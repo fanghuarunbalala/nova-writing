@@ -1,0 +1,1655 @@
+# Novel Agent Runtime Architecture
+
+## 1. Document Status
+
+This document records the currently accepted architecture for the shared Novel Agent Runtime.
+
+- It is an architecture target, not a statement that every component has already been implemented.
+- The dedicated Novel domain model remains deferred and is not included in this runtime boundary.
+- Diagrams use Mermaid so they remain version-controlled, editable, and renderable in compatible Markdown viewers.
+- The initial implementation stays TypeScript-first. Performance-critical implementations may later move to Rust behind stable TypeScript interfaces.
+- Review-gated implementation tasks and open questions are tracked in `docs/implementation-plan.md`.
+
+## 2. Product Belief
+
+This project helps people turn imagination into serialized web novels.
+
+The product should lower the barrier between imagination and a structured, sustainable story rather than requiring every user to first master professional writing techniques.
+
+## 3. Accepted Architecture Principles
+
+1. `Conversation` is a durable session handle, not an operating-system process.
+2. `ConversationRuntime` is an ephemeral executor and is activated only when execution is required.
+3. Historical queries and Agent execution use separate query and command paths.
+4. `InputEvent` is the unified input protocol and `OutputEvent` is the unified output protocol.
+5. Control inputs and normal Agent-turn inputs use separate logical lanes.
+6. `ConversationJournal` is the durable source of truth; `OutputEventHub` only handles live delivery.
+7. Approval is an asynchronous `OutputEvent → InputEvent` interaction rather than a UI callback.
+8. `RuntimePolicyEngine` evaluates Runtime facts and returns typed effects; it never performs those effects directly.
+9. `NudgeManager` consumes one-shot Nudge effects, while `ContextCompactionManager` consumes Context Compaction effects.
+10. Emitting an OutputEvent records an observable lifecycle transition; it does not prove that an effect has been applied to a model request.
+11. Tool description, implementation, registration, execution policy, sandboxing, and Pi adaptation remain separate.
+12. Main agents and subagents both use the Conversation abstraction.
+13. Process placement is selected by `ConversationHost`; one Conversation does not imply one process.
+14. Pi-specific types remain behind adapters and do not leak into core-owned public contracts.
+15. `storageDir` stores runtime data; `workdir` points to the user's project and is a separate concept.
+
+## 4. Pause and Resume Decision
+
+Generic Pause and Resume are not part of the initial public event protocol.
+
+The reason is that model streams and arbitrary tools generally cannot be safely frozen and resumed at an exact instruction boundary. A generic pause operation would usually mean aborting current execution, creating a checkpoint, and later reconstructing work, which is materially different from suspending a process.
+
+Initial control semantics are:
+
+- `StopInputEvent` cancels the active run, active model request, active tools, pending interactions, and configured child work.
+- A future `InterruptInputEvent` may cancel only the current turn while keeping the Conversation available for a follow-up input.
+- `ApprovalDecisionInputEvent` resolves a waiting approval directly; it does not require Resume.
+- An offline runtime is activated automatically by `ConversationHost.ensureActive()` when an execution command arrives.
+- Runtime crash recovery is handled by Host restoration policy rather than `ResumeInputEvent`.
+- The existing `ResumeInputEvent` code is provisional and should not be treated as a frozen first-version contract.
+
+Pause/Resume are deferred from the accepted architecture. They can be reconsidered only after a concrete resumable checkpoint and safe-point model is defined.
+
+## 5. Repository Layering
+
+```text
+core/
+├─ src/config/
+├─ src/event/
+├─ src/prompt/
+├─ src/runtime/
+└─ src/tools/
+
+cli/
+gui/
+web/
+native/
+docs/
+```
+
+```mermaid
+flowchart TB
+    Apps["CLI / TUI / Desktop GUI / Web"]
+    Core["core"]
+    Config["config"]
+    Event["event"]
+    Prompt["prompt"]
+    Runtime["runtime"]
+    Tools["tools"]
+    Native["native / optional Rust"]
+    Pi["pi-agent-core"]
+
+    Apps --> Core
+    Core --> Config
+    Core --> Event
+    Core --> Prompt
+    Core --> Runtime
+    Core --> Tools
+    Runtime --> Pi
+    Tools -. stable interface .-> Native
+```
+
+## 6. Overall Architecture
+
+```mermaid
+flowchart TB
+    Apps["CLI / TUI / GUI / Web"]
+    Conversation["Conversation Handle"]
+    QueryService["ConversationQueryService"]
+    CommandService["ConversationCommandService"]
+
+    Journal["ConversationJournalService"]
+    Snapshot["SnapshotStore"]
+    EventHub["OutputEventHub"]
+
+    Host["ConversationHost / Supervisor"]
+    LocalRuntime["Local ConversationRuntime"]
+    Proxy["ConversationProxy / IPC"]
+    ChildRuntime["Child ConversationRuntime"]
+
+    Apps --> Conversation
+    Conversation --> QueryService
+    Conversation --> CommandService
+
+    QueryService --> Journal
+    QueryService --> Snapshot
+    QueryService --> EventHub
+
+    CommandService --> Host
+    Host --> LocalRuntime
+    Host --> Proxy
+    Proxy <--> ChildRuntime
+
+    LocalRuntime -->|"append request"| Journal
+    ChildRuntime -->|"IPC append request"| Journal
+    Journal --> EventHub
+    EventHub --> Apps
+```
+
+The architecture has three major layers:
+
+```text
+Public API
+    Conversation
+
+Host and Storage Services
+    ConversationQueryService
+    ConversationCommandService
+    ConversationJournalService
+    SnapshotStore
+    OutputEventHub
+    ConversationHost
+
+Runtime Execution
+    ConversationRuntime
+    PiAgentCoreAdapter
+    ToolDispatcher
+    RuntimePolicyEngine
+    RuntimeEffectCoordinator
+    NudgeManager
+    ContextCompactionManager
+    InteractionCoordinator
+```
+
+## 7. Conversation Public Boundary
+
+```mermaid
+classDiagram
+    direction LR
+
+    class Conversation {
+        <<abstract>>
+        +string id
+        +string? parentConversationId
+        +ConversationInput input
+        +ConversationOutput output
+        +getSnapshot() ConversationSnapshot
+        +getRuntimePresence() RuntimePresence
+        +close()
+    }
+
+    class LocalConversation {
+        -ConversationQueryService queryService
+        -ConversationCommandService commandService
+    }
+
+    class ConversationProxy {
+        -ConversationClient client
+        -Transport transport
+    }
+
+    class ConversationInput {
+        <<interface>>
+        +enqueue(InputEvent) InputReceipt
+    }
+
+    class ConversationOutput {
+        <<interface>>
+        +list(OutputEventQuery) OutputEventPage
+        +subscribe(OutputSubscriptionOptions) AsyncIterable
+    }
+
+    class ConversationQueryService {
+        +getSnapshot(conversationId)
+        +listOutputEvents(query)
+        +subscribeOutputEvents(options)
+    }
+
+    class ConversationCommandService {
+        +enqueue(conversationId, inputEvent)
+        +stop(conversationId)
+    }
+
+    class ConversationHost {
+        +ensureActive(conversationId)
+        +createRuntime(bootstrap)
+        +restoreRuntime(conversationId)
+        +getRuntimePresence(conversationId)
+        +terminateRuntime(conversationId)
+    }
+
+    class ConversationRuntime {
+        +dispatch(InputEventSnapshot)
+        +start()
+        +stop()
+        +restore(RuntimeBootstrap)
+    }
+
+    Conversation <|-- LocalConversation
+    Conversation <|-- ConversationProxy
+    Conversation *-- ConversationInput
+    Conversation *-- ConversationOutput
+
+    LocalConversation --> ConversationQueryService
+    LocalConversation --> ConversationCommandService
+    ConversationProxy --> ConversationQueryService
+    ConversationProxy --> ConversationCommandService
+    ConversationCommandService --> ConversationHost
+    ConversationHost --> ConversationRuntime
+```
+
+Example public usage:
+
+```ts
+await conversation.input.enqueue(inputEvent);
+
+const page = await conversation.output.list({
+  afterSequence: 100,
+  limit: 200,
+});
+
+for await (const event of conversation.output.subscribe({
+  start: { from: "sequence", afterSequence: 100 },
+  follow: true,
+})) {
+  outputStore.apply(event);
+}
+```
+
+The public Conversation handle does not reveal whether a Runtime currently exists or where it is placed.
+
+## 8. Query and Command Paths
+
+```mermaid
+flowchart LR
+    Conversation["Conversation Handle"]
+
+    Conversation --> Query["Query Path"]
+    Conversation --> Command["Command Path"]
+
+    Query --> List["output.list()"]
+    Query --> Subscribe["output.subscribe()"]
+    Query --> GetSnapshot["getSnapshot()"]
+
+    List --> Journal["JournalReader"]
+    Subscribe --> Journal
+    Subscribe --> EventHub["OutputEventHub"]
+    GetSnapshot --> SnapshotStore["SnapshotStore"]
+
+    Command --> Enqueue["input.enqueue()"]
+    Enqueue --> CommandService["ConversationCommandService"]
+    CommandService --> Ensure["ConversationHost.ensureActive()"]
+    Ensure --> Runtime["ConversationRuntime"]
+```
+
+Operations that never activate a Runtime:
+
+- `output.list()`
+- history-only `output.subscribe()`
+- following `output.subscribe()`
+- `getSnapshot()`
+- metadata lookup
+- Conversation export
+- Tool trace lookup
+- OutputEvent replay
+
+A following subscription attaches to the Host-owned EventHub and waits for future events. Subscribing alone does not activate a Runtime.
+
+Execution inputs pass through `ConversationCommandService` and may call `ConversationHost.ensureActive()`.
+
+## 9. State Model
+
+A single Conversation state would mix durable product state, active-run state, and process state. These are separate dimensions.
+
+### 9.1 Conversation Status
+
+```text
+active
+archived
+disposed
+```
+
+- `active`: accepts queries and, subject to policy, execution commands.
+- `archived`: remains readable but rejects normal execution until explicitly restored by a future archive API.
+- `disposed`: no longer usable through normal Conversation APIs.
+
+### 9.2 Run Status
+
+```mermaid
+stateDiagram-v2
+    [*] --> queued
+    queued --> running: runtime accepts run
+
+    running --> waiting_interaction: approval requested
+    waiting_interaction --> running: interaction resolved
+
+    running --> stopping: stop
+    waiting_interaction --> stopping: stop
+
+    stopping --> cancelled: cancellation completed
+    running --> completed: run completed
+    running --> failed: unrecoverable failure
+
+    completed --> [*]
+    failed --> [*]
+    cancelled --> [*]
+```
+
+An idle Conversation is represented by the absence of an active Run rather than by overloading Conversation lifecycle state.
+
+### 9.3 Runtime Presence
+
+```mermaid
+stateDiagram-v2
+    [*] --> offline
+    offline --> starting: execution command
+    starting --> online: bootstrap succeeded
+    starting --> crashed: bootstrap failed
+
+    online --> stopping: shutdown / idle eviction
+    stopping --> offline: process exited
+
+    online --> crashed: unexpected exit
+    crashed --> starting: restore policy
+    crashed --> offline: abandon runtime
+```
+
+Valid combinations include:
+
+```text
+ConversationStatus: active
+RunStatus: none
+RuntimePresence: offline
+
+ConversationStatus: active
+RunStatus: waiting_interaction
+RuntimePresence: offline or online
+
+ConversationStatus: archived
+RunStatus: none
+RuntimePresence: offline
+```
+
+Pending interactions must be durable so a waiting run can be reconstructed even if the original Runtime is offline.
+
+## 10. Input Event Model
+
+```mermaid
+classDiagram
+    class InputEvent {
+        <<abstract>>
+        +string id
+        +string? conversationId
+        +string timestamp
+        +getEventType() string
+        +getPriority() number
+        +getPayload() EventPayload
+        +getSnapshot() InputEventSnapshot
+    }
+
+    class SystemInputEvent
+    class CommandInputEvent
+    class UserInputEvent
+    class ContextInputEvent
+
+    class StopInputEvent
+    class ReloadConfigInputEvent
+    class ApprovalDecisionInputEvent
+    class InterruptInputEvent
+
+    class UserMessageInputEvent
+
+    class ClearContextInputEvent
+    class CompactContextInputEvent
+
+    InputEvent <|-- SystemInputEvent
+    InputEvent <|-- CommandInputEvent
+    InputEvent <|-- UserInputEvent
+    InputEvent <|-- ContextInputEvent
+
+    CommandInputEvent <|-- StopInputEvent
+    CommandInputEvent <|-- ReloadConfigInputEvent
+    CommandInputEvent <|-- ApprovalDecisionInputEvent
+    CommandInputEvent <|-- InterruptInputEvent
+
+    UserInputEvent <|-- UserMessageInputEvent
+    ContextInputEvent <|-- ClearContextInputEvent
+    ContextInputEvent <|-- CompactContextInputEvent
+```
+
+Currently implemented input classes include:
+
+- `UserMessageInputEvent`
+- `ReloadConfigInputEvent`
+- `StopInputEvent`
+- `ClearContextInputEvent`
+- `CompactContextInputEvent`
+- `ResumeInputEvent`, currently provisional and not part of the accepted first-version protocol
+
+Planned input classes include:
+
+- `ApprovalDecisionInputEvent`
+- `InterruptInputEvent`, after its exact cancellation semantics are frozen
+
+## 11. Input Routing
+
+A single priority queue is insufficient because an active turn may already be waiting for a tool or interaction. Priority cannot preempt code that has already started awaiting work.
+
+```mermaid
+flowchart TB
+    Input["InputEvent"]
+    Router["InputRouter"]
+    Control["Control Lane"]
+    Turn["Turn Lane"]
+
+    Stop["Stop / Interrupt"]
+    Approval["Approval Decision"]
+    Config["Reload Config"]
+
+    User["User Message"]
+    Context["Context Change"]
+    Task["Agent Task"]
+
+    Input --> Router
+    Router --> Control
+    Router --> Turn
+
+    Control --> Stop
+    Control --> Approval
+    Control --> Config
+
+    Turn --> User
+    Turn --> Context
+    Turn --> Task
+```
+
+Control Lane requirements:
+
+- remains responsive while Model Provider execution is active
+- remains responsive while a Tool is active
+- remains responsive while an approval is pending
+- can cancel the current Run, Turn, Tool, Interaction, and configured child work
+
+Turn Lane requirements:
+
+- handles normal user messages and Agent tasks
+- serializes Agent execution by default
+- may still use priority inside the lane
+- does not prevent Control Lane processing
+
+## 12. Output Event Model
+
+```mermaid
+classDiagram
+    class OutputEvent {
+        <<abstract>>
+        +string id
+        +string conversationId
+        +string eventType
+        +string timestamp
+        +number sequence
+        +number schemaVersion
+        +string? correlationId
+        +string? causationId
+        +string? runId
+        +string? turnId
+        +getPayload() OutputPayload
+    }
+
+    class InputResponseOutputEvent {
+        +string inputEventId
+        +InputEventSnapshot? inputEventSnapshot
+    }
+
+    class SystemOutputEvent
+    class AgentOutputEvent
+    class NovelOutputEvent
+    class ErrorOutputEvent
+
+    class ApprovalRequestedOutputEvent
+    class ApprovalResolvedOutputEvent
+    class NudgeScheduledOutputEvent
+    class SystemReminderInjectedOutputEvent
+    class NudgeExpiredOutputEvent
+    class ContextCompactionRequestedOutputEvent
+    class ContextCompactionStartedOutputEvent
+    class ContextCompactionCompletedOutputEvent
+    class ContextCompactionFailedOutputEvent
+    class ContextCheckpointAppliedOutputEvent
+
+    class AssistantOutputEvent
+    class ToolCallOutputEvent
+    class ToolResponseOutputEvent
+
+    OutputEvent <|-- InputResponseOutputEvent
+    OutputEvent <|-- SystemOutputEvent
+    OutputEvent <|-- AgentOutputEvent
+    OutputEvent <|-- NovelOutputEvent
+    OutputEvent <|-- ErrorOutputEvent
+
+    SystemOutputEvent <|-- ApprovalRequestedOutputEvent
+    SystemOutputEvent <|-- NudgeScheduledOutputEvent
+    SystemOutputEvent <|-- SystemReminderInjectedOutputEvent
+    SystemOutputEvent <|-- NudgeExpiredOutputEvent
+    SystemOutputEvent <|-- ContextCompactionRequestedOutputEvent
+    SystemOutputEvent <|-- ContextCompactionStartedOutputEvent
+    SystemOutputEvent <|-- ContextCompactionCompletedOutputEvent
+    SystemOutputEvent <|-- ContextCompactionFailedOutputEvent
+    SystemOutputEvent <|-- ContextCheckpointAppliedOutputEvent
+    InputResponseOutputEvent <|-- ApprovalResolvedOutputEvent
+
+    AgentOutputEvent <|-- AssistantOutputEvent
+    AgentOutputEvent <|-- ToolCallOutputEvent
+    AgentOutputEvent <|-- ToolResponseOutputEvent
+```
+
+`OutputEvent.conversationId` is always required.
+
+Only outputs that explicitly respond to one InputEvent inherit from `InputResponseOutputEvent`. Independent system, Agent, error, and child events do not need an InputEvent reference.
+
+IPC and persisted consumers discriminate events using `eventType` and validated payload schemas rather than JavaScript `instanceof` checks.
+
+Lifecycle event semantics are explicit:
+
+- `NudgeScheduledOutputEvent` means a Policy produced a Nudge and it entered the pending queue; it has not necessarily reached the model.
+- `SystemReminderInjectedOutputEvent` means a one-shot Reminder was included in a concrete dispatched Provider request.
+- `ContextCompactionCompletedOutputEvent` means a durable ContextCheckpoint was created.
+- `ContextCheckpointAppliedOutputEvent` means that Checkpoint was actually used to compile a concrete Provider request.
+- OutputEvents observe state transitions. The authoritative state remains in the corresponding Runtime component and durable store.
+
+## 13. Event Envelope and Identity
+
+The protocol-level event representation is pure data:
+
+```ts
+interface EventEnvelope<TPayload = unknown> {
+  id: string;
+  conversationId: string;
+  eventType: string;
+  timestamp: string;
+
+  sequence: number;
+  schemaVersion: number;
+
+  correlationId?: string;
+  causationId?: string;
+  runId?: string;
+  turnId?: string;
+
+  payload: TPayload;
+}
+```
+
+Identity hierarchy:
+
+```text
+conversationId
+└─ runId
+   └─ turnId
+      ├─ toolCallId
+      │  └─ approvalRequestId
+      └─ outputEventId
+```
+
+- `conversationId`: durable Conversation identity
+- `runId`: one accepted execution task
+- `turnId`: one model request and response cycle
+- `toolCallId`: one Tool invocation
+- `approvalRequestId`: one approval interaction
+- `sequence`: durable per-Conversation journal ordering
+- `correlationId`: correlation across a broader execution chain
+- `causationId`: direct event or command that caused the current record
+
+Local InputEvent construction may omit `conversationId` for convenience. `ConversationInput.enqueue()` or CommandService must resolve it before persistence or IPC transmission.
+
+Full InputEvent snapshots inside output events must be:
+
+- bounded in size
+- non-recursive
+- redacted when sensitive
+- omitted or replaced with a Journal reference for large inputs
+
+## 14. Output History and Subscription
+
+```ts
+interface ConversationOutput {
+  list(query?: OutputEventQuery): Promise<OutputEventPage>;
+
+  subscribe(
+    options: OutputSubscriptionOptions,
+  ): AsyncIterable<OutputEventSnapshot>;
+}
+
+interface OutputEventQuery {
+  afterSequence?: number;
+  beforeSequence?: number;
+  limit?: number;
+  eventTypes?: string[];
+}
+
+type OutputSubscriptionStart =
+  | { from: "beginning" }
+  | { from: "latest" }
+  | { from: "sequence"; afterSequence: number };
+
+interface OutputSubscriptionOptions {
+  start: OutputSubscriptionStart;
+  follow: boolean;
+  eventTypes?: string[];
+  signal?: AbortSignal;
+}
+```
+
+### 14.1 Read-only Replay
+
+```mermaid
+sequenceDiagram
+    participant UI
+    participant Conversation
+    participant Query as ConversationQueryService
+    participant Journal as ConversationJournal
+
+    UI->>Conversation: output.list(afterSequence, limit)
+    Conversation->>Query: listOutputEvents(query)
+    Query->>Journal: read persisted output records
+    Journal-->>Query: OutputEvent page
+    Query-->>Conversation: page
+    Conversation-->>UI: page
+
+    Note over UI,Journal: No Runtime or child process is created
+```
+
+### 14.2 Catch-up and Live Follow
+
+```mermaid
+sequenceDiagram
+    participant UI
+    participant Conversation
+    participant Query as ConversationQueryService
+    participant Journal as ConversationJournal
+    participant Hub as OutputEventHub
+
+    UI->>Conversation: output.subscribe(afterSequence=100, follow=true)
+    Conversation->>Query: subscribe(conversationId, 100)
+    Query->>Hub: establish subscription and watermark
+    Query->>Journal: read events after 100 through watermark
+    Journal-->>Query: historical OutputEvents
+    Query-->>UI: replay historical events
+    Query->>Hub: drain buffered events and follow live
+    Hub-->>UI: new OutputEvents
+
+    Note over UI,Hub: Subscription does not activate ConversationRuntime
+```
+
+QueryService owns the catch-up-to-live transition so clients cannot lose events between separate list and subscribe operations.
+
+## 15. Journal and Live Delivery
+
+The durable journal and live event hub have different responsibilities and belong to the Host/Storage layer.
+
+```mermaid
+flowchart LR
+    Runtime["ConversationRuntime"]
+    Append["append event request"]
+    Journal["ConversationJournalService"]
+    Sequence["assign sequence"]
+    Publisher["OutputEventHub.publish()"]
+    Client["CLI / TUI / GUI / Web"]
+
+    Runtime --> Append
+    Append --> Journal
+    Journal --> Sequence
+    Sequence --> Publisher
+    Publisher --> Client
+```
+
+Rules:
+
+- Journal append succeeds before live publication.
+- Host-owned JournalService is the sequence authority.
+- Local and child runtimes use the same logical append port.
+- Child runtimes append through IPC rather than directly writing shared files.
+- Snapshots accelerate restoration but never replace the append-only Journal.
+- Journal and Snapshot formats carry explicit schema versions.
+- Clients reconnect using `afterSequence`.
+
+## 16. ConversationRuntime Composition
+
+```mermaid
+classDiagram
+    class ConversationRuntime {
+        -InputRouter inputRouter
+        -RunStateMachine runStateMachine
+        -TurnController turnController
+        -InteractionCoordinator interactionCoordinator
+        -ContextCompiler contextCompiler
+        -RuntimePolicyEngine policyEngine
+        -RuntimeEffectCoordinator effectCoordinator
+        -AgentRuntimeAdapter agentAdapter
+        -ToolDispatcher toolDispatcher
+        -ChildConversationManager childManager
+        -RuntimeEventSink eventSink
+        +dispatch(InputEventSnapshot)
+        +start()
+        +stop()
+        +restore(RuntimeBootstrap)
+    }
+
+    class InputRouter {
+        -ControlInbox controlInbox
+        -TurnInbox turnInbox
+        +route(InputEventSnapshot)
+    }
+
+    class RunStateMachine {
+        +getState()
+        +canTransition(target)
+        +transition(target, cause)
+    }
+
+    class TurnController {
+        +startRun(input)
+        +runTurn()
+        +interrupt()
+        +cancel()
+    }
+
+    class InteractionCoordinator {
+        +request(interaction)
+        +resolve(response)
+        +cancel(interactionId)
+        +restore(snapshot)
+    }
+
+    class ContextCompiler {
+        +compile(ContextCompileRequest)
+    }
+
+    class RuntimePolicyEngine {
+        +register(RuntimePolicy)
+        +evaluate(RuntimePolicyContext) RuntimePolicyEffect[]
+        +restore(snapshot)
+    }
+
+    class RuntimeEffectCoordinator {
+        +execute(RuntimePolicyEffect[])
+    }
+
+    class NudgeManager {
+        +schedule(NudgeEffect)
+        +leaseForProviderCall(request) PendingNudge[]
+        +confirmDelivered(providerCallId)
+        +releaseLease(providerCallId)
+        +restore(snapshot)
+    }
+
+    class ContextCompactionManager {
+        +compact(ContextCompactionRequest) ContextCheckpoint
+        +getActiveCheckpoint(conversationId)
+        +invalidate(checkpointId)
+        +restore(snapshot)
+    }
+
+    class AgentRuntimeAdapter {
+        <<interface>>
+        +stream(AgentRequest)
+        +cancel(turnId)
+    }
+
+    class PiAgentCoreAdapter {
+        +stream(AgentRequest)
+        +cancel(turnId)
+    }
+
+    class ChildConversationManager {
+        +spawn(request)
+        +cancel(conversationId)
+        +waitForResult(conversationId)
+    }
+
+    ConversationRuntime *-- InputRouter
+    ConversationRuntime *-- RunStateMachine
+    ConversationRuntime *-- TurnController
+    ConversationRuntime *-- InteractionCoordinator
+    ConversationRuntime *-- ContextCompiler
+    ConversationRuntime *-- RuntimePolicyEngine
+    ConversationRuntime *-- RuntimeEffectCoordinator
+    ConversationRuntime *-- ToolDispatcher
+    ConversationRuntime *-- ChildConversationManager
+    RuntimeEffectCoordinator --> NudgeManager
+    RuntimeEffectCoordinator --> ContextCompactionManager
+    ContextCompiler --> ContextCompactionManager
+    AgentRuntimeAdapter --> NudgeManager
+    ConversationRuntime --> AgentRuntimeAdapter
+    AgentRuntimeAdapter <|.. PiAgentCoreAdapter
+```
+
+This diagram is a responsibility map. It does not require every responsibility to immediately become a large framework class.
+
+## 17. Runtime Policy Engine
+
+`RuntimePolicyEngine` is a pure decision layer:
+
+```text
+RuntimePolicyContext
+        ↓
+RuntimePolicyEngine
+        ↓
+RuntimePolicyEffect[]
+```
+
+It never performs Context Compaction, sends a Reminder, stops a Run, writes a file, or mutates Conversation state directly.
+
+```ts
+type RuntimePolicyPhase =
+  | "before_run"
+  | "before_turn"
+  | "after_turn"
+  | "before_tool"
+  | "after_tool"
+  | "interaction_resolved"
+  | "idle_tick";
+
+interface RuntimePolicy {
+  readonly id: string;
+  readonly phases: RuntimePolicyPhase[];
+  readonly priority: number;
+
+  evaluate(
+    context: RuntimePolicyContext,
+    state: RuntimePolicyState,
+  ): RuntimePolicyEffect[];
+}
+
+type RuntimePolicyEffect =
+  | NudgeEffect
+  | ContextCompactionEffect
+  | StopRunEffect;
+```
+
+`RuntimePolicyEngine` owns generic rule mechanics:
+
+- Policy registration and enablement
+- phase matching
+- priority ordering
+- cooldown and deduplication
+- maximum trigger counts
+- durable per-Policy state
+- evaluation diagnostics
+
+`RuntimeEffectCoordinator` routes each returned Effect to the component that owns the corresponding behavior.
+
+```mermaid
+flowchart LR
+    Runtime["ConversationRuntime"]
+    Context["RuntimePolicyContext"]
+    Engine["RuntimePolicyEngine"]
+    Effects["RuntimePolicyEffect[]"]
+    Coordinator["RuntimeEffectCoordinator"]
+    Nudge["NudgeManager"]
+    Compaction["ContextCompactionManager"]
+    Stop["TurnController"]
+
+    Runtime --> Context
+    Context --> Engine
+    Engine --> Effects
+    Effects --> Coordinator
+    Coordinator --> Nudge
+    Coordinator --> Compaction
+    Coordinator --> Stop
+```
+
+Hard limits remain authoritative and separate from reminders. For example, a Policy may schedule a maximum-turn Nudge before `RunLimits.maxTurns` enforces the final hard stop.
+
+## 18. Nudge and One-shot System Reminders
+
+Nudge has one concrete responsibility:
+
+> Convert a `NudgeEffect` into a pending, one-shot Reminder for a future Provider request.
+
+Nudge does not directly stop, compact, approve, or mutate Conversation state.
+
+### 18.1 Nudge Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> scheduled: Policy produced NudgeEffect
+    scheduled --> leased: selected for Provider call
+    leased --> consumed: Provider request dispatched
+    leased --> scheduled: failed before dispatch
+    scheduled --> expired: Run ended or deadline passed
+    consumed --> [*]
+    expired --> [*]
+```
+
+```ts
+interface PendingNudge {
+  id: string;
+  policyId: string;
+  message: string;
+  placement: "system-prompt" | "context-tail";
+  delivery: "once";
+  state: "scheduled" | "leased" | "consumed" | "expired";
+  targetRunId: string;
+  targetTurnNumber?: number;
+  scheduledAt: string;
+  expiresAt?: string;
+}
+```
+
+`NudgeScheduledOutputEvent` means the Nudge entered the pending queue. It does not mean the Reminder has reached the model.
+
+`SystemReminderInjectedOutputEvent` is emitted only after a concrete Provider request containing the Reminder has been dispatched.
+
+If request construction fails before dispatch, the lease returns to `scheduled`. If the Provider request was dispatched and later failed, the Nudge remains `consumed` because it was already sent.
+
+### 18.2 Nudge Classes
+
+```mermaid
+classDiagram
+    class NudgeManager {
+        -PendingNudgeStore pendingStore
+        -NudgeRenderer renderer
+        +schedule(NudgeEffect)
+        +leaseForProviderCall(request) PendingNudge[]
+        +confirmDelivered(providerCallId)
+        +releaseLease(providerCallId)
+        +expireForRun(runId)
+        +restore(snapshot)
+    }
+
+    class PendingNudgeStore {
+        +enqueue(PendingNudge)
+        +lease(request)
+        +consume(providerCallId)
+        +release(providerCallId)
+        +expire(runId)
+    }
+
+    class NudgeRenderer {
+        +render(NudgeEffect) PendingNudge
+    }
+
+    class RuntimePolicyEngine {
+        +evaluate(context) RuntimePolicyEffect[]
+    }
+
+    RuntimePolicyEngine --> NudgeManager : NudgeEffect
+    NudgeManager --> PendingNudgeStore
+    NudgeManager --> NudgeRenderer
+```
+
+Initial Nudge Policies may include:
+
+- maximum-turn reminder
+- turns-since-last-tool reminder
+- context pressure reminder
+- no-progress reminder
+- stage reminder
+- completion reminder
+
+Tool wall-clock timeout is not a Nudge. It belongs to Tool execution timeout and cancellation policy.
+
+Nudge selection applies priority, deduplication, cooldown, expiry, and a small per-call delivery limit so multiple reminders cannot flood one prompt.
+
+### 18.3 One-turn Disappearance
+
+Nudge messages never enter canonical Conversation history or ContextCheckpoint summaries. They exist only in one `CompiledProviderContext`.
+
+```text
+Provider Call N
+= Base System Prompt
++ Context Projection
++ one-shot System Reminder
+
+Provider Call N+1
+= Base System Prompt
++ Context Projection
+```
+
+The consumed Reminder is absent from the next Provider call. Its delivered OutputEvent remains in the Journal for UI replay and debugging, but OutputEvent history is not automatically converted back into model messages.
+
+## 19. Context Compaction and Compilation
+
+Canonical Conversation history, compacted Context projection, and provider-specific messages are separate concepts.
+
+`RuntimePolicyEngine` decides when compaction is needed. `ContextCompactionManager` performs it and persists a `ContextCheckpoint`. `ContextCompiler` applies the latest usable Checkpoint to one Provider request.
+
+```mermaid
+sequenceDiagram
+    participant Runtime as ConversationRuntime
+    participant Engine as RuntimePolicyEngine
+    participant Policy as ContextPressurePolicy
+    participant Effects as RuntimeEffectCoordinator
+    participant Compact as ContextCompactionManager
+    participant Store as SnapshotStore
+    participant Journal as JournalService
+    participant Compiler as ContextCompiler
+
+    Runtime->>Engine: evaluate(before_turn, policyContext)
+    Engine->>Policy: evaluate(context, state)
+    Policy-->>Engine: ContextCompactionEffect
+    Engine-->>Runtime: effects
+    Runtime->>Effects: execute(effects)
+    Effects->>Compact: compact(request)
+
+    Compact->>Journal: read canonical message range
+    Journal-->>Compact: source messages
+    Compact->>Compact: preserve pinned and recent messages
+    Compact->>Compact: generate structured summary
+    Compact->>Store: persist ContextCheckpoint
+    Store-->>Compact: checkpoint persisted
+    Compact-->>Effects: ContextCheckpoint
+
+    Runtime->>Compiler: compile(checkpoint, recent messages)
+    Compiler-->>Runtime: CompiledProviderContext
+```
+
+```ts
+interface ContextCheckpoint {
+  id: string;
+  conversationId: string;
+  sourceStartSequence: number;
+  sourceEndSequence: number;
+  coveredThroughSequence: number;
+  summary: string;
+  facts: string[];
+  decisions: string[];
+  constraints: string[];
+  unresolvedTasks: string[];
+  pinnedMessageIds: string[];
+  recentWindowStartSequence: number;
+  tokenEstimateBefore: number;
+  tokenEstimateAfter: number;
+  createdAt: string;
+  schemaVersion: number;
+}
+```
+
+Compaction never deletes or rewrites Journal history. It only changes the Context projection used for model calls.
+
+Protected content includes the current user goal, recent messages, pinned messages, unresolved interactions, active Tool state, active child work, and current Run constraints.
+
+Nudge messages are excluded from ContextCheckpoint summaries because they are ephemeral execution guidance.
+
+Repeated compaction requires hysteresis and durable Policy state. A high usage ratio alone is insufficient; enough uncompacted content must have accumulated since the last Checkpoint.
+
+Suggested thresholds are configuration rather than protocol constants:
+
+```text
+soft reminder threshold
+compaction request threshold
+target post-compaction ratio
+hard context limit
+minimum new uncompacted tokens
+```
+
+Compaction lifecycle events are distinct from actual application:
+
+- `ContextCompactionRequestedOutputEvent`
+- `ContextCompactionStartedOutputEvent`
+- `ContextCompactionCompletedOutputEvent`
+- `ContextCompactionFailedOutputEvent`
+- `ContextCheckpointAppliedOutputEvent`
+
+`ContextCompactionCompletedOutputEvent` means a Checkpoint exists. Only `ContextCheckpointAppliedOutputEvent` means that Checkpoint was used in a concrete Provider request.
+
+### 19.1 Pi Agent Core Integration
+
+Pi applies `transformContext()` before each LLM call. The transformed array is used for that call while Assistant output continues to update the original Agent context. This makes `transformContext()` suitable for applying ContextCheckpoint projections without deleting canonical Agent history.
+
+The transform implementation must return a new safe array and must not mutate its input.
+
+```ts
+transformContext: async (messages) => {
+  return contextProjection.apply({
+    messages,
+    checkpoint: activeCheckpoint,
+  });
+}
+```
+
+True one-shot System Reminders use a per-call `systemPromptOverlay` inside `PiAgentCoreAdapter`. The Adapter leases pending Nudges for one Provider call, appends them to that call's System Prompt, confirms delivery after dispatch, and releases the lease if dispatch never occurs.
+
+```mermaid
+flowchart TB
+    History["Canonical Agent Messages"]
+    Checkpoint["ContextCheckpoint"]
+    Transform["Pi transformContext()"]
+    Projected["Projected Agent Messages"]
+    BasePrompt["Base System Prompt"]
+    Pending["Leased one-shot Nudge"]
+    Overlay["PiAgentCoreAdapter systemPromptOverlay"]
+    Provider["Provider Request"]
+
+    History --> Transform
+    Checkpoint --> Transform
+    Transform --> Projected
+    BasePrompt --> Overlay
+    Pending --> Overlay
+    Projected --> Provider
+    Overlay --> Provider
+```
+
+This separation gives Context Compaction and System Reminder different, explicit lifecycles:
+
+```text
+ContextCheckpoint → transformContext()
+one-shot System Reminder → per-call systemPromptOverlay
+```
+
+## 20. Tool Definition and Registry
+
+Tool declaration, implementation, and Pi adaptation are separate.
+
+```mermaid
+classDiagram
+    class ToolDescriptor {
+        +string name
+        +string label
+        +string description
+        +Schema parameters
+        +string groupId
+        +ExecutionCharacteristics execution
+    }
+
+    class ToolHandler {
+        <<interface>>
+        +execute(ToolExecutionContext) ToolResult
+    }
+
+    class RegisteredTool {
+        +ToolDescriptor descriptor
+        +ToolHandler handler
+    }
+
+    class ToolRegistry {
+        +register(RegisteredTool)
+        +get(name)
+        +list()
+        +loadGroup(manifest)
+        +createView(policy)
+        +merge(registry)
+    }
+
+    class ToolRegistryView {
+        +get(name)
+        +listAllowed()
+    }
+
+    class PiToolAdapter {
+        +toAgentTool(RegisteredTool)
+    }
+
+    ToolDescriptor --> RegisteredTool
+    ToolHandler --> RegisteredTool
+    RegisteredTool --> ToolRegistry
+    ToolRegistry --> ToolRegistryView
+    PiToolAdapter --> RegisteredTool
+```
+
+YAML manifests describe:
+
+- group identity and display metadata
+- tool name and description
+- parameter schema
+- execution characteristics
+- presentation metadata
+
+Executable handlers are bound explicitly in TypeScript code. YAML does not contain arbitrary executable module bindings.
+
+`groupId` is the stable key. Human-readable `label` is not used as an identity key.
+
+## 21. Tool Execution Pipeline
+
+`ToolDispatcher` is the public execution facade. Internally it uses a composable pipeline rather than one giant manager method.
+
+```mermaid
+classDiagram
+    class ToolDispatcher {
+        +execute(ToolInvocation)
+        +cancel(toolCallId)
+    }
+
+    class ToolExecutionPipeline {
+        +execute(ToolInvocation)
+    }
+
+    class PermissionPolicy {
+        +evaluate(invocation) PermissionDecision
+    }
+
+    class SandboxExecutor {
+        +createContext(invocation)
+        +execute(handler, context)
+    }
+
+    class InteractionCoordinator {
+        +request(interaction)
+    }
+
+    ToolDispatcher --> ToolRegistryView
+    ToolDispatcher --> ToolExecutionPipeline
+    ToolExecutionPipeline --> PermissionPolicy
+    ToolExecutionPipeline --> InteractionCoordinator
+    ToolExecutionPipeline --> SandboxExecutor
+```
+
+```mermaid
+flowchart LR
+    Invoke["ToolInvocation"]
+    Resolve["Resolve"]
+    Validate["Validate Arguments"]
+    Permission["Permission"]
+    Interaction["Approval Interaction"]
+    Sandbox["Sandbox"]
+    Execute["Execute"]
+    Normalize["Normalize"]
+    Trace["Trace"]
+    Result["Tool Result / Error"]
+
+    Invoke --> Resolve
+    Resolve --> Validate
+    Validate --> Permission
+
+    Permission -->|"allow"| Sandbox
+    Permission -->|"ask"| Interaction
+    Permission -->|"deny"| Result
+
+    Interaction -->|"approved"| Sandbox
+    Interaction -->|"rejected"| Result
+
+    Sandbox --> Execute
+    Execute --> Normalize
+    Normalize --> Trace
+    Trace --> Result
+```
+
+Permission and approval are separate:
+
+- `allow`: execute without asking
+- `ask`: create an approval interaction
+- `deny`: reject without offering approval
+
+Tool implementations return successful results or throw structured errors. Runtime decides whether a reported retryable failure should be retried.
+
+```ts
+class ToolError extends Error {
+  code: string;
+  category:
+    | "validation"
+    | "permission"
+    | "approval_rejected"
+    | "sandbox"
+    | "timeout"
+    | "cancelled"
+    | "execution"
+    | "internal";
+  retryable: boolean;
+  details?: unknown;
+}
+```
+
+`ToolDetails`, if retained, represents structured success details only and does not carry the error protocol. Its final shape remains unresolved.
+
+## 22. Runtime Interaction and Approval
+
+Approval is the first concrete Runtime Interaction.
+
+```mermaid
+sequenceDiagram
+    participant Runtime as ConversationRuntime
+    participant Tool as ToolDispatcher
+    participant Interaction as InteractionCoordinator
+    participant Journal as JournalService
+    participant UI
+    participant Router as InputRouter
+
+    Runtime->>Tool: execute(toolInvocation)
+    Tool->>Tool: permission = ask
+    Tool->>Interaction: request(toolApproval)
+    Interaction->>Runtime: ApprovalRequestedOutputEvent
+    Runtime->>Journal: append event
+    Journal-->>Runtime: persisted sequence
+    Journal-->>UI: publish approval request
+
+    UI->>Router: ApprovalDecisionInputEvent
+    Router->>Interaction: resolve(approvalRequestId)
+    Interaction-->>Tool: approved or rejected
+
+    alt approved
+        Tool->>Tool: sandbox and execute
+        Tool-->>Runtime: ToolResult
+    else rejected
+        Tool-->>Runtime: ToolError(approval_rejected)
+    end
+
+    Runtime->>Journal: append ApprovalResolvedOutputEvent
+```
+
+`InteractionCoordinator` manages:
+
+- pending request creation
+- asynchronous waiting
+- idempotent resolution
+- cancellation
+- expiry
+- restoration after restart
+- first-valid-decision wins
+
+Possible future Interaction types include user choice, clarification, and conflict resolution. Only Tool Approval is part of the initial implementation scope.
+
+## 23. Normal Agent Execution Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Command as ConversationCommandService
+    participant Journal as JournalService
+    participant Host as ConversationHost
+    participant Runtime as ConversationRuntime
+    participant Router as InputRouter
+    participant Policy as RuntimePolicyEngine
+    participant Effects as RuntimeEffectCoordinator
+    participant Nudge as NudgeManager
+    participant Compact as ContextCompactionManager
+    participant Context as ContextCompiler
+    participant Agent as PiAgentCoreAdapter
+    participant Tools as ToolDispatcher
+
+    Client->>Command: enqueue(UserMessageInputEvent)
+    Command->>Journal: append accepted input
+    Journal-->>Command: InputReceipt
+    Command->>Host: ensureActive(conversationId)
+    Host-->>Command: runtime endpoint
+    Command->>Runtime: dispatch(input)
+    Runtime->>Router: route(input)
+    Router->>Runtime: Turn Lane event
+
+    Runtime->>Policy: evaluate before_turn
+    Policy-->>Runtime: RuntimePolicyEffect[]
+    Runtime->>Effects: execute effects
+    Effects->>Nudge: schedule NudgeEffect
+    Effects->>Compact: execute ContextCompactionEffect
+    Compact-->>Effects: ContextCheckpoint
+    Runtime->>Context: compile history and checkpoint
+    Context-->>Runtime: projected messages
+
+    Runtime->>Agent: stream(projected messages, tools)
+    Agent->>Nudge: lease one-shot reminders
+    Nudge-->>Agent: systemPromptOverlay
+    Agent->>Nudge: confirm after Provider dispatch
+
+    loop Agent stream
+        Agent-->>Runtime: assistant delta
+        Runtime->>Journal: append OutputEvent
+
+        opt tool call
+            Agent-->>Runtime: ToolInvocation
+            Runtime->>Tools: execute(invocation)
+            Tools-->>Runtime: ToolResult or ToolError
+            Runtime->>Agent: tool result
+        end
+    end
+
+    Agent-->>Runtime: turn completed
+    Runtime->>Policy: evaluate after_turn
+    Runtime->>Journal: append completion events
+```
+
+## 24. Subprocess and IPC Architecture
+
+```mermaid
+flowchart LR
+    subgraph Parent["Parent / Host Process"]
+        Apps["CLI / TUI / GUI / Web"]
+        Query["ConversationQueryService"]
+        Command["ConversationCommandService"]
+        Journal["ConversationJournalService"]
+        Snapshot["SnapshotStore"]
+        Hub["OutputEventHub"]
+        Supervisor["ConversationProcessSupervisor"]
+        Transport["IPC Transport"]
+    end
+
+    subgraph Child["Child Runtime Process"]
+        Runtime["ConversationRuntime"]
+        Router["InputRouter"]
+        RunState["RunStateMachine"]
+        Tool["ToolDispatcher"]
+        Policy["RuntimePolicyEngine"]
+        Effects["RuntimeEffectCoordinator"]
+        Nudge["NudgeManager"]
+        Compact["ContextCompactionManager"]
+        Interaction["InteractionCoordinator"]
+    end
+
+    Apps --> Query
+    Apps --> Command
+
+    Query --> Journal
+    Query --> Snapshot
+    Query --> Hub
+
+    Command --> Supervisor
+    Supervisor --> Transport
+    Transport <--> Runtime
+
+    Runtime --> Router
+    Runtime --> RunState
+    Runtime --> Tool
+    Runtime --> Policy
+    Runtime --> Effects
+    Effects --> Nudge
+    Effects --> Compact
+    Runtime --> Interaction
+
+    Runtime -->|"append request"| Transport
+    Transport --> Journal
+    Journal --> Hub
+    Hub --> Apps
+```
+
+IPC transfers pure serializable messages only.
+
+Allowed messages include:
+
+- request
+- response
+- event notification
+- Runtime bootstrap
+- InputEvent snapshot
+- OutputEvent append request and acknowledgement
+- state snapshot
+- cancellation command
+- heartbeat
+
+IPC never transfers:
+
+- class instances
+- functions or callbacks
+- promises
+- Provider clients
+- ToolHandler instances
+- EventBus instances
+- `AbortSignal`
+
+Cancellation uses explicit protocol messages such as:
+
+```text
+runtime.stopRun
+runtime.interruptTurn
+runtime.cancelTool
+interaction.resolve
+runtime.shutdown
+```
+
+## 25. Subagent Architecture
+
+Main Agent and Subagent both use Conversation.
+
+```mermaid
+sequenceDiagram
+    participant Parent as Parent ConversationRuntime
+    participant ChildManager as ChildConversationManager
+    participant Host as ConversationHost
+    participant Child as Child ConversationRuntime
+    participant Journal as JournalService
+
+    Parent->>ChildManager: spawn(SubagentRequest)
+    ChildManager->>Host: create child Conversation
+    Host-->>ChildManager: childConversationId
+    Host->>Child: bootstrap(parentConversationId)
+    Child-->>Journal: SubagentStarted event
+
+    loop child execution
+        Child-->>Journal: child OutputEvents
+    end
+
+    Child-->>Host: child result
+    Host-->>ChildManager: SubagentResult
+    ChildManager-->>Parent: result
+    Parent-->>Journal: parent projection event
+```
+
+Subagent rules:
+
+- owns its own `conversationId`
+- records `parentConversationId`
+- owns its own Run state, Input Router, Nudge state, and OutputEvent sequence
+- does not automatically mix all child output into parent output
+- can run locally, in a worker, in a child process, or remotely
+- cancellation propagation follows an explicit parent-child lifecycle policy
+
+Parent output normally contains projections such as:
+
+- `SubagentStartedOutputEvent`
+- `SubagentProgressOutputEvent`
+- `SubagentCompletedOutputEvent`
+- `SubagentFailedOutputEvent`
+
+A debugging UI that needs the whole tree uses a Host-level tree subscription rather than changing one Conversation's output semantics.
+
+## 26. Persistence Model
+
+Logical local storage layout:
+
+```text
+<storageDir>/
+└─ conversations/
+   └─ <conversationId>/
+      ├─ metadata.json
+      ├─ snapshot.json
+      ├─ journal.jsonl
+      ├─ children.json
+      ├─ checkpoints/
+      └─ artifacts/
+```
+
+Suggested responsibilities:
+
+```text
+metadata.json
+    conversationId
+    parentConversationId
+    createdAt
+    updatedAt
+    workdir
+    schemaVersion
+
+snapshot.json
+    Conversation status
+    lastSequence
+    active Run snapshot
+    pending Interactions
+    child references
+    context checkpoint
+
+journal.jsonl
+    accepted InputEvents
+    OutputEvents
+    Run transitions
+    Tool traces
+    Interaction transitions
+```
+
+The storage API does not expose JSONL assumptions. A future SQLite implementation can replace the physical storage without changing Conversation or Runtime contracts.
+
+Host/Storage services are the durable write authority. Runtime processes do not concurrently write the same journal file directly.
+
+## 27. Current Implementation Status
+
+Currently implemented skeletons include:
+
+- InputEvent base hierarchy
+- OutputEvent base hierarchy
+- strict JSON-safe EventPayload and OutputPayload contracts
+- Input and Output snapshots with schema version and correlation metadata
+- persisted-event snapshot type with sequence and recorded time
+- InputEvent options, reference, priority, receipt, and rejection contracts
+- stable core InputEvent type constants
+- TypeBox EventSchemaRegistry and core InputEvent schemas
+- Conversation binding and mismatch rejection for InputEvent snapshots
+- `UserMessageInputEvent`
+- `ReloadConfigInputEvent`
+- `StopInputEvent`
+- `ClearContextInputEvent`
+- `CompactContextInputEvent`
+- InputResponse output references an InputEvent without copying its full snapshot
+
+The first-version protocol no longer contains `ResumeInputEvent`.
+
+Not yet implemented:
+
+- Conversation public API
+- Query and Command services
+- ConversationHost and process supervisor
+- ConversationRuntime
+- InputRouter
+- Run state machine
+- JournalService and OutputEventHub
+- InteractionCoordinator and Approval events
+- RuntimePolicyEngine and RuntimeEffectCoordinator
+- NudgeManager
+- ContextCompactionManager and ContextCheckpoint
+- PendingNudgeStore and one-shot System Prompt Overlay
+- ContextCompiler
+- Tool registry and execution pipeline
+- IPC protocol
+- Subagent manager
+
+The provisional Pi-coupled `BaseTool` and `ToolDetails` drafts have been removed. Tool abstractions will be introduced only during the reviewed Tool task.
+
+## 28. Deferred or Unresolved Decisions
+
+The following items still require explicit review before implementation:
+
+1. Exact Stop and Interrupt cancellation semantics
+2. Which InputEvents activate an offline Runtime
+3. Event schema migration mechanism beyond schema version 1
+4. Input snapshot redaction and size limits
+5. Context pressure thresholds and compaction hysteresis defaults
+6. ContextCheckpoint summary schema and validation
+7. Nudge scheduling, delivery, expiry, and redaction payloads
+8. Tool YAML manifest fields
+9. Whether `ToolDetails` returns as a common success-detail abstraction
+10. Tool result and incremental update contracts
+11. Runtime bootstrap payload
+12. Subagent result projection and cancellation policy
+13. Runtime idle eviction duration
+14. Initial JSONL versus SQLite storage backend
+15. System Prompt and ContextCompiler layer ordering
+16. Dedicated Novel domain model, intentionally deferred
+
+## 29. Recommended Implementation Order
+
+```text
+1. Freeze Stop / Interrupt semantics
+2. Freeze Event Envelope and Journal contract
+3. Define Conversation public interfaces
+4. Define Query and Command services
+5. Define Run state machine
+6. Define InputRouter control and turn lanes
+7. Define ConversationRuntime execution loop
+8. Define InteractionCoordinator and Approval
+9. Define ToolDescriptor, ToolHandler, and Tool pipeline
+10. Define RuntimePolicyEngine and Effect Coordinator
+11. Define ContextCompactionManager and ContextCheckpoint
+12. Define NudgeManager and PendingNudge lifecycle
+13. Define ContextCompiler and Pi per-call overlays
+14. Define Host, IPC, and Subagent management
+15. Integrate Pi through adapters
+```
+
+No implementation should proceed beyond a reviewed architecture boundary without confirming the corresponding unresolved decisions.

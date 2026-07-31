@@ -1,0 +1,15 @@
+{
+  "name": "novel-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "build": "pnpm --filter @novel/core build && pnpm --filter @novel/cli build",
+    "check": "pnpm build && pnpm -r check",
+    "dev": "pnpm --filter @novel/cli dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

@@ -143,35 +143,56 @@ Purpose:
 
 Design scope:
 
+- `WorkspaceStoreLocator`
+- semantic Store directory naming
+- `workspace-index.json` and explicit rebind
+- `ConversationMetadataStore`
+- `ConversationAgentBindingStore`
+- `conversation_agent_bindings`
 - `ConversationJournalService`
 - `JournalReader`
 - `JournalWriter`
+- per-Conversation `messages.jsonl`
 - `SnapshotStore`
-- `OutputEventHub`
+- `ConversationEventHub`
 - `ConversationQueryService`
-- `output.list()`
-- `output.subscribe()`
+- `events.list()`
+- `events.subscribe()`
 - catch-up-to-live subscription
 - `storageDir` and `workdir`
 - storage schema versions
 - storage locking and ownership
 
-Questions to resolve before implementation:
+Accepted decisions:
 
-1. Is the initial physical backend JSONL, SQLite, or a storage interface with both implementations deferred?
-2. Is the Host always the only Journal writer?
-3. What is the atomic append and publish order?
-4. How are corrupted or partially written records recovered?
-5. When are snapshots generated?
-6. How are snapshots invalidated after schema changes?
-7. What retention or cleanup policy applies to events, checkpoints, and artifacts?
-8. How does `output.subscribe()` atomically transition from Journal catch-up to live EventHub delivery?
-9. How are subscription backpressure and slow clients handled?
+1. One canonical Workspace root maps to one semantic Store directory and one `novel.db`.
+2. `workspace-index.json` owns the `workspaceRoot → workspaceId → storeDir` mapping; project moves use explicit rebind.
+3. Conversation metadata and the unified Input/Output Journal use SQLite.
+4. Every Conversation uses its own repairable `messages.jsonl` Runtime message projection.
+5. The public observable history is `conversation.events`, containing persisted InputEvent and OutputEvent records.
+6. Agent bindings are normalized into `conversation_agent_bindings`; one active binding is allowed per Conversation.
+7. Persisted Agent bindings always contain an exact Agent type and definition version, while the upper layer resolves Prompt, Tools, Policy, and Provider.
+8. Journal append succeeds before live publication or Message projection.
+9. Snapshots accelerate restoration but never replace Journal history.
+
+Task breakdown:
+
+- Task 1A: Workspace location, SQLite initialization, Conversation metadata, and Agent binding.
+- Task 1B: Unified SQLite Journal, sequence allocation, idempotency, and history queries.
+- Task 1C: Per-Conversation Messages JSONL, projection, validation, and Journal repair.
+- Task 1D: ConversationEventHub, catch-up-to-live delivery, and backpressure.
+
+Implementation status:
+
+- Task 1A implemented: Workspace location, semantic Store naming, SQLite initialization, Conversation metadata, and single-active Agent binding persistence.
+- Tasks 1B through 1D remain unimplemented and require their own review before coding.
 
 Expected deliverables after approval:
 
 - storage ports
 - initial storage implementation
+- Workspace and Conversation catalog
+- versioned Agent binding persistence
 - atomic append behavior
 - output pagination
 - replay and follow subscription
@@ -197,7 +218,7 @@ Design scope:
 - `LocalConversation`
 - `ConversationProxy` interface boundary
 - `ConversationInput`
-- `ConversationOutput`
+- `ConversationEvents`
 - `ConversationQueryService`
 - `ConversationCommandService`
 - `ConversationHost`

@@ -23,7 +23,7 @@ The product should lower the barrier between imagination and a structured, susta
 3. Historical queries and Agent execution use separate query and command paths.
 4. `InputEvent` is the unified input protocol and `OutputEvent` is the unified output protocol.
 5. Control inputs and normal Agent-turn inputs use separate logical lanes.
-6. `ConversationJournal` is the durable source of truth; `OutputEventHub` only handles live delivery.
+6. `ConversationJournal` is the durable source of truth; `ConversationEventHub` only handles live delivery after persistence.
 7. Approval is an asynchronous `OutputEvent → InputEvent` interaction rather than a UI callback.
 8. `RuntimePolicyEngine` evaluates Runtime facts and returns typed effects; it never performs those effects directly.
 9. `NudgeManager` consumes one-shot Nudge effects, while `ContextCompactionManager` consumes Context Compaction effects.
@@ -32,7 +32,9 @@ The product should lower the barrier between imagination and a structured, susta
 12. Main agents and subagents both use the Conversation abstraction.
 13. Process placement is selected by `ConversationHost`; one Conversation does not imply one process.
 14. Pi-specific types remain behind adapters and do not leak into core-owned public contracts.
-15. `storageDir` stores runtime data; `workdir` points to the user's project and is a separate concept.
+15. A canonical workspace root maps one-to-one to a separate semantic Store directory; transient execution working directories never change that binding.
+16. A Conversation does not interpret Agent types, but its versioned Agent binding is persisted so the Host can restore it through an upper-layer `AgentResolver`.
+17. SQLite Journal records drive display and replay; per-Conversation `messages.jsonl` files are repairable Runtime message projections rather than a second event source of truth.
 
 ## 4. Pause and Resume Decision
 
@@ -57,8 +59,10 @@ Pause/Resume are deferred from the accepted architecture. They can be reconsider
 core/
 ├─ src/config/
 ├─ src/event/
+├─ src/node/
 ├─ src/prompt/
 ├─ src/runtime/
+├─ src/storage/
 └─ src/tools/
 
 cli/
@@ -74,6 +78,8 @@ flowchart TB
     Core["core"]
     Config["config"]
     Event["event"]
+    Storage["storage"]
+    Node["node adapters"]
     Prompt["prompt"]
     Runtime["runtime"]
     Tools["tools"]
@@ -83,12 +89,64 @@ flowchart TB
     Apps --> Core
     Core --> Config
     Core --> Event
+    Core --> Storage
+    Core --> Node
     Core --> Prompt
     Core --> Runtime
     Core --> Tools
     Runtime --> Pi
     Tools -. stable interface .-> Native
 ```
+
+The package root remains platform-independent. Node filesystem and SQLite implementations are exposed through the `@novel/core/node` subpath and are not re-exported from the package root.
+
+## 5.1 Workspace Storage Layout
+
+```text
+workspaceRoot
+    ↓ WorkspaceStoreLocator
+~/.novel-agent/workspaces/<semantic-slug>--<short-workspace-id>/
+├─ workspace.json
+├─ novel.db
+└─ conversations/
+   └─ <conversationId>/
+      ├─ messages.jsonl
+      ├─ checkpoints/
+      └─ artifacts/
+```
+
+`workspace-index.json` stores the explicit `workspaceRoot → workspaceId → storeDir` binding. Moving a project requires an explicit rebind. Rebinding updates the canonical root but does not automatically rename an active Store directory.
+
+The stable project root is distinct from `executionWorkdir`. Main agents, subagents, tools, and sandboxes may use different execution directories while retaining the same Workspace Store binding.
+
+## 5.2 Conversation and Agent Binding
+
+```mermaid
+erDiagram
+    CONVERSATION ||--o{ CONVERSATION_AGENT_BINDING : has
+
+    CONVERSATION {
+        string id
+        string workspace_id
+        string parent_conversation_id
+        string root_conversation_id
+        string status
+    }
+
+    CONVERSATION_AGENT_BINDING {
+        string id
+        string conversation_id
+        int revision
+        string agent_type
+        string definition_version
+        string manifest_digest
+        string status
+    }
+```
+
+Creation requires an Agent type. The upper-layer resolver may select the exact definition version, but the persisted binding always records both `agentType` and `definitionVersion`. The public Conversation handle does not need to expose or interpret them.
+
+One Conversation has at most one active binding in the initial architecture. Historical binding revisions are supported by the schema, while concurrent multi-Agent rooms are deferred. Main and subagents continue to use separate Conversations.
 
 ## 6. Overall Architecture
 
@@ -101,7 +159,7 @@ flowchart TB
 
     Journal["ConversationJournalService"]
     Snapshot["SnapshotStore"]
-    EventHub["OutputEventHub"]
+    EventHub["ConversationEventHub"]
 
     Host["ConversationHost / Supervisor"]
     LocalRuntime["Local ConversationRuntime"]
@@ -138,7 +196,7 @@ Host and Storage Services
     ConversationCommandService
     ConversationJournalService
     SnapshotStore
-    OutputEventHub
+    ConversationEventHub
     ConversationHost
 
 Runtime Execution
@@ -163,7 +221,7 @@ classDiagram
         +string id
         +string? parentConversationId
         +ConversationInput input
-        +ConversationOutput output
+        +ConversationEvents events
         +getSnapshot() ConversationSnapshot
         +getRuntimePresence() RuntimePresence
         +close()
@@ -184,16 +242,16 @@ classDiagram
         +enqueue(InputEvent) InputReceipt
     }
 
-    class ConversationOutput {
+    class ConversationEvents {
         <<interface>>
-        +list(OutputEventQuery) OutputEventPage
-        +subscribe(OutputSubscriptionOptions) AsyncIterable
+        +list(ConversationEventQuery) ConversationEventPage
+        +subscribe(ConversationEventSubscriptionOptions) AsyncIterable
     }
 
     class ConversationQueryService {
         +getSnapshot(conversationId)
-        +listOutputEvents(query)
-        +subscribeOutputEvents(options)
+        +listConversationEvents(query)
+        +subscribeConversationEvents(options)
     }
 
     class ConversationCommandService {
@@ -219,7 +277,7 @@ classDiagram
     Conversation <|-- LocalConversation
     Conversation <|-- ConversationProxy
     Conversation *-- ConversationInput
-    Conversation *-- ConversationOutput
+    Conversation *-- ConversationEvents
 
     LocalConversation --> ConversationQueryService
     LocalConversation --> ConversationCommandService
@@ -234,16 +292,15 @@ Example public usage:
 ```ts
 await conversation.input.enqueue(inputEvent);
 
-const page = await conversation.output.list({
+const page = await conversation.events.list({
   afterSequence: 100,
   limit: 200,
 });
 
-for await (const event of conversation.output.subscribe({
+for await (const event of conversation.events.subscribe({
   start: { from: "sequence", afterSequence: 100 },
-  follow: true,
 })) {
-  outputStore.apply(event);
+  eventStore.apply(event);
 }
 ```
 
@@ -258,13 +315,13 @@ flowchart LR
     Conversation --> Query["Query Path"]
     Conversation --> Command["Command Path"]
 
-    Query --> List["output.list()"]
-    Query --> Subscribe["output.subscribe()"]
+    Query --> List["events.list()"]
+    Query --> Subscribe["events.subscribe()"]
     Query --> GetSnapshot["getSnapshot()"]
 
     List --> Journal["JournalReader"]
     Subscribe --> Journal
-    Subscribe --> EventHub["OutputEventHub"]
+    Subscribe --> EventHub["ConversationEventHub"]
     GetSnapshot --> SnapshotStore["SnapshotStore"]
 
     Command --> Enqueue["input.enqueue()"]
@@ -275,14 +332,13 @@ flowchart LR
 
 Operations that never activate a Runtime:
 
-- `output.list()`
-- history-only `output.subscribe()`
-- following `output.subscribe()`
+- `events.list()`
+- `events.subscribe()`
 - `getSnapshot()`
 - metadata lookup
 - Conversation export
 - Tool trace lookup
-- OutputEvent replay
+- InputEvent and OutputEvent replay
 
 A following subscription attaches to the Host-owned EventHub and waits for future events. Subscribing alone does not activate a Runtime.
 
@@ -600,33 +656,34 @@ Full InputEvent snapshots inside output events must be:
 - redacted when sensitive
 - omitted or replaced with a Journal reference for large inputs
 
-## 14. Output History and Subscription
+## 14. Conversation Event History and Subscription
 
 ```ts
-interface ConversationOutput {
-  list(query?: OutputEventQuery): Promise<OutputEventPage>;
+interface ConversationEvents {
+  list(query?: ConversationEventQuery): Promise<ConversationEventPage>;
 
   subscribe(
-    options: OutputSubscriptionOptions,
-  ): AsyncIterable<OutputEventSnapshot>;
+    options: ConversationEventSubscriptionOptions,
+  ): AsyncIterable<PersistedConversationEventSnapshot>;
 }
 
-interface OutputEventQuery {
+interface ConversationEventQuery {
   afterSequence?: number;
   beforeSequence?: number;
   limit?: number;
   eventTypes?: string[];
+  direction?: "input" | "output";
 }
 
-type OutputSubscriptionStart =
+type ConversationEventSubscriptionStart =
   | { from: "beginning" }
   | { from: "latest" }
   | { from: "sequence"; afterSequence: number };
 
-interface OutputSubscriptionOptions {
-  start: OutputSubscriptionStart;
-  follow: boolean;
+interface ConversationEventSubscriptionOptions {
+  start: ConversationEventSubscriptionStart;
   eventTypes?: string[];
+  direction?: "input" | "output";
   signal?: AbortSignal;
 }
 ```
@@ -640,10 +697,10 @@ sequenceDiagram
     participant Query as ConversationQueryService
     participant Journal as ConversationJournal
 
-    UI->>Conversation: output.list(afterSequence, limit)
-    Conversation->>Query: listOutputEvents(query)
-    Query->>Journal: read persisted output records
-    Journal-->>Query: OutputEvent page
+    UI->>Conversation: events.list(afterSequence, limit)
+    Conversation->>Query: listConversationEvents(query)
+    Query->>Journal: read persisted Input/Output records
+    Journal-->>Query: ConversationEvent page
     Query-->>Conversation: page
     Conversation-->>UI: page
 
@@ -658,16 +715,16 @@ sequenceDiagram
     participant Conversation
     participant Query as ConversationQueryService
     participant Journal as ConversationJournal
-    participant Hub as OutputEventHub
+    participant Hub as ConversationEventHub
 
-    UI->>Conversation: output.subscribe(afterSequence=100, follow=true)
+    UI->>Conversation: events.subscribe(afterSequence=100)
     Conversation->>Query: subscribe(conversationId, 100)
     Query->>Hub: establish subscription and watermark
     Query->>Journal: read events after 100 through watermark
-    Journal-->>Query: historical OutputEvents
+    Journal-->>Query: historical ConversationEvents
     Query-->>UI: replay historical events
     Query->>Hub: drain buffered events and follow live
-    Hub-->>UI: new OutputEvents
+    Hub-->>UI: new persisted ConversationEvents
 
     Note over UI,Hub: Subscription does not activate ConversationRuntime
 ```
@@ -684,7 +741,7 @@ flowchart LR
     Append["append event request"]
     Journal["ConversationJournalService"]
     Sequence["assign sequence"]
-    Publisher["OutputEventHub.publish()"]
+    Publisher["ConversationEventHub.publish()"]
     Client["CLI / TUI / GUI / Web"]
 
     Runtime --> Append
@@ -1398,7 +1455,7 @@ flowchart LR
         Command["ConversationCommandService"]
         Journal["ConversationJournalService"]
         Snapshot["SnapshotStore"]
-        Hub["OutputEventHub"]
+        Hub["ConversationEventHub"]
         Supervisor["ConversationProcessSupervisor"]
         Transport["IPC Transport"]
     end
@@ -1598,7 +1655,7 @@ Not yet implemented:
 - ConversationRuntime
 - InputRouter
 - Run state machine
-- JournalService and OutputEventHub
+- JournalService and ConversationEventHub
 - InteractionCoordinator and Approval events
 - RuntimePolicyEngine and RuntimeEffectCoordinator
 - NudgeManager

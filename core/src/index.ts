@@ -12,4 +12,5 @@ export * from "./config/index.js";
 export * from "./event/index.js";
 export * from "./prompt/index.js";
 export * from "./runtime/index.js";
+export * from "./storage/index.js";
 export * from "./tools/index.js";

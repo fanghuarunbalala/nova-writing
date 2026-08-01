@@ -965,6 +965,104 @@ History pages default to 100 records and are capped at 1000. Start, End, AfterSe
 
 Known InputEvents are validated strictly on write. Unknown OutputEvent types may be stored after strict envelope and JSON-safety validation. Historical reads tolerate unknown Input and Output schemas so future event types remain replayable, while malformed JSON, non-canonical JSON, hash mismatches, invalid envelopes, or extracted-column mismatches are treated as corrupted Journal records.
 
+### 15.2 Implemented Task 1C-A Runtime Message Boundary
+
+Runtime Messages are a Core-owned model-context protocol rather than Pi `AgentMessage` values. Pi-specific conversion remains inside the future Agent adapter.
+
+```mermaid
+flowchart LR
+    JournalEvent["Persisted InputEvent / OutputEvent"]
+    Projector["RuntimeMessageProjector<br/>synchronous and deterministic"]
+    Registry["RuntimeMessageSchemaRegistry"]
+    Draft["RuntimeMessageDraft"]
+    FutureFile["Future messages.jsonl"]
+    PiAdapter["Future Pi Message Adapter"]
+
+    JournalEvent --> Projector
+    Projector --> Draft
+    Draft --> Registry
+    Registry -. "Task 1C-B onward" .-> FutureFile
+    FutureFile -. "Runtime activation" .-> PiAdapter
+```
+
+The common Runtime Message envelope contains:
+
+```text
+Message ID + Conversation ID
+Role + Message Type + Schema Version
+Timestamp + optional Run and Turn identifiers
+JSON-safe typed Payload
+```
+
+The common Roles are User, Assistant, Tool, System, and Custom. Message Type and Payload remain extensible through registered schemas. Known Message Types are strict; historical readers may explicitly allow unknown types for forward-compatible replay.
+
+Projectors are synchronous local computations under the async-first hybrid architecture. They must be deterministic and must not perform I/O, use randomness, read the wall clock, or call a Provider or Tool. The same persisted Event and projector version must always produce the same ordered Message drafts.
+
+The initial Core projector maps `user.message` InputEvents to provider-independent User RuntimeMessages. Stop, configuration, Context control, and unrelated Events project to no messages. Assistant and Tool projections remain deferred until their concrete OutputEvent contracts and Agent adapter boundary are reviewed.
+
+Core observability uses a platform-neutral structured Logger with a default `NoopLogger`. Projector debug records contain logical IDs, Event Type, Direction, Sequence, and Message count, but never Event payloads, Message payloads, user novel text, prompts, Tool results, or credentials. Info logs are reserved for the future JSONL projection lifecycle such as creation, catch-up, repair, and rebuild.
+
+### 15.3 Implemented Task 1C-B Message Projection File Protocol
+
+The Message projection file is a committed JSONL protocol rather than an unstructured list of provider messages.
+
+```text
+Header
+Checkpoint(projectedThroughSequence = 0, messageCount = 0)
+Message
+Message
+Checkpoint(projectedThroughSequence = 10, messageCount = 2)
+Message
+```
+
+Every line is strict Canonical JSON and belongs to one Hash Chain. The Codec returns a line without a newline; the Node file adapter introduced in Task 1C-C will append the newline.
+
+```mermaid
+classDiagram
+    class MessageProjectionHeaderRecord {
+        +recordType header
+        +formatVersion 1
+        +workspaceId
+        +conversationId
+        +projectorId
+        +projectorVersion
+        +hashAlgorithm sha256
+        +createdAt
+        +previousHash null
+        +recordHash
+    }
+
+    class MessageProjectionMessageRecord {
+        +recordType message
+        +messageIndex
+        +source sequence/eventId/eventType/direction/ordinal
+        +RuntimeMessageSnapshot message
+        +previousHash
+        +recordHash
+    }
+
+    class MessageProjectionCheckpointRecord {
+        +recordType checkpoint
+        +projectedThroughSequence
+        +messageCount
+        +committedAt
+        +previousHash
+        +recordHash
+    }
+```
+
+The Header is immutable and binds the file to one Workspace, Conversation, projector identity, projector version, format version, and hash algorithm. A valid empty projection is always Header plus Checkpoint zero.
+
+Message Index is a cumulative contiguous index independent from Journal Sequence. Source Ordinal starts at zero for each source Event and increments when one Event produces multiple Messages. Messages sharing one source Sequence must reference the same Event ID, Event Type, and Direction. Runtime Message IDs must be unique in the file.
+
+Checkpoint is the projection commit marker. It records the cumulative Message count and the Journal Sequence through which every Event has been considered, including Events that produce no Messages. Checkpoint Sequence strictly increases after the initial zero Checkpoint.
+
+Hash input is the Canonical JSON form of the record with `recordHash` omitted. Because the remaining record includes `previousHash`, Header, Message, and Checkpoint records form one ordered chain. SHA-256 is fixed by the protocol, while the Core Codec receives a platform-neutral synchronous Hasher capability; Node `crypto` remains a Task 1C-C adapter concern.
+
+The record sequence validator separates the latest committed Checkpoint from valid records appended after it. A file ending with valid Message records but no following Checkpoint contains an interrupted, uncommitted tail. Task 1C-C may truncate that tail back to the last committed record before catch-up continues. Invalid JSON or byte-level tail classification remains a file-scanner responsibility.
+
+Codec and sequence validation are synchronous pure protocol operations and do not log. Task 1C-C and Task 1C-D own scan, truncation, catch-up, repair, rebuild, and their structured info/debug lifecycle logs.
+
 ## 16. ConversationRuntime Composition
 
 ```mermaid

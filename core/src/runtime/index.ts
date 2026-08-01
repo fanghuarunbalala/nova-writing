@@ -18,3 +18,4 @@ export function createRuntime(config: RuntimeConfig): Runtime {
   };
 }
 
+export * from "./message/index.js";

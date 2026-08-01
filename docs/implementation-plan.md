@@ -190,7 +190,9 @@ Implementation status:
 
 - Task 1A implemented: Workspace location, semantic Store naming, SQLite initialization, Conversation metadata, and single-active Agent binding persistence.
 - Task 1B implemented and awaiting review: unified SQLite Input/Output Journal, per-Conversation Sequence allocation, Event ID idempotency, canonical JSON integrity, stable history pagination, unknown historical event replay, and shared Workspace Store ownership.
-- Tasks 1C and 1D remain unimplemented and require their own review before coding.
+- Task 1C-A implemented and awaiting review: platform-neutral structured Logger, Core-owned RuntimeMessage envelope, strict Message Schema Registry, deterministic projector contracts, composite validation, and Core `user.message` projection.
+- Task 1C-B implemented and awaiting review: JSONL Header, Message, and Checkpoint records, canonical encoding, injected SHA-256 hashing, Hash Chain validation, committed Checkpoint state, and valid trailing-record detection.
+- Task 1C-C through 1C-E and Task 1D remain unimplemented and require their own review before coding.
 
 Task 1B concurrency boundary:
 
@@ -234,6 +236,61 @@ Explicitly excluded:
 - Runtime activation
 - Tool execution
 - child processes
+
+Task 1C checkpoints:
+
+- Task 1C-A: RuntimeMessage domain protocol, schemas, deterministic projector contracts, and logging boundary.
+- Task 1C-B: JSONL Header, Message, and Checkpoint records, canonical encoding, and hash chain.
+- Task 1C-C: Node JSONL Store, path safety, async file access, atomic replacement, and locking.
+- Task 1C-D: Journal catch-up, validation, repair, rebuild, and projector version handling.
+- Task 1C-E: Node integration, exports, documentation, and focused end-to-end validation.
+
+Task 1C-A delivered:
+
+- Core-owned `RuntimeMessageSnapshot` and `RuntimeMessageDraft` without Pi type leakage
+- common User, Assistant, Tool, System, and Custom roles with extensible Message Type payloads
+- strict RuntimeMessage envelope, role, timestamp, JSON-safety, registered payload, and version validation
+- optional tolerant validation for unknown historical Message Types
+- synchronous and deterministic `RuntimeMessageProjector` contract
+- ordered `CompositeRuntimeMessageProjector` with strict draft validation and duplicate projector detection
+- Core `user.message` Event to provider-independent User RuntimeMessage projection
+- control and unrelated Events produce no Runtime Messages
+- platform-neutral structured Logger and default `NoopLogger`
+- privacy-safe per-Event debug logging that excludes Event and Message payloads
+
+Task 1C-A explicitly excludes:
+
+- `messages.jsonl` creation or reading
+- Header, Message, and Checkpoint record formats
+- file hashes, hash chains, truncation, locking, catch-up, repair, or rebuild
+- Assistant and Tool Event definitions or Pi conversion
+- live projection from `ConversationEventHub`
+
+Task 1C-B delivered:
+
+- platform-neutral Header, Message, and Checkpoint JSONL record contracts
+- Workspace, Conversation, Projector ID, Projector Version, and format identity in the immutable Header
+- explicit empty projection state represented by Header followed by Checkpoint zero
+- Message records with cumulative Message Index and source Event Sequence, ID, Type, Direction, and Ordinal
+- cumulative Checkpoint Sequence and Message Count as the projection batch commit marker
+- platform-neutral synchronous `MessageProjectionHasher` port fixed to SHA-256 protocol semantics
+- Canonical JSON encoding without newline or file-system assumptions
+- record hashes calculated from Canonical JSON with `recordHash` omitted
+- Header, Message, and Checkpoint participation in one PreviousHash chain
+- strict RuntimeMessage validation on creation and configurable unknown historical Message reading
+- cross-record identity, chain, Message Index, Message ID, Source Sequence, Source Event, Ordinal, and Checkpoint validation
+- separate committed state and valid trailing-record state for future interrupted-write truncation
+- privacy-safe typed protocol errors without Message or Event payloads
+
+Task 1C-B explicitly excludes:
+
+- Node `crypto` implementation of SHA-256
+- JSONL file creation, reading, appending, scanning, truncation, or replacement
+- Conversation path validation and directory ownership
+- in-process or cross-process projection locks
+- Journal catch-up and Runtime Message materialization
+- automatic repair or rebuild
+- info or debug logging from pure Codec and sequence validation functions
 
 ## 5. Task 2: Conversation and Host
 

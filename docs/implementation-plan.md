@@ -1036,6 +1036,7 @@ Implementation status:
 - Task 3B-B implemented and awaiting review: stable execution cancellation reasons, cancellation-consistent Run/Turn payloads, terminal Runtime Input processing outcomes, strict schema variants, public exports, and expanded protocol validation.
 - Task 3B-C implemented and awaiting review: deterministic payload-free Runtime Event IDs, versioned SHA-256 identity, Runtime persistence-barrier contracts, shared Output publisher adaptation, stable error normalization, structured logs, and focused protocol validation.
 - Task 3C-A implemented and awaiting review: pure Run and Turn state machines, explicit legal transition tables, frozen snapshots/transitions, cancellation consistency, restore validation, scope-local ordinals, stable errors, public exports, and focused validation.
+- Task 3C-B implemented and awaiting review: bounded Control/Turn inboxes, Core lane policy, durable snapshot capture, Sequence conflict detection, Control preemption, Turn FIFO, Stop fence pruning, structured logs, public exports, and focused validation.
 
 Task 3B implementation is complete. Task 3C may now implement transition legality, the two-lane Router, Stop fences, and serialized Run/Turn mutation against these frozen protocols.
 
@@ -1172,6 +1173,32 @@ Task 3C-A explicitly excludes:
 - InputRouter, Control/Turn inboxes, Stop fence calculation, queue capacity, and wake-up behavior
 - Runtime Event publication and automatic Event construction
 - Provider, Pi, Tool, Approval, Policy, IPC, and Subagent behavior
+
+Task 3C-B delivered:
+
+- `InputRouter`, `RuntimeInputInbox`, and Core lane policy
+- Control ordering by priority then Journal Sequence and Turn ordering strictly by Sequence
+- bounded independent lane capacities with stable queue errors
+- defensive canonical capture of persisted Input snapshots
+- duplicate suppression and same-Sequence conflict rejection
+- Control-first `peekNext` and `dequeueNext`
+- Stop fence removal of queued Turn inputs through the Stop Sequence
+- structured routing, duplicate, and fence logs without payloads
+- focused smoke coverage for ordering, preemption, FIFO, duplicate/conflict, capacity, Conversation mismatch, immutable capture, fence behavior, and log redaction
+
+Task 3C-B accepted decisions:
+
+- Router accepts already-resolved `PersistedInputEventSnapshot`; Task 3D resolves Host references through Journal.
+- Stop and ReloadConfig use Control; all other registered Inputs default to Turn.
+- priority never reorders the Turn lane.
+- Stop fence removes only queued Turn inputs at or before its Sequence; active Run cancellation is not a Router mutation.
+- Router performs no Journal I/O, Output publication, state transition, or cancellation effect.
+
+Task 3C-B explicitly excludes:
+
+- durable replay cursor and Host-reference resolution
+- Input outcome publication and state-machine coordination
+- TurnController, ConversationRuntime, Pi, Tool, Approval, Policy, IPC, and Subagent behavior
 
 Expected deliverables after approval:
 

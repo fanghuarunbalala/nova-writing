@@ -2764,6 +2764,29 @@ Snapshots and transition results are frozen and defensively capture durable Run 
 
 Task 3C-B adds the two-lane Router and Stop fence around these pure rules. Task 3C-C adds `TurnController` coordination without moving Provider or Tool behavior into the state machines.
 
+### 16.6 Implemented Task 3C-B Two-Lane Input Router
+
+`InputRouter` accepts validated `PersistedInputEventSnapshot` records. Host references are resolved through Journal later by Task 3D, keeping routing synchronous and storage-independent.
+
+```mermaid
+flowchart LR
+    Input["Persisted Input"] --> Policy["CoreRuntimeInputLanePolicy"]
+    Policy -->|"Stop / ReloadConfig"| Control["Bounded Control Inbox"]
+    Policy -->|"Other registered input"| Turn["Bounded Turn Inbox"]
+    Control --> Next["peekNext / dequeueNext"]
+    Turn --> Next
+    Stop["Stop Sequence"] --> Fence["applyStopFence"]
+    Fence --> Turn
+```
+
+Control ordering uses descending priority and ascending Journal Sequence, so Stop may preempt older lower-priority control work. Turn ordering is always ascending Sequence and ignores priority. `peekNext` and `dequeueNext` always select Control before Turn.
+
+Snapshots are canonicalized, defensively frozen, and fingerprinted for same-Sequence duplicate recovery. An identical retry returns `duplicate`; a different snapshot at the same Sequence raises a stable conflict. Control and Turn capacities are independent and bounded.
+
+`applyStopFence(stopSequence)` removes and returns queued Turn inputs whose Sequence is at or before the fence, ordered by Sequence. It does not mutate an active Run, remove Control inputs, publish outcomes, or perform cancellation. Task 3C-C and Task 3D coordinate those effects.
+
+Structured logs expose only Conversation/Event identity, Event Type, Sequence, priority, lane, queue sizes, and cancelled count. Input payloads, prompts, novel text, paths, raw errors, stacks, and causes are excluded.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:

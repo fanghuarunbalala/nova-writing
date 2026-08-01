@@ -4,6 +4,8 @@ export const CORE_PI_MESSAGE_CONVERSION_FAILURE = {
   invalidMessage: "invalid_message",
   unsupportedMessage: "unsupported_message",
   duplicateMessage: "duplicate_message",
+  assistantEnvelopeUnavailable: "assistant_envelope_unavailable",
+  assistantEnvelopeInvalid: "assistant_envelope_invalid",
 } as const;
 
 export type CorePiMessageConversionFailure =

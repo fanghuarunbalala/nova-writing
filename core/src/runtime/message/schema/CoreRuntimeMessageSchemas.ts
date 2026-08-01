@@ -5,6 +5,7 @@ import { RUNTIME_MESSAGE_SCHEMA_VERSION } from "../RuntimeMessageSnapshot.js";
 
 export const CORE_RUNTIME_MESSAGE_TYPE = {
   userMessage: "user.message",
+  assistantMessage: "assistant.message",
 } as const;
 
 export const RuntimeTextContentSchema = Type.Object(
@@ -22,6 +23,13 @@ export const CoreUserRuntimeMessagePayloadSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const CoreAssistantRuntimeMessagePayloadSchema = Type.Object(
+  {
+    content: Type.Array(RuntimeTextContentSchema),
+  },
+  { additionalProperties: false },
+);
+
 export function registerCoreRuntimeMessageSchemas(
   registry: RuntimeMessageSchemaRegistry,
 ): void {
@@ -30,5 +38,11 @@ export function registerCoreRuntimeMessageSchemas(
     messageType: CORE_RUNTIME_MESSAGE_TYPE.userMessage,
     schemaVersion: RUNTIME_MESSAGE_SCHEMA_VERSION,
     payloadSchema: CoreUserRuntimeMessagePayloadSchema,
+  });
+  registry.register({
+    role: "assistant",
+    messageType: CORE_RUNTIME_MESSAGE_TYPE.assistantMessage,
+    schemaVersion: RUNTIME_MESSAGE_SCHEMA_VERSION,
+    payloadSchema: CoreAssistantRuntimeMessagePayloadSchema,
   });
 }

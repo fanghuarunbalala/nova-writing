@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Type } from "typebox";
 import {
-  CoreRuntimeMessageProjector,
+  AgentAssistantMessageCompletedOutputEvent,
+  CoreConversationRuntimeMessageProjector,
   INPUT_EVENT_TYPE,
   UserMessageInputEvent,
   createCoreRuntimeMessageSchemaRegistry,
@@ -54,6 +55,7 @@ const storageRoot = join(temporaryRoot, "storage");
 const conversationA = "conversation-main";
 const conversationB = "conversation-custom";
 const secretText = "SMOKE_SECRET_NOVEL_CONTENT";
+const secretAssistantText = "SMOKE_SECRET_ASSISTANT_CONTENT";
 const logEntries = [];
 const logger = new CollectingLogger(logEntries);
 
@@ -61,7 +63,7 @@ try {
   await mkdir(workspaceRoot, { recursive: true });
   const locator = new NodeWorkspaceStoreLocator({ storageRoot });
   const location = await locator.resolve(workspaceRoot);
-  const coreProjector = new CoreRuntimeMessageProjector();
+  const coreProjector = new CoreConversationRuntimeMessageProjector({ logger });
 
   const firstStore = await SqliteWorkspaceStore.open({
     workspace: location,
@@ -92,6 +94,23 @@ try {
     }).getSnapshot(),
   });
   await firstStore.journal.append({
+    direction: "output",
+    snapshot: new AgentAssistantMessageCompletedOutputEvent({
+      id: "assistant-output-main",
+      conversationId: conversationA,
+      runId: "run-main",
+      turnId: "turn-main",
+      assistantMessageId: "assistant-message-main",
+      timestamp: "2026-08-01T00:00:00.500Z",
+      content: [
+        { type: "thinking", thinking: "projection-private-thinking" },
+        { type: "text", text: secretAssistantText },
+      ],
+      completionReason: "stop",
+      hasToolCalls: false,
+    }).getSnapshot(),
+  });
+  await firstStore.journal.append({
     direction: "input",
     snapshot: new UserMessageInputEvent({
       conversationId: conversationB,
@@ -111,9 +130,21 @@ try {
   assert.deepEqual(firstSynchronization.operations, ["initialized", "caught_up"]);
 
   const firstPage = await contextA.messages.list({ conversationId: conversationA });
-  assert.equal(firstPage.items.length, 1);
+  assert.equal(firstPage.items.length, 2);
   assert.equal(firstPage.items[0].message.payload.content[0].text, secretText);
+  assert.deepEqual(firstPage.items[1].message, {
+    id: firstPage.items[1].message.id,
+    conversationId: conversationA,
+    role: "assistant",
+    messageType: "assistant.message",
+    schemaVersion: 1,
+    timestamp: "2026-08-01T00:00:00.500Z",
+    runId: "run-main",
+    turnId: "turn-main",
+    payload: { content: [{ type: "text", text: secretAssistantText }] },
+  });
   const deterministicMessageId = firstPage.items[0].message.id;
+  const deterministicAssistantMessageId = firstPage.items[1].message.id;
 
   await contextA.close();
   await contextA.close();
@@ -145,6 +176,7 @@ try {
   assert.equal(ready.health, "ready");
   const reopenedPage = await reopenedContext.messages.list({ conversationId: conversationA });
   assert.equal(reopenedPage.items[0].message.id, deterministicMessageId);
+  assert.equal(reopenedPage.items[1].message.id, deterministicAssistantMessageId);
 
   const versionTwoProjector = {
     id: coreProjector.id,
@@ -159,6 +191,7 @@ try {
   assert.equal(migration.rebuildReason, "projector_changed");
   const migratedPage = await versionTwoContext.messages.list({ conversationId: conversationA });
   assert.notEqual(migratedPage.items[0].message.id, deterministicMessageId);
+  assert.notEqual(migratedPage.items[1].message.id, deterministicAssistantMessageId);
 
   const customRegistry = createCoreRuntimeMessageSchemaRegistry();
   customRegistry.register({
@@ -204,6 +237,8 @@ try {
   await reopenedStore.close();
   const serializedLogs = JSON.stringify(logEntries);
   assert.equal(serializedLogs.includes(secretText), false);
+  assert.equal(serializedLogs.includes(secretAssistantText), false);
+  assert.equal(serializedLogs.includes("projection-private-thinking"), false);
   assert.equal(serializedLogs.includes("custom projection source"), false);
   assert.equal(serializedLogs.includes('"payload"'), false);
 } finally {

@@ -7,6 +7,11 @@ import type {
 
 export interface PiAgentCoreState {
   systemPrompt: string;
+  readonly model: {
+    readonly id: string;
+    readonly api: string;
+    readonly provider: string;
+  };
   messages: AgentMessage[];
   readonly errorMessage?: string;
 }

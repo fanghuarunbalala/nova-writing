@@ -1060,6 +1060,7 @@ Implementation status:
 - Task 3E-B implemented and awaiting review: package-private `PiAgentCoreAdapter`, installed Pi `Agent` compatibility boundary, canonical context replacement, prompt/continue execution, awaited event-bridge barriers, single-active-Run reservation, terminal outcome normalization, preparation-aware idempotent cancellation, redacted logs, and real Pi Agent smoke validation.
 - Task 3E-C implemented and awaiting review: strict package-private `CorePiRuntimeMessageConverter` for registered UserMessages, serialized `PiTurnLifecycleBridge`, persistence-first Pi Turn start/end mapping through real `TurnController`, cancellation ownership deferral, fixed failures, redacted logs, and real Pi/Provider/Journal barrier validation.
 - Task 3E-D implemented and awaiting review: public Core Assistant draft OutputEvent protocol and schemas, package-private composite Pi event bridge, persistence-first Assistant start/text-thinking delta/completed/failed/cancelled mapping, Tool-argument exclusion, cancellation draft settlement, redacted logs, and real streaming Pi validation.
+- Task 3E-E implemented and awaiting review: canonical `assistant.message@1` text history, independent Assistant Event projector, standard versioned Core projector composition, active-model Pi Assistant envelope reconstruction, Tool-call deferral, strict failures, redacted logs, and Journal-to-Message integration validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1737,6 +1738,41 @@ Task 3E-D explicitly excludes:
 - Run terminalization and concrete `RuntimeRunExecutor`
 - Runtime/Stop composition, Policy, Compaction, Nudge, Approval, IPC, and Subagents
 - replay-time synthesis of a missing terminal draft Event after an Event Sink failure
+
+Task 3E-E delivered:
+
+- public Core `assistant.message@1` Runtime Message schema containing only ordered text blocks
+- independent `CoreAssistantRuntimeMessageProjector` for completed Tool-free Assistant OutputEvents
+- `CoreConversationRuntimeMessageProjector` as the standard versioned User-plus-Assistant projector composition
+- deterministic omission of thinking blocks, empty text blocks, failed drafts, cancelled drafts, streaming deltas, and Tool-bearing completions
+- package-private `PiAssistantMessageEnvelopeFactory` boundary
+- package-private `PiAgentCoreAssistantMessageEnvelopeFactory` reading the active Pi model identity at conversion time
+- Core-to-Pi Assistant reconstruction with current API/provider/model identity, zero synthetic usage, canonical timestamp, and neutral `stop` history reason
+- stable missing/invalid Assistant envelope conversion failures without raw payload or Provider data
+- focused protocol, conversion, active-model replacement, privacy, and log-redaction smoke validation
+- SQLite Journal-to-Message integration proving deterministic Assistant persistence, reopen, rebuild, and thinking omission
+
+Task 3E-E accepted decisions:
+
+- canonical Assistant history is projected only from `agent.assistant.message.completed` with `hasToolCalls: false`.
+- a completion carrying Tool calls is skipped as a whole until Task 5 can project the Assistant Tool-call blocks and matching Tool results atomically without inventing incomplete model history.
+- canonical Assistant payloads preserve text blocks only. Thinking text and signatures remain display/replay data in the Journal and are not sent back to a Provider as canonical reasoning history.
+- empty final text and thinking-only completions produce an Assistant Runtime Message with an empty content array instead of failing Message repair. Empty text blocks themselves are omitted.
+- failed, cancelled, started, and delta Assistant Events never become canonical Runtime Messages.
+- Provider API, Provider ID, model ID, usage, response metadata, and stop reason are not persisted in the canonical Core Message.
+- Pi conversion reads the currently active Pi model identity through a package-private envelope factory. It supplies zero usage and neutral `stop` because those fields are required Pi transport scaffolding rather than persisted historical facts.
+- `CoreConversationRuntimeMessageProjector` owns the standard composition identity. Future Tool-aware projection changes must advance its version so existing Message JSONL projections rebuild from Journal.
+- missing or invalid Assistant envelope configuration is a stable conversion failure; Runtime composition must inject the active Pi envelope factory before canonical Assistant history can be used.
+
+Task 3E-E explicitly excludes:
+
+- canonical Tool-call blocks and ToolResult Runtime Messages
+- Tool-bearing Assistant projection before matching Tool result semantics are reviewed
+- thinking signature persistence or Provider reasoning-block reconstruction
+- Provider usage accounting and original completion-reason persistence
+- Run terminalization, concrete `RuntimeRunExecutor`, and live Runtime installation
+- Provider/model selection, credentials, retries, transport, or configuration persistence
+- Policy, Compaction, Nudge, Approval, IPC, and Subagents
 
 Expected deliverables after approval:
 

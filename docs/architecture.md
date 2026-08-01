@@ -3680,6 +3680,70 @@ Logs include only Core IDs, delta ordinal/channel, terminal outcome, delta count
 
 This checkpoint intentionally does not project completed Assistant output into canonical Runtime Messages, convert canonical Assistant history back to Pi, persist Tool arguments/results, account usage, terminalize Runs, or install the Adapter into the live Runtime executor.
 
+### 16.23 Implemented Task 3E-E Canonical Assistant History
+
+Canonical Assistant history is now a Core-owned `assistant.message@1` Runtime Message. Its payload contains only ordered text blocks:
+
+```ts
+interface CoreAssistantRuntimeMessagePayload {
+  content: Array<{
+    type: "text";
+    text: string;
+  }>;
+}
+```
+
+`CoreAssistantRuntimeMessageProjector` accepts only durable `agent.assistant.message.completed` OutputEvents whose `hasToolCalls` flag is false. Started, delta, failed, and cancelled draft Events remain replay-only history. A Tool-bearing completion is skipped as a whole until Task 5 can project its Tool-call blocks and matching Tool results without creating an incomplete Provider transcript.
+
+Thinking blocks remain in Journal OutputEvents for UI replay but are intentionally absent from canonical model history. Provider reasoning signatures were never persisted, so replaying plain thinking text as a signed reasoning block would be unsafe. Empty text blocks are omitted; a completed thinking-only response becomes an Assistant Runtime Message with an empty content array so deterministic Message repair does not fail on a valid completed Event.
+
+`CoreConversationRuntimeMessageProjector` is the standard versioned composition:
+
+```text
+Persisted Conversation Event
+        ↓
+CoreRuntimeMessageProjector            user.message
+        +
+CoreAssistantRuntimeMessageProjector   assistant.message
+        ↓
+strict Core RuntimeMessage registry
+        ↓
+Messages JSONL projection
+```
+
+Its composition identity is `core.conversation-message@1`. A future Tool-aware projection must advance that version, causing the repairable Messages JSONL projection to rebuild from Journal rather than silently retaining the Tool-free interpretation.
+
+Canonical Core Messages do not persist Pi-required API, Provider, model, usage, response, signature, or stop-reason fields. `PiAssistantMessageEnvelopeFactory` is a package-private boundary that supplies the active model identity only when Core history is converted for a Pi run. `PiAgentCoreAssistantMessageEnvelopeFactory` reads `agent.state.model` at conversion time, so resumed history follows the currently selected model instead of stale Provider metadata.
+
+```mermaid
+sequenceDiagram
+    participant Journal
+    participant Projector as Core Assistant Projector
+    participant Messages as Canonical Messages JSONL
+    participant Converter as Core→Pi Converter
+    participant Factory as Active Pi Envelope Factory
+    participant Pi
+
+    Journal->>Projector: completed Assistant OutputEvent
+    alt hasToolCalls is false
+        Projector->>Projector: retain text; omit thinking
+        Projector->>Messages: assistant.message@1
+    else hasToolCalls is true
+        Projector-->>Messages: no Message until Task 5
+    end
+    Messages->>Converter: canonical Assistant Message
+    Converter->>Factory: request current model identity
+    Factory-->>Converter: api + provider + model
+    Converter->>Converter: add zero usage + neutral stop
+    Converter-->>Pi: reconstructed Assistant AgentMessage
+```
+
+Pi reconstruction uses the canonical timestamp and text, the current API/provider/model identity, zero usage, and neutral `stop`. The synthetic usage and stop reason satisfy Pi's message shape but are not asserted as historical Provider facts. Missing or invalid envelope configuration fails with stable, payload-free conversion errors.
+
+Logs continue to contain only Core identities, conversion purpose, counts, Event metadata, and fixed failures. Assistant text, thinking, payloads, Provider/model identity, prompts, credentials, paths, JSONL, and raw errors remain excluded.
+
+This checkpoint intentionally does not project Tool-bearing Assistant messages, Tool results, thinking signatures, Provider usage, or original completion reasons. It also does not terminalize Runs, install a concrete Runtime executor, or implement Tool, Policy, Compaction, Nudge, Approval, IPC, or Subagent behavior.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4497,6 +4561,8 @@ Currently implemented skeletons include:
 - startup reconciliation with consumed repairs, duplicate-routing prevention, and active-lifecycle blocking
 - ready-only startup execution with durable repair, lifecycle restore, and resumable Router backpressure
 - one-shot Bootstrap startup composition with bound Runtime identity and stage failure normalization
+- canonical Tool-free Assistant Runtime Message projection and versioned Core projector composition
+- active-model Core-to-Pi Assistant history reconstruction without Provider metadata persistence
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 
@@ -4510,7 +4576,7 @@ Not yet implemented:
 - ContextCompactionManager and ContextCheckpoint
 - PendingNudgeStore and one-shot System Prompt Overlay
 - ContextCheckpoint-aware ContextCompiler and per-call overlays
-- canonical Assistant projection/conversion and Tool Pi mapping
+- Tool Pi mapping and Tool-bearing Assistant canonical projection
 - Tool registry and execution pipeline
 - IPC protocol
 - Subagent manager

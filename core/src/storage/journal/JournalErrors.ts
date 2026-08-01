@@ -7,6 +7,16 @@ export class JournalConversationNotFoundError extends Error {
   }
 }
 
+export class JournalConversationNotAcceptingInputError extends Error {
+  constructor(
+    public readonly conversationId: string,
+    public readonly status: "archived" | "disposed",
+  ) {
+    super(`Conversation is not accepting input: ${conversationId}`);
+    this.name = "JournalConversationNotAcceptingInputError";
+  }
+}
+
 export class JournalEventConflictError extends Error {
   constructor(
     public readonly conversationId: string,

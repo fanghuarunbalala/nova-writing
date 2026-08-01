@@ -10,6 +10,7 @@ import type {
 } from "../../storage/index.js";
 import {
   ConversationEventQueryError,
+  JournalConversationNotAcceptingInputError,
   JournalConversationNotFoundError,
   JournalEventConflictError,
   JournalRecordCorruptedError,
@@ -26,6 +27,7 @@ const MAX_PAGE_LIMIT = 1000;
 
 interface ConversationSequenceRow {
   last_journal_sequence: number;
+  status: "active" | "archived" | "disposed";
 }
 
 interface QueryPlan {
@@ -90,6 +92,13 @@ export class SqliteConversationJournalStore implements ConversationJournalStore 
           prepared.eventId,
           existing.event_direction,
           prepared.direction,
+        );
+      }
+
+      if (prepared.direction === "input" && conversation.status !== "active") {
+        throw new JournalConversationNotAcceptingInputError(
+          prepared.conversationId,
+          conversation.status,
         );
       }
 
@@ -315,7 +324,7 @@ export class SqliteConversationJournalStore implements ConversationJournalStore 
 
   private selectConversationSequence(conversationId: string): ConversationSequenceRow | undefined {
     return this.database
-      .prepare("SELECT last_journal_sequence FROM conversations WHERE id = ?")
+      .prepare("SELECT last_journal_sequence, status FROM conversations WHERE id = ?")
       .get(conversationId) as ConversationSequenceRow | undefined;
   }
 

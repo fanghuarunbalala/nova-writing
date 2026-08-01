@@ -613,6 +613,94 @@ The repeatable SQLite integration smoke verifies parent metadata, active Agent B
 
 Task 2-B explicitly excludes concrete command acceptance, Host activation, Runtime Bootstrap, Runtime placement, Run state, Stop or Interrupt, IPC Proxy behavior, and automatic Message projection.
 
+### 7.3 Implemented Task 2-C Durable Command Acceptance
+
+Task 2-C implements the production `ConversationCommandService` boundary without implementing `ConversationHost` or activating a Runtime directly.
+
+```mermaid
+classDiagram
+    class StorageConversationCommandService {
+        +enqueue(conversationId, InputEvent) Promise~InputReceipt~
+    }
+
+    class ConversationInputRoutePolicy {
+        <<interface>>
+        +resolve(InputEventSnapshot) ConversationInputRoute
+    }
+
+    class CoreConversationInputRoutePolicy {
+        +resolve(InputEventSnapshot) ConversationInputRoute
+    }
+
+    class AcceptedConversationInputNotifier {
+        <<interface>>
+        +notifyAccepted(AcceptedConversationInputSignal) Promise~void~
+    }
+
+    class ConversationMetadataStore
+    class EventSchemaRegistry
+    class ConversationJournalService
+    class ConversationEventHub
+
+    StorageConversationCommandService --> ConversationMetadataStore
+    StorageConversationCommandService --> EventSchemaRegistry
+    StorageConversationCommandService --> ConversationJournalService
+    StorageConversationCommandService --> ConversationInputRoutePolicy
+    StorageConversationCommandService --> AcceptedConversationInputNotifier
+    CoreConversationInputRoutePolicy ..|> ConversationInputRoutePolicy
+    ConversationJournalService --> ConversationEventHub
+```
+
+Accepted InputEvent routing is descriptive rather than executable:
+
+| InputEvent | Route | Offline Runtime activation |
+| --- | --- | --- |
+| `user.message` | Runtime | required |
+| `context.clear` | Runtime | required |
+| `context.compact` | Runtime | required |
+| registered Agent extension | Runtime | required by default |
+| `system.stop` | Host stop handler | never; notify only if online |
+| `command.config.reload` | Host config handler | never; notify only if online |
+
+The accepted-input signal contains only identifiers, Event metadata, Journal Sequence, append status, and route. It never copies the InputEvent payload. Host and Runtime implementations load the canonical InputEvent from the Journal by Conversation ID and Sequence.
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Command as StorageConversationCommandService
+    participant Registry as EventSchemaRegistry
+    participant Catalog as ConversationMetadataStore
+    participant Journal as ConversationJournalService
+    participant Hub as ConversationEventHub
+    participant Notify as AcceptedConversationInputNotifier
+
+    App->>Command: enqueue(conversationId, InputEvent)
+    Command->>Registry: validate bound snapshot
+    Command->>Catalog: verify durable existence
+    Command->>Journal: append input snapshot
+    Journal->>Journal: atomic status check and append
+    Journal->>Hub: best-effort live publication
+    Journal-->>Command: durable receipt + persisted Event
+    Command->>Notify: notifyAccepted(sequence + route)
+    alt Host notification succeeds
+        Notify-->>Command: scheduled
+    else Host notification fails
+        Notify--xCommand: safe failure identity
+        Note over Command: durable acceptance is not rolled back
+    end
+    Command-->>App: InputReceipt
+```
+
+`InputReceipt.accepted` means the InputEvent was newly persisted. `InputReceipt.duplicate` means the same immutable Event was already durable. Neither status means Runtime activation, Run creation, Agent processing, or semantic completion. EventHub publication and Host notification are best-effort after durable persistence and cannot convert a successful append into a rejected enqueue.
+
+SQLite enforces Conversation status inside the append transaction. Existing duplicate lookup happens before the status gate, so a retry of an Event accepted before archival still returns its original Sequence. A new InputEvent for an `archived` or `disposed` Conversation is rejected atomically. Same-ID different-content requests remain conflicts regardless of current Conversation status.
+
+Duplicate receipts are also re-notified to the Host. The notifier must therefore be idempotent by Conversation ID and Journal Sequence; this lets a client retry recover from a previous post-persistence notification failure. Journal replay remains the durable recovery mechanism.
+
+Task 2-C deliberately emits no additional acceptance OutputEvent. The persisted InputEvent and direct InputReceipt already represent acceptance. A later Host or Runtime handler may emit an `InputResponseOutputEvent` subtype only when semantic handling actually completes.
+
+Task 2-C explicitly excludes concrete Host scheduling, Runtime activation, Runtime Presence transitions, configuration application, Stop cancellation, Run creation, Context operations, Input processing OutputEvents, and Message projection triggering. Those remain Task 2-D and later Runtime tasks.
+
 ## 8. Query and Command Paths
 
 ```mermaid
@@ -633,8 +721,10 @@ flowchart LR
 
     Command --> Enqueue["input.enqueue()"]
     Enqueue --> CommandService["ConversationCommandService"]
-    CommandService --> Ensure["ConversationHost.ensureActive()"]
-    Ensure --> Runtime["ConversationRuntime"]
+    CommandService --> JournalWrite["Persist InputEvent"]
+    JournalWrite --> Notify["Accepted Input Notifier"]
+    Notify --> Host["Future ConversationHost"]
+    Host --> Runtime["ConversationRuntime when route requires"]
 ```
 
 Operations that never activate a Runtime:
@@ -649,7 +739,7 @@ Operations that never activate a Runtime:
 
 A following subscription attaches to the Host-owned EventHub and waits for future events. Subscribing alone does not activate a Runtime.
 
-Execution inputs pass through `ConversationCommandService` and may call `ConversationHost.ensureActive()`.
+Execution inputs pass through `ConversationCommandService`, enter the durable Journal first, and only then notify the Host. Task 2-D will implement the Host decision to activate, reuse, or leave a Runtime offline.
 
 ## 9. State Model
 
@@ -2586,6 +2676,10 @@ Currently implemented skeletons include:
 - bound Local Input and Events adapters with runtime Conversation ID enforcement
 - Handle-owned managed Event subscriptions and best-effort close aggregation
 - real SQLite read-only LocalConversation integration without Runtime activation
+- `StorageConversationCommandService` with schema validation, durable InputReceipt mapping, and post-persistence Host notification
+- payload-free accepted-input signals and Core routing for Runtime-required, Host stop, and Host config inputs
+- atomic SQLite rejection of new InputEvents for archived or disposed Conversations while preserving duplicate lookup
+- real SQLite command integration covering persist-before-notify, route isolation, duplicate recovery, concurrent Sequence allocation, status rejection, failure degradation, and log redaction
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild
@@ -2599,7 +2693,7 @@ The first-version protocol no longer contains `ResumeInputEvent`.
 Not yet implemented:
 
 - ConversationProxy implementation
-- concrete Command Service and Runtime Presence Reader implementations
+- concrete Runtime Presence Reader implementation
 - ConversationHost and process supervisor
 - ConversationRuntime
 - InputRouter
@@ -2621,21 +2715,19 @@ The provisional Pi-coupled `BaseTool` and `ToolDetails` drafts have been removed
 The following items still require explicit review before implementation:
 
 1. Exact Stop and Interrupt cancellation semantics
-2. Which InputEvents activate an offline Runtime
-3. Event schema migration mechanism beyond schema version 1
-4. Input snapshot redaction and size limits
-5. Context pressure thresholds and compaction hysteresis defaults
-6. ContextCheckpoint summary schema and validation
-7. Nudge scheduling, delivery, expiry, and redaction payloads
-8. Tool YAML manifest fields
-9. Whether `ToolDetails` returns as a common success-detail abstraction
-10. Tool result and incremental update contracts
-11. Runtime bootstrap payload
-12. Subagent result projection and cancellation policy
-13. Runtime idle eviction duration
-14. Initial JSONL versus SQLite storage backend
-15. System Prompt and ContextCompiler layer ordering
-16. Dedicated Novel domain model, intentionally deferred
+2. Event schema migration mechanism beyond schema version 1
+3. Input snapshot redaction and size limits
+4. Context pressure thresholds and compaction hysteresis defaults
+5. ContextCheckpoint summary schema and validation
+6. Nudge scheduling, delivery, expiry, and redaction payloads
+7. Tool YAML manifest fields
+8. Whether `ToolDetails` returns as a common success-detail abstraction
+9. Tool result and incremental update contracts
+10. Runtime bootstrap payload
+11. Subagent result projection and cancellation policy
+12. Runtime idle eviction duration
+13. System Prompt and ContextCompiler layer ordering
+14. Dedicated Novel domain model, intentionally deferred
 
 ## 29. Recommended Implementation Order
 

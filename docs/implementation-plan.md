@@ -552,18 +552,23 @@ Implementation status:
 
 - Task 2A implemented and awaiting review: `Conversation` interface, bound `ConversationInput` and `ConversationEvents`, durable `ConversationSnapshot`, placement-neutral `RuntimePresence`, query/command/presence service ports, lifecycle errors, public exports, and protocol smoke validation.
 - Task 2B implemented and awaiting review: Storage-backed Query Service, verified LocalConversation Factory, bound local Input and Events adapters, defensive durable Snapshots, managed Subscription ownership, idempotent Handle lifecycle, SQLite no-Runtime replay validation, and log redaction.
+- Task 2C implemented and awaiting review: durable Command Service, Input schema validation, post-persistence payload-free Host notification, Core route policy, atomic archived/disposed rejection, duplicate recovery signaling, structured logs, and real SQLite integration validation.
 
-Questions to resolve before implementation:
+Resolved through Task 2C:
 
-1. Which InputEvents activate an offline Runtime?
-2. Which commands can be handled entirely by Host services?
-3. Can one Conversation have more than one concurrent active Run?
-4. Does each accepted user message always create a new Run?
-5. How is an active Runtime located and addressed?
-6. When may the Host evict an idle Runtime?
-7. What automatic recovery behavior follows a Runtime crash?
-8. Which parts of RuntimeBootstrap are loaded from Snapshot versus configuration?
-9. How is Conversation access authorization represented without coupling Core to one UI?
+- user messages, Context commands, and registered extension inputs request Runtime activation.
+- Stop and config reload are Host routes and do not activate an offline Runtime.
+- durable Journal acceptance happens before Host notification.
+
+Questions remaining for Task 2D and Task 3 review:
+
+1. Can one Conversation have more than one concurrent active Run?
+2. Does each accepted user message always create a new Run?
+3. How is an active Runtime located and addressed?
+4. When may the Host evict an idle Runtime?
+5. What automatic recovery behavior follows a Runtime crash?
+6. Which parts of RuntimeBootstrap are loaded from Snapshot versus configuration?
+7. How is Conversation access authorization represented without coupling Core to one UI?
 
 Expected deliverables after approval:
 
@@ -642,6 +647,41 @@ Task 2B explicitly excludes:
 - automatic Message projection
 - Tool pipeline
 - Subagent execution
+
+Task 2C delivered:
+
+- `StorageConversationCommandService` implementing the existing platform-neutral command port
+- bound InputEvent snapshot capture and strict configured-schema validation before persistence
+- durable `InputReceipt` mapping where accepted and duplicate never imply Runtime or Agent completion
+- `ConversationInputRoutePolicy` and Core routing for Runtime-required, Host stop, and Host config inputs
+- payload-free `AcceptedConversationInputSignal` carrying durable Journal identity and route metadata
+- best-effort idempotent Host notification after persistence for both appended and duplicate inputs
+- notification and live-publication failure degradation without rolling back durable acceptance
+- SQLite transaction status enforcement for new InputEvents targeting archived or disposed Conversations
+- duplicate-before-status ordering so retries preserve the original durable Receipt after archival
+- structured command logs without Event payload, user text, config, prompt, Tool, credential, or error details
+- real SQLite smoke coverage for persist-before-notify, routing, duplicate recovery, conflicts, concurrent Sequence allocation, status rejection, failure degradation, and redaction
+
+Task 2C accepted decisions:
+
+- `user.message`, `context.clear`, `context.compact`, and registered extension inputs require Runtime activation.
+- `system.stop` and `command.config.reload` are Host routes and never activate an offline Runtime.
+- persistence always precedes Host notification and future Runtime activation.
+- `InputReceipt` reports durable Journal acceptance only.
+- a failed Host notification or Runtime activation cannot roll back an accepted InputEvent.
+- Task 2C creates no Run or Turn and does not decide whether each user message creates a new Run.
+- no generic acceptance OutputEvent is emitted; semantic completion belongs to later Input-response events.
+
+Task 2C explicitly excludes:
+
+- concrete `ConversationHost` scheduling and activation
+- production Runtime Presence tracking
+- Runtime Bootstrap and placement
+- Stop cancellation and config application
+- Run and Turn state
+- Context clear or compaction execution
+- automatic Runtime Message projection
+- IPC-backed `ConversationProxy`
 
 ## 6. Task 3: Input Routing and Runtime Loop
 
@@ -1013,7 +1053,7 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0, Task 1A through Task 1D-F, and Task 2A through Task 2B have been implemented and are awaiting checkpoint review.
+Task 0, Task 1A through Task 1D-F, and Task 2A through Task 2C have been implemented and are awaiting checkpoint review.
 
 Completed Task 1 results include:
 
@@ -1028,4 +1068,4 @@ Completed Task 1 results include:
 - persistence-first Event publication with per-Conversation serialization
 - real SQLite end-to-end replay, reopen, duplicate, and live-follow smoke validation
 
-The next reviewed step is Task 2C: durable command acceptance and the lazy Host activation boundary. Before implementation, InputEvents that activate an offline Runtime, Host-handled control inputs, durable acceptance ordering, and one-active-Run policy must be confirmed.
+The next reviewed step is Task 2D: ConversationHost lifecycle, Runtime Presence tracking, Runtime Bootstrap, placement abstraction, accepted-input reconciliation, and lazy activation. Runtime identity, idle eviction, bootstrap contents, crash recovery, and one-active-Runtime ownership must be confirmed before implementation.

@@ -3,6 +3,10 @@ import type { JournalAppendReceipt, JournalAppendRequest } from "./JournalAppend
 import type { PersistedConversationEventSnapshot } from "./PersistedConversationEventSnapshot.js";
 
 export interface ConversationJournalWriter {
+  /**
+   * Appends one durable Event. Input appends must atomically reject new Events
+   * for Conversations that are not active while preserving duplicate lookup.
+   */
   append(request: JournalAppendRequest): Promise<JournalAppendReceipt>;
 }
 

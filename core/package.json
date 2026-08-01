@@ -19,6 +19,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "smoke:conversation-protocol": "pnpm build && node scripts/conversation-protocol-smoke.mjs",
+    "smoke:conversation-command": "pnpm build && node scripts/conversation-command-integration-smoke.mjs",
     "smoke:local-conversation": "pnpm build && node scripts/local-conversation-integration-smoke.mjs",
     "smoke:conversation-events": "pnpm build && node scripts/conversation-event-live-smoke.mjs && node scripts/conversation-event-follow-smoke.mjs && node scripts/conversation-event-publishing-smoke.mjs && node scripts/conversation-event-integration-smoke.mjs",
     "smoke:conversation-event-integration": "pnpm build && node scripts/conversation-event-integration-smoke.mjs",

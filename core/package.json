@@ -39,6 +39,7 @@
     "smoke:runtime-agent-no-process": "pnpm build && node scripts/runtime-agent-no-process-integration-smoke.mjs",
     "smoke:runtime-agent-run-executor": "pnpm build && node scripts/runtime-agent-run-executor-smoke.mjs",
     "smoke:runtime-agent-stop-cancellation": "pnpm build && node scripts/runtime-agent-stop-cancellation-port-smoke.mjs",
+    "smoke:runtime-agent-turn-fifo": "pnpm build && node scripts/runtime-agent-turn-fifo-integration-smoke.mjs",
     "smoke:runtime-projected-run-preparation": "pnpm build && node scripts/runtime-projected-run-preparation-smoke.mjs",
     "smoke:runtime-pi-adapter": "pnpm build && node scripts/runtime-pi-agent-core-adapter-smoke.mjs",
     "smoke:runtime-pi-assistant-output": "pnpm build && node scripts/runtime-pi-assistant-output-bridge-smoke.mjs",

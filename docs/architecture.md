@@ -4014,6 +4014,46 @@ The validated durable Output order is Run queued, Input consumed, Run running, T
 
 This checkpoint intentionally does not define a production composition factory. It also excludes multiple queued Turns, Control preemption, Stop fencing and cancellation races, startup replay, non-terminal recovery, Runtime degradation, real combined SQLite persistence, `ConversationRuntime`/Host/process composition, concrete Pi/Provider construction, Assistant streaming, Tools, Approval, Policy, Compaction, Nudge, IPC, and Subagents.
 
+### 16.28 Implemented Task 3F-B Ordered Agent Run and Turn FIFO
+
+The second Task 3F checkpoint validates two UserMessages accepted before execution begins. Both are durably present in the Turn inbox, but `RuntimeInputPump` starts only one Turn handler and does not admit the second until the first handler has observed a terminal Run and returned.
+
+```mermaid
+sequenceDiagram
+    participant Router as InputRouter
+    participant Pump as RuntimeInputPump
+    participant First as UserMessage 1 Handler
+    participant Adapter as AgentRuntimeAdapter
+    participant Second as UserMessage 2 Handler
+
+    Router->>Pump: enqueue Input 1
+    Router->>Pump: enqueue Input 2
+    Pump->>First: start Input 1
+    First->>Adapter: Run 1 stream
+    Note over Pump,Second: Input 2 remains queued while Run 1 is active
+    Adapter-->>First: Turn 1 completed
+    First->>First: Run 1 completed and handler settles
+    Pump->>Second: start Input 2
+    Second->>Adapter: Run 2 stream
+    Adapter-->>Second: Turn 2 completed
+    Second->>Second: Run 2 completed and handler settles
+```
+
+The durable Run order is:
+
+```text
+Run 1 queued
+Run 1 running
+Run 1 completed
+Run 2 queued
+Run 2 running
+Run 2 completed
+```
+
+The second preparation request uses the first projected UserMessage as base Context and keeps the second projected UserMessage as the explicit prompt invocation. This verifies the accepted Journal-Sequence split across consecutive Runs while leaving Message projection physically ahead of the first Run.
+
+Queue ownership remains in `InputRouter` and `RuntimeInputPump`; the Agent Adapter is never given an internal queue and sees at most one active stream. This checkpoint excludes Control execution, Stop preemption and cancellation, Assistant output, Tools, Approval, Policy, Compaction, Nudge, startup recovery, combined SQLite persistence, `ConversationRuntime`/Host/process composition, IPC, and Subagents.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4837,6 +4877,7 @@ Currently implemented skeletons include:
 - Journal-backed canonical UserMessage Run preparation with fixed Message pagination and current-Sequence isolation
 - provider-neutral Stop-to-Agent Adapter cancellation mapping with durable Stop identity validation and redacted failures
 - no-process successful Agent Turn integration across Router, Pump, lifecycle, outcome, preparation, compilation, and shared Adapter boundaries
+- strict multi-UserMessage Turn FIFO with terminal Run barriers and prior-message Context visibility
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

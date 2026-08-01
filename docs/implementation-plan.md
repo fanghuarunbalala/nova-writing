@@ -1065,6 +1065,7 @@ Implementation status:
 - Task 3E-G implemented and awaiting review: projected UserMessage Run preparation, injected final System Prompt source, fixed-high-watermark Message pagination, current-Sequence context/prompt split, later-input isolation, stable failures, redacted logs, and real SQLite integration.
 - Task 3E-H implemented and awaiting review: provider-neutral Stop-to-Agent cancellation port, strict durable Stop identity validation, immutable Adapter cancellation mapping, fixed failure normalization, redacted logs, public exports, and focused validation.
 - Task 3F-A implemented and awaiting review: no-process successful UserMessage Turn integration across Router, Pump, durable Run/Turn and Input outcomes, projected preparation, Context compilation, shared Agent Adapter execution, orderly shutdown, and redacted logs.
+- Task 3F-B implemented and awaiting review: two queued UserMessages executing as strict Turn FIFO, first-Run terminal barrier before second Run claim, projected prior-message context for the second Run, orderly drain, and redacted logs.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1908,6 +1909,33 @@ Task 3F-A explicitly excludes:
 - real SQLite Journal/Message files in the combined Runtime path
 - `ConversationRuntime`, Host, placement, process proxy, IPC, or Subagent composition
 - concrete Pi Agent, Provider/model selection, credentials, Assistant streaming, Tools, Approval, Policy, Compaction, or Nudge
+
+Task 3F-B delivered:
+
+- focused no-process integration with two UserMessages admitted to the Turn lane before Pump execution begins
+- explicit first-Adapter gate proving the second Input remains queued while the first Run and Turn are active
+- strict Run transition order `run-1 queued/running/completed` before `run-2 queued/running/completed`
+- one active Adapter stream and one active Turn at a time without a second execution reservation
+- distinct generated Run and Turn identities for each queued UserMessage
+- terminal Input outcomes for both Inputs and an empty Turn inbox after orderly Pump shutdown
+- second-Run projected context containing the first UserMessage while its own UserMessage remains the explicit prompt invocation
+- log redaction across both executions, including both UserMessage contents and System Prompt text
+
+Task 3F-B accepted decisions:
+
+- Turn FIFO is enforced at the `RuntimeInputPump` handler boundary: the second UserMessage may already be durably queued, but its handler cannot begin until the first handler returns after a terminal Run.
+- a terminal first Turn alone is not enough to admit the second handler; the first Run terminal barrier and handler settlement remain required.
+- each UserMessage creates a distinct Run and each Adapter invocation creates a distinct Turn; terminal state from the previous pair is replaced only through the existing state-machine begin contracts.
+- the second Run sees earlier projected Messages as base Context and keeps only its exact current Event projection in the prompt invocation.
+- this checkpoint validates serialized execution rather than introducing an Adapter queue, because queue ownership remains in Router/Pump.
+
+Task 3F-B explicitly excludes:
+
+- Control-lane work, Stop preemption, Stop fences, cancellation ownership, or queued-input cancellation
+- more than one concurrent Adapter stream or any Adapter-side queue
+- Assistant output projection, Tool calls, Approval, Policy, Compaction, or Nudge
+- startup replay, crash recovery, persistence failure retry, or Runtime degradation
+- real combined SQLite persistence, `ConversationRuntime`, Host, placement, IPC, or Subagents
 
 Expected deliverables after approval:
 

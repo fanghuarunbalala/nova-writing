@@ -195,7 +195,12 @@ Implementation status:
 - Task 1C-C implemented and awaiting review: Node JSONL Store, safe Conversation paths, asynchronous chunk scanning, atomic append/replacement, same-process serialization, cross-process locking, and stable Message pagination.
 - Task 1C-D implemented and awaiting review: projection maintenance contracts, deterministic IDs, Journal synchronization, repair, atomic rebuild, Projector migration, Schema protection, cancellation, and structured logs.
 - Task 1C-E implemented and awaiting review: Projector/Schema-specific Node projection contexts, `SqliteWorkspaceStore` lifecycle ownership, public exports, documentation, and repeatable end-to-end smoke validation.
-- Task 1D remains unimplemented and requires its own review before coding.
+- Task 1D-A implemented and awaiting review: public Event filter, subscription, Hub, Journal publishing, and catch-up service contracts with strict option normalization and typed lifecycle errors.
+- Task 1D-B implemented and awaiting review: fixed-capacity asynchronous FIFO subscriptions, direct pending-read delivery, overflow isolation, cancellation, single-consumer enforcement, and safe lifecycle logs.
+- Task 1D-C implemented and awaiting review: process-local multi-Subscriber Event Hub, Conversation isolation, filter matching, Sequence continuity enforcement, defensive Event validation, and independent Subscriber failure.
+- Task 1D-D implemented and awaiting review: Hub-first catch-up subscription, fixed Journal High Watermark replay, bounded paging, history-to-live transition, duplicate watermark suppression, and composite resume cursors.
+- Task 1D-E implemented and awaiting review: persistence-first Journal publishing, per-Conversation append/publish serialization, immutable request capture, Receipt validation, duplicate suppression, live failure degradation, and close draining.
+- Task 1D-F implemented and awaiting review: real SQLite append-to-live integration, Workspace reopen replay, catch-up continuity, Input/Output validation, lifecycle composition, public export review, documentation, and repeatable smoke coverage.
 
 Task 1B concurrency boundary:
 
@@ -460,6 +465,57 @@ Task 1C-E explicitly excludes:
 - automatic application-start projection maintenance
 - OutputEvent publication for projection maintenance
 - CLI, TUI, GUI, or Web commands and views
+
+Task 1D delivered:
+
+- platform-neutral `ConversationEventHub`, `ConversationEventSubscription`, `ConversationEventSubscriptionService`, and `ConversationJournalService` contracts
+- strict subscription cursors for `{ from: "start" }`, `{ from: "latest" }`, and `{ afterSequence }`
+- normalized Event filters covering direction, Event Types, Run ID, and Turn ID
+- independent bounded per-Subscriber queues with no silent Event dropping
+- process-local `InMemoryConversationEventHub` with Conversation Channel isolation and monotonic Sequence validation
+- Hub-first `JournalConversationEventSubscriptionService` that captures a fixed Journal High Watermark after establishing its live subscription
+- pull-based historical paging followed by buffered live delivery without an observable gap
+- `PublishingConversationJournalService` that captures an immutable request, serializes append and publish per Conversation, and persists before live publication
+- explicit durable versus live result semantics: `published`, `skipped duplicate`, or `failed` with safe error identity
+- duplicate Journal appends that preserve the durable Event but never republish it
+- idempotent close behavior and closing/closed rejection for publishing and subscription services
+- structured logs containing identifiers, Sequence, status, and counts without Event payloads, prompts, novel content, Tool data, credentials, or error details
+- real SQLite integration smoke covering history, live buffering during catch-up, continuous Sequence delivery, duplicate suppression, Workspace reopen, `afterSequence` recovery, and Input/Output Events
+
+Task 1D append and follow boundaries:
+
+```text
+append request
+    → per-Conversation serializer
+    → SQLite Journal append
+    → persisted Event snapshot
+    → process-local Event Hub publish
+
+subscribe cursor
+    → establish bounded Hub subscription
+    → capture Journal High Watermark
+    → page history through fixed watermark
+    → drain buffered newer Events
+    → continue live delivery
+```
+
+Task 1D close order used by the integration composition:
+
+```text
+PublishingConversationJournalService.close()
+    → JournalConversationEventSubscriptionService.close()
+    → InMemoryConversationEventHub.close()
+    → SqliteWorkspaceStore.close()
+```
+
+Task 1D explicitly excludes:
+
+- `ConversationHost`, Runtime activation, idle eviction, or process placement
+- automatic Message projection after Journal append
+- Pi adapters, Provider calls, Tool execution, Approval, or Nudge behavior
+- IPC and child-process forwarding
+- durable Event storage in the Hub
+- ownership of live services by `SqliteWorkspaceStore`
 
 ## 5. Task 2: Conversation and Host
 
@@ -883,18 +939,19 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0A and Task 0B have been implemented and are awaiting review.
+Task 0 and Task 1A through Task 1D-F have been implemented and are awaiting checkpoint review.
 
-Completed Task 0 results include:
+Completed Task 1 results include:
 
-- removal of the provisional Resume and Pi-coupled Tool drafts
-- strict JSON Event payload contracts
-- stable Event metadata and type constants
-- Input and Output snapshot migration
-- unified persisted-event sequence contract
-- durable-acceptance `InputReceipt` semantics
-- InputEvent reference in response outputs instead of full snapshot copying
-- TypeBox Event Schema Registry and core InputEvent schemas
-- Core type checking, build, and protocol smoke validation
+- Workspace-to-Store location, semantic naming, explicit rebind, and SQLite lifecycle
+- Conversation metadata and normalized versioned Agent bindings
+- unified Input/Output Journal with durable Sequence and idempotent Event identity
+- public read-only Journal history that does not activate Runtime
+- repairable per-Conversation Runtime Message JSONL projections
+- projection validation, synchronization, repair, migration, and atomic rebuild
+- process-local live Event fan-out with bounded Subscriber backpressure
+- Journal catch-up-to-live delivery with reconnectable Sequence cursors
+- persistence-first Event publication with per-Conversation serialization
+- real SQLite end-to-end replay, reopen, duplicate, and live-follow smoke validation
 
-Task 1 Query and Persistence has not been authorized. The next action is Task 0 review, followed by Task 1 design confirmation if approved.
+The next reviewed checkpoint is Task 2: Conversation and Host. No Task 2 implementation begins until its public interfaces, Runtime activation boundary, and Host ownership rules are confirmed.

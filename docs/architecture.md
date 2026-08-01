@@ -1395,7 +1395,133 @@ sequenceDiagram
 
 The repeatable integration smoke uses a real Workspace Locator, SQLite Catalog, SQLite Journal, JSONL Message files, Core Runtime Message Projector, and Journal projection service. It verifies reopen and replay, deterministic Runtime Message IDs, Projector-version rebuild, an Agent-specific Schema Registry, multiple Context coexistence, idempotent and Workspace-owned closure, closing/closed rejection, and absence of Event or Message payload text in logs.
 
-Task 1C-E does not resolve Agent Bindings, activate Runtime, convert Runtime Messages to Pi or Provider types, subscribe to live Journal changes, publish maintenance OutputEvents, or add application commands. Those remain upper-layer Host, Task 1D, and later Runtime responsibilities.
+Task 1C-E does not resolve Agent Bindings, activate Runtime, convert Runtime Messages to Pi or Provider types, publish maintenance OutputEvents, or add application commands. Task 1D now supplies the separate persisted Event live-delivery boundary; Runtime activation and Message projection triggering remain later Host responsibilities.
+
+### 15.9 Implemented Task 1D Conversation Event Live Delivery
+
+Task 1D implements process-local live delivery for Events that have already been accepted by the durable Journal. It deliberately keeps persistence, replay, and live fan-out as separate responsibilities.
+
+```mermaid
+classDiagram
+    class ConversationJournalService {
+        <<interface>>
+        +append(request) Promise~ConversationJournalAppendResult~
+        +close() Promise~void~
+    }
+
+    class PublishingConversationJournalService {
+        -ConversationOperationSerializer serializer
+        +append(request) Promise~ConversationJournalAppendResult~
+        +close() Promise~void~
+    }
+
+    class ConversationJournalWriter {
+        <<interface>>
+        +append(request) Promise~JournalAppendReceipt~
+    }
+
+    class ConversationEventHub {
+        <<interface>>
+        +publish(event) Promise~void~
+        +subscribe(options) ConversationEventSubscription
+        +close() Promise~void~
+    }
+
+    class InMemoryConversationEventHub
+
+    class ConversationEventSubscriptionService {
+        <<interface>>
+        +subscribe(options) ConversationEventSubscription
+        +close() Promise~void~
+    }
+
+    class JournalConversationEventSubscriptionService
+    class ConversationJournalReader
+
+    ConversationJournalService <|.. PublishingConversationJournalService
+    PublishingConversationJournalService --> ConversationJournalWriter
+    PublishingConversationJournalService --> ConversationEventHub
+    PublishingConversationJournalService *-- ConversationOperationSerializer
+    ConversationEventHub <|.. InMemoryConversationEventHub
+    ConversationEventSubscriptionService <|.. JournalConversationEventSubscriptionService
+    JournalConversationEventSubscriptionService --> ConversationJournalReader
+    JournalConversationEventSubscriptionService --> ConversationEventHub
+```
+
+The append path is persistence-first and serialized per Conversation:
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant Service as Publishing Journal Service
+    participant Serial as Conversation Serializer
+    participant SQLite as SQLite Journal
+    participant Hub as Conversation Event Hub
+
+    Caller->>Service: append(InputEvent or OutputEvent)
+    Service->>Service: capture immutable JSON-safe request
+    Service->>Serial: enqueue by conversationId
+    Serial->>SQLite: append(request)
+    SQLite-->>Serial: appended or duplicate receipt
+    alt appended
+        Serial->>Hub: publish(persisted event)
+        Hub-->>Serial: published or live failure
+    else duplicate
+        Serial->>Serial: skip live publication
+    end
+    Serial-->>Caller: durable receipt + event + live status
+```
+
+- Journal failure rejects `append()` and never calls the Hub.
+- Hub failure after durable append never rolls back Journal data. The result reports only a safe error name and optional code.
+- an identical duplicate keeps its original Sequence and RecordedAt and is not republished.
+- operations for one Conversation execute as `append1 → publish1 → append2 → publish2`.
+- operations for different Conversations may execute concurrently.
+- caller mutation after `append()` cannot alter the captured request or published Event.
+
+Catch-up subscribes to the Hub before it captures the Journal High Watermark:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Follow as Journal Subscription Service
+    participant Hub as Conversation Event Hub
+    participant Journal as Conversation Journal
+    participant Publisher
+
+    Client->>Follow: subscribe(start cursor)
+    Follow->>Hub: establish bounded live subscription
+    Follow->>Journal: capture High Watermark
+    Publisher->>Hub: publish Events newer than watermark
+    Hub-->>Follow: buffer live Events
+    Follow->>Journal: page history through fixed watermark
+    Journal-->>Follow: persisted historical Events
+    Follow-->>Client: historical Events in Sequence order
+    Follow->>Follow: discard buffered Sequence <= watermark
+    Follow-->>Client: buffered and future live Events
+```
+
+Each live Subscriber owns an independent bounded FIFO. A slow Subscriber overflow fails only that Subscriber and never silently drops Events. The resume cursor is the last Event actually delivered to that Subscriber. Reconnection always resumes from Journal using Sequence; the Hub is not a historical Store and never reads Journal itself.
+
+Task 1D lifecycle ownership remains an upper-layer composition concern. The verified close order is:
+
+```mermaid
+flowchart LR
+    Publisher["Publishing Journal Service close"] --> Follow["Follow Subscription Service close"]
+    Follow --> Hub["Conversation Event Hub close"]
+    Hub --> Workspace["SQLite Workspace Store close"]
+```
+
+The integration smoke composes these resources locally and uses a real Workspace Locator, SQLite Catalog, SQLite Journal, Event Hub, publishing service, and catch-up subscription service. It verifies historical replay, live Events buffered during catch-up, continuous Sequence delivery, duplicate suppression, Input/Output replay, Workspace reopen, `afterSequence` recovery, lifecycle ordering, and log redaction.
+
+Task 1D explicitly excludes:
+
+- `ConversationHost` or Runtime lifecycle ownership
+- Runtime activation, Pi integration, model execution, or Tool execution
+- automatic Message projection triggering
+- IPC transport or child-process Event forwarding
+- durable Hub state; Journal remains the only durable Event source of truth
+- making `SqliteWorkspaceStore` own the Hub, publishing service, or subscription service
 
 ## 16. ConversationRuntime Composition
 
@@ -2280,6 +2406,13 @@ Currently implemented skeletons include:
 - `ClearContextInputEvent`
 - `CompactContextInputEvent`
 - InputResponse output references an InputEvent without copying its full snapshot
+- Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
+- unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
+- per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild
+- process-local `ConversationEventHub` with bounded per-Subscriber delivery and overflow isolation
+- Journal catch-up-to-live subscriptions using fixed High Watermarks and Sequence resume cursors
+- persistence-first `PublishingConversationJournalService` with per-Conversation operation serialization
+- real SQLite end-to-end Event append, replay, reopen, duplicate suppression, and live-follow validation
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 
@@ -2291,7 +2424,6 @@ Not yet implemented:
 - ConversationRuntime
 - InputRouter
 - Run state machine
-- JournalService and ConversationEventHub
 - InteractionCoordinator and Approval events
 - RuntimePolicyEngine and RuntimeEffectCoordinator
 - NudgeManager

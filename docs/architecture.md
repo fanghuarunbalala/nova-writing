@@ -1039,6 +1039,59 @@ The real SQLite smoke validates durable append, process-local live delivery, dup
 
 Task 2-D-D-A does not modify `ManagedConversationHost`, define lifecycle OutputEvent types, emit Runtime Presence transitions, implement InputResponse events, or implement Stop and ReloadConfig semantics. Those remain the following Task 2-D-D checkpoints.
 
+### 7.8 Implemented Task 2-D-D-B Lifecycle OutputEvent Contracts
+
+Task 2-D-D-B defines the two Core Output protocols required by later Host integration without changing Host behavior.
+
+```mermaid
+classDiagram
+    class OutputEvent
+    class SystemOutputEvent
+    class InputResponseOutputEvent
+    class RuntimePresenceChangedOutputEvent
+    class HostInputRoutedOutputEvent
+    class RuntimePresenceChangedPayload
+    class HostInputRoutedPayload
+
+    OutputEvent <|-- SystemOutputEvent
+    OutputEvent <|-- InputResponseOutputEvent
+    SystemOutputEvent <|-- RuntimePresenceChangedOutputEvent
+    InputResponseOutputEvent <|-- HostInputRoutedOutputEvent
+    RuntimePresenceChangedOutputEvent --> RuntimePresenceChangedPayload
+    HostInputRoutedOutputEvent --> HostInputRoutedPayload
+```
+
+`RuntimePresenceChangedOutputEvent` uses Event Type `system.runtime.presence.changed`. Its payload contains frozen copies of the previous and current logical Presence plus a stable transition reason:
+
+```ts
+{
+  previous: { state, observedAt },
+  current: { state, observedAt },
+  reason
+}
+```
+
+The event timestamp defaults to the current Presence `observedAt`, preserving the Host transition time even when durable publication occurs later. Runtime instance ID, generation, PID, worker identity, placement, and transport address are deliberately absent.
+
+Transition reasons cover accepted-input, explicit-restore, and crash-recovery activation requests; activation success or failure; explicit, Host-close, idle-eviction, and replacement shutdown; stopped or crashed Runtime exits; exit-observer failure; and shutdown failure. The event records an observable state fact and does not itself perform activation or shutdown.
+
+`HostInputRoutedOutputEvent` uses Event Type `system.input.routed` and extends `InputResponseOutputEvent`. It carries a defensively copied durable Input reference containing Event ID, Event Type, and Journal Sequence. `causationId` defaults to the referenced Input Event ID unless the producer explicitly supplies another causal identity.
+
+Its payload is intentionally limited to:
+
+```ts
+{
+  handler: "stop" | "reload_config",
+  outcome: "runtime_notified" | "no_runtime" | "deferred"
+}
+```
+
+`runtime_notified` means only that the durable Input reference was dispatched to an online Runtime command target. `no_runtime` means routing found no online Runtime and performed no Runtime notification. `deferred` reserves an explicitly deferred Host outcome. None of these values means Stop cancellation completed or ReloadConfig became active; those semantic completion events belong to the future Runtime and InputRouter layers.
+
+Both Event Types and Payload schemas are registered by `createCoreEventSchemaRegistry()`. Agent- or plugin-owned Output types remain unknown until their definitions are explicitly registered. The protocol smoke validates defensive copies, durable Input Sequence requirements, causation defaults, Core Registry acceptance, invalid reason and outcome rejection, and absence of Runtime placement identity.
+
+Task 2-D-D-B does not publish these events, modify `ManagedConversationHost`, change the control-dispatcher return type, or implement Stop, ReloadConfig, Runtime, InputRouter, Run, Turn, IPC, or Subagent behavior.
+
 ## 8. Query and Command Paths
 
 ```mermaid
@@ -3029,6 +3082,8 @@ Currently implemented skeletons include:
 - lifecycle smoke coverage for control preemption, duplicate wake-up, dispatch failure, crash recovery, if-online routing, Handle mismatch, queue overflow, conflict detection, shutdown, close, and log redaction
 - unified `ConversationOutputEventPublisher` and storage-backed Output validation, canonical capture, Journal append, durable receipt, and failure normalization
 - real SQLite Output publication validation covering live delivery, duplicate recovery, conflict and schema rejection, live failure degradation, reopen replay, and log redaction
+- Core `system.runtime.presence.changed` and `system.input.routed` OutputEvent classes, payloads, Event Types, and registered schemas
+- Output protocol smoke coverage for Presence privacy, durable Input references, causation defaults, defensive capture, and invalid lifecycle values
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild

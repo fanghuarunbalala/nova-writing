@@ -566,6 +566,7 @@ Implementation status:
 - Task 2D-B implemented and awaiting review: narrow Snapshot Reader, storage-backed immutable Bootstrap Factory, durable accepted-input verification, workdir-only Workspace projection, High Watermark validation, safe errors and logs, and real SQLite integration validation.
 - Task 2D-C implemented and awaiting review: managed per-Conversation Runtime Slots, bounded Control and Runtime queues, single-flight activation, logical Presence tracking, payload-free dispatch, shutdown, close, stale-exit protection, safe logs, and lifecycle smoke validation.
 - Task 2D-D-A implemented and awaiting review: unified OutputEvent publication contract, schema validation, canonical frozen capture, durable Journal receipts, conflict and persistence normalization, live-publication degradation, and real SQLite integration validation.
+- Task 2D-D-B implemented and awaiting review: Runtime Presence transition and Host-input routing OutputEvent classes, payloads, Event Types, registered Core schemas, durable Input references, causation defaults, privacy boundaries, and protocol smoke validation.
 
 Resolved through Task 2C:
 
@@ -844,6 +845,36 @@ Task 2D-D-A explicitly excludes:
 - concrete Runtime Presence or Host-input OutputEvent types
 - InputResponse semantic completion
 - Stop cancellation and ReloadConfig application
+- Runtime, InputRouter, Run/Turn state, Pi, Tools, Approval, IPC, and Subagents
+
+Task 2D-D-B delivered:
+
+- stable `OUTPUT_EVENT_TYPE` values for Runtime Presence transitions and Host-input routing
+- `RuntimePresenceChangedOutputEvent` with previous/current logical Presence and stable transition reasons
+- transition timestamps defaulting to current Presence observation time
+- explicit exclusion of Runtime instance, generation, PID, placement, worker, and transport identity
+- `HostInputRoutedOutputEvent` extending `InputResponseOutputEvent`
+- required durable Input Event ID, Event Type, and Journal Sequence references
+- default `causationId` binding to the routed Input Event ID
+- routing outcomes that distinguish Runtime notification, no online Runtime, and explicit deferral without claiming semantic completion
+- Core Output payload schemas registered by `createCoreEventSchemaRegistry()`
+- protocol smoke covering defensive capture, schema acceptance and rejection, privacy, and causal identity
+
+Task 2D-D-B accepted decisions:
+
+- Runtime Presence OutputEvents describe logical state facts only and expose no Runtime placement identity.
+- Presence Event timestamp defaults to the current state's `observedAt` value.
+- Host-input routing is an InputResponse event because it references one durable accepted InputEvent.
+- routed Input references require a positive Journal Sequence.
+- `runtime_notified` does not mean a Stop or ReloadConfig operation completed.
+- Agent- and plugin-owned Output schemas remain explicitly registered extensions.
+
+Task 2D-D-B explicitly excludes:
+
+- event publication from `ManagedConversationHost`
+- Host transition failure degradation
+- control-dispatcher result changes or concrete Stop and ReloadConfig routing
+- semantic Input completion events
 - Runtime, InputRouter, Run/Turn state, Pi, Tools, Approval, IPC, and Subagents
 
 ## 6. Task 3: Input Routing and Runtime Loop
@@ -1216,7 +1247,7 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, Task 2D-A through Task 2D-C, and Task 2D-D-A have been implemented and are awaiting checkpoint review.
+Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, Task 2D-A through Task 2D-C, and Task 2D-D-A through Task 2D-D-B have been implemented and are awaiting checkpoint review.
 
 Completed Task 1 results include:
 

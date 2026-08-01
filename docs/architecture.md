@@ -3836,6 +3836,85 @@ One executor instance reserves one active Run synchronously before awaiting prep
 
 This checkpoint intentionally does not implement the concrete Journal/Message-backed preparation source, System Prompt ordering, Message cutoff policy, Runtime installation, Pi construction, Tool execution, Policy, Compaction, Nudge, Approval, IPC, or Subagents.
 
+### 16.25 Implemented Task 3E-G Projected UserMessage Run Preparation
+
+`ProjectedUserMessageRunPreparationSource` is the platform-neutral implementation of the 3E-F preparation port for an ordinary claimed UserMessage Run. It combines the repairable Message projection services with an injected `RuntimeSystemPromptSource`; it does not import Node, SQLite, JSONL, Pi, Provider, configuration, or process-placement types.
+
+```mermaid
+classDiagram
+    class ProjectedUserMessageRunPreparationSource {
+        +prepare(RuntimeRunExecutionRequest) RuntimeRunPreparation
+    }
+
+    class ConversationMessageProjectionService {
+        <<interface>>
+        +synchronize(conversationId)
+    }
+
+    class ConversationMessageFileStore {
+        <<interface>>
+        +list(query) ConversationMessageFilePage
+    }
+
+    class RuntimeSystemPromptSource {
+        <<interface>>
+        +resolve(RuntimeRunExecutionRequest) string
+    }
+
+    ProjectedUserMessageRunPreparationSource --> ConversationMessageProjectionService
+    ProjectedUserMessageRunPreparationSource --> ConversationMessageFileStore
+    ProjectedUserMessageRunPreparationSource --> RuntimeSystemPromptSource
+```
+
+The Prompt source returns one already-selected final base System Prompt. Its internal layering remains intentionally opaque, preserving the unresolved System Prompt hierarchy for a later reviewed step.
+
+Preparation uses the claimed durable Input Sequence as a strict cut:
+
+```text
+Message source Sequence < current Input Sequence
+    → base contextMessages
+
+Message source Sequence = current Input Sequence
+    + exact Event ID / Event Type / input direction
+    → explicit prompt invocation Messages
+
+Message source Sequence > current Input Sequence
+    → excluded from this Run
+```
+
+All canonical Messages produced by the exact current Input Event are retained in projector ordinal order. This permits explicitly registered supplemental Message projectors, while exactly one Message must be Core `user.message@1`. Zero Core UserMessages is missing projection; more than one is ambiguous projection. A current-Sequence Message correlated to another Event is invalid projection state.
+
+```mermaid
+sequenceDiagram
+    participant Executor as AgentRuntimeRunExecutor
+    participant Source as Projected Preparation Source
+    participant Projection as Message Projection Service
+    participant Messages as Message File Store
+    participant Prompt as RuntimeSystemPromptSource
+
+    Executor->>Source: prepare(claimed UserMessage Run)
+    Source->>Projection: synchronize(conversationId)
+    Projection-->>Source: projected through Sequence >= Input Sequence
+    Source->>Prompt: resolve(final base Prompt)
+    Prompt-->>Source: string
+    Source->>Messages: list first page
+    Messages-->>Source: fixed Message high watermark + projected-through Sequence
+    loop until later Sequence or fixed high watermark
+        Source->>Messages: list continuation at same high watermark
+        Messages-->>Source: ordered Message records
+    end
+    Source->>Source: validate and split by source Sequence
+    Source-->>Executor: base context + prompt invocation
+```
+
+The first Message page fixes `highWatermarkMessageIndex` and `projectedThroughSequence`. Every continuation page must use and return the same values. Message indices must be contiguous, source Sequences monotonic, Runtime Message schemas registered, Conversation identities exact, and Message IDs unique across base and prompt.
+
+Projection synchronization may include Inputs accepted after the claimed UserMessage. Those later Messages remain physically present but are not visible to the current Run. Once a greater source Sequence is encountered, monotonic projection order allows preparation to stop reading without admitting future Inputs.
+
+The implementation snapshots the durable request and every selected Runtime Message before returning. Logs contain only Core Run/Input identity, page-independent counts, projection operation counts, projected-through Sequence, Journal High Watermark, and Message High Watermark. System Prompt text, Message payloads, novel content, thinking, configuration, credentials, paths, JSONL, raw errors, stacks, and causes remain excluded.
+
+This checkpoint intentionally does not choose Prompt hierarchy, load config or Agent definitions, apply ContextCheckpoint/Compaction/Nudge overlays, prepare continue-based recovery, install the executor into live Runtime composition, construct Pi/Provider objects, or implement Tools, Approval, IPC, or Subagents.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4656,6 +4735,7 @@ Currently implemented skeletons include:
 - canonical Tool-free Assistant Runtime Message projection and versioned Core projector composition
 - active-model Core-to-Pi Assistant history reconstruction without Provider metadata persistence
 - provider-neutral Agent Run execution coordination with persistence-first normal terminalization and Stop-race deferral
+- Journal-backed canonical UserMessage Run preparation with fixed Message pagination and current-Sequence isolation
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

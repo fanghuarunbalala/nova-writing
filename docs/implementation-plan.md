@@ -1062,6 +1062,7 @@ Implementation status:
 - Task 3E-D implemented and awaiting review: public Core Assistant draft OutputEvent protocol and schemas, package-private composite Pi event bridge, persistence-first Assistant start/text-thinking delta/completed/failed/cancelled mapping, Tool-argument exclusion, cancellation draft settlement, redacted logs, and real streaming Pi validation.
 - Task 3E-E implemented and awaiting review: canonical `assistant.message@1` text history, independent Assistant Event projector, standard versioned Core projector composition, active-model Pi Assistant envelope reconstruction, Tool-call deferral, strict failures, redacted logs, and Journal-to-Message integration validation.
 - Task 3E-F implemented and awaiting review: provider-neutral Run preparation contract, concrete Agent Run execution coordinator, strict context/invocation capture, normal Run terminalization, Stop-race deferral, stable failures, redacted logs, and real lifecycle validation.
+- Task 3E-G implemented and awaiting review: projected UserMessage Run preparation, injected final System Prompt source, fixed-high-watermark Message pagination, current-Sequence context/prompt split, later-input isolation, stable failures, redacted logs, and real SQLite integration.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1814,6 +1815,41 @@ Task 3E-F explicitly excludes:
 - installation into `RuntimeUserMessageInputHandler`, `ConversationRuntime`, or Stop composition
 - concrete Pi Agent/provider/model construction
 - Tool execution, Tool-bearing history, Approval, Policy, Compaction, Nudge, IPC, and Subagents
+
+Task 3E-G delivered:
+
+- public `RuntimeSystemPromptSource` resolving the already-selected final base System Prompt for one claimed Run
+- public platform-neutral `ProjectedUserMessageRunPreparationSource`
+- Message projection synchronization requiring coverage through the claimed Input Journal Sequence
+- fixed-high-watermark paginated Message reads with stable projected-through Sequence across pages
+- strict Message index continuity, source Sequence monotonicity, source identity, canonical schema, Conversation identity, and duplicate Message validation
+- deterministic split of all earlier canonical Messages into base context
+- deterministic inclusion of all canonical Messages produced by the current Input Event in the explicit prompt invocation
+- exact requirement that the current Input Event produces one and only one Core `user.message@1`
+- deterministic exclusion of canonical Messages from later Journal Sequences even when projection synchronization advances beyond the current Input
+- immutable preparation snapshots and structured count/Sequence logs without Prompt or Message content
+- fake pagination validation for multi-Message current Events, fixed watermark reuse, later-input cutoff, ambiguity, projection lag, and Prompt resolution failure
+- real SQLite Journal-to-Messages-to-Preparation validation with page size one, prior User/Assistant context, current prompt, later accepted UserMessage isolation, thinking omission, and log redaction
+
+Task 3E-G accepted decisions:
+
+- `RuntimeSystemPromptSource` returns the final base Prompt string. It deliberately does not expose or standardize Prompt layer ordering, so the existing unresolved hierarchy decision remains outside this step.
+- every UserMessage Run uses an explicit prompt invocation. The base context contains only canonical Messages whose source Journal Sequence is lower than the claimed Input Sequence.
+- all canonical Messages emitted from the exact current Input Event are preserved in prompt order. This supports explicitly registered supplemental projectors while requiring exactly one Core UserMessage as the semantic anchor.
+- a Message at the current Sequence with a different Event ID, Event Type, or direction is projection inconsistency and fails preparation.
+- later accepted Inputs may already be present in a synchronized Message file, but Messages with greater source Sequence are never included in the current Run.
+- the first Message page fixes both `highWatermarkMessageIndex` and `projectedThroughSequence`; every continuation page must match them.
+- source Sequence is monotonic in Message projection order. Once a later Sequence is observed, the source may stop reading because no current or earlier Message can legally follow.
+- Message projection and Prompt resolution errors are normalized independently and never expose Message payloads, Prompt text, file paths, JSONL, or raw errors.
+
+Task 3E-G explicitly excludes:
+
+- concrete System Prompt hierarchy, config/prompt-file loading, and Agent-definition resolution
+- ContextCheckpoint selection, Compaction, Nudge overlays, or one-shot reminders
+- continue-based recovery preparation
+- installation into the live `RuntimeUserMessageInputHandler` or `ConversationRuntime`
+- concrete Pi Agent/provider/model construction and credentials
+- Tool execution, Tool-bearing history, Approval, IPC, and Subagents
 
 Expected deliverables after approval:
 

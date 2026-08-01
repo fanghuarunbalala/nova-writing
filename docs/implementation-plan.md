@@ -1066,6 +1066,7 @@ Implementation status:
 - Task 3E-H implemented and awaiting review: provider-neutral Stop-to-Agent cancellation port, strict durable Stop identity validation, immutable Adapter cancellation mapping, fixed failure normalization, redacted logs, public exports, and focused validation.
 - Task 3F-A implemented and awaiting review: no-process successful UserMessage Turn integration across Router, Pump, durable Run/Turn and Input outcomes, projected preparation, Context compilation, shared Agent Adapter execution, orderly shutdown, and redacted logs.
 - Task 3F-B implemented and awaiting review: two queued UserMessages executing as strict Turn FIFO, first-Run terminal barrier before second Run claim, projected prior-message context for the second Run, orderly drain, and redacted logs.
+- Task 3F-C implemented and awaiting review: Control-lane Stop preemption during an active Adapter Turn, persistence-first stopping barriers, shared Adapter cancellation, queued UserMessage fencing, terminal cancellation outcomes, and redacted logs.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1936,6 +1937,34 @@ Task 3F-B explicitly excludes:
 - Assistant output projection, Tool calls, Approval, Policy, Compaction, or Nudge
 - startup replay, crash recovery, persistence failure retry, or Runtime degradation
 - real combined SQLite persistence, `ConversationRuntime`, Host, placement, IPC, or Subagents
+
+Task 3F-C delivered:
+
+- active UserMessage Run and Turn held inside one Adapter stream while later UserMessage and Stop Inputs are routed
+- concurrent Control-lane Stop processing while the Turn handler remains active
+- durable Turn `stopping` then Run `stopping` barriers before Adapter cancellation
+- shared `AgentRuntimeStopCancellationPort` mapping to the same Adapter instance used by the active Run
+- Adapter cancellation settlement followed by durable Turn `cancelled` then Run `cancelled`
+- Stop fence removal of the queued later UserMessage before it can claim a Run
+- `cancelled_before_run` outcome for the fenced UserMessage and `consumed` outcome for Stop
+- active UserMessage handler settlement only after the Stop-owned terminal Run barrier
+- fixed lifecycle and outcome ordering plus log redaction across concurrent Control and Turn paths
+
+Task 3F-C accepted decisions:
+
+- `RuntimeInputPump` may run one Control handler concurrently with one active Turn handler; this is the intended Stop preemption mechanism.
+- Stop cancellation remains persistence-first: Adapter cancellation is never invoked before both applicable stopping transitions are durably acknowledged.
+- the Adapter may settle its own cancelled result before Core terminalizes Run/Turn; `AgentRuntimeRunExecutor` waits for the Stop-owned terminal Run instead of publishing another terminal transition.
+- queued Turn Inputs at or below Stop Sequence are fenced and terminalized as `cancelled_before_run`; they never reach the Adapter.
+- the active UserMessage Input remains `consumed` because its Run was already claimed before Stop, while the Run itself ends `cancelled`.
+
+Task 3F-C explicitly excludes:
+
+- cancellation timeout, retry, late-result suppression, emergency cancellation failure, or Runtime degradation paths
+- ReloadConfig, Interrupt, Pause, Resume, shutdown, replacement, or parent cancellation
+- Tool, Approval/Interaction, child Agent, IPC, or process cancellation
+- startup replay, non-terminal crash recovery, or real combined SQLite persistence
+- concrete Pi Provider execution beyond the already-accepted Adapter cancellation semantics
 
 Expected deliverables after approval:
 

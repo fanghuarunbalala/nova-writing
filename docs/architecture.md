@@ -4054,6 +4054,43 @@ The second preparation request uses the first projected UserMessage as base Cont
 
 Queue ownership remains in `InputRouter` and `RuntimeInputPump`; the Agent Adapter is never given an internal queue and sees at most one active stream. This checkpoint excludes Control execution, Stop preemption and cancellation, Assistant output, Tools, Approval, Policy, Compaction, Nudge, startup recovery, combined SQLite persistence, `ConversationRuntime`/Host/process composition, IPC, and Subagents.
 
+### 16.29 Implemented Task 3F-C Active Turn Stop Preemption
+
+The third Task 3F checkpoint validates the accepted two-lane concurrency model: one Control handler may run while one Turn handler is active. A Stop Input therefore reaches `RuntimeStopInputHandler` without waiting for the active Provider Turn to finish.
+
+```mermaid
+sequenceDiagram
+    participant Turn as Active UserMessage Handler
+    participant Pump as RuntimeInputPump
+    participant Stop as RuntimeStopInputHandler
+    participant Lifecycle as TurnController
+    participant Cancel as AgentRuntimeStopCancellationPort
+    participant Adapter as Shared AgentRuntimeAdapter
+
+    Turn->>Adapter: active stream
+    Pump->>Stop: concurrent Control-lane Stop
+    Stop->>Stop: fence queued Turn Inputs
+    Stop->>Lifecycle: Turn stopping barrier
+    Stop->>Lifecycle: Run stopping barrier
+    Stop->>Cancel: cancel durable Stop request
+    Cancel->>Adapter: cancel Run + Turn + reason=stop
+    Adapter-->>Turn: cancelled Adapter result
+    Turn->>Lifecycle: wait for Stop-owned terminal Run
+    Adapter-->>Cancel: cancellation settled
+    Cancel-->>Stop: resolved
+    Stop->>Lifecycle: Turn cancelled barrier
+    Stop->>Lifecycle: Run cancelled barrier
+    Stop->>Stop: queued Input cancelled_before_run
+    Stop->>Stop: Stop consumed
+    Lifecycle-->>Turn: terminal Run released
+```
+
+The durable lifecycle order is Run queued, Run running, Turn running, Turn stopping, Run stopping, Turn cancelled, then Run cancelled. Runtime Input outcomes are active UserMessage consumed, queued UserMessage cancelled before Run, and Stop consumed.
+
+The Adapter's cancelled result does not own Core terminalization. `AgentRuntimeRunExecutor` observes the durable stopping state and waits while `RuntimeStopInputHandler` completes the cancellation barriers. This prevents duplicate or racing terminal Run Events.
+
+This checkpoint excludes cancellation timeouts and retries, late Provider/Tool result suppression, emergency-cancellation failure, Runtime degradation, ReloadConfig and other cancellation reasons, real combined SQLite persistence, concrete Pi Provider execution, Approval, IPC, Subagents, Policy, Compaction, and Nudge.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4878,6 +4915,7 @@ Currently implemented skeletons include:
 - provider-neutral Stop-to-Agent Adapter cancellation mapping with durable Stop identity validation and redacted failures
 - no-process successful Agent Turn integration across Router, Pump, lifecycle, outcome, preparation, compilation, and shared Adapter boundaries
 - strict multi-UserMessage Turn FIFO with terminal Run barriers and prior-message Context visibility
+- active-Turn Control preemption with persistence-first Stop cancellation and queued-Input fencing
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

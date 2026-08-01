@@ -2656,6 +2656,84 @@ Cancellation reasons are shared by Input, Run, Turn, and future Tool and child l
 
 This checkpoint still does not decide deterministic Runtime Event IDs or implement outcome production. The next Task 3B checkpoint defines the persistence-facing event identity and append boundary required before Router and state-machine code.
 
+### 16.4 Implemented Task 3B-C Runtime Event Identity and Persistence Barrier
+
+Runtime execution now depends on a narrow persistence boundary rather than the storage implementation:
+
+```mermaid
+classDiagram
+    class RuntimeEventIdFactory {
+        <<interface>>
+        +create(CreateRuntimeEventIdInput) string
+    }
+
+    class Sha256RuntimeEventIdFactory {
+        +create(CreateRuntimeEventIdInput) string
+    }
+
+    class RuntimeEventSink {
+        <<interface>>
+        +append(OutputEvent) RuntimeEventAppendReceipt
+    }
+
+    class PublishingRuntimeEventSink {
+        +append(OutputEvent) RuntimeEventAppendReceipt
+    }
+
+    class ConversationOutputEventPublisher {
+        <<interface>>
+        +publish(OutputEvent) OutputReceipt
+    }
+
+    RuntimeEventIdFactory <|.. Sha256RuntimeEventIdFactory
+    RuntimeEventSink <|.. PublishingRuntimeEventSink
+    PublishingRuntimeEventSink --> ConversationOutputEventPublisher
+```
+
+#### Deterministic identity
+
+`Sha256RuntimeEventIdFactory` hashes canonical JSON with this versioned identity shape:
+
+```text
+namespace: novel.runtime-event.v1
+conversationId
+eventType
+scope: input | run | turn
+scope identity: inputEventId | runId | runId + turnId
+ordinal: non-negative scope-local integer
+```
+
+The public ID format is `evt_rt_<lowercase sha256>`. Payload, timestamp, correlation IDs, schema version, Runtime instance ID, PID, Provider data, Tool data, prompt content, and novel text are excluded. The Node adapter supplies SHA-256 through `NodeSha256RuntimeEventIdHasher`; other platforms may provide their own adapter without changing Core identity semantics.
+
+The namespace is part of the hash. Any future change to canonical identity fields requires a new namespace version rather than silently changing IDs produced under `v1`.
+
+Deterministic ID is necessary but not sufficient for acknowledgement-ambiguous retry. Runtime must retain and retry the same already-created Event or canonical snapshot. Reconstructing an Event with a new timestamp under the same ID would produce a different canonical snapshot and must remain a Journal conflict.
+
+#### Runtime Event sink
+
+`PublishingRuntimeEventSink` adapts `ConversationOutputEventPublisher` into a Runtime-owned barrier result:
+
+```text
+recorded  → new durable Journal Event
+duplicate → identical durable Journal Event already exists
+```
+
+Both statuses are successful acknowledgements and return Conversation ID, Event ID, Journal Sequence, and recorded time. Receipts are validated and frozen before the Runtime receives them.
+
+Publisher failures are normalized without carrying raw causes:
+
+```text
+rejected
+conflict
+persistence_failed
+invalid_receipt
+publisher_failed
+```
+
+The adapter emits structured `runtime.event.append_started`, `runtime.event.append_completed`, and `runtime.event.append_failed` logs. Fields are limited to Conversation ID, Event ID, Event Type, stable status/failure, and Journal Sequence. Event payload, prompt, Tool data, Provider response, novel text, raw messages, stacks, causes, paths, and storage details are never logged.
+
+The Sink does not own or close the shared Output publisher, Journal service, or EventHub. Task 3D owns retry decisions, abort-on-failure behavior, and safe Runtime exit; Task 3C owns scope ordinals as part of serialized execution state.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:

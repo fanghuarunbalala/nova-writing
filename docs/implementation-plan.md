@@ -1034,6 +1034,9 @@ Implementation status:
 - Task 3A implemented and awaiting review: execution semantics are frozen in `docs/architecture.md` and summarized below; no Runtime production code is introduced by this step.
 - Task 3B-A implemented and awaiting review: provider-independent Run/Turn lifecycle constants, durable state-change OutputEvents, shared durable Input references, event-specific snapshot schema constraints, public exports, and focused protocol validation.
 - Task 3B-B implemented and awaiting review: stable execution cancellation reasons, cancellation-consistent Run/Turn payloads, terminal Runtime Input processing outcomes, strict schema variants, public exports, and expanded protocol validation.
+- Task 3B-C implemented and awaiting review: deterministic payload-free Runtime Event IDs, versioned SHA-256 identity, Runtime persistence-barrier contracts, shared Output publisher adaptation, stable error normalization, structured logs, and focused protocol validation.
+
+Task 3B implementation is complete. Task 3C may now implement transition legality, the two-lane Router, Stop fences, and serialized Run/Turn mutation against these frozen protocols.
 
 Task 3A accepted decisions:
 
@@ -1111,6 +1114,36 @@ Task 3B-B explicitly excludes:
 - deterministic Runtime Event identity and append request contracts, deferred to the next Task 3B checkpoint
 - Router handling, Stop fence execution, state transition legality, replay cursor mutation, and recovery behavior
 - Assistant, Tool, Provider, Approval, Policy, IPC, and Subagent OutputEvents
+
+Task 3B-C delivered:
+
+- platform-neutral `RuntimeEventIdHasher` and `RuntimeEventIdFactory` contracts
+- `Sha256RuntimeEventIdFactory` using versioned canonical identity and `evt_rt_<sha256>` IDs
+- semantic Input, Run, and Turn identity scopes with non-negative ordinals
+- identity generation excluding Event payload, timestamp, prompt, Tool data, Provider state, and novel content
+- Node `NodeSha256RuntimeEventIdHasher` adapter
+- platform-neutral `RuntimeEventSink` and immutable append receipt
+- `PublishingRuntimeEventSink` adaptation over the shared `ConversationOutputEventPublisher`
+- duplicate Journal receipts treated as successful persistence acknowledgements
+- stable Runtime append failures for rejected, conflict, persistence, invalid-receipt, and unknown publisher failure cases
+- structured `debug`, `info`, and `error` logs containing identifiers, status, Sequence, and stable failure only
+- focused smoke coverage for canonical identity, payload exclusion, scope/ordinal separation, SHA validation, recorded/duplicate receipts, error mapping, invalid receipts, and log redaction
+
+Task 3B-C accepted decisions:
+
+- Runtime Event identity namespace is `novel.runtime-event.v1`; changing its canonical fields requires a new namespace version.
+- deterministic identity uses Conversation ID, Output Event Type, semantic scope identity, and scope-local ordinal.
+- Event payload, timestamp, correlation data, schema version, and process identity never affect the Event ID.
+- ambiguous acknowledgement retry must reuse both the same deterministic Event ID and the same already-created Event snapshot; regenerating a timestamp under the same ID would correctly produce a Journal conflict.
+- a duplicate receipt is a successful persistence barrier because the Journal already contains the canonical Event.
+- `PublishingRuntimeEventSink` does not own or close the shared Output publisher, Journal service, or EventHub.
+- Runtime code depends on `RuntimeEventSink`, not the concrete storage publisher.
+
+Task 3B-C explicitly excludes:
+
+- automatic ordinal allocation and replay restoration, owned by Task 3C and Task 3D
+- retry policy, backoff, Runtime failure exit, and Host recovery execution
+- Router, state machines, Pi Adapter, Context Compiler, Tool, Approval, Policy, IPC, and Subagent behavior
 
 Expected deliverables after approval:
 

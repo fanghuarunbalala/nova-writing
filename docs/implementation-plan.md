@@ -1040,6 +1040,7 @@ Implementation status:
 - Task 3C-C implemented and awaiting review: Core Run/Turn identity generators, persistence-first `TurnController`, serialized lifecycle mutation, deterministic Event construction, pending-commit retry, cross-state coordination, restore validation, structured logs, public exports, and focused validation.
 - Task 3D-A implemented and awaiting review: platform-neutral Runtime Input resolution, Journal-backed canonical lookup by Conversation ID and Sequence, durable identity and schema validation, frozen snapshot capture, stable failures, redacted logs, public exports, and focused validation.
 - Task 3D-B implemented and awaiting review: fixed-High-Watermark Journal replay planning, contiguous pagination, terminal Input outcome correlation, pending Input reconstruction, deterministic Run/Turn lifecycle replay, stable failures, redacted logs, public exports, and focused validation.
+- Task 3D-C implemented and awaiting review: persistence-first Runtime Input outcome control, deterministic terminal Event identity, serialized idempotency, retained same-Event retry, stable conflicts, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1288,6 +1289,35 @@ Task 3D-B explicitly excludes:
 - restoring `TurnController`, enqueueing `InputRouter`, activating Provider/Pi work, or publishing any OutputEvent
 - choosing recovery outcomes for pending Inputs that overlap active Run/Turn state
 - cancellation execution, Stop fence application, retry scheduling, Runtime exit policy, Tool, Approval, Policy, IPC, and Subagent behavior
+
+Task 3D-C delivered:
+
+- `RuntimeInputOutcomeController` as the serialized persistence-first writer for `system.input.processed`
+- deterministic Input-scope Event identity using ordinal zero for the single terminal outcome
+- strict capture of durable Input reference, outcome payload, and optional Correlation/Causation/Run/Turn metadata
+- stable rejection of Turn metadata without Run metadata and `cancelled_before_run` outcomes that already have a Run
+- process-local idempotent reuse of an already committed identical request without a second append
+- stable conflict rejection when the same Input is assigned a different terminal outcome or metadata identity
+- retained pending Event after append failure, global mutation blocking, and `retryPending()` using the exact same Event instance and timestamp
+- recorded and duplicate append receipts both completing the terminal outcome barrier
+- immutable pending and committed snapshots plus completion lookup by Input Event ID
+- structured started, completed, and reused logs without Input payloads, novel text, raw errors, stacks, causes, or paths
+- focused smoke coverage for all three terminal outcomes, deterministic IDs, default causation, duplicate receipts, same-request reuse, conflicting outcomes, concurrent idempotency, pending barriers, exact Event retry, invalid metadata, strict payload combinations, and log redaction
+
+Task 3D-C accepted decisions:
+
+- one Input has exactly one semantic Runtime terminal outcome; its deterministic Event ordinal is always zero.
+- the outcome is authoritative only after the Runtime Event Sink acknowledges recorded or duplicate persistence.
+- an append failure leaves the original Event pending and blocks every later outcome mutation until exact-Event retry succeeds or Runtime exits.
+- repeating the identical request after success returns the original process-local commit; changing outcome or metadata for that Input is a conflict.
+- `cancelled_before_run` cannot carry Run or Turn identity because the Input never received a Run.
+- the controller persists a caller-selected outcome but does not decide whether an Input should be consumed, cancelled, or failed.
+
+Task 3D-C explicitly excludes:
+
+- replay restoration of completed-controller memory; durable replay prevents already processed Inputs from being rescheduled
+- Input routing, Run/Turn startup ordering, Stop fence decisions, cancellation effects, and Runtime failure policy
+- Provider, Pi, Tool, Approval, Policy, IPC, Subagent, Context compilation, and message projection behavior
 
 Expected deliverables after approval:
 

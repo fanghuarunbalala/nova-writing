@@ -33,6 +33,7 @@
     "smoke:runtime-input-router": "pnpm build && node scripts/runtime-input-router-smoke.mjs",
     "smoke:turn-controller": "pnpm build && node scripts/turn-controller-smoke.mjs",
     "smoke:runtime-input-resolver": "pnpm build && node scripts/runtime-input-resolver-smoke.mjs",
+    "smoke:runtime-input-outcome": "pnpm build && node scripts/runtime-input-outcome-controller-smoke.mjs",
     "smoke:runtime-replay-planner": "pnpm build && node scripts/runtime-replay-planner-smoke.mjs",
     "smoke:local-conversation": "pnpm build && node scripts/local-conversation-integration-smoke.mjs",
     "smoke:local-conversation-host": "pnpm build && node scripts/local-conversation-host-integration-smoke.mjs",

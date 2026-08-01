@@ -2890,6 +2890,45 @@ The result contains pending Input snapshots, processed/scanned counts, and the l
 
 Failures normalize to `invalid_request`, `read_failed`, `watermark_mismatch`, `journal_gap`, `invalid_event`, or `history_conflict`. Logs contain only Conversation identity, cursor/High Watermark, counts, stable state labels, Run/Turn identifiers, and stable failure values.
 
+### 16.10 Implemented Task 3D-C Persistence-First Input Outcomes
+
+`RuntimeInputOutcomeController` is the serialized write boundary for `system.input.processed`. It accepts one durable Input reference, one terminal outcome, and optional Event metadata, but never reads the Input payload or chooses the outcome on behalf of Runtime scheduling.
+
+```mermaid
+sequenceDiagram
+    participant Runtime
+    participant Controller as RuntimeInputOutcomeController
+    participant Sink as RuntimeEventSink
+    participant Journal
+
+    Runtime->>Controller: record(input, terminal outcome)
+    Controller->>Controller: capture identity + create ordinal-zero Event once
+    Controller->>Sink: append(same Event instance)
+    Sink->>Journal: persist system.input.processed
+    alt recorded or duplicate
+        Journal-->>Sink: durable acknowledgement
+        Sink-->>Controller: receipt
+        Controller-->>Runtime: immutable commit
+    else append failure
+        Sink-->>Controller: rejection
+        Controller->>Controller: retain pending Event and block mutations
+        Runtime->>Controller: retryPending()
+        Controller->>Sink: append(exact same Event instance)
+    end
+```
+
+Every Input has one terminal Runtime outcome and therefore uses Input-scope ordinal zero in `RuntimeEventIdFactory`. The durable Event ID depends on Conversation ID, Event Type, Input Event ID, scope, and ordinal; timestamp and outcome payload remain excluded from identity.
+
+The controller treats recorded and duplicate Sink receipts as successful persistence barriers. After success, an identical process-local request returns the original immutable commit without appending again. A request that changes the outcome, cancellation/failure detail, or Event metadata for the same Input raises a stable conflict.
+
+Append failure retains the exact `RuntimeInputProcessedOutputEvent`, including its ID, timestamp, metadata, and payload snapshot. While that Event is pending, every new outcome mutation is rejected; only `retryPending()` may resubmit it. This is the same ack-first mutation boundary used by `TurnController`.
+
+`cancelled_before_run` rejects Run or Turn metadata because that outcome means the Turn-lane Input never received a Run. Turn metadata always requires Run metadata. Payload constructors continue to enforce the exact `consumed`, `cancelled_before_run`, and `failed` discriminated variants.
+
+The controller does not decide which outcome is semantically correct, restore completed in-memory entries from replay, route Inputs, apply Stop fences, mutate Run/Turn state, or execute cancellation. `RuntimeReplayPlanner` prevents durable terminal Inputs from being rescheduled; later `ConversationRuntime` coordination selects and orders new outcomes.
+
+Logs expose only Conversation/Input/Event identifiers, durable Sequence, outcome label, receipt status, and Journal Sequence. Input payloads, prompts, Tool data, novel text, raw Sink errors, stacks, causes, workdir, Store paths, and JSONL content remain excluded.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -3703,6 +3742,7 @@ Currently implemented skeletons include:
 - bounded two-lane `InputRouter` with Control preemption, Turn FIFO, and Stop fences
 - Journal-backed Runtime Input resolution with exact durable identity and schema validation
 - fixed-High-Watermark Runtime replay planning with pending Input and lifecycle reconstruction
+- persistence-first terminal Runtime Input outcome control with exact-Event retry
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

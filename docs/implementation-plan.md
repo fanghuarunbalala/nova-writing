@@ -569,6 +569,7 @@ Implementation status:
 - Task 2D-D-B implemented and awaiting review: Runtime Presence transition and Host-input routing OutputEvent classes, payloads, Event Types, registered Core schemas, durable Input references, causation defaults, privacy boundaries, and protocol smoke validation.
 - Task 2D-D-C implemented and awaiting review: Managed Host lifecycle publication, ordered per-Conversation Presence events, Input causation propagation, publication failure degradation, ownership boundaries, and expanded lifecycle smoke validation.
 - Task 2D-D-D implemented and awaiting review: Core Stop and ReloadConfig routing, online Runtime durable-reference notification, offline outcomes, routed InputResponse publication, result contracts, retry-preserving failure behavior, and focused smoke validation.
+- Task 2D-D-E implemented and awaiting review: real SQLite Host composition, unified Input/Output Sequence validation, Bootstrap High Watermark interaction, online/offline control routing, duplicate idempotency, live delivery, reopen replay, and redacted logs.
 
 Resolved through Task 2C:
 
@@ -938,6 +939,33 @@ Task 2D-D-D explicitly excludes:
 - Stop cancellation and queued-user-input clearing
 - ReloadConfig payload resolution or application
 - semantic completion and failure OutputEvents from Runtime
+- Runtime, InputRouter, Run/Turn state, Pi, Tools, Approval, IPC, and Subagents
+
+Task 2D-D-E delivered:
+
+- real Workspace Store, Catalog, SQLite Journal, query service, and catch-up subscription composition
+- shared persistence-first Journal and Core Output publisher for Input and lifecycle/control OutputEvents
+- real storage-backed Runtime Bootstrap Factory inside `ManagedConversationHost`
+- online user activation with lifecycle OutputEvents before and after placement
+- online Stop Runtime notification and routed InputResponse persistence
+- duplicate Stop Host idempotency without repeated dispatch or Output
+- explicit shutdown with stopping and stopped Presence persistence
+- offline ReloadConfig deferred routing and offline Stop no-Runtime routing
+- contiguous live EventHub observation of the complete unified Journal sequence
+- Store close/reopen replay preserving all Input and Output records
+- log redaction for novel content, configuration contents, Workspace and Store paths, payloads, and raw failures
+
+Task 2D-D-E accepted decisions:
+
+- lifecycle OutputEvents share the same Journal Sequence as accepted Inputs and routed InputResponse events.
+- the Bootstrap High Watermark may include a starting Presence OutputEvent newer than its accepted activation Input.
+- Host duplicate idempotency suppresses repeated control dispatch and routed Output publication within the current Host lifetime.
+- live EventHub delivery and reopened SQLite replay must expose the same durable Sequence order.
+
+Task 2D-D-E explicitly excludes:
+
+- new production interfaces or lifecycle behavior
+- semantic Stop cancellation and ReloadConfig application
 - Runtime, InputRouter, Run/Turn state, Pi, Tools, Approval, IPC, and Subagents
 
 ## 6. Task 3: Input Routing and Runtime Loop
@@ -1310,7 +1338,7 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, Task 2D-A through Task 2D-C, and Task 2D-D-A through Task 2D-D-D have been implemented and are awaiting checkpoint review.
+Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, Task 2D-A through Task 2D-C, and Task 2D-D-A through Task 2D-D-E have been implemented and are awaiting checkpoint review.
 
 Completed Task 1 results include:
 

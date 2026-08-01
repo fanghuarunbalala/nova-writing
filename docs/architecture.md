@@ -1176,6 +1176,47 @@ The focused smoke validates online Stop and ReloadConfig notification, offline S
 
 Task 2-D-D-D does not implement Runtime cancellation, configuration resolution/application, queued user-input clearing, semantic completion OutputEvents, Runtime/InputRouter behavior, Pi, Tools, Approval, IPC, or Subagents.
 
+### 7.11 Implemented Task 2-D-D-E SQLite Host Integration
+
+Task 2-D-D-E validates the complete no-process Host composition against the real Workspace SQLite Store and unified Journal:
+
+```text
+StorageConversationCommandService
+    → ManagedConversationHost
+        → StorageConversationRuntimeBootstrapFactory
+        → Integration Runtime Placement / Handle
+        → CoreConversationHostControlDispatcher
+        → StorageConversationOutputEventPublisher
+            → PublishingConversationJournalService
+                → SQLite Journal + InMemory EventHub
+```
+
+The integration uses one shared Core Event Schema Registry, Output publisher, Journal service, Clock, and Workspace identity. No fake Journal, Catalog, Bootstrap Factory, query service, or Output persistence path is used.
+
+The validated durable sequence is:
+
+| Sequence | Direction | Event Type | Lifecycle or routing result |
+| ---: | --- | --- | --- |
+| 1 | Input | `user.message` | Runtime-required input |
+| 2 | Output | `system.runtime.presence.changed` | `accepted_input` |
+| 3 | Output | `system.runtime.presence.changed` | `activation_succeeded` |
+| 4 | Input | `system.stop` | online Host route |
+| 5 | Output | `system.input.routed` | `runtime_notified` |
+| 6 | Output | `system.runtime.presence.changed` | `explicit_shutdown` |
+| 7 | Output | `system.runtime.presence.changed` | `runtime_stopped` |
+| 8 | Input | `command.config.reload` | offline Host route |
+| 9 | Output | `system.input.routed` | `deferred` |
+| 10 | Input | `system.stop` | offline Host route |
+| 11 | Output | `system.input.routed` | `no_runtime` |
+
+The Runtime Bootstrap is created after Sequence 2, so its Journal High Watermark is 2 while its accepted activation Input reference remains Sequence 1. This proves lifecycle Output insertion does not break exact durable Input validation.
+
+The online Stop reference reaches the Runtime Handle without payload copying. Re-notifying the identical durable Stop Input is idempotent in the Host and creates neither a second Runtime dispatch nor a second routed OutputEvent. Explicit shutdown records stopping and stopped Presence transitions before later offline control routing.
+
+All eleven persisted Events are observed through the process-local EventHub in contiguous Sequence order and remain readable after closing and reopening the SQLite Store. The integration also verifies that novel text, ReloadConfig contents, Workspace paths, Store paths, database paths, Output payloads, and raw errors do not enter structured logs.
+
+Task 2-D-D-E adds no production behavior. It does not implement semantic Stop cancellation, configuration application, Runtime execution, InputRouter, Run/Turn state, Pi, Tools, Approval, IPC, or Subagents.
+
 ## 8. Query and Command Paths
 
 ```mermaid
@@ -3172,6 +3213,7 @@ Currently implemented skeletons include:
 - Host lifecycle smoke coverage for activation, shutdown, crash recovery, causation retention, and continuous operation during lifecycle publication failure
 - `CoreConversationHostControlDispatcher` with durable online Runtime notification, offline Stop/ReloadConfig outcomes, routed InputResponse publication, and frozen dispatch results
 - focused Host control smoke coverage for routing outcomes, durable references, causation, failure retention, context validation, and redacted observability
+- real SQLite Host composition covering durable command acceptance, lifecycle publication, Bootstrap High Watermark, online and offline control routing, live delivery, idempotency, reopen replay, and redacted logs
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild

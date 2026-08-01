@@ -1048,6 +1048,7 @@ Implementation status:
 - Task 3D-H implemented and awaiting review: event-driven `RuntimeInputPump`, single Control and Turn work slots, Control preemption while Turn work is pending, Turn FIFO, no-poll wake coalescing, stop-with-queue-retention, fixed safe failure exits, redacted logs, public exports, and focused validation.
 - Task 3D-I implemented and awaiting review: `ConversationRuntime` ownership of `RuntimeInputPump`, post-Bootstrap Pump startup, live route wake-up, shutdown drain/exit gating, asynchronous Pump failure observation, unexpected-stop degradation, fixed safe Runtime exits, real Pump integration, redacted logs, public exports, and focused validation.
 - Task 3D-J implemented and awaiting review: durable `RuntimeUserMessageInputHandler`, defensive canonical Input capture, Run claim/outcome/start barriers, injected `RuntimeRunExecutor`, terminal Run verification, serialized direct use, fixed safe phase failures, real controller/sink integration, redacted logs, public exports, and focused validation.
+- Task 3D-K implemented and awaiting review: persistence-first `RuntimeStopInputHandler`, Stop fence pruning, Turn-before-Run stopping and cancellation transitions, idempotent external cancellation port, emergency cancellation on barrier failure, ordered cancelled-before-run and Stop outcomes, real Router/controller/sink integration, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1542,6 +1543,42 @@ Task 3D-J explicitly excludes:
 - Pi Agent Core adaptation, Provider streaming, Turn event mapping, Tool execution, Assistant output, and Context compilation
 - Stop fence application, cancellation propagation, AbortSignal ownership, child cancellation, and late-result suppression
 - automatic failed Run synthesis after executor rejection and resolution of active Run/Turn crash recovery
+
+Task 3D-K delivered:
+
+- `RuntimeStopInputHandler` as a Pump-compatible, serialized Stop coordination boundary
+- defensive canonical Stop snapshot capture and durable payload-free Stop Input identity
+- synchronous `InputRouter.applyStopFence(stopSequence)` before new Turn work can begin
+- defensive validation and ascending-Sequence capture of all Turn Inputs removed by the fence
+- active Run/Turn coordination validation before lifecycle mutation
+- exact persistence order `Turn stopping -> Run stopping -> external cancellation -> Turn cancelled -> Run cancelled`
+- `RuntimeStopCancellationPort` as one idempotent external cancellation boundary for active Provider, Tool, interaction, and configured child work
+- best-effort repeated emergency cancellation when Turn/Run stopping persistence or the primary cancellation call fails
+- ascending `cancelled_before_run` terminal outcomes for every fenced Turn Input, each caused by the Stop Input
+- terminal `consumed` outcome for the Stop Input after lifecycle cancellation and queued-Input outcomes are durably acknowledged
+- immutable payload-free result containing Stop identity, optional Run/Turn identity and cancelled status, cancelled Input references, and Stop outcome receipt Sequence
+- fixed phase failures for invalid Stop Input, fence output, lifecycle consistency, stopping/cancelled transitions, cancellation port, queued outcomes, and Stop outcome
+- focused smoke validation with real `InputRouter`, `TurnController`, `RuntimeInputOutcomeController`, active and idle cancellation paths, exact Event ordering, emergency cancellation after append failure, cancellation retry, outcome failure, mutation boundaries, and log redaction
+
+Task 3D-K accepted decisions:
+
+- the process-local Stop fence is applied before any asynchronous persistence so no additional covered Turn Input can start in the current Runtime. If later work fails, Journal remains authoritative and recovery may reconstruct those Inputs.
+- an active Turn enters `stopping` before its Run because `TurnController` forbids stopping a Run while a non-stopping Turn remains active.
+- external cancellation begins only after all applicable stopping transitions are durably acknowledged. The cancellation port may abort Provider, Tool, interaction, and owned child work but must not write Core Run/Turn transitions.
+- the cancellation port is idempotent by Conversation, Stop Input, and Run identity because the coordinator may invoke it again after an acknowledgement or cancellation failure.
+- after external cancellation settles, Turn reaches `cancelled` before Run reaches `cancelled`, both with the shared `stop` cancellation reason.
+- fenced Inputs receive `cancelled_before_run` outcomes in ascending durable Sequence. Inputs after the Stop fence remain queued and eligible for later Runs.
+- the Stop Input receives `consumed` only after all earlier cancellation barriers and fenced-Input outcomes succeed.
+- stopping-transition append failure triggers a best-effort emergency cancellation before the handler fails. The Pump and Runtime then degrade, while Journal records the last acknowledged lifecycle boundary.
+- cancellation or terminal transition failure does not invent alternate failed lifecycle Events. Non-terminal recovery remains governed by the explicitly unresolved crash-recovery decision.
+
+Task 3D-K explicitly excludes:
+
+- installation into a general Control dispatcher or the live Runtime Pump composition
+- concrete AbortController, Provider, Tool, interaction, or child-Conversation cancellation implementations and timeout policy
+- late Provider/Tool completion suppression, invocation identity tracking, and cancellation grace periods
+- ReloadConfig handling, Pi execution, Context compilation, Tool execution, Approval, Policy, IPC, Subagent, Nudge, and Compaction
+- automatic recovery of stopping Run/Turn state after Runtime replacement
 
 Expected deliverables after approval:
 

@@ -3240,6 +3240,75 @@ The immutable handler result exposes only durable Input identity, Run ID, termin
 
 This checkpoint does not install a general Turn dispatcher, handle Context Inputs, implement Pi/Provider execution, apply Stop cancellation, or resolve non-terminal crash recovery.
 
+### 16.18 Implemented Task 3D-K Persistence-first Stop Coordination
+
+`RuntimeStopInputHandler` implements the accepted Stop fence and cancellation ordering without embedding Provider, Tool, interaction, or child-management implementations. It is a Pump-compatible Control handler, but installation into a general Control dispatcher remains a later composition checkpoint.
+
+```mermaid
+sequenceDiagram
+    participant Pump
+    participant Stop as RuntimeStopInputHandler
+    participant Router as InputRouter
+    participant Turns as TurnController
+    participant Cancel as RuntimeStopCancellationPort
+    participant Outcomes as RuntimeInputOutcomeController
+
+    Pump->>Stop: handle(canonical Stop Input)
+    Stop->>Router: applyStopFence(stopSequence)
+    Router-->>Stop: covered Turn Inputs in Sequence order
+    opt active Turn
+        Stop->>Turns: transitionTurn(stopping, stop_requested)
+        Turns-->>Stop: durable acknowledgement
+    end
+    opt active Run
+        Stop->>Turns: transitionRun(stopping, stop_requested)
+        Turns-->>Stop: durable acknowledgement
+        Stop->>Cancel: cancel(runId, turnId?, stopInput)
+        Cancel-->>Stop: external cancellation settled
+    end
+    opt active Turn
+        Stop->>Turns: transitionTurn(cancelled, stop)
+        Turns-->>Stop: durable acknowledgement
+    end
+    opt active Run
+        Stop->>Turns: transitionRun(cancelled, stop)
+        Turns-->>Stop: durable acknowledgement
+    end
+    loop each fenced Turn Input by Journal Sequence
+        Stop->>Outcomes: record(cancelled_before_run, stop)
+        Outcomes-->>Stop: durable acknowledgement
+    end
+    Stop->>Outcomes: record(Stop consumed)
+    Outcomes-->>Stop: durable acknowledgement
+    Stop-->>Pump: settled
+```
+
+The process-local fence is applied first so no covered queued Turn Input can start while Stop coordination is in progress. It removes only snapshots at or before the Stop Journal Sequence; later Inputs remain in the Router and can start after cancellation completes. Removing a snapshot is not durable deletion: if a later barrier fails, Journal replay remains able to reconstruct the Input.
+
+When a Turn is active, it must durably enter `stopping` before the Run. This matches `TurnController` coordination rules and prevents a stopping Run from retaining a non-stopping active Turn. A Run with no active Turn transitions directly to stopping.
+
+`RuntimeStopCancellationPort` is an idempotent side-effect boundary. It receives only Conversation ID, Stop Input reference, Run ID, optional Turn ID, and the fixed `stop` reason. Implementations may abort active Provider, Tool, interaction, and configured child work, but must not publish Core lifecycle Events or mutate `TurnController`.
+
+The primary cancellation call begins only after applicable stopping transitions are durably acknowledged. If a stopping append fails, or the primary cancellation call rejects, the handler issues a best-effort emergency cancellation with the same immutable request before failing. Repeated calls are therefore an explicit port requirement rather than accidental behavior.
+
+After external cancellation settles, the handler durably cancels Turn before Run. It then records `cancelled_before_run` for fenced Inputs in ascending Journal Sequence and finally records the Stop Input as consumed. Stop is not semantically complete before these outcomes are acknowledged.
+
+```mermaid
+flowchart TD
+    Barrier["Turn/Run stopping append"] --> Ack{"acknowledged?"}
+    Ack -->|yes| Cancel["Idempotent external cancellation"]
+    Ack -->|no| Emergency["Best-effort emergency cancellation"]
+    Cancel --> Cancelled["Turn then Run cancelled barriers"]
+    Cancel -->|reject| Emergency
+    Emergency --> Fail["Handler failure → Pump/Runtime degradation"]
+    Cancelled --> Queued["Fenced Input cancelled_before_run outcomes"]
+    Queued --> StopOutcome["Stop consumed outcome"]
+```
+
+Cancellation, lifecycle, or outcome failures expose only fixed phase values. Logs and immutable results contain identifiers, status, counts, and Journal Sequence only; Stop payload, queued Input payloads, novel text, prompts, Provider responses, Tool data, child content, raw errors, stacks, causes, paths, and JSONL remain excluded.
+
+The handler does not define AbortController ownership, cancellation timeouts, Tool late-result suppression, child traversal, ReloadConfig, Pi execution, or recovery transitions for a Run left in stopping state after Runtime failure.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:

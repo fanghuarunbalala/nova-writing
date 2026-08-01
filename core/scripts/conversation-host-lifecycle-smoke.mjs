@@ -198,17 +198,47 @@ class FakeControlDispatcher {
   }
 }
 
+class FakeOutputPublisher {
+  constructor() {
+    this.events = [];
+    this.nextSequence = 1;
+    this.failuresRemaining = 0;
+    this.failAlways = false;
+  }
+
+  async publish(event) {
+    const snapshot = event.getSnapshot();
+    this.events.push(snapshot);
+    if (this.failAlways || this.failuresRemaining > 0) {
+      if (this.failuresRemaining > 0) this.failuresRemaining -= 1;
+      const error = new Error("secret lifecycle output failure");
+      error.code = "LIFECYCLE_OUTPUT_FAILED";
+      throw error;
+    }
+    const sequence = this.nextSequence++;
+    return Object.freeze({
+      status: "recorded",
+      conversationId: snapshot.conversationId,
+      outputEventId: snapshot.id,
+      sequence,
+      recordedAt: snapshot.timestamp,
+    });
+  }
+}
+
 function createHost(conversationIds, options = {}) {
   const logger = options.logger ?? new CollectingLogger();
   const bootstrapFactory = options.bootstrapFactory ?? new FakeBootstrapFactory();
   const placement = options.placement ?? new FakePlacement();
   const controlDispatcher =
     options.controlDispatcher ?? new FakeControlDispatcher();
+  const outputPublisher = options.outputPublisher ?? new FakeOutputPublisher();
   const host = new ManagedConversationHost({
     snapshotReader: new FakeSnapshotReader(conversationIds),
     bootstrapFactory,
     placement,
     controlDispatcher,
+    outputPublisher,
     clock: new IncrementingClock(),
     runtimeInstanceIdGenerator: new SequentialRuntimeInstanceIdGenerator(),
     logger,
@@ -219,7 +249,14 @@ function createHost(conversationIds, options = {}) {
       ? { runtimeQueueCapacity: options.runtimeQueueCapacity }
       : {}),
   });
-  return { host, logger, bootstrapFactory, placement, controlDispatcher };
+  return {
+    host,
+    logger,
+    bootstrapFactory,
+    placement,
+    controlDispatcher,
+    outputPublisher,
+  };
 }
 
 function createSignal(options) {
@@ -278,7 +315,9 @@ async function waitUntil(predicate, label) {
 }
 
 {
-  const { host, placement, bootstrapFactory } = createHost(["conversation-basic"]);
+  const { host, placement, bootstrapFactory, outputPublisher } = createHost([
+    "conversation-basic",
+  ]);
   assert.deepEqual(await host.getRuntimePresence("conversation-basic"), {
     state: "offline",
     observedAt: "2026-08-01T00:00:00.000Z",
@@ -294,6 +333,31 @@ async function waitUntil(predicate, label) {
   assert.equal(bootstrapFactory.requests[0].activation.reason, "accepted_input");
   assert.equal(bootstrapFactory.requests[0].activation.input.sequence, 1);
   assert.equal((await host.getRuntimePresence("conversation-basic")).state, "online");
+  assert.deepEqual(
+    outputPublisher.events.slice(0, 2).map((event) => ({
+      eventType: event.eventType,
+      previousState: event.payload.previous.state,
+      currentState: event.payload.current.state,
+      reason: event.payload.reason,
+      causationId: event.causationId,
+    })),
+    [
+      {
+        eventType: "system.runtime.presence.changed",
+        previousState: "offline",
+        currentState: "starting",
+        reason: "accepted_input",
+        causationId: "input-1",
+      },
+      {
+        eventType: "system.runtime.presence.changed",
+        previousState: "starting",
+        currentState: "online",
+        reason: "activation_succeeded",
+        causationId: "input-1",
+      },
+    ],
+  );
 
   await host.notifyAccepted({ ...signal, journalStatus: "duplicate" });
   await new Promise((resolve) => setTimeout(resolve, 5));
@@ -313,6 +377,25 @@ async function waitUntil(predicate, label) {
   assert.equal(second.status, "reused");
   assert.equal(placement.handles.length, 1);
   await host.close();
+  assert.deepEqual(
+    outputPublisher.events.slice(-2).map((event) => ({
+      previousState: event.payload.previous.state,
+      currentState: event.payload.current.state,
+      reason: event.payload.reason,
+    })),
+    [
+      {
+        previousState: "online",
+        currentState: "stopping",
+        reason: "host_close",
+      },
+      {
+        previousState: "stopping",
+        currentState: "offline",
+        reason: "runtime_stopped",
+      },
+    ],
+  );
 }
 
 {
@@ -377,7 +460,7 @@ async function waitUntil(predicate, label) {
 }
 
 {
-  const { host, placement, bootstrapFactory } = createHost([
+  const { host, placement, bootstrapFactory, outputPublisher } = createHost([
     "conversation-crash-recovery",
   ]);
   await host.notifyAccepted(
@@ -391,12 +474,55 @@ async function waitUntil(predicate, label) {
       "crashed",
     "crashed presence",
   );
+  assert.equal(outputPublisher.events.at(-1).payload.reason, "runtime_crashed");
   await host.notifyAccepted(
     createSignal({ conversationId: "conversation-crash-recovery", sequence: 31 }),
   );
   await waitUntil(() => placement.handles[1]?.inputs.length === 1, "recovery dispatch");
   assert.equal(bootstrapFactory.requests[1].activation.reason, "crash_recovery");
   assert.equal(placement.handles[1].inputs[0].sequence, 31);
+  assert.deepEqual(
+    outputPublisher.events
+      .filter((event) => event.payload.reason === "crash_recovery")
+      .map((event) => event.causationId),
+    ["input-31"],
+  );
+  await host.close();
+}
+
+{
+  const logger = new CollectingLogger();
+  const outputPublisher = new FakeOutputPublisher();
+  outputPublisher.failAlways = true;
+  const { host, placement } = createHost(["conversation-output-degradation"], {
+    logger,
+    outputPublisher,
+  });
+  await host.notifyAccepted(
+    createSignal({
+      conversationId: "conversation-output-degradation",
+      sequence: 65,
+    }),
+  );
+  await waitUntil(
+    () => placement.handles[0]?.inputs.length === 1,
+    "dispatch after lifecycle publication failure",
+  );
+  assert.equal(
+    (await host.getRuntimePresence("conversation-output-degradation")).state,
+    "online",
+  );
+  assert.deepEqual(
+    outputPublisher.events.slice(0, 2).map((event) => event.payload.reason),
+    ["accepted_input", "activation_succeeded"],
+  );
+  assert.equal(
+    logger.entries.filter(
+      (entry) =>
+        entry.event === "conversation_host.runtime.presence_publish_failed",
+    ).length,
+    2,
+  );
   await host.close();
 }
 
@@ -549,6 +675,7 @@ async function waitUntil(predicate, label) {
   for (const forbidden of [
     "secret dispatch failure",
     "secret control failure",
+    "secret lifecycle output failure",
     "systemPrompt",
     "apiKey",
     "payload",

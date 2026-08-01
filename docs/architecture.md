@@ -1092,6 +1092,50 @@ Both Event Types and Payload schemas are registered by `createCoreEventSchemaReg
 
 Task 2-D-D-B does not publish these events, modify `ManagedConversationHost`, change the control-dispatcher return type, or implement Stop, ReloadConfig, Runtime, InputRouter, Run, Turn, IPC, or Subagent behavior.
 
+### 7.9 Implemented Task 2-D-D-C Managed Host Lifecycle Publication
+
+Task 2-D-D-C injects the shared `ConversationOutputEventPublisher` into `ManagedConversationHost` and records every real logical Runtime Presence transition through `RuntimePresenceChangedOutputEvent`.
+
+```mermaid
+sequenceDiagram
+    participant Host as ManagedConversationHost
+    participant Slot as Runtime Slot
+    participant Output as ConversationOutputEventPublisher
+    participant Factory as Bootstrap Factory
+    participant Placement
+
+    Host->>Slot: set offline → starting
+    Host->>Output: publish PresenceChanged(accepted_input)
+    alt publication succeeds
+        Output-->>Host: durable OutputReceipt
+    else publication fails
+        Output--xHost: safe failure
+        Host->>Host: log and continue without rollback
+    end
+    Host->>Factory: create Bootstrap
+    Factory-->>Host: Bootstrap
+    Host->>Placement: activate
+    Placement-->>Host: Runtime Handle
+    Host->>Slot: set starting → online
+    Host->>Output: publish PresenceChanged(activation_succeeded)
+```
+
+Presence state is updated before publication. The Host awaits each publication attempt inside the per-Conversation serialized lifecycle path so successful lifecycle OutputEvents preserve transition order. A publication failure is caught, logged with safe identities, and never rolls the Slot back, fails activation, prevents Runtime input dispatch, converts a successful shutdown into failure, or aborts Host close.
+
+The initial offline Slot created for lookup or accepted-input scheduling does not emit an Event because no observed transition occurred. Subsequent transitions cover activation start, activation success or failure, shutdown start, stopped or crashed exits, rejected exit observation, and shutdown failure.
+
+Accepted-input activation Events inherit the Input Event ID as `causationId` and preserve correlation, Run, and Turn identity. A required durable Input that recovers a crashed Runtime supplies the same metadata to the `crash_recovery` transition even though the Bootstrap activation cause intentionally contains no synthetic Input reference. Explicit restore without an Input has no fabricated causation.
+
+The `starting` lifecycle OutputEvent is appended before Bootstrap creation. Therefore a storage-backed Bootstrap Factory may observe that OutputEvent in its Journal High Watermark while still validating the original accepted Input by its own Sequence. The lifecycle Output append does not call the Input command notifier and cannot recursively trigger Runtime activation.
+
+Unexpected Runtime exits remain protected by Slot generation and Runtime instance ID checks. Stale exits emit no Presence OutputEvent. Matching stopped exits transition to offline with `runtime_stopped`; matching crashes use `runtime_crashed`; rejected exit observers use `exit_observer_failed`.
+
+Host close continues to own only Runtime Slots and Handles. It does not close the injected Output publisher, Journal service, or EventHub. Lifecycle publication failures do not generate another OutputEvent, preventing recursive failure loops.
+
+The lifecycle smoke now verifies ordered accepted-input activation, Host-close shutdown transitions, crash and crash-recovery transitions, Input causation retention, and continued activation, dispatch, Presence reporting, and close when every lifecycle publication attempt fails.
+
+Task 2-D-D-C does not publish `HostInputRoutedOutputEvent`, change control-dispatch results, or implement Stop cancellation, ReloadConfig application, Runtime execution, InputRouter, Run/Turn state, IPC, or Subagents.
+
 ## 8. Query and Command Paths
 
 ```mermaid
@@ -3084,6 +3128,8 @@ Currently implemented skeletons include:
 - real SQLite Output publication validation covering live delivery, duplicate recovery, conflict and schema rejection, live failure degradation, reopen replay, and log redaction
 - Core `system.runtime.presence.changed` and `system.input.routed` OutputEvent classes, payloads, Event Types, and registered schemas
 - Output protocol smoke coverage for Presence privacy, durable Input references, causation defaults, defensive capture, and invalid lifecycle values
+- `ManagedConversationHost` lifecycle publication through the shared Output publisher with ordered per-Conversation transitions and non-rollback failure degradation
+- Host lifecycle smoke coverage for activation, shutdown, crash recovery, causation retention, and continuous operation during lifecycle publication failure
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild

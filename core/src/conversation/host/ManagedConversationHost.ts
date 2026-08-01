@@ -9,12 +9,18 @@
  * ```
  */
 import type { AcceptedConversationInputSignal } from "../command/index.js";
+import type { ConversationOutputEventPublisher } from "../output/index.js";
 import { ConversationNotFoundError } from "../ConversationErrors.js";
 import type { ConversationSnapshotReader } from "../ConversationSnapshotReader.js";
 import {
   RUNTIME_PRESENCE_STATE,
   type RuntimePresence,
 } from "../RuntimePresence.js";
+import {
+  RUNTIME_PRESENCE_CHANGE_REASON,
+  RuntimePresenceChangedOutputEvent,
+  type RuntimePresenceChangeReason,
+} from "../../event/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
 import type { ConversationHost } from "./ConversationHost.js";
 import {
@@ -74,11 +80,19 @@ type HostLifecycle = "open" | "closing" | "closed";
 type SignalQueueTarget = "control" | "runtime";
 type RuntimeSignalOutcome = "handled" | "reselect";
 
+interface PresenceTransitionEventMetadata {
+  correlationId?: string;
+  causationId?: string;
+  runId?: string;
+  turnId?: string;
+}
+
 export interface ManagedConversationHostOptions {
   snapshotReader: ConversationSnapshotReader;
   bootstrapFactory: ConversationRuntimeBootstrapFactory;
   placement: ConversationRuntimePlacement;
   controlDispatcher: ConversationHostControlDispatcher;
+  outputPublisher: ConversationOutputEventPublisher;
   clock?: ConversationHostClock;
   runtimeInstanceIdGenerator?: ConversationRuntimeInstanceIdGenerator;
   controlQueueCapacity?: number;
@@ -91,6 +105,7 @@ export class ManagedConversationHost implements ConversationHost {
   private readonly bootstrapFactory: ConversationRuntimeBootstrapFactory;
   private readonly placement: ConversationRuntimePlacement;
   private readonly controlDispatcher: ConversationHostControlDispatcher;
+  private readonly outputPublisher: ConversationOutputEventPublisher;
   private readonly clock: ConversationHostClock;
   private readonly runtimeInstanceIdGenerator: ConversationRuntimeInstanceIdGenerator;
   private readonly controlQueueCapacity: number;
@@ -106,6 +121,7 @@ export class ManagedConversationHost implements ConversationHost {
     this.bootstrapFactory = options.bootstrapFactory;
     this.placement = options.placement;
     this.controlDispatcher = options.controlDispatcher;
+    this.outputPublisher = options.outputPublisher;
     this.clock = options.clock ?? new SystemConversationHostClock();
     this.runtimeInstanceIdGenerator =
       options.runtimeInstanceIdGenerator ??
@@ -405,7 +421,7 @@ export class ManagedConversationHost implements ConversationHost {
       await this.activateSlot(slot, {
         conversationId: signal.conversationId,
         ...activation,
-      });
+      }, getSignalEventMetadata(signal));
       return "reselect";
     }
 
@@ -448,15 +464,18 @@ export class ManagedConversationHost implements ConversationHost {
   private async activateSlot(
     slot: ManagedConversationRuntimeSlot,
     request: ConversationRuntimeActivationRequest,
+    metadata: PresenceTransitionEventMetadata = getActivationEventMetadata(request),
   ): Promise<void> {
     slot.generation += 1;
     const generation = slot.generation;
     let runtimeInstanceId = "unknown";
 
     try {
-      slot.presence = createPresence(
-        RUNTIME_PRESENCE_STATE.starting,
-        this.readTimestamp(),
+      await this.transitionPresence(
+        slot,
+        createPresence(RUNTIME_PRESENCE_STATE.starting, this.readTimestamp()),
+        request.reason,
+        metadata,
       );
       runtimeInstanceId = this.runtimeInstanceIdGenerator.generate(
         slot.conversationId,
@@ -507,7 +526,12 @@ export class ManagedConversationHost implements ConversationHost {
       slot.exitPromise = exitPromise;
       slot.verified = true;
       slot.dispatchedRuntimeSignals.clear();
-      slot.presence = createPresence(RUNTIME_PRESENCE_STATE.online, activatedAt);
+      await this.transitionPresence(
+        slot,
+        createPresence(RUNTIME_PRESENCE_STATE.online, activatedAt),
+        RUNTIME_PRESENCE_CHANGE_REASON.activationSucceeded,
+        metadata,
+      );
       this.observeRuntimeExit(slot, generation, runtimeInstanceId, exitPromise);
       this.logger.info("conversation_host.runtime.activated", {
         conversationId: slot.conversationId,
@@ -518,9 +542,14 @@ export class ManagedConversationHost implements ConversationHost {
     } catch (error) {
       slot.handle = undefined;
       slot.exitPromise = undefined;
-      slot.presence = createPresence(
-        RUNTIME_PRESENCE_STATE.crashed,
-        this.readTimestampOr(slot.presence.observedAt),
+      await this.transitionPresence(
+        slot,
+        createPresence(
+          RUNTIME_PRESENCE_STATE.crashed,
+          this.readTimestampOr(slot.presence.observedAt),
+        ),
+        RUNTIME_PRESENCE_CHANGE_REASON.activationFailed,
+        metadata,
       );
       const normalized = normalizeActivationError(error, slot.conversationId);
       this.logger.error("conversation_host.runtime.activation_failed", {
@@ -544,7 +573,7 @@ export class ManagedConversationHost implements ConversationHost {
       .then(
         (exit) =>
           this.serializer.run(slot.conversationId, async () => {
-            this.applyObservedExit(
+            await this.applyObservedExit(
               slot,
               observedGeneration,
               observedRuntimeInstanceId,
@@ -553,7 +582,7 @@ export class ManagedConversationHost implements ConversationHost {
           }),
         (error: unknown) =>
           this.serializer.run(slot.conversationId, async () => {
-            this.applyRejectedExitObserver(
+            await this.applyRejectedExitObserver(
               slot,
               observedGeneration,
               observedRuntimeInstanceId,
@@ -571,12 +600,12 @@ export class ManagedConversationHost implements ConversationHost {
       });
   }
 
-  private applyObservedExit(
+  private async applyObservedExit(
     slot: ManagedConversationRuntimeSlot,
     observedGeneration: number,
     observedRuntimeInstanceId: string,
     exit: ConversationRuntimeExit,
-  ): void {
+  ): Promise<void> {
     if (!this.isCurrentRuntime(slot, observedGeneration, observedRuntimeInstanceId)) {
       this.logger.debug("conversation_host.runtime.stale_exit_ignored", {
         conversationId: slot.conversationId,
@@ -590,11 +619,17 @@ export class ManagedConversationHost implements ConversationHost {
     slot.handle = undefined;
     slot.exitPromise = undefined;
     slot.dispatchedRuntimeSignals.clear();
-    slot.presence = createPresence(
+    await this.transitionPresence(
+      slot,
+      createPresence(
+        exit.kind === "stopped"
+          ? RUNTIME_PRESENCE_STATE.offline
+          : RUNTIME_PRESENCE_STATE.crashed,
+        isValidTimestamp(exit.exitedAt) ? exit.exitedAt : this.readTimestamp(),
+      ),
       exit.kind === "stopped"
-        ? RUNTIME_PRESENCE_STATE.offline
-        : RUNTIME_PRESENCE_STATE.crashed,
-      isValidTimestamp(exit.exitedAt) ? exit.exitedAt : this.readTimestamp(),
+        ? RUNTIME_PRESENCE_CHANGE_REASON.runtimeStopped
+        : RUNTIME_PRESENCE_CHANGE_REASON.runtimeCrashed,
     );
     this.logger.info("conversation_host.runtime.exit_observed", {
       conversationId: slot.conversationId,
@@ -610,12 +645,12 @@ export class ManagedConversationHost implements ConversationHost {
     });
   }
 
-  private applyRejectedExitObserver(
+  private async applyRejectedExitObserver(
     slot: ManagedConversationRuntimeSlot,
     observedGeneration: number,
     observedRuntimeInstanceId: string,
     error: unknown,
-  ): void {
+  ): Promise<void> {
     if (!this.isCurrentRuntime(slot, observedGeneration, observedRuntimeInstanceId)) {
       this.logger.debug("conversation_host.runtime.stale_exit_ignored", {
         conversationId: slot.conversationId,
@@ -629,9 +664,10 @@ export class ManagedConversationHost implements ConversationHost {
     slot.handle = undefined;
     slot.exitPromise = undefined;
     slot.dispatchedRuntimeSignals.clear();
-    slot.presence = createPresence(
-      RUNTIME_PRESENCE_STATE.crashed,
-      this.readTimestamp(),
+    await this.transitionPresence(
+      slot,
+      createPresence(RUNTIME_PRESENCE_STATE.crashed, this.readTimestamp()),
+      RUNTIME_PRESENCE_CHANGE_REASON.exitObserverFailed,
     );
     this.logger.warn("conversation_host.runtime.exit_observed", {
       conversationId: slot.conversationId,
@@ -660,9 +696,10 @@ export class ManagedConversationHost implements ConversationHost {
     const handle = slot.handle;
     const exitPromise = slot.exitPromise;
     const generation = slot.generation;
-    slot.presence = createPresence(
-      RUNTIME_PRESENCE_STATE.stopping,
-      this.readTimestamp(),
+    await this.transitionPresence(
+      slot,
+      createPresence(RUNTIME_PRESENCE_STATE.stopping, this.readTimestamp()),
+      reason,
     );
     this.logger.info("conversation_host.runtime.shutdown_started", {
       conversationId,
@@ -674,7 +711,7 @@ export class ManagedConversationHost implements ConversationHost {
     try {
       await handle.shutdown({ reason });
       const exit = await exitPromise;
-      this.applyObservedExit(slot, generation, handle.runtimeInstanceId, exit);
+      await this.applyObservedExit(slot, generation, handle.runtimeInstanceId, exit);
       this.logger.info("conversation_host.runtime.shutdown_completed", {
         conversationId,
         runtimeInstanceId: handle.runtimeInstanceId,
@@ -692,9 +729,10 @@ export class ManagedConversationHost implements ConversationHost {
         slot.handle = undefined;
         slot.exitPromise = undefined;
         slot.dispatchedRuntimeSignals.clear();
-        slot.presence = createPresence(
-          RUNTIME_PRESENCE_STATE.crashed,
-          this.readTimestamp(),
+        await this.transitionPresence(
+          slot,
+          createPresence(RUNTIME_PRESENCE_STATE.crashed, this.readTimestamp()),
+          RUNTIME_PRESENCE_CHANGE_REASON.shutdownFailed,
         );
       }
       this.logger.error("conversation_host.runtime.shutdown_failed", {
@@ -727,6 +765,54 @@ export class ManagedConversationHost implements ConversationHost {
         handle.dispatchInput(input),
     });
     return Object.freeze({ presence, runtime });
+  }
+
+  private async transitionPresence(
+    slot: ManagedConversationRuntimeSlot,
+    current: RuntimePresence,
+    reason: RuntimePresenceChangeReason,
+    metadata: PresenceTransitionEventMetadata = {},
+  ): Promise<void> {
+    const previous = slot.presence;
+    slot.presence = current;
+    const event = new RuntimePresenceChangedOutputEvent({
+      conversationId: slot.conversationId,
+      previous,
+      current,
+      reason,
+      ...(metadata.correlationId !== undefined
+        ? { correlationId: metadata.correlationId }
+        : {}),
+      ...(metadata.causationId !== undefined
+        ? { causationId: metadata.causationId }
+        : {}),
+      ...(metadata.runId !== undefined ? { runId: metadata.runId } : {}),
+      ...(metadata.turnId !== undefined ? { turnId: metadata.turnId } : {}),
+    });
+
+    try {
+      const receipt = await this.outputPublisher.publish(event);
+      this.logger.debug("conversation_host.runtime.presence_published", {
+        conversationId: slot.conversationId,
+        outputEventId: event.id,
+        eventType: event.getEventType(),
+        previousState: previous.state,
+        currentState: current.state,
+        transitionReason: reason,
+        outputStatus: receipt.status,
+        sequence: receipt.sequence,
+      });
+    } catch (error) {
+      this.logger.warn("conversation_host.runtime.presence_publish_failed", {
+        conversationId: slot.conversationId,
+        outputEventId: event.id,
+        eventType: event.getEventType(),
+        previousState: previous.state,
+        currentState: current.state,
+        transitionReason: reason,
+        ...getErrorIdentity(error),
+      });
+    }
   }
 
   private isHandledOrPending(
@@ -969,6 +1055,36 @@ function toRuntimeInputReference(
     inputEventId: signal.inputEventId,
     eventType: signal.eventType,
     sequence: signal.sequence,
+    ...(signal.correlationId !== undefined
+      ? { correlationId: signal.correlationId }
+      : {}),
+    ...(signal.runId !== undefined ? { runId: signal.runId } : {}),
+    ...(signal.turnId !== undefined ? { turnId: signal.turnId } : {}),
+  });
+}
+
+function getActivationEventMetadata(
+  request: ConversationRuntimeActivationRequest,
+): PresenceTransitionEventMetadata {
+  return request.reason === CONVERSATION_RUNTIME_ACTIVATION_REASON.acceptedInput
+    ? Object.freeze({
+        causationId: request.input.inputEventId,
+        ...(request.input.correlationId !== undefined
+          ? { correlationId: request.input.correlationId }
+          : {}),
+        ...(request.input.runId !== undefined ? { runId: request.input.runId } : {}),
+        ...(request.input.turnId !== undefined
+          ? { turnId: request.input.turnId }
+          : {}),
+      })
+    : Object.freeze({});
+}
+
+function getSignalEventMetadata(
+  signal: AcceptedConversationInputSignal,
+): PresenceTransitionEventMetadata {
+  return Object.freeze({
+    causationId: signal.inputEventId,
     ...(signal.correlationId !== undefined
       ? { correlationId: signal.correlationId }
       : {}),

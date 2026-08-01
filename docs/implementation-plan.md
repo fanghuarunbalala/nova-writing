@@ -567,6 +567,7 @@ Implementation status:
 - Task 2D-C implemented and awaiting review: managed per-Conversation Runtime Slots, bounded Control and Runtime queues, single-flight activation, logical Presence tracking, payload-free dispatch, shutdown, close, stale-exit protection, safe logs, and lifecycle smoke validation.
 - Task 2D-D-A implemented and awaiting review: unified OutputEvent publication contract, schema validation, canonical frozen capture, durable Journal receipts, conflict and persistence normalization, live-publication degradation, and real SQLite integration validation.
 - Task 2D-D-B implemented and awaiting review: Runtime Presence transition and Host-input routing OutputEvent classes, payloads, Event Types, registered Core schemas, durable Input references, causation defaults, privacy boundaries, and protocol smoke validation.
+- Task 2D-D-C implemented and awaiting review: Managed Host lifecycle publication, ordered per-Conversation Presence events, Input causation propagation, publication failure degradation, ownership boundaries, and expanded lifecycle smoke validation.
 
 Resolved through Task 2C:
 
@@ -874,6 +875,37 @@ Task 2D-D-B explicitly excludes:
 - event publication from `ManagedConversationHost`
 - Host transition failure degradation
 - control-dispatcher result changes or concrete Stop and ReloadConfig routing
+- semantic Input completion events
+- Runtime, InputRouter, Run/Turn state, Pi, Tools, Approval, IPC, and Subagents
+
+Task 2D-D-C delivered:
+
+- required `ConversationOutputEventPublisher` dependency on `ManagedConversationHost`
+- lifecycle publication for starting, online, stopping, offline, and crashed transitions
+- per-Conversation publication ordering inside the existing Host serializer
+- state-first publication attempts that never roll back logical Presence
+- accepted-input and crash-recovery causation, correlation, Run, and Turn propagation
+- no fabricated causation for explicit restore
+- safe publication failure logs without Output payloads or raw errors
+- continued activation, dispatch, shutdown, and Host close after publication failure
+- no Event for initial offline Slot creation or stale Runtime exits
+- external ownership of the Output publisher, Journal service, and EventHub
+- expanded lifecycle smoke covering transition order, crash recovery, causation, and continuous failure degradation
+
+Task 2D-D-C accepted decisions:
+
+- successful lifecycle publications are awaited to preserve per-Conversation transition order.
+- logical Presence changes before the durable publication attempt.
+- publication failure is observable through safe logs but does not alter lifecycle results.
+- lifecycle publication failure never emits another OutputEvent.
+- a required Input that triggers crash recovery remains the causation source for the recovery transition.
+- Host close does not close the shared Output publication path.
+
+Task 2D-D-C explicitly excludes:
+
+- `HostInputRoutedOutputEvent` publication
+- control-dispatcher result contracts
+- Stop cancellation and ReloadConfig application
 - semantic Input completion events
 - Runtime, InputRouter, Run/Turn state, Pi, Tools, Approval, IPC, and Subagents
 
@@ -1247,7 +1279,7 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, Task 2D-A through Task 2D-C, and Task 2D-D-A through Task 2D-D-B have been implemented and are awaiting checkpoint review.
+Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, Task 2D-A through Task 2D-C, and Task 2D-D-A through Task 2D-D-C have been implemented and are awaiting checkpoint review.
 
 Completed Task 1 results include:
 

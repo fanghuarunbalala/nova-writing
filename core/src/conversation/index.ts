@@ -6,6 +6,7 @@ export * from "./ConversationInput.js";
 export * from "./ConversationQueryService.js";
 export * from "./ConversationRuntimePresenceReader.js";
 export * from "./ConversationSnapshot.js";
+export * from "./ConversationSnapshotReader.js";
 export * from "./RuntimePresence.js";
 export * from "./command/index.js";
 export * from "./host/index.js";

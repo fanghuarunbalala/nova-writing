@@ -7,11 +7,9 @@ import type {
   BoundConversationEventSubscriptionOptions,
   ConversationEventListOptions,
 } from "./ConversationEvents.js";
-import type { ConversationSnapshot } from "./ConversationSnapshot.js";
+import type { ConversationSnapshotReader } from "./ConversationSnapshotReader.js";
 
-export interface ConversationQueryService {
-  getSnapshot(conversationId: string): Promise<ConversationSnapshot>;
-
+export interface ConversationQueryService extends ConversationSnapshotReader {
   listEvents(
     conversationId: string,
     options: ConversationEventListOptions,

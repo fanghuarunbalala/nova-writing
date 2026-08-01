@@ -788,6 +788,90 @@ Task 2-D-A also reserves stable shutdown reasons for explicit shutdown, Host clo
 
 Task 2-D-A explicitly excludes `ManagedConversationHost`, Bootstrap Factory implementation, Runtime Slot state, per-Conversation scheduling, Presence transitions, Runtime activation, Host control dispatch, lifecycle OutputEvents, crash restart policy, idle timers, historical pending-input recovery, Runtime checkpoints, and Agent execution.
 
+### 7.5 Implemented Task 2-D-B Storage Runtime Bootstrap Factory
+
+Task 2-D-B implements the immutable, storage-backed Bootstrap assembly boundary without activating a Runtime or choosing a placement.
+
+```mermaid
+classDiagram
+    class ConversationSnapshotReader {
+        <<interface>>
+        +getSnapshot(conversationId) Promise~ConversationSnapshot~
+    }
+
+    class ConversationQueryService
+    class StorageConversationRuntimeBootstrapFactory {
+        +create(BootstrapRequest) Promise~ConversationRuntimeBootstrap~
+    }
+    class ConversationJournalReader {
+        +getBySequence(conversationId, sequence)
+        +getHighWatermark(conversationId)
+    }
+    class WorkspaceStoreLocation
+
+    ConversationQueryService --|> ConversationSnapshotReader
+    StorageConversationRuntimeBootstrapFactory --> ConversationSnapshotReader
+    StorageConversationRuntimeBootstrapFactory --> ConversationJournalReader
+    StorageConversationRuntimeBootstrapFactory --> WorkspaceStoreLocation
+```
+
+The narrow `ConversationSnapshotReader` prevents Bootstrap assembly from depending on Event listing or live subscription capabilities it does not use. The existing `ConversationQueryService` extends this reader without changing its behavior.
+
+```mermaid
+sequenceDiagram
+    participant Host
+    participant Factory as StorageConversationRuntimeBootstrapFactory
+    participant Snapshot as ConversationSnapshotReader
+    participant Journal as ConversationJournalReader
+
+    Host->>Factory: create(request with instance ID and activatedAt)
+    Factory->>Factory: capture and validate request
+    Factory->>Snapshot: getSnapshot(conversationId)
+    Snapshot-->>Factory: durable Snapshot
+    Factory->>Factory: validate identity, active status, Agent Binding, Workspace
+
+    opt accepted_input activation
+        Factory->>Journal: getBySequence(conversationId, sequence)
+        Journal-->>Factory: persisted Event
+        Factory->>Factory: require exact durable Input reference match
+    end
+
+    Factory->>Journal: getHighWatermark(conversationId)
+    Journal-->>Factory: current High Watermark
+    Factory->>Factory: defensive copy and deep freeze
+    Factory-->>Host: immutable Bootstrap
+```
+
+The future Host owns Runtime instance ID and activation-time generation. The Factory validates and preserves those values so the Host Slot, Presence transition, Bootstrap, Placement, and returned Runtime Handle can share one identity.
+
+Accepted-input activation never trusts an in-memory reference alone. The Factory reloads the durable Journal record and requires:
+
+- the Sequence exists
+- the record direction is Input
+- Conversation ID, Event ID, Event Type, and Sequence match
+- optional correlation ID, Run ID, and Turn ID match exactly
+
+This validation never reads, copies, or logs the Event payload. Explicit restore and crash recovery do not fabricate or require an Input reference.
+
+The Factory rejects archived and disposed Conversations, mismatched Workspace identity, inactive or cross-Conversation Agent Bindings, missing durable inputs, OutputEvent references, mismatched input metadata, malformed requests, and invalid Journal High Watermarks.
+
+Snapshot and Journal High Watermark reads are intentionally separate asynchronous reads rather than one storage-specific transaction. A concurrent append may therefore produce:
+
+```text
+Snapshot metadata lastJournalSequence = 40
+Bootstrap Journal High Watermark = 41
+```
+
+This is valid. The High Watermark must never be lower than the Snapshot's observed Sequence or an accepted activation Input Sequence. Runtime replay uses `bootstrap.journal.highWatermark`; it does not substitute `metadata.lastJournalSequence`.
+
+The Factory defensively copies and freezes the Bootstrap root, Conversation Snapshot, Metadata, active Agent Binding, Workspace identity, Activation cause, accepted Input reference, and Journal identity. Mutation of an injected reader's source objects cannot alter an already-created Bootstrap.
+
+The Factory captures only Workspace ID and Workspace root at construction. Bootstrap maps the root to `workdir` and never retains or emits Store directory name, Store path, database path, JSONL path, Provider credentials, prompt content, Tool data, or Event payloads.
+
+Structured lifecycle logs include stable identifiers, activation reason, optional activation Sequence, High Watermark, Agent Type, Definition Version, and safe error identity. Invalid caller-controlled identifiers are logged as `unknown`; paths, payloads, messages, stacks, and causes are never logged.
+
+Task 2-D-B explicitly excludes Runtime ID generation, Clock ownership, Host Slot state, per-Conversation scheduling, Runtime activation, Placement invocation, Presence transitions, Host control routes, lifecycle OutputEvents, processed-input checkpoints, historical pending-input recovery, idle eviction, and crash restart loops.
+
 ## 8. Query and Command Paths
 
 ```mermaid
@@ -2770,6 +2854,9 @@ Currently implemented skeletons include:
 - platform-neutral Conversation Host, activation, shutdown, Bootstrap Factory, Runtime Placement, Runtime Handle, input-reference, and safe exit protocols
 - stable Host and Runtime boundary errors without raw placement or failure details
 - executable Task 2-D-A protocol composition using fake Bootstrap Factory, Placement, Runtime Handle, and Host surfaces
+- narrow `ConversationSnapshotReader` and storage-backed immutable Runtime Bootstrap assembly
+- durable accepted-input Journal reference validation without copying Event payloads
+- real SQLite Runtime Bootstrap integration covering workdir isolation, High Watermark races, status and identity rejection, deep freezing, and log redaction
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild
@@ -2785,7 +2872,7 @@ Not yet implemented:
 - ConversationProxy implementation
 - Managed ConversationHost implementation
 - concrete Runtime Presence Reader implementation
-- Runtime Bootstrap Factory implementation and process supervisor
+- process supervisor
 - ConversationRuntime
 - InputRouter
 - Run state machine

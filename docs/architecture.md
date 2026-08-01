@@ -3380,6 +3380,116 @@ Compilation logs contain only Conversation ID, Run ID, Message count, and fixed 
 
 This checkpoint does not construct Pi `Agent`, subscribe to Pi events, convert Runtime Messages to Pi messages, allocate Turns, emit Assistant events, select a Provider, install Tools, apply ContextCheckpoint state, lease Nudges, or compose the Adapter into `ConversationRuntime`.
 
+### 16.20 Implemented Task 3E-B Package-private Pi Agent Core Adapter
+
+`PiAgentCoreAdapter` is the first concrete implementation of the Core-owned `AgentRuntimeAdapter`. It is emitted inside the package for internal composition and testing but is intentionally absent from the Core root exports, so Conversation, CLI, GUI, Web, and future IPC contracts still expose no Pi types.
+
+```mermaid
+classDiagram
+    class AgentRuntimeAdapter {
+        <<public Core interface>>
+        +stream(request)
+        +cancel(request)
+    }
+
+    class PiAgentCoreAdapter {
+        <<package-private>>
+        -PiAgentCoreClient agent
+        -PiRuntimeMessageConverter messageConverter
+        -PiAgentEventBridge eventBridge
+        -ActivePiRun activeRun
+        +stream(request)
+        +cancel(request)
+    }
+
+    class PiAgentCoreClient {
+        <<installed Pi subset>>
+        +state.systemPrompt
+        +state.messages
+        +subscribe(listener)
+        +prompt(messages)
+        +continue()
+        +abort()
+        +waitForIdle()
+    }
+
+    class PiRuntimeMessageConverter {
+        <<private port>>
+        +convert(context|prompt, RuntimeMessageSnapshot[])
+    }
+
+    class PiAgentEventBridge {
+        <<private awaited port>>
+        +handle(conversationId, runId, AgentEvent, AbortSignal)
+    }
+
+    AgentRuntimeAdapter <|.. PiAgentCoreAdapter
+    PiAgentCoreAdapter *-- PiAgentCoreClient
+    PiAgentCoreAdapter --> PiRuntimeMessageConverter
+    PiAgentCoreAdapter --> PiAgentEventBridge
+```
+
+The installed Pi 0.82.1 API is checked structurally through `asPiAgentCoreClient()`. The Adapter uses only the subset needed by Core: replace System Prompt and transcript state, subscribe to lifecycle events, execute prompt or continuation, abort active work, and wait until the Run plus all awaited subscribers are idle. Provider/model construction remains outside this checkpoint.
+
+Every Core Run replaces Pi transcript state from canonical compiled context. Pi's in-memory transcript is therefore transient execution state rather than a second history source:
+
+```mermaid
+sequenceDiagram
+    participant Runtime
+    participant Adapter as PiAgentCoreAdapter
+    participant Convert as PiRuntimeMessageConverter
+    participant Agent as Pi Agent
+    participant Bridge as PiAgentEventBridge
+
+    Runtime->>Adapter: stream(Core request)
+    Adapter->>Adapter: reserve active Run synchronously
+    Adapter->>Convert: convert base canonical Messages
+    opt prompt invocation
+        Adapter->>Convert: convert explicit prompt Messages
+    end
+    Adapter->>Agent: replace systemPrompt + messages
+    alt prompt
+        Adapter->>Agent: prompt(converted prompt)
+    else continue
+        Adapter->>Agent: continue()
+    end
+    loop each Pi AgentEvent
+        Agent->>Adapter: awaited subscriber callback
+        Adapter->>Bridge: handle(bound Core identity, event, signal)
+        Bridge-->>Adapter: durable/mapping barrier settled
+    end
+    Agent-->>Adapter: prompt/continue settled after agent_end barriers
+    Adapter-->>Runtime: completed | failed | cancelled
+```
+
+Admission is reserved before asynchronous conversion. A second `stream()` call is rejected rather than queued because Run ordering belongs to `InputRouter` and the Turn lane. The reservation closes a race where two callers could otherwise both convert before either became active.
+
+The active Run has `preparing`, `executing`, and `settling` phases plus a shared settlement Promise. Cancellation behavior depends on that phase:
+
+```mermaid
+flowchart TD
+    Cancel["cancel(conversationId, runId)"] --> Match{"matching active Run?"}
+    Match -->|no active| Ignore["idempotent no-op"]
+    Match -->|different Run| Conflict["fixed cancellation_conflict"]
+    Match -->|matching| Phase{"phase"}
+    Phase -->|preparing| Mark["mark cancelled; suppress Provider dispatch"]
+    Phase -->|executing| Abort["Pi abort() + waitForIdle()"]
+    Phase -->|settling after agent_end| Wait["wait existing settlement; no new intent"]
+    Mark --> Settle["wait Adapter settlement"]
+    Abort --> Settle
+    Wait --> Settle
+```
+
+Only a matching explicit Core cancellation intent produces the Adapter outcome `cancelled`. Pi `error`, Pi `aborted` without Core cancellation, or non-empty Pi error state produces `failed`. Normal stop, length, or terminal Tool-use completion produces `completed`. This keeps cancellation tied to Core lifecycle reason ownership rather than Provider-local stop text.
+
+`PiAgentEventBridge` callbacks are awaited in Pi subscription order and are part of Run settlement. A retained bridge failure remains terminal even if Pi attempts to emit fallback failure events, preventing an unacknowledged event boundary from being treated as committed progress.
+
+The Adapter validates and snapshots Core requests before conversion. It rejects unknown Runtime Message schemas, cross-Conversation Messages, duplicate Message IDs across base and prompt batches, empty prompt invocations, empty continuation contexts, and mismatched compiled identities.
+
+Logs contain only Core IDs, invocation kind, phase-independent Message counts, Pi event type names, normalized outcomes, cancellation reason, boolean Turn presence, and fixed failure categories. Pi messages, Agent event payloads, System Prompts, Provider responses, novel text, Tool data, credentials, paths, raw errors, stacks, causes, and stderr remain excluded.
+
+This checkpoint intentionally leaves `PiRuntimeMessageConverter` and `PiAgentEventBridge` as injected private ports. It does not yet define role/content conversion, Turn allocation, Assistant streaming OutputEvents, Tool events, Provider configuration, Runtime installation, or Stop-port composition.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4210,7 +4320,7 @@ Not yet implemented:
 - ContextCompactionManager and ContextCheckpoint
 - PendingNudgeStore and one-shot System Prompt Overlay
 - ContextCheckpoint-aware ContextCompiler and per-call overlays
-- concrete PiAgentCoreAdapter event and message mapping
+- Pi Runtime Message conversion and event-to-Core lifecycle/output mapping
 - Tool registry and execution pipeline
 - IPC protocol
 - Subagent manager

@@ -1050,6 +1050,7 @@ Implementation status:
 - Task 3D-J implemented and awaiting review: durable `RuntimeUserMessageInputHandler`, defensive canonical Input capture, Run claim/outcome/start barriers, injected `RuntimeRunExecutor`, terminal Run verification, serialized direct use, fixed safe phase failures, real controller/sink integration, redacted logs, public exports, and focused validation.
 - Task 3D-K implemented and awaiting review: persistence-first `RuntimeStopInputHandler`, Stop fence pruning, Turn-before-Run stopping and cancellation transitions, idempotent external cancellation port, emergency cancellation on barrier failure, ordered cancelled-before-run and Stop outcomes, real Router/controller/sink integration, redacted logs, public exports, and focused validation.
 - Task 3E-A implemented and awaiting review: provider-neutral `AgentRuntimeAdapter` stream/cancel contracts, explicit prompt/continue invocation and terminal outcome protocols, Core-owned compiled-context types, asynchronous `ContextCompiler`, immutable strict `BaseContextCompiler`, redacted logs, public exports, and focused validation.
+- Task 3E-B implemented and awaiting review: package-private `PiAgentCoreAdapter`, installed Pi `Agent` compatibility boundary, canonical context replacement, prompt/continue execution, awaited event-bridge barriers, single-active-Run reservation, terminal outcome normalization, preparation-aware idempotent cancellation, redacted logs, and real Pi Agent smoke validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1611,6 +1612,45 @@ Task 3E-A explicitly excludes:
 - System Prompt layer ordering, per-call overlays, Nudge leasing, ContextCheckpoint application, and Context Compaction
 - installation into `RuntimeUserMessageInputHandler`, `ConversationRuntime`, or Stop cancellation composition
 - non-terminal Run/Turn crash recovery semantics
+
+Task 3E-B delivered:
+
+- package-private `PiAgentCoreAdapter` implementing the provider-neutral `AgentRuntimeAdapter`
+- structural `PiAgentCoreClient` limited to installed Pi `Agent` state replacement, subscription, prompt, continue, abort, and idle-wait APIs
+- compile-time `asPiAgentCoreClient()` compatibility check against `@earendil-works/pi-agent-core` 0.82.1
+- private `PiRuntimeMessageConverter` boundary for canonical Runtime Message conversion by context or prompt purpose
+- private awaited `PiAgentEventBridge` carrying bound Core Conversation and Run identity plus the active Pi AbortSignal
+- defensive request capture, strict Message schema validation, Conversation identity checks, duplicate prevention across base context and prompt, and immutable copies
+- one active Run reservation beginning before asynchronous conversion so concurrent stream calls cannot pass the admission check
+- per-Run preparation, execution, and settling phases with a settlement barrier shared by stream and cancellation paths
+- exact replacement of Pi `state.systemPrompt` and `state.messages` before each execution so Pi transcript state is never authoritative across Runs
+- prompt and continue dispatch through the installed Pi API
+- completed, failed, and cancelled outcome normalization without exposing Pi stop reasons or raw error messages
+- preparation-aware idempotent cancellation using `abort()` and `waitForIdle()` only after Pi execution begins, while pre-execution cancellation suppresses Provider dispatch
+- fixed failure categories for invalid request, active Run, conversion, event barrier, execution, invalid result, cancellation conflict, and cancellation failure
+- focused smoke validation using a real Pi `Agent`, fake Provider streams, awaited turn-start barriers, prompt/continue behavior, Provider errors, conversion-phase cancellation, concurrent Run rejection, duplicate cancellation, event-bridge failure, and log redaction
+
+Task 3E-B accepted decisions:
+
+- Pi-specific types and the concrete Adapter remain package-private and are not re-exported from the Core root or Conversation API.
+- one Pi `Agent` instance is owned by one concrete Adapter; every Core Run replaces its System Prompt and transcript from compiled canonical Core state before execution.
+- Adapter admission is reserved synchronously before asynchronous conversion. A second Run is rejected rather than queued because Turn FIFO remains a Runtime/InputRouter responsibility.
+- Pi subscriber callbacks are awaited event barriers. Adapter settlement requires Pi `agent_end` and the final observed Assistant Turn stop reason after all bridge callbacks settle.
+- an explicit Core cancellation request is the only path normalized as `cancelled`. A Pi `aborted` result without matching Core cancellation intent is normalized as `failed`.
+- cancellation during Message conversion marks the Run cancelled, waits for Adapter settlement, and prevents Pi/Provider dispatch. Cancellation during Pi execution calls `abort()`, waits for Pi idle including subscriber barriers, then waits for Adapter settlement.
+- cancellation after `agent_end` has entered its awaited barrier is ignored as a new cancellation intent but waits for existing settlement.
+- event-bridge failure is terminal and remains distinct from Provider execution failure; subsequent Pi fallback events cannot bypass the retained barrier error.
+- Pi state error text, Provider errors, Agent messages, System Prompts, Event payloads, and conversion data never enter Adapter errors or logs.
+
+Task 3E-B explicitly excludes:
+
+- concrete Runtime Message-to-Pi role/content conversion rules
+- Pi event-to-Core Turn, Assistant, Tool, usage, and error OutputEvent mapping
+- Turn ID allocation and `TurnController` integration
+- Provider/model/stream function construction, credentials, retries, transport, and configuration reload
+- Tool registration or execution, Approval, Policy, Compaction, Nudge, IPC, and Subagents
+- installation into `RuntimeUserMessageInputHandler`, `ConversationRuntime`, or `RuntimeStopCancellationPort`
+- cancellation grace periods and non-cooperative downstream timeout policy
 
 Expected deliverables after approval:
 

@@ -38,6 +38,7 @@
     "smoke:runtime-input-outcome": "pnpm build && node scripts/runtime-input-outcome-controller-smoke.mjs",
     "smoke:runtime-agent-foundation": "pnpm build && node scripts/runtime-agent-foundation-smoke.mjs",
     "smoke:runtime-agent-failure-degradation": "pnpm build && node scripts/runtime-agent-failure-degradation-integration-smoke.mjs",
+    "smoke:runtime-agent-crash-replay": "pnpm build && node scripts/runtime-agent-crash-replay-integration-smoke.mjs",
     "smoke:runtime-agent-no-process": "pnpm build && node scripts/runtime-agent-no-process-integration-smoke.mjs",
     "smoke:runtime-agent-run-executor": "pnpm build && node scripts/runtime-agent-run-executor-smoke.mjs",
     "smoke:runtime-agent-stop-cancellation": "pnpm build && node scripts/runtime-agent-stop-cancellation-port-smoke.mjs",

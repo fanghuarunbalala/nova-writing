@@ -4139,6 +4139,31 @@ The Runtime crash exit contains only `ConversationRuntimeInputPumpError` and its
 
 Run and Input persistence remain exactly as last acknowledged before failure: the active Input is consumed and the Run is running. No Turn or terminal Run Event is fabricated. Host replacement, process restart, IPC, and the fail-versus-cancel recovery choice remain outside this checkpoint.
 
+### 16.32 Implemented Task 3F-F Durable Agent Crash Replay Detection
+
+The sixth Task 3F checkpoint replays the exact durable shape left by a pre-Turn Agent infrastructure crash:
+
+```text
+UserMessage Input
+Run queued
+Input consumed
+Run running
+```
+
+`JournalRuntimeReplayPlanner` reconstructs the consumed Input and running Run without inventing a missing Turn or terminal lifecycle. The Input is absent from both pending Inputs and unconfirmed Run claims because its consumed outcome is already durable.
+
+```mermaid
+flowchart LR
+    Journal["Crash Journal through fixed watermark"] --> Replay["JournalRuntimeReplayPlanner"]
+    Replay --> Facts["consumed Input + running Run"]
+    Facts --> Reconcile["RuntimeStartupReconciler"]
+    Reconcile --> Block["lifecycleDisposition = recovery_required"]
+    Block --> NoRoute["no ordinary Input reroute"]
+    Block --> NoRepair["no lifecycle repair Event"]
+```
+
+This checkpoint proves replay detection and startup admission blocking only. It does not choose failed versus cancelled, append recovery transitions, restart Provider execution, replace placement, or start another Runtime. Those actions remain gated by the unresolved non-terminal crash recovery decision.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4966,6 +4991,7 @@ Currently implemented skeletons include:
 - active-Turn Control preemption with persistence-first Stop cancellation and queued-Input fencing
 - fixed execution-loop degradation for preparation, Context compilation, and Adapter infrastructure failures without fabricated terminal lifecycle
 - `ConversationRuntime` observation of real Agent Pump failure through a fixed crash exit and closed dispatch admission
+- durable Agent crash replay detection producing `recovery_required` without reroute or implicit lifecycle repair
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

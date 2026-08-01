@@ -1069,6 +1069,7 @@ Implementation status:
 - Task 3F-C implemented and awaiting review: Control-lane Stop preemption during an active Adapter Turn, persistence-first stopping barriers, shared Adapter cancellation, queued UserMessage fencing, terminal cancellation outcomes, and redacted logs.
 - Task 3F-D implemented and awaiting review: preparation, Context compilation, and Adapter infrastructure failure degradation through the Turn handler and Pump, fixed failure exits, retained queued work, last-acknowledged non-terminal lifecycle, and redacted logs.
 - Task 3F-E implemented and awaiting review: real Agent execution failure observed through `ConversationRuntime`, fixed Runtime crash exit, post-crash dispatch rejection, retained last-acknowledged lifecycle, and end-to-end log redaction.
+- Task 3F-F implemented and awaiting review: durable Agent crash Journal replay, reconstructed consumed Input and running Run state, startup `recovery_required` detection, reroute blocking, and redacted logs without choosing repair semantics.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -2018,6 +2019,31 @@ Task 3F-E explicitly excludes:
 - startup replay and recovery conversion of the retained running Run
 - real SQLite persistence in the combined Runtime path
 - normal Agent failed outcomes, Stop cancellation, Tools, Approval, Policy, Compaction, Nudge, or Subagents
+
+Task 3F-F delivered:
+
+- contiguous crash Journal fixture matching the durable order Input, Run queued, Input consumed, Run running
+- fixed-high-watermark paginated replay through `JournalRuntimeReplayPlanner`
+- exact reconstruction of one consumed Input, no pending or unconfirmed Input claim, and one running Run with no Turn
+- startup reconciliation to `recovery_required`
+- no outcome repair and no routable Input while non-terminal lifecycle remains unresolved
+- immutable replay/startup results and log redaction for Input text, Prompt, paths, and raw failure content
+
+Task 3F-F accepted decisions:
+
+- durable replay reconstructs facts only; it does not infer a terminal status from the absence of later Events.
+- an already-consumed Input is not re-routed even though its Run is still non-terminal.
+- startup reconciliation blocks ordinary execution whenever replay exposes a non-terminal Run or Turn.
+- `recovery_required` is a detection and admission-control result, not a fail/cancel repair decision.
+- no recovery Event is appended until the deferred crash-recovery semantics are reviewed.
+
+Task 3F-F explicitly excludes:
+
+- choosing failed versus cancelled recovery status or transition reason
+- appending repair lifecycle Events or restarting Provider execution
+- Host placement replacement, process restart, IPC, or Runtime proxy behavior
+- real SQLite storage in this focused replay chain
+- Tools, Approval, Policy, Compaction, Nudge, or Subagents
 
 Expected deliverables after approval:
 

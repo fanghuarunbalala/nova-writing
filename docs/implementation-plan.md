@@ -556,6 +556,7 @@ Implementation status:
 - Task 2D-A implemented and awaiting review: platform-neutral Host, activation, shutdown, Bootstrap Factory, Placement, Runtime Handle, input-reference, safe exit, and stable error protocols with executable fake composition validation.
 - Task 2D-B implemented and awaiting review: narrow Snapshot Reader, storage-backed immutable Bootstrap Factory, durable accepted-input verification, workdir-only Workspace projection, High Watermark validation, safe errors and logs, and real SQLite integration validation.
 - Task 2D-C implemented and awaiting review: managed per-Conversation Runtime Slots, bounded Control and Runtime queues, single-flight activation, logical Presence tracking, payload-free dispatch, shutdown, close, stale-exit protection, safe logs, and lifecycle smoke validation.
+- Task 2D-D-A implemented and awaiting review: unified OutputEvent publication contract, schema validation, canonical frozen capture, durable Journal receipts, conflict and persistence normalization, live-publication degradation, and real SQLite integration validation.
 
 Resolved through Task 2C:
 
@@ -691,7 +692,11 @@ Task 2D implementation breakdown:
 - Task 2D-A: Host, activation, Bootstrap, Placement, Runtime Handle, exit, shutdown, and error protocols.
 - Task 2D-B: Storage-backed immutable Bootstrap Factory with workdir and Journal High Watermark boundaries.
 - Task 2D-C: Managed Host Runtime Slot state machine, single-flight activation, Presence tracking, queued accepted-input scheduling, shutdown, and close.
-- Task 2D-D: Host-route dispatch, lifecycle OutputEvents, failure degradation, and safe observability.
+- Task 2D-D-A: unified OutputEvent publication contract and durable Storage implementation.
+- Task 2D-D-B: Runtime Presence and Host-input routing OutputEvent contracts and schemas.
+- Task 2D-D-C: Managed Host lifecycle-event integration and transition degradation.
+- Task 2D-D-D: Core Stop and ReloadConfig control dispatcher behavior.
+- Task 2D-D-E: focused Host control and lifecycle SQLite integration validation.
 - Task 2D-E: focused Host lifecycle integration followed by the separate Task 2E LocalConversation no-process integration checkpoint.
 
 Task 2D-A delivered:
@@ -802,6 +807,35 @@ Task 2D-C explicitly excludes:
 - durable processed-input checkpoints and Host-restart pending-input reconciliation
 - automatic crash retry, backoff, or idle eviction
 - Runtime execution, Run/Turn state, Context operations, Pi, Tools, Approval, IPC, and Subagents
+
+Task 2D-D-A delivered:
+
+- `ConversationOutputEventPublisher` as the shared Conversation-layer Output write boundary
+- frozen `OutputReceipt` with recorded or duplicate durability status and Journal Sequence
+- `StorageConversationOutputEventPublisher` using Output schema validation and the existing persistence-first Journal service
+- canonical defensive snapshot capture before asynchronous Journal append
+- stable rejected, conflict, and persistence errors without payloads or raw causes
+- duplicate preservation of the original durable Sequence
+- successful durable receipts when live EventHub publication fails
+- structured Output publication logs without payload, config, prompt, Tool, credential, path, message, stack, or cause fields
+- real SQLite smoke covering live delivery, duplicate recovery, conflicts, schema rejection, degraded publication, reopen replay, and redaction
+
+Task 2D-D-A accepted decisions:
+
+- producers publish Core-owned `OutputEvent` instances rather than arbitrary raw snapshots.
+- Output schema validation occurs before Journal append.
+- Journal durability is the success boundary; live delivery is best effort.
+- `recorded` means newly durable and `duplicate` means the identical Event was already durable.
+- the publisher owns neither the Journal service nor EventHub lifecycle.
+- publication failure never produces another OutputEvent, avoiding recursive failure loops.
+
+Task 2D-D-A explicitly excludes:
+
+- `ManagedConversationHost` integration
+- concrete Runtime Presence or Host-input OutputEvent types
+- InputResponse semantic completion
+- Stop cancellation and ReloadConfig application
+- Runtime, InputRouter, Run/Turn state, Pi, Tools, Approval, IPC, and Subagents
 
 ## 6. Task 3: Input Routing and Runtime Loop
 
@@ -1173,7 +1207,7 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, and Task 2D-A through Task 2D-C have been implemented and are awaiting checkpoint review.
+Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, Task 2D-A through Task 2D-C, and Task 2D-D-A have been implemented and are awaiting checkpoint review.
 
 Completed Task 1 results include:
 

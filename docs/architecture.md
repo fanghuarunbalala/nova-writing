@@ -981,6 +981,63 @@ Structured logs contain stable lifecycle identities and safe error name/code fie
 
 Task 2-D-C explicitly excludes Stop cancellation semantics, queued-user-input removal, ReloadConfig application, Runtime lifecycle OutputEvents, durable Runtime checkpoints, Host-restart pending-input reconciliation, automatic crash retry or backoff, idle eviction, `ConversationRuntime`, `InputRouter`, Run state, Pi integration, Tools, Approval, IPC, and Subagents.
 
+### 7.7 Implemented Task 2-D-D-A Conversation Output Publication
+
+Task 2-D-D-A introduces the unified Conversation-layer write boundary for validated `OutputEvent` objects. Host, Runtime, Tool, and Novel components can publish through the same contract without calling the Journal directly.
+
+```mermaid
+classDiagram
+    class ConversationOutputEventPublisher {
+        <<interface>>
+        +publish(OutputEvent) Promise~OutputReceipt~
+    }
+
+    class StorageConversationOutputEventPublisher {
+        +publish(OutputEvent) Promise~OutputReceipt~
+    }
+
+    class EventSchemaRegistry
+    class ConversationJournalService
+    class OutputReceipt
+
+    StorageConversationOutputEventPublisher ..|> ConversationOutputEventPublisher
+    StorageConversationOutputEventPublisher --> EventSchemaRegistry
+    StorageConversationOutputEventPublisher --> ConversationJournalService
+    StorageConversationOutputEventPublisher --> OutputReceipt
+```
+
+The publisher accepts Core-owned `OutputEvent` instances rather than arbitrary caller-built snapshots. It captures `getSnapshot()`, validates the registered Output schema, canonicalizes and deeply freezes the snapshot, then appends it to the unified Conversation Journal with `direction: output`.
+
+```mermaid
+sequenceDiagram
+    participant Producer as Host / Runtime / Tool / Novel
+    participant Output as StorageConversationOutputEventPublisher
+    participant Registry as EventSchemaRegistry
+    participant Journal as ConversationJournalService
+    participant Hub as ConversationEventHub
+
+    Producer->>Output: publish(OutputEvent)
+    Output->>Output: capture safe Event identity
+    Output->>Registry: validateOutput(snapshot)
+    Registry-->>Output: validated snapshot
+    Output->>Output: canonical copy + deep freeze
+    Output->>Journal: append(direction=output, snapshot)
+    Journal->>Journal: persist before live delivery
+    Journal->>Hub: best-effort publish
+    Journal-->>Output: receipt + live publication status
+    Output-->>Producer: frozen OutputReceipt
+```
+
+`OutputReceipt.status` is `recorded` for a newly durable OutputEvent and `duplicate` for an identical existing Event. A duplicate returns the original Journal Sequence. The receipt does not claim that every live subscriber received the Event; historical recovery always reads the Journal.
+
+The publisher preserves the Journal's persistence-first degradation boundary. A failed EventHub publication is logged safely and still returns a successful durable receipt. Journal append failure rejects publication with a stable `ConversationOutputPersistenceError`. Same-ID different-content Journal conflicts become `ConversationOutputConflictError`. Invalid or unregistered Output schemas become `ConversationOutputRejectedError` with `invalid_event` or `unknown_event_type` reason codes.
+
+Publisher logs contain only Conversation ID, Output Event ID, Event Type, Sequence, live publication status, rejection reason, and safe error name/code identity. Output payloads, novel content, prompts, configuration, Tool data, credentials, paths, raw messages, stacks, and causes are never logged.
+
+The real SQLite smoke validates durable append, process-local live delivery, duplicate Sequence preservation, conflict rejection, unknown and invalid schema rejection, live-publication degradation, stable persistence errors, Store reopen replay, and log redaction.
+
+Task 2-D-D-A does not modify `ManagedConversationHost`, define lifecycle OutputEvent types, emit Runtime Presence transitions, implement InputResponse events, or implement Stop and ReloadConfig semantics. Those remain the following Task 2-D-D checkpoints.
+
 ## 8. Query and Command Paths
 
 ```mermaid
@@ -2969,6 +3026,8 @@ Currently implemented skeletons include:
 - `ManagedConversationHost` with per-Conversation serialization, bounded Control and Runtime queues, single-flight activation, logical Presence transitions, Runtime dispatch, shutdown, close, and stale-exit protection
 - Host-owned Clock and Runtime instance identity generation plus a narrow Host-control dispatcher boundary
 - lifecycle smoke coverage for control preemption, duplicate wake-up, dispatch failure, crash recovery, if-online routing, Handle mismatch, queue overflow, conflict detection, shutdown, close, and log redaction
+- unified `ConversationOutputEventPublisher` and storage-backed Output validation, canonical capture, Journal append, durable receipt, and failure normalization
+- real SQLite Output publication validation covering live delivery, duplicate recovery, conflict and schema rejection, live failure degradation, reopen replay, and log redaction
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild

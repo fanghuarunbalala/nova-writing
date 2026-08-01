@@ -3037,6 +3037,59 @@ The immutable result contains only Runtime/Conversation identity, activation rea
 
 Failures normalize to `invalid_bootstrap`, `already_started`, `replay_failed`, `reconcile_failed`, `recovery_required`, or `execution_failed`. Logs contain only bound identities, activation reason, High Watermark, counts, lifecycle status, and stable failure values.
 
+### 16.14 Implemented Task 3D-G In-process ConversationRuntime Shell
+
+`ConversationRuntime` is the first concrete process-local executor shell. It implements `ConversationRuntimeHandle` directly while keeping process placement outside the class, so a future in-process, Worker, child-process, or remote placement can own the same lifecycle without changing Host protocol.
+
+```mermaid
+stateDiagram-v2
+    [*] --> created
+    created --> starting: start
+    starting --> online: Bootstrap startup completed
+    created --> stopping: shutdown before start
+    starting --> stopping: queued shutdown after startup
+    online --> stopping: shutdown
+    stopping --> stopped: local shutdown completed
+    starting --> crashed: startup failure
+    online --> crashed: unknown dispatch failure
+    stopped --> [*]
+    crashed --> [*]
+```
+
+Startup, Input dispatch, failure degradation, and shutdown re-enter one serialized mutation channel. Different Conversations remain independent and may execute concurrently, but one Runtime instance has exactly one state owner.
+
+`start()` is a concrete activation method rather than part of the Host Handle. It delegates the immutable Bootstrap to `RuntimeBootstrapStartupCoordinator`; only successful ready startup enters `online`. Startup failure is terminal for that Runtime instance, resolves one safe `crashed` exit, and leaves replacement to the Host.
+
+```mermaid
+sequenceDiagram
+    participant Host
+    participant Runtime as ConversationRuntime
+    participant Startup as RuntimeBootstrapStartupCoordinator
+    participant Resolver as RuntimeInputResolver
+    participant Router as InputRouter
+
+    Host->>Runtime: start(bootstrap)
+    Runtime->>Startup: start(bootstrap)
+    Startup-->>Runtime: payload-free startup result
+    Runtime->>Runtime: state = online
+    Host->>Runtime: dispatchInput(durable reference)
+    Runtime->>Resolver: resolve(reference)
+    Resolver-->>Runtime: canonical persisted Input
+    Runtime->>Router: route(Input snapshot)
+    Router-->>Runtime: enqueued or duplicate
+    Runtime-->>Host: accepted by Runtime endpoint
+```
+
+Successful live dispatch means only that the Host reference was resolved against Journal and admitted to the correct Router lane. It does not mean dequeue, Run creation, Provider execution, or terminal `system.input.processed` persistence occurred.
+
+Stable resolution, queue-capacity, conflict, and Router validation errors reject one dispatch attempt while the Runtime remains online. An unknown internal resolver or Router failure conservatively moves the Runtime to `crashed`; queued operations observe that terminal state rather than continuing against potentially partial mutation.
+
+The first valid shutdown request closes new dispatch admission immediately. Operations admitted before that request drain through the serializer, after which lifecycle moves through `stopping` to `stopped`. Repeated shutdown calls share the first request and cannot replace its reason. `waitForExit()` always observes the same immutable safe exit object and never requires a process to exist.
+
+Logs include only Runtime/Conversation identity, lifecycle states, stable reasons, Sequence, Event identity/type after canonical resolution, Router lane/status, and fixed known Core error names/codes. Event payloads, novel text, prompts, Tool data, configuration content, workdir, Store paths, JSONL, raw messages, stacks, and causes remain excluded.
+
+This shell deliberately does not dequeue Inputs, create Runs, apply Stop fences, execute Provider/Pi calls, select terminal Input outcomes, publish Runtime Presence, implement IPC, or resolve the still-open active Run/Turn fail-versus-cancel crash-recovery decision.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:

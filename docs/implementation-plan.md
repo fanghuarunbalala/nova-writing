@@ -1044,6 +1044,7 @@ Implementation status:
 - Task 3D-D implemented and awaiting review: replayed Run-input claims, pure startup reconciliation, consumed-outcome repair planning, safe routable Input partitioning, active lifecycle recovery blocking, stable failures, redacted logs, public exports, and focused validation.
 - Task 3D-E implemented and awaiting review: ready-only startup execution, repair/restore/route ordering, resumable outcome and queue backpressure barriers, defensive plan capture, stable failures, redacted logs, public exports, and focused validation.
 - Task 3D-F implemented and awaiting review: one-shot Bootstrap startup composition, bound Runtime identity validation, replay/reconcile/execute stage ordering, recovery blocking, stable stage failures, payload-free summaries, redacted logs, public exports, and focused validation.
+- Task 3D-G implemented and awaiting review: in-process `ConversationRuntime` shell, serialized lifecycle and live dispatch ownership, one-shot startup delegation, Journal-reference resolution, Router admission, idempotent shutdown, safe exit observation, recoverable Input rejection, terminal unknown-failure degradation, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1415,6 +1416,38 @@ Task 3D-F explicitly excludes:
 - live Host `dispatchInput` handling after startup and the long-running ConversationRuntime loop
 - non-terminal lifecycle degradation, automatic restart/backoff, Runtime Presence publication, and process exit mapping
 - dequeue processing, Stop cancellation effects, Provider/Pi, Tool, Approval, Policy, IPC, Subagent, Context compilation, Nudge, and Compaction
+
+Task 3D-G delivered:
+
+- `ConversationRuntime` as the in-process executor shell implementing the placement-neutral `ConversationRuntimeHandle`
+- explicit process-local lifecycle states `created`, `starting`, `online`, `stopping`, `stopped`, and `crashed`
+- public one-shot `start(bootstrap)` composition through `RuntimeBootstrapStartupCoordinator`
+- one serialized mutation channel shared by startup, live Input resolution/routing, failure degradation, and shutdown
+- online-only `dispatchInput(reference)` flow through `RuntimeInputResolver.resolve` followed by `InputRouter.route`
+- an immediate dispatch admission gate once shutdown is requested, while already-admitted serialized dispatches drain before shutdown
+- recoverable dispatch rejection for stable resolution, queue-capacity, conflict, and Router validation errors without taking the Runtime offline
+- terminal degradation for unknown internal dispatch failures, with queued and later operations rejected from the `crashed` state
+- idempotent first-reason-wins shutdown and immutable `stopped` or `crashed` exit observation through `waitForExit()`
+- safe lifecycle and dispatch errors that preserve only fixed known Core error names/codes and never raw messages, stacks, causes, payloads, prompts, paths, or Tool data
+- structured lifecycle, dispatch, rejection, shutdown, and failure logs plus focused smoke validation
+
+Task 3D-G accepted decisions:
+
+- `ConversationRuntime` is a process-local object. It can later be owned by an in-process, Worker, child-process, or remote placement adapter without changing the Host Handle contract.
+- `start()` belongs to the concrete Runtime activation boundary; the returned Host Handle continues to expose only `dispatchInput`, `shutdown`, and `waitForExit`.
+- all state mutation is serialized per Runtime instance. Different Conversation Runtime instances may still execute concurrently.
+- successful `dispatchInput` means the durable reference was resolved and admitted to the Router. It does not mean the Input was dequeued, executed, or terminally processed.
+- stable reference, capacity, conflict, and validation failures reject only that dispatch attempt. Unknown internal failures conservatively crash the Runtime because partial component mutation cannot be proven safe.
+- the first valid shutdown request closes dispatch admission immediately, drains already-admitted operations in order, owns the terminal shutdown reason, and resolves one immutable stopped exit.
+- startup failure is terminal for the Runtime instance and resolves a safe crashed exit. Replacement remains a Host responsibility.
+- unresolved non-terminal Run/Turn crash recovery still stops in Bootstrap reconciliation and is not converted into invented failed or cancelled lifecycle transitions.
+
+Task 3D-G explicitly excludes:
+
+- dequeue processing, Run creation, Turn execution, Stop fence effects, cancellation propagation, and terminal Input outcome selection
+- Provider/Pi execution, Context compilation, Tool execution, Approval, Policy, IPC transport, Subagent management, Nudge, and Compaction
+- automatic restart, retry/backoff, Runtime Presence publication, idle eviction scheduling, and child-process exit-code mapping
+- resolution of the active Run/Turn fail-versus-cancel crash-recovery decision
 
 Expected deliverables after approval:
 

@@ -2413,6 +2413,139 @@ classDiagram
 
 This diagram is a responsibility map. It does not require every responsibility to immediately become a large framework class.
 
+### 16.1 Accepted Task 3A Execution Semantics
+
+Task 3 uses an asynchronous outer boundary with a serialized per-Conversation state machine. Provider streaming, Journal access, Tool execution, and Event delivery remain Promise-based, while mutation of Run, Turn, queue, and cancellation state occurs through one ordered Runtime transition path.
+
+#### Run and Input invariants
+
+- One Conversation has zero or one active Run.
+- One Run has zero or one active Turn.
+- Turn inputs are considered in ascending durable Journal Sequence.
+- Input priority selects a lane; it does not rewrite Journal order.
+- Control-lane work may preempt a Runtime waiting on Provider, Tool, or Interaction work.
+- A normal `UserMessageInputEvent` starts a Run only after earlier eligible Turn inputs settle.
+- A user message accepted during an active Run is a later Run, not implicit steering.
+- Pi steering and follow-up APIs remain Adapter capabilities until a future explicit Core InputEvent gives the caller that intent.
+
+```mermaid
+flowchart LR
+    Journal["Durable Input Journal"] --> Router["InputRouter"]
+    Router -->|"Stop / control"| Control["Control Lane"]
+    Router -->|"User / context turn"| TurnQueue["Turn Lane FIFO by Sequence"]
+    Control --> Fence["Cancellation Fence"]
+    TurnQueue --> Gate{"Active Run?"}
+    Gate -->|"no"| Start["Start next Run"]
+    Gate -->|"yes"| Wait["Remain queued"]
+    Fence --> Active["Cancel active Run"]
+    Fence --> Queued["Cancel queued inputs through fence Sequence"]
+```
+
+The Stop fence is the durable Journal Sequence of the accepted `StopInputEvent`. It cancels the active Run and accepted-but-not-started Turn inputs whose Sequence is less than or equal to the fence. Inputs accepted after the fence are not retroactively cancelled and may start later Runs.
+
+#### Stop and reserved Interrupt semantics
+
+| Concern | Stop | Future Interrupt |
+|---|---|---|
+| Active Provider or Tool operation | cancel | cancel |
+| Active Turn | `cancelled`, reason `stop` | `cancelled`, reason `interrupt` |
+| Active Run | `cancelled`, reason `stop` | `cancelled`, reason `interrupt` after the Turn settles |
+| Queued Turn inputs | cancel through Stop fence | preserve |
+| Active-Run child Conversations | cancel owned non-terminal descendants | preserve |
+| Later inputs | preserve | preserve |
+| First-version public InputEvent | yes | no |
+
+Child cancellation is ownership-scoped. Stop affects only non-terminal descendants spawned for the active Run; detached, completed, unrelated, and later child Conversations are not part of the cancellation set. Task 3 models this through a narrow cancellation dependency, while Task 7 owns child lifecycle implementation.
+
+Tool cancellation is cooperative first and bounded second. The Runtime supplies an internal `AbortSignal`; a Tool acknowledges cancellation by settling its invocation. A non-cooperative Tool cannot block the Control lane forever: after a bounded grace period the Runtime records a timeout outcome and ignores any late result whose invocation identity is no longer active. Exact Tool outcomes and timeout policy are defined in Task 5.
+
+#### Assistant draft and canonical history
+
+Streaming OutputEvents are durable UI and diagnostic history, but they are not automatically canonical model Messages. If cancellation occurs during an Assistant stream:
+
+- already-acknowledged delta events remain replayable;
+- the draft receives a terminal cancelled outcome;
+- no completed Assistant Runtime Message is projected from the draft;
+- later recovery never fabricates `message_end` or a completed Assistant response;
+- subsequent Runs compile only committed canonical Messages.
+
+Canonical Runtime Messages are derived from durable Core events rather than copied from Pi's in-memory `Agent.state.messages`:
+
+| Source | Canonical Runtime Message |
+|---|---|
+| accepted user message | yes |
+| completed Assistant message | yes |
+| finalized Tool result | yes |
+| Assistant delta or incomplete draft | no |
+| System Prompt or one-shot overlay | no |
+| transformed/compacted request context | no |
+| Run, Turn, Presence, routing, or policy lifecycle event | no |
+| Pi-internal retry, error, or abort scaffolding | no |
+
+Custom Agent messages require an explicitly registered Core Runtime Message projector. Unknown Pi or application messages never enter canonical history implicitly.
+
+#### Core Run and Turn identity over Pi
+
+Core owns lifecycle identity; Pi remains an execution adapter detail.
+
+```mermaid
+sequenceDiagram
+    participant Runtime as ConversationRuntime
+    participant Sink as RuntimeEventSink
+    participant Pi as PiAgentCoreAdapter
+    participant Agent as Pi Agent
+
+    Runtime->>Sink: append RunStarted(runId, inputRef)
+    Sink-->>Runtime: durable acknowledgement
+    Runtime->>Pi: prompt(runId, compiled context)
+    Pi->>Agent: Agent.prompt()
+    Agent-->>Pi: agent_start
+    Agent-->>Pi: turn_start
+    Pi->>Sink: append TurnStarted(runId, turnId)
+    Sink-->>Pi: durable acknowledgement
+    Agent-->>Pi: message/tool events
+    Pi->>Sink: append mapped OutputEvents(runId, turnId)
+    Sink-->>Pi: durable acknowledgements
+    Agent-->>Pi: turn_end
+    Pi->>Sink: append TurnCompleted(runId, turnId)
+    Sink-->>Pi: durable acknowledgement
+    Agent-->>Pi: agent_end
+    Pi->>Sink: append RunCompleted(runId)
+    Sink-->>Pi: durable acknowledgement
+```
+
+One Pi prompt or continuation lifecycle maps to one Core Run. Each Pi `turn_start` allocates a new Core `turnId`; all mapped message and Tool events until the matching `turn_end` use that Turn. Pi lifecycle events never supply Core IDs.
+
+Pi subscribers are awaited, so the Adapter may use its subscription as a persistence barrier. A Turn-start acknowledgement must complete before Provider progress is treated as committed, and terminal lifecycle acknowledgement is part of Run settlement.
+
+#### Durable state and failure boundary
+
+Task 3 does not introduce a second authoritative Runtime-state database. Durable lifecycle OutputEvents record enough information to rebuild:
+
+- Run ID, status, origin Input reference, and terminal reason;
+- Turn ID, owning Run ID, status, and terminal reason;
+- consumed, cancelled-before-run, or failed Input outcomes;
+- correlation and causation identifiers;
+- the last durably acknowledged execution boundary.
+
+Canonical Message JSONL remains a repairable projection of Journal. Transient Pi state, active Promises, `AbortController` instances, Tool handlers, Provider clients, and partial in-memory queues are never persisted as Runtime snapshots.
+
+Every Runtime-to-Journal append is an execution barrier:
+
+```mermaid
+flowchart TD
+    Produce["Produce lifecycle or Agent output"] --> Append["Append deterministic OutputEvent ID"]
+    Append --> Ack{"Journal acknowledged?"}
+    Ack -->|"yes"| Advance["Advance serialized Runtime state"]
+    Ack -->|"ambiguous"| Retry["Retry same Event ID"]
+    Retry --> Ack
+    Ack -->|"definite failure"| Abort["Abort Provider / Tool / Turn"]
+    Abort --> Exit["Exit Runtime as failed"]
+    Exit --> Recover["Host recovery replays durable Journal"]
+```
+
+If acknowledgement is lost after a successful append, retry uses the same deterministic Event ID and canonical snapshot so Journal idempotency can recover the receipt. If persistence definitely fails, Runtime stops Provider and Tool progress, does not announce the transition as committed, and exits through the safe Runtime failure boundary. The accepted Input remains durable and may be reconsidered during recovery according to its last persisted processing outcome.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -3248,20 +3381,18 @@ The provisional Pi-coupled `BaseTool` and `ToolDetails` drafts have been removed
 
 The following items still require explicit review before implementation:
 
-1. Exact Stop and Interrupt cancellation semantics
-2. Event schema migration mechanism beyond schema version 1
-3. Input snapshot redaction and size limits
-4. Context pressure thresholds and compaction hysteresis defaults
-5. ContextCheckpoint summary schema and validation
-6. Nudge scheduling, delivery, expiry, and redaction payloads
-7. Tool YAML manifest fields
-8. Whether `ToolDetails` returns as a common success-detail abstraction
-9. Tool result and incremental update contracts
-10. Runtime bootstrap payload
-11. Subagent result projection and cancellation policy
-12. Runtime idle eviction duration
-13. System Prompt and ContextCompiler layer ordering
-14. Dedicated Novel domain model, intentionally deferred
+1. Event schema migration mechanism beyond schema version 1
+2. Input snapshot redaction and size limits
+3. Context pressure thresholds and compaction hysteresis defaults
+4. ContextCheckpoint summary schema and validation
+5. Nudge scheduling, delivery, expiry, and redaction payloads
+6. Tool YAML manifest fields
+7. Whether `ToolDetails` returns as a common success-detail abstraction
+8. Tool result and incremental update contracts
+9. Subagent result projection beyond the accepted active-Run cancellation ownership rule
+10. Runtime idle eviction duration
+11. System Prompt and ContextCompiler layer ordering
+12. Dedicated Novel domain model, intentionally deferred
 
 ## 29. Recommended Implementation Order
 

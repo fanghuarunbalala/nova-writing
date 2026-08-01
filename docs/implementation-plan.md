@@ -1020,18 +1020,40 @@ Design scope:
 - base `ContextCompiler`
 - Runtime-to-Journal event sink
 
-Questions to resolve before implementation:
+Task breakdown:
 
-1. Does Stop cancel only the active Run or also queued Turn inputs?
-2. Does Stop always cancel all child Conversations?
-3. How is an unfinished Assistant draft handled after cancellation?
-4. What exactly does Interrupt cancel compared with Stop?
-5. Does an appended user message steer the current Run or create a later Run?
-6. How does a Tool receive and acknowledge cancellation?
-7. How do Pi's internal model calls map to core-owned `turnId` values?
-8. Which Pi messages enter canonical history?
-9. Which Runtime state is persisted after each Turn boundary?
-10. What happens when the Journal append acknowledgement fails during execution?
+- Task 3A: freeze Run, Turn, input queue, cancellation, Pi mapping, canonical history, and persistence-barrier semantics.
+- Task 3B: define Runtime protocol types, Run/Turn lifecycle OutputEvents, input-processing outcomes, cancellation reasons, and schemas.
+- Task 3C: implement the two-lane `InputRouter`, serialized Turn queue, Stop fence, `RunStateMachine`, and `TurnController` foundations.
+- Task 3D: implement the `ConversationRuntime` loop, Runtime event sink, durable replay cursor, cancellation coordination, and failure degradation.
+- Task 3E: implement the Pi Agent Core Adapter foundation and base `ContextCompiler` without Tool, Policy, Compaction, or Nudge behavior.
+- Task 3F: validate no-process Runtime integration, control-lane preemption, ordered Runs and Turns, cancellation, recovery, and log redaction.
+
+Implementation status:
+
+- Task 3A implemented and awaiting review: execution semantics are frozen in `docs/architecture.md` and summarized below; no Runtime production code is introduced by this step.
+
+Task 3A accepted decisions:
+
+1. One Conversation has at most one active Run. Turn inputs are consumed in ascending durable Journal Sequence and each Run executes its Turns serially.
+2. A `UserMessageInputEvent` starts a Run when idle. If a Run is active, the message remains queued for a later Run; ordinary user messages never implicitly enter Pi's steering queue. A future explicit steering InputEvent is required to alter an active Run.
+3. Input priority selects the Control or Turn lane and allows Control handling to preempt Turn waiting. It never rewrites durable Journal order or reorders messages within the Turn lane.
+4. Stop forms a cancellation fence at the Stop Input's Journal Sequence. It cancels the active Run and terminally cancels accepted-but-not-started Turn inputs at or before that fence. Inputs accepted after the fence remain eligible to start later Runs.
+5. Stop cancellation propagates only to non-terminal child Conversations owned by the active Run. It does not cancel detached, completed, unrelated, or later child Conversations. Task 3 uses a cancellation port or test double; child management remains Task 7.
+6. An unfinished Assistant draft remains observable through already-durable streaming OutputEvents but never becomes a canonical Assistant Runtime Message. Cancellation emits a terminal draft/Turn outcome rather than fabricating a completed Assistant message.
+7. `InterruptInputEvent` remains outside the first-version public protocol. Its reserved future meaning is narrower than Stop: cancel the current Turn operation and end its Run without clearing queued Turn inputs or cascading to child Conversations.
+8. Tool cancellation uses an internal `AbortSignal`. The Runtime does not wait forever for a non-cooperative Tool: after a bounded grace period it records a cancellation-timeout outcome and ignores late completion by invocation identity. Tool contracts and exact timeout configuration remain Task 5.
+9. Core owns `runId` and `turnId`. One Pi `Agent.prompt()` or continuation lifecycle maps to one Core Run, while each Pi `turn_start` allocates one Core Turn and its matching `turn_end` closes it. All Pi message and Tool events between those boundaries carry that `turnId`.
+10. Canonical Runtime Messages are projected only from durable Core events: accepted user messages, completed Assistant messages, and finalized Tool results. Streaming deltas, incomplete drafts, System Prompt text, per-call overlays, Context transforms, lifecycle events, and Pi-internal error scaffolding are not canonical history.
+11. Journal lifecycle events, not a second mutable Runtime-state database, are the Task 3 source of truth. After each accepted Run/Turn transition, durable events record status, IDs, causation, consumed Input references, and terminal reason; Runtime recovery reconstructs state and canonical Messages from Journal plus projections.
+12. Runtime-to-Journal append acknowledgement is a persistence barrier. The Runtime must not expose a transition as committed or advance past a boundary before acknowledgement. Append failure aborts active execution, prevents further Provider/Tool progress, preserves the accepted Input for recovery, and causes a safe failed Runtime exit. Retrying an acknowledgement-ambiguous append reuses the same deterministic Event identity.
+
+Task 3A explicitly excludes:
+
+- production Runtime, Router, State Machine, Turn Controller, Pi Adapter, or Context Compiler code
+- exact OutputEvent class and schema definitions, deferred to Task 3B
+- timeout configuration, Tool implementation, Approval, Policy, Compaction, Nudge, IPC, and Subagent implementation
+- adding `InterruptInputEvent` to the first-version public Input protocol
 
 Expected deliverables after approval:
 

@@ -1047,6 +1047,7 @@ Implementation status:
 - Task 3D-G implemented and awaiting review: in-process `ConversationRuntime` shell, serialized lifecycle and live dispatch ownership, one-shot startup delegation, Journal-reference resolution, Router admission, idempotent shutdown, safe exit observation, recoverable Input rejection, terminal unknown-failure degradation, redacted logs, public exports, and focused validation.
 - Task 3D-H implemented and awaiting review: event-driven `RuntimeInputPump`, single Control and Turn work slots, Control preemption while Turn work is pending, Turn FIFO, no-poll wake coalescing, stop-with-queue-retention, fixed safe failure exits, redacted logs, public exports, and focused validation.
 - Task 3D-I implemented and awaiting review: `ConversationRuntime` ownership of `RuntimeInputPump`, post-Bootstrap Pump startup, live route wake-up, shutdown drain/exit gating, asynchronous Pump failure observation, unexpected-stop degradation, fixed safe Runtime exits, real Pump integration, redacted logs, public exports, and focused validation.
+- Task 3D-J implemented and awaiting review: durable `RuntimeUserMessageInputHandler`, defensive canonical Input capture, Run claim/outcome/start barriers, injected `RuntimeRunExecutor`, terminal Run verification, serialized direct use, fixed safe phase failures, real controller/sink integration, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1509,6 +1510,38 @@ Task 3D-I explicitly excludes:
 - concrete Control and Turn handlers, Stop fence application, cancellation propagation, child cancellation, AbortSignal ownership, and late Provider/Tool result suppression
 - Run creation, Turn transitions, terminal Input outcome selection, Provider/Pi execution, Context compilation, Tool execution, Approval, Policy, IPC, Subagent, Nudge, and Compaction
 - automatic restart/backoff, Runtime Presence publication, idle eviction, process placement, and active Run/Turn crash-recovery resolution
+
+Task 3D-J delivered:
+
+- `RuntimeUserMessageInputHandler` as the durable UserMessage-to-Run claim boundary and a valid future Turn-lane Pump handler
+- defensive canonical capture and deep freezing of the validated persisted UserMessage snapshot before asynchronous work begins
+- required persistence order `Run queued -> Input consumed -> Run running -> delegated execution`
+- reuse of `TurnController` and `RuntimeInputOutcomeController` barriers without creating a second claim store
+- propagation of correlation metadata and Input causation across queued Run, consumed Input outcome, and running Run transitions
+- `RuntimeRunExecutor` as the provider-independent injected execution port receiving one frozen request with Conversation ID, Core Run ID, and canonical Input snapshot
+- executor-return invariant requiring the same claimed Run to have reached `completed`, `failed`, or `cancelled`
+- acceptance of all three durable terminal Run outcomes without interpreting Provider or cancellation semantics in the handler
+- serialized direct `process()` calls in addition to Pump-compatible `handle()` usage
+- immutable payload-free result containing only durable Input identity, Run ID, terminal status, and outcome receipt Sequence
+- fixed phase failures for invalid Input, pre-existing active Run, queued-Run append, consumed-outcome append, running transition, executor rejection, and non-terminal executor return
+- focused smoke validation with real `TurnController`, `RuntimeInputOutcomeController`, shared Event Sink ordering, completed and cancelled Runs, mutation isolation, active Run rejection, downstream failure normalization, and log redaction
+
+Task 3D-J accepted decisions:
+
+- `UserMessage` receives a durable Core Run claim before its terminal Input outcome is written. This is the exact crash window repaired by `unconfirmedRunInputs` during startup.
+- `system.input.processed: consumed` is written immediately after the queued Run claim and before execution starts. It prevents duplicate work but does not claim Run success.
+- Provider or Pi work may begin only after the running Run transition is durably acknowledged.
+- the injected executor owns all Turn creation, Provider/Pi events, Tool behavior, and terminal Run transition. Returning while the Run is still active is a contract failure.
+- executor rejection does not invent a failed Run transition because an active Turn or partially persisted adapter boundary may exist. The handler fails safely, causing Pump/Runtime degradation; later recovery sees the last durable lifecycle state.
+- canonical UserMessage payload is available only to the internal executor request. It never enters handler results, lifecycle logs, errors, or claim Events.
+- Context clear/compact and extension Turn inputs require a later Turn dispatcher and are not misclassified as unsupported by this UserMessage-specific handler.
+
+Task 3D-J explicitly excludes:
+
+- direct installation of the handler into the Runtime Pump and dispatch of non-UserMessage Turn inputs
+- Pi Agent Core adaptation, Provider streaming, Turn event mapping, Tool execution, Assistant output, and Context compilation
+- Stop fence application, cancellation propagation, AbortSignal ownership, child cancellation, and late-result suppression
+- automatic failed Run synthesis after executor rejection and resolution of active Run/Turn crash recovery
 
 Expected deliverables after approval:
 

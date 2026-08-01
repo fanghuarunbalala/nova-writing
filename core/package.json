@@ -35,6 +35,7 @@
     "smoke:turn-controller": "pnpm build && node scripts/turn-controller-smoke.mjs",
     "smoke:runtime-input-resolver": "pnpm build && node scripts/runtime-input-resolver-smoke.mjs",
     "smoke:runtime-input-outcome": "pnpm build && node scripts/runtime-input-outcome-controller-smoke.mjs",
+    "smoke:runtime-user-message": "pnpm build && node scripts/runtime-user-message-input-handler-smoke.mjs",
     "smoke:runtime-replay-planner": "pnpm build && node scripts/runtime-replay-planner-smoke.mjs",
     "smoke:runtime-startup-reconciler": "pnpm build && node scripts/runtime-startup-reconciler-smoke.mjs",
     "smoke:runtime-startup-executor": "pnpm build && node scripts/runtime-startup-executor-smoke.mjs",

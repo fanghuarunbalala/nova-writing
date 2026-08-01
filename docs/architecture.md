@@ -3193,6 +3193,53 @@ The Runtime crash exit contains only the fixed `ConversationRuntimeInputPumpErro
 
 Concrete Control/Turn processing, Stop cancellation, Run/Turn mutation, terminal Input outcomes, Provider/Pi, Tool execution, and active-lifecycle recovery remain outside this checkpoint.
 
+### 16.17 Implemented Task 3D-J Durable UserMessage Run Claim
+
+`RuntimeUserMessageInputHandler` is the first concrete Turn-lane processing boundary. It converts one validated durable `user.message` Input into one Core-owned Run claim and then delegates execution through a provider-independent port.
+
+```mermaid
+sequenceDiagram
+    participant Pump
+    participant Handler as RuntimeUserMessageInputHandler
+    participant Turns as TurnController
+    participant Outcomes as RuntimeInputOutcomeController
+    participant Executor as RuntimeRunExecutor
+
+    Pump->>Handler: handle(canonical UserMessage)
+    Handler->>Turns: beginRun(input reference)
+    Turns-->>Handler: durable Run queued receipt
+    Handler->>Outcomes: record(consumed, runId)
+    Outcomes-->>Handler: durable Input outcome receipt
+    Handler->>Turns: transitionRun(running)
+    Turns-->>Handler: durable Run running receipt
+    Handler->>Executor: execute(frozen Input, runId)
+    Executor-->>Handler: settled
+    Handler->>Turns: getRunSnapshot()
+    Turns-->>Handler: completed | failed | cancelled
+    Handler-->>Pump: handler settled
+```
+
+The order is a hard persistence invariant:
+
+1. append the queued Run claim;
+2. append `system.input.processed: consumed` with that Run ID;
+3. append the running Run transition;
+4. only then allow Provider/Pi execution through the injected executor.
+
+The queued Run precedes the consumed outcome intentionally. A crash after the first append is reconstructed as an `unconfirmedRunInput`, and startup repairs the missing consumed outcome without creating a duplicate Run. `consumed` still means only that Runtime owns the Input; the Run may later complete, fail, or be cancelled.
+
+The handler defensively canonicalizes and freezes the persisted Input before entering its serializer. The complete snapshot, including UserMessage payload, is passed only to the internal `RuntimeRunExecutor`. Public results, lifecycle Events, Input outcomes, errors, and logs remain payload-free.
+
+`RuntimeRunExecutor` owns Turn creation, Provider/Pi mapping, Tool behavior, and the terminal Run transition. When it resolves, the same Run ID must already be `completed`, `failed`, or `cancelled`. Returning with a queued, running, waiting, or stopping Run is a stable contract failure.
+
+Executor rejection is not converted automatically into a failed Run transition. At that point an adapter may have an active Turn or an acknowledgement-ambiguous Event, so synthesizing a transition could violate the persistence barrier. The handler instead fails with a fixed phase reason, allowing the Pump and Runtime to degrade while Journal remains authoritative.
+
+Direct calls to `process()` are serialized even outside the Pump. A pre-existing non-terminal Run rejects a new UserMessage claim. A terminal retained Run may be replaced by the next claim according to the existing state-machine rules.
+
+The immutable handler result exposes only durable Input identity, Run ID, terminal Run status, and consumed-outcome Journal Sequence. Logs contain only these stable identifiers, status, phase, and Sequence; UserMessage text, novel content, prompts, Provider data, Tool data, raw errors, stacks, causes, paths, and JSONL remain excluded.
+
+This checkpoint does not install a general Turn dispatcher, handle Context Inputs, implement Pi/Provider execution, apply Stop cancellation, or resolve non-terminal crash recovery.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:

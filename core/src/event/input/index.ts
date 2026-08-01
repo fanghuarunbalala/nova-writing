@@ -2,6 +2,7 @@ export * from "./CommandInputEvent.js";
 export * from "./CompactContextInputEvent.js";
 export * from "./ClearContextInputEvent.js";
 export * from "./ContextInputEvent.js";
+export * from "./DurableInputEventReference.js";
 export * from "./InputEvent.js";
 export * from "./InputEventOptions.js";
 export * from "./InputEventReference.js";

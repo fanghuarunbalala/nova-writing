@@ -1,4 +1,6 @@
 export * from "./AgentOutputEvent.js";
+export * from "./AgentRunStateChangedOutputEvent.js";
+export * from "./AgentTurnStateChangedOutputEvent.js";
 export * from "./ErrorOutputEvent.js";
 export * from "./HostInputRoutedOutputEvent.js";
 export * from "./InputResponseOutputEvent.js";

@@ -2,6 +2,8 @@
 export const OUTPUT_EVENT_TYPE = {
   runtimePresenceChanged: "system.runtime.presence.changed",
   hostInputRouted: "system.input.routed",
+  agentRunStateChanged: "agent.run.state.changed",
+  agentTurnStateChanged: "agent.turn.state.changed",
 } as const;
 
 export type CoreOutputEventType =

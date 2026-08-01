@@ -49,6 +49,7 @@ export interface EventSchemaDefinition<TPayloadSchema extends TSchema = TSchema>
   schemaVersion: number;
   kind: EventKind;
   payloadSchema: TPayloadSchema;
+  snapshotSchema?: TSchema;
   priority?: number;
 }
 
@@ -94,6 +95,7 @@ export class EventSchemaRegistry {
       );
     }
 
+    this.assertRegisteredSnapshot(definition, snapshot);
     this.assertPayload(definition, snapshot.payload);
     return snapshot;
   }
@@ -113,8 +115,21 @@ export class EventSchemaRegistry {
       return snapshot;
     }
 
+    this.assertRegisteredSnapshot(definition, snapshot);
     this.assertPayload(definition, snapshot.payload);
     return snapshot;
+  }
+
+  private assertRegisteredSnapshot(
+    definition: EventSchemaDefinition,
+    snapshot: InputEventSnapshot | OutputEventSnapshot,
+  ): void {
+    if (definition.snapshotSchema === undefined) return;
+    this.assertSchema(
+      definition.snapshotSchema,
+      snapshot,
+      `Invalid snapshot for ${definition.eventType}@${definition.schemaVersion}`,
+    );
   }
 
   private assertCommon(snapshot: InputEventSnapshot | OutputEventSnapshot): void {

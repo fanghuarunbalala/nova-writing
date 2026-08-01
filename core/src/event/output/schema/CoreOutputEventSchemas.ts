@@ -55,6 +55,99 @@ export const HostInputRoutedPayloadSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const DurableInputEventReferenceSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    eventType: Type.String({ minLength: 3 }),
+    sequence: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+const HostInputRoutedSnapshotSchema = Type.Object(
+  {
+    inputEvent: DurableInputEventReferenceSchema,
+  },
+  { additionalProperties: true },
+);
+
+const RunStatusSchema = Type.Union([
+  Type.Literal("queued"),
+  Type.Literal("running"),
+  Type.Literal("waiting_interaction"),
+  Type.Literal("stopping"),
+  Type.Literal("completed"),
+  Type.Literal("failed"),
+  Type.Literal("cancelled"),
+]);
+
+const TurnStatusSchema = Type.Union([
+  Type.Literal("running"),
+  Type.Literal("waiting_tool"),
+  Type.Literal("waiting_interaction"),
+  Type.Literal("stopping"),
+  Type.Literal("completed"),
+  Type.Literal("failed"),
+  Type.Literal("cancelled"),
+]);
+
+export const AgentRunStateChangedPayloadSchema = Type.Object(
+  {
+    inputEvent: DurableInputEventReferenceSchema,
+    previous: Type.Union([Type.Null(), RunStatusSchema]),
+    current: RunStatusSchema,
+    reason: Type.Union([
+      Type.Literal("input_queued"),
+      Type.Literal("execution_started"),
+      Type.Literal("interaction_requested"),
+      Type.Literal("interaction_resolved"),
+      Type.Literal("stop_requested"),
+      Type.Literal("interrupt_requested"),
+      Type.Literal("execution_completed"),
+      Type.Literal("execution_failed"),
+      Type.Literal("cancellation_completed"),
+      Type.Literal("recovery_restored"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentTurnStateChangedPayloadSchema = Type.Object(
+  {
+    previous: Type.Union([Type.Null(), TurnStatusSchema]),
+    current: TurnStatusSchema,
+    reason: Type.Union([
+      Type.Literal("provider_started"),
+      Type.Literal("tool_execution_started"),
+      Type.Literal("tool_execution_completed"),
+      Type.Literal("interaction_requested"),
+      Type.Literal("interaction_resolved"),
+      Type.Literal("stop_requested"),
+      Type.Literal("interrupt_requested"),
+      Type.Literal("turn_completed"),
+      Type.Literal("turn_failed"),
+      Type.Literal("cancellation_completed"),
+      Type.Literal("recovery_restored"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+const AgentRunStateChangedSnapshotSchema = Type.Object(
+  {
+    runId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: true },
+);
+
+const AgentTurnStateChangedSnapshotSchema = Type.Object(
+  {
+    runId: Type.String({ minLength: 1 }),
+    turnId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: true },
+);
+
 export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): void {
   registry.register({
     kind: "output",
@@ -68,5 +161,22 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     eventType: OUTPUT_EVENT_TYPE.hostInputRouted,
     schemaVersion: EVENT_SCHEMA_VERSION,
     payloadSchema: HostInputRoutedPayloadSchema,
+    snapshotSchema: HostInputRoutedSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.agentRunStateChanged,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: AgentRunStateChangedPayloadSchema,
+    snapshotSchema: AgentRunStateChangedSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.agentTurnStateChanged,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: AgentTurnStateChangedPayloadSchema,
+    snapshotSchema: AgentTurnStateChangedSnapshotSchema,
   });
 }

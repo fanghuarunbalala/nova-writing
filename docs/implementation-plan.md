@@ -1032,6 +1032,7 @@ Task breakdown:
 Implementation status:
 
 - Task 3A implemented and awaiting review: execution semantics are frozen in `docs/architecture.md` and summarized below; no Runtime production code is introduced by this step.
+- Task 3B-A implemented and awaiting review: provider-independent Run/Turn lifecycle constants, durable state-change OutputEvents, shared durable Input references, event-specific snapshot schema constraints, public exports, and focused protocol validation.
 
 Task 3A accepted decisions:
 
@@ -1054,6 +1055,34 @@ Task 3A explicitly excludes:
 - exact OutputEvent class and schema definitions, deferred to Task 3B
 - timeout configuration, Tool implementation, Approval, Policy, Compaction, Nudge, IPC, and Subagent implementation
 - adding `InterruptInputEvent` to the first-version public Input protocol
+
+Task 3B-A delivered:
+
+- stable `RUN_STATUS`, `RUN_STATE_CHANGE_REASON`, `TURN_STATUS`, and `TURN_STATE_CHANGE_REASON` protocols
+- `AgentRunStateChangedOutputEvent` using `agent.run.state.changed`
+- `AgentTurnStateChangedOutputEvent` using `agent.turn.state.changed`
+- Run lifecycle payloads carrying a defensive, payload-free durable origin Input reference
+- required Core-owned `runId` metadata for Run events and `runId` plus `turnId` metadata for Turn events
+- shared `DurableInputEventReference` capture and validation reused by Host routing and Runtime lifecycle events
+- optional event-specific snapshot schemas in `EventSchemaRegistry`
+- strengthened Host routed-event validation requiring a durable top-level Input reference
+- Core Output schema registration and public exports
+- focused protocol smoke coverage for immutable capture, defensive snapshots, invalid identities, invalid states/reasons, event-specific metadata, Host reference requirements, and Provider/Pi privacy
+
+Task 3B-A accepted decisions:
+
+- lifecycle history uses state-change events rather than one class per terminal state.
+- Run lifecycle events always carry their durable origin Input reference; Turn lifecycle events inherit origin through `runId` and carry only Turn transition data.
+- `previous: null` represents creation of a new Run or Turn lifecycle.
+- Output metadata remains the authoritative location for `runId` and `turnId`; payload schemas do not duplicate those IDs.
+- event-specific snapshot schemas may strengthen the common Event envelope without changing the platform-neutral snapshot shape.
+- transition legality is not enforced by Event constructors or schemas; `RunStateMachine` and `TurnController` own that behavior in Task 3C.
+
+Task 3B-A explicitly excludes:
+
+- input processing outcome OutputEvents, deferred to Task 3B-B
+- transition legality and state-machine mutation
+- Router, Runtime loop, Pi Adapter, Context Compiler, Provider, Tool, Approval, Policy, IPC, and Subagent behavior
 
 Expected deliverables after approval:
 

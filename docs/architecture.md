@@ -2546,6 +2546,56 @@ flowchart TD
 
 If acknowledgement is lost after a successful append, retry uses the same deterministic Event ID and canonical snapshot so Journal idempotency can recover the receipt. If persistence definitely fails, Runtime stops Provider and Tool progress, does not announce the transition as committed, and exits through the safe Runtime failure boundary. The accepted Input remains durable and may be reconsidered during recovery according to its last persisted processing outcome.
 
+### 16.2 Implemented Task 3B-A Run and Turn Lifecycle Protocol
+
+The first Runtime execution protocol checkpoint introduces provider-independent lifecycle values and two replayable OutputEvents:
+
+```text
+agent.run.state.changed
+agent.turn.state.changed
+```
+
+```mermaid
+classDiagram
+    class AgentRunStateChangedOutputEvent {
+        +string conversationId
+        +string runId
+        +DurableInputEventReference inputEvent
+        +RunStatus? previous
+        +RunStatus current
+        +RunStateChangeReason reason
+    }
+
+    class AgentTurnStateChangedOutputEvent {
+        +string conversationId
+        +string runId
+        +string turnId
+        +TurnStatus? previous
+        +TurnStatus current
+        +TurnStateChangeReason reason
+    }
+
+    class DurableInputEventReference {
+        +string id
+        +string eventType
+        +number sequence
+    }
+
+    AgentRunStateChangedOutputEvent --> DurableInputEventReference
+    AgentRunStateChangedOutputEvent --|> AgentOutputEvent
+    AgentTurnStateChangedOutputEvent --|> AgentOutputEvent
+```
+
+Run status values are `queued`, `running`, `waiting_interaction`, `stopping`, `completed`, `failed`, and `cancelled`. Turn status values are `running`, `waiting_tool`, `waiting_interaction`, `stopping`, `completed`, `failed`, and `cancelled`. Reasons are separate stable values so terminal status and cause remain independently queryable.
+
+`previous: null` marks lifecycle creation. Event constructors validate and defensively capture status, reason, IDs, and durable Input identity, but they intentionally do not decide whether a transition is legal. Task 3C's state machine owns transition legality and serialized mutation.
+
+Run events always copy their origin Input's ID, Event Type, and Journal Sequence into the payload. They never copy the Input payload. Turn events use `runId` and `turnId` metadata and do not duplicate Run origin data.
+
+`EventSchemaRegistry` now accepts an optional event-specific snapshot schema in addition to the shared Event envelope and payload schema. This allows Core lifecycle schemas to require `runId`, or `runId` plus `turnId`, while preserving one public `OutputEventSnapshot` shape. The Host routing schema also uses this mechanism to require its durable top-level Input reference and Sequence.
+
+This checkpoint does not define semantic Input processing outcomes, deterministic Runtime Event IDs, transition rules, or execution behavior. Those remain Task 3B-B through Task 3D.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:

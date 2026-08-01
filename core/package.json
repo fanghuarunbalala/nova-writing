@@ -31,6 +31,7 @@
     "smoke:runtime-event-sink": "pnpm build && node scripts/runtime-event-sink-smoke.mjs",
     "smoke:runtime-state-machine": "pnpm build && node scripts/runtime-state-machine-smoke.mjs",
     "smoke:runtime-input-router": "pnpm build && node scripts/runtime-input-router-smoke.mjs",
+    "smoke:runtime-input-pump": "pnpm build && node scripts/runtime-input-pump-smoke.mjs",
     "smoke:turn-controller": "pnpm build && node scripts/turn-controller-smoke.mjs",
     "smoke:runtime-input-resolver": "pnpm build && node scripts/runtime-input-resolver-smoke.mjs",
     "smoke:runtime-input-outcome": "pnpm build && node scripts/runtime-input-outcome-controller-smoke.mjs",

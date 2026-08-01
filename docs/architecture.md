@@ -3090,6 +3090,54 @@ Logs include only Runtime/Conversation identity, lifecycle states, stable reason
 
 This shell deliberately does not dequeue Inputs, create Runs, apply Stop fences, execute Provider/Pi calls, select terminal Input outcomes, publish Runtime Presence, implement IPC, or resolve the still-open active Run/Turn fail-versus-cancel crash-recovery decision.
 
+### 16.15 Implemented Task 3D-H Event-driven Runtime Input Pump
+
+`RuntimeInputPump` is the process-local scheduler between `InputRouter` inboxes and future Control/Turn processors. It introduces no second durable queue and never copies Input payloads: the existing Router remains the owner of validated in-memory snapshots until they are dequeued.
+
+```mermaid
+flowchart TB
+    Wake["start() / wake()"] --> Drain["Coalesced microtask drain"]
+    Drain --> Control{"Control active or queued?"}
+    Control -->|queued and idle| ControlHandler["Start one Control handler"]
+    Control -->|none| Turn{"Turn active?"}
+    Turn -->|no| TurnHandler["Start next FIFO Turn handler"]
+    Turn -->|yes| Wait["Wait for handler settlement or next wake"]
+    ControlHandler --> ControlDone["Control completion schedules another drain"]
+    TurnHandler --> TurnDone["Turn completion schedules another drain"]
+    ControlDone --> Drain
+    TurnDone --> Drain
+```
+
+The Pump has one Control work slot and one Turn work slot. Control handlers are serialized with each other, Turn handlers are serialized with each other, and an asynchronous Control handler may run while an already-started Turn handler Promise remains pending. This is the accepted Control-preemption boundary: it does not claim that JavaScript can interrupt synchronous CPU work.
+
+```mermaid
+sequenceDiagram
+    participant Runtime
+    participant Pump as RuntimeInputPump
+    participant Control as Control Handler
+    participant Turn as Turn Handler
+
+    Runtime->>Pump: wake after Router admission
+    Pump->>Turn: handle(turn input)
+    Note over Turn: asynchronous Turn remains pending
+    Runtime->>Pump: wake after Control admission
+    Pump->>Control: handle(control input)
+    Control-->>Pump: settled
+    Note over Pump: no second Control overlaps
+    Turn-->>Pump: settled
+    Pump->>Pump: select next Control, otherwise next FIFO Turn
+```
+
+A new Turn starts only when no Turn is active and both the Control work slot and Control inbox are empty. Once a Turn is active, later Control work may run concurrently but does not implicitly cancel that Turn; the concrete Stop processor owns cancellation semantics in a later checkpoint.
+
+`start()` schedules existing queued work, while `wake()` coalesces new work onto one microtask drain. The Pump uses no timers, polling loop, sleep, Worker, or child process. Different Conversation Pumps may progress independently through the event loop.
+
+`stop()` closes further dequeue immediately, waits only for handlers already started by the Pump, preserves all still-queued snapshots in `InputRouter`, and resolves one immutable stopped exit. Repeated stop calls share the same completion Promise.
+
+Handler rejection or scheduler failure moves the Pump to `failed`, resolves a fixed `RuntimeInputPumpFailureError` identity, and prevents additional dequeue. Raw handler names, codes, messages, stacks, causes, payloads, prompts, Tool data, paths, and configuration never enter snapshots, exits, or logs. Work already running in the other lane may settle, but its completion cannot restart scheduling; AbortSignal propagation and late-result suppression remain later cancellation work.
+
+This checkpoint deliberately does not connect the Pump to `ConversationRuntime`, apply Stop fences, mutate Run/Turn state, persist terminal Input outcomes, execute Provider/Pi or Tools, or resolve active-lifecycle crash recovery.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:

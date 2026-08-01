@@ -1045,6 +1045,7 @@ Implementation status:
 - Task 3D-E implemented and awaiting review: ready-only startup execution, repair/restore/route ordering, resumable outcome and queue backpressure barriers, defensive plan capture, stable failures, redacted logs, public exports, and focused validation.
 - Task 3D-F implemented and awaiting review: one-shot Bootstrap startup composition, bound Runtime identity validation, replay/reconcile/execute stage ordering, recovery blocking, stable stage failures, payload-free summaries, redacted logs, public exports, and focused validation.
 - Task 3D-G implemented and awaiting review: in-process `ConversationRuntime` shell, serialized lifecycle and live dispatch ownership, one-shot startup delegation, Journal-reference resolution, Router admission, idempotent shutdown, safe exit observation, recoverable Input rejection, terminal unknown-failure degradation, redacted logs, public exports, and focused validation.
+- Task 3D-H implemented and awaiting review: event-driven `RuntimeInputPump`, single Control and Turn work slots, Control preemption while Turn work is pending, Turn FIFO, no-poll wake coalescing, stop-with-queue-retention, fixed safe failure exits, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1448,6 +1449,36 @@ Task 3D-G explicitly excludes:
 - Provider/Pi execution, Context compilation, Tool execution, Approval, Policy, IPC transport, Subagent management, Nudge, and Compaction
 - automatic restart, retry/backoff, Runtime Presence publication, idle eviction scheduling, and child-process exit-code mapping
 - resolution of the active Run/Turn fail-versus-cancel crash-recovery decision
+
+Task 3D-H delivered:
+
+- `RuntimeInputPump` as an event-driven scheduler over the existing `InputRouter` Control and Turn inboxes
+- explicit Pump lifecycle states `created`, `running`, `stopping`, `stopped`, and `failed`
+- injected asynchronous Control and Turn handler ports without copying or transforming durable Input snapshots
+- at most one active Control handler and one active Turn handler per Pump
+- Control dequeue before new Turn dequeue, plus Control execution while an already-active Turn handler remains pending
+- strict Turn FIFO through the Router inbox and no second Turn start until the active Turn handler settles
+- coalesced microtask wake-ups instead of timers, polling, sleeps, or dedicated threads
+- idempotent stop that closes new dequeue, waits for already-started handlers, preserves queued durable Inputs, and resolves one immutable stopped exit
+- terminal fixed-identity Pump failure for handler or scheduler rejection without exposing raw names, codes, messages, stacks, causes, payloads, prompts, paths, or Tool data
+- immutable payload-free operational snapshots and exits with queue sizes and optional in-flight Input identity
+- focused smoke validation for lifecycle legality, initial Control priority, Control/Turn overlap, Control serialization, Turn FIFO, wake coalescing, stop draining, queue retention, scheduler failure, handler failure, and log redaction
+
+Task 3D-H accepted decisions:
+
+- Control preemption means an asynchronous Control handler may start while one Turn handler Promise is pending. JavaScript cannot preempt synchronous CPU work; blocking computation must remain behind the accepted Worker/process/Rust adapter boundary.
+- a new Turn starts only when no Turn is active and no Control handler or queued Control Input remains. An already-active Turn is not implicitly cancelled merely because Control work arrives.
+- the Pump owns process-local scheduling only. Handler implementations remain responsible for durable outcomes and accepted controller barriers.
+- stop does not delete or terminally process queued Inputs. It stops dequeue and leaves queued snapshots available to the owning Runtime or later recovery path.
+- any unknown handler or scheduler failure is terminal for the Pump. It resolves a fixed safe failure exit and never starts additional queued work.
+- an operation already running in the other lane may settle after Pump failure; that completion cannot restart scheduling. Abort propagation and late-result suppression belong to the following cancellation integration checkpoints.
+
+Task 3D-H explicitly excludes:
+
+- integration of the Pump into `ConversationRuntime` startup, dispatch, shutdown, or crash observation
+- Stop fence application, active Run/Turn cancellation, child cancellation, AbortSignal ownership, and late Provider/Tool result suppression
+- Run creation, Turn lifecycle transitions, terminal Input outcome selection, Provider/Pi execution, Context compilation, Tool execution, Approval, Policy, IPC, Subagent, Nudge, and Compaction
+- automatic restart/backoff and resolution of non-terminal Run/Turn crash recovery
 
 Expected deliverables after approval:
 

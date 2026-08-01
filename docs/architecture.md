@@ -3965,6 +3965,55 @@ Invalid identity is normalized as `invalid_request`. Any Adapter exception is no
 
 Persistence-first Stop fencing, Run/Turn `stopping` and `cancelled` transitions, queued Input cancellation outcomes, and Stop outcome recording remain owned by `RuntimeStopInputHandler`. This checkpoint does not install the bridge into Runtime composition and does not define AbortController ownership, cancellation timeouts, late-result suppression, ReloadConfig, Tool cancellation, Approval, child traversal, IPC, Subagents, or Pi-specific construction.
 
+### 16.27 Implemented Task 3F-A No-process Successful Agent Turn Integration
+
+The first Task 3F checkpoint composes the existing public Core execution components directly in one process. It validates their shared protocol without introducing a production Runtime factory or exposing Pi-specific construction.
+
+```mermaid
+flowchart LR
+    Input["Durable UserMessage"] --> Router["InputRouter Turn lane"]
+    Router --> Pump["RuntimeInputPump"]
+    Pump --> Handler["RuntimeUserMessageInputHandler"]
+    Handler --> Controller["TurnController"]
+    Handler --> Outcome["RuntimeInputOutcomeController"]
+    Handler --> Executor["AgentRuntimeRunExecutor"]
+    Executor --> Preparation["ProjectedUserMessageRunPreparationSource"]
+    Executor --> Compiler["BaseContextCompiler"]
+    Executor --> Adapter["AgentRuntimeAdapter"]
+    Adapter --> Controller
+```
+
+The integration uses one shared `AgentRuntimeAdapter` instance for normal Run execution and the already-defined Stop cancellation bridge, although this success-only checkpoint does not route a Stop Input. The Adapter double simulates the awaited Turn lifecycle bridge by durably beginning and completing one Turn before returning a completed Agent result.
+
+```mermaid
+sequenceDiagram
+    participant Router as InputRouter
+    participant Pump as RuntimeInputPump
+    participant Handler as UserMessage Handler
+    participant Lifecycle as TurnController
+    participant Outcome as Input Outcome Controller
+    participant Executor as Agent Run Executor
+    participant Adapter as Agent Runtime Adapter
+
+    Router->>Pump: queued UserMessage wake
+    Pump->>Handler: handle durable Input
+    Handler->>Lifecycle: Run queued barrier
+    Handler->>Outcome: Input consumed barrier
+    Handler->>Lifecycle: Run running barrier
+    Handler->>Executor: execute claimed Run
+    Executor->>Adapter: compiled context + prompt invocation
+    Adapter->>Lifecycle: Turn running barrier
+    Adapter->>Lifecycle: Turn completed barrier
+    Adapter-->>Executor: completed
+    Executor->>Lifecycle: Run completed barrier
+    Handler-->>Pump: terminal Run verified
+    Pump->>Pump: orderly stop after handler settlement
+```
+
+The validated durable Output order is Run queued, Input consumed, Run running, Turn running, Turn completed, then Run completed. Prompt and Message contents remain available to the injected Adapter request but are absent from structured logs across every participating component.
+
+This checkpoint intentionally does not define a production composition factory. It also excludes multiple queued Turns, Control preemption, Stop fencing and cancellation races, startup replay, non-terminal recovery, Runtime degradation, real combined SQLite persistence, `ConversationRuntime`/Host/process composition, concrete Pi/Provider construction, Assistant streaming, Tools, Approval, Policy, Compaction, Nudge, IPC, and Subagents.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4787,6 +4836,7 @@ Currently implemented skeletons include:
 - provider-neutral Agent Run execution coordination with persistence-first normal terminalization and Stop-race deferral
 - Journal-backed canonical UserMessage Run preparation with fixed Message pagination and current-Sequence isolation
 - provider-neutral Stop-to-Agent Adapter cancellation mapping with durable Stop identity validation and redacted failures
+- no-process successful Agent Turn integration across Router, Pump, lifecycle, outcome, preparation, compilation, and shared Adapter boundaries
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

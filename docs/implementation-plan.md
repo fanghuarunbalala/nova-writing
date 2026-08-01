@@ -1064,6 +1064,7 @@ Implementation status:
 - Task 3E-F implemented and awaiting review: provider-neutral Run preparation contract, concrete Agent Run execution coordinator, strict context/invocation capture, normal Run terminalization, Stop-race deferral, stable failures, redacted logs, and real lifecycle validation.
 - Task 3E-G implemented and awaiting review: projected UserMessage Run preparation, injected final System Prompt source, fixed-high-watermark Message pagination, current-Sequence context/prompt split, later-input isolation, stable failures, redacted logs, and real SQLite integration.
 - Task 3E-H implemented and awaiting review: provider-neutral Stop-to-Agent cancellation port, strict durable Stop identity validation, immutable Adapter cancellation mapping, fixed failure normalization, redacted logs, public exports, and focused validation.
+- Task 3F-A implemented and awaiting review: no-process successful UserMessage Turn integration across Router, Pump, durable Run/Turn and Input outcomes, projected preparation, Context compilation, shared Agent Adapter execution, orderly shutdown, and redacted logs.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1878,6 +1879,35 @@ Task 3E-H explicitly excludes:
 - Stop lifecycle terminalization, queued Input outcome recording, ReloadConfig, Pause, or Resume behavior
 - Tool cancellation, Approval/Interaction cancellation, child traversal, IPC, and Subagent management
 - direct Pi Agent construction or Pi-specific cancellation behavior
+
+Task 3F-A delivered:
+
+- focused no-process composition using only existing public Core components and injected platform-neutral dependencies
+- one durable UserMessage routed through the Turn lane and consumed by the event-driven `RuntimeInputPump`
+- persistence-barrier Run `queued -> running -> completed` lifecycle through the shared `TurnController`
+- terminal Runtime Input `consumed` outcome recorded before Provider execution proceeds
+- projected current UserMessage preparation, base Context compilation, and explicit prompt invocation
+- one shared `AgentRuntimeAdapter` instance used by both `AgentRuntimeRunExecutor` and `AgentRuntimeStopCancellationPort`
+- simulated Adapter Turn `running -> completed` barriers before the Run terminal transition
+- deterministic durable Output ordering across Run, Input outcome, Turn, and final Run Events
+- orderly Pump stop only after the active Turn handler settles
+- log redaction across Router, Pump, handler, preparation, compiler, Adapter coordination, lifecycle, and outcome paths
+
+Task 3F-A accepted decisions:
+
+- Task 3F validation begins with a single successful UserMessage Turn before adding queued ordering, Stop races, and failure/recovery scenarios.
+- the integration smoke composes public components directly instead of introducing a production Runtime factory, because Host/process placement and concrete Pi/Provider construction remain later architecture boundaries.
+- the Adapter test double simulates the already-defined awaited Turn lifecycle bridge; it does not create an alternative Turn owner.
+- Message projection and Prompt sources remain injected. The test proves their Runtime contract without choosing Prompt hierarchy or filesystem/config loading.
+- Pump shutdown is part of the success barrier so no active Turn handler is left behind after validation.
+
+Task 3F-A explicitly excludes:
+
+- multiple queued UserMessages, FIFO verification, Control preemption, Stop fencing, or Adapter cancellation races
+- startup replay, non-terminal lifecycle recovery, Runtime crash degradation, or outcome retry
+- real SQLite Journal/Message files in the combined Runtime path
+- `ConversationRuntime`, Host, placement, process proxy, IPC, or Subagent composition
+- concrete Pi Agent, Provider/model selection, credentials, Assistant streaming, Tools, Approval, Policy, Compaction, or Nudge
 
 Expected deliverables after approval:
 

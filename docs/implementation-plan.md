@@ -2124,6 +2124,27 @@ Task 4N explicitly excludes:
 - Reminder text or parameters in Journal Events or logs
 - Pi types in Core public exports
 
+Task 4N-A delivered:
+
+- accepted Nudge decisions copied into the authoritative architecture and implementation plan
+- an isolated Task 4N implementation gate while Runtime Policy and Context Compaction remain unresolved
+- template-based Reminder generation, one-shot overlay placement, dispatch delivery boundary, lifecycle, selection limit, ordering, exclusivity, and Event redaction rules
+
+Task 4N-B delivered:
+
+- provider-neutral `NudgeEffect`, `PendingNudge`, `NudgeLeaseRequest`, `NudgeLease`, and `SystemReminderOverlay` contracts
+- stable placement, delivery, pending-state, default-selection, and hard-maximum constants
+- immutable boundary capture for JSON-safe parameters, canonical timestamps, positive Sequence and Turn values, unique bounded Nudge IDs, and overlay content
+- stable validation failure categories and safe error identities without Reminder or parameter disclosure
+- public Core exports with no Pi types and focused protocol smoke coverage
+
+Task 4N-B explicitly excludes:
+
+- pending persistence, deduplication, selection, cooldown evaluation, expiry transitions, leasing mutation, and restart restoration
+- template registration or Reminder rendering
+- public Nudge OutputEvents
+- Provider dispatch and System Prompt integration
+
 ### 7.2 Task 4 Policy and Compaction Review Gate
 
 Questions still requiring explicit review before their implementation:

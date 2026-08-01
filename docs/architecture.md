@@ -4314,6 +4314,23 @@ interface PendingNudge {
   expiresAt?: string;
 }
 
+interface NudgeLeaseRequest {
+  readonly providerCallId: string;
+  readonly targetRunId: string;
+  readonly targetTurnNumber?: number;
+  readonly requestedLimit?: number;
+  readonly requestedAt: string;
+}
+
+interface NudgeLease {
+  readonly leaseId: string;
+  readonly providerCallId: string;
+  readonly targetRunId: string;
+  readonly targetTurnNumber?: number;
+  readonly nudgeIds: readonly string[];
+  readonly leasedAt: string;
+}
+
 interface SystemReminderOverlay {
   readonly placement: "system-prompt-overlay";
   readonly nudgeIds: readonly string[];
@@ -4322,6 +4339,8 @@ interface SystemReminderOverlay {
 ```
 
 `parameters` are JSON-safe template inputs, not public Event data. Only `NudgeTemplateRegistry` and `NudgeRenderer` may turn them into temporary Reminder content. A Policy cannot supply arbitrary rendered Reminder text.
+
+Protocol boundary capture rejects invalid identifiers, non-canonical timestamps, non-JSON parameters, duplicate Nudge IDs, empty leases or overlays, and requested limits above the hard maximum. Captured values are immutable snapshots. Stable failures expose only fixed categories and safe identities, never Reminder content or parameters.
 
 `NudgeScheduledOutputEvent` means the Nudge entered the pending queue. It does not mean the Reminder has reached the model.
 

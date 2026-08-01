@@ -44,6 +44,7 @@
     "smoke:runtime-agent-stop-cancellation": "pnpm build && node scripts/runtime-agent-stop-cancellation-port-smoke.mjs",
     "smoke:runtime-agent-stop-preemption": "pnpm build && node scripts/runtime-agent-stop-preemption-integration-smoke.mjs",
     "smoke:runtime-agent-turn-fifo": "pnpm build && node scripts/runtime-agent-turn-fifo-integration-smoke.mjs",
+    "smoke:runtime-nudge-protocol": "pnpm build && node scripts/runtime-nudge-protocol-smoke.mjs",
     "smoke:runtime-projected-run-preparation": "pnpm build && node scripts/runtime-projected-run-preparation-smoke.mjs",
     "smoke:runtime-pi-adapter": "pnpm build && node scripts/runtime-pi-agent-core-adapter-smoke.mjs",
     "smoke:runtime-pi-assistant-output": "pnpm build && node scripts/runtime-pi-assistant-output-bridge-smoke.mjs",

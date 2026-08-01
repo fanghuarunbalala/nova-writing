@@ -1046,6 +1046,7 @@ Implementation status:
 - Task 3D-F implemented and awaiting review: one-shot Bootstrap startup composition, bound Runtime identity validation, replay/reconcile/execute stage ordering, recovery blocking, stable stage failures, payload-free summaries, redacted logs, public exports, and focused validation.
 - Task 3D-G implemented and awaiting review: in-process `ConversationRuntime` shell, serialized lifecycle and live dispatch ownership, one-shot startup delegation, Journal-reference resolution, Router admission, idempotent shutdown, safe exit observation, recoverable Input rejection, terminal unknown-failure degradation, redacted logs, public exports, and focused validation.
 - Task 3D-H implemented and awaiting review: event-driven `RuntimeInputPump`, single Control and Turn work slots, Control preemption while Turn work is pending, Turn FIFO, no-poll wake coalescing, stop-with-queue-retention, fixed safe failure exits, redacted logs, public exports, and focused validation.
+- Task 3D-I implemented and awaiting review: `ConversationRuntime` ownership of `RuntimeInputPump`, post-Bootstrap Pump startup, live route wake-up, shutdown drain/exit gating, asynchronous Pump failure observation, unexpected-stop degradation, fixed safe Runtime exits, real Pump integration, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1479,6 +1480,35 @@ Task 3D-H explicitly excludes:
 - Stop fence application, active Run/Turn cancellation, child cancellation, AbortSignal ownership, and late Provider/Tool result suppression
 - Run creation, Turn lifecycle transitions, terminal Input outcome selection, Provider/Pi execution, Context compilation, Tool execution, Approval, Policy, IPC, Subagent, Nudge, and Compaction
 - automatic restart/backoff and resolution of non-terminal Run/Turn crash recovery
+
+Task 3D-I delivered:
+
+- required `ConversationRuntimeInputPump` ownership in `ConversationRuntime` with the narrow `start`, `wake`, `stop`, and `waitForExit` lifecycle contract
+- Pump startup only after durable Bootstrap replay/reconciliation/execution succeeds and no shutdown is already pending
+- live `dispatchInput` ordering `resolve canonical Input -> route snapshot -> wake Pump`
+- startup-routed Input scheduling through Pump start without a second recovery scan or copied queue
+- shutdown ordering that closes Runtime dispatch admission, drains already-admitted serialized dispatches, enters `stopping`, stops the Pump, verifies a stopped Pump exit, and only then commits the Runtime stopped exit
+- asynchronous Pump exit observation independent of later Host commands
+- terminal Runtime degradation for Pump `failed`, rejected exit observation, or unexpected `stopped` exit while no Runtime shutdown is pending
+- fixed `ConversationRuntimeInputPumpError` crash identity and scope classification without forwarding Pump or handler messages, stacks, causes, payloads, prompts, paths, or Tool data
+- best-effort idempotent Pump stop requests after startup, dispatch, observer, or Pump failures so process-local scheduling does not continue behind a crashed Runtime
+- focused smoke coverage with fake Pump lifecycle races plus real `InputRouter` and `RuntimeInputPump` dispatch integration
+
+Task 3D-I accepted decisions:
+
+- `ConversationRuntime` exclusively owns the Pump lifecycle. Placement and Host code continue to interact only through `ConversationRuntimeHandle`.
+- the Pump starts after Bootstrap completion because startup may enqueue recovered Inputs; Pump start is the one wake-up that makes those queues executable.
+- a live dispatch resolves only after the durable Input has entered the Router and Pump wake-up was accepted. It still does not await handler execution or terminal Input outcome persistence.
+- shutdown requested during Bootstrap prevents Pump start. The later serialized shutdown stops the still-created Pump and produces a normal stopped Runtime exit.
+- a Runtime may report `stopped` only after the Pump reports `stopped`. Pump failure during shutdown converts the Runtime to `crashed` and rejects shutdown with a stable safe error.
+- Pump `stopped` without a pending Runtime shutdown is a broken executor invariant and therefore becomes a Runtime crash rather than an offline success.
+- Pump failure observation re-enters the Runtime serializer before mutating lifecycle state, preserving the single Conversation state-owner boundary.
+
+Task 3D-I explicitly excludes:
+
+- concrete Control and Turn handlers, Stop fence application, cancellation propagation, child cancellation, AbortSignal ownership, and late Provider/Tool result suppression
+- Run creation, Turn transitions, terminal Input outcome selection, Provider/Pi execution, Context compilation, Tool execution, Approval, Policy, IPC, Subagent, Nudge, and Compaction
+- automatic restart/backoff, Runtime Presence publication, idle eviction, process placement, and active Run/Turn crash-recovery resolution
 
 Expected deliverables after approval:
 

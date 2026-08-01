@@ -21,6 +21,7 @@ import {
   RuntimeInputRejectedError,
 } from "./input/RuntimeInputErrors.js";
 import type { RuntimeInputRouteResult } from "./input/InputRouter.js";
+import type { RuntimeInputPumpExit } from "./input/RuntimeInputPump.js";
 import { RuntimeInputResolutionError } from "./source/RuntimeInputResolutionError.js";
 import type { RuntimeInputResolver } from "./source/RuntimeInputResolver.js";
 import type { RuntimeBootstrapStartupResult } from "./startup/RuntimeBootstrapStartupCoordinator.js";
@@ -28,8 +29,10 @@ import { RuntimeBootstrapStartupError } from "./startup/RuntimeBootstrapStartupE
 import {
   CONVERSATION_RUNTIME_OPERATION,
   ConversationRuntimeDispatchFailureError,
+  ConversationRuntimeInputPumpError,
   ConversationRuntimeStartError,
   ConversationRuntimeStateError,
+  type ConversationRuntimeInputPumpFailureScope,
 } from "./ConversationRuntimeErrors.js";
 import {
   CONVERSATION_RUNTIME_STATE,
@@ -48,12 +51,20 @@ export interface ConversationRuntimeInputRouter {
   route(input: PersistedInputEventSnapshot): RuntimeInputRouteResult;
 }
 
+export interface ConversationRuntimeInputPump {
+  start(): void;
+  wake(): void;
+  stop(): Promise<void>;
+  waitForExit(): Promise<RuntimeInputPumpExit>;
+}
+
 export interface ConversationRuntimeOptions {
   conversationId: string;
   runtimeInstanceId: string;
   startupCoordinator: ConversationRuntimeStarter;
   inputResolver: RuntimeInputResolver;
   inputRouter: ConversationRuntimeInputRouter;
+  inputPump: ConversationRuntimeInputPump;
   clock?: ConversationRuntimeClock;
   logger?: Logger;
 }
@@ -64,6 +75,7 @@ export class ConversationRuntime implements ConversationRuntimeHandle {
   private readonly startupCoordinator: ConversationRuntimeStarter;
   private readonly inputResolver: RuntimeInputResolver;
   private readonly inputRouter: ConversationRuntimeInputRouter;
+  private readonly inputPump: ConversationRuntimeInputPump;
   private readonly clock: ConversationRuntimeClock;
   private readonly logger: Logger;
   private readonly exitPromise: Promise<ConversationRuntimeExit>;
@@ -83,6 +95,7 @@ export class ConversationRuntime implements ConversationRuntimeHandle {
     this.startupCoordinator = options.startupCoordinator;
     this.inputResolver = options.inputResolver;
     this.inputRouter = options.inputRouter;
+    this.inputPump = options.inputPump;
     this.clock = options.clock ?? SYSTEM_RUNTIME_CLOCK;
     this.logger = (options.logger ?? noopLogger).child({
       component: "conversation_runtime",
@@ -92,6 +105,7 @@ export class ConversationRuntime implements ConversationRuntimeHandle {
     this.exitPromise = new Promise((resolve) => {
       this.resolveExit = resolve;
     });
+    this.observeInputPumpExit();
   }
 
   get state(): ConversationRuntimeState {
@@ -116,6 +130,7 @@ export class ConversationRuntime implements ConversationRuntimeHandle {
       try {
         const result = await this.startupCoordinator.start(bootstrap);
         if (!this.shutdownRequested) {
+          this.inputPump.start();
           this.transitionTo(CONVERSATION_RUNTIME_STATE.online, "startup_completed");
         }
         this.logger.info("runtime.lifecycle.start_completed", {
@@ -133,6 +148,7 @@ export class ConversationRuntime implements ConversationRuntimeHandle {
           identity.errorCode,
         );
         this.transitionTo(CONVERSATION_RUNTIME_STATE.crashed, "startup_failed");
+        this.requestInputPumpStop();
         this.completeExit(
           Object.freeze({
             kind: "crashed",
@@ -172,6 +188,7 @@ export class ConversationRuntime implements ConversationRuntimeHandle {
       try {
         const input = await this.inputResolver.resolve(reference);
         const route = this.inputRouter.route(input);
+        this.inputPump.wake();
         this.logger.info("runtime.input.dispatch_completed", {
           eventId: input.id,
           eventType: input.eventType,
@@ -199,6 +216,7 @@ export class ConversationRuntime implements ConversationRuntimeHandle {
           identity.errorCode,
         );
         this.transitionTo(CONVERSATION_RUNTIME_STATE.crashed, "dispatch_failed");
+        this.requestInputPumpStop();
         this.completeExit(
           Object.freeze({
             kind: "crashed",
@@ -246,6 +264,16 @@ export class ConversationRuntime implements ConversationRuntimeHandle {
       this.logger.info("runtime.lifecycle.shutdown_started", {
         shutdownReason: reason,
       });
+      let pumpExit: RuntimeInputPumpExit;
+      try {
+        await this.inputPump.stop();
+        pumpExit = await this.inputPump.waitForExit();
+      } catch {
+        throw this.failFromInputPump("shutdown");
+      }
+      if (pumpExit.kind !== "stopped") {
+        throw this.failFromInputPump(captureInputPumpFailureScope(pumpExit));
+      }
       this.transitionTo(CONVERSATION_RUNTIME_STATE.stopped, reason);
       this.completeExit(
         Object.freeze({
@@ -279,6 +307,74 @@ export class ConversationRuntime implements ConversationRuntimeHandle {
     if (this.exit !== undefined) return;
     this.exit = exit;
     this.resolveExit(exit);
+  }
+
+  private observeInputPumpExit(): void {
+    void Promise.resolve()
+      .then(() => this.inputPump.waitForExit())
+      .then(
+        (exit) => {
+          void this.serialize(async () => {
+            if (
+              this.lifecycleState === CONVERSATION_RUNTIME_STATE.stopped ||
+              this.lifecycleState === CONVERSATION_RUNTIME_STATE.crashed
+            ) {
+              return;
+            }
+            if (exit.kind === "stopped" && this.shutdownRequested) return;
+            const scope =
+              exit.kind === "failed"
+                ? captureInputPumpFailureScope(exit)
+                : "unexpected_stop";
+            this.failFromInputPump(scope);
+          });
+        },
+        () => {
+          void this.serialize(async () => {
+            if (
+              this.lifecycleState !== CONVERSATION_RUNTIME_STATE.stopped &&
+              this.lifecycleState !== CONVERSATION_RUNTIME_STATE.crashed
+            ) {
+              this.failFromInputPump("observer");
+            }
+          });
+        },
+      );
+  }
+
+  private failFromInputPump(
+    scope: ConversationRuntimeInputPumpFailureScope,
+  ): ConversationRuntimeInputPumpError {
+    const failure = new ConversationRuntimeInputPumpError(
+      this.conversationId,
+      this.runtimeInstanceId,
+      scope,
+    );
+    if (
+      this.lifecycleState !== CONVERSATION_RUNTIME_STATE.stopped &&
+      this.lifecycleState !== CONVERSATION_RUNTIME_STATE.crashed
+    ) {
+      this.transitionTo(CONVERSATION_RUNTIME_STATE.crashed, "input_pump_failed");
+      this.requestInputPumpStop();
+      this.completeExit(
+        Object.freeze({
+          kind: "crashed",
+          exitedAt: this.readTimestamp(),
+          errorName: failure.name,
+          errorCode: failure.code,
+        }),
+      );
+      this.logger.error("runtime.input_pump.failed", { scope });
+    }
+    return failure;
+  }
+
+  private requestInputPumpStop(): void {
+    void Promise.resolve()
+      .then(() => this.inputPump.stop())
+      .catch(() => {
+        this.logger.error("runtime.input_pump.stop_failed");
+      });
   }
 
   private stateError(
@@ -360,8 +456,19 @@ function isKnownSafeRuntimeError(
     error instanceof RuntimeInputRejectedError ||
     error instanceof ConversationRuntimeStateError ||
     error instanceof ConversationRuntimeStartError ||
-    error instanceof ConversationRuntimeDispatchFailureError
+    error instanceof ConversationRuntimeDispatchFailureError ||
+    error instanceof ConversationRuntimeInputPumpError
   );
+}
+
+function captureInputPumpFailureScope(
+  exit: Extract<RuntimeInputPumpExit, { kind: "failed" }>,
+): ConversationRuntimeInputPumpFailureScope {
+  return exit.scope === "control" ||
+    exit.scope === "turn" ||
+    exit.scope === "scheduler"
+    ? exit.scope
+    : "observer";
 }
 
 function safeSequence(value: unknown): number {

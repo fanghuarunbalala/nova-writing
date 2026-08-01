@@ -3138,6 +3138,61 @@ Handler rejection or scheduler failure moves the Pump to `failed`, resolves a fi
 
 This checkpoint deliberately does not connect the Pump to `ConversationRuntime`, apply Stop fences, mutate Run/Turn state, persist terminal Input outcomes, execute Provider/Pi or Tools, or resolve active-lifecycle crash recovery.
 
+### 16.16 Implemented Task 3D-I ConversationRuntime and Pump Composition
+
+`ConversationRuntime` now exclusively owns one `RuntimeInputPump` through a narrow lifecycle port. Host and placement abstractions remain unchanged: they still receive only the placement-neutral Runtime Handle and never address the Pump directly.
+
+```mermaid
+sequenceDiagram
+    participant Host
+    participant Runtime as ConversationRuntime
+    participant Startup as Bootstrap Startup Coordinator
+    participant Resolver as RuntimeInputResolver
+    participant Router as InputRouter
+    participant Pump as RuntimeInputPump
+
+    Host->>Runtime: start(bootstrap)
+    Runtime->>Startup: start(bootstrap)
+    Startup-->>Runtime: startup result; recovered Inputs already routed
+    alt no shutdown pending
+        Runtime->>Pump: start()
+        Runtime->>Runtime: state = online
+    else shutdown pending
+        Runtime->>Runtime: remain non-online
+    end
+    Host->>Runtime: dispatchInput(reference)
+    Runtime->>Resolver: resolve(reference)
+    Resolver-->>Runtime: canonical Input snapshot
+    Runtime->>Router: route(snapshot)
+    Runtime->>Pump: wake()
+    Runtime-->>Host: endpoint accepted
+```
+
+Pump start happens only after the complete durable Bootstrap barrier. Startup replay may already have placed recovered Inputs in Router inboxes, so `start()` is also their initial execution wake-up; no second Journal scan or duplicate queue is introduced.
+
+Live dispatch retains the exact order `resolve -> route -> wake`. Success means the canonical durable Input was admitted and the scheduler accepted a wake-up. It does not wait for a handler, Provider call, Run/Turn transition, or terminal `system.input.processed` Event.
+
+```mermaid
+stateDiagram-v2
+    online --> stopping: Runtime shutdown requested
+    stopping --> stopped: Pump stopped exit observed
+    starting --> crashed: Pump start failure
+    online --> crashed: Pump failed exit
+    stopping --> crashed: Pump failure during shutdown
+    created --> crashed: Pump observer failure or unexpected stop
+    online --> crashed: unexpected Pump stopped exit
+```
+
+Runtime shutdown closes new dispatch admission immediately, allows operations admitted earlier to finish through the Runtime serializer, enters `stopping`, calls `Pump.stop()`, and waits for the Pump exit. The Runtime produces a normal stopped exit only when the Pump exit is also stopped. A failed Pump exit or stop/observation rejection produces a fixed `ConversationRuntimeInputPumpError` crash and makes Host shutdown fail safely.
+
+Pump exit observation is active independently of later Host calls. A failed exit re-enters the Runtime serializer before changing lifecycle state. A stopped Pump exit is accepted only while Runtime shutdown is pending; otherwise it represents a broken executor invariant and becomes a Runtime crash.
+
+Startup, dispatch, Pump-observer, and Pump-shutdown failure paths issue a best-effort idempotent Pump stop request. These requests never expose underlying errors and prevent process-local scheduling from intentionally continuing behind a crashed Runtime.
+
+The Runtime crash exit contains only the fixed `ConversationRuntimeInputPumpError` name and code. Logs add only a stable failure scope (`control`, `turn`, `scheduler`, `observer`, `unexpected_stop`, or `shutdown`) and never include handler errors, Input payloads, novel text, prompts, Tool data, configuration content, workdir, Store paths, JSONL, stacks, or causes.
+
+Concrete Control/Turn processing, Stop cancellation, Run/Turn mutation, terminal Input outcomes, Provider/Pi, Tool execution, and active-lifecycle recovery remain outside this checkpoint.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:

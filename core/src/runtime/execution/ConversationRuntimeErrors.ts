@@ -51,3 +51,24 @@ export class ConversationRuntimeDispatchFailureError extends Error {
     this.name = "ConversationRuntimeDispatchFailureError";
   }
 }
+
+export type ConversationRuntimeInputPumpFailureScope =
+  | "control"
+  | "turn"
+  | "scheduler"
+  | "observer"
+  | "unexpected_stop"
+  | "shutdown";
+
+export class ConversationRuntimeInputPumpError extends Error {
+  override readonly name = "ConversationRuntimeInputPumpError";
+  readonly code = "CONVERSATION_RUNTIME_INPUT_PUMP_FAILED" as const;
+
+  constructor(
+    public readonly conversationId: string,
+    public readonly runtimeInstanceId: string,
+    public readonly scope: ConversationRuntimeInputPumpFailureScope,
+  ) {
+    super("Conversation Runtime Input Pump failed");
+  }
+}

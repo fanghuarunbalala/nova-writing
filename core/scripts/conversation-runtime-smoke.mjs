@@ -4,9 +4,12 @@ import {
   CONVERSATION_RUNTIME_STATE,
   ConversationRuntime,
   ConversationRuntimeDispatchFailureError,
+  ConversationRuntimeInputPumpError,
   ConversationRuntimeStartError,
   ConversationRuntimeStateError,
+  InputRouter,
   RUNTIME_INPUT_RESOLUTION_FAILURE,
+  RuntimeInputPump,
   RuntimeInputResolutionError,
 } from "../dist/index.js";
 
@@ -59,6 +62,66 @@ function deferred() {
     reject = rejectPromise;
   });
   return { promise, resolve, reject };
+}
+
+class FakeInputPump {
+  constructor(options = {}) {
+    this.options = options;
+    this.exitGate = deferred();
+    this.startCount = 0;
+    this.wakeCount = 0;
+    this.stopCount = 0;
+    this.settled = false;
+  }
+
+  start() {
+    this.startCount += 1;
+    if (this.options.startError !== undefined) throw this.options.startError;
+  }
+
+  wake() {
+    this.wakeCount += 1;
+    if (this.options.wakeError !== undefined) throw this.options.wakeError;
+  }
+
+  async stop() {
+    this.stopCount += 1;
+    if (this.options.stopGate !== undefined) await this.options.stopGate.promise;
+    if (this.options.stopError !== undefined) throw this.options.stopError;
+    this.settle(
+      this.options.stopExit ??
+        Object.freeze({ kind: "stopped", exitedAt: timestamp }),
+    );
+  }
+
+  waitForExit() {
+    if (this.options.observerError !== undefined) {
+      return Promise.reject(this.options.observerError);
+    }
+    return this.exitGate.promise;
+  }
+
+  fail(scope) {
+    this.settle(
+      Object.freeze({
+        kind: "failed",
+        exitedAt: timestamp,
+        scope,
+        errorName: "RuntimeInputPumpFailureError",
+        errorCode: "RUNTIME_INPUT_PUMP_FAILED",
+      }),
+    );
+  }
+
+  stopUnexpectedly() {
+    this.settle(Object.freeze({ kind: "stopped", exitedAt: timestamp }));
+  }
+
+  settle(exit) {
+    if (this.settled) return;
+    this.settled = true;
+    this.exitGate.resolve(exit);
+  }
 }
 
 function startupResult() {
@@ -119,15 +182,18 @@ function createRuntime(options = {}) {
         });
       },
     });
+  const inputPump = options.inputPump ?? new FakeInputPump();
   return {
     records,
     routed,
+    inputPump,
     runtime: new ConversationRuntime({
       conversationId,
       runtimeInstanceId,
       startupCoordinator,
       inputResolver,
       inputRouter,
+      inputPump,
       clock: Object.freeze({ now: () => timestamp }),
       logger: new CollectingLogger(records),
     }),
@@ -171,6 +237,7 @@ await assert.rejects(
 startupGate.resolve();
 assert.deepEqual(await firstStart, startupResult());
 assert.equal(concurrentStart.runtime.state, CONVERSATION_RUNTIME_STATE.online);
+assert.equal(concurrentStart.inputPump.startCount, 1);
 
 const shutdownDuringStartGate = deferred();
 const shutdownDuringStart = createRuntime({
@@ -195,6 +262,8 @@ await assert.rejects(
 shutdownDuringStartGate.resolve();
 await Promise.all([interruptedStart, interruptedShutdown]);
 assert.equal(shutdownDuringStart.runtime.state, CONVERSATION_RUNTIME_STATE.stopped);
+assert.equal(shutdownDuringStart.inputPump.startCount, 0);
+assert.equal(shutdownDuringStart.inputPump.stopCount, 1);
 assert.deepEqual(await shutdownDuringStart.runtime.waitForExit(), {
   kind: "stopped",
   exitedAt: timestamp,
@@ -243,6 +312,8 @@ firstDispatchGate.resolve();
 await Promise.all([firstDispatch, secondDispatch, firstShutdown]);
 assert.deepEqual(resolveOrder, ["start-1", "end-1", "start-2", "end-2"]);
 assert.deepEqual(serialized.routed, [1, 2]);
+assert.equal(serialized.inputPump.wakeCount, 2);
+assert.equal(serialized.inputPump.stopCount, 1);
 assert.equal(serialized.runtime.state, CONVERSATION_RUNTIME_STATE.stopped);
 const stoppedExit = await serialized.runtime.waitForExit();
 assert.deepEqual(stoppedExit, {
@@ -261,6 +332,8 @@ await offlineShutdown.runtime.shutdown({
   reason: CONVERSATION_RUNTIME_SHUTDOWN_REASON.idleEviction,
 });
 assert.equal(offlineShutdown.runtime.state, CONVERSATION_RUNTIME_STATE.stopped);
+assert.equal(offlineShutdown.inputPump.startCount, 0);
+assert.equal(offlineShutdown.inputPump.stopCount, 1);
 assert.equal(
   (await offlineShutdown.runtime.waitForExit()).reason,
   CONVERSATION_RUNTIME_SHUTDOWN_REASON.idleEviction,
@@ -287,6 +360,7 @@ await assert.rejects(
   RuntimeInputResolutionError,
 );
 assert.equal(recoverable.runtime.state, CONVERSATION_RUNTIME_STATE.online);
+assert.equal(recoverable.inputPump.wakeCount, 0);
 await assert.rejects(
   () => recoverable.runtime.shutdown({ reason: "FORBIDDEN_RUNTIME_PATH" }),
   TypeError,
@@ -317,6 +391,7 @@ assert.deepEqual(await startupFailure.runtime.waitForExit(), {
   errorName: "ConversationRuntimeStartError",
   errorCode: "CONVERSATION_RUNTIME_START_FAILED",
 });
+await waitFor(() => startupFailure.inputPump.stopCount === 1);
 
 const dispatchFailure = createRuntime({
   inputResolver: Object.freeze({
@@ -350,6 +425,7 @@ assert.deepEqual(await dispatchFailure.runtime.waitForExit(), {
   errorName: "ConversationRuntimeDispatchFailureError",
   errorCode: "CONVERSATION_RUNTIME_INPUT_DISPATCH_FAILED",
 });
+await waitFor(() => dispatchFailure.inputPump.stopCount === 1);
 await assert.rejects(
   () => dispatchFailure.runtime.dispatchInput(reference(7)),
   ConversationRuntimeStateError,
@@ -357,6 +433,114 @@ await assert.rejects(
 await dispatchFailure.runtime.shutdown({
   reason: CONVERSATION_RUNTIME_SHUTDOWN_REASON.replacement,
 });
+
+const asynchronousPumpFailure = createRuntime();
+await asynchronousPumpFailure.runtime.start(Object.freeze({}));
+asynchronousPumpFailure.inputPump.fail("turn");
+assert.deepEqual(await asynchronousPumpFailure.runtime.waitForExit(), {
+  kind: "crashed",
+  exitedAt: timestamp,
+  errorName: "ConversationRuntimeInputPumpError",
+  errorCode: "CONVERSATION_RUNTIME_INPUT_PUMP_FAILED",
+});
+assert.equal(asynchronousPumpFailure.runtime.state, CONVERSATION_RUNTIME_STATE.crashed);
+
+const unexpectedPumpStop = createRuntime();
+await unexpectedPumpStop.runtime.start(Object.freeze({}));
+unexpectedPumpStop.inputPump.stopUnexpectedly();
+assert.deepEqual(await unexpectedPumpStop.runtime.waitForExit(), {
+  kind: "crashed",
+  exitedAt: timestamp,
+  errorName: "ConversationRuntimeInputPumpError",
+  errorCode: "CONVERSATION_RUNTIME_INPUT_PUMP_FAILED",
+});
+
+const failedShutdownPump = new FakeInputPump({
+  stopExit: Object.freeze({
+    kind: "failed",
+    exitedAt: timestamp,
+    scope: "control",
+    errorName: "RuntimeInputPumpFailureError",
+    errorCode: "RUNTIME_INPUT_PUMP_FAILED",
+  }),
+});
+const failedPumpShutdown = createRuntime({ inputPump: failedShutdownPump });
+await failedPumpShutdown.runtime.start(Object.freeze({}));
+await assert.rejects(
+  () =>
+    failedPumpShutdown.runtime.shutdown({
+      reason: CONVERSATION_RUNTIME_SHUTDOWN_REASON.hostClose,
+    }),
+  (error) =>
+    error instanceof ConversationRuntimeInputPumpError &&
+    error.scope === "control",
+);
+assert.equal(failedPumpShutdown.runtime.state, CONVERSATION_RUNTIME_STATE.crashed);
+
+const rejectedPumpStop = createRuntime({
+  inputPump: new FakeInputPump({
+    stopError: new Error("FORBIDDEN_RUNTIME_STACK"),
+  }),
+});
+await rejectedPumpStop.runtime.start(Object.freeze({}));
+await assert.rejects(
+  () =>
+    rejectedPumpStop.runtime.shutdown({
+      reason: CONVERSATION_RUNTIME_SHUTDOWN_REASON.replacement,
+    }),
+  (error) =>
+    error instanceof ConversationRuntimeInputPumpError &&
+    error.scope === "shutdown",
+);
+assert.equal(rejectedPumpStop.runtime.state, CONVERSATION_RUNTIME_STATE.crashed);
+
+const rejectedPumpObserver = createRuntime({
+  inputPump: new FakeInputPump({
+    observerError: new Error("FORBIDDEN_RUNTIME_PROMPT"),
+  }),
+});
+assert.deepEqual(await rejectedPumpObserver.runtime.waitForExit(), {
+  kind: "crashed",
+  exitedAt: timestamp,
+  errorName: "ConversationRuntimeInputPumpError",
+  errorCode: "CONVERSATION_RUNTIME_INPUT_PUMP_FAILED",
+});
+assert.equal(rejectedPumpObserver.runtime.state, CONVERSATION_RUNTIME_STATE.crashed);
+
+const actualPumpLogs = [];
+const actualRouter = new InputRouter({
+  conversationId,
+  logger: new CollectingLogger(actualPumpLogs),
+});
+const handledByActualPump = [];
+const actualPump = new RuntimeInputPump({
+  conversationId,
+  source: actualRouter,
+  controlHandler: Object.freeze({
+    handle: async (input) => {
+      handledByActualPump.push(`control-${input.sequence}`);
+    },
+  }),
+  turnHandler: Object.freeze({
+    handle: async (input) => {
+      handledByActualPump.push(`turn-${input.sequence}`);
+    },
+  }),
+  clock: Object.freeze({ now: () => timestamp }),
+  logger: new CollectingLogger(actualPumpLogs),
+});
+const actualPumpRuntime = createRuntime({
+  records: actualPumpLogs,
+  inputRouter: actualRouter,
+  inputPump: actualPump,
+});
+await actualPumpRuntime.runtime.start(Object.freeze({}));
+await actualPumpRuntime.runtime.dispatchInput(reference(20));
+await waitFor(() => handledByActualPump.includes("turn-20"));
+await actualPumpRuntime.runtime.shutdown({
+  reason: CONVERSATION_RUNTIME_SHUTDOWN_REASON.explicitShutdown,
+});
+assert.deepEqual(handledByActualPump, ["turn-20"]);
 
 const allLogs = [
   ...created.records,
@@ -367,6 +551,12 @@ const allLogs = [
   ...recoverable.records,
   ...startupFailure.records,
   ...dispatchFailure.records,
+  ...asynchronousPumpFailure.records,
+  ...unexpectedPumpStop.records,
+  ...failedPumpShutdown.records,
+  ...rejectedPumpStop.records,
+  ...rejectedPumpObserver.records,
+  ...actualPumpLogs,
 ];
 const serializedLogs = JSON.stringify(allLogs);
 for (const token of forbidden) assert.equal(serializedLogs.includes(token), false);
@@ -375,5 +565,6 @@ assert.equal(allLogs.some((record) => record.event === "runtime.input.dispatch_c
 assert.equal(allLogs.some((record) => record.event === "runtime.lifecycle.shutdown_completed"), true);
 assert.equal(allLogs.some((record) => record.event === "runtime.lifecycle.start_failed"), true);
 assert.equal(allLogs.some((record) => record.event === "runtime.input.dispatch_failed"), true);
+assert.equal(allLogs.some((record) => record.event === "runtime.input_pump.failed"), true);
 
 console.log("ConversationRuntime smoke passed");

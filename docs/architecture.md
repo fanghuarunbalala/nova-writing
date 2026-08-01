@@ -1217,6 +1217,98 @@ Scanner collection is now demand-driven. Health checks and replacement verificat
 
 Task 1C-D2 does not read Journal, invoke a Runtime Message Projector, choose a repair action, or implement `ConversationMessageProjectionService`. Those orchestration responsibilities remain Task 1C-D3.
 
+### 15.7 Implemented Task 1C-D3 Journal Projection Synchronization
+
+`JournalConversationMessageProjectionService` is the platform-neutral implementation of the D1 maintenance contract. It combines the Journal Reader, Message File Store, deterministic Runtime Message Projector and Materializer, projection Codec, Clock, maintenance planner, and structured Logger without importing Node, SQLite, Pi, Runtime Host, or application UI types.
+
+```mermaid
+classDiagram
+    class JournalConversationMessageProjectionService {
+        +inspect(conversationId, options)
+        +synchronize(conversationId, options)
+        +rebuild(conversationId, options)
+    }
+
+    class MessageProjectionSchemaInspector {
+        +inspect(structuralScan, strictScan)
+    }
+
+    class MessageProjectionAssessmentReader {
+        +read(conversationId, scan, signal)
+    }
+
+    class MessageProjectionJournalPager {
+        +projectRange(input)
+    }
+
+    class MessageProjectionBatchProjector {
+        +projectPage(input)
+    }
+
+    class ConversationJournalReader
+    class ConversationMessageFileStore
+    class RuntimeMessageProjector
+    class RuntimeMessageMaterializer
+
+    JournalConversationMessageProjectionService --> ConversationJournalReader
+    JournalConversationMessageProjectionService --> ConversationMessageFileStore
+    JournalConversationMessageProjectionService --> MessageProjectionAssessmentReader
+    MessageProjectionAssessmentReader --> MessageProjectionSchemaInspector
+    JournalConversationMessageProjectionService --> MessageProjectionJournalPager
+    MessageProjectionJournalPager --> MessageProjectionBatchProjector
+    MessageProjectionBatchProjector --> RuntimeMessageProjector
+    MessageProjectionBatchProjector --> RuntimeMessageMaterializer
+```
+
+Inspection remains non-mutating and does not acquire the Message writer lock. It first performs a tolerant structural Scan. If the file is structurally usable and its Projector identity matches the active Projector, it performs a strict Scan of the same file generation. Matching committed Record Hashes mean the committed history is Schema-compatible. If the tolerant Scan reaches a later committed Checkpoint than the strict Scan, the result is `schema_unavailable`; the service does not truncate or rebuild valid history while an Agent-specific Schema is absent.
+
+`synchronize` always reacquires the same-process mutex and cross-process `messages.lock`, then repeats inspection inside that exclusive boundary. A fixed Journal High Watermark is captured once. Events appended after capture are intentionally deferred to the next synchronization.
+
+```mermaid
+flowchart TD
+    Start["synchronize"] --> Lock["Exclusive Message file lock"]
+    Lock --> Assess["Structural + strict assessment"]
+    Assess --> Decision{"Recommended action"}
+    Decision -- none --> Ready["Return ready"]
+    Decision -- initialize --> Initialize["Header + Checkpoint 0"]
+    Initialize --> CatchUp["Catch up to fixed High Watermark"]
+    Decision -- catch_up --> CatchUp
+    Decision -- truncate_and_catch_up --> Truncate["Truncate uncommitted tail"]
+    Truncate --> CatchUp
+    Decision -- rebuild --> Rebuild["D2 atomic staging rebuild"]
+    Decision -- restore_schema --> Block["SchemaUnavailableError"]
+```
+
+Journal pagination uses `afterSequence`, a fixed `throughSequence`, and a default page size of 200. Every page is checked for the expected High Watermark, maximum page size, current Conversation identity, contiguous Sequence numbers, correct `hasNext` behavior, and an appender state that preserves Workspace, Conversation, Projector, and committed Sequence identity. A missing Sequence is never skipped because a Checkpoint asserts that every Event through its Sequence has been considered.
+
+`MessageProjectionBatchProjector` projects an entire page before any file append. Each Event is passed through the active deterministic `RuntimeMessageProjector`, then `RuntimeMessageMaterializer`, then the projection Codec. The resulting batch contains zero or more Message records followed by exactly one Checkpoint. Events such as Stop or Context control that produce no Runtime Messages still advance the projection through a Checkpoint-only batch.
+
+```mermaid
+sequenceDiagram
+    participant Pager
+    participant Journal
+    participant Projector
+    participant Appender
+
+    Pager->>Journal: list(afterSequence, throughSequence, limit)
+    Journal-->>Pager: contiguous Event page
+    loop each Event
+        Pager->>Projector: project(Event)
+        Projector-->>Pager: RuntimeMessageDraft[]
+    end
+    Pager->>Pager: materialize Messages + final Checkpoint
+    Pager->>Appender: appendCommittedBatch(records)
+    Appender-->>Pager: committed Sequence state
+```
+
+Incremental catch-up commits one complete page at a time. Projection failure or cancellation before append leaves the current page absent, while earlier page Checkpoints remain valid and resumable. Rebuild uses the same Pager and Batch Projector through the D2 `MessageProjectionReplacementWriter`; cancellation or failure removes the staging file and leaves the previous target unchanged.
+
+Missing files are initialized with Header and Checkpoint zero using one injected Clock timestamp, then optionally caught up. Repairable tails are truncated to the last committed byte before catch-up. Corruption, Projector ID or Version change, and Journal regression trigger atomic rebuild. Forced `rebuild()` bypasses existing-file health decisions but still uses a fixed High Watermark and the current Projector.
+
+Maintenance logs include only logical IDs, Projector identity, health/action names, Sequence boundaries, page size, Event counts, Message counts, and rebuild reasons. Event payloads, Runtime Message payloads, prompts, novel text, Tool inputs/results, credentials, and JSONL lines remain excluded.
+
+Task 1C-D3 does not subscribe to live Journal events, activate Runtime, select an Agent Binding, convert Core Runtime Messages into Pi or Provider messages, integrate into `SqliteWorkspaceStore`, or publish maintenance OutputEvents. Those concerns remain Task 1C-E, Task 1D, and later Runtime tasks.
+
 ## 16. ConversationRuntime Composition
 
 ```mermaid

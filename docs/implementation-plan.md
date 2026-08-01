@@ -375,6 +375,45 @@ Task 1C-D2 explicitly excludes:
 - automatic maintenance lifecycle logs such as rebuild reason and processed Event counts
 - staging-file resume; abandoned staging files are discarded because Journal remains the source of truth
 
+Task 1C-D3 delivered:
+
+- platform-neutral `JournalConversationMessageProjectionService` implementing `inspect`, `synchronize`, and forced `rebuild`
+- non-mutating advisory inspection followed by mandatory lock-scoped reassessment before synchronization
+- tolerant structural Scan plus strict committed-Schema Scan with repeated-generation detection
+- dedicated `MessageProjectionAssessmentReader` separating advisory/lock-scoped assessment from mutation orchestration
+- explicit protection for unknown committed Runtime Message Types without truncation or silent rebuild
+- fixed Journal High Watermark capture for every synchronization or rebuild operation
+- stable forward Journal pagination with configurable default page size 200
+- strict page High Watermark, Conversation identity, Sequence continuity, page-size, `hasNext`, and appender-state validation
+- shared page projection path for incremental catch-up and atomic staging-file rebuild
+- dedicated locked-file appender adapter sharing the replacement-writer protocol with D2 rebuilds
+- deterministic Event-to-RuntimeMessage materialization followed by Message and Checkpoint record creation
+- Checkpoint-only batches for Journal Events that intentionally produce no Runtime Messages
+- missing-file Header and Checkpoint-zero initialization followed by optional paged catch-up
+- repairable-tail truncation followed by catch-up from the last committed Sequence
+- automatic rebuild for corruption, Projector identity/version changes, and Journal regression
+- forced rebuild that preserves the previous target until D2 atomically commits the staging file
+- page-boundary cancellation for catch-up and replacement cleanup for canceled rebuilds
+- typed Journal Watermark, unstable inspection, and per-Event projection errors without payload leakage
+- structured inspection, page, initialization, catch-up, repair, Projector migration, corruption, regression, and rebuild logs
+- maintenance results with operations, previous/final Sequence, fixed High Watermark, processed Event count, appended Message count, and rebuild reason
+
+Task 1C-D3 commit boundary:
+
+- an incremental page is projected completely before its Message and Checkpoint records are appended
+- cancellation or projection failure before append leaves the current page uncommitted
+- previously completed pages remain valid and resumable from their final Checkpoint
+- rebuild failure or cancellation deletes the staging file and preserves the previous target
+
+Task 1C-D3 explicitly excludes:
+
+- `ConversationEventHub`, live follow, or Journal-append-triggered projection
+- Runtime activation, Pi adapters, Provider Message conversion, or Tool execution
+- Agent Binding selection; callers construct the Projector for the active binding
+- automatic application-start maintenance policy
+- aggregation into `SqliteWorkspaceStore`, deferred to Task 1C-E
+- OutputEvent publication for maintenance progress
+
 ## 5. Task 2: Conversation and Host
 
 Purpose:

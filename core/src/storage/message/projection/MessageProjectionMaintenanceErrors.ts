@@ -38,3 +38,40 @@ export class MessageProjectionInvariantError extends MessageProjectionMaintenanc
     this.name = "MessageProjectionInvariantError";
   }
 }
+
+export class MessageProjectionJournalWatermarkError extends MessageProjectionMaintenanceError {
+  constructor(
+    public readonly conversationId: string,
+    public readonly expectedHighWatermark: number,
+    public readonly actualHighWatermark: number,
+  ) {
+    super(
+      `Journal High Watermark changed for Conversation ${conversationId}: expected ${expectedHighWatermark}, received ${actualHighWatermark}`,
+    );
+    this.name = "MessageProjectionJournalWatermarkError";
+  }
+}
+
+export class MessageProjectionInspectionUnstableError extends MessageProjectionMaintenanceError {
+  constructor(public readonly conversationId: string) {
+    super(`Message projection changed repeatedly during inspection: ${conversationId}`);
+    this.name = "MessageProjectionInspectionUnstableError";
+  }
+}
+
+export class MessageProjectionEventProjectionError extends MessageProjectionMaintenanceError {
+  constructor(
+    public readonly conversationId: string,
+    public readonly eventId: string,
+    public readonly sequence: number,
+    public readonly projectorId: string,
+    public readonly projectorVersion: string,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `Runtime Message projection failed for Event ${eventId} at Sequence ${sequence}`,
+      options,
+    );
+    this.name = "MessageProjectionEventProjectionError";
+  }
+}

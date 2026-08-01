@@ -245,6 +245,12 @@ Task 1C checkpoints:
 - Task 1C-D: Journal catch-up, validation, repair, rebuild, and projector version handling.
 - Task 1C-E: Node integration, exports, documentation, and focused end-to-end validation.
 
+Task 1C-D implementation checkpoints:
+
+- Task 1C-D1: maintenance contracts, health decisions, deterministic Runtime Message IDs, materialization, Clock, and typed errors.
+- Task 1C-D2: bounded staging-file replacement writer and atomic streaming rebuild.
+- Task 1C-D3: Journal pagination, initialization, catch-up, repair, rebuild, schema protection, logging, and validation.
+
 Task 1C-A delivered:
 
 - Core-owned `RuntimeMessageSnapshot` and `RuntimeMessageDraft` without Pi type leakage
@@ -315,6 +321,28 @@ Task 1C-C explicitly excludes:
 - `ConversationEventHub` subscription or catch-up-to-live delivery
 - Runtime activation and provider message conversion
 - aggregation into `SqliteWorkspaceStore`, deferred to Task 1C-E
+
+Task 1C-D1 delivered:
+
+- platform-neutral `ConversationMessageProjectionService` contract with `inspect`, `synchronize`, and forced `rebuild`
+- `AbortSignal` support at the long-running projection-maintenance boundary
+- explicit projection health states for missing, ready, behind, repairable tail, corruption, Projector mismatch, unavailable schemas, and Journal regression
+- explicit recommended actions and composable maintenance-operation results
+- pure synchronous `MessageProjectionMaintenancePlanner` with no I/O or file mutation
+- Projector mismatch before incremental catch-up and Journal regression before tail truncation
+- unknown committed Runtime Message Schema protection through `restore_schema` rather than silent deletion
+- injectable `MessageProjectionClock` and default ISO wall-clock implementation
+- deterministic SHA-256 Runtime Message IDs derived from Conversation, Projector, Event, Sequence, and Ordinal identity
+- Runtime Message draft materialization with strict draft and snapshot schema validation
+- typed maintenance, unavailable-schema, Journal-gap, cancellation, and invariant errors
+
+Task 1C-D1 explicitly excludes:
+
+- a concrete `ConversationMessageProjectionService` implementation
+- Journal reads, pagination, continuity validation, and High Watermark capture
+- Message File initialization, append, truncation, or replacement
+- staging-file replacement and atomic streaming rebuild, deferred to Task 1C-D2
+- automatic catch-up, repair, rebuild, and lifecycle logs, deferred to Task 1C-D3
 
 ## 5. Task 2: Conversation and Host
 

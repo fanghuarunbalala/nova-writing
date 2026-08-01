@@ -1088,6 +1088,71 @@ Initialization and replacement write a same-directory temporary file, call file 
 
 Committed Message pagination uses cumulative Message Index and an optional High Watermark. Reading a missing, corrupted, or repairable file does not silently mutate it. Journal catch-up, automatic repair/rebuild, projector-version migration, and integration into `SqliteWorkspaceStore` remain Task 1C-D and Task 1C-E responsibilities.
 
+### 15.5 Implemented Task 1C-D1 Projection Maintenance Protocol
+
+Projection maintenance is a platform-neutral orchestration boundary. It does not activate an Agent, call a Provider, execute Tools, or expose Pi message types.
+
+```mermaid
+classDiagram
+    class ConversationMessageProjectionService {
+        +inspect(conversationId, options)
+        +synchronize(conversationId, options)
+        +rebuild(conversationId, options)
+    }
+
+    class MessageProjectionMaintenancePlanner {
+        +assess(input) MessageProjectionInspection
+    }
+
+    class RuntimeMessageMaterializer {
+        +materialize(event, projector, drafts)
+    }
+
+    class RuntimeMessageIdFactory {
+        <<interface>>
+        +create(input) string
+    }
+
+    class MessageProjectionClock {
+        <<interface>>
+        +now() string
+    }
+
+    ConversationMessageProjectionService ..> MessageProjectionMaintenancePlanner
+    ConversationMessageProjectionService ..> RuntimeMessageMaterializer
+    RuntimeMessageMaterializer --> RuntimeMessageIdFactory
+    ConversationMessageProjectionService ..> MessageProjectionClock
+```
+
+`inspect` is non-mutating. `synchronize` is the future normal maintenance command, while `rebuild` explicitly requests replacement from the Journal source of truth. Long-running operations accept `AbortSignal`; Task 1C-D3 will check cancellation at safe page and commit boundaries.
+
+The pure maintenance planner distinguishes `missing`, `ready`, `behind`, `repairable_tail`, `corrupted`, `projector_mismatch`, `schema_unavailable`, and `journal_regressed`. Its decision order prevents unsafe repair:
+
+```mermaid
+flowchart TD
+    Scan["Structural Scan"] --> Missing{"Missing?"}
+    Missing -- yes --> Initialize["Initialize"]
+    Missing -- no --> Corrupt{"Corrupted or no committed Checkpoint?"}
+    Corrupt -- yes --> Rebuild1["Rebuild: corrupted"]
+    Corrupt -- no --> Projector{"Projector identity matches?"}
+    Projector -- no --> Rebuild2["Rebuild: projector changed"]
+    Projector -- yes --> Schema{"Committed Message schemas available?"}
+    Schema -- no --> Restore["Stop and restore schema"]
+    Schema -- yes --> Regression{"Journal behind committed Sequence?"}
+    Regression -- yes --> Rebuild3["Rebuild: Journal regressed"]
+    Regression -- no --> Tail{"Repairable tail?"}
+    Tail -- yes --> Truncate["Truncate then catch up"]
+    Tail -- no --> Behind{"Journal ahead?"}
+    Behind -- yes --> CatchUp["Catch up"]
+    Behind -- no --> Ready["Ready"]
+```
+
+Unknown committed Runtime Message Types are not treated as corruption. They produce `schema_unavailable` and `restore_schema`, preventing an application from silently deleting valid plugin or Agent-specific history while its definition is unavailable.
+
+Runtime Message IDs are deterministic and content-free. `Sha256RuntimeMessageIdFactory` hashes Canonical JSON containing Conversation ID, Projector ID and Version, source Event ID and Sequence, and source Ordinal. Rebuilding the same Projector version from the same Journal therefore reproduces the same Runtime Message IDs without randomness or wall-clock access. `RuntimeMessageMaterializer` assigns those IDs and validates both drafts and final snapshots through `RuntimeMessageSchemaRegistry`.
+
+Task 1C-D1 defines contracts and pure local logic only. Atomic staging-file replacement remains Task 1C-D2; concrete Journal pagination, catch-up, repair, rebuild, and lifecycle logging remain Task 1C-D3.
+
 ## 16. ConversationRuntime Composition
 
 ```mermaid

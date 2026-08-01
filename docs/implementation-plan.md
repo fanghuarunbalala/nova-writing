@@ -2087,9 +2087,46 @@ Design scope:
 - per-call System Prompt Overlay
 - compaction and Nudge lifecycle events
 
-Questions to resolve before implementation:
+Review state:
 
-The current non-authoritative recommendation is recorded in `docs/decisions/task-4-policy-compaction-nudge-proposal.md`. Its status is **proposed / not accepted**; it does not authorize implementation or resolve the questions below.
+- The Nudge protocol is accepted and may proceed through the isolated Task 4N steps below.
+- Runtime Policy behavior beyond the provider-neutral Nudge contracts remains gated.
+- Context Compaction remains gated by unresolved decisions.
+- `docs/decisions/task-4-policy-compaction-nudge-proposal.md` is **partially accepted — Nudge protocol only**.
+
+### 7.1 Task 4N: Accepted Nudge Protocol
+
+The first-version Nudge contract is:
+
+1. A Policy produces a provider-neutral `NudgeEffect` containing `templateId`, `templateVersion`, JSON-safe `parameters`, priority, deduplication identity, Run targeting, optional Turn targeting, cooldown, expiry, and exclusivity. A Policy cannot supply arbitrary rendered Reminder text.
+2. Pending lifecycle is `scheduled -> leased -> consumed`, with `leased -> scheduled` when failure is known to occur before Provider dispatch and `scheduled -> expired` when the target or deadline is no longer valid.
+3. Delivery occurs only when the Provider request containing the Reminder is dispatched. Failure after dispatch leaves the Nudge consumed; cooldown begins at this consumption boundary.
+4. Candidate selection filters target, expiry, and cooldown, then orders by priority descending and scheduled Journal Sequence ascending. The default selection count is one and the hard maximum is two. An exclusive Nudge is selected alone.
+5. The Provider receives one temporary `SystemReminderOverlay` block containing the selected items. Initial placement is only `system-prompt-overlay`; `context-tail` is excluded.
+6. A Nudge never enters canonical Runtime Messages or a `ContextCheckpoint` summary.
+7. Public durable Events are Nudge scheduled, delivered, and expired. Their payloads contain identifiers, template metadata, and lifecycle state only; rendered Reminder text and template parameters are forbidden.
+8. Lease release before dispatch is an internal structured debug trace, not a public Event.
+
+Task 4N implementation order:
+
+- Task 4N-A: record the accepted Nudge protocol and isolate its review gate
+- Task 4N-B: define provider-neutral Nudge protocol types and validation failures
+- Task 4N-C: implement deterministic selection and the versioned template registry
+- Task 4N-D: implement the pending store and lifecycle manager
+- Task 4N-E: implement redacted public Nudge lifecycle OutputEvents
+- Task 4N-F: integrate the one-shot Provider System Prompt Overlay without canonical Message projection
+
+Task 4N explicitly excludes:
+
+- Context pressure thresholds, hysteresis, compaction, and `ContextCheckpoint`
+- arbitrary Policy evaluation and Effect coordination beyond contracts required by Nudge
+- `context-tail` placement
+- Reminder text or parameters in Journal Events or logs
+- Pi types in Core public exports
+
+### 7.2 Task 4 Policy and Compaction Review Gate
+
+Questions still requiring explicit review before their implementation:
 
 1. What are the soft context reminder, compaction, and hard context thresholds?
 2. What post-compaction target ratio is desired?
@@ -2098,13 +2135,10 @@ The current non-authoritative recommendation is recorded in `docs/decisions/task
 5. What structured fields belong in `ContextCheckpoint`?
 6. Does compaction use the active Provider, a dedicated model, or a pluggable Compactor?
 7. How is a Compaction result validated before becoming active?
-8. How many Nudges may be injected into one Provider call?
-9. How are Nudge priority, deduplication, cooldown, and expiry configured?
-10. When is a Nudge considered delivered: context compilation, stream creation, or Provider dispatch?
-11. How is a leased Nudge recovered if dispatch fails?
-12. Which Policy evaluation events are public OutputEvents versus internal traces?
+8. Which non-Nudge `RuntimePolicyEffect` behaviors belong in the first Policy engine version?
+9. Which Policy evaluation and Compaction events are public OutputEvents versus internal traces?
 
-Expected deliverables after approval:
+Expected deliverables after all Task 4 review gates are approved:
 
 - pure Policy evaluation engine
 - typed Effect routing

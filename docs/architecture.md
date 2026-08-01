@@ -4241,6 +4241,8 @@ Hard limits remain authoritative and separate from reminders. For example, a Pol
 
 ## 18. Nudge and One-shot System Reminders
 
+This section is the accepted first-version Nudge protocol. Its implementation may proceed independently while Runtime Policy behavior and Context Compaction remain under review.
+
 Nudge has one concrete responsibility:
 
 > Convert a `NudgeEffect` into a pending, one-shot Reminder for a future Provider request.
@@ -4261,19 +4263,65 @@ stateDiagram-v2
 ```
 
 ```ts
+type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
+interface NudgeEffect {
+  readonly kind: "nudge";
+  readonly policyId: string;
+  readonly templateId: string;
+  readonly templateVersion: string;
+  readonly priority: number;
+  readonly dedupeKey: string;
+  readonly targetRunId: string;
+  readonly targetTurnNumber?: number;
+  readonly parameters: Readonly<Record<string, JsonValue>>;
+  readonly cooldownTurns?: number;
+  readonly expiresAfterTurn?: number;
+  readonly expiresAt?: string;
+  readonly exclusive?: boolean;
+}
+
+type PendingNudgeState =
+  | "scheduled"
+  | "leased"
+  | "consumed"
+  | "expired";
+
 interface PendingNudge {
   id: string;
   policyId: string;
-  message: string;
-  placement: "system-prompt" | "context-tail";
+  templateId: string;
+  templateVersion: string;
+  priority: number;
+  dedupeKey: string;
+  parameters: Readonly<Record<string, JsonValue>>;
+  exclusive: boolean;
+  placement: "system-prompt-overlay";
   delivery: "once";
-  state: "scheduled" | "leased" | "consumed" | "expired";
+  state: PendingNudgeState;
   targetRunId: string;
   targetTurnNumber?: number;
+  scheduledSequence: number;
   scheduledAt: string;
+  cooldownTurns?: number;
+  expiresAfterTurn?: number;
   expiresAt?: string;
 }
+
+interface SystemReminderOverlay {
+  readonly placement: "system-prompt-overlay";
+  readonly nudgeIds: readonly string[];
+  readonly content: string;
+}
 ```
+
+`parameters` are JSON-safe template inputs, not public Event data. Only `NudgeTemplateRegistry` and `NudgeRenderer` may turn them into temporary Reminder content. A Policy cannot supply arbitrary rendered Reminder text.
 
 `NudgeScheduledOutputEvent` means the Nudge entered the pending queue. It does not mean the Reminder has reached the model.
 
@@ -4281,15 +4329,19 @@ interface PendingNudge {
 
 If request construction fails before dispatch, the lease returns to `scheduled`. If the Provider request was dispatched and later failed, the Nudge remains `consumed` because it was already sent.
 
+Cooldown starts only after the Nudge becomes `consumed`. Lease release before dispatch is an internal structured debug trace rather than a public Event.
+
 ### 18.2 Nudge Classes
 
 ```mermaid
 classDiagram
     class NudgeManager {
         -PendingNudgeStore pendingStore
+        -NudgeSelector selector
+        -NudgeTemplateRegistry templates
         -NudgeRenderer renderer
         +schedule(NudgeEffect)
-        +leaseForProviderCall(request) PendingNudge[]
+        +leaseForProviderCall(request) NudgeLease
         +confirmDelivered(providerCallId)
         +releaseLease(providerCallId)
         +expireForRun(runId)
@@ -4298,14 +4350,23 @@ classDiagram
 
     class PendingNudgeStore {
         +enqueue(PendingNudge)
-        +lease(request)
+        +lease(selected, providerCallId)
         +consume(providerCallId)
         +release(providerCallId)
         +expire(runId)
     }
 
+    class NudgeSelector {
+        +select(candidates, request) PendingNudge[]
+    }
+
+    class NudgeTemplateRegistry {
+        +register(templateId, templateVersion, template)
+        +resolve(templateId, templateVersion)
+    }
+
     class NudgeRenderer {
-        +render(NudgeEffect) PendingNudge
+        +render(leasedNudges) SystemReminderOverlay
     }
 
     class RuntimePolicyEngine {
@@ -4314,6 +4375,8 @@ classDiagram
 
     RuntimePolicyEngine --> NudgeManager : NudgeEffect
     NudgeManager --> PendingNudgeStore
+    NudgeManager --> NudgeSelector
+    NudgeManager --> NudgeTemplateRegistry
     NudgeManager --> NudgeRenderer
 ```
 
@@ -4328,7 +4391,9 @@ Initial Nudge Policies may include:
 
 Tool wall-clock timeout is not a Nudge. It belongs to Tool execution timeout and cancellation policy.
 
-Nudge selection applies priority, deduplication, cooldown, expiry, and a small per-call delivery limit so multiple reminders cannot flood one prompt.
+Nudge selection first filters by target, expiry, and cooldown, then orders by priority descending and scheduled Journal Sequence ascending. One Nudge is selected by default and two is the hard maximum. An exclusive Nudge is always selected alone.
+
+The selected items are rendered into one temporary `SystemReminderOverlay` block. The first version supports only `system-prompt-overlay`; `context-tail` placement is deferred.
 
 ### 18.3 One-turn Disappearance
 
@@ -4346,6 +4411,14 @@ Provider Call N+1
 ```
 
 The consumed Reminder is absent from the next Provider call. Its delivered OutputEvent remains in the Journal for UI replay and debugging, but OutputEvent history is not automatically converted back into model messages.
+
+Public durable Nudge Events are:
+
+- `NudgeScheduledOutputEvent`
+- `SystemReminderInjectedOutputEvent`
+- `NudgeExpiredOutputEvent`
+
+Their payloads contain Nudge identifiers, Policy and template metadata, target identity, and lifecycle state only. Rendered Reminder content and template parameters are forbidden in public Events and logs.
 
 ## 19. Context Compaction and Compilation
 
@@ -4447,7 +4520,7 @@ transformContext: async (messages) => {
 }
 ```
 
-True one-shot System Reminders use a per-call `systemPromptOverlay` inside `PiAgentCoreAdapter`. The Adapter leases pending Nudges for one Provider call, appends them to that call's System Prompt, confirms delivery after dispatch, and releases the lease if dispatch never occurs.
+True one-shot System Reminders use a per-call `systemPromptOverlay` inside `PiAgentCoreAdapter`. The Adapter leases one Nudge by default and at most two for one Provider call, renders them as one overlay block, appends that block to that call's System Prompt, confirms delivery after dispatch, and releases the lease if dispatch never occurs.
 
 ```mermaid
 flowchart TB
@@ -5020,15 +5093,14 @@ The following items still require explicit review before implementation:
 2. Input snapshot redaction and size limits
 3. Context pressure thresholds and compaction hysteresis defaults
 4. ContextCheckpoint summary schema and validation
-5. Nudge scheduling, delivery, expiry, and redaction payloads
-6. Tool YAML manifest fields
-7. Whether `ToolDetails` returns as a common success-detail abstraction
-8. Tool result and incremental update contracts
-9. Subagent result projection beyond the accepted active-Run cancellation ownership rule
-10. Runtime idle eviction duration
-11. System Prompt and ContextCompiler layer ordering
-12. Dedicated Novel domain model, intentionally deferred
-13. Runtime crash recovery for a non-terminal Run/Turn: fail versus cancel semantics and the required lifecycle transition reasons
+5. Tool YAML manifest fields
+6. Whether `ToolDetails` returns as a common success-detail abstraction
+7. Tool result and incremental update contracts
+8. Subagent result projection beyond the accepted active-Run cancellation ownership rule
+9. Runtime idle eviction duration
+10. System Prompt and ContextCompiler layer ordering outside the accepted one-shot Nudge overlay
+11. Dedicated Novel domain model, intentionally deferred
+12. Runtime crash recovery for a non-terminal Run/Turn: fail versus cancel semantics and the required lifecycle transition reasons
 
 ## 29. Recommended Implementation Order
 

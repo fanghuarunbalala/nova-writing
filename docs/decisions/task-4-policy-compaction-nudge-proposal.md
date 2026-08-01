@@ -1,10 +1,10 @@
 # Task 4 Policy, Compaction, and Nudge Decision Proposal
 
-Status: **proposed / not accepted**
+Status: **partially accepted — Nudge protocol only**
 
-This document collects the recommended first-version decisions required before Task 4 implementation. It is not an accepted architecture contract. `docs/implementation-plan.md` and the unresolved-decision list in `docs/architecture.md` remain authoritative until the user explicitly approves or revises this proposal.
+This document collects the recommended first-version decisions required before Task 4 implementation. The Nudge decisions in Sections 8 through 12 are accepted with the explicit changes recorded below. Sections 1 through 7 remain proposals and do not authorize Runtime crash recovery or Context Compaction implementation.
 
-No Task 4 production code may rely on these values while this document remains proposed.
+`docs/implementation-plan.md` and `docs/architecture.md` are the authoritative implementation contracts.
 
 ## 1. Runtime Crash Recovery Dependency
 
@@ -80,33 +80,40 @@ Recommendation:
 
 ## 8. Per-call Nudge Limit
 
-Recommendation:
+Accepted decision:
 
-- inject at most two Nudges into one Provider call
-- apply deterministic priority ordering followed by scheduled time and Nudge ID
+- select one Nudge by default and never inject more than two Nudges into one Provider call
+- filter by target, expiry, and cooldown before ordering candidates
+- apply deterministic priority-descending ordering followed by scheduled Journal Sequence ascending
 - allow a policy to declare itself exclusive when its Reminder must be delivered alone
+- expose the selected items to the Provider as one temporary `SystemReminderOverlay` block
+- support only `system-prompt-overlay` placement initially; `context-tail` is not part of the first version
 
 ## 9. Nudge Scheduling Rules
 
-Recommendation:
+Accepted decision:
 
 - integer priority with higher values selected first
-- stable deduplication key scoped to Conversation, Run, policy, and semantic target
+- stable deduplication key supplied by the Policy and scoped by the owning Conversation Runtime
 - cooldown measured primarily in completed Turns, with optional wall-clock expiry
-- expiry may target Run end, a maximum Turn number, or an absolute timestamp
+- expiry may target a maximum Turn number or an absolute timestamp; Run targeting is explicit through `targetRunId`
 - configuration belongs to the Policy definition and Runtime config, not Message payloads
+- a Nudge carries `templateId`, `templateVersion`, and JSON-safe `parameters`; Policy code cannot inject arbitrary rendered Reminder text
+- cooldown starts only after the Nudge is consumed at the Provider dispatch boundary
+- an exclusive Nudge is selected alone even when the per-call hard maximum would allow another item
 
 ## 10. Delivery Boundary
 
-Recommendation:
+Accepted decision:
 
 - a Nudge becomes delivered and consumed only when the Provider request containing it is dispatched
 - Context compilation, Adapter request construction, and stream reservation do not count as delivery
 - emit `SystemReminderInjectedOutputEvent` only after this dispatch barrier
+- a consumed Nudge never enters canonical Runtime Messages or a `ContextCheckpoint` summary
 
 ## 11. Lease Recovery
 
-Recommendation:
+Accepted decision:
 
 - persist lease identity with Provider call ID and lease timestamp
 - release to `scheduled` when failure is known to occur before dispatch
@@ -116,34 +123,40 @@ Recommendation:
 
 ## 12. Public Events and Internal Traces
 
-Recommendation:
+Accepted decision:
 
 Public durable OutputEvents:
 
 - Nudge scheduled
 - Nudge delivered
 - Nudge expired
+
+The public Nudge Event payload contains only identifiers, template metadata, and lifecycle state. It never contains rendered Reminder text or template parameters.
+
+Internal structured traces only:
+
+- lease release before Provider dispatch
+- ordinary Policy evaluation
+- non-triggered Policy decisions
+- cooldown and deduplication suppression
+- candidate ranking
+
+The following Compaction recommendations remain unaccepted:
+
 - Compaction started
 - Compaction completed
 - Compaction failed with a fixed failure category
 - ContextCheckpoint activated
 
-Internal structured traces only:
-
-- ordinary Policy evaluation
-- non-triggered Policy decisions
-- cooldown and deduplication suppression
-- token-estimate diagnostics
-- candidate ranking
+Token-estimate diagnostics also remain part of the unaccepted Compaction design.
 
 Public Events and logs must not contain Reminder text, Message content, summaries, Prompt text, source excerpts, credentials, paths, raw errors, stacks, or causes.
 
 ## 13. Review Outcome Required
 
-Before implementation, review must record one of:
+Review outcome:
 
-- accepted as proposed
-- accepted with explicit changes
-- rejected and replaced by another decision set
+- Sections 8 through 12: accepted with the explicit changes recorded above
+- Sections 1 through 7: still proposed and require separate review
 
-After acceptance, the decisions must be copied into the authoritative Task 4 section of `docs/implementation-plan.md` and the unresolved items in `docs/architecture.md` must be updated before Task 4A code begins.
+Only the accepted Nudge protocol may proceed to implementation. Runtime Policy behavior beyond the provider-neutral Nudge contracts and all Context Compaction behavior remain behind separate review gates.

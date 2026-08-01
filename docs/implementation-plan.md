@@ -2145,6 +2145,20 @@ Task 4N-B explicitly excludes:
 - public Nudge OutputEvents
 - Provider dispatch and System Prompt integration
 
+Task 4N-C delivered:
+
+- pure deterministic `NudgeSelector` filtering scheduled state, Run and optional Turn target, absolute and Turn expiry, and explicit dedupe cooldown records
+- priority-descending and scheduled-Sequence-ascending ordering with default one, hard maximum two, and non-leapfrogging exclusive boundaries
+- versioned `NudgeTemplateRegistry` with duplicate and missing-template protection
+- `NudgeRenderer` composition of one or two leased Nudges into one validated `SystemReminderOverlay`
+- stable selection and template failure categories plus structured logs that exclude parameters and rendered Reminder content
+- focused coverage for target filtering, expiry, cooldown, ordering, exclusivity, template versions, rendering validation, and log redaction
+
+Task 4N-C explicitly excludes:
+
+- durable cooldown state, pending lifecycle mutation, lease creation, expiry persistence, or restart restoration
+- public lifecycle Events and Provider dispatch integration
+
 ### 7.2 Task 4 Policy and Compaction Review Gate
 
 Questions still requiring explicit review before their implementation:

@@ -4410,7 +4410,9 @@ Initial Nudge Policies may include:
 
 Tool wall-clock timeout is not a Nudge. It belongs to Tool execution timeout and cancellation policy.
 
-Nudge selection first filters by target, expiry, and cooldown, then orders by priority descending and scheduled Journal Sequence ascending. One Nudge is selected by default and two is the hard maximum. An exclusive Nudge is always selected alone.
+Nudge selection first filters by target, expiry, and cooldown, then orders by priority descending and scheduled Journal Sequence ascending. One Nudge is selected by default and two is the hard maximum. An exclusive Nudge is always selected alone; when an exclusive candidate appears after an already-selected higher-priority candidate, it forms a boundary and lower-priority candidates cannot leapfrog it.
+
+Cooldown evaluation is explicit selector input rather than hidden mutable state. A `NudgeCooldownRecord` identifies the most recent consumed Turn for one dedupe key. A cooldown of `N` suppresses the next `N` complete Turns after consumption; lifecycle persistence remains owned by `PendingNudgeStore` and `NudgeManager`.
 
 The selected items are rendered into one temporary `SystemReminderOverlay` block. The first version supports only `system-prompt-overlay`; `context-tail` placement is deferred.
 

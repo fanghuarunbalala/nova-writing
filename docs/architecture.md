@@ -2787,6 +2787,44 @@ Snapshots are canonicalized, defensively frozen, and fingerprinted for same-Sequ
 
 Structured logs expose only Conversation/Event identity, Event Type, Sequence, priority, lane, queue sizes, and cancelled count. Input payloads, prompts, novel text, paths, raw errors, stacks, and causes are excluded.
 
+### 16.7 Implemented Task 3C-C Persistence-First TurnController
+
+`TurnController` is the single serialized lifecycle mutation entry over Run/Turn state machines. It composes Core-owned identity generators, deterministic Runtime Event IDs, an injected Clock, and `RuntimeEventSink` without invoking Pi or Provider behavior.
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant Controller as TurnController
+    participant Temp as Temporary StateMachine
+    participant Sink as RuntimeEventSink
+    participant State as Authoritative StateMachine
+
+    Caller->>Controller: begin / transition
+    Controller->>Temp: clone + validate transition
+    Temp-->>Controller: frozen transition + next snapshot
+    Controller->>Controller: create deterministic Event once
+    Controller->>Sink: append(same Event instance)
+    alt recorded or duplicate
+        Sink-->>Controller: durable receipt
+        Controller->>State: restore(next snapshot)
+        Controller-->>Caller: lifecycle commit
+    else append failure
+        Sink-->>Controller: error
+        Controller->>Controller: retain pending Event
+        Controller-->>Caller: reject without state mutation
+    end
+```
+
+Every operation is serialized through one Promise tail. A pending durable commit blocks all new lifecycle mutations. `retryPending()` resubmits the exact same Event instance, preserving Event ID, timestamp, metadata, and payload snapshot; successful duplicate recovery then commits the speculative state.
+
+Run and Turn IDs are Core-owned opaque values. Lifecycle Event ordinals come from the speculative state transition and therefore align with `RuntimeEventIdFactory`. The originating Input ID becomes the default causation of Run creation.
+
+Cross-state coordination prevents terminal Run transition while a Turn remains active. Run stopping is allowed only after the active Turn has entered stopping; cancellation may then terminally commit Turn followed by Run. Starting a Turn requires a running Run.
+
+Restore is valid only on a fresh Controller. A restored Turn must belong to the restored Run, and a non-terminal Turn cannot coexist with a terminal Run. Restore performs no Event publication.
+
+Logs contain only scope, Event identity/type, ordinal, receipt status, and Journal Sequence. Task 3D owns Journal replay, Input processing outcomes, cancellation effects, retry policy, and Runtime failure exit.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:

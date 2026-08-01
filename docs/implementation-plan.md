@@ -1037,6 +1037,9 @@ Implementation status:
 - Task 3B-C implemented and awaiting review: deterministic payload-free Runtime Event IDs, versioned SHA-256 identity, Runtime persistence-barrier contracts, shared Output publisher adaptation, stable error normalization, structured logs, and focused protocol validation.
 - Task 3C-A implemented and awaiting review: pure Run and Turn state machines, explicit legal transition tables, frozen snapshots/transitions, cancellation consistency, restore validation, scope-local ordinals, stable errors, public exports, and focused validation.
 - Task 3C-B implemented and awaiting review: bounded Control/Turn inboxes, Core lane policy, durable snapshot capture, Sequence conflict detection, Control preemption, Turn FIFO, Stop fence pruning, structured logs, public exports, and focused validation.
+- Task 3C-C implemented and awaiting review: Core Run/Turn identity generators, persistence-first `TurnController`, serialized lifecycle mutation, deterministic Event construction, pending-commit retry, cross-state coordination, restore validation, structured logs, public exports, and focused validation.
+
+Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
 Task 3B implementation is complete. Task 3C may now implement transition legality, the two-lane Router, Stop fences, and serialized Run/Turn mutation against these frozen protocols.
 
@@ -1199,6 +1202,34 @@ Task 3C-B explicitly excludes:
 - durable replay cursor and Host-reference resolution
 - Input outcome publication and state-machine coordination
 - TurnController, ConversationRuntime, Pi, Tool, Approval, Policy, IPC, and Subagent behavior
+
+Task 3C-C delivered:
+
+- provider-independent Run and Turn ID generator contracts with random default implementations
+- persistence-first `TurnController` over Run/Turn state machines, deterministic Event IDs, and `RuntimeEventSink`
+- serialized asynchronous lifecycle operations
+- Run/Turn Event construction with injected Clock and stable metadata
+- state commit only after recorded or duplicate durable acknowledgement
+- retained pending Event and `retryPending()` using the same Event instance after append failure
+- rejection of new mutations while a durable commit is pending
+- active-Turn coordination that requires Turn stopping before Run stopping and terminal Turn before terminal Run completion
+- fresh-controller restore with Run/Turn identity and terminal-state consistency checks
+- structured commit-started and commit-completed logs without payloads
+- focused smoke coverage for normal lifecycle, active-Turn blocking, completion, Stop cancellation, persistence failure, same-Event retry, pending mutation rejection, restore mismatch, identity ordinals, and log redaction
+
+Task 3C-C accepted decisions:
+
+- state machines are mutated speculatively in temporary copies; authoritative in-memory state changes only after Sink acknowledgement.
+- append failure retains the exact Event object and blocks every later mutation until `retryPending()` succeeds or the Runtime exits.
+- duplicate append receipts commit state exactly like newly recorded receipts.
+- Controller restore is startup-only and requires a fresh instance.
+- `TurnController` coordinates lifecycle persistence but does not call Provider, Pi, Tool, Journal reader, InputRouter, or cancellation effects.
+
+Task 3C-C explicitly excludes:
+
+- Host-reference resolution, Journal replay cursor, Input outcome publication, and Runtime loop scheduling
+- AbortController ownership and child/Tool cancellation execution
+- Pi Adapter, Context Compiler, Approval, Policy, IPC, and Subagent behavior
 
 Expected deliverables after approval:
 

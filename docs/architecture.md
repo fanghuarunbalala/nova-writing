@@ -3915,6 +3915,56 @@ The implementation snapshots the durable request and every selected Runtime Mess
 
 This checkpoint intentionally does not choose Prompt hierarchy, load config or Agent definitions, apply ContextCheckpoint/Compaction/Nudge overlays, prepare continue-based recovery, install the executor into live Runtime composition, construct Pi/Provider objects, or implement Tools, Approval, IPC, or Subagents.
 
+### 16.26 Implemented Task 3E-H Stop-to-Agent Cancellation Bridge
+
+`AgentRuntimeStopCancellationPort` implements the existing Stop handler cancellation port by translating one persistence-authorized Core Stop request into the provider-neutral `AgentRuntimeAdapter.cancel(...)` contract. It does not import Pi types or own Stop lifecycle transitions.
+
+```mermaid
+classDiagram
+    class RuntimeStopInputHandler {
+        +process(stopInput)
+    }
+
+    class RuntimeStopCancellationPort {
+        <<interface>>
+        +cancel(RuntimeStopCancellationRequest)
+    }
+
+    class AgentRuntimeStopCancellationPort {
+        +cancel(RuntimeStopCancellationRequest)
+    }
+
+    class AgentRuntimeAdapter {
+        <<interface>>
+        +cancel(AgentRuntimeCancelRequest)
+    }
+
+    RuntimeStopInputHandler --> RuntimeStopCancellationPort
+    RuntimeStopCancellationPort <|.. AgentRuntimeStopCancellationPort
+    AgentRuntimeStopCancellationPort --> AgentRuntimeAdapter
+```
+
+The bridge validates the bound Conversation, fixed `stop` reason, non-blank Run identity, optional non-blank Turn identity, and exact durable `system.stop` Event reference. Validation captures a fresh immutable request before any asynchronous boundary, so later caller mutation cannot change cancellation identity.
+
+```mermaid
+sequenceDiagram
+    participant Stop as RuntimeStopInputHandler
+    participant Bridge as AgentRuntimeStopCancellationPort
+    participant Adapter as AgentRuntimeAdapter
+
+    Stop->>Bridge: cancel(Stop request after durable stopping transitions)
+    Bridge->>Bridge: validate and capture Stop identity
+    Bridge->>Adapter: cancel(Conversation + Run + optional Turn + reason=stop)
+    Adapter-->>Bridge: cancellation barrier settled
+    Bridge-->>Stop: resolved
+```
+
+The durable Stop Input reference authorizes and correlates the bridge call but is intentionally not forwarded to the Agent Adapter. Unknown fields are also discarded. The Adapter receives only a frozen `AgentRuntimeCancelRequest` containing Conversation ID, Run ID, optional Turn ID, and the stable Core cancellation reason.
+
+Invalid identity is normalized as `invalid_request`. Any Adapter exception is normalized as `adapter_failed` without retaining its raw error, message, stack, or cause. Logs contain only Conversation, Run, optional Turn, Stop Event ID, Stop Journal Sequence, Turn presence, and fixed failure category; Stop payloads, novel text, Provider data, Tool data, prompts, configuration, paths, JSONL, raw errors, stacks, and causes remain excluded.
+
+Persistence-first Stop fencing, Run/Turn `stopping` and `cancelled` transitions, queued Input cancellation outcomes, and Stop outcome recording remain owned by `RuntimeStopInputHandler`. This checkpoint does not install the bridge into Runtime composition and does not define AbortController ownership, cancellation timeouts, late-result suppression, ReloadConfig, Tool cancellation, Approval, child traversal, IPC, Subagents, or Pi-specific construction.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4736,6 +4786,7 @@ Currently implemented skeletons include:
 - active-model Core-to-Pi Assistant history reconstruction without Provider metadata persistence
 - provider-neutral Agent Run execution coordination with persistence-first normal terminalization and Stop-race deferral
 - Journal-backed canonical UserMessage Run preparation with fixed Message pagination and current-Sequence isolation
+- provider-neutral Stop-to-Agent Adapter cancellation mapping with durable Stop identity validation and redacted failures
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

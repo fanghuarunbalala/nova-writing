@@ -1063,6 +1063,7 @@ Implementation status:
 - Task 3E-E implemented and awaiting review: canonical `assistant.message@1` text history, independent Assistant Event projector, standard versioned Core projector composition, active-model Pi Assistant envelope reconstruction, Tool-call deferral, strict failures, redacted logs, and Journal-to-Message integration validation.
 - Task 3E-F implemented and awaiting review: provider-neutral Run preparation contract, concrete Agent Run execution coordinator, strict context/invocation capture, normal Run terminalization, Stop-race deferral, stable failures, redacted logs, and real lifecycle validation.
 - Task 3E-G implemented and awaiting review: projected UserMessage Run preparation, injected final System Prompt source, fixed-high-watermark Message pagination, current-Sequence context/prompt split, later-input isolation, stable failures, redacted logs, and real SQLite integration.
+- Task 3E-H implemented and awaiting review: provider-neutral Stop-to-Agent cancellation port, strict durable Stop identity validation, immutable Adapter cancellation mapping, fixed failure normalization, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1850,6 +1851,33 @@ Task 3E-G explicitly excludes:
 - installation into the live `RuntimeUserMessageInputHandler` or `ConversationRuntime`
 - concrete Pi Agent/provider/model construction and credentials
 - Tool execution, Tool-bearing history, Approval, IPC, and Subagents
+
+Task 3E-H delivered:
+
+- public `AgentRuntimeStopCancellationPort` implementing the existing `RuntimeStopCancellationPort`
+- strict bound Conversation ID, fixed `stop` reason, non-blank Run/optional Turn identity, and durable Stop Input reference validation
+- fresh immutable `AgentRuntimeCancelRequest` mapping containing only Conversation, Run, optional Turn, and stable cancellation reason
+- deliberate exclusion of the Stop Input reference and all unknown request fields from the Adapter request
+- defensive request capture so caller mutation cannot alter the Adapter-facing cancellation identity
+- stable `invalid_request` and `adapter_failed` failures without raw Adapter error propagation
+- structured started/completed/failed logging using only IDs, Journal Sequence, Turn presence, and fixed failure categories
+- focused smoke validation for Turn and no-Turn mapping, immutable capture, identity mismatches, non-Stop references, blank IDs, Adapter failure normalization, and log redaction
+
+Task 3E-H accepted decisions:
+
+- `RuntimeStopInputHandler` remains the owner of persistence-first Stop fencing and Run/Turn cancellation lifecycle; this port only translates the already-authorized external cancellation effect to `AgentRuntimeAdapter.cancel(...)`.
+- a valid durable `system.stop` Input reference is required for authorization and observability but is not forwarded to the Agent Adapter.
+- Adapter cancellation receives the Core-defined fixed `stop` reason and does not reinterpret Stop as `interrupt`, shutdown, replacement, or parent cancellation.
+- Adapter exceptions collapse to `adapter_failed`; raw messages, stacks, causes, Provider details, and process details never cross the port.
+- the bridge remains provider-neutral and depends only on the public Core Agent Adapter contract, not on Pi types.
+
+Task 3E-H explicitly excludes:
+
+- installation into `RuntimeStopInputHandler`, `ConversationRuntime`, Bootstrap, Host, or process composition
+- AbortController ownership, cancellation timeout policy, late Provider/Tool result suppression, or retry policy
+- Stop lifecycle terminalization, queued Input outcome recording, ReloadConfig, Pause, or Resume behavior
+- Tool cancellation, Approval/Interaction cancellation, child traversal, IPC, and Subagent management
+- direct Pi Agent construction or Pi-specific cancellation behavior
 
 Expected deliverables after approval:
 

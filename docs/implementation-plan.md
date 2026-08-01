@@ -1049,6 +1049,7 @@ Implementation status:
 - Task 3D-I implemented and awaiting review: `ConversationRuntime` ownership of `RuntimeInputPump`, post-Bootstrap Pump startup, live route wake-up, shutdown drain/exit gating, asynchronous Pump failure observation, unexpected-stop degradation, fixed safe Runtime exits, real Pump integration, redacted logs, public exports, and focused validation.
 - Task 3D-J implemented and awaiting review: durable `RuntimeUserMessageInputHandler`, defensive canonical Input capture, Run claim/outcome/start barriers, injected `RuntimeRunExecutor`, terminal Run verification, serialized direct use, fixed safe phase failures, real controller/sink integration, redacted logs, public exports, and focused validation.
 - Task 3D-K implemented and awaiting review: persistence-first `RuntimeStopInputHandler`, Stop fence pruning, Turn-before-Run stopping and cancellation transitions, idempotent external cancellation port, emergency cancellation on barrier failure, ordered cancelled-before-run and Stop outcomes, real Router/controller/sink integration, redacted logs, public exports, and focused validation.
+- Task 3E-A implemented and awaiting review: provider-neutral `AgentRuntimeAdapter` stream/cancel contracts, explicit prompt/continue invocation and terminal outcome protocols, Core-owned compiled-context types, asynchronous `ContextCompiler`, immutable strict `BaseContextCompiler`, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1579,6 +1580,37 @@ Task 3D-K explicitly excludes:
 - late Provider/Tool completion suppression, invocation identity tracking, and cancellation grace periods
 - ReloadConfig handling, Pi execution, Context compilation, Tool execution, Approval, Policy, IPC, Subagent, Nudge, and Compaction
 - automatic recovery of stopping Run/Turn state after Runtime replacement
+
+Task 3E-A delivered:
+
+- provider-neutral `AgentRuntimeAdapter` with Promise-based `stream()` and idempotent `cancel()` boundaries
+- Core-owned prompt and continue invocation variants without Pi `AgentMessage` in public Conversation or Runtime contracts
+- Core-owned completed, failed, and cancelled Adapter settlement outcomes
+- cancellation requests correlated by Conversation ID, Run ID, optional Turn ID, and stable Core cancellation reason
+- asynchronous `ContextCompiler` contract and immutable `CompiledProviderContext`
+- `BaseContextCompiler` validation against the injected Runtime Message schema registry
+- exact canonical Message ordering, defensive JSON capture, duplicate Message rejection, Conversation identity checks, and deep freezing
+- structured compilation logs containing identity, counts, and fixed failures only
+- public exports and focused smoke validation for isolation, strict schemas, failure normalization, and log redaction
+
+Task 3E-A accepted decisions:
+
+- Conversation, CLI, GUI, Web, and future IPC callers depend on `AgentRuntimeAdapter`; concrete Pi types remain an Adapter implementation detail.
+- `stream()` represents exactly one Core Run and settles only after the concrete Adapter's awaited event barriers settle.
+- a prompt invocation appends its explicit Runtime Messages after the compiled base transcript; a continue invocation resumes from the compiled transcript without appending another prompt.
+- the base compiled context contains a caller-selected final base System Prompt and ordered canonical Runtime Messages only. It does not choose Prompt layer order.
+- `BaseContextCompiler` is asynchronous even though its first implementation performs local validation and copying, preserving compatibility with later storage-backed checkpoint and overlay work.
+- unknown Runtime Message types are rejected by the base compiler unless a caller injects a registry that explicitly registers them; Provider conversion never occurs implicitly.
+- Context compilation snapshots input data and never mutates caller-owned Message arrays or payloads.
+
+Task 3E-A explicitly excludes:
+
+- concrete `PiAgentCoreAdapter` construction, Pi event subscription, Turn allocation, Assistant streaming, and Provider failure mapping
+- Provider model selection, credentials, transport, retry configuration, and API-key resolution
+- Tool registration, Tool execution, Approval, and Tool event conversion
+- System Prompt layer ordering, per-call overlays, Nudge leasing, ContextCheckpoint application, and Context Compaction
+- installation into `RuntimeUserMessageInputHandler`, `ConversationRuntime`, or Stop cancellation composition
+- non-terminal Run/Turn crash recovery semantics
 
 Expected deliverables after approval:
 

@@ -3309,6 +3309,77 @@ Cancellation, lifecycle, or outcome failures expose only fixed phase values. Log
 
 The handler does not define AbortController ownership, cancellation timeouts, Tool late-result suppression, child traversal, ReloadConfig, Pi execution, or recovery transitions for a Run left in stopping state after Runtime failure.
 
+### 16.19 Implemented Task 3E-A Agent Adapter and Base Context Contracts
+
+The first Agent integration boundary is owned by Core and contains no Pi types. `AgentRuntimeAdapter` is the stable execution port used by Runtime composition, while a later concrete `PiAgentCoreAdapter` translates this contract to `@earendil-works/pi-agent-core` internally.
+
+```mermaid
+classDiagram
+    class AgentRuntimeAdapter {
+        <<interface>>
+        +stream(AgentRuntimeStreamRequest) Promise~AgentRuntimeStreamResult~
+        +cancel(AgentRuntimeCancelRequest) Promise~void~
+    }
+
+    class AgentRuntimeStreamRequest {
+        +string conversationId
+        +string runId
+        +CompiledProviderContext context
+        +AgentRuntimeInvocation invocation
+    }
+
+    class AgentRuntimeInvocation {
+        <<union>>
+        prompt RuntimeMessageSnapshot[]
+        continue
+    }
+
+    class AgentRuntimeStreamResult {
+        +string conversationId
+        +string runId
+        +completed|failed|cancelled outcome
+    }
+
+    class ContextCompiler {
+        <<interface>>
+        +compile(ContextCompileRequest) Promise~CompiledProviderContext~
+    }
+
+    class BaseContextCompiler {
+        +compile(ContextCompileRequest) Promise~CompiledProviderContext~
+    }
+
+    AgentRuntimeAdapter --> AgentRuntimeStreamRequest
+    AgentRuntimeStreamRequest --> AgentRuntimeInvocation
+    AgentRuntimeStreamRequest --> CompiledProviderContext
+    AgentRuntimeAdapter --> AgentRuntimeStreamResult
+    ContextCompiler <|.. BaseContextCompiler
+    ContextCompiler --> CompiledProviderContext
+```
+
+One `stream()` call represents one Core Run. The concrete Adapter owns its underlying Agent instance and event translation, but it does not own Core Run or Turn identity. A prompt invocation carries explicit Core Runtime Messages to append after the compiled base transcript; a continue invocation resumes from the compiled transcript without appending another prompt. This preserves both Pi entry paths without exposing Pi `AgentMessage` or `AgentEvent` through shared contracts.
+
+`cancel()` is an idempotent side-effect port. It is correlated by Conversation ID and Run ID, may include the active Core Turn ID, and carries only a stable Core cancellation reason. It does not write lifecycle Events or choose Run/Turn transitions.
+
+The base Context path is deliberately narrower than Task 4 compaction and Nudge behavior:
+
+```mermaid
+flowchart LR
+    Prompt["Caller-resolved base System Prompt"] --> Compile["BaseContextCompiler"]
+    Messages["Ordered canonical Runtime Messages"] --> Compile
+    Registry["RuntimeMessageSchemaRegistry"] --> Compile
+    Compile --> Context["Immutable CompiledProviderContext"]
+    Context --> Adapter["AgentRuntimeAdapter"]
+```
+
+`BaseContextCompiler` validates registered Runtime Message schemas, Conversation identity, and duplicate Message IDs. It preserves exact input order and exact System Prompt text, creates a defensive canonical JSON copy, and deeply freezes the result. Unknown Message types require explicit schema registration and never reach a Provider implicitly.
+
+The asynchronous `ContextCompiler` contract is intentional even though this base implementation is local. Later ContextCheckpoint reads and per-call overlays can remain asynchronous without changing Runtime callers. This Step does not decide System Prompt layer ordering: the request contains a final base Prompt already selected by its caller, so unresolved layering remains deferred.
+
+Compilation logs contain only Conversation ID, Run ID, Message count, and fixed failure categories. System Prompt text, Runtime Message payloads, novel content, Provider data, Tool data, paths, raw errors, stacks, causes, and JSONL are excluded.
+
+This checkpoint does not construct Pi `Agent`, subscribe to Pi events, convert Runtime Messages to Pi messages, allocate Turns, emit Assistant events, select a Provider, install Tools, apply ContextCheckpoint state, lease Nudges, or compose the Adapter into `ConversationRuntime`.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4133,13 +4204,13 @@ Not yet implemented:
 
 - ConversationProxy implementation
 - process supervisor
-- ConversationRuntime
 - InteractionCoordinator and Approval events
 - RuntimePolicyEngine and RuntimeEffectCoordinator
 - NudgeManager
 - ContextCompactionManager and ContextCheckpoint
 - PendingNudgeStore and one-shot System Prompt Overlay
-- ContextCompiler
+- ContextCheckpoint-aware ContextCompiler and per-call overlays
+- concrete PiAgentCoreAdapter event and message mapping
 - Tool registry and execution pipeline
 - IPC protocol
 - Subagent manager

@@ -1035,6 +1035,7 @@ Implementation status:
 - Task 3B-A implemented and awaiting review: provider-independent Run/Turn lifecycle constants, durable state-change OutputEvents, shared durable Input references, event-specific snapshot schema constraints, public exports, and focused protocol validation.
 - Task 3B-B implemented and awaiting review: stable execution cancellation reasons, cancellation-consistent Run/Turn payloads, terminal Runtime Input processing outcomes, strict schema variants, public exports, and expanded protocol validation.
 - Task 3B-C implemented and awaiting review: deterministic payload-free Runtime Event IDs, versioned SHA-256 identity, Runtime persistence-barrier contracts, shared Output publisher adaptation, stable error normalization, structured logs, and focused protocol validation.
+- Task 3C-A implemented and awaiting review: pure Run and Turn state machines, explicit legal transition tables, frozen snapshots/transitions, cancellation consistency, restore validation, scope-local ordinals, stable errors, public exports, and focused validation.
 
 Task 3B implementation is complete. Task 3C may now implement transition legality, the two-lane Router, Stop fences, and serialized Run/Turn mutation against these frozen protocols.
 
@@ -1144,6 +1145,33 @@ Task 3B-C explicitly excludes:
 - automatic ordinal allocation and replay restoration, owned by Task 3C and Task 3D
 - retry policy, backoff, Runtime failure exit, and Host recovery execution
 - Router, state machines, Pi Adapter, Context Compiler, Tool, Approval, Policy, IPC, and Subagent behavior
+
+Task 3C-A delivered:
+
+- pure synchronous `RunStateMachine` and `TurnStateMachine`
+- `begin`, `transition`, `restore`, `getSnapshot`, and active-state queries
+- explicit Run and Turn transition tables matching the accepted lifecycle diagrams
+- immutable state snapshots and transition results
+- transition ordinal zero on lifecycle creation and monotonic increment per legal transition
+- defensive durable origin Input capture for Run state
+- required cancellation reasons on cancelled states and rejection elsewhere
+- stable transition and restore errors without payloads or adapter details
+- focused smoke coverage for normal completion, Stop, future Interrupt, Tool wait, replacement after terminal state, invalid transitions, restore, immutability, and ordinal continuity
+
+Task 3C-A accepted decisions:
+
+- state machines are pure synchronous decision/mutation components and perform no logging, I/O, Event publication, Provider calls, or cancellation effects.
+- a new Run or Turn may replace the machine's retained state only after the previous lifecycle is terminal.
+- Run creation is `null → queued` with ordinal zero; Turn creation is `null → running` with ordinal zero.
+- state-machine ordinals are the scope-local ordinals consumed by `RuntimeEventIdFactory`.
+- restore validates one durable snapshot but does not fabricate a recovery transition or prove historical transition continuity.
+- Task 3C-B owns queue routing and Stop fences; Task 3C-C will coordinate these state machines through `TurnController` foundations.
+
+Task 3C-A explicitly excludes:
+
+- InputRouter, Control/Turn inboxes, Stop fence calculation, queue capacity, and wake-up behavior
+- Runtime Event publication and automatic Event construction
+- Provider, Pi, Tool, Approval, Policy, IPC, and Subagent behavior
 
 Expected deliverables after approval:
 

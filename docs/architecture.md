@@ -2734,6 +2734,36 @@ The adapter emits structured `runtime.event.append_started`, `runtime.event.appe
 
 The Sink does not own or close the shared Output publisher, Journal service, or EventHub. Task 3D owns retry decisions, abort-on-failure behavior, and safe Runtime exit; Task 3C owns scope ordinals as part of serialized execution state.
 
+### 16.5 Implemented Task 3C-A Pure Run and Turn State Machines
+
+`RunStateMachine` and `TurnStateMachine` are synchronous provider-independent lifecycle cores. They expose `begin`, `transition`, `restore`, `getSnapshot`, and active-state queries, but perform no I/O, logging, Event publication, cancellation, or adapter work.
+
+```mermaid
+classDiagram
+    class RunStateMachine {
+        +begin(BeginRunOptions) RunStateTransition
+        +transition(RunTransitionRequest) RunStateTransition
+        +restore(RunStateSnapshot)
+        +getSnapshot() RunStateSnapshot?
+        +hasActiveRun() boolean
+    }
+    class TurnStateMachine {
+        +begin(BeginTurnOptions) TurnStateTransition
+        +transition(TurnTransitionRequest) TurnStateTransition
+        +restore(TurnStateSnapshot)
+        +getSnapshot() TurnStateSnapshot?
+        +hasActiveTurn() boolean
+    }
+```
+
+Run creation is `null → queued`; Turn creation is `null → running`. Each lifecycle starts at transition ordinal zero and increments only after a legal transition. These ordinals are the scope-local values used by deterministic Runtime Event IDs.
+
+Legal transitions are explicit and reject wrong state/reason pairs. Stop and future Interrupt first enter `stopping`, then terminally enter `cancelled` with a required shared cancellation reason. Completed, failed, and cancelled lifecycles cannot transition again; a new lifecycle may replace retained machine state only after terminal completion.
+
+Snapshots and transition results are frozen and defensively capture durable Run origin Input references. Restore validates identity, registered values, cancellation consistency, and ordinal shape. It does not emit `recovery_restored`, write Journal state, or prove the complete historical chain; Task 3D reconstructs and verifies history before restore.
+
+Task 3C-B adds the two-lane Router and Stop fence around these pure rules. Task 3C-C adds `TurnController` coordination without moving Provider or Tool behavior into the state machines.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:

@@ -3214,6 +3214,7 @@ Currently implemented skeletons include:
 - `CoreConversationHostControlDispatcher` with durable online Runtime notification, offline Stop/ReloadConfig outcomes, routed InputResponse publication, and frozen dispatch results
 - focused Host control smoke coverage for routing outcomes, durable references, causation, failure retention, context validation, and redacted observability
 - real SQLite Host composition covering durable command acceptance, lifecycle publication, Bootstrap High Watermark, online and offline control routing, live delivery, idempotency, reopen replay, and redacted logs
+- no-process public `LocalConversation` integration covering lazy Runtime activation, unified Input/Output observation, replay, Handle-owned subscription shutdown, Runtime reuse after Handle reopen, closed-Handle rejection, shared-service independence, final Host shutdown, and log redaction
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild

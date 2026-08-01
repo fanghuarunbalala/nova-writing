@@ -570,6 +570,9 @@ Implementation status:
 - Task 2D-D-C implemented and awaiting review: Managed Host lifecycle publication, ordered per-Conversation Presence events, Input causation propagation, publication failure degradation, ownership boundaries, and expanded lifecycle smoke validation.
 - Task 2D-D-D implemented and awaiting review: Core Stop and ReloadConfig routing, online Runtime durable-reference notification, offline outcomes, routed InputResponse publication, result contracts, retry-preserving failure behavior, and focused smoke validation.
 - Task 2D-D-E implemented and awaiting review: real SQLite Host composition, unified Input/Output Sequence validation, Bootstrap High Watermark interaction, online/offline control routing, duplicate idempotency, live delivery, reopen replay, and redacted logs.
+- Task 2E implemented and awaiting review: public `LocalConversation` Handle integration with the real local Command, Host, Runtime placement, Output publication, and unified Event replay path; Handle close remains isolated from shared Runtime and service lifecycles.
+
+Task 2 implementation is complete. Task 3 must begin with an explicit review and freeze of its unresolved Run, Stop, Interrupt, cancellation, Pi mapping, canonical history, and Runtime persistence semantics.
 
 Resolved through Task 2C:
 
@@ -967,6 +970,34 @@ Task 2D-D-E explicitly excludes:
 - new production interfaces or lifecycle behavior
 - semantic Stop cancellation and ReloadConfig application
 - Runtime, InputRouter, Run/Turn state, Pi, Tools, Approval, IPC, and Subagents
+
+Task 2E delivered:
+
+- no-process integration of the public `LocalConversation` Handle with real SQLite-backed query and command services
+- lazy Runtime activation through `conversation.input.enqueue(...)` rather than Handle creation
+- unified Handle observation of durable InputEvents and Host lifecycle OutputEvents
+- replay through `conversation.events.list(...)` using the same durable Journal history
+- Handle-owned subscription shutdown without stopping the online Runtime or closing shared services
+- Handle reopen against the same online Runtime without duplicate placement
+- Stop routing through the reopened Handle with durable routed Output observation
+- closed-Handle rejection while the shared query path remains usable
+- final Host ownership of Runtime shutdown
+- log redaction across the complete local composition
+
+Task 2E accepted decisions:
+
+- a local Conversation Handle is a client-facing lifetime boundary, not the owner of its Runtime or shared storage and event services.
+- opening or replaying a Conversation never activates a Runtime.
+- closing one Handle closes only resources owned by that Handle.
+- reopening a Handle may reuse an already-online Runtime managed by the shared Host.
+- no-process composition must preserve the same public Conversation contracts intended for a future proxy implementation.
+
+Task 2E explicitly excludes:
+
+- ConversationProxy transport
+- process supervision and IPC
+- Runtime execution semantics beyond the existing fake Runtime Handle boundary
+- Run/Turn state, Pi, Tools, Approval, Policy, Compaction, Nudge, and Subagents
 
 ## 6. Task 3: Input Routing and Runtime Loop
 

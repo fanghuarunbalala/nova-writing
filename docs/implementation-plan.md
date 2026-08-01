@@ -1043,6 +1043,7 @@ Implementation status:
 - Task 3D-C implemented and awaiting review: persistence-first Runtime Input outcome control, deterministic terminal Event identity, serialized idempotency, retained same-Event retry, stable conflicts, redacted logs, public exports, and focused validation.
 - Task 3D-D implemented and awaiting review: replayed Run-input claims, pure startup reconciliation, consumed-outcome repair planning, safe routable Input partitioning, active lifecycle recovery blocking, stable failures, redacted logs, public exports, and focused validation.
 - Task 3D-E implemented and awaiting review: ready-only startup execution, repair/restore/route ordering, resumable outcome and queue backpressure barriers, defensive plan capture, stable failures, redacted logs, public exports, and focused validation.
+- Task 3D-F implemented and awaiting review: one-shot Bootstrap startup composition, bound Runtime identity validation, replay/reconcile/execute stage ordering, recovery blocking, stable stage failures, payload-free summaries, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1384,6 +1385,36 @@ Task 3D-E explicitly excludes:
 - execution of `recovery_required` lifecycle degradation and its unresolved fail-versus-cancel transition semantics
 - dequeue processing, Run creation, Stop fence application, Provider/Pi execution, Tool cancellation, and Runtime exit handling
 - Approval, Policy, IPC, Subagent, Context compilation, Nudge, Compaction, and message projection behavior
+
+Task 3D-F delivered:
+
+- `RuntimeBootstrapStartupCoordinator` as the single asynchronous startup entry over Bootstrap, replay, reconciliation, and ready execution
+- constructor binding to one Conversation ID and Runtime instance ID
+- validation of Bootstrap schema version, Runtime identity, active Conversation and Agent binding, Workspace identity, non-secret workdir presence, timestamps, Journal High Watermark, metadata Sequence floor, and activation cause
+- accepted-input activation validation for Conversation identity, Event Type, Sequence bounds, optional IDs, and Turn-with-Run consistency
+- exact stage order `replayPlanner.plan -> startupReconciler.reconcile -> startupExecutor.execute`
+- replay and execution identity checks against the Bootstrap Conversation and fixed High Watermark
+- zero-execution rejection of `recovery_required` startup plans
+- one-shot valid startup attempt semantics; later calls are rejected even when a valid attempt failed and Host must create a replacement Runtime instance
+- immutable payload-free startup summary with activation reason, replay counts, repair/routing counts, and restored lifecycle identity/status
+- stable `RuntimeBootstrapStartupError` failures for invalid Bootstrap, repeated start, replay, reconciliation, active recovery, and execution
+- structured start, completion, and failure logs without workdir, Store paths, Agent definition content, Event payloads, novel text, raw errors, stacks, or causes
+- focused smoke coverage using real empty replay and real reconciliation/execution, terminal-lifecycle repair and routing, active-lifecycle blocking, replay failure normalization, Runtime identity rejection, one-shot start, immutable results, and log redaction
+
+Task 3D-F accepted decisions:
+
+- Bootstrap High Watermark is captured by Host and remains the exact replay boundary for the complete startup attempt.
+- the coordinator is bound to one Runtime instance and accepts one valid Bootstrap attempt; transient startup failure is recovered by Host replacement rather than hidden in-process replay loops.
+- invalid Bootstrap input does not consume the coordinator, but once a valid Bootstrap begins, every outcome is terminal for that coordinator instance.
+- `recovery_required` is surfaced before `RuntimeStartupExecutor`, guaranteeing no repairs, restore, or routing occur under unresolved active-lifecycle semantics.
+- stage-specific internal errors are normalized at the coordinator boundary and raw causes are not returned or logged.
+- the startup result is an operational summary, not a replay/history API and not a carrier for Input payloads or Workspace paths.
+
+Task 3D-F explicitly excludes:
+
+- live Host `dispatchInput` handling after startup and the long-running ConversationRuntime loop
+- non-terminal lifecycle degradation, automatic restart/backoff, Runtime Presence publication, and process exit mapping
+- dequeue processing, Stop cancellation effects, Provider/Pi, Tool, Approval, Policy, IPC, Subagent, Context compilation, Nudge, and Compaction
 
 Expected deliverables after approval:
 

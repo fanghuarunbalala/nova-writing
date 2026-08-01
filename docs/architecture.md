@@ -2998,6 +2998,45 @@ Public execution snapshots expose only phase, fixed High Watermark, completed/to
 
 Failures normalize to `invalid_plan`, `recovery_required`, `already_started`, `no_resumable_execution`, `outcome_pending`, `outcome_failed`, `restore_failed`, `route_blocked`, or `route_failed`. Logs contain only stable identifiers, phase counts, lane/capacity, status, Sequence, and failure value.
 
+### 16.13 Implemented Task 3D-F Bootstrap Startup Composition
+
+`RuntimeBootstrapStartupCoordinator` is the single one-shot startup entry used by a future `ConversationRuntime`. It binds one Conversation ID and Runtime instance ID, accepts one immutable Host Bootstrap, and composes the already separated startup stages.
+
+```mermaid
+sequenceDiagram
+    participant Host
+    participant Coordinator as RuntimeBootstrapStartupCoordinator
+    participant Replay as RuntimeReplayPlanner
+    participant Reconcile as RuntimeStartupReconciler
+    participant Execute as RuntimeStartupExecutor
+
+    Host->>Coordinator: start(RuntimeBootstrap)
+    Coordinator->>Coordinator: validate bound identity + High Watermark
+    Coordinator->>Replay: plan(conversationId, highWatermark)
+    Replay-->>Coordinator: RuntimeReplayPlan
+    Coordinator->>Reconcile: reconcile(replay)
+    Reconcile-->>Coordinator: ready or recovery_required
+    alt ready
+        Coordinator->>Execute: execute(startup plan)
+        Execute-->>Coordinator: durable startup result
+        Coordinator-->>Host: payload-free startup summary
+    else recovery_required
+        Coordinator-->>Host: stable recovery_required failure
+    end
+```
+
+Bootstrap validation covers schema version, Runtime instance, active Conversation and Agent binding identity, Workspace identity, timestamp shape, Journal High Watermark, metadata Sequence consistency, and the discriminated activation cause. The workdir must be present because it is part of the accepted Bootstrap contract, but its value is never returned or logged.
+
+Accepted-input activation additionally verifies Input Conversation ID, Event Type, Sequence within the fixed High Watermark, optional Correlation/Run/Turn identifiers, and Turn-with-Run consistency. Explicit restore and crash recovery reject an unexpected Input field.
+
+The stage order is fixed: replay, reconcile, then ready execution. Replay and execution results must match the bound Conversation and Bootstrap High Watermark. A `recovery_required` plan never reaches the executor, preserving the unresolved active-lifecycle degradation boundary.
+
+One coordinator accepts one valid Bootstrap attempt. An invalid Bootstrap may be corrected before startup begins; after a valid attempt starts, success or failure is terminal for that coordinator. Host recovery creates a replacement Runtime instance instead of running hidden retry or backoff loops inside Core startup.
+
+The immutable result contains only Runtime/Conversation identity, activation reason, fixed High Watermark, scanned and processed counts, repair and routing counts, and optional restored Run/Turn identity and status. It is not a history surface and carries no Input payloads, prompts, Agent definition content, workdir, Store path, or JSONL data.
+
+Failures normalize to `invalid_bootstrap`, `already_started`, `replay_failed`, `reconcile_failed`, `recovery_required`, or `execution_failed`. Logs contain only bound identities, activation reason, High Watermark, counts, lifecycle status, and stable failure values.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -3814,6 +3853,7 @@ Currently implemented skeletons include:
 - persistence-first terminal Runtime Input outcome control with exact-Event retry
 - startup reconciliation with consumed repairs, duplicate-routing prevention, and active-lifecycle blocking
 - ready-only startup execution with durable repair, lifecycle restore, and resumable Router backpressure
+- one-shot Bootstrap startup composition with bound Runtime identity and stage failure normalization
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

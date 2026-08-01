@@ -174,6 +174,10 @@ Accepted decisions:
 7. Persisted Agent bindings always contain an exact Agent type and definition version, while the upper layer resolves Prompt, Tools, Policy, and Provider.
 8. Journal append succeeds before live publication or Message projection.
 9. Snapshots accelerate restoration but never replace Journal history.
+10. Runtime, Journal, Message, Snapshot, and Catalog ports use Promise-based asynchronous contracts.
+11. The initial Node SQLite adapter follows Pi's boundary principle: Promise-based domain Storage ports encapsulate direct `DatabaseSync` calls without exposing synchronous database APIs to Core callers.
+12. Task 1B does not introduce Storage Worker RPC or a generic thread pool. A Worker-backed adapter remains a compatible future optimization triggered by measured event-loop delay.
+13. The project uses an async-first hybrid concurrency model: asynchronous system boundaries, one serialized Runtime state owner per active Conversation, synchronous lightweight domain computation, and Worker, process, or Rust-backed isolation only for measured heavy or blocking work.
 
 Task breakdown:
 
@@ -185,22 +189,47 @@ Task breakdown:
 Implementation status:
 
 - Task 1A implemented: Workspace location, semantic Store naming, SQLite initialization, Conversation metadata, and single-active Agent binding persistence.
-- Tasks 1B through 1D remain unimplemented and require their own review before coding.
+- Task 1B implemented and awaiting review: unified SQLite Input/Output Journal, per-Conversation Sequence allocation, Event ID idempotency, canonical JSON integrity, stable history pagination, unknown historical event replay, and shared Workspace Store ownership.
+- Tasks 1C and 1D remain unimplemented and require their own review before coding.
 
-Expected deliverables after approval:
+Task 1B concurrency boundary:
 
-- storage ports
-- initial storage implementation
-- Workspace and Conversation catalog
-- versioned Agent binding persistence
-- atomic append behavior
-- output pagination
-- replay and follow subscription
-- snapshot read/write contracts
-- focused recovery and replay tests
+```text
+Async ConversationJournalStore
+    ↓
+Direct Node SQLite adapter
+    ↓
+DatabaseSync
+```
+
+- `async` methods do not imply a Worker Thread and must not be described as non-blocking SQLite I/O.
+- the Node adapter keeps SQL transactions small, result pages bounded, and JSON processing outside critical transactions where possible.
+- Conversation, Runtime, Tool, Provider, Event, IPC, and Storage boundaries remain asynchronous even though the initial SQLite leaf implementation is synchronous.
+- each active Conversation serializes Run, Turn, Context, control, and lifecycle state mutation; concurrent completion results re-enter that serialized transition path.
+- pure in-memory validation, registry lookup, value conversion, and small state transitions remain synchronous rather than receiving artificial Promise wrappers.
+- no Storage Worker, Worker RPC protocol, or connection pool is implemented in Task 1B.
+- the database capability remains replaceable so a future Worker adapter can preserve the same Journal and Catalog interfaces.
+
+Task 1B delivered:
+
+- platform-neutral asynchronous Journal reader and writer ports
+- persisted InputEvent and OutputEvent snapshots with Direction, Sequence, and RecordedAt
+- strict canonical JSON serialization and SHA-256 integrity hashes
+- SQLite schema migration V2 with Journal indexes and foreign keys
+- atomic per-Conversation Sequence allocation and Event ID idempotency
+- duplicate receipts and conflicting Event ID rejection
+- strict known InputEvent writes and extensible unknown OutputEvent writes
+- tolerant unknown historical InputEvent and OutputEvent replay
+- corruption detection for JSON, hashes, envelopes, and extracted columns
+- stable paginated queries with Start, End, After, Before, ThroughSequence, and filters
+- `SqliteWorkspaceStore.open()` and `close()` ownership of one database connection, Catalog, and Journal
+- focused temporary smoke validation without adding a new test framework
 
 Explicitly excluded:
 
+- per-Conversation `messages.jsonl` projection and Journal repair, deferred to Task 1C
+- `ConversationEventHub`, follow subscription, catch-up-to-live, and backpressure, deferred to Task 1D
+- Snapshot persistence contracts and implementations
 - Agent execution
 - Runtime activation
 - Tool execution

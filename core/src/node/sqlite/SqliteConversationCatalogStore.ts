@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import type {
   AgentBindingIdentity,
   ConversationAgentBinding,
@@ -18,9 +16,7 @@ import {
   ConversationAlreadyExistsError,
   ConversationParentNotFoundError,
   ConversationWorkspaceMismatchError,
-  WorkspaceDatabaseMismatchError,
 } from "./ConversationCatalogErrors.js";
-import { runCoreSqliteMigrations } from "./migrations.js";
 
 interface ConversationRow {
   id: string;
@@ -45,33 +41,12 @@ interface AgentBindingRow {
   superseded_at: string | null;
 }
 
-interface WorkspaceMetadataRow {
-  workspace_id: string;
-}
-
-export interface SqliteConversationCatalogStoreOptions {
-  workspace: WorkspaceStoreLocation;
-}
-
 export class SqliteConversationCatalogStore implements ConversationCatalogStore {
-  private readonly database: DatabaseSync;
-  private readonly workspace: WorkspaceStoreLocation;
-  private closed = false;
-
-  constructor(options: SqliteConversationCatalogStoreOptions) {
-    this.workspace = options.workspace;
-    mkdirSync(dirname(this.workspace.databasePath), { recursive: true });
-    this.database = new DatabaseSync(this.workspace.databasePath);
-    try {
-      this.configureDatabase();
-      runCoreSqliteMigrations(this.database);
-      this.bindWorkspaceMetadata();
-    } catch (error) {
-      this.database.close();
-      this.closed = true;
-      throw error;
-    }
-  }
+  constructor(
+    private readonly database: DatabaseSync,
+    private readonly workspace: WorkspaceStoreLocation,
+    private readonly ensureWorkspaceOpen: () => void,
+  ) {}
 
   async createConversation(input: CreateConversationInput): Promise<StoredConversation> {
     this.assertOpen();
@@ -257,55 +232,6 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
     return rows.map((row) => this.mapAgentBindingRow(row));
   }
 
-  async close(): Promise<void> {
-    if (this.closed) return;
-    this.database.close();
-    this.closed = true;
-  }
-
-  private configureDatabase(): void {
-    this.database.exec("PRAGMA journal_mode = WAL");
-    this.database.exec("PRAGMA synchronous = FULL");
-    this.database.exec("PRAGMA foreign_keys = ON");
-    this.database.exec("PRAGMA busy_timeout = 5000");
-  }
-
-  private bindWorkspaceMetadata(): void {
-    const existing = this.database
-      .prepare("SELECT workspace_id FROM workspace_metadata LIMIT 1")
-      .get() as WorkspaceMetadataRow | undefined;
-    if (existing !== undefined && existing.workspace_id !== this.workspace.workspaceId) {
-      throw new WorkspaceDatabaseMismatchError(
-        this.workspace.databasePath,
-        this.workspace.workspaceId,
-        existing.workspace_id,
-      );
-    }
-
-    this.database
-      .prepare(
-        `INSERT INTO workspace_metadata(
-           workspace_id,
-           workspace_root,
-           store_dir_name,
-           schema_version,
-           created_at,
-           updated_at
-         ) VALUES (?, ?, ?, 1, ?, ?)
-         ON CONFLICT(workspace_id) DO UPDATE SET
-           workspace_root = excluded.workspace_root,
-           store_dir_name = excluded.store_dir_name,
-           updated_at = excluded.updated_at`,
-      )
-      .run(
-        this.workspace.workspaceId,
-        this.workspace.workspaceRoot,
-        this.workspace.storeDirName,
-        this.workspace.createdAt,
-        this.workspace.updatedAt,
-      );
-  }
-
   private selectConversationRow(conversationId: string): ConversationRow | undefined {
     return this.database.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId) as
       | ConversationRow
@@ -360,6 +286,6 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
   }
 
   private assertOpen(): void {
-    if (this.closed) throw new Error("SqliteConversationCatalogStore is closed");
+    this.ensureWorkspaceOpen();
   }
 }

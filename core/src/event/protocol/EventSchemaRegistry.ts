@@ -27,7 +27,22 @@ const inputEventSnapshotSchema = Type.Object(
   { additionalProperties: false },
 );
 
-const outputEventSnapshotSchema = Type.Object(metadataProperties, { additionalProperties: false });
+const outputEventSnapshotSchema = Type.Object(
+  {
+    ...metadataProperties,
+    inputEvent: Type.Optional(
+      Type.Object(
+        {
+          id: Type.String({ minLength: 1 }),
+          eventType: Type.String({ minLength: 3 }),
+          sequence: Type.Optional(Type.Integer({ minimum: 1 })),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
 
 export interface EventSchemaDefinition<TPayloadSchema extends TSchema = TSchema> {
   eventType: string;
@@ -37,7 +52,7 @@ export interface EventSchemaDefinition<TPayloadSchema extends TSchema = TSchema>
   priority?: number;
 }
 
-export interface ValidateOutputOptions {
+export interface ValidateEventOptions {
   allowUnknownEventType?: boolean;
 }
 
@@ -58,12 +73,21 @@ export class EventSchemaRegistry {
     this.definitions.set(key, definition);
   }
 
-  validateInput(value: unknown): InputEventSnapshot {
+  validateInput(value: unknown, options: ValidateEventOptions = {}): InputEventSnapshot {
     this.assertSchema(inputEventSnapshotSchema, value, "Invalid input event snapshot");
     const snapshot = value as InputEventSnapshot;
     this.assertCommon(snapshot);
 
-    const definition = this.getDefinition("input", snapshot.eventType, snapshot.schemaVersion);
+    const definition = this.findDefinition("input", snapshot.eventType, snapshot.schemaVersion);
+    if (!definition) {
+      if (!options.allowUnknownEventType) {
+        throw new EventValidationError(
+          `Unknown input event schema: ${snapshot.eventType}@${snapshot.schemaVersion}`,
+        );
+      }
+      return snapshot;
+    }
+
     if (snapshot.priority !== definition.priority) {
       throw new EventValidationError(
         `Input priority mismatch for ${snapshot.eventType}: expected ${definition.priority}, received ${snapshot.priority}`,
@@ -74,7 +98,7 @@ export class EventSchemaRegistry {
     return snapshot;
   }
 
-  validateOutput(value: unknown, options: ValidateOutputOptions = {}): OutputEventSnapshot {
+  validateOutput(value: unknown, options: ValidateEventOptions = {}): OutputEventSnapshot {
     this.assertSchema(outputEventSnapshotSchema, value, "Invalid output event snapshot");
     const snapshot = value as OutputEventSnapshot;
     this.assertCommon(snapshot);
@@ -120,14 +144,6 @@ export class EventSchemaRegistry {
       message: error.message,
     }));
     throw new EventValidationError(message, issues);
-  }
-
-  private getDefinition(kind: EventKind, eventType: string, schemaVersion: number): EventSchemaDefinition {
-    const definition = this.findDefinition(kind, eventType, schemaVersion);
-    if (!definition) {
-      throw new EventValidationError(`Unknown ${kind} event schema: ${eventType}@${schemaVersion}`);
-    }
-    return definition;
   }
 
   private findDefinition(

@@ -1,3 +1,3 @@
 export * from "./ConversationCatalogErrors.js";
-export * from "./SqliteConversationCatalogStore.js";
+export * from "./SqliteWorkspaceStore.js";
 export * from "./migrations.js";

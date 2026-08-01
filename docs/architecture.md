@@ -35,6 +35,9 @@ The product should lower the barrier between imagination and a structured, susta
 15. A canonical workspace root maps one-to-one to a separate semantic Store directory; transient execution working directories never change that binding.
 16. A Conversation does not interpret Agent types, but its versioned Agent binding is persisted so the Host can restore it through an upper-layer `AgentResolver`.
 17. SQLite Journal records drive display and replay; per-Conversation `messages.jsonl` files are repairable Runtime message projections rather than a second event source of truth.
+18. Runtime and Storage contracts are asynchronous, while the first Node SQLite adapter may execute bounded `DatabaseSync` operations directly behind those Promise-based contracts.
+19. Worker Threads are an implementation option, not part of the initial Storage contract; they are introduced only after measured event-loop blocking justifies the additional transport and lifecycle complexity.
+20. The concurrency model is async-first and hybrid: system boundaries are asynchronous, each Conversation mutates Runtime state through a serialized state machine, lightweight in-memory computation remains synchronous, and heavy CPU or blocking work is isolated behind replaceable Worker, process, or Rust-backed adapters when required.
 
 ## 4. Pause and Resume Decision
 
@@ -147,6 +150,139 @@ erDiagram
 Creation requires an Agent type. The upper-layer resolver may select the exact definition version, but the persisted binding always records both `agentType` and `definitionVersion`. The public Conversation handle does not need to expose or interpret them.
 
 One Conversation has at most one active binding in the initial architecture. Historical binding revisions are supported by the schema, while concurrent multi-Agent rooms are deferred. Main and subagents continue to use separate Conversations.
+
+## 5.3 TypeScript Async and Execution Model
+
+TypeScript uses the JavaScript runtime concurrency model. `async` and `await` coordinate Promise-based work on the runtime event loop; they do not create an operating-system thread.
+
+```ts
+async function run(): Promise<void> {
+  prepareSynchronously();
+  await waitForProviderStream();
+  continueAfterSettlement();
+}
+```
+
+Calling `run()` starts executing immediately and synchronously until it reaches an `await` that has not settled. At that point the function returns a Promise and its continuation is scheduled for later. Synchronous work performed before or after `await` still runs on the current JavaScript thread and can block its event loop.
+
+```ts
+async function misleadingAsync(): Promise<void> {
+  databaseSync.exec("SELECT expensive_operation()");
+}
+```
+
+The `async` keyword in this example changes the return type to Promise-based control flow, but it does not make `DatabaseSync.exec()` non-blocking and does not move it into a Worker Thread.
+
+Python `asyncio` and TypeScript async code are both cooperative concurrency models: work switches at explicit asynchronous suspension points rather than being preemptively assigned a new thread. Their important surface differences are:
+
+| TypeScript / Node | Python / asyncio |
+|---|---|
+| `async function` returns a `Promise` | `async def` returns a coroutine object |
+| Calling an async function begins executing it immediately until suspension | Calling an async function creates a coroutine; it runs when awaited or scheduled |
+| `Promise` is both a result container and composition primitive | Coroutine and `asyncio.Task` are distinct concepts |
+| The Node runtime owns the normal application event loop | Applications commonly interact explicitly with the asyncio loop and Tasks |
+| Blocking synchronous work blocks the JavaScript event-loop thread | Blocking synchronous work blocks the asyncio event-loop thread |
+| Blocking work can move to Worker Threads or child processes | Blocking work can move to an executor, thread, or process |
+
+Neither model makes synchronous code asynchronous merely by wrapping it in an async function.
+
+### 5.3.1 Pi Agent Core Model
+
+Pi Agent Core uses the TypeScript asynchronous model:
+
+- Agent execution is an async loop.
+- streamed Agent events are exposed through `EventStream` and `for await`.
+- Provider calls and Tool execution return Promises.
+- Tool batches use Promise concurrency for parallel mode and awaited ordering for sequential mode.
+- the stateful `Agent` class awaits event subscribers in registration order, allowing a subscriber to act as a persistence barrier.
+- steering and follow-up queues are drained at asynchronous turn boundaries.
+
+Pi's SQLite package deliberately separates its contract from its Node implementation:
+
+```text
+Promise-based SqliteDatabase interface
+    ↓
+Node adapter
+    ↓
+DatabaseSync
+```
+
+The Node adapter exposes Promise-returning methods but directly calls `DatabaseSync`. This is an asynchronous interface over a synchronous implementation, not asynchronous SQLite I/O and not a Worker Thread implementation.
+
+### 5.3.2 Accepted Novel Runtime Model
+
+```mermaid
+flowchart LR
+    Apps["CLI / TUI / GUI / Web"]
+    Runtime["Async ConversationRuntime"]
+    Pi["Pi Agent Core async loop"]
+    StoragePort["Async Storage Ports"]
+    DirectSqlite["Direct Node SQLite Adapter"]
+    Database["DatabaseSync"]
+    FutureWorker["Future Worker Adapter"]
+
+    Apps --> Runtime
+    Runtime --> Pi
+    Runtime -->|"await append/query"| StoragePort
+    StoragePort --> DirectSqlite
+    DirectSqlite --> Database
+    StoragePort -. "replace after profiling" .-> FutureWorker
+```
+
+The accepted initial model is:
+
+```text
+ConversationRuntime, Provider streaming, Tool APIs, Event delivery
+    asynchronous Promise / AsyncIterable contracts
+
+Conversation Journal, Metadata, Messages, Snapshot ports
+    asynchronous Promise contracts
+
+Initial Node SQLite implementation
+    direct bounded DatabaseSync operations behind the async ports
+
+Worker Threads
+    deferred adapter optimization, not an initial architectural dependency
+```
+
+The direct SQLite adapter remains acceptable only while transactions and queries are short and bounded. Journal pages have hard limits, large payload transformations occur outside transactions, and performance measurements must include event-loop delay. If storage work later causes material Provider-stream, IPC, UI, or approval latency, the same async Storage ports can be implemented by a Worker-backed adapter without changing Conversation or Runtime contracts.
+
+### 5.3.3 Async-First Hybrid Concurrency Boundary
+
+The accepted concurrency principle is:
+
+> **Async-first hybrid architecture: asynchronous system boundaries, a serialized Conversation state machine, and localized synchronous computation.**
+
+This is not a purely synchronous architecture, and it does not require every function to return a Promise. The boundary is determined by whether an operation crosses an I/O, time, process, runtime-placement, or cancellation boundary.
+
+| Area | Accepted model | Reason |
+| --- | --- | --- |
+| Conversation commands and queries | `Promise` | May cross persistence, activation, IPC, or authorization boundaries |
+| Provider and Agent execution | `Promise` / `AsyncIterable` | Supports streaming, cancellation, and long-running remote work |
+| Tool execution and Approval | `Promise` / event interaction | May wait for I/O, processes, sandboxing, or user decisions |
+| Event live delivery | `AsyncIterable` | Supports streaming, reconnect, and backpressure policy |
+| Subagent and IPC communication | asynchronous request/event protocols | Runtime placement must remain transparent to callers |
+| Storage ports | `Promise` | Keeps direct, Worker-backed, process-backed, and remote adapters interchangeable |
+| Conversation Runtime state mutation | serialized state machine | Prevents overlapping Turn, Context, Stop, Config, and Tool state transitions |
+| Event validation, registry lookup, and small state transitions | synchronous | Pure in-memory work has no asynchronous suspension boundary |
+| Initial SQLite transaction body | bounded synchronous work | `DatabaseSync` is confined to the Node adapter and transactions contain no `await` |
+| Heavy CPU or materially blocking work | Worker, child process, or Rust-backed adapter | Protects Provider streaming, UI responsiveness, IPC, and approval latency |
+
+Each active Conversation has one logical Runtime state owner. Inputs may arrive concurrently, but state-changing work is admitted through prioritized queues and applied serially:
+
+```text
+concurrent InputEvent submissions
+    ↓
+control and turn queues
+    ↓
+single ConversationRuntime state owner
+    ↓
+serialized Run / Turn / Context transitions
+```
+
+Different Conversations may execute concurrently. A single Conversation may also run explicitly independent Provider, Tool, or Subagent work concurrently when policy allows it, but completion results must re-enter the serialized Runtime state transition path before mutating Conversation state or committing ordered events.
+
+The Core public API never exposes `DatabaseSync`, `StatementSync`, or another synchronous storage contract. A direct Node SQLite implementation may perform short synchronous calls internally, but `async` wrappers must not be described as yielding execution while those calls run. SQLite transaction callbacks must not contain arbitrary asynchronous work.
 
 ## 6. Overall Architecture
 
@@ -760,6 +896,74 @@ Rules:
 - Snapshots accelerate restoration but never replace the append-only Journal.
 - Journal and Snapshot formats carry explicit schema versions.
 - Clients reconnect using `afterSequence`.
+
+### 15.1 Implemented Task 1B Storage Boundary
+
+Task 1B implements the durable Store primitive used by the future Host-owned JournalService. It does not implement live publication.
+
+```mermaid
+classDiagram
+    class SqliteWorkspaceStore {
+        +WorkspaceStoreLocation workspace
+        +ConversationCatalogStore conversations
+        +ConversationJournalStore journal
+        +open(options) Promise~SqliteWorkspaceStore~
+        +close() Promise~void~
+    }
+
+    class ConversationJournalStore {
+        <<interface>>
+        +append(request) Promise~JournalAppendReceipt~
+        +getHighWatermark(conversationId) Promise~number~
+        +getBySequence(conversationId, sequence) Promise~PersistedEvent~
+        +getByEventId(conversationId, eventId) Promise~PersistedEvent~
+        +list(query) Promise~ConversationEventPage~
+    }
+
+    class ConversationCatalogStore {
+        <<interface>>
+    }
+
+    SqliteWorkspaceStore *-- ConversationCatalogStore
+    SqliteWorkspaceStore *-- ConversationJournalStore
+```
+
+The Workspace Store owns one `novel.db` connection, SQLite configuration, migrations, Workspace identity verification, Catalog adapter, Journal adapter, and final close operation. Child Store ports do not independently own or close the database.
+
+Journal records persist:
+
+```text
+Conversation ID + per-Conversation Sequence
+Event ID + Input/Output Direction
+Event Type + Schema Version + Event Timestamp
+Run / Turn / Correlation / Causation identifiers
+Canonical full Event JSON + SHA-256 hash
+RecordedAt persistence timestamp
+```
+
+Append is one bounded synchronous SQLite transaction behind an asynchronous Journal port:
+
+```text
+validate Event and canonicalize JSON outside transaction
+    ↓
+calculate SHA-256 outside transaction
+    ↓
+BEGIN IMMEDIATE
+    ↓
+verify Conversation and Event ID idempotency
+    ↓
+allocate last_journal_sequence + 1
+    ↓
+insert Journal record and advance Conversation watermark
+    ↓
+COMMIT
+```
+
+The transaction contains no `await`. An identical `(conversationId, eventId)` returns the original Sequence and RecordedAt. Reusing the same ID for different content or Direction is rejected.
+
+History pages default to 100 records and are capped at 1000. Start, End, AfterSequence, and BeforeSequence anchors always return ascending Sequence order. Direction, Event Type, Run, and Turn filters may create expected Sequence gaps. `throughSequence` freezes a query to a captured High Watermark so later appends do not alter an in-progress replay.
+
+Known InputEvents are validated strictly on write. Unknown OutputEvent types may be stored after strict envelope and JSON-safety validation. Historical reads tolerate unknown Input and Output schemas so future event types remain replayable, while malformed JSON, non-canonical JSON, hash mismatches, invalid envelopes, or extracted-column mismatches are treated as corrupted Journal records.
 
 ## 16. ConversationRuntime Composition
 

@@ -45,6 +45,4 @@ export interface ConversationCatalogStore
   createConversation(input: CreateConversationInput): Promise<StoredConversation>;
 
   getConversation(conversationId: string): Promise<StoredConversation | undefined>;
-
-  close(): Promise<void>;
 }

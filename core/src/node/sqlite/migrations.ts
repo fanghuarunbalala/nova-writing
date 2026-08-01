@@ -65,6 +65,43 @@ const MIGRATIONS: Migration[] = [
       ON conversation_agent_bindings(agent_type, definition_version);
     `,
   },
+  {
+    version: 2,
+    name: "conversation_journal",
+    sql: `
+      CREATE TABLE journal_records (
+        conversation_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL CHECK (sequence > 0),
+        event_id TEXT NOT NULL,
+        event_direction TEXT NOT NULL CHECK (event_direction IN ('input', 'output')),
+        event_type TEXT NOT NULL,
+        schema_version INTEGER NOT NULL CHECK (schema_version > 0),
+        event_timestamp TEXT NOT NULL,
+        recorded_at TEXT NOT NULL,
+        run_id TEXT,
+        turn_id TEXT,
+        correlation_id TEXT,
+        causation_id TEXT,
+        event_json TEXT NOT NULL,
+        event_hash TEXT NOT NULL,
+        PRIMARY KEY (conversation_id, sequence),
+        UNIQUE (conversation_id, event_id),
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      ) STRICT;
+
+      CREATE INDEX journal_records_direction_sequence_idx
+      ON journal_records(conversation_id, event_direction, sequence);
+
+      CREATE INDEX journal_records_type_sequence_idx
+      ON journal_records(conversation_id, event_type, sequence);
+
+      CREATE INDEX journal_records_run_sequence_idx
+      ON journal_records(conversation_id, run_id, sequence);
+
+      CREATE INDEX journal_records_turn_sequence_idx
+      ON journal_records(conversation_id, turn_id, sequence);
+    `,
+  },
 ];
 
 export function runCoreSqliteMigrations(database: DatabaseSync): void {

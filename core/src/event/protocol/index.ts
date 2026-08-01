@@ -1,3 +1,4 @@
+export * from "./CanonicalJson.js";
 export * from "./EventMetadata.js";
 export * from "./EventSchemaRegistry.js";
 export * from "./EventType.js";

@@ -6,18 +6,34 @@ import {
   type TurnStateChangeReason,
   type TurnStatus,
 } from "../../../runtime/execution/TurnLifecycle.js";
+import {
+  isExecutionCancellationReason,
+  type ExecutionCancellationReason,
+} from "../../../runtime/execution/ExecutionCancellationReason.js";
 import { OutputPayload } from "../OutputPayload.js";
 
-export interface AgentTurnStateChangedPayloadOptions {
+interface AgentTurnStateChangedPayloadBaseOptions {
   previous: TurnStatus | null;
-  current: TurnStatus;
   reason: TurnStateChangeReason;
 }
+
+export type AgentTurnStateChangedPayloadOptions = AgentTurnStateChangedPayloadBaseOptions &
+  (
+    | {
+        current: "cancelled";
+        cancellationReason: ExecutionCancellationReason;
+      }
+    | {
+        current: Exclude<TurnStatus, "cancelled">;
+        cancellationReason?: never;
+      }
+  );
 
 export class AgentTurnStateChangedPayload extends OutputPayload {
   readonly previous: TurnStatus | null;
   readonly current: TurnStatus;
   readonly reason: TurnStateChangeReason;
+  readonly cancellationReason?: ExecutionCancellationReason;
 
   constructor(options: AgentTurnStateChangedPayloadOptions) {
     super();
@@ -30,6 +46,14 @@ export class AgentTurnStateChangedPayload extends OutputPayload {
     if (!isTurnStateChangeReason(options.reason)) {
       throw new TypeError("Turn state change reason must be registered");
     }
+    if (options.current === "cancelled") {
+      if (!isExecutionCancellationReason(options.cancellationReason)) {
+        throw new TypeError("Cancelled Turn requires a registered cancellation reason");
+      }
+      this.cancellationReason = options.cancellationReason;
+    } else if ("cancellationReason" in options && options.cancellationReason !== undefined) {
+      throw new TypeError("Non-cancelled Turn must not contain a cancellation reason");
+    }
 
     this.previous = options.previous;
     this.current = options.current;
@@ -41,6 +65,9 @@ export class AgentTurnStateChangedPayload extends OutputPayload {
       previous: this.previous,
       current: this.current,
       reason: this.reason,
+      ...(this.cancellationReason !== undefined
+        ? { cancellationReason: this.cancellationReason }
+        : {}),
     };
   }
 }

@@ -11,6 +11,7 @@ export * from "./OutputEventSnapshot.js";
 export * from "./OutputEventType.js";
 export * from "./OutputPayload.js";
 export * from "./RuntimePresenceChangedOutputEvent.js";
+export * from "./RuntimeInputProcessedOutputEvent.js";
 export * from "./schema/index.js";
 export * from "./SystemOutputEvent.js";
 export * from "./payload/index.js";

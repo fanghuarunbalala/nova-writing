@@ -10,20 +10,36 @@ import {
   type RunStateChangeReason,
   type RunStatus,
 } from "../../../runtime/execution/RunLifecycle.js";
+import {
+  isExecutionCancellationReason,
+  type ExecutionCancellationReason,
+} from "../../../runtime/execution/ExecutionCancellationReason.js";
 import { OutputPayload } from "../OutputPayload.js";
 
-export interface AgentRunStateChangedPayloadOptions {
+interface AgentRunStateChangedPayloadBaseOptions {
   inputEvent: DurableInputEventReference;
   previous: RunStatus | null;
-  current: RunStatus;
   reason: RunStateChangeReason;
 }
+
+export type AgentRunStateChangedPayloadOptions = AgentRunStateChangedPayloadBaseOptions &
+  (
+    | {
+        current: "cancelled";
+        cancellationReason: ExecutionCancellationReason;
+      }
+    | {
+        current: Exclude<RunStatus, "cancelled">;
+        cancellationReason?: never;
+      }
+  );
 
 export class AgentRunStateChangedPayload extends OutputPayload {
   readonly inputEvent: DurableInputEventReference;
   readonly previous: RunStatus | null;
   readonly current: RunStatus;
   readonly reason: RunStateChangeReason;
+  readonly cancellationReason?: ExecutionCancellationReason;
 
   constructor(options: AgentRunStateChangedPayloadOptions) {
     super();
@@ -35,6 +51,14 @@ export class AgentRunStateChangedPayload extends OutputPayload {
     }
     if (!isRunStateChangeReason(options.reason)) {
       throw new TypeError("Run state change reason must be registered");
+    }
+    if (options.current === "cancelled") {
+      if (!isExecutionCancellationReason(options.cancellationReason)) {
+        throw new TypeError("Cancelled Run requires a registered cancellation reason");
+      }
+      this.cancellationReason = options.cancellationReason;
+    } else if ("cancellationReason" in options && options.cancellationReason !== undefined) {
+      throw new TypeError("Non-cancelled Run must not contain a cancellation reason");
     }
 
     this.inputEvent = captureDurableInputEventReference(options.inputEvent);
@@ -49,6 +73,9 @@ export class AgentRunStateChangedPayload extends OutputPayload {
       previous: this.previous,
       current: this.current,
       reason: this.reason,
+      ...(this.cancellationReason !== undefined
+        ? { cancellationReason: this.cancellationReason }
+        : {}),
     };
   }
 }

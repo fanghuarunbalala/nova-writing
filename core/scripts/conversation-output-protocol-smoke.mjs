@@ -15,6 +15,7 @@ const registry = createCoreEventSchemaRegistry();
 assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "system.runtime.presence.changed",
   "system.input.routed",
+  "system.input.processed",
   "agent.run.state.changed",
   "agent.turn.state.changed",
 ]);

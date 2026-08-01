@@ -2,6 +2,7 @@
 export const OUTPUT_EVENT_TYPE = {
   runtimePresenceChanged: "system.runtime.presence.changed",
   hostInputRouted: "system.input.routed",
+  runtimeInputProcessed: "system.input.processed",
   agentRunStateChanged: "agent.run.state.changed",
   agentTurnStateChanged: "agent.turn.state.changed",
 } as const;

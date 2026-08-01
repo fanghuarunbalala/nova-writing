@@ -1,30 +1,30 @@
 /** Records one Core-owned Run state transition for replay and UI consumers. */
-import type { DurableInputEventReference } from "../input/DurableInputEventReference.js";
-import type {
-  RunStateChangeReason,
-  RunStatus,
-} from "../../runtime/execution/RunLifecycle.js";
 import { AgentOutputEvent } from "./AgentOutputEvent.js";
 import { OUTPUT_EVENT_TYPE } from "./OutputEventType.js";
 import type { OutputEventOptions } from "./OutputEventOptions.js";
-import { AgentRunStateChangedPayload } from "./payload/AgentRunStateChangedPayload.js";
+import {
+  AgentRunStateChangedPayload,
+  type AgentRunStateChangedPayloadOptions,
+} from "./payload/AgentRunStateChangedPayload.js";
 
-export interface AgentRunStateChangedOutputEventOptions
-  extends Omit<OutputEventOptions, "runId" | "turnId"> {
-  runId: string;
-  inputEvent: DurableInputEventReference;
-  previous: RunStatus | null;
-  current: RunStatus;
-  reason: RunStateChangeReason;
-}
+export type AgentRunStateChangedOutputEventOptions = Omit<
+  OutputEventOptions,
+  "runId" | "turnId"
+> &
+  AgentRunStateChangedPayloadOptions & {
+    runId: string;
+  };
 
 export class AgentRunStateChangedOutputEvent extends AgentOutputEvent {
   constructor(options: AgentRunStateChangedOutputEventOptions) {
-    const { runId, inputEvent, previous, current, reason, ...eventOptions } = options;
+    const {
+      runId,
+      ...eventOptions
+    } = options;
     assertNonBlank("Run ID", runId);
     super(
       "run.state.changed",
-      new AgentRunStateChangedPayload({ inputEvent, previous, current, reason }),
+      new AgentRunStateChangedPayload(capturePayloadOptions(options)),
       {
         ...eventOptions,
         runId,
@@ -35,6 +35,30 @@ export class AgentRunStateChangedOutputEvent extends AgentOutputEvent {
   override getEventType(): string {
     return OUTPUT_EVENT_TYPE.agentRunStateChanged;
   }
+}
+
+function capturePayloadOptions(
+  options: AgentRunStateChangedOutputEventOptions,
+): AgentRunStateChangedPayloadOptions {
+  const base = {
+    inputEvent: options.inputEvent,
+    previous: options.previous,
+    reason: options.reason,
+  };
+  if (options.current === "cancelled") {
+    return {
+      ...base,
+      current: options.current,
+      cancellationReason: options.cancellationReason,
+    };
+  }
+  if ("cancellationReason" in options && options.cancellationReason !== undefined) {
+    throw new TypeError("Non-cancelled Run must not contain a cancellation reason");
+  }
+  return {
+    ...base,
+    current: options.current,
+  };
 }
 
 function assertNonBlank(label: string, value: string): void {

@@ -1033,6 +1033,7 @@ Implementation status:
 
 - Task 3A implemented and awaiting review: execution semantics are frozen in `docs/architecture.md` and summarized below; no Runtime production code is introduced by this step.
 - Task 3B-A implemented and awaiting review: provider-independent Run/Turn lifecycle constants, durable state-change OutputEvents, shared durable Input references, event-specific snapshot schema constraints, public exports, and focused protocol validation.
+- Task 3B-B implemented and awaiting review: stable execution cancellation reasons, cancellation-consistent Run/Turn payloads, terminal Runtime Input processing outcomes, strict schema variants, public exports, and expanded protocol validation.
 
 Task 3A accepted decisions:
 
@@ -1083,6 +1084,33 @@ Task 3B-A explicitly excludes:
 - input processing outcome OutputEvents, deferred to Task 3B-B
 - transition legality and state-machine mutation
 - Router, Runtime loop, Pi Adapter, Context Compiler, Provider, Tool, Approval, Policy, IPC, and Subagent behavior
+
+Task 3B-B delivered:
+
+- shared `EXECUTION_CANCELLATION_REASON` values for Stop, future Interrupt, parent Stop, Runtime shutdown, and Runtime replacement
+- required cancellation reason on cancelled Run and Turn lifecycle payloads
+- rejection of cancellation reasons on non-cancelled Run and Turn states
+- `RuntimeInputProcessedOutputEvent` using `system.input.processed`
+- terminal Input outcomes `consumed`, `cancelled_before_run`, and `failed`
+- safe Input failure codes `unsupported_input`, `invalid_runtime_state`, and `processing_failed`
+- strict discriminated payload schemas that reject missing, conflicting, or raw failure details
+- durable InputResponse snapshot requirements and default Input causation
+- expanded protocol smoke coverage for cancellation reason capture, Input outcome variants, invalid combinations, schema rejection, defensive durable references, and privacy
+
+Task 3B-B accepted decisions:
+
+- `system.input.processed` is the semantic Runtime terminal outcome and remains distinct from Host-level `system.input.routed`.
+- `consumed` means the Runtime durably claimed the Input and will not start duplicate work for it; it does not mean the resulting Run succeeded.
+- `cancelled_before_run` applies only when a durable Turn input never received a Run because a cancellation fence covered it.
+- `failed` records a stable failure code only; raw errors, stacks, Provider responses, and payload data never enter this event.
+- cancellation cause is orthogonal to lifecycle status and uses one shared protocol across Run, Turn, Input, future Tool, and child cancellation.
+- exact outcome production and transition ordering belong to Task 3C and Task 3D, not Event constructors.
+
+Task 3B-B explicitly excludes:
+
+- deterministic Runtime Event identity and append request contracts, deferred to the next Task 3B checkpoint
+- Router handling, Stop fence execution, state transition legality, replay cursor mutation, and recovery behavior
+- Assistant, Tool, Provider, Approval, Policy, IPC, and Subagent OutputEvents
 
 Expected deliverables after approval:
 

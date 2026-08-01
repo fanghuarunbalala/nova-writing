@@ -2596,6 +2596,66 @@ Run events always copy their origin Input's ID, Event Type, and Journal Sequence
 
 This checkpoint does not define semantic Input processing outcomes, deterministic Runtime Event IDs, transition rules, or execution behavior. Those remain Task 3B-B through Task 3D.
 
+### 16.3 Implemented Task 3B-B Input Outcome and Cancellation Protocol
+
+Host routing and Runtime processing are separate durable facts:
+
+```text
+system.input.routed
+    Host selected and completed a routing action
+
+system.input.processed
+    Runtime reached a terminal semantic outcome for the Input
+```
+
+`RuntimeInputProcessedOutputEvent` extends `InputResponseOutputEvent`, requires a durable Input ID, Event Type, and Journal Sequence, and defaults `causationId` to the referenced Input ID.
+
+```mermaid
+classDiagram
+    class RuntimeInputProcessedOutputEvent {
+        +DurableInputEventReference inputEvent
+        +RuntimeInputProcessingOutcome outcome
+        +ExecutionCancellationReason? cancellationReason
+        +RuntimeInputProcessingFailureCode? failureCode
+    }
+
+    class RuntimeInputProcessingOutcome {
+        <<enumeration>>
+        consumed
+        cancelled_before_run
+        failed
+    }
+
+    class ExecutionCancellationReason {
+        <<enumeration>>
+        stop
+        interrupt
+        parent_stop
+        runtime_shutdown
+        runtime_replaced
+    }
+
+    RuntimeInputProcessedOutputEvent --|> InputResponseOutputEvent
+    RuntimeInputProcessedOutputEvent --> RuntimeInputProcessingOutcome
+    RuntimeInputProcessedOutputEvent --> ExecutionCancellationReason
+```
+
+The three Input outcomes are terminal but intentionally narrow:
+
+| Outcome | Meaning | Required detail |
+|---|---|---|
+| `consumed` | Runtime durably claimed the Input and will not start duplicate work from it | none |
+| `cancelled_before_run` | a cancellation fence covered a Turn input before it received a Run | `cancellationReason` |
+| `failed` | Runtime terminally rejected or failed to process the Input | stable `failureCode` |
+
+`consumed` is not a Run-success claim. A consumed user input may own a Run that later completes, fails, or is cancelled; Run lifecycle events carry that result.
+
+Failure codes are intentionally non-diagnostic: `unsupported_input`, `invalid_runtime_state`, and `processing_failed`. Raw errors, stacks, Provider responses, Input payloads, prompts, Tool data, and novel text are forbidden. Detailed private diagnostics remain in safely redacted observability or process-local error handling.
+
+Cancellation reasons are shared by Input, Run, Turn, and future Tool and child lifecycles. A lifecycle payload whose current state is `cancelled` must carry one registered reason; every non-cancelled state rejects cancellation detail. Event constructors and TypeBox schemas enforce payload consistency, while Task 3C owns legal transition ordering.
+
+This checkpoint still does not decide deterministic Runtime Event IDs or implement outcome production. The next Task 3B checkpoint defines the persistence-facing event identity and append boundary required before Router and state-machine code.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:

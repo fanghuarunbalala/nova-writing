@@ -18,6 +18,11 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "system.input.processed",
   "agent.run.state.changed",
   "agent.turn.state.changed",
+  "agent.assistant.message.started",
+  "agent.assistant.message.delta",
+  "agent.assistant.message.completed",
+  "agent.assistant.message.failed",
+  "agent.assistant.message.cancelled",
 ]);
 
 const previous = {

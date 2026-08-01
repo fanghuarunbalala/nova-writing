@@ -228,6 +228,72 @@ const AgentTurnStateChangedSnapshotSchema = Type.Object(
   { additionalProperties: true },
 );
 
+const AssistantMessageIdentityPayloadSchema = Type.Object(
+  {
+    assistantMessageId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentAssistantMessageDeltaPayloadSchema = Type.Object(
+  {
+    assistantMessageId: Type.String({ minLength: 1 }),
+    deltaOrdinal: Type.Integer({ minimum: 0 }),
+    contentIndex: Type.Integer({ minimum: 0 }),
+    channel: Type.Union([Type.Literal("text"), Type.Literal("thinking")]),
+    delta: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+const AssistantMessageContentSchema = Type.Union([
+  Type.Object(
+    { type: Type.Literal("text"), text: Type.String() },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("thinking"),
+      thinking: Type.String(),
+      redacted: Type.Optional(Type.Boolean()),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export const AgentAssistantMessageCompletedPayloadSchema = Type.Object(
+  {
+    assistantMessageId: Type.String({ minLength: 1 }),
+    content: Type.Array(AssistantMessageContentSchema),
+    completionReason: Type.Union([
+      Type.Literal("stop"),
+      Type.Literal("length"),
+      Type.Literal("tool_use"),
+    ]),
+    hasToolCalls: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentAssistantMessageFailedPayloadSchema = Type.Object(
+  {
+    assistantMessageId: Type.String({ minLength: 1 }),
+    failureCode: Type.Union([
+      Type.Literal("provider_error"),
+      Type.Literal("provider_aborted"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+const AgentAssistantMessageSnapshotSchema = Type.Object(
+  {
+    runId: Type.String({ minLength: 1 }),
+    turnId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: true },
+);
+
 export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): void {
   registry.register({
     kind: "output",
@@ -266,5 +332,45 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     schemaVersion: EVENT_SCHEMA_VERSION,
     payloadSchema: AgentTurnStateChangedPayloadSchema,
     snapshotSchema: AgentTurnStateChangedSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.agentAssistantMessageStarted,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: AssistantMessageIdentityPayloadSchema,
+    snapshotSchema: AgentAssistantMessageSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.agentAssistantMessageDelta,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: AgentAssistantMessageDeltaPayloadSchema,
+    snapshotSchema: AgentAssistantMessageSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.agentAssistantMessageCompleted,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: AgentAssistantMessageCompletedPayloadSchema,
+    snapshotSchema: AgentAssistantMessageSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.agentAssistantMessageFailed,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: AgentAssistantMessageFailedPayloadSchema,
+    snapshotSchema: AgentAssistantMessageSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.agentAssistantMessageCancelled,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: AssistantMessageIdentityPayloadSchema,
+    snapshotSchema: AgentAssistantMessageSnapshotSchema,
   });
 }

@@ -3592,6 +3592,94 @@ Bridge and converter logs include only Core IDs, conversion purpose, counts, Tur
 
 This checkpoint does not define Assistant streaming OutputEvents, canonical Assistant or Tool Runtime Messages, Tool waiting transitions, Run terminalization, Runtime executor composition, Provider setup, or cancellation during an unacknowledged Turn-start append.
 
+### 16.22 Implemented Task 3E-D Assistant Draft Output Protocol and Pi Bridge
+
+Assistant streaming is durable UI and diagnostic history, but only a future completed-message projection becomes canonical model context. The public protocol is owned by Core and exposes no Pi or Provider types:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Started: agent.assistant.message.started
+    Started --> Started: agent.assistant.message.delta*
+    Started --> Completed: agent.assistant.message.completed
+    Started --> Failed: agent.assistant.message.failed
+    Started --> Cancelled: agent.assistant.message.cancelled
+    Completed --> [*]
+    Failed --> [*]
+    Cancelled --> [*]
+```
+
+Every Event carries required Core `runId` and `turnId` metadata plus one Core-owned `assistantMessageId`. The five payloads are:
+
+| Event | Payload |
+|---|---|
+| started | `assistantMessageId` |
+| delta | `assistantMessageId`, `deltaOrdinal`, `contentIndex`, `channel`, `delta` |
+| completed | `assistantMessageId`, final text/thinking `content`, `completionReason`, `hasToolCalls` |
+| failed | `assistantMessageId`, fixed `failureCode` |
+| cancelled | `assistantMessageId` |
+
+Delta `channel` is `text` or `thinking`. Completion reason is `stop`, `length`, or `tool_use`. Failure code is `provider_error` or `provider_aborted`. Tool-call arguments, Tool results, Provider/model identifiers, API names, usage payloads, response IDs, signatures, and raw error text are absent.
+
+`CompositePiAgentEventBridge` invokes private child bridges sequentially. Runtime composition registers the Turn bridge before the Assistant bridge so `turn_start` is durably acknowledged and a Core Turn ID exists before any Assistant message Event can be accepted.
+
+```mermaid
+sequenceDiagram
+    participant Provider
+    participant Pi as Pi Agent
+    participant Composite
+    participant Turn as PiTurnLifecycleBridge
+    participant Assistant as PiAssistantOutputBridge
+    participant Journal as RuntimeEventSink
+
+    Provider-->>Pi: Assistant stream start
+    Pi->>Composite: message_start(assistant)
+    Composite->>Turn: no-op
+    Composite->>Assistant: start draft
+    Assistant->>Journal: append assistant.started
+    Journal-->>Assistant: durable acknowledgement
+
+    loop text/thinking delta
+        Provider-->>Pi: next chunk
+        Pi->>Composite: message_update(delta)
+        Composite->>Assistant: append delta ordinal N
+        Assistant->>Journal: append assistant.delta
+        Journal-->>Assistant: durable acknowledgement
+        Assistant-->>Pi: subscriber settled
+    end
+
+    Provider-->>Pi: final Assistant message
+    Pi->>Composite: message_end(assistant)
+    Composite->>Assistant: append terminal draft Event
+    Assistant->>Journal: completed | failed | cancelled
+    Journal-->>Assistant: durable acknowledgement
+    Pi->>Composite: turn_end
+    Composite->>Turn: terminalize Core Turn
+```
+
+The next Provider chunk cannot be consumed while a delta append barrier is pending because Pi awaits subscriber completion before advancing its async stream iterator. `deltaOrdinal` advances only after acknowledgement, preserving durable order and deterministic per-Turn Event identity.
+
+The final completed payload captures display-safe text and thinking blocks. Provider thinking signatures and Tool-call blocks are intentionally omitted. `hasToolCalls` tells clients and later projection logic that the completed display content was accompanied by Tool calls without exposing their arguments before Task 5.
+
+Terminal mapping is explicit:
+
+```text
+Pi stop / length / toolUse       → Assistant completed
+Pi error                         → Assistant failed(provider_error)
+Pi aborted without Core cancel   → Assistant failed(provider_aborted)
+Pi aborted with stopping/cancelled Core Turn
+                                 → Assistant cancelled
+```
+
+Cancelled and failed Events contain no repeated partial content. Previously acknowledged deltas remain ordered Journal history and can be replayed by CLI, GUI, TUI, or Web clients. A cancelled draft is never projected as a completed canonical Assistant Message.
+
+The Assistant payload does not carry the Stop, Interrupt, shutdown, replacement, or parent-stop reason. That authoritative cause remains in Run and Turn lifecycle Events, avoiding conflicting cancellation facts.
+
+`PiAssistantOutputBridge` serializes direct calls, validates active Turn identity, rejects overlapping or missing drafts, and requires message end before `turn_end` or `agent_end`. Event append failure is a fixed persistence-barrier failure and does not advance draft ordinal or clear active draft state.
+
+Logs include only Core IDs, delta ordinal/channel, terminal outcome, delta count, receipt Sequence, and fixed failures. Assistant text, thinking, Tool data, Provider errors, System Prompts, credentials, paths, raw errors, stacks, causes, stderr, and JSONL remain excluded.
+
+This checkpoint intentionally does not project completed Assistant output into canonical Runtime Messages, convert canonical Assistant history back to Pi, persist Tool arguments/results, account usage, terminalize Runs, or install the Adapter into the live Runtime executor.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4422,7 +4510,7 @@ Not yet implemented:
 - ContextCompactionManager and ContextCheckpoint
 - PendingNudgeStore and one-shot System Prompt Overlay
 - ContextCheckpoint-aware ContextCompiler and per-call overlays
-- Assistant/Tool Pi conversion and event-to-Core output mapping
+- canonical Assistant projection/conversion and Tool Pi mapping
 - Tool registry and execution pipeline
 - IPC protocol
 - Subagent manager

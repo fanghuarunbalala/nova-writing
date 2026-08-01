@@ -1052,6 +1052,7 @@ Implementation status:
 - Task 3E-A implemented and awaiting review: provider-neutral `AgentRuntimeAdapter` stream/cancel contracts, explicit prompt/continue invocation and terminal outcome protocols, Core-owned compiled-context types, asynchronous `ContextCompiler`, immutable strict `BaseContextCompiler`, redacted logs, public exports, and focused validation.
 - Task 3E-B implemented and awaiting review: package-private `PiAgentCoreAdapter`, installed Pi `Agent` compatibility boundary, canonical context replacement, prompt/continue execution, awaited event-bridge barriers, single-active-Run reservation, terminal outcome normalization, preparation-aware idempotent cancellation, redacted logs, and real Pi Agent smoke validation.
 - Task 3E-C implemented and awaiting review: strict package-private `CorePiRuntimeMessageConverter` for registered UserMessages, serialized `PiTurnLifecycleBridge`, persistence-first Pi Turn start/end mapping through real `TurnController`, cancellation ownership deferral, fixed failures, redacted logs, and real Pi/Provider/Journal barrier validation.
+- Task 3E-D implemented and awaiting review: public Core Assistant draft OutputEvent protocol and schemas, package-private composite Pi event bridge, persistence-first Assistant start/text-thinking delta/completed/failed/cancelled mapping, Tool-argument exclusion, cancellation draft settlement, redacted logs, and real streaming Pi validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1688,6 +1689,47 @@ Task 3E-C explicitly excludes:
 - installation into `RuntimeUserMessageInputHandler`, Stop cancellation composition, or `ConversationRuntime`
 - Provider/model construction, Tool registry, Approval, Policy, Compaction, Nudge, IPC, and Subagents
 - cancellation races while a Turn-start persistence commit itself is pending; recovery remains Journal-authoritative
+
+Task 3E-D delivered:
+
+- public Pi-independent `AgentAssistantMessageStartedOutputEvent`
+- public `AgentAssistantMessageDeltaOutputEvent` with ordered text/thinking channels and content indices
+- public `AgentAssistantMessageCompletedOutputEvent` with final display content, completion reason, and Tool-call presence flag
+- public `AgentAssistantMessageFailedOutputEvent` with fixed Provider failure code
+- public `AgentAssistantMessageCancelledOutputEvent` as the terminal incomplete-draft outcome
+- five stable `agent.assistant.message.*` Event types, payload classes, strict TypeBox schemas, required Run/Turn metadata, Core registry registration, and root exports
+- package-private sequential `CompositePiAgentEventBridge`
+- package-private serialized `PiAssistantOutputBridge` with Core-owned Assistant Message IDs
+- deterministic Runtime Event IDs scoped by Conversation, Run, Turn, Event type, and per-type ordinal
+- persistence-first draft start, text/thinking delta, and terminal Event appends
+- final text/thinking content capture without Provider metadata, raw errors, Tool-call arguments, or Tool results
+- completed mapping for Pi stop/length/toolUse, fixed failed mapping for error/non-Core aborted, and cancelled mapping for matching Core cancellation state
+- retention of already-durable deltas when cancellation terminates an incomplete draft
+- focused validation with real Pi `Agent`, real Adapter, real Turn bridge/controller, strict Core Event schema validation, blocking delta append, completed/failed/cancelled flows, and log redaction
+
+Task 3E-D accepted decisions:
+
+- Assistant streaming history is represented by distinct started, delta, completed, failed, and cancelled OutputEvent types rather than treating every partial message as a canonical Runtime Message.
+- every Assistant OutputEvent requires Core `runId` and `turnId`; Pi does not supply either identity.
+- Assistant Message identity is Core-owned and stable for one Pi message start/update/end lifecycle.
+- delta ordinals advance only after the previous delta Event is durably acknowledged. Pi cannot request the next stream chunk while the current subscriber barrier remains pending.
+- only text and thinking deltas are persisted in Task 3E-D. Tool-call deltas and arguments remain reserved for the reviewed Tool task.
+- completed Output contains final text/thinking display content and `hasToolCalls`, but never Tool arguments, Provider identifiers, API names, raw usage, signatures, or response IDs.
+- a Provider error emits a failed draft with fixed `provider_error`; an aborted Pi result without Core cancellation emits `provider_aborted`; a matching stopped/stopping Core Turn emits cancelled.
+- cancelled and failed terminal Events do not repeat partial content because acknowledged delta Events remain replayable.
+- draft cancellation reason is not duplicated in the Assistant payload; authoritative Stop/Interrupt/shutdown reason belongs to Run and Turn lifecycle Events.
+- Assistant completed persistence finishes before Pi `turn_end` can terminalize the Core Turn.
+- the Composite bridge invokes child bridges sequentially in registration order; Turn allocation runs before Assistant start handling.
+
+Task 3E-D explicitly excludes:
+
+- projection of completed Assistant Output into canonical Assistant Runtime Messages
+- Core Assistant Runtime Message schema and Core-to-Pi Assistant conversion
+- Tool-call argument/output events, Tool waiting transitions, Tool results, and Tool canonical projection
+- usage accounting and Provider/model metadata persistence
+- Run terminalization and concrete `RuntimeRunExecutor`
+- Runtime/Stop composition, Policy, Compaction, Nudge, Approval, IPC, and Subagents
+- replay-time synthesis of a missing terminal draft Event after an Event Sink failure
 
 Expected deliverables after approval:
 

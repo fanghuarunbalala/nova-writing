@@ -5,6 +5,11 @@ export const OUTPUT_EVENT_TYPE = {
   runtimeInputProcessed: "system.input.processed",
   agentRunStateChanged: "agent.run.state.changed",
   agentTurnStateChanged: "agent.turn.state.changed",
+  agentAssistantMessageStarted: "agent.assistant.message.started",
+  agentAssistantMessageDelta: "agent.assistant.message.delta",
+  agentAssistantMessageCompleted: "agent.assistant.message.completed",
+  agentAssistantMessageFailed: "agent.assistant.message.failed",
+  agentAssistantMessageCancelled: "agent.assistant.message.cancelled",
 } as const;
 
 export type CoreOutputEventType =

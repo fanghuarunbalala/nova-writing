@@ -112,10 +112,9 @@ workspaceRoot
 ├─ workspace.json
 ├─ novel.db
 └─ conversations/
-   └─ <conversationId>/
+   └─ conversation-<sha256(conversationId)>/
       ├─ messages.jsonl
-      ├─ checkpoints/
-      └─ artifacts/
+      └─ messages.lock              # only exists while a writer owns the file
 ```
 
 `workspace-index.json` stores the explicit `workspaceRoot → workspaceId → storeDir` binding. Moving a project requires an explicit rebind. Rebinding updates the canonical root but does not automatically rename an active Store directory.
@@ -1059,9 +1058,35 @@ Checkpoint is the projection commit marker. It records the cumulative Message co
 
 Hash input is the Canonical JSON form of the record with `recordHash` omitted. Because the remaining record includes `previousHash`, Header, Message, and Checkpoint records form one ordered chain. SHA-256 is fixed by the protocol, while the Core Codec receives a platform-neutral synchronous Hasher capability; Node `crypto` remains a Task 1C-C adapter concern.
 
-The record sequence validator separates the latest committed Checkpoint from valid records appended after it. A file ending with valid Message records but no following Checkpoint contains an interrupted, uncommitted tail. Task 1C-C may truncate that tail back to the last committed record before catch-up continues. Invalid JSON or byte-level tail classification remains a file-scanner responsibility.
+The record sequence validator separates the latest committed Checkpoint from valid records appended after it. A file ending with valid Message records but no following Checkpoint contains an interrupted, uncommitted tail. Task 1C-C can truncate that tail back to the last committed record before catch-up continues. Invalid JSON or byte-level tail classification remains a file-scanner responsibility.
 
-Codec and sequence validation are synchronous pure protocol operations and do not log. Task 1C-C and Task 1C-D own scan, truncation, catch-up, repair, rebuild, and their structured info/debug lifecycle logs.
+Codec and sequence validation are synchronous pure protocol operations and do not log. Task 1C-C owns file Scan and explicit tail truncation; Task 1C-D will own Journal catch-up, automatic repair, and rebuild.
+
+### 15.4 Implemented Task 1C-C Node JSONL File Store
+
+The Node adapter maps a Conversation ID to an opaque, traversal-safe SHA-256 directory key. The actual Conversation identity remains in the immutable Header and is verified on every Scan.
+
+```mermaid
+flowchart LR
+    Caller["Conversation Message Store caller"]
+    Mutex["KeyedAsyncMutex<br/>same process"]
+    Lock["messages.lock<br/>cross process"]
+    Scan["Chunked JSONL Scanner"]
+    Writer["Atomic Message File Writer"]
+    File["messages.jsonl"]
+
+    Caller --> Mutex --> Lock
+    Lock --> Scan --> File
+    Lock --> Writer --> File
+```
+
+`JsonlMessageFileScanner` reads asynchronous Buffer chunks, locates LF byte boundaries, decodes UTF-8 strictly, verifies Canonical JSON and the Hash Chain, and tracks exact committed byte offsets. Blank lines, CRLF, unterminated lines, invalid UTF-8, invalid JSON, schema failures, and chain failures are rejected. A failure after a valid Checkpoint is classified as `repairable_tail`; a file without any valid Checkpoint is `corrupted`.
+
+Writes use two lock layers. `KeyedAsyncMutex` serializes one Conversation inside a process while allowing different Conversations to proceed concurrently. `messages.lock` uses exclusive creation, bounded waiting, heartbeat updates, stale-lock cleanup, and ownership-token verification for cooperating processes. Lock files never contain Event, Message, prompt, Tool, or novel payloads.
+
+Initialization and replacement write a same-directory temporary file, call file `fsync`, atomically rename it, and `fsync` the parent directory. Append validates the existing committed stream and proposed batch under the lock, requires a final Checkpoint, appends LF-terminated Canonical records, calls `fsync`, and rescans. Explicit truncation verifies that the supplied Scan still matches the current file boundary before truncating to the last committed byte.
+
+Committed Message pagination uses cumulative Message Index and an optional High Watermark. Reading a missing, corrupted, or repairable file does not silently mutate it. Journal catch-up, automatic repair/rebuild, projector-version migration, and integration into `SqliteWorkspaceStore` remain Task 1C-D and Task 1C-E responsibilities.
 
 ## 16. ConversationRuntime Composition
 

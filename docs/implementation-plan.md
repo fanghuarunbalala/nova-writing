@@ -292,6 +292,30 @@ Task 1C-B explicitly excludes:
 - automatic repair or rebuild
 - info or debug logging from pure Codec and sequence validation functions
 
+Task 1C-C delivered:
+
+- Node `crypto` SHA-256 implementation for the platform-neutral Message projection Hasher
+- traversal-safe `conversation-<sha256(conversationId)>` directory resolution
+- asynchronous Buffer-chunk JSONL scanning with exact LF byte offsets and strict UTF-8 decoding
+- `missing`, `valid`, `repairable_tail`, and `corrupted` file classification
+- committed byte, record, Message, Checkpoint, and trailing-state reporting
+- stable committed Message pagination with cumulative Message Index and optional High Watermark
+- same-process per-Conversation keyed async mutex with concurrency across different Conversations
+- cross-process `messages.lock` ownership, timeout, heartbeat, and stale-lock cleanup
+- durable append and truncate with file `fsync`
+- same-directory temporary writes, atomic replacement, and directory `fsync`
+- stale Scan detection before explicit tail truncation
+- structured lifecycle `info` and `debug` logs without Event, Message, prompt, Tool, credential, or novel payloads
+
+Task 1C-C explicitly excludes:
+
+- Journal reads or Journal-to-Message projection
+- automatic catch-up, repair, rebuild, or projector-version migration
+- automatic mutation during ordinary Scan or pagination
+- `ConversationEventHub` subscription or catch-up-to-live delivery
+- Runtime activation and provider message conversion
+- aggregation into `SqliteWorkspaceStore`, deferred to Task 1C-E
+
 ## 5. Task 2: Conversation and Host
 
 Purpose:

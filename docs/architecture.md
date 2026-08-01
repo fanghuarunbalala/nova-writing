@@ -4091,6 +4091,29 @@ The Adapter's cancelled result does not own Core terminalization. `AgentRuntimeR
 
 This checkpoint excludes cancellation timeouts and retries, late Provider/Tool result suppression, emergency-cancellation failure, Runtime degradation, ReloadConfig and other cancellation reasons, real combined SQLite persistence, concrete Pi Provider execution, Approval, IPC, Subagents, Policy, Compaction, and Nudge.
 
+### 16.30 Implemented Task 3F-D Agent Execution Failure Degradation
+
+The fourth Task 3F checkpoint validates failures that occur outside the Agent's normal terminal-result protocol. A preparation source exception, Context compiler exception, or Adapter exception is not equivalent to an Adapter result whose outcome is `failed`.
+
+```mermaid
+flowchart TD
+    Input["UserMessage claimed"] --> Queued["Run queued barrier"]
+    Queued --> Outcome["Input consumed barrier"]
+    Outcome --> Running["Run running barrier"]
+    Running --> Phase{"Failing infrastructure phase"}
+    Phase -->|Preparation| PumpFailed["Pump failed: scope=turn"]
+    Phase -->|Context compile| PumpFailed
+    Phase -->|Adapter exception| PumpFailed
+    PumpFailed --> Retain["Later Turn Inputs remain queued"]
+    PumpFailed --> LastAck["Run remains last acknowledged running"]
+```
+
+No terminal Run Event is fabricated. The Run Journal projection therefore remains `running`, the active Input remains durably `consumed`, and later queued UserMessages remain pending. This is intentional evidence for the later startup recovery policy rather than an implicit recovery decision.
+
+The Pump exit contains only the fixed `RuntimeInputPumpFailureError` name/code, `turn` scope, and durable Input identity. Preparation errors, compiler errors, Adapter errors, Prompt and Message content, novel text, configuration, paths, stacks, and causes never cross the failure boundary or enter logs.
+
+This checkpoint does not decide whether a recovered non-terminal Run becomes failed or cancelled. It also excludes persistence append failures, pending-commit retry, Stop cancellation failure, `ConversationRuntime`/Host crash observation, process restart, concrete Pi Provider errors, Tools, Approval, Policy, Compaction, Nudge, IPC, and Subagents.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4916,6 +4939,7 @@ Currently implemented skeletons include:
 - no-process successful Agent Turn integration across Router, Pump, lifecycle, outcome, preparation, compilation, and shared Adapter boundaries
 - strict multi-UserMessage Turn FIFO with terminal Run barriers and prior-message Context visibility
 - active-Turn Control preemption with persistence-first Stop cancellation and queued-Input fencing
+- fixed execution-loop degradation for preparation, Context compilation, and Adapter infrastructure failures without fabricated terminal lifecycle
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

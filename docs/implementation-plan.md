@@ -1067,6 +1067,7 @@ Implementation status:
 - Task 3F-A implemented and awaiting review: no-process successful UserMessage Turn integration across Router, Pump, durable Run/Turn and Input outcomes, projected preparation, Context compilation, shared Agent Adapter execution, orderly shutdown, and redacted logs.
 - Task 3F-B implemented and awaiting review: two queued UserMessages executing as strict Turn FIFO, first-Run terminal barrier before second Run claim, projected prior-message context for the second Run, orderly drain, and redacted logs.
 - Task 3F-C implemented and awaiting review: Control-lane Stop preemption during an active Adapter Turn, persistence-first stopping barriers, shared Adapter cancellation, queued UserMessage fencing, terminal cancellation outcomes, and redacted logs.
+- Task 3F-D implemented and awaiting review: preparation, Context compilation, and Adapter infrastructure failure degradation through the Turn handler and Pump, fixed failure exits, retained queued work, last-acknowledged non-terminal lifecycle, and redacted logs.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1965,6 +1966,33 @@ Task 3F-C explicitly excludes:
 - Tool, Approval/Interaction, child Agent, IPC, or process cancellation
 - startup replay, non-terminal crash recovery, or real combined SQLite persistence
 - concrete Pi Provider execution beyond the already-accepted Adapter cancellation semantics
+
+Task 3F-D delivered:
+
+- parameterized no-process integration for preparation-source, Context-compiler, and Agent-Adapter exceptions
+- durable UserMessage Run claim and `consumed` Input outcome before each failing execution phase
+- fixed `RuntimeInputPump` failed exit with `turn` scope and durable Input identity only
+- retention of the next queued UserMessage without processing after Pump degradation
+- exact last-acknowledged Run state remaining `running` with no fabricated completed, failed, or cancelled Event
+- absence of a Turn when failure occurs before any Adapter lifecycle bridge event
+- phase call-count validation proving later boundaries are not invoked after an earlier failure
+- raw failure, Prompt, Message content, path, stack, and cause redaction across all three phases
+
+Task 3F-D accepted decisions:
+
+- preparation, compilation, and Adapter exceptions are infrastructure failures, not normal Agent `failed` results; they propagate through fixed Core errors and degrade the Turn execution loop.
+- Core does not synthesize a terminal Run after a persistence-independent execution failure because the non-terminal crash recovery policy remains unresolved.
+- the already-recorded active UserMessage outcome stays `consumed`, while later queued Inputs remain pending for startup/recovery handling.
+- a Pump failed exit reports only fixed scope/error identity and the durable Input reference; handler or Adapter errors never become Runtime exit details.
+- this checkpoint records the last acknowledged lifecycle state as evidence for later recovery without choosing whether recovery should fail or cancel it.
+
+Task 3F-D explicitly excludes:
+
+- normal Adapter `failed` outcomes, which already map to durable Run `failed`
+- crash recovery transition choice, recovery reason taxonomy, or automatic Run/Turn repair
+- persistence append failure, pending-commit retry, emergency cancellation, or Stop cancellation failure
+- `ConversationRuntime` and Host crash observation, replacement placement, IPC, or process restart
+- concrete Pi Provider errors, Tools, Approval, Policy, Compaction, Nudge, or Subagents
 
 Expected deliverables after approval:
 

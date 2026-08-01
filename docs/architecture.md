@@ -2855,6 +2855,41 @@ Every resolved Event passes through the shared `EventSchemaRegistry`, is capture
 
 Failures normalize to `invalid_reference`, `not_found`, `direction_mismatch`, `identity_mismatch`, `invalid_event`, or `read_failed`. Logs include only durable identifiers, Sequence, Event Type, priority, and the stable failure value; payloads and raw Journal errors remain excluded.
 
+### 16.9 Implemented Task 3D-B Fixed-Watermark Runtime Replay Plan
+
+`RuntimeReplayPlanner` reconstructs one immutable startup plan from the durable Journal without activating the Runtime. Its request contains only Conversation ID and the Bootstrap High Watermark; process placement, workdir, Store paths, Provider state, and copied Event payloads remain outside the boundary.
+
+```mermaid
+sequenceDiagram
+    participant Runtime
+    participant Planner as RuntimeReplayPlanner
+    participant Journal as ConversationJournalReader
+    participant Schema as EventSchemaRegistry
+    participant State as Run/Turn StateMachines
+
+    Runtime->>Planner: plan(conversationId, throughSequence)
+    loop bounded pages through fixed High Watermark
+        Planner->>Journal: list(afterSequence, throughSequence)
+        Journal-->>Planner: contiguous Input and Output Events
+        Planner->>Schema: validate Inputs and relevant Runtime Outputs
+        Planner->>State: replay legal lifecycle transitions
+    end
+    Planner->>Planner: correlate system.input.processed
+    Planner-->>Runtime: pending Inputs + latest Run/Turn snapshots
+```
+
+The planner requires an exact contiguous Sequence range from one through `throughSequence`. Each page must report that same High Watermark, remain within the configured bound, and advance the cursor without gaps. Events appended after the captured High Watermark are excluded and belong to later live dispatch.
+
+Every InputEvent is schema-validated, canonically captured, and frozen. An Input is terminal only when an exact `system.input.processed` reference exists. Host-level `system.input.routed` does not claim semantic Runtime completion, so routed, deferred, or offline control Inputs without a Runtime outcome remain pending in durable Sequence order.
+
+Run and Turn lifecycle Events are not reduced to “take the latest payload.” Replay drives the accepted `RunStateMachine` and `TurnStateMachine`, verifies durable origin references, enforces the same cross-state coordination used by `TurnController`, and checks deterministic Runtime Event IDs against reconstructed ordinals. A new Run replaces the previous latest scope only after the previous Run and Turn are terminal.
+
+One terminal Input outcome uses Input-scope ordinal zero. Duplicate outcomes, mismatched references, illegal lifecycle transitions, invalid deterministic IDs, active-Turn coordination violations, malformed schemas, Journal gaps, and High Watermark regression reject the complete plan.
+
+The result contains pending Input snapshots, processed/scanned counts, and the latest Run plus its latest Turn when present. A crash can leave an Input pending while lifecycle Events already reference it; the planner deliberately returns both durable facts. It does not restore `TurnController`, enqueue `InputRouter`, publish a compensating outcome, retry work, or execute cancellation. Those are Runtime startup reconciliation responsibilities.
+
+Failures normalize to `invalid_request`, `read_failed`, `watermark_mismatch`, `journal_gap`, `invalid_event`, or `history_conflict`. Logs contain only Conversation identity, cursor/High Watermark, counts, stable state labels, Run/Turn identifiers, and stable failure values.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -3667,6 +3702,7 @@ Currently implemented skeletons include:
 - pure Run and Turn state machines with persistence-first lifecycle coordination
 - bounded two-lane `InputRouter` with Control preemption, Turn FIFO, and Stop fences
 - Journal-backed Runtime Input resolution with exact durable identity and schema validation
+- fixed-High-Watermark Runtime replay planning with pending Input and lifecycle reconstruction
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

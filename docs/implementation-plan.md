@@ -1039,6 +1039,7 @@ Implementation status:
 - Task 3C-B implemented and awaiting review: bounded Control/Turn inboxes, Core lane policy, durable snapshot capture, Sequence conflict detection, Control preemption, Turn FIFO, Stop fence pruning, structured logs, public exports, and focused validation.
 - Task 3C-C implemented and awaiting review: Core Run/Turn identity generators, persistence-first `TurnController`, serialized lifecycle mutation, deterministic Event construction, pending-commit retry, cross-state coordination, restore validation, structured logs, public exports, and focused validation.
 - Task 3D-A implemented and awaiting review: platform-neutral Runtime Input resolution, Journal-backed canonical lookup by Conversation ID and Sequence, durable identity and schema validation, frozen snapshot capture, stable failures, redacted logs, public exports, and focused validation.
+- Task 3D-B implemented and awaiting review: fixed-High-Watermark Journal replay planning, contiguous pagination, terminal Input outcome correlation, pending Input reconstruction, deterministic Run/Turn lifecycle replay, stable failures, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1257,6 +1258,36 @@ Task 3D-A explicitly excludes:
 - Bootstrap High Watermark scanning, durable replay cursors, and pending-Input reconstruction
 - `ConversationRuntime` scheduling, Input outcome publication, and Run/Turn mutation
 - Stop cancellation effects, child cancellation, Tool cancellation, Pi, Provider, Policy, Approval, IPC, and Subagent behavior
+
+Task 3D-B delivered:
+
+- platform-neutral `RuntimeReplayPlanner`, `RuntimeReplayRequest`, and immutable `RuntimeReplayPlan` contracts
+- `JournalRuntimeReplayPlanner` scanning from Sequence zero through one caller-supplied Bootstrap High Watermark
+- bounded ascending pagination with exact Conversation identity, contiguous Sequence, page size, `hasNext`, and High Watermark validation
+- schema validation and canonical frozen capture for every InputEvent in the replay range
+- correlation of `system.input.processed` with exact durable Input ID, Event Type, and Sequence
+- pending Input reconstruction in original Journal Sequence order
+- Run and Turn history replay through the accepted state machines, including cross-state coordination and latest-scope restoration
+- deterministic Runtime Event ID verification using Input ordinal zero and reconstructed Run/Turn transition ordinals
+- stable `RuntimeReplayPlanningError` failures for invalid requests, reads, watermarks, gaps, invalid Events, and conflicting history
+- structured page, completion, and failure logs without Event payloads, prompts, paths, raw errors, stacks, or causes
+- focused smoke coverage for multi-page replay, terminal and pending Inputs, completed and active lifecycle scopes, immutable plans, empty history, malformed requests, read failure, watermark regression, Journal gaps, schema rejection, deterministic ID mismatch, and log redaction
+
+Task 3D-B accepted decisions:
+
+- the replay range is exactly `1..throughSequence`; Events appended after the Bootstrap High Watermark are intentionally excluded from this plan.
+- `system.input.processed` is the only Runtime terminal Input fact. `system.input.routed` remains a Host routing fact, so every Input lacking a terminal Runtime outcome remains pending in the replay plan.
+- one Input has at most one terminal Runtime outcome, whose deterministic Input-scope ordinal is zero.
+- lifecycle replay uses the accepted state machines rather than trusting the final payload alone; every transition, durable origin reference, Run/Turn coordination rule, and deterministic Event ID must match.
+- beginning a new Run requires the previous Run and Turn scopes to be terminal; the plan retains only the latest Run and its latest Turn snapshot.
+- a crash boundary may leave an Input pending while durable lifecycle state already references it. The planner reports both facts without silently inventing an outcome; startup reconciliation belongs to the next Runtime checkpoint.
+- unrelated OutputEvents are ignored by lifecycle reconstruction but still count toward the contiguous replay cursor.
+
+Task 3D-B explicitly excludes:
+
+- restoring `TurnController`, enqueueing `InputRouter`, activating Provider/Pi work, or publishing any OutputEvent
+- choosing recovery outcomes for pending Inputs that overlap active Run/Turn state
+- cancellation execution, Stop fence application, retry scheduling, Runtime exit policy, Tool, Approval, Policy, IPC, and Subagent behavior
 
 Expected deliverables after approval:
 

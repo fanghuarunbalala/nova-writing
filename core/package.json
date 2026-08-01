@@ -32,6 +32,7 @@
     "smoke:runtime-state-machine": "pnpm build && node scripts/runtime-state-machine-smoke.mjs",
     "smoke:runtime-input-router": "pnpm build && node scripts/runtime-input-router-smoke.mjs",
     "smoke:turn-controller": "pnpm build && node scripts/turn-controller-smoke.mjs",
+    "smoke:runtime-input-resolver": "pnpm build && node scripts/runtime-input-resolver-smoke.mjs",
     "smoke:local-conversation": "pnpm build && node scripts/local-conversation-integration-smoke.mjs",
     "smoke:local-conversation-host": "pnpm build && node scripts/local-conversation-host-integration-smoke.mjs",
     "smoke:conversation-events": "pnpm build && node scripts/conversation-event-live-smoke.mjs && node scripts/conversation-event-follow-smoke.mjs && node scripts/conversation-event-publishing-smoke.mjs && node scripts/conversation-event-integration-smoke.mjs",

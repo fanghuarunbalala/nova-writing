@@ -2825,6 +2825,36 @@ Restore is valid only on a fresh Controller. A restored Turn must belong to the 
 
 Logs contain only scope, Event identity/type, ordinal, receipt status, and Journal Sequence. Task 3D owns Journal replay, Input processing outcomes, cancellation effects, retry policy, and Runtime failure exit.
 
+### 16.8 Implemented Task 3D-A Durable Runtime Input Resolution
+
+`RuntimeInputResolver` is the platform-neutral boundary that converts one payload-free `ConversationRuntimeInputReference` from the Host into the canonical durable Input snapshot consumed by Runtime routing.
+
+```mermaid
+sequenceDiagram
+    participant Host
+    participant Resolver as RuntimeInputResolver
+    participant Journal as ConversationJournalReader
+    participant Schema as EventSchemaRegistry
+    participant Router as InputRouter
+
+    Host->>Resolver: resolve(reference)
+    Resolver->>Journal: getBySequence(conversationId, sequence)
+    Journal-->>Resolver: persisted Event or missing
+    Resolver->>Resolver: verify Input direction and exact identity
+    Resolver->>Schema: validateInput(snapshot)
+    Schema-->>Resolver: valid
+    Resolver->>Resolver: canonical capture + deep freeze
+    Resolver-->>Router: PersistedInputEventSnapshot
+```
+
+The resolver verifies Conversation ID, Input Event ID, Event Type, and every optional Correlation, Run, or Turn identity supplied by the Host reference. A copied Host payload is never accepted because the reference intentionally contains no payload.
+
+The Journal implementation reads exactly one Sequence. It does not use Bootstrap High Watermark, scan a replay range, reconstruct pending Inputs, publish outcomes, or activate Runtime scheduling. Those responsibilities remain later Task 3D checkpoints.
+
+Every resolved Event passes through the shared `EventSchemaRegistry`, is captured through canonical JSON, and is recursively frozen before returning. This prevents later mutation of a Journal implementation's returned object from changing Runtime input.
+
+Failures normalize to `invalid_reference`, `not_found`, `direction_mismatch`, `identity_mismatch`, `invalid_event`, or `read_failed`. Logs include only durable identifiers, Sequence, Event Type, priority, and the stable failure value; payloads and raw Journal errors remain excluded.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -3634,6 +3664,9 @@ Currently implemented skeletons include:
 - Journal catch-up-to-live subscriptions using fixed High Watermarks and Sequence resume cursors
 - persistence-first `PublishingConversationJournalService` with per-Conversation operation serialization
 - real SQLite end-to-end Event append, replay, reopen, duplicate suppression, and live-follow validation
+- pure Run and Turn state machines with persistence-first lifecycle coordination
+- bounded two-lane `InputRouter` with Control preemption, Turn FIFO, and Stop fences
+- Journal-backed Runtime Input resolution with exact durable identity and schema validation
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 
@@ -3642,8 +3675,6 @@ Not yet implemented:
 - ConversationProxy implementation
 - process supervisor
 - ConversationRuntime
-- InputRouter
-- Run state machine
 - InteractionCoordinator and Approval events
 - RuntimePolicyEngine and RuntimeEffectCoordinator
 - NudgeManager

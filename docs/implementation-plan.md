@@ -1038,6 +1038,7 @@ Implementation status:
 - Task 3C-A implemented and awaiting review: pure Run and Turn state machines, explicit legal transition tables, frozen snapshots/transitions, cancellation consistency, restore validation, scope-local ordinals, stable errors, public exports, and focused validation.
 - Task 3C-B implemented and awaiting review: bounded Control/Turn inboxes, Core lane policy, durable snapshot capture, Sequence conflict detection, Control preemption, Turn FIFO, Stop fence pruning, structured logs, public exports, and focused validation.
 - Task 3C-C implemented and awaiting review: Core Run/Turn identity generators, persistence-first `TurnController`, serialized lifecycle mutation, deterministic Event construction, pending-commit retry, cross-state coordination, restore validation, structured logs, public exports, and focused validation.
+- Task 3D-A implemented and awaiting review: platform-neutral Runtime Input resolution, Journal-backed canonical lookup by Conversation ID and Sequence, durable identity and schema validation, frozen snapshot capture, stable failures, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1230,6 +1231,32 @@ Task 3C-C explicitly excludes:
 - Host-reference resolution, Journal replay cursor, Input outcome publication, and Runtime loop scheduling
 - AbortController ownership and child/Tool cancellation execution
 - Pi Adapter, Context Compiler, Approval, Policy, IPC, and Subagent behavior
+
+Task 3D-A delivered:
+
+- platform-neutral `RuntimeInputResolver` port from a payload-free Host reference to one canonical durable Input snapshot
+- `JournalRuntimeInputResolver` lookup by exact Conversation ID and Journal Sequence
+- rejection of missing Events, Output direction, durable identity mismatch, invalid Event schema, invalid references, and Journal read failure
+- exact verification of Input Event ID, Event Type, optional Correlation ID, optional Run ID, and optional Turn ID
+- schema validation through the shared `EventSchemaRegistry` before Runtime consumption
+- canonical JSON capture and recursive freezing so later Journal or caller mutation cannot alter the resolved snapshot
+- stable `RuntimeInputResolutionError` failures without exposing raw Journal errors or Event payloads
+- structured resolution logs containing only durable identity, Sequence, Event Type, priority, and stable failure values
+- focused smoke coverage for successful resolution, defensive capture, identity mismatch, direction mismatch, schema rejection, read failure, invalid references, and log redaction
+
+Task 3D-A accepted decisions:
+
+- Runtime never trusts an Event payload copied through Host dispatch; the Journal remains the canonical source.
+- a single-reference resolution reads exactly the referenced Sequence and does not infer replay progress from the current Journal tail.
+- optional identity fields constrain the lookup only when they are present on the Host reference.
+- the resolved value is a canonical immutable `PersistedInputEventSnapshot`, ready for `InputRouter` without platform-specific storage details.
+- resolution failures are terminal for that dispatch attempt; retry and Runtime degradation policy belong to later Task 3D checkpoints.
+
+Task 3D-A explicitly excludes:
+
+- Bootstrap High Watermark scanning, durable replay cursors, and pending-Input reconstruction
+- `ConversationRuntime` scheduling, Input outcome publication, and Run/Turn mutation
+- Stop cancellation effects, child cancellation, Tool cancellation, Pi, Provider, Policy, Approval, IPC, and Subagent behavior
 
 Expected deliverables after approval:
 

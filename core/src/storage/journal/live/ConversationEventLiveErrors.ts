@@ -26,6 +26,15 @@ export class ConversationEventHubClosedError extends Error {
   }
 }
 
+export class ConversationEventHubPublishError extends TypeError {
+  readonly code = "CONVERSATION_EVENT_HUB_PUBLISH_INVALID";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ConversationEventHubPublishError";
+  }
+}
+
 export class ConversationEventHubSequenceError extends Error {
   readonly code = "CONVERSATION_EVENT_HUB_SEQUENCE_INVALID";
 

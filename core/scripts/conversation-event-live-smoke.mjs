@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import {
+  ConversationEventHubClosedError,
+  ConversationEventHubPublishError,
+  ConversationEventHubSequenceError,
   ConversationEventSubscriptionAbortedError,
   ConversationEventSubscriptionConcurrentReadError,
   ConversationEventSubscriptionOverflowError,
+  InMemoryConversationEventHub,
 } from "../dist/index.js";
 import { InMemoryConversationEventSubscription } from "../dist/storage/journal/live/InMemoryConversationEventSubscription.js";
 
@@ -205,4 +209,160 @@ assert.equal(serializedLogs.includes("SMOKE_SECRET_ABORT_REASON"), false);
 assert.equal(serializedLogs.includes("SMOKE_SECRET_PRE_ABORT_REASON"), false);
 assert.equal(serializedLogs.includes('"payload"'), false);
 
-console.log("Task 1D-B Conversation Event subscription smoke passed");
+const broadcastHub = new InMemoryConversationEventHub({ logger });
+const broadcastAll = broadcastHub.subscribe({ conversationId: "conversation-1" });
+const broadcastInput = broadcastHub.subscribe({
+  conversationId: "conversation-1",
+  filter: { direction: "input", eventTypes: ["user.message"] },
+});
+const isolated = broadcastHub.subscribe({ conversationId: "conversation-2" });
+assert.notEqual(broadcastAll.id, broadcastInput.id);
+const broadcastAllFirst = broadcastAll.next();
+await broadcastHub.publish(createEvent(100));
+assert.equal((await broadcastAllFirst).value.sequence, 100);
+await broadcastHub.publish(
+  createEvent(101, { direction: "input", eventType: "user.message" }),
+);
+assert.equal((await broadcastAll.next()).value.sequence, 101);
+assert.equal((await broadcastInput.next()).value.sequence, 101);
+await broadcastHub.publish(createEvent(50, { conversationId: "conversation-2" }));
+assert.equal((await isolated.next()).value.sequence, 50);
+await broadcastHub.close();
+
+const filterHub = new InMemoryConversationEventHub({ logger });
+const runTurnFiltered = filterHub.subscribe({
+  conversationId: "conversation-filter",
+  filter: { runId: "run-target", turnId: "turn-target" },
+});
+await filterHub.publish(
+  createEvent(1, {
+    conversationId: "conversation-filter",
+    runId: "run-other",
+    turnId: "turn-target",
+  }),
+);
+await filterHub.publish(
+  createEvent(2, {
+    conversationId: "conversation-filter",
+    runId: "run-target",
+    turnId: "turn-target",
+  }),
+);
+assert.equal((await runTurnFiltered.next()).value.sequence, 2);
+await filterHub.close();
+
+const overflowHub = new InMemoryConversationEventHub({ logger });
+const slowHubSubscription = overflowHub.subscribe({
+  conversationId: "conversation-overflow",
+  capacity: 1,
+});
+const fastHubSubscription = overflowHub.subscribe({
+  conversationId: "conversation-overflow",
+  capacity: 1,
+});
+await overflowHub.publish(createEvent(1, { conversationId: "conversation-overflow" }));
+assert.equal((await fastHubSubscription.next()).value.sequence, 1);
+await overflowHub.publish(createEvent(2, { conversationId: "conversation-overflow" }));
+await assert.rejects(
+  () => slowHubSubscription.next(),
+  ConversationEventSubscriptionOverflowError,
+);
+assert.equal((await fastHubSubscription.next()).value.sequence, 2);
+await overflowHub.publish(createEvent(3, { conversationId: "conversation-overflow" }));
+assert.equal((await fastHubSubscription.next()).value.sequence, 3);
+await overflowHub.close();
+
+const sequenceHub = new InMemoryConversationEventHub({ logger });
+const sequenceA = sequenceHub.subscribe({ conversationId: "conversation-sequence-a" });
+const sequenceB = sequenceHub.subscribe({ conversationId: "conversation-sequence-b" });
+await sequenceHub.publish(createEvent(10, { conversationId: "conversation-sequence-a" }));
+assert.equal((await sequenceA.next()).value.sequence, 10);
+await sequenceHub.publish(createEvent(5, { conversationId: "conversation-sequence-b" }));
+assert.equal((await sequenceB.next()).value.sequence, 5);
+await assert.rejects(
+  () => sequenceHub.publish(createEvent(12, { conversationId: "conversation-sequence-a" })),
+  (error) =>
+    error instanceof ConversationEventHubSequenceError &&
+    error.expectedSequence === 11 &&
+    error.actualSequence === 12,
+);
+await assert.rejects(() => sequenceA.next(), ConversationEventHubSequenceError);
+await sequenceHub.publish(createEvent(6, { conversationId: "conversation-sequence-b" }));
+assert.equal((await sequenceB.next()).value.sequence, 6);
+
+const sequenceAfterGap = sequenceHub.subscribe({
+  conversationId: "conversation-sequence-a",
+});
+await sequenceHub.publish(createEvent(13, { conversationId: "conversation-sequence-a" }));
+assert.equal((await sequenceAfterGap.next()).value.sequence, 13);
+await assert.rejects(
+  () => sequenceHub.publish(createEvent(13, { conversationId: "conversation-sequence-a" })),
+  ConversationEventHubSequenceError,
+);
+await assert.rejects(() => sequenceAfterGap.next(), ConversationEventHubSequenceError);
+
+const sequenceAfterDuplicate = sequenceHub.subscribe({
+  conversationId: "conversation-sequence-a",
+});
+await sequenceHub.publish(createEvent(14, { conversationId: "conversation-sequence-a" }));
+assert.equal((await sequenceAfterDuplicate.next()).value.sequence, 14);
+await assert.rejects(
+  () => sequenceHub.publish(createEvent(12, { conversationId: "conversation-sequence-a" })),
+  ConversationEventHubSequenceError,
+);
+await assert.rejects(
+  () => sequenceAfterDuplicate.next(),
+  ConversationEventHubSequenceError,
+);
+
+const sequenceAfterRegression = sequenceHub.subscribe({
+  conversationId: "conversation-sequence-a",
+});
+await sequenceHub.publish(createEvent(15, { conversationId: "conversation-sequence-a" }));
+assert.equal((await sequenceAfterRegression.next()).value.sequence, 15);
+await sequenceHub.close();
+
+const invalidHub = new InMemoryConversationEventHub({ logger });
+await assert.rejects(
+  () => invalidHub.publish(createEvent(0)),
+  ConversationEventHubPublishError,
+);
+await invalidHub.close();
+
+const lifecycleHub = new InMemoryConversationEventHub({ logger });
+const preAbortedHubController = new AbortController();
+preAbortedHubController.abort("SMOKE_SECRET_HUB_PRE_ABORT_REASON");
+assert.throws(
+  () =>
+    lifecycleHub.subscribe({
+      conversationId: "conversation-pre-aborted",
+      signal: preAbortedHubController.signal,
+    }),
+  ConversationEventSubscriptionAbortedError,
+);
+const afterPreAbort = lifecycleHub.subscribe({
+  conversationId: "conversation-pre-aborted",
+});
+await lifecycleHub.publish(createEvent(1, { conversationId: "conversation-pre-aborted" }));
+assert.equal((await afterPreAbort.next()).value.sequence, 1);
+const lifecycleSubscription = lifecycleHub.subscribe({ conversationId: "conversation-close" });
+const lifecycleRead = lifecycleSubscription.next();
+const lifecycleClose = lifecycleHub.close();
+assert.throws(
+  () => lifecycleHub.subscribe({ conversationId: "conversation-close" }),
+  ConversationEventHubClosedError,
+);
+await assert.rejects(
+  () => lifecycleHub.publish(createEvent(1, { conversationId: "conversation-close" })),
+  ConversationEventHubClosedError,
+);
+assert.deepEqual(await lifecycleRead, { done: true, value: undefined });
+await lifecycleClose;
+await lifecycleHub.close();
+
+const hubSerializedLogs = JSON.stringify(logEntries);
+assert.equal(hubSerializedLogs.includes("SMOKE_SECRET_EVENT_PAYLOAD"), false);
+assert.equal(hubSerializedLogs.includes("SMOKE_SECRET_HUB_PRE_ABORT_REASON"), false);
+assert.equal(hubSerializedLogs.includes('"payload"'), false);
+
+console.log("Task 1D-C Conversation Event Hub smoke passed");

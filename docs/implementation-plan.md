@@ -4,6 +4,13 @@
 
 The repository-level execution rules are authoritative in `AGENTS.md`. The implementation plan uses the following autonomous, plan-first cycle:
 
+### 1.1 Non-negotiable Continuation Requirements
+
+1. The agent has sufficient authority to autonomously advance the documented work required to complete Task 1 through Task 7, but that authority never extends beyond the currently selected documented step.
+2. After every context compression or reset, the agent must re-read `AGENTS.md`, this implementation plan, `docs/architecture.md`, applicable nested instructions, `git status`, and recent history before deciding what to implement.
+3. Before every implementation, the agent must publish the concrete plan for exactly one next step; implementation begins only after that plan is recorded, while user approval is required only for a genuinely unresolved architectural decision.
+4. Every completed step must be validated and committed immediately as one focused commit before another implementation step begins. Completed Task 1 through Task 7 checkpoints must not be left as uncommitted work or silently combined across step boundaries.
+
 ```text
 Recover repository context when required
     ↓

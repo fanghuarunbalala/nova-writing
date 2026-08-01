@@ -1,34 +1,43 @@
 # Runtime Architecture Implementation Plan
 
-## 1. Working Agreement
+## 1. Autonomous Working Agreement
 
-Every task follows the same review-gated process:
+The repository-level execution rules are authoritative in `AGENTS.md`. The implementation plan uses the following autonomous, plan-first cycle:
 
 ```text
-Design discussion
+Recover repository context when required
     ↓
-Resolve open questions
+Read the active task and architecture boundary
     ↓
-Freeze interfaces and diagrams
+Publish one concrete next-step plan
     ↓
-Explicit implementation approval
+Implement only that documented step
     ↓
-Implement only the approved task
+Run focused and complete validation
     ↓
-Run focused validation
+Update documentation and review the diff
     ↓
-Stop for review
+Commit the completed step immediately
+    ↓
+Report the commit and next-step plan
 ```
 
 Rules:
 
-- Do not automatically continue into the next task.
+- The agent may autonomously continue through the incomplete documented steps required to finish Task 1 through Task 7.
+- Autonomy is limited to the currently planned task step; do not implement adjacent future steps or unrelated work in the same change.
+- Every implementation step requires a specific published plan before editing begins.
+- Every completed implementation step must be validated, documented where required, and committed immediately as one focused commit.
+- After context compression, reset, goal resumption, or scope uncertainty, re-read `AGENTS.md`, this implementation plan, `docs/architecture.md`, applicable nested instructions, `git status`, and recent history before continuing.
 - Do not implement a task while its listed questions remain unresolved.
 - Do not silently invent behavior when a protocol or lifecycle semantic is unclear.
-- Keep each implementation focused on the reviewed task boundary.
-- Report changed files, public interfaces, validation results, and remaining risks after each implementation.
-- Update architecture documentation when an approved decision changes an existing diagram or contract.
+- If an unresolved decision blocks safe implementation, stop autonomous progress and ask the user.
+- Keep each implementation focused on the documented task boundary and do not reopen completed checkpoints without a concrete compatibility need.
+- Report the commit, changed public interfaces, validation results, remaining risks, and the next step plan after each implementation.
+- Update architecture documentation whenever an implementation changes an accepted diagram, contract, lifecycle, or task status.
 - The dedicated Novel domain model remains outside this implementation plan until separately reviewed.
+
+Execution continues from the repository's recorded current position. Completed Task 1 and Task 2 checkpoints are not repeated; remaining checkpoints proceed in documented dependency order through Task 7.
 
 ## 2. Task Overview
 

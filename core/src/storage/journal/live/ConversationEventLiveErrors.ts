@@ -117,6 +117,34 @@ export class ConversationEventSubscriptionCursorAheadError extends Error {
   }
 }
 
+export class ConversationEventSubscriptionJournalWatermarkError extends Error {
+  readonly code = "CONVERSATION_EVENT_SUBSCRIPTION_JOURNAL_WATERMARK_CHANGED";
+
+  constructor(
+    public readonly conversationId: string,
+    public readonly expectedHighWatermark: number,
+    public readonly actualHighWatermark: number,
+  ) {
+    super(
+      `Conversation Event Journal High Watermark changed from ${expectedHighWatermark} to ${actualHighWatermark}`,
+    );
+    this.name = "ConversationEventSubscriptionJournalWatermarkError";
+  }
+}
+
+export class ConversationEventSubscriptionJournalPageError extends Error {
+  readonly code = "CONVERSATION_EVENT_SUBSCRIPTION_JOURNAL_PAGE_INVALID";
+
+  constructor(
+    public readonly conversationId: string,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "ConversationEventSubscriptionJournalPageError";
+  }
+}
+
 export class ConversationEventSubscriptionServiceClosingError extends Error {
   readonly code = "CONVERSATION_EVENT_SUBSCRIPTION_SERVICE_CLOSING";
 

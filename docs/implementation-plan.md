@@ -344,6 +344,37 @@ Task 1C-D1 explicitly excludes:
 - staging-file replacement and atomic streaming rebuild, deferred to Task 1C-D2
 - automatic catch-up, repair, rebuild, and lifecycle logs, deferred to Task 1C-D3
 
+Task 1C-D2 delivered:
+
+- platform-neutral `MessageProjectionReplacementWriter` for sequential committed-batch streaming
+- `LockedConversationMessageFile.replaceAtomically()` with mandatory Header and Checkpoint zero initialization
+- same-directory `.messages.jsonl-<uuid>.rebuild` staging files with mode `0600`
+- protocol-aware staging writes with Canonical JSON encoding and incremental sequence validation
+- explicit rejection of empty batches, Header reuse, missing final Checkpoint, invalid chains, and concurrent writes
+- immutable sequence-state snapshots for constructing the next Message and Checkpoint batch
+- final staging file `fsync`, close, strict disk rescan, and in-memory versus disk-state comparison
+- atomic rename to `messages.jsonl`, directory `fsync`, and final target rescan
+- failed callback, validation, write, or cancellation cleanup while preserving the previous target file
+- orphan staging-file cleanup under the existing per-Conversation exclusive lock
+- compatibility `replace(records)` implemented through the new replacement transaction
+- scanner collection controls so health and replacement scans do not retain complete Record or Message payload arrays
+- privacy-safe replacement lifecycle debug logs and orphan-removal info logs
+
+Task 1C-D2 memory boundary:
+
+- encoded Record batches and Message payloads are retained only for the active append call
+- ordinary health and replacement verification scans do not collect all Record or Message objects
+- the protocol validator still retains a global Runtime Message ID Set for duplicate detection, so validation memory remains proportional to Message count rather than strictly constant
+
+Task 1C-D2 explicitly excludes:
+
+- Journal reads, High Watermark capture, or pagination
+- Runtime Message projection or ID generation
+- decisions about initialization, catch-up, truncation, Projector migration, or rebuild
+- a concrete `ConversationMessageProjectionService`
+- automatic maintenance lifecycle logs such as rebuild reason and processed Event counts
+- staging-file resume; abandoned staging files are discarded because Journal remains the source of truth
+
 ## 5. Task 2: Conversation and Host
 
 Purpose:

@@ -31,6 +31,11 @@ export interface JsonlMessageFileScannerOptions {
   changeRetryCount?: number;
 }
 
+export interface JsonlMessageFileScanOptions extends ScanConversationMessageFileOptions {
+  collectRecords?: boolean;
+  collectCommittedMessages?: boolean;
+}
+
 export class JsonlMessageFileScanner {
   private readonly workspaceId: string;
   private readonly codec: MessageProjectionRecordCodec;
@@ -59,7 +64,7 @@ export class JsonlMessageFileScanner {
   async scan(
     conversationId: string,
     filePath: string,
-    options: ScanConversationMessageFileOptions = {},
+    options: JsonlMessageFileScanOptions = {},
   ): Promise<JsonlMessageFileScanResult> {
     this.logger.debug("message_projection.file.scan_started", { conversationId });
 
@@ -85,7 +90,7 @@ export class JsonlMessageFileScanner {
   private async scanOnce(
     conversationId: string,
     filePath: string,
-    options: ScanConversationMessageFileOptions,
+    options: JsonlMessageFileScanOptions,
   ): Promise<JsonlMessageFileScanResult | "changed"> {
     let handle;
     try {
@@ -130,16 +135,23 @@ export class JsonlMessageFileScanner {
               : {}),
           });
           validator.accept(record);
-          records.push(record);
+          if (options.collectRecords === true) records.push(record);
           completeRecordCount += 1;
 
           if (record.recordType === "header") header = record;
-          if (record.recordType === "message") pendingMessages.push(record);
+          if (
+            options.collectCommittedMessages === true &&
+            record.recordType === "message"
+          ) {
+            pendingMessages.push(record);
+          }
           if (record.recordType === "checkpoint") {
             hasCommittedCheckpoint = true;
             committedByteLength = line.endOffset;
             committedRecordCount = completeRecordCount;
-            committedMessages.push(...pendingMessages);
+            if (options.collectCommittedMessages === true) {
+              committedMessages.push(...pendingMessages);
+            }
             pendingMessages = [];
           }
         }

@@ -1153,6 +1153,70 @@ Runtime Message IDs are deterministic and content-free. `Sha256RuntimeMessageIdF
 
 Task 1C-D1 defines contracts and pure local logic only. Atomic staging-file replacement remains Task 1C-D2; concrete Journal pagination, catch-up, repair, rebuild, and lifecycle logging remain Task 1C-D3.
 
+### 15.6 Implemented Task 1C-D2 Atomic Streaming Replacement
+
+Long Conversation rebuilds use a staging transaction instead of constructing one complete in-memory Record array. The existing `messages.jsonl` remains readable until the replacement has been fully written, synchronized, and verified.
+
+```text
+conversation-<sha256(conversationId)>/
+├─ messages.jsonl
+├─ messages.lock
+└─ .messages.jsonl-<uuid>.rebuild
+```
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant LockedFile as LockedConversationMessageFile
+    participant Replacement as ReplacementWriter
+    participant Staging as Staging File
+    participant Scanner
+    participant Target as messages.jsonl
+
+    Caller->>LockedFile: replaceAtomically(Header + Checkpoint 0)
+    LockedFile->>Staging: create mode 0600
+    LockedFile->>Replacement: initialize protocol validator
+    loop committed batches
+        Caller->>Replacement: appendCommittedBatch(records)
+        Replacement->>Replacement: encode and validate chain
+        Replacement->>Staging: append LF JSONL
+    end
+    LockedFile->>Staging: file fsync and close
+    LockedFile->>Scanner: strict staging Scan
+    Scanner-->>LockedFile: valid state
+    LockedFile->>LockedFile: compare memory and disk state
+    LockedFile->>Target: atomic rename staging to target
+    LockedFile->>Target: directory fsync
+    LockedFile->>Scanner: final target Scan
+    Scanner-->>Caller: committed Scan
+```
+
+`replaceAtomically()` receives Header and Checkpoint zero directly, so its callback cannot forget initialization or begin from a partially committed file. `MessageProjectionReplacementWriter.getState()` returns the current immutable sequence state used by Task 1C-D3 to derive the next Message Index, Previous Hash, cumulative Message Count, and projected Journal Sequence.
+
+Each appended batch must be non-empty, contain no Header, and end with a Checkpoint. The stateful protocol validator rejects invalid identity, Hash Chain, Message Index, Message ID, Source Sequence, Source Ordinal, and Checkpoint transitions before commit. The Writer is a serialized state machine; concurrent append attempts invalidate the replacement rather than guessing an order.
+
+The staging file is not synchronized after every page because the previous target remains authoritative throughout the build. After the callback completes, the adapter performs one staging-file `fsync`, closes it, scans it from disk without collecting full Record or Message arrays, compares disk state against the in-memory validator state, atomically renames it, synchronizes the Conversation directory, and scans the committed target.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active
+    Active --> Active: append committed batch
+    Active --> Finalized: fsync + close + validate
+    Finalized --> Committed: rename + directory fsync
+    Active --> Aborted: callback / validation / write failure
+    Finalized --> Aborted: validation or rename failure
+    Aborted --> [*]: remove staging
+    Committed --> [*]
+```
+
+If the callback throws, cancellation is raised by the future D3 service, validation fails, or the staging write fails, the staging file is removed and the old target remains unchanged. If rename succeeds but directory `fsync` fails, the new target is retained and a durability error is reported because the visible rename cannot safely be pretended to have rolled back.
+
+Abandoned `.messages.jsonl-<uuid>.rebuild` files are removed only while holding the existing same-process mutex and cross-process `messages.lock`. They are never resumed: Journal is the source of truth, while a staging file may belong to an obsolete Projector or may not have reached durable completion.
+
+Scanner collection is now demand-driven. Health checks and replacement verification retain protocol state but not complete Record or Message payload arrays; pagination collects committed Messages, and legacy append validation explicitly collects Records. The global Message ID Set remains proportional to Message count so duplicate IDs can still be detected without weakening the protocol.
+
+Task 1C-D2 does not read Journal, invoke a Runtime Message Projector, choose a repair action, or implement `ConversationMessageProjectionService`. Those orchestration responsibilities remain Task 1C-D3.
+
 ## 16. ConversationRuntime Composition
 
 ```mermaid

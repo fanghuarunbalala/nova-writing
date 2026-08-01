@@ -10,6 +10,7 @@ import type {
   MessageProjectionMessageRecord,
   MessageProjectionSequenceState,
 } from "../protocol/index.js";
+import type { MessageProjectionReplacementWriter } from "./MessageProjectionReplacementWriter.js";
 
 export type MessageProjectionFileStatus =
   | "missing"
@@ -79,6 +80,14 @@ export interface LockedConversationMessageFile {
   truncateToCommitted(scan: MessageProjectionFileScan): Promise<MessageProjectionFileScan>;
 
   replace(records: readonly MessageProjectionFileRecord[]): Promise<MessageProjectionFileScan>;
+
+  replaceAtomically(
+    initialRecords: readonly [
+      MessageProjectionHeaderRecord,
+      MessageProjectionCheckpointRecord,
+    ],
+    operation: (replacement: MessageProjectionReplacementWriter) => Promise<void>,
+  ): Promise<MessageProjectionFileScan>;
 }
 
 export interface ConversationMessageFileStore {

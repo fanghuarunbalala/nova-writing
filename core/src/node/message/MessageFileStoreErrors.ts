@@ -60,3 +60,31 @@ export class MessageProjectionFileOperationError extends Error {
     this.name = "MessageProjectionFileOperationError";
   }
 }
+
+export class MessageProjectionReplacementInactiveError extends Error {
+  constructor(public readonly conversationId: string) {
+    super(`Message projection replacement is no longer active: ${conversationId}`);
+    this.name = "MessageProjectionReplacementInactiveError";
+  }
+}
+
+export class MessageProjectionReplacementConcurrentWriteError extends Error {
+  constructor(public readonly conversationId: string) {
+    super(`Concurrent Message projection replacement write: ${conversationId}`);
+    this.name = "MessageProjectionReplacementConcurrentWriteError";
+  }
+}
+
+export class MessageProjectionReplacementValidationError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "MessageProjectionReplacementValidationError";
+  }
+}
+
+export class MessageProjectionReplacementDurabilityError extends Error {
+  constructor(public readonly conversationId: string, options?: ErrorOptions) {
+    super(`Message projection replacement directory sync failed: ${conversationId}`, options);
+    this.name = "MessageProjectionReplacementDurabilityError";
+  }
+}

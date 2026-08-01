@@ -23,6 +23,8 @@ import {
   type MessageProjectionFileScan,
   type MessageProjectionHeaderRecord,
   type MessageProjectionRecordCodec,
+  type MessageProjectionReplacementWriter,
+  type MessageProjectionSequenceState,
   type ScanConversationMessageFileOptions,
 } from "../../storage/index.js";
 import { AtomicMessageFileWriter } from "./AtomicMessageFileWriter.js";
@@ -36,6 +38,7 @@ import {
 } from "./ConversationMessagePathResolver.js";
 import { JsonlMessageFileScanner } from "./JsonlMessageFileScanner.js";
 import type { JsonlMessageFileScanResult } from "./JsonlMessageFileScanner.js";
+import { JsonlMessageProjectionReplacementWriter } from "./JsonlMessageProjectionReplacementWriter.js";
 import { KeyedAsyncMutex } from "./KeyedAsyncMutex.js";
 import {
   MessageFileStoreClosedError,
@@ -113,6 +116,7 @@ export class JsonlConversationMessageStore implements ConversationMessageFileSto
     const limit = this.parseLimit(query.limit ?? DEFAULT_PAGE_LIMIT);
     const paths = this.pathResolver.resolve(query.conversationId);
     const scan = await this.scanner.scan(query.conversationId, paths.messageFilePath, {
+      collectCommittedMessages: true,
       ...(query.allowUnknownMessageTypes === true
         ? { allowUnknownMessageTypes: true }
         : {}),
@@ -320,6 +324,7 @@ class LockedJsonlConversationMessageFile implements LockedConversationMessageFil
     const current = await this.scanner.scan(
       this.conversationId,
       this.paths.messageFilePath,
+      { collectRecords: true },
     );
     this.assertValid(current);
     this.validateCompleteFile([...current.records, ...records], false);
@@ -376,13 +381,106 @@ class LockedJsonlConversationMessageFile implements LockedConversationMessageFil
       recordCount: records.length,
     });
     this.validateCompleteFile(records, false);
-    await this.writer.replace(this.paths.messageFilePath, this.encodeLines(records));
-    const scan = await this.requireValidScan();
+    const header = records[0];
+    const initialCheckpoint = records[1];
+    if (header?.recordType !== "header" || initialCheckpoint?.recordType !== "checkpoint") {
+      throw new MessageProjectionFileOperationError(
+        "Message projection replacement requires Header followed by Checkpoint zero",
+      );
+    }
+    const remaining = records.slice(2);
+    const scan = await this.replaceAtomically(
+      [header, initialCheckpoint],
+      async (replacement) => {
+        if (remaining.length > 0) {
+          await replacement.appendCommittedBatch(remaining);
+        }
+      },
+    );
     this.logger.debug("message_projection.file.replace_completed", {
       conversationId: this.conversationId,
       committedRecordCount: scan.committedRecordCount,
     });
     return scan;
+  }
+
+  async replaceAtomically(
+    initialRecords: readonly [
+      MessageProjectionHeaderRecord,
+      MessageProjectionCheckpointRecord,
+    ],
+    operation: (replacement: MessageProjectionReplacementWriter) => Promise<void>,
+  ): Promise<MessageProjectionFileScan> {
+    this.assertActive();
+    this.logger.debug("message_projection.replacement.started", {
+      conversationId: this.conversationId,
+    });
+
+    const removedOrphans = await this.writer.cleanupAbandonedReplacements(
+      this.paths.messageFilePath,
+    );
+    if (removedOrphans > 0) {
+      this.logger.info("message_projection.replacement.orphan_removed", {
+        conversationId: this.conversationId,
+        removedCount: removedOrphans,
+      });
+    }
+
+    const atomicReplacement = await this.writer.beginReplacement(
+      this.conversationId,
+      this.paths.messageFilePath,
+    );
+    const replacement = await JsonlMessageProjectionReplacementWriter.create({
+      workspaceId: this.workspaceId,
+      conversationId: this.conversationId,
+      initialRecords,
+      codec: this.codec,
+      replacement: atomicReplacement,
+      logger: this.logger,
+    });
+    this.logger.debug("message_projection.replacement.staging_created", {
+      conversationId: this.conversationId,
+    });
+
+    try {
+      await operation(replacement);
+      const expectedState = await replacement.finalize();
+      this.logger.debug("message_projection.replacement.staging_synced", {
+        conversationId: this.conversationId,
+        committedRecordCount: expectedState.committedRecordCount,
+        committedMessageCount: expectedState.committedMessageCount,
+      });
+
+      const stagingScan = await this.scanner.scan(
+        this.conversationId,
+        replacement.stagingPath,
+      );
+      this.assertReplacementState(stagingScan, expectedState, "staging");
+      this.logger.debug("message_projection.replacement.staging_validated", {
+        conversationId: this.conversationId,
+        committedRecordCount: expectedState.committedRecordCount,
+      });
+
+      this.logger.debug("message_projection.replacement.commit_started", {
+        conversationId: this.conversationId,
+      });
+      await replacement.commit();
+      const committedScan = await this.requireValidScan();
+      this.assertReplacementState(committedScan, expectedState, "committed");
+      this.logger.debug("message_projection.replacement.commit_completed", {
+        conversationId: this.conversationId,
+        committedRecordCount: expectedState.committedRecordCount,
+        committedMessageCount: expectedState.committedMessageCount,
+      });
+      return committedScan;
+    } catch (error) {
+      await replacement.abort();
+      this.logger.debug("message_projection.replacement.aborted", {
+        conversationId: this.conversationId,
+        errorName: error instanceof Error ? error.name : "Error",
+      });
+      throw error;
+    }
   }
 
   private validateCompleteFile(
@@ -420,6 +518,39 @@ class LockedJsonlConversationMessageFile implements LockedConversationMessageFil
 
   private encodeLines(records: readonly MessageProjectionFileRecord[]): string {
     return `${records.map((record) => this.codec.encode(record)).join("\n")}\n`;
+  }
+
+  private assertReplacementState(
+    scan: MessageProjectionFileScan,
+    expected: MessageProjectionSequenceState,
+    phase: "staging" | "committed",
+  ): void {
+    if (scan.status !== "valid" || scan.state === undefined) {
+      throw new MessageProjectionFileStateError(
+        this.conversationId,
+        scan.status,
+        `Message projection ${phase} replacement is not valid`,
+      );
+    }
+    const actual = scan.state;
+    if (
+      actual.workspaceId !== expected.workspaceId ||
+      actual.conversationId !== expected.conversationId ||
+      actual.projectorId !== expected.projectorId ||
+      actual.projectorVersion !== expected.projectorVersion ||
+      actual.recordCount !== expected.recordCount ||
+      actual.messageCount !== expected.messageCount ||
+      actual.lastRecordHash !== expected.lastRecordHash ||
+      actual.committedThroughSequence !== expected.committedThroughSequence ||
+      actual.committedMessageCount !== expected.committedMessageCount ||
+      actual.committedRecordCount !== expected.committedRecordCount ||
+      actual.committedRecordHash !== expected.committedRecordHash ||
+      actual.trailingRecordCount !== 0
+    ) {
+      throw new MessageProjectionFileOperationError(
+        `Message projection ${phase} replacement state does not match the writer state`,
+      );
+    }
   }
 
   private async requireValidScan(

@@ -18,6 +18,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
+    "smoke:conversation-events": "pnpm build && node scripts/conversation-event-live-smoke.mjs",
     "smoke:message-projection-integration": "pnpm build && node scripts/message-projection-integration-smoke.mjs"
   },
   "dependencies": {

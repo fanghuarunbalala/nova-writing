@@ -359,7 +359,7 @@ export class ManagedConversationHost implements ConversationHost {
     const fingerprint = getSignalFingerprint(signal);
     const context = this.createControlContext(slot);
     try {
-      await this.controlDispatcher.dispatch(signal, context);
+      const result = await this.controlDispatcher.dispatch(signal, context);
       slot.pendingControlSignals.delete(signal.sequence);
       slot.completedControlSignals.set(signal.sequence, fingerprint);
       this.logger.info("conversation_host.control.dispatched", {
@@ -367,7 +367,11 @@ export class ManagedConversationHost implements ConversationHost {
         inputEventId: signal.inputEventId,
         eventType: signal.eventType,
         sequence: signal.sequence,
-        handler: signal.route.target === "host" ? signal.route.handler : "unknown",
+        handler: result.handler,
+        routingOutcome: result.outcome,
+        outputEventId: result.outputReceipt.outputEventId,
+        outputSequence: result.outputReceipt.sequence,
+        outputStatus: result.outputReceipt.status,
         runtimeOnline: context.runtime !== undefined,
       });
     } catch (error) {

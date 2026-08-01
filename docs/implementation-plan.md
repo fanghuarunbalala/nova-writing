@@ -568,6 +568,7 @@ Implementation status:
 - Task 2D-D-A implemented and awaiting review: unified OutputEvent publication contract, schema validation, canonical frozen capture, durable Journal receipts, conflict and persistence normalization, live-publication degradation, and real SQLite integration validation.
 - Task 2D-D-B implemented and awaiting review: Runtime Presence transition and Host-input routing OutputEvent classes, payloads, Event Types, registered Core schemas, durable Input references, causation defaults, privacy boundaries, and protocol smoke validation.
 - Task 2D-D-C implemented and awaiting review: Managed Host lifecycle publication, ordered per-Conversation Presence events, Input causation propagation, publication failure degradation, ownership boundaries, and expanded lifecycle smoke validation.
+- Task 2D-D-D implemented and awaiting review: Core Stop and ReloadConfig routing, online Runtime durable-reference notification, offline outcomes, routed InputResponse publication, result contracts, retry-preserving failure behavior, and focused smoke validation.
 
 Resolved through Task 2C:
 
@@ -907,6 +908,36 @@ Task 2D-D-C explicitly excludes:
 - control-dispatcher result contracts
 - Stop cancellation and ReloadConfig application
 - semantic Input completion events
+- Runtime, InputRouter, Run/Turn state, Pi, Tools, Approval, IPC, and Subagents
+
+Task 2D-D-D delivered:
+
+- `ConversationHostControlDispatchResult` with handler, routing outcome, and durable Output receipt
+- `CoreConversationHostControlDispatcher` with injected Output publisher, Clock, and Logger
+- strict Core Event Type and Host handler pairing validation
+- online Runtime context identity and Presence validation
+- payload-free Stop and ReloadConfig Runtime notification by durable Journal reference
+- offline Stop `no_runtime` and offline ReloadConfig `deferred` routing outcomes
+- durable `HostInputRoutedOutputEvent` publication after successful routing
+- Host completion only after Runtime notification and routed Output publication succeed
+- pending Signal retention after Runtime notification or Output publication failure
+- stable Runtime dispatch failure normalization and safe structured observability
+- focused smoke covering all routing outcomes, metadata, failure paths, invalid contexts, and redaction
+
+Task 2D-D-D accepted decisions:
+
+- Host routing completion is distinct from Runtime semantic completion.
+- online Runtime notification precedes routed Output publication.
+- no routed OutputEvent is emitted when Runtime notification fails.
+- publication failure after Runtime notification leaves the Host Signal pending for explicit wake-up retry.
+- offline ReloadConfig is deferred but not loaded or applied by the Host Dispatcher.
+- the Dispatcher owns neither the Output publisher nor the Runtime target lifecycle.
+
+Task 2D-D-D explicitly excludes:
+
+- Stop cancellation and queued-user-input clearing
+- ReloadConfig payload resolution or application
+- semantic completion and failure OutputEvents from Runtime
 - Runtime, InputRouter, Run/Turn state, Pi, Tools, Approval, IPC, and Subagents
 
 ## 6. Task 3: Input Routing and Runtime Loop
@@ -1279,7 +1310,7 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, Task 2D-A through Task 2D-C, and Task 2D-D-A through Task 2D-D-C have been implemented and are awaiting checkpoint review.
+Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, Task 2D-A through Task 2D-C, and Task 2D-D-A through Task 2D-D-D have been implemented and are awaiting checkpoint review.
 
 Completed Task 1 results include:
 

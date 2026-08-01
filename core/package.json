@@ -22,6 +22,7 @@
     "smoke:conversation-command": "pnpm build && node scripts/conversation-command-integration-smoke.mjs",
     "smoke:conversation-host-protocol": "pnpm build && node scripts/conversation-host-protocol-smoke.mjs",
     "smoke:conversation-host-lifecycle": "pnpm build && node scripts/conversation-host-lifecycle-smoke.mjs",
+    "smoke:conversation-host-control": "pnpm build && node scripts/conversation-host-control-dispatcher-smoke.mjs",
     "smoke:conversation-output-publishing": "pnpm build && node scripts/conversation-output-publishing-smoke.mjs",
     "smoke:conversation-output-protocol": "pnpm build && node scripts/conversation-output-protocol-smoke.mjs",
     "smoke:conversation-runtime-bootstrap": "pnpm build && node scripts/conversation-runtime-bootstrap-integration-smoke.mjs",

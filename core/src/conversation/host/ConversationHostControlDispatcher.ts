@@ -5,7 +5,12 @@
  * online; they never receive the placement-owned Runtime Handle.
  */
 import type { AcceptedConversationInputSignal } from "../command/index.js";
+import type { OutputReceipt } from "../output/index.js";
 import type { RuntimePresence } from "../RuntimePresence.js";
+import type {
+  HostInputHandler,
+  HostInputRoutingOutcome,
+} from "../../event/index.js";
 import type { ConversationRuntimeInputReference } from "./ConversationRuntimeInputReference.js";
 
 export interface ConversationRuntimeCommandTarget {
@@ -20,9 +25,15 @@ export interface ConversationHostControlDispatchContext {
   readonly runtime?: ConversationRuntimeCommandTarget;
 }
 
+export interface ConversationHostControlDispatchResult {
+  readonly handler: HostInputHandler;
+  readonly outcome: HostInputRoutingOutcome;
+  readonly outputReceipt: OutputReceipt;
+}
+
 export interface ConversationHostControlDispatcher {
   dispatch(
     signal: AcceptedConversationInputSignal,
     context: ConversationHostControlDispatchContext,
-  ): Promise<void>;
+  ): Promise<ConversationHostControlDispatchResult>;
 }

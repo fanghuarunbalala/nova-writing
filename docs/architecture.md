@@ -1136,6 +1136,46 @@ The lifecycle smoke now verifies ordered accepted-input activation, Host-close s
 
 Task 2-D-D-C does not publish `HostInputRoutedOutputEvent`, change control-dispatch results, or implement Stop cancellation, ReloadConfig application, Runtime execution, InputRouter, Run/Turn state, IPC, or Subagents.
 
+### 7.10 Implemented Task 2-D-D-D Core Host Control Dispatcher
+
+Task 2-D-D-D implements `CoreConversationHostControlDispatcher` for the two Core Host routes while preserving the distinction between routing and semantic execution.
+
+```mermaid
+flowchart TD
+    Signal["Durable Host-routed Input Signal"] --> Validate["Validate handler, Event Type, and context"]
+    Validate --> Online{"Online Runtime target?"}
+    Online -- yes --> Dispatch["dispatchInput(durable Journal reference)"]
+    Dispatch --> RuntimeOutcome["runtime_notified"]
+    Online -- no, Stop --> NoRuntime["no_runtime"]
+    Online -- no, ReloadConfig --> Deferred["deferred"]
+    RuntimeOutcome --> RoutedEvent["HostInputRoutedOutputEvent"]
+    NoRuntime --> RoutedEvent
+    Deferred --> RoutedEvent
+    RoutedEvent --> Publish["ConversationOutputEventPublisher.publish()"]
+    Publish --> Result["Frozen ControlDispatchResult"]
+```
+
+The Dispatcher accepts only the Core route pairs:
+
+| Input Event Type | Handler | Offline outcome |
+| --- | --- | --- |
+| `system.stop` | `stop` | `no_runtime` |
+| `command.config.reload` | `reload_config` | `deferred` |
+
+Both Core routes require `runtimeNotification: if_online`. A supplied Runtime target must report the same Conversation ID, a non-empty Runtime instance ID, and online logical Presence. Online Stop and ReloadConfig inputs are dispatched as payload-free `ConversationRuntimeInputReference` values. The Runtime resolves the canonical Event from Journal by Conversation ID and Sequence.
+
+`runtime_notified` means the Runtime command endpoint accepted the reference. It does not mean an active Run was cancelled or a configuration became effective. Offline Stop performs no action because there is no active Runtime to notify. Offline ReloadConfig is classified as deferred so a later Runtime/configuration layer can resolve the durable command; this Dispatcher does not load or apply its payload.
+
+After routing, the Dispatcher publishes `HostInputRoutedOutputEvent` and returns a frozen `ConversationHostControlDispatchResult` containing handler, routing outcome, and durable `OutputReceipt`. `ManagedConversationHost` removes the pending control Signal only after this complete result returns, and logs the routing outcome plus Output identity.
+
+Runtime notification failure becomes a safe `ConversationRuntimeDispatchError`; no routed OutputEvent is emitted because routing did not complete. If Runtime notification succeeds but routed Output publication fails, the Dispatcher rethrows the publication failure. The Host leaves the Signal pending and stops the current drain. A later new or duplicate accepted-input notification can wake the queue and retry; Runtime dispatch remains idempotent by durable Sequence.
+
+The Dispatcher uses an injected Clock for deterministic routed-event timestamps and an injected Output publisher that it does not own or close. Structured logs contain stable routing identities and safe error name/code only, never Input payloads, ReloadConfig contents, novel text, prompts, Tool data, credentials, paths, messages, stacks, or causes.
+
+The focused smoke validates online Stop and ReloadConfig notification, offline Stop and ReloadConfig outcomes, durable reference metadata, routed Output shape and causation, Runtime notification failure, Output publication failure after notification, invalid route/context rejection, and log redaction.
+
+Task 2-D-D-D does not implement Runtime cancellation, configuration resolution/application, queued user-input clearing, semantic completion OutputEvents, Runtime/InputRouter behavior, Pi, Tools, Approval, IPC, or Subagents.
+
 ## 8. Query and Command Paths
 
 ```mermaid
@@ -3130,6 +3170,8 @@ Currently implemented skeletons include:
 - Output protocol smoke coverage for Presence privacy, durable Input references, causation defaults, defensive capture, and invalid lifecycle values
 - `ManagedConversationHost` lifecycle publication through the shared Output publisher with ordered per-Conversation transitions and non-rollback failure degradation
 - Host lifecycle smoke coverage for activation, shutdown, crash recovery, causation retention, and continuous operation during lifecycle publication failure
+- `CoreConversationHostControlDispatcher` with durable online Runtime notification, offline Stop/ReloadConfig outcomes, routed InputResponse publication, and frozen dispatch results
+- focused Host control smoke coverage for routing outcomes, durable references, causation, failure retention, context validation, and redacted observability
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild

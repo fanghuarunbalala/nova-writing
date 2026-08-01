@@ -14,6 +14,7 @@ export * from "./ConversationRuntimeInputReference.js";
 export * from "./ConversationRuntimeInstanceIdGenerator.js";
 export * from "./ConversationRuntimePlacement.js";
 export * from "./ConversationRuntimeShutdown.js";
+export * from "./CoreConversationHostControlDispatcher.js";
 export * from "./ManagedConversationHost.js";
 export * from "./ManagedConversationRuntimeSlot.js";
 export * from "./StorageConversationRuntimeBootstrapFactory.js";

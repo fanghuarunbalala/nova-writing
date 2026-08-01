@@ -186,6 +186,7 @@ class FakeControlDispatcher {
     this.calls = [];
     this.executionOrder = executionOrder;
     this.failuresRemaining = 0;
+    this.nextOutputSequence = 10_000;
   }
 
   async dispatch(signal, context) {
@@ -195,6 +196,23 @@ class FakeControlDispatcher {
       this.failuresRemaining -= 1;
       throw new Error("secret control failure");
     }
+    const handler = signal.route.handler;
+    const outcome = context.runtime
+      ? "runtime_notified"
+      : handler === "reload_config"
+        ? "deferred"
+        : "no_runtime";
+    return Object.freeze({
+      handler,
+      outcome,
+      outputReceipt: Object.freeze({
+        status: "recorded",
+        conversationId: signal.conversationId,
+        outputEventId: `output-control-${signal.sequence}`,
+        sequence: this.nextOutputSequence++,
+        recordedAt: signal.recordedAt,
+      }),
+    });
   }
 }
 

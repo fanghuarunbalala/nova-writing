@@ -495,6 +495,124 @@ Accepted protocol rules:
 
 Task 2-A explicitly excludes `LocalConversation`, `ConversationProxy`, Runtime activation, Run state, Host lifecycle, IPC, access authorization, and Stop or Interrupt semantics.
 
+### 7.2 Implemented Task 2-B Read-only LocalConversation
+
+Task 2-B supplies an in-process Handle and durable query implementation without supplying a concrete command path or activating Runtime.
+
+```mermaid
+classDiagram
+    class LocalConversationFactory {
+        +open(conversationId) Promise~LocalConversation~
+    }
+
+    class LocalConversation {
+        +string id
+        +string? parentConversationId
+        +LocalConversationInput input
+        +LocalConversationEvents events
+        +getSnapshot() Promise~ConversationSnapshot~
+        +getRuntimePresence() Promise~RuntimePresence~
+        +close() Promise~void~
+    }
+
+    class StorageConversationQueryService {
+        +getSnapshot(conversationId) Promise~ConversationSnapshot~
+        +listEvents(conversationId, options) Promise~ConversationEventPage~
+        +subscribeEvents(conversationId, options) ConversationEventSubscription
+    }
+
+    class ManagedConversationEventSubscription {
+        +next()
+        +return()
+        +close()
+    }
+
+    class ConversationCatalogStore
+    class ConversationJournalReader
+    class ConversationEventSubscriptionService
+    class ConversationCommandService
+    class ConversationRuntimePresenceReader
+
+    LocalConversationFactory --> StorageConversationQueryService
+    LocalConversationFactory --> ConversationCommandService
+    LocalConversationFactory --> ConversationRuntimePresenceReader
+    LocalConversation *-- LocalConversationInput
+    LocalConversation *-- LocalConversationEvents
+    LocalConversationEvents *-- ManagedConversationEventSubscription
+    LocalConversation --> StorageConversationQueryService
+    StorageConversationQueryService --> ConversationCatalogStore
+    StorageConversationQueryService --> ConversationJournalReader
+    StorageConversationQueryService --> ConversationEventSubscriptionService
+```
+
+Opening a local Handle verifies durable existence before constructing the Handle:
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Factory as LocalConversationFactory
+    participant Query as StorageConversationQueryService
+    participant Catalog as ConversationCatalogStore
+
+    App->>Factory: open(conversationId)
+    Factory->>Query: getSnapshot(conversationId)
+    Query->>Catalog: getConversation(conversationId)
+    alt found
+        Catalog-->>Query: metadata + active Agent Binding
+        Query-->>Factory: independent frozen Snapshot
+        Factory-->>App: LocalConversation
+    else missing
+        Query-->>App: ConversationNotFoundError
+    end
+```
+
+Read-only operations are bound to the Handle ID:
+
+```text
+conversation.events.list(options)
+    → inject Handle conversationId after caller options
+    → SQLite Journal list
+
+conversation.events.subscribe(options)
+    → inject Handle conversationId after caller options
+    → Journal catch-up subscription service
+```
+
+Even an untyped or JavaScript caller cannot override the Handle's `conversationId` by adding an extra property. The bound ID is written last when constructing the internal query or subscription options.
+
+`StorageConversationQueryService.getSnapshot()` returns independent frozen copies of Conversation Metadata and the active Agent Binding. Snapshot mutation cannot alter Catalog-owned objects or another Handle's Snapshot.
+
+`LocalConversation` requires injected `ConversationCommandService` and `ConversationRuntimePresenceReader` ports. Task 2-B does not provide production defaults: a read-only query must not silently imply that Runtime is offline, and the Handle must not invent a command implementation. Later Host composition supplies these ports.
+
+Handle-owned subscriptions are wrapped by `ManagedConversationEventSubscription`. Completion, failure, explicit return, or close unregisters the Subscription from the Handle. Handle close uses best-effort closure of every owned Subscription and reports multiple close failures through `AggregateError`.
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Handle as LocalConversation
+    participant Subscriptions as Owned Subscriptions
+    participant Shared as Shared Query/Command/Host Services
+
+    App->>Handle: close()
+    Handle->>Handle: mark closing
+    Handle->>Subscriptions: close all
+    Subscriptions-->>Handle: settled / failures
+    Handle->>Handle: mark closed
+    Note over Handle,Shared: shared services remain open and are never closed by the Handle
+```
+
+- new operations during close throw `ConversationHandleClosingError`.
+- operations after close throw `ConversationHandleClosedError`.
+- close is idempotent, including when Subscription closure fails.
+- already-started one-shot query operations may finish normally.
+- closing a Handle does not archive or dispose the Conversation.
+- closing a Handle does not close Catalog, Journal, Hub, Workspace, Command Service, or Runtime Presence Reader.
+- a direct synchronous `subscribeEvents()` call for an unknown ID returns a Subscription whose Journal initialization fails on first read. Normal `LocalConversationFactory.open()` validates the ID first.
+
+The repeatable SQLite integration smoke verifies parent metadata, active Agent Binding, defensive Snapshot copies, bound Event isolation, history-to-live delivery, no Command Service invocation, logical Runtime presence delegation, Handle Subscription ownership, aggregated close failures, shared-service survival after Handle close, reopen through a second Handle, and log redaction.
+
+Task 2-B explicitly excludes concrete command acceptance, Host activation, Runtime Bootstrap, Runtime placement, Run state, Stop or Interrupt, IPC Proxy behavior, and automatic Message projection.
+
 ## 8. Query and Command Paths
 
 ```mermaid
@@ -2463,6 +2581,11 @@ Currently implemented skeletons include:
 - durable `ConversationSnapshot` and placement-neutral `RuntimePresence` contracts
 - Conversation query, command, and Runtime-presence service ports
 - stable Conversation not-found and Handle lifecycle errors
+- `StorageConversationQueryService` backed by Catalog, Journal, and catch-up subscriptions
+- `LocalConversationFactory` and in-process `LocalConversation` Handle composition
+- bound Local Input and Events adapters with runtime Conversation ID enforcement
+- Handle-owned managed Event subscriptions and best-effort close aggregation
+- real SQLite read-only LocalConversation integration without Runtime activation
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild
@@ -2475,8 +2598,8 @@ The first-version protocol no longer contains `ResumeInputEvent`.
 
 Not yet implemented:
 
-- LocalConversation and ConversationProxy implementations
-- concrete Query and Command service implementations
+- ConversationProxy implementation
+- concrete Command Service and Runtime Presence Reader implementations
 - ConversationHost and process supervisor
 - ConversationRuntime
 - InputRouter

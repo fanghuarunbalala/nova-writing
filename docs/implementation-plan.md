@@ -551,6 +551,7 @@ Task breakdown:
 Implementation status:
 
 - Task 2A implemented and awaiting review: `Conversation` interface, bound `ConversationInput` and `ConversationEvents`, durable `ConversationSnapshot`, placement-neutral `RuntimePresence`, query/command/presence service ports, lifecycle errors, public exports, and protocol smoke validation.
+- Task 2B implemented and awaiting review: Storage-backed Query Service, verified LocalConversation Factory, bound local Input and Events adapters, defensive durable Snapshots, managed Subscription ownership, idempotent Handle lifecycle, SQLite no-Runtime replay validation, and log redaction.
 
 Questions to resolve before implementation:
 
@@ -597,6 +598,48 @@ Task 2A explicitly excludes:
 - Stop and Interrupt semantics
 - access authorization
 - IPC transport
+
+Task 2B delivered:
+
+- `StorageConversationQueryService` combining Conversation Catalog, Journal Reader, and catch-up Subscription Service ports
+- durable Snapshot lookup with `ConversationNotFoundError` normalization
+- independent frozen Metadata and active Agent Binding copies
+- bound list and subscription option construction that writes the Handle Conversation ID last
+- `LocalConversationFactory.open()` existence verification without Runtime activation
+- `LocalConversation` implementing the public Handle through injected query, command, and presence ports
+- `LocalConversationInput` delegation without a fake production Command Service
+- `LocalConversationEvents` list and subscribe delegation with Handle-owned Subscription tracking
+- `ManagedConversationEventSubscription` cleanup on completion, failure, return, or close
+- Handle close that rejects new operations, closes all owned Subscriptions, aggregates multiple failures, and never closes shared services
+- structured Handle and query logs without Event payload, novel text, prompt, Tool, credential, or error details
+- real SQLite integration smoke covering parent metadata, Agent Binding, history, live follow, cross-Conversation isolation, shared-service survival, and zero command invocation
+
+Task 2B ownership boundary:
+
+```text
+LocalConversation
+    ├─ owns LocalConversationInput adapter
+    ├─ owns LocalConversationEvents adapter
+    └─ owns only Subscriptions created through that Handle
+
+LocalConversation does not own
+    ├─ ConversationQueryService
+    ├─ ConversationCommandService
+    ├─ ConversationRuntimePresenceReader
+    ├─ Journal or Event Hub
+    └─ Workspace Store
+```
+
+Task 2B explicitly excludes:
+
+- concrete `ConversationCommandService` implementation
+- `ConversationHost`, lazy Runtime activation, and Runtime Bootstrap
+- production Runtime Presence tracking
+- Run state and concurrent Run policy
+- Stop and Interrupt semantics
+- IPC-backed `ConversationProxy`
+- access authorization
+- automatic Message projection
 - Tool pipeline
 - Subagent execution
 
@@ -970,7 +1013,7 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0, Task 1A through Task 1D-F, and Task 2A have been implemented and are awaiting checkpoint review.
+Task 0, Task 1A through Task 1D-F, and Task 2A through Task 2B have been implemented and are awaiting checkpoint review.
 
 Completed Task 1 results include:
 
@@ -985,4 +1028,4 @@ Completed Task 1 results include:
 - persistence-first Event publication with per-Conversation serialization
 - real SQLite end-to-end replay, reopen, duplicate, and live-follow smoke validation
 
-The next reviewed step is Task 2B: a read-only `LocalConversation` query path backed by existing Catalog, Journal, and catch-up subscription services. Task 2B must not activate Runtime or implement the command path.
+The next reviewed step is Task 2C: durable command acceptance and the lazy Host activation boundary. Before implementation, InputEvents that activate an offline Runtime, Host-handled control inputs, durable acceptance ordering, and one-active-Run policy must be confirmed.

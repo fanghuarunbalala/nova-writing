@@ -180,3 +180,12 @@ export class ConversationJournalServiceClosedError extends Error {
     this.name = "ConversationJournalServiceClosedError";
   }
 }
+
+export class ConversationJournalServiceReceiptError extends Error {
+  readonly code = "CONVERSATION_JOURNAL_SERVICE_RECEIPT_INVALID";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ConversationJournalServiceReceiptError";
+  }
+}

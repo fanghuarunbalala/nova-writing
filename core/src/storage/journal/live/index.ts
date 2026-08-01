@@ -7,3 +7,4 @@ export * from "./ConversationJournalAppendResult.js";
 export * from "./ConversationJournalService.js";
 export * from "./InMemoryConversationEventHub.js";
 export * from "./JournalConversationEventSubscriptionService.js";
+export * from "./PublishingConversationJournalService.js";

@@ -38,6 +38,7 @@ The product should lower the barrier between imagination and a structured, susta
 18. Runtime and Storage contracts are asynchronous, while the first Node SQLite adapter may execute bounded `DatabaseSync` operations directly behind those Promise-based contracts.
 19. Worker Threads are an implementation option, not part of the initial Storage contract; they are introduced only after measured event-loop blocking justifies the additional transport and lifecycle complexity.
 20. The concurrency model is async-first and hybrid: system boundaries are asynchronous, each Conversation mutates Runtime state through a serialized state machine, lightweight in-memory computation remains synchronous, and heavy CPU or blocking work is isolated behind replaceable Worker, process, or Rust-backed adapters when required.
+21. Node Message projection integration is Projector- and Schema-specific; a Workspace shares its Journal but does not freeze one global Runtime Message Schema Registry for every Agent definition.
 
 ## 4. Pause and Resume Decision
 
@@ -1307,7 +1308,94 @@ Missing files are initialized with Header and Checkpoint zero using one injected
 
 Maintenance logs include only logical IDs, Projector identity, health/action names, Sequence boundaries, page size, Event counts, Message counts, and rebuild reasons. Event payloads, Runtime Message payloads, prompts, novel text, Tool inputs/results, credentials, and JSONL lines remain excluded.
 
-Task 1C-D3 does not subscribe to live Journal events, activate Runtime, select an Agent Binding, convert Core Runtime Messages into Pi or Provider messages, integrate into `SqliteWorkspaceStore`, or publish maintenance OutputEvents. Those concerns remain Task 1C-E, Task 1D, and later Runtime tasks.
+Task 1C-D3 does not subscribe to live Journal events, activate Runtime, select an Agent Binding, convert Core Runtime Messages into Pi or Provider messages, integrate into `SqliteWorkspaceStore`, or publish maintenance OutputEvents. Node integration is supplied by Task 1C-E; live delivery and Runtime concerns remain Task 1D and later Runtime tasks.
+
+### 15.8 Implemented Task 1C-E Node Integration and Lifecycle
+
+`SqliteWorkspaceStore` now creates Projector- and Schema-specific `NodeConversationMessageProjectionContext` objects. A Context exposes only the stable Message file query port, the Journal-backed maintenance service, and `close()`. Codec, Hasher, Runtime Message Materializer, ID Factory, JSONL locking, and other wiring details remain internal to the Node factory.
+
+One fixed Workspace-global Message Store would be incorrect because different Agent definitions may register different Runtime Message Types and use different deterministic Projectors or Projector versions. The Workspace therefore shares its SQLite Journal while each active Agent definition supplies the Projector and optional Runtime Message Schema Registry used to construct a Context.
+
+```mermaid
+classDiagram
+    class SqliteWorkspaceStore {
+        +workspace WorkspaceStoreLocation
+        +conversations ConversationCatalogStore
+        +journal ConversationJournalStore
+        +createMessageProjectionContext(options)
+        +close() Promise
+    }
+
+    class NodeConversationMessageProjectionContext {
+        <<interface>>
+        +messages ConversationMessageFileStore
+        +projections ConversationMessageProjectionService
+        +close() Promise
+    }
+
+    class NodeConversationMessageProjectionContextFactory {
+        +create(options) NodeConversationMessageProjectionContext
+    }
+
+    class JsonlConversationMessageStore
+    class JournalConversationMessageProjectionService
+    class RuntimeMessageProjector
+    class RuntimeMessageSchemaRegistry
+    class SqliteConversationJournalStore
+
+    SqliteWorkspaceStore "1" o-- "*" NodeConversationMessageProjectionContext
+    SqliteWorkspaceStore --> NodeConversationMessageProjectionContextFactory
+    SqliteWorkspaceStore o-- SqliteConversationJournalStore
+    NodeConversationMessageProjectionContext o-- JsonlConversationMessageStore
+    NodeConversationMessageProjectionContext o-- JournalConversationMessageProjectionService
+    NodeConversationMessageProjectionContextFactory --> RuntimeMessageProjector
+    NodeConversationMessageProjectionContextFactory --> RuntimeMessageSchemaRegistry
+    JournalConversationMessageProjectionService --> SqliteConversationJournalStore
+    JournalConversationMessageProjectionService --> JsonlConversationMessageStore
+```
+
+The factory creates a fresh Core Runtime Message Schema Registry when the caller does not provide one. An Agent-specific caller may provide its own Registry, but that Registry must contain every Core and Agent Message Schema required to strictly decode the target projection. The factory does not silently merge registries because hidden duplicate definitions and version conflicts would make restoration behavior ambiguous.
+
+```mermaid
+flowchart TD
+    Create["createMessageProjectionContext"] --> Projector["Active RuntimeMessageProjector"]
+    Create --> Registry["Caller Registry or fresh Core Registry"]
+    Registry --> Codec["MessageProjectionRecordCodec"]
+    Hasher["Node SHA-256 Hasher"] --> Codec
+    Codec --> Files["JsonlConversationMessageStore"]
+    Hasher --> IDs["Sha256RuntimeMessageIdFactory"]
+    Registry --> Materializer["RuntimeMessageMaterializer"]
+    IDs --> Materializer
+    Files --> Service["JournalConversationMessageProjectionService"]
+    Materializer --> Service
+    Projector --> Service
+    Journal["Shared SQLite Journal"] --> Service
+    Files --> Context["Node Projection Context"]
+    Service --> Context
+```
+
+`SqliteWorkspaceStore` owns every Context it creates. Context close is idempotent and closes only its JSONL Message Store; it never closes the shared Journal. Workspace close first enters a closing state so new Context creation and Catalog or Journal operations fail with a typed lifecycle error. It then closes all registered Contexts, waits for their active Message file operations, closes SQLite, and reports one error directly or multiple failures through `AggregateError`.
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Workspace as SqliteWorkspaceStore
+    participant Context as Projection Contexts
+    participant SQLite
+
+    App->>Workspace: close()
+    Workspace->>Workspace: mark closing
+    Workspace->>Context: close all contexts
+    Context->>Context: wait for active JSONL operations
+    Context-->>Workspace: closed / failure
+    Workspace->>SQLite: close database
+    Workspace->>Workspace: mark closed
+    Workspace-->>App: complete / lifecycle error
+```
+
+The repeatable integration smoke uses a real Workspace Locator, SQLite Catalog, SQLite Journal, JSONL Message files, Core Runtime Message Projector, and Journal projection service. It verifies reopen and replay, deterministic Runtime Message IDs, Projector-version rebuild, an Agent-specific Schema Registry, multiple Context coexistence, idempotent and Workspace-owned closure, closing/closed rejection, and absence of Event or Message payload text in logs.
+
+Task 1C-E does not resolve Agent Bindings, activate Runtime, convert Runtime Messages to Pi or Provider types, subscribe to live Journal changes, publish maintenance OutputEvents, or add application commands. Those remain upper-layer Host, Task 1D, and later Runtime responsibilities.
 
 ## 16. ConversationRuntime Composition
 

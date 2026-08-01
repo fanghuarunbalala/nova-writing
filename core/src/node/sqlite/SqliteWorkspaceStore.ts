@@ -5,11 +5,19 @@ import {
   createCoreEventSchemaRegistry,
   type EventSchemaRegistry,
 } from "../../event/index.js";
+import { noopLogger, type Logger } from "../../observability/index.js";
 import type {
   ConversationCatalogStore,
   ConversationJournalStore,
   WorkspaceStoreLocation,
 } from "../../storage/index.js";
+import {
+  NodeConversationMessageProjectionContextFactory,
+  SqliteWorkspaceStoreClosedError,
+  SqliteWorkspaceStoreClosingError,
+  type CreateMessageProjectionContextOptions,
+  type NodeConversationMessageProjectionContext,
+} from "../message/index.js";
 import { WorkspaceDatabaseMismatchError } from "./ConversationCatalogErrors.js";
 import { SqliteConversationCatalogStore } from "./SqliteConversationCatalogStore.js";
 import { SqliteConversationJournalStore } from "./SqliteConversationJournalStore.js";
@@ -22,22 +30,44 @@ interface WorkspaceMetadataRow {
 export interface SqliteWorkspaceStoreOptions {
   workspace: WorkspaceStoreLocation;
   eventSchemaRegistry?: EventSchemaRegistry;
+  logger?: Logger;
 }
 
 export class SqliteWorkspaceStore {
   readonly conversations: ConversationCatalogStore;
   readonly journal: ConversationJournalStore;
 
+  private readonly logger: Logger;
+  private readonly projectionContextFactory: NodeConversationMessageProjectionContextFactory;
+  private readonly projectionContexts = new Set<NodeConversationMessageProjectionContext>();
+  private closing = false;
   private closed = false;
+  private closePromise?: Promise<void>;
 
   private constructor(
     private readonly database: DatabaseSync,
     public readonly workspace: WorkspaceStoreLocation,
     eventSchemaRegistry: EventSchemaRegistry,
+    logger: Logger,
   ) {
+    this.logger = logger.child({
+      component: "sqlite_workspace_store",
+      workspaceId: workspace.workspaceId,
+    });
     const ensureOpen = (): void => this.assertOpen();
     this.conversations = new SqliteConversationCatalogStore(database, workspace, ensureOpen);
     this.journal = new SqliteConversationJournalStore(database, eventSchemaRegistry, ensureOpen);
+    this.projectionContextFactory = new NodeConversationMessageProjectionContextFactory({
+      workspace,
+      journal: this.journal,
+      logger: this.logger,
+      onContextClosed: (context) => {
+        this.projectionContexts.delete(context);
+        this.logger.debug("message_projection.context.unregistered", {
+          projectionContextCount: this.projectionContexts.size,
+        });
+      },
+    });
   }
 
   static async open(options: SqliteWorkspaceStoreOptions): Promise<SqliteWorkspaceStore> {
@@ -52,6 +82,7 @@ export class SqliteWorkspaceStore {
         database,
         options.workspace,
         options.eventSchemaRegistry ?? createCoreEventSchemaRegistry(),
+        options.logger ?? noopLogger,
       );
     } catch (error) {
       database.close();
@@ -59,14 +90,67 @@ export class SqliteWorkspaceStore {
     }
   }
 
-  async close(): Promise<void> {
-    if (this.closed) return;
-    this.database.close();
-    this.closed = true;
+  createMessageProjectionContext(
+    options: CreateMessageProjectionContextOptions,
+  ): NodeConversationMessageProjectionContext {
+    this.assertOpen();
+    const context = this.projectionContextFactory.create(options);
+    this.projectionContexts.add(context);
+    this.logger.debug("message_projection.context.registered", {
+      projectionContextCount: this.projectionContexts.size,
+      projectorId: options.projector.id,
+      projectorVersion: options.projector.version,
+    });
+    return context;
+  }
+
+  close(): Promise<void> {
+    this.closePromise ??= this.closeOnce();
+    return this.closePromise;
+  }
+
+  private async closeOnce(): Promise<void> {
+    this.closing = true;
+    const contexts = [...this.projectionContexts];
+    this.logger.info("workspace_store.close.started", {
+      projectionContextCount: contexts.length,
+    });
+    const errors: unknown[] = [];
+
+    const contextResults = await Promise.allSettled(
+      contexts.map((context) => context.close()),
+    );
+    for (const result of contextResults) {
+      if (result.status === "rejected") errors.push(result.reason);
+    }
+    this.logger.debug("workspace_store.close.contexts_completed", {
+      projectionContextCount: contexts.length,
+      contextErrorCount: errors.length,
+    });
+
+    try {
+      this.database.close();
+      this.logger.debug("workspace_store.close.database_completed");
+    } catch (error) {
+      errors.push(error);
+    } finally {
+      this.closed = true;
+      this.closing = false;
+    }
+
+    if (errors.length > 0) {
+      this.logger.error("workspace_store.close.failed", {
+        errorCount: errors.length,
+      });
+      if (errors.length === 1) throw errors[0];
+      throw new AggregateError(errors, "Failed to close SqliteWorkspaceStore resources");
+    }
+    this.logger.info("workspace_store.close.completed");
   }
 
   private assertOpen(): void {
-    if (this.closed) throw new Error("SqliteWorkspaceStore is closed");
+    if (this.closing) throw new SqliteWorkspaceStoreClosingError();
+    if (this.closed) throw new SqliteWorkspaceStoreClosedError();
   }
 }
 

@@ -192,7 +192,10 @@ Implementation status:
 - Task 1B implemented and awaiting review: unified SQLite Input/Output Journal, per-Conversation Sequence allocation, Event ID idempotency, canonical JSON integrity, stable history pagination, unknown historical event replay, and shared Workspace Store ownership.
 - Task 1C-A implemented and awaiting review: platform-neutral structured Logger, Core-owned RuntimeMessage envelope, strict Message Schema Registry, deterministic projector contracts, composite validation, and Core `user.message` projection.
 - Task 1C-B implemented and awaiting review: JSONL Header, Message, and Checkpoint records, canonical encoding, injected SHA-256 hashing, Hash Chain validation, committed Checkpoint state, and valid trailing-record detection.
-- Task 1C-C through 1C-E and Task 1D remain unimplemented and require their own review before coding.
+- Task 1C-C implemented and awaiting review: Node JSONL Store, safe Conversation paths, asynchronous chunk scanning, atomic append/replacement, same-process serialization, cross-process locking, and stable Message pagination.
+- Task 1C-D implemented and awaiting review: projection maintenance contracts, deterministic IDs, Journal synchronization, repair, atomic rebuild, Projector migration, Schema protection, cancellation, and structured logs.
+- Task 1C-E implemented and awaiting review: Projector/Schema-specific Node projection contexts, `SqliteWorkspaceStore` lifecycle ownership, public exports, documentation, and repeatable end-to-end smoke validation.
+- Task 1D remains unimplemented and requires its own review before coding.
 
 Task 1B concurrency boundary:
 
@@ -413,6 +416,50 @@ Task 1C-D3 explicitly excludes:
 - automatic application-start maintenance policy
 - aggregation into `SqliteWorkspaceStore`, deferred to Task 1C-E
 - OutputEvent publication for maintenance progress
+
+Task 1C-E delivered:
+
+- public `NodeConversationMessageProjectionContext` exposing only `messages`, `projections`, and idempotent `close()`
+- `CreateMessageProjectionContextOptions` accepting the active deterministic Projector and optional Agent-specific Runtime Message Schema Registry
+- Core Runtime Message Schema Registry creation by default without silently merging caller-owned Agent Schema registries
+- `NodeConversationMessageProjectionContextFactory` wiring SHA-256 hashing, projection Codec, JSONL Message Store, deterministic Runtime Message IDs, materialization, and Journal maintenance
+- `SqliteWorkspaceStore.createMessageProjectionContext()` as the Node integration entry point
+- Projector/Schema-specific contexts instead of one Workspace-global Message Store, allowing upper-layer Agent definitions to provide distinct Message types
+- Workspace-owned tracking of every created projection Context
+- idempotent Context and Workspace close behavior
+- Workspace close ordering that rejects new Context creation, closes all Contexts, waits for active Message operations, and only then closes SQLite
+- typed closing and closed Workspace lifecycle errors
+- best-effort closure of all Contexts with aggregated lifecycle failures
+- structured Context and Workspace lifecycle logs without Event, Message, prompt, novel, Tool, credential, or JSONL payloads
+- repeatable real integration smoke using `NodeWorkspaceStoreLocator`, SQLite Catalog and Journal, Node JSONL Message Store, Core Projector, and Journal synchronization
+- smoke validation for Workspace reopen, deterministic Message IDs, Projector-version rebuild, custom Agent Schema Registry, multiple Context coexistence, idempotent closure, automatic Context closure, lifecycle rejection, and log redaction
+
+Task 1C-E ownership boundary:
+
+```text
+SqliteWorkspaceStore
+    ├─ SQLite Conversation Catalog
+    ├─ SQLite Conversation Journal
+    └─ NodeConversationMessageProjectionContext*
+           ├─ ConversationMessageFileStore
+           └─ ConversationMessageProjectionService
+```
+
+- SQLite Journal and Workspace metadata are shared Workspace resources.
+- JSONL Message Stores and projection services are owned by Projector/Schema-specific Contexts.
+- Agent Binding lookup and Agent-definition resolution remain upper-layer responsibilities.
+- a custom Runtime Message Schema Registry must include every Core and Agent Message Schema required to read the target projection history.
+- closing a Context never closes the shared SQLite Journal.
+
+Task 1C-E explicitly excludes:
+
+- automatic Agent Binding lookup or Agent-definition resolution
+- Runtime activation or Conversation command dispatch
+- Pi or Provider Message conversion
+- `ConversationEventHub`, live Journal follow, or append-triggered synchronization
+- automatic application-start projection maintenance
+- OutputEvent publication for projection maintenance
+- CLI, TUI, GUI, or Web commands and views
 
 ## 5. Task 2: Conversation and Host
 

@@ -17,7 +17,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit"
+    "check": "tsc -p tsconfig.json --noEmit",
+    "smoke:message-projection-integration": "pnpm build && node scripts/message-projection-integration-smoke.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.82.1",

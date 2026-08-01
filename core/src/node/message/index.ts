@@ -8,4 +8,7 @@ export * from "./JsonlMessageFileScanner.js";
 export * from "./JsonlMessageProjectionReplacementWriter.js";
 export * from "./KeyedAsyncMutex.js";
 export * from "./MessageFileStoreErrors.js";
+export * from "./MessageProjectionContextErrors.js";
+export * from "./NodeConversationMessageProjectionContext.js";
+export * from "./NodeConversationMessageProjectionContextFactory.js";
 export * from "./NodeSha256MessageProjectionHasher.js";

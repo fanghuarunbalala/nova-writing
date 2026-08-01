@@ -553,6 +553,7 @@ Implementation status:
 - Task 2A implemented and awaiting review: `Conversation` interface, bound `ConversationInput` and `ConversationEvents`, durable `ConversationSnapshot`, placement-neutral `RuntimePresence`, query/command/presence service ports, lifecycle errors, public exports, and protocol smoke validation.
 - Task 2B implemented and awaiting review: Storage-backed Query Service, verified LocalConversation Factory, bound local Input and Events adapters, defensive durable Snapshots, managed Subscription ownership, idempotent Handle lifecycle, SQLite no-Runtime replay validation, and log redaction.
 - Task 2C implemented and awaiting review: durable Command Service, Input schema validation, post-persistence payload-free Host notification, Core route policy, atomic archived/disposed rejection, duplicate recovery signaling, structured logs, and real SQLite integration validation.
+- Task 2D-A implemented and awaiting review: platform-neutral Host, activation, shutdown, Bootstrap Factory, Placement, Runtime Handle, input-reference, safe exit, and stable error protocols with executable fake composition validation.
 
 Resolved through Task 2C:
 
@@ -682,6 +683,50 @@ Task 2C explicitly excludes:
 - Context clear or compaction execution
 - automatic Runtime Message projection
 - IPC-backed `ConversationProxy`
+
+Task 2D implementation breakdown:
+
+- Task 2D-A: Host, activation, Bootstrap, Placement, Runtime Handle, exit, shutdown, and error protocols.
+- Task 2D-B: Storage-backed immutable Bootstrap Factory with workdir and Journal High Watermark boundaries.
+- Task 2D-C: Managed Host Runtime Slot state machine, single-flight activation, Presence tracking, queued accepted-input scheduling, shutdown, and close.
+- Task 2D-D: Host-route dispatch, lifecycle OutputEvents, failure degradation, and safe observability.
+- Task 2D-E: focused Host lifecycle integration followed by the separate Task 2E LocalConversation no-process integration checkpoint.
+
+Task 2D-A delivered:
+
+- `ConversationHost` extending accepted-input notification and logical Runtime Presence reading
+- discriminated accepted-input, explicit-restore, and crash-recovery activation requests
+- stable activated or reused activation results without exposing Runtime instance or placement identity
+- payload-free `ConversationRuntimeInputReference` using durable Journal Sequence identity
+- serializable Core `ConversationRuntimeBootstrap` with Snapshot, workdir, activation cause, and Journal High Watermark
+- `ConversationRuntimeBootstrapFactory` and placement-neutral `ConversationRuntimePlacement` ports
+- `ConversationRuntimeHandle` with dispatch, idempotent shutdown expectations, and exit observation
+- safe stopped or crashed Runtime exit snapshots without raw error details
+- stable shutdown reasons and stopped or already-offline results
+- Host lifecycle, activation, dispatch, and Handle mismatch errors with stable codes
+- root Core exports, executable fake protocol composition, documentation, and repeatable smoke validation
+
+Task 2D-A accepted decisions:
+
+- Conversation Host directly implements the accepted-input Notifier and Runtime Presence Reader ports.
+- Host notification acknowledges process-local scheduling only.
+- Runtime Handle receives durable Input references and never InputEvent payload copies.
+- Bootstrap exposes `workdir` but never Store or database paths.
+- Agent Binding identity remains inside the Conversation Snapshot; prompts, Tools, Providers, and credentials remain outside the Bootstrap protocol.
+- Host owns Runtime Handles but does not own a shared Runtime Placement.
+- Task 2D-A defines no production Host, Presence transition, lifecycle OutputEvent, recovery loop, idle timer, or processed-input cursor.
+
+Task 2D-A explicitly excludes:
+
+- `ManagedConversationHost`
+- `StorageConversationRuntimeBootstrapFactory`
+- Runtime Slot and per-Conversation scheduling queues
+- concrete Runtime Presence tracking
+- Runtime activation or local Runtime implementation
+- Stop and reload-config Host handlers
+- Runtime lifecycle OutputEvents
+- historical pending-input reconciliation and Runtime checkpoints
+- idle eviction and automatic crash restart
 
 ## 6. Task 3: Input Routing and Runtime Loop
 
@@ -1053,7 +1098,7 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0, Task 1A through Task 1D-F, and Task 2A through Task 2C have been implemented and are awaiting checkpoint review.
+Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, and Task 2D-A have been implemented and are awaiting checkpoint review.
 
 Completed Task 1 results include:
 
@@ -1068,4 +1113,4 @@ Completed Task 1 results include:
 - persistence-first Event publication with per-Conversation serialization
 - real SQLite end-to-end replay, reopen, duplicate, and live-follow smoke validation
 
-The next reviewed step is Task 2D: ConversationHost lifecycle, Runtime Presence tracking, Runtime Bootstrap, placement abstraction, accepted-input reconciliation, and lazy activation. Runtime identity, idle eviction, bootstrap contents, crash recovery, and one-active-Runtime ownership must be confirmed before implementation.
+The next reviewed step is Task 2D-B: a storage-backed immutable Runtime Bootstrap Factory. Snapshot sourcing, workdir mapping, Journal High Watermark capture, activation-reference validation, identity generation ownership, and defensive freezing must be confirmed before implementation.

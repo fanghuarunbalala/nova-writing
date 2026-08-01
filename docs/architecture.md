@@ -701,6 +701,93 @@ Task 2-C deliberately emits no additional acceptance OutputEvent. The persisted 
 
 Task 2-C explicitly excludes concrete Host scheduling, Runtime activation, Runtime Presence transitions, configuration application, Stop cancellation, Run creation, Context operations, Input processing OutputEvents, and Message projection triggering. Those remain Task 2-D and later Runtime tasks.
 
+### 7.4 Implemented Task 2-D-A Host and Placement Protocol
+
+Task 2-D-A freezes the platform-neutral management contracts between command acceptance, Conversation Host, Runtime bootstrap creation, Runtime placement, and one ephemeral Runtime handle. It does not provide a production Host implementation or start a Runtime.
+
+```mermaid
+classDiagram
+    class ConversationHost {
+        <<interface>>
+        +notifyAccepted(AcceptedConversationInputSignal) Promise~void~
+        +getRuntimePresence(conversationId) Promise~RuntimePresence~
+        +ensureActive(ActivationRequest) Promise~ActivationResult~
+        +shutdownRuntime(ShutdownRequest) Promise~ShutdownResult~
+        +close() Promise~void~
+    }
+
+    class AcceptedConversationInputNotifier
+    class ConversationRuntimePresenceReader
+    class ConversationRuntimeBootstrapFactory {
+        <<interface>>
+        +create(BootstrapRequest) Promise~ConversationRuntimeBootstrap~
+    }
+    class ConversationRuntimePlacement {
+        <<interface>>
+        +activate(ConversationRuntimeBootstrap) Promise~ConversationRuntimeHandle~
+    }
+    class ConversationRuntimeHandle {
+        <<interface>>
+        +string conversationId
+        +string runtimeInstanceId
+        +dispatchInput(InputReference) Promise~void~
+        +shutdown(HandleShutdownRequest) Promise~void~
+        +waitForExit() Promise~ConversationRuntimeExit~
+    }
+
+    ConversationHost --|> AcceptedConversationInputNotifier
+    ConversationHost --|> ConversationRuntimePresenceReader
+    ConversationRuntimeBootstrapFactory --> ConversationRuntimeBootstrap
+    ConversationRuntimePlacement --> ConversationRuntimeBootstrap
+    ConversationRuntimePlacement --> ConversationRuntimeHandle
+    ConversationRuntimeHandle --> ConversationRuntimeInputReference
+    ConversationRuntimeHandle --> ConversationRuntimeExit
+```
+
+`ConversationHost.notifyAccepted()` acknowledges only process-local scheduling of a payload-free durable-input signal. It does not imply Runtime activation, Runtime dispatch, Run creation, Agent processing, or Input completion. The production per-Conversation scheduling queue remains Task 2-D-C.
+
+Activation requests are discriminated by cause:
+
+```text
+accepted_input
+    requires ConversationRuntimeInputReference
+
+explicit_restore
+    has no synthetic InputEvent
+
+crash_recovery
+    has no synthetic InputEvent
+```
+
+Activation results expose only `activated` or `reused` plus logical Runtime Presence. They do not expose Runtime instance identity, placement, transport, PID, or address to Conversation API consumers.
+
+The bootstrap contains:
+
+- bootstrap schema version
+- opaque Runtime instance ID and activation time
+- immutable Conversation Snapshot and active Agent Binding
+- Workspace ID and `workdir`
+- activation cause and optional durable Input reference
+- Journal High Watermark
+
+The bootstrap deliberately excludes Store directory names, database paths, JSONL paths, Provider credentials, API keys, prompt bodies, Tool handlers, Provider clients, callbacks, AbortSignals, PIDs, IPC addresses, and placement identity. `workdir` is the Workspace root, not the Store directory. Host and Storage remain the durable write authority.
+
+`ConversationRuntimeHandle.dispatchInput()` accepts only Conversation ID, Input Event ID, Event Type, Journal Sequence, and optional correlation identifiers. Successful dispatch means only that the Runtime endpoint accepted the reference; it is not a durable processed-input checkpoint.
+
+Runtime Handle ownership rules are explicit:
+
+- the future Conversation Host owns and shuts down every Runtime Handle it activates.
+- shutdown and exit observation must be idempotent.
+- the Host does not own or close the shared Runtime Placement.
+- the composition root closes a shared Placement or process supervisor after dependent Hosts.
+- Placement results must match the Bootstrap Conversation ID and Runtime instance ID.
+
+Runtime exits are normalized to safe stopped or crashed snapshots. Crash snapshots expose only safe error name and optional error code, never raw error messages, stacks, causes, stderr, Provider data, Tool data, or credentials.
+
+Task 2-D-A also reserves stable shutdown reasons for explicit shutdown, Host close, future idle eviction, and replacement. Reserving a reason does not implement the corresponding policy; automatic idle eviction remains disabled until reliable Run, Interaction, Tool, and child-Conversation activity state exists.
+
+Task 2-D-A explicitly excludes `ManagedConversationHost`, Bootstrap Factory implementation, Runtime Slot state, per-Conversation scheduling, Presence transitions, Runtime activation, Host control dispatch, lifecycle OutputEvents, crash restart policy, idle timers, historical pending-input recovery, Runtime checkpoints, and Agent execution.
+
 ## 8. Query and Command Paths
 
 ```mermaid
@@ -2680,6 +2767,9 @@ Currently implemented skeletons include:
 - payload-free accepted-input signals and Core routing for Runtime-required, Host stop, and Host config inputs
 - atomic SQLite rejection of new InputEvents for archived or disposed Conversations while preserving duplicate lookup
 - real SQLite command integration covering persist-before-notify, route isolation, duplicate recovery, concurrent Sequence allocation, status rejection, failure degradation, and log redaction
+- platform-neutral Conversation Host, activation, shutdown, Bootstrap Factory, Runtime Placement, Runtime Handle, input-reference, and safe exit protocols
+- stable Host and Runtime boundary errors without raw placement or failure details
+- executable Task 2-D-A protocol composition using fake Bootstrap Factory, Placement, Runtime Handle, and Host surfaces
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild
@@ -2693,8 +2783,9 @@ The first-version protocol no longer contains `ResumeInputEvent`.
 Not yet implemented:
 
 - ConversationProxy implementation
+- Managed ConversationHost implementation
 - concrete Runtime Presence Reader implementation
-- ConversationHost and process supervisor
+- Runtime Bootstrap Factory implementation and process supervisor
 - ConversationRuntime
 - InputRouter
 - Run state machine

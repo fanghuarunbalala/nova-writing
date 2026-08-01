@@ -8,5 +8,6 @@ export * from "./ConversationRuntimePresenceReader.js";
 export * from "./ConversationSnapshot.js";
 export * from "./RuntimePresence.js";
 export * from "./command/index.js";
+export * from "./host/index.js";
 export * from "./local/index.js";
 export * from "./query/index.js";

@@ -353,14 +353,14 @@ classDiagram
     direction LR
 
     class Conversation {
-        <<abstract>>
+        <<interface>>
         +string id
         +string? parentConversationId
         +ConversationInput input
         +ConversationEvents events
-        +getSnapshot() ConversationSnapshot
-        +getRuntimePresence() RuntimePresence
-        +close()
+        +getSnapshot() Promise~ConversationSnapshot~
+        +getRuntimePresence() Promise~RuntimePresence~
+        +close() Promise~void~
     }
 
     class LocalConversation {
@@ -375,13 +375,13 @@ classDiagram
 
     class ConversationInput {
         <<interface>>
-        +enqueue(InputEvent) InputReceipt
+        +enqueue(InputEvent) Promise~InputReceipt~
     }
 
     class ConversationEvents {
         <<interface>>
-        +list(ConversationEventQuery) ConversationEventPage
-        +subscribe(ConversationEventSubscriptionOptions) AsyncIterable
+        +list(ConversationEventListOptions) Promise~ConversationEventPage~
+        +subscribe(BoundSubscriptionOptions) ConversationEventSubscription
     }
 
     class ConversationQueryService {
@@ -429,18 +429,71 @@ Example public usage:
 await conversation.input.enqueue(inputEvent);
 
 const page = await conversation.events.list({
-  afterSequence: 100,
+  anchor: { afterSequence: 100 },
   limit: 200,
 });
 
 for await (const event of conversation.events.subscribe({
-  start: { from: "sequence", afterSequence: 100 },
+  start: { afterSequence: 100 },
 })) {
   eventStore.apply(event);
 }
 ```
 
-The public Conversation handle does not reveal whether a Runtime currently exists or where it is placed.
+The public Conversation handle may expose logical Runtime presence, but it never reveals PID, transport address, IPC details, or process placement.
+
+### 7.1 Implemented Task 2-A Public Protocol
+
+Task 2-A establishes only the platform-neutral protocol. It does not create a local Handle, activate Runtime, or choose process placement.
+
+```mermaid
+classDiagram
+    class ConversationSnapshot {
+        +ConversationMetadata metadata
+        +ConversationAgentBinding activeAgentBinding
+    }
+
+    class RuntimePresence {
+        +RuntimePresenceState state
+        +string observedAt
+    }
+
+    class ConversationQueryService {
+        <<interface>>
+        +getSnapshot(conversationId) Promise~ConversationSnapshot~
+        +listEvents(conversationId, options) Promise~ConversationEventPage~
+        +subscribeEvents(conversationId, options) ConversationEventSubscription
+    }
+
+    class ConversationCommandService {
+        <<interface>>
+        +enqueue(conversationId, InputEvent) Promise~InputReceipt~
+    }
+
+    class ConversationRuntimePresenceReader {
+        <<interface>>
+        +getRuntimePresence(conversationId) Promise~RuntimePresence~
+    }
+
+    Conversation --> ConversationSnapshot
+    Conversation --> RuntimePresence
+    Conversation --> ConversationQueryService
+    Conversation --> ConversationCommandService
+    Conversation --> ConversationRuntimePresenceReader
+```
+
+Accepted protocol rules:
+
+- `Conversation` is an interface implemented later by local Handles and IPC-backed Proxies.
+- `ConversationEvents` is already bound to one Conversation; callers cannot provide or override `conversationId`.
+- internal query and command services keep an explicit `conversationId` so the same services can back many Handles.
+- `ConversationSnapshot` contains durable metadata and the active versioned Agent Binding only.
+- Runtime presence is a separate transient observation with `offline`, `starting`, `online`, `stopping`, or `crashed` state.
+- Runtime presence never exposes placement or transport details.
+- `ConversationInput.enqueue()` returns a Promise of durable `InputReceipt`; acceptance does not mean the Agent processed the Event.
+- closing a Handle releases only Handle-local resources. It does not archive, dispose, or delete the durable Conversation and does not close shared Host services.
+
+Task 2-A explicitly excludes `LocalConversation`, `ConversationProxy`, Runtime activation, Run state, Host lifecycle, IPC, access authorization, and Stop or Interrupt semantics.
 
 ## 8. Query and Command Paths
 
@@ -2406,6 +2459,10 @@ Currently implemented skeletons include:
 - `ClearContextInputEvent`
 - `CompactContextInputEvent`
 - InputResponse output references an InputEvent without copying its full snapshot
+- platform-neutral `Conversation`, `ConversationInput`, and bound `ConversationEvents` protocols
+- durable `ConversationSnapshot` and placement-neutral `RuntimePresence` contracts
+- Conversation query, command, and Runtime-presence service ports
+- stable Conversation not-found and Handle lifecycle errors
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild
@@ -2418,8 +2475,8 @@ The first-version protocol no longer contains `ResumeInputEvent`.
 
 Not yet implemented:
 
-- Conversation public API
-- Query and Command services
+- LocalConversation and ConversationProxy implementations
+- concrete Query and Command service implementations
 - ConversationHost and process supervisor
 - ConversationRuntime
 - InputRouter

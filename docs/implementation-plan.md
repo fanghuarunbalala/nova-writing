@@ -540,6 +540,18 @@ Design scope:
 - runtime placement abstraction
 - lazy Runtime activation
 
+Task breakdown:
+
+- Task 2A: platform-neutral Conversation protocol, bound Input/Events APIs, durable Snapshot, Runtime Presence, and service ports.
+- Task 2B: read-only LocalConversation query path backed by Catalog, Journal, and catch-up subscriptions without Runtime activation.
+- Task 2C: command acceptance, Input Journal persistence, and lazy Host activation boundary.
+- Task 2D: Host lifecycle skeleton, Runtime Presence tracking, Runtime Bootstrap contract, and placement abstraction.
+- Task 2E: no-process replay and local Handle lifecycle integration validation.
+
+Implementation status:
+
+- Task 2A implemented and awaiting review: `Conversation` interface, bound `ConversationInput` and `ConversationEvents`, durable `ConversationSnapshot`, placement-neutral `RuntimePresence`, query/command/presence service ports, lifecycle errors, public exports, and protocol smoke validation.
+
 Questions to resolve before implementation:
 
 1. Which InputEvents activate an offline Runtime?
@@ -566,6 +578,25 @@ Explicitly excluded:
 
 - complete Agent execution loop
 - full IPC process implementation
+
+Task 2A accepted decisions:
+
+- `Conversation` is an interface rather than an abstract base class.
+- a Conversation Handle binds its ID into Input and Event operations.
+- callers of `conversation.events` cannot override `conversationId`.
+- `ConversationSnapshot` contains durable Conversation metadata and the active Agent Binding only.
+- Runtime presence is queried separately and exposes no process or transport identity.
+- `ConversationInput.enqueue()` resolves only after durable input acceptance and returns `Promise<InputReceipt>`.
+- closing a Handle does not archive, dispose, delete, or close shared Host resources.
+
+Task 2A explicitly excludes:
+
+- `LocalConversation` and `ConversationProxy` implementations
+- Runtime activation, Runtime Bootstrap, and Runtime placement
+- Run state and concurrent Run policy
+- Stop and Interrupt semantics
+- access authorization
+- IPC transport
 - Tool pipeline
 - Subagent execution
 
@@ -939,7 +970,7 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0 and Task 1A through Task 1D-F have been implemented and are awaiting checkpoint review.
+Task 0, Task 1A through Task 1D-F, and Task 2A have been implemented and are awaiting checkpoint review.
 
 Completed Task 1 results include:
 
@@ -954,4 +985,4 @@ Completed Task 1 results include:
 - persistence-first Event publication with per-Conversation serialization
 - real SQLite end-to-end replay, reopen, duplicate, and live-follow smoke validation
 
-The next reviewed checkpoint is Task 2: Conversation and Host. No Task 2 implementation begins until its public interfaces, Runtime activation boundary, and Host ownership rules are confirmed.
+The next reviewed step is Task 2B: a read-only `LocalConversation` query path backed by existing Catalog, Journal, and catch-up subscription services. Task 2B must not activate Runtime or implement the command path.

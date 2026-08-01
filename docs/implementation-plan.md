@@ -555,6 +555,7 @@ Implementation status:
 - Task 2C implemented and awaiting review: durable Command Service, Input schema validation, post-persistence payload-free Host notification, Core route policy, atomic archived/disposed rejection, duplicate recovery signaling, structured logs, and real SQLite integration validation.
 - Task 2D-A implemented and awaiting review: platform-neutral Host, activation, shutdown, Bootstrap Factory, Placement, Runtime Handle, input-reference, safe exit, and stable error protocols with executable fake composition validation.
 - Task 2D-B implemented and awaiting review: narrow Snapshot Reader, storage-backed immutable Bootstrap Factory, durable accepted-input verification, workdir-only Workspace projection, High Watermark validation, safe errors and logs, and real SQLite integration validation.
+- Task 2D-C implemented and awaiting review: managed per-Conversation Runtime Slots, bounded Control and Runtime queues, single-flight activation, logical Presence tracking, payload-free dispatch, shutdown, close, stale-exit protection, safe logs, and lifecycle smoke validation.
 
 Resolved through Task 2C:
 
@@ -764,6 +765,43 @@ Task 2D-B explicitly excludes:
 - lifecycle OutputEvents
 - historical pending-input reconciliation and Runtime checkpoints
 - idle eviction and automatic crash restart
+
+Task 2D-C delivered:
+
+- `ManagedConversationHost` implementing accepted-input notification, Runtime Presence reading, activation, shutdown, and close
+- Host-local per-Conversation operation serialization with cross-Conversation concurrency
+- bounded Control and Runtime signal queues with Control-first, Priority-descending, Sequence-ascending scheduling
+- defensive accepted-signal capture, payload-free fingerprints, duplicate wake-up behavior, conflict rejection, and explicit queue overflow
+- single-flight Runtime activation using Host-owned Clock, Runtime instance ID generation, Bootstrap Factory, and Placement
+- Handle identity validation, best-effort replacement shutdown, and stable activation degradation
+- logical offline, starting, online, stopping, and crashed Presence transitions without exposing placement identity
+- payload-free Runtime input dispatch with pending retention after failure and revision-gated wake-up retry
+- injected narrow `ConversationHostControlDispatcher` context without exposing the Runtime Handle
+- generation- and Runtime-ID-protected exit observation with stale exit suppression
+- explicit serialized shutdown and idempotent best-effort Host close with failure aggregation
+- structured lifecycle logs without payloads, prompts, configs, Tool data, credentials, paths, messages, stacks, causes, or stderr
+- lifecycle smoke coverage for activation, reuse, Control preemption, duplicate idempotency, dispatch recovery, crash recovery, if-online behavior, mismatch rejection, bounded queues, shutdown, close, and redaction
+
+Task 2D-C accepted decisions:
+
+- `notifyAccepted()` acknowledges scheduling only and never waits for activation or Runtime dispatch.
+- Control and Runtime signals use independent bounded queues; Control is always selected first.
+- identical Sequence fingerprints are idempotent, while conflicting identities are rejected.
+- a duplicate pending notification is also a retry wake-up after a prior drain failure.
+- Runtime dispatch failure keeps Presence online, leaves the Signal pending, and does not create an automatic retry loop.
+- a crashed Slot activates only when a new required Signal or explicit activation requests recovery.
+- Runtime `if_online` inputs never activate an offline Runtime.
+- Host control dispatch receives a narrow optional Runtime command target rather than the full Handle.
+- Host close owns Slots and Handles only; shared placement, storage, query, and event services remain externally owned.
+
+Task 2D-C explicitly excludes:
+
+- concrete Stop cancellation and queued-input clearing
+- ReloadConfig application
+- Runtime lifecycle and InputResponse OutputEvents
+- durable processed-input checkpoints and Host-restart pending-input reconciliation
+- automatic crash retry, backoff, or idle eviction
+- Runtime execution, Run/Turn state, Context operations, Pi, Tools, Approval, IPC, and Subagents
 
 ## 6. Task 3: Input Routing and Runtime Loop
 
@@ -1135,7 +1173,7 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, and Task 2D-A through Task 2D-B have been implemented and are awaiting checkpoint review.
+Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, and Task 2D-A through Task 2D-C have been implemented and are awaiting checkpoint review.
 
 Completed Task 1 results include:
 

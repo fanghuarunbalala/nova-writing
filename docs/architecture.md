@@ -872,6 +872,115 @@ Structured lifecycle logs include stable identifiers, activation reason, optiona
 
 Task 2-D-B explicitly excludes Runtime ID generation, Clock ownership, Host Slot state, per-Conversation scheduling, Runtime activation, Placement invocation, Presence transitions, Host control routes, lifecycle OutputEvents, processed-input checkpoints, historical pending-input recovery, idle eviction, and crash restart loops.
 
+### 7.6 Implemented Task 2-D-C Managed Conversation Host
+
+Task 2-D-C implements the process-local lifecycle authority that connects durable accepted-input notifications to Runtime placement without introducing Runtime execution, IPC, or Agent behavior.
+
+```mermaid
+classDiagram
+    class ConversationHost {
+        <<interface>>
+        +notifyAccepted(signal) Promise~void~
+        +getRuntimePresence(conversationId) Promise~RuntimePresence~
+        +ensureActive(request) Promise~ActivationResult~
+        +shutdownRuntime(request) Promise~ShutdownResult~
+        +close() Promise~void~
+    }
+
+    class ManagedConversationHost
+    class ManagedConversationRuntimeSlot
+    class ConversationHostOperationSerializer
+    class ConversationHostSignalQueue
+    class ConversationHostClock
+    class ConversationRuntimeInstanceIdGenerator
+    class ConversationHostControlDispatcher
+    class ConversationRuntimeBootstrapFactory
+    class ConversationRuntimePlacement
+    class ConversationRuntimeHandle
+
+    ManagedConversationHost ..|> ConversationHost
+    ManagedConversationHost --> ManagedConversationRuntimeSlot
+    ManagedConversationHost --> ConversationHostOperationSerializer
+    ManagedConversationRuntimeSlot --> ConversationHostSignalQueue
+    ManagedConversationHost --> ConversationHostClock
+    ManagedConversationHost --> ConversationRuntimeInstanceIdGenerator
+    ManagedConversationHost --> ConversationHostControlDispatcher
+    ManagedConversationHost --> ConversationRuntimeBootstrapFactory
+    ManagedConversationHost --> ConversationRuntimePlacement
+    ManagedConversationRuntimeSlot --> ConversationRuntimeHandle
+```
+
+Each Conversation has one Host-owned Runtime Slot. Operations for the same Conversation pass through `ConversationHostOperationSerializer`, while unrelated Conversations can activate, dispatch, and shut down concurrently. This creates a serial state machine per Conversation without turning the entire Host into one global lock.
+
+The Slot exposes only logical Presence through the public API:
+
+```mermaid
+stateDiagram-v2
+    [*] --> offline
+    offline --> starting: required input or ensureActive
+    crashed --> starting: crash-recovery activation
+    starting --> online: Bootstrap + Placement succeed
+    starting --> crashed: activation or identity failure
+    online --> stopping: explicit shutdown or Host close
+    online --> offline: observed stopped exit
+    online --> crashed: observed crash or rejected exit observer
+    stopping --> offline: stopped exit
+    stopping --> crashed: shutdown failure or crashed exit
+```
+
+Runtime instance ID, generation, Handle, PID, worker identity, and transport address remain internal. `getRuntimePresence()` returns a frozen `{ state, observedAt }` copy. A previously unseen Conversation ID is verified through `ConversationSnapshotReader` before an offline Slot becomes a valid public Presence result.
+
+Accepted signals enter two independent bounded queues per Conversation:
+
+| Queue | Default capacity | Contents |
+| --- | ---: | --- |
+| Control | 64 | Host-routed Stop, ReloadConfig, and future Host commands |
+| Runtime | 1024 | Runtime-required and Runtime-if-online input references |
+
+The scheduler always selects Control before Runtime. Within each queue it selects higher Priority first, then lower Journal Sequence. Queue overflow is explicit and never silently drops a durable notification. The durable Journal remains the restart recovery source; these queues are process-local scheduling state.
+
+Signal identity is keyed by Conversation ID and Journal Sequence with a payload-free fingerprint. An identical re-notification is idempotent and also acts as a wake-up after a previous dispatch failure. The same Sequence with a different Event or route identity is rejected as a conflict. `journalStatus: appended` and `journalStatus: duplicate` intentionally produce the same fingerprint.
+
+```mermaid
+sequenceDiagram
+    participant Command as ConversationCommandService
+    participant Host as ManagedConversationHost
+    participant Factory as BootstrapFactory
+    participant Placement
+    participant Runtime as RuntimeHandle
+
+    Command->>Host: notifyAccepted(payload-free Signal)
+    Host->>Host: validate, freeze, enqueue, schedule drain
+    Host-->>Command: scheduled
+    Host->>Host: serialize by Conversation ID
+    Host->>Host: select Control before Runtime
+    alt required Runtime is offline
+        Host->>Factory: create(instance ID, activatedAt, cause)
+        Factory-->>Host: immutable Bootstrap
+        Host->>Placement: activate(Bootstrap)
+        Placement-->>Host: RuntimeHandle
+        Host->>Host: validate Handle identity and mark online
+        Note over Host: reselect queues so newly arrived Control can preempt
+    end
+    Host->>Runtime: dispatchInput(Journal reference)
+    Runtime-->>Host: dispatch accepted
+    Host->>Host: remove pending Signal
+```
+
+`notifyAccepted()` resolves after process-local scheduling, not after activation or Runtime dispatch. Background failures therefore cannot roll back the durable `InputReceipt`. A failed Runtime or control dispatch leaves the Signal pending, stops the current drain, and performs no automatic retry loop. A later new or duplicate notification increments the Slot revision and wakes the drain. A revision check also prevents a notification arriving during a failed attempt from being lost.
+
+Runtime activation is single-flight through the per-Conversation serializer. The Host owns generation, Runtime instance ID, and activation timestamps; the Bootstrap Factory remains a pure assembly boundary. A Runtime-required Signal activates an offline Slot with `accepted_input` and a crashed Slot with `crash_recovery`. Runtime `if_online` Signals never activate an offline Slot.
+
+The returned Handle must match both Bootstrap Conversation ID and Runtime instance ID. A mismatch is rejected, never stored, degraded to `crashed`, and receives a best-effort replacement shutdown without waiting for its exit. Exit observers capture generation and Runtime instance ID; stale exits from replaced instances cannot overwrite the current Slot.
+
+Host-control behavior is injected through `ConversationHostControlDispatcher`. Its context contains frozen logical Presence and, only while online, a narrow Runtime command target with `dispatchInput()`. It never receives the placement-owned Handle. Core Stop semantics, ReloadConfig application, and lifecycle OutputEvents remain Task 2-D-D.
+
+Explicit shutdown is serialized with activation and dispatch. Host close is idempotent, rejects new operations once closing begins, queues best-effort `host_close` shutdown for active Slots, aggregates failures, clears process-local queues, and does not close shared Placement, Bootstrap Factory, Snapshot Reader, Dispatcher, Journal, Workspace, or Event Hub resources.
+
+Structured logs contain stable lifecycle identities and safe error name/code fields only. They never include Event payloads, novel text, prompts, configuration contents, Tool data, credentials, Store/work paths, JSONL lines, raw error messages, stacks, causes, or Runtime stderr.
+
+Task 2-D-C explicitly excludes Stop cancellation semantics, queued-user-input removal, ReloadConfig application, Runtime lifecycle OutputEvents, durable Runtime checkpoints, Host-restart pending-input reconciliation, automatic crash retry or backoff, idle eviction, `ConversationRuntime`, `InputRouter`, Run state, Pi integration, Tools, Approval, IPC, and Subagents.
+
 ## 8. Query and Command Paths
 
 ```mermaid
@@ -2857,6 +2966,9 @@ Currently implemented skeletons include:
 - narrow `ConversationSnapshotReader` and storage-backed immutable Runtime Bootstrap assembly
 - durable accepted-input Journal reference validation without copying Event payloads
 - real SQLite Runtime Bootstrap integration covering workdir isolation, High Watermark races, status and identity rejection, deep freezing, and log redaction
+- `ManagedConversationHost` with per-Conversation serialization, bounded Control and Runtime queues, single-flight activation, logical Presence transitions, Runtime dispatch, shutdown, close, and stale-exit protection
+- Host-owned Clock and Runtime instance identity generation plus a narrow Host-control dispatcher boundary
+- lifecycle smoke coverage for control preemption, duplicate wake-up, dispatch failure, crash recovery, if-online routing, Handle mismatch, queue overflow, conflict detection, shutdown, close, and log redaction
 - Workspace location, semantic Store mapping, SQLite initialization, Conversation metadata, and Agent bindings
 - unified SQLite Input/Output Journal with Sequence allocation, idempotency, canonical JSON integrity, and replay queries
 - per-Conversation JSONL Runtime Message projections with validation, repair, and atomic rebuild
@@ -2870,8 +2982,6 @@ The first-version protocol no longer contains `ResumeInputEvent`.
 Not yet implemented:
 
 - ConversationProxy implementation
-- Managed ConversationHost implementation
-- concrete Runtime Presence Reader implementation
 - process supervisor
 - ConversationRuntime
 - InputRouter

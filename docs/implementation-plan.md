@@ -2089,6 +2089,8 @@ Design scope:
 
 Questions to resolve before implementation:
 
+The current non-authoritative recommendation is recorded in `docs/decisions/task-4-policy-compaction-nudge-proposal.md`. Its status is **proposed / not accepted**; it does not authorize implementation or resolve the questions below.
+
 1. What are the soft context reminder, compaction, and hard context thresholds?
 2. What post-compaction target ratio is desired?
 3. How many new uncompacted tokens are required before another compaction?

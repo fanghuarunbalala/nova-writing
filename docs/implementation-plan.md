@@ -1051,6 +1051,7 @@ Implementation status:
 - Task 3D-K implemented and awaiting review: persistence-first `RuntimeStopInputHandler`, Stop fence pruning, Turn-before-Run stopping and cancellation transitions, idempotent external cancellation port, emergency cancellation on barrier failure, ordered cancelled-before-run and Stop outcomes, real Router/controller/sink integration, redacted logs, public exports, and focused validation.
 - Task 3E-A implemented and awaiting review: provider-neutral `AgentRuntimeAdapter` stream/cancel contracts, explicit prompt/continue invocation and terminal outcome protocols, Core-owned compiled-context types, asynchronous `ContextCompiler`, immutable strict `BaseContextCompiler`, redacted logs, public exports, and focused validation.
 - Task 3E-B implemented and awaiting review: package-private `PiAgentCoreAdapter`, installed Pi `Agent` compatibility boundary, canonical context replacement, prompt/continue execution, awaited event-bridge barriers, single-active-Run reservation, terminal outcome normalization, preparation-aware idempotent cancellation, redacted logs, and real Pi Agent smoke validation.
+- Task 3E-C implemented and awaiting review: strict package-private `CorePiRuntimeMessageConverter` for registered UserMessages, serialized `PiTurnLifecycleBridge`, persistence-first Pi Turn start/end mapping through real `TurnController`, cancellation ownership deferral, fixed failures, redacted logs, and real Pi/Provider/Journal barrier validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1651,6 +1652,42 @@ Task 3E-B explicitly excludes:
 - Tool registration or execution, Approval, Policy, Compaction, Nudge, IPC, and Subagents
 - installation into `RuntimeUserMessageInputHandler`, `ConversationRuntime`, or `RuntimeStopCancellationPort`
 - cancellation grace periods and non-cooperative downstream timeout policy
+
+Task 3E-C delivered:
+
+- package-private `CorePiRuntimeMessageConverter` implementing the private `PiRuntimeMessageConverter` port
+- strict conversion of the currently registered Core `user.message@1` schema to Pi user messages with text content and millisecond timestamps
+- duplicate Message detection, Conversation identity validation, exact order preservation, defensive content creation, and immutable results
+- fixed conversion failures for invalid request, invalid Message, unsupported Message type, and duplicate Message
+- serialized `PiTurnLifecycleBridge` implementing the private awaited `PiAgentEventBridge`
+- Pi `turn_start` mapping to `TurnController.beginTurn()` and durable `provider_started` acknowledgement
+- Pi `turn_end` mapping to durable `turn_completed` for stop/length/toolUse or `turn_failed` for error/non-Core aborted outcomes
+- Pi `agent_end` validation that no running/waiting Turn remains
+- stopping/cancelled Turn deferral so the Runtime cancellation coordinator retains terminal cancellation ownership
+- strict Run/Turn identity and state validation with fixed lifecycle failure categories
+- focused smoke validation with real Pi `Agent`, real `PiAgentCoreAdapter`, real `TurnController`, a blocking Runtime Event Sink, fake Provider streams, normal completion, Provider error, Stop cancellation, conversion isolation, and log redaction
+
+Task 3E-C accepted decisions:
+
+- only registered canonical Core Runtime Messages may be converted; the initial converter supports `user.message@1` only and rejects future Assistant, Tool, System, or custom Message types until their schemas and conversion rules are reviewed.
+- Runtime Message conversion preserves canonical order and creates new Pi message/content objects. Pi never receives references to caller-owned Core payload objects.
+- `turn_start` is a persistence barrier before Provider execution. Pi subscriber ordering guarantees the Provider stream function is not called until the Core Turn-start Journal append is acknowledged.
+- one Pi `turn_start` allocates one Core Turn through the injected `TurnController`; Pi never supplies the Turn ID.
+- Pi stop, length, and terminal Tool-use stop reasons complete the current Core Turn. Pi error and aborted without matching Core cancellation intent fail it.
+- a Turn already in `stopping` or `cancelled` is not terminalized by Pi `turn_end`; Stop/Interrupt/shutdown coordination owns its cancellation reason and final lifecycle transition.
+- an aborted Pi signal while the Core Turn is still running is an invalid cancellation-order state, not an implicit cancelled transition.
+- `agent_end` may observe a terminal Turn or a stopping Turn awaiting the cancellation coordinator, but never an ordinary running/waiting Turn.
+- Message, Assistant stream, Tool, and usage events pass through this lifecycle bridge untouched for later dedicated mappers.
+
+Task 3E-C explicitly excludes:
+
+- Assistant and Tool Runtime Message schemas and Pi conversion
+- Assistant message start/update/end OutputEvents, streaming draft persistence, usage events, and error OutputEvents
+- Pi Tool execution lifecycle mapping to `waiting_tool` and Tool OutputEvents
+- Run terminal transitions and a concrete `RuntimeRunExecutor`
+- installation into `RuntimeUserMessageInputHandler`, Stop cancellation composition, or `ConversationRuntime`
+- Provider/model construction, Tool registry, Approval, Policy, Compaction, Nudge, IPC, and Subagents
+- cancellation races while a Turn-start persistence commit itself is pending; recovery remains Journal-authoritative
 
 Expected deliverables after approval:
 

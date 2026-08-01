@@ -3490,6 +3490,108 @@ Logs contain only Core IDs, invocation kind, phase-independent Message counts, P
 
 This checkpoint intentionally leaves `PiRuntimeMessageConverter` and `PiAgentEventBridge` as injected private ports. It does not yet define role/content conversion, Turn allocation, Assistant streaming OutputEvents, Tool events, Provider configuration, Runtime installation, or Stop-port composition.
 
+### 16.21 Implemented Task 3E-C Core UserMessage Conversion and Pi Turn Bridge
+
+The first concrete private Pi collaborators implement only semantics already frozen by Core: canonical `user.message@1` conversion and persistence-first Turn boundaries. Assistant, Tool, usage, Provider, and policy concerns remain outside these components.
+
+```mermaid
+classDiagram
+    class CorePiRuntimeMessageConverter {
+        <<package-private>>
+        +convert(PiRuntimeMessageConversionRequest) Promise~AgentMessage[]~
+    }
+
+    class PiTurnLifecycleBridge {
+        <<package-private>>
+        +handle(PiAgentEventBridgeRequest) Promise~void~
+    }
+
+    class RuntimeMessageSchemaRegistry
+    class TurnController {
+        +beginTurn()
+        +transitionTurn(request)
+        +getRunSnapshot()
+        +getTurnSnapshot()
+    }
+
+    PiRuntimeMessageConverter <|.. CorePiRuntimeMessageConverter
+    CorePiRuntimeMessageConverter --> RuntimeMessageSchemaRegistry
+    PiAgentEventBridge <|.. PiTurnLifecycleBridge
+    PiTurnLifecycleBridge --> TurnController
+```
+
+`CorePiRuntimeMessageConverter` validates every input through the active Runtime Message schema registry. Its initial supported mapping is intentionally exact:
+
+```text
+Core RuntimeMessage
+  role: user
+  messageType: user.message
+  schemaVersion: 1
+  payload.content: [{ type: text, text }]
+
+        ↓ defensive conversion
+
+Pi AgentMessage
+  role: user
+  content: [{ type: text, text }]
+  timestamp: Date.parse(Core timestamp)
+```
+
+The converter preserves Message order, rejects duplicate IDs and cross-Conversation Messages, creates new text objects and arrays, and freezes the returned batch. Assistant, Tool, System, and custom messages are not guessed or passed through; they require explicit future schemas and mapping rules.
+
+The Turn bridge uses Pi's awaited subscription ordering as a Journal barrier:
+
+```mermaid
+sequenceDiagram
+    participant Pi as Pi Agent
+    participant Adapter as PiAgentCoreAdapter
+    participant Bridge as PiTurnLifecycleBridge
+    participant Turns as TurnController
+    participant Journal as RuntimeEventSink
+    participant Provider
+
+    Pi->>Adapter: turn_start
+    Adapter->>Bridge: await handle(turn_start)
+    Bridge->>Turns: beginTurn()
+    Turns->>Journal: append Turn running/provider_started
+    Journal-->>Turns: durable acknowledgement
+    Turns-->>Bridge: Turn commit with Core turnId
+    Bridge-->>Adapter: barrier settled
+    Adapter-->>Pi: subscriber settled
+    Pi->>Provider: start model request
+    Provider-->>Pi: final Assistant response
+    Pi->>Adapter: turn_end
+    Adapter->>Bridge: await handle(turn_end)
+    Bridge->>Turns: transition completed or failed
+    Turns->>Journal: append terminal Turn Event
+    Journal-->>Turns: durable acknowledgement
+    Bridge-->>Adapter: terminal barrier settled
+```
+
+Pi does not supply the Core Turn ID. Each `turn_start` calls `TurnController.beginTurn()`, whose injected ID generator allocates it and whose Event Sink acknowledges it before Provider execution can proceed.
+
+Normal stop, context-length stop, and terminal Tool-use stop reasons produce `turn_completed`. Provider `error`, and Pi `aborted` without a matching Core cancellation path, produce `turn_failed`. The Bridge does not translate Provider text or raw error messages into lifecycle records.
+
+Cancellation ownership is deliberately asymmetric:
+
+```mermaid
+flowchart TD
+    End["Pi turn_end"] --> State{"Core Turn status"}
+    State -->|running| Signal{"Pi signal aborted?"}
+    Signal -->|no| Terminal["completed or failed barrier"]
+    Signal -->|yes| Invalid["fixed cancellation_state failure"]
+    State -->|stopping/cancelled| Defer["no terminal write; cancellation coordinator owns outcome"]
+    State -->|completed/failed| Duplicate["fixed turn_already_terminal failure"]
+```
+
+The accepted Stop path persists Turn and Run `stopping` before calling the Adapter cancellation port. Therefore a Pi abort observed while the Turn remains ordinarily running indicates an ordering violation; the Bridge does not invent a cancellation reason. Once stopping is durable, Pi `turn_end` and `agent_end` may settle without racing the coordinator's later Turn/Run `cancelled` barriers.
+
+`agent_end` validates that the current Turn is terminal or stopping. A remaining running, waiting-Tool, or waiting-interaction Turn is a lifecycle protocol failure.
+
+Bridge and converter logs include only Core IDs, conversion purpose, counts, Turn status, receipt Sequence, and fixed failure categories. Runtime Message content, Agent messages, Assistant output, Event payloads, System Prompts, Provider errors, Tool data, paths, raw errors, stacks, causes, and stderr remain excluded.
+
+This checkpoint does not define Assistant streaming OutputEvents, canonical Assistant or Tool Runtime Messages, Tool waiting transitions, Run terminalization, Runtime executor composition, Provider setup, or cancellation during an unacknowledged Turn-start append.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4320,7 +4422,7 @@ Not yet implemented:
 - ContextCompactionManager and ContextCheckpoint
 - PendingNudgeStore and one-shot System Prompt Overlay
 - ContextCheckpoint-aware ContextCompiler and per-call overlays
-- Pi Runtime Message conversion and event-to-Core lifecycle/output mapping
+- Assistant/Tool Pi conversion and event-to-Core output mapping
 - Tool registry and execution pipeline
 - IPC protocol
 - Subagent manager

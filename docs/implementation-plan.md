@@ -1041,6 +1041,7 @@ Implementation status:
 - Task 3D-A implemented and awaiting review: platform-neutral Runtime Input resolution, Journal-backed canonical lookup by Conversation ID and Sequence, durable identity and schema validation, frozen snapshot capture, stable failures, redacted logs, public exports, and focused validation.
 - Task 3D-B implemented and awaiting review: fixed-High-Watermark Journal replay planning, contiguous pagination, terminal Input outcome correlation, pending Input reconstruction, deterministic Run/Turn lifecycle replay, stable failures, redacted logs, public exports, and focused validation.
 - Task 3D-C implemented and awaiting review: persistence-first Runtime Input outcome control, deterministic terminal Event identity, serialized idempotency, retained same-Event retry, stable conflicts, redacted logs, public exports, and focused validation.
+- Task 3D-D implemented and awaiting review: replayed Run-input claims, pure startup reconciliation, consumed-outcome repair planning, safe routable Input partitioning, active lifecycle recovery blocking, stable failures, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1268,6 +1269,7 @@ Task 3D-B delivered:
 - schema validation and canonical frozen capture for every InputEvent in the replay range
 - correlation of `system.input.processed` with exact durable Input ID, Event Type, and Sequence
 - pending Input reconstruction in original Journal Sequence order
+- explicit unconfirmed Run-input claims when lifecycle evidence exists without a terminal Input outcome
 - Run and Turn history replay through the accepted state machines, including cross-state coordination and latest-scope restoration
 - deterministic Runtime Event ID verification using Input ordinal zero and reconstructed Run/Turn transition ordinals
 - stable `RuntimeReplayPlanningError` failures for invalid requests, reads, watermarks, gaps, invalid Events, and conflicting history
@@ -1282,6 +1284,7 @@ Task 3D-B accepted decisions:
 - lifecycle replay uses the accepted state machines rather than trusting the final payload alone; every transition, durable origin reference, Run/Turn coordination rule, and deterministic Event ID must match.
 - beginning a new Run requires the previous Run and Turn scopes to be terminal; the plan retains only the latest Run and its latest Turn snapshot.
 - a crash boundary may leave an Input pending while durable lifecycle state already references it. The planner reports both facts without silently inventing an outcome; startup reconciliation belongs to the next Runtime checkpoint.
+- replay exposes those overlaps as immutable `unconfirmedRunInputs` so startup coordination can repair `consumed` before any duplicate routing.
 - unrelated OutputEvents are ignored by lifecycle reconstruction but still count toward the contiguous replay cursor.
 
 Task 3D-B explicitly excludes:
@@ -1317,6 +1320,35 @@ Task 3D-C explicitly excludes:
 
 - replay restoration of completed-controller memory; durable replay prevents already processed Inputs from being rescheduled
 - Input routing, Run/Turn startup ordering, Stop fence decisions, cancellation effects, and Runtime failure policy
+- Provider, Pi, Tool, Approval, Policy, IPC, Subagent, Context compilation, and message projection behavior
+
+Task 3D-D delivered:
+
+- immutable `RuntimeReplayRunInputClaim` and `RuntimeReplayPlan.unconfirmedRunInputs` contracts
+- replay tracking of every unique Input that begins a Run, filtered to claims still lacking `system.input.processed`
+- `RuntimeStartupReconciler` and immutable `RuntimeStartupPlan` contracts
+- ordered `consumed` outcome repair plans carrying exact durable Input reference, claimed Run ID, and optional Correlation ID
+- safe routable Input partitioning that excludes every lifecycle-claimed Input from duplicate Router delivery
+- lifecycle disposition values `ready` and `recovery_required`
+- `ready` classification for no lifecycle or terminal latest Run/Turn state
+- explicit `recovery_required` classification for any non-terminal latest Run without choosing fail or cancel semantics
+- stable rejection of malformed pending order, duplicate/missing claims, claim-reference mismatches, Turn-without-Run, Run/Turn identity mismatch, and active Turn with terminal Run
+- structured reconciliation completion and failure logs without Event payloads, prompts, paths, raw errors, stacks, or causes
+- focused replay and startup smoke coverage for unconfirmed claims, consumed repairs, Host-routed pending controls, routable partitioning, ready/blocked lifecycle states, malformed plans, claim mismatches, lifecycle conflicts, immutable results, and log redaction
+
+Task 3D-D accepted decisions:
+
+- lifecycle evidence means Runtime already claimed the Input even if a crash occurred before `system.input.processed` acknowledgement; startup must repair `consumed` before considering other routing.
+- an Input with an unconfirmed Run claim is never included in `routableInputs`, preventing duplicate Run creation.
+- terminal latest Run/Turn snapshots are restorable and do not block later queued Inputs after required outcome repairs.
+- any non-terminal latest Run produces `recovery_required`; the reconciler does not silently choose cancellation or failure transitions.
+- outcome repairs preserve original pending Input order relative to other repairs, while routable Inputs preserve their Journal Sequence order after claimed Inputs are removed.
+- the reconciler is side-effect-free except structured observability; it does not write outcomes, restore controllers, enqueue Inputs, or execute recovery.
+
+Task 3D-D explicitly excludes:
+
+- the exact fail-versus-cancel policy and transition reasons for non-terminal lifecycle recovery
+- executing outcome repairs, `TurnController.restore`, `InputRouter.route`, Stop fences, Provider cancellation, or Runtime shutdown
 - Provider, Pi, Tool, Approval, Policy, IPC, Subagent, Context compilation, and message projection behavior
 
 Expected deliverables after approval:

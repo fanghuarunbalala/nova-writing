@@ -35,6 +35,7 @@
     "smoke:runtime-input-resolver": "pnpm build && node scripts/runtime-input-resolver-smoke.mjs",
     "smoke:runtime-input-outcome": "pnpm build && node scripts/runtime-input-outcome-controller-smoke.mjs",
     "smoke:runtime-replay-planner": "pnpm build && node scripts/runtime-replay-planner-smoke.mjs",
+    "smoke:runtime-startup-reconciler": "pnpm build && node scripts/runtime-startup-reconciler-smoke.mjs",
     "smoke:local-conversation": "pnpm build && node scripts/local-conversation-integration-smoke.mjs",
     "smoke:local-conversation-host": "pnpm build && node scripts/local-conversation-host-integration-smoke.mjs",
     "smoke:conversation-events": "pnpm build && node scripts/conversation-event-live-smoke.mjs && node scripts/conversation-event-follow-smoke.mjs && node scripts/conversation-event-publishing-smoke.mjs && node scripts/conversation-event-integration-smoke.mjs",

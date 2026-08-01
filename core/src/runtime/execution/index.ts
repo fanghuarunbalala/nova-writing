@@ -5,4 +5,5 @@ export * from "./input/index.js";
 export * from "./RunLifecycle.js";
 export * from "./state/index.js";
 export * from "./source/index.js";
+export * from "./startup/index.js";
 export * from "./TurnLifecycle.js";

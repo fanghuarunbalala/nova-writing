@@ -310,6 +310,9 @@ const plan = await planner.plan({ conversationId, throughSequence: 13 });
 assert.equal(plan.scannedEventCount, 13);
 assert.equal(plan.processedInputCount, 1);
 assert.deepEqual(plan.pendingInputs.map((input) => input.id), [stopInput.id, secondInput.id]);
+assert.deepEqual(plan.unconfirmedRunInputs, [
+  { inputEvent: secondReference, runId: "run-replay-2" },
+]);
 assert.deepEqual(plan.run, {
   runId: "run-replay-2",
   inputEvent: secondReference,
@@ -327,6 +330,8 @@ assert.deepEqual(plan.turn, {
 assert.equal(journal.requests.length, 5);
 assert.equal(Object.isFrozen(plan), true);
 assert.equal(Object.isFrozen(plan.pendingInputs), true);
+assert.equal(Object.isFrozen(plan.unconfirmedRunInputs), true);
+assert.equal(Object.isFrozen(plan.unconfirmedRunInputs[0]), true);
 assert.equal(Object.isFrozen(plan.pendingInputs[0]), true);
 assert.equal(Object.isFrozen(plan.pendingInputs[0].payload), true);
 events[9].payload.text = "mutated-after-plan";
@@ -340,6 +345,7 @@ const emptyPlan = await new JournalRuntimeReplayPlanner({
 }).plan({ conversationId, throughSequence: 0 });
 assert.equal(emptyPlan.scannedEventCount, 0);
 assert.equal(emptyPlan.pendingInputs.length, 0);
+assert.equal(emptyPlan.unconfirmedRunInputs.length, 0);
 assert.equal(emptyJournal.requests.length, 0);
 
 async function expectFailure(candidateEvents, request, failure, options = {}) {

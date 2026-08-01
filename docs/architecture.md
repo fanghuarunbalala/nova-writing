@@ -2929,6 +2929,35 @@ The controller does not decide which outcome is semantically correct, restore co
 
 Logs expose only Conversation/Input/Event identifiers, durable Sequence, outcome label, receipt status, and Journal Sequence. Input payloads, prompts, Tool data, novel text, raw Sink errors, stacks, causes, workdir, Store paths, and JSONL content remain excluded.
 
+### 16.11 Implemented Task 3D-D Startup Reconciliation Plan
+
+`RuntimeReplayPlan` now preserves `unconfirmedRunInputs`: Inputs that still lack `system.input.processed` but already have durable Run-begin lifecycle evidence. This is the crash window between claiming work and acknowledging the terminal Input outcome.
+
+`RuntimeStartupReconciler` converts replay facts into one immutable, side-effect-free startup plan:
+
+```mermaid
+flowchart TB
+    Replay["RuntimeReplayPlan"] --> Claims["Unconfirmed Run-input claims"]
+    Replay --> Pending["Pending Inputs by Journal Sequence"]
+    Claims --> Repairs["consumed outcome repairs"]
+    Pending --> Partition{"Input has Run claim?"}
+    Partition -->|yes| Repairs
+    Partition -->|no| Routable["Routable Inputs"]
+    Replay --> Lifecycle{"Latest Run terminal?"}
+    Lifecycle -->|yes or absent| Ready["ready"]
+    Lifecycle -->|no| Blocked["recovery_required"]
+```
+
+Every Run-begin Event creates one immutable claim containing the durable Input reference and Run ID. Replay rejects a second Run claim for the same Input. After terminal Input outcomes are correlated, only still-unconfirmed claims appear in the startup plan.
+
+Each unconfirmed claim becomes a planned `consumed` repair with the exact Input ID, Event Type, Journal Sequence, claimed Run ID, and optional Correlation ID. Claimed Inputs are removed from `routableInputs`, so a crash cannot cause the same durable Input to create a duplicate Run. Remaining Inputs preserve ascending Journal Sequence.
+
+Lifecycle disposition is `ready` when no Run exists or the latest Run is terminal with no conflicting active Turn. Any non-terminal latest Run produces `recovery_required`. The reconciler intentionally does not decide whether crash recovery should fail or cancel that Run/Turn, because current transition reasons do not yet encode a reviewed Runtime-crash or replacement transition.
+
+The plan does not publish repairs, restore `TurnController`, enqueue `InputRouter`, activate Pi/Provider execution, apply Stop fences, or mutate lifecycle state. It only separates safe startup work from the unresolved active-lifecycle degradation decision.
+
+Failures normalize to `invalid_plan`, `claim_mismatch`, or `lifecycle_conflict`. Logs contain only Conversation ID, High Watermark, disposition, counts, stable Run/Turn IDs and statuses, and stable failure values.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -3743,6 +3772,7 @@ Currently implemented skeletons include:
 - Journal-backed Runtime Input resolution with exact durable identity and schema validation
 - fixed-High-Watermark Runtime replay planning with pending Input and lifecycle reconstruction
 - persistence-first terminal Runtime Input outcome control with exact-Event retry
+- startup reconciliation with consumed repairs, duplicate-routing prevention, and active-lifecycle blocking
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 
@@ -3779,6 +3809,7 @@ The following items still require explicit review before implementation:
 10. Runtime idle eviction duration
 11. System Prompt and ContextCompiler layer ordering
 12. Dedicated Novel domain model, intentionally deferred
+13. Runtime crash recovery for a non-terminal Run/Turn: fail versus cancel semantics and the required lifecycle transition reasons
 
 ## 29. Recommended Implementation Order
 

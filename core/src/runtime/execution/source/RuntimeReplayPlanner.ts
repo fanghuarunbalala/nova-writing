@@ -1,4 +1,5 @@
 /** Defines the side-effect-free startup plan reconstructed from durable Events. */
+import type { DurableInputEventReference } from "../../../event/input/DurableInputEventReference.js";
 import type { PersistedInputEventSnapshot } from "../../../storage/journal/PersistedConversationEventSnapshot.js";
 import type { RunStateSnapshot } from "../state/RunStateMachine.js";
 import type { TurnStateSnapshot } from "../state/TurnStateMachine.js";
@@ -8,12 +9,18 @@ export interface RuntimeReplayRequest {
   readonly throughSequence: number;
 }
 
+export interface RuntimeReplayRunInputClaim {
+  readonly inputEvent: DurableInputEventReference;
+  readonly runId: string;
+}
+
 export interface RuntimeReplayPlan {
   readonly conversationId: string;
   readonly throughSequence: number;
   readonly scannedEventCount: number;
   readonly processedInputCount: number;
   readonly pendingInputs: readonly PersistedInputEventSnapshot[];
+  readonly unconfirmedRunInputs: readonly RuntimeReplayRunInputClaim[];
   readonly run?: RunStateSnapshot;
   readonly turn?: TurnStateSnapshot;
 }

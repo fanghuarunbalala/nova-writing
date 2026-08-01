@@ -135,6 +135,9 @@ export class JournalRuntimeReplayPlanner implements RuntimeReplayPlanner {
       scannedEventCount: state.scannedEventCount,
       processedInputCount: state.processedInputIds.size,
       pendingInputs,
+      unconfirmedRunInputs: [...state.runInputClaims.values()].filter(
+        (claim) => !state.processedInputIds.has(claim.inputEvent.id),
+      ),
       run: state.runState.getSnapshot(),
       turn: state.turnState.getSnapshot(),
     });
@@ -144,6 +147,7 @@ export class JournalRuntimeReplayPlanner implements RuntimeReplayPlanner {
       scannedEventCount: plan.scannedEventCount,
       processedInputCount: plan.processedInputCount,
       pendingInputCount: plan.pendingInputs.length,
+      unconfirmedRunInputCount: plan.unconfirmedRunInputs.length,
       ...(plan.run !== undefined
         ? { runId: plan.run.runId, runStatus: plan.run.status }
         : {}),
@@ -310,6 +314,13 @@ export class JournalRuntimeReplayPlanner implements RuntimeReplayPlanner {
       ordinal: transition.ordinal,
     });
     if (event.id !== expectedId) throw new TypeError("run event identity mismatch");
+    if (snapshot.payload.previous === null) {
+      if (state.runInputClaims.has(input.id)) throw new TypeError("duplicate run input");
+      state.runInputClaims.set(
+        input.id,
+        Object.freeze({ inputEvent: transition.inputEvent, runId: transition.runId }),
+      );
+    }
   }
 
   private applyTurnTransition(state: ReplayState, event: PersistedOutputEventSnapshot): void {
@@ -372,6 +383,10 @@ export class JournalRuntimeReplayPlanner implements RuntimeReplayPlanner {
 interface ReplayState {
   readonly inputs: Map<string, PersistedInputEventSnapshot>;
   readonly processedInputIds: Set<string>;
+  readonly runInputClaims: Map<
+    string,
+    Readonly<{ inputEvent: DurableInputEventReference; runId: string }>
+  >;
   readonly runState: RunStateMachine;
   turnState: TurnStateMachine;
   scannedEventCount: number;
@@ -417,6 +432,7 @@ function createReplayState(): ReplayState {
   return {
     inputs: new Map(),
     processedInputIds: new Set(),
+    runInputClaims: new Map(),
     runState: new RunStateMachine(),
     turnState: new TurnStateMachine(),
     scannedEventCount: 0,
@@ -462,6 +478,10 @@ function capturePlan(options: {
   scannedEventCount: number;
   processedInputCount: number;
   pendingInputs: PersistedInputEventSnapshot[];
+  unconfirmedRunInputs: Readonly<{
+    inputEvent: DurableInputEventReference;
+    runId: string;
+  }>[];
   run: RunStateSnapshot | undefined;
   turn: TurnStateSnapshot | undefined;
 }): RuntimeReplayPlan {
@@ -471,6 +491,7 @@ function capturePlan(options: {
     scannedEventCount: options.scannedEventCount,
     processedInputCount: options.processedInputCount,
     pendingInputs: Object.freeze([...options.pendingInputs]),
+    unconfirmedRunInputs: Object.freeze([...options.unconfirmedRunInputs]),
     ...(options.run !== undefined ? { run: options.run } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
   });

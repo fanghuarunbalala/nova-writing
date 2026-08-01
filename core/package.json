@@ -26,6 +26,7 @@
     "smoke:conversation-host-sqlite": "pnpm build && node scripts/conversation-host-sqlite-integration-smoke.mjs",
     "smoke:conversation-output-publishing": "pnpm build && node scripts/conversation-output-publishing-smoke.mjs",
     "smoke:conversation-output-protocol": "pnpm build && node scripts/conversation-output-protocol-smoke.mjs",
+    "smoke:conversation-agent-runtime-crash": "pnpm build && node scripts/conversation-agent-runtime-crash-integration-smoke.mjs",
     "smoke:conversation-runtime-bootstrap": "pnpm build && node scripts/conversation-runtime-bootstrap-integration-smoke.mjs",
     "smoke:runtime-execution-protocol": "pnpm build && node scripts/runtime-execution-protocol-smoke.mjs",
     "smoke:runtime-event-sink": "pnpm build && node scripts/runtime-event-sink-smoke.mjs",

@@ -4114,6 +4114,31 @@ The Pump exit contains only the fixed `RuntimeInputPumpFailureError` name/code, 
 
 This checkpoint does not decide whether a recovered non-terminal Run becomes failed or cancelled. It also excludes persistence append failures, pending-commit retry, Stop cancellation failure, `ConversationRuntime`/Host crash observation, process restart, concrete Pi Provider errors, Tools, Approval, Policy, Compaction, Nudge, IPC, and Subagents.
 
+### 16.31 Implemented Task 3F-E ConversationRuntime Agent Failure Observation
+
+The fifth Task 3F checkpoint installs the real Agent execution loop behind `ConversationRuntime` using injected in-process startup and Input resolution boundaries. Input dispatch resolves after durable resolution, Router admission, and Pump wake-up; it does not wait for Agent semantic completion.
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant Runtime as ConversationRuntime
+    participant Pump as RuntimeInputPump
+    participant Agent as Agent execution pipeline
+
+    Caller->>Runtime: dispatch durable Input reference
+    Runtime->>Pump: route and wake
+    Runtime-->>Caller: dispatch accepted
+    Pump->>Agent: execute UserMessage Turn
+    Agent-->>Pump: fixed handler failure
+    Pump-->>Runtime: failed exit, scope=turn
+    Runtime->>Runtime: state = crashed
+    Runtime-->>Caller: fixed crash exit
+```
+
+The Runtime crash exit contains only `ConversationRuntimeInputPumpError` and its stable code. The underlying preparation, compiler, Adapter, Message, Prompt, payload, path, stack, and cause remain unavailable. New dispatches are rejected after the Runtime enters crashed state.
+
+Run and Input persistence remain exactly as last acknowledged before failure: the active Input is consumed and the Run is running. No Turn or terminal Run Event is fabricated. Host replacement, process restart, IPC, and the fail-versus-cancel recovery choice remain outside this checkpoint.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4940,6 +4965,7 @@ Currently implemented skeletons include:
 - strict multi-UserMessage Turn FIFO with terminal Run barriers and prior-message Context visibility
 - active-Turn Control preemption with persistence-first Stop cancellation and queued-Input fencing
 - fixed execution-loop degradation for preparation, Context compilation, and Adapter infrastructure failures without fabricated terminal lifecycle
+- `ConversationRuntime` observation of real Agent Pump failure through a fixed crash exit and closed dispatch admission
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

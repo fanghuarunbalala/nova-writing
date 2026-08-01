@@ -1068,6 +1068,7 @@ Implementation status:
 - Task 3F-B implemented and awaiting review: two queued UserMessages executing as strict Turn FIFO, first-Run terminal barrier before second Run claim, projected prior-message context for the second Run, orderly drain, and redacted logs.
 - Task 3F-C implemented and awaiting review: Control-lane Stop preemption during an active Adapter Turn, persistence-first stopping barriers, shared Adapter cancellation, queued UserMessage fencing, terminal cancellation outcomes, and redacted logs.
 - Task 3F-D implemented and awaiting review: preparation, Context compilation, and Adapter infrastructure failure degradation through the Turn handler and Pump, fixed failure exits, retained queued work, last-acknowledged non-terminal lifecycle, and redacted logs.
+- Task 3F-E implemented and awaiting review: real Agent execution failure observed through `ConversationRuntime`, fixed Runtime crash exit, post-crash dispatch rejection, retained last-acknowledged lifecycle, and end-to-end log redaction.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1993,6 +1994,30 @@ Task 3F-D explicitly excludes:
 - persistence append failure, pending-commit retry, emergency cancellation, or Stop cancellation failure
 - `ConversationRuntime` and Host crash observation, replacement placement, IPC, or process restart
 - concrete Pi Provider errors, Tools, Approval, Policy, Compaction, Nudge, or Subagents
+
+Task 3F-E delivered:
+
+- no-process `ConversationRuntime` composition with real Router, Pump, UserMessage handler, Run executor, lifecycle, and outcome components
+- successful Runtime startup and durable Input-reference dispatch before asynchronous Agent Adapter failure
+- Pump `turn` failure observation converted to fixed `ConversationRuntimeInputPumpError` crash exit
+- Runtime state transition from online to crashed and rejection of later Input dispatch
+- active Input retained as consumed and Run retained at the last acknowledged running state
+- no fabricated Turn or terminal Run Event after Adapter infrastructure failure
+- end-to-end Runtime, Pump, handler, executor, compiler, Router, lifecycle, and outcome log redaction
+
+Task 3F-E accepted decisions:
+
+- `ConversationRuntime.dispatchInput(...)` acknowledges routing and wake-up, not semantic completion; it may resolve before later asynchronous execution crashes the Runtime.
+- Pump failure is the sole execution-loop failure signal observed by `ConversationRuntime`; underlying handler and Adapter errors are not inspected or exposed.
+- Runtime crash closes new dispatch admission and emits only fixed Runtime error identity.
+- crash observation does not alter Run/Turn lifecycle or decide the deferred non-terminal recovery transition.
+
+Task 3F-E explicitly excludes:
+
+- Host presence updates, placement replacement, process restart, IPC, or Runtime proxy behavior
+- startup replay and recovery conversion of the retained running Run
+- real SQLite persistence in the combined Runtime path
+- normal Agent failed outcomes, Stop cancellation, Tools, Approval, Policy, Compaction, Nudge, or Subagents
 
 Expected deliverables after approval:
 

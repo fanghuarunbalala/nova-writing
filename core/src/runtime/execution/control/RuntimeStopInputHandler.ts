@@ -49,6 +49,7 @@ export interface RuntimeStopLifecycleController {
     request: TurnTransitionRequest,
     metadata?: LifecycleEventMetadata,
   ): Promise<TurnLifecycleCommit>;
+  failRunTerminalWait?(runId: string): void;
 }
 
 export interface RuntimeStopOutcomeRecorder {
@@ -200,6 +201,7 @@ export class RuntimeStopInputHandler implements RuntimeInputPumpHandler {
         await this.cancellationPort.cancel(cancellationRequest);
       } catch {
         this.requestEmergencyCancellation(cancellationRequest, input);
+        this.failRunTerminalWait(active);
         throw this.fail(RUNTIME_STOP_INPUT_FAILURE.cancellationFailed, input, active);
       }
       this.logger.info("runtime.stop.cancellation_completed", {
@@ -233,6 +235,7 @@ export class RuntimeStopInputHandler implements RuntimeInputPumpHandler {
         assertTurnCommit(commit, active.turn.turnId, TURN_STATUS.cancelled);
         turnStatus = TURN_STATUS.cancelled;
       } catch {
+        this.failRunTerminalWait(active);
         throw this.fail(RUNTIME_STOP_INPUT_FAILURE.turnCancelledFailed, input, active);
       }
     }
@@ -255,6 +258,7 @@ export class RuntimeStopInputHandler implements RuntimeInputPumpHandler {
         assertRunCommit(commit, active.run.runId, RUN_STATUS.cancelled);
         runStatus = RUN_STATUS.cancelled;
       } catch {
+        this.failRunTerminalWait(active);
         throw this.fail(RUNTIME_STOP_INPUT_FAILURE.runCancelledFailed, input, active);
       }
     }
@@ -329,6 +333,11 @@ export class RuntimeStopInputHandler implements RuntimeInputPumpHandler {
           ...(request.turnId !== undefined ? { turnId: request.turnId } : {}),
         });
       });
+  }
+
+  private failRunTerminalWait(active: ActiveExecution): void {
+    if (active.run === undefined) return;
+    this.lifecycleController.failRunTerminalWait?.(active.run.runId);
   }
 
   private fail(

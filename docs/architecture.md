@@ -3744,6 +3744,98 @@ Logs continue to contain only Core identities, conversion purpose, counts, Event
 
 This checkpoint intentionally does not project Tool-bearing Assistant messages, Tool results, thinking signatures, Provider usage, or original completion reasons. It also does not terminalize Runs, install a concrete Runtime executor, or implement Tool, Policy, Compaction, Nudge, Approval, IPC, or Subagent behavior.
 
+### 16.24 Implemented Task 3E-F Agent Run Execution Coordinator
+
+`AgentRuntimeRunExecutor` connects the already-claimed Core Run to the provider-neutral Context and Agent ports. It implements the existing `RuntimeRunExecutor` expected by `RuntimeUserMessageInputHandler` while remaining independent from Pi, Node, SQLite, JSONL, configuration files, and future process placement.
+
+```mermaid
+classDiagram
+    class RuntimeRunPreparationSource {
+        <<interface>>
+        +prepare(RuntimeRunExecutionRequest) RuntimeRunPreparation
+    }
+
+    class RuntimeRunPreparation {
+        +string conversationId
+        +string runId
+        +string systemPrompt
+        +RuntimeMessageSnapshot[] contextMessages
+        +AgentRuntimeInvocation invocation
+    }
+
+    class AgentRuntimeRunExecutor {
+        +execute(RuntimeRunExecutionRequest) Promise~void~
+    }
+
+    class ContextCompiler
+    class AgentRuntimeAdapter
+    class TurnController
+
+    AgentRuntimeRunExecutor --> RuntimeRunPreparationSource
+    AgentRuntimeRunExecutor --> ContextCompiler
+    AgentRuntimeRunExecutor --> AgentRuntimeAdapter
+    AgentRuntimeRunExecutor --> TurnController
+```
+
+The preparation source owns every selection decision that remains outside the executor:
+
+- final base System Prompt and its layer ordering;
+- synchronization and reading of canonical Messages;
+- the base-transcript cutoff relative to the claimed Input Sequence;
+- explicit prompt Messages versus a continue invocation;
+- later ContextCheckpoint and one-shot overlay selection.
+
+This boundary prevents the current accepted UserMessage from being silently included in both the base transcript and prompt invocation. The executor validates the returned identities, canonical Message schemas, Conversation membership, duplicate IDs, invocation shape, and continue preconditions, then takes an immutable snapshot before the next asynchronous boundary.
+
+```mermaid
+sequenceDiagram
+    participant Handler as UserMessage Handler
+    participant Executor as AgentRuntimeRunExecutor
+    participant Source as Run Preparation Source
+    participant Compiler as ContextCompiler
+    participant Adapter as AgentRuntimeAdapter
+    participant Lifecycle as TurnController
+    participant Journal
+
+    Handler->>Executor: execute(claimed running Run)
+    Executor->>Executor: reserve active execution
+    Executor->>Lifecycle: require matching running Run
+    Executor->>Source: prepare(Run + durable Input)
+    Source-->>Executor: final prompt + context + invocation
+    Executor->>Executor: validate and immutable capture
+    Executor->>Compiler: compile(base context)
+    Compiler-->>Executor: CompiledProviderContext
+    Executor->>Lifecycle: recheck matching running Run
+    alt Stop already owns Run
+        Executor->>Lifecycle: waitForRunTerminal(runId)
+        Lifecycle-->>Executor: durable cancelled or failed
+    else Run still running
+        Executor->>Adapter: stream(context + invocation)
+        Adapter-->>Executor: completed | failed | cancelled
+    end
+    alt matching Run remains running
+        Executor->>Lifecycle: completed or failed transition
+        Lifecycle->>Journal: append Run terminal Event
+        Journal-->>Lifecycle: durable acknowledgement
+    else matching Run stopping or cancelled
+        Executor->>Lifecycle: waitForRunTerminal(runId)
+        Lifecycle-->>Executor: durable cancelled or failed
+    end
+    Executor-->>Handler: return only after Run is terminal
+```
+
+Normal Adapter `completed` and `failed` results map to `execution_completed` and `execution_failed` Run transitions. An Adapter `cancelled` result is accepted only after Core already records `stopping` or `cancelled`; cancellation without durable Core intent is a fixed protocol failure.
+
+Stop may race during preparation or after the Adapter settles. The executor rechecks Run state after Context compilation, so a Run already moved to `stopping` or `cancelled` never starts Provider work. If a normal terminal transition later loses to a concurrent Stop transition, the executor rereads state. A matching cancellation-owned state wins and cancellation remains owned by the Stop coordinator instead of being reported as an executor failure.
+
+Ownership deferral is not an early return. `RuntimeRunExecutor` must settle only after the Run is terminal because `RuntimeUserMessageInputHandler` verifies that invariant. `TurnController.waitForRunTerminal()` resolves only after the matching terminal Run Event is durably acknowledged. Stop cancellation failure, cancellation terminalization failure, or terminal Event append failure rejects the waiter, allowing the executor and Runtime to degrade instead of hanging indefinitely.
+
+Preparation, Context compilation, Adapter, invalid-result, and persistence-barrier failures never fabricate another terminal Run Event. They propagate through stable payload-free errors and leave Journal at the last acknowledged state for the still-unresolved non-terminal crash-recovery policy.
+
+One executor instance reserves one active Run synchronously before awaiting preparation. Logs contain only Core Run/Input identity, invocation kind, Message counts, outcome, Run status, receipt Sequence, and fixed failure codes. System Prompts, Message payloads, novel text, Provider/model data, configuration, credentials, paths, JSONL, raw errors, stacks, and causes remain excluded.
+
+This checkpoint intentionally does not implement the concrete Journal/Message-backed preparation source, System Prompt ordering, Message cutoff policy, Runtime installation, Pi construction, Tool execution, Policy, Compaction, Nudge, Approval, IPC, or Subagents.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -4563,6 +4655,7 @@ Currently implemented skeletons include:
 - one-shot Bootstrap startup composition with bound Runtime identity and stage failure normalization
 - canonical Tool-free Assistant Runtime Message projection and versioned Core projector composition
 - active-model Core-to-Pi Assistant history reconstruction without Provider metadata persistence
+- provider-neutral Agent Run execution coordination with persistence-first normal terminalization and Stop-race deferral
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

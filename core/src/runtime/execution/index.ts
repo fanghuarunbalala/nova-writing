@@ -2,6 +2,7 @@ export * from "./ConversationRuntime.js";
 export * from "./ConversationRuntimeErrors.js";
 export * from "./ConversationRuntimeState.js";
 export * from "./ExecutionCancellationReason.js";
+export * from "./agent/index.js";
 export * from "./control/index.js";
 export * from "./event/index.js";
 export * from "./input/index.js";

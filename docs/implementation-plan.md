@@ -1061,6 +1061,7 @@ Implementation status:
 - Task 3E-C implemented and awaiting review: strict package-private `CorePiRuntimeMessageConverter` for registered UserMessages, serialized `PiTurnLifecycleBridge`, persistence-first Pi Turn start/end mapping through real `TurnController`, cancellation ownership deferral, fixed failures, redacted logs, and real Pi/Provider/Journal barrier validation.
 - Task 3E-D implemented and awaiting review: public Core Assistant draft OutputEvent protocol and schemas, package-private composite Pi event bridge, persistence-first Assistant start/text-thinking delta/completed/failed/cancelled mapping, Tool-argument exclusion, cancellation draft settlement, redacted logs, and real streaming Pi validation.
 - Task 3E-E implemented and awaiting review: canonical `assistant.message@1` text history, independent Assistant Event projector, standard versioned Core projector composition, active-model Pi Assistant envelope reconstruction, Tool-call deferral, strict failures, redacted logs, and Journal-to-Message integration validation.
+- Task 3E-F implemented and awaiting review: provider-neutral Run preparation contract, concrete Agent Run execution coordinator, strict context/invocation capture, normal Run terminalization, Stop-race deferral, stable failures, redacted logs, and real lifecycle validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1773,6 +1774,46 @@ Task 3E-E explicitly excludes:
 - Run terminalization, concrete `RuntimeRunExecutor`, and live Runtime installation
 - Provider/model selection, credentials, retries, transport, or configuration persistence
 - Policy, Compaction, Nudge, Approval, IPC, and Subagents
+
+Task 3E-F delivered:
+
+- public `RuntimeRunPreparationSource` returning the final System Prompt, ordered base transcript, and explicit prompt/continue invocation for one claimed Run
+- public `AgentRuntimeRunExecutor` implementing the existing `RuntimeRunExecutor` port
+- bound Conversation, Run, origin Input, canonical Message, duplicate Message, and invocation validation
+- defensive immutable capture before asynchronous Context compilation and Agent execution
+- strict `ContextCompiler` and `AgentRuntimeAdapter` identity/result validation
+- persistence-first Run `completed` and `failed` terminalization through the existing lifecycle controller
+- cancellation ownership deferral whenever Stop has already moved the Run to `stopping` or `cancelled`
+- `TurnController.waitForRunTerminal()` settlement so the executor does not return to `RuntimeUserMessageInputHandler` before the Stop-owned Run becomes terminal
+- explicit terminal-wait rejection when Stop cancellation or cancellation terminalization fails
+- a post-compilation Run-state barrier preventing Provider dispatch when Stop wins during preparation
+- post-transition-failure state reread so a Stop that wins the narrow normal-terminal commit race is not misclassified as a Runtime failure
+- synchronous active-Run reservation preventing overlapping executor calls during asynchronous preparation
+- stable preparation, compilation, Adapter, state, cancellation, and terminal-commit failures without raw causes
+- focused real-`TurnController` validation for completed, failed, cancelled, Stop-race, invalid preparation, compiler/Adapter failure, active execution, immutable capture, lifecycle metadata, and log redaction
+
+Task 3E-F accepted decisions:
+
+- the preparation source owns selection semantics: System Prompt layer order, Message projection synchronization, base-transcript cutoff, and whether a Run uses prompt or continue. The executor does not infer those choices.
+- this separation prevents the executor from accidentally including the current accepted UserMessage in both the base transcript and explicit prompt invocation.
+- the executor validates and snapshots the selected preparation but does not read Journal, Messages JSONL, configuration, Prompt files, or Provider settings directly.
+- normal Adapter `completed` and `failed` outcomes become durable Run terminal transitions only while the matching Run remains `running`.
+- any matching `stopping` or `cancelled` state wins over a concurrent normal Adapter result. Stop remains the sole owner of cancellation terminalization.
+- ownership deferral does not mean early executor return. The executor waits for the Stop-owned durable `cancelled` or `failed` terminal state so the existing `RuntimeRunExecutor` contract remains true.
+- `TurnController` resolves terminal waiters only after the Run terminal Event is acknowledged. A terminal append failure or a Stop failure after `stopping` rejects waiters with a stable state error.
+- the executor rechecks Run state after Context compilation and before Adapter dispatch. A Stop accepted during preparation prevents Provider work from starting.
+- an Adapter `cancelled` result while the Core Run is still ordinarily `running` is a protocol failure because no durable Core cancellation intent exists.
+- preparation, compilation, Adapter, or persistence-barrier exceptions propagate to Runtime without fabricating a terminal Run. Recovery of that non-terminal Run remains governed by the unresolved crash-recovery decision.
+- one executor instance admits at most one active execution; reservation occurs before awaiting preparation.
+
+Task 3E-F explicitly excludes:
+
+- concrete Journal/Message-backed `RuntimeRunPreparationSource`
+- Message projection synchronization and current-Input Sequence slicing
+- System Prompt hierarchy and configuration resolution
+- installation into `RuntimeUserMessageInputHandler`, `ConversationRuntime`, or Stop composition
+- concrete Pi Agent/provider/model construction
+- Tool execution, Tool-bearing history, Approval, Policy, Compaction, Nudge, IPC, and Subagents
 
 Expected deliverables after approval:
 

@@ -111,6 +111,12 @@ type PendingCommit =
       next: TurnStateSnapshot;
     };
 
+interface RunTerminalWaiter {
+  readonly runId: string;
+  readonly resolve: (snapshot: RunStateSnapshot) => void;
+  readonly reject: (error: TurnControllerStateError) => void;
+}
+
 export class TurnController {
   private readonly conversationId: string;
   private readonly eventIdFactory: RuntimeEventIdFactory;
@@ -123,6 +129,8 @@ export class TurnController {
   private readonly turnState = new TurnStateMachine();
   private tail: Promise<void> = Promise.resolve();
   private pending?: PendingCommit;
+  private readonly runTerminalWaiters: RunTerminalWaiter[] = [];
+  private failedRunTerminalWaitId?: string;
 
   constructor(options: TurnControllerOptions) {
     assertNonBlank("Conversation ID", options.conversationId);
@@ -146,6 +154,44 @@ export class TurnController {
     return this.turnState.getSnapshot();
   }
 
+  waitForRunTerminal(runId: string): Promise<RunStateSnapshot> {
+    assertNonBlank("Run ID", runId);
+    const snapshot = this.runState.getSnapshot();
+    if (snapshot?.runId !== runId) {
+      return Promise.reject(
+        new TurnControllerStateError("run_terminal_wait_mismatch"),
+      );
+    }
+    if (isTerminalRun(snapshot.status)) return Promise.resolve(snapshot);
+    if (this.failedRunTerminalWaitId === runId) {
+      return Promise.reject(
+        new TurnControllerStateError("run_terminal_wait_failed"),
+      );
+    }
+    this.logger.debug("turn_controller.run_terminal_wait_started", {
+      runId,
+      runStatus: snapshot.status,
+    });
+    return new Promise<RunStateSnapshot>((resolve, reject) => {
+      this.runTerminalWaiters.push({ runId, resolve, reject });
+    });
+  }
+
+  failRunTerminalWait(runId: string): void {
+    assertNonBlank("Run ID", runId);
+    const snapshot = this.runState.getSnapshot();
+    if (snapshot?.runId !== runId || isTerminalRun(snapshot.status)) return;
+    if (this.failedRunTerminalWaitId === runId) return;
+    this.failedRunTerminalWaitId = runId;
+    const failure = new TurnControllerStateError("run_terminal_wait_failed");
+    const rejected = this.rejectRunTerminalWaiters(runId, failure);
+    this.logger.error("turn_controller.run_terminal_wait_failed", {
+      runId,
+      runStatus: snapshot.status,
+      waiterCount: rejected,
+    });
+  }
+
   getPendingCommit(): PendingLifecycleCommitSnapshot | undefined {
     if (this.pending === undefined) return undefined;
     return Object.freeze({
@@ -164,6 +210,7 @@ export class TurnController {
         runId: options.runId ?? this.runIdGenerator.generate(),
         inputEvent: options.inputEvent,
       });
+      this.failedRunTerminalWaitId = undefined;
       const event = this.createRunEvent(transition, {
         ...options,
         causationId: options.causationId ?? options.inputEvent.id,
@@ -281,7 +328,15 @@ export class TurnController {
       eventType: pending.event.getEventType(),
       ordinal: pending.transition.ordinal,
     });
-    const receipt = await this.eventSink.append(pending.event);
+    let receipt: RuntimeEventAppendReceipt;
+    try {
+      receipt = await this.eventSink.append(pending.event);
+    } catch (error) {
+      if (pending.scope === "run" && isTerminalRun(pending.next.status)) {
+        this.failRunTerminalWait(pending.next.runId);
+      }
+      throw error;
+    }
     if (pending.scope === "run") this.runState.restore(pending.next);
     else this.turnState.restore(pending.next);
     if (this.pending === pending) this.pending = undefined;
@@ -293,6 +348,9 @@ export class TurnController {
       sequence: receipt.sequence,
       status: receipt.status,
     });
+    if (pending.scope === "run" && isTerminalRun(pending.next.status)) {
+      this.resolveRunTerminalWaiters(pending.next);
+    }
     return Object.freeze({
       scope: pending.scope,
       transition: pending.transition,
@@ -368,6 +426,38 @@ export class TurnController {
 
   private assertNoPending(): void {
     if (this.pending !== undefined) throw new TurnControllerPendingCommitError();
+  }
+
+  private resolveRunTerminalWaiters(snapshot: RunStateSnapshot): void {
+    this.failedRunTerminalWaitId = undefined;
+    let resolved = 0;
+    for (let index = this.runTerminalWaiters.length - 1; index >= 0; index -= 1) {
+      const waiter = this.runTerminalWaiters[index];
+      if (waiter?.runId !== snapshot.runId) continue;
+      this.runTerminalWaiters.splice(index, 1);
+      waiter.resolve(snapshot);
+      resolved += 1;
+    }
+    this.logger.debug("turn_controller.run_terminal_wait_completed", {
+      runId: snapshot.runId,
+      runStatus: snapshot.status,
+      waiterCount: resolved,
+    });
+  }
+
+  private rejectRunTerminalWaiters(
+    runId: string,
+    error: TurnControllerStateError,
+  ): number {
+    let rejected = 0;
+    for (let index = this.runTerminalWaiters.length - 1; index >= 0; index -= 1) {
+      const waiter = this.runTerminalWaiters[index];
+      if (waiter?.runId !== runId) continue;
+      this.runTerminalWaiters.splice(index, 1);
+      waiter.reject(error);
+      rejected += 1;
+    }
+    return rejected;
   }
 
   private serialize<T>(operation: () => Promise<T>): Promise<T> {

@@ -1042,6 +1042,7 @@ Implementation status:
 - Task 3D-B implemented and awaiting review: fixed-High-Watermark Journal replay planning, contiguous pagination, terminal Input outcome correlation, pending Input reconstruction, deterministic Run/Turn lifecycle replay, stable failures, redacted logs, public exports, and focused validation.
 - Task 3D-C implemented and awaiting review: persistence-first Runtime Input outcome control, deterministic terminal Event identity, serialized idempotency, retained same-Event retry, stable conflicts, redacted logs, public exports, and focused validation.
 - Task 3D-D implemented and awaiting review: replayed Run-input claims, pure startup reconciliation, consumed-outcome repair planning, safe routable Input partitioning, active lifecycle recovery blocking, stable failures, redacted logs, public exports, and focused validation.
+- Task 3D-E implemented and awaiting review: ready-only startup execution, repair/restore/route ordering, resumable outcome and queue backpressure barriers, defensive plan capture, stable failures, redacted logs, public exports, and focused validation.
 
 Task 3C implementation is complete. Task 3D may now resolve Host references from Journal, drive Router and TurnController, persist Input outcomes, coordinate cancellation effects, and implement Runtime failure/recovery behavior.
 
@@ -1350,6 +1351,39 @@ Task 3D-D explicitly excludes:
 - the exact fail-versus-cancel policy and transition reasons for non-terminal lifecycle recovery
 - executing outcome repairs, `TurnController.restore`, `InputRouter.route`, Stop fences, Provider cancellation, or Runtime shutdown
 - Provider, Pi, Tool, Approval, Policy, IPC, Subagent, Context compilation, and message projection behavior
+
+Task 3D-E delivered:
+
+- stateful `RuntimeStartupExecutor` for one `ready` startup plan per Runtime activation
+- explicit execution states `idle`, `repairing`, `repair_blocked`, `restoring`, `routing`, `route_blocked`, `completed`, and `failed`
+- strict `repair -> restore -> route` ordering
+- sequential `consumed` repair publication through `RuntimeInputOutcomeController`
+- exact pending-outcome resume through the Controller's same-Event `retryPending()` barrier
+- one-time `TurnController.restore` only after every outcome repair is durable
+- ascending safe Input delivery through `InputRouter.route` only after restore succeeds
+- queue-full backpressure as resumable `route_blocked`, preserving the current Input Sequence and all prior route results
+- terminal normalization of non-pending outcome failures, restore failures, and non-capacity Router failures
+- zero-side-effect rejection of `recovery_required` plans
+- full defensive capture and validation of repairs, lifecycle snapshots, and routable Input snapshots before the first durable write
+- immutable execution snapshots and completion results with no Event payload exposure
+- structured start, block, completion, and failure logs without novel text, prompts, raw errors, stacks, causes, paths, or JSONL content
+- focused smoke coverage for happy repair/restore/route order, deterministic outcome metadata, completed lifecycle restoration, active-lifecycle rejection, same-Event repair retry, external plan mutation isolation, queue-full resume, one-time startup, invalid plans, immutable results, and log redaction
+
+Task 3D-E accepted decisions:
+
+- startup executes only a reconciled `ready` plan; `recovery_required` is rejected before repairs, restore, or routing.
+- every consumed repair must reach a durable recorded or duplicate acknowledgement before lifecycle restoration.
+- lifecycle restoration occurs once and before the first routable Input enters either Router lane.
+- outcome append failure is resumable only when the outcome controller retains the matching pending Event.
+- queue capacity is a resumable startup backpressure condition; already routed Inputs are not removed or routed again.
+- all plan content is defensively captured before execution so caller mutation during asynchronous repair cannot change later restore or routing behavior.
+- one executor owns one startup attempt; a completed or failed executor is not reused for a different plan.
+
+Task 3D-E explicitly excludes:
+
+- execution of `recovery_required` lifecycle degradation and its unresolved fail-versus-cancel transition semantics
+- dequeue processing, Run creation, Stop fence application, Provider/Pi execution, Tool cancellation, and Runtime exit handling
+- Approval, Policy, IPC, Subagent, Context compilation, Nudge, Compaction, and message projection behavior
 
 Expected deliverables after approval:
 

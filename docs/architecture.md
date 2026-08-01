@@ -2958,6 +2958,46 @@ The plan does not publish repairs, restore `TurnController`, enqueue `InputRoute
 
 Failures normalize to `invalid_plan`, `claim_mismatch`, or `lifecycle_conflict`. Logs contain only Conversation ID, High Watermark, disposition, counts, stable Run/Turn IDs and statuses, and stable failure values.
 
+### 16.12 Implemented Task 3D-E Ready Startup Execution
+
+`RuntimeStartupExecutor` executes exactly one reconciled startup plan and accepts only `lifecycleDisposition: "ready"`. A `recovery_required` plan is rejected before any Journal write, controller restore, or Router mutation.
+
+```mermaid
+sequenceDiagram
+    participant Runtime
+    participant Executor as RuntimeStartupExecutor
+    participant Outcomes as RuntimeInputOutcomeController
+    participant Turns as TurnController
+    participant Router as InputRouter
+
+    Runtime->>Executor: execute(ready plan)
+    loop ordered outcome repairs
+        Executor->>Outcomes: record(consumed claim repair)
+        Outcomes-->>Executor: durable receipt
+    end
+    Executor->>Turns: restore(latest terminal Run/Turn)
+    loop routable Inputs by Sequence
+        Executor->>Router: route(Input snapshot)
+    end
+    Executor-->>Runtime: immutable execution result
+```
+
+The executor defensively captures and validates the entire plan before the first side effect. Outcome repair identity, Run metadata, lifecycle snapshots, Input direction, Conversation identity, Sequence bounds and ordering, repair/route disjointness, and JSON-safe routable snapshots cannot be changed by the caller while asynchronous persistence is in progress.
+
+Execution order is a hard invariant:
+
+1. every planned `consumed` repair is durably acknowledged;
+2. `TurnController.restore` runs exactly once;
+3. safe Inputs enter `InputRouter` in ascending Journal Sequence.
+
+If an outcome append fails and the outcome controller retains the matching Event, status becomes `repair_blocked`. `resume()` calls the controller's `retryPending()` and therefore resubmits the exact same Event ID, timestamp, metadata, and payload snapshot before continuing.
+
+If a Router lane is full, status becomes `route_blocked`. Previously routed Inputs remain queued, the current Input Sequence remains the next cursor, and `resume()` retries only that Input after capacity becomes available. Non-capacity Router errors, restore errors, conflicting outcome state, and malformed plans are terminal for that executor instance.
+
+Public execution snapshots expose only phase, fixed High Watermark, completed/total repair and route counts, and the next Input identity or Sequence. Completion results contain durable outcome receipts and route results, not Event payloads.
+
+Failures normalize to `invalid_plan`, `recovery_required`, `already_started`, `no_resumable_execution`, `outcome_pending`, `outcome_failed`, `restore_failed`, `route_blocked`, or `route_failed`. Logs contain only stable identifiers, phase counts, lane/capacity, status, Sequence, and failure value.
+
 ## 17. Runtime Policy Engine
 
 `RuntimePolicyEngine` is a pure decision layer:
@@ -3773,6 +3813,7 @@ Currently implemented skeletons include:
 - fixed-High-Watermark Runtime replay planning with pending Input and lifecycle reconstruction
 - persistence-first terminal Runtime Input outcome control with exact-Event retry
 - startup reconciliation with consumed repairs, duplicate-routing prevention, and active-lifecycle blocking
+- ready-only startup execution with durable repair, lifecycle restore, and resumable Router backpressure
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

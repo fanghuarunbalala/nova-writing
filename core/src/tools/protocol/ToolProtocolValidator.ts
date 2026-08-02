@@ -1,5 +1,5 @@
 /** Defensively captures immutable Tool protocol values without retaining private data. */
-import { IsSchema, type TSchema } from "typebox";
+import { IsSchema, type Static, type TSchema } from "typebox";
 import { Compile } from "typebox/compile";
 import {
   canonicalStringifyJson,
@@ -104,6 +104,25 @@ export function defineTool<
   value: RegisteredTool<TParameters, TDetails>,
 ): RegisteredTool<TParameters, TDetails> {
   return captureRegisteredTool(value);
+}
+
+export function captureToolArguments<TParameters extends TSchema>(
+  descriptorSource: ToolDescriptor<TParameters>,
+  value: unknown,
+): Static<TParameters> {
+  const descriptor = captureToolDescriptor(descriptorSource);
+  const identity = {
+    toolName: descriptor.name,
+    toolVersion: descriptor.version,
+  };
+  try {
+    if (!isJsonValue(value)) throw new Error();
+    const captured = cloneJson(value);
+    if (!Compile(descriptor.parameters).Check(captured)) throw new Error();
+    return captured as Static<TParameters>;
+  } catch {
+    throw failure(TOOL_PROTOCOL_FAILURE.invalidArguments, identity);
+  }
 }
 
 export function captureToolResult<TDetails extends JsonValue = JsonValue>(

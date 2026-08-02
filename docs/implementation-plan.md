@@ -2551,6 +2551,16 @@ Task 5B-C delivered:
 - a trusted command-metadata boundary for approval actor identity and a Journal Event projector for restart recovery
 - persistence barriers that publish requested and resolved Events before the Tool caller observes the corresponding state transition
 
+Task 5B-D delivered:
+
+- public `ToolDispatcher` facade over a staged `ToolExecutionPipeline`
+- Registry View resolution and TypeBox argument revalidation before any Tool side effect
+- exact execution-policy resolution, layered permission evaluation, event-based approval, and post-approval policy re-evaluation
+- `SandboxExecutor` Port plus `TrustedProcessSandboxExecutor`, whose capabilities explicitly declare `isolation: none`
+- defense-in-depth rejection when a Tool requires OS process isolation but the configured executor cannot provide it
+- validated progress forwarding, bounded result normalization, stable safe `ToolError` conversion, and structured redacted execution logs
+- no timeout, active cancellation ownership, retry, or persistent Trace behavior, which remains scoped to Task 5B-E
+
 Expected deliverables after approval:
 
 - Tool execution facade and middleware pipeline

@@ -11,6 +11,7 @@ export const TOOL_PROTOCOL_FAILURE = {
   resultOversized: "result_oversized",
   artifactConversationMismatch: "artifact_conversation_mismatch",
   invalidProgress: "invalid_progress",
+  invalidArguments: "invalid_arguments",
 } as const;
 
 export type ToolProtocolFailure =

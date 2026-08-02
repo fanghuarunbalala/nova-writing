@@ -760,6 +760,20 @@ Outbox protocol foundation delivered:
 **Status:** N8-C Outbox protocol and Store port completed; SQLite pending-page
 reading with lifecycle JSON/digest validation is next.
 
+SQLite pending-page reading delivered:
+
+- one Node reader opens either canonical or Draft Outbox storage through an
+  explicit validated source identity
+- pending rows are ordered by lifecycle occurrence time and Event ID and support
+  stable cursor pagination without exposing SQLite rows above the adapter
+- every row must contain canonical lifecycle JSON whose Event identity, Novel,
+  Conversation, type, schema version, timestamp, and stored SHA-256 all agree
+- published rows are excluded, existing attempt counts are preserved, and
+  corrupt records fail with content-safe integrity categories
+
+**Status:** N8-C SQLite pending-page reading and integrity validation completed;
+attempt recording and compare-and-set publication marking are next.
+
 ### N8-D Approval Bridge
 
 Bind asynchronous Approval requests and responses to exact ChangeSet digests without holding SQLite transactions while waiting.

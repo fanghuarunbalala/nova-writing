@@ -48,10 +48,13 @@ export type NovelOutboxPublicationReceipt =
     }
   | { readonly status: typeof NOVEL_OUTBOX_PUBLICATION_STATUS.missing };
 
-export interface NovelOutboxStore {
+export interface NovelOutboxReader {
   readonly source: NovelOutboxSource;
 
   listPending(request: NovelOutboxPageRequest): Promise<NovelOutboxPage>;
+}
+
+export interface NovelOutboxStore extends NovelOutboxReader {
 
   recordAttempt(
     identity: NovelOutboxRecordIdentity,

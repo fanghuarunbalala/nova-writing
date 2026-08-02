@@ -4,7 +4,9 @@ import {
   NOVEL_LIFECYCLE_RECORD_VERSION,
   canonicalizeNovelLifecycleRecord,
   captureNovelLifecycleRecord,
+  captureNovelOutboxRecordDigest,
   type NovelLifecycleRecord,
+  type NovelOutboxRecordDigest,
 } from "../../../novel/index.js";
 import { digestNovelSha256Text } from "./NodeSha256NovelOperationDigester.js";
 
@@ -13,7 +15,7 @@ export interface NodeNovelLifecycleOutboxEnvelope {
   readonly eventType: string;
   readonly schemaVersion: typeof NOVEL_LIFECYCLE_RECORD_VERSION;
   readonly eventJson: string;
-  readonly eventDigest: string;
+  readonly eventDigest: NovelOutboxRecordDigest;
   readonly createdAt: string;
 }
 
@@ -27,9 +29,17 @@ export function encodeNovelLifecycleOutboxRecord(
     eventType: `novel.${record.eventType}`,
     schemaVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
     eventJson,
-    eventDigest: digestNovelSha256Text(eventJson),
+    eventDigest: digestNovelLifecycleOutboxText(eventJson),
     createdAt: record.occurredAt,
   });
+}
+
+export function digestNovelLifecycleOutboxText(
+  canonicalText: string,
+): NovelOutboxRecordDigest {
+  return captureNovelOutboxRecordDigest(
+    digestNovelSha256Text(canonicalText),
+  );
 }
 
 export function insertNovelLifecycleOutboxRecord(

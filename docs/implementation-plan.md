@@ -2818,6 +2818,15 @@ Task 6B-C delivered:
 - terminal persistence ordering of parent Journal projection, Manager terminal transition/capacity release, then `SubagentResult` Promise resolution
 - focused schema and lifecycle validation for success, progress ordering, Artifact results, failed/cancelled/orphaned projection, start and terminal append failure, late progress, duplicate/conflicting results, and payload-free logs
 
+Task 6B-D delivered:
+
+- asynchronous `SubagentBindingStore` with immutable query results and a sequence-based catch-up-to-live binding change feed
+- `DurableChildConversationManager` persistence of running and terminal binding projections without leaking Store or process placement into public Conversation APIs
+- Host-level `ConversationTreeObserver` snapshots and subscriptions separate from each Conversation's Event history
+- parent completion, failure, Stop, and crash propagation through registered cancellation reasons and the existing terminal Result delivery path
+- recovery-time orphan detection through a parent Run activity Port, `orphan_reclaimed` terminal results, no automatic child execution resume, and preserved child Journal ownership
+- focused validation for durable running/terminal transitions, tree query, subscription catch-up, parent Stop cancellation, active-parent preservation, and orphan reclamation
+
 Expected deliverables after approval:
 
 - child Conversation creation and metadata
@@ -2915,4 +2924,4 @@ No next checkpoint begins without explicit approval.
 
 Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
-The next documented Runtime step is Task 6B-D: parent cancellation propagation, orphan reclamation, and Host-level Conversation tree query/subscription.
+The next documented Runtime step is Task 6B-E: concrete Host/storage integration, complete Subagent validation, and Checkpoint 6B closure.

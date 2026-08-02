@@ -5763,6 +5763,10 @@ Task 6B-C exposes five parent-visible Agent OutputEvents: `agent.subagent.starte
 
 `DefaultSubagentLifecycleCoordinator.start()` returns a frozen handle containing the running binding and a `Promise<SubagentResult>`. Started and progress projections are serialized per child. Terminal delivery validates the complete result against its binding, appends the terminal parent projection as a persistence barrier, records the Manager terminal state to release capacity, and only then resolves the handle result. Retry-stable event identity and duplicate-result checks permit an identical terminal delivery to be replayed while rejecting conflicting results.
 
+Task 6B-D adds a durable `SubagentBindingStore` projection and change feed. `DurableChildConversationManager` persists running and terminal binding transitions, while `ConversationTreeObserver` serves Host-level tree snapshots and catch-up-to-live binding subscriptions without altering any individual Conversation Event stream.
+
+Parent completion, failure, Stop, and crash are normalized by `SubagentCancellationCoordinator` into registered child cancellation reasons. Recovery lists every non-terminal binding, asks a parent-Run activity reader whether its owner is still active, and reclaims inactive children with `orphan_reclaimed`. Cancellation always returns a validated terminal `SubagentResult` through the existing lifecycle coordinator, so parent projection persistence, capacity release, and result delivery retain one ordering rule. Child execution is never resumed automatically.
+
 ## 26. Persistence Model
 
 Logical local storage layout:

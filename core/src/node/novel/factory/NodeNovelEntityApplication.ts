@@ -31,6 +31,7 @@ import {
   SqliteNovelDraftOperationStore,
   SqliteNovelEntityQueryStore,
   SqliteNovelCommitStore,
+  SqliteNovelLifecycleRecordWriter,
   SqliteNovelApprovalStore,
   createSqliteNovelEntityMutationContext,
 } from "../sqlite/index.js";
@@ -164,6 +165,10 @@ export function createNodeNovelEntityApplication(
       draftStore: store,
       operationDigester,
       changeSetDigester: new NodeSha256NovelChangeSetDigester(),
+      lifecycleWriter: new SqliteNovelLifecycleRecordWriter(
+        options.location,
+        options.novelId,
+      ),
       logger,
     }),
   });

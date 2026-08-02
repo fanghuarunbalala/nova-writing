@@ -5,6 +5,8 @@ import { NovelCommitHistoryIntegrityError } from "../error/index.js";
 import { captureNovelId, type NovelId } from "../identity/index.js";
 import type { NovelOperationDigester, NovelDraftOperationWriter } from "../operation/index.js";
 import type { NovelCommitHistoryStore, NovelCommitStore, NovelDraftChangeSetStore } from "../port/index.js";
+import type { NovelLifecycleRecordWriter } from "../port/index.js";
+import { NOVEL_LIFECYCLE_EVENT_TYPE, NOVEL_LIFECYCLE_RECORD_VERSION } from "../event/index.js";
 import { NOVEL_CHANGE_SET_VERSION, captureNovelChangeSetIdentity } from "./NovelChangeSet.js";
 import type { NovelChangeSetDigester } from "./NovelChangeSetDigest.js";
 import { NOVEL_COMMIT_PAYLOAD_VERSION } from "./NovelCommitPayload.js";
@@ -17,6 +19,7 @@ export interface NovelCommitRecoveryServiceOptions<TContext> {
   readonly draftStore: NovelDraftChangeSetStore;
   readonly operationDigester: NovelOperationDigester;
   readonly changeSetDigester: NovelChangeSetDigester;
+  readonly lifecycleWriter: NovelLifecycleRecordWriter;
   readonly logger?: Logger;
 }
 
@@ -93,6 +96,20 @@ export class NovelCommitRecoveryService<TContext> {
             prepared.payloadSize !== commit.payloadSize
           ) throw new Error();
           recoveredCount += 1;
+          await this.options.lifecycleWriter.recordCanonical({
+            recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+            eventId: `commit-recovered:${commit.commitId}`,
+            eventType: NOVEL_LIFECYCLE_EVENT_TYPE.commitRecovered,
+            novelId: commit.novelId,
+            conversationId: commit.ownerConversationId,
+            occurredAt: commit.committedAt,
+            payload: {
+              draftSessionId: commit.draftSessionId,
+              commitId: commit.commitId,
+              resultRevision: commit.resultRevision,
+              recovery: "payload-regenerated",
+            },
+          });
         } catch {
           throw new NovelCommitHistoryIntegrityError(commit.commitId);
         }

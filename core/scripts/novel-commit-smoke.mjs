@@ -263,6 +263,15 @@ try {
   });
   const recovered = await restarted.commitRecovery.recover(canonical.novelId);
   assert.equal(recovered.recoveredCount, 1);
+  const recoveryDatabase = new DatabaseSync(location.canonicalDatabasePath, {
+    readOnly: true,
+  });
+  const recoveryEvent = recoveryDatabase.prepare(
+    `SELECT event_json FROM novel_outbox
+     WHERE event_id = ?`,
+  ).get(`commit-recovered:${commitIdA}`);
+  recoveryDatabase.close();
+  assert.equal(JSON.parse(recoveryEvent.event_json).eventType, "commit.recovered");
   assert.deepEqual(
     await readFile(join(location.commitHistoryDir, "commit_a.json")),
     payloadBytes,

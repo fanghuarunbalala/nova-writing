@@ -10,6 +10,7 @@ export * from "./NovelCommitStore.js";
 export * from "./NovelConflictDigester.js";
 export * from "./NovelConflictStore.js";
 export * from "./NovelKeepDraftOperationPlanner.js";
+export * from "./NovelLifecycleRecordWriter.js";
 export * from "./NovelResolutionApplicationPlanStore.js";
 export * from "./NovelEntityRepository.js";
 export * from "./NovelRevisionFactory.js";

@@ -716,6 +716,18 @@ Candidate-local Conflict lifecycle writes delivered:
 **Status:** Conflict/Resolution lifecycle writers completed; Recovery summary
 and remaining state-transition lifecycle coverage are next before N8-C.
 
+Commit Recovery lifecycle delivered:
+
+- a provider-neutral `NovelLifecycleRecordWriter` persists already validated
+  Records without exposing SQLite to the recovery service
+- the Node canonical writer validates exact duplicate Event identity and rejects
+  an Event ID reused with different metadata
+- successful missing-payload regeneration records retry-stable
+  `commit.recovered` using Commit ID and original committed timestamp
+
+**Status:** Commit Recovery lifecycle completed; Draft Recovery lifecycle is the
+final N8-B writer step before N8-C.
+
 ### N8-C Outbox Dispatcher
 
 Dispatch canonical and Draft outbox records idempotently through the accepted Conversation Output publisher and Runtime Journal boundary.

@@ -663,7 +663,7 @@ All reviewers share:
 - operation identities;
 - review lifecycle state;
 - reference-to-Conversation action;
-- request-revision, reject, and approve actions.
+- request-revision, reject, and approve controls that emit typed InputEvents through the bound Conversation.
 
 They do not share one generic content layout.
 
@@ -673,6 +673,7 @@ The reviewer binds to the immutable Novel ChangeSet identity accepted by the Nov
 
 ```ts
 interface NovelChangeReviewTarget {
+  readonly approvalRequestId: string;
   readonly novelId: NovelId;
   readonly draftSessionId: NovelDraftSessionId;
   readonly baseRevision: NovelRevision;
@@ -682,7 +683,7 @@ interface NovelChangeReviewTarget {
 }
 ```
 
-Before approval, the UI must revalidate that:
+Before enabling an Approval decision, the UI refreshes enough read state to detect an obviously stale review:
 
 - the Draft Session still exists;
 - the Draft is still awaiting the relevant approval;
@@ -691,9 +692,58 @@ Before approval, the UI must revalidate that:
 - the reviewed operation identities match the Approval request;
 - no stale or conflicting canonical revision invalidated the review.
 
+This client-side refresh improves feedback but is not authoritative. Runtime and Novel services repeat every identity, revision, digest, lifecycle, permission, and policy validation after the decision InputEvent is durably accepted.
+
 Approval never binds only to a displayed card ID or Draft Session ID.
 
-### 15.1 Partial Selection
+### 15.1 Event-only Approval Boundary
+
+Approval is not a direct `NovelApiClient` mutation and the GUI does not receive a `NovelApprovalClient.resolve()` method.
+
+The complete interaction is:
+
+```text
+Novel or Tool requires Approval
+    -> ApprovalRequestedOutputEvent
+    -> Conversation Journal persistence
+    -> ConversationProjectionStore
+    -> ApprovalCard and review Inspector
+
+User chooses approve, reject, or another supported decision
+    -> ApprovalDecisionInputEvent
+    -> conversation.input.enqueue()
+    -> durable InputReceipt
+    -> Runtime InputRouter
+    -> InteractionCoordinator
+    -> NovelApprovalBridge or Tool continuation
+    -> ApprovalResolvedOutputEvent, ErrorOutputEvent, or domain lifecycle OutputEvent
+    -> Conversation projection updates the UI
+```
+
+The GUI may use Novel query APIs to load semantic summaries, tree Diffs, Manuscript Diffs, evidence, and the current ChangeSet identity. Those queries never resolve, approve, reject, commit, or resume the waiting interaction.
+
+Review controls therefore map to InputEvents:
+
+```ts
+interface ApprovalDecisionDraft {
+  readonly approvalRequestId: string;
+  readonly decision: "approve" | "reject";
+  readonly expectedBinding: {
+    readonly draftSessionId: NovelDraftSessionId;
+    readonly baseRevision: NovelRevision;
+    readonly changeSetDigest: string;
+    readonly operationIds: readonly NovelOperationId[];
+  };
+}
+```
+
+The concrete persisted payload belongs to `ApprovalDecisionInputEvent`; the UI draft is not an alternate command protocol.
+
+`Request Revision` is also expressed through Conversation input rather than a direct Novel mutation. Its exact first-version form may be a dedicated Interaction decision InputEvent or a referenced UserMessage InputEvent, but it must re-enter the serialized Conversation and Runtime path.
+
+The UI marks an Approval as resolved only after observing the corresponding persisted OutputEvent. An `InputReceipt` proves durable decision acceptance, not that the Interaction or Novel Commit completed.
+
+### 15.2 Partial Selection
 
 The Novel domain currently treats one proposal ChangeSet as an atomic reviewable unit.
 
@@ -706,7 +756,8 @@ select desired operations
     -> request ChangeSet revision or operation disablement
     -> produce a new immutable ChangeSet
     -> compute a new digest
-    -> issue a new Approval request
+    -> emit and persist a new ApprovalRequestedOutputEvent
+    -> submit a new ApprovalDecisionInputEvent
     -> approve the frozen replacement ChangeSet atomically
 ```
 
@@ -1018,6 +1069,8 @@ Every query states:
 
 The GUI never queries SQLite rows or local filesystem paths.
 
+Novel query APIs are read-only from the reviewer's perspective. They may load Draft state, canonical state, Diffs, projection evidence, revisions, and Approval binding metadata, but they do not expose `approve`, `reject`, `resolveApproval`, or `commitApprovedChangeSet` UI methods. Approval decisions always enter through `Conversation.input.enqueue()`.
+
 ## 24. Conversation and Novel Event Integration
 
 ```mermaid
@@ -1052,6 +1105,7 @@ sequenceDiagram
     participant Novel
 
     UI->>Conversation: enqueue Approval decision InputEvent
+    Conversation-->>UI: durable InputReceipt
     Conversation->>Runtime: durable input dispatch
     Runtime->>Novel: resolve ChangeSet Approval
     Novel->>Novel: validate digest, operations, revision, and policy
@@ -1083,6 +1137,7 @@ Rules:
 - conflict state opens a dedicated resolution view rather than showing the old Diff as approvable;
 - committed or rolled-back Drafts remain viewable only according to retention and query policy;
 - query errors are mapped to safe stable UI errors without displaying raw paths, SQL, credentials, stack traces, or Runtime stderr.
+- successful InputReceipt does not mark Approval resolved; only subsequent persisted OutputEvents advance the projected interaction state.
 
 ## 26. Performance and Rendering
 
@@ -1183,6 +1238,8 @@ Electron Preload exposes narrow request methods and subscription channels. It ne
 - review colors include textual and icon semantics;
 - stale review disables approval;
 - digest changes force refresh;
+- Approval controls enqueue the expected InputEvent and never call a direct Novel Approval mutation;
+- InputReceipt leaves the card pending until a persisted resolution OutputEvent arrives;
 - request-revision references the correct operation.
 
 ### 29.3 Transport contract tests
@@ -1256,7 +1313,8 @@ The stages below describe dependency order only. Each stage requires its own pla
 - implement Manuscript block Diff reviewer;
 - implement Character and Location field reviewers;
 - implement stale, conflict, and unavailable states;
-- bind Approval to immutable ChangeSet identity.
+- bind the projected Approval request to immutable ChangeSet identity;
+- emit every review decision through `Conversation.input.enqueue()` and wait for resolution OutputEvents.
 
 ### GUI-7: Composer references
 
@@ -1306,6 +1364,9 @@ The stages below describe dependency order only. Each stage requires its own pla
 23. Direct partial commit is not assumed; subset approval requires a replacement immutable ChangeSet unless later domain contracts explicitly support it.
 24. GUI and Web share `@novel/ui`, while desktop and Web shells inject different Transports and platform capabilities.
 25. The left project and Conversation sidebar remains visible in normal and expanded review modes; review width is taken from the central Conversation area rather than replacing the sidebar.
+26. Approval is an event-only interaction: the request and resolution are OutputEvents, while the user's decision is an InputEvent durably enqueued through the bound Conversation.
+27. Novel query APIs load review content and binding metadata but never expose direct Approval resolution or commit methods to the GUI.
+28. An InputReceipt does not resolve the Approval in UI state; only a later persisted resolution or failure OutputEvent does.
 
 ## 32. Deferred Decisions
 

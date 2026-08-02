@@ -4,15 +4,15 @@
 
 This document is the authoritative implementation plan for the Novel layer as of August 2, 2026.
 
-- The current active repository track is Novel Task N0 through Task N11.
-- Runtime Task 1 through Task 7 remains documented in `docs/implementation-plan.md` but is paused while the Novel track is active.
+- Novel Task N0 through Task N6 is completed and remains the accepted Novel foundation.
+- Novel Task N7 through Task N11 is paused while Runtime Task 5A-B through Task 7 is the active repository track in `docs/implementation-plan.md`.
 - Novel implementation must preserve the accepted domain and architecture boundaries in `docs/novel-domain.md`.
 - Agent-facing Novel Tools, Tool YAML, Prompt composition, Agent definitions, and CLI/GUI/Web Novel interfaces are outside this plan.
 - Each completed Novel step must be validated and committed independently before the next step begins.
 
 ## 2. Autonomous Execution Agreement
 
-The repository protocol in `AGENTS.md` remains authoritative. During the active Novel track the agent may autonomously plan, implement, validate, document, and commit the next incomplete Novel step without waiting for approval.
+The repository protocol in `AGENTS.md` remains authoritative. Novel autonomous execution resumes from Task N7 only after an explicit track change; the current active execution cycle is defined by `docs/implementation-plan.md`.
 
 The mandatory cycle is:
 

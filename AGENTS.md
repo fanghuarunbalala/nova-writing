@@ -6,7 +6,7 @@ These instructions apply to the entire repository.
 
 Complete the currently active documented implementation track from the current repository status without reimplementing completed checkpoints.
 
-The active track is Novel Task N0 through Task N11 in `docs/novel-implementation-plan.md`. Runtime Task 1 through Task 7 remains documented in `docs/implementation-plan.md` and is paused rather than cancelled while the Novel track is active.
+The active track is Runtime Task 5A-B through Task 7 in `docs/implementation-plan.md`. Runtime Task 5A-A and the earlier Runtime checkpoints remain completed. Novel Task N0 through Task N6 remains completed and documented in `docs/novel-implementation-plan.md`; Novel Task N7 through Task N11 is paused rather than cancelled while the Runtime track is active.
 
 ## Autonomous Authority
 
@@ -22,8 +22,8 @@ After any context compression, context reset, resumed goal, or uncertainty about
 1. `AGENTS.md`
 2. `docs/implementation-plan.md`
 3. `docs/architecture.md`
-4. `docs/novel-implementation-plan.md` while the Novel track is active
-5. `docs/novel-domain.md` while the Novel track is active
+4. `docs/novel-implementation-plan.md` while the Novel track is active or when a Runtime change crosses the Novel integration boundary
+5. `docs/novel-domain.md` while the Novel track is active or when a Runtime change crosses the Novel integration boundary
 6. Applicable nested `AGENTS.md` files
 7. `git status` and recent `git log`
 
@@ -49,7 +49,8 @@ Planning is mandatory even when the agent has authority to continue automaticall
 
 - Follow the async-first hybrid architecture documented by the project.
 - Do not mix Runtime and Novel implementation changes in one step or commit.
-- Agent-facing Novel Tools, Tool YAML, Prompt composition, Agent definitions, and CLI/GUI/Web Novel interfaces remain outside Novel Task N0 through Task N11.
+- Do not resume Novel Task N7 through Task N11 without an explicit track change.
+- Runtime Tool, Approval, IPC, Subagent, and validation work must remain provider-neutral at public Core boundaries.
 - Preserve stable public abstractions and keep Pi, process placement, Node, and future Rust details behind their accepted boundaries.
 - Do not silently resolve questions explicitly marked unresolved or deferred.
 - Do not change unrelated code or repair unrelated failures.
@@ -60,4 +61,4 @@ Planning is mandatory even when the agent has authority to continue automaticall
 
 ## Completion Boundary
 
-The current autonomous execution objective ends only when Novel Task N0 through Task N11 is implemented, validated, documented, and committed, or when progress is blocked by an unresolved decision that cannot be safely derived from accepted documents and existing code. Runtime Task 1 through Task 7 resumes only after an explicit track change.
+The current autonomous execution objective ends only when Runtime Task 5A-B through Task 7 is implemented, validated, documented, and committed, or when progress is blocked by an unresolved decision that cannot be safely derived from accepted documents and existing code. Novel Task N7 through Task N11 resumes only after an explicit track change.

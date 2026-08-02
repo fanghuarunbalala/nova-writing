@@ -12,6 +12,8 @@ declare const novelConflictIdBrand: unique symbol;
 declare const novelArtifactIdBrand: unique symbol;
 declare const characterIdBrand: unique symbol;
 declare const locationIdBrand: unique symbol;
+declare const storyOutlineIdBrand: unique symbol;
+declare const storyUnitIdBrand: unique symbol;
 
 export type NovelId = string & { readonly [novelIdBrand]: "NovelId" };
 export type NovelDraftSessionId = string & {
@@ -31,6 +33,12 @@ export type NovelArtifactId = string & {
 };
 export type CharacterId = string & { readonly [characterIdBrand]: "CharacterId" };
 export type LocationId = string & { readonly [locationIdBrand]: "LocationId" };
+export type StoryOutlineId = string & {
+  readonly [storyOutlineIdBrand]: "StoryOutlineId";
+};
+export type StoryUnitId = string & {
+  readonly [storyUnitIdBrand]: "StoryUnitId";
+};
 
 const SAFE_IDENTITY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
 
@@ -64,6 +72,14 @@ export function captureCharacterId(value: unknown): CharacterId {
 
 export function captureLocationId(value: unknown): LocationId {
   return captureIdentity("locationId", value) as LocationId;
+}
+
+export function captureStoryOutlineId(value: unknown): StoryOutlineId {
+  return captureIdentity("storyOutlineId", value) as StoryOutlineId;
+}
+
+export function captureStoryUnitId(value: unknown): StoryUnitId {
+  return captureIdentity("storyUnitId", value) as StoryUnitId;
 }
 
 function captureIdentity(field: string, value: unknown): string {

@@ -924,6 +924,21 @@ Resolve `OrderKey`, then implement the ordered stable StoryUnit tree.
 **Status:** `OrderKey` value, comparator, factory, and dense-insertion
 validation completed; StoryOutline and StoryUnit structure are next.
 
+Ordered StoryUnit tree foundation delivered:
+
+- stable StoryOutline and StoryUnit identities remain independent from paths,
+  depth, publication containers, and persistence placement
+- immutable StoryUnit snapshots capture parent identity, opaque sibling order,
+  required title, optional intent/synopsis, and optional semantic scope without
+  introducing N9-B status fields
+- one immutable StoryOutlineTree validates Outline ownership, unique Unit IDs,
+  existing parents, acyclic ancestry, and unique sibling OrderKeys
+- root, child, and depth-first reads return deterministic ordered snapshots even
+  when input Units arrive in arbitrary order
+
+**Status:** Task N9-A completed by the dense OrderKey foundation and immutable
+ordered StoryOutline tree. Task N9-B status and reason contracts are next.
+
 ### N9-B Status and Reasons
 
 Resolve `StoryUnitBlockState` and `StoryUnitAbandonment`, then implement planning, realization, blocking, abandonment, and derived parent progress.

@@ -2719,6 +2719,16 @@ Task 6A-G delivered:
 - unhealthy process handling without a shutdown reason: close IPC, send `SIGTERM`, wait the same grace window, then force termination; the resulting exit remains a redacted crash and is never automatically restarted
 - deterministic timer and fake-process validation for heartbeat cadence, recovery after a fresh heartbeat, three-miss detection, graceful timeout escalation, unhealthy crash normalization, and payload-free health logs
 
+Task 6A-H delivered:
+
+- real `ManagedConversationHost` → `NodeConversationProcessSupervisor` → negotiated Child entrypoint integration using the unchanged `ConversationRuntimePlacement` and `ConversationRuntimeHandle` boundaries
+- explicit-restore activation, accepted Runtime input dispatch, logical Presence publication, graceful Host shutdown, process release, and no public process or Pi identity leakage
+- real post-bootstrap Child Runtime crash coverage proving Host Presence remains `crashed`, Supervisor ownership is released, and no automatic restart occurs
+- confirmation that the existing client/API `ConversationProxy` remains the single public remote Conversation implementation; process placement stays below Host and does not introduce a second proxy abstraction
+- Checkpoint 6A validation across strict IPC, JSONL transport, process placement, Child composition, persistence RPC, heartbeat health, cancellation cleanup, graceful termination, forced termination, and crash boundaries
+
+Checkpoint 6A status: completed.
+
 Expected deliverables after approval:
 
 - transport interfaces
@@ -2855,6 +2865,6 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-G are implemented. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, Task 6A-B adds the asynchronous in-memory Peer, Task 6A-C binds that Port to bounded Node JSONL streams, Task 6A-D adds one-process-per-Runtime placement, Task 6A-E completes negotiated Parent/Child startup and Child-local Runtime construction, Task 6A-F adds the allowlisted persistence RPC and durable Output append acknowledgement, and Task 6A-G adds heartbeat health plus graceful-to-forced termination policy.
+Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
-The next documented Runtime step is Task 6A-H: full Host-to-child integration validation, ConversationProxy placement verification, crash and recovery-boundary coverage, documentation closure, and Checkpoint 6A review preparation.
+The next documented Runtime step is Task 6B: Subagent Management. Its child result, parent projection, nesting, concurrency, permission inheritance, orphan recovery, and tree-subscription decisions must be reviewed against the accepted Subagent architecture before implementation.

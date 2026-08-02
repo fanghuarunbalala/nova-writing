@@ -5678,6 +5678,27 @@ Active request cancellation remains the provider-neutral `ipc.cancel_request` pr
 
 Task 6A-G does not introduce Runtime restart, non-terminal Run/Turn repair semantics, public process IDs, raw signal details, or Subagent lifecycle. Full Host-to-child integration and Checkpoint 6A closure remain Task 6A-H.
 
+### 24.8 Host-to-Child Integration
+
+Task 6A-H validates the complete placement chain without changing the public Conversation API:
+
+```text
+Conversation / ConversationProxy
+→ ConversationHost
+→ ConversationRuntimePlacement
+→ NodeConversationProcessSupervisor
+→ ParentRuntimeChildEndpoint
+→ RuntimeIpcPeer + JSONL stdio
+→ Child Runtime composition root
+→ ConversationRuntime
+```
+
+The existing `ConversationProxy` remains the client/API transport implementation of `Conversation`. It does not represent a process object and is not recreated per Child Runtime. Process placement remains entirely below `ManagedConversationHost`, which continues to own logical Presence and accepted-input scheduling through placement-neutral Handles.
+
+The full integration verifies explicit activation, accepted Runtime input dispatch, durable logical Presence transitions, graceful shutdown, and process ownership release. A real Child Runtime crash after successful Bootstrap produces Host Presence `crashed`, releases the Supervisor Handle, and does not schedule any automatic restart. A later explicit activation may create a new Runtime instance, but non-terminal Run/Turn repair remains governed by the existing unresolved recovery policy.
+
+Checkpoint 6A is complete. Provider clients, credentials, prompts, Tool handlers, Store paths, process IDs, raw stderr, signals, and Node/Pi-specific types remain absent from the public Conversation and provider-neutral Runtime IPC boundaries.
+
 ## 25. Subagent Architecture
 
 Main Agent and Subagent both use Conversation.
@@ -5859,12 +5880,12 @@ Currently implemented skeletons include:
 - negotiated Parent/Child Runtime startup with Child-local composition and one-process-per-Runtime placement
 - allowlisted Runtime persistence RPC with strict Journal/Message reads, durable Output append acknowledgement, and typed aggregate recovery-state load
 - two-second Child heartbeat, three-miss Parent health detection, active IPC cancellation cleanup, and five-second graceful-to-forced process termination
+- full ManagedConversationHost-to-child-process integration with retained crashed Presence and no automatic restart
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 
 Not yet implemented:
 
-- ConversationProxy implementation
 - concrete restart-safe ContextCheckpointStore and canonical Journal/Message source adapters
 - durable ArtifactStore, oversized User-content staging, and Artifact-reference recovery
 - concrete restart-safe private Nudge persistence and Provider transport dispatch-hook adapters

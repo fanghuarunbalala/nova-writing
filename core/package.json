@@ -94,6 +94,7 @@
     "smoke:runtime-child-entrypoint": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/runtime-child-entrypoint-typecheck.ts && node scripts/runtime-child-entrypoint-smoke.mjs",
     "smoke:runtime-persistence-rpc": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/runtime-persistence-rpc-typecheck.ts && node scripts/runtime-persistence-rpc-smoke.mjs",
     "smoke:runtime-heartbeat-health": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/runtime-heartbeat-health-typecheck.ts && node scripts/runtime-heartbeat-health-smoke.mjs",
+    "smoke:runtime-host-child-integration": "pnpm build && node scripts/runtime-host-child-integration-smoke.mjs",
     "smoke:runtime-user-message": "pnpm build && node scripts/runtime-user-message-input-handler-smoke.mjs",
     "smoke:runtime-stop-input": "pnpm build && node scripts/runtime-stop-input-handler-smoke.mjs",
     "smoke:runtime-replay-planner": "pnpm build && node scripts/runtime-replay-planner-smoke.mjs",

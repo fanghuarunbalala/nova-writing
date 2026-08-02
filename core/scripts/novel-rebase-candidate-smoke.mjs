@@ -434,6 +434,29 @@ try {
     await conflictStore.listResolutions(conflicted.candidate.session),
     [keepCanonicalResolution],
   );
+  const conflictLifecycleDatabase = new DatabaseSync(
+    join(candidatePath(location, conflicted.candidate.session), "draft.sqlite"),
+    { readOnly: true },
+  );
+  const conflictLifecycleRows = conflictLifecycleDatabase.prepare(
+    `SELECT event_id, operation_sequence, operation_id, event_type, event_json
+     FROM draft_outbox WHERE event_type LIKE 'novel.conflict.%'
+     ORDER BY created_at, event_id`,
+  ).all();
+  conflictLifecycleDatabase.close();
+  assert.equal(
+    conflictLifecycleRows.some((row) =>
+      row.event_id === `conflict-detected:${conflicted.conflicts[0].conflict.id}` &&
+      row.operation_sequence === null && row.operation_id === null &&
+      JSON.parse(row.event_json).eventType === "conflict.detected"),
+    true,
+  );
+  assert.equal(
+    conflictLifecycleRows.some((row) =>
+      row.event_id === `conflict-resolved:${keepCanonicalResolution.conflictId}` &&
+      JSON.parse(row.event_json).eventType === "conflict.resolved"),
+    true,
+  );
   assert.deepEqual(
     await conflictStore.listConflicts(conflicted.candidate.session),
     [],

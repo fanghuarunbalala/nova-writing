@@ -2,6 +2,8 @@
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import {
+  NOVEL_LIFECYCLE_EVENT_TYPE,
+  NOVEL_LIFECYCLE_RECORD_VERSION,
   NovelInvariantViolationError,
   NOVEL_INVARIANT_FAILURE,
   canonicalizeNovelConflict,
@@ -22,6 +24,7 @@ import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
 import { digestNovelConflictText } from "./NodeSha256NovelConflictDigester.js";
 import { initializeNovelDraftSqliteSchema } from "./NovelDraftSqliteSchema.js";
+import { insertDraftNovelLifecycleOutboxRecord } from "./NodeNovelLifecycleOutboxEncoder.js";
 
 export interface SqliteNovelConflictStoreOptions {
   readonly location: NodeNovelStoreLocation;
@@ -95,6 +98,20 @@ export class SqliteNovelConflictStore implements NovelConflictStore {
           record.digest,
           record.conflict.createdAt,
         );
+      insertDraftNovelLifecycleOutboxRecord(database, {
+        recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+        eventId: `conflict-detected:${record.conflict.id}`,
+        eventType: NOVEL_LIFECYCLE_EVENT_TYPE.conflictDetected,
+        novelId: session.novelId,
+        conversationId: session.ownerConversationId,
+        occurredAt: record.conflict.createdAt,
+        payload: {
+          draftSessionId: session.id,
+          conflictId: record.conflict.id,
+          operationId: record.conflict.operationId,
+          kind: record.conflict.kind,
+        },
+      });
       database.exec("COMMIT");
       transaction = false;
       this.logger.info("novel_conflict.recorded", {
@@ -230,6 +247,19 @@ export class SqliteNovelConflictStore implements NovelConflictStore {
         )
         .run(json, digest, resolution.resolvedAt, resolution.conflictId);
       if (Number(result.changes) !== 1) throw corrupt(session);
+      insertDraftNovelLifecycleOutboxRecord(database, {
+        recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+        eventId: `conflict-resolved:${resolution.conflictId}`,
+        eventType: NOVEL_LIFECYCLE_EVENT_TYPE.conflictResolved,
+        novelId: session.novelId,
+        conversationId: session.ownerConversationId,
+        occurredAt: resolution.resolvedAt,
+        payload: {
+          draftSessionId: session.id,
+          conflictId: resolution.conflictId,
+          strategy: resolution.resolution.strategy,
+        },
+      });
       database.exec("COMMIT");
       transaction = false;
       this.logger.info("novel_conflict.resolved", {

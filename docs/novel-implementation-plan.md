@@ -702,6 +702,20 @@ Canonical Rebase lifecycle writes delivered:
 **Status:** canonical Rebase lifecycle writers completed; candidate-local
 Conflict and Resolution lifecycle writers are the next N8-B step.
 
+Candidate-local Conflict lifecycle writes delivered:
+
+- durable Conflict insertion and `conflict.detected` share one candidate Draft
+  transaction
+- immutable Resolution update and `conflict.resolved` share one candidate Draft
+  transaction
+- one Operation may produce multiple Conflict events because these lifecycle
+  rows intentionally leave the optional Operation Outbox columns null
+- exact Conflict or Resolution retry returns `duplicate` without inserting a
+  second lifecycle Event
+
+**Status:** Conflict/Resolution lifecycle writers completed; Recovery summary
+and remaining state-transition lifecycle coverage are next before N8-C.
+
 ### N8-C Outbox Dispatcher
 
 Dispatch canonical and Draft outbox records idempotently through the accepted Conversation Output publisher and Runtime Journal boundary.

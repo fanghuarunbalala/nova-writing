@@ -55,3 +55,27 @@ export function insertNovelLifecycleOutboxRecord(
   );
   return outbox;
 }
+
+export function insertDraftNovelLifecycleOutboxRecord(
+  database: DatabaseSync,
+  recordInput: NovelLifecycleRecord,
+): NodeNovelLifecycleOutboxEnvelope {
+  const record = captureNovelLifecycleRecord(recordInput);
+  const outbox = encodeNovelLifecycleOutboxRecord(record);
+  database.prepare(
+    `INSERT INTO draft_outbox(
+       event_id, novel_id, conversation_id, operation_sequence, operation_id,
+       event_type, schema_version, event_json, event_digest, created_at
+     ) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)`,
+  ).run(
+    outbox.eventId,
+    record.novelId,
+    record.conversationId,
+    outbox.eventType,
+    outbox.schemaVersion,
+    outbox.eventJson,
+    outbox.eventDigest,
+    outbox.createdAt,
+  );
+  return outbox;
+}

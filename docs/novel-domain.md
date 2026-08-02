@@ -357,7 +357,146 @@ Novel Command Queue
 - Optimistic revisions detect stale concurrent commands.
 - A future collaborative editor may introduce CRDT behavior at the Paragraph text adapter boundary without changing the whole Novel domain contract.
 
-## 11. Current Open Questions
+## 11. Minimal Character Model
+
+**Current recommendation:** the author primarily prepares the Story Outline. Character records remain minimal, while leaf StoryUnits describe participation, events, and character or location changes. Tools may derive and maintain reviewable state projections from those sources.
+
+### 11.1 Minimal Contracts
+
+```ts
+interface Character {
+  readonly id: CharacterId;
+  readonly name: string;
+  readonly aliases: readonly string[];
+  readonly summary?: string;
+}
+
+interface StoryUnitCharacterBinding {
+  readonly storyUnitId: StoryUnitId;
+  readonly characterId: CharacterId;
+  readonly involvement?: CharacterInvolvement;
+  readonly note?: string;
+}
+
+interface StoryUnitRealization {
+  readonly storyUnitId: StoryUnitId;
+  readonly manuscriptRanges: readonly ManuscriptRange[];
+  readonly actualSummary?: string;
+}
+
+interface CharacterCurrentStateProjection {
+  readonly characterId: CharacterId;
+  readonly atStoryUnitId: StoryUnitId;
+  readonly sourceRevision: NovelRevision;
+  readonly summary: string;
+}
+```
+
+```mermaid
+classDiagram
+    class StoryUnit {
+        +StoryUnitId id
+    }
+
+    class Character {
+        +CharacterId id
+        +string name
+        +string[] aliases
+        +string summary
+    }
+
+    class StoryUnitCharacterBinding {
+        +StoryUnitId storyUnitId
+        +CharacterId characterId
+        +CharacterInvolvement involvement
+        +string note
+    }
+
+    class StoryUnitRealization {
+        +StoryUnitId storyUnitId
+        +ManuscriptRange[] manuscriptRanges
+        +string actualSummary
+    }
+
+    class CharacterCurrentStateProjection {
+        +CharacterId characterId
+        +StoryUnitId atStoryUnitId
+        +NovelRevision sourceRevision
+        +string summary
+    }
+
+    StoryUnit "1" --> "0..*" StoryUnitCharacterBinding
+    Character "1" --> "0..*" StoryUnitCharacterBinding
+    StoryUnit "1" --> "0..1" StoryUnitRealization
+    Character "1" --> "0..*" CharacterCurrentStateProjection
+    StoryUnit "1" --> "0..*" CharacterCurrentStateProjection : projection position
+```
+
+The binding and realization do not own one another. Both refer to the same stable StoryUnit for different purposes:
+
+- `StoryUnitCharacterBinding` records planned character participation in the outline.
+- `StoryUnitRealization` records where that StoryUnit was actually realized in manuscript content.
+- `CharacterCurrentStateProjection` summarizes a character at a selected StoryUnit position by replaying relevant leaf StoryUnit changes.
+
+Character stores only stable identity and information that should not be repeatedly inferred from the outline. Current location, injuries, relationships, life state, inventory, and similar changing information remain derived from StoryUnit participation and entity-change records rather than becoming mutable fields on Character.
+
+### 11.2 NovelRevision
+
+`NovelRevision` is the opaque logical version of the complete Novel project state.
+
+```ts
+type NovelRevision = string & {
+  readonly __brand: "NovelRevision";
+};
+```
+
+Its semantic rules are:
+
+- The Repository creates a new NovelRevision after each accepted mutation to authoritative Novel-domain state.
+- Outline, Character, Location, Manuscript, and Publication mutations may all advance the NovelRevision.
+- Commands may carry a base NovelRevision for optimistic concurrency validation.
+- A derived projection records the NovelRevision from which it was calculated.
+- If the current NovelRevision differs from `sourceRevision`, the projection is potentially stale and must be validated or rebuilt before being treated as current.
+- NovelRevision is not a Git commit, timestamp, Conversation Event ID, or Manuscript Block ordering key.
+- Callers compare NovelRevision values for equality and do not parse or perform arithmetic on them.
+
+Example:
+
+```text
+NovelRevision = revision-105
+    -> calculate CharacterCurrentStateProjection
+    -> projection.sourceRevision = revision-105
+
+edit a relevant leaf StoryUnit
+    -> NovelRevision = revision-106
+    -> projection from revision-105 is potentially stale
+```
+
+The initial global NovelRevision deliberately provides coarse invalidation. It may mark a Character projection potentially stale after an unrelated Novel mutation, but it keeps the first contract simple and safe. If measured rebuild cost becomes significant, a later projection may additionally record narrower Outline, Manuscript, or dependency revisions without removing the global NovelRevision.
+
+### 11.3 Projection and Review Boundary
+
+`CharacterCurrentStateProjection` is a repairable Tool-maintained table rather than another authoritative character fact store.
+
+```text
+Character stable profile
+    + relevant accepted leaf StoryUnit bindings
+    + ordered character and location change notes
+    = CharacterCurrentStateProjection
+```
+
+Recommended query behavior:
+
+- A state query always names the target `atStoryUnitId`; there is no context-free global current state.
+- Tool results return the source StoryUnit IDs used as evidence even if the cached projection stores only their summarized result initially.
+- Agent-proposed corrections enter a reviewable state before replacing accepted projections or authoritative StoryUnit changes.
+- Human rejection leaves authoritative outline and manuscript data unchanged.
+- Outline reordering, insertion, removal, abandonment, or change-note edits invalidate affected projections from the earliest changed narrative position.
+- A missing projection is rebuilt from Character baseline information and relevant StoryUnits rather than treated as lost Novel truth.
+
+Full pairwise Character relationship storage remains excluded from the initial model. Relationship changes that materially affect the story are recorded sparsely as leaf StoryUnit entity changes, while protagonist-centered or arbitrary-focus relationship views are generated on demand by Tools.
+
+## 12. Current Open Questions
 
 The following decisions remain outside the accepted Runtime implementation plan:
 
@@ -368,3 +507,5 @@ The following decisions remain outside the accepted Runtime implementation plan:
 5. The storage layout for Manuscript Blocks and Novel-domain Journal records.
 6. The promotion workflow from `StoryBeat` to child `StoryUnit`.
 7. Whether Beat realization is stored, derived, or omitted in the first implementation.
+8. The concrete NovelRevision generation format and whether narrower component revisions are needed after measuring projection rebuild cost.
+9. The exact review-state contract for Tool-proposed Character and Location projections.

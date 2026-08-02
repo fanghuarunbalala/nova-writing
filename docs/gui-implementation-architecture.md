@@ -948,6 +948,12 @@ The shared UI now defines a normalized `StoryOutlineTreeView` and an immutable `
 
 The Controller owns only local expansion and selection, derives flat visible rows with depth and ARIA set-position metadata, and supports next, previous, parent, first-child, and expansion commands. Replacing a query result preserves only still-valid expansion and selection. A 10,000-node deep-tree test verifies iterative validation and flattening without recursive stack growth. Query transport, Ready policy, composite blocking overrides, paging, and virtualization thresholds remain deferred.
 
+### 18.2 Implemented Accessible Outline Tree
+
+`StoryOutlineTree` binds the local Controller through React `useSyncExternalStore` and renders flattened rows with `tree` / `treeitem` roles, level, set position, selected state, and expansion state. Mouse selection and the standard Up, Down, Left, Right, Enter, and Space interactions update only local UI state.
+
+Each row presents Scope, planning status, realization status, blocking, and derived completed-leaf progress as separate tokens. Blocking details remain a UI tooltip and are not logged. The component intentionally performs no Novel mutation, no Ready-policy inference, and no recursive nested rendering; query-backed Inspector composition and virtualization remain later checkpoints.
+
 ## 19. Outline Diff Projection
 
 The Outline reviewer preserves tree structure while overlaying ChangeSet operations.

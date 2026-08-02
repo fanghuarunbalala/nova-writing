@@ -319,6 +319,136 @@ const NOVEL_THEME_CSS = `
   padding-top: 16px;
 }
 
+.novel-outline-tree-panel {
+  color: var(--novel-text-primary);
+}
+
+.novel-outline-tree-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.novel-outline-tree-header span,
+.novel-outline-scope {
+  color: var(--novel-text-secondary);
+  font-size: 11px;
+}
+
+.novel-outline-tree-header h3 {
+  margin: 3px 0 0;
+  font-size: 16px;
+}
+
+.novel-outline-scope {
+  border: 1px solid var(--novel-border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--novel-surface-primary);
+}
+
+.novel-outline-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.novel-outline-row {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  border-radius: 7px;
+  padding: 7px 8px 7px calc(8px + var(--novel-outline-indent));
+  cursor: default;
+}
+
+.novel-outline-row:hover {
+  background: var(--novel-surface-secondary);
+}
+
+.novel-outline-row[data-selected="true"] {
+  background: #e8edf3;
+}
+
+.novel-outline-row:focus-visible {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: -2px;
+}
+
+.novel-outline-toggle {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  border: 0;
+  padding: 0;
+  color: var(--novel-text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.novel-outline-toggle:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.novel-outline-row-main {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.novel-outline-title {
+  min-width: 120px;
+  flex: 1 1 180px;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.novel-outline-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.novel-outline-badge,
+.novel-outline-progress {
+  border: 1px solid var(--novel-border);
+  border-radius: 999px;
+  padding: 2px 6px;
+  color: var(--novel-text-secondary);
+  background: var(--novel-surface-primary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.novel-outline-badge[data-badge-kind="planning"] {
+  color: #556c85;
+  background: #f4f7fa;
+}
+
+.novel-outline-badge[data-badge-kind="realization"] {
+  color: #526b5d;
+  background: #f4f8f5;
+}
+
+.novel-outline-badge[data-badge-kind="blocked"] {
+  border-color: #e2c7c7;
+  color: #8a4141;
+  background: #fff8f8;
+}
+
+.novel-outline-empty {
+  color: var(--novel-text-secondary);
+  font-size: 13px;
+}
+
 .novel-conversation-view {
   width: min(840px, 100%);
   margin: 0 auto;

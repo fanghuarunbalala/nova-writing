@@ -556,23 +556,304 @@ Chapter and Volume are publication structures whose actual authority is written 
 - A Volume owns ordered Chapters, and its actual manuscript coverage is derived from them rather than duplicated as another authoritative range.
 - A Volume may reference a primary higher-level StoryUnit for narrative intent, but that association is not its content boundary.
 
-## 10. Initial Mutation Strategy
+## 10. Multi-Conversation Draft and Commit Model
 
-**Accepted direction:** initial Novel mutation uses serialized commands and revision checks rather than making the whole domain a CRDT.
+**Accepted direction:** proceed directly with independent Conversation Drafts, optimistic rebasing, and explicit conflict resolution rather than restricting a Novel to one active writable Draft. The initial Novel implementation still uses serialized domain operations and revision checks rather than making the whole domain a CRDT.
+
+### 10.1 Canonical and Draft Databases
+
+The Workspace owns one canonical Novel database and may contain multiple active Draft Sessions:
 
 ```text
-Novel Command Queue
-    -> validate base revision
-    -> apply one mutation
-    -> maintain anchors and references
-    -> persist
-    -> publish Novel Event
+novel.sqlite
+    accepted canonical Novel state
+
+Conversation A
+    -> DraftSession A
+    -> draft-a.sqlite based on revision-105
+
+Conversation B
+    -> DraftSession B
+    -> draft-b.sqlite based on revision-105
 ```
 
+- `novel.sqlite` is the sole authority for accepted Novel state, Commit existence, and the current NovelRevision.
+- Each top-level Conversation may own at most one active writable `NovelDraftSession`.
+- Multiple top-level Conversations may own independent Draft Sessions concurrently.
+- A subagent participating in its parent Conversation's work shares the parent's Draft Session through the same serialized Draft Writer unless it is explicitly started as a separate top-level branch.
+- Every Draft Session owns a durable `draft.sqlite` working copy initialized from one exact canonical `baseRevision`.
+- Agent Turns, Provider calls, Tool calls, Approval waits, process restarts, and host replacement may occur while the Draft Session remains active.
+- No long-lived SQLite transaction or connection spans those boundaries. Each Draft operation uses a short transaction against its own `draft.sqlite`.
+- `draft.sqlite` is never copied over the canonical database file. Final publication replays a validated Domain ChangeSet inside a short canonical SQLite transaction.
+
+Recommended storage shape:
+
+```text
+storeDir/
+├── runtime.sqlite
+├── novel.sqlite
+├── novel-staging/
+│   ├── conversation-a/
+│   │   └── draft-session-a/
+│   │       ├── manifest.json
+│   │       ├── draft.sqlite
+│   │       └── artifacts/
+│   └── conversation-b/
+│       └── draft-session-b/
+│           ├── manifest.json
+│           ├── draft.sqlite
+│           └── artifacts/
+└── novel-history/
+    └── commits/
+```
+
+The staging directory is durable Store state rather than operating-system temporary storage. A host restart must discover and reopen active Draft Sessions instead of treating their files as disposable process cache.
+
+### 10.2 Draft Session Lifecycle
+
+```ts
+type NovelDraftSessionStatus =
+  | "active"
+  | "awaiting-approval"
+  | "rebasing"
+  | "conflicted"
+  | "committing"
+  | "committed"
+  | "rolled-back";
+
+interface NovelDraftSession {
+  readonly id: NovelDraftSessionId;
+  readonly novelId: NovelId;
+  readonly ownerConversationId: ConversationId;
+  readonly baseRevision: NovelRevision;
+  readonly status: NovelDraftSessionStatus;
+}
+```
+
+Public lifecycle semantics:
+
+- `startDraft()` creates a new Draft Session from the current canonical revision. It must not overwrite or silently reset an existing active Draft owned by the same Conversation.
+- `getActiveDraft()` reopens the Conversation's existing Draft across Agent Turns or process restarts.
+- `commit()` freezes the current ChangeSet and attempts to publish it to `novel.sqlite`.
+- `rollback()` abandons the whole Draft Session, removes its unpublished working state after durable terminal marking, and returns the Conversation to no-active-Draft state.
+- `resetToMain()` deliberately discards local Draft changes, recreates the Draft from the latest canonical revision, and keeps the Draft Session active with a new base revision.
+- A successful Commit ends that Draft Session. Further editing starts a new Draft Session, even when the same Conversation continues.
+- `sync()` is not a public operation because its direction and data-loss behavior are ambiguous. `commit()`, `rollback()`, and `resetToMain()` express the intended direction explicitly.
+- A committed Draft cannot be rolled back. Reversing accepted state requires a future compensating Novel Commit rather than history deletion.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: startDraft
+    Active --> Active: short Draft mutations
+    Active --> AwaitingApproval: request Approval
+    AwaitingApproval --> Active: revise Draft
+    AwaitingApproval --> Committing: approved commit
+    Active --> Committing: policy-authorized commit
+    Active --> RolledBack: rollback
+    AwaitingApproval --> RolledBack: reject and rollback
+    Active --> Active: resetToMain
+    Committing --> Committed: canonical Commit succeeds
+    Committing --> Rebasing: base revision is stale
+    Rebasing --> AwaitingApproval: automatic rebase succeeds
+    Rebasing --> Conflicted: semantic conflict found
+    Conflicted --> AwaitingApproval: all conflicts resolved
+    Conflicted --> RolledBack: rollback
+    Committed --> [*]
+    RolledBack --> [*]
+```
+
+### 10.3 Domain Operation Journal and Draft Projection
+
+All Draft writes are represented as serializable, versioned Domain Operations. A Draft operation is not a closure, raw SQL statement, Provider request, or instruction to regenerate content later.
+
+```ts
+interface NovelOperationBase {
+  readonly operationId: NovelOperationId;
+  readonly operationVersion: number;
+  readonly type: string;
+  readonly expected: readonly NovelOperationPrecondition[];
+}
+
+interface NovelOperationPrecondition {
+  readonly entityType: NovelEntityType;
+  readonly entityId: string;
+  readonly fieldPath?: string;
+  readonly expectedDigest?: string;
+  readonly expectedEntityRevision?: EntityRevision;
+}
+```
+
+- Generated IDs, timestamps, model-produced text, random choices, and other nondeterministic results are fixed before the Operation is accepted into the Draft.
+- Large text or binary values may be stored as immutable Draft Artifacts referenced by logical ID and digest rather than duplicated inside every Operation.
+- Preconditions record the state against which the Operation was authored and permit field-, entity-, Block-, parent-, and ordering-level conflict detection during Rebase.
+- A Draft Writer serializes Main Agent, shared Subagent, and user Tool writes for one Draft Session.
+- One short `draft.sqlite` transaction validates the Operation, records it in a Draft Operation table, applies it to Draft domain tables, updates Draft metadata, and commits. This keeps the Operation Journal and queryable Draft state atomic without coordinating a JSONL append with SQLite.
+- The Draft Operation table is the recoverable unpublished ChangeSet source. `draft.sqlite` also provides read-your-own-writes queries, previews, tree traversal, relationship queries, and full-text access.
+- Final Commit history may serialize the frozen Operation payload into an immutable history file referenced by canonical Commit metadata and protected by digest and size checks.
+
+The effective model is:
+
+```text
+base canonical revision
+    + ordered Draft Domain Operations
+    = queryable draft.sqlite state
+```
+
+### 10.4 Canonical Commit Protocol
+
+All canonical Commits for one Novel pass through one asynchronous Commit Writer and are serialized even when their Drafts were edited concurrently.
+
+```text
+1. Freeze the Draft Operation sequence.
+2. Wait for that Draft's Writer Queue to drain.
+3. Validate Draft integrity and construct an immutable ChangeSet.
+4. Calculate the ChangeSet digest.
+5. Verify that any required Approval grants that exact digest.
+6. Acquire the per-Novel Commit Writer lock.
+7. Open a short `BEGIN IMMEDIATE` transaction on novel.sqlite.
+8. Compare current NovelRevision with the Draft baseRevision.
+9. Replay all Domain Operations and validate final domain invariants.
+10. Insert Commit metadata and its immutable payload reference.
+11. Increment NovelRevision exactly once.
+12. Insert the Novel outbox record.
+13. Commit the SQLite transaction.
+14. Mark the Draft Session committed and clean or archive its staging data.
+```
+
+Any Operation or invariant failure rolls back the complete canonical SQLite transaction. The canonical database therefore observes either the whole ChangeSet or none of it. A Draft may contain many short local transactions while still producing exactly one canonical NovelRevision increment.
+
+Direct replacement of `novel.sqlite` with a Draft file is excluded. File replacement would not safely compose with active readers, WAL state, Commit metadata, outbox publication, schema validation, or future process placement.
+
+### 10.5 Revision Staleness and Rebase
+
+Suppose two Drafts start from the same accepted state:
+
+```text
+Conversation A Draft: baseRevision = revision-105
+Conversation B Draft: baseRevision = revision-105
+```
+
+If A commits first, canonical state advances to `revision-106`. B's later Commit attempt detects a stale base and must not overwrite A. Revision staleness alone is not a semantic conflict; it requires Rebase.
+
+```mermaid
+sequenceDiagram
+    participant A as Conversation A
+    participant B as Conversation B
+    participant Writer as Canonical Commit Writer
+    participant Main as novel.sqlite
+
+    A->>Writer: commit(base=105)
+    Writer->>Main: BEGIN IMMEDIATE
+    Main-->>Writer: current=105
+    Writer->>Main: apply A ChangeSet, revision=106
+    Writer->>Main: COMMIT
+    Writer-->>A: committed revision-106
+
+    B->>Writer: commit(base=105)
+    Writer->>Main: BEGIN IMMEDIATE
+    Main-->>Writer: current=106
+    Writer->>Main: ROLLBACK without applying B
+    Writer-->>B: rebase required
+```
+
+Rebase creates a new working copy from the latest canonical revision and replays the stale Draft's Operations in order:
+
+```text
+1. Preserve the original Draft unchanged.
+2. Snapshot the latest canonical revision into a sibling rebase Draft.
+3. Replay each stale Draft Operation with its original preconditions.
+4. Record semantic conflicts instead of forcing an overwrite.
+5. Validate the rebuilt Draft and its final invariants.
+6. If conflict-free, atomically promote the rebuilt Draft and update baseRevision.
+7. If conflicted, preserve both the original Draft and the rebase candidate for resolution.
+```
+
+- Non-overlapping Operations rebase automatically.
+- Operations on the same entity may still merge automatically when they modify independent fields and preserve domain invariants.
+- Equivalent idempotent Operations may collapse to no-ops.
+- Rebase must not mutate the original Draft in place; failure or process interruption leaves recoverable source state.
+- Rebase changes the effective ChangeSet digest. Any Approval granted before Rebase becomes stale even when Rebase finds no semantic conflict.
+
+### 10.6 Conflict Model and Resolution
+
+```ts
+type NovelConflictKind =
+  | "field-modified"
+  | "entity-deleted"
+  | "entity-created"
+  | "parent-changed"
+  | "order-changed"
+  | "manuscript-block-modified"
+  | "domain-invariant";
+
+interface NovelConflict {
+  readonly id: NovelConflictId;
+  readonly draftSessionId: NovelDraftSessionId;
+  readonly operationId: NovelOperationId;
+
+  readonly kind: NovelConflictKind;
+  readonly entityType: NovelEntityType;
+  readonly entityId: string;
+  readonly fieldPath?: string;
+
+  readonly baseDigest?: string;
+  readonly canonicalDigest?: string;
+  readonly draftDigest?: string;
+}
+
+type NovelConflictResolution =
+  | { readonly strategy: "keep-canonical" }
+  | { readonly strategy: "keep-draft" }
+  | { readonly strategy: "drop-operation" }
+  | {
+      readonly strategy: "manual";
+      readonly replacement: NovelOperation;
+    };
+```
+
+Conflict granularity follows stable domain identities:
+
+| Canonical change | Draft change | Default result |
+| --- | --- | --- |
+| Different entities | Different entities | Automatic Rebase |
+| Same entity, independent fields | Independent fields | Automatic Rebase when invariants hold |
+| Same field | Same field | Conflict |
+| Delete entity | Update entity | Conflict |
+| Delete parent StoryUnit | Create or move child below it | Conflict |
+| Create distinct stable IDs | Create distinct stable IDs | Automatic Rebase |
+| Create same stable ID | Create same stable ID | Idempotent no-op or conflict after payload comparison |
+| Move different StoryUnits | Move different StoryUnits | Usually automatic Rebase |
+| Move same StoryUnit | Move same StoryUnit | Conflict |
+| Edit different Manuscript Blocks | Edit different Blocks | Automatic Rebase |
+| Edit same Manuscript Block | Edit same Block | Conflict |
+
+Conflict resolution produces new or replacement Domain Operations; it never patches canonical state outside the normal Commit path. `keep-draft` is still subject to permission, invariant, and conformance validation rather than meaning unconditional overwrite.
+
+### 10.7 Approval Binding
+
+Approval grants bind to an immutable ChangeSet identity rather than only a Draft Session ID:
+
+```ts
+interface NovelChangeSetApprovalRequest {
+  readonly draftSessionId: NovelDraftSessionId;
+  readonly baseRevision: NovelRevision;
+  readonly changeSetDigest: string;
+  readonly operationIds: readonly NovelOperationId[];
+}
+```
+
+- Appending, replacing, disabling, or resolving an Operation changes the effective ChangeSet digest and invalidates previous Approval.
+- A successful Rebase changes the base revision and invalidates previous Approval even if every Operation replayed automatically.
+- The Approval UI may show semantic summaries and load detailed values or manuscript Artifacts on demand; approval identity remains the digest.
+- Canonical Commit verifies the Approval grant after acquiring the Commit Writer lock and before applying the ChangeSet.
+
+### 10.8 Preserved Domain Mutation Rules
+
 - Fractional ordering keys handle frequent sibling and paragraph insertion.
-- Stable IDs preserve references across movement.
+- Stable IDs preserve references across movement and permit fine-grained conflict detection.
 - Tombstones and redirects preserve references across deletion, splitting, and merging.
-- Optimistic revisions detect stale concurrent commands.
+- Optimistic NovelRevision checks prevent stale Drafts from overwriting accepted state.
+- Domain Operation preconditions distinguish revision staleness from real semantic conflict.
 - A future collaborative editor may introduce CRDT behavior at the Paragraph text adapter boundary without changing the whole Novel domain contract.
 
 ## 11. Minimal Progressive Character and Location Models
@@ -835,12 +1116,15 @@ The following decisions remain outside the accepted Runtime implementation plan:
 2. Whether composite StoryUnits may explicitly override derived blocking and how descendant abandonment affects aggregate completion.
 3. Whether planned Chapter coverage uses a contiguous leaf range, an explicit ordered selection, or both.
 4. The exact command and event contracts for Block split, merge, move, and anchor repair.
-5. The storage layout for Manuscript Blocks and Novel-domain Journal records.
+5. The physical storage of Manuscript Block text and Artifacts, plus the exact canonical Commit-payload encoding, retention, integrity-repair, and garbage-collection policy; the per-Conversation durable Draft Session layout is accepted in Section 10.
 6. The exact OutlineRevision and ManuscriptRevision generation contracts and their relationship to the global NovelRevision.
 7. Whether RhythmBeat mismatch remains a warning by default or may become a required conformance error for selected beats.
 8. The concrete NovelRevision generation format and whether narrower component revisions are needed after measuring projection rebuild cost.
 9. The exact review-state contract for Tool-proposed Character and Location profile patches and projections.
 10. The exact conformance validator boundary between deterministic Tool checks, model-assisted analysis, and human acceptance.
-11. The concrete OutlineOperation union, proposal conflict resolution, and which low-risk outline operations may be auto-accepted by policy.
+11. The concrete OutlineOperation union, the mapping of each Operation to the general precondition and NovelConflict protocol, and which low-risk outline operations may be auto-accepted by policy.
 12. The initial LeafStoryUnit ready policy and whether different Agent definitions may select stricter readiness profiles.
 13. The contextual Character and Location readiness policies for different involvement roles and which missing stable details should block a leaf StoryUnit from reaching `ready`.
+14. The concrete SQLite snapshot mechanism used by `startDraft()` and Rebase, including WAL-aware backup, validation, and crash recovery.
+15. The Draft Operation table schema, canonical digest encoding, Artifact preparation protocol, and recovery behavior for an interrupted Draft mutation or canonical Commit.
+16. Draft staging retention limits, terminal-session cleanup timing, and whether selected committed or rolled-back Drafts may be retained for diagnostics without becoming authoritative history.

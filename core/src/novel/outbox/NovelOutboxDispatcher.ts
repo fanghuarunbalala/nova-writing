@@ -32,6 +32,15 @@ export interface NovelOutboxDispatchResult {
   readonly alreadyPublishedCount: number;
 }
 
+export const NOVEL_OUTBOX_ENTRY_DISPATCH_STATUS = {
+  recorded: "recorded",
+  duplicate: "duplicate",
+  alreadyPublished: "already-published",
+} as const;
+
+export type NovelOutboxEntryDispatchStatus =
+  (typeof NOVEL_OUTBOX_ENTRY_DISPATCH_STATUS)[keyof typeof NOVEL_OUTBOX_ENTRY_DISPATCH_STATUS];
+
 export class NovelOutboxDispatcher {
   private readonly store: NovelOutboxStore;
   private readonly publisher: NovelLifecycleOutputPublisher;
@@ -64,41 +73,16 @@ export class NovelOutboxDispatcher {
       const page = await this.store.listPending({ limit: this.pageSize });
       if (page.entries.length === 0) break;
       for (const entry of page.entries) {
-        const identity = identityOf(entry);
-        const attempt = await this.store.recordAttempt(identity);
-        if (attempt.status === NOVEL_OUTBOX_ATTEMPT_STATUS.missing) {
-          this.fail(NOVEL_OUTBOX_DISPATCH_FAILURE.attemptStateLost);
-        }
-        if (attempt.status === NOVEL_OUTBOX_ATTEMPT_STATUS.alreadyPublished) {
+        const status = await this.dispatchEntry(entry);
+        if (status === NOVEL_OUTBOX_ENTRY_DISPATCH_STATUS.alreadyPublished) {
           alreadyPublishedCount += 1;
-          continue;
-        }
-        attemptedCount += 1;
-
-        let publication;
-        try {
-          publication = await this.publisher.publish(entry.record);
-        } catch (error) {
-          const failure =
-            error instanceof NovelOutboxDispatchError
-              ? error.failure
-              : NOVEL_OUTBOX_DISPATCH_FAILURE.publisherFailed;
-          this.fail(failure);
-        }
-
-        const marked = await this.store.markPublished({
-          ...identity,
-          publishedAt: publication.recordedAt,
-        });
-        if (marked.status === NOVEL_OUTBOX_PUBLICATION_STATUS.missing) {
-          this.fail(NOVEL_OUTBOX_DISPATCH_FAILURE.publicationStateLost);
-        }
-        if (
-          publication.status === NOVEL_LIFECYCLE_PUBLICATION_STATUS.recorded
-        ) {
-          recordedCount += 1;
         } else {
-          duplicateCount += 1;
+          attemptedCount += 1;
+          if (status === NOVEL_OUTBOX_ENTRY_DISPATCH_STATUS.recorded) {
+            recordedCount += 1;
+          } else {
+            duplicateCount += 1;
+          }
         }
       }
     }
@@ -117,6 +101,45 @@ export class NovelOutboxDispatcher {
       alreadyPublishedCount,
     });
     return result;
+  }
+
+  async readNextPending(): Promise<NovelOutboxEntry | undefined> {
+    return (await this.store.listPending({ limit: 1 })).entries[0];
+  }
+
+  async dispatchEntry(
+    entry: NovelOutboxEntry,
+  ): Promise<NovelOutboxEntryDispatchStatus> {
+    const identity = identityOf(entry);
+    const attempt = await this.store.recordAttempt(identity);
+    if (attempt.status === NOVEL_OUTBOX_ATTEMPT_STATUS.missing) {
+      this.fail(NOVEL_OUTBOX_DISPATCH_FAILURE.attemptStateLost);
+    }
+    if (attempt.status === NOVEL_OUTBOX_ATTEMPT_STATUS.alreadyPublished) {
+      return NOVEL_OUTBOX_ENTRY_DISPATCH_STATUS.alreadyPublished;
+    }
+
+    let publication;
+    try {
+      publication = await this.publisher.publish(entry.record);
+    } catch (error) {
+      const failure =
+        error instanceof NovelOutboxDispatchError
+          ? error.failure
+          : NOVEL_OUTBOX_DISPATCH_FAILURE.publisherFailed;
+      this.fail(failure);
+    }
+
+    const marked = await this.store.markPublished({
+      ...identity,
+      publishedAt: publication.recordedAt,
+    });
+    if (marked.status === NOVEL_OUTBOX_PUBLICATION_STATUS.missing) {
+      this.fail(NOVEL_OUTBOX_DISPATCH_FAILURE.publicationStateLost);
+    }
+    return publication.status === NOVEL_LIFECYCLE_PUBLICATION_STATUS.recorded
+      ? NOVEL_OUTBOX_ENTRY_DISPATCH_STATUS.recorded
+      : NOVEL_OUTBOX_ENTRY_DISPATCH_STATUS.duplicate;
   }
 
   private fail(failure: NovelOutboxDispatchError["failure"]): never {

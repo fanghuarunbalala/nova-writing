@@ -804,6 +804,21 @@ Single-Store Dispatcher and Output bridge delivered:
 **Status:** N8-C single-Store dispatch completed; canonical/Draft dispatch
 composition and restart-safe scheduling are next.
 
+Cross-source dispatch coordination delivered:
+
+- the single-Store Dispatcher exposes one-entry delivery without weakening its
+  existing ordered drain API
+- a coordinator reads the current head of every canonical/Draft Store, compares
+  lifecycle timestamp, Event ID, and source key, then dispatches exactly the
+  globally earliest available Event
+- duplicate source registration is rejected and results retain both aggregate
+  counts and immutable per-source counts
+- repeated coordination after all rows are published is empty and side-effect
+  free, allowing startup and post-write scheduling to share the same operation
+
+**Status:** N8-C Outbox persistence, bridge, single-Store dispatch, and
+cross-source coordination completed. N8-D Approval Bridge is next.
+
 ### N8-D Approval Bridge
 
 Bind asynchronous Approval requests and responses to exact ChangeSet digests without holding SQLite transactions while waiting.

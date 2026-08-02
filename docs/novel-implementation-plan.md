@@ -396,7 +396,47 @@ Serialize canonical Commit for one Novel, validate base revision, replay the com
 
 ### N6-C History Payload
 
-Before implementing this step, resolve and document the exact immutable Commit payload encoding, filename, atomic preparation, digest verification, orphan cleanup, and missing-file recovery protocol. The accepted default direction is an external canonical JSON or JSONL payload with metadata authority in `novel.sqlite`.
+The immutable Commit history payload protocol is accepted as follows:
+
+```text
+novel-history/commits/<commitId>.json
+```
+
+- `payload_ref` stores only the safe basename `<commitId>.json`; absolute paths never enter platform-neutral contracts or canonical metadata.
+- The payload is canonical JSON encoded as UTF-8 with no byte-order mark and no trailing newline.
+- The exact version-1 envelope is:
+
+```ts
+interface NovelCommitPayloadV1 {
+  readonly payloadVersion: 1;
+  readonly commitId: NovelCommitId;
+  readonly novelId: NovelId;
+  readonly draftSessionId: NovelDraftSessionId;
+  readonly ownerConversationId: string;
+  readonly baseRevision: NovelRevision;
+  readonly resultRevision: NovelRevision;
+  readonly changeSetDigest: NovelChangeSetDigest;
+  readonly operationCount: number;
+  readonly committedAt: NovelTimestamp;
+  readonly operations: readonly {
+    readonly sequence: number;
+    readonly operationDigest: NovelOperationDigest;
+    readonly operation: NovelOperation;
+  }[];
+}
+```
+
+- `payload_digest` is SHA-256 over the exact payload bytes and uses `sha256:<64 lowercase hexadecimal characters>`.
+- `payload_size` is the exact UTF-8 byte length and must be a non-negative safe integer.
+- Commit ID, result revision, committed timestamp, complete payload bytes, digest, and size are fixed before the canonical SQLite transaction starts.
+- Preparation writes `.<commitId>.<nonce>.tmp` in the Commit directory using exclusive creation, flushes and fsyncs the file, atomically renames it to `<commitId>.json`, then fsyncs the directory.
+- If the final file already exists, preparation verifies canonical bytes, digest, and size. An exact match is idempotently reused; any mismatch is a fixed Commit payload identity conflict.
+- Immediately before inserting canonical Commit metadata, the Commit Writer reopens and verifies the prepared regular file, safe filename, exact size, and digest. SQLite never records an unverified payload reference.
+- A failed or stale canonical transaction leaves the prepared final file as an orphan. Startup recovery and pre-Commit reconciliation run under the per-Novel Commit Writer, delete recognized temporary files, and remove recognized final payload files that are not referenced by `novel_commits`.
+- Canonical Commit metadata remains authoritative if a referenced payload file later disappears. Recovery regenerates the exact payload only when the preserved frozen Draft still matches the stored ChangeSet digest; otherwise it reports a fixed history-integrity failure without deleting or rolling back the canonical Commit and without fabricating Operations.
+- Retention duration for committed Drafts and broad Artifact quotas remain deferred; they may improve recoverability but do not change this protocol.
+
+**Status:** protocol accepted; implementation proceeds in N6-B through N6-D.
 
 ### N6-D Validation
 

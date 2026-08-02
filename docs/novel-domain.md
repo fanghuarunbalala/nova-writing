@@ -746,6 +746,23 @@ All canonical Commits for one Novel pass through one asynchronous Commit Writer 
 
 Any Operation or invariant failure rolls back the complete canonical SQLite transaction. The canonical database therefore observes either the whole ChangeSet or none of it. A Draft may contain many short local transactions while still producing exactly one canonical NovelRevision increment.
 
+Canonical Commit history uses one immutable external canonical-JSON payload per
+Commit at `novel-history/commits/<commitId>.json`. The UTF-8 bytes contain the
+versioned Commit identity, source Draft and owner, base and result revisions,
+ChangeSet digest, committed timestamp, and the complete ordered Operations with
+their digests. The file has no trailing newline; its SHA-256 digest and exact
+byte size are stored in `novel_commits`, whose row remains Commit authority.
+
+Preparation uses an exclusively created same-directory temporary file, file
+fsync, atomic rename, and directory fsync before the canonical SQLite
+transaction. Existing identical final files are reused; mismatches are identity
+conflicts. The Commit transaction re-verifies the regular file, safe basename,
+size, and digest before recording it. Serialized recovery removes recognized
+temporary files and unreferenced final files. A missing referenced file never
+rolls back accepted Novel state: it is regenerated only from a preserved frozen
+Draft with the same ChangeSet digest, otherwise a fixed history-integrity error
+is exposed without fabricating history.
+
 Direct replacement of `novel.sqlite` with a Draft file is excluded. File replacement would not safely compose with active readers, WAL state, Commit metadata, outbox publication, schema validation, or future process placement.
 
 ### 10.5 Revision Staleness and Rebase

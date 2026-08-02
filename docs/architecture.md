@@ -5131,6 +5131,10 @@ Task 5B security policy is fixed as follows:
 
 The initial execution protocol uses a `ToolArgumentDigester` Port so the provider-neutral Core contract does not select a platform crypto implementation. `captureToolInvocation` defensively clones JSON-safe arguments before asynchronous transfer and binds the resulting immutable invocation to a validated `sha256:` digest. Errors and Trace records retain only safe identities and bounded metadata.
 
+`LayeredToolPermissionPolicy` captures immutable rules, orders them by built-in, Workspace, then Agent Definition source, and evaluates every matching rule. A matching deny wins over ask and allow; a built-in hard deny is reported explicitly and cannot be changed by approval. No matching rule produces the synthetic `builtin.default_deny` decision.
+
+An approve-once record is represented as a `ToolApprovalGrant`, not as a general reusable permission rule. It changes an `ask` result to `allow` only when all six approval identity fields match the current captured invocation. The decision trace includes only matching rule IDs and the consumed grant ID; it never includes Tool arguments, match configuration, or approval UI data.
+
 ## 22. Runtime Interaction and Approval
 
 Approval is the first concrete Runtime Interaction.

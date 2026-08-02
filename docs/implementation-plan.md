@@ -2531,6 +2531,17 @@ Task 5B is implemented as six separately reviewable steps:
 - 5B-E: cancellation, timeout, retry, and persisted Trace coordination
 - 5B-F: Pi execution bridge, integration validation, and Checkpoint 5B closure
 
+Task 5B-A delivered the immutable execution protocol, canonical argument-digest Port, approval identity, execution policy, side-effect status, stable `ToolError`, and redacted Tool Trace contracts.
+
+Task 5B-B delivered:
+
+- immutable layered permission rules from built-in, Workspace, and Agent Definition sources
+- deterministic source-order capture with `deny > ask > allow` effect precedence
+- built-in hard deny protection and an initial hard restriction for unavailable OS isolation
+- secure default deny when no rule grants or asks for the Tool
+- exact one-shot approval grants bound to the accepted approval identity and argument digest
+- decision traces containing only deterministic rule IDs and no Tool arguments or policy contents
+
 Expected deliverables after approval:
 
 - Tool execution facade and middleware pipeline

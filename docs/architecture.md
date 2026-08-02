@@ -5753,6 +5753,12 @@ The accepted first-version result envelope contains the child Conversation ID, t
 
 Task 6B-A freezes these values as schema-versioned Core contracts. `SubagentRequest` identifies the parent Conversation, Run, optional Turn, child Agent definition, objective, and requested reduced Tool policy. `SubagentBinding` adds the created child Conversation and immutable depth one. `SubagentResult` is terminal-only and enforces that completed results contain a bounded summary or child Artifact, failed results contain a safe code, and cancelled or orphaned results contain one registered lifecycle reason.
 
+Task 6B-B places `ChildConversationManager` behind provider-neutral parent-scope, Tool-policy-relation, child-creation, child-activation, and rollback Ports. The default Manager uses a short serialized reservation phase, then performs slow creation and activation outside that serializer. Reservations count immediately against both the four-per-parent-Run and sixteen-global limits, so concurrent creation cannot oversubscribe either boundary.
+
+Tool policy identifiers remain opaque to the Manager. A composition-owned relation reader authoritatively classifies the requested child policy as `same`, `reduced`, `expanded`, or `unknown`; only `same` and `reduced` pass the verifier. This keeps concrete Tool manifests and permission rules outside the Subagent public contract while preventing a child from expanding parent authority.
+
+Successful activation freezes a `running` binding. Creation failure releases the reservation, activation failure invokes the rollback Port and records a terminal `failed` binding, and rollback failure records `orphaned` for later recovery. Terminal status recording releases capacity exactly once while preserving the binding for later lifecycle projection and tree observation.
+
 ## 26. Persistence Model
 
 Logical local storage layout:

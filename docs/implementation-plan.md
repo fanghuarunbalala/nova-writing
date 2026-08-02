@@ -2799,6 +2799,16 @@ Task 6B-A delivered:
 - bounded objective and result summary content, child-owned Artifact references, safe error codes, and strict terminal-field consistency
 - exact-field, accessor, dense-array, timestamp, identity, Artifact ownership, depth, and cross-binding validation without Pi, Node, process, Provider, or Tool implementation types
 
+Task 6B-B delivered:
+
+- provider-neutral parent-scope, Tool-policy-relation, child-creation, child-activation, rollback, clock, and Manager Ports
+- `DefaultChildConversationManager` with short serialized reservations and asynchronous child creation/activation outside the critical section
+- atomic ownership of the accepted four-active-per-parent-Run and sixteen-active-global limits, including concurrent reservation protection and exact-once capacity release
+- first-version depth-one rejection before child creation and an opaque reduce-only Tool policy verifier that accepts only authoritative `same` or `reduced` relations
+- immutable `creating`, `running`, and terminal bindings; creation failure reservation cleanup; activation rollback; and orphaned recording when rollback itself fails
+- stable payload-free management errors plus structured `info` and `debug` logs that exclude objectives, Tool policy contents, paths, raw causes, and Runtime details
+- focused validation for successful activation, nesting rejection, policy expansion, per-Run/global limits, concurrent oversubscription, terminal capacity reuse, creation failure, invalid creation responses, activation rollback, rollback failure, and log safety
+
 Expected deliverables after approval:
 
 - child Conversation creation and metadata
@@ -2896,4 +2906,4 @@ No next checkpoint begins without explicit approval.
 
 Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
-The next documented Runtime step is Task 6B-B: `ChildConversationManager`, child creation and activation Ports, reduce-only Tool policy verification, and ownership of the accepted per-Run and global concurrency limits.
+The next documented Runtime step is Task 6B-C: child lifecycle coordination, structured `SubagentResult` delivery, and redacted parent projection OutputEvents.

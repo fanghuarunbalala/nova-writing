@@ -120,7 +120,7 @@ const conversation = await api.conversations.open(conversationId);
 await conversation.input.enqueue(inputEvent);
 
 for await (const event of conversation.events.subscribe({
-  start: { from: "sequence", afterSequence },
+  start: { afterSequence },
 })) {
   projection.apply(event);
 }
@@ -180,14 +180,18 @@ core/src/
 │  │  ├─ ProxyConversationInput.ts
 │  │  └─ ProxyConversationEvents.ts
 │  └─ client/
-│     └─ ConversationClient.ts
+│     ├─ ConversationClient.ts
+│     └─ ApiConversationEventSubscription.ts
 ├─ transport/
 │  ├─ ApiTransport.ts
 │  ├─ ApiRequest.ts
 │  ├─ ApiResponse.ts
-│  ├─ ApiEvent.ts
+│  ├─ ApiEventFrame.ts
 │  ├─ ApiErrorSnapshot.ts
-│  └─ schema/
+│  └─ ApiSubscription.ts
+├─ testing/
+│  └─ client/
+│     └─ ScriptedApiTransport.ts
 └─ projection/
    ├─ conversation/
    ├─ tools/
@@ -196,6 +200,33 @@ core/src/
 ```
 
 Exact file names and protocol envelopes remain subject to the Task 6 review gate. This document fixes the responsibility boundaries, not unresolved IPC details.
+
+### 6.1 Implemented Client Protocol Checkpoint
+
+The initial client-to-Host protocol checkpoint implements:
+
+- protocol version `1` request, response, Event-frame, error, and subscription contracts;
+- `DefaultNovelApiClient`, `ConversationClient`, and a Conversation-bound `ConversationProxy`;
+- Snapshot-only wire transfer for Input Events, persisted Conversation Events, Conversation state, Runtime Presence, receipts, and errors;
+- stable business-error responses separated from rejected Transport operations;
+- Handle-owned subscriptions whose closure never archives, deletes, or stops a durable Conversation;
+- a deterministic `ScriptedApiTransport` that forces JSON serialization round trips in contract tests.
+
+The first implemented Conversation operations are:
+
+```text
+conversation.input.enqueue
+conversation.events.list
+conversation.events.subscribe
+conversation.snapshot.get
+conversation.runtimePresence.get
+```
+
+`ConversationApi.open()` is client composition: it reads a Snapshot and creates a Proxy. It is not a remote Runtime activation command.
+
+Event delivery across a remote-capable Transport is at-least-once. Transport adapters preserve durable Event identity and Sequence; projections deduplicate replayed Events and resume with `afterSequence`. Automatic reconnect policy remains adapter-specific and is not implemented by the protocol checkpoint.
+
+`AbortSignal` is Handle-local Transport control and is never serialized into a request payload. Raw class instances, functions, `Error` objects, Node handles, Electron objects, and Runtime process details are forbidden across this boundary.
 
 ## 7. One API Router, Multiple Transports
 
@@ -611,8 +642,8 @@ Platform packages remain:
 
 The following choices remain deferred to their applicable implementation review gates:
 
-1. exact `NovelApiClient` module names and request envelopes;
-2. exact Task 6 protocol version negotiation and Transport framing;
+1. Conversation create/list and non-Conversation `NovelApiClient` modules;
+2. future protocol negotiation beyond the implemented client-to-Host version `1`, plus Host-to-Runtime Task 6 framing;
 3. whether the first GUI Runtime is in-process, an Electron Utility Process, or a standard child process;
 4. whether a standalone local or remote Novel server is shipped in the first product release;
 5. authentication and trusted actor derivation for HTTP, WebSocket, and local IPC clients;

@@ -87,6 +87,7 @@
     "smoke:conversation-runtime": "pnpm build && node scripts/conversation-runtime-smoke.mjs",
     "smoke:local-conversation": "pnpm build && node scripts/local-conversation-integration-smoke.mjs",
     "smoke:local-conversation-host": "pnpm build && node scripts/local-conversation-host-integration-smoke.mjs",
+    "smoke:client-proxy-protocol": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/client-proxy-protocol-typecheck.ts && node scripts/client-proxy-protocol-smoke.mjs",
     "smoke:conversation-events": "pnpm build && node scripts/conversation-event-live-smoke.mjs && node scripts/conversation-event-follow-smoke.mjs && node scripts/conversation-event-publishing-smoke.mjs && node scripts/conversation-event-integration-smoke.mjs",
     "smoke:conversation-event-integration": "pnpm build && node scripts/conversation-event-integration-smoke.mjs",
     "smoke:message-projection-integration": "pnpm build && node scripts/message-projection-integration-smoke.mjs"

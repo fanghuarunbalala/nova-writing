@@ -38,6 +38,22 @@ importers:
         specifier: 26.1.2
         version: 26.1.2
 
+  gui:
+    dependencies:
+      '@novel/core':
+        specifier: workspace:*
+        version: link:../core
+      '@novel/ui':
+        specifier: workspace:*
+        version: link:../ui
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
+    devDependencies:
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+
   ui:
     dependencies:
       '@novel/core':
@@ -62,6 +78,22 @@ importers:
       react-dom:
         specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
+
+  web:
+    dependencies:
+      '@novel/core':
+        specifier: workspace:*
+        version: link:../core
+      '@novel/ui':
+        specifier: workspace:*
+        version: link:../ui
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
+    devDependencies:
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
 
 packages:
 

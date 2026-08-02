@@ -14,6 +14,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
+    "smoke:app-composition": "pnpm --dir ../core build && pnpm build && pnpm --dir ../gui build && pnpm --dir ../web build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-app-composition-typecheck.tsx && node scripts/novel-app-composition-smoke.mjs",
     "smoke:conversation-projection-hook": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-projection-hook-typecheck.tsx && node scripts/conversation-projection-hook-smoke.mjs"
   },
   "dependencies": {

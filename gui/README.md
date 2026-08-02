@@ -1,7 +1,12 @@
 # Desktop GUI
 
-Reserved for the desktop GUI app.
+The desktop application uses Electron with a React Renderer and shares its
+presentation implementation through `@novel/ui`.
 
-Recommended path: Tauri + TypeScript frontend, sharing `@novel/core`.
+The current checkpoint contains only the platform-neutral Renderer composition
+entrypoint. Electron Main, Preload, IPC Transport, Runtime placement, Vite, and
+packaging remain later GUI steps.
 
-This app is intentionally not scaffolded yet, so the first GUI decision can still choose React, Svelte, Vue, or another frontend stack.
+The Renderer must never import Node-only Core adapters or unrestricted Electron
+APIs. Desktop capabilities enter shared UI through explicit platform ports and
+bounded extension contracts.

@@ -337,6 +337,16 @@ The package should export both:
 
 This allows a platform to use the standard application or construct a specialized layout without copying feature implementations.
 
+### 8.1 Implemented Shared Application Composition Checkpoint
+
+`@novel/ui` now exports `NovelApp` and `NovelAppProvider` as the stable shared React composition boundary. Applications inject an already composed `NovelApiClient`, one capability-based `FrontendPlatform`, optional bounded `NovelUiExtensions`, and an optional structured Logger. The shared application does not inspect browser globals or select a Transport.
+
+The first platform protocol contains narrow file-selection, clipboard, and notification ports plus explicit capability flags. File selection returns opaque frontend references rather than local filesystem paths. Desktop-only window, updater, tray, native-file, Electron, and Runtime controls remain outside this shared interface.
+
+The extension protocol supports first-party title-bar, route, sidebar-panel, Inspector-panel, settings-section, and command contributions. Arrays are captured immutably and duplicate IDs are rejected. It is not a dynamic plugin loader and does not authorize remote code loading.
+
+`@novel/gui` and `@novel/web` now provide thin `DesktopNovelApp` and `WebNovelApp` React entrypoints that forward the same application contract. Neither package implements a production Transport, Electron Main/Preload, HTTP server, Vite bootstrap, routing, or visual Shell in this checkpoint. Focused validation composes both entrypoints with their corresponding deterministic Mock Transport and proves that API, platform, and extension contexts reach the same shared component tree.
+
 ## 9. Platform Shells and UI Extensions
 
 Shared UI must not branch on global platform detection such as `isElectron` or inspect `window.novelDesktop` directly.

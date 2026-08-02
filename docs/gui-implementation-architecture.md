@@ -609,6 +609,12 @@ Inspector targets use a small platform-neutral identity envelope until concrete 
 
 `NovelApp` accepts an injected Inspector Store or creates a local one, and derives the Shell Inspector width from that Store unless an explicit Shell override is supplied. Opening, resizing, navigating, or closing the Inspector preserves the mounted central Conversation subtree. Renderer registration and domain query adapters remain the next Inspector checkpoint.
 
+### 12.2 Implemented Inspector Renderer Checkpoint
+
+An immutable `InspectorRendererRegistry` now maps platform-neutral target kinds to shared React renderers. The Store-connected `InspectorPanel` owns only common chrome and lifecycle presentation: target heading, local back navigation, normal or expanded width, close, loading, stale, stable-code error, unavailable, and missing-renderer states. It never prints target parameters or raw query failures.
+
+`NovelApp` renders this panel by default and accepts an injected Registry while retaining an explicit Shell Inspector override for bounded host customization. Renderer changes and Inspector navigation leave the central Conversation subtree mounted. Concrete Character, Location, Outline, Manuscript, and Schedule query adapters remain separate checkpoints because their read contracts do not all exist yet.
+
 ## 13. Referencing Inspector Content in Conversation
 
 The Inspector provides `Reference in Conversation` on eligible StoryUnits, Manuscript blocks, Character fields, Location fields, proposal operations, and task records.

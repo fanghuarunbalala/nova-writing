@@ -247,6 +247,78 @@ const NOVEL_THEME_CSS = `
   border-left: 0;
 }
 
+.novel-inspector-panel {
+  min-height: 100%;
+  padding: 18px;
+  color: var(--novel-text-primary);
+  background: var(--novel-surface-quiet);
+}
+
+.novel-inspector-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--novel-border);
+  padding-bottom: 14px;
+}
+
+.novel-inspector-heading span {
+  color: var(--novel-text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.novel-inspector-heading h2 {
+  margin: 4px 0 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.novel-inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.novel-inspector-actions button {
+  border: 1px solid var(--novel-border-strong);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--novel-text-primary);
+  background: var(--novel-surface-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.novel-inspector-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.novel-inspector-actions button:focus-visible {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: 1px;
+}
+
+.novel-inspector-status,
+.novel-inspector-empty {
+  margin: 14px 0 0;
+  color: var(--novel-text-secondary);
+  font-size: 13px;
+}
+
+.novel-inspector-status[data-status="error"],
+.novel-inspector-status[data-status="unavailable"] {
+  color: #8a4141;
+}
+
+.novel-inspector-content {
+  padding-top: 16px;
+}
+
 .novel-conversation-view {
   width: min(840px, 100%);
   margin: 0 auto;

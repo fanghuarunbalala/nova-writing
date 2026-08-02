@@ -20,6 +20,9 @@ import {
 } from "../conversation/index.js";
 import { ConversationProjectionView } from "../conversation/view/index.js";
 import {
+  emptyInspectorRendererRegistry,
+  InspectorPanel,
+  type InspectorRendererRegistry,
   InspectorStoreProvider,
   type InspectorStore,
   type InspectorStoreInitialState,
@@ -32,6 +35,7 @@ export interface NovelAppProps extends NovelAppProviderProps {
   readonly initialShellState?: ApplicationShellState;
   readonly inspectorStore?: InspectorStore;
   readonly initialInspectorState?: InspectorStoreInitialState;
+  readonly inspectorRenderers?: InspectorRendererRegistry;
   readonly children?: ReactNode;
 }
 
@@ -46,7 +50,10 @@ export function NovelApp(props: NovelAppProps) {
           store={props.inspectorStore}
           initialState={props.initialInspectorState}
         >
-          <ConnectedApplicationShell shell={props.shell}>
+          <ConnectedApplicationShell
+            shell={props.shell}
+            inspectorRenderers={props.inspectorRenderers}
+          >
             {props.children}
           </ConnectedApplicationShell>
         </InspectorStoreProvider>
@@ -57,9 +64,11 @@ export function NovelApp(props: NovelAppProps) {
 
 function ConnectedApplicationShell({
   shell,
+  inspectorRenderers,
   children,
 }: {
   readonly shell?: Omit<ApplicationShellProps, "children">;
+  readonly inspectorRenderers?: InspectorRendererRegistry;
   readonly children?: ReactNode;
 }) {
   const snapshot = useApplicationShellSnapshot();
@@ -75,6 +84,12 @@ function ConnectedApplicationShell({
     context,
     sidebarMode: shell?.sidebarMode ?? snapshot.sidebarMode,
     inspectorMode: shell?.inspectorMode ?? inspectorSnapshot.mode,
+    inspector:
+      shell?.inspector ?? (
+        <InspectorPanel
+          registry={inspectorRenderers ?? emptyInspectorRendererRegistry}
+        />
+      ),
   };
   if (children !== undefined || snapshot.conversation === undefined) {
     return <ApplicationShell {...shellProps}>{children}</ApplicationShell>;

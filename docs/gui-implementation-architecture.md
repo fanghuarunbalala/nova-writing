@@ -326,6 +326,12 @@ Responsibilities:
 - current Meta selection;
 - sidebar expansion and application-level UI preferences.
 
+#### Implemented Shell Store Checkpoint
+
+`ApplicationShellStore` now exposes immutable external-store snapshots for current Workspace, Novel, Meta, Conversation, Agent, and sidebar presentation mode. It captures identity records defensively, suppresses equivalent updates, increments one local revision per effective command, and remains non-durable UI state.
+
+`NovelApp` accepts either an injected Store or initial Shell state and binds the context bar and sidebar mode through React `useSyncExternalStore`. Updating Shell context or collapsing the sidebar does not recreate the central Conversation subtree. Inspector target identity, open/close mode, reviewer state, loading, staleness, and query failures remain owned by the later `InspectorStore` checkpoint.
+
 ## 8. Current Workspace and Meta
 
 The context bar remains visible below the top menu:

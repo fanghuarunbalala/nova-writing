@@ -14,6 +14,7 @@ export interface ConversationSidebarItem {
 }
 
 export interface ProjectSidebarProps {
+  readonly mode?: "expanded" | "collapsed";
   readonly conversations?: readonly ConversationSidebarItem[];
   readonly onNavigate?: (item: ProjectNavigationItem) => void;
   readonly onConversationSelect?: (conversationId: string) => void;
@@ -33,12 +34,13 @@ const NAVIGATION_ITEMS: readonly {
 ]);
 
 export function ProjectSidebar({
+  mode = "expanded",
   conversations = [],
   onNavigate,
   onConversationSelect,
 }: ProjectSidebarProps) {
   return (
-    <aside className="novel-project-sidebar" aria-label="项目导航">
+    <aside className="novel-project-sidebar" data-sidebar-mode={mode} aria-label="项目导航">
       <section className="novel-sidebar-section">
         <h2 className="novel-sidebar-heading">创作</h2>
         {NAVIGATION_ITEMS.map((item) => (
@@ -51,7 +53,7 @@ export function ProjectSidebar({
             <span className="novel-sidebar-marker" aria-hidden="true">
               {item.marker}
             </span>
-            {item.label}
+            <span className="novel-sidebar-label">{item.label}</span>
           </button>
         ))}
       </section>
@@ -59,7 +61,7 @@ export function ProjectSidebar({
         <h2 className="novel-sidebar-heading">对话</h2>
         {conversations.length === 0 ? (
           <div className="novel-sidebar-button" aria-disabled="true">
-            暂无对话
+            <span className="novel-sidebar-label">暂无对话</span>
           </div>
         ) : (
           conversations.map((conversation) => (
@@ -73,7 +75,7 @@ export function ProjectSidebar({
               <span className="novel-sidebar-marker" aria-hidden="true">
                 ●
               </span>
-              {conversation.title}
+              <span className="novel-sidebar-label">{conversation.title}</span>
             </button>
           ))
         )}

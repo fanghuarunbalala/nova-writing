@@ -5,4 +5,5 @@ export * from "./conversation/index.js";
 export * from "./extensions/index.js";
 export * from "./platform/index.js";
 export * from "./shell/index.js";
+export * from "./state/index.js";
 export * from "./theme/index.js";

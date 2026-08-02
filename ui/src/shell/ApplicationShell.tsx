@@ -13,10 +13,12 @@ import {
   type ConversationSidebarItem,
 } from "./ProjectSidebar.js";
 import { TopMenu } from "./TopMenu.js";
+import type { SidebarMode } from "../state/index.js";
 
 export interface ApplicationShellProps {
   readonly context?: CurrentContextBarProps;
   readonly conversations?: readonly ConversationSidebarItem[];
+  readonly sidebarMode?: SidebarMode;
   readonly inspectorMode?: InspectorMode;
   readonly inspector?: ReactNode;
   readonly composer?: ReactNode;
@@ -26,6 +28,7 @@ export interface ApplicationShellProps {
 export function ApplicationShell({
   context,
   conversations,
+  sidebarMode = "expanded",
   inspectorMode = "closed",
   inspector,
   composer,
@@ -41,8 +44,8 @@ export function ApplicationShell({
       </div>
       <TopMenu />
       <CurrentContextBar {...context} />
-      <div className="novel-shell-body" data-inspector-mode={inspectorMode}>
-        <ProjectSidebar conversations={conversations} />
+      <div className="novel-shell-body" data-inspector-mode={inspectorMode} data-sidebar-mode={sidebarMode}>
+        <ProjectSidebar mode={sidebarMode} conversations={conversations} />
         <ConversationWorkspace composer={composer}>{children}</ConversationWorkspace>
         <InspectorHost mode={inspectorMode}>{inspector}</InspectorHost>
       </div>

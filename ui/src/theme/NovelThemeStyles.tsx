@@ -125,6 +125,18 @@ const NOVEL_THEME_CSS = `
   grid-template-columns: 244px minmax(320px, 0.72fr) minmax(520px, 1.28fr);
 }
 
+.novel-shell-body[data-sidebar-mode="collapsed"] {
+  grid-template-columns: 64px minmax(360px, 1fr) 0;
+}
+
+.novel-shell-body[data-sidebar-mode="collapsed"][data-inspector-mode="normal"] {
+  grid-template-columns: 64px minmax(360px, 1fr) minmax(320px, 34vw);
+}
+
+.novel-shell-body[data-sidebar-mode="collapsed"][data-inspector-mode="expanded"] {
+  grid-template-columns: 64px minmax(320px, 0.72fr) minmax(520px, 1.28fr);
+}
+
 .novel-project-sidebar {
   min-height: 0;
   overflow: auto;
@@ -166,6 +178,20 @@ const NOVEL_THEME_CSS = `
   width: 18px;
   color: var(--novel-accent);
   text-align: center;
+}
+
+.novel-project-sidebar[data-sidebar-mode="collapsed"] .novel-sidebar-heading,
+.novel-project-sidebar[data-sidebar-mode="collapsed"] .novel-sidebar-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.novel-project-sidebar[data-sidebar-mode="collapsed"] .novel-sidebar-button {
+  justify-content: center;
 }
 
 .novel-conversation-workspace {

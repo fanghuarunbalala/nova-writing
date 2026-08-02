@@ -10,6 +10,8 @@ declare const novelOperationIdBrand: unique symbol;
 declare const novelCommitIdBrand: unique symbol;
 declare const novelConflictIdBrand: unique symbol;
 declare const novelArtifactIdBrand: unique symbol;
+declare const characterIdBrand: unique symbol;
+declare const locationIdBrand: unique symbol;
 
 export type NovelId = string & { readonly [novelIdBrand]: "NovelId" };
 export type NovelDraftSessionId = string & {
@@ -27,6 +29,8 @@ export type NovelConflictId = string & {
 export type NovelArtifactId = string & {
   readonly [novelArtifactIdBrand]: "NovelArtifactId";
 };
+export type CharacterId = string & { readonly [characterIdBrand]: "CharacterId" };
+export type LocationId = string & { readonly [locationIdBrand]: "LocationId" };
 
 const SAFE_IDENTITY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
 
@@ -52,6 +56,14 @@ export function captureNovelConflictId(value: unknown): NovelConflictId {
 
 export function captureNovelArtifactId(value: unknown): NovelArtifactId {
   return captureIdentity("artifactId", value) as NovelArtifactId;
+}
+
+export function captureCharacterId(value: unknown): CharacterId {
+  return captureIdentity("characterId", value) as CharacterId;
+}
+
+export function captureLocationId(value: unknown): LocationId {
+  return captureIdentity("locationId", value) as LocationId;
 }
 
 function captureIdentity(field: string, value: unknown): string {

@@ -5,8 +5,9 @@ import {
   captureNovelTimestamp,
   type NovelDraftSession,
 } from "../../../novel/index.js";
+import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
 
-export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 1 as const;
+export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 2 as const;
 
 export function initializeNovelDraftSqliteSchema(
   databasePath: string,
@@ -129,6 +130,14 @@ const DRAFT_MIGRATIONS = [
       ON draft_outbox(operation_sequence, event_id)
       WHERE published_at IS NULL;
     `,
+  },
+  {
+    version: 2,
+    name: "character_location_profiles",
+    sql: NOVEL_ENTITY_SCHEMA_SQL.replaceAll(
+      "CREATE TABLE ",
+      "CREATE TABLE IF NOT EXISTS ",
+    ).replaceAll("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS "),
   },
 ] as const;
 

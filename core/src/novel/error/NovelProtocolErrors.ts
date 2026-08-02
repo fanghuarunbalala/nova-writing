@@ -33,6 +33,9 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "operationPayload",
   "operationPrecondition",
   "operationDigest",
+  "characterId",
+  "locationId",
+  "entityProfile",
 ]);
 
 export class NovelProtocolValidationError extends Error {

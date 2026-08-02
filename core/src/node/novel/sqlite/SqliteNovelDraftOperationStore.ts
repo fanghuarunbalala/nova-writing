@@ -7,6 +7,7 @@ import {
   NovelInvariantViolationError,
   NovelOperationHandlerNotFoundError,
   NovelOperationIdentityConflictError,
+  NovelOperationPreconditionError,
   NovelOperationSynchronousHandlerError,
   NovelProtocolValidationError,
   canonicalizeNovelOperation,
@@ -24,6 +25,7 @@ import { canonicalStringifyJson } from "../../../event/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
 import { digestNovelSha256Text } from "./NodeSha256NovelOperationDigester.js";
+import { initializeNovelDraftSqliteSchema } from "./NovelDraftSqliteSchema.js";
 
 interface DraftMetadataRow {
   draft_session_id: string;
@@ -96,7 +98,9 @@ export class SqliteNovelDraftOperationStore<TContext>
     let database: DatabaseSync | undefined;
     let transactionStarted = false;
     try {
-      database = new DatabaseSync(this.databasePath(session));
+      const databasePath = this.databasePath(session);
+      initializeNovelDraftSqliteSchema(databasePath, session);
+      database = new DatabaseSync(databasePath);
       configure(database);
       database.exec("BEGIN IMMEDIATE");
       transactionStarted = true;
@@ -269,6 +273,7 @@ function assertSession(
 function isSafeOperationError(error: unknown): boolean {
   return (
     error instanceof NovelOperationIdentityConflictError ||
+    error instanceof NovelOperationPreconditionError ||
     error instanceof NovelInvariantViolationError ||
     error instanceof NovelOperationHandlerNotFoundError ||
     error instanceof NovelOperationSynchronousHandlerError ||

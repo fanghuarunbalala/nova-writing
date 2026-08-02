@@ -9,6 +9,7 @@ import {
   NOVEL_DATABASE_FAILURE,
   NovelDatabaseError,
 } from "./NovelDatabaseErrors.js";
+import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
 
 interface NovelSqliteMigration {
   readonly version: number;
@@ -98,6 +99,11 @@ const NOVEL_MIGRATIONS: readonly NovelSqliteMigration[] = [
       ON novel_outbox(created_at, event_id)
       WHERE published_at IS NULL;
     `,
+  },
+  {
+    version: 2,
+    name: "character_location_profiles",
+    sql: NOVEL_ENTITY_SCHEMA_SQL,
   },
 ];
 

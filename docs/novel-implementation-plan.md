@@ -349,6 +349,17 @@ Implement Character and Location application and query services against explicit
 
 Cover Draft create/replace/delete, canonical isolation, entity-version conflicts, restart recovery, invalid profile fields, and content-safe logs.
 
+### N5-E Delivered
+
+- branded Character and Location identities plus strict progressively completed stable-profile models
+- shared canonical and Draft SQLite schema for versioned Character and Location records
+- deterministic create, full-replace, and safe-delete Operations with exact payload and precondition validation
+- atomic Draft execution through the shared Operation Registry, Mutation Service, per-Draft Writer, Journal, entity tables, and Outbox
+- platform-neutral Character, Location, and explicit-scope query services with a Node SQLite composition factory
+- canonical isolation, entity-version rollback, restart recovery, dynamic-field rejection, malformed Operation rejection, and content-safe log coverage
+
+**Status:** completed by the focused Character and Location vertical-slice commit.
+
 ## 12. Task N6: Canonical Commit
 
 ### N6-A ChangeSet

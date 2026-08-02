@@ -170,6 +170,12 @@ function validateNovelDatabaseStructure(database: DatabaseSync): void {
       `SELECT event_id, novel_id, conversation_id, event_type, schema_version,
               event_json, event_digest, created_at, published_at, attempt_count
        FROM novel_outbox LIMIT 0`,
+      `SELECT id, name, aliases_json, summary, initial_state, author_notes,
+              entity_version, created_at, updated_at
+       FROM novel_characters LIMIT 0`,
+      `SELECT id, name, aliases_json, summary, initial_state, author_notes,
+              entity_version, created_at, updated_at
+       FROM novel_locations LIMIT 0`,
     ]) {
       database.prepare(statement);
     }

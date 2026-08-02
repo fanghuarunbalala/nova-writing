@@ -1,5 +1,7 @@
 /** Payload-free lifecycle failures shared by future Draft and Commit services. */
 import type {
+  CharacterId,
+  LocationId,
   NovelDraftSessionId,
   NovelId,
   NovelOperationId,
@@ -180,6 +182,26 @@ export class NovelDraftOperationPersistenceError extends Error {
     public readonly operationId?: NovelOperationId,
   ) {
     super("Novel Draft Operation persistence failed");
+  }
+}
+
+export type NovelOperationPreconditionFailure =
+  | "entity_exists"
+  | "entity_missing"
+  | "entity_version_mismatch"
+  | "entity_referenced";
+
+export class NovelOperationPreconditionError extends Error {
+  override readonly name = "NovelOperationPreconditionError";
+  readonly code = "NOVEL_OPERATION_PRECONDITION_FAILED" as const;
+
+  constructor(
+    public readonly failure: NovelOperationPreconditionFailure,
+    public readonly entityType: "character" | "location",
+    public readonly entityId: CharacterId | LocationId,
+    public readonly operationId: NovelOperationId,
+  ) {
+    super("Novel Operation precondition failed");
   }
 }
 

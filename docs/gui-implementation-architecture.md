@@ -1,0 +1,1317 @@
+# Novel GUI Implementation Architecture
+
+## 1. Document Status
+
+This document records the accepted implementation architecture for the shared React UI, Electron desktop GUI, Web shell, chat-first Novel workflow, contextual Inspector, and domain-specific change review.
+
+- It refines `docs/client-ui-architecture.md` rather than replacing its package and Transport boundaries.
+- It consumes the accepted Story Outline, Manuscript, Draft, ChangeSet, Approval, query, and projection semantics in `docs/novel-domain.md` rather than redefining the Novel domain.
+- It describes target modules, component responsibilities, read models, state flow, and implementation stages.
+- It does not claim that `ui/`, GUI Transport, Novel query endpoints, or domain reviewers have already been implemented.
+- It does not authorize out-of-order implementation outside the active Runtime and Novel implementation plans.
+- Exact API envelopes, Task 6 IPC framing, React libraries, styling libraries, editor libraries, and packaging choices remain subject to their applicable review gates.
+
+## 2. Accepted Product Interaction
+
+The GUI is chat-first.
+
+The central Conversation remains visible while the user inspects, references, reviews, and approves Novel content in a contextual right-side Inspector.
+
+```text
+Top Menu
+    Project / Edit / Publish / Help
+
+Context Bar
+    Workspace / Current Meta / Conversation / Agent
+
+Left Sidebar
+    New Conversation
+    Schedule
+    Outline
+    Characters
+    Locations
+    Manuscript
+    Conversation list
+
+Center
+    Conversation timeline
+    structured cards
+    message composer
+
+Right Inspector
+    read-only content
+    structured Diff review
+    status and evidence
+    approval actions
+```
+
+Accepted interaction rules:
+
+1. Conversation is the primary application surface.
+2. Selecting Outline, Character, Location, Manuscript, Schedule, or a Conversation card opens the right Inspector without replacing the Conversation.
+3. The Inspector is closed by default and may expand when domain review needs more horizontal space.
+4. Viewing and selecting content are queries and local UI state transitions, not Conversation InputEvents.
+5. Referencing an Inspector object adds a structured reference to the message composer rather than copying an untracked text fragment.
+6. Sending a message with references enters the Conversation through the normal InputEvent path.
+7. Agent-proposed Novel changes appear as typed cards in the Conversation timeline.
+8. Opening a proposal card queries the full domain review model and displays a domain-specific reviewer.
+9. A proposal OutputEvent does not prove that Novel state has changed.
+10. Accepted Novel state changes only through the Draft and Commit protocols defined by the Novel domain.
+
+## 3. Visual Direction
+
+The shared graphical UI uses a quiet white presentation:
+
+```text
+primary surface       #FFFFFF
+secondary surface     #F7F8FA
+quiet surface         #FAFAFA
+border                #E5E7EB
+strong border         #D1D5DB
+primary text          #20242A
+secondary text        #6B7280
+low-saturation accent blue or blue-gray
+```
+
+Color semantics are reserved for state and review meaning:
+
+| Meaning | Presentation |
+| --- | --- |
+| added operation | green block plus `+` marker |
+| deleted operation | red block plus `-` marker and deleted text treatment |
+| moved operation | blue block plus move marker |
+| unchanged context | white or neutral gray |
+| warning or awaiting decision | amber status token |
+| error or blocked | red status token with text or icon |
+| success or completed | green status token with text or icon |
+
+Color is never the only signal. Every state also has a label, marker, icon, or accessible description.
+
+## 4. Package and Process Architecture
+
+```mermaid
+flowchart TB
+    subgraph Shared["Shared packages"]
+        Core["@novel/core"]
+        UI["@novel/ui"]
+    end
+
+    subgraph Desktop["Desktop GUI"]
+        Renderer["React Renderer"]
+        Preload["Electron Preload"]
+        Main["Electron Main"]
+    end
+
+    subgraph Web["Web"]
+        Browser["React Browser Shell"]
+        Server["HTTP / WebSocket Host"]
+    end
+
+    Runtime["Conversation Runtime"]
+    Novel["Novel Application"]
+    Storage["Runtime and Novel Storage"]
+
+    UI --> Renderer
+    UI --> Browser
+    Core --> UI
+    Renderer --> Preload
+    Preload --> Main
+    Browser --> Server
+    Main --> Core
+    Server --> Core
+    Main --> Novel
+    Server --> Novel
+    Main --> Storage
+    Server --> Storage
+    Main --> Runtime
+    Server --> Runtime
+```
+
+The desktop Renderer and Web Browser use the same React feature implementation from `@novel/ui`.
+
+Platform entrypoints inject:
+
+- `NovelApiClient`;
+- `ConversationClient` and `ConversationProxy` composition;
+- `FrontendPlatform` ports;
+- platform capabilities;
+- UI extensions;
+- desktop or Web Transport.
+
+The Renderer never imports Node-only adapters, SQLite, Electron Main APIs, Provider credentials, Runtime implementations, or Tool handlers.
+
+## 5. Target Repository Layout
+
+```text
+core/src/
+├─ client/
+│  ├─ NovelApiClient.ts
+│  ├─ DefaultNovelApiClient.ts
+│  └─ transport/
+├─ conversation/
+│  ├─ proxy/
+│  └─ client/
+├─ projection/
+│  ├─ conversation/
+│  ├─ card/
+│  └─ client-state/
+└─ novel/
+   ├─ model/
+   ├─ operation/
+   ├─ service/
+   ├─ query/
+   ├─ projection/
+   ├─ integration/
+   └─ port/
+
+ui/src/
+├─ app/
+├─ shell/
+├─ context/
+├─ workspace/
+├─ conversation/
+├─ composer/
+├─ card/
+├─ inspector/
+├─ review/
+├─ outline/
+├─ manuscript/
+├─ character/
+├─ location/
+├─ schedule/
+├─ state/
+├─ platform/
+├─ theme/
+└─ index.ts
+
+gui/src/
+├─ main/
+├─ preload/
+├─ renderer/
+│  ├─ DesktopNovelApp.tsx
+│  ├─ ElectronFrontendPlatform.ts
+│  ├─ transport/
+│  ├─ extensions/
+│  └─ features/
+└─ shared/
+
+web/src/
+├─ WebNovelApp.tsx
+├─ WebFrontendPlatform.ts
+├─ transport/
+├─ extensions/
+└─ features/
+```
+
+The exact package-level files remain implementation targets. Existing accepted Core and Novel files are extended rather than moved solely to match this illustrative tree.
+
+## 6. Shared React Application Composition
+
+```mermaid
+classDiagram
+    class NovelApp {
+        +NovelApiClient api
+        +FrontendPlatform platform
+        +NovelUiExtensions extensions
+    }
+
+    class ApplicationShell
+    class ContextBar
+    class ProjectSidebar
+    class ConversationWorkspace
+    class InspectorHost
+    class Composer
+
+    NovelApp *-- ApplicationShell
+    ApplicationShell *-- ContextBar
+    ApplicationShell *-- ProjectSidebar
+    ApplicationShell *-- ConversationWorkspace
+    ApplicationShell *-- InspectorHost
+    ConversationWorkspace *-- Composer
+```
+
+Recommended component composition:
+
+```tsx
+<NovelAppProvider api={api} platform={platform} extensions={extensions}>
+  <ApplicationShell>
+    <TopMenu />
+    <CurrentContextBar />
+    <ProjectSidebar />
+    <ConversationWorkspace />
+    <InspectorHost />
+  </ApplicationShell>
+</NovelAppProvider>
+```
+
+The shared application does not detect Electron or Web through globals. Desktop and Web shells provide capabilities explicitly.
+
+## 7. Application State Boundaries
+
+The GUI uses multiple focused stores rather than one application-wide mutable object.
+
+```mermaid
+flowchart LR
+    Events["Conversation Events"] --> ConversationProjection["ConversationProjectionStore"]
+    Queries["Novel Queries"] --> NovelReadCache["NovelReadCache"]
+    Selection["User selection"] --> InspectorStore["InspectorStore"]
+    References["Referenced content"] --> ComposerStore["ComposerDraftStore"]
+    Shell["Workspace and route"] --> ShellStore["ApplicationShellStore"]
+
+    ConversationProjection --> React["React Views"]
+    NovelReadCache --> React
+    InspectorStore --> React
+    ComposerStore --> React
+    ShellStore --> React
+```
+
+### 7.1 `ConversationProjectionStore`
+
+Responsibilities:
+
+- apply persisted Conversation Events in Sequence order;
+- deduplicate replayed Events;
+- maintain user messages, assistant drafts, completed assistant messages, cards, Runtime Presence, Run state, Turn state, Tool trace summaries, and Approval summaries;
+- expose immutable snapshots to React;
+- rebuild from Journal replay;
+- never become an independent durable history.
+
+### 7.2 `NovelReadCache`
+
+Responsibilities:
+
+- cache query results by `NovelReadScope`, entity identity, revision, and query parameters;
+- distinguish canonical and Draft reads;
+- invalidate or replace results when NovelRevision, Draft revision, or explicit outbox-delivered Novel lifecycle Events change;
+- never mutate Novel domain state;
+- never infer canonical acceptance from an OutputEvent alone.
+
+### 7.3 `InspectorStore`
+
+Responsibilities:
+
+- identify the currently opened Inspector target;
+- record whether the Inspector is closed, normal width, or expanded review width;
+- store the active reviewer tab and selected UI node;
+- coordinate loading, loaded, stale, error, and unavailable states;
+- keep Inspector selection local unless the user explicitly sends a Conversation reference or domain command.
+
+### 7.4 `ComposerDraftStore`
+
+Responsibilities:
+
+- maintain unsent user text;
+- maintain structured context references;
+- add or remove references from the Inspector;
+- preserve drafts while the Inspector opens or closes;
+- serialize the final input through the accepted Conversation input protocol;
+- never write Novel state directly.
+
+### 7.5 `ApplicationShellStore`
+
+Responsibilities:
+
+- current Workspace identity;
+- current Novel identity;
+- current Conversation identity;
+- current Agent presentation identity;
+- current Meta selection;
+- sidebar expansion and application-level UI preferences.
+
+## 8. Current Workspace and Meta
+
+The context bar remains visible below the top menu:
+
+```text
+Workspace / Meta / Conversation / Agent
+```
+
+Recommended view model:
+
+```ts
+interface CurrentApplicationContextView {
+  readonly workspace: WorkspaceContextView;
+  readonly meta?: CurrentMetaView;
+  readonly conversation?: ConversationContextView;
+  readonly agent?: AgentContextView;
+}
+
+interface WorkspaceContextView {
+  readonly workspaceId: string;
+  readonly displayName: string;
+}
+
+type CurrentMetaKind =
+  | "novel"
+  | "story-outline"
+  | "story-unit"
+  | "manuscript"
+  | "manuscript-block"
+  | "character"
+  | "location"
+  | "publication"
+  | "schedule";
+
+interface CurrentMetaView {
+  readonly kind: CurrentMetaKind;
+  readonly targetId: string;
+  readonly displayPath: readonly string[];
+  readonly readScope: NovelReadScope;
+  readonly sourceRevision?: NovelRevision;
+}
+```
+
+UI examples:
+
+```text
+Workspace  雾港回声
+Meta       StoryOutline / 灯塔调查线 / 追踪错误目标
+Conversation 继续第三卷
+Agent      Novel Writer
+```
+
+The default product UI shows display names, not Store paths, database paths, raw IDs, Runtime instance IDs, or credentials. A dedicated diagnostics view may expose safe identifiers when explicitly enabled.
+
+`Meta` means the current Novel object or scope the user is viewing. It is not Runtime metadata.
+
+## 9. Left Sidebar Architecture
+
+The sidebar order is fixed initially:
+
+```text
+New Conversation
+Schedule
+
+Novel Content
+    Outline
+    Characters
+    Locations
+    Manuscript
+
+Conversations
+    current and recent Conversations
+```
+
+Recommended component tree:
+
+```text
+ProjectSidebar
+├─ NewConversationButton
+├─ ScheduleNavigationItem
+├─ NovelContentNavigation
+│  ├─ OutlineNavigationItem
+│  ├─ CharacterNavigationItem
+│  ├─ LocationNavigationItem
+│  └─ ManuscriptNavigationItem
+└─ ConversationNavigation
+   └─ ConversationNavigationItem[]
+```
+
+Click behavior:
+
+- `Schedule` opens `ScheduleInspector`.
+- `Outline` opens `StoryOutlineInspector` and sets Meta to the Story Outline root.
+- `Characters` opens `CharacterIndexInspector`.
+- `Locations` opens `LocationIndexInspector`.
+- `Manuscript` opens `ManuscriptIndexInspector`.
+- a Conversation item changes the bound Conversation and reconstructs its projection from Event history and live follow.
+- content navigation does not replace the central Conversation.
+
+## 10. Conversation Workspace
+
+The Conversation workspace is a projection over unified InputEvent and OutputEvent history.
+
+```text
+ConversationWorkspace
+├─ ConversationHeader
+├─ ConversationTimeline
+│  ├─ UserMessageItem
+│  ├─ AssistantMessageItem
+│  ├─ ConversationCardItem
+│  ├─ RuntimeLifecycleItem
+│  └─ ErrorItem
+└─ ConversationComposer
+```
+
+The initial user-visible timeline hides low-level Event noise by default while retaining a diagnostics mode for advanced users.
+
+Examples of normally visible content:
+
+- user messages;
+- assistant text;
+- Novel proposal cards;
+- Tool summaries that materially affect the user;
+- Approval requests;
+- task and schedule cards;
+- recoverable errors requiring user action.
+
+Examples of normally collapsed diagnostics:
+
+- Run and Turn lifecycle Events;
+- input routing acknowledgements;
+- Runtime Presence transitions that do not require attention;
+- replay and restoration metadata;
+- internal Nudge lifecycle Events.
+
+## 11. Structured Card Architecture
+
+Conversation cards are produced from structured Event snapshots, never by scraping assistant Markdown for application commands.
+
+```mermaid
+flowchart LR
+    OutputEvent["Persisted OutputEvent"] --> Projector["ConversationCardProjector"]
+    Projector --> Descriptor["ConversationCardDescriptor"]
+    Descriptor --> Registry["ConversationCardRendererRegistry"]
+    Registry --> Card["React Card Component"]
+    Card --> Inspector["Inspector Target"]
+```
+
+Recommended view-neutral descriptor:
+
+```ts
+type ConversationCardKind =
+  | "novel-reference"
+  | "outline-proposal"
+  | "manuscript-proposal"
+  | "character-proposal"
+  | "location-proposal"
+  | "task"
+  | "approval"
+  | "publication";
+
+interface ConversationCardDescriptor {
+  readonly cardId: string;
+  readonly conversationId: string;
+  readonly sourceEventId: string;
+  readonly kind: ConversationCardKind;
+  readonly title: string;
+  readonly summary?: string;
+  readonly status: ConversationCardStatus;
+  readonly inspectorTarget?: InspectorTarget;
+}
+```
+
+The descriptor contains safe display summaries and stable references. Large Manuscript content, Tool payloads, prompts, credentials, and unrestricted domain objects are queried only after the user opens the relevant Inspector.
+
+Recommended React boundaries:
+
+```text
+ui/src/card/
+├─ ConversationCard.tsx
+├─ ConversationCardRendererRegistry.ts
+├─ NovelReferenceCard.tsx
+├─ OutlineProposalCard.tsx
+├─ ManuscriptProposalCard.tsx
+├─ CharacterProposalCard.tsx
+├─ LocationProposalCard.tsx
+├─ TaskCard.tsx
+├─ ApprovalCard.tsx
+└─ PublicationCard.tsx
+```
+
+Different Novel domains produce separate proposal cards. One card must not silently combine Outline, Manuscript, Character, and Location mutations into an indistinguishable review surface.
+
+## 12. Inspector Architecture
+
+```mermaid
+classDiagram
+    class InspectorHost
+    class InspectorController
+    class InspectorTarget
+    class InspectorRendererRegistry
+    class StoryOutlineInspector
+    class NovelChangeReviewInspector
+    class CharacterInspector
+    class LocationInspector
+    class ManuscriptInspector
+    class ScheduleInspector
+
+    InspectorHost --> InspectorController
+    InspectorController --> InspectorTarget
+    InspectorHost --> InspectorRendererRegistry
+    InspectorRendererRegistry --> StoryOutlineInspector
+    InspectorRendererRegistry --> NovelChangeReviewInspector
+    InspectorRendererRegistry --> CharacterInspector
+    InspectorRendererRegistry --> LocationInspector
+    InspectorRendererRegistry --> ManuscriptInspector
+    InspectorRendererRegistry --> ScheduleInspector
+```
+
+Recommended target union:
+
+```ts
+type InspectorTarget =
+  | StoryOutlineInspectorTarget
+  | StoryUnitInspectorTarget
+  | ManuscriptInspectorTarget
+  | ManuscriptBlockInspectorTarget
+  | CharacterInspectorTarget
+  | LocationInspectorTarget
+  | ScheduleInspectorTarget
+  | NovelChangeReviewInspectorTarget
+  | ApprovalInspectorTarget;
+```
+
+Every target includes only the identity and read scope required to query its content.
+
+Inspector size modes:
+
+```ts
+type InspectorSize = "closed" | "normal" | "expanded";
+```
+
+- `normal` is appropriate for a Character card, Location card, Schedule, and compact metadata.
+- `expanded` is appropriate for Outline tree review, Manuscript Diff, conflict resolution, and publication review.
+- the user may close or resize the Inspector without changing domain state.
+
+## 13. Referencing Inspector Content in Conversation
+
+The Inspector provides `Reference in Conversation` on eligible StoryUnits, Manuscript blocks, Character fields, Location fields, proposal operations, and task records.
+
+Recommended platform-neutral reference:
+
+```ts
+type ConversationContentReference =
+  | StoryUnitConversationReference
+  | ManuscriptBlockConversationReference
+  | CharacterConversationReference
+  | LocationConversationReference
+  | NovelOperationConversationReference
+  | ScheduleConversationReference;
+
+interface StoryUnitConversationReference {
+  readonly kind: "story-unit";
+  readonly novelId: NovelId;
+  readonly storyUnitId: StoryUnitId;
+  readonly readScope: NovelReadScope;
+  readonly sourceRevision: NovelRevision;
+}
+
+interface NovelOperationConversationReference {
+  readonly kind: "novel-operation";
+  readonly draftSessionId: NovelDraftSessionId;
+  readonly operationId: NovelOperationId;
+  readonly changeSetDigest: string;
+}
+```
+
+The UI flow is:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Inspector
+    participant Composer
+    participant Conversation
+    participant Runtime
+
+    User->>Inspector: select StoryUnit or changed block
+    User->>Inspector: reference in Conversation
+    Inspector->>Composer: add structured reference
+    User->>Composer: describe requested change
+    Composer->>Conversation: enqueue user input with references
+    Conversation->>Runtime: durable execution path
+```
+
+Adding a reference is local UI state. Sending the composed input is the durable Conversation action.
+
+The exact InputEvent payload extension for references remains a protocol review decision. UI code must not embed a platform-specific object or live domain instance into the Event.
+
+## 14. Domain-specific Reviewers
+
+The review surface is selected by domain type:
+
+```text
+outline    -> OutlineChangeReviewer
+manuscript -> ManuscriptChangeReviewer
+character  -> CharacterChangeReviewer
+location   -> LocationChangeReviewer
+publication-> PublicationChangeReviewer
+```
+
+Shared review infrastructure:
+
+```text
+ui/src/review/
+├─ NovelChangeReviewInspector.tsx
+├─ NovelChangeReviewHeader.tsx
+├─ NovelChangeReviewSummary.tsx
+├─ NovelChangeReviewFooter.tsx
+├─ ReviewOperationSelection.ts
+├─ ReviewReferenceAction.tsx
+├─ common/
+│  ├─ AddedBlock.tsx
+│  ├─ DeletedBlock.tsx
+│  ├─ MovedBlock.tsx
+│  └─ UnchangedContextBlock.tsx
+├─ outline/
+├─ manuscript/
+├─ character/
+├─ location/
+└─ publication/
+```
+
+All reviewers share:
+
+- proposal identity;
+- Draft Session identity;
+- base NovelRevision;
+- immutable ChangeSet digest;
+- operation identities;
+- review lifecycle state;
+- reference-to-Conversation action;
+- request-revision, reject, and approve actions.
+
+They do not share one generic content layout.
+
+## 15. Change Review Identity and Approval
+
+The reviewer binds to the immutable Novel ChangeSet identity accepted by the Novel domain:
+
+```ts
+interface NovelChangeReviewTarget {
+  readonly novelId: NovelId;
+  readonly draftSessionId: NovelDraftSessionId;
+  readonly baseRevision: NovelRevision;
+  readonly changeSetDigest: string;
+  readonly operationIds: readonly NovelOperationId[];
+  readonly domain: NovelReviewDomain;
+}
+```
+
+Before approval, the UI must revalidate that:
+
+- the Draft Session still exists;
+- the Draft is still awaiting the relevant approval;
+- the base revision matches the review model;
+- the ChangeSet digest remains unchanged;
+- the reviewed operation identities match the Approval request;
+- no stale or conflicting canonical revision invalidated the review.
+
+Approval never binds only to a displayed card ID or Draft Session ID.
+
+### 15.1 Partial Selection
+
+The Novel domain currently treats one proposal ChangeSet as an atomic reviewable unit.
+
+Checkboxes may help users inspect or reference individual operations, but direct partial commit is not assumed.
+
+If the user wants to accept only a subset:
+
+```text
+select desired operations
+    -> request ChangeSet revision or operation disablement
+    -> produce a new immutable ChangeSet
+    -> compute a new digest
+    -> issue a new Approval request
+    -> approve the frozen replacement ChangeSet atomically
+```
+
+The initial UI should therefore prefer:
+
+```text
+Reject
+Request Revision
+Approve ChangeSet
+Reference Operation in Conversation
+```
+
+An `Approve Selected` button is introduced only after the backend owns explicit immutable subset ChangeSet semantics.
+
+## 16. Story Outline Tree Read Model
+
+The Outline UI is a tree over stable `StoryUnit` identities.
+
+It must not require `Volume -> Chapter -> Scene` hierarchy. Friendly scope labels may be shown without turning them into persistence invariants.
+
+Recommended query result:
+
+```ts
+interface StoryOutlineTreeView {
+  readonly outlineId: StoryOutlineId;
+  readonly readScope: NovelReadScope;
+  readonly sourceRevision: NovelRevision;
+  readonly rootIds: readonly StoryUnitId[];
+  readonly nodes: Readonly<Record<StoryUnitId, StoryUnitTreeNodeView>>;
+}
+
+interface StoryUnitTreeNodeView {
+  readonly id: StoryUnitId;
+  readonly parentId?: StoryUnitId;
+  readonly orderKey: OrderKey;
+  readonly childIds: readonly StoryUnitId[];
+
+  readonly title: string;
+  readonly intent?: string;
+  readonly synopsis?: string;
+  readonly scope?: StoryUnitScope;
+
+  readonly planningStatus: StoryUnitPlanningStatus;
+  readonly realizationStatus: StoryUnitRealizationStatus;
+  readonly blockState?: StoryUnitBlockStateView;
+  readonly abandonment?: StoryUnitAbandonmentView;
+  readonly progress: StoryUnitProgressProjection;
+}
+```
+
+A normalized node map is preferred over returning deeply mutable UI objects. The React tree derives visible flattened rows from stable IDs, child IDs, expansion state, and ordering keys.
+
+## 17. StoryUnit Status Presentation
+
+Every tree row presents separate dimensions.
+
+### 17.1 Planning status
+
+| Protocol | User label | Meaning |
+| --- | --- | --- |
+| `idea` | `构想` | narrative direction exists but is not sufficiently outlined |
+| `outlined` | `已大纲` | intention and summary are accepted but the leaf may not satisfy ready policy |
+| `ready` | `可写` | the currently executable leaf satisfies the configured ready policy |
+
+### 17.2 Realization status
+
+| Protocol | User label | Meaning |
+| --- | --- | --- |
+| `pending` | `未开始` | manuscript realization has not started |
+| `in-progress` | `进行中` | drafting or revision exists but is not accepted as complete |
+| `completed` | `已完成` | accepted and conforming manuscript realizes the StoryUnit |
+| `abandoned` | `已放弃` | the author no longer intends to realize the StoryUnit |
+
+### 17.3 Blocking
+
+Blocking is shown as an additional status token:
+
+```text
+[可写] [未开始] [阻塞]
+```
+
+The Inspector may display a safe human-readable block explanation. Structured logs must not emit natural-language block notes.
+
+### 17.4 Composite progress
+
+Composite StoryUnits display derived leaf progress:
+
+```text
+灯塔调查线 [已大纲] [进行中] 2/5
+```
+
+The UI does not maintain a second editable completion percentage. It renders `completedLeafCount / totalLeafCount` and effective state from the projection.
+
+## 18. Story Outline Tree Components
+
+```text
+ui/src/outline/
+├─ StoryOutlineTree.tsx
+├─ StoryOutlineTreeController.ts
+├─ StoryOutlineTreeView.ts
+├─ StoryOutlineTreeRow.tsx
+├─ StoryOutlineTreeBranch.tsx
+├─ StoryOutlineTreeStatus.tsx
+├─ StoryUnitScopeBadge.tsx
+├─ StoryUnitPlanningStatusBadge.tsx
+├─ StoryUnitRealizationStatusBadge.tsx
+├─ StoryUnitBlockBadge.tsx
+├─ StoryUnitProgress.tsx
+├─ StoryUnitDetailPanel.tsx
+└─ useVisibleStoryUnitRows.ts
+```
+
+`StoryOutlineTree` owns only presentation and selection coordination.
+
+`StoryOutlineTreeController` coordinates query refresh, expansion persistence, Meta updates, and Inspector selection but never performs Novel mutation directly.
+
+`useVisibleStoryUnitRows` flattens expanded rows for rendering and future virtualization while preserving stable node identity.
+
+## 19. Outline Diff Projection
+
+The Outline reviewer preserves tree structure while overlaying ChangeSet operations.
+
+Recommended review model:
+
+```ts
+type OutlineTreeDiffKind =
+  | "unchanged"
+  | "added"
+  | "deleted"
+  | "modified-before"
+  | "modified-after"
+  | "moved";
+
+interface OutlineTreeDiffRow {
+  readonly rowId: string;
+  readonly storyUnitId: StoryUnitId;
+  readonly operationId?: NovelOperationId;
+  readonly parentId?: StoryUnitId;
+  readonly depth: number;
+  readonly kind: OutlineTreeDiffKind;
+  readonly before?: StoryUnitTreeNodeView;
+  readonly after?: StoryUnitTreeNodeView;
+  readonly sourcePath?: readonly StoryUnitId[];
+  readonly targetPath?: readonly StoryUnitId[];
+}
+```
+
+Projection rules:
+
+### 19.1 Added StoryUnit
+
+- render the node at its Draft parent and Draft order;
+- use a green full-row background and `+` marker;
+- render the proposed planning, realization, and block statuses;
+- allow reference to the creating Operation.
+
+### 19.2 Deleted StoryUnit
+
+- retain a red tombstone row at the accepted tree position;
+- use a `-` marker and deleted text treatment;
+- preserve the stable ID and previous status for review;
+- do not remove the node from the review tree before the user sees it.
+
+### 19.3 Modified StoryUnit
+
+- render a red `modified-before` row followed by a green `modified-after` row at the same logical depth;
+- show changed status badges in the paired rows;
+- keep one operation grouping for reference and review.
+
+### 19.4 Moved StoryUnit
+
+- preserve the stable StoryUnit ID;
+- render one blue row at the target position;
+- display source and target parent paths in the detail panel;
+- do not misrepresent a move as deletion plus creation.
+
+### 19.5 Unchanged context
+
+- render unchanged ancestors and nearby siblings in white or quiet gray;
+- keep enough context to understand the structural effect;
+- allow unchanged subtrees to collapse.
+
+## 20. Outline Review Layout
+
+Outline review requires more width than a normal Inspector.
+
+Recommended expanded layout:
+
+```text
+Conversation 35% to 45%
+Outline Review 55% to 65%
+
+Outline Review
+├─ Review header
+├─ change summary and legend
+├─ tree pane
+├─ selected StoryUnit detail pane
+└─ review actions
+```
+
+The tree row layout is:
+
+```text
+[expand] [icon] [title + scope] [planning] [realization] [blocked] [leaf progress]
+```
+
+Clicking a row updates the detail pane with:
+
+- StoryUnit identity and scope;
+- intent and synopsis;
+- planning status;
+- realization status;
+- block state and dependencies;
+- abandonment data when relevant;
+- derived leaf progress;
+- current Diff operation;
+- source and target paths for movement;
+- reference-to-Conversation action.
+
+## 21. Manuscript Reviewer
+
+The Manuscript reviewer is separate from the Outline tree.
+
+It operates on Manuscript blocks and anchors rather than StoryUnit hierarchy.
+
+```text
+ManuscriptChangeReviewer
+├─ Chapter or Manuscript target header
+├─ unchanged paragraph context
+├─ deleted paragraph blocks
+├─ added paragraph blocks
+├─ optional inline word Diff
+├─ StoryUnit realization and conformance references
+└─ review actions
+```
+
+Rules:
+
+- deletion uses a red paragraph block;
+- addition uses a green paragraph block;
+- replacement uses red old block plus green new block;
+- movement uses a blue block with source and target anchors;
+- unchanged neighboring paragraphs use quiet context presentation;
+- inline word Diff is secondary to block identity and never replaces stable Manuscript block references.
+
+## 22. Character and Location Reviewers
+
+Character and Location reviews use field-oriented Diff rather than Outline tree or Manuscript paragraph presentation.
+
+```text
+CharacterChangeReviewer
+├─ stable profile field changes
+├─ role or involvement changes
+├─ current-state projection evidence
+└─ source StoryUnit references
+
+LocationChangeReviewer
+├─ stable profile field changes
+├─ rule and property changes
+├─ current-state projection evidence
+└─ source StoryUnit references
+```
+
+Replacement fields display red old values and green new values. Added fields display green blocks. Removed fields display red blocks.
+
+Current-state projections remain repairable views and are not treated as alternate Novel truth.
+
+## 23. Query Architecture
+
+The GUI reads Novel state through explicit query services and scopes.
+
+```mermaid
+flowchart LR
+    UI["React Inspector"] --> Client["NovelApiClient"]
+    Client --> Transport["ApiTransport"]
+    Transport --> Router["NovelApiRouter"]
+    Router --> Query["Novel Query Services"]
+    Query --> Canonical["Canonical scope"]
+    Query --> Draft["Draft scope"]
+```
+
+Target query operations include:
+
+```ts
+interface StoryOutlineQueryClient {
+  getTree(request: GetStoryOutlineTreeRequest): Promise<StoryOutlineTreeView>;
+  getStoryUnit(request: GetStoryUnitRequest): Promise<StoryUnitDetailView>;
+}
+
+interface NovelDiffQueryClient {
+  getChangeReview(
+    request: GetNovelChangeReviewRequest,
+  ): Promise<NovelChangeReviewView>;
+}
+```
+
+Every query states:
+
+- Novel identity;
+- canonical or Draft scope;
+- target identity;
+- expected or observed revision where required;
+- pagination or subtree boundary for large structures.
+
+The GUI never queries SQLite rows or local filesystem paths.
+
+## 24. Conversation and Novel Event Integration
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Novel as Novel Application
+    participant Outbox as Novel Outbox
+    participant Bridge as NovelOutputEventBridge
+    participant Journal as Conversation Journal
+    participant UI as GUI Projection
+
+    Agent->>Novel: create Draft Operations
+    Novel->>Novel: update Draft state
+    Novel->>Outbox: append lifecycle record
+    Outbox->>Bridge: dispatch idempotently
+    Bridge->>Journal: append Novel OutputEvent
+    Journal->>UI: replay or live Event
+    UI->>UI: project proposal card
+```
+
+The public OutputEvent should carry stable references and lifecycle metadata sufficient to open the review surface, but it should not duplicate entire Manuscript or Tool payloads into the Runtime Journal.
+
+Opening the card performs a Novel query against the referenced Draft scope and immutable ChangeSet identity.
+
+Approval flow:
+
+```mermaid
+sequenceDiagram
+    participant UI
+    participant Conversation
+    participant Runtime
+    participant Novel
+
+    UI->>Conversation: enqueue Approval decision InputEvent
+    Conversation->>Runtime: durable input dispatch
+    Runtime->>Novel: resolve ChangeSet Approval
+    Novel->>Novel: validate digest, operations, revision, and policy
+    Novel-->>Runtime: commit, rebase requirement, conflict, or rejection
+    Runtime-->>Conversation: append OutputEvents
+    Conversation-->>UI: replay or live projection
+```
+
+## 25. Loading, Staleness, and Conflict States
+
+Every domain Inspector and reviewer supports:
+
+```ts
+type InspectorLoadState =
+  | "idle"
+  | "loading"
+  | "ready"
+  | "stale"
+  | "conflicted"
+  | "unavailable"
+  | "error";
+```
+
+Rules:
+
+- opening a card never assumes its referenced Draft or ChangeSet still exists;
+- stale revision prevents approval until the review model is refreshed;
+- a changed digest invalidates the prior approval surface;
+- conflict state opens a dedicated resolution view rather than showing the old Diff as approvable;
+- committed or rolled-back Drafts remain viewable only according to retention and query policy;
+- query errors are mapped to safe stable UI errors without displaying raw paths, SQL, credentials, stack traces, or Runtime stderr.
+
+## 26. Performance and Rendering
+
+The initial UI remains simple, but the architecture supports large Novels.
+
+### 26.1 Conversation timeline
+
+- page older Event history;
+- subscribe from a reconnectable Sequence cursor;
+- keep assistant draft updates separate from completed message records;
+- virtualize only after measured timeline size requires it;
+- retain stable card identity across replay.
+
+### 26.2 Story Outline tree
+
+- store a normalized node map;
+- derive visible rows from expansion state;
+- request subtrees or paginate siblings if measured scale requires it;
+- preserve expansion by stable StoryUnit ID;
+- virtualize flattened visible rows after scale testing;
+- never use array index as React key or domain identity.
+
+### 26.3 Review models
+
+- load full review content on card open rather than Event delivery;
+- stream or page large Manuscript Diffs if required;
+- retain operation and block identity across rendering;
+- memoize pure Diff row projection by ChangeSet digest and source revision;
+- invalidate cached review models on digest, Draft revision, or NovelRevision change.
+
+## 27. Accessibility and Keyboard Interaction
+
+The GUI must support:
+
+- tree semantics and keyboard expand/collapse;
+- focus preservation when the Inspector opens;
+- keyboard movement across visible StoryUnit rows;
+- textual status labels in addition to color;
+- accessible added, deleted, and moved descriptions;
+- keyboard activation of reference, approve, reject, and request-revision actions;
+- confirmation for destructive Novel, publication, and permission decisions;
+- reduced-motion behavior for Inspector expansion and streaming updates.
+
+Recommended Outline keys:
+
+```text
+Arrow Up / Down    previous or next visible StoryUnit
+Arrow Right        expand or enter first child
+Arrow Left         collapse or select parent
+Enter              open StoryUnit detail
+R                  reference selected node in Conversation
+```
+
+Shortcuts are enabled only when focus is inside the relevant tree and do not override text editing.
+
+## 28. Security and Redaction
+
+The GUI follows existing Core redaction rules.
+
+Renderer-visible diagnostics and structured logs must never expose:
+
+- Provider credentials;
+- Store or execution paths;
+- raw SQLite rows;
+- JSONL lines;
+- prompts or system reminders;
+- unrestricted Tool input or output;
+- natural-language block, abandonment, or conflict notes in logs;
+- raw error messages, causes, stacks, stderr, or shell output.
+
+The UI may display authorized Novel content because it is the product surface, but logs and telemetry record only safe identities, domain types, lifecycle states, revision metadata, and redacted error codes.
+
+Electron Preload exposes narrow request methods and subscription channels. It never exposes unrestricted `ipcRenderer`, filesystem APIs, process execution, or credential access to React.
+
+## 29. Testing Strategy
+
+### 29.1 Core projection tests
+
+- Event replay produces stable Conversation card descriptors;
+- duplicate Sequence does not duplicate cards;
+- assistant draft completion is deterministic;
+- StoryUnit tree normalization preserves stable ordering;
+- composite progress renders from projection rather than UI mutation;
+- Outline Diff preserves added, deleted, modified, moved, and unchanged context;
+- moves preserve StoryUnit identity;
+- deleted nodes remain visible as review tombstones;
+- status dimensions remain separate;
+- blocked state does not overwrite planning or realization status.
+
+### 29.2 Shared React tests
+
+- left content selection opens the expected Inspector;
+- opening content does not replace the Conversation;
+- closing the Inspector preserves composer text;
+- adding and removing structured references updates the composer;
+- proposal cards choose the correct reviewer;
+- Outline tree supports keyboard expansion and selection;
+- review colors include textual and icon semantics;
+- stale review disables approval;
+- digest changes force refresh;
+- request-revision references the correct operation.
+
+### 29.3 Transport contract tests
+
+- Electron and HTTP Transports return the same typed API results;
+- subscriptions preserve Event identity and Sequence;
+- disconnect and reconnect resume from the correct cursor;
+- incompatible protocol versions fail before domain operations;
+- serialized errors remain stable and redacted.
+
+### 29.4 Desktop integration tests
+
+- Preload exposes only approved methods;
+- Renderer cannot import or call Node-only services;
+- desktop startup opens the correct Workspace context;
+- historical Conversation replay does not activate Runtime;
+- proposal card opening performs a read-only Novel query;
+- approval reaches the durable InputEvent path;
+- application reload reconstructs Conversation and Inspector-safe state from durable sources.
+
+## 30. Recommended Implementation Stages
+
+The stages below describe dependency order only. Each stage requires its own plan, validation, documentation, and focused commit when activated.
+
+### GUI-0: Shared client and query contracts
+
+- finalize `NovelApiClient` client-facing query modules;
+- finalize Conversation Proxy and client Transport boundary through the applicable Task 6 review;
+- define Inspector targets and structured Conversation references;
+- define safe card descriptors and review target identity.
+
+### GUI-1: Shared UI shell
+
+- scaffold `ui/` as `@novel/ui`;
+- implement white application shell;
+- implement top menu, context bar, left sidebar, central Conversation layout, and closed Inspector host;
+- inject platform and API dependencies.
+
+### GUI-2: Read-only Conversation
+
+- replay Conversation Events;
+- follow live Events;
+- render user and assistant messages;
+- render safe Runtime state;
+- preserve cursor and reconnect behavior.
+
+### GUI-3: Inspector and Meta
+
+- implement `InspectorStore` and target registry;
+- open Outline, Character, Location, Manuscript, and Schedule read-only views;
+- update Workspace and Meta context bar;
+- preserve central Conversation state.
+
+### GUI-4: Structured cards
+
+- project Novel and Approval OutputEvents into card descriptors;
+- register card renderers;
+- open full query-backed Inspector views from cards;
+- avoid Markdown command scraping.
+
+### GUI-5: Story Outline tree
+
+- implement normalized tree query result;
+- implement expansion, selection, keyboard navigation, Scope labels, planning status, realization status, block state, and derived progress;
+- add large-tree performance coverage.
+
+### GUI-6: Domain reviewers
+
+- implement shared change review shell;
+- implement Outline tree Diff reviewer;
+- implement Manuscript block Diff reviewer;
+- implement Character and Location field reviewers;
+- implement stale, conflict, and unavailable states;
+- bind Approval to immutable ChangeSet identity.
+
+### GUI-7: Composer references
+
+- implement structured reference chips;
+- define and validate the InputEvent reference protocol;
+- reference StoryUnits, Manuscript blocks, domain fields, and Novel Operations;
+- preserve references across Inspector navigation.
+
+### GUI-8: Desktop shell
+
+- scaffold Electron Main, Preload, and Renderer entrypoints;
+- implement `ElectronApiTransport`;
+- configure security boundaries;
+- compose local Core, Node adapters, Runtime placement, and packaging according to accepted process decisions.
+
+### GUI-9: Web shell
+
+- implement Web bootstrap with the same `@novel/ui`;
+- implement HTTP and Event stream Transport;
+- add authentication and remote Workspace behavior;
+- retain identical Conversation, card, Inspector, and review semantics.
+
+## 31. Accepted Decisions
+
+1. Conversation is the primary GUI workspace.
+2. The overall visual style is white, quiet, and low-saturation.
+3. The top menu contains Project, Edit, Publish, and Help.
+4. A persistent context bar displays Workspace, current Meta, Conversation, and Agent.
+5. The left sidebar contains New Conversation, Schedule, Outline, Characters, Locations, Manuscript, and Conversation history.
+6. Left-side Novel content opens in the right Inspector and does not replace the central Conversation.
+7. Conversation cards open query-backed Inspector views.
+8. Inspector content can be referenced into the Conversation composer through structured references.
+9. Proposal OutputEvents do not prove Novel mutation or acceptance.
+10. Different Novel domains use different reviewers.
+11. Added blocks are green, deleted blocks are red, moves are blue, and unchanged context is neutral.
+12. Story Outline review uses a tree, not a flat list.
+13. The Outline tree is an ordered arbitrary-depth StoryUnit tree rather than a required Volume, Chapter, and Scene hierarchy.
+14. StoryUnit Scope is a presentation label independent of tree depth.
+15. Every StoryUnit row displays planning status and realization status separately.
+16. Blocking is displayed independently from planning and realization status.
+17. Composite StoryUnits display derived completed-leaf progress.
+18. Outline review preserves tree structure and stable StoryUnit identity.
+19. Deleted StoryUnits remain visible as red tombstone rows during review.
+20. Moved StoryUnits display as moves rather than false delete-and-create pairs.
+21. Expanded review mode uses substantially more width than a normal metadata Inspector.
+22. Approval binds to immutable ChangeSet digest, base revision, Draft Session, and operation identities.
+23. Direct partial commit is not assumed; subset approval requires a replacement immutable ChangeSet unless later domain contracts explicitly support it.
+24. GUI and Web share `@novel/ui`, while desktop and Web shells inject different Transports and platform capabilities.
+
+## 32. Deferred Decisions
+
+1. exact React, routing, state-store, styling, component, and testing libraries;
+2. exact Electron packaging and Runtime process placement;
+3. exact `NovelApiClient` wire envelopes and Task 6 Transport framing;
+4. the final InputEvent protocol for structured content references;
+5. the final public OutputEvent taxonomy for Novel proposal cards;
+6. whether Outline review selection supports backend-owned immutable subset ChangeSets in the first version;
+7. the first-version Outline ready policy and its detailed UI explanation;
+8. whether composite StoryUnits may own explicit block overrides;
+9. large-tree subtree paging and virtualization thresholds;
+10. Manuscript editor selection, rich text behavior, and inline word-Diff implementation;
+11. conflict resolution UI for stale Drafts and concurrent Conversation changes;
+12. publication platform integrations and Publish review details;
+13. Schedule domain contracts and whether schedules belong to Novel, Runtime, or a separate application service;
+14. desktop-only diagnostics, update, tray, and local Runtime management pages;
+15. user-facing replacement for the technical label `Meta`, such as `Current Content` or `Current Scope`.

@@ -15,6 +15,18 @@ export interface NovelResolvedRebaseCandidate {
   readonly preparedAt: NovelTimestamp;
 }
 
+export interface NovelResolvedRebasePromotion {
+  readonly sourceDraftSessionId: NovelDraftSessionId;
+  readonly resolvedCandidateDraftSessionId: NovelDraftSessionId;
+  readonly session: NovelDraftSession;
+  readonly promotedAt: NovelTimestamp;
+}
+
+export interface NovelResolvedRebasePromotionResult {
+  readonly status: "promoted" | "duplicate";
+  readonly promotion: NovelResolvedRebasePromotion;
+}
+
 export function captureNovelResolvedRebaseCandidate(
   value: NovelResolvedRebaseCandidate,
 ): NovelResolvedRebaseCandidate {
@@ -45,5 +57,33 @@ export function captureNovelResolvedRebaseCandidate(
     operationCount: value.operationCount,
     lastOperationSequence: value.lastOperationSequence,
     preparedAt: captureNovelTimestamp(value.preparedAt),
+  });
+}
+
+export function captureNovelResolvedRebasePromotion(
+  value: NovelResolvedRebasePromotion,
+): NovelResolvedRebasePromotion {
+  const session = captureNovelDraftSession(value.session);
+  const sourceDraftSessionId = captureNovelDraftSessionId(
+    value.sourceDraftSessionId,
+  );
+  const resolvedCandidateDraftSessionId = captureNovelDraftSessionId(
+    value.resolvedCandidateDraftSessionId,
+  );
+  if (
+    session.status !== NOVEL_DRAFT_SESSION_STATUS.active ||
+    session.id !== resolvedCandidateDraftSessionId ||
+    session.id === sourceDraftSessionId
+  ) {
+    throw new NovelProtocolValidationError(
+      NOVEL_PROTOCOL_FAILURE.invalidRebaseCandidate,
+      "rebasePromotion",
+    );
+  }
+  return Object.freeze({
+    sourceDraftSessionId,
+    resolvedCandidateDraftSessionId,
+    session,
+    promotedAt: captureNovelTimestamp(value.promotedAt),
   });
 }

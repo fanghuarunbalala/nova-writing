@@ -179,7 +179,7 @@ export class SqliteNovelDraftStore implements NovelDraftStore {
       .prepare(
         `${DRAFT_SESSION_SELECT}
          WHERE novel_id = ? AND owner_conversation_id = ?
-           AND status NOT IN ('committed', 'rolled-back')
+           AND status IN ('active', 'awaiting-approval', 'rebasing', 'committing')
          ORDER BY created_at DESC, id DESC
          LIMIT 1`,
       )

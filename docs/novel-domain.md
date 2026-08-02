@@ -814,6 +814,13 @@ Rebase creates a new working copy from the latest canonical revision and replays
 - Equivalent idempotent Operations may collapse to no-ops.
 - Rebase must not mutate the original Draft in place; failure or process interruption leaves recoverable source state.
 - Rebase changes the effective ChangeSet digest. Any Approval granted before Rebase becomes stale even when Rebase finds no semantic conflict.
+- A resolved sibling is promoted through one canonical SQLite transaction: the
+  preserved source Draft becomes `conflicted`, the sibling becomes the owner's
+  `active` writable Draft, and the resolved-candidate registry records the
+  promotion timestamp. `conflicted` predecessors remain inspectable but do not
+  occupy the one-active-writable-Draft uniqueness slot.
+- Promotion is retry-stable across restart and never transfers Approval. The
+  promoted sibling freezes and approves its own ChangeSet identity.
 
 The SQLite snapshot and publication protocol used by both `startDraft()` and
 Rebase is accepted as follows:

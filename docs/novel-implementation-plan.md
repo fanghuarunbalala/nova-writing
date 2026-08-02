@@ -581,6 +581,20 @@ Delivered boundaries:
 
 Use concurrent Character and Location Drafts to cover non-overlapping automatic Rebase, same-field conflict, delete/update conflict, idempotent create, manual resolution, crash recovery, and successful post-resolution Commit.
 
+Resolved-candidate promotion foundation delivered:
+
+- promotion atomically moves the preserved source Draft to `conflicted` and
+  registers the rebuilt sibling as the owner's `active` writable Draft
+- `conflicted` Drafts remain durable and inspectable but no longer consume the
+  one-active-writable-Draft owner slot
+- the canonical resolved-candidate registry records `promoted_at`; exact retry
+  after restart reconstructs the same immutable promotion result
+- promotion never inherits the predecessor Approval; the promoted Draft must
+  freeze its own ChangeSet and obtain a new Approval before enforced Commit
+
+**Status:** promotion and restart/idempotency coverage completed; concurrent
+Rebase/conflict matrix and successful approved post-resolution Commit remain.
+
 ## 14. Task N8: Conversation and OutputEvent Integration
 
 ### N8-A Binding

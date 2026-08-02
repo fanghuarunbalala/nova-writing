@@ -15,6 +15,7 @@ import {
   NovelRebaseService,
   NovelResolutionApplicationPlanIdentityConflictError,
   NovelResolutionApplicationPlanBuilder,
+  NovelResolvedRebasePromotionService,
   NovelResolvedRebaseService,
   NovelRevisionConflictError,
   canonicalNovelReadScope,
@@ -945,6 +946,43 @@ try {
   assert.equal(
     await exists(candidatePath(location, planCandidate.candidate.session)),
     true,
+  );
+  const promotionService = new NovelResolvedRebasePromotionService({
+    store: resolvedCandidateStore,
+    clock,
+    logger,
+  });
+  const promoted = await promotionService.promote(replayedResolvedCandidate);
+  assert.equal(promoted.status, "promoted");
+  assert.equal(promoted.promotion.session.status, "active");
+  assert.equal(
+    (await draftStore.getDraftSession(canonical.novelId, planSource.id)).status,
+    "conflicted",
+  );
+  assert.equal(
+    (
+      await draftStore.getActiveDraftSession(
+        canonical.novelId,
+        planSource.ownerConversationId,
+      )
+    ).id,
+    replayedResolvedCandidate.session.id,
+  );
+  await resolvedCandidateStore.close();
+  resolvedCandidateStore = await SqliteNovelResolvedRebaseCandidateStore.open({
+    location,
+    novelId: canonical.novelId,
+    logger,
+  });
+  const duplicatePromotion = await new NovelResolvedRebasePromotionService({
+    store: resolvedCandidateStore,
+    clock,
+    logger,
+  }).promote(replayedResolvedCandidate);
+  assert.equal(duplicatePromotion.status, "duplicate");
+  assert.deepEqual(
+    duplicatePromotion.promotion,
+    promoted.promotion,
   );
   await resolvedCandidateStore.close();
   assert.equal(

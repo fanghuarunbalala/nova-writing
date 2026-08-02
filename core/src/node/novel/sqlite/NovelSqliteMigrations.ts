@@ -151,6 +151,19 @@ const NOVEL_MIGRATIONS: readonly NovelSqliteMigration[] = [
       );
     `,
   },
+  {
+    version: 5,
+    name: "resolved_rebase_candidate_promotion",
+    sql: `
+      ALTER TABLE novel_resolved_rebase_candidates
+      ADD COLUMN promoted_at TEXT;
+
+      DROP INDEX novel_draft_sessions_one_active_owner_idx;
+      CREATE UNIQUE INDEX novel_draft_sessions_one_active_owner_idx
+      ON novel_draft_sessions(novel_id, owner_conversation_id)
+      WHERE status IN ('active', 'awaiting-approval', 'rebasing', 'committing');
+    `,
+  },
 ];
 
 export const LATEST_NOVEL_SCHEMA_VERSION: NovelSchemaVersion =

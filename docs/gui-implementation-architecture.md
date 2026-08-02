@@ -417,6 +417,8 @@ Click behavior:
 - a Conversation item changes the bound Conversation and reconstructs its projection from Event history and live follow.
 - content navigation does not replace the central Conversation.
 
+The left sidebar remains visible while normal or expanded Inspectors are open. Expanded review reallocates width only between the central Conversation and the Inspector; it does not replace, hide, or repurpose the project and Conversation lists. A future user-controlled sidebar collapse may reduce it to a narrow rail, but review mode never collapses it automatically.
+
 ## 10. Conversation Workspace
 
 The Conversation workspace is a projection over unified InputEvent and OutputEvent history.
@@ -563,6 +565,7 @@ type InspectorSize = "closed" | "normal" | "expanded";
 - `normal` is appropriate for a Character card, Location card, Schedule, and compact metadata.
 - `expanded` is appropriate for Outline tree review, Manuscript Diff, conflict resolution, and publication review.
 - the user may close or resize the Inspector without changing domain state.
+- changing Inspector size never removes the left project and Conversation sidebar; only the remaining content width is redistributed.
 
 ## 13. Referencing Inspector Content in Conversation
 
@@ -893,8 +896,13 @@ Outline review requires more width than a normal Inspector.
 Recommended expanded layout:
 
 ```text
-Conversation 35% to 45%
-Outline Review 55% to 65%
+Left Sidebar
+    fixed 220px to 260px
+    New Conversation / Schedule / Novel Content / Conversations
+
+Remaining Content Width
+    Conversation 35% to 45%
+    Outline Review 55% to 65%
 
 Outline Review
 ├─ Review header
@@ -1297,6 +1305,7 @@ The stages below describe dependency order only. Each stage requires its own pla
 22. Approval binds to immutable ChangeSet digest, base revision, Draft Session, and operation identities.
 23. Direct partial commit is not assumed; subset approval requires a replacement immutable ChangeSet unless later domain contracts explicitly support it.
 24. GUI and Web share `@novel/ui`, while desktop and Web shells inject different Transports and platform capabilities.
+25. The left project and Conversation sidebar remains visible in normal and expanded review modes; review width is taken from the central Conversation area rather than replacing the sidebar.
 
 ## 32. Deferred Decisions
 

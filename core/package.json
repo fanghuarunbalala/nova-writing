@@ -32,6 +32,7 @@
     "smoke:tool-registry": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-registry-typecheck.ts && node scripts/tool-registry-smoke.mjs",
     "smoke:tool-group-manifest": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-group-manifest-typecheck.ts && node scripts/tool-group-manifest-smoke.mjs",
     "smoke:tool-registry-view": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-registry-view-typecheck.ts && node scripts/tool-registry-view-smoke.mjs",
+    "smoke:tool-pi-adapter": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-pi-adapter-typecheck.ts && node scripts/tool-pi-adapter-smoke.mjs",
     "smoke:conversation-protocol": "pnpm build && node scripts/conversation-protocol-smoke.mjs",
     "smoke:conversation-command": "pnpm build && node scripts/conversation-command-integration-smoke.mjs",
     "smoke:conversation-host-protocol": "pnpm build && node scripts/conversation-host-protocol-smoke.mjs",

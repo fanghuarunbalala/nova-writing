@@ -2450,6 +2450,16 @@ Task 5A-D delivered:
 
 Task 5A-D explicitly excludes Pi conversion, argument execution, Tool-error normalization, permission, approval, sandboxing, retry, trace persistence, Artifact materialization, dynamic Group mounting, and concrete Tools.
 
+Task 5A-E delivered:
+
+- a package-private `PiToolAdapter` that converts Core Descriptor metadata and TypeBox parameters into Pi `AgentTool` values without entering any public Core or internal Pi barrel export
+- ordered bulk conversion plus internal Pi details envelopes for progress, partial text results, final Core details, and logical Artifact references
+- Pi cancellation forwarding and a no-op non-aborted signal fallback when Pi omits its optional signal
+- a package-private `PiToolExecutionBridge` seam so Pi execution cannot call a Handler directly or bypass the Task 5B Dispatcher, permission, approval, sandbox, timeout, cancellation, and trace pipeline
+- focused compile-time and runtime coverage for parameter inference, metadata conversion, bridge-only execution, progress/result conversion, error propagation, ordering, and public declaration non-leakage
+
+Task 5A-E explicitly excludes the concrete execution bridge, Dispatcher, argument revalidation, Tool-error normalization, permission, approval, sandboxing, retry, timeout policy, trace persistence, Artifact materialization, dynamic Group mounting, and concrete Tools.
+
 Expected deliverables after approval:
 
 - core-owned Tool types

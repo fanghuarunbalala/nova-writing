@@ -4956,6 +4956,12 @@ classDiagram
 
     class PiToolAdapter {
         +toAgentTool(RegisteredTool)
+        +toAgentTools(RegisteredTool[])
+    }
+
+    class PiToolExecutionBridge {
+        <<interface>>
+        +execute(request) Promise~ToolResult~
     }
 
     ToolDescriptor --> RegisteredTool
@@ -4967,6 +4973,7 @@ classDiagram
     ToolGroupCatalog --> ToolRegistryView
     ToolRegistry --> ToolRegistryView
     PiToolAdapter --> RegisteredTool
+    PiToolAdapter --> PiToolExecutionBridge
 ```
 
 TypeScript registration is the single source of truth for Tool name, version, label, description, TypeBox parameter schema, and executable Handler binding. YAML never repeats parameter schemas and never contains executable module bindings.
@@ -5004,6 +5011,8 @@ interface ToolResult<TDetails extends JsonValue = JsonValue> {
 There is no public `BaseTool` or common `ToolDetails` class. Concrete Tools may define their own JSON-safe details interface and bind it through the `ToolResult<TDetails>` generic.
 
 Incremental execution information is emitted through an injected asynchronous `ToolProgressSink`. Progress updates never replace the final Promise result and are treated as private Tool data for logging and persistence redaction.
+
+`PiToolAdapter` is package-private and is not exported through Core, Tools, Runtime, or the internal Pi barrel. It converts Core Descriptor fields and TypeBox parameters to Pi `AgentTool` values while preserving Tool order. Its execute callback never invokes a Core Handler directly: it delegates to a package-private `PiToolExecutionBridge`, which Task 5B connects to the Dispatcher and security pipeline. The Adapter maps Core progress, partial results, final text content, optional details, and logical Artifact references into internal Pi result envelopes. Pi cancellation is forwarded as an `AbortSignal`; Pi types never appear in public Core Tool contracts or exported declaration surfaces.
 
 The implemented Core protocol defensively captures Tool declarations and values before they cross ownership boundaries:
 

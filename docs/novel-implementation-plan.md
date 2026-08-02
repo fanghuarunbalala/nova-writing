@@ -80,7 +80,7 @@ The implementation follows these rules:
 - all public Novel application and port methods are asynchronous
 - a Node adapter may use synchronous SQLite internally behind a serialized asynchronous boundary
 
-## 4. Explicitly Deferred Types
+## 4. Deferred-Type Resolution
 
 The following contracts are not invented during foundation tasks:
 
@@ -95,7 +95,9 @@ OrderKey
 
 Their implementation gates are:
 
-- `OrderKey`, `StoryUnitBlockState`, `StoryUnitAbandonment`, and `StoryTimeDescription` must be resolved before the affected Task N9 outline steps.
+- `OrderKey`, `StoryUnitBlockState`, `StoryUnitAbandonment`, and
+  `StoryTimeDescription` were resolved for V1 in `docs/novel-domain.md` before
+  Task N9 implementation began
 - `ManuscriptAnchor` and `ManuscriptRange` must be resolved before the affected Task N10 manuscript steps.
 - Earlier tasks must not add placeholder public contracts that silently predetermine these decisions.
 
@@ -900,7 +902,10 @@ dispatch, asynchronous Approval orchestration, and real Journal integration.
 
 ## 15. Task N9: Story Outline Vertical Slice
 
-This task begins only after its affected deferred contracts are explicitly resolved and recorded.
+The affected V1 contracts are explicitly resolved in
+`docs/novel-domain.md`: variable-length lexical `OrderKey`, independent direct
+blocking with ancestor effects, non-destructive composite abandonment, derived
+active-leaf progress, and descriptive Story time with optional chronology.
 
 ### N9-A StoryOutline and StoryUnit
 
@@ -993,5 +998,10 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
 - Task N6 is completed by the ChangeSet, Commit payload, canonical Commit Writer, and recovery commits.
 - Task N7-A is completed by the focused Rebase Candidate commit.
 - Task N7-B is completed by the focused digest-only Conflict Protocol commit.
-- Task N7-C Resolution is the next implementation step.
+- Task N7-C and Task N7-D are completed by resolved-candidate promotion and
+  approved post-Rebase Commit validation.
+- Task N8 is completed by Conversation binding, lifecycle OutputEvents,
+  durable Outbox dispatch, Approval orchestration, and Journal integration.
+- Task N9 deferred contracts are resolved; Task N9-A `OrderKey` and ordered
+  StoryUnit foundation is the next implementation step.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

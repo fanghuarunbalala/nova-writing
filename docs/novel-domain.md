@@ -107,6 +107,37 @@ interface OrderKeyFactory {
 - References always use stable IDs and never use outline paths or array indexes.
 - Fractional indexing, LexoRank, or another variable-length lexical rank may implement `OrderKey` behind the stable contract.
 
+#### OrderKey V1 Resolution
+
+**Accepted V1 contract:** `OrderKey` is an opaque, non-empty uppercase
+hexadecimal string composed of fixed-width four-character digits. Native string
+comparison is the authoritative ordering operation.
+
+```text
+8000
+4000
+40008000
+400080004000
+```
+
+- each encoded digit is in `0000` through `FFFF`; the final digit must not be
+  `0000`, which preserves space after every valid prefix
+- `initial()` returns `8000`
+- `before(next)` and `after(previous)` delegate to the same midpoint algorithm
+  as `between(previous, next)` with an open lower or upper boundary
+- generation compares one digit at a time using implicit lower `0000` and
+  upper `10000` sentinels; when adjacent digits leave no midpoint, generation
+  keeps the lower digit and continues at the next depth
+- factories reject malformed keys and reject `between(previous, next)` unless
+  `previous < next`
+- V1 performs no sibling rebalance and never rewrites another StoryUnit merely
+  to insert or move one node; adversarial key growth is measured before a
+  future explicit maintenance Operation is designed
+
+The serialized representation is public only as an opaque value. Callers must
+use the factory and comparator rather than construct semantic meaning from its
+digits.
+
 ### 4.3 Agent-Assisted Rolling Outline
 
 **Accepted direction:** the outline is collaboratively created by the human and Agent rather than manually completed by the human before writing begins.
@@ -163,7 +194,7 @@ Recommended approval boundary:
 
 ## 5. StoryUnit Status and Reasons
 
-**Current recommendation:** a Todo-like outline needs status, but planning maturity, manuscript realization, and temporary blocking are separate concerns.
+**Accepted V1 contract:** a Todo-like outline needs status, but planning maturity, manuscript realization, and temporary blocking are separate concerns.
 
 ### 5.1 Planning and Realization Status
 
@@ -224,6 +255,13 @@ interface StoryUnitBlockState {
 - `note` is an optional human-readable explanation of the current blocking condition.
 - `dependencyIds` identifies StoryUnits whose progress or decisions may unblock this unit.
 - Clearing the block removes the current `blockState`; the historical transition remains in Novel-domain Events.
+- an explicit `blockState` may be attached to a leaf or composite StoryUnit
+- an ancestor block makes every active descendant effectively blocked without
+  copying block state into those descendants
+- a composite projection reports blocked-descendant counts separately; one
+  blocked branch does not imply that every sibling branch is blocked
+- dependency IDs are unique, may not reference the blocked StoryUnit itself,
+  and must resolve inside the same StoryOutline when the state is accepted
 
 ### 5.3 Abandonment Information
 
@@ -249,6 +287,11 @@ interface StoryUnitAbandonment {
 - `note` explains why the author abandoned the unit without overloading a generic status note.
 - `replacementStoryUnitId` prevents replacement from being interpreted as simple deletion and helps Agents avoid proposing an obsolete direction again.
 - `abandonment` is required while `realizationStatus` is `abandoned` and is cleared from current state if the unit is restored.
+- abandoning a composite StoryUnit does not rewrite descendant current state;
+  descendants become effectively excluded through the abandoned ancestor and
+  become visible with their preserved state if that ancestor is restored
+- replacement targets must belong to the same StoryOutline and may not be the
+  abandoned StoryUnit or one of its descendants
 
 Recommended current-state invariants:
 
@@ -278,7 +321,18 @@ interface StoryUnitProgressProjection {
 }
 ```
 
-Whether a composite StoryUnit may own an explicit block override, rather than only deriving blocked state from descendants, remains a command-model decision.
+Composite progress uses active leaf descendants as its source of truth:
+
+- effectively abandoned leaves are excluded from active totals
+- all active leaves completed means the composite is effectively completed
+- any active leaf in progress, or a mix of completed and pending leaves, means
+  the composite is effectively in progress
+- otherwise the composite is effectively pending
+- a directly or ancestrally abandoned composite is effectively abandoned
+
+Direct block state, ancestor blocking, and blocked-descendant counts remain
+separate projection fields so aggregate progress does not erase the actual
+execution constraint.
 
 ### 5.5 Status History
 
@@ -295,7 +349,7 @@ Domain persistence may retain reason notes in these Events. Structured Runtime l
 
 ## 6. Leaf StoryUnit Plan
 
-**Current recommendation:** a leaf StoryUnit is the smallest currently executable writing specification. It describes time, participating Characters and Locations, objective Events, intended emotional rhythm, and the persistent entity changes that the manuscript must realize.
+**Accepted V1 contract:** a leaf StoryUnit is the smallest currently executable writing specification. It describes time, participating Characters and Locations, objective Events, intended emotional rhythm, and the persistent entity changes that the manuscript must realize.
 
 ```ts
 interface LeafStoryUnitPlan {
@@ -329,6 +383,9 @@ If a leaf StoryUnit is decomposed into children, its detailed plan must be migra
 
 ### 6.1 Story Time
 
+**Accepted V1 contract:** Story time remains a human-readable narrative
+description with optional coarse chronological ordering.
+
 ```ts
 interface StoryTimeDescription {
   readonly description: string;
@@ -339,6 +396,16 @@ interface StoryTimeDescription {
 - `description` permits natural-language time such as `the following morning` or `ten years earlier`.
 - `timelineOrderKey` is optional initial support for story-world chronology that differs from outline or manuscript order.
 - The initial model does not require a complete calendar system.
+- `description` is required, trimmed, and non-blank when a time description is
+  present; Core does not parse it into calendar facts
+- `timelineOrderKey` uses the same opaque `OrderKey` representation but belongs
+  to a separate StoryTimeline ordering namespace
+- equal timeline keys are allowed for simultaneous or deliberately unordered
+  StoryUnits; deterministic queries use StoryUnit ID as the final tie-breaker
+- absence of `timelineOrderKey` means chronologically unplaced rather than
+  chronologically last
+- the initial `ready` policy requires a usable description but does not require
+  a timeline key
 
 ### 6.2 StoryEventStep
 

@@ -2372,10 +2372,16 @@ classDiagram
     }
 
     class ContextCompactionManager {
-        +compact(ContextCompactionRequest) ContextCheckpoint
-        +getActiveCheckpoint(conversationId)
-        +invalidate(checkpointId)
-        +restore(snapshot)
+        +compact(ContextCompactionEffect) ContextCompactionManagerResult
+        +drain()
+    }
+
+    class ContextCheckpointStore {
+        <<interface>>
+        +getActive(conversationId)
+        +reserveAttempt(request)
+        +finalizeAttempt(request)
+        +failAttempt(request)
     }
 
     class AgentRuntimeAdapter {
@@ -2406,6 +2412,7 @@ classDiagram
     ConversationRuntime *-- ChildConversationManager
     RuntimeEffectCoordinator --> NudgeManager
     RuntimeEffectCoordinator --> ContextCompactionManager
+    ContextCompactionManager --> ContextCheckpointStore
     ContextCompiler --> ContextCompactionManager
     AgentRuntimeAdapter --> NudgeManager
     ConversationRuntime --> AgentRuntimeAdapter
@@ -4787,6 +4794,12 @@ The first implemented Policy phase is only `before_provider_call`. `RuntimePolic
 
 Each Conversation owns one `RuntimeEffectCoordinator`. Concurrent batches enter one Promise-tail lane, Effects inside a batch execute in their original order, and a rejected operation never poisons the next batch. The first typed routes are injected handlers for `NudgeEffect` and `ContextCompactionEffect`; concrete Nudge scheduling metadata and Compaction Manager orchestration remain outside the Coordinator contract.
 
+`ContextCompactionManager` is also Conversation-owned and serial. It loads the current active Checkpoint and a provider-neutral canonical source, recomputes the source digest, atomically reserves the `(conversationId, sourceDigest, compactorId, compactorVersion)` attempt, and calls the selected Compactor at most once. The Compactor supplies structured private memory and an estimated post-compaction size; it never owns Checkpoint identity, lineage, timestamps, source digest, or content digest.
+
+Core constructs the complete immutable Checkpoint, validates exact pins and source references, calculates its SHA-256 content digest through an injected platform-neutral Hasher, recomputes that digest against the captured value, and optionally invokes a semantic validator. `ContextCheckpointStore.finalizeAttempt` activates the Checkpoint only when the expected parent is still active. Any Compactor, validation, semantic, or activation failure preserves the prior active Checkpoint.
+
+Automatic duplicate suppression is durable Store behavior rather than an in-memory Manager flag. An unchanged active source reuses its existing source digest; new canonical Runtime Messages extend the digest using the parent source digest plus ordered new Message and pin material. The in-memory Store is a reference/test adapter only; production composition must provide restart-safe atomic persistence behind the same port.
+
 ```mermaid
 sequenceDiagram
     participant Pi as Pi Agent Loop
@@ -5396,6 +5409,7 @@ Currently implemented skeletons include:
 - provider-neutral Nudge Provider-call coordination with private Snapshot commit ordering and retry-stable delivery Event identities
 - Pi one-shot System Prompt Overlay integration through an exact dispatch-aware private StreamFn contract without canonical Message projection
 - deterministic before-Provider-call Runtime Policy evaluation, Context-pressure Compaction requests with automatic hysteresis, and Conversation-serialized typed Nudge/Compaction Effect routing
+- single-attempt Context Compaction orchestration with canonical source/content digest recomputation, durable-port duplicate suppression, optional semantic validation, and immutable parent-checked Checkpoint activation
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 
@@ -5404,8 +5418,8 @@ Not yet implemented:
 - ConversationProxy implementation
 - process supervisor
 - InteractionCoordinator and Approval events
-- ContextCompactionManager and ContextCheckpoint
 - ContextProjectionPlanner, ContextCheckpoint-aware ContextCompiler, and per-call overlays
+- concrete restart-safe ContextCheckpointStore and canonical Journal/Message source adapters
 - durable ArtifactStore, oversized User-content staging, and Artifact-reference recovery
 - concrete restart-safe private Nudge persistence and Provider transport dispatch-hook adapters
 - Tool Pi mapping and Tool-bearing Assistant canonical projection

@@ -2304,6 +2304,26 @@ Task 4C-D explicitly excludes:
 - concrete Nudge scheduling metadata or lifecycle persistence inside the Effect Coordinator; composition must adapt `NudgeEffect` to the already accepted Nudge Manager boundary
 - additional Runtime Policy phases or Effect kinds, Tool/Approval policies, crash recovery, Provider/model switching, and Novel-specific behavior
 
+Task 4C-E delivered:
+
+- provider-neutral asynchronous `ContextCompactionSourceProvider`, `ContextCompactor`, SHA-256 `ContextCompactionHasher`, optional `ContextCheckpointSemanticValidator`, Clock, Checkpoint ID factory, and atomic `ContextCheckpointStore` ports
+- immutable canonical Compaction source capture over ordered Runtime Messages and complete pinned Message Groups, including Conversation identity, source range, Message uniqueness, Nudge/Reminder exclusion, active-Checkpoint continuation, and exact pin ordering
+- source digest calculation from canonical Runtime Message and pin material, chained through the active Checkpoint source digest for new durable content, with unchanged active source reuse so the same source remains duplicate-stable after activation
+- single-attempt `ContextCompactionManager` orchestration covering active Checkpoint loading, irreducible-floor preflight, durable attempt reservation, one Compactor call, structural result validation, four-outcome assessment, optional semantic validation, and Store finalization
+- Manager-owned Checkpoint identity, lineage, source boundaries, Compactor identity, timestamps, token estimates, and SHA-256 content digest; Core recomputes the digest against the captured immutable Checkpoint before activation rather than trusting Compactor metadata
+- exact pinned-Message preservation, structured source-reference validation, Conversation-bound Artifact-reference validation, token-floor/reduction validation, and rejection of malformed Compactor results without replacing the previous active Checkpoint
+- durable-port duplicate-attempt identity scoped by Conversation, source digest, Compactor ID, and Compactor version; reserved, completed, unreducible, and failed attempts suppress another automatic call for unchanged source
+- atomic Store finalization requiring the expected parent Checkpoint to remain active, persisting an immutable successful Checkpoint and switching active identity in one operation; failed, unreducible, conflicting, or semantically rejected attempts preserve the previous active Checkpoint
+- `InMemoryContextCheckpointStore` as a serial reference/test adapter with fixed safe failures; production composition still requires a restart-safe Store implementation behind the same port
+- structured redacted logs and focused coverage for initial activation, parent lineage, source/content digests, same-source suppression, failed-attempt suppression, pin rejection, unreducible result, irreducible-floor preflight, semantic rejection, activation conflict, immutability, and private-content redaction
+
+Task 4C-E explicitly excludes:
+
+- concrete Journal/Message source loading, SQLite/filesystem/object-store Checkpoint persistence, cross-process locking, retention, migration, and garbage collection
+- priority-budgeted Checkpoint Projection, recent-window degradation, Context rendering, Provider hard-admission enforcement, and Pi per-call application, which belong to Task 4C-F and Task 4C-G
+- Compaction lifecycle OutputEvents and Journal publication, which belong to Task 4C-G
+- Artifact materialization or bounded Artifact access Tools, Tool-schema mounting, Provider/model selection, automatic retries, forced re-compaction input, and Novel-specific semantic validation implementations
+
 Task 4C explicitly excludes until their own implementation steps:
 
 - concrete filesystem, SQLite, or object-backed `ArtifactStore`; Artifact quota, retention, and garbage collection

@@ -14,6 +14,7 @@ import {
   type ApplicationShellStore,
   useApplicationShellSnapshot,
 } from "../state/index.js";
+import { ConversationView } from "../conversation/view/index.js";
 
 export interface NovelAppProps extends NovelAppProviderProps {
   readonly shell?: Omit<ApplicationShellProps, "children">;
@@ -57,7 +58,10 @@ function ConnectedApplicationShell({
       context={context}
       sidebarMode={shell?.sidebarMode ?? snapshot.sidebarMode}
     >
-      {children}
+      {children ??
+        (snapshot.conversation !== undefined ? (
+          <ConversationView conversationId={snapshot.conversation.id} />
+        ) : undefined)}
     </ApplicationShell>
   );
 }

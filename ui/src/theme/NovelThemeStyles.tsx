@@ -246,4 +246,120 @@ const NOVEL_THEME_CSS = `
   visibility: hidden;
   border-left: 0;
 }
+
+.novel-conversation-view {
+  width: min(840px, 100%);
+  margin: 0 auto;
+}
+
+.novel-conversation-header,
+.novel-message-header,
+.novel-card-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--novel-text-secondary);
+  font-size: 12px;
+}
+
+.novel-conversation-header {
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.novel-runtime-presence,
+.novel-status-token,
+.novel-card-status {
+  border: 1px solid var(--novel-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--novel-surface-secondary);
+}
+
+.novel-conversation-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.novel-message {
+  max-width: min(720px, 92%);
+}
+
+.novel-user-message {
+  align-self: flex-end;
+}
+
+.novel-assistant-message {
+  align-self: flex-start;
+}
+
+.novel-message-header {
+  margin: 0 8px 6px;
+}
+
+.novel-message-text,
+.novel-thinking-block,
+.novel-message-notice {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.novel-user-message .novel-message-text {
+  border-radius: 14px 14px 4px 14px;
+  padding: 11px 14px;
+  background: #edf1f6;
+}
+
+.novel-assistant-content {
+  border-left: 2px solid var(--novel-border);
+  padding: 4px 0 4px 14px;
+  line-height: 1.65;
+}
+
+.novel-thinking-block {
+  margin-top: 10px;
+  color: var(--novel-text-secondary);
+  font-size: 13px;
+}
+
+.novel-streaming-cursor {
+  color: var(--novel-accent);
+  animation: novel-pulse 1.1s ease-in-out infinite;
+}
+
+.novel-message-notice {
+  color: #8a4b4b;
+  font-size: 13px;
+}
+
+.novel-approval-card {
+  width: min(620px, 100%);
+  align-self: flex-start;
+  border: 1px solid var(--novel-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--novel-surface-quiet);
+}
+
+.novel-approval-card h3,
+.novel-approval-card p {
+  margin: 8px 0 0;
+}
+
+.novel-card-status {
+  width: fit-content;
+  margin-top: 12px;
+  color: #8a641e;
+}
+
+.novel-conversation-diagnostics {
+  margin-top: 18px;
+  color: var(--novel-text-secondary);
+  font-size: 12px;
+}
+
+@keyframes novel-pulse {
+  50% { opacity: 0.35; }
+}
 `;

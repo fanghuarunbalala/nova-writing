@@ -469,6 +469,14 @@ Examples of normally collapsed diagnostics:
 - replay and restoration metadata;
 - internal Nudge lifecycle Events.
 
+### 10.1 Implemented Read-only Conversation Checkpoint
+
+The shared UI now renders the existing Core `ConversationProjectionSnapshot` through typed User Message, Assistant Message, and Tool Approval components. Assistant streaming, completed, failed, and cancelled states have explicit text labels; thinking content is collapsed behind a disclosure element; message text preserves whitespace without interpreting Markdown as commands.
+
+Unknown and low-level Events remain hidden from the normal timeline. An explicit diagnostics mode renders only safe Event descriptors containing Sequence, type, and direction, never arbitrary payloads. Approval summaries omit Tool arguments and digests from normal display.
+
+`ConversationView` binds the timeline to `useConversationProjection`, and `NovelApp` automatically opens the Conversation selected in `ApplicationShellStore` when no custom central child is supplied. Journal replay and live Events update the same view without making React state an independent history. Connection recovery controls remain the next checkpoint.
+
 ## 11. Structured Card Architecture
 
 Conversation cards are produced from structured Event snapshots, never by scraping assistant Markdown for application commands.

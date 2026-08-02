@@ -10,6 +10,7 @@ import type {
   ConversationEventPage,
   ConversationEventSubscription,
 } from "../../storage/index.js";
+import { validatePersistedConversationEventSnapshot } from "../../storage/index.js";
 import {
   API_PROTOCOL_VERSION,
   ApiRemoteError,
@@ -28,7 +29,7 @@ import {
   isRuntimePresenceState,
   type RuntimePresence,
 } from "../RuntimePresence.js";
-import { ApiConversationEventSubscription, validatePersistedConversationEventSnapshot } from "./ApiConversationEventSubscription.js";
+import { ApiConversationEventSubscription } from "./ApiConversationEventSubscription.js";
 import {
   CONVERSATION_API_OPERATION,
   type EnqueueConversationInputRequest,

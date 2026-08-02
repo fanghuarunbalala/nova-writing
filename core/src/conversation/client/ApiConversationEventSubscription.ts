@@ -1,10 +1,10 @@
 /** Validates Transport Event frames and exposes the established Conversation stream. */
-import { coreEventSchemaRegistry } from "../../event/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
 import type {
   ConversationEventSubscription,
   PersistedConversationEventSnapshot,
 } from "../../storage/index.js";
+import { validatePersistedConversationEventSnapshot } from "../../storage/index.js";
 import {
   API_PROTOCOL_VERSION,
   type ApiEventFrame,
@@ -88,42 +88,6 @@ export class ApiConversationEventSubscription
   }
 }
 
-export function validatePersistedConversationEventSnapshot(
-  value: unknown,
-  expectedConversationId: string,
-): PersistedConversationEventSnapshot {
-  const record = assertRecord(value, "Persisted Conversation Event");
-  const direction = record.direction;
-  if (direction !== "input" && direction !== "output") {
-    throw new ConversationClientProtocolError(
-      "Persisted Conversation Event direction is invalid",
-    );
-  }
-  const sequence = assertSafeInteger(record.sequence, "Event sequence", 1);
-  const recordedAt = assertNonEmptyString(record.recordedAt, "Event recordedAt");
-  const { direction: _direction, sequence: _sequence, recordedAt: _recordedAt, ...snapshot } =
-    record;
-  const validated =
-    direction === "input"
-      ? coreEventSchemaRegistry.validateInput(snapshot, {
-          allowUnknownEventType: true,
-        })
-      : coreEventSchemaRegistry.validateOutput(snapshot, {
-          allowUnknownEventType: true,
-        });
-  if (validated.conversationId !== expectedConversationId) {
-    throw new ConversationClientProtocolError(
-      "Persisted Conversation Event targets another Conversation",
-    );
-  }
-  return Object.freeze({
-    ...validated,
-    direction,
-    sequence,
-    recordedAt,
-  }) as PersistedConversationEventSnapshot;
-}
-
 function validateApiEventFrame(
   value: ApiEventFrame,
   expectedSubscriptionId: string,
@@ -140,10 +104,16 @@ function validateApiEventFrame(
       "API Event frame subscriptionId does not match the active subscription",
     );
   }
-  return validatePersistedConversationEventSnapshot(
-    frame.event,
-    expectedConversationId,
-  );
+  try {
+    return validatePersistedConversationEventSnapshot(
+      frame.event,
+      expectedConversationId,
+    );
+  } catch {
+    throw new ConversationClientProtocolError(
+      "Persisted Conversation Event frame is invalid",
+    );
+  }
 }
 
 function assertRecord(value: unknown, label: string): Record<string, unknown> {
@@ -158,13 +128,4 @@ function assertNonEmptyString(value: unknown, label: string): string {
     throw new ConversationClientProtocolError(`${label} must be a non-empty string`);
   }
   return value;
-}
-
-function assertSafeInteger(value: unknown, label: string, minimum: number): number {
-  if (!Number.isSafeInteger(value) || (value as number) < minimum) {
-    throw new ConversationClientProtocolError(
-      `${label} must be a safe integer greater than or equal to ${minimum}`,
-    );
-  }
-  return value as number;
 }

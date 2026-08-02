@@ -15,6 +15,7 @@ export * from "./event/index.js";
 export * from "./novel/index.js";
 export * from "./observability/index.js";
 export * from "./prompt/index.js";
+export * from "./projection/index.js";
 export * from "./runtime/index.js";
 export * from "./storage/index.js";
 export * from "./tools/index.js";

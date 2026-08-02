@@ -511,6 +511,23 @@ flowchart LR
     Projection --> Text["CLI formatter"]
 ```
 
+### 13.1 Implemented Conversation Projection Checkpoint
+
+`ConversationProjectionStore` now provides one immutable, view-neutral Conversation state for all clients. It applies persisted Events in strict Journal Sequence order, rejects gaps and identity conflicts, and treats a byte-equivalent replay of an already applied Sequence as a duplicate without incrementing revision or notifying subscribers.
+
+The initial typed projections include:
+
+- User Message timeline entries;
+- Assistant streaming drafts, ordered deltas, terminal completion, failure, and cancellation;
+- logical Runtime Presence;
+- current Run and Turn lifecycle state;
+- requested and resolved Tool Approval summaries;
+- safe Event descriptors for every persisted Event, including currently unknown Event types.
+
+Unknown Events do not expose arbitrary payloads through the generic descriptor. Typed projections expose only payload fields explicitly required by their view model. Logs contain Event identity, type, direction, Sequence, revision, and error names, but never projected message text or Approval descriptions.
+
+A new projection rebuild starts from Sequence `1`. Reconnection reuses the existing Store and subscribes with its `lastAppliedSequence`; an independent tail-only Store is not treated as a complete Conversation projection. The Store owns no durable state, network lifecycle, automatic reconnect loop, React state, or rendering behavior.
+
 ## 14. CLI and TUI Integration
 
 CLI and TUI are first-class clients in the same API system.

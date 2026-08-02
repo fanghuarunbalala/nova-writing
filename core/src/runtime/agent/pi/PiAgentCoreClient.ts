@@ -3,6 +3,7 @@ import type {
   Agent,
   AgentEvent,
   AgentMessage,
+  StreamFn,
 } from "@earendil-works/pi-agent-core";
 
 export interface PiAgentCoreState {
@@ -18,6 +19,7 @@ export interface PiAgentCoreState {
 
 export interface PiAgentCoreClient {
   readonly state: PiAgentCoreState;
+  streamFunction: StreamFn;
 
   subscribe(
     listener: (event: AgentEvent, signal: AbortSignal) => Promise<void> | void,

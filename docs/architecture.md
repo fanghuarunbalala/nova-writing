@@ -4430,7 +4430,59 @@ The Store Snapshot is private Runtime state and may contain template parameters 
 
 The selected items are rendered into one temporary `SystemReminderOverlay` block. The first version supports only `system-prompt-overlay`; `context-tail` placement is deferred.
 
-### 18.3 One-turn Disappearance
+### 18.3 Provider Dispatch Integration
+
+`NudgeProviderCallCoordinator` owns the provider-neutral transaction boundary between pending private state, one concrete Provider request, and redacted public lifecycle Events.
+
+```mermaid
+sequenceDiagram
+    participant Pi as PiAgentCoreAdapter
+    participant Nudge as NudgeProviderCallCoordinator
+    participant Private as Private Nudge State
+    participant Provider as Dispatch-aware Provider Stream
+    participant Journal as RuntimeEventSink
+
+    Pi->>Nudge: prepare(conversationId, runId, providerCallId, turn)
+    Nudge->>Nudge: lease and render Overlay
+    Nudge->>Private: commit leased Snapshot
+    Nudge-->>Pi: PreparedNudgeProviderCall
+    Pi->>Pi: clone Provider Context and append Overlay
+    Pi->>Provider: stream(model, clonedContext, hooks)
+
+    alt request actually sent
+        Provider->>Pi: onDispatched(dispatchedAt)
+        Pi->>Nudge: confirmDispatched(...)
+        Nudge->>Private: commit consumed Snapshot
+        Nudge->>Journal: append SystemReminderInjectedOutputEvent per Nudge
+    else known failure before send
+        Provider->>Pi: onFailedBeforeDispatch(failedAt)
+        Pi->>Nudge: releaseBeforeDispatch(...)
+        Nudge->>Private: commit scheduled Snapshot
+    else stream completes without either hook
+        Pi->>Nudge: releaseBeforeDispatch(...)
+        Nudge->>Private: commit scheduled Snapshot
+        Pi-->>Pi: fail provider_dispatch_protocol
+    end
+```
+
+Pi's native `onPayload` callback is before request dispatch and therefore cannot prove delivery. `onResponse` is after a response and misses dispatched requests that fail before a response arrives. A successful StreamFn return is also insufficient because a returned stream may dispatch lazily. Provider integration therefore uses the private `PiDispatchAwareStreamFunction` contract:
+
+```ts
+interface PiProviderDispatchHooks {
+  onDispatched(dispatchedAt?: string): Promise<void>;
+  onFailedBeforeDispatch(failedAt?: string): Promise<void>;
+}
+```
+
+The concrete Provider transport calls `onDispatched` immediately after the request is actually sent. If no Nudge is selected, the call does not require either hook. If a Nudge is leased and the stream finishes without either hook, Core releases the lease and reports the fixed `provider_dispatch_protocol` failure rather than guessing whether delivery occurred. Pi internally converts StreamFn exceptions into an Agent failure, so the Core adapter retains dispatch-coordination failures and rethrows the fixed infrastructure failure after Pi settles instead of misclassifying them as an ordinary model outcome.
+
+The leased Snapshot is committed before the Overlay may reach request construction. After dispatch, the consumed Snapshot is committed before public delivery Events. Public Event retries use injected stable Event IDs, so a partial multi-Nudge append can be retried without inventing a second lifecycle identity. Failure after actual dispatch never releases the Nudge.
+
+The Pi adapter creates one Provider Call ID for every actual LLM call and applies the Overlay only to a cloned per-call Provider Context. It does not mutate the compiled base Context or `agent.state.systemPrompt`. Pi-specific types and dispatch hooks remain internal adapter details rather than Core public protocol.
+
+Production composition must inject restart-safe private persistence through `NudgePrivateStateCommitter`. The in-memory Store and snapshot collector are reference/test implementations only; redacted Journal Events cannot reconstruct renderable parameters.
+
+### 18.4 One-turn Disappearance
 
 Nudge messages never enter canonical Conversation history or ContextCheckpoint summaries. They exist only in one `CompiledProviderContext`.
 
@@ -5106,6 +5158,9 @@ Currently implemented skeletons include:
 - fixed execution-loop degradation for preparation, Context compilation, and Adapter infrastructure failures without fabricated terminal lifecycle
 - `ConversationRuntime` observation of real Agent Pump failure through a fixed crash exit and closed dispatch admission
 - durable Agent crash replay detection producing `recovery_required` without reroute or implicit lifecycle repair
+- deterministic Nudge selection, template rendering, pending lifecycle, restart-normalized private Snapshots, and redacted public lifecycle Events
+- provider-neutral Nudge Provider-call coordination with private Snapshot commit ordering and retry-stable delivery Event identities
+- Pi one-shot System Prompt Overlay integration through an exact dispatch-aware private StreamFn contract without canonical Message projection
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 
@@ -5115,10 +5170,9 @@ Not yet implemented:
 - process supervisor
 - InteractionCoordinator and Approval events
 - RuntimePolicyEngine and RuntimeEffectCoordinator
-- NudgeManager
 - ContextCompactionManager and ContextCheckpoint
-- PendingNudgeStore and one-shot System Prompt Overlay
 - ContextCheckpoint-aware ContextCompiler and per-call overlays
+- concrete restart-safe private Nudge persistence and Provider transport dispatch-hook adapters
 - Tool Pi mapping and Tool-bearing Assistant canonical projection
 - Tool registry and execution pipeline
 - IPC protocol

@@ -4,6 +4,8 @@ export * from "./NudgeManagerErrors.js";
 export * from "./NudgeProtocol.js";
 export * from "./NudgeProtocolErrors.js";
 export * from "./NudgeProtocolValidator.js";
+export * from "./NudgeProviderCallCoordinator.js";
+export * from "./NudgeProviderCallCoordinatorErrors.js";
 export * from "./NudgeRenderer.js";
 export * from "./NudgeSelectionErrors.js";
 export * from "./NudgeSelector.js";

@@ -4,13 +4,21 @@
  * Pi owns transient model execution; canonical Messages, lifecycle identity,
  * persistence barriers, and cancellation intent remain owned by Core.
  */
-import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
+import type {
+  AgentEvent,
+  AgentMessage,
+  StreamFn,
+} from "@earendil-works/pi-agent-core";
 import {
   canonicalStringifyJson,
   type JsonValue,
 } from "../../../event/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { isExecutionCancellationReason } from "../../execution/ExecutionCancellationReason.js";
+import type {
+  NudgeProviderCallCoordinator,
+  PreparedNudgeProviderCall,
+} from "../../nudge/index.js";
 import {
   coreRuntimeMessageSchemaRegistry,
   type RuntimeMessageSchemaRegistry,
@@ -33,6 +41,14 @@ import {
 } from "./PiAgentCoreAdapterErrors.js";
 import type { PiAgentEventBridge } from "./PiAgentEventBridge.js";
 import {
+  RandomPiProviderCallIdFactory,
+  systemPiProviderCallClock,
+  type PiDispatchAwareStreamFunction,
+  type PiProviderCallClock,
+  type PiProviderCallIdFactory,
+  type PiProviderDispatchHooks,
+} from "./PiDispatchAwareStreamFunction.js";
+import {
   PI_RUNTIME_MESSAGE_CONVERSION_PURPOSE,
   type PiRuntimeMessageConverter,
 } from "./PiRuntimeMessageConverter.js";
@@ -42,6 +58,10 @@ export interface PiAgentCoreAdapterOptions {
   messageConverter: PiRuntimeMessageConverter;
   eventBridge: PiAgentEventBridge;
   messageSchemaRegistry?: RuntimeMessageSchemaRegistry;
+  nudgeProviderCalls?: NudgeProviderCallCoordinator;
+  dispatchAwareStreamFunction?: PiDispatchAwareStreamFunction;
+  providerCallIdFactory?: PiProviderCallIdFactory;
+  providerCallClock?: PiProviderCallClock;
   logger?: Logger;
 }
 
@@ -54,6 +74,9 @@ interface ActivePiRun {
   sawAgentEnd: boolean;
   terminalStopReason?: PiTerminalStopReason;
   eventBarrierError?: PiAgentCoreAdapterError;
+  providerDispatchProtocolError?: PiAgentCoreAdapterError;
+  turnNumber: number;
+  providerCallOrdinal: number;
 }
 
 type PiTerminalStopReason =
@@ -74,6 +97,10 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
   private readonly messageConverter: PiRuntimeMessageConverter;
   private readonly eventBridge: PiAgentEventBridge;
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
+  private readonly nudgeProviderCalls?: NudgeProviderCallCoordinator;
+  private readonly dispatchAwareStreamFunction?: PiDispatchAwareStreamFunction;
+  private readonly providerCallIdFactory: PiProviderCallIdFactory;
+  private readonly providerCallClock: PiProviderCallClock;
   private readonly logger: Logger;
   private activeRun?: ActivePiRun;
 
@@ -86,6 +113,21 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     this.logger = (options.logger ?? noopLogger).child({
       component: "pi_agent_core_adapter",
     });
+    this.nudgeProviderCalls = options.nudgeProviderCalls;
+    this.dispatchAwareStreamFunction = options.dispatchAwareStreamFunction;
+    this.providerCallIdFactory =
+      options.providerCallIdFactory ?? new RandomPiProviderCallIdFactory();
+    this.providerCallClock = options.providerCallClock ?? systemPiProviderCallClock;
+    if (
+      (this.nudgeProviderCalls === undefined) !==
+      (this.dispatchAwareStreamFunction === undefined)
+    ) {
+      throw this.fail(PI_AGENT_CORE_ADAPTER_FAILURE.invalidRequest);
+    }
+    if (this.nudgeProviderCalls && this.dispatchAwareStreamFunction) {
+      this.agent.streamFunction = (model, context, streamOptions) =>
+        this.streamProviderCall(model, context, streamOptions);
+    }
     this.agent.subscribe((event, signal) => this.handlePiEvent(event, signal));
   }
 
@@ -117,6 +159,8 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       phase: "preparing",
       cancelRequested: false,
       sawAgentEnd: false,
+      turnNumber: 0,
+      providerCallOrdinal: 0,
     };
     this.activeRun = active;
     this.logger.info("runtime.agent.stream_started", {
@@ -149,6 +193,9 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         await this.agent.prompt([...converted.prompt]);
       } else {
         await this.agent.continue();
+      }
+      if (active.providerDispatchProtocolError !== undefined) {
+        throw active.providerDispatchProtocolError;
       }
       if (active.eventBarrierError !== undefined) throw active.eventBarrierError;
       if (!active.sawAgentEnd || active.terminalStopReason === undefined) {
@@ -240,6 +287,9 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     }
     if (active.eventBarrierError !== undefined) throw active.eventBarrierError;
 
+    if (event.type === "turn_start") {
+      active.turnNumber += 1;
+    }
     if (event.type === "turn_end" && event.message.role === "assistant") {
       active.terminalStopReason = event.message.stopReason;
     }
@@ -307,6 +357,134 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         request,
       );
     }
+  }
+
+  private async streamProviderCall(
+    model: Parameters<StreamFn>[0],
+    context: Parameters<StreamFn>[1],
+    options: Parameters<StreamFn>[2],
+  ): Promise<Awaited<ReturnType<StreamFn>>> {
+    const active = this.activeRun;
+    const coordinator = this.nudgeProviderCalls;
+    const delegate = this.dispatchAwareStreamFunction;
+    if (
+      !active ||
+      active.phase !== "executing" ||
+      active.turnNumber < 1 ||
+      !coordinator ||
+      !delegate
+    ) {
+      throw active
+        ? this.rememberProviderDispatchFailure(active)
+        : this.fail(PI_AGENT_CORE_ADAPTER_FAILURE.providerDispatchProtocol);
+    }
+
+    active.providerCallOrdinal += 1;
+    const requestedAt = this.providerCallClock.now();
+    const providerCallId = this.providerCallIdFactory.create({
+      conversationId: active.request.conversationId,
+      runId: active.request.runId,
+      turnNumber: active.turnNumber,
+      providerCallOrdinal: active.providerCallOrdinal,
+    });
+    let prepared: PreparedNudgeProviderCall | undefined;
+    try {
+      prepared = await coordinator.prepare({
+        conversationId: active.request.conversationId,
+        runId: active.request.runId,
+        providerCallId,
+        targetTurnNumber: active.turnNumber,
+        requestedAt,
+      });
+    } catch {
+      throw this.rememberProviderDispatchFailure(active);
+    }
+
+    const lifecycle = createDispatchLifecycle(prepared);
+    const hooks: PiProviderDispatchHooks = Object.freeze({
+      onDispatched: async (dispatchedAt = this.providerCallClock.now()) => {
+        if (!prepared) return;
+        if (lifecycle.state === "dispatched") return;
+        if (lifecycle.state !== "pending") {
+          throw this.rememberProviderDispatchFailure(active);
+        }
+        lifecycle.state = "dispatched";
+        try {
+          await coordinator.confirmDispatched(prepared, dispatchedAt);
+        } catch {
+          throw this.rememberProviderDispatchFailure(active);
+        }
+      },
+      onFailedBeforeDispatch: async (failedAt = this.providerCallClock.now()) => {
+        if (!prepared) return;
+        if (lifecycle.state === "released") return;
+        if (lifecycle.state !== "pending") {
+          throw this.rememberProviderDispatchFailure(active);
+        }
+        lifecycle.state = "released";
+        try {
+          await coordinator.releaseBeforeDispatch(prepared, failedAt);
+        } catch {
+          throw this.rememberProviderDispatchFailure(active);
+        }
+      },
+    });
+
+    const providerContext = prepared
+      ? {
+          ...context,
+          systemPrompt: appendSystemPromptOverlay(
+            context.systemPrompt ?? "",
+            prepared.overlay.content,
+          ),
+        }
+      : context;
+    let response: Awaited<ReturnType<StreamFn>>;
+    try {
+      response = await delegate(model, providerContext, options, hooks);
+    } catch (error) {
+      if (prepared && lifecycle.state === "pending") {
+        lifecycle.state = "released";
+        try {
+          await coordinator.releaseBeforeDispatch(
+            prepared,
+            this.providerCallClock.now(),
+          );
+        } catch {
+          throw this.rememberProviderDispatchFailure(active);
+        }
+      }
+      throw error;
+    }
+
+    if (prepared) {
+      const originalResult = response.result.bind(response);
+      let guardedResult: ReturnType<typeof originalResult> | undefined;
+      response.result = () => {
+        guardedResult ??= (async () => {
+          const result = await originalResult();
+          if (lifecycle.state === "pending") {
+            lifecycle.state = "released";
+            await coordinator.releaseBeforeDispatch(
+              prepared,
+              this.providerCallClock.now(),
+            );
+            throw this.rememberProviderDispatchFailure(active);
+          }
+          return result;
+        })();
+        return guardedResult;
+      };
+    }
+    this.logger.debug("runtime.agent.provider_call_prepared", {
+      conversationId: active.request.conversationId,
+      runId: active.request.runId,
+      providerCallId,
+      turnNumber: active.turnNumber,
+      providerCallOrdinal: active.providerCallOrdinal,
+      hasNudgeOverlay: prepared !== undefined,
+    });
+    return response;
   }
 
   private captureStreamRequest(
@@ -432,6 +610,17 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     return this.fail(fallback, identity?.conversationId, identity?.runId);
   }
 
+  private rememberProviderDispatchFailure(
+    active: ActivePiRun,
+  ): PiAgentCoreAdapterError {
+    active.providerDispatchProtocolError ??= this.fail(
+      PI_AGENT_CORE_ADAPTER_FAILURE.providerDispatchProtocol,
+      active.request.conversationId,
+      active.request.runId,
+    );
+    return active.providerDispatchProtocolError;
+  }
+
   private fail(
     failure: PiAgentCoreAdapterFailure,
     conversationId?: string,
@@ -489,4 +678,18 @@ function createSettlement(): {
     resolve = settle;
   });
   return Object.freeze({ promise, resolve });
+}
+
+interface DispatchLifecycle {
+  state: "inactive" | "pending" | "dispatched" | "released";
+}
+
+function createDispatchLifecycle(
+  prepared: PreparedNudgeProviderCall | undefined,
+): DispatchLifecycle {
+  return { state: prepared ? "pending" : "inactive" };
+}
+
+function appendSystemPromptOverlay(base: string, overlay: string): string {
+  return base.length === 0 ? overlay : `${base}\n\n${overlay}`;
 }

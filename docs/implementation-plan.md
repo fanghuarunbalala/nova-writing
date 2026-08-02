@@ -2193,6 +2193,25 @@ Task 4N-E explicitly excludes:
 - Provider dispatch detection and Pi Adapter integration
 - conversion of any Nudge Event into canonical Runtime Messages
 
+Task 4N-F delivered:
+
+- provider-neutral `NudgeProviderCallCoordinator` coordination around one exact Provider-call identity, with leased private Snapshot commit before request construction, consumed private Snapshot commit before public delivery Events, and released private Snapshot commit for known pre-dispatch failure
+- injected `NudgePrivateStateCommitter`, `RuntimeEventSink`, and retry-stable `NudgeLifecycleEventIdFactory` ports; production composition must provide restart-safe private persistence rather than relying on `InMemoryPendingNudgeStore`
+- internal Pi-only `PiDispatchAwareStreamFunction` contract exposing `onDispatched` immediately after the Provider request is actually sent and `onFailedBeforeDispatch` when execution terminates before send
+- rejection of Pi `onPayload`, `onResponse`, and successful StreamFn return as dispatch evidence because they are respectively too early, too late, or compatible with lazy dispatch
+- one Provider Call ID per actual Pi LLM call, Run and Turn targeting, and a cloned per-call Provider Context that appends the temporary Overlay without mutating the base System Prompt
+- one-shot disappearance across repeated Provider calls in the same Agent Run, while canonical Core Messages, Pi Agent history, compiled base Context, and `agent.state.systemPrompt` remain free of Reminder content and parameters
+- idempotent duplicate dispatch confirmation, pre-dispatch lease release without a public Event, post-dispatch consumption, and promotion of missing hooks or coordination failures to stable `provider_dispatch_protocol` infrastructure failure even though Pi normalizes StreamFn exceptions internally
+- redacted structured logs and one-delivered-Event-per-Nudge publication with no rendered Reminder content, template parameters, raw Provider errors, or local failure messages
+- focused integration coverage for two Provider calls in one Run, exact one-shot disappearance, private Snapshot ordering, public Event redaction, duplicate dispatch hooks, pre-dispatch failure, missing dispatch hooks, and post-dispatch Event publication failure
+
+Task 4N-F explicitly excludes:
+
+- a concrete Provider SDK transport adapter; each configured Provider transport must implement the private dispatch-aware hook contract at its actual send boundary
+- a concrete SQLite or file-backed private Nudge repository; restart-safe production composition remains required through the injected private state port
+- generic `ContextCompiler` overlay layers, `context-tail` placement, Runtime Policy evaluation, Context Compaction, or `ContextCheckpoint`
+- projection of Reminder content, parameters, or Nudge lifecycle Events into canonical Runtime Messages
+
 ### 7.2 Task 4 Policy and Compaction Review Gate
 
 Questions still requiring explicit review before their implementation:

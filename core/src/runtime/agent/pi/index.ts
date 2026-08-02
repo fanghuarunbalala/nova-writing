@@ -9,6 +9,7 @@ export * from "./PiAgentEventBridge.js";
 export * from "./PiAssistantMessageEnvelopeFactory.js";
 export * from "./PiAssistantOutputBridge.js";
 export * from "./PiAssistantOutputBridgeErrors.js";
+export * from "./PiDispatchAwareStreamFunction.js";
 export * from "./PiRuntimeMessageConverter.js";
 export * from "./PiTurnLifecycleBridge.js";
 export * from "./PiTurnLifecycleBridgeErrors.js";

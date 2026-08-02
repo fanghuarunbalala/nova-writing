@@ -50,6 +50,7 @@
     "smoke:runtime-nudge-selection-template": "pnpm build && node scripts/runtime-nudge-selection-template-smoke.mjs",
     "smoke:runtime-projected-run-preparation": "pnpm build && node scripts/runtime-projected-run-preparation-smoke.mjs",
     "smoke:runtime-pi-adapter": "pnpm build && node scripts/runtime-pi-agent-core-adapter-smoke.mjs",
+    "smoke:runtime-pi-nudge-overlay": "pnpm build && node scripts/runtime-pi-nudge-overlay-integration-smoke.mjs",
     "smoke:runtime-pi-assistant-output": "pnpm build && node scripts/runtime-pi-assistant-output-bridge-smoke.mjs",
     "smoke:runtime-assistant-history": "pnpm build && node scripts/runtime-assistant-message-history-smoke.mjs",
     "smoke:runtime-pi-turn-bridge": "pnpm build && node scripts/runtime-pi-turn-lifecycle-bridge-smoke.mjs",

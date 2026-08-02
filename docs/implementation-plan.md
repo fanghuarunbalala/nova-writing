@@ -2899,6 +2899,24 @@ Expected deliverables after approval:
 
 This task does not implement full CLI, GUI, or Web products. It verifies that each can use the same Core contracts.
 
+Accepted Task 7 decisions:
+
+1. The release uses strict TypeScript compilation plus executable `core/scripts/*-smoke.mjs` fixtures rather than introducing a second test framework.
+2. Every Validation Scope item above is required for the first Runtime release and mapped in `docs/runtime-validation-matrix.md`.
+3. Reference examples are executable smoke fixtures with a stable documentation index, so examples and acceptance behavior share one implementation.
+4. Performance and memory baselines remain explicitly deferred until representative workloads exist; Task 7 makes no unmeasured performance guarantees.
+5. Required failure injection covers persistence, schema, projection, cancellation, Tool, IPC, process, recovery, and Subagent boundaries already represented by the complete smoke suite.
+
+Task 7 delivered:
+
+- executable references for in-memory, persisted, child-process, replay, Approval, Nudge, Compaction, and Subagent flows
+- shared CLI/TUI/GUI/Web client integration guidance based on Conversation Client/Proxy, InputEvents, durable Events, projections, and injected Transports
+- a first-release validation matrix covering every documented Runtime correctness and failure boundary
+- machine-checkable release acceptance smoke for required examples, documents, scripts, and public Event names
+- final full workspace typecheck/build, complete Core smoke execution, formatting review, scope review, and payload-free logging review
+
+Checkpoint 7 status: completed.
+
 ## 11. Review Checkpoints
 
 Implementation pauses for review after each checkpoint:
@@ -2933,4 +2951,4 @@ No next checkpoint begins without explicit approval.
 
 Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
-The next documented Runtime step is Task 7: full validation, examples, client integration documentation, and final Runtime checkpoint closure.
+Runtime Task 1 through Task 7 is complete. Novel Task N7 through Task N11 remains paused until an explicit track change.

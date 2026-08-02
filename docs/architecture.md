@@ -5771,6 +5771,12 @@ Task 6B-E closes the concrete local composition. `CatalogHostChildConversationAd
 
 Checkpoint 6B is complete. Main and child agents share the same Conversation, Host, Journal, Message, Tool, Context, Nudge, IPC, and process-placement abstractions while retaining independent state. Public Core boundaries remain provider-neutral and contain no Pi, Node process, workspace path, prompt, Tool payload, or child private history.
 
+## 25.1 Runtime Release Validation
+
+Checkpoint 7 treats executable smoke fixtures as both acceptance tests and reference examples. `docs/runtime-validation-matrix.md` maps the complete first-release correctness surface, while `docs/runtime-client-integration.md` records how CLI, TUI, GUI, and Web clients consume the same Client, Proxy, Transport, InputEvent, OutputEvent, replay, Approval, and Subagent contracts. Replay remains process-free and client platforms never receive Pi, Node, SQLite, Tool implementation, prompt, credential, or raw failure types.
+
+Runtime Task 1 through Task 7 is complete. Performance baselines remain deferred rather than implied; the accepted release checkpoint guarantees the documented protocol, persistence, recovery, cancellation, redaction, and cross-client behavior validated by the complete suite.
+
 ## 26. Persistence Model
 
 Logical local storage layout:

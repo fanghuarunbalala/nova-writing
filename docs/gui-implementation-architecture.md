@@ -615,6 +615,12 @@ An immutable `InspectorRendererRegistry` now maps platform-neutral target kinds 
 
 `NovelApp` renders this panel by default and accepts an injected Registry while retaining an explicit Shell Inspector override for bounded host customization. Renderer changes and Inspector navigation leave the central Conversation subtree mounted. Concrete Character, Location, Outline, Manuscript, and Schedule query adapters remain separate checkpoints because their read contracts do not all exist yet.
 
+### 12.3 Implemented Project Navigation Checkpoint
+
+The shared project sidebar now drives a platform-neutral `ProjectNavigationController`. Schedule, Outline, Characters, Locations, and Manuscript open root Inspector targets, replace prior local Inspector navigation, update the Shell Meta identity, and select normal or expanded width according to the accepted presentation. The central Conversation subtree remains mounted throughout these local navigation changes.
+
+When no Novel is selected, Novel-bound sections enter a stable `NOVEL_NOT_SELECTED` unavailable state. Schedule opens with `SCHEDULE_PROTOCOL_UNRESOLVED` because its owning domain and query contract remain explicitly deferred. New Conversation remains a visible but unsupported default action until a Conversation creation protocol is accepted; hosts may override the Shell navigation callback without changing the shared layout.
+
 ## 13. Referencing Inspector Content in Conversation
 
 The Inspector provides `Reference in Conversation` on eligible StoryUnits, Manuscript blocks, Character fields, Location fields, proposal operations, and task records.

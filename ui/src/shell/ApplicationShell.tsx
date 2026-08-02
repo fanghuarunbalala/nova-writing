@@ -11,6 +11,7 @@ import { InspectorHost, type InspectorMode } from "./InspectorHost.js";
 import {
   ProjectSidebar,
   type ConversationSidebarItem,
+  type ProjectNavigationItem,
 } from "./ProjectSidebar.js";
 import { TopMenu } from "./TopMenu.js";
 import type { SidebarMode } from "../state/index.js";
@@ -18,6 +19,8 @@ import type { SidebarMode } from "../state/index.js";
 export interface ApplicationShellProps {
   readonly context?: CurrentContextBarProps;
   readonly conversations?: readonly ConversationSidebarItem[];
+  readonly onNavigate?: (item: ProjectNavigationItem) => void;
+  readonly onConversationSelect?: (conversationId: string) => void;
   readonly sidebarMode?: SidebarMode;
   readonly inspectorMode?: InspectorMode;
   readonly inspector?: ReactNode;
@@ -28,6 +31,8 @@ export interface ApplicationShellProps {
 export function ApplicationShell({
   context,
   conversations,
+  onNavigate,
+  onConversationSelect,
   sidebarMode = "expanded",
   inspectorMode = "closed",
   inspector,
@@ -45,7 +50,12 @@ export function ApplicationShell({
       <TopMenu />
       <CurrentContextBar {...context} />
       <div className="novel-shell-body" data-inspector-mode={inspectorMode} data-sidebar-mode={sidebarMode}>
-        <ProjectSidebar mode={sidebarMode} conversations={conversations} />
+        <ProjectSidebar
+          mode={sidebarMode}
+          conversations={conversations}
+          onNavigate={onNavigate}
+          onConversationSelect={onConversationSelect}
+        />
         <ConversationWorkspace composer={composer}>{children}</ConversationWorkspace>
         <InspectorHost mode={inspectorMode}>{inspector}</InspectorHost>
       </div>

@@ -1,5 +1,6 @@
 /** Stable shared React application entrypoint used by desktop and Web shells. */
 import type { ReactNode } from "react";
+import { useMemo } from "react";
 import {
   ApplicationShell,
   type ApplicationShellProps,
@@ -12,6 +13,7 @@ import {
   ApplicationShellStoreProvider,
   type ApplicationShellState,
   type ApplicationShellStore,
+  useApplicationShellStore,
   useApplicationShellSnapshot,
 } from "../state/index.js";
 import {
@@ -26,8 +28,10 @@ import {
   InspectorStoreProvider,
   type InspectorStore,
   type InspectorStoreInitialState,
+  useInspectorStore,
   useInspectorSnapshot,
 } from "../inspector/index.js";
+import { ProjectNavigationController } from "../navigation/index.js";
 
 export interface NovelAppProps extends NovelAppProviderProps {
   readonly shell?: Omit<ApplicationShellProps, "children">;
@@ -72,7 +76,13 @@ function ConnectedApplicationShell({
   readonly children?: ReactNode;
 }) {
   const snapshot = useApplicationShellSnapshot();
+  const shellStore = useApplicationShellStore();
   const inspectorSnapshot = useInspectorSnapshot();
+  const inspectorStore = useInspectorStore();
+  const projectNavigation = useMemo(
+    () => new ProjectNavigationController({ shellStore, inspectorStore }),
+    [inspectorStore, shellStore],
+  );
   const context = shell?.context ?? {
     workspace: snapshot.workspace?.label,
     meta: snapshot.meta?.label ?? snapshot.novel?.label,
@@ -84,6 +94,10 @@ function ConnectedApplicationShell({
     context,
     sidebarMode: shell?.sidebarMode ?? snapshot.sidebarMode,
     inspectorMode: shell?.inspectorMode ?? inspectorSnapshot.mode,
+    onNavigate:
+      shell?.onNavigate ?? ((item) => {
+        projectNavigation.navigate(item);
+      }),
     inspector:
       shell?.inspector ?? (
         <InspectorPanel

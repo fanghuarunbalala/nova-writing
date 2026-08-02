@@ -104,6 +104,25 @@ export class InspectorStore {
     this.publish();
   }
 
+  openRoot(
+    target: InspectorTarget,
+    mode: Exclude<InspectorSize, "closed"> = "normal",
+  ): void {
+    const captured = captureTarget(target);
+    const capturedMode = requireVisibleInspectorSize(mode);
+    if (
+      this.navigation.length === 1 &&
+      sameTarget(this.navigation[0], captured) &&
+      this.mode === capturedMode
+    ) {
+      return;
+    }
+    this.navigation = [captured];
+    this.mode = capturedMode;
+    this.resetTargetLocalState();
+    this.publish();
+  }
+
   back(): void {
     if (this.navigation.length <= 1) {
       this.close();

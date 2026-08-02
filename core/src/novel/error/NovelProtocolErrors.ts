@@ -9,6 +9,7 @@ export const NOVEL_PROTOCOL_FAILURE = {
   invalidOperation: "invalid_operation",
   invalidOperationVersion: "invalid_operation_version",
   invalidOperationDigest: "invalid_operation_digest",
+  invalidChangeSetDigest: "invalid_change_set_digest",
 } as const;
 
 export type NovelProtocolFailure =
@@ -33,6 +34,7 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "operationPayload",
   "operationPrecondition",
   "operationDigest",
+  "changeSetDigest",
   "characterId",
   "locationId",
   "entityProfile",

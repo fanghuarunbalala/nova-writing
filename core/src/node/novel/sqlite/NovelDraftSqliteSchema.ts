@@ -7,7 +7,7 @@ import {
 } from "../../../novel/index.js";
 import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
 
-export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 2 as const;
+export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 3 as const;
 
 export function initializeNovelDraftSqliteSchema(
   databasePath: string,
@@ -134,10 +134,29 @@ const DRAFT_MIGRATIONS = [
   {
     version: 2,
     name: "character_location_profiles",
-    sql: NOVEL_ENTITY_SCHEMA_SQL.replaceAll(
+    sql: `${NOVEL_ENTITY_SCHEMA_SQL.replaceAll(
       "CREATE TABLE ",
       "CREATE TABLE IF NOT EXISTS ",
-    ).replaceAll("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS "),
+    ).replaceAll("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ")}
+      UPDATE draft_metadata SET schema_version = 2;
+    `,
+  },
+  {
+    version: 3,
+    name: "draft_change_set_freeze",
+    sql: `
+      ALTER TABLE draft_metadata
+      ADD COLUMN change_set_state TEXT NOT NULL DEFAULT 'open'
+      CHECK (change_set_state IN ('open', 'frozen'));
+
+      ALTER TABLE draft_metadata
+      ADD COLUMN change_set_digest TEXT;
+
+      ALTER TABLE draft_metadata
+      ADD COLUMN change_set_frozen_at TEXT;
+
+      UPDATE draft_metadata SET schema_version = 3;
+    `,
   },
 ] as const;
 

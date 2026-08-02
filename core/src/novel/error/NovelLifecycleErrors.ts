@@ -185,6 +185,24 @@ export class NovelDraftOperationPersistenceError extends Error {
   }
 }
 
+export class NovelDraftChangeSetFrozenError extends Error {
+  override readonly name = "NovelDraftChangeSetFrozenError";
+  readonly code = "NOVEL_DRAFT_CHANGE_SET_FROZEN" as const;
+
+  constructor(public readonly draftSessionId: NovelDraftSessionId) {
+    super("Novel Draft ChangeSet is frozen");
+  }
+}
+
+export class NovelDraftChangeSetChangedError extends Error {
+  override readonly name = "NovelDraftChangeSetChangedError";
+  readonly code = "NOVEL_DRAFT_CHANGE_SET_CHANGED" as const;
+
+  constructor(public readonly draftSessionId: NovelDraftSessionId) {
+    super("Novel Draft ChangeSet changed before freeze");
+  }
+}
+
 export type NovelOperationPreconditionFailure =
   | "entity_exists"
   | "entity_missing"

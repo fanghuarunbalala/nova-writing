@@ -2,6 +2,7 @@
 import { noopLogger, type Logger } from "../../observability/index.js";
 import {
   NOVEL_DRAFT_SESSION_STATUS,
+  captureNovelDraftSession,
   type NovelDraftSession,
 } from "../draft/index.js";
 import { NovelDraftSessionStateError } from "../error/index.js";
@@ -47,7 +48,7 @@ export class NovelDraftOperationWriter<TContext> {
       );
     }
     const captured = captureNovelOperation(operation);
-    return this.serializer.run(session.id, async () => {
+    return this.runExclusive(session, async () => {
       this.logger.debug("novel_draft_operation.write.started", {
         novelId: session.novelId,
         draftSessionId: session.id,
@@ -86,6 +87,14 @@ export class NovelDraftOperationWriter<TContext> {
         throw error;
       }
     });
+  }
+
+  runExclusive<T>(
+    session: NovelDraftSession,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const captured = captureNovelDraftSession(session);
+    return this.serializer.run(captured.id, operation);
   }
 }
 

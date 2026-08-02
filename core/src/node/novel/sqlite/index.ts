@@ -1,5 +1,6 @@
 export * from "./NovelDatabaseErrors.js";
 export * from "./NodeSha256NovelOperationDigester.js";
+export * from "./NodeSha256NovelChangeSetDigester.js";
 export * from "./NovelDraftSqliteSchema.js";
 export * from "./NovelEntitySqliteSchema.js";
 export * from "./NovelSqliteMigrations.js";

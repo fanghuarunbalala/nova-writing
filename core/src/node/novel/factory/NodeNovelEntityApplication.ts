@@ -5,6 +5,7 @@ import {
   LocationQueryService,
   LocationService,
   NovelDraftOperationWriter,
+  NovelDraftChangeSetBuilder,
   NovelMutationService,
   NovelOperationExecutor,
   NovelOperationRegistry,
@@ -19,6 +20,7 @@ import {
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import {
   NodeSha256NovelOperationDigester,
+  NodeSha256NovelChangeSetDigester,
   SqliteNovelDraftOperationStore,
   SqliteNovelEntityQueryStore,
   createSqliteNovelEntityMutationContext,
@@ -39,6 +41,7 @@ export interface NodeNovelEntityApplication {
   readonly locations: LocationService;
   readonly characterQueries: CharacterQueryService;
   readonly locationQueries: LocationQueryService;
+  readonly changeSets: NovelDraftChangeSetBuilder;
 }
 
 export function createNodeNovelEntityApplication(
@@ -60,10 +63,11 @@ export function createNodeNovelEntityApplication(
     contextFactory: createSqliteNovelEntityMutationContext,
     logger,
   });
+  const operationDigester = new NodeSha256NovelOperationDigester();
   const writer = new NovelDraftOperationWriter({
     store,
     executor: new NovelOperationExecutor(registry),
-    digester: new NodeSha256NovelOperationDigester(),
+    digester: operationDigester,
     clock,
     logger,
   });
@@ -91,5 +95,13 @@ export function createNodeNovelEntityApplication(
     }),
     characterQueries: new CharacterQueryService(queryStore),
     locationQueries: new LocationQueryService(queryStore),
+    changeSets: new NovelDraftChangeSetBuilder({
+      store,
+      writer,
+      operationDigester,
+      changeSetDigester: new NodeSha256NovelChangeSetDigester(),
+      clock,
+      logger,
+    }),
   });
 }

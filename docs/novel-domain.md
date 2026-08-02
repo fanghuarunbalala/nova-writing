@@ -714,6 +714,15 @@ base canonical revision
     = queryable draft.sqlite state
 ```
 
+Before canonical Commit, the effective ordered Draft sequence is frozen into a
+versioned ChangeSet identity. Its SHA-256 digest covers `novelId`,
+`baseRevision`, operation count, last sequence, and the ordered
+`{ sequence, operationDigest }` entries. Draft Session identity and freeze time
+remain durable metadata but do not participate in the content digest. The
+freeze shares the per-Draft Writer queue and uses a SQLite compare-and-set, so
+later Operations cannot join the approved sequence. This identity contract is
+independent from the still-deferred immutable Commit history file encoding.
+
 ### 10.4 Canonical Commit Protocol
 
 All canonical Commits for one Novel pass through one asynchronous Commit Writer and are serialized even when their Drafts were edited concurrently.

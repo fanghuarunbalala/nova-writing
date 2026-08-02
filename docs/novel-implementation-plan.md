@@ -366,6 +366,30 @@ Cover Draft create/replace/delete, canonical isolation, entity-version conflicts
 
 Freeze the effective Draft Operation sequence, validate its canonical form, calculate its digest, and stop later mutation from joining that ChangeSet.
 
+The accepted ChangeSet digest identity is separate from the deferred Commit history payload encoding:
+
+```text
+canonicalStringifyJson({
+  changeSetVersion,
+  novelId,
+  baseRevision,
+  operationCount,
+  lastOperationSequence,
+  operations: [{ sequence, operationDigest }]
+})
+    -> UTF-8
+    -> SHA-256
+    -> sha256:<64 lowercase hexadecimal characters>
+```
+
+- Draft Session ID and freeze timestamp identify the durable frozen record but do not participate in content identity.
+- Operation envelopes are protected by their previously accepted complete-envelope digests.
+- Array order and explicit sequence values both participate in the ChangeSet digest.
+- Freezing uses the same per-Draft Writer queue plus a durable SQLite compare-and-set, so a concurrent write is either included before the freeze or rejected afterward.
+- This contract does not choose the N6-C history filename, JSON/JSONL payload encoding, preparation, cleanup, or recovery protocol.
+
+**Status:** completed by the focused frozen ChangeSet commit.
+
 ### N6-B Commit Writer
 
 Serialize canonical Commit for one Novel, validate base revision, replay the complete ChangeSet, validate final invariants, insert Commit metadata, increment NovelRevision exactly once, and insert the canonical outbox record in one short SQLite transaction.

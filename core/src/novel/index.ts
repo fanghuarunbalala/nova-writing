@@ -4,6 +4,7 @@ export * from "./approval/index.js";
 export * from "./commit/index.js";
 export * from "./conflict/index.js";
 export * from "./error/index.js";
+export * from "./event/index.js";
 export * from "./identity/index.js";
 export * from "./integration/index.js";
 export * from "./model/index.js";

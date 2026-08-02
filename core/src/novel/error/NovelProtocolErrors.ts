@@ -17,6 +17,7 @@ export const NOVEL_PROTOCOL_FAILURE = {
   invalidConflictResolution: "invalid_conflict_resolution",
   invalidApproval: "invalid_approval",
   invalidResolutionApplicationPlan: "invalid_resolution_application_plan",
+  invalidLifecycleRecord: "invalid_lifecycle_record",
 } as const;
 
 export type NovelProtocolFailure =
@@ -55,6 +56,7 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "conflictResolution",
   "approval",
   "resolutionApplicationPlan",
+  "lifecycleRecord",
 ]);
 
 export class NovelProtocolValidationError extends Error {

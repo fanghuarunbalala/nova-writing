@@ -628,6 +628,20 @@ adapter, and restart/owner validation smoke.
 
 Define internal Novel lifecycle records and public Novel OutputEvents for Draft, Commit, Rebase, conflict, and recovery transitions. Payloads expose stable safe identities and metadata rather than Novel content.
 
+Internal lifecycle protocol foundation delivered:
+
+- immutable version-1 records cover Draft, Commit, Rebase, Conflict, and
+  Recovery transitions through a closed discriminated event-type union
+- every record binds a stable event ID, Novel ID, Conversation ID, timestamp,
+  and event-specific safe identities, revisions, statuses, strategies, or counts
+- payload capture rejects additional fields so Novel text, prompts, paths, Tool
+  data, and raw errors cannot silently enter durable lifecycle records
+- canonical JSON is deterministic and independent from public OutputEvent
+  construction or delivery
+
+**Status:** internal lifecycle records completed; public Novel OutputEvents and
+their schema registration are the next N8-B step.
+
 ### N8-C Outbox Dispatcher
 
 Dispatch canonical and Draft outbox records idempotently through the accepted Conversation Output publisher and Runtime Journal boundary.

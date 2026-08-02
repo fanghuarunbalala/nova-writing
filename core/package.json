@@ -30,6 +30,7 @@
     "smoke:novel-rebase-candidate": "pnpm build && node scripts/novel-rebase-candidate-smoke.mjs",
     "smoke:novel-approval": "pnpm build && node scripts/novel-approval-smoke.mjs",
     "smoke:novel-conversation-binding": "pnpm build && node scripts/novel-conversation-binding-smoke.mjs",
+    "smoke:novel-lifecycle-record": "pnpm build && node scripts/novel-lifecycle-record-smoke.mjs",
     "smoke:tool-protocol": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-protocol-typecheck.ts && node scripts/tool-protocol-smoke.mjs",
     "smoke:tool-registry": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-registry-typecheck.ts && node scripts/tool-registry-smoke.mjs",
     "smoke:tool-group-manifest": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-group-manifest-typecheck.ts && node scripts/tool-group-manifest-smoke.mjs",

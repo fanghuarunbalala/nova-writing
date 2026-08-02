@@ -1,6 +1,8 @@
 /** Persists Draft Session lifecycle records in the canonical Novel database. */
 import { DatabaseSync } from "node:sqlite";
 import {
+  NOVEL_LIFECYCLE_EVENT_TYPE,
+  NOVEL_LIFECYCLE_RECORD_VERSION,
   NOVEL_DRAFT_SESSION_STATUS,
   NovelDraftAlreadyActiveError,
   NovelDraftSessionNotFoundError,
@@ -27,6 +29,7 @@ import {
   NOVEL_DATABASE_FAILURE,
   NovelDatabaseError,
 } from "./NovelDatabaseErrors.js";
+import { encodeNovelLifecycleOutboxRecord } from "./NodeNovelLifecycleOutboxEncoder.js";
 
 interface NovelDraftSessionRow {
   id: string;
@@ -114,6 +117,7 @@ export class SqliteNovelDraftStore implements NovelDraftStore {
       );
     }
     try {
+      this.database.exec("BEGIN IMMEDIATE");
       this.database
         .prepare(
           `INSERT INTO novel_draft_sessions(
@@ -131,7 +135,21 @@ export class SqliteNovelDraftStore implements NovelDraftStore {
           captured.createdAt,
           captured.updatedAt,
         );
+      this.insertLifecycleRecord({
+        recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+        eventId: `draft-started:${captured.id}`,
+        eventType: NOVEL_LIFECYCLE_EVENT_TYPE.draftStarted,
+        novelId: captured.novelId,
+        conversationId: captured.ownerConversationId,
+        occurredAt: captured.createdAt,
+        payload: {
+          draftSessionId: captured.id,
+          baseRevision: captured.baseRevision,
+        },
+      });
+      this.database.exec("COMMIT");
     } catch {
+      try { this.database.exec("ROLLBACK"); } catch {}
       const concurrent = await this.getActiveDraftSession(
         captured.novelId,
         captured.ownerConversationId,
@@ -241,23 +259,44 @@ export class SqliteNovelDraftStore implements NovelDraftStore {
     const statuses = captureExpectedStatuses(input.expectedStatuses);
     const rolledBackAt = captureNovelTimestamp(input.rolledBackAt);
     const placeholders = statuses.map(() => "?").join(", ");
-    const result = this.database
-      .prepare(
-        `UPDATE novel_draft_sessions
-         SET status = 'rolled-back', updated_at = ?, terminal_at = ?
-         WHERE novel_id = ? AND id = ? AND status IN (${placeholders})`,
-      )
-      .run(
-        rolledBackAt,
-        rolledBackAt,
-        this.novelId,
-        input.draftSessionId,
-        ...statuses,
-      );
-    if (Number(result.changes) !== 1) {
-      this.throwTransitionFailure(input.draftSessionId, undefined, statuses);
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const current = this.requireDraftSession(input.draftSessionId);
+      const result = this.database
+        .prepare(
+          `UPDATE novel_draft_sessions
+           SET status = 'rolled-back', updated_at = ?, terminal_at = ?
+           WHERE novel_id = ? AND id = ? AND status IN (${placeholders})`,
+        )
+        .run(
+          rolledBackAt,
+          rolledBackAt,
+          this.novelId,
+          input.draftSessionId,
+          ...statuses,
+        );
+      if (Number(result.changes) !== 1) {
+        this.throwTransitionFailure(input.draftSessionId, undefined, statuses);
+      }
+      this.insertLifecycleRecord({
+        recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+        eventId: `draft-rolled-back:${current.id}`,
+        eventType: NOVEL_LIFECYCLE_EVENT_TYPE.draftRolledBack,
+        novelId: current.novelId,
+        conversationId: current.ownerConversationId,
+        occurredAt: rolledBackAt,
+        payload: {
+          draftSessionId: current.id,
+          baseRevision: current.baseRevision,
+        },
+      });
+      const rolledBack = this.requireDraftSession(input.draftSessionId);
+      this.database.exec("COMMIT");
+      return rolledBack;
+    } catch (error) {
+      try { this.database.exec("ROLLBACK"); } catch {}
+      throw error;
     }
-    return this.requireDraftSession(input.draftSessionId);
   }
 
   close(): Promise<void> {
@@ -280,6 +319,27 @@ export class SqliteNovelDraftStore implements NovelDraftStore {
       .get(this.novelId, draftSessionId) as NovelDraftSessionRow | undefined;
     if (row === undefined) throw new NovelDraftSessionNotFoundError(draftSessionId);
     return captureDraftRow(row);
+  }
+
+  private insertLifecycleRecord(
+    record: Parameters<typeof encodeNovelLifecycleOutboxRecord>[0],
+  ): void {
+    const outbox = encodeNovelLifecycleOutboxRecord(record);
+    this.database.prepare(
+      `INSERT INTO novel_outbox(
+         event_id, novel_id, conversation_id, event_type, schema_version,
+         event_json, event_digest, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      outbox.eventId,
+      record.novelId,
+      record.conversationId,
+      outbox.eventType,
+      outbox.schemaVersion,
+      outbox.eventJson,
+      outbox.eventDigest,
+      outbox.createdAt,
+    );
   }
 
   private throwTransitionFailure(

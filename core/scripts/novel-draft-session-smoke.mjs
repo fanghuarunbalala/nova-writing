@@ -246,6 +246,28 @@ try {
   assert.equal(rolledBack.status, NOVEL_DRAFT_SESSION_STATUS.rolledBack);
   assert.equal(await exists(draftPath(location, draftB)), false);
   assert.equal(await resumedService.getActiveDraft("conversation-b"), undefined);
+  const lifecycleDatabase = new DatabaseSync(location.canonicalDatabasePath, {
+    readOnly: true,
+  });
+  const lifecycleRows = lifecycleDatabase
+    .prepare(
+      `SELECT event_id, conversation_id, event_type, event_json, event_digest
+       FROM novel_outbox ORDER BY created_at, event_id`,
+    )
+    .all();
+  lifecycleDatabase.close();
+  const startedRow = lifecycleRows.find(
+    (row) => row.event_id === `draft-started:${draftA.id}`,
+  );
+  const rolledBackRow = lifecycleRows.find(
+    (row) => row.event_id === `draft-rolled-back:${draftB.id}`,
+  );
+  assert.equal(startedRow.event_type, "novel.draft.started");
+  assert.equal(startedRow.conversation_id, draftA.ownerConversationId);
+  assert.equal(JSON.parse(startedRow.event_json).eventType, "draft.started");
+  assert.equal(rolledBackRow.event_type, "novel.draft.rolled.back");
+  assert.equal(JSON.parse(rolledBackRow.event_json).eventType, "draft.rolled.back");
+  assert.match(startedRow.event_digest, /^sha256:[0-9a-f]{64}$/u);
 
   const orphan = captureNovelDraftSession({
     id: captureNovelDraftSessionId("draft_orphan"),

@@ -183,7 +183,11 @@ try {
   const rolledBack = inspectCanonical(location.canonicalDatabasePath);
   assert.equal(rolledBack.metadata.current_revision, "revision_commit_base");
   assert.equal(rolledBack.commits.length, 0);
-  assert.equal(rolledBack.outbox.length, 0);
+  assert.equal(
+    rolledBack.outbox.some((row) =>
+      JSON.parse(row.event_json).eventType === "commit.completed"),
+    false,
+  );
   assert.equal(await application.characterQueries.get(canonicalNovelReadScope, characterId), undefined);
 
   const commitIdA = captureNovelCommitId("commit_a");
@@ -238,9 +242,12 @@ try {
   assert.equal(state.metadata.current_revision, resultRevisionA);
   assert.equal(state.commits.length, 1);
   assert.equal(state.commits[0].payload_ref, "commit_a.json");
-  assert.equal(state.outbox.length, 1);
-  assert.equal(state.outbox[0].event_json.includes(secretCharacter), false);
-  assert.equal(state.outbox[0].event_json.includes(secretLocation), false);
+  const commitOutbox = state.outbox.filter(
+    (row) => JSON.parse(row.event_json).eventType === "commit.completed",
+  );
+  assert.equal(commitOutbox.length, 1);
+  assert.equal(commitOutbox[0].event_json.includes(secretCharacter), false);
+  assert.equal(commitOutbox[0].event_json.includes(secretLocation), false);
   const payloadBytes = await readFile(join(location.commitHistoryDir, "commit_a.json"));
   assert.equal(payloadBytes.byteLength, state.commits[0].payload_size);
   assert.equal((await draftStore.getDraftSession(canonical.novelId, sessionA.id)).status, "committed");

@@ -678,6 +678,18 @@ General Draft Outbox storage delivered:
 **Status:** general Draft lifecycle Outbox foundation completed; service-level
 lifecycle writers are the next N8-B step.
 
+Canonical Draft lifecycle writes delivered:
+
+- Draft Session creation and its `draft.started` Outbox Record commit in one
+  canonical SQLite transaction
+- Draft rollback and its `draft.rolled.back` Outbox Record commit in one
+  canonical SQLite transaction using the pre-transition base revision
+- deterministic Event IDs make the durable facts retry-identifiable, while a
+  failed transaction leaves neither a Session transition nor an orphan event
+
+**Status:** Draft create/rollback lifecycle writers completed; Rebase, Conflict,
+promotion, and Recovery lifecycle writers remain before N8-C.
+
 ### N8-C Outbox Dispatcher
 
 Dispatch canonical and Draft outbox records idempotently through the accepted Conversation Output publisher and Runtime Journal boundary.

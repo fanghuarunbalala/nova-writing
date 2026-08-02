@@ -1108,7 +1108,446 @@ Recommended query behavior:
 
 Full pairwise Character relationship storage remains excluded from the initial model. Relationship changes that materially affect the story are recorded sparsely as leaf StoryUnit entity changes, while protagonist-centered or arbitrary-focus relationship views are generated on demand by Tools.
 
-## 12. Current Open Questions
+## 12. Novel Layer Architecture
+
+**Accepted direction:** the Novel layer uses a platform-neutral domain and application core, explicit asynchronous storage ports, Node-specific SQLite and filesystem adapters, and an OutputEvent integration boundary. Agent Tool shape is deliberately excluded from this section and remains a separate design decision.
+
+### 12.1 Module and Dependency Boundary
+
+Recommended source layout:
+
+```text
+core/src/
+├── novel/
+│   ├── model/
+│   ├── operation/
+│   ├── draft/
+│   ├── commit/
+│   ├── conflict/
+│   ├── query/
+│   ├── projection/
+│   ├── validation/
+│   ├── service/
+│   ├── port/
+│   ├── event/
+│   ├── integration/
+│   └── index.ts
+│
+└── node/
+    └── novel/
+        ├── sqlite/
+        ├── artifact/
+        ├── history/
+        ├── workspace/
+        ├── factory/
+        └── index.ts
+```
+
+Dependency direction is fixed:
+
+```mermaid
+flowchart TD
+    Upper["Conversation / Runtime / future Tool adapters"]
+    Application["Novel Application Services"]
+    Domain["Novel Models, Operations, Validation"]
+    Ports["Novel Storage and Integration Ports"]
+    Node["Node SQLite / Filesystem Adapters"]
+    Events["Conversation OutputEvent Publisher"]
+
+    Upper --> Application
+    Application --> Domain
+    Application --> Ports
+    Node -. implements .-> Ports
+    Application --> Events
+```
+
+- `core/src/novel` must not import SQLite drivers, Node filesystem APIs, Pi, CLI, GUI, Web, or future Rust implementation types.
+- Node adapters implement Novel ports but do not decide domain policy, Approval policy, conflict semantics, or Agent behavior.
+- SQLite repositories are never public application entry points.
+- All public application methods return Promises. A Node adapter may use synchronous SQLite calls internally only behind the accepted async-first boundary and serialized writer ownership.
+- A future Rust implementation may replace selected port adapters without changing Novel models, services, or callers.
+
+### 12.2 Public Application Facade
+
+The Novel layer exposes a composed facade rather than one class containing every operation:
+
+```ts
+interface NovelApplication {
+  readonly drafts: NovelDraftSessionService;
+  readonly mutations: NovelMutationService;
+  readonly commits: NovelCommitService;
+  readonly rebases: NovelRebaseService;
+  readonly conflicts: NovelConflictResolutionService;
+
+  readonly outline: StoryOutlineService;
+  readonly manuscript: ManuscriptService;
+  readonly characters: CharacterService;
+  readonly locations: LocationService;
+  readonly publication: PublicationService;
+  readonly queries: NovelQueryService;
+  readonly projections: NovelProjectionService;
+}
+```
+
+- The facade groups stable use-case services and contains no persistence logic itself.
+- Domain-specific services validate caller intent and construct Domain Operations; they do not write SQLite directly.
+- `NovelMutationService` is the shared write boundary that routes accepted Operations through the owning Draft Writer.
+- Query services always receive an explicit canonical or Draft read scope.
+- Commit, Rebase, conflict resolution, and projection rebuild remain separate services because they have different lifecycle and failure semantics.
+
+Recommended application directories:
+
+```text
+novel/service/
+├── NovelApplication.ts
+├── DefaultNovelApplication.ts
+├── NovelMutationService.ts
+├── StoryOutlineService.ts
+├── ManuscriptService.ts
+├── CharacterService.ts
+├── LocationService.ts
+├── PublicationService.ts
+└── NovelProjectionService.ts
+```
+
+### 12.3 Models, Operations, and Validation
+
+The domain model is divided by narrative responsibility rather than database table:
+
+```text
+novel/model/
+├── identity/
+├── outline/
+├── manuscript/
+├── publication/
+├── character/
+├── location/
+└── realization/
+```
+
+`model` owns stable identities, value objects, accepted state contracts, and pure invariants. `operation` owns serializable mutation intent and replay behavior:
+
+```text
+novel/operation/
+├── NovelOperation.ts
+├── NovelOperationPrecondition.ts
+├── NovelOperationRegistry.ts
+├── NovelOperationExecutor.ts
+├── outline/
+├── manuscript/
+├── character/
+├── location/
+└── publication/
+```
+
+- Application commands describe caller intent; immutable Domain Operations describe the accepted deterministic write that enters a Draft.
+- Operations contain stable IDs, fixed generated content, canonical timestamps where required, and replay preconditions. They never contain closures, raw SQL, Provider calls, or instructions to regenerate content during Commit.
+- Operation handlers use repository ports and may not bypass the Draft Writer.
+- Validation is separated into structural invariants, Draft integrity, Commit admission, anchor/reference repair checks, and manuscript conformance.
+- Optional model-assisted semantic validation may implement a port, but deterministic structural validation remains authoritative for storage admission.
+
+Recommended validation layout:
+
+```text
+novel/validation/
+├── NovelInvariantValidator.ts
+├── StoryOutlineValidator.ts
+├── ManuscriptAnchorValidator.ts
+├── DraftIntegrityValidator.ts
+├── CommitAdmissionValidator.ts
+└── StoryUnitConformanceValidator.ts
+```
+
+### 12.4 Draft, Commit, Rebase, and Conflict Services
+
+The lifecycle services directly reflect Section 10:
+
+```text
+novel/draft/
+├── NovelDraftSession.ts
+├── NovelDraftSessionService.ts
+├── NovelDraftWriter.ts
+├── NovelDraftChangeSetBuilder.ts
+└── NovelDraftRecoveryService.ts
+
+novel/commit/
+├── NovelChangeSet.ts
+├── NovelCommit.ts
+├── NovelCommitService.ts
+├── NovelCommitCoordinator.ts
+├── NovelCommitWriter.ts
+└── NovelChangeSetDigest.ts
+
+novel/conflict/
+├── NovelRebaseService.ts
+├── NovelConflict.ts
+├── NovelConflictDetector.ts
+├── NovelConflictResolution.ts
+└── NovelConflictResolutionService.ts
+```
+
+```mermaid
+classDiagram
+    class NovelApplication
+    class NovelDraftSessionService {
+        +startDraft(conversationId)
+        +getActiveDraft(conversationId)
+        +resetToMain(draftSessionId)
+        +rollback(draftSessionId)
+    }
+    class NovelMutationService {
+        +execute(draftSessionId, operation)
+    }
+    class NovelCommitService {
+        +commit(draftSessionId, approvalGrant)
+    }
+    class NovelRebaseService {
+        +rebase(draftSessionId)
+    }
+    class NovelConflictResolutionService {
+        +resolve(conflictId, resolution)
+    }
+    class NovelDraftWriter {
+        +enqueue(operation)
+    }
+    class NovelCommitWriter {
+        +runExclusive(novelId, commit)
+    }
+
+    NovelApplication --> NovelDraftSessionService
+    NovelApplication --> NovelMutationService
+    NovelApplication --> NovelCommitService
+    NovelApplication --> NovelRebaseService
+    NovelApplication --> NovelConflictResolutionService
+    NovelMutationService --> NovelDraftWriter
+    NovelCommitService --> NovelCommitWriter
+```
+
+- Each Draft Session has one serialized `NovelDraftWriter`; Main Agent, shared Subagents, and user-originated mutations enter the same queue.
+- Each Novel has one serialized `NovelCommitWriter`; independent Drafts may be edited concurrently, but canonical Commits are ordered.
+- `NovelDraftChangeSetBuilder` freezes the ordered effective Operation sequence and computes its immutable identity.
+- Rebase uses a new candidate Draft created from the latest canonical revision; it never mutates the stale source Draft in place.
+- Conflict resolution creates replacement or compensating Operations and returns through the normal Draft and Commit path.
+
+### 12.5 Query and Projection Boundary
+
+Every query explicitly selects accepted canonical state or one Conversation Draft:
+
+```ts
+type NovelReadScope =
+  | { readonly kind: "canonical" }
+  | {
+      readonly kind: "draft";
+      readonly draftSessionId: NovelDraftSessionId;
+    };
+```
+
+Recommended query structure:
+
+```text
+novel/query/
+├── NovelQueryService.ts
+├── StoryOutlineQueryService.ts
+├── ManuscriptQueryService.ts
+├── CharacterQueryService.ts
+├── LocationQueryService.ts
+├── PublicationQueryService.ts
+└── NovelDiffQueryService.ts
+```
+
+- Agent work in an active Conversation normally resolves to that Conversation's Draft scope.
+- Canonical reads never silently include unpublished Draft state.
+- Cross-Conversation Draft access requires an explicit higher-level authorization decision and is not enabled by knowing a Draft ID alone.
+- Query services return domain read models and logical Artifact references, never SQLite rows or local filesystem paths.
+- Projection services build repairable Character state, Location state, readiness, relationship, and conformance views from authoritative Novel data.
+- A projection records its source NovelRevision and evidence IDs and can be deleted and rebuilt without losing Novel truth.
+
+### 12.6 Storage Ports
+
+Platform-neutral ports provide the complete persistence and integration boundary:
+
+```text
+novel/port/
+├── NovelCanonicalStore.ts
+├── NovelDraftStore.ts
+├── NovelCanonicalRepository.ts
+├── NovelDraftRepository.ts
+├── NovelSnapshotter.ts
+├── NovelHistoryStore.ts
+├── NovelArtifactStore.ts
+├── NovelCommitLock.ts
+├── NovelApprovalVerifier.ts
+├── NovelEventSink.ts
+├── NovelClock.ts
+└── NovelIdFactory.ts
+```
+
+Representative contracts:
+
+```ts
+interface NovelSnapshotter {
+  createDraftSnapshot(input: {
+    readonly novelId: NovelId;
+    readonly baseRevision: NovelRevision;
+    readonly draftSessionId: NovelDraftSessionId;
+  }): Promise<void>;
+}
+
+interface NovelCommitLock {
+  runExclusive<T>(
+    novelId: NovelId,
+    operation: () => Promise<T>,
+  ): Promise<T>;
+}
+```
+
+- Repository ports are split between canonical and Draft ownership so a caller cannot accidentally write accepted state through a Draft path or vice versa.
+- `NovelSnapshotter` owns consistent canonical-to-Draft copy semantics, including future WAL-aware implementation details.
+- `NovelHistoryStore` owns immutable external Commit payload preparation, verification, and lookup without making those files the authority for Commit success.
+- `NovelArtifactStore` owns large manuscript or generated content by logical Artifact ID and digest.
+- `NovelApprovalVerifier` verifies that a grant matches the exact ChangeSet digest; it does not render UI or wait synchronously for user input.
+- `NovelEventSink` accepts private Novel lifecycle records for later public OutputEvent publication without importing Conversation persistence into the domain model.
+
+### 12.7 Node SQLite and File Adapters
+
+Concrete Node adapters live outside the platform-neutral Novel directory:
+
+```text
+core/src/node/novel/
+├── sqlite/
+│   ├── schema/
+│   ├── migration/
+│   ├── SqliteNovelCanonicalStore.ts
+│   ├── SqliteNovelDraftStore.ts
+│   ├── SqliteNovelCanonicalRepository.ts
+│   ├── SqliteNovelDraftRepository.ts
+│   ├── SqliteNovelSnapshotter.ts
+│   ├── SqliteNovelCommitLock.ts
+│   ├── SqliteNovelOutboxStore.ts
+│   └── SqliteNovelRecoveryService.ts
+├── artifact/
+├── history/
+├── workspace/
+└── factory/
+```
+
+The canonical and Draft databases share domain-table semantics so the same validators, query adapters, and Operation handlers can run against either scope. Their control tables differ.
+
+Canonical `novel.sqlite` owns at least these categories:
+
+```text
+novel_metadata
+novel_commits
+novel_outbox
+
+outline and StoryUnit tables
+Character and Location tables
+Manuscript and Publication tables
+Realization and conformance tables
+repairable projection tables
+```
+
+Each `draft.sqlite` additionally owns:
+
+```text
+draft_session_metadata
+draft_operations
+draft_conflicts
+draft_projection_state
+draft_outbox
+```
+
+One short Draft SQLite transaction validates and records an Operation, applies it to Draft domain tables, updates Draft metadata, and writes any Draft outbox record. This keeps the unpublished Operation Journal and read-your-own-writes state atomic without coordinating SQLite with a separate append-only file for each edit.
+
+Canonical Commit uses one short SQLite transaction to verify `baseRevision`, replay all frozen Operations, validate final invariants, insert Commit metadata, increment NovelRevision once, and insert `novel_outbox`. The Commit payload may be prepared as an immutable external file before the transaction, but `novel.sqlite` remains the authority for whether Commit succeeded.
+
+### 12.8 Conversation and OutputEvent Integration
+
+Conversation integration binds runtime identity to Novel editing state without making Conversation the Novel aggregate:
+
+```ts
+interface ConversationNovelBinding {
+  readonly conversationId: ConversationId;
+  readonly novelId: NovelId;
+  readonly activeDraftSessionId?: NovelDraftSessionId;
+}
+```
+
+Recommended integration structure:
+
+```text
+novel/integration/
+├── ConversationNovelBindingService.ts
+├── NovelConversationContext.ts
+├── NovelOutputEventBridge.ts
+├── NovelApprovalBridge.ts
+└── NovelOutboxDispatcher.ts
+```
+
+- Conversation owns conversation history and Agent execution; Novel owns accepted and Draft story state.
+- A top-level Conversation may bind one active Draft Session. Shared Subagents use the same binding unless explicitly launched as an independent branch.
+- Novel lifecycle events are internal records first and are translated to public `NovelOutputEvent` or general Approval/Error OutputEvents at the integration boundary.
+- Canonical Novel mutation and Runtime Journal publication cannot share one SQLite transaction. The canonical transaction therefore writes `novel_outbox`, and an idempotent dispatcher retries public Event delivery afterward.
+- Public OutputEvents always carry a Conversation ID. Canonical events use the initiating or owning Conversation for delivery while NovelRevision and Commit ID preserve Novel-wide identity.
+- Approval is asynchronous: the Novel service emits an Approval request tied to a ChangeSet digest, releases all SQLite transactions, and later resumes when the corresponding InputEvent is delivered.
+
+### 12.9 Principal Execution Flows
+
+Draft mutation:
+
+```text
+Caller intent
+    -> domain-specific Application Service
+    -> construct and validate Domain Operation
+    -> NovelMutationService
+    -> per-Draft Writer Queue
+    -> short draft.sqlite transaction
+    -> Draft state and Draft Operation Journal advance together
+    -> publish or enqueue Novel lifecycle Event
+```
+
+Canonical Commit:
+
+```text
+DraftSession
+    -> freeze ChangeSet
+    -> verify ChangeSet digest and Approval
+    -> acquire per-Novel Commit Writer
+    -> short novel.sqlite transaction
+    -> revision check and Operation replay
+    -> invariant validation
+    -> Commit metadata + NovelRevision + outbox
+    -> release lock
+    -> dispatch OutputEvents
+```
+
+Stale Draft:
+
+```text
+Commit detects stale baseRevision
+    -> preserve source Draft
+    -> snapshot latest canonical state
+    -> replay Draft Operations into Rebase candidate
+    -> automatic merge or NovelConflict records
+    -> resolve conflicts through replacement Operations
+    -> invalidate old Approval
+    -> request new Approval
+    -> retry canonical Commit
+```
+
+### 12.10 Explicit Exclusions
+
+This architecture section intentionally does not define:
+
+- Agent-facing Tool count, naming, grouping, View contracts, YAML schema, or read/write/delete surface
+- concrete SQLite driver selection and whether selected adapters later move to Rust
+- exact table columns, migration numbers, indexes, or full Operation unions
+- UI presentation of Drafts, Diff, Approval, conflicts, or projections
+- final Artifact quotas, retention, or garbage-collection policy
+
+Those decisions may refine adapters and callers, but they must preserve the application, port, Draft, Commit, Revision, Rebase, conflict, and OutputEvent boundaries recorded here.
+
+## 13. Current Open Questions
 
 The following decisions remain outside the accepted Runtime implementation plan:
 
@@ -1128,3 +1567,4 @@ The following decisions remain outside the accepted Runtime implementation plan:
 14. The concrete SQLite snapshot mechanism used by `startDraft()` and Rebase, including WAL-aware backup, validation, and crash recovery.
 15. The Draft Operation table schema, canonical digest encoding, Artifact preparation protocol, and recovery behavior for an interrupted Draft mutation or canonical Commit.
 16. Draft staging retention limits, terminal-session cleanup timing, and whether selected committed or rolled-back Drafts may be retained for diagnostics without becoming authoritative history.
+17. The Agent-facing Tool grouping and per-Model or View-oriented read, overwrite-write, and delete schemas; Section 12 intentionally defines only the application boundary those Tools must call.

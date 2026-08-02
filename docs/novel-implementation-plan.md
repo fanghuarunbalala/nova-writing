@@ -774,6 +774,20 @@ SQLite pending-page reading delivered:
 **Status:** N8-C SQLite pending-page reading and integrity validation completed;
 attempt recording and compare-and-set publication marking are next.
 
+SQLite delivery-state writes delivered:
+
+- one writable Store composes the verified Reader for canonical and Draft
+  sources without duplicating row decoding
+- attempt recording atomically increments only an unpublished row whose Event,
+  Novel, source, and digest identity match
+- publication marking uses the same immutable identity as a compare-and-set and
+  preserves the first durable publication timestamp across retries and restart
+- `missing`, `already-published`, digest mismatch, and source/Novel mismatch are
+  distinct outcomes, and no database transaction spans an external publish wait
+
+**Status:** N8-C SQLite Outbox Store completed; the application Dispatcher and
+Conversation OutputEvent bridge are next.
+
 ### N8-D Approval Bridge
 
 Bind asynchronous Approval requests and responses to exact ChangeSet digests without holding SQLite transactions while waiting.

@@ -4673,6 +4673,7 @@ Oversized User content, Tool results, and verbose Checkpoint detail are stored i
 
 ```ts
 interface ArtifactReference {
+  readonly schemaVersion: 1;
   readonly artifactId: string;
   readonly conversationId: string;
   readonly contentType: string;

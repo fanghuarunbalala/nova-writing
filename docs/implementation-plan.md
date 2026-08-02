@@ -2254,6 +2254,22 @@ Task 4C-A delivered:
 - accepted per-Provider-call pressure evaluation, stable Context layer ordering, public Compaction lifecycle Events, private Policy traces, and cross-task ownership boundaries
 - updated authoritative architecture diagrams and supporting decision record
 
+Task 4C-B delivered:
+
+- public provider-neutral Context budget defaults and threshold contracts for effective input capacity, complete candidate estimates, irreducible-floor estimates, pressure levels, and per-Provider-call pressure snapshots
+- public immutable-intent Message Group pin contracts covering current Input, latest complete Turn, unresolved Interaction/Approval, active Tool execution, explicit pins, and active Run state with permanent, conditional, and sliding lifetimes
+- public versioned `ArtifactReference` protocol under the generic Storage boundary using Conversation identity, logical Artifact identity, content metadata, optional token estimate and filename, and a canonical digest without local paths
+- public versioned `ContextCheckpoint` and structured item contracts containing lineage, source boundaries and digest, priority, source Message references, Artifact references, pinned identities, recent-window boundary, Compactor identity, token estimates, and content digest
+- public per-call `ContextProjection` contract with selected and omitted Checkpoint items, pinned/recent identities, transient count, token estimate, and fixed degradation levels
+- public `target_met`, `reduced`, `degraded`, and `unreducible` outcomes, stable unreducible reason categories, duplicate-attempt identity, and Compaction assessment metadata
+- root Core exports, focused public protocol smoke coverage, and no Pi, filesystem, database, Provider, Tool-handler, or Novel-domain types in the contracts
+
+Task 4C-B explicitly excludes:
+
+- runtime boundary capture, canonical timestamp/digest validation, immutable cloning, ratio ordering validation, and cross-field outcome validation, which belong to Task 4C-C
+- token estimation implementation, pressure calculation, Policy evaluation, Compactor execution, Checkpoint storage, Projection planning, Provider application, and lifecycle Events
+- concrete Artifact persistence, Artifact access Tools, oversized ingress/materialization behavior, quota, retention, garbage collection, sandbox, or permission behavior
+
 Task 4C explicitly excludes until their own implementation steps:
 
 - concrete filesystem, SQLite, or object-backed `ArtifactStore`; Artifact quota, retention, and garbage collection

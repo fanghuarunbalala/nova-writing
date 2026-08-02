@@ -44,6 +44,7 @@
     "smoke:runtime-agent-stop-cancellation": "pnpm build && node scripts/runtime-agent-stop-cancellation-port-smoke.mjs",
     "smoke:runtime-agent-stop-preemption": "pnpm build && node scripts/runtime-agent-stop-preemption-integration-smoke.mjs",
     "smoke:runtime-agent-turn-fifo": "pnpm build && node scripts/runtime-agent-turn-fifo-integration-smoke.mjs",
+    "smoke:runtime-context-compaction-protocol": "pnpm build && node scripts/runtime-context-compaction-protocol-smoke.mjs",
     "smoke:runtime-nudge-protocol": "pnpm build && node scripts/runtime-nudge-protocol-smoke.mjs",
     "smoke:runtime-nudge-manager-store": "pnpm build && node scripts/runtime-nudge-manager-store-smoke.mjs",
     "smoke:runtime-nudge-output-event": "pnpm build && node scripts/runtime-nudge-output-event-smoke.mjs",

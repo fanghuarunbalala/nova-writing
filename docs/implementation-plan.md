@@ -2219,7 +2219,7 @@ The first-version Context contract is:
 
 1. Context pressure is calculated from the complete candidate Provider input against an effective input budget after reserved output, Provider protocol overhead, and a safety reserve. Default configurable thresholds are 70% soft reminder, 82% compaction request, 55% post-compaction target, and 92% hard admission limit.
 2. Automatic compaction requires new uncompacted content of at least `max(10% of effective budget, 8,192 estimated tokens)` after the previous Checkpoint. The hard admission boundary may bypass this hysteresis.
-3. Before invoking a Compactor, Core calculates an irreducible floor containing the Base System Prompt, selected Tool schemas, pinned Message Groups, current Input, active transient Run state, and required protocol overhead. An irreducible floor at or above the hard limit fails without invoking the Compactor.
+3. Before invoking a Compactor, Core calculates an irreducible floor containing the Base System Prompt, selected Tool schemas, pinned Message Groups excluding the separately counted current Input, the current Input, and active transient Run state. Provider protocol overhead is subtracted once from the effective budget rather than double-counted in the floor. An irreducible floor at or above the hard limit fails without invoking the Compactor.
 4. Compaction outcomes are `target_met`, `reduced`, `degraded`, and `unreducible`. The 55% target is desirable rather than mandatory; a result below 82% may activate as `reduced`, and a meaningfully smaller result below 92% may activate as `degraded`. A result at or above 92% cannot be dispatched.
 5. Meaningful reduction is configuration-driven and prevents negligible results from being treated as success. The recommended default is at least `max(5% of effective budget, 2,048 estimated tokens)` unless the result reaches the measured irreducible floor.
 6. Pinned content is retained as immutable Message Groups rather than arbitrary individual lines. Current Input, the latest complete Turn, unresolved Interaction/Approval pairs, active Tool-call/result groups, explicit pins, and active Run facts cannot be summarized, reordered, partially removed, or role-rewritten while pinned.
@@ -2269,6 +2269,23 @@ Task 4C-B explicitly excludes:
 - runtime boundary capture, canonical timestamp/digest validation, immutable cloning, ratio ordering validation, and cross-field outcome validation, which belong to Task 4C-C
 - token estimation implementation, pressure calculation, Policy evaluation, Compactor execution, Checkpoint storage, Projection planning, Provider application, and lifecycle Events
 - concrete Artifact persistence, Artifact access Tools, oversized ingress/materialization behavior, quota, retention, garbage collection, sandbox, or permission behavior
+
+Task 4C-C delivered:
+
+- stable payload-free `ArtifactReferenceValidationError` and `ContextProtocolValidationError` categories with safe Artifact, Conversation, Run, Provider-call, and Checkpoint identities only
+- immutable capture for logical Artifact references with schema-version, canonical SHA-256 digest, non-negative size estimates, portable display filename, and path-shaped Artifact ID rejection
+- Context threshold ordering, exact effective-budget arithmetic, disjoint candidate estimate sums, irreducible-floor sums, derived usage ratio, and deterministic pressure-level validation
+- immutable Message Group capture with unique non-empty Message identities and required sliding lifetime for current-Input and latest-complete-Turn pins
+- immutable Checkpoint item and Checkpoint capture with schema version, exact source coverage, lineage, canonical digests, unique structured item identity, source references, Conversation-bound Artifact references, recent-window boundary, canonical timestamp, and actual token reduction
+- immutable Projection capture with selected/omitted disjointness, pinned/recent disjointness, Checkpoint consistency, fixed degradation levels, and non-negative counts and estimates
+- immutable Compaction attempt and assessment capture with canonical source identity, target/request/hard threshold ordering, irreducible-floor enforcement, minimum-savings semantics, exact four-outcome classification, required success Checkpoint identity, and required safe unreducible reason
+- focused coverage for deep-freeze isolation, path rejection, budget and pressure derivation, pin lifetime, Checkpoint reference isolation, Projection overlap, all four outcomes, classification mismatch, and private-content-free failures
+
+Task 4C-C explicitly excludes:
+
+- cryptographic recomputation of source and content digests against Journal/Checkpoint bytes, which requires the concrete Manager source and injected platform-neutral hasher in Task 4C-E
+- semantic completeness or Novel consistency validation, which remains an optional future validator port
+- actual token estimation, Compactor invocation, Policy state, duplicate-attempt persistence, Checkpoint Store, Projection planning, Provider application, and OutputEvents
 
 Task 4C explicitly excludes until their own implementation steps:
 

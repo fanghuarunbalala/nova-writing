@@ -4549,7 +4549,7 @@ effectiveInputBudget
 - configured safety reserve
 ```
 
-The candidate input estimate includes the Base System Prompt, selected Tool schemas, Checkpoint Overlay, one-shot Nudge reserve, pinned and recent canonical Messages, and active transient Run Messages.
+The candidate input estimate includes the Base System Prompt, selected Tool schemas, Checkpoint Overlay, one-shot Nudge reserve, pinned canonical Messages excluding the separately counted current Input, the current Input, recent canonical Messages, and active transient Run Messages. These categories are disjoint.
 
 Default values are Runtime configuration rather than protocol constants:
 
@@ -4573,10 +4573,9 @@ irreducibleFloor
 + pinned Message Groups
 + current Input
 + active transient Run state
-+ required Provider protocol overhead
 ```
 
-If the irreducible floor is already at or above the hard admission boundary, Runtime reports `context_unreducible` without spending a Compactor call. Base Prompt, Tool schemas, pinned content, and current Input are not silently truncated.
+Provider protocol overhead is already removed once when calculating `effectiveInputBudget` and is not counted again in the candidate or floor estimate. If the irreducible floor is already at or above the hard admission boundary, Runtime reports `context_unreducible` without spending a Compactor call. Base Prompt, Tool schemas, pinned content, and current Input are not silently truncated.
 
 Context pressure is evaluated before every Provider call because one Agent Run may contain multiple LLM calls separated by Tool results. Evaluation only before the outer User Turn would miss Context growth inside the Pi Agent loop.
 

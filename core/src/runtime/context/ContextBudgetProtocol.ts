@@ -36,6 +36,7 @@ export interface ContextInputTokenEstimate {
   readonly checkpointOverlayTokens: number;
   readonly nudgeReserveTokens: number;
   readonly pinnedMessageTokens: number;
+  readonly currentInputTokens: number;
   readonly recentMessageTokens: number;
   readonly transientMessageTokens: number;
   readonly totalInputTokens: number;
@@ -47,7 +48,6 @@ export interface ContextIrreducibleFloorEstimate {
   readonly pinnedMessageTokens: number;
   readonly currentInputTokens: number;
   readonly transientMessageTokens: number;
-  readonly protocolOverheadTokens: number;
   readonly totalTokens: number;
 }
 

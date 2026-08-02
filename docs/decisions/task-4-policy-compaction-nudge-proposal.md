@@ -99,7 +99,7 @@ Accepted Compaction outcomes:
 - `degraded`: valid meaningful result below the 92% hard boundary while pressure remains
 - `unreducible`: the irreducible floor or validated result remains at or above the hard boundary, or no safe meaningful result exists
 
-The irreducible floor contains Base Prompt, selected Tool schemas, pinned Message Groups, current Input, active transient state, and required protocol overhead. A floor at or above the hard limit fails before invoking the Compactor.
+The irreducible floor contains Base Prompt, selected Tool schemas, pinned Message Groups excluding the separately counted current Input, the current Input, and active transient state. Provider protocol overhead is subtracted once from the effective budget and is not counted again in the floor. A floor at or above the hard limit fails before invoking the Compactor.
 
 ## 7A. Oversized Content and Artifact References
 

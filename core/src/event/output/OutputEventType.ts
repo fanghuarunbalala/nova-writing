@@ -10,6 +10,9 @@ export const OUTPUT_EVENT_TYPE = {
   agentAssistantMessageCompleted: "agent.assistant.message.completed",
   agentAssistantMessageFailed: "agent.assistant.message.failed",
   agentAssistantMessageCancelled: "agent.assistant.message.cancelled",
+  nudgeScheduled: "system.nudge.scheduled",
+  systemReminderInjected: "system.reminder.injected",
+  nudgeExpired: "system.nudge.expired",
 } as const;
 
 export type CoreOutputEventType =

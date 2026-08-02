@@ -2178,6 +2178,21 @@ Task 4N-D explicitly excludes:
 
 Public lifecycle Events cannot replace private Nudge state persistence because their accepted redaction contract forbids template parameters. Task 4N-F must require an injected restart-safe private Store adapter or repository in production composition; `InMemoryPendingNudgeStore` is not sufficient for restart-safe Provider integration.
 
+Task 4N-E delivered:
+
+- stable `system.nudge.scheduled`, `system.reminder.injected`, and `system.nudge.expired` OutputEvent type names
+- `NudgeScheduledOutputEvent`, `SystemReminderInjectedOutputEvent`, and `NudgeExpiredOutputEvent` as Core System OutputEvents with required Conversation and Run identity
+- one-Event-per-Nudge delivery semantics; two Nudges in one Provider call share `leaseId` and `providerCallId`
+- redacted payloads limited to Nudge, Policy, template, Lease, Provider-call, target-Turn, and lifecycle-state metadata
+- strict Core Event Schemas rejecting extra parameters, rendered text, invalid lifecycle states, and missing Run identity
+- focused protocol coverage plus updated global OutputEvent type compatibility coverage
+
+Task 4N-E explicitly excludes:
+
+- Event publication ordering, Journal append coordination, private Snapshot reconciliation, or retry orchestration
+- Provider dispatch detection and Pi Adapter integration
+- conversion of any Nudge Event into canonical Runtime Messages
+
 ### 7.2 Task 4 Policy and Compaction Review Gate
 
 Questions still requiring explicit review before their implementation:

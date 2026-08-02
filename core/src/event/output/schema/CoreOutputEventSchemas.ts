@@ -286,6 +286,47 @@ export const AgentAssistantMessageFailedPayloadSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const NudgePublicIdentityProperties = {
+  nudgeId: Type.String({ minLength: 1 }),
+  policyId: Type.String({ minLength: 1 }),
+  templateId: Type.String({ minLength: 1 }),
+  templateVersion: Type.String({ minLength: 1 }),
+  targetTurnNumber: Type.Optional(Type.Integer({ minimum: 1 })),
+};
+
+export const NudgeScheduledPayloadSchema = Type.Object(
+  {
+    ...NudgePublicIdentityProperties,
+    state: Type.Literal("scheduled"),
+  },
+  { additionalProperties: false },
+);
+
+export const SystemReminderInjectedPayloadSchema = Type.Object(
+  {
+    ...NudgePublicIdentityProperties,
+    leaseId: Type.String({ minLength: 1 }),
+    providerCallId: Type.String({ minLength: 1 }),
+    state: Type.Literal("consumed"),
+  },
+  { additionalProperties: false },
+);
+
+export const NudgeExpiredPayloadSchema = Type.Object(
+  {
+    ...NudgePublicIdentityProperties,
+    state: Type.Literal("expired"),
+  },
+  { additionalProperties: false },
+);
+
+const NudgeLifecycleSnapshotSchema = Type.Object(
+  {
+    runId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: true },
+);
+
 const AgentAssistantMessageSnapshotSchema = Type.Object(
   {
     runId: Type.String({ minLength: 1 }),
@@ -372,5 +413,29 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     schemaVersion: EVENT_SCHEMA_VERSION,
     payloadSchema: AssistantMessageIdentityPayloadSchema,
     snapshotSchema: AgentAssistantMessageSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.nudgeScheduled,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: NudgeScheduledPayloadSchema,
+    snapshotSchema: NudgeLifecycleSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.systemReminderInjected,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: SystemReminderInjectedPayloadSchema,
+    snapshotSchema: NudgeLifecycleSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.nudgeExpired,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: NudgeExpiredPayloadSchema,
+    snapshotSchema: NudgeLifecycleSnapshotSchema,
   });
 }

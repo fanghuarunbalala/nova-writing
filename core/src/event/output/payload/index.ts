@@ -3,5 +3,6 @@ export * from "./AgentRunStateChangedPayload.js";
 export * from "./AgentTurnStateChangedPayload.js";
 export * from "./EmptyOutputPayload.js";
 export * from "./HostInputRoutedPayload.js";
+export * from "./NudgeLifecyclePayloads.js";
 export * from "./RuntimePresenceChangedPayload.js";
 export * from "./RuntimeInputProcessedPayload.js";

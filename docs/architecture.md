@@ -4455,6 +4455,10 @@ Public durable Nudge Events are:
 
 Their payloads contain Nudge identifiers, Policy and template metadata, target identity, and lifecycle state only. Rendered Reminder content and template parameters are forbidden in public Events and logs.
 
+Each Event represents one Nudge. When one Provider call carries two Nudges, Core emits two `SystemReminderInjectedOutputEvent` records sharing the same `leaseId` and `providerCallId`. This preserves a simple per-Nudge lifecycle while retaining the Provider-call grouping. The Event envelope requires `conversationId` and `runId`; an actual `turnId` may be included when available, while the redacted payload may contain the numeric target Turn.
+
+`NudgeScheduledOutputEvent` does not copy its eventual Journal Sequence into the payload. After persistence, the Journal record Sequence becomes the `PendingNudge.scheduledSequence` used for deterministic ordering. These lifecycle Events are ordinary System OutputEvents rather than `InputResponseOutputEvent` subclasses because Policy evaluation and Provider dispatch do not always correspond one-to-one with a user Input.
+
 Because these Events omit template parameters, they are not the authoritative private Runtime state for Nudge restoration. Runtime recovery combines the private Store Snapshot with durable public lifecycle facts; public Event replay alone is display-oriented.
 
 ## 19. Context Compaction and Compilation

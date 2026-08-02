@@ -6,6 +6,7 @@ export * from "./ErrorOutputEvent.js";
 export * from "./HostInputRoutedOutputEvent.js";
 export * from "./InputResponseOutputEvent.js";
 export * from "./NovelOutputEvent.js";
+export * from "./NudgeLifecycleOutputEvents.js";
 export * from "./OutputEvent.js";
 export * from "./OutputEventOptions.js";
 export * from "./OutputEventSnapshot.js";

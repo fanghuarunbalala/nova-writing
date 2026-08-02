@@ -23,6 +23,9 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "agent.assistant.message.completed",
   "agent.assistant.message.failed",
   "agent.assistant.message.cancelled",
+  "system.nudge.scheduled",
+  "system.reminder.injected",
+  "system.nudge.expired",
 ]);
 
 const previous = {

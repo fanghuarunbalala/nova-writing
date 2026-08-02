@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   NOVEL_INVARIANT_FAILURE,
+  NovelDraftOperationPersistenceError,
   NovelDraftOperationWriter,
   NovelDraftSessionService,
   NovelInvariantViolationError,
@@ -73,8 +74,23 @@ function readDraftState(path) {
       operations: database.prepare("SELECT COUNT(*) AS count FROM draft_operations").get().count,
       outbox: database.prepare("SELECT COUNT(*) AS count FROM draft_outbox").get().count,
       metadata: database.prepare(
-        "SELECT operation_count, last_operation_digest FROM draft_metadata WHERE singleton = 1",
+        `SELECT operation_count, last_operation_sequence, last_operation_digest
+         FROM draft_metadata WHERE singleton = 1`,
       ).get(),
+      controlTables: database
+        .prepare(
+          `SELECT name FROM sqlite_schema
+           WHERE type = 'table' AND name LIKE 'draft_%'
+           ORDER BY name`,
+        )
+        .all()
+        .map((row) => row.name),
+      outboxRows: database
+        .prepare(
+          `SELECT event_type, event_json, event_digest
+           FROM draft_outbox ORDER BY operation_sequence`,
+        )
+        .all(),
       sequences: database
         .prepare("SELECT sequence FROM draft_operations ORDER BY sequence")
         .all()
@@ -135,6 +151,13 @@ try {
     },
   });
   registry.register({
+    operationType: "test.raw-fail",
+    operationVersion: captureNovelOperationVersion(1),
+    apply() {
+      throw new Error("FORBIDDEN_RAW_HANDLER_ERROR");
+    },
+  });
+  registry.register({
     operationType: "test.always-fail",
     operationVersion: captureNovelOperationVersion(1),
     apply() {
@@ -164,7 +187,10 @@ try {
   assert.equal(first.status, "appended");
   assert.equal(first.sequence, 1);
   assert.match(first.digest, /^sha256:[0-9a-f]{64}$/u);
-  const duplicate = await writer.enqueue(session, firstOperation);
+  const duplicate = await writer.enqueue(session, {
+    ...firstOperation,
+    payload: { secret, amount: 2 },
+  });
   assert.equal(duplicate.status, "duplicate");
   assert.equal(duplicate.sequence, 1);
   assert.equal(duplicate.digest, first.digest);
@@ -190,6 +216,17 @@ try {
       }),
     NovelInvariantViolationError,
   );
+  await assert.rejects(
+    () =>
+      writer.enqueue(session, {
+        operationId: captureNovelOperationId("operation_writer_raw_failed"),
+        operationVersion: captureNovelOperationVersion(1),
+        type: "test.raw-fail",
+        expected: [],
+        payload: {},
+      }),
+    NovelDraftOperationPersistenceError,
+  );
   const afterFailure = await writer.enqueue(
     session,
     operation("operation_writer_4", 5),
@@ -207,8 +244,26 @@ try {
   assert.equal(state.operations, 4);
   assert.equal(state.outbox, 4);
   assert.equal(state.metadata.operation_count, 4);
+  assert.equal(state.metadata.last_operation_sequence, 4);
   assert.equal(state.metadata.last_operation_digest, afterFailure.digest);
   assert.deepEqual(state.sequences, [1, 2, 3, 4]);
+  assert.deepEqual(state.controlTables, [
+    "draft_conflicts",
+    "draft_metadata",
+    "draft_operations",
+    "draft_outbox",
+    "draft_projection_state",
+    "draft_schema_migrations",
+  ]);
+  assert.equal(
+    state.outboxRows.every(
+      (row) =>
+        row.event_type === "novel.draft.operation-applied" &&
+        /^sha256:[0-9a-f]{64}$/u.test(row.event_digest) &&
+        !row.event_json.includes(secret),
+    ),
+    true,
+  );
 
   const restartedWriter = new NovelDraftOperationWriter({
     store: new SqliteNovelDraftOperationStore({
@@ -232,6 +287,7 @@ try {
   const serializedLogs = JSON.stringify(logEntries);
   assert.equal(serializedLogs.includes(secret), false);
   assert.equal(serializedLogs.includes(root), false);
+  assert.equal(serializedLogs.includes("FORBIDDEN_RAW_HANDLER_ERROR"), false);
   for (const entry of logEntries) {
     for (const field of ["payload", "path", "sql", "message", "stack", "cause"]) {
       assert.equal(Object.hasOwn(entry.fields, field), false);

@@ -321,7 +321,7 @@ Cover protocol immutability, JSON-only payload admission, branded Operation vers
 - fixed payload-free failures for invalid Operations, duplicate registration, missing handlers, and asynchronous Handler implementations
 - focused compile-time brand separation and runtime protocol/registry smoke coverage
 - accepted canonical Operation digest over the complete envelope using shared canonical JSON, UTF-8, SHA-256, and `sha256:<64 lowercase hexadecimal characters>`
-- Draft-local `draft_metadata`, ordered `draft_operations`, and durable `draft_outbox` control tables initialized on every new or reset snapshot
+- versioned Draft-local metadata, ordered Operation Journal, conflict, projection, and durable Outbox control tables initialized on every new or reset snapshot
 - atomic duplicate detection, Operation Journal append, synchronous Handler application, metadata advancement, and Outbox insertion in one short SQLite transaction
 - same Operation ID and Digest idempotency, with conflicting durable content rejected by a fixed identity-conflict failure
 - per-Draft asynchronous Writer queues that preserve FIFO order, permit independent Drafts, and remain usable after a rejected write

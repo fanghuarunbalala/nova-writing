@@ -107,11 +107,11 @@ interface OrderKeyFactory {
 - References always use stable IDs and never use outline paths or array indexes.
 - Fractional indexing, LexoRank, or another variable-length lexical rank may implement `OrderKey` behind the stable contract.
 
-## 5. StoryUnit Status
+## 5. StoryUnit Status and Reasons
 
-**Current recommendation:** a Todo-like outline needs progress state, but one overloaded `status` is insufficient.
+**Current recommendation:** a Todo-like outline needs status, but planning maturity, manuscript realization, and temporary blocking are separate concerns.
 
-Planning maturity and writing progress answer different questions:
+### 5.1 Planning and Realization Status
 
 ```ts
 type StoryUnitPlanningStatus =
@@ -119,10 +119,9 @@ type StoryUnitPlanningStatus =
   | "outlined"
   | "ready";
 
-type StoryUnitProgressStatus =
+type StoryUnitRealizationStatus =
   | "pending"
   | "in-progress"
-  | "blocked"
   | "completed"
   | "abandoned";
 ```
@@ -130,29 +129,115 @@ type StoryUnitProgressStatus =
 ```ts
 interface StoryUnit {
   readonly planningStatus: StoryUnitPlanningStatus;
-  readonly progressStatus: StoryUnitProgressStatus;
+  readonly realizationStatus: StoryUnitRealizationStatus;
+  readonly blockState?: StoryUnitBlockState;
+  readonly abandonment?: StoryUnitAbandonment;
 }
 ```
 
 Semantics:
 
-- `planningStatus` describes whether the story idea is sufficiently defined to write.
-- `progressStatus` describes whether its intended manuscript realization has been produced and accepted.
-- Writing text does not automatically mean `completed`; completion is an author or workflow decision.
-- Leaf progress may be stored directly.
-- Composite progress should normally be exposed as a derived roll-up of descendant progress rather than maintained as a conflicting second source of truth.
-- Whether a composite node can apply an explicit blocked or abandoned override remains a decision for the command model.
+- `planningStatus` answers whether the narrative intention is sufficiently defined to write.
+- `realizationStatus` answers whether that intention has been accepted as realized in manuscript content.
+- `pending` means manuscript realization has not started.
+- `in-progress` means some realization exists or active drafting and revision work has started, but the StoryUnit is not accepted as complete.
+- `completed` means its narrative intention has been sufficiently expressed in manuscript content and accepted by the author or workflow.
+- `abandoned` means the author no longer intends to realize this StoryUnit; it remains addressable for history, replacement tracking, and possible restoration.
+- Producing text does not automatically mean `completed`, and `completed` does not mean published or permanently immutable.
 
-A derived projection may expose aggregate progress:
+### 5.2 Blocking Is Independent
+
+`blocked` is a temporary execution condition rather than a manuscript-realization phase. Keeping it outside `realizationStatus` preserves whether the StoryUnit was pending or already in progress when it became blocked.
+
+```ts
+type StoryUnitBlockReason =
+  | "dependency"
+  | "decision-required"
+  | "continuity-conflict"
+  | "missing-material"
+  | "outline-incomplete"
+  | "other";
+
+interface StoryUnitBlockState {
+  readonly reasonCode?: StoryUnitBlockReason;
+  readonly note?: string;
+  readonly dependencyIds: readonly StoryUnitId[];
+  readonly blockedAt: string;
+}
+```
+
+- `reasonCode` supports filtering, automation, and Agent routing.
+- `note` is an optional human-readable explanation of the current blocking condition.
+- `dependencyIds` identifies StoryUnits whose progress or decisions may unblock this unit.
+- Clearing the block removes the current `blockState`; the historical transition remains in Novel-domain Events.
+
+### 5.3 Abandonment Information
+
+An abandoned StoryUnit retains a structured reason and may point to the StoryUnit that replaced it.
+
+```ts
+type StoryUnitAbandonReason =
+  | "story-direction-changed"
+  | "replaced"
+  | "merged"
+  | "duplicate"
+  | "scope-reduced"
+  | "other";
+
+interface StoryUnitAbandonment {
+  readonly reasonCode?: StoryUnitAbandonReason;
+  readonly note?: string;
+  readonly replacementStoryUnitId?: StoryUnitId;
+  readonly abandonedAt: string;
+}
+```
+
+- `note` explains why the author abandoned the unit without overloading a generic status note.
+- `replacementStoryUnitId` prevents replacement from being interpreted as simple deletion and helps Agents avoid proposing an obsolete direction again.
+- `abandonment` is required while `realizationStatus` is `abandoned` and is cleared from current state if the unit is restored.
+
+Recommended current-state invariants:
+
+```text
+realizationStatus = pending | in-progress
+    blockState may be present
+
+realizationStatus = completed
+    blockState and abandonment are absent
+
+realizationStatus = abandoned
+    abandonment is present
+    blockState is absent
+```
+
+### 5.4 Composite Progress
+
+Leaf realization status may be stored directly. Composite progress should normally be exposed as a derived roll-up rather than maintained as a conflicting second source of truth.
 
 ```ts
 interface StoryUnitProgressProjection {
   readonly storyUnitId: StoryUnitId;
-  readonly effectiveStatus: StoryUnitProgressStatus;
+  readonly effectiveStatus: StoryUnitRealizationStatus;
+  readonly isBlocked: boolean;
   readonly completedLeafCount: number;
   readonly totalLeafCount: number;
 }
 ```
+
+Whether a composite StoryUnit may own an explicit block override, rather than only deriving blocked state from descendants, remains a command-model decision.
+
+### 5.5 Status History
+
+Current StoryUnit fields expose current state; Novel-domain Events preserve transition history:
+
+```text
+StoryUnitBlocked
+StoryUnitUnblocked
+StoryUnitAbandoned
+StoryUnitRestored
+```
+
+Domain persistence may retain reason notes in these Events. Structured Runtime logs must only record safe identifiers and lifecycle metadata and must not emit the natural-language note content.
 
 ## 6. Beat Boundary
 
@@ -277,7 +362,7 @@ Novel Command Queue
 The following decisions remain outside the accepted Runtime implementation plan:
 
 1. The exact `OrderKey` algorithm and rebalance policy.
-2. Whether composite StoryUnits may explicitly override derived blocked or abandoned progress.
+2. Whether composite StoryUnits may explicitly override derived blocking and how descendant abandonment affects aggregate completion.
 3. Whether planned Chapter coverage uses a contiguous leaf range, an explicit ordered selection, or both.
 4. The exact command and event contracts for Block split, merge, move, and anchor repair.
 5. The storage layout for Manuscript Blocks and Novel-domain Journal records.

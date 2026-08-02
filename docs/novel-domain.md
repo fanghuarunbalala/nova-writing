@@ -575,9 +575,9 @@ Novel Command Queue
 - Optimistic revisions detect stale concurrent commands.
 - A future collaborative editor may introduce CRDT behavior at the Paragraph text adapter boundary without changing the whole Novel domain contract.
 
-## 11. Minimal Character Model
+## 11. Minimal Progressive Character and Location Models
 
-**Current recommendation:** the author primarily prepares the Story Outline. Character records remain minimal, while leaf StoryUnits describe participation, events, and character or location changes. Tools may derive and maintain reviewable state projections from those sources.
+**Current recommendation:** Character and Location records begin as minimal stable identities and are progressively enriched by human and Agent collaboration only when upcoming StoryUnits need more information. Leaf StoryUnits remain responsible for participation, Events, rhythm, and changing narrative state. Tools may derive reviewable readiness and current-state projections from those sources.
 
 ### 11.1 Minimal Contracts
 
@@ -587,6 +587,17 @@ interface Character {
   readonly name: string;
   readonly aliases: readonly string[];
   readonly summary?: string;
+  readonly initialState?: string;
+  readonly authorNotes?: string;
+}
+
+interface Location {
+  readonly id: LocationId;
+  readonly name: string;
+  readonly aliases: readonly string[];
+  readonly summary?: string;
+  readonly initialState?: string;
+  readonly authorNotes?: string;
 }
 
 interface StoryUnitCharacterBinding {
@@ -596,8 +607,22 @@ interface StoryUnitCharacterBinding {
   readonly note?: string;
 }
 
+interface StoryUnitLocationBinding {
+  readonly storyUnitId: StoryUnitId;
+  readonly locationId: LocationId;
+  readonly involvement?: LocationInvolvement;
+  readonly note?: string;
+}
+
 interface CharacterCurrentStateProjection {
   readonly characterId: CharacterId;
+  readonly atStoryUnitId: StoryUnitId;
+  readonly sourceRevision: NovelRevision;
+  readonly summary: string;
+}
+
+interface LocationCurrentStateProjection {
+  readonly locationId: LocationId;
   readonly atStoryUnitId: StoryUnitId;
   readonly sourceRevision: NovelRevision;
   readonly summary: string;
@@ -615,12 +640,30 @@ classDiagram
         +string name
         +string[] aliases
         +string summary
+        +string initialState
+        +string authorNotes
+    }
+
+    class Location {
+        +LocationId id
+        +string name
+        +string[] aliases
+        +string summary
+        +string initialState
+        +string authorNotes
     }
 
     class StoryUnitCharacterBinding {
         +StoryUnitId storyUnitId
         +CharacterId characterId
         +CharacterInvolvement involvement
+        +string note
+    }
+
+    class StoryUnitLocationBinding {
+        +StoryUnitId storyUnitId
+        +LocationId locationId
+        +LocationInvolvement involvement
         +string note
     }
 
@@ -638,22 +681,92 @@ classDiagram
         +string summary
     }
 
+    class LocationCurrentStateProjection {
+        +LocationId locationId
+        +StoryUnitId atStoryUnitId
+        +NovelRevision sourceRevision
+        +string summary
+    }
+
     StoryUnit "1" --> "0..*" StoryUnitCharacterBinding
     Character "1" --> "0..*" StoryUnitCharacterBinding
+    StoryUnit "1" --> "0..*" StoryUnitLocationBinding
+    Location "1" --> "0..*" StoryUnitLocationBinding
     StoryUnit "1" --> "0..1" StoryUnitRealization
     Character "1" --> "0..*" CharacterCurrentStateProjection
     StoryUnit "1" --> "0..*" CharacterCurrentStateProjection : projection position
+    Location "1" --> "0..*" LocationCurrentStateProjection
+    StoryUnit "1" --> "0..*" LocationCurrentStateProjection : projection position
 ```
 
 The binding and realization do not own one another. Both refer to the same stable StoryUnit for different purposes:
 
 - `StoryUnitCharacterBinding` records planned character participation in the outline.
+- `StoryUnitLocationBinding` records planned primary, secondary, or mentioned Locations in the outline.
 - `StoryUnitRealization` uses the contract in Section 8 to record where that StoryUnit was realized and whether the manuscript conforms to the current outline.
-- `CharacterCurrentStateProjection` summarizes a character at a selected StoryUnit position by replaying relevant leaf StoryUnit changes.
+- Character and Location current-state projections summarize an entity at a selected StoryUnit position by replaying relevant completed and conforming leaf StoryUnit changes.
 
-Character stores only stable identity and information that should not be repeatedly inferred from the outline. Current location, injuries, relationships, life state, inventory, and similar changing information remain derived from StoryUnit participation and entity-change records rather than becoming mutable fields on Character.
+Character and Location store only stable identity, an optional initial condition, and author constraints that should not be repeatedly inferred from the outline. Current location, injuries, relationships, life state, ownership, access, damage, occupancy, and similar changing information remain derived from StoryUnit bindings and entity-change records rather than becoming mutable profile fields.
 
-### 11.2 NovelRevision
+### 11.2 Progressive Profile Completion
+
+A Character or Location may begin as a stub as soon as a StoryUnit needs a stable reference:
+
+```text
+Character stub
+    id + name
+
+Location stub
+    id + name
+```
+
+Aliases, stable summary, initial state, and author-only constraints are added later when they become useful. The model does not require a globally complete Character sheet or Location encyclopedia before outline or manuscript work can continue.
+
+Entity sufficiency is contextual rather than permanent. A mentioned Character may need only a name, while a point-of-view Character may need motivation, voice, initial condition, and relevant constraints. A mentioned Location may need only a label, while a primary action Location may need spatial or atmospheric guidance.
+
+Tools expose contextual readiness as a repairable projection rather than storing a misleading global `completed` profile state:
+
+```ts
+type EntityProfileReadinessStatus =
+  | "sufficient"
+  | "insufficient";
+
+interface EntityProfileReadinessProjection {
+  readonly entityType: "character" | "location";
+  readonly entityId: StoryEntityId;
+  readonly forStoryUnitId: StoryUnitId;
+  readonly sourceRevision: NovelRevision;
+  readonly status: EntityProfileReadinessStatus;
+  readonly missingInformation: readonly string[];
+}
+```
+
+An Agent may propose stable profile additions when readiness checks discover missing information:
+
+```ts
+interface EntityProfileProposal {
+  readonly id: EntityProfileProposalId;
+  readonly entityType: "character" | "location";
+  readonly entityId: StoryEntityId;
+  readonly baseRevision: NovelRevision;
+  readonly patch: CharacterProfilePatch | LocationProfilePatch;
+  readonly reviewStatus: ReviewStatus;
+}
+```
+
+Recommended rules:
+
+- The Agent may create profile proposals from the current StoryUnit need, accepted outline evidence, or explicit human direction.
+- Tools validate stable IDs, base Revision, patch schema, and whether the proposed information belongs in the stable profile or in a StoryUnitEntityChange.
+- Accepted profile proposals advance NovelRevision and invalidate affected readiness or current-state projections.
+- Rejected proposals do not change the entity profile.
+- Dynamic facts such as a new injury, current location, changing relationship, damaged building, or changed ownership never enter stable profiles; they remain StoryUnit entity changes.
+- Information already represented adequately by the accepted outline does not need to be copied into the profile merely to make the profile appear complete.
+- Human interfaces may batch related low-risk profile proposals, while identity changes, author constraints, or rewrites of established profile facts require explicit review under the configured approval policy.
+
+This approach keeps authoring progressive: upcoming StoryUnits drive which Character and Location details are developed next, while distant entities may remain intentionally sparse.
+
+### 11.3 NovelRevision
 
 `NovelRevision` is the opaque logical version of the complete Novel project state.
 
@@ -687,14 +800,18 @@ edit a relevant leaf StoryUnit
 
 The initial global NovelRevision deliberately provides coarse invalidation. It may mark a Character projection potentially stale after an unrelated Novel mutation, but it keeps the first contract simple and safe. If measured rebuild cost becomes significant, a later projection may additionally record narrower Outline, Manuscript, or dependency revisions without removing the global NovelRevision.
 
-### 11.3 Projection and Review Boundary
+### 11.4 Projection and Review Boundary
 
-`CharacterCurrentStateProjection` is a repairable Tool-maintained table rather than another authoritative character fact store.
+Character and Location current-state projections are repairable Tool-maintained tables rather than alternate authoritative fact stores.
 
 ```text
 Character stable profile
     + ordered entity changes from completed and currently conforming StoryUnits
     = CharacterCurrentStateProjection
+
+Location stable profile
+    + ordered entity changes from completed and currently conforming StoryUnits
+    = LocationCurrentStateProjection
 ```
 
 Recommended query behavior:
@@ -722,7 +839,8 @@ The following decisions remain outside the accepted Runtime implementation plan:
 6. The exact OutlineRevision and ManuscriptRevision generation contracts and their relationship to the global NovelRevision.
 7. Whether RhythmBeat mismatch remains a warning by default or may become a required conformance error for selected beats.
 8. The concrete NovelRevision generation format and whether narrower component revisions are needed after measuring projection rebuild cost.
-9. The exact review-state contract for Tool-proposed Character and Location projections.
+9. The exact review-state contract for Tool-proposed Character and Location profile patches and projections.
 10. The exact conformance validator boundary between deterministic Tool checks, model-assisted analysis, and human acceptance.
 11. The concrete OutlineOperation union, proposal conflict resolution, and which low-risk outline operations may be auto-accepted by policy.
 12. The initial LeafStoryUnit ready policy and whether different Agent definitions may select stricter readiness profiles.
+13. The contextual Character and Location readiness policies for different involvement roles and which missing stable details should block a leaf StoryUnit from reaching `ready`.

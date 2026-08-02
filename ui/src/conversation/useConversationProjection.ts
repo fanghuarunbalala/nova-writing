@@ -5,6 +5,7 @@ import {
   useMemo,
   useSyncExternalStore,
 } from "react";
+import type { InputEvent, InputReceipt } from "@novel/core";
 import { useNovelApi } from "../client/NovelApiContext.js";
 import { ConversationProjectionBinding } from "./ConversationProjectionBinding.js";
 import type { ConversationProjectionBindingSnapshot } from "./ConversationProjectionBindingTypes.js";
@@ -12,6 +13,7 @@ import type { ConversationProjectionBindingSnapshot } from "./ConversationProjec
 export interface ConversationProjectionHookResult {
   readonly snapshot: ConversationProjectionBindingSnapshot;
   resume(): Promise<void>;
+  enqueue(event: InputEvent): Promise<InputReceipt>;
 }
 
 export function useConversationProjection(
@@ -42,12 +44,14 @@ export function useConversationProjection(
   }, [binding]);
 
   const resume = useCallback(() => binding.resume(), [binding]);
+  const enqueue = useCallback((event: InputEvent) => binding.enqueue(event), [binding]);
   return useMemo(
     () =>
       Object.freeze({
         snapshot,
         resume,
+        enqueue,
       }),
-    [resume, snapshot],
+    [enqueue, resume, snapshot],
   );
 }

@@ -7,6 +7,8 @@ import {
   ConversationProjectionStore,
   noopLogger,
   type Conversation,
+  type InputEvent,
+  type InputReceipt,
   type ConversationProjectionControllerErrorSnapshot,
   type Logger,
   type NovelApiClient,
@@ -93,6 +95,16 @@ export class ConversationProjectionBinding {
       throw new ConversationProjectionControllerStateError("resume", this.state);
     }
     return this.controller.resume();
+  }
+
+  enqueue(event: InputEvent): Promise<InputReceipt> {
+    if (
+      this.state !== CONVERSATION_PROJECTION_BINDING_STATE.active ||
+      this.conversation === undefined
+    ) {
+      throw new ConversationProjectionControllerStateError("enqueue input", this.state);
+    }
+    return this.conversation.input.enqueue(event);
   }
 
   stop(): Promise<void> {

@@ -14,7 +14,11 @@ import {
   type ApplicationShellStore,
   useApplicationShellSnapshot,
 } from "../state/index.js";
-import { ConversationView } from "../conversation/view/index.js";
+import {
+  ConversationComposer,
+  useConversationProjection,
+} from "../conversation/index.js";
+import { ConversationProjectionView } from "../conversation/view/index.js";
 
 export interface NovelAppProps extends NovelAppProviderProps {
   readonly shell?: Omit<ApplicationShellProps, "children">;
@@ -52,16 +56,45 @@ function ConnectedApplicationShell({
     conversation: snapshot.conversation?.label,
     agent: snapshot.agent?.label,
   };
+  const shellProps = {
+    ...shell,
+    context,
+    sidebarMode: shell?.sidebarMode ?? snapshot.sidebarMode,
+  };
+  if (children !== undefined || snapshot.conversation === undefined) {
+    return <ApplicationShell {...shellProps}>{children}</ApplicationShell>;
+  }
+  return (
+    <BoundConversationShell
+      shell={shellProps}
+      conversationId={snapshot.conversation.id}
+    />
+  );
+}
+
+function BoundConversationShell({
+  shell,
+  conversationId,
+}: {
+  readonly shell: Omit<ApplicationShellProps, "children">;
+  readonly conversationId: string;
+}) {
+  const result = useConversationProjection(conversationId);
+  const connected = result.snapshot.controller?.state === "live";
   return (
     <ApplicationShell
       {...shell}
-      context={context}
-      sidebarMode={shell?.sidebarMode ?? snapshot.sidebarMode}
+      composer={
+        shell.composer ?? (
+          <ConversationComposer
+            conversationId={conversationId}
+            enabled={connected}
+            enqueue={result.enqueue}
+          />
+        )
+      }
     >
-      {children ??
-        (snapshot.conversation !== undefined ? (
-          <ConversationView conversationId={snapshot.conversation.id} />
-        ) : undefined)}
+      <ConversationProjectionView result={result} />
     </ApplicationShell>
   );
 }

@@ -483,6 +483,12 @@ Conversation connection progress now presents opening, replaying, following, dis
 
 Timeline scrolling tracks whether the reader remains near the latest Event. New Events auto-follow only while the reader is already at the bottom; otherwise the current reading position is preserved and a keyboard-accessible “new messages, return to latest” control appears.
 
+### 10.3 Implemented Basic Composer Checkpoint
+
+The Conversation Projection Binding and React Hook now expose the bound Conversation's generic `enqueue(InputEvent)` operation. `NovelApp` uses one Hook result for Timeline, connection controls, and Composer, so the central workspace does not create duplicate Conversation handles or Event subscriptions.
+
+The initial Composer sends plain `UserMessageInputEvent` instances and explicit `StopInputEvent` instances. Enter sends, Shift+Enter preserves a newline, empty text is rejected locally, and controls remain disabled until the bound Controller is live. Accepted and duplicate receipts are presented only as durable Journal outcomes; the UI continues to say that Agent or Runtime processing is pending. Input failures use a fixed safe message and never expose raw Transport or Provider errors. Structured Novel references and persistent Composer draft state remain GUI-7 responsibilities.
+
 ## 11. Structured Card Architecture
 
 Conversation cards are produced from structured Event snapshots, never by scraping assistant Markdown for application commands.

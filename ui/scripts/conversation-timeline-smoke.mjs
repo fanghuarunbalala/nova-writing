@@ -151,6 +151,10 @@ async function assertConnectedTimeline() {
   await waitForReact(() => container.textContent.includes("这是回放后的回答。"));
   assert.match(container.textContent, new RegExp(secretText));
   assert.equal(container.querySelector(".novel-conversation-view").dataset.controllerState, "live");
+  assert.equal(
+    logs.filter((entry) => entry.event === "mock_novel_host.subscription_opened").length,
+    1,
+  );
 
   await act(async () => {
     await external.input.enqueue(

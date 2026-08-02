@@ -411,6 +411,74 @@ const NOVEL_THEME_CSS = `
   font-size: 12px;
 }
 
+.novel-conversation-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 10px;
+}
+
+.novel-conversation-composer textarea {
+  min-height: 58px;
+  max-height: 180px;
+  resize: vertical;
+  border: 1px solid var(--novel-border-strong);
+  border-radius: var(--novel-radius);
+  padding: 11px 13px;
+  color: var(--novel-text-primary);
+  background: var(--novel-surface-primary);
+  font: inherit;
+  line-height: 1.45;
+}
+
+.novel-conversation-composer textarea:focus-visible {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: 1px;
+}
+
+.novel-composer-actions {
+  display: flex;
+  align-items: end;
+  gap: 7px;
+}
+
+.novel-send-button,
+.novel-stop-button {
+  min-height: 36px;
+  border: 1px solid var(--novel-border-strong);
+  border-radius: 7px;
+  padding: 0 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.novel-send-button {
+  border-color: #60738c;
+  color: #ffffff;
+  background: #60738c;
+}
+
+.novel-stop-button {
+  color: var(--novel-text-primary);
+  background: var(--novel-surface-primary);
+}
+
+.novel-send-button:disabled,
+.novel-stop-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.novel-composer-notice {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--novel-text-secondary);
+  font-size: 12px;
+}
+
+.novel-composer-notice[data-notice-kind="error"] {
+  color: #8a4141;
+}
+
 @keyframes novel-pulse {
   50% { opacity: 0.35; }
 }

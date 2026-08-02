@@ -2,6 +2,7 @@
 import type {
   CharacterId,
   LocationId,
+  NovelCommitId,
   NovelDraftSessionId,
   NovelId,
   NovelOperationId,
@@ -200,6 +201,24 @@ export class NovelDraftChangeSetChangedError extends Error {
 
   constructor(public readonly draftSessionId: NovelDraftSessionId) {
     super("Novel Draft ChangeSet changed before freeze");
+  }
+}
+
+export class NovelCommitPayloadIdentityConflictError extends Error {
+  override readonly name = "NovelCommitPayloadIdentityConflictError";
+  readonly code = "NOVEL_COMMIT_PAYLOAD_IDENTITY_CONFLICT" as const;
+
+  constructor(public readonly commitId: NovelCommitId) {
+    super("Novel Commit payload identity conflict");
+  }
+}
+
+export class NovelCommitHistoryIntegrityError extends Error {
+  override readonly name = "NovelCommitHistoryIntegrityError";
+  readonly code = "NOVEL_COMMIT_HISTORY_INTEGRITY_FAILED" as const;
+
+  constructor(public readonly commitId: NovelCommitId) {
+    super("Novel Commit history integrity failed");
   }
 }
 

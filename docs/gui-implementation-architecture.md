@@ -246,6 +246,14 @@ Recommended component composition:
 
 The shared application does not detect Electron or Web through globals. Desktop and Web shells provide capabilities explicitly.
 
+### 6.1 Implemented Shared Shell Checkpoint
+
+`NovelApp` now renders the initial shared chat-first `ApplicationShell` inside the accepted API, platform, and extension providers. The Shell contains the fixed Project/Edit/Publish/Help menu, persistent Workspace/Meta/Conversation/Agent context bar, project and Conversation sidebar, central Conversation host with reserved Composer surface, and contextual Inspector host.
+
+The initial theme is implemented with shared CSS variables and a quiet white presentation. The Inspector defaults to `closed` and supports presentation-only `normal` and `expanded` widths; state ownership and transitions remain the next Shell Store checkpoint. Expanded review preserves the left sidebar and takes width from the central Conversation area.
+
+The fixed left navigation contains New Conversation, Schedule, Outline, Characters, Locations, and Manuscript followed by Conversation history. Components expose semantic navigation, workspace, Conversation, Composer, and Inspector landmarks, keyboard-visible focus treatment, and non-color text labels. No query, InputEvent, routing, Electron, HTTP, or Novel mutation behavior is introduced by this checkpoint.
+
 ## 7. Application State Boundaries
 
 The GUI uses multiple focused stores rather than one application-wide mutable object.

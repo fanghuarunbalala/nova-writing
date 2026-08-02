@@ -11,12 +11,18 @@ export interface NovelDraftSnapshot {
   readonly novelId: NovelId;
   readonly ownerConversationId: string;
   readonly baseRevision: NovelRevision;
+  readonly replacedBaseRevision?: NovelRevision;
+}
+
+export interface ReplaceNovelDraftSnapshotInput {
+  readonly session: NovelDraftSession;
+  readonly expectedBaseRevision: NovelRevision;
 }
 
 export interface NovelSnapshotter {
   createDraftSnapshot(session: NovelDraftSession): Promise<void>;
 
-  replaceDraftSnapshot(session: NovelDraftSession): Promise<void>;
+  replaceDraftSnapshot(input: ReplaceNovelDraftSnapshotInput): Promise<void>;
 
   inspectDraftSnapshot(
     novelId: NovelId,

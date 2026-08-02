@@ -309,6 +309,24 @@ One short Draft SQLite transaction validates an Operation, records it, applies i
 
 ### N4-E Validation
 
+Cover protocol immutability, JSON-only payload admission, branded Operation versions, precondition validation, duplicate registration, missing handlers, and synchronous Handler enforcement.
+
+### N4-F Partial Delivery
+
+N4-A and N4-B are implemented:
+
+- immutable versioned Domain Operation envelopes with branded Operation IDs and Operation versions
+- discriminated entity-exists, entity-absent, entity-version, and field-digest preconditions
+- canonical JSON capture that rejects closures, `undefined`, non-finite numbers, cycles, and non-plain objects
+- typed Operation Registry keyed by Operation type and version
+- asynchronous public Executor boundary whose transaction-facing Handler must complete synchronously
+- fixed payload-free failures for invalid Operations, duplicate registration, missing handlers, and asynchronous Handler implementations
+- focused compile-time brand separation and runtime protocol/registry smoke coverage
+
+N4-C and N4-D remain pending because the exact Operation digest text encoding is still explicitly unresolved in `docs/novel-domain.md`. Existing Core code uses both raw lowercase SHA-256 hex and `sha256:<hex>` forms, so the format cannot be selected by precedent alone.
+
+**Status:** N4-A and N4-B completed; N4-C and N4-D pending the recorded digest decision.
+
 Cover immutability, registration, duplicate identity, ordering, transaction rollback, restart recovery, and log redaction with a private test Operation rather than a premature public Novel model.
 
 ## 11. Task N5: Character and Location Vertical Slice

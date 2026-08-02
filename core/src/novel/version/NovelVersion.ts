@@ -7,6 +7,7 @@ import {
 declare const novelRevisionBrand: unique symbol;
 declare const novelSchemaVersionBrand: unique symbol;
 declare const novelEntityVersionBrand: unique symbol;
+declare const novelOperationVersionBrand: unique symbol;
 declare const novelTimestampBrand: unique symbol;
 
 export type NovelRevision = string & {
@@ -17,6 +18,9 @@ export type NovelSchemaVersion = number & {
 };
 export type NovelEntityVersion = number & {
   readonly [novelEntityVersionBrand]: "NovelEntityVersion";
+};
+export type NovelOperationVersion = number & {
+  readonly [novelOperationVersionBrand]: "NovelOperationVersion";
 };
 export type NovelTimestamp = string & {
   readonly [novelTimestampBrand]: "NovelTimestamp";
@@ -52,6 +56,16 @@ export function captureNovelEntityVersion(value: unknown): NovelEntityVersion {
     );
   }
   return value as NovelEntityVersion;
+}
+
+export function captureNovelOperationVersion(value: unknown): NovelOperationVersion {
+  if (!Number.isSafeInteger(value) || (value as number) < 1) {
+    throw new NovelProtocolValidationError(
+      NOVEL_PROTOCOL_FAILURE.invalidOperationVersion,
+      "operationVersion",
+    );
+  }
+  return value as NovelOperationVersion;
 }
 
 export function captureNovelTimestamp(value: unknown): NovelTimestamp {

@@ -154,7 +154,10 @@ export class NovelDraftSessionService {
         novelId: current.novelId,
         draftSessionId: current.id,
       });
-      await this.options.snapshotter.replaceDraftSnapshot(resetSnapshot);
+      await this.options.snapshotter.replaceDraftSnapshot({
+        session: resetSnapshot,
+        expectedBaseRevision: current.baseRevision,
+      });
       const updated = await this.options.draftStore.resetDraftSession({
         novelId: current.novelId,
         draftSessionId: current.id,

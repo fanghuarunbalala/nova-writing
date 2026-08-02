@@ -3,7 +3,10 @@ import type {
   NovelDraftSessionId,
   NovelId,
 } from "../identity/index.js";
-import type { NovelRevision } from "../version/index.js";
+import type {
+  NovelOperationVersion,
+  NovelRevision,
+} from "../version/index.js";
 
 export const NOVEL_INVARIANT_FAILURE = {
   workspaceIdentityMismatch: "workspace_identity_mismatch",
@@ -116,6 +119,42 @@ export class NovelInvariantViolationError extends Error {
     public readonly draftSessionId?: NovelDraftSessionId,
   ) {
     super("Novel invariant violated");
+  }
+}
+
+export class NovelOperationRegistrationError extends Error {
+  override readonly name = "NovelOperationRegistrationError";
+  readonly code = "NOVEL_OPERATION_ALREADY_REGISTERED" as const;
+
+  constructor(
+    public readonly operationType: string,
+    public readonly operationVersion: NovelOperationVersion,
+  ) {
+    super("Novel Operation handler is already registered");
+  }
+}
+
+export class NovelOperationHandlerNotFoundError extends Error {
+  override readonly name = "NovelOperationHandlerNotFoundError";
+  readonly code = "NOVEL_OPERATION_HANDLER_NOT_FOUND" as const;
+
+  constructor(
+    public readonly operationType: string,
+    public readonly operationVersion: NovelOperationVersion,
+  ) {
+    super("Novel Operation handler was not found");
+  }
+}
+
+export class NovelOperationSynchronousHandlerError extends Error {
+  override readonly name = "NovelOperationSynchronousHandlerError";
+  readonly code = "NOVEL_OPERATION_HANDLER_NOT_SYNCHRONOUS" as const;
+
+  constructor(
+    public readonly operationType: string,
+    public readonly operationVersion: NovelOperationVersion,
+  ) {
+    super("Novel Operation handler must complete synchronously");
   }
 }
 

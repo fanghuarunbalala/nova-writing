@@ -6,6 +6,8 @@ export const NOVEL_PROTOCOL_FAILURE = {
   invalidEntityVersion: "invalid_entity_version",
   invalidTimestamp: "invalid_timestamp",
   invalidDraftStatus: "invalid_draft_status",
+  invalidOperation: "invalid_operation",
+  invalidOperationVersion: "invalid_operation_version",
 } as const;
 
 export type NovelProtocolFailure =
@@ -25,6 +27,10 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "entityVersion",
   "timestamp",
   "draftStatus",
+  "operationType",
+  "operationVersion",
+  "operationPayload",
+  "operationPrecondition",
 ]);
 
 export class NovelProtocolValidationError extends Error {

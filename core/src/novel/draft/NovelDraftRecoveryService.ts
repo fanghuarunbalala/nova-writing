@@ -91,7 +91,8 @@ export class NovelDraftRecoveryService {
 
       if (
         snapshot.baseRevision !== session.baseRevision &&
-        session.status === NOVEL_DRAFT_SESSION_STATUS.active
+        session.status === NOVEL_DRAFT_SESSION_STATUS.active &&
+        snapshot.replacedBaseRevision === session.baseRevision
       ) {
         await this.options.draftStore.resetDraftSession({
           novelId: session.novelId,

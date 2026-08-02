@@ -45,7 +45,10 @@ class FixtureRuntime {
 
 await runNodeRuntimeChildEntrypoint({
   compositionFactory: {
-    async create(bootstrap) {
+    async create(bootstrap, context) {
+      if (!context.persistence?.journal || !context.persistence?.runtimeState) {
+        throw new Error("Missing Runtime persistence composition context");
+      }
       return new FixtureRuntime(bootstrap);
     },
   },

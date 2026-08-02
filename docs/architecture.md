@@ -5573,6 +5573,76 @@ Bootstrap is one-shot. The constructed Runtime must match the Bootstrap Conversa
 
 Task 6A-E does not provide Journal, Message, Runtime-state, Artifact, or generic storage RPC; it also does not add heartbeat, health state, five-second graceful termination, forced kill, automatic restart, or Subagent behavior. Narrow persistence access is Task 6A-F, while health and termination policy remain Task 6A-G.
 
+### 24.6 Runtime Persistence RPC
+
+Task 6A-F keeps durable storage authority in the Parent process while giving the Child Runtime only five typed operations:
+
+```text
+journal.getEvent
+journal.listEvents
+journal.appendOutput
+messages.list
+runtimeState.load
+```
+
+The method grammar permits lower-camel segments after each dot so these reviewed names remain valid, while the Handler rejects every method outside the exact allowlist. There is no generic SQL, filesystem, path, namespace, key/value, arbitrary JSON state, Artifact, or Store discovery operation.
+
+```mermaid
+sequenceDiagram
+    participant Runtime as Child ConversationRuntime
+    participant Ports as Child Persistence Ports
+    participant Peer as Child RuntimeIpcPeer
+    participant Handler as Parent Persistence Handler
+    participant Journal as Journal Service / Reader
+    participant Messages as Message Projection Store
+    participant State as Typed Private State Stores
+
+    Runtime->>Ports: journal.getEvent / listEvents
+    Ports->>Peer: strict Request
+    Peer->>Handler: allowlisted RPC
+    Handler->>Journal: typed read
+    Journal-->>Handler: immutable Event page
+    Handler-->>Peer: strict Response
+    Peer-->>Ports: validated result
+
+    Runtime->>Ports: journal.appendOutput(snapshot)
+    Ports->>Peer: strict append Request
+    Peer->>Handler: allowlisted RPC
+    Handler->>Journal: durable append before publication
+    Journal-->>Handler: receipt + best-effort live state
+    Handler-->>Peer: durable receipt only
+    Peer-->>Ports: appended or duplicate ACK
+
+    Runtime->>Ports: runtimeState.load(conversationId)
+    Ports->>Peer: strict load Request
+    Peer->>Handler: allowlisted RPC
+    Handler->>Journal: getHighWatermark
+    Handler->>State: snapshot configured typed sections
+    Handler-->>Peer: RuntimeRecoverySnapshot@1
+    Peer-->>Ports: immutable aggregate
+```
+
+`ParentRuntimePersistenceHandler` is bound to one Conversation and validates that every request, Event, Message page, receipt, Checkpoint, and Approval identity targets that Conversation. Journal reads use Sequence identity and the existing bounded `ConversationEventQuery`; Message reads preserve the existing bounded projection pagination. `journal.appendOutput` validates an `OutputEventSnapshot`, persists it through `ConversationJournalService`, and returns only `status`, Conversation ID, Event ID, Sequence, and `recordedAt`. A failed best-effort live publication does not convert a durable append into failure.
+
+`RuntimeRecoverySnapshot@1` is Child-private recovery input rather than public replay data:
+
+```ts
+interface RuntimeRecoverySnapshot {
+  schemaVersion: 1;
+  conversationId: string;
+  capturedThroughSequence: number;
+  nudge?: PendingNudgeStoreSnapshot;
+  contextCheckpoint?: ContextCheckpoint;
+  interaction?: ToolApprovalInteractionSnapshot;
+}
+```
+
+The Parent assembles only configured typed sections. Missing sections are omitted, the active Checkpoint must target the same Conversation and cannot cover beyond `capturedThroughSequence`, and pending Nudge scheduling cannot point beyond that boundary. State writes remain on their existing typed lifecycle paths; `runtimeState.load` is deliberately load-only.
+
+`ChildRuntimePersistenceClient` implements the provider-neutral `RuntimePersistencePorts`. `RuntimeChildCompositionFactory.create()` now receives a `RuntimeChildCompositionContext` containing those narrow Ports, not a `RuntimeIpcPeer`, Store path, SQL connection, Node stream, Provider client, credential, Tool handler, or Pi type. Local cancellation becomes the existing `ipc.cancel_request` Notification; an already-started non-cancellable Store operation may still complete, relying on durable Event identity for safe append retry and duplicate acknowledgement.
+
+Task 6A-F does not implement heartbeat health, graceful termination escalation, automatic restart, concrete restart-safe private State adapters, Artifact access, ConversationProxy, or Subagent behavior. Heartbeat and process health remain Task 6A-G.
+
 ## 25. Subagent Architecture
 
 Main Agent and Subagent both use Conversation.
@@ -5751,13 +5821,14 @@ Currently implemented skeletons include:
 - priority-budgeted per-call Context Projection with critical-item preservation, oldest-first recent-window degradation, immutable pinned/transient retention, and strict hard-admission rejection
 - provider-neutral Base Prompt plus Checkpoint Overlay composition and Pi `transformContext()` application before every inner LLM call, followed by the existing one-shot Nudge Overlay without canonical history mutation
 - redacted durable Context Compaction lifecycle Events and exact-dispatch Checkpoint application publication with idempotent Event identities
+- negotiated Parent/Child Runtime startup with Child-local composition and one-process-per-Runtime placement
+- allowlisted Runtime persistence RPC with strict Journal/Message reads, durable Output append acknowledgement, and typed aggregate recovery-state load
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 
 Not yet implemented:
 
 - ConversationProxy implementation
-- narrow Runtime persistence RPC and durable Journal append acknowledgement
 - heartbeat health, cancellation routing, and graceful termination escalation
 - concrete restart-safe ContextCheckpointStore and canonical Journal/Message source adapters
 - durable ArtifactStore, oversized User-content staging, and Artifact-reference recovery

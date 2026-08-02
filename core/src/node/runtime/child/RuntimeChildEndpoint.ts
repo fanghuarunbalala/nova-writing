@@ -12,6 +12,7 @@ import type {
   RuntimeIpcRequestHandlerContext,
 } from "../../../runtime/ipc/index.js";
 import type {
+  RuntimeChildCompositionContext,
   RuntimeChildCompositionFactory,
   RuntimeChildRuntime,
 } from "./RuntimeChildCompositionFactory.js";
@@ -34,6 +35,7 @@ type RuntimeChildEndpointState =
 
 export interface RuntimeChildEndpointOptions {
   readonly compositionFactory: RuntimeChildCompositionFactory;
+  readonly compositionContext: RuntimeChildCompositionContext;
   readonly logger?: Logger;
 }
 
@@ -41,6 +43,7 @@ export class RuntimeChildEndpoint
   implements RuntimeIpcRequestHandler, RuntimeIpcRequestErrorMapper
 {
   readonly #compositionFactory: RuntimeChildCompositionFactory;
+  readonly #compositionContext: RuntimeChildCompositionContext;
   readonly #logger: Logger;
   readonly #unexpectedExitPromise: Promise<ConversationRuntimeExit>;
   #resolveUnexpectedExit!: (exit: ConversationRuntimeExit) => void;
@@ -52,6 +55,7 @@ export class RuntimeChildEndpoint
 
   constructor(options: RuntimeChildEndpointOptions) {
     this.#compositionFactory = options.compositionFactory;
+    this.#compositionContext = options.compositionContext;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "runtime_child_endpoint",
     });
@@ -122,7 +126,10 @@ export class RuntimeChildEndpoint
     this.#state = "starting";
     let runtime: RuntimeChildRuntime;
     try {
-      runtime = await this.#compositionFactory.create(bootstrap);
+      runtime = await this.#compositionFactory.create(
+        bootstrap,
+        this.#compositionContext,
+      );
     } catch {
       this.#state = "exited";
       throw new RuntimeChildRequestError(

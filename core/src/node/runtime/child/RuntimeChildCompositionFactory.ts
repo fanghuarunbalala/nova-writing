@@ -6,6 +6,7 @@ import type {
   ConversationRuntimeInputReference,
 } from "../../../conversation/host/index.js";
 import type { RuntimeBootstrapStartupResult } from "../../../runtime/execution/index.js";
+import type { RuntimePersistencePorts } from "../../../runtime/ipc/index.js";
 
 export interface RuntimeChildRuntime {
   readonly conversationId: string;
@@ -21,5 +22,12 @@ export interface RuntimeChildRuntime {
 }
 
 export interface RuntimeChildCompositionFactory {
-  create(bootstrap: ConversationRuntimeBootstrap): Promise<RuntimeChildRuntime>;
+  create(
+    bootstrap: ConversationRuntimeBootstrap,
+    context: RuntimeChildCompositionContext,
+  ): Promise<RuntimeChildRuntime>;
+}
+
+export interface RuntimeChildCompositionContext {
+  readonly persistence: RuntimePersistencePorts;
 }

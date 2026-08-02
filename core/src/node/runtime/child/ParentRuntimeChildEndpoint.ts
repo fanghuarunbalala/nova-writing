@@ -17,6 +17,7 @@ import {
   negotiateRuntimeIpcProtocolVersion,
   type RuntimeIpcConnection,
   type RuntimeIpcNotificationHandler,
+  type RuntimeIpcRequestErrorMapper,
   type RuntimeIpcRequestHandler,
 } from "../../../runtime/ipc/index.js";
 import type {
@@ -46,6 +47,7 @@ export interface ParentRuntimeChildIdentityFactory {
 export interface ParentRuntimeChildEndpointFactoryOptions {
   readonly sessionIdFactory?: ParentRuntimeChildIdentityFactory;
   readonly requestHandler?: RuntimeIpcRequestHandler;
+  readonly requestErrorMapper?: RuntimeIpcRequestErrorMapper;
   readonly notificationHandler?: RuntimeIpcNotificationHandler;
   readonly logger?: Logger;
 }
@@ -55,12 +57,14 @@ export class ParentRuntimeChildEndpointFactory
 {
   readonly #sessionIdFactory: ParentRuntimeChildIdentityFactory;
   readonly #requestHandler?: RuntimeIpcRequestHandler;
+  readonly #requestErrorMapper?: RuntimeIpcRequestErrorMapper;
   readonly #notificationHandler?: RuntimeIpcNotificationHandler;
   readonly #logger: Logger;
 
   constructor(options: ParentRuntimeChildEndpointFactoryOptions = {}) {
     this.#sessionIdFactory = options.sessionIdFactory ?? DEFAULT_SESSION_ID_FACTORY;
     this.#requestHandler = options.requestHandler;
+    this.#requestErrorMapper = options.requestErrorMapper;
     this.#notificationHandler = options.notificationHandler;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "parent_runtime_child_endpoint_factory",
@@ -109,6 +113,9 @@ export class ParentRuntimeChildEndpointFactory
       connection: request.connection,
       ...(this.#requestHandler !== undefined
         ? { requestHandler: this.#requestHandler }
+        : {}),
+      ...(this.#requestErrorMapper !== undefined
+        ? { requestErrorMapper: this.#requestErrorMapper }
         : {}),
       ...(this.#notificationHandler !== undefined
         ? { notificationHandler: this.#notificationHandler }

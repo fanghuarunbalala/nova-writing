@@ -2700,6 +2700,16 @@ Task 6A-E delivered:
 - `RuntimeChildEntrypoint` and `runNodeRuntimeChildEntrypoint()` for protocol-only stdio startup; Provider clients and credentials remain entirely inside the injected Child composition root and never cross IPC
 - real child-process validation of Hello → Welcome → Bootstrap → Dispatch → Shutdown → process exit, incompatible-version rejection, strict payload rejection, immutable Bootstrap capture, and workdir/path/log redaction
 
+Task 6A-F delivered:
+
+- a fixed five-method Runtime persistence RPC allowlist: `journal.getEvent`, `journal.listEvents`, `journal.appendOutput`, `messages.list`, and `runtimeState.load`
+- provider-neutral strict immutable codecs for Journal Sequence reads, bounded Event queries, Output append requests, Message projection pagination, durable append receipts, and versioned Runtime recovery snapshots
+- `ParentRuntimePersistenceHandler` over existing typed Journal, Journal Service, Message, Nudge, Checkpoint, and Interaction Ports; it rejects unknown methods, cross-Conversation access, arbitrary namespace/key state, SQL, filesystem paths, and unknown fields
+- `ChildRuntimePersistenceClient` exposing only `RuntimeJournalPersistencePort`, `RuntimeMessagePersistencePort`, and `RuntimeStatePersistencePort`; the Child composition root receives these Ports without direct Store, path, Peer, Node stream, or Pi types
+- `RuntimeRecoverySnapshot@1` as one strongly structured load-only aggregate with a required Conversation ID and captured Journal Sequence plus optional Nudge, active Context Checkpoint, and Approval Interaction sections
+- durable acknowledgement only for `journal.appendOutput`; best-effort live publication failure does not invalidate a successful Journal receipt, while all reads and lifecycle responses remain protocol acknowledgements rather than business-completion claims
+- cancellation propagation through `RuntimeIpcPeer`, stable redacted persistence errors, structured payload-free logs, and focused validation for allowlisting, identity and Sequence mismatch, paging, duplicate append receipts, absent recovery sections, malformed payloads, and private-content log exclusion
+
 Expected deliverables after approval:
 
 - transport interfaces
@@ -2836,6 +2846,6 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-E are implemented. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, Task 6A-B adds the asynchronous in-memory Peer, Task 6A-C binds that Port to bounded Node JSONL streams, Task 6A-D adds one-process-per-Runtime placement, and Task 6A-E completes negotiated Parent/Child startup and Child-local Runtime construction.
+Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-F are implemented. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, Task 6A-B adds the asynchronous in-memory Peer, Task 6A-C binds that Port to bounded Node JSONL streams, Task 6A-D adds one-process-per-Runtime placement, Task 6A-E completes negotiated Parent/Child startup and Child-local Runtime construction, and Task 6A-F adds the allowlisted persistence RPC and durable Output append acknowledgement.
 
-The next documented Runtime step is Task 6A-F: a narrow persistence RPC Port for Journal and Message reads, Runtime state load, and durable Journal Output append acknowledgement. It must not expose generic SQL, arbitrary filesystem access, or Store paths.
+The next documented Runtime step is Task 6A-G: two-second heartbeat traffic, three-miss unhealthy detection, active request cancellation routing, five-second graceful termination, forced termination escalation, and redacted crash behavior without automatic restart.

@@ -11,6 +11,7 @@ import {
   type RuntimeIpcConnection,
 } from "../../../runtime/ipc/index.js";
 import { NodeJsonlIpcConnection } from "../ipc/index.js";
+import { ChildRuntimePersistenceClient } from "../persistence/index.js";
 import type { RuntimeChildCompositionFactory } from "./RuntimeChildCompositionFactory.js";
 import { RuntimeChildEndpoint } from "./RuntimeChildEndpoint.js";
 import { RuntimeChildEntrypointError } from "./RuntimeChildErrors.js";
@@ -74,11 +75,24 @@ export class RuntimeChildEntrypoint {
       throw new RuntimeChildEntrypointError("invalid_welcome");
     }
 
-    const endpoint = new RuntimeChildEndpoint({
-      compositionFactory: this.#compositionFactory,
+    let peer: RuntimeIpcPeer | undefined;
+    const persistence = new ChildRuntimePersistenceClient({
+      requester: {
+        request(method, payload, options) {
+          if (peer === undefined) {
+            throw new RuntimeChildEntrypointError("connection_closed");
+          }
+          return peer.request(method, payload, options);
+        },
+      },
       logger: this.#logger,
     });
-    const peer = new RuntimeIpcPeer({
+    const endpoint = new RuntimeChildEndpoint({
+      compositionFactory: this.#compositionFactory,
+      compositionContext: Object.freeze({ persistence }),
+      logger: this.#logger,
+    });
+    peer = new RuntimeIpcPeer({
       sessionId: response.sessionId,
       connection: this.#connection,
       requestHandler: endpoint,

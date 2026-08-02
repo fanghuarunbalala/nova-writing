@@ -20,6 +20,10 @@ export interface PiAgentCoreState {
 export interface PiAgentCoreClient {
   readonly state: PiAgentCoreState;
   streamFunction: StreamFn;
+  transformContext?: (
+    messages: AgentMessage[],
+    signal?: AbortSignal,
+  ) => Promise<AgentMessage[]>;
 
   subscribe(
     listener: (event: AgentEvent, signal: AbortSignal) => Promise<void> | void,

@@ -7,6 +7,7 @@ export const PI_AGENT_CORE_ADAPTER_FAILURE = {
   execution: "execution",
   invalidResult: "invalid_result",
   providerDispatchProtocol: "provider_dispatch_protocol",
+  contextProjection: "context_projection",
   cancellationConflict: "cancellation_conflict",
   cancellation: "cancellation",
 } as const;

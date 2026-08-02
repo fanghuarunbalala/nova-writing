@@ -14,6 +14,10 @@ import {
   type JsonValue,
 } from "../../../event/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
+import type {
+  ContextProjectionProviderCallCoordinator,
+  ContextProjectionProviderCallResult,
+} from "../../context/index.js";
 import { isExecutionCancellationReason } from "../../execution/ExecutionCancellationReason.js";
 import type {
   NudgeProviderCallCoordinator,
@@ -59,6 +63,7 @@ export interface PiAgentCoreAdapterOptions {
   eventBridge: PiAgentEventBridge;
   messageSchemaRegistry?: RuntimeMessageSchemaRegistry;
   nudgeProviderCalls?: NudgeProviderCallCoordinator;
+  contextProjectionProviderCalls?: ContextProjectionProviderCallCoordinator;
   dispatchAwareStreamFunction?: PiDispatchAwareStreamFunction;
   providerCallIdFactory?: PiProviderCallIdFactory;
   providerCallClock?: PiProviderCallClock;
@@ -75,6 +80,10 @@ interface ActivePiRun {
   terminalStopReason?: PiTerminalStopReason;
   eventBarrierError?: PiAgentCoreAdapterError;
   providerDispatchProtocolError?: PiAgentCoreAdapterError;
+  contextProjectionError?: PiAgentCoreAdapterError;
+  canonicalRuntimeMessages?: readonly RuntimeMessageSnapshot[];
+  canonicalPiMessages?: readonly AgentMessage[];
+  pendingContextProjection?: PreparedPiContextProjection;
   turnNumber: number;
   providerCallOrdinal: number;
 }
@@ -92,13 +101,20 @@ interface CapturedAgentRuntimeStreamRequest extends AgentRuntimeStreamRequest {
   };
 }
 
+interface PreparedPiContextProjection {
+  readonly providerCallId: string;
+  readonly result: ContextProjectionProviderCallResult;
+}
+
 export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
   private readonly agent: PiAgentCoreClient;
   private readonly messageConverter: PiRuntimeMessageConverter;
   private readonly eventBridge: PiAgentEventBridge;
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
   private readonly nudgeProviderCalls?: NudgeProviderCallCoordinator;
+  private readonly contextProjectionProviderCalls?: ContextProjectionProviderCallCoordinator;
   private readonly dispatchAwareStreamFunction?: PiDispatchAwareStreamFunction;
+  private readonly baseStreamFunction: StreamFn;
   private readonly providerCallIdFactory: PiProviderCallIdFactory;
   private readonly providerCallClock: PiProviderCallClock;
   private readonly logger: Logger;
@@ -114,7 +130,9 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       component: "pi_agent_core_adapter",
     });
     this.nudgeProviderCalls = options.nudgeProviderCalls;
+    this.contextProjectionProviderCalls = options.contextProjectionProviderCalls;
     this.dispatchAwareStreamFunction = options.dispatchAwareStreamFunction;
+    this.baseStreamFunction = this.agent.streamFunction;
     this.providerCallIdFactory =
       options.providerCallIdFactory ?? new RandomPiProviderCallIdFactory();
     this.providerCallClock = options.providerCallClock ?? systemPiProviderCallClock;
@@ -124,7 +142,20 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     ) {
       throw this.fail(PI_AGENT_CORE_ADAPTER_FAILURE.invalidRequest);
     }
-    if (this.nudgeProviderCalls && this.dispatchAwareStreamFunction) {
+    if (
+      this.contextProjectionProviderCalls !== undefined &&
+      this.agent.transformContext !== undefined
+    ) {
+      throw this.fail(PI_AGENT_CORE_ADAPTER_FAILURE.invalidRequest);
+    }
+    if (this.contextProjectionProviderCalls !== undefined) {
+      this.agent.transformContext = (messages, signal) =>
+        this.transformProviderContext(messages, signal);
+    }
+    if (
+      this.contextProjectionProviderCalls !== undefined ||
+      (this.nudgeProviderCalls && this.dispatchAwareStreamFunction)
+    ) {
       this.agent.streamFunction = (model, context, streamOptions) =>
         this.streamProviderCall(model, context, streamOptions);
     }
@@ -188,6 +219,16 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
 
       this.agent.state.systemPrompt = captured.context.systemPrompt;
       this.agent.state.messages = [...converted.context];
+      active.canonicalRuntimeMessages = Object.freeze([
+        ...captured.context.messages,
+        ...(captured.invocation.kind === AGENT_RUNTIME_INVOCATION_KIND.prompt
+          ? captured.invocation.messages
+          : []),
+      ]);
+      active.canonicalPiMessages = Object.freeze([
+        ...converted.context,
+        ...converted.prompt,
+      ]);
       active.phase = "executing";
       if (captured.invocation.kind === AGENT_RUNTIME_INVOCATION_KIND.prompt) {
         await this.agent.prompt([...converted.prompt]);
@@ -196,6 +237,9 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       }
       if (active.providerDispatchProtocolError !== undefined) {
         throw active.providerDispatchProtocolError;
+      }
+      if (active.contextProjectionError !== undefined) {
+        throw active.contextProjectionError;
       }
       if (active.eventBarrierError !== undefined) throw active.eventBarrierError;
       if (!active.sawAgentEnd || active.terminalStopReason === undefined) {
@@ -223,6 +267,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         captured,
       );
     } finally {
+      active.pendingContextProjection = undefined;
       active.resolveSettled();
       if (this.activeRun === active) this.activeRun = undefined;
     }
@@ -346,6 +391,18 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       if (!Array.isArray(context) || !Array.isArray(prompt)) {
         throw new TypeError("Pi Runtime Message converter returned a non-array");
       }
+      if (
+        this.contextProjectionProviderCalls !== undefined &&
+        (context.length !== request.context.messages.length ||
+          prompt.length !==
+            (request.invocation.kind === AGENT_RUNTIME_INVOCATION_KIND.prompt
+              ? request.invocation.messages.length
+              : 0))
+      ) {
+        throw new TypeError(
+          "Context Projection requires one Pi Message per canonical Runtime Message",
+        );
+      }
       return Object.freeze({
         context: Object.freeze([...context]),
         prompt: Object.freeze([...prompt]),
@@ -359,45 +416,135 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     }
   }
 
+  private async transformProviderContext(
+    messages: AgentMessage[],
+    _signal?: AbortSignal,
+  ): Promise<AgentMessage[]> {
+    const active = this.activeRun;
+    const coordinator = this.contextProjectionProviderCalls;
+    if (
+      !active ||
+      active.phase !== "executing" ||
+      active.turnNumber < 1 ||
+      !coordinator ||
+      !active.canonicalRuntimeMessages ||
+      !active.canonicalPiMessages ||
+      active.pendingContextProjection !== undefined
+    ) {
+      if (active) this.rememberContextProjectionFailure(active);
+      return [...messages];
+    }
+
+    const canonicalCount = active.canonicalPiMessages.length;
+    if (
+      messages.length < canonicalCount ||
+      active.canonicalRuntimeMessages.length !== canonicalCount ||
+      active.canonicalPiMessages.some(
+        (message, index) => messages[index] !== message,
+      )
+    ) {
+      this.rememberContextProjectionFailure(active);
+      return [...messages];
+    }
+
+    try {
+      active.providerCallOrdinal += 1;
+      const providerCallId = this.providerCallIdFactory.create({
+        conversationId: active.request.conversationId,
+        runId: active.request.runId,
+        turnNumber: active.turnNumber,
+        providerCallOrdinal: active.providerCallOrdinal,
+      });
+      const result = await coordinator.prepare({
+        conversationId: active.request.conversationId,
+        runId: active.request.runId,
+        providerCallId,
+        baseSystemPrompt: active.request.context.systemPrompt,
+        canonicalMessages: active.canonicalRuntimeMessages,
+        transientMessageCount: messages.length - canonicalCount,
+      });
+      const selectedIds = new Set(
+        result.context.messages.map((message) => message.id),
+      );
+      const projectedCanonical = active.canonicalPiMessages.filter(
+        (_message, index) =>
+          selectedIds.has(active.canonicalRuntimeMessages![index]!.id),
+      );
+      active.pendingContextProjection = Object.freeze({
+        providerCallId,
+        result,
+      });
+      this.logger.debug("runtime.agent.context_projection_prepared", {
+        conversationId: active.request.conversationId,
+        runId: active.request.runId,
+        providerCallId,
+        turnNumber: active.turnNumber,
+        providerCallOrdinal: active.providerCallOrdinal,
+        projectedCanonicalMessageCount: projectedCanonical.length,
+        transientMessageCount: messages.length - canonicalCount,
+        checkpointId: result.projection.checkpointId ?? "none",
+        degradationLevel: result.projection.degradationLevel,
+      });
+      return [
+        ...projectedCanonical,
+        ...messages.slice(canonicalCount),
+      ];
+    } catch {
+      this.rememberContextProjectionFailure(active);
+      return [...messages];
+    }
+  }
+
   private async streamProviderCall(
     model: Parameters<StreamFn>[0],
     context: Parameters<StreamFn>[1],
     options: Parameters<StreamFn>[2],
   ): Promise<Awaited<ReturnType<StreamFn>>> {
     const active = this.activeRun;
-    const coordinator = this.nudgeProviderCalls;
-    const delegate = this.dispatchAwareStreamFunction;
+    const nudgeCoordinator = this.nudgeProviderCalls;
+    const projectionCoordinator = this.contextProjectionProviderCalls;
+    const dispatchDelegate = this.dispatchAwareStreamFunction;
     if (
       !active ||
       active.phase !== "executing" ||
       active.turnNumber < 1 ||
-      !coordinator ||
-      !delegate
+      (!nudgeCoordinator && !projectionCoordinator) ||
+      (nudgeCoordinator !== undefined && dispatchDelegate === undefined)
     ) {
       throw active
         ? this.rememberProviderDispatchFailure(active)
         : this.fail(PI_AGENT_CORE_ADAPTER_FAILURE.providerDispatchProtocol);
     }
 
-    active.providerCallOrdinal += 1;
-    const requestedAt = this.providerCallClock.now();
-    const providerCallId = this.providerCallIdFactory.create({
-      conversationId: active.request.conversationId,
-      runId: active.request.runId,
-      turnNumber: active.turnNumber,
-      providerCallOrdinal: active.providerCallOrdinal,
-    });
-    let prepared: PreparedNudgeProviderCall | undefined;
-    try {
-      prepared = await coordinator.prepare({
+    if (active.contextProjectionError !== undefined) {
+      throw active.contextProjectionError;
+    }
+    const pendingProjection = active.pendingContextProjection;
+    if (projectionCoordinator && !pendingProjection) {
+      throw this.rememberContextProjectionFailure(active);
+    }
+    if (!projectionCoordinator) active.providerCallOrdinal += 1;
+    const providerCallId = pendingProjection?.providerCallId ??
+      this.providerCallIdFactory.create({
         conversationId: active.request.conversationId,
         runId: active.request.runId,
-        providerCallId,
-        targetTurnNumber: active.turnNumber,
-        requestedAt,
+        turnNumber: active.turnNumber,
+        providerCallOrdinal: active.providerCallOrdinal,
       });
-    } catch {
-      throw this.rememberProviderDispatchFailure(active);
+    const requestedAt = this.providerCallClock.now();
+    let prepared: PreparedNudgeProviderCall | undefined;
+    if (nudgeCoordinator) {
+      try {
+        prepared = await nudgeCoordinator.prepare({
+          conversationId: active.request.conversationId,
+          runId: active.request.runId,
+          providerCallId,
+          targetTurnNumber: active.turnNumber,
+          requestedAt,
+        });
+      } catch {
+        throw this.rememberProviderDispatchFailure(active);
+      }
     }
 
     const lifecycle = createDispatchLifecycle(prepared);
@@ -410,7 +557,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         }
         lifecycle.state = "dispatched";
         try {
-          await coordinator.confirmDispatched(prepared, dispatchedAt);
+          await nudgeCoordinator!.confirmDispatched(prepared, dispatchedAt);
         } catch {
           throw this.rememberProviderDispatchFailure(active);
         }
@@ -423,30 +570,34 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         }
         lifecycle.state = "released";
         try {
-          await coordinator.releaseBeforeDispatch(prepared, failedAt);
+          await nudgeCoordinator!.releaseBeforeDispatch(prepared, failedAt);
         } catch {
           throw this.rememberProviderDispatchFailure(active);
         }
       },
     });
 
-    const providerContext = prepared
-      ? {
-          ...context,
-          systemPrompt: appendSystemPromptOverlay(
-            context.systemPrompt ?? "",
+    const projectedSystemPrompt =
+      pendingProjection?.result.context.systemPrompt ?? context.systemPrompt ?? "";
+    const providerContext = {
+      ...context,
+      systemPrompt: prepared
+        ? appendSystemPromptOverlay(
+            projectedSystemPrompt,
             prepared.overlay.content,
-          ),
-        }
-      : context;
+          )
+        : projectedSystemPrompt,
+    };
     let response: Awaited<ReturnType<StreamFn>>;
     try {
-      response = await delegate(model, providerContext, options, hooks);
+      response = nudgeCoordinator
+        ? await dispatchDelegate!(model, providerContext, options, hooks)
+        : await this.baseStreamFunction(model, providerContext, options);
     } catch (error) {
       if (prepared && lifecycle.state === "pending") {
         lifecycle.state = "released";
         try {
-          await coordinator.releaseBeforeDispatch(
+          await nudgeCoordinator!.releaseBeforeDispatch(
             prepared,
             this.providerCallClock.now(),
           );
@@ -455,6 +606,10 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         }
       }
       throw error;
+    } finally {
+      if (active.pendingContextProjection === pendingProjection) {
+        active.pendingContextProjection = undefined;
+      }
     }
 
     if (prepared) {
@@ -465,7 +620,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
           const result = await originalResult();
           if (lifecycle.state === "pending") {
             lifecycle.state = "released";
-            await coordinator.releaseBeforeDispatch(
+            await nudgeCoordinator!.releaseBeforeDispatch(
               prepared,
               this.providerCallClock.now(),
             );
@@ -483,6 +638,8 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       turnNumber: active.turnNumber,
       providerCallOrdinal: active.providerCallOrdinal,
       hasNudgeOverlay: prepared !== undefined,
+      hasCheckpointOverlay:
+        pendingProjection?.result.checkpointOverlay !== undefined,
     });
     return response;
   }
@@ -619,6 +776,17 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       active.request.runId,
     );
     return active.providerDispatchProtocolError;
+  }
+
+  private rememberContextProjectionFailure(
+    active: ActivePiRun,
+  ): PiAgentCoreAdapterError {
+    active.contextProjectionError ??= this.fail(
+      PI_AGENT_CORE_ADAPTER_FAILURE.contextProjection,
+      active.request.conversationId,
+      active.request.runId,
+    );
+    return active.contextProjectionError;
   }
 
   private fail(

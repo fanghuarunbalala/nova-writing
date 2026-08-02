@@ -2324,6 +2324,26 @@ Task 4C-E explicitly excludes:
 - Compaction lifecycle OutputEvents and Journal publication, which belong to Task 4C-G
 - Artifact materialization or bounded Artifact access Tools, Tool-schema mounting, Provider/model selection, automatic retries, forced re-compaction input, and Novel-specific semantic validation implementations
 
+Task 4C-F delivered:
+
+- deterministic provider-neutral `ContextProjectionPlanner` admission below the strict hard boundary, retaining all Checkpoint items first and then omitting `low`, `normal`, and `high` items in stable reverse order while never omitting `critical` items
+- recent canonical Message reduction oldest-first only after all omittable Checkpoint items are exhausted, with complete pinned Message Groups and active transient Pi Messages always preserved
+- immutable per-call `ContextProjectionPlan` results with selected/omitted Checkpoint identities, pinned/recent Message identities, fixed degradation levels, final token estimates, exact-boundary rejection, and stable payload-free failures
+- fixed delimited `ContextCheckpoint` Overlay rendering that always includes the summary, renders only selected structured items, labels the block as derived historical data rather than instructions, and exposes only logical Artifact identity/content metadata without local paths
+- asynchronous `ContextProjectionProviderCallCoordinator` loading one exact Provider-call candidate, validating complete canonical Message classification, planning the Projection, filtering immutable canonical Messages, and composing Base Prompt plus persistent Checkpoint Overlay
+- Pi `transformContext()` integration before every inner LLM call, using one-to-one canonical Runtime-to-Pi Message mapping, preserving all later Pi Messages as transient, and replanning independently as Tool-loop context grows
+- exact Provider Call ID handoff from Pi `transformContext()` to the matching StreamFn invocation, with projected Base plus Checkpoint System Prompt applied before the existing one-shot Nudge Overlay
+- preservation of canonical Runtime Messages, Pi Agent history, base compiled Context, and `agent.state.systemPrompt`; Projection failure returns a safe transform fallback and is promoted to a fixed adapter infrastructure failure before Provider dispatch
+- explicit rejection of a pre-existing Pi `transformContext` when Core Projection owns that boundary, rather than composing ambiguous transforms silently
+- structured redacted logs and focused coverage for priority omission, critical preservation, oldest-first recent reduction, pinned preservation, exact hard-boundary rejection, immutable outputs, candidate/Overlay failures, two Provider calls in one Tool loop, transient growth, Base → Checkpoint → Nudge ordering, canonical-history preservation, and transform conflict rejection
+
+Task 4C-F explicitly excludes:
+
+- Compaction lifecycle OutputEvents, `ContextCheckpointAppliedOutputEvent`, and public per-call application publication, which belong to Task 4C-G
+- concrete restart-safe Checkpoint persistence, Journal/Message candidate adapters, token estimators, Artifact Stores, oversized-content materialization, and Artifact access Tools
+- implementation of `strongerStructured` or `artifactOffload` degradation stages; their fixed protocol levels remain reserved for later concrete Compactor and Artifact capabilities
+- dynamic Tool schema mounting, Provider/model switching, automatic Projection retries, Novel-specific Projection policies, and mutation of canonical history
+
 Task 4C explicitly excludes until their own implementation steps:
 
 - concrete filesystem, SQLite, or object-backed `ArtifactStore`; Artifact quota, retention, and garbage collection

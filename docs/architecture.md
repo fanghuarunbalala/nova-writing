@@ -5410,6 +5410,8 @@ Currently implemented skeletons include:
 - Pi one-shot System Prompt Overlay integration through an exact dispatch-aware private StreamFn contract without canonical Message projection
 - deterministic before-Provider-call Runtime Policy evaluation, Context-pressure Compaction requests with automatic hysteresis, and Conversation-serialized typed Nudge/Compaction Effect routing
 - single-attempt Context Compaction orchestration with canonical source/content digest recomputation, durable-port duplicate suppression, optional semantic validation, and immutable parent-checked Checkpoint activation
+- priority-budgeted per-call Context Projection with critical-item preservation, oldest-first recent-window degradation, immutable pinned/transient retention, and strict hard-admission rejection
+- provider-neutral Base Prompt plus Checkpoint Overlay composition and Pi `transformContext()` application before every inner LLM call, followed by the existing one-shot Nudge Overlay without canonical history mutation
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 
@@ -5418,7 +5420,6 @@ Not yet implemented:
 - ConversationProxy implementation
 - process supervisor
 - InteractionCoordinator and Approval events
-- ContextProjectionPlanner, ContextCheckpoint-aware ContextCompiler, and per-call overlays
 - concrete restart-safe ContextCheckpointStore and canonical Journal/Message source adapters
 - durable ArtifactStore, oversized User-content staging, and Artifact-reference recovery
 - concrete restart-safe private Nudge persistence and Provider transport dispatch-hook adapters

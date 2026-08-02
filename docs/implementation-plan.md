@@ -2509,6 +2509,28 @@ Questions to resolve before implementation:
 9. How is the approving actor derived from trusted transport metadata?
 10. What trace data is persisted and what data must be redacted?
 
+Accepted Task 5B security decisions:
+
+1. Permission sources are evaluated in the order built-in hard restrictions, Workspace configuration, Agent Definition, then one-shot approval. The effective precedence is `deny > ask > allow`; a built-in deny cannot be overridden.
+2. Approve-once binds exactly `conversationId + runId + toolCallId + toolName@version + argumentDigest`.
+3. Any canonical Tool argument digest change requires a new approval.
+4. Core defines a `SandboxExecutor` Port. The initial trusted-process executor explicitly provides no OS isolation, and Tools requiring real isolation are denied until a process-isolated executor exists.
+5. Initial Tools must honor `AbortSignal`; non-cancellable Tools are forbidden. Restartable and checkpointable default to false.
+6. Partial side effects are reported as `none | possible | partial | completed_unknown`. Only `none` is eligible for automatic retry.
+7. Automatic retry is disabled by default. At most one retry is permitted only for an explicitly idempotent and retryable failure that was not cancelled and reports side effects as `none`.
+8. The coordinator supports concurrent pending approvals. Clients may render them serially or concurrently, and the first valid decision wins per request.
+9. The approval actor is supplied only by trusted transport or command metadata, never by an Input Event payload. The initial local identity is `local_user`.
+10. Persisted Tool Trace contains only identities, stages, timestamps, rule IDs, decisions, durations, sizes, Artifact IDs, error category/code, retryability, side-effect status, and argument digest. It never contains raw arguments, Tool content/details/progress, paths, environment, credentials, raw errors, stacks, causes, or Runtime stderr. Approval requests expose only a bounded Tool-defined redacted summary and argument digest by default.
+
+Task 5B is implemented as six separately reviewable steps:
+
+- 5B-A: immutable execution protocol, argument-digest boundary, structured errors, side-effect status, and redacted Trace contract
+- 5B-B: layered permission policy and deterministic safe decision traces
+- 5B-C: Approval Events and asynchronous Interaction coordination
+- 5B-D: sandbox port and validated Dispatcher execution pipeline
+- 5B-E: cancellation, timeout, retry, and persisted Trace coordination
+- 5B-F: Pi execution bridge, integration validation, and Checkpoint 5B closure
+
 Expected deliverables after approval:
 
 - Tool execution facade and middleware pipeline

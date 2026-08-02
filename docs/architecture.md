@@ -5117,6 +5117,20 @@ class ToolError extends Error {
 
 Successful Tool details are optional generic JSON-safe data and never carry the error protocol. Handlers throw on failure; the Task 5B execution pipeline owns stable `ToolError` normalization and retry decisions.
 
+Task 5B security policy is fixed as follows:
+
+- permission sources are built-in hard restrictions, Workspace configuration, Agent Definition, and one-shot approval, with `deny > ask > allow`; built-in deny is final
+- approve-once binds `conversationId + runId + toolCallId + toolName@version + argumentDigest`, and changed canonical arguments always require another approval
+- `SandboxExecutor` is a Port; the initial trusted-process implementation advertises no OS isolation, so a Tool requiring real isolation is denied
+- all initial Tools are cancellable through `AbortSignal`; restartable and checkpointable are false unless explicitly declared
+- side effects use `none | possible | partial | completed_unknown`; only `none` may be automatically retried
+- automatic retries are off by default and are capped at one retry for explicitly idempotent, retryable, non-cancelled failures
+- approval requests may be pending concurrently and each request uses first-valid-decision semantics
+- approval actors come from trusted transport or command metadata, never Event payload data
+- Tool Trace is a redacted metadata projection and never persists raw arguments, Tool data, paths, environment, credentials, raw errors, stacks, causes, or Runtime stderr
+
+The initial execution protocol uses a `ToolArgumentDigester` Port so the provider-neutral Core contract does not select a platform crypto implementation. `captureToolInvocation` defensively clones JSON-safe arguments before asynchronous transfer and binds the resulting immutable invocation to a validated `sha256:` digest. Errors and Trace records retain only safe identities and bounded metadata.
+
 ## 22. Runtime Interaction and Approval
 
 Approval is the first concrete Runtime Interaction.

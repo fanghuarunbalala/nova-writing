@@ -22,8 +22,8 @@ export const NOVEL_LIFECYCLE_RECORD_VERSION = 1 as const;
 
 export const NOVEL_LIFECYCLE_EVENT_TYPE = {
   draftStarted: "draft.started",
-  draftStatusChanged: "draft.status-changed",
-  draftRolledBack: "draft.rolled-back",
+  draftStatusChanged: "draft.status.changed",
+  draftRolledBack: "draft.rolled.back",
   commitCompleted: "commit.completed",
   commitRecovered: "commit.recovered",
   rebasePrepared: "rebase.prepared",
@@ -40,8 +40,8 @@ export type NovelLifecycleEventType =
 
 export interface NovelLifecyclePayloads {
   readonly "draft.started": { readonly draftSessionId: NovelDraftSessionId; readonly baseRevision: NovelRevision };
-  readonly "draft.status-changed": { readonly draftSessionId: NovelDraftSessionId; readonly previousStatus: NovelDraftSessionStatus; readonly currentStatus: NovelDraftSessionStatus };
-  readonly "draft.rolled-back": { readonly draftSessionId: NovelDraftSessionId; readonly baseRevision: NovelRevision };
+  readonly "draft.status.changed": { readonly draftSessionId: NovelDraftSessionId; readonly previousStatus: NovelDraftSessionStatus; readonly currentStatus: NovelDraftSessionStatus };
+  readonly "draft.rolled.back": { readonly draftSessionId: NovelDraftSessionId; readonly baseRevision: NovelRevision };
   readonly "commit.completed": { readonly draftSessionId: NovelDraftSessionId; readonly commitId: NovelCommitId; readonly baseRevision: NovelRevision; readonly resultRevision: NovelRevision; readonly operationCount: number };
   readonly "commit.recovered": { readonly draftSessionId: NovelDraftSessionId; readonly commitId: NovelCommitId; readonly resultRevision: NovelRevision; readonly recovery: "payload-regenerated" | "metadata-confirmed" };
   readonly "rebase.prepared": { readonly sourceDraftSessionId: NovelDraftSessionId; readonly candidateDraftSessionId: NovelDraftSessionId; readonly sourceBaseRevision: NovelRevision; readonly candidateBaseRevision: NovelRevision; readonly operationCount: number };
@@ -94,9 +94,9 @@ function capturePayload<T extends NovelLifecycleEventType>(type: T, input: Novel
   const value = input as Record<string, unknown>;
   let payload: Record<string, unknown>;
   switch (type) {
-    case "draft.started": case "draft.rolled-back":
+    case "draft.started": case "draft.rolled.back":
       payload = { draftSessionId: captureNovelDraftSessionId(value.draftSessionId), baseRevision: captureNovelRevision(value.baseRevision) }; break;
-    case "draft.status-changed":
+    case "draft.status.changed":
       payload = { draftSessionId: captureNovelDraftSessionId(value.draftSessionId), previousStatus: captureNovelDraftSessionStatus(value.previousStatus), currentStatus: captureNovelDraftSessionStatus(value.currentStatus) }; break;
     case "commit.completed":
       payload = { draftSessionId: captureNovelDraftSessionId(value.draftSessionId), commitId: captureNovelCommitId(value.commitId), baseRevision: captureNovelRevision(value.baseRevision), resultRevision: captureNovelRevision(value.resultRevision), operationCount: captureCount(value.operationCount) }; break;

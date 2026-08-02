@@ -20,6 +20,18 @@ export const OUTPUT_EVENT_TYPE = {
   toolApprovalRequested: "system.tool.approval.requested",
   toolApprovalResolved: "system.tool.approval.resolved",
   toolTraceRecorded: "system.tool.trace.recorded",
+  novelDraftStarted: "novel.draft.started",
+  novelDraftStatusChanged: "novel.draft.status.changed",
+  novelDraftRolledBack: "novel.draft.rolled.back",
+  novelCommitCompleted: "novel.commit.completed",
+  novelCommitRecovered: "novel.commit.recovered",
+  novelRebasePrepared: "novel.rebase.prepared",
+  novelRebaseConflicted: "novel.rebase.conflicted",
+  novelRebaseResolved: "novel.rebase.resolved",
+  novelRebasePromoted: "novel.rebase.promoted",
+  novelConflictDetected: "novel.conflict.detected",
+  novelConflictResolved: "novel.conflict.resolved",
+  novelRecoveryCompleted: "novel.recovery.completed",
 } as const;
 
 export type CoreOutputEventType =

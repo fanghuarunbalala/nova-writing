@@ -3,6 +3,7 @@ import { Type } from "typebox";
 import { EVENT_SCHEMA_VERSION } from "../../protocol/EventMetadata.js";
 import type { EventSchemaRegistry } from "../../protocol/EventSchemaRegistry.js";
 import { OUTPUT_EVENT_TYPE } from "../OutputEventType.js";
+import { registerNovelLifecycleOutputEventSchemas } from "./NovelLifecycleOutputEventSchemas.js";
 
 const RuntimePresenceStateSchema = Type.Union([
   Type.Literal("offline"),
@@ -538,4 +539,5 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     [OUTPUT_EVENT_TYPE.contextCompactionFailed, ContextCompactionFailedPayloadSchema],
     [OUTPUT_EVENT_TYPE.contextCheckpointApplied, ContextCheckpointAppliedPayloadSchema],
   ] as const) registry.register({ kind: "output", eventType, schemaVersion: EVENT_SCHEMA_VERSION, payloadSchema, snapshotSchema: ContextLifecycleSnapshotSchema });
+  registerNovelLifecycleOutputEventSchemas(registry);
 }

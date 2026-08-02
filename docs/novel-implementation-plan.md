@@ -639,8 +639,18 @@ Internal lifecycle protocol foundation delivered:
 - canonical JSON is deterministic and independent from public OutputEvent
   construction or delivery
 
-**Status:** internal lifecycle records completed; public Novel OutputEvents and
-their schema registration are the next N8-B step.
+Public event bridge delivered:
+
+- `NovelLifecycleOutputEvent` preserves the durable Record's event ID,
+  Conversation ID, timestamp, and `novel.<lifecycle-type>` identity
+- public payloads expose lifecycle version, Novel ID, and only the already
+  validated event-specific safe metadata
+- all twelve lifecycle event types are registered in the Core OutputEvent
+  Schema Registry with `additionalProperties: false`
+- snapshot validation rejects accidental Novel text or other undeclared data
+
+**Status:** internal lifecycle records and public Novel OutputEvents completed;
+atomic Draft/canonical Outbox write integration is the next N8-B step.
 
 ### N8-C Outbox Dispatcher
 

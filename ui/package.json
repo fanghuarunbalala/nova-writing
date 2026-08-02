@@ -25,7 +25,8 @@
     "smoke:inspector-panel": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/inspector-panel-typecheck.tsx && node scripts/inspector-panel-smoke.mjs",
     "smoke:project-navigation": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/project-navigation-typecheck.tsx && node scripts/project-navigation-smoke.mjs",
     "smoke:conversation-card": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-card-typecheck.tsx && node scripts/conversation-card-smoke.mjs",
-    "smoke:conversation-card-binding": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-card-binding-typecheck.tsx && node scripts/conversation-card-binding-smoke.mjs"
+    "smoke:conversation-card-binding": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-card-binding-typecheck.tsx && node scripts/conversation-card-binding-smoke.mjs",
+    "smoke:story-outline-tree-model": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/story-outline-tree-model-typecheck.ts && node scripts/story-outline-tree-model-smoke.mjs"
   },
   "dependencies": {
     "@novel/core": "workspace:*"

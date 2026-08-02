@@ -942,6 +942,12 @@ ui/src/outline/
 
 `useVisibleStoryUnitRows` flattens expanded rows for rendering and future virtualization while preserving stable node identity.
 
+### 18.1 Implemented Outline View-model Foundation
+
+The shared UI now defines a normalized `StoryOutlineTreeView` and an immutable `StoryOutlineTreeController` without choosing the backend `OrderKey` algorithm. The capture boundary validates stable node identity, ordered unique roots and children, parent/child agreement, reachability, cycle freedom, status values, and derived leaf-count bounds before any React rendering.
+
+The Controller owns only local expansion and selection, derives flat visible rows with depth and ARIA set-position metadata, and supports next, previous, parent, first-child, and expansion commands. Replacing a query result preserves only still-valid expansion and selection. A 10,000-node deep-tree test verifies iterative validation and flattening without recursive stack growth. Query transport, Ready policy, composite blocking overrides, paging, and virtualization thresholds remain deferred.
+
 ## 19. Outline Diff Projection
 
 The Outline reviewer preserves tree structure while overlaying ChangeSet operations.

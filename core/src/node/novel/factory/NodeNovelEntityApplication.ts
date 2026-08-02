@@ -8,6 +8,7 @@ import {
   NovelDraftChangeSetBuilder,
   NovelCommitService,
   NovelCommitWriter,
+  NovelCommitRecoveryService,
   NovelMutationService,
   NovelOperationExecutor,
   NovelOperationRegistry,
@@ -40,6 +41,7 @@ export interface NodeNovelEntityApplicationOptions {
   readonly clock?: NovelClock;
   readonly logger?: Logger;
   readonly revisionFactory?: NovelRevisionFactory;
+  readonly validateCommit?: (context: NovelEntityMutationContext) => void;
 }
 
 export interface NodeNovelEntityApplication {
@@ -50,6 +52,7 @@ export interface NodeNovelEntityApplication {
   readonly locationQueries: LocationQueryService;
   readonly changeSets: NovelDraftChangeSetBuilder;
   readonly commits: NovelCommitService<NovelEntityMutationContext>;
+  readonly commitRecovery: NovelCommitRecoveryService<NovelEntityMutationContext>;
 }
 
 export function createNodeNovelEntityApplication(
@@ -95,18 +98,21 @@ export function createNodeNovelEntityApplication(
     clock,
     logger,
   });
-  const commitWriter = new NovelCommitWriter({
-    store: new SqliteNovelCommitStore({
+  const commitStore = new SqliteNovelCommitStore({
       location: options.location,
       novelId: options.novelId,
       contextFactory: createSqliteNovelEntityMutationContext,
       logger,
-    }),
-    history: new NodeNovelCommitHistoryStore({
+    });
+  const history = new NodeNovelCommitHistoryStore({
       location: options.location,
       logger,
-    }),
+    });
+  const commitWriter = new NovelCommitWriter({
+    store: commitStore,
+    history,
     executor,
+    validate: options.validateCommit,
     logger,
   });
   logger.info("novel_entity_application.created", {});
@@ -133,6 +139,15 @@ export function createNodeNovelEntityApplication(
       identityFactory,
       revisionFactory: options.revisionFactory ?? new RandomNovelRevisionFactory(),
       clock,
+    }),
+    commitRecovery: new NovelCommitRecoveryService({
+      writer: commitWriter,
+      commitStore,
+      history,
+      draftStore: store,
+      operationDigester,
+      changeSetDigester: new NodeSha256NovelChangeSetDigester(),
+      logger,
     }),
   });
 }

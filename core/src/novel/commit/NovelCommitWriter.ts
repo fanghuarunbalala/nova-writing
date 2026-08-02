@@ -40,7 +40,7 @@ export class NovelCommitWriter<TContext> {
     const changeSet = captureNovelChangeSet(input.changeSet);
     const payload = captureNovelCommitPayload(input.payload);
     assertPayloadMatchesChangeSet(payload, changeSet);
-    return this.serializer.run(changeSet.novelId, async () => {
+    return this.runExclusive(changeSet.novelId, async () => {
       const references = await this.options.store.listHistoryReferences();
       const reconciliation = await this.options.history.reconcile(references);
       if (reconciliation.missing.length > 0) {
@@ -87,6 +87,10 @@ export class NovelCommitWriter<TContext> {
       });
       return Object.freeze({ status, commit });
     });
+  }
+
+  runExclusive<T>(novelId: NovelId, operation: () => Promise<T>): Promise<T> {
+    return this.serializer.run(novelId, operation);
   }
 }
 

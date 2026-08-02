@@ -18,6 +18,7 @@ import {
   captureNovelRevision,
   type CommitNovelChangeSetInput,
   type NovelCommitHistoryReference,
+  type NovelCommit,
   type NovelCommitStore,
   type NovelId,
 } from "../../../novel/index.js";
@@ -61,6 +62,10 @@ export class SqliteNovelCommitStore<TContext>
   }
 
   async listHistoryReferences(): Promise<readonly NovelCommitHistoryReference[]> {
+    return this.listCommits();
+  }
+
+  async listCommits(): Promise<readonly NovelCommit[]> {
     const database = new DatabaseSync(
       this.options.location.canonicalDatabasePath,
       { readOnly: true },
@@ -69,23 +74,26 @@ export class SqliteNovelCommitStore<TContext>
       configureRead(database);
       const rows = database
         .prepare(
-          `SELECT commit_id, payload_ref, payload_digest, payload_size
+          `SELECT commit_id, novel_id, draft_session_id, owner_conversation_id,
+                  base_revision, result_revision, change_set_digest, payload_ref,
+                  payload_digest, payload_size, committed_at
            FROM novel_commits
-           WHERE novel_id = ? AND payload_ref IS NOT NULL
-             AND payload_digest IS NOT NULL AND payload_size IS NOT NULL
+           WHERE novel_id = ?
            ORDER BY committed_at, commit_id`,
         )
-        .all(this.novelId) as unknown as Array<{
-          commit_id: string;
-          payload_ref: string;
-          payload_digest: string;
-          payload_size: number;
-        }>;
-      return Object.freeze(rows.map((row) => Object.freeze({
+        .all(this.novelId) as unknown as CommitRow[];
+      return Object.freeze(rows.map((row) => captureNovelCommit({
         commitId: captureNovelCommitId(row.commit_id),
+        novelId: row.novel_id as never,
+        draftSessionId: row.draft_session_id as never,
+        ownerConversationId: row.owner_conversation_id,
+        baseRevision: row.base_revision as never,
+        resultRevision: row.result_revision as never,
+        changeSetDigest: row.change_set_digest as never,
         payloadRef: captureNovelCommitPayloadRef(row.payload_ref),
         payloadDigest: captureNovelCommitPayloadDigest(row.payload_digest),
         payloadSize: capturePayloadSize(row.payload_size),
+        committedAt: row.committed_at as never,
       })));
     } finally {
       database.close();

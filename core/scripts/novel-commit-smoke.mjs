@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   NovelDraftSessionService,
+  NovelCommitHistoryIntegrityError,
+  NovelInvariantViolationError,
+  NOVEL_INVARIANT_FAILURE,
   NovelRevisionConflictError,
   canonicalNovelReadScope,
   captureCharacterId,
@@ -155,6 +158,34 @@ try {
   });
   assert.equal(await application.characterQueries.get(canonicalNovelReadScope, characterId), undefined);
 
+  const failingApplication = createNodeNovelEntityApplication({
+    location,
+    novelId: canonical.novelId,
+    identityFactory: new OperationIdentityFactory(),
+    clock,
+    logger,
+    validateCommit() {
+      throw new NovelInvariantViolationError(
+        NOVEL_INVARIANT_FAILURE.persistenceInvariant,
+        canonical.novelId,
+        sessionA.id,
+      );
+    },
+  });
+  await assert.rejects(
+    failingApplication.commits.commit(sessionA, {
+      commitId: captureNovelCommitId("commit_failed"),
+      resultRevision: captureNovelRevision("revision_commit_failed"),
+      committedAt: captureNovelTimestamp("2026-08-02T11:29:00.000Z"),
+    }),
+    (error) => error instanceof NovelInvariantViolationError,
+  );
+  const rolledBack = inspectCanonical(location.canonicalDatabasePath);
+  assert.equal(rolledBack.metadata.current_revision, "revision_commit_base");
+  assert.equal(rolledBack.commits.length, 0);
+  assert.equal(rolledBack.outbox.length, 0);
+  assert.equal(await application.characterQueries.get(canonicalNovelReadScope, characterId), undefined);
+
   const commitIdA = captureNovelCommitId("commit_a");
   const resultRevisionA = captureNovelRevision("revision_commit_a");
   const committedAtA = captureNovelTimestamp("2026-08-02T11:30:00.000Z");
@@ -163,6 +194,7 @@ try {
     resultRevision: resultRevisionA,
     committedAt: committedAtA,
   });
+  await assert.rejects(access(join(location.commitHistoryDir, "commit_failed.json")));
   assert.equal(committed.status, "committed");
   assert.equal(committed.commit.resultRevision, resultRevisionA);
   assert.equal(
@@ -213,6 +245,31 @@ try {
   assert.equal(payloadBytes.byteLength, state.commits[0].payload_size);
   assert.equal((await draftStore.getDraftSession(canonical.novelId, sessionA.id)).status, "committed");
   assert.equal((await draftStore.getDraftSession(canonical.novelId, sessionB.id)).status, "active");
+
+  await unlink(join(location.commitHistoryDir, "commit_a.json"));
+  const restarted = createNodeNovelEntityApplication({
+    location,
+    novelId: canonical.novelId,
+    identityFactory: new OperationIdentityFactory(),
+    clock,
+    logger,
+  });
+  const recovered = await restarted.commitRecovery.recover(canonical.novelId);
+  assert.equal(recovered.recoveredCount, 1);
+  assert.deepEqual(
+    await readFile(join(location.commitHistoryDir, "commit_a.json")),
+    payloadBytes,
+  );
+
+  await unlink(join(location.commitHistoryDir, "commit_a.json"));
+  await rm(
+    join(location.stagingDir, sessionA.ownerConversationId, sessionA.id),
+    { recursive: true, force: true },
+  );
+  await assert.rejects(
+    restarted.commitRecovery.recover(canonical.novelId),
+    (error) => error instanceof NovelCommitHistoryIntegrityError,
+  );
   assertRedacted(logs, [root, secretCharacter, secretLocation]);
 } finally {
   await draftStore?.close();

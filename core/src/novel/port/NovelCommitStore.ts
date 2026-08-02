@@ -10,6 +10,7 @@ export interface CommitNovelChangeSetInput<TContext> {
 }
 
 export interface NovelCommitStore<TContext> {
+  listCommits(): Promise<readonly NovelCommit[]>;
   listHistoryReferences(): Promise<readonly NovelCommitHistoryReference[]>;
   commit(input: CommitNovelChangeSetInput<TContext>): Promise<"committed" | "duplicate">;
 }

@@ -141,7 +141,7 @@ Semantics:
 - `realizationStatus` answers whether that intention has been accepted as realized in manuscript content.
 - `pending` means manuscript realization has not started.
 - `in-progress` means some realization exists or active drafting and revision work has started, but the StoryUnit is not accepted as complete.
-- `completed` means its narrative intention has been sufficiently expressed in manuscript content and accepted by the author or workflow.
+- `completed` means its narrative intention has been expressed in manuscript content, the realization conforms to the current outline and manuscript revisions, and the result has been accepted by the author or workflow.
 - `abandoned` means the author no longer intends to realize this StoryUnit; it remains addressable for history, replacement tracking, and possible restoration.
 - Producing text does not automatically mean `completed`, and `completed` does not mean published or permanently immutable.
 
@@ -239,31 +239,137 @@ StoryUnitRestored
 
 Domain persistence may retain reason notes in these Events. Structured Runtime logs must only record safe identifiers and lifecycle metadata and must not emit the natural-language note content.
 
-## 6. Beat Boundary
+## 6. Leaf StoryUnit Plan
 
-**Current recommendation:** Beat is optional and is not a required child type in the base StoryUnit tree.
-
-A Beat is a lightweight ordered intention inside a sufficiently small StoryUnit, usually a scene-sized unit:
+**Current recommendation:** a leaf StoryUnit is the smallest currently executable writing specification. It describes time, participating Characters and Locations, objective Events, intended emotional rhythm, and the persistent entity changes that the manuscript must realize.
 
 ```ts
-interface StoryBeat {
-  readonly id: StoryBeatId;
+interface LeafStoryUnitPlan {
   readonly storyUnitId: StoryUnitId;
-  readonly orderKey: OrderKey;
-  readonly intent: string;
-  readonly expectedOutcome?: string;
+  readonly time: StoryTimeDescription;
+  readonly characters: readonly StoryUnitCharacterBinding[];
+  readonly locations: readonly StoryUnitLocationBinding[];
+  readonly events: readonly StoryEventStep[];
+  readonly rhythmBeats: readonly RhythmBeat[];
+  readonly entityChanges: readonly StoryUnitEntityChange[];
 }
 ```
 
-Recommended rules:
+A leaf plan answers five questions:
 
-- A StoryUnit does not require Beats.
-- Beats help guide scene generation, revision, pacing, and coverage checks.
-- Beats do not initially carry the full Todo lifecycle or independent manuscript ownership.
-- A Beat that becomes large enough to require independent status, dependencies, assignment, or manuscript realization should be promoted into a child `StoryUnit`.
-- Beat realization may later be represented as derived analysis rather than a manually maintained authoritative status.
+1. When does this unit happen?
+2. Where does it happen?
+3. Which Characters participate or are affected?
+4. What objectively happens, and how should emotional tension rise or fall?
+5. What persistent Character or Location changes must later StoryUnits remember?
 
-This keeps the base outline simple for users while allowing more detailed planning when it is useful.
+If a leaf StoryUnit is decomposed into children, its detailed plan must be migrated, summarized, or archived rather than silently duplicated across parent and child nodes.
+
+### 6.1 Story Time
+
+```ts
+interface StoryTimeDescription {
+  readonly description: string;
+  readonly timelineOrderKey?: OrderKey;
+}
+```
+
+- `description` permits natural-language time such as `the following morning` or `ten years earlier`.
+- `timelineOrderKey` is optional initial support for story-world chronology that differs from outline or manuscript order.
+- The initial model does not require a complete calendar system.
+
+### 6.2 StoryEventStep
+
+`StoryEventStep` describes what objectively happens.
+
+```ts
+interface StoryEventStep {
+  readonly id: StoryEventStepId;
+  readonly storyUnitId: StoryUnitId;
+  readonly orderKey: OrderKey;
+  readonly description: string;
+}
+```
+
+Events are ordered implementation requirements for the manuscript. They do not directly describe emotional rhythm and do not need independent Todo lifecycle state.
+
+### 6.3 RhythmBeat
+
+`RhythmBeat` describes intended emotion, tension, turning points, climax, release, and aftermath. It does not describe the objective Event itself.
+
+```ts
+type RhythmDirection =
+  | "setup"
+  | "rise"
+  | "hold"
+  | "turn"
+  | "climax"
+  | "fall"
+  | "release"
+  | "aftermath";
+
+type RhythmIntensity = 1 | 2 | 3 | 4 | 5;
+
+interface RhythmBeat {
+  readonly id: RhythmBeatId;
+  readonly storyUnitId: StoryUnitId;
+  readonly orderKey: OrderKey;
+  readonly rhythm: RhythmDirection;
+  readonly intensity: RhythmIntensity;
+  readonly readerEmotion?: string;
+  readonly pointOfViewEmotion?: string;
+  readonly description?: string;
+  readonly relatedEventIds: readonly StoryEventStepId[];
+}
+```
+
+- `readerEmotion` expresses the intended reader experience.
+- `pointOfViewEmotion` expresses the point-of-view Character's experience; it may intentionally differ from reader emotion.
+- `relatedEventIds` identifies which objective Events carry the rhythm point.
+- RhythmBeat is optional, carries no Todo status, owns no manuscript content, and cannot be promoted into a child StoryUnit.
+- If an Event or leaf StoryUnit becomes too complex, the Event or StoryUnit is decomposed and its RhythmBeats are replanned.
+
+### 6.4 StoryUnitEntityChange
+
+`StoryUnitEntityChange` describes what later StoryUnits must remember after this unit is realized.
+
+```ts
+type StoryEntityChangeCategory =
+  | "identity"
+  | "condition"
+  | "location"
+  | "relationship"
+  | "knowledge"
+  | "goal"
+  | "ownership"
+  | "environment"
+  | "custom";
+
+interface StoryUnitEntityChange {
+  readonly id: StoryUnitEntityChangeId;
+  readonly storyUnitId: StoryUnitId;
+  readonly entityType: "character" | "location";
+  readonly entityId: StoryEntityId;
+  readonly relatedEntityId?: StoryEntityId;
+  readonly category: StoryEntityChangeCategory;
+  readonly summary: string;
+  readonly sourceEventIds: readonly StoryEventStepId[];
+}
+```
+
+- Character relationships are recorded only as sparse, story-relevant changes with an optional `relatedEntityId`; the initial model does not maintain a complete pairwise relationship graph.
+- Location changes use the same mechanism for damage, ownership, access, environmental condition, and other persistent consequences.
+- The model maintains one authoritative entity-change specification per StoryUnit. It does not preserve separate long-lived `expectedChanges` and `actualChanges` truth sets.
+
+```mermaid
+flowchart LR
+    Event["StoryEventStep<br/>What happens"]
+    Rhythm["RhythmBeat<br/>How tension and emotion move"]
+    Change["StoryUnitEntityChange<br/>What later units must remember"]
+
+    Event --> Rhythm
+    Event --> Change
+```
 
 ## 7. Manuscript Organization
 
@@ -292,7 +398,7 @@ flowchart TD
     ChapterB --> BlocksB["Ordered Manuscript Blocks"]
 ```
 
-## 8. Manuscript Anchors and Realization
+## 8. Manuscript Anchors, Realization, and Conformance
 
 StoryUnits associate with written content through stable Block anchors:
 
@@ -311,6 +417,8 @@ interface ManuscriptRange {
 interface StoryUnitRealization {
   readonly storyUnitId: StoryUnitId;
   readonly ranges: readonly ManuscriptRange[];
+  readonly sourceOutlineRevision: OutlineRevision;
+  readonly validation: StoryUnitConformanceResult;
 }
 ```
 
@@ -319,6 +427,54 @@ interface StoryUnitRealization {
 - Anchor bias determines whether insertion at an exact boundary belongs inside or outside a range.
 - One StoryUnit may realize across multiple ranges and Chapters.
 - Node movement in the outline does not invalidate manuscript realization because the StoryUnit ID remains stable.
+
+The manuscript is an implementation of the StoryUnit specification rather than an independent source of alternate story facts. A realization records where the StoryUnit is implemented and whether that content conforms to the current outline.
+
+```ts
+type StoryUnitConformanceStatus =
+  | "pending"
+  | "conforming"
+  | "non-conforming"
+  | "stale";
+
+type StoryUnitConformanceFindingType =
+  | "missing-event"
+  | "unexpected-event"
+  | "character-mismatch"
+  | "location-mismatch"
+  | "time-mismatch"
+  | "missing-entity-change"
+  | "contradictory-entity-change"
+  | "rhythm-mismatch"
+  | "other";
+
+interface StoryUnitConformanceFinding {
+  readonly type: StoryUnitConformanceFindingType;
+  readonly severity: "warning" | "error";
+  readonly note: string;
+  readonly manuscriptRanges: readonly ManuscriptRange[];
+}
+
+interface StoryUnitConformanceResult {
+  readonly status: StoryUnitConformanceStatus;
+  readonly checkedOutlineRevision: OutlineRevision;
+  readonly checkedManuscriptRevision: ManuscriptRevision;
+  readonly findings: readonly StoryUnitConformanceFinding[];
+}
+```
+
+Conformance semantics:
+
+- `pending` means the current manuscript ranges have not yet been checked.
+- `conforming` means the manuscript satisfies the current StoryUnit Events, entity changes, Character and Location bindings, time requirements, and accepted rhythm expectations.
+- `non-conforming` means required semantics are missing, contradicted, or changed by the manuscript.
+- `stale` means either the relevant outline or manuscript changed after validation.
+- Additional prose detail is allowed when it does not create a conflicting persistent story fact.
+- A new semantic Event or entity change must either be removed from the manuscript or explicitly added to the outline through an accepted outline mutation before validation can succeed.
+
+A StoryUnit may enter `realizationStatus: completed` only when it has at least one current ManuscriptRange and a `conforming` validation checked against the current OutlineRevision and ManuscriptRevision. Conformance failure keeps the StoryUnit in progress; it does not create an alternate actual-facts table.
+
+If the author changes creative direction while drafting, the outline is explicitly revised and the manuscript is revalidated. The model treats this as a specification change rather than silent manuscript divergence.
 
 Deletion and structural edits require reference preservation:
 
@@ -378,12 +534,6 @@ interface StoryUnitCharacterBinding {
   readonly note?: string;
 }
 
-interface StoryUnitRealization {
-  readonly storyUnitId: StoryUnitId;
-  readonly manuscriptRanges: readonly ManuscriptRange[];
-  readonly actualSummary?: string;
-}
-
 interface CharacterCurrentStateProjection {
   readonly characterId: CharacterId;
   readonly atStoryUnitId: StoryUnitId;
@@ -414,8 +564,9 @@ classDiagram
 
     class StoryUnitRealization {
         +StoryUnitId storyUnitId
-        +ManuscriptRange[] manuscriptRanges
-        +string actualSummary
+        +ManuscriptRange[] ranges
+        +OutlineRevision sourceOutlineRevision
+        +StoryUnitConformanceResult validation
     }
 
     class CharacterCurrentStateProjection {
@@ -435,7 +586,7 @@ classDiagram
 The binding and realization do not own one another. Both refer to the same stable StoryUnit for different purposes:
 
 - `StoryUnitCharacterBinding` records planned character participation in the outline.
-- `StoryUnitRealization` records where that StoryUnit was actually realized in manuscript content.
+- `StoryUnitRealization` uses the contract in Section 8 to record where that StoryUnit was realized and whether the manuscript conforms to the current outline.
 - `CharacterCurrentStateProjection` summarizes a character at a selected StoryUnit position by replaying relevant leaf StoryUnit changes.
 
 Character stores only stable identity and information that should not be repeatedly inferred from the outline. Current location, injuries, relationships, life state, inventory, and similar changing information remain derived from StoryUnit participation and entity-change records rather than becoming mutable fields on Character.
@@ -480,14 +631,15 @@ The initial global NovelRevision deliberately provides coarse invalidation. It m
 
 ```text
 Character stable profile
-    + relevant accepted leaf StoryUnit bindings
-    + ordered character and location change notes
+    + ordered entity changes from completed and currently conforming StoryUnits
     = CharacterCurrentStateProjection
 ```
 
 Recommended query behavior:
 
 - A state query always names the target `atStoryUnitId`; there is no context-free global current state.
+- A `confirmed` query includes only completed StoryUnits whose realization currently conforms to the outline.
+- A `planned` query may additionally include pending and in-progress StoryUnit entity changes to simulate the state expected if the current outline is implemented.
 - Tool results return the source StoryUnit IDs used as evidence even if the cached projection stores only their summarized result initially.
 - Agent-proposed corrections enter a reviewable state before replacing accepted projections or authoritative StoryUnit changes.
 - Human rejection leaves authoritative outline and manuscript data unchanged.
@@ -505,7 +657,8 @@ The following decisions remain outside the accepted Runtime implementation plan:
 3. Whether planned Chapter coverage uses a contiguous leaf range, an explicit ordered selection, or both.
 4. The exact command and event contracts for Block split, merge, move, and anchor repair.
 5. The storage layout for Manuscript Blocks and Novel-domain Journal records.
-6. The promotion workflow from `StoryBeat` to child `StoryUnit`.
-7. Whether Beat realization is stored, derived, or omitted in the first implementation.
+6. The exact OutlineRevision and ManuscriptRevision generation contracts and their relationship to the global NovelRevision.
+7. Whether RhythmBeat mismatch remains a warning by default or may become a required conformance error for selected beats.
 8. The concrete NovelRevision generation format and whether narrower component revisions are needed after measuring projection rebuild cost.
 9. The exact review-state contract for Tool-proposed Character and Location projections.
+10. The exact conformance validator boundary between deterministic Tool checks, model-assisted analysis, and human acceptance.

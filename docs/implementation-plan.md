@@ -2680,6 +2680,16 @@ Task 6A-C delivered:
 - idempotent close behavior that flushes accepted writes, waits only for writable completion on Duplex streams, destroys the local readable, and avoids reporting intentional closure as a stream failure
 - focused validation for UTF-8 fragmentation, multi-Frame chunks, malformed JSON, invalid Frames, incomplete and oversized lines, Peer request/response over paired streams, ordered backpressured writes, writable closure, and Node-only type compatibility
 
+Task 6A-D delivered:
+
+- Node-only `NodeConversationProcessSupervisor` implementing the existing `ConversationRuntimePlacement` Port with one owned child process per active Runtime Handle and no automatic restart
+- `NodeRuntimeChildProcessLauncher` for a fixed executable and immutable argument list; Runtime Bootstrap data, workdir, credentials, Provider clients, Tool handlers, callbacks, and Event payloads never enter argv or launcher logs
+- stdout bound to the strict `NodeJsonlIpcConnection`, stdin reserved for ordered protocol writes, and stderr continuously drained and discarded without parsing, persistence, or raw logging
+- an injected `RuntimeChildProcessEndpointFactory` boundary so Task 6A-D owns process placement while Task 6A-E remains responsible for handshake, Bootstrap transfer, Parent RPC mapping, and Child Runtime construction
+- `ChildProcessConversationRuntimeHandle` preserving the existing dispatch, shutdown, and stable `waitForExit()` contract with safe command failures, idempotent transport cleanup, and Supervisor-owned final disposal
+- `RuntimeProcessExitNormalizer` mapping requested process exits to stopped snapshots and unexpected zero, non-zero, signal, or process failures to redacted crashed snapshots without raw stderr, messages, stacks, causes, commands, paths, or exit details
+- active and starting Conversation/Runtime identity conflict detection, activation rollback, close-time pending activation drainage, active Handle release, and deterministic two-process smoke validation
+
 Expected deliverables after approval:
 
 - transport interfaces
@@ -2816,6 +2826,6 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-C are implemented. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, Task 6A-B adds the asynchronous in-memory Peer, and Task 6A-C binds that Port to bounded Node JSONL streams without starting a process.
+Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-D are implemented. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, Task 6A-B adds the asynchronous in-memory Peer, Task 6A-C binds that Port to bounded Node JSONL streams, and Task 6A-D adds one-process-per-Runtime placement and safe process ownership without constructing the Child Runtime.
 
-The next documented Runtime step is Task 6A-D: child-process Runtime Placement, process supervision, a placement-neutral Runtime Handle, and safe exit normalization. It does not construct the child Runtime or open persistence RPC yet.
+The next documented Runtime step is Task 6A-E: Parent/Child handshake orchestration, Runtime Bootstrap transfer after version negotiation, a Child endpoint, and injected Child Runtime composition. It does not expose generic persistence or implement heartbeat and termination policy yet.

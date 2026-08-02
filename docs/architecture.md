@@ -5462,6 +5462,59 @@ Writes are captured again at the transport boundary, serialized as one immutable
 
 Task 6A-C does not spawn a process, perform handshake orchestration, create a Runtime, interpret stderr, send heartbeat traffic, expose persistence methods, or implement restart behavior. Those responsibilities remain in Task 6A-D through Task 6A-G.
 
+### 24.4 Implemented Child-Process Runtime Placement
+
+Task 6A-D implements the first Node child-process placement behind the existing platform-neutral `ConversationRuntimePlacement` and `ConversationRuntimeHandle` contracts. One successful activation owns exactly one process, one JSONL connection, one Parent endpoint, and one Handle. The Supervisor never restarts an exited Runtime automatically.
+
+```mermaid
+classDiagram
+    class ConversationRuntimePlacement {
+        <<interface>>
+        +activate(Bootstrap) Promise~ConversationRuntimeHandle~
+    }
+    class NodeConversationProcessSupervisor {
+        +activeProcessCount number
+        +activate(Bootstrap) Promise~ConversationRuntimeHandle~
+        +close() Promise~void~
+    }
+    class RuntimeChildProcessLauncher {
+        <<interface>>
+        +launch(ids) Promise~RuntimeChildProcess~
+    }
+    class NodeRuntimeChildProcessLauncher
+    class RuntimeChildProcessEndpointFactory {
+        <<interface>>
+        +connect(Bootstrap, Connection) Promise~Endpoint~
+    }
+    class ChildProcessConversationRuntimeHandle {
+        +dispatchInput(InputReference) Promise~void~
+        +shutdown(reason) Promise~void~
+        +waitForExit() Promise~RuntimeExit~
+    }
+    class RuntimeProcessExitNormalizer
+    class NodeJsonlIpcConnection
+
+    NodeConversationProcessSupervisor ..|> ConversationRuntimePlacement
+    NodeConversationProcessSupervisor --> RuntimeChildProcessLauncher
+    NodeRuntimeChildProcessLauncher ..|> RuntimeChildProcessLauncher
+    NodeConversationProcessSupervisor --> NodeJsonlIpcConnection
+    NodeConversationProcessSupervisor --> RuntimeChildProcessEndpointFactory
+    NodeConversationProcessSupervisor --> ChildProcessConversationRuntimeHandle
+    ChildProcessConversationRuntimeHandle --> RuntimeProcessExitNormalizer
+```
+
+The concrete launcher owns a fixed executable plus an immutable argument list. Activation passes only logical Conversation and Runtime identities to the launcher for lifecycle logging; the Bootstrap, Workspace root, Store paths, prompts, Provider credentials, Tool handlers, callbacks, Events, and configuration contents never enter command arguments or launcher logs. The child inherits the composition environment normally, but Provider clients and credential access are still constructed and consumed only inside the Child composition root introduced in Task 6A-E.
+
+Every child uses piped stdin, stdout, and stderr. Stdout is protocol-only and is immediately wrapped by `NodeJsonlIpcConnection`; malformed output therefore fails the connection rather than entering Runtime state. Stderr is continuously drained and discarded so a noisy child cannot block on pipe capacity, but its bytes are never parsed, persisted, copied into an exit snapshot, or written to structured logs.
+
+The Supervisor reserves both Conversation ID and Runtime instance ID before asynchronous launch, preventing two concurrent placements for the same logical Runtime. Activation rollback closes any established endpoint and JSONL connection and terminates the partially launched process. Closing the shared Supervisor rejects new activations, waits for already-started activation attempts, disposes every remaining Handle, and clears ownership maps. The composition root still closes dependent Hosts before this shared Supervisor.
+
+`RuntimeChildProcessEndpointFactory` is the deliberate seam between Task 6A-D and Task 6A-E. In 6A-D it is injected and tested with a deterministic endpoint; in 6A-E its implementation will negotiate protocol version and Session identity, transfer the serializable Bootstrap, and map Handle commands onto `RuntimeIpcPeer`. Process placement does not know Pi, Provider, Tool, persistence, or Child Runtime construction types.
+
+`RuntimeProcessExitNormalizer` emits only the existing `ConversationRuntimeExit` union. Once a Handle has accepted a shutdown reason, a subsequent process exit becomes `stopped` with that reason. An exit without an accepted shutdown becomes `crashed` with stable categories for unexpected zero exit, non-zero exit, signal exit, or a safe process failure identity. Raw exit codes, signal names, stderr, commands, paths, messages, stacks, causes, and environment contents are not exposed.
+
+Task 6A-D provides ownership cleanup but intentionally does not implement handshake, Runtime construction, persistence RPC, heartbeat health, the five-second graceful termination window, forced-kill escalation, cancellation routing, or restart. Those remain Task 6A-E through Task 6A-G.
+
 ## 25. Subagent Architecture
 
 Main Agent and Subagent both use Conversation.
@@ -5646,13 +5699,14 @@ The first-version protocol no longer contains `ResumeInputEvent`.
 Not yet implemented:
 
 - ConversationProxy implementation
-- process supervisor
+- Child Runtime entrypoint, negotiated Parent endpoint, and internal composition root
+- narrow Runtime persistence RPC and durable Journal append acknowledgement
+- heartbeat health, cancellation routing, and graceful termination escalation
 - concrete restart-safe ContextCheckpointStore and canonical Journal/Message source adapters
 - durable ArtifactStore, oversized User-content staging, and Artifact-reference recovery
 - concrete restart-safe private Nudge persistence and Provider transport dispatch-hook adapters
 - Tool-bearing Assistant canonical projection
 - ToolResultMaterializer and bounded Artifact access Tools
-- IPC protocol
 - Subagent manager
 
 The provisional Pi-coupled `BaseTool` and `ToolDetails` drafts have been removed. Tool abstractions will be introduced only during the reviewed Tool task.

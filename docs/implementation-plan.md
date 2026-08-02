@@ -2827,6 +2827,15 @@ Task 6B-D delivered:
 - recovery-time orphan detection through a parent Run activity Port, `orphan_reclaimed` terminal results, no automatic child execution resume, and preserved child Journal ownership
 - focused validation for durable running/terminal transitions, tree query, subscription catch-up, parent Stop cancellation, active-parent preservation, and orphan reclamation
 
+Task 6B-E delivered:
+
+- `CatalogHostChildConversationAdapter` using the accepted Catalog parent metadata, Agent binding, Host activation, and Host rollback boundaries
+- SQLite migration version 3 plus `SqliteSubagentBindingStore` for durable current bindings and ordered binding changes
+- real Workspace SQLite integration proving child Conversation creation, parent metadata, Host activation, parent projection, terminal persistence, and restart-time binding reconstruction
+- full provider-neutral Subagent protocol, limits, reduce-only Tool policy, lifecycle projection, cancellation, orphan recovery, tree observation, and local storage validation
+
+Checkpoint 6B status: completed.
+
 Expected deliverables after approval:
 
 - child Conversation creation and metadata
@@ -2924,4 +2933,4 @@ No next checkpoint begins without explicit approval.
 
 Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
-The next documented Runtime step is Task 6B-E: concrete Host/storage integration, complete Subagent validation, and Checkpoint 6B closure.
+The next documented Runtime step is Task 7: full validation, examples, client integration documentation, and final Runtime checkpoint closure.

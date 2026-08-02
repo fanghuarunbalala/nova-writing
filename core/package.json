@@ -99,6 +99,7 @@
     "smoke:runtime-subagent-manager": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/runtime-subagent-manager-typecheck.ts && node scripts/runtime-subagent-manager-smoke.mjs",
     "smoke:runtime-subagent-lifecycle": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/runtime-subagent-lifecycle-typecheck.ts && node scripts/runtime-subagent-lifecycle-smoke.mjs",
     "smoke:runtime-subagent-recovery-tree": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/runtime-subagent-recovery-tree-typecheck.ts && node scripts/runtime-subagent-recovery-tree-smoke.mjs",
+    "smoke:runtime-subagent-host-sqlite": "pnpm build && node scripts/runtime-subagent-host-sqlite-integration-smoke.mjs",
     "smoke:runtime-user-message": "pnpm build && node scripts/runtime-user-message-input-handler-smoke.mjs",
     "smoke:runtime-stop-input": "pnpm build && node scripts/runtime-stop-input-handler-smoke.mjs",
     "smoke:runtime-replay-planner": "pnpm build && node scripts/runtime-replay-planner-smoke.mjs",

@@ -1,5 +1,6 @@
 export * from "./ChildConversationManagerErrors.js";
 export * from "./ChildConversationManagerProtocol.js";
+export * from "./CatalogHostChildConversationAdapter.js";
 export * from "./DefaultChildConversationManager.js";
 export * from "./DefaultSubagentLifecycleCoordinator.js";
 export * from "./DurableChildConversationManager.js";

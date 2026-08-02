@@ -5767,6 +5767,10 @@ Task 6B-D adds a durable `SubagentBindingStore` projection and change feed. `Dur
 
 Parent completion, failure, Stop, and crash are normalized by `SubagentCancellationCoordinator` into registered child cancellation reasons. Recovery lists every non-terminal binding, asks a parent-Run activity reader whether its owner is still active, and reclaims inactive children with `orphan_reclaimed`. Cancellation always returns a validated terminal `SubagentResult` through the existing lifecycle coordinator, so parent projection persistence, capacity release, and result delivery retain one ordering rule. Child execution is never resumed automatically.
 
+Task 6B-E closes the concrete local composition. `CatalogHostChildConversationAdapter` creates child Conversation metadata and immutable Agent bindings through `ConversationCatalogStore`, activates the child through the unchanged `ConversationHost`, and uses Host shutdown for provisioning rollback. Node adds `SqliteSubagentBindingStore` and migration version 3 for durable binding projections and sequence-based change catch-up. A reopened workspace database reconstructs terminal child hierarchy without creating a Runtime process.
+
+Checkpoint 6B is complete. Main and child agents share the same Conversation, Host, Journal, Message, Tool, Context, Nudge, IPC, and process-placement abstractions while retaining independent state. Public Core boundaries remain provider-neutral and contain no Pi, Node process, workspace path, prompt, Tool payload, or child private history.
+
 ## 26. Persistence Model
 
 Logical local storage layout:

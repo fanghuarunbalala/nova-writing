@@ -102,6 +102,34 @@ const MIGRATIONS: Migration[] = [
       ON journal_records(conversation_id, turn_id, sequence);
     `,
   },
+  {
+    version: 3,
+    name: "subagent_bindings",
+    sql: `
+      CREATE TABLE subagent_bindings (
+        subagent_id TEXT PRIMARY KEY,
+        parent_conversation_id TEXT NOT NULL,
+        parent_run_id TEXT NOT NULL,
+        child_conversation_id TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL CHECK (status IN ('creating', 'running', 'completed', 'failed', 'cancelled', 'orphaned')),
+        binding_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (parent_conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+        FOREIGN KEY (child_conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      ) STRICT;
+
+      CREATE INDEX subagent_bindings_parent_run_idx
+      ON subagent_bindings(parent_conversation_id, parent_run_id, status, updated_at, subagent_id);
+
+      CREATE TABLE subagent_binding_changes (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        subagent_id TEXT NOT NULL,
+        binding_json TEXT NOT NULL,
+        recorded_at TEXT NOT NULL,
+        FOREIGN KEY (subagent_id) REFERENCES subagent_bindings(subagent_id) ON DELETE CASCADE
+      ) STRICT;
+    `,
+  },
 ];
 
 export function runCoreSqliteMigrations(database: DatabaseSync): void {

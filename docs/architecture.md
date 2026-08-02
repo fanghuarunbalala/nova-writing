@@ -5014,6 +5014,8 @@ Incremental execution information is emitted through an injected asynchronous `T
 
 `PiToolAdapter` is package-private and is not exported through Core, Tools, Runtime, or the internal Pi barrel. It converts Core Descriptor fields and TypeBox parameters to Pi `AgentTool` values while preserving Tool order. Its execute callback never invokes a Core Handler directly: it delegates to a package-private `PiToolExecutionBridge`, which Task 5B connects to the Dispatcher and security pipeline. The Adapter maps Core progress, partial results, final text content, optional details, and logical Artifact references into internal Pi result envelopes. Pi cancellation is forwarded as an `AbortSignal`; Pi types never appear in public Core Tool contracts or exported declaration surfaces.
 
+Checkpoint 5A is implemented end to end through declaration, defensive registration, YAML Group loading, immutable Catalog and Registry View composition, and package-private Pi conversion. The boundary intentionally ends at `PiToolExecutionBridge`: no production path may execute a Handler through the Adapter until Task 5B supplies the validated Dispatcher, permission, approval, sandbox, cancellation, timeout, and trace pipeline.
+
 The implemented Core protocol defensively captures Tool declarations and values before they cross ownership boundaries:
 
 - Tool names use a stable lowercase underscore identity and Tool versions use strict `major.minor.patch` syntax.

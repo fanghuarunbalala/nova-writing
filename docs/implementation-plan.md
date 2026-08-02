@@ -2460,6 +2460,14 @@ Task 5A-E delivered:
 
 Task 5A-E explicitly excludes the concrete execution bridge, Dispatcher, argument revalidation, Tool-error normalization, permission, approval, sandboxing, retry, timeout policy, trace persistence, Artifact materialization, dynamic Group mounting, and concrete Tools.
 
+Task 5A-F delivered:
+
+- end-to-end integration coverage from TypeScript Tool declaration and immutable Registry assembly through YAML Group loading, Catalog lookup, View capability composition, package-private Pi conversion, progress forwarding, and bridge execution
+- combined verification of Tool name/version retention, deterministic order, allow filtering, deny precedence, unknown Manifest Tool rejection, Core result conversion, and public Pi-type isolation
+- Checkpoint 5A architecture and task documentation that fixes `PiToolExecutionBridge` as the intentional boundary before Task 5B
+
+**Checkpoint 5A status:** completed. Tool protocol, Registry, YAML Group Manifests, Catalog, scoped Views, and package-private Pi conversion are implemented and validated. Task 5B must not begin implementation until its documented security-policy questions are explicitly reviewed with the user.
+
 Expected deliverables after approval:
 
 - core-owned Tool types

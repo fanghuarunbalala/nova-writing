@@ -6,6 +6,7 @@ This document records the currently accepted architecture for the shared Novel A
 
 - It is an architecture target, not a statement that every component has already been implemented.
 - The dedicated Novel domain model remains deferred and is not included in this runtime boundary.
+- Current Novel-domain design discussions are recorded separately in `docs/novel-domain.md` and do not extend the Task 1 through Task 7 implementation scope.
 - Diagrams use Mermaid so they remain version-controlled, editable, and renderable in compatible Markdown viewers.
 - The initial implementation stays TypeScript-first. Performance-critical implementations may later move to Rust behind stable TypeScript interfaces.
 - Plan-first autonomous implementation tasks and unresolved questions are tracked in `docs/implementation-plan.md`.

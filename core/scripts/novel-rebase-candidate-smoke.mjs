@@ -31,6 +31,7 @@ import {
   captureLocationId,
   captureNovelOperationId,
   captureNovelResolutionApplicationPlan,
+  captureNovelResolvedRebaseCandidate,
   captureNovelRevision,
   captureNovelTimestamp,
   draftNovelReadScope,
@@ -52,6 +53,7 @@ import {
   SqliteNovelDraftStore,
   SqliteNovelRebaseCandidateStore,
   SqliteNovelResolutionApplicationPlanStore,
+  SqliteNovelResolvedRebaseCandidateStore,
   SqliteNovelSnapshotter,
   createNodeNovelEntityApplication,
   createSqliteNovelEntityMutationContext,
@@ -843,6 +845,57 @@ try {
     await restartedPlanStore.getPlan(planCandidate.candidate.session),
     planned.plan,
   );
+  let resolvedCandidateStore = await SqliteNovelResolvedRebaseCandidateStore.open({
+    location,
+    novelId: canonical.novelId,
+    logger,
+  });
+  const resolvedPreparedAt = clock.now();
+  const resolvedCandidate = captureNovelResolvedRebaseCandidate({
+    sourceDraftSessionId: planCandidate.candidate.sourceDraftSessionId,
+    conflictedCandidateDraftSessionId: planCandidate.candidate.session.id,
+    resolutionPlanDigest: planned.plan.digest,
+    session: {
+      id: captureNovelDraftSessionId("draft_rebase_plan_resolved"),
+      novelId: canonical.novelId,
+      ownerConversationId: planCandidate.candidate.session.ownerConversationId,
+      baseRevision: planCandidate.candidate.session.baseRevision,
+      status: "rebasing",
+      createdAt: resolvedPreparedAt,
+      updatedAt: resolvedPreparedAt,
+    },
+    operationCount: planned.plan.effectiveOperationCount,
+    lastOperationSequence: planned.plan.effectiveOperationCount,
+    preparedAt: resolvedPreparedAt,
+  });
+  await resolvedCandidateStore.createResolvedCandidate(resolvedCandidate);
+  await assert.rejects(
+    resolvedCandidateStore.createResolvedCandidate({
+      ...resolvedCandidate,
+      session: {
+        ...resolvedCandidate.session,
+        id: captureNovelDraftSessionId("draft_rebase_plan_resolved_other"),
+      },
+    }),
+  );
+  await resolvedCandidateStore.close();
+  resolvedCandidateStore = await SqliteNovelResolvedRebaseCandidateStore.open({
+    location,
+    novelId: canonical.novelId,
+    logger,
+  });
+  assert.deepEqual(
+    await resolvedCandidateStore.getResolvedCandidate(
+      canonical.novelId,
+      resolvedCandidate.session.id,
+    ),
+    resolvedCandidate,
+  );
+  assert.deepEqual(
+    await resolvedCandidateStore.listResolvedCandidates(canonical.novelId),
+    [resolvedCandidate],
+  );
+  await resolvedCandidateStore.close();
   assert.equal(
     await application.locationQueries.get(
       draftNovelReadScope(planCandidate.candidate.session),

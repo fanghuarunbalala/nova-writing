@@ -6,3 +6,4 @@ export * from "./NovelRebaseCandidate.js";
 export * from "./NovelRebaseService.js";
 export * from "./NovelResolutionApplicationPlan.js";
 export * from "./NovelResolutionApplicationPlanBuilder.js";
+export * from "./NovelResolvedRebaseCandidate.js";

@@ -979,6 +979,13 @@ This sequence-local state is required when several source Operations touch the
 same entity: preconditions for a later replacement must observe earlier
 effective Operations, not the final state of a partially replayed candidate.
 
+A successfully rebuilt sibling is registered separately from both its source
+Draft and conflicted candidate. The canonical registry records the Resolution
+Plan digest and effective Operation count, while all three Draft directories
+retain distinct stable identities. Registry identity is immutable per
+conflicted candidate and survives restart; creating another resolved identity
+for the same conflicted candidate is rejected.
+
 ### 10.7 Approval Binding
 
 Approval grants bind to an immutable ChangeSet identity rather than only a Draft Session ID:

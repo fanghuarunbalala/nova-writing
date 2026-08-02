@@ -12,4 +12,5 @@ export * from "./NovelResolutionApplicationPlanStore.js";
 export * from "./NovelEntityRepository.js";
 export * from "./NovelRevisionFactory.js";
 export * from "./NovelRebaseCandidateStore.js";
+export * from "./NovelResolvedRebaseCandidateStore.js";
 export * from "./NovelSnapshotter.js";

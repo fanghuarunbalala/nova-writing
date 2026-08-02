@@ -14,4 +14,5 @@ export * from "./SqliteNovelCommitStore.js";
 export * from "./SqliteNovelConflictStore.js";
 export * from "./SqliteNovelResolutionApplicationPlanStore.js";
 export * from "./SqliteNovelRebaseCandidateStore.js";
+export * from "./SqliteNovelResolvedRebaseCandidateStore.js";
 export * from "./SqliteNovelSnapshotter.js";

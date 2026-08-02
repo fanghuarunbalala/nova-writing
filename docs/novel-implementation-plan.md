@@ -542,10 +542,15 @@ Resolution protocol foundation delivered:
 - an existing immutable plan is validated against current source Operations and
   durable decisions without invoking keep-draft planning again, preserving exact
   retry when replacement identities and timestamps were originally generated
+- resolved sibling candidate identities have a separate canonical registry that
+  links source Draft, conflicted candidate, Resolution Plan digest, rebuilt Draft
+  identity, base revision, effective Operation count, and preparation timestamp
+  without replacing either preserved predecessor
 
 **Status:** protocol, durable decision recording, and immutable strategy
 application planning plus concrete Character/Location rebinding completed;
-resolved sibling candidate sequential rebuilding is the next N7-C step.
+resolved sibling candidate registry foundation completed; atomic snapshot and
+sequential rebuilding is the next N7-C step.
 
 ### N7-D Approval Invalidation
 

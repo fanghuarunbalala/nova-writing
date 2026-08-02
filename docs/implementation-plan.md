@@ -2661,6 +2661,16 @@ Task 6A-A delivered:
 - deterministic highest-common-version selection and canonical exact-request comparison for the future duplicate-request ledger
 - provider-neutral public declarations with no Node process, Pi, Provider, Tool handler, callback, Promise transport, or `AbortSignal` coupling
 
+Task 6A-B delivered:
+
+- explicit-start `RuntimeIpcPeer` sessions over a transport-neutral asynchronous `RuntimeIpcConnection`
+- concurrent Request/Response correlation with out-of-order completion, Notification routing, safe remote errors, and deterministic Pending Promise cleanup when the connection closes
+- separate bounded Control and Data outbound queues with Control priority, one ordered writer, initial capacities of 64 and 1024, and stable backpressure failures
+- a bounded 1024-entry inbound completion ledger keyed by `sessionId + requestId`, exact canonical duplicate replay, active duplicate suppression, and Session termination for changed-content conflicts
+- local `AbortSignal` handling converted into the explicit `ipc.cancel_request` Notification; `AbortSignal` itself never enters a Frame
+- local inbound `AbortController` ownership, cancellation-safe Handler failure normalization, late Response suppression, and structured payload-free `info`, `debug`, and `warn` logs
+- deterministic `InMemoryRuntimeIpcConnection` pairs for concurrent, cancellation, duplicate, conflict, priority, connection-backpressure, and disconnect validation without Node stream or process coupling
+
 Expected deliverables after approval:
 
 - transport interfaces
@@ -2797,6 +2807,6 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Runtime Task 0 through Task 5B and Task 6A-A are implemented and committed. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary without starting a process.
+Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-B are implemented and committed. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, while Task 6A-B adds the asynchronous in-memory Peer without opening Node streams or starting a process.
 
-The next documented Runtime step is Task 6A-B: asynchronous request/response Peer, exact duplicate detection, cancellation, bounded queues, and in-memory transport validation. It does not implement JSONL stdio or child processes.
+The next documented Runtime step is Task 6A-C: Node JSONL stdio connection, incremental UTF-8 line decoding, ordered Frame writes, pre-parse line limits, and stream backpressure. It does not spawn a Runtime process.

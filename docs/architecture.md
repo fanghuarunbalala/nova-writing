@@ -5400,6 +5400,44 @@ interface RuntimeIpcErrorSnapshot {
 
 `sameRuntimeIpcRequest()` performs canonical exact-request comparison without exposing a payload fingerprint. Task 6A-B will use this boundary in a bounded `sessionId + requestId` completion ledger. Task 6A-A intentionally does not implement request execution, queues, cancellation, stream framing, JSONL, heartbeat, process placement, or restart behavior.
 
+### 24.2 Implemented Runtime IPC Peer
+
+Task 6A-B implements a provider-neutral `RuntimeIpcPeer` over the asynchronous `RuntimeIpcConnection` Port. A Peer is explicitly started after handshake and is bound to exactly one Session ID. Handshake Frames or Frames from another Session terminate the Peer rather than being guessed or silently ignored.
+
+Each direction uses one ordered writer with independent bounded queues:
+
+```text
+Control Queue: 64
+Data Queue: 1024
+Inbound completion ledger: 1024
+```
+
+Responses, cancellation, shutdown, and future heartbeat traffic use the Control lane. Ordinary Requests and Notifications use the Data lane unless the caller explicitly selects Control. Control is selected before queued Data after the active write completes; active writes are never reordered.
+
+Request processing uses two identity maps. Active inbound Requests suppress exact duplicates while the original Handler is running. Completed Requests retain the captured Request and terminal Response in a bounded insertion-ordered ledger. An exact duplicate replays the same Response without re-executing the Handler. The same Request ID with changed Session-bound canonical content emits `IPC_REQUEST_CONFLICT` and terminates the Session.
+
+Cancellation remains local at each execution boundary:
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant ClientPeer
+    participant ServerPeer
+    participant Handler
+
+    Caller->>ClientPeer: request(method, payload, AbortSignal)
+    ClientPeer->>ServerPeer: Request Frame
+    ServerPeer->>Handler: handle(local AbortSignal)
+    Caller->>ClientPeer: abort()
+    ClientPeer-->>Caller: RuntimeIpcRequestCancelledError
+    ClientPeer->>ServerPeer: ipc.cancel_request Notification
+    ServerPeer->>Handler: local AbortController.abort()
+```
+
+The original `AbortSignal` never enters a Frame. Late Responses after local cancellation are ignored by Request identity. Handler errors are normalized to a safe error code/category/retryability tuple and no raw error message, stack, cause, method payload, Frame content, path, credential, or stderr is logged.
+
+`InMemoryRuntimeIpcConnection` provides deterministic duplex validation of the same connection Port, including receive capacity. Task 6A-B intentionally does not implement byte framing, JSONL parsing, Node streams, process launch, heartbeat, durable Journal RPC, or automatic restart.
+
 ## 25. Subagent Architecture
 
 Main Agent and Subagent both use Conversation.

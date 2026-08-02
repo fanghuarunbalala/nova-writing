@@ -546,11 +546,17 @@ Resolution protocol foundation delivered:
   links source Draft, conflicted candidate, Resolution Plan digest, rebuilt Draft
   identity, base revision, effective Operation count, and preparation timestamp
   without replacing either preserved predecessor
+- resolved rebuilding requires canonical revision to remain equal to the
+  conflicted candidate base, creates a fresh sibling snapshot, replays only
+  effective plan entries in source order, verifies the rebuilt Journal, and
+  registers the sibling only after replay succeeds
+- replay failure removes the unregistered sibling snapshot while preserving the
+  source Draft, conflicted candidate, durable decisions, and application plan
 
 **Status:** protocol, durable decision recording, and immutable strategy
 application planning plus concrete Character/Location rebinding completed;
-resolved sibling candidate registry foundation completed; atomic snapshot and
-sequential rebuilding is the next N7-C step.
+resolved sibling candidate registry and atomic sequential rebuilding completed;
+Approval invalidation is the next N7 step.
 
 ### N7-D Approval Invalidation
 

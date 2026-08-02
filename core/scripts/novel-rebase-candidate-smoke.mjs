@@ -15,6 +15,7 @@ import {
   NovelRebaseService,
   NovelResolutionApplicationPlanIdentityConflictError,
   NovelResolutionApplicationPlanBuilder,
+  NovelResolvedRebaseService,
   NovelRevisionConflictError,
   canonicalNovelReadScope,
   canonicalizeNovelConflictResolutionRecord,
@@ -894,6 +895,56 @@ try {
   assert.deepEqual(
     await resolvedCandidateStore.listResolvedCandidates(canonical.novelId),
     [resolvedCandidate],
+  );
+  await resolvedCandidateStore.removeResolvedCandidate(
+    canonical.novelId,
+    resolvedCandidate.session.id,
+  );
+  const resolvedRebase = new NovelResolvedRebaseService({
+    canonicalStore,
+    snapshotter,
+    operationStore,
+    executor: operationExecutor,
+    planStore: restartedPlanStore,
+    resolvedCandidateStore,
+    identityFactory: new DraftIdentityFactory([
+      "draft_rebase_plan_resolved_replayed",
+    ]),
+    clock,
+    logger,
+  });
+  const replayedResolvedCandidate = await resolvedRebase
+    .prepareResolvedCandidate(planCandidate.candidate);
+  assert.equal(
+    replayedResolvedCandidate.operationCount,
+    planned.plan.effectiveOperationCount,
+  );
+  assert.deepEqual(
+    await resolvedCandidateStore.getResolvedCandidate(
+      canonical.novelId,
+      replayedResolvedCandidate.session.id,
+    ),
+    replayedResolvedCandidate,
+  );
+  assert.notEqual(
+    await application.locationQueries.get(
+      draftNovelReadScope(replayedResolvedCandidate.session),
+      "location_plan_original",
+    ),
+    undefined,
+  );
+  assert.equal(
+    (
+      await application.characterQueries.get(
+        draftNovelReadScope(replayedResolvedCandidate.session),
+        planCharacterIds[2],
+      )
+    ).name,
+    "FORBIDDEN_PLAN_MANUAL",
+  );
+  assert.equal(
+    await exists(candidatePath(location, planCandidate.candidate.session)),
+    true,
   );
   await resolvedCandidateStore.close();
   assert.equal(

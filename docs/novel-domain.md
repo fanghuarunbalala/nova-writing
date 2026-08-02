@@ -986,6 +986,12 @@ retain distinct stable identities. Registry identity is immutable per
 conflicted candidate and survives restart; creating another resolved identity
 for the same conflicted candidate is rejected.
 
+Resolved rebuilding is fail-closed: canonical revision must still equal the
+Resolution Plan base, a fresh sibling snapshot receives effective entries in
+source order, and its Operation Journal is verified before registry publication.
+An interrupted or rejected replay removes only the unregistered sibling; the
+source Draft, conflicted candidate, decisions, and plan remain recoverable.
+
 ### 10.7 Approval Binding
 
 Approval grants bind to an immutable ChangeSet identity rather than only a Draft Session ID:

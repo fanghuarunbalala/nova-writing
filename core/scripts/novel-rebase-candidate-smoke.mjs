@@ -7,6 +7,7 @@ import {
   NovelDraftOperationWriter,
   NovelDraftRecoveryService,
   NovelDraftSessionService,
+  NovelApprovalRequiredError,
   NovelEntityKeepDraftStrategy,
   NovelInvariantViolationError,
   NovelOperationExecutor,
@@ -984,6 +985,67 @@ try {
     duplicatePromotion.promotion,
     promoted.promotion,
   );
+  const approvedApplication = createNodeNovelEntityApplication({
+    location,
+    novelId: canonical.novelId,
+    identityFactory: operationIdentityFactory,
+    clock,
+    logger,
+    requireApproval: true,
+  });
+  const resolvedCommitOptions = {
+    commitId: captureNovelCommitId("commit_rebase_plan_resolved"),
+    resultRevision: captureNovelRevision("revision_rebase_plan_resolved"),
+    committedAt: clock.now(),
+  };
+  await assert.rejects(
+    approvedApplication.commits.commit(
+      promoted.promotion.session,
+      resolvedCommitOptions,
+    ),
+    NovelApprovalRequiredError,
+  );
+  const promotedChangeSet = await approvedApplication.changeSets.build(
+    promoted.promotion.session,
+  );
+  await assert.rejects(
+    approvedApplication.approvals.verify(promotedChangeSet),
+    NovelApprovalRequiredError,
+  );
+  const granted = await approvedApplication.approvals.grant(promotedChangeSet);
+  assert.equal(granted.status, "recorded");
+  assert.equal(
+    granted.approval.draftSessionId,
+    replayedResolvedCandidate.session.id,
+  );
+  const resolvedCommit = await approvedApplication.commits.commit(
+    promoted.promotion.session,
+    resolvedCommitOptions,
+  );
+  assert.equal(resolvedCommit.status, "committed");
+  assert.equal(
+    (await canonicalStore.getMetadata()).currentRevision,
+    resolvedCommitOptions.resultRevision,
+  );
+  assert.equal(
+    (
+      await draftStore.getDraftSession(
+        canonical.novelId,
+        replayedResolvedCandidate.session.id,
+      )
+    ).status,
+    "committed",
+  );
+  const restartedCanonicalStore = await SqliteNovelCanonicalStore.open({
+    location,
+    clock,
+    logger,
+  });
+  assert.equal(
+    (await restartedCanonicalStore.getMetadata()).currentRevision,
+    resolvedCommitOptions.resultRevision,
+  );
+  await restartedCanonicalStore.close();
   await resolvedCandidateStore.close();
   assert.equal(
     await application.locationQueries.get(

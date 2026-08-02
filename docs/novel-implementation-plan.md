@@ -592,8 +592,15 @@ Resolved-candidate promotion foundation delivered:
 - promotion never inherits the predecessor Approval; the promoted Draft must
   freeze its own ChangeSet and obtain a new Approval before enforced Commit
 
-**Status:** promotion and restart/idempotency coverage completed; concurrent
-Rebase/conflict matrix and successful approved post-resolution Commit remain.
+The existing Character/Location Rebase smoke now also proves that a promoted
+resolved sibling cannot Commit under enforced Approval before obtaining a new
+grant, then freezes its own ChangeSet, records that grant, commits the ordered
+effective Operations, advances canonical revision, reaches `committed`, and is
+read back with the same revision after reopening canonical storage.
+
+**Status:** Task N7 completed by Rebase Candidate, digest-only Conflict,
+Resolution Plan and rebuilding, Approval invalidation, atomic promotion, and
+successful approved post-resolution Commit validation.
 
 ## 14. Task N8: Conversation and OutputEvent Integration
 

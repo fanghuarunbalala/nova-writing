@@ -601,6 +601,14 @@ type InspectorSize = "closed" | "normal" | "expanded";
 - the user may close or resize the Inspector without changing domain state.
 - changing Inspector size never removes the left project and Conversation sidebar; only the remaining content width is redistributed.
 
+### 12.1 Implemented Inspector Store Foundation
+
+The shared UI now owns Inspector navigation in a dedicated immutable `InspectorStore`. Its external snapshot records the current target, local back stack, `closed` / `normal` / `expanded` size, active reviewer tab, selected UI node, and query lifecycle state without moving those concerns into `ApplicationShellStore`.
+
+Inspector targets use a small platform-neutral identity envelope until concrete domain query contracts are finalized. Async query results must identify the target key they belong to; results for a target that is no longer active are ignored, preventing stale loads from replacing newly selected Inspector content. Error and unavailable states contain stable codes only.
+
+`NovelApp` accepts an injected Inspector Store or creates a local one, and derives the Shell Inspector width from that Store unless an explicit Shell override is supplied. Opening, resizing, navigating, or closing the Inspector preserves the mounted central Conversation subtree. Renderer registration and domain query adapters remain the next Inspector checkpoint.
+
 ## 13. Referencing Inspector Content in Conversation
 
 The Inspector provides `Reference in Conversation` on eligible StoryUnits, Manuscript blocks, Character fields, Location fields, proposal operations, and task records.

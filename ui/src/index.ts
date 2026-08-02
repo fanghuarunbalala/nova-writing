@@ -3,6 +3,7 @@ export * from "./app/index.js";
 export * from "./client/index.js";
 export * from "./conversation/index.js";
 export * from "./extensions/index.js";
+export * from "./inspector/index.js";
 export * from "./platform/index.js";
 export * from "./shell/index.js";
 export * from "./state/index.js";

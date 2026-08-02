@@ -19,11 +19,19 @@ import {
   useConversationProjection,
 } from "../conversation/index.js";
 import { ConversationProjectionView } from "../conversation/view/index.js";
+import {
+  InspectorStoreProvider,
+  type InspectorStore,
+  type InspectorStoreInitialState,
+  useInspectorSnapshot,
+} from "../inspector/index.js";
 
 export interface NovelAppProps extends NovelAppProviderProps {
   readonly shell?: Omit<ApplicationShellProps, "children">;
   readonly shellStore?: ApplicationShellStore;
   readonly initialShellState?: ApplicationShellState;
+  readonly inspectorStore?: InspectorStore;
+  readonly initialInspectorState?: InspectorStoreInitialState;
   readonly children?: ReactNode;
 }
 
@@ -34,9 +42,14 @@ export function NovelApp(props: NovelAppProps) {
         store={props.shellStore}
         initialState={props.initialShellState}
       >
-        <ConnectedApplicationShell shell={props.shell}>
-          {props.children}
-        </ConnectedApplicationShell>
+        <InspectorStoreProvider
+          store={props.inspectorStore}
+          initialState={props.initialInspectorState}
+        >
+          <ConnectedApplicationShell shell={props.shell}>
+            {props.children}
+          </ConnectedApplicationShell>
+        </InspectorStoreProvider>
       </ApplicationShellStoreProvider>
     </NovelAppProvider>
   );
@@ -50,6 +63,7 @@ function ConnectedApplicationShell({
   readonly children?: ReactNode;
 }) {
   const snapshot = useApplicationShellSnapshot();
+  const inspectorSnapshot = useInspectorSnapshot();
   const context = shell?.context ?? {
     workspace: snapshot.workspace?.label,
     meta: snapshot.meta?.label ?? snapshot.novel?.label,
@@ -60,6 +74,7 @@ function ConnectedApplicationShell({
     ...shell,
     context,
     sidebarMode: shell?.sidebarMode ?? snapshot.sidebarMode,
+    inspectorMode: shell?.inspectorMode ?? inspectorSnapshot.mode,
   };
   if (children !== undefined || snapshot.conversation === undefined) {
     return <ApplicationShell {...shellProps}>{children}</ApplicationShell>;

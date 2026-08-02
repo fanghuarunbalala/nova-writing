@@ -2,6 +2,7 @@
 import type {
   NovelDraftSessionId,
   NovelId,
+  NovelOperationId,
 } from "../identity/index.js";
 import type {
   NovelOperationVersion,
@@ -155,6 +156,30 @@ export class NovelOperationSynchronousHandlerError extends Error {
     public readonly operationVersion: NovelOperationVersion,
   ) {
     super("Novel Operation handler must complete synchronously");
+  }
+}
+
+export class NovelOperationIdentityConflictError extends Error {
+  override readonly name = "NovelOperationIdentityConflictError";
+  readonly code = "NOVEL_OPERATION_IDENTITY_CONFLICT" as const;
+
+  constructor(
+    public readonly operationId: NovelOperationId,
+    public readonly draftSessionId: NovelDraftSessionId,
+  ) {
+    super("Novel Operation identity conflicts with durable content");
+  }
+}
+
+export class NovelDraftOperationPersistenceError extends Error {
+  override readonly name = "NovelDraftOperationPersistenceError";
+  readonly code = "NOVEL_DRAFT_OPERATION_PERSISTENCE_FAILED" as const;
+
+  constructor(
+    public readonly draftSessionId: NovelDraftSessionId,
+    public readonly operationId?: NovelOperationId,
+  ) {
+    super("Novel Draft Operation persistence failed");
   }
 }
 

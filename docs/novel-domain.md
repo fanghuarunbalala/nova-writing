@@ -666,6 +666,21 @@ stateDiagram-v2
 
 All Draft writes are represented as serializable, versioned Domain Operations. A Draft operation is not a closure, raw SQL statement, Provider request, or instruction to regenerate content later.
 
+The canonical Operation digest contract is accepted as follows:
+
+```text
+canonicalStringifyJson(complete Operation envelope)
+    -> UTF-8 bytes
+    -> SHA-256
+    -> "sha256:" + 64 lowercase hexadecimal characters
+```
+
+- The complete envelope includes `operationId`, `operationVersion`, `type`, `expected`, and `payload`.
+- Canonical JSON sorts object keys using the shared Core canonical serializer.
+- Array order is preserved and participates in the digest, including precondition order.
+- Operation producers therefore construct semantically equivalent precondition arrays in a stable order.
+- The prefixed digest is the durable identity used by the Draft Journal, ChangeSet, Commit, and Rebase protocols.
+
 ```ts
 interface NovelOperationBase {
   readonly operationId: NovelOperationId;
@@ -1565,6 +1580,6 @@ The following decisions remain outside the accepted Runtime implementation plan:
 12. The initial LeafStoryUnit ready policy and whether different Agent definitions may select stricter readiness profiles.
 13. The contextual Character and Location readiness policies for different involvement roles and which missing stable details should block a leaf StoryUnit from reaching `ready`.
 14. The concrete SQLite snapshot mechanism used by `startDraft()` and Rebase, including WAL-aware backup, validation, and crash recovery.
-15. The Draft Operation table schema, canonical digest encoding, Artifact preparation protocol, and recovery behavior for an interrupted Draft mutation or canonical Commit.
+15. The Artifact preparation protocol and recovery behavior for an interrupted canonical Commit; the Draft Operation digest encoding and atomic Draft Journal behavior are resolved by Task N4.
 16. Draft staging retention limits, terminal-session cleanup timing, and whether selected committed or rolled-back Drafts may be retained for diagnostics without becoming authoritative history.
 17. The Agent-facing Tool grouping and per-Model or View-oriented read, overwrite-write, and delete schemas; Section 12 intentionally defines only the application boundary those Tools must call.

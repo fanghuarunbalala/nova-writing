@@ -311,9 +311,7 @@ One short Draft SQLite transaction validates an Operation, records it, applies i
 
 Cover protocol immutability, JSON-only payload admission, branded Operation versions, precondition validation, duplicate registration, missing handlers, and synchronous Handler enforcement.
 
-### N4-F Partial Delivery
-
-N4-A and N4-B are implemented:
+### N4-F Delivered
 
 - immutable versioned Domain Operation envelopes with branded Operation IDs and Operation versions
 - discriminated entity-exists, entity-absent, entity-version, and field-digest preconditions
@@ -322,12 +320,14 @@ N4-A and N4-B are implemented:
 - asynchronous public Executor boundary whose transaction-facing Handler must complete synchronously
 - fixed payload-free failures for invalid Operations, duplicate registration, missing handlers, and asynchronous Handler implementations
 - focused compile-time brand separation and runtime protocol/registry smoke coverage
+- accepted canonical Operation digest over the complete envelope using shared canonical JSON, UTF-8, SHA-256, and `sha256:<64 lowercase hexadecimal characters>`
+- Draft-local `draft_metadata`, ordered `draft_operations`, and durable `draft_outbox` control tables initialized on every new or reset snapshot
+- atomic duplicate detection, Operation Journal append, synchronous Handler application, metadata advancement, and Outbox insertion in one short SQLite transaction
+- same Operation ID and Digest idempotency, with conflicting durable content rejected by a fixed identity-conflict failure
+- per-Draft asynchronous Writer queues that preserve FIFO order, permit independent Drafts, and remain usable after a rejected write
+- restart-safe sequence continuation and focused coverage for canonical Digest validation, duplicate identity, ordering, transaction rollback, post-failure recovery, restart recovery, and redacted logs using private test Operations
 
-N4-C and N4-D remain pending because the exact Operation digest text encoding is still explicitly unresolved in `docs/novel-domain.md`. Existing Core code uses both raw lowercase SHA-256 hex and `sha256:<hex>` forms, so the format cannot be selected by precedent alone.
-
-**Status:** N4-A and N4-B completed; N4-C and N4-D pending the recorded digest decision.
-
-Cover immutability, registration, duplicate identity, ordering, transaction rollback, restart recovery, and log redaction with a private test Operation rather than a premature public Novel model.
+**Status:** completed by the focused Domain Operation Engine commit.
 
 ## 11. Task N5: Character and Location Vertical Slice
 
@@ -501,5 +501,6 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
 - Task N1 is completed by the focused Novel foundation commit.
 - Task N2 is completed by the focused canonical Novel Store commit.
 - Task N3 is completed by the focused durable Draft Session commit.
-- Task N4 is the next implementation task.
+- Task N4 is completed by the focused Domain Operation Engine commit.
+- Task N5 is the next implementation task.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

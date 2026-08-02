@@ -71,6 +71,10 @@ export class NovelOperationExecutor<TContext> {
   constructor(private readonly registry: NovelOperationRegistry<TContext>) {}
 
   async execute(context: TContext, operation: NovelOperation): Promise<void> {
+    this.executeSynchronous(context, operation);
+  }
+
+  executeSynchronous(context: TContext, operation: NovelOperation): void {
     const captured = captureNovelOperation(operation);
     const result = this.registry.resolve(captured).apply(context, captured);
     if (result !== undefined) {

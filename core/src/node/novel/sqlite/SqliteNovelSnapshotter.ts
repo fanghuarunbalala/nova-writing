@@ -31,6 +31,7 @@ import {
   NOVEL_DATABASE_FAILURE,
   NovelDatabaseError,
 } from "./NovelDatabaseErrors.js";
+import { initializeNovelDraftSqliteSchema } from "./NovelDraftSqliteSchema.js";
 
 const SNAPSHOT_MANIFEST_SCHEMA_VERSION = 1 as const;
 
@@ -253,6 +254,7 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
       source.close();
     }
     assertSnapshotDatabase(targetPath, session.novelId, session.baseRevision);
+    initializeNovelDraftSqliteSchema(targetPath, session);
   }
 
   private async writeManifest(

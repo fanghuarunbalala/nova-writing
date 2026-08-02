@@ -2628,6 +2628,39 @@ Questions to resolve before implementation:
 9. Which messages require durable acknowledgement?
 10. How are incompatible protocol versions rejected?
 
+Accepted Task 6A decisions:
+
+1. The initial local process transport is bounded JSONL over stdio. Child stdout is protocol-only, stderr is never treated as protocol or persisted as raw diagnostic data, and every decoded Frame is schema-validated before use.
+2. The initial placement model is one child process per active Runtime instance. A future multi-Runtime worker pool must remain hidden behind `ConversationRuntimePlacement`.
+3. Provider clients and credential access belong to the child composition root. Credentials, Provider clients, Tool handlers, callbacks, and environment contents never cross IPC or enter `ConversationRuntimeBootstrap`.
+4. Heartbeats are planned at two-second intervals, with three missed intervals marking the process unhealthy and a five-second graceful termination window before forced termination. Heartbeat implementation remains scoped to 6A-G.
+5. Task 6A performs no automatic Runtime restart. A later activation may create a new Runtime instance, but existing `recovery_required` behavior remains final while non-terminal Run/Turn crash semantics are unresolved.
+6. RPC duplicate detection binds `sessionId + requestId`, with exact-response replay for the same request fingerprint and protocol conflict for changed content. Durable domain identities remain the final idempotency boundary.
+7. Pending Approval state may be reconstructed from durable Events. Active Provider or Tool execution is never resumed or automatically retried after process loss, and unknown side effects remain blocked by recovery policy.
+8. IPC uses separate bounded Control and Data queues, one ordered writer per direction, explicit stream backpressure, and reserved Control capacity. Durable frames are never silently dropped.
+9. Only Journal append acknowledgement is a durable acknowledgement. Runtime start, dispatch, cancellation, and shutdown responses acknowledge protocol acceptance or readiness; business completion remains observable through durable Events or Runtime exit.
+10. Startup uses explicit protocol-range negotiation. No compatible version produces a redacted rejection Frame and immediate connection termination; subsequent Frames bind the selected protocol version and Session ID.
+
+Task 6A is implemented as separately reviewable steps:
+
+- 6A-A: provider-neutral Frame protocol, version negotiation, strict capture, safe errors, and protocol validation
+- 6A-B: asynchronous request/response Peer, deduplication ledger, cancellation, and bounded in-memory channel validation
+- 6A-C: Node JSONL stdio connection, incremental decoding, ordered writes, Frame limits, and stream backpressure
+- 6A-D: child-process Runtime Placement, process supervisor, placement-neutral Handle, and safe exit normalization
+- 6A-E: child Runtime entrypoint, handshake, Bootstrap, and internal Runtime construction
+- 6A-F: narrow Runtime persistence Port RPC and durable Journal acknowledgement
+- 6A-G: heartbeat, health state, cancellation, graceful shutdown, and crash behavior
+- 6A-H: full Host-to-child integration validation and Checkpoint 6A closure
+
+Task 6A-A delivered:
+
+- `RuntimeIpcHelloFrame`, `RuntimeIpcWelcomeFrame`, and `RuntimeIpcRejectedFrame` for explicit protocol-family and supported-range negotiation
+- immutable Request, Response, and Notification Frames bound to protocol version, Session identity, request or notification identity, method, and JSON-safe payload
+- a one-MiB logical Frame limit and strict rejection of unknown fields, accessors, symbols, sparse or extended arrays, cyclic values, non-finite numbers, and non-JSON payloads
+- redacted `RuntimeIpcErrorSnapshot`, stable protocol and remote errors, and safe error identities without raw payloads, messages, stacks, causes, stderr, paths, or credentials
+- deterministic highest-common-version selection and canonical exact-request comparison for the future duplicate-request ledger
+- provider-neutral public declarations with no Node process, Pi, Provider, Tool handler, callback, Promise transport, or `AbortSignal` coupling
+
 Expected deliverables after approval:
 
 - transport interfaces
@@ -2764,6 +2797,6 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Runtime Task 0 through Task 5B are implemented and committed. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path.
+Runtime Task 0 through Task 5B and Task 6A-A are implemented and committed. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary without starting a process.
 
-The next documented Runtime step is Task 6A: IPC and Process Management. It is outside the Task 5B implementation scope and begins only as a separate reviewed step.
+The next documented Runtime step is Task 6A-B: asynchronous request/response Peer, exact duplicate detection, cancellation, bounded queues, and in-memory transport validation. It does not implement JSONL stdio or child processes.

@@ -22,6 +22,7 @@ export * from "./agent/index.js";
 export * from "./context/index.js";
 export * from "./execution/index.js";
 export * from "./interaction/index.js";
+export * from "./ipc/index.js";
 export * from "./message/index.js";
 export * from "./nudge/index.js";
 export * from "./policy/index.js";

@@ -5262,6 +5262,8 @@ sequenceDiagram
 
 ## 24. Subprocess and IPC Architecture
 
+The existing public `ConversationProxy` remains the client/API Transport implementation of `Conversation`; Task 6A does not introduce a second proxy with the same name. Process placement is represented below the Host boundary by `ConversationProcessSupervisor` and a future `ChildProcessConversationRuntimeHandle` implementing the existing `ConversationRuntimeHandle` Port.
+
 ```mermaid
 flowchart LR
     subgraph Parent["Parent / Host Process"]
@@ -5346,6 +5348,57 @@ runtime.cancelTool
 interaction.resolve
 runtime.shutdown
 ```
+
+### 24.1 Implemented Runtime IPC Protocol
+
+Task 6A-A defines a provider-neutral, transport-independent Frame protocol under `core/src/runtime/ipc/protocol`. It does not open streams, spawn processes, construct Providers, or change the public Conversation API.
+
+The first protocol family and supported range are:
+
+```text
+protocolFamily: novel.runtime.ipc
+minimumVersion: 1
+maximumVersion: 1
+maximum logical Frame size: 1 MiB
+```
+
+Handshake Frames do not assume a compatible selected version:
+
+```mermaid
+sequenceDiagram
+    participant Parent
+    participant Child
+
+    Child->>Parent: hello(protocol family, supported range, process nonce)
+    alt compatible range
+        Parent->>Child: welcome(selected version, session ID, process nonce)
+    else incompatible range
+        Parent->>Child: rejected(supported range, process nonce)
+        Parent--xChild: close connection
+    end
+```
+
+After `welcome`, every Request, Response, and Notification binds the selected protocol version and Session ID. Requests bind a Request ID, method, and JSON-safe payload. Notifications use a separate Notification ID. Responses are a strict success-or-error union correlated to one Request ID.
+
+Frame capture is defensive and immutable. Unknown fields, accessors, symbols, non-plain objects, sparse or extended arrays, cycles, non-finite numbers, unsupported protocol versions, malformed identities, invalid methods, and oversized Frames are rejected before transport ownership. Captured payloads are cloned and deeply frozen so caller mutation cannot change queued data.
+
+The protocol error shape intentionally has no raw message or details field:
+
+```ts
+interface RuntimeIpcErrorSnapshot {
+  readonly code: string;
+  readonly category:
+    | "validation"
+    | "protocol"
+    | "conflict"
+    | "cancelled"
+    | "unavailable"
+    | "internal";
+  readonly retryable: boolean;
+}
+```
+
+`sameRuntimeIpcRequest()` performs canonical exact-request comparison without exposing a payload fingerprint. Task 6A-B will use this boundary in a bounded `sessionId + requestId` completion ledger. Task 6A-A intentionally does not implement request execution, queues, cancellation, stream framing, JSONL, heartbeat, process placement, or restart behavior.
 
 ## 25. Subagent Architecture
 

@@ -2420,6 +2420,16 @@ Task 5A-A delivered:
 
 Task 5A-A explicitly excludes Registry assembly, duplicate resolution, YAML Group manifests, Registry Views, Pi conversion, argument execution, Tool-error normalization, permission, approval, sandboxing, retry, trace persistence, Artifact materialization, and concrete Tools.
 
+Task 5A-B delivered:
+
+- a mutable `ToolRegistryAssembler` that defensively captures registrations, supports atomic Registry merge, and permanently closes after its idempotent `freeze()` operation
+- an immutable `ToolRegistry` snapshot with `size`, `has`, optional `get`, strict `require`, and frozen deterministic Tool-name ordering
+- global duplicate-name rejection across direct registration, Registry construction, and merge without version-based replacement or load-order override
+- stable Registry failure codes for duplicate Tool, closed assembly, and unknown Tool lookup while retaining only validated Tool identity
+- focused compile-time and runtime coverage for immutable public queries, deterministic order, merge atomicity, source isolation, closed assembly, and safe failures
+
+Task 5A-B explicitly excludes YAML Group manifests, Registry Views, Pi conversion, argument execution, Tool-error normalization, permission, approval, sandboxing, retry, trace persistence, Artifact materialization, and concrete Tools.
+
 Expected deliverables after approval:
 
 - core-owned Tool types

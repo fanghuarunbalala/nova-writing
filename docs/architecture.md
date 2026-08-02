@@ -4913,13 +4913,17 @@ classDiagram
         +ToolHandler handler
     }
 
-    class ToolRegistry {
+    class ToolRegistryAssembler {
         +register(RegisteredTool)
-        +get(name)
-        +list()
-        +createView(policy)
         +merge(registry)
-        +freeze()
+        +freeze() ToolRegistry
+    }
+
+    class ToolRegistry {
+        +has(name)
+        +get(name)
+        +require(name)
+        +list()
     }
 
     class ToolRegistryView {
@@ -4933,7 +4937,8 @@ classDiagram
 
     ToolDescriptor --> RegisteredTool
     ToolHandler --> RegisteredTool
-    RegisteredTool --> ToolRegistry
+    RegisteredTool --> ToolRegistryAssembler
+    ToolRegistryAssembler --> ToolRegistry
     ToolRegistry --> ToolRegistryView
     PiToolAdapter --> RegisteredTool
 ```
@@ -4950,7 +4955,7 @@ YAML Tool Group manifests contain only:
 
 `groupId` is the stable key. Human-readable `label` is not used as an identity key.
 
-`ToolRegistry` is mutable only during assembly and becomes immutable after `freeze()`. Tool names are globally unique inside one Registry. Duplicate registration and merge conflicts fail explicitly; load order never replaces an existing Tool.
+`ToolRegistryAssembler` is mutable only during assembly. Its idempotent `freeze()` operation captures one immutable `ToolRegistry` snapshot and permanently closes that Assembler to registration or merge. Tool names are globally unique inside one Registry. Duplicate registration and merge conflicts fail explicitly; merge preflight is atomic and load order never replaces an existing Tool. Registry listing is ordered by stable Tool name and does not depend on registration or merge order.
 
 `ToolRegistryView` is an immutable Agent-facing capability view. It begins with the union of selected Tool Groups, applies an optional allowlist, and then applies a denylist. Deny has final precedence. Unknown Group or Tool identities fail rather than being silently ignored.
 

@@ -4781,6 +4781,12 @@ Validation failure never activates or replaces the previous Checkpoint. Below th
 
 `RuntimePolicyEngine` is pure evaluation. `RuntimeEffectCoordinator` serializes side effects. The first accepted policy effects are `NudgeEffect` and `ContextCompactionEffect`; hard admission rejection is an execution guard rather than an Effect.
 
+The first implemented Policy phase is only `before_provider_call`. `RuntimePolicyState` is an immutable Conversation-owned input to evaluation; its initial Compaction state records the last automatic activation timestamp and the estimated new uncompacted tokens since that activation. The Engine evaluates matching Policies in registration order and returns immutable Effects without executing them.
+
+`ContextPressurePolicy` emits no Effect below the Compaction request threshold. At or above the request threshold it emits one `ContextCompactionEffect` unless automatic hysteresis suppresses the attempt. Reaching the hard candidate boundary bypasses hysteresis, while an irreducible floor already at the hard boundary emits no Compaction Effect because the separate admission guard must reject without spending a Compactor call.
+
+Each Conversation owns one `RuntimeEffectCoordinator`. Concurrent batches enter one Promise-tail lane, Effects inside a batch execute in their original order, and a rejected operation never poisons the next batch. The first typed routes are injected handlers for `NudgeEffect` and `ContextCompactionEffect`; concrete Nudge scheduling metadata and Compaction Manager orchestration remain outside the Coordinator contract.
+
 ```mermaid
 sequenceDiagram
     participant Pi as Pi Agent Loop
@@ -5389,6 +5395,7 @@ Currently implemented skeletons include:
 - deterministic Nudge selection, template rendering, pending lifecycle, restart-normalized private Snapshots, and redacted public lifecycle Events
 - provider-neutral Nudge Provider-call coordination with private Snapshot commit ordering and retry-stable delivery Event identities
 - Pi one-shot System Prompt Overlay integration through an exact dispatch-aware private StreamFn contract without canonical Message projection
+- deterministic before-Provider-call Runtime Policy evaluation, Context-pressure Compaction requests with automatic hysteresis, and Conversation-serialized typed Nudge/Compaction Effect routing
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 
@@ -5397,7 +5404,6 @@ Not yet implemented:
 - ConversationProxy implementation
 - process supervisor
 - InteractionCoordinator and Approval events
-- RuntimePolicyEngine and RuntimeEffectCoordinator
 - ContextCompactionManager and ContextCheckpoint
 - ContextProjectionPlanner, ContextCheckpoint-aware ContextCompiler, and per-call overlays
 - durable ArtifactStore, oversized User-content staging, and Artifact-reference recovery

@@ -2287,6 +2287,23 @@ Task 4C-C explicitly excludes:
 - semantic completeness or Novel consistency validation, which remains an optional future validator port
 - actual token estimation, Compactor invocation, Policy state, duplicate-attempt persistence, Checkpoint Store, Projection planning, Provider application, and OutputEvents
 
+Task 4C-D delivered:
+
+- public provider-neutral `RuntimePolicyPhase`, `RuntimePolicyContext`, Conversation-owned `RuntimePolicyState`, `RuntimePolicy`, `RuntimePolicyEffect`, and `ContextCompactionEffect` contracts with the first accepted phase limited to `before_provider_call`
+- immutable Policy boundary capture with exact Conversation, Run, Provider-call, timestamp, Context-pressure, Nudge, Compaction-trigger, and derived token-boundary validation
+- deterministic registration-order `RuntimePolicyEngine` evaluation that never executes Effects, rejects duplicate Policies and cross-identity Effects, and exposes only fixed safe failures
+- pure `ContextPressurePolicy` behavior that requests Compaction at the 82% boundary, applies `max(10%, 8,192)` automatic hysteresis, bypasses hysteresis when the 92% boundary would otherwise be crossed, and avoids a Compaction Effect when the irreducible floor already reaches the hard boundary
+- Conversation-owned `RuntimeEffectCoordinator` serialization with ordered per-batch execution, rejected-operation queue recovery, and typed handler routing limited to existing `NudgeEffect` and new `ContextCompactionEffect`
+- structured `info`/`debug` execution traces and fixed redacted failures without Context content, Nudge parameters, raw handler errors, stacks, or causes
+- focused coverage for threshold behavior, token arithmetic, immutable effects, deterministic Policy ordering, duplicate rejection, effect identity validation, serial routing, queue recovery, and log redaction
+
+Task 4C-D explicitly excludes:
+
+- actual Compactor invocation, Checkpoint persistence or activation, duplicate-attempt persistence, source digest calculation, and Compaction lifecycle OutputEvents, which belong to Task 4C-E and Task 4C-G
+- Context Projection planning, recent-window degradation, Context rendering, hard-admission enforcement, and Pi Provider-call integration, which belong to Task 4C-F and Task 4C-G
+- concrete Nudge scheduling metadata or lifecycle persistence inside the Effect Coordinator; composition must adapt `NudgeEffect` to the already accepted Nudge Manager boundary
+- additional Runtime Policy phases or Effect kinds, Tool/Approval policies, crash recovery, Provider/model switching, and Novel-specific behavior
+
 Task 4C explicitly excludes until their own implementation steps:
 
 - concrete filesystem, SQLite, or object-backed `ArtifactStore`; Artifact quota, retention, and garbage collection

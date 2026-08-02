@@ -690,6 +690,18 @@ Canonical Draft lifecycle writes delivered:
 **Status:** Draft create/rollback lifecycle writers completed; Rebase, Conflict,
 promotion, and Recovery lifecycle writers remain before N8-C.
 
+Canonical Rebase lifecycle writes delivered:
+
+- candidate registry insertion and `rebase.prepared` are atomic
+- resolved sibling registry insertion and `rebase.resolved` are atomic
+- source transition, promoted Draft insertion, promotion timestamp, and
+  `rebase.promoted` share the promotion transaction
+- registry failure rolls back its lifecycle Record; exact promotion retry does
+  not create a second Event identity
+
+**Status:** canonical Rebase lifecycle writers completed; candidate-local
+Conflict and Resolution lifecycle writers are the next N8-B step.
+
 ### N8-C Outbox Dispatcher
 
 Dispatch canonical and Draft outbox records idempotently through the accepted Conversation Output publisher and Runtime Journal boundary.

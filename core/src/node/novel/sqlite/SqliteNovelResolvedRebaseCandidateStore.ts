@@ -1,6 +1,8 @@
 /** Persists resolved sibling candidate identities in canonical SQLite. */
 import { DatabaseSync } from "node:sqlite";
 import {
+  NOVEL_LIFECYCLE_EVENT_TYPE,
+  NOVEL_LIFECYCLE_RECORD_VERSION,
   NovelRebaseCandidateIdentityConflictError,
   NOVEL_DRAFT_SESSION_STATUS,
   captureNovelConversationId,
@@ -22,6 +24,7 @@ import {
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
 import { NOVEL_DATABASE_FAILURE, NovelDatabaseError } from "./NovelDatabaseErrors.js";
+import { insertNovelLifecycleOutboxRecord } from "./NodeNovelLifecycleOutboxEncoder.js";
 
 interface Row {
   resolved_candidate_draft_session_id: string;
@@ -87,6 +90,7 @@ export class SqliteNovelResolvedRebaseCandidateStore
     const candidate = captureNovelResolvedRebaseCandidate(input);
     if (candidate.session.novelId !== this.novelId) throw invalid(this.workspaceId, this.novelId);
     try {
+      this.database.exec("BEGIN IMMEDIATE");
       this.database.prepare(
         `INSERT INTO novel_resolved_rebase_candidates(
            resolved_candidate_draft_session_id, novel_id, source_draft_session_id,
@@ -101,6 +105,22 @@ export class SqliteNovelResolvedRebaseCandidateStore
         candidate.resolutionPlanDigest, candidate.operationCount,
         candidate.lastOperationSequence, candidate.preparedAt,
       );
+      insertNovelLifecycleOutboxRecord(this.database, {
+        recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+        eventId: `rebase-resolved:${candidate.session.id}`,
+        eventType: NOVEL_LIFECYCLE_EVENT_TYPE.rebaseResolved,
+        novelId: candidate.session.novelId,
+        conversationId: candidate.session.ownerConversationId,
+        occurredAt: candidate.preparedAt,
+        payload: {
+          sourceDraftSessionId: candidate.sourceDraftSessionId,
+          conflictedCandidateDraftSessionId: candidate.conflictedCandidateDraftSessionId,
+          resolvedCandidateDraftSessionId: candidate.session.id,
+          candidateBaseRevision: candidate.session.baseRevision,
+          effectiveOperationCount: candidate.operationCount,
+        },
+      });
+      this.database.exec("COMMIT");
       this.logger.info("novel_resolved_candidate_store.created", {
         sourceDraftSessionId: candidate.sourceDraftSessionId,
         conflictedCandidateDraftSessionId: candidate.conflictedCandidateDraftSessionId,
@@ -108,6 +128,7 @@ export class SqliteNovelResolvedRebaseCandidateStore
         operationCount: candidate.operationCount,
       });
     } catch {
+      try { this.database.exec("ROLLBACK"); } catch {}
       const existing = this.database.prepare(
         `${SELECT} WHERE novel_id = ? AND conflicted_candidate_draft_session_id = ?`,
       ).get(this.novelId, candidate.conflictedCandidateDraftSessionId) as Row | undefined;
@@ -200,6 +221,19 @@ export class SqliteNovelResolvedRebaseCandidateStore
         throw invalid(this.workspaceId, this.novelId);
       }
       const promotion = this.readPromotion(candidate, promotedAt);
+      insertNovelLifecycleOutboxRecord(this.database, {
+        recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+        eventId: `rebase-promoted:${candidate.session.id}`,
+        eventType: NOVEL_LIFECYCLE_EVENT_TYPE.rebasePromoted,
+        novelId: candidate.session.novelId,
+        conversationId: candidate.session.ownerConversationId,
+        occurredAt: promotedAt,
+        payload: {
+          sourceDraftSessionId: candidate.sourceDraftSessionId,
+          resolvedCandidateDraftSessionId: candidate.session.id,
+          baseRevision: candidate.session.baseRevision,
+        },
+      });
       this.database.exec("COMMIT");
       return Object.freeze({ status: "promoted", promotion });
     } catch (error) {

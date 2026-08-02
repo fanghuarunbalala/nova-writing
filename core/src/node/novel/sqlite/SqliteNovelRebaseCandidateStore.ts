@@ -1,6 +1,8 @@
 /** Persists fully replayed Rebase Candidate identities in canonical SQLite. */
 import { DatabaseSync } from "node:sqlite";
 import {
+  NOVEL_LIFECYCLE_EVENT_TYPE,
+  NOVEL_LIFECYCLE_RECORD_VERSION,
   NovelRebaseCandidateIdentityConflictError,
   captureNovelConversationId,
   captureNovelDraftSession,
@@ -21,6 +23,7 @@ import {
   NOVEL_DATABASE_FAILURE,
   NovelDatabaseError,
 } from "./NovelDatabaseErrors.js";
+import { insertNovelLifecycleOutboxRecord } from "./NodeNovelLifecycleOutboxEncoder.js";
 
 interface RebaseCandidateRow {
   candidate_draft_session_id: string;
@@ -92,6 +95,7 @@ export class SqliteNovelRebaseCandidateStore
     const candidate = captureNovelRebaseCandidate(candidateInput);
     this.assertIdentity(candidate.session.novelId);
     try {
+      this.database.exec("BEGIN IMMEDIATE");
       this.database
         .prepare(
           `INSERT INTO novel_rebase_candidates(
@@ -112,12 +116,29 @@ export class SqliteNovelRebaseCandidateStore
           candidate.lastOperationSequence,
           candidate.preparedAt,
         );
+      insertNovelLifecycleOutboxRecord(this.database, {
+        recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+        eventId: `rebase-prepared:${candidate.session.id}`,
+        eventType: NOVEL_LIFECYCLE_EVENT_TYPE.rebasePrepared,
+        novelId: candidate.session.novelId,
+        conversationId: candidate.session.ownerConversationId,
+        occurredAt: candidate.preparedAt,
+        payload: {
+          sourceDraftSessionId: candidate.sourceDraftSessionId,
+          candidateDraftSessionId: candidate.session.id,
+          sourceBaseRevision: candidate.sourceBaseRevision,
+          candidateBaseRevision: candidate.session.baseRevision,
+          operationCount: candidate.operationCount,
+        },
+      });
+      this.database.exec("COMMIT");
       this.logger.info("novel_rebase_candidate_store.created", {
         sourceDraftSessionId: candidate.sourceDraftSessionId,
         candidateDraftSessionId: candidate.session.id,
         operationCount: candidate.operationCount,
       });
     } catch {
+      try { this.database.exec("ROLLBACK"); } catch {}
       const existing = this.findConflict(candidate);
       if (existing !== undefined) {
         throw new NovelRebaseCandidateIdentityConflictError(

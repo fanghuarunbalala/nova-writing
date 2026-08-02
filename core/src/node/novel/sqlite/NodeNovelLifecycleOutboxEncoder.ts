@@ -1,4 +1,5 @@
 /** Encodes one validated lifecycle Record for durable SQLite Outbox storage. */
+import type { DatabaseSync } from "node:sqlite";
 import {
   NOVEL_LIFECYCLE_RECORD_VERSION,
   canonicalizeNovelLifecycleRecord,
@@ -29,4 +30,28 @@ export function encodeNovelLifecycleOutboxRecord(
     eventDigest: digestNovelSha256Text(eventJson),
     createdAt: record.occurredAt,
   });
+}
+
+export function insertNovelLifecycleOutboxRecord(
+  database: DatabaseSync,
+  recordInput: NovelLifecycleRecord,
+): NodeNovelLifecycleOutboxEnvelope {
+  const record = captureNovelLifecycleRecord(recordInput);
+  const outbox = encodeNovelLifecycleOutboxRecord(record);
+  database.prepare(
+    `INSERT INTO novel_outbox(
+       event_id, novel_id, conversation_id, event_type, schema_version,
+       event_json, event_digest, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    outbox.eventId,
+    record.novelId,
+    record.conversationId,
+    outbox.eventType,
+    outbox.schemaVersion,
+    outbox.eventJson,
+    outbox.eventDigest,
+    outbox.createdAt,
+  );
+  return outbox;
 }

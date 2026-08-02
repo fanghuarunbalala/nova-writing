@@ -1045,6 +1045,19 @@ try {
     (await restartedCanonicalStore.getMetadata()).currentRevision,
     resolvedCommitOptions.resultRevision,
   );
+  const lifecycleDatabase = new DatabaseSync(location.canonicalDatabasePath, { readOnly: true });
+  const lifecycleRows = lifecycleDatabase.prepare(
+    "SELECT event_id, event_type, event_json FROM novel_outbox WHERE event_type LIKE 'novel.rebase.%'",
+  ).all();
+  lifecycleDatabase.close();
+  for (const [eventId, eventType] of [
+    [`rebase-prepared:${planCandidate.candidate.session.id}`, "rebase.prepared"],
+    [`rebase-resolved:${replayedResolvedCandidate.session.id}`, "rebase.resolved"],
+    [`rebase-promoted:${replayedResolvedCandidate.session.id}`, "rebase.promoted"],
+  ]) {
+    const row = lifecycleRows.find((entry) => entry.event_id === eventId);
+    assert.equal(JSON.parse(row.event_json).eventType, eventType);
+  }
   await restartedCanonicalStore.close();
   await resolvedCandidateStore.close();
   assert.equal(

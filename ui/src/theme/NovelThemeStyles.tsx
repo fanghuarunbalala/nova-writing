@@ -466,6 +466,36 @@ const NOVEL_THEME_CSS = `
   background: var(--novel-surface-quiet);
 }
 
+.novel-conversation-card {
+  width: min(620px, 100%);
+  align-self: flex-start;
+  border: 1px solid var(--novel-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--novel-surface-quiet);
+}
+
+.novel-conversation-card h3,
+.novel-conversation-card p {
+  margin: 8px 0 0;
+}
+
+.novel-conversation-card button {
+  margin-top: 12px;
+  border: 1px solid var(--novel-border-strong);
+  border-radius: 7px;
+  padding: 6px 10px;
+  color: var(--novel-text-primary);
+  background: var(--novel-surface-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.novel-conversation-card button:focus-visible {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: 1px;
+}
+
 .novel-approval-card h3,
 .novel-approval-card p {
   margin: 8px 0 0;

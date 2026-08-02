@@ -1,16 +1,26 @@
 /** Presentational Conversation view driven by one shared Hook result. */
 import type { ConversationProjectionHookResult } from "../useConversationProjection.js";
+import type {
+  ConversationCardDescriptor,
+  ConversationCardRendererRegistry,
+} from "../../card/index.js";
 import { ConversationConnectionStatus } from "./ConversationConnectionStatus.js";
 import { ConversationTimeline } from "./ConversationTimeline.js";
 
 export interface ConversationProjectionViewProps {
   readonly result: ConversationProjectionHookResult;
   readonly diagnostics?: boolean;
+  readonly cards?: readonly ConversationCardDescriptor[];
+  readonly cardRenderers?: ConversationCardRendererRegistry;
+  readonly onOpenCardInspector?: (card: ConversationCardDescriptor) => void;
 }
 
 export function ConversationProjectionView({
   result,
   diagnostics,
+  cards,
+  cardRenderers,
+  onOpenCardInspector,
 }: ConversationProjectionViewProps) {
   const controllerState = result.snapshot.controller?.state ?? result.snapshot.state;
   const runtimePresence = result.snapshot.controller?.runtimePresence;
@@ -30,6 +40,9 @@ export function ConversationProjectionView({
       <ConversationTimeline
         projection={result.snapshot.projection}
         diagnostics={diagnostics}
+        cards={cards}
+        cardRenderers={cardRenderers}
+        onOpenCardInspector={onOpenCardInspector}
       />
     </section>
   );

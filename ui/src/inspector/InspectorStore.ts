@@ -60,7 +60,7 @@ export class InspectorStore {
   constructor(initialState: InspectorStoreInitialState = {}) {
     const target = initialState.target === undefined
       ? undefined
-      : captureTarget(initialState.target);
+      : captureInspectorTarget(initialState.target);
     this.navigation = target === undefined ? [] : [target];
     this.mode = target === undefined
       ? "closed"
@@ -83,7 +83,7 @@ export class InspectorStore {
   }
 
   open(target: InspectorTarget, options: OpenInspectorOptions = {}): void {
-    const captured = captureTarget(target);
+    const captured = captureInspectorTarget(target);
     const current = this.navigation.at(-1);
     const mode = requireVisibleInspectorSize(
       options.mode ?? (this.mode === "closed" ? "normal" : this.mode),
@@ -108,7 +108,7 @@ export class InspectorStore {
     target: InspectorTarget,
     mode: Exclude<InspectorSize, "closed"> = "normal",
   ): void {
-    const captured = captureTarget(target);
+    const captured = captureInspectorTarget(target);
     const capturedMode = requireVisibleInspectorSize(mode);
     if (
       this.navigation.length === 1 &&
@@ -247,7 +247,7 @@ export class InspectorStore {
   }
 }
 
-function captureTarget(target: InspectorTarget): InspectorTarget {
+export function captureInspectorTarget(target: InspectorTarget): InspectorTarget {
   const parameters = target.parameters === undefined
     ? undefined
     : Object.freeze(

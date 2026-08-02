@@ -547,6 +547,12 @@ ui/src/card/
 
 Different Novel domains produce separate proposal cards. One card must not silently combine Outline, Manuscript, Character, and Location mutations into an indistinguishable review surface.
 
+### 11.1 Implemented Structured Card Foundation
+
+The shared UI now defines a bounded `ConversationCardDescriptor` containing only safe display text, source Event identity and Sequence, status, and an optional Inspector target. A `ConversationCardProjectorRegistry` maps exact persisted OutputEvent types to descriptors, while a separate immutable Renderer Registry selects domain-specific React presentation. Projectors never parse assistant Markdown, and descriptor validation prevents arbitrary Event payload objects from entering the card surface.
+
+`ConversationTimeline` can merge supplied Card descriptors with existing message and Approval projections in source Sequence order. The default Card renderer exposes only descriptor fields and opens its stable target through the existing Inspector boundary. Production Event-to-Card mappings remain deferred until the public Novel proposal OutputEvent taxonomy is finalized; the UI does not create a second Event subscription or expose raw OutputEvent payloads to React.
+
 ## 12. Inspector Architecture
 
 ```mermaid

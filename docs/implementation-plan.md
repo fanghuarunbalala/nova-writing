@@ -2690,6 +2690,16 @@ Task 6A-D delivered:
 - `RuntimeProcessExitNormalizer` mapping requested process exits to stopped snapshots and unexpected zero, non-zero, signal, or process failures to redacted crashed snapshots without raw stderr, messages, stacks, causes, commands, paths, or exit details
 - active and starting Conversation/Runtime identity conflict detection, activation rollback, close-time pending activation drainage, active Handle release, and deterministic two-process smoke validation
 
+Task 6A-E delivered:
+
+- strict JSON-safe Bootstrap, Input reference, Shutdown, and acknowledgement codecs with exact fields, immutable reconstruction, identity validation, timestamp and Sequence validation, and no Provider, Tool, prompt, credential, callback, or process data
+- Child-first Hello and Parent Welcome/Rejected orchestration with protocol-range negotiation, nonce echo validation, selected-version and Session binding, and immediate redacted rejection of incompatible protocol ranges
+- `ParentRuntimeChildEndpointFactory` implementing the 6A-D Endpoint Factory seam, creating the Session Peer only after handshake and returning a Placement Handle only after `runtime.bootstrap` successfully constructs and starts the Child Runtime
+- Parent command mapping for `runtime.dispatch_input` and `runtime.shutdown`, strict acknowledgement validation, Control-lane Bootstrap/Shutdown requests, and Parent connection closure only after Shutdown acknowledgement
+- serialized `RuntimeChildEndpoint` request handling with one-shot Bootstrap, Child-local `RuntimeChildCompositionFactory`, Runtime identity verification, dispatch and shutdown state gates, safe request error mapping, and unexpected Runtime exit observation
+- `RuntimeChildEntrypoint` and `runNodeRuntimeChildEntrypoint()` for protocol-only stdio startup; Provider clients and credentials remain entirely inside the injected Child composition root and never cross IPC
+- real child-process validation of Hello → Welcome → Bootstrap → Dispatch → Shutdown → process exit, incompatible-version rejection, strict payload rejection, immutable Bootstrap capture, and workdir/path/log redaction
+
 Expected deliverables after approval:
 
 - transport interfaces
@@ -2826,6 +2836,6 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-D are implemented. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, Task 6A-B adds the asynchronous in-memory Peer, Task 6A-C binds that Port to bounded Node JSONL streams, and Task 6A-D adds one-process-per-Runtime placement and safe process ownership without constructing the Child Runtime.
+Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-E are implemented. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, Task 6A-B adds the asynchronous in-memory Peer, Task 6A-C binds that Port to bounded Node JSONL streams, Task 6A-D adds one-process-per-Runtime placement, and Task 6A-E completes negotiated Parent/Child startup and Child-local Runtime construction.
 
-The next documented Runtime step is Task 6A-E: Parent/Child handshake orchestration, Runtime Bootstrap transfer after version negotiation, a Child endpoint, and injected Child Runtime composition. It does not expose generic persistence or implement heartbeat and termination policy yet.
+The next documented Runtime step is Task 6A-F: a narrow persistence RPC Port for Journal and Message reads, Runtime state load, and durable Journal Output append acknowledgement. It must not expose generic SQL, arbitrary filesystem access, or Store paths.

@@ -5515,6 +5515,64 @@ The Supervisor reserves both Conversation ID and Runtime instance ID before asyn
 
 Task 6A-D provides ownership cleanup but intentionally does not implement handshake, Runtime construction, persistence RPC, heartbeat health, the five-second graceful termination window, forced-kill escalation, cancellation routing, or restart. Those remain Task 6A-E through Task 6A-G.
 
+### 24.5 Implemented Negotiated Child Runtime Startup
+
+Task 6A-E fills the Endpoint Factory seam from 6A-D. The Child always speaks first with `hello`; the Parent selects the highest compatible protocol version, echoes the Child process nonce in `welcome`, binds a new Session ID, and only then creates a `RuntimeIpcPeer`. An incompatible range receives one redacted `rejected` Frame and the connection closes.
+
+```mermaid
+sequenceDiagram
+    participant Supervisor as Parent Supervisor
+    participant Parent as Parent Endpoint Factory
+    participant Child as Child Entrypoint
+    participant Endpoint as Child Endpoint
+    participant Factory as Child Composition Factory
+    participant Runtime as ConversationRuntime
+
+    Supervisor->>Parent: connect(Bootstrap, JSONL Connection)
+    Child->>Parent: hello(range, process nonce)
+    alt compatible protocol
+        Parent->>Child: welcome(version, Session ID, nonce)
+        Parent->>Endpoint: runtime.bootstrap(Bootstrap)
+        Endpoint->>Factory: create(Bootstrap)
+        Factory-->>Endpoint: Runtime
+        Endpoint->>Runtime: start(Bootstrap)
+        Runtime-->>Endpoint: startup result
+        Endpoint-->>Parent: accepted identities + throughSequence
+        Parent-->>Supervisor: Runtime child endpoint
+    else incompatible protocol
+        Parent->>Child: rejected(local range, nonce)
+        Parent--xChild: close
+    end
+
+    Supervisor->>Parent: dispatchInput(reference)
+    Parent->>Endpoint: runtime.dispatch_input(reference)
+    Endpoint->>Runtime: dispatchInput(reference)
+    Endpoint-->>Parent: accepted
+
+    Supervisor->>Parent: shutdown(reason)
+    Parent->>Endpoint: runtime.shutdown(reason)
+    Endpoint->>Runtime: shutdown(reason)
+    Endpoint-->>Parent: accepted
+    Parent--xChild: close Session after ACK
+```
+
+Handshake Frames remain outside `RuntimeIpcPeer`; the Peer starts only after the selected version, Session ID, and nonce have been validated. Child rejection also validates the echoed nonce, preventing a stale or unrelated handshake response from being accepted. No timeout is introduced in this step; heartbeat and startup health deadlines remain Task 6A-G.
+
+Bootstrap, Input reference, Shutdown request, Bootstrap acknowledgement, and command acknowledgement use strict codecs. Every codec rejects unknown or missing fields, accessors, symbols, non-plain records, invalid identities, invalid Event Types, invalid timestamps, unsafe Sequence numbers, mismatched Workspace or Conversation identities, and unsupported lifecycle values. Captured values are rebuilt as immutable Core contracts before Runtime construction. The Bootstrap can carry the accepted Workspace root and Agent Binding, but never Store paths, credentials, Provider clients, prompts, Tool handlers, callbacks, Event payload copies, process identities, or environment contents.
+
+`RuntimeChildCompositionFactory` is invoked only inside the Child after Bootstrap validation. Its implementation is the Child composition root that resolves the Agent definition and constructs Provider, Tool, Context, Nudge, Interaction, and Runtime dependencies using Child-local configuration and credential access. The Parent knows only the serializable Bootstrap and the provider-neutral command endpoint.
+
+`RuntimeChildEndpoint` serializes requests through one state machine:
+
+```text
+awaiting_bootstrap → starting → online → stopping → exited
+                                      ↘ closed
+```
+
+Bootstrap is one-shot. The constructed Runtime must match the Bootstrap Conversation and Runtime instance identities, and `runtime.bootstrap` acknowledges only after `Runtime.start()` succeeds. Dispatch is accepted only while online. Shutdown is sent on the Control lane and acknowledges only after `Runtime.shutdown()` succeeds. The Parent then closes the Session, allowing the stdio Child entrypoint to finish and the supervised process to exit. Unexpected Runtime exit closes the Peer so the Parent observes a process crash rather than an implicit restart.
+
+Task 6A-E does not provide Journal, Message, Runtime-state, Artifact, or generic storage RPC; it also does not add heartbeat, health state, five-second graceful termination, forced kill, automatic restart, or Subagent behavior. Narrow persistence access is Task 6A-F, while health and termination policy remain Task 6A-G.
+
 ## 25. Subagent Architecture
 
 Main Agent and Subagent both use Conversation.
@@ -5699,7 +5757,6 @@ The first-version protocol no longer contains `ResumeInputEvent`.
 Not yet implemented:
 
 - ConversationProxy implementation
-- Child Runtime entrypoint, negotiated Parent endpoint, and internal composition root
 - narrow Runtime persistence RPC and durable Journal append acknowledgement
 - heartbeat health, cancellation routing, and graceful termination escalation
 - concrete restart-safe ContextCheckpointStore and canonical Journal/Message source adapters

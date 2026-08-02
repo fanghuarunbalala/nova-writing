@@ -7,6 +7,7 @@ import { OUTPUT_EVENT_TYPE } from "../OutputEventType.js";
 const Id = Type.String({ minLength: 1, maxLength: 160 });
 const Count = Type.Integer({ minimum: 0 });
 const Revision = Id;
+const Digest = Type.String({ pattern: "^sha256:[0-9a-f]{64}$" });
 const DraftStatus = Type.Union([
   Type.Literal("active"), Type.Literal("awaiting-approval"),
   Type.Literal("rebasing"), Type.Literal("conflicted"),
@@ -48,6 +49,7 @@ export function registerNovelLifecycleOutputEventSchemas(
     [OUTPUT_EVENT_TYPE.novelConflictDetected, payload({ draftSessionId: Id, conflictId: Id, operationId: Id, kind: ConflictKind })],
     [OUTPUT_EVENT_TYPE.novelConflictResolved, payload({ draftSessionId: Id, conflictId: Id, strategy: ResolutionStrategy })],
     [OUTPUT_EVENT_TYPE.novelRecoveryCompleted, payload({ scope: Type.Union([Type.Literal("draft"), Type.Literal("commit"), Type.Literal("rebase"), Type.Literal("projection")]), outcome: Type.Union([Type.Literal("recovered"), Type.Literal("cleaned"), Type.Literal("verified"), Type.Literal("rebuilt")]), affectedCount: Count })],
+    [OUTPUT_EVENT_TYPE.novelApprovalRequested, Type.Object({ requestVersion: Type.Literal(1), approvalRequestId: Type.String({ minLength: 1, maxLength: 255 }), novelId: Id, draftSessionId: Id, baseRevision: Revision, changeSetDigest: Digest, operationIds: Type.Array(Id, { uniqueItems: true }) }, { additionalProperties: false })],
   ] as const;
   for (const [eventType, payloadSchema] of definitions) {
     registry.register({

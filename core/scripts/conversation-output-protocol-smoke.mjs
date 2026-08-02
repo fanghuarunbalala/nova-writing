@@ -46,6 +46,7 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "novel.conflict.detected",
   "novel.conflict.resolved",
   "novel.recovery.completed",
+  "novel.approval.requested",
 ]);
 
 const previous = {

@@ -33,6 +33,7 @@ export const OUTPUT_EVENT_TYPE = {
   novelConflictDetected: "novel.conflict.detected",
   novelConflictResolved: "novel.conflict.resolved",
   novelRecoveryCompleted: "novel.recovery.completed",
+  novelApprovalRequested: "novel.approval.requested",
 } as const;
 
 export type CoreOutputEventType =

@@ -823,6 +823,21 @@ cross-source coordination completed. N8-D Approval Bridge is next.
 
 Bind asynchronous Approval requests and responses to exact ChangeSet digests without holding SQLite transactions while waiting.
 
+Novel Approval request protocol delivered:
+
+- a content-safe immutable request binds one Conversation, Draft Session, base
+  revision, frozen ChangeSet digest, and ordered Operation identities
+- the request ID is deterministically derived from Draft identity and ChangeSet
+  digest, so retrying the same review request produces the same OutputEvent ID
+- `novel.approval.requested` exposes only review identities and is registered in
+  the strict Core OutputEvent Schema Registry
+- clients respond through the existing provider-neutral
+  `ApprovalDecisionInputEvent`, using the request ID and ChangeSet digest as the
+  correlation pair; Tool Approval payloads are not reused
+
+**Status:** N8-D Approval request and OutputEvent protocol completed; the
+asynchronous pending-request bridge and stale-decision validation are next.
+
 ### N8-E Validation
 
 Cover Event ordering, retry-stable IDs, dispatcher restart, duplicate delivery, Approval staleness, Conversation identity, and redacted logs.

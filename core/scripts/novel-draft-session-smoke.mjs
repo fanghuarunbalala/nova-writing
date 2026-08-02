@@ -21,6 +21,7 @@ import {
   NodeWorkspaceStoreLocator,
   SqliteNovelCanonicalStore,
   SqliteNovelDraftStore,
+  SqliteNovelLifecycleRecordWriter,
   SqliteNovelSnapshotter,
 } from "../dist/node/index.js";
 
@@ -110,6 +111,10 @@ try {
     logger,
   });
   const clock = new SequenceClock();
+  const lifecycleWriter = new SqliteNovelLifecycleRecordWriter(
+    location,
+    canonical.novelId,
+  );
   const service = new NovelDraftSessionService({
     canonicalStore,
     draftStore,
@@ -121,6 +126,7 @@ try {
       "draft_unproven_mismatch",
     ]),
     clock,
+    lifecycleWriter,
     logger,
   });
 
@@ -152,6 +158,7 @@ try {
     draftStore,
     snapshotter,
     clock,
+    lifecycleWriter,
     logger,
   });
   const restarted = await recovery.recoverDraftSessions();
@@ -161,6 +168,21 @@ try {
     interruptedResetDraft.id,
     unprovenMismatchDraft.id,
   ]);
+  const duplicateRecovery = await recovery.recoverDraftSessions();
+  assert.deepEqual(duplicateRecovery.recoveredDraftSessionIds, restarted.recoveredDraftSessionIds);
+  const recoveryEventDatabase = new DatabaseSync(location.canonicalDatabasePath, { readOnly: true });
+  const recoveryEvents = recoveryEventDatabase.prepare(
+    "SELECT event_id, conversation_id, event_json FROM novel_outbox WHERE event_type = 'novel.recovery.completed'",
+  ).all();
+  recoveryEventDatabase.close();
+  assert.equal(
+    recoveryEvents.filter((row) => row.event_id === `draft-recovery:${draftA.id}`).length,
+    1,
+  );
+  assert.equal(
+    recoveryEvents.find((row) => row.event_id === `draft-recovery:${draftA.id}`).conversation_id,
+    draftA.ownerConversationId,
+  );
 
   const canonicalDatabase = new DatabaseSync(location.canonicalDatabasePath);
   canonicalDatabase.exec("CREATE TABLE reset_marker(value TEXT NOT NULL) STRICT");
@@ -220,6 +242,7 @@ try {
         snapshotter.removeDraftSnapshot(novelId, draftSessionId),
     },
     clock,
+    lifecycleWriter,
     logger,
   });
   const rejectedMismatch = await mismatchRecovery.recoverDraftSessions();

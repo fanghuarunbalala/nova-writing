@@ -67,7 +67,7 @@ export type NovelLifecycleRecord<T extends NovelLifecycleEventType = NovelLifecy
 };
 
 const EVENT_TYPES = new Set<unknown>(Object.values(NOVEL_LIFECYCLE_EVENT_TYPE));
-const SAFE_EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
+const SAFE_EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$/u;
 const CONFLICT_KINDS = new Set<unknown>(["field-modified", "entity-deleted", "entity-created", "parent-changed", "order-changed", "manuscript-block-modified", "domain-invariant"]);
 const RESOLUTION_STRATEGIES = new Set<unknown>(["keep-canonical", "keep-draft", "drop-operation", "manual"]);
 const RECOVERY_SCOPES = new Set<unknown>(["draft", "commit", "rebase", "projection"]);

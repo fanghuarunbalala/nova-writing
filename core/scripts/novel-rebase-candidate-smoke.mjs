@@ -54,6 +54,7 @@ import {
   SqliteNovelConflictStore,
   SqliteNovelDraftOperationStore,
   SqliteNovelDraftStore,
+  SqliteNovelLifecycleRecordWriter,
   SqliteNovelRebaseCandidateStore,
   SqliteNovelResolutionApplicationPlanStore,
   SqliteNovelResolvedRebaseCandidateStore,
@@ -1165,6 +1166,10 @@ try {
     snapshotter,
     rebaseCandidateStore: candidateStore,
     clock,
+    lifecycleWriter: new SqliteNovelLifecycleRecordWriter(
+      location,
+      canonical.novelId,
+    ),
     logger,
   });
   const recovered = await recovery.recoverDraftSessions();

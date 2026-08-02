@@ -728,6 +728,20 @@ Commit Recovery lifecycle delivered:
 **Status:** Commit Recovery lifecycle completed; Draft Recovery lifecycle is the
 final N8-B writer step before N8-C.
 
+Draft Recovery lifecycle delivered:
+
+- every canonical Draft whose snapshot is successfully verified records one
+  owner-routed `recovery.completed` Event with `scope=draft`
+- Event identity and timestamp derive from immutable Draft identity/creation
+  metadata, so repeated startup verification is an exact duplicate
+- recovery-triggered rollback remains covered by the Draft Store's atomic
+  `draft.rolled.back` Event
+- unregistered orphan cleanup does not fabricate a Conversation route and is
+  therefore retained in internal recovery results/log metadata only
+
+**Status:** Task N8-B lifecycle records, public events, atomic writers, and
+Recovery coverage completed. Task N8-C Outbox Dispatcher is next.
+
 ### N8-C Outbox Dispatcher
 
 Dispatch canonical and Draft outbox records idempotently through the accepted Conversation Output publisher and Runtime Journal boundary.

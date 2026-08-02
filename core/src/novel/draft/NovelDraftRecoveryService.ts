@@ -15,7 +15,12 @@ import type {
   NovelDraftStore,
   NovelRebaseCandidateStore,
   NovelSnapshotter,
+  NovelLifecycleRecordWriter,
 } from "../port/index.js";
+import {
+  NOVEL_LIFECYCLE_EVENT_TYPE,
+  NOVEL_LIFECYCLE_RECORD_VERSION,
+} from "../event/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
 
 const RECOVERABLE_DRAFT_STATUSES: readonly NovelDraftSessionStatus[] = [
@@ -32,6 +37,7 @@ export interface NovelDraftRecoveryServiceOptions {
   readonly snapshotter: NovelSnapshotter;
   readonly rebaseCandidateStore?: NovelRebaseCandidateStore;
   readonly clock: NovelClock;
+  readonly lifecycleWriter: NovelLifecycleRecordWriter;
   readonly logger?: Logger;
 }
 
@@ -165,6 +171,23 @@ export class NovelDraftRecoveryService {
       rolledBackDraftSessionIds: rolledBack,
       removedOrphanSnapshotIds: removedOrphans,
     });
+    for (const draftSessionId of result.recoveredDraftSessionIds) {
+      const session = sessions.find((value) => value.id === draftSessionId);
+      if (session === undefined) continue;
+      await this.options.lifecycleWriter.recordCanonical({
+        recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+        eventId: `draft-recovery:${session.id}`,
+        eventType: NOVEL_LIFECYCLE_EVENT_TYPE.recoveryCompleted,
+        novelId: session.novelId,
+        conversationId: session.ownerConversationId,
+        occurredAt: session.createdAt,
+        payload: {
+          scope: "draft",
+          outcome: "verified",
+          affectedCount: 1,
+        },
+      });
+    }
     this.logger.info("novel_draft_recovery.completed", {
       novelId: metadata.novelId,
       recoveredCount: result.recoveredDraftSessionIds.length,

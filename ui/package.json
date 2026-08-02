@@ -28,7 +28,8 @@
     "smoke:conversation-card-binding": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-card-binding-typecheck.tsx && node scripts/conversation-card-binding-smoke.mjs",
     "smoke:story-outline-tree-model": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/story-outline-tree-model-typecheck.ts && node scripts/story-outline-tree-model-smoke.mjs",
     "smoke:story-outline-tree": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/story-outline-tree-typecheck.tsx && node scripts/story-outline-tree-smoke.mjs",
-    "smoke:novel-change-review-shell": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-change-review-shell-typecheck.tsx && node scripts/novel-change-review-shell-smoke.mjs"
+    "smoke:novel-change-review-shell": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-change-review-shell-typecheck.tsx && node scripts/novel-change-review-shell-smoke.mjs",
+    "smoke:entity-change-reviewer": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/entity-change-reviewer-typecheck.tsx && node scripts/entity-change-reviewer-smoke.mjs"
   },
   "dependencies": {
     "@novel/core": "workspace:*"

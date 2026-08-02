@@ -1114,6 +1114,12 @@ Replacement fields display red old values and green new values. Added fields dis
 
 Current-state projections remain repairable views and are not treated as alternate Novel truth.
 
+### 22.1 Implemented Character and Location Field Reviewers
+
+Character and Location now have separate reviewer components over a validated field-Diff model. Added values render in green blocks, removed values in red blocks, modified fields present red old and green new values side by side, and unchanged values use quiet context styling. Text and list values are captured immutably and unknown fields are not forwarded into React.
+
+Optional current-state evidence is clearly labelled as a rebuildable projection, carries only safe summaries and a count of source StoryUnits in the default view, and is never presented as alternate Novel truth. Character and Location retain separate domain wrappers even though they share low-level field primitives. Query adapters, operation references, and decision controls remain later integration work.
+
 ## 23. Query Architecture
 
 The GUI reads Novel state through explicit query services and scopes.

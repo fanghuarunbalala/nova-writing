@@ -554,6 +554,121 @@ const NOVEL_THEME_CSS = `
   font-size: 11px;
 }
 
+.novel-entity-change-reviewer > header > span {
+  color: var(--novel-text-secondary);
+  font-size: 11px;
+}
+
+.novel-entity-change-reviewer > header > h3 {
+  margin: 4px 0 12px;
+  font-size: 16px;
+}
+
+.novel-entity-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.novel-entity-field-diff {
+  border: 1px solid var(--novel-border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--novel-surface-primary);
+}
+
+.novel-entity-field-diff > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.novel-entity-field-diff h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.novel-entity-field-diff > header span,
+.novel-entity-field-value > span {
+  color: var(--novel-text-secondary);
+  font-size: 10px;
+}
+
+.novel-entity-field-replacement {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.novel-entity-field-value {
+  border-radius: 6px;
+  padding: 8px 9px;
+  background: var(--novel-surface-quiet);
+}
+
+.novel-entity-field-value[data-value-tone="added"] {
+  border: 1px solid #bcd8c3;
+  background: #eff8f1;
+}
+
+.novel-entity-field-value[data-value-tone="removed"] {
+  border: 1px solid #e2c1c1;
+  background: #fff0f0;
+}
+
+.novel-entity-field-value[data-value-tone="unchanged"] {
+  border: 1px solid var(--novel-border);
+  background: var(--novel-surface-quiet);
+}
+
+.novel-entity-field-value p,
+.novel-entity-field-value ul {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.novel-entity-field-value ul {
+  padding-left: 18px;
+}
+
+.novel-entity-evidence {
+  margin-top: 16px;
+  border-top: 1px solid var(--novel-border);
+  padding-top: 14px;
+}
+
+.novel-entity-evidence > h4,
+.novel-entity-evidence > p {
+  margin: 0 0 7px;
+}
+
+.novel-entity-evidence > p,
+.novel-entity-evidence small {
+  color: var(--novel-text-secondary);
+  font-size: 11px;
+}
+
+.novel-entity-evidence article {
+  margin-top: 8px;
+  border: 1px solid var(--novel-border);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: var(--novel-surface-quiet);
+}
+
+.novel-entity-evidence article header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.novel-entity-evidence article p {
+  margin: 6px 0;
+}
+
 .novel-conversation-view {
   width: min(840px, 100%);
   margin: 0 auto;

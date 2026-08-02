@@ -19,6 +19,7 @@ export const OUTPUT_EVENT_TYPE = {
   contextCheckpointApplied: "system.context.checkpoint.applied",
   toolApprovalRequested: "system.tool.approval.requested",
   toolApprovalResolved: "system.tool.approval.resolved",
+  toolTraceRecorded: "system.tool.trace.recorded",
 } as const;
 
 export type CoreOutputEventType =

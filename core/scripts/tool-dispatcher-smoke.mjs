@@ -148,6 +148,7 @@ const pipeline = new ToolExecutionPipeline({
     maximumDetailsBytes: 64,
     maximumArtifactReferences: 2,
   },
+  traceSink: { async append() {} },
   logger: new CollectingLogger(logs),
 });
 const dispatcher = new ToolDispatcher(pipeline);

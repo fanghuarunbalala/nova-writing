@@ -32,6 +32,7 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "system.context.checkpoint.applied",
   "system.tool.approval.requested",
   "system.tool.approval.resolved",
+  "system.tool.trace.recorded",
 ]);
 
 const previous = {

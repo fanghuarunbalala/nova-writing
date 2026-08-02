@@ -5137,6 +5137,12 @@ The initial execution protocol uses a `ToolArgumentDigester` Port so the provide
 
 Approval request construction is an injected Port whose input contains Tool identity, label, description, Turn identity, and argument digest but no raw arguments. Task 5B-D intentionally performs one attempt only. Timeout races, active-call cancellation, retry eligibility, and persisted Tool Trace belong to Task 5B-E.
 
+Task 5B-E makes the Pipeline the owner of active Tool-call cancellation. Caller abort and `ToolDispatcher.cancel(toolCallId)` converge on one internal `AbortController`; when the call is waiting for Approval, cancellation first resolves that interaction as cancelled through its durable terminal Event. A Tool timeout begins only when Sandbox/Handler execution starts, because Approval already has an independent expiry protocol.
+
+Retry is evaluated after each normalized Handler attempt. A second attempt is possible only when policy permits two attempts, the Tool is explicitly idempotent, the error is explicitly retryable, execution was not cancelled, and side effects are `none`. Timeout errors are not retryable by default. `possible`, `partial`, and `completed_unknown` always stop automatic retry.
+
+Every execution stage is projected into a validated `ToolTraceRecord`. `RuntimeEventToolTraceSink` converts that record into `ToolTraceRecordedOutputEvent`, so the existing Runtime Event sink persists it in the Conversation Journal before the next security-sensitive stage advances. Trace payloads contain identity, digest, stage, attempt, timing, sizes, rules, decisions, Artifact IDs, and safe error metadata only.
+
 `LayeredToolPermissionPolicy` captures immutable rules, orders them by built-in, Workspace, then Agent Definition source, and evaluates every matching rule. A matching deny wins over ask and allow; a built-in hard deny is reported explicitly and cannot be changed by approval. No matching rule produces the synthetic `builtin.default_deny` decision.
 
 An approve-once record is represented as a `ToolApprovalGrant`, not as a general reusable permission rule. It changes an `ask` result to `allow` only when all six approval identity fields match the current captured invocation. The decision trace includes only matching rule IDs and the consumed grant ID; it never includes Tool arguments, match configuration, or approval UI data.

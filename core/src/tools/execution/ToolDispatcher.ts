@@ -1,5 +1,8 @@
 /** Validated Tool execution pipeline and its public Dispatcher facade. */
-import type { JsonValue } from "../../event/protocol/index.js";
+import {
+  canonicalStringifyJson,
+  type JsonValue,
+} from "../../event/protocol/index.js";
 import type { Logger } from "../../observability/index.js";
 import { noopLogger } from "../../observability/index.js";
 import type { InteractionCoordinator } from "../../runtime/interaction/ToolApprovalInteractionProtocol.js";
@@ -25,6 +28,9 @@ import type {
   ToolExecutionPolicy,
   ToolInvocation,
   ToolPermissionDecision,
+  ToolSideEffectStatus,
+  ToolTraceRecord,
+  ToolTraceStage,
 } from "./ToolExecutionContracts.js";
 import { ToolError } from "./ToolExecutionError.js";
 import {
@@ -35,6 +41,7 @@ import {
 import type { ToolExecutionPolicyResolver } from "./ToolExecutionPolicyResolver.js";
 import type { ToolPermissionPolicy } from "./ToolPermissionPolicy.js";
 import type { SandboxExecutor } from "./SandboxExecutor.js";
+import type { ToolTraceSink } from "./ToolTraceSink.js";
 
 export interface ToolApprovalRequestFactoryInput {
   readonly identity: ToolApprovalIdentity;
@@ -52,6 +59,32 @@ export interface ToolDispatchOptions {
   readonly progress?: ToolProgressSink;
 }
 
+export interface ToolExecutionClock {
+  now(): string;
+}
+
+export interface ToolExecutionTimer {
+  schedule(delayMs: number, callback: () => void): () => void;
+}
+
+export interface ToolTraceIdFactory {
+  create(invocation: CapturedToolInvocation): string;
+}
+
+export const TOOL_CANCEL_OUTCOME = {
+  cancelled: "cancelled",
+  alreadyCancelled: "already_cancelled",
+  notFound: "not_found",
+} as const;
+
+export type ToolCancelOutcome =
+  (typeof TOOL_CANCEL_OUTCOME)[keyof typeof TOOL_CANCEL_OUTCOME];
+
+export interface ToolCancelResult {
+  readonly toolCallId: string;
+  readonly outcome: ToolCancelOutcome;
+}
+
 export interface ToolExecutionPipelineOptions {
   readonly registryView: ToolRegistryView;
   readonly argumentDigester: ToolArgumentDigester;
@@ -61,7 +94,22 @@ export interface ToolExecutionPipelineOptions {
   readonly approvalRequestFactory: ToolApprovalRequestFactory;
   readonly sandboxExecutor: SandboxExecutor;
   readonly resultLimits: ToolResultLimits;
+  readonly traceSink: ToolTraceSink;
+  readonly clock?: ToolExecutionClock;
+  readonly timer?: ToolExecutionTimer;
+  readonly traceIdFactory?: ToolTraceIdFactory;
   readonly logger?: Logger;
+}
+
+interface ActiveToolCall {
+  readonly invocation: CapturedToolInvocation;
+  readonly traceId: string;
+  readonly controller: AbortController;
+  readonly externalSignal: AbortSignal;
+  readonly removeExternalAbort: () => void;
+  approvalRequestId?: string;
+  tool?: RegisteredTool;
+  terminalTraceRecorded: boolean;
 }
 
 export class ToolExecutionPipeline {
@@ -73,7 +121,12 @@ export class ToolExecutionPipeline {
   readonly #approvalRequestFactory: ToolApprovalRequestFactory;
   readonly #sandboxExecutor: SandboxExecutor;
   readonly #resultLimits: ToolResultLimits;
+  readonly #traceSink: ToolTraceSink;
+  readonly #clock: ToolExecutionClock;
+  readonly #timer: ToolExecutionTimer;
+  readonly #traceIdFactory: ToolTraceIdFactory;
   readonly #logger: Logger;
+  readonly #active = new Map<string, ActiveToolCall>();
 
   constructor(options: ToolExecutionPipelineOptions) {
     this.#registryView = options.registryView;
@@ -84,6 +137,10 @@ export class ToolExecutionPipeline {
     this.#approvalRequestFactory = options.approvalRequestFactory;
     this.#sandboxExecutor = options.sandboxExecutor;
     this.#resultLimits = captureResultLimits(options.resultLimits);
+    this.#traceSink = options.traceSink;
+    this.#clock = options.clock ?? SYSTEM_TOOL_EXECUTION_CLOCK;
+    this.#timer = options.timer ?? SYSTEM_TOOL_EXECUTION_TIMER;
+    this.#traceIdFactory = options.traceIdFactory ?? DEFAULT_TOOL_TRACE_ID_FACTORY;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "tool_execution_pipeline",
     });
@@ -102,43 +159,46 @@ export class ToolExecutionPipeline {
     } catch {
       throw validationError(invocationSource);
     }
-    const signal = captureSignal(options?.signal, invocation);
+    const externalSignal = captureSignal(options?.signal, invocation);
+    const active = this.#activate(invocation, externalSignal);
     this.#logger.info("runtime.tool.execution_started", logIdentity(invocation));
 
     try {
-      if (signal.aborted) throw cancelledError(invocation, "none");
+      if (active.controller.signal.aborted) throw cancelledError(invocation, "none");
       const tool = resolveTool(this.#registryView, invocation);
+      active.tool = tool;
       const executionPolicy = this.#executionPolicyResolver.resolve(tool);
       const arguments_ = captureArguments(tool, invocation);
+      await this.#trace(active, tool, "received", 1, {
+        inputBytes: byteLength(invocation.arguments),
+      });
+      await this.#trace(active, tool, "resolved", 1);
+      await this.#trace(active, tool, "validated", 1);
       const permission = this.#evaluatePermission(
         invocation,
         tool,
         executionPolicy,
       );
-      await this.#authorize(invocation, tool, executionPolicy, permission);
+      await this.#trace(active, tool, "permission_evaluated", 1, {
+        ruleIds: permission.ruleIds,
+        permissionEffect: permission.effect,
+      });
+      await this.#authorize(active, tool, executionPolicy, permission);
       assertSandboxCapability(this.#sandboxExecutor, executionPolicy, invocation, tool);
-      if (signal.aborted) throw cancelledError(invocation, "none", tool);
+      if (active.controller.signal.aborted) throw cancelledError(invocation, "none", tool);
 
       const progress = createValidatedProgressSink(
         options.progress ?? noopToolProgressSink,
         invocation,
         tool,
       );
-      const rawResult = await this.#executeSandbox(
+      const result = await this.#executeSandbox(
+        active,
         tool,
-        invocation,
         executionPolicy,
         arguments_,
-        signal,
         progress,
       );
-      const result = captureToolResult(rawResult, {
-        conversationId: invocation.conversationId,
-        toolCallId: invocation.toolCallId,
-        toolName: tool.descriptor.name,
-        toolVersion: tool.descriptor.version,
-        limits: this.#resultLimits,
-      });
       this.#logger.info("runtime.tool.execution_completed", {
         ...logIdentity(invocation, tool),
         resultBlockCount: result.content.length,
@@ -147,6 +207,20 @@ export class ToolExecutionPipeline {
       return result;
     } catch (error) {
       const normalized = normalizeToolFailure(error, invocation);
+      if (!active.terminalTraceRecorded && active.tool) {
+        const stage = normalized.category === "cancelled"
+          ? "cancelled"
+          : normalized.category === "timeout"
+            ? "timed_out"
+            : "execution_failed";
+        await this.#trace(active, active.tool, stage, 1, {
+          errorCategory: normalized.category,
+          errorCode: normalized.code,
+          retryable: normalized.retryable,
+          sideEffectStatus: normalized.sideEffectStatus,
+        });
+        active.terminalTraceRecorded = true;
+      }
       this.#logger.info("runtime.tool.execution_failed", {
         ...logIdentity(invocation),
         errorCode: normalized.code,
@@ -155,7 +229,49 @@ export class ToolExecutionPipeline {
         sideEffectStatus: normalized.sideEffectStatus,
       });
       throw normalized;
+    } finally {
+      this.#deactivate(active);
     }
+  }
+
+  async cancel(toolCallIdSource: string): Promise<ToolCancelResult> {
+    const toolCallId = safeIdentity(toolCallIdSource);
+    if (!toolCallId) {
+      return Object.freeze({
+        toolCallId: "unknown",
+        outcome: TOOL_CANCEL_OUTCOME.notFound,
+      });
+    }
+    const active = this.#active.get(toolCallId);
+    if (!active) {
+      return Object.freeze({ toolCallId, outcome: TOOL_CANCEL_OUTCOME.notFound });
+    }
+    if (active.controller.signal.aborted) {
+      return Object.freeze({
+        toolCallId,
+        outcome: TOOL_CANCEL_OUTCOME.alreadyCancelled,
+      });
+    }
+    active.controller.abort();
+    if (active.approvalRequestId) {
+      try {
+        await this.#interactionCoordinator.cancel(
+          active.approvalRequestId,
+          this.#timestamp(),
+        );
+      } catch {
+        throw internalError(
+          "TOOL_APPROVAL_CANCELLATION_FAILED",
+          active.invocation,
+          active.tool,
+        );
+      }
+    }
+    this.#logger.info("runtime.tool.cancel_requested", logIdentity(
+      active.invocation,
+      active.tool,
+    ));
+    return Object.freeze({ toolCallId, outcome: TOOL_CANCEL_OUTCOME.cancelled });
   }
 
   #evaluatePermission(
@@ -176,11 +292,12 @@ export class ToolExecutionPipeline {
   }
 
   async #authorize(
-    invocation: CapturedToolInvocation,
+    active: ActiveToolCall,
     tool: RegisteredTool,
     executionPolicy: ToolExecutionPolicy,
     permission: ToolPermissionDecision,
   ): Promise<void> {
+    const invocation = active.invocation;
     this.#logger.debug("runtime.tool.permission_evaluated", {
       ...logIdentity(invocation, tool),
       effect: permission.effect,
@@ -196,6 +313,9 @@ export class ToolExecutionPipeline {
       });
     }
     if (permission.effect === "allow") return;
+    if (active.controller.signal.aborted) {
+      throw cancelledError(invocation, "none", tool);
+    }
 
     const identity = approvalIdentity(invocation, tool);
     let request: ToolApprovalRequest;
@@ -211,10 +331,23 @@ export class ToolExecutionPipeline {
       throw internalError("TOOL_APPROVAL_REQUEST_FAILED", invocation, tool);
     }
 
-    const resolution = await this.#interactionCoordinator.request(request);
+    active.approvalRequestId = request.approvalRequestId;
+    await this.#trace(active, tool, "approval_requested", 1);
+    let resolution;
+    try {
+      resolution = await this.#interactionCoordinator.request(request);
+    } finally {
+      active.approvalRequestId = undefined;
+    }
     if (!sameApprovalIdentity(resolution.identity, identity)) {
       throw internalError("TOOL_APPROVAL_IDENTITY_MISMATCH", invocation, tool);
     }
+    await this.#trace(active, tool, "approval_resolved", 1, {
+      approvalDecision: resolution.decision,
+      ...(resolution.actorId === undefined
+        ? {}
+        : { approvalActorId: resolution.actorId }),
+    });
     if (resolution.decision === "cancelled") {
       throw cancelledError(invocation, "none", tool);
     }
@@ -254,31 +387,196 @@ export class ToolExecutionPipeline {
   }
 
   async #executeSandbox(
+    active: ActiveToolCall,
     tool: RegisteredTool,
-    invocation: CapturedToolInvocation,
     policy: ToolExecutionPolicy,
     arguments_: JsonValue,
-    signal: AbortSignal,
     progress: ToolProgressSink,
   ): Promise<ToolResult> {
-    try {
-      return await this.#sandboxExecutor.execute({
-        tool,
-        context: Object.freeze({
-          conversationId: invocation.conversationId,
-          runId: invocation.runId,
-          toolCallId: invocation.toolCallId,
-          ...(invocation.turnId === undefined ? {} : { turnId: invocation.turnId }),
-          signal,
-        }),
-        arguments: arguments_,
-        progress,
-        policy,
+    const invocation = active.invocation;
+    for (let attempt = 1; attempt <= policy.retry.maximumAttempts; attempt += 1) {
+      const startedAt = this.#timestamp();
+      await this.#trace(active, tool, "sandbox_started", attempt);
+      await this.#trace(active, tool, "execution_started", attempt);
+      let timedOut = false;
+      const attemptController = new AbortController();
+      const forwardCancellation = () => attemptController.abort();
+      active.controller.signal.addEventListener("abort", forwardCancellation, {
+        once: true,
       });
-    } catch (error) {
-      if (signal.aborted) throw cancelledError(invocation, "completed_unknown", tool);
-      throw normalizeToolFailure(error, invocation, tool);
+      if (active.controller.signal.aborted) attemptController.abort();
+      const clearTimeout = this.#timer.schedule(policy.timeoutMs, () => {
+        timedOut = true;
+        attemptController.abort();
+      });
+      try {
+        const rawResult = await this.#sandboxExecutor.execute({
+          tool,
+          context: Object.freeze({
+            conversationId: invocation.conversationId,
+            runId: invocation.runId,
+            toolCallId: invocation.toolCallId,
+            ...(invocation.turnId === undefined ? {} : { turnId: invocation.turnId }),
+            signal: attemptController.signal,
+          }),
+          arguments: arguments_,
+          progress,
+          policy,
+        });
+        const result = captureToolResult(rawResult, {
+          conversationId: invocation.conversationId,
+          toolCallId: invocation.toolCallId,
+          toolName: tool.descriptor.name,
+          toolVersion: tool.descriptor.version,
+          limits: this.#resultLimits,
+        });
+        await this.#trace(active, tool, "execution_completed", attempt, {
+          durationMs: elapsedMs(startedAt, this.#timestamp()),
+          outputBytes: byteLength(result as unknown as JsonValue),
+          artifactIds: result.artifacts?.map((artifact) => artifact.artifactId),
+        });
+        active.terminalTraceRecorded = true;
+        return result;
+      } catch (error) {
+        const base = normalizeToolFailure(error, invocation, tool);
+        const normalized = timedOut
+          ? timeoutError(invocation, base.sideEffectStatus, tool)
+          : active.controller.signal.aborted
+            ? cancelledError(invocation, base.sideEffectStatus, tool)
+            : base;
+        const retry = shouldRetry(policy, normalized, attempt);
+        await this.#trace(
+          active,
+          tool,
+          normalized.category === "timeout"
+            ? "timed_out"
+            : normalized.category === "cancelled"
+              ? "cancelled"
+              : "execution_failed",
+          attempt,
+          {
+            durationMs: elapsedMs(startedAt, this.#timestamp()),
+            errorCategory: normalized.category,
+            errorCode: normalized.code,
+            retryable: normalized.retryable,
+            sideEffectStatus: normalized.sideEffectStatus,
+          },
+        );
+        if (!retry) {
+          active.terminalTraceRecorded = true;
+          throw normalized;
+        }
+      } finally {
+        clearTimeout();
+        active.controller.signal.removeEventListener("abort", forwardCancellation);
+      }
     }
+    throw internalError("TOOL_RETRY_STATE_INVALID", invocation, tool);
+  }
+
+  #activate(
+    invocation: CapturedToolInvocation,
+    externalSignal: AbortSignal,
+  ): ActiveToolCall {
+    if (this.#active.has(invocation.toolCallId)) {
+      throw new ToolError({
+        code: "TOOL_CALL_ALREADY_ACTIVE",
+        category: "validation",
+        sideEffectStatus: "none",
+        ...errorIdentity(invocation),
+      });
+    }
+    const controller = new AbortController();
+    const forwardExternalAbort = () => controller.abort();
+    externalSignal.addEventListener("abort", forwardExternalAbort, { once: true });
+    if (externalSignal.aborted) controller.abort();
+    const active: ActiveToolCall = {
+      invocation,
+      traceId: this.#traceIdFactory.create(invocation),
+      controller,
+      externalSignal,
+      removeExternalAbort: () =>
+        externalSignal.removeEventListener("abort", forwardExternalAbort),
+      terminalTraceRecorded: false,
+    };
+    this.#active.set(invocation.toolCallId, active);
+    return active;
+  }
+
+  #deactivate(active: ActiveToolCall): void {
+    active.removeExternalAbort();
+    if (this.#active.get(active.invocation.toolCallId) === active) {
+      this.#active.delete(active.invocation.toolCallId);
+    }
+  }
+
+  async #trace(
+    active: ActiveToolCall,
+    tool: RegisteredTool,
+    stage: ToolTraceStage,
+    attempt: number,
+    fields: Partial<ToolTraceRecord> = {},
+  ): Promise<void> {
+    try {
+      await this.#traceSink.append({
+        traceId: active.traceId,
+        conversationId: active.invocation.conversationId,
+        runId: active.invocation.runId,
+        toolCallId: active.invocation.toolCallId,
+        ...(active.invocation.turnId === undefined
+          ? {}
+          : { turnId: active.invocation.turnId }),
+        toolName: tool.descriptor.name,
+        toolVersion: tool.descriptor.version,
+        argumentDigest: active.invocation.argumentDigest,
+        stage,
+        timestamp: this.#timestamp(),
+        attempt,
+        ...(fields.durationMs === undefined ? {} : { durationMs: fields.durationMs }),
+        ...(fields.inputBytes === undefined ? {} : { inputBytes: fields.inputBytes }),
+        ...(fields.outputBytes === undefined ? {} : { outputBytes: fields.outputBytes }),
+        ...(fields.ruleIds === undefined ? {} : { ruleIds: fields.ruleIds }),
+        ...(fields.permissionEffect === undefined
+          ? {}
+          : { permissionEffect: fields.permissionEffect }),
+        ...(fields.approvalDecision === undefined
+          ? {}
+          : { approvalDecision: fields.approvalDecision }),
+        ...(fields.approvalActorId === undefined
+          ? {}
+          : { approvalActorId: fields.approvalActorId }),
+        ...(fields.artifactIds === undefined ? {} : { artifactIds: fields.artifactIds }),
+        ...(fields.errorCategory === undefined
+          ? {}
+          : { errorCategory: fields.errorCategory }),
+        ...(fields.errorCode === undefined ? {} : { errorCode: fields.errorCode }),
+        ...(fields.retryable === undefined ? {} : { retryable: fields.retryable }),
+        ...(fields.sideEffectStatus === undefined
+          ? {}
+          : { sideEffectStatus: fields.sideEffectStatus }),
+      });
+    } catch {
+      throw new ToolError({
+        code: "TOOL_TRACE_PERSIST_FAILED",
+        category: "internal",
+        sideEffectStatus: stage === "execution_completed"
+          ? "completed_unknown"
+          : "none",
+        ...errorIdentity(active.invocation, tool),
+      });
+    }
+  }
+
+  #timestamp(): string {
+    const value = this.#clock.now();
+    if (
+      typeof value !== "string" ||
+      !Number.isFinite(Date.parse(value)) ||
+      new Date(value).toISOString() !== value
+    ) {
+      throw new TypeError("Tool execution clock returned an invalid timestamp");
+    }
+    return value;
   }
 }
 
@@ -290,6 +588,10 @@ export class ToolDispatcher {
     options: ToolDispatchOptions,
   ): Promise<ToolResult> {
     return this.pipeline.execute(invocation, options);
+  }
+
+  cancel(toolCallId: string): Promise<ToolCancelResult> {
+    return this.pipeline.cancel(toolCallId);
   }
 }
 
@@ -393,7 +695,15 @@ function normalizeToolFailure(
   invocation: CapturedToolInvocation,
   tool?: RegisteredTool,
 ): ToolError {
-  if (error instanceof ToolError) return error;
+  if (error instanceof ToolError) {
+    return new ToolError({
+      code: error.code,
+      category: error.category,
+      retryable: error.retryable,
+      sideEffectStatus: error.sideEffectStatus,
+      ...errorIdentity(invocation, tool),
+    });
+  }
   if (error instanceof ToolProtocolError) {
     return new ToolError({
       code: "TOOL_RESULT_INVALID",
@@ -424,7 +734,7 @@ function validationError(invocation: Partial<ToolInvocation>): ToolError {
 
 function cancelledError(
   invocation: CapturedToolInvocation,
-  sideEffectStatus: "none" | "completed_unknown",
+  sideEffectStatus: ToolSideEffectStatus,
   tool?: RegisteredTool,
 ): ToolError {
   return new ToolError({
@@ -433,6 +743,33 @@ function cancelledError(
     sideEffectStatus,
     ...errorIdentity(invocation, tool),
   });
+}
+
+function timeoutError(
+  invocation: CapturedToolInvocation,
+  sideEffectStatus: ToolSideEffectStatus,
+  tool?: RegisteredTool,
+): ToolError {
+  return new ToolError({
+    code: "TOOL_EXECUTION_TIMED_OUT",
+    category: "timeout",
+    sideEffectStatus,
+    ...errorIdentity(invocation, tool),
+  });
+}
+
+function shouldRetry(
+  policy: ToolExecutionPolicy,
+  error: ToolError,
+  attempt: number,
+): boolean {
+  return (
+    attempt < policy.retry.maximumAttempts &&
+    policy.idempotent &&
+    error.retryable &&
+    error.category !== "cancelled" &&
+    error.sideEffectStatus === "none"
+  );
 }
 
 function internalError(
@@ -531,3 +868,28 @@ function captureResultLimits(value: ToolResultLimits): ToolResultLimits {
   }
   return Object.freeze({ ...value });
 }
+
+function byteLength(value: JsonValue): number {
+  return new TextEncoder().encode(canonicalStringifyJson(value)).byteLength;
+}
+
+function elapsedMs(startedAt: string, completedAt: string): number {
+  return Math.max(0, Date.parse(completedAt) - Date.parse(startedAt));
+}
+
+const SYSTEM_TOOL_EXECUTION_CLOCK: ToolExecutionClock = Object.freeze({
+  now: () => new Date().toISOString(),
+});
+
+const SYSTEM_TOOL_EXECUTION_TIMER: ToolExecutionTimer = Object.freeze({
+  schedule(delayMs: number, callback: () => void): () => void {
+    const handle = setTimeout(callback, delayMs);
+    return () => clearTimeout(handle);
+  },
+});
+
+const DEFAULT_TOOL_TRACE_ID_FACTORY: ToolTraceIdFactory = Object.freeze({
+  create(invocation: CapturedToolInvocation): string {
+    return `trace_${invocation.runId}_${invocation.toolCallId}`;
+  },
+});

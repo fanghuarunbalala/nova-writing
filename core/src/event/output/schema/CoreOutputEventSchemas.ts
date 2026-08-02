@@ -351,6 +351,47 @@ export const ToolApprovalResolvedPayloadSchema = Type.Object({
   actorId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
   resolvedAt: Type.String({ minLength: 1 }),
 }, { additionalProperties: false });
+export const ToolTraceRecordedPayloadSchema = Type.Object({
+  traceId: Type.String({ minLength: 1, maxLength: 256 }),
+  toolCallId: Type.String({ minLength: 1, maxLength: 256 }),
+  toolName: Type.String({ pattern: "^[a-z][a-z0-9_]{0,63}$" }),
+  toolVersion: Type.String({ pattern: "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" }),
+  argumentDigest: Type.String({ pattern: "^sha256:[a-f0-9]{64}$" }),
+  stage: Type.Union([
+    Type.Literal("received"), Type.Literal("resolved"),
+    Type.Literal("validated"), Type.Literal("permission_evaluated"),
+    Type.Literal("approval_requested"), Type.Literal("approval_resolved"),
+    Type.Literal("sandbox_started"), Type.Literal("execution_started"),
+    Type.Literal("execution_completed"), Type.Literal("execution_failed"),
+    Type.Literal("cancelled"), Type.Literal("timed_out"),
+  ]),
+  attempt: Type.Integer({ minimum: 1 }),
+  durationMs: Type.Optional(Type.Integer({ minimum: 0 })),
+  inputBytes: Type.Optional(Type.Integer({ minimum: 0 })),
+  outputBytes: Type.Optional(Type.Integer({ minimum: 0 })),
+  ruleIds: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 256 }))),
+  permissionEffect: Type.Optional(Type.Union([
+    Type.Literal("allow"), Type.Literal("ask"), Type.Literal("deny"),
+  ])),
+  approvalDecision: Type.Optional(Type.Union([
+    Type.Literal("approved"), Type.Literal("rejected"),
+    Type.Literal("cancelled"), Type.Literal("expired"),
+  ])),
+  approvalActorId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
+  artifactIds: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 256 }))),
+  errorCategory: Type.Optional(Type.Union([
+    Type.Literal("validation"), Type.Literal("permission"),
+    Type.Literal("approval_rejected"), Type.Literal("sandbox"),
+    Type.Literal("timeout"), Type.Literal("cancelled"),
+    Type.Literal("execution"), Type.Literal("internal"),
+  ])),
+  errorCode: Type.Optional(Type.String({ pattern: "^[A-Z][A-Z0-9_]{0,127}$" })),
+  retryable: Type.Optional(Type.Boolean()),
+  sideEffectStatus: Type.Optional(Type.Union([
+    Type.Literal("none"), Type.Literal("possible"),
+    Type.Literal("partial"), Type.Literal("completed_unknown"),
+  ])),
+}, { additionalProperties: false });
 
 const NudgeLifecycleSnapshotSchema = Type.Object(
   {
@@ -452,6 +493,13 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     eventType: OUTPUT_EVENT_TYPE.nudgeScheduled,
     schemaVersion: EVENT_SCHEMA_VERSION,
     payloadSchema: NudgeScheduledPayloadSchema,
+    snapshotSchema: NudgeLifecycleSnapshotSchema,
+  });
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.toolTraceRecorded,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: ToolTraceRecordedPayloadSchema,
     snapshotSchema: NudgeLifecycleSnapshotSchema,
   });
   registry.register({

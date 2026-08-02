@@ -7,3 +7,4 @@ export * from "./ToolExecutionProtocolValidator.js";
 export * from "./ToolExecutionPolicyResolver.js";
 export * from "./ToolPermissionPolicy.js";
 export * from "./ToolPermissionPolicyErrors.js";
+export * from "./ToolTraceSink.js";

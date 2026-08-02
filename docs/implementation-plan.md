@@ -2561,6 +2561,16 @@ Task 5B-D delivered:
 - validated progress forwarding, bounded result normalization, stable safe `ToolError` conversion, and structured redacted execution logs
 - no timeout, active cancellation ownership, retry, or persistent Trace behavior, which remains scoped to Task 5B-E
 
+Task 5B-E delivered:
+
+- active Tool-call ownership in the Pipeline and public `ToolDispatcher.cancel(toolCallId)` outcomes
+- propagation of caller cancellation and Dispatcher cancellation through the Handler `AbortSignal`, including cancellation of pending Approval interactions
+- Handler-stage timeout control that begins immediately before Sandbox execution and preserves structured side-effect status
+- deterministic retry gating: at most one retry, only for explicitly idempotent policy, retryable error, non-cancelled execution, and `sideEffectStatus: none`
+- redacted Tool Trace records for resolution, validation, permission, approval, attempts, completion, failure, cancellation, and timeout
+- `ToolTraceRecordedOutputEvent` plus `RuntimeEventToolTraceSink`, making validated Trace metadata durable through the shared Journal OutputEvent barrier
+- retry attempt numbers, durations, input/output byte sizes, Artifact IDs, safe error metadata, and approval metadata without raw Tool data
+
 Expected deliverables after approval:
 
 - Tool execution facade and middleware pipeline

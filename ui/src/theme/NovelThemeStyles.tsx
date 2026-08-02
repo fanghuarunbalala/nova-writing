@@ -276,6 +276,58 @@ const NOVEL_THEME_CSS = `
   background: var(--novel-surface-secondary);
 }
 
+.novel-connection-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  border: 1px solid var(--novel-border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--novel-text-secondary);
+  background: var(--novel-surface-secondary);
+  font-size: 13px;
+}
+
+.novel-connection-status[data-connection-state="disconnected"],
+.novel-connection-status[data-connection-state="failed"] {
+  border-color: #e2c7c7;
+  color: #7b4141;
+  background: #fff8f8;
+}
+
+.novel-connection-error-code {
+  font-size: 11px;
+}
+
+.novel-connection-action,
+.novel-follow-latest {
+  border: 1px solid var(--novel-border-strong);
+  border-radius: 7px;
+  padding: 6px 10px;
+  color: var(--novel-text-primary);
+  background: var(--novel-surface-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.novel-connection-action {
+  margin-left: auto;
+}
+
+.novel-follow-latest {
+  position: sticky;
+  bottom: 8px;
+  align-self: center;
+  box-shadow: 0 4px 14px rgb(32 36 42 / 12%);
+}
+
+.novel-connection-action:focus-visible,
+.novel-follow-latest:focus-visible {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: 2px;
+}
+
 .novel-conversation-timeline {
   display: flex;
   flex-direction: column;

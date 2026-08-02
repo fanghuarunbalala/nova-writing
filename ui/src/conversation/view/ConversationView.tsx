@@ -1,5 +1,6 @@
 /** Hook-connected read-only Conversation screen for GUI and Web. */
 import { useConversationProjection } from "../useConversationProjection.js";
+import { ConversationConnectionStatus } from "./ConversationConnectionStatus.js";
 import { ConversationTimeline } from "./ConversationTimeline.js";
 
 export interface ConversationViewProps {
@@ -21,6 +22,9 @@ export function ConversationView({ conversationId, diagnostics }: ConversationVi
           </span>
         ) : null}
       </header>
+      {controllerState !== "live" ? (
+        <ConversationConnectionStatus snapshot={result.snapshot} resume={result.resume} />
+      ) : null}
       <ConversationTimeline projection={result.snapshot.projection} diagnostics={diagnostics} />
     </section>
   );

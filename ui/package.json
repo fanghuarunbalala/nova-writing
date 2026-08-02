@@ -18,7 +18,8 @@
     "smoke:application-shell": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/application-shell-typecheck.tsx && node scripts/application-shell-smoke.mjs",
     "smoke:application-shell-store": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/application-shell-store-typecheck.tsx && node scripts/application-shell-store-smoke.mjs",
     "smoke:conversation-projection-hook": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-projection-hook-typecheck.tsx && node scripts/conversation-projection-hook-smoke.mjs",
-    "smoke:conversation-timeline": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-timeline-typecheck.tsx && node scripts/conversation-timeline-smoke.mjs"
+    "smoke:conversation-timeline": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-timeline-typecheck.tsx && node scripts/conversation-timeline-smoke.mjs",
+    "smoke:conversation-connection-status": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-connection-status-typecheck.tsx && node scripts/conversation-connection-status-smoke.mjs"
   },
   "dependencies": {
     "@novel/core": "workspace:*"

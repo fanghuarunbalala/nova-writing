@@ -477,6 +477,12 @@ Unknown and low-level Events remain hidden from the normal timeline. An explicit
 
 `ConversationView` binds the timeline to `useConversationProjection`, and `NovelApp` automatically opens the Conversation selected in `ApplicationShellStore` when no custom central child is supplied. Journal replay and live Events update the same view without making React state an independent history. Connection recovery controls remain the next checkpoint.
 
+### 10.2 Implemented Connection and Follow Checkpoint
+
+Conversation connection progress now presents opening, replaying, following, disconnected, failed, stopping, and stopped states without replacing the existing timeline. Disconnect failures expose only the Controller's stable redacted code. The UI performs no automatic reconnect; only the visible reconnect action calls `resume()`, after which the existing Projection Store catches up from its last applied Sequence.
+
+Timeline scrolling tracks whether the reader remains near the latest Event. New Events auto-follow only while the reader is already at the bottom; otherwise the current reading position is preserved and a keyboard-accessible “new messages, return to latest” control appears.
+
 ## 11. Structured Card Architecture
 
 Conversation cards are produced from structured Event snapshots, never by scraping assistant Markdown for application commands.

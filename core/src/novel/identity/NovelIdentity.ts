@@ -1,0 +1,65 @@
+/** Opaque Novel infrastructure identities and their shared safe capture boundary. */
+import {
+  NOVEL_PROTOCOL_FAILURE,
+  NovelProtocolValidationError,
+} from "../error/index.js";
+
+declare const novelIdBrand: unique symbol;
+declare const novelDraftSessionIdBrand: unique symbol;
+declare const novelOperationIdBrand: unique symbol;
+declare const novelCommitIdBrand: unique symbol;
+declare const novelConflictIdBrand: unique symbol;
+declare const novelArtifactIdBrand: unique symbol;
+
+export type NovelId = string & { readonly [novelIdBrand]: "NovelId" };
+export type NovelDraftSessionId = string & {
+  readonly [novelDraftSessionIdBrand]: "NovelDraftSessionId";
+};
+export type NovelOperationId = string & {
+  readonly [novelOperationIdBrand]: "NovelOperationId";
+};
+export type NovelCommitId = string & {
+  readonly [novelCommitIdBrand]: "NovelCommitId";
+};
+export type NovelConflictId = string & {
+  readonly [novelConflictIdBrand]: "NovelConflictId";
+};
+export type NovelArtifactId = string & {
+  readonly [novelArtifactIdBrand]: "NovelArtifactId";
+};
+
+const SAFE_IDENTITY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
+
+export function captureNovelId(value: unknown): NovelId {
+  return captureIdentity("novelId", value) as NovelId;
+}
+
+export function captureNovelDraftSessionId(value: unknown): NovelDraftSessionId {
+  return captureIdentity("draftSessionId", value) as NovelDraftSessionId;
+}
+
+export function captureNovelOperationId(value: unknown): NovelOperationId {
+  return captureIdentity("operationId", value) as NovelOperationId;
+}
+
+export function captureNovelCommitId(value: unknown): NovelCommitId {
+  return captureIdentity("commitId", value) as NovelCommitId;
+}
+
+export function captureNovelConflictId(value: unknown): NovelConflictId {
+  return captureIdentity("conflictId", value) as NovelConflictId;
+}
+
+export function captureNovelArtifactId(value: unknown): NovelArtifactId {
+  return captureIdentity("artifactId", value) as NovelArtifactId;
+}
+
+function captureIdentity(field: string, value: unknown): string {
+  if (typeof value !== "string" || !SAFE_IDENTITY_PATTERN.test(value)) {
+    throw new NovelProtocolValidationError(
+      NOVEL_PROTOCOL_FAILURE.invalidIdentity,
+      field,
+    );
+  }
+  return value;
+}

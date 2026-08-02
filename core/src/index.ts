@@ -11,6 +11,7 @@ export const projectVision: ProjectVision = {
 export * from "./config/index.js";
 export * from "./conversation/index.js";
 export * from "./event/index.js";
+export * from "./novel/index.js";
 export * from "./observability/index.js";
 export * from "./prompt/index.js";
 export * from "./runtime/index.js";

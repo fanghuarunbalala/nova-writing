@@ -187,6 +187,18 @@ Define Clock and ID factories plus payload-free public validation and lifecycle 
 
 Add focused foundation smoke coverage, then run the complete repository suite.
 
+### N1-F Delivered
+
+- platform-neutral `core/src/novel` and Node adapter `core/src/node/novel` public roots
+- branded non-interchangeable Novel, Draft Session, Operation, Commit, Conflict, and Artifact identities
+- safe ASCII identity capture that rejects blank, whitespace, path-shaped, control-shaped, and oversized identities without exposing rejected values
+- distinct opaque NovelRevision, positive safe-integer NovelSchemaVersion and NovelEntityVersion, and canonical UTC NovelTimestamp contracts
+- injectable Novel Clock and collision-resistant random Novel identity factory
+- fixed payload-free protocol, Draft lifecycle, revision-conflict, and invariant failures
+- focused compile-time brand isolation and runtime foundation smoke coverage
+
+**Status:** completed by the focused Novel foundation commit.
+
 ## 8. Task N2: Canonical Novel Store
 
 ### N2-A Store Location
@@ -443,5 +455,6 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
 ## 19. Current Position
 
 - Task N0 is completed by the commit introducing this plan.
-- Task N1 is the next implementation task.
+- Task N1 is completed by the focused Novel foundation commit.
+- Task N2 is the next implementation task.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

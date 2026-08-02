@@ -1098,6 +1098,12 @@ Rules:
 - unchanged neighboring paragraphs use quiet context presentation;
 - inline word Diff is secondary to block identity and never replaces stable Manuscript block references.
 
+### 21.1 Implemented Manuscript Block Diff Reviewer
+
+The shared UI now exposes an ordered, immutable Manuscript Block Diff view and a read-only React reviewer. Every rendered row has an independent row identity and a stable Manuscript Block identity. Added and modified-after blocks use green presentation; deleted and modified-before blocks use red presentation; moved blocks use blue presentation with explicit source and target display labels; unchanged neighboring blocks remain quiet context.
+
+Modified blocks must form exactly one before/after pair sharing both a change identity and the same stable Block identity. Deleted blocks remain explicit tombstones, while movement remains a single Block row rather than a synthetic delete/add pair. Source and target labels are presentation-only and do not define the deferred Manuscript Anchor or Range protocol. Inline word Diff remains disabled and is identified as a future enhancement rather than inferred from block text.
+
 ## 22. Character and Location Reviewers
 
 Character and Location reviews use field-oriented Diff rather than Outline tree or Manuscript paragraph presentation.

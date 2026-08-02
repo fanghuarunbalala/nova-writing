@@ -961,6 +961,24 @@ The plan does not append replacements to the partially replayed conflicted
 candidate. A later serialized step replays the complete ordered plan against a
 fresh canonical snapshot into a new sibling candidate.
 
+Character and Location `keep-draft` uses a platform-neutral rebinding strategy
+rather than reading the final partial candidate as if it represented every
+source sequence. The resolved-candidate replayer supplies the entity state that
+exists immediately before the conflicting source Operation:
+
+- conflicting create becomes replace against the current entity version, or a
+  no-op when the stable profile already matches
+- conflicting replace becomes create when the entity was deleted, otherwise
+  replace against the current entity version or a matching-profile no-op
+- conflicting delete becomes delete against the current entity version, or a
+  no-op when the entity is already absent
+- unsupported Conflict kind, entity identity, or Operation type combinations
+  are rejected instead of guessed
+
+This sequence-local state is required when several source Operations touch the
+same entity: preconditions for a later replacement must observe earlier
+effective Operations, not the final state of a partially replayed candidate.
+
 ### 10.7 Approval Binding
 
 Approval grants bind to an immutable ChangeSet identity rather than only a Draft Session ID:

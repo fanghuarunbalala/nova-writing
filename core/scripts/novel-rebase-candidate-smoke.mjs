@@ -7,6 +7,7 @@ import {
   NovelDraftOperationWriter,
   NovelDraftRecoveryService,
   NovelDraftSessionService,
+  NovelEntityKeepDraftStrategy,
   NovelInvariantViolationError,
   NovelOperationExecutor,
   NovelOperationRegistry,
@@ -17,17 +18,26 @@ import {
   NovelRevisionConflictError,
   canonicalNovelReadScope,
   canonicalizeNovelConflictResolutionRecord,
+  captureCharacter,
+  captureLocation,
+  captureNovelConflict,
+  captureNovelConflictRecord,
   captureNovelConflictResolution,
   captureNovelConflictResolutionRecord,
   captureCharacterId,
   captureNovelCommitId,
   captureNovelDraftSessionId,
+  captureNovelEntityVersion,
+  captureLocationId,
   captureNovelOperationId,
   captureNovelResolutionApplicationPlan,
   captureNovelRevision,
   captureNovelTimestamp,
   draftNovelReadScope,
+  createCharacterCreateOperation,
+  createCharacterDeleteOperation,
   createCharacterReplaceOperation,
+  createLocationReplaceOperation,
   registerNovelEntityOperationHandlers,
 } from "../dist/index.js";
 import {
@@ -487,6 +497,171 @@ try {
     deletedConflict.conflicts,
   );
 
+  const keepDraftStrategy = new NovelEntityKeepDraftStrategy({
+    identityFactory: operationIdentityFactory,
+    clock,
+    logger,
+  });
+  const conflictSourceSequence = await operationStore.readOperationSequence(
+    conflictSource,
+  );
+  const conflictCurrentCharacter = await application.characterQueries.get(
+    draftNovelReadScope(conflicted.candidate.session),
+    characterId,
+  );
+  assert.notEqual(conflictCurrentCharacter, undefined);
+  const modifiedPlan = keepDraftStrategy.plan({
+    sourceOperation: conflictSourceSequence.operations[0].operation,
+    conflict: conflicted.conflicts[0],
+    currentEntity: conflictCurrentCharacter,
+  });
+  assert.equal(modifiedPlan.action, "apply-replacement");
+  assert.equal(modifiedPlan.operation.type, "character.replace");
+  assert.equal(
+    modifiedPlan.operation.expected[0].expectedEntityVersion,
+    conflictCurrentCharacter.entityVersion,
+  );
+
+  const deletedSourceSequence = await operationStore.readOperationSequence(
+    deletedSource,
+  );
+  const deletedPlan = keepDraftStrategy.plan({
+    sourceOperation: deletedSourceSequence.operations[0].operation,
+    conflict: deletedConflict.conflicts[0],
+    currentEntity: undefined,
+  });
+  assert.equal(deletedPlan.action, "apply-replacement");
+  assert.equal(deletedPlan.operation.type, "character.create");
+
+  const deleteOperation = createCharacterDeleteOperation({
+    operationId: captureNovelOperationId("operation_keep_draft_delete"),
+    id: characterId,
+    expectedEntityVersion: captureNovelEntityVersion(1),
+  });
+  const syntheticDigest = `sha256:${"1".repeat(64)}`;
+  const deletedDeleteConflict = captureNovelConflictRecord({
+    conflict: captureNovelConflict({
+      conflictVersion: 1,
+      id: "conflict_keep_draft_delete_missing",
+      draftSessionId: deletedConflict.candidate.session.id,
+      operationId: deleteOperation.operationId,
+      sourceOperationSequence: 1,
+      status: "unresolved",
+      kind: "entity-deleted",
+      entityType: "character",
+      entityId: characterId,
+      baseDigest: syntheticDigest,
+      canonicalDigest: syntheticDigest,
+      draftDigest: syntheticDigest,
+      createdAt: clock.now(),
+    }),
+    digest: syntheticDigest,
+  });
+  assert.deepEqual(
+    keepDraftStrategy.plan({
+      sourceOperation: deleteOperation,
+      conflict: deletedDeleteConflict,
+      currentEntity: undefined,
+    }),
+    { action: "skip" },
+  );
+  const modifiedDeleteConflict = captureNovelConflictRecord({
+    conflict: captureNovelConflict({
+      ...deletedDeleteConflict.conflict,
+      id: "conflict_keep_draft_delete_modified",
+      kind: "field-modified",
+    }),
+    digest: syntheticDigest,
+  });
+  const deletePlan = keepDraftStrategy.plan({
+    sourceOperation: deleteOperation,
+    conflict: modifiedDeleteConflict,
+    currentEntity: conflictCurrentCharacter,
+  });
+  assert.equal(deletePlan.action, "apply-replacement");
+  assert.equal(deletePlan.operation.type, "character.delete");
+  assert.equal(
+    deletePlan.operation.expected[0].expectedEntityVersion,
+    conflictCurrentCharacter.entityVersion,
+  );
+
+  const sameProfileOperation = createCharacterCreateOperation({
+    operationId: captureNovelOperationId("operation_keep_draft_same_profile"),
+    id: characterId,
+    profile: { name: conflictSourceName, aliases: [] },
+    timestamp: clock.now(),
+  });
+  const sameProfileConflict = captureNovelConflictRecord({
+    conflict: captureNovelConflict({
+      ...conflicted.conflicts[0].conflict,
+      id: "conflict_keep_draft_same_profile",
+      operationId: sameProfileOperation.operationId,
+      kind: "entity-created",
+    }),
+    digest: syntheticDigest,
+  });
+  assert.deepEqual(
+    keepDraftStrategy.plan({
+      sourceOperation: sameProfileOperation,
+      conflict: sameProfileConflict,
+      currentEntity: captureCharacter({
+        id: characterId,
+        name: conflictSourceName,
+        aliases: [],
+        entityVersion: captureNovelEntityVersion(7),
+        createdAt: clock.now(),
+        updatedAt: clock.now(),
+      }),
+    }),
+    { action: "skip" },
+  );
+
+  const locationId = captureLocationId("location_keep_draft_strategy");
+  const locationReplaceOperation = createLocationReplaceOperation({
+    operationId: captureNovelOperationId("operation_keep_draft_location"),
+    id: locationId,
+    expectedEntityVersion: captureNovelEntityVersion(1),
+    profile: { name: "FORBIDDEN_LOCATION_DRAFT", aliases: [] },
+    timestamp: clock.now(),
+  });
+  const locationConflict = captureNovelConflictRecord({
+    conflict: captureNovelConflict({
+      conflictVersion: 1,
+      id: "conflict_keep_draft_location",
+      draftSessionId: deletedConflict.candidate.session.id,
+      operationId: locationReplaceOperation.operationId,
+      sourceOperationSequence: 1,
+      status: "unresolved",
+      kind: "field-modified",
+      entityType: "location",
+      entityId: locationId,
+      fieldPath: "profile",
+      baseDigest: syntheticDigest,
+      canonicalDigest: syntheticDigest,
+      draftDigest: syntheticDigest,
+      createdAt: clock.now(),
+    }),
+    digest: syntheticDigest,
+  });
+  const locationPlan = keepDraftStrategy.plan({
+    sourceOperation: locationReplaceOperation,
+    conflict: locationConflict,
+    currentEntity: captureLocation({
+      id: locationId,
+      name: "FORBIDDEN_LOCATION_CANONICAL",
+      aliases: [],
+      entityVersion: captureNovelEntityVersion(3),
+      createdAt: clock.now(),
+      updatedAt: clock.now(),
+    }),
+  });
+  assert.equal(locationPlan.action, "apply-replacement");
+  assert.equal(locationPlan.operation.type, "location.replace");
+  assert.equal(
+    locationPlan.operation.expected[0].expectedEntityVersion,
+    3,
+  );
+
   const planSource = await drafts.startDraft("conversation-rebase-plan-source");
   const planCommitter = await drafts.startDraft(
     "conversation-rebase-plan-committer",
@@ -552,13 +727,6 @@ try {
     profile: { name: "FORBIDDEN_PLAN_MANUAL", aliases: [] },
     timestamp: clock.now(),
   });
-  const keepDraftPlanReplacement = createCharacterReplaceOperation({
-    operationId: captureNovelOperationId("operation_plan_keep_draft"),
-    id: planCharacterIds[3],
-    expectedEntityVersion: 1,
-    profile: { name: "FORBIDDEN_PLAN_KEEP_DRAFT", aliases: [] },
-    timestamp: clock.now(),
-  });
   const strategies = [
     { strategy: "keep-canonical" },
     { strategy: "drop-operation" },
@@ -602,16 +770,28 @@ try {
     NovelProtocolValidationError,
   );
 
+  let keepDraftPlanningCount = 0;
   const planBuilder = new NovelResolutionApplicationPlanBuilder({
     draftStore,
     operationStore,
     conflictStore,
     keepDraftPlanner: {
-      async planKeepDraft() {
-        return {
-          action: "apply-replacement",
-          operation: keepDraftPlanReplacement,
-        };
+      async planKeepDraft(input) {
+        keepDraftPlanningCount += 1;
+        const currentEntity = input.conflict.conflict.entityType === "character"
+          ? await application.characterQueries.get(
+              draftNovelReadScope(input.candidate.session),
+              input.conflict.conflict.entityId,
+            )
+          : await application.locationQueries.get(
+              draftNovelReadScope(input.candidate.session),
+              input.conflict.conflict.entityId,
+            );
+        return keepDraftStrategy.plan({
+          sourceOperation: input.sourceEntry.operation,
+          conflict: input.conflict,
+          currentEntity,
+        });
       },
     },
     operationDigester,
@@ -639,6 +819,7 @@ try {
     (await planBuilder.buildAndSave(planCandidate.candidate)).status,
     "duplicate",
   );
+  assert.equal(keepDraftPlanningCount, 1);
   assert.equal(
     await planStore.savePlan(planCandidate.candidate.session, planned.plan),
     "duplicate",
@@ -772,8 +953,9 @@ try {
     "FORBIDDEN_PLAN_CANONICAL_2",
     "FORBIDDEN_PLAN_CANONICAL_3",
     "FORBIDDEN_PLAN_MANUAL",
-    "FORBIDDEN_PLAN_KEEP_DRAFT",
     "FORBIDDEN_PLAN_ORIGINAL_LOCATION",
+    "FORBIDDEN_LOCATION_DRAFT",
+    "FORBIDDEN_LOCATION_CANONICAL",
   ]);
 } finally {
   await candidateStore?.close();

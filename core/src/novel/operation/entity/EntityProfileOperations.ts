@@ -61,6 +61,30 @@ interface EntityDeletePayload extends JsonObject {
   readonly expectedEntityVersion: number;
 }
 
+export type NovelEntityProfileOperationIntent =
+  | {
+      readonly action: "create" | "replace";
+      readonly entityType: "character";
+      readonly id: CharacterId;
+      readonly profile: StableEntityProfile;
+    }
+  | {
+      readonly action: "delete";
+      readonly entityType: "character";
+      readonly id: CharacterId;
+    }
+  | {
+      readonly action: "create" | "replace";
+      readonly entityType: "location";
+      readonly id: LocationId;
+      readonly profile: StableEntityProfile;
+    }
+  | {
+      readonly action: "delete";
+      readonly entityType: "location";
+      readonly id: LocationId;
+    };
+
 export function createCharacterCreateOperation(input: {
   readonly operationId: NovelOperationId;
   readonly id: CharacterId;
@@ -155,6 +179,82 @@ export function createLocationDeleteOperation(input: {
     input.id,
     input.expectedEntityVersion,
   );
+}
+
+export function captureNovelEntityProfileOperationIntent(
+  operationInput: NovelOperation,
+): NovelEntityProfileOperationIntent {
+  const operation = captureNovelOperation(operationInput);
+  switch (operation.type) {
+    case NOVEL_ENTITY_OPERATION_TYPE.characterCreate:
+    case NOVEL_ENTITY_OPERATION_TYPE.characterReplace: {
+      const expected = operation.type === NOVEL_ENTITY_OPERATION_TYPE.characterCreate
+        ? "absent"
+        : "version";
+      const payload = captureEntityProfilePayload(operation.payload, expected);
+      const id = captureCharacterId(payload.id);
+      captureEntityPrecondition(
+        operation,
+        "character",
+        id,
+        expected === "absent"
+          ? undefined
+          : captureNovelEntityVersion(payload.expectedEntityVersion),
+      );
+      return Object.freeze({
+        action: expected === "absent" ? "create" : "replace",
+        entityType: "character",
+        id,
+        profile: profileFromPayload(payload),
+      });
+    }
+    case NOVEL_ENTITY_OPERATION_TYPE.characterDelete: {
+      const payload = captureEntityDeletePayload(operation.payload);
+      const id = captureCharacterId(payload.id);
+      captureEntityPrecondition(
+        operation,
+        "character",
+        id,
+        captureNovelEntityVersion(payload.expectedEntityVersion),
+      );
+      return Object.freeze({ action: "delete", entityType: "character", id });
+    }
+    case NOVEL_ENTITY_OPERATION_TYPE.locationCreate:
+    case NOVEL_ENTITY_OPERATION_TYPE.locationReplace: {
+      const expected = operation.type === NOVEL_ENTITY_OPERATION_TYPE.locationCreate
+        ? "absent"
+        : "version";
+      const payload = captureEntityProfilePayload(operation.payload, expected);
+      const id = captureLocationId(payload.id);
+      captureEntityPrecondition(
+        operation,
+        "location",
+        id,
+        expected === "absent"
+          ? undefined
+          : captureNovelEntityVersion(payload.expectedEntityVersion),
+      );
+      return Object.freeze({
+        action: expected === "absent" ? "create" : "replace",
+        entityType: "location",
+        id,
+        profile: profileFromPayload(payload),
+      });
+    }
+    case NOVEL_ENTITY_OPERATION_TYPE.locationDelete: {
+      const payload = captureEntityDeletePayload(operation.payload);
+      const id = captureLocationId(payload.id);
+      captureEntityPrecondition(
+        operation,
+        "location",
+        id,
+        captureNovelEntityVersion(payload.expectedEntityVersion),
+      );
+      return Object.freeze({ action: "delete", entityType: "location", id });
+    }
+    default:
+      throw invalidOperationPayload();
+  }
 }
 
 export function registerNovelEntityOperationHandlers(

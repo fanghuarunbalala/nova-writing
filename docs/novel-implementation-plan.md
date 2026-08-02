@@ -535,10 +535,17 @@ Resolution protocol foundation delivered:
 - candidate-local SQLite persists plan metadata and entries atomically, returns
   exact retries as duplicates, rejects a second identity, and reconstructs and
   revalidates the plan after restart
+- Character and Location keep-draft rebinding deterministically maps
+  create/replace/delete intent plus sequence-local entity state to a replacement
+  Operation or explicit no-op, rejecting unsupported identity and Conflict-kind
+  combinations
+- an existing immutable plan is validated against current source Operations and
+  durable decisions without invoking keep-draft planning again, preserving exact
+  retry when replacement identities and timestamps were originally generated
 
 **Status:** protocol, durable decision recording, and immutable strategy
-application planning completed; resolved sibling candidate rebuilding and
-concrete Character/Location `keep-draft` planning are the next N7-C step.
+application planning plus concrete Character/Location rebinding completed;
+resolved sibling candidate sequential rebuilding is the next N7-C step.
 
 ### N7-D Approval Invalidation
 

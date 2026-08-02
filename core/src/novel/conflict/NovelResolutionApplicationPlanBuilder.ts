@@ -6,7 +6,10 @@ import {
   NovelResolutionApplicationPlanIdentityConflictError,
   NOVEL_INVARIANT_FAILURE,
 } from "../error/index.js";
-import type { NovelOperationDigester } from "../operation/index.js";
+import {
+  canonicalizeNovelOperation,
+  type NovelOperationDigester,
+} from "../operation/index.js";
 import type {
   NovelClock,
   NovelConflictStore,
@@ -19,9 +22,10 @@ import {
   captureNovelRebaseCandidate,
   type NovelRebaseCandidate,
 } from "./NovelRebaseCandidate.js";
+import type { NovelConflictRecord } from "./NovelConflict.js";
+import type { NovelConflictResolutionRecord } from "./NovelConflictResolution.js";
 import {
   NOVEL_RESOLUTION_APPLICATION_PLAN_VERSION,
-  canonicalizeNovelResolutionApplicationPlan,
   captureNovelResolutionApplicationPlan,
   captureNovelResolutionApplicationPlanContent,
   type NovelResolutionApplicationEntry,
@@ -133,6 +137,25 @@ export class NovelResolutionApplicationPlanBuilder {
       throw corrupt(candidate);
     }
 
+    const existing = await this.options.planStore.getPlan(candidate.session);
+    if (existing !== undefined) {
+      assertExistingPlanMatches(
+        candidate,
+        sourceSession.id,
+        sourceSequence.operations,
+        conflictBySequence,
+        resolutionByConflictId,
+        existing,
+      );
+      this.logger.debug("novel_resolution_plan.duplicate", {
+        draftSessionId: candidate.session.id,
+        sourceDraftSessionId: sourceSession.id,
+        sourceOperationCount: existing.sourceOperationCount,
+        effectiveOperationCount: existing.effectiveOperationCount,
+      });
+      return Object.freeze({ status: "duplicate", plan: existing });
+    }
+
     const entries: NovelResolutionApplicationEntry[] = [];
     for (const sourceEntry of sourceSequence.operations) {
       const conflictRecord = conflictBySequence.get(sourceEntry.sequence);
@@ -203,7 +226,6 @@ export class NovelResolutionApplicationPlanBuilder {
       }
     }
 
-    const existing = await this.options.planStore.getPlan(candidate.session);
     const content = captureNovelResolutionApplicationPlanContent({
       planVersion: NOVEL_RESOLUTION_APPLICATION_PLAN_VERSION,
       sourceDraftSessionId: sourceSession.id,
@@ -213,30 +235,12 @@ export class NovelResolutionApplicationPlanBuilder {
       effectiveOperationCount: entries.filter((entry) => entry.action !== "skip")
         .length,
       entries,
-      createdAt: existing?.createdAt ?? this.options.clock.now(),
+      createdAt: this.options.clock.now(),
     });
     const plan = captureNovelResolutionApplicationPlan({
       ...content,
       digest: await this.options.planDigester.digest(content),
     });
-    if (existing !== undefined) {
-      if (
-        existing.digest !== plan.digest ||
-        canonicalizeNovelResolutionApplicationPlan(existing) !==
-          canonicalizeNovelResolutionApplicationPlan(plan)
-      ) {
-        throw new NovelResolutionApplicationPlanIdentityConflictError(
-          candidate.session.id,
-        );
-      }
-      this.logger.debug("novel_resolution_plan.duplicate", {
-        draftSessionId: candidate.session.id,
-        sourceDraftSessionId: sourceSession.id,
-        sourceOperationCount: plan.sourceOperationCount,
-        effectiveOperationCount: plan.effectiveOperationCount,
-      });
-      return Object.freeze({ status: "duplicate", plan: existing });
-    }
     const status = await this.options.planStore.savePlan(candidate.session, plan);
     this.logger.info("novel_resolution_plan.saved", {
       draftSessionId: candidate.session.id,
@@ -245,6 +249,71 @@ export class NovelResolutionApplicationPlanBuilder {
       effectiveOperationCount: plan.effectiveOperationCount,
     });
     return Object.freeze({ status, plan });
+  }
+}
+
+function assertExistingPlanMatches(
+  candidate: NovelRebaseCandidate,
+  sourceDraftSessionId: NovelResolutionApplicationPlan["sourceDraftSessionId"],
+  sourceEntries: readonly Awaited<
+    ReturnType<NovelDraftChangeSetStore["readOperationSequence"]>
+  >["operations"][number][],
+  conflictBySequence: ReadonlyMap<number, NovelConflictRecord>,
+  resolutionByConflictId: ReadonlyMap<
+    NovelConflictRecord["conflict"]["id"],
+    NovelConflictResolutionRecord
+  >,
+  plan: NovelResolutionApplicationPlan,
+): void {
+  if (
+    plan.sourceDraftSessionId !== sourceDraftSessionId ||
+    plan.conflictedCandidateDraftSessionId !== candidate.session.id ||
+    plan.baseRevision !== candidate.session.baseRevision ||
+    plan.sourceOperationCount !== sourceEntries.length
+  ) {
+    throw new NovelResolutionApplicationPlanIdentityConflictError(
+      candidate.session.id,
+    );
+  }
+  for (const sourceEntry of sourceEntries) {
+    const entry = plan.entries[sourceEntry.sequence - 1];
+    const conflict = conflictBySequence.get(sourceEntry.sequence);
+    if (entry === undefined) throw corrupt(candidate);
+    if (conflict === undefined) {
+      if (
+        entry.action !== "apply-original" ||
+        entry.operationDigest !== sourceEntry.operationDigest ||
+        canonicalizeNovelOperation(entry.operation) !==
+          canonicalizeNovelOperation(sourceEntry.operation)
+      ) {
+        throw new NovelResolutionApplicationPlanIdentityConflictError(
+          candidate.session.id,
+        );
+      }
+      continue;
+    }
+    const resolution = resolutionByConflictId.get(conflict.conflict.id);
+    if (
+      resolution === undefined ||
+      entry.action === "apply-original" ||
+      entry.conflictId !== conflict.conflict.id ||
+      entry.strategy !== resolution.resolution.strategy
+    ) {
+      throw new NovelResolutionApplicationPlanIdentityConflictError(
+        candidate.session.id,
+      );
+    }
+    if (resolution.resolution.strategy === "manual") {
+      if (
+        entry.action !== "apply-replacement" ||
+        canonicalizeNovelOperation(entry.operation) !==
+          canonicalizeNovelOperation(resolution.resolution.replacement)
+      ) {
+        throw new NovelResolutionApplicationPlanIdentityConflictError(
+          candidate.session.id,
+        );
+      }
+    }
   }
 }
 

@@ -856,6 +856,21 @@ Asynchronous Approval Bridge delivered:
 **Status:** N8-D request protocol and asynchronous decision Bridge completed;
 Commit orchestration integration is next.
 
+Approval-aware Commit orchestration delivered:
+
+- a Core orchestrator freezes the request ChangeSet before entering the
+  asynchronous Approval wait and does not call the Commit service while pending
+- rejected and stale resolutions return without entering the Commit Writer
+- after an approved resolution, the orchestrator rebuilds the frozen ChangeSet
+  and requires the same Novel, Draft, base revision, digest, and Operation IDs
+  before Commit
+- a change detected after Approval returns `stale-after-approval`; an exact
+  match delegates to the existing Commit service, preserving its short Writer
+  lock and SQLite transaction boundary
+
+**Status:** Task N8-D Approval request, asynchronous decision handling, and
+Approval-aware Commit orchestration completed. Task N8-E validation is next.
+
 ### N8-E Validation
 
 Cover Event ordering, retry-stable IDs, dispatcher restart, duplicate delivery, Approval staleness, Conversation identity, and redacted logs.

@@ -6,4 +6,5 @@ export * from "./NovelCommitPayloadDigest.js";
 export * from "./NovelCommit.js";
 export * from "./NovelCommitWriter.js";
 export * from "./NovelCommitService.js";
+export * from "./NovelApprovalCommitOrchestrator.js";
 export * from "./NovelCommitRecoveryService.js";

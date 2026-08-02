@@ -248,6 +248,7 @@ try {
   assert.equal(state.metadata.last_operation_digest, afterFailure.digest);
   assert.deepEqual(state.sequences, [1, 2, 3, 4]);
   assert.deepEqual(state.controlTables, [
+    "draft_approvals",
     "draft_conflicts",
     "draft_metadata",
     "draft_operations",

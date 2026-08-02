@@ -7,7 +7,7 @@ import {
 } from "../../../novel/index.js";
 import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
 
-export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 5 as const;
+export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 6 as const;
 
 export function initializeNovelDraftSqliteSchema(
   databasePath: string,
@@ -210,6 +210,27 @@ const DRAFT_MIGRATIONS = [
       ) STRICT;
 
       UPDATE draft_metadata SET schema_version = 5;
+    `,
+  },
+  {
+    version: 6,
+    name: "change_set_approval",
+    sql: `
+      CREATE TABLE draft_approvals (
+        approval_digest TEXT PRIMARY KEY,
+        approval_json TEXT NOT NULL,
+        base_revision TEXT NOT NULL,
+        change_set_digest TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('active', 'invalidated')),
+        granted_at TEXT NOT NULL,
+        invalidated_at TEXT,
+        invalidation_reason TEXT
+      ) STRICT;
+
+      CREATE UNIQUE INDEX draft_approvals_one_active_idx
+      ON draft_approvals(status) WHERE status = 'active';
+
+      UPDATE draft_metadata SET schema_version = 6;
     `,
   },
 ] as const;

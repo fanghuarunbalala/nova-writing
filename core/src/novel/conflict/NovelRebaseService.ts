@@ -33,6 +33,7 @@ import type {
   NovelRebaseCandidateStore,
   NovelSnapshotter,
 } from "../port/index.js";
+import type { NovelApprovalService } from "../approval/index.js";
 import {
   NOVEL_CONFLICT_VERSION,
   captureNovelConflict,
@@ -63,6 +64,7 @@ export interface NovelRebaseServiceOptions<TContext> {
   >;
   readonly clock: NovelClock;
   readonly logger?: Logger;
+  readonly approvalInvalidator?: Pick<NovelApprovalService, "invalidate">;
 }
 
 export class NovelRebaseService<TContext> {
@@ -200,6 +202,10 @@ export class NovelRebaseService<TContext> {
           lastOperationSequence: replayed.lastOperationSequence,
           preparedAt,
         });
+        await this.options.approvalInvalidator?.invalidate(
+          source,
+          "base-revision-changed",
+        );
         await this.options.candidateStore.createCandidate(candidate);
         registered = true;
         this.logger.info("novel_rebase_candidate.prepare.completed", {

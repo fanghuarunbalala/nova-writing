@@ -15,6 +15,7 @@ export const NOVEL_PROTOCOL_FAILURE = {
   invalidConflict: "invalid_conflict",
   invalidConflictDigest: "invalid_conflict_digest",
   invalidConflictResolution: "invalid_conflict_resolution",
+  invalidApproval: "invalid_approval",
   invalidResolutionApplicationPlan: "invalid_resolution_application_plan",
 } as const;
 
@@ -52,6 +53,7 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "conflict",
   "conflictDigest",
   "conflictResolution",
+  "approval",
   "resolutionApplicationPlan",
 ]);
 

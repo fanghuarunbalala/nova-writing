@@ -9,6 +9,7 @@ import {
   NovelCommitService,
   NovelCommitWriter,
   NovelCommitRecoveryService,
+  NovelApprovalService,
   NovelMutationService,
   NovelOperationExecutor,
   NovelOperationRegistry,
@@ -26,9 +27,11 @@ import { noopLogger, type Logger } from "../../../observability/index.js";
 import {
   NodeSha256NovelOperationDigester,
   NodeSha256NovelChangeSetDigester,
+  NodeSha256NovelApprovalDigester,
   SqliteNovelDraftOperationStore,
   SqliteNovelEntityQueryStore,
   SqliteNovelCommitStore,
+  SqliteNovelApprovalStore,
   createSqliteNovelEntityMutationContext,
 } from "../sqlite/index.js";
 import { NodeNovelCommitHistoryStore } from "../history/index.js";
@@ -42,6 +45,7 @@ export interface NodeNovelEntityApplicationOptions {
   readonly logger?: Logger;
   readonly revisionFactory?: NovelRevisionFactory;
   readonly validateCommit?: (context: NovelEntityMutationContext) => void;
+  readonly requireApproval?: boolean;
 }
 
 export interface NodeNovelEntityApplication {
@@ -53,6 +57,7 @@ export interface NodeNovelEntityApplication {
   readonly changeSets: NovelDraftChangeSetBuilder;
   readonly commits: NovelCommitService<NovelEntityMutationContext>;
   readonly commitRecovery: NovelCommitRecoveryService<NovelEntityMutationContext>;
+  readonly approvals: NovelApprovalService;
 }
 
 export function createNodeNovelEntityApplication(
@@ -108,11 +113,22 @@ export function createNodeNovelEntityApplication(
       location: options.location,
       logger,
     });
+  const approvals = new NovelApprovalService({
+    store: new SqliteNovelApprovalStore({
+      location: options.location,
+      novelId: options.novelId,
+      logger,
+    }),
+    digester: new NodeSha256NovelApprovalDigester(),
+    clock,
+    logger,
+  });
   const commitWriter = new NovelCommitWriter({
     store: commitStore,
     history,
     executor,
     validate: options.validateCommit,
+    ...(options.requireApproval ? { approvalVerifier: approvals } : {}),
     logger,
   });
   logger.info("novel_entity_application.created", {});
@@ -133,6 +149,7 @@ export function createNodeNovelEntityApplication(
     characterQueries: new CharacterQueryService(queryStore),
     locationQueries: new LocationQueryService(queryStore),
     changeSets,
+    approvals,
     commits: new NovelCommitService({
       changeSets,
       writer: commitWriter,

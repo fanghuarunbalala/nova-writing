@@ -1,6 +1,7 @@
 /** Serializes canonical Commits per Novel and coordinates payload plus SQLite authority. */
 import { noopLogger, type Logger } from "../../observability/index.js";
 import { NovelCommitHistoryIntegrityError } from "../error/index.js";
+import type { NovelApprovalService } from "../approval/index.js";
 import type { NovelId } from "../identity/index.js";
 import type { NovelOperationExecutor } from "../operation/index.js";
 import type { NovelCommitHistoryStore, NovelCommitStore } from "../port/index.js";
@@ -13,6 +14,7 @@ export interface NovelCommitWriterOptions<TContext> {
   readonly history: NovelCommitHistoryStore;
   readonly executor: NovelOperationExecutor<TContext>;
   readonly validate?: (context: TContext) => void;
+  readonly approvalVerifier?: Pick<NovelApprovalService, "verify">;
   readonly logger?: Logger;
 }
 
@@ -41,6 +43,7 @@ export class NovelCommitWriter<TContext> {
     const payload = captureNovelCommitPayload(input.payload);
     assertPayloadMatchesChangeSet(payload, changeSet);
     return this.runExclusive(changeSet.novelId, async () => {
+      await this.options.approvalVerifier?.verify(changeSet);
       const references = await this.options.store.listHistoryReferences();
       const reconciliation = await this.options.history.reconcile(references);
       if (reconciliation.missing.length > 0) {

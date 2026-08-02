@@ -562,6 +562,21 @@ Approval invalidation is the next N7 step.
 
 Any Rebase or conflict resolution that changes base revision or effective ChangeSet digest invalidates previous Approval.
 
+Delivered boundaries:
+
+- immutable version-1 Approval grants bind Draft identity, base revision,
+  ChangeSet digest, ordered Operation IDs, timestamp, canonical JSON, and SHA-256
+- Draft SQLite schema v6 retains active and invalidated Approval audit records,
+  supports exact duplicate grant retry, and supersedes an older active identity
+- explicit invalidation records fixed safe reasons without Novel content
+- optional Node application enforcement verifies Approval inside Commit Writer's
+  per-Novel serialized section before history preparation or canonical mutation
+- Rebase invalidates the source Draft Approval with `base-revision-changed`
+  before candidate registry publication; new candidate identities never inherit
+  predecessor Approval
+
+**Status:** completed by the focused Novel ChangeSet Approval commit.
+
 ### N7-E Validation
 
 Use concurrent Character and Location Drafts to cover non-overlapping automatic Rebase, same-field conflict, delete/update conflict, idempotent create, manual resolution, crash recovery, and successful post-resolution Commit.

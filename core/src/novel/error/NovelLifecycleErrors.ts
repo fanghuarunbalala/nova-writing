@@ -267,6 +267,14 @@ export class NovelResolutionApplicationPlanIdentityConflictError extends Error {
   }
 }
 
+export class NovelApprovalRequiredError extends Error {
+  override readonly name = "NovelApprovalRequiredError";
+  readonly code = "NOVEL_APPROVAL_REQUIRED" as const;
+  constructor(public readonly draftSessionId: NovelDraftSessionId) {
+    super("Novel ChangeSet Approval is required");
+  }
+}
+
 export type NovelOperationPreconditionFailure =
   | "entity_exists"
   | "entity_missing"

@@ -1010,6 +1010,24 @@ interface NovelChangeSetApprovalRequest {
 - The Approval UI may show semantic summaries and load detailed values or manuscript Artifacts on demand; approval identity remains the digest.
 - Canonical Commit verifies the Approval grant after acquiring the Commit Writer lock and before applying the ChangeSet.
 
+The initial durable Approval protocol is Draft-local and versioned:
+
+- the grant records `draftSessionId`, `baseRevision`, exact ChangeSet digest,
+  ordered Operation IDs, grant timestamp, canonical JSON, and SHA-256 identity
+- one active grant exists per Draft database; an exact retry is a duplicate,
+  while a new grant supersedes the previous active record without deleting its
+  audit history
+- explicit invalidation records a safe fixed reason such as
+  `base-revision-changed`, `change-set-changed`, `draft-replaced`, or `revoked`
+- when Approval enforcement is enabled, Commit Writer verifies the grant inside
+  the per-Novel serialized section before preparing history or mutating canonical
+  state
+- successful Rebase invalidates the preserved source Draft grant before
+  publishing the candidate registry; resolved siblings have distinct Draft
+  identities and therefore cannot inherit predecessor Approval
+- Novel ChangeSet Approval remains independent from Runtime Tool Approval and
+  does not reuse Tool interaction records or permission decisions
+
 ### 10.8 Preserved Domain Mutation Rules
 
 - Fractional ordering keys handle frequent sibling and paragraph insertion.

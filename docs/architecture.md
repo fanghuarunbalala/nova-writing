@@ -5012,9 +5012,9 @@ There is no public `BaseTool` or common `ToolDetails` class. Concrete Tools may 
 
 Incremental execution information is emitted through an injected asynchronous `ToolProgressSink`. Progress updates never replace the final Promise result and are treated as private Tool data for logging and persistence redaction.
 
-`PiToolAdapter` is package-private and is not exported through Core, Tools, Runtime, or the internal Pi barrel. It converts Core Descriptor fields and TypeBox parameters to Pi `AgentTool` values while preserving Tool order. Its execute callback never invokes a Core Handler directly: it delegates to a package-private `PiToolExecutionBridge`, which Task 5B connects to the Dispatcher and security pipeline. The Adapter maps Core progress, partial results, final text content, optional details, and logical Artifact references into internal Pi result envelopes. Pi cancellation is forwarded as an `AbortSignal`; Pi types never appear in public Core Tool contracts or exported declaration surfaces.
+`PiToolAdapter` is package-private and is not exported through Core, Tools, Runtime, or the internal Pi barrel. It converts Core Descriptor fields and TypeBox parameters to Pi `AgentTool` values while preserving Tool order. Its execute callback never invokes a Core Handler directly: it delegates to the package-private `DispatcherPiToolExecutionBridge`, which binds the current Conversation, Run, optional Turn, Tool call, registered Tool version, arguments, progress, and cancellation signal to the shared `ToolDispatcher`. The Adapter maps Core progress, partial results, final text content, optional details, and logical Artifact references into internal Pi result envelopes. Pi types never appear in public Core Tool contracts or exported declaration surfaces.
 
-Checkpoint 5A is implemented end to end through declaration, defensive registration, YAML Group loading, immutable Catalog and Registry View composition, and package-private Pi conversion. The boundary intentionally ends at `PiToolExecutionBridge`: no production path may execute a Handler through the Adapter until Task 5B supplies the validated Dispatcher, permission, approval, sandbox, cancellation, timeout, and trace pipeline.
+Checkpoint 5A is implemented end to end through declaration, defensive registration, YAML Group loading, immutable Catalog and Registry View composition, and package-private Pi conversion. Checkpoint 5B extends that boundary so every Pi Tool call crosses the validated Dispatcher, permission, Approval, Sandbox, cancellation, timeout, retry, and Trace pipeline before a Handler can execute.
 
 The implemented Core protocol defensively captures Tool declarations and values before they cross ownership boundaries:
 
@@ -5129,9 +5129,9 @@ Task 5B security policy is fixed as follows:
 - approval actors come from trusted transport or command metadata, never Event payload data
 - Tool Trace is a redacted metadata projection and never persists raw arguments, Tool data, paths, environment, credentials, raw errors, stacks, causes, or Runtime stderr
 
-The initial execution protocol uses a `ToolArgumentDigester` Port so the provider-neutral Core contract does not select a platform crypto implementation. `captureToolInvocation` defensively clones JSON-safe arguments before asynchronous transfer and binds the resulting immutable invocation to a validated `sha256:` digest. Errors and Trace records retain only safe identities and bounded metadata.
+The initial execution protocol uses a `ToolArgumentDigester` Port so the provider-neutral Core contract does not select a platform crypto implementation. `captureToolInvocation` accepts untrusted provider arguments, defensively captures a JSON-safe immutable value before asynchronous transfer, preserves an optional requested Tool version, and binds the invocation to a validated `sha256:` digest. The Node entrypoint supplies `NodeSha256ToolArgumentDigester`, which hashes the canonical UTF-8 argument representation. Errors and Trace records retain only safe identities and bounded metadata.
 
-`ToolDispatcher` is a thin facade over `ToolExecutionPipeline`. The pipeline captures and digests the invocation, resolves only through the assigned `ToolRegistryView`, revalidates arguments against the registered TypeBox schema, resolves the exact Tool execution policy, evaluates permission, waits for approval when required, re-evaluates with the one-shot grant, checks Sandbox capability, executes the Handler, then validates progress and the bounded final result.
+`ToolDispatcher` is a thin facade over `ToolExecutionPipeline`. The pipeline captures and digests the invocation, resolves only through the assigned `ToolRegistryView`, rejects a supplied Tool version that differs from the registered version, revalidates arguments against the registered TypeBox schema, resolves the exact Tool execution policy, evaluates permission, waits for approval when required, re-evaluates with the one-shot grant, checks Sandbox capability, executes the Handler, then validates progress and the bounded final result.
 
 `SandboxExecutor` exposes an immutable capability declaration. `TrustedProcessSandboxExecutor` declares `isolation: none` and invokes the Handler in the current trusted process; it is not described as a security sandbox. A policy requiring `os_process` is rejected both by the initial built-in permission rule and by a pipeline capability check before Handler execution.
 
@@ -5142,6 +5142,8 @@ Task 5B-E makes the Pipeline the owner of active Tool-call cancellation. Caller 
 Retry is evaluated after each normalized Handler attempt. A second attempt is possible only when policy permits two attempts, the Tool is explicitly idempotent, the error is explicitly retryable, execution was not cancelled, and side effects are `none`. Timeout errors are not retryable by default. `possible`, `partial`, and `completed_unknown` always stop automatic retry.
 
 Every execution stage is projected into a validated `ToolTraceRecord`. `RuntimeEventToolTraceSink` converts that record into `ToolTraceRecordedOutputEvent`, so the existing Runtime Event sink persists it in the Conversation Journal before the next security-sensitive stage advances. Trace payloads contain identity, digest, stage, attempt, timing, sizes, rules, decisions, Artifact IDs, and safe error metadata only.
+
+Checkpoint 5B is complete. Its integration boundary proves the concrete Pi Agent Tool path cannot execute before Approval, preserves and checks the registered Tool version, forwards progress and cancellation, converts the final Core result back to Pi, changes approval identity when canonical arguments change, persists only redacted Approval and Trace Events, and keeps all Pi declarations out of public Core barrels.
 
 `LayeredToolPermissionPolicy` captures immutable rules, orders them by built-in, Workspace, then Agent Definition source, and evaluates every matching rule. A matching deny wins over ask and allow; a built-in hard deny is reported explicitly and cannot be changed by approval. No matching rule produces the synthetic `builtin.default_deny` decision.
 
@@ -5530,12 +5532,11 @@ Not yet implemented:
 
 - ConversationProxy implementation
 - process supervisor
-- InteractionCoordinator and Approval events
 - concrete restart-safe ContextCheckpointStore and canonical Journal/Message source adapters
 - durable ArtifactStore, oversized User-content staging, and Artifact-reference recovery
 - concrete restart-safe private Nudge persistence and Provider transport dispatch-hook adapters
-- Tool Pi mapping and Tool-bearing Assistant canonical projection
-- Tool registry, execution pipeline, ToolResultMaterializer, and bounded Artifact access Tools
+- Tool-bearing Assistant canonical projection
+- ToolResultMaterializer and bounded Artifact access Tools
 - IPC protocol
 - Subagent manager
 

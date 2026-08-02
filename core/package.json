@@ -40,6 +40,7 @@
     "smoke:tool-interaction-coordinator": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-interaction-coordinator-typecheck.ts && node scripts/tool-interaction-coordinator-smoke.mjs",
     "smoke:tool-dispatcher": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-dispatcher-typecheck.ts && node scripts/tool-dispatcher-smoke.mjs",
     "smoke:tool-execution-control": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-execution-control-typecheck.ts && node scripts/tool-execution-control-smoke.mjs",
+    "smoke:tool-execution-integration": "pnpm build && node scripts/tool-execution-integration-smoke.mjs",
     "smoke:conversation-protocol": "pnpm build && node scripts/conversation-protocol-smoke.mjs",
     "smoke:conversation-command": "pnpm build && node scripts/conversation-command-integration-smoke.mjs",
     "smoke:conversation-host-protocol": "pnpm build && node scripts/conversation-host-protocol-smoke.mjs",

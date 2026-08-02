@@ -13,10 +13,13 @@ export interface ToolInvocation {
   readonly toolCallId: string;
   readonly turnId?: string;
   readonly toolName: string;
-  readonly arguments: JsonValue;
+  readonly toolVersion?: string;
+  readonly arguments: unknown;
 }
 
-export interface CapturedToolInvocation extends ToolInvocation {
+export interface CapturedToolInvocation
+  extends Omit<ToolInvocation, "arguments"> {
+  readonly arguments: JsonValue;
   readonly argumentDigest: ToolArgumentDigest;
 }
 

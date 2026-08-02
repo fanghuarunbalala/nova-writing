@@ -608,6 +608,17 @@ function resolveTool(
       ...errorIdentity(invocation),
     });
   }
+  if (
+    invocation.toolVersion !== undefined &&
+    invocation.toolVersion !== tool.descriptor.version
+  ) {
+    throw new ToolError({
+      code: "TOOL_VERSION_MISMATCH",
+      category: "validation",
+      sideEffectStatus: "none",
+      ...errorIdentity(invocation, tool),
+    });
+  }
   return tool;
 }
 

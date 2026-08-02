@@ -47,6 +47,7 @@ export async function captureToolInvocation(
     const runId = requireIdentity(record.runId);
     const toolCallId = requireIdentity(record.toolCallId);
     const toolName = requireToolName(record.toolName);
+    const toolVersion = optionalToolVersion(record.toolVersion);
     const turnId = optionalIdentity(record.turnId);
     const arguments_ = captureJson(record.arguments);
     const argumentDigest = captureToolArgumentDigest(
@@ -58,6 +59,7 @@ export async function captureToolInvocation(
       toolCallId,
       ...(turnId === undefined ? {} : { turnId }),
       toolName,
+      ...(toolVersion === undefined ? {} : { toolVersion }),
       arguments: arguments_,
       argumentDigest,
     });
@@ -290,6 +292,10 @@ function requireToolName(value: unknown): string {
 function requireToolVersion(value: unknown): string {
   if (typeof value !== "string" || !TOOL_VERSION.test(value)) throw new Error();
   return value;
+}
+
+function optionalToolVersion(value: unknown): string | undefined {
+  return value === undefined ? undefined : requireToolVersion(value);
 }
 
 function requireTimestamp(value: unknown): string {

@@ -2571,6 +2571,16 @@ Task 5B-E delivered:
 - `ToolTraceRecordedOutputEvent` plus `RuntimeEventToolTraceSink`, making validated Trace metadata durable through the shared Journal OutputEvent barrier
 - retry attempt numbers, durations, input/output byte sizes, Artifact IDs, safe error metadata, and approval metadata without raw Tool data
 
+Task 5B-F delivered:
+
+- optional `toolVersion` capture on untrusted Tool invocations and rejection of stale or mismatched provider Tool versions before Handler execution
+- Node-only `NodeSha256ToolArgumentDigester`, exported from `@novel/core/node`, for canonical UTF-8 SHA-256 approval identities without introducing Node crypto into provider-neutral Core barrels
+- package-private `DispatcherPiToolExecutionBridge`, binding Pi Tool calls to Conversation, Run, optional Turn, registered Tool version, cancellation, progress, and the shared `ToolDispatcher`
+- end-to-end Pi Tool execution validation across Registry View, canonical digest, TypeBox validation, permission, Approval Events, post-approval evaluation, Sandbox, Handler, progress/result conversion, cancellation, and persisted redacted Trace Events
+- declaration leak validation proving Pi adapter, bridge, and Pi Agent Tool types remain absent from public Core, Tools, Runtime, Agent, and Pi barrel declarations
+
+Checkpoint 5B status: completed.
+
 Expected deliverables after approval:
 
 - Tool execution facade and middleware pipeline
@@ -2754,19 +2764,6 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Task 0, Task 1A through Task 1D-F, Task 2A through Task 2C, Task 2D-A through Task 2D-C, and Task 2D-D-A through Task 2D-D-E have been implemented and are awaiting checkpoint review.
+Runtime Task 0 through Task 5B are implemented and committed. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path.
 
-Completed Task 1 results include:
-
-- Workspace-to-Store location, semantic naming, explicit rebind, and SQLite lifecycle
-- Conversation metadata and normalized versioned Agent bindings
-- unified Input/Output Journal with durable Sequence and idempotent Event identity
-- public read-only Journal history that does not activate Runtime
-- repairable per-Conversation Runtime Message JSONL projections
-- projection validation, synchronization, repair, migration, and atomic rebuild
-- process-local live Event fan-out with bounded Subscriber backpressure
-- Journal catch-up-to-live delivery with reconnectable Sequence cursors
-- persistence-first Event publication with per-Conversation serialization
-- real SQLite end-to-end replay, reopen, duplicate, and live-follow smoke validation
-
-The next reviewed step is Task 2D-C: `ManagedConversationHost`, per-Conversation Runtime Slots, single-flight activation, queued accepted-input scheduling, Runtime Presence transitions, explicit shutdown, stale-exit generation protection, and Host close lifecycle. Queue ownership, activation failure behavior, duplicate Sequence handling, stopping-state inputs, and Placement Handle validation must be confirmed before implementation.
+The next documented Runtime step is Task 6A: IPC and Process Management. It is outside the Task 5B implementation scope and begins only as a separate reviewed step.

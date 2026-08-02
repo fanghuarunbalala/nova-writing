@@ -838,6 +838,24 @@ Novel Approval request protocol delivered:
 **Status:** N8-D Approval request and OutputEvent protocol completed; the
 asynchronous pending-request bridge and stale-decision validation are next.
 
+Asynchronous Approval Bridge delivered:
+
+- request publication is a durable barrier before the Bridge exposes a pending
+  Promise; retrying the same Draft/ChangeSet request reuses that Promise and
+  does not republish after a valid receipt
+- `ApprovalDecisionInputEvent` resolution validates Conversation, request ID,
+  and ChangeSet digest before consuming a request
+- the current frozen ChangeSet is revalidated against Novel, Draft, base
+  revision, digest, and ordered Operation IDs at decision time
+- stale ChangeSets resolve as `stale` without granting Approval, identity
+  mismatches leave the request pending, exact rejection resolves without a
+  grant, and only an exact approval invokes the short durable grant operation
+- no Novel SQLite transaction or Commit Writer lock exists while the Bridge is
+  waiting for client input
+
+**Status:** N8-D request protocol and asynchronous decision Bridge completed;
+Commit orchestration integration is next.
+
 ### N8-E Validation
 
 Cover Event ordering, retry-stable IDs, dispatcher restart, duplicate delivery, Approval staleness, Conversation identity, and redacted logs.

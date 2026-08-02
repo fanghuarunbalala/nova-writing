@@ -4970,6 +4970,15 @@ There is no public `BaseTool` or common `ToolDetails` class. Concrete Tools may 
 
 Incremental execution information is emitted through an injected asynchronous `ToolProgressSink`. Progress updates never replace the final Promise result and are treated as private Tool data for logging and persistence redaction.
 
+The implemented Core protocol defensively captures Tool declarations and values before they cross ownership boundaries:
+
+- Tool names use a stable lowercase underscore identity and Tool versions use strict `major.minor.patch` syntax.
+- TypeBox schemas are runtime-validated, cloned with their TypeBox metadata intact, and deeply frozen so later declaration mutation cannot alter a registered definition.
+- first-version result content is text-only; structured success details must be JSON-safe, and large or non-text values are represented by logical `ArtifactReference` values owned by the executing Conversation.
+- result limits are supplied by the caller as policy input rather than hidden as protocol constants; until Artifact materialization is implemented, an oversized result fails with stable `result_oversized`.
+- progress and partial-result updates are asynchronously emitted and validated separately from the final result.
+- protocol failures contain only validated Tool, Conversation, and Tool-call identities and never retain Tool arguments, content, details, progress text, paths, or underlying errors.
+
 ## 21. Tool Execution Pipeline
 
 `ToolDispatcher` is the public execution facade. Internally it uses a composable pipeline rather than one giant manager method.

@@ -2409,6 +2409,17 @@ Task 5A implementation order:
 - Task 5A-E: implement the package-private Pi Tool Adapter without exposing Pi types through Core Tool contracts
 - Task 5A-F: integrate protocol, Registry, Group, View, and Pi conversion coverage; update architecture and commit the completed Task 5A boundary
 
+Task 5A-A delivered:
+
+- Core-owned TypeBox-backed `ToolDescriptor`, inferred `ToolArguments`, minimal `ToolExecutionContext`, asynchronous `ToolHandler`, immutable `RegisteredTool`, and type-preserving `defineTool()` composition
+- Provider-neutral text result content, optional generic JSON-safe details, logical Conversation-owned `ArtifactReference` values, and caller-supplied result limits without a hidden global size policy
+- asynchronous `ToolProgressSink`, progress and partial-result updates, and a reusable no-op Sink while keeping all progress content private from logs and failures
+- defensive Descriptor, registration, result, and progress capture with deep immutable schemas and values, strict Tool name and semantic version validation, TypeBox runtime-shape validation, UTF-8 result accounting, and Artifact Conversation ownership checks
+- stable `ToolProtocolError` failures containing only validated Tool, Conversation, and Tool-call identities; errors never retain arguments, result content, details, progress text, paths, raw failures, stacks from caught errors, or Pi types
+- focused compile-time and runtime smoke coverage for TypeBox inference, schema metadata retention, source-mutation isolation, generic details, size boundaries, Artifact ownership, progress arithmetic, stable redaction, and public Tool declaration independence from Pi
+
+Task 5A-A explicitly excludes Registry assembly, duplicate resolution, YAML Group manifests, Registry Views, Pi conversion, argument execution, Tool-error normalization, permission, approval, sandboxing, retry, trace persistence, Artifact materialization, and concrete Tools.
+
 Expected deliverables after approval:
 
 - core-owned Tool types

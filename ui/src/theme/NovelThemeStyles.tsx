@@ -449,6 +449,111 @@ const NOVEL_THEME_CSS = `
   font-size: 13px;
 }
 
+.novel-change-review {
+  color: var(--novel-text-primary);
+}
+
+.novel-change-review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--novel-border);
+  padding-bottom: 14px;
+}
+
+.novel-change-review-header > div > span {
+  color: var(--novel-text-secondary);
+  font-size: 11px;
+}
+
+.novel-change-review-header h2 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.novel-change-review-header p {
+  margin: 7px 0 0;
+  color: var(--novel-text-secondary);
+  line-height: 1.5;
+}
+
+.novel-change-review-state {
+  flex: 0 0 auto;
+  border: 1px solid var(--novel-border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--novel-text-secondary);
+  background: var(--novel-surface-primary);
+  font-size: 11px;
+}
+
+.novel-change-review-state[data-state="stale"],
+.novel-change-review-state[data-state="conflict"],
+.novel-change-review-state[data-state="unavailable"],
+.novel-change-review-state[data-state="error"] {
+  border-color: #e2c7c7;
+  color: #8a4141;
+  background: #fff8f8;
+}
+
+.novel-change-review-identity {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 0;
+}
+
+.novel-change-review-identity div {
+  min-width: 0;
+  border: 1px solid var(--novel-border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: var(--novel-surface-primary);
+}
+
+.novel-change-review-identity dt {
+  color: var(--novel-text-secondary);
+  font-size: 10px;
+}
+
+.novel-change-review-identity dd {
+  margin: 4px 0 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.novel-change-review-notice {
+  margin: 12px 0 0;
+  border-radius: 7px;
+  padding: 9px 10px;
+  color: var(--novel-text-secondary);
+  background: var(--novel-surface-secondary);
+  font-size: 12px;
+}
+
+.novel-change-review-notice[data-notice-kind="stale"],
+.novel-change-review-notice[data-notice-kind="conflict"],
+.novel-change-review-notice[data-notice-kind="unavailable"],
+.novel-change-review-notice[data-notice-kind="error"] {
+  color: #8a4141;
+  background: #fff8f8;
+}
+
+.novel-change-review-content {
+  padding-top: 16px;
+}
+
+.novel-change-review-footer {
+  margin-top: 16px;
+  border-top: 1px solid var(--novel-border);
+  padding-top: 12px;
+  color: var(--novel-text-secondary);
+  font-size: 11px;
+}
+
 .novel-conversation-view {
   width: min(840px, 100%);
   margin: 0 auto;

@@ -733,6 +733,12 @@ All reviewers share:
 
 They do not share one generic content layout.
 
+### 14.1 Implemented Shared Review Shell
+
+The shared UI now validates and renders an immutable `NovelChangeReviewView` containing the complete Approval Request, Novel, Draft Session, base Revision, ChangeSet digest, Operation identities, and domain binding. The Shell abbreviates the digest for display, shows operation count rather than dumping identities, and exposes only stable lifecycle codes for stale, conflict, unavailable, and error states.
+
+`NovelChangeReviewShell` provides common identity, lifecycle, loading, pending-resolution, resolved, stale, conflict, and unavailable chrome around domain-specific children. It remains deliberately read-only: no direct Novel mutation client and no locally invented Approval decision protocol are exposed. Decision controls begin only after the accepted Novel Approval InputEvent and resolution OutputEvent bridge exist.
+
 ## 15. Change Review Identity and Approval
 
 The reviewer binds to the immutable Novel ChangeSet identity accepted by the Novel domain:

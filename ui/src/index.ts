@@ -8,6 +8,7 @@ export * from "./inspector/index.js";
 export * from "./navigation/index.js";
 export * from "./outline/index.js";
 export * from "./platform/index.js";
+export * from "./review/index.js";
 export * from "./shell/index.js";
 export * from "./state/index.js";
 export * from "./theme/index.js";

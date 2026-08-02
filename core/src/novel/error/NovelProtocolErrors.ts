@@ -5,6 +5,7 @@ export const NOVEL_PROTOCOL_FAILURE = {
   invalidSchemaVersion: "invalid_schema_version",
   invalidEntityVersion: "invalid_entity_version",
   invalidTimestamp: "invalid_timestamp",
+  invalidDraftStatus: "invalid_draft_status",
 } as const;
 
 export type NovelProtocolFailure =
@@ -18,10 +19,12 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "conflictId",
   "artifactId",
   "workspaceId",
+  "conversationId",
   "revision",
   "schemaVersion",
   "entityVersion",
   "timestamp",
+  "draftStatus",
 ]);
 
 export class NovelProtocolValidationError extends Error {

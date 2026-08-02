@@ -35,6 +35,44 @@ export class NovelDraftSessionNotFoundError extends Error {
   }
 }
 
+export class NovelDraftAlreadyActiveError extends Error {
+  override readonly name = "NovelDraftAlreadyActiveError";
+  readonly code = "NOVEL_DRAFT_ALREADY_ACTIVE" as const;
+
+  constructor(
+    public readonly novelId: NovelId,
+    public readonly ownerConversationId: string,
+    public readonly draftSessionId: NovelDraftSessionId,
+  ) {
+    super("Conversation already owns an active Novel Draft Session");
+  }
+}
+
+export const NOVEL_SNAPSHOT_FAILURE = {
+  alreadyExists: "already_exists",
+  missing: "missing",
+  invalid: "invalid",
+  createFailed: "create_failed",
+  replaceFailed: "replace_failed",
+  removeFailed: "remove_failed",
+} as const;
+
+export type NovelSnapshotFailure =
+  (typeof NOVEL_SNAPSHOT_FAILURE)[keyof typeof NOVEL_SNAPSHOT_FAILURE];
+
+export class NovelSnapshotError extends Error {
+  override readonly name = "NovelSnapshotError";
+  readonly code = "NOVEL_SNAPSHOT_FAILED" as const;
+
+  constructor(
+    public readonly failure: NovelSnapshotFailure,
+    public readonly novelId: NovelId,
+    public readonly draftSessionId: NovelDraftSessionId,
+  ) {
+    super("Novel Draft snapshot operation failed");
+  }
+}
+
 export class NovelDraftSessionStateError extends Error {
   override readonly name = "NovelDraftSessionStateError";
   readonly code = "NOVEL_DRAFT_SESSION_STATE_INVALID" as const;

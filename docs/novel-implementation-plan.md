@@ -276,6 +276,19 @@ recoverDraftSessions
 
 Cover multiple Conversation Drafts, same-Conversation exclusivity, restart recovery, reset, rollback, snapshot failure cleanup, and path redaction.
 
+### N3-E Delivered
+
+- immutable Draft Session protocol covering identity, owning Conversation, base NovelRevision, lifecycle status, and timestamps
+- platform-neutral canonical Draft Store and Novel Snapshotter ports with no physical path exposure
+- canonical SQLite Draft records enforcing one non-terminal Draft per top-level Conversation
+- durable per-Conversation staging layout containing `manifest.json`, `draft.sqlite`, and an Artifact directory
+- WAL-aware `node:sqlite.backup()` snapshots with source and destination revision validation; ordinary filesystem copying is not used
+- lifecycle services for `startDraft`, `getActiveDraft`, `resetToMain`, and `rollback`, with same-Conversation serialization and cleanup compensation
+- restart recovery that reopens valid Drafts, reconciles completed reset snapshots, rolls back missing or invalid working copies, removes terminal working state, and deletes orphan snapshots
+- focused coverage for concurrent Conversation Drafts, exclusivity, reopen recovery, latest-revision reset, rollback, orphan and missing snapshots, failed snapshot cleanup, and path/content redaction
+
+**Status:** completed by the focused durable Draft Session commit.
+
 ## 10. Task N4: Domain Operation Engine
 
 ### N4-A Operation Protocol
@@ -469,5 +482,6 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
 - Task N0 is completed by the commit introducing this plan.
 - Task N1 is completed by the focused Novel foundation commit.
 - Task N2 is completed by the focused canonical Novel Store commit.
-- Task N3 is the next implementation task.
+- Task N3 is completed by the focused durable Draft Session commit.
+- Task N4 is the next implementation task.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

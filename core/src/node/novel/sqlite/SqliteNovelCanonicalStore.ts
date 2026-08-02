@@ -52,7 +52,7 @@ export class SqliteNovelCanonicalStore implements NovelCanonicalStore {
 
   private constructor(
     private readonly database: DatabaseSync,
-    private readonly metadata: NovelCanonicalMetadata,
+    private metadata: NovelCanonicalMetadata,
     private readonly logger: Logger,
   ) {}
 
@@ -107,6 +107,11 @@ export class SqliteNovelCanonicalStore implements NovelCanonicalStore {
 
   async getMetadata(): Promise<NovelCanonicalMetadata> {
     this.assertOpen();
+    this.metadata = readNovelMetadata(this.database, {
+      workspaceId: this.metadata.workspaceId,
+      expectedNovelId: this.metadata.novelId,
+      schemaVersion: this.metadata.schemaVersion,
+    });
     return this.metadata;
   }
 
@@ -227,6 +232,37 @@ function bindNovelMetadata(
       updatedAt: timestamp,
     });
   }
+
+  return validateNovelMetadataRow(existing, options);
+}
+
+function readNovelMetadata(
+  database: DatabaseSync,
+  options: Pick<
+    BindNovelMetadataOptions,
+    "workspaceId" | "expectedNovelId" | "schemaVersion"
+  >,
+): NovelCanonicalMetadata {
+  const existing = database
+    .prepare(
+      `SELECT novel_id, workspace_id, schema_version, current_revision, created_at, updated_at
+       FROM novel_metadata
+       WHERE singleton = 1`,
+    )
+    .get() as NovelMetadataRow | undefined;
+  if (existing === undefined) {
+    throw new NovelDatabaseError(NOVEL_DATABASE_FAILURE.invalidStructure);
+  }
+  return validateNovelMetadataRow(existing, options);
+}
+
+function validateNovelMetadataRow(
+  existing: NovelMetadataRow,
+  options: Pick<
+    BindNovelMetadataOptions,
+    "workspaceId" | "expectedNovelId" | "schemaVersion"
+  >,
+): NovelCanonicalMetadata {
 
   let metadata: NovelCanonicalMetadata;
   try {

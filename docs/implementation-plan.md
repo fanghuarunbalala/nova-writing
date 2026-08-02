@@ -2809,6 +2809,15 @@ Task 6B-B delivered:
 - stable payload-free management errors plus structured `info` and `debug` logs that exclude objectives, Tool policy contents, paths, raw causes, and Runtime details
 - focused validation for successful activation, nesting rejection, policy expansion, per-Run/global limits, concurrent oversubscription, terminal capacity reuse, creation failure, invalid creation responses, activation rollback, rollback failure, and log safety
 
+Task 6B-C delivered:
+
+- five schema-registered parent Agent OutputEvents for started, progress, completed, failed, and cancelled child lifecycle projections
+- redacted immutable payloads with stable child identity, safe progress/error/cancellation codes, bounded summaries, and child-owned Artifact references only
+- explicit `orphaned` result mapping to the failed parent projection with an `orphaned` outcome, preserving the accepted five-event client surface
+- `DefaultSubagentLifecycleCoordinator` with per-child serialization, retry-stable Event identity, ordered progress ordinals, structured result waiting, and duplicate terminal result consistency checks
+- terminal persistence ordering of parent Journal projection, Manager terminal transition/capacity release, then `SubagentResult` Promise resolution
+- focused schema and lifecycle validation for success, progress ordering, Artifact results, failed/cancelled/orphaned projection, start and terminal append failure, late progress, duplicate/conflicting results, and payload-free logs
+
 Expected deliverables after approval:
 
 - child Conversation creation and metadata
@@ -2906,4 +2915,4 @@ No next checkpoint begins without explicit approval.
 
 Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
-The next documented Runtime step is Task 6B-C: child lifecycle coordination, structured `SubagentResult` delivery, and redacted parent projection OutputEvents.
+The next documented Runtime step is Task 6B-D: parent cancellation propagation, orphan reclamation, and Host-level Conversation tree query/subscription.

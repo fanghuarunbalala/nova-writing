@@ -15,6 +15,7 @@ export * from "./OutputEventType.js";
 export * from "./OutputPayload.js";
 export * from "./RuntimePresenceChangedOutputEvent.js";
 export * from "./RuntimeInputProcessedOutputEvent.js";
+export * from "./SubagentLifecycleOutputEvents.js";
 export * from "./schema/index.js";
 export * from "./SystemOutputEvent.js";
 export * from "./ToolApprovalLifecycleOutputEvents.js";

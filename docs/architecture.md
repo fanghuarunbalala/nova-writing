@@ -5759,6 +5759,10 @@ Tool policy identifiers remain opaque to the Manager. A composition-owned relati
 
 Successful activation freezes a `running` binding. Creation failure releases the reservation, activation failure invokes the rollback Port and records a terminal `failed` binding, and rollback failure records `orphaned` for later recovery. Terminal status recording releases capacity exactly once while preserving the binding for later lifecycle projection and tree observation.
 
+Task 6B-C exposes five parent-visible Agent OutputEvents: `agent.subagent.started`, `agent.subagent.progress`, `agent.subagent.completed`, `agent.subagent.failed`, and `agent.subagent.cancelled`. Their payloads contain stable identities, bounded status metadata, safe codes, and optional child-owned Artifact references; child prompts, Messages, Tool traces, and full child OutputEvents are never copied into the parent Journal. An `orphaned` terminal result uses the failed projection with `outcome: "orphaned"`, preserving the accepted five-event public surface without losing the distinct recovery outcome.
+
+`DefaultSubagentLifecycleCoordinator.start()` returns a frozen handle containing the running binding and a `Promise<SubagentResult>`. Started and progress projections are serialized per child. Terminal delivery validates the complete result against its binding, appends the terminal parent projection as a persistence barrier, records the Manager terminal state to release capacity, and only then resolves the handle result. Retry-stable event identity and duplicate-result checks permit an identical terminal delivery to be replayed while rejecting conflicting results.
+
 ## 26. Persistence Model
 
 Logical local storage layout:

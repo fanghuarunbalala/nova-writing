@@ -409,6 +409,116 @@ const AgentAssistantMessageSnapshotSchema = Type.Object(
   { additionalProperties: true },
 );
 
+const SubagentArtifactReferenceSchema = Type.Object(
+  {
+    schemaVersion: Type.Literal(1),
+    artifactId: Type.String({ minLength: 1 }),
+    conversationId: Type.String({ minLength: 1 }),
+    contentType: Type.String({ minLength: 1 }),
+    byteLength: Type.Integer({ minimum: 0 }),
+    digest: Type.String({ pattern: "^sha256:[0-9a-f]{64}$" }),
+    tokenEstimate: Type.Optional(Type.Integer({ minimum: 0 })),
+    filename: Type.Optional(Type.String({ minLength: 1 })),
+  },
+  { additionalProperties: false },
+);
+
+const SubagentIdentitySchema = {
+  subagentId: Type.String({ minLength: 1 }),
+  childConversationId: Type.String({ minLength: 1 }),
+} as const;
+
+export const SubagentStartedPayloadSchema = Type.Object(
+  {
+    ...SubagentIdentitySchema,
+    agentType: Type.String({ minLength: 1 }),
+    definitionVersion: Type.String({ minLength: 1 }),
+    startedAt: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const SubagentProgressPayloadSchema = Type.Object(
+  {
+    ...SubagentIdentitySchema,
+    progressCode: Type.String({ pattern: "^[a-z][a-z0-9_.-]{0,127}$" }),
+    ordinal: Type.Integer({ minimum: 1 }),
+    reportedAt: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const SubagentCompletedPayloadSchema = Type.Union([
+  Type.Object(
+    {
+      ...SubagentIdentitySchema,
+      summary: Type.String({ minLength: 1 }),
+      artifactReferences: Type.Array(SubagentArtifactReferenceSchema),
+      completedAt: Type.String({ minLength: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...SubagentIdentitySchema,
+      artifactReferences: Type.Array(SubagentArtifactReferenceSchema, { minItems: 1 }),
+      completedAt: Type.String({ minLength: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+const SubagentCancellationReasonSchema = Type.Union([
+  Type.Literal("parent_completed"),
+  Type.Literal("parent_failed"),
+  Type.Literal("parent_stopped"),
+  Type.Literal("parent_crashed"),
+  Type.Literal("explicit"),
+  Type.Literal("limit_reclaimed"),
+  Type.Literal("orphan_reclaimed"),
+]);
+
+export const SubagentFailedPayloadSchema = Type.Union([
+  Type.Object(
+    {
+      ...SubagentIdentitySchema,
+      outcome: Type.Literal("failed"),
+      errorCode: Type.String({ pattern: "^[A-Z][A-Z0-9_]{0,127}$" }),
+      artifactReferences: Type.Array(SubagentArtifactReferenceSchema),
+      failedAt: Type.String({ minLength: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...SubagentIdentitySchema,
+      outcome: Type.Literal("orphaned"),
+      cancellationReason: SubagentCancellationReasonSchema,
+      artifactReferences: Type.Array(SubagentArtifactReferenceSchema),
+      failedAt: Type.String({ minLength: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export const SubagentCancelledPayloadSchema = Type.Object(
+  {
+    ...SubagentIdentitySchema,
+    cancellationReason: SubagentCancellationReasonSchema,
+    artifactReferences: Type.Array(SubagentArtifactReferenceSchema),
+    cancelledAt: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+const SubagentLifecycleSnapshotSchema = Type.Object(
+  {
+    runId: Type.String({ minLength: 1 }),
+    turnId: Type.Optional(Type.String({ minLength: 1 })),
+  },
+  { additionalProperties: true },
+);
+
 export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): void {
   registry.register({
     kind: "output",
@@ -488,6 +598,22 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     payloadSchema: AssistantMessageIdentityPayloadSchema,
     snapshotSchema: AgentAssistantMessageSnapshotSchema,
   });
+
+  for (const [eventType, payloadSchema] of [
+    [OUTPUT_EVENT_TYPE.subagentStarted, SubagentStartedPayloadSchema],
+    [OUTPUT_EVENT_TYPE.subagentProgress, SubagentProgressPayloadSchema],
+    [OUTPUT_EVENT_TYPE.subagentCompleted, SubagentCompletedPayloadSchema],
+    [OUTPUT_EVENT_TYPE.subagentFailed, SubagentFailedPayloadSchema],
+    [OUTPUT_EVENT_TYPE.subagentCancelled, SubagentCancelledPayloadSchema],
+  ] as const) {
+    registry.register({
+      kind: "output",
+      eventType,
+      schemaVersion: EVENT_SCHEMA_VERSION,
+      payloadSchema,
+      snapshotSchema: SubagentLifecycleSnapshotSchema,
+    });
+  }
 
   registry.register({
     kind: "output",

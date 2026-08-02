@@ -236,6 +236,18 @@ Verify exact Workspace and Novel identity, monotonic schema migration, and fixed
 
 Add canonical bootstrap, identity, migration, reopening, and redacted logging smoke coverage.
 
+### N2-E Delivered
+
+- Node-only Novel Store location derived from the accepted Workspace Store, with `novel.sqlite`, `novel-staging/`, `novel-history/commits/`, and `novel-artifacts/`
+- compatibility with the existing Runtime Workspace database path, which remains `workspace.databasePath` and currently resolves to `novel.db`; Novel N2 does not rename or migrate Runtime storage
+- canonical SQLite control schema for metadata, Draft lifecycle records, Commit metadata, transactional Outbox records, and ordered schema migrations
+- immutable canonical metadata with exact Workspace binding, optional expected Novel identity validation, opaque current revision, and schema version
+- strict contiguous migration-history validation and fixed safe failures for foreign Workspace, foreign Novel, unsupported schema, malformed structure, and closed Store access
+- idempotent close behavior and structured lifecycle logs containing identifiers and safe status metadata only
+- focused smoke coverage for path layout, canonical bootstrap, reopen stability, identity mismatch, future or altered migration history, malformed databases, driver-open failure, and log redaction
+
+**Status:** completed by the focused canonical Novel Store commit.
+
 ## 9. Task N3: Durable Draft Sessions
 
 ### N3-A Draft Protocol
@@ -456,5 +468,6 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
 
 - Task N0 is completed by the commit introducing this plan.
 - Task N1 is completed by the focused Novel foundation commit.
-- Task N2 is the next implementation task.
+- Task N2 is completed by the focused canonical Novel Store commit.
+- Task N3 is the next implementation task.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

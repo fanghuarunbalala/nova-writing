@@ -1,2 +1,3 @@
-/** Node-specific Novel adapters are added incrementally from Task N2 onward. */
-export {};
+/** Node-specific Novel persistence and Workspace adapters. */
+export * from "./sqlite/index.js";
+export * from "./workspace/index.js";

@@ -17,6 +17,7 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "commitId",
   "conflictId",
   "artifactId",
+  "workspaceId",
   "revision",
   "schemaVersion",
   "entityVersion",

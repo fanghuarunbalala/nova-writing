@@ -4927,8 +4927,18 @@ classDiagram
     }
 
     class ToolRegistryView {
+        +ToolRegistryViewPolicy policy
+        +has(name)
         +get(name)
+        +require(name)
         +listAllowed()
+    }
+
+    class ToolGroupCatalog {
+        +has(id)
+        +get(id)
+        +require(id)
+        +list()
     }
 
     class ToolGroupManifest {
@@ -4953,7 +4963,8 @@ classDiagram
     RegisteredTool --> ToolRegistryAssembler
     ToolRegistryAssembler --> ToolRegistry
     ToolGroupManifestLoader --> ToolGroupManifest
-    ToolGroupManifest --> ToolRegistryView
+    ToolGroupManifest --> ToolGroupCatalog
+    ToolGroupCatalog --> ToolRegistryView
     ToolRegistry --> ToolRegistryView
     PiToolAdapter --> RegisteredTool
 ```
@@ -4974,7 +4985,9 @@ The YAML loader accepts one YAML 1.2 document, rejects duplicate mapping keys, a
 
 `ToolRegistryAssembler` is mutable only during assembly. Its idempotent `freeze()` operation captures one immutable `ToolRegistry` snapshot and permanently closes that Assembler to registration or merge. Tool names are globally unique inside one Registry. Duplicate registration and merge conflicts fail explicitly; merge preflight is atomic and load order never replaces an existing Tool. Registry listing is ordered by stable Tool name and does not depend on registration or merge order.
 
-`ToolRegistryView` is an immutable Agent-facing capability view. It begins with the union of selected Tool Groups, applies an optional allowlist, and then applies a denylist. Deny has final precedence. Unknown Group or Tool identities fail rather than being silently ignored.
+`ToolGroupCatalog` is an immutable, deterministic Group identity index. Duplicate Group identities fail; Catalog listing is ordered by Group ID while each Manifest retains its declared Tool order.
+
+`ToolRegistryView` is an immutable Agent-facing capability view. It traverses selected Groups in policy order and each Manifest in declared Tool order, preserving the first occurrence of a Tool shared by multiple Groups. An optional allowlist filters that union but never expands capability outside the selected Groups; the denylist is applied last and has final precedence. Unknown Group identities and unknown Tool identities from Manifests, allowlists, or denylists fail rather than being silently ignored. Repeated Group selections and duplicate allow or deny entries also fail. The resulting Tool order is deterministic for the captured immutable policy.
 
 One Registry exposes at most one version for a Tool name. Incompatible parameter, result, or semantic changes require a new Tool version and a corresponding Agent `definitionVersion` change. Durable Tool-call records retain both Tool name and version.
 

@@ -2440,6 +2440,16 @@ Task 5A-C delivered:
 
 Task 5A-C explicitly excludes Registry existence checks, Group selection, allow/deny composition, Registry Views, Pi conversion, argument execution, Tool-error normalization, permission, approval, sandboxing, retry, trace persistence, Artifact materialization, and concrete Tools.
 
+Task 5A-D delivered:
+
+- an immutable `ToolGroupCatalog` with duplicate Group rejection, strict lookup, and deterministic Group-ID listing while preserving each Manifest's Tool order
+- immutable `ToolRegistryViewPolicy` capture and `ToolRegistryView` queries through `size`, `has`, optional `get`, strict `require`, and frozen `listAllowed`
+- deterministic capability composition in selected-Group order and Manifest Tool order, first-occurrence union deduplication, allow filtering without capability expansion, and final-precedence deny filtering
+- explicit rejection of unknown Group identities, unknown Registry Tools referenced by Manifests, allowlists, or denylists, repeated Group selections, and duplicate allow or deny entries
+- stable Catalog and View failures retaining only validated Group or Tool identities plus focused compile-time and runtime coverage for ordering, immutability, source capture, unknown rejection, and deny precedence
+
+Task 5A-D explicitly excludes Pi conversion, argument execution, Tool-error normalization, permission, approval, sandboxing, retry, trace persistence, Artifact materialization, dynamic Group mounting, and concrete Tools.
+
 Expected deliverables after approval:
 
 - core-owned Tool types

@@ -79,7 +79,7 @@ export function captureNovelLifecycleRecord<T extends NovelLifecycleEventType>(
   if (value.recordVersion !== NOVEL_LIFECYCLE_RECORD_VERSION || !EVENT_TYPES.has(value.eventType)) throw invalid();
   const base = {
     recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
-    eventId: captureEventId(value.eventId),
+    eventId: captureNovelLifecycleEventId(value.eventId),
     eventType: value.eventType,
     novelId: captureNovelId(value.novelId),
     conversationId: captureNovelConversationId(value.conversationId),
@@ -91,6 +91,11 @@ export function captureNovelLifecycleRecord<T extends NovelLifecycleEventType>(
 export function canonicalizeNovelLifecycleRecord(record: NovelLifecycleRecord): string {
   const captured = captureNovelLifecycleRecord(record);
   return canonicalStringifyJson(captured as unknown as JsonObject);
+}
+
+export function captureNovelLifecycleEventId(value: unknown): string {
+  if (typeof value !== "string" || !SAFE_EVENT_ID.test(value)) throw invalid();
+  return value;
 }
 
 function capturePayload<T extends NovelLifecycleEventType>(type: T, input: NovelLifecyclePayloads[T]): NovelLifecyclePayloads[T] {
@@ -130,10 +135,6 @@ function capturePayload<T extends NovelLifecycleEventType>(type: T, input: Novel
   return Object.freeze(payload) as NovelLifecyclePayloads[T];
 }
 
-function captureEventId(value: unknown): string {
-  if (typeof value !== "string" || !SAFE_EVENT_ID.test(value)) throw invalid();
-  return value;
-}
 function captureCount(value: unknown): number {
   if (!Number.isSafeInteger(value) || (value as number) < 0) throw invalid();
   return value as number;

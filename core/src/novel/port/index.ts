@@ -11,6 +11,7 @@ export * from "./NovelConflictDigester.js";
 export * from "./NovelConflictStore.js";
 export * from "./NovelKeepDraftOperationPlanner.js";
 export * from "./NovelLifecycleRecordWriter.js";
+export * from "./NovelOutboxStore.js";
 export * from "./NovelResolutionApplicationPlanStore.js";
 export * from "./NovelEntityRepository.js";
 export * from "./NovelRevisionFactory.js";

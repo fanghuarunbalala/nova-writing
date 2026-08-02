@@ -746,6 +746,20 @@ Recovery coverage completed. Task N8-C Outbox Dispatcher is next.
 
 Dispatch canonical and Draft outbox records idempotently through the accepted Conversation Output publisher and Runtime Journal boundary.
 
+Outbox protocol foundation delivered:
+
+- one provider-neutral Entry protocol represents canonical and Draft lifecycle
+  records through an explicit source discriminator
+- Entries expose only a validated lifecycle Record, its SHA-256 digest, and safe
+  delivery metadata; raw SQLite rows remain adapter-private
+- stable pagination uses lifecycle occurrence time plus Event ID, while a source
+  key provides deterministic merge ordering across stores
+- the Store port separates pending-page reads, delivery-attempt recording, and
+  compare-and-set publication marking for restart-safe dispatch
+
+**Status:** N8-C Outbox protocol and Store port completed; SQLite pending-page
+reading with lifecycle JSON/digest validation is next.
+
 ### N8-D Approval Bridge
 
 Bind asynchronous Approval requests and responses to exact ChangeSet digests without holding SQLite transactions while waiting.

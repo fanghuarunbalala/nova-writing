@@ -9,6 +9,7 @@ export * from "./identity/index.js";
 export * from "./integration/index.js";
 export * from "./model/index.js";
 export * from "./operation/index.js";
+export * from "./outbox/index.js";
 export * from "./port/index.js";
 export * from "./query/index.js";
 export * from "./service/index.js";

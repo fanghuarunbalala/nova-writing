@@ -5438,6 +5438,30 @@ The original `AbortSignal` never enters a Frame. Late Responses after local canc
 
 `InMemoryRuntimeIpcConnection` provides deterministic duplex validation of the same connection Port, including receive capacity. Task 6A-B intentionally does not implement byte framing, JSONL parsing, Node streams, process launch, heartbeat, durable Journal RPC, or automatic restart.
 
+### 24.3 Implemented Node JSONL Runtime IPC Connection
+
+Task 6A-C implements `NodeJsonlIpcConnection` as a Node-only adapter for the provider-neutral `RuntimeIpcConnection` Port. It is exported from `@novel/core/node`; the default Core entrypoint and its declarations remain free of Node stream types.
+
+```mermaid
+flowchart LR
+    Peer["RuntimeIpcPeer"] --> Port["RuntimeIpcConnection Port"]
+    Port --> Connection["NodeJsonlIpcConnection"]
+    Connection --> WriteTail["Ordered write tail"]
+    WriteTail --> Writable["Node Writable / child stdin"]
+    Readable["Node Readable / child stdout"] --> Decoder["Incremental byte decoder"]
+    Decoder --> Capture["Strict Frame capture"]
+    Capture --> Buffer["Bounded async receive buffer"]
+    Buffer --> Port
+```
+
+The decoder accumulates bytes rather than decoded strings, so a UTF-8 code point may be split across arbitrary stream chunks without corrupting the JSON line. Both LF and CRLF are accepted, but every Frame must end with a newline; EOF with a partial nonempty line is a protocol failure. The configured line limit defaults to the protocol one-MiB Frame limit and is enforced before JSON parsing. Blank lines, malformed JSON, invalid Frame shapes, unsupported protocol content, and oversized lines are normalized to stable `NodeJsonlIpcError` failure identities without retaining or logging the raw line.
+
+The read loop validates every decoded value through `captureRuntimeIpcFrame()` and then enters a bounded asynchronous receive buffer. When the buffer is full, the read loop waits for consumer capacity instead of dropping Frames or growing without bound. Natural readable EOF drains already-buffered Frames before iteration completes. Local close rejects blocked producers, destroys the readable, and does not emit a false stream-failure warning.
+
+Writes are captured again at the transport boundary, serialized as one immutable JSON object plus LF, and appended through one Promise tail. Concurrent callers therefore preserve accepted call order. If `Writable.write()` reports backpressure, completion waits for `drain`; `error` or `close` before `drain` becomes the redacted `stream_failed` identity rather than an unresolved Promise. Close stops new sends, waits for accepted writes, ends the writable, and waits only for writable completion so Duplex protocol streams do not hang on an unrelated unread side.
+
+Task 6A-C does not spawn a process, perform handshake orchestration, create a Runtime, interpret stderr, send heartbeat traffic, expose persistence methods, or implement restart behavior. Those responsibilities remain in Task 6A-D through Task 6A-G.
+
 ## 25. Subagent Architecture
 
 Main Agent and Subagent both use Conversation.

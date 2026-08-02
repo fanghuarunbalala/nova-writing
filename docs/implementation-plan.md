@@ -2671,6 +2671,15 @@ Task 6A-B delivered:
 - local inbound `AbortController` ownership, cancellation-safe Handler failure normalization, late Response suppression, and structured payload-free `info`, `debug`, and `warn` logs
 - deterministic `InMemoryRuntimeIpcConnection` pairs for concurrent, cancellation, duplicate, conflict, priority, connection-backpressure, and disconnect validation without Node stream or process coupling
 
+Task 6A-C delivered:
+
+- Node-only `NodeJsonlIpcConnection` implementing the provider-neutral `RuntimeIpcConnection` Port without exposing Node stream types from the default Core entrypoint
+- byte-first incremental UTF-8 JSONL decoding across arbitrary chunk boundaries, LF and CRLF support, strict newline termination, and schema capture of every decoded Frame
+- one-MiB default pre-parse line enforcement, configurable positive receive capacity, bounded asynchronous receive backpressure, and stable redacted transport failures
+- one ordered write tail per connection, newline-delimited immutable Frame serialization, Node writable `drain` handling, and prompt failure when a backpressured stream closes
+- idempotent close behavior that flushes accepted writes, waits only for writable completion on Duplex streams, destroys the local readable, and avoids reporting intentional closure as a stream failure
+- focused validation for UTF-8 fragmentation, multi-Frame chunks, malformed JSON, invalid Frames, incomplete and oversized lines, Peer request/response over paired streams, ordered backpressured writes, writable closure, and Node-only type compatibility
+
 Expected deliverables after approval:
 
 - transport interfaces
@@ -2807,6 +2816,6 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-B are implemented and committed. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, while Task 6A-B adds the asynchronous in-memory Peer without opening Node streams or starting a process.
+Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-C are implemented. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, Task 6A-B adds the asynchronous in-memory Peer, and Task 6A-C binds that Port to bounded Node JSONL streams without starting a process.
 
-The next documented Runtime step is Task 6A-C: Node JSONL stdio connection, incremental UTF-8 line decoding, ordered Frame writes, pre-parse line limits, and stream backpressure. It does not spawn a Runtime process.
+The next documented Runtime step is Task 6A-D: child-process Runtime Placement, process supervision, a placement-neutral Runtime Handle, and safe exit normalization. It does not construct the child Runtime or open persistence RPC yet.

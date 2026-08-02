@@ -8,6 +8,7 @@ export * from "./NovelDraftSqliteSchema.js";
 export * from "./NovelEntitySqliteSchema.js";
 export * from "./NovelSqliteMigrations.js";
 export * from "./SqliteNovelCanonicalStore.js";
+export * from "./SqliteConversationNovelBindingStore.js";
 export * from "./SqliteNovelApprovalStore.js";
 export * from "./SqliteNovelDraftStore.js";
 export * from "./SqliteNovelDraftOperationStore.js";

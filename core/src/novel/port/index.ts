@@ -1,4 +1,5 @@
 export * from "./NovelCanonicalStore.js";
+export * from "./ConversationNovelBindingStore.js";
 export * from "./NovelApprovalStore.js";
 export * from "./NovelClock.js";
 export * from "./NovelDraftStore.js";

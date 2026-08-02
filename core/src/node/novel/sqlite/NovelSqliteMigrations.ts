@@ -164,6 +164,21 @@ const NOVEL_MIGRATIONS: readonly NovelSqliteMigration[] = [
       WHERE status IN ('active', 'awaiting-approval', 'rebasing', 'committing');
     `,
   },
+  {
+    version: 6,
+    name: "conversation_novel_bindings",
+    sql: `
+      CREATE TABLE novel_conversation_bindings (
+        conversation_id TEXT PRIMARY KEY,
+        novel_id TEXT NOT NULL,
+        active_draft_session_id TEXT UNIQUE,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (novel_id) REFERENCES novel_metadata(novel_id),
+        FOREIGN KEY (active_draft_session_id) REFERENCES novel_draft_sessions(id)
+      ) STRICT;
+    `,
+  },
 ];
 
 export const LATEST_NOVEL_SCHEMA_VERSION: NovelSchemaVersion =

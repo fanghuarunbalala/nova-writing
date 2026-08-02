@@ -1661,6 +1661,13 @@ interface ConversationNovelBinding {
 }
 ```
 
+The durable binding is intentionally identity-only. Novel Core validates that
+an attached Draft belongs to the same Conversation ID and is currently writable;
+it does not load, host, or persist the Conversation object. Clearing the active
+Draft uses an expected Draft ID so delayed completion cannot detach a newer
+Draft. A unique canonical constraint prevents one Draft from being attached to
+multiple Conversation bindings.
+
 Recommended integration structure:
 
 ```text

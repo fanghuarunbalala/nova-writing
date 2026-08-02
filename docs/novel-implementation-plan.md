@@ -608,6 +608,22 @@ successful approved post-resolution Commit validation.
 
 Implement the Conversation-to-Novel and active-Draft binding boundary without making Conversation the Novel aggregate.
 
+Delivered boundaries:
+
+- immutable bindings contain only Conversation ID, Novel ID, optional active
+  Draft Session ID, and safe timestamps
+- a provider-neutral application service binds Novel context, attaches an
+  owner-matching writable Draft, clears it with compare-and-set semantics, and
+  reads the durable binding without referencing a Conversation object
+- canonical SQLite schema v6 persists one binding per Conversation and prevents
+  one Draft Session from being attached to multiple bindings
+- root/subagent Conversation identity selection remains an upper-layer concern;
+  shared Subagents may deliberately use the root binding without changing Novel
+  ownership
+
+**Status:** completed by the Conversation Novel Binding protocol, SQLite
+adapter, and restart/owner validation smoke.
+
 ### N8-B Lifecycle Events
 
 Define internal Novel lifecycle records and public Novel OutputEvents for Draft, Commit, Rebase, conflict, and recovery transitions. Payloads expose stable safe identities and metadata rather than Novel content.

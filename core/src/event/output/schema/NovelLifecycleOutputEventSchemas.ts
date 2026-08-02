@@ -38,6 +38,7 @@ export function registerNovelLifecycleOutputEventSchemas(
     [OUTPUT_EVENT_TYPE.novelDraftStarted, payload({ draftSessionId: Id, baseRevision: Revision })],
     [OUTPUT_EVENT_TYPE.novelDraftStatusChanged, payload({ draftSessionId: Id, previousStatus: DraftStatus, currentStatus: DraftStatus })],
     [OUTPUT_EVENT_TYPE.novelDraftRolledBack, payload({ draftSessionId: Id, baseRevision: Revision })],
+    [OUTPUT_EVENT_TYPE.novelDraftOperationApplied, payload({ draftSessionId: Id, operationId: Id, operationType: Type.String({ pattern: "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+){1,15}$" }), operationVersion: Type.Integer({ minimum: 1 }), sequence: Type.Integer({ minimum: 1 }) })],
     [OUTPUT_EVENT_TYPE.novelCommitCompleted, payload({ draftSessionId: Id, commitId: Id, baseRevision: Revision, resultRevision: Revision, operationCount: Count })],
     [OUTPUT_EVENT_TYPE.novelCommitRecovered, payload({ draftSessionId: Id, commitId: Id, resultRevision: Revision, recovery: Type.Union([Type.Literal("payload-regenerated"), Type.Literal("metadata-confirmed")]) })],
     [OUTPUT_EVENT_TYPE.novelRebasePrepared, payload({ sourceDraftSessionId: Id, candidateDraftSessionId: Id, sourceBaseRevision: Revision, candidateBaseRevision: Revision, operationCount: Count })],

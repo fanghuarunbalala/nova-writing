@@ -23,6 +23,7 @@ export const OUTPUT_EVENT_TYPE = {
   novelDraftStarted: "novel.draft.started",
   novelDraftStatusChanged: "novel.draft.status.changed",
   novelDraftRolledBack: "novel.draft.rolled.back",
+  novelDraftOperationApplied: "novel.draft.operation.applied",
   novelCommitCompleted: "novel.commit.completed",
   novelCommitRecovered: "novel.commit.recovered",
   novelRebasePrepared: "novel.rebase.prepared",

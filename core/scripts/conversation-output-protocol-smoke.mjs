@@ -36,6 +36,7 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "novel.draft.started",
   "novel.draft.status.changed",
   "novel.draft.rolled.back",
+  "novel.draft.operation.applied",
   "novel.commit.completed",
   "novel.commit.recovered",
   "novel.rebase.prepared",

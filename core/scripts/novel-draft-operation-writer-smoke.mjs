@@ -259,8 +259,10 @@ try {
   assert.equal(
     state.outboxRows.every(
       (row) =>
-        row.event_type === "novel.draft.operation-applied" &&
+        row.event_type === "novel.draft.operation.applied" &&
         /^sha256:[0-9a-f]{64}$/u.test(row.event_digest) &&
+        JSON.parse(row.event_json).recordVersion === 1 &&
+        JSON.parse(row.event_json).eventType === "draft.operation.applied" &&
         !row.event_json.includes(secret),
     ),
     true,

@@ -645,12 +645,25 @@ Public event bridge delivered:
   Conversation ID, timestamp, and `novel.<lifecycle-type>` identity
 - public payloads expose lifecycle version, Novel ID, and only the already
   validated event-specific safe metadata
-- all twelve lifecycle event types are registered in the Core OutputEvent
+- all thirteen lifecycle event types are registered in the Core OutputEvent
   Schema Registry with `additionalProperties: false`
 - snapshot validation rejects accidental Novel text or other undeclared data
 
 **Status:** internal lifecycle records and public Novel OutputEvents completed;
 atomic Draft/canonical Outbox write integration is the next N8-B step.
+
+Atomic Outbox encoding delivered:
+
+- the existing Draft Operation transaction now writes a complete
+  `draft.operation.applied` lifecycle Record rather than an adapter-local event
+- canonical Commit writes the complete `commit.completed` lifecycle Record in
+  the same transaction as entity replay, revision advancement, Commit metadata,
+  Draft terminal state, and canonical Outbox insertion
+- a shared Node encoder validates canonical JSON and computes SHA-256 over the
+  exact durable Record bytes; no Novel content enters either Outbox
+
+**Status:** internal/public lifecycle protocols and Draft/Commit atomic Outbox
+encoding completed; remaining lifecycle service write points follow before N8-C.
 
 ### N8-C Outbox Dispatcher
 

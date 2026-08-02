@@ -1,5 +1,6 @@
 export * from "./NovelDatabaseErrors.js";
 export * from "./NodeSha256NovelOperationDigester.js";
+export * from "./NodeNovelLifecycleOutboxEncoder.js";
 export * from "./NodeSha256NovelChangeSetDigester.js";
 export * from "./NodeSha256NovelApprovalDigester.js";
 export * from "./NodeSha256NovelConflictDigester.js";

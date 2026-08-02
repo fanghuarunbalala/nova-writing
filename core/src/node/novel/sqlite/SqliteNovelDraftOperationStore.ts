@@ -2,6 +2,8 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
+  NOVEL_LIFECYCLE_EVENT_TYPE,
+  NOVEL_LIFECYCLE_RECORD_VERSION,
   NOVEL_INVARIANT_FAILURE,
   NovelDraftOperationPersistenceError,
   NovelDraftChangeSetChangedError,
@@ -27,11 +29,11 @@ import {
   type FreezeNovelDraftChangeSetInput,
   type NovelId,
 } from "../../../novel/index.js";
-import { canonicalStringifyJson } from "../../../event/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
 import { digestNovelSha256Text } from "./NodeSha256NovelOperationDigester.js";
 import { initializeNovelDraftSqliteSchema } from "./NovelDraftSqliteSchema.js";
+import { encodeNovelLifecycleOutboxRecord } from "./NodeNovelLifecycleOutboxEncoder.js";
 
 interface DraftMetadataRow {
   draft_session_id: string;
@@ -193,12 +195,20 @@ export class SqliteNovelDraftOperationStore<TContext>
         );
       }
 
-      const eventJson = canonicalStringifyJson({
-        draftSessionId: session.id,
-        operationId: operation.operationId,
-        operationType: operation.type,
-        operationVersion: operation.operationVersion,
-        sequence,
+      const outbox = encodeNovelLifecycleOutboxRecord({
+        recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+        eventId: `draft-operation:${operation.operationId}`,
+        eventType: NOVEL_LIFECYCLE_EVENT_TYPE.draftOperationApplied,
+        novelId: session.novelId,
+        conversationId: session.ownerConversationId,
+        occurredAt: recordedAt,
+        payload: {
+          draftSessionId: session.id,
+          operationId: operation.operationId,
+          operationType: operation.type,
+          operationVersion: operation.operationVersion,
+          sequence,
+        },
       });
       database
         .prepare(
@@ -208,13 +218,13 @@ export class SqliteNovelDraftOperationStore<TContext>
            ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
-          `draft-operation:${operation.operationId}`,
+          outbox.eventId,
           sequence,
           operation.operationId,
-          "novel.draft.operation-applied",
-          eventJson,
-          digestNovelSha256Text(eventJson),
-          recordedAt,
+          outbox.eventType,
+          outbox.eventJson,
+          outbox.eventDigest,
+          outbox.createdAt,
         );
       database.exec("COMMIT");
       transactionStarted = false;

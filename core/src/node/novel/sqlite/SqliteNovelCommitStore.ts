@@ -1,8 +1,8 @@
 /** Canonical SQLite transaction for replaying and recording one frozen ChangeSet. */
-import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { canonicalStringifyJson } from "../../../event/index.js";
 import {
+  NOVEL_LIFECYCLE_EVENT_TYPE,
+  NOVEL_LIFECYCLE_RECORD_VERSION,
   NOVEL_INVARIANT_FAILURE,
   NovelCommitIdentityConflictError,
   NovelInvariantViolationError,
@@ -24,6 +24,7 @@ import {
 } from "../../../novel/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
+import { encodeNovelLifecycleOutboxRecord } from "./NodeNovelLifecycleOutboxEncoder.js";
 
 interface CommitRow {
   commit_id: string;
@@ -199,13 +200,20 @@ export class SqliteNovelCommitStore<TContext>
           commit.novelId,
         );
       if (Number(draftUpdate.changes) !== 1) throw invariant(commit);
-      const eventJson = canonicalStringifyJson({
-        commitId: commit.commitId,
-        draftSessionId: commit.draftSessionId,
+      const outbox = encodeNovelLifecycleOutboxRecord({
+        recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+        eventId: `novel-commit:${commit.commitId}`,
+        eventType: NOVEL_LIFECYCLE_EVENT_TYPE.commitCompleted,
         novelId: commit.novelId,
-        baseRevision: commit.baseRevision,
-        resultRevision: commit.resultRevision,
-        changeSetDigest: commit.changeSetDigest,
+        conversationId: commit.ownerConversationId,
+        occurredAt: commit.committedAt,
+        payload: {
+          draftSessionId: commit.draftSessionId,
+          commitId: commit.commitId,
+          baseRevision: commit.baseRevision,
+          resultRevision: commit.resultRevision,
+          operationCount: changeSet.operationCount,
+        },
       });
       database
         .prepare(
@@ -215,14 +223,14 @@ export class SqliteNovelCommitStore<TContext>
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
-          `novel-commit:${commit.commitId}`,
+          outbox.eventId,
           commit.novelId,
           commit.ownerConversationId,
-          "novel.commit.completed",
-          1,
-          eventJson,
-          digestText(eventJson),
-          commit.committedAt,
+          outbox.eventType,
+          outbox.schemaVersion,
+          outbox.eventJson,
+          outbox.eventDigest,
+          outbox.createdAt,
         );
       database.exec("COMMIT");
       transactionStarted = false;
@@ -308,9 +316,6 @@ function capturePayloadSize(value: unknown): number {
   return value as number;
 }
 
-function digestText(value: string): string {
-  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
-}
 
 function configure(database: DatabaseSync): void {
   database.exec("PRAGMA journal_mode = WAL");

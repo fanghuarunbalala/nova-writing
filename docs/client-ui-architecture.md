@@ -228,6 +228,33 @@ Event delivery across a remote-capable Transport is at-least-once. Transport ada
 
 `AbortSignal` is Handle-local Transport control and is never serialized into a request payload. Raw class instances, functions, `Error` objects, Node handles, Electron objects, and Runtime process details are forbidden across this boundary.
 
+### 6.2 Implemented Deterministic Mock Checkpoint
+
+The client protocol test layer provides one deterministic `DeterministicMockNovelHost` shared by two protocol adapters:
+
+```text
+ConversationProxy
+    -> MockElectronApiTransport ---------+
+                                        +-> DeterministicMockNovelHost
+    -> MockHttpWebSocketApiTransport ----+
+```
+
+The Mock Host does not duplicate catch-up and live Event behavior. It composes the established `PublishingConversationJournalService`, `InMemoryConversationEventHub`, and `JournalConversationEventSubscriptionService` over a testing-only deterministic in-memory Journal. Input receipts, duplicate Event identity, Journal Sequence, historical queries, and catch-up-to-live subscriptions therefore retain the existing Core semantics.
+
+Both Mock Transports force request, response, and Event frames through JSON serialization. A shared fault controller can disconnect a Transport or duplicate the next Event delivery. Reconnection creates a new Proxy or subscription with the last applied `afterSequence`; an old disconnected subscription is never revived.
+
+The parameterized contract suite verifies:
+
+- the same client operations over Electron-shaped and HTTP/WebSocket-shaped adapters;
+- accepted versus duplicate Input receipts;
+- historical replay followed by live Events without a protocol-specific code path;
+- at-least-once duplicate delivery with stable Event identity and Sequence;
+- disconnect, missed durable Event, reconnect, and cursor-based catch-up;
+- GUI-shaped and Web-shaped clients observing the same Conversation through one Host;
+- Runtime Presence queries, stable not-found errors, Proxy-owned subscription closure, and log redaction.
+
+These adapters are testing utilities rather than production Electron IPC or network implementations. They simulate protocol placement and failure semantics without pretending to provide authentication, sockets, process isolation, SQLite durability, or Runtime execution.
+
 ## 7. One API Router, Multiple Transports
 
 Transport adapters must not implement separate business behavior.

@@ -7,7 +7,7 @@ import {
 } from "../../../novel/index.js";
 import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
 
-export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 4 as const;
+export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 5 as const;
 
 export function initializeNovelDraftSqliteSchema(
   databasePath: string,
@@ -174,6 +174,42 @@ const DRAFT_MIGRATIONS = [
       ALTER TABLE draft_conflicts ADD COLUMN resolution_json TEXT;
       ALTER TABLE draft_conflicts ADD COLUMN resolution_digest TEXT;
       UPDATE draft_metadata SET schema_version = 4;
+    `,
+  },
+  {
+    version: 5,
+    name: "resolution_application_plan",
+    sql: `
+      CREATE TABLE resolution_application_plan (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        plan_version INTEGER NOT NULL CHECK (plan_version > 0),
+        source_draft_session_id TEXT NOT NULL,
+        conflicted_candidate_draft_session_id TEXT NOT NULL UNIQUE,
+        base_revision TEXT NOT NULL,
+        source_operation_count INTEGER NOT NULL CHECK (source_operation_count >= 0),
+        effective_operation_count INTEGER NOT NULL CHECK (effective_operation_count >= 0),
+        plan_json TEXT NOT NULL,
+        plan_digest TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE resolution_application_entries (
+        source_sequence INTEGER PRIMARY KEY CHECK (source_sequence > 0),
+        action TEXT NOT NULL CHECK (
+          action IN ('apply-original', 'apply-replacement', 'skip')
+        ),
+        conflict_id TEXT,
+        strategy TEXT CHECK (
+          strategy IS NULL OR strategy IN (
+            'keep-canonical', 'keep-draft', 'drop-operation', 'manual'
+          )
+        ),
+        operation_json TEXT,
+        operation_digest TEXT,
+        entry_json TEXT NOT NULL
+      ) STRICT;
+
+      UPDATE draft_metadata SET schema_version = 5;
     `,
   },
 ] as const;

@@ -939,6 +939,28 @@ Resolution decisions are durable versioned records before they are applied:
   strategy application and resolved-candidate rebuilding remain a separate
   serialized Operation step
 
+Before any strategy mutates a projection, all source Operations and durable
+decisions are compiled into one immutable Resolution Application Plan:
+
+- every source Operation sequence produces exactly one ordered entry
+- non-conflicting Operations remain `apply-original`
+- `keep-canonical` and `drop-operation` remain distinct audited `skip` entries
+- `manual` stores its captured replacement as `apply-replacement`
+- `keep-draft` passes through a platform-neutral planner that returns either a
+  validated replacement Operation or an explicit no-op
+- plan identity hashes only stable metadata, ordering, actions, strategies,
+  Conflict identities, and Operation digests; full Operation payloads retain
+  their independent Operation digest protection
+- the candidate Draft SQLite database stores the plan metadata and all entries
+  in one short transaction; exact retry is a duplicate success and a different
+  plan for the same candidate is an identity conflict
+- restart reconstruction revalidates canonical JSON, source ordering, counts,
+  Operation digests, and the plan digest before returning the plan
+
+The plan does not append replacements to the partially replayed conflicted
+candidate. A later serialized step replays the complete ordered plan against a
+fresh canonical snapshot into a new sibling candidate.
+
 ### 10.7 Approval Binding
 
 Approval grants bind to an immutable ChangeSet identity rather than only a Draft Session ID:

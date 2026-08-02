@@ -525,9 +525,20 @@ Resolution protocol foundation delivered:
 - candidate-local SQLite transitions one Conflict from `unresolved` to
   `resolved` atomically and rejects a different second decision
 - restart reads validate stored decision JSON and digest before returning it
+- immutable version-1 Resolution Application Plans preserve one entry for every
+  source Operation sequence before any strategy mutates a projection
+- complete Resolution mapping rejects missing, extra, duplicate-sequence, wrong
+  candidate, corrupted source Journal, digest, and effective Operation identity
+  inputs
+- `keep-canonical`, `drop-operation`, `manual`, and injected `keep-draft`
+  planning compile to ordered skip, original, or replacement entries
+- candidate-local SQLite persists plan metadata and entries atomically, returns
+  exact retries as duplicates, rejects a second identity, and reconstructs and
+  revalidates the plan after restart
 
-**Status:** protocol and durable decision recording completed; strategy
-application and resolved-candidate rebuilding are the next N7-C step.
+**Status:** protocol, durable decision recording, and immutable strategy
+application planning completed; resolved sibling candidate rebuilding and
+concrete Character/Location `keep-draft` planning are the next N7-C step.
 
 ### N7-D Approval Invalidation
 

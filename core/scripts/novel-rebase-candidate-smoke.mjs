@@ -2,13 +2,18 @@ import assert from "node:assert/strict";
 import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import {
   NovelDraftOperationWriter,
   NovelDraftRecoveryService,
   NovelDraftSessionService,
+  NovelInvariantViolationError,
   NovelOperationExecutor,
   NovelOperationRegistry,
+  NovelProtocolValidationError,
   NovelRebaseService,
+  NovelResolutionApplicationPlanIdentityConflictError,
+  NovelResolutionApplicationPlanBuilder,
   NovelRevisionConflictError,
   canonicalNovelReadScope,
   canonicalizeNovelConflictResolutionRecord,
@@ -18,6 +23,7 @@ import {
   captureNovelCommitId,
   captureNovelDraftSessionId,
   captureNovelOperationId,
+  captureNovelResolutionApplicationPlan,
   captureNovelRevision,
   captureNovelTimestamp,
   draftNovelReadScope,
@@ -28,12 +34,14 @@ import {
   NodeNovelStoreLocator,
   NodeSha256NovelConflictDigester,
   NodeSha256NovelOperationDigester,
+  NodeSha256NovelResolutionApplicationPlanDigester,
   NodeWorkspaceStoreLocator,
   SqliteNovelCanonicalStore,
   SqliteNovelConflictStore,
   SqliteNovelDraftOperationStore,
   SqliteNovelDraftStore,
   SqliteNovelRebaseCandidateStore,
+  SqliteNovelResolutionApplicationPlanStore,
   SqliteNovelSnapshotter,
   createNodeNovelEntityApplication,
   createSqliteNovelEntityMutationContext,
@@ -192,6 +200,8 @@ try {
       "draft_rebase_conflict_committer",
       "draft_rebase_deleted_source",
       "draft_rebase_deleted_committer",
+      "draft_rebase_plan_source",
+      "draft_rebase_plan_committer",
     ]),
     clock,
     logger,
@@ -277,8 +287,16 @@ try {
         "draft_rebase_candidate",
         "draft_rebase_conflicted_candidate",
         "draft_rebase_deleted_candidate",
+        "draft_rebase_plan_candidate",
       ],
-      ["conflict_rebase_modified", "conflict_rebase_deleted"],
+      [
+        "conflict_rebase_modified",
+        "conflict_rebase_deleted",
+        "conflict_plan_keep_canonical",
+        "conflict_plan_drop",
+        "conflict_plan_manual",
+        "conflict_plan_keep_draft",
+      ],
     ),
     clock,
     logger,
@@ -469,6 +487,228 @@ try {
     deletedConflict.conflicts,
   );
 
+  const planSource = await drafts.startDraft("conversation-rebase-plan-source");
+  const planCommitter = await drafts.startDraft(
+    "conversation-rebase-plan-committer",
+  );
+  const planCharacterIds = [
+    captureCharacterId("character_plan_keep_canonical"),
+    captureCharacterId("character_plan_drop"),
+    captureCharacterId("character_plan_manual"),
+    captureCharacterId("character_plan_keep_draft"),
+  ];
+  await application.locations.create(planSource, "location_plan_original", {
+    name: "FORBIDDEN_PLAN_ORIGINAL_LOCATION",
+    aliases: [],
+  });
+  for (const [index, id] of planCharacterIds.entries()) {
+    await application.characters.create(planSource, id, {
+      name: `FORBIDDEN_PLAN_SOURCE_${index}`,
+      aliases: [],
+    });
+    await application.characters.create(planCommitter, id, {
+      name: `FORBIDDEN_PLAN_CANONICAL_${index}`,
+      aliases: [],
+    });
+  }
+  await application.commits.commit(planCommitter, {
+    commitId: captureNovelCommitId("commit_rebase_plan"),
+    resultRevision: captureNovelRevision("revision_rebase_plan"),
+    committedAt: clock.now(),
+  });
+  const planCandidate = await rebase.prepareCandidate(planSource.id);
+  assert.equal(planCandidate.conflicts.length, 4);
+
+  const planStore = new SqliteNovelResolutionApplicationPlanStore({
+    location,
+    novelId: canonical.novelId,
+    logger,
+  });
+  const planDigester = new NodeSha256NovelResolutionApplicationPlanDigester();
+  const missingResolutionBuilder = new NovelResolutionApplicationPlanBuilder({
+    draftStore,
+    operationStore,
+    conflictStore,
+    keepDraftPlanner: {
+      async planKeepDraft() {
+        throw new Error("unexpected keep-draft planning");
+      },
+    },
+    operationDigester,
+    planDigester,
+    planStore,
+    clock,
+    logger,
+  });
+  await assert.rejects(
+    missingResolutionBuilder.buildAndSave(planCandidate.candidate),
+    NovelInvariantViolationError,
+  );
+
+  const manualPlanReplacement = createCharacterReplaceOperation({
+    operationId: captureNovelOperationId("operation_plan_manual"),
+    id: planCharacterIds[2],
+    expectedEntityVersion: 1,
+    profile: { name: "FORBIDDEN_PLAN_MANUAL", aliases: [] },
+    timestamp: clock.now(),
+  });
+  const keepDraftPlanReplacement = createCharacterReplaceOperation({
+    operationId: captureNovelOperationId("operation_plan_keep_draft"),
+    id: planCharacterIds[3],
+    expectedEntityVersion: 1,
+    profile: { name: "FORBIDDEN_PLAN_KEEP_DRAFT", aliases: [] },
+    timestamp: clock.now(),
+  });
+  const strategies = [
+    { strategy: "keep-canonical" },
+    { strategy: "drop-operation" },
+    { strategy: "manual", replacement: manualPlanReplacement },
+    { strategy: "keep-draft" },
+  ];
+  for (const [index, conflict] of planCandidate.conflicts.entries()) {
+    const resolution = captureNovelConflictResolutionRecord({
+      resolutionVersion: 1,
+      draftSessionId: planCandidate.candidate.session.id,
+      conflictId: conflict.conflict.id,
+      resolution: captureNovelConflictResolution(strategies[index]),
+      resolvedAt: clock.now(),
+    });
+    await conflictStore.resolveConflict(
+      planCandidate.candidate.session,
+      resolution,
+      digestNovelConflictText(
+        canonicalizeNovelConflictResolutionRecord(resolution),
+      ),
+    );
+  }
+
+  const duplicateIdentityBuilder = new NovelResolutionApplicationPlanBuilder({
+    draftStore,
+    operationStore,
+    conflictStore,
+    keepDraftPlanner: {
+      async planKeepDraft() {
+        return { action: "apply-replacement", operation: manualPlanReplacement };
+      },
+    },
+    operationDigester,
+    planDigester,
+    planStore,
+    clock,
+    logger,
+  });
+  await assert.rejects(
+    duplicateIdentityBuilder.buildAndSave(planCandidate.candidate),
+    NovelProtocolValidationError,
+  );
+
+  const planBuilder = new NovelResolutionApplicationPlanBuilder({
+    draftStore,
+    operationStore,
+    conflictStore,
+    keepDraftPlanner: {
+      async planKeepDraft() {
+        return {
+          action: "apply-replacement",
+          operation: keepDraftPlanReplacement,
+        };
+      },
+    },
+    operationDigester,
+    planDigester,
+    planStore,
+    clock,
+    logger,
+  });
+  const planned = await planBuilder.buildAndSave(planCandidate.candidate);
+  assert.equal(planned.status, "recorded");
+  assert.equal(planned.plan.sourceOperationCount, 5);
+  assert.equal(planned.plan.effectiveOperationCount, 3);
+  assert.deepEqual(
+    planned.plan.entries.map((entry) => [entry.sourceSequence, entry.action,
+      entry.action === "apply-original" ? undefined : entry.strategy]),
+    [
+      [1, "apply-original", undefined],
+      [2, "skip", "keep-canonical"],
+      [3, "skip", "drop-operation"],
+      [4, "apply-replacement", "manual"],
+      [5, "apply-replacement", "keep-draft"],
+    ],
+  );
+  assert.equal(
+    (await planBuilder.buildAndSave(planCandidate.candidate)).status,
+    "duplicate",
+  );
+  assert.equal(
+    await planStore.savePlan(planCandidate.candidate.session, planned.plan),
+    "duplicate",
+  );
+  await assert.rejects(
+    planStore.savePlan(
+      planCandidate.candidate.session,
+      captureNovelResolutionApplicationPlan({
+        ...planned.plan,
+        createdAt: clock.now(),
+      }),
+    ),
+    NovelResolutionApplicationPlanIdentityConflictError,
+  );
+  const restartedPlanStore = new SqliteNovelResolutionApplicationPlanStore({
+    location,
+    novelId: canonical.novelId,
+    logger,
+  });
+  assert.deepEqual(
+    await restartedPlanStore.getPlan(planCandidate.candidate.session),
+    planned.plan,
+  );
+  assert.equal(
+    await application.locationQueries.get(
+      draftNovelReadScope(planCandidate.candidate.session),
+      "location_plan_original",
+    ) instanceof Object,
+    true,
+  );
+
+  const planDatabasePath = join(
+    candidatePath(location, planCandidate.candidate.session),
+    "draft.sqlite",
+  );
+  const sourceDatabasePath = join(
+    candidatePath(location, planSource),
+    "draft.sqlite",
+  );
+  const sourceDatabase = new DatabaseSync(sourceDatabasePath);
+  const sourceDigest = sourceDatabase
+    .prepare(
+      "SELECT operation_digest FROM draft_operations WHERE sequence = 1",
+    )
+    .get().operation_digest;
+  sourceDatabase.prepare(
+    "UPDATE draft_operations SET operation_digest = ? WHERE sequence = 1",
+  ).run(`sha256:${"0".repeat(64)}`);
+  sourceDatabase.close();
+  await assert.rejects(
+    planBuilder.buildAndSave(planCandidate.candidate),
+    NovelInvariantViolationError,
+  );
+  const repairedSourceDatabase = new DatabaseSync(sourceDatabasePath);
+  repairedSourceDatabase.prepare(
+    "UPDATE draft_operations SET operation_digest = ? WHERE sequence = 1",
+  ).run(sourceDigest);
+  repairedSourceDatabase.close();
+
+  const planDatabase = new DatabaseSync(planDatabasePath);
+  planDatabase.prepare(
+    `UPDATE resolution_application_entries
+     SET operation_digest = ? WHERE source_sequence = 4`,
+  ).run(`sha256:${"0".repeat(64)}`);
+  planDatabase.close();
+  await assert.rejects(
+    restartedPlanStore.getPlan(planCandidate.candidate.session),
+    NovelInvariantViolationError,
+  );
+
   await candidateStore.close();
   candidateStore = await SqliteNovelRebaseCandidateStore.open({
     location,
@@ -523,6 +763,17 @@ try {
     conflictCanonicalName,
     "FORBIDDEN_REBASE_DELETED_SOURCE",
     "FORBIDDEN_MANUAL_RESOLUTION",
+    "FORBIDDEN_PLAN_SOURCE_0",
+    "FORBIDDEN_PLAN_SOURCE_1",
+    "FORBIDDEN_PLAN_SOURCE_2",
+    "FORBIDDEN_PLAN_SOURCE_3",
+    "FORBIDDEN_PLAN_CANONICAL_0",
+    "FORBIDDEN_PLAN_CANONICAL_1",
+    "FORBIDDEN_PLAN_CANONICAL_2",
+    "FORBIDDEN_PLAN_CANONICAL_3",
+    "FORBIDDEN_PLAN_MANUAL",
+    "FORBIDDEN_PLAN_KEEP_DRAFT",
+    "FORBIDDEN_PLAN_ORIGINAL_LOCATION",
   ]);
 } finally {
   await candidateStore?.close();

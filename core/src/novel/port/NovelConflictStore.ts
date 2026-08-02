@@ -16,6 +16,10 @@ export interface NovelConflictStore {
     session: NovelDraftSession,
   ): Promise<readonly NovelConflictRecord[]>;
 
+  listAllConflicts(
+    session: NovelDraftSession,
+  ): Promise<readonly NovelConflictRecord[]>;
+
   resolveConflict(
     session: NovelDraftSession,
     resolution: NovelConflictResolutionRecord,

@@ -256,6 +256,17 @@ export class NovelCommitIdentityConflictError extends Error {
   }
 }
 
+export class NovelResolutionApplicationPlanIdentityConflictError extends Error {
+  override readonly name =
+    "NovelResolutionApplicationPlanIdentityConflictError";
+  readonly code =
+    "NOVEL_RESOLUTION_APPLICATION_PLAN_IDENTITY_CONFLICT" as const;
+
+  constructor(public readonly draftSessionId: NovelDraftSessionId) {
+    super("Novel Resolution Application Plan identity conflict");
+  }
+}
+
 export type NovelOperationPreconditionFailure =
   | "entity_exists"
   | "entity_missing"

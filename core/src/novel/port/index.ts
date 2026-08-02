@@ -7,6 +7,8 @@ export * from "./NovelCommitHistoryStore.js";
 export * from "./NovelCommitStore.js";
 export * from "./NovelConflictDigester.js";
 export * from "./NovelConflictStore.js";
+export * from "./NovelKeepDraftOperationPlanner.js";
+export * from "./NovelResolutionApplicationPlanStore.js";
 export * from "./NovelEntityRepository.js";
 export * from "./NovelRevisionFactory.js";
 export * from "./NovelRebaseCandidateStore.js";

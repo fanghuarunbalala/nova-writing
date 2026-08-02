@@ -360,7 +360,7 @@ try {
   assert.equal(legacyMetadata.change_set_state, "open");
   assert.equal(legacyMetadata.change_set_digest, null);
   assert.equal(legacyMetadata.change_set_frozen_at, null);
-  assert.deepEqual(legacyMigrations, [1, 2, 3, 4]);
+  assert.deepEqual(legacyMigrations, [1, 2, 3, 4, 5]);
 
   assertRedacted(logEntries, [
     root,

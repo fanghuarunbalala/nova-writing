@@ -118,6 +118,19 @@ export class SqliteNovelConflictStore implements NovelConflictStore {
   async listConflicts(
     sessionInput: NovelDraftSession,
   ): Promise<readonly NovelConflictRecord[]> {
+    return this.readConflicts(sessionInput, true);
+  }
+
+  async listAllConflicts(
+    sessionInput: NovelDraftSession,
+  ): Promise<readonly NovelConflictRecord[]> {
+    return this.readConflicts(sessionInput, false);
+  }
+
+  private async readConflicts(
+    sessionInput: NovelDraftSession,
+    unresolvedOnly: boolean,
+  ): Promise<readonly NovelConflictRecord[]> {
     const session = captureNovelDraftSession(sessionInput);
     initializeNovelDraftSqliteSchema(this.databasePath(session), session);
     const database = new DatabaseSync(this.databasePath(session), {
@@ -128,7 +141,7 @@ export class SqliteNovelConflictStore implements NovelConflictStore {
         .prepare(
           `SELECT conflict_json, conflict_digest
            FROM draft_conflicts
-           WHERE status = 'unresolved'
+           ${unresolvedOnly ? "WHERE status = 'unresolved'" : ""}
            ORDER BY created_at, conflict_id`,
         )
         .all() as unknown as Array<{

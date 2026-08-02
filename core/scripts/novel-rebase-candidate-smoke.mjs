@@ -11,6 +11,9 @@ import {
   NovelRebaseService,
   NovelRevisionConflictError,
   canonicalNovelReadScope,
+  canonicalizeNovelConflictResolutionRecord,
+  captureNovelConflictResolution,
+  captureNovelConflictResolutionRecord,
   captureCharacterId,
   captureNovelCommitId,
   captureNovelDraftSessionId,
@@ -18,6 +21,7 @@ import {
   captureNovelRevision,
   captureNovelTimestamp,
   draftNovelReadScope,
+  createCharacterReplaceOperation,
   registerNovelEntityOperationHandlers,
 } from "../dist/index.js";
 import {
@@ -33,6 +37,7 @@ import {
   SqliteNovelSnapshotter,
   createNodeNovelEntityApplication,
   createSqliteNovelEntityMutationContext,
+  digestNovelConflictText,
 } from "../dist/node/index.js";
 
 class DraftIdentityFactory {
@@ -364,6 +369,64 @@ try {
     await conflictStore.listConflicts(conflicted.candidate.session),
     conflicted.conflicts,
   );
+  const keepCanonicalResolution = captureNovelConflictResolutionRecord({
+    resolutionVersion: 1,
+    draftSessionId: conflicted.candidate.session.id,
+    conflictId: conflicted.conflicts[0].conflict.id,
+    resolution: captureNovelConflictResolution({
+      strategy: "keep-canonical",
+    }),
+    resolvedAt: clock.now(),
+  });
+  const keepCanonicalDigest = digestNovelConflictText(
+    canonicalizeNovelConflictResolutionRecord(keepCanonicalResolution),
+  );
+  assert.equal(
+    await conflictStore.resolveConflict(
+      conflicted.candidate.session,
+      keepCanonicalResolution,
+      keepCanonicalDigest,
+    ),
+    "resolved",
+  );
+  assert.equal(
+    await conflictStore.resolveConflict(
+      conflicted.candidate.session,
+      keepCanonicalResolution,
+      keepCanonicalDigest,
+    ),
+    "duplicate",
+  );
+  assert.deepEqual(
+    await conflictStore.listResolutions(conflicted.candidate.session),
+    [keepCanonicalResolution],
+  );
+  assert.deepEqual(
+    await conflictStore.listConflicts(conflicted.candidate.session),
+    [],
+  );
+  assert.deepEqual(
+    captureNovelConflictResolution({ strategy: "keep-draft" }),
+    { strategy: "keep-draft" },
+  );
+  assert.deepEqual(
+    captureNovelConflictResolution({ strategy: "drop-operation" }),
+    { strategy: "drop-operation" },
+  );
+  const manualReplacement = createCharacterReplaceOperation({
+    operationId: captureNovelOperationId("operation_manual_resolution"),
+    id: characterId,
+    expectedEntityVersion: 2,
+    profile: { name: "FORBIDDEN_MANUAL_RESOLUTION", aliases: [] },
+    timestamp: clock.now(),
+  });
+  assert.deepEqual(
+    captureNovelConflictResolution({
+      strategy: "manual",
+      replacement: manualReplacement,
+    }),
+    { strategy: "manual", replacement: manualReplacement },
+  );
   assert.equal(
     (
       await application.characterQueries.get(
@@ -424,8 +487,8 @@ try {
     conflicted.candidate,
   );
   assert.deepEqual(
-    await conflictStore.listConflicts(conflicted.candidate.session),
-    conflicted.conflicts,
+    await conflictStore.listResolutions(conflicted.candidate.session),
+    [keepCanonicalResolution],
   );
 
   const interruptedName =
@@ -459,6 +522,7 @@ try {
     conflictSourceName,
     conflictCanonicalName,
     "FORBIDDEN_REBASE_DELETED_SOURCE",
+    "FORBIDDEN_MANUAL_RESOLUTION",
   ]);
 } finally {
   await candidateStore?.close();

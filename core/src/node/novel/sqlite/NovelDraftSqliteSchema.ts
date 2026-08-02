@@ -7,7 +7,7 @@ import {
 } from "../../../novel/index.js";
 import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
 
-export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 3 as const;
+export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 4 as const;
 
 export function initializeNovelDraftSqliteSchema(
   databasePath: string,
@@ -156,6 +156,24 @@ const DRAFT_MIGRATIONS = [
       ADD COLUMN change_set_frozen_at TEXT;
 
       UPDATE draft_metadata SET schema_version = 3;
+    `,
+  },
+  {
+    version: 4,
+    name: "conflict_resolution",
+    sql: `
+      CREATE TABLE IF NOT EXISTS draft_conflicts (
+        conflict_id TEXT PRIMARY KEY,
+        source_operation_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        conflict_json TEXT NOT NULL,
+        conflict_digest TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        resolved_at TEXT
+      ) STRICT;
+      ALTER TABLE draft_conflicts ADD COLUMN resolution_json TEXT;
+      ALTER TABLE draft_conflicts ADD COLUMN resolution_digest TEXT;
+      UPDATE draft_metadata SET schema_version = 4;
     `,
   },
 ] as const;

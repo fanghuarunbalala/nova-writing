@@ -517,6 +517,18 @@ Delivered boundaries:
 
 Implement `keep-canonical`, validated `keep-draft`, `drop-operation`, and manual replacement Operation strategies.
 
+Resolution protocol foundation delivered:
+
+- immutable version-1 records capture all four strategies and require a fully
+  captured replacement Operation only for `manual`
+- canonical decision JSON and SHA-256 provide exact retry identity
+- candidate-local SQLite transitions one Conflict from `unresolved` to
+  `resolved` atomically and rejects a different second decision
+- restart reads validate stored decision JSON and digest before returning it
+
+**Status:** protocol and durable decision recording completed; strategy
+application and resolved-candidate rebuilding are the next N7-C step.
+
 ### N7-D Approval Invalidation
 
 Any Rebase or conflict resolution that changes base revision or effective ChangeSet digest invalidates previous Approval.

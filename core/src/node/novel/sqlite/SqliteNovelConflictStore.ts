@@ -5,11 +5,15 @@ import {
   NovelInvariantViolationError,
   NOVEL_INVARIANT_FAILURE,
   canonicalizeNovelConflict,
+  canonicalizeNovelConflictResolutionRecord,
   captureNovelConflict,
   captureNovelConflictDigest,
   captureNovelConflictRecord,
+  captureNovelConflictResolutionRecord,
   captureNovelDraftSession,
   type NovelConflictRecord,
+  type NovelConflictDigest,
+  type NovelConflictResolutionRecord,
   type NovelConflictStore,
   type NovelDraftSession,
   type NovelId,
@@ -143,6 +147,128 @@ export class SqliteNovelConflictStore implements NovelConflictStore {
           throw corrupt(session);
         }
         return captureNovelConflictRecord({ conflict, digest });
+      }));
+    } finally {
+      database.close();
+    }
+  }
+
+  async resolveConflict(
+    sessionInput: NovelDraftSession,
+    resolutionInput: NovelConflictResolutionRecord,
+    digestInput: NovelConflictDigest,
+  ): Promise<"resolved" | "duplicate"> {
+    const session = captureNovelDraftSession(sessionInput);
+    const resolution = captureNovelConflictResolutionRecord(resolutionInput);
+    const digest = captureNovelConflictDigest(digestInput);
+    if (
+      resolution.draftSessionId !== session.id ||
+      digestNovelConflictText(
+        canonicalizeNovelConflictResolutionRecord(resolution),
+      ) !== digest
+    ) {
+      throw corrupt(session);
+    }
+    initializeNovelDraftSqliteSchema(this.databasePath(session), session);
+    const database = new DatabaseSync(this.databasePath(session));
+    let transaction = false;
+    try {
+      configure(database);
+      database.exec("BEGIN IMMEDIATE");
+      transaction = true;
+      const row = database
+        .prepare(
+          `SELECT status, resolution_json, resolution_digest
+           FROM draft_conflicts WHERE conflict_id = ?`,
+        )
+        .get(resolution.conflictId) as
+        | {
+            status: string;
+            resolution_json: string | null;
+            resolution_digest: string | null;
+          }
+        | undefined;
+      if (row === undefined) throw corrupt(session);
+      const json = canonicalizeNovelConflictResolutionRecord(resolution);
+      if (row.status === "resolved") {
+        if (
+          row.resolution_json !== json ||
+          row.resolution_digest !== digest
+        ) {
+          throw corrupt(session);
+        }
+        database.exec("COMMIT");
+        transaction = false;
+        return "duplicate";
+      }
+      if (
+        row.status !== "unresolved" ||
+        row.resolution_json !== null ||
+        row.resolution_digest !== null
+      ) {
+        throw corrupt(session);
+      }
+      const result = database
+        .prepare(
+          `UPDATE draft_conflicts
+           SET status = 'resolved', resolution_json = ?,
+               resolution_digest = ?, resolved_at = ?
+           WHERE conflict_id = ? AND status = 'unresolved'`,
+        )
+        .run(json, digest, resolution.resolvedAt, resolution.conflictId);
+      if (Number(result.changes) !== 1) throw corrupt(session);
+      database.exec("COMMIT");
+      transaction = false;
+      this.logger.info("novel_conflict.resolved", {
+        draftSessionId: session.id,
+        conflictId: resolution.conflictId,
+        resolutionStrategy: resolution.resolution.strategy,
+      });
+      return "resolved";
+    } catch (error) {
+      if (transaction) {
+        try { database.exec("ROLLBACK"); } catch {}
+      }
+      if (error instanceof NovelInvariantViolationError) throw error;
+      throw corrupt(session);
+    } finally {
+      database.close();
+    }
+  }
+
+  async listResolutions(
+    sessionInput: NovelDraftSession,
+  ): Promise<readonly NovelConflictResolutionRecord[]> {
+    const session = captureNovelDraftSession(sessionInput);
+    initializeNovelDraftSqliteSchema(this.databasePath(session), session);
+    const database = new DatabaseSync(this.databasePath(session), {
+      readOnly: true,
+    });
+    try {
+      const rows = database
+        .prepare(
+          `SELECT resolution_json, resolution_digest
+           FROM draft_conflicts
+           WHERE status = 'resolved'
+           ORDER BY resolved_at, conflict_id`,
+        )
+        .all() as unknown as Array<{
+          resolution_json: string;
+          resolution_digest: string;
+        }>;
+      return Object.freeze(rows.map((row) => {
+        const resolution = captureNovelConflictResolutionRecord(
+          JSON.parse(row.resolution_json),
+        );
+        const digest = captureNovelConflictDigest(row.resolution_digest);
+        if (
+          canonicalizeNovelConflictResolutionRecord(resolution) !==
+            row.resolution_json ||
+          digestNovelConflictText(row.resolution_json) !== digest
+        ) {
+          throw corrupt(session);
+        }
+        return resolution;
       }));
     } finally {
       database.close();

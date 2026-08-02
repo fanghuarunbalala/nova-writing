@@ -924,6 +924,21 @@ Conflict granularity follows stable domain identities:
 
 Conflict resolution produces new or replacement Domain Operations; it never patches canonical state outside the normal Commit path. `keep-draft` is still subject to permission, invariant, and conformance validation rather than meaning unconditional overwrite.
 
+Resolution decisions are durable versioned records before they are applied:
+
+- one Conflict accepts exactly one `keep-canonical`, `keep-draft`,
+  `drop-operation`, or `manual` decision
+- `manual` contains one fully captured replacement Domain Operation; the other
+  strategies contain no hidden payload
+- canonical JSON plus SHA-256 gives the decision an idempotent durable identity
+- `draft_conflicts` changes from `unresolved` to `resolved` in one short
+  transaction and stores the exact decision JSON, digest, and timestamp
+- an exact retry is a duplicate success; a different decision for an already
+  resolved Conflict is an invariant failure
+- recording a decision does not itself mutate the candidate projection;
+  strategy application and resolved-candidate rebuilding remain a separate
+  serialized Operation step
+
 ### 10.7 Approval Binding
 
 Approval grants bind to an immutable ChangeSet identity rather than only a Draft Session ID:

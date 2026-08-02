@@ -14,6 +14,7 @@ export const NOVEL_PROTOCOL_FAILURE = {
   invalidRebaseCandidate: "invalid_rebase_candidate",
   invalidConflict: "invalid_conflict",
   invalidConflictDigest: "invalid_conflict_digest",
+  invalidConflictResolution: "invalid_conflict_resolution",
 } as const;
 
 export type NovelProtocolFailure =
@@ -49,6 +50,7 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "lastOperationSequence",
   "conflict",
   "conflictDigest",
+  "conflictResolution",
 ]);
 
 export class NovelProtocolValidationError extends Error {

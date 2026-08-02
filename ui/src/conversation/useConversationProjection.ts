@@ -9,6 +9,7 @@ import type { InputEvent, InputReceipt } from "@novel/core";
 import { useNovelApi } from "../client/NovelApiContext.js";
 import { ConversationProjectionBinding } from "./ConversationProjectionBinding.js";
 import type { ConversationProjectionBindingSnapshot } from "./ConversationProjectionBindingTypes.js";
+import type { ConversationCardProjectorRegistry } from "../card/index.js";
 
 export interface ConversationProjectionHookResult {
   readonly snapshot: ConversationProjectionBindingSnapshot;
@@ -16,8 +17,13 @@ export interface ConversationProjectionHookResult {
   enqueue(event: InputEvent): Promise<InputReceipt>;
 }
 
+export interface UseConversationProjectionOptions {
+  readonly cardProjectors?: ConversationCardProjectorRegistry;
+}
+
 export function useConversationProjection(
   conversationId: string,
+  options: UseConversationProjectionOptions = {},
 ): ConversationProjectionHookResult {
   const { api, logger } = useNovelApi();
   const binding = useMemo(
@@ -26,8 +32,11 @@ export function useConversationProjection(
         api,
         conversationId,
         logger,
+        ...(options.cardProjectors !== undefined
+          ? { cardProjectors: options.cardProjectors }
+          : {}),
       }),
-    [api, conversationId, logger],
+    [api, conversationId, logger, options.cardProjectors],
   );
   const subscribe = useCallback(
     (listener: () => void) => binding.subscribe(listener),

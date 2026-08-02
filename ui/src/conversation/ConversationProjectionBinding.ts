@@ -4,7 +4,6 @@ import {
   ApiTransportError,
   ConversationProjectionController,
   ConversationProjectionControllerStateError,
-  ConversationProjectionStore,
   noopLogger,
   type Conversation,
   type InputEvent,
@@ -13,6 +12,10 @@ import {
   type Logger,
   type NovelApiClient,
 } from "@novel/core";
+import {
+  ConversationCardProjectionStore,
+  type ConversationCardProjectorRegistry,
+} from "../card/index.js";
 import {
   CONVERSATION_PROJECTION_BINDING_STATE,
   type ConversationProjectionBindingListener,
@@ -24,13 +27,14 @@ export interface ConversationProjectionBindingOptions {
   readonly api: NovelApiClient;
   readonly conversationId: string;
   readonly logger?: Logger;
+  readonly cardProjectors?: ConversationCardProjectorRegistry;
 }
 
 export class ConversationProjectionBinding {
   readonly conversationId: string;
 
   private readonly api: NovelApiClient;
-  private readonly store: ConversationProjectionStore;
+  private readonly store: ConversationCardProjectionStore;
   private readonly logger: Logger;
   private readonly listeners = new Set<ConversationProjectionBindingListener>();
   private state: ConversationProjectionBindingState =
@@ -52,9 +56,12 @@ export class ConversationProjectionBinding {
       component: "conversation_projection_binding",
       conversationId: this.conversationId,
     });
-    this.store = new ConversationProjectionStore({
+    this.store = new ConversationCardProjectionStore({
       conversationId: this.conversationId,
       logger: this.logger,
+      ...(options.cardProjectors !== undefined
+        ? { projectors: options.cardProjectors }
+        : {}),
     });
     this.snapshot = this.buildSnapshot();
   }
@@ -223,6 +230,7 @@ export class ConversationProjectionBinding {
       revision: this.revision,
       state: this.state,
       projection: this.store.getSnapshot(),
+      cards: this.store.getCardSnapshot(),
       ...(controllerSnapshot !== undefined
         ? { controller: controllerSnapshot }
         : {}),

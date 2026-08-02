@@ -32,6 +32,11 @@ import {
   useInspectorSnapshot,
 } from "../inspector/index.js";
 import { ProjectNavigationController } from "../navigation/index.js";
+import type {
+  ConversationCardDescriptor,
+  ConversationCardProjectorRegistry,
+  ConversationCardRendererRegistry,
+} from "../card/index.js";
 
 export interface NovelAppProps extends NovelAppProviderProps {
   readonly shell?: Omit<ApplicationShellProps, "children">;
@@ -40,6 +45,8 @@ export interface NovelAppProps extends NovelAppProviderProps {
   readonly inspectorStore?: InspectorStore;
   readonly initialInspectorState?: InspectorStoreInitialState;
   readonly inspectorRenderers?: InspectorRendererRegistry;
+  readonly conversationCardProjectors?: ConversationCardProjectorRegistry;
+  readonly conversationCardRenderers?: ConversationCardRendererRegistry;
   readonly children?: ReactNode;
 }
 
@@ -57,6 +64,8 @@ export function NovelApp(props: NovelAppProps) {
           <ConnectedApplicationShell
             shell={props.shell}
             inspectorRenderers={props.inspectorRenderers}
+            conversationCardProjectors={props.conversationCardProjectors}
+            conversationCardRenderers={props.conversationCardRenderers}
           >
             {props.children}
           </ConnectedApplicationShell>
@@ -69,10 +78,14 @@ export function NovelApp(props: NovelAppProps) {
 function ConnectedApplicationShell({
   shell,
   inspectorRenderers,
+  conversationCardProjectors,
+  conversationCardRenderers,
   children,
 }: {
   readonly shell?: Omit<ApplicationShellProps, "children">;
   readonly inspectorRenderers?: InspectorRendererRegistry;
+  readonly conversationCardProjectors?: ConversationCardProjectorRegistry;
+  readonly conversationCardRenderers?: ConversationCardRendererRegistry;
   readonly children?: ReactNode;
 }) {
   const snapshot = useApplicationShellSnapshot();
@@ -83,6 +96,12 @@ function ConnectedApplicationShell({
     () => new ProjectNavigationController({ shellStore, inspectorStore }),
     [inspectorStore, shellStore],
   );
+  const openCardInspector = (card: ConversationCardDescriptor): void => {
+    if (card.inspectorTarget === undefined) return;
+    inspectorStore.open(card.inspectorTarget, {
+      ...(card.inspectorSize !== undefined ? { mode: card.inspectorSize } : {}),
+    });
+  };
   const context = shell?.context ?? {
     workspace: snapshot.workspace?.label,
     meta: snapshot.meta?.label ?? snapshot.novel?.label,
@@ -112,6 +131,9 @@ function ConnectedApplicationShell({
     <BoundConversationShell
       shell={shellProps}
       conversationId={snapshot.conversation.id}
+      cardProjectors={conversationCardProjectors}
+      cardRenderers={conversationCardRenderers}
+      onOpenCardInspector={openCardInspector}
     />
   );
 }
@@ -119,11 +141,17 @@ function ConnectedApplicationShell({
 function BoundConversationShell({
   shell,
   conversationId,
+  cardProjectors,
+  cardRenderers,
+  onOpenCardInspector,
 }: {
   readonly shell: Omit<ApplicationShellProps, "children">;
   readonly conversationId: string;
+  readonly cardProjectors?: ConversationCardProjectorRegistry;
+  readonly cardRenderers?: ConversationCardRendererRegistry;
+  readonly onOpenCardInspector?: (card: ConversationCardDescriptor) => void;
 }) {
-  const result = useConversationProjection(conversationId);
+  const result = useConversationProjection(conversationId, { cardProjectors });
   const connected = result.snapshot.controller?.state === "live";
   return (
     <ApplicationShell
@@ -138,7 +166,11 @@ function BoundConversationShell({
         )
       }
     >
-      <ConversationProjectionView result={result} />
+      <ConversationProjectionView
+        result={result}
+        cardRenderers={cardRenderers}
+        onOpenCardInspector={onOpenCardInspector}
+      />
     </ApplicationShell>
   );
 }

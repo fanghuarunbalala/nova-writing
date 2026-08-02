@@ -18,7 +18,7 @@ export interface ConversationProjectionViewProps {
 export function ConversationProjectionView({
   result,
   diagnostics,
-  cards,
+  cards = result.snapshot.cards.cards,
   cardRenderers,
   onOpenCardInspector,
 }: ConversationProjectionViewProps) {

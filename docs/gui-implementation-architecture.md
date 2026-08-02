@@ -553,6 +553,12 @@ The shared UI now defines a bounded `ConversationCardDescriptor` containing only
 
 `ConversationTimeline` can merge supplied Card descriptors with existing message and Approval projections in source Sequence order. The default Card renderer exposes only descriptor fields and opens its stable target through the existing Inspector boundary. Production Event-to-Card mappings remain deferred until the public Novel proposal OutputEvent taxonomy is finalized; the UI does not create a second Event subscription or expose raw OutputEvent payloads to React.
 
+### 11.2 Implemented Single-stream Card Binding
+
+`ConversationCardProjectionStore` now subclasses the Core Conversation Projection Store and applies registered Card projectors inside the same replay and live Event path used by messages and Approval projections. Card state is staged before the Core Store publishes its one update and rolled back if the Core Event application fails, so React observes one coherent combined snapshot without opening another Conversation handle or Event subscription.
+
+The shared Binding snapshot carries both the Core projection and immutable Card projection. `NovelApp` accepts injected Card Projector and Renderer Registries, renders replayed and live Cards automatically, and routes Card Inspector actions through the existing `InspectorStore`. Duplicate Events require deterministic Card projection, Card IDs cannot be reused across source Events, and structured logs include only stable identities, kinds, and Sequences. Default production projectors remain empty until Novel proposal OutputEvent types are accepted.
+
 ## 12. Inspector Architecture
 
 ```mermaid

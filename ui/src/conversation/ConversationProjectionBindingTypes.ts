@@ -4,6 +4,7 @@ import type {
   ConversationProjectionControllerSnapshot,
   ConversationProjectionSnapshot,
 } from "@novel/core";
+import type { ConversationCardProjectionSnapshot } from "../card/index.js";
 
 export const CONVERSATION_PROJECTION_BINDING_STATE = {
   idle: "idle",
@@ -22,6 +23,7 @@ export interface ConversationProjectionBindingSnapshot {
   readonly revision: number;
   readonly state: ConversationProjectionBindingState;
   readonly projection: ConversationProjectionSnapshot;
+  readonly cards: ConversationCardProjectionSnapshot;
   readonly controller?: ConversationProjectionControllerSnapshot;
   readonly error?: ConversationProjectionControllerErrorSnapshot;
 }

@@ -1,9 +1,9 @@
 /** Deterministic disconnect and duplicate-delivery controls for Mock Transports. */
+import { ApiTransportDisconnectedError } from "../../transport/index.js";
+
 export type MockTransportDisconnectListener = () => void;
 
-export class MockTransportDisconnectedError extends Error {
-  readonly code = "MOCK_TRANSPORT_DISCONNECTED";
-
+export class MockTransportDisconnectedError extends ApiTransportDisconnectedError {
   constructor(public readonly transportKind: string) {
     super("Mock Transport is disconnected");
     this.name = "MockTransportDisconnectedError";

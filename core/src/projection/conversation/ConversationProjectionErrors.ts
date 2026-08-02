@@ -64,3 +64,33 @@ export class ConversationProjectionPayloadError extends ConversationProjectionEr
     this.name = "ConversationProjectionPayloadError";
   }
 }
+
+export class ConversationProjectionControllerStateError extends ConversationProjectionError {
+  constructor(operation: string, state: string) {
+    super(
+      "CONVERSATION_PROJECTION_CONTROLLER_STATE_INVALID",
+      `Conversation Projection Controller cannot ${operation} while ${state}`,
+    );
+    this.name = "ConversationProjectionControllerStateError";
+  }
+}
+
+export class ConversationProjectionReplayError extends ConversationProjectionError {
+  constructor() {
+    super(
+      "CONVERSATION_PROJECTION_REPLAY_INVALID",
+      "Conversation replay did not reach the requested Journal high watermark",
+    );
+    this.name = "ConversationProjectionReplayError";
+  }
+}
+
+export class ConversationProjectionSubscriptionEndedError extends ConversationProjectionError {
+  constructor() {
+    super(
+      "CONVERSATION_PROJECTION_SUBSCRIPTION_ENDED",
+      "Conversation Event subscription ended before the Controller stopped",
+    );
+    this.name = "ConversationProjectionSubscriptionEndedError";
+  }
+}

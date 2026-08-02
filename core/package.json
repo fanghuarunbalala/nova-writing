@@ -95,6 +95,7 @@
     "smoke:client-proxy-protocol": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/client-proxy-protocol-typecheck.ts && node scripts/client-proxy-protocol-smoke.mjs",
     "smoke:mock-client-transports": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/mock-client-transports-typecheck.ts && node scripts/mock-client-transports-smoke.mjs",
     "smoke:conversation-projection-store": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/conversation-projection-store-typecheck.ts && node scripts/conversation-projection-store-smoke.mjs",
+    "smoke:conversation-projection-controller": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/conversation-projection-controller-typecheck.ts && node scripts/conversation-projection-controller-smoke.mjs",
     "smoke:conversation-events": "pnpm build && node scripts/conversation-event-live-smoke.mjs && node scripts/conversation-event-follow-smoke.mjs && node scripts/conversation-event-publishing-smoke.mjs && node scripts/conversation-event-integration-smoke.mjs",
     "smoke:conversation-event-integration": "pnpm build && node scripts/conversation-event-integration-smoke.mjs",
     "smoke:message-projection-integration": "pnpm build && node scripts/message-projection-integration-smoke.mjs"

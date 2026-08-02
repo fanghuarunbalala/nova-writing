@@ -528,6 +528,25 @@ Unknown Events do not expose arbitrary payloads through the generic descriptor. 
 
 A new projection rebuild starts from Sequence `1`. Reconnection reuses the existing Store and subscribes with its `lastAppliedSequence`; an independent tail-only Store is not treated as a complete Conversation projection. The Store owns no durable state, network lifecycle, automatic reconnect loop, React state, or rendering behavior.
 
+### 13.2 Implemented Conversation Projection Controller Checkpoint
+
+`ConversationProjectionController` now owns the client-side lifecycle that feeds one opened `Conversation` into one `ConversationProjectionStore`. Its immutable snapshot exposes the logical connection state, projected Sequence, current Runtime Presence, and a redacted stable failure descriptor without exposing Transport implementations or Event payloads.
+
+The accepted startup and recovery sequence is:
+
+1. query the Conversation snapshot and logical Runtime Presence;
+2. replay paged Journal history through the observed high watermark;
+3. subscribe after the Store's current `lastAppliedSequence`;
+4. query the Conversation snapshot again after subscription creation;
+5. drain the subscription through the second high watermark to close the replay/follow race window;
+6. enter `live` and continue one background Event pump;
+7. enter `disconnected` when the Transport reports a provider-neutral disconnect;
+8. reconnect only through an explicit `resume()`, reusing the existing Store and its Sequence cursor.
+
+The Controller does not run an infinite retry loop and does not own the opened `Conversation` handle. `stop()` is idempotent, aborts and closes only the Controller-owned subscription, waits for its active connection and pump work to settle, detaches the Store listener, and prevents later restart. A non-disconnect failure enters `failed`; the public error snapshot contains only a stable code, retryability, and category.
+
+Focused contract validation runs against both deterministic Electron-style and HTTP/WebSocket-style Mock Transports. It covers durable history replay, live following, duplicate delivery suppression, logical Runtime Presence updates, offline Event persistence, explicit catch-up after reconnect, immutable listener snapshots, idempotent stopping, and log payload redaction.
+
 ## 14. CLI and TUI Integration
 
 CLI and TUI are first-class clients in the same API system.

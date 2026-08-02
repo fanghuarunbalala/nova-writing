@@ -4931,6 +4931,19 @@ classDiagram
         +listAllowed()
     }
 
+    class ToolGroupManifest {
+        +1 schemaVersion
+        +string id
+        +string version
+        +string label
+        +string description
+        +string[] tools
+    }
+
+    class ToolGroupManifestLoader {
+        +load(yaml) ToolGroupManifest
+    }
+
     class PiToolAdapter {
         +toAgentTool(RegisteredTool)
     }
@@ -4939,6 +4952,8 @@ classDiagram
     ToolHandler --> RegisteredTool
     RegisteredTool --> ToolRegistryAssembler
     ToolRegistryAssembler --> ToolRegistry
+    ToolGroupManifestLoader --> ToolGroupManifest
+    ToolGroupManifest --> ToolRegistryView
     ToolRegistry --> ToolRegistryView
     PiToolAdapter --> RegisteredTool
 ```
@@ -4954,6 +4969,8 @@ YAML Tool Group manifests contain only:
 - an ordered list of registered Tool names
 
 `groupId` is the stable key. Human-readable `label` is not used as an identity key.
+
+The YAML loader accepts one YAML 1.2 document, rejects duplicate mapping keys, aliases, merge keys, parser warnings, unknown fields, unsupported schema versions, invalid identities, empty Tool lists, and duplicate Tool names. It preserves declared Tool order and returns a defensively captured immutable Manifest. Parsing and validation failures expose only stable failure codes plus validated Group or Tool identities; YAML text, source paths, and raw parser diagnostics are never retained.
 
 `ToolRegistryAssembler` is mutable only during assembly. Its idempotent `freeze()` operation captures one immutable `ToolRegistry` snapshot and permanently closes that Assembler to registration or merge. Tool names are globally unique inside one Registry. Duplicate registration and merge conflicts fail explicitly; merge preflight is atomic and load order never replaces an existing Tool. Registry listing is ordered by stable Tool name and does not depend on registration or merge order.
 

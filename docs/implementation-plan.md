@@ -2430,6 +2430,16 @@ Task 5A-B delivered:
 
 Task 5A-B explicitly excludes YAML Group manifests, Registry Views, Pi conversion, argument execution, Tool-error normalization, permission, approval, sandboxing, retry, trace persistence, Artifact materialization, and concrete Tools.
 
+Task 5A-C delivered:
+
+- immutable schema-versioned `ToolGroupManifest` values containing stable Group identity, SemVer version, display metadata, and ordered Tool names only
+- strict YAML 1.2 loading with duplicate-key, alias, merge, warning, multi-document, unknown-field, malformed identity, empty-list, and duplicate-Tool rejection
+- defensive direct-object capture that rejects accessors, symbols, inherited shapes, and source mutation without surfacing raw caller failures
+- stable Manifest failure codes retaining only validated Group and Tool identities, never YAML text, source paths, parser diagnostics, or raw errors
+- a direct Core dependency on `yaml@2.9.0` plus focused compile-time and runtime coverage for immutability, order preservation, strict structure, and failure redaction
+
+Task 5A-C explicitly excludes Registry existence checks, Group selection, allow/deny composition, Registry Views, Pi conversion, argument execution, Tool-error normalization, permission, approval, sandboxing, retry, trace persistence, Artifact materialization, and concrete Tools.
+
 Expected deliverables after approval:
 
 - core-owned Tool types

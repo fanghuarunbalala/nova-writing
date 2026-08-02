@@ -788,6 +788,22 @@ SQLite delivery-state writes delivered:
 **Status:** N8-C SQLite Outbox Store completed; the application Dispatcher and
 Conversation OutputEvent bridge are next.
 
+Single-Store Dispatcher and Output bridge delivered:
+
+- a provider-neutral lifecycle publisher port is implemented by a Conversation
+  adapter that constructs retry-stable `NovelLifecycleOutputEvent` instances
+  and validates durable Journal receipts
+- the Dispatcher reads ordered pages, records each attempt before publication,
+  and marks the exact Outbox row published only after a valid durable receipt
+- a Journal `duplicate` receipt is treated as successful crash recovery and
+  preserves the Journal's original recorded timestamp in Outbox state
+- the first publication failure stops the ordered drain, leaving that row and
+  all later rows pending; invalid receipts and lost delivery state fail through
+  content-safe categories
+
+**Status:** N8-C single-Store dispatch completed; canonical/Draft dispatch
+composition and restart-safe scheduling are next.
+
 ### N8-D Approval Bridge
 
 Bind asynchronous Approval requests and responses to exact ChangeSet digests without holding SQLite transactions while waiting.

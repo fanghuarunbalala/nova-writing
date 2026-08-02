@@ -16,3 +16,22 @@ export class NovelOutboxIntegrityError extends Error {
     super("Novel lifecycle Outbox integrity validation failed");
   }
 }
+
+export const NOVEL_OUTBOX_DISPATCH_FAILURE = {
+  publisherFailed: "publisher_failed",
+  invalidPublisherReceipt: "invalid_publisher_receipt",
+  attemptStateLost: "attempt_state_lost",
+  publicationStateLost: "publication_state_lost",
+} as const;
+
+export type NovelOutboxDispatchFailure =
+  (typeof NOVEL_OUTBOX_DISPATCH_FAILURE)[keyof typeof NOVEL_OUTBOX_DISPATCH_FAILURE];
+
+export class NovelOutboxDispatchError extends Error {
+  override readonly name = "NovelOutboxDispatchError";
+  readonly code = "NOVEL_OUTBOX_DISPATCH_FAILED" as const;
+
+  constructor(public readonly failure: NovelOutboxDispatchFailure) {
+    super("Novel lifecycle Outbox dispatch failed");
+  }
+}

@@ -1,0 +1,11 @@
+/** Public redacted Context Compaction and Checkpoint application events. */
+import { OUTPUT_EVENT_TYPE } from "./OutputEventType.js";
+import type { OutputEventOptions } from "./OutputEventOptions.js";
+import { SystemOutputEvent } from "./SystemOutputEvent.js";
+import { ContextCompactionStartedPayload, ContextCompactionCompletedPayload, ContextCompactionFailedPayload, ContextCheckpointAppliedPayload, type ContextCompactionStartedPayloadOptions, type ContextCompactionCompletedPayloadOptions, type ContextCompactionFailedPayloadOptions, type ContextCheckpointAppliedPayloadOptions } from "./payload/ContextCompactionLifecyclePayloads.js";
+
+type LifecycleOptions<T> = Omit<OutputEventOptions, "runId"> & T & { runId: string };
+export class ContextCompactionStartedOutputEvent extends SystemOutputEvent { constructor(options: LifecycleOptions<ContextCompactionStartedPayloadOptions>) { const { runId, ...rest } = options; super("context.compaction.started", new ContextCompactionStartedPayload(options), { ...rest, runId }); } override getEventType() { return OUTPUT_EVENT_TYPE.contextCompactionStarted; } }
+export class ContextCompactionCompletedOutputEvent extends SystemOutputEvent { constructor(options: LifecycleOptions<ContextCompactionCompletedPayloadOptions>) { const { runId, ...rest } = options; super("context.compaction.completed", new ContextCompactionCompletedPayload(options), { ...rest, runId }); } override getEventType() { return OUTPUT_EVENT_TYPE.contextCompactionCompleted; } }
+export class ContextCompactionFailedOutputEvent extends SystemOutputEvent { constructor(options: LifecycleOptions<ContextCompactionFailedPayloadOptions>) { const { runId, ...rest } = options; super("context.compaction.failed", new ContextCompactionFailedPayload(options), { ...rest, runId }); } override getEventType() { return OUTPUT_EVENT_TYPE.contextCompactionFailed; } }
+export class ContextCheckpointAppliedOutputEvent extends SystemOutputEvent { constructor(options: LifecycleOptions<ContextCheckpointAppliedPayloadOptions>) { const { runId, ...rest } = options; super("context.checkpoint.applied", new ContextCheckpointAppliedPayload(options), { ...rest, runId }); } override getEventType() { return OUTPUT_EVENT_TYPE.contextCheckpointApplied; } }

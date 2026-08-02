@@ -15,6 +15,7 @@ import {
 } from "../../../event/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type {
+  ContextCheckpointApplicationCoordinator,
   ContextProjectionProviderCallCoordinator,
   ContextProjectionProviderCallResult,
 } from "../../context/index.js";
@@ -64,6 +65,7 @@ export interface PiAgentCoreAdapterOptions {
   messageSchemaRegistry?: RuntimeMessageSchemaRegistry;
   nudgeProviderCalls?: NudgeProviderCallCoordinator;
   contextProjectionProviderCalls?: ContextProjectionProviderCallCoordinator;
+  checkpointApplications?: ContextCheckpointApplicationCoordinator;
   dispatchAwareStreamFunction?: PiDispatchAwareStreamFunction;
   providerCallIdFactory?: PiProviderCallIdFactory;
   providerCallClock?: PiProviderCallClock;
@@ -113,6 +115,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
   private readonly nudgeProviderCalls?: NudgeProviderCallCoordinator;
   private readonly contextProjectionProviderCalls?: ContextProjectionProviderCallCoordinator;
+  private readonly checkpointApplications?: ContextCheckpointApplicationCoordinator;
   private readonly dispatchAwareStreamFunction?: PiDispatchAwareStreamFunction;
   private readonly baseStreamFunction: StreamFn;
   private readonly providerCallIdFactory: PiProviderCallIdFactory;
@@ -131,15 +134,19 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     });
     this.nudgeProviderCalls = options.nudgeProviderCalls;
     this.contextProjectionProviderCalls = options.contextProjectionProviderCalls;
+    this.checkpointApplications = options.checkpointApplications;
     this.dispatchAwareStreamFunction = options.dispatchAwareStreamFunction;
     this.baseStreamFunction = this.agent.streamFunction;
     this.providerCallIdFactory =
       options.providerCallIdFactory ?? new RandomPiProviderCallIdFactory();
     this.providerCallClock = options.providerCallClock ?? systemPiProviderCallClock;
-    if (
-      (this.nudgeProviderCalls === undefined) !==
-      (this.dispatchAwareStreamFunction === undefined)
-    ) {
+    const requiresDispatchHooks =
+      this.nudgeProviderCalls !== undefined ||
+      this.checkpointApplications !== undefined;
+    if (requiresDispatchHooks !== (this.dispatchAwareStreamFunction !== undefined)) {
+      throw this.fail(PI_AGENT_CORE_ADAPTER_FAILURE.invalidRequest);
+    }
+    if (this.checkpointApplications && !this.contextProjectionProviderCalls) {
       throw this.fail(PI_AGENT_CORE_ADAPTER_FAILURE.invalidRequest);
     }
     if (
@@ -154,7 +161,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     }
     if (
       this.contextProjectionProviderCalls !== undefined ||
-      (this.nudgeProviderCalls && this.dispatchAwareStreamFunction)
+      requiresDispatchHooks
     ) {
       this.agent.streamFunction = (model, context, streamOptions) =>
         this.streamProviderCall(model, context, streamOptions);
@@ -503,13 +510,15 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     const active = this.activeRun;
     const nudgeCoordinator = this.nudgeProviderCalls;
     const projectionCoordinator = this.contextProjectionProviderCalls;
+    const checkpointApplications = this.checkpointApplications;
     const dispatchDelegate = this.dispatchAwareStreamFunction;
     if (
       !active ||
       active.phase !== "executing" ||
       active.turnNumber < 1 ||
       (!nudgeCoordinator && !projectionCoordinator) ||
-      (nudgeCoordinator !== undefined && dispatchDelegate === undefined)
+      ((nudgeCoordinator !== undefined || checkpointApplications !== undefined) &&
+        dispatchDelegate === undefined)
     ) {
       throw active
         ? this.rememberProviderDispatchFailure(active)
@@ -548,21 +557,36 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     }
 
     const lifecycle = createDispatchLifecycle(prepared);
+    const checkpointId = pendingProjection?.result.projection.checkpointId;
+    let dispatchSettled = false;
     const hooks: PiProviderDispatchHooks = Object.freeze({
       onDispatched: async (dispatchedAt = this.providerCallClock.now()) => {
-        if (!prepared) return;
-        if (lifecycle.state === "dispatched") return;
-        if (lifecycle.state !== "pending") {
+        if (dispatchSettled) return;
+        if (prepared && lifecycle.state !== "pending") {
           throw this.rememberProviderDispatchFailure(active);
         }
-        lifecycle.state = "dispatched";
+        dispatchSettled = true;
+        if (prepared) lifecycle.state = "dispatched";
         try {
-          await nudgeCoordinator!.confirmDispatched(prepared, dispatchedAt);
+          if (checkpointApplications && checkpointId) {
+            await checkpointApplications.confirmDispatched({
+              conversationId: active.request.conversationId,
+              runId: active.request.runId,
+              providerCallId,
+              checkpointId,
+              dispatchedAt,
+            });
+          }
+          if (prepared) {
+            await nudgeCoordinator!.confirmDispatched(prepared, dispatchedAt);
+          }
         } catch {
           throw this.rememberProviderDispatchFailure(active);
         }
       },
       onFailedBeforeDispatch: async (failedAt = this.providerCallClock.now()) => {
+        if (dispatchSettled) return;
+        dispatchSettled = true;
         if (!prepared) return;
         if (lifecycle.state === "released") return;
         if (lifecycle.state !== "pending") {
@@ -590,7 +614,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     };
     let response: Awaited<ReturnType<StreamFn>>;
     try {
-      response = nudgeCoordinator
+      response = dispatchDelegate
         ? await dispatchDelegate!(model, providerContext, options, hooks)
         : await this.baseStreamFunction(model, providerContext, options);
     } catch (error) {
@@ -612,18 +636,20 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       }
     }
 
-    if (prepared) {
+    if (prepared || (checkpointApplications && checkpointId)) {
       const originalResult = response.result.bind(response);
       let guardedResult: ReturnType<typeof originalResult> | undefined;
       response.result = () => {
         guardedResult ??= (async () => {
           const result = await originalResult();
-          if (lifecycle.state === "pending") {
-            lifecycle.state = "released";
-            await nudgeCoordinator!.releaseBeforeDispatch(
-              prepared,
-              this.providerCallClock.now(),
-            );
+          if (!dispatchSettled) {
+            if (prepared) {
+              lifecycle.state = "released";
+              await nudgeCoordinator!.releaseBeforeDispatch(
+                prepared,
+                this.providerCallClock.now(),
+              );
+            }
             throw this.rememberProviderDispatchFailure(active);
           }
           return result;

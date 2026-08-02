@@ -13,6 +13,10 @@ export const OUTPUT_EVENT_TYPE = {
   nudgeScheduled: "system.nudge.scheduled",
   systemReminderInjected: "system.reminder.injected",
   nudgeExpired: "system.nudge.expired",
+  contextCompactionStarted: "system.context.compaction.started",
+  contextCompactionCompleted: "system.context.compaction.completed",
+  contextCompactionFailed: "system.context.compaction.failed",
+  contextCheckpointApplied: "system.context.checkpoint.applied",
 } as const;
 
 export type CoreOutputEventType =

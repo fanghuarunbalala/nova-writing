@@ -5412,6 +5412,7 @@ Currently implemented skeletons include:
 - single-attempt Context Compaction orchestration with canonical source/content digest recomputation, durable-port duplicate suppression, optional semantic validation, and immutable parent-checked Checkpoint activation
 - priority-budgeted per-call Context Projection with critical-item preservation, oldest-first recent-window degradation, immutable pinned/transient retention, and strict hard-admission rejection
 - provider-neutral Base Prompt plus Checkpoint Overlay composition and Pi `transformContext()` application before every inner LLM call, followed by the existing one-shot Nudge Overlay without canonical history mutation
+- redacted durable Context Compaction lifecycle Events and exact-dispatch Checkpoint application publication with idempotent Event identities
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 

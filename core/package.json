@@ -46,6 +46,7 @@
     "smoke:runtime-agent-turn-fifo": "pnpm build && node scripts/runtime-agent-turn-fifo-integration-smoke.mjs",
     "smoke:runtime-context-compaction-protocol": "pnpm build && node scripts/runtime-context-compaction-protocol-smoke.mjs",
     "smoke:runtime-context-compaction-manager": "pnpm build && node scripts/runtime-context-compaction-manager-smoke.mjs",
+    "smoke:runtime-context-compaction-events": "pnpm build && node scripts/runtime-context-compaction-events-smoke.mjs",
     "smoke:runtime-context-projection-planner": "pnpm build && node scripts/runtime-context-projection-planner-smoke.mjs",
     "smoke:runtime-policy-effect-coordination": "pnpm build && node scripts/runtime-policy-effect-coordination-smoke.mjs",
     "smoke:runtime-nudge-protocol": "pnpm build && node scripts/runtime-nudge-protocol-smoke.mjs",

@@ -230,6 +230,7 @@ const nudgeCoordinator = {
 };
 
 const providerContexts = [];
+const checkpointApplications = [];
 let providerCallCount = 0;
 const agent = new Agent({
   initialState: { model, systemPrompt: "", messages: [], tools: [] },
@@ -242,6 +243,12 @@ const adapter = new PiAgentCoreAdapter({
   messageConverter,
   eventBridge: { handle: async () => undefined },
   contextProjectionProviderCalls: projectionCoordinator,
+  checkpointApplications: {
+    async confirmDispatched(request) {
+      checkpointApplications.push(request);
+      return { status: "recorded", conversationId: request.conversationId, eventId: `applied:${request.providerCallId}`, sequence: checkpointApplications.length, recordedAt: request.dispatchedAt };
+    },
+  },
   nudgeProviderCalls: nudgeCoordinator,
   dispatchAwareStreamFunction: async (_model, context, _options, hooks) => {
     providerCallCount += 1;
@@ -324,6 +331,7 @@ assert.deepEqual(
   ["provider-call-1", "provider-call-2"],
 );
 assert.deepEqual(nudgeConfirmations, ["provider-call-1"]);
+assert.deepEqual(checkpointApplications.map((request) => request.providerCallId), ["provider-call-1", "provider-call-2"]);
 
 assert.equal(
   providerContexts[0].systemPrompt,
@@ -404,8 +412,18 @@ const failedAdapter = new PiAgentCoreAdapter({
   eventBridge: { handle: async () => undefined },
   contextProjectionProviderCalls: new ContextProjectionProviderCallCoordinator({
     candidateProvider: {
-      async load() {
-        throw new Error(`${privateMarker}:candidate-failure`);
+      async load(request) {
+        const source = await projectionCoordinator.prepare;
+        void source;
+        return {
+          conversationId: request.conversationId, providerCallId: request.providerCallId, checkpoint,
+          pinnedGroups: [{ id: "pin-current", conversationId: request.conversationId, kind: CONTEXT_PIN_GROUP_KIND.currentInput, lifetime: CONTEXT_PIN_LIFETIME.sliding, messageIds: ["message-old-2"], tokenEstimate: 50, runId: request.runId, turnId: "turn-current" }],
+          recentMessageIds: ["message-old-1"], transientMessageCount: request.transientMessageCount,
+          nonMessageFixedTokens: 200, checkpointBaseTokens: 50,
+          checkpointItemTokenEstimates: [{ itemId: "critical-memory", tokenEstimate: 100 }, { itemId: "low-memory", tokenEstimate: 50 }],
+          messageTokenEstimates: [{ messageId: "message-old-2", tokenEstimate: 50 }, { messageId: "message-old-1", tokenEstimate: 60 }],
+          transientMessageTokens: 0, hardAdmissionTokens: 300,
+        };
       },
     },
     logger,

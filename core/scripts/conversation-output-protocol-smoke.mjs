@@ -26,6 +26,10 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "system.nudge.scheduled",
   "system.reminder.injected",
   "system.nudge.expired",
+  "system.context.compaction.started",
+  "system.context.compaction.completed",
+  "system.context.compaction.failed",
+  "system.context.checkpoint.applied",
 ]);
 
 const previous = {

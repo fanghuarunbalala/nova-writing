@@ -320,6 +320,12 @@ export const NudgeExpiredPayloadSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const ContextLifecycleSnapshotSchema = Type.Object({ runId: Type.String({ minLength: 1 }) }, { additionalProperties: true });
+export const ContextCompactionStartedPayloadSchema = Type.Object({ providerCallId: Type.String({ minLength: 1 }), trigger: Type.Union([Type.Literal("automatic"), Type.Literal("hard_admission_risk"), Type.Literal("explicit")]), tokenEstimateBefore: Type.Integer({ minimum: 0 }), targetTokens: Type.Integer({ minimum: 0 }), hardAdmissionTokens: Type.Integer({ minimum: 0 }) }, { additionalProperties: false });
+export const ContextCompactionCompletedPayloadSchema = Type.Object({ providerCallId: Type.String({ minLength: 1 }), checkpointId: Type.String({ minLength: 1 }), outcome: Type.Union([Type.Literal("target_met"), Type.Literal("reduced"), Type.Literal("degraded")]), sourceStartSequence: Type.Integer({ minimum: 0 }), sourceEndSequence: Type.Integer({ minimum: 0 }), tokenEstimateBefore: Type.Integer({ minimum: 0 }), tokenEstimateAfter: Type.Integer({ minimum: 0 }) }, { additionalProperties: false });
+export const ContextCompactionFailedPayloadSchema = Type.Object({ providerCallId: Type.String({ minLength: 1 }), failure: Type.String({ minLength: 1 }), tokenEstimateBefore: Type.Optional(Type.Integer({ minimum: 0 })), tokenEstimateAfter: Type.Optional(Type.Integer({ minimum: 0 })), sourceStartSequence: Type.Optional(Type.Integer({ minimum: 0 })), sourceEndSequence: Type.Optional(Type.Integer({ minimum: 0 })) }, { additionalProperties: false });
+export const ContextCheckpointAppliedPayloadSchema = Type.Object({ providerCallId: Type.String({ minLength: 1 }), checkpointId: Type.String({ minLength: 1 }) }, { additionalProperties: false });
+
 const NudgeLifecycleSnapshotSchema = Type.Object(
   {
     runId: Type.String({ minLength: 1 }),
@@ -438,4 +444,10 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     payloadSchema: NudgeExpiredPayloadSchema,
     snapshotSchema: NudgeLifecycleSnapshotSchema,
   });
+  for (const [eventType, payloadSchema] of [
+    [OUTPUT_EVENT_TYPE.contextCompactionStarted, ContextCompactionStartedPayloadSchema],
+    [OUTPUT_EVENT_TYPE.contextCompactionCompleted, ContextCompactionCompletedPayloadSchema],
+    [OUTPUT_EVENT_TYPE.contextCompactionFailed, ContextCompactionFailedPayloadSchema],
+    [OUTPUT_EVENT_TYPE.contextCheckpointApplied, ContextCheckpointAppliedPayloadSchema],
+  ] as const) registry.register({ kind: "output", eventType, schemaVersion: EVENT_SCHEMA_VERSION, payloadSchema, snapshotSchema: ContextLifecycleSnapshotSchema });
 }

@@ -2344,6 +2344,16 @@ Task 4C-F explicitly excludes:
 - implementation of `strongerStructured` or `artifactOffload` degradation stages; their fixed protocol levels remain reserved for later concrete Compactor and Artifact capabilities
 - dynamic Tool schema mounting, Provider/model switching, automatic Projection retries, Novel-specific Projection policies, and mutation of canonical history
 
+Task 4C-G delivered:
+
+- four public redacted System OutputEvents for Compaction started, completed, failed, and Checkpoint applied, with strict payload schemas and no Message, Prompt, Checkpoint text, Artifact path, or raw failure content
+- deterministic lifecycle publication that suppresses duplicate attempts, maps activated Checkpoints to completed Events, maps `unreducible` and stable Manager failures to failed Events, and normalizes Event append failures
+- idempotent `ContextCheckpointApplicationCoordinator` publication keyed by Checkpoint and Provider-call identity
+- Pi dispatch-hook integration that publishes Checkpoint applied only after exact Provider dispatch confirmation, composes safely with Nudge delivery confirmation, and detects missing dispatch evidence
+- focused validation for schema registration, duplicate suppression, unreducible mapping, idempotent Checkpoint application, two inner Pi Provider calls, hard-boundary dispatch prevention, and private-content redaction
+
+Task 4C-G explicitly excludes concrete production Event ID factories, durable Checkpoint candidate adapters, Artifact persistence, Tool integration, Provider transport implementations, and Novel-specific policies.
+
 Task 4C explicitly excludes until their own implementation steps:
 
 - concrete filesystem, SQLite, or object-backed `ArtifactStore`; Artifact quota, retention, and garbage collection

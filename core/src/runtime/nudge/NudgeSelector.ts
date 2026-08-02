@@ -18,6 +18,8 @@ import {
 } from "./NudgeSelectionErrors.js";
 
 export interface NudgeCooldownRecord {
+  readonly targetRunId: string;
+  readonly policyId: string;
   readonly dedupeKey: string;
   readonly consumedTurnNumber: number;
 }
@@ -102,17 +104,22 @@ export class NudgeSelector {
       if (!isRecord(cooldown)) {
         throw this.failure(NUDGE_SELECTION_FAILURE.invalidCooldown, identity);
       }
+      const targetRunId = captureNonBlank(cooldown.targetRunId);
+      const policyId = captureNonBlank(cooldown.policyId);
       const dedupeKey = captureNonBlank(cooldown.dedupeKey);
       if (
+        !targetRunId ||
+        !policyId ||
         !dedupeKey ||
         !Number.isSafeInteger(cooldown.consumedTurnNumber) ||
         cooldown.consumedTurnNumber < 1
       ) {
         throw this.failure(NUDGE_SELECTION_FAILURE.invalidCooldown, identity);
       }
-      const previous = captured.get(dedupeKey);
+      const key = cooldownKey(targetRunId, policyId, dedupeKey);
+      const previous = captured.get(key);
       if (previous === undefined || cooldown.consumedTurnNumber > previous) {
-        captured.set(dedupeKey, cooldown.consumedTurnNumber);
+        captured.set(key, cooldown.consumedTurnNumber);
       }
     }
     return captured;
@@ -160,7 +167,9 @@ export class NudgeSelector {
       return false;
     }
 
-    const consumedTurnNumber = cooldownByKey.get(candidate.dedupeKey);
+    const consumedTurnNumber = cooldownByKey.get(
+      cooldownKey(candidate.targetRunId, candidate.policyId, candidate.dedupeKey),
+    );
     if (consumedTurnNumber === undefined || candidate.cooldownTurns === undefined) {
       return true;
     }
@@ -218,6 +227,14 @@ function selectExclusiveSafe(
 
 function captureNonBlank(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function cooldownKey(
+  targetRunId: string,
+  policyId: string,
+  dedupeKey: string,
+): string {
+  return `${targetRunId}\u0000${policyId}\u0000${dedupeKey}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -2114,7 +2114,7 @@ Task 4N implementation order:
 - Task 4N-C: implement deterministic selection and the versioned template registry
 - Task 4N-D: implement the pending store and lifecycle manager
 - Task 4N-E: implement redacted public Nudge lifecycle OutputEvents
-- Task 4N-F: integrate the one-shot Provider System Prompt Overlay without canonical Message projection
+- Task 4N-F: integrate the one-shot Provider System Prompt Overlay with an injected restart-safe private Pending Store and without canonical Message projection
 
 Task 4N explicitly excludes:
 
@@ -2158,6 +2158,25 @@ Task 4N-C explicitly excludes:
 
 - durable cooldown state, pending lifecycle mutation, lease creation, expiry persistence, or restart restoration
 - public lifecycle Events and Provider dispatch integration
+
+Task 4N-D delivered:
+
+- asynchronous `PendingNudgeStore` contract and Conversation-scoped serialized in-memory implementation
+- atomic schedule, scoped active deduplication, candidate reads, cooldown projection, active-Lease lookup, lease, dispatch confirmation, pre-dispatch release, expiry, snapshot, and restore operations
+- `targetRunId + policyId + dedupeKey` scoping for deduplication and cooldown state
+- versioned immutable Store Snapshot containing Nudge records, active Lease identities, and consumed confirmation records
+- restart normalization from unconfirmed `leased` back to `scheduled`, while durable consumed confirmations and cooldown facts remain consumed
+- `NudgeManager` orchestration across selector, Store, template renderer, deterministic Lease ID injection, render-failure release, dispatch confirmation, expiry, snapshot, and restore
+- idempotent schedule, active lease replay, dispatch confirmation, and release semantics with stable redacted Store and Manager failures
+- focused coverage for deduplication, two-item leases, release, consumption, cooldown, expiry, active-Lease recovery, consumed recovery, render-failure rollback, and log redaction
+
+Task 4N-D explicitly excludes:
+
+- a concrete SQLite or file-backed private Nudge Store adapter; the current in-memory implementation is a reference implementation and test double
+- public Nudge OutputEvents and Journal coordination
+- Provider request dispatch or Pi Adapter changes
+
+Public lifecycle Events cannot replace private Nudge state persistence because their accepted redaction contract forbids template parameters. Task 4N-F must require an injected restart-safe private Store adapter or repository in production composition; `InMemoryPendingNudgeStore` is not sufficient for restart-safe Provider integration.
 
 ### 7.2 Task 4 Policy and Compaction Review Gate
 

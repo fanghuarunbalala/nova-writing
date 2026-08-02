@@ -4359,20 +4359,26 @@ classDiagram
         -NudgeSelector selector
         -NudgeTemplateRegistry templates
         -NudgeRenderer renderer
-        +schedule(NudgeEffect)
-        +leaseForProviderCall(request) NudgeLease
-        +confirmDelivered(providerCallId)
-        +releaseLease(providerCallId)
-        +expireForRun(runId)
+        +schedule(NudgeScheduleRequest) NudgeScheduleResult
+        +leaseForProviderCall(request) LeasedSystemReminderOverlay
+        +confirmDelivered(providerCallId, dispatchedAt)
+        +releaseLease(providerCallId, releasedAt)
+        +expire(NudgeExpiryRequest)
+        +snapshot()
         +restore(snapshot)
     }
 
     class PendingNudgeStore {
-        +enqueue(PendingNudge)
-        +lease(selected, providerCallId)
-        +consume(providerCallId)
-        +release(providerCallId)
-        +expire(runId)
+        +schedule(PendingNudge)
+        +list()
+        +listCooldowns()
+        +getActiveLease(providerCallId)
+        +lease(NudgeLease)
+        +confirmDispatched(request)
+        +releaseBeforeDispatch(request)
+        +expire(request)
+        +snapshot()
+        +restore(snapshot)
     }
 
     class NudgeSelector {
@@ -4412,7 +4418,15 @@ Tool wall-clock timeout is not a Nudge. It belongs to Tool execution timeout and
 
 Nudge selection first filters by target, expiry, and cooldown, then orders by priority descending and scheduled Journal Sequence ascending. One Nudge is selected by default and two is the hard maximum. An exclusive Nudge is always selected alone; when an exclusive candidate appears after an already-selected higher-priority candidate, it forms a boundary and lower-priority candidates cannot leapfrog it.
 
-Cooldown evaluation is explicit selector input rather than hidden mutable state. A `NudgeCooldownRecord` identifies the most recent consumed Turn for one dedupe key. A cooldown of `N` suppresses the next `N` complete Turns after consumption; lifecycle persistence remains owned by `PendingNudgeStore` and `NudgeManager`.
+Cooldown evaluation is explicit selector input rather than hidden mutable state. A `NudgeCooldownRecord` identifies the most recent consumed Turn for one Conversation-scoped `targetRunId + policyId + dedupeKey` identity. A cooldown of `N` suppresses the next `N` complete Turns after consumption; lifecycle persistence remains owned by `PendingNudgeStore` and `NudgeManager`.
+
+`PendingNudgeStore` is an asynchronous, serial state boundary even when its first implementation is in memory. Schedule, lease, dispatch confirmation, release, expiry, snapshot, and restore operations are atomic from the Manager's perspective. Active deduplication uses the Conversation-owned scope plus `targetRunId + policyId + dedupeKey`; terminal Nudges do not prevent a later schedule, but consumed Turn facts remain available for cooldown evaluation.
+
+The versioned Store Snapshot contains immutable Nudge records, active Lease identities, and consumption confirmations. Active Lease records retain `leaseId`, `providerCallId`, and `leasedAt`, but restore converts every unconfirmed `leased` Nudge back to `scheduled`. A durable consumed confirmation restores the Nudge as `consumed` and preserves cooldown state. Lease release is not restored because it is an internal pre-dispatch trace rather than durable public history.
+
+The Store Snapshot is private Runtime state and may contain template parameters required for a later render. It must be persisted through a private `PendingNudgeStore` adapter or private Snapshot repository, never through public `conversation.events`. The redacted scheduled, delivered, and expired OutputEvents are sufficient for UI lifecycle replay but intentionally insufficient to reconstruct renderable Pending Nudges. Provider integration must not claim restart-safe Nudge delivery while using only `InMemoryPendingNudgeStore`.
+
+`NudgeManager` releases a newly acquired or previously active Lease if template resolution or rendering fails before dispatch. Repeated schedule, lease, dispatch confirmation, and release operations are idempotent for the same durable identity. A release attempted after dispatch never returns the Nudge to `scheduled`.
 
 The selected items are rendered into one temporary `SystemReminderOverlay` block. The first version supports only `system-prompt-overlay`; `context-tail` placement is deferred.
 
@@ -4440,6 +4454,8 @@ Public durable Nudge Events are:
 - `NudgeExpiredOutputEvent`
 
 Their payloads contain Nudge identifiers, Policy and template metadata, target identity, and lifecycle state only. Rendered Reminder content and template parameters are forbidden in public Events and logs.
+
+Because these Events omit template parameters, they are not the authoritative private Runtime state for Nudge restoration. Runtime recovery combines the private Store Snapshot with durable public lifecycle facts; public Event replay alone is display-oriented.
 
 ## 19. Context Compaction and Compilation
 

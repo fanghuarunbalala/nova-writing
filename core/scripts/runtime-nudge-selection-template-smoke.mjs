@@ -82,7 +82,12 @@ const candidates = [
 assert.deepEqual(
   selector
     .select(candidates, request, [
-      { dedupeKey: "cooldown-key", consumedTurnNumber: 4 },
+      {
+        targetRunId: "run-1",
+        policyId: "policy.default",
+        dedupeKey: "cooldown-key",
+        consumedTurnNumber: 4,
+      },
     ])
     .map((nudge) => nudge.id),
   ["priority-first"],
@@ -90,7 +95,12 @@ assert.deepEqual(
 assert.deepEqual(
   selector
     .select(candidates, { ...request, requestedLimit: 2 }, [
-      { dedupeKey: "cooldown-key", consumedTurnNumber: 4 },
+      {
+        targetRunId: "run-1",
+        policyId: "policy.default",
+        dedupeKey: "cooldown-key",
+        consumedTurnNumber: 4,
+      },
     ])
     .map((nudge) => nudge.id),
   ["priority-first", "sequence-first"],
@@ -131,7 +141,15 @@ assert.deepEqual(
   ["normal"],
 );
 assert.throws(
-  () => selector.select(candidates, request, [{ dedupeKey: "bad", consumedTurnNumber: 0 }]),
+  () =>
+    selector.select(candidates, request, [
+      {
+        targetRunId: "run-1",
+        policyId: "policy.default",
+        dedupeKey: "bad",
+        consumedTurnNumber: 0,
+      },
+    ]),
   (error) =>
     error instanceof NudgeSelectionError &&
     error.failure === NUDGE_SELECTION_FAILURE.invalidCooldown,

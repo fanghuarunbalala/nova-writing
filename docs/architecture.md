@@ -4516,131 +4516,358 @@ Because these Events omit template parameters, they are not the authoritative pr
 
 ## 19. Context Compaction and Compilation
 
-Canonical Conversation history, compacted Context projection, and provider-specific messages are separate concepts.
+Canonical Conversation history, durable oversized content, structured compacted memory, per-call Context projection, and provider-specific messages are separate concepts.
 
-`RuntimePolicyEngine` decides when compaction is needed. `ContextCompactionManager` performs it and persists a `ContextCheckpoint`. `ContextCompiler` applies the latest usable Checkpoint to one Provider request.
+```text
+Journal / Messages
+    = canonical Conversation facts
+
+ArtifactStore
+    = durable large content referenced by canonical facts
+
+ContextCheckpoint
+    = immutable structured derived memory
+
+ContextProjection
+    = one Provider call's budgeted selection
+
+CompiledProviderContext
+    = Provider-facing System Prompt layers and projected Messages
+```
+
+Compaction never deletes or rewrites Journal history. Omitting a Checkpoint segment or Message from one `ContextProjection` changes only that Provider call; it never deletes Messages, Checkpoints, or Artifacts.
+
+### 19.1 Effective Budget and Pressure
+
+Context pressure is calculated against the complete candidate Provider input and an effective input budget:
+
+```text
+effectiveInputBudget
+= Provider context window
+- reserved Provider output
+- Provider protocol overhead
+- configured safety reserve
+```
+
+The candidate input estimate includes the Base System Prompt, selected Tool schemas, Checkpoint Overlay, one-shot Nudge reserve, pinned and recent canonical Messages, and active transient Run Messages.
+
+Default values are Runtime configuration rather than protocol constants:
+
+```text
+soft reminder threshold       70%
+compaction request threshold  82%
+post-compaction target        55%
+hard admission limit          92%
+automatic hysteresis          max(10% of effective budget, 8,192 tokens)
+minimum meaningful savings    max(5% of effective budget, 2,048 tokens)
+```
+
+The soft threshold may schedule a Nudge. The compaction threshold requests Compaction. The hard threshold is an admission guard rather than a Nudge or ordinary Policy Effect: a Provider request at or above the hard boundary is not dispatched unless a valid projection brings it below the boundary.
+
+Before invoking a Compactor, Core calculates an irreducible floor:
+
+```text
+irreducibleFloor
+= Base System Prompt
++ selected Tool schemas
++ pinned Message Groups
++ current Input
++ active transient Run state
++ required Provider protocol overhead
+```
+
+If the irreducible floor is already at or above the hard admission boundary, Runtime reports `context_unreducible` without spending a Compactor call. Base Prompt, Tool schemas, pinned content, and current Input are not silently truncated.
+
+Context pressure is evaluated before every Provider call because one Agent Run may contain multiple LLM calls separated by Tool results. Evaluation only before the outer User Turn would miss Context growth inside the Pi Agent loop.
+
+### 19.2 Pinned Message Groups
+
+Pinned content is retained as a complete protocol or semantic group. While pinned, its role, order, content, Tool-call identity, and pair relationships remain unchanged.
+
+First-version pinned groups are:
+
+- the current Input and its exact canonical projection
+- the latest complete User/Assistant Turn
+- an Assistant Tool-call Message and every corresponding unresolved Tool result
+- an unresolved Interaction or Approval request and its response state
+- explicit Message IDs pinned by Agent definition or Runtime configuration
+- active Run lifecycle facts and transient Messages not yet represented in durable canonical history
+
+Pins have three lifetimes:
+
+```text
+permanent pin   explicitly configured until removed
+conditional pin active while Tool, Interaction, Approval, or child work is unresolved
+sliding pin     current Input and latest complete Turn
+```
+
+The Compactor may summarize only the durable reducible prefix. It cannot split a Tool-call/result group, fabricate a Message role, or copy an ephemeral Nudge into structured memory.
+
+### 19.3 ContextCheckpoint and ContextProjection
+
+`ContextCheckpoint` is private, immutable, versioned derived memory. `ContextProjection` is the bounded selection applied to one Provider call.
+
+```ts
+interface ContextCheckpointItem {
+  readonly id: string;
+  readonly text: string;
+  readonly priority: "critical" | "high" | "normal" | "low";
+  readonly sourceMessageIds: readonly string[];
+  readonly artifactReferences: readonly ArtifactReference[];
+}
+
+interface ContextCheckpoint {
+  readonly schemaVersion: 1;
+  readonly id: string;
+  readonly conversationId: string;
+  readonly parentCheckpointId?: string;
+  readonly sourceStartSequence: number;
+  readonly sourceEndSequence: number;
+  readonly coveredThroughSequence: number;
+  readonly sourceDigest: string;
+  readonly summary: string;
+  readonly facts: readonly ContextCheckpointItem[];
+  readonly decisions: readonly ContextCheckpointItem[];
+  readonly constraints: readonly ContextCheckpointItem[];
+  readonly unresolvedTasks: readonly ContextCheckpointItem[];
+  readonly pinnedMessageIds: readonly string[];
+  readonly recentWindowStartSequence: number;
+  readonly tokenEstimateBefore: number;
+  readonly tokenEstimateAfter: number;
+  readonly compactorId: string;
+  readonly compactorVersion: string;
+  readonly createdAt: string;
+  readonly contentDigest: string;
+}
+
+interface ContextProjection {
+  readonly conversationId: string;
+  readonly providerCallId: string;
+  readonly checkpointId?: string;
+  readonly selectedCheckpointItemIds: readonly string[];
+  readonly omittedCheckpointItemIds: readonly string[];
+  readonly pinnedMessageIds: readonly string[];
+  readonly recentMessageIds: readonly string[];
+  readonly transientMessageCount: number;
+  readonly degradationLevel: number;
+  readonly tokenEstimate: number;
+}
+```
+
+`parentCheckpointId`, source Sequence boundaries, and `sourceDigest` establish immutable lineage and prevent a Checkpoint from being activated against different source content. Structured items reference durable Message IDs rather than copying Event payloads. Summary, item text, and Artifact content are private and forbidden in public Events and logs.
+
+Checkpoint priority drives projection omission:
+
+```text
+critical → never automatically omitted
+high     → preserved before normal and low
+normal   → omitted when budget pressure remains
+low      → first omitted from Provider projection
+```
+
+Critical Checkpoint items are still derived memory rather than canonical facts. If critical derived memory plus pinned groups exceeds the hard limit, Runtime fails instead of deleting pinned content.
+
+### 19.4 Oversized Content and Artifact References
+
+Oversized User content, Tool results, and verbose Checkpoint detail are stored in a durable Conversation-owned `ArtifactStore`. A referenced Artifact is not a temporary cache entry because Conversation replay and later Context recovery may depend on it.
+
+```ts
+interface ArtifactReference {
+  readonly artifactId: string;
+  readonly conversationId: string;
+  readonly contentType: string;
+  readonly byteLength: number;
+  readonly tokenEstimate?: number;
+  readonly digest: string;
+  readonly filename?: string;
+}
+```
+
+Canonical Messages and Checkpoints use logical Artifact IDs rather than local paths. The Store resolves an ID inside the owning Conversation boundary, verifies its digest, and hides workdir and storeDir placement from the Agent and public logs.
 
 ```mermaid
 sequenceDiagram
-    participant Runtime as ConversationRuntime
+    participant Client
+    participant Ingress as ContentIngressService
+    participant Policy as OversizedContentPolicy
+    participant Artifacts as ArtifactStore
+    participant Command as ConversationCommandService
+    participant Agent
+    participant Access as Artifact Access Tool
+
+    Client->>Ingress: User content stream
+    Ingress->>Policy: measure bytes and estimated tokens
+    alt content remains inline
+        Ingress->>Command: UserMessage with inline content
+    else oversized content
+        Ingress->>Artifacts: put immutable content stream
+        Artifacts-->>Ingress: ArtifactReference
+        Ingress->>Command: UserMessage with ArtifactReference
+    end
+    Command-->>Agent: bounded Artifact manifest
+    Agent->>Access: read/grep/search logical artifactId
+    Access->>Artifacts: bounded range/query
+    Artifacts-->>Access: bounded result and continuation cursor
+    Access-->>Agent: bounded Tool result
+```
+
+Artifact access is bounded by byte, line, match, and estimated-token limits and supports cursors. A Tool cannot externalize a large result and then reinsert the whole Artifact through an unbounded read.
+
+Tool results use the same materialization boundary after Tool execution. Concrete `ToolResultMaterializer`, Artifact handlers, permissions, and sandbox behavior belong to Task 5. Oversized Tool schemas do not use Artifacts because the Provider must see a Tool schema before invoking it; schema pressure is addressed through Agent-specific Tool Groups and dynamic mounting.
+
+### 19.5 Compaction Outcomes and Degradation
+
+The 55% target is desirable rather than a binary success requirement:
+
+```ts
+type ContextCompactionOutcome =
+  | "target_met"
+  | "reduced"
+  | "degraded"
+  | "unreducible";
+```
+
+```text
+target_met   valid result at or below the target
+reduced      valid meaningful reduction below the 82% request threshold
+degraded     valid meaningful reduction below 92% but still pressure-bound
+unreducible  result remains at or above 92%, violates validation, or the irreducible floor is too large
+```
+
+A `reduced` or `degraded` Checkpoint may activate because rejecting a meaningful safe reduction would waste usable capacity. Durable hysteresis and duplicate-attempt suppression prevent immediate loops. Automatic attempt identity is scoped by Conversation, source digest, Compactor ID, and Compactor version. The same unchanged source is not repeatedly sent to the same Compactor; explicit future control input may request a forced attempt.
+
+Degradation order is fixed:
+
+```text
+0. normal structured Compaction
+1. stronger structured Compaction with less narrative prose
+2. durable Artifact offload for verbose Checkpoint detail
+3. priority-budgeted Checkpoint Projection
+4. recent-window reduction down to the latest complete Turn
+5. hard failure when critical and pinned content still cannot fit
+```
+
+This is projection degradation, not canonical deletion. Complete Checkpoints and referenced Artifacts remain recoverable even when low-priority segments are omitted from one Provider call.
+
+```mermaid
+flowchart TD
+    Candidate["Candidate Provider Context"] --> Floor["Calculate irreducible floor"]
+    Floor --> FloorHard{"Floor >= 92%?"}
+    FloorHard -->|Yes| Fail["context_unreducible"]
+    FloorHard -->|No| Pressure{"Candidate >= 82%?"}
+    Pressure -->|No| Dispatch["Dispatch Provider call"]
+    Pressure -->|Yes| Duplicate{"Same source already attempted?"}
+    Duplicate -->|Yes| Projection["Reuse safe degraded projection"]
+    Duplicate -->|No| Compact["Run ContextCompactor"]
+    Compact --> Validate["Validate lineage, pins, digest, savings"]
+    Validate --> Target{"Result <= 55%?"}
+    Target -->|Yes| TargetMet["target_met"]
+    Target -->|No| Request{"Result < 82%?"}
+    Request -->|Yes| Reduced["reduced"]
+    Request -->|No| Hard{"Result < 92%?"}
+    Hard -->|Yes| Degraded["degraded"]
+    Hard -->|No| Fail
+    TargetMet --> Dispatch
+    Reduced --> Dispatch
+    Degraded --> Dispatch
+    Projection --> Hard
+```
+
+Mandatory structural validation checks schema and canonical JSON safety, exact Conversation and source identity, source digest and lineage, monotonic coverage, durable source references, pinned-group preservation, Nudge exclusion, content digest, estimated reduction, and hard-limit admission. A separate optional semantic validator may enforce Agent- or Novel-specific consistency without coupling Core to a model.
+
+Validation failure never activates or replaces the previous Checkpoint. Below the hard limit Runtime may continue with the previous safe projection; at the hard boundary the Provider call is rejected. Core never silently switches models or performs unbounded Compactor retries.
+
+### 19.6 Policy, Effects, and Events
+
+`RuntimePolicyEngine` is pure evaluation. `RuntimeEffectCoordinator` serializes side effects. The first accepted policy effects are `NudgeEffect` and `ContextCompactionEffect`; hard admission rejection is an execution guard rather than an Effect.
+
+```mermaid
+sequenceDiagram
+    participant Pi as Pi Agent Loop
     participant Engine as RuntimePolicyEngine
     participant Policy as ContextPressurePolicy
     participant Effects as RuntimeEffectCoordinator
     participant Compact as ContextCompactionManager
-    participant Store as SnapshotStore
-    participant Journal as JournalService
-    participant Compiler as ContextCompiler
+    participant Checkpoints as ContextCheckpointStore
+    participant Projection as ContextProjectionPlanner
+    participant Provider
 
-    Runtime->>Engine: evaluate(before_turn, policyContext)
-    Engine->>Policy: evaluate(context, state)
-    Policy-->>Engine: ContextCompactionEffect
-    Engine-->>Runtime: effects
-    Runtime->>Effects: execute(effects)
-    Effects->>Compact: compact(request)
-
-    Compact->>Journal: read canonical message range
-    Journal-->>Compact: source messages
-    Compact->>Compact: preserve pinned and recent messages
-    Compact->>Compact: generate structured summary
-    Compact->>Store: persist ContextCheckpoint
-    Store-->>Compact: checkpoint persisted
-    Compact-->>Effects: ContextCheckpoint
-
-    Runtime->>Compiler: compile(checkpoint, recent messages)
-    Compiler-->>Runtime: CompiledProviderContext
+    Pi->>Engine: evaluate(before_provider_call, candidate context)
+    Engine->>Policy: evaluate(budget, state, candidate estimate)
+    Policy-->>Engine: ContextCompactionEffect or no effect
+    Engine-->>Pi: effects
+    Pi->>Effects: execute serially
+    Effects->>Compact: compact durable prefix
+    Compact->>Checkpoints: persist validated immutable Checkpoint
+    Checkpoints-->>Compact: committed
+    Effects-->>Pi: active Checkpoint identity
+    Pi->>Projection: plan(checkpoint, pins, recent, transient, budget)
+    Projection-->>Pi: ContextProjection
+    Pi->>Provider: dispatch compiled Provider context
 ```
 
-```ts
-interface ContextCheckpoint {
-  id: string;
-  conversationId: string;
-  sourceStartSequence: number;
-  sourceEndSequence: number;
-  coveredThroughSequence: number;
-  summary: string;
-  facts: string[];
-  decisions: string[];
-  constraints: string[];
-  unresolvedTasks: string[];
-  pinnedMessageIds: string[];
-  recentWindowStartSequence: number;
-  tokenEstimateBefore: number;
-  tokenEstimateAfter: number;
-  createdAt: string;
-  schemaVersion: number;
-}
-```
+Public durable Compaction Events are:
 
-Compaction never deletes or rewrites Journal history. It only changes the Context projection used for model calls.
-
-Protected content includes the current user goal, recent messages, pinned messages, unresolved interactions, active Tool state, active child work, and current Run constraints.
-
-Nudge messages are excluded from ContextCheckpoint summaries because they are ephemeral execution guidance.
-
-Repeated compaction requires hysteresis and durable Policy state. A high usage ratio alone is insufficient; enough uncompacted content must have accumulated since the last Checkpoint.
-
-Suggested thresholds are configuration rather than protocol constants:
-
-```text
-soft reminder threshold
-compaction request threshold
-target post-compaction ratio
-hard context limit
-minimum new uncompacted tokens
-```
-
-Compaction lifecycle events are distinct from actual application:
-
-- `ContextCompactionRequestedOutputEvent`
 - `ContextCompactionStartedOutputEvent`
 - `ContextCompactionCompletedOutputEvent`
 - `ContextCompactionFailedOutputEvent`
 - `ContextCheckpointAppliedOutputEvent`
 
-`ContextCompactionCompletedOutputEvent` means a Checkpoint exists. Only `ContextCheckpointAppliedOutputEvent` means that Checkpoint was used in a concrete Provider request.
+Policy evaluation, request decisions, non-triggered evaluations, hysteresis and duplicate suppression, candidate ranking, and ordinary Projection omission are internal structured traces. Public payloads may include safe identities, source Sequence ranges, fixed outcomes and failures, and token estimates. They never include Message content, Checkpoint text, Prompt text, source excerpts, Artifact paths, raw errors, stacks, or causes.
 
-### 19.1 Pi Agent Core Integration
+`ContextCompactionCompletedOutputEvent` means a valid Checkpoint was persisted. `ContextCheckpointAppliedOutputEvent` is emitted for each concrete Provider call that actually uses a Checkpoint and carries `checkpointId + providerCallId`; UI clients may collapse repeated applications.
 
-Pi applies `transformContext()` before each LLM call. The transformed array is used for that call while Assistant output continues to update the original Agent context. This makes `transformContext()` suitable for applying ContextCheckpoint projections without deleting canonical Agent history.
+### 19.7 Provider Context Layering and Pi Integration
 
-The transform implementation must return a new safe array and must not mutate its input.
+The Provider-facing layer order is:
 
-```ts
-transformContext: async (messages) => {
-  return contextProjection.apply({
-    messages,
-    checkpoint: activeCheckpoint,
-  });
-}
+```text
+System Prompt
+  1. Base System Prompt
+  2. persistent ContextCheckpoint Overlay
+  3. one-shot SystemReminderOverlay
+
+Messages
+  4. pinned canonical Message Groups
+  5. recent canonical Messages
+  6. active transient Run Messages
 ```
 
-True one-shot System Reminders use a per-call `systemPromptOverlay` inside `PiAgentCoreAdapter`. The Adapter leases one Nudge by default and at most two for one Provider call, renders them as one overlay block, appends that block to that call's System Prompt, confirms delivery after dispatch, and releases the lease if dispatch never occurs.
+Checkpoint content is rendered through a fixed delimited template as historical data, not as a fabricated User Message or new System instruction. The one-shot Nudge is appended after the persistent Checkpoint Overlay so it is the most recent temporary execution guidance while remaining subordinate to the Base System Prompt.
+
+Pi applies `transformContext()` before each LLM call. The transform returns a new safe Message array and never mutates canonical Agent history. The package-private Pi adapter combines the Base Prompt, selected Checkpoint Overlay, and leased Nudge Overlay on a cloned per-call Provider Context.
 
 ```mermaid
 flowchart TB
-    History["Canonical Agent Messages"]
+    Journal["Canonical Journal and Messages"]
+    Artifacts["Durable ArtifactStore"]
     Checkpoint["ContextCheckpoint"]
-    Transform["Pi transformContext()"]
-    Projected["Projected Agent Messages"]
-    BasePrompt["Base System Prompt"]
-    Pending["Leased one-shot Nudge"]
-    Overlay["PiAgentCoreAdapter systemPromptOverlay"]
+    Planner["ContextProjectionPlanner"]
+    Projected["Pinned + recent + transient Messages"]
+    Base["Base System Prompt"]
+    CheckpointOverlay["Persistent Checkpoint Overlay"]
+    Nudge["One-shot Nudge Overlay"]
     Provider["Provider Request"]
 
-    History --> Transform
-    Checkpoint --> Transform
-    Transform --> Projected
-    BasePrompt --> Overlay
-    Pending --> Overlay
+    Journal --> Planner
+    Artifacts --> Checkpoint
+    Checkpoint --> Planner
+    Planner --> Projected
+    Checkpoint --> CheckpointOverlay
+    Base --> Provider
+    CheckpointOverlay --> Provider
+    Nudge --> Provider
     Projected --> Provider
-    Overlay --> Provider
 ```
 
-This separation gives Context Compaction and System Reminder different, explicit lifecycles:
+This separation preserves different lifecycles:
 
 ```text
-ContextCheckpoint → transformContext()
-one-shot System Reminder → per-call systemPromptOverlay
+Journal and Messages      canonical durable history
+ArtifactReference         durable large-content identity
+ContextCheckpoint         persistent structured derived memory
+ContextProjection         one-call budget decision
+SystemReminderOverlay     one-shot execution guidance
 ```
 
 ## 20. Tool Definition and Registry
@@ -5172,10 +5399,11 @@ Not yet implemented:
 - InteractionCoordinator and Approval events
 - RuntimePolicyEngine and RuntimeEffectCoordinator
 - ContextCompactionManager and ContextCheckpoint
-- ContextCheckpoint-aware ContextCompiler and per-call overlays
+- ContextProjectionPlanner, ContextCheckpoint-aware ContextCompiler, and per-call overlays
+- durable ArtifactStore, oversized User-content staging, and Artifact-reference recovery
 - concrete restart-safe private Nudge persistence and Provider transport dispatch-hook adapters
 - Tool Pi mapping and Tool-bearing Assistant canonical projection
-- Tool registry and execution pipeline
+- Tool registry, execution pipeline, ToolResultMaterializer, and bounded Artifact access Tools
 - IPC protocol
 - Subagent manager
 
@@ -5187,16 +5415,13 @@ The following items still require explicit review before implementation:
 
 1. Event schema migration mechanism beyond schema version 1
 2. Input snapshot redaction and size limits
-3. Context pressure thresholds and compaction hysteresis defaults
-4. ContextCheckpoint summary schema and validation
-5. Tool YAML manifest fields
-6. Whether `ToolDetails` returns as a common success-detail abstraction
-7. Tool result and incremental update contracts
-8. Subagent result projection beyond the accepted active-Run cancellation ownership rule
-9. Runtime idle eviction duration
-10. System Prompt and ContextCompiler layer ordering outside the accepted one-shot Nudge overlay
-11. Dedicated Novel domain model, intentionally deferred
-12. Runtime crash recovery for a non-terminal Run/Turn: fail versus cancel semantics and the required lifecycle transition reasons
+3. Tool YAML manifest fields
+4. Whether `ToolDetails` returns as a common success-detail abstraction
+5. Tool result and incremental update contracts beyond the accepted oversized Artifact-reference boundary
+6. Subagent result projection beyond the accepted active-Run cancellation ownership rule
+7. Runtime idle eviction duration
+8. Dedicated Novel domain model, intentionally deferred
+9. Runtime crash recovery for a non-terminal Run/Turn: fail versus cancel semantics and the required lifecycle transition reasons
 
 ## 29. Recommended Implementation Order
 
@@ -5208,12 +5433,12 @@ The following items still require explicit review before implementation:
 5. Define Run state machine
 6. Define InputRouter control and turn lanes
 7. Define ConversationRuntime execution loop
-8. Define InteractionCoordinator and Approval
-9. Define ToolDescriptor, ToolHandler, and Tool pipeline
-10. Define RuntimePolicyEngine and Effect Coordinator
-11. Define ContextCompactionManager and ContextCheckpoint
-12. Define NudgeManager and PendingNudge lifecycle
-13. Define ContextCompiler and Pi per-call overlays
+8. Define RuntimePolicyEngine and Effect Coordinator
+9. Define ContextCompactionManager, ContextCheckpoint, and ContextProjection
+10. Define ContextCompiler and Pi per-call overlays
+11. Define InteractionCoordinator and Approval
+12. Define ToolDescriptor, ToolHandler, Artifact access, and Tool pipeline
+13. Define durable ArtifactStore and oversized-content materialization
 14. Define Host, IPC, and Subagent management
 15. Integrate Pi through adapters
 ```

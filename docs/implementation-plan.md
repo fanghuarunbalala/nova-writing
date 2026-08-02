@@ -2089,10 +2089,11 @@ Design scope:
 
 Review state:
 
-- The Nudge protocol is accepted and may proceed through the isolated Task 4N steps below.
-- Runtime Policy behavior beyond the provider-neutral Nudge contracts remains gated.
-- Context Compaction remains gated by unresolved decisions.
-- `docs/decisions/task-4-policy-compaction-nudge-proposal.md` is **partially accepted — Nudge protocol only**.
+- The Nudge protocol is accepted and implemented through Task 4N-F.
+- The Context pressure, Compaction, Checkpoint/Projection, oversized Artifact-reference, and degradation protocols are accepted and may proceed through the isolated Task 4C steps below.
+- Runtime Policy behavior beyond `NudgeEffect` and `ContextCompactionEffect` remains gated.
+- Runtime crash recovery for a non-terminal Run or Turn remains gated separately.
+- `docs/decisions/task-4-policy-compaction-nudge-proposal.md` is **partially accepted — Nudge and Context Compaction protocols**.
 
 ### 7.1 Task 4N: Accepted Nudge Protocol
 
@@ -2212,37 +2213,54 @@ Task 4N-F explicitly excludes:
 - generic `ContextCompiler` overlay layers, `context-tail` placement, Runtime Policy evaluation, Context Compaction, or `ContextCheckpoint`
 - projection of Reminder content, parameters, or Nudge lifecycle Events into canonical Runtime Messages
 
-### 7.2 Task 4 Policy and Compaction Review Gate
+### 7.2 Task 4C: Accepted Context Pressure and Compaction Protocol
 
-Questions still requiring explicit review before their implementation:
+The first-version Context contract is:
 
-1. What are the soft context reminder, compaction, and hard context thresholds?
-2. What post-compaction target ratio is desired?
-3. How many new uncompacted tokens are required before another compaction?
-4. Which messages and Runtime facts are always pinned?
-5. What structured fields belong in `ContextCheckpoint`?
-6. Does compaction use the active Provider, a dedicated model, or a pluggable Compactor?
-7. How is a Compaction result validated before becoming active?
-8. Which non-Nudge `RuntimePolicyEffect` behaviors belong in the first Policy engine version?
-9. Which Policy evaluation and Compaction events are public OutputEvents versus internal traces?
+1. Context pressure is calculated from the complete candidate Provider input against an effective input budget after reserved output, Provider protocol overhead, and a safety reserve. Default configurable thresholds are 70% soft reminder, 82% compaction request, 55% post-compaction target, and 92% hard admission limit.
+2. Automatic compaction requires new uncompacted content of at least `max(10% of effective budget, 8,192 estimated tokens)` after the previous Checkpoint. The hard admission boundary may bypass this hysteresis.
+3. Before invoking a Compactor, Core calculates an irreducible floor containing the Base System Prompt, selected Tool schemas, pinned Message Groups, current Input, active transient Run state, and required protocol overhead. An irreducible floor at or above the hard limit fails without invoking the Compactor.
+4. Compaction outcomes are `target_met`, `reduced`, `degraded`, and `unreducible`. The 55% target is desirable rather than mandatory; a result below 82% may activate as `reduced`, and a meaningfully smaller result below 92% may activate as `degraded`. A result at or above 92% cannot be dispatched.
+5. Meaningful reduction is configuration-driven and prevents negligible results from being treated as success. The recommended default is at least `max(5% of effective budget, 2,048 estimated tokens)` unless the result reaches the measured irreducible floor.
+6. Pinned content is retained as immutable Message Groups rather than arbitrary individual lines. Current Input, the latest complete Turn, unresolved Interaction/Approval pairs, active Tool-call/result groups, explicit pins, and active Run facts cannot be summarized, reordered, partially removed, or role-rewritten while pinned.
+7. `ContextCheckpoint` is durable private derived memory; `ContextProjection` is the per-Provider-call budgeted selection of Checkpoint segments, pinned groups, recent canonical Messages, and active transient Messages. Omitting a segment from one Projection never deletes Journal, Messages, Checkpoints, or Artifacts.
+8. Checkpoints are immutable, versioned, linked through `parentCheckpointId`, bound to an exact source Sequence range and canonical source digest, and contain structured facts, decisions, constraints, and unresolved tasks with durable source Message references.
+9. Core defines an asynchronous provider-neutral `ContextCompactor` port. Runtime composition may select the active Provider, a dedicated model, or a local implementation; Core never silently changes Provider or model.
+10. Mandatory structural validation covers schema, JSON safety, Conversation identity, source range and digest, lineage, monotonic coverage, source references, pinned-group preservation, Nudge exclusion, content digest, and estimated reduction. Optional semantic validation is a separate injectable port.
+11. Oversized User content, Tool results, and Checkpoint detail blocks are materialized into a durable Conversation-owned `ArtifactStore`, not an ephemeral cache, when they must remain recoverable. Canonical Messages and Checkpoints retain stable logical `ArtifactReference` values rather than raw local paths.
+12. Provider-visible Artifact access occurs through bounded `artifact_read`, `artifact_grep`, `artifact_search`, and metadata capabilities. Every read has byte, line, match, and token limits so Artifact access cannot reintroduce an unbounded Tool result.
+13. Oversized Tool schemas are not Artifactized because the Provider must see a schema before invoking a Tool. Tool schema pressure is addressed later through Agent-specific Tool Groups and dynamic Tool mounting.
+14. Degradation order is normal structured compaction, stronger structured compaction, durable Artifact offload for verbose detail, priority-budgeted Checkpoint Projection, and recent-window reduction down to the latest complete Turn. Critical constraints, current Input, and active protocol groups are never silently discarded.
+15. The Provider context layer order is Base System Prompt, persistent Checkpoint Overlay, one-shot Nudge Overlay, then projected Messages. Checkpoint content is rendered as delimited historical data rather than a fabricated User Message.
+16. Public durable Compaction Events are started, completed, failed, and Checkpoint applied. Policy evaluation, request decisions, hysteresis suppression, candidate ranking, and ordinary projection omission remain private structured traces. Public payloads may contain safe identities, source ranges, outcomes, and token estimates, but never content or raw failures.
+17. Context pressure is evaluated before each Provider call, not only before the outer User Turn, because Tool results and inner Agent-loop calls can increase Context during one Run. Only durable canonical prefixes are compacted; active transient content remains pinned.
 
-Expected deliverables after all Task 4 review gates are approved:
+Task 4C implementation order:
 
-- pure Policy evaluation engine
-- typed Effect routing
-- durable ContextCheckpoint creation
-- Pi `transformContext()` projection
-- Pending Nudge lifecycle
-- one-shot System Prompt Overlay
-- lifecycle OutputEvents
-- compaction and one-shot delivery tests
+- Task 4C-A: record the accepted Context pressure, Compaction, Artifact-reference, Projection, and degradation protocol
+- Task 4C-B: define provider-neutral budget, pressure, pinned-group, outcome, Artifact-reference, Checkpoint, and Projection protocol types
+- Task 4C-C: implement deterministic boundary capture, structural validation, lineage, digest, and reduction validation
+- Task 4C-D: define the pure `RuntimePolicyEngine`, Context-pressure Policy phase, `ContextCompactionEffect`, and serialized Effect coordination contracts
+- Task 4C-E: implement `ContextCompactionManager`, Checkpoint Store ports, Compactor orchestration, duplicate-attempt suppression, and immutable activation rules
+- Task 4C-F: implement priority-budgeted `ContextProjectionPlanner`, recent-window degradation, Context layer rendering, and Pi per-call application
+- Task 4C-G: implement redacted Compaction lifecycle OutputEvents and end-to-end pressure, degradation, application, and hard-limit validation
 
-Explicitly excluded:
+Task 4C-A delivered:
 
-- generic Pause or Resume
-- Novel-specific context schema
-- Tool Permission policies
-- Subagent scheduling policies unless separately reviewed
+- accepted effective-budget thresholds, hysteresis, irreducible-floor preflight, four-result Compaction outcomes, minimum-savings semantics, and hard admission behavior
+- accepted immutable Message Group pinning, complete Checkpoint versus per-call Projection separation, priority-budgeted omission, and recent-window degradation without canonical deletion
+- accepted structured Checkpoint lineage, source references, digests, provider-neutral Compactor selection, mandatory structural validation, and optional semantic validation
+- accepted durable Artifact offload for oversized User content, Tool results, and Checkpoint detail plus bounded logical-ID access and explicit Tool-schema exclusion
+- accepted per-Provider-call pressure evaluation, stable Context layer ordering, public Compaction lifecycle Events, private Policy traces, and cross-task ownership boundaries
+- updated authoritative architecture diagrams and supporting decision record
+
+Task 4C explicitly excludes until their own implementation steps:
+
+- concrete filesystem, SQLite, or object-backed `ArtifactStore`; Artifact quota, retention, and garbage collection
+- Tool result materialization, Artifact access Tool handlers, Tool permissions, sandboxing, and dynamic Tool Group mounting, which belong to Task 5
+- Novel-specific Checkpoint fields, retrieval ranking, character/world/timeline semantics, or a dedicated Novel memory model
+- automatic Provider/model switching, unlimited Compactor retries, canonical history deletion, or silent truncation of pinned content
+- generic Pause or Resume, Runtime crash terminal repair, Tool Permission policies, and Subagent scheduling policies
 
 ## 8. Task 5: Tools, Approval, and Security
 

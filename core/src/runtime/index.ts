@@ -26,3 +26,4 @@ export * from "./ipc/index.js";
 export * from "./message/index.js";
 export * from "./nudge/index.js";
 export * from "./policy/index.js";
+export * from "./subagent/index.js";

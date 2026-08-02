@@ -2770,6 +2770,35 @@ Questions to resolve before implementation:
 9. How is orphaned child work detected and reclaimed?
 10. How does a debugging client subscribe to the whole Conversation tree?
 
+Accepted Task 6B decisions:
+
+1. A child returns one structured `SubagentResult`; its complete Event history and detailed working state remain in the child Conversation.
+2. The parent receives only redacted lifecycle projections: started, progress, completed, failed, and cancelled. Child OutputEvents are never copied wholesale into the parent Journal.
+3. First-version Subagents cannot create another Subagent. The maximum child depth is one below a main Conversation.
+4. Initial concurrency limits are four active children per parent Run and sixteen active children globally.
+5. Parent completion, failure, Stop, or crash cancels active children according to an explicit lifecycle reason. Crashed or interrupted child execution is never automatically resumed.
+6. Child Tool policy must inherit or reduce the parent policy and can never expand it.
+7. Every child owns independent Context, Nudge, Run, Turn, Interaction, Journal, and Message state.
+8. Host recovery identifies non-terminal child bindings whose parent Run is no longer active and reclaims them as orphaned/cancelled.
+9. Debugging clients observe the complete hierarchy through a Host-level Conversation tree query and subscription, not by changing one Conversation's Event semantics.
+10. Parent result projections contain status, child Conversation identity, bounded summary, and optional Artifact references. Large result content stays in child-owned Artifacts.
+
+Task 6B is implemented as separately reviewable steps:
+
+- 6B-A: provider-neutral Subagent request, binding, result, cancellation, limit, and validation protocol
+- 6B-B: `ChildConversationManager`, child creation Ports, reduce-only Tool policy, and concurrency ownership
+- 6B-C: child lifecycle coordination, structured result delivery, and parent projection OutputEvents
+- 6B-D: parent cancellation propagation, orphan reclamation, and Host-level Conversation tree observation
+- 6B-E: full Subagent integration validation, documentation, and Checkpoint 6B closure
+
+Task 6B-A delivered:
+
+- immutable provider-neutral `SubagentRequest`, `SubagentBinding`, and terminal `SubagentResult` contracts with schema version 1
+- fixed first-version limits of depth one, four active children per parent Run, and sixteen active children globally
+- explicit completed, failed, cancelled, and orphaned terminal semantics plus parent lifecycle, explicit, limit-reclaimed, and orphan-reclaimed cancellation reasons
+- bounded objective and result summary content, child-owned Artifact references, safe error codes, and strict terminal-field consistency
+- exact-field, accessor, dense-array, timestamp, identity, Artifact ownership, depth, and cross-binding validation without Pi, Node, process, Provider, or Tool implementation types
+
 Expected deliverables after approval:
 
 - child Conversation creation and metadata
@@ -2867,4 +2896,4 @@ No next checkpoint begins without explicit approval.
 
 Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
-The next documented Runtime step is Task 6B: Subagent Management. Its child result, parent projection, nesting, concurrency, permission inheritance, orphan recovery, and tree-subscription decisions must be reviewed against the accepted Subagent architecture before implementation.
+The next documented Runtime step is Task 6B-B: `ChildConversationManager`, child creation and activation Ports, reduce-only Tool policy verification, and ownership of the accepted per-Run and global concurrency limits.

@@ -5735,6 +5735,10 @@ Subagent rules:
 - does not automatically mix all child output into parent output
 - can run locally, in a worker, in a child process, or remotely
 - cancellation propagation follows an explicit parent-child lifecycle policy
+- first-version maximum depth is one; a child cannot spawn another child
+- active concurrency is limited to four children per parent Run and sixteen globally
+- child Tool policy is reduce-only relative to its parent
+- parent lifecycle projection is bounded metadata, while detailed output remains child-owned
 
 Parent output normally contains projections such as:
 
@@ -5744,6 +5748,10 @@ Parent output normally contains projections such as:
 - `SubagentFailedOutputEvent`
 
 A debugging UI that needs the whole tree uses a Host-level tree subscription rather than changing one Conversation's output semantics.
+
+The accepted first-version result envelope contains the child Conversation ID, terminal status, bounded summary, optional Artifact references, and safe failure or cancellation metadata. Parent completion, failure, Stop, and crash cancel active children. Recovery reclaims a non-terminal child whose parent Run is no longer active as orphaned; no child Provider or Tool execution is automatically resumed.
+
+Task 6B-A freezes these values as schema-versioned Core contracts. `SubagentRequest` identifies the parent Conversation, Run, optional Turn, child Agent definition, objective, and requested reduced Tool policy. `SubagentBinding` adds the created child Conversation and immutable depth one. `SubagentResult` is terminal-only and enforces that completed results contain a bounded summary or child Artifact, failed results contain a safe code, and cancelled or orphaned results contain one registered lifecycle reason.
 
 ## 26. Persistence Model
 

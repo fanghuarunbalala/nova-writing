@@ -7,7 +7,6 @@ import {
   NovelDraftRecoveryService,
   NovelDraftSessionService,
   NovelOperationExecutor,
-  NovelOperationPreconditionError,
   NovelOperationRegistry,
   NovelRebaseService,
   NovelRevisionConflictError,
@@ -23,9 +22,11 @@ import {
 } from "../dist/index.js";
 import {
   NodeNovelStoreLocator,
+  NodeSha256NovelConflictDigester,
   NodeSha256NovelOperationDigester,
   NodeWorkspaceStoreLocator,
   SqliteNovelCanonicalStore,
+  SqliteNovelConflictStore,
   SqliteNovelDraftOperationStore,
   SqliteNovelDraftStore,
   SqliteNovelRebaseCandidateStore,
@@ -40,6 +41,16 @@ class DraftIdentityFactory {
   }
   createDraftSessionId() {
     return captureNovelDraftSessionId(this.ids.shift());
+  }
+}
+
+class RebaseIdentityFactory extends DraftIdentityFactory {
+  constructor(draftIds, conflictIds) {
+    super(draftIds);
+    this.conflictIds = [...conflictIds];
+  }
+  createConflictId() {
+    return this.conflictIds.shift();
   }
 }
 
@@ -174,6 +185,8 @@ try {
       "draft_rebase_source",
       "draft_rebase_conflict_source",
       "draft_rebase_conflict_committer",
+      "draft_rebase_deleted_source",
+      "draft_rebase_deleted_committer",
     ]),
     clock,
     logger,
@@ -227,6 +240,15 @@ try {
     logger,
   });
   const operationDigester = new NodeSha256NovelOperationDigester();
+  const conflictDigester = new NodeSha256NovelConflictDigester({
+    location,
+    novelId: canonical.novelId,
+  });
+  const conflictStore = new SqliteNovelConflictStore({
+    location,
+    novelId: canonical.novelId,
+    logger,
+  });
   const operationWriter = new NovelDraftOperationWriter({
     store: operationStore,
     executor: operationExecutor,
@@ -239,19 +261,27 @@ try {
     draftStore,
     snapshotter,
     candidateStore,
+    conflictStore,
+    conflictDigester,
     operationStore,
     writer: operationWriter,
     executor: operationExecutor,
     operationDigester,
-    identityFactory: new DraftIdentityFactory([
-      "draft_rebase_candidate",
-      "draft_rebase_conflicted_candidate",
-    ]),
+    identityFactory: new RebaseIdentityFactory(
+      [
+        "draft_rebase_candidate",
+        "draft_rebase_conflicted_candidate",
+        "draft_rebase_deleted_candidate",
+      ],
+      ["conflict_rebase_modified", "conflict_rebase_deleted"],
+    ),
     clock,
     logger,
   });
 
-  const candidate = await rebase.prepareCandidate(sourceDraft.id);
+  const preparation = await rebase.prepareCandidate(sourceDraft.id);
+  const candidate = preparation.candidate;
+  assert.deepEqual(preparation.conflicts, []);
   assert.equal(candidate.sourceDraftSessionId, sourceDraft.id);
   assert.equal(candidate.sourceBaseRevision, sourceDraft.baseRevision);
   assert.equal(candidate.session.baseRevision, "revision_rebase_a");
@@ -289,17 +319,6 @@ try {
   assert.equal(candidateSnapshot.kind, "rebase-candidate");
   assert.equal(candidateSnapshot.sourceDraftSessionId, sourceDraft.id);
 
-  await candidateStore.close();
-  candidateStore = await SqliteNovelRebaseCandidateStore.open({
-    location,
-    novelId: canonical.novelId,
-    logger,
-  });
-  assert.deepEqual(
-    await candidateStore.getCandidate(canonical.novelId, candidate.session.id),
-    candidate,
-  );
-
   const conflictSource = await drafts.startDraft("conversation-rebase-c");
   const conflictCommitter = await drafts.startDraft("conversation-rebase-d");
   const conflictSourceName = "FORBIDDEN_REBASE_CONFLICT_SOURCE";
@@ -321,27 +340,29 @@ try {
     resultRevision: captureNovelRevision("revision_rebase_conflict"),
     committedAt: clock.now(),
   });
-  await assert.rejects(
-    rebase.prepareCandidate(conflictSource.id),
-    (error) =>
-      error instanceof NovelOperationPreconditionError &&
-      error.failure === "entity_version_mismatch",
-  );
+  const conflicted = await rebase.prepareCandidate(conflictSource.id);
+  assert.equal(conflicted.conflicts.length, 1);
+  assert.equal(conflicted.conflicts[0].conflict.kind, "field-modified");
+  assert.equal(conflicted.conflicts[0].conflict.fieldPath, "profile");
+  assert.match(conflicted.conflicts[0].conflict.baseDigest, /^sha256:[0-9a-f]{64}$/);
+  assert.match(conflicted.conflicts[0].conflict.canonicalDigest, /^sha256:[0-9a-f]{64}$/);
+  assert.match(conflicted.conflicts[0].conflict.draftDigest, /^sha256:[0-9a-f]{64}$/);
   assert.equal(
     await exists(
-      candidatePath(location, {
-        ...conflictSource,
-        id: "draft_rebase_conflicted_candidate",
-      }),
+      candidatePath(location, conflicted.candidate.session),
     ),
-    false,
+    true,
   );
-  assert.equal(
+  assert.deepEqual(
     await candidateStore.getCandidate(
       canonical.novelId,
-      "draft_rebase_conflicted_candidate",
+      conflicted.candidate.session.id,
     ),
-    undefined,
+    conflicted.candidate,
+  );
+  assert.deepEqual(
+    await conflictStore.listConflicts(conflicted.candidate.session),
+    conflicted.conflicts,
   );
   assert.equal(
     (
@@ -360,6 +381,51 @@ try {
       )
     ).name,
     conflictCanonicalName,
+  );
+
+  const deletedSource = await drafts.startDraft("conversation-rebase-e");
+  const deletedCommitter = await drafts.startDraft("conversation-rebase-f");
+  await application.characters.replace(
+    deletedSource,
+    characterId,
+    2,
+    { name: "FORBIDDEN_REBASE_DELETED_SOURCE", aliases: [] },
+  );
+  await application.characters.delete(deletedCommitter, characterId, 2);
+  await application.commits.commit(deletedCommitter, {
+    commitId: captureNovelCommitId("commit_rebase_deleted"),
+    resultRevision: captureNovelRevision("revision_rebase_deleted"),
+    committedAt: clock.now(),
+  });
+  const deletedConflict = await rebase.prepareCandidate(deletedSource.id);
+  assert.equal(deletedConflict.conflicts.length, 1);
+  assert.equal(deletedConflict.conflicts[0].conflict.kind, "entity-deleted");
+  assert.equal(deletedConflict.conflicts[0].conflict.fieldPath, undefined);
+  assert.deepEqual(
+    await conflictStore.listConflicts(deletedConflict.candidate.session),
+    deletedConflict.conflicts,
+  );
+
+  await candidateStore.close();
+  candidateStore = await SqliteNovelRebaseCandidateStore.open({
+    location,
+    novelId: canonical.novelId,
+    logger,
+  });
+  assert.deepEqual(
+    await candidateStore.getCandidate(canonical.novelId, candidate.session.id),
+    candidate,
+  );
+  assert.deepEqual(
+    await candidateStore.getCandidate(
+      canonical.novelId,
+      conflicted.candidate.session.id,
+    ),
+    conflicted.candidate,
+  );
+  assert.deepEqual(
+    await conflictStore.listConflicts(conflicted.candidate.session),
+    conflicted.conflicts,
   );
 
   const interruptedName =
@@ -392,6 +458,7 @@ try {
     canonicalCharacterName,
     conflictSourceName,
     conflictCanonicalName,
+    "FORBIDDEN_REBASE_DELETED_SOURCE",
   ]);
 } finally {
   await candidateStore?.close();

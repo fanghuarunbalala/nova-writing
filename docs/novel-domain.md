@@ -880,6 +880,32 @@ type NovelConflictResolution =
     };
 ```
 
+The initial Conflict digest protocol is accepted as follows:
+
+- `baseDigest` is SHA-256 over canonical JSON containing the exact original
+  Operation precondition. It represents the state assumption under which the
+  Operation was authored without reconstructing unavailable historical text.
+- `canonicalDigest` and `draftDigest` are SHA-256 over canonical version-1
+  entity snapshot envelopes. The envelope identifies entity type, stable ID,
+  presence state, and the complete current entity projection when present.
+- Entity content exists only transiently inside the Node digest adapter. Draft
+  Conflict rows, canonical candidate records, application values, errors, and
+  logs retain only `sha256:<64 lowercase hex>` values.
+- `conflictDigest` is SHA-256 over canonical JSON of the complete safe Conflict
+  envelope: version, IDs, source Operation sequence, unresolved status, kind,
+  entity identity, optional field path, the three snapshot digests, and the
+  creation timestamp.
+- Rebase persists a conflicting source sequence in `draft_conflicts`, skips
+  applying that Operation, and continues scanning later source Operations.
+  Successfully applied Operations preserve their relative source order; the
+  source Draft remains the complete authoritative unpublished Operation list
+  until resolution.
+- Character and Location full-profile replacement conflicts use
+  `fieldPath = "profile"`. Missing canonical entities map to
+  `entity-deleted`, unexpected canonical entities map to `entity-created`,
+  version mismatch maps to `field-modified`, and reference/invariant rejection
+  maps to `domain-invariant`.
+
 Conflict granularity follows stable domain identities:
 
 | Canonical change | Draft change | Default result |

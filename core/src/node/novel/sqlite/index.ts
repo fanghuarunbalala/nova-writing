@@ -1,6 +1,7 @@
 export * from "./NovelDatabaseErrors.js";
 export * from "./NodeSha256NovelOperationDigester.js";
 export * from "./NodeSha256NovelChangeSetDigester.js";
+export * from "./NodeSha256NovelConflictDigester.js";
 export * from "./NovelDraftSqliteSchema.js";
 export * from "./NovelEntitySqliteSchema.js";
 export * from "./NovelSqliteMigrations.js";
@@ -9,5 +10,6 @@ export * from "./SqliteNovelDraftStore.js";
 export * from "./SqliteNovelDraftOperationStore.js";
 export * from "./SqliteNovelEntityRepository.js";
 export * from "./SqliteNovelCommitStore.js";
+export * from "./SqliteNovelConflictStore.js";
 export * from "./SqliteNovelRebaseCandidateStore.js";
 export * from "./SqliteNovelSnapshotter.js";

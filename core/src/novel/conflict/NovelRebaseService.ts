@@ -9,6 +9,7 @@ import {
   NovelDraftSessionNotFoundError,
   NovelDraftSessionStateError,
   NovelInvariantViolationError,
+  NovelOperationPreconditionError,
   NovelRebaseNotRequiredError,
   NOVEL_INVARIANT_FAILURE,
 } from "../error/index.js";
@@ -24,6 +25,8 @@ import type {
 import type {
   NovelCanonicalStore,
   NovelClock,
+  NovelConflictDigester,
+  NovelConflictStore,
   NovelDraftChangeSetStore,
   NovelDraftOperationStore,
   NovelDraftStore,
@@ -31,8 +34,15 @@ import type {
   NovelSnapshotter,
 } from "../port/index.js";
 import {
+  NOVEL_CONFLICT_VERSION,
+  captureNovelConflict,
+  captureNovelConflictRecord,
+  type NovelConflict,
+  type NovelConflictRecord,
+} from "./NovelConflict.js";
+import {
   captureNovelRebaseCandidate,
-  type NovelRebaseCandidate,
+  type NovelRebasePreparationResult,
 } from "./NovelRebaseCandidate.js";
 
 export interface NovelRebaseServiceOptions<TContext> {
@@ -40,12 +50,17 @@ export interface NovelRebaseServiceOptions<TContext> {
   readonly draftStore: NovelDraftStore;
   readonly snapshotter: NovelSnapshotter;
   readonly candidateStore: NovelRebaseCandidateStore;
+  readonly conflictStore: NovelConflictStore;
+  readonly conflictDigester: NovelConflictDigester;
   readonly operationStore: NovelDraftOperationStore<TContext> &
     NovelDraftChangeSetStore;
   readonly writer: Pick<NovelDraftOperationWriter<unknown>, "runExclusive">;
   readonly executor: NovelOperationExecutor<TContext>;
   readonly operationDigester: NovelOperationDigester;
-  readonly identityFactory: Pick<NovelIdentityFactory, "createDraftSessionId">;
+  readonly identityFactory: Pick<
+    NovelIdentityFactory,
+    "createDraftSessionId" | "createConflictId"
+  >;
   readonly clock: NovelClock;
   readonly logger?: Logger;
 }
@@ -61,7 +76,7 @@ export class NovelRebaseService<TContext> {
 
   async prepareCandidate(
     sourceDraftSessionId: NovelDraftSessionId,
-  ): Promise<NovelRebaseCandidate> {
+  ): Promise<NovelRebasePreparationResult> {
     const metadata = await this.options.canonicalStore.getMetadata();
     const initialSource = await this.options.draftStore.getDraftSession(
       metadata.novelId,
@@ -127,21 +142,45 @@ export class NovelRebaseService<TContext> {
           sourceDraftSessionId: source.id,
         });
 
+        const conflicts: NovelConflictRecord[] = [];
+        const appliedEntries = [];
         for (const entry of sourceSequence.operations) {
-          const receipt = await this.options.operationStore.appendOperation({
-            session: candidateSession,
-            operation: entry.operation,
-            digest: entry.operationDigest,
-            recordedAt: this.options.clock.now(),
-            apply: (context) =>
-              this.options.executor.executeSynchronous(
-                context,
-                entry.operation,
-              ),
-          });
+          let receipt;
+          try {
+            receipt = await this.options.operationStore.appendOperation({
+              session: candidateSession,
+              operation: entry.operation,
+              digest: entry.operationDigest,
+              recordedAt: this.options.clock.now(),
+              apply: (context) =>
+                this.options.executor.executeSynchronous(
+                  context,
+                  entry.operation,
+                ),
+            });
+          } catch (error) {
+            if (!(error instanceof NovelOperationPreconditionError)) {
+              throw error;
+            }
+            const record = await this.createConflict(
+              source,
+              candidateSession,
+              entry.sequence,
+              entry.operation,
+              error,
+            );
+            const status = await this.options.conflictStore.recordConflict(
+              candidateSession,
+              record,
+            );
+            if (status !== "recorded") throw corrupt(source);
+            conflicts.push(record);
+            continue;
+          }
+          appliedEntries.push(entry);
           if (
             receipt.status !== "appended" ||
-            receipt.sequence !== entry.sequence ||
+            receipt.sequence !== appliedEntries.length ||
             receipt.digest !== entry.operationDigest
           ) {
             throw corrupt(source);
@@ -152,7 +191,7 @@ export class NovelRebaseService<TContext> {
           await this.options.operationStore.readOperationSequence(
             candidateSession,
           );
-        assertReplayMatches(source, sourceSequence, replayed);
+        assertReplayMatches(source, appliedEntries, replayed);
         const candidate = captureNovelRebaseCandidate({
           sourceDraftSessionId: source.id,
           sourceBaseRevision: source.baseRevision,
@@ -168,8 +207,12 @@ export class NovelRebaseService<TContext> {
           sourceDraftSessionId: source.id,
           candidateDraftSessionId: candidateSession.id,
           operationCount: candidate.operationCount,
+          conflictCount: conflicts.length,
         });
-        return candidate;
+        return Object.freeze({
+          candidate,
+          conflicts: Object.freeze([...conflicts]),
+        });
       } catch (error) {
         this.logger.info("novel_rebase_candidate.prepare.failed", {
           novelId: source.novelId,
@@ -183,6 +226,56 @@ export class NovelRebaseService<TContext> {
         }
         throw error;
       }
+    });
+  }
+
+  private async createConflict(
+    source: NovelDraftSession,
+    candidate: NovelDraftSession,
+    sourceOperationSequence: number,
+    operation: Awaited<
+      ReturnType<NovelDraftChangeSetStore["readOperationSequence"]>
+    >["operations"][number]["operation"],
+    error: NovelOperationPreconditionError,
+  ): Promise<NovelConflictRecord> {
+    const precondition = operation.expected.find(
+      (value) =>
+        value.entityType === error.entityType &&
+        value.entityId === error.entityId,
+    );
+    if (precondition === undefined) throw corrupt(source);
+    const conflict = captureNovelConflict({
+      conflictVersion: NOVEL_CONFLICT_VERSION,
+      id: this.options.identityFactory.createConflictId(),
+      draftSessionId: candidate.id,
+      operationId: operation.operationId,
+      sourceOperationSequence,
+      status: "unresolved",
+      kind: conflictKind(error),
+      entityType: error.entityType,
+      entityId: error.entityId,
+      ...(conflictFieldPath(error, precondition) === undefined
+        ? {}
+        : { fieldPath: conflictFieldPath(error, precondition) }),
+      baseDigest:
+        await this.options.conflictDigester.digestPrecondition(precondition),
+      canonicalDigest:
+        await this.options.conflictDigester.digestEntitySnapshot(
+          candidate,
+          error.entityType,
+          error.entityId,
+        ),
+      draftDigest:
+        await this.options.conflictDigester.digestEntitySnapshot(
+          source,
+          error.entityType,
+          error.entityId,
+        ),
+      createdAt: this.options.clock.now(),
+    });
+    return captureNovelConflictRecord({
+      conflict,
+      digest: await this.options.conflictDigester.digestConflict(conflict),
     });
   }
 
@@ -205,19 +298,19 @@ export class NovelRebaseService<TContext> {
 
 function assertReplayMatches(
   source: NovelDraftSession,
-  expected: Awaited<
+  expected: readonly Awaited<
     ReturnType<NovelDraftChangeSetStore["readOperationSequence"]>
-  >,
+  >["operations"][number][],
   actual: Awaited<
     ReturnType<NovelDraftChangeSetStore["readOperationSequence"]>
   >,
 ): void {
   if (
-    actual.operationCount !== expected.operationCount ||
-    actual.lastOperationSequence !== expected.lastOperationSequence ||
+    actual.operationCount !== expected.length ||
+    actual.lastOperationSequence !== expected.length ||
     actual.frozen !== undefined ||
     actual.operations.some((entry, index) => {
-      const sourceEntry = expected.operations[index];
+      const sourceEntry = expected[index];
       return (
         sourceEntry === undefined ||
         entry.sequence !== sourceEntry.sequence ||
@@ -228,6 +321,29 @@ function assertReplayMatches(
   ) {
     throw corrupt(source);
   }
+}
+
+function conflictKind(
+  error: NovelOperationPreconditionError,
+): NovelConflict["kind"] {
+  switch (error.failure) {
+    case "entity_exists":
+      return "entity-created";
+    case "entity_missing":
+      return "entity-deleted";
+    case "entity_version_mismatch":
+      return "field-modified";
+    case "entity_referenced":
+      return "domain-invariant";
+  }
+}
+
+function conflictFieldPath(
+  error: NovelOperationPreconditionError,
+  precondition: { readonly kind: string; readonly fieldPath?: string },
+): string | undefined {
+  if (precondition.kind === "field-digest") return precondition.fieldPath;
+  return error.failure === "entity_version_mismatch" ? "profile" : undefined;
 }
 
 function corrupt(session: NovelDraftSession): NovelInvariantViolationError {

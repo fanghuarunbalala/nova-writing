@@ -1,4 +1,4 @@
-/** Immutable metadata for a fully replayed sibling Rebase candidate. */
+/** Immutable metadata for a durably prepared sibling Rebase candidate. */
 import {
   NOVEL_DRAFT_SESSION_STATUS,
   captureNovelDraftSession,
@@ -18,6 +18,7 @@ import {
   type NovelRevision,
   type NovelTimestamp,
 } from "../version/index.js";
+import type { NovelConflictRecord } from "./NovelConflict.js";
 
 export interface NovelRebaseCandidate {
   readonly sourceDraftSessionId: NovelDraftSessionId;
@@ -26,6 +27,11 @@ export interface NovelRebaseCandidate {
   readonly operationCount: number;
   readonly lastOperationSequence: number;
   readonly preparedAt: NovelTimestamp;
+}
+
+export interface NovelRebasePreparationResult {
+  readonly candidate: NovelRebaseCandidate;
+  readonly conflicts: readonly NovelConflictRecord[];
 }
 
 export function captureNovelRebaseCandidate(

@@ -494,6 +494,25 @@ Delivered boundaries:
 
 Implement the accepted conflict kinds and safe digest-based conflict snapshots without logging Novel content.
 
+Delivered boundaries:
+
+- immutable version-1 Conflict records contain only safe identities, source
+  sequence, accepted Conflict kind, optional field path, timestamps, and
+  SHA-256 evidence digests
+- base evidence hashes the original Operation precondition; canonical and
+  Draft evidence hash transient canonical entity snapshots whose content is
+  never persisted in Conflict rows or logs
+- candidate-local Conflict persistence verifies canonical JSON and digest
+  identity, supports exact duplicate retry, and rejects mismatched durable
+  identity as a fixed invariant failure
+- Rebase converts Character and Location precondition failures into
+  `entity-created`, `entity-deleted`, `field-modified`, or `domain-invariant`
+  records, skips the rejected Operation, and continues ordered replay
+- conflicted candidates remain durably registered and recoverable together
+  with their untouched source Draft; N7-C owns resolution and promotion
+
+**Status:** completed by the focused digest-only Conflict Protocol commit.
+
 ### N7-C Resolution
 
 Implement `keep-canonical`, validated `keep-draft`, `drop-operation`, and manual replacement Operation strategies.
@@ -622,5 +641,6 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
 - Task N5 is completed by the focused Character and Location vertical-slice commit.
 - Task N6 is completed by the ChangeSet, Commit payload, canonical Commit Writer, and recovery commits.
 - Task N7-A is completed by the focused Rebase Candidate commit.
-- Task N7-B Conflict Protocol is the next implementation step.
+- Task N7-B is completed by the focused digest-only Conflict Protocol commit.
+- Task N7-C Resolution is the next implementation step.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

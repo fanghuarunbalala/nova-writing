@@ -42,9 +42,9 @@ Rules:
 - Keep each implementation focused on the documented task boundary and do not reopen completed checkpoints without a concrete compatibility need.
 - Report the commit, changed public interfaces, validation results, remaining risks, and the next step plan after each implementation.
 - Update architecture documentation whenever an implementation changes an accepted diagram, contract, lifecycle, or task status.
-- The dedicated Novel domain model remains outside this implementation plan until separately reviewed.
+- The dedicated Novel domain model is implemented through the separate active track in `docs/novel-implementation-plan.md`; it remains outside this Runtime implementation plan.
 
-Execution continues from the repository's recorded current position. Completed Task 1 and Task 2 checkpoints are not repeated; remaining checkpoints proceed in documented dependency order through Task 7.
+When the Runtime track is active, execution continues from the repository's recorded Runtime position. Completed checkpoints are not repeated, and remaining checkpoints proceed in documented dependency order through Task 7. The Runtime track is currently paused while `docs/novel-implementation-plan.md` is active.
 
 ## 2. Task Overview
 

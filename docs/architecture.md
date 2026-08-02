@@ -5,8 +5,8 @@
 This document records the currently accepted architecture for the shared Novel Agent Runtime.
 
 - It is an architecture target, not a statement that every component has already been implemented.
-- The dedicated Novel domain model remains deferred and is not included in this runtime boundary.
-- Current Novel-domain design discussions are recorded separately in `docs/novel-domain.md` and do not extend the Task 1 through Task 7 implementation scope.
+- The dedicated Novel domain implementation is tracked separately in `docs/novel-implementation-plan.md` and remains outside this runtime boundary.
+- Current Novel-domain design and implementation boundaries are recorded in `docs/novel-domain.md` and `docs/novel-implementation-plan.md`; they do not change the Runtime Task 1 through Task 7 contracts.
 - Diagrams use Mermaid so they remain version-controlled, editable, and renderable in compatible Markdown viewers.
 - The initial implementation stays TypeScript-first. Performance-critical implementations may later move to Rust behind stable TypeScript interfaces.
 - Plan-first autonomous implementation tasks and unresolved questions are tracked in `docs/implementation-plan.md`.
@@ -5467,7 +5467,7 @@ The following items still require explicit review before implementation:
 2. Input snapshot redaction and size limits
 3. Subagent result projection beyond the accepted active-Run cancellation ownership rule
 4. Runtime idle eviction duration
-5. Dedicated Novel domain model, intentionally deferred
+5. Dedicated Novel domain implementation, tracked separately in `docs/novel-implementation-plan.md`
 6. Runtime crash recovery for a non-terminal Run/Turn: fail versus cancel semantics and the required lifecycle transition reasons
 
 ## 29. Recommended Implementation Order

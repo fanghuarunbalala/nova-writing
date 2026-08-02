@@ -4,11 +4,13 @@ These instructions apply to the entire repository.
 
 ## Mission
 
-Complete the documented Task 1 through Task 7 architecture and implementation plan. Continue from the current repository status; do not reimplement completed checkpoints.
+Complete the currently active documented implementation track from the current repository status without reimplementing completed checkpoints.
+
+The active track is Novel Task N0 through Task N11 in `docs/novel-implementation-plan.md`. Runtime Task 1 through Task 7 remains documented in `docs/implementation-plan.md` and is paused rather than cancelled while the Novel track is active.
 
 ## Autonomous Authority
 
-- The agent may autonomously plan, implement, validate, document, and commit the next incomplete step described in `docs/implementation-plan.md`.
+- The agent may autonomously plan, implement, validate, document, and commit the next incomplete step described by the active implementation plan.
 - The agent does not need to wait for explicit approval between documented steps.
 - Autonomous authority is limited to the currently selected documented task step. Do not implement deferred features, adjacent future steps, unrelated refactors, or behavior outside that step.
 - If a step depends on an unresolved architectural decision that cannot be derived safely from the accepted documents and existing code, stop and ask the user before implementation.
@@ -20,8 +22,10 @@ After any context compression, context reset, resumed goal, or uncertainty about
 1. `AGENTS.md`
 2. `docs/implementation-plan.md`
 3. `docs/architecture.md`
-4. Applicable nested `AGENTS.md` files
-5. `git status` and recent `git log`
+4. `docs/novel-implementation-plan.md` while the Novel track is active
+5. `docs/novel-domain.md` while the Novel track is active
+6. Applicable nested `AGENTS.md` files
+7. `git status` and recent `git log`
 
 Do not rely only on a compressed conversation summary when repository documents can establish the current task and accepted boundaries.
 
@@ -44,6 +48,8 @@ Planning is mandatory even when the agent has authority to continue automaticall
 ## Scope and Quality Boundaries
 
 - Follow the async-first hybrid architecture documented by the project.
+- Do not mix Runtime and Novel implementation changes in one step or commit.
+- Agent-facing Novel Tools, Tool YAML, Prompt composition, Agent definitions, and CLI/GUI/Web Novel interfaces remain outside Novel Task N0 through Task N11.
 - Preserve stable public abstractions and keep Pi, process placement, Node, and future Rust details behind their accepted boundaries.
 - Do not silently resolve questions explicitly marked unresolved or deferred.
 - Do not change unrelated code or repair unrelated failures.
@@ -54,4 +60,4 @@ Planning is mandatory even when the agent has authority to continue automaticall
 
 ## Completion Boundary
 
-The autonomous execution objective ends only when the documented Task 1 through Task 7 deliverables are implemented, validated, documented, and committed, or when progress is blocked by an unresolved decision requiring user input.
+The current autonomous execution objective ends only when Novel Task N0 through Task N11 is implemented, validated, documented, and committed, or when progress is blocked by an unresolved decision that cannot be safely derived from accepted documents and existing code. Runtime Task 1 through Task 7 resumes only after an explicit track change.

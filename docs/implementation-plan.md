@@ -2710,6 +2710,15 @@ Task 6A-F delivered:
 - durable acknowledgement only for `journal.appendOutput`; best-effort live publication failure does not invalidate a successful Journal receipt, while all reads and lifecycle responses remain protocol acknowledgements rather than business-completion claims
 - cancellation propagation through `RuntimeIpcPeer`, stable redacted persistence errors, structured payload-free logs, and focused validation for allowlisting, identity and Sequence mismatch, paging, duplicate append receipts, absent recovery sections, malformed payloads, and private-content log exclusion
 
+Task 6A-G delivered:
+
+- provider-neutral `runtime.heartbeat` Control notifications emitted immediately and every two seconds by the Child Session
+- Parent-side monotonic heartbeat monitoring with explicit `healthy`, `unhealthy`, and `stopped` states; three missed intervals resolve one unhealthy signal without logging payloads
+- existing `ipc.cancel_request` routing retained for active RPC cancellation, with Peer or transport closure aborting remaining inbound work during shutdown or health failure
+- `ChildProcessConversationRuntimeHandle` graceful termination policy: Runtime shutdown and process exit receive a five-second window, followed by transport closure and `SIGKILL` when the process does not exit
+- unhealthy process handling without a shutdown reason: close IPC, send `SIGTERM`, wait the same grace window, then force termination; the resulting exit remains a redacted crash and is never automatically restarted
+- deterministic timer and fake-process validation for heartbeat cadence, recovery after a fresh heartbeat, three-miss detection, graceful timeout escalation, unhealthy crash normalization, and payload-free health logs
+
 Expected deliverables after approval:
 
 - transport interfaces
@@ -2846,6 +2855,6 @@ No next checkpoint begins without explicit approval.
 
 ## 12. Current Position
 
-Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-F are implemented. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, Task 6A-B adds the asynchronous in-memory Peer, Task 6A-C binds that Port to bounded Node JSONL streams, Task 6A-D adds one-process-per-Runtime placement, Task 6A-E completes negotiated Parent/Child startup and Child-local Runtime construction, and Task 6A-F adds the allowlisted persistence RPC and durable Output append acknowledgement.
+Runtime Task 0 through Task 5B and Task 6A-A through Task 6A-G are implemented. Checkpoint 5B closes the Tool definition, registry, execution, permission, Approval, Sandbox, cancellation, timeout, retry, Trace, and package-private Pi execution path. Task 6A-A establishes the provider-neutral IPC Frame and negotiation boundary, Task 6A-B adds the asynchronous in-memory Peer, Task 6A-C binds that Port to bounded Node JSONL streams, Task 6A-D adds one-process-per-Runtime placement, Task 6A-E completes negotiated Parent/Child startup and Child-local Runtime construction, Task 6A-F adds the allowlisted persistence RPC and durable Output append acknowledgement, and Task 6A-G adds heartbeat health plus graceful-to-forced termination policy.
 
-The next documented Runtime step is Task 6A-G: two-second heartbeat traffic, three-miss unhealthy detection, active request cancellation routing, five-second graceful termination, forced termination escalation, and redacted crash behavior without automatic restart.
+The next documented Runtime step is Task 6A-H: full Host-to-child integration validation, ConversationProxy placement verification, crash and recovery-boundary coverage, documentation closure, and Checkpoint 6A review preparation.

@@ -22,6 +22,8 @@ export interface RuntimeChildProcessEndpoint {
   shutdown(request: ConversationRuntimeHandleShutdownRequest): Promise<void>;
 
   close(): Promise<void>;
+
+  waitForUnhealthy?(): Promise<void>;
 }
 
 export interface ChildProcessConversationRuntimeHandleOptions {
@@ -33,6 +35,7 @@ export interface ChildProcessConversationRuntimeHandleOptions {
   readonly exitNormalizer?: RuntimeProcessExitNormalizer;
   readonly logger?: Logger;
   readonly onExit?: (exit: ConversationRuntimeExit) => void;
+  readonly gracefulTerminationTimeoutMs?: number;
 }
 
 export class ChildProcessConversationRuntimeHandle
@@ -47,6 +50,7 @@ export class ChildProcessConversationRuntimeHandle
   readonly #logger: Logger;
   readonly #onExit?: (exit: ConversationRuntimeExit) => void;
   readonly #exitPromise: Promise<ConversationRuntimeExit>;
+  readonly #gracefulTerminationTimeoutMs: number;
   #shutdownReason?: ConversationRuntimeShutdownReason;
   #shutdownPromise?: Promise<void>;
   #closeTransportPromise?: Promise<void>;
@@ -71,7 +75,11 @@ export class ChildProcessConversationRuntimeHandle
       runtimeInstanceId: this.runtimeInstanceId,
     });
     this.#onExit = options.onExit;
+    this.#gracefulTerminationTimeoutMs = capturePositiveInteger(options.gracefulTerminationTimeoutMs ?? 5_000);
     this.#exitPromise = this.#observeExit();
+    if (this.#endpoint.waitForUnhealthy !== undefined) {
+      void this.#endpoint.waitForUnhealthy().then(() => this.#terminateUnhealthy());
+    }
   }
 
   async dispatchInput(input: ConversationRuntimeInputReference): Promise<void> {
@@ -113,24 +121,49 @@ export class ChildProcessConversationRuntimeHandle
   }
 
   async dispose(reason: ConversationRuntimeShutdownReason): Promise<void> {
-    this.#shutdownReason ??= captureShutdownReason(reason);
-    await this.#closeTransport();
-    this.#process.terminate(RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL.terminate);
+    await this.shutdown({ reason: captureShutdownReason(reason) });
   }
 
   async #requestShutdown(reason: ConversationRuntimeShutdownReason): Promise<void> {
     this.#logger.info("runtime.process.shutdown_requested", {
       shutdownReason: reason,
     });
-    try {
-      await this.#endpoint.shutdown({ reason });
-    } catch {
+    let commandFailed = false;
+    const graceful = this.#endpoint.shutdown({ reason }).catch(() => {
+      commandFailed = true;
       this.#process.terminate(RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL.terminate);
+    });
+    const completed = await Promise.race([
+      Promise.all([graceful, this.#exitPromise]).then(() => true),
+      delay(this.#gracefulTerminationTimeoutMs).then(() => false),
+    ]);
+    if (!completed && !this.#exited) {
+      this.#logger.warn("runtime.process.shutdown_forced");
+      await this.#closeTransport();
+      this.#process.terminate(RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL.kill);
+      await this.#exitPromise;
+    }
+    if (commandFailed) {
       throw new ChildProcessConversationRuntimeHandleError(
         this.conversationId,
         this.runtimeInstanceId,
         "shutdown",
       );
+    }
+  }
+
+  async #terminateUnhealthy(): Promise<void> {
+    if (this.#exited || this.#shutdownReason !== undefined) return;
+    this.#logger.warn("runtime.process.heartbeat_unhealthy");
+    await this.#closeTransport();
+    this.#process.terminate(RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL.terminate);
+    const exited = await Promise.race([
+      this.#exitPromise.then(() => true),
+      delay(this.#gracefulTerminationTimeoutMs).then(() => false),
+    ]);
+    if (!exited && !this.#exited) {
+      this.#logger.warn("runtime.process.unhealthy_forced");
+      this.#process.terminate(RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL.kill);
     }
   }
 
@@ -190,4 +223,13 @@ function captureNonBlank(value: unknown, label: string): string {
     throw new TypeError(`${label} must be non-blank`);
   }
   return value;
+}
+
+function capturePositiveInteger(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 1) throw new TypeError("Termination timeout must be positive");
+  return value;
+}
+
+function delay(durationMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, durationMs));
 }

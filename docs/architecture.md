@@ -5643,6 +5643,41 @@ The Parent assembles only configured typed sections. Missing sections are omitte
 
 Task 6A-F does not implement heartbeat health, graceful termination escalation, automatic restart, concrete restart-safe private State adapters, Artifact access, ConversationProxy, or Subagent behavior. Heartbeat and process health remain Task 6A-G.
 
+### 24.7 Heartbeat Health and Termination
+
+After Session startup, the Child immediately sends `runtime.heartbeat` and repeats it every two seconds on the reserved Control lane. The payload contains only a monotonic Session-local Sequence and timestamp. The Parent monitor resets its observation deadline only for a newer valid Sequence; three missed intervals transition health from `healthy` to `unhealthy` exactly once.
+
+```mermaid
+sequenceDiagram
+    participant Child as Child Runtime Session
+    participant Parent as Parent Heartbeat Monitor
+    participant Handle as Process Runtime Handle
+    participant Process as Child Process
+
+    loop every 2 seconds
+        Child-->>Parent: runtime.heartbeat(sequence, sentAt)
+    end
+    alt heartbeat remains current
+        Parent-->>Parent: health = healthy
+    else 3 intervals missed
+        Parent-->>Handle: unhealthy
+        Handle->>Child: close IPC / abort active RPC
+        Handle->>Process: SIGTERM
+        alt exits within 5 seconds
+            Process-->>Handle: redacted crashed exit
+        else still running
+            Handle->>Process: SIGKILL
+            Process-->>Handle: redacted crashed exit
+        end
+    end
+```
+
+Normal shutdown starts the same five-second grace window around the Runtime shutdown RPC and actual process exit. If the Runtime acknowledges but the process remains alive, or the command never completes, the Handle closes transport and sends `SIGKILL` after the deadline. A health-triggered termination carries no shutdown reason and therefore normalizes as a crash; an explicitly requested shutdown retains its accepted shutdown reason even if forced termination was required. Neither path performs automatic restart.
+
+Active request cancellation remains the provider-neutral `ipc.cancel_request` protocol implemented by `RuntimeIpcPeer`. Closing a Peer or transport aborts all remaining inbound request controllers and rejects outbound pending requests, so health failure and shutdown do not leave orphan IPC work. Provider, Tool, and Interaction business cancellation remains owned by their existing Runtime cancellation coordinators rather than heartbeat code.
+
+Task 6A-G does not introduce Runtime restart, non-terminal Run/Turn repair semantics, public process IDs, raw signal details, or Subagent lifecycle. Full Host-to-child integration and Checkpoint 6A closure remain Task 6A-H.
+
 ## 25. Subagent Architecture
 
 Main Agent and Subagent both use Conversation.
@@ -5823,13 +5858,13 @@ Currently implemented skeletons include:
 - redacted durable Context Compaction lifecycle Events and exact-dispatch Checkpoint application publication with idempotent Event identities
 - negotiated Parent/Child Runtime startup with Child-local composition and one-process-per-Runtime placement
 - allowlisted Runtime persistence RPC with strict Journal/Message reads, durable Output append acknowledgement, and typed aggregate recovery-state load
+- two-second Child heartbeat, three-miss Parent health detection, active IPC cancellation cleanup, and five-second graceful-to-forced process termination
 
 The first-version protocol no longer contains `ResumeInputEvent`.
 
 Not yet implemented:
 
 - ConversationProxy implementation
-- heartbeat health, cancellation routing, and graceful termination escalation
 - concrete restart-safe ContextCheckpointStore and canonical Journal/Message source adapters
 - durable ArtifactStore, oversized User-content staging, and Artifact-reference recovery
 - concrete restart-safe private Nudge persistence and Provider transport dispatch-hook adapters

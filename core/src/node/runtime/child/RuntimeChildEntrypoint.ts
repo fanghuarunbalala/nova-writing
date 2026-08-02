@@ -7,6 +7,7 @@ import {
   RUNTIME_IPC_PROTOCOL_VERSION,
   RUNTIME_IPC_SUPPORTED_PROTOCOL_RANGE,
   RuntimeIpcPeer,
+  RuntimeIpcHeartbeatEmitter,
   captureRuntimeIpcFrame,
   type RuntimeIpcConnection,
 } from "../../../runtime/ipc/index.js";
@@ -100,6 +101,8 @@ export class RuntimeChildEntrypoint {
       logger: this.#logger,
     });
     peer.start();
+    const heartbeat = new RuntimeIpcHeartbeatEmitter(peer);
+    heartbeat.start();
     this.#logger.info("runtime.child.session_started", {
       sessionId: response.sessionId,
     });
@@ -109,6 +112,7 @@ export class RuntimeChildEntrypoint {
       endpoint.waitForUnexpectedExit().then(() => "runtime_exited" as const),
     ]);
     if (reason === "runtime_exited") await peer.close();
+    heartbeat.stop();
     await endpoint.close();
     this.#logger.info("runtime.child.entrypoint_completed", { reason });
     return Object.freeze({ reason });

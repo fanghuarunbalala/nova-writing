@@ -12,6 +12,7 @@ import {
   RUNTIME_IPC_REJECTION_REASON,
   RUNTIME_IPC_SUPPORTED_PROTOCOL_RANGE,
   RuntimeIpcPeer,
+  RuntimeIpcHeartbeatMonitor,
   RuntimeIpcProtocolError,
   captureRuntimeIpcFrame,
   negotiateRuntimeIpcProtocolVersion,
@@ -108,6 +109,15 @@ export class ParentRuntimeChildEndpointFactory
       sessionId,
       processNonce: hello.processNonce,
     }));
+    const heartbeatMonitor = new RuntimeIpcHeartbeatMonitor();
+    const notificationHandler: RuntimeIpcNotificationHandler = {
+      handle: async (method, payload) => {
+        await heartbeatMonitor.handle(method, payload);
+        if (method !== "runtime.heartbeat") {
+          await this.#notificationHandler?.handle(method, payload);
+        }
+      },
+    };
     const peer = new RuntimeIpcPeer({
       sessionId,
       connection: request.connection,
@@ -117,13 +127,12 @@ export class ParentRuntimeChildEndpointFactory
       ...(this.#requestErrorMapper !== undefined
         ? { requestErrorMapper: this.#requestErrorMapper }
         : {}),
-      ...(this.#notificationHandler !== undefined
-        ? { notificationHandler: this.#notificationHandler }
-        : {}),
+      notificationHandler,
       logger: this.#logger,
     });
     peer.start();
-    const endpoint = new ParentRuntimeChildEndpoint(peer, this.#logger);
+    heartbeatMonitor.start();
+    const endpoint = new ParentRuntimeChildEndpoint(peer, heartbeatMonitor, this.#logger);
     try {
       await endpoint.bootstrap(request.bootstrap);
       this.#logger.info("runtime.child.handshake_completed", {
@@ -141,13 +150,17 @@ export class ParentRuntimeChildEndpointFactory
 
 export class ParentRuntimeChildEndpoint implements RuntimeChildProcessEndpoint {
   readonly #peer: RuntimeIpcPeer;
+  readonly #heartbeatMonitor: RuntimeIpcHeartbeatMonitor;
   readonly #logger: Logger;
   #closePromise?: Promise<void>;
 
-  constructor(peer: RuntimeIpcPeer, logger: Logger = noopLogger) {
+  constructor(peer: RuntimeIpcPeer, heartbeatMonitor: RuntimeIpcHeartbeatMonitor, logger: Logger = noopLogger) {
     this.#peer = peer;
+    this.#heartbeatMonitor = heartbeatMonitor;
     this.#logger = logger.child({ component: "parent_runtime_child_endpoint" });
   }
+
+  waitForUnhealthy(): Promise<void> { return this.#heartbeatMonitor.waitForUnhealthy(); }
 
   async bootstrap(bootstrap: ConversationRuntimeBootstrap): Promise<void> {
     let response;
@@ -213,6 +226,7 @@ export class ParentRuntimeChildEndpoint implements RuntimeChildProcessEndpoint {
 
   close(): Promise<void> {
     this.#closePromise ??= Promise.resolve().then(async () => {
+      this.#heartbeatMonitor.stop();
       this.#logger.info("runtime.child.parent_endpoint_closed");
       await this.#peer.close();
     });

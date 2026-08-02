@@ -6,6 +6,7 @@ import {
   NovelDraftSessionNotFoundError,
   NovelDraftSessionStateError,
   NovelRevisionConflictError,
+  captureNovelConversationId,
   captureNovelDraftSession,
   captureNovelDraftSessionStatus,
   captureNovelId,
@@ -93,10 +94,8 @@ export class SqliteNovelDraftStore implements NovelDraftStore {
   async createDraftSession(session: NovelDraftSession): Promise<void> {
     this.assertOpen();
     const captured = captureNovelDraftSession(session);
-    if (
-      captured.novelId !== this.novelId ||
-      captured.status !== NOVEL_DRAFT_SESSION_STATUS.active
-    ) {
+    this.assertIdentity(captured.novelId);
+    if (captured.status !== NOVEL_DRAFT_SESSION_STATUS.active) {
       throw new NovelDraftSessionStateError(
         captured.id,
         [NOVEL_DRAFT_SESSION_STATUS.active],
@@ -175,6 +174,7 @@ export class SqliteNovelDraftStore implements NovelDraftStore {
     ownerConversationId: string,
   ): Promise<NovelDraftSession | undefined> {
     this.assertIdentity(novelId);
+    const ownerId = captureNovelConversationId(ownerConversationId);
     const row = this.database
       .prepare(
         `${DRAFT_SESSION_SELECT}
@@ -183,7 +183,7 @@ export class SqliteNovelDraftStore implements NovelDraftStore {
          ORDER BY created_at DESC, id DESC
          LIMIT 1`,
       )
-      .get(this.novelId, ownerConversationId) as
+      .get(this.novelId, ownerId) as
       | NovelDraftSessionRow
       | undefined;
     return row === undefined ? undefined : captureDraftRow(row);

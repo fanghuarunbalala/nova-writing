@@ -22,10 +22,15 @@ import {
   type NovelDraftSessionId,
   type NovelDraftSnapshot,
   type NovelId,
+  type ReplaceNovelDraftSnapshotInput,
   type NovelSnapshotter,
 } from "../../../novel/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
+import {
+  NOVEL_DATABASE_FAILURE,
+  NovelDatabaseError,
+} from "./NovelDatabaseErrors.js";
 
 const SNAPSHOT_MANIFEST_SCHEMA_VERSION = 1 as const;
 
@@ -35,25 +40,31 @@ interface SnapshotManifest {
   readonly novelId: NovelId;
   readonly ownerConversationId: string;
   readonly baseRevision: string;
+  readonly replacedBaseRevision?: string;
 }
 
 export interface SqliteNovelSnapshotterOptions {
   readonly location: NodeNovelStoreLocation;
+  readonly novelId: NovelId;
   readonly logger?: Logger;
 }
 
 export class SqliteNovelSnapshotter implements NovelSnapshotter {
   private readonly logger: Logger;
+  private readonly novelId: NovelId;
 
   constructor(private readonly options: SqliteNovelSnapshotterOptions) {
+    this.novelId = captureNovelId(options.novelId);
     this.logger = (options.logger ?? noopLogger).child({
       component: "sqlite_novel_snapshotter",
       workspaceId: options.location.workspaceId,
+      novelId: this.novelId,
     });
   }
 
   async createDraftSnapshot(session: NovelDraftSession): Promise<void> {
     const captured = captureNovelDraftSession(session);
+    this.assertNovelIdentity(captured.novelId);
     const paths = this.paths(captured.ownerConversationId, captured.id);
     this.logger.info("novel_snapshot.create.started", {
       novelId: captured.novelId,
@@ -91,8 +102,14 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
     }
   }
 
-  async replaceDraftSnapshot(session: NovelDraftSession): Promise<void> {
-    const captured = captureNovelDraftSession(session);
+  async replaceDraftSnapshot(
+    input: ReplaceNovelDraftSnapshotInput,
+  ): Promise<void> {
+    const captured = captureNovelDraftSession(input.session);
+    const expectedBaseRevision = captureNovelRevision(
+      input.expectedBaseRevision,
+    );
+    this.assertNovelIdentity(captured.novelId);
     const paths = this.paths(captured.ownerConversationId, captured.id);
     if (!(await exists(paths.databasePath))) {
       throw new NovelSnapshotError(
@@ -108,8 +125,10 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
       await this.backupCanonical(captured, paths.nextDatabasePath);
       await rename(paths.databasePath, paths.previousDatabasePath);
       await rename(paths.nextDatabasePath, paths.databasePath);
-      await this.writeManifest(paths, captured);
-      await rm(paths.previousDatabasePath, { force: true });
+      await this.writeManifest(paths, captured, expectedBaseRevision);
+      await rm(paths.previousDatabasePath, { force: true }).catch(
+        () => undefined,
+      );
       this.logger.info("novel_snapshot.replace.completed", {
         novelId: captured.novelId,
         draftSessionId: captured.id,
@@ -136,6 +155,7 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
     draftSessionId: NovelDraftSessionId,
   ): Promise<NovelDraftSnapshot | undefined> {
     const capturedNovelId = captureNovelId(novelId);
+    this.assertNovelIdentity(capturedNovelId);
     const capturedDraftId = captureNovelDraftSessionId(draftSessionId);
     const discovered = await this.findDraftDirectory(capturedDraftId);
     if (discovered === undefined) return undefined;
@@ -158,6 +178,13 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
         novelId: manifest.novelId,
         ownerConversationId: manifest.ownerConversationId,
         baseRevision: captureNovelRevision(manifest.baseRevision),
+        ...(manifest.replacedBaseRevision === undefined
+          ? {}
+          : {
+              replacedBaseRevision: captureNovelRevision(
+                manifest.replacedBaseRevision,
+              ),
+            }),
       });
     } catch {
       throw new NovelSnapshotError(
@@ -172,21 +199,18 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
     novelId: NovelId,
   ): Promise<readonly NovelDraftSessionId[]> {
     const capturedNovelId = captureNovelId(novelId);
-    const ids: NovelDraftSessionId[] = [];
+    this.assertNovelIdentity(capturedNovelId);
+    const ids = new Set<NovelDraftSessionId>();
     for (const ownerEntry of await readDirectories(this.options.location.stagingDir)) {
       const ownerDir = join(this.options.location.stagingDir, ownerEntry.name);
       for (const draftEntry of await readDirectories(ownerDir)) {
         try {
           const id = captureNovelDraftSessionId(draftEntry.name);
-          const manifest = await readManifest(join(ownerDir, draftEntry.name, "manifest.json"));
-          if (manifest.novelId === capturedNovelId && manifest.draftSessionId === id) {
-            ids.push(id);
-          }
+          ids.add(id);
         } catch {}
       }
     }
-    ids.sort();
-    return Object.freeze(ids);
+    return Object.freeze([...ids].sort());
   }
 
   async removeDraftSnapshot(
@@ -194,13 +218,13 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
     draftSessionId: NovelDraftSessionId,
   ): Promise<void> {
     const capturedNovelId = captureNovelId(novelId);
+    this.assertNovelIdentity(capturedNovelId);
     const capturedDraftId = captureNovelDraftSessionId(draftSessionId);
     const discovered = await this.findDraftDirectory(capturedDraftId);
     if (discovered === undefined) return;
     try {
-      const manifest = await readManifest(discovered.manifestPath);
-      if (manifest.novelId !== capturedNovelId) throw new Error();
       await rm(discovered.draftDir, { recursive: true, force: true });
+      await rm(discovered.ownerDir).catch(() => undefined);
       this.logger.debug("novel_snapshot.remove.completed", {
         novelId: capturedNovelId,
         draftSessionId: capturedDraftId,
@@ -234,6 +258,7 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
   private async writeManifest(
     paths: SnapshotPaths,
     session: NovelDraftSession,
+    replacedBaseRevision?: string,
   ): Promise<void> {
     const manifest: SnapshotManifest = Object.freeze({
       schemaVersion: SNAPSHOT_MANIFEST_SCHEMA_VERSION,
@@ -241,6 +266,9 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
       novelId: session.novelId,
       ownerConversationId: session.ownerConversationId,
       baseRevision: session.baseRevision,
+      ...(replacedBaseRevision === undefined
+        ? {}
+        : { replacedBaseRevision: captureNovelRevision(replacedBaseRevision) }),
     });
     await writeFile(paths.manifestTemporaryPath, `${JSON.stringify(manifest)}\n`, {
       encoding: "utf8",
@@ -267,7 +295,8 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
       );
       if (!(await exists(draftDir))) continue;
       return {
-        ownerConversationId: captureNovelConversationId(ownerEntry.name),
+        ownerConversationId: ownerEntry.name,
+        ownerDir: join(this.options.location.stagingDir, ownerEntry.name),
         draftDir,
         databasePath: join(draftDir, "draft.sqlite"),
         manifestPath: join(draftDir, "manifest.json"),
@@ -297,6 +326,16 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
       artifactDir: join(draftDir, "artifacts"),
     };
   }
+
+  private assertNovelIdentity(novelId: NovelId): void {
+    if (captureNovelId(novelId) !== this.novelId) {
+      throw new NovelDatabaseError(
+        NOVEL_DATABASE_FAILURE.novelMismatch,
+        this.options.location.workspaceId,
+        this.novelId,
+      );
+    }
+  }
 }
 
 interface SnapshotPaths extends DiscoveredSnapshot {
@@ -309,6 +348,7 @@ interface SnapshotPaths extends DiscoveredSnapshot {
 
 interface DiscoveredSnapshot {
   readonly ownerConversationId: string;
+  readonly ownerDir: string;
   readonly draftDir: string;
   readonly databasePath: string;
   readonly manifestPath: string;
@@ -361,6 +401,13 @@ async function readManifest(path: string): Promise<SnapshotManifest> {
     novelId: captureNovelId(value.novelId),
     ownerConversationId: captureNovelConversationId(value.ownerConversationId),
     baseRevision: captureNovelRevision(value.baseRevision),
+    ...(value.replacedBaseRevision === undefined
+      ? {}
+      : {
+          replacedBaseRevision: captureNovelRevision(
+            value.replacedBaseRevision,
+          ),
+        }),
   });
 }
 

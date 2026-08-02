@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, mkdir, rm } from "node:fs/promises";
+import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -8,7 +8,9 @@ import {
   NovelDraftAlreadyActiveError,
   NovelDraftRecoveryService,
   NovelDraftSessionService,
+  NovelProtocolValidationError,
   NovelSnapshotError,
+  captureNovelDraftRecoveryResult,
   captureNovelDraftSession,
   captureNovelDraftSessionId,
   captureNovelRevision,
@@ -102,7 +104,11 @@ try {
     novelId: canonical.novelId,
     logger,
   });
-  const snapshotter = new SqliteNovelSnapshotter({ location, logger });
+  const snapshotter = new SqliteNovelSnapshotter({
+    location,
+    novelId: canonical.novelId,
+    logger,
+  });
   const clock = new SequenceClock();
   const service = new NovelDraftSessionService({
     canonicalStore,
@@ -111,15 +117,20 @@ try {
     identityFactory: new SequentialIdentityFactory([
       "draft_conversation_a",
       "draft_conversation_b",
+      "draft_interrupted_reset",
+      "draft_unproven_mismatch",
     ]),
     clock,
     logger,
   });
 
-  const [draftA, draftB] = await Promise.all([
-    service.startDraft("conversation-a"),
-    service.startDraft("conversation-b"),
-  ]);
+  const [draftA, draftB, interruptedResetDraft, unprovenMismatchDraft] =
+    await Promise.all([
+      service.startDraft("conversation-a"),
+      service.startDraft("conversation-b"),
+      service.startDraft("conversation-c"),
+      service.startDraft("conversation-d"),
+    ]);
   assert.notEqual(draftA.id, draftB.id);
   assert.equal(draftA.baseRevision, canonical.currentRevision);
   assert.equal(await exists(draftPath(location, draftA)), true);
@@ -144,7 +155,12 @@ try {
     logger,
   });
   const restarted = await recovery.recoverDraftSessions();
-  assert.deepEqual(restarted.recoveredDraftSessionIds, [draftA.id, draftB.id]);
+  assert.deepEqual(restarted.recoveredDraftSessionIds, [
+    draftA.id,
+    draftB.id,
+    interruptedResetDraft.id,
+    unprovenMismatchDraft.id,
+  ]);
 
   const canonicalDatabase = new DatabaseSync(location.canonicalDatabasePath);
   canonicalDatabase.exec("CREATE TABLE reset_marker(value TEXT NOT NULL) STRICT");
@@ -155,6 +171,61 @@ try {
     )
     .run("revision_after_reset", "2026-08-02T01:30:00.000Z");
   canonicalDatabase.close();
+
+  await snapshotter.replaceDraftSnapshot({
+    session: captureNovelDraftSession({
+      ...interruptedResetDraft,
+      baseRevision: captureNovelRevision("revision_after_reset"),
+      updatedAt: clock.now(),
+    }),
+    expectedBaseRevision: interruptedResetDraft.baseRevision,
+  });
+  const recoveredReset = await recovery.recoverDraftSessions();
+  assert.deepEqual(recoveredReset.recoveredDraftSessionIds, [
+    draftA.id,
+    draftB.id,
+    interruptedResetDraft.id,
+    unprovenMismatchDraft.id,
+  ]);
+  assert.equal(
+    (
+      await draftStore.getDraftSession(
+        interruptedResetDraft.novelId,
+        interruptedResetDraft.id,
+      )
+    ).baseRevision,
+    "revision_after_reset",
+  );
+
+  const mismatchRecovery = new NovelDraftRecoveryService({
+    canonicalStore,
+    draftStore,
+    snapshotter: {
+      ...snapshotter,
+      inspectDraftSnapshot: async (novelId, draftSessionId) => {
+        const inspected = await snapshotter.inspectDraftSnapshot(
+          novelId,
+          draftSessionId,
+        );
+        return draftSessionId === unprovenMismatchDraft.id && inspected
+          ? Object.freeze({
+              ...inspected,
+              baseRevision: captureNovelRevision("unproven_revision"),
+            })
+          : inspected;
+      },
+      listDraftSnapshotIds: (novelId) =>
+        snapshotter.listDraftSnapshotIds(novelId),
+      removeDraftSnapshot: (novelId, draftSessionId) =>
+        snapshotter.removeDraftSnapshot(novelId, draftSessionId),
+    },
+    clock,
+    logger,
+  });
+  const rejectedMismatch = await mismatchRecovery.recoverDraftSessions();
+  assert.deepEqual(rejectedMismatch.rolledBackDraftSessionIds, [
+    unprovenMismatchDraft.id,
+  ]);
 
   const resumedService = new NovelDraftSessionService({
     canonicalStore,
@@ -186,6 +257,16 @@ try {
     updatedAt: clock.now(),
   });
   await snapshotter.createDraftSnapshot(orphan);
+  await writeFile(
+    join(
+      location.stagingDir,
+      orphan.ownerConversationId,
+      orphan.id,
+      "manifest.json",
+    ),
+    "invalid-manifest\n",
+    "utf8",
+  );
   await snapshotter.removeDraftSnapshot(resetDraft.novelId, resetDraft.id);
   const reconciled = await recovery.recoverDraftSessions();
   assert.deepEqual(reconciled.rolledBackDraftSessionIds, [resetDraft.id]);
@@ -217,6 +298,16 @@ try {
       join(location.stagingDir, "conversation-failure", "draft_failed_snapshot"),
     ),
     false,
+  );
+
+  assert.throws(
+    () =>
+      captureNovelDraftRecoveryResult({
+        recoveredDraftSessionIds: [draftA.id],
+        rolledBackDraftSessionIds: [draftA.id],
+        removedOrphanSnapshotIds: [],
+      }),
+    NovelProtocolValidationError,
   );
 
   assertRedacted(logs, [root, "latest", "revision_stale_for_failure", "CREATE TABLE"]);

@@ -4897,16 +4897,15 @@ Tool declaration, implementation, and Pi adaptation are separate.
 classDiagram
     class ToolDescriptor {
         +string name
+        +string version
         +string label
         +string description
-        +Schema parameters
-        +string groupId
-        +ExecutionCharacteristics execution
+        +TypeBoxSchema parameters
     }
 
     class ToolHandler {
         <<interface>>
-        +execute(ToolExecutionContext) ToolResult
+        +execute(context, arguments, progress) Promise~ToolResult~
     }
 
     class RegisteredTool {
@@ -4918,9 +4917,9 @@ classDiagram
         +register(RegisteredTool)
         +get(name)
         +list()
-        +loadGroup(manifest)
         +createView(policy)
         +merge(registry)
+        +freeze()
     }
 
     class ToolRegistryView {
@@ -4939,17 +4938,37 @@ classDiagram
     PiToolAdapter --> RegisteredTool
 ```
 
-YAML manifests describe:
+TypeScript registration is the single source of truth for Tool name, version, label, description, TypeBox parameter schema, and executable Handler binding. YAML never repeats parameter schemas and never contains executable module bindings.
 
-- group identity and display metadata
-- tool name and description
-- parameter schema
-- execution characteristics
-- presentation metadata
+YAML Tool Group manifests contain only:
 
-Executable handlers are bound explicitly in TypeScript code. YAML does not contain arbitrary executable module bindings.
+- `schemaVersion`
+- stable Group `id`
+- Group `version`
+- display `label` and optional `description`
+- an ordered list of registered Tool names
 
 `groupId` is the stable key. Human-readable `label` is not used as an identity key.
+
+`ToolRegistry` is mutable only during assembly and becomes immutable after `freeze()`. Tool names are globally unique inside one Registry. Duplicate registration and merge conflicts fail explicitly; load order never replaces an existing Tool.
+
+`ToolRegistryView` is an immutable Agent-facing capability view. It begins with the union of selected Tool Groups, applies an optional allowlist, and then applies a denylist. Deny has final precedence. Unknown Group or Tool identities fail rather than being silently ignored.
+
+One Registry exposes at most one version for a Tool name. Incompatible parameter, result, or semantic changes require a new Tool version and a corresponding Agent `definitionVersion` change. Durable Tool-call records retain both Tool name and version.
+
+Tool implementations return one final asynchronous success result:
+
+```ts
+interface ToolResult<TDetails extends JsonValue = JsonValue> {
+  readonly content: readonly ToolResultContent[];
+  readonly details?: TDetails;
+  readonly artifacts?: readonly ArtifactReference[];
+}
+```
+
+There is no public `BaseTool` or common `ToolDetails` class. Concrete Tools may define their own JSON-safe details interface and bind it through the `ToolResult<TDetails>` generic.
+
+Incremental execution information is emitted through an injected asynchronous `ToolProgressSink`. Progress updates never replace the final Promise result and are treated as private Tool data for logging and persistence redaction.
 
 ## 21. Tool Execution Pipeline
 
@@ -5041,7 +5060,7 @@ class ToolError extends Error {
 }
 ```
 
-`ToolDetails`, if retained, represents structured success details only and does not carry the error protocol. Its final shape remains unresolved.
+Successful Tool details are optional generic JSON-safe data and never carry the error protocol. Handlers throw on failure; the Task 5B execution pipeline owns stable `ToolError` normalization and retry decisions.
 
 ## 22. Runtime Interaction and Approval
 
@@ -5437,13 +5456,10 @@ The following items still require explicit review before implementation:
 
 1. Event schema migration mechanism beyond schema version 1
 2. Input snapshot redaction and size limits
-3. Tool YAML manifest fields
-4. Whether `ToolDetails` returns as a common success-detail abstraction
-5. Tool result and incremental update contracts beyond the accepted oversized Artifact-reference boundary
-6. Subagent result projection beyond the accepted active-Run cancellation ownership rule
-7. Runtime idle eviction duration
-8. Dedicated Novel domain model, intentionally deferred
-9. Runtime crash recovery for a non-terminal Run/Turn: fail versus cancel semantics and the required lifecycle transition reasons
+3. Subagent result projection beyond the accepted active-Run cancellation ownership rule
+4. Runtime idle eviction duration
+5. Dedicated Novel domain model, intentionally deferred
+6. Runtime crash recovery for a non-terminal Run/Turn: fail versus cancel semantics and the required lifecycle transition reasons
 
 ## 29. Recommended Implementation Order
 

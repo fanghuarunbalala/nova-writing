@@ -2387,17 +2387,27 @@ Design scope:
 - Tool Error
 - optional Tool Details
 
-Questions to resolve before implementation:
+Accepted Task 5A contract:
 
-1. What are the final YAML Manifest fields?
-2. Which fields belong in YAML versus TypeScript registration code?
-3. Is TypeBox the required parameter-schema representation?
-4. Does `ToolDetails` remain an abstract base, a generic type, or no common abstraction?
-5. What is the successful Tool Result contract?
-6. How are streaming updates represented?
-7. How do Registry merge conflicts resolve?
-8. How are Tool Group views and Conversation allowlists constructed?
-9. How does Tool versioning work if a descriptor changes?
+1. `ToolDescriptor`, `ToolHandler`, and `RegisteredTool` are separate Core-owned composition contracts. No public `BaseTool` inheritance hierarchy is introduced.
+2. TypeScript is the single source of truth for Tool identity, version, label, description, and TypeBox parameter schema. YAML manifests only declare Tool Group identity, display metadata, version, and ordered Tool names.
+3. TypeBox is the first-version parameter-schema representation. Argument types are inferred from the registered schema and validated before Handler execution.
+4. There is no common `ToolDetails` base class. Successful Tool results may carry an optional generic JSON-safe `details` value defined by the concrete Tool.
+5. A Handler returns one final `Promise<ToolResult<TDetails>>`. Successful results contain bounded content plus optional details and logical `ArtifactReference` values.
+6. A Handler reports failure by throwing. Task 5B owns structured `ToolError` normalization, retry policy, permission, approval, timeout, cancellation, sandboxing, and redacted tracing.
+7. Incremental updates use an injected asynchronous `ToolProgressSink`; they do not replace the single final Promise result. Progress content is Tool data and must never be logged directly.
+8. Tool names are globally unique within one Registry. Duplicate registration and merge conflicts fail explicitly; load order never overrides an existing Tool.
+9. A Registry becomes immutable after assembly. Agent-specific access is represented by immutable `ToolRegistryView` values built from Tool Groups, optional allowlists, and denylists, with deny taking final precedence.
+10. `ToolDescriptor.version` is mandatory. One Registry may expose only one version for a given Tool name. Incompatible descriptor or result changes require a Tool version change and an Agent `definitionVersion` change.
+
+Task 5A implementation order:
+
+- Task 5A-A: define Tool parameter schema, Descriptor, Handler, Result content, optional generic details, Progress Sink, registration, and stable validation failures
+- Task 5A-B: implement mutable assembly plus immutable `ToolRegistry`, duplicate detection, freeze behavior, lookup, and deterministic listing
+- Task 5A-C: define and validate YAML Tool Group manifests containing group metadata and ordered Tool names only
+- Task 5A-D: implement immutable `ToolRegistryView` construction with Group selection, allow, deny, unknown-name rejection, and deterministic ordering
+- Task 5A-E: implement the package-private Pi Tool Adapter without exposing Pi types through Core Tool contracts
+- Task 5A-F: integrate protocol, Registry, Group, View, and Pi conversion coverage; update architecture and commit the completed Task 5A boundary
 
 Expected deliverables after approval:
 

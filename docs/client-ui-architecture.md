@@ -547,6 +547,16 @@ The Controller does not run an infinite retry loop and does not own the opened `
 
 Focused contract validation runs against both deterministic Electron-style and HTTP/WebSocket-style Mock Transports. It covers durable history replay, live following, duplicate delivery suppression, logical Runtime Presence updates, offline Event persistence, explicit catch-up after reconnect, immutable listener snapshots, idempotent stopping, and log payload redaction.
 
+### 13.3 Implemented Shared React Projection Binding Checkpoint
+
+The initial `@novel/ui` package now provides React and TypeScript bindings without introducing a desktop shell, browser server, page router, editor, or platform-specific Transport. `NovelApiProvider` receives an already composed `NovelApiClient`; shared code never imports Electron, chooses an HTTP endpoint, or detects its platform through globals.
+
+`ConversationProjectionBinding` owns the UI consumer's opened Conversation handle, Core Projection Store, and Core Projection Controller. It opens and starts them asynchronously, forwards immutable Controller and Projection snapshots, delegates explicit `resume()`, and closes only its owned handle when stopped. Event interpretation, replay ordering, duplicate suppression, and Transport failures remain in Core rather than being reimplemented in React.
+
+`useConversationProjection(conversationId)` creates one Binding for the current Provider and Conversation identity, subscribes through React `useSyncExternalStore`, starts it after mount, and stops it on unmount or identity replacement. Its result exposes the immutable Binding snapshot plus explicit `resume()`; it does not create an automatic reconnect loop.
+
+Focused React validation mounts the same Provider and Hook against deterministic Electron-style and HTTP/WebSocket-style Mock Transports. It verifies durable replay, live updates, logical disconnect state, explicit resume with offline catch-up, immutable snapshots, unmount cleanup, continued usability of separately owned Conversation handles, and log payload redaction.
+
 ## 14. CLI and TUI Integration
 
 CLI and TUI are first-class clients in the same API system.

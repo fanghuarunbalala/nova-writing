@@ -7,7 +7,7 @@ import {
 } from "../../../novel/index.js";
 import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
 
-export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 6 as const;
+export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 7 as const;
 
 export function initializeNovelDraftSqliteSchema(
   databasePath: string,
@@ -231,6 +231,55 @@ const DRAFT_MIGRATIONS = [
       ON draft_approvals(status) WHERE status = 'active';
 
       UPDATE draft_metadata SET schema_version = 6;
+    `,
+  },
+  {
+    version: 7,
+    name: "general_lifecycle_outbox",
+    sql: `
+      DROP INDEX IF EXISTS draft_outbox_unpublished_idx;
+      ALTER TABLE draft_outbox RENAME TO draft_outbox_v1;
+
+      CREATE TABLE draft_outbox (
+        event_id TEXT PRIMARY KEY,
+        novel_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        operation_sequence INTEGER,
+        operation_id TEXT,
+        event_type TEXT NOT NULL,
+        schema_version INTEGER NOT NULL CHECK (schema_version > 0),
+        event_json TEXT NOT NULL,
+        event_digest TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        published_at TEXT,
+        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+        CHECK ((operation_sequence IS NULL) = (operation_id IS NULL)),
+        FOREIGN KEY (operation_sequence) REFERENCES draft_operations(sequence),
+        FOREIGN KEY (operation_id) REFERENCES draft_operations(operation_id)
+      ) STRICT;
+
+      INSERT INTO draft_outbox(
+        event_id, novel_id, conversation_id, operation_sequence, operation_id,
+        event_type, schema_version, event_json, event_digest, created_at,
+        published_at, attempt_count
+      )
+      SELECT event_id, metadata.novel_id, metadata.owner_conversation_id,
+             operation_sequence, operation_id, event_type, 1, event_json,
+             event_digest, outbox.created_at, published_at, attempt_count
+      FROM draft_outbox_v1 AS outbox
+      CROSS JOIN draft_metadata AS metadata
+      WHERE metadata.singleton = 1;
+
+      DROP TABLE draft_outbox_v1;
+
+      CREATE UNIQUE INDEX draft_outbox_operation_sequence_idx
+      ON draft_outbox(operation_sequence) WHERE operation_sequence IS NOT NULL;
+      CREATE UNIQUE INDEX draft_outbox_operation_id_idx
+      ON draft_outbox(operation_id) WHERE operation_id IS NOT NULL;
+      CREATE INDEX draft_outbox_unpublished_idx
+      ON draft_outbox(created_at, event_id) WHERE published_at IS NULL;
+
+      UPDATE draft_metadata SET schema_version = 7;
     `,
   },
 ] as const;

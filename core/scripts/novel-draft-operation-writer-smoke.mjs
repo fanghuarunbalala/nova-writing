@@ -87,7 +87,8 @@ function readDraftState(path) {
         .map((row) => row.name),
       outboxRows: database
         .prepare(
-          `SELECT event_type, event_json, event_digest
+          `SELECT novel_id, conversation_id, operation_sequence, operation_id,
+                  event_type, schema_version, event_json, event_digest
            FROM draft_outbox ORDER BY operation_sequence`,
         )
         .all(),
@@ -260,6 +261,11 @@ try {
     state.outboxRows.every(
       (row) =>
         row.event_type === "novel.draft.operation.applied" &&
+        row.novel_id === canonical.novelId &&
+        row.conversation_id === session.ownerConversationId &&
+        row.schema_version === 1 &&
+        row.operation_sequence > 0 &&
+        typeof row.operation_id === "string" &&
         /^sha256:[0-9a-f]{64}$/u.test(row.event_digest) &&
         JSON.parse(row.event_json).recordVersion === 1 &&
         JSON.parse(row.event_json).eventType === "draft.operation.applied" &&

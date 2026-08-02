@@ -170,6 +170,30 @@ function createLegacyDraftDatabase(databasePath, session) {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       ) STRICT;
+
+      CREATE TABLE draft_operations (
+        sequence INTEGER PRIMARY KEY CHECK (sequence > 0),
+        operation_id TEXT NOT NULL UNIQUE,
+        operation_type TEXT NOT NULL,
+        operation_version INTEGER NOT NULL CHECK (operation_version > 0),
+        operation_json TEXT NOT NULL,
+        operation_digest TEXT NOT NULL,
+        recorded_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE draft_outbox (
+        event_id TEXT PRIMARY KEY,
+        operation_sequence INTEGER NOT NULL UNIQUE,
+        operation_id TEXT NOT NULL UNIQUE,
+        event_type TEXT NOT NULL,
+        event_json TEXT NOT NULL,
+        event_digest TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        published_at TEXT,
+        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+        FOREIGN KEY (operation_sequence) REFERENCES draft_operations(sequence),
+        FOREIGN KEY (operation_id) REFERENCES draft_operations(operation_id)
+      ) STRICT;
     `);
     database
       .prepare(
@@ -360,7 +384,7 @@ try {
   assert.equal(legacyMetadata.change_set_state, "open");
   assert.equal(legacyMetadata.change_set_digest, null);
   assert.equal(legacyMetadata.change_set_frozen_at, null);
-  assert.deepEqual(legacyMigrations, [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(legacyMigrations, [1, 2, 3, 4, 5, 6, 7]);
 
   assertRedacted(logEntries, [
     root,

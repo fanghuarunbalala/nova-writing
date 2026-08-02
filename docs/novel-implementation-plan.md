@@ -665,6 +665,19 @@ Atomic Outbox encoding delivered:
 **Status:** internal/public lifecycle protocols and Draft/Commit atomic Outbox
 encoding completed; remaining lifecycle service write points follow before N8-C.
 
+General Draft Outbox storage delivered:
+
+- Draft SQLite schema v7 adds Novel ID, Conversation ID, schema version, and a
+  stable created-time ordering key to every durable Outbox row
+- Operation sequence and Operation ID remain paired and unique when present but
+  are nullable for Draft, Rebase, Conflict, Approval, and Recovery lifecycle
+  events that are not caused by one Operation Journal entry
+- migration copies existing Operation Outbox rows without changing Event IDs,
+  JSON bytes, digests, publication state, or attempt counts
+
+**Status:** general Draft lifecycle Outbox foundation completed; service-level
+lifecycle writers are the next N8-B step.
+
 ### N8-C Outbox Dispatcher
 
 Dispatch canonical and Draft outbox records idempotently through the accepted Conversation Output publisher and Runtime Journal boundary.

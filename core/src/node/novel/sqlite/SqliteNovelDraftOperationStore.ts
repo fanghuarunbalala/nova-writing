@@ -213,15 +213,19 @@ export class SqliteNovelDraftOperationStore<TContext>
       database
         .prepare(
           `INSERT INTO draft_outbox(
-             event_id, operation_sequence, operation_id, event_type,
-             event_json, event_digest, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             event_id, novel_id, conversation_id, operation_sequence,
+             operation_id, event_type, schema_version, event_json,
+             event_digest, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           outbox.eventId,
+          session.novelId,
+          session.ownerConversationId,
           sequence,
           operation.operationId,
           outbox.eventType,
+          outbox.schemaVersion,
           outbox.eventJson,
           outbox.eventDigest,
           outbox.createdAt,

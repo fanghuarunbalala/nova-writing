@@ -911,6 +911,19 @@ active-leaf progress, and descriptive Story time with optional chronology.
 
 Resolve `OrderKey`, then implement the ordered stable StoryUnit tree.
 
+`OrderKey` foundation delivered:
+
+- the V1 opaque fixed-width hexadecimal digit encoding validates one canonical
+  representation whose native string order is the domain order
+- one fractional factory creates initial, before, after, and between keys
+  without rewriting existing siblings or exposing digit semantics to callers
+- adjacent and prefix-boundary insertion remains dense by extending the key at
+  the next digit depth; invalid ordering and malformed encodings fail through
+  the content-safe Novel protocol boundary
+
+**Status:** `OrderKey` value, comparator, factory, and dense-insertion
+validation completed; StoryOutline and StoryUnit structure are next.
+
 ### N9-B Status and Reasons
 
 Resolve `StoryUnitBlockState` and `StoryUnitAbandonment`, then implement planning, realization, blocking, abandonment, and derived parent progress.

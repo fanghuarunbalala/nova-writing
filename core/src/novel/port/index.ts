@@ -4,6 +4,7 @@ export * from "./NovelDraftStore.js";
 export * from "./NovelDraftOperationStore.js";
 export * from "./NovelDraftChangeSetStore.js";
 export * from "./NovelCommitHistoryStore.js";
+export * from "./NovelCommitStore.js";
 export * from "./NovelEntityRepository.js";
 export * from "./NovelRevisionFactory.js";
 export * from "./NovelSnapshotter.js";

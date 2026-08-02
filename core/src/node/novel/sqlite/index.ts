@@ -8,4 +8,5 @@ export * from "./SqliteNovelCanonicalStore.js";
 export * from "./SqliteNovelDraftStore.js";
 export * from "./SqliteNovelDraftOperationStore.js";
 export * from "./SqliteNovelEntityRepository.js";
+export * from "./SqliteNovelCommitStore.js";
 export * from "./SqliteNovelSnapshotter.js";

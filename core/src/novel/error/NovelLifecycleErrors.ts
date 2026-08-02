@@ -222,6 +222,15 @@ export class NovelCommitHistoryIntegrityError extends Error {
   }
 }
 
+export class NovelCommitIdentityConflictError extends Error {
+  override readonly name = "NovelCommitIdentityConflictError";
+  readonly code = "NOVEL_COMMIT_IDENTITY_CONFLICT" as const;
+
+  constructor(public readonly commitId: NovelCommitId) {
+    super("Novel Commit identity conflict");
+  }
+}
+
 export type NovelOperationPreconditionFailure =
   | "entity_exists"
   | "entity_missing"

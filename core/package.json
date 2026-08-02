@@ -26,6 +26,7 @@
     "smoke:novel-entity": "pnpm build && node scripts/novel-entity-slice-smoke.mjs",
     "smoke:novel-change-set": "pnpm build && node scripts/novel-change-set-smoke.mjs",
     "smoke:novel-commit-history": "pnpm build && node scripts/novel-commit-history-smoke.mjs",
+    "smoke:novel-commit": "pnpm build && node scripts/novel-commit-smoke.mjs",
     "smoke:tool-protocol": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-protocol-typecheck.ts && node scripts/tool-protocol-smoke.mjs",
     "smoke:conversation-protocol": "pnpm build && node scripts/conversation-protocol-smoke.mjs",
     "smoke:conversation-command": "pnpm build && node scripts/conversation-command-integration-smoke.mjs",

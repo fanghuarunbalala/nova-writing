@@ -6,16 +6,20 @@ import {
   LocationService,
   NovelDraftOperationWriter,
   NovelDraftChangeSetBuilder,
+  NovelCommitService,
+  NovelCommitWriter,
   NovelMutationService,
   NovelOperationExecutor,
   NovelOperationRegistry,
   RandomNovelIdentityFactory,
+  RandomNovelRevisionFactory,
   SystemNovelClock,
   registerNovelEntityOperationHandlers,
   type NovelClock,
   type NovelEntityMutationContext,
   type NovelId,
   type NovelIdentityFactory,
+  type NovelRevisionFactory,
 } from "../../../novel/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import {
@@ -23,8 +27,10 @@ import {
   NodeSha256NovelChangeSetDigester,
   SqliteNovelDraftOperationStore,
   SqliteNovelEntityQueryStore,
+  SqliteNovelCommitStore,
   createSqliteNovelEntityMutationContext,
 } from "../sqlite/index.js";
+import { NodeNovelCommitHistoryStore } from "../history/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
 
 export interface NodeNovelEntityApplicationOptions {
@@ -33,6 +39,7 @@ export interface NodeNovelEntityApplicationOptions {
   readonly identityFactory?: NovelIdentityFactory;
   readonly clock?: NovelClock;
   readonly logger?: Logger;
+  readonly revisionFactory?: NovelRevisionFactory;
 }
 
 export interface NodeNovelEntityApplication {
@@ -42,6 +49,7 @@ export interface NodeNovelEntityApplication {
   readonly characterQueries: CharacterQueryService;
   readonly locationQueries: LocationQueryService;
   readonly changeSets: NovelDraftChangeSetBuilder;
+  readonly commits: NovelCommitService<NovelEntityMutationContext>;
 }
 
 export function createNodeNovelEntityApplication(
@@ -64,9 +72,10 @@ export function createNodeNovelEntityApplication(
     logger,
   });
   const operationDigester = new NodeSha256NovelOperationDigester();
+  const executor = new NovelOperationExecutor(registry);
   const writer = new NovelDraftOperationWriter({
     store,
-    executor: new NovelOperationExecutor(registry),
+    executor,
     digester: operationDigester,
     clock,
     logger,
@@ -78,6 +87,28 @@ export function createNodeNovelEntityApplication(
     logger,
   });
 
+  const changeSets = new NovelDraftChangeSetBuilder({
+    store,
+    writer,
+    operationDigester,
+    changeSetDigester: new NodeSha256NovelChangeSetDigester(),
+    clock,
+    logger,
+  });
+  const commitWriter = new NovelCommitWriter({
+    store: new SqliteNovelCommitStore({
+      location: options.location,
+      novelId: options.novelId,
+      contextFactory: createSqliteNovelEntityMutationContext,
+      logger,
+    }),
+    history: new NodeNovelCommitHistoryStore({
+      location: options.location,
+      logger,
+    }),
+    executor,
+    logger,
+  });
   logger.info("novel_entity_application.created", {});
   return Object.freeze({
     mutations,
@@ -95,13 +126,13 @@ export function createNodeNovelEntityApplication(
     }),
     characterQueries: new CharacterQueryService(queryStore),
     locationQueries: new LocationQueryService(queryStore),
-    changeSets: new NovelDraftChangeSetBuilder({
-      store,
-      writer,
-      operationDigester,
-      changeSetDigester: new NodeSha256NovelChangeSetDigester(),
+    changeSets,
+    commits: new NovelCommitService({
+      changeSets,
+      writer: commitWriter,
+      identityFactory,
+      revisionFactory: options.revisionFactory ?? new RandomNovelRevisionFactory(),
       clock,
-      logger,
     }),
   });
 }

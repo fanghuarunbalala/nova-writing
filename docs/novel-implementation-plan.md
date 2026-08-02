@@ -394,6 +394,16 @@ canonicalStringifyJson({
 
 Serialize canonical Commit for one Novel, validate base revision, replay the complete ChangeSet, validate final invariants, insert Commit metadata, increment NovelRevision exactly once, and insert the canonical outbox record in one short SQLite transaction.
 
+Delivered boundaries:
+
+- one asynchronous per-Novel Commit Writer serializes history reconciliation, payload preparation, verification, and canonical SQLite execution
+- the canonical transaction detects exact duplicate Commit identity before revision checks, rejects conflicting identity, and rejects stale base revisions without partial replay
+- the complete frozen ChangeSet is replayed through the registered synchronous Operation Handlers, followed by the injected final invariant validator
+- Commit metadata, NovelRevision, Draft terminal state, and canonical Outbox insertion succeed or roll back together
+- caller-supplied Commit ID, result revision, and committed timestamp support exact idempotent retry
+
+**Status:** completed by the focused canonical Commit Writer commit.
+
 ### N6-C History Payload
 
 The immutable Commit history payload protocol is accepted as follows:

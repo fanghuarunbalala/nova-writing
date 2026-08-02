@@ -107,6 +107,60 @@ interface OrderKeyFactory {
 - References always use stable IDs and never use outline paths or array indexes.
 - Fractional indexing, LexoRank, or another variable-length lexical rank may implement `OrderKey` behind the stable contract.
 
+### 4.3 Agent-Assisted Rolling Outline
+
+**Accepted direction:** the outline is collaboratively created by the human and Agent rather than manually completed by the human before writing begins.
+
+The human contributes imagination, preferences, constraints, and creative judgment. The Agent may propose StoryUnits, decomposition, LeafStoryUnitPlan details, Character and Location bindings, Events, RhythmBeats, and entity changes. Tools validate identifiers, ordering, revisions, and structural invariants before accepted changes become authoritative outline state.
+
+The entire novel does not need to reach `ready` before manuscript writing starts. Planning advances with a rolling horizon:
+
+```text
+Novel direction
+    idea or outlined
+
+Current arc
+    outlined
+
+Next executable leaf StoryUnits
+    ready
+
+Distant future StoryUnits
+    idea
+```
+
+Only the leaf StoryUnit currently selected for manuscript execution must have an accepted plan that satisfies the configured ready policy.
+
+Agent changes first enter an outline proposal rather than directly replacing accepted StoryUnits:
+
+```ts
+type ReviewStatus =
+  | "proposed"
+  | "accepted"
+  | "rejected";
+
+interface OutlineProposal {
+  readonly id: OutlineProposalId;
+  readonly baseRevision: OutlineRevision;
+  readonly operations: readonly OutlineOperation[];
+  readonly reviewStatus: ReviewStatus;
+}
+```
+
+- `baseRevision` prevents an Agent proposal based on stale outline state from overwriting newer decisions.
+- `operations` apply one reviewable outline change set atomically after acceptance.
+- A rejected proposal leaves accepted outline and manuscript state unchanged.
+- Accepted operations advance OutlineRevision and global NovelRevision.
+- Proposal origin and actor identity belong in audit metadata or Novel-domain Events rather than changing the semantics of the resulting StoryUnit.
+- Once accepted, a StoryUnit has the same authority whether its content originated from the human, Agent, or a joint editing process.
+- Conformance validation uses only accepted outline state; proposed changes cannot silently redefine the manuscript specification.
+
+Recommended approval boundary:
+
+- Agents may freely generate proposals, decomposition alternatives, missing-field suggestions, RhythmBeat suggestions, projections, and validation findings.
+- Low-risk, repairable projection or indexing work may be auto-accepted by policy.
+- Adding or removing required Events, changing entity consequences, moving accepted StoryUnits, modifying ready or realized leaf plans, abandoning StoryUnits, and marking realization complete require review under the configured approval policy.
+
 ## 5. StoryUnit Status and Reasons
 
 **Current recommendation:** a Todo-like outline needs status, but planning maturity, manuscript realization, and temporary blocking are separate concerns.
@@ -137,7 +191,7 @@ interface StoryUnit {
 
 Semantics:
 
-- `planningStatus` answers whether the narrative intention is sufficiently defined to write.
+- `planningStatus` answers whether the collaboratively produced narrative intention is sufficiently defined and accepted for writing; it does not identify whether the human or Agent authored the content.
 - `realizationStatus` answers whether that intention has been accepted as realized in manuscript content.
 - `pending` means manuscript realization has not started.
 - `in-progress` means some realization exists or active drafting and revision work has started, but the StoryUnit is not accepted as complete.
@@ -246,7 +300,7 @@ Domain persistence may retain reason notes in these Events. Structured Runtime l
 ```ts
 interface LeafStoryUnitPlan {
   readonly storyUnitId: StoryUnitId;
-  readonly time: StoryTimeDescription;
+  readonly time?: StoryTimeDescription;
   readonly characters: readonly StoryUnitCharacterBinding[];
   readonly locations: readonly StoryUnitLocationBinding[];
   readonly events: readonly StoryEventStep[];
@@ -263,7 +317,15 @@ A leaf plan answers five questions:
 4. What objectively happens, and how should emotional tension rise or fall?
 5. What persistent Character or Location changes must later StoryUnits remember?
 
-If a leaf StoryUnit is decomposed into children, its detailed plan must be migrated, summarized, or archived rather than silently duplicated across parent and child nodes.
+The plan is progressively populated by human and Agent collaboration:
+
+- `idea` may contain only title and intent.
+- `outlined` may contain partial time, bindings, Events, rhythm, and entity changes.
+- `ready` means the accepted leaf plan satisfies a Tool-enforced readiness policy and may be used as the manuscript specification.
+
+RhythmBeats remain optional. Character or Location bindings and entity changes may be empty when the StoryUnit semantics do not require them. The initial ready policy should require at least a usable time description, a coherent primary setting when applicable, and one objective Event, while allowing future policy configuration.
+
+If a leaf StoryUnit is decomposed into children, its detailed plan must be migrated, summarized, or archived through an accepted proposal rather than silently duplicated across parent and child nodes.
 
 ### 6.1 Story Time
 
@@ -474,7 +536,7 @@ Conformance semantics:
 
 A StoryUnit may enter `realizationStatus: completed` only when it has at least one current ManuscriptRange and a `conforming` validation checked against the current OutlineRevision and ManuscriptRevision. Conformance failure keeps the StoryUnit in progress; it does not create an alternate actual-facts table.
 
-If the author changes creative direction while drafting, the outline is explicitly revised and the manuscript is revalidated. The model treats this as a specification change rather than silent manuscript divergence.
+If the human changes creative direction, or accepts an Agent proposal that changes it while drafting, the outline is explicitly revised and the manuscript is revalidated. The model treats this as a specification change rather than silent manuscript divergence.
 
 Deletion and structural edits require reference preservation:
 
@@ -662,3 +724,5 @@ The following decisions remain outside the accepted Runtime implementation plan:
 8. The concrete NovelRevision generation format and whether narrower component revisions are needed after measuring projection rebuild cost.
 9. The exact review-state contract for Tool-proposed Character and Location projections.
 10. The exact conformance validator boundary between deterministic Tool checks, model-assisted analysis, and human acceptance.
+11. The concrete OutlineOperation union, proposal conflict resolution, and which low-risk outline operations may be auto-accepted by policy.
+12. The initial LeafStoryUnit ready policy and whether different Agent definitions may select stricter readiness profiles.

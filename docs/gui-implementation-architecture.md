@@ -1024,6 +1024,12 @@ Projection rules:
 - keep enough context to understand the structural effect;
 - allow unchanged subtrees to collapse.
 
+### 19.6 Implemented Outline Tree Diff Reviewer
+
+The shared UI now validates a normalized `OutlineTreeDiffView` with independent Diff row identity and stable StoryUnit identity. Modified StoryUnits must appear as one `modified-before` / `modified-after` pair bound to the same Change identity; deleted StoryUnits remain visible tombstones; moved StoryUnits require explicit source and target paths and cannot be represented as duplicate delete-and-add rows.
+
+`OutlineChangeReviewer` renders added and after rows in green, deleted and before rows in red, moves in blue, and unchanged context in quiet white. The tree remains collapsible and preserves status, blocking, and derived progress tokens. It performs no ChangeSet query, mutation, selection-to-approval conversion, or partial-commit inference.
+
 ## 20. Outline Review Layout
 
 Outline review requires more width than a normal Inspector.

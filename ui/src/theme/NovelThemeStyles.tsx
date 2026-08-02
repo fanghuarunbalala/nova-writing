@@ -669,6 +669,103 @@ const NOVEL_THEME_CSS = `
   margin: 6px 0;
 }
 
+.novel-outline-diff-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.novel-outline-diff-legend span,
+.novel-outline-diff-status span {
+  border: 1px solid var(--novel-border);
+  border-radius: 999px;
+  padding: 2px 6px;
+  color: var(--novel-text-secondary);
+  background: var(--novel-surface-primary);
+  font-size: 10px;
+}
+
+.novel-outline-diff-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.novel-outline-diff-row {
+  display: flex;
+  gap: 6px;
+  border: 1px solid var(--novel-border);
+  border-radius: 7px;
+  padding: 8px 9px 8px calc(9px + var(--novel-outline-diff-indent));
+  background: var(--novel-surface-primary);
+}
+
+.novel-outline-diff-row[data-diff-kind="added"],
+.novel-outline-diff-row[data-diff-kind="modified-after"] {
+  border-color: #bcd8c3;
+  background: #eff8f1;
+}
+
+.novel-outline-diff-row[data-diff-kind="deleted"],
+.novel-outline-diff-row[data-diff-kind="modified-before"] {
+  border-color: #e2c1c1;
+  background: #fff0f0;
+}
+
+.novel-outline-diff-row[data-diff-kind="deleted"] .novel-outline-diff-main strong {
+  text-decoration: line-through;
+}
+
+.novel-outline-diff-row[data-diff-kind="moved"] {
+  border-color: #bfd0e4;
+  background: #f0f5fb;
+}
+
+.novel-outline-diff-row[data-selected="true"] {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: -2px;
+}
+
+.novel-outline-diff-toggle {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  border: 0;
+  padding: 0;
+  color: var(--novel-text-secondary);
+  background: transparent;
+}
+
+.novel-outline-diff-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.novel-outline-diff-main > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.novel-outline-diff-main > header span {
+  color: var(--novel-text-secondary);
+  font-size: 10px;
+}
+
+.novel-outline-diff-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.novel-outline-move-path {
+  margin: 7px 0 0;
+  color: #55708f;
+  font-size: 11px;
+}
+
 .novel-conversation-view {
   width: min(840px, 100%);
   margin: 0 auto;

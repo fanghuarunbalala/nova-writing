@@ -10,6 +10,17 @@ import {
   type StoryUnitId,
 } from "../../identity/index.js";
 import { captureOrderKey, type OrderKey } from "./OrderKey.js";
+import {
+  STORY_UNIT_REALIZATION_STATUS,
+  captureStoryUnitAbandonment,
+  captureStoryUnitBlockState,
+  captureStoryUnitPlanningStatus,
+  captureStoryUnitRealizationStatus,
+  type StoryUnitAbandonment,
+  type StoryUnitBlockState,
+  type StoryUnitPlanningStatus,
+  type StoryUnitRealizationStatus,
+} from "./StoryUnitStatus.js";
 
 export const STORY_UNIT_SCOPE = {
   saga: "saga",
@@ -31,6 +42,10 @@ export interface StoryUnit {
   readonly intent?: string;
   readonly synopsis?: string;
   readonly scope?: StoryUnitScope;
+  readonly planningStatus: StoryUnitPlanningStatus;
+  readonly realizationStatus: StoryUnitRealizationStatus;
+  readonly blockState?: StoryUnitBlockState;
+  readonly abandonment?: StoryUnitAbandonment;
 }
 
 const STORY_UNIT_KEYS = new Set([
@@ -42,6 +57,10 @@ const STORY_UNIT_KEYS = new Set([
   "intent",
   "synopsis",
   "scope",
+  "planningStatus",
+  "realizationStatus",
+  "blockState",
+  "abandonment",
 ]);
 const STORY_UNIT_SCOPES = new Set<unknown>(Object.values(STORY_UNIT_SCOPE));
 
@@ -60,6 +79,19 @@ export function captureStoryUnit(value: unknown): StoryUnit {
       ? undefined
       : captureStoryUnitId(candidate.parentId);
   const scope = captureScope(candidate.scope);
+  const planningStatus = captureStoryUnitPlanningStatus(candidate.planningStatus);
+  const realizationStatus = captureStoryUnitRealizationStatus(
+    candidate.realizationStatus,
+  );
+  const blockState =
+    candidate.blockState === undefined
+      ? undefined
+      : captureStoryUnitBlockState(candidate.blockState);
+  const abandonment =
+    candidate.abandonment === undefined
+      ? undefined
+      : captureStoryUnitAbandonment(candidate.abandonment);
+  assertCurrentState(realizationStatus, blockState, abandonment);
   return Object.freeze({
     id: captureStoryUnitId(candidate.id),
     outlineId: captureStoryOutlineId(candidate.outlineId),
@@ -69,7 +101,31 @@ export function captureStoryUnit(value: unknown): StoryUnit {
     ...captureOptionalText("intent", candidate.intent, 20_000),
     ...captureOptionalText("synopsis", candidate.synopsis, 50_000),
     ...(scope === undefined ? {} : { scope }),
+    planningStatus,
+    realizationStatus,
+    ...(blockState === undefined ? {} : { blockState }),
+    ...(abandonment === undefined ? {} : { abandonment }),
   });
+}
+
+function assertCurrentState(
+  realizationStatus: StoryUnitRealizationStatus,
+  blockState: StoryUnitBlockState | undefined,
+  abandonment: StoryUnitAbandonment | undefined,
+): void {
+  if (realizationStatus === STORY_UNIT_REALIZATION_STATUS.abandoned) {
+    if (abandonment === undefined || blockState !== undefined) {
+      throw invalidStoryUnit();
+    }
+    return;
+  }
+  if (abandonment !== undefined) throw invalidStoryUnit();
+  if (
+    realizationStatus === STORY_UNIT_REALIZATION_STATUS.completed &&
+    blockState !== undefined
+  ) {
+    throw invalidStoryUnit();
+  }
 }
 
 function captureTitle(value: unknown): string {

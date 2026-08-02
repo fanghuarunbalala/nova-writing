@@ -943,6 +943,24 @@ ordered StoryOutline tree. Task N9-B status and reason contracts are next.
 
 Resolve `StoryUnitBlockState` and `StoryUnitAbandonment`, then implement planning, realization, blocking, abandonment, and derived parent progress.
 
+Status and progress foundation delivered:
+
+- planning maturity and manuscript realization use independent closed status
+  contracts, while direct block state and structured abandonment reasons remain
+  optional current-state records with safe timestamps
+- current-state validation forbids completed Units from remaining blocked,
+  requires abandonment metadata for abandoned Units, and prevents block and
+  abandonment state from coexisting
+- Tree validation resolves dependency and replacement identities, rejects self
+  dependencies, and prevents an abandoned Unit from selecting its own
+  descendant as replacement
+- progress projection excludes effectively abandoned branches, derives
+  composite status from active leaves, and reports direct blocking, ancestor
+  blocking, and blocked-leaf counts separately
+
+**Status:** Task N9-B completed by StoryUnit status/reason contracts and derived
+active-leaf progress projection. Task N9-C Leaf Plan is next.
+
 ### N9-C Leaf Plan
 
 Resolve `StoryTimeDescription`, then implement LeafStoryUnitPlan and readiness validation.

@@ -42,12 +42,16 @@ const rootFirst = captureStoryUnit({
   intent: "Establish the central promise.",
   synopsis: "The protagonist enters the story problem.",
   scope: STORY_UNIT_SCOPE.arc,
+  planningStatus: "outlined",
+  realizationStatus: "pending",
 });
 const rootSecond = captureStoryUnit({
   id: rootSecondId,
   outlineId,
   orderKey: rootSecondKey,
   title: "Escalation arc",
+  planningStatus: "idea",
+  realizationStatus: "pending",
 });
 const childFirst = captureStoryUnit({
   id: childFirstId,
@@ -56,6 +60,8 @@ const childFirst = captureStoryUnit({
   orderKey: childFirstKey,
   title: "First encounter",
   scope: STORY_UNIT_SCOPE.scene,
+  planningStatus: "ready",
+  realizationStatus: "pending",
 });
 const childSecond = captureStoryUnit({
   id: childSecondId,
@@ -64,6 +70,8 @@ const childSecond = captureStoryUnit({
   orderKey: childSecondKey,
   title: "First consequence",
   scope: STORY_UNIT_SCOPE.sequence,
+  planningStatus: "outlined",
+  realizationStatus: "pending",
 });
 assert.equal(Object.isFrozen(rootFirst), true);
 

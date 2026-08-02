@@ -13,6 +13,7 @@ import type {
   NovelCanonicalStore,
   NovelClock,
   NovelDraftStore,
+  NovelRebaseCandidateStore,
   NovelSnapshotter,
 } from "../port/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
@@ -29,6 +30,7 @@ export interface NovelDraftRecoveryServiceOptions {
   readonly canonicalStore: NovelCanonicalStore;
   readonly draftStore: NovelDraftStore;
   readonly snapshotter: NovelSnapshotter;
+  readonly rebaseCandidateStore?: NovelRebaseCandidateStore;
   readonly clock: NovelClock;
   readonly logger?: Logger;
 }
@@ -61,7 +63,14 @@ export class NovelDraftRecoveryService {
     const snapshotIds = await this.options.snapshotter.listDraftSnapshotIds(
       metadata.novelId,
     );
-    const knownSessionIds = new Set(sessions.map((session) => session.id));
+    const candidates =
+      (await this.options.rebaseCandidateStore?.listCandidates(
+        metadata.novelId,
+      )) ?? [];
+    const knownSessionIds = new Set([
+      ...sessions.map((session) => session.id),
+      ...candidates.map((candidate) => candidate.session.id),
+    ]);
     const recovered = [];
     const rolledBack = [];
     const removedOrphans = [];
@@ -110,8 +119,40 @@ export class NovelDraftRecoveryService {
       recovered.push(session.id);
     }
 
+    for (const candidate of candidates) {
+      const snapshot = await this.options.snapshotter
+        .inspectDraftSnapshot(candidate.session.novelId, candidate.session.id)
+        .catch(() => undefined);
+      if (
+        snapshot?.kind === "rebase-candidate" &&
+        snapshot.sourceDraftSessionId === candidate.sourceDraftSessionId &&
+        snapshot.ownerConversationId ===
+          candidate.session.ownerConversationId &&
+        snapshot.baseRevision === candidate.session.baseRevision
+      ) {
+        continue;
+      }
+      await this.options.rebaseCandidateStore?.removeCandidate(
+        candidate.session.novelId,
+        candidate.session.id,
+      );
+      await this.options.snapshotter.removeDraftSnapshot(
+        candidate.session.novelId,
+        candidate.session.id,
+      );
+    }
+
     for (const snapshotId of snapshotIds) {
       if (knownSessionIds.has(snapshotId)) continue;
+      const snapshot = await this.options.snapshotter
+        .inspectDraftSnapshot(metadata.novelId, snapshotId)
+        .catch(() => undefined);
+      if (
+        snapshot?.kind === "rebase-candidate" &&
+        this.options.rebaseCandidateStore === undefined
+      ) {
+        continue;
+      }
       await this.options.snapshotter.removeDraftSnapshot(
         metadata.novelId,
         snapshotId,

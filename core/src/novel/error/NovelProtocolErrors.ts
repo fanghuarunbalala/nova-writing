@@ -11,6 +11,7 @@ export const NOVEL_PROTOCOL_FAILURE = {
   invalidOperationDigest: "invalid_operation_digest",
   invalidChangeSetDigest: "invalid_change_set_digest",
   invalidCommitPayload: "invalid_commit_payload",
+  invalidRebaseCandidate: "invalid_rebase_candidate",
 } as const;
 
 export type NovelProtocolFailure =
@@ -41,6 +42,9 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "characterId",
   "locationId",
   "entityProfile",
+  "rebaseCandidate",
+  "operationCount",
+  "lastOperationSequence",
 ]);
 
 export class NovelProtocolValidationError extends Error {

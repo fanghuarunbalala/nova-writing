@@ -815,6 +815,34 @@ Rebase creates a new working copy from the latest canonical revision and replays
 - Rebase must not mutate the original Draft in place; failure or process interruption leaves recoverable source state.
 - Rebase changes the effective ChangeSet digest. Any Approval granted before Rebase becomes stale even when Rebase finds no semantic conflict.
 
+The SQLite snapshot and publication protocol used by both `startDraft()` and
+Rebase is accepted as follows:
+
+- A snapshot is created with the SQLite Backup API from a read-only canonical
+  connection. Copying `novel.sqlite`, `-wal`, and `-shm` files directly is
+  forbidden.
+- The target is first assembled in a recognized same-parent temporary
+  directory. Its database is migrated to the Draft schema and validated for
+  integrity, Novel identity, Draft identity, owner identity, and exact base
+  revision before publication.
+- The database file, manifest, temporary directory, and parent directory are
+  synced in that order where the host filesystem exposes directory fsync.
+- Publication is one atomic rename from the temporary sibling directory to the
+  final Draft directory. An existing final identity is never overwritten.
+- Startup reconciliation removes only recognized incomplete snapshot
+  directories. Unknown files and directories are preserved for diagnosis.
+- A Rebase candidate has a new Draft Session identity and an explicit source
+  Draft identity. It is stored as a sibling snapshot and as a separate
+  canonical Rebase Candidate record; it does not become a second active
+  Conversation Draft merely by being prepared.
+- The source Draft remains byte-for-byte and lifecycle-state unchanged while
+  the candidate is prepared. The candidate becomes durable only after all
+  source Operations have replayed in original order with their original
+  preconditions and digests.
+- Failure before candidate registration removes the incomplete candidate and
+  leaves the source Draft recoverable. Semantic precondition failures are not
+  converted into overwrites; Task N7-B records them as `NovelConflict` values.
+
 ### 10.6 Conflict Model and Resolution
 
 ```ts
@@ -1605,7 +1633,6 @@ The following decisions remain outside the accepted Runtime implementation plan:
 11. The concrete OutlineOperation union, the mapping of each Operation to the general precondition and NovelConflict protocol, and which low-risk outline operations may be auto-accepted by policy.
 12. The initial LeafStoryUnit ready policy and whether different Agent definitions may select stricter readiness profiles.
 13. The contextual Character and Location readiness policies for different involvement roles and which missing stable details should block a leaf StoryUnit from reaching `ready`.
-14. The concrete SQLite snapshot mechanism used by `startDraft()` and Rebase, including WAL-aware backup, validation, and crash recovery.
-15. The Artifact preparation protocol and recovery behavior for an interrupted canonical Commit; the Draft Operation digest encoding and atomic Draft Journal behavior are resolved by Task N4.
-16. Draft staging retention limits, terminal-session cleanup timing, and whether selected committed or rolled-back Drafts may be retained for diagnostics without becoming authoritative history.
-17. The Agent-facing Tool grouping and per-Model or View-oriented read, overwrite-write, and delete schemas; Section 12 intentionally defines only the application boundary those Tools must call.
+14. The Artifact preparation protocol and recovery behavior for an interrupted canonical Commit; the Draft Operation digest encoding and atomic Draft Journal behavior are resolved by Task N4.
+15. Draft staging retention limits, terminal-session cleanup timing, and whether selected committed or rolled-back Drafts may be retained for diagnostics without becoming authoritative history.
+16. The Agent-facing Tool grouping and per-Model or View-oriented read, overwrite-write, and delete schemas; Section 12 intentionally defines only the application boundary those Tools must call.

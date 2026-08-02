@@ -105,6 +105,28 @@ const NOVEL_MIGRATIONS: readonly NovelSqliteMigration[] = [
     name: "character_location_profiles",
     sql: NOVEL_ENTITY_SCHEMA_SQL,
   },
+  {
+    version: 3,
+    name: "rebase_candidates",
+    sql: `
+      CREATE TABLE novel_rebase_candidates (
+        candidate_draft_session_id TEXT PRIMARY KEY,
+        novel_id TEXT NOT NULL,
+        source_draft_session_id TEXT NOT NULL UNIQUE,
+        owner_conversation_id TEXT NOT NULL,
+        source_base_revision TEXT NOT NULL,
+        candidate_base_revision TEXT NOT NULL,
+        operation_count INTEGER NOT NULL CHECK (operation_count >= 0),
+        last_operation_sequence INTEGER NOT NULL CHECK (last_operation_sequence >= 0),
+        prepared_at TEXT NOT NULL,
+        FOREIGN KEY (novel_id) REFERENCES novel_metadata(novel_id),
+        FOREIGN KEY (source_draft_session_id) REFERENCES novel_draft_sessions(id)
+      ) STRICT;
+
+      CREATE INDEX novel_rebase_candidates_prepared_idx
+      ON novel_rebase_candidates(novel_id, prepared_at, candidate_draft_session_id);
+    `,
+  },
 ];
 
 export const LATEST_NOVEL_SCHEMA_VERSION: NovelSchemaVersion =

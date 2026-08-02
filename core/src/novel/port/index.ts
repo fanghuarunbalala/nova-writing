@@ -7,4 +7,5 @@ export * from "./NovelCommitHistoryStore.js";
 export * from "./NovelCommitStore.js";
 export * from "./NovelEntityRepository.js";
 export * from "./NovelRevisionFactory.js";
+export * from "./NovelRebaseCandidateStore.js";
 export * from "./NovelSnapshotter.js";

@@ -177,9 +177,9 @@ try {
   assert.equal(metadata.novelId, "novel_canonical_smoke");
   assert.equal(metadata.workspaceId, workspace.workspaceId);
   assert.equal(metadata.schemaVersion, LATEST_NOVEL_SCHEMA_VERSION);
-  assert.equal(metadata.schemaVersion, 2);
+  assert.equal(metadata.schemaVersion, 3);
   assert.equal(metadata.currentRevision, "revision_canonical_smoke");
-  assert.equal(metadata.createdAt, "2026-08-02T00:00:00.002Z");
+  assert.equal(metadata.createdAt, "2026-08-02T00:00:00.003Z");
   assert.equal(metadata.updatedAt, metadata.createdAt);
   assert.deepEqual(inspectControlTables(location.canonicalDatabasePath), [
     "novel_characters",
@@ -188,6 +188,7 @@ try {
     "novel_locations",
     "novel_metadata",
     "novel_outbox",
+    "novel_rebase_candidates",
     "novel_schema_migrations",
   ]);
 

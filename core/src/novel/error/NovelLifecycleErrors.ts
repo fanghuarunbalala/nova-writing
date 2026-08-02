@@ -113,6 +113,31 @@ export class NovelRevisionConflictError extends Error {
   }
 }
 
+export class NovelRebaseNotRequiredError extends Error {
+  override readonly name = "NovelRebaseNotRequiredError";
+  readonly code = "NOVEL_REBASE_NOT_REQUIRED" as const;
+
+  constructor(
+    public readonly novelId: NovelId,
+    public readonly draftSessionId: NovelDraftSessionId,
+    public readonly currentRevision: NovelRevision,
+  ) {
+    super("Novel Draft already uses the current revision");
+  }
+}
+
+export class NovelRebaseCandidateIdentityConflictError extends Error {
+  override readonly name = "NovelRebaseCandidateIdentityConflictError";
+  readonly code = "NOVEL_REBASE_CANDIDATE_IDENTITY_CONFLICT" as const;
+
+  constructor(
+    public readonly sourceDraftSessionId: NovelDraftSessionId,
+    public readonly candidateDraftSessionId: NovelDraftSessionId,
+  ) {
+    super("Novel Rebase candidate identity conflict");
+  }
+}
+
 export class NovelInvariantViolationError extends Error {
   override readonly name = "NovelInvariantViolationError";
   readonly code = "NOVEL_INVARIANT_VIOLATED" as const;

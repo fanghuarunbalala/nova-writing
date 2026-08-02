@@ -2,12 +2,14 @@
 import {
   access,
   mkdir,
+  open,
   readFile,
   readdir,
   rename,
   rm,
   writeFile,
 } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import {
@@ -18,11 +20,13 @@ import {
   captureNovelDraftSessionId,
   captureNovelId,
   captureNovelRevision,
+  captureNovelTimestamp,
   type NovelDraftSession,
   type NovelDraftSessionId,
   type NovelDraftSnapshot,
   type NovelId,
   type ReplaceNovelDraftSnapshotInput,
+  type CreateNovelRebaseCandidateSnapshotInput,
   type NovelSnapshotter,
 } from "../../../novel/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
@@ -37,10 +41,12 @@ const SNAPSHOT_MANIFEST_SCHEMA_VERSION = 1 as const;
 
 interface SnapshotManifest {
   readonly schemaVersion: typeof SNAPSHOT_MANIFEST_SCHEMA_VERSION;
+  readonly kind: "draft" | "rebase-candidate";
   readonly draftSessionId: NovelDraftSessionId;
   readonly novelId: NovelId;
   readonly ownerConversationId: string;
   readonly baseRevision: string;
+  readonly sourceDraftSessionId?: NovelDraftSessionId;
   readonly replacedBaseRevision?: string;
 }
 
@@ -65,36 +71,82 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
 
   async createDraftSnapshot(session: NovelDraftSession): Promise<void> {
     const captured = captureNovelDraftSession(session);
-    this.assertNovelIdentity(captured.novelId);
-    const paths = this.paths(captured.ownerConversationId, captured.id);
-    this.logger.info("novel_snapshot.create.started", {
-      novelId: captured.novelId,
-      draftSessionId: captured.id,
-      ownerConversationId: captured.ownerConversationId,
-    });
-    try {
-      await mkdir(paths.ownerDir, { recursive: true });
-      await mkdir(paths.draftDir);
-    } catch {
+    await this.createSnapshot(captured, "draft");
+  }
+
+  async createRebaseCandidateSnapshot(
+    input: CreateNovelRebaseCandidateSnapshotInput,
+  ): Promise<void> {
+    const captured = captureNovelDraftSession(input.session);
+    const sourceDraftSessionId = captureNovelDraftSessionId(
+      input.sourceDraftSessionId,
+    );
+    if (captured.id === sourceDraftSessionId) {
       throw new NovelSnapshotError(
-        NOVEL_SNAPSHOT_FAILURE.alreadyExists,
+        NOVEL_SNAPSHOT_FAILURE.invalid,
         captured.novelId,
         captured.id,
       );
     }
+    await this.createSnapshot(
+      captured,
+      "rebase-candidate",
+      sourceDraftSessionId,
+    );
+  }
+
+  private async createSnapshot(
+    captured: NovelDraftSession,
+    kind: SnapshotManifest["kind"],
+    sourceDraftSessionId?: NovelDraftSessionId,
+  ): Promise<void> {
+    this.assertNovelIdentity(captured.novelId);
+    const paths = this.paths(captured.ownerConversationId, captured.id);
+    const temporaryPaths = this.temporaryPaths(paths, captured.id);
+    this.logger.info("novel_snapshot.create.started", {
+      novelId: captured.novelId,
+      draftSessionId: captured.id,
+      ownerConversationId: captured.ownerConversationId,
+      snapshotKind: kind,
+    });
     try {
-      await mkdir(paths.artifactDir);
-      await this.backupCanonical(captured, paths.databasePath);
-      await this.writeManifest(paths, captured);
+      await mkdir(paths.ownerDir, { recursive: true });
+      if (await exists(paths.draftDir)) {
+        throw new NovelSnapshotError(
+          NOVEL_SNAPSHOT_FAILURE.alreadyExists,
+          captured.novelId,
+          captured.id,
+        );
+      }
+      await mkdir(temporaryPaths.draftDir);
+      await mkdir(temporaryPaths.artifactDir);
+      await this.backupCanonical(captured, temporaryPaths.databasePath);
+      await this.writeManifest(
+        temporaryPaths,
+        captured,
+        undefined,
+        kind,
+        sourceDraftSessionId,
+      );
+      await syncFile(temporaryPaths.databasePath);
+      await syncDirectory(temporaryPaths.draftDir);
+      assertSnapshotDatabase(
+        temporaryPaths.databasePath,
+        captured,
+      );
+      await rename(temporaryPaths.draftDir, paths.draftDir);
+      await syncDirectory(paths.ownerDir);
       this.logger.info("novel_snapshot.create.completed", {
         novelId: captured.novelId,
         draftSessionId: captured.id,
         ownerConversationId: captured.ownerConversationId,
+        snapshotKind: kind,
       });
-    } catch {
-      await rm(paths.draftDir, { recursive: true, force: true }).catch(
+    } catch (error) {
+      await rm(temporaryPaths.draftDir, { recursive: true, force: true }).catch(
         () => undefined,
       );
+      if (error instanceof NovelSnapshotError) throw error;
       throw new NovelSnapshotError(
         NOVEL_SNAPSHOT_FAILURE.createFailed,
         captured.novelId,
@@ -169,16 +221,26 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
       ) {
         throw new Error();
       }
-      assertSnapshotDatabase(
-        discovered.databasePath,
-        manifest.novelId,
-        captureNovelRevision(manifest.baseRevision),
-      );
+      const snapshotSession = captureNovelDraftSession({
+        id: manifest.draftSessionId,
+        novelId: manifest.novelId,
+        ownerConversationId: manifest.ownerConversationId,
+        baseRevision: captureNovelRevision(manifest.baseRevision),
+        status:
+          manifest.kind === "rebase-candidate" ? "rebasing" : "active",
+        createdAt: readDraftTimestamp(discovered.databasePath, "created_at"),
+        updatedAt: readDraftTimestamp(discovered.databasePath, "updated_at"),
+      });
+      assertSnapshotDatabase(discovered.databasePath, snapshotSession);
       return Object.freeze({
+        kind: manifest.kind,
         draftSessionId: manifest.draftSessionId,
         novelId: manifest.novelId,
         ownerConversationId: manifest.ownerConversationId,
         baseRevision: captureNovelRevision(manifest.baseRevision),
+        ...(manifest.sourceDraftSessionId === undefined
+          ? {}
+          : { sourceDraftSessionId: manifest.sourceDraftSessionId }),
         ...(manifest.replacedBaseRevision === undefined
           ? {}
           : {
@@ -204,12 +266,22 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
     const ids = new Set<NovelDraftSessionId>();
     for (const ownerEntry of await readDirectories(this.options.location.stagingDir)) {
       const ownerDir = join(this.options.location.stagingDir, ownerEntry.name);
+      let removedTemporary = false;
       for (const draftEntry of await readDirectories(ownerDir)) {
+        if (isSnapshotTemporaryDirectory(draftEntry.name)) {
+          await rm(join(ownerDir, draftEntry.name), {
+            recursive: true,
+            force: true,
+          });
+          removedTemporary = true;
+          continue;
+        }
         try {
           const id = captureNovelDraftSessionId(draftEntry.name);
           ids.add(id);
         } catch {}
       }
+      if (removedTemporary) await syncDirectory(ownerDir);
     }
     return Object.freeze([...ids].sort());
   }
@@ -253,21 +325,36 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
     } finally {
       source.close();
     }
-    assertSnapshotDatabase(targetPath, session.novelId, session.baseRevision);
+    assertCanonicalSnapshotDatabase(
+      targetPath,
+      session.novelId,
+      session.baseRevision,
+    );
     initializeNovelDraftSqliteSchema(targetPath, session);
+    assertSnapshotDatabase(targetPath, session);
   }
 
   private async writeManifest(
     paths: SnapshotPaths,
     session: NovelDraftSession,
     replacedBaseRevision?: string,
+    kind: SnapshotManifest["kind"] = "draft",
+    sourceDraftSessionId?: NovelDraftSessionId,
   ): Promise<void> {
     const manifest: SnapshotManifest = Object.freeze({
       schemaVersion: SNAPSHOT_MANIFEST_SCHEMA_VERSION,
+      kind,
       draftSessionId: session.id,
       novelId: session.novelId,
       ownerConversationId: session.ownerConversationId,
       baseRevision: session.baseRevision,
+      ...(sourceDraftSessionId === undefined
+        ? {}
+        : {
+            sourceDraftSessionId: captureNovelDraftSessionId(
+              sourceDraftSessionId,
+            ),
+          }),
       ...(replacedBaseRevision === undefined
         ? {}
         : { replacedBaseRevision: captureNovelRevision(replacedBaseRevision) }),
@@ -284,6 +371,7 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
       );
     });
     await rename(paths.manifestTemporaryPath, paths.manifestPath);
+    await syncFile(paths.manifestPath);
   }
 
   private async findDraftDirectory(
@@ -319,6 +407,27 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
     return {
       ownerConversationId,
       ownerDir,
+      draftDir,
+      databasePath: join(draftDir, "draft.sqlite"),
+      nextDatabasePath: join(draftDir, "draft.next.sqlite"),
+      previousDatabasePath: join(draftDir, "draft.previous.sqlite"),
+      manifestPath: join(draftDir, "manifest.json"),
+      manifestTemporaryPath: join(draftDir, "manifest.json.next"),
+      artifactDir: join(draftDir, "artifacts"),
+    };
+  }
+
+  private temporaryPaths(
+    paths: SnapshotPaths,
+    draftSessionId: NovelDraftSessionId,
+  ): SnapshotPaths {
+    const draftDir = join(
+      paths.ownerDir,
+      `.${captureNovelDraftSessionId(draftSessionId)}.${randomUUID()}.snapshot-tmp`,
+    );
+    return {
+      ownerConversationId: paths.ownerConversationId,
+      ownerDir: paths.ownerDir,
       draftDir,
       databasePath: join(draftDir, "draft.sqlite"),
       nextDatabasePath: join(draftDir, "draft.next.sqlite"),
@@ -379,6 +488,45 @@ function assertSnapshotSource(
 
 function assertSnapshotDatabase(
   path: string,
+  session: NovelDraftSession,
+): void {
+  const database = new DatabaseSync(path, { readOnly: true });
+  try {
+    assertSnapshotSource(database, session.novelId, session.baseRevision);
+    const draft = database
+      .prepare(
+        `SELECT draft_session_id, novel_id, owner_conversation_id,
+                base_revision
+         FROM draft_metadata WHERE singleton = 1`,
+      )
+      .get() as
+      | {
+          draft_session_id: string;
+          novel_id: string;
+          owner_conversation_id: string;
+          base_revision: string;
+        }
+      | undefined;
+    if (
+      draft === undefined ||
+      draft.draft_session_id !== session.id ||
+      draft.novel_id !== session.novelId ||
+      draft.owner_conversation_id !== session.ownerConversationId ||
+      draft.base_revision !== session.baseRevision
+    ) {
+      throw new Error();
+    }
+    const integrity = database.prepare("PRAGMA integrity_check").get() as
+      | { integrity_check?: unknown }
+      | undefined;
+    if (integrity?.integrity_check !== "ok") throw new Error();
+  } finally {
+    database.close();
+  }
+}
+
+function assertCanonicalSnapshotDatabase(
+  path: string,
   novelId: NovelId,
   revision: string,
 ): void {
@@ -397,12 +545,33 @@ function assertSnapshotDatabase(
 async function readManifest(path: string): Promise<SnapshotManifest> {
   const value = JSON.parse(await readFile(path, "utf8")) as Partial<SnapshotManifest>;
   if (value.schemaVersion !== SNAPSHOT_MANIFEST_SCHEMA_VERSION) throw new Error();
+  const kind =
+    value.kind === undefined
+      ? "draft"
+      : value.kind === "draft" || value.kind === "rebase-candidate"
+        ? value.kind
+        : undefined;
+  if (
+    kind === undefined ||
+    (kind === "draft" && value.sourceDraftSessionId !== undefined) ||
+    (kind === "rebase-candidate" && value.sourceDraftSessionId === undefined)
+  ) {
+    throw new Error();
+  }
   return Object.freeze({
     schemaVersion: SNAPSHOT_MANIFEST_SCHEMA_VERSION,
+    kind,
     draftSessionId: captureNovelDraftSessionId(value.draftSessionId),
     novelId: captureNovelId(value.novelId),
     ownerConversationId: captureNovelConversationId(value.ownerConversationId),
     baseRevision: captureNovelRevision(value.baseRevision),
+    ...(value.sourceDraftSessionId === undefined
+      ? {}
+      : {
+          sourceDraftSessionId: captureNovelDraftSessionId(
+            value.sourceDraftSessionId,
+          ),
+        }),
     ...(value.replacedBaseRevision === undefined
       ? {}
       : {
@@ -411,6 +580,46 @@ async function readManifest(path: string): Promise<SnapshotManifest> {
           ),
         }),
   });
+}
+
+function readDraftTimestamp(
+  path: string,
+  column: "created_at" | "updated_at",
+) {
+  const database = new DatabaseSync(path, { readOnly: true });
+  try {
+    const row = database
+      .prepare(`SELECT ${column} AS value FROM draft_metadata WHERE singleton = 1`)
+      .get() as { value: string } | undefined;
+    if (row === undefined) throw new Error();
+    return captureNovelTimestamp(row.value);
+  } finally {
+    database.close();
+  }
+}
+
+function isSnapshotTemporaryDirectory(name: string): boolean {
+  return /^\.[A-Za-z0-9][A-Za-z0-9._:-]{0,159}\.[0-9a-f-]{36}\.snapshot-tmp$/u.test(
+    name,
+  );
+}
+
+async function syncFile(path: string): Promise<void> {
+  const handle = await open(path, "r");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function syncDirectory(path: string): Promise<void> {
+  const handle = await open(path, "r");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
 }
 
 async function readDirectories(path: string) {

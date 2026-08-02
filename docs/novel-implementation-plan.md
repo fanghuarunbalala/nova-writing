@@ -470,6 +470,26 @@ Delivered validation and recovery:
 
 Preserve the stale source Draft, snapshot the latest canonical revision into a sibling candidate, and replay source Operations with their original preconditions.
 
+Delivered boundaries:
+
+- canonical-to-Draft snapshots use the SQLite Backup API and are assembled in
+  recognized same-parent temporary directories before atomic publication
+- snapshot validation binds Novel, Draft, owner, exact base revision, Draft
+  metadata, and SQLite integrity without copying WAL sidecar files
+- a prepared Rebase Candidate has its own Draft identity and canonical registry
+  record while the source Draft record, snapshot, status, and Operation Journal
+  remain unchanged
+- source Operations and their digests are verified, replayed in original order,
+  and applied with their original preconditions against the latest canonical
+  projection
+- precondition failure never forces an overwrite and removes the incomplete
+  candidate until N7-B can persist a conflict protocol
+- startup Draft recovery preserves registered candidates, removes unregistered
+  recognized candidates when the candidate registry is available, and cleans
+  recognized interrupted snapshot directories while preserving unknown files
+
+**Status:** completed by the focused Rebase Candidate commit.
+
 ### N7-B Conflict Protocol
 
 Implement the accepted conflict kinds and safe digest-based conflict snapshots without logging Novel content.
@@ -599,5 +619,8 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
 - Task N2 is completed by the focused canonical Novel Store commit.
 - Task N3 is completed by the focused durable Draft Session commit.
 - Task N4 is completed by the focused Domain Operation Engine commit.
-- Task N5 is the next implementation task.
+- Task N5 is completed by the focused Character and Location vertical-slice commit.
+- Task N6 is completed by the ChangeSet, Commit payload, canonical Commit Writer, and recovery commits.
+- Task N7-A is completed by the focused Rebase Candidate commit.
+- Task N7-B Conflict Protocol is the next implementation step.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

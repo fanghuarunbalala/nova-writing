@@ -17,7 +17,8 @@ export interface RuntimeInputLanePolicy {
 export class CoreRuntimeInputLanePolicy implements RuntimeInputLanePolicy {
   resolve(event: PersistedInputEventSnapshot): RuntimeInputLane {
     return event.eventType === INPUT_EVENT_TYPE.systemStop ||
-      event.eventType === INPUT_EVENT_TYPE.reloadConfig
+      event.eventType === INPUT_EVENT_TYPE.reloadConfig ||
+      event.eventType === INPUT_EVENT_TYPE.approvalDecision
       ? RUNTIME_INPUT_LANE.control
       : RUNTIME_INPUT_LANE.turn;
   }

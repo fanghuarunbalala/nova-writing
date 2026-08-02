@@ -1,3 +1,4 @@
+export * from "./ApprovalDecisionPayload.js";
 export * from "./ClearContextPayload.js";
 export * from "./CompactContextPayload.js";
 export * from "./EventPayload.js";

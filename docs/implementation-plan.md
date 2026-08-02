@@ -2542,6 +2542,15 @@ Task 5B-B delivered:
 - exact one-shot approval grants bound to the accepted approval identity and argument digest
 - decision traces containing only deterministic rule IDs and no Tool arguments or policy contents
 
+Task 5B-C delivered:
+
+- `ApprovalDecisionInputEvent` with request ID, decision, and argument digest only; approving actor identity is excluded from the payload
+- redacted `ToolApprovalRequestedOutputEvent` and `ToolApprovalResolvedOutputEvent` lifecycle facts
+- command-lane routing for Approval decisions so they can resolve a waiting Tool without joining the normal Turn queue
+- a serialized `InMemoryInteractionCoordinator` supporting concurrent pending requests, first-valid-decision wins, idempotent duplicate decisions, cancellation, explicit expiry, snapshots, and restoration
+- a trusted command-metadata boundary for approval actor identity and a Journal Event projector for restart recovery
+- persistence barriers that publish requested and resolved Events before the Tool caller observes the corresponding state transition
+
 Expected deliverables after approval:
 
 - Tool execution facade and middleware pipeline

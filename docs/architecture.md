@@ -5180,6 +5180,12 @@ sequenceDiagram
 - restoration after restart
 - first-valid-decision wins
 
+The initial implementation uses `ApprovalDecisionInputEvent` as a command-lane Input. Its payload contains only `approvalRequestId`, `decision`, and `argumentDigest`; an actor field is rejected by the Event schema. The Runtime supplies `ToolApprovalTrustedCommandMetadata` from its trusted command or transport boundary when resolving the Input.
+
+`ToolApprovalRequestedOutputEvent` exposes the exact Tool/approval identity, expiry, argument digest, and a bounded Tool-defined redacted title/description. `ToolApprovalResolvedOutputEvent` records the terminal decision and trusted actor ID when applicable. Both are persisted before the waiting Tool pipeline advances.
+
+`InMemoryInteractionCoordinator` serializes state transitions while allowing multiple requests to remain pending concurrently. A mismatched digest or Conversation/Run identity does not consume the request. The first valid approved or rejected command wins; later commands are idempotent duplicates. Internal cancellation and explicit expiry use the same terminal Event path. Coordinator snapshots and `projectToolApprovalInteractionSnapshot` rebuild pending and resolved metadata from Journal OutputEvents without reconstructing Tool arguments.
+
 Possible future Interaction types include user choice, clarification, and conflict resolution. Only Tool Approval is part of the initial implementation scope.
 
 ## 23. Normal Agent Execution Flow

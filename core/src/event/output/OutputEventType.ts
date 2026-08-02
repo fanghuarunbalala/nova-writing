@@ -17,6 +17,8 @@ export const OUTPUT_EVENT_TYPE = {
   contextCompactionCompleted: "system.context.compaction.completed",
   contextCompactionFailed: "system.context.compaction.failed",
   contextCheckpointApplied: "system.context.checkpoint.applied",
+  toolApprovalRequested: "system.tool.approval.requested",
+  toolApprovalResolved: "system.tool.approval.resolved",
 } as const;
 
 export type CoreOutputEventType =

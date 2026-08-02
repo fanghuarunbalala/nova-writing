@@ -30,6 +30,8 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "system.context.compaction.completed",
   "system.context.compaction.failed",
   "system.context.checkpoint.applied",
+  "system.tool.approval.requested",
+  "system.tool.approval.resolved",
 ]);
 
 const previous = {

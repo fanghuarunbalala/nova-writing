@@ -7,3 +7,4 @@ export * from "./NudgeLifecyclePayloads.js";
 export * from "./ContextCompactionLifecyclePayloads.js";
 export * from "./RuntimePresenceChangedPayload.js";
 export * from "./RuntimeInputProcessedPayload.js";
+export * from "./ToolApprovalLifecyclePayloads.js";

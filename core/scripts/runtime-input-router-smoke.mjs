@@ -44,6 +44,11 @@ const context2 = input(2, "context.clear", 400, {});
 const reload3 = input(3, "command.config.reload", 900, {});
 const stop4 = input(4, "system.stop", 1000, {});
 const user5 = input(5, "user.message", 500, { text: "later" });
+const approval6 = input(6, "command.tool.approval.decision", 900, {
+  approvalRequestId: "approval-router-6",
+  decision: "approved",
+  argumentDigest: `sha256:${"a".repeat(64)}`,
+});
 
 assert.equal(router.route(user1).lane, "turn");
 user1.payload.text = "mutated";
@@ -51,10 +56,13 @@ assert.equal(router.route(context2).lane, "turn");
 assert.equal(router.route(reload3).lane, "control");
 assert.equal(router.route(stop4).lane, "control");
 assert.equal(router.route(user5).lane, "turn");
+assert.equal(router.route(approval6).lane, "control");
 assert.equal(router.peekNext().sequence, 4);
 assert.equal(router.dequeueNext().sequence, 4);
 assert.equal(router.peekNext().sequence, 3);
 assert.equal(router.dequeueNext().sequence, 3);
+assert.equal(router.peekNext().sequence, 6);
+assert.equal(router.dequeueNext().sequence, 6);
 assert.equal(router.peekNext().sequence, 1);
 
 const cancelled = router.applyStopFence(4);

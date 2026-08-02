@@ -26,6 +26,18 @@ export const ReloadConfigPayloadSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ApprovalDecisionPayloadSchema = Type.Object(
+  {
+    approvalRequestId: Type.String({ minLength: 1, maxLength: 256 }),
+    decision: Type.Union([
+      Type.Literal("approved"),
+      Type.Literal("rejected"),
+    ]),
+    argumentDigest: Type.String({ pattern: "^sha256:[a-f0-9]{64}$" }),
+  },
+  { additionalProperties: false },
+);
+
 export function registerCoreInputEventSchemas(registry: EventSchemaRegistry): void {
   registry.register({
     kind: "input",
@@ -65,5 +77,13 @@ export function registerCoreInputEventSchemas(registry: EventSchemaRegistry): vo
     schemaVersion: EVENT_SCHEMA_VERSION,
     priority: INPUT_PRIORITY.context,
     payloadSchema: EmptyInputPayloadSchema,
+  });
+
+  registry.register({
+    kind: "input",
+    eventType: INPUT_EVENT_TYPE.approvalDecision,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    priority: INPUT_PRIORITY.command,
+    payloadSchema: ApprovalDecisionPayloadSchema,
   });
 }

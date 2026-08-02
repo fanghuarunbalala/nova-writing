@@ -36,6 +36,8 @@
     "smoke:tool-registry-integration": "pnpm build && node scripts/tool-registry-integration-smoke.mjs",
     "smoke:tool-execution-protocol": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-execution-protocol-typecheck.ts && node scripts/tool-execution-protocol-smoke.mjs",
     "smoke:tool-permission-policy": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-permission-policy-typecheck.ts && node scripts/tool-permission-policy-smoke.mjs",
+    "smoke:tool-approval-events": "pnpm build && node scripts/tool-approval-events-smoke.mjs",
+    "smoke:tool-interaction-coordinator": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-interaction-coordinator-typecheck.ts && node scripts/tool-interaction-coordinator-smoke.mjs",
     "smoke:conversation-protocol": "pnpm build && node scripts/conversation-protocol-smoke.mjs",
     "smoke:conversation-command": "pnpm build && node scripts/conversation-command-integration-smoke.mjs",
     "smoke:conversation-host-protocol": "pnpm build && node scripts/conversation-host-protocol-smoke.mjs",

@@ -1,3 +1,4 @@
+export * from "./ApprovalDecisionInputEvent.js";
 export * from "./CommandInputEvent.js";
 export * from "./CompactContextInputEvent.js";
 export * from "./ClearContextInputEvent.js";

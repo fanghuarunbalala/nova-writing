@@ -326,6 +326,32 @@ export const ContextCompactionCompletedPayloadSchema = Type.Object({ providerCal
 export const ContextCompactionFailedPayloadSchema = Type.Object({ providerCallId: Type.String({ minLength: 1 }), failure: Type.String({ minLength: 1 }), tokenEstimateBefore: Type.Optional(Type.Integer({ minimum: 0 })), tokenEstimateAfter: Type.Optional(Type.Integer({ minimum: 0 })), sourceStartSequence: Type.Optional(Type.Integer({ minimum: 0 })), sourceEndSequence: Type.Optional(Type.Integer({ minimum: 0 })) }, { additionalProperties: false });
 export const ContextCheckpointAppliedPayloadSchema = Type.Object({ providerCallId: Type.String({ minLength: 1 }), checkpointId: Type.String({ minLength: 1 }) }, { additionalProperties: false });
 
+const ToolApprovalIdentityProperties = {
+  approvalRequestId: Type.String({ minLength: 1, maxLength: 256 }),
+  toolCallId: Type.String({ minLength: 1, maxLength: 256 }),
+  toolName: Type.String({ pattern: "^[a-z][a-z0-9_]{0,63}$" }),
+  toolVersion: Type.String({ pattern: "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" }),
+  argumentDigest: Type.String({ pattern: "^sha256:[a-f0-9]{64}$" }),
+};
+export const ToolApprovalRequestedPayloadSchema = Type.Object({
+  ...ToolApprovalIdentityProperties,
+  summary: Type.Object({
+    title: Type.String({ minLength: 1, maxLength: 256 }),
+    description: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
+  }, { additionalProperties: false }),
+  requestedAt: Type.String({ minLength: 1 }),
+  expiresAt: Type.String({ minLength: 1 }),
+}, { additionalProperties: false });
+export const ToolApprovalResolvedPayloadSchema = Type.Object({
+  ...ToolApprovalIdentityProperties,
+  decision: Type.Union([
+    Type.Literal("approved"), Type.Literal("rejected"),
+    Type.Literal("cancelled"), Type.Literal("expired"),
+  ]),
+  actorId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
+  resolvedAt: Type.String({ minLength: 1 }),
+}, { additionalProperties: false });
+
 const NudgeLifecycleSnapshotSchema = Type.Object(
   {
     runId: Type.String({ minLength: 1 }),
@@ -426,6 +452,20 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     eventType: OUTPUT_EVENT_TYPE.nudgeScheduled,
     schemaVersion: EVENT_SCHEMA_VERSION,
     payloadSchema: NudgeScheduledPayloadSchema,
+    snapshotSchema: NudgeLifecycleSnapshotSchema,
+  });
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.toolApprovalRequested,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: ToolApprovalRequestedPayloadSchema,
+    snapshotSchema: NudgeLifecycleSnapshotSchema,
+  });
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.toolApprovalResolved,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: ToolApprovalResolvedPayloadSchema,
     snapshotSchema: NudgeLifecycleSnapshotSchema,
   });
 

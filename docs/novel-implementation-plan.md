@@ -875,6 +875,29 @@ Approval-aware Commit orchestration completed. Task N8-E validation is next.
 
 Cover Event ordering, retry-stable IDs, dispatcher restart, duplicate delivery, Approval staleness, Conversation identity, and redacted logs.
 
+End-to-end Outbox and Journal validation delivered:
+
+- a real canonical SQLite Outbox dispatches through the provider-neutral
+  lifecycle bridge, strict OutputEvent Registry, durable Conversation Journal,
+  and in-memory live EventHub rather than a test-only publisher
+- deliberately out-of-order lifecycle writes are delivered by occurrence time
+  and stable Event ID, while root and Subagent Conversations receive only their
+  own ordered Journal records
+- retrying the same lifecycle write preserves one Outbox identity, and a
+  simulated crash after Journal persistence but before Outbox publication is
+  recovered after reopening both Stores as one `duplicate` delivery
+- the recovered Outbox row is marked published with no duplicate Journal row,
+  and a second dispatcher run performs zero attempts
+- focused Approval validation covers retry-stable request IDs, exact
+  Conversation/request/digest correlation, stale ChangeSets before decision,
+  and post-Approval mutation before Commit
+- integration and focused Outbox tests reject path, payload, event JSON, raw
+  error, stack, cause, and Runtime stderr leakage from structured logs
+
+**Status:** Task N8 completed by durable Conversation binding, lifecycle
+records and OutputEvents, atomic canonical/Draft Outboxes, restart-safe
+dispatch, asynchronous Approval orchestration, and real Journal integration.
+
 ## 15. Task N9: Story Outline Vertical Slice
 
 This task begins only after its affected deferred contracts are explicitly resolved and recorded.

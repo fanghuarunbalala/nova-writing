@@ -1240,8 +1240,10 @@ propagates review requirements. A synchronous transaction-local Manuscript
 Repository Port now supports version-1 move, split, merge, delete, and explicit
 Anchor Repair Operations. Their envelopes contain only stable IDs, final text,
 OrderKeys, Anchors, and precondition digests; handlers validate placement and
-adjacency before deterministic mutation. SQLite composition and canonical
-persistence remain deferred to N11. D-C completes structural integration with
+adjacency before deterministic mutation. N11-B-I1 adds shared canonical/Draft
+SQLite persistence for Publication, Manuscript, Paragraph Blocks, Tombstones,
+and Redirects; registers Manuscript handlers in the default Operation Registry;
+and validates snapshot-isolated structural replay. D-C completes structural integration with
 `ManuscriptRangeRepairValidator`, which resolves both boundaries through the
 durable repair chain and returns `valid`, `review-required`, `unresolved`, or
 `inverted` rather than silently reinterpreting the Range.
@@ -1338,6 +1340,16 @@ accepted Commit, Rebase, Draft, Projection, and Outbox implementations through
 the Core coordinator and rejects phase-mismatched injection. Concrete
 Projection Source reading plus full restart acceptance remain before N11-B is
 complete.
+
+B-I1 establishes the missing authoritative Publication/Manuscript SQLite
+foundation required by Projection Source recovery. Canonical and Draft schemas
+now retain Publication structure, Manuscript roots, inline Paragraph Blocks
+with field digests, Tombstones, and Anchor Redirects. The default mutation
+context exposes transaction-local repositories and registers structural
+Manuscript Operations. Focused validation proves canonical-to-Draft snapshot
+copying, Draft-only split replay, durable Redirect creation, and unchanged
+canonical state. Binding, entity-change, Realization persistence and concrete
+Projection Source composition remain next.
 
 ### N11-C End-to-End Validation
 

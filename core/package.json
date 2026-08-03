@@ -26,6 +26,7 @@
     "smoke:novel-operation": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/novel-operation-typecheck.ts && node scripts/novel-operation-smoke.mjs",
     "smoke:novel-outline-operation": "pnpm build && node scripts/novel-outline-operation-smoke.mjs",
     "smoke:novel-outline-sqlite": "pnpm build && node scripts/novel-outline-sqlite-smoke.mjs",
+    "smoke:novel-publication-manuscript-sqlite": "pnpm build && node scripts/novel-publication-manuscript-sqlite-smoke.mjs",
     "smoke:novel-outline-application": "pnpm build && node scripts/novel-outline-application-smoke.mjs",
     "smoke:novel-outline-rebase": "pnpm build && node scripts/novel-outline-rebase-smoke.mjs",
     "smoke:novel-publication": "pnpm build && node scripts/novel-publication-smoke.mjs",

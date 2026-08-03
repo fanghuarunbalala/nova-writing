@@ -1823,6 +1823,14 @@ core/src/node/novel/
 
 The canonical and Draft databases share domain-table semantics so the same validators, query adapters, and Operation handlers can run against either scope. Their control tables differ.
 
+For V1, Publication roots, Volumes, Chapters, Manuscript roots, Paragraph
+Blocks, Block Tombstones, and Anchor Redirects are authoritative SQLite state.
+Paragraph Block text is stored inline with SHA-256 field digests so Draft
+Operation replay, optimistic preconditions, snapshots, and canonical Commit can
+remain inside one SQLite transaction. Large generated Artifacts remain logical
+references behind `NovelArtifactStore`; this does not establish their physical
+retention or garbage-collection policy.
+
 Canonical `novel.sqlite` owns at least these categories:
 
 ```text
@@ -2013,7 +2021,11 @@ The following decisions remain outside the accepted Runtime implementation plan:
 1. The exact `OrderKey` algorithm and rebalance policy.
 2. Whether composite StoryUnits may explicitly override derived blocking and how descendant abandonment affects aggregate completion.
 3. Whether planned Chapter coverage uses a contiguous leaf range, an explicit ordered selection, or both.
-4. The physical storage of Manuscript Block text and Artifacts, plus the exact canonical Commit-payload encoding, retention, integrity-repair, and garbage-collection policy; the per-Conversation durable Draft Session layout is accepted in Section 10.
+4. The physical storage, retention, integrity repair, and garbage-collection
+   policy for large generated Artifacts, plus the exact canonical Commit-payload
+   encoding; V1 Paragraph Block text is resolved as inline canonical/Draft
+   SQLite state with field digests, and the per-Conversation durable Draft
+   Session layout is accepted in Section 10.
 5. Whether a post-V1 independent Manuscript revision becomes justified after measuring global NovelRevision invalidation and projection-rebuild cost; V1 uses only the global NovelRevision.
 6. Whether RhythmBeat mismatch remains a warning by default or may become a required conformance error for selected beats.
 7. The concrete NovelRevision generation format and whether a post-V1 narrower component revision is justified after measuring projection rebuild cost.

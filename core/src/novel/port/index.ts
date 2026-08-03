@@ -13,6 +13,7 @@ export * from "./NovelKeepDraftOperationPlanner.js";
 export * from "./NovelLifecycleRecordWriter.js";
 export * from "./NovelLifecycleOutputPublisher.js";
 export * from "./NovelManuscriptRepository.js";
+export * from "./NovelPublicationRepository.js";
 export * from "./NovelOutboxStore.js";
 export * from "./NovelResolutionApplicationPlanStore.js";
 export * from "./NovelEntityRepository.js";

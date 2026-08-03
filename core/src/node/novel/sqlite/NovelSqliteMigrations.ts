@@ -11,6 +11,7 @@ import {
 } from "./NovelDatabaseErrors.js";
 import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
 import { NOVEL_OUTLINE_SCHEMA_SQL } from "./NovelOutlineSqliteSchema.js";
+import { NOVEL_PUBLICATION_MANUSCRIPT_SCHEMA_SQL } from "./NovelPublicationManuscriptSqliteSchema.js";
 import { NOVEL_PROJECTION_CACHE_SCHEMA_SQL } from "./NovelProjectionSqliteSchema.js";
 
 interface NovelSqliteMigration {
@@ -190,6 +191,11 @@ const NOVEL_MIGRATIONS: readonly NovelSqliteMigration[] = [
     version: 8,
     name: "novel_projection_cache",
     sql: NOVEL_PROJECTION_CACHE_SCHEMA_SQL,
+  },
+  {
+    version: 9,
+    name: "publication_manuscript_state",
+    sql: NOVEL_PUBLICATION_MANUSCRIPT_SCHEMA_SQL,
   },
 ];
 

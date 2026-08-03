@@ -2,6 +2,7 @@
 import type {
   ManuscriptBlockId,
   ManuscriptId,
+  NovelId,
   PublicationChapterId,
 } from "../identity/index.js";
 import type {
@@ -17,6 +18,8 @@ export type ManuscriptBlockDigestField = "text" | "chapterId" | "orderKey";
 
 export interface NovelMutableManuscriptRepository {
   getManuscript(id: ManuscriptId): Manuscript | undefined;
+  findManuscriptByNovelId(novelId: NovelId): Manuscript | undefined;
+  insertManuscript(manuscript: Manuscript): boolean;
   getBlock(id: ManuscriptBlockId): ParagraphBlock | undefined;
   getBlockDigest(
     id: ManuscriptBlockId,

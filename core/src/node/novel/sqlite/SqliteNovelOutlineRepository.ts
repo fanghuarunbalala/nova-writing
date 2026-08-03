@@ -27,6 +27,8 @@ import {
   type StoryUnitId,
 } from "../../../novel/index.js";
 import { createSqliteNovelEntityMutationContext } from "./SqliteNovelEntityRepository.js";
+import { createSqliteNovelManuscriptMutationContext } from "./SqliteNovelManuscriptRepository.js";
+import { createSqliteNovelPublicationMutationContext } from "./SqliteNovelPublicationRepository.js";
 
 interface OutlineRow {
   id: string;
@@ -67,6 +69,8 @@ export function createSqliteNovelMutationContext(
   return Object.freeze({
     ...createSqliteNovelEntityMutationContext(database),
     ...createSqliteNovelOutlineMutationContext(database),
+    ...createSqliteNovelPublicationMutationContext(database),
+    ...createSqliteNovelManuscriptMutationContext(database),
   });
 }
 

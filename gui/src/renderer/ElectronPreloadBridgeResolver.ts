@@ -1,9 +1,14 @@
 /** Validates and narrows the only global capability accepted by the Renderer. */
-import { ApiTransportError, type ApiRequest } from "@novel/core";
+import {
+  ApiTransportError,
+  type ApiRequest,
+  type ApplicationConfigurationSnapshot,
+} from "@novel/core";
 import type {
   ElectronApplicationCommand,
   ElectronApplicationCommandBridge,
   ElectronBridgeOpenSubscriptionRequest,
+  ElectronConfigurationBridge,
   ElectronPreloadBridge,
   ElectronWorkspaceBridge,
   ElectronWorkspaceReference,
@@ -39,6 +44,7 @@ export function resolveElectronPreloadBridge(
   const acceptedKeys = [
     ...BRIDGE_METHODS,
     ...(record.commands === undefined ? [] : ["commands"]),
+    ...(record.configuration === undefined ? [] : ["configuration"]),
     ...(record.workspaces === undefined ? [] : ["workspaces"]),
   ].sort();
   if (
@@ -51,10 +57,12 @@ export function resolveElectronPreloadBridge(
     if (typeof record[method] !== "function") throw bridgeUnavailable();
   }
   const commands = resolveCommandBridge(record.commands);
+  const configuration = resolveConfigurationBridge(record.configuration);
   const workspaces = resolveWorkspaceBridge(record.workspaces);
   const bridge = candidate as ElectronPreloadBridge;
   const resolved: ElectronPreloadBridge = {
     ...(commands !== undefined ? { commands } : {}),
+    ...(configuration !== undefined ? { configuration } : {}),
     ...(workspaces !== undefined ? { workspaces } : {}),
     request: (request: ApiRequest) => bridge.request(request),
     cancelRequest: (requestId: string) => bridge.cancelRequest(requestId),
@@ -66,6 +74,43 @@ export function resolveElectronPreloadBridge(
       bridge.closeSubscription(subscriptionId),
   };
   return Object.freeze(resolved);
+}
+
+function resolveConfigurationBridge(
+  value: unknown,
+): ElectronConfigurationBridge | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw bridgeUnavailable();
+  }
+  const record = value as Record<string, unknown>;
+  const methods = [
+    "deleteCredential",
+    "getCredentialStatus",
+    "load",
+    "save",
+    "saveCredential",
+  ] as const;
+  const keys = Object.keys(record).sort();
+  if (
+    keys.length !== methods.length ||
+    methods.some((method, index) => keys[index] !== method) ||
+    methods.some((method) => typeof record[method] !== "function")
+  ) {
+    throw bridgeUnavailable();
+  }
+  const bridge = value as ElectronConfigurationBridge;
+  return Object.freeze({
+    load: () => bridge.load(),
+    save: (configuration: ApplicationConfigurationSnapshot) =>
+      bridge.save(configuration),
+    getCredentialStatus: (credentialRef: string) =>
+      bridge.getCredentialStatus(credentialRef),
+    saveCredential: (credentialRef: string, secret: string) =>
+      bridge.saveCredential(credentialRef, secret),
+    deleteCredential: (credentialRef: string) =>
+      bridge.deleteCredential(credentialRef),
+  });
 }
 
 function resolveCommandBridge(

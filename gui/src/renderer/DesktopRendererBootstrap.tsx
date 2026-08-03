@@ -7,6 +7,7 @@ import {
   type NovelApiClient,
 } from "@novel/core";
 import type { ApplicationCommandSource, FrontendPlatform } from "@novel/ui";
+import type { ElectronConfigurationBridge } from "../shared/index.js";
 import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -33,6 +34,7 @@ export interface DesktopRendererComposition {
   readonly api: NovelApiClient;
   readonly platform: FrontendPlatform;
   readonly commandSource?: ApplicationCommandSource;
+  readonly configurationBridge?: ElectronConfigurationBridge;
   readonly workspaceController?: NonNullable<DesktopNovelAppProps["workspaceController"]>;
 }
 
@@ -69,6 +71,9 @@ export function createDesktopRendererComposition(
     api: new DefaultNovelApiClient({ transport, logger }),
     platform: options.platform ?? createElectronFrontendPlatform(),
     ...(commandSource !== undefined ? { commandSource } : {}),
+    ...(bridge.configuration !== undefined
+      ? { configurationBridge: bridge.configuration }
+      : {}),
     ...(workspaceController !== undefined ? { workspaceController } : {}),
   });
 }

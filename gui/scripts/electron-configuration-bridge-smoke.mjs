@@ -5,6 +5,7 @@ import {
   DesktopConfigurationService,
 } from "../dist/main/index.js";
 import { createElectronPreloadBridge } from "../dist/preload/index.js";
+import { resolveElectronPreloadBridge } from "../dist/renderer/index.js";
 
 class MemoryConfigurationStore {
   configuration;
@@ -111,12 +112,13 @@ const bridge = createElectronPreloadBridge({
     },
   },
 });
-const loaded = await bridge.configuration.load();
+const resolvedBridge = resolveElectronPreloadBridge({ novelDesktop: bridge });
+const loaded = await resolvedBridge.configuration.load();
 assert.equal(loaded.ok, true);
 assert.equal(loaded.value.modelConnections[0].credentialConfigured, true);
-const status = await bridge.configuration.getCredentialStatus("credential:primary");
+const status = await resolvedBridge.configuration.getCredentialStatus("credential:primary");
 assert.deepEqual(status, { ok: true, value: "configured" });
-const deleted = await bridge.configuration.deleteCredential("credential:primary");
+const deleted = await resolvedBridge.configuration.deleteCredential("credential:primary");
 assert.equal(deleted.ok, true);
 assert.equal(await credentialStore.getStatus(new CredentialReference("credential:primary")), "missing");
 

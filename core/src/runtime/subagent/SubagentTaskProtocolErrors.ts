@@ -6,6 +6,7 @@ export const SUBAGENT_TASK_PROTOCOL_FAILURE = Object.freeze({
   invalidLimits: "invalid_limits",
   invalidPolicy: "invalid_policy",
   invalidArguments: "invalid_arguments",
+  taskNotFound: "task_not_found",
   invalidAcceptance: "invalid_acceptance",
   invalidSnapshot: "invalid_snapshot",
   invalidCancellation: "invalid_cancellation",

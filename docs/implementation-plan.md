@@ -42,9 +42,12 @@ Rules:
 - Keep each implementation focused on the documented task boundary and do not reopen completed checkpoints without a concrete compatibility need.
 - Report the commit, changed public interfaces, validation results, remaining risks, and the next step plan after each implementation.
 - Update architecture documentation whenever an implementation changes an accepted diagram, contract, lifecycle, or task status.
-- The dedicated Novel domain model remains documented in `docs/novel-implementation-plan.md`; Novel Task N0 through Task N6 is complete, while Novel Task N7 through Task N11 is paused during the active Runtime track.
+- The dedicated Novel domain model remains documented in `docs/novel-implementation-plan.md`; Novel Task N0 through Task N6 is complete, while Novel Task N7 through Task N11 is paused during the active Subagent Tool track.
 
-The Runtime track is active and continues from completed Task 5A-A. Completed checkpoints are not repeated; implementation resumes at Task 5A-B and proceeds in documented dependency order through Task 7. Novel Task N7 through Task N11 remains paused during this track.
+The Subagent Tool track is active and continues from completed Step S3.
+Completed checkpoints are not repeated; implementation resumes at Step S4 and
+proceeds through Step S6. Novel Task N7 through Task N11 remains paused during
+this track.
 
 ## 2. Task Overview
 
@@ -2954,15 +2957,14 @@ No next checkpoint begins without explicit approval.
 Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
 Runtime Task 1 through Task 7 and Subagent Tool Step S0 through Step S3 are
-complete. On August 3, 2026, the active track changed explicitly back to Novel
-Task N9-E through Task N11. Subagent Tool Step S4 through Step S6 and persistent
+complete. On August 3, 2026, the active track changed explicitly to Subagent
+Tool Step S4 through Step S6. Novel Task N7 through Task N11 and persistent
 Agent Team work remain paused until another explicit track change.
 
 Post-Task-7 Agent orchestration is documented in
-`docs/agent-orchestration.md`. Its completed S0-S3 contracts remain accepted,
-but no further Subagent Tool implementation is active. The Novel track does not
-authorize persistent Agent, Agent Team, Team communication, `TaskOutput`, or
-`Sleep` implementation.
+`docs/agent-orchestration.md`. The accepted S0-S4 contracts are active for the
+current Subagent Tool track. The current track does not authorize persistent
+Agent, Agent Team, Team communication, `TaskOutput`, or `Sleep` implementation.
 
 Active implementation order:
 
@@ -3002,4 +3004,9 @@ Conversation projections, and enters the normal Turn lane without being
 treated as a human `user.message`. Step S3 status: completed. Child Bootstrap
 now persists Task assignment before activation, uses retry-stable child
 identity, records activation acceptance, and rolls back failed activation.
-Step S4 through Step S6 are paused while Novel N9-E through N11 is active.
+Step S4 status: completed. Process-free Task query now validates parent
+ownership, projects Binding and Runtime Presence into an immutable Task
+snapshot, and reads completed results from the final canonical Assistant
+Message. Terminal Run observations now reconcile through a restart-safe,
+idempotent result sink; missing completed content and unknown tasks use stable
+protocol failures. Step S5 is the next active step. Step S6 follows S5.

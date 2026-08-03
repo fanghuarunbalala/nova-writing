@@ -3,11 +3,11 @@
 ## 1. Status and Boundary
 
 This document records the accepted design direction for Agent orchestration.
-The ephemeral Subagent slice completed Step S0 through Step S3 on August 3,
-2026. Its remaining Step S4 through Step S6 are paused while Novel Task N9-E
-through Task N11 is active. Persistent Agent, Agent Team, Team communication,
-`TaskOutput`, and `Sleep` remain documented future work. Completed Runtime Task
-6B and Task 7 checkpoints remain closed.
+The ephemeral Subagent slice completed Step S0 through Step S4 on August 3,
+2026. Step S5 is the next active implementation step and Step S6 remains after
+it. Persistent Agent, Agent Team, Team communication, `TaskOutput`, and `Sleep`
+remain documented future work. Completed Runtime Task 6B and Task 7 checkpoints
+remain closed.
 
 The central decisions are:
 
@@ -337,6 +337,25 @@ It never calls `ConversationHost.ensureActive()` and never sends an InputEvent.
 `TaskCancel` validates ownership, persists cancellation intent, and routes Stop
 to the child Conversation. It returns `cancellation_requested`,
 `already_terminal`, or `not_found` without waiting for Runtime termination.
+
+### 7.1 Query and Completion Boundaries
+
+Step S4 adds two process-free Core services behind the Tool layer:
+
+- `SubagentTaskQueryService` reads the durable Subagent Binding, logical Runtime
+  Presence, and final canonical Assistant Message. It validates parent
+  Conversation and Run ownership before returning a bounded immutable
+  `SubagentTaskSnapshot`.
+- `SubagentCompletionBridge` reconciles a terminal Child Run observation into a
+  provider-neutral `SubagentResult`. Completed Runs require the final canonical
+  Assistant Message; missing content becomes the stable
+  `SUBAGENT_EMPTY_RESULT` failure. Failed, cancelled, and orphaned Runs retain
+  their terminal status without exposing Runtime placement details.
+
+The bridge never publishes directly to a parent Message projection. It hands
+the validated result to the existing idempotent completion sink, so retries
+after process restart do not create a second semantic result. Neither service
+activates a Runtime or enqueues an InputEvent.
 
 ## 7. Subagent Bootstrap and Completion
 

@@ -19,3 +19,5 @@ export * from "./SubagentLifecycleCoordinatorProtocol.js";
 export * from "./SubagentBindingStore.js";
 export * from "./SubagentCancellationCoordinator.js";
 export * from "./ConversationTreeObserver.js";
+export * from "./SubagentTaskQueryService.js";
+export * from "./SubagentCompletionBridge.js";

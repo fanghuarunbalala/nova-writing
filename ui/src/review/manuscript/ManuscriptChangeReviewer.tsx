@@ -1,18 +1,37 @@
 /** Block-oriented Manuscript Diff with stable identity and explicit move presentation. */
 import { useMemo, useState } from "react";
 import {
+  ReferenceInConversationButton,
+  type ComposerContentReference,
+} from "../../composer/index.js";
+import {
   captureManuscriptBlockDiffView,
+  type ManuscriptBlockDiffRowView,
   type ManuscriptBlockDiffKind,
   type ManuscriptBlockDiffView,
 } from "./ManuscriptBlockDiffView.js";
 
+export interface ManuscriptChangeReviewerProps {
+  readonly view: ManuscriptBlockDiffView;
+  readonly referenceForBlock?: (
+    row: ManuscriptBlockDiffRowView,
+    view: ManuscriptBlockDiffView,
+  ) => ComposerContentReference | undefined;
+}
+
 export function ManuscriptChangeReviewer({
   view: input,
-}: {
-  readonly view: ManuscriptBlockDiffView;
-}) {
+  referenceForBlock,
+}: ManuscriptChangeReviewerProps) {
   const view = useMemo(() => captureManuscriptBlockDiffView(input), [input]);
   const [selectedRowId, setSelectedRowId] = useState<string | undefined>();
+  const selectedRow = selectedRowId === undefined
+    ? undefined
+    : view.rows.find((row) => row.rowId === selectedRowId);
+  const selectedReference =
+    selectedRow === undefined || referenceForBlock === undefined
+      ? undefined
+      : referenceForBlock(selectedRow, view);
   return (
     <section className="novel-manuscript-diff-reviewer">
       <div className="novel-manuscript-diff-legend" aria-label="正文差异图例">
@@ -21,6 +40,12 @@ export function ManuscriptChangeReviewer({
         <span data-diff-kind="moved">移动</span>
         <span data-diff-kind="unchanged">上下文</span>
       </div>
+      {selectedReference !== undefined ? (
+        <div className="novel-manuscript-diff-actions">
+          <span>{selectedRow?.contextLabel ?? "已选择正文块"}</span>
+          <ReferenceInConversationButton reference={selectedReference} />
+        </div>
+      ) : null}
       <div className="novel-manuscript-diff-blocks" role="list" aria-label="正文块差异">
         {view.rows.map((row) => (
           <article

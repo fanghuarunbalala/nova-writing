@@ -790,6 +790,16 @@ const NOVEL_THEME_CSS = `
   font-size: 10px;
 }
 
+.novel-manuscript-diff-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: var(--novel-text-secondary);
+  font-size: 11px;
+}
+
 .novel-manuscript-diff-blocks {
   display: flex;
   flex-direction: column;

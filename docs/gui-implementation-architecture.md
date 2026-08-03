@@ -704,6 +704,12 @@ The action remains domain- and Transport-neutral. An Outline, Manuscript, Charac
 
 The tree does not manufacture Novel identity, read scope, source revision, or Inspector parameters. Its query adapter or owning Inspector renderer receives the complete normalized tree view and selected StoryUnit, then supplies the immutable local reference. Trees without a resolver retain the existing read-only behavior and do not require Composer or Shell providers.
 
+### 13.4 Implemented Manuscript Block Reference Integration
+
+`ManuscriptChangeReviewer` now accepts an optional `referenceForBlock(row, view)` resolver. Selecting or focusing a Diff row exposes the shared reference action for the exact row selected, while the resolver receives both independent Diff-row identity and stable Manuscript Block identity. This allows the owning query adapter to distinguish modified-before, modified-after, moved, deleted tombstone, added, and unchanged-context references without the Reviewer inventing version semantics.
+
+The Reviewer continues to treat source and target movement labels as presentation-only. It does not derive a Manuscript Anchor, Range, source revision, or structured InputEvent payload from displayed text or row order. Without a resolver it remains the same read-only Block Diff surface.
+
 ## 14. Domain-specific Reviewers
 
 The review surface is selected by domain type:

@@ -3395,6 +3395,17 @@ Acceptance:
 - Subagent terminal observation can resolve an eligible condition;
 - parent and child Conversation identities are validated.
 
+N-8 delivered:
+
+- provider-neutral `NudgeRuntimeEventBridge` recognizes completed Tool traces,
+  resolved Approval decisions, and terminal Subagent lifecycle OutputEvents
+- an injected `NudgeRuntimeEventPolicy` reviews every eligible redacted Event
+  before acknowledgement or condition effects may reach service ports
+- Tool Handlers and Subagent executors receive no Store or Nudge mutation API;
+  non-terminal events are ignored
+- parent Run identity and terminal child Conversation ownership are validated,
+  with serialized observation handling and identity-only logs
+
 ### 13.16 N-9: Recovery and Migration
 
 Implement Protocol v1 to v2 decoding, private Snapshot migration, lease

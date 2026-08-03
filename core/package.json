@@ -122,6 +122,7 @@
     "smoke:runtime-nudge-output-event": "pnpm build && node scripts/runtime-nudge-output-event-smoke.mjs",
     "smoke:runtime-nudge-selection-template": "pnpm build && node scripts/runtime-nudge-selection-template-smoke.mjs",
     "smoke:runtime-nudge-provider-call-receipt": "pnpm build && node scripts/runtime-nudge-provider-call-receipt-smoke.mjs",
+    "smoke:runtime-nudge-event-bridge": "pnpm build && node scripts/runtime-nudge-event-bridge-smoke.mjs",
     "smoke:runtime-projected-run-preparation": "pnpm build && node scripts/runtime-projected-run-preparation-smoke.mjs",
     "smoke:runtime-pi-adapter": "pnpm build && node scripts/runtime-pi-agent-core-adapter-smoke.mjs",
     "smoke:runtime-pi-context-projection": "pnpm build && node scripts/runtime-pi-context-projection-integration-smoke.mjs",

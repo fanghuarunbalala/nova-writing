@@ -5791,9 +5791,12 @@ Subagents while defining two distinct completion protocols:
 
 The document also records non-blocking Task/query/cancellation Tools, Team
 communication routing, optional Sleep/wake semantics, System Prompt role
-sections, composition rules, and unresolved protocol decisions. This direction
-is documented only; it is not part of the completed Task 6B or Task 7
-implementation.
+sections, immutable Agent Definitions and Manifests, persistent Agent Instances,
+Agent Team membership and Task state, composition rules, persistence and
+recovery boundaries, and phased implementation. Subagents do not implicitly
+inherit or fork Parent Conversation context; required context is passed through
+the Task Prompt and validated Artifact references. This direction is documented
+only; it is not part of the completed Task 6B or Task 7 implementation.
 
 ## 26. Persistence Model
 

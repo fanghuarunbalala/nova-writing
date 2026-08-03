@@ -2959,5 +2959,8 @@ Post-Task-7 Agent orchestration direction is documented in
 `docs/agent-orchestration.md`. It is not an active implementation task and does
 not reopen completed Runtime checkpoints. The recorded direction uses
 Conversation for all Agent forms, non-blocking Subagent start/query/cancel,
-final Assistant content as the Subagent result, and explicit Tool-mediated
-cross-Conversation communication for persistent Agent Teams.
+explicit Prompt and Artifact-only Subagent context, final Assistant content as
+the Subagent result, immutable Agent Definition and Manifest composition, and
+explicit Tool-mediated cross-Conversation communication for persistent Agent
+Teams. The document also records persistent Agent, Team, Task, Inbox,
+communication, recovery, and optional Sleep/wake implementation phases.

@@ -47,6 +47,24 @@ export class SqliteNovelProjectionEvidenceRepository
     );
   }
 
+  getCharacterBinding(storyUnitId: StoryUnitCharacterBinding["storyUnitId"], characterId: StoryUnitCharacterBinding["characterId"]) {
+    return this.readOne(
+      `SELECT binding_json AS value_json, binding_digest AS value_digest
+       FROM novel_story_unit_character_bindings WHERE story_unit_id = ? AND character_id = ?`,
+      captureStoryUnitCharacterBinding,
+      captureStoryUnitId(storyUnitId),
+      captureCharacterId(characterId),
+    );
+  }
+
+  getCharacterBindingDigest(storyUnitId: StoryUnitCharacterBinding["storyUnitId"], characterId: StoryUnitCharacterBinding["characterId"]) {
+    return this.readDigest(
+      "SELECT binding_digest AS value_digest FROM novel_story_unit_character_bindings WHERE story_unit_id = ? AND character_id = ?",
+      captureStoryUnitId(storyUnitId),
+      captureCharacterId(characterId),
+    );
+  }
+
   putCharacterBinding(binding: StoryUnitCharacterBinding): void {
     const value = captureStoryUnitCharacterBinding(binding);
     this.put(
@@ -82,6 +100,24 @@ export class SqliteNovelProjectionEvidenceRepository
     );
   }
 
+  getLocationBinding(storyUnitId: StoryUnitLocationBinding["storyUnitId"], locationId: StoryUnitLocationBinding["locationId"]) {
+    return this.readOne(
+      `SELECT binding_json AS value_json, binding_digest AS value_digest
+       FROM novel_story_unit_location_bindings WHERE story_unit_id = ? AND location_id = ?`,
+      captureStoryUnitLocationBinding,
+      captureStoryUnitId(storyUnitId),
+      captureLocationId(locationId),
+    );
+  }
+
+  getLocationBindingDigest(storyUnitId: StoryUnitLocationBinding["storyUnitId"], locationId: StoryUnitLocationBinding["locationId"]) {
+    return this.readDigest(
+      "SELECT binding_digest AS value_digest FROM novel_story_unit_location_bindings WHERE story_unit_id = ? AND location_id = ?",
+      captureStoryUnitId(storyUnitId),
+      captureLocationId(locationId),
+    );
+  }
+
   putLocationBinding(binding: StoryUnitLocationBinding): void {
     const value = captureStoryUnitLocationBinding(binding);
     this.put(
@@ -112,6 +148,21 @@ export class SqliteNovelProjectionEvidenceRepository
       `SELECT change_json AS value_json, change_digest AS value_digest
        FROM novel_story_unit_entity_changes ORDER BY story_unit_id, id`,
       captureStoryUnitEntityChange,
+    );
+  }
+
+  getEntityChange(id: StoryUnitEntityChange["id"]) {
+    return this.readOne(
+      "SELECT change_json AS value_json, change_digest AS value_digest FROM novel_story_unit_entity_changes WHERE id = ?",
+      captureStoryUnitEntityChange,
+      captureStoryUnitEntityChangeId(id),
+    );
+  }
+
+  getEntityChangeDigest(id: StoryUnitEntityChange["id"]) {
+    return this.readDigest(
+      "SELECT change_digest AS value_digest FROM novel_story_unit_entity_changes WHERE id = ?",
+      captureStoryUnitEntityChangeId(id),
     );
   }
 
@@ -149,6 +200,21 @@ export class SqliteNovelProjectionEvidenceRepository
     );
   }
 
+  getRealization(storyUnitId: StoryUnitRealization["storyUnitId"]) {
+    return this.readOne(
+      "SELECT realization_json AS value_json, realization_digest AS value_digest FROM novel_story_unit_realizations WHERE story_unit_id = ?",
+      captureStoryUnitRealization,
+      captureStoryUnitId(storyUnitId),
+    );
+  }
+
+  getRealizationDigest(storyUnitId: StoryUnitRealization["storyUnitId"]) {
+    return this.readDigest(
+      "SELECT realization_digest AS value_digest FROM novel_story_unit_realizations WHERE story_unit_id = ?",
+      captureStoryUnitId(storyUnitId),
+    );
+  }
+
   putRealization(realization: StoryUnitRealization): void {
     const value = captureStoryUnitRealization(realization);
     this.put(
@@ -170,12 +236,40 @@ export class SqliteNovelProjectionEvidenceRepository
     );
   }
 
+  hasStoryUnit(storyUnitId: StoryUnitRealization["storyUnitId"]): boolean {
+    return this.exists("novel_story_units", "id", captureStoryUnitId(storyUnitId));
+  }
+
+  hasCharacter(characterId: StoryUnitCharacterBinding["characterId"]): boolean {
+    return this.exists("novel_characters", "id", captureCharacterId(characterId));
+  }
+
+  hasLocation(locationId: StoryUnitLocationBinding["locationId"]): boolean {
+    return this.exists("novel_locations", "id", captureLocationId(locationId));
+  }
+
   private readAll<T>(
     sql: string,
     capture: (value: unknown) => T,
   ): readonly T[] {
     const rows = this.database.prepare(sql).all() as unknown as EvidenceRow[];
     return Object.freeze(rows.map((row) => decode(row, capture)));
+  }
+
+  private readOne<T>(sql: string, capture: (value: unknown) => T, ...identity: readonly string[]): T | undefined {
+    const row = this.database.prepare(sql).get(...identity) as EvidenceRow | undefined;
+    return row === undefined ? undefined : decode(row, capture);
+  }
+
+  private readDigest(sql: string, ...identity: readonly string[]): string | undefined {
+    const row = this.database.prepare(sql).get(...identity) as { value_digest: string } | undefined;
+    return row?.value_digest;
+  }
+
+  private exists(table: string, column: string, identity: string): boolean {
+    return this.database.prepare(
+      `SELECT 1 AS present FROM ${table} WHERE ${column} = ? LIMIT 1`,
+    ).get(identity) !== undefined;
   }
 
   private put(sql: string, identity: readonly string[], value: object): void {

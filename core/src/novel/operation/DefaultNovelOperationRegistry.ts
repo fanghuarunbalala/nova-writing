@@ -7,6 +7,7 @@ import type {
   NovelPublicationMutationContext,
 } from "../port/index.js";
 import { registerNovelEntityOperationHandlers } from "./entity/index.js";
+import { registerNovelProjectionEvidenceOperationHandlers } from "./evidence/index.js";
 import { registerNovelManuscriptOperationHandlers } from "./manuscript/index.js";
 import { registerNovelOutlineOperationHandlers } from "./outline/index.js";
 import { registerNovelPublicationOperationHandlers } from "./publication/index.js";
@@ -23,6 +24,7 @@ export function createDefaultNovelOperationRegistry<
 >(): NovelOperationRegistry<TContext> {
   const registry = new NovelOperationRegistry<TContext>();
   registerNovelEntityOperationHandlers(registry);
+  registerNovelProjectionEvidenceOperationHandlers(registry);
   registerNovelOutlineOperationHandlers(registry);
   registerNovelPublicationOperationHandlers(registry);
   registerNovelManuscriptOperationHandlers(registry);

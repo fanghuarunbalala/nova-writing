@@ -1413,6 +1413,15 @@ Draft scope. Focused application acceptance covers every service operation,
 scope isolation, Commit publication, restart reads, repair-chain durability,
 and log redaction. Task N11-C Manuscript application coverage is complete.
 
+C-C1 adds version-1 authoritative Evidence Operations for Character bindings,
+Location bindings, StoryUnit entity changes, and StoryUnit Realizations. Each
+record supports absent-only creation, whole-record SHA-256 guarded overwrite,
+and digest-guarded deletion. Handlers synchronously validate StoryUnit and
+entity references before updating the shared canonical/Draft evidence tables;
+Operation payloads remain exact JSON and contain no repository closures or SQL.
+Application services, explicit-scope queries, and completion admission remain
+the next C-C substep.
+
 ### N11-D Documentation and Examples
 
 Update accepted architecture diagrams and add platform-neutral application examples. Tool examples remain deferred.

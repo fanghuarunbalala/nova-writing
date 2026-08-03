@@ -4,6 +4,7 @@ import {
   AgentAssembler,
   AgentDefinition,
   AgentManifestResolver,
+  AgentCapabilityProfileResolver,
   AgentManifestStoreError,
   AgentToolPolicy,
   AgentDelegationPolicy,
@@ -16,10 +17,12 @@ import {
   SystemPromptBuilder,
   ToolGroupCatalog,
   ToolRegistry,
+  createDefaultAgentCapabilityProfileCatalog,
   createDefaultPromptSectionRegistry,
   defineTool,
   loadToolGroupManifest,
   novelAgentDefinition,
+  hydrateAgentManifest,
 } from "../dist/index.js";
 import { Type } from "typebox";
 
@@ -66,6 +69,9 @@ function createResolver(createdAt = "2026-08-03T00:00:00.000Z") {
 const manifest = await createResolver().resolve(novelAgentDefinition);
 assert.equal(manifest.agentType, "novel_agent");
 assert.equal(manifest.definitionVersion, "1.0.0");
+assert.equal(manifest.schemaVersion, 2);
+assert.equal(manifest.capabilityProfile.profileId, "communication.standalone");
+assert.equal(manifest.capabilityProfile.communicationRole, "standalone");
 assert.deepEqual(
   manifest.promptRecipe.items.map((item) =>
     item.kind === "section" ? `${item.sectionId}@${item.version}` : item.sourceId,
@@ -89,6 +95,18 @@ assert.equal(Object.isFrozen(manifest.tools), true);
 assert.equal(Object.isFrozen(manifest.promptRecipe), true);
 assert.equal(Object.isFrozen(manifest.toSnapshot()), true);
 assert.throws(() => { manifest.agentType = "changed"; }, TypeError);
+
+const hydrated = hydrateAgentManifest(manifest.toSnapshot());
+assert.equal(hydrated.capabilityProfile.profileId, "communication.standalone");
+assert.deepEqual(
+  hydrated.capabilityProfile.toolPolicy.toSnapshot(),
+  manifest.capabilityProfile.toolPolicy.toSnapshot(),
+);
+const legacySnapshot = { ...manifest.toSnapshot(), schemaVersion: 1 };
+delete legacySnapshot.capabilityProfile;
+const hydratedLegacy = hydrateAgentManifest(legacySnapshot);
+assert.equal(hydratedLegacy.schemaVersion, 2);
+assert.equal(hydratedLegacy.capabilityProfile.profileId, "communication.standalone");
 
 const sameManifest = await createResolver().resolve(novelAgentDefinition);
 assert.equal(sameManifest.manifestDigest, manifest.manifestDigest);
@@ -117,6 +135,11 @@ const assembledStore = new InMemoryAgentManifestStore();
 const assembled = await new AgentAssembler({
   registry: toolRegistry,
   groups: toolGroups,
+  capabilityResolver: new AgentCapabilityProfileResolver({
+    profiles: createDefaultAgentCapabilityProfileCatalog(),
+    promptSections: createDefaultPromptSectionRegistry(),
+    toolGroups,
+  }),
   manifestResolver: createResolver(),
   manifestStore: assembledStore,
   logger,

@@ -12,10 +12,17 @@ import {
 import { isToolName } from "../../tooling/protocol/ToolName.js";
 import {
   ResolvedPromptRecipe,
+  ResolvedPromptSectionItem,
   type ResolvedPromptRecipeSnapshot,
 } from "./ResolvedPromptRecipe.js";
+import {
+  ResolvedAgentCapabilities,
+  createLegacyResolvedAgentCapabilities,
+  type ResolvedAgentCapabilitiesSnapshot,
+} from "../capability/ResolvedAgentCapabilities.js";
 
-export const AGENT_MANIFEST_SCHEMA_VERSION = 1 as const;
+export const LEGACY_AGENT_MANIFEST_SCHEMA_VERSION = 1 as const;
+export const AGENT_MANIFEST_SCHEMA_VERSION = 2 as const;
 
 export type AgentManifestDigest = `sha256:${string}`;
 
@@ -115,6 +122,7 @@ export interface AgentManifestOptions {
   readonly compiledPrompt: AgentManifestPrompt;
   readonly tools: readonly AgentManifestTool[];
   readonly delegation: AgentManifestDelegation;
+  readonly capabilityProfile?: ResolvedAgentCapabilities;
   readonly communicationRole: AgentCommunicationRole;
   readonly runtimePolicyId: string;
   readonly createdAt: string;
@@ -131,6 +139,7 @@ export interface AgentManifestSnapshot {
   readonly compiledPrompt: AgentManifestPromptSnapshot;
   readonly tools: readonly AgentManifestToolSnapshot[];
   readonly delegation: AgentManifestDelegationSnapshot;
+  readonly capabilityProfile: ResolvedAgentCapabilitiesSnapshot;
   readonly communicationRole: AgentCommunicationRole;
   readonly runtimePolicyId: string;
   readonly createdAt: string;
@@ -147,6 +156,7 @@ export class AgentManifest {
   readonly compiledPrompt: AgentManifestPrompt;
   readonly tools: readonly AgentManifestTool[];
   readonly delegation: AgentManifestDelegation;
+  readonly capabilityProfile: ResolvedAgentCapabilities;
   readonly communicationRole: AgentCommunicationRole;
   readonly runtimePolicyId: string;
   readonly createdAt: string;
@@ -190,6 +200,14 @@ export class AgentManifest {
     this.compiledPrompt = options.compiledPrompt;
     this.tools = Object.freeze([...tools].sort(compareTools));
     this.delegation = options.delegation;
+    this.capabilityProfile = options.capabilityProfile ??
+      createLegacyResolvedAgentCapabilities(
+        options.definition,
+        options.promptRecipe.items
+          .filter((item): item is ResolvedPromptSectionItem =>
+            item instanceof ResolvedPromptSectionItem)
+          .map((item) => item.sectionId),
+      );
     this.communicationRole = options.communicationRole;
     this.runtimePolicyId = captureIdentity(
       options.runtimePolicyId,
@@ -212,6 +230,7 @@ export class AgentManifest {
       compiledPrompt: this.compiledPrompt.toSnapshot(),
       tools: Object.freeze(this.tools.map((tool) => tool.toSnapshot())),
       delegation: this.delegation.toSnapshot(),
+      capabilityProfile: this.capabilityProfile.toSnapshot(),
       communicationRole: this.communicationRole,
       runtimePolicyId: this.runtimePolicyId,
       createdAt: this.createdAt,
@@ -225,6 +244,7 @@ function assertDefinitionPolicyConsistency(
 ): void {
   if (
     manifest.communicationRole !== definition.communication.role ||
+    manifest.capabilityProfile.communicationRole !== definition.communication.role ||
     manifest.runtimePolicyId !== definition.runtimePolicyId ||
     manifest.delegation.mode !== definition.delegation.mode ||
     manifest.delegation.allowedAgentTypes.length !==

@@ -34,7 +34,7 @@ export class AgentAssemblyRestorer {
     const toolView = new ToolRegistryView({
       registry: this.#registry,
       groups: this.#groups,
-      policy: manifest.definition.tools,
+      policy: manifest.capabilityProfile!.toolPolicy.toSnapshot(),
     });
     assertManifestToolsMatchView(manifest, toolView);
     const assembly = new AgentAssembly({ manifest, toolView });

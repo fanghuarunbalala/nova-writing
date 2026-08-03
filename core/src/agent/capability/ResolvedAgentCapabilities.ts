@@ -1,6 +1,9 @@
 /** Immutable Agent capability resolution result used before Manifest assembly. */
 import type { AgentCommunicationRole } from "../definition/AgentDefinition.js";
-import { AgentToolPolicy } from "../definition/AgentDefinition.js";
+import {
+  AgentDefinition,
+  AgentToolPolicy,
+} from "../definition/AgentDefinition.js";
 import { AgentCapabilityProfile } from "./AgentCapabilityProfile.js";
 
 export const RESOLVED_AGENT_CAPABILITIES_SCHEMA_VERSION = 1 as const;
@@ -68,4 +71,23 @@ export class ResolvedAgentCapabilities {
       channelIds: this.channelIds,
     });
   }
+}
+
+export function createLegacyResolvedAgentCapabilities(
+  definition: AgentDefinition,
+  promptSectionIds: readonly string[],
+): ResolvedAgentCapabilities {
+  if (!(definition instanceof AgentDefinition)) {
+    throw new TypeError("Legacy Agent Definition is invalid");
+  }
+  return new ResolvedAgentCapabilities({
+    profile: new AgentCapabilityProfile({
+      profileId: `communication.${definition.communication.role}`,
+      version: "1.0.0",
+      communicationRole: definition.communication.role,
+    }),
+    promptSectionIds,
+    toolPolicy: new AgentToolPolicy(definition.tools.toSnapshot()),
+    channelIds: [],
+  });
 }

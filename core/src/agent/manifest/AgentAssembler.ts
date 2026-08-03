@@ -18,12 +18,15 @@ import type { AgentManifest } from "./AgentManifest.js";
 import { AgentAssembly } from "./AgentAssembly.js";
 import type { AgentManifestResolver } from "./AgentManifestResolver.js";
 import type { AgentManifestStore } from "./AgentManifestStore.js";
+import type { AgentCapabilityProfileResolver } from "../capability/AgentCapabilityProfileResolver.js";
+import type { ResolvedAgentCapabilities } from "../capability/ResolvedAgentCapabilities.js";
 
 export interface AgentAssemblerOptions {
   readonly registry: ToolRegistry;
   readonly groups: ToolGroupCatalog;
   readonly manifestResolver: AgentManifestResolver;
   readonly manifestStore: AgentManifestStore;
+  readonly capabilityResolver?: AgentCapabilityProfileResolver;
   readonly logger?: Logger;
 }
 
@@ -32,6 +35,7 @@ export class AgentAssembler {
   readonly #groups: ToolGroupCatalog;
   readonly #manifestResolver: AgentManifestResolver;
   readonly #manifestStore: AgentManifestStore;
+  readonly #capabilityResolver?: AgentCapabilityProfileResolver;
   readonly #logger: Logger;
 
   constructor(options: AgentAssemblerOptions) {
@@ -45,6 +49,7 @@ export class AgentAssembler {
     this.#groups = options.groups;
     this.#manifestResolver = options.manifestResolver;
     this.#manifestStore = options.manifestStore;
+    this.#capabilityResolver = options.capabilityResolver;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "agent_assembler",
     });
@@ -59,10 +64,15 @@ export class AgentAssembler {
       definitionVersion: definition.definitionVersion,
     });
 
+    const resolvedCapabilities = this.#capabilityResolver === undefined
+      ? undefined
+      : await this.#capabilityResolver.resolve({ definition });
     const toolView = new ToolRegistryView({
       registry: this.#registry,
       groups: this.#groups,
-      policy: toToolViewPolicy(definition),
+      policy: toToolViewPolicy(
+        resolvedCapabilities?.toolPolicy ?? definition.tools,
+      ),
     });
     const capabilities = new PromptCapabilitySnapshot(
       toolView.listAllowed().map((tool) => ({
@@ -75,6 +85,7 @@ export class AgentAssembler {
     const manifest = await this.#manifestResolver.resolve(
       definition,
       capabilities,
+      resolvedCapabilities,
     );
     assertManifestToolsMatchView(manifest, toolView);
     await this.#manifestStore.save(manifest);
@@ -90,8 +101,10 @@ export class AgentAssembler {
   }
 }
 
-function toToolViewPolicy(definition: AgentDefinition): ToolRegistryViewPolicy {
-  const policy = definition.tools.toSnapshot();
+function toToolViewPolicy(
+  policySource: AgentDefinition["tools"] | ResolvedAgentCapabilities["toolPolicy"],
+): ToolRegistryViewPolicy {
+  const policy = policySource.toSnapshot();
   return {
     groupIds: policy.groupIds,
     ...(policy.allow === undefined ? {} : { allow: policy.allow }),

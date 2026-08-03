@@ -24,6 +24,10 @@ import {
   PromptSectionItem,
 } from "../../prompt/PromptPlanItem.js";
 import type { SystemPromptBuilder } from "../../prompt/SystemPromptBuilder.js";
+import {
+  createLegacyResolvedAgentCapabilities,
+  type ResolvedAgentCapabilities,
+} from "../capability/index.js";
 
 export interface AgentManifestIdFactory {
   create(input: {
@@ -67,6 +71,7 @@ export class AgentManifestResolver {
   async resolve(
     definition: AgentDefinition,
     promptCapabilities: PromptCapabilitySnapshot = this.#promptCapabilities,
+    resolvedCapabilities?: ResolvedAgentCapabilities,
   ): Promise<AgentManifest> {
     const manifestId = await this.#manifestIdFactory.create({
       agentType: definition.agentType,
@@ -83,6 +88,14 @@ export class AgentManifestResolver {
       capabilities: promptCapabilities,
     });
     const promptRecipe = resolvePromptRecipe(definition, compiledPrompt);
+    const capabilityProfile = resolvedCapabilities ??
+      createLegacyResolvedAgentCapabilities(
+        definition,
+        promptRecipe.items
+          .filter((item): item is ResolvedPromptSectionItem =>
+            item instanceof ResolvedPromptSectionItem)
+          .map((item) => item.sectionId),
+      );
     const tools = promptCapabilities.tools.map(
       (tool) => new AgentManifestTool({ name: tool.name, version: tool.version }),
     );
@@ -104,6 +117,7 @@ export class AgentManifestResolver {
           compiledPrompt: prompt,
           tools,
           delegation,
+          capabilityProfile,
           communicationRole: definition.communication.role,
           runtimePolicyId: definition.runtimePolicyId,
         }) as JsonValue,
@@ -117,6 +131,7 @@ export class AgentManifestResolver {
       compiledPrompt: prompt,
       tools,
       delegation,
+      capabilityProfile,
       communicationRole: definition.communication.role,
       runtimePolicyId: definition.runtimePolicyId,
       createdAt,
@@ -179,6 +194,7 @@ interface ManifestDigestPayloadOptions {
   readonly compiledPrompt: AgentManifestPrompt;
   readonly tools: readonly AgentManifestTool[];
   readonly delegation: AgentManifestDelegation;
+  readonly capabilityProfile: ResolvedAgentCapabilities;
   readonly communicationRole: string;
   readonly runtimePolicyId: string;
 }
@@ -197,6 +213,7 @@ function buildManifestDigestPayload(
     compiledPrompt: options.compiledPrompt.toSnapshot() as unknown as JsonValue,
     tools: options.tools.map((tool) => tool.toSnapshot()) as unknown as JsonValue,
     delegation: options.delegation.toSnapshot() as unknown as JsonValue,
+    capabilityProfile: options.capabilityProfile.toSnapshot() as unknown as JsonValue,
     communicationRole: options.communicationRole,
     runtimePolicyId: options.runtimePolicyId,
   };

@@ -256,6 +256,28 @@ The fixed left navigation contains New Conversation, Schedule, Outline, Characte
 
 The shared Shell assigns the optional title bar, top menu, context bar, and main body to explicit named Grid rows. An absent desktop title-bar extension therefore collapses only its own row and cannot move the main body into the fixed-height context row. The Shell occupies the current viewport height (`100dvh`, with `100vh` fallback), while Sidebar, Conversation, Composer, and Inspector keep their own bounded scrolling surfaces.
 
+### 6.2 Implemented Workspace and Settings Interaction Skeleton
+
+The shared Shell now treats Workspace as an actionable application context rather than static text. The Workspace segment, central empty state, and `项目 → 打开 Workspace…` command open one shared chooser; `项目 → 关闭 Workspace` clears the active Workspace and stale Shell context. One window owns at most one active Workspace.
+
+The shared Shell and both platform roots are also responsive below the original desktop-width assumption. They remove the `760px` document minimum, preserve the project navigation list in a narrower sidebar, keep context overflow local to the context bar, and prevent the page itself from being horizontally clipped in narrow desktop or embedded-browser viewports.
+
+`WorkspaceController` is a presentation-facing async state machine with immutable snapshots and strictly serialized operations. It composes a picker port with a Workspace-session port, allowing GUI and Web shells to share the same React behavior while injecting different platform implementations. The current W1 Web/default composition intentionally uses unavailable ports and displays a safe error instead of pretending that a browser can select a local project root.
+
+Settings remains under `编辑 → 设置…`. The dialog consumes the existing `settingsSections` extension contract and currently owns only process-local sidebar presentation state. Host overlays and built-in Workspace/Settings dialogs compose together; a specialized shell cannot accidentally replace the built-in application dialogs by supplying its own overlay content.
+
+This checkpoint is a Mock-backed interaction skeleton, not the final Workspace Host. The next client boundary must sit above the current Workspace-bound `ConversationApiRouter`:
+
+```mermaid
+flowchart LR
+    Renderer["Renderer"] --> ApplicationRouter["ApplicationApiRouter"]
+    ApplicationRouter --> SessionManager["WorkspaceSessionManager"]
+    SessionManager --> ActiveApplication["active NodeConversationApiApplication"]
+    ActiveApplication --> ConversationRouter["active ConversationApiRouter"]
+```
+
+Electron native directory picking, opaque Preload selection tokens, `NodeWorkspaceStoreLocator`, recent-Workspace persistence, and one active Node application per window remain later desktop steps. Focused Mock validation covers selection, recent reopen data, open and close transitions, menu access, Settings extension rendering, immediate sidebar state, immutable snapshots, operation serialization, and overlay composition.
+
 ## 7. Application State Boundaries
 
 The GUI uses multiple focused stores rather than one application-wide mutable object.
@@ -1603,6 +1625,9 @@ The stages below describe dependency order only. Each stage requires its own pla
 26. Approval is an event-only interaction: the request and resolution are OutputEvents, while the user's decision is an InputEvent durably enqueued through the bound Conversation.
 27. Novel query APIs load review content and binding metadata but never expose direct Approval resolution or commit methods to the GUI.
 28. An InputReceipt does not resolve the Approval in UI state; only a later persisted resolution or failure OutputEvent does.
+29. Workspace is the selected novel project root; shared React receives only opaque selection references and presentation-safe Workspace identities.
+30. One application window owns at most one active Workspace, while future multi-Workspace desktop use is represented by multiple windows.
+31. Settings is opened from `编辑 → 设置…`, and platform or extension settings extend the same shared dialog rather than adding another top-level menu.
 
 ## 32. Deferred Decisions
 
@@ -1621,3 +1646,5 @@ The stages below describe dependency order only. Each stage requires its own pla
 13. Schedule domain contracts and whether schedules belong to Novel, Runtime, or a separate application service;
 14. desktop-only diagnostics, update, tray, and local Runtime management pages;
 15. user-facing replacement for the technical label `Meta`, such as `Current Content` or `Current Scope`.
+16. production application-level Workspace Router envelopes, native selection tokens, recent-Workspace persistence, and Workspace session rebinding;
+17. durable Settings storage, migration, and synchronization policy.

@@ -4,6 +4,7 @@ export interface CurrentContextBarProps {
   readonly meta?: string;
   readonly conversation?: string;
   readonly agent?: string;
+  readonly onWorkspaceSelect?: () => void;
 }
 
 const EMPTY_VALUE = "未选择";
@@ -25,9 +26,20 @@ export function CurrentContextBar(props: CurrentContextBarProps) {
             </span>
           ) : null}
           <span className="novel-context-label">{label}</span>
-          <span className="novel-context-value" title={value}>
-            {value}
-          </span>
+          {label === "Workspace" && props.onWorkspaceSelect !== undefined ? (
+            <button
+              className="novel-context-value novel-context-workspace-button"
+              onClick={props.onWorkspaceSelect}
+              title={value}
+              type="button"
+            >
+              {value}
+            </button>
+          ) : (
+            <span className="novel-context-value" title={value}>
+              {value}
+            </span>
+          )}
         </span>
       ))}
     </div>

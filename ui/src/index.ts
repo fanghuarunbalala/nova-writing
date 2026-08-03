@@ -10,6 +10,8 @@ export * from "./navigation/index.js";
 export * from "./outline/index.js";
 export * from "./platform/index.js";
 export * from "./review/index.js";
+export * from "./settings/index.js";
 export * from "./shell/index.js";
 export * from "./state/index.js";
 export * from "./theme/index.js";
+export * from "./workspace/index.js";

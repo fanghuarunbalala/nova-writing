@@ -21,10 +21,16 @@ export interface ApplicationShellProps {
   readonly conversations?: readonly ConversationSidebarItem[];
   readonly onNavigate?: (item: ProjectNavigationItem) => void;
   readonly onConversationSelect?: (conversationId: string) => void;
+  readonly onOpenWorkspace?: () => void;
+  readonly onCloseWorkspace?: () => void;
+  readonly onOpenSettings?: () => void;
+  readonly workspaceOpen?: boolean;
   readonly sidebarMode?: SidebarMode;
   readonly inspectorMode?: InspectorMode;
   readonly inspector?: ReactNode;
   readonly composer?: ReactNode;
+  readonly emptyState?: ReactNode;
+  readonly overlays?: ReactNode;
   readonly children?: ReactNode;
 }
 
@@ -33,10 +39,16 @@ export function ApplicationShell({
   conversations,
   onNavigate,
   onConversationSelect,
+  onOpenWorkspace,
+  onCloseWorkspace,
+  onOpenSettings,
+  workspaceOpen = false,
   sidebarMode = "expanded",
   inspectorMode = "closed",
   inspector,
   composer,
+  emptyState,
+  overlays,
   children,
 }: ApplicationShellProps) {
   const extensions = useNovelUiExtensions();
@@ -47,7 +59,12 @@ export function ApplicationShell({
       <div className="novel-titlebar-extension">
         {TitleBar !== undefined ? <TitleBar /> : null}
       </div>
-      <TopMenu />
+      <TopMenu
+        onCloseWorkspace={onCloseWorkspace}
+        onOpenSettings={onOpenSettings}
+        onOpenWorkspace={onOpenWorkspace}
+        workspaceOpen={workspaceOpen}
+      />
       <CurrentContextBar {...context} />
       <div className="novel-shell-body" data-inspector-mode={inspectorMode} data-sidebar-mode={sidebarMode}>
         <ProjectSidebar
@@ -56,9 +73,12 @@ export function ApplicationShell({
           onNavigate={onNavigate}
           onConversationSelect={onConversationSelect}
         />
-        <ConversationWorkspace composer={composer}>{children}</ConversationWorkspace>
+        <ConversationWorkspace composer={composer} emptyState={emptyState}>
+          {children}
+        </ConversationWorkspace>
         <InspectorHost mode={inspectorMode}>{inspector}</InspectorHost>
       </div>
+      {overlays}
     </div>
   );
 }

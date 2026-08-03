@@ -68,13 +68,15 @@ assert.match(markup, /"context"/);
 assert.match(markup, /"body"/);
 assert.match(markup, /\.novel-shell-body \{[\s\S]*grid-area: body/);
 assert.match(markup, /height: 100dvh/);
+assert.match(markup, /min-width: 0/);
+assert.match(markup, /@media \(max-width: 720px\)/);
 
 const closedMarkup = renderToStaticMarkup(
   createElement(NovelApp, { api, platform }),
 );
 assert.match(closedMarkup, /data-inspector-mode="closed"/);
 assert.match(closedMarkup, /aria-hidden="true"/);
-assert.match(closedMarkup, /选择或新建一个对话/);
+assert.match(closedMarkup, /选择 Workspace/);
 
 await transport.close();
 await host.close();

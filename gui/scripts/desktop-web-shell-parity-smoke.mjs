@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { mountDesktopRenderer } from "../dist/renderer/index.js";
 import { mountWebBrowser } from "../../web/dist/browser/index.js";
 
 async function run() {
+  await assertResponsiveShellStyles();
   const dom = installDom();
   const bridge = new TestElectronBridge();
   const appProps = {
@@ -67,6 +69,16 @@ async function run() {
   assert.equal(webRoot.childNodes.length, 0);
 
   console.log("desktop web shell parity smoke passed");
+}
+
+async function assertResponsiveShellStyles() {
+  const [desktopCss, webCss] = await Promise.all([
+    readFile(new URL("../src/renderer/renderer.css", import.meta.url), "utf8"),
+    readFile(new URL("../../web/src/browser/browser.css", import.meta.url), "utf8"),
+  ]);
+  assert.equal(desktopCss, webCss);
+  assert.match(desktopCss, /min-width:\s*0/);
+  assert.equal(/min-width:\s*760px/.test(desktopCss), false);
 }
 
 class TestElectronBridge {

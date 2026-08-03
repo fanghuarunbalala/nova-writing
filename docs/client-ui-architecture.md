@@ -377,6 +377,28 @@ Subsequent GUI/Web checkpoints now implement the shared visual Shell, state, Con
 
 The shared visual Shell uses explicit named Grid rows for the optional title bar, menu, context bar, and main body. Hiding an empty title-bar extension no longer changes auto-placement of the remaining regions, and the main Workspace body retains the full remaining viewport height in both GUI and Web shells.
 
+### 8.2 Implemented Workspace and Settings Shell Checkpoint
+
+`@novel/ui` now owns the shared interaction skeleton for selecting one active Workspace per application window. `NovelApp` accepts an optional `WorkspaceController`; the controller exposes immutable current, recent, phase, and redacted error snapshots while delegating platform work through `WorkspacePickerPort` and `WorkspaceSessionPort`. Its asynchronous selection, open, refresh, and close operations are serialized so two UI commands cannot mutate the active Workspace concurrently.
+
+The Workspace value in the persistent context bar is clickable, the empty Conversation area offers a primary `选择 Workspace` action, and the `项目` menu exposes `打开 Workspace…` and `关闭 Workspace`. The chooser presents recent Workspace identities and never exposes a local filesystem path through shared React contracts. Opening or closing a Workspace updates the existing `ApplicationShellStore` context and clears stale Shell identities rather than creating a second presentation state tree.
+
+The shared, GUI, and Web roots no longer impose a `760px` minimum page width. Narrow windows keep the full application inside the viewport, reduce the sidebar track without dropping its navigation list, allow the context bar to scroll independently, and proportionally share the remaining area with an open Inspector instead of creating document-level horizontal clipping.
+
+The `编辑` menu now owns `设置…`. `ApplicationSettingsStore` provides process-local immutable settings snapshots, and the shared Settings dialog applies the sidebar presentation preference immediately while rendering extension-contributed `settingsSections`. Persistence, platform account settings, model/provider settings, and production configuration mutation remain outside this checkpoint.
+
+W1 deliberately does not add Electron, Node filesystem, SQLite, Core Workspace API, or Novel API behavior. The default shared/Web composition uses unavailable Workspace ports and reports a safe user-facing error when local selection is requested. Production Workspace switching requires a stable application-level Host boundary above the Workspace-bound Conversation router:
+
+```text
+Renderer
+    → ApplicationApiRouter
+    → WorkspaceSessionManager
+    → active NodeConversationApiApplication
+    → active ConversationApiRouter
+```
+
+Focused validation uses injected deterministic Mock Workspace ports to prove the empty state, recent list, open and close transitions, clickable menus, Settings extension rendering, immediate sidebar updates, immutable snapshots, strictly serialized Workspace operations, and coexistence of host-provided overlays with built-in dialogs.
+
 ## 9. Platform Shells and UI Extensions
 
 Shared UI must not branch on global platform detection such as `isElectron` or inspect `window.novelDesktop` directly.
@@ -750,6 +772,10 @@ Platform packages remain:
 10. A unified logical API does not require mandatory HTTP transport.
 11. Client-to-Host Transport remains separate from Host-to-Runtime IPC.
 12. GUI packaging includes the shared UI and required Core resources in one desktop application artifact.
+13. A Workspace represents one selected novel project root, while shared UI receives only opaque references and presentation-safe identities.
+14. Each application window has at most one active Workspace; future multi-Workspace desktop behavior uses multiple windows rather than multiple active roots inside one Shell Store.
+15. Workspace selection and session activation are separate injected ports in shared UI; native directory selection remains a desktop-host responsibility.
+16. Settings is an Edit-menu dialog, not a fifth top-level menu, and extension settings render through the existing bounded `settingsSections` contract.
 
 ## 20. Deferred Decisions
 
@@ -765,3 +791,5 @@ The following choices remain deferred to their applicable implementation review 
 8. concrete React component, styling, editor, and terminal rendering libraries;
 9. dynamic third-party UI extension and plugin support;
 10. Novel-domain editor, document projection, revision, and change-approval contracts.
+11. production Workspace API envelopes, application-level routing, recent-Workspace persistence, and Workspace rebinding behavior;
+12. durable application settings storage and the final settings schema.

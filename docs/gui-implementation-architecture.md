@@ -1356,7 +1356,17 @@ The desktop Renderer now provides an `ElectronApiTransport` implementation of th
 
 Pull-based reads preserve one-frame-at-a-time backpressure without exposing EventEmitter, `ipcRenderer`, Electron, Node streams, or Main-process objects to shared UI. Abort signals remain Renderer-local and trigger a bounded bridge cancellation request. Bridge infrastructure failures become stable redacted `ApiTransportError` values; logs contain only request, operation, subscription, Event sequence, direction, type, and stable failure metadata, never payloads or raw bridge errors.
 
-This checkpoint does not implement Electron Main handlers, `contextBridge.exposeInMainWorld`, IPC channel names, Host composition, Runtime process placement, Vite, packaging, signing, or updates.
+This Renderer checkpoint does not implement Electron Main handlers, `contextBridge.exposeInMainWorld`, IPC channel names, Host composition, Runtime process placement, Vite, packaging, signing, or updates.
+
+### 28.2 Implemented Main and Preload IPC Boundary
+
+The desktop protocol now fixes five versioned IPC channels corresponding exactly to the Renderer bridge capabilities. Preload creates one frozen bridge and exposes it under the fixed `novelDesktop` key. It catches IPC invocation failures as a stable disconnected result and never exposes `ipcRenderer`, arbitrary channel invocation, Node modules, filesystem access, process control, credentials, or Main objects to React.
+
+`DesktopApiIpcController` registers the five Main handlers over injected Electron-shaped ports and an injected Core `ApiTransport`. Every invocation requires an explicit authorized sender ID. Active requests and subscriptions are isolated per sender; cancellation cannot target another sender, subscription reads cannot cross sender ownership, concurrent reads on one subscription are rejected, and Renderer subscription IDs are checked against their opening request before Main rewrites Host frames to that exact public ID.
+
+The controller owns only IPC request and subscription handles, not the injected Host Transport. Releasing a sender aborts its pending requests and closes its subscriptions. Disposing the controller removes all five handlers and cleans up every remaining handle. Main responses and logs expose stable codes, identities, operations, counts, Event sequence, direction, and type only; raw payloads and error details remain redacted.
+
+This checkpoint uses injectable Electron-shaped ports so its full protocol can be validated without an Electron runtime. Actual `electron` imports, BrowserWindow creation, WebContents lifecycle wiring, Core Host composition, Runtime placement, Vite bootstrap, packaging, signing, and updates remain later desktop steps.
 
 ## 29. Testing Strategy
 

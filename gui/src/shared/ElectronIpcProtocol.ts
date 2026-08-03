@@ -1,0 +1,16 @@
+/** Fixed, versioned Electron IPC names shared by Main and Preload adapters. */
+export const NOVEL_DESKTOP_BRIDGE_KEY = "novelDesktop" as const;
+
+export const ELECTRON_API_IPC_CHANNEL = Object.freeze({
+  request: "novel.api.v1.request",
+  cancelRequest: "novel.api.v1.request.cancel",
+  openSubscription: "novel.api.v1.subscription.open",
+  readSubscription: "novel.api.v1.subscription.read",
+  closeSubscription: "novel.api.v1.subscription.close",
+} as const);
+
+export type ElectronApiIpcChannel =
+  (typeof ELECTRON_API_IPC_CHANNEL)[keyof typeof ELECTRON_API_IPC_CHANNEL];
+
+export const ELECTRON_API_IPC_CHANNELS: readonly ElectronApiIpcChannel[] =
+  Object.freeze(Object.values(ELECTRON_API_IPC_CHANNEL));

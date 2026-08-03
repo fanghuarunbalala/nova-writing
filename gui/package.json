@@ -8,7 +8,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "smoke:electron-api-transport": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-api-transport-typecheck.ts && node scripts/electron-api-transport-smoke.mjs"
+    "smoke:electron-api-transport": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-api-transport-typecheck.ts && node scripts/electron-api-transport-smoke.mjs",
+    "smoke:electron-main-preload": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-main-preload-typecheck.ts && node scripts/electron-main-preload-smoke.mjs"
   },
   "dependencies": {
     "@novel/core": "workspace:*",

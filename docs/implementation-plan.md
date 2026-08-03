@@ -2954,3 +2954,10 @@ No next checkpoint begins without explicit approval.
 Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
 Runtime Task 1 through Task 7 is complete. Novel Task N7 through Task N11 remains paused until an explicit track change.
+
+Post-Task-7 Agent orchestration direction is documented in
+`docs/agent-orchestration.md`. It is not an active implementation task and does
+not reopen completed Runtime checkpoints. The recorded direction uses
+Conversation for all Agent forms, non-blocking Subagent start/query/cancel,
+final Assistant content as the Subagent result, and explicit Tool-mediated
+cross-Conversation communication for persistent Agent Teams.

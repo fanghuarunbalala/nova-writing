@@ -5777,6 +5777,24 @@ Checkpoint 7 treats executable smoke fixtures as both acceptance tests and refer
 
 Runtime Task 1 through Task 7 is complete. Performance baselines remain deferred rather than implied; the accepted release checkpoint guarantees the documented protocol, persistence, recovery, cancellation, redaction, and cross-client behavior validated by the complete suite.
 
+## 25.2 Future Conversation-Based Agent Orchestration
+
+The accepted post-Task-7 design direction is recorded in
+`docs/agent-orchestration.md`. It keeps Conversation as the shared foundation
+for Main Agents, Orchestrators, persistent Team members, and ephemeral
+Subagents while defining two distinct completion protocols:
+
+- a non-blocking Subagent is queried explicitly and uses its final canonical
+  Assistant content as its result;
+- a persistent Team member communicates with its Orchestrator through explicit
+  cross-Conversation Tools backed by durable target InputEvent enqueue.
+
+The document also records non-blocking Task/query/cancellation Tools, Team
+communication routing, optional Sleep/wake semantics, System Prompt role
+sections, composition rules, and unresolved protocol decisions. This direction
+is documented only; it is not part of the completed Task 6B or Task 7
+implementation.
+
 ## 26. Persistence Model
 
 Logical local storage layout:

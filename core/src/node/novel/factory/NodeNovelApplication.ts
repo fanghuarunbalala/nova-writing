@@ -12,6 +12,8 @@ import {
   NovelCommitWriter,
   NovelDraftChangeSetBuilder,
   NovelDraftOperationWriter,
+  NovelEvidenceQueryService,
+  NovelEvidenceService,
   NovelMutationService,
   NovelOperationExecutor,
   NovelRebaseService,
@@ -48,6 +50,7 @@ import {
   SqliteNovelCommitStore,
   SqliteNovelDraftOperationStore,
   SqliteNovelEntityQueryStore,
+  SqliteNovelEvidenceQueryStore,
   SqliteNovelLifecycleRecordWriter,
   SqliteNovelManuscriptQueryStore,
   SqliteNovelOutlineQueryStore,
@@ -78,11 +81,13 @@ export interface NodeNovelApplication {
   readonly outline: StoryOutlineService;
   readonly publication: PublicationService;
   readonly manuscript: ManuscriptService;
+  readonly evidence: NovelEvidenceService;
   readonly characterQueries: CharacterQueryService;
   readonly locationQueries: LocationQueryService;
   readonly outlineQueries: StoryOutlineQueryService;
   readonly publicationQueries: PublicationQueryService;
   readonly manuscriptQueries: ManuscriptQueryService;
+  readonly evidenceQueries: NovelEvidenceQueryService;
   readonly changeSets: NovelDraftChangeSetBuilder;
   readonly commits: NovelCommitService<NovelMutationContext>;
   readonly commitRecovery: NovelCommitRecoveryService<NovelMutationContext>;
@@ -138,6 +143,11 @@ export function createNodeNovelApplication(
   });
   const mutations = new NovelMutationService({ writer, logger });
   const entityQueryStore = new SqliteNovelEntityQueryStore({
+    location: options.location,
+    novelId: options.novelId,
+    logger,
+  });
+  const evidenceQueryStore = new SqliteNovelEvidenceQueryStore({
     location: options.location,
     novelId: options.novelId,
     logger,
@@ -220,11 +230,13 @@ export function createNodeNovelApplication(
       logger,
     }),
     manuscript: new ManuscriptService({ mutations, identityFactory, logger }),
+    evidence: new NovelEvidenceService({ mutations, identityFactory, logger }),
     characterQueries: new CharacterQueryService(entityQueryStore),
     locationQueries: new LocationQueryService(entityQueryStore),
     outlineQueries: new StoryOutlineQueryService(outlineQueryStore),
     publicationQueries: new PublicationQueryService(publicationQueryStore),
     manuscriptQueries: new ManuscriptQueryService(manuscriptQueryStore),
+    evidenceQueries: new NovelEvidenceQueryService(evidenceQueryStore),
     changeSets,
     approvals,
     commits: new NovelCommitService({

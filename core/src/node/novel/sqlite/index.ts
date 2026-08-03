@@ -18,6 +18,7 @@ export * from "./SqliteNovelApprovalStore.js";
 export * from "./SqliteNovelDraftStore.js";
 export * from "./SqliteNovelDraftOperationStore.js";
 export * from "./SqliteNovelEntityRepository.js";
+export * from "./SqliteNovelEvidenceQueryStore.js";
 export * from "./SqliteNovelOutlineRepository.js";
 export * from "./SqliteNovelOutlineQueryStore.js";
 export * from "./SqliteNovelPublicationRepository.js";

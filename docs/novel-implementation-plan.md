@@ -1422,6 +1422,17 @@ Operation payloads remain exact JSON and contain no repository closures or SQL.
 Application services, explicit-scope queries, and completion admission remain
 the next C-C substep.
 
+C-C2 composes `NovelEvidenceService`, `NovelEvidenceQueryService`, and one
+explicit-scope SQLite adapter. All Evidence writes enter the serialized Draft
+writer; reads return strict values with persisted record digests. Completion
+admission reconstructs Outline, Publication, Manuscript, repair chains, current
+scope Revision, and the selected Realization inside one SQLite read transaction
+before invoking the platform-neutral validator. Focused acceptance confirms
+Draft admission for a current conforming Range, canonical isolation, durable
+Commit/restart reads, automatic stale rejection after the global Revision
+advances, and redacted structured logs. Task N11-C Realization/Evidence
+application coverage is complete.
+
 ### N11-D Documentation and Examples
 
 Update accepted architecture diagrams and add platform-neutral application examples. Tool examples remain deferred.

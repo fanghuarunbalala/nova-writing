@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "smoke:configuration-bootstrap": "pnpm --dir ../core build && pnpm build && node scripts/cli-configuration-bootstrap-smoke.mjs"
   },
   "dependencies": {
     "@novel/core": "workspace:*"

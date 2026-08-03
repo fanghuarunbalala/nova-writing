@@ -6,21 +6,30 @@
   "main": "dist/renderer/index.js",
   "types": "dist/renderer/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json && pnpm build:preload",
+    "build": "tsc -p tsconfig.json && pnpm build:preload && pnpm build:renderer",
     "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload/preload.cjs --log-level=warning",
+    "build:renderer": "vite build",
     "check": "tsc -p tsconfig.json --noEmit",
+    "dev:renderer": "vite",
     "smoke:electron-api-transport": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-api-transport-typecheck.ts && node scripts/electron-api-transport-smoke.mjs",
     "smoke:electron-main-preload": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-main-preload-typecheck.ts && node scripts/electron-main-preload-smoke.mjs",
-    "smoke:electron-desktop-shell": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-desktop-shell-typecheck.ts && node scripts/electron-desktop-shell-smoke.mjs"
+    "smoke:electron-desktop-shell": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-desktop-shell-typecheck.ts && node scripts/electron-desktop-shell-smoke.mjs",
+    "smoke:electron-renderer-bootstrap": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-renderer-bootstrap-typecheck.tsx && node scripts/electron-renderer-bootstrap-smoke.mjs"
   },
   "dependencies": {
     "@novel/core": "workspace:*",
     "@novel/ui": "workspace:*",
-    "react": "19.2.8"
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@types/jsdom": "28.0.3",
     "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
     "electron": "43.2.0",
-    "esbuild": "0.28.1"
+    "esbuild": "0.28.1",
+    "jsdom": "30.0.1",
+    "vite": "8.2.0"
   }
 }

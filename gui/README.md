@@ -17,6 +17,11 @@ Renderer build target.
 The sandboxed Preload is bundled as the single CommonJS file
 `dist/preload/preload.cjs`; the window manager rejects non-`.cjs` Preload paths.
 
+The Renderer is built by Vite into `dist/renderer-app` with relative asset URLs
+for `loadFile()`. Its bootstrap validates the five-method `window.novelDesktop`
+surface, injects the shared white `DesktopNovelApp`, and exposes no Electron or
+Node object to React.
+
 The Renderer must never import Node-only Core adapters or unrestricted Electron
 APIs. Desktop capabilities enter shared UI through explicit platform ports and
 bounded extension contracts.

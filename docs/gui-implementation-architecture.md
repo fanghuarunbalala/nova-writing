@@ -1380,6 +1380,16 @@ Each managed WebContents sender becomes authorized only while its window is aliv
 
 This checkpoint still does not provide the executable Host factory, Renderer DOM bootstrap, Vite configuration, application menu, native platform ports, packaging, signing, updater, or Runtime placement decision.
 
+### 28.4 Implemented Renderer Bootstrap Boundary
+
+The desktop Renderer now has a Vite production build rooted at `gui/index.html` and emitted to `dist/renderer-app` with relative asset URLs suitable for `BrowserWindow.loadFile()`. The HTML defines the root element, a light color scheme, and a restrictive Content Security Policy. Shared white-shell styles remain owned by `@novel/ui`; GUI adds only document-level sizing and reset rules.
+
+`resolveElectronPreloadBridge()` requires exactly the five accepted bridge methods and returns a new frozen wrapper, so additional globals or capabilities cannot enter application composition accidentally. `createDesktopRendererComposition()` constructs `ElectronApiTransport`, `DefaultNovelApiClient`, and an initial immutable `FrontendPlatform` whose not-yet-bridged native capabilities are explicitly false. `mountDesktopRenderer()` injects those dependencies into `DesktopNovelApp`, owns React root teardown, and closes the Transport on unload.
+
+Renderer source imports no Electron, Node, filesystem, process, or unrestricted IPC APIs. The Vite entrypoint reads only `window.novelDesktop`, and focused DOM validation mounts the existing shared Shell rather than duplicating presentation inside `@novel/gui`.
+
+This checkpoint still does not implement the production Host factory, native file/clipboard/notification bridge, automatic Workspace selection, executable Main bootstrap, application menu, packaging, signing, updater, or Runtime placement decision.
+
 ## 29. Testing Strategy
 
 ### 29.1 Core projection tests

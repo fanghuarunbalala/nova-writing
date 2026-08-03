@@ -64,7 +64,10 @@ export class AgentManifestResolver {
     });
   }
 
-  async resolve(definition: AgentDefinition): Promise<AgentManifest> {
+  async resolve(
+    definition: AgentDefinition,
+    promptCapabilities: PromptCapabilitySnapshot = this.#promptCapabilities,
+  ): Promise<AgentManifest> {
     const manifestId = await this.#manifestIdFactory.create({
       agentType: definition.agentType,
       definitionVersion: definition.definitionVersion,
@@ -77,10 +80,10 @@ export class AgentManifestResolver {
 
     const compiledPrompt = await this.#promptBuilder.build({
       definition,
-      capabilities: this.#promptCapabilities,
+      capabilities: promptCapabilities,
     });
     const promptRecipe = resolvePromptRecipe(definition, compiledPrompt);
-    const tools = this.#promptCapabilities.tools.map(
+    const tools = promptCapabilities.tools.map(
       (tool) => new AgentManifestTool({ name: tool.name, version: tool.version }),
     );
     const delegation = new AgentManifestDelegation({

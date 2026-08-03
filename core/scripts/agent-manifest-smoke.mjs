@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
+  AgentAssembler,
   AgentDefinition,
   AgentManifestResolver,
   AgentManifestStoreError,
@@ -13,9 +14,14 @@ import {
   PromptRecipe,
   PromptSectionItem,
   SystemPromptBuilder,
+  ToolGroupCatalog,
+  ToolRegistry,
   createDefaultPromptSectionRegistry,
+  defineTool,
+  loadToolGroupManifest,
   novelAgentDefinition,
 } from "../dist/index.js";
+import { Type } from "typebox";
 
 class Sha256Digester {
   algorithm = "sha256";
@@ -86,6 +92,42 @@ assert.throws(() => { manifest.agentType = "changed"; }, TypeError);
 
 const sameManifest = await createResolver().resolve(novelAgentDefinition);
 assert.equal(sameManifest.manifestDigest, manifest.manifestDigest);
+
+const todoTool = defineTool({
+  descriptor: {
+    name: "TodoWrite",
+    version: "1.0.0",
+    label: "Todo Write",
+    description: "Maintains the current execution plan.",
+    parameters: Type.Object({}),
+  },
+  handler: { async execute() { return { content: [] }; } },
+});
+const toolRegistry = new ToolRegistry([todoTool]);
+const toolGroups = new ToolGroupCatalog([
+  loadToolGroupManifest(`
+schemaVersion: 1
+id: runtime.todo
+version: 1.0.0
+label: Runtime todo tools
+tools: [TodoWrite]
+`),
+]);
+const assembledStore = new InMemoryAgentManifestStore();
+const assembled = await new AgentAssembler({
+  registry: toolRegistry,
+  groups: toolGroups,
+  manifestResolver: createResolver(),
+  manifestStore: assembledStore,
+  logger,
+}).assemble(novelAgentDefinition);
+assert.equal(assembled.agentType, "novel_agent");
+assert.equal(assembled.toolView.require("TodoWrite").descriptor.name, todoTool.descriptor.name);
+assert.equal(assembled.toolView.require("TodoWrite").descriptor.version, todoTool.descriptor.version);
+assert.deepEqual(assembled.toSnapshot().tools, [
+  { name: "TodoWrite", version: "1.0.0" },
+]);
+assert.equal(await assembledStore.get(assembled.manifest.manifestId), assembled.manifest);
 
 const store = new InMemoryAgentManifestStore();
 await store.save(manifest);

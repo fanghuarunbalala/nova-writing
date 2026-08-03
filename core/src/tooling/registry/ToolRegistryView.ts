@@ -9,7 +9,7 @@ import {
   type ToolRegistryViewFailure,
 } from "./ToolRegistryViewErrors.js";
 
-const GROUP_ID = /^[a-z][a-z0-9_]{0,63}$/;
+const GROUP_ID = /^(?=.{1,64}$)[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 const POLICY_FIELDS = new Set(["groupIds", "allow", "deny"]);
 
 export interface ToolRegistryViewPolicy {

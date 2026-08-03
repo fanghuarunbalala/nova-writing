@@ -1,3 +1,5 @@
+export * from "./AgentAssembly.js";
+export * from "./AgentAssembler.js";
 export * from "./AgentManifest.js";
 export * from "./AgentManifestResolver.js";
 export * from "./AgentManifestStore.js";

@@ -1,5 +1,6 @@
 /** Compile-time examples for immutable Agent Manifest assembly and lookup. */
 import {
+  AgentAssembler,
   AgentManifest,
   AgentManifestResolver,
   AgentManifestStore,
@@ -17,6 +18,7 @@ const recipe = new ResolvedPromptRecipe([
 
 const store: AgentManifestStore = new InMemoryAgentManifestStore();
 const resolver: AgentManifestResolver = undefined as never;
+const assembler: AgentAssembler = undefined as never;
 const manifest: AgentManifest = undefined as never;
 
 // @ts-expect-error Manifest Prompt Recipes are immutable.
@@ -25,4 +27,5 @@ recipe.items.push(recipe.items[0]!);
 store.getSync("manifest");
 
 void resolver;
+void assembler;
 void manifest;

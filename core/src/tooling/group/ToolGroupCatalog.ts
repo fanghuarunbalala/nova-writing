@@ -6,7 +6,7 @@ import {
   ToolGroupCatalogError,
 } from "./ToolGroupCatalogErrors.js";
 
-const GROUP_ID = /^[a-z][a-z0-9_]{0,63}$/;
+const GROUP_ID = /^(?=.{1,64}$)[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 
 export class ToolGroupCatalog {
   readonly #groupsById: ReadonlyMap<string, ToolGroupManifest>;

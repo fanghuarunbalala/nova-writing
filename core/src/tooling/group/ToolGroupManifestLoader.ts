@@ -12,7 +12,7 @@ import {
   type ToolGroupManifestFailure,
 } from "./ToolGroupManifestErrors.js";
 
-const GROUP_ID = /^[a-z][a-z0-9_]{0,63}$/;
+const GROUP_ID = /^(?=.{1,64}$)[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 const SEMANTIC_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const MANIFEST_FIELDS = new Set([
   "schemaVersion",

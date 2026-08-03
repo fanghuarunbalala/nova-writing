@@ -106,6 +106,18 @@ export class SqliteNovelManuscriptRepository
     return row === undefined ? undefined : decodeBlock(row);
   }
 
+  listBlocks(
+    manuscriptId: ParagraphBlock["manuscriptId"],
+  ): readonly ParagraphBlock[] {
+    const rows = this.database
+      .prepare(
+        `${BLOCK_SELECT}
+         WHERE manuscript_id = ? ORDER BY chapter_id, order_key, id`,
+      )
+      .all(captureManuscriptId(manuscriptId)) as unknown as BlockRow[];
+    return Object.freeze(rows.map(decodeBlock));
+  }
+
   getBlockDigest(
     id: ParagraphBlock["id"],
     field: ManuscriptBlockDigestField,
@@ -215,6 +227,18 @@ export class SqliteNovelManuscriptRepository
     return row === undefined ? undefined : decodeTombstone(row);
   }
 
+  listTombstones(
+    manuscriptId: ManuscriptBlockTombstone["manuscriptId"],
+  ): readonly ManuscriptBlockTombstone[] {
+    const rows = this.database.prepare(
+      `SELECT block_id, manuscript_id, former_chapter_id, former_order_key,
+              reason, replacement_block_id
+       FROM novel_manuscript_block_tombstones
+       WHERE manuscript_id = ? ORDER BY block_id`,
+    ).all(captureManuscriptId(manuscriptId)) as unknown as TombstoneRow[];
+    return Object.freeze(rows.map(decodeTombstone));
+  }
+
   insertTombstone(tombstone: ManuscriptBlockTombstone): boolean {
     const value = captureManuscriptBlockTombstone(tombstone);
     const result = this.database
@@ -246,6 +270,16 @@ export class SqliteNovelManuscriptRepository
       )
       .get(anchor.blockId, anchor.boundary) as RedirectRow | undefined;
     return row === undefined ? undefined : decodeRedirect(row);
+  }
+
+  listAnchorRedirects(): readonly ManuscriptAnchorRedirect[] {
+    const rows = this.database.prepare(
+      `SELECT source_block_id, source_boundary, target_block_id,
+              target_boundary, reason, review
+       FROM novel_manuscript_anchor_redirects
+       ORDER BY source_block_id, source_boundary`,
+    ).all() as unknown as RedirectRow[];
+    return Object.freeze(rows.map(decodeRedirect));
   }
 
   insertAnchorRedirect(redirect: ManuscriptAnchorRedirect): boolean {

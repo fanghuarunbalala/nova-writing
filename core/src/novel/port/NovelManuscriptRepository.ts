@@ -21,6 +21,7 @@ export interface NovelMutableManuscriptRepository {
   findManuscriptByNovelId(novelId: NovelId): Manuscript | undefined;
   insertManuscript(manuscript: Manuscript): boolean;
   getBlock(id: ManuscriptBlockId): ParagraphBlock | undefined;
+  listBlocks(manuscriptId: ManuscriptId): readonly ParagraphBlock[];
   getBlockDigest(
     id: ManuscriptBlockId,
     field: ManuscriptBlockDigestField,
@@ -39,10 +40,12 @@ export interface NovelMutableManuscriptRepository {
   replaceBlock(block: ParagraphBlock): boolean;
   deleteBlock(id: ManuscriptBlockId): boolean;
   getTombstone(id: ManuscriptBlockId): ManuscriptBlockTombstone | undefined;
+  listTombstones(manuscriptId: ManuscriptId): readonly ManuscriptBlockTombstone[];
   insertTombstone(tombstone: ManuscriptBlockTombstone): boolean;
   getAnchorRedirect(
     source: ManuscriptAnchor,
   ): ManuscriptAnchorRedirect | undefined;
+  listAnchorRedirects(): readonly ManuscriptAnchorRedirect[];
   insertAnchorRedirect(redirect: ManuscriptAnchorRedirect): boolean;
 }
 

@@ -2005,6 +2005,16 @@ Commit history and incomplete canonical Commit recovery
   Projection stages, validates their phase identity, and delegates ordering,
   single-flight execution, failure stopping, and aggregate results to the Core
   coordinator.
+- Node Projection recovery uses an explicit canonical or Draft `NovelReadScope`.
+  `SqliteNovelProjectionSourceReader` opens one read-only SQLite transaction and
+  reconstructs the Outline tree, profiles, Publication/Manuscript catalogs,
+  repair chain, bindings, entity changes, and Realizations from that scope.
+  Canonical reads bind projections to the current NovelRevision; Draft reads
+  bind them to the Draft base revision. No recovery adapter implicitly scans or
+  merges multiple Draft scopes.
+- `createNodeNovelProjectionRecoveryStage` composes the scoped Source Reader,
+  scoped disposable cache Store, readiness policy, and Core Projection Recovery
+  service without exposing SQLite through public Novel Core contracts.
 - Public recovery results contain phase and aggregate counts. Logs contain only
   stable identity, phase, and count metadata; they never include Novel content,
   Operations, payloads, paths, raw errors, stacks, or causes.

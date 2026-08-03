@@ -226,6 +226,15 @@ class SqliteEntityRepository<TEntity, TId>
       : this.captureEntity(value);
   }
 
+  list(): readonly TEntity[] {
+    const rows = this.database
+      .prepare(`${ENTITY_SELECT} FROM ${this.table} ORDER BY id`)
+      .all() as unknown as EntityRow[];
+    return Object.freeze(rows.map((row) =>
+      this.captureEntity(decodeEntity(row, this.captureId) as TEntity)
+    ));
+  }
+
   insert(entity: TEntity): boolean {
     const value = this.captureEntity(entity) as Character | Location;
     const result = this.database

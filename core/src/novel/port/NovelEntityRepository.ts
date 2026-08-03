@@ -6,6 +6,7 @@ import type { NovelReadScope } from "../query/index.js";
 
 export interface NovelMutableEntityRepository<TEntity, TId> {
   get(id: TId): TEntity | undefined;
+  list(): readonly TEntity[];
   insert(entity: TEntity): boolean;
   replace(entity: TEntity, expectedVersion: NovelEntityVersion): boolean;
   delete(id: TId, expectedVersion: NovelEntityVersion): boolean;

@@ -5,7 +5,11 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   FractionalOrderKeyFactory,
+  NOVEL_PROJECTION_MODE,
+  NOVEL_PROJECTION_TARGET_KIND,
   NovelDraftSessionService,
+  NovelProjectionPlanner,
+  canonicalNovelReadScope,
   captureCharacter,
   captureCharacterId,
   captureManuscript,
@@ -28,13 +32,17 @@ import {
   captureStoryUnitEntityChangeId,
   captureStoryUnitId,
   captureStoryUnitRealization,
+  draftNovelReadScope,
 } from "../dist/index.js";
 import {
   NodeNovelStoreLocator,
   NodeWorkspaceStoreLocator,
   SqliteNovelCanonicalStore,
   SqliteNovelDraftStore,
+  SqliteNovelProjectionSourceReader,
+  SqliteNovelProjectionStore,
   SqliteNovelSnapshotter,
+  createNodeNovelProjectionRecoveryStage,
   createSqliteNovelMutationContext,
 } from "../dist/node/index.js";
 
@@ -184,13 +192,68 @@ try {
     assert.deepEqual(evidence.listRealizations(), [realization]);
   }, true);
 
+  const readinessPolicy = {
+    evaluateCharacter() { return []; },
+    evaluateLocation() { return []; },
+  };
+  const canonicalReader = new SqliteNovelProjectionSourceReader({
+    location,
+    novelId: metadata.novelId,
+    scope: canonicalNovelReadScope,
+  });
+  const canonicalContext = await canonicalReader.readProjectionContext(
+    metadata.novelId,
+  );
+  assert.equal(canonicalContext.outline.getUnit(storyUnit.id)?.id, storyUnit.id);
+  assert.deepEqual(canonicalContext.source.characterBindings, [binding]);
+  assert.deepEqual(canonicalContext.source.entityChanges, [change]);
+  assert.deepEqual(canonicalContext.source.realizations, [realization]);
+  const target = {
+    kind: NOVEL_PROJECTION_TARGET_KIND.characterState,
+    characterId: character.id,
+    atStoryUnitId: storyUnit.id,
+    mode: NOVEL_PROJECTION_MODE.confirmed,
+  };
+  const initialProjection = new NovelProjectionPlanner(
+    canonicalContext.outline,
+    canonicalContext.source,
+    canonicalContext.ranges,
+    readinessPolicy,
+  ).projectCharacterState(target);
+  assert.notEqual(initialProjection, undefined);
+  const clock = new Clock();
+  const projectionStore = new SqliteNovelProjectionStore({
+    location,
+    novelId: metadata.novelId,
+    scope: canonicalNovelReadScope,
+    clock,
+  });
+  await projectionStore.putEntry({
+    novelId: metadata.novelId,
+    rebuildRevision: metadata.currentRevision,
+    entry: { target, projection: initialProjection },
+  });
+  const recovery = await createNodeNovelProjectionRecoveryStage({
+    location,
+    novelId: metadata.novelId,
+    scope: canonicalNovelReadScope,
+    clock,
+    readinessPolicy,
+  }).recover(metadata.novelId);
+  assert.equal(recovery.repairedCount, 1);
+  assert.equal(
+    (await projectionStore.getEntry(metadata.novelId, target))
+      ?.projection.sourceRevision,
+    metadata.currentRevision,
+  );
+
   draftStore = await SqliteNovelDraftStore.open({ location, novelId: metadata.novelId });
   const session = await new NovelDraftSessionService({
     canonicalStore,
     draftStore,
     snapshotter: new SqliteNovelSnapshotter({ location, novelId: metadata.novelId }),
     identityFactory: new IdentityFactory(),
-    clock: new Clock(),
+    clock,
   }).startDraft("conversation-projection-evidence");
   const draftPath = join(
     location.stagingDir,
@@ -203,6 +266,13 @@ try {
     evidence.putCharacterBinding({ ...binding, note: "draft" });
     assert.equal(evidence.listCharacterBindings()[0].note, "draft");
   });
+  const draftContext = await new SqliteNovelProjectionSourceReader({
+    location,
+    novelId: metadata.novelId,
+    scope: draftNovelReadScope(session),
+  }).readProjectionContext(metadata.novelId);
+  assert.equal(draftContext.source.currentRevision, session.baseRevision);
+  assert.equal(draftContext.source.characterBindings[0].note, "draft");
   withDatabase(location.canonicalDatabasePath, (database) => {
     assert.equal(
       createSqliteNovelMutationContext(database)

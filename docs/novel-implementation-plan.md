@@ -1358,6 +1358,15 @@ reject damaged rows, enforce stable row identities and available entity
 references, and participate in canonical-to-Draft snapshots. Concrete
 Projection Source composition and five-phase restart acceptance remain next.
 
+B-I3 adds `SqliteNovelProjectionSourceReader` and the scoped Node Projection
+Recovery stage factory. One read-only SQLite transaction reconstructs the
+Outline, entity profiles, Publication/Manuscript catalogs, repair chain,
+bindings, entity changes, and Realizations for exactly one explicit canonical
+or Draft scope. Focused validation drives the real Planner and SQLite cache
+replacement from canonical state, confirms Draft base-revision binding and
+Draft-only evidence visibility, and rejects damaged evidence. Full five-phase
+restart acceptance remains before N11-B is complete.
+
 ### N11-C End-to-End Validation
 
 Cover multi-Conversation Drafts, Commit, Rebase, conflict, Approval, Outline, Manuscript, publication, realization, recovery, and replay without Agent Tool involvement.

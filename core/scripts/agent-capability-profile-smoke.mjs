@@ -2,9 +2,20 @@ import assert from "node:assert/strict";
 import {
   AgentCapabilityProfile,
   AgentCapabilityProfileCatalog,
+  AgentCapabilityProfileResolver,
   AgentCapabilityProfileError,
   AGENT_CAPABILITY_PROFILE_FAILURE,
+  AgentCommunicationPolicy,
   createDefaultAgentCapabilityProfileCatalog,
+  createDefaultPromptSectionRegistry,
+  AgentDefinition,
+  AgentDelegationPolicy,
+  AgentToolPolicy,
+  InlinePromptItem,
+  PromptRecipe,
+  PromptSectionItem,
+  ToolGroupCatalog,
+  loadToolGroupManifest,
   ephemeralSubagentCapabilityProfile,
   standaloneAgentCapabilityProfile,
 } from "../dist/index.js";
@@ -55,6 +66,70 @@ assert.throws(
   (error) =>
     error instanceof AgentCapabilityProfileError &&
     error.failure === AGENT_CAPABILITY_PROFILE_FAILURE.unknownProfile,
+);
+
+const toolGroups = new ToolGroupCatalog([
+  loadToolGroupManifest(`
+schemaVersion: 1
+id: runtime.todo
+version: 1.0.0
+label: Runtime todo tools
+tools: [TodoWrite]
+`),
+]);
+const resolver = new AgentCapabilityProfileResolver({
+  profiles: catalog,
+  promptSections: createDefaultPromptSectionRegistry(),
+  toolGroups,
+});
+const definition = new AgentDefinition({
+  agentType: "profile_test_agent",
+  definitionVersion: "1.0.0",
+  label: "Profile Test Agent",
+  description: "Validates capability profile resolution.",
+  promptRecipe: new PromptRecipe([
+    new PromptSectionItem("core.runtime.protocol"),
+    new InlinePromptItem("Use the resolved capabilities."),
+    new PromptSectionItem("completion.contract"),
+  ]),
+  tools: new AgentToolPolicy({ groupIds: ["runtime.todo"] }),
+  delegation: new AgentDelegationPolicy({
+    mode: "disabled",
+    allowedAgentTypes: [],
+  }),
+  communication: new AgentCommunicationPolicy("standalone"),
+  runtimePolicyId: "default",
+});
+const resolved = await resolver.resolve({ definition });
+assert.equal(resolved.profileId, "communication.standalone");
+assert.deepEqual(resolved.promptSectionIds, [
+  "core.runtime.protocol",
+  "completion.contract",
+]);
+assert.deepEqual(resolved.toolPolicy.groupIds, ["runtime.todo"]);
+assert.deepEqual(resolved.channelIds, []);
+assert.equal(Object.isFrozen(resolved), true);
+
+const mismatchedProfile = new AgentCapabilityProfileCatalog([
+  new AgentCapabilityProfile({
+    profileId: "custom.standalone",
+    version: "1.0.0",
+    communicationRole: "orchestrator",
+  }),
+]);
+const mismatchedResolver = new AgentCapabilityProfileResolver({
+  profiles: mismatchedProfile,
+  promptSections: createDefaultPromptSectionRegistry(),
+  toolGroups,
+});
+await assert.rejects(
+  mismatchedResolver.resolve({
+    definition,
+    profileId: "custom.standalone",
+  }),
+  (error) =>
+    error instanceof AgentCapabilityProfileError &&
+    error.failure === AGENT_CAPABILITY_PROFILE_FAILURE.communicationRoleMismatch,
 );
 
 console.log("Agent Capability Profile architecture smoke passed");

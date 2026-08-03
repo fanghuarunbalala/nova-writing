@@ -3,6 +3,9 @@
 export const AGENT_CAPABILITY_PROFILE_FAILURE = {
   duplicateProfile: "duplicate_profile",
   unknownProfile: "unknown_profile",
+  communicationRoleMismatch: "communication_role_mismatch",
+  unknownPromptSection: "unknown_prompt_section",
+  unknownToolGroup: "unknown_tool_group",
 } as const;
 
 export type AgentCapabilityProfileFailure =

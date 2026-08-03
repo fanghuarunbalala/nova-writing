@@ -3447,6 +3447,17 @@ The launcher must report:
 - queue wait, event-loop lag, memory growth, and slowest scenarios;
 - no Prompt, Tool data, novel text, paths, raw errors, or stacks in logs.
 
+N-10 delivered:
+
+- the unified Core smoke launcher automatically includes Prompt Composition,
+  Nudge v2, Provider receipt, Policy Effect, Tool/Approval/Subagent bridge, and
+  recovery migration scenarios
+- the report retains total/pass/fail rates, failed-test details, wall time,
+  percentiles, event-loop lag/utilization, memory growth, and slowest tests
+- Prompt Assembly, Nudge selection, and Provider preparation latency are
+  reported separately, alongside retry/duplicate, reconciliation, and
+  Tool/Subagent scenario counts
+
 ### 13.18 N-11: Documentation and Checkpoint Commit
 
 Update the architecture, implementation plan, public protocol notes, and

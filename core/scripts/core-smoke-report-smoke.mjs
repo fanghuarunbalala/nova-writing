@@ -24,12 +24,15 @@ assert.equal(report.performance.p50TestDurationMs, 200);
 assert.equal(report.performance.p95TestDurationMs, 300);
 assert.equal(report.failedTests[0].test, "beta-smoke.mjs");
 assert.equal(report.failedTests[0].failureKind, "test_failed");
+assert.equal(report.performance.promptAssemblyLatencyMs, 0);
+assert.equal(report.nudgeScenarios.retryAndDuplicateTests, 0);
 
 const formatted = formatCoreSmokeSuiteReport(report);
 assert.equal(formatted.includes("pass=66.67%"), true);
 assert.equal(formatted.includes("failed=33.33%"), true);
 assert.equal(formatted.includes("beta-smoke.mjs"), true);
 assert.equal(formatted.includes("maximumEventLoopLag=30.00ms"), true);
+assert.equal(formatted.includes("Prompt/Nudge latency:"), true);
 
 console.log("Core smoke report smoke passed");
 

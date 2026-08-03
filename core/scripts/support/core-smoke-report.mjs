@@ -39,6 +39,14 @@ export function createCoreSmokeSuiteReport({ results, wallDurationMs, timeoutMs 
       averageEventLoopUtilization: round(average(eventLoopUtilizations), 4),
       maximumPeakRssGrowthBytes: round(maximum(peakRssGrowthValues)),
       maximumPeakHeapGrowthBytes: round(maximum(peakHeapGrowthValues)),
+      promptAssemblyLatencyMs: durationFor(results, "prompt-assembly-smoke.mjs"),
+      nudgeSelectionLatencyMs: durationFor(results, "runtime-nudge-stateful-selection-smoke.mjs"),
+      providerPreparationLatencyMs: durationFor(results, "runtime-nudge-provider-call-receipt-smoke.mjs"),
+    },
+    nudgeScenarios: {
+      retryAndDuplicateTests: countMatching(results, /provider-call-receipt|nudge-store-v2/),
+      reconciliationTests: countMatching(results, /nudge-store-v2|recovery/),
+      toolAndSubagentIntegrationTests: countMatching(results, /nudge-event-bridge|subagent/),
     },
     slowestTests: [...results]
       .sort((left, right) => right.durationMs - left.durationMs)
@@ -82,6 +90,13 @@ export function formatCoreSmokeSuiteReport(report) {
       `maximumPeakRssGrowth=${formatMebibytes(performance.maximumPeakRssGrowthBytes)}`,
       `maximumPeakHeapGrowth=${formatMebibytes(performance.maximumPeakHeapGrowthBytes)}`,
     ].join(" "),
+    [
+      "Prompt/Nudge latency:",
+      `promptAssembly=${formatMilliseconds(performance.promptAssemblyLatencyMs)}`,
+      `nudgeSelection=${formatMilliseconds(performance.nudgeSelectionLatencyMs)}`,
+      `providerPreparation=${formatMilliseconds(performance.providerPreparationLatencyMs)}`,
+    ].join(" "),
+    `Nudge scenarios: retryAndDuplicate=${report.nudgeScenarios.retryAndDuplicateTests} reconciliation=${report.nudgeScenarios.reconciliationTests} toolAndSubagent=${report.nudgeScenarios.toolAndSubagentIntegrationTests}`,
     "Slowest tests:",
     ...report.slowestTests.map(
       (result) => `- ${result.test} status=${result.status} duration=${formatMilliseconds(result.durationMs)}`,
@@ -95,6 +110,14 @@ export function formatCoreSmokeSuiteReport(report) {
         )),
   ];
   return lines.join("\n");
+}
+
+function durationFor(results, test) {
+  return round(results.find((result) => result.test === test)?.durationMs ?? 0);
+}
+
+function countMatching(results, pattern) {
+  return results.filter((result) => pattern.test(result.test)).length;
 }
 
 function ratio(value, total) {

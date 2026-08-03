@@ -1,4 +1,5 @@
 export * from "./agent/index.js";
+export * from "./config/index.js";
 export * from "./conversation/index.js";
 export * from "./message/index.js";
 export * from "./novel/index.js";

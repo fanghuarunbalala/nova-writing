@@ -30,6 +30,11 @@ the Manifest, persists it through the asynchronous Store Port, and returns an
 View needed by a Conversation Runtime; execution remains a later Runtime
 responsibility.
 
+The next Runtime boundary is `AgentRuntimeConfiguration`, documented in
+`docs/agent-runtime-configuration.md`. It adds Conversation identity, policy
+references, and explicit execution limits without placing mutable Runtime
+state or Provider objects inside the Agent Manifest.
+
 The Manifest stores:
 
 - the full `AgentDefinition` snapshot;

@@ -24,12 +24,16 @@ for (const marker of [
   "await application.evidenceQueries.evaluateCompletion",
   "participant Client as \"CLI / GUI / Web\"",
   "### 12.11 Explicit Exclusions",
+  "### 12.12 External Consumption Contract",
+  "@novel/core/node",
+  "NodeNovelWorkspaceHost",
 ]) {
   assert.equal(domain.includes(marker), true, marker);
 }
 for (const marker of [
   "## 30. Completed Novel Application Boundary",
   "Commit → Rebase → Draft → Projection → Outbox",
+  "Trusted Node Host / Web Backend",
   "core/scripts/novel-end-to-end-acceptance-smoke.mjs",
 ]) {
   assert.equal(architecture.includes(marker), true, marker);

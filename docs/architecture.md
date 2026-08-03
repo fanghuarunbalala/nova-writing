@@ -6017,7 +6017,8 @@ outside this completed boundary.
 
 ```mermaid
 flowchart LR
-    Clients["CLI / GUI / Web / Tests"]
+    Clients["CLI / TUI / GUI Renderer / Browser / Tests"]
+    Host["Trusted Node Host / Web Backend"]
     Facade["NodeNovelApplication"]
     Services["Outline / Publication / Manuscript / Evidence Services"]
     Queries["Explicit-scope Query Services"]
@@ -6026,7 +6027,8 @@ flowchart LR
     Recovery["Commit → Rebase → Draft → Projection → Outbox"]
     SQLite["Canonical and Draft SQLite"]
 
-    Clients --> Facade
+    Clients --> Host
+    Host --> Facade
     Facade --> Services
     Facade --> Queries
     Services --> Writer
@@ -6036,6 +6038,17 @@ flowchart LR
     Lifecycle --> SQLite
     Recovery --> SQLite
 ```
+
+The Client node represents a presentation or test caller, not permission to
+open SQLite from every process. CLI and TUI may place the trusted Host in their
+own Node process; Electron renderers and browser clients cross IPC or network
+transport to an Electron main, dedicated desktop host, or Web backend. That Host
+owns Workspace resolution, Novel store initialization, Conversation Draft
+lookup, `NodeNovelApplication`, recovery, resource shutdown, and translation
+between Novel lifecycle results and public OutputEvents. The currently
+implemented composition remains explicit; a future `NodeNovelWorkspaceHost`
+convenience facade is recommended but not part of the completed N0–N11 public
+contract.
 
 The completed boundary guarantees:
 

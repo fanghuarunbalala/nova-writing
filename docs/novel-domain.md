@@ -2179,6 +2179,159 @@ This architecture section intentionally does not define:
 
 Those decisions may refine adapters and callers, but they must preserve the application, port, Draft, Commit, Revision, Rebase, conflict, and OutputEvent boundaries recorded here.
 
+### 12.12 External Consumption Contract
+
+The public Novel surface has two package boundaries:
+
+- `@novel/core` exposes platform-neutral identities, immutable models, Draft
+  lifecycle contracts, explicit read scopes, application services, validation,
+  lifecycle errors, and OutputEvent integration contracts.
+- `@novel/core/node` exposes the trusted-host Workspace locator, Novel store
+  locator, SQLite and filesystem adapters, snapshotter, recovery composition,
+  and `createNodeNovelApplication` factory.
+- Browser code and an Electron renderer must never import `@novel/core/node`.
+  The Node-specific boundary belongs in a CLI/TUI process, Electron main
+  process, desktop host process, or Web backend.
+
+The currently implemented trusted-host bootstrap sequence is explicit:
+
+```ts
+import {
+  NovelDraftSessionService,
+  RandomNovelIdentityFactory,
+  SystemNovelClock,
+} from "@novel/core";
+import {
+  NodeNovelStoreLocator,
+  NodeWorkspaceStoreLocator,
+  SqliteNovelCanonicalStore,
+  SqliteNovelDraftStore,
+  SqliteNovelSnapshotter,
+  createNodeNovelApplication,
+} from "@novel/core/node";
+
+const clock = new SystemNovelClock();
+const identityFactory = new RandomNovelIdentityFactory();
+const workspace = await new NodeWorkspaceStoreLocator({ storageRoot })
+  .resolve(workdir);
+const location = await new NodeNovelStoreLocator().resolve(workspace);
+const canonicalStore = await SqliteNovelCanonicalStore.open({
+  location,
+  clock,
+  identityFactory,
+});
+const metadata = await canonicalStore.getMetadata();
+const draftStore = await SqliteNovelDraftStore.open({
+  location,
+  novelId: metadata.novelId,
+});
+const snapshotter = new SqliteNovelSnapshotter({
+  location,
+  novelId: metadata.novelId,
+});
+const drafts = new NovelDraftSessionService({
+  canonicalStore,
+  draftStore,
+  snapshotter,
+  identityFactory,
+  clock,
+});
+const application = createNodeNovelApplication({
+  location,
+  novelId: metadata.novelId,
+  identityFactory,
+  clock,
+  requireApproval: true,
+});
+```
+
+One Workspace owns one Novel. Each Conversation obtains or starts its own
+durable Draft Session, and every mutation receives that Session explicitly:
+
+```ts
+const session =
+  (await drafts.getActiveDraft(conversationId)) ??
+  (await drafts.startDraft(conversationId));
+const scope = draftNovelReadScope(session);
+
+await application.outline.createStoryUnit(session, storyUnit);
+await application.manuscript.createBlock(session, paragraphBlock);
+
+const block = await application.manuscriptQueries.getBlock(
+  scope,
+  paragraphBlock.id,
+);
+await application.manuscript.replaceBlockText(
+  session,
+  paragraphBlock.id,
+  block.textDigest,
+  revisedText,
+);
+```
+
+- Write services always target one Conversation-owned Draft and append durable
+  Operations through the serialized Draft Writer.
+- Query services always require `canonicalNovelReadScope` or
+  `draftNovelReadScope(session)`; they never choose or merge Drafts implicitly.
+- Replacement and deletion use the digest returned by the corresponding query
+  model, so stale callers cannot silently overwrite newer state.
+- `drafts.rollback(session.id)` abandons a Draft, while
+  `drafts.resetToMain(session.id)` replaces its staging state with the current
+  canonical Novel and keeps the Conversation editing session active.
+
+When Approval is enabled, the trusted host builds an exact ChangeSet, emits or
+adapts the platform Approval request, records the positive response, and only
+then commits:
+
+```ts
+const changeSet = await application.changeSets.build(session);
+await application.approvals.grant(changeSet);
+await application.commits.commit(session);
+```
+
+Any mutation after Approval changes the ChangeSet and requires a new Approval.
+A stale canonical base raises `NovelRevisionConflictError`; the host must open
+the explicit Rebase services, present or automate the accepted conflict choices,
+promote the resolved candidate into an active Draft, and close the Rebase handle.
+Approval, Rebase, and Commit remain reviewable lifecycle actions rather than
+hidden side effects of domain write methods.
+
+```mermaid
+flowchart LR
+    Client["CLI / TUI / GUI Renderer / Browser"]
+    Host["Trusted Node Host / Web Backend"]
+    Drafts["Draft Session Service"]
+    App["NodeNovelApplication"]
+    Scope["Canonical or Draft Read Scope"]
+    Store["Workspace-owned Novel Store"]
+    Events["OutputEvent / Replay Boundary"]
+
+    Client -->|Command or RPC| Host
+    Host --> Drafts
+    Host --> App
+    Host --> Scope
+    Drafts --> Store
+    App --> Store
+    Scope --> App
+    Store --> Events
+    Events -->|Push or replay| Client
+```
+
+Process placement follows one rule: only a trusted host owns Node adapters and
+storage resources. A CLI or TUI may host them in its own Node process; Electron
+places them in the main or dedicated host process; Web places them in the
+backend. Renderer and browser clients consume commands, immutable read models,
+Approval requests, OutputEvents, and replay through their transport boundary.
+
+The current Core intentionally leaves bootstrap ownership explicit:
+`NodeNovelApplication` does not own `NovelDraftSessionService`, the canonical
+store, the Draft store, or their shutdown. The host closes any opened Rebase
+handle and then closes the Draft and canonical stores. A future
+`NodeNovelWorkspaceHost` may encapsulate open, Conversation-Draft lookup,
+recovery, commit, rollback, event publication, and close for all application
+surfaces, but that convenience facade is not yet an implemented or accepted
+public contract.
+
 ## 13. Current Open Questions
 
 The following decisions remain outside the accepted Runtime implementation plan:

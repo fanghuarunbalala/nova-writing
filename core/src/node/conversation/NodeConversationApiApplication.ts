@@ -118,6 +118,7 @@ export class NodeConversationApiApplication {
           snapshotReader: queries,
           journal: store.journal,
           workspace: options.workspace,
+          agentManifestStore: store.agentManifests,
           logger,
         }),
         placement: options.placement,

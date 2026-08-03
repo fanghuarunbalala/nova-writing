@@ -2959,6 +2959,17 @@ complete. On August 3, 2026, the active track changed explicitly back to Novel
 Task N10 through Task N11. Persistent Agent Team work remains paused until
 another explicit track change.
 
+Runtime R1 through R6 are also complete as a post-Task-7 hardening track. R7
+closes the production Conversation recovery loop: `NodeConversationApiApplication`
+injects the Workspace SQLite `AgentManifestStore` into
+`StorageConversationRuntimeBootstrapFactory`, so a resumed Conversation with
+`manifestId + manifestDigest` validates the exact persisted Manifest before
+Runtime activation. Digest-only and legacy bindings remain backward compatible;
+they do not trigger strict Manifest lookup. `conversation.events.list()` stays
+process-free and does not activate a Runtime; only an accepted execution input
+can enter Host Bootstrap. The executable validation is
+`core/scripts/runtime-conversation-manifest-recovery-smoke.mjs`.
+
 Post-Task-7 Agent orchestration is documented in
 `docs/agent-orchestration.md`. The accepted S0-S6 contracts are complete. The
 Novel track does not authorize persistent Agent, Agent Team, Team

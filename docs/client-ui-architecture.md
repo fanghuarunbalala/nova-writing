@@ -385,7 +385,11 @@ The Workspace value in the persistent context bar is clickable, the empty Conver
 
 The shared, GUI, and Web roots no longer impose a `760px` minimum page width. Narrow windows keep the full application inside the viewport, reduce the sidebar track without dropping its navigation list, allow the context bar to scroll independently, and proportionally share the remaining area with an open Inspector instead of creating document-level horizontal clipping.
 
-The `编辑` menu now owns `设置…`. `ApplicationSettingsStore` provides process-local immutable settings snapshots, and the shared Settings dialog applies the sidebar presentation preference immediately while rendering extension-contributed `settingsSections`. Persistence, platform account settings, model/provider settings, and production configuration mutation remain outside this checkpoint.
+The `编辑` menu owns `设置…`. The shared Settings dialog uses a left category sidebar with a built-in `模型` page plus extension-contributed `settingsSections`. `ApplicationSettingsStore` provides process-local immutable settings snapshots for non-secret Provider metadata and the currently selected Provider. The model page supports adding and editing Provider name, Provider ID, API protocol, model ID, and optional Base URL, then selecting one current effective Provider.
+
+Credentials never enter shared Renderer settings state. API keys and OAuth material remain owned by a future desktop or server Host credential store. Durable Provider persistence and binding the selected Provider into active or resumed Conversations remain separate Host integration work.
+
+Sidebar presentation is no longer configured through an Appearance settings page. One compact upper-right top-menu control toggles the project sidebar immediately and keeps `ApplicationShellStore` plus the compatibility settings snapshot synchronized. GUI and Web use the same interaction contract.
 
 W1 deliberately does not add Electron, Node filesystem, SQLite, Core Workspace API, or Novel API behavior. The default shared/Web composition uses unavailable Workspace ports and reports a safe user-facing error when local selection is requested. Production Workspace switching requires a stable application-level Host boundary above the Workspace-bound Conversation router:
 
@@ -791,7 +795,9 @@ Platform packages remain:
 13. A Workspace represents one selected novel project root, while shared UI receives only opaque references and presentation-safe identities.
 14. Each application window has at most one active Workspace; future multi-Workspace desktop behavior uses multiple windows rather than multiple active roots inside one Shell Store.
 15. Workspace selection and session activation are separate injected ports in shared UI; native directory selection remains a desktop-host responsibility.
-16. Settings is an Edit-menu dialog, not a fifth top-level menu, and extension settings render through the existing bounded `settingsSections` contract.
+16. Settings is an Edit-menu dialog, not a fifth top-level menu, and its left category sidebar combines the built-in Model Provider page with bounded extension `settingsSections`.
+17. Shared Provider settings contain only non-secret connection metadata and one current selection; credentials and Runtime activation remain Host-owned.
+18. Project-sidebar expansion uses one compact upper-right top-menu control rather than an Appearance settings field.
 
 ## 20. Deferred Decisions
 

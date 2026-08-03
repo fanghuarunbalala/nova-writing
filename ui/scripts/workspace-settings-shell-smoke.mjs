@@ -121,22 +121,58 @@ assert.ok(container.querySelector('[role="menu"][data-menu="edit"]'));
 await clickButton("设置…");
 assert.ok(container.querySelector('[role="dialog"][aria-label="设置"]'));
 assert.ok(container.querySelector("[data-custom-overlay]"));
-assert.ok(container.querySelector("[data-extension-settings]"));
-const sidebarSelect = container.querySelector('select[aria-label="项目侧栏"]');
-assert.ok(sidebarSelect);
+assert.equal(container.textContent.includes("外观"), false);
+assert.ok(container.querySelector('[aria-label="设置分类"]'));
+assert.ok(container.querySelector('[aria-label="模型设置"]'));
+assert.equal(container.querySelector("[data-extension-settings]"), null);
+
+await clickButton("新增 Provider");
+await setField("名称", "主力模型");
+await setField("Provider ID", "openai");
+await setField("模型 ID", "gpt-5");
+await setField("Base URL", "https://api.example.test/v1");
+await clickButton("保存 Provider");
+const primaryProvider = settingsStore.getSnapshot().modelProviders[0];
+assert.equal(primaryProvider.name, "主力模型");
+assert.equal(settingsStore.getSnapshot().activeModelProviderId, primaryProvider.id);
+
+await clickButton("新增 Provider");
+await setField("名称", "备用模型");
+await setField("Provider ID", "anthropic");
+await selectField("API 协议", "anthropic-messages");
+await setField("模型 ID", "claude-sonnet");
+await clickButton("保存 Provider");
+const secondaryProvider = settingsStore.getSnapshot().modelProviders[1];
+await selectField("当前生效 Provider", secondaryProvider.id);
+assert.equal(settingsStore.getSnapshot().activeModelProviderId, secondaryProvider.id);
+
+const firstProviderRow = container.querySelectorAll(".novel-provider-row")[0];
+const firstEditButton = [...firstProviderRow.querySelectorAll("button")].find(
+  (button) => button.textContent.trim() === "编辑",
+);
+assert.ok(firstEditButton);
 await act(async () => {
-  sidebarSelect.value = "collapsed";
-  sidebarSelect.dispatchEvent(new window.Event("change", { bubbles: true }));
+  firstEditButton.click();
 });
+await setField("模型 ID", "gpt-5.1");
+await clickButton("保存 Provider");
+assert.equal(settingsStore.getSnapshot().modelProviders[0].modelId, "gpt-5.1");
+
+await clickButton("扩展");
+assert.ok(container.querySelector("[data-extension-settings]"));
+
+await clickButton("完成");
+assert.equal(container.querySelector('[role="dialog"][aria-label="设置"]'), null);
+
+await clickAriaButton("收起侧边栏");
 assert.equal(settingsStore.getSnapshot().sidebarMode, "collapsed");
 assert.equal(shellStore.getSnapshot().sidebarMode, "collapsed");
 assert.equal(
   container.querySelector(".novel-shell-body").dataset.sidebarMode,
   "collapsed",
 );
-
-await clickButton("完成");
-assert.equal(container.querySelector('[role="dialog"][aria-label="设置"]'), null);
+await clickAriaButton("展开侧边栏");
+assert.equal(shellStore.getSnapshot().sidebarMode, "expanded");
 
 await act(async () => root.unmount());
 await transport.close();
@@ -153,6 +189,34 @@ async function clickButton(label) {
   const button = findButton(label);
   assert.ok(button, `Button not found: ${label}`);
   await act(async () => button.click());
+}
+
+async function clickAriaButton(label) {
+  const button = container.querySelector(`button[aria-label="${label}"]`);
+  assert.ok(button, `Button not found: ${label}`);
+  await act(async () => button.click());
+}
+
+async function setField(label, value) {
+  const field = container.querySelector(`input[aria-label="${label}"]`);
+  assert.ok(field, `Input not found: ${label}`);
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    ).set;
+    setter.call(field, value);
+    field.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+}
+
+async function selectField(label, value) {
+  const field = container.querySelector(`select[aria-label="${label}"]`);
+  assert.ok(field, `Select not found: ${label}`);
+  await act(async () => {
+    field.value = value;
+    field.dispatchEvent(new window.Event("change", { bubbles: true }));
+  });
 }
 
 function installDom() {

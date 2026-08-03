@@ -24,6 +24,7 @@ export interface ApplicationShellProps {
   readonly onOpenWorkspace?: () => void;
   readonly onCloseWorkspace?: () => void;
   readonly onOpenSettings?: () => void;
+  readonly onToggleSidebar?: () => void;
   readonly workspaceOpen?: boolean;
   readonly sidebarMode?: SidebarMode;
   readonly inspectorMode?: InspectorMode;
@@ -42,6 +43,7 @@ export function ApplicationShell({
   onOpenWorkspace,
   onCloseWorkspace,
   onOpenSettings,
+  onToggleSidebar,
   workspaceOpen = false,
   sidebarMode = "expanded",
   inspectorMode = "closed",
@@ -63,6 +65,8 @@ export function ApplicationShell({
         onCloseWorkspace={onCloseWorkspace}
         onOpenSettings={onOpenSettings}
         onOpenWorkspace={onOpenWorkspace}
+        onToggleSidebar={onToggleSidebar}
+        sidebarMode={sidebarMode}
         workspaceOpen={workspaceOpen}
       />
       <CurrentContextBar {...context} />

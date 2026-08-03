@@ -1,14 +1,13 @@
 /** Shared Settings dialog consuming built-in and extension-contributed sections. */
-import { useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import type { NovelSettingsSection } from "../extensions/index.js";
-import type { SidebarMode } from "../state/index.js";
 import type { ApplicationSettingsStore } from "./ApplicationSettingsStore.js";
+import { ModelProviderSettingsPanel } from "./ModelProviderSettingsPanel.js";
 
 export interface SettingsDialogProps {
   readonly open: boolean;
   readonly store: ApplicationSettingsStore;
   readonly sections?: readonly NovelSettingsSection[];
-  readonly onSidebarModeChange?: (mode: SidebarMode) => void;
   readonly onDismiss: () => void;
 }
 
@@ -16,19 +15,17 @@ export function SettingsDialog({
   open,
   store,
   sections = [],
-  onSidebarModeChange,
   onDismiss,
 }: SettingsDialogProps) {
-  const snapshot = useSyncExternalStore(
-    (listener) => store.subscribe(listener),
-    () => store.getSnapshot(),
-    () => store.getSnapshot(),
-  );
+  const [activeSectionId, setActiveSectionId] = useState("models");
+  useEffect(() => {
+    if (open) setActiveSectionId("models");
+  }, [open]);
   if (!open) return null;
-  const updateSidebarMode = (mode: SidebarMode): void => {
-    store.setSidebarMode(mode);
-    onSidebarModeChange?.(mode);
-  };
+  const extensionSection = sections.find(
+    (section) => section.id === activeSectionId,
+  );
+  const ExtensionSection = extensionSection?.component;
   return (
     <div className="novel-dialog-backdrop" role="presentation">
       <section
@@ -46,35 +43,37 @@ export function SettingsDialog({
             ×
           </button>
         </header>
-        <div className="novel-dialog-content novel-settings-content">
-          <section className="novel-settings-section">
-            <div>
-              <h3>外观</h3>
-              <p>设置当前窗口的默认侧栏状态。</p>
-            </div>
-            <label>
-              <span>项目侧栏</span>
-              <select
-                aria-label="项目侧栏"
-                onChange={(event) =>
-                  updateSidebarMode(event.currentTarget.value as SidebarMode)
-                }
-                value={snapshot.sidebarMode}
+        <div className="novel-dialog-content novel-settings-layout">
+          <nav aria-label="设置分类" className="novel-settings-sidebar">
+            <button
+              data-active={activeSectionId === "models"}
+              onClick={() => setActiveSectionId("models")}
+              type="button"
+            >
+              模型
+            </button>
+            {sections.map((section) => (
+              <button
+                data-active={activeSectionId === section.id}
+                key={section.id}
+                onClick={() => setActiveSectionId(section.id)}
+                type="button"
               >
-                <option value="expanded">展开</option>
-                <option value="collapsed">收起</option>
-              </select>
-            </label>
-          </section>
-          {sections.map((section) => {
-            const Section = section.component;
-            return (
-              <section className="novel-settings-section" key={section.id}>
-                <h3>{section.title}</h3>
-                <Section />
+                {section.title}
+              </button>
+            ))}
+          </nav>
+          <div className="novel-settings-content">
+            {activeSectionId === "models" ? (
+              <ModelProviderSettingsPanel store={store} />
+            ) : null}
+            {extensionSection !== undefined && ExtensionSection !== undefined ? (
+              <section className="novel-settings-section">
+                <h3>{extensionSection.title}</h3>
+                <ExtensionSection />
               </section>
-            );
-          })}
+            ) : null}
+          </div>
         </div>
         <footer className="novel-dialog-footer">
           <button onClick={onDismiss} type="button">

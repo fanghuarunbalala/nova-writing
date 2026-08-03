@@ -16,6 +16,19 @@ declare const sessions: WorkspaceSessionPort;
 
 const workspaceController = new WorkspaceController({ picker, sessions });
 const settingsStore = new ApplicationSettingsStore({ sidebarMode: "expanded" });
+const provider = settingsStore.addModelProvider({
+  name: "Main",
+  providerId: "openai",
+  api: "openai-responses",
+  modelId: "gpt-5",
+});
+settingsStore.updateModelProvider(provider.id, {
+  name: "Main",
+  providerId: "openai",
+  api: "openai-responses",
+  modelId: "gpt-5.1",
+});
+settingsStore.setActiveModelProvider(provider.id);
 
 const app = (
   <NovelApp

@@ -193,10 +193,16 @@ function ConnectedApplicationShell({
   };
   const workspaceOpen =
     workspaceSnapshot.current !== undefined || snapshot.workspace !== undefined;
+  const sidebarMode = shell?.sidebarMode ?? snapshot.sidebarMode;
+  const toggleSidebar = (): void => {
+    const nextMode = sidebarMode === "expanded" ? "collapsed" : "expanded";
+    settingsStore.setSidebarMode(nextMode);
+    shellStore.setSidebarMode(nextMode);
+  };
   const shellProps = {
     ...shell,
     context,
-    sidebarMode: shell?.sidebarMode ?? snapshot.sidebarMode,
+    sidebarMode,
     inspectorMode: shell?.inspectorMode ?? inspectorSnapshot.mode,
     workspaceOpen,
     onOpenWorkspace: shell?.onOpenWorkspace ?? openWorkspaceDialog,
@@ -206,6 +212,7 @@ function ConnectedApplicationShell({
       }),
     onOpenSettings:
       shell?.onOpenSettings ?? (() => setSettingsDialogOpen(true)),
+    onToggleSidebar: shell?.onToggleSidebar ?? toggleSidebar,
     onNavigate:
       shell?.onNavigate ?? ((item) => {
         projectNavigation.navigate(item);
@@ -243,9 +250,6 @@ function ConnectedApplicationShell({
         />
         <SettingsDialog
           onDismiss={() => setSettingsDialogOpen(false)}
-          onSidebarModeChange={(sidebarMode) =>
-            shellStore.setSidebarMode(sidebarMode)
-          }
           open={settingsDialogOpen}
           sections={extensions.settingsSections}
           store={settingsStore}

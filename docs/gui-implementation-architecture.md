@@ -1648,6 +1648,8 @@ The stages below describe dependency order only. Each stage requires its own pla
 29. Workspace is the selected novel project root; shared React receives only opaque selection references and presentation-safe Workspace identities.
 30. One application window owns at most one active Workspace, while future multi-Workspace desktop use is represented by multiple windows.
 31. Settings is opened from `编辑 → 设置…`, and platform or extension settings extend the same shared dialog rather than adding another top-level menu.
+32. Settings uses a left category sidebar. Its built-in `模型` page manages non-secret Provider metadata, supports add/edit flows, and selects one current effective Provider; credentials remain Host-owned and are never retained by shared Renderer state.
+33. Project-sidebar expansion is controlled by one compact upper-right top-menu button rather than an Appearance settings field.
 
 ## 32. Deferred Decisions
 
@@ -1668,3 +1670,4 @@ The stages below describe dependency order only. Each stage requires its own pla
 15. user-facing replacement for the technical label `Meta`, such as `Current Content` or `Current Scope`.
 16. production application-level Workspace Router envelopes, native selection tokens, recent-Workspace persistence, and Workspace session rebinding;
 17. durable Settings storage, migration, and synchronization policy.
+18. the Host API that persists Provider metadata, resolves credentials, and applies the selected Provider to active and resumed Conversations.

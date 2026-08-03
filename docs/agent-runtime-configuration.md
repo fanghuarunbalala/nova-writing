@@ -41,3 +41,24 @@ The configuration does not contain:
 Those dependencies are injected by the Runtime Host. The configuration is safe
 to validate, snapshot, transfer across a Core boundary, and reuse for local or
 child-process execution.
+
+## Restoration
+
+```text
+ConversationRuntimeBootstrap
+    -> manifestId + manifestDigest
+    -> AgentManifestStore
+    -> AgentAssemblyRestorer
+    -> Runtime Configuration Profile
+    -> AgentRuntimeConfiguration
+```
+
+`AgentAssemblyRestorer` reconstructs the Tool View from the exact Tool policy
+stored in the Manifest and rejects missing or changed Tool versions. It reuses
+the compiled Prompt already stored in the Manifest and never calls
+`SystemPromptBuilder` or resolves a latest Prompt Section.
+
+`AgentRuntimeConfigurationFactory` requires a manifest-bound Conversation
+Bootstrap, verifies Agent type, Definition version, and Manifest digest, then
+selects the Context, Nudge, Runtime, and execution-limit profile by the
+Manifest's exact `runtimePolicyId`.

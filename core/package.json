@@ -36,6 +36,7 @@
     "smoke:novel-manuscript-anchor": "pnpm build && node scripts/novel-manuscript-anchor-smoke.mjs",
     "smoke:novel-manuscript-repair": "pnpm build && node scripts/novel-manuscript-repair-smoke.mjs",
     "smoke:novel-manuscript-operation": "pnpm build && node scripts/novel-manuscript-operation-smoke.mjs",
+    "smoke:novel-manuscript-basic-operation": "pnpm build && node scripts/novel-manuscript-basic-operation-smoke.mjs",
     "smoke:novel-manuscript-range-repair": "pnpm build && node scripts/novel-manuscript-range-repair-smoke.mjs",
     "smoke:novel-story-unit-realization": "pnpm build && node scripts/novel-story-unit-realization-smoke.mjs",
     "smoke:novel-projection-model": "pnpm build && node scripts/novel-projection-model-smoke.mjs",

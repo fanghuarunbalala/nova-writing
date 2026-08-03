@@ -89,6 +89,13 @@ export class SqliteNovelManuscriptRepository
     return row === undefined ? undefined : decodeManuscript(row);
   }
 
+  hasPublication(id: Manuscript["publicationId"]): boolean {
+    const row = this.database
+      .prepare("SELECT 1 AS present FROM novel_publication_structures WHERE id = ? LIMIT 1")
+      .get(id) as { present: number } | undefined;
+    return row !== undefined;
+  }
+
   insertManuscript(manuscript: Manuscript): boolean {
     const value = captureManuscript(manuscript);
     const result = this.database

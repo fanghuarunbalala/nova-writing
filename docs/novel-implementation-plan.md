@@ -1395,6 +1395,14 @@ Publication mutation forms, canonical publication, durable reads, and redacted
 structured logs. Manuscript and Realization application slices plus the complete
 cross-domain N11-C scenario remain next.
 
+C-B1 adds the missing version-1 Manuscript root creation, Paragraph Block
+creation, and Paragraph Block text-overwrite Operations. They preserve the
+existing synchronous deterministic handler boundary, reject duplicate or
+tombstoned Block identities, validate Publication and Chapter ownership,
+enforce per-Chapter OrderKey uniqueness, and use the persisted text SHA-256
+digest as the optimistic overwrite precondition. Application services and
+explicit-scope Manuscript queries remain the next C-B substep.
+
 ### N11-D Documentation and Examples
 
 Update accepted architecture diagrams and add platform-neutral application examples. Tool examples remain deferred.

@@ -10,8 +10,10 @@ import {
 } from "../../error/index.js";
 import {
   captureManuscriptBlockId,
+  captureManuscriptId,
   capturePublicationChapterId,
   type ManuscriptBlockId,
+  type ManuscriptId,
   type NovelOperationId,
   type PublicationChapterId,
 } from "../../identity/index.js";
@@ -24,11 +26,13 @@ import {
   captureManuscriptAnchorRedirect,
   captureManuscriptBlockTombstone,
   captureManuscriptText,
+  captureManuscript,
   captureParagraphBlock,
   captureOrderKey,
   compareOrderKeys,
   manuscriptAnchorKey,
   type ManuscriptAnchor,
+  type Manuscript,
   type OrderKey,
   type ParagraphBlock,
 } from "../../model/index.js";
@@ -46,6 +50,9 @@ import {
 import type { NovelOperationRegistry } from "../NovelOperationRegistry.js";
 
 export const NOVEL_MANUSCRIPT_OPERATION_TYPE = {
+  manuscriptCreate: "manuscript.create",
+  blockCreate: "manuscript-block.create",
+  blockTextReplace: "manuscript-block.text.replace",
   blockMove: "manuscript-block.move",
   blockSplit: "manuscript-block.split",
   blockMerge: "manuscript-block.merge",
@@ -54,6 +61,9 @@ export const NOVEL_MANUSCRIPT_OPERATION_TYPE = {
 } as const;
 
 const MANUSCRIPT_OPERATION_VERSION = captureNovelOperationVersion(1);
+const MANUSCRIPT_ENTITY_TYPE = "manuscript";
+const MANUSCRIPT_NOVEL_ENTITY_TYPE = "manuscript-for-novel";
+const PUBLICATION_ENTITY_TYPE = "publication";
 const BLOCK_ENTITY_TYPE = "manuscript-block";
 const TOMBSTONE_ENTITY_TYPE = "manuscript-tombstone";
 const REDIRECT_ENTITY_TYPE = "manuscript-anchor-redirect";
@@ -63,6 +73,84 @@ interface BlockMovePayload extends JsonObject {
   readonly blockId: string;
   readonly chapterId: string;
   readonly orderKey: string;
+}
+
+interface ManuscriptPayload extends JsonObject {
+  readonly manuscript: JsonObject;
+}
+
+interface BlockPayload extends JsonObject {
+  readonly block: JsonObject;
+}
+
+interface BlockTextReplacePayload extends JsonObject {
+  readonly blockId: string;
+  readonly text: string;
+}
+
+export function createManuscriptCreateOperation(input: {
+  readonly operationId: NovelOperationId;
+  readonly manuscript: Manuscript;
+}): NovelOperation<
+  typeof NOVEL_MANUSCRIPT_OPERATION_TYPE.manuscriptCreate,
+  ManuscriptPayload
+> {
+  const manuscript = captureManuscript(input.manuscript);
+  return captureNovelOperation({
+    operationId: input.operationId,
+    operationVersion: MANUSCRIPT_OPERATION_VERSION,
+    type: NOVEL_MANUSCRIPT_OPERATION_TYPE.manuscriptCreate,
+    expected: [
+      absent(MANUSCRIPT_ENTITY_TYPE, manuscript.id),
+      absent(MANUSCRIPT_NOVEL_ENTITY_TYPE, manuscript.novelId),
+      exists(PUBLICATION_ENTITY_TYPE, manuscript.publicationId),
+    ],
+    payload: { manuscript: toJsonObject(manuscript) },
+  });
+}
+
+export function createManuscriptBlockCreateOperation(input: {
+  readonly operationId: NovelOperationId;
+  readonly block: ParagraphBlock;
+}): NovelOperation<
+  typeof NOVEL_MANUSCRIPT_OPERATION_TYPE.blockCreate,
+  BlockPayload
+> {
+  const block = captureParagraphBlock(input.block);
+  return captureNovelOperation({
+    operationId: input.operationId,
+    operationVersion: MANUSCRIPT_OPERATION_VERSION,
+    type: NOVEL_MANUSCRIPT_OPERATION_TYPE.blockCreate,
+    expected: [
+      exists(MANUSCRIPT_ENTITY_TYPE, block.manuscriptId),
+      exists(CHAPTER_ENTITY_TYPE, block.chapterId),
+      absent(BLOCK_ENTITY_TYPE, block.id),
+      absent(TOMBSTONE_ENTITY_TYPE, block.id),
+    ],
+    payload: { block: toJsonObject(block) },
+  });
+}
+
+export function createManuscriptBlockTextReplaceOperation(input: {
+  readonly operationId: NovelOperationId;
+  readonly blockId: ManuscriptBlockId;
+  readonly expectedTextDigest: string;
+  readonly text: string;
+}): NovelOperation<
+  typeof NOVEL_MANUSCRIPT_OPERATION_TYPE.blockTextReplace,
+  BlockTextReplacePayload
+> {
+  const blockId = captureManuscriptBlockId(input.blockId);
+  return captureNovelOperation({
+    operationId: input.operationId,
+    operationVersion: MANUSCRIPT_OPERATION_VERSION,
+    type: NOVEL_MANUSCRIPT_OPERATION_TYPE.blockTextReplace,
+    expected: [
+      exists(BLOCK_ENTITY_TYPE, blockId),
+      fieldDigest(BLOCK_ENTITY_TYPE, blockId, "text", input.expectedTextDigest),
+    ],
+    payload: { blockId, text: captureManuscriptText(input.text) },
+  });
 }
 
 interface BlockSplitPayload extends JsonObject {
@@ -242,6 +330,27 @@ export function registerNovelManuscriptOperationHandlers<
   TContext extends NovelManuscriptMutationContext,
 >(registry: NovelOperationRegistry<TContext>): void {
   registry.register({
+    operationType: NOVEL_MANUSCRIPT_OPERATION_TYPE.manuscriptCreate,
+    operationVersion: MANUSCRIPT_OPERATION_VERSION,
+    apply(context, operation) {
+      applyManuscriptCreate(context.manuscript, operation);
+    },
+  });
+  registry.register({
+    operationType: NOVEL_MANUSCRIPT_OPERATION_TYPE.blockCreate,
+    operationVersion: MANUSCRIPT_OPERATION_VERSION,
+    apply(context, operation) {
+      applyBlockCreate(context.manuscript, operation);
+    },
+  });
+  registry.register({
+    operationType: NOVEL_MANUSCRIPT_OPERATION_TYPE.blockTextReplace,
+    operationVersion: MANUSCRIPT_OPERATION_VERSION,
+    apply(context, operation) {
+      applyBlockTextReplace(context.manuscript, operation);
+    },
+  });
+  registry.register({
     operationType: NOVEL_MANUSCRIPT_OPERATION_TYPE.blockMove,
     operationVersion: MANUSCRIPT_OPERATION_VERSION,
     apply(context, operation) {
@@ -276,6 +385,98 @@ export function registerNovelManuscriptOperationHandlers<
       applyAnchorRepair(context.manuscript, operation);
     },
   });
+}
+
+function applyManuscriptCreate(
+  store: NovelMutableManuscriptRepository,
+  operation: NovelOperation,
+): void {
+  const payload = capturePayloadObject(operation.payload, ["manuscript"]);
+  const manuscript = captureManuscript(payload.manuscript);
+  assertExpected(operation, [
+    absent(MANUSCRIPT_ENTITY_TYPE, manuscript.id),
+    absent(MANUSCRIPT_NOVEL_ENTITY_TYPE, manuscript.novelId),
+    exists(PUBLICATION_ENTITY_TYPE, manuscript.publicationId),
+  ]);
+  if (store.getManuscript(manuscript.id) !== undefined) {
+    throw precondition(operation, "entity_exists", MANUSCRIPT_ENTITY_TYPE, manuscript.id);
+  }
+  if (store.findManuscriptByNovelId(manuscript.novelId) !== undefined) {
+    throw precondition(
+      operation,
+      "entity_exists",
+      MANUSCRIPT_NOVEL_ENTITY_TYPE,
+      manuscript.novelId,
+    );
+  }
+  if (!store.hasPublication(manuscript.publicationId)) {
+    throw precondition(
+      operation,
+      "entity_missing",
+      PUBLICATION_ENTITY_TYPE,
+      manuscript.publicationId,
+    );
+  }
+  if (!store.insertManuscript(manuscript)) {
+    throw precondition(operation, "domain_invariant", MANUSCRIPT_ENTITY_TYPE, manuscript.id);
+  }
+}
+
+function applyBlockCreate(
+  store: NovelMutableManuscriptRepository,
+  operation: NovelOperation,
+): void {
+  const payload = capturePayloadObject(operation.payload, ["block"]);
+  const block = captureParagraphBlock(payload.block);
+  assertExpected(operation, [
+    exists(MANUSCRIPT_ENTITY_TYPE, block.manuscriptId),
+    exists(CHAPTER_ENTITY_TYPE, block.chapterId),
+    absent(BLOCK_ENTITY_TYPE, block.id),
+    absent(TOMBSTONE_ENTITY_TYPE, block.id),
+  ]);
+  requireManuscript(store, operation, block.manuscriptId);
+  if (!store.hasPublicationChapter(block.chapterId)) {
+    throw precondition(operation, "entity_missing", CHAPTER_ENTITY_TYPE, block.chapterId);
+  }
+  if (store.getBlock(block.id) !== undefined || store.getTombstone(block.id) !== undefined) {
+    throw precondition(operation, "entity_exists", BLOCK_ENTITY_TYPE, block.id);
+  }
+  if (store.findBlockAt(block.manuscriptId, block.chapterId, block.orderKey) !== undefined) {
+    throw precondition(operation, "domain_invariant", BLOCK_ENTITY_TYPE, block.id, "orderKey");
+  }
+  if (!store.insertBlock(block)) {
+    throw precondition(operation, "domain_invariant", BLOCK_ENTITY_TYPE, block.id);
+  }
+}
+
+function applyBlockTextReplace(
+  store: NovelMutableManuscriptRepository,
+  operation: NovelOperation,
+): void {
+  const payload = capturePayloadObject(operation.payload, ["blockId", "text"]);
+  const blockId = captureManuscriptBlockId(payload.blockId);
+  const text = captureManuscriptText(payload.text);
+  assertExpected(operation, [
+    exists(BLOCK_ENTITY_TYPE, blockId),
+    fieldDigest(BLOCK_ENTITY_TYPE, blockId, "text", expectedDigest(operation, 1)),
+  ]);
+  const block = requireBlock(store, operation, blockId);
+  assertBlockDigest(store, operation, blockId, "text");
+  if (!store.replaceBlock(captureParagraphBlock({ ...block, text }))) {
+    throw precondition(operation, "domain_invariant", BLOCK_ENTITY_TYPE, blockId);
+  }
+}
+
+function requireManuscript(
+  store: NovelMutableManuscriptRepository,
+  operation: NovelOperation,
+  id: ManuscriptId,
+): Manuscript {
+  const manuscript = store.getManuscript(id);
+  if (manuscript === undefined) {
+    throw precondition(operation, "entity_missing", MANUSCRIPT_ENTITY_TYPE, id);
+  }
+  return manuscript;
 }
 
 function applyBlockMove(

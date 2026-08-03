@@ -9,6 +9,7 @@ import type {
 import { registerNovelEntityOperationHandlers } from "./entity/index.js";
 import { registerNovelManuscriptOperationHandlers } from "./manuscript/index.js";
 import { registerNovelOutlineOperationHandlers } from "./outline/index.js";
+import { registerNovelPublicationOperationHandlers } from "./publication/index.js";
 import { NovelOperationRegistry } from "./NovelOperationRegistry.js";
 
 export type NovelMutationContext = NovelEntityMutationContext &
@@ -23,6 +24,7 @@ export function createDefaultNovelOperationRegistry<
   const registry = new NovelOperationRegistry<TContext>();
   registerNovelEntityOperationHandlers(registry);
   registerNovelOutlineOperationHandlers(registry);
+  registerNovelPublicationOperationHandlers(registry);
   registerNovelManuscriptOperationHandlers(registry);
   return registry;
 }

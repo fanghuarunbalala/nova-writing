@@ -1,4 +1,4 @@
-/** Composes the complete Node SQLite Novel application through Task N9-E. */
+/** Composes the Node SQLite Novel application including the Publication slice. */
 import {
   CharacterQueryService,
   CharacterService,
@@ -18,6 +18,8 @@ import {
   NovelResolvedRebaseService,
   RandomNovelIdentityFactory,
   RandomNovelRevisionFactory,
+  PublicationQueryService,
+  PublicationService,
   StoryOutlineQueryService,
   StoryOutlineService,
   SystemNovelClock,
@@ -46,6 +48,7 @@ import {
   SqliteNovelEntityQueryStore,
   SqliteNovelLifecycleRecordWriter,
   SqliteNovelOutlineQueryStore,
+  SqliteNovelPublicationQueryStore,
   SqliteNovelConflictStore,
   SqliteNovelRebaseCandidateStore,
   SqliteNovelResolutionApplicationPlanStore,
@@ -70,9 +73,11 @@ export interface NodeNovelApplication {
   readonly characters: CharacterService;
   readonly locations: LocationService;
   readonly outline: StoryOutlineService;
+  readonly publication: PublicationService;
   readonly characterQueries: CharacterQueryService;
   readonly locationQueries: LocationQueryService;
   readonly outlineQueries: StoryOutlineQueryService;
+  readonly publicationQueries: PublicationQueryService;
   readonly changeSets: NovelDraftChangeSetBuilder;
   readonly commits: NovelCommitService<NovelMutationContext>;
   readonly commitRecovery: NovelCommitRecoveryService<NovelMutationContext>;
@@ -137,6 +142,11 @@ export function createNodeNovelApplication(
     novelId: options.novelId,
     logger,
   });
+  const publicationQueryStore = new SqliteNovelPublicationQueryStore({
+    location: options.location,
+    novelId: options.novelId,
+    logger,
+  });
   const changeSetDigester = new NodeSha256NovelChangeSetDigester();
   const changeSets = new NovelDraftChangeSetBuilder({
     store,
@@ -194,9 +204,15 @@ export function createNodeNovelApplication(
       identityFactory,
       logger,
     }),
+    publication: new PublicationService({
+      mutations,
+      identityFactory,
+      logger,
+    }),
     characterQueries: new CharacterQueryService(entityQueryStore),
     locationQueries: new LocationQueryService(entityQueryStore),
     outlineQueries: new StoryOutlineQueryService(outlineQueryStore),
+    publicationQueries: new PublicationQueryService(publicationQueryStore),
     changeSets,
     approvals,
     commits: new NovelCommitService({

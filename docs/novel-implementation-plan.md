@@ -1381,6 +1381,20 @@ cleanup. **Task N11-B is complete.**
 
 Cover multi-Conversation Drafts, Commit, Rebase, conflict, Approval, Outline, Manuscript, publication, realization, recovery, and replay without Agent Tool involvement.
 
+**Status:** C-A completes the Publication application vertical slice. Version-1
+Publication, Volume, and Chapter Operations now cover root creation plus ordered
+create, full-replace, and delete behavior with exact JSON payloads, stable
+operation versions, existence checks, whole-record SHA-256 preconditions, and
+deterministic ownership, ordering, StoryUnit-reference, and Manuscript-reference
+validation. `PublicationService` routes every mutation through the serialized
+Draft writer; `PublicationQueryService` requires an explicit canonical or Draft
+`NovelReadScope` and returns immutable catalog snapshots plus Volume and Chapter
+record digests. The Node application composes the SQLite query adapter, and
+focused Draft-to-Commit-to-restart acceptance verifies scope isolation, all
+Publication mutation forms, canonical publication, durable reads, and redacted
+structured logs. Manuscript and Realization application slices plus the complete
+cross-domain N11-C scenario remain next.
+
 ### N11-D Documentation and Examples
 
 Update accepted architecture diagrams and add platform-neutral application examples. Tool examples remain deferred.

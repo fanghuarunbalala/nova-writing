@@ -542,6 +542,43 @@ const NOVEL_THEME_CSS = `
   font-size: 12px;
 }
 
+.novel-change-review-operations {
+  margin-top: 14px;
+  border-top: 1px solid var(--novel-border);
+  padding-top: 12px;
+}
+
+.novel-change-review-operations h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.novel-change-review-operations ul {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.novel-change-review-operations li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--novel-border);
+  border-radius: 8px;
+  padding: 8px 9px;
+  background: var(--novel-surface-quiet);
+}
+
+.novel-change-review-operations li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
 .novel-change-review-notice[data-notice-kind="stale"],
 .novel-change-review-notice[data-notice-kind="conflict"],
 .novel-change-review-notice[data-notice-kind="unavailable"],

@@ -1,6 +1,10 @@
 /** Shared read-only review chrome around domain-specific diff content. */
 import type { ReactNode } from "react";
 import {
+  ReferenceInConversationButton,
+  type ComposerContentReference,
+} from "../composer/index.js";
+import {
   captureNovelChangeReviewView,
   type NovelChangeReviewLifecycle,
   type NovelChangeReviewView,
@@ -9,6 +13,10 @@ import {
 
 export interface NovelChangeReviewShellProps {
   readonly view: NovelChangeReviewView;
+  readonly referenceForOperation?: (
+    operationId: string,
+    view: NovelChangeReviewView,
+  ) => ComposerContentReference | undefined;
   readonly children?: ReactNode;
 }
 
@@ -22,9 +30,16 @@ const DOMAIN_LABELS: Readonly<Record<NovelReviewDomain, string>> = Object.freeze
 
 export function NovelChangeReviewShell({
   view: input,
+  referenceForOperation,
   children,
 }: NovelChangeReviewShellProps) {
   const view = captureNovelChangeReviewView(input);
+  const operationReferences = referenceForOperation === undefined
+    ? []
+    : view.target.operationIds.flatMap((operationId) => {
+        const reference = referenceForOperation(operationId, view);
+        return reference === undefined ? [] : [{ operationId, reference }];
+      });
   return (
     <section
       className="novel-change-review"
@@ -55,6 +70,19 @@ export function NovelChangeReviewShell({
         </div>
       </dl>
       <ReviewLifecycleNotice lifecycle={view.lifecycle} />
+      {operationReferences.length > 0 ? (
+        <section className="novel-change-review-operations" aria-label="可引用的变更操作">
+          <h3>变更操作</h3>
+          <ul>
+            {operationReferences.map(({ operationId, reference }) => (
+              <li key={operationId}>
+                <span>{reference.label}</span>
+                <ReferenceInConversationButton reference={reference} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <div className="novel-change-review-content">{children}</div>
       <footer className="novel-change-review-footer">
         审阅操作保持只读；决策必须通过 Conversation InputEvent 提交。

@@ -36,7 +36,8 @@
     "smoke:reference-in-conversation": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/reference-in-conversation-typecheck.tsx && node scripts/reference-in-conversation-smoke.mjs",
     "smoke:story-outline-reference": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/story-outline-reference-typecheck.tsx && node scripts/story-outline-reference-smoke.mjs",
     "smoke:manuscript-reference": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/manuscript-reference-typecheck.tsx && node scripts/manuscript-reference-smoke.mjs",
-    "smoke:entity-field-reference": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/entity-field-reference-typecheck.tsx && node scripts/entity-field-reference-smoke.mjs"
+    "smoke:entity-field-reference": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/entity-field-reference-typecheck.tsx && node scripts/entity-field-reference-smoke.mjs",
+    "smoke:novel-operation-reference": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-operation-reference-typecheck.tsx && node scripts/novel-operation-reference-smoke.mjs"
   },
   "dependencies": {
     "@novel/core": "workspace:*"

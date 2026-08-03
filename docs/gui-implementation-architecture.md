@@ -716,6 +716,12 @@ The shared entity field Diff list now owns local field selection and accepts an 
 
 Selecting or focusing a field exposes the shared reference action. The resolver receives stable entity and field identities together with the complete captured review view, while the presentation layer does not derive a reference from visible field text, list position, projection evidence, or before/after content. Reviewers without a resolver remain read-only and preserve their existing red/green field Diff behavior.
 
+### 13.6 Implemented Novel Operation References
+
+`NovelChangeReviewShell` now accepts an optional `referenceForOperation(operationId, view)` resolver and renders one shared reference action for every authorized operation returned by that resolver. Operation identity comes exclusively from the immutable `NovelChangeReviewTarget.operationIds` bound to the Approval Request, Draft Session, base Revision, ChangeSet digest, and review domain.
+
+The Shell never treats a Diff row ID or UI `changeId` as a Novel Operation ID. The owning query adapter can include the exact Draft Session, Operation ID, and ChangeSet digest in the local reference key and Inspector target, while the default Shell remains read-only when no resolver is supplied. Referencing an operation does not approve, reject, partially commit, or otherwise mutate the ChangeSet.
+
 ## 14. Domain-specific Reviewers
 
 The review surface is selected by domain type:

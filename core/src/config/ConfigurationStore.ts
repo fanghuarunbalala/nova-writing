@@ -21,11 +21,23 @@ export interface WorkspaceConfigurationStore {
 
 export type CredentialStatus = "missing" | "configured" | "unavailable";
 
-export interface CredentialStore {
-  save(reference: CredentialReference, secret: string): Promise<void>;
+export interface CredentialStatusReader {
   getStatus(reference: CredentialReference): Promise<CredentialStatus>;
+}
+
+export interface CredentialWriter {
+  save(reference: CredentialReference, secret: string): Promise<void>;
   delete(reference: CredentialReference): Promise<void>;
 }
+
+export interface CredentialVault extends CredentialStatusReader {
+  use<TResult>(
+    reference: CredentialReference,
+    operation: (secret: string) => Promise<TResult>,
+  ): Promise<TResult>;
+}
+
+export interface CredentialStore extends CredentialWriter, CredentialVault {}
 
 export interface ConfigurationHome {
   readonly rootDir: string;

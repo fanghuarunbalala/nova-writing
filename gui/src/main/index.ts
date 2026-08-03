@@ -4,5 +4,6 @@ export * from "./DesktopBootstrapApiTransport.js";
 export * from "./DesktopMainPaths.js";
 export * from "./DesktopWindowManager.js";
 export * from "./conversation/index.js";
+export * from "./config/index.js";
 export * from "./ipc/index.js";
 export * from "./workspace/index.js";

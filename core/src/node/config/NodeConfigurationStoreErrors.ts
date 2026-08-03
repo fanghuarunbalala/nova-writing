@@ -7,6 +7,10 @@ export const NODE_CONFIGURATION_STORE_FAILURE = Object.freeze({
   revisionConflict: "revision_conflict",
   lockTimeout: "lock_timeout",
   workspaceMissing: "workspace_missing",
+  credentialMissing: "credential_missing",
+  credentialUnavailable: "credential_unavailable",
+  credentialCorrupted: "credential_corrupted",
+  credentialWriteFailed: "credential_write_failed",
 } as const);
 
 export type NodeConfigurationStoreFailure =

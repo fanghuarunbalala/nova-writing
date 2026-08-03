@@ -1,0 +1,65 @@
+# Agent Prompt Architecture
+
+The initial `novel_agent@1.0.0` uses the generic Prompt system. Novel-specific
+Prompt Sections, Novel Tools, Subagents, and Agent Team orchestration remain
+deferred.
+
+## Runtime model
+
+```text
+AgentDefinition
+    -> PromptRecipe
+        -> PromptPlanItem[]
+            -> PromptSectionItem / InlinePromptItem
+    -> SystemPromptBuilder
+        -> PromptBlock[]
+            -> CompiledSystemPrompt
+```
+
+Prompt Plan Items are class/value objects inside Core. JSON objects appear only
+in `toSnapshot()` results used at persistence or IPC boundaries.
+
+## Prompt Recipe
+
+An Agent Definition owns an ordered `PromptRecipe`. A Section Item references a
+reusable Section by ID and optionally by exact version. An omitted version
+resolves to the latest stable version in the frozen `PromptSectionRegistry`.
+An Inline Item is intended for a short one-off instruction and is bounded to
+avoid turning Agent Definitions into unstructured Prompt files.
+
+The resolved version is recorded when an Agent Manifest is created. Resume
+never resolves `latest` again; it uses the Manifest's exact Section versions.
+
+## Sections and Context
+
+Sections render against an immutable `PromptContext` containing Agent identity
+and the resolved Tool capability snapshot. Generic Sections currently include:
+
+```text
+core.runtime.protocol
+agent.identity
+conversation.behavior
+tool.guidance
+todo.guidance
+context.reliability
+completion.contract
+```
+
+`SystemPromptBuilder` creates only the stable Base System Prompt. Runtime state
+is appended by the existing Runtime context path:
+
+```text
+Base Prompt -> Checkpoint -> Current Todo -> Nudge -> Messages
+```
+
+Messages remain Provider message records rather than being flattened into the
+System Prompt string.
+
+## Initial Novel Agent
+
+`novel_agent@1.0.0` is standalone:
+
+- Prompt uses only generic Sections plus one language Inline instruction.
+- Tool policy contains only `runtime.todo` and therefore `TodoWrite`.
+- Delegation is disabled.
+- Novel-domain Tools and Subagent/Agent Team capabilities are not assembled.

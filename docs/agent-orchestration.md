@@ -72,7 +72,7 @@ classDiagram
     class AgentDefinition {
         +string agentType
         +string definitionVersion
-        +SystemPromptDefinition systemPrompt
+        +PromptRecipe promptRecipe
         +AgentToolPolicyDefinition tools
         +AgentSubagentPolicyDefinition subagents
         +AgentCommunicationDefinition communication
@@ -119,9 +119,9 @@ interface AgentDefinition {
   readonly definitionVersion: string;
   readonly label: string;
   readonly description: string;
-  readonly systemPrompt: SystemPromptDefinition;
+  readonly promptRecipe: PromptRecipe;
   readonly tools: AgentToolPolicyDefinition;
-  readonly subagents: AgentSubagentPolicyDefinition;
+  readonly delegation: AgentDelegationPolicy;
   readonly communication: AgentCommunicationDefinition;
   readonly runtimePolicyId: string;
 }
@@ -194,31 +194,34 @@ Journal, Message, and Runtime identity.
 
 ## 4. System Prompt Builder
 
-`SystemPromptBuilder` deterministically builds the stable Base System Prompt for
-one resolved Agent Manifest:
+`SystemPromptBuilder` deterministically builds the stable Base System Prompt from
+the ordered `PromptRecipe` selected by one Agent Definition:
 
 ```ts
 interface SystemPromptBuilder {
-  build(request: SystemPromptBuildRequest): CompiledSystemPrompt;
+  build(request: SystemPromptBuildRequest): Promise<CompiledSystemPrompt>;
 }
 
 interface SystemPromptBuildRequest {
   readonly definition: AgentDefinition;
-  readonly manifest: AgentManifest;
   readonly capabilities: AgentCapabilitySnapshot;
 }
 ```
 
-The Base Prompt order is:
+`PromptRecipe` contains class-based `PromptPlanItem` values. A Section item
+references a reusable Prompt Section by ID and optional version; an omitted
+version resolves to the latest stable Section in the frozen Registry. A short
+one-off instruction uses an Inline item rather than creating a dedicated file.
+The Base Prompt order is therefore the exact order in the Agent Definition:
 
 ```text
-Core Runtime Protocol
-    -> Base Agent Definition
-    -> Delegated Role
-    -> Communication Protocol
-    -> Subagent Protocol
-    -> Tool Guidance
-    -> Completion Contract
+core.runtime.protocol
+    -> agent.identity
+    -> conversation.behavior
+    -> tool.guidance
+    -> todo.guidance
+    -> context.reliability
+    -> completion.contract
 ```
 
 Runtime then applies the existing dynamic layers:
@@ -226,12 +229,17 @@ Runtime then applies the existing dynamic layers:
 ```text
 Base System Prompt
     -> Checkpoint Overlay
+    -> Current Todo Overlay
     -> one-shot Nudge Overlay
     -> Messages
 ```
 
 `SystemPromptBuilder` does not own Checkpoint, Nudge, Conversation Messages,
-current Task content, Tool results, or Provider-call transient state.
+current Task content, Tool results, or Provider-call transient state. Prompt
+Section content is represented by immutable class/value objects in Core; only
+their JSON snapshots cross persistence or IPC boundaries. Agent Manifests pin
+the exact Section versions resolved from `latest`, so Resume never silently
+re-resolves a newer Prompt.
 
 Role-specific requirements:
 

@@ -8,6 +8,7 @@ export const projectVision: ProjectVision = {
   belief: "Turn imagination into serialized web novels.",
 };
 
+export * from "./agent/index.js";
 export * from "./client/index.js";
 export * from "./config/index.js";
 export * from "./conversation/index.js";

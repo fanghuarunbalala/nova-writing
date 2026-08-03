@@ -993,6 +993,19 @@ Story Event foundation delivered:
 **Status:** StoryEventStep identity, capture, and ordered sequence completed;
 Character/Location bindings, RhythmBeat, and entity changes remain in N9-D.
 
+RhythmBeat foundation delivered:
+
+- stable RhythmBeat identities and closed direction/intensity contracts model
+  emotional movement independently from objective Events
+- immutable Beats preserve optional reader and point-of-view emotion plus an
+  ordered, duplicate-free set of related Event identities
+- ordered sequence capture validates StoryUnit ownership, Beat ID and OrderKey
+  uniqueness, and that every related Event belongs to the available Event set
+
+**Status:** StoryEventStep and RhythmBeat foundations completed; entity changes
+remain implementable, while Character/Location involvement roles remain an
+explicit unresolved binding decision.
+
 ### N9-E Services, Operations, Queries, and Persistence
 
 Add complete Draft and canonical vertical slices with Rebase and conflict behavior. Tool adapters remain excluded.

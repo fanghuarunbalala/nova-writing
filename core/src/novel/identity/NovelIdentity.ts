@@ -15,6 +15,7 @@ declare const locationIdBrand: unique symbol;
 declare const storyOutlineIdBrand: unique symbol;
 declare const storyUnitIdBrand: unique symbol;
 declare const storyEventStepIdBrand: unique symbol;
+declare const rhythmBeatIdBrand: unique symbol;
 
 export type NovelId = string & { readonly [novelIdBrand]: "NovelId" };
 export type NovelDraftSessionId = string & {
@@ -42,6 +43,9 @@ export type StoryUnitId = string & {
 };
 export type StoryEventStepId = string & {
   readonly [storyEventStepIdBrand]: "StoryEventStepId";
+};
+export type RhythmBeatId = string & {
+  readonly [rhythmBeatIdBrand]: "RhythmBeatId";
 };
 
 const SAFE_IDENTITY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
@@ -88,6 +92,10 @@ export function captureStoryUnitId(value: unknown): StoryUnitId {
 
 export function captureStoryEventStepId(value: unknown): StoryEventStepId {
   return captureIdentity("storyEventStepId", value) as StoryEventStepId;
+}
+
+export function captureRhythmBeatId(value: unknown): RhythmBeatId {
+  return captureIdentity("rhythmBeatId", value) as RhythmBeatId;
 }
 
 function captureIdentity(field: string, value: unknown): string {

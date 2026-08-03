@@ -2,8 +2,10 @@
 import {
   captureStoryOutlineId,
   captureStoryEventStepId,
+  captureRhythmBeatId,
   captureStoryUnitId,
   type StoryEventStepId,
+  type RhythmBeatId,
   type StoryOutlineId,
   type StoryUnitId,
 } from "../../identity/index.js";
@@ -12,6 +14,7 @@ export interface StoryIdentityFactory {
   createStoryOutlineId(): StoryOutlineId;
   createStoryUnitId(): StoryUnitId;
   createStoryEventStepId(): StoryEventStepId;
+  createRhythmBeatId(): RhythmBeatId;
 }
 
 export class RandomStoryIdentityFactory implements StoryIdentityFactory {
@@ -25,6 +28,10 @@ export class RandomStoryIdentityFactory implements StoryIdentityFactory {
 
   createStoryEventStepId(): StoryEventStepId {
     return captureStoryEventStepId(createRandomIdentity("story_event"));
+  }
+
+  createRhythmBeatId(): RhythmBeatId {
+    return captureRhythmBeatId(createRandomIdentity("rhythm_beat"));
   }
 }
 

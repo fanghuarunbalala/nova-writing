@@ -9,6 +9,8 @@ export * from "./NudgeProviderCallCoordinatorErrors.js";
 export * from "./NudgeRenderer.js";
 export * from "./NudgeSelectionErrors.js";
 export * from "./NudgeSelector.js";
+export * from "./NudgeStateMachine.js";
+export * from "./NudgeStateMachineErrors.js";
 export * from "./NudgeTemplateErrors.js";
 export * from "./NudgeTemplateRegistry.js";
 export * from "./PendingNudgeStore.js";

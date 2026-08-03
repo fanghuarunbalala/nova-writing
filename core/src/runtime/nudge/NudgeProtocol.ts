@@ -30,8 +30,13 @@ export interface NudgeConditionReference {
 export const PENDING_NUDGE_STATE = {
   scheduled: "scheduled",
   leased: "leased",
+  applied: "applied",
+  active: "active",
   consumed: "consumed",
+  acknowledged: "acknowledged",
+  resolved: "resolved",
   expired: "expired",
+  superseded: "superseded",
 } as const;
 
 export type PendingNudgeState =

@@ -1400,6 +1400,16 @@ Responses require a successful HTTP status, JSON content type, valid JSON, and a
 
 This checkpoint intentionally does not implement `ApiTransport.subscribe()`, WebSocket framing, reconnect policy, authentication screens, actor derivation, remote Workspace selection, browser bootstrap, or the HTTP/WebSocket Host server. Those remain separate Web steps so the request path does not invent subscription or trust semantics prematurely.
 
+### 28.6 Implemented WebSocket Event Boundary
+
+The Web package now implements the Event half of its future composed Transport. `WebSocketEventClient` converts an HTTP or HTTPS origin into the fixed `/api/v1/subscriptions` WebSocket endpoint and negotiates the `novel.api.v1` subprotocol. Subscription requests and credentials never enter the URL or logs; browser-managed cookies remain the initial authentication carrier.
+
+Each Core subscription owns one WebSocket and one stable `websocket:<requestId>` identity. The client sends an explicit `open` message, requires an `opened` acknowledgement before Events, validates every protocol version and subscription ID, and accepts only JSON text messages of kind `event`, `done`, or stable-code `error`. Explicit close sends a close message before the normal WebSocket close handshake.
+
+The adapter exposes an asynchronous `ApiSubscription`, forwards AbortSignal cancellation, and bounds queued Event frames to 256 by default. A slow consumer that exceeds the configured queue is disconnected with a retryable backpressure error instead of allowing unbounded browser memory growth. Non-text messages, out-of-order frames, malformed server errors, subprotocol mismatches, socket failures, and unexpected closes become stable redacted errors.
+
+Automatic reconnect remains intentionally absent. A later composed `HttpWebSocketApiTransport` will own request/subscription delegation, while higher client layers retain the accepted cursor-based catch-up semantics after reconnect. The WebSocket Host, actor derivation, origin checks, authentication UI, and remote Workspace policy remain separate server and product steps.
+
 ## 29. Testing Strategy
 
 ### 29.1 Core projection tests

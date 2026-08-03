@@ -10,5 +10,11 @@ future HTTP/WebSocket Transport.
 Requests use `POST /api/v1/requests`, JSON Core protocol envelopes,
 `credentials: include`, no-store caching, redirect rejection, and a no-referrer
 policy. Optional authentication headers enter through an injected provider and
-are never logged. WebSocket Event streaming, authentication UI, remote
-Workspace behavior, Vite bootstrap, and deployment remain later Web steps.
+are never logged.
+
+WebSocket Event subscriptions connect to `/api/v1/subscriptions` with the
+`novel.api.v1` subprotocol. Each subscription owns one socket, uses explicit
+open/close JSON messages, requires exact subscription identity, and enforces a
+bounded Event queue. Authentication UI, remote Workspace behavior, composed
+HTTP/WebSocket `ApiTransport`, Vite bootstrap, and deployment remain later Web
+steps.

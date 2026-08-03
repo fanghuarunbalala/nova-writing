@@ -3465,6 +3465,13 @@ validation README. Add class diagrams, state diagrams, recovery flow, and
 client-facing observation guidance. Run the complete established check suite,
 review the final diff, and create the dedicated Checkpoint commit.
 
+N-11-A delivered:
+
+- architecture class, lifecycle state, and recovery sequence diagrams
+- client-facing rules for redacted observation, canonical Message isolation,
+  Policy-reviewed Runtime facts, and private-state authority
+- validation documentation for the new focused latency and scenario metrics
+
 ### 13.19 Explicit Exclusions
 
 This track does not implement:

@@ -81,3 +81,12 @@ duration, maximum Event Loop delay, Event Loop utilization, and peak RSS growth.
 The parent applies a hard timeout and kills a blocked phase. These limits are
 regression and deadlock guards, not production throughput or latency SLAs; the
 formal performance baselines remain deferred as documented.
+
+## Prompt and Stateful Nudge Validation
+
+The unified report includes Prompt Assembly, stateful selection, Provider-call
+application receipts, Policy Effects, Tool/Approval/Subagent observation, and
+v1-to-v2 recovery. It reports dedicated Prompt Assembly, Nudge selection, and
+Provider preparation latency plus retry/duplicate, reconciliation, and
+Tool/Subagent scenario counts. Public reports contain only test identities,
+fixed failure categories, timings, counts, process status, and byte totals.

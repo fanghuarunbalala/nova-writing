@@ -6198,3 +6198,60 @@ The following alternatives were discussed but are not accepted architecture:
 These alternatives require separate review because they couple topology to
 capability, allow execution components to bypass deterministic Prompt assembly,
 or pollute canonical user-visible history with ephemeral Runtime control state.
+
+## 32. Prompt Composition and Stateful Nudge Completion
+
+```mermaid
+classDiagram
+    class RuntimePolicyEngine
+    class RuntimeEffectCoordinator
+    class RuntimeNudgePolicyEffectHandler
+    class NudgeManager
+    class NudgeProviderCallCoordinator
+    class NudgeRuntimeEventBridge
+    class PromptAssemblyBuilder
+    RuntimePolicyEngine --> RuntimeEffectCoordinator : typed effects
+    RuntimeEffectCoordinator --> RuntimeNudgePolicyEffectHandler : serialized lifecycle
+    RuntimeNudgePolicyEffectHandler --> NudgeManager : all mutations
+    NudgeManager --> NudgeProviderCallCoordinator : eligible overlay lease
+    PromptAssemblyBuilder --> NudgeProviderCallCoordinator : provider-call overlay
+    NudgeRuntimeEventBridge --> NudgeManager : service ports after policy review
+```
+
+```mermaid
+stateDiagram-v2
+    [*] --> scheduled
+    scheduled --> leased
+    active --> leased
+    leased --> scheduled: pre-dispatch release (once)
+    leased --> active: pre-dispatch release (persistent)
+    leased --> applied: dispatch confirmed
+    applied --> consumed: once
+    applied --> active: persistent
+    active --> acknowledged
+    active --> resolved
+    scheduled --> expired
+    active --> expired
+    scheduled --> superseded
+    active --> superseded
+```
+
+```mermaid
+sequenceDiagram
+    participant Recovery
+    participant Decoder
+    participant Store
+    participant Manager
+    Recovery->>Decoder: load private snapshot v1 or v2
+    Decoder->>Decoder: migrate to canonical v2
+    Decoder->>Store: restore active and terminal state
+    Store->>Store: normalize unconfirmed leases
+    Recovery->>Manager: reconcile leases
+    Manager-->>Recovery: deterministic recovery result
+```
+
+Clients observe redacted OutputEvents and application receipts. They never infer
+renderable Nudge parameters from Journal replay, never project Nudge text into
+canonical Messages, and never mutate Nudge state from a Tool or UI handler.
+Tool results, Approval decisions, and terminal Subagent observations pass
+through `NudgeRuntimeEventPolicy` before acknowledgement or condition services.

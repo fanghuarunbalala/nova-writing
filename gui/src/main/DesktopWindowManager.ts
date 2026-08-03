@@ -1,6 +1,10 @@
 /** Owns the secure primary BrowserWindow and its sender cleanup lifecycle. */
 import { ApiTransportError, noopLogger, type Logger } from "@novel/core";
 import type { BrowserWindowConstructorOptions } from "electron";
+import {
+  ELECTRON_APPLICATION_COMMAND_CHANNEL,
+  type ElectronApplicationCommand,
+} from "../shared/index.js";
 
 export type DesktopRendererTarget =
   | { readonly kind: "url"; readonly url: string }
@@ -12,6 +16,7 @@ export interface DesktopNavigationEventPort {
 
 export interface DesktopWebContentsPort {
   readonly id: number;
+  send(channel: string, value: unknown): void;
   readonly session: {
     setPermissionRequestHandler(
       handler: (
@@ -80,6 +85,17 @@ export class DesktopWindowManager {
 
   ownsSender(senderId: number): boolean {
     return this.senderIds.has(senderId);
+  }
+
+  dispatchCommand(command: ElectronApplicationCommand): boolean {
+    const window = this.primaryWindow;
+    if (window === undefined || window.isDestroyed()) return false;
+    window.webContents.send(ELECTRON_APPLICATION_COMMAND_CHANNEL, command);
+    this.logger.debug("desktop_window.command_dispatched", {
+      senderId: window.webContents.id,
+      command,
+    });
+    return true;
   }
 
   openPrimaryWindow(): Promise<DesktopBrowserWindowPort> {

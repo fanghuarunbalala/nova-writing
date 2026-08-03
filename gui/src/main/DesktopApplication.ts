@@ -1,6 +1,7 @@
 /** Coordinates Electron App lifecycle, secure windows, and the IPC Controller. */
 import { ApiTransportError, noopLogger, type ApiTransport, type Logger } from "@novel/core";
 import type { BrowserWindowConstructorOptions } from "electron";
+import type { ElectronApplicationCommand } from "../shared/index.js";
 import { DesktopApiIpcController, type ElectronIpcMainPort } from "./ipc/index.js";
 import {
   DesktopWorkspaceIpcController,
@@ -94,6 +95,10 @@ export class DesktopApplication {
   stop(): Promise<void> {
     this.stopPromise ??= this.stopOnce();
     return this.stopPromise;
+  }
+
+  dispatchCommand(command: ElectronApplicationCommand): boolean {
+    return this.windowManager.dispatchCommand(command);
   }
 
   private async startOnce(): Promise<void> {

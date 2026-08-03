@@ -26,4 +26,5 @@ const options = createSecureWindowOptions("/application/preload.cjs");
 
 void application.start();
 void application.stop();
+void application.dispatchCommand("settings.open");
 void options;

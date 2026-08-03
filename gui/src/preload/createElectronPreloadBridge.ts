@@ -2,7 +2,10 @@
 import type { ApiRequest, ApiResponse } from "@novel/core";
 import {
   ELECTRON_API_IPC_CHANNEL,
+  ELECTRON_APPLICATION_COMMAND_CHANNEL,
   ELECTRON_WORKSPACE_IPC_CHANNEL,
+  type ElectronApplicationCommand,
+  type ElectronApplicationCommandBridge,
   type ElectronBridgeAcknowledgement,
   type ElectronBridgeOpenSubscriptionRequest,
   type ElectronBridgeResult,
@@ -14,6 +17,14 @@ import {
 
 export interface ElectronIpcRendererPort {
   invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+  on?(
+    channel: string,
+    listener: (event: unknown, value: unknown) => void,
+  ): void;
+  removeListener?(
+    channel: string,
+    listener: (event: unknown, value: unknown) => void,
+  ): void;
 }
 
 export interface CreateElectronPreloadBridgeOptions {
@@ -30,6 +41,7 @@ export function createElectronPreloadBridge(
     invokeSafely<TValue>(options.ipcRenderer, channel, args);
 
   const bridge: ElectronPreloadBridge = {
+    ...createCommandBridge(options.ipcRenderer),
     workspaces: Object.freeze({
       select: () =>
         invoke<ElectronWorkspaceReference | undefined>(
@@ -73,6 +85,43 @@ export function createElectronPreloadBridge(
       ),
   };
   return Object.freeze(bridge);
+}
+
+function createCommandBridge(
+  ipcRenderer: ElectronIpcRendererPort,
+): { readonly commands: ElectronApplicationCommandBridge } | Record<string, never> {
+  if (
+    typeof ipcRenderer.on !== "function" ||
+    typeof ipcRenderer.removeListener !== "function"
+  ) {
+    return Object.freeze({});
+  }
+  const commands: ElectronApplicationCommandBridge = Object.freeze({
+    subscribe: (listener: (command: ElectronApplicationCommand) => void) => {
+      const receive = (_event: unknown, value: unknown): void => {
+        const command = captureApplicationCommand(value);
+        if (command !== undefined) listener(command);
+      };
+      ipcRenderer.on?.(ELECTRON_APPLICATION_COMMAND_CHANNEL, receive);
+      return () => {
+        ipcRenderer.removeListener?.(ELECTRON_APPLICATION_COMMAND_CHANNEL, receive);
+      };
+    },
+  });
+  return Object.freeze({ commands });
+}
+
+function captureApplicationCommand(
+  value: unknown,
+): ElectronApplicationCommand | undefined {
+  if (
+    value === "workspace.open" ||
+    value === "workspace.close" ||
+    value === "settings.open"
+  ) {
+    return value;
+  }
+  return undefined;
 }
 
 async function invokeSafely<TValue>(

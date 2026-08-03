@@ -15,6 +15,16 @@ import {
 
 class TestElectronBridge {
   constructor() {
+    Object.defineProperty(this, "commandListeners", {
+      value: new Set(),
+      enumerable: false,
+    });
+    this.commands = Object.freeze({
+      subscribe: (listener) => {
+        this.commandListeners.add(listener);
+        return () => this.commandListeners.delete(listener);
+      },
+    });
     Object.defineProperty(this, "requests", {
       value: [],
       enumerable: false,
@@ -58,6 +68,10 @@ class TestElectronBridge {
   async closeSubscription() {
     return acknowledgement();
   }
+
+  emitCommand(command) {
+    for (const listener of [...this.commandListeners]) listener(command);
+  }
 }
 
 await assertBridgeGuard();
@@ -75,6 +89,7 @@ async function assertBridgeGuard() {
   assert.deepEqual(Object.keys(resolved).sort(), [
     "cancelRequest",
     "closeSubscription",
+    "commands",
     "openSubscription",
     "readSubscription",
     "request",
@@ -101,6 +116,7 @@ async function assertRendererComposition() {
   });
 
   assert.ok(composition.api instanceof DefaultNovelApiClient);
+  assert.ok(composition.commandSource);
   assert.equal(composition.platform, platform);
   assert.equal(Object.isFrozen(platform), true);
   assert.deepEqual(platform.capabilities, {
@@ -115,18 +131,30 @@ async function assertRendererComposition() {
 
 async function assertRendererMount() {
   const dom = installDom();
+  const bridge = new TestElectronBridge();
   let mounted;
   await act(async () => {
     mounted = mountDesktopRenderer({
-      window: { novelDesktop: new TestElectronBridge() },
+      window: { novelDesktop: bridge },
       document: dom.window.document,
     });
   });
   assert.ok(dom.window.document.querySelector(".novel-app-shell"));
+  assert.equal(dom.window.document.querySelector(".novel-top-menu"), null);
+  assert.equal(
+    dom.window.document
+      .querySelector(".novel-app-shell")
+      ?.getAttribute("data-menu-presentation"),
+    "native",
+  );
+  assert.ok(dom.window.document.querySelector('button[aria-label="收起侧边栏"]'));
   assert.ok(dom.window.document.querySelector(".novel-project-sidebar"));
   assert.match(dom.window.document.body.textContent, /新对话/);
   assert.match(dom.window.document.body.textContent, /大纲/);
+  await act(async () => bridge.emitCommand("settings.open"));
+  assert.ok(dom.window.document.querySelector('[role="dialog"][aria-label="设置"]'));
   await act(async () => mounted.close());
+  assert.equal(bridge.commandListeners.size, 0);
   assert.equal(dom.window.document.getElementById("root").childNodes.length, 0);
 
   assert.throws(

@@ -47,7 +47,7 @@ async function run() {
 
   const desktopRoot = requireElement(dom.window.document, "desktop-root");
   const webRoot = requireElement(dom.window.document, "web-root");
-  assert.deepEqual(captureShell(desktopRoot), captureShell(webRoot));
+  assertPlatformShellParity(desktopRoot, webRoot);
   assert.deepEqual(desktop.platform.capabilities, web.platform.capabilities);
   assert.equal(bridge.callCount, 0);
 
@@ -55,7 +55,7 @@ async function run() {
     findButton(desktopRoot, "大纲").click();
     findButton(webRoot, "大纲").click();
   });
-  assert.deepEqual(captureShell(desktopRoot), captureShell(webRoot));
+  assertPlatformShellParity(desktopRoot, webRoot);
   assert.equal(
     desktopRoot.querySelector(".novel-shell-body")?.getAttribute("data-inspector-mode"),
     "expanded",
@@ -69,6 +69,29 @@ async function run() {
   assert.equal(webRoot.childNodes.length, 0);
 
   console.log("desktop web shell parity smoke passed");
+}
+
+function assertPlatformShellParity(desktopRoot, webRoot) {
+  const desktop = captureShell(desktopRoot);
+  const web = captureShell(webRoot);
+  assert.deepEqual(desktop.menu, []);
+  assert.deepEqual(web.menu, ["项目", "编辑", "发布", "帮助"]);
+  assert.deepEqual(
+    { ...desktop, menu: undefined },
+    { ...web, menu: undefined },
+  );
+  assert.equal(
+    desktopRoot
+      .querySelector(".novel-app-shell")
+      ?.getAttribute("data-menu-presentation"),
+    "native",
+  );
+  assert.equal(
+    webRoot
+      .querySelector(".novel-app-shell")
+      ?.getAttribute("data-menu-presentation"),
+    "inline",
+  );
 }
 
 async function assertResponsiveShellStyles() {

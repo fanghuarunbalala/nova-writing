@@ -6,7 +6,7 @@ import {
   type Logger,
   type NovelApiClient,
 } from "@novel/core";
-import type { FrontendPlatform } from "@novel/ui";
+import type { ApplicationCommandSource, FrontendPlatform } from "@novel/ui";
 import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -14,6 +14,7 @@ import {
   type DesktopNovelAppProps,
 } from "./DesktopNovelApp.js";
 import { createElectronFrontendPlatform } from "./ElectronFrontendPlatform.js";
+import { createElectronApplicationCommandSource } from "./ElectronApplicationCommandSource.js";
 import { createElectronWorkspaceController } from "./ElectronWorkspaceController.js";
 import {
   resolveElectronPreloadBridge,
@@ -31,6 +32,7 @@ export interface DesktopRendererComposition {
   readonly transport: ElectronApiTransport;
   readonly api: NovelApiClient;
   readonly platform: FrontendPlatform;
+  readonly commandSource?: ApplicationCommandSource;
   readonly workspaceController?: NonNullable<DesktopNovelAppProps["workspaceController"]>;
 }
 
@@ -61,10 +63,12 @@ export function createDesktopRendererComposition(
     logger,
   });
   const workspaceController = createElectronWorkspaceController(bridge, logger);
+  const commandSource = createElectronApplicationCommandSource(bridge);
   return Object.freeze({
     transport,
     api: new DefaultNovelApiClient({ transport, logger }),
     platform: options.platform ?? createElectronFrontendPlatform(),
+    ...(commandSource !== undefined ? { commandSource } : {}),
     ...(workspaceController !== undefined ? { workspaceController } : {}),
   });
 }
@@ -98,6 +102,7 @@ export function mountDesktopRenderer(
         api={composition.api}
         platform={composition.platform}
         logger={logger}
+        commandSource={options.appProps?.commandSource ?? composition.commandSource}
         workspaceController={
           options.appProps?.workspaceController ?? composition.workspaceController
         }

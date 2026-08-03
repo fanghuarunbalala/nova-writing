@@ -1,6 +1,8 @@
 /** Validates and narrows the only global capability accepted by the Renderer. */
 import { ApiTransportError, type ApiRequest } from "@novel/core";
 import type {
+  ElectronApplicationCommand,
+  ElectronApplicationCommandBridge,
   ElectronBridgeOpenSubscriptionRequest,
   ElectronPreloadBridge,
   ElectronWorkspaceBridge,
@@ -36,6 +38,7 @@ export function resolveElectronPreloadBridge(
   const keys = Object.keys(record).sort();
   const acceptedKeys = [
     ...BRIDGE_METHODS,
+    ...(record.commands === undefined ? [] : ["commands"]),
     ...(record.workspaces === undefined ? [] : ["workspaces"]),
   ].sort();
   if (
@@ -47,9 +50,11 @@ export function resolveElectronPreloadBridge(
   for (const method of BRIDGE_METHODS) {
     if (typeof record[method] !== "function") throw bridgeUnavailable();
   }
+  const commands = resolveCommandBridge(record.commands);
   const workspaces = resolveWorkspaceBridge(record.workspaces);
   const bridge = candidate as ElectronPreloadBridge;
   const resolved: ElectronPreloadBridge = {
+    ...(commands !== undefined ? { commands } : {}),
     ...(workspaces !== undefined ? { workspaces } : {}),
     request: (request: ApiRequest) => bridge.request(request),
     cancelRequest: (requestId: string) => bridge.cancelRequest(requestId),
@@ -61,6 +66,27 @@ export function resolveElectronPreloadBridge(
       bridge.closeSubscription(subscriptionId),
   };
   return Object.freeze(resolved);
+}
+
+function resolveCommandBridge(
+  value: unknown,
+): ElectronApplicationCommandBridge | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw bridgeUnavailable();
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    Object.keys(record).join(",") !== "subscribe" ||
+    typeof record.subscribe !== "function"
+  ) {
+    throw bridgeUnavailable();
+  }
+  const bridge = value as ElectronApplicationCommandBridge;
+  return Object.freeze({
+    subscribe: (listener: (command: ElectronApplicationCommand) => void) =>
+      bridge.subscribe(listener),
+  });
 }
 
 function resolveWorkspaceBridge(value: unknown): ElectronWorkspaceBridge | undefined {

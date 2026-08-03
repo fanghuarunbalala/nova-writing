@@ -1,10 +1,15 @@
 /** Persistent Workspace, Meta, Conversation, and Agent context summary. */
+import type { SidebarMode } from "../state/index.js";
+import { SidebarToggleButton } from "./SidebarToggleButton.js";
+
 export interface CurrentContextBarProps {
   readonly workspace?: string;
   readonly meta?: string;
   readonly conversation?: string;
   readonly agent?: string;
   readonly onWorkspaceSelect?: () => void;
+  readonly sidebarMode?: SidebarMode;
+  readonly onToggleSidebar?: () => void;
 }
 
 const EMPTY_VALUE = "未选择";
@@ -42,6 +47,14 @@ export function CurrentContextBar(props: CurrentContextBarProps) {
           )}
         </span>
       ))}
+      {props.sidebarMode !== undefined ? (
+        <span className="novel-context-actions">
+          <SidebarToggleButton
+            mode={props.sidebarMode}
+            onToggle={props.onToggleSidebar}
+          />
+        </span>
+      ) : null}
     </div>
   );
 }

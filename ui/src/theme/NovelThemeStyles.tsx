@@ -42,6 +42,14 @@ const NOVEL_THEME_CSS = `
   font-family: var(--novel-font);
 }
 
+.novel-app-shell[data-menu-presentation="native"] {
+  grid-template-rows: auto 38px minmax(0, 1fr);
+  grid-template-areas:
+    "titlebar"
+    "context"
+    "body";
+}
+
 .novel-titlebar-extension {
   grid-area: titlebar;
 }
@@ -187,6 +195,12 @@ const NOVEL_THEME_CSS = `
   padding: 0 16px;
   color: var(--novel-text-secondary);
   font-size: 12px;
+}
+
+.novel-context-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
 }
 
 .novel-context-segment {

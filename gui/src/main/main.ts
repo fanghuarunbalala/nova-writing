@@ -1,8 +1,9 @@
 /** Launches the built secure Electron desktop application. */
 import { join } from "node:path";
-import { app, dialog } from "electron";
+import { app, dialog, Menu } from "electron";
 import { NodeWorkspaceStoreLocator } from "@novel/core/node";
 import { DesktopBootstrapApiTransport } from "./DesktopBootstrapApiTransport.js";
+import { createDesktopApplicationMenuTemplate } from "./DesktopApplicationMenu.js";
 import { resolveDesktopMainPaths } from "./DesktopMainPaths.js";
 import { createElectronDesktopApplication } from "./createElectronDesktopApplication.js";
 import { DesktopWorkspaceService } from "./workspace/index.js";
@@ -28,6 +29,17 @@ const application = createElectronDesktopApplication({
   rendererTarget: { kind: "file", filePath: paths.rendererFilePath },
   workspaceService,
 });
+Menu.setApplicationMenu(
+  Menu.buildFromTemplate([
+    ...createDesktopApplicationMenuTemplate({
+      applicationName: "Novel",
+      platform: process.platform,
+      dispatch: (command) => {
+        application.dispatchCommand(command);
+      },
+    }),
+  ]),
+);
 
 let stopping = false;
 app.on("before-quit", (event) => {

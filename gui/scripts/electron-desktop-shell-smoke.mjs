@@ -6,10 +6,14 @@ import {
 import {
   DesktopApplication,
   DesktopWindowManager,
+  createDesktopApplicationMenuTemplate,
   createSecureWindowOptions,
 } from "../dist/main/index.js";
 import { createElectronPreloadBridge } from "../dist/preload/index.js";
-import { ELECTRON_API_IPC_CHANNELS } from "../dist/shared/index.js";
+import {
+  ELECTRON_API_IPC_CHANNELS,
+  ELECTRON_APPLICATION_COMMAND_CHANNEL,
+} from "../dist/shared/index.js";
 
 async function runDesktopShellSmoke() {
   const logs = [];
@@ -38,6 +42,14 @@ async function runDesktopShellSmoke() {
   assertSecureWindowOptions(windows[0].options);
   assert.equal(application.windowManager.ownsSender(100), true);
   assert.deepEqual(new Set(ipcMain.handlers.keys()), new Set(ELECTRON_API_IPC_CHANNELS));
+  assert.equal(application.dispatchCommand("settings.open"), true);
+  assert.deepEqual(windows[0].webContents.sent, [
+    {
+      channel: ELECTRON_APPLICATION_COMMAND_CHANNEL,
+      value: "settings.open",
+    },
+  ]);
+  assertNativeMenuTemplate();
 
   windows[0].emit("ready-to-show");
   assert.equal(windows[0].shown, true);
@@ -61,6 +73,7 @@ async function runDesktopShellSmoke() {
   );
 
   windows[0].close();
+  assert.equal(application.dispatchCommand("workspace.open"), false);
   await waitFor(() => host.closedSubscriptionIds.includes("host:subscription-owned"));
   assert.equal(application.windowManager.ownsSender(100), false);
 
@@ -78,6 +91,29 @@ async function runDesktopShellSmoke() {
 
   await assertLoadFailureRedaction();
   await assertElectronEntrypointSources();
+}
+
+function assertNativeMenuTemplate() {
+  const commands = [];
+  const template = createDesktopApplicationMenuTemplate({
+    applicationName: "Novel",
+    platform: "darwin",
+    dispatch: (command) => commands.push(command),
+  });
+  assert.deepEqual(
+    template.map((item) => item.label),
+    ["Novel", "项目", "编辑", "发布", "帮助"],
+  );
+  const projectMenu = template[1].submenu;
+  projectMenu[0].click();
+  projectMenu[1].click();
+  const editMenu = template[2].submenu;
+  editMenu.find((item) => item.label === "设置…").click();
+  assert.deepEqual(commands, [
+    "workspace.open",
+    "workspace.close",
+    "settings.open",
+  ]);
 }
 
 function assertSecureWindowOptions(options) {
@@ -245,6 +281,7 @@ class FakeBrowserWindow {
 
 class FakeWebContents {
   listeners = new Map();
+  sent = [];
   windowOpenHandler;
   permissionHandler;
 
@@ -261,6 +298,10 @@ class FakeWebContents {
     const listeners = this.listeners.get(event) ?? new Set();
     listeners.add(listener);
     this.listeners.set(event, listeners);
+  }
+
+  send(channel, value) {
+    this.sent.push({ channel, value });
   }
 
   emit(event, ...args) {

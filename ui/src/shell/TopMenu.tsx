@@ -1,6 +1,7 @@
 /** Top-level application menu with Workspace and Settings commands. */
 import { useState } from "react";
 import type { SidebarMode } from "../state/index.js";
+import { SidebarToggleButton } from "./SidebarToggleButton.js";
 
 export interface TopMenuProps {
   readonly onSelect?: (item: TopMenuItem) => void;
@@ -91,21 +92,7 @@ export function TopMenu({
         </div>
       ) : null}
       <span className="novel-menu-spacer" />
-      <button
-        aria-label={sidebarMode === "expanded" ? "收起侧边栏" : "展开侧边栏"}
-        className="novel-sidebar-toggle"
-        onClick={onToggleSidebar}
-        title={sidebarMode === "expanded" ? "收起侧边栏" : "展开侧边栏"}
-        type="button"
-      >
-        <svg aria-hidden="true" viewBox="0 0 20 20">
-          <rect height="14" rx="2" width="16" x="2" y="3" />
-          <path d="M7 3v14" />
-          <path
-            d={sidebarMode === "expanded" ? "m5 8-2 2 2 2" : "m4 8 2 2-2 2"}
-          />
-        </svg>
-      </button>
+      <SidebarToggleButton mode={sidebarMode} onToggle={onToggleSidebar} />
     </nav>
   );
 }

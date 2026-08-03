@@ -27,6 +27,7 @@ export interface ApplicationShellProps {
   readonly onToggleSidebar?: () => void;
   readonly workspaceOpen?: boolean;
   readonly sidebarMode?: SidebarMode;
+  readonly menuPresentation?: "inline" | "native";
   readonly inspectorMode?: InspectorMode;
   readonly inspector?: ReactNode;
   readonly composer?: ReactNode;
@@ -46,6 +47,7 @@ export function ApplicationShell({
   onToggleSidebar,
   workspaceOpen = false,
   sidebarMode = "expanded",
+  menuPresentation = "inline",
   inspectorMode = "closed",
   inspector,
   composer,
@@ -56,20 +58,27 @@ export function ApplicationShell({
   const extensions = useNovelUiExtensions();
   const TitleBar = extensions.titleBar;
   return (
-    <div className="novel-app-shell">
+    <div className="novel-app-shell" data-menu-presentation={menuPresentation}>
       <NovelThemeStyles />
       <div className="novel-titlebar-extension">
         {TitleBar !== undefined ? <TitleBar /> : null}
       </div>
-      <TopMenu
-        onCloseWorkspace={onCloseWorkspace}
-        onOpenSettings={onOpenSettings}
-        onOpenWorkspace={onOpenWorkspace}
-        onToggleSidebar={onToggleSidebar}
-        sidebarMode={sidebarMode}
-        workspaceOpen={workspaceOpen}
+      {menuPresentation === "inline" ? (
+        <TopMenu
+          onCloseWorkspace={onCloseWorkspace}
+          onOpenSettings={onOpenSettings}
+          onOpenWorkspace={onOpenWorkspace}
+          onToggleSidebar={onToggleSidebar}
+          sidebarMode={sidebarMode}
+          workspaceOpen={workspaceOpen}
+        />
+      ) : null}
+      <CurrentContextBar
+        {...context}
+        {...(menuPresentation === "native"
+          ? { sidebarMode, onToggleSidebar }
+          : {})}
       />
-      <CurrentContextBar {...context} />
       <div className="novel-shell-body" data-inspector-mode={inspectorMode} data-sidebar-mode={sidebarMode}>
         <ProjectSidebar
           mode={sidebarMode}

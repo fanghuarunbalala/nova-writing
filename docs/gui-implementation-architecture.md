@@ -1424,6 +1424,14 @@ The Electron bridge now contains one optional nested Workspace capability rather
 
 The Renderer detects the optional Workspace capability and injects an Electron-backed shared `WorkspaceController` into `NovelApp`. Therefore the central `选择 Workspace`, context-bar Workspace button, and Project menu now invoke the native desktop directory dialog, while Web continues to report that local selection is unavailable. This checkpoint does not yet activate the Conversation API router, persist recent ordering across restarts, or launch Agent Runtime.
 
+### 28.3C Implemented Native Application Menu
+
+Electron Main owns the operating-system application menu. Its top-level structure is `项目`, `编辑`, `发布`, and `帮助`, preceded by the conventional application menu on macOS. Workspace open/close and Settings actions dispatch only the fixed commands `workspace.open`, `workspace.close`, and `settings.open` to the currently managed WebContents.
+
+Preload exposes one optional command-subscription capability and filters unknown command values. Renderer adapts it into the provider-neutral shared `ApplicationCommandSource`; `NovelApp` invokes the same Workspace and Settings handlers used by Web. No arbitrary menu payload, callback name, script, filesystem path, or general IPC channel enters Renderer.
+
+`DesktopNovelApp` selects native-menu presentation, so Electron removes the duplicate page-level Project/Edit/Publish/Help row. Web keeps the inline menu. The sidebar toggle remains inside application content: Web shows it at the right edge of the inline menu, while Electron shows it at the right edge of the context bar.
+
 ### 28.4 Implemented Renderer Bootstrap Boundary
 
 The desktop Renderer now has a Vite production build rooted at `gui/index.html` and emitted to `dist/renderer-app` with relative asset URLs suitable for `BrowserWindow.loadFile()`. The HTML defines the root element, a light color scheme, and a restrictive Content Security Policy. Shared white-shell styles remain owned by `@novel/ui`; GUI adds only document-level sizing and reset rules.
@@ -1619,7 +1627,7 @@ The stages below describe dependency order only. Each stage requires its own pla
 
 1. Conversation is the primary GUI workspace.
 2. The overall visual style is white, quiet, and low-saturation.
-3. The top menu contains Project, Edit, Publish, and Help.
+3. Project, Edit, Publish, and Help are native top-level menus in Electron and an inline application menu in Web; Electron does not duplicate them inside Renderer content.
 4. A persistent context bar displays Workspace, current Meta, Conversation, and Agent.
 5. The left sidebar contains New Conversation, Schedule, Outline, Characters, Locations, Manuscript, and Conversation history.
 6. Left-side Novel content opens in the right Inspector and does not replace the central Conversation.
@@ -1647,9 +1655,9 @@ The stages below describe dependency order only. Each stage requires its own pla
 28. An InputReceipt does not resolve the Approval in UI state; only a later persisted resolution or failure OutputEvent does.
 29. Workspace is the selected novel project root; shared React receives only opaque selection references and presentation-safe Workspace identities.
 30. One application window owns at most one active Workspace, while future multi-Workspace desktop use is represented by multiple windows.
-31. Settings is opened from `编辑 → 设置…`, and platform or extension settings extend the same shared dialog rather than adding another top-level menu.
+31. Settings is opened from `编辑 → 设置…` in either the Electron native menu or Web inline menu, and platform or extension settings extend the same shared dialog rather than adding another top-level menu.
 32. Settings uses a left category sidebar. Its built-in `模型` page manages non-secret Provider metadata, supports add/edit flows, and selects one current effective Provider; credentials remain Host-owned and are never retained by shared Renderer state.
-33. Project-sidebar expansion is controlled by one compact upper-right top-menu button rather than an Appearance settings field.
+33. Project-sidebar expansion is controlled by one compact upper-right content button rather than an Appearance settings field: inline-menu right edge on Web and context-bar right edge on Electron.
 
 ## 32. Deferred Decisions
 

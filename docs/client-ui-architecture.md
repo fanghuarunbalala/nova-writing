@@ -375,13 +375,13 @@ The extension protocol supports first-party title-bar, route, sidebar-panel, Ins
 
 Subsequent GUI/Web checkpoints now implement the shared visual Shell, state, Conversation projection, Inspector, structured cards, domain review surfaces, structured composer references, production client-side Electron IPC and HTTP/WebSocket Transports, secure Electron Main/Preload/Renderer boundaries, and Vite browser and Renderer bootstraps. Production business routing and Host composition remain separate from these client-side implementations.
 
-The shared visual Shell uses explicit named Grid rows for the optional title bar, menu, context bar, and main body. Hiding an empty title-bar extension no longer changes auto-placement of the remaining regions, and the main Workspace body retains the full remaining viewport height in both GUI and Web shells.
+The shared visual Shell uses explicit named Grid rows for the optional title bar, optional inline menu, context bar, and main body. Web uses the inline application menu. Electron uses the native operating-system application menu and removes the duplicate menu row from Renderer content. Hiding either optional row cannot move the main body into the fixed-height context row.
 
 ### 8.2 Implemented Workspace and Settings Shell Checkpoint
 
 `@novel/ui` now owns the shared interaction skeleton for selecting one active Workspace per application window. `NovelApp` accepts an optional `WorkspaceController`; the controller exposes immutable current, recent, phase, and redacted error snapshots while delegating platform work through `WorkspacePickerPort` and `WorkspaceSessionPort`. Its asynchronous selection, open, refresh, and close operations are serialized so two UI commands cannot mutate the active Workspace concurrently.
 
-The Workspace value in the persistent context bar is clickable, the empty Conversation area offers a primary `选择 Workspace` action, and the `项目` menu exposes `打开 Workspace…` and `关闭 Workspace`. The chooser presents recent Workspace identities and never exposes a local filesystem path through shared React contracts. Opening or closing a Workspace updates the existing `ApplicationShellStore` context and clears stale Shell identities rather than creating a second presentation state tree.
+The Workspace value in the persistent context bar is clickable, the empty Conversation area offers a primary `选择 Workspace` action, and the `项目` menu exposes `打开 Workspace…` and `关闭 Workspace`. Web renders that menu inside the page; Electron Main renders it as a native top-level menu and emits only fixed commands through Preload. The chooser presents recent Workspace identities and never exposes a local filesystem path through shared React contracts.
 
 The shared, GUI, and Web roots no longer impose a `760px` minimum page width. Narrow windows keep the full application inside the viewport, reduce the sidebar track without dropping its navigation list, allow the context bar to scroll independently, and proportionally share the remaining area with an open Inspector instead of creating document-level horizontal clipping.
 
@@ -389,7 +389,7 @@ The `编辑` menu owns `设置…`. The shared Settings dialog uses a left categ
 
 Credentials never enter shared Renderer settings state. API keys and OAuth material remain owned by a future desktop or server Host credential store. Durable Provider persistence and binding the selected Provider into active or resumed Conversations remain separate Host integration work.
 
-Sidebar presentation is no longer configured through an Appearance settings page. One compact upper-right top-menu control toggles the project sidebar immediately and keeps `ApplicationShellStore` plus the compatibility settings snapshot synchronized. GUI and Web use the same interaction contract.
+Sidebar presentation is no longer configured through an Appearance settings page. Web places the compact toggle at the right edge of its inline menu, while Electron places it at the right edge of the context bar because the application menu is native. Both use the same shared command and state contract.
 
 W1 deliberately does not add Electron, Node filesystem, SQLite, Core Workspace API, or Novel API behavior. The default shared/Web composition uses unavailable Workspace ports and reports a safe user-facing error when local selection is requested. Production Workspace switching requires a stable application-level Host boundary above the Workspace-bound Conversation router:
 

@@ -37,6 +37,17 @@ export interface ElectronWorkspaceBridge {
   close(): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
 }
 
+export type ElectronApplicationCommand =
+  | "workspace.open"
+  | "workspace.close"
+  | "settings.open";
+
+export interface ElectronApplicationCommandBridge {
+  subscribe(
+    listener: (command: ElectronApplicationCommand) => void,
+  ): () => void;
+}
+
 export interface ElectronBridgeOpenSubscriptionRequest {
   readonly subscriptionId: string;
   readonly request: ApiRequest;
@@ -47,6 +58,7 @@ export type ElectronBridgeSubscriptionRead =
   | { readonly done: false; readonly frame: ApiEventFrame };
 
 export interface ElectronPreloadBridge {
+  readonly commands?: ElectronApplicationCommandBridge;
   readonly workspaces?: ElectronWorkspaceBridge;
 
   request(

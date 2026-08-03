@@ -1,6 +1,6 @@
 /** Stable shared React application entrypoint used by desktop and Web shells. */
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApplicationShell,
   type ApplicationShellProps,
@@ -54,6 +54,10 @@ import {
   WorkspaceSelectionDialog,
   useWorkspaceControllerSnapshot,
 } from "../workspace/index.js";
+import type {
+  ApplicationCommand,
+  ApplicationCommandSource,
+} from "../command/index.js";
 
 export interface NovelAppProps extends NovelAppProviderProps {
   readonly shell?: Omit<ApplicationShellProps, "children">;
@@ -68,6 +72,7 @@ export interface NovelAppProps extends NovelAppProviderProps {
   readonly initialComposerDrafts?: readonly ComposerDraftInitialState[];
   readonly workspaceController?: WorkspaceController;
   readonly settingsStore?: ApplicationSettingsStore;
+  readonly commandSource?: ApplicationCommandSource;
   readonly children?: ReactNode;
 }
 
@@ -102,6 +107,7 @@ export function NovelApp(props: NovelAppProps) {
               inspectorRenderers={props.inspectorRenderers}
               conversationCardProjectors={props.conversationCardProjectors}
               conversationCardRenderers={props.conversationCardRenderers}
+              commandSource={props.commandSource}
               settingsStore={props.settingsStore ?? defaultSettingsStore}
               workspaceController={
                 props.workspaceController ?? defaultWorkspaceController
@@ -121,6 +127,7 @@ function ConnectedApplicationShell({
   inspectorRenderers,
   conversationCardProjectors,
   conversationCardRenderers,
+  commandSource,
   settingsStore,
   workspaceController,
   children,
@@ -129,6 +136,7 @@ function ConnectedApplicationShell({
   readonly inspectorRenderers?: InspectorRendererRegistry;
   readonly conversationCardProjectors?: ConversationCardProjectorRegistry;
   readonly conversationCardRenderers?: ConversationCardRendererRegistry;
+  readonly commandSource?: ApplicationCommandSource;
   readonly settingsStore: ApplicationSettingsStore;
   readonly workspaceController: WorkspaceController;
   readonly children?: ReactNode;
@@ -199,6 +207,16 @@ function ConnectedApplicationShell({
     settingsStore.setSidebarMode(nextMode);
     shellStore.setSidebarMode(nextMode);
   };
+  const commandHandlerRef = useRef<(command: ApplicationCommand) => void>(() => {});
+  commandHandlerRef.current = (command) => {
+    if (command === "workspace.open") openWorkspaceDialog();
+    else if (command === "workspace.close") void closeWorkspace();
+    else if (command === "settings.open") setSettingsDialogOpen(true);
+  };
+  useEffect(() => {
+    if (commandSource === undefined) return undefined;
+    return commandSource.subscribe((command) => commandHandlerRef.current(command));
+  }, [commandSource]);
   const shellProps = {
     ...shell,
     context,

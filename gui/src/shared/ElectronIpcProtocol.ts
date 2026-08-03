@@ -27,3 +27,6 @@ export type ElectronWorkspaceIpcChannel =
 
 export const ELECTRON_WORKSPACE_IPC_CHANNELS: readonly ElectronWorkspaceIpcChannel[] =
   Object.freeze(Object.values(ELECTRON_WORKSPACE_IPC_CHANNEL));
+
+export const ELECTRON_APPLICATION_COMMAND_CHANNEL =
+  "novel.application.v1.command" as const;

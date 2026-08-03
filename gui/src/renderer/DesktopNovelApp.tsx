@@ -4,5 +4,10 @@ import { NovelApp, type NovelAppProps } from "@novel/ui";
 export type DesktopNovelAppProps = NovelAppProps;
 
 export function DesktopNovelApp(props: DesktopNovelAppProps) {
-  return <NovelApp {...props} />;
+  return (
+    <NovelApp
+      {...props}
+      shell={{ ...props.shell, menuPresentation: "native" }}
+    />
+  );
 }

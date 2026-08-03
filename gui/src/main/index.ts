@@ -1,4 +1,5 @@
 export * from "./DesktopApplication.js";
+export * from "./DesktopApplicationMenu.js";
 export * from "./DesktopBootstrapApiTransport.js";
 export * from "./DesktopMainPaths.js";
 export * from "./DesktopWindowManager.js";

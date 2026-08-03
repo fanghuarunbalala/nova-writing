@@ -15,6 +15,7 @@ import { ElectronApiTransport } from "../dist/renderer/index.js";
 import {
   ELECTRON_API_IPC_CHANNEL,
   ELECTRON_API_IPC_CHANNELS,
+  ELECTRON_APPLICATION_COMMAND_CHANNEL,
   NOVEL_DESKTOP_BRIDGE_KEY,
 } from "../dist/shared/index.js";
 
@@ -42,6 +43,8 @@ class FakeIpcMain {
 }
 
 class FakeIpcRenderer {
+  listeners = new Map();
+
   constructor(ipcMain, senderId) {
     this.ipcMain = ipcMain;
     this.senderId = senderId;
@@ -49,6 +52,22 @@ class FakeIpcRenderer {
 
   invoke(channel, ...args) {
     return this.ipcMain.invoke(this.senderId, channel, ...args);
+  }
+
+  on(channel, listener) {
+    const listeners = this.listeners.get(channel) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(channel, listeners);
+  }
+
+  removeListener(channel, listener) {
+    this.listeners.get(channel)?.delete(listener);
+  }
+
+  emit(channel, value) {
+    for (const listener of this.listeners.get(channel) ?? []) {
+      listener({}, value);
+    }
   }
 }
 
@@ -160,21 +179,34 @@ assert.equal(new Set(ELECTRON_API_IPC_CHANNELS).size, 5);
 assert.deepEqual(new Set(ipcMain.handlers.keys()), new Set(ELECTRON_API_IPC_CHANNELS));
 
 const contextBridge = new FakeContextBridge();
+const renderer7 = new FakeIpcRenderer(ipcMain, 7);
 const bridge7 = exposeDesktopApi({
   contextBridge,
-  ipcRenderer: new FakeIpcRenderer(ipcMain, 7),
+  ipcRenderer: renderer7,
 });
 assert.equal(contextBridge.exposures.get(NOVEL_DESKTOP_BRIDGE_KEY), bridge7);
 assert.equal(Object.isFrozen(bridge7), true);
 assert.deepEqual(Object.keys(bridge7).sort(), [
   "cancelRequest",
   "closeSubscription",
+  "commands",
   "openSubscription",
   "readSubscription",
   "request",
   "workspaces",
 ]);
 assert.equal(Object.isFrozen(bridge7.workspaces), true);
+assert.equal(Object.isFrozen(bridge7.commands), true);
+const receivedCommands = [];
+const unsubscribeCommands = bridge7.commands.subscribe((command) =>
+  receivedCommands.push(command),
+);
+renderer7.emit(ELECTRON_APPLICATION_COMMAND_CHANNEL, "settings.open");
+renderer7.emit(ELECTRON_APPLICATION_COMMAND_CHANNEL, "private.command");
+assert.deepEqual(receivedCommands, ["settings.open"]);
+unsubscribeCommands();
+renderer7.emit(ELECTRON_APPLICATION_COMMAND_CHANNEL, "workspace.open");
+assert.deepEqual(receivedCommands, ["settings.open"]);
 
 const bridge8 = createElectronPreloadBridge({
   ipcRenderer: new FakeIpcRenderer(ipcMain, 8),

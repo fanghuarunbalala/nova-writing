@@ -1072,6 +1072,65 @@ gated by its accepted Outline operation and revision contracts.
 
 Add complete Draft and canonical vertical slices with Rebase and conflict behavior. Tool adapters remain excluded.
 
+Accepted N9-E revision contract:
+
+- V1 has no independent `OutlineRevision`; authoritative Outline state,
+  proposals, realizations, conformance checks, and projections bind to the
+  global `NovelRevision`
+- one successful canonical Commit advances `NovelRevision` exactly once,
+  regardless of how many Outline Operations the ChangeSet contains
+- Draft Operations continue to target the Draft's current `baseRevision`; a
+  Rebase changes that base and invalidates any previous Novel ChangeSet
+  Approval
+
+Accepted N9-E Operation union:
+
+```text
+story-outline.create
+story-unit.create
+story-unit.replace
+story-unit.move
+story-unit.delete
+leaf-story-unit-plan.replace
+leaf-story-unit-plan.clear
+```
+
+- `story-unit.replace` overwrites StoryUnit content, scope, and status but does
+  not change structural location
+- `story-unit.move` is the exclusive Operation for changing `parentId` and
+  `orderKey`
+- `leaf-story-unit-plan.replace` overwrites the complete accepted leaf plan;
+  partial patch semantics are excluded
+- all Operations are deterministic, replayable, Draft-first mutations using
+  the existing `NovelOperationRegistry`, `NovelMutationService`, ChangeSet,
+  Commit, and Rebase boundaries
+
+Accepted conflict mapping uses the existing protocol kinds:
+
+```text
+entity-created
+entity-deleted
+field-modified
+parent-changed
+order-changed
+domain-invariant
+```
+
+The Novel Domain does not hardcode automatic Approval. Approval remains an
+upper-layer policy decision, and the default composition performs no automatic
+Approval.
+
+Implementation sequence:
+
+1. define Outline Operations, handlers, Registry composition, and Draft replay
+2. add canonical and Draft SQLite schema, repositories, and state appliers
+3. add Outline mutation services and explicit canonical/Draft query scopes
+4. map Rebase precondition failures to the accepted conflict kinds
+5. validate restart, concurrent Commit/Rebase, conflict resolution, and replay
+
+**Status:** revision, Operation, conflict, and Approval contracts are accepted
+and recorded. Outline Operation implementation is next.
+
 ## 16. Task N10: Manuscript, Publication, and Realization
 
 This task begins only after Anchor and Range contracts are explicitly resolved and recorded.

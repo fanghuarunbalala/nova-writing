@@ -172,7 +172,7 @@ type ReviewStatus =
 
 interface OutlineProposal {
   readonly id: OutlineProposalId;
-  readonly baseRevision: OutlineRevision;
+  readonly baseRevision: NovelRevision;
   readonly operations: readonly OutlineOperation[];
   readonly reviewStatus: ReviewStatus;
 }
@@ -181,7 +181,8 @@ interface OutlineProposal {
 - `baseRevision` prevents an Agent proposal based on stale outline state from overwriting newer decisions.
 - `operations` apply one reviewable outline change set atomically after acceptance.
 - A rejected proposal leaves accepted outline and manuscript state unchanged.
-- Accepted operations advance OutlineRevision and global NovelRevision.
+- V1 has no independent `OutlineRevision`; accepted operations advance the
+  global `NovelRevision` exactly once per canonical Commit.
 - Proposal origin and actor identity belong in audit metadata or Novel-domain Events rather than changing the semantics of the resulting StoryUnit.
 - Once accepted, a StoryUnit has the same authority whether its content originated from the human, Agent, or a joint editing process.
 - Conformance validation uses only accepted outline state; proposed changes cannot silently redefine the manuscript specification.
@@ -191,6 +192,9 @@ Recommended approval boundary:
 - Agents may freely generate proposals, decomposition alternatives, missing-field suggestions, RhythmBeat suggestions, projections, and validation findings.
 - Low-risk, repairable projection or indexing work may be auto-accepted by policy.
 - Adding or removing required Events, changing entity consequences, moving accepted StoryUnits, modifying ready or realized leaf plans, abandoning StoryUnits, and marking realization complete require review under the configured approval policy.
+- The Novel Domain does not auto-approve any ChangeSet. Automatic Approval, if
+  an application later enables it, is an upper-layer policy; the default
+  composition performs no automatic Approval.
 
 ## 5. StoryUnit Status and Reasons
 
@@ -572,7 +576,7 @@ interface ManuscriptRange {
 interface StoryUnitRealization {
   readonly storyUnitId: StoryUnitId;
   readonly ranges: readonly ManuscriptRange[];
-  readonly sourceOutlineRevision: OutlineRevision;
+  readonly sourceRevision: NovelRevision;
   readonly validation: StoryUnitConformanceResult;
 }
 ```
@@ -612,7 +616,7 @@ interface StoryUnitConformanceFinding {
 
 interface StoryUnitConformanceResult {
   readonly status: StoryUnitConformanceStatus;
-  readonly checkedOutlineRevision: OutlineRevision;
+  readonly checkedNovelRevision: NovelRevision;
   readonly checkedManuscriptRevision: ManuscriptRevision;
   readonly findings: readonly StoryUnitConformanceFinding[];
 }
@@ -627,7 +631,7 @@ Conformance semantics:
 - Additional prose detail is allowed when it does not create a conflicting persistent story fact.
 - A new semantic Event or entity change must either be removed from the manuscript or explicitly added to the outline through an accepted outline mutation before validation can succeed.
 
-A StoryUnit may enter `realizationStatus: completed` only when it has at least one current ManuscriptRange and a `conforming` validation checked against the current OutlineRevision and ManuscriptRevision. Conformance failure keeps the StoryUnit in progress; it does not create an alternate actual-facts table.
+A StoryUnit may enter `realizationStatus: completed` only when it has at least one current ManuscriptRange and a `conforming` validation checked against the current NovelRevision and ManuscriptRevision. Conformance failure keeps the StoryUnit in progress; it does not create an alternate actual-facts table.
 
 If the human changes creative direction, or accepts an Agent proposal that changes it while drafting, the outline is explicitly revised and the manuscript is revalidated. The model treats this as a specification change rather than silent manuscript divergence.
 
@@ -1272,7 +1276,7 @@ classDiagram
     class StoryUnitRealization {
         +StoryUnitId storyUnitId
         +ManuscriptRange[] ranges
-        +OutlineRevision sourceOutlineRevision
+        +NovelRevision sourceRevision
         +StoryUnitConformanceResult validation
     }
 
@@ -1884,12 +1888,14 @@ The following decisions remain outside the accepted Runtime implementation plan:
 3. Whether planned Chapter coverage uses a contiguous leaf range, an explicit ordered selection, or both.
 4. The exact command and event contracts for Block split, merge, move, and anchor repair.
 5. The physical storage of Manuscript Block text and Artifacts, plus the exact canonical Commit-payload encoding, retention, integrity-repair, and garbage-collection policy; the per-Conversation durable Draft Session layout is accepted in Section 10.
-6. The exact OutlineRevision and ManuscriptRevision generation contracts and their relationship to the global NovelRevision.
+6. The exact ManuscriptRevision generation contract and its relationship to the global NovelRevision; V1 has no independent OutlineRevision.
 7. Whether RhythmBeat mismatch remains a warning by default or may become a required conformance error for selected beats.
-8. The concrete NovelRevision generation format and whether narrower component revisions are needed after measuring projection rebuild cost.
+8. The concrete NovelRevision generation format and whether a post-V1 narrower component revision is justified after measuring projection rebuild cost.
 9. The exact review-state contract for Tool-proposed Character and Location profile patches and projections.
 10. The exact conformance validator boundary between deterministic Tool checks, model-assisted analysis, and human acceptance.
-11. The concrete OutlineOperation union, the mapping of each Operation to the general precondition and NovelConflict protocol, and which low-risk outline operations may be auto-accepted by policy.
+11. The exact field-level payload and precondition schema for the accepted
+    Outline Operation union; operation names, structural ownership, conflict
+    kinds, and the default no-auto-Approval policy are resolved by Task N9-E.
 12. The Artifact preparation protocol and recovery behavior for an interrupted canonical Commit; the Draft Operation digest encoding and atomic Draft Journal behavior are resolved by Task N4.
 13. Draft staging retention limits, terminal-session cleanup timing, and whether selected committed or rolled-back Drafts may be retained for diagnostics without becoming authoritative history.
 14. The Agent-facing Tool grouping and per-Model or View-oriented read, overwrite-write, and delete schemas; Section 12 intentionally defines only the application boundary those Tools must call.

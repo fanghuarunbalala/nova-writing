@@ -1333,6 +1333,12 @@ post-reconciliation staging Outboxes at dispatch time, closes them after the
 ordered pass, and removes terminal Draft staging only after delivery succeeds.
 The five-stage Node Recovery Application composition is next.
 
+B-H adds the Novel-ID-bound `NodeNovelRecoveryApplication`, which composes the
+accepted Commit, Rebase, Draft, Projection, and Outbox implementations through
+the Core coordinator and rejects phase-mismatched injection. Concrete
+Projection Source reading plus full restart acceptance remain before N11-B is
+complete.
+
 ### N11-C End-to-End Validation
 
 Cover multi-Conversation Drafts, Commit, Rebase, conflict, Approval, Outline, Manuscript, publication, realization, recovery, and replay without Agent Tool involvement.

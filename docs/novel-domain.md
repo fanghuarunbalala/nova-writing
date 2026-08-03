@@ -1985,6 +1985,11 @@ Commit history and incomplete canonical Commit recovery
 - Each phase is idempotent, the coordinator is single-flight per application
   instance, a failed phase prevents later phases from running, and retry starts
   the complete fixed sequence again.
+- Node exposes one `NodeNovelRecoveryApplication` bound to a single Novel ID.
+  It adapts Commit, Draft, and Outbox runners, accepts concrete Rebase and
+  Projection stages, validates their phase identity, and delegates ordering,
+  single-flight execution, failure stopping, and aggregate results to the Core
+  coordinator.
 - Public recovery results contain phase and aggregate counts. Logs contain only
   stable identity, phase, and count metadata; they never include Novel content,
   Operations, payloads, paths, raw errors, stacks, or causes.

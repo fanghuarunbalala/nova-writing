@@ -150,7 +150,7 @@ export function captureCharacterCurrentStateProjection(
     entityType: "character",
     characterId: captureCharacterId(candidate.characterId),
     atStoryUnitId: captureStoryUnitId(candidate.atStoryUnitId),
-    mode: captureProjectionMode(candidate.mode),
+    mode: captureNovelProjectionMode(candidate.mode),
     sourceRevision: captureNovelRevision(candidate.sourceRevision),
     summary: captureSummary(candidate.summary),
     evidenceStoryUnitIds: captureEvidence(candidate.evidenceStoryUnitIds),
@@ -166,7 +166,7 @@ export function captureLocationCurrentStateProjection(
     entityType: "location",
     locationId: captureLocationId(candidate.locationId),
     atStoryUnitId: captureStoryUnitId(candidate.atStoryUnitId),
-    mode: captureProjectionMode(candidate.mode),
+    mode: captureNovelProjectionMode(candidate.mode),
     sourceRevision: captureNovelRevision(candidate.sourceRevision),
     summary: captureSummary(candidate.summary),
     evidenceStoryUnitIds: captureEvidence(candidate.evidenceStoryUnitIds),
@@ -224,7 +224,7 @@ export function captureCharacterRelationshipProjection(
     focusCharacterId,
     relatedCharacterId,
     atStoryUnitId: captureStoryUnitId(candidate.atStoryUnitId),
-    mode: captureProjectionMode(candidate.mode),
+    mode: captureNovelProjectionMode(candidate.mode),
     sourceRevision: captureNovelRevision(candidate.sourceRevision),
     summary: captureSummary(candidate.summary),
     evidenceStoryUnitIds: captureEvidence(candidate.evidenceStoryUnitIds),
@@ -306,7 +306,7 @@ function captureEvidence(value: unknown): readonly StoryUnitId[] {
   return Object.freeze(evidence);
 }
 
-function captureProjectionMode(value: unknown): NovelProjectionMode {
+export function captureNovelProjectionMode(value: unknown): NovelProjectionMode {
   if (value !== "confirmed" && value !== "planned") throw invalidProjection();
   return value;
 }

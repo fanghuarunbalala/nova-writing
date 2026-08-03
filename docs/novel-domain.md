@@ -1489,6 +1489,14 @@ V1 projection records share these invariants:
   structural Range outcomes, warning/error counts, and their StoryUnit evidence.
 - Every projection can be deleted and rebuilt from profiles, bindings, entity
   changes, Realizations, and the selected NovelRevision without losing truth.
+- Confirmed rebuild includes only completed leaf StoryUnits with a current,
+  conforming Realization and structurally resolvable Ranges. Planned rebuild may
+  additionally include active pending and in-progress leaves through the target
+  StoryUnit position.
+- Readiness requirements remain an injected provider-neutral policy. Core owns
+  evidence ordering, revision binding, strict result capture, and rebuild
+  determinism, but does not hard-code one universal definition of a complete
+  Character or Location profile.
 
 ## 12. Novel Layer Architecture
 

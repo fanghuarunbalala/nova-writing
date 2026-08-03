@@ -36,6 +36,7 @@
     "smoke:novel-manuscript-range-repair": "pnpm build && node scripts/novel-manuscript-range-repair-smoke.mjs",
     "smoke:novel-story-unit-realization": "pnpm build && node scripts/novel-story-unit-realization-smoke.mjs",
     "smoke:novel-projection-model": "pnpm build && node scripts/novel-projection-model-smoke.mjs",
+    "smoke:novel-projection-planner": "pnpm build && node scripts/novel-projection-planner-smoke.mjs",
     "smoke:novel-draft-operation-writer": "pnpm build && node scripts/novel-draft-operation-writer-smoke.mjs",
     "smoke:novel-entity": "pnpm build && node scripts/novel-entity-slice-smoke.mjs",
     "smoke:novel-change-set": "pnpm build && node scripts/novel-change-set-smoke.mjs",

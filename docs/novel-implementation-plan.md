@@ -1274,7 +1274,13 @@ NovelRevision plus ordered evidence StoryUnit IDs. Strict capture enforces
 entity identity, confirmed/planned mode, readiness consistency, non-self
 relationships, conformance counts, Range repair statuses, and immutable
 evidence. These records remain disposable views rather than authoritative Novel
-facts. Evidence planning and deterministic rebuild are the next N11-A substep.
+facts. A-B adds a strict authoritative Source Catalog and deterministic
+`NovelProjectionPlanner`. Confirmed mode selects only current, conforming,
+completed leaf StoryUnits; planned mode may include active incomplete leaves.
+State and relationship summaries are rebuilt from stable baselines plus ordered
+entity changes, Conformance views are rebuilt from Realization and Range repair,
+and contextual Readiness delegates missing-information policy through an
+injected provider-neutral interface. Task N11-A is complete.
 
 ### N11-B Recovery
 
@@ -1344,5 +1350,8 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
   plus deterministic current-revision completion admission. Task N10 is complete.
 - Task N11-A-A is completed by strict revision-bound state, readiness,
   relationship, and conformance Projection value contracts.
-- Task N11-A-B evidence planning and deterministic rebuild is next.
+- Task N11-A-B is completed by strict Projection Source validation,
+  confirmed/planned evidence selection, injected Readiness policy, and
+  deterministic rebuild. Task N11-A is complete.
+- Task N11-B Recovery is next.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

@@ -2993,6 +2993,17 @@ the composition path. Validation is covered by
 `core/scripts/runtime-child-entrypoint-smoke.mjs`, and
 `core/scripts/runtime-host-child-integration-smoke.mjs`.
 
+R10 closes the shared client adaptation boundary. CLI and TUI use the same
+headless `NovelApiClient` with an injected local or remote `ApiTransport`;
+Electron GUI uses `ElectronApiTransport`; Web uses the HTTP/WebSocket
+transport. All clients use the same `ConversationProxy` operations:
+`input.enqueue`, `events.list`, `events.subscribe`, `getSnapshot`, and
+`getRuntimePresence`. Approval panels render Approval OutputEvents and enqueue
+the corresponding decision InputEvent. Replay only calls `events.list` and
+never activates a Runtime. The parity validation is
+`core/scripts/runtime-client-adaptation-smoke.mjs` together with the existing
+mock Transport, projection-controller, Electron, and Web smoke fixtures.
+
 Post-Task-7 Agent orchestration is documented in
 `docs/agent-orchestration.md`. The accepted S0-S6 contracts are complete. The
 Novel track does not authorize persistent Agent, Agent Team, Team

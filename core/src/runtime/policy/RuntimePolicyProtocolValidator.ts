@@ -181,7 +181,11 @@ export function captureRuntimeNudgeLifecycleEffect(
     const nudgeId = requireNonBlank(record.nudgeId);
     const scheduledSequence = requirePositiveInteger(record.scheduledSequence);
     const scheduledAt = requireTimestamp(record.scheduledAt);
-    if (effect.targetRunId !== runId || !nudgeId) throw new Error();
+    if (
+      effect.policyId !== policyId ||
+      effect.targetRunId !== runId ||
+      !nudgeId
+    ) throw new Error();
     return Object.freeze({
       kind,
       policyId,
@@ -216,12 +220,14 @@ export function captureRuntimeNudgeLifecycleEffect(
     } satisfies NudgeResolvePolicyEffect);
   }
   if (kind === "nudge_expire") {
+    const targetRunId = requireNonBlank(record.targetRunId);
+    if (targetRunId !== runId) throw new Error();
     return Object.freeze({
       kind,
       policyId,
       conversationId,
       runId,
-      targetRunId: requireNonBlank(record.targetRunId),
+      targetRunId,
       evaluatedAt: requireTimestamp(record.evaluatedAt),
       ...captureOptionalPositiveInteger(record.currentTurnNumber),
       ...captureOptionalBoolean(record.runEnded),
@@ -231,7 +237,7 @@ export function captureRuntimeNudgeLifecycleEffect(
     const nudgeId = requireNonBlank(record.nudgeId);
     const targetRunId = requireNonBlank(record.targetRunId);
     const supersededByNudgeId = requireNonBlank(record.supersededByNudgeId);
-    if (nudgeId === supersededByNudgeId) throw new Error();
+    if (targetRunId !== runId || nudgeId === supersededByNudgeId) throw new Error();
     return Object.freeze({
       kind,
       policyId,

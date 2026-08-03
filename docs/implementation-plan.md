@@ -3372,6 +3372,15 @@ N-7-B delivered:
   persistent activation, acknowledgement, condition resolution, expiry,
   supersession, and missing-handler failure
 
+N-7-C delivered:
+
+- `RuntimePolicyEngine` evaluates lifecycle Effects in deterministic policy
+  order and rejects cross-Policy, cross-Conversation, and cross-Run identities
+- schedule Effects require the inner Nudge Policy identity and exact evaluated
+  timestamp; expiry and supersession cannot target a different Run
+- engine integration coverage verifies typed lifecycle output and normalized
+  invalid-Effect failure without exposing private payloads
+
 ### 13.15 N-8: Tool and Subagent Event Integration
 
 Connect Tool results, Approval decisions, and existing Subagent lifecycle

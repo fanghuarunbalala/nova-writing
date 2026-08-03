@@ -1,6 +1,13 @@
 /** Stable shared React application entrypoint used by desktop and Web shells. */
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   ApplicationShell,
   type ApplicationShellProps,
@@ -17,6 +24,7 @@ import {
   useApplicationShellSnapshot,
 } from "../state/index.js";
 import {
+  ConversationCatalogController,
   ConversationComposer,
   useConversationProjection,
 } from "../conversation/index.js";
@@ -58,6 +66,7 @@ import type {
   ApplicationCommand,
   ApplicationCommandSource,
 } from "../command/index.js";
+import { useNovelApi } from "../client/index.js";
 
 export interface NovelAppProps extends NovelAppProviderProps {
   readonly shell?: Omit<ApplicationShellProps, "children">;
@@ -145,10 +154,28 @@ function ConnectedApplicationShell({
   const shellStore = useApplicationShellStore();
   const inspectorSnapshot = useInspectorSnapshot();
   const inspectorStore = useInspectorStore();
+  const { api, logger } = useNovelApi();
   const extensions = useNovelUiExtensions();
   const workspaceSnapshot = useWorkspaceControllerSnapshot(workspaceController);
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const conversationCatalog = useMemo(
+    () => new ConversationCatalogController({ api, logger }),
+    [api, logger],
+  );
+  const subscribeConversationCatalog = useCallback(
+    (listener: () => void) => conversationCatalog.subscribe(listener),
+    [conversationCatalog],
+  );
+  const getConversationCatalogSnapshot = useCallback(
+    () => conversationCatalog.getSnapshot(),
+    [conversationCatalog],
+  );
+  const conversationCatalogSnapshot = useSyncExternalStore(
+    subscribeConversationCatalog,
+    getConversationCatalogSnapshot,
+    getConversationCatalogSnapshot,
+  );
   useEffect(() => {
     void workspaceController.refresh();
   }, [workspaceController]);
@@ -169,22 +196,51 @@ function ConnectedApplicationShell({
     workspaceController.clearError();
     setWorkspaceDialogOpen(true);
   };
-  const applyWorkspace = (workspace: { readonly id: string; readonly label: string }): void => {
+  const applyConversation = (
+    conversation:
+      | {
+          readonly id: string;
+          readonly title: string;
+          readonly agentType: string;
+          readonly agentLabel: string;
+        }
+      | undefined,
+  ): void => {
+    shellStore.setConversation(
+      conversation === undefined
+        ? undefined
+        : { id: conversation.id, label: conversation.title },
+    );
+    shellStore.setAgent(
+      conversation === undefined
+        ? undefined
+        : { id: conversation.agentType, label: conversation.agentLabel },
+    );
+  };
+  const applyWorkspace = async (workspace: {
+    readonly id: string;
+    readonly label: string;
+  }): Promise<void> => {
     shellStore.replaceContext({
       workspace: { id: workspace.id, label: workspace.label },
     });
     setWorkspaceDialogOpen(false);
+    const conversation = await conversationCatalog.openWorkspace(workspace.id);
+    if (conversationCatalog.getSnapshot().workspaceId === workspace.id) {
+      applyConversation(conversation);
+    }
   };
   const chooseWorkspace = async (): Promise<void> => {
     const workspace = await workspaceController.chooseAndOpen();
-    if (workspace !== undefined) applyWorkspace(workspace);
+    if (workspace !== undefined) await applyWorkspace(workspace);
   };
   const openRecentWorkspace = async (workspaceId: string): Promise<void> => {
     const workspace = await workspaceController.openRecent(workspaceId);
-    if (workspace !== undefined) applyWorkspace(workspace);
+    if (workspace !== undefined) await applyWorkspace(workspace);
   };
   const closeWorkspace = async (): Promise<void> => {
     if (!(await workspaceController.closeCurrent())) return;
+    conversationCatalog.clearWorkspace();
     shellStore.replaceContext({});
     setWorkspaceDialogOpen(false);
   };
@@ -233,7 +289,27 @@ function ConnectedApplicationShell({
     onToggleSidebar: shell?.onToggleSidebar ?? toggleSidebar,
     onNavigate:
       shell?.onNavigate ?? ((item) => {
+        if (item === "new-conversation") {
+          void conversationCatalog.createConversation().then(applyConversation);
+          return;
+        }
         projectNavigation.navigate(item);
+      }),
+    conversations:
+      shell?.conversations ??
+      conversationCatalogSnapshot.conversations.map((conversation) => ({
+        id: conversation.id,
+        title: conversation.title,
+        active:
+          conversation.id ===
+          conversationCatalogSnapshot.activeConversationId,
+      })),
+    onConversationSelect:
+      shell?.onConversationSelect ??
+      ((conversationId) => {
+        applyConversation(
+          conversationCatalog.selectConversation(conversationId),
+        );
       }),
     inspector:
       shell?.inspector ?? (
@@ -245,6 +321,15 @@ function ConnectedApplicationShell({
       shell?.emptyState ??
       (!workspaceOpen ? (
         <WorkspaceEmptyState onSelectWorkspace={openWorkspaceDialog} />
+      ) : snapshot.conversation === undefined ? (
+        <div className="novel-conversation-empty" role="status">
+          {conversationCatalogSnapshot.phase === "loading" ||
+          conversationCatalogSnapshot.phase === "creating"
+            ? "正在准备对话…"
+            : conversationCatalogSnapshot.phase === "error"
+              ? "暂时无法加载对话，请重试新建对话"
+              : "选择或新建一个对话"}
+        </div>
       ) : undefined),
     overlays: (
       <>

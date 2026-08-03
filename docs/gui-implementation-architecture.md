@@ -1631,6 +1631,14 @@ application without exposing Store paths or Node objects. Provider execution is
 still a separate Host composition concern; the current desktop placement reports
 Runtime unavailable rather than inventing an assistant response.
 
+The shared React application now binds the Workspace lifecycle to a
+`ConversationCatalogController`. Opening a Workspace lists active Conversations,
+creates the first `novel_agent` Conversation when the catalog is empty, selects an
+active Conversation, and projects the catalog into the persistent left sidebar.
+`新对话` creates another durable Conversation, sidebar selection swaps the bound
+Projection and Composer, and user text follows the existing InputEvent → Journal →
+Event subscription path back into the visible timeline.
+
 ### GUI-9: Web shell
 
 - implement Web bootstrap with the same `@novel/ui`;

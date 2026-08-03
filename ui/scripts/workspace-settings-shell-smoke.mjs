@@ -107,7 +107,9 @@ assert.equal(calls.picks, 1);
 assert.deepEqual(calls.opens, ["workspace-new"]);
 assert.equal(shellStore.getSnapshot().workspace.label, "星海计划");
 assert.equal(container.querySelector('[aria-label="选择 Workspace"]'), null);
-assert.match(container.textContent, /选择或新建一个对话/);
+await waitForReact(() =>
+  container.textContent.includes("暂时无法加载对话，请重试新建对话"),
+);
 
 await clickButton("项目");
 assert.ok(container.querySelector('[role="menu"][data-menu="project"]'));
@@ -217,6 +219,14 @@ async function selectField(label, value) {
     field.value = value;
     field.dispatchEvent(new window.Event("change", { bubbles: true }));
   });
+}
+
+async function waitForReact(predicate, timeoutMs = 1_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("Timed out waiting for React state");
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  }
 }
 
 function installDom() {

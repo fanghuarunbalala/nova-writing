@@ -250,7 +250,8 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
           candidate.state !== PENDING_NUDGE_STATE.scheduled &&
           candidate.state !== PENDING_NUDGE_STATE.active ||
           candidate.targetRunId !== captured.targetRunId ||
-          (candidate.targetTurnNumber !== undefined &&
+          (candidate.state === PENDING_NUDGE_STATE.scheduled &&
+            candidate.targetTurnNumber !== undefined &&
             candidate.targetTurnNumber !== captured.targetTurnNumber)
         ) {
           throw this.failure(

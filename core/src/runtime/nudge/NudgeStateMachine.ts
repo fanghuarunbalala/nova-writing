@@ -37,6 +37,7 @@ const TRANSITIONS: ReadonlyMap<NudgeStateAction, readonly StateTransition[]> =
   new Map([
     [NUDGE_STATE_ACTION.lease, [
       transition(PENDING_NUDGE_STATE.scheduled, PENDING_NUDGE_STATE.leased),
+      transition(PENDING_NUDGE_STATE.active, PENDING_NUDGE_STATE.leased),
     ]],
     [NUDGE_STATE_ACTION.release, [
       transition(PENDING_NUDGE_STATE.leased, PENDING_NUDGE_STATE.scheduled),
@@ -97,6 +98,17 @@ export class NudgeStateMachine {
     if (idempotentState === nudge.state) return nudge;
     if (action === NUDGE_STATE_ACTION.activate && nudge.delivery === NUDGE_DELIVERY.once) {
       throw illegalTransition(nudge, action);
+    }
+    if (
+      action === NUDGE_STATE_ACTION.release &&
+      nudge.state === PENDING_NUDGE_STATE.leased
+    ) {
+      return Object.freeze({
+        ...nudge,
+        state: nudge.delivery === NUDGE_DELIVERY.once
+          ? PENDING_NUDGE_STATE.scheduled
+          : PENDING_NUDGE_STATE.active,
+      });
     }
     if (
       action === NUDGE_STATE_ACTION.consume &&

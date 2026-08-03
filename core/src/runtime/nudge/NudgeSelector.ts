@@ -72,8 +72,9 @@ export class NudgeSelector {
           this.isEligible(candidate, capturedRequest, cooldownByKey),
         )
         .sort(compareCandidates);
+      const deduplicated = selectDedupeRepresentatives(eligible);
       const limit = resolveNudgeSelectionLimit(capturedRequest);
-      const selected = selectExclusiveSafe(eligible, limit);
+      const selected = selectExclusiveSafe(deduplicated, limit);
 
       this.logger.info("runtime.nudge.selection_completed", {
         ...identity,
@@ -145,9 +146,17 @@ export class NudgeSelector {
     request: NudgeLeaseRequest,
     cooldownByKey: ReadonlyMap<string, number>,
   ): boolean {
-    if (candidate.state !== PENDING_NUDGE_STATE.scheduled) return false;
+    if (
+      candidate.state !== PENDING_NUDGE_STATE.scheduled &&
+      candidate.state !== PENDING_NUDGE_STATE.active
+    ) return false;
+    if (
+      candidate.state === PENDING_NUDGE_STATE.active &&
+      candidate.delivery === "once"
+    ) return false;
     if (candidate.targetRunId !== request.targetRunId) return false;
     if (
+      candidate.state === PENDING_NUDGE_STATE.scheduled &&
       candidate.targetTurnNumber !== undefined &&
       candidate.targetTurnNumber !== request.targetTurnNumber
     ) {
@@ -203,9 +212,34 @@ function captureIdentity(request: NudgeLeaseRequest): NudgeSelectionIdentity {
 }
 
 function compareCandidates(left: PendingNudge, right: PendingNudge): number {
+  if (left.state !== right.state) {
+    return left.state === PENDING_NUDGE_STATE.active ? -1 : 1;
+  }
   if (left.priority !== right.priority) return left.priority < right.priority ? 1 : -1;
-  if (left.scheduledSequence === right.scheduledSequence) return 0;
-  return left.scheduledSequence < right.scheduledSequence ? -1 : 1;
+  if (left.scheduledSequence !== right.scheduledSequence) {
+    return left.scheduledSequence < right.scheduledSequence ? -1 : 1;
+  }
+  return left.id.localeCompare(right.id);
+}
+
+function selectDedupeRepresentatives(
+  eligible: readonly PendingNudge[],
+): readonly PendingNudge[] {
+  const activeKeys = new Set<string>();
+  return eligible.filter((candidate) => {
+    const key = cooldownKey(
+      candidate.targetRunId,
+      candidate.policyId,
+      candidate.dedupeKey,
+    );
+    if (candidate.state === PENDING_NUDGE_STATE.active) {
+      if (activeKeys.has(key)) return false;
+      activeKeys.add(key);
+      return true;
+    }
+    if (activeKeys.has(key)) return false;
+    return true;
+  });
 }
 
 function selectExclusiveSafe(

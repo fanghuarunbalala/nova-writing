@@ -4,12 +4,22 @@
 
 ```bash
 pnpm check
-cd core
-pnpm build
-for script in $(find scripts -maxdepth 1 -type f -name '*-smoke.mjs' | sort); do
-  node "$script"
-done
+pnpm --dir core smoke:all
 ```
+
+`smoke:all` discovers every top-level `core/scripts/*-smoke.mjs` fixture and
+runs each test in an isolated process. Its unified report includes total,
+passed and failed counts, pass/failure rates, wall/cumulative/average/p50/p95/
+maximum durations, Event Loop delay and utilization, peak RSS/Heap growth,
+the ten slowest tests, and every failed test. A machine-readable
+`CORE_SMOKE_SUITE_REPORT=<json>` line is emitted after the human summary.
+
+Individual child stdout, stderr, errors, stacks, paths, and payloads are not
+forwarded. Failed entries contain only the test filename, fixed failure kind,
+duration, process exit/signal state, and captured byte counts. Each test has a
+30-second hard timeout; this is a deadlock guard rather than a production SLA.
+RSS and Heap values measure the isolated test process and do not aggregate
+memory owned by descendant processes.
 
 ## Acceptance Coverage
 
@@ -31,7 +41,7 @@ done
 
 The release suite includes invalid schema data, duplicate IDs, append failure, projection failure, stale recovery state, child creation/activation/rollback failure, process crash, heartbeat loss, IPC queue pressure, cancellation races, Tool timeout/denial, and corrupted persisted projections. Logs are reviewed to remain payload-free.
 
-Checkpoint 7 is accepted only when `pnpm check`, every Core smoke script, `git diff --check`, and scoped secret/generated-file review pass from one repository state.
+Checkpoint 7 is accepted only when `pnpm check`, `pnpm --dir core smoke:all`, `git diff --check`, and scoped secret/generated-file review pass from one repository state.
 
 ## Complete Conversation Simulation
 

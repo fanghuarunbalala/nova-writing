@@ -18,6 +18,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
+    "smoke:all": "pnpm build && node scripts/core-smoke-suite.mjs",
+    "smoke:report": "node scripts/core-smoke-report-smoke.mjs",
     "smoke:novel-foundation": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/novel-foundation-typecheck.ts && node scripts/novel-foundation-smoke.mjs",
     "smoke:novel-canonical-store": "pnpm build && node scripts/novel-canonical-store-smoke.mjs",
     "smoke:novel-draft-session": "pnpm build && node scripts/novel-draft-session-smoke.mjs",

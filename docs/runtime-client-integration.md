@@ -38,6 +38,16 @@ The first release uses executable smoke fixtures as reference examples so exampl
 
 Run one reference with `node core/scripts/<name>.mjs` after `pnpm --dir core build`, or run the complete release suite described in `docs/runtime-validation-matrix.md`.
 
+For the unified Core smoke report, run:
+
+```bash
+pnpm --dir core smoke:all
+```
+
+The final report provides pass/failure rates, failed test identities, duration
+distribution, Event Loop responsiveness, and per-test-process memory growth
+without forwarding raw child output.
+
 For a complete simulated Conversation workflow, run:
 
 ```bash

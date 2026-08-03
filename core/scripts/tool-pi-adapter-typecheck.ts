@@ -1,6 +1,6 @@
 /** Compile-only proof that Pi conversion preserves TypeBox parameters internally. */
 import { Type } from "typebox";
-import { defineTool } from "../src/tools/index.js";
+import { defineTool } from "../src/tooling/index.js";
 import {
   PiToolAdapter,
   type PiToolExecutionBridge,

@@ -2,7 +2,7 @@
 import {
   TOOL_GROUP_MANIFEST_SCHEMA_VERSION,
   captureToolGroupManifest,
-} from "../src/tools/index.js";
+} from "../src/tooling/index.js";
 
 const manifest = captureToolGroupManifest({
   schemaVersion: TOOL_GROUP_MANIFEST_SCHEMA_VERSION,

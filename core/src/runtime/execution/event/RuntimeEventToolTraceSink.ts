@@ -1,8 +1,8 @@
 /** Persists redacted Tool Trace records through the Runtime OutputEvent barrier. */
 import { ToolTraceRecordedOutputEvent } from "../../../event/output/ToolTraceRecordedOutputEvent.js";
-import type { ToolTraceRecord } from "../../../tools/execution/ToolExecutionContracts.js";
-import { captureToolTraceRecord } from "../../../tools/execution/ToolExecutionProtocolValidator.js";
-import type { ToolTraceSink } from "../../../tools/execution/ToolTraceSink.js";
+import type { ToolTraceRecord } from "../../tools/execution/ToolExecutionContracts.js";
+import { captureToolTraceRecord } from "../../tools/execution/ToolExecutionProtocolValidator.js";
+import type { ToolTraceSink } from "../../tools/execution/ToolTraceSink.js";
 import type { RuntimeEventSink } from "./RuntimeEventSink.js";
 
 export interface ToolTraceEventIdFactory {

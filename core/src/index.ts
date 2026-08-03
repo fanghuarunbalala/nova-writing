@@ -18,5 +18,6 @@ export * from "./prompt/index.js";
 export * from "./projection/index.js";
 export * from "./runtime/index.js";
 export * from "./storage/index.js";
+export * from "./tooling/index.js";
 export * from "./tools/index.js";
 export * from "./transport/index.js";

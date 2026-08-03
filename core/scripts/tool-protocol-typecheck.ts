@@ -1,6 +1,6 @@
 /** Compile-only proof that defineTool preserves TypeBox argument inference. */
 import { Type } from "typebox";
-import { defineTool } from "../src/tools/index.js";
+import { defineTool } from "../src/tooling/index.js";
 
 const parameters = Type.Object({
   query: Type.String(),

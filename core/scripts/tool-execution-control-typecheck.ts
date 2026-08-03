@@ -3,7 +3,7 @@ import type {
   ToolCancelResult,
   ToolDispatcher,
   ToolTraceSink,
-} from "../src/tools/index.js";
+} from "../src/runtime/tools/index.js";
 
 declare const dispatcher: ToolDispatcher;
 declare const traceSink: ToolTraceSink;

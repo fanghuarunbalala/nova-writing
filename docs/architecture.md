@@ -68,13 +68,18 @@ core/
 ├─ src/node/
 ├─ src/prompt/
 ├─ src/runtime/
+│  └─ tools/
+│     └─ execution/   # Dispatcher, policy, approval, sandbox, cancellation, trace
 ├─ src/storage/
-└─ src/tools/
-   ├─ execution/
+├─ src/tooling/
    ├─ group/
    ├─ protocol/
-   ├─ registry/
-   └─ subagent/        # Task/TaskGet/TaskCancel implementations and schemas
+│  └─ registry/
+└─ src/tools/
+   └─ subagent/
+      ├─ Task.ts       # Schema, descriptor, and handler
+      ├─ TaskGet.ts    # Schema, descriptor, and handler
+      └─ TaskCancel.ts # Schema, descriptor, and handler
 
 cli/
 gui/
@@ -93,7 +98,10 @@ flowchart TB
     Node["node adapters"]
     Prompt["prompt"]
     Runtime["runtime"]
-    Tools["tools"]
+    Tooling["tooling contracts / registry / groups"]
+    Tools["concrete tools"]
+    ToolRuntime["runtime tool execution"]
+    SubagentRuntime["runtime subagent services"]
     Native["native / optional Rust"]
     Pi["pi-agent-core"]
 
@@ -104,7 +112,13 @@ flowchart TB
     Core --> Node
     Core --> Prompt
     Core --> Runtime
+    Core --> Tooling
     Core --> Tools
+    Tools --> Tooling
+    Tools --> SubagentRuntime
+    ToolRuntime --> Tooling
+    Runtime --> ToolRuntime
+    Runtime --> SubagentRuntime
     Runtime --> Pi
     Tools -. stable interface .-> Native
 ```

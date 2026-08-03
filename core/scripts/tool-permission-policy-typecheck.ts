@@ -2,7 +2,7 @@
 import type {
   ToolPermissionDecision,
   ToolPermissionRule,
-} from "../src/tools/index.js";
+} from "../src/runtime/tools/index.js";
 
 declare const rule: ToolPermissionRule;
 declare const decision: ToolPermissionDecision;

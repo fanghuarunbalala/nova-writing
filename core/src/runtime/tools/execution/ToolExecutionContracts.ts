@@ -1,5 +1,5 @@
 /** Provider-neutral immutable contracts crossing the Tool execution boundary. */
-import type { JsonValue } from "../../event/protocol/index.js";
+import type { JsonValue } from "../../../event/protocol/index.js";
 
 export type ToolArgumentDigest = `sha256:${string}`;
 

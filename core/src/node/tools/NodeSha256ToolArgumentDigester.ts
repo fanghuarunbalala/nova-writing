@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import type {
   ToolArgumentDigest,
   ToolArgumentDigester,
-} from "../../tools/execution/ToolExecutionContracts.js";
-import { canonicalToolArguments } from "../../tools/execution/ToolExecutionProtocolValidator.js";
+} from "../../runtime/tools/execution/ToolExecutionContracts.js";
+import { canonicalToolArguments } from "../../runtime/tools/execution/ToolExecutionProtocolValidator.js";
 import type { JsonValue } from "../../event/protocol/index.js";
 
 export class NodeSha256ToolArgumentDigester implements ToolArgumentDigester {

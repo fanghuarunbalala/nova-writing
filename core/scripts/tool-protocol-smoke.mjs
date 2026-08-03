@@ -248,7 +248,7 @@ for (const invoke of [
 }
 
 const declarations = await readDeclarations(
-  join(process.cwd(), "dist", "tools", "protocol"),
+  join(process.cwd(), "dist", "tooling", "protocol"),
 );
 assert.equal(declarations.includes("@earendil-works/pi-agent-core"), false);
 

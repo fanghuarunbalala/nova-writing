@@ -5,7 +5,7 @@ import {
   ToolApprovalResolvedPayload,
 } from "../../event/output/payload/ToolApprovalLifecyclePayloads.js";
 import type { PersistedOutputEventSnapshot } from "../../storage/journal/PersistedConversationEventSnapshot.js";
-import { captureToolApprovalIdentity } from "../../tools/execution/ToolExecutionProtocolValidator.js";
+import { captureToolApprovalIdentity } from "../tools/execution/ToolExecutionProtocolValidator.js";
 import {
   INTERACTION_COORDINATOR_FAILURE,
   InteractionCoordinatorError,

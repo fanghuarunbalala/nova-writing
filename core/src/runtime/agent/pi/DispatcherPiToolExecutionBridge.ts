@@ -1,5 +1,5 @@
 /** Package-private Pi Tool bridge that routes every call through Core dispatch. */
-import type { ToolDispatcher } from "../../../tools/execution/ToolDispatcher.js";
+import type { ToolDispatcher } from "../../tools/execution/ToolDispatcher.js";
 import type {
   PiToolExecutionBridge,
   PiToolExecutionRequest,

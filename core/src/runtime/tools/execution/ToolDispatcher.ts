@@ -2,26 +2,26 @@
 import {
   canonicalStringifyJson,
   type JsonValue,
-} from "../../event/protocol/index.js";
-import type { Logger } from "../../observability/index.js";
-import { noopLogger } from "../../observability/index.js";
-import type { InteractionCoordinator } from "../../runtime/interaction/ToolApprovalInteractionProtocol.js";
-import type { ToolApprovalRequest } from "../../runtime/interaction/ToolApprovalInteractionProtocol.js";
-import type { RegisteredTool } from "../protocol/RegisteredTool.js";
-import { isToolName } from "../protocol/ToolName.js";
+} from "../../../event/protocol/index.js";
+import type { Logger } from "../../../observability/index.js";
+import { noopLogger } from "../../../observability/index.js";
+import type { InteractionCoordinator } from "../../interaction/ToolApprovalInteractionProtocol.js";
+import type { ToolApprovalRequest } from "../../interaction/ToolApprovalInteractionProtocol.js";
+import type { RegisteredTool } from "../../../tooling/protocol/RegisteredTool.js";
+import { isToolName } from "../../../tooling/protocol/ToolName.js";
 import type {
   ToolExecutionUpdate,
   ToolProgressSink,
-} from "../protocol/ToolProgress.js";
-import { noopToolProgressSink } from "../protocol/ToolProgress.js";
-import type { ToolResult, ToolResultLimits } from "../protocol/ToolResult.js";
+} from "../../../tooling/protocol/ToolProgress.js";
+import { noopToolProgressSink } from "../../../tooling/protocol/ToolProgress.js";
+import type { ToolResult, ToolResultLimits } from "../../../tooling/protocol/ToolResult.js";
 import {
   captureToolArguments,
   captureToolExecutionUpdate,
   captureToolResult,
-} from "../protocol/ToolProtocolValidator.js";
-import { ToolProtocolError } from "../protocol/ToolProtocolErrors.js";
-import type { ToolRegistryView } from "../registry/ToolRegistryView.js";
+} from "../../../tooling/protocol/ToolProtocolValidator.js";
+import { ToolProtocolError } from "../../../tooling/protocol/ToolProtocolErrors.js";
+import type { ToolRegistryView } from "../../../tooling/registry/ToolRegistryView.js";
 import type {
   CapturedToolInvocation,
   ToolApprovalIdentity,

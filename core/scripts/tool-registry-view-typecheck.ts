@@ -6,7 +6,7 @@ import {
   ToolRegistryView,
   captureToolGroupManifest,
   defineTool,
-} from "../src/tools/index.js";
+} from "../src/tooling/index.js";
 
 const registered = defineTool({
   descriptor: {

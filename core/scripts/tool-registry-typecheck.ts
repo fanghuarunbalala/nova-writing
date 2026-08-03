@@ -1,6 +1,6 @@
 /** Compile-only proof that Registry snapshots expose immutable, Provider-neutral Tools. */
 import { Type } from "typebox";
-import { ToolRegistryAssembler, defineTool } from "../src/tools/index.js";
+import { ToolRegistryAssembler, defineTool } from "../src/tooling/index.js";
 
 const registered = defineTool({
   descriptor: {

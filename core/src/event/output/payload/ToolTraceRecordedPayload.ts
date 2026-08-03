@@ -1,6 +1,6 @@
 /** Redacted Tool Trace payload containing metadata only. */
 import type { JsonObject } from "../../protocol/JsonValue.js";
-import type { ToolTraceRecord } from "../../../tools/execution/ToolExecutionContracts.js";
+import type { ToolTraceRecord } from "../../../runtime/tools/execution/ToolExecutionContracts.js";
 import { OutputPayload } from "../OutputPayload.js";
 
 export class ToolTraceRecordedPayload extends OutputPayload {

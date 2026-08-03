@@ -9,7 +9,7 @@ import { captureContextCheckpoint } from "../../context/index.js";
 import type { ToolApprovalInteractionSnapshot } from "../../interaction/index.js";
 import { coreRuntimeMessageSchemaRegistry } from "../../message/index.js";
 import { captureNudgeLease, capturePendingNudge } from "../../nudge/index.js";
-import { captureToolApprovalIdentity } from "../../../tools/execution/index.js";
+import { captureToolApprovalIdentity } from "../../tools/execution/index.js";
 import {
   MESSAGE_PROJECTION_FORMAT_VERSION,
   validatePersistedConversationEventSnapshot,

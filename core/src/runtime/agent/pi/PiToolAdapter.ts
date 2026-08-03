@@ -12,7 +12,7 @@ import type {
   ToolExecutionUpdate,
   ToolProgressSink,
   ToolResult,
-} from "../../../tools/index.js";
+} from "../../../tooling/index.js";
 
 export interface PiToolExecutionRequest {
   readonly tool: RegisteredTool;

@@ -14,7 +14,7 @@ import { noopLogger, type Logger } from "../../observability/index.js";
 import type { RuntimeEventSink } from "../execution/event/RuntimeEventSink.js";
 import {
   captureToolApprovalIdentity,
-} from "../../tools/execution/ToolExecutionProtocolValidator.js";
+} from "../tools/execution/ToolExecutionProtocolValidator.js";
 import {
   INTERACTION_COORDINATOR_FAILURE,
   InteractionCoordinatorError,

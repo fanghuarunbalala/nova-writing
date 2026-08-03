@@ -7,7 +7,7 @@ import type {
   ToolPermissionDecision,
   ToolPermissionEffect,
 } from "./ToolExecutionContracts.js";
-import { TOOL_NAME_PATTERN, isToolName } from "../protocol/ToolName.js";
+import { TOOL_NAME_PATTERN, isToolName } from "../../../tooling/protocol/ToolName.js";
 import { captureToolApprovalIdentity } from "./ToolExecutionProtocolValidator.js";
 import { captureToolExecutionPolicy } from "./ToolExecutionProtocolValidator.js";
 import {

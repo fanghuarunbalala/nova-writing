@@ -3,7 +3,7 @@ import type {
   CapturedToolInvocation,
   ToolExecutionPolicy,
   ToolTraceRecord,
-} from "../src/tools/index.js";
+} from "../src/runtime/tools/index.js";
 
 declare const invocation: CapturedToolInvocation;
 declare const policy: ToolExecutionPolicy;

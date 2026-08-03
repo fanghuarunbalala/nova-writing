@@ -1,7 +1,7 @@
 /** Provider-neutral protocol for one asynchronous Tool approval interaction. */
 import type {
   ToolApprovalIdentity,
-} from "../../tools/execution/ToolExecutionContracts.js";
+} from "../tools/execution/ToolExecutionContracts.js";
 import type {
   ToolApprovalResolutionDecision,
   ToolApprovalSummary,

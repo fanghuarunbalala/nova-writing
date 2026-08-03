@@ -1,10 +1,10 @@
 /** Execution Port separating Tool handlers from future process-isolated sandboxes. */
 import type { Static, TSchema } from "typebox";
-import type { JsonValue } from "../../event/protocol/index.js";
-import type { RegisteredTool } from "../protocol/RegisteredTool.js";
-import type { ToolExecutionContext } from "../protocol/ToolExecutionContext.js";
-import type { ToolProgressSink } from "../protocol/ToolProgress.js";
-import type { ToolResult } from "../protocol/ToolResult.js";
+import type { JsonValue } from "../../../event/protocol/index.js";
+import type { RegisteredTool } from "../../../tooling/protocol/RegisteredTool.js";
+import type { ToolExecutionContext } from "../../../tooling/protocol/ToolExecutionContext.js";
+import type { ToolProgressSink } from "../../../tooling/protocol/ToolProgress.js";
+import type { ToolResult } from "../../../tooling/protocol/ToolResult.js";
 import type { ToolExecutionPolicy } from "./ToolExecutionContracts.js";
 
 export type SandboxIsolationCapability = "none" | "os_process";

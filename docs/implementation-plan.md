@@ -3021,7 +3021,11 @@ pass/failure rates, performance metrics, slowest scenarios, and failed tests.
 Subagent Tool Steps S4 through S6 are complete; future Subagent or Agent Team
 work requires an explicit track change.
 
-Post-completion structure note: Subagent Tool implementations and TypeBox
-schemas live under `core/src/tools/subagent/`. Runtime-owned Task protocol,
-query/completion services, Binding persistence, lifecycle, and process-neutral
-execution contracts remain under `core/src/runtime/subagent/`.
+Post-completion structure note: concrete Subagent Tools colocate schema,
+descriptor, and handler in `core/src/tools/subagent/Task.ts`, `TaskGet.ts`, and
+`TaskCancel.ts`. Provider-neutral Tool protocol, Registry, and Group composition
+live under `core/src/tooling/`; runtime execution policy, Dispatcher, sandbox,
+cancellation, and trace live under `core/src/runtime/tools/execution/`.
+Runtime-owned Task protocol, query/completion services, Binding persistence,
+lifecycle, and process-neutral execution contracts remain under
+`core/src/runtime/subagent/`.

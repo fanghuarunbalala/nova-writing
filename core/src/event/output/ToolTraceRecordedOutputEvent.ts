@@ -1,6 +1,6 @@
 /** Persisted public OutputEvent for one redacted Tool Trace stage. */
-import type { ToolTraceRecord } from "../../tools/execution/ToolExecutionContracts.js";
-import { captureToolTraceRecord } from "../../tools/execution/ToolExecutionProtocolValidator.js";
+import type { ToolTraceRecord } from "../../runtime/tools/execution/ToolExecutionContracts.js";
+import { captureToolTraceRecord } from "../../runtime/tools/execution/ToolExecutionProtocolValidator.js";
 import { OUTPUT_EVENT_TYPE } from "./OutputEventType.js";
 import { SystemOutputEvent } from "./SystemOutputEvent.js";
 import { ToolTraceRecordedPayload } from "./payload/ToolTraceRecordedPayload.js";

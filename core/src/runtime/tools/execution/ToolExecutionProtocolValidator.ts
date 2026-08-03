@@ -3,8 +3,8 @@ import {
   canonicalStringifyJson,
   isJsonValue,
   type JsonValue,
-} from "../../event/protocol/index.js";
-import { isToolName } from "../protocol/ToolName.js";
+} from "../../../event/protocol/index.js";
+import { isToolName } from "../../../tooling/protocol/ToolName.js";
 import type {
   CapturedToolInvocation,
   ToolApprovalIdentity,

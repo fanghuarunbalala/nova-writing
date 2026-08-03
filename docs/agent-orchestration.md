@@ -366,12 +366,20 @@ The handlers obtain definition version and child Tool policy from the trusted
 catalog; the model supplies only `agentType`, `prompt`, and optional Artifact
 identities.
 
-The Tool implementations, dynamic TypeBox schemas, and their local barrel are
-kept together under `core/src/tools/subagent/`. Runtime-owned Subagent
-protocols, Binding stores, query services, completion bridging, lifecycle, and
-process placement remain under `core/src/runtime/subagent/`. This keeps Tool
-assembly easy to inspect without moving execution or persistence authority into
-the Tool package.
+Each concrete Tool keeps its TypeBox schema, descriptor, and handler together
+in `core/src/tools/subagent/Task.ts`, `TaskGet.ts`, or `TaskCancel.ts`.
+Provider-neutral Tool contracts, immutable Registry/View, and Group composition
+live under `core/src/tooling/`. Permission, Approval routing, sandbox, timeout,
+cancellation, retry, and trace execution live under
+`core/src/runtime/tools/execution/`. Runtime-owned Subagent protocols, Binding
+stores, query services, completion bridging, lifecycle, and process placement
+remain under `core/src/runtime/subagent/`.
+
+The dependency direction is intentional: concrete Tools depend on Tooling and
+narrow Runtime Subagent Ports; Runtime Tool execution depends on Tooling but
+does not import concrete Tools. The application composition root selects and
+registers concrete Tools without coupling the generic Dispatcher to Subagent
+behavior.
 
 `TaskCancel` depends on a narrow cancellation-intent Port. That Port persists
 the intent and routes child Stop without waiting for process termination. All

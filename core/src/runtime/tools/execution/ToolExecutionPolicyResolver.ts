@@ -1,6 +1,6 @@
 /** Immutable exact Tool identity to execution-policy resolver. */
-import type { RegisteredTool } from "../protocol/RegisteredTool.js";
-import { isToolName } from "../protocol/ToolName.js";
+import type { RegisteredTool } from "../../../tooling/protocol/RegisteredTool.js";
+import { isToolName } from "../../../tooling/protocol/ToolName.js";
 import type { ToolExecutionPolicy } from "./ToolExecutionContracts.js";
 import { ToolError } from "./ToolExecutionError.js";
 import { captureToolExecutionPolicy } from "./ToolExecutionProtocolValidator.js";

@@ -2962,7 +2962,7 @@ Tool Step S4 through Step S6. Novel Task N7 through Task N11 and persistent
 Agent Team work remain paused until another explicit track change.
 
 Post-Task-7 Agent orchestration is documented in
-`docs/agent-orchestration.md`. The accepted S0-S4 contracts are active for the
+`docs/agent-orchestration.md`. The accepted S0-S5 contracts are active for the
 current Subagent Tool track. The current track does not authorize persistent
 Agent, Agent Team, Team communication, `TaskOutput`, or `Sleep` implementation.
 
@@ -3009,4 +3009,9 @@ ownership, projects Binding and Runtime Presence into an immutable Task
 snapshot, and reads completed results from the final canonical Assistant
 Message. Terminal Run observations now reconcile through a restart-safe,
 idempotent result sink; missing completed content and unknown tasks use stable
-protocol failures. Step S5 is the next active step. Step S6 follows S5.
+protocol failures. Step S5 status: completed. `Task`, `TaskGet`, and
+`TaskCancel` now use PascalCase names, are assembled into an immutable Tool
+Registry, and expose dynamically generated allowed-Agent descriptions and
+schemas. `Task` waits only for Child Bootstrap acceptance, `TaskGet` is
+process-free, and `TaskCancel` submits a non-blocking cancellation intent with
+ownership validation. Step S6 is the next active step.

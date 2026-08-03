@@ -1,0 +1,184 @@
+import assert from "node:assert/strict";
+import { Compile } from "typebox/compile";
+import {
+  SUBAGENT_SCHEMA_VERSION,
+  SubagentDefinitionCatalog,
+  SubagentTaskQueryService,
+  ToolError,
+  createSubagentTaskToolRegistry,
+} from "../dist/index.js";
+
+const timestamp = "2026-08-03T00:00:00.000Z";
+const limits = {
+  maximumPromptBytes: 4096,
+  maximumArtifactReferences: 4,
+  maximumResultBytes: 4096,
+};
+
+const definitions = new SubagentDefinitionCatalog([
+  {
+    agentType: "write",
+    definitionVersion: "1.0.0",
+    label: "Writer",
+    description: "Draft bounded prose.",
+    toolPolicyId: "policy-write",
+  },
+  {
+    agentType: "explore",
+    definitionVersion: "2.0.0",
+    label: "Explorer",
+    description: "Inspect bounded evidence.",
+    toolPolicyId: "policy-explore",
+  },
+]);
+
+function binding(taskId, status, parentConversationId = "conversation-parent", parentRunId = "run-parent") {
+  return {
+    schemaVersion: SUBAGENT_SCHEMA_VERSION,
+    subagentId: taskId,
+    parentConversationId,
+    parentRunId,
+    childConversationId: `conversation-child-${taskId}`,
+    depth: 1,
+    agentType: "explore",
+    definitionVersion: "2.0.0",
+    toolPolicyId: "policy-explore",
+    status,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+class MemoryBindings {
+  constructor(entries = []) {
+    this.entries = new Map(entries.map((entry) => [entry.subagentId, entry]));
+  }
+  async put(value) { this.entries.set(value.subagentId, value); }
+  async get(taskId) { return this.entries.get(taskId); }
+  async list() { return [...this.entries.values()]; }
+  subscribe() { throw new Error("not implemented"); }
+}
+
+const bindings = new MemoryBindings([
+  binding("running", "running"),
+  binding("done", "completed"),
+]);
+const spawnRequests = [];
+const cancellationRequests = [];
+const querySnapshots = new Map([
+  ["running", {
+    schemaVersion: 1,
+    taskId: "running",
+    childConversationId: "conversation-child-running",
+    status: "running",
+    runtimePresence: "active",
+  }],
+]);
+const query = new SubagentTaskQueryService({
+  bindings,
+  runtimePresence: {
+    async getRuntimePresence() {
+      return { state: "online", observedAt: timestamp };
+    },
+  },
+  finalAssistantMessages: {
+    async readFinalAssistantMessage() { return undefined; },
+  },
+  limits,
+});
+
+const registry = createSubagentTaskToolRegistry({
+  definitions,
+  policy: {
+    allowedAgentTypes: ["write", "explore"],
+    limits,
+  },
+  manager: {
+    async spawn(request) {
+      spawnRequests.push(request);
+      const created = binding(request.subagentId, "running");
+      bindings.entries.set(created.subagentId, created);
+      return created;
+    },
+    async recordTerminalStatus() { throw new Error("not implemented"); },
+    getBinding(taskId) { return bindings.entries.get(taskId); },
+    listBindings() { return [...bindings.entries.values()]; },
+    getCapacity() { return { activeGlobal: 0, activeForParentRun: 0 }; },
+  },
+  bindings,
+  query: {
+    async get(scope) { return querySnapshots.get(scope.taskId); },
+  },
+  artifactResolver: {
+    async resolve(parentConversationId, artifactIds) {
+      assert.equal(parentConversationId, "conversation-parent");
+      assert.deepEqual(artifactIds, ["artifact-1"]);
+      return [{
+        schemaVersion: 1,
+        artifactId: "artifact-1",
+        conversationId: parentConversationId,
+        contentType: "text/plain",
+        byteLength: 32,
+        digest: `sha256:${"a".repeat(64)}`,
+      }];
+    },
+  },
+  cancellation: {
+    async requestCancellation(value, reason) {
+      cancellationRequests.push({ value, reason });
+      return "cancellation_requested";
+    },
+  },
+  taskIdFactory: { create() { return "task-created"; } },
+  clock: { now() { return timestamp; } },
+});
+
+assert.deepEqual(registry.list().map((tool) => tool.descriptor.name), ["Task", "TaskCancel", "TaskGet"]);
+const task = registry.require("Task");
+assert.match(task.descriptor.description, /explore \(Explorer\): Inspect bounded evidence\./);
+assert.match(task.descriptor.description, /write \(Writer\): Draft bounded prose\./);
+assert.equal(Compile(task.descriptor.parameters).Check({ agentType: "explore", prompt: "scan" }), true);
+assert.equal(Compile(task.descriptor.parameters).Check({ agentType: "unknown", prompt: "scan" }), false);
+
+const context = {
+  conversationId: "conversation-parent",
+  runId: "run-parent",
+  turnId: "turn-parent",
+  toolCallId: "tool-call-1",
+  signal: new AbortController().signal,
+};
+const accepted = await task.handler.execute(context, {
+  agentType: "explore",
+  prompt: "Inspect the bounded evidence.",
+  artifactIds: ["artifact-1"],
+}, { emit: async () => {} });
+assert.equal(accepted.details.taskId, "task-created");
+assert.equal(accepted.details.status, "running");
+assert.equal(spawnRequests.length, 1);
+assert.deepEqual(spawnRequests[0].artifactReferences.map((value) => value.artifactId), ["artifact-1"]);
+assert.equal(spawnRequests[0].definitionVersion, "2.0.0");
+assert.equal(spawnRequests[0].toolPolicyId, "policy-explore");
+assert.equal(spawnRequests[0].parentConversationId, "conversation-parent");
+assert.equal(spawnRequests[0].parentRunId, "run-parent");
+
+const taskGet = registry.require("TaskGet");
+const snapshot = await taskGet.handler.execute(context, { taskId: "running" }, { emit: async () => {} });
+assert.equal(snapshot.details.status, "running");
+await assert.rejects(
+  taskGet.handler.execute(context, { taskId: "missing" }, { emit: async () => {} }),
+  (error) => error instanceof ToolError && error.code === "SUBAGENT_TASK_NOT_FOUND",
+);
+
+const taskCancel = registry.require("TaskCancel");
+const cancellation = await taskCancel.handler.execute(context, { taskId: "running" }, { emit: async () => {} });
+assert.equal(cancellation.details.status, "cancellation_requested");
+assert.equal(cancellationRequests.length, 1);
+assert.equal(cancellationRequests[0].reason, "explicit");
+const terminalCancellation = await taskCancel.handler.execute(context, { taskId: "done" }, { emit: async () => {} });
+assert.equal(terminalCancellation.details.status, "already_terminal");
+const missingCancellation = await taskCancel.handler.execute(context, { taskId: "missing" }, { emit: async () => {} });
+assert.equal(missingCancellation.details.status, "not_found");
+const foreignCancellation = await taskCancel.handler.execute({ ...context, runId: "run-foreign" }, { taskId: "running" }, { emit: async () => {} });
+assert.equal(foreignCancellation.details.status, "not_found");
+
+console.log("Runtime Subagent Task Tools smoke passed");

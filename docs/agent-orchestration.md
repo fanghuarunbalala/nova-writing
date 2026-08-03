@@ -3,9 +3,9 @@
 ## 1. Status and Boundary
 
 This document records the accepted design direction for Agent orchestration.
-The ephemeral Subagent slice completed Step S0 through Step S4 on August 3,
-2026. Step S5 is the next active implementation step and Step S6 remains after
-it. Persistent Agent, Agent Team, Team communication, `TaskOutput`, and `Sleep`
+The ephemeral Subagent slice completed Step S0 through Step S5 on August 3,
+2026. Step S6 is the next active implementation step. Persistent Agent, Agent
+Team, Team communication, `TaskOutput`, and `Sleep`
 remain documented future work. Completed Runtime Task 6B and Task 7 checkpoints
 remain closed.
 
@@ -356,6 +356,22 @@ The bridge never publishes directly to a parent Message projection. It hands
 the validated result to the existing idempotent completion sink, so retries
 after process restart do not create a second semantic result. Neither service
 activates a Runtime or enqueues an InputEvent.
+
+### 7.2 Subagent Tool Registry
+
+`createSubagentTaskToolRegistry` builds an immutable Registry containing exactly
+the current ephemeral Subagent Tools: `Task`, `TaskGet`, and `TaskCancel`.
+`Task`'s description and TypeBox schema are generated from the creator's
+validated allowed-Agent policy, with Agent definitions sorted deterministically.
+The handlers obtain definition version and child Tool policy from the trusted
+catalog; the model supplies only `agentType`, `prompt`, and optional Artifact
+identities.
+
+`TaskCancel` depends on a narrow cancellation-intent Port. That Port persists
+the intent and routes child Stop without waiting for process termination. All
+three Tools return bounded structured `details` and short text content; Tool
+execution policy, permission, approval, sandbox, timeout, and trace behavior
+remain owned by the existing provider-neutral Tool Dispatcher.
 
 ## 7. Subagent Bootstrap and Completion
 

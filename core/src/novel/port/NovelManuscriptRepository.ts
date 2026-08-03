@@ -11,9 +11,12 @@ import type {
   ManuscriptAnchor,
   ManuscriptAnchorRedirect,
   ManuscriptBlockTombstone,
+  ManuscriptCatalogSnapshot,
+  ManuscriptRepairCatalogSnapshot,
   OrderKey,
   ParagraphBlock,
 } from "../model/index.js";
+import type { NovelReadScope } from "../query/index.js";
 
 export type ManuscriptBlockDigestField = "text" | "chapterId" | "orderKey";
 
@@ -53,4 +56,32 @@ export interface NovelMutableManuscriptRepository {
 
 export interface NovelManuscriptMutationContext {
   readonly manuscript: NovelMutableManuscriptRepository;
+}
+
+export interface ManuscriptBlockReadModel {
+  readonly block: ParagraphBlock;
+  readonly textDigest: string;
+  readonly chapterDigest: string;
+  readonly orderDigest: string;
+}
+
+export interface ManuscriptCatalogReadModel {
+  readonly snapshot: ManuscriptCatalogSnapshot;
+  readonly blockDigests: Readonly<Record<string, Readonly<{
+    textDigest: string;
+    chapterDigest: string;
+    orderDigest: string;
+  }>>>;
+}
+
+export interface NovelManuscriptQueryStore {
+  getCatalog(scope: NovelReadScope): Promise<ManuscriptCatalogReadModel | undefined>;
+  getBlock(
+    scope: NovelReadScope,
+    id: ManuscriptBlockId,
+  ): Promise<ManuscriptBlockReadModel | undefined>;
+  listBlocks(scope: NovelReadScope): Promise<readonly ManuscriptBlockReadModel[]>;
+  getRepairs(
+    scope: NovelReadScope,
+  ): Promise<ManuscriptRepairCatalogSnapshot | undefined>;
 }

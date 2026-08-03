@@ -4,6 +4,8 @@ import {
   CharacterService,
   LocationQueryService,
   LocationService,
+  ManuscriptQueryService,
+  ManuscriptService,
   NovelApprovalService,
   NovelCommitRecoveryService,
   NovelCommitService,
@@ -47,6 +49,7 @@ import {
   SqliteNovelDraftOperationStore,
   SqliteNovelEntityQueryStore,
   SqliteNovelLifecycleRecordWriter,
+  SqliteNovelManuscriptQueryStore,
   SqliteNovelOutlineQueryStore,
   SqliteNovelPublicationQueryStore,
   SqliteNovelConflictStore,
@@ -74,10 +77,12 @@ export interface NodeNovelApplication {
   readonly locations: LocationService;
   readonly outline: StoryOutlineService;
   readonly publication: PublicationService;
+  readonly manuscript: ManuscriptService;
   readonly characterQueries: CharacterQueryService;
   readonly locationQueries: LocationQueryService;
   readonly outlineQueries: StoryOutlineQueryService;
   readonly publicationQueries: PublicationQueryService;
+  readonly manuscriptQueries: ManuscriptQueryService;
   readonly changeSets: NovelDraftChangeSetBuilder;
   readonly commits: NovelCommitService<NovelMutationContext>;
   readonly commitRecovery: NovelCommitRecoveryService<NovelMutationContext>;
@@ -147,6 +152,11 @@ export function createNodeNovelApplication(
     novelId: options.novelId,
     logger,
   });
+  const manuscriptQueryStore = new SqliteNovelManuscriptQueryStore({
+    location: options.location,
+    novelId: options.novelId,
+    logger,
+  });
   const changeSetDigester = new NodeSha256NovelChangeSetDigester();
   const changeSets = new NovelDraftChangeSetBuilder({
     store,
@@ -209,10 +219,12 @@ export function createNodeNovelApplication(
       identityFactory,
       logger,
     }),
+    manuscript: new ManuscriptService({ mutations, identityFactory, logger }),
     characterQueries: new CharacterQueryService(entityQueryStore),
     locationQueries: new LocationQueryService(entityQueryStore),
     outlineQueries: new StoryOutlineQueryService(outlineQueryStore),
     publicationQueries: new PublicationQueryService(publicationQueryStore),
+    manuscriptQueries: new ManuscriptQueryService(manuscriptQueryStore),
     changeSets,
     approvals,
     commits: new NovelCommitService({

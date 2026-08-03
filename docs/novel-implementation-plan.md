@@ -1403,6 +1403,16 @@ enforce per-Chapter OrderKey uniqueness, and use the persisted text SHA-256
 digest as the optimistic overwrite precondition. Application services and
 explicit-scope Manuscript queries remain the next C-B substep.
 
+C-B2 composes `ManuscriptService`, `ManuscriptQueryService`, and the explicit-
+scope SQLite query adapter. The service exposes root and Paragraph Block
+creation, text overwrite, move, split, merge, delete, and explicit Anchor
+Repair exclusively through the serialized Draft writer. Queries return one
+validated Manuscript catalog, all three persisted Block digests, and the
+validated Tombstone/Redirect repair snapshot for exactly one canonical or
+Draft scope. Focused application acceptance covers every service operation,
+scope isolation, Commit publication, restart reads, repair-chain durability,
+and log redaction. Task N11-C Manuscript application coverage is complete.
+
 ### N11-D Documentation and Examples
 
 Update accepted architecture diagrams and add platform-neutral application examples. Tool examples remain deferred.

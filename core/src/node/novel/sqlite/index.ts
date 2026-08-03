@@ -22,6 +22,7 @@ export * from "./SqliteNovelOutlineRepository.js";
 export * from "./SqliteNovelOutlineQueryStore.js";
 export * from "./SqliteNovelPublicationRepository.js";
 export * from "./SqliteNovelManuscriptRepository.js";
+export * from "./SqliteNovelManuscriptQueryStore.js";
 export * from "./SqliteNovelProjectionEvidenceRepository.js";
 export * from "./SqliteNovelProjectionSourceReader.js";
 export * from "./SqliteNovelProjectionStore.js";

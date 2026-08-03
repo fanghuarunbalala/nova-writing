@@ -26,3 +26,4 @@ export * from "./ContextProjectionProviderCallCoordinator.js";
 export * from "./ContextProtocolErrors.js";
 export * from "./ContextProjection.js";
 export * from "./InMemoryContextCheckpointStore.js";
+export * from "./RuntimePromptAssembler.js";

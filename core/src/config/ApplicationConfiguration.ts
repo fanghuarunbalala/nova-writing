@@ -28,6 +28,7 @@ import {
   type WebSettingsSnapshot,
 } from "./ApplicationSettings.js";
 import {
+  inferDefaultModelApi,
   ModelConnection,
   ModelProfile,
   type ModelConnectionSnapshot,
@@ -118,8 +119,19 @@ export class ApplicationConfiguration {
       snapshot.modelConnections.map((connection) => new ModelConnection(connection)),
       "Model Connection",
     );
+    const modelConnectionsById = new Map(
+      this.modelConnections.map((connection) => [connection.id, connection] as const),
+    );
     this.modelProfiles = captureUnique(
-      snapshot.modelProfiles.map((profile) => new ModelProfile(profile)),
+      snapshot.modelProfiles.map((profile) => {
+        const connection = modelConnectionsById.get(profile.connectionId);
+        return new ModelProfile(
+          profile,
+          connection === undefined
+            ? "openai-responses"
+            : inferDefaultModelApi(connection.providerKind),
+        );
+      }),
       "Model Profile",
     );
     this.runtimeProfiles = captureRequiredUnique(

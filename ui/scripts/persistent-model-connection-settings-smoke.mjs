@@ -74,6 +74,15 @@ await waitForReact(() => container.textContent.includes("配置已加载"));
 await clickButton("新增模型连接");
 assert.equal(container.querySelector('[aria-label="Provider ID"]'), null);
 assert.ok(container.querySelector('[aria-label="API Key"][type="password"]'));
+const protocol = container.querySelector('[aria-label="API 协议"]');
+assert.ok(protocol);
+assert.equal(protocol.value, "openai-responses");
+assert.equal(
+  [...protocol.options].some((option) => option.value === "anthropic-messages"),
+  true,
+);
+await setSelect("服务商", "anthropic");
+assert.equal(protocol.value, "anthropic-messages");
 await setField("API Key", "secret-openai-key");
 await clickButton("保存并设为默认模型");
 await waitForReact(() => container.textContent.includes("模型连接保存成功"));
@@ -86,8 +95,9 @@ assert.equal(
 );
 assert.equal(client.snapshot.modelConnections.length, 1);
 assert.equal(client.snapshot.modelProfiles.length, 1);
-assert.equal(client.snapshot.modelConnections[0].providerKind, "openai");
+assert.equal(client.snapshot.modelConnections[0].providerKind, "anthropic");
 assert.equal(client.snapshot.modelConnections[0].displayName, "OpenAI 主力模型");
+assert.equal(client.snapshot.modelProfiles[0].api, "anthropic-messages");
 assert.equal(client.snapshot.modelProfiles[0].modelId, "gpt-5");
 assert.equal(
   client.snapshot.defaultModelProfileId,
@@ -132,6 +142,19 @@ async function setField(label, value) {
     ).set;
     setter.call(field, value);
     field.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+}
+
+async function setSelect(label, value) {
+  const field = container.querySelector(`select[aria-label="${label}"]`);
+  assert.ok(field, `missing select: ${label}`);
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype,
+      "value",
+    ).set;
+    setter.call(field, value);
+    field.dispatchEvent(new window.Event("change", { bubbles: true }));
   });
 }
 

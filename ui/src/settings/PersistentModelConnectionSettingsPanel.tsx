@@ -1,10 +1,12 @@
 /** Persists Model Connections, Model Profiles, credentials, and the default model. */
 import type {
   ApplicationConfigurationSnapshot,
+  ModelApi,
   ModelConnectionSnapshot,
   ModelProfileSnapshot,
   ProviderKind,
 } from "@novel/core";
+import { inferDefaultModelApi } from "@novel/core";
 import { useEffect, useState, type FormEvent } from "react";
 import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
 
@@ -19,6 +21,7 @@ interface ModelConnectionDraft {
   readonly credentialConfigured: boolean;
   readonly displayName: string;
   readonly providerKind: ProviderKind;
+  readonly api: ModelApi;
   readonly modelId: string;
   readonly baseUrl: string;
   readonly apiKey: string;
@@ -36,10 +39,27 @@ const PROVIDER_OPTIONS: readonly {
   Object.freeze({ value: "custom", label: "自定义" }),
 ]);
 
+const API_OPTIONS: readonly {
+  readonly value: ModelApi;
+  readonly label: string;
+}[] = Object.freeze([
+  Object.freeze({ value: "openai-responses", label: "OpenAI Responses" }),
+  Object.freeze({ value: "openai-completions", label: "OpenAI Chat Completions" }),
+  Object.freeze({ value: "anthropic-messages", label: "Anthropic Messages" }),
+  Object.freeze({ value: "google-generative-ai", label: "Google Generative AI" }),
+  Object.freeze({ value: "google-vertex", label: "Google Vertex" }),
+  Object.freeze({ value: "azure-openai-responses", label: "Azure OpenAI Responses" }),
+  Object.freeze({ value: "openai-codex-responses", label: "OpenAI Codex Responses" }),
+  Object.freeze({ value: "bedrock-converse-stream", label: "Amazon Bedrock Converse" }),
+  Object.freeze({ value: "mistral-conversations", label: "Mistral Conversations" }),
+  Object.freeze({ value: "pi-messages", label: "Pi Messages" }),
+]);
+
 const NEW_CONNECTION_DRAFT: ModelConnectionDraft = Object.freeze({
   credentialConfigured: false,
   displayName: "OpenAI 主力模型",
   providerKind: "openai",
+  api: "openai-responses",
   modelId: "gpt-5",
   baseUrl: "",
   apiKey: "",
@@ -124,6 +144,7 @@ export function PersistentModelConnectionSettingsPanel({
       id: modelProfileId,
       displayName: `${draft.displayName.trim()} · ${draft.modelId.trim()}`,
       connectionId,
+      api: draft.api,
       modelId: draft.modelId.trim(),
       parameters:
         existingProfile?.parameters ??
@@ -234,7 +255,8 @@ export function PersistentModelConnectionSettingsPanel({
               <div>
                 <strong>{connection.displayName}</strong>
                 <span>
-                  {providerLabel(connection.providerKind)} · {profile.modelId}
+                  {providerLabel(connection.providerKind)} · {apiLabel(profile.api)} ·{" "}
+                  {profile.modelId}
                 </span>
                 <small>
                   {connection.credentialConfigured
@@ -285,11 +307,34 @@ export function PersistentModelConnectionSettingsPanel({
                   setDraft({
                     ...draft,
                     providerKind: event.currentTarget.value as ProviderKind,
+                    api: inferDefaultModelApi(
+                      event.currentTarget.value as ProviderKind,
+                    ),
                   })
                 }
                 value={draft.providerKind}
               >
                 {PROVIDER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>API 协议</span>
+              <select
+                aria-label="API 协议"
+                disabled={saving}
+                onChange={(event) =>
+                  setDraft({ ...draft, api: event.currentTarget.value as ModelApi })
+                }
+                value={draft.api}
+              >
+                {isKnownApiOption(draft.api) ? null : (
+                  <option value={draft.api}>{draft.api}</option>
+                )}
+                {API_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -403,6 +448,7 @@ function createDraft(
     credentialConfigured: connection.credentialConfigured,
     displayName: connection.displayName,
     providerKind: connection.providerKind,
+    api: profile.api ?? inferDefaultModelApi(connection.providerKind),
     modelId: profile.modelId,
     baseUrl: connection.baseUrl ?? "",
     apiKey: "",
@@ -423,6 +469,7 @@ function replaceOrAppend<TValue extends { readonly id: string }>(
 function isDraftValid(draft: ModelConnectionDraft): boolean {
   return (
     draft.displayName.trim().length > 0 &&
+    draft.api.trim().length > 0 &&
     draft.modelId.trim().length > 0 &&
     (!requiresBaseUrl(draft.providerKind) || draft.baseUrl.trim().length > 0) &&
     (draft.credentialConfigured || draft.apiKey.length > 0)
@@ -438,6 +485,15 @@ function providerLabel(providerKind: ProviderKind): string {
     PROVIDER_OPTIONS.find((option) => option.value === providerKind)?.label ??
     providerKind
   );
+}
+
+function apiLabel(api: ModelApi | undefined): string {
+  if (api === undefined) return "未指定协议";
+  return API_OPTIONS.find((option) => option.value === api)?.label ?? api;
+}
+
+function isKnownApiOption(api: ModelApi): boolean {
+  return API_OPTIONS.some((option) => option.value === api);
 }
 
 function getErrorCode(error: unknown): string {

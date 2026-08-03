@@ -22,6 +22,20 @@ export type ProviderKind =
   | "openai_compatible"
   | "custom";
 
+export type KnownModelApi =
+  | "openai-completions"
+  | "mistral-conversations"
+  | "openai-responses"
+  | "azure-openai-responses"
+  | "openai-codex-responses"
+  | "anthropic-messages"
+  | "bedrock-converse-stream"
+  | "google-generative-ai"
+  | "google-vertex"
+  | "pi-messages";
+
+export type ModelApi = KnownModelApi | (string & {});
+
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 
 export class CredentialReference {
@@ -256,6 +270,7 @@ export interface ModelProfileSnapshot {
   readonly id: string;
   readonly displayName: string;
   readonly connectionId: string;
+  readonly api?: ModelApi;
   readonly modelId: string;
   readonly parameters: ModelParametersSnapshot;
   readonly capabilityOverrides: ModelCapabilityOverridesSnapshot;
@@ -266,15 +281,20 @@ export class ModelProfile {
   readonly id: string;
   readonly displayName: string;
   readonly connectionId: string;
+  readonly api: ModelApi;
   readonly modelId: string;
   readonly parameters: ModelParameters;
   readonly capabilityOverrides: ModelCapabilityOverrides;
   readonly fallbackProfileIds: readonly string[];
 
-  constructor(options: ModelProfileSnapshot) {
+  constructor(
+    options: ModelProfileSnapshot,
+    defaultApi: ModelApi = "openai-responses",
+  ) {
     this.id = captureIdentity(options.id, "Model Profile ID");
     this.displayName = captureNonBlank(options.displayName, "Model Profile name", 256);
     this.connectionId = captureIdentity(options.connectionId, "Model Connection ID");
+    this.api = captureModelApi(options.api ?? defaultApi);
     this.modelId = captureNonBlank(options.modelId, "Model ID", 512);
     this.parameters = new ModelParameters(options.parameters);
     this.capabilityOverrides = new ModelCapabilityOverrides(options.capabilityOverrides);
@@ -294,11 +314,27 @@ export class ModelProfile {
       id: this.id,
       displayName: this.displayName,
       connectionId: this.connectionId,
+      api: this.api,
       modelId: this.modelId,
       parameters: this.parameters.toSnapshot(),
       capabilityOverrides: this.capabilityOverrides.toSnapshot(),
       fallbackProfileIds: this.fallbackProfileIds,
     });
+  }
+}
+
+export function inferDefaultModelApi(providerKind: ProviderKind): KnownModelApi {
+  switch (providerKind) {
+    case "openai":
+      return "openai-responses";
+    case "anthropic":
+      return "anthropic-messages";
+    case "google":
+      return "google-generative-ai";
+    case "openrouter":
+    case "openai_compatible":
+    case "custom":
+      return "openai-completions";
   }
 }
 
@@ -314,6 +350,10 @@ function captureProviderKind(value: unknown): ProviderKind {
     throw new TypeError("Provider kind is invalid");
   }
   return value;
+}
+
+function captureModelApi(value: unknown): ModelApi {
+  return captureNonBlank(value, "Model API", 256);
 }
 
 function captureReasoningEffort(value: unknown): ReasoningEffort {

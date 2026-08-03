@@ -114,6 +114,8 @@ const effective = new EffectiveConfigurationResolver().resolve({
 });
 
 assert.equal(effective.modelProfile?.id, "model.secondary");
+assert.equal(application.getModelProfile("model.primary")?.api, "openai-responses");
+assert.equal(application.getModelProfile("model.secondary")?.api, "anthropic-messages");
 assert.equal(effective.modelConnection?.id, "connection.secondary");
 assert.equal(effective.sources.modelProfile, "session");
 assert.equal(effective.responseLanguage, "zh-CN");

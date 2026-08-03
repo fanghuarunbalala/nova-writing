@@ -1211,6 +1211,33 @@ semantics remain deferred to N10-D.
 
 Implement Block move, split, merge, Tombstone, Redirect, and anchor repair Operations.
 
+The V1 structural-repair contract was explicitly confirmed on August 3, 2026:
+
+- Move preserves Block ID and text, changes only Chapter and OrderKey, and
+  revalidates affected Ranges without creating a Redirect.
+- Split keeps the source Block ID on the left, creates a caller-supplied right
+  Block ID, carries final left/right text plus the expected source-text digest,
+  and redirects the pre-split `after(source)` anchor to `after(right)`.
+- Merge is limited to adjacent Blocks in one Chapter, retains the left Block
+  ID, tombstones the right Block, carries final merged text plus both expected
+  text digests, and records review-required redirects from the removed Block's
+  boundaries to the retained Block's matching boundaries.
+- Delete tombstones the Block without guessing a replacement anchor.
+- `manuscript-anchor.repair` explicitly redirects a tombstoned boundary to a
+  surviving Anchor and always requires review.
+- Structural Operations remain synchronous, deterministic, serializable, and
+  guarded by digest and existence preconditions. V1 adds neither character
+  offsets nor a separate Manuscript revision.
+
+**Status:** the contract and D-A repair model are complete. Strict immutable
+Tombstones distinguish delete from merge and retain former ownership and order.
+Redirects distinguish split, merge, and manual repair and encode automatic or
+review-required semantics. `ManuscriptRepairCatalog` rejects active/tombstone
+identity overlap, invalid reason mappings, duplicate sources, dangling targets,
+and cycles; resolution follows durable chains to one active Anchor and
+propagates review requirements. Structural Operations remain the next N10-D
+substep.
+
 ### N10-E Realization and Conformance
 
 Implement StoryUnitRealization, current revision binding, conformance findings, and completion admission.
@@ -1279,5 +1306,7 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
   Chapter-local Block ordering.
 - Task N10-C is completed by stable Block-boundary Anchors, half-open Ranges,
   and catalog-aware existence and ordering validation.
-- Task N10-D Structural Repair is next.
+- Task N10-D-A is completed by the accepted structural contract and immutable
+  Tombstone, Redirect, and Anchor Resolution models.
+- Task N10-D-B Manuscript structural Operations is next.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

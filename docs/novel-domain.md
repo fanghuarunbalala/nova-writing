@@ -653,6 +653,22 @@ Deletion and structural edits require reference preservation:
 - Moving a Block preserves its ID and changes only its container and ordering key.
 - Invalid, inverted, disconnected, or orphaned ranges must be surfaced for repair rather than silently reinterpreted.
 
+Accepted V1 structural-repair semantics:
+
+- Move preserves identity and text. It changes only Chapter and OrderKey and
+  may make an existing Range invalid, which must be surfaced by revalidation.
+- Split retains the source ID on the left and creates a new right Block. The
+  old `after(source)` boundary redirects to `after(right)` so pre-split Ranges
+  retain their enclosing boundary; callers use `before(right)` for the new seam.
+- Merge only accepts adjacent Blocks in one Chapter, retains the left ID, and
+  tombstones the right ID. Both removed boundaries redirect to matching
+  boundaries on the retained Block and require semantic review.
+- Delete creates a Tombstone and no automatic Redirect. An explicit Anchor
+  Repair Operation selects a surviving target and requires review.
+- Redirect resolution is durable, cycle-free, and may follow a chain created by
+  later structural edits. Any review-required hop makes the final resolution
+  review-required.
+
 ## 9. Publication Relationship
 
 Chapter and Volume are publication structures whose actual authority is written content.
@@ -1896,16 +1912,15 @@ The following decisions remain outside the accepted Runtime implementation plan:
 1. The exact `OrderKey` algorithm and rebalance policy.
 2. Whether composite StoryUnits may explicitly override derived blocking and how descendant abandonment affects aggregate completion.
 3. Whether planned Chapter coverage uses a contiguous leaf range, an explicit ordered selection, or both.
-4. The exact command and event contracts for Block split, merge, move, and anchor repair.
-5. The physical storage of Manuscript Block text and Artifacts, plus the exact canonical Commit-payload encoding, retention, integrity-repair, and garbage-collection policy; the per-Conversation durable Draft Session layout is accepted in Section 10.
-6. Whether a post-V1 independent Manuscript revision becomes justified after measuring global NovelRevision invalidation and projection-rebuild cost; V1 uses only the global NovelRevision.
-7. Whether RhythmBeat mismatch remains a warning by default or may become a required conformance error for selected beats.
-8. The concrete NovelRevision generation format and whether a post-V1 narrower component revision is justified after measuring projection rebuild cost.
-9. The exact review-state contract for Tool-proposed Character and Location profile patches and projections.
-10. The exact conformance validator boundary between deterministic Tool checks, model-assisted analysis, and human acceptance.
-11. The exact field-level payload and precondition schema for the accepted
+4. The physical storage of Manuscript Block text and Artifacts, plus the exact canonical Commit-payload encoding, retention, integrity-repair, and garbage-collection policy; the per-Conversation durable Draft Session layout is accepted in Section 10.
+5. Whether a post-V1 independent Manuscript revision becomes justified after measuring global NovelRevision invalidation and projection-rebuild cost; V1 uses only the global NovelRevision.
+6. Whether RhythmBeat mismatch remains a warning by default or may become a required conformance error for selected beats.
+7. The concrete NovelRevision generation format and whether a post-V1 narrower component revision is justified after measuring projection rebuild cost.
+8. The exact review-state contract for Tool-proposed Character and Location profile patches and projections.
+9. The exact conformance validator boundary between deterministic Tool checks, model-assisted analysis, and human acceptance.
+10. The exact field-level payload and precondition schema for the accepted
     Outline Operation union; operation names, structural ownership, conflict
     kinds, and the default no-auto-Approval policy are resolved by Task N9-E.
-12. The Artifact preparation protocol and recovery behavior for an interrupted canonical Commit; the Draft Operation digest encoding and atomic Draft Journal behavior are resolved by Task N4.
-13. Draft staging retention limits, terminal-session cleanup timing, and whether selected committed or rolled-back Drafts may be retained for diagnostics without becoming authoritative history.
-14. The Agent-facing Tool grouping and per-Model or View-oriented read, overwrite-write, and delete schemas; Section 12 intentionally defines only the application boundary those Tools must call.
+11. The Artifact preparation protocol and recovery behavior for an interrupted canonical Commit; the Draft Operation digest encoding and atomic Draft Journal behavior are resolved by Task N4.
+12. Draft staging retention limits, terminal-session cleanup timing, and whether selected committed or rolled-back Drafts may be retained for diagnostics without becoming authoritative history.
+13. The Agent-facing Tool grouping and per-Model or View-oriented read, overwrite-write, and delete schemas; Section 12 intentionally defines only the application boundary those Tools must call.

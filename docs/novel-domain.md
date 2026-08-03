@@ -1932,6 +1932,32 @@ Commit detects stale baseRevision
     -> retry canonical Commit
 ```
 
+Startup recovery uses one provider-neutral coordinator with a fixed phase order:
+
+```text
+Commit history and incomplete canonical Commit recovery
+    -> interrupted Rebase reconciliation
+    -> Draft snapshot corruption repair and staging cleanup
+    -> disposable Projection rebuild
+    -> canonical and Draft Outbox retry
+```
+
+- Commit recovery runs before Draft cleanup because a missing canonical payload
+  may still require the frozen Draft Operation sequence. Terminal Draft staging
+  is not removed until that dependency has been reconciled.
+- Rebase recovery runs before general Draft recovery so only registered,
+  structurally valid candidate staging is treated as owned Draft state.
+- Projection rebuild runs only after authoritative canonical and Draft state is
+  stable. Projection records remain disposable and never repair source facts.
+- Outbox retry runs last so recovery-generated lifecycle records and all reopened
+  Draft stores participate in one deterministic delivery pass.
+- Each phase is idempotent, the coordinator is single-flight per application
+  instance, a failed phase prevents later phases from running, and retry starts
+  the complete fixed sequence again.
+- Public recovery results contain phase and aggregate counts. Logs contain only
+  stable identity, phase, and count metadata; they never include Novel content,
+  Operations, payloads, paths, raw errors, stacks, or causes.
+
 ### 12.10 Explicit Exclusions
 
 This architecture section intentionally does not define:

@@ -13,6 +13,7 @@ export * from "./outbox/index.js";
 export * from "./port/index.js";
 export * from "./projection/index.js";
 export * from "./query/index.js";
+export * from "./recovery/index.js";
 export * from "./service/index.js";
 export * from "./validation/index.js";
 export * from "./version/index.js";

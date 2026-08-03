@@ -1286,6 +1286,14 @@ injected provider-neutral interface. Task N11-A is complete.
 
 Implement Draft corruption detection, incomplete Commit recovery, outbox retry, interrupted Rebase recovery, staging retention, orphan cleanup, and projection rebuild.
 
+**Status:** B-A defines the provider-neutral startup recovery coordinator and
+its fixed dependency-safe order: Commit, Rebase, Draft, Projection, then Outbox.
+The coordinator is single-flight, fail-fast, retryable as a complete sequence,
+and reports only strict phase and aggregate counts. Existing Draft, Commit, and
+Outbox recovery services remain the owned implementations for their phases;
+Rebase reconciliation, Projection persistence/rebuild adapters, and Node
+composition are the next N11-B substeps.
+
 ### N11-C End-to-End Validation
 
 Cover multi-Conversation Drafts, Commit, Rebase, conflict, Approval, Outline, Manuscript, publication, realization, recovery, and replay without Agent Tool involvement.

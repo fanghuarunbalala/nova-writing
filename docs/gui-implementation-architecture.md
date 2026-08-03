@@ -1404,6 +1404,16 @@ Each managed WebContents sender becomes authorized only while its window is aliv
 
 This checkpoint still does not provide the executable Host factory, Renderer DOM bootstrap, Vite configuration, application menu, native platform ports, packaging, signing, updater, or Runtime placement decision.
 
+### 28.3A Implemented Executable Desktop Entry
+
+The desktop package now exposes `dist/main/main.js` as its executable Electron Main entry. The repository command `pnpm gui` builds Core, shared UI, Main, the bundled sandbox-compatible Preload, and the static Vite Renderer before launching Electron. The production-style entry loads `dist/renderer-app/index.html` with `BrowserWindow.loadFile()` rather than depending on the Web development server.
+
+Renderer and Preload paths are resolved from the compiled Main module URL, so launching from the repository root, the GUI package, or another current directory cannot redirect asset lookup. Quit performs the existing idempotent `DesktopApplication.stop()` path before allowing Electron to exit.
+
+The executable initially composes `DesktopBootstrapApiTransport`. It returns only the stable redacted `DESKTOP_WORKSPACE_NOT_OPEN` error until the later application-level Workspace session manager activates a real `NodeConversationApiApplication`; it never imports Mock Host code into the product entry or claims that Agent Runtime is connected.
+
+This checkpoint makes the current shared application directly inspectable in a real Electron window while preserving all previously accepted Main, Preload, Renderer, IPC, navigation, permission, and redaction boundaries. Native directory selection, recent Workspace persistence, active Host switching, Conversation catalog loading, Runtime placement, packaging, signing, and updates remain separate steps.
+
 ### 28.4 Implemented Renderer Bootstrap Boundary
 
 The desktop Renderer now has a Vite production build rooted at `gui/index.html` and emitted to `dist/renderer-app` with relative asset URLs suitable for `BrowserWindow.loadFile()`. The HTML defines the root element, a light color scheme, and a restrictive Content Security Policy. Shared white-shell styles remain owned by `@novel/ui`; GUI adds only document-level sizing and reset rules.

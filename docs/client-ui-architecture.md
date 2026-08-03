@@ -472,6 +472,14 @@ Desktop-only UI belongs in `gui/src/renderer/features/` and is contributed throu
 
 The GUI Renderer uses only the Preload-exposed desktop API. It does not receive unrestricted Electron IPC, Node, filesystem, Runtime, Tool, or credential access.
 
+### 10.1 Implemented Executable Desktop Entry
+
+`@novel/gui` now ships a real Electron Main entry at `dist/main/main.js`. `pnpm gui` performs the complete build and launches the packaged-style static Renderer through `BrowserWindow.loadFile()`, while the existing bundled CommonJS Preload remains the only bridge into the sandboxed Renderer.
+
+The executable entry resolves Renderer and Preload artifacts relative to its compiled Main module rather than the caller's current directory. Until a Workspace Host is activated, `DesktopBootstrapApiTransport` returns a stable redacted `DESKTOP_WORKSPACE_NOT_OPEN` response instead of fabricating Conversation data or silently binding a test Host. Workspace selection and the application-level active-Workspace Router remain the next desktop boundary.
+
+The Main entry performs idempotent application cleanup on quit and emits only a structured startup failure event without raw Electron errors or local paths. Focused validation proves packaged asset resolution, the unavailable bootstrap response, preserved BrowserWindow security options, package entry metadata, and the root launch command.
+
 ## 11. Web Composition
 
 ```text

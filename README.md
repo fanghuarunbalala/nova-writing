@@ -15,4 +15,12 @@
 
 ## 当前阶段
 
-只初始化开发环境和项目骨架，不实现具体业务功能。
+Runtime、Novel Domain、共享 UI、Web 和 Electron 安全壳正在按架构文档逐步实现。
+
+## 启动桌面 GUI
+
+```bash
+pnpm gui
+```
+
+该命令构建 Core、共享 UI、Electron Main/Preload/Renderer，并启动真实 Electron 窗口。当前可查看和操作共享应用 Shell、Workspace 入口与 Settings；本地 Workspace Host 和 Agent Runtime 仍按后续步骤接入。

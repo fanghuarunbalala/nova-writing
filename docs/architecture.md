@@ -6053,3 +6053,135 @@ The completed boundary guarantees:
 The release-level acceptance matrix is
 `core/scripts/novel-end-to-end-acceptance-smoke.mjs`; the complete Core suite
 remains the final executable gate.
+
+## 31. Prompt Composition Refinement
+
+This section records the accepted direction for evolving the current Prompt
+architecture after comparing it with a large, conditionally assembled agent
+Prompt system. It does not resume a new implementation track and does not
+change the completed Runtime or Novel checkpoints.
+
+### 31.1 Preserved Base-Prompt Boundary
+
+The existing provider-neutral path remains valid:
+
+```text
+AgentDefinition
+→ PromptRecipe
+→ PromptSectionRegistry
+→ SystemPromptBuilder
+→ CompiledSystemPrompt
+```
+
+`CompiledSystemPrompt` remains the immutable Manifest-owned Base Prompt. It is
+resolved when the Agent Manifest is assembled, records exact section versions
+and content digests, and is restored from the frozen Manifest without resolving
+`latest` again. It does not contain per-Run Checkpoint state, one-shot Nudge
+content, canonical Messages, Provider data, or Pi types.
+
+### 31.2 Provider-call Prompt Assembly
+
+A future `RuntimePromptAssembler` may compose one exact Provider-call candidate
+without replacing `SystemPromptBuilder` or `ContextCompiler`:
+
+```mermaid
+flowchart LR
+    Definition["AgentDefinition"] --> Base["SystemPromptBuilder"]
+    ToolView["ToolRegistryView"] --> Base
+    Base --> Assembly["RuntimePromptAssembler"]
+    Checkpoint["ContextCheckpoint"] --> Assembly
+    Nudge["NudgeManager"] --> Assembly
+    Messages["Canonical Runtime Messages"] --> Assembly
+    Assembly --> Compiler["ContextCompiler"]
+    Compiler --> Adapter["Provider Adapter"]
+```
+
+The stable outer order remains:
+
+```text
+Base Prompt → Checkpoint Overlay → Nudge Overlay → Messages
+```
+
+The Base Prompt may internally contain Core protocol, Agent identity and
+behavior, deterministic Tool guidance, and other Manifest-frozen capability
+instructions. Checkpoint state is durable Runtime projection state. Nudge state
+is leased and one-shot. Messages remain the canonical Conversation projection.
+
+A future immutable `PromptAssembly` may record the Conversation, Run, Agent
+Definition identity, Base Prompt snapshot, selected overlay identities, Message
+High Watermark, and aggregate digest for one Provider call. Prompt text remains
+excluded from logs and public lifecycle Events.
+
+### 31.3 Prompt Contribution Identity
+
+Prompt fragments should retain enough source identity to explain deterministic
+assembly without exposing Provider implementation details. A future
+`PromptContribution` may distinguish Core section, Agent section, inline rule,
+Tool guidance, Skill, Checkpoint, and Nudge sources while retaining source ID,
+exact version when applicable, layer, persistence scope, content digest, and
+content.
+
+Persistence scope is semantically distinct from layer. Manifest contributions
+are stable across Runs, Checkpoint contributions survive until replaced, and
+one-shot contributions disappear only after confirmed Provider-call
+application or explicit expiry.
+
+### 31.4 Tool Prompt Boundary
+
+Tool declaration, model-facing guidance, and execution policy remain separate:
+
+```text
+ToolDefinition       = identity, version, description, schemas
+ToolPromptDetails    = optional usage, parameter, and safety guidance
+ToolExecutionPolicy  = permission, Approval, Sandbox, timeout, cancellation
+ToolHandler          = execution implementation
+```
+
+Tool guidance is selected from the immutable `ToolRegistryView`, ordered
+deterministically, and compiled through the normal Prompt assembly boundary.
+A Tool Handler never receives authority to mutate an active System Prompt.
+Optional Tool guidance must not override Core protocol, Agent identity,
+permission policy, or the completion contract.
+
+### 31.5 Nudge Application Receipt
+
+Nudge publication, selection, application, and consumption are different
+states:
+
+```text
+emitted → selected → applied → consumed
+                     └──────→ expired / superseded
+```
+
+An emitted OutputEvent proves only that Runtime exposed the Nudge lifecycle; it
+does not prove that the content entered a Provider call. Provider preparation
+must confirm exact application before the private Nudge snapshot is consumed.
+Retry of the same dispatch remains delivery-stable. Nudge text never becomes a
+canonical Runtime Message merely because it was emitted or applied.
+
+### 31.6 Deferred Skill and Context Attachments
+
+On-demand Skills may later be represented by versioned `SkillDefinition`
+objects with activation policy and a Prompt Recipe. Activated Skill state
+belongs in a durable Runtime projection or an explicitly leased overlay rather
+than being added permanently to every Agent Base Prompt.
+
+Large references, schemas, files, Artifacts, and templates belong to a future
+`ContextAttachment` boundary with identity, kind, digest, priority, size, and a
+logical content reference. Large content remains in an Artifact or cache Store
+and is inspected through bounded Tools instead of being copied unconditionally
+into the System Prompt.
+
+### 31.7 Explicit Non-decisions
+
+The following alternatives were discussed but are not accepted architecture:
+
+1. `AgentCommunicationPolicy` automatically selecting or installing Prompt
+   sections and Tools solely from the communication role.
+2. Tool implementations directly mutating the active System Prompt.
+3. Nudge or System Reminder content being permanently projected into canonical
+   Conversation Messages.
+
+These alternatives require separate review because they couple topology to
+capability, allow execution components to bypass deterministic Prompt assembly,
+or pollute canonical user-visible history with ephemeral Runtime control state.

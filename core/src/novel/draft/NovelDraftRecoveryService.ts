@@ -88,7 +88,10 @@ export class NovelDraftRecoveryService {
       ...resolvedCandidates.map((candidate) => candidate.session.id),
     ]);
     const recovered = [];
+    const reset = [];
     const rolledBack = [];
+    const removedTerminal = [];
+    const removedCandidates = [];
     const removedOrphans = [];
 
     for (const session of sessions) {
@@ -98,6 +101,7 @@ export class NovelDraftRecoveryService {
             session.novelId,
             session.id,
           );
+          removedTerminal.push(session.id);
         }
         continue;
       }
@@ -127,6 +131,7 @@ export class NovelDraftRecoveryService {
           baseRevision: snapshot.baseRevision,
           resetAt: this.options.clock.now(),
         });
+        reset.push(session.id);
       } else if (snapshot.baseRevision !== session.baseRevision) {
         await this.rollbackBrokenSession(session);
         rolledBack.push(session.id);
@@ -156,6 +161,7 @@ export class NovelDraftRecoveryService {
         candidate.session.novelId,
         candidate.session.id,
       );
+      removedCandidates.push(candidate.session.id);
     }
 
     for (const snapshotId of snapshotIds) {
@@ -178,7 +184,10 @@ export class NovelDraftRecoveryService {
 
     const result = captureNovelDraftRecoveryResult({
       recoveredDraftSessionIds: recovered,
+      resetDraftSessionIds: reset,
       rolledBackDraftSessionIds: rolledBack,
+      removedTerminalSnapshotIds: removedTerminal,
+      removedCandidateSnapshotIds: removedCandidates,
       removedOrphanSnapshotIds: removedOrphans,
     });
     for (const draftSessionId of result.recoveredDraftSessionIds) {
@@ -201,7 +210,10 @@ export class NovelDraftRecoveryService {
     this.logger.info("novel_draft_recovery.completed", {
       novelId: metadata.novelId,
       recoveredCount: result.recoveredDraftSessionIds.length,
+      resetCount: result.resetDraftSessionIds.length,
       rolledBackCount: result.rolledBackDraftSessionIds.length,
+      removedTerminalCount: result.removedTerminalSnapshotIds.length,
+      removedCandidateCount: result.removedCandidateSnapshotIds.length,
       removedOrphanCount: result.removedOrphanSnapshotIds.length,
     });
     return result;

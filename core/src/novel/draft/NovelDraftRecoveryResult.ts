@@ -10,7 +10,10 @@ import {
 
 export interface NovelDraftRecoveryResult {
   readonly recoveredDraftSessionIds: readonly NovelDraftSessionId[];
+  readonly resetDraftSessionIds: readonly NovelDraftSessionId[];
   readonly rolledBackDraftSessionIds: readonly NovelDraftSessionId[];
+  readonly removedTerminalSnapshotIds: readonly NovelDraftSessionId[];
+  readonly removedCandidateSnapshotIds: readonly NovelDraftSessionId[];
   readonly removedOrphanSnapshotIds: readonly NovelDraftSessionId[];
 }
 
@@ -20,26 +23,40 @@ export function captureNovelDraftRecoveryResult(
   const recoveredDraftSessionIds = captureUniqueDraftIds(
     value.recoveredDraftSessionIds,
   );
+  const resetDraftSessionIds = captureUniqueDraftIds(value.resetDraftSessionIds);
   const rolledBackDraftSessionIds = captureUniqueDraftIds(
     value.rolledBackDraftSessionIds,
   );
   const removedOrphanSnapshotIds = captureUniqueDraftIds(
     value.removedOrphanSnapshotIds,
   );
+  const removedTerminalSnapshotIds = captureUniqueDraftIds(
+    value.removedTerminalSnapshotIds,
+  );
+  const removedCandidateSnapshotIds = captureUniqueDraftIds(
+    value.removedCandidateSnapshotIds,
+  );
+  if (
+    resetDraftSessionIds.some((id) => !recoveredDraftSessionIds.includes(id))
+  ) {
+    throw invalidDraftRecoveryResult();
+  }
   const classifications = [
     ...recoveredDraftSessionIds,
     ...rolledBackDraftSessionIds,
+    ...removedTerminalSnapshotIds,
+    ...removedCandidateSnapshotIds,
     ...removedOrphanSnapshotIds,
   ];
   if (new Set(classifications).size !== classifications.length) {
-    throw new NovelProtocolValidationError(
-      NOVEL_PROTOCOL_FAILURE.invalidIdentity,
-      "draftSessionId",
-    );
+    throw invalidDraftRecoveryResult();
   }
   return Object.freeze({
     recoveredDraftSessionIds,
+    resetDraftSessionIds,
     rolledBackDraftSessionIds,
+    removedTerminalSnapshotIds,
+    removedCandidateSnapshotIds,
     removedOrphanSnapshotIds,
   });
 }
@@ -55,4 +72,11 @@ function captureUniqueDraftIds(
     );
   }
   return Object.freeze(captured);
+}
+
+function invalidDraftRecoveryResult(): NovelProtocolValidationError {
+  return new NovelProtocolValidationError(
+    NOVEL_PROTOCOL_FAILURE.invalidIdentity,
+    "draftSessionId",
+  );
 }

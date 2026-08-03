@@ -371,7 +371,10 @@ try {
     () =>
       captureNovelDraftRecoveryResult({
         recoveredDraftSessionIds: [draftA.id],
+        resetDraftSessionIds: [],
         rolledBackDraftSessionIds: [draftA.id],
+        removedTerminalSnapshotIds: [],
+        removedCandidateSnapshotIds: [],
         removedOrphanSnapshotIds: [],
       }),
     NovelProtocolValidationError,

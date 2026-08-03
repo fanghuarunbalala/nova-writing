@@ -1322,6 +1322,12 @@ B-E confirms that canonical Commit visibility is already atomic and narrows
 counts into the unified Commit phase. Draft/Outbox phase adapters and Node
 startup composition remain next.
 
+B-F adapts Draft reconciliation and coordinated Outbox retry into the unified
+Recovery phases. Draft results now distinguish reset repair, rollback,
+terminal staging cleanup, invalid Candidate cleanup, and orphan cleanup.
+Outbox mapping distinguishes newly recorded publication, duplicate delivery
+recovery, and already-published races. Node startup composition is next.
+
 ### N11-C End-to-End Validation
 
 Cover multi-Conversation Drafts, Commit, Rebase, conflict, Approval, Outline, Manuscript, publication, realization, recovery, and replay without Agent Tool involvement.

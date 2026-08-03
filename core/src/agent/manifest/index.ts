@@ -2,6 +2,7 @@ export * from "./AgentAssembly.js";
 export * from "./AgentAssemblyRestorer.js";
 export * from "./AgentAssembler.js";
 export * from "./AgentManifest.js";
+export * from "./AgentManifestHydrator.js";
 export * from "./AgentManifestResolver.js";
 export * from "./AgentManifestStore.js";
 export * from "./InMemoryAgentManifestStore.js";

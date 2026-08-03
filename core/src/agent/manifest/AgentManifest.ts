@@ -196,6 +196,7 @@ export class AgentManifest {
       "Manifest Runtime policy ID",
     );
     this.createdAt = captureTimestamp(options.createdAt);
+    assertDefinitionPolicyConsistency(this, options.definition);
     Object.freeze(this);
   }
 
@@ -215,6 +216,25 @@ export class AgentManifest {
       runtimePolicyId: this.runtimePolicyId,
       createdAt: this.createdAt,
     });
+  }
+}
+
+function assertDefinitionPolicyConsistency(
+  manifest: AgentManifest,
+  definition: AgentDefinition,
+): void {
+  if (
+    manifest.communicationRole !== definition.communication.role ||
+    manifest.runtimePolicyId !== definition.runtimePolicyId ||
+    manifest.delegation.mode !== definition.delegation.mode ||
+    manifest.delegation.allowedAgentTypes.length !==
+      definition.delegation.allowedAgentTypes.length ||
+    manifest.delegation.allowedAgentTypes.some(
+      (agentType, index) =>
+        agentType !== definition.delegation.allowedAgentTypes[index],
+    )
+  ) {
+    throw new TypeError("Agent Manifest policy does not match Definition");
   }
 }
 

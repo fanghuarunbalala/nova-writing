@@ -56,6 +56,9 @@ count/digest metadata; they never log Prompt content or Tool data.
 - saving the same ID with a different digest fails with `manifest_conflict`;
 - lookup by Agent identity is sorted by creation time and then Manifest ID.
 
-SQLite persistence is intentionally deferred to a Node adapter. Provider/Pi
-assembly, Conversation integration, Novel Tools, Subagents, and Agent Teams are
-outside this foundation step.
+The Node adapter is `SqliteAgentManifestStore`, exposed through
+`SqliteWorkspaceStore.agentManifests`. It stores the immutable JSON snapshot
+inside a versioned SQLite table, hydrates class/value objects on reads, and
+uses one immediate transaction for idempotent saves and Digest conflict
+checks. Provider/Pi execution, Novel Tools, Subagents, and Agent Teams remain
+outside the Manifest Store boundary.

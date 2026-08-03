@@ -21,6 +21,7 @@ import {
 import { WorkspaceDatabaseMismatchError } from "./ConversationCatalogErrors.js";
 import { SqliteConversationCatalogStore } from "./SqliteConversationCatalogStore.js";
 import { SqliteConversationJournalStore } from "./SqliteConversationJournalStore.js";
+import { SqliteAgentManifestStore } from "../agent/manifest/index.js";
 import { runCoreSqliteMigrations } from "./migrations.js";
 
 interface WorkspaceMetadataRow {
@@ -36,6 +37,7 @@ export interface SqliteWorkspaceStoreOptions {
 export class SqliteWorkspaceStore {
   readonly conversations: ConversationCatalogStore;
   readonly journal: ConversationJournalStore;
+  readonly agentManifests: SqliteAgentManifestStore;
 
   private readonly logger: Logger;
   private readonly projectionContextFactory: NodeConversationMessageProjectionContextFactory;
@@ -57,6 +59,9 @@ export class SqliteWorkspaceStore {
     const ensureOpen = (): void => this.assertOpen();
     this.conversations = new SqliteConversationCatalogStore(database, workspace, ensureOpen);
     this.journal = new SqliteConversationJournalStore(database, eventSchemaRegistry, ensureOpen);
+    this.agentManifests = new SqliteAgentManifestStore(database, ensureOpen, {
+      logger: this.logger,
+    });
     this.projectionContextFactory = new NodeConversationMessageProjectionContextFactory({
       workspace,
       journal: this.journal,

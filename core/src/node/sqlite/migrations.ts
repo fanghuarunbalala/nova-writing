@@ -138,6 +138,23 @@ const MIGRATIONS: Migration[] = [
       ADD COLUMN manifest_id TEXT;
     `,
   },
+  {
+    version: 5,
+    name: "agent_manifests",
+    sql: `
+      CREATE TABLE agent_manifests (
+        manifest_id TEXT PRIMARY KEY,
+        manifest_digest TEXT NOT NULL,
+        agent_type TEXT NOT NULL,
+        definition_version TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        manifest_json TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX agent_manifests_type_version_created_idx
+      ON agent_manifests(agent_type, definition_version, created_at, manifest_id);
+    `,
+  },
 ];
 
 export function runCoreSqliteMigrations(database: DatabaseSync): void {

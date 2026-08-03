@@ -710,6 +710,12 @@ The tree does not manufacture Novel identity, read scope, source revision, or In
 
 The Reviewer continues to treat source and target movement labels as presentation-only. It does not derive a Manuscript Anchor, Range, source revision, or structured InputEvent payload from displayed text or row order. Without a resolver it remains the same read-only Block Diff surface.
 
+### 13.5 Implemented Character and Location Field References
+
+The shared entity field Diff list now owns local field selection and accepts an optional `referenceForField(field, view)` resolver. `CharacterChangeReviewer` and `LocationChangeReviewer` remain separate domain components and independently forward their owning resolver, so a field with the same display label never loses its Character or Location identity.
+
+Selecting or focusing a field exposes the shared reference action. The resolver receives stable entity and field identities together with the complete captured review view, while the presentation layer does not derive a reference from visible field text, list position, projection evidence, or before/after content. Reviewers without a resolver remain read-only and preserve their existing red/green field Diff behavior.
+
 ## 14. Domain-specific Reviewers
 
 The review surface is selected by domain type:

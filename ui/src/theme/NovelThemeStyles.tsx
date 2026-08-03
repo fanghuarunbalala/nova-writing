@@ -578,11 +578,31 @@ const NOVEL_THEME_CSS = `
   gap: 10px;
 }
 
+.novel-entity-field-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: var(--novel-text-secondary);
+  font-size: 11px;
+}
+
 .novel-entity-field-diff {
   border: 1px solid var(--novel-border);
   border-radius: 8px;
   padding: 10px;
   background: var(--novel-surface-primary);
+}
+
+.novel-entity-field-diff[data-selected="true"] {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: -2px;
+}
+
+.novel-entity-field-diff:focus-visible {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: 1px;
 }
 
 .novel-entity-field-diff > header {

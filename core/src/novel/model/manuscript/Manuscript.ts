@@ -56,8 +56,19 @@ export function captureParagraphBlock(value: unknown): ParagraphBlock {
     manuscriptId: captureManuscriptId(candidate.manuscriptId),
     chapterId: capturePublicationChapterId(candidate.chapterId),
     orderKey: captureOrderKey(candidate.orderKey),
-    text: captureText(candidate.text),
+    text: captureManuscriptText(candidate.text),
   });
+}
+
+export function captureManuscriptText(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length > 1_000_000 ||
+    /\u0000/u.test(value)
+  ) {
+    throw invalidManuscript();
+  }
+  return value;
 }
 
 function captureRecord(
@@ -79,17 +90,6 @@ function captureRecord(
     throw invalidManuscript();
   }
   return value as Record<string, unknown>;
-}
-
-function captureText(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    value.length > 1_000_000 ||
-    /\u0000/u.test(value)
-  ) {
-    throw invalidManuscript();
-  }
-  return value;
 }
 
 function invalidManuscript(): NovelProtocolValidationError {

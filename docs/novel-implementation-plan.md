@@ -1229,14 +1229,19 @@ The V1 structural-repair contract was explicitly confirmed on August 3, 2026:
   guarded by digest and existence preconditions. V1 adds neither character
   offsets nor a separate Manuscript revision.
 
-**Status:** the contract and D-A repair model are complete. Strict immutable
+**Status:** the contract, D-A repair model, and D-B structural Operations are
+complete. Strict immutable
 Tombstones distinguish delete from merge and retain former ownership and order.
 Redirects distinguish split, merge, and manual repair and encode automatic or
 review-required semantics. `ManuscriptRepairCatalog` rejects active/tombstone
 identity overlap, invalid reason mappings, duplicate sources, dangling targets,
 and cycles; resolution follows durable chains to one active Anchor and
-propagates review requirements. Structural Operations remain the next N10-D
-substep.
+propagates review requirements. A synchronous transaction-local Manuscript
+Repository Port now supports version-1 move, split, merge, delete, and explicit
+Anchor Repair Operations. Their envelopes contain only stable IDs, final text,
+OrderKeys, Anchors, and precondition digests; handlers validate placement and
+adjacency before deterministic mutation. SQLite composition and canonical
+persistence remain deferred to N11.
 
 ### N10-E Realization and Conformance
 
@@ -1308,5 +1313,7 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
   and catalog-aware existence and ordering validation.
 - Task N10-D-A is completed by the accepted structural contract and immutable
   Tombstone, Redirect, and Anchor Resolution models.
-- Task N10-D-B Manuscript structural Operations is next.
+- Task N10-D-B is completed by the synchronous Manuscript Repository Port and
+  deterministic move, split, merge, delete, and Anchor Repair Operations.
+- Task N10-D-C structural repair integration validation is next.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

@@ -668,6 +668,11 @@ Accepted V1 structural-repair semantics:
 - Redirect resolution is durable, cycle-free, and may follow a chain created by
   later structural edits. Any review-required hop makes the final resolution
   review-required.
+- Structural Operation payloads carry final text rather than split offsets or
+  merge separator policies. Expected text, Chapter, and OrderKey digests make
+  replay deterministic and surface concurrent edits as precondition failures.
+- The Operation handlers are synchronous and transaction-local. Durable SQLite
+  mapping is an adapter responsibility and does not change these contracts.
 
 ## 9. Publication Relationship
 

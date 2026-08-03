@@ -704,6 +704,10 @@ The completed Task 6B infrastructure remains the base:
 
 Required evolution:
 
+- Step S1 protocol values are implemented in the provider-neutral Runtime
+  boundary: immutable Subagent Definitions, allowed-type policy, Task/Query/
+  Cancellation values, defensive capture, and dynamic TypeBox parameter
+  Schemas. They do not create a Child Conversation or execute a Tool.
 - replace the create-then-activate-only path with a child Bootstrap port that
   persists `TaskAssignedInputEvent` before activation acceptance;
 - add `SubagentTaskService`, `SubagentQueryService`, and

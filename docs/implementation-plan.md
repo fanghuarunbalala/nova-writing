@@ -2991,4 +2991,8 @@ Step S0 status: completed. Provider-facing Tool names now use one PascalCase
 protocol across Descriptor capture, Registry and View lookup, Group Manifest
 loading, invocation and permission validation, execution-policy lookup,
 Approval OutputEvents, Pi conversion fixtures, and Runtime integration tests.
-Step S1 is the next active implementation step.
+Step S1 status: completed. The provider-neutral Subagent Task protocol now
+defines `Task`, `TaskGet`, and `TaskCancel` arguments and results, immutable
+allowed-Subagent definition catalogs, injected Prompt/Artifact/result limits,
+and dynamic TypeBox parameter Schemas without creating or activating a Child
+Conversation. Step S2 is the next active implementation step.

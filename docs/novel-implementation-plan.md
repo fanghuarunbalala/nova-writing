@@ -1050,6 +1050,24 @@ StoryUnit bindings delivered:
 **Status:** Task N9-D completed by Event, RhythmBeat, EntityChange, and
 Character/Location binding contracts. N9-C LeafPlan composition is next.
 
+LeafStoryUnitPlan composition delivered:
+
+- one immutable plan composes Story time, Character and Location bindings,
+  ordered Events, ordered RhythmBeats, and entity changes without requiring a
+  progressively authored plan to already be ready
+- member capture reuses each established contract and validates same-StoryUnit
+  ownership plus Event references before returning canonical collection order
+- deterministic baseline readiness separately checks current leaf membership,
+  usable Story time, at least one Event, setting-mode primary Location rules,
+  and known Character/Location references
+- readiness returns stable finding codes rather than throwing for repairable
+  incompleteness; contextual profile sufficiency remains a non-blocking N11
+  projection layered above this baseline result
+
+**Status:** Task N9-C LeafStoryUnitPlan and V1 baseline readiness completed.
+Task N9-E services, operations, queries, and persistence is next and remains
+gated by its accepted Outline operation and revision contracts.
+
 ### N9-E Services, Operations, Queries, and Persistence
 
 Add complete Draft and canonical vertical slices with Rebase and conflict behavior. Tool adapters remain excluded.
@@ -1129,6 +1147,8 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
   approved post-Rebase Commit validation.
 - Task N8 is completed by Conversation binding, lifecycle OutputEvents,
   durable Outbox dispatch, Approval orchestration, and Journal integration.
-- Task N9 deferred contracts are resolved; Task N9-A `OrderKey` and ordered
-  StoryUnit foundation is the next implementation step.
+- Task N9 deferred Story planning contracts are resolved; Task N9-A through
+  N9-D now provide ordered StoryUnits, progress, Story time, LeafStoryUnitPlan
+  baseline readiness, Events, RhythmBeats, entity changes, and entity bindings.
+- Task N9-E Outline services, operations, queries, and persistence is next.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

@@ -1,4 +1,5 @@
 export * from "./OrderKey.js";
+export * from "./LeafStoryUnitPlan.js";
 export * from "./RhythmBeat.js";
 export * from "./StoryIdentityFactory.js";
 export * from "./StoryEventStep.js";

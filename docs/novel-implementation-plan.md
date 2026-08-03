@@ -1036,6 +1036,20 @@ Binding and readiness decisions resolved:
 **Status:** N9-D binding and N9-C LeafPlan contracts are now unblocked and ready
 for implementation.
 
+StoryUnit bindings delivered:
+
+- Character involvement separates presence from a unique composable role set;
+  point-of-view participation requires physical presence
+- Location involvement separates primary/secondary/mentioned setting role from
+  whether the StoryUnit affects that place
+- Character and Location bindings use stable `(storyUnitId, entityId)`
+  composite identity, reject duplicates, and return entity-ID canonical order
+- optional binding notes remain immutable author content and are never needed
+  for identity or ordering
+
+**Status:** Task N9-D completed by Event, RhythmBeat, EntityChange, and
+Character/Location binding contracts. N9-C LeafPlan composition is next.
+
 ### N9-E Services, Operations, Queries, and Persistence
 
 Add complete Draft and canonical vertical slices with Rebase and conflict behavior. Tool adapters remain excluded.

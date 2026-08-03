@@ -6,6 +6,7 @@ export * from "./StoryOutline.js";
 export * from "./StoryOutlineTree.js";
 export * from "./StoryTimeDescription.js";
 export * from "./StoryUnit.js";
+export * from "./StoryUnitBinding.js";
 export * from "./StoryUnitEntityChange.js";
 export * from "./StoryUnitProgress.js";
 export * from "./StoryUnitStatus.js";

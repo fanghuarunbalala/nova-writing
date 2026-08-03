@@ -692,6 +692,12 @@ The shared UI now provides a `ComposerDraftStore` keyed by Conversation ID. It p
 
 The Composer renders accessible reference chips, supports explicit removal, and can reopen the referenced Inspector target. Until the accepted structured-reference InputEvent protocol exists, a draft containing references cannot be sent: the UI retains both text and references and displays the protocol boundary rather than silently dropping references or serializing an invented payload. Plain text messages continue to use the existing `UserMessageInputEvent` path.
 
+### 13.2 Implemented Inspector-to-Composer Reference Action
+
+Shared Inspector renderers can now use `ReferenceInConversationButton` to add an immutable local reference to the active Conversation's `ComposerDraftStore`. The action resolves the current Conversation through `ApplicationShellStore`, deduplicates exact reference identities, exposes explicit already-referenced and conflicting-key states, and becomes unavailable when no Conversation is selected.
+
+The action remains domain- and Transport-neutral. An Outline, Manuscript, Character, Location, Novel Operation, or future Schedule renderer constructs the authorized local reference descriptor and invokes the same shared action. Closing or navigating the Inspector does not remove the resulting Composer chip, and activating that chip reopens its captured Inspector target. This checkpoint still does not serialize references into `UserMessageInputEvent` or define the deferred wire protocol.
+
 ## 14. Domain-specific Reviewers
 
 The review surface is selected by domain type:

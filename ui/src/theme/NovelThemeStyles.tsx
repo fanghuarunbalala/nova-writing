@@ -1119,6 +1119,45 @@ const NOVEL_THEME_CSS = `
   font-size: 12px;
 }
 
+.novel-reference-in-conversation {
+  min-height: 32px;
+  border: 1px solid #bac6d5;
+  border-radius: 7px;
+  padding: 0 10px;
+  color: #405775;
+  background: #f4f7fb;
+  font: inherit;
+  cursor: pointer;
+}
+
+.novel-reference-in-conversation:hover:not(:disabled) {
+  border-color: #8fa2b9;
+  background: #edf2f8;
+}
+
+.novel-reference-in-conversation:focus-visible {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: 1px;
+}
+
+.novel-reference-in-conversation[data-reference-state="referenced"] {
+  border-color: #bcd8c3;
+  color: #3e6c49;
+  background: #eff8f1;
+}
+
+.novel-reference-in-conversation[data-reference-state="conflict"],
+.novel-reference-in-conversation[data-reference-state="unavailable"] {
+  border-color: #e2c1c1;
+  color: #8a4141;
+  background: #fff0f0;
+}
+
+.novel-reference-in-conversation:disabled {
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
 .novel-conversation-composer textarea {
   min-height: 58px;
   max-height: 180px;

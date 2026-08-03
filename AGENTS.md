@@ -6,7 +6,7 @@ These instructions apply to the entire repository.
 
 Complete the currently active documented implementation track from the current repository status without reimplementing completed checkpoints.
 
-Subagent Tool Step S4 through Step S6 is now completed in `docs/implementation-plan.md`. Runtime Task 1 through Task 7 and Subagent Tool Step S0 through Step S3 remain completed. Novel Task N7 through Task N11 and persistent Agent Team work are paused rather than cancelled until an explicit track change.
+The active track is Novel Task N10 through Task N11 in `docs/novel-implementation-plan.md`. Novel Task N0 through Task N9-E, Runtime Task 1 through Task 7, and Subagent Tool Step S0 through Step S6 remain completed. Persistent Agent Team work is paused rather than cancelled while the Novel track is active.
 
 ## Autonomous Authority
 
@@ -49,7 +49,7 @@ Planning is mandatory even when the agent has authority to continue automaticall
 
 - Follow the async-first hybrid architecture documented by the project.
 - Do not mix Runtime and Novel implementation changes in one step or commit.
-- Do not resume Novel Task N7 through Task N11 or persistent Agent Team work without an explicit track change.
+- Do not resume persistent Agent Team work without an explicit track change.
 - Runtime Tool, Approval, IPC, Subagent, and validation work must remain provider-neutral at public Core boundaries.
 - Preserve stable public abstractions and keep Pi, process placement, Node, and future Rust details behind their accepted boundaries.
 - Do not silently resolve questions explicitly marked unresolved or deferred.
@@ -61,4 +61,4 @@ Planning is mandatory even when the agent has authority to continue automaticall
 
 ## Completion Boundary
 
-The current autonomous execution objective ends when Subagent Tool Step S4 through Step S6 is implemented, validated, documented, and committed. Novel Task N7 through Task N11 and persistent Agent Team work resume only after an explicit track change.
+The current autonomous execution objective ends only when Novel Task N10 through Task N11 is implemented, validated, documented, and committed, or when progress is blocked by an unresolved decision that cannot be safely derived from accepted documents and existing code. Persistent Agent Team work resumes only after an explicit track change.

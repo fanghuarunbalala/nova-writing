@@ -564,8 +564,7 @@ StoryUnits associate with written content through stable Block anchors:
 ```ts
 interface ManuscriptAnchor {
   readonly blockId: ManuscriptBlockId;
-  readonly offset?: number;
-  readonly bias: "left" | "right";
+  readonly boundary: "before" | "after";
 }
 
 interface ManuscriptRange {
@@ -617,7 +616,6 @@ interface StoryUnitConformanceFinding {
 interface StoryUnitConformanceResult {
   readonly status: StoryUnitConformanceStatus;
   readonly checkedNovelRevision: NovelRevision;
-  readonly checkedManuscriptRevision: ManuscriptRevision;
   readonly findings: readonly StoryUnitConformanceFinding[];
 }
 ```
@@ -631,7 +629,11 @@ Conformance semantics:
 - Additional prose detail is allowed when it does not create a conflicting persistent story fact.
 - A new semantic Event or entity change must either be removed from the manuscript or explicitly added to the outline through an accepted outline mutation before validation can succeed.
 
-A StoryUnit may enter `realizationStatus: completed` only when it has at least one current ManuscriptRange and a `conforming` validation checked against the current NovelRevision and ManuscriptRevision. Conformance failure keeps the StoryUnit in progress; it does not create an alternate actual-facts table.
+A StoryUnit may enter `realizationStatus: completed` only when it has at least one current ManuscriptRange and a `conforming` validation checked against the current global NovelRevision. Conformance failure keeps the StoryUnit in progress; it does not create an alternate actual-facts table.
+
+`ManuscriptRange` uses half-open `[start, end)` semantics. Both anchors belong
+to the same Manuscript and reference stable Block boundaries. V1 does not
+define character-offset anchors or an independent `ManuscriptRevision`.
 
 If the human changes creative direction, or accepts an Agent proposal that changes it while drafting, the outline is explicitly revised and the manuscript is revalidated. The model treats this as a specification change rather than silent manuscript divergence.
 
@@ -1888,7 +1890,7 @@ The following decisions remain outside the accepted Runtime implementation plan:
 3. Whether planned Chapter coverage uses a contiguous leaf range, an explicit ordered selection, or both.
 4. The exact command and event contracts for Block split, merge, move, and anchor repair.
 5. The physical storage of Manuscript Block text and Artifacts, plus the exact canonical Commit-payload encoding, retention, integrity-repair, and garbage-collection policy; the per-Conversation durable Draft Session layout is accepted in Section 10.
-6. The exact ManuscriptRevision generation contract and its relationship to the global NovelRevision; V1 has no independent OutlineRevision.
+6. Whether a post-V1 independent Manuscript revision becomes justified after measuring global NovelRevision invalidation and projection-rebuild cost; V1 uses only the global NovelRevision.
 7. Whether RhythmBeat mismatch remains a warning by default or may become a required conformance error for selected beats.
 8. The concrete NovelRevision generation format and whether a post-V1 narrower component revision is justified after measuring projection rebuild cost.
 9. The exact review-state contract for Tool-proposed Character and Location profile patches and projections.

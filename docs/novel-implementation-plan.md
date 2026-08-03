@@ -1155,7 +1155,19 @@ contracts.
 
 ## 16. Task N10: Manuscript, Publication, and Realization
 
-This task begins only after Anchor and Range contracts are explicitly resolved and recorded.
+The Anchor, Range, and revision contracts were explicitly confirmed on August
+3, 2026. Task N10 may proceed.
+
+Accepted V1 contracts:
+
+- `ManuscriptAnchor` is a stable Block-boundary reference containing
+  `blockId` and `boundary: "before" | "after"`; character offsets are excluded
+- `ManuscriptRange` is a half-open `[start, end)` interval whose anchors belong
+  to the same Manuscript and form a valid non-inverted order
+- V1 has no independent `ManuscriptRevision`; Manuscript, Outline, Anchor,
+  Range, and conformance state use the global `NovelRevision`
+- split, merge, and delete repair anchors through stable Block IDs, Tombstones,
+  and Redirect records rather than silently changing their meaning
 
 ### N10-A Publication
 

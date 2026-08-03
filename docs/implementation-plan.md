@@ -2954,15 +2954,15 @@ No next checkpoint begins without explicit approval.
 
 Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
-Runtime Task 1 through Task 7 and Subagent Tool Step S0 through Step S3 are
-complete. On August 3, 2026, the active track changed explicitly to Subagent
-Tool Step S4 through Step S6. Novel Task N7 through Task N11 and persistent
-Agent Team work remain paused until another explicit track change.
+Runtime Task 1 through Task 7 and Subagent Tool Step S0 through Step S6 are
+complete. On August 3, 2026, the active track changed explicitly back to Novel
+Task N10 through Task N11. Persistent Agent Team work remains paused until
+another explicit track change.
 
 Post-Task-7 Agent orchestration is documented in
-`docs/agent-orchestration.md`. The accepted S0-S6 contracts are complete. No
-current track authorizes persistent
-Agent, Agent Team, Team communication, `TaskOutput`, or `Sleep` implementation.
+`docs/agent-orchestration.md`. The accepted S0-S6 contracts are complete. The
+Novel track does not authorize persistent Agent, Agent Team, Team
+communication, `TaskOutput`, or `Sleep` implementation.
 
 Active implementation order:
 

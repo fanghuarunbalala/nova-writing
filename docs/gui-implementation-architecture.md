@@ -1442,6 +1442,32 @@ Renderer source imports no Electron, Node, filesystem, process, or unrestricted 
 
 This checkpoint still does not implement the production Host factory, native file/clipboard/notification bridge, automatic Workspace selection, executable Main bootstrap, application menu, packaging, signing, updater, or Runtime placement decision.
 
+### 28.4A Implemented Desktop Configuration Settings Integration
+
+The Renderer now adapts the optional fixed Electron Configuration bridge into the platform-neutral shared `ApplicationConfigurationClient` and injects it through `DesktopNovelApp`. The shared `模型` settings page therefore uses the same React surface while Desktop gains durable Core Configuration without importing Electron, Node, filesystem, or `@novel/core/node` modules into `@novel/ui`.
+
+The page persists one Core Model Connection and Model Profile together, increments the Application Configuration revision, and sets the saved Model Profile as the default. Provider is selected from the accepted `ProviderKind` catalog; OpenAI-compatible and custom connections additionally require a Base URL. Editing an existing connection preserves its credential reference and permits leaving the API Key blank to retain the current Host credential.
+
+Configuration and credentials use separate calls and separate storage boundaries:
+
+```text
+Shared React settings
+    ├─ ApplicationConfigurationClient.save(snapshot)
+    │      → Electron Preload fixed IPC
+    │      → DesktopConfigurationService
+    │      → Application Configuration Store
+    │
+    └─ ApplicationConfigurationClient.saveCredential(ref, secret)
+           → Electron Preload fixed IPC
+           → DesktopConfigurationService
+           → Electron safeStorage cipher
+           → encrypted Credential Store
+```
+
+The submitted Configuration always carries only the credential reference and a non-authoritative `credentialConfigured: false`. Main validates that the reference is registered, stores the secret separately, and projects the actual credential status on the next load. The API Key is cleared from component state immediately after successful credential persistence and is never returned to Renderer, included in Configuration, retained by `ApplicationSettingsStore`, emitted as an Event, or logged.
+
+The process-local Provider settings implementation remains the Web/Mock fallback when no durable Configuration client is injected. Provider connection testing and applying the default Model Profile to Conversation Runtime activation remain separate steps.
+
 ### 28.5 Implemented Web HTTP Request Boundary
 
 The Web package now implements the request half of its future HTTP/WebSocket Transport. `HttpApiRequestClient` sends the existing Core `ApiRequest` envelope to the fixed `POST /api/v1/requests` endpoint and returns an `ApiResponse` snapshot without introducing Web-specific business operations.
@@ -1679,7 +1705,7 @@ Event subscription path back into the visible timeline.
 29. Workspace is the selected novel project root; shared React receives only opaque selection references and presentation-safe Workspace identities.
 30. One application window owns at most one active Workspace, while future multi-Workspace desktop use is represented by multiple windows.
 31. Settings is opened from `编辑 → 设置…` in either the Electron native menu or Web inline menu, and platform or extension settings extend the same shared dialog rather than adding another top-level menu.
-32. Settings uses a left category sidebar. Its built-in `模型` page manages non-secret Provider metadata, supports add/edit flows, and selects one current effective Provider; credentials remain Host-owned and are never retained by shared Renderer state.
+32. Settings uses a left category sidebar. Its built-in `模型` page manages Model Connections and Model Profiles, supports add/edit flows, and selects one default Model Profile; credentials remain Host-owned and are never retained by shared Renderer state.
 33. Project-sidebar expansion is controlled by one compact upper-right content button rather than an Appearance settings field: inline-menu right edge on Web and context-bar right edge on Electron.
 
 ## 32. Deferred Decisions
@@ -1700,5 +1726,6 @@ Event subscription path back into the visible timeline.
 14. desktop-only diagnostics, update, tray, and local Runtime management pages;
 15. user-facing replacement for the technical label `Meta`, such as `Current Content` or `Current Scope`.
 16. production application-level Workspace Router envelopes, native selection tokens, recent-Workspace persistence, and Workspace session rebinding;
-17. durable Settings storage, migration, and synchronization policy.
-18. the Host API that persists Provider metadata, resolves credentials, and applies the selected Provider to active and resumed Conversations.
+17. cross-device Configuration synchronization policy.
+18. the Runtime Host binding that resolves the default Model Profile and its Host credential for active and resumed Conversations.
+19. Provider connection testing, capability discovery, and model catalog synchronization.

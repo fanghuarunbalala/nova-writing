@@ -6,7 +6,11 @@ import {
   type Logger,
   type NovelApiClient,
 } from "@novel/core";
-import type { ApplicationCommandSource, FrontendPlatform } from "@novel/ui";
+import type {
+  ApplicationCommandSource,
+  ApplicationConfigurationClient,
+  FrontendPlatform,
+} from "@novel/ui";
 import type { ElectronConfigurationBridge } from "../shared/index.js";
 import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -22,6 +26,7 @@ import {
   type DesktopRendererWindowPort,
 } from "./ElectronPreloadBridgeResolver.js";
 import { ElectronApiTransport } from "./transport/index.js";
+import { ElectronApplicationConfigurationClient } from "./config/index.js";
 
 export interface DesktopRendererCompositionOptions {
   readonly window: DesktopRendererWindowPort;
@@ -35,6 +40,7 @@ export interface DesktopRendererComposition {
   readonly platform: FrontendPlatform;
   readonly commandSource?: ApplicationCommandSource;
   readonly configurationBridge?: ElectronConfigurationBridge;
+  readonly configurationClient?: ApplicationConfigurationClient;
   readonly workspaceController?: NonNullable<DesktopNovelAppProps["workspaceController"]>;
 }
 
@@ -66,6 +72,10 @@ export function createDesktopRendererComposition(
   });
   const workspaceController = createElectronWorkspaceController(bridge, logger);
   const commandSource = createElectronApplicationCommandSource(bridge);
+  const configurationClient =
+    bridge.configuration === undefined
+      ? undefined
+      : new ElectronApplicationConfigurationClient(bridge.configuration);
   return Object.freeze({
     transport,
     api: new DefaultNovelApiClient({ transport, logger }),
@@ -74,6 +84,7 @@ export function createDesktopRendererComposition(
     ...(bridge.configuration !== undefined
       ? { configurationBridge: bridge.configuration }
       : {}),
+    ...(configurationClient !== undefined ? { configurationClient } : {}),
     ...(workspaceController !== undefined ? { workspaceController } : {}),
   });
 }
@@ -108,6 +119,9 @@ export function mountDesktopRenderer(
         platform={composition.platform}
         logger={logger}
         commandSource={options.appProps?.commandSource ?? composition.commandSource}
+        configurationClient={
+          options.appProps?.configurationClient ?? composition.configurationClient
+        }
         workspaceController={
           options.appProps?.workspaceController ?? composition.workspaceController
         }

@@ -2,12 +2,14 @@
 import { useEffect, useState } from "react";
 import type { NovelSettingsSection } from "../extensions/index.js";
 import type { ApplicationSettingsStore } from "./ApplicationSettingsStore.js";
+import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
 import { ModelProviderSettingsPanel } from "./ModelProviderSettingsPanel.js";
 
 export interface SettingsDialogProps {
   readonly open: boolean;
   readonly store: ApplicationSettingsStore;
   readonly sections?: readonly NovelSettingsSection[];
+  readonly configuration?: ApplicationConfigurationClient;
   readonly onDismiss: () => void;
 }
 
@@ -15,6 +17,7 @@ export function SettingsDialog({
   open,
   store,
   sections = [],
+  configuration,
   onDismiss,
 }: SettingsDialogProps) {
   const [activeSectionId, setActiveSectionId] = useState("models");
@@ -65,7 +68,10 @@ export function SettingsDialog({
           </nav>
           <div className="novel-settings-content">
             {activeSectionId === "models" ? (
-              <ModelProviderSettingsPanel store={store} />
+              <ModelProviderSettingsPanel
+                store={store}
+                configuration={configuration}
+              />
             ) : null}
             {extensionSection !== undefined && ExtensionSection !== undefined ? (
               <section className="novel-settings-section">

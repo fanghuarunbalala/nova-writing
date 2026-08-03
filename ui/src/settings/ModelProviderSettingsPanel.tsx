@@ -5,9 +5,12 @@ import type {
   ModelProviderSettings,
   ModelProviderSettingsInput,
 } from "./ModelProviderSettings.js";
+import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
+import { PersistentModelConnectionSettingsPanel } from "./PersistentModelConnectionSettingsPanel.js";
 
 export interface ModelProviderSettingsPanelProps {
   readonly store: ApplicationSettingsStore;
+  readonly configuration?: ApplicationConfigurationClient;
 }
 
 interface ProviderDraft {
@@ -36,7 +39,18 @@ const API_OPTIONS = Object.freeze([
 
 export function ModelProviderSettingsPanel({
   store,
+  configuration,
 }: ModelProviderSettingsPanelProps) {
+  return configuration === undefined ? (
+    <LocalModelProviderSettingsPanel store={store} />
+  ) : (
+    <PersistentModelConnectionSettingsPanel configuration={configuration} />
+  );
+}
+
+function LocalModelProviderSettingsPanel({
+  store,
+}: Pick<ModelProviderSettingsPanelProps, "store">) {
   const snapshot = useSyncExternalStore(
     (listener) => store.subscribe(listener),
     () => store.getSnapshot(),

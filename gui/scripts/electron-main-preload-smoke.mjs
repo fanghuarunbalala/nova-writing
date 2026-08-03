@@ -190,6 +190,7 @@ assert.deepEqual(Object.keys(bridge7).sort(), [
   "cancelRequest",
   "closeSubscription",
   "commands",
+  "configuration",
   "openSubscription",
   "readSubscription",
   "request",
@@ -197,6 +198,7 @@ assert.deepEqual(Object.keys(bridge7).sort(), [
 ]);
 assert.equal(Object.isFrozen(bridge7.workspaces), true);
 assert.equal(Object.isFrozen(bridge7.commands), true);
+assert.equal(Object.isFrozen(bridge7.configuration), true);
 const receivedCommands = [];
 const unsubscribeCommands = bridge7.commands.subscribe((command) =>
   receivedCommands.push(command),

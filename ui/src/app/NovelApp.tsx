@@ -52,6 +52,7 @@ import {
   type ComposerDraftStore,
 } from "../composer/index.js";
 import {
+  type ApplicationConfigurationClient,
   ApplicationSettingsStore,
   SettingsDialog,
 } from "../settings/index.js";
@@ -81,6 +82,7 @@ export interface NovelAppProps extends NovelAppProviderProps {
   readonly initialComposerDrafts?: readonly ComposerDraftInitialState[];
   readonly workspaceController?: WorkspaceController;
   readonly settingsStore?: ApplicationSettingsStore;
+  readonly configurationClient?: ApplicationConfigurationClient;
   readonly commandSource?: ApplicationCommandSource;
   readonly children?: ReactNode;
 }
@@ -118,6 +120,7 @@ export function NovelApp(props: NovelAppProps) {
               conversationCardRenderers={props.conversationCardRenderers}
               commandSource={props.commandSource}
               settingsStore={props.settingsStore ?? defaultSettingsStore}
+              configurationClient={props.configurationClient}
               workspaceController={
                 props.workspaceController ?? defaultWorkspaceController
               }
@@ -138,6 +141,7 @@ function ConnectedApplicationShell({
   conversationCardRenderers,
   commandSource,
   settingsStore,
+  configurationClient,
   workspaceController,
   children,
 }: {
@@ -147,6 +151,7 @@ function ConnectedApplicationShell({
   readonly conversationCardRenderers?: ConversationCardRendererRegistry;
   readonly commandSource?: ApplicationCommandSource;
   readonly settingsStore: ApplicationSettingsStore;
+  readonly configurationClient?: ApplicationConfigurationClient;
   readonly workspaceController: WorkspaceController;
   readonly children?: ReactNode;
 }) {
@@ -356,6 +361,7 @@ function ConnectedApplicationShell({
           open={settingsDialogOpen}
           sections={extensions.settingsSections}
           store={settingsStore}
+          configuration={configurationClient}
         />
       </>
     ),

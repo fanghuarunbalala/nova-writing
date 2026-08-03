@@ -287,6 +287,38 @@ export const AgentAssistantMessageFailedPayloadSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const TodoItemSchema = Type.Object(
+  {
+    id: Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }),
+    content: Type.String({ minLength: 1, maxLength: 2_000 }),
+    status: Type.Union([
+      Type.Literal("pending"),
+      Type.Literal("in_progress"),
+      Type.Literal("completed"),
+      Type.Literal("cancelled"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentTodoUpdatedPayloadSchema = Type.Object(
+  {
+    toolCallId: Type.String({ minLength: 1, maxLength: 256 }),
+    revision: Type.Integer({ minimum: 1 }),
+    todos: Type.Array(TodoItemSchema, { maxItems: 32 }),
+    updatedAt: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+const AgentTodoUpdatedSnapshotSchema = Type.Object(
+  {
+    runId: Type.String({ minLength: 1 }),
+    turnId: Type.Optional(Type.String({ minLength: 1 })),
+  },
+  { additionalProperties: true },
+);
+
 const NudgePublicIdentityProperties = {
   nudgeId: Type.String({ minLength: 1 }),
   policyId: Type.String({ minLength: 1 }),
@@ -597,6 +629,14 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     schemaVersion: EVENT_SCHEMA_VERSION,
     payloadSchema: AssistantMessageIdentityPayloadSchema,
     snapshotSchema: AgentAssistantMessageSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.agentTodoUpdated,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: AgentTodoUpdatedPayloadSchema,
+    snapshotSchema: AgentTodoUpdatedSnapshotSchema,
   });
 
   for (const [eventType, payloadSchema] of [

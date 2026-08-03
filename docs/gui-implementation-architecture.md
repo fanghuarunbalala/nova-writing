@@ -1420,6 +1420,16 @@ Focused integration now opens a Conversation through `DefaultNovelApiClient`, re
 
 The browser DOM bootstrap, authentication UI, remote Workspace selection, Web Host server, origin enforcement, deployment, and reconnect policy remain later Web steps.
 
+### 28.8 Implemented Web Browser Bootstrap Boundary
+
+The Web package now builds a real Vite/ReactDOM browser shell rooted at `web/index.html` and emitted to `dist/browser-app`. The output uses relative static asset URLs, a light color scheme, and a restrictive Content Security Policy that permits only same-origin HTTP requests plus WebSocket connections required by the accepted Event Transport.
+
+`createWebBrowserComposition()` derives and validates one HTTP or HTTPS API origin from `window.location.origin`, then constructs `HttpWebSocketApiTransport`, `DefaultNovelApiClient`, and an immutable browser-safe `FrontendPlatform`. Native file selection, clipboard, and notification capabilities remain explicitly disabled until separate user-gesture, permission, and product policies are accepted.
+
+`mountWebBrowser()` injects the composition into `WebNovelApp`, which renders the same `@novel/ui` tree as Desktop. The mount owns React teardown and Transport closure; the Vite entrypoint triggers that closure on page unload. Browser source imports no Electron, Node, filesystem, process, or unrestricted IPC APIs.
+
+Focused DOM validation mounts the shared white Shell, verifies the current navigation surface, proves same-origin HTTP delegation through the composed Transport, and inspects the production HTML and assets. Authentication UI, actor derivation, remote Workspace selection, automatic reconnect, deployment policy, origin enforcement on the server, and the production HTTP/WebSocket Host remain separate steps.
+
 ## 29. Testing Strategy
 
 ### 29.1 Core projection tests

@@ -1964,6 +1964,11 @@ Commit history and incomplete canonical Commit recovery
   no longer resolve, and atomically replaces the complete cache. A corrupt Target
   is discarded because it cannot be reconstructed without inventing caller
   intent.
+- Canonical and Draft SQLite use the same `novel_projection_cache` schema.
+  `projection_key` is the SHA-256 digest of canonical Target JSON; derived JSON
+  has its own digest. Normal cache writes are idempotent upserts, while startup
+  rebuild uses one short `BEGIN IMMEDIATE` delete-and-reinsert transaction so a
+  failed rebuild preserves the previous complete cache.
 - Outbox retry runs last so recovery-generated lifecycle records and all reopened
   Draft stores participate in one deterministic delivery pass.
 - Each phase is idempotent, the coordinator is single-flight per application

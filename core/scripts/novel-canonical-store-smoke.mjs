@@ -194,6 +194,7 @@ try {
     "novel_locations",
     "novel_metadata",
     "novel_outbox",
+    "novel_projection_cache",
     "novel_rebase_candidates",
     "novel_resolved_rebase_candidates",
     "novel_schema_migrations",

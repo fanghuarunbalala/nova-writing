@@ -21,6 +21,12 @@ export interface ReplaceNovelProjectionCacheInput {
   readonly entries: readonly NovelProjectionCacheEntry[];
 }
 
+export interface PutNovelProjectionCacheInput {
+  readonly novelId: NovelId;
+  readonly rebuildRevision: NovelRevision;
+  readonly entry: NovelProjectionCacheEntry;
+}
+
 export interface NovelProjectionPlanningContext {
   readonly outline: StoryOutlineTree;
   readonly source: NovelProjectionSourceSnapshot;
@@ -32,6 +38,12 @@ export interface NovelProjectionSourceReader {
 }
 
 export interface NovelProjectionStore {
+  getEntry(
+    novelId: NovelId,
+    target: NovelProjectionTarget,
+  ): Promise<NovelProjectionCacheEntry | undefined>;
+  putEntry(input: PutNovelProjectionCacheInput): Promise<void>;
+  deleteEntry(novelId: NovelId, target: NovelProjectionTarget): Promise<void>;
   inspectTargets(novelId: NovelId): Promise<NovelProjectionTargetInventory>;
   replaceCache(input: ReplaceNovelProjectionCacheInput): Promise<void>;
 }

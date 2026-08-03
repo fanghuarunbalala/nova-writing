@@ -1308,6 +1308,13 @@ recomputes values through `NovelProjectionPlanner`, drops corrupt or no-longer-
 resolvable Targets, and requests one atomic cache replacement. SQLite storage
 and Node startup composition are next.
 
+B-D adds canonical and Draft migration support plus
+`SqliteNovelProjectionStore`. The adapter validates Target and Projection
+digests, supports get/put/delete, inventories corrupt Targets without reading
+derived payloads, and atomically replaces the complete cache. Focused restart
+and rollback coverage confirms Draft persistence and failed-rebuild preservation.
+Node Projection Source composition and the remaining recovery phases are next.
+
 ### N11-C End-to-End Validation
 
 Cover multi-Conversation Drafts, Commit, Rebase, conflict, Approval, Outline, Manuscript, publication, realization, recovery, and replay without Agent Tool involvement.

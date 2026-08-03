@@ -3,6 +3,7 @@ import type {
   NovelEntityMutationContext,
   NovelManuscriptMutationContext,
   NovelOutlineMutationContext,
+  NovelProjectionEvidenceMutationContext,
   NovelPublicationMutationContext,
 } from "../port/index.js";
 import { registerNovelEntityOperationHandlers } from "./entity/index.js";
@@ -13,7 +14,8 @@ import { NovelOperationRegistry } from "./NovelOperationRegistry.js";
 export type NovelMutationContext = NovelEntityMutationContext &
   NovelOutlineMutationContext &
   NovelPublicationMutationContext &
-  NovelManuscriptMutationContext;
+  NovelManuscriptMutationContext &
+  NovelProjectionEvidenceMutationContext;
 
 export function createDefaultNovelOperationRegistry<
   TContext extends NovelMutationContext,

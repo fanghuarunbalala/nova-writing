@@ -1351,6 +1351,13 @@ copying, Draft-only split replay, durable Redirect creation, and unchanged
 canonical state. Binding, entity-change, Realization persistence and concrete
 Projection Source composition remain next.
 
+B-I2 persists the remaining authoritative Projection evidence: StoryUnit
+Character and Location bindings, stable entity changes, and one Realization per
+StoryUnit. Transaction-local repositories use canonical JSON plus SHA-256,
+reject damaged rows, enforce stable row identities and available entity
+references, and participate in canonical-to-Draft snapshots. Concrete
+Projection Source composition and five-phase restart acceptance remain next.
+
 ### N11-C End-to-End Validation
 
 Cover multi-Conversation Drafts, Commit, Rebase, conflict, Approval, Outline, Manuscript, publication, realization, recovery, and replay without Agent Tool involvement.

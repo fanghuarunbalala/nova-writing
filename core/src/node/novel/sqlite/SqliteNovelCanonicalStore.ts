@@ -191,6 +191,14 @@ function validateNovelDatabaseStructure(database: DatabaseSync): void {
       `SELECT source_block_id, source_boundary, target_block_id,
               target_boundary, reason, review
        FROM novel_manuscript_anchor_redirects LIMIT 0`,
+      `SELECT story_unit_id, character_id, binding_json, binding_digest
+       FROM novel_story_unit_character_bindings LIMIT 0`,
+      `SELECT story_unit_id, location_id, binding_json, binding_digest
+       FROM novel_story_unit_location_bindings LIMIT 0`,
+      `SELECT id, story_unit_id, change_json, change_digest
+       FROM novel_story_unit_entity_changes LIMIT 0`,
+      `SELECT story_unit_id, realization_json, realization_digest
+       FROM novel_story_unit_realizations LIMIT 0`,
     ]) {
       database.prepare(statement);
     }

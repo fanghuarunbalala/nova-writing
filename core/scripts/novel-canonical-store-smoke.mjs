@@ -206,6 +206,10 @@ try {
     "novel_resolved_rebase_candidates",
     "novel_schema_migrations",
     "novel_story_outlines",
+    "novel_story_unit_character_bindings",
+    "novel_story_unit_entity_changes",
+    "novel_story_unit_location_bindings",
+    "novel_story_unit_realizations",
     "novel_story_units",
   ]);
 

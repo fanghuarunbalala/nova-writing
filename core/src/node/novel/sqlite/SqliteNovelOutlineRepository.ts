@@ -29,6 +29,7 @@ import {
 import { createSqliteNovelEntityMutationContext } from "./SqliteNovelEntityRepository.js";
 import { createSqliteNovelManuscriptMutationContext } from "./SqliteNovelManuscriptRepository.js";
 import { createSqliteNovelPublicationMutationContext } from "./SqliteNovelPublicationRepository.js";
+import { createSqliteNovelProjectionEvidenceMutationContext } from "./SqliteNovelProjectionEvidenceRepository.js";
 
 interface OutlineRow {
   id: string;
@@ -71,6 +72,7 @@ export function createSqliteNovelMutationContext(
     ...createSqliteNovelOutlineMutationContext(database),
     ...createSqliteNovelPublicationMutationContext(database),
     ...createSqliteNovelManuscriptMutationContext(database),
+    ...createSqliteNovelProjectionEvidenceMutationContext(database),
   });
 }
 

@@ -27,6 +27,7 @@
     "smoke:novel-outline-operation": "pnpm build && node scripts/novel-outline-operation-smoke.mjs",
     "smoke:novel-outline-sqlite": "pnpm build && node scripts/novel-outline-sqlite-smoke.mjs",
     "smoke:novel-publication-manuscript-sqlite": "pnpm build && node scripts/novel-publication-manuscript-sqlite-smoke.mjs",
+    "smoke:novel-projection-evidence-sqlite": "pnpm build && node scripts/novel-projection-evidence-sqlite-smoke.mjs",
     "smoke:novel-outline-application": "pnpm build && node scripts/novel-outline-application-smoke.mjs",
     "smoke:novel-outline-rebase": "pnpm build && node scripts/novel-outline-rebase-smoke.mjs",
     "smoke:novel-publication": "pnpm build && node scripts/novel-publication-smoke.mjs",

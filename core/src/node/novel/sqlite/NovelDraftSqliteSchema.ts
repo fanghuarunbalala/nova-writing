@@ -8,9 +8,10 @@ import {
 import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
 import { NOVEL_OUTLINE_SCHEMA_SQL } from "./NovelOutlineSqliteSchema.js";
 import { NOVEL_PUBLICATION_MANUSCRIPT_SCHEMA_SQL } from "./NovelPublicationManuscriptSqliteSchema.js";
+import { NOVEL_PROJECTION_EVIDENCE_SCHEMA_SQL } from "./NovelProjectionEvidenceSqliteSchema.js";
 import { NOVEL_PROJECTION_CACHE_SCHEMA_SQL } from "./NovelProjectionSqliteSchema.js";
 
-export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 10 as const;
+export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 11 as const;
 
 export function initializeNovelDraftSqliteSchema(
   databasePath: string,
@@ -319,6 +320,19 @@ const DRAFT_MIGRATIONS = [
       "CREATE UNIQUE INDEX IF NOT EXISTS ",
     )}
       UPDATE draft_metadata SET schema_version = 10;
+    `,
+  },
+  {
+    version: 11,
+    name: "projection_evidence_state",
+    sql: `${NOVEL_PROJECTION_EVIDENCE_SCHEMA_SQL.replaceAll(
+      "CREATE TABLE ",
+      "CREATE TABLE IF NOT EXISTS ",
+    ).replaceAll(
+      "CREATE INDEX ",
+      "CREATE INDEX IF NOT EXISTS ",
+    )}
+      UPDATE draft_metadata SET schema_version = 11;
     `,
   },
 ] as const;

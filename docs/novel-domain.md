@@ -1831,6 +1831,13 @@ remain inside one SQLite transaction. Large generated Artifacts remain logical
 references behind `NovelArtifactStore`; this does not establish their physical
 retention or garbage-collection policy.
 
+StoryUnit Character bindings, Location bindings, entity-change records, and
+Realizations are also authoritative canonical/Draft SQLite state. Each record
+stores canonical JSON plus a SHA-256 digest; readers reject digest or canonical
+encoding mismatches rather than rebuilding a Projection from ambiguous
+evidence. Draft snapshots copy these rows with the rest of the domain state, so
+Projection rebuild observes one explicit read scope.
+
 Canonical `novel.sqlite` owns at least these categories:
 
 ```text

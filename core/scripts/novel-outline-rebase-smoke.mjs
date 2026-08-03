@@ -7,6 +7,7 @@ import {
   NovelDraftSessionService,
   NovelRevisionConflictError,
   STORY_SETTING_MODE,
+  canonicalNovelReadScope,
   canonicalizeNovelConflictResolutionRecord,
   captureLeafStoryUnitPlan,
   captureNovelConflictResolutionRecord,
@@ -105,6 +106,7 @@ try {
   const domainId = captureStoryUnitId("story_unit_rebase_domain");
   const createdId = captureStoryUnitId("story_unit_rebase_created");
   const domainChildId = captureStoryUnitId("story_unit_rebase_domain_child");
+  const safeId = captureStoryUnitId("story_unit_rebase_safe");
 
   const rootOrders = [];
   let currentOrder = orderKeys.initial();
@@ -213,6 +215,14 @@ try {
     planningStatus: "idea",
     realizationStatus: "pending",
   }));
+  await application.outline.createStoryUnit(source, captureStoryUnit({
+    id: safeId,
+    outlineId,
+    orderKey: rootOrders[10],
+    title: "Source non-conflicting unit",
+    planningStatus: "outlined",
+    realizationStatus: "pending",
+  }));
 
   const canonicalField = await application.outlineQueries.getStoryUnit(
     committerScope,
@@ -301,7 +311,7 @@ try {
   });
   const result = await rebaseServices.rebases.prepareCandidate(source.id);
   assert.equal(result.conflicts.length, 6);
-  assert.equal(result.candidate.operationCount, 0);
+  assert.equal(result.candidate.operationCount, 1);
   assert.deepEqual(
     result.conflicts.map(({ conflict }) => [conflict.kind, conflict.fieldPath ?? null]),
     [
@@ -351,7 +361,7 @@ try {
     result.candidate,
   );
   assert.equal(planned.status, "recorded");
-  assert.equal(planned.plan.effectiveOperationCount, 0);
+  assert.equal(planned.plan.effectiveOperationCount, 1);
 
   await rebaseServices.close();
   rebaseServices = await application.openRebase({
@@ -366,7 +376,7 @@ try {
   );
   const resolved = await rebaseServices.resolvedRebases
     .prepareResolvedCandidate(result.candidate);
-  assert.equal(resolved.operationCount, 0);
+  assert.equal(resolved.operationCount, 1);
 
   await rebaseServices.close();
   rebaseServices = await application.openRebase({
@@ -397,6 +407,34 @@ try {
   assert.equal(
     (await rebaseServices.promotions.promote(resolved)).status,
     "duplicate",
+  );
+  await application.commits.commit(promoted.promotion.session, {
+    commitId: captureNovelCommitId("commit_outline_rebase_resolved"),
+    resultRevision: captureNovelRevision("revision_outline_rebase_resolved"),
+    committedAt: clock.now(),
+  });
+  assert.equal(
+    (await canonicalStore.getMetadata()).currentRevision,
+    "revision_outline_rebase_resolved",
+  );
+  assert.equal(
+    (
+      await application.outlineQueries.getStoryUnit(
+        canonicalNovelReadScope,
+        safeId,
+      )
+    ).unit.title,
+    "Source non-conflicting unit",
+  );
+
+  await canonicalStore.close();
+  canonicalStore = await SqliteNovelCanonicalStore.open({
+    location,
+    revisionFactory: new FixedRevisionFactory("revision_unused_after_restart"),
+  });
+  assert.equal(
+    (await canonicalStore.getMetadata()).currentRevision,
+    "revision_outline_rebase_resolved",
   );
 
   console.log("novel outline rebase smoke passed");

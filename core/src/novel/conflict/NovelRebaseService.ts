@@ -326,7 +326,7 @@ function assertReplayMatches(
       const sourceEntry = expected[index];
       return (
         sourceEntry === undefined ||
-        entry.sequence !== sourceEntry.sequence ||
+        entry.sequence !== index + 1 ||
         entry.operationDigest !== sourceEntry.operationDigest ||
         entry.operation.operationId !== sourceEntry.operation.operationId
       );

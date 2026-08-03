@@ -1141,12 +1141,17 @@ The unified Application can open scoped Rebase services; conflict evidence now
 hashes Outline, StoryUnit, LeafPlan, and generic StoryEntity snapshots. Real
 multi-Draft replay validates `field-modified`, `parent-changed`,
 `order-changed`, `entity-created`, `entity-deleted`, and `domain-invariant`
-mapping. Restart and resolved-conflict end-to-end validation is next.
+mapping. Restart and resolved-conflict end-to-end validation is complete.
 The unified Rebase scope now also composes durable Resolution Plans, resolved
 sibling replay, and promotion. Outline conflicts can be resolved, reopened
 across process restarts, rebuilt into a fresh sibling Draft, promoted into the
-owner's active Draft slot, and promoted idempotently. Final concurrent
-Commit/Rebase-to-canonical validation is next.
+owner's active Draft slot, and promoted idempotently. A non-conflicting
+Operation following conflicted source Operations replays with compact candidate
+sequence numbering, survives conflict resolution and restart, promotes into
+the active Draft slot, commits to canonical state, and advances the global
+`NovelRevision` exactly once. Task N9-E is complete. Task N10 remains gated on
+explicit `ManuscriptAnchor`, `ManuscriptRange`, and Manuscript revision
+contracts.
 
 ## 16. Task N10: Manuscript, Publication, and Realization
 

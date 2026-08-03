@@ -1267,6 +1267,15 @@ review; unresolved or inverted Ranges are always rejected. Task N10 is complete.
 
 Implement Character and Location state, contextual readiness, relationship, and conformance projections as repairable revision-bound views.
 
+**Status:** A-A projection value contracts are complete. Character and Location
+current-state views, contextual profile readiness, on-demand Character
+relationship views, and StoryUnit conformance views all carry one source
+NovelRevision plus ordered evidence StoryUnit IDs. Strict capture enforces
+entity identity, confirmed/planned mode, readiness consistency, non-self
+relationships, conformance counts, Range repair statuses, and immutable
+evidence. These records remain disposable views rather than authoritative Novel
+facts. Evidence planning and deterministic rebuild are the next N11-A substep.
+
 ### N11-B Recovery
 
 Implement Draft corruption detection, incomplete Commit recovery, outbox retry, interrupted Rebase recovery, staging retention, orphan cleanup, and projection rebuild.
@@ -1333,5 +1342,7 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
   merge, delete, and explicit repair outcomes. Task N10-D is complete.
 - Task N10-E is completed by revision-bound Realization and Conformance models
   plus deterministic current-revision completion admission. Task N10 is complete.
-- Task N11-A Projections is next.
+- Task N11-A-A is completed by strict revision-bound state, readiness,
+  relationship, and conformance Projection value contracts.
+- Task N11-A-B evidence planning and deterministic rebuild is next.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

@@ -1475,6 +1475,21 @@ Recommended query behavior:
 
 Full pairwise Character relationship storage remains excluded from the initial model. Relationship changes that materially affect the story are recorded sparsely as leaf StoryUnit entity changes, while protagonist-centered or arbitrary-focus relationship views are generated on demand by Tools.
 
+V1 projection records share these invariants:
+
+- Character and Location current-state projections identify a target StoryUnit,
+  confirmed or planned mode, source NovelRevision, summary, and ordered evidence
+  StoryUnit IDs.
+- Contextual readiness projections bind one entity to one upcoming StoryUnit;
+  `sufficient` has no missing information and `insufficient` has at least one
+  explicit missing-information item.
+- Character relationship projections are on-demand focus/related views and
+  never imply a stored full pairwise relationship graph.
+- StoryUnit conformance projections summarize validation freshness, status,
+  structural Range outcomes, warning/error counts, and their StoryUnit evidence.
+- Every projection can be deleted and rebuilt from profiles, bindings, entity
+  changes, Realizations, and the selected NovelRevision without losing truth.
+
 ## 12. Novel Layer Architecture
 
 **Accepted direction:** the Novel layer uses a platform-neutral domain and application core, explicit asynchronous storage ports, Node-specific SQLite and filesystem adapters, and an OutputEvent integration boundary. Agent Tool shape is deliberately excluded from this section and remains a separate design decision.

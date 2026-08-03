@@ -8,6 +8,14 @@ The ephemeral Subagent Tool track completed Step S0 through Step S6 on August
 Team, Team communication, `TaskOutput`, and `Sleep` remain future work.
 Completed Runtime Task 6B and Task 7 checkpoints remain closed.
 
+Runtime hardening R8 now also requires every ephemeral Subagent Child
+Conversation created through the Catalog/Host adapter to use an independently
+assembled and persisted Agent Manifest. The adapter resolves the exact
+Definition version and stores the resulting `manifestId + manifestDigest` in
+the Child Conversation binding before Host activation. This does not resume
+Persistent Agent Team work or introduce Team communication, `TaskOutput`, or
+`Sleep`.
+
 The central decisions are:
 
 1. every Main Agent, Orchestrator, persistent Team member, and ephemeral

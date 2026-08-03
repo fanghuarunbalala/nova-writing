@@ -2970,6 +2970,16 @@ process-free and does not activate a Runtime; only an accepted execution input
 can enter Host Bootstrap. The executable validation is
 `core/scripts/runtime-conversation-manifest-recovery-smoke.mjs`.
 
+R8 closes ephemeral Subagent Manifest assembly. `CatalogHostChildConversationAdapter`
+now resolves the requested exact Agent Definition, runs the provider-neutral
+`AgentAssembler`, persists the immutable Manifest through the configured
+`AgentManifestStore`, and creates the Child Conversation with the resulting
+`manifestId + manifestDigest`. A Child never inherits the Parent's implicit
+context or Tool View, and Task creation remains acceptance-based and
+non-blocking. Persistent Agent Team communication remains outside R8.
+The production SQLite integration is covered by
+`core/scripts/runtime-subagent-host-sqlite-integration-smoke.mjs`.
+
 Post-Task-7 Agent orchestration is documented in
 `docs/agent-orchestration.md`. The accepted S0-S6 contracts are complete. The
 Novel track does not authorize persistent Agent, Agent Team, Team

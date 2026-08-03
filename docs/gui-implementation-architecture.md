@@ -1390,6 +1390,16 @@ Renderer source imports no Electron, Node, filesystem, process, or unrestricted 
 
 This checkpoint still does not implement the production Host factory, native file/clipboard/notification bridge, automatic Workspace selection, executable Main bootstrap, application menu, packaging, signing, updater, or Runtime placement decision.
 
+### 28.5 Implemented Web HTTP Request Boundary
+
+The Web package now implements the request half of its future HTTP/WebSocket Transport. `HttpApiRequestClient` sends the existing Core `ApiRequest` envelope to the fixed `POST /api/v1/requests` endpoint and returns an `ApiResponse` snapshot without introducing Web-specific business operations.
+
+The client accepts only an HTTP or HTTPS origin without embedded credentials, query, fragment, or deployment path. Requests use JSON, `credentials: include`, no-store caching, redirect rejection, and a no-referrer policy. This supports same-origin cookie sessions while an optional asynchronous header provider can supply a future bearer or anti-CSRF credential without receiving Event payloads or being logged.
+
+Responses require a successful HTTP status, JSON content type, valid JSON, and a bounded body size. Network failures, authorization-header failures, HTTP statuses, malformed responses, and oversized bodies become stable redacted `ApiTransportError` values. Logs contain only request identity, operation, status, retryability, and response byte count.
+
+This checkpoint intentionally does not implement `ApiTransport.subscribe()`, WebSocket framing, reconnect policy, authentication screens, actor derivation, remote Workspace selection, browser bootstrap, or the HTTP/WebSocket Host server. Those remain separate Web steps so the request path does not invent subscription or trust semantics prematurely.
+
 ## 29. Testing Strategy
 
 ### 29.1 Core projection tests

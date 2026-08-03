@@ -30,6 +30,9 @@ avoid turning Agent Definitions into unstructured Prompt files.
 The resolved version is recorded when an Agent Manifest is created. Resume
 never resolves `latest` again; it uses the Manifest's exact Section versions.
 
+The Manifest assembly and storage boundary is documented in
+`docs/agent-manifest-architecture.md`.
+
 ## Sections and Context
 
 Sections render against an immutable `PromptContext` containing Agent identity

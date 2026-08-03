@@ -965,6 +965,18 @@ active-leaf progress projection. Task N9-C Leaf Plan is next.
 
 Resolve `StoryTimeDescription`, then implement LeafStoryUnitPlan and readiness validation.
 
+Story time foundation delivered:
+
+- immutable StoryTimeDescription preserves one trimmed natural-language
+  description without parsing it into calendar facts
+- optional timeline OrderKeys use the established opaque ordering contract and
+  allow equal keys for simultaneous or deliberately unordered StoryUnits
+- chronology comparison returns no ordering when either side is unplaced, so a
+  missing timeline key is never silently treated as earliest or latest
+
+**Status:** StoryTimeDescription and coarse chronology semantics completed;
+LeafStoryUnitPlan composition follows after its N9-D member contracts exist.
+
 ### N9-D Event, Rhythm, and Entity Change
 
 Implement StoryEventStep, RhythmBeat, StoryUnitEntityChange, and Character/Location bindings with stable IDs and ordering.

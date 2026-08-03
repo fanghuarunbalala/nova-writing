@@ -32,3 +32,22 @@ done
 The release suite includes invalid schema data, duplicate IDs, append failure, projection failure, stale recovery state, child creation/activation/rollback failure, process crash, heartbeat loss, IPC queue pressure, cancellation races, Tool timeout/denial, and corrupted persisted projections. Logs are reviewed to remain payload-free.
 
 Checkpoint 7 is accepted only when `pnpm check`, every Core smoke script, `git diff --check`, and scoped secret/generated-file review pass from one repository state.
+
+## Complete Conversation Simulation
+
+`core/scripts/runtime-conversation-complete-simulation-smoke.mjs` is the
+cross-component Conversation usage test. One command validates:
+
+- InputEvent persistence/routing and OutputEvent schema/publication;
+- Context Compaction, Checkpoint projection, one-shot Nudge behavior, and exact
+  base System Prompt restoration;
+- Tool Registry construction and complete Approval/Sandbox/Trace execution;
+- Subagent lifecycle in one process and durable Host-backed scheduling;
+- Runtime IPC request handling and a real Node child-process Conversation;
+- Journal replay and parent/child durable projections.
+
+Each phase runs in an isolated process. The phase process measures its own wall
+duration, maximum Event Loop delay, Event Loop utilization, and peak RSS growth.
+The parent applies a hard timeout and kills a blocked phase. These limits are
+regression and deadlock guards, not production throughput or latency SLAs; the
+formal performance baselines remain deferred as documented.

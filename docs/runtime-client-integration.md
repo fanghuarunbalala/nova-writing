@@ -38,6 +38,16 @@ The first release uses executable smoke fixtures as reference examples so exampl
 
 Run one reference with `node core/scripts/<name>.mjs` after `pnpm --dir core build`, or run the complete release suite described in `docs/runtime-validation-matrix.md`.
 
+For a complete simulated Conversation workflow, run:
+
+```bash
+pnpm --dir core smoke:runtime-conversation-complete
+```
+
+This combines the Input/Output, Context, Nudge, Tool, System Prompt, Subagent,
+IPC, single-process, child-process, persistence, and blocking-regression phases
+behind one executable acceptance command.
+
 ## Deferred Baselines
 
 Task 7 closes correctness and failure-boundary validation. Throughput, memory, startup latency, maximum Journal size, and multi-process load targets remain explicit future performance work; no unmeasured number is presented as a release guarantee.

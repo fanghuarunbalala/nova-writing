@@ -2914,6 +2914,7 @@ Task 7 delivered:
 - a first-release validation matrix covering every documented Runtime correctness and failure boundary
 - machine-checkable release acceptance smoke for required examples, documents, scripts, and public Event names
 - final full workspace typecheck/build, complete Core smoke execution, formatting review, scope review, and payload-free logging review
+- complete Conversation simulation command covering Input/Output Events, Context Compaction, one-shot Nudge, Tool registration/execution, exact System Prompt handling, Subagent scheduling, single-process Runtime, child-process IPC, persistence, hard timeouts, Event Loop delay, and memory-growth regression guards
 
 Checkpoint 7 status: completed.
 

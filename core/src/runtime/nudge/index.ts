@@ -10,6 +10,7 @@ export * from "./NudgeProtocolErrors.js";
 export * from "./NudgeProtocolValidator.js";
 export * from "./NudgeProviderCallCoordinator.js";
 export * from "./NudgeProviderCallCoordinatorErrors.js";
+export * from "./NudgeProviderCallReceipt.js";
 export * from "./NudgeRenderer.js";
 export * from "./NudgeSelectionErrors.js";
 export * from "./NudgeSelector.js";

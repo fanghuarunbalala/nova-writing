@@ -18,6 +18,12 @@ import type {
   PendingNudgeStoreSnapshot,
 } from "./PendingNudgeStore.js";
 import {
+  createNudgeProviderCallReceipt,
+  InMemoryNudgeProviderCallReceiptStore,
+  type NudgeProviderCallReceipt,
+  type NudgeProviderCallReceiptStore,
+} from "./NudgeProviderCallReceipt.js";
+import {
   NUDGE_PROVIDER_CALL_FAILURE,
   NudgeProviderCallCoordinatorError,
   type NudgeProviderCallFailure,
@@ -57,6 +63,7 @@ export interface PreparedNudgeProviderCall
 
 export interface ConfirmNudgeProviderDispatchResult {
   readonly confirmation: NudgeDispatchConfirmationResult;
+  readonly receipt: NudgeProviderCallReceipt;
   readonly eventReceipts: readonly RuntimeEventAppendReceipt[];
 }
 
@@ -65,6 +72,7 @@ export interface NudgeProviderCallCoordinatorOptions {
   readonly privateStateCommitter: NudgePrivateStateCommitter;
   readonly eventSink: RuntimeEventSink;
   readonly eventIdFactory: NudgeLifecycleEventIdFactory;
+  readonly receiptStore?: NudgeProviderCallReceiptStore;
   readonly logger?: Logger;
 }
 
@@ -73,6 +81,7 @@ export class NudgeProviderCallCoordinator {
   private readonly privateStateCommitter: NudgePrivateStateCommitter;
   private readonly eventSink: RuntimeEventSink;
   private readonly eventIdFactory: NudgeLifecycleEventIdFactory;
+  private readonly receiptStore: NudgeProviderCallReceiptStore;
   private readonly logger: Logger;
 
   constructor(options: NudgeProviderCallCoordinatorOptions) {
@@ -80,6 +89,8 @@ export class NudgeProviderCallCoordinator {
     this.privateStateCommitter = options.privateStateCommitter;
     this.eventSink = options.eventSink;
     this.eventIdFactory = options.eventIdFactory;
+    this.receiptStore =
+      options.receiptStore ?? new InMemoryNudgeProviderCallReceiptStore();
     this.logger = (options.logger ?? noopLogger).child({
       component: "nudge_provider_call_coordinator",
     });
@@ -161,8 +172,36 @@ export class NudgeProviderCallCoordinator {
         );
       }
 
+      let recordedReceipt: NudgeProviderCallReceipt;
+      try {
+        const existing = confirmation.unchanged
+          ? await this.receiptStore.getByProviderCallId(identity.providerCallId!)
+          : undefined;
+        recordedReceipt = existing ?? (
+          await this.receiptStore.record(
+            createNudgeProviderCallReceipt({
+              conversationId: identity.conversationId!,
+              runId: identity.runId!,
+              providerCallId: identity.providerCallId!,
+              leaseId: confirmation.lease.leaseId,
+              nudgeIds: confirmation.lease.nudgeIds,
+              nudgeStates: confirmation.nudges.map((nudge) => ({
+                nudgeId: nudge.id,
+                state: nudge.state === "consumed" ? "consumed" : "active",
+              })),
+              appliedAt: dispatchedAt,
+            }),
+          )
+        ).receipt;
+      } catch {
+        throw this.failure(
+          NUDGE_PROVIDER_CALL_FAILURE.receiptCommitFailed,
+          identity,
+        );
+      }
+
       const receipts: RuntimeEventAppendReceipt[] = [];
-      for (const nudge of confirmation.nudges) {
+      if (!confirmation.unchanged) for (const nudge of confirmation.nudges) {
         try {
           receipts.push(
             await this.eventSink.append(
@@ -204,6 +243,7 @@ export class NudgeProviderCallCoordinator {
       });
       return Object.freeze({
         confirmation,
+        receipt: recordedReceipt,
         eventReceipts: Object.freeze(receipts),
       });
     } catch (error) {

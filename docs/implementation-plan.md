@@ -2207,6 +2207,15 @@ Task 4N-F delivered:
 - redacted structured logs and one-delivered-Event-per-Nudge publication with no rendered Reminder content, template parameters, raw Provider errors, or local failure messages
 - focused integration coverage for two Provider calls in one Run, exact one-shot disappearance, private Snapshot ordering, public Event redaction, duplicate dispatch hooks, pre-dispatch failure, missing dispatch hooks, and post-dispatch Event publication failure
 
+Provider-call Application Receipt extension (N-6) delivered:
+
+- provider-neutral, immutable `NudgeProviderCallReceipt` records only Conversation, Run, Provider-call, Lease, Nudge identities, final delivery state, application status, timestamp, and a stable delivery identity
+- an injected `NudgeProviderCallReceiptStore` supports replacement by restart-safe persistence; the default in-memory store preserves compatibility for existing compositions
+- a Receipt is created only after dispatch confirmation and private Nudge state commit; pre-dispatch release produces no Receipt
+- duplicate dispatch hooks reuse the same Receipt and publish no duplicate lifecycle Events; receipt conflicts fail with a stable coordination failure
+- Receipt data excludes rendered Reminder text, template parameters, Prompt content, Tool data, and Provider errors
+- focused coverage verifies applied, duplicate, release, redaction, and final-state behavior
+
 Task 4N-F explicitly excludes:
 
 - a concrete Provider SDK transport adapter; each configured Provider transport must implement the private dispatch-aware hook contract at its actual send boundary

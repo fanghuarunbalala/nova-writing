@@ -3,6 +3,7 @@ export const NUDGE_PROVIDER_CALL_FAILURE = {
   invalidRequest: "invalid_request",
   prepareFailed: "prepare_failed",
   privateStateCommitFailed: "private_state_commit_failed",
+  receiptCommitFailed: "receipt_commit_failed",
   confirmationFailed: "confirmation_failed",
   eventAppendFailed: "event_append_failed",
   releaseFailed: "release_failed",

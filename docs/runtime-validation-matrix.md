@@ -53,6 +53,16 @@ The release suite includes invalid schema data, duplicate IDs, append failure, p
 
 Checkpoint 7 is accepted only when `pnpm check`, `pnpm --dir core smoke:all`, `git diff --check`, and scoped secret/generated-file review pass from one repository state.
 
+## R1-R11 Release Evidence
+
+The post-Task-7 Runtime hardening track uses the same isolated runner. On
+August 3, 2026, `pnpm smoke:all` completed 165 tests with 165 passed and 0
+failed. The report included pass/failure rates, wall and cumulative duration,
+p50/p95/maximum duration, Event Loop lag/utilization, peak RSS/Heap growth,
+slowest tests, and failed-test identities. The R7-R10 focused fixtures are
+included in the complete Conversation simulation and release acceptance
+references.
+
 ## Complete Conversation Simulation
 
 `core/scripts/runtime-conversation-complete-simulation-smoke.mjs` is the

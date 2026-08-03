@@ -3004,6 +3004,15 @@ never activates a Runtime. The parity validation is
 `core/scripts/runtime-client-adaptation-smoke.mjs` together with the existing
 mock Transport, projection-controller, Electron, and Web smoke fixtures.
 
+R11 closes the Runtime R1-R11 validation track. The complete Conversation
+simulation now includes Manifest recovery, Child execution assembly, and
+client portability in addition to Input/Output, Context/Nudge, Tools,
+Subagent, and IPC phases. The final isolated Core suite on August 3, 2026
+reported 165/165 passed, 100.00% pass, 0.00% failed, with unified wall and
+cumulative durations, p50/p95/maximum durations, Event Loop lag/utilization,
+peak RSS/Heap growth, slowest tests, and an empty failed-test list. These are
+regression guards and release evidence, not production performance SLAs.
+
 Post-Task-7 Agent orchestration is documented in
 `docs/agent-orchestration.md`. The accepted S0-S6 contracts are complete. The
 Novel track does not authorize persistent Agent, Agent Team, Team

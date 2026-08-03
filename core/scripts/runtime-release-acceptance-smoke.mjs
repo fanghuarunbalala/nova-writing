@@ -13,6 +13,9 @@ const references = [
   "runtime-pi-nudge-overlay-integration-smoke.mjs",
   "runtime-context-compaction-manager-smoke.mjs",
   "runtime-subagent-host-sqlite-integration-smoke.mjs",
+  "runtime-conversation-manifest-recovery-smoke.mjs",
+  "runtime-manifest-backed-child-composition-smoke.mjs",
+  "runtime-client-adaptation-smoke.mjs",
   "runtime-conversation-complete-simulation-smoke.mjs",
 ];
 

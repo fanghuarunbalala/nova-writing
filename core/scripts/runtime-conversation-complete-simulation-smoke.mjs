@@ -58,7 +58,20 @@ const phases = [
   {
     name: "subagent_persisted_host",
     capabilities: ["subagent", "persistence", "host"],
-    scripts: ["runtime-subagent-host-sqlite-integration-smoke.mjs"],
+    scripts: [
+      "runtime-subagent-host-sqlite-integration-smoke.mjs",
+      "runtime-conversation-manifest-recovery-smoke.mjs",
+      "runtime-manifest-backed-child-composition-smoke.mjs",
+    ],
+  },
+  {
+    name: "client_portability",
+    capabilities: ["client_portability", "replay", "single_process"],
+    scripts: [
+      "runtime-client-adaptation-smoke.mjs",
+      "mock-client-transports-smoke.mjs",
+      "conversation-projection-controller-smoke.mjs",
+    ],
   },
 ];
 
@@ -74,6 +87,8 @@ const requiredCapabilities = new Set([
   "ipc",
   "single_process",
   "child_process",
+  "replay",
+  "client_portability",
 ]);
 const coveredCapabilities = new Set(
   phases.flatMap((phase) => phase.capabilities),

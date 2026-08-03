@@ -49,6 +49,7 @@ export interface SubagentRequest {
   readonly definitionVersion: string;
   readonly objective: string;
   readonly toolPolicyId: string;
+  readonly artifactReferences?: readonly ArtifactReference[];
   readonly requestedAt: string;
 }
 

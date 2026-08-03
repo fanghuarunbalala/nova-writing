@@ -1,4 +1,5 @@
 /** Provider-neutral Ports and immutable values used to provision child Conversations. */
+import type { InputReceipt } from "../../event/input/InputReceipt.js";
 import type { SubagentBinding, SubagentRequest } from "./SubagentProtocol.js";
 
 export const SUBAGENT_TOOL_POLICY_RELATION = Object.freeze({
@@ -52,6 +53,17 @@ export interface ChildConversationCreationPort {
 
 export interface ChildConversationActivationPort {
   activateChild(binding: SubagentBinding): Promise<void>;
+}
+
+export interface ChildConversationTaskAssignmentPort {
+  assignTask(
+    binding: SubagentBinding,
+    request: SubagentRequest,
+  ): Promise<InputReceipt>;
+}
+
+export interface ChildConversationBindingPersistencePort {
+  persist(binding: SubagentBinding): Promise<void>;
 }
 
 export interface ChildConversationRollbackPort {

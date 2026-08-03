@@ -4,10 +4,10 @@
 
 This document records the accepted design direction for Agent orchestration.
 The ephemeral Subagent slice completed Step S0 through Step S2 on August 3,
-2026. Its remaining Step S3 through Step S6 are paused while Novel Task N9-E
-through Task N11 is active. Persistent Agent, Agent Team, Team communication,
-`TaskOutput`, and `Sleep` remain documented future work. Completed Runtime Task
-6B and Task 7 checkpoints remain closed.
+2026. Its remaining Step S3 through Step S6 are the active implementation
+track. Novel Task N9-E through Task N11, persistent Agent, Agent Team, Team
+communication, `TaskOutput`, and `Sleep` remain paused or documented future
+work. Completed Runtime Task 6B and Task 7 checkpoints remain closed.
 
 The central decisions are:
 

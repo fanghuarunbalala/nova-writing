@@ -8,12 +8,14 @@ import {
 } from "./ChildConversationManagerErrors.js";
 import type {
   ChildConversationActivationPort,
+  ChildConversationBindingPersistencePort,
   ChildConversationCapacitySnapshot,
   ChildConversationCreation,
   ChildConversationCreationPort,
   ChildConversationManager,
   ChildConversationManagerClock,
   ChildConversationRollbackPort,
+  ChildConversationTaskAssignmentPort,
   SubagentParentScope,
   SubagentParentScopeReader,
   SubagentToolPolicyRelationReader,
@@ -40,6 +42,8 @@ export interface DefaultChildConversationManagerOptions {
   readonly creationPort: ChildConversationCreationPort;
   readonly activationPort: ChildConversationActivationPort;
   readonly rollbackPort: ChildConversationRollbackPort;
+  readonly taskAssignmentPort?: ChildConversationTaskAssignmentPort;
+  readonly bindingPersistencePort?: ChildConversationBindingPersistencePort;
   readonly clock?: ChildConversationManagerClock;
   readonly logger?: Logger;
 }
@@ -75,6 +79,13 @@ export class DefaultChildConversationManager
   async spawn(requestSource: SubagentRequest): Promise<SubagentBinding> {
     const request = captureSubagentRequest(requestSource);
     const identity = requestIdentity(request);
+    const existing = await this.#serializer.run(() =>
+      this.#findRetryableBinding(request),
+    );
+    if (existing !== undefined) {
+      this.#logger.info("runtime.subagent.spawn_duplicate_reused", { ...identity });
+      return existing;
+    }
     const parentScope = await this.#readParentScope(request, identity);
     if (parentScope.depth >= SUBAGENT_LIMITS.maximumDepth) {
       this.#logger.info("runtime.subagent.spawn_rejected", {
@@ -140,6 +151,31 @@ export class DefaultChildConversationManager
       this.#recordCreatedBinding(request, creation),
     );
 
+    try {
+      await this.#persistBinding(creatingBinding);
+      await this.#assignTask(creatingBinding, request);
+    } catch (error) {
+      const rollbackFailed = await this.#rollback(creatingBinding);
+      const failedBinding = await this.#serializer.run(() =>
+        this.#recordProvisioningFailure(creatingBinding, rollbackFailed),
+      );
+      await this.#persistBindingBestEffort(failedBinding);
+      const failure = rollbackFailed
+        ? CHILD_CONVERSATION_MANAGER_FAILURE.childRollbackFailed
+        : error instanceof ChildConversationManagerError
+          ? error.failure
+          : CHILD_CONVERSATION_MANAGER_FAILURE.childTaskAssignmentFailed;
+      this.#logger.info("runtime.subagent.task_assignment_failed", {
+        ...identity,
+        childConversationId: failedBinding.childConversationId,
+        failure,
+      });
+      throw managerFailure(failure, {
+        ...identity,
+        childConversationId: failedBinding.childConversationId,
+      });
+    }
+
     this.#logger.debug("runtime.subagent.child_created", {
       ...identity,
       childConversationId: creatingBinding.childConversationId,
@@ -169,6 +205,7 @@ export class DefaultChildConversationManager
     const runningBinding = await this.#serializer.run(() =>
       this.#recordRunning(creatingBinding),
     );
+    await this.#persistBinding(runningBinding);
     this.#logger.info("runtime.subagent.activated", {
       ...identity,
       childConversationId: runningBinding.childConversationId,
@@ -255,6 +292,33 @@ export class DefaultChildConversationManager
       activeGlobal: this.#activeGlobal,
       activeForParentRun: this.#activeByParentRun.get(parentRunKey) ?? 0,
     });
+  }
+
+  #findRetryableBinding(request: SubagentRequest): SubagentBinding | undefined {
+    const existing = this.#bindings.get(request.subagentId);
+    if (existing === undefined) return undefined;
+    if (
+      existing.parentConversationId !== request.parentConversationId ||
+      existing.parentRunId !== request.parentRunId ||
+      existing.agentType !== request.agentType ||
+      existing.definitionVersion !== request.definitionVersion ||
+      existing.toolPolicyId !== request.toolPolicyId
+    ) {
+      throw managerFailure(
+        CHILD_CONVERSATION_MANAGER_FAILURE.duplicateSubagent,
+        requestIdentity(request),
+      );
+    }
+    if (
+      existing.status === SUBAGENT_STATUS.creating ||
+      existing.status === SUBAGENT_STATUS.running
+    ) {
+      return existing;
+    }
+    throw managerFailure(
+      CHILD_CONVERSATION_MANAGER_FAILURE.duplicateSubagent,
+      bindingIdentity(existing),
+    );
   }
 
   async #readParentScope(
@@ -392,6 +456,65 @@ export class DefaultChildConversationManager
     });
     this.#bindings.set(running.subagentId, running);
     return running;
+  }
+
+  async #assignTask(
+    binding: SubagentBinding,
+    request: SubagentRequest,
+  ): Promise<void> {
+    if (this.options.taskAssignmentPort === undefined) return;
+    let receipt;
+    try {
+      receipt = await this.options.taskAssignmentPort.assignTask(binding, request);
+    } catch {
+      throw managerFailure(
+        CHILD_CONVERSATION_MANAGER_FAILURE.childTaskAssignmentFailed,
+        bindingIdentity(binding),
+      );
+    }
+    if (
+      receipt === null ||
+      typeof receipt !== "object" ||
+      receipt.conversationId !== binding.childConversationId ||
+      (receipt.status !== "accepted" && receipt.status !== "duplicate") ||
+      typeof receipt.inputEventId !== "string" ||
+      receipt.inputEventId.trim().length === 0 ||
+      !Number.isSafeInteger(receipt.sequence) ||
+      receipt.sequence <= 0
+    ) {
+      throw managerFailure(
+        CHILD_CONVERSATION_MANAGER_FAILURE.childTaskAssignmentInvalid,
+        bindingIdentity(binding),
+      );
+    }
+    this.#logger.info("runtime.subagent.task_assigned", {
+      ...bindingIdentity(binding),
+      journalStatus: receipt.status,
+      inputSequence: receipt.sequence,
+    });
+  }
+
+  async #persistBinding(binding: SubagentBinding): Promise<void> {
+    if (this.options.bindingPersistencePort === undefined) return;
+    try {
+      await this.options.bindingPersistencePort.persist(binding);
+    } catch {
+      throw managerFailure(
+        CHILD_CONVERSATION_MANAGER_FAILURE.childBindingPersistenceFailed,
+        bindingIdentity(binding),
+      );
+    }
+  }
+
+  async #persistBindingBestEffort(binding: SubagentBinding): Promise<void> {
+    try {
+      await this.#persistBinding(binding);
+    } catch {
+      this.#logger.warn("runtime.subagent.binding_persistence_failed", {
+        ...bindingIdentity(binding),
+        failure: CHILD_CONVERSATION_MANAGER_FAILURE.childBindingPersistenceFailed,
+      });
+    }
   }
 
   #recordProvisioningFailure(

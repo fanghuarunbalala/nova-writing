@@ -26,8 +26,17 @@ export function captureSubagentRequest(value: unknown): SubagentRequest {
     exactKeys(record, [
       "schemaVersion", "subagentId", "parentConversationId", "parentRunId",
       "agentType", "definitionVersion", "objective", "toolPolicyId", "requestedAt",
-    ], ["parentTurnId"]);
+    ], ["parentTurnId", "artifactReferences"]);
     requireSchema(record.schemaVersion);
+    if (record.artifactReferences !== undefined &&
+        !Array.isArray(record.artifactReferences)) throw new Error();
+    const artifactReferences = record.artifactReferences === undefined
+      ? undefined
+      : Object.freeze(
+          record.artifactReferences.map((artifact) =>
+            captureArtifactReference(artifact),
+          ),
+        );
     return Object.freeze({
       schemaVersion: SUBAGENT_SCHEMA_VERSION,
       subagentId: identity(record.subagentId),
@@ -38,6 +47,7 @@ export function captureSubagentRequest(value: unknown): SubagentRequest {
       definitionVersion: boundedNonBlank(record.definitionVersion, 128),
       objective: boundedNonBlank(record.objective, MAX_OBJECTIVE_BYTES),
       toolPolicyId: identity(record.toolPolicyId),
+      ...(artifactReferences === undefined ? {} : { artifactReferences }),
       requestedAt: timestamp(record.requestedAt),
     });
   });

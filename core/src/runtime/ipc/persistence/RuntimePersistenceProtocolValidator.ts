@@ -392,7 +392,7 @@ function capturePendingNudgeStoreSnapshot(value: unknown, throughSequence: numbe
     ["schemaVersion", "nudges", "leases", "consumptions"],
     ["deliveryAttempts"],
   );
-  if (record.schemaVersion !== 1 || !Array.isArray(record.nudges) ||
+  if ((record.schemaVersion !== 1 && record.schemaVersion !== 2) || !Array.isArray(record.nudges) ||
       !Array.isArray(record.leases) || !Array.isArray(record.consumptions) ||
       (record.deliveryAttempts !== undefined && !Array.isArray(record.deliveryAttempts))) {
     throw new Error();
@@ -412,7 +412,7 @@ function capturePendingNudgeStoreSnapshot(value: unknown, throughSequence: numbe
     ? undefined
     : Object.freeze(record.deliveryAttempts.map(captureNudgeDeliveryAttempt));
   return deepFreeze({
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     nudges,
     leases,
     consumptions,

@@ -114,8 +114,10 @@ export interface NudgeExpiryRequest {
   readonly runEnded?: boolean;
 }
 
+export const PENDING_NUDGE_STORE_SNAPSHOT_SCHEMA_VERSION = 2 as const;
+
 export interface PendingNudgeStoreSnapshot {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 1 | typeof PENDING_NUDGE_STORE_SNAPSHOT_SCHEMA_VERSION;
   readonly nudges: readonly PendingNudge[];
   readonly leases: readonly NudgeLease[];
   readonly consumptions: readonly NudgeConsumptionRecord[];

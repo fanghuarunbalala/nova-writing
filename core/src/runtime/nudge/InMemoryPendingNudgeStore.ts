@@ -22,6 +22,7 @@ import {
   type PendingNudgeLeaseResult,
   type PendingNudgeStore,
   type PendingNudgeStoreSnapshot,
+  PENDING_NUDGE_STORE_SNAPSHOT_SCHEMA_VERSION,
 } from "./PendingNudgeStore.js";
 import {
   PENDING_NUDGE_STORE_FAILURE,
@@ -649,7 +650,7 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
   snapshot(): Promise<PendingNudgeStoreSnapshot> {
     return this.run(() =>
       Object.freeze({
-        schemaVersion: 1 as const,
+        schemaVersion: PENDING_NUDGE_STORE_SNAPSHOT_SCHEMA_VERSION,
         nudges: Object.freeze([...this.nudges.values()].sort(compareScheduledSequence)),
         leases: Object.freeze(
           [...this.activeLeases.values()].sort((left, right) =>
@@ -1179,7 +1180,11 @@ function freezeScheduleResult(
 }
 
 function captureSnapshot(value: unknown): PendingNudgeStoreSnapshot {
-  if (!isRecord(value) || value.schemaVersion !== 1) throw new Error();
+  if (
+    !isRecord(value) ||
+    (value.schemaVersion !== 1 &&
+      value.schemaVersion !== PENDING_NUDGE_STORE_SNAPSHOT_SCHEMA_VERSION)
+  ) throw new Error();
   if (
     !Array.isArray(value.nudges) ||
     !Array.isArray(value.leases) ||
@@ -1191,7 +1196,7 @@ function captureSnapshot(value: unknown): PendingNudgeStoreSnapshot {
     throw new Error();
   }
   return Object.freeze({
-    schemaVersion: 1,
+    schemaVersion: PENDING_NUDGE_STORE_SNAPSHOT_SCHEMA_VERSION,
     nudges: Object.freeze(value.nudges.map((nudge) => capturePendingNudge(nudge))),
     leases: Object.freeze(value.leases.map((lease) => captureNudgeLease(lease))),
     consumptions: Object.freeze(

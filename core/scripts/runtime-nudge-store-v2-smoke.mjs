@@ -147,7 +147,7 @@ assert.equal(
 );
 
 const snapshot = await store.snapshot();
-assert.equal(snapshot.schemaVersion, 1);
+assert.equal(snapshot.schemaVersion, 2);
 assert.ok(snapshot.deliveryAttempts.length >= 4);
 const restored = new InMemoryPendingNudgeStore();
 await restored.restore(snapshot);
@@ -167,7 +167,7 @@ assert.equal(
   true,
 );
 
-const legacySnapshot = { ...snapshot };
+const legacySnapshot = { ...snapshot, schemaVersion: 1 };
 delete legacySnapshot.deliveryAttempts;
 const legacyRestored = new InMemoryPendingNudgeStore();
 await legacyRestored.restore(legacySnapshot);

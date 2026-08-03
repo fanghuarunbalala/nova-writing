@@ -3421,6 +3421,17 @@ Acceptance:
 - old Manifest and Conversation data remain readable;
 - all recovery errors are stable and redacted.
 
+N-9 delivered:
+
+- canonical Pending Nudge private Snapshots now emit schema v2 while the Store
+  and Runtime persistence decoder continue accepting v1
+- v1 records are migrated during capture with missing delivery mode interpreted
+  as `once` and missing delivery attempts normalized to an empty history
+- active and terminal v2 states remain intact; leased records normalize through
+  the existing deterministic reconciliation path rather than inferred dispatch
+- public lifecycle Events remain observational and cannot reconstruct private
+  template parameters or renderable state
+
 ### 13.17 N-10: Full-chain and Performance Validation
 
 Extend the unified validation launcher with scenarios for Prompt Assembly,

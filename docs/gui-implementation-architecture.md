@@ -7,9 +7,9 @@ This document records the accepted implementation architecture for the shared Re
 - It refines `docs/client-ui-architecture.md` rather than replacing its package and Transport boundaries.
 - It consumes the accepted Story Outline, Manuscript, Draft, ChangeSet, Approval, query, and projection semantics in `docs/novel-domain.md` rather than redefining the Novel domain.
 - It describes target modules, component responsibilities, read models, state flow, and implementation stages.
-- It does not claim that `ui/`, GUI Transport, Novel query endpoints, or domain reviewers have already been implemented.
-- It does not authorize out-of-order implementation outside the active Runtime and Novel implementation plans.
-- Exact API envelopes, Task 6 IPC framing, React libraries, styling libraries, editor libraries, and packaging choices remain subject to their applicable review gates.
+- It records the implemented shared UI, client protocol, Electron Renderer, and Web browser checkpoints while keeping production Host composition separate.
+- It does not authorize implementation outside the explicitly selected GUI/Web track or across unresolved Runtime placement, authentication, deployment, and packaging boundaries.
+- Editor libraries, production Host wiring, authentication, deployment, and packaging choices remain subject to their applicable review gates.
 
 ## 2. Accepted Product Interaction
 
@@ -1429,6 +1429,14 @@ The Web package now builds a real Vite/ReactDOM browser shell rooted at `web/ind
 `mountWebBrowser()` injects the composition into `WebNovelApp`, which renders the same `@novel/ui` tree as Desktop. The mount owns React teardown and Transport closure; the Vite entrypoint triggers that closure on page unload. Browser source imports no Electron, Node, filesystem, process, or unrestricted IPC APIs.
 
 Focused DOM validation mounts the shared white Shell, verifies the current navigation surface, proves same-origin HTTP delegation through the composed Transport, and inspects the production HTML and assets. Authentication UI, actor derivation, remote Workspace selection, automatic reconnect, deployment policy, origin enforcement on the server, and the production HTTP/WebSocket Host remain separate steps.
+
+### 28.9 Implemented Desktop/Web Shell Parity Validation
+
+A repository-level parity Smoke now mounts the production Desktop Renderer composition and Web browser composition side by side against the same `NovelApp` properties. It compares menu labels, Workspace and Novel context, project navigation, Conversation history, sidebar state, Inspector state, and the Outline navigation transition without introducing a platform-specific presentation path.
+
+The validation also proves that both initial platform ports advertise the same disabled native capabilities, a read-only mount performs no Electron IPC operation, and closing either shell unmounts React and closes its owned Transport. The test is exposed as `pnpm smoke:client-shells` and complements the existing protocol-level Mock Electron/HTTP-WebSocket parity suite.
+
+This closes the client-shell parity checkpoint only. It does not fabricate the missing production API Host, select local Runtime placement, derive authenticated actors, implement remote Workspace policy, reconnect automatically, package Electron, or define deployment infrastructure.
 
 ## 29. Testing Strategy
 

@@ -15,7 +15,7 @@ const draftStage = new NovelDraftRecoveryStage({
       recoveredDraftSessionIds: [draft("draft_retained"), draft("draft_reset")],
       resetDraftSessionIds: [draft("draft_reset")],
       rolledBackDraftSessionIds: [draft("draft_rolled_back")],
-      removedTerminalSnapshotIds: [draft("draft_terminal")],
+      retainedTerminalSnapshotIds: [draft("draft_terminal")],
       removedCandidateSnapshotIds: [draft("draft_candidate")],
       removedOrphanSnapshotIds: [draft("draft_orphan")],
     };
@@ -25,8 +25,8 @@ assert.deepEqual(await draftStage.recover(novelId), {
   phase: NOVEL_RECOVERY_PHASE.draft,
   inspectedCount: 6,
   repairedCount: 2,
-  removedCount: 3,
-  retainedCount: 1,
+  removedCount: 2,
+  retainedCount: 2,
   publishedCount: 0,
 });
 
@@ -37,6 +37,7 @@ const outboxStage = new NovelOutboxRecoveryStage({
       recordedCount: 2,
       duplicateCount: 1,
       alreadyPublishedCount: 1,
+      removedTerminalSnapshotCount: 2,
       sourceResults: [],
     };
   },
@@ -45,7 +46,7 @@ assert.deepEqual(await outboxStage.recover(novelId), {
   phase: NOVEL_RECOVERY_PHASE.outbox,
   inspectedCount: 4,
   repairedCount: 1,
-  removedCount: 0,
+  removedCount: 2,
   retainedCount: 1,
   publishedCount: 3,
 });

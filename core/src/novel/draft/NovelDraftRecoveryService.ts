@@ -90,18 +90,14 @@ export class NovelDraftRecoveryService {
     const recovered = [];
     const reset = [];
     const rolledBack = [];
-    const removedTerminal = [];
+    const retainedTerminal = [];
     const removedCandidates = [];
     const removedOrphans = [];
 
     for (const session of sessions) {
       if (isTerminalNovelDraftStatus(session.status)) {
         if (snapshotIds.includes(session.id)) {
-          await this.options.snapshotter.removeDraftSnapshot(
-            session.novelId,
-            session.id,
-          );
-          removedTerminal.push(session.id);
+          retainedTerminal.push(session.id);
         }
         continue;
       }
@@ -186,7 +182,7 @@ export class NovelDraftRecoveryService {
       recoveredDraftSessionIds: recovered,
       resetDraftSessionIds: reset,
       rolledBackDraftSessionIds: rolledBack,
-      removedTerminalSnapshotIds: removedTerminal,
+      retainedTerminalSnapshotIds: retainedTerminal,
       removedCandidateSnapshotIds: removedCandidates,
       removedOrphanSnapshotIds: removedOrphans,
     });
@@ -212,7 +208,7 @@ export class NovelDraftRecoveryService {
       recoveredCount: result.recoveredDraftSessionIds.length,
       resetCount: result.resetDraftSessionIds.length,
       rolledBackCount: result.rolledBackDraftSessionIds.length,
-      removedTerminalCount: result.removedTerminalSnapshotIds.length,
+      retainedTerminalCount: result.retainedTerminalSnapshotIds.length,
       removedCandidateCount: result.removedCandidateSnapshotIds.length,
       removedOrphanCount: result.removedOrphanSnapshotIds.length,
     });

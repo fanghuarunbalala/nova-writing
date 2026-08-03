@@ -43,6 +43,7 @@
     "smoke:novel-projection-sqlite": "pnpm build && node scripts/novel-projection-sqlite-smoke.mjs",
     "smoke:novel-commit-recovery-stage": "pnpm build && node scripts/novel-commit-recovery-stage-smoke.mjs",
     "smoke:novel-recovery-stage-adapters": "pnpm build && node scripts/novel-recovery-stage-adapters-smoke.mjs",
+    "smoke:node-novel-outbox-recovery": "pnpm build && node scripts/node-novel-outbox-recovery-runner-smoke.mjs",
     "smoke:novel-draft-operation-writer": "pnpm build && node scripts/novel-draft-operation-writer-smoke.mjs",
     "smoke:novel-entity": "pnpm build && node scripts/novel-entity-slice-smoke.mjs",
     "smoke:novel-change-set": "pnpm build && node scripts/novel-change-set-smoke.mjs",

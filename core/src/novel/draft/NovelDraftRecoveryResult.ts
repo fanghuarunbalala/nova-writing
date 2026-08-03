@@ -12,7 +12,7 @@ export interface NovelDraftRecoveryResult {
   readonly recoveredDraftSessionIds: readonly NovelDraftSessionId[];
   readonly resetDraftSessionIds: readonly NovelDraftSessionId[];
   readonly rolledBackDraftSessionIds: readonly NovelDraftSessionId[];
-  readonly removedTerminalSnapshotIds: readonly NovelDraftSessionId[];
+  readonly retainedTerminalSnapshotIds: readonly NovelDraftSessionId[];
   readonly removedCandidateSnapshotIds: readonly NovelDraftSessionId[];
   readonly removedOrphanSnapshotIds: readonly NovelDraftSessionId[];
 }
@@ -30,8 +30,8 @@ export function captureNovelDraftRecoveryResult(
   const removedOrphanSnapshotIds = captureUniqueDraftIds(
     value.removedOrphanSnapshotIds,
   );
-  const removedTerminalSnapshotIds = captureUniqueDraftIds(
-    value.removedTerminalSnapshotIds,
+  const retainedTerminalSnapshotIds = captureUniqueDraftIds(
+    value.retainedTerminalSnapshotIds,
   );
   const removedCandidateSnapshotIds = captureUniqueDraftIds(
     value.removedCandidateSnapshotIds,
@@ -44,7 +44,7 @@ export function captureNovelDraftRecoveryResult(
   const classifications = [
     ...recoveredDraftSessionIds,
     ...rolledBackDraftSessionIds,
-    ...removedTerminalSnapshotIds,
+    ...retainedTerminalSnapshotIds,
     ...removedCandidateSnapshotIds,
     ...removedOrphanSnapshotIds,
   ];
@@ -55,7 +55,7 @@ export function captureNovelDraftRecoveryResult(
     recoveredDraftSessionIds,
     resetDraftSessionIds,
     rolledBackDraftSessionIds,
-    removedTerminalSnapshotIds,
+    retainedTerminalSnapshotIds,
     removedCandidateSnapshotIds,
     removedOrphanSnapshotIds,
   });

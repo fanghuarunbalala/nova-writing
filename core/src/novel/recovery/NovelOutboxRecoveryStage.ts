@@ -9,7 +9,11 @@ import {
 import type { NovelRecoveryStage } from "./NovelRecoveryCoordinator.js";
 
 export interface NovelOutboxRecoveryRunner {
-  dispatchPending(): Promise<NovelOutboxCoordinatedDispatchResult>;
+  dispatchPending(): Promise<
+    NovelOutboxCoordinatedDispatchResult & {
+      readonly removedTerminalSnapshotCount?: number;
+    }
+  >;
 }
 
 export class NovelOutboxRecoveryStage implements NovelRecoveryStage {
@@ -23,7 +27,7 @@ export class NovelOutboxRecoveryStage implements NovelRecoveryStage {
       phase: this.phase,
       inspectedCount: result.attemptedCount + result.alreadyPublishedCount,
       repairedCount: result.duplicateCount,
-      removedCount: 0,
+      removedCount: result.removedTerminalSnapshotCount,
       retainedCount: result.alreadyPublishedCount,
       publishedCount: result.recordedCount + result.duplicateCount,
     });
@@ -31,12 +35,19 @@ export class NovelOutboxRecoveryStage implements NovelRecoveryStage {
 }
 
 function captureDispatchResult(
-  value: NovelOutboxCoordinatedDispatchResult,
-): NovelOutboxCoordinatedDispatchResult {
+  value: NovelOutboxCoordinatedDispatchResult & {
+    readonly removedTerminalSnapshotCount?: number;
+  },
+): NovelOutboxCoordinatedDispatchResult & {
+  readonly removedTerminalSnapshotCount: number;
+} {
   const attemptedCount = captureCount(value.attemptedCount);
   const recordedCount = captureCount(value.recordedCount);
   const duplicateCount = captureCount(value.duplicateCount);
   const alreadyPublishedCount = captureCount(value.alreadyPublishedCount);
+  const removedTerminalSnapshotCount = captureCount(
+    value.removedTerminalSnapshotCount ?? 0,
+  );
   if (attemptedCount !== recordedCount + duplicateCount) {
     throw new TypeError("Novel Outbox recovery result is invalid");
   }
@@ -45,6 +56,7 @@ function captureDispatchResult(
     recordedCount,
     duplicateCount,
     alreadyPublishedCount,
+    removedTerminalSnapshotCount,
     sourceResults: Object.freeze([...value.sourceResults]),
   });
 }

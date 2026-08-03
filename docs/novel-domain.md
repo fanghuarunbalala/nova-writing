@@ -1977,6 +1977,11 @@ Commit history and incomplete canonical Commit recovery
   failed rebuild preserves the previous complete cache.
 - Outbox retry runs last so recovery-generated lifecycle records and all reopened
   Draft stores participate in one deterministic delivery pass.
+- Terminal Draft staging is retained by Draft recovery until this final Outbox
+  pass. Node dynamically opens canonical plus every still-registered staging
+  Outbox, closes all SQLite stores after successful dispatch, and only then
+  removes terminal Draft snapshots. A dispatch failure preserves staging for the
+  next complete recovery retry.
 - Each phase is idempotent, the coordinator is single-flight per application
   instance, a failed phase prevents later phases from running, and retry starts
   the complete fixed sequence again.

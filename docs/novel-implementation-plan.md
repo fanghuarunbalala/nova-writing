@@ -1324,9 +1324,14 @@ startup composition remain next.
 
 B-F adapts Draft reconciliation and coordinated Outbox retry into the unified
 Recovery phases. Draft results now distinguish reset repair, rollback,
-terminal staging cleanup, invalid Candidate cleanup, and orphan cleanup.
+terminal staging retention, invalid Candidate cleanup, and orphan cleanup.
 Outbox mapping distinguishes newly recorded publication, duplicate delivery
 recovery, and already-published races. Node startup composition is next.
+
+B-G adds `NodeNovelOutboxRecoveryRunner`. It discovers canonical and all
+post-reconciliation staging Outboxes at dispatch time, closes them after the
+ordered pass, and removes terminal Draft staging only after delivery succeeds.
+The five-stage Node Recovery Application composition is next.
 
 ### N11-C End-to-End Validation
 

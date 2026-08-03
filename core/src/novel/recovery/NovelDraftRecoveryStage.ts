@@ -30,15 +30,16 @@ export class NovelDraftRecoveryStage implements NovelRecoveryStage {
       inspectedCount:
         result.recoveredDraftSessionIds.length +
         result.rolledBackDraftSessionIds.length +
-        result.removedTerminalSnapshotIds.length +
+        result.retainedTerminalSnapshotIds.length +
         result.removedCandidateSnapshotIds.length +
         result.removedOrphanSnapshotIds.length,
       repairedCount: resetCount + result.rolledBackDraftSessionIds.length,
       removedCount:
-        result.removedTerminalSnapshotIds.length +
         result.removedCandidateSnapshotIds.length +
         result.removedOrphanSnapshotIds.length,
-      retainedCount: result.recoveredDraftSessionIds.length - resetCount,
+      retainedCount:
+        result.recoveredDraftSessionIds.length - resetCount +
+        result.retainedTerminalSnapshotIds.length,
       publishedCount: 0,
     });
   }

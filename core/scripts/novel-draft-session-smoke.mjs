@@ -373,7 +373,7 @@ try {
         recoveredDraftSessionIds: [draftA.id],
         resetDraftSessionIds: [],
         rolledBackDraftSessionIds: [draftA.id],
-        removedTerminalSnapshotIds: [],
+        retainedTerminalSnapshotIds: [],
         removedCandidateSnapshotIds: [],
         removedOrphanSnapshotIds: [],
       }),

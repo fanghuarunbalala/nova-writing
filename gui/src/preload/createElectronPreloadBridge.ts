@@ -2,11 +2,14 @@
 import type { ApiRequest, ApiResponse } from "@novel/core";
 import {
   ELECTRON_API_IPC_CHANNEL,
+  ELECTRON_WORKSPACE_IPC_CHANNEL,
   type ElectronBridgeAcknowledgement,
   type ElectronBridgeOpenSubscriptionRequest,
   type ElectronBridgeResult,
   type ElectronBridgeSubscriptionRead,
   type ElectronPreloadBridge,
+  type ElectronWorkspaceReference,
+  type ElectronWorkspaceSession,
 } from "../shared/index.js";
 
 export interface ElectronIpcRendererPort {
@@ -27,6 +30,25 @@ export function createElectronPreloadBridge(
     invokeSafely<TValue>(options.ipcRenderer, channel, args);
 
   const bridge: ElectronPreloadBridge = {
+    workspaces: Object.freeze({
+      select: () =>
+        invoke<ElectronWorkspaceReference | undefined>(
+          ELECTRON_WORKSPACE_IPC_CHANNEL.select,
+        ),
+      listRecent: () =>
+        invoke<readonly ElectronWorkspaceSession[]>(
+          ELECTRON_WORKSPACE_IPC_CHANNEL.listRecent,
+        ),
+      open: (reference: ElectronWorkspaceReference) =>
+        invoke<ElectronWorkspaceSession>(
+          ELECTRON_WORKSPACE_IPC_CHANNEL.open,
+          reference,
+        ),
+      close: () =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_WORKSPACE_IPC_CHANNEL.close,
+        ),
+    }),
     request: (request: ApiRequest) =>
       invoke<ApiResponse>(ELECTRON_API_IPC_CHANNEL.request, request),
     cancelRequest: (requestId: string) =>

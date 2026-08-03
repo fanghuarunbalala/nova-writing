@@ -3,6 +3,8 @@ import { ApiTransportError, type ApiRequest } from "@novel/core";
 import type {
   ElectronBridgeOpenSubscriptionRequest,
   ElectronPreloadBridge,
+  ElectronWorkspaceBridge,
+  ElectronWorkspaceReference,
 } from "../shared/index.js";
 
 declare global {
@@ -32,17 +34,23 @@ export function resolveElectronPreloadBridge(
   }
   const record = candidate as Record<string, unknown>;
   const keys = Object.keys(record).sort();
+  const acceptedKeys = [
+    ...BRIDGE_METHODS,
+    ...(record.workspaces === undefined ? [] : ["workspaces"]),
+  ].sort();
   if (
-    keys.length !== BRIDGE_METHODS.length ||
-    BRIDGE_METHODS.some((method, index) => keys[index] !== method)
+    keys.length !== acceptedKeys.length ||
+    acceptedKeys.some((method, index) => keys[index] !== method)
   ) {
     throw bridgeUnavailable();
   }
   for (const method of BRIDGE_METHODS) {
     if (typeof record[method] !== "function") throw bridgeUnavailable();
   }
+  const workspaces = resolveWorkspaceBridge(record.workspaces);
   const bridge = candidate as ElectronPreloadBridge;
   const resolved: ElectronPreloadBridge = {
+    ...(workspaces !== undefined ? { workspaces } : {}),
     request: (request: ApiRequest) => bridge.request(request),
     cancelRequest: (requestId: string) => bridge.cancelRequest(requestId),
     openSubscription: (request: ElectronBridgeOpenSubscriptionRequest) =>
@@ -53,6 +61,30 @@ export function resolveElectronPreloadBridge(
       bridge.closeSubscription(subscriptionId),
   };
   return Object.freeze(resolved);
+}
+
+function resolveWorkspaceBridge(value: unknown): ElectronWorkspaceBridge | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw bridgeUnavailable();
+  }
+  const record = value as Record<string, unknown>;
+  const methods = ["close", "listRecent", "open", "select"] as const;
+  const keys = Object.keys(record).sort();
+  if (
+    keys.length !== methods.length ||
+    methods.some((method, index) => keys[index] !== method) ||
+    methods.some((method) => typeof record[method] !== "function")
+  ) {
+    throw bridgeUnavailable();
+  }
+  const bridge = value as ElectronWorkspaceBridge;
+  return Object.freeze({
+    select: () => bridge.select(),
+    listRecent: () => bridge.listRecent(),
+    open: (reference: ElectronWorkspaceReference) => bridge.open(reference),
+    close: () => bridge.close(),
+  });
 }
 
 function bridgeUnavailable(): ApiTransportError {

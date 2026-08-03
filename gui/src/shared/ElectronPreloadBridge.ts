@@ -18,6 +18,25 @@ export interface ElectronBridgeAcknowledgement {
   readonly acknowledged: true;
 }
 
+export interface ElectronWorkspaceReference {
+  readonly referenceId: string;
+  readonly label: string;
+}
+
+export interface ElectronWorkspaceSession {
+  readonly id: string;
+  readonly label: string;
+}
+
+export interface ElectronWorkspaceBridge {
+  select(): Promise<ElectronBridgeResult<ElectronWorkspaceReference | undefined>>;
+  listRecent(): Promise<ElectronBridgeResult<readonly ElectronWorkspaceSession[]>>;
+  open(
+    reference: ElectronWorkspaceReference,
+  ): Promise<ElectronBridgeResult<ElectronWorkspaceSession>>;
+  close(): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+}
+
 export interface ElectronBridgeOpenSubscriptionRequest {
   readonly subscriptionId: string;
   readonly request: ApiRequest;
@@ -28,6 +47,8 @@ export type ElectronBridgeSubscriptionRead =
   | { readonly done: false; readonly frame: ApiEventFrame };
 
 export interface ElectronPreloadBridge {
+  readonly workspaces?: ElectronWorkspaceBridge;
+
   request(
     request: ApiRequest,
   ): Promise<ElectronBridgeResult<ApiResponse>>;

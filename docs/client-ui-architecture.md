@@ -480,6 +480,14 @@ The executable entry resolves Renderer and Preload artifacts relative to its com
 
 The Main entry performs idempotent application cleanup on quit and emits only a structured startup failure event without raw Electron errors or local paths. Focused validation proves packaged asset resolution, the unavailable bootstrap response, preserved BrowserWindow security options, package entry metadata, and the root launch command.
 
+### 10.2 Implemented Native Workspace Selection
+
+The real Electron composition now contributes an optional nested `workspaces` Preload capability with four fixed operations: select a directory, list process-local recent sessions, open one opaque reference, and close the current session. The Renderer adapts that capability into the existing shared `WorkspaceController`; Web and older test bridges may omit it and retain the safe unavailable behavior.
+
+Electron Main owns the native directory dialog, absolute path, one-time selection token, sender ownership, and `NodeWorkspaceStoreLocator`. Renderer receives only `{ referenceId, label }` before open and `{ id, label }` after open. The selected directory path, Store root, database path, Workspace index contents, and raw Main errors never cross Preload or enter UI logs.
+
+Opening a selected directory resolves or creates the persistent workdir-to-Workspace Store mapping, updates the current Workspace for that window sender, and allows the shared Shell to transition out of its Workspace empty state. Recent sessions are process-local in this checkpoint; durable recent ordering and active `NodeConversationApiApplication` routing remain separate application-Host work.
+
 ## 11. Web Composition
 
 ```text

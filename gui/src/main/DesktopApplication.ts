@@ -3,6 +3,10 @@ import { ApiTransportError, noopLogger, type ApiTransport, type Logger } from "@
 import type { BrowserWindowConstructorOptions } from "electron";
 import { DesktopApiIpcController, type ElectronIpcMainPort } from "./ipc/index.js";
 import {
+  DesktopWorkspaceIpcController,
+  type DesktopWorkspaceServicePort,
+} from "./workspace/index.js";
+import {
   DesktopWindowManager,
   type DesktopBrowserWindowPort,
   type DesktopRendererTarget,
@@ -27,6 +31,7 @@ export interface DesktopApplicationOptions {
   readonly platform: string;
   readonly isNavigationAllowed?: (url: string) => boolean;
   readonly logger?: Logger;
+  readonly workspaceService?: DesktopWorkspaceServicePort;
 }
 
 export class DesktopApplication {
@@ -35,6 +40,7 @@ export class DesktopApplication {
   private readonly app: ElectronAppPort;
   private readonly ipcMain: ElectronIpcMainPort;
   private readonly controller: DesktopApiIpcController;
+  private readonly workspaceController?: DesktopWorkspaceIpcController;
   private readonly platform: string;
   private readonly logger: Logger;
   private started = false;
@@ -54,11 +60,24 @@ export class DesktopApplication {
       authorizeSender: (senderId) => windowManager.ownsSender(senderId),
       logger: this.logger,
     });
+    this.workspaceController =
+      options.workspaceService === undefined
+        ? undefined
+        : new DesktopWorkspaceIpcController({
+            service: options.workspaceService,
+            authorizeSender: (senderId) => windowManager.ownsSender(senderId),
+            logger: this.logger,
+          });
     windowManager = new DesktopWindowManager({
       preloadPath: options.preloadPath,
       rendererTarget: options.rendererTarget,
       createWindow: options.createWindow,
-      releaseSender: (senderId) => this.controller.releaseSender(senderId),
+      releaseSender: async (senderId) => {
+        await Promise.all([
+          this.controller.releaseSender(senderId),
+          this.workspaceController?.releaseSender(senderId),
+        ]);
+      },
       ...(options.isNavigationAllowed !== undefined
         ? { isNavigationAllowed: options.isNavigationAllowed }
         : {}),
@@ -81,6 +100,7 @@ export class DesktopApplication {
     if (this.started) return;
     this.started = true;
     this.controller.register(this.ipcMain);
+    this.workspaceController?.register(this.ipcMain);
     this.app.on("activate", this.handleActivate);
     this.app.on("window-all-closed", this.handleWindowAllClosed);
     this.logger.info("desktop_application.start_started");
@@ -107,6 +127,7 @@ export class DesktopApplication {
     const results = await Promise.allSettled([
       this.windowManager.closeAll(),
       this.controller.dispose(),
+      this.workspaceController?.dispose() ?? Promise.resolve(),
     ]);
     const failureCount = results.filter((result) => result.status === "rejected").length;
     this.logger.info("desktop_application.stop_completed", { failureCount });

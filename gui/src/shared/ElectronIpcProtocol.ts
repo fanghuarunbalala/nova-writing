@@ -14,3 +14,16 @@ export type ElectronApiIpcChannel =
 
 export const ELECTRON_API_IPC_CHANNELS: readonly ElectronApiIpcChannel[] =
   Object.freeze(Object.values(ELECTRON_API_IPC_CHANNEL));
+
+export const ELECTRON_WORKSPACE_IPC_CHANNEL = Object.freeze({
+  select: "novel.workspace.v1.select",
+  listRecent: "novel.workspace.v1.list-recent",
+  open: "novel.workspace.v1.open",
+  close: "novel.workspace.v1.close",
+} as const);
+
+export type ElectronWorkspaceIpcChannel =
+  (typeof ELECTRON_WORKSPACE_IPC_CHANNEL)[keyof typeof ELECTRON_WORKSPACE_IPC_CHANNEL];
+
+export const ELECTRON_WORKSPACE_IPC_CHANNELS: readonly ElectronWorkspaceIpcChannel[] =
+  Object.freeze(Object.values(ELECTRON_WORKSPACE_IPC_CHANNEL));

@@ -1414,6 +1414,16 @@ The executable initially composes `DesktopBootstrapApiTransport`. It returns onl
 
 This checkpoint makes the current shared application directly inspectable in a real Electron window while preserving all previously accepted Main, Preload, Renderer, IPC, navigation, permission, and redaction boundaries. Native directory selection, recent Workspace persistence, active Host switching, Conversation catalog loading, Runtime placement, packaging, signing, and updates remain separate steps.
 
+### 28.3B Implemented Native Workspace Selection
+
+The Electron bridge now contains one optional nested Workspace capability rather than exposing general filesystem or arbitrary IPC access. Its four versioned channels select a directory, list process-local recent Workspace sessions, open one opaque Workspace reference, and close the sender's current Workspace. Existing API request and subscription channels remain unchanged and separately owned.
+
+`DesktopWorkspaceService` keeps absolute directory paths and one-time selection tokens exclusively in Main. Tokens are bound to the owning WebContents sender, cannot be opened by another window, and are consumed when opened. `NodeWorkspaceStoreLocator` resolves or creates the durable Workspace ID and Store mapping, while Preload returns only presentation-safe IDs and labels.
+
+`DesktopWorkspaceIpcController` authorizes every sender, validates the exact Workspace reference envelope, removes its four handlers on disposal, and releases pending selections when a window is destroyed. Failures cross the bridge only as stable code and retryability metadata; logs contain sender IDs and codes but no paths, labels, Novel text, or raw errors.
+
+The Renderer detects the optional Workspace capability and injects an Electron-backed shared `WorkspaceController` into `NovelApp`. Therefore the central `选择 Workspace`, context-bar Workspace button, and Project menu now invoke the native desktop directory dialog, while Web continues to report that local selection is unavailable. This checkpoint does not yet activate the Conversation API router, persist recent ordering across restarts, or launch Agent Runtime.
+
 ### 28.4 Implemented Renderer Bootstrap Boundary
 
 The desktop Renderer now has a Vite production build rooted at `gui/index.html` and emitted to `dist/renderer-app` with relative asset URLs suitable for `BrowserWindow.loadFile()`. The HTML defines the root element, a light color scheme, and a restrictive Content Security Policy. Shared white-shell styles remain owned by `@novel/ui`; GUI adds only document-level sizing and reset rules.

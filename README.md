@@ -23,4 +23,4 @@ Runtime、Novel Domain、共享 UI、Web 和 Electron 安全壳正在按架构�
 pnpm gui
 ```
 
-该命令构建 Core、共享 UI、Electron Main/Preload/Renderer，并启动真实 Electron 窗口。当前可查看和操作共享应用 Shell、Workspace 入口与 Settings；本地 Workspace Host 和 Agent Runtime 仍按后续步骤接入。
+该命令构建 Core、共享 UI、Electron Main/Preload/Renderer，并启动真实 Electron 窗口。桌面端已经支持通过原生目录选择器打开 Workspace，并在 Main 中建立本地 Workspace Store 映射；Conversation Host 和 Agent Runtime 仍按后续步骤接入。

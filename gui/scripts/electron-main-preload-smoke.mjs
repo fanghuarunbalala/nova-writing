@@ -172,7 +172,9 @@ assert.deepEqual(Object.keys(bridge7).sort(), [
   "openSubscription",
   "readSubscription",
   "request",
+  "workspaces",
 ]);
+assert.equal(Object.isFrozen(bridge7.workspaces), true);
 
 const bridge8 = createElectronPreloadBridge({
   ipcRenderer: new FakeIpcRenderer(ipcMain, 8),

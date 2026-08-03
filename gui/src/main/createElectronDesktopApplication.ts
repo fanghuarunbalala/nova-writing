@@ -6,6 +6,7 @@ import type {
   DesktopBrowserWindowPort,
   DesktopRendererTarget,
 } from "./DesktopWindowManager.js";
+import type { DesktopWorkspaceServicePort } from "./workspace/index.js";
 
 export interface CreateElectronDesktopApplicationOptions {
   readonly transport: ApiTransport;
@@ -13,6 +14,7 @@ export interface CreateElectronDesktopApplicationOptions {
   readonly rendererTarget: DesktopRendererTarget;
   readonly isNavigationAllowed?: (url: string) => boolean;
   readonly logger?: Logger;
+  readonly workspaceService?: DesktopWorkspaceServicePort;
 }
 
 export function createElectronDesktopApplication(
@@ -46,5 +48,8 @@ export function createElectronDesktopApplication(
       ? { isNavigationAllowed: options.isNavigationAllowed }
       : {}),
     ...(options.logger !== undefined ? { logger: options.logger } : {}),
+    ...(options.workspaceService !== undefined
+      ? { workspaceService: options.workspaceService }
+      : {}),
   });
 }

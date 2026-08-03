@@ -14,6 +14,7 @@ import {
   type DesktopNovelAppProps,
 } from "./DesktopNovelApp.js";
 import { createElectronFrontendPlatform } from "./ElectronFrontendPlatform.js";
+import { createElectronWorkspaceController } from "./ElectronWorkspaceController.js";
 import {
   resolveElectronPreloadBridge,
   type DesktopRendererWindowPort,
@@ -30,6 +31,7 @@ export interface DesktopRendererComposition {
   readonly transport: ElectronApiTransport;
   readonly api: NovelApiClient;
   readonly platform: FrontendPlatform;
+  readonly workspaceController?: NonNullable<DesktopNovelAppProps["workspaceController"]>;
 }
 
 export interface MountDesktopRendererOptions
@@ -53,14 +55,17 @@ export function createDesktopRendererComposition(
   const logger = (options.logger ?? noopLogger).child({
     component: "desktop_renderer_bootstrap",
   });
+  const bridge = resolveElectronPreloadBridge(options.window);
   const transport = new ElectronApiTransport({
-    bridge: resolveElectronPreloadBridge(options.window),
+    bridge,
     logger,
   });
+  const workspaceController = createElectronWorkspaceController(bridge, logger);
   return Object.freeze({
     transport,
     api: new DefaultNovelApiClient({ transport, logger }),
     platform: options.platform ?? createElectronFrontendPlatform(),
+    ...(workspaceController !== undefined ? { workspaceController } : {}),
   });
 }
 
@@ -93,6 +98,9 @@ export function mountDesktopRenderer(
         api={composition.api}
         platform={composition.platform}
         logger={logger}
+        workspaceController={
+          options.appProps?.workspaceController ?? composition.workspaceController
+        }
       />
     </StrictMode>,
   );

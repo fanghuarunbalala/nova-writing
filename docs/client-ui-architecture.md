@@ -4,7 +4,7 @@
 
 This document records the accepted client, shared React UI, desktop GUI, Web, CLI, and TUI architecture.
 
-- It defines target boundaries and naming rather than claiming that the packages and adapters already exist.
+- It records both the accepted target boundaries and the implemented shared UI, Electron client, and Web client checkpoints.
 - It does not authorize out-of-order implementation of Task 6 IPC, Runtime process placement, Tool approval, or deferred Novel-domain behavior.
 - `@novel/core` remains the shared headless package used by every client.
 - `@novel/ui` is the shared React presentation package used by the desktop GUI and Web application only.
@@ -345,7 +345,9 @@ The first platform protocol contains narrow file-selection, clipboard, and notif
 
 The extension protocol supports first-party title-bar, route, sidebar-panel, Inspector-panel, settings-section, and command contributions. Arrays are captured immutably and duplicate IDs are rejected. It is not a dynamic plugin loader and does not authorize remote code loading.
 
-`@novel/gui` and `@novel/web` now provide thin `DesktopNovelApp` and `WebNovelApp` React entrypoints that forward the same application contract. Neither package implements a production Transport, Electron Main/Preload, HTTP server, Vite bootstrap, routing, or visual Shell in this checkpoint. Focused validation composes both entrypoints with their corresponding deterministic Mock Transport and proves that API, platform, and extension contexts reach the same shared component tree.
+`@novel/gui` and `@novel/web` provide thin `DesktopNovelApp` and `WebNovelApp` React entrypoints that forward the same application contract. At this original composition checkpoint neither package implemented a production Transport, Electron Main/Preload, HTTP server, Vite bootstrap, routing, or visual Shell. Focused validation composed both entrypoints with their corresponding deterministic Mock Transport and proved that API, platform, and extension contexts reached the same shared component tree.
+
+Subsequent GUI/Web checkpoints now implement the shared visual Shell, state, Conversation projection, Inspector, structured cards, domain review surfaces, structured composer references, production client-side Electron IPC and HTTP/WebSocket Transports, secure Electron Main/Preload/Renderer boundaries, and Vite browser and Renderer bootstraps. Production business routing and Host composition remain separate from these client-side implementations.
 
 ## 9. Platform Shells and UI Extensions
 

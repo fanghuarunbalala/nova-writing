@@ -1438,6 +1438,14 @@ The validation also proves that both initial platform ports advertise the same d
 
 This closes the client-shell parity checkpoint only. It does not fabricate the missing production API Host, select local Runtime placement, derive authenticated actors, implement remote Workspace policy, reconnect automatically, package Electron, or define deployment infrastructure.
 
+### 28.10 Implemented GUI/Web Final Validation Entry
+
+The repository now exposes `pnpm validate:gui-web` as the complete client acceptance entry. It performs one full workspace build, compiles every UI, GUI, and Web contract typecheck together, and then executes every matching Smoke in deterministic package and filename order.
+
+The matrix covers shared application composition, the white Shell and Shell Store, Conversation replay and live projection, connection state, composer input, Inspector state and navigation, structured cards, Outline tree behavior, all implemented domain reviewers, every structured reference family, Electron IPC and security boundaries, Web HTTP/WebSocket behavior, both browser bootstraps, and Desktop/Web Shell parity. The runner discovers the package-local `*-typecheck.ts` or `*.tsx` and `*-smoke.mjs` files so a future client checkpoint cannot silently omit its focused validation from the final suite.
+
+Passing this command proves the implemented client scope; it does not claim production Host, authentication, deployment, Runtime placement, Electron packaging, automatic reconnect, or deferred Novel protocols are complete.
+
 ## 29. Testing Strategy
 
 ### 29.1 Core projection tests

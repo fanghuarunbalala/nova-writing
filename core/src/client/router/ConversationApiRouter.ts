@@ -426,6 +426,7 @@ function captureCreateConversationOptions(value: unknown): {
   agent: {
     agentType: string;
     definitionVersion: string;
+    manifestId?: string;
     manifestDigest?: string;
   };
 } {
@@ -437,7 +438,7 @@ function captureCreateConversationOptions(value: unknown): {
     );
   }
   const agent = captureJsonRecord(options.agent, "Conversation Agent binding");
-  assertAllowedKeys(agent, ["agentType", "definitionVersion", "manifestDigest"]);
+  assertAllowedKeys(agent, ["agentType", "definitionVersion", "manifestId", "manifestDigest"]);
   if (!("agentType" in agent) || !("definitionVersion" in agent)) {
     throw new ConversationApiRouterProtocolError(
       "Conversation Agent binding is incomplete",
@@ -466,6 +467,14 @@ function captureCreateConversationOptions(value: unknown): {
         agent.definitionVersion,
         "Agent definition version",
       ),
+      ...(agent.manifestId !== undefined
+        ? {
+            manifestId: captureNonEmptyString(
+              agent.manifestId,
+              "Agent manifest ID",
+            ),
+          }
+        : {}),
       ...(agent.manifestDigest !== undefined
         ? {
             manifestDigest: captureNonEmptyString(

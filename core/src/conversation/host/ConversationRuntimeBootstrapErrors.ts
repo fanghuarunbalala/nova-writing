@@ -4,7 +4,9 @@ import type { ConversationStatus } from "../../storage/index.js";
 export type ConversationRuntimeBootstrapValidationReason =
   | "invalid_request"
   | "snapshot_conversation_mismatch"
-  | "snapshot_agent_binding_mismatch";
+  | "snapshot_agent_binding_mismatch"
+  | "agent_manifest_missing"
+  | "agent_manifest_mismatch";
 
 export class ConversationRuntimeBootstrapValidationError extends Error {
   readonly code = "CONVERSATION_RUNTIME_BOOTSTRAP_INVALID";

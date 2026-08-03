@@ -130,6 +130,14 @@ const MIGRATIONS: Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 4,
+    name: "conversation_agent_manifest_identity",
+    sql: `
+      ALTER TABLE conversation_agent_bindings
+      ADD COLUMN manifest_id TEXT;
+    `,
+  },
 ];
 
 export function runCoreSqliteMigrations(database: DatabaseSync): void {

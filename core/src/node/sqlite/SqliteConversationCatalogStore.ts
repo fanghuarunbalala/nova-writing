@@ -35,6 +35,7 @@ interface AgentBindingRow {
   revision: number;
   agent_type: string;
   definition_version: string;
+  manifest_id: string | null;
   manifest_digest: string | null;
   status: "active" | "superseded" | "detached";
   created_at: string;
@@ -106,16 +107,18 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
              revision,
              agent_type,
              definition_version,
+             manifest_id,
              manifest_digest,
              status,
              created_at
-           ) VALUES (?, ?, 1, ?, ?, ?, 'active', ?)`,
+           ) VALUES (?, ?, 1, ?, ?, ?, ?, 'active', ?)`,
         )
         .run(
           bindingId,
           input.id,
           input.agent.agentType,
           input.agent.definitionVersion,
+          input.agent.manifestId ?? null,
           input.agent.manifestDigest ?? null,
           timestamp,
         );
@@ -260,6 +263,7 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
       revision: row.revision,
       agentType: row.agent_type,
       definitionVersion: row.definition_version,
+      ...(row.manifest_id !== null ? { manifestId: row.manifest_id } : {}),
       ...(row.manifest_digest !== null ? { manifestDigest: row.manifest_digest } : {}),
       status: row.status,
       createdAt: row.created_at,

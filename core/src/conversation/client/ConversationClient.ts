@@ -360,6 +360,14 @@ function validateConversationSnapshot(
         binding.definitionVersion,
         "Agent definition version",
       ),
+      ...(binding.manifestId !== undefined
+        ? {
+            manifestId: assertNonEmptyString(
+              binding.manifestId,
+              "Agent manifest ID",
+            ),
+          }
+        : {}),
       ...(binding.manifestDigest !== undefined
         ? {
             manifestDigest: assertNonEmptyString(

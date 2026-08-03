@@ -13,6 +13,7 @@
  * ```
  */
 import { isEventType } from "../../event/index.js";
+import type { AgentManifestStore } from "../../agent/manifest/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
 import type {
   ConversationJournalReader,
@@ -47,6 +48,7 @@ export interface StorageConversationRuntimeBootstrapFactoryOptions {
   snapshotReader: ConversationSnapshotReader;
   journal: ConversationJournalReader;
   workspace: WorkspaceStoreLocation;
+  agentManifestStore?: AgentManifestStore;
   logger?: Logger;
 }
 
@@ -64,6 +66,7 @@ export class StorageConversationRuntimeBootstrapFactory
   private readonly journal: ConversationJournalReader;
   private readonly workspaceId: string;
   private readonly workdir: string;
+  private readonly agentManifestStore?: AgentManifestStore;
   private readonly logger: Logger;
 
   constructor(options: StorageConversationRuntimeBootstrapFactoryOptions) {
@@ -71,6 +74,7 @@ export class StorageConversationRuntimeBootstrapFactory
     this.journal = options.journal;
     this.workspaceId = options.workspace.workspaceId;
     this.workdir = options.workspace.workspaceRoot;
+    this.agentManifestStore = options.agentManifestStore;
     this.logger = (options.logger ?? noopLogger).child({
       component: "storage_conversation_runtime_bootstrap_factory",
     });
@@ -88,6 +92,7 @@ export class StorageConversationRuntimeBootstrapFactory
 
       const snapshot = await this.snapshotReader.getSnapshot(captured.conversationId);
       this.validateSnapshot(captured.conversationId, snapshot);
+      await this.validateAgentManifest(snapshot);
       if (captured.activation.reason === CONVERSATION_RUNTIME_ACTIVATION_REASON.acceptedInput) {
         await this.validateDurableInput(captured.activation.input);
       }
@@ -175,6 +180,35 @@ export class StorageConversationRuntimeBootstrapFactory
     ) {
       throw new ConversationRuntimeBootstrapValidationError(
         "snapshot_conversation_mismatch",
+      );
+    }
+  }
+
+  private async validateAgentManifest(
+    snapshot: ConversationSnapshot,
+  ): Promise<void> {
+    const binding = snapshot.activeAgentBinding;
+    if (binding.manifestId === undefined) {
+      return;
+    }
+    if (
+      binding.manifestId === undefined ||
+      binding.manifestDigest === undefined ||
+      this.agentManifestStore === undefined
+    ) {
+      throw new ConversationRuntimeBootstrapValidationError(
+        "agent_manifest_missing",
+      );
+    }
+    const manifest = await this.agentManifestStore.get(binding.manifestId);
+    if (
+      manifest === undefined ||
+      manifest.manifestDigest !== binding.manifestDigest ||
+      manifest.agentType !== binding.agentType ||
+      manifest.definitionVersion !== binding.definitionVersion
+    ) {
+      throw new ConversationRuntimeBootstrapValidationError(
+        "agent_manifest_mismatch",
       );
     }
   }

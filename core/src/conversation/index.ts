@@ -1,4 +1,5 @@
 export * from "./Conversation.js";
+export * from "./ConversationAgentManifestBinding.js";
 export * from "./ConversationCommandService.js";
 export * from "./ConversationErrors.js";
 export * from "./ConversationEvents.js";

@@ -3,6 +3,7 @@ export type ConversationAgentBindingStatus = "active" | "superseded" | "detached
 export interface AgentBindingIdentity {
   agentType: string;
   definitionVersion: string;
+  manifestId?: string;
   manifestDigest?: string;
 }
 

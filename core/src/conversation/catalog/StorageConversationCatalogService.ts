@@ -56,6 +56,14 @@ export class StorageConversationCatalogService
         options.agent.definitionVersion,
         "Agent definition version",
       ),
+      ...(options.agent.manifestId !== undefined
+        ? {
+            manifestId: captureNonEmptyString(
+              options.agent.manifestId,
+              "Agent manifest ID",
+            ),
+          }
+        : {}),
       ...(options.agent.manifestDigest !== undefined
         ? {
             manifestDigest: captureNonEmptyString(

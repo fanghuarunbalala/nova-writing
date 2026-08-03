@@ -1,5 +1,10 @@
 # Runtime Architecture Implementation Plan
 
+> Status on August 3, 2026: Runtime Task 1 through Task 7 are complete. The
+> active production integration work is tracked in
+> `docs/desktop-runtime-integration-plan.md`; this document remains the accepted
+> Runtime architecture and completion record.
+
 ## 1. Autonomous Working Agreement
 
 The repository-level execution rules are authoritative in `AGENTS.md`. The implementation plan uses the following autonomous, plan-first cycle:
@@ -2964,9 +2969,10 @@ No next checkpoint begins without explicit approval.
 Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
 Runtime Task 1 through Task 7 and Subagent Tool Step S0 through Step S6 are
-complete. On August 3, 2026, the active track changed explicitly back to Novel
-Task N10 through Task N11. Persistent Agent Team work remains paused until
-another explicit track change.
+complete. Novel Task N0 through Task N11 subsequently completed. On August 3,
+2026, the active track changed explicitly to Desktop Runtime Integration Task D0
+through Task D12 in `docs/desktop-runtime-integration-plan.md`. Persistent Agent
+Team work remains paused until another explicit track change.
 
 Runtime R1 through R6 are also complete as a post-Task-7 hardening track. R7
 closes the production Conversation recovery loop: `NodeConversationApiApplication`
@@ -3352,6 +3358,19 @@ N-7-A delivered:
 - a separate lifecycle handler boundary in `RuntimeEffectCoordinator`; the
   existing `kind: "nudge"` and Compaction Effect routes remain compatible
 - no Policy implementation receives or mutates the Pending Nudge Store
+
+N-7-B delivered:
+
+- `NudgeManager` now owns acknowledgement, condition resolution, and
+  supersession mutations alongside scheduling and expiry
+- `RuntimeNudgePolicyEffectHandler` is the only Policy Effect adapter and
+  delegates every lifecycle mutation to `NudgeManager`, never to the Store
+- `RuntimeEffectCoordinator` serializes lifecycle Effects with existing Nudge
+  and Compaction Effects and reports missing/failed lifecycle handlers without
+  fabricating success
+- focused execution coverage verifies concurrent request serialization,
+  persistent activation, acknowledgement, condition resolution, expiry,
+  supersession, and missing-handler failure
 
 ### 13.15 N-8: Tool and Subagent Event Integration
 

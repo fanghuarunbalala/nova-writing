@@ -114,6 +114,7 @@
     "smoke:runtime-context-projection-planner": "pnpm build && node scripts/runtime-context-projection-planner-smoke.mjs",
     "smoke:runtime-policy-effect-coordination": "pnpm build && node scripts/runtime-policy-effect-coordination-smoke.mjs",
     "smoke:runtime-policy-nudge-effect-protocol": "pnpm build && node scripts/runtime-policy-nudge-effect-protocol-smoke.mjs",
+    "smoke:runtime-policy-nudge-effect-execution": "pnpm build && node scripts/runtime-policy-nudge-effect-execution-smoke.mjs",
     "smoke:runtime-nudge-protocol": "pnpm build && node scripts/runtime-nudge-protocol-smoke.mjs",
     "smoke:runtime-nudge-manager-store": "pnpm build && node scripts/runtime-nudge-manager-store-smoke.mjs",
     "smoke:runtime-nudge-output-event": "pnpm build && node scripts/runtime-nudge-output-event-smoke.mjs",

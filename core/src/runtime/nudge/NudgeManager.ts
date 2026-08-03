@@ -18,6 +18,9 @@ import type {
   NudgeDispatchConfirmationResult,
   NudgeExpiryRequest,
   NudgeLeaseReleaseResult,
+  NudgeAcknowledgementRequest,
+  NudgeConditionResolutionRequest,
+  NudgeSupersessionRequest,
   NudgeScheduleResult,
   PendingNudgeLeaseResult,
   PendingNudgeStore,
@@ -245,6 +248,74 @@ export class NudgeManager {
         undefined,
         undefined,
         safeProviderCallId,
+      );
+      this.logFailure(normalized);
+      throw normalized;
+    }
+  }
+
+  async acknowledge(request: NudgeAcknowledgementRequest): Promise<PendingNudge> {
+    const nudgeId = captureNonBlank(request?.nudgeId);
+    const targetRunId = captureNonBlank(request?.targetRunId);
+    try {
+      const nudge = await this.store.acknowledge(request);
+      this.logger.info("runtime.nudge.acknowledgement_completed", {
+        nudgeId: nudge.id,
+        targetRunId: nudge.targetRunId,
+        state: nudge.state,
+      });
+      return nudge;
+    } catch {
+      const normalized = this.failure(
+        NUDGE_MANAGER_FAILURE.acknowledgementFailed,
+        nudgeId,
+        targetRunId,
+      );
+      this.logFailure(normalized);
+      throw normalized;
+    }
+  }
+
+  async resolveCondition(
+    request: NudgeConditionResolutionRequest,
+  ): Promise<PendingNudge> {
+    const nudgeId = captureNonBlank(request?.nudgeId);
+    const targetRunId = captureNonBlank(request?.targetRunId);
+    try {
+      const nudge = await this.store.resolveCondition(request);
+      this.logger.info("runtime.nudge.condition_resolution_completed", {
+        nudgeId: nudge.id,
+        targetRunId: nudge.targetRunId,
+        state: nudge.state,
+      });
+      return nudge;
+    } catch {
+      const normalized = this.failure(
+        NUDGE_MANAGER_FAILURE.conditionResolutionFailed,
+        nudgeId,
+        targetRunId,
+      );
+      this.logFailure(normalized);
+      throw normalized;
+    }
+  }
+
+  async supersede(request: NudgeSupersessionRequest): Promise<PendingNudge> {
+    const nudgeId = captureNonBlank(request?.nudgeId);
+    const targetRunId = captureNonBlank(request?.targetRunId);
+    try {
+      const nudge = await this.store.supersede(request);
+      this.logger.info("runtime.nudge.supersession_completed", {
+        nudgeId: nudge.id,
+        targetRunId: nudge.targetRunId,
+        state: nudge.state,
+      });
+      return nudge;
+    } catch {
+      const normalized = this.failure(
+        NUDGE_MANAGER_FAILURE.supersessionFailed,
+        nudgeId,
+        targetRunId,
       );
       this.logFailure(normalized);
       throw normalized;

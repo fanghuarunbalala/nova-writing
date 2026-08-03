@@ -1350,6 +1350,14 @@ The UI may display authorized Novel content because it is the product surface, b
 
 Electron Preload exposes narrow request methods and subscription channels. It never exposes unrestricted `ipcRenderer`, filesystem APIs, process execution, or credential access to React.
 
+### 28.1 Implemented Renderer Transport Boundary
+
+The desktop Renderer now provides an `ElectronApiTransport` implementation of the existing Core `ApiTransport`. It communicates only through an injected `ElectronPreloadBridge` with five JSON-safe capabilities: request, request cancellation, subscription open, pull-based subscription read, and subscription close. The Renderer chooses the stable subscription identity before opening it, allowing existing Conversation frame validation to require exact subscription-ID equality.
+
+Pull-based reads preserve one-frame-at-a-time backpressure without exposing EventEmitter, `ipcRenderer`, Electron, Node streams, or Main-process objects to shared UI. Abort signals remain Renderer-local and trigger a bounded bridge cancellation request. Bridge infrastructure failures become stable redacted `ApiTransportError` values; logs contain only request, operation, subscription, Event sequence, direction, type, and stable failure metadata, never payloads or raw bridge errors.
+
+This checkpoint does not implement Electron Main handlers, `contextBridge.exposeInMainWorld`, IPC channel names, Host composition, Runtime process placement, Vite, packaging, signing, or updates.
+
 ## 29. Testing Strategy
 
 ### 29.1 Core projection tests

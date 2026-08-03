@@ -16,6 +16,7 @@ declare const storyOutlineIdBrand: unique symbol;
 declare const storyUnitIdBrand: unique symbol;
 declare const storyEventStepIdBrand: unique symbol;
 declare const rhythmBeatIdBrand: unique symbol;
+declare const storyUnitEntityChangeIdBrand: unique symbol;
 
 export type NovelId = string & { readonly [novelIdBrand]: "NovelId" };
 export type NovelDraftSessionId = string & {
@@ -47,6 +48,10 @@ export type StoryEventStepId = string & {
 export type RhythmBeatId = string & {
   readonly [rhythmBeatIdBrand]: "RhythmBeatId";
 };
+export type StoryUnitEntityChangeId = string & {
+  readonly [storyUnitEntityChangeIdBrand]: "StoryUnitEntityChangeId";
+};
+export type StoryEntityId = CharacterId | LocationId;
 
 const SAFE_IDENTITY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
 
@@ -96,6 +101,19 @@ export function captureStoryEventStepId(value: unknown): StoryEventStepId {
 
 export function captureRhythmBeatId(value: unknown): RhythmBeatId {
   return captureIdentity("rhythmBeatId", value) as RhythmBeatId;
+}
+
+export function captureStoryUnitEntityChangeId(
+  value: unknown,
+): StoryUnitEntityChangeId {
+  return captureIdentity(
+    "storyUnitEntityChangeId",
+    value,
+  ) as StoryUnitEntityChangeId;
+}
+
+export function captureStoryEntityId(value: unknown): StoryEntityId {
+  return captureIdentity("storyEntityId", value) as StoryEntityId;
 }
 
 function captureIdentity(field: string, value: unknown): string {

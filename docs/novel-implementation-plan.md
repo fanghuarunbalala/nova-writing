@@ -1006,6 +1006,20 @@ RhythmBeat foundation delivered:
 remain implementable, while Character/Location involvement roles remain an
 explicit unresolved binding decision.
 
+StoryUnit Entity Change foundation delivered:
+
+- stable Change identities bind one StoryUnit to a Character or Location fact
+  consequence through a closed category contract
+- optional related entities remain sparse StoryEntity references rather than a
+  complete pairwise relationship graph
+- immutable Change sets validate unique IDs and source Event references, then
+  use ID-canonical ordering because entity consequences are a fact set rather
+  than a narrative sequence
+
+**Status:** Event, RhythmBeat, and EntityChange foundations completed. The
+remaining N9-D binding step is gated by undefined Character/Location
+involvement contracts.
+
 ### N9-E Services, Operations, Queries, and Persistence
 
 Add complete Draft and canonical vertical slices with Rebase and conflict behavior. Tool adapters remain excluded.

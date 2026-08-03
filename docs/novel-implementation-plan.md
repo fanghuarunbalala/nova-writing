@@ -1433,6 +1433,18 @@ Commit/restart reads, automatic stale rejection after the global Revision
 advances, and redacted structured logs. Task N11-C Realization/Evidence
 application coverage is complete.
 
+C-D completes Task N11-C with a release-level acceptance matrix. Nine real
+application and SQLite scenarios jointly prove thirty named capabilities:
+multi-Conversation Draft isolation, Commit and stale Commit, Rebase, conflict
+resolution and Operation replay, Approval persistence and stale-approval
+handling, Outline, Publication, Manuscript structural repair, cross-domain
+Realization and completion admission, all five startup recovery phases,
+Projection rebuild, Outbox/OutputEvent replay, Journal integration, restart
+durability, and retry idempotency. The acceptance runner verifies the required
+capability set before executing every scenario and uses only platform-neutral
+Novel application APIs and Node adapters; Agent-facing Novel Tools remain
+excluded. **Task N11-C is complete.**
+
 ### N11-D Documentation and Examples
 
 Update accepted architecture diagrams and add platform-neutral application examples. Tool examples remain deferred.

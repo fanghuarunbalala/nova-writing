@@ -153,10 +153,17 @@ try {
     novelId: canonical.novelId,
     logger,
   });
+  const resolvedCandidatesForRecovery = [];
   const recovery = new NovelDraftRecoveryService({
     canonicalStore,
     draftStore,
     snapshotter,
+    resolvedRebaseCandidateStore: {
+      async listResolvedCandidates(novelId) {
+        assert.equal(novelId, canonical.novelId);
+        return resolvedCandidatesForRecovery;
+      },
+    },
     clock,
     lifecycleWriter,
     logger,
@@ -302,6 +309,20 @@ try {
     updatedAt: clock.now(),
   });
   await snapshotter.createDraftSnapshot(orphan);
+  const retainedResolvedCandidate = captureNovelDraftSession({
+    id: captureNovelDraftSessionId("draft_resolved_candidate"),
+    novelId: canonical.novelId,
+    ownerConversationId: resetDraft.ownerConversationId,
+    baseRevision: resetDraft.baseRevision,
+    status: NOVEL_DRAFT_SESSION_STATUS.rebasing,
+    createdAt: clock.now(),
+    updatedAt: clock.now(),
+  });
+  await snapshotter.createRebaseCandidateSnapshot({
+    session: retainedResolvedCandidate,
+    sourceDraftSessionId: resetDraft.id,
+  });
+  resolvedCandidatesForRecovery.push({ session: retainedResolvedCandidate });
   await writeFile(
     join(
       location.stagingDir,
@@ -317,6 +338,7 @@ try {
   assert.deepEqual(reconciled.rolledBackDraftSessionIds, [resetDraft.id]);
   assert.deepEqual(reconciled.removedOrphanSnapshotIds, [orphan.id]);
   assert.equal(await exists(draftPath(location, orphan)), false);
+  assert.equal(await exists(draftPath(location, retainedResolvedCandidate)), true);
 
   const failingService = new NovelDraftSessionService({
     canonicalStore: {

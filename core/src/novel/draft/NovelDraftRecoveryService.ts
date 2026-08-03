@@ -14,6 +14,7 @@ import type {
   NovelClock,
   NovelDraftStore,
   NovelRebaseCandidateStore,
+  NovelResolvedRebaseCandidateStore,
   NovelSnapshotter,
   NovelLifecycleRecordWriter,
 } from "../port/index.js";
@@ -36,6 +37,10 @@ export interface NovelDraftRecoveryServiceOptions {
   readonly draftStore: NovelDraftStore;
   readonly snapshotter: NovelSnapshotter;
   readonly rebaseCandidateStore?: NovelRebaseCandidateStore;
+  readonly resolvedRebaseCandidateStore?: Pick<
+    NovelResolvedRebaseCandidateStore,
+    "listResolvedCandidates"
+  >;
   readonly clock: NovelClock;
   readonly lifecycleWriter: NovelLifecycleRecordWriter;
   readonly logger?: Logger;
@@ -73,9 +78,14 @@ export class NovelDraftRecoveryService {
       (await this.options.rebaseCandidateStore?.listCandidates(
         metadata.novelId,
       )) ?? [];
+    const resolvedCandidates =
+      (await this.options.resolvedRebaseCandidateStore?.listResolvedCandidates(
+        metadata.novelId,
+      )) ?? [];
     const knownSessionIds = new Set([
       ...sessions.map((session) => session.id),
       ...candidates.map((candidate) => candidate.session.id),
+      ...resolvedCandidates.map((candidate) => candidate.session.id),
     ]);
     const recovered = [];
     const rolledBack = [];

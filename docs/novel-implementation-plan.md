@@ -1294,6 +1294,13 @@ Outbox recovery services remain the owned implementations for their phases;
 Rebase reconciliation, Projection persistence/rebuild adapters, and Node
 composition are the next N11-B substeps.
 
+B-B adds `NovelRebaseRecoveryService` as the concrete Rebase phase. It verifies
+source Draft identity, candidate snapshot manifests, durable Operation counts,
+and Resolved Candidate Resolution Plans; invalid candidates are removed
+snapshot-first and registry-second. Draft Recovery now treats registered
+Resolved Candidate snapshots as owned staging. Projection persistence/rebuild
+and Node startup composition remain next.
+
 ### N11-C End-to-End Validation
 
 Cover multi-Conversation Drafts, Commit, Rebase, conflict, Approval, Outline, Manuscript, publication, realization, recovery, and replay without Agent Tool involvement.

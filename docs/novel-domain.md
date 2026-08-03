@@ -1947,6 +1947,15 @@ Commit history and incomplete canonical Commit recovery
   is not removed until that dependency has been reconciled.
 - Rebase recovery runs before general Draft recovery so only registered,
   structurally valid candidate staging is treated as owned Draft state.
+- A registered Rebase candidate is retained only when its source Draft remains
+  non-terminal, its `rebase-candidate` manifest matches the registered identity,
+  and its durable Operation sequence matches the registered counts. A Resolved
+  candidate additionally requires its original Candidate and matching Resolution
+  Plan. Invalid candidates are cleaned snapshot-first and registry-second so an
+  interrupted cleanup is safe to retry.
+- Draft orphan cleanup recognizes both unresolved and Resolved registered
+  candidate IDs. This prevents a valid, not-yet-promoted Resolved candidate from
+  being mistaken for an unowned staging directory after restart.
 - Projection rebuild runs only after authoritative canonical and Draft state is
   stable. Projection records remain disposable and never repair source facts.
 - Outbox retry runs last so recovery-generated lifecycle records and all reopened

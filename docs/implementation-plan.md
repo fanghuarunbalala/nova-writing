@@ -3472,6 +3472,17 @@ N-11-A delivered:
   Policy-reviewed Runtime facts, and private-state authority
 - validation documentation for the new focused latency and scenario metrics
 
+N-11-B validation evidence:
+
+- `pnpm check` passes across Core, UI, GUI, Web, and CLI
+- focused Prompt/Nudge suite passes 6/6 with 100% pass rate
+- the complete Core launcher executed 191 scenarios with 190 passed and 1
+  failed; the sole failure is the parallel `model-configuration-command-service-smoke.mjs`
+  fixture and is outside this track, so it was not modified
+- the final dedicated Checkpoint remains reviewable, but the repository-wide
+  release gate is not marked green until that unrelated fixture is repaired by
+  its owning change
+
 ### 13.19 Explicit Exclusions
 
 This track does not implement:

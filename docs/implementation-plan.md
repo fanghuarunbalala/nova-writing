@@ -2980,6 +2980,19 @@ non-blocking. Persistent Agent Team communication remains outside R8.
 The production SQLite integration is covered by
 `core/scripts/runtime-subagent-host-sqlite-integration-smoke.mjs`.
 
+R9 adds `ManifestBackedRuntimeChildCompositionFactory` at the Node Child
+adapter boundary. It restores `AgentRuntimeConfiguration` from the durable
+Conversation Bootstrap and exact Manifest, runs
+`AgentRuntimeExecutionAssembler`, and injects the resulting provider-neutral
+Execution Assembly into the existing Child Composition Context. The IPC wire
+protocol remains unchanged: only Bootstrap, Input references, shutdown
+commands, persistence RPC, acknowledgements, and health frames cross the
+process boundary. Replay remains process-free; only Host activation invokes
+the composition path. Validation is covered by
+`core/scripts/runtime-manifest-backed-child-composition-smoke.mjs`,
+`core/scripts/runtime-child-entrypoint-smoke.mjs`, and
+`core/scripts/runtime-host-child-integration-smoke.mjs`.
+
 Post-Task-7 Agent orchestration is documented in
 `docs/agent-orchestration.md`. The accepted S0-S6 contracts are complete. The
 Novel track does not authorize persistent Agent, Agent Team, Team

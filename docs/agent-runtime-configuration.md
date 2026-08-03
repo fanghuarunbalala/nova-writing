@@ -62,3 +62,17 @@ the compiled Prompt already stored in the Manifest and never calls
 Bootstrap, verifies Agent type, Definition version, and Manifest digest, then
 selects the Context, Nudge, Runtime, and execution-limit profile by the
 Manifest's exact `runtimePolicyId`.
+
+## Provider-neutral Execution Assembly
+
+`AgentRuntimeExecutionAssembler` resolves two injected ports for a restored
+configuration:
+
+- `AgentRuntimeContextCompilerFactory` creates the Core Context compiler;
+- `AgentRuntimeAdapterFactory` creates the concrete Provider adapter.
+
+The resulting `AgentRuntimeExecutionAssembly` exposes the configuration, a
+Manifest-backed `RuntimeSystemPromptSource`, the Context compiler, and the
+provider-neutral `AgentRuntimeAdapter`. Pi remains confined to the internal Pi
+adapter implementation. The execution assembler never logs Prompt content,
+Provider credentials, Tool data, or mutable Runtime state.

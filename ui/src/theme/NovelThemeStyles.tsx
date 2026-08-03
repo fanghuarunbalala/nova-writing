@@ -25,13 +25,24 @@ const NOVEL_THEME_CSS = `
 
 .novel-app-shell {
   min-width: 760px;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   display: grid;
   grid-template-rows: auto 40px 38px minmax(0, 1fr);
+  grid-template-areas:
+    "titlebar"
+    "menu"
+    "context"
+    "body";
   overflow: hidden;
   color: var(--novel-text-primary);
   background: var(--novel-surface-primary);
   font-family: var(--novel-font);
+}
+
+.novel-titlebar-extension {
+  grid-area: titlebar;
 }
 
 .novel-titlebar-extension:empty {
@@ -44,6 +55,14 @@ const NOVEL_THEME_CSS = `
   align-items: center;
   border-bottom: 1px solid var(--novel-border);
   background: var(--novel-surface-primary);
+}
+
+.novel-top-menu {
+  grid-area: menu;
+}
+
+.novel-context-bar {
+  grid-area: context;
 }
 
 .novel-top-menu {
@@ -111,6 +130,7 @@ const NOVEL_THEME_CSS = `
 }
 
 .novel-shell-body {
+  grid-area: body;
   min-height: 0;
   display: grid;
   grid-template-columns: 244px minmax(360px, 1fr) 0;

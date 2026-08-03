@@ -375,6 +375,8 @@ The extension protocol supports first-party title-bar, route, sidebar-panel, Ins
 
 Subsequent GUI/Web checkpoints now implement the shared visual Shell, state, Conversation projection, Inspector, structured cards, domain review surfaces, structured composer references, production client-side Electron IPC and HTTP/WebSocket Transports, secure Electron Main/Preload/Renderer boundaries, and Vite browser and Renderer bootstraps. Production business routing and Host composition remain separate from these client-side implementations.
 
+The shared visual Shell uses explicit named Grid rows for the optional title bar, menu, context bar, and main body. Hiding an empty title-bar extension no longer changes auto-placement of the remaining regions, and the main Workspace body retains the full remaining viewport height in both GUI and Web shells.
+
 ## 9. Platform Shells and UI Extensions
 
 Shared UI must not branch on global platform detection such as `isElectron` or inspect `window.novelDesktop` directly.

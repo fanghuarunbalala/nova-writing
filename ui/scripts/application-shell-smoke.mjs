@@ -61,6 +61,13 @@ assert.match(markup, /data-desktop-titlebar="true"/);
 assert.match(markup, /data-timeline="true"/);
 assert.match(markup, /Composer Slot/);
 assert.match(markup, /--novel-surface-primary: #ffffff/);
+assert.match(markup, /grid-template-areas:/);
+assert.match(markup, /"titlebar"/);
+assert.match(markup, /"menu"/);
+assert.match(markup, /"context"/);
+assert.match(markup, /"body"/);
+assert.match(markup, /\.novel-shell-body \{[\s\S]*grid-area: body/);
+assert.match(markup, /height: 100dvh/);
 
 const closedMarkup = renderToStaticMarkup(
   createElement(NovelApp, { api, platform }),

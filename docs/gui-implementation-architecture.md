@@ -254,6 +254,8 @@ The initial theme is implemented with shared CSS variables and a quiet white pre
 
 The fixed left navigation contains New Conversation, Schedule, Outline, Characters, Locations, and Manuscript followed by Conversation history. Components expose semantic navigation, workspace, Conversation, Composer, and Inspector landmarks, keyboard-visible focus treatment, and non-color text labels. No query, InputEvent, routing, Electron, HTTP, or Novel mutation behavior is introduced by this checkpoint.
 
+The shared Shell assigns the optional title bar, top menu, context bar, and main body to explicit named Grid rows. An absent desktop title-bar extension therefore collapses only its own row and cannot move the main body into the fixed-height context row. The Shell occupies the current viewport height (`100dvh`, with `100vh` fallback), while Sidebar, Conversation, Composer, and Inspector keep their own bounded scrolling surfaces.
+
 ## 7. Application State Boundaries
 
 The GUI uses multiple focused stores rather than one application-wide mutable object.

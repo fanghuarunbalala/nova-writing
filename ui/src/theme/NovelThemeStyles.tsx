@@ -1048,6 +1048,77 @@ const NOVEL_THEME_CSS = `
   gap: 8px 10px;
 }
 
+.novel-composer-references,
+.novel-composer-reference-notice {
+  grid-column: 1 / -1;
+}
+
+.novel-composer-references ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.novel-composer-references li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  border: 1px solid #cad3df;
+  border-radius: 999px;
+  padding: 3px 5px 3px 8px;
+  background: #f5f7fa;
+  font-size: 11px;
+}
+
+.novel-composer-reference-kind {
+  color: var(--novel-text-secondary);
+}
+
+.novel-composer-reference-label,
+.novel-composer-reference-open {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--novel-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.novel-composer-reference-open,
+.novel-composer-reference-remove {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.novel-composer-reference-open:focus-visible,
+.novel-composer-reference-remove:focus-visible {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: 1px;
+}
+
+.novel-composer-reference-remove {
+  border-radius: 999px;
+  padding: 2px 5px;
+  color: var(--novel-text-secondary);
+}
+
+.novel-composer-reference-remove:hover {
+  color: #8a4141;
+  background: #f9e8e8;
+}
+
+.novel-composer-reference-notice {
+  margin: 0;
+  color: #6f5b32;
+  font-size: 12px;
+}
+
 .novel-conversation-composer textarea {
   min-height: 58px;
   max-height: 180px;

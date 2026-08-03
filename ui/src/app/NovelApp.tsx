@@ -37,6 +37,12 @@ import type {
   ConversationCardProjectorRegistry,
   ConversationCardRendererRegistry,
 } from "../card/index.js";
+import {
+  ComposerDraftStoreProvider,
+  type ComposerContentReference,
+  type ComposerDraftInitialState,
+  type ComposerDraftStore,
+} from "../composer/index.js";
 
 export interface NovelAppProps extends NovelAppProviderProps {
   readonly shell?: Omit<ApplicationShellProps, "children">;
@@ -47,6 +53,8 @@ export interface NovelAppProps extends NovelAppProviderProps {
   readonly inspectorRenderers?: InspectorRendererRegistry;
   readonly conversationCardProjectors?: ConversationCardProjectorRegistry;
   readonly conversationCardRenderers?: ConversationCardRendererRegistry;
+  readonly composerDraftStore?: ComposerDraftStore;
+  readonly initialComposerDrafts?: readonly ComposerDraftInitialState[];
   readonly children?: ReactNode;
 }
 
@@ -57,19 +65,24 @@ export function NovelApp(props: NovelAppProps) {
         store={props.shellStore}
         initialState={props.initialShellState}
       >
-        <InspectorStoreProvider
-          store={props.inspectorStore}
-          initialState={props.initialInspectorState}
+        <ComposerDraftStoreProvider
+          store={props.composerDraftStore}
+          initialDrafts={props.initialComposerDrafts}
         >
-          <ConnectedApplicationShell
-            shell={props.shell}
-            inspectorRenderers={props.inspectorRenderers}
-            conversationCardProjectors={props.conversationCardProjectors}
-            conversationCardRenderers={props.conversationCardRenderers}
+          <InspectorStoreProvider
+            store={props.inspectorStore}
+            initialState={props.initialInspectorState}
           >
-            {props.children}
-          </ConnectedApplicationShell>
-        </InspectorStoreProvider>
+            <ConnectedApplicationShell
+              shell={props.shell}
+              inspectorRenderers={props.inspectorRenderers}
+              conversationCardProjectors={props.conversationCardProjectors}
+              conversationCardRenderers={props.conversationCardRenderers}
+            >
+              {props.children}
+            </ConnectedApplicationShell>
+          </InspectorStoreProvider>
+        </ComposerDraftStoreProvider>
       </ApplicationShellStoreProvider>
     </NovelAppProvider>
   );
@@ -101,6 +114,9 @@ function ConnectedApplicationShell({
     inspectorStore.open(card.inspectorTarget, {
       ...(card.inspectorSize !== undefined ? { mode: card.inspectorSize } : {}),
     });
+  };
+  const openComposerReference = (reference: ComposerContentReference): void => {
+    inspectorStore.open(reference.target);
   };
   const context = shell?.context ?? {
     workspace: snapshot.workspace?.label,
@@ -134,6 +150,7 @@ function ConnectedApplicationShell({
       cardProjectors={conversationCardProjectors}
       cardRenderers={conversationCardRenderers}
       onOpenCardInspector={openCardInspector}
+      onOpenComposerReference={openComposerReference}
     />
   );
 }
@@ -144,12 +161,14 @@ function BoundConversationShell({
   cardProjectors,
   cardRenderers,
   onOpenCardInspector,
+  onOpenComposerReference,
 }: {
   readonly shell: Omit<ApplicationShellProps, "children">;
   readonly conversationId: string;
   readonly cardProjectors?: ConversationCardProjectorRegistry;
   readonly cardRenderers?: ConversationCardRendererRegistry;
   readonly onOpenCardInspector?: (card: ConversationCardDescriptor) => void;
+  readonly onOpenComposerReference?: (reference: ComposerContentReference) => void;
 }) {
   const result = useConversationProjection(conversationId, { cardProjectors });
   const connected = result.snapshot.controller?.state === "live";
@@ -162,6 +181,7 @@ function BoundConversationShell({
             conversationId={conversationId}
             enabled={connected}
             enqueue={result.enqueue}
+            onOpenReference={onOpenComposerReference}
           />
         )
       }

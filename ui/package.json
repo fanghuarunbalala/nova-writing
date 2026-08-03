@@ -31,7 +31,8 @@
     "smoke:novel-change-review-shell": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-change-review-shell-typecheck.tsx && node scripts/novel-change-review-shell-smoke.mjs",
     "smoke:entity-change-reviewer": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/entity-change-reviewer-typecheck.tsx && node scripts/entity-change-reviewer-smoke.mjs",
     "smoke:outline-change-reviewer": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/outline-change-reviewer-typecheck.tsx && node scripts/outline-change-reviewer-smoke.mjs",
-    "smoke:manuscript-change-reviewer": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/manuscript-change-reviewer-typecheck.tsx && node scripts/manuscript-change-reviewer-smoke.mjs"
+    "smoke:manuscript-change-reviewer": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/manuscript-change-reviewer-typecheck.tsx && node scripts/manuscript-change-reviewer-smoke.mjs",
+    "smoke:composer-draft-store": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/composer-draft-store-typecheck.tsx && node scripts/composer-draft-store-smoke.mjs"
   },
   "dependencies": {
     "@novel/core": "workspace:*"

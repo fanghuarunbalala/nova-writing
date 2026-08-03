@@ -686,6 +686,12 @@ Adding a reference is local UI state. Sending the composed input is the durable 
 
 The exact InputEvent payload extension for references remains a protocol review decision. UI code must not embed a platform-specific object or live domain instance into the Event.
 
+### 13.1 Implemented Local Composer Reference Foundation
+
+The shared UI now provides a `ComposerDraftStore` keyed by Conversation ID. It preserves unsent text and ordered immutable reference descriptors while the Inspector opens, closes, or navigates, and it prevents one Conversation's draft from leaking into another Conversation. Reference descriptors contain only a stable local key, domain presentation kind, authorized label, and immutable Inspector target; they are explicitly not an InputEvent wire payload.
+
+The Composer renders accessible reference chips, supports explicit removal, and can reopen the referenced Inspector target. Until the accepted structured-reference InputEvent protocol exists, a draft containing references cannot be sent: the UI retains both text and references and displays the protocol boundary rather than silently dropping references or serializing an invented payload. Plain text messages continue to use the existing `UserMessageInputEvent` path.
+
 ## 14. Domain-specific Reviewers
 
 The review surface is selected by domain type:

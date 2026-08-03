@@ -4,6 +4,7 @@ export * from "./ToolExecutionContext.js";
 export * from "./ToolHandler.js";
 export * from "./ToolName.js";
 export * from "./ToolProgress.js";
+export * from "./ToolPromptDetails.js";
 export * from "./ToolProtocolErrors.js";
 export * from "./ToolProtocolValidator.js";
 export * from "./ToolResult.js";

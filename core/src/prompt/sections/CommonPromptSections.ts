@@ -76,11 +76,25 @@ export class ToolGuidancePromptSection extends PromptSection {
     return [
       "Available Tools:",
       ...context.capabilities.tools.map(
-        (tool) => `- ${tool.name}@${tool.version}: ${tool.description}`,
+        (tool) => renderToolGuidance(tool),
       ),
       "Use only the listed Tools and follow each Tool schema exactly.",
     ].join("\n");
   }
+}
+
+function renderToolGuidance(tool: PromptContext["capabilities"]["tools"][number]): string {
+  const lines = [`- ${tool.name}@${tool.version}: ${tool.description}`];
+  if (tool.promptDetails?.usage !== undefined) {
+    lines.push(`  Usage: ${tool.promptDetails.usage}`);
+  }
+  if (tool.promptDetails?.parameterGuidance !== undefined) {
+    lines.push(`  Parameters: ${tool.promptDetails.parameterGuidance}`);
+  }
+  if (tool.promptDetails?.safetyGuidance !== undefined) {
+    lines.push(`  Safety: ${tool.promptDetails.safetyGuidance}`);
+  }
+  return lines.join("\n");
 }
 
 export class TodoGuidancePromptSection extends PromptSection {

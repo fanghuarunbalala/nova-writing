@@ -80,6 +80,9 @@ export class AgentAssembler {
         version: tool.descriptor.version,
         label: tool.descriptor.label,
         description: tool.descriptor.description,
+        ...(tool.descriptor.promptDetails === undefined
+          ? {}
+          : { promptDetails: tool.descriptor.promptDetails.toSnapshot() }),
       })),
     );
     const manifest = await this.#manifestResolver.resolve(

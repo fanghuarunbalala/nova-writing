@@ -1,10 +1,13 @@
 /** Immutable Tool capability metadata available while rendering base Prompt sections. */
 
+import type { ToolPromptDetailsSnapshot } from "../tooling/protocol/ToolPromptDetails.js";
+
 export interface PromptToolCapabilityOptions {
   readonly name: string;
   readonly version: string;
   readonly label: string;
   readonly description: string;
+  readonly promptDetails?: ToolPromptDetailsSnapshot;
 }
 
 export class PromptToolCapability {
@@ -12,12 +15,16 @@ export class PromptToolCapability {
   readonly version: string;
   readonly label: string;
   readonly description: string;
+  readonly promptDetails?: ToolPromptDetailsSnapshot;
 
   constructor(options: PromptToolCapabilityOptions) {
     this.name = requireNonBlank(options.name, "Tool name");
     this.version = requireNonBlank(options.version, "Tool version");
     this.label = requireNonBlank(options.label, "Tool label");
     this.description = requireNonBlank(options.description, "Tool description");
+    this.promptDetails = options.promptDetails === undefined
+      ? undefined
+      : Object.freeze({ ...options.promptDetails });
     Object.freeze(this);
   }
 }

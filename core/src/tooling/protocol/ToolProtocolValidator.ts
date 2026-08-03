@@ -11,6 +11,7 @@ import {
   type ArtifactReference,
 } from "../../storage/artifact/index.js";
 import type { ToolDescriptor } from "./ToolDescriptor.js";
+import { ToolPromptDetails } from "./ToolPromptDetails.js";
 import type { ToolHandler } from "./ToolHandler.js";
 import { isToolName } from "./ToolName.js";
 import type {
@@ -63,12 +64,18 @@ export function captureToolDescriptor(value: unknown): ToolDescriptor {
   }
 
   try {
+    const promptDetails = record.promptDetails === undefined
+      ? undefined
+      : record.promptDetails instanceof ToolPromptDetails
+      ? record.promptDetails
+      : new ToolPromptDetails(record.promptDetails as Record<string, unknown>);
     return Object.freeze({
       name,
       version,
       label: requireNonBlank(record.label),
       description: requireNonBlank(record.description),
       parameters,
+      ...(promptDetails === undefined ? {} : { promptDetails }),
     });
   } catch {
     throw failure(TOOL_PROTOCOL_FAILURE.invalidDescriptor, {

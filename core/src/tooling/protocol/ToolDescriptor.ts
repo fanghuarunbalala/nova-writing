@@ -1,5 +1,6 @@
 /** Core-owned Tool identity and TypeBox parameter-schema contract. */
 import type { Static, TSchema } from "typebox";
+import type { ToolPromptDetails } from "./ToolPromptDetails.js";
 
 export interface ToolDescriptor<TParameters extends TSchema = TSchema> {
   readonly name: string;
@@ -7,6 +8,7 @@ export interface ToolDescriptor<TParameters extends TSchema = TSchema> {
   readonly label: string;
   readonly description: string;
   readonly parameters: TParameters;
+  readonly promptDetails?: ToolPromptDetails;
 }
 
 export type ToolArguments<TParameters extends TSchema> = Static<TParameters>;

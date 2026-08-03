@@ -1142,6 +1142,11 @@ hashes Outline, StoryUnit, LeafPlan, and generic StoryEntity snapshots. Real
 multi-Draft replay validates `field-modified`, `parent-changed`,
 `order-changed`, `entity-created`, `entity-deleted`, and `domain-invariant`
 mapping. Restart and resolved-conflict end-to-end validation is next.
+The unified Rebase scope now also composes durable Resolution Plans, resolved
+sibling replay, and promotion. Outline conflicts can be resolved, reopened
+across process restarts, rebuilt into a fresh sibling Draft, promoted into the
+owner's active Draft slot, and promoted idempotently. Final concurrent
+Commit/Rebase-to-canonical validation is next.
 
 ## 16. Task N10: Manuscript, Publication, and Realization
 

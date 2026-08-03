@@ -13,6 +13,9 @@ import {
   NovelMutationService,
   NovelOperationExecutor,
   NovelRebaseService,
+  NovelResolutionApplicationPlanBuilder,
+  NovelResolvedRebasePromotionService,
+  NovelResolvedRebaseService,
   RandomNovelIdentityFactory,
   RandomNovelRevisionFactory,
   StoryOutlineQueryService,
@@ -24,6 +27,7 @@ import {
   type NovelDraftStore,
   type NovelId,
   type NovelIdentityFactory,
+  type NovelKeepDraftOperationPlanner,
   type NovelMutationContext,
   type NovelRevisionFactory,
   type NovelSnapshotter,
@@ -35,6 +39,7 @@ import {
   NodeSha256NovelChangeSetDigester,
   NodeSha256NovelConflictDigester,
   NodeSha256NovelOperationDigester,
+  NodeSha256NovelResolutionApplicationPlanDigester,
   SqliteNovelApprovalStore,
   SqliteNovelCommitStore,
   SqliteNovelDraftOperationStore,
@@ -43,6 +48,8 @@ import {
   SqliteNovelOutlineQueryStore,
   SqliteNovelConflictStore,
   SqliteNovelRebaseCandidateStore,
+  SqliteNovelResolutionApplicationPlanStore,
+  SqliteNovelResolvedRebaseCandidateStore,
   createSqliteNovelMutationContext,
 } from "../sqlite/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
@@ -77,12 +84,18 @@ export interface NodeNovelRebaseOpenOptions {
   readonly canonicalStore: NovelCanonicalStore;
   readonly draftStore: NovelDraftStore;
   readonly snapshotter: NovelSnapshotter;
+  readonly keepDraftPlanner: NovelKeepDraftOperationPlanner;
 }
 
 export interface NodeNovelRebaseServices {
   readonly rebases: NovelRebaseService<NovelMutationContext>;
+  readonly resolutionPlans: NovelResolutionApplicationPlanBuilder;
+  readonly resolvedRebases: NovelResolvedRebaseService<NovelMutationContext>;
+  readonly promotions: NovelResolvedRebasePromotionService;
   readonly candidateStore: SqliteNovelRebaseCandidateStore;
   readonly conflictStore: SqliteNovelConflictStore;
+  readonly planStore: SqliteNovelResolutionApplicationPlanStore;
+  readonly resolvedCandidateStore: SqliteNovelResolvedRebaseCandidateStore;
   close(): Promise<void>;
 }
 
@@ -212,7 +225,14 @@ export function createNodeNovelApplication(
         novelId: options.novelId,
         logger,
       });
+      let resolvedCandidateStore: SqliteNovelResolvedRebaseCandidateStore | undefined;
       try {
+        const openedResolvedCandidateStore = await SqliteNovelResolvedRebaseCandidateStore.open({
+          location: options.location,
+          novelId: options.novelId,
+          logger,
+        });
+        resolvedCandidateStore = openedResolvedCandidateStore;
         const conflictStore = new SqliteNovelConflictStore({
           location: options.location,
           novelId: options.novelId,
@@ -237,13 +257,54 @@ export function createNodeNovelApplication(
           logger,
           approvalInvalidator: approvals,
         });
+        const planStore = new SqliteNovelResolutionApplicationPlanStore({
+          location: options.location,
+          novelId: options.novelId,
+          logger,
+        });
+        const resolutionPlans = new NovelResolutionApplicationPlanBuilder({
+          draftStore: rebaseOptions.draftStore,
+          operationStore: store,
+          conflictStore,
+          keepDraftPlanner: rebaseOptions.keepDraftPlanner,
+          operationDigester,
+          planDigester: new NodeSha256NovelResolutionApplicationPlanDigester(),
+          planStore,
+          clock,
+          logger,
+        });
+        const resolvedRebases = new NovelResolvedRebaseService({
+          canonicalStore: rebaseOptions.canonicalStore,
+          snapshotter: rebaseOptions.snapshotter,
+          operationStore: store,
+          executor,
+          planStore,
+          resolvedCandidateStore: openedResolvedCandidateStore,
+          identityFactory,
+          clock,
+          logger,
+        });
+        const promotions = new NovelResolvedRebasePromotionService({
+          store: openedResolvedCandidateStore,
+          clock,
+          logger,
+        });
         return Object.freeze({
           rebases,
+          resolutionPlans,
+          resolvedRebases,
+          promotions,
           candidateStore,
           conflictStore,
-          close: () => candidateStore.close(),
+          planStore,
+          resolvedCandidateStore: openedResolvedCandidateStore,
+          async close() {
+            await openedResolvedCandidateStore.close();
+            await candidateStore.close();
+          },
         });
       } catch (error) {
+        await resolvedCandidateStore?.close().catch(() => undefined);
         await candidateStore.close().catch(() => undefined);
         throw error;
       }

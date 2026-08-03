@@ -7,7 +7,9 @@ import {
   NovelDraftSessionService,
   NovelRevisionConflictError,
   STORY_SETTING_MODE,
+  canonicalizeNovelConflictResolutionRecord,
   captureLeafStoryUnitPlan,
+  captureNovelConflictResolutionRecord,
   captureNovelCommitId,
   captureNovelRevision,
   captureNovelTimestamp,
@@ -23,6 +25,7 @@ import {
   SqliteNovelDraftStore,
   SqliteNovelSnapshotter,
   createNodeNovelApplication,
+  digestNovelConflictText,
 } from "../dist/node/index.js";
 
 class DraftIdentityFactory {
@@ -46,6 +49,12 @@ class SequenceClock {
     );
   }
 }
+
+const keepDraftPlanner = Object.freeze({
+  async planKeepDraft() {
+    throw new Error("keep-draft is not used by this scenario");
+  },
+});
 
 const root = await mkdtemp(join(tmpdir(), "novel-outline-rebase-"));
 const workspaceRoot = join(root, "workspace");
@@ -288,6 +297,7 @@ try {
     canonicalStore,
     draftStore,
     snapshotter,
+    keepDraftPlanner,
   });
   const result = await rebaseServices.rebases.prepareCandidate(source.id);
   assert.equal(result.conflicts.length, 6);
@@ -316,6 +326,77 @@ try {
       result.candidate.session.id,
     ),
     result.candidate,
+  );
+
+  for (const { conflict } of result.conflicts) {
+    const resolution = captureNovelConflictResolutionRecord({
+      resolutionVersion: 1,
+      draftSessionId: result.candidate.session.id,
+      conflictId: conflict.id,
+      resolution: { strategy: "keep-canonical" },
+      resolvedAt: clock.now(),
+    });
+    assert.equal(
+      await rebaseServices.conflictStore.resolveConflict(
+        result.candidate.session,
+        resolution,
+        digestNovelConflictText(
+          canonicalizeNovelConflictResolutionRecord(resolution),
+        ),
+      ),
+      "resolved",
+    );
+  }
+  const planned = await rebaseServices.resolutionPlans.buildAndSave(
+    result.candidate,
+  );
+  assert.equal(planned.status, "recorded");
+  assert.equal(planned.plan.effectiveOperationCount, 0);
+
+  await rebaseServices.close();
+  rebaseServices = await application.openRebase({
+    canonicalStore,
+    draftStore,
+    snapshotter,
+    keepDraftPlanner,
+  });
+  assert.deepEqual(
+    await rebaseServices.planStore.getPlan(result.candidate.session),
+    planned.plan,
+  );
+  const resolved = await rebaseServices.resolvedRebases
+    .prepareResolvedCandidate(result.candidate);
+  assert.equal(resolved.operationCount, 0);
+
+  await rebaseServices.close();
+  rebaseServices = await application.openRebase({
+    canonicalStore,
+    draftStore,
+    snapshotter,
+    keepDraftPlanner,
+  });
+  assert.deepEqual(
+    await rebaseServices.resolvedCandidateStore.getResolvedCandidate(
+      canonical.novelId,
+      resolved.session.id,
+    ),
+    resolved,
+  );
+  const promoted = await rebaseServices.promotions.promote(resolved);
+  assert.equal(promoted.status, "promoted");
+  assert.equal(promoted.promotion.session.status, "active");
+  assert.equal(
+    (
+      await draftStore.getActiveDraftSession(
+        canonical.novelId,
+        source.ownerConversationId,
+      )
+    ).id,
+    resolved.session.id,
+  );
+  assert.equal(
+    (await rebaseServices.promotions.promote(resolved)).status,
+    "duplicate",
   );
 
   console.log("novel outline rebase smoke passed");

@@ -13,6 +13,33 @@ export const UserMessagePayloadSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const TaskAssignedArtifactReferenceSchema = Type.Object(
+  {
+    schemaVersion: Type.Literal(1),
+    artifactId: Type.String({ minLength: 1, maxLength: 256 }),
+    conversationId: Type.String({ minLength: 1, maxLength: 256 }),
+    contentType: Type.String({ minLength: 1 }),
+    byteLength: Type.Integer({ minimum: 0 }),
+    tokenEstimate: Type.Optional(Type.Integer({ minimum: 0 })),
+    digest: Type.String({ pattern: "^sha256:[0-9a-f]{64}$" }),
+    filename: Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
+  },
+  { additionalProperties: false },
+);
+
+export const TaskAssignedPayloadSchema = Type.Object(
+  {
+    taskId: Type.String({ minLength: 1, maxLength: 256 }),
+    requesterConversationId: Type.String({ minLength: 1, maxLength: 256 }),
+    prompt: Type.String({ minLength: 1, maxLength: 16 * 1024 }),
+    artifactReferences: Type.Array(TaskAssignedArtifactReferenceSchema, {
+      maxItems: 8,
+      uniqueItems: true,
+    }),
+  },
+  { additionalProperties: false },
+);
+
 export const ReloadConfigPayloadSchema = Type.Object(
   {
     config: Type.Object(
@@ -45,6 +72,14 @@ export function registerCoreInputEventSchemas(registry: EventSchemaRegistry): vo
     schemaVersion: EVENT_SCHEMA_VERSION,
     priority: INPUT_PRIORITY.user,
     payloadSchema: UserMessagePayloadSchema,
+  });
+
+  registry.register({
+    kind: "input",
+    eventType: INPUT_EVENT_TYPE.taskAssigned,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    priority: INPUT_PRIORITY.system,
+    payloadSchema: TaskAssignedPayloadSchema,
   });
 
   registry.register({

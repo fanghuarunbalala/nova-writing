@@ -2995,4 +2995,9 @@ Step S1 status: completed. The provider-neutral Subagent Task protocol now
 defines `Task`, `TaskGet`, and `TaskCancel` arguments and results, immutable
 allowed-Subagent definition catalogs, injected Prompt/Artifact/result limits,
 and dynamic TypeBox parameter Schemas without creating or activating a Child
-Conversation. Step S2 is the next active implementation step.
+Conversation. Step S2 status: completed. `TaskAssignedInputEvent` now has a
+strict payload and Event Schema, persists explicit Prompt and Artifact
+references, projects to a provider-neutral `user` Runtime Message, appears in
+Conversation projections, and enters the normal Turn lane without being
+treated as a human `user.message`. Step S3 is the next active implementation
+step.

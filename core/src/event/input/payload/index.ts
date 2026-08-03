@@ -5,4 +5,5 @@ export * from "./EventPayload.js";
 export * from "./EmptyPayload.js";
 export * from "./ReloadConfigPayload.js";
 export * from "./StopPayload.js";
+export * from "./TaskAssignedPayload.js";
 export * from "./UserMessagePayload.js";

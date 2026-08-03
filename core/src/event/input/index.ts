@@ -17,5 +17,6 @@ export * from "./ReloadConfigInputEvent.js";
 export * from "./schema/index.js";
 export * from "./SystemInputEvent.js";
 export * from "./StopInputEvent.js";
+export * from "./TaskAssignedInputEvent.js";
 export * from "./UserInputEvent.js";
 export * from "./UserMessageInputEvent.js";

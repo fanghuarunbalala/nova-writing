@@ -1,5 +1,8 @@
 /** Projects Core-owned user input events into provider-independent user messages. */
-import { INPUT_EVENT_TYPE } from "../../../event/index.js";
+import {
+  INPUT_EVENT_TYPE,
+  isAgentTurnInputEventType,
+} from "../../../event/index.js";
 import type { PersistedConversationEventSnapshot } from "../../../storage/index.js";
 import { RUNTIME_MESSAGE_SCHEMA_VERSION, type RuntimeMessageDraft } from "../RuntimeMessageSnapshot.js";
 import { CORE_RUNTIME_MESSAGE_TYPE } from "../schema/CoreRuntimeMessageSchemas.js";
@@ -11,11 +14,13 @@ export class CoreRuntimeMessageProjector implements RuntimeMessageProjector {
   readonly version = "1";
 
   project(event: PersistedConversationEventSnapshot): readonly RuntimeMessageDraft[] {
-    if (event.direction !== "input" || event.eventType !== INPUT_EVENT_TYPE.userMessage) {
+    if (event.direction !== "input" || !isAgentTurnInputEventType(event.eventType)) {
       return [];
     }
 
-    const text = event.payload.text;
+    const text = event.eventType === INPUT_EVENT_TYPE.taskAssigned
+      ? event.payload.prompt
+      : event.payload.text;
     if (typeof text !== "string" || text.length === 0) {
       throw new RuntimeMessageProjectionError(
         "User message event payload does not contain valid text",

@@ -1,8 +1,10 @@
 /** Replayable Conversation Event projection with strict ordering and duplicate suppression. */
 import {
   ASSISTANT_MESSAGE_DELTA_CHANNEL,
+  INPUT_EVENT_TYPE,
   OUTPUT_EVENT_TYPE,
   canonicalStringifyJson,
+  isAgentTurnInputEventType,
   type AssistantMessageCompletionReason,
   type AssistantMessageFailureCode,
   type JsonValue,
@@ -183,7 +185,7 @@ export class ConversationProjectionStore {
   }
 
   private applyTypedProjection(event: PersistedConversationEventSnapshot): void {
-    if (event.direction === "input" && event.eventType === "user.message") {
+    if (event.direction === "input" && isAgentTurnInputEventType(event.eventType)) {
       this.applyUserMessage(event);
       return;
     }
@@ -233,7 +235,13 @@ export class ConversationProjectionStore {
         eventId: event.id,
         sequence: event.sequence,
         timestamp: event.timestamp,
-        text: requireString(event.eventType, "text", payload.text),
+        text: requireString(
+          event.eventType,
+          event.eventType === INPUT_EVENT_TYPE.taskAssigned ? "prompt" : "text",
+          event.eventType === INPUT_EVENT_TYPE.taskAssigned
+            ? payload.prompt
+            : payload.text,
+        ),
         ...(event.runId !== undefined ? { runId: event.runId } : {}),
         ...(event.turnId !== undefined ? { turnId: event.turnId } : {}),
       }),

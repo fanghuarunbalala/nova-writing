@@ -7,7 +7,7 @@
 import {
   canonicalStringifyJson,
   captureDurableInputEventReference,
-  INPUT_EVENT_TYPE,
+  isAgentTurnInputEventType,
   type DurableInputEventReference,
   type JsonValue,
 } from "../../../event/index.js";
@@ -235,7 +235,7 @@ function captureUserMessageInput(
     typeof input !== "object" ||
     input.direction !== "input" ||
     input.conversationId !== conversationId ||
-    input.eventType !== INPUT_EVENT_TYPE.userMessage ||
+    !isAgentTurnInputEventType(input.eventType) ||
     !Number.isSafeInteger(input.sequence) ||
     input.sequence <= 0
   ) {

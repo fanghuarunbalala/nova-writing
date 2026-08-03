@@ -368,7 +368,6 @@ layer while its Message projector may produce a Provider `user` role message:
 ```ts
 interface TaskAssignedPayload {
   readonly taskId: string;
-  readonly requesterAgentId: string;
   readonly requesterConversationId: string;
   readonly prompt: string;
   readonly artifactReferences: readonly ArtifactReference[];
@@ -708,6 +707,11 @@ Required evolution:
   boundary: immutable Subagent Definitions, allowed-type policy, Task/Query/
   Cancellation values, defensive capture, and dynamic TypeBox parameter
   Schemas. They do not create a Child Conversation or execute a Tool.
+- Step S2 event values are implemented in the Core event boundary:
+  `TaskAssignedInputEvent` persists explicit Prompt and Artifact references;
+  its Message projector produces a provider-neutral `user` Message, and the
+  existing Agent-turn path accepts it without classifying it as a human
+  `user.message`.
 - replace the create-then-activate-only path with a child Bootstrap port that
   persists `TaskAssignedInputEvent` before activation acceptance;
 - add `SubagentTaskService`, `SubagentQueryService`, and

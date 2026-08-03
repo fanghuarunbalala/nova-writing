@@ -4,7 +4,7 @@
  */
 import {
   canonicalStringifyJson,
-  INPUT_EVENT_TYPE,
+  isAgentTurnInputEventType,
   type JsonValue,
 } from "../../../event/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
@@ -410,7 +410,7 @@ function captureExecutionRequest(
     typeof request.input !== "object" ||
     request.input.direction !== "input" ||
     request.input.conversationId !== conversationId ||
-    request.input.eventType !== INPUT_EVENT_TYPE.userMessage ||
+    !isAgentTurnInputEventType(request.input.eventType) ||
     captureNonBlank(request.input.id) === undefined ||
     !Number.isSafeInteger(request.input.sequence) ||
     request.input.sequence <= 0

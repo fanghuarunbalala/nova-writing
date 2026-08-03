@@ -1198,6 +1198,15 @@ to their owning N10 steps.
 
 Resolve and implement ManuscriptAnchor and ManuscriptRange.
 
+**Status:** stable Block-boundary Anchor and half-open Range contracts are
+complete. Strict immutable capture permits only `blockId` plus
+`boundary: "before" | "after"`; Range contains exactly `start` and `end`.
+`ManuscriptAnchorValidator` resolves both anchors against one current
+ManuscriptCatalog, orders boundaries by canonical Publication and Block order,
+accepts equal boundaries as an empty Range, and rejects missing or inverted
+references. Character offsets, Tombstone/Redirect repair, and structural edit
+semantics remain deferred to N10-D.
+
 ### N10-D Structural Repair
 
 Implement Block move, split, merge, Tombstone, Redirect, and anchor repair Operations.
@@ -1268,5 +1277,7 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
 - Task N10-B is completed by Manuscript and Paragraph Block identities, strict
   immutable capture, publication-reference validation, and deterministic
   Chapter-local Block ordering.
-- Task N10-C Anchors and Ranges is next.
+- Task N10-C is completed by stable Block-boundary Anchors, half-open Ranges,
+  and catalog-aware existence and ordering validation.
+- Task N10-D Structural Repair is next.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

@@ -30,6 +30,8 @@ export const NOVEL_PROTOCOL_FAILURE = {
   invalidOutbox: "invalid_outbox",
   invalidPublication: "invalid_publication",
   invalidManuscript: "invalid_manuscript",
+  invalidManuscriptAnchor: "invalid_manuscript_anchor",
+  invalidManuscriptRange: "invalid_manuscript_range",
 } as const;
 
 export type NovelProtocolFailure =
@@ -97,6 +99,8 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "manuscript",
   "manuscriptId",
   "manuscriptBlockId",
+  "manuscriptAnchor",
+  "manuscriptRange",
 ]);
 
 export class NovelProtocolValidationError extends Error {

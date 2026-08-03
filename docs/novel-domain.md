@@ -586,6 +586,9 @@ interface StoryUnitRealization {
 ```
 
 - Ranges never use array indexes.
+- Within one Block, the `before` boundary sorts before the `after` boundary.
+- Across Blocks, boundary order follows canonical Volume, Chapter, and Block order.
+- Equal start and end anchors form a valid empty Range; only inverted order is rejected.
 - Blocks inserted between existing anchors are naturally included according to current order.
 - Anchor bias determines whether insertion at an exact boundary belongs inside or outside a range.
 - One StoryUnit may realize across multiple ranges and Chapters.

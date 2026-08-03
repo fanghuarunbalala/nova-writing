@@ -1368,6 +1368,18 @@ The controller owns only IPC request and subscription handles, not the injected 
 
 This checkpoint uses injectable Electron-shaped ports so its full protocol can be validated without an Electron runtime. Actual `electron` imports, BrowserWindow creation, WebContents lifecycle wiring, Core Host composition, Runtime placement, Vite bootstrap, packaging, signing, and updates remain later desktop steps.
 
+### 28.3 Implemented Secure Desktop Shell Boundary
+
+The GUI now pins Electron `43.2.0` and provides real Main and Preload bindings around the previously tested ports. `createElectronDesktopApplication()` accepts an already composed Host `ApiTransport`, Preload path, Renderer loading target, optional navigation policy, and Logger; it does not select Runtime placement or create a second business router. The Preload entrypoint imports only Electron `contextBridge` and `ipcRenderer` before exposing the fixed bridge.
+
+Because sandboxed Electron Preload scripts cannot consume this package's multi-file ESM output directly, the GUI build bundles the Preload dependency graph into the single CommonJS artifact `dist/preload/preload.cjs` with Electron left external. Secure window options reject non-`.cjs` Preload targets so an accidental ESM path cannot silently bypass the accepted sandbox boundary.
+
+`DesktopApplication` owns app readiness, activation, non-macOS quit behavior, IPC registration, primary-window lifecycle, and idempotent stop. `DesktopWindowManager` creates a hidden white primary window with context isolation and Chromium sandbox enabled; Node integration, worker Node integration, WebView, insecure content, and unsafe web security are disabled. New windows, WebViews, unapproved top-level navigation, and permission requests are denied by default.
+
+Each managed WebContents sender becomes authorized only while its window is alive. WebContents destruction immediately removes authorization and releases all sender-owned IPC requests and subscriptions. Load failures and cleanup failures surface stable redacted codes and never log the Preload path, Renderer target, or raw Electron errors.
+
+This checkpoint still does not provide the executable Host factory, Renderer DOM bootstrap, Vite configuration, application menu, native platform ports, packaging, signing, updater, or Runtime placement decision.
+
 ## 29. Testing Strategy
 
 ### 29.1 Core projection tests

@@ -5,9 +5,17 @@ presentation implementation through `@novel/ui`.
 
 The current desktop protocol checkpoint contains the platform-neutral
 application composition, a production `ElectronApiTransport`, a fixed
-versioned Main/Preload IPC protocol, and sender-scoped Main lifecycle control.
-Runtime placement, Electron entrypoints, window creation, Vite, and packaging
-remain later GUI steps.
+versioned Main/Preload IPC protocol, sender-scoped Main lifecycle control, and
+a secure Electron application/window factory. Runtime placement, executable
+Host composition, Renderer bootstrap, Vite, and packaging remain later steps.
+
+The secure desktop shell now includes real Electron Main and Preload bindings,
+an injected application factory, and a primary BrowserWindow lifecycle manager.
+The final executable bootstrap still waits for local Host composition and the
+Renderer build target.
+
+The sandboxed Preload is bundled as the single CommonJS file
+`dist/preload/preload.cjs`; the window manager rejects non-`.cjs` Preload paths.
 
 The Renderer must never import Node-only Core adapters or unrestricted Electron
 APIs. Desktop capabilities enter shared UI through explicit platform ports and

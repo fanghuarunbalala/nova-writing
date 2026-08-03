@@ -6,8 +6,9 @@ import {
   type NovelDraftSession,
 } from "../../../novel/index.js";
 import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
+import { NOVEL_OUTLINE_SCHEMA_SQL } from "./NovelOutlineSqliteSchema.js";
 
-export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 7 as const;
+export const LATEST_NOVEL_DRAFT_SCHEMA_VERSION = 8 as const;
 
 export function initializeNovelDraftSqliteSchema(
   databasePath: string,
@@ -280,6 +281,19 @@ const DRAFT_MIGRATIONS = [
       ON draft_outbox(created_at, event_id) WHERE published_at IS NULL;
 
       UPDATE draft_metadata SET schema_version = 7;
+    `,
+  },
+  {
+    version: 8,
+    name: "story_outline_state",
+    sql: `${NOVEL_OUTLINE_SCHEMA_SQL.replaceAll(
+      "CREATE TABLE ",
+      "CREATE TABLE IF NOT EXISTS ",
+    ).replaceAll(
+      "CREATE UNIQUE INDEX ",
+      "CREATE UNIQUE INDEX IF NOT EXISTS ",
+    ).replaceAll("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ")}
+      UPDATE draft_metadata SET schema_version = 8;
     `,
   },
 ] as const;

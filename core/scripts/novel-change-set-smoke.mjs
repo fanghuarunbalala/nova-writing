@@ -384,7 +384,13 @@ try {
   assert.equal(legacyMetadata.change_set_state, "open");
   assert.equal(legacyMetadata.change_set_digest, null);
   assert.equal(legacyMetadata.change_set_frozen_at, null);
-  assert.deepEqual(legacyMigrations, [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(
+    legacyMigrations,
+    Array.from(
+      { length: LATEST_NOVEL_DRAFT_SCHEMA_VERSION },
+      (_, index) => index + 1,
+    ),
+  );
 
   assertRedacted(logEntries, [
     root,

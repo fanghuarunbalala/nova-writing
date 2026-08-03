@@ -1131,8 +1131,10 @@ Implementation sequence:
 **Status:** revision, Operation, conflict, and Approval contracts are accepted
 and recorded. Seven deterministic Outline Operations, field-digest replay
 preconditions, transaction-local mutation ports, structural invariant handlers,
-and the composed default Novel Operation Registry are complete. SQLite
-persistence and canonical/Draft repository adapters are next.
+and the composed default Novel Operation Registry are complete. Canonical and
+Draft SQLite schema, content/parent/order/plan digests, transaction-local
+repositories, combined mutation contexts, restart validation, and Draft
+isolation are complete. Outline services and explicit read scopes are next.
 
 ## 16. Task N10: Manuscript, Publication, and Realization
 

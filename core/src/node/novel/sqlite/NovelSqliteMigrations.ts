@@ -10,6 +10,7 @@ import {
   NovelDatabaseError,
 } from "./NovelDatabaseErrors.js";
 import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
+import { NOVEL_OUTLINE_SCHEMA_SQL } from "./NovelOutlineSqliteSchema.js";
 
 interface NovelSqliteMigration {
   readonly version: number;
@@ -178,6 +179,11 @@ const NOVEL_MIGRATIONS: readonly NovelSqliteMigration[] = [
         FOREIGN KEY (active_draft_session_id) REFERENCES novel_draft_sessions(id)
       ) STRICT;
     `,
+  },
+  {
+    version: 7,
+    name: "story_outline_state",
+    sql: NOVEL_OUTLINE_SCHEMA_SQL,
   },
 ];
 

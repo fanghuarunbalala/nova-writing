@@ -177,21 +177,28 @@ try {
   assert.equal(metadata.novelId, "novel_canonical_smoke");
   assert.equal(metadata.workspaceId, workspace.workspaceId);
   assert.equal(metadata.schemaVersion, LATEST_NOVEL_SCHEMA_VERSION);
-  assert.equal(metadata.schemaVersion, 6);
   assert.equal(metadata.currentRevision, "revision_canonical_smoke");
-  assert.equal(metadata.createdAt, "2026-08-02T00:00:00.006Z");
+  assert.equal(
+    metadata.createdAt,
+    new Date(
+      Date.UTC(2026, 7, 2, 0, 0, 0, LATEST_NOVEL_SCHEMA_VERSION),
+    ).toISOString(),
+  );
   assert.equal(metadata.updatedAt, metadata.createdAt);
   assert.deepEqual(inspectControlTables(location.canonicalDatabasePath), [
     "novel_characters",
     "novel_commits",
     "novel_conversation_bindings",
     "novel_draft_sessions",
+    "novel_leaf_story_unit_plans",
     "novel_locations",
     "novel_metadata",
     "novel_outbox",
     "novel_rebase_candidates",
     "novel_resolved_rebase_candidates",
     "novel_schema_migrations",
+    "novel_story_outlines",
+    "novel_story_units",
   ]);
 
   await store.close();

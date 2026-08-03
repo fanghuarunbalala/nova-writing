@@ -1,8 +1,14 @@
 /** Creates the only IPC capability object allowed to cross into the Renderer. */
-import type { ApiRequest, ApiResponse } from "@novel/core";
+import type {
+  ApiRequest,
+  ApiResponse,
+  ApplicationConfigurationSnapshot,
+  CredentialStatus,
+} from "@novel/core";
 import {
   ELECTRON_API_IPC_CHANNEL,
   ELECTRON_APPLICATION_COMMAND_CHANNEL,
+  ELECTRON_CONFIGURATION_IPC_CHANNEL,
   ELECTRON_WORKSPACE_IPC_CHANNEL,
   type ElectronApplicationCommand,
   type ElectronApplicationCommandBridge,
@@ -59,6 +65,33 @@ export function createElectronPreloadBridge(
       close: () =>
         invoke<ElectronBridgeAcknowledgement>(
           ELECTRON_WORKSPACE_IPC_CHANNEL.close,
+        ),
+    }),
+    configuration: Object.freeze({
+      load: () =>
+        invoke<ApplicationConfigurationSnapshot>(
+          ELECTRON_CONFIGURATION_IPC_CHANNEL.load,
+        ),
+      save: (configuration: ApplicationConfigurationSnapshot) =>
+        invoke<ApplicationConfigurationSnapshot>(
+          ELECTRON_CONFIGURATION_IPC_CHANNEL.save,
+          configuration,
+        ),
+      getCredentialStatus: (credentialRef: string) =>
+        invoke<CredentialStatus>(
+          ELECTRON_CONFIGURATION_IPC_CHANNEL.credentialStatus,
+          credentialRef,
+        ),
+      saveCredential: (credentialRef: string, secret: string) =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_CONFIGURATION_IPC_CHANNEL.credentialSave,
+          credentialRef,
+          secret,
+        ),
+      deleteCredential: (credentialRef: string) =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_CONFIGURATION_IPC_CHANNEL.credentialDelete,
+          credentialRef,
         ),
     }),
     request: (request: ApiRequest) =>

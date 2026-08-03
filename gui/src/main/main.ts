@@ -1,15 +1,34 @@
 /** Launches the built secure Electron desktop application. */
 import { join } from "node:path";
-import { app, dialog, Menu } from "electron";
-import { NodeWorkspaceStoreLocator } from "@novel/core/node";
+import { app, dialog, Menu, safeStorage } from "electron";
+import {
+  NodeApplicationConfigurationStore,
+  NodeConfigurationHomeResolver,
+  NodeEncryptedCredentialStore,
+  NodeWorkspaceStoreLocator,
+} from "@novel/core/node";
 import { DesktopBootstrapApiTransport } from "./DesktopBootstrapApiTransport.js";
 import { createDesktopApplicationMenuTemplate } from "./DesktopApplicationMenu.js";
 import { resolveDesktopMainPaths } from "./DesktopMainPaths.js";
 import { DesktopConversationApiApplicationFactory } from "./conversation/index.js";
+import {
+  DesktopConfigurationService,
+  ElectronSafeStorageCredentialCipher,
+} from "./config/index.js";
 import { createElectronDesktopApplication } from "./createElectronDesktopApplication.js";
 import { DesktopWorkspaceService } from "./workspace/index.js";
 
 const paths = resolveDesktopMainPaths(import.meta.url);
+const configurationHome = new NodeConfigurationHomeResolver();
+const configurationService = new DesktopConfigurationService({
+  store: new NodeApplicationConfigurationStore({
+    homeResolver: configurationHome,
+  }),
+  credentials: new NodeEncryptedCredentialStore({
+    homeResolver: configurationHome,
+    cipher: new ElectronSafeStorageCredentialCipher({ safeStorage }),
+  }),
+});
 const workspaceService = new DesktopWorkspaceService({
   picker: {
     pickDirectory: async () => {
@@ -32,6 +51,7 @@ const application = createElectronDesktopApplication({
   preloadPath: paths.preloadPath,
   rendererTarget: { kind: "file", filePath: paths.rendererFilePath },
   workspaceService,
+  configurationService,
 });
 Menu.setApplicationMenu(
   Menu.buildFromTemplate([

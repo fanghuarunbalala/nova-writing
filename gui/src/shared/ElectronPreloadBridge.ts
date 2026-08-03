@@ -3,6 +3,8 @@ import type {
   ApiEventFrame,
   ApiRequest,
   ApiResponse,
+  ApplicationConfigurationSnapshot,
+  CredentialStatus,
 } from "@novel/core";
 
 export interface ElectronBridgeFailure {
@@ -37,6 +39,23 @@ export interface ElectronWorkspaceBridge {
   close(): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
 }
 
+export interface ElectronConfigurationBridge {
+  load(): Promise<ElectronBridgeResult<ApplicationConfigurationSnapshot>>;
+  save(
+    configuration: ApplicationConfigurationSnapshot,
+  ): Promise<ElectronBridgeResult<ApplicationConfigurationSnapshot>>;
+  getCredentialStatus(
+    credentialRef: string,
+  ): Promise<ElectronBridgeResult<CredentialStatus>>;
+  saveCredential(
+    credentialRef: string,
+    secret: string,
+  ): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+  deleteCredential(
+    credentialRef: string,
+  ): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+}
+
 export type ElectronApplicationCommand =
   | "workspace.open"
   | "workspace.close"
@@ -60,6 +79,7 @@ export type ElectronBridgeSubscriptionRead =
 export interface ElectronPreloadBridge {
   readonly commands?: ElectronApplicationCommandBridge;
   readonly workspaces?: ElectronWorkspaceBridge;
+  readonly configuration?: ElectronConfigurationBridge;
 
   request(
     request: ApiRequest,

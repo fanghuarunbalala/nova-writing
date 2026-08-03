@@ -2,6 +2,10 @@
 import { ApiTransportError, noopLogger, type ApiTransport, type Logger } from "@novel/core";
 import type { BrowserWindowConstructorOptions } from "electron";
 import type { ElectronApplicationCommand } from "../shared/index.js";
+import {
+  DesktopConfigurationIpcController,
+  type DesktopConfigurationServicePort,
+} from "./config/index.js";
 import { DesktopApiIpcController, type ElectronIpcMainPort } from "./ipc/index.js";
 import {
   DesktopWorkspaceIpcController,
@@ -34,6 +38,7 @@ export interface DesktopApplicationOptions {
   readonly isNavigationAllowed?: (url: string) => boolean;
   readonly logger?: Logger;
   readonly workspaceService?: DesktopWorkspaceServicePort;
+  readonly configurationService?: DesktopConfigurationServicePort;
 }
 
 export class DesktopApplication {
@@ -43,6 +48,7 @@ export class DesktopApplication {
   private readonly ipcMain: ElectronIpcMainPort;
   private readonly controller: DesktopApiIpcController;
   private readonly workspaceController?: DesktopWorkspaceIpcController;
+  private readonly configurationController?: DesktopConfigurationIpcController;
   private readonly platform: string;
   private readonly logger: Logger;
   private started = false;
@@ -73,6 +79,13 @@ export class DesktopApplication {
             authorizeSender: (senderId) => windowManager.ownsSender(senderId),
             logger: this.logger,
           });
+    this.configurationController = options.configurationService === undefined
+      ? undefined
+      : new DesktopConfigurationIpcController({
+        service: options.configurationService,
+        authorizeSender: (senderId) => windowManager.ownsSender(senderId),
+        logger: this.logger,
+      });
     windowManager = new DesktopWindowManager({
       preloadPath: options.preloadPath,
       rendererTarget: options.rendererTarget,
@@ -110,6 +123,7 @@ export class DesktopApplication {
     this.started = true;
     this.controller.register(this.ipcMain);
     this.workspaceController?.register(this.ipcMain);
+    this.configurationController?.register(this.ipcMain);
     this.app.on("activate", this.handleActivate);
     this.app.on("window-all-closed", this.handleWindowAllClosed);
     this.logger.info("desktop_application.start_started");
@@ -137,6 +151,7 @@ export class DesktopApplication {
       this.windowManager.closeAll(),
       this.controller.dispose(),
       this.workspaceController?.dispose() ?? Promise.resolve(),
+      this.configurationController?.dispose() ?? Promise.resolve(),
     ]);
     const failureCount = results.filter((result) => result.status === "rejected").length;
     this.logger.info("desktop_application.stop_completed", { failureCount });

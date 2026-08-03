@@ -30,3 +30,17 @@ export const ELECTRON_WORKSPACE_IPC_CHANNELS: readonly ElectronWorkspaceIpcChann
 
 export const ELECTRON_APPLICATION_COMMAND_CHANNEL =
   "novel.application.v1.command" as const;
+
+export const ELECTRON_CONFIGURATION_IPC_CHANNEL = Object.freeze({
+  load: "novel.configuration.v1.load",
+  save: "novel.configuration.v1.save",
+  credentialStatus: "novel.configuration.v1.credential.status",
+  credentialSave: "novel.configuration.v1.credential.save",
+  credentialDelete: "novel.configuration.v1.credential.delete",
+} as const);
+
+export type ElectronConfigurationIpcChannel =
+  (typeof ELECTRON_CONFIGURATION_IPC_CHANNEL)[keyof typeof ELECTRON_CONFIGURATION_IPC_CHANNEL];
+
+export const ELECTRON_CONFIGURATION_IPC_CHANNELS: readonly ElectronConfigurationIpcChannel[] =
+  Object.freeze(Object.values(ELECTRON_CONFIGURATION_IPC_CHANNEL));

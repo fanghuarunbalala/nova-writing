@@ -17,6 +17,9 @@ declare const storyUnitIdBrand: unique symbol;
 declare const storyEventStepIdBrand: unique symbol;
 declare const rhythmBeatIdBrand: unique symbol;
 declare const storyUnitEntityChangeIdBrand: unique symbol;
+declare const publicationStructureIdBrand: unique symbol;
+declare const publicationVolumeIdBrand: unique symbol;
+declare const publicationChapterIdBrand: unique symbol;
 
 export type NovelId = string & { readonly [novelIdBrand]: "NovelId" };
 export type NovelDraftSessionId = string & {
@@ -50,6 +53,15 @@ export type RhythmBeatId = string & {
 };
 export type StoryUnitEntityChangeId = string & {
   readonly [storyUnitEntityChangeIdBrand]: "StoryUnitEntityChangeId";
+};
+export type PublicationStructureId = string & {
+  readonly [publicationStructureIdBrand]: "PublicationStructureId";
+};
+export type PublicationVolumeId = string & {
+  readonly [publicationVolumeIdBrand]: "PublicationVolumeId";
+};
+export type PublicationChapterId = string & {
+  readonly [publicationChapterIdBrand]: "PublicationChapterId";
 };
 export type StoryEntityId = CharacterId | LocationId;
 
@@ -114,6 +126,20 @@ export function captureStoryUnitEntityChangeId(
 
 export function captureStoryEntityId(value: unknown): StoryEntityId {
   return captureIdentity("storyEntityId", value) as StoryEntityId;
+}
+
+export function capturePublicationStructureId(
+  value: unknown,
+): PublicationStructureId {
+  return captureIdentity("publicationStructureId", value) as PublicationStructureId;
+}
+
+export function capturePublicationVolumeId(value: unknown): PublicationVolumeId {
+  return captureIdentity("publicationVolumeId", value) as PublicationVolumeId;
+}
+
+export function capturePublicationChapterId(value: unknown): PublicationChapterId {
+  return captureIdentity("publicationChapterId", value) as PublicationChapterId;
 }
 
 function captureIdentity(field: string, value: unknown): string {

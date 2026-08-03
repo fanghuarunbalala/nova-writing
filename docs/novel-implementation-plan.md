@@ -1173,6 +1173,13 @@ Accepted V1 contracts:
 
 Implement Volume and Chapter as publication structures separate from StoryOutline.
 
+**Status:** Publication identity and immutable model contracts are complete.
+One Novel-owned PublicationStructure contains globally ordered Volumes and
+Volume-owned ordered Chapters. IDs and sibling OrderKeys are unique, ownership
+is validated, a Volume may reference one primary StoryUnit for intent, and
+planned StoryUnit coverage plus Manuscript Block ownership remain deferred to
+their owning steps.
+
 ### N10-B Manuscript Blocks
 
 Implement stable Paragraph Blocks and ordering without sentence-level domain objects.

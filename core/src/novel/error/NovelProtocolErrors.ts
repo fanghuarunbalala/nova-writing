@@ -28,6 +28,7 @@ export const NOVEL_PROTOCOL_FAILURE = {
   invalidResolutionApplicationPlan: "invalid_resolution_application_plan",
   invalidLifecycleRecord: "invalid_lifecycle_record",
   invalidOutbox: "invalid_outbox",
+  invalidPublication: "invalid_publication",
 } as const;
 
 export type NovelProtocolFailure =
@@ -88,6 +89,10 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "outboxPageRequest",
   "outboxPage",
   "attemptCount",
+  "publication",
+  "publicationStructureId",
+  "publicationVolumeId",
+  "publicationChapterId",
 ]);
 
 export class NovelProtocolValidationError extends Error {

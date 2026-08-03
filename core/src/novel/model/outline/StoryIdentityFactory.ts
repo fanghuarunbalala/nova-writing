@@ -1,7 +1,9 @@
 /** Generates stable Story Outline and StoryUnit identities behind one port. */
 import {
   captureStoryOutlineId,
+  captureStoryEventStepId,
   captureStoryUnitId,
+  type StoryEventStepId,
   type StoryOutlineId,
   type StoryUnitId,
 } from "../../identity/index.js";
@@ -9,6 +11,7 @@ import {
 export interface StoryIdentityFactory {
   createStoryOutlineId(): StoryOutlineId;
   createStoryUnitId(): StoryUnitId;
+  createStoryEventStepId(): StoryEventStepId;
 }
 
 export class RandomStoryIdentityFactory implements StoryIdentityFactory {
@@ -18,6 +21,10 @@ export class RandomStoryIdentityFactory implements StoryIdentityFactory {
 
   createStoryUnitId(): StoryUnitId {
     return captureStoryUnitId(createRandomIdentity("story_unit"));
+  }
+
+  createStoryEventStepId(): StoryEventStepId {
+    return captureStoryEventStepId(createRandomIdentity("story_event"));
   }
 }
 

@@ -981,6 +981,18 @@ LeafStoryUnitPlan composition follows after its N9-D member contracts exist.
 
 Implement StoryEventStep, RhythmBeat, StoryUnitEntityChange, and Character/Location bindings with stable IDs and ordering.
 
+Story Event foundation delivered:
+
+- stable StoryEventStep identities remain independent from descriptions and
+  sibling position
+- immutable Event snapshots bind one StoryUnit, opaque OrderKey, and required
+  objective description without adding Todo or realization status
+- ordered sequence capture validates StoryUnit ownership plus unique Event IDs
+  and sibling OrderKeys before returning deterministic order
+
+**Status:** StoryEventStep identity, capture, and ordered sequence completed;
+Character/Location bindings, RhythmBeat, and entity changes remain in N9-D.
+
 ### N9-E Services, Operations, Queries, and Persistence
 
 Add complete Draft and canonical vertical slices with Rebase and conflict behavior. Tool adapters remain excluded.

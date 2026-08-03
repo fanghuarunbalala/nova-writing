@@ -1137,7 +1137,11 @@ repositories, combined mutation contexts, restart validation, and Draft
 isolation are complete. Draft-only StoryOutline mutation services, atomic
 canonical/Draft tree snapshots, optimistic digest read models, SQLite query
 adapters, and the unified Node Novel Application composition are complete.
-Outline-specific Rebase conflict validation is next.
+The unified Application can open scoped Rebase services; conflict evidence now
+hashes Outline, StoryUnit, LeafPlan, and generic StoryEntity snapshots. Real
+multi-Draft replay validates `field-modified`, `parent-changed`,
+`order-changed`, `entity-created`, `entity-deleted`, and `domain-invariant`
+mapping. Restart and resolved-conflict end-to-end validation is next.
 
 ## 16. Task N10: Manuscript, Publication, and Realization
 

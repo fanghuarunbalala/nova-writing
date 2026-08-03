@@ -12,6 +12,7 @@ import {
   NovelDraftOperationWriter,
   NovelMutationService,
   NovelOperationExecutor,
+  NovelRebaseService,
   RandomNovelIdentityFactory,
   RandomNovelRevisionFactory,
   StoryOutlineQueryService,
@@ -19,16 +20,20 @@ import {
   SystemNovelClock,
   createDefaultNovelOperationRegistry,
   type NovelClock,
+  type NovelCanonicalStore,
+  type NovelDraftStore,
   type NovelId,
   type NovelIdentityFactory,
   type NovelMutationContext,
   type NovelRevisionFactory,
+  type NovelSnapshotter,
 } from "../../../novel/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { NodeNovelCommitHistoryStore } from "../history/index.js";
 import {
   NodeSha256NovelApprovalDigester,
   NodeSha256NovelChangeSetDigester,
+  NodeSha256NovelConflictDigester,
   NodeSha256NovelOperationDigester,
   SqliteNovelApprovalStore,
   SqliteNovelCommitStore,
@@ -36,6 +41,8 @@ import {
   SqliteNovelEntityQueryStore,
   SqliteNovelLifecycleRecordWriter,
   SqliteNovelOutlineQueryStore,
+  SqliteNovelConflictStore,
+  SqliteNovelRebaseCandidateStore,
   createSqliteNovelMutationContext,
 } from "../sqlite/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
@@ -63,6 +70,20 @@ export interface NodeNovelApplication {
   readonly commits: NovelCommitService<NovelMutationContext>;
   readonly commitRecovery: NovelCommitRecoveryService<NovelMutationContext>;
   readonly approvals: NovelApprovalService;
+  openRebase(options: NodeNovelRebaseOpenOptions): Promise<NodeNovelRebaseServices>;
+}
+
+export interface NodeNovelRebaseOpenOptions {
+  readonly canonicalStore: NovelCanonicalStore;
+  readonly draftStore: NovelDraftStore;
+  readonly snapshotter: NovelSnapshotter;
+}
+
+export interface NodeNovelRebaseServices {
+  readonly rebases: NovelRebaseService<NovelMutationContext>;
+  readonly candidateStore: SqliteNovelRebaseCandidateStore;
+  readonly conflictStore: SqliteNovelConflictStore;
+  close(): Promise<void>;
 }
 
 export function createNodeNovelApplication(
@@ -185,5 +206,47 @@ export function createNodeNovelApplication(
       ),
       logger,
     }),
+    async openRebase(rebaseOptions: NodeNovelRebaseOpenOptions) {
+      const candidateStore = await SqliteNovelRebaseCandidateStore.open({
+        location: options.location,
+        novelId: options.novelId,
+        logger,
+      });
+      try {
+        const conflictStore = new SqliteNovelConflictStore({
+          location: options.location,
+          novelId: options.novelId,
+          logger,
+        });
+        const rebases = new NovelRebaseService({
+          canonicalStore: rebaseOptions.canonicalStore,
+          draftStore: rebaseOptions.draftStore,
+          snapshotter: rebaseOptions.snapshotter,
+          candidateStore,
+          conflictStore,
+          conflictDigester: new NodeSha256NovelConflictDigester({
+            location: options.location,
+            novelId: options.novelId,
+          }),
+          operationStore: store,
+          writer,
+          executor,
+          operationDigester,
+          identityFactory,
+          clock,
+          logger,
+          approvalInvalidator: approvals,
+        });
+        return Object.freeze({
+          rebases,
+          candidateStore,
+          conflictStore,
+          close: () => candidateStore.close(),
+        });
+      } catch (error) {
+        await candidateStore.close().catch(() => undefined);
+        throw error;
+      }
+    },
   });
 }

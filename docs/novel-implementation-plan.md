@@ -1129,7 +1129,10 @@ Implementation sequence:
 5. validate restart, concurrent Commit/Rebase, conflict resolution, and replay
 
 **Status:** revision, Operation, conflict, and Approval contracts are accepted
-and recorded. Outline Operation implementation is next.
+and recorded. Seven deterministic Outline Operations, field-digest replay
+preconditions, transaction-local mutation ports, structural invariant handlers,
+and the composed default Novel Operation Registry are complete. SQLite
+persistence and canonical/Draft repository adapters are next.
 
 ## 16. Task N10: Manuscript, Publication, and Realization
 

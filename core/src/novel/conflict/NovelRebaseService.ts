@@ -244,11 +244,18 @@ export class NovelRebaseService<TContext> {
     >["operations"][number]["operation"],
     error: NovelOperationPreconditionError,
   ): Promise<NovelConflictRecord> {
-    const precondition = operation.expected.find(
+    const matchingPreconditions = operation.expected.filter(
       (value) =>
         value.entityType === error.entityType &&
         value.entityId === error.entityId,
     );
+    const precondition = error.fieldPath === undefined
+      ? matchingPreconditions[0]
+      : matchingPreconditions.find(
+          (value) =>
+            value.kind === "field-digest" &&
+            value.fieldPath === error.fieldPath,
+        );
     if (precondition === undefined) throw corrupt(source);
     const conflict = captureNovelConflict({
       conflictVersion: NOVEL_CONFLICT_VERSION,
@@ -339,7 +346,12 @@ function conflictKind(
       return "entity-deleted";
     case "entity_version_mismatch":
       return "field-modified";
+    case "field_digest_mismatch":
+      if (error.fieldPath === "parentId") return "parent-changed";
+      if (error.fieldPath === "orderKey") return "order-changed";
+      return "field-modified";
     case "entity_referenced":
+    case "domain_invariant":
       return "domain-invariant";
   }
 }
@@ -349,6 +361,7 @@ function conflictFieldPath(
   precondition: { readonly kind: string; readonly fieldPath?: string },
 ): string | undefined {
   if (precondition.kind === "field-digest") return precondition.fieldPath;
+  if (error.fieldPath !== undefined) return error.fieldPath;
   return error.failure === "entity_version_mismatch" ? "profile" : undefined;
 }
 

@@ -1,7 +1,5 @@
 /** Payload-free lifecycle failures shared by future Draft and Commit services. */
 import type {
-  CharacterId,
-  LocationId,
   NovelCommitId,
   NovelDraftSessionId,
   NovelId,
@@ -279,7 +277,9 @@ export type NovelOperationPreconditionFailure =
   | "entity_exists"
   | "entity_missing"
   | "entity_version_mismatch"
-  | "entity_referenced";
+  | "field_digest_mismatch"
+  | "entity_referenced"
+  | "domain_invariant";
 
 export class NovelOperationPreconditionError extends Error {
   override readonly name = "NovelOperationPreconditionError";
@@ -287,9 +287,10 @@ export class NovelOperationPreconditionError extends Error {
 
   constructor(
     public readonly failure: NovelOperationPreconditionFailure,
-    public readonly entityType: "character" | "location",
-    public readonly entityId: CharacterId | LocationId,
+    public readonly entityType: string,
+    public readonly entityId: string,
     public readonly operationId: NovelOperationId,
+    public readonly fieldPath?: string,
   ) {
     super("Novel Operation precondition failed");
   }

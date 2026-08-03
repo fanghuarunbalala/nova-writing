@@ -257,8 +257,10 @@ export function captureNovelEntityProfileOperationIntent(
   }
 }
 
-export function registerNovelEntityOperationHandlers(
-  registry: NovelOperationRegistry<NovelEntityMutationContext>,
+export function registerNovelEntityOperationHandlers<
+  TContext extends NovelEntityMutationContext,
+>(
+  registry: NovelOperationRegistry<TContext>,
 ): void {
   registry.register({
     operationType: NOVEL_ENTITY_OPERATION_TYPE.characterCreate,

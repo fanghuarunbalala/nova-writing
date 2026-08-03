@@ -33,11 +33,7 @@ export const STORY_UNIT_SCOPE = {
 export type StoryUnitScope =
   (typeof STORY_UNIT_SCOPE)[keyof typeof STORY_UNIT_SCOPE];
 
-export interface StoryUnit {
-  readonly id: StoryUnitId;
-  readonly outlineId: StoryOutlineId;
-  readonly parentId?: StoryUnitId;
-  readonly orderKey: OrderKey;
+export interface StoryUnitContent {
   readonly title: string;
   readonly intent?: string;
   readonly synopsis?: string;
@@ -48,11 +44,28 @@ export interface StoryUnit {
   readonly abandonment?: StoryUnitAbandonment;
 }
 
+export interface StoryUnit extends StoryUnitContent {
+  readonly id: StoryUnitId;
+  readonly outlineId: StoryOutlineId;
+  readonly parentId?: StoryUnitId;
+  readonly orderKey: OrderKey;
+}
+
 const STORY_UNIT_KEYS = new Set([
   "id",
   "outlineId",
   "parentId",
   "orderKey",
+  "title",
+  "intent",
+  "synopsis",
+  "scope",
+  "planningStatus",
+  "realizationStatus",
+  "blockState",
+  "abandonment",
+]);
+const STORY_UNIT_CONTENT_KEYS = new Set([
   "title",
   "intent",
   "synopsis",
@@ -74,10 +87,39 @@ export function captureStoryUnit(value: unknown): StoryUnit {
     throw invalidStoryUnit();
   }
   const candidate = value as Record<string, unknown>;
+  const content = captureStoryUnitContent({
+    title: candidate.title,
+    intent: candidate.intent,
+    synopsis: candidate.synopsis,
+    scope: candidate.scope,
+    planningStatus: candidate.planningStatus,
+    realizationStatus: candidate.realizationStatus,
+    blockState: candidate.blockState,
+    abandonment: candidate.abandonment,
+  });
   const parentId =
     candidate.parentId === undefined
       ? undefined
       : captureStoryUnitId(candidate.parentId);
+  return Object.freeze({
+    id: captureStoryUnitId(candidate.id),
+    outlineId: captureStoryOutlineId(candidate.outlineId),
+    ...(parentId === undefined ? {} : { parentId }),
+    orderKey: captureOrderKey(candidate.orderKey),
+    ...content,
+  });
+}
+
+export function captureStoryUnitContent(value: unknown): StoryUnitContent {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => !STORY_UNIT_CONTENT_KEYS.has(key))
+  ) {
+    throw invalidStoryUnit();
+  }
+  const candidate = value as Record<string, unknown>;
   const scope = captureScope(candidate.scope);
   const planningStatus = captureStoryUnitPlanningStatus(candidate.planningStatus);
   const realizationStatus = captureStoryUnitRealizationStatus(
@@ -93,10 +135,6 @@ export function captureStoryUnit(value: unknown): StoryUnit {
       : captureStoryUnitAbandonment(candidate.abandonment);
   assertCurrentState(realizationStatus, blockState, abandonment);
   return Object.freeze({
-    id: captureStoryUnitId(candidate.id),
-    outlineId: captureStoryOutlineId(candidate.outlineId),
-    ...(parentId === undefined ? {} : { parentId }),
-    orderKey: captureOrderKey(candidate.orderKey),
     title: captureTitle(candidate.title),
     ...captureOptionalText("intent", candidate.intent, 20_000),
     ...captureOptionalText("synopsis", candidate.synopsis, 50_000),
@@ -145,7 +183,7 @@ function captureOptionalText(
   field: "intent" | "synopsis",
   value: unknown,
   maximumLength: number,
-): Partial<StoryUnit> {
+): Partial<StoryUnitContent> {
   if (value === undefined) return {};
   if (
     typeof value !== "string" ||

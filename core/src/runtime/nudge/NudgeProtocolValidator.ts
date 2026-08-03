@@ -11,6 +11,9 @@ import {
   NUDGE_SELECTION_LIMIT,
   PENDING_NUDGE_STATE,
   type NudgeEffect,
+  type NudgeAcknowledgementReference,
+  type NudgeConditionReference,
+  type NudgeDelivery,
   type NudgeLease,
   type NudgeLeaseRequest,
   type PendingNudge,
@@ -31,11 +34,33 @@ export function captureNudgeEffect(value: unknown): NudgeEffect {
 
   try {
     if (record.kind !== "nudge") throw new Error();
+    const delivery = captureDelivery(record.delivery, targetRunId);
+    const acknowledgementRef = captureOptionalReference(
+      record.acknowledgementRef,
+      "acknowledgementRef",
+      NUDGE_PROTOCOL_VALIDATION_FAILURE.invalidAcknowledgementReference,
+      targetRunId,
+    );
+    const conditionRef = captureOptionalReference(
+      record.conditionRef,
+      "conditionRef",
+      NUDGE_PROTOCOL_VALIDATION_FAILURE.invalidConditionReference,
+      targetRunId,
+    );
+    assertDeliveryConfiguration(
+      delivery,
+      acknowledgementRef.acknowledgementRef,
+      conditionRef.conditionRef,
+      targetRunId,
+    );
     const effect: NudgeEffect = {
       kind: "nudge",
       policyId: requireNonBlank(record.policyId),
       templateId: requireNonBlank(record.templateId),
       templateVersion: requireNonBlank(record.templateVersion),
+      delivery,
+      ...acknowledgementRef,
+      ...conditionRef,
       priority: requireSafeInteger(record.priority),
       dedupeKey: requireNonBlank(record.dedupeKey),
       targetRunId,
@@ -47,7 +72,8 @@ export function captureNudgeEffect(value: unknown): NudgeEffect {
       ...captureOptionalBoolean(record.exclusive, "exclusive"),
     };
     return deepFreeze(effect);
-  } catch {
+  } catch (error) {
+    if (error instanceof NudgeProtocolValidationError) throw error;
     throw failure(
       NUDGE_PROTOCOL_VALIDATION_FAILURE.invalidEffect,
       undefined,
@@ -70,7 +96,25 @@ export function capturePendingNudge(value: unknown): PendingNudge {
       throw new Error();
     }
     if (record.placement !== NUDGE_PLACEMENT.systemPromptOverlay) throw new Error();
-    if (record.delivery !== NUDGE_DELIVERY.once) throw new Error();
+    const delivery = captureDelivery(record.delivery, targetRunId);
+    const acknowledgementRef = captureOptionalReference(
+      record.acknowledgementRef,
+      "acknowledgementRef",
+      NUDGE_PROTOCOL_VALIDATION_FAILURE.invalidAcknowledgementReference,
+      targetRunId,
+    );
+    const conditionRef = captureOptionalReference(
+      record.conditionRef,
+      "conditionRef",
+      NUDGE_PROTOCOL_VALIDATION_FAILURE.invalidConditionReference,
+      targetRunId,
+    );
+    assertDeliveryConfiguration(
+      delivery,
+      acknowledgementRef.acknowledgementRef,
+      conditionRef.conditionRef,
+      targetRunId,
+    );
 
     const pending: PendingNudge = {
       id: nudgeId,
@@ -82,7 +126,9 @@ export function capturePendingNudge(value: unknown): PendingNudge {
       parameters: captureParameters(record.parameters),
       exclusive: requireBoolean(record.exclusive),
       placement: NUDGE_PLACEMENT.systemPromptOverlay,
-      delivery: NUDGE_DELIVERY.once,
+      delivery,
+      ...acknowledgementRef,
+      ...conditionRef,
       state: record.state as PendingNudge["state"],
       targetRunId,
       scheduledSequence: requirePositiveInteger(record.scheduledSequence),
@@ -93,7 +139,8 @@ export function capturePendingNudge(value: unknown): PendingNudge {
       ...captureOptionalTimestamp(record.expiresAt, "expiresAt"),
     };
     return deepFreeze(pending);
-  } catch {
+  } catch (error) {
+    if (error instanceof NudgeProtocolValidationError) throw error;
     throw failure(
       NUDGE_PROTOCOL_VALIDATION_FAILURE.invalidPendingNudge,
       nudgeId,
@@ -230,6 +277,65 @@ function captureOptionalBoolean(
 ): { readonly exclusive?: boolean } {
   if (value === undefined) return {};
   return { [key]: requireBoolean(value) };
+}
+
+function captureDelivery(
+  value: unknown,
+  targetRunId: string,
+): NudgeDelivery {
+  if (value === undefined) return NUDGE_DELIVERY.once;
+  if (!Object.values(NUDGE_DELIVERY).includes(value as NudgeDelivery)) {
+    throw failure(
+      NUDGE_PROTOCOL_VALIDATION_FAILURE.invalidDelivery,
+      undefined,
+      targetRunId,
+    );
+  }
+  return value as NudgeDelivery;
+}
+
+function captureOptionalReference<T extends
+  NudgeAcknowledgementReference | NudgeConditionReference>(
+  value: unknown,
+  key: "acknowledgementRef" | "conditionRef",
+  invalid: NudgeProtocolValidationFailure,
+  targetRunId: string,
+): { readonly [K in typeof key]?: T } {
+  if (value === undefined) return {};
+  if (!isPlainRecord(value) || Object.keys(value).some(
+    (field) => field !== "id" && field !== "version",
+  )) {
+    throw failure(invalid, undefined, targetRunId);
+  }
+  try {
+    const reference = deepFreeze({
+      id: requireNonBlank(value.id),
+      version: requireNonBlank(value.version),
+    }) as T;
+    return { [key]: reference } as { readonly [K in typeof key]?: T };
+  } catch {
+    throw failure(invalid, undefined, targetRunId);
+  }
+}
+
+function assertDeliveryConfiguration(
+  delivery: NudgeDelivery,
+  acknowledgementRef: NudgeAcknowledgementReference | undefined,
+  conditionRef: NudgeConditionReference | undefined,
+  targetRunId: string,
+): void {
+  const valid = delivery === NUDGE_DELIVERY.once
+    ? acknowledgementRef === undefined && conditionRef === undefined
+    : delivery === NUDGE_DELIVERY.untilAcknowledged
+    ? acknowledgementRef !== undefined && conditionRef === undefined
+    : conditionRef !== undefined && acknowledgementRef === undefined;
+  if (!valid) {
+    throw failure(
+      NUDGE_PROTOCOL_VALIDATION_FAILURE.invalidDeliveryConfiguration,
+      undefined,
+      targetRunId,
+    );
+  }
 }
 
 function requireRecord(

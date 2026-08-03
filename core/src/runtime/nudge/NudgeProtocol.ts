@@ -1,4 +1,4 @@
-/** Provider-neutral one-shot Nudge contracts shared by Runtime components. */
+/** Provider-neutral versioned Nudge contracts shared by Runtime components. */
 import type { JsonValue } from "../../event/index.js";
 
 export const NUDGE_PLACEMENT = {
@@ -10,10 +10,22 @@ export type NudgePlacement =
 
 export const NUDGE_DELIVERY = {
   once: "once",
+  untilAcknowledged: "until_acknowledged",
+  untilCondition: "until_condition",
 } as const;
 
 export type NudgeDelivery =
   (typeof NUDGE_DELIVERY)[keyof typeof NUDGE_DELIVERY];
+
+export interface NudgeAcknowledgementReference {
+  readonly id: string;
+  readonly version: string;
+}
+
+export interface NudgeConditionReference {
+  readonly id: string;
+  readonly version: string;
+}
 
 export const PENDING_NUDGE_STATE = {
   scheduled: "scheduled",
@@ -35,6 +47,9 @@ export interface NudgeEffect {
   readonly policyId: string;
   readonly templateId: string;
   readonly templateVersion: string;
+  readonly delivery?: NudgeDelivery;
+  readonly acknowledgementRef?: NudgeAcknowledgementReference;
+  readonly conditionRef?: NudgeConditionReference;
   readonly priority: number;
   readonly dedupeKey: string;
   readonly targetRunId: string;
@@ -57,6 +72,8 @@ export interface PendingNudge {
   readonly exclusive: boolean;
   readonly placement: NudgePlacement;
   readonly delivery: NudgeDelivery;
+  readonly acknowledgementRef?: NudgeAcknowledgementReference;
+  readonly conditionRef?: NudgeConditionReference;
   readonly state: PendingNudgeState;
   readonly targetRunId: string;
   readonly targetTurnNumber?: number;

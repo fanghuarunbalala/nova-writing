@@ -397,7 +397,13 @@ function createPendingNudge(
     parameters: effect.parameters,
     exclusive: effect.exclusive ?? false,
     placement: NUDGE_PLACEMENT.systemPromptOverlay,
-    delivery: NUDGE_DELIVERY.once,
+    delivery: effect.delivery ?? NUDGE_DELIVERY.once,
+    ...(effect.acknowledgementRef === undefined
+      ? {}
+      : { acknowledgementRef: effect.acknowledgementRef }),
+    ...(effect.conditionRef === undefined
+      ? {}
+      : { conditionRef: effect.conditionRef }),
     state: PENDING_NUDGE_STATE.scheduled,
     targetRunId: effect.targetRunId,
     ...(effect.targetTurnNumber === undefined

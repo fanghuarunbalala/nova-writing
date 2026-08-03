@@ -2,6 +2,10 @@
 export const NUDGE_PROTOCOL_VALIDATION_FAILURE = {
   invalidEffect: "invalid_effect",
   invalidPendingNudge: "invalid_pending_nudge",
+  invalidDelivery: "invalid_delivery",
+  invalidAcknowledgementReference: "invalid_acknowledgement_reference",
+  invalidConditionReference: "invalid_condition_reference",
+  invalidDeliveryConfiguration: "invalid_delivery_configuration",
   invalidLeaseRequest: "invalid_lease_request",
   invalidLease: "invalid_lease",
   invalidOverlay: "invalid_overlay",

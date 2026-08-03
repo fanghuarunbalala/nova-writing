@@ -3020,3 +3020,8 @@ execution, and Host-to-child execution. It emits unified core metrics,
 pass/failure rates, performance metrics, slowest scenarios, and failed tests.
 Subagent Tool Steps S4 through S6 are complete; future Subagent or Agent Team
 work requires an explicit track change.
+
+Post-completion structure note: Subagent Tool implementations and TypeBox
+schemas live under `core/src/tools/subagent/`. Runtime-owned Task protocol,
+query/completion services, Binding persistence, lifecycle, and process-neutral
+execution contracts remain under `core/src/runtime/subagent/`.

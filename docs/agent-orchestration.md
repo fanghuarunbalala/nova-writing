@@ -367,6 +367,13 @@ The handlers obtain definition version and child Tool policy from the trusted
 catalog; the model supplies only `agentType`, `prompt`, and optional Artifact
 identities.
 
+The Tool implementations, dynamic TypeBox schemas, and their local barrel are
+kept together under `core/src/tools/subagent/`. Runtime-owned Subagent
+protocols, Binding stores, query services, completion bridging, lifecycle, and
+process placement remain under `core/src/runtime/subagent/`. This keeps Tool
+assembly easy to inspect without moving execution or persistence authority into
+the Tool package.
+
 `TaskCancel` depends on a narrow cancellation-intent Port. That Port persists
 the intent and routes child Stop without waiting for process termination. All
 three Tools return bounded structured `details` and short text content; Tool

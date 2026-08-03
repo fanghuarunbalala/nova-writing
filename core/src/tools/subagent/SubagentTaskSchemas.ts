@@ -1,8 +1,8 @@
 /** TypeBox parameter Schemas for the PascalCase Subagent Tools. */
 import { Type, type TObject, type TSchema } from "typebox";
-import type { SubagentDefinitionReader } from "./SubagentDefinitionCatalog.js";
-import type { SubagentToolCompositionPolicy } from "./SubagentTaskProtocol.js";
-import { captureSubagentToolCompositionPolicy } from "./SubagentTaskProtocolValidator.js";
+import type { SubagentDefinitionReader } from "../../runtime/subagent/SubagentDefinitionCatalog.js";
+import type { SubagentToolCompositionPolicy } from "../../runtime/subagent/SubagentTaskProtocol.js";
+import { captureSubagentToolCompositionPolicy } from "../../runtime/subagent/SubagentTaskProtocolValidator.js";
 
 export const SubagentTaskGetParametersSchema = Type.Object(
   { taskId: Type.String({ minLength: 1, maxLength: 256 }) },

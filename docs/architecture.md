@@ -70,6 +70,11 @@ core/
 ├─ src/runtime/
 ├─ src/storage/
 └─ src/tools/
+   ├─ execution/
+   ├─ group/
+   ├─ protocol/
+   ├─ registry/
+   └─ subagent/        # Task/TaskGet/TaskCancel implementations and schemas
 
 cli/
 gui/

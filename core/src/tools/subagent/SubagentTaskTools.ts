@@ -2,23 +2,23 @@
 import type { JsonValue } from "../../event/protocol/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
 import type { ArtifactReference } from "../../storage/artifact/index.js";
-import { ToolError } from "../../tools/execution/index.js";
+import { ToolError } from "../execution/index.js";
 import {
   defineTool,
   type RegisteredTool,
   type ToolExecutionContext,
   type ToolResult,
-} from "../../tools/protocol/index.js";
-import { ToolRegistry } from "../../tools/registry/index.js";
-import type { SubagentBindingStore } from "./SubagentBindingStore.js";
-import type { ChildConversationManager } from "./ChildConversationManagerProtocol.js";
-import type { SubagentDefinitionReader } from "./SubagentDefinitionCatalog.js";
+} from "../protocol/index.js";
+import { ToolRegistry } from "../registry/index.js";
+import type { SubagentBindingStore } from "../../runtime/subagent/SubagentBindingStore.js";
+import type { ChildConversationManager } from "../../runtime/subagent/ChildConversationManagerProtocol.js";
+import type { SubagentDefinitionReader } from "../../runtime/subagent/SubagentDefinitionCatalog.js";
 import {
   SUBAGENT_CANCELLATION_REASON,
   SUBAGENT_SCHEMA_VERSION,
   SUBAGENT_STATUS,
   type SubagentBinding,
-} from "./SubagentProtocol.js";
+} from "../../runtime/subagent/SubagentProtocol.js";
 import {
   SUBAGENT_TASK_CANCELLATION_STATUS,
   SUBAGENT_TASK_SCHEMA_VERSION,
@@ -29,7 +29,7 @@ import {
   type SubagentTaskGetArguments,
   type SubagentTaskSnapshot,
   type SubagentToolCompositionPolicy,
-} from "./SubagentTaskProtocol.js";
+} from "../../runtime/subagent/SubagentTaskProtocol.js";
 import {
   captureSubagentTaskAcceptance,
   captureSubagentTaskArguments,
@@ -37,13 +37,13 @@ import {
   captureSubagentTaskCancelArguments,
   captureSubagentTaskGetArguments,
   captureSubagentToolCompositionPolicy,
-} from "./SubagentTaskProtocolValidator.js";
+} from "../../runtime/subagent/SubagentTaskProtocolValidator.js";
 import {
   createSubagentTaskParametersSchema,
   SubagentTaskCancelParametersSchema,
   SubagentTaskGetParametersSchema,
 } from "./SubagentTaskSchemas.js";
-import type { SubagentTaskQueryService } from "./SubagentTaskQueryService.js";
+import type { SubagentTaskQueryService } from "../../runtime/subagent/SubagentTaskQueryService.js";
 
 export interface SubagentTaskIdFactory {
   create(context: ToolExecutionContext): string;

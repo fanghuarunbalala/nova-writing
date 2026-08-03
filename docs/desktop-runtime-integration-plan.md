@@ -155,6 +155,11 @@ D0 is completed by the focused commit introducing this plan. D1 is next.
   Model settings UI to orchestrate multiple persistence operations;
 - add focused type and behavior validation.
 
+D1 is complete with serializable upsert, default-selection, and removal
+requests; explicit keep, replace, and delete Credential mutations; safe mutation
+results; trusted-boundary capture functions; Core exports; and the
+`model-configuration-command-protocol-smoke.mjs` validation. D2 is next.
+
 ### Task D2: Consistent Model Configuration Service
 
 - implement the trusted Host command over Application Configuration and
@@ -295,8 +300,9 @@ stderr. Tests must assert redaction on every new failure boundary.
 
 ## 8. Current Position
 
-- D0 is complete when the track-activation commit is created.
-- D1 Model Configuration Command Protocol is the next implementation step.
-- D2 through D12 remain pending.
+- D0 is complete by the track-activation commit.
+- D1 is complete by the Model Configuration Command Protocol commit.
+- D2 Consistent Model Configuration Service is the next implementation step.
+- D3 through D12 remain pending.
 - Agent-facing Novel Tools and Persistent Agent Team work remain outside this
   active track.

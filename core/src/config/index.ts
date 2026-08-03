@@ -14,5 +14,6 @@ export * from "./ConfigurationProtocol.js";
 export * from "./ConfigurationStore.js";
 export * from "./EffectiveConfigurationResolver.js";
 export * from "./ModelConfiguration.js";
+export * from "./ModelConfigurationCommand.js";
 export * from "./RuntimeProfile.js";
 export * from "./ScopedConfiguration.js";

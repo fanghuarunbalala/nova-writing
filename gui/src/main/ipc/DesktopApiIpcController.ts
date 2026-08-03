@@ -36,7 +36,8 @@ export interface ElectronIpcMainPort {
 }
 
 export interface DesktopApiIpcControllerOptions {
-  readonly transport: ApiTransport;
+  readonly transport?: ApiTransport;
+  readonly resolveTransport?: (senderId: number) => ApiTransport;
   readonly authorizeSender: (senderId: number) => boolean;
   readonly logger?: Logger;
 }
@@ -53,7 +54,7 @@ interface ActiveSubscription {
 }
 
 export class DesktopApiIpcController {
-  private readonly transport: ApiTransport;
+  private readonly resolveTransport: (senderId: number) => ApiTransport;
   private readonly authorizeSender: (senderId: number) => boolean;
   private readonly logger: Logger;
   private readonly requests = new Map<number, Map<string, ActiveRequest>>();
@@ -66,7 +67,11 @@ export class DesktopApiIpcController {
   private disposePromise?: Promise<void>;
 
   constructor(options: DesktopApiIpcControllerOptions) {
-    this.transport = options.transport;
+    if (options.resolveTransport === undefined && options.transport === undefined) {
+      throw new TypeError("Desktop API IPC requires a Transport resolver");
+    }
+    this.resolveTransport =
+      options.resolveTransport ?? (() => options.transport as ApiTransport);
     this.authorizeSender = options.authorizeSender;
     this.logger = (options.logger ?? noopLogger).child({
       component: "desktop_api_ipc_controller",
@@ -149,7 +154,7 @@ export class DesktopApiIpcController {
         operation: request.operation,
       });
       try {
-        const response = await this.transport.request(request, {
+        const response = await this.resolveTransport(senderId).request(request, {
           signal: abortController.signal,
         });
         if (this.disposed) {
@@ -214,7 +219,7 @@ export class DesktopApiIpcController {
           "Electron subscription identity is already active",
         );
       }
-      const subscription = this.transport.subscribe(openRequest.request);
+      const subscription = this.resolveTransport(senderId).subscribe(openRequest.request);
       validateApiSubscription(subscription);
       const subscriptions = getOrCreateSenderMap(this.subscriptions, senderId);
       subscriptions.set(openRequest.subscriptionId, {

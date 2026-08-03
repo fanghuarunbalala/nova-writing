@@ -23,7 +23,8 @@ export interface ElectronAppPort {
 export interface DesktopApplicationOptions {
   readonly app: ElectronAppPort;
   readonly ipcMain: ElectronIpcMainPort;
-  readonly transport: ApiTransport;
+  readonly transport?: ApiTransport;
+  readonly resolveTransport?: (senderId: number) => ApiTransport;
   readonly createWindow: (
     options: BrowserWindowConstructorOptions,
   ) => DesktopBrowserWindowPort;
@@ -57,7 +58,10 @@ export class DesktopApplication {
     });
     let windowManager: DesktopWindowManager;
     this.controller = new DesktopApiIpcController({
-      transport: options.transport,
+      ...(options.transport !== undefined ? { transport: options.transport } : {}),
+      ...(options.resolveTransport !== undefined
+        ? { resolveTransport: options.resolveTransport }
+        : {}),
       authorizeSender: (senderId) => windowManager.ownsSender(senderId),
       logger: this.logger,
     });

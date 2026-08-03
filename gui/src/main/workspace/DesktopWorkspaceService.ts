@@ -1,7 +1,12 @@
 /** Owns Main-only directory selections and safe per-window Workspace sessions. */
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
-import { noopLogger, type Logger } from "@novel/core";
+import {
+  noopLogger,
+  type ApiTransport,
+  type Logger,
+  type WorkspaceStoreLocation,
+} from "@novel/core";
 import type { NodeWorkspaceStoreLocator } from "@novel/core/node";
 import type {
   ElectronWorkspaceReference,
@@ -18,7 +23,19 @@ export interface DesktopWorkspaceServiceOptions {
     NodeWorkspaceStoreLocator,
     "resolve" | "getByWorkspaceId"
   >;
+  readonly applicationFactory?: DesktopWorkspaceApiApplicationFactory;
   readonly logger?: Logger;
+}
+
+export interface DesktopWorkspaceApiApplication {
+  readonly transport: ApiTransport;
+  close(): Promise<void>;
+}
+
+export interface DesktopWorkspaceApiApplicationFactory {
+  open(
+    location: WorkspaceStoreLocation,
+  ): Promise<DesktopWorkspaceApiApplication>;
 }
 
 export interface DesktopWorkspaceServicePort {
@@ -32,23 +49,36 @@ export interface DesktopWorkspaceServicePort {
   releaseSender(senderId: number): Promise<void>;
 }
 
+export interface DesktopWorkspaceApiTransportResolver {
+  resolveTransport(senderId: number): ApiTransport | undefined;
+}
+
 interface PendingSelection {
   readonly senderId: number;
   readonly workspaceRoot: string;
   readonly label: string;
 }
 
-export class DesktopWorkspaceService implements DesktopWorkspaceServicePort {
+interface ActiveWorkspace {
+  readonly session: ElectronWorkspaceSession;
+  readonly application?: DesktopWorkspaceApiApplication;
+}
+
+export class DesktopWorkspaceService
+  implements DesktopWorkspaceServicePort, DesktopWorkspaceApiTransportResolver
+{
   private readonly picker: DesktopWorkspaceDirectoryPicker;
   private readonly locator: DesktopWorkspaceServiceOptions["locator"];
+  private readonly applicationFactory?: DesktopWorkspaceApiApplicationFactory;
   private readonly logger: Logger;
   private readonly selections = new Map<string, PendingSelection>();
-  private readonly currentBySender = new Map<number, ElectronWorkspaceSession>();
+  private readonly currentBySender = new Map<number, ActiveWorkspace>();
   private readonly recent = new Map<string, ElectronWorkspaceSession>();
 
   constructor(options: DesktopWorkspaceServiceOptions) {
     this.picker = options.picker;
     this.locator = options.locator;
+    this.applicationFactory = options.applicationFactory;
     this.logger = (options.logger ?? noopLogger).child({
       component: "desktop_workspace_service",
     });
@@ -89,26 +119,44 @@ export class DesktopWorkspaceService implements DesktopWorkspaceServicePort {
       id: location.workspaceId,
       label: basename(location.workspaceRoot) || reference.label,
     });
-    this.currentBySender.set(senderId, session);
+    const current = this.currentBySender.get(senderId);
+    if (current?.session.id === session.id) return current.session;
+    const application = await this.applicationFactory?.open(location);
+    try {
+      await current?.application?.close();
+    } catch {
+      await application?.close().catch(() => undefined);
+      throw new DesktopWorkspaceApplicationReplaceError();
+    }
+    this.currentBySender.set(senderId, {
+      session,
+      ...(application !== undefined ? { application } : {}),
+    });
     this.recent.delete(session.id);
     this.recent.set(session.id, session);
     this.logger.info("desktop_workspace.open_completed", { senderId });
     return session;
   }
 
-  close(senderId: number): Promise<void> {
+  async close(senderId: number): Promise<void> {
+    const current = this.currentBySender.get(senderId);
     this.currentBySender.delete(senderId);
+    await current?.application?.close();
     this.logger.info("desktop_workspace.close_completed", { senderId });
-    return Promise.resolve();
   }
 
-  releaseSender(senderId: number): Promise<void> {
+  async releaseSender(senderId: number): Promise<void> {
+    const current = this.currentBySender.get(senderId);
     this.currentBySender.delete(senderId);
     for (const [referenceId, selection] of this.selections) {
       if (selection.senderId === senderId) this.selections.delete(referenceId);
     }
+    await current?.application?.close();
     this.logger.debug("desktop_workspace.sender_released", { senderId });
-    return Promise.resolve();
+  }
+
+  resolveTransport(senderId: number): ApiTransport | undefined {
+    return this.currentBySender.get(senderId)?.application?.transport;
   }
 
   private async resolvePending(
@@ -128,4 +176,8 @@ export class DesktopWorkspaceNotFoundError extends Error {
 
 export class DesktopWorkspaceUnauthorizedError extends Error {
   readonly code = "DESKTOP_WORKSPACE_UNAUTHORIZED";
+}
+
+export class DesktopWorkspaceApplicationReplaceError extends Error {
+  readonly code = "DESKTOP_WORKSPACE_APPLICATION_REPLACE_FAILED";
 }

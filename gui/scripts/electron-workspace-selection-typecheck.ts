@@ -17,6 +17,7 @@ const service = new DesktopWorkspaceService({
   picker: { pickDirectory: async () => undefined },
   locator,
 });
+const resolvedTransport = service.resolveTransport(1);
 const controller = new DesktopWorkspaceIpcController({
   service,
   authorizeSender: (senderId) => senderId === 1,
@@ -25,4 +26,5 @@ controller.register(ipcMain);
 const workspaceController = createElectronWorkspaceController(bridge, noopLogger);
 
 void workspaceController;
+void resolvedTransport;
 void controller.dispose();

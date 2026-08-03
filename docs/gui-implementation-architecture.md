@@ -1616,6 +1616,21 @@ The stages below describe dependency order only. Each stage requires its own pla
 - configure security boundaries;
 - compose local Core, Node adapters, Runtime placement, and packaging according to accepted process decisions.
 
+#### Implemented Workspace-bound Conversation Host checkpoint
+
+Electron Main now resolves API Transport per authorized Renderer sender. Opening a
+Workspace creates one `NodeConversationApiApplication` over that Workspace's
+SQLite Store; replacing, closing, or releasing the window closes the associated
+application. Before a Workspace is open, the stable bootstrap Transport continues
+to return `DESKTOP_WORKSPACE_NOT_OPEN`.
+
+The Renderer and Preload contracts remain unchanged: they receive only opaque
+Workspace identity and the existing JSON-safe Conversation API protocol. Replay,
+catalog, create, and subscription operations route through the active Workspace
+application without exposing Store paths or Node objects. Provider execution is
+still a separate Host composition concern; the current desktop placement reports
+Runtime unavailable rather than inventing an assistant response.
+
 ### GUI-9: Web shell
 
 - implement Web bootstrap with the same `@novel/ui`;

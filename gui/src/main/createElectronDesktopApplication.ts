@@ -9,7 +9,8 @@ import type {
 import type { DesktopWorkspaceServicePort } from "./workspace/index.js";
 
 export interface CreateElectronDesktopApplicationOptions {
-  readonly transport: ApiTransport;
+  readonly transport?: ApiTransport;
+  readonly resolveTransport?: (senderId: number) => ApiTransport;
   readonly preloadPath: string;
   readonly rendererTarget: DesktopRendererTarget;
   readonly isNavigationAllowed?: (url: string) => boolean;
@@ -38,7 +39,10 @@ export function createElectronDesktopApplication(
         ipcMain.handle(channel, (event, ...args) => handler(event, ...args)),
       removeHandler: (channel) => ipcMain.removeHandler(channel),
     },
-    transport: options.transport,
+    ...(options.transport !== undefined ? { transport: options.transport } : {}),
+    ...(options.resolveTransport !== undefined
+      ? { resolveTransport: options.resolveTransport }
+      : {}),
     createWindow: (windowOptions) =>
       new BrowserWindow(windowOptions) as unknown as DesktopBrowserWindowPort,
     preloadPath: options.preloadPath,

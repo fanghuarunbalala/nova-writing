@@ -5,6 +5,7 @@ import { NodeWorkspaceStoreLocator } from "@novel/core/node";
 import { DesktopBootstrapApiTransport } from "./DesktopBootstrapApiTransport.js";
 import { createDesktopApplicationMenuTemplate } from "./DesktopApplicationMenu.js";
 import { resolveDesktopMainPaths } from "./DesktopMainPaths.js";
+import { DesktopConversationApiApplicationFactory } from "./conversation/index.js";
 import { createElectronDesktopApplication } from "./createElectronDesktopApplication.js";
 import { DesktopWorkspaceService } from "./workspace/index.js";
 
@@ -22,9 +23,12 @@ const workspaceService = new DesktopWorkspaceService({
   locator: new NodeWorkspaceStoreLocator({
     storageRoot: join(app.getPath("userData"), "novel-storage"),
   }),
+  applicationFactory: new DesktopConversationApiApplicationFactory(),
 });
+const bootstrapTransport = new DesktopBootstrapApiTransport();
 const application = createElectronDesktopApplication({
-  transport: new DesktopBootstrapApiTransport(),
+  resolveTransport: (senderId) =>
+    workspaceService.resolveTransport(senderId) ?? bootstrapTransport,
   preloadPath: paths.preloadPath,
   rendererTarget: { kind: "file", filePath: paths.rendererFilePath },
   workspaceService,

@@ -17,9 +17,24 @@ async function run() {
   const workspaceRoot = join(root, "星海计划");
   await mkdir(workspaceRoot, { recursive: true });
   const picks = [workspaceRoot, workspaceRoot];
+  const applications = [];
   const service = new DesktopWorkspaceService({
     picker: { pickDirectory: async () => picks.shift() },
     locator: new NodeWorkspaceStoreLocator({ storageRoot: join(root, "storage") }),
+    applicationFactory: {
+      open: async (location) => {
+        const application = {
+          location,
+          transport: { request() {}, subscribe() {} },
+          closeCount: 0,
+          async close() {
+            this.closeCount += 1;
+          },
+        };
+        applications.push(application);
+        return application;
+      },
+    },
   });
   const ipcMain = new FakeIpcMain();
   const controller = new DesktopWorkspaceIpcController({
@@ -45,6 +60,7 @@ async function run() {
   assert.equal(opened.label, "星海计划");
   assert.equal(ownerController.getSnapshot().phase, "ready");
   assert.equal(ownerController.getSnapshot().current.id, opened.id);
+  assert.equal(service.resolveTransport(1), applications[0].transport);
   assert.equal(
     JSON.stringify(ownerController.getSnapshot()).includes(workspaceRoot),
     false,
@@ -54,6 +70,8 @@ async function run() {
   assert.deepEqual(ownerController.getSnapshot().recent, [opened]);
   assert.equal(await ownerController.closeCurrent(), true);
   assert.equal(ownerController.getSnapshot().current, undefined);
+  assert.equal(service.resolveTransport(1), undefined);
+  assert.equal(applications[0].closeCount, 1);
 
   const selection = await ownerBridge.workspaces.select();
   assert.equal(selection.ok, true);

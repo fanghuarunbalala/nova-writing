@@ -1,0 +1,591 @@
+/** Routes the public Conversation API protocol to provider-neutral Core services. */
+import {
+  ConversationNotFoundError,
+  type ConversationCommandService,
+  type ConversationQueryService,
+  type ConversationRuntimePresenceReader,
+} from "../../conversation/index.js";
+import {
+  coreEventSchemaRegistry,
+  EventPayload,
+  EventValidationError,
+  InputEvent,
+  InputRejectedError,
+  isJsonValue,
+  type InputEventSnapshot,
+  type JsonObject,
+} from "../../event/index.js";
+import { noopLogger, type Logger } from "../../observability/index.js";
+import {
+  ConversationEventFilterError,
+  ConversationEventHubClosedError,
+  ConversationEventQueryError,
+  ConversationEventSubscriptionAbortedError,
+  ConversationEventSubscriptionCursorAheadError,
+  ConversationEventSubscriptionOptionsError,
+  ConversationEventSubscriptionOverflowError,
+  type ConversationEventSubscription,
+} from "../../storage/index.js";
+import {
+  API_PROTOCOL_VERSION,
+  ApiTransportError,
+  type ApiErrorSnapshot,
+  type ApiEventFrame,
+  type ApiRequest,
+  type ApiRequestOptions,
+  type ApiResponse,
+  type ApiSubscription,
+  type ApiSubscriptionOptions,
+  type ApiTransport,
+} from "../../transport/index.js";
+import {
+  CONVERSATION_API_OPERATION,
+  type SerializableConversationEventSubscriptionOptions,
+} from "../../conversation/client/ConversationApiOperations.js";
+
+export interface ConversationApiRouterOptions {
+  readonly commands: ConversationCommandService;
+  readonly queries: ConversationQueryService;
+  readonly runtimePresence: ConversationRuntimePresenceReader;
+  readonly logger?: Logger;
+}
+
+export class ConversationApiRouter implements ApiTransport {
+  private readonly commands: ConversationCommandService;
+  private readonly queries: ConversationQueryService;
+  private readonly runtimePresence: ConversationRuntimePresenceReader;
+  private readonly logger: Logger;
+  private readonly subscriptions = new Set<RoutedConversationApiSubscription>();
+  private closed = false;
+  private closePromise?: Promise<void>;
+
+  constructor(options: ConversationApiRouterOptions) {
+    this.commands = options.commands;
+    this.queries = options.queries;
+    this.runtimePresence = options.runtimePresence;
+    this.logger = (options.logger ?? noopLogger).child({
+      component: "conversation_api_router",
+    });
+  }
+
+  async request<TData = unknown>(
+    request: ApiRequest,
+    options: ApiRequestOptions = {},
+  ): Promise<ApiResponse<TData>> {
+    this.assertOpen();
+    throwIfAborted(options.signal);
+    const requestId = captureRequestId(request);
+    let operation = "invalid";
+    try {
+      operation = validateRequestEnvelope(request);
+      this.logger.debug("conversation_api.request_started", {
+        requestId,
+        operation,
+      });
+      const data = await this.dispatch(request);
+      throwIfAborted(options.signal);
+      this.logger.debug("conversation_api.request_completed", {
+        requestId,
+        operation,
+      });
+      return Object.freeze({
+        protocolVersion: API_PROTOCOL_VERSION,
+        requestId,
+        ok: true,
+        data,
+      }) as ApiResponse<TData>;
+    } catch (error) {
+      if (error instanceof ApiTransportError) throw error;
+      const snapshot = createApiErrorSnapshot(error);
+      this.logger.info("conversation_api.request_rejected", {
+        requestId,
+        operation,
+        errorCode: snapshot.code,
+        errorCategory: snapshot.category,
+        retryable: snapshot.retryable,
+      });
+      return Object.freeze({
+        protocolVersion: API_PROTOCOL_VERSION,
+        requestId,
+        ok: false,
+        error: snapshot,
+      });
+    }
+  }
+
+  subscribe(
+    request: ApiRequest,
+    options: ApiSubscriptionOptions = {},
+  ): ApiSubscription {
+    this.assertOpen();
+    throwIfAborted(options.signal);
+    try {
+      const operation = validateRequestEnvelope(request);
+      if (operation !== CONVERSATION_API_OPERATION.eventsSubscribe) {
+        throw new ConversationApiRouterProtocolError(
+          "API operation does not create a subscription",
+        );
+      }
+      const payload = capturePayload(request.payload, ["conversationId", "options"]);
+      const conversationId = captureConversationId(payload.conversationId);
+      const subscriptionOptions = cloneJsonRecord(
+        payload.options,
+        "Conversation subscription options",
+      ) as SerializableConversationEventSubscriptionOptions;
+      const source = this.queries.subscribeEvents(conversationId, {
+        ...subscriptionOptions,
+        ...(options.signal !== undefined ? { signal: options.signal } : {}),
+      });
+      let subscription: RoutedConversationApiSubscription;
+      subscription = new RoutedConversationApiSubscription(
+        source,
+        this.logger,
+        () => this.subscriptions.delete(subscription),
+      );
+      this.subscriptions.add(subscription);
+      this.logger.info("conversation_api.subscription_opened", {
+        requestId: request.requestId,
+        operation,
+        subscriptionId: subscription.id,
+        subscriptionCount: this.subscriptions.size,
+      });
+      return subscription;
+    } catch (error) {
+      if (error instanceof ApiTransportError) throw error;
+      throw createSubscriptionError(error);
+    }
+  }
+
+  close(): Promise<void> {
+    this.closePromise ??= this.closeOnce();
+    return this.closePromise;
+  }
+
+  private async dispatch(request: ApiRequest): Promise<unknown> {
+    const payload = capturePayload(request.payload, expectedPayloadKeys(request.operation));
+    const conversationId = captureConversationId(payload.conversationId);
+    switch (request.operation) {
+      case CONVERSATION_API_OPERATION.snapshotGet:
+        return this.queries.getSnapshot(conversationId);
+      case CONVERSATION_API_OPERATION.runtimePresenceGet:
+        return this.runtimePresence.getRuntimePresence(conversationId);
+      case CONVERSATION_API_OPERATION.inputEnqueue: {
+        const snapshot = coreEventSchemaRegistry.validateInput(payload.inputEvent, {
+          allowUnknownEventType: true,
+        });
+        if (snapshot.conversationId !== conversationId) {
+          throw new InputRejectedError(
+            "conversation_id_mismatch",
+            "InputEvent targets another Conversation",
+          );
+        }
+        return this.commands.enqueue(
+          conversationId,
+          new SnapshotBackedInputEvent(snapshot),
+        );
+      }
+      case CONVERSATION_API_OPERATION.eventsList:
+        return this.queries.listEvents(
+          conversationId,
+          cloneJsonRecord(payload.options, "Conversation Event list options") as never,
+        );
+      default:
+        throw new ConversationApiRouterProtocolError(
+          "API operation is not supported by Conversation Router",
+        );
+    }
+  }
+
+  private assertOpen(): void {
+    if (this.closed) {
+      throw new ApiTransportError(
+        "HOST_UNAVAILABLE",
+        true,
+        "Conversation API Router is unavailable",
+      );
+    }
+  }
+
+  private async closeOnce(): Promise<void> {
+    this.closed = true;
+    const subscriptions = [...this.subscriptions];
+    const results = await Promise.allSettled(
+      subscriptions.map((subscription) => subscription.close()),
+    );
+    this.subscriptions.clear();
+    const failureCount = results.filter(
+      (result) => result.status === "rejected",
+    ).length;
+    this.logger.info("conversation_api.router_closed", {
+      subscriptionCount: subscriptions.length,
+      failureCount,
+    });
+    if (failureCount > 0) {
+      throw new ApiTransportError(
+        "CONVERSATION_API_ROUTER_CLOSE_FAILED",
+        true,
+        "Conversation API Router failed to close cleanly",
+      );
+    }
+  }
+}
+
+class RoutedConversationApiSubscription implements ApiSubscription {
+  readonly id: string;
+  private closePromise?: Promise<void>;
+
+  constructor(
+    private readonly source: ConversationEventSubscription,
+    private readonly logger: Logger,
+    private readonly onClosed: () => void,
+  ) {
+    this.id = source.id;
+  }
+
+  [Symbol.asyncIterator](): ApiSubscription {
+    return this;
+  }
+
+  async next(): Promise<IteratorResult<ApiEventFrame>> {
+    try {
+      const result = await this.source.next();
+      if (result.done) {
+        this.onClosed();
+        return { done: true, value: undefined };
+      }
+      return {
+        done: false,
+        value: Object.freeze({
+          protocolVersion: API_PROTOCOL_VERSION,
+          subscriptionId: this.id,
+          event: result.value,
+        }),
+      };
+    } catch (error) {
+      this.onClosed();
+      throw createSubscriptionError(error);
+    }
+  }
+
+  close(): Promise<void> {
+    this.closePromise ??= Promise.resolve().then(async () => {
+      try {
+        await this.source.close();
+      } catch (error) {
+        throw createSubscriptionError(error);
+      } finally {
+        this.onClosed();
+        this.logger.debug("conversation_api.subscription_closed", {
+          subscriptionId: this.id,
+        });
+      }
+    });
+    return this.closePromise;
+  }
+}
+
+class SnapshotBackedInputEvent extends InputEvent {
+  private readonly snapshot: InputEventSnapshot;
+  private readonly eventPayload: SnapshotEventPayload;
+
+  constructor(snapshot: InputEventSnapshot) {
+    super({
+      id: snapshot.id,
+      conversationId: snapshot.conversationId,
+      timestamp: snapshot.timestamp,
+      ...(snapshot.correlationId !== undefined
+        ? { correlationId: snapshot.correlationId }
+        : {}),
+      ...(snapshot.causationId !== undefined
+        ? { causationId: snapshot.causationId }
+        : {}),
+      ...(snapshot.runId !== undefined ? { runId: snapshot.runId } : {}),
+      ...(snapshot.turnId !== undefined ? { turnId: snapshot.turnId } : {}),
+    });
+    this.snapshot = cloneInputSnapshot(snapshot);
+    this.eventPayload = new SnapshotEventPayload(this.snapshot.payload);
+  }
+
+  getEventType(): string {
+    return this.snapshot.eventType;
+  }
+
+  getPriority(): number {
+    return this.snapshot.priority;
+  }
+
+  getPayload(): EventPayload {
+    return this.eventPayload;
+  }
+
+  override getSnapshot(defaultConversationId?: string): InputEventSnapshot {
+    if (
+      defaultConversationId !== undefined &&
+      defaultConversationId !== this.snapshot.conversationId
+    ) {
+      throw new InputRejectedError(
+        "conversation_id_mismatch",
+        "InputEvent targets another Conversation",
+      );
+    }
+    return cloneInputSnapshot(this.snapshot);
+  }
+}
+
+class SnapshotEventPayload extends EventPayload {
+  constructor(private readonly value: JsonObject) {
+    super();
+  }
+
+  toObject(): JsonObject {
+    return cloneJson(this.value) as JsonObject;
+  }
+}
+
+class ConversationApiRouterProtocolError extends TypeError {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConversationApiRouterProtocolError";
+  }
+}
+
+function validateRequestEnvelope(request: ApiRequest): string {
+  const record = captureRecord(request, "API request");
+  assertExactKeys(record, ["protocolVersion", "requestId", "operation", "payload"]);
+  if (record.protocolVersion !== API_PROTOCOL_VERSION) {
+    throw new ConversationApiRouterProtocolError(
+      "API request protocol version is incompatible",
+    );
+  }
+  captureRequestId(request);
+  return captureNonEmptyString(record.operation, "API operation");
+}
+
+function captureRequestId(request: ApiRequest): string {
+  try {
+    return captureNonEmptyString(
+      captureRecord(request, "API request").requestId,
+      "API request id",
+    );
+  } catch {
+    throw new ApiTransportError(
+      "INVALID_API_REQUEST",
+      false,
+      "API request identity is invalid",
+    );
+  }
+}
+
+function expectedPayloadKeys(operation: string): readonly string[] {
+  switch (operation) {
+    case CONVERSATION_API_OPERATION.inputEnqueue:
+      return ["conversationId", "inputEvent"];
+    case CONVERSATION_API_OPERATION.eventsList:
+      return ["conversationId", "options"];
+    case CONVERSATION_API_OPERATION.snapshotGet:
+    case CONVERSATION_API_OPERATION.runtimePresenceGet:
+      return ["conversationId"];
+    default:
+      return ["conversationId"];
+  }
+}
+
+function capturePayload(
+  value: unknown,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const payload = captureRecord(value, "API request payload");
+  assertExactKeys(payload, keys);
+  return payload;
+}
+
+function captureConversationId(value: unknown): string {
+  return captureNonEmptyString(value, "Conversation id");
+}
+
+function cloneJsonRecord(value: unknown, label: string): Record<string, unknown> {
+  const record = captureRecord(value, label);
+  if (!isJsonValue(record)) {
+    throw new ConversationApiRouterProtocolError(`${label} must be JSON-safe`);
+  }
+  return cloneJson(record) as Record<string, unknown>;
+}
+
+function cloneInputSnapshot(snapshot: InputEventSnapshot): InputEventSnapshot {
+  return cloneJson(snapshot) as unknown as InputEventSnapshot;
+}
+
+function cloneJson(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function captureRecord(value: unknown, label: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new ConversationApiRouterProtocolError(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function captureNonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new ConversationApiRouterProtocolError(
+      `${label} must be a non-empty string`,
+    );
+  }
+  return value;
+}
+
+function assertExactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+): void {
+  const actual = Object.keys(value).sort();
+  const accepted = [...expected].sort();
+  if (
+    actual.length !== accepted.length ||
+    actual.some((key, index) => key !== accepted[index])
+  ) {
+    throw new ConversationApiRouterProtocolError(
+      "API request contains unexpected fields",
+    );
+  }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted !== true) return;
+  throw new ApiTransportError(
+    "API_REQUEST_ABORTED",
+    true,
+    "API request was aborted",
+  );
+}
+
+function createApiErrorSnapshot(error: unknown): ApiErrorSnapshot {
+  if (error instanceof ConversationNotFoundError) {
+    return freezeError(
+      "CONVERSATION_NOT_FOUND",
+      "not-found",
+      false,
+      "Conversation was not found",
+    );
+  }
+  if (error instanceof InputRejectedError) {
+    if (error.code === "conversation_not_found") {
+      return freezeError(
+        "CONVERSATION_NOT_FOUND",
+        "not-found",
+        false,
+        "Conversation was not found",
+      );
+    }
+    if (error.code === "conversation_not_accepting_input") {
+      return freezeError(
+        "CONVERSATION_NOT_ACCEPTING_INPUT",
+        "conflict",
+        false,
+        "Conversation is not accepting input",
+      );
+    }
+    if (error.code === "event_id_conflict") {
+      return freezeError(
+        "EVENT_ID_CONFLICT",
+        "conflict",
+        false,
+        "Event identity conflicts with durable history",
+      );
+    }
+    return freezeError(
+      "INVALID_API_REQUEST",
+      "validation",
+      false,
+      "API request is invalid",
+    );
+  }
+  if (
+    error instanceof ConversationApiRouterProtocolError ||
+    error instanceof EventValidationError ||
+    error instanceof ConversationEventQueryError ||
+    error instanceof ConversationEventFilterError ||
+    error instanceof ConversationEventSubscriptionOptionsError ||
+    error instanceof ConversationEventSubscriptionCursorAheadError
+  ) {
+    return freezeError(
+      "INVALID_API_REQUEST",
+      "validation",
+      false,
+      "API request is invalid",
+    );
+  }
+  if (error instanceof ConversationEventHubClosedError) {
+    return freezeError(
+      "HOST_UNAVAILABLE",
+      "unavailable",
+      true,
+      "Conversation Host is unavailable",
+    );
+  }
+  return freezeError(
+    "INTERNAL_ERROR",
+    "internal",
+    false,
+    "An internal Conversation Host error occurred",
+  );
+}
+
+function createSubscriptionError(error: unknown): ApiTransportError {
+  if (error instanceof ApiTransportError) return error;
+  if (error instanceof ConversationNotFoundError) {
+    return new ApiTransportError(
+      "CONVERSATION_NOT_FOUND",
+      false,
+      "Conversation was not found",
+    );
+  }
+  if (
+    error instanceof ConversationApiRouterProtocolError ||
+    error instanceof ConversationEventFilterError ||
+    error instanceof ConversationEventSubscriptionOptionsError ||
+    error instanceof ConversationEventSubscriptionCursorAheadError
+  ) {
+    return new ApiTransportError(
+      "INVALID_API_REQUEST",
+      false,
+      "Conversation subscription request is invalid",
+    );
+  }
+  if (error instanceof ConversationEventSubscriptionOverflowError) {
+    return new ApiTransportError(
+      "CONVERSATION_EVENT_SUBSCRIPTION_OVERFLOW",
+      true,
+      "Conversation Event subscription overflowed",
+    );
+  }
+  if (error instanceof ConversationEventSubscriptionAbortedError) {
+    return new ApiTransportError(
+      "API_REQUEST_ABORTED",
+      true,
+      "Conversation Event subscription was aborted",
+    );
+  }
+  if (error instanceof ConversationEventHubClosedError) {
+    return new ApiTransportError(
+      "HOST_UNAVAILABLE",
+      true,
+      "Conversation Host is unavailable",
+    );
+  }
+  return new ApiTransportError(
+    "INTERNAL_ERROR",
+    false,
+    "Conversation Event subscription failed",
+  );
+}
+
+function freezeError(
+  code: string,
+  category: ApiErrorSnapshot["category"],
+  retryable: boolean,
+  message: string,
+): ApiErrorSnapshot {
+  return Object.freeze({ code, category, retryable, message });
+}

@@ -5888,6 +5888,7 @@ Currently implemented skeletons include:
 - platform-neutral `Conversation`, `ConversationInput`, and bound `ConversationEvents` protocols
 - durable `ConversationSnapshot` and placement-neutral `RuntimePresence` contracts
 - Conversation query, command, and Runtime-presence service ports
+- provider-neutral `ConversationApiRouter` for the five stable Conversation operations, versioned Event frames, exact protocol validation, stable error normalization, subscription lifecycle ownership, and Client-to-service integration without Novel-domain API routing
 - stable Conversation not-found and Handle lifecycle errors
 - `StorageConversationQueryService` backed by Catalog, Journal, and catch-up subscriptions
 - `LocalConversationFactory` and in-process `LocalConversation` Handle composition

@@ -291,6 +291,16 @@ same authentication source
 same desktop platform capabilities
 ```
 
+### 7.1 Implemented Conversation-First Router Checkpoint
+
+The current client integration deliberately routes only the five stable Conversation operations: input enqueue, Event history, Event subscription, Snapshot query, and Runtime Presence query. Novel query, Draft, ChangeSet, Approval, Commit, publication, and other domain operations are not registered in this Router.
+
+`ConversationApiRouter` is the provider-neutral production routing boundary behind those operations. It validates protocol envelopes and exact payload fields, preserves validated InputEvent snapshots when delegating to `ConversationCommandService`, dispatches read operations to `ConversationQueryService` and `ConversationRuntimePresenceReader`, converts durable subscriptions into versioned `ApiEventFrame` streams, and normalizes failures into stable redacted API errors.
+
+The Router implements the existing `ApiTransport` surface so it can be used directly for in-process composition while later Electron IPC and HTTP/WebSocket server adapters delegate to the same object. It owns only routed subscription lifetimes; it does not close Storage, Runtime, or Host services and does not select process placement, authentication, Workspace policy, or a Provider.
+
+Focused validation composes `DefaultNovelApiClient` over this Router and verifies Conversation open, user input, history, live delivery, Snapshot and Presence queries, not-found and malformed-operation errors, shutdown behavior, and log payload redaction. Despite the historical `NovelApiClient` name, this checkpoint exercises no Novel-domain API.
+
 ## 8. Shared React UI Package
 
 The top-level `ui/` directory is published inside the workspace as `@novel/ui`.

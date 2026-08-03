@@ -170,6 +170,13 @@ results; trusted-boundary capture functions; Core exports; and the
 - cover create, edit with secret, edit without secret, conflict, cleanup, and
   failure-compensation scenarios.
 
+D2 is complete with the provider-neutral storage command service, deterministic
+and random identity Ports, revision conflict handling, serialized mutation,
+versioned Credential staging, candidate-build and save rollback, committed
+cleanup with shared-reference protection, deferred cleanup reporting, safe
+structured logs, and the `model-configuration-command-service-smoke.mjs`
+validation. D3 is next.
+
 ### Task D3: Shared UI and Electron Configuration Commands
 
 - extend the shared `ApplicationConfigurationClient`;
@@ -302,7 +309,9 @@ stderr. Tests must assert redaction on every new failure boundary.
 
 - D0 is complete by the track-activation commit.
 - D1 is complete by the Model Configuration Command Protocol commit.
-- D2 Consistent Model Configuration Service is the next implementation step.
-- D3 through D12 remain pending.
+- D2 is complete by the Consistent Model Configuration Service commit.
+- D3 Shared UI and Electron Configuration Commands is the next implementation
+  step.
+- D4 through D12 remain pending.
 - Agent-facing Novel Tools and Persistent Agent Team work remain outside this
   active track.

@@ -102,6 +102,7 @@ const safeResult = {
   connectionId: "connection:primary",
   modelProfileId: "model-profile:primary",
   credentialStatus: "configured",
+  credentialCleanupStatus: "not_required",
 };
 assert.equal(JSON.stringify(safeResult).includes(replacementSecret), false);
 assert.equal(JSON.stringify(safeResult).includes("secret"), false);

@@ -109,6 +109,7 @@ export interface UpsertModelConfigurationResult {
   readonly connectionId: string;
   readonly modelProfileId: string;
   readonly credentialStatus: CredentialStatus;
+  readonly credentialCleanupStatus: ModelCredentialCleanupStatus;
 }
 
 export interface SetDefaultModelProfileResult {

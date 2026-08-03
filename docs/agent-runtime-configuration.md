@@ -76,3 +76,21 @@ Manifest-backed `RuntimeSystemPromptSource`, the Context compiler, and the
 provider-neutral `AgentRuntimeAdapter`. Pi remains confined to the internal Pi
 adapter implementation. The execution assembler never logs Prompt content,
 Provider credentials, Tool data, or mutable Runtime state.
+
+## Policy Services
+
+`InMemoryAgentRuntimePolicyServicesResolver` binds the configuration's exact
+Runtime, Context, and Nudge policy IDs to one immutable service bundle:
+
+- `RuntimePolicyEngine` evaluates effects;
+- `ContextProjectionProviderCallCoordinator` prepares Checkpoint and recent
+  Message projection without mutating canonical Messages;
+- `ContextCheckpointApplicationCoordinator` records dispatch-time application;
+- `NudgeProviderCallCoordinator` leases and consumes one-shot System Reminder
+  overlays.
+
+`PolicyBoundAgentRuntimeAdapterFactory` resolves this bundle before delegating
+to the concrete Provider adapter factory. Existing Nudge protocol limits remain
+authoritative: one overlay is selected by default and at most two are admitted
+for a Provider call. Confirmed reminders are consumed; failed-before-dispatch
+leases are released; overlays never become permanent Base Prompt content.

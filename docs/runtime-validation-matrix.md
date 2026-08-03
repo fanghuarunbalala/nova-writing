@@ -5,6 +5,7 @@
 ```bash
 pnpm check
 pnpm --dir core smoke:all
+pnpm --dir core smoke:runtime-subagent-validation
 ```
 
 `smoke:all` discovers every top-level `core/scripts/*-smoke.mjs` fixture and
@@ -20,6 +21,15 @@ duration, process exit/signal state, and captured byte counts. Each test has a
 30-second hard timeout; this is a deadlock guard rather than a production SLA.
 RSS and Heap values measure the isolated test process and do not aggregate
 memory owned by descendant processes.
+
+`smoke:runtime-subagent-validation` runs the focused ephemeral Subagent slice
+with the same report format. It covers Task protocol and assignment Events,
+single-process lifecycle and recovery, process-free query and completion
+bridging, dynamic `Task`/`TaskGet`/`TaskCancel` Tools, SQLite persistence,
+capacity and reduced Tool policy checks, plus provider-neutral IPC and both
+same-process and child-process Runtime placement. It emits a machine-readable
+`SUBAGENT_VALIDATION_REPORT=<json>` line and fails on any child failure,
+timeout, missing report, or non-finite performance metric.
 
 ## Acceptance Coverage
 

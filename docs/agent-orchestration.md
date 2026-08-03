@@ -3,8 +3,8 @@
 ## 1. Status and Boundary
 
 This document records the accepted design direction for Agent orchestration.
-The ephemeral Subagent slice completed Step S0 through Step S5 on August 3,
-2026. Step S6 is the next active implementation step. Persistent Agent, Agent
+The ephemeral Subagent slice completed Step S0 through Step S6 on August 3,
+2026. No further implementation is active in this slice. Persistent Agent, Agent
 Team, Team communication, `TaskOutput`, and `Sleep`
 remain documented future work. Completed Runtime Task 6B and Task 7 checkpoints
 remain closed.
@@ -372,6 +372,17 @@ the intent and routes child Stop without waiting for process termination. All
 three Tools return bounded structured `details` and short text content; Tool
 execution policy, permission, approval, sandbox, timeout, and trace behavior
 remain owned by the existing provider-neutral Tool Dispatcher.
+
+### 7.3 Validation Boundary
+
+`runtime-subagent-validation-smoke.mjs` runs the focused Subagent release slice
+through the existing isolated Core Smoke runner. Its 15 scenarios cover
+protocol capture, assignment Event delivery, single-process lifecycle,
+Bootstrap ordering, recovery and SQLite persistence, process-free query and
+completion, dynamic Tool execution, cancellation ownership, IPC, no-process
+Runtime execution, and Host-to-child execution. The report includes pass/fail
+rates, duration percentiles, Event Loop delay/utilization, memory growth, the
+slowest scenarios, and redacted failed-test records.
 
 ## 7. Subagent Bootstrap and Completion
 

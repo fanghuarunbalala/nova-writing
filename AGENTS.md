@@ -6,7 +6,7 @@ These instructions apply to the entire repository.
 
 Complete the currently active documented implementation track from the current repository status without reimplementing completed checkpoints.
 
-The active track is Subagent Tool Step S4 through Step S6 in `docs/implementation-plan.md`. Runtime Task 1 through Task 7 and Subagent Tool Step S0 through Step S3 remain completed. Novel Task N7 through Task N11 and persistent Agent Team work are paused rather than cancelled while the Subagent track is active.
+Subagent Tool Step S4 through Step S6 is now completed in `docs/implementation-plan.md`. Runtime Task 1 through Task 7 and Subagent Tool Step S0 through Step S3 remain completed. Novel Task N7 through Task N11 and persistent Agent Team work are paused rather than cancelled until an explicit track change.
 
 ## Autonomous Authority
 
@@ -61,4 +61,4 @@ Planning is mandatory even when the agent has authority to continue automaticall
 
 ## Completion Boundary
 
-The current autonomous execution objective ends only when Subagent Tool Step S4 through Step S6 is implemented, validated, documented, and committed, or when progress is blocked by an unresolved decision that cannot be safely derived from accepted documents and existing code. Novel Task N7 through Task N11 and persistent Agent Team work resume only after an explicit track change.
+The current autonomous execution objective ends when Subagent Tool Step S4 through Step S6 is implemented, validated, documented, and committed. Novel Task N7 through Task N11 and persistent Agent Team work resume only after an explicit track change.

@@ -44,10 +44,8 @@ Rules:
 - Update architecture documentation whenever an implementation changes an accepted diagram, contract, lifecycle, or task status.
 - The dedicated Novel domain model remains documented in `docs/novel-implementation-plan.md`; Novel Task N0 through Task N6 is complete, while Novel Task N7 through Task N11 is paused during the active Subagent Tool track.
 
-The Subagent Tool track is active and continues from completed Step S3.
-Completed checkpoints are not repeated; implementation resumes at Step S4 and
-proceeds through Step S6. Novel Task N7 through Task N11 remains paused during
-this track.
+The Subagent Tool track is complete through Step S6. Novel Task N7 through Task
+N11 remains paused until an explicit track change.
 
 ## 2. Task Overview
 
@@ -2962,8 +2960,8 @@ Tool Step S4 through Step S6. Novel Task N7 through Task N11 and persistent
 Agent Team work remain paused until another explicit track change.
 
 Post-Task-7 Agent orchestration is documented in
-`docs/agent-orchestration.md`. The accepted S0-S5 contracts are active for the
-current Subagent Tool track. The current track does not authorize persistent
+`docs/agent-orchestration.md`. The accepted S0-S6 contracts are complete. No
+current track authorizes persistent
 Agent, Agent Team, Team communication, `TaskOutput`, or `Sleep` implementation.
 
 Active implementation order:
@@ -3014,4 +3012,11 @@ protocol failures. Step S5 status: completed. `Task`, `TaskGet`, and
 Registry, and expose dynamically generated allowed-Agent descriptions and
 schemas. `Task` waits only for Child Bootstrap acceptance, `TaskGet` is
 process-free, and `TaskCancel` submits a non-blocking cancellation intent with
-ownership validation. Step S6 is the next active step.
+ownership validation. Step S6 status: completed. The focused validation
+launcher runs 15 isolated scenarios covering protocol, assignment Events,
+single-process lifecycle, Bootstrap/recovery, SQLite persistence, query and
+completion bridging, dynamic Tools, cancellation, IPC, no-process Runtime
+execution, and Host-to-child execution. It emits unified core metrics,
+pass/failure rates, performance metrics, slowest scenarios, and failed tests.
+Subagent Tool Steps S4 through S6 are complete; future Subagent or Agent Team
+work requires an explicit track change.

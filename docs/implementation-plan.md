@@ -3083,3 +3083,315 @@ cancellation, and trace live under `core/src/runtime/tools/execution/`.
 Runtime-owned Task protocol, query/completion services, Binding persistence,
 lifecycle, and process-neutral execution contracts remain under
 `core/src/runtime/subagent/`.
+
+## 13. Prompt Composition and Stateful Nudge Track
+
+This post-completion track is explicitly selected by the user after the
+Runtime, Tool, IPC, Subagent, and Novel application checkpoints. It extends the
+existing one-shot Nudge protocol without changing the meaning of the completed
+Task 4N contracts until the versioned migration boundary is implemented.
+
+The track follows the existing execution protocol: each step is independently
+planned, implemented, validated, reviewed, documented when needed, and
+committed before the next step begins. The track does not resume Persistent
+Agent Team implementation, Skill Runtime, ContextAttachment, or Novel-facing
+Tool work.
+
+### 13.1 Accepted Invariants
+
+1. `AgentCommunicationPolicy` describes an Agent's communication topology; it
+   is not itself a Tool registry, Prompt builder, Runtime executor, or IPC
+   manager.
+2. `AgentDelegationPolicy` controls which Agent types may be invoked, while
+   `AgentToolPolicy` controls concrete Tool capability. Communication role may
+   provide defaults through a resolver, but explicit Agent Definition values
+   take precedence.
+3. `CompiledSystemPrompt` remains the immutable Manifest-owned Base Prompt.
+   Prompt Assembly is a separate per-Provider-call object.
+4. The stable Context order is `Base Prompt → Checkpoint Overlay → Nudge
+   Overlay → Messages`. Nudge content never becomes canonical Runtime Message
+   history merely because it was emitted or applied.
+5. Tool declarations, Tool Prompt guidance, Tool execution policy, and Tool
+   handlers remain separate. Tool handlers cannot directly mutate an active
+   System Prompt.
+6. Nudge delivery supports `once`, `until_acknowledged`, and
+   `until_condition`. A `ContextCheckpoint` is not represented as a Nudge
+   delivery mode.
+7. Nudge publication, selection, Provider-call application, acknowledgement or
+   resolution, consumption, expiry, and supersession remain distinguishable
+   lifecycle states.
+8. Private Nudge state is authoritative for renderable parameters and lease
+   recovery. Redacted public OutputEvents are for observation and replay, not
+   complete private-state reconstruction.
+9. Public Core boundaries remain provider-neutral. Pi, Node, SQLite, process,
+   IPC, and future Rust details stay behind existing adapters and stores.
+
+### 13.2 PC-0: Semantic and Compatibility Freeze
+
+Status: planned as the first implementation step.
+
+Record the role, capability, Prompt, Tool, and Nudge boundaries above in the
+architecture and implementation documents. Define the Protocol v1 to Protocol
+v2 migration rule: old Pending Nudges are interpreted as `once`, old lifecycle
+states remain readable, and no old Manifest digest is silently recomputed.
+
+Acceptance:
+
+- no Runtime behavior changes;
+- no existing public Event or Manifest snapshot is rewritten;
+- the extended track and its exclusions are explicit;
+- the documentation-only change is committed separately.
+
+### 13.3 PC-1: Agent Capability Profile
+
+Add immutable provider-neutral `AgentCapabilityProfile` and a deterministic
+catalog under `core/src/agent/capability/`. A Profile contains identity,
+version, communication role, default Prompt Section IDs, default Tool Group
+IDs, and default communication Channel IDs. Only `standalone` and
+`ephemeral_subagent` Profiles are assembled in this track; `orchestrator` and
+`team_member` remain recognized roles without silently installing deferred
+Agent Team capabilities.
+
+Acceptance:
+
+- duplicate Profile identities and unknown references fail;
+- Profile snapshots are defensively captured and deeply frozen;
+- Profile ordering and digest are deterministic;
+- existing `AgentCommunicationPolicy` construction remains compatible.
+
+### 13.4 PC-2: Capability Profile Resolver
+
+Add `AgentCapabilityProfileResolver` and an immutable resolved-capability
+result. Resolve Profile defaults first, then merge explicit Agent Definition
+Prompt and Tool policy. Explicit Prompt Sections, Tool Groups, allowlists, and
+denylists have precedence; deny remains final. The Resolver validates
+communication-role compatibility but never creates Tool handlers, Providers,
+IPC channels, or child processes.
+
+Acceptance:
+
+- same inputs produce the same resolved snapshot and digest;
+- unknown Prompt Sections, Tool Groups, and Profile IDs fail explicitly;
+- explicit Agent Definition configuration overrides defaults;
+- logs contain only stable IDs, counts, and failure categories.
+
+### 13.5 PC-3: Agent Manifest Snapshot Integration
+
+Persist the resolved Profile identity, version, and digest in the Agent
+Manifest through a versioned Manifest snapshot extension. Manifest recovery
+uses the exact persisted resolution and never re-resolves `latest` or current
+Profile defaults. V1 Manifests remain readable; V2 adds the capability
+snapshot without changing the old digest algorithm.
+
+Acceptance:
+
+- Manifest round-trip preserves resolved capabilities;
+- changed Profile definitions do not change existing Manifest identity;
+- digest mismatch and missing Profile snapshots fail with stable errors;
+- Node persistence remains hidden behind the Manifest Store port.
+
+### 13.6 PC-4: Provider-call Prompt Assembly
+
+Add immutable `PromptContribution`, `PromptLayer`, and `PromptAssembly`
+contracts under `core/src/prompt/assembly/`, plus a Runtime-owned assembler at
+`core/src/runtime/context/RuntimePromptAssembler.ts`. Keep
+`SystemPromptBuilder` responsible only for the Manifest Base Prompt. The
+assembler combines Base Prompt, Checkpoint Overlay, selected Nudge Overlay,
+and fixed-High-Watermark canonical Messages, then produces one aggregate
+digest for the Provider-call candidate.
+
+Acceptance:
+
+- layer order is deterministic;
+- Base Prompt remains unchanged across Runs;
+- Prompt Assembly is deeply frozen;
+- Messages and overlays retain separate identities and persistence scopes;
+- Prompt text is excluded from logs and public lifecycle Events.
+
+### 13.7 PC-5: Tool Prompt Details
+
+Add optional provider-neutral `ToolPromptDetails` under
+`core/src/tooling/protocol/`. It may describe Tool usage, parameter guidance,
+and safety guidance. `ToolRegistryView` contributes deterministic Tool Prompt
+blocks only for Tools that survive the Agent Tool policy. Tool handlers receive
+no mutable Prompt object; Tool effects must use the existing Runtime Policy and
+Effect Coordinator boundary.
+
+Acceptance:
+
+- Tool declaration, schema, Prompt guidance, execution policy, and handler
+  remain distinct;
+- denied or unavailable Tools contribute no Prompt guidance;
+- Tool guidance is included in Manifest/Base Prompt digest deterministically;
+- existing Tools without Prompt Details remain valid.
+
+### 13.8 N-1: Nudge Protocol v2
+
+Extend `core/src/runtime/nudge/NudgeProtocol.ts` with delivery modes
+`once`, `until_acknowledged`, and `until_condition`; add acknowledgement and
+condition references, while preserving old v1 decoding as `once`. Add stable
+validation failures for invalid combinations, such as a missing condition for
+`until_condition` or an acknowledgement policy on `once`.
+
+Acceptance:
+
+- old snapshots decode without mutation;
+- new protocol values are strict and JSON-safe;
+- templates still receive only validated parameters;
+- rendered content never enters durable public Event payloads.
+
+### 13.9 N-2: Nudge State Machine
+
+Add explicit lifecycle coordination for `scheduled`, `leased`, `applied`,
+`active`, `consumed`, `acknowledged`, `resolved`, `expired`, and `superseded`.
+Release before Provider dispatch returns a lease to `scheduled`; a confirmed
+dispatch produces `applied`; persistent deliveries become `active`; terminal
+states are idempotent. Unknown dispatch state remains a recovery case rather
+than an inferred success.
+
+Acceptance:
+
+- every state transition is validated;
+- illegal transitions fail with stable categories;
+- duplicate acknowledgement, resolution, expiry, and supersession are
+  idempotent;
+- one-shot behavior remains byte-for-byte compatible at the Provider boundary.
+
+### 13.10 N-3: Pending Nudge Store Extension
+
+Extend the Store port and in-memory reference implementation with active-state
+queries, acknowledgement, condition resolution, supersession, and lease
+reconciliation. Add the restart-safe private snapshot representation required
+for renderable parameters, cooldowns, conditions, and delivery attempts. Do not
+make public Journal replay the source of renderable Nudge state.
+
+Acceptance:
+
+- leased records normalize to scheduled after a restart when dispatch was not
+  confirmed;
+- active records survive restart;
+- terminal records remain terminal;
+- concurrent operations remain Conversation-serialized and idempotent.
+
+### 13.11 N-4: Acknowledgement and Condition Services
+
+Add provider-neutral acknowledgement and condition ports. Acknowledgements may
+come from Runtime control, user input, Approval decisions, Tool results, or
+terminal Subagent observations. Conditions are referenced by stable ID and
+version and are evaluated by Runtime Policy services, never by arbitrary
+functions stored in a Nudge.
+
+Acceptance:
+
+- acknowledgement source and reason are identity-only metadata;
+- condition evaluation is bounded, async, and failure-normalized;
+- an Agent cannot self-acknowledge by merely emitting text;
+- condition resolution is retry-safe.
+
+### 13.12 N-5: Stateful Nudge Selection
+
+Extend deterministic selection to include delivery state, active re-projection,
+acknowledgement and condition eligibility, cooldown, expiry, dedupe, priority,
+scheduled Sequence, exclusivity, and the existing maximum selection limit.
+Persistent Nudges may be reselected on later Provider Calls without creating a
+new Nudge identity or duplicate lifecycle record.
+
+Acceptance:
+
+- selection order is deterministic;
+- one active Nudge per dedupe identity is enforced;
+- superseding a Nudge is explicit;
+- selected count and exclusive behavior remain bounded;
+- selection does not mutate state before lease acquisition.
+
+### 13.13 N-6: Provider-call Application Receipt
+
+Integrate Nudge leasing with Prompt Assembly and the Provider dispatch boundary.
+Persist a private application receipt only after the injected overlay is known
+to have entered the Provider call. Once deliveries consume after confirmed
+application; persistent deliveries remain active. Provider failure before
+dispatch releases the lease; failure after dispatch does not guess or release
+it.
+
+Acceptance:
+
+- `emitted`, `selected`, `applied`, and `consumed` are distinguishable;
+- retry uses stable lease and delivery identities;
+- Prompt Assembly contains only eligible overlays;
+- Nudge text never enters canonical Messages.
+
+### 13.14 N-7: RuntimePolicyEngine Integration
+
+Extend Runtime Policy effects and the Effect Coordinator so policy phases can
+schedule, acknowledge, resolve, expire, and supersede Nudges. Preserve the
+existing before-Provider-call coordination and avoid direct Store access from
+Policy implementations.
+
+Acceptance:
+
+- all Nudge mutations pass through `NudgeManager`;
+- policy effects are typed and validated;
+- effect ordering remains Conversation-serialized;
+- policy failure does not fabricate Provider or Nudge success.
+
+### 13.15 N-8: Tool and Subagent Event Integration
+
+Connect Tool results, Approval decisions, and existing Subagent lifecycle
+observations to the acknowledgement and condition ports. This step does not
+implement new Agent Team communication Tools. It only consumes already
+available provider-neutral Runtime facts and verifies ownership boundaries.
+
+Acceptance:
+
+- Tool Handler cannot directly mutate Nudge state;
+- Tool runtime effects are policy-reviewed;
+- Subagent terminal observation can resolve an eligible condition;
+- parent and child Conversation identities are validated.
+
+### 13.16 N-9: Recovery and Migration
+
+Implement Protocol v1 to v2 decoding, private Snapshot migration, lease
+reconciliation, active-state restoration, terminal-state preservation, and
+Manifest capability Snapshot recovery. Public Events remain display/replay
+facts and do not reconstruct omitted private parameters.
+
+Acceptance:
+
+- v1 one-shot Snapshots recover as `once`;
+- active v2 Nudges survive restart;
+- in-flight leases reconcile deterministically;
+- old Manifest and Conversation data remain readable;
+- all recovery errors are stable and redacted.
+
+### 13.17 N-10: Full-chain and Performance Validation
+
+Extend the unified validation launcher with scenarios for Prompt Assembly,
+Capability Profile resolution, Tool Prompt Details, all Nudge delivery modes,
+Provider dispatch races, acknowledgement, conditions, expiry, supersession,
+restart, Subagent integration, and same-process/child-process execution.
+
+The launcher must report:
+
+- total, passed, failed, pass rate, and failed-test list;
+- Prompt Assembly, Nudge selection, and Provider preparation latency;
+- Nudge retry, duplicate suppression, and reconciliation counts;
+- queue wait, event-loop lag, memory growth, and slowest scenarios;
+- no Prompt, Tool data, novel text, paths, raw errors, or stacks in logs.
+
+### 13.18 N-11: Documentation and Checkpoint Commit
+
+Update the architecture, implementation plan, public protocol notes, and
+validation README. Add class diagrams, state diagrams, recovery flow, and
+client-facing observation guidance. Run the complete established check suite,
+review the final diff, and create the dedicated Checkpoint commit.
+
+### 13.19 Explicit Exclusions
+
+This track does not implement:
+
+- Persistent Agent Team, `SendMessage`, or `ListAgents`;
+- cross-session Agent communication;
+- Skill Runtime or ContextAttachment;
+- splitting Communication Role into lifecycle and audience fields;
+- Novel-domain Agent Tools or UI-specific Nudge rendering;
+- direct Tool Handler mutation of Prompt or Nudge state.

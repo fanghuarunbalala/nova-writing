@@ -349,6 +349,14 @@ const NOVEL_THEME_CSS = `
   background: var(--novel-surface-primary);
 }
 
+.novel-outline-tree-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
 .novel-outline-tree {
   display: flex;
   flex-direction: column;

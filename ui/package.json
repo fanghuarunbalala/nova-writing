@@ -33,7 +33,8 @@
     "smoke:outline-change-reviewer": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/outline-change-reviewer-typecheck.tsx && node scripts/outline-change-reviewer-smoke.mjs",
     "smoke:manuscript-change-reviewer": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/manuscript-change-reviewer-typecheck.tsx && node scripts/manuscript-change-reviewer-smoke.mjs",
     "smoke:composer-draft-store": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/composer-draft-store-typecheck.tsx && node scripts/composer-draft-store-smoke.mjs",
-    "smoke:reference-in-conversation": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/reference-in-conversation-typecheck.tsx && node scripts/reference-in-conversation-smoke.mjs"
+    "smoke:reference-in-conversation": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/reference-in-conversation-typecheck.tsx && node scripts/reference-in-conversation-smoke.mjs",
+    "smoke:story-outline-reference": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/story-outline-reference-typecheck.tsx && node scripts/story-outline-reference-smoke.mjs"
   },
   "dependencies": {
     "@novel/core": "workspace:*"

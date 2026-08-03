@@ -698,6 +698,12 @@ Shared Inspector renderers can now use `ReferenceInConversationButton` to add an
 
 The action remains domain- and Transport-neutral. An Outline, Manuscript, Character, Location, Novel Operation, or future Schedule renderer constructs the authorized local reference descriptor and invokes the same shared action. Closing or navigating the Inspector does not remove the resulting Composer chip, and activating that chip reopens its captured Inspector target. This checkpoint still does not serialize references into `UserMessageInputEvent` or define the deferred wire protocol.
 
+### 13.3 Implemented StoryUnit Reference Integration
+
+`StoryOutlineTree` now accepts an optional `referenceForStoryUnit(node, view)` resolver. When a StoryUnit is selected and the resolver returns an authorized local descriptor, the tree header exposes the shared `ReferenceInConversationButton`; changing selection changes the candidate reference, while returning to an already-referenced StoryUnit exposes the shared deduplicated state.
+
+The tree does not manufacture Novel identity, read scope, source revision, or Inspector parameters. Its query adapter or owning Inspector renderer receives the complete normalized tree view and selected StoryUnit, then supplies the immutable local reference. Trees without a resolver retain the existing read-only behavior and do not require Composer or Shell providers.
+
 ## 14. Domain-specific Reviewers
 
 The review surface is selected by domain type:

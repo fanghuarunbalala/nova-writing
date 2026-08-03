@@ -3343,6 +3343,16 @@ Acceptance:
 - effect ordering remains Conversation-serialized;
 - policy failure does not fabricate Provider or Nudge success.
 
+N-7-A delivered:
+
+- typed `nudge_schedule`, `nudge_acknowledge`, `nudge_resolve`,
+  `nudge_expire`, and `nudge_supersede` Policy Effects
+- immutable capture and validation of Conversation/Run identity, references,
+  timestamps, schedule order, target identity, and replacement identity
+- a separate lifecycle handler boundary in `RuntimeEffectCoordinator`; the
+  existing `kind: "nudge"` and Compaction Effect routes remain compatible
+- no Policy implementation receives or mutates the Pending Nudge Store
+
 ### 13.15 N-8: Tool and Subagent Event Integration
 
 Connect Tool results, Approval decisions, and existing Subagent lifecycle

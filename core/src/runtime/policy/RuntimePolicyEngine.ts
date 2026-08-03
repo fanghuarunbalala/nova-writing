@@ -202,6 +202,28 @@ function assertEffectIdentity(
   context: RuntimePolicyContext,
 ): void {
   if (effect.policyId !== policyId) throw new Error();
+  if (effect.kind === "nudge_schedule") {
+    if (
+      effect.conversationId !== context.conversationId ||
+      effect.runId !== context.runId ||
+      effect.effect.targetRunId !== context.runId ||
+      effect.scheduledAt !== context.evaluatedAt
+    ) {
+      throw new Error();
+    }
+    return;
+  }
+  if (
+    effect.kind === "nudge_acknowledge" ||
+    effect.kind === "nudge_resolve" ||
+    effect.kind === "nudge_expire" ||
+    effect.kind === "nudge_supersede"
+  ) {
+    if (effect.conversationId !== context.conversationId || effect.runId !== context.runId) {
+      throw new Error();
+    }
+    return;
+  }
   if (effect.kind === "nudge") {
     if (effect.targetRunId === context.runId) return;
     throw new Error();

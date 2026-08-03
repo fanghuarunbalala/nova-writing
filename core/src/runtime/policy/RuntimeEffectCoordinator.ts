@@ -3,6 +3,7 @@ import { noopLogger, type Logger } from "../../observability/index.js";
 import type { NudgeEffect } from "../nudge/index.js";
 import type {
   ContextCompactionEffect,
+  RuntimeNudgeLifecycleEffect,
   RuntimePolicyContext,
   RuntimePolicyEffect,
 } from "./RuntimePolicyProtocol.js";
@@ -18,6 +19,13 @@ import {
 
 export interface RuntimeNudgeEffectHandler {
   handle(context: RuntimePolicyContext, effect: NudgeEffect): Promise<void>;
+}
+
+export interface RuntimeNudgeLifecycleEffectHandler {
+  handle(
+    context: RuntimePolicyContext,
+    effect: RuntimeNudgeLifecycleEffect,
+  ): Promise<void>;
 }
 
 export interface RuntimeContextCompactionEffectHandler {
@@ -43,6 +51,7 @@ export interface RuntimeEffectExecutionReceipt {
 export interface RuntimeEffectCoordinatorOptions {
   readonly conversationId: string;
   readonly nudgeHandler?: RuntimeNudgeEffectHandler;
+  readonly nudgeLifecycleHandler?: RuntimeNudgeLifecycleEffectHandler;
   readonly contextCompactionHandler?: RuntimeContextCompactionEffectHandler;
   readonly logger?: Logger;
 }
@@ -50,6 +59,7 @@ export interface RuntimeEffectCoordinatorOptions {
 export class RuntimeEffectCoordinator {
   private readonly conversationId: string;
   private readonly nudgeHandler?: RuntimeNudgeEffectHandler;
+  private readonly nudgeLifecycleHandler?: RuntimeNudgeLifecycleEffectHandler;
   private readonly contextCompactionHandler?: RuntimeContextCompactionEffectHandler;
   private readonly logger: Logger;
   private tail: Promise<void> = Promise.resolve();
@@ -60,6 +70,7 @@ export class RuntimeEffectCoordinator {
     }
     this.conversationId = options.conversationId;
     this.nudgeHandler = options.nudgeHandler;
+    this.nudgeLifecycleHandler = options.nudgeLifecycleHandler;
     this.contextCompactionHandler = options.contextCompactionHandler;
     this.logger = (options.logger ?? noopLogger).child({
       component: "runtime_effect_coordinator",
@@ -154,6 +165,28 @@ export class RuntimeEffectCoordinator {
       }
     }
 
+    if (effect.kind !== "context_compaction") {
+      if (!this.nudgeLifecycleHandler) {
+        throw this.failEffect(
+          RUNTIME_EFFECT_COORDINATOR_FAILURE.nudgeLifecycleHandlerMissing,
+          context,
+          effect,
+        );
+      }
+      try {
+        await this.nudgeLifecycleHandler.handle(context, effect);
+        this.logHandled(context, effect);
+        return;
+      } catch (error) {
+        if (error instanceof RuntimeEffectCoordinatorError) throw error;
+        throw this.failEffect(
+          RUNTIME_EFFECT_COORDINATOR_FAILURE.nudgeLifecycleFailed,
+          context,
+          effect,
+        );
+      }
+    }
+
     if (!this.contextCompactionHandler) {
       throw this.failEffect(
         RUNTIME_EFFECT_COORDINATOR_FAILURE.compactionHandlerMissing,
@@ -195,7 +228,13 @@ export class RuntimeEffectCoordinator {
       captureNonBlank(context?.runId),
       captureNonBlank(context?.providerCallId),
       captureNonBlank(effect?.policyId),
-      effect?.kind === "nudge" || effect?.kind === "context_compaction"
+      effect?.kind === "nudge" ||
+      effect?.kind === "context_compaction" ||
+      effect?.kind === "nudge_schedule" ||
+      effect?.kind === "nudge_acknowledge" ||
+      effect?.kind === "nudge_resolve" ||
+      effect?.kind === "nudge_expire" ||
+      effect?.kind === "nudge_supersede"
         ? effect.kind
         : undefined,
     );
@@ -242,6 +281,15 @@ function assertEffectContext(
 ): void {
   if (effect.kind === "nudge") {
     if (effect.targetRunId !== context.runId) throw new Error();
+    return;
+  }
+  if (effect.kind !== "context_compaction") {
+    if (
+      effect.conversationId !== context.conversationId ||
+      effect.runId !== context.runId
+    ) {
+      throw new Error();
+    }
     return;
   }
   if (

@@ -9,8 +9,14 @@ import {
   RUNTIME_POLICY_PHASE,
   type ContextCompactionEffect,
   type ContextCompactionPolicyState,
+  type NudgeAcknowledgePolicyEffect,
+  type NudgeExpirePolicyEffect,
+  type NudgeResolvePolicyEffect,
+  type NudgeSchedulePolicyEffect,
+  type NudgeSupersedePolicyEffect,
   type RuntimePolicyContext,
   type RuntimePolicyEffect,
+  type RuntimeNudgeLifecycleEffect,
   type RuntimePolicyState,
 } from "./RuntimePolicyProtocol.js";
 import {
@@ -143,7 +149,101 @@ export function captureRuntimePolicyEffect(value: unknown): RuntimePolicyEffect 
       );
     }
   }
+  if (
+    record.kind === "nudge_schedule" ||
+    record.kind === "nudge_acknowledge" ||
+    record.kind === "nudge_resolve" ||
+    record.kind === "nudge_expire" ||
+    record.kind === "nudge_supersede"
+  ) {
+    try {
+      return captureRuntimeNudgeLifecycleEffect(value);
+    } catch {
+      throw failure(
+        RUNTIME_POLICY_PROTOCOL_FAILURE.invalidEffect,
+        captureIdentity(value),
+      );
+    }
+  }
   return captureContextCompactionEffect(value);
+}
+
+export function captureRuntimeNudgeLifecycleEffect(
+  value: unknown,
+): RuntimeNudgeLifecycleEffect {
+  const record = requireRecord(value);
+  const kind = record.kind;
+  const policyId = requireNonBlank(record.policyId);
+  const conversationId = requireNonBlank(record.conversationId);
+  const runId = requireNonBlank(record.runId);
+  if (kind === "nudge_schedule") {
+    const effect = captureNudgeEffect(record.effect);
+    const nudgeId = requireNonBlank(record.nudgeId);
+    const scheduledSequence = requirePositiveInteger(record.scheduledSequence);
+    const scheduledAt = requireTimestamp(record.scheduledAt);
+    if (effect.targetRunId !== runId || !nudgeId) throw new Error();
+    return Object.freeze({
+      kind,
+      policyId,
+      conversationId,
+      runId,
+      nudgeId,
+      effect,
+      scheduledSequence,
+      scheduledAt,
+    } satisfies NudgeSchedulePolicyEffect);
+  }
+  if (kind === "nudge_acknowledge") {
+    return Object.freeze({
+      kind,
+      policyId,
+      conversationId,
+      runId,
+      nudgeId: requireNonBlank(record.nudgeId),
+      acknowledgementRef: captureReference(record.acknowledgementRef),
+      acknowledgedAt: requireTimestamp(record.acknowledgedAt),
+    } satisfies NudgeAcknowledgePolicyEffect);
+  }
+  if (kind === "nudge_resolve") {
+    return Object.freeze({
+      kind,
+      policyId,
+      conversationId,
+      runId,
+      nudgeId: requireNonBlank(record.nudgeId),
+      conditionRef: captureReference(record.conditionRef),
+      resolvedAt: requireTimestamp(record.resolvedAt),
+    } satisfies NudgeResolvePolicyEffect);
+  }
+  if (kind === "nudge_expire") {
+    return Object.freeze({
+      kind,
+      policyId,
+      conversationId,
+      runId,
+      targetRunId: requireNonBlank(record.targetRunId),
+      evaluatedAt: requireTimestamp(record.evaluatedAt),
+      ...captureOptionalPositiveInteger(record.currentTurnNumber),
+      ...captureOptionalBoolean(record.runEnded),
+    } satisfies NudgeExpirePolicyEffect);
+  }
+  if (kind === "nudge_supersede") {
+    const nudgeId = requireNonBlank(record.nudgeId);
+    const targetRunId = requireNonBlank(record.targetRunId);
+    const supersededByNudgeId = requireNonBlank(record.supersededByNudgeId);
+    if (nudgeId === supersededByNudgeId) throw new Error();
+    return Object.freeze({
+      kind,
+      policyId,
+      conversationId,
+      runId,
+      nudgeId,
+      targetRunId,
+      supersededByNudgeId,
+      supersededAt: requireTimestamp(record.supersededAt),
+    } satisfies NudgeSupersedePolicyEffect);
+  }
+  throw new Error();
 }
 
 export function calculateContextPolicyTokenBoundaries(
@@ -233,6 +333,16 @@ function requireNonBlank(value: unknown): string {
   return value;
 }
 
+function captureReference(value: unknown): {
+  readonly id: string;
+  readonly version: string;
+} {
+  const record = requireRecord(value);
+  const id = requireNonBlank(record.id);
+  const version = requireNonBlank(record.version);
+  return Object.freeze({ id, version });
+}
+
 function requireTimestamp(value: unknown): string {
   const timestamp = requireNonBlank(value);
   if (
@@ -252,6 +362,21 @@ function requirePositiveInteger(value: unknown): number {
 function requireNonNegativeInteger(value: unknown): number {
   if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error();
   return value as number;
+}
+
+function captureOptionalPositiveInteger(
+  value: unknown,
+): { readonly currentTurnNumber?: number } {
+  if (value === undefined) return {};
+  return { currentTurnNumber: requirePositiveInteger(value) };
+}
+
+function captureOptionalBoolean(
+  value: unknown,
+): { readonly runEnded?: boolean } {
+  if (value === undefined) return {};
+  if (typeof value !== "boolean") throw new Error();
+  return { runEnded: value };
 }
 
 function captureIdentity(value: unknown): {

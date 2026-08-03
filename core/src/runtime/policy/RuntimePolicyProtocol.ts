@@ -1,5 +1,9 @@
 /** Provider-neutral Runtime Policy contracts for deterministic evaluation. */
-import type { NudgeEffect } from "../nudge/index.js";
+import type {
+  NudgeAcknowledgementReference,
+  NudgeConditionReference,
+  NudgeEffect,
+} from "../nudge/index.js";
 import type { ContextPressureSnapshot } from "../context/index.js";
 
 export const RUNTIME_POLICY_PHASE = {
@@ -52,7 +56,70 @@ export interface ContextCompactionEffect {
   readonly automaticHysteresisTokens: number;
 }
 
-export type RuntimePolicyEffect = NudgeEffect | ContextCompactionEffect;
+export interface NudgeSchedulePolicyEffect {
+  readonly kind: "nudge_schedule";
+  readonly policyId: string;
+  readonly conversationId: string;
+  readonly runId: string;
+  readonly nudgeId: string;
+  readonly effect: NudgeEffect;
+  readonly scheduledSequence: number;
+  readonly scheduledAt: string;
+}
+
+export interface NudgeAcknowledgePolicyEffect {
+  readonly kind: "nudge_acknowledge";
+  readonly policyId: string;
+  readonly conversationId: string;
+  readonly runId: string;
+  readonly nudgeId: string;
+  readonly acknowledgementRef: NudgeAcknowledgementReference;
+  readonly acknowledgedAt: string;
+}
+
+export interface NudgeResolvePolicyEffect {
+  readonly kind: "nudge_resolve";
+  readonly policyId: string;
+  readonly conversationId: string;
+  readonly runId: string;
+  readonly nudgeId: string;
+  readonly conditionRef: NudgeConditionReference;
+  readonly resolvedAt: string;
+}
+
+export interface NudgeExpirePolicyEffect {
+  readonly kind: "nudge_expire";
+  readonly policyId: string;
+  readonly conversationId: string;
+  readonly runId: string;
+  readonly targetRunId: string;
+  readonly evaluatedAt: string;
+  readonly currentTurnNumber?: number;
+  readonly runEnded?: boolean;
+}
+
+export interface NudgeSupersedePolicyEffect {
+  readonly kind: "nudge_supersede";
+  readonly policyId: string;
+  readonly conversationId: string;
+  readonly runId: string;
+  readonly nudgeId: string;
+  readonly targetRunId: string;
+  readonly supersededByNudgeId: string;
+  readonly supersededAt: string;
+}
+
+export type RuntimeNudgeLifecycleEffect =
+  | NudgeSchedulePolicyEffect
+  | NudgeAcknowledgePolicyEffect
+  | NudgeResolvePolicyEffect
+  | NudgeExpirePolicyEffect
+  | NudgeSupersedePolicyEffect;
+
+export type RuntimePolicyEffect =
+  | NudgeEffect
+  | RuntimeNudgeLifecycleEffect
+  | ContextCompactionEffect;
 
 export interface RuntimePolicy {
   readonly id: string;

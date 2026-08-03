@@ -2015,6 +2015,12 @@ Commit history and incomplete canonical Commit recovery
 - `createNodeNovelProjectionRecoveryStage` composes the scoped Source Reader,
   scoped disposable cache Store, readiness policy, and Core Projection Recovery
   service without exposing SQLite through public Novel Core contracts.
+- Restart acceptance uses the real Node SQLite Commit, Rebase, Draft,
+  Projection, and Outbox implementations in the fixed dependency order. An
+  Outbox publication failure leaves terminal Draft staging intact and stops the
+  sequence; retry reruns all five idempotent phases, publishes pending canonical
+  and Draft records, then removes terminal staging. A subsequent recovery has no
+  duplicate publication or cleanup work.
 - Public recovery results contain phase and aggregate counts. Logs contain only
   stable identity, phase, and count metadata; they never include Novel content,
   Operations, payloads, paths, raw errors, stacks, or causes.

@@ -1367,6 +1367,16 @@ replacement from canonical state, confirms Draft base-revision binding and
 Draft-only evidence visibility, and rejects damaged evidence. Full five-phase
 restart acceptance remains before N11-B is complete.
 
+B-I4 completes N11-B with a real Node restart acceptance scenario. One
+canonical Commit, one retained active Draft, one terminal Draft snapshot, one
+persisted Projection Target, the real empty Rebase registries, and canonical
+plus Draft Outboxes are recovered through the fixed five-stage application.
+The first Outbox publication failure preserves terminal staging and fails the
+Outbox phase; the complete retry verifies Commit History, retains valid Draft
+state, rebuilds Projection cache, publishes all pending lifecycle records, and
+removes terminal staging. A third run performs no duplicate publication or
+cleanup. **Task N11-B is complete.**
+
 ### N11-C End-to-End Validation
 
 Cover multi-Conversation Drafts, Commit, Rebase, conflict, Approval, Outline, Manuscript, publication, realization, recovery, and replay without Agent Tool involvement.

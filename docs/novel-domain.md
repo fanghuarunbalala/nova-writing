@@ -639,6 +639,13 @@ Conformance semantics:
 
 A StoryUnit may enter `realizationStatus: completed` only when it has at least one current ManuscriptRange and a `conforming` validation checked against the current global NovelRevision. Conformance failure keeps the StoryUnit in progress; it does not create an alternate actual-facts table.
 
+Completion admission is deterministic and provider-neutral. The StoryUnit must
+be an active leaf, the Realization and validation revisions must both equal the
+current global NovelRevision, and every Range must resolve without becoming
+unresolved or inverted. A current conforming result may admit a Range whose
+structural repair is marked review-required because that result is the explicit
+current semantic review; stale or pending validation never clears that flag.
+
 `ManuscriptRange` uses half-open `[start, end)` semantics. Both anchors belong
 to the same Manuscript and reference stable Block boundaries. V1 does not
 define character-offset anchors or an independent `ManuscriptRevision`.

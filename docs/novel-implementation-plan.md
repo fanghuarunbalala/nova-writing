@@ -1250,6 +1250,17 @@ durable repair chain and returns `valid`, `review-required`, `unresolved`, or
 
 Implement StoryUnitRealization, current revision binding, conformance findings, and completion admission.
 
+**Status:** complete. Strict immutable StoryUnitRealization records bind one
+StoryUnit, zero or more unique ManuscriptRanges, one global source
+NovelRevision, and a Conformance Result. Pending, conforming, non-conforming,
+and stale states enforce finding-severity invariants without deciding whether a
+human, deterministic checker, or model-assisted adapter produced the findings.
+`StoryUnitCompletionAdmissionValidator` admits only an active leaf with at
+least one structurally resolvable Range, a current realization revision, and a
+current conforming validation. Review-required redirects may be admitted only
+because that current conformance result represents the required semantic
+review; unresolved or inverted Ranges are always rejected. Task N10 is complete.
+
 ## 17. Task N11: Projection, Recovery, and End-to-End Validation
 
 ### N11-A Projections
@@ -1320,5 +1331,7 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
   deterministic move, split, merge, delete, and Anchor Repair Operations.
 - Task N10-D-C is completed by Range repair classification across move, split,
   merge, delete, and explicit repair outcomes. Task N10-D is complete.
-- Task N10-E Realization and Conformance is next.
+- Task N10-E is completed by revision-bound Realization and Conformance models
+  plus deterministic current-revision completion admission. Task N10 is complete.
+- Task N11-A Projections is next.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

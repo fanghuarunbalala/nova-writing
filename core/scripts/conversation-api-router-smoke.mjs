@@ -4,6 +4,7 @@ import {
   ApiRemoteError,
   ApiTransportError,
   ConversationApiRouter,
+  ConversationAlreadyExistsError,
   ConversationNotFoundError,
   DefaultNovelApiClient,
   UserMessageInputEvent,
@@ -14,6 +15,7 @@ const conversationId = "conversation-router";
 const logs = [];
 const services = new TestConversationServices(conversationId);
 const router = new ConversationApiRouter({
+  catalog: services,
   commands: services,
   queries: services,
   runtimePresence: services,
@@ -24,6 +26,39 @@ const api = new DefaultNovelApiClient({
   requestIdFactory: createRequestIdFactory(),
   logger: createCollectingLogger(logs),
 });
+
+const createdConversation = await api.conversations.create({
+  conversationId: "conversation-router-created",
+  agent: {
+    agentType: "conversation.main",
+    definitionVersion: "2",
+  },
+});
+assert.equal(createdConversation.id, "conversation-router-created");
+const catalog = await api.conversations.list({ status: "active", limit: 10 });
+assert.deepEqual(
+  catalog.conversations.map((snapshot) => snapshot.metadata.id),
+  [conversationId, "conversation-router-created"],
+);
+assert.equal(
+  catalog.conversations[1].activeAgentBinding.definitionVersion,
+  "2",
+);
+await createdConversation.close();
+
+await assert.rejects(
+  api.conversations.create({
+    conversationId: "conversation-router-created",
+    agent: {
+      agentType: "conversation.main",
+      definitionVersion: "2",
+    },
+  }),
+  (error) =>
+    error instanceof ApiRemoteError &&
+    error.code === "CONVERSATION_ALREADY_EXISTS" &&
+    error.category === "conflict",
+);
 
 const conversation = await api.conversations.open(conversationId);
 const events = conversation.events.subscribe({ start: { from: "start" } });
@@ -116,6 +151,55 @@ class TestConversationServices {
     this.eventIds = new Map();
     this.subscriptions = new Set();
     this.snapshot = createSnapshot(registeredConversationId);
+    this.catalogSnapshots = [this.snapshot];
+  }
+
+  async create(options) {
+    const conversationId = options.conversationId ?? "conversation-router-generated";
+    if (
+      this.catalogSnapshots.some(
+        (snapshot) => snapshot.metadata.id === conversationId,
+      )
+    ) {
+      throw new ConversationAlreadyExistsError(conversationId);
+    }
+    const timestamp = "2026-08-03T01:00:00.000Z";
+    const snapshot = Object.freeze({
+      metadata: Object.freeze({
+        id: conversationId,
+        workspaceId: "workspace-router",
+        ...(options.parentConversationId !== undefined
+          ? { parentConversationId: options.parentConversationId }
+          : {}),
+        rootConversationId: options.parentConversationId ?? conversationId,
+        status: "active",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        lastJournalSequence: 0,
+      }),
+      activeAgentBinding: Object.freeze({
+        id: `binding-${conversationId}`,
+        conversationId,
+        revision: 1,
+        ...options.agent,
+        status: "active",
+        createdAt: timestamp,
+      }),
+    });
+    this.catalogSnapshots.push(snapshot);
+    return snapshot;
+  }
+
+  async list(options = {}) {
+    return {
+      conversations: this.catalogSnapshots
+        .filter(
+          (snapshot) =>
+            options.status === undefined ||
+            snapshot.metadata.status === options.status,
+        )
+        .slice(0, options.limit),
+    };
   }
 
   async enqueue(requestConversationId, event) {

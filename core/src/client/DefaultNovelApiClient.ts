@@ -4,6 +4,9 @@ import {
   ConversationProxy,
   type ApiRequestIdFactory,
   type Conversation,
+  type ConversationCatalogResult,
+  type CreateConversationOptions,
+  type ListConversationsOptions,
 } from "../conversation/index.js";
 import { noopLogger, type Logger } from "../observability/index.js";
 import type { ApiTransport } from "../transport/index.js";
@@ -38,6 +41,19 @@ class DefaultConversationApi implements ConversationApi {
     private readonly client: ConversationClient,
     private readonly logger: Logger,
   ) {}
+
+  async create(options: CreateConversationOptions): Promise<Conversation> {
+    const snapshot = await this.client.create(options);
+    return new ConversationProxy({
+      snapshot,
+      client: this.client,
+      logger: this.logger,
+    });
+  }
+
+  list(options?: ListConversationsOptions): Promise<ConversationCatalogResult> {
+    return this.client.list(options);
+  }
 
   async open(conversationId: string): Promise<Conversation> {
     const snapshot = await this.client.getSnapshot(conversationId);

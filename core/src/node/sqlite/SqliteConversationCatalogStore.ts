@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import {
+  ConversationAgentBindingMissingError,
+  ConversationAlreadyExistsError,
+  ConversationParentNotFoundError,
+  ConversationWorkspaceMismatchError,
+} from "../../storage/index.js";
 import type {
   AgentBindingIdentity,
   ConversationAgentBinding,
@@ -11,12 +17,6 @@ import type {
   StoredConversation,
   WorkspaceStoreLocation,
 } from "../../storage/index.js";
-import {
-  ConversationAgentBindingMissingError,
-  ConversationAlreadyExistsError,
-  ConversationParentNotFoundError,
-  ConversationWorkspaceMismatchError,
-} from "./ConversationCatalogErrors.js";
 
 interface ConversationRow {
   id: string;

@@ -1,11 +1,17 @@
-/** Initial logical Conversation operations carried by every frontend Transport. */
+/** Logical Conversation operations carried by every frontend Transport. */
 import type {
   BoundConversationEventSubscriptionOptions,
   ConversationEventListOptions,
 } from "../ConversationEvents.js";
+import type {
+  CreateConversationOptions,
+  ListConversationsOptions,
+} from "../catalog/index.js";
 import type { InputEventSnapshot } from "../../event/index.js";
 
 export const CONVERSATION_API_OPERATION = {
+  create: "conversation.create",
+  list: "conversation.list",
   inputEnqueue: "conversation.input.enqueue",
   eventsList: "conversation.events.list",
   eventsSubscribe: "conversation.events.subscribe",
@@ -18,6 +24,14 @@ export type ConversationApiOperation =
 
 export interface ConversationIdentityRequest {
   readonly conversationId: string;
+}
+
+export interface CreateConversationRequest {
+  readonly options: CreateConversationOptions;
+}
+
+export interface ListConversationsRequest {
+  readonly options: ListConversationsOptions;
 }
 
 export interface EnqueueConversationInputRequest

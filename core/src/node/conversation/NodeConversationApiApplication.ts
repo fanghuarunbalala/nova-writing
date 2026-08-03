@@ -5,12 +5,14 @@ import {
   CoreConversationInputRoutePolicy,
   ManagedConversationHost,
   RandomConversationRuntimeInstanceIdGenerator,
+  StorageConversationCatalogService,
   StorageConversationCommandService,
   StorageConversationOutputEventPublisher,
   StorageConversationQueryService,
   StorageConversationRuntimeBootstrapFactory,
   SystemConversationHostClock,
   type ConversationHostClock,
+  type ConversationIdGenerator,
   type ConversationRuntimeInstanceIdGenerator,
   type ConversationRuntimePlacement,
 } from "../../conversation/index.js";
@@ -34,6 +36,7 @@ export interface NodeConversationApiApplicationOptions {
   readonly eventSchemaRegistry?: EventSchemaRegistry;
   readonly clock?: ConversationHostClock;
   readonly runtimeInstanceIdGenerator?: ConversationRuntimeInstanceIdGenerator;
+  readonly conversationIdGenerator?: ConversationIdGenerator;
   readonly subscriptionPageSize?: number;
   readonly logger?: Logger;
 }
@@ -95,6 +98,14 @@ export class NodeConversationApiApplication {
         subscriptions,
         logger,
       });
+      const catalog = new StorageConversationCatalogService({
+        catalog: store.conversations,
+        workspaceId: options.workspace.workspaceId,
+        ...(options.conversationIdGenerator !== undefined
+          ? { conversationIdGenerator: options.conversationIdGenerator }
+          : {}),
+        logger,
+      });
       const outputPublisher = new StorageConversationOutputEventPublisher({
         eventSchemaRegistry: registry,
         journalService: journal,
@@ -131,6 +142,7 @@ export class NodeConversationApiApplication {
         logger,
       });
       const transport = new ConversationApiRouter({
+        catalog,
         commands,
         queries,
         runtimePresence: host,

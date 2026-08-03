@@ -293,21 +293,29 @@ same desktop platform capabilities
 
 ### 7.1 Implemented Conversation-First Router Checkpoint
 
-The current client integration deliberately routes only the five stable Conversation operations: input enqueue, Event history, Event subscription, Snapshot query, and Runtime Presence query. Novel query, Draft, ChangeSet, Approval, Commit, publication, and other domain operations are not registered in this Router.
+The current client integration deliberately routes only the seven stable Conversation operations: Catalog create, Catalog list, input enqueue, Event history, Event subscription, Snapshot query, and Runtime Presence query. Novel query, Draft, ChangeSet, Approval, Commit, publication, and other domain operations are not registered in this Router.
 
 `ConversationApiRouter` is the provider-neutral production routing boundary behind those operations. It validates protocol envelopes and exact payload fields, preserves validated InputEvent snapshots when delegating to `ConversationCommandService`, dispatches read operations to `ConversationQueryService` and `ConversationRuntimePresenceReader`, converts durable subscriptions into versioned `ApiEventFrame` streams, and normalizes failures into stable redacted API errors.
 
 The Router implements the existing `ApiTransport` surface so it can be used directly for in-process composition while later Electron IPC and HTTP/WebSocket server adapters delegate to the same object. It owns only routed subscription lifetimes; it does not close Storage, Runtime, or Host services and does not select process placement, authentication, Workspace policy, or a Provider.
 
-Focused validation composes `DefaultNovelApiClient` over this Router and verifies Conversation open, user input, history, live delivery, Snapshot and Presence queries, not-found and malformed-operation errors, shutdown behavior, and log payload redaction. Despite the historical `NovelApiClient` name, this checkpoint exercises no Novel-domain API.
+Focused validation composes `DefaultNovelApiClient` over this Router and verifies Conversation create, list, open, user input, history, live delivery, Snapshot and Presence queries, conflict, not-found and malformed-operation errors, shutdown behavior, and log payload redaction. Despite the historical `NovelApiClient` name, this checkpoint exercises no Novel-domain API.
 
 ### 7.2 Implemented Node Local Conversation API Application
 
-`NodeConversationApiApplication.open()` is the first production local composition behind the Conversation Router. It opens one SQLite Workspace Store and constructs the shared Event Hub, publishing Journal service, catch-up subscription service, storage-backed Query and Command services, Output publisher, Runtime Bootstrap factory, managed Conversation Host, and `ConversationApiRouter` with one shared Event schema registry and Logger.
+`NodeConversationApiApplication.open()` is the first production local composition behind the Conversation Router. It opens one SQLite Workspace Store and constructs the Workspace-bound Conversation Catalog service, shared Event Hub, publishing Journal service, catch-up subscription service, storage-backed Query and Command services, Output publisher, Runtime Bootstrap factory, managed Conversation Host, and `ConversationApiRouter` with one shared Event schema registry and Logger.
 
 Runtime placement remains injected through `ConversationRuntimePlacement`; the application therefore does not choose in-process, worker, child-process, daemon, remote, Pi, or future Rust placement. The application exposes only its Conversation `transport`, Workspace Conversation catalog, immutable Workspace location, and idempotent close lifecycle. It owns the Store and every service it creates, while individual Conversation handles and API subscriptions retain their existing local ownership rules.
 
-Shutdown closes Router subscriptions before the Host, then subscription service, Journal service, Event Hub, and SQLite Store. Failures are collected as stable stage names without exposing raw errors, paths, Event payloads, prompts, or configuration. Focused integration verifies durable input, Runtime activation, lifecycle OutputEvents, application-owned shutdown, SQLite reopen, process-free history replay, offline Presence after restart, and log redaction.
+Shutdown closes Router subscriptions before the Host, then subscription service, Journal service, Event Hub, and SQLite Store. Failures are collected as stable stage names without exposing raw errors, paths, Event payloads, prompts, or configuration. Focused integration verifies API-created Conversation metadata and Agent binding, Catalog listing, durable input, Runtime activation, lifecycle OutputEvents, application-owned shutdown, SQLite reopen, Catalog recovery, process-free history replay, offline Presence after restart, and log redaction.
+
+### 7.3 Conversation Catalog API Boundary
+
+`ConversationApi.create()` accepts an optional caller-supplied Conversation ID, an optional parent Conversation ID, and one required immutable Agent binding identity (`agentType`, `definitionVersion`, and optional `manifestDigest`). When no ID is supplied, the Workspace-bound Catalog service uses an injected `ConversationIdGenerator`; the Node application defaults to a random provider-neutral generator and permits deterministic injection for tests or future host policy.
+
+`ConversationApi.list()` returns frozen `ConversationSnapshot` records rather than live Handles. Each record combines persisted Conversation metadata with its active Agent binding, so GUI, Web, CLI, and TUI can render a Conversation selector without activating a Runtime. Callers explicitly use `open(id)` when they need a bound Conversation Handle.
+
+The public Catalog protocol never accepts `workspaceId`: the Router is already composed for one Workspace, preventing a client from escaping that boundary. Supported list filters mirror the existing Catalog facts (`rootConversationId`, `parentConversationId`, `status`, and bounded `limit`). Catalog creation and listing do not activate a Runtime, append Journal Events, or introduce archive, delete, Agent rebinding, Novel-domain, authentication, or remote Workspace behavior.
 
 ## 8. Shared React UI Package
 

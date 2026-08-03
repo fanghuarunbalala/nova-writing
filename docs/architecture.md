@@ -5888,8 +5888,9 @@ Currently implemented skeletons include:
 - platform-neutral `Conversation`, `ConversationInput`, and bound `ConversationEvents` protocols
 - durable `ConversationSnapshot` and placement-neutral `RuntimePresence` contracts
 - Conversation query, command, and Runtime-presence service ports
-- provider-neutral `ConversationApiRouter` for the five stable Conversation operations, versioned Event frames, exact protocol validation, stable error normalization, subscription lifecycle ownership, and Client-to-service integration without Novel-domain API routing
-- Node `NodeConversationApiApplication` composition owning one SQLite Workspace Store, shared Journal/Hub services, storage-backed Conversation Query and Command services, managed Host, injected Runtime Placement, Router transport, ordered shutdown, durable restart replay, and redacted lifecycle observability
+- provider-neutral `ConversationApiRouter` for the seven stable Conversation operations, including Workspace-bound Catalog create/list, versioned Event frames, exact protocol validation, stable error normalization, subscription lifecycle ownership, and Client-to-service integration without Novel-domain API routing
+- provider-neutral `ConversationCatalogService`, injected Conversation ID generation, immutable Snapshot results, required Agent binding identity, and storage-backed create/list behavior without Runtime activation
+- Node `NodeConversationApiApplication` composition owning one SQLite Workspace Store, Workspace-bound Catalog service, shared Journal/Hub services, storage-backed Conversation Query and Command services, managed Host, injected Runtime Placement, Router transport, ordered shutdown, Catalog recovery, durable restart replay, and redacted lifecycle observability
 - stable Conversation not-found and Handle lifecycle errors
 - `StorageConversationQueryService` backed by Catalog, Journal, and catch-up subscriptions
 - `LocalConversationFactory` and in-process `LocalConversation` Handle composition

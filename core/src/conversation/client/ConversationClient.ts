@@ -25,6 +25,11 @@ import type {
   ConversationEventListOptions,
 } from "../ConversationEvents.js";
 import type { ConversationSnapshot } from "../ConversationSnapshot.js";
+import type {
+  ConversationCatalogResult,
+  CreateConversationOptions,
+  ListConversationsOptions,
+} from "../catalog/index.js";
 import {
   isRuntimePresenceState,
   type RuntimePresence,
@@ -32,7 +37,9 @@ import {
 import { ApiConversationEventSubscription } from "./ApiConversationEventSubscription.js";
 import {
   CONVERSATION_API_OPERATION,
+  type CreateConversationRequest,
   type EnqueueConversationInputRequest,
+  type ListConversationsRequest,
   type ListConversationEventsRequest,
   type SerializableConversationEventSubscriptionOptions,
   type SubscribeConversationEventsRequest,
@@ -58,6 +65,30 @@ export class ConversationClient {
     this.logger = (options.logger ?? noopLogger).child({
       component: "conversation_client",
     });
+  }
+
+  async create(options: CreateConversationOptions): Promise<ConversationSnapshot> {
+    const payload: CreateConversationRequest = {
+      options: cloneCreateConversationOptions(options),
+    };
+    const snapshot = await this.request(
+      CONVERSATION_API_OPERATION.create,
+      payload,
+    );
+    return validateConversationSnapshot(snapshot);
+  }
+
+  async list(
+    options: ListConversationsOptions = {},
+  ): Promise<ConversationCatalogResult> {
+    const payload: ListConversationsRequest = {
+      options: cloneListConversationsOptions(options),
+    };
+    const result = await this.request(
+      CONVERSATION_API_OPERATION.list,
+      payload,
+    );
+    return validateConversationCatalogResult(result);
   }
 
   async enqueueInput(
@@ -151,21 +182,21 @@ export class ConversationClient {
   private async request<TPayload, TData>(
     operation: string,
     payload: TPayload,
-    conversationId: string,
+    conversationId?: string,
   ): Promise<TData> {
     const request = this.createRequest(operation, payload);
     this.assertRequestSerializable(request);
     this.logger.debug("conversation.client.request_started", {
       operation,
       requestId: request.requestId,
-      conversationId,
+      ...(conversationId !== undefined ? { conversationId } : {}),
     });
     const response = await this.transport.request<TData>(request);
     const data = validateApiResponse(response, request.requestId);
     this.logger.debug("conversation.client.request_completed", {
       operation,
       requestId: request.requestId,
-      conversationId,
+      ...(conversationId !== undefined ? { conversationId } : {}),
     });
     return data;
   }
@@ -263,7 +294,7 @@ function validateInputReceipt(
 
 function validateConversationSnapshot(
   value: unknown,
-  expectedConversationId: string,
+  expectedConversationId?: string,
 ): ConversationSnapshot {
   const snapshot = assertRecord(value, "Conversation snapshot");
   const metadata = assertRecord(snapshot.metadata, "Conversation metadata");
@@ -271,7 +302,14 @@ function validateConversationSnapshot(
     snapshot.activeAgentBinding,
     "Conversation active Agent binding",
   );
-  if (metadata.id !== expectedConversationId || binding.conversationId !== expectedConversationId) {
+  const conversationId = assertNonEmptyString(
+    metadata.id,
+    "Conversation id",
+  );
+  if (
+    (expectedConversationId !== undefined && conversationId !== expectedConversationId) ||
+    binding.conversationId !== conversationId
+  ) {
     throw new ConversationClientProtocolError(
       "Conversation snapshot identity does not match the requested Conversation",
     );
@@ -290,7 +328,7 @@ function validateConversationSnapshot(
   }
   return Object.freeze({
     metadata: Object.freeze({
-      id: expectedConversationId,
+      id: conversationId,
       workspaceId: assertNonEmptyString(metadata.workspaceId, "Workspace id"),
       ...(metadata.parentConversationId !== undefined
         ? {
@@ -315,7 +353,7 @@ function validateConversationSnapshot(
     }),
     activeAgentBinding: Object.freeze({
       id: assertNonEmptyString(binding.id, "Agent binding id"),
-      conversationId: expectedConversationId,
+      conversationId,
       revision: assertSafeInteger(binding.revision, "Agent binding revision", 1),
       agentType: assertNonEmptyString(binding.agentType, "Agent type"),
       definitionVersion: assertNonEmptyString(
@@ -341,6 +379,24 @@ function validateConversationSnapshot(
           }
         : {}),
     }),
+  });
+}
+
+function validateConversationCatalogResult(
+  value: unknown,
+): ConversationCatalogResult {
+  const result = assertRecord(value, "Conversation catalog result");
+  if (!Array.isArray(result.conversations)) {
+    throw new ConversationClientProtocolError(
+      "Conversation catalog result conversations must be an array",
+    );
+  }
+  return Object.freeze({
+    conversations: Object.freeze(
+      result.conversations.map((snapshot) =>
+        validateConversationSnapshot(snapshot),
+      ),
+    ),
   });
 }
 
@@ -416,6 +472,26 @@ function cloneSubscriptionOptions(
         }
       : {}),
   };
+}
+
+function cloneCreateConversationOptions(
+  options: CreateConversationOptions,
+): CreateConversationOptions {
+  return {
+    ...(options.conversationId !== undefined
+      ? { conversationId: options.conversationId }
+      : {}),
+    ...(options.parentConversationId !== undefined
+      ? { parentConversationId: options.parentConversationId }
+      : {}),
+    agent: { ...options.agent },
+  };
+}
+
+function cloneListConversationsOptions(
+  options: ListConversationsOptions,
+): ListConversationsOptions {
+  return { ...options };
 }
 
 function generateApiRequestId(): string {

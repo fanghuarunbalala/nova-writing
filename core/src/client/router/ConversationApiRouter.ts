@@ -1,6 +1,7 @@
 /** Routes the public Conversation API protocol to provider-neutral Core services. */
 import {
   ConversationNotFoundError,
+  type ConversationCatalogService,
   type ConversationCommandService,
   type ConversationQueryService,
   type ConversationRuntimePresenceReader,
@@ -24,6 +25,10 @@ import {
   ConversationEventSubscriptionCursorAheadError,
   ConversationEventSubscriptionOptionsError,
   ConversationEventSubscriptionOverflowError,
+  ConversationAgentBindingMissingError,
+  ConversationAlreadyExistsError,
+  ConversationParentNotFoundError,
+  ConversationWorkspaceMismatchError,
   type ConversationEventSubscription,
 } from "../../storage/index.js";
 import {
@@ -44,6 +49,7 @@ import {
 } from "../../conversation/client/ConversationApiOperations.js";
 
 export interface ConversationApiRouterOptions {
+  readonly catalog: ConversationCatalogService;
   readonly commands: ConversationCommandService;
   readonly queries: ConversationQueryService;
   readonly runtimePresence: ConversationRuntimePresenceReader;
@@ -51,6 +57,7 @@ export interface ConversationApiRouterOptions {
 }
 
 export class ConversationApiRouter implements ApiTransport {
+  private readonly catalog: ConversationCatalogService;
   private readonly commands: ConversationCommandService;
   private readonly queries: ConversationQueryService;
   private readonly runtimePresence: ConversationRuntimePresenceReader;
@@ -60,6 +67,7 @@ export class ConversationApiRouter implements ApiTransport {
   private closePromise?: Promise<void>;
 
   constructor(options: ConversationApiRouterOptions) {
+    this.catalog = options.catalog;
     this.commands = options.commands;
     this.queries = options.queries;
     this.runtimePresence = options.runtimePresence;
@@ -163,6 +171,12 @@ export class ConversationApiRouter implements ApiTransport {
 
   private async dispatch(request: ApiRequest): Promise<unknown> {
     const payload = capturePayload(request.payload, expectedPayloadKeys(request.operation));
+    switch (request.operation) {
+      case CONVERSATION_API_OPERATION.create:
+        return this.catalog.create(captureCreateConversationOptions(payload.options));
+      case CONVERSATION_API_OPERATION.list:
+        return this.catalog.list(captureListConversationsOptions(payload.options));
+    }
     const conversationId = captureConversationId(payload.conversationId);
     switch (request.operation) {
       case CONVERSATION_API_OPERATION.snapshotGet:
@@ -378,6 +392,9 @@ function captureRequestId(request: ApiRequest): string {
 
 function expectedPayloadKeys(operation: string): readonly string[] {
   switch (operation) {
+    case CONVERSATION_API_OPERATION.create:
+    case CONVERSATION_API_OPERATION.list:
+      return ["options"];
     case CONVERSATION_API_OPERATION.inputEnqueue:
       return ["conversationId", "inputEvent"];
     case CONVERSATION_API_OPERATION.eventsList:
@@ -401,6 +418,138 @@ function capturePayload(
 
 function captureConversationId(value: unknown): string {
   return captureNonEmptyString(value, "Conversation id");
+}
+
+function captureCreateConversationOptions(value: unknown): {
+  conversationId?: string;
+  parentConversationId?: string;
+  agent: {
+    agentType: string;
+    definitionVersion: string;
+    manifestDigest?: string;
+  };
+} {
+  const options = captureJsonRecord(value, "Conversation create options");
+  assertAllowedKeys(options, ["conversationId", "parentConversationId", "agent"]);
+  if (!("agent" in options)) {
+    throw new ConversationApiRouterProtocolError(
+      "Conversation create options require an Agent binding",
+    );
+  }
+  const agent = captureJsonRecord(options.agent, "Conversation Agent binding");
+  assertAllowedKeys(agent, ["agentType", "definitionVersion", "manifestDigest"]);
+  if (!("agentType" in agent) || !("definitionVersion" in agent)) {
+    throw new ConversationApiRouterProtocolError(
+      "Conversation Agent binding is incomplete",
+    );
+  }
+  return {
+    ...(options.conversationId !== undefined
+      ? {
+          conversationId: captureNonEmptyString(
+            options.conversationId,
+            "Conversation id",
+          ),
+        }
+      : {}),
+    ...(options.parentConversationId !== undefined
+      ? {
+          parentConversationId: captureNonEmptyString(
+            options.parentConversationId,
+            "Parent Conversation id",
+          ),
+        }
+      : {}),
+    agent: {
+      agentType: captureNonEmptyString(agent.agentType, "Agent type"),
+      definitionVersion: captureNonEmptyString(
+        agent.definitionVersion,
+        "Agent definition version",
+      ),
+      ...(agent.manifestDigest !== undefined
+        ? {
+            manifestDigest: captureNonEmptyString(
+              agent.manifestDigest,
+              "Agent manifest digest",
+            ),
+          }
+        : {}),
+    },
+  };
+}
+
+function captureListConversationsOptions(value: unknown): {
+  rootConversationId?: string;
+  parentConversationId?: string;
+  status?: "active" | "archived" | "disposed";
+  limit?: number;
+} {
+  const options = captureJsonRecord(value, "Conversation list options");
+  assertAllowedKeys(options, [
+    "rootConversationId",
+    "parentConversationId",
+    "status",
+    "limit",
+  ]);
+  return {
+    ...(options.rootConversationId !== undefined
+      ? {
+          rootConversationId: captureNonEmptyString(
+            options.rootConversationId,
+            "Root Conversation id",
+          ),
+        }
+      : {}),
+    ...(options.parentConversationId !== undefined
+      ? {
+          parentConversationId: captureNonEmptyString(
+            options.parentConversationId,
+            "Parent Conversation id",
+          ),
+        }
+      : {}),
+    ...(options.status !== undefined
+      ? { status: captureConversationStatus(options.status) }
+      : {}),
+    ...(options.limit !== undefined
+      ? { limit: captureConversationLimit(options.limit) }
+      : {}),
+  };
+}
+
+function captureJsonRecord(
+  value: unknown,
+  label: string,
+): Record<string, unknown> {
+  const record = captureRecord(value, label);
+  if (!isJsonValue(record)) {
+    throw new ConversationApiRouterProtocolError(`${label} must be JSON-safe`);
+  }
+  return cloneJson(record) as Record<string, unknown>;
+}
+
+function captureConversationStatus(
+  value: unknown,
+): "active" | "archived" | "disposed" {
+  if (value !== "active" && value !== "archived" && value !== "disposed") {
+    throw new ConversationApiRouterProtocolError(
+      "Conversation status is invalid",
+    );
+  }
+  return value;
+}
+
+function captureConversationLimit(value: unknown): number {
+  if (
+    !Number.isSafeInteger(value) ||
+    (value as number) < 1 ||
+    (value as number) > 1_000
+  ) {
+    throw new ConversationApiRouterProtocolError(
+      "Conversation list limit must be an integer from 1 through 1000",
+    );
+  }
+  return value as number;
 }
 
 function cloneJsonRecord(value: unknown, label: string): Record<string, unknown> {
@@ -451,6 +600,17 @@ function assertExactKeys(
   }
 }
 
+function assertAllowedKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+): void {
+  if (Object.keys(value).some((key) => !allowed.includes(key))) {
+    throw new ConversationApiRouterProtocolError(
+      "API request contains unexpected fields",
+    );
+  }
+}
+
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted !== true) return;
   throw new ApiTransportError(
@@ -461,6 +621,22 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 }
 
 function createApiErrorSnapshot(error: unknown): ApiErrorSnapshot {
+  if (error instanceof ConversationAlreadyExistsError) {
+    return freezeError(
+      "CONVERSATION_ALREADY_EXISTS",
+      "conflict",
+      false,
+      "Conversation already exists",
+    );
+  }
+  if (error instanceof ConversationParentNotFoundError) {
+    return freezeError(
+      "CONVERSATION_PARENT_NOT_FOUND",
+      "not-found",
+      false,
+      "Parent Conversation was not found",
+    );
+  }
   if (error instanceof ConversationNotFoundError) {
     return freezeError(
       "CONVERSATION_NOT_FOUND",
@@ -503,6 +679,7 @@ function createApiErrorSnapshot(error: unknown): ApiErrorSnapshot {
   }
   if (
     error instanceof ConversationApiRouterProtocolError ||
+    error instanceof TypeError ||
     error instanceof EventValidationError ||
     error instanceof ConversationEventQueryError ||
     error instanceof ConversationEventFilterError ||
@@ -514,6 +691,17 @@ function createApiErrorSnapshot(error: unknown): ApiErrorSnapshot {
       "validation",
       false,
       "API request is invalid",
+    );
+  }
+  if (
+    error instanceof ConversationAgentBindingMissingError ||
+    error instanceof ConversationWorkspaceMismatchError
+  ) {
+    return freezeError(
+      "CONVERSATION_CATALOG_INTEGRITY_ERROR",
+      "internal",
+      false,
+      "Conversation Catalog is inconsistent",
     );
   }
   if (error instanceof ConversationEventHubClosedError) {

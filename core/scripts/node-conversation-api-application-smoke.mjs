@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  ApiRemoteError,
   DefaultNovelApiClient,
   UserMessageInputEvent,
 } from "../dist/index.js";
@@ -91,25 +92,45 @@ try {
     placement: firstPlacement,
     clock: new IncrementingClock(),
     runtimeInstanceIdGenerator: new RuntimeInstanceIdGenerator(),
+    conversationIdGenerator: { generate: () => conversationId },
     subscriptionPageSize: 2,
     logger: createCollectingLogger(logs),
   });
-  await firstApplication.conversations.createConversation({
-    id: conversationId,
-    workspaceId: workspace.workspaceId,
-    agent: {
-      agentType: "conversation.main",
-      definitionVersion: "1",
-    },
-    createdAt: "2026-08-03T02:00:00.000Z",
-  });
-
   const firstClient = new DefaultNovelApiClient({
     transport: firstApplication.transport,
     requestIdFactory: createRequestIdFactory("first"),
     logger: createCollectingLogger(logs),
   });
-  const firstConversation = await firstClient.conversations.open(conversationId);
+  const firstConversation = await firstClient.conversations.create({
+    agent: {
+      agentType: "conversation.main",
+      definitionVersion: "1",
+    },
+  });
+  assert.equal(firstConversation.id, conversationId);
+  const firstCatalog = await firstClient.conversations.list({ status: "active" });
+  assert.equal(firstCatalog.conversations.length, 1);
+  assert.equal(Object.isFrozen(firstCatalog.conversations), true);
+  assert.equal(Object.isFrozen(firstCatalog.conversations[0]), true);
+  assert.equal(firstCatalog.conversations[0].metadata.id, conversationId);
+  assert.equal(
+    firstCatalog.conversations[0].activeAgentBinding.agentType,
+    "conversation.main",
+  );
+  await assert.rejects(
+    firstClient.conversations.create({
+      conversationId: "conversation-node-api-missing-parent",
+      parentConversationId: "missing-parent",
+      agent: {
+        agentType: "conversation.subagent",
+        definitionVersion: "1",
+      },
+    }),
+    (error) =>
+      error instanceof ApiRemoteError &&
+      error.code === "CONVERSATION_PARENT_NOT_FOUND" &&
+      error.category === "not-found",
+  );
   assert.equal((await firstConversation.getRuntimePresence()).state, "offline");
   const live = firstConversation.events.subscribe({
     start: { from: "start" },
@@ -160,6 +181,9 @@ try {
     requestIdFactory: createRequestIdFactory("second"),
     logger: createCollectingLogger(logs),
   });
+  const reopenedCatalog = await secondClient.conversations.list();
+  assert.equal(reopenedCatalog.conversations.length, 1);
+  assert.equal(reopenedCatalog.conversations[0].metadata.id, conversationId);
   const secondConversation = await secondClient.conversations.open(conversationId);
   const replay = await secondConversation.events.list({
     anchor: { from: "start" },

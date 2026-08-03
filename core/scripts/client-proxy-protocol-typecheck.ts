@@ -10,6 +10,10 @@ declare const conversation: Conversation;
 declare const request: ApiRequest;
 
 void api.conversations.open("conversation-typecheck");
+void api.conversations.create({
+  agent: { agentType: "conversation.main", definitionVersion: "1" },
+});
+void api.conversations.list({ status: "active", limit: 20 });
 void conversation.events.list({ anchor: { from: "start" } });
 void conversation.events.subscribe({ start: { afterSequence: 3 } });
 

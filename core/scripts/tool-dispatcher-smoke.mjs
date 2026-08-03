@@ -44,23 +44,23 @@ class CollectingLogger {
 const secret = "DO_NOT_EXPOSE_TOOL_ARGUMENT_OR_ERROR";
 const calls = [];
 const tools = [
-  tool("read_file", Type.Object({ path: Type.String() }), async (context, arguments_, progress) => {
-    calls.push(["read_file", context.toolCallId, arguments_.path]);
+  tool("ReadFile", Type.Object({ path: Type.String() }), async (context, arguments_, progress) => {
+    calls.push(["ReadFile", context.toolCallId, arguments_.path]);
     await progress.emit({ kind: "progress", completed: 1, total: 1 });
     return { content: [{ type: "text", text: "chapter" }], details: { count: 1 } };
   }),
-  tool("write_file", Type.Object({ text: Type.String() }), async (_context, arguments_) => {
-    calls.push(["write_file", arguments_.text]);
+  tool("WriteFile", Type.Object({ text: Type.String() }), async (_context, arguments_) => {
+    calls.push(["WriteFile", arguments_.text]);
     return { content: [{ type: "text", text: "written" }] };
   }),
-  tool("isolated_tool", Type.Object({}), async () => {
-    calls.push(["isolated_tool"]);
+  tool("IsolatedTool", Type.Object({}), async () => {
+    calls.push(["IsolatedTool"]);
     return { content: [] };
   }),
-  tool("failing_tool", Type.Object({}), async () => {
+  tool("FailingTool", Type.Object({}), async () => {
     throw new Error(secret);
   }),
-  tool("oversized_tool", Type.Object({}), async () => ({
+  tool("OversizedTool", Type.Object({}), async () => ({
     content: [{ type: "text", text: "x".repeat(200) }],
   })),
 ];
@@ -92,7 +92,7 @@ const policyResolver = new StaticToolExecutionPolicyResolver(
   tools.map((registered) => ({
     toolName: registered.descriptor.name,
     toolVersion: registered.descriptor.version,
-    policy: registered.descriptor.name === "isolated_tool"
+    policy: registered.descriptor.name === "IsolatedTool"
       ? { ...trustedPolicy, isolation: "os_process" }
       : trustedPolicy,
   })),
@@ -103,13 +103,13 @@ const permissionPolicy = new LayeredToolPermissionPolicy([
     ruleId: "workspace.allow_runtime_tools",
     source: "workspace",
     effect: "allow",
-    match: { toolNames: ["read_file", "isolated_tool", "failing_tool", "oversized_tool"] },
+    match: { toolNames: ["ReadFile", "IsolatedTool", "FailingTool", "OversizedTool"] },
   },
   {
     ruleId: "workspace.ask_write",
     source: "workspace",
     effect: "ask",
-    match: { toolNames: ["write_file"] },
+    match: { toolNames: ["WriteFile"] },
   },
 ]);
 const sink = new CollectingSink();
@@ -154,7 +154,7 @@ const pipeline = new ToolExecutionPipeline({
 const dispatcher = new ToolDispatcher(pipeline);
 
 const readResult = await dispatcher.execute(
-  invocation("read-call", "read_file", { path: secret }),
+  invocation("read-call", "ReadFile", { path: secret }),
   {
     signal: new AbortController().signal,
     progress: { async emit(update) { progress.push(update); } },
@@ -165,7 +165,7 @@ assert.equal(Object.isFrozen(readResult), true);
 assert.deepEqual(progress, [{ kind: "progress", completed: 1, total: 1 }]);
 
 const writePromise = dispatcher.execute(
-  invocation("write-call", "write_file", { text: secret }),
+  invocation("write-call", "WriteFile", { text: secret }),
   { signal: new AbortController().signal },
 );
 const pending = await waitForPending(coordinator);
@@ -178,7 +178,7 @@ await coordinator.resolve(
 assert.equal((await writePromise).content[0].text, "written");
 
 await assertToolError(
-  () => dispatcher.execute(invocation("invalid-call", "read_file", { path: 1 }), {
+  () => dispatcher.execute(invocation("invalid-call", "ReadFile", { path: 1 }), {
     signal: new AbortController().signal,
   }),
   "TOOL_ARGUMENTS_INVALID",
@@ -186,7 +186,7 @@ await assertToolError(
   "none",
 );
 await assertToolError(
-  () => dispatcher.execute(invocation("unknown-call", "missing_tool", {}), {
+  () => dispatcher.execute(invocation("unknown-call", "MissingTool", {}), {
     signal: new AbortController().signal,
   }),
   "TOOL_NOT_AVAILABLE",
@@ -194,7 +194,7 @@ await assertToolError(
   "none",
 );
 await assertToolError(
-  () => dispatcher.execute(invocation("isolated-call", "isolated_tool", {}), {
+  () => dispatcher.execute(invocation("isolated-call", "IsolatedTool", {}), {
     signal: new AbortController().signal,
   }),
   "TOOL_PERMISSION_DENIED",
@@ -202,7 +202,7 @@ await assertToolError(
   "none",
 );
 await assertToolError(
-  () => dispatcher.execute(invocation("failing-call", "failing_tool", {}), {
+  () => dispatcher.execute(invocation("failing-call", "FailingTool", {}), {
     signal: new AbortController().signal,
   }),
   "TOOL_HANDLER_FAILED",
@@ -210,7 +210,7 @@ await assertToolError(
   "completed_unknown",
 );
 await assertToolError(
-  () => dispatcher.execute(invocation("oversized-call", "oversized_tool", {}), {
+  () => dispatcher.execute(invocation("oversized-call", "OversizedTool", {}), {
     signal: new AbortController().signal,
   }),
   "TOOL_RESULT_INVALID",
@@ -220,7 +220,7 @@ await assertToolError(
 const aborted = new AbortController();
 aborted.abort();
 await assertToolError(
-  () => dispatcher.execute(invocation("cancelled-call", "read_file", { path: secret }), {
+  () => dispatcher.execute(invocation("cancelled-call", "ReadFile", { path: secret }), {
     signal: aborted.signal,
   }),
   "TOOL_EXECUTION_CANCELLED",
@@ -228,7 +228,7 @@ await assertToolError(
   "none",
 );
 
-assert.equal(calls.some(([name]) => name === "isolated_tool"), false);
+assert.equal(calls.some(([name]) => name === "IsolatedTool"), false);
 const serializedLogs = JSON.stringify(logs);
 for (const forbidden of [secret, "payload", "content", "details", "stack", "cause", "path"]) {
   assert.equal(serializedLogs.includes(forbidden), false);

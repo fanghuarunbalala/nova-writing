@@ -202,7 +202,7 @@ const overlayAdapter = new PiAgentCoreAdapter({
             {
               type: "toolCall",
               id: "tool-call-1",
-              name: "missing_tool",
+              name: "MissingTool",
               arguments: {},
             },
           ],

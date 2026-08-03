@@ -18,18 +18,18 @@ const handler = Object.freeze({
   },
 });
 const tools = [
-  tool("read_file"),
-  tool("write_file"),
-  tool("search_novel"),
-  tool("submit_result"),
+  tool("ReadFile"),
+  tool("WriteFile"),
+  tool("SearchNovel"),
+  tool("SubmitResult"),
 ];
 const registry = new ToolRegistryAssembler();
 for (const registered of tools) registry.register(registered);
 const frozenRegistry = registry.freeze();
 
-const files = group("files", ["read_file", "write_file"]);
-const novel = group("novel", ["search_novel", "read_file"]);
-const submit = group("submit", ["submit_result"]);
+const files = group("files", ["ReadFile", "WriteFile"]);
+const novel = group("novel", ["SearchNovel", "ReadFile"]);
+const submit = group("submit", ["SubmitResult"]);
 const catalog = new ToolGroupCatalog([submit, novel, files]);
 assert.equal(Object.isFrozen(catalog), true);
 assert.equal(Object.isFrozen(catalog.list()), true);
@@ -41,15 +41,15 @@ assert.deepEqual(catalog.list().map((manifest) => manifest.id), [
 assert.equal(catalog.require("novel").label, "novel tools");
 
 const groupIds = ["files", "novel"];
-const allow = ["read_file", "search_novel", "submit_result"];
-const deny = ["read_file"];
+const allow = ["ReadFile", "SearchNovel", "SubmitResult"];
+const deny = ["ReadFile"];
 const view = new ToolRegistryView({
   registry: frozenRegistry,
   groups: catalog,
   policy: { groupIds, allow, deny },
 });
 groupIds[0] = "submit";
-allow[0] = "write_file";
+allow[0] = "WriteFile";
 deny.length = 0;
 assert.equal(Object.isFrozen(view), true);
 assert.equal(Object.isFrozen(view.policy), true);
@@ -57,12 +57,12 @@ assert.equal(Object.isFrozen(view.policy.groupIds), true);
 assert.equal(Object.isFrozen(view.listAllowed()), true);
 assert.deepEqual(view.policy.groupIds, ["files", "novel"]);
 assert.deepEqual(view.listAllowed().map((registered) => registered.descriptor.name), [
-  "search_novel",
+  "SearchNovel",
 ]);
-assert.equal(view.has("search_novel"), true);
-assert.equal(view.has("read_file"), false);
-assert.equal(view.get("write_file"), undefined);
-assert.equal(view.require("search_novel").descriptor.name, "search_novel");
+assert.equal(view.has("SearchNovel"), true);
+assert.equal(view.has("ReadFile"), false);
+assert.equal(view.get("WriteFile"), undefined);
+assert.equal(view.require("SearchNovel").descriptor.name, "SearchNovel");
 
 const orderedView = new ToolRegistryView({
   registry: frozenRegistry,
@@ -71,18 +71,18 @@ const orderedView = new ToolRegistryView({
 });
 assert.deepEqual(
   orderedView.listAllowed().map((registered) => registered.descriptor.name),
-  ["read_file", "write_file", "search_novel", "submit_result"],
+  ["ReadFile", "WriteFile", "SearchNovel", "SubmitResult"],
 );
 
 const emptyView = new ToolRegistryView({
   registry: frozenRegistry,
   groups: catalog,
-  policy: { groupIds: [], allow: ["read_file"] },
+  policy: { groupIds: [], allow: ["ReadFile"] },
 });
 assert.equal(emptyView.size, 0);
 
 assertCatalogFailure(
-  () => new ToolGroupCatalog([files, group("files", ["submit_result"])]),
+  () => new ToolGroupCatalog([files, group("files", ["SubmitResult"])]),
   TOOL_GROUP_CATALOG_FAILURE.duplicateGroup,
   "files",
 );
@@ -103,51 +103,51 @@ assertViewFailure(
   "files",
 );
 assertViewFailure(
-  () => createView({ groupIds: ["files"], allow: ["read_file", "read_file"] }),
+  () => createView({ groupIds: ["files"], allow: ["ReadFile", "ReadFile"] }),
   TOOL_REGISTRY_VIEW_FAILURE.duplicateAllowTool,
   undefined,
   ToolRegistryViewError,
-  "read_file",
+  "ReadFile",
 );
 assertViewFailure(
-  () => createView({ groupIds: ["files"], deny: ["read_file", "read_file"] }),
+  () => createView({ groupIds: ["files"], deny: ["ReadFile", "ReadFile"] }),
   TOOL_REGISTRY_VIEW_FAILURE.duplicateDenyTool,
   undefined,
   ToolRegistryViewError,
-  "read_file",
+  "ReadFile",
 );
 assertViewFailure(
-  () => createView({ groupIds: ["files"], allow: ["missing_tool"] }),
+  () => createView({ groupIds: ["files"], allow: ["MissingTool"] }),
   TOOL_REGISTRY_VIEW_FAILURE.unknownTool,
   undefined,
   ToolRegistryViewError,
-  "missing_tool",
+  "MissingTool",
 );
 assertViewFailure(
-  () => createView({ groupIds: ["files"], deny: ["missing_tool"] }),
+  () => createView({ groupIds: ["files"], deny: ["MissingTool"] }),
   TOOL_REGISTRY_VIEW_FAILURE.unknownTool,
   undefined,
   ToolRegistryViewError,
-  "missing_tool",
+  "MissingTool",
 );
 assertViewFailure(
   () =>
     new ToolRegistryView({
       registry: frozenRegistry,
-      groups: new ToolGroupCatalog([group("broken", ["missing_tool"])]),
+      groups: new ToolGroupCatalog([group("broken", ["MissingTool"])]),
       policy: { groupIds: ["broken"] },
     }),
   TOOL_REGISTRY_VIEW_FAILURE.unknownTool,
   "broken",
   ToolRegistryViewError,
-  "missing_tool",
+  "MissingTool",
 );
 assertViewFailure(
-  () => orderedView.require("write_secret"),
+  () => orderedView.require("WriteSecret"),
   TOOL_REGISTRY_VIEW_FAILURE.unknownTool,
   undefined,
   ToolRegistryViewError,
-  "write_secret",
+  "WriteSecret",
 );
 assertViewFailure(
   () =>

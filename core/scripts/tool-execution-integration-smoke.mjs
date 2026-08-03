@@ -46,7 +46,7 @@ const cancellationStarted = new Promise((resolve) => {
 });
 const writeTool = defineTool({
   descriptor: {
-    name: "write_chapter",
+    name: "WriteChapter",
     version: "1.2.3",
     label: "Write chapter",
     description: "Writes one chapter draft.",
@@ -65,7 +65,7 @@ const writeTool = defineTool({
 });
 const cancellationTool = defineTool({
   descriptor: {
-    name: "wait_for_signal",
+    name: "WaitForSignal",
     version: "1.0.0",
     label: "Wait for signal",
     description: "Waits until the caller cancels execution.",
@@ -98,7 +98,7 @@ const groups = new ToolGroupCatalog([{
   id: "checkpoint_5b",
   version: "1.0.0",
   label: "Checkpoint 5B tools",
-  tools: ["write_chapter", "wait_for_signal"],
+  tools: ["WriteChapter", "WaitForSignal"],
 }]);
 const registryView = new ToolRegistryView({
   registry,
@@ -126,13 +126,13 @@ const permissionPolicy = new LayeredToolPermissionPolicy([
     ruleId: "workspace.ask_write_chapter",
     source: "workspace",
     effect: "ask",
-    match: { toolNames: ["write_chapter"] },
+    match: { toolNames: ["WriteChapter"] },
   },
   {
     ruleId: "workspace.allow_wait_for_signal",
     source: "workspace",
     effect: "allow",
-    match: { toolNames: ["wait_for_signal"] },
+    match: { toolNames: ["WaitForSignal"] },
   },
 ]);
 const eventSink = new CollectingEventSink();

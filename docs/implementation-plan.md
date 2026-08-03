@@ -2953,14 +2953,42 @@ No next checkpoint begins without explicit approval.
 
 Runtime Task 0 through Task 5B and Task 6A are implemented. Checkpoint 6A closes provider-neutral IPC, bounded Node JSONL transport, one-process-per-Runtime placement, negotiated Child startup, Child-local composition, allowlisted persistence RPC, durable Output append acknowledgement, heartbeat health, cancellation cleanup, termination escalation, and Host-to-child crash-boundary integration.
 
-Runtime Task 1 through Task 7 is complete. Novel Task N7 through Task N11 remains paused until an explicit track change.
+Runtime Task 1 through Task 7 is complete. On August 3, 2026, the active track
+changed explicitly to the post-Task-7 ephemeral Subagent Tool implementation.
+Novel Task N9-E through Task N11 and persistent Agent Team work remain paused
+until another explicit track change.
 
-Post-Task-7 Agent orchestration direction is documented in
-`docs/agent-orchestration.md`. It is not an active implementation task and does
-not reopen completed Runtime checkpoints. The recorded direction uses
-Conversation for all Agent forms, non-blocking Subagent start/query/cancel,
-explicit Prompt and Artifact-only Subagent context, final Assistant content as
-the Subagent result, immutable Agent Definition and Manifest composition, and
-explicit Tool-mediated cross-Conversation communication for persistent Agent
-Teams. The document also records persistent Agent, Team, Task, Inbox,
-communication, recovery, and optional Sleep/wake implementation phases.
+Post-Task-7 Agent orchestration is documented in
+`docs/agent-orchestration.md`. Only the ephemeral Subagent and its `Task`,
+`TaskGet`, and `TaskCancel` Tools are active. This track does not reopen
+completed Runtime checkpoints and does not authorize persistent Agent, Agent
+Team, Team communication, `TaskOutput`, or `Sleep` implementation.
+
+Active implementation order:
+
+1. Step S0: activate the track and migrate every provider-facing Tool identity
+   to PascalCase matching `[A-Z][A-Za-z0-9]{0,63}`;
+2. Step S1: define Subagent Task, query, cancellation, allowed-definition, and
+   dynamic Tool-composition protocols;
+3. Step S2: add `TaskAssignedInputEvent`, its payload, schema, canonical Runtime
+   Message projection, and Turn-triggering behavior;
+4. Step S3: add persistence-first Child Bootstrap ordering, deterministic
+   retry identity, rollback, and activation acceptance;
+5. Step S4: add process-free Task query and restart-safe final Assistant
+   completion bridging;
+6. Step S5: implement and register `Task`, `TaskGet`, and `TaskCancel` with a
+   dynamically generated allowed-Subagent description and schema;
+7. Step S6: validate non-blocking behavior, context isolation, Event delivery,
+   cancellation, recovery, same-process and child-process execution, IPC,
+   capacity, Tool-policy reduction, naming, and performance reporting.
+
+Each Step is independently planned, validated, reviewed, and committed. The
+first implementation exposes `taskId` and `childConversationId`; it does not
+introduce a separate public `agentId`. The existing `subagentId` is the internal
+and persistence-compatible representation of `taskId` during this track.
+
+Step S0 status: completed. Provider-facing Tool names now use one PascalCase
+protocol across Descriptor capture, Registry and View lookup, Group Manifest
+loading, invocation and permission validation, execution-policy lookup,
+Approval OutputEvents, Pi conversion fixtures, and Runtime integration tests.
+Step S1 is the next active implementation step.

@@ -9,14 +9,14 @@ const manifest = captureToolGroupManifest({
   id: "novel_read",
   version: "1.0.0",
   label: "Novel read",
-  tools: ["search_novel", "read_chapter"],
+  tools: ["SearchNovel", "ReadChapter"],
 });
 
 const schemaVersion: 1 = manifest.schemaVersion;
 const firstTool: string | undefined = manifest.tools[0];
 
 // @ts-expect-error Captured Tool name order must not be mutable.
-manifest.tools.push("write_chapter");
+manifest.tools.push("WriteChapter");
 // @ts-expect-error Captured manifest metadata must not be mutable.
 manifest.label = "Changed";
 

@@ -6,7 +6,7 @@ These instructions apply to the entire repository.
 
 Complete the currently active documented implementation track from the current repository status without reimplementing completed checkpoints.
 
-The active track is Novel Task N9-E through Task N11 in `docs/novel-implementation-plan.md`. Runtime Task 1 through Task 7 remains completed and documented in `docs/implementation-plan.md`. Novel Task N0 through Task N8 and Task N9-A through Task N9-D remain completed; do not reimplement those checkpoints.
+The active track is the post-Task-7 Subagent Tool implementation, Step S0 through Step S6, in `docs/implementation-plan.md` and `docs/agent-orchestration.md`. Runtime Task 1 through Task 7 remains completed. Novel Task N9-E through Task N11 and persistent Agent Team work are paused rather than cancelled while the Subagent Tool track is active.
 
 ## Autonomous Authority
 
@@ -49,7 +49,7 @@ Planning is mandatory even when the agent has authority to continue automaticall
 
 - Follow the async-first hybrid architecture documented by the project.
 - Do not mix Runtime and Novel implementation changes in one step or commit.
-- Do not resume or modify the completed Runtime track without an explicit track change.
+- Do not reopen completed Runtime checkpoints beyond the documented Subagent Tool extension.
 - Runtime Tool, Approval, IPC, Subagent, and validation work must remain provider-neutral at public Core boundaries.
 - Preserve stable public abstractions and keep Pi, process placement, Node, and future Rust details behind their accepted boundaries.
 - Do not silently resolve questions explicitly marked unresolved or deferred.
@@ -61,4 +61,4 @@ Planning is mandatory even when the agent has authority to continue automaticall
 
 ## Completion Boundary
 
-The current autonomous execution objective ends only when Novel Task N9-E through Task N11 is implemented, validated, documented, and committed, or when progress is blocked by an unresolved decision that cannot be safely derived from accepted documents and existing code. Agent-facing Novel Tools remain outside this objective.
+The current autonomous execution objective ends only when Subagent Tool Step S0 through Step S6 is implemented, validated, documented, and committed, or when progress is blocked by an unresolved decision that cannot be safely derived from accepted documents and existing code. Novel Task N9-E through Task N11 and persistent Agent Team work resume only after an explicit track change.

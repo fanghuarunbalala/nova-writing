@@ -422,7 +422,7 @@ function createInteractionSnapshot() {
         conversationId,
         runId: "run-1",
         toolCallId: "tool-call-1",
-        toolName: "read_file",
+        toolName: "ReadFile",
         toolVersion: "1.0.0",
         argumentDigest: `sha256:${"4".repeat(64)}`,
       }),

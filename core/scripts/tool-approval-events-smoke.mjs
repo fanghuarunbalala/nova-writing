@@ -39,7 +39,7 @@ const requested = new ToolApprovalRequestedOutputEvent({
   turnId: "turn-approval",
   approvalRequestId: "approval-1",
   toolCallId: "tool-call-1",
-  toolName: "write_file",
+  toolName: "WriteFile",
   toolVersion: "1.0.0",
   argumentDigest: digest,
   summary: {
@@ -61,7 +61,7 @@ const resolved = new ToolApprovalResolvedOutputEvent({
   causationId: "input-approval-1",
   approvalRequestId: "approval-1",
   toolCallId: "tool-call-1",
-  toolName: "write_file",
+  toolName: "WriteFile",
   toolVersion: "1.0.0",
   argumentDigest: digest,
   decision: "approved",

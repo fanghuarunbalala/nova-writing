@@ -21,19 +21,19 @@ const handler = Object.freeze({
   },
 });
 const registered = [
-  tool("submit_result", "3.0.0"),
-  tool("read_file", "1.1.0"),
-  tool("search_novel", "2.0.0"),
-  tool("write_file", "1.0.0"),
+  tool("SubmitResult", "3.0.0"),
+  tool("ReadFile", "1.1.0"),
+  tool("SearchNovel", "2.0.0"),
+  tool("WriteFile", "1.0.0"),
 ];
 const assembler = new ToolRegistryAssembler();
 for (const toolValue of registered) assembler.register(toolValue);
 const registry = assembler.freeze();
 assert.deepEqual(registry.list().map(identity), [
-  "read_file@1.1.0",
-  "search_novel@2.0.0",
-  "submit_result@3.0.0",
-  "write_file@1.0.0",
+  "ReadFile@1.1.0",
+  "SearchNovel@2.0.0",
+  "SubmitResult@3.0.0",
+  "WriteFile@1.0.0",
 ]);
 
 const catalog = new ToolGroupCatalog([
@@ -43,8 +43,8 @@ id: novel
 version: 1.0.0
 label: Novel tools
 tools:
-  - search_novel
-  - submit_result
+  - SearchNovel
+  - SubmitResult
 `),
   loadToolGroupManifest(`
 schemaVersion: 1
@@ -52,9 +52,9 @@ id: files
 version: 1.0.0
 label: File tools
 tools:
-  - read_file
-  - write_file
-  - submit_result
+  - ReadFile
+  - WriteFile
+  - SubmitResult
 `),
 ]);
 const view = new ToolRegistryView({
@@ -62,13 +62,13 @@ const view = new ToolRegistryView({
   groups: catalog,
   policy: {
     groupIds: ["files", "novel"],
-    allow: ["read_file", "search_novel", "submit_result"],
-    deny: ["submit_result"],
+    allow: ["ReadFile", "SearchNovel", "SubmitResult"],
+    deny: ["SubmitResult"],
   },
 });
 assert.deepEqual(view.listAllowed().map(identity), [
-  "read_file@1.1.0",
-  "search_novel@2.0.0",
+  "ReadFile@1.1.0",
+  "SearchNovel@2.0.0",
 ]);
 
 const bridgeRequests = [];
@@ -105,8 +105,8 @@ const adapter = new PiToolAdapter({
 });
 const piTools = adapter.toAgentTools(view.listAllowed());
 assert.deepEqual(piTools.map((toolValue) => toolValue.name), [
-  "read_file",
-  "search_novel",
+  "ReadFile",
+  "SearchNovel",
 ]);
 const result = await piTools[1].execute(
   "tool-call-1",
@@ -115,7 +115,7 @@ const result = await piTools[1].execute(
   (update) => updates.push(update),
 );
 assert.equal(bridgeRequests.length, 1);
-assert.equal(bridgeRequests[0].tool.descriptor.name, "search_novel");
+assert.equal(bridgeRequests[0].tool.descriptor.name, "SearchNovel");
 assert.equal(bridgeRequests[0].tool.descriptor.version, "2.0.0");
 assert.deepEqual(bridgeRequests[0].arguments, { value: "chapter" });
 assert.deepEqual(updates, [
@@ -138,7 +138,7 @@ schemaVersion: 1
 id: broken
 version: 1.0.0
 label: Broken
-tools: [missing_tool]
+tools: [MissingTool]
 `),
 ]);
 assert.throws(
@@ -152,7 +152,7 @@ assert.throws(
     error instanceof ToolRegistryViewError &&
     error.failure === TOOL_REGISTRY_VIEW_FAILURE.unknownTool &&
     error.groupId === "broken" &&
-    error.toolName === "missing_tool",
+    error.toolName === "MissingTool",
 );
 
 const publicDeclaration = await readFile(

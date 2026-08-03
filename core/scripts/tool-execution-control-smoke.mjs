@@ -39,7 +39,7 @@ let noRetryCalls = 0;
 let cancelStartedResolve;
 const cancelStarted = new Promise((resolve) => { cancelStartedResolve = resolve; });
 const tools = [
-  tool("retry_tool", async () => {
+  tool("RetryTool", async () => {
     retryCalls += 1;
     if (retryCalls === 1) {
       throw new ToolError({
@@ -51,7 +51,7 @@ const tools = [
     }
     return { content: [{ type: "text", text: "retried" }] };
   }),
-  tool("no_retry_tool", async () => {
+  tool("NoRetryTool", async () => {
     noRetryCalls += 1;
     throw new ToolError({
       code: "TOOL_PARTIAL_FAILURE",
@@ -60,12 +60,12 @@ const tools = [
       sideEffectStatus: "possible",
     });
   }),
-  tool("timeout_tool", async (context) => waitForAbort(context.signal, "none")),
-  tool("cancel_tool", async (context) => {
+  tool("TimeoutTool", async (context) => waitForAbort(context.signal, "none")),
+  tool("CancelTool", async (context) => {
     cancelStartedResolve();
     return waitForAbort(context.signal, "possible");
   }),
-  tool("approval_tool", async () => ({ content: [] })),
+  tool("ApprovalTool", async () => ({ content: [] })),
 ];
 const assembler = new ToolRegistryAssembler();
 for (const registered of tools) assembler.register(registered);
@@ -95,10 +95,10 @@ const policyResolver = new StaticToolExecutionPolicyResolver(
   tools.map((registered) => ({
     toolName: registered.descriptor.name,
     toolVersion: registered.descriptor.version,
-    policy: registered.descriptor.name === "retry_tool" ||
-      registered.descriptor.name === "no_retry_tool"
+    policy: registered.descriptor.name === "RetryTool" ||
+      registered.descriptor.name === "NoRetryTool"
       ? { ...defaultPolicy, idempotent: true, retry: { maximumAttempts: 2 } }
-      : registered.descriptor.name === "timeout_tool"
+      : registered.descriptor.name === "TimeoutTool"
         ? { ...defaultPolicy, timeoutMs: 10, idempotent: true, retry: { maximumAttempts: 2 } }
         : defaultPolicy,
   })),
@@ -108,13 +108,13 @@ const permissionPolicy = new LayeredToolPermissionPolicy([
     ruleId: "workspace.allow_control",
     source: "workspace",
     effect: "allow",
-    match: { toolNames: ["retry_tool", "no_retry_tool", "timeout_tool", "cancel_tool"] },
+    match: { toolNames: ["RetryTool", "NoRetryTool", "TimeoutTool", "CancelTool"] },
   },
   {
     ruleId: "workspace.ask_approval",
     source: "workspace",
     effect: "ask",
-    match: { toolNames: ["approval_tool"] },
+    match: { toolNames: ["ApprovalTool"] },
   },
 ]);
 const eventSink = new CollectingEventSink();
@@ -148,14 +148,14 @@ const dispatcher = new ToolDispatcher(new ToolExecutionPipeline({
   traceSink,
 }));
 
-const retryResult = await dispatcher.execute(invocation("retry-call", "retry_tool"), {
+const retryResult = await dispatcher.execute(invocation("retry-call", "RetryTool"), {
   signal: new AbortController().signal,
 });
 assert.equal(retryResult.content[0].text, "retried");
 assert.equal(retryCalls, 2);
 
 await assertToolError(
-  dispatcher.execute(invocation("no-retry-call", "no_retry_tool"), {
+  dispatcher.execute(invocation("no-retry-call", "NoRetryTool"), {
     signal: new AbortController().signal,
   }),
   "TOOL_PARTIAL_FAILURE",
@@ -165,7 +165,7 @@ await assertToolError(
 assert.equal(noRetryCalls, 1);
 
 await assertToolError(
-  dispatcher.execute(invocation("timeout-call", "timeout_tool"), {
+  dispatcher.execute(invocation("timeout-call", "TimeoutTool"), {
     signal: new AbortController().signal,
   }),
   "TOOL_EXECUTION_TIMED_OUT",
@@ -173,7 +173,7 @@ await assertToolError(
   "none",
 );
 
-const cancelExecution = dispatcher.execute(invocation("cancel-call", "cancel_tool"), {
+const cancelExecution = dispatcher.execute(invocation("cancel-call", "CancelTool"), {
   signal: new AbortController().signal,
 });
 await cancelStarted;
@@ -189,7 +189,7 @@ await assertToolError(
 );
 
 const approvalExecution = dispatcher.execute(
-  invocation("approval-call", "approval_tool"),
+  invocation("approval-call", "ApprovalTool"),
   { signal: new AbortController().signal },
 );
 const pending = await waitForPending(coordinator);

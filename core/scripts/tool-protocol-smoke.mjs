@@ -23,7 +23,7 @@ const limits = Object.freeze({
 const captureOptions = Object.freeze({
   conversationId: "conversation-1",
   toolCallId: "tool-call-1",
-  toolName: "search_notes",
+  toolName: "SearchNotes",
   toolVersion: "1.0.0",
   limits,
 });
@@ -36,7 +36,7 @@ const parameterSource = Type.Object(
   { additionalProperties: false },
 );
 const descriptorSource = {
-  name: "search_notes",
+  name: "SearchNotes",
   version: "1.0.0",
   label: "Search notes",
   description: "Searches indexed notes.",
@@ -52,7 +52,7 @@ parameterSource.properties.query.minLength = 99;
 assert.equal(descriptor.label, "Search notes");
 assert.equal(descriptor.parameters.properties.query.minLength, 1);
 
-for (const name of ["Search", "1search", "search-notes", `a${"b".repeat(64)}`]) {
+for (const name of ["search", "1Search", "Search-Notes", `A${"b".repeat(64)}`]) {
   assertProtocolFailure(
     () => captureToolDescriptor({ ...descriptorSource, name }),
     TOOL_PROTOCOL_FAILURE.invalidName,

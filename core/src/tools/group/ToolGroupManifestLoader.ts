@@ -1,5 +1,6 @@
 /** Strict YAML loader and defensive capture for Tool Group Manifests. */
 import { parseDocument } from "yaml";
+import { isToolName } from "../protocol/ToolName.js";
 import {
   TOOL_GROUP_MANIFEST_SCHEMA_VERSION,
   type ToolGroupManifest,
@@ -12,7 +13,6 @@ import {
 } from "./ToolGroupManifestErrors.js";
 
 const GROUP_ID = /^[a-z][a-z0-9_]{0,63}$/;
-const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const SEMANTIC_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const MANIFEST_FIELDS = new Set([
   "schemaVersion",
@@ -122,7 +122,7 @@ function captureToolNames(
   const names: string[] = [];
   const seen = new Set<string>();
   for (const valueEntry of value) {
-    if (typeof valueEntry !== "string" || !TOOL_NAME.test(valueEntry)) {
+    if (!isToolName(valueEntry)) {
       throw manifestFailure(
         TOOL_GROUP_MANIFEST_FAILURE.invalidToolName,
         identity,

@@ -1,6 +1,7 @@
 /** Immutable Agent capability view composed from Groups, allowlist, then denylist. */
 import type { ToolGroupCatalog } from "../group/ToolGroupCatalog.js";
 import type { RegisteredTool } from "../protocol/RegisteredTool.js";
+import { TOOL_NAME_PATTERN, isToolName } from "../protocol/ToolName.js";
 import type { ToolRegistry } from "./ToolRegistry.js";
 import {
   TOOL_REGISTRY_VIEW_FAILURE,
@@ -9,7 +10,6 @@ import {
 } from "./ToolRegistryViewErrors.js";
 
 const GROUP_ID = /^[a-z][a-z0-9_]{0,63}$/;
-const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const POLICY_FIELDS = new Set(["groupIds", "allow", "deny"]);
 
 export interface ToolRegistryViewPolicy {
@@ -101,12 +101,12 @@ function captureViewPolicy(value: unknown): ToolRegistryViewPolicy {
   );
   const allow = captureOptionalIdentityList(
     record.allow,
-    TOOL_NAME,
+    TOOL_NAME_PATTERN,
     TOOL_REGISTRY_VIEW_FAILURE.duplicateAllowTool,
   );
   const deny = captureOptionalIdentityList(
     record.deny,
-    TOOL_NAME,
+    TOOL_NAME_PATTERN,
     TOOL_REGISTRY_VIEW_FAILURE.duplicateDenyTool,
   );
   return Object.freeze({
@@ -176,7 +176,7 @@ function validateKnownTools(
 function unknownTool(name: string, groupId?: string): ToolRegistryViewError {
   return viewFailure(TOOL_REGISTRY_VIEW_FAILURE.unknownTool, {
     groupId,
-    toolName: TOOL_NAME.test(name) ? name : undefined,
+    toolName: isToolName(name) ? name : undefined,
   });
 }
 

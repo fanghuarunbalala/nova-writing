@@ -61,7 +61,7 @@ const bridge = Object.freeze({
 const parameters = Type.Object({ query: Type.String() });
 const registered = defineTool({
   descriptor: {
-    name: "search_novel",
+    name: "SearchNovel",
     version: "1.0.0",
     label: "Search novel",
     description: "Searches Novel content.",
@@ -77,7 +77,7 @@ const registered = defineTool({
 const adapter = new PiToolAdapter(bridge);
 const piTool = adapter.toAgentTool(registered);
 assert.equal(Object.isFrozen(piTool), true);
-assert.equal(piTool.name, "search_novel");
+assert.equal(piTool.name, "SearchNovel");
 assert.equal(piTool.label, "Search novel");
 assert.equal(piTool.description, "Searches Novel content.");
 assert.equal(piTool.parameters, registered.descriptor.parameters);
@@ -129,7 +129,7 @@ assert.equal(requests[1].signal.aborted, false);
 
 const ordered = adapter.toAgentTools([registered, defineTool({
   descriptor: {
-    name: "submit_result",
+    name: "SubmitResult",
     version: "1.0.0",
     label: "Submit",
     description: "Submits a result.",
@@ -139,8 +139,8 @@ const ordered = adapter.toAgentTools([registered, defineTool({
 })]);
 assert.equal(Object.isFrozen(ordered), true);
 assert.deepEqual(ordered.map((tool) => tool.name), [
-  "search_novel",
-  "submit_result",
+  "SearchNovel",
+  "SubmitResult",
 ]);
 
 const bridgeFailure = new Error("bridge failure");

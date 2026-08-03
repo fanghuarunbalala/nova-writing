@@ -28,78 +28,78 @@ function tool(name, version = "1.0.0") {
 }
 
 const assembler = new ToolRegistryAssembler();
-const zetaSource = tool("zeta_tool");
-const alphaSource = tool("alpha_tool", "2.0.0");
+const zetaSource = tool("ZetaTool");
+const alphaSource = tool("AlphaTool", "2.0.0");
 assembler.register(zetaSource).register(alphaSource);
 assert.equal(assembler.size, 2);
 
 const registry = assembler.freeze();
 assert.equal(Object.isFrozen(registry), true);
 assert.equal(registry.size, 2);
-assert.equal(registry.has("alpha_tool"), true);
-assert.equal(registry.has("missing_tool"), false);
-assert.equal(registry.get("zeta_tool")?.descriptor.version, "1.0.0");
-assert.equal(registry.require("alpha_tool").descriptor.version, "2.0.0");
+assert.equal(registry.has("AlphaTool"), true);
+assert.equal(registry.has("MissingTool"), false);
+assert.equal(registry.get("ZetaTool")?.descriptor.version, "1.0.0");
+assert.equal(registry.require("AlphaTool").descriptor.version, "2.0.0");
 assert.deepEqual(
   registry.list().map((registered) => registered.descriptor.name),
-  ["alpha_tool", "zeta_tool"],
+  ["AlphaTool", "ZetaTool"],
 );
 assert.equal(Object.isFrozen(registry.list()), true);
 assert.equal(assembler.freeze(), registry);
 
 assertRegistryFailure(
-  () => assembler.register(tool("later_tool")),
+  () => assembler.register(tool("LaterTool")),
   TOOL_REGISTRY_FAILURE.assemblyFrozen,
 );
 assertRegistryFailure(
-  () => assembler.merge(new ToolRegistry([tool("later_tool")])),
+  () => assembler.merge(new ToolRegistry([tool("LaterTool")])),
   TOOL_REGISTRY_FAILURE.assemblyFrozen,
 );
 assertRegistryFailure(
-  () => registry.require("missing_tool"),
+  () => registry.require("MissingTool"),
   TOOL_REGISTRY_FAILURE.unknownTool,
 );
 
 const duplicateAssembler = new ToolRegistryAssembler();
-duplicateAssembler.register(tool("same_tool", "1.0.0"));
+duplicateAssembler.register(tool("SameTool", "1.0.0"));
 assertRegistryFailure(
-  () => duplicateAssembler.register(tool("same_tool", "1.0.0")),
+  () => duplicateAssembler.register(tool("SameTool", "1.0.0")),
   TOOL_REGISTRY_FAILURE.duplicateTool,
-  "same_tool",
+  "SameTool",
   "1.0.0",
 );
 assertRegistryFailure(
-  () => duplicateAssembler.register(tool("same_tool", "2.0.0")),
+  () => duplicateAssembler.register(tool("SameTool", "2.0.0")),
   TOOL_REGISTRY_FAILURE.duplicateTool,
-  "same_tool",
+  "SameTool",
   "2.0.0",
 );
 
 const mergeAssembler = new ToolRegistryAssembler();
-mergeAssembler.register(tool("existing_tool"));
+mergeAssembler.register(tool("ExistingTool"));
 const conflictingRegistry = new ToolRegistry([
-  tool("new_tool"),
-  tool("existing_tool", "3.0.0"),
+  tool("NewTool"),
+  tool("ExistingTool", "3.0.0"),
 ]);
 assertRegistryFailure(
   () => mergeAssembler.merge(conflictingRegistry),
   TOOL_REGISTRY_FAILURE.duplicateTool,
-  "existing_tool",
+  "ExistingTool",
   "3.0.0",
 );
 assert.equal(mergeAssembler.size, 1);
-assert.equal(mergeAssembler.freeze().has("new_tool"), false);
+assert.equal(mergeAssembler.freeze().has("NewTool"), false);
 
 const mergedAssembler = new ToolRegistryAssembler();
-mergedAssembler.register(tool("local_tool"));
-mergedAssembler.merge(new ToolRegistry([tool("remote_b"), tool("remote_a")]));
+mergedAssembler.register(tool("LocalTool"));
+mergedAssembler.merge(new ToolRegistry([tool("RemoteB"), tool("RemoteA")]));
 assert.deepEqual(
   mergedAssembler.freeze().list().map((registered) => registered.descriptor.name),
-  ["local_tool", "remote_a", "remote_b"],
+  ["LocalTool", "RemoteA", "RemoteB"],
 );
 
 const mutableDescriptor = {
-  name: "captured_tool",
+  name: "CapturedTool",
   version: "1.0.0",
   label: "Captured",
   description: "Captured during Registry construction.",
@@ -109,17 +109,17 @@ const capturedRegistry = new ToolRegistry([
   { descriptor: mutableDescriptor, handler },
 ]);
 mutableDescriptor.label = "Mutated";
-assert.equal(capturedRegistry.require("captured_tool").descriptor.label, "Captured");
+assert.equal(capturedRegistry.require("CapturedTool").descriptor.label, "Captured");
 
 const privateToolData = "DO_NOT_EXPOSE_PRIVATE_TOOL_DATA";
 assert.throws(
   () =>
     new ToolRegistryAssembler()
-      .register(tool("private_tool"))
+      .register(tool("PrivateTool"))
       .register(
         defineTool({
           descriptor: {
-            name: "private_tool",
+            name: "PrivateTool",
             version: "2.0.0",
             label: privateToolData,
             description: privateToolData,

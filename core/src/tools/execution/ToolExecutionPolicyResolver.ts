@@ -1,5 +1,6 @@
 /** Immutable exact Tool identity to execution-policy resolver. */
 import type { RegisteredTool } from "../protocol/RegisteredTool.js";
+import { isToolName } from "../protocol/ToolName.js";
 import type { ToolExecutionPolicy } from "./ToolExecutionContracts.js";
 import { ToolError } from "./ToolExecutionError.js";
 import { captureToolExecutionPolicy } from "./ToolExecutionProtocolValidator.js";
@@ -71,9 +72,7 @@ function captureBindingKey(binding: ToolExecutionPolicyBinding): string {
 }
 
 function safeToolName(value: unknown): string | undefined {
-  return typeof value === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(value)
-    ? value
-    : undefined;
+  return isToolName(value) ? value : undefined;
 }
 
 function safeToolVersion(value: unknown): string | undefined {

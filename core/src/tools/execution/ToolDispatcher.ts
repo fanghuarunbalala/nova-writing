@@ -8,6 +8,7 @@ import { noopLogger } from "../../observability/index.js";
 import type { InteractionCoordinator } from "../../runtime/interaction/ToolApprovalInteractionProtocol.js";
 import type { ToolApprovalRequest } from "../../runtime/interaction/ToolApprovalInteractionProtocol.js";
 import type { RegisteredTool } from "../protocol/RegisteredTool.js";
+import { isToolName } from "../protocol/ToolName.js";
 import type {
   ToolExecutionUpdate,
   ToolProgressSink,
@@ -858,9 +859,7 @@ function safeIdentity(value: unknown): string | undefined {
 }
 
 function safeToolName(value: unknown): string | undefined {
-  return typeof value === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(value)
-    ? value
-    : undefined;
+  return isToolName(value) ? value : undefined;
 }
 
 function captureResultLimits(value: ToolResultLimits): ToolResultLimits {

@@ -330,7 +330,7 @@ export const ContextCheckpointAppliedPayloadSchema = Type.Object({ providerCallI
 const ToolApprovalIdentityProperties = {
   approvalRequestId: Type.String({ minLength: 1, maxLength: 256 }),
   toolCallId: Type.String({ minLength: 1, maxLength: 256 }),
-  toolName: Type.String({ pattern: "^[a-z][a-z0-9_]{0,63}$" }),
+  toolName: Type.String({ pattern: "^[A-Z][A-Za-z0-9]{0,63}$" }),
   toolVersion: Type.String({ pattern: "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" }),
   argumentDigest: Type.String({ pattern: "^sha256:[a-f0-9]{64}$" }),
 };
@@ -355,7 +355,7 @@ export const ToolApprovalResolvedPayloadSchema = Type.Object({
 export const ToolTraceRecordedPayloadSchema = Type.Object({
   traceId: Type.String({ minLength: 1, maxLength: 256 }),
   toolCallId: Type.String({ minLength: 1, maxLength: 256 }),
-  toolName: Type.String({ pattern: "^[a-z][a-z0-9_]{0,63}$" }),
+  toolName: Type.String({ pattern: "^[A-Z][A-Za-z0-9]{0,63}$" }),
   toolVersion: Type.String({ pattern: "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" }),
   argumentDigest: Type.String({ pattern: "^sha256:[a-f0-9]{64}$" }),
   stage: Type.Union([

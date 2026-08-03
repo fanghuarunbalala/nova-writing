@@ -1,5 +1,6 @@
 /** Mutable Tool assembly that freezes into a deterministic immutable Registry snapshot. */
 import type { RegisteredTool } from "../protocol/RegisteredTool.js";
+import { isToolName } from "../protocol/ToolName.js";
 import { captureRegisteredTool } from "../protocol/ToolProtocolValidator.js";
 import {
   TOOL_REGISTRY_FAILURE,
@@ -7,7 +8,6 @@ import {
 } from "./ToolRegistryErrors.js";
 
 type AnyRegisteredTool = RegisteredTool;
-const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
 export class ToolRegistry {
   readonly #toolsByName: ReadonlyMap<string, AnyRegisteredTool>;
@@ -45,7 +45,7 @@ export class ToolRegistry {
     const tool = this.get(name);
     if (!tool) {
       throw new ToolRegistryError(TOOL_REGISTRY_FAILURE.unknownTool, {
-        toolName: TOOL_NAME.test(name) ? name : undefined,
+        toolName: isToolName(name) ? name : undefined,
       });
     }
     return tool;

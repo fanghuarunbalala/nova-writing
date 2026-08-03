@@ -200,7 +200,7 @@ async function runProjectionContract(name, Transport) {
       runId,
       approvalRequestId,
       toolCallId,
-      toolName: "write_file",
+      toolName: "WriteFile",
       toolVersion: "1.0.0",
       argumentDigest,
       summary: {
@@ -221,7 +221,7 @@ async function runProjectionContract(name, Transport) {
       runId,
       approvalRequestId,
       toolCallId,
-      toolName: "write_file",
+      toolName: "WriteFile",
       toolVersion: "1.0.0",
       argumentDigest,
       decision: "approved",

@@ -13,7 +13,7 @@ const bridge: PiToolExecutionBridge = {
 };
 const registered = defineTool({
   descriptor: {
-    name: "search_novel",
+    name: "SearchNovel",
     version: "1.0.0",
     label: "Search novel",
     description: "Searches Novel content.",

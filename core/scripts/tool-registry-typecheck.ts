@@ -4,7 +4,7 @@ import { ToolRegistryAssembler, defineTool } from "../src/tools/index.js";
 
 const registered = defineTool({
   descriptor: {
-    name: "search_notes",
+    name: "SearchNotes",
     version: "1.0.0",
     label: "Search notes",
     description: "Searches indexed notes.",
@@ -26,4 +26,4 @@ listed.push(registered);
 // @ts-expect-error Immutable Registries do not expose registration methods.
 registry.register(registered);
 
-void registry.require("search_notes");
+void registry.require("SearchNotes");

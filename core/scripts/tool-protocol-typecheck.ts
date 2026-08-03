@@ -9,7 +9,7 @@ const parameters = Type.Object({
 
 const inferredTool = defineTool({
   descriptor: {
-    name: "search_notes",
+    name: "SearchNotes",
     version: "1.0.0",
     label: "Search notes",
     description: "Searches indexed notes.",

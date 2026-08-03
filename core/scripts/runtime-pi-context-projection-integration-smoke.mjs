@@ -263,7 +263,7 @@ const adapter = new PiAgentCoreAdapter({
             {
               type: "toolCall",
               id: "tool-call-projection",
-              name: "missing_tool",
+              name: "MissingTool",
               arguments: {},
             },
           ],

@@ -11,7 +11,7 @@ const invocation = Object.freeze({
   runId: "run-1",
   toolCallId: "tool-call-1",
   turnId: "turn-1",
-  toolName: "write_file",
+  toolName: "WriteFile",
   arguments: Object.freeze({ path: "private-path" }),
   argumentDigest: `sha256:${"a".repeat(64)}`,
 });
@@ -30,13 +30,13 @@ const rules = [
     ruleId: "workspace.ask_write",
     source: "workspace",
     effect: "ask",
-    match: { toolNames: ["write_file"] },
+    match: { toolNames: ["WriteFile"] },
   },
   {
     ruleId: "agent.allow_write",
     source: "agent_definition",
     effect: "allow",
-    match: { toolNames: ["write_file"] },
+    match: { toolNames: ["WriteFile"] },
   },
 ];
 const policy = new LayeredToolPermissionPolicy(rules);

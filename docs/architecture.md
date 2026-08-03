@@ -5018,7 +5018,7 @@ Checkpoint 5A is implemented end to end through declaration, defensive registrat
 
 The implemented Core protocol defensively captures Tool declarations and values before they cross ownership boundaries:
 
-- Tool names use a stable lowercase underscore identity and Tool versions use strict `major.minor.patch` syntax.
+- Tool names use a stable PascalCase identity matching `[A-Z][A-Za-z0-9]{0,63}` and Tool versions use strict `major.minor.patch` syntax.
 - TypeBox schemas are runtime-validated, cloned with their TypeBox metadata intact, and deeply frozen so later declaration mutation cannot alter a registered definition.
 - first-version result content is text-only; structured success details must be JSON-safe, and large or non-text values are represented by logical `ArtifactReference` values owned by the executing Conversation.
 - result limits are supplied by the caller as policy input rather than hidden as protocol constants; until Artifact materialization is implemented, an oversized result fails with stable `result_oversized`.
@@ -5777,7 +5777,7 @@ Checkpoint 7 treats executable smoke fixtures as both acceptance tests and refer
 
 Runtime Task 1 through Task 7 is complete. Performance baselines remain deferred rather than implied; the accepted release checkpoint guarantees the documented protocol, persistence, recovery, cancellation, redaction, and cross-client behavior validated by the complete suite.
 
-## 25.2 Future Conversation-Based Agent Orchestration
+## 25.2 Conversation-Based Agent Orchestration
 
 The accepted post-Task-7 design direction is recorded in
 `docs/agent-orchestration.md`. It keeps Conversation as the shared foundation
@@ -5795,8 +5795,10 @@ sections, immutable Agent Definitions and Manifests, persistent Agent Instances,
 Agent Team membership and Task state, composition rules, persistence and
 recovery boundaries, and phased implementation. Subagents do not implicitly
 inherit or fork Parent Conversation context; required context is passed through
-the Task Prompt and validated Artifact references. This direction is documented
-only; it is not part of the completed Task 6B or Task 7 implementation.
+the Task Prompt and validated Artifact references. The ephemeral Subagent and
+its `Task`, `TaskGet`, and `TaskCancel` Tools are the active post-Task-7
+extension. Persistent Agent and Agent Team sections remain future work and are
+not part of the completed Task 6B or Task 7 implementation.
 
 ## 26. Persistence Model
 

@@ -12,6 +12,7 @@ import {
 } from "../../storage/artifact/index.js";
 import type { ToolDescriptor } from "./ToolDescriptor.js";
 import type { ToolHandler } from "./ToolHandler.js";
+import { isToolName } from "./ToolName.js";
 import type {
   ToolExecutionUpdate,
   ToolPartialResultUpdate,
@@ -31,7 +32,6 @@ import type {
   ToolResultLimits,
 } from "./ToolResult.js";
 
-const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const TOOL_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const SAFE_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 const textEncoder = new TextEncoder();
@@ -401,7 +401,7 @@ function requireNonBlank(value: unknown): string {
 }
 
 function captureToolName(value: unknown): string | undefined {
-  return typeof value === "string" && TOOL_NAME.test(value) ? value : undefined;
+  return isToolName(value) ? value : undefined;
 }
 
 function captureToolVersion(value: unknown): string | undefined {

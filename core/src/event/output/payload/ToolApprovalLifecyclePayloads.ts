@@ -153,7 +153,7 @@ function requireIdentity(value: unknown): string {
 }
 
 function requireToolName(value: unknown): string {
-  if (typeof value !== "string" || !/^[a-z][a-z0-9_]{0,63}$/.test(value)) {
+  if (typeof value !== "string" || !/^[A-Z][A-Za-z0-9]{0,63}$/.test(value)) {
     throw new TypeError("Approval Tool name is invalid");
   }
   return value;

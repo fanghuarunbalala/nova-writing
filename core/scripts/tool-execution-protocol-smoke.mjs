@@ -23,7 +23,7 @@ const source = {
   runId: "run-1",
   toolCallId: "tool-call-1",
   turnId: "turn-1",
-  toolName: "search_notes",
+  toolName: "SearchNotes",
   arguments: { query: privateArguments },
 };
 const invocation = await captureToolInvocation(source, digester);

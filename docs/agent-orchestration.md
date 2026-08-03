@@ -2,9 +2,11 @@
 
 ## 1. Status and Boundary
 
-This document records the accepted design direction for future Agent
-orchestration. It is not implemented by completed Runtime Task 6B or Task 7 and
-does not change their public contracts or checkpoint status.
+This document records the accepted design direction for Agent orchestration.
+The ephemeral Subagent slice and its `Task`, `TaskGet`, and `TaskCancel` Tools
+became the active implementation track on August 3, 2026. Persistent Agent,
+Agent Team, Team communication, `TaskOutput`, and `Sleep` remain documented
+future work. Completed Runtime Task 6B and Task 7 checkpoints remain closed.
 
 The central decisions are:
 
@@ -267,14 +269,14 @@ It:
 - may retain its Journal for replay even when logically disposable.
 
 The current Task 6B `SubagentRequest.objective` remains a useful internal field.
-The model-facing `task.prompt` is captured into that field and must also be
+The model-facing `Task.prompt` is captured into that field and must also be
 persisted as a child Task InputEvent before activation is accepted.
 
 ## 6. Non-Blocking Subagent Tools
 
-### 6.1 `task`
+### 6.1 `Task`
 
-`task` creates one ephemeral child Agent. It waits only for durable creation,
+`Task` creates one ephemeral child Agent. It waits only for durable creation,
 Task Input acceptance, and activation acceptance. It does not wait for Agent
 execution.
 
@@ -292,7 +294,6 @@ through validated Artifact identities rather than implicit context inheritance.
 ```ts
 interface SubagentTaskAcceptance {
   readonly taskId: string;
-  readonly agentId: string;
   readonly childConversationId: string;
   readonly status: "queued" | "running";
   readonly acceptedAt: string;
@@ -304,14 +305,13 @@ are the same stable identity. The target definition version, Tool policy,
 parent identities, timestamp, process placement, and child identity are trusted
 Runtime values rather than model arguments.
 
-### 6.2 `task_get`
+### 6.2 `TaskGet`
 
-`task_get` is a process-free, read-only status and result query:
+`TaskGet` is a process-free, read-only status and result query:
 
 ```ts
 interface SubagentTaskSnapshot {
   readonly taskId: string;
-  readonly agentId: string;
   readonly status:
     | "queued"
     | "running"
@@ -331,9 +331,9 @@ interface SubagentTaskSnapshot {
 The query reads durable binding and Run state plus the child Message projection.
 It never calls `ConversationHost.ensureActive()` and never sends an InputEvent.
 
-### 6.3 `task_cancel`
+### 6.3 `TaskCancel`
 
-`task_cancel` validates ownership, persists cancellation intent, and routes Stop
+`TaskCancel` validates ownership, persists cancellation intent, and routes Stop
 to the child Conversation. It returns `cancellation_requested`,
 `already_terminal`, or `not_found` without waiting for Runtime termination.
 
@@ -389,7 +389,7 @@ Completion rules:
 - inactive-parent recovery: existing orphaned result.
 
 Parent lifecycle Events retain bounded summary and Artifact metadata. Full
-result content remains child-owned and is read through `task_get`.
+result content remains child-owned and is read through `TaskGet`.
 
 ## 8. Agent Team Architecture
 
@@ -439,7 +439,7 @@ interface AgentTeamMember {
 
 ## 9. Persistent Team Agent Creation
 
-The Orchestrator may receive an `agent_create` Tool:
+The Orchestrator may receive an `AgentCreate` Tool:
 
 ```ts
 interface AgentCreateArguments {
@@ -502,18 +502,18 @@ identities, and timestamps.
 
 The first Orchestrator Tool set is conceptually:
 
-- `agent_create`: create and join one persistent Team Agent;
-- `agent_list`: list durable member identity, type, status, Runtime Presence,
+- `AgentCreate`: create and join one persistent Team Agent;
+- `AgentList`: list durable member identity, type, status, Runtime Presence,
   and active Task identity;
-- `agent_task`: assign a non-blocking Task to one member;
-- `agent_message`: send bounded follow-up or control content;
-- `agent_status`: read durable member and active Task state without activation;
-- `agent_messages`: read a cursor-based Team Inbox projection;
-- `agent_disable`: reject new Tasks without deleting history;
-- the ephemeral `task`, `task_get`, and `task_cancel` Tools when the
+- `AgentTask`: assign a non-blocking Task to one member;
+- `AgentMessage`: send bounded follow-up or control content;
+- `AgentStatus`: read durable member and active Task state without activation;
+- `AgentMessages`: read a cursor-based Team Inbox projection;
+- `AgentDisable`: reject new Tasks without deleting history;
+- the ephemeral `Task`, `TaskGet`, and `TaskCancel` Tools when the
   Orchestrator definition permits Subagents.
 
-`agent_task` waits only for Task metadata and target InputEvent persistence:
+`AgentTask` waits only for Task metadata and target InputEvent persistence:
 
 ```ts
 interface AgentTaskArguments {
@@ -527,20 +527,20 @@ It returns `taskId`, `agentId`, and `queued` or `running` acceptance without
 waiting for the member result.
 
 Runtime Agent IDs are not embedded into immutable Tool Schemas. The Orchestrator
-discovers current members through `agent_list` and durable Team state.
+discovers current members through `AgentList` and durable Team state.
 
 ## 12. Team Member Tool View
 
 Every persistent Team member receives bound communication Tools equivalent to:
 
-- `task_output`: report progress, blocked state, completion, or failure for the
+- `TaskOutput`: report progress, blocked state, completion, or failure for the
   currently active Team Task;
-- `orchestrator_message`: send a question or normal message;
-- `orchestrator_messages`: query messages addressed to the member;
-- the ephemeral `task`, `task_get`, and `task_cancel` Tools when the member
+- `OrchestratorMessage`: send a question or normal message;
+- `OrchestratorMessages`: query messages addressed to the member;
+- the ephemeral `Task`, `TaskGet`, and `TaskCancel` Tools when the member
   definition permits Subagents.
 
-The first implementation binds `task_output` to the single active Task. The
+The first implementation binds `TaskOutput` to the single active Task. The
 model does not provide or override `taskId`, source Agent, Team, Orchestrator,
 or target Conversation identities.
 
@@ -639,16 +639,16 @@ Role-bound Tool sets:
 - ephemeral Subagent: reduced domain Tools only, with no Team management and no
   nested Subagent Tools.
 
-The Subagent `task` descriptor is generated from the creator definition's
+The Subagent `Task` descriptor is generated from the creator definition's
 allowed Subagent types. Persistent `agentId` values are runtime data and are
 queried rather than embedded into Tool descriptors.
 
 ## 15. Optional Sleep and Wake
 
-Active query Tools remain authoritative: `task_get`, `agent_status`,
-`agent_messages`, and `orchestrator_messages` can always read current state.
+Active query Tools remain authoritative: `TaskGet`, `AgentStatus`,
+`AgentMessages`, and `OrchestratorMessages` can always read current state.
 
-A later `sleep` Tool may avoid busy polling. It must not hold a Tool Promise,
+A later `Sleep` Tool may avoid busy polling. It must not hold a Tool Promise,
 Provider call, process, or timer open. It persists a bounded wait condition,
 ends the current Run as yielded or sleeping, and permits Runtime eviction. A
 matching durable InputEvent later causes `WakeCoordinator` to enqueue a wake
@@ -727,10 +727,10 @@ Required evolution:
 
 - `TaskAssignedInputEvent` and Runtime Message projection;
 - child Bootstrap ordering;
-- non-blocking `task` Tool;
+- non-blocking `Task` Tool;
 - final Assistant completion bridge;
-- process-free `task_get`;
-- non-blocking `task_cancel`.
+- process-free `TaskGet`;
+- non-blocking `TaskCancel`.
 
 ### Phase 3: Persistent Agent Instance
 
@@ -752,7 +752,7 @@ Required evolution:
 - `AgentCommunicationService`;
 - Inbox projection and cursor query;
 - Orchestrator Tools;
-- member `task_output` and Orchestrator communication Tools;
+- member `TaskOutput` and Orchestrator communication Tools;
 - Artifact and oversized-content behavior.
 
 ### Phase 6: Optional Sleep and Wake
@@ -781,9 +781,11 @@ Accepted direction:
     authority;
 13. persistent Agent identity does not imply a permanently running process.
 
-Unresolved before implementation:
+Unresolved outside the active Subagent Tool slice or deferred to its owning
+Step:
 
-1. final public Tool and Event names;
+1. public Tool and Event names beyond `Task`, `TaskGet`, `TaskCancel`, and
+   `TaskAssignedInputEvent`;
 2. exact Agent identity versus Conversation identity mapping and ID factories;
 3. Agent Manifest digest and immutable snapshot persistence protocol;
 4. Team Inbox canonical storage and projection ownership;

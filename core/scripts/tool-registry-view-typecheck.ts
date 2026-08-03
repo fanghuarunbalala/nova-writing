@@ -10,7 +10,7 @@ import {
 
 const registered = defineTool({
   descriptor: {
-    name: "read_file",
+    name: "ReadFile",
     version: "1.0.0",
     label: "Read file",
     description: "Reads one file.",
@@ -29,7 +29,7 @@ const groups = new ToolGroupCatalog([
     id: "files",
     version: "1.0.0",
     label: "Files",
-    tools: ["read_file"],
+    tools: ["ReadFile"],
   }),
 ]);
 const view = new ToolRegistryView({
@@ -46,4 +46,4 @@ view.register(registered);
 // @ts-expect-error Captured View policy is immutable.
 view.policy.groupIds.push("other");
 
-void view.require("read_file");
+void view.require("ReadFile");

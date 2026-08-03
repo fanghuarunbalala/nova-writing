@@ -7,6 +7,7 @@ import type {
   ToolPermissionDecision,
   ToolPermissionEffect,
 } from "./ToolExecutionContracts.js";
+import { TOOL_NAME_PATTERN, isToolName } from "../protocol/ToolName.js";
 import { captureToolApprovalIdentity } from "./ToolExecutionProtocolValidator.js";
 import { captureToolExecutionPolicy } from "./ToolExecutionProtocolValidator.js";
 import {
@@ -66,7 +67,6 @@ const EFFECT_ORDER: Readonly<Record<ToolPermissionEffect, number>> = {
   deny: 2,
 };
 const SAFE_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
-const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const TOOL_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const RULE_FIELDS = new Set(["ruleId", "source", "effect", "hardRestriction", "match"]);
 const MATCH_FIELDS = new Set(["toolNames", "toolVersions", "isolation"]);
@@ -236,7 +236,7 @@ function captureMatch(value: unknown): ToolPermissionRuleMatch {
   if (value === undefined) return Object.freeze({});
   const record = asPlainRecord(value);
   if (!record || hasUnknownFields(record, MATCH_FIELDS)) throw new Error();
-  const toolNames = captureOptionalList(record.toolNames, TOOL_NAME);
+  const toolNames = captureOptionalList(record.toolNames, TOOL_NAME_PATTERN);
   const toolVersions = captureOptionalList(record.toolVersions, TOOL_VERSION);
   const isolation = record.isolation === undefined
     ? undefined
@@ -333,7 +333,7 @@ function safeIdentity(value: unknown): string | undefined {
 }
 
 function safeToolName(value: unknown): string | undefined {
-  return typeof value === "string" && TOOL_NAME.test(value) ? value : undefined;
+  return isToolName(value) ? value : undefined;
 }
 
 function requireOneOf<const T extends readonly string[]>(

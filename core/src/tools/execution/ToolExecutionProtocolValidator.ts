@@ -4,6 +4,7 @@ import {
   isJsonValue,
   type JsonValue,
 } from "../../event/protocol/index.js";
+import { isToolName } from "../protocol/ToolName.js";
 import type {
   CapturedToolInvocation,
   ToolApprovalIdentity,
@@ -22,7 +23,6 @@ import {
 } from "./ToolExecutionProtocolErrors.js";
 
 const SAFE_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
-const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const TOOL_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const ARGUMENT_DIGEST = /^sha256:[a-f0-9]{64}$/;
 const SAFE_CODE = /^[A-Z][A-Z0-9_]{0,127}$/;
@@ -285,7 +285,7 @@ function optionalIdentity(value: unknown): string | undefined {
 }
 
 function requireToolName(value: unknown): string {
-  if (typeof value !== "string" || !TOOL_NAME.test(value)) throw new Error();
+  if (!isToolName(value)) throw new Error();
   return value;
 }
 
@@ -346,7 +346,7 @@ function safeIdentity(value: unknown): string | undefined {
 }
 
 function safeToolName(value: unknown): string | undefined {
-  return typeof value === "string" && TOOL_NAME.test(value) ? value : undefined;
+  return isToolName(value) ? value : undefined;
 }
 
 function safeToolVersion(value: unknown): string | undefined {

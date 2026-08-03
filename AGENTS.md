@@ -6,7 +6,11 @@ These instructions apply to the entire repository.
 
 Complete the currently active documented implementation track from the current repository status without reimplementing completed checkpoints.
 
-The active track is Novel Task N10 through Task N11 in `docs/novel-implementation-plan.md`. Novel Task N0 through Task N9-E, Runtime Task 1 through Task 7, and Subagent Tool Step S0 through Step S6 remain completed. Persistent Agent Team work is paused rather than cancelled while the Novel track is active.
+The active track is Desktop Runtime Integration Task D0 through Task D12 in
+`docs/desktop-runtime-integration-plan.md`. Novel Task N0 through Task N11,
+Runtime Task 1 through Task 7, and Subagent Tool Step S0 through Step S6 remain
+completed. Persistent Agent Team work is paused rather than cancelled while the
+Desktop Runtime Integration track is active.
 
 ## Autonomous Authority
 
@@ -24,8 +28,9 @@ After any context compression, context reset, resumed goal, or uncertainty about
 3. `docs/architecture.md`
 4. `docs/novel-implementation-plan.md`
 5. `docs/novel-domain.md`
-6. Applicable nested `AGENTS.md` files
-7. `git status` and recent `git log`
+6. `docs/desktop-runtime-integration-plan.md`
+7. Applicable nested `AGENTS.md` files
+8. `git status` and recent `git log`
 
 Do not rely only on a compressed conversation summary when repository documents can establish the current task and accepted boundaries.
 
@@ -61,4 +66,8 @@ Planning is mandatory even when the agent has authority to continue automaticall
 
 ## Completion Boundary
 
-The current autonomous execution objective ends only when Novel Task N10 through Task N11 is implemented, validated, documented, and committed, or when progress is blocked by an unresolved decision that cannot be safely derived from accepted documents and existing code. Persistent Agent Team work resumes only after an explicit track change.
+The current autonomous execution objective ends only when Desktop Runtime
+Integration Task D0 through Task D12 is implemented, validated, documented, and
+committed, or when progress is blocked by an unresolved decision that cannot be
+safely derived from accepted documents and existing code. Persistent Agent Team
+work resumes only after an explicit track change.

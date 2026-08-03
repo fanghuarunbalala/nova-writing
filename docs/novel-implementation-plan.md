@@ -137,8 +137,8 @@ Create this implementation plan and update repository execution documents so Nov
 
 ### N0-C Exit Criteria
 
-- Novel N0 through N11 is the documented current active track.
-- Runtime Task 1 through Task 7 is paused rather than deleted.
+- Novel N0 through N11 becomes the documented active track for its implementation.
+- Runtime Task 1 through Task 7 is paused rather than deleted during that track.
 - Tool implementation remains excluded.
 - Recovery reading includes this plan while the Novel track is active.
 

@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "smoke:http-api-request": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/http-api-request-client-typecheck.ts && node scripts/http-api-request-client-smoke.mjs",
-    "smoke:websocket-events": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/websocket-event-client-typecheck.ts && node scripts/websocket-event-client-smoke.mjs"
+    "smoke:websocket-events": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/websocket-event-client-typecheck.ts && node scripts/websocket-event-client-smoke.mjs",
+    "smoke:http-websocket-transport": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/http-websocket-transport-typecheck.ts && node scripts/http-websocket-transport-smoke.mjs"
   },
   "dependencies": {
     "@novel/core": "workspace:*",

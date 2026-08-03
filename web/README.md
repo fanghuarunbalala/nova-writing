@@ -18,3 +18,8 @@ open/close JSON messages, requires exact subscription identity, and enforces a
 bounded Event queue. Authentication UI, remote Workspace behavior, composed
 HTTP/WebSocket `ApiTransport`, Vite bootstrap, and deployment remain later Web
 steps.
+
+`HttpWebSocketApiTransport` now composes both halves behind the Core
+`ApiTransport` contract. Closing it aborts and waits for active HTTP requests,
+then closes every Event subscription. Automatic reconnect, browser bootstrap,
+authentication UI, and the production Host remain later steps.

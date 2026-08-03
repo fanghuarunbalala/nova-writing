@@ -1410,6 +1410,16 @@ The adapter exposes an asynchronous `ApiSubscription`, forwards AbortSignal canc
 
 Automatic reconnect remains intentionally absent. A later composed `HttpWebSocketApiTransport` will own request/subscription delegation, while higher client layers retain the accepted cursor-based catch-up semantics after reconnect. The WebSocket Host, actor derivation, origin checks, authentication UI, and remote Workspace policy remain separate server and product steps.
 
+### 28.7 Implemented Composed Web ApiTransport
+
+`HttpWebSocketApiTransport` now implements the complete Core `ApiTransport` by delegating requests to `HttpApiRequestClient` and subscriptions to `WebSocketEventClient`. It accepts one validated origin and one shared Logger while preserving the independently tested request and Event protocol boundaries.
+
+Every HTTP operation receives a Transport-owned AbortController combined with the caller's optional AbortSignal. Closing the Transport rejects new work, aborts and waits for all active HTTP operations, then closes every WebSocket subscription. Caller cancellation preserves the caller's Abort reason; Transport shutdown uses a stable local AbortError. Close is idempotent and reports only stable failure metadata.
+
+Focused integration now opens a Conversation through `DefaultNovelApiClient`, receives a persisted Event through the WebSocket subscription, and verifies exact request and subscription identities without Web-specific code in the Core client. Automatic reconnect remains outside the Transport: after a connection failure, the accepted higher-level flow creates a new subscription with the last applied durable Sequence for catch-up.
+
+The browser DOM bootstrap, authentication UI, remote Workspace selection, Web Host server, origin enforcement, deployment, and reconnect policy remain later Web steps.
+
 ## 29. Testing Strategy
 
 ### 29.1 Core projection tests

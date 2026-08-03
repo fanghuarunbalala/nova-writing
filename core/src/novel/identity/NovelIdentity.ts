@@ -20,6 +20,8 @@ declare const storyUnitEntityChangeIdBrand: unique symbol;
 declare const publicationStructureIdBrand: unique symbol;
 declare const publicationVolumeIdBrand: unique symbol;
 declare const publicationChapterIdBrand: unique symbol;
+declare const manuscriptIdBrand: unique symbol;
+declare const manuscriptBlockIdBrand: unique symbol;
 
 export type NovelId = string & { readonly [novelIdBrand]: "NovelId" };
 export type NovelDraftSessionId = string & {
@@ -62,6 +64,12 @@ export type PublicationVolumeId = string & {
 };
 export type PublicationChapterId = string & {
   readonly [publicationChapterIdBrand]: "PublicationChapterId";
+};
+export type ManuscriptId = string & {
+  readonly [manuscriptIdBrand]: "ManuscriptId";
+};
+export type ManuscriptBlockId = string & {
+  readonly [manuscriptBlockIdBrand]: "ManuscriptBlockId";
 };
 export type StoryEntityId = CharacterId | LocationId;
 
@@ -140,6 +148,14 @@ export function capturePublicationVolumeId(value: unknown): PublicationVolumeId 
 
 export function capturePublicationChapterId(value: unknown): PublicationChapterId {
   return captureIdentity("publicationChapterId", value) as PublicationChapterId;
+}
+
+export function captureManuscriptId(value: unknown): ManuscriptId {
+  return captureIdentity("manuscriptId", value) as ManuscriptId;
+}
+
+export function captureManuscriptBlockId(value: unknown): ManuscriptBlockId {
+  return captureIdentity("manuscriptBlockId", value) as ManuscriptBlockId;
 }
 
 function captureIdentity(field: string, value: unknown): string {

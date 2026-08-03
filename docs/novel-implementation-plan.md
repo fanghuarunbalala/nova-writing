@@ -2,17 +2,18 @@
 
 ## 1. Document Status
 
-This document is the authoritative implementation plan for the Novel layer as of August 2, 2026.
+This document is the authoritative implementation plan for the Novel layer as of August 3, 2026.
 
-- Novel Task N0 through Task N6 is completed and remains the accepted Novel foundation.
-- Novel Task N7 through Task N11 is paused while Runtime Task 5A-B through Task 7 is the active repository track in `docs/implementation-plan.md`.
+- Novel Task N0 through Task N9-E is completed and remains the accepted Novel foundation.
+- Novel Task N10 through Task N11 is the active repository track.
+- Runtime Task 1 through Task 7 and Subagent Tool Step S0 through Step S6 remain completed; persistent Agent Team work is paused.
 - Novel implementation must preserve the accepted domain and architecture boundaries in `docs/novel-domain.md`.
 - Agent-facing Novel Tools, Tool YAML, Prompt composition, Agent definitions, and CLI/GUI/Web Novel interfaces are outside this plan.
 - Each completed Novel step must be validated and committed independently before the next step begins.
 
 ## 2. Autonomous Execution Agreement
 
-The repository protocol in `AGENTS.md` remains authoritative. Novel autonomous execution resumes from Task N7 only after an explicit track change; the current active execution cycle is defined by `docs/implementation-plan.md`.
+The repository protocol in `AGENTS.md` remains authoritative. Novel autonomous execution continues through Task N10 and Task N11 under the cycle below.
 
 The mandatory cycle is:
 
@@ -1184,6 +1185,15 @@ their owning steps.
 
 Implement stable Paragraph Blocks and ordering without sentence-level domain objects.
 
+**Status:** Manuscript identity and immutable Paragraph Block model contracts are
+complete. One Novel-owned Manuscript binds one PublicationStructure; each Block
+belongs to that Manuscript and references an existing Publication Chapter.
+Block IDs are unique across the Manuscript, sibling OrderKeys are unique within
+each Chapter, and deterministic traversal follows Volume, Chapter, then Block
+order. Empty Paragraph text remains valid for incremental drafting. Sentence
+entities, structural edits, Tombstones, Redirects, and anchors remain deferred
+to their owning N10 steps.
+
 ### N10-C Anchors and Ranges
 
 Resolve and implement ManuscriptAnchor and ManuscriptRange.
@@ -1250,5 +1260,13 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
 - Task N9 deferred Story planning contracts are resolved; Task N9-A through
   N9-D now provide ordered StoryUnits, progress, Story time, LeafStoryUnitPlan
   baseline readiness, Events, RhythmBeats, entity changes, and entity bindings.
-- Task N9-E Outline services, operations, queries, and persistence is next.
+- Task N9-E is completed by Outline services, operations, queries, persistence,
+  conflict validation, Resolution Plans, replay, promotion, and post-resolution
+  Commit validation.
+- Task N10-A is completed by the immutable PublicationStructure, Volume,
+  Chapter, and ordered PublicationCatalog model.
+- Task N10-B is completed by Manuscript and Paragraph Block identities, strict
+  immutable capture, publication-reference validation, and deterministic
+  Chapter-local Block ordering.
+- Task N10-C Anchors and Ranges is next.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

@@ -29,6 +29,7 @@ export const NOVEL_PROTOCOL_FAILURE = {
   invalidLifecycleRecord: "invalid_lifecycle_record",
   invalidOutbox: "invalid_outbox",
   invalidPublication: "invalid_publication",
+  invalidManuscript: "invalid_manuscript",
 } as const;
 
 export type NovelProtocolFailure =
@@ -93,6 +94,9 @@ const NOVEL_PROTOCOL_FIELDS = new Set([
   "publicationStructureId",
   "publicationVolumeId",
   "publicationChapterId",
+  "manuscript",
+  "manuscriptId",
+  "manuscriptBlockId",
 ]);
 
 export class NovelProtocolValidationError extends Error {

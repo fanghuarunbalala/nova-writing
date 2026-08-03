@@ -537,17 +537,22 @@ flowchart LR
 ```ts
 interface ParagraphBlock {
   readonly id: ManuscriptBlockId;
-  readonly chapterId: ChapterId;
+  readonly manuscriptId: ManuscriptId;
+  readonly chapterId: PublicationChapterId;
   readonly orderKey: OrderKey;
   readonly text: string;
 }
 ```
 
+- One Novel-owned Manuscript binds one PublicationStructure in V1.
 - Paragraph is the initial persistent editing unit.
 - Sentence is not a persistent domain entity; precise operations use offsets within a Block.
 - Chapter is an ordered container of Manuscript Blocks rather than a fragile global array-index range.
 - Volume is an ordered container of Chapters.
 - StoryUnit does not become owned by Chapter merely because its realization appears in that Chapter.
+- Block IDs are unique across the Manuscript, while OrderKeys are unique among Blocks in the same Chapter.
+- Canonical traversal follows Publication Volume order, Chapter order, then Chapter-local Block order.
+- Empty Paragraph text is valid while a Draft incrementally realizes an outline leaf.
 
 ```mermaid
 flowchart TD

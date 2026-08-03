@@ -29,6 +29,7 @@
     "smoke:novel-outline-application": "pnpm build && node scripts/novel-outline-application-smoke.mjs",
     "smoke:novel-outline-rebase": "pnpm build && node scripts/novel-outline-rebase-smoke.mjs",
     "smoke:novel-publication": "pnpm build && node scripts/novel-publication-smoke.mjs",
+    "smoke:novel-manuscript-block": "pnpm build && node scripts/novel-manuscript-block-smoke.mjs",
     "smoke:novel-draft-operation-writer": "pnpm build && node scripts/novel-draft-operation-writer-smoke.mjs",
     "smoke:novel-entity": "pnpm build && node scripts/novel-entity-slice-smoke.mjs",
     "smoke:novel-change-set": "pnpm build && node scripts/novel-change-set-smoke.mjs",

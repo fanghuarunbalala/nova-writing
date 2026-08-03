@@ -673,6 +673,10 @@ Accepted V1 structural-repair semantics:
   replay deterministic and surface concurrent edits as precondition failures.
 - The Operation handlers are synchronous and transaction-local. Durable SQLite
   mapping is an adapter responsibility and does not change these contracts.
+- Range repair returns one explicit status: `valid` when automatic redirects
+  preserve order, `review-required` when any redirect needs semantic review,
+  `unresolved` when an Anchor remains tombstoned or orphaned, and `inverted`
+  when current Block order reverses the resolved boundaries.
 
 ## 9. Publication Relationship
 

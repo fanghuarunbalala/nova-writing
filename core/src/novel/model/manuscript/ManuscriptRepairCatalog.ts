@@ -101,6 +101,10 @@ export class ManuscriptRepairCatalog {
     return this.snapshot;
   }
 
+  getManuscriptId() {
+    return this.manuscript.getSnapshot().manuscript.id;
+  }
+
   getTombstone(
     blockId: ManuscriptBlockId,
   ): ManuscriptBlockTombstone | undefined {

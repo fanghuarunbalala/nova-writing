@@ -1241,7 +1241,10 @@ Repository Port now supports version-1 move, split, merge, delete, and explicit
 Anchor Repair Operations. Their envelopes contain only stable IDs, final text,
 OrderKeys, Anchors, and precondition digests; handlers validate placement and
 adjacency before deterministic mutation. SQLite composition and canonical
-persistence remain deferred to N11.
+persistence remain deferred to N11. D-C completes structural integration with
+`ManuscriptRangeRepairValidator`, which resolves both boundaries through the
+durable repair chain and returns `valid`, `review-required`, `unresolved`, or
+`inverted` rather than silently reinterpreting the Range.
 
 ### N10-E Realization and Conformance
 
@@ -1315,5 +1318,7 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
   Tombstone, Redirect, and Anchor Resolution models.
 - Task N10-D-B is completed by the synchronous Manuscript Repository Port and
   deterministic move, split, merge, delete, and Anchor Repair Operations.
-- Task N10-D-C structural repair integration validation is next.
+- Task N10-D-C is completed by Range repair classification across move, split,
+  merge, delete, and explicit repair outcomes. Task N10-D is complete.
+- Task N10-E Realization and Conformance is next.
 - Agent-facing Novel Tools remain deferred beyond Task N11.

@@ -2,11 +2,19 @@
 import {
   ApplicationConfiguration,
   CredentialReference,
+  StorageModelConfigurationCommandService,
   createDefaultApplicationConfiguration,
   type ApplicationConfigurationSnapshot,
   type ApplicationConfigurationStore,
   type CredentialStatus,
   type CredentialStore,
+  type ModelConfigurationCommandService,
+  type RemoveModelConfigurationRequest,
+  type RemoveModelConfigurationResult,
+  type SetDefaultModelProfileRequest,
+  type SetDefaultModelProfileResult,
+  type UpsertModelConfigurationRequest,
+  type UpsertModelConfigurationResult,
 } from "@novel/core";
 
 export interface DesktopConfigurationServicePort {
@@ -14,6 +22,15 @@ export interface DesktopConfigurationServicePort {
   save(
     snapshot: ApplicationConfigurationSnapshot,
   ): Promise<ApplicationConfigurationSnapshot>;
+  upsertModelConfiguration(
+    request: UpsertModelConfigurationRequest,
+  ): Promise<UpsertModelConfigurationResult>;
+  setDefaultModelProfile(
+    request: SetDefaultModelProfileRequest,
+  ): Promise<SetDefaultModelProfileResult>;
+  removeModelConfiguration(
+    request: RemoveModelConfigurationRequest,
+  ): Promise<RemoveModelConfigurationResult>;
   getCredentialStatus(credentialRef: string): Promise<CredentialStatus>;
   saveCredential(credentialRef: string, secret: string): Promise<void>;
   deleteCredential(credentialRef: string): Promise<void>;
@@ -29,12 +46,59 @@ export class DesktopConfigurationService
 {
   readonly #store: ApplicationConfigurationStore;
   readonly #credentials: CredentialStore;
+  readonly #modelCommands: ModelConfigurationCommandService;
   #current?: Promise<ApplicationConfiguration>;
   #mutationTail: Promise<void> = Promise.resolve();
 
   constructor(options: DesktopConfigurationServiceOptions) {
     this.#store = options.store;
     this.#credentials = options.credentials;
+    this.#modelCommands = new StorageModelConfigurationCommandService({
+      store: options.store,
+      credentials: options.credentials,
+    });
+  }
+
+  upsertModelConfiguration(
+    request: UpsertModelConfigurationRequest,
+  ): Promise<UpsertModelConfigurationResult> {
+    return this.#mutate(async () => {
+      const result = await this.#modelCommands.upsert(request);
+      const configuration = new ApplicationConfiguration(result.configuration);
+      this.#current = Promise.resolve(configuration);
+      return Object.freeze({
+        ...result,
+        configuration: await this.#project(configuration),
+      });
+    });
+  }
+
+  setDefaultModelProfile(
+    request: SetDefaultModelProfileRequest,
+  ): Promise<SetDefaultModelProfileResult> {
+    return this.#mutate(async () => {
+      const result = await this.#modelCommands.setDefault(request);
+      const configuration = new ApplicationConfiguration(result.configuration);
+      this.#current = Promise.resolve(configuration);
+      return Object.freeze({
+        ...result,
+        configuration: await this.#project(configuration),
+      });
+    });
+  }
+
+  removeModelConfiguration(
+    request: RemoveModelConfigurationRequest,
+  ): Promise<RemoveModelConfigurationResult> {
+    return this.#mutate(async () => {
+      const result = await this.#modelCommands.remove(request);
+      const configuration = new ApplicationConfiguration(result.configuration);
+      this.#current = Promise.resolve(configuration);
+      return Object.freeze({
+        ...result,
+        configuration: await this.#project(configuration),
+      });
+    });
   }
 
   async load(): Promise<ApplicationConfigurationSnapshot> {

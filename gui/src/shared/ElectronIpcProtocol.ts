@@ -34,6 +34,9 @@ export const ELECTRON_APPLICATION_COMMAND_CHANNEL =
 export const ELECTRON_CONFIGURATION_IPC_CHANNEL = Object.freeze({
   load: "novel.configuration.v1.load",
   save: "novel.configuration.v1.save",
+  modelUpsert: "novel.configuration.v1.model.upsert",
+  modelDefaultSet: "novel.configuration.v1.model.default.set",
+  modelRemove: "novel.configuration.v1.model.remove",
   credentialStatus: "novel.configuration.v1.credential.status",
   credentialSave: "novel.configuration.v1.credential.save",
   credentialDelete: "novel.configuration.v1.credential.delete",

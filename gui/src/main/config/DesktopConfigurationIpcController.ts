@@ -3,6 +3,9 @@ import {
   noopLogger,
   type ApplicationConfigurationSnapshot,
   type Logger,
+  type RemoveModelConfigurationRequest,
+  type SetDefaultModelProfileRequest,
+  type UpsertModelConfigurationRequest,
 } from "@novel/core";
 import {
   ELECTRON_CONFIGURATION_IPC_CHANNEL,
@@ -39,6 +42,30 @@ export class DesktopConfigurationIpcController {
     ipcMain.handle(ELECTRON_CONFIGURATION_IPC_CHANNEL.save, (event, snapshot) =>
       this.#execute(event.sender.id, () =>
         this.#service.save(snapshot as ApplicationConfigurationSnapshot)),
+    );
+    ipcMain.handle(
+      ELECTRON_CONFIGURATION_IPC_CHANNEL.modelUpsert,
+      (event, request) =>
+        this.#execute(event.sender.id, () =>
+          this.#service.upsertModelConfiguration(
+            request as UpsertModelConfigurationRequest,
+          )),
+    );
+    ipcMain.handle(
+      ELECTRON_CONFIGURATION_IPC_CHANNEL.modelDefaultSet,
+      (event, request) =>
+        this.#execute(event.sender.id, () =>
+          this.#service.setDefaultModelProfile(
+            request as SetDefaultModelProfileRequest,
+          )),
+    );
+    ipcMain.handle(
+      ELECTRON_CONFIGURATION_IPC_CHANNEL.modelRemove,
+      (event, request) =>
+        this.#execute(event.sender.id, () =>
+          this.#service.removeModelConfiguration(
+            request as RemoveModelConfigurationRequest,
+          )),
     );
     ipcMain.handle(
       ELECTRON_CONFIGURATION_IPC_CHANNEL.credentialStatus,
@@ -89,12 +116,19 @@ export class DesktopConfigurationIpcController {
       }
       return Object.freeze({ ok: true as const, value: await operation() });
     } catch (error) {
-      const code = error !== null && typeof error === "object" &&
-          typeof (error as { code?: unknown }).code === "string"
-        ? (error as { code: string }).code
+      const record = error !== null && typeof error === "object"
+        ? error as { code?: unknown; failure?: unknown; retryable?: unknown }
+        : undefined;
+      const code = typeof record?.code === "string"
+        ? record.code
+        : typeof record?.failure === "string"
+        ? record.failure
         : "DESKTOP_CONFIGURATION_OPERATION_FAILED";
+      const retryable = typeof record?.retryable === "boolean"
+        ? record.retryable
+        : code === "DESKTOP_CONFIGURATION_OPERATION_FAILED";
       this.#logger.info("desktop_configuration_ipc.operation_failed", { errorCode: code });
-      return failure(code, code === "DESKTOP_CONFIGURATION_OPERATION_FAILED");
+      return failure(code, retryable);
     }
   }
 }

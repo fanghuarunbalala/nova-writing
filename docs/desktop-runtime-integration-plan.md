@@ -185,6 +185,13 @@ validation. D3 is next.
 - retain safe status-only credential projection;
 - validate Renderer, Preload, IPC authorization, and Main composition.
 
+D3 is complete with shared Client commands, versioned Electron channels, typed
+Preload capabilities, strict Renderer bridge narrowing, Main delegation to the
+D2 service, safe failure-code propagation, and a single-upsert Model settings
+flow. The shared React, Electron Client, and Electron Bridge smokes cover the
+new path while compatibility Configuration and Credential methods remain
+available. D4 is next.
+
 ### Task D4: Child-Accessible System Credential Vault
 
 - add Node system Credential backend contracts and stable errors;
@@ -310,8 +317,8 @@ stderr. Tests must assert redaction on every new failure boundary.
 - D0 is complete by the track-activation commit.
 - D1 is complete by the Model Configuration Command Protocol commit.
 - D2 is complete by the Consistent Model Configuration Service commit.
-- D3 Shared UI and Electron Configuration Commands is the next implementation
-  step.
-- D4 through D12 remain pending.
+- D3 is complete by the Shared UI and Electron Configuration Commands commit.
+- D4 Child-Accessible System Credential Vault is the next implementation step.
+- D5 through D12 remain pending.
 - Agent-facing Novel Tools and Persistent Agent Team work remain outside this
   active track.

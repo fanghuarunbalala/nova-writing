@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { CredentialReference } from "@novel/core";
+import {
+  CredentialReference,
+  MODEL_CONFIGURATION_COMMAND_SCHEMA_VERSION,
+  MODEL_CREDENTIAL_MUTATION_KIND,
+} from "@novel/core";
 import {
   DesktopConfigurationIpcController,
   DesktopConfigurationService,
@@ -118,6 +122,31 @@ assert.equal(loaded.ok, true);
 assert.equal(loaded.value.modelConnections[0].credentialConfigured, true);
 const status = await resolvedBridge.configuration.getCredentialStatus("credential:primary");
 assert.deepEqual(status, { ok: true, value: "configured" });
+const upserted = await resolvedBridge.configuration.upsertModelConfiguration({
+  schemaVersion: MODEL_CONFIGURATION_COMMAND_SCHEMA_VERSION,
+  expectedRevision: 1,
+  connection: {
+    id: "connection.primary",
+    displayName: "Primary",
+    providerKind: "openai",
+    enabled: true,
+    publicHeaders: {},
+    secretHeaderCredentialRefs: {},
+  },
+  profile: {
+    displayName: "Primary Model",
+    api: "openai-responses",
+    modelId: "model-primary",
+    parameters: { stopSequences: [], providerOptions: {} },
+    capabilityOverrides: { toolCalling: true },
+    fallbackProfileIds: [],
+  },
+  credential: { kind: MODEL_CREDENTIAL_MUTATION_KIND.keep },
+  setAsDefault: true,
+});
+assert.equal(upserted.ok, true);
+assert.equal(upserted.value.configuration.revision, 2);
+assert.equal(upserted.value.credentialStatus, "configured");
 const deleted = await resolvedBridge.configuration.deleteCredential("credential:primary");
 assert.equal(deleted.ok, true);
 assert.equal(await credentialStore.getStatus(new CredentialReference("credential:primary")), "missing");

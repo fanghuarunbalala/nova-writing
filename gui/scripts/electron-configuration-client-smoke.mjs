@@ -10,6 +10,9 @@ const snapshot = createDefaultApplicationConfiguration().toSnapshot();
 const configuration = {
   load: async () => success(snapshot),
   save: async (value) => success(value),
+  upsertModelConfiguration: async (request) => success({ request }),
+  setDefaultModelProfile: async (request) => success({ request }),
+  removeModelConfiguration: async (request) => success({ request }),
   getCredentialStatus: async () => success("missing"),
   saveCredential: async () => success({ acknowledged: true }),
   deleteCredential: async () => success({ acknowledged: true }),
@@ -18,6 +21,10 @@ const client = new ElectronApplicationConfigurationClient(configuration);
 assert.equal((await client.load()).revision, 0);
 assert.equal(await client.getCredentialStatus("credential:model"), "missing");
 await client.saveCredential("credential:model", "private-secret");
+assert.deepEqual(
+  await client.upsertModelConfiguration({ operation: "upsert" }),
+  { request: { operation: "upsert" } },
+);
 
 const composition = createDesktopRendererComposition({
   window: {

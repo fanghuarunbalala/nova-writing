@@ -6,7 +6,11 @@ import type {
   ModelProfileSnapshot,
   ProviderKind,
 } from "@novel/core";
-import { inferDefaultModelApi } from "@novel/core";
+import {
+  MODEL_CONFIGURATION_COMMAND_SCHEMA_VERSION,
+  MODEL_CREDENTIAL_MUTATION_KIND,
+  inferDefaultModelApi,
+} from "@novel/core";
 import { useEffect, useState, type FormEvent } from "react";
 import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
 
@@ -103,80 +107,70 @@ export function PersistentModelConnectionSettingsPanel({
     }
     setSaving(true);
     setStatus("正在保存模型连接…");
-    const connectionId = draft.connectionId ?? `connection:${crypto.randomUUID()}`;
-    const modelProfileId =
-      draft.modelProfileId ?? `model-profile:${crypto.randomUUID()}`;
-    const credentialRef =
-      draft.credentialRef ?? `credential:model-connection:${connectionId}`;
     const existingConnection = snapshot.modelConnections.find(
-      (connection) => connection.id === connectionId,
+      (connection) => connection.id === draft.connectionId,
     );
     const existingProfile = snapshot.modelProfiles.find(
-      (profile) => profile.id === modelProfileId,
+      (profile) => profile.id === draft.modelProfileId,
     );
-    const connection: ModelConnectionSnapshot = Object.freeze({
-      id: connectionId,
-      displayName: draft.displayName.trim(),
-      providerKind: draft.providerKind,
-      ...(requiresBaseUrl(draft.providerKind)
-        ? { baseUrl: draft.baseUrl.trim() }
-        : {}),
-      ...(existingConnection?.organizationId === undefined
-        ? {}
-        : { organizationId: existingConnection.organizationId }),
-      ...(existingConnection?.projectId === undefined
-        ? {}
-        : { projectId: existingConnection.projectId }),
-      ...(existingConnection?.apiVersion === undefined
-        ? {}
-        : { apiVersion: existingConnection.apiVersion }),
-      ...(existingConnection?.region === undefined
-        ? {}
-        : { region: existingConnection.region }),
-      enabled: true,
-      credentialRef,
-      credentialConfigured: false,
-      publicHeaders: existingConnection?.publicHeaders ?? Object.freeze({}),
-      secretHeaderCredentialRefs:
-        existingConnection?.secretHeaderCredentialRefs ?? Object.freeze({}),
-    });
-    const modelProfile: ModelProfileSnapshot = Object.freeze({
-      id: modelProfileId,
-      displayName: `${draft.displayName.trim()} · ${draft.modelId.trim()}`,
-      connectionId,
-      api: draft.api,
-      modelId: draft.modelId.trim(),
-      parameters:
-        existingProfile?.parameters ??
-        Object.freeze({
-          reasoningEffort: "medium",
-          stopSequences: Object.freeze([]),
-          providerOptions: Object.freeze({}),
-        }),
-      capabilityOverrides:
-        existingProfile?.capabilityOverrides ?? Object.freeze({ toolCalling: true }),
-      fallbackProfileIds:
-        existingProfile?.fallbackProfileIds ?? Object.freeze([]),
-    });
 
     try {
-      const savedConfiguration = await configuration.save({
-        ...snapshot,
-        revision: snapshot.revision + 1,
-        modelConnections: replaceOrAppend(
-          snapshot.modelConnections,
-          connection,
-        ),
-        modelProfiles: replaceOrAppend(snapshot.modelProfiles, modelProfile),
-        defaultModelProfileId: modelProfileId,
+      const result = await configuration.upsertModelConfiguration({
+        schemaVersion: MODEL_CONFIGURATION_COMMAND_SCHEMA_VERSION,
+        expectedRevision: snapshot.revision,
+        connection: {
+          ...(draft.connectionId === undefined ? {} : { id: draft.connectionId }),
+          displayName: draft.displayName.trim(),
+          providerKind: draft.providerKind,
+          ...(requiresBaseUrl(draft.providerKind)
+            ? { baseUrl: draft.baseUrl.trim() }
+            : {}),
+          ...(existingConnection?.organizationId === undefined
+            ? {}
+            : { organizationId: existingConnection.organizationId }),
+          ...(existingConnection?.projectId === undefined
+            ? {}
+            : { projectId: existingConnection.projectId }),
+          ...(existingConnection?.apiVersion === undefined
+            ? {}
+            : { apiVersion: existingConnection.apiVersion }),
+          ...(existingConnection?.region === undefined
+            ? {}
+            : { region: existingConnection.region }),
+          enabled: true,
+          publicHeaders: existingConnection?.publicHeaders ?? Object.freeze({}),
+          secretHeaderCredentialRefs:
+            existingConnection?.secretHeaderCredentialRefs ?? Object.freeze({}),
+        },
+        profile: {
+          ...(draft.modelProfileId === undefined
+            ? {}
+            : { id: draft.modelProfileId }),
+          displayName: `${draft.displayName.trim()} · ${draft.modelId.trim()}`,
+          api: draft.api,
+          modelId: draft.modelId.trim(),
+          parameters:
+            existingProfile?.parameters ??
+            Object.freeze({
+              reasoningEffort: "medium",
+              stopSequences: Object.freeze([]),
+              providerOptions: Object.freeze({}),
+            }),
+          capabilityOverrides:
+            existingProfile?.capabilityOverrides ??
+            Object.freeze({ toolCalling: true }),
+          fallbackProfileIds:
+            existingProfile?.fallbackProfileIds ?? Object.freeze([]),
+        },
+        credential: draft.apiKey.length === 0
+          ? { kind: MODEL_CREDENTIAL_MUTATION_KIND.keep }
+          : {
+              kind: MODEL_CREDENTIAL_MUTATION_KIND.replace,
+              secret: draft.apiKey,
+            },
+        setAsDefault: true,
       });
-      setSnapshot(savedConfiguration);
-      if (draft.apiKey.length > 0) {
-        await configuration.saveCredential(credentialRef, draft.apiKey);
-        setDraft({ ...draft, apiKey: "", credentialConfigured: true });
-      }
-      const refreshed = await configuration.load();
-      setSnapshot(refreshed);
+      setSnapshot(result.configuration);
       setDraft(undefined);
       setStatus("模型连接保存成功，并已设为默认模型");
     } catch (error) {
@@ -191,12 +185,12 @@ export function PersistentModelConnectionSettingsPanel({
     setSaving(true);
     setStatus("正在更新默认模型…");
     try {
-      const saved = await configuration.save({
-        ...snapshot,
-        revision: snapshot.revision + 1,
-        defaultModelProfileId: modelProfileId,
+      const result = await configuration.setDefaultModelProfile({
+        schemaVersion: MODEL_CONFIGURATION_COMMAND_SCHEMA_VERSION,
+        expectedRevision: snapshot.revision,
+        modelProfileId,
       });
-      setSnapshot(saved);
+      setSnapshot(result.configuration);
       setStatus("默认模型已更新");
     } catch (error) {
       setStatus(`默认模型更新失败：${getErrorCode(error)}`);
@@ -453,17 +447,6 @@ function createDraft(
     baseUrl: connection.baseUrl ?? "",
     apiKey: "",
   });
-}
-
-function replaceOrAppend<TValue extends { readonly id: string }>(
-  values: readonly TValue[],
-  value: TValue,
-): readonly TValue[] {
-  const index = values.findIndex((candidate) => candidate.id === value.id);
-  if (index < 0) return Object.freeze([...values, value]);
-  const next = [...values];
-  next[index] = value;
-  return Object.freeze(next);
 }
 
 function isDraftValid(draft: ModelConnectionDraft): boolean {

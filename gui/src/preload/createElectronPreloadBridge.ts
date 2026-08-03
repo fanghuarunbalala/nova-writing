@@ -4,6 +4,12 @@ import type {
   ApiResponse,
   ApplicationConfigurationSnapshot,
   CredentialStatus,
+  RemoveModelConfigurationRequest,
+  RemoveModelConfigurationResult,
+  SetDefaultModelProfileRequest,
+  SetDefaultModelProfileResult,
+  UpsertModelConfigurationRequest,
+  UpsertModelConfigurationResult,
 } from "@novel/core";
 import {
   ELECTRON_API_IPC_CHANNEL,
@@ -76,6 +82,21 @@ export function createElectronPreloadBridge(
         invoke<ApplicationConfigurationSnapshot>(
           ELECTRON_CONFIGURATION_IPC_CHANNEL.save,
           configuration,
+        ),
+      upsertModelConfiguration: (request: UpsertModelConfigurationRequest) =>
+        invoke<UpsertModelConfigurationResult>(
+          ELECTRON_CONFIGURATION_IPC_CHANNEL.modelUpsert,
+          request,
+        ),
+      setDefaultModelProfile: (request: SetDefaultModelProfileRequest) =>
+        invoke<SetDefaultModelProfileResult>(
+          ELECTRON_CONFIGURATION_IPC_CHANNEL.modelDefaultSet,
+          request,
+        ),
+      removeModelConfiguration: (request: RemoveModelConfigurationRequest) =>
+        invoke<RemoveModelConfigurationResult>(
+          ELECTRON_CONFIGURATION_IPC_CHANNEL.modelRemove,
+          request,
         ),
       getCredentialStatus: (credentialRef: string) =>
         invoke<CredentialStatus>(

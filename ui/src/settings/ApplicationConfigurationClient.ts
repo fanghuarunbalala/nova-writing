@@ -2,6 +2,12 @@
 import type {
   ApplicationConfigurationSnapshot,
   CredentialStatus,
+  RemoveModelConfigurationRequest,
+  RemoveModelConfigurationResult,
+  SetDefaultModelProfileRequest,
+  SetDefaultModelProfileResult,
+  UpsertModelConfigurationRequest,
+  UpsertModelConfigurationResult,
 } from "@novel/core";
 
 export interface ApplicationConfigurationClient {
@@ -10,6 +16,18 @@ export interface ApplicationConfigurationClient {
   save(
     configuration: ApplicationConfigurationSnapshot,
   ): Promise<ApplicationConfigurationSnapshot>;
+
+  upsertModelConfiguration(
+    request: UpsertModelConfigurationRequest,
+  ): Promise<UpsertModelConfigurationResult>;
+
+  setDefaultModelProfile(
+    request: SetDefaultModelProfileRequest,
+  ): Promise<SetDefaultModelProfileResult>;
+
+  removeModelConfiguration(
+    request: RemoveModelConfigurationRequest,
+  ): Promise<RemoveModelConfigurationResult>;
 
   getCredentialStatus(credentialRef: string): Promise<CredentialStatus>;
 

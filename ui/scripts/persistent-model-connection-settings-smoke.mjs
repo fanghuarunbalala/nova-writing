@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { JSDOM } from "jsdom";
 import {
   ApplicationConfiguration,
+  StorageModelConfigurationCommandService,
   createDefaultApplicationConfiguration,
 } from "../../core/dist/index.js";
 import {
@@ -16,6 +17,36 @@ class MemoryApplicationConfigurationClient {
   credentials = new Map();
   savedSecrets = [];
   savedSnapshots = [];
+  commands;
+
+  constructor() {
+    this.commands = new StorageModelConfigurationCommandService({
+      store: {
+        load: async () => new ApplicationConfiguration(this.snapshot),
+        save: async (configuration, expectedRevision) => {
+          assert.equal(this.snapshot.revision, expectedRevision);
+          this.snapshot = configuration.toSnapshot();
+          this.savedSnapshots.push(this.snapshot);
+        },
+      },
+      credentials: {
+        getStatus: async (reference) =>
+          this.credentials.has(reference.id) ? "configured" : "missing",
+        save: async (reference, secret) => {
+          this.savedSecrets.push({ credentialRef: reference.id, secret });
+          this.credentials.set(reference.id, secret);
+        },
+        use: async (reference, operation) => {
+          const secret = this.credentials.get(reference.id);
+          if (secret === undefined) throw new Error("missing");
+          return operation(secret);
+        },
+        delete: async (reference) => {
+          this.credentials.delete(reference.id);
+        },
+      },
+    });
+  }
 
   async load() {
     return this.projectCredentials(this.snapshot);
@@ -25,6 +56,24 @@ class MemoryApplicationConfigurationClient {
     this.snapshot = new ApplicationConfiguration(snapshot).toSnapshot();
     this.savedSnapshots.push(this.snapshot);
     return this.projectCredentials(this.snapshot);
+  }
+
+  async upsertModelConfiguration(request) {
+    const result = await this.commands.upsert(request);
+    this.snapshot = result.configuration;
+    return { ...result, configuration: this.projectCredentials(result.configuration) };
+  }
+
+  async setDefaultModelProfile(request) {
+    const result = await this.commands.setDefault(request);
+    this.snapshot = result.configuration;
+    return { ...result, configuration: this.projectCredentials(result.configuration) };
+  }
+
+  async removeModelConfiguration(request) {
+    const result = await this.commands.remove(request);
+    this.snapshot = result.configuration;
+    return { ...result, configuration: this.projectCredentials(result.configuration) };
   }
 
   async getCredentialStatus(credentialRef) {
@@ -91,7 +140,7 @@ assert.equal(client.savedSecrets.length, 1);
 assert.equal(client.savedSecrets[0].secret, "secret-openai-key");
 assert.equal(
   client.savedSnapshots[0].modelConnections[0].credentialConfigured,
-  false,
+  true,
 );
 assert.equal(client.snapshot.modelConnections.length, 1);
 assert.equal(client.snapshot.modelProfiles.length, 1);
@@ -118,7 +167,7 @@ await waitForReact(() => container.textContent.includes("OpenAI 默认连接"));
 assert.equal(client.savedSecrets.length, 1);
 assert.equal(
   client.savedSnapshots[1].modelConnections[0].credentialConfigured,
-  false,
+  true,
 );
 
 await act(async () => root.unmount());

@@ -1,5 +1,13 @@
 /** Adapts the Electron Configuration Bridge to the shared UI Config client. */
-import type { ApplicationConfigurationSnapshot } from "@novel/core";
+import type {
+  ApplicationConfigurationSnapshot,
+  RemoveModelConfigurationRequest,
+  RemoveModelConfigurationResult,
+  SetDefaultModelProfileRequest,
+  SetDefaultModelProfileResult,
+  UpsertModelConfigurationRequest,
+  UpsertModelConfigurationResult,
+} from "@novel/core";
 import type { ApplicationConfigurationClient } from "@novel/ui";
 import type {
   ElectronBridgeResult,
@@ -19,6 +27,24 @@ export class ElectronApplicationConfigurationClient
     configuration: ApplicationConfigurationSnapshot,
   ): Promise<ApplicationConfigurationSnapshot> {
     return unwrapPromise(this.bridge.save(configuration));
+  }
+
+  upsertModelConfiguration(
+    request: UpsertModelConfigurationRequest,
+  ): Promise<UpsertModelConfigurationResult> {
+    return unwrapPromise(this.bridge.upsertModelConfiguration(request));
+  }
+
+  setDefaultModelProfile(
+    request: SetDefaultModelProfileRequest,
+  ): Promise<SetDefaultModelProfileResult> {
+    return unwrapPromise(this.bridge.setDefaultModelProfile(request));
+  }
+
+  removeModelConfiguration(
+    request: RemoveModelConfigurationRequest,
+  ): Promise<RemoveModelConfigurationResult> {
+    return unwrapPromise(this.bridge.removeModelConfiguration(request));
   }
 
   getCredentialStatus(credentialRef: string) {

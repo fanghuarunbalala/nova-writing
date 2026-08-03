@@ -3,6 +3,9 @@ import {
   ApiTransportError,
   type ApiRequest,
   type ApplicationConfigurationSnapshot,
+  type RemoveModelConfigurationRequest,
+  type SetDefaultModelProfileRequest,
+  type UpsertModelConfigurationRequest,
 } from "@novel/core";
 import type {
   ElectronApplicationCommand,
@@ -88,8 +91,11 @@ function resolveConfigurationBridge(
     "deleteCredential",
     "getCredentialStatus",
     "load",
+    "removeModelConfiguration",
     "save",
     "saveCredential",
+    "setDefaultModelProfile",
+    "upsertModelConfiguration",
   ] as const;
   const keys = Object.keys(record).sort();
   if (
@@ -104,6 +110,12 @@ function resolveConfigurationBridge(
     load: () => bridge.load(),
     save: (configuration: ApplicationConfigurationSnapshot) =>
       bridge.save(configuration),
+    upsertModelConfiguration: (request: UpsertModelConfigurationRequest) =>
+      bridge.upsertModelConfiguration(request),
+    setDefaultModelProfile: (request: SetDefaultModelProfileRequest) =>
+      bridge.setDefaultModelProfile(request),
+    removeModelConfiguration: (request: RemoveModelConfigurationRequest) =>
+      bridge.removeModelConfiguration(request),
     getCredentialStatus: (credentialRef: string) =>
       bridge.getCredentialStatus(credentialRef),
     saveCredential: (credentialRef: string, secret: string) =>

@@ -5,6 +5,12 @@ import type {
   ApiResponse,
   ApplicationConfigurationSnapshot,
   CredentialStatus,
+  RemoveModelConfigurationRequest,
+  RemoveModelConfigurationResult,
+  SetDefaultModelProfileRequest,
+  SetDefaultModelProfileResult,
+  UpsertModelConfigurationRequest,
+  UpsertModelConfigurationResult,
 } from "@novel/core";
 
 export interface ElectronBridgeFailure {
@@ -44,6 +50,15 @@ export interface ElectronConfigurationBridge {
   save(
     configuration: ApplicationConfigurationSnapshot,
   ): Promise<ElectronBridgeResult<ApplicationConfigurationSnapshot>>;
+  upsertModelConfiguration(
+    request: UpsertModelConfigurationRequest,
+  ): Promise<ElectronBridgeResult<UpsertModelConfigurationResult>>;
+  setDefaultModelProfile(
+    request: SetDefaultModelProfileRequest,
+  ): Promise<ElectronBridgeResult<SetDefaultModelProfileResult>>;
+  removeModelConfiguration(
+    request: RemoveModelConfigurationRequest,
+  ): Promise<ElectronBridgeResult<RemoveModelConfigurationResult>>;
   getCredentialStatus(
     credentialRef: string,
   ): Promise<ElectronBridgeResult<CredentialStatus>>;

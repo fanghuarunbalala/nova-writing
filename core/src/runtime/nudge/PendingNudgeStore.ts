@@ -1,5 +1,10 @@
 /** Async state port for one Conversation's recoverable Nudge lifecycle. */
-import type { NudgeLease, PendingNudge } from "./NudgeProtocol.js";
+import type {
+  NudgeAcknowledgementReference,
+  NudgeConditionReference,
+  NudgeLease,
+  PendingNudge,
+} from "./NudgeProtocol.js";
 import type { NudgeCooldownRecord } from "./NudgeSelector.js";
 
 export const NUDGE_SCHEDULE_OUTCOME = {
@@ -46,6 +51,42 @@ export interface NudgeDispatchConfirmationResult {
   readonly unchanged: boolean;
 }
 
+export interface NudgeAcknowledgementRequest {
+  readonly nudgeId: string;
+  readonly targetRunId: string;
+  readonly acknowledgementRef: NudgeAcknowledgementReference;
+  readonly acknowledgedAt: string;
+}
+
+export interface NudgeConditionResolutionRequest {
+  readonly nudgeId: string;
+  readonly targetRunId: string;
+  readonly conditionRef: NudgeConditionReference;
+  readonly resolvedAt: string;
+}
+
+export interface NudgeSupersessionRequest {
+  readonly nudgeId: string;
+  readonly targetRunId: string;
+  readonly supersededByNudgeId: string;
+  readonly supersededAt: string;
+}
+
+export interface NudgeDeliveryAttemptRecord {
+  readonly nudgeId: string;
+  readonly leaseId: string;
+  readonly providerCallId: string;
+  readonly attemptNumber: number;
+  readonly leasedAt: string;
+  readonly status: "leased" | "released" | "confirmed";
+  readonly completedAt?: string;
+}
+
+export interface NudgeLeaseReconciliationResult {
+  readonly nudgeIds: readonly string[];
+  readonly providerCallIds: readonly string[];
+}
+
 export interface NudgeLeaseReleaseRequest {
   readonly providerCallId: string;
   readonly releasedAt: string;
@@ -78,6 +119,7 @@ export interface PendingNudgeStoreSnapshot {
   readonly nudges: readonly PendingNudge[];
   readonly leases: readonly NudgeLease[];
   readonly consumptions: readonly NudgeConsumptionRecord[];
+  readonly deliveryAttempts?: readonly NudgeDeliveryAttemptRecord[];
 }
 
 export interface PendingNudgeStore {
@@ -94,6 +136,16 @@ export interface PendingNudgeStore {
   confirmDispatched(
     request: NudgeDispatchConfirmationRequest,
   ): Promise<NudgeDispatchConfirmationResult>;
+
+  listActive(targetRunId?: string): Promise<readonly PendingNudge[]>;
+
+  acknowledge(request: NudgeAcknowledgementRequest): Promise<PendingNudge>;
+
+  resolveCondition(request: NudgeConditionResolutionRequest): Promise<PendingNudge>;
+
+  supersede(request: NudgeSupersessionRequest): Promise<PendingNudge>;
+
+  reconcileLeases(): Promise<NudgeLeaseReconciliationResult>;
 
   releaseBeforeDispatch(
     request: NudgeLeaseReleaseRequest,

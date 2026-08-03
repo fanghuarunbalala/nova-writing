@@ -387,9 +387,16 @@ function captureMessageRecord(
 }
 
 function capturePendingNudgeStoreSnapshot(value: unknown, throughSequence: number) {
-  const record = exactRecord(value, ["schemaVersion", "nudges", "leases", "consumptions"]);
+  const record = exactRecord(
+    value,
+    ["schemaVersion", "nudges", "leases", "consumptions"],
+    ["deliveryAttempts"],
+  );
   if (record.schemaVersion !== 1 || !Array.isArray(record.nudges) ||
-      !Array.isArray(record.leases) || !Array.isArray(record.consumptions)) throw new Error();
+      !Array.isArray(record.leases) || !Array.isArray(record.consumptions) ||
+      (record.deliveryAttempts !== undefined && !Array.isArray(record.deliveryAttempts))) {
+    throw new Error();
+  }
   const nudges = Object.freeze(record.nudges.map((entry) => {
     assertPendingNudgeKeys(entry);
     const nudge = capturePendingNudge(entry);
@@ -401,7 +408,16 @@ function capturePendingNudgeStoreSnapshot(value: unknown, throughSequence: numbe
     return captureNudgeLease(entry);
   }));
   const consumptions = Object.freeze(record.consumptions.map(captureNudgeConsumption));
-  return deepFreeze({ schemaVersion: 1 as const, nudges, leases, consumptions });
+  const deliveryAttempts = record.deliveryAttempts === undefined
+    ? undefined
+    : Object.freeze(record.deliveryAttempts.map(captureNudgeDeliveryAttempt));
+  return deepFreeze({
+    schemaVersion: 1 as const,
+    nudges,
+    leases,
+    consumptions,
+    ...(deliveryAttempts === undefined ? {} : { deliveryAttempts }),
+  });
 }
 
 function captureStrictContextCheckpoint(value: unknown) {
@@ -439,8 +455,29 @@ function assertPendingNudgeKeys(value: unknown): void {
     value,
     ["id", "policyId", "templateId", "templateVersion", "priority", "dedupeKey", "parameters",
       "exclusive", "placement", "delivery", "state", "targetRunId", "scheduledSequence", "scheduledAt"],
-    ["targetTurnNumber", "cooldownTurns", "expiresAfterTurn", "expiresAt"],
+    ["targetTurnNumber", "cooldownTurns", "expiresAfterTurn", "expiresAt", "acknowledgementRef", "conditionRef"],
   );
+}
+
+function captureNudgeDeliveryAttempt(value: unknown) {
+  const record = exactRecord(
+    value,
+    ["nudgeId", "leaseId", "providerCallId", "attemptNumber", "leasedAt"],
+    ["status", "completedAt"],
+  );
+  const status = record.status === undefined ? "leased" : record.status;
+  if (status !== "leased" && status !== "released" && status !== "confirmed") {
+    throw new Error();
+  }
+  return Object.freeze({
+    nudgeId: nonBlank(record.nudgeId),
+    leaseId: nonBlank(record.leaseId),
+    providerCallId: nonBlank(record.providerCallId),
+    attemptNumber: positiveInteger(record.attemptNumber),
+    leasedAt: timestamp(record.leasedAt),
+    status,
+    ...(record.completedAt === undefined ? {} : { completedAt: timestamp(record.completedAt) }),
+  });
 }
 
 function assertNudgeLeaseKeys(value: unknown): void {

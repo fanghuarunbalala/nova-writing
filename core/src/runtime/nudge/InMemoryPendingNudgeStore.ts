@@ -7,13 +7,18 @@ import { noopLogger, type Logger } from "../../observability/index.js";
 import {
   NUDGE_LEASE_RELEASE_OUTCOME,
   NUDGE_SCHEDULE_OUTCOME,
+  type NudgeAcknowledgementRequest,
+  type NudgeConditionResolutionRequest,
   type NudgeConsumptionRecord,
+  type NudgeDeliveryAttemptRecord,
   type NudgeDispatchConfirmationRequest,
   type NudgeDispatchConfirmationResult,
   type NudgeExpiryRequest,
   type NudgeLeaseReleaseRequest,
   type NudgeLeaseReleaseResult,
+  type NudgeLeaseReconciliationResult,
   type NudgeScheduleResult,
+  type NudgeSupersessionRequest,
   type PendingNudgeLeaseResult,
   type PendingNudgeStore,
   type PendingNudgeStoreSnapshot,
@@ -33,6 +38,10 @@ import {
   capturePendingNudge,
 } from "./NudgeProtocolValidator.js";
 import type { NudgeCooldownRecord } from "./NudgeSelector.js";
+import {
+  NUDGE_STATE_ACTION,
+  NudgeStateMachine,
+} from "./NudgeStateMachine.js";
 
 export interface InMemoryPendingNudgeStoreOptions {
   readonly logger?: Logger;
@@ -47,7 +56,12 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
   >();
   private readonly releasedCalls = new Map<string, NudgeLeaseReleaseResult>();
   private readonly consumptions = new Map<string, NudgeConsumptionRecord>();
+  private readonly deliveryAttempts = new Map<
+    string,
+    readonly NudgeDeliveryAttemptRecord[]
+  >();
   private readonly logger: Logger;
+  private readonly stateMachine = new NudgeStateMachine();
   private tail: Promise<void> = Promise.resolve();
 
   constructor(options: InMemoryPendingNudgeStoreOptions = {}) {
@@ -112,6 +126,24 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
     return this.run(() =>
       Object.freeze([...this.nudges.values()].sort(compareScheduledSequence)),
     );
+  }
+
+  listActive(targetRunIdValue?: string): Promise<readonly PendingNudge[]> {
+    return this.run(() => {
+      const targetRunId = targetRunIdValue === undefined
+        ? undefined
+        : captureNonBlank(targetRunIdValue);
+      if (targetRunIdValue !== undefined && !targetRunId) {
+        throw this.failure(PENDING_NUDGE_STORE_FAILURE.invalidNudge);
+      }
+      return Object.freeze(
+        [...this.nudges.values()]
+          .filter((nudge) =>
+            nudge.state === PENDING_NUDGE_STATE.active &&
+            (targetRunId === undefined || nudge.targetRunId === targetRunId))
+          .sort(compareScheduledSequence),
+      );
+    });
   }
 
   listCooldowns(): Promise<readonly NudgeCooldownRecord[]> {
@@ -215,7 +247,8 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
         const candidate = this.nudges.get(nudgeId);
         if (
           !candidate ||
-          candidate.state !== PENDING_NUDGE_STATE.scheduled ||
+          candidate.state !== PENDING_NUDGE_STATE.scheduled &&
+          candidate.state !== PENDING_NUDGE_STATE.active ||
           candidate.targetRunId !== captured.targetRunId ||
           (candidate.targetTurnNumber !== undefined &&
             candidate.targetTurnNumber !== captured.targetTurnNumber)
@@ -230,7 +263,22 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
         return candidate;
       });
       for (const candidate of selected) {
-        this.nudges.set(candidate.id, withState(candidate, PENDING_NUDGE_STATE.leased));
+        this.nudges.set(
+          candidate.id,
+          this.stateMachine.transition(candidate, NUDGE_STATE_ACTION.lease),
+        );
+        const attempts = this.deliveryAttempts.get(candidate.id) ?? [];
+        this.deliveryAttempts.set(candidate.id, Object.freeze([
+          ...attempts,
+          Object.freeze({
+            nudgeId: candidate.id,
+            leaseId: captured.leaseId,
+            providerCallId: captured.providerCallId,
+            attemptNumber: attempts.length + 1,
+            leasedAt: captured.leasedAt,
+            status: "leased",
+          }),
+        ]));
       }
       this.activeLeases.set(captured.providerCallId, captured);
       this.logger.info("runtime.nudge.store_leased", {
@@ -277,7 +325,7 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
           providerCallId,
         );
       }
-      const consumedNudges = lease.nudgeIds.map((nudgeId) => {
+      const completedNudges = lease.nudgeIds.map((nudgeId) => {
         const candidate = this.nudges.get(nudgeId);
         if (!candidate || candidate.state !== PENDING_NUDGE_STATE.leased) {
           throw this.failure(
@@ -287,12 +335,20 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
             providerCallId,
           );
         }
-        const consumed = withState(candidate, PENDING_NUDGE_STATE.consumed);
-        this.nudges.set(nudgeId, consumed);
-        return consumed;
+        const applied = this.stateMachine.transition(
+          candidate,
+          NUDGE_STATE_ACTION.dispatchConfirmed,
+        );
+        const completed = candidate.delivery === "once"
+          ? this.stateMachine.transition(applied, NUDGE_STATE_ACTION.consume)
+          : this.stateMachine.transition(applied, NUDGE_STATE_ACTION.activate);
+        this.nudges.set(nudgeId, completed);
+        return completed;
       });
       const consumptions = Object.freeze(
-        consumedNudges.map((nudge) => {
+        completedNudges
+          .filter((nudge) => nudge.state === PENDING_NUDGE_STATE.consumed)
+          .map((nudge) => {
           const consumption = Object.freeze({
             nudgeId: nudge.id,
             policyId: nudge.policyId,
@@ -312,16 +368,19 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
       );
       const result = Object.freeze({
         lease,
-        nudges: Object.freeze(consumedNudges),
+        nudges: Object.freeze(completedNudges),
         consumptions,
         unchanged: false,
       });
+      for (const nudge of completedNudges) {
+        this.updateDeliveryAttempt(nudge.id, providerCallId, "confirmed", dispatchedAt);
+      }
       this.activeLeases.delete(providerCallId);
       this.consumedCalls.set(providerCallId, result);
-      this.logger.info("runtime.nudge.store_consumed", {
+      this.logger.info("runtime.nudge.store_delivery_confirmed", {
         targetRunId: lease.targetRunId,
         providerCallId,
-        nudgeCount: consumedNudges.length,
+        nudgeCount: completedNudges.length,
       });
       return result;
     });
@@ -376,7 +435,11 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
             providerCallId,
           );
         }
-        this.nudges.set(nudgeId, withState(candidate, PENDING_NUDGE_STATE.scheduled));
+        this.nudges.set(
+          nudgeId,
+          this.stateMachine.transition(candidate, NUDGE_STATE_ACTION.release),
+        );
+        this.updateDeliveryAttempt(nudgeId, providerCallId, "released", request.releasedAt);
       }
       this.activeLeases.delete(providerCallId);
       const result = Object.freeze({
@@ -391,6 +454,144 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
         nudgeCount: lease.nudgeIds.length,
       });
       return result;
+    });
+  }
+
+  acknowledge(request: NudgeAcknowledgementRequest): Promise<PendingNudge> {
+    return this.run(() => {
+      const nudgeId = captureNonBlank(request?.nudgeId);
+      const targetRunId = captureNonBlank(request?.targetRunId);
+      const acknowledgedAt = captureTimestamp(request?.acknowledgedAt);
+      if (!nudgeId || !targetRunId || !acknowledgedAt) {
+        throw this.failure(
+          PENDING_NUDGE_STORE_FAILURE.invalidAcknowledgement,
+          nudgeId,
+          targetRunId,
+        );
+      }
+      const candidate = this.requireNudge(nudgeId, targetRunId, "acknowledgement");
+      if (candidate.state === PENDING_NUDGE_STATE.acknowledged) return candidate;
+      if (
+        candidate.state !== PENDING_NUDGE_STATE.active ||
+        !sameJson(candidate.acknowledgementRef, request.acknowledgementRef)
+      ) {
+        throw this.failure(
+          PENDING_NUDGE_STORE_FAILURE.invalidAcknowledgement,
+          nudgeId,
+          targetRunId,
+        );
+      }
+      const updated = this.stateMachine.transition(
+        candidate,
+        NUDGE_STATE_ACTION.acknowledge,
+      );
+      this.nudges.set(nudgeId, updated);
+      return updated;
+    });
+  }
+
+  resolveCondition(request: NudgeConditionResolutionRequest): Promise<PendingNudge> {
+    return this.run(() => {
+      const nudgeId = captureNonBlank(request?.nudgeId);
+      const targetRunId = captureNonBlank(request?.targetRunId);
+      const resolvedAt = captureTimestamp(request?.resolvedAt);
+      if (!nudgeId || !targetRunId || !resolvedAt) {
+        throw this.failure(
+          PENDING_NUDGE_STORE_FAILURE.invalidConditionResolution,
+          nudgeId,
+          targetRunId,
+        );
+      }
+      const candidate = this.requireNudge(nudgeId, targetRunId, "condition");
+      if (candidate.state === PENDING_NUDGE_STATE.resolved) return candidate;
+      if (
+        candidate.state !== PENDING_NUDGE_STATE.active ||
+        !sameJson(candidate.conditionRef, request.conditionRef)
+      ) {
+        throw this.failure(
+          PENDING_NUDGE_STORE_FAILURE.invalidConditionResolution,
+          nudgeId,
+          targetRunId,
+        );
+      }
+      const updated = this.stateMachine.transition(
+        candidate,
+        NUDGE_STATE_ACTION.resolve,
+      );
+      this.nudges.set(nudgeId, updated);
+      return updated;
+    });
+  }
+
+  supersede(request: NudgeSupersessionRequest): Promise<PendingNudge> {
+    return this.run(() => {
+      const nudgeId = captureNonBlank(request?.nudgeId);
+      const targetRunId = captureNonBlank(request?.targetRunId);
+      const replacementId = captureNonBlank(request?.supersededByNudgeId);
+      const supersededAt = captureTimestamp(request?.supersededAt);
+      if (!nudgeId || !targetRunId || !replacementId || !supersededAt || nudgeId === replacementId) {
+        throw this.failure(
+          PENDING_NUDGE_STORE_FAILURE.invalidSupersession,
+          nudgeId,
+          targetRunId,
+        );
+      }
+      const candidate = this.requireNudge(nudgeId, targetRunId, "supersession");
+      if (candidate.state === PENDING_NUDGE_STATE.superseded) return candidate;
+      if (
+        candidate.state !== PENDING_NUDGE_STATE.scheduled &&
+        candidate.state !== PENDING_NUDGE_STATE.active
+      ) {
+        throw this.failure(
+          PENDING_NUDGE_STORE_FAILURE.invalidSupersession,
+          nudgeId,
+          targetRunId,
+        );
+      }
+      const updated = this.stateMachine.transition(
+        candidate,
+        NUDGE_STATE_ACTION.supersede,
+      );
+      this.nudges.set(nudgeId, updated);
+      return updated;
+    });
+  }
+
+  reconcileLeases(): Promise<NudgeLeaseReconciliationResult> {
+    return this.run(() => {
+      const nudgeIds: string[] = [];
+      const providerCallIds = [...this.activeLeases.keys()].sort();
+      for (const lease of this.activeLeases.values()) {
+        for (const nudgeId of lease.nudgeIds) {
+          const candidate = this.nudges.get(nudgeId);
+          if (!candidate || candidate.state !== PENDING_NUDGE_STATE.leased) {
+            throw this.failure(
+              PENDING_NUDGE_STORE_FAILURE.leaseConflict,
+              nudgeId,
+              lease.targetRunId,
+              lease.providerCallId,
+            );
+          }
+          this.nudges.set(
+            nudgeId,
+            this.stateMachine.transition(candidate, NUDGE_STATE_ACTION.release),
+          );
+          nudgeIds.push(nudgeId);
+        }
+        for (const nudgeId of lease.nudgeIds) {
+          this.updateDeliveryAttempt(nudgeId, lease.providerCallId, "released");
+        }
+        this.releasedCalls.set(lease.providerCallId, Object.freeze({
+          outcome: NUDGE_LEASE_RELEASE_OUTCOME.released,
+          providerCallId: lease.providerCallId,
+          nudgeIds: Object.freeze(lease.nudgeIds.slice()),
+        }));
+      }
+      this.activeLeases.clear();
+      return Object.freeze({
+        nudgeIds: Object.freeze(nudgeIds.sort()),
+        providerCallIds: Object.freeze(providerCallIds),
+      });
     });
   }
 
@@ -427,7 +628,10 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
         ) {
           continue;
         }
-        const updated = withState(candidate, PENDING_NUDGE_STATE.expired);
+        const updated = this.stateMachine.transition(
+          candidate,
+          NUDGE_STATE_ACTION.expire,
+        );
         this.nudges.set(candidate.id, updated);
         expired.push(updated);
       }
@@ -455,6 +659,11 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
           [...this.consumptions.values()].sort((left, right) =>
             left.nudgeId.localeCompare(right.nudgeId),
           ),
+        ),
+        deliveryAttempts: Object.freeze(
+          [...this.deliveryAttempts.values()]
+            .flat()
+            .sort(compareDeliveryAttempts),
         ),
       }),
     );
@@ -485,6 +694,38 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
             : nudge;
         nextNudges.set(restored.id, restored);
         sequences.add(restored.scheduledSequence);
+      }
+
+      const nextDeliveryAttempts = new Map<
+        string,
+        readonly NudgeDeliveryAttemptRecord[]
+      >();
+      const attemptKeys = new Set<string>();
+      for (const attempt of captured.deliveryAttempts ?? []) {
+        const nudge = nextNudges.get(attempt.nudgeId);
+        if (!nudge || nudge.targetRunId !== captured.nudges.find(
+          (candidate) => candidate.id === attempt.nudgeId,
+        )?.targetRunId) {
+          throw this.failure(
+            PENDING_NUDGE_STORE_FAILURE.invalidSnapshot,
+            attempt.nudgeId,
+          );
+        }
+        const key = `${attempt.nudgeId}:${attempt.attemptNumber}`;
+        if (attemptKeys.has(key)) {
+          throw this.failure(
+            PENDING_NUDGE_STORE_FAILURE.invalidSnapshot,
+            attempt.nudgeId,
+            nudge.targetRunId,
+            attempt.providerCallId,
+          );
+        }
+        attemptKeys.add(key);
+        const attempts = nextDeliveryAttempts.get(attempt.nudgeId) ?? [];
+        nextDeliveryAttempts.set(attempt.nudgeId, Object.freeze([
+          ...attempts,
+          attempt,
+        ]));
       }
 
       const leasedNudgeIds = new Set<string>();
@@ -607,6 +848,64 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
         );
       }
 
+      const nextReleasedCalls = new Map<string, NudgeLeaseReleaseResult>();
+      for (const group of groupDeliveryAttempts(captured.deliveryAttempts ?? [])) {
+        const nudges = group.nudgeIds.map((nudgeId) => nextNudges.get(nudgeId));
+        if (nudges.some((nudge) => nudge === undefined)) {
+          throw this.failure(PENDING_NUDGE_STORE_FAILURE.invalidSnapshot);
+        }
+        const capturedNudges = nudges as PendingNudge[];
+        const targetRunId = capturedNudges[0]!.targetRunId;
+        const targetTurnNumber = capturedNudges[0]!.targetTurnNumber;
+        if (capturedNudges.some(
+          (nudge) =>
+            nudge!.targetRunId !== targetRunId ||
+            nudge!.targetTurnNumber !== targetTurnNumber,
+        )) {
+          throw this.failure(PENDING_NUDGE_STORE_FAILURE.invalidSnapshot);
+        }
+        let lease: NudgeLease;
+        try {
+          lease = captureNudgeLease({
+            leaseId: group.leaseId,
+            providerCallId: group.providerCallId,
+            targetRunId,
+            ...(targetTurnNumber === undefined ? {} : { targetTurnNumber }),
+            nudgeIds: group.nudgeIds,
+            leasedAt: group.leasedAt,
+          });
+        } catch {
+          throw this.failure(
+            PENDING_NUDGE_STORE_FAILURE.invalidSnapshot,
+            undefined,
+            targetRunId,
+            group.providerCallId,
+          );
+        }
+        if (group.status === "confirmed" && !nextConsumedCalls.has(group.providerCallId)) {
+          nextConsumedCalls.set(
+            group.providerCallId,
+            Object.freeze({
+              lease,
+              nudges: Object.freeze(capturedNudges),
+              consumptions: Object.freeze(
+                group.nudgeIds
+                  .map((nudgeId) => nextConsumptions.get(nudgeId))
+                  .filter((record): record is NudgeConsumptionRecord => record !== undefined),
+              ),
+              unchanged: false,
+            }),
+          );
+        }
+        if (group.status === "released") {
+          nextReleasedCalls.set(group.providerCallId, Object.freeze({
+            outcome: NUDGE_LEASE_RELEASE_OUTCOME.released,
+            providerCallId: group.providerCallId,
+            nudgeIds: Object.freeze(group.nudgeIds.slice()),
+          }));
+        }
+      }
+
       this.nudges.clear();
       for (const [id, nudge] of nextNudges) this.nudges.set(id, nudge);
       this.consumptions.clear();
@@ -619,6 +918,13 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
       }
       this.activeLeases.clear();
       this.releasedCalls.clear();
+      for (const [id, result] of nextReleasedCalls) {
+        this.releasedCalls.set(id, result);
+      }
+      this.deliveryAttempts.clear();
+      for (const [id, attempts] of nextDeliveryAttempts) {
+        this.deliveryAttempts.set(id, attempts);
+      }
       this.logger.info("runtime.nudge.store_restored", {
         nudgeCount: this.nudges.size,
         consumptionCount: this.consumptions.size,
@@ -633,6 +939,44 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
       () => undefined,
     );
     return result;
+  }
+
+  private requireNudge(
+    nudgeId: string,
+    targetRunId: string,
+    _operation: string,
+  ): PendingNudge {
+    const nudge = this.nudges.get(nudgeId);
+    if (!nudge || nudge.targetRunId !== targetRunId) {
+      throw this.failure(
+        PENDING_NUDGE_STORE_FAILURE.invalidNudge,
+        nudgeId,
+        targetRunId,
+      );
+    }
+    return nudge;
+  }
+
+  private updateDeliveryAttempt(
+    nudgeId: string,
+    providerCallId: string,
+    status: NudgeDeliveryAttemptRecord["status"],
+    completedAt?: string,
+  ): void {
+    const attempts = this.deliveryAttempts.get(nudgeId) ?? [];
+    const index = [...attempts].reverse().findIndex(
+      (attempt) => attempt.providerCallId === providerCallId && attempt.status === "leased",
+    );
+    if (index < 0) return;
+    const actualIndex = attempts.length - 1 - index;
+    const updated = Object.freeze({
+      ...attempts[actualIndex]!,
+      status,
+      ...(completedAt === undefined ? {} : { completedAt }),
+    });
+    const next = [...attempts];
+    next[actualIndex] = updated;
+    this.deliveryAttempts.set(nudgeId, Object.freeze(next));
   }
 
   private captureScheduledNudge(nudge: PendingNudge): PendingNudge {
@@ -730,6 +1074,48 @@ interface ConsumptionGroup {
   readonly records: readonly NudgeConsumptionRecord[];
 }
 
+interface DeliveryAttemptGroup {
+  readonly leaseId: string;
+  readonly providerCallId: string;
+  readonly leasedAt: string;
+  readonly status: NudgeDeliveryAttemptRecord["status"];
+  readonly nudgeIds: readonly string[];
+}
+
+function groupDeliveryAttempts(
+  attempts: readonly NudgeDeliveryAttemptRecord[],
+): DeliveryAttemptGroup[] {
+  const groups = new Map<string, NudgeDeliveryAttemptRecord[]>();
+  for (const attempt of attempts) {
+    if (attempt.status === "leased") continue;
+    const records = groups.get(attempt.providerCallId) ?? [];
+    records.push(attempt);
+    groups.set(attempt.providerCallId, records);
+  }
+  return [...groups.values()].map((records) => {
+    const first = records[0]!;
+    if (records.some(
+      (record) =>
+        record.leaseId !== first.leaseId ||
+        record.status !== first.status ||
+        record.leasedAt !== first.leasedAt,
+    )) {
+      throw new Error();
+    }
+    return Object.freeze({
+      leaseId: first.leaseId,
+      providerCallId: first.providerCallId,
+      leasedAt: first.leasedAt,
+      status: first.status,
+      nudgeIds: Object.freeze(
+        records
+          .sort((left, right) => left.nudgeId.localeCompare(right.nudgeId))
+          .map((record) => record.nudgeId),
+      ),
+    });
+  });
+}
+
 function shouldExpire(nudge: PendingNudge, context: ExpiryContext): boolean {
   if (context.runEnded) return true;
   if (
@@ -754,6 +1140,16 @@ function shouldExpire(nudge: PendingNudge, context: ExpiryContext): boolean {
 function compareScheduledSequence(left: PendingNudge, right: PendingNudge): number {
   if (left.scheduledSequence === right.scheduledSequence) return 0;
   return left.scheduledSequence < right.scheduledSequence ? -1 : 1;
+}
+
+function compareDeliveryAttempts(
+  left: NudgeDeliveryAttemptRecord,
+  right: NudgeDeliveryAttemptRecord,
+): number {
+  if (left.nudgeId !== right.nudgeId) {
+    return left.nudgeId.localeCompare(right.nudgeId);
+  }
+  return left.attemptNumber - right.attemptNumber;
 }
 
 function withState(nudge: PendingNudge, state: PendingNudge["state"]): PendingNudge {
@@ -790,6 +1186,9 @@ function captureSnapshot(value: unknown): PendingNudgeStoreSnapshot {
   ) {
     throw new Error();
   }
+  if (value.deliveryAttempts !== undefined && !Array.isArray(value.deliveryAttempts)) {
+    throw new Error();
+  }
   return Object.freeze({
     schemaVersion: 1,
     nudges: Object.freeze(value.nudges.map((nudge) => capturePendingNudge(nudge))),
@@ -797,7 +1196,33 @@ function captureSnapshot(value: unknown): PendingNudgeStoreSnapshot {
     consumptions: Object.freeze(
       value.consumptions.map((consumption) => captureConsumption(consumption)),
     ),
+    deliveryAttempts: Object.freeze(
+      (value.deliveryAttempts ?? []).map((attempt) => captureDeliveryAttempt(attempt)),
+    ),
   });
+}
+
+function captureDeliveryAttempt(value: unknown): NudgeDeliveryAttemptRecord {
+  if (!isRecord(value)) throw new Error();
+  return Object.freeze({
+    nudgeId: requireNonBlank(value.nudgeId),
+    leaseId: requireNonBlank(value.leaseId),
+    providerCallId: requireNonBlank(value.providerCallId),
+    attemptNumber: requirePositiveInteger(value.attemptNumber),
+    leasedAt: requireTimestamp(value.leasedAt),
+    status: captureAttemptStatus(value.status),
+    ...(value.completedAt === undefined
+      ? {}
+      : { completedAt: requireTimestamp(value.completedAt) }),
+  });
+}
+
+function captureAttemptStatus(value: unknown): NudgeDeliveryAttemptRecord["status"] {
+  if (value === undefined) return "leased";
+  if (value !== "leased" && value !== "released" && value !== "confirmed") {
+    throw new Error();
+  }
+  return value;
 }
 
 function captureConsumption(value: unknown): NudgeConsumptionRecord {
@@ -889,6 +1314,12 @@ function captureOptionalPositiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 1
     ? value
     : undefined;
+}
+
+function requirePositiveInteger(value: unknown): number {
+  const captured = captureOptionalPositiveInteger(value);
+  if (captured === undefined) throw new Error();
+  return captured;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

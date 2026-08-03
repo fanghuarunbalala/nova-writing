@@ -354,6 +354,7 @@ Domain persistence may retain reason notes in these Events. Structured Runtime l
 ```ts
 interface LeafStoryUnitPlan {
   readonly storyUnitId: StoryUnitId;
+  readonly settingMode: StorySettingMode;
   readonly time?: StoryTimeDescription;
   readonly characters: readonly StoryUnitCharacterBinding[];
   readonly locations: readonly StoryUnitLocationBinding[];
@@ -361,6 +362,12 @@ interface LeafStoryUnitPlan {
   readonly rhythmBeats: readonly RhythmBeat[];
   readonly entityChanges: readonly StoryUnitEntityChange[];
 }
+```
+
+```ts
+type StorySettingMode =
+  | "located"
+  | "location-independent";
 ```
 
 A leaf plan answers five questions:
@@ -377,7 +384,26 @@ The plan is progressively populated by human and Agent collaboration:
 - `outlined` may contain partial time, bindings, Events, rhythm, and entity changes.
 - `ready` means the accepted leaf plan satisfies a Tool-enforced readiness policy and may be used as the manuscript specification.
 
-RhythmBeats remain optional. Character or Location bindings and entity changes may be empty when the StoryUnit semantics do not require them. The initial ready policy should require at least a usable time description, a coherent primary setting when applicable, and one objective Event, while allowing future policy configuration.
+RhythmBeats remain optional. Character or Location bindings and entity changes
+may be empty when the StoryUnit semantics do not require them.
+
+**Accepted V1 ready policy:** a StoryUnit may enter `ready` only when:
+
+- it is currently a leaf StoryUnit
+- it has a usable `StoryTimeDescription`
+- it has at least one objective `StoryEventStep`
+- `settingMode = located` has exactly one Location binding whose role is
+  `primary`
+- `settingMode = location-independent` has no `primary` Location binding;
+  secondary or mentioned references remain allowed
+- every Character, Location, Event, RhythmBeat, and EntityChange reference is
+  structurally valid and belongs to the same StoryUnit plan
+
+Contextual Character or Location profile insufficiency produces a repairable
+readiness finding but does not block the V1 baseline `ready` state. A stricter
+Agent definition may refuse manuscript execution until additional profile
+findings are resolved, but it does not redefine the stored baseline readiness
+contract.
 
 If a leaf StoryUnit is decomposed into children, its detailed plan must be migrated, summarized, or archived through an accepted proposal rather than silently duplicated across parent and child nodes.
 
@@ -1165,6 +1191,46 @@ interface LocationCurrentStateProjection {
 }
 ```
 
+The V1 involvement contracts are composable objects rather than one mutually
+exclusive role enum:
+
+```ts
+type CharacterPresence =
+  | "present"
+  | "offstage"
+  | "mentioned";
+
+type CharacterStoryRole =
+  | "point-of-view"
+  | "participant"
+  | "observer"
+  | "affected";
+
+interface CharacterInvolvement {
+  readonly presence: CharacterPresence;
+  readonly roles: readonly CharacterStoryRole[];
+}
+
+type LocationStoryRole =
+  | "primary"
+  | "secondary"
+  | "mentioned";
+
+interface LocationInvolvement {
+  readonly role: LocationStoryRole;
+  readonly affected: boolean;
+}
+```
+
+- Character roles are unique; `point-of-view` requires `presence = present`
+- one Character may simultaneously be point-of-view, participant, and affected
+- Location role expresses narrative setting importance while `affected`
+  independently records whether the StoryUnit changes that place
+- omitted involvement means the binding is intentionally unspecified rather
+  than automatically `mentioned`
+- binding notes remain optional author-facing context and must never enter
+  structured logs
+
 ```mermaid
 classDiagram
     class StoryUnit {
@@ -1824,8 +1890,6 @@ The following decisions remain outside the accepted Runtime implementation plan:
 9. The exact review-state contract for Tool-proposed Character and Location profile patches and projections.
 10. The exact conformance validator boundary between deterministic Tool checks, model-assisted analysis, and human acceptance.
 11. The concrete OutlineOperation union, the mapping of each Operation to the general precondition and NovelConflict protocol, and which low-risk outline operations may be auto-accepted by policy.
-12. The initial LeafStoryUnit ready policy and whether different Agent definitions may select stricter readiness profiles.
-13. The contextual Character and Location readiness policies for different involvement roles and which missing stable details should block a leaf StoryUnit from reaching `ready`.
-14. The Artifact preparation protocol and recovery behavior for an interrupted canonical Commit; the Draft Operation digest encoding and atomic Draft Journal behavior are resolved by Task N4.
-15. Draft staging retention limits, terminal-session cleanup timing, and whether selected committed or rolled-back Drafts may be retained for diagnostics without becoming authoritative history.
-16. The Agent-facing Tool grouping and per-Model or View-oriented read, overwrite-write, and delete schemas; Section 12 intentionally defines only the application boundary those Tools must call.
+12. The Artifact preparation protocol and recovery behavior for an interrupted canonical Commit; the Draft Operation digest encoding and atomic Draft Journal behavior are resolved by Task N4.
+13. Draft staging retention limits, terminal-session cleanup timing, and whether selected committed or rolled-back Drafts may be retained for diagnostics without becoming authoritative history.
+14. The Agent-facing Tool grouping and per-Model or View-oriented read, overwrite-write, and delete schemas; Section 12 intentionally defines only the application boundary those Tools must call.

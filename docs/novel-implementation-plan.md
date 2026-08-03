@@ -905,7 +905,9 @@ dispatch, asynchronous Approval orchestration, and real Journal integration.
 The affected V1 contracts are explicitly resolved in
 `docs/novel-domain.md`: variable-length lexical `OrderKey`, independent direct
 blocking with ancestor effects, non-destructive composite abandonment, derived
-active-leaf progress, and descriptive Story time with optional chronology.
+active-leaf progress, descriptive Story time with optional chronology,
+composable Character/Location involvement, explicit setting mode, and baseline
+Leaf readiness.
 
 ### N9-A StoryOutline and StoryUnit
 
@@ -1019,6 +1021,20 @@ StoryUnit Entity Change foundation delivered:
 **Status:** Event, RhythmBeat, and EntityChange foundations completed. The
 remaining N9-D binding step is gated by undefined Character/Location
 involvement contracts.
+
+Binding and readiness decisions resolved:
+
+- Character involvement separates presence from a unique set of point-of-view,
+  participant, observer, and affected roles
+- Location involvement separates primary/secondary/mentioned setting role from
+  whether the Location is affected
+- Leaf plans explicitly distinguish located and location-independent units
+- V1 `ready` requires a leaf, usable Story time, at least one Event, valid local
+  references, and exactly one primary Location for located units; entity profile
+  insufficiency remains a non-blocking repairable finding
+
+**Status:** N9-D binding and N9-C LeafPlan contracts are now unblocked and ready
+for implementation.
 
 ### N9-E Services, Operations, Queries, and Persistence
 

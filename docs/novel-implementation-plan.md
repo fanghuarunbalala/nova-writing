@@ -1449,6 +1449,34 @@ excluded. **Task N11-C is complete.**
 
 Update accepted architecture diagrams and add platform-neutral application examples. Tool examples remain deferred.
 
+**Status:** complete. The accepted facade, class diagram, dependency flow,
+Draft-write sequence, explicit-scope query boundary, and platform-neutral
+Outline/Publication/Manuscript/Evidence/Commit/Rebase examples now reflect the
+implemented application. `docs/architecture.md` records the completed Novel
+boundary and removes the obsolete unresolved “dedicated Novel implementation”
+item. Agent-facing Tool examples remain explicitly deferred. Documentation
+acceptance verifies required sections, Mermaid fence integrity, completed task
+markers, and removal of stale “N11-B next” text. **Task N11-D and Task N11 are
+complete.**
+
+### N10–N11 Completion Evidence
+
+| Requirement | Authoritative implementation evidence | Executable evidence |
+| --- | --- | --- |
+| N10-A Publication model | `core/src/novel/model/publication/` | `novel-publication-smoke.mjs` |
+| N10-B Manuscript/Block model | `core/src/novel/model/manuscript/Manuscript.ts` | `novel-manuscript-block-smoke.mjs` |
+| N10-C Anchors/Ranges | `ManuscriptAnchor.ts`, `ManuscriptAnchorValidator.ts` | `novel-manuscript-anchor-smoke.mjs` |
+| N10-D repair Operations | `ManuscriptOperations.ts`, repair catalogs | `novel-manuscript-operation-smoke.mjs`, `novel-manuscript-range-repair-smoke.mjs` |
+| N10-E Realization/conformance | `StoryUnitRealization.ts`, completion validator | `novel-story-unit-realization-smoke.mjs`, `novel-evidence-application-smoke.mjs` |
+| N11-A Projections | projection values, planner, source catalog | `novel-projection-model-smoke.mjs`, `novel-projection-planner-smoke.mjs` |
+| N11-B Recovery | five ordered recovery stages and Node composition | `node-novel-restart-recovery-smoke.mjs` |
+| N11-C complete application | Publication, Manuscript, Evidence services/queries and Node facade | `novel-end-to-end-acceptance-smoke.mjs` |
+| N11-D docs/examples | accepted diagrams, examples, completion boundary | `novel-documentation-acceptance-smoke.mjs` |
+
+The release acceptance matrix covers nine real scenarios and thirty named
+capabilities. The complete `pnpm --dir core smoke:all` suite is the final gate;
+a narrower focused test is not used to claim overall completion.
+
 ## 18. Milestones
 
 ### Milestone A: Durable Novel Workspace
@@ -1508,5 +1536,12 @@ Tasks N10 and N11 provide manuscript, publication, realization, conformance, pro
 - Task N11-A-B is completed by strict Projection Source validation,
   confirmed/planned evidence selection, injected Readiness policy, and
   deterministic rebuild. Task N11-A is complete.
-- Task N11-B Recovery is next.
+- Task N11-B is completed by the fixed five-stage Core/Node recovery composition,
+  real Projection source rebuild, Outbox retry, terminal staging retention, and
+  restart-idempotency acceptance.
+- Task N11-C is completed by the Publication, Manuscript, and Evidence
+  application slices plus the nine-scenario release acceptance matrix.
+- Task N11-D is completed by the accepted architecture diagrams,
+  platform-neutral examples, and requirement-by-requirement completion audit.
+  **Novel Task N0 through Task N11 is complete.**
 - Agent-facing Novel Tools remain deferred beyond Task N11.

@@ -1563,19 +1563,26 @@ The Novel layer exposes a composed facade rather than one class containing every
 
 ```ts
 interface NovelApplication {
-  readonly drafts: NovelDraftSessionService;
   readonly mutations: NovelMutationService;
-  readonly commits: NovelCommitService;
-  readonly rebases: NovelRebaseService;
-  readonly conflicts: NovelConflictResolutionService;
-
-  readonly outline: StoryOutlineService;
-  readonly manuscript: ManuscriptService;
   readonly characters: CharacterService;
   readonly locations: LocationService;
+  readonly outline: StoryOutlineService;
   readonly publication: PublicationService;
-  readonly queries: NovelQueryService;
-  readonly projections: NovelProjectionService;
+  readonly manuscript: ManuscriptService;
+  readonly evidence: NovelEvidenceService;
+
+  readonly characterQueries: CharacterQueryService;
+  readonly locationQueries: LocationQueryService;
+  readonly outlineQueries: StoryOutlineQueryService;
+  readonly publicationQueries: PublicationQueryService;
+  readonly manuscriptQueries: ManuscriptQueryService;
+  readonly evidenceQueries: NovelEvidenceQueryService;
+
+  readonly changeSets: NovelDraftChangeSetBuilder;
+  readonly approvals: NovelApprovalService;
+  readonly commits: NovelCommitService;
+  readonly commitRecovery: NovelCommitRecoveryService;
+  openRebase(options: NovelRebaseOpenOptions): Promise<NovelRebaseServices>;
 }
 ```
 
@@ -1583,7 +1590,40 @@ interface NovelApplication {
 - Domain-specific services validate caller intent and construct Domain Operations; they do not write SQLite directly.
 - `NovelMutationService` is the shared write boundary that routes accepted Operations through the owning Draft Writer.
 - Query services always receive an explicit canonical or Draft read scope.
-- Commit, Rebase, conflict resolution, and projection rebuild remain separate services because they have different lifecycle and failure semantics.
+- Draft Session lifecycle remains externally composable because it owns canonical
+  snapshot creation rather than one already-open application instance.
+- Rebase services are opened and closed explicitly because their candidate,
+  conflict, Resolution Plan, and Resolved Candidate stores own resources.
+- Projection rebuild and five-phase startup recovery remain separate composition
+  roots because they have different readiness policy and process-lifecycle needs.
+
+```mermaid
+classDiagram
+    class NovelApplication
+    class NovelMutationService
+    class StoryOutlineService
+    class PublicationService
+    class ManuscriptService
+    class NovelEvidenceService
+    class NovelQueryServices
+    class NovelCommitService
+    class NovelApprovalService
+    class NovelRebaseServices
+
+    NovelApplication --> NovelMutationService
+    NovelApplication --> StoryOutlineService
+    NovelApplication --> PublicationService
+    NovelApplication --> ManuscriptService
+    NovelApplication --> NovelEvidenceService
+    NovelApplication --> NovelQueryServices
+    NovelApplication --> NovelCommitService
+    NovelApplication --> NovelApprovalService
+    NovelApplication --> NovelRebaseServices : openRebase()
+    StoryOutlineService --> NovelMutationService
+    PublicationService --> NovelMutationService
+    ManuscriptService --> NovelMutationService
+    NovelEvidenceService --> NovelMutationService
+```
 
 Recommended application directories:
 
@@ -1597,7 +1637,15 @@ novel/service/
 ├── CharacterService.ts
 ├── LocationService.ts
 ├── PublicationService.ts
-└── NovelProjectionService.ts
+└── NovelEvidenceService.ts
+
+novel/query/
+├── CharacterQueryService.ts
+├── LocationQueryService.ts
+├── StoryOutlineQueryService.ts
+├── PublicationQueryService.ts
+├── ManuscriptQueryService.ts
+└── NovelEvidenceQueryService.ts
 ```
 
 ### 12.3 Models, Operations, and Validation
@@ -1625,9 +1673,9 @@ novel/operation/
 ├── NovelOperationExecutor.ts
 ├── outline/
 ├── manuscript/
-├── character/
-├── location/
-└── publication/
+├── entity/
+├── publication/
+└── evidence/
 ```
 
 - Application commands describe caller intent; immutable Domain Operations describe the accepted deterministic write that enters a Draft.
@@ -2025,7 +2073,101 @@ Commit history and incomplete canonical Commit recovery
   stable identity, phase, and count metadata; they never include Novel content,
   Operations, payloads, paths, raw errors, stacks, or causes.
 
-### 12.10 Explicit Exclusions
+### 12.10 Platform-Neutral Application Examples
+
+The following examples intentionally depend only on Core Novel contracts. A
+CLI, TUI, GUI, Web server, test, or future process proxy can use the same flow.
+
+Draft writing and explicit-scope reads:
+
+```ts
+const session = await drafts.startDraft(conversationId);
+const scope = draftNovelReadScope(session);
+
+await application.outline.createOutline(session, outlineId);
+await application.outline.createStoryUnit(session, storyUnit);
+await application.publication.createPublication(session, publicationId);
+await application.publication.createVolume(session, volume);
+await application.publication.createChapter(session, chapter);
+await application.manuscript.createManuscript(
+  session,
+  manuscriptId,
+  publicationId,
+);
+await application.manuscript.createBlock(session, paragraphBlock);
+
+const block = await application.manuscriptQueries.getBlock(
+  scope,
+  paragraphBlock.id,
+);
+await application.manuscript.replaceBlockText(
+  session,
+  paragraphBlock.id,
+  block.textDigest,
+  revisedText,
+);
+```
+
+Authoritative Evidence and completion admission:
+
+```ts
+await application.evidence.putCharacterBinding(session, characterBinding);
+await application.evidence.putLocationBinding(session, locationBinding);
+await application.evidence.putEntityChange(session, entityChange);
+await application.evidence.putRealization(session, realization);
+
+const admission = await application.evidenceQueries.evaluateCompletion(
+  scope,
+  realization.storyUnitId,
+);
+if (admission?.status === "rejected") {
+  // The caller decides how to display or revise the rejected work.
+}
+```
+
+Commit and stale-Draft Rebase remain explicit lifecycle actions:
+
+```ts
+const changeSet = await application.changeSets.build(session);
+// After the platform-specific Approval interaction resolves positively:
+await application.approvals.grant(changeSet);
+try {
+  await application.commits.commit(session, commitInput);
+} catch (error) {
+  if (!(error instanceof NovelRevisionConflictError)) throw error;
+  const rebase = await application.openRebase(rebaseOptions);
+  try {
+    const candidate = await rebase.rebases.prepareCandidate(session.id);
+    // Conflict resolution and promotion are explicit reviewable steps.
+  } finally {
+    await rebase.close();
+  }
+}
+```
+
+```mermaid
+sequenceDiagram
+    participant Client as "CLI / GUI / Web"
+    participant Drafts as "Draft Session Service"
+    participant App as "Novel Application"
+    participant Writer as "Serialized Draft Writer"
+    participant SQLite as "Draft SQLite"
+    participant Commit as "Commit / Rebase Services"
+
+    Client->>Drafts: startDraft(conversationId)
+    Drafts-->>Client: NovelDraftSession
+    Client->>App: domain command(session, value)
+    App->>Writer: enqueue(versioned Operation)
+    Writer->>SQLite: apply + append Journal + Outbox
+    SQLite-->>Writer: receipt
+    Writer-->>Client: Promise<Receipt>
+    Client->>App: explicit Draft query(scope)
+    App-->>Client: immutable read model + digests
+    Client->>Commit: Commit or Rebase
+    Commit-->>Client: durable lifecycle result
+```
+
+### 12.11 Explicit Exclusions
 
 This architecture section intentionally does not define:
 

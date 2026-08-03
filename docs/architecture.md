@@ -5980,7 +5980,10 @@ The following items still require explicit review before implementation:
 2. Input snapshot redaction and size limits
 3. Subagent result projection beyond the accepted active-Run cancellation ownership rule
 4. Runtime idle eviction duration
-5. Dedicated Novel domain implementation, tracked separately in `docs/novel-implementation-plan.md`
+5. Agent-facing Novel Tool names, grouping, YAML descriptors, permission policy,
+   and CLI/GUI/Web presentation; the provider-neutral Novel N0–N11 domain and
+   application layer is complete and remains documented in
+   `docs/novel-domain.md` and `docs/novel-implementation-plan.md`
 6. Runtime crash recovery for a non-terminal Run/Turn: fail versus cancel semantics and the required lifecycle transition reasons
 
 ## 29. Recommended Implementation Order
@@ -6004,3 +6007,49 @@ The following items still require explicit review before implementation:
 ```
 
 No implementation should proceed beyond a reviewed architecture boundary without confirming the corresponding unresolved decisions.
+
+## 30. Completed Novel Application Boundary
+
+Novel Task N0 through Task N11 is complete as a provider-neutral Core domain,
+application, persistence-port, Node SQLite adapter, recovery, and validation
+track. Agent-facing Novel Tools and client presentation remain deliberately
+outside this completed boundary.
+
+```mermaid
+flowchart LR
+    Clients["CLI / GUI / Web / Tests"]
+    Facade["NodeNovelApplication"]
+    Services["Outline / Publication / Manuscript / Evidence Services"]
+    Queries["Explicit-scope Query Services"]
+    Writer["Serialized Draft Writer"]
+    Lifecycle["Commit / Rebase / Approval"]
+    Recovery["Commit → Rebase → Draft → Projection → Outbox"]
+    SQLite["Canonical and Draft SQLite"]
+
+    Clients --> Facade
+    Facade --> Services
+    Facade --> Queries
+    Services --> Writer
+    Writer --> SQLite
+    Queries --> SQLite
+    Facade --> Lifecycle
+    Lifecycle --> SQLite
+    Recovery --> SQLite
+```
+
+The completed boundary guarantees:
+
+- one Novel per Workspace and explicit Conversation-owned Draft Sessions;
+- deterministic JSON Domain Operations with replay preconditions;
+- serialized Draft mutation and serialized canonical Commit ownership;
+- explicit canonical or Draft query scope without implicit Draft merging;
+- Character, Location, Outline, Publication, Manuscript, Evidence, Realization,
+  Conformance, and disposable Projection contracts;
+- Approval, conflict resolution, Outbox/OutputEvent integration, restart
+  recovery, and idempotent replay;
+- platform-neutral public Core APIs with SQLite, filesystem, process placement,
+  Pi, future Rust adapters, and UI details outside the public boundary.
+
+The release-level acceptance matrix is
+`core/scripts/novel-end-to-end-acceptance-smoke.mjs`; the complete Core suite
+remains the final executable gate.

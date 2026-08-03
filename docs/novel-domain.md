@@ -1945,6 +1945,12 @@ Commit history and incomplete canonical Commit recovery
 - Commit recovery runs before Draft cleanup because a missing canonical payload
   may still require the frozen Draft Operation sequence. Terminal Draft staging
   is not removed until that dependency has been reconciled.
+- The canonical Commit transaction already advances authoritative domain state,
+  NovelRevision, Commit metadata, Draft terminal status, and canonical Outbox as
+  one atomic unit. Therefore recovery never completes a partially visible SQLite
+  Commit. It only reconciles the transaction-external History payload: removes
+  temporary/unreferenced files and regenerates a missing referenced payload from
+  the preserved frozen Draft when all stored digests still match.
 - Rebase recovery runs before general Draft recovery so only registered,
   structurally valid candidate staging is treated as owned Draft state.
 - A registered Rebase candidate is retained only when its source Draft remains

@@ -1315,6 +1315,13 @@ derived payloads, and atomically replaces the complete cache. Focused restart
 and rollback coverage confirms Draft persistence and failed-rebuild preservation.
 Node Projection Source composition and the remaining recovery phases are next.
 
+B-E confirms that canonical Commit visibility is already atomic and narrows
+"incomplete Commit" recovery to transaction-external History reconciliation.
+`NovelCommitRecoveryResult` now reports inspected Commits, while
+`NovelCommitRecoveryStage` maps verified, regenerated, temporary, and orphan
+counts into the unified Commit phase. Draft/Outbox phase adapters and Node
+startup composition remain next.
+
 ### N11-C End-to-End Validation
 
 Cover multi-Conversation Drafts, Commit, Rebase, conflict, Approval, Outline, Manuscript, publication, realization, recovery, and replay without Agent Tool involvement.

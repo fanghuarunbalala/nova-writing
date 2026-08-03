@@ -262,6 +262,7 @@ try {
     logger,
   });
   const recovered = await restarted.commitRecovery.recover(canonical.novelId);
+  assert.equal(recovered.inspectedCount, 1);
   assert.equal(recovered.recoveredCount, 1);
   const recoveryDatabase = new DatabaseSync(location.canonicalDatabasePath, {
     readOnly: true,

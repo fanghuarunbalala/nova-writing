@@ -24,6 +24,7 @@ export interface NovelCommitRecoveryServiceOptions<TContext> {
 }
 
 export interface NovelCommitRecoveryResult {
+  readonly inspectedCount: number;
   readonly recoveredCount: number;
   readonly removedTemporaryCount: number;
   readonly removedOrphanCount: number;
@@ -122,6 +123,7 @@ export class NovelCommitRecoveryService<TContext> {
         removedOrphanCount: reconciliation.removedOrphanCount,
       });
       return Object.freeze({
+        inspectedCount: commits.length,
         recoveredCount,
         removedTemporaryCount: reconciliation.removedTemporaryCount,
         removedOrphanCount: reconciliation.removedOrphanCount,

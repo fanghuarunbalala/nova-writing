@@ -1134,7 +1134,10 @@ preconditions, transaction-local mutation ports, structural invariant handlers,
 and the composed default Novel Operation Registry are complete. Canonical and
 Draft SQLite schema, content/parent/order/plan digests, transaction-local
 repositories, combined mutation contexts, restart validation, and Draft
-isolation are complete. Outline services and explicit read scopes are next.
+isolation are complete. Draft-only StoryOutline mutation services, atomic
+canonical/Draft tree snapshots, optimistic digest read models, SQLite query
+adapters, and the unified Node Novel Application composition are complete.
+Outline-specific Rebase conflict validation is next.
 
 ## 16. Task N10: Manuscript, Publication, and Realization
 

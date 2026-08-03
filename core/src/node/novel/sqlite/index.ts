@@ -16,6 +16,7 @@ export * from "./SqliteNovelDraftStore.js";
 export * from "./SqliteNovelDraftOperationStore.js";
 export * from "./SqliteNovelEntityRepository.js";
 export * from "./SqliteNovelOutlineRepository.js";
+export * from "./SqliteNovelOutlineQueryStore.js";
 export * from "./SqliteNovelCommitStore.js";
 export * from "./SqliteNovelLifecycleRecordWriter.js";
 export * from "./SqliteNovelOutboxReader.js";

@@ -106,6 +106,16 @@ export class SqliteNovelOutlineRepository
     return row === undefined ? undefined : decodeStoryUnit(row);
   }
 
+  listStoryUnits(outlineId: StoryOutlineId): readonly StoryUnit[] {
+    const rows = this.database
+      .prepare(
+        `${STORY_UNIT_SELECT} FROM novel_story_units
+         WHERE outline_id = ? ORDER BY parent_id, order_key, id`,
+      )
+      .all(captureStoryOutlineId(outlineId)) as unknown as StoryUnitRow[];
+    return Object.freeze(rows.map(decodeStoryUnit));
+  }
+
   listStoryUnitChildren(parentId: StoryUnitId): readonly StoryUnit[] {
     const rows = this.database
       .prepare(

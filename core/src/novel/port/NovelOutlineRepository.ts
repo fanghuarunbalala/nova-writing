@@ -21,6 +21,7 @@ export interface NovelMutableOutlineRepository {
   findOutlineByNovelId(novelId: NovelId): StoryOutline | undefined;
   insertOutline(outline: StoryOutline): boolean;
   getStoryUnit(id: StoryUnitId): StoryUnit | undefined;
+  listStoryUnits(outlineId: StoryOutlineId): readonly StoryUnit[];
   listStoryUnitChildren(parentId: StoryUnitId): readonly StoryUnit[];
   findStoryUnitAt(
     outlineId: StoryOutlineId,

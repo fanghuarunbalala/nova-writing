@@ -278,6 +278,28 @@ flowchart LR
 
 Electron native directory picking, opaque Preload selection tokens, `NodeWorkspaceStoreLocator`, recent-Workspace persistence, and one active Node application per window remain later desktop steps. Focused Mock validation covers selection, recent reopen data, open and close transitions, menu access, Settings extension rendering, immediate sidebar state, immutable snapshots, operation serialization, and overlay composition.
 
+### 6.3 Implemented Workspace-owned Novel Bootstrap
+
+The production Electron Workspace factory now composes one
+`NodeConversationApiApplication` and one `NodeNovelWorkspaceHost`. A Workspace
+does not transition to the shared Shell `ready` state until both SQLite
+boundaries have opened, migrated, validated identity, and completed mandatory
+Novel startup recovery. Directory selection remains side-effect free; these
+operations begin only after the user confirms the selected Workspace.
+
+`NodeNovelWorkspaceHost` owns the canonical and Draft Stores, composes the
+platform-neutral Novel application and Draft lifecycle service, runs Commit,
+Rebase, Draft, Projection, and Outbox recovery, and closes durable resources in
+reverse order. Novel lifecycle Outbox records publish through the existing
+Conversation OutputEvent journal boundary. If either application fails to open,
+the partially opened resources are closed and Renderer receives only the safe
+Workspace-open failure boundary.
+
+This checkpoint initializes Novel persistence but intentionally does not add
+Renderer Novel query routes. Outline, Character, Location, Manuscript, and
+review views remain backed by their existing deterministic UI models until the
+next query-transport step.
+
 ## 7. Application State Boundaries
 
 The GUI uses multiple focused stores rather than one application-wide mutable object.

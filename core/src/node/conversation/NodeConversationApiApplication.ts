@@ -11,6 +11,7 @@ import {
   StorageConversationQueryService,
   StorageConversationRuntimeBootstrapFactory,
   SystemConversationHostClock,
+  type ConversationOutputEventPublisher,
   type ConversationHostClock,
   type ConversationIdGenerator,
   type ConversationRuntimeInstanceIdGenerator,
@@ -44,6 +45,7 @@ export interface NodeConversationApiApplicationOptions {
 export class NodeConversationApiApplication {
   readonly transport: ConversationApiRouter;
   readonly conversations: ConversationCatalogStore;
+  readonly outputPublisher: ConversationOutputEventPublisher;
   readonly workspace: WorkspaceStoreLocation;
 
   private closePromise?: Promise<void>;
@@ -52,6 +54,7 @@ export class NodeConversationApiApplication {
     workspace: WorkspaceStoreLocation,
     private readonly store: SqliteWorkspaceStore,
     transport: ConversationApiRouter,
+    outputPublisher: ConversationOutputEventPublisher,
     private readonly host: ManagedConversationHost,
     private readonly subscriptions: JournalConversationEventSubscriptionService,
     private readonly journal: PublishingConversationJournalService,
@@ -61,6 +64,7 @@ export class NodeConversationApiApplication {
     this.workspace = Object.freeze({ ...workspace });
     this.transport = transport;
     this.conversations = store.conversations;
+    this.outputPublisher = outputPublisher;
   }
 
   static async open(
@@ -154,6 +158,7 @@ export class NodeConversationApiApplication {
         options.workspace,
         store,
         transport,
+        outputPublisher,
         host,
         subscriptions,
         journal,

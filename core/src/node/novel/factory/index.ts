@@ -3,3 +3,4 @@ export * from "./NodeNovelApplication.js";
 export * from "./NodeNovelOutboxRecoveryRunner.js";
 export * from "./NodeNovelRecoveryApplication.js";
 export * from "./NodeNovelProjectionRecoveryStage.js";
+export * from "./NodeNovelWorkspaceHost.js";

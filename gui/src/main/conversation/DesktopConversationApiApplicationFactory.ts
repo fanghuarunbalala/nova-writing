@@ -10,7 +10,7 @@ import { NodeConversationApiApplication } from "@novel/core/node";
 import type {
   DesktopWorkspaceApiApplication,
   DesktopWorkspaceApiApplicationFactory,
-} from "../workspace/index.js";
+} from "../workspace/DesktopWorkspaceService.js";
 
 export interface DesktopConversationApiApplicationFactoryOptions {
   readonly placement?: ConversationRuntimePlacement;

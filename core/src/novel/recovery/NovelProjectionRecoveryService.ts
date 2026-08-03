@@ -46,11 +46,26 @@ export class NovelProjectionRecoveryService implements NovelRecoveryStage {
   async recover(novelIdInput: NovelId): Promise<NovelRecoveryPhaseResult> {
     const novelId = captureNovelId(novelIdInput);
     this.logger.info("novel_projection_recovery.started", { novelId });
-    const [context, inventory] = await Promise.all([
-      this.options.sourceReader.readProjectionContext(novelId),
-      this.options.store.inspectTargets(novelId),
-    ]);
+    const inventory = await this.options.store.inspectTargets(novelId);
     const targets = captureInventory(inventory);
+    if (inventory.storedCount === 0) {
+      const emptyResult = captureNovelRecoveryPhaseResult({
+        phase: this.phase,
+        inspectedCount: 0,
+        repairedCount: 0,
+        removedCount: 0,
+        retainedCount: 0,
+        publishedCount: 0,
+      });
+      this.logger.info("novel_projection_recovery.completed", {
+        novelId,
+        inspectedCount: 0,
+        rebuiltCount: 0,
+        removedCount: 0,
+      });
+      return emptyResult;
+    }
+    const context = await this.options.sourceReader.readProjectionContext(novelId);
     const planner = new NovelProjectionPlanner(
       context.outline,
       context.source,

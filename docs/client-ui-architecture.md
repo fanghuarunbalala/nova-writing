@@ -496,6 +496,25 @@ Electron Main owns the native directory dialog, absolute path, one-time selectio
 
 Opening a selected directory resolves or creates the persistent workdir-to-Workspace Store mapping, updates the current Workspace for that window sender, and allows the shared Shell to transition out of its Workspace empty state. Recent sessions are process-local in this checkpoint; durable recent ordering and active `NodeConversationApiApplication` routing remain separate application-Host work.
 
+### 10.3 Implemented Desktop Novel Workspace Bootstrap
+
+The Electron Main Workspace application now opens both the Conversation SQLite
+application and the Workspace-owned Novel Host before returning a ready
+Workspace session. Database open, schema migration, exact Workspace/Novel
+identity validation, Draft Store open, and the accepted five startup recovery
+phases occur after selection confirmation and before Renderer may use the active
+Workspace transport.
+
+Novel recovery publishes lifecycle Outbox records through the existing
+Conversation OutputEvent journal boundary. Renderer still receives only the
+opaque Workspace session and generic `ApiTransport`; SQLite handles, Store
+paths, Novel Node adapters, and raw startup failures remain Main-only.
+
+The logical Runtime and Novel SQLite boundaries remain separate. The currently
+implemented Runtime path still resolves through `workspace.databasePath` to
+`novel.db`, while the Novel domain uses `novel.sqlite`; renaming Runtime storage
+is a separate migration rather than part of GUI integration.
+
 ## 11. Web Composition
 
 ```text

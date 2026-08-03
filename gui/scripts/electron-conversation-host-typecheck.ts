@@ -2,7 +2,7 @@
 import { DefaultNovelApiClient } from "@novel/core";
 import type { NodeWorkspaceStoreLocator } from "@novel/core/node";
 import {
-  DesktopConversationApiApplicationFactory,
+  DesktopNovelWorkspaceApplicationFactory,
   DesktopWorkspaceService,
 } from "../src/main/index.js";
 
@@ -11,7 +11,7 @@ declare const locator: NodeWorkspaceStoreLocator;
 const service = new DesktopWorkspaceService({
   picker: { pickDirectory: async () => undefined },
   locator,
-  applicationFactory: new DesktopConversationApiApplicationFactory(),
+  applicationFactory: new DesktopNovelWorkspaceApplicationFactory(),
 });
 const transport = service.resolveTransport(1);
 const api = transport === undefined ? undefined : new DefaultNovelApiClient({ transport });

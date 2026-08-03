@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir } from "node:fs/promises";
+import { access, mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DefaultNovelApiClient } from "../../core/dist/index.js";
-import { NodeWorkspaceStoreLocator } from "../../core/dist/node/index.js";
 import {
-  DesktopConversationApiApplicationFactory,
+  NodeNovelStoreLocator,
+  NodeWorkspaceStoreLocator,
+} from "../../core/dist/node/index.js";
+import {
+  DesktopNovelWorkspaceApplicationFactory,
   DesktopWorkspaceService,
 } from "../dist/main/index.js";
 
@@ -13,16 +16,26 @@ const root = await mkdtemp(join(tmpdir(), "novel-electron-conversation-host-"));
 const workspaceRoot = join(root, "desktop-project");
 await mkdir(workspaceRoot, { recursive: true });
 
+const locator = new NodeWorkspaceStoreLocator({
+  storageRoot: join(root, "storage"),
+});
 const service = new DesktopWorkspaceService({
   picker: { pickDirectory: async () => workspaceRoot },
-  locator: new NodeWorkspaceStoreLocator({ storageRoot: join(root, "storage") }),
-  applicationFactory: new DesktopConversationApiApplicationFactory(),
+  locator,
+  applicationFactory: new DesktopNovelWorkspaceApplicationFactory(),
 });
 const reference = await service.select(1);
 assert.ok(reference);
 const workspace = await service.open(1, reference);
 const transport = service.resolveTransport(1);
 assert.ok(transport);
+const workspaceLocation = await locator.getByWorkspaceId(workspace.id);
+assert.ok(workspaceLocation);
+await access(workspaceLocation.databasePath);
+await access(
+  (await new NodeNovelStoreLocator().resolve(workspaceLocation))
+    .canonicalDatabasePath,
+);
 
 const api = new DefaultNovelApiClient({ transport });
 const conversation = await api.conversations.create({

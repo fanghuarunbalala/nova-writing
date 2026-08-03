@@ -10,13 +10,15 @@ import {
 import { DesktopBootstrapApiTransport } from "./DesktopBootstrapApiTransport.js";
 import { createDesktopApplicationMenuTemplate } from "./DesktopApplicationMenu.js";
 import { resolveDesktopMainPaths } from "./DesktopMainPaths.js";
-import { DesktopConversationApiApplicationFactory } from "./conversation/index.js";
 import {
   DesktopConfigurationService,
   ElectronSafeStorageCredentialCipher,
 } from "./config/index.js";
 import { createElectronDesktopApplication } from "./createElectronDesktopApplication.js";
-import { DesktopWorkspaceService } from "./workspace/index.js";
+import {
+  DesktopNovelWorkspaceApplicationFactory,
+  DesktopWorkspaceService,
+} from "./workspace/index.js";
 
 const paths = resolveDesktopMainPaths(import.meta.url);
 const configurationHome = new NodeConfigurationHomeResolver();
@@ -42,7 +44,7 @@ const workspaceService = new DesktopWorkspaceService({
   locator: new NodeWorkspaceStoreLocator({
     storageRoot: join(app.getPath("userData"), "novel-storage"),
   }),
-  applicationFactory: new DesktopConversationApiApplicationFactory(),
+  applicationFactory: new DesktopNovelWorkspaceApplicationFactory(),
 });
 const bootstrapTransport = new DesktopBootstrapApiTransport();
 const application = createElectronDesktopApplication({

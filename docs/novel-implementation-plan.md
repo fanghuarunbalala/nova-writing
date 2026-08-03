@@ -1301,6 +1301,13 @@ snapshot-first and registry-second. Draft Recovery now treats registered
 Resolved Candidate snapshots as owned staging. Projection persistence/rebuild
 and Node startup composition remain next.
 
+B-C defines strict Projection Target and Cache Entry contracts, a platform-
+neutral Projection Store/Source Reader boundary, and
+`NovelProjectionRecoveryService`. Recovery inventories rebuildable Targets,
+recomputes values through `NovelProjectionPlanner`, drops corrupt or no-longer-
+resolvable Targets, and requests one atomic cache replacement. SQLite storage
+and Node startup composition are next.
+
 ### N11-C End-to-End Validation
 
 Cover multi-Conversation Drafts, Commit, Rebase, conflict, Approval, Outline, Manuscript, publication, realization, recovery, and replay without Agent Tool involvement.

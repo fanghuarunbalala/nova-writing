@@ -1958,6 +1958,12 @@ Commit history and incomplete canonical Commit recovery
   being mistaken for an unowned staging directory after restart.
 - Projection rebuild runs only after authoritative canonical and Draft state is
   stable. Projection records remain disposable and never repair source facts.
+- Each cached Projection persists a strict Target identity separately from its
+  derived value. Recovery inventories valid Targets even when a derived payload
+  is corrupt, rebuilds them from the current Source Snapshot, drops Targets that
+  no longer resolve, and atomically replaces the complete cache. A corrupt Target
+  is discarded because it cannot be reconstructed without inventing caller
+  intent.
 - Outbox retry runs last so recovery-generated lifecycle records and all reopened
   Draft stores participate in one deterministic delivery pass.
 - Each phase is idempotent, the coordinator is single-flight per application

@@ -301,6 +301,14 @@ The Router implements the existing `ApiTransport` surface so it can be used dire
 
 Focused validation composes `DefaultNovelApiClient` over this Router and verifies Conversation open, user input, history, live delivery, Snapshot and Presence queries, not-found and malformed-operation errors, shutdown behavior, and log payload redaction. Despite the historical `NovelApiClient` name, this checkpoint exercises no Novel-domain API.
 
+### 7.2 Implemented Node Local Conversation API Application
+
+`NodeConversationApiApplication.open()` is the first production local composition behind the Conversation Router. It opens one SQLite Workspace Store and constructs the shared Event Hub, publishing Journal service, catch-up subscription service, storage-backed Query and Command services, Output publisher, Runtime Bootstrap factory, managed Conversation Host, and `ConversationApiRouter` with one shared Event schema registry and Logger.
+
+Runtime placement remains injected through `ConversationRuntimePlacement`; the application therefore does not choose in-process, worker, child-process, daemon, remote, Pi, or future Rust placement. The application exposes only its Conversation `transport`, Workspace Conversation catalog, immutable Workspace location, and idempotent close lifecycle. It owns the Store and every service it creates, while individual Conversation handles and API subscriptions retain their existing local ownership rules.
+
+Shutdown closes Router subscriptions before the Host, then subscription service, Journal service, Event Hub, and SQLite Store. Failures are collected as stable stage names without exposing raw errors, paths, Event payloads, prompts, or configuration. Focused integration verifies durable input, Runtime activation, lifecycle OutputEvents, application-owned shutdown, SQLite reopen, process-free history replay, offline Presence after restart, and log redaction.
+
 ## 8. Shared React UI Package
 
 The top-level `ui/` directory is published inside the workspace as `@novel/ui`.

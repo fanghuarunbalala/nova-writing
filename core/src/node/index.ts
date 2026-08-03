@@ -1,3 +1,4 @@
+export * from "./conversation/index.js";
 export * from "./message/index.js";
 export * from "./novel/index.js";
 export * from "./runtime/index.js";

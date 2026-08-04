@@ -10,7 +10,13 @@ const STATUS_LABELS: Readonly<Record<ToolApprovalProjection["status"], string>> 
   cancelled: "已取消",
 };
 
-export function ToolApprovalItem({ approval }: { readonly approval: ToolApprovalProjection }) {
+export function ToolApprovalItem({
+  approval,
+  onDecide,
+}: {
+  readonly approval: ToolApprovalProjection;
+  readonly onDecide?: (decision: "approved" | "rejected") => void;
+}) {
   return (
     <article className="novel-approval-card" data-approval-status={approval.status}>
       <header className="novel-card-header">
@@ -20,6 +26,24 @@ export function ToolApprovalItem({ approval }: { readonly approval: ToolApproval
       <h3>{approval.title}</h3>
       {approval.description !== undefined ? <p>{approval.description}</p> : null}
       <div className="novel-card-status">{STATUS_LABELS[approval.status]}</div>
+      {approval.status === "pending" && onDecide !== undefined ? (
+        <footer className="novel-approval-actions">
+          <button
+            className="novel-connection-action"
+            type="button"
+            onClick={() => onDecide("approved")}
+          >
+            允许
+          </button>
+          <button
+            className="novel-connection-action"
+            type="button"
+            onClick={() => onDecide("rejected")}
+          >
+            拒绝
+          </button>
+        </footer>
+      ) : null}
     </article>
   );
 }

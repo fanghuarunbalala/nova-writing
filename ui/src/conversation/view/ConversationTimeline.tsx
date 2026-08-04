@@ -19,6 +19,13 @@ export interface ConversationTimelineProps {
   readonly cards?: readonly ConversationCardDescriptor[];
   readonly cardRenderers?: ConversationCardRendererRegistry;
   readonly onOpenCardInspector?: (card: ConversationCardDescriptor) => void;
+  readonly onRetryMessage?: (assistantMessageId: string) => void;
+  readonly onResendUser?: (eventId: string) => void;
+  readonly onDecideApproval?: (
+    approvalRequestId: string,
+    argumentDigest: `sha256:${string}`,
+    decision: "approved" | "rejected",
+  ) => void;
 }
 
 export function ConversationTimeline({
@@ -27,6 +34,9 @@ export function ConversationTimeline({
   cards = [],
   cardRenderers = emptyConversationCardRendererRegistry,
   onOpenCardInspector,
+  onRetryMessage,
+  onResendUser,
+  onDecideApproval,
 }: ConversationTimelineProps) {
   const timelineRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -81,12 +91,47 @@ export function ConversationTimeline({
           }
           const item = entry.item;
           if (item.kind === "user-message") {
-            return <UserMessageItem key={`user:${item.eventId}`} message={item} />;
+            return (
+              <UserMessageItem
+                key={`user:${item.eventId}`}
+                message={item}
+                onResend={
+                  onResendUser === undefined
+                    ? undefined
+                    : () => onResendUser(item.eventId)
+                }
+              />
+            );
           }
           if (item.kind === "assistant-message") {
-            return <AssistantMessageItem key={`assistant:${item.assistantMessageId}`} message={item} />;
+            return (
+              <AssistantMessageItem
+                key={`assistant:${item.assistantMessageId}`}
+                message={item}
+                onRetry={
+                  onRetryMessage === undefined
+                    ? undefined
+                    : () => onRetryMessage(item.assistantMessageId)
+                }
+              />
+            );
           }
-          return <ToolApprovalItem key={`approval:${item.approvalRequestId}`} approval={item} />;
+          return (
+            <ToolApprovalItem
+              key={`approval:${item.approvalRequestId}`}
+              approval={item}
+              onDecide={
+                onDecideApproval === undefined
+                  ? undefined
+                  : (decision) =>
+                      onDecideApproval(
+                        item.approvalRequestId,
+                        item.argumentDigest,
+                        decision,
+                      )
+              }
+            />
+          );
         })
       )}
       {diagnostics ? <ConversationDiagnostics events={projection.events} /> : null}

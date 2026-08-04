@@ -9,7 +9,13 @@ const STATUS_LABELS = {
   cancelled: "已停止",
 } as const;
 
-export function AssistantMessageItem({ message }: { readonly message: AssistantMessageProjection }) {
+export function AssistantMessageItem({
+  message,
+  onRetry,
+}: {
+  readonly message: AssistantMessageProjection;
+  readonly onRetry?: () => void;
+}) {
   return (
     <article
       className="novel-message novel-assistant-message"
@@ -46,6 +52,12 @@ export function AssistantMessageItem({ message }: { readonly message: AssistantM
         ) : null}
         {message.status === "cancelled" ? (
           <p className="novel-message-notice" role="status">本轮生成已停止</p>
+        ) : null}
+        {(message.status === "failed" || message.status === "cancelled") &&
+        onRetry !== undefined ? (
+          <button className="novel-connection-action" type="button" onClick={onRetry}>
+            重试
+          </button>
         ) : null}
       </div>
     </article>

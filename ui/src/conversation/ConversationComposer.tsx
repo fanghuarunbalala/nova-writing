@@ -1,7 +1,5 @@
 /** Conversation composer with local drafts and protocol-gated structured references. */
 import {
-  StopInputEvent,
-  UserMessageInputEvent,
   type InputEvent,
   type InputReceipt,
 } from "@novel/core";
@@ -12,6 +10,10 @@ import {
   type ComposerContentReference,
   type ComposerDraftStore,
 } from "../composer/index.js";
+import {
+  createConversationInteractionCommands,
+  type ConversationInteractionCommands,
+} from "./interaction/index.js";
 
 export interface ConversationComposerProps {
   readonly conversationId: string;
@@ -19,6 +21,7 @@ export interface ConversationComposerProps {
   readonly draftStore?: ComposerDraftStore;
   readonly onOpenReference?: (reference: ComposerContentReference) => void;
   enqueue(event: InputEvent): Promise<InputReceipt>;
+  readonly commands?: ConversationInteractionCommands;
 }
 
 type ComposerNotice =
@@ -31,7 +34,10 @@ export function ConversationComposer({
   draftStore,
   onOpenReference,
   enqueue,
+  commands,
 }: ConversationComposerProps) {
+  const effectiveCommands =
+    commands ?? createConversationInteractionCommands({ conversationId, enqueue });
   const draft = useComposerDraftBinding(conversationId, draftStore);
   const [pending, setPending] = useState<"message" | "stop" | undefined>();
   const [notice, setNotice] = useState<ComposerNotice | undefined>();
@@ -49,9 +55,7 @@ export function ConversationComposer({
     setPending("message");
     setNotice(undefined);
     try {
-      const receipt = await enqueue(
-        new UserMessageInputEvent({ conversationId, text: message }),
-      );
+      const receipt = await effectiveCommands.send(message);
       draft.store.setText(conversationId, "");
       setNotice({
         kind: "receipt",
@@ -72,7 +76,7 @@ export function ConversationComposer({
     setPending("stop");
     setNotice(undefined);
     try {
-      const receipt = await enqueue(new StopInputEvent({ conversationId }));
+      const receipt = await effectiveCommands.stop();
       setNotice({
         kind: "receipt",
         text: `停止请求已记录，等待 Runtime 处理（#${receipt.sequence}）`,

@@ -7,7 +7,7 @@ import type {
 import { ConversationConnectionStatus } from "./ConversationConnectionStatus.js";
 import { ConversationRuntimeStatusView } from "./ConversationRuntimeStatusView.js";
 import { ConversationTimeline } from "./ConversationTimeline.js";
-import { useConversationRuntimeStatus } from "../useConversationRuntimeStatus.js";
+import { useConversationInteraction } from "../interaction/index.js";
 
 export interface ConversationProjectionViewProps {
   readonly result: ConversationProjectionHookResult;
@@ -33,19 +33,16 @@ export function ConversationProjectionView({
   onRuntimeOpenSettings,
 }: ConversationProjectionViewProps) {
   const controllerState = result.snapshot.controller?.state ?? result.snapshot.state;
-  const runtimeStatus = useConversationRuntimeStatus(
-    result.snapshot,
-    runtimeFailureCode,
-  );
+  const interaction = useConversationInteraction(result, runtimeFailureCode);
   return (
     <section className="novel-conversation-view" data-controller-state={controllerState}>
       <header className="novel-conversation-header">
         <span>Conversation</span>
         <ConversationRuntimeStatusView
-          status={runtimeStatus.status}
-          failureCode={runtimeStatus.failureCode}
+          status={interaction.runtime.status}
+          failureCode={interaction.runtime.failureCode}
           onRetry={onRuntimeRetry}
-          onStop={onRuntimeStop}
+          onStop={interaction.runtime.canStop ? interaction.commands.stop : onRuntimeStop}
           onOpenSettings={onRuntimeOpenSettings}
         />
       </header>
@@ -58,6 +55,32 @@ export function ConversationProjectionView({
         cards={cards}
         cardRenderers={cardRenderers}
         onOpenCardInspector={onOpenCardInspector}
+        onRetryMessage={(assistantMessageId) => {
+          const scenario = interaction.scenarios.find(
+            (candidate) =>
+              candidate.kind === "assistant-message" &&
+              candidate.assistantMessageId === assistantMessageId,
+          );
+          if (scenario !== undefined && scenario.kind === "assistant-message") {
+            void interaction.commands.retryMessage(scenario);
+          }
+        }}
+        onResendUser={(eventId) => {
+          const scenario = interaction.scenarios.find(
+            (candidate) =>
+              candidate.kind === "user-message" && candidate.eventId === eventId,
+          );
+          if (scenario !== undefined && scenario.kind === "user-message") {
+            void interaction.commands.editAndResend(scenario.text);
+          }
+        }}
+        onDecideApproval={(approvalRequestId, argumentDigest, decision) => {
+          void interaction.commands.decideApproval({
+            approvalRequestId,
+            argumentDigest,
+            decision,
+          });
+        }}
       />
     </section>
   );

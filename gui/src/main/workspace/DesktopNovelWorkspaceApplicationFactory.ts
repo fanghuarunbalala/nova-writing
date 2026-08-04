@@ -6,11 +6,13 @@ import {
   noopLogger,
   type ApiTransport,
   type ConversationRuntimePlacement,
+  type AgentManifestProvisioner,
   type EntityProfileReadinessPolicy,
   type Logger,
   type WorkspaceStoreLocation,
 } from "@novel/core";
 import {
+  DefaultNovelConversationManifestProvisioner,
   NodeConversationApiApplication,
   NodeNovelWorkspaceHost,
 } from "@novel/core/node";
@@ -24,6 +26,7 @@ import type {
 
 export interface DesktopNovelWorkspaceApplicationFactoryOptions {
   readonly placement?: ConversationRuntimePlacement;
+  readonly agentManifestProvisioner?: AgentManifestProvisioner;
   readonly readinessPolicy?: EntityProfileReadinessPolicy;
   readonly logger?: Logger;
 }
@@ -32,12 +35,18 @@ export class DesktopNovelWorkspaceApplicationFactory
   implements DesktopWorkspaceApiApplicationFactory
 {
   private readonly placement: ConversationRuntimePlacement;
+  private readonly agentManifestProvisioner: AgentManifestProvisioner;
   private readonly readinessPolicy: EntityProfileReadinessPolicy;
   private readonly logger: Logger;
 
   constructor(options: DesktopNovelWorkspaceApplicationFactoryOptions = {}) {
     this.placement =
       options.placement ?? new DesktopUnavailableConversationRuntimePlacement();
+    this.agentManifestProvisioner =
+      options.agentManifestProvisioner ??
+      new DefaultNovelConversationManifestProvisioner({
+        logger: options.logger,
+      });
     this.readinessPolicy =
       options.readinessPolicy ?? DESKTOP_DEFAULT_READINESS_POLICY;
     this.logger = (options.logger ?? noopLogger).child({
@@ -55,6 +64,7 @@ export class DesktopNovelWorkspaceApplicationFactory
       conversationApplication = await NodeConversationApiApplication.open({
         workspace: location,
         placement: this.placement,
+        agentManifestProvisioner: this.agentManifestProvisioner,
         logger,
       });
       const novelHost = await NodeNovelWorkspaceHost.open({

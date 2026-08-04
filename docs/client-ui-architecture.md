@@ -281,8 +281,15 @@ Conversation. It delegates to the existing provider-neutral query services and
 returns only the strict snapshots above. `WorkspaceApiRouter` mounts those
 operations beside Conversation operations behind the same `ApiTransport`, and
 the Desktop Workspace composition now uses that unified Router without adding
-an Electron-specific Novel channel. `DefaultNovelApiClient.novel` and React
-query binding remain the next separate checkpoints.
+an Electron-specific Novel channel.
+
+`DefaultNovelApiClient` now exposes the same read contract through grouped
+methods under `api.novel`: overview, Outline and StoryUnit, Character list and
+detail, Location list and detail, and Manuscript structure and Block detail.
+The shared Client validates each request before transport, correlates and
+validates every response envelope, converts safe remote failures into
+`ApiRemoteError`, and strictly captures every returned Novel snapshot. React
+query binding remains the next separate checkpoint.
 
 ## 7. One API Router, Multiple Transports
 

@@ -5,7 +5,9 @@ import type {
   ConversationCardRendererRegistry,
 } from "../../card/index.js";
 import { ConversationConnectionStatus } from "./ConversationConnectionStatus.js";
+import { ConversationRuntimeStatusView } from "./ConversationRuntimeStatusView.js";
 import { ConversationTimeline } from "./ConversationTimeline.js";
+import { useConversationRuntimeStatus } from "../useConversationRuntimeStatus.js";
 
 export interface ConversationProjectionViewProps {
   readonly result: ConversationProjectionHookResult;
@@ -13,6 +15,10 @@ export interface ConversationProjectionViewProps {
   readonly cards?: readonly ConversationCardDescriptor[];
   readonly cardRenderers?: ConversationCardRendererRegistry;
   readonly onOpenCardInspector?: (card: ConversationCardDescriptor) => void;
+  readonly runtimeFailureCode?: string;
+  readonly onRuntimeRetry?: () => void;
+  readonly onRuntimeStop?: () => void;
+  readonly onRuntimeOpenSettings?: () => void;
 }
 
 export function ConversationProjectionView({
@@ -21,18 +27,27 @@ export function ConversationProjectionView({
   cards = result.snapshot.cards.cards,
   cardRenderers,
   onOpenCardInspector,
+  runtimeFailureCode,
+  onRuntimeRetry,
+  onRuntimeStop,
+  onRuntimeOpenSettings,
 }: ConversationProjectionViewProps) {
   const controllerState = result.snapshot.controller?.state ?? result.snapshot.state;
-  const runtimePresence = result.snapshot.controller?.runtimePresence;
+  const runtimeStatus = useConversationRuntimeStatus(
+    result.snapshot,
+    runtimeFailureCode,
+  );
   return (
     <section className="novel-conversation-view" data-controller-state={controllerState}>
       <header className="novel-conversation-header">
         <span>Conversation</span>
-        {runtimePresence !== undefined ? (
-          <span className="novel-runtime-presence" data-runtime-state={runtimePresence.state}>
-            Runtime {runtimePresence.state}
-          </span>
-        ) : null}
+        <ConversationRuntimeStatusView
+          status={runtimeStatus.status}
+          failureCode={runtimeStatus.failureCode}
+          onRetry={onRuntimeRetry}
+          onStop={onRuntimeStop}
+          onOpenSettings={onRuntimeOpenSettings}
+        />
       </header>
       {controllerState !== "live" ? (
         <ConversationConnectionStatus snapshot={result.snapshot} resume={result.resume} />

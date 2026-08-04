@@ -30,6 +30,7 @@ export function createDesktopRuntimePlacement(
     command: process.execPath,
     args: [childMain],
     env: {
+      ELECTRON_RUN_AS_NODE: "1",
       [DESKTOP_CHILD_STORAGE_ROOT_ENV]: options.storageRoot,
     },
     persistenceProvider: {

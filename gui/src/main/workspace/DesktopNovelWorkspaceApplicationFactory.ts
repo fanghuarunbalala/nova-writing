@@ -1,6 +1,8 @@
 /** Composes Conversation and Novel hosts so one Electron Workspace becomes ready atomically. */
 import {
   ConversationNovelLifecycleOutputPublisher,
+  NovelQueryApiRouter,
+  WorkspaceApiRouter,
   noopLogger,
   type ApiTransport,
   type ConversationRuntimePlacement,
@@ -89,7 +91,21 @@ class DesktopNovelWorkspaceApplication implements DesktopWorkspaceApiApplication
     private readonly novelHost: NodeNovelWorkspaceHost,
     private readonly logger: Logger,
   ) {
-    this.transport = conversationApplication.transport;
+    this.transport = new WorkspaceApiRouter({
+      conversations: conversationApplication.transport,
+      novel: new NovelQueryApiRouter({
+        workspaceId: novelHost.workspaceId,
+        novelId: novelHost.novelId,
+        metadata: novelHost,
+        drafts: novelHost.drafts,
+        characters: novelHost.application.characterQueries,
+        locations: novelHost.application.locationQueries,
+        outline: novelHost.application.outlineQueries,
+        publication: novelHost.application.publicationQueries,
+        manuscript: novelHost.application.manuscriptQueries,
+        logger,
+      }),
+    });
   }
 
   close(): Promise<void> {

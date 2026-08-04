@@ -273,8 +273,16 @@ returned only by the Block-detail response.
 Strict capture functions reject unknown fields, invalid identities, malformed
 tree relations, duplicate entities or blocks, inconsistent progress, invalid
 Publication/Manuscript ownership, and non-SHA-256 digests after a JSON round
-trip. Router registration, `DefaultNovelApiClient.novel`, and React query
-binding remain the next separate checkpoints.
+trip.
+
+The implemented `NovelQueryApiRouter` resolves canonical state directly and
+Conversation-Draft state only through the active Draft owned by the requested
+Conversation. It delegates to the existing provider-neutral query services and
+returns only the strict snapshots above. `WorkspaceApiRouter` mounts those
+operations beside Conversation operations behind the same `ApiTransport`, and
+the Desktop Workspace composition now uses that unified Router without adding
+an Electron-specific Novel channel. `DefaultNovelApiClient.novel` and React
+query binding remain the next separate checkpoints.
 
 ## 7. One API Router, Multiple Transports
 

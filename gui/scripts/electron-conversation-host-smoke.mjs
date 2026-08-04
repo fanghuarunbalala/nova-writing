@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { access, mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DefaultNovelApiClient } from "../../core/dist/index.js";
+import {
+  API_PROTOCOL_VERSION,
+  NOVEL_QUERY_API_OPERATION,
+  DefaultNovelApiClient,
+} from "../../core/dist/index.js";
 import {
   NodeNovelStoreLocator,
   NodeWorkspaceStoreLocator,
@@ -45,6 +49,22 @@ const listed = await api.conversations.list();
 assert.equal(listed.conversations.length, 1);
 assert.equal(listed.conversations[0].metadata.id, conversation.id);
 assert.equal(listed.conversations[0].metadata.workspaceId, workspace.id);
+const novelOverview = await transport.request({
+  protocolVersion: API_PROTOCOL_VERSION,
+  requestId: "electron-novel-overview",
+  operation: NOVEL_QUERY_API_OPERATION.overviewGet,
+  payload: { scope: { kind: "canonical" } },
+});
+assert.equal(novelOverview.ok, true);
+assert.equal(novelOverview.data.workspaceId, workspace.id);
+assert.deepEqual(novelOverview.data.counts, {
+  storyUnitCount: 0,
+  characterCount: 0,
+  locationCount: 0,
+  volumeCount: 0,
+  chapterCount: 0,
+  manuscriptBlockCount: 0,
+});
 
 await service.close(1);
 assert.equal(service.resolveTransport(1), undefined);

@@ -1,3 +1,4 @@
+export * from "./DefaultRuntimeRunPreparationSourceFactory.js";
 export * from "./DesktopRuntimeChildCompositionFactory.js";
 export * from "./DesktopRuntimeChildEndpointFactory.js";
 export * from "./DesktopRuntimeChildEntrypoint.js";

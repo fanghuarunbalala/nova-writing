@@ -19,6 +19,7 @@ export interface ChildProcessConversationRuntimePlacementOptions {
   readonly persistenceProvider: DesktopRuntimeChildPersistenceProvider;
   readonly sessionIdFactory?: ParentRuntimeChildIdentityFactory;
   readonly exitNormalizer?: RuntimeProcessExitNormalizer;
+  readonly env?: Readonly<Record<string, string>>;
   readonly logger?: Logger;
 }
 
@@ -32,6 +33,7 @@ export function createChildProcessConversationRuntimePlacement(
     launcher: new NodeRuntimeChildProcessLauncher({
       command: options.command,
       args: options.args ?? [],
+      ...(options.env === undefined ? {} : { env: options.env }),
       logger,
     }),
     endpointFactory: new DesktopRuntimeChildEndpointFactory({

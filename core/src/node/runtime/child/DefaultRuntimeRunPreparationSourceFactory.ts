@@ -1,0 +1,78 @@
+/**
+ * Production Runtime run preparation source for the desktop child: reads
+ * persisted messages through the Runtime persistence RPC and resolves the
+ * Manifest-bound system prompt. Advanced projection passes remain outside the
+ * child scope and surface stable unsupported failures.
+ */
+import {
+  AgentRuntimeSystemPromptSource,
+  ProjectedUserMessageRunPreparationSource,
+} from "../../../runtime/index.js";
+import type { ConversationMessageFileStore } from "../../../storage/index.js";
+import type { ConversationMessageProjectionService } from "../../../storage/index.js";
+import { noopLogger, type Logger } from "../../../observability/index.js";
+import type { RuntimeRunPreparationSourceFactory } from "./DesktopRuntimeChildCompositionFactory.js";
+
+export interface DefaultRuntimeRunPreparationSourceFactoryOptions {
+  readonly logger?: Logger;
+}
+
+export class DefaultRuntimeRunPreparationSourceFactory
+  implements RuntimeRunPreparationSourceFactory
+{
+  readonly #logger: Logger;
+
+  constructor(options: DefaultRuntimeRunPreparationSourceFactoryOptions = {}) {
+    this.#logger = (options.logger ?? noopLogger).child({
+      component: "default_runtime_run_preparation_source_factory",
+    });
+  }
+
+  async create({
+    configuration,
+    bootstrap,
+    persistence,
+  }: Parameters<RuntimeRunPreparationSourceFactory["create"]>[0]) {
+    const conversationId = bootstrap.conversation.metadata.id;
+    return new ProjectedUserMessageRunPreparationSource({
+      conversationId,
+      projections: createChildProjectionService(conversationId),
+      messages: {
+        list: (query: Parameters<ConversationMessageFileStore["list"]>[0]) =>
+          persistence.messages.list(query),
+      } as ConversationMessageFileStore,
+      systemPromptSource: new AgentRuntimeSystemPromptSource(configuration),
+      logger: this.#logger,
+    });
+  }
+}
+
+function createChildProjectionService(
+  conversationId: string,
+): ConversationMessageProjectionService {
+  return Object.freeze({
+    inspect: async () => {
+      throw new TypeError(
+        "Runtime child projection inspection is outside the desktop V1 scope",
+      );
+    },
+    synchronize: async () =>
+      Object.freeze({
+        workspaceId: "desktop-child",
+        projectorId: "core.conversation-message",
+        projectorVersion: "1",
+        conversationId,
+        operations: Object.freeze([]),
+        previousSequence: 0,
+        projectedThroughSequence: 0,
+        journalHighWatermark: 0,
+        processedEventCount: 0,
+        appendedMessageCount: 0,
+      }),
+    rebuild: async () => {
+      throw new TypeError(
+        "Runtime child projection rebuild is outside the desktop V1 scope",
+      );
+    },
+  });
+}

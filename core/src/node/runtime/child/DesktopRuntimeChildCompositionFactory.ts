@@ -40,6 +40,14 @@ import {
   RuntimeBootstrapStartupCoordinator,
   RuntimeInputOutcomeController,
   RuntimeInputPump,
+  NudgeManager,
+  NudgeProviderCallCoordinator,
+  NudgeRenderer,
+  NudgeSelector,
+  NudgeTemplateRegistry,
+  InMemoryPendingNudgeStore,
+  type NudgeLifecycleEventIdFactory,
+  type NudgeProviderCallCoordinator as NudgeProviderCallCoordinatorType,
   RuntimeStartupExecutor,
   RuntimeStartupReconciler,
   RuntimeStopInputHandler,
@@ -76,6 +84,7 @@ export interface RuntimeChildAdapterFactory {
   create(options: {
     readonly configuration: AgentRuntimeConfiguration;
     readonly lifecycleController: TurnController;
+    readonly nudgeProviderCalls?: NudgeProviderCallCoordinatorType;
   }): Promise<AgentRuntimeAdapter>;
 }
 
@@ -196,9 +205,16 @@ export class DesktopRuntimeChildCompositionFactory
       logger,
     });
     const router = new InputRouter({ conversationId, logger });
+    const nudgeProviderCalls = createChildNudgeCoordinator({
+      conversationId,
+      eventSink,
+      persistence,
+      logger,
+    });
     const agentAdapter = await this.#adapterFactory.create({
       configuration,
       lifecycleController,
+      nudgeProviderCalls,
     });
     const assembly = new AgentRuntimeExecutionAssembly({
       configuration,
@@ -381,5 +397,47 @@ class ChildRuntimeOutputPublisher implements ConversationOutputEventPublisher {
         sequence: receipt.sequence,
         recordedAt: receipt.recordedAt,
       }));
+  }
+}
+
+function createChildNudgeCoordinator(options: {
+  readonly conversationId: string;
+  readonly eventSink: PublishingRuntimeEventSink;
+  readonly persistence: RuntimePersistencePorts;
+  readonly logger: Logger;
+}): NudgeProviderCallCoordinatorType {
+  const templates = new NudgeTemplateRegistry({ logger: options.logger });
+  const manager = new NudgeManager({
+    store: new InMemoryPendingNudgeStore({ logger: options.logger }),
+    selector: new NudgeSelector({ logger: options.logger }),
+    renderer: new NudgeRenderer({ templates, logger: options.logger }),
+    logger: options.logger,
+  });
+  const coordinator = new NudgeProviderCallCoordinator({
+    manager,
+    privateStateCommitter: {
+      commit: async () => undefined,
+    },
+    eventSink: options.eventSink,
+    eventIdFactory: new ChildNudgeLifecycleEventIdFactory(),
+    logger: options.logger,
+  });
+  options.logger.debug("runtime_child.nudge_coordinator_created", {
+    conversationId: options.conversationId,
+  });
+  return coordinator;
+}
+
+class ChildNudgeLifecycleEventIdFactory implements NudgeLifecycleEventIdFactory {
+  #count = 0;
+
+  create(input: {
+    readonly conversationId: string;
+    readonly runId: string;
+    readonly eventType: string;
+    readonly nudgeId: string;
+  }): string {
+    this.#count += 1;
+    return `nudge_event_${input.nudgeId}_${this.#count}`;
   }
 }

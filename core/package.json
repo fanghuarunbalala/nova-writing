@@ -134,6 +134,7 @@
     "smoke:runtime-nudge-event-bridge": "pnpm build && node scripts/runtime-nudge-event-bridge-smoke.mjs",
     "smoke:runtime-projected-run-preparation": "pnpm build && node scripts/runtime-projected-run-preparation-smoke.mjs",
     "smoke:runtime-pi-adapter": "pnpm build && node scripts/runtime-pi-agent-core-adapter-smoke.mjs",
+    "smoke:runtime-pi-provider-execution-factory": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/runtime-pi-provider-execution-factory-typecheck.ts && node scripts/runtime-pi-provider-execution-factory-smoke.mjs",
     "smoke:runtime-pi-context-projection": "pnpm build && node scripts/runtime-pi-context-projection-integration-smoke.mjs",
     "smoke:runtime-pi-nudge-overlay": "pnpm build && node scripts/runtime-pi-nudge-overlay-integration-smoke.mjs",
     "smoke:runtime-pi-assistant-output": "pnpm build && node scripts/runtime-pi-assistant-output-bridge-smoke.mjs",
@@ -178,6 +179,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.82.1",
+    "@earendil-works/pi-ai": "0.82.1",
     "typebox": "1.1.38",
     "yaml": "2.9.0"
   },

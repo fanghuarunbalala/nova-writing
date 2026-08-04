@@ -355,6 +355,9 @@ failures expose stable codes and a retry action only for retryable
 transport/remote failures; invalidated entries are simply refetched on the
 next mount. Cache invalidation from outbox-delivered lifecycle Events remains
 wired later through the existing `invalidate` and `clear` boundaries.
+Out-of-order query responses are discarded when the requesting view unmounted
+or its target changed, and a dedicated race smoke proves a late character
+response never replaces the Outline already on screen.
 
 ### 7.3 `InspectorStore`
 
@@ -620,6 +623,19 @@ The shared UI now defines a bounded `ConversationCardDescriptor` containing only
 `ConversationCardProjectionStore` now subclasses the Core Conversation Projection Store and applies registered Card projectors inside the same replay and live Event path used by messages and Approval projections. Card state is staged before the Core Store publishes its one update and rolled back if the Core Event application fails, so React observes one coherent combined snapshot without opening another Conversation handle or Event subscription.
 
 The shared Binding snapshot carries both the Core projection and immutable Card projection. `NovelApp` accepts injected Card Projector and Renderer Registries, renders replayed and live Cards automatically, and routes Card Inspector actions through the existing `InspectorStore`. Duplicate Events require deterministic Card projection, Card IDs cannot be reused across source Events, and structured logs include only stable identities, kinds, and Sequences. Default production projectors remain empty until Novel proposal OutputEvent types are accepted.
+
+### 11.3 Implemented Canonical Commit Card Projection
+
+`NovelApp` now supplies a default `ConversationCardProjectorRegistry` when the
+host injects none. The default projector maps persisted
+`novel.commit.completed` OutputEvents to a completed `novel-reference` card
+whose Inspector action opens the canonical Story Outline view through the
+existing renderer registry. Projection stays canonical-only: the payload
+carries Draft and Commit identities but no canonical entity identity, so the
+card binds to the current canonical Outline rather than a specific entity.
+Entity-level card targets await OutputEvents that carry canonical entity
+identity. Invalid payloads, unregistered Event types, and non-output Events
+never produce cards, and card summaries expose only safe counts.
 
 ## 12. Inspector Architecture
 
@@ -1057,6 +1073,11 @@ The Controller owns only local expansion and selection, derives flat visible row
 `StoryOutlineTree` binds the local Controller through React `useSyncExternalStore` and renders flattened rows with `tree` / `treeitem` roles, level, set position, selected state, and expansion state. Mouse selection and the standard Up, Down, Left, Right, Enter, and Space interactions update only local UI state.
 
 Each row presents Scope, planning status, realization status, blocking, and derived completed-leaf progress as separate tokens. Blocking details remain a UI tooltip and are not logged. The component intentionally performs no Novel mutation, no Ready-policy inference, and no recursive nested rendering; query-backed Inspector composition and virtualization remain later checkpoints.
+
+A rendering-level large-tree smoke now exercises an expanded 1,400+ node
+Outline through `StoryOutlineTree` under a loose time budget and verifies row
+count, collapse, and keyboard navigation; paging and virtualization remain
+deferred.
 
 ## 19. Outline Diff Projection
 

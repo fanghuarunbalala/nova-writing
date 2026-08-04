@@ -69,6 +69,7 @@ import type {
 } from "../command/index.js";
 import { useNovelApi } from "../client/index.js";
 import {
+  createDefaultNovelCardProjectorRegistry,
   createNovelInspectorRendererRegistry,
   NovelReadCacheProvider,
   useNovelWorkspaceOverview,
@@ -104,6 +105,10 @@ export function NovelApp(props: NovelAppProps) {
       }),
     [props.initialShellState?.sidebarMode],
   );
+  const defaultCardProjectors = useMemo(
+    () => createDefaultNovelCardProjectorRegistry(),
+    [],
+  );
   return (
     <NovelAppProvider {...props}>
       <NovelReadCacheProvider>
@@ -122,7 +127,9 @@ export function NovelApp(props: NovelAppProps) {
               <ConnectedApplicationShell
                 shell={props.shell}
                 inspectorRenderers={props.inspectorRenderers}
-                conversationCardProjectors={props.conversationCardProjectors}
+                conversationCardProjectors={
+                  props.conversationCardProjectors ?? defaultCardProjectors
+                }
                 conversationCardRenderers={props.conversationCardRenderers}
                 commandSource={props.commandSource}
                 settingsStore={props.settingsStore ?? defaultSettingsStore}

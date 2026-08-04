@@ -303,7 +303,10 @@ action; no Novel mutation command is exposed. A non-durable canonical-only
 read cache now backs these queries: it is cleared on Workspace switch, pruned
 when the canonical Overview revision changes, never reads Draft scope, and is
 invalidated only through explicit cache boundaries until lifecycle-Event
-wiring lands.
+wiring lands. A default canonical commit-card projector turns persisted
+`novel.commit.completed` events into timeline cards that open the canonical
+Outline view; proposal-level and entity-level card targets remain
+host-supplied or await OutputEvents carrying canonical entity identity.
 
 ## 7. One API Router, Multiple Transports
 

@@ -1,4 +1,5 @@
 /** Composes the production local Conversation API over one SQLite Workspace Store. */
+import type { AgentManifestProvisioner } from "../../agent/index.js";
 import { ConversationApiRouter } from "../../client/index.js";
 import {
   CoreConversationHostControlDispatcher,
@@ -11,6 +12,7 @@ import {
   StorageConversationQueryService,
   StorageConversationRuntimeBootstrapFactory,
   SystemConversationHostClock,
+  type ConversationCatalogService,
   type ConversationOutputEventPublisher,
   type ConversationHostClock,
   type ConversationIdGenerator,
@@ -30,10 +32,12 @@ import {
   type WorkspaceStoreLocation,
 } from "../../storage/index.js";
 import { SqliteWorkspaceStore } from "../sqlite/index.js";
+import { DefaultNovelAgentBindingConversationCatalog } from "./DefaultNovelAgentBindingConversationCatalog.js";
 
 export interface NodeConversationApiApplicationOptions {
   readonly workspace: WorkspaceStoreLocation;
   readonly placement: ConversationRuntimePlacement;
+  readonly agentManifestProvisioner?: AgentManifestProvisioner;
   readonly eventSchemaRegistry?: EventSchemaRegistry;
   readonly clock?: ConversationHostClock;
   readonly runtimeInstanceIdGenerator?: ConversationRuntimeInstanceIdGenerator;
@@ -110,6 +114,12 @@ export class NodeConversationApiApplication {
           : {}),
         logger,
       });
+      const conversationCatalog = await composeDefaultAgentCatalog(
+        options.agentManifestProvisioner,
+        catalog,
+        store,
+        logger,
+      );
       const outputPublisher = new StorageConversationOutputEventPublisher({
         eventSchemaRegistry: registry,
         journalService: journal,
@@ -147,7 +157,7 @@ export class NodeConversationApiApplication {
         logger,
       });
       const transport = new ConversationApiRouter({
-        catalog,
+        catalog: conversationCatalog,
         commands,
         queries,
         runtimePresence: host,
@@ -196,6 +206,29 @@ export class NodeConversationApiApplication {
       throw new NodeConversationApiApplicationCloseError(failures);
     }
   }
+}
+
+async function composeDefaultAgentCatalog(
+  provisioner: AgentManifestProvisioner | undefined,
+  catalog: ConversationCatalogService,
+  store: SqliteWorkspaceStore,
+  logger: Logger,
+): Promise<ConversationCatalogService> {
+  if (provisioner === undefined) {
+    return catalog;
+  }
+  const defaultManifest = await provisioner.provision(store.agentManifests);
+  if (defaultManifest === undefined) {
+    return catalog;
+  }
+  logger.info("node_conversation_api.default_manifest_bound", {
+    agentType: defaultManifest.agentType,
+    definitionVersion: defaultManifest.definitionVersion,
+    manifestDigest: defaultManifest.manifestDigest,
+  });
+  return new DefaultNovelAgentBindingConversationCatalog(catalog, defaultManifest, {
+    logger,
+  });
 }
 
 export class NodeConversationApiApplicationOpenError extends Error {

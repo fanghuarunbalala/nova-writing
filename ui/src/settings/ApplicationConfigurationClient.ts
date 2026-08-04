@@ -2,6 +2,7 @@
 import type {
   ApplicationConfigurationSnapshot,
   CredentialStatus,
+  ModelConnectionProbeResult,
   RemoveModelConfigurationRequest,
   RemoveModelConfigurationResult,
   SetDefaultModelProfileRequest,
@@ -28,6 +29,8 @@ export interface ApplicationConfigurationClient {
   removeModelConfiguration(
     request: RemoveModelConfigurationRequest,
   ): Promise<RemoveModelConfigurationResult>;
+
+  probeModelConnection(): Promise<ModelConnectionProbeResult>;
 
   getCredentialStatus(credentialRef: string): Promise<CredentialStatus>;
 

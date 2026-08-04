@@ -5,6 +5,7 @@ import type {
   ApiResponse,
   ApplicationConfigurationSnapshot,
   CredentialStatus,
+  ModelConnectionProbeResult,
   RemoveModelConfigurationRequest,
   RemoveModelConfigurationResult,
   SetDefaultModelProfileRequest,
@@ -59,6 +60,7 @@ export interface ElectronConfigurationBridge {
   removeModelConfiguration(
     request: RemoveModelConfigurationRequest,
   ): Promise<ElectronBridgeResult<RemoveModelConfigurationResult>>;
+  probeModelConnection(): Promise<ElectronBridgeResult<ModelConnectionProbeResult>>;
   getCredentialStatus(
     credentialRef: string,
   ): Promise<ElectronBridgeResult<CredentialStatus>>;

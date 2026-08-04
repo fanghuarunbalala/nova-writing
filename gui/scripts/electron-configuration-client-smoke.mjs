@@ -13,6 +13,7 @@ const configuration = {
   upsertModelConfiguration: async (request) => success({ request }),
   setDefaultModelProfile: async (request) => success({ request }),
   removeModelConfiguration: async (request) => success({ request }),
+  probeModelConnection: async () => success({ ok: true, latencyMs: 42 }),
   getCredentialStatus: async () => success("missing"),
   saveCredential: async () => success({ acknowledged: true }),
   deleteCredential: async () => success({ acknowledged: true }),
@@ -25,6 +26,10 @@ assert.deepEqual(
   await client.upsertModelConfiguration({ operation: "upsert" }),
   { request: { operation: "upsert" } },
 );
+assert.deepEqual(await client.probeModelConnection(), {
+  ok: true,
+  latencyMs: 42,
+});
 
 const composition = createDesktopRendererComposition({
   window: {

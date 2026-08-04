@@ -4,6 +4,7 @@ import type {
   ApiResponse,
   ApplicationConfigurationSnapshot,
   CredentialStatus,
+  ModelConnectionProbeResult,
   RemoveModelConfigurationRequest,
   RemoveModelConfigurationResult,
   SetDefaultModelProfileRequest,
@@ -97,6 +98,10 @@ export function createElectronPreloadBridge(
         invoke<RemoveModelConfigurationResult>(
           ELECTRON_CONFIGURATION_IPC_CHANNEL.modelRemove,
           request,
+        ),
+      probeModelConnection: () =>
+        invoke<ModelConnectionProbeResult>(
+          ELECTRON_CONFIGURATION_IPC_CHANNEL.modelProbe,
         ),
       getCredentialStatus: (credentialRef: string) =>
         invoke<CredentialStatus>(

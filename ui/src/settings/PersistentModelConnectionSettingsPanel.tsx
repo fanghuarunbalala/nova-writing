@@ -3,6 +3,7 @@ import type {
   ApplicationConfigurationSnapshot,
   ModelApi,
   ModelConnectionSnapshot,
+  ModelConnectionProbeResult,
   ModelProfileSnapshot,
   ProviderKind,
 } from "@novel/core";
@@ -76,6 +77,8 @@ export function PersistentModelConnectionSettingsPanel({
   const [draft, setDraft] = useState<ModelConnectionDraft>();
   const [status, setStatus] = useState("正在读取配置…");
   const [saving, setSaving] = useState(false);
+  const [probing, setProbing] = useState(false);
+  const [probe, setProbe] = useState<ModelConnectionProbeResult>();
 
   useEffect(() => {
     let active = true;
@@ -199,6 +202,26 @@ export function PersistentModelConnectionSettingsPanel({
     }
   }
 
+  async function probeConnection(): Promise<void> {
+    if (probing) return;
+    setProbing(true);
+    setProbe(undefined);
+    setStatus("正在测试连接…");
+    try {
+      const result = await configuration.probeModelConnection();
+      setProbe(result);
+      setStatus(
+        result.ok
+          ? `连接成功（${result.latencyMs}ms）`
+          : `连接失败：${result.failure}`,
+      );
+    } catch (error) {
+      setStatus(`连接测试失败：${getErrorCode(error)}`);
+    } finally {
+      setProbing(false);
+    }
+  }
+
   return (
     <section className="novel-model-settings" aria-label="模型设置">
       <header className="novel-model-settings-header">
@@ -208,6 +231,13 @@ export function PersistentModelConnectionSettingsPanel({
           <p>模型配置持久化到 Config；API Key 由 Host 凭据存储保存。</p>
         </div>
         <button
+          disabled={snapshot === undefined || saving || probing}
+          onClick={() => void probeConnection()}
+          type="button"
+        >
+          测试连接
+        </button>
+        <button
           disabled={snapshot === undefined || saving}
           onClick={() => setDraft(NEW_CONNECTION_DRAFT)}
           type="button"
@@ -215,6 +245,14 @@ export function PersistentModelConnectionSettingsPanel({
           新增模型连接
         </button>
       </header>
+
+      {probe !== undefined ? (
+        <p className="novel-provider-security-note" data-ok={probe.ok} role="status">
+          {probe.ok
+            ? `连接成功 · ${probe.latencyMs}ms`
+            : `连接失败 · ${probe.failure}`}
+        </p>
+      ) : null}
 
       <label className="novel-active-provider-field">
         <span>默认模型</span>

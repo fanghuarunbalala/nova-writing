@@ -37,6 +37,7 @@ export const ELECTRON_CONFIGURATION_IPC_CHANNEL = Object.freeze({
   modelUpsert: "novel.configuration.v1.model.upsert",
   modelDefaultSet: "novel.configuration.v1.model.default.set",
   modelRemove: "novel.configuration.v1.model.remove",
+  modelProbe: "novel.configuration.v1.model.probe",
   credentialStatus: "novel.configuration.v1.credential.status",
   credentialSave: "novel.configuration.v1.credential.save",
   credentialDelete: "novel.configuration.v1.credential.delete",

@@ -17,5 +17,6 @@ export * from "./EffectiveModelExecutionResolver.js";
 export * from "./ModelConfiguration.js";
 export * from "./ModelConfigurationCommand.js";
 export * from "./ModelConfigurationCommandService.js";
+export * from "./ModelConnectionProbe.js";
 export * from "./RuntimeProfile.js";
 export * from "./ScopedConfiguration.js";

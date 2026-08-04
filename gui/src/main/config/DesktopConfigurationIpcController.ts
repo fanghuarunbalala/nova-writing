@@ -67,6 +67,11 @@ export class DesktopConfigurationIpcController {
             request as RemoveModelConfigurationRequest,
           )),
     );
+    ipcMain.handle(ELECTRON_CONFIGURATION_IPC_CHANNEL.modelProbe, (event) =>
+      this.#execute(event.sender.id, () =>
+        this.#service.probeModelConnection(),
+      ),
+    );
     ipcMain.handle(
       ELECTRON_CONFIGURATION_IPC_CHANNEL.credentialStatus,
       (event, reference) =>

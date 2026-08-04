@@ -91,6 +91,7 @@ function resolveConfigurationBridge(
     "deleteCredential",
     "getCredentialStatus",
     "load",
+    "probeModelConnection",
     "removeModelConfiguration",
     "save",
     "saveCredential",
@@ -116,6 +117,7 @@ function resolveConfigurationBridge(
       bridge.setDefaultModelProfile(request),
     removeModelConfiguration: (request: RemoveModelConfigurationRequest) =>
       bridge.removeModelConfiguration(request),
+    probeModelConnection: () => bridge.probeModelConnection(),
     getCredentialStatus: (credentialRef: string) =>
       bridge.getCredentialStatus(credentialRef),
     saveCredential: (credentialRef: string, secret: string) =>

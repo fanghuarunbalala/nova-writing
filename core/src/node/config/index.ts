@@ -1,4 +1,5 @@
 export * from "./EnvironmentCredentialVault.js";
+export * from "./ModelConnectionProbeService.js";
 export * from "./NodeApplicationConfigurationStore.js";
 export * from "./NodeConfigurationHomeResolver.js";
 export * from "./NodeConfigurationStoreErrors.js";

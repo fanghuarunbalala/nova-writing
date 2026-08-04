@@ -17,6 +17,8 @@ class MemoryApplicationConfigurationClient {
   credentials = new Map();
   savedSecrets = [];
   savedSnapshots = [];
+  probeCalls = 0;
+  probeResult = { ok: true, latencyMs: 37 };
   commands;
 
   constructor() {
@@ -74,6 +76,11 @@ class MemoryApplicationConfigurationClient {
     const result = await this.commands.remove(request);
     this.snapshot = result.configuration;
     return { ...result, configuration: this.projectCredentials(result.configuration) };
+  }
+
+  async probeModelConnection() {
+    this.probeCalls += 1;
+    return this.probeResult;
   }
 
   async getCredentialStatus(credentialRef) {
@@ -169,6 +176,14 @@ assert.equal(
   client.savedSnapshots[1].modelConnections[0].credentialConfigured,
   true,
 );
+
+await clickButton("测试连接");
+await waitForReact(() => container.textContent.includes("连接成功 · 37ms"));
+assert.equal(client.probeCalls, 1);
+client.probeResult = { ok: false, failure: "rate_limit" };
+await clickButton("测试连接");
+await waitForReact(() => container.textContent.includes("连接失败 · rate_limit"));
+assert.equal(client.probeCalls, 2);
 
 await act(async () => root.unmount());
 console.log("persistent model connection settings smoke passed");

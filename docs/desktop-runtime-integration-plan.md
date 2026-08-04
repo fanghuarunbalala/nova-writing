@@ -33,9 +33,9 @@ The following production paths already work:
 - Electron Preload and Main expose authorized Configuration IPC;
 - Application Configuration is revisioned and atomically persisted under the
   resolved Configuration Home;
-- Provider secrets are excluded from Configuration snapshots and currently use
-  the legacy Electron Main `safeStorage` credential service pending D4
-  migration;
+- Provider secrets are excluded from Configuration snapshots and use the global
+  permission-restricted plaintext Credential Store; the legacy Electron Main
+  `safeStorage` cipher remains only for startup migration;
 - Workspace selection opens the Node Conversation application;
 - Conversation InputEvents and Runtime presence OutputEvents are durable;
 - Core provides Runtime lifecycle, persistence RPC, process supervision,
@@ -270,6 +270,15 @@ unavailable, conflicting, concurrent, and redacted-log paths. D4-C is next.
 - validate GUI Credential persistence across restart and child-process use
   without returning plaintext to Renderer or Runtime IPC.
 
+D4-C is complete with `DesktopCredentialMigrationCoordinator`, production Main
+composition over `NodePlaintextCredentialStore`, pre-window migration of every
+deduplicated Application proxy, Connection, and secret Header reference, and
+legacy `safeStorage` retention only inside the migration source. The
+`desktop-credential-composition-smoke.mjs` validation proves GUI Configuration
+restart recovery and an independent Node child opening the same global Store
+without receiving plaintext through Renderer or Runtime IPC. Task D4 is
+complete and D5 is next.
+
 ### Task D5: Effective Model Execution Resolver
 
 - load Application, Workspace, Conversation, and Session configuration inputs;
@@ -386,8 +395,9 @@ stderr. Tests must assert redaction on every new failure boundary.
 - D1 is complete by the Model Configuration Command Protocol commit.
 - D2 is complete by the Consistent Model Configuration Service commit.
 - D3 is complete by the Shared UI and Electron Configuration Commands commit.
-- D4-A Plaintext Store and D4-B Legacy `safeStorage` Migration are complete.
-  D4-C Desktop and Child Composition is the next implementation step.
-- D5 through D12 remain pending.
+- D4-A Plaintext Store, D4-B Legacy `safeStorage` Migration, and D4-C Desktop
+  and Child Composition are complete.
+- D5 Effective Model Execution Resolver is the next implementation step. D6
+  through D12 remain pending.
 - Agent-facing Novel Tools and Persistent Agent Team work remain outside this
   active track.

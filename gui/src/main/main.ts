@@ -4,7 +4,10 @@ import { app, dialog, Menu, safeStorage } from "electron";
 import {
   NodeApplicationConfigurationStore,
   NodeConfigurationHomeResolver,
+  NodeCredentialMigrationStateStore,
   NodeEncryptedCredentialStore,
+  NodeLegacyCredentialMigrator,
+  NodePlaintextCredentialStore,
   NodeWorkspaceStoreLocator,
 } from "@novel/core/node";
 import { DesktopBootstrapApiTransport } from "./DesktopBootstrapApiTransport.js";
@@ -12,6 +15,7 @@ import { createDesktopApplicationMenuTemplate } from "./DesktopApplicationMenu.j
 import { resolveDesktopMainPaths } from "./DesktopMainPaths.js";
 import {
   DesktopConfigurationService,
+  DesktopCredentialMigrationCoordinator,
   ElectronSafeStorageCredentialCipher,
 } from "./config/index.js";
 import { createElectronDesktopApplication } from "./createElectronDesktopApplication.js";
@@ -22,14 +26,29 @@ import {
 
 const paths = resolveDesktopMainPaths(import.meta.url);
 const configurationHome = new NodeConfigurationHomeResolver();
+const configurationStore = new NodeApplicationConfigurationStore({
+  homeResolver: configurationHome,
+});
+const plaintextCredentialStore = new NodePlaintextCredentialStore({
+  homeResolver: configurationHome,
+});
+const legacyCredentialStore = new NodeEncryptedCredentialStore({
+  homeResolver: configurationHome,
+  cipher: new ElectronSafeStorageCredentialCipher({ safeStorage }),
+});
+const credentialMigration = new DesktopCredentialMigrationCoordinator({
+  store: configurationStore,
+  migrator: new NodeLegacyCredentialMigrator({
+    legacyStore: legacyCredentialStore,
+    plaintextStore: plaintextCredentialStore,
+    stateStore: new NodeCredentialMigrationStateStore({
+      homeResolver: configurationHome,
+    }),
+  }),
+});
 const configurationService = new DesktopConfigurationService({
-  store: new NodeApplicationConfigurationStore({
-    homeResolver: configurationHome,
-  }),
-  credentials: new NodeEncryptedCredentialStore({
-    homeResolver: configurationHome,
-    cipher: new ElectronSafeStorageCredentialCipher({ safeStorage }),
-  }),
+  store: configurationStore,
+  credentials: plaintextCredentialStore,
 });
 const workspaceService = new DesktopWorkspaceService({
   picker: {
@@ -75,9 +94,15 @@ app.on("before-quit", (event) => {
   void application.stop().finally(() => app.quit());
 });
 
-void application.start().catch(() => {
+void startDesktopApplication().catch(() => {
   console.error(
     JSON.stringify({ level: "error", event: "desktop_main.start_failed" }),
   );
   app.quit();
 });
+
+async function startDesktopApplication(): Promise<void> {
+  await app.whenReady();
+  await credentialMigration.migrateKnownCredentials();
+  await application.start();
+}

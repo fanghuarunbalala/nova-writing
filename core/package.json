@@ -19,6 +19,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "smoke:configuration-foundation": "pnpm build && node scripts/configuration-foundation-smoke.mjs",
+    "smoke:effective-model-execution": "pnpm build && node scripts/effective-model-execution-resolver-smoke.mjs",
     "smoke:node-configuration-store": "pnpm build && node scripts/node-configuration-store-smoke.mjs",
     "smoke:node-credential-store": "pnpm build && node scripts/node-credential-store-smoke.mjs",
     "smoke:node-legacy-credential-migration": "pnpm build && node scripts/node-legacy-credential-migration-smoke.mjs",

@@ -289,6 +289,18 @@ complete and D5 is next.
 - provide stable readiness failures for missing, disabled, unsupported, and
   unavailable configuration states.
 
+D5 is complete with the async `EffectiveModelExecutionResolver`. It loads the
+Application Store plus optional Workspace, Conversation, and Session layers,
+reuses `EffectiveConfigurationResolver` precedence, validates the selected
+Profile and Connection, checks an injected Provider-neutral API support set and
+live primary/secret-Header Credential status, and returns an immutable execution
+descriptor containing Configuration metadata and Credential References but no
+secret values. Stable redacted readiness failures cover unavailable loading,
+unselected or missing Profiles, missing or disabled Connections, unsupported
+APIs, and missing or unavailable Credentials. The
+`effective-model-execution-resolver-smoke.mjs` validation covers all four
+precedence layers and failure boundaries. D6 is next.
+
 ### Task D6: Default Novel Conversation Agent Manifest
 
 - define and assemble the initial `novel.conversation` Agent definition;
@@ -397,7 +409,8 @@ stderr. Tests must assert redaction on every new failure boundary.
 - D3 is complete by the Shared UI and Electron Configuration Commands commit.
 - D4-A Plaintext Store, D4-B Legacy `safeStorage` Migration, and D4-C Desktop
   and Child Composition are complete.
-- D5 Effective Model Execution Resolver is the next implementation step. D6
-  through D12 remain pending.
+- D5 Effective Model Execution Resolver is complete.
+- D6 Default Novel Conversation Agent Manifest is the next implementation step.
+  D7 through D12 remain pending.
 - Agent-facing Novel Tools and Persistent Agent Team work remain outside this
   active track.

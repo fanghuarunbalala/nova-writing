@@ -13,6 +13,7 @@ export * from "./ApplicationSettings.js";
 export * from "./ConfigurationProtocol.js";
 export * from "./ConfigurationStore.js";
 export * from "./EffectiveConfigurationResolver.js";
+export * from "./EffectiveModelExecutionResolver.js";
 export * from "./ModelConfiguration.js";
 export * from "./ModelConfigurationCommand.js";
 export * from "./ModelConfigurationCommandService.js";

@@ -340,6 +340,22 @@ Responsibilities:
 - never mutate Novel domain state;
 - never infer canonical acceptance from an OutputEvent alone.
 
+#### Implemented Canonical-only GUI Read Cache Checkpoint
+
+The shared React shell now owns one non-durable `NovelReadCache` per
+application instance. It caches canonical query snapshots by target key and
+records the canonical revision observed when the Workspace Overview loaded.
+Switching Workspace clears the cache, and observing a new Overview
+`sourceRevision` prunes entries captured under the older revision, so a
+canonical Commit invalidates read state without the GUI keeping its own
+history. The GUI performs no Draft-scope reads: every query uses
+`canonicalNovelQueryScope`, and the cache API keeps the canonical/Draft
+distinction only as a type boundary for later Draft-backed surfaces. Query
+failures expose stable codes and a retry action only for retryable
+transport/remote failures; invalidated entries are simply refetched on the
+next mount. Cache invalidation from outbox-delivered lifecycle Events remains
+wired later through the existing `invalidate` and `clear` boundaries.
+
 ### 7.3 `InspectorStore`
 
 Responsibilities:

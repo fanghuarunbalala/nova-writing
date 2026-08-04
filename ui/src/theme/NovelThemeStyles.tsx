@@ -999,6 +999,33 @@ const NOVEL_THEME_CSS = `
   color: #8a4141;
 }
 
+.novel-query-error-state {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+
+.novel-query-retry {
+  border: 1px solid var(--novel-border);
+  border-radius: 8px;
+  padding: 7px 14px;
+  color: var(--novel-text-primary);
+  background: var(--novel-surface-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.novel-query-retry:hover {
+  border-color: var(--novel-border-strong);
+  background: var(--novel-surface-secondary);
+}
+
+.novel-query-retry:focus-visible {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: 1px;
+}
+
 .novel-query-index-list {
   display: grid;
   gap: 8px;

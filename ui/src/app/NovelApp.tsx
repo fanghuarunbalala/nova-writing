@@ -70,6 +70,7 @@ import type {
 import { useNovelApi } from "../client/index.js";
 import {
   createNovelInspectorRendererRegistry,
+  NovelReadCacheProvider,
   useNovelWorkspaceOverview,
 } from "../novel/index.js";
 
@@ -105,35 +106,37 @@ export function NovelApp(props: NovelAppProps) {
   );
   return (
     <NovelAppProvider {...props}>
-      <ApplicationShellStoreProvider
-        store={props.shellStore}
-        initialState={props.initialShellState}
-      >
-        <ComposerDraftStoreProvider
-          store={props.composerDraftStore}
-          initialDrafts={props.initialComposerDrafts}
+      <NovelReadCacheProvider>
+        <ApplicationShellStoreProvider
+          store={props.shellStore}
+          initialState={props.initialShellState}
         >
-          <InspectorStoreProvider
-            store={props.inspectorStore}
-            initialState={props.initialInspectorState}
+          <ComposerDraftStoreProvider
+            store={props.composerDraftStore}
+            initialDrafts={props.initialComposerDrafts}
           >
-            <ConnectedApplicationShell
-              shell={props.shell}
-              inspectorRenderers={props.inspectorRenderers}
-              conversationCardProjectors={props.conversationCardProjectors}
-              conversationCardRenderers={props.conversationCardRenderers}
-              commandSource={props.commandSource}
-              settingsStore={props.settingsStore ?? defaultSettingsStore}
-              configurationClient={props.configurationClient}
-              workspaceController={
-                props.workspaceController ?? defaultWorkspaceController
-              }
+            <InspectorStoreProvider
+              store={props.inspectorStore}
+              initialState={props.initialInspectorState}
             >
-              {props.children}
-            </ConnectedApplicationShell>
-          </InspectorStoreProvider>
-        </ComposerDraftStoreProvider>
-      </ApplicationShellStoreProvider>
+              <ConnectedApplicationShell
+                shell={props.shell}
+                inspectorRenderers={props.inspectorRenderers}
+                conversationCardProjectors={props.conversationCardProjectors}
+                conversationCardRenderers={props.conversationCardRenderers}
+                commandSource={props.commandSource}
+                settingsStore={props.settingsStore ?? defaultSettingsStore}
+                configurationClient={props.configurationClient}
+                workspaceController={
+                  props.workspaceController ?? defaultWorkspaceController
+                }
+              >
+                {props.children}
+              </ConnectedApplicationShell>
+            </InspectorStoreProvider>
+          </ComposerDraftStoreProvider>
+        </ApplicationShellStoreProvider>
+      </NovelReadCacheProvider>
     </NovelAppProvider>
   );
 }

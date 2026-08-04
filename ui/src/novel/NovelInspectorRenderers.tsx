@@ -18,6 +18,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -34,11 +35,16 @@ import {
   StoryOutlineTreeController,
   type StoryOutlineTreeView,
 } from "../outline/index.js";
+import { useNovelReadCache } from "./NovelReadCacheContext.js";
 
 type QueryState<T> =
   | { readonly phase: "loading" }
   | { readonly phase: "ready"; readonly value: T }
-  | { readonly phase: "error"; readonly code: string };
+  | {
+      readonly phase: "error";
+      readonly code: string;
+      readonly retryable: boolean;
+    };
 
 const DEFAULT_RENDERERS = Object.freeze([
   ["story-outline", StoryOutlineInspector],
@@ -70,9 +76,13 @@ function StoryOutlineInspector({ target }: InspectorRendererProps) {
     ]),
     [api],
   );
-  const state = useInspectorQuery(target, load);
+  const { state, retry } = useInspectorQuery(target, load);
   return (
-    <QueryPresentation state={state} emptyLabel="大纲中还没有故事单元。">
+    <QueryPresentation
+      state={state}
+      emptyLabel="大纲中还没有故事单元。"
+      onRetry={retry}
+    >
       {(value) => <LoadedOutline overview={value[0]} outline={value[1]} />}
     </QueryPresentation>
   );
@@ -128,9 +138,13 @@ function StoryUnitInspector({ target }: InspectorRendererProps) {
     ),
     [api, storyUnitId],
   );
-  const state = useInspectorQuery(target, load);
+  const { state, retry } = useInspectorQuery(target, load);
   return (
-    <QueryPresentation state={state} emptyLabel="故事单元不存在。">
+    <QueryPresentation
+      state={state}
+      emptyLabel="故事单元不存在。"
+      onRetry={retry}
+    >
       {(snapshot) => snapshot.unit === undefined ? null : (
         <NovelDetailList>
           <Detail label="标题" value={snapshot.unit.title} />
@@ -158,9 +172,13 @@ function CharacterIndexInspector({ target }: InspectorRendererProps) {
     () => api.novel.characters.list(canonicalNovelQueryScope),
     [api],
   );
-  const state = useInspectorQuery(target, load);
+  const { state, retry } = useInspectorQuery(target, load);
   return (
-    <QueryPresentation state={state} emptyLabel="还没有人物。">
+    <QueryPresentation
+      state={state}
+      emptyLabel="还没有人物。"
+      onRetry={retry}
+    >
       {(snapshot) => snapshot.characters.length === 0 ? null : (
         <NovelIndexList>
           {snapshot.characters.map((character) => (
@@ -189,9 +207,13 @@ function CharacterDetailInspector({ target }: InspectorRendererProps) {
     ),
     [api, characterId],
   );
-  const state = useInspectorQuery(target, load);
+  const { state, retry } = useInspectorQuery(target, load);
   return (
-    <QueryPresentation state={state} emptyLabel="人物不存在。">
+    <QueryPresentation
+      state={state}
+      emptyLabel="人物不存在。"
+      onRetry={retry}
+    >
       {(snapshot) => snapshot.character === undefined
         ? null
         : <EntityDetail entity={snapshot.character} />}
@@ -206,9 +228,13 @@ function LocationIndexInspector({ target }: InspectorRendererProps) {
     () => api.novel.locations.list(canonicalNovelQueryScope),
     [api],
   );
-  const state = useInspectorQuery(target, load);
+  const { state, retry } = useInspectorQuery(target, load);
   return (
-    <QueryPresentation state={state} emptyLabel="还没有地点。">
+    <QueryPresentation
+      state={state}
+      emptyLabel="还没有地点。"
+      onRetry={retry}
+    >
       {(snapshot) => snapshot.locations.length === 0 ? null : (
         <NovelIndexList>
           {snapshot.locations.map((location) => (
@@ -235,9 +261,13 @@ function LocationDetailInspector({ target }: InspectorRendererProps) {
     ),
     [api, locationId],
   );
-  const state = useInspectorQuery(target, load);
+  const { state, retry } = useInspectorQuery(target, load);
   return (
-    <QueryPresentation state={state} emptyLabel="地点不存在。">
+    <QueryPresentation
+      state={state}
+      emptyLabel="地点不存在。"
+      onRetry={retry}
+    >
       {(snapshot) => snapshot.location === undefined
         ? null
         : <EntityDetail entity={snapshot.location} />}
@@ -252,9 +282,13 @@ function ManuscriptIndexInspector({ target }: InspectorRendererProps) {
     () => api.novel.manuscript.getStructure(canonicalNovelQueryScope),
     [api],
   );
-  const state = useInspectorQuery(target, load);
+  const { state, retry } = useInspectorQuery(target, load);
   return (
-    <QueryPresentation state={state} emptyLabel="正文结构尚未建立。">
+    <QueryPresentation
+      state={state}
+      emptyLabel="正文结构尚未建立。"
+      onRetry={retry}
+    >
       {(snapshot) => snapshot.publication === undefined || snapshot.manuscript === undefined
         ? null
         : (
@@ -284,9 +318,13 @@ function ManuscriptBlockInspector({ target }: InspectorRendererProps) {
     ),
     [api, blockId],
   );
-  const state = useInspectorQuery(target, load);
+  const { state, retry } = useInspectorQuery(target, load);
   return (
-    <QueryPresentation state={state} emptyLabel="正文段落不存在。">
+    <QueryPresentation
+      state={state}
+      emptyLabel="正文段落不存在。"
+      onRetry={retry}
+    >
       {(snapshot) => snapshot.readModel === undefined ? null : (
         <article className="novel-manuscript-block-view">
           <header>
@@ -395,17 +433,32 @@ function NovelIndexButton({
 function QueryPresentation<T>({
   state,
   emptyLabel,
+  onRetry,
   children,
 }: {
   readonly state: QueryState<T>;
   readonly emptyLabel: string;
+  readonly onRetry?: () => void;
   readonly children: (value: T) => ReactNode | null;
 }) {
   if (state.phase === "loading") {
     return <p className="novel-query-empty">正在读取内容…</p>;
   }
   if (state.phase === "error") {
-    return <p className="novel-query-error">内容读取失败（{state.code}）</p>;
+    return (
+      <div className="novel-query-error-state">
+        <p className="novel-query-error">内容读取失败（{state.code}）</p>
+        {state.retryable && onRetry !== undefined ? (
+          <button
+            className="novel-query-retry"
+            type="button"
+            onClick={onRetry}
+          >
+            重试
+          </button>
+        ) : null}
+      </div>
+    );
   }
   return children(state.value) ?? <p className="novel-query-empty">{emptyLabel}</p>;
 }
@@ -413,31 +466,53 @@ function QueryPresentation<T>({
 function useInspectorQuery<T>(
   target: InspectorTarget,
   load: () => Promise<T>,
-): QueryState<T> {
+): { readonly state: QueryState<T>; readonly retry: () => void } {
   const inspectorStore = useInspectorStore();
-  const [state, setState] = useState<QueryState<T>>(Object.freeze({ phase: "loading" }));
+  const cache = useNovelReadCache();
+  const key = `canonical:${target.key}`;
+  const readyKeyRef = useRef<string | undefined>(undefined);
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<QueryState<T>>(() => {
+    const cached = cache.get<T>(key);
+    if (cached === undefined) {
+      return Object.freeze({ phase: "loading" });
+    }
+    readyKeyRef.current = key;
+    return Object.freeze({ phase: "ready", value: cached });
+  });
   useEffect(() => {
+    if (readyKeyRef.current === key) {
+      inspectorStore.markLoaded(target.key);
+      return undefined;
+    }
     let cancelled = false;
     setState(Object.freeze({ phase: "loading" }));
     inspectorStore.markLoading(target.key);
     void load().then(
       (value) => {
         if (cancelled) return;
+        cache.set(key, value);
+        readyKeyRef.current = key;
         setState(Object.freeze({ phase: "ready", value }));
         inspectorStore.markLoaded(target.key);
       },
       (error: unknown) => {
         if (cancelled) return;
         const failure = captureFailure(error);
-        setState(Object.freeze({ phase: "error", code: failure.code }));
+        setState(Object.freeze({
+          phase: "error",
+          code: failure.code,
+          retryable: failure.retryable,
+        }));
         inspectorStore.markError(target.key, failure.code, failure.retryable);
       },
     );
     return () => {
       cancelled = true;
     };
-  }, [inspectorStore, load, target.key]);
-  return state;
+  }, [attempt, cache, inspectorStore, key, load, target.key]);
+  const retry = useCallback(() => setAttempt((value) => value + 1), []);
+  return Object.freeze({ state, retry });
 }
 
 function createOutlineView(

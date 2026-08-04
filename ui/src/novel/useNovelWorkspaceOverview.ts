@@ -5,8 +5,9 @@ import {
   canonicalNovelQueryScope,
   type NovelOverviewSnapshot,
 } from "@novel/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNovelApi } from "../client/index.js";
+import { useNovelReadCache } from "./NovelReadCacheContext.js";
 
 export type NovelWorkspaceOverviewState =
   | { readonly phase: "idle" }
@@ -29,11 +30,25 @@ export function useNovelWorkspaceOverview(
   workspaceId: string | undefined,
 ): NovelWorkspaceOverviewState {
   const { api, logger } = useNovelApi();
+  const cache = useNovelReadCache();
+  const lastWorkspaceIdRef = useRef<string | undefined>(undefined);
   const [state, setState] = useState<NovelWorkspaceOverviewState>(IDLE_STATE);
 
   useEffect(() => {
     if (workspaceId === undefined) {
+      lastWorkspaceIdRef.current = undefined;
       setState(IDLE_STATE);
+      return undefined;
+    }
+    if (lastWorkspaceIdRef.current !== workspaceId) {
+      cache.clear();
+      lastWorkspaceIdRef.current = workspaceId;
+      logger.debug("novel_ui.overview_cache_cleared", { workspaceId });
+    }
+    const cached = cache.get<NovelOverviewSnapshot>("canonical:overview");
+    if (cached !== undefined && cached.workspaceId === workspaceId) {
+      setState(Object.freeze({ phase: "ready", workspaceId, overview: cached }));
+      logger.debug("novel_ui.overview_cache_hit", { workspaceId });
       return undefined;
     }
     let cancelled = false;
@@ -57,10 +72,13 @@ export function useNovelWorkspaceOverview(
           });
           return;
         }
+        cache.noteRevision(overview.sourceRevision);
+        cache.set("canonical:overview", overview);
         setState(Object.freeze({ phase: "ready", workspaceId, overview }));
         logger.debug("novel_ui.overview_load_completed", {
           workspaceId,
           novelId: overview.novelId,
+          sourceRevision: overview.sourceRevision,
         });
       },
       (error: unknown) => {
@@ -77,7 +95,7 @@ export function useNovelWorkspaceOverview(
     return () => {
       cancelled = true;
     };
-  }, [api, logger, workspaceId]);
+  }, [api, cache, logger, workspaceId]);
 
   return state;
 }

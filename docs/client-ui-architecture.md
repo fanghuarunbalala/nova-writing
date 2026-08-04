@@ -298,7 +298,12 @@ Manuscript entries. The default Inspector registry queries and renders an
 ordered Outline tree with status, StoryUnit detail, Character and Location
 indexes and profiles, Publication/Chapter/Block structure, and full Manuscript
 Block text only after explicit selection. Loading, empty, unavailable, and safe
-error states remain transport-neutral; no Novel mutation command is exposed.
+error states remain transport-neutral, and retryable failures expose a retry
+action; no Novel mutation command is exposed. A non-durable canonical-only
+read cache now backs these queries: it is cleared on Workspace switch, pruned
+when the canonical Overview revision changes, never reads Draft scope, and is
+invalidated only through explicit cache boundaries until lifecycle-Event
+wiring lands.
 
 ## 7. One API Router, Multiple Transports
 

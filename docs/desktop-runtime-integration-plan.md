@@ -234,6 +234,12 @@ available. D4 is next.
 - validate save, use, status, delete, missing, corrupted, permission, concurrent,
   lock recovery, atomic replacement, and redacted-log behavior.
 
+D4-A is complete with the exported `NodePlaintextCredentialStore`, hashed
+`.plaintext-credential` records, restrictive directory/file modes, atomic and
+durable replacement, per-Credential cross-instance locks with stale recovery,
+stable Core failures, secret-scoped callback use, and the
+`node-plaintext-credential-store-smoke.mjs` validation. D4-B is next.
+
 #### D4-B: Legacy `safeStorage` Migration
 
 - detect legacy Electron `safeStorage` records without overwriting them in
@@ -371,8 +377,8 @@ stderr. Tests must assert redaction on every new failure boundary.
 - D1 is complete by the Model Configuration Command Protocol commit.
 - D2 is complete by the Consistent Model Configuration Service commit.
 - D3 is complete by the Shared UI and Electron Configuration Commands commit.
-- D4 Child-Accessible Plaintext Credential Store is the next implementation
-  step, beginning with D4-A.
+- D4-A Plaintext Store is complete. D4-B Legacy `safeStorage` Migration is the
+  next implementation step.
 - D5 through D12 remain pending.
 - Agent-facing Novel Tools and Persistent Agent Team work remain outside this
   active track.

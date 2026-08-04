@@ -21,6 +21,7 @@
     "smoke:configuration-foundation": "pnpm build && node scripts/configuration-foundation-smoke.mjs",
     "smoke:node-configuration-store": "pnpm build && node scripts/node-configuration-store-smoke.mjs",
     "smoke:node-credential-store": "pnpm build && node scripts/node-credential-store-smoke.mjs",
+    "smoke:node-plaintext-credential-store": "pnpm build && node scripts/node-plaintext-credential-store-smoke.mjs",
     "smoke:all": "pnpm build && node scripts/core-smoke-suite.mjs",
     "smoke:report": "node scripts/core-smoke-report-smoke.mjs",
     "smoke:novel-foundation": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/novel-foundation-typecheck.ts && node scripts/novel-foundation-smoke.mjs",

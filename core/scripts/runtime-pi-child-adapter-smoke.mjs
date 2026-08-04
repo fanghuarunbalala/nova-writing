@@ -145,9 +145,43 @@ assert.equal(result.outcome, AGENT_RUNTIME_OUTCOME.completed);
 assert.equal(lifecycleController.getTurnSnapshot()?.status, TURN_STATUS.completed);
 
 const serializedLogs = JSON.stringify(records);
+assert.ok(
+  records.some((record) =>
+    record.includes('"pi_runtime_child.adapter_created"'),
+  ),
+  "adapter created log missing",
+);
 for (const token of forbidden) {
   assert.equal(serializedLogs.includes(token), false);
 }
+
+const failingFactory = new PiRuntimeChildAdapterFactory({
+  application: new MemoryApplicationStore(
+    createDefaultApplicationConfiguration().toSnapshot(),
+  ),
+  credentials: fakeCredentials(),
+  resolver,
+  providerExecutionFactory: {
+    create: () => async () => completedStream(assistantMessage("stop")),
+  },
+  logger,
+});
+await assert.rejects(
+  failingFactory.create({
+    configuration: createConfiguration(conversationId),
+    lifecycleController,
+  }),
+);
+assert.ok(
+  records.some((record) => record.includes('"pi_runtime_child.adapter_failed"')),
+  "adapter failed log missing",
+);
+assert.equal(
+  records.some((record) =>
+    record.includes("Effective Model execution is not ready"),
+  ),
+  false,
+);
 console.log("Runtime Pi child adapter smoke passed");
 
 function createConfiguration(cid) {

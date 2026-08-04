@@ -82,6 +82,26 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
     lifecycleController,
     nudgeProviderCalls,
   }: Parameters<RuntimeChildAdapterFactory["create"]>[0]): Promise<AgentRuntimeAdapter> {
+    try {
+      return await this.#createOnce({
+        configuration,
+        lifecycleController,
+        nudgeProviderCalls,
+      });
+    } catch (error) {
+      this.#logger.error("pi_runtime_child.adapter_failed", {
+        conversationId: configuration.conversationId,
+        failure: captureStableFailure(error),
+      });
+      throw error;
+    }
+  }
+
+  async #createOnce({
+    configuration,
+    lifecycleController,
+    nudgeProviderCalls,
+  }: Parameters<RuntimeChildAdapterFactory["create"]>[0]): Promise<AgentRuntimeAdapter> {
     const conversationId = configuration.conversationId;
     const descriptor = await this.#resolver.resolve({
       application: this.#application,
@@ -126,4 +146,13 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
     });
     return adapter;
   }
+}
+
+function captureStableFailure(error: unknown): string {
+  if (error instanceof Error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && code.length > 0) return code;
+    return error.name;
+  }
+  return "unknown";
 }

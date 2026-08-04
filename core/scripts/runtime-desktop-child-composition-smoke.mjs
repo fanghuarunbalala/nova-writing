@@ -177,9 +177,50 @@ try {
   assert.equal(exit.kind, "stopped");
 
   const serializedLogs = JSON.stringify(records);
+  assert.ok(
+    records.some((record) =>
+      record.includes('"runtime_child.composition_created"'),
+    ),
+    "composition created log missing",
+  );
   for (const token of forbidden) {
     assert.equal(serializedLogs.includes(token), false);
   }
+
+  const failingFactory = new DesktopRuntimeChildCompositionFactory({
+    manifestStoreProvider: async () => {
+      throw new TypeError("FORBIDDEN_CHILD_MANIFEST");
+    },
+    adapterFactory: {
+      async create() {
+        throw new Error("unused");
+      },
+    },
+    contextCompilerFactory: {
+      async create() {
+        throw new Error("unused");
+      },
+    },
+    preparationSourceFactory: {
+      async create() {
+        throw new Error("unused");
+      },
+    },
+    logger,
+  });
+  await assert.rejects(
+    failingFactory.create(bootstrap, { persistence: createPersistence() }),
+  );
+  assert.ok(
+    records.some((record) =>
+      record.includes('"runtime_child.composition_failed"'),
+    ),
+    "composition failed log missing",
+  );
+  assert.equal(
+    records.some((record) => record.includes("FORBIDDEN_CHILD_MANIFEST")),
+    false,
+  );
 } finally {
   await manifestStore?.close();
   await rm(temporaryRoot, { recursive: true, force: true });

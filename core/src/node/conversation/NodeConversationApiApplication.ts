@@ -214,6 +214,7 @@ export class NodeConversationApiApplication {
     const context = this.store.createMessageProjectionContext({
       projector: new CoreRuntimeMessageProjector(),
     });
+    this.logger.debug("node_conversation_api.runtime_persistence_bound");
     return Object.freeze({
       journalReader: this.store.journal,
       journalService: this.journal,

@@ -105,12 +105,17 @@ export class PiProviderExecutionFactory {
         context,
         options,
       );
+      this.#logger.debug("pi_provider_execution.stream_created", {
+        api: descriptor.api,
+      });
     } catch (error) {
       await hooks.onFailedBeforeDispatch(undefined);
-      return createFailureStream(
-        classifyProviderFailure({ message: errorMessageOf(error), status: state.status }),
-        descriptor.api,
-      );
+      const failure = classifyProviderFailure({
+        message: errorMessageOf(error),
+        status: state.status,
+      });
+      this.#logger.info("pi_provider_execution.failed", { failure });
+      return createFailureStream(failure, descriptor.api);
     }
     return this.#normalize(stream, state, hooks, descriptor.api);
   }
@@ -204,6 +209,7 @@ export class PiProviderExecutionFactory {
         }
         output.push(event);
         if (event.type === "done") {
+          this.#logger.debug("pi_provider_execution.completed", { api });
           output.end(event.message);
           return asPiStream(output);
         }

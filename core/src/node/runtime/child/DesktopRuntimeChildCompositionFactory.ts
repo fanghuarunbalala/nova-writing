@@ -160,6 +160,21 @@ export class DesktopRuntimeChildCompositionFactory
     bootstrap: ConversationRuntimeBootstrap,
     context: RuntimeChildCompositionContext,
   ): Promise<RuntimeChildRuntime> {
+    try {
+      return await this.#createOnce(bootstrap, context);
+    } catch (error) {
+      this.#logger.error("runtime_child.composition_failed", {
+        conversationId: bootstrap?.conversation?.metadata?.id,
+        failure: captureStableFailure(error),
+      });
+      throw error;
+    }
+  }
+
+  async #createOnce(
+    bootstrap: ConversationRuntimeBootstrap,
+    context: RuntimeChildCompositionContext,
+  ): Promise<RuntimeChildRuntime> {
     const conversationId = bootstrap.conversation.metadata.id;
     const runtimeInstanceId = bootstrap.runtimeInstanceId;
     const logger = this.#logger.child({ conversationId });
@@ -398,6 +413,15 @@ class ChildRuntimeOutputPublisher implements ConversationOutputEventPublisher {
         recordedAt: receipt.recordedAt,
       }));
   }
+}
+
+function captureStableFailure(error: unknown): string {
+  if (error instanceof Error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && code.length > 0) return code;
+    return error.name;
+  }
+  return "unknown";
 }
 
 function createChildNudgeCoordinator(options: {

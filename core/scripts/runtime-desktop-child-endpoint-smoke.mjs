@@ -30,9 +30,11 @@ let persistenceCalls = 0;
 const fixturePath = fileURLToPath(
   new URL("./fixtures/runtime-desktop-child-persistence.mjs", import.meta.url),
 );
+const records = [];
 const placement = createChildProcessConversationRuntimePlacement({
   command: process.execPath,
   args: [fixturePath],
+  logger: createLogger(records),
   exitNormalizer: new RuntimeProcessExitNormalizer({
     clock: { now: () => "2026-08-04T08:00:02.000Z" },
   }),
@@ -113,6 +115,12 @@ assert.deepEqual(await withTimeout(handle.waitForExit()), {
 });
 await placement.close();
 assert.equal(persistenceCalls, 1);
+assert.ok(
+  records.some((record) =>
+    record.includes('"desktop_runtime_child_endpoint.persistence_bound"'),
+  ),
+  "persistence bound log missing",
+);
 
 console.log("Desktop Runtime child endpoint smoke passed");
 
@@ -160,4 +168,15 @@ function withTimeout(promise) {
       );
     }),
   ]);
+}
+
+function createLogger(records) {
+  const logger = {
+    debug: (event, fields = {}) => records.push(JSON.stringify({ event, fields })),
+    info: (event, fields = {}) => records.push(JSON.stringify({ event, fields })),
+    warn: (event, fields = {}) => records.push(JSON.stringify({ event, fields })),
+    error: (event, fields = {}) => records.push(JSON.stringify({ event, fields })),
+    child: () => logger,
+  };
+  return logger;
 }

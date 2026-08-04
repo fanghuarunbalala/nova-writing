@@ -75,6 +75,9 @@ export class DesktopRuntimeChildEndpointFactory
       messageStore: persistence.messageStore,
       logger: this.#logger,
     });
+    this.#logger.debug("desktop_runtime_child_endpoint.persistence_bound", {
+      conversationId,
+    });
     const delegate = new ParentRuntimeChildEndpointFactory({
       requestHandler: handler,
       requestErrorMapper: handler,

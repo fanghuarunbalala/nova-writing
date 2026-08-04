@@ -34,7 +34,7 @@ export class DefaultRuntimeRunPreparationSourceFactory
     persistence,
   }: Parameters<RuntimeRunPreparationSourceFactory["create"]>[0]) {
     const conversationId = bootstrap.conversation.metadata.id;
-    return new ProjectedUserMessageRunPreparationSource({
+    const source = new ProjectedUserMessageRunPreparationSource({
       conversationId,
       projections: createChildProjectionService(conversationId),
       messages: {
@@ -44,6 +44,10 @@ export class DefaultRuntimeRunPreparationSourceFactory
       systemPromptSource: new AgentRuntimeSystemPromptSource(configuration),
       logger: this.#logger,
     });
+    this.#logger.debug("runtime_run_preparation_source.created", {
+      conversationId,
+    });
+    return source;
   }
 }
 

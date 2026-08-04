@@ -44,6 +44,14 @@ for (const api of supportedApis) {
   assert.equal(dispatcher.calls[0].options.apiKey, "secret-credential:primary");
   assert.equal(hooks.calls.some((call) => call.kind === "dispatched"), true);
 }
+assert.ok(
+  records.some((record) => record.includes('"pi_provider_execution.stream_created"')),
+  "provider dispatch debug log missing",
+);
+assert.ok(
+  records.some((record) => record.includes('"pi_provider_execution.completed"')),
+  "provider completion debug log missing",
+);
 
 {
   const dispatcher = createTestDispatcher();

@@ -65,6 +65,7 @@ const workspaceService = new DesktopWorkspaceService({
   }),
   applicationFactory: new DesktopNovelWorkspaceApplicationFactory({
     storageRoot: join(app.getPath("userData"), "novel-storage"),
+    childLogPath: join(app.getPath("userData"), "runtime-child.log"),
   }),
 });
 const bootstrapTransport = new DesktopBootstrapApiTransport();

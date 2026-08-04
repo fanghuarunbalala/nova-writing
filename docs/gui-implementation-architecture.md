@@ -1484,11 +1484,11 @@ Shared React settings
     └─ ApplicationConfigurationClient.saveCredential(ref, secret)
            → Electron Preload fixed IPC
            → DesktopConfigurationService
-           → Electron safeStorage cipher
-           → encrypted Credential Store
+           → NodePlaintextCredentialStore
+           → global NOVEL_HOME/credentials
 ```
 
-The submitted Configuration always carries only the credential reference and a non-authoritative `credentialConfigured: false`. Main validates that the reference is registered, stores the secret separately, and projects the actual credential status on the next load. The API Key is cleared from component state immediately after successful credential persistence and is never returned to Renderer, included in Configuration, retained by `ApplicationSettingsStore`, emitted as an Event, or logged.
+The submitted Configuration always carries only the credential reference and a non-authoritative `credentialConfigured: false`. Main validates that the reference is registered, stores the secret separately, and projects the actual credential status on the next load. Desktop V1 deliberately uses a permission-restricted plaintext record in the global Credential directory; Workdir and Workspace Store never own credentials. The API Key is cleared from component state immediately after successful credential persistence and is never returned to Renderer, included in Configuration, retained by `ApplicationSettingsStore`, emitted as an Event, or logged. Existing Electron `safeStorage` records are migrated through a trusted restart-safe path, while platform Keychain adapters remain deferred behind the same Core interfaces.
 
 The process-local Provider settings implementation remains the Web/Mock fallback when no durable Configuration client is injected. Provider connection testing and applying the default Model Profile to Conversation Runtime activation remain separate steps.
 

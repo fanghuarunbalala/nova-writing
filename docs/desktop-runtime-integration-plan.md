@@ -2,7 +2,7 @@
 
 ## 1. Status and Objective
 
-This plan is the active repository implementation track as of August 3, 2026.
+This plan is the active repository implementation track as of August 4, 2026.
 It connects the existing Electron GUI Configuration and Conversation surfaces
 to the completed provider-neutral Core Runtime and child-process infrastructure.
 
@@ -14,7 +14,7 @@ GUI UserMessageInputEvent
   -> Node child-process Runtime Placement
   -> Manifest-bound Agent Runtime
   -> effective Model Configuration
-  -> child-accessible Credential Vault
+  -> child-accessible Credential Store
   -> Pi-backed Provider execution
   -> durable Assistant OutputEvent
   -> GUI live display and replay
@@ -33,8 +33,9 @@ The following production paths already work:
 - Electron Preload and Main expose authorized Configuration IPC;
 - Application Configuration is revisioned and atomically persisted under the
   resolved Configuration Home;
-- Provider secrets are excluded from Configuration snapshots and encrypted by
-  the Electron Main credential service;
+- Provider secrets are excluded from Configuration snapshots and currently use
+  the legacy Electron Main `safeStorage` credential service pending D4
+  migration;
 - Workspace selection opens the Node Conversation application;
 - Conversation InputEvents and Runtime presence OutputEvents are durable;
 - Core provides Runtime lifecycle, persistence RPC, process supervision,
@@ -64,7 +65,7 @@ flowchart LR
     Preload["Electron Preload bridge"]
     Main["Trusted Electron Main"]
     Config["Application and Workspace Configuration"]
-    Vault["System Credential Vault"]
+    Credentials["Global Node Credential Store"]
     Host["Managed Conversation Host"]
     Child["Node Runtime child process"]
     Manifest["Workspace Agent Manifest"]
@@ -74,11 +75,11 @@ flowchart LR
     Renderer -->|typed command| Preload
     Preload -->|authorized IPC| Main
     Main --> Config
-    Main --> Vault
+    Main --> Credentials
     Main --> Host
     Host -->|Runtime IPC| Child
     Child --> Config
-    Child --> Vault
+    Child --> Credentials
     Child --> Manifest
     Child --> Provider
     Child -->|persistence RPC| Journal
@@ -92,21 +93,33 @@ The following boundaries are accepted:
 2. Renderer and browser surfaces never receive stored Provider credentials.
 3. Provider credentials do not enter Conversation Runtime Bootstrap, Journal,
    OutputEvents, Runtime IPC payloads, Agent Manifest, logs, or diagnostics.
-4. A child-accessible system Credential Vault is the accepted production
-   direction. The first production adapter targets macOS; unavailable platforms
-   fail explicitly rather than falling back to plaintext storage.
-5. Existing Electron `safeStorage` credentials are migrated once through a
-   trusted Main-owned migration path and are not silently discarded.
-6. Public Core Configuration, Conversation, Runtime, IPC, Tool, and Approval
+4. Desktop V1 deliberately uses a child-accessible plaintext Credential Store
+   under the resolved global `NOVEL_HOME/credentials` directory. Credentials
+   never live under Workdir or a Workspace Store, and Configuration persists
+   only the opaque Credential Reference.
+5. The public boundary remains `CredentialStore` and `CredentialVault.use()`.
+   No plaintext getter is added, and Renderer, Runtime Bootstrap, Runtime IPC,
+   Events, Journal, diagnostics, paths, and logs never receive secret values.
+6. `NodePlaintextCredentialStore` hashes Credential References for filenames,
+   creates its directory with mode `0700`, creates credential files with mode
+   `0600`, serializes access per Credential, and replaces records through an
+   atomic temporary-write, file `fsync`, rename, and directory `fsync` flow.
+7. Existing Electron `safeStorage` credentials are migrated once through a
+   trusted, restart-safe Main-owned migration path and are not silently
+   discarded. The legacy cipher remains only for migration compatibility.
+8. macOS Keychain, Windows Credential Manager, and Linux Secret Service adapters
+   are deferred beyond V1 and may replace the plaintext backend behind the same
+   provider-neutral interfaces.
+9. Public Core Configuration, Conversation, Runtime, IPC, Tool, and Approval
    boundaries remain Provider-neutral. Pi remains an internal Runtime adapter.
-7. Model Connection describes vendor/endpoint/credential identity. Model Profile
+10. Model Connection describes vendor/endpoint/credential identity. Model Profile
    describes API protocol, Model ID, parameters, capabilities, and fallbacks.
-8. Effective Configuration precedence remains session over Conversation over
+11. Effective Configuration precedence remains session over Conversation over
    Workspace over Application.
-9. Connection testing and Conversation execution reuse the same effective
+12. Connection testing and Conversation execution reuse the same effective
    configuration resolver and Provider factory; the GUI does not implement a
    separate direct `fetch` path.
-10. Agent Prompt, Tool selection, and Runtime policies are restored from the
+13. Agent Prompt, Tool selection, and Runtime policies are restored from the
     immutable Conversation-bound Agent Manifest rather than hard-coded during
     desktop startup.
 
@@ -133,6 +146,21 @@ provided, the existing Credential Reference remains unchanged.
 
 `credentialConfigured` is a Host projection derived from Credential status. It
 must not be treated as an authoritative persisted Configuration fact.
+
+### 4.1 Desktop V1 Plaintext Threat Model
+
+Desktop V1 accepts that a process running as the same operating-system user, an
+administrator, malware with equivalent filesystem access, or a compromised host
+can read stored API Keys. The plaintext backend therefore does not claim
+encryption at rest or protection from a local account compromise.
+
+The V1 controls are intended to prevent accidental disclosure and unnecessarily
+broad filesystem access: credentials are isolated under the global
+Configuration Home, references are not exposed as filenames, files use
+restrictive permissions, writes are atomic and serialized, and secrets remain
+outside Configuration snapshots and all observable Runtime or UI channels.
+Backups and filesystem snapshots may still contain plaintext records and are
+part of the accepted V1 risk.
 
 ## 5. Task Sequence
 
@@ -192,15 +220,40 @@ flow. The shared React, Electron Client, and Electron Bridge smokes cover the
 new path while compatibility Configuration and Credential methods remain
 available. D4 is next.
 
-### Task D4: Child-Accessible System Credential Vault
+### Task D4: Child-Accessible Plaintext Credential Store
 
-- add Node system Credential backend contracts and stable errors;
-- implement the macOS production adapter;
-- add trusted Electron `safeStorage` migration and migration state;
-- make unsupported platforms return `credential_unavailable` without plaintext
-  fallback;
-- validate configured, missing, unavailable, corrupted, migration, cleanup, and
-  child-use behavior with redacted logs.
+#### D4-A: Plaintext Store
+
+- implement `NodePlaintextCredentialStore` behind the existing
+  `CredentialStore` and `CredentialVault` contracts;
+- resolve records only beneath global `NOVEL_HOME/credentials`, hash Credential
+  References for filenames, and never place secret or reference text in paths;
+- enforce restrictive directory and file permissions, per-Credential locking,
+  atomic replacement, file and directory durability, and stable redacted
+  errors;
+- validate save, use, status, delete, missing, corrupted, permission, concurrent,
+  lock recovery, atomic replacement, and redacted-log behavior.
+
+#### D4-B: Legacy `safeStorage` Migration
+
+- detect legacy Electron `safeStorage` records without overwriting them in
+  place;
+- migrate through `NodeEncryptedCredentialStore.use()` into a distinct
+  plaintext record layout;
+- verify the new record before deleting the old record;
+- persist restart-safe, idempotent migration state without recording secret
+  values;
+- validate interrupted, repeated, failed, and successful migration behavior.
+
+#### D4-C: Desktop and Child Composition
+
+- make Electron Main use `NodePlaintextCredentialStore` for production writes
+  and reads after migration;
+- let the Runtime Child open the same global store directly through the public
+  `CredentialVault.use()` boundary;
+- retain Electron `safeStorage` and the legacy cipher only for migration;
+- validate GUI Credential persistence across restart and child-process use
+  without returning plaintext to Renderer or Runtime IPC.
 
 ### Task D5: Effective Model Execution Resolver
 
@@ -243,7 +296,7 @@ available. D4 is next.
 
 - add the desktop child entrypoint and production composition factory;
 - restore the Manifest-bound Agent assembly;
-- resolve Model execution and use the system Credential Vault;
+- resolve Model execution and use the child-accessible Credential Store;
 - create the Pi Provider, Pi Agent adapter, context compiler, Runtime policy,
   Nudge services, input pump, and Conversation Runtime;
 - retain persistence ownership behind existing Runtime persistence RPC.
@@ -284,7 +337,7 @@ flowchart TD
     D0["D0 Track activation"] --> D1["D1 Command protocol"]
     D1 --> D2["D2 Consistent service"]
     D2 --> D3["D3 UI and IPC"]
-    D3 --> D4["D4 System Credential Vault"]
+    D3 --> D4["D4 Plaintext Credential Store"]
     D4 --> D5["D5 Effective resolver"]
     D5 --> D6["D6 Agent Manifest"]
     D5 --> D7["D7 Provider factory"]
@@ -318,7 +371,8 @@ stderr. Tests must assert redaction on every new failure boundary.
 - D1 is complete by the Model Configuration Command Protocol commit.
 - D2 is complete by the Consistent Model Configuration Service commit.
 - D3 is complete by the Shared UI and Electron Configuration Commands commit.
-- D4 Child-Accessible System Credential Vault is the next implementation step.
+- D4 Child-Accessible Plaintext Credential Store is the next implementation
+  step, beginning with D4-A.
 - D5 through D12 remain pending.
 - Agent-facing Novel Tools and Persistent Agent Team work remain outside this
   active track.

@@ -29,9 +29,12 @@ import {
   JournalConversationEventSubscriptionService,
   PublishingConversationJournalService,
   type ConversationCatalogStore,
+  type ConversationMessageFileQuery,
   type WorkspaceStoreLocation,
 } from "../../storage/index.js";
 import { SqliteWorkspaceStore } from "../sqlite/index.js";
+import { CoreRuntimeMessageProjector } from "../../runtime/message/projection/index.js";
+import type { DesktopRuntimeChildPersistence } from "../runtime/child/index.js";
 import { DefaultNovelAgentBindingConversationCatalog } from "./DefaultNovelAgentBindingConversationCatalog.js";
 
 export interface NodeConversationApiApplicationOptions {
@@ -205,6 +208,20 @@ export class NodeConversationApiApplication {
     if (failures.length > 0) {
       throw new NodeConversationApiApplicationCloseError(failures);
     }
+  }
+
+  async getRuntimePersistence(): Promise<DesktopRuntimeChildPersistence> {
+    const context = this.store.createMessageProjectionContext({
+      projector: new CoreRuntimeMessageProjector(),
+    });
+    return Object.freeze({
+      journalReader: this.store.journal,
+      journalService: this.journal,
+      messageStore: Object.freeze({
+        list: (query: ConversationMessageFileQuery) =>
+          context.messages.list(query),
+      }),
+    });
   }
 }
 

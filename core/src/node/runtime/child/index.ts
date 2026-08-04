@@ -1,4 +1,5 @@
 export * from "./DesktopRuntimeChildCompositionFactory.js";
+export * from "./DesktopRuntimeChildEndpointFactory.js";
 export * from "./DesktopRuntimeChildEntrypoint.js";
 export * from "./ParentRuntimeChildEndpoint.js";
 export * from "./PiRuntimeChildAdapterFactory.js";

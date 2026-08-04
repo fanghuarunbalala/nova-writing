@@ -299,7 +299,8 @@ secret values. Stable redacted readiness failures cover unavailable loading,
 unselected or missing Profiles, missing or disabled Connections, unsupported
 APIs, and missing or unavailable Credentials. The
 `effective-model-execution-resolver-smoke.mjs` validation covers all four
-precedence layers and failure boundaries. D6 is next.
+precedence layers and failure boundaries. D6 is complete by the Default Novel
+Conversation Agent Manifest commits.
 
 ### Task D6: Default Novel Conversation Agent Manifest
 
@@ -308,6 +309,24 @@ precedence layers and failure boundaries. D6 is next.
 - bind new Conversations to immutable Manifest ID and digest values;
 - inject the Manifest Store into production bootstrap composition;
 - prove restart restoration and strict missing/digest-mismatch behavior.
+
+D6 is complete. The production `DefaultNovelConversationManifestProvisioner`
+assembles the accepted `novelAgentDefinition` through the shared
+`AgentAssembler` with a deterministic `manifest:novel_agent:1.0.0` identity,
+persists it idempotently in the Workspace SQLite Agent Manifest Store
+(get-first reuse with restart restoration; `manifest_conflict` and identity
+mismatch normalized to stable errors), and is composed into
+`NodeConversationApiApplication.open` from
+`DesktopNovelWorkspaceApplicationFactory`. New Conversations for the default
+Agent are bound server-side to the immutable Manifest ID and digest through a
+decorating catalog that leaves the public Router, Catalog service, Client, and
+Transport contracts unchanged and keeps the Renderer store-free. The
+`novel-conversation-manifest-composition`,
+`novel-default-agent-manifest-provisioning`, and `novel-default-agent-binding`
+validations prove the production assembly primitives, idempotent provisioning,
+restart restoration, binding completion, explicit and non-default binding
+pass-through, and strict `agent_manifest_missing` / `agent_manifest_mismatch`
+activation failures with redacted logs. D7 is next.
 
 ### Task D7: Pi Provider Execution Factory
 
@@ -410,7 +429,8 @@ stderr. Tests must assert redaction on every new failure boundary.
 - D4-A Plaintext Store, D4-B Legacy `safeStorage` Migration, and D4-C Desktop
   and Child Composition are complete.
 - D5 Effective Model Execution Resolver is complete.
-- D6 Default Novel Conversation Agent Manifest is the next implementation step.
-  D7 through D12 remain pending.
+- D6 Default Novel Conversation Agent Manifest is complete.
+- D7 Pi Provider Execution Factory is the next implementation step. D8 through
+  D12 remain pending.
 - Agent-facing Novel Tools and Persistent Agent Team work remain outside this
   active track.

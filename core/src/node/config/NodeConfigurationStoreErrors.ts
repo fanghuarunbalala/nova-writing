@@ -11,6 +11,8 @@ export const NODE_CONFIGURATION_STORE_FAILURE = Object.freeze({
   credentialUnavailable: "credential_unavailable",
   credentialCorrupted: "credential_corrupted",
   credentialWriteFailed: "credential_write_failed",
+  credentialMigrationConflict: "credential_migration_conflict",
+  credentialMigrationStateCorrupted: "credential_migration_state_corrupted",
 } as const);
 
 export type NodeConfigurationStoreFailure =

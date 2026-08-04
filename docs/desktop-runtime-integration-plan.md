@@ -251,6 +251,15 @@ stable Core failures, secret-scoped callback use, and the
   values;
 - validate interrupted, repeated, failed, and successful migration behavior.
 
+D4-B is complete with `NodeLegacyCredentialMigrator` and
+`NodeCredentialMigrationStateStore`. Known Configuration references migrate
+under per-Credential file locks using durable `started` and `plaintext_saved`
+markers; interrupted copies and deletes resume idempotently, ambiguous unmarked
+dual records fail with a stable conflict, and secrets remain scoped to the
+source `use()` callback. The `node-legacy-credential-migration-smoke.mjs`
+validation covers missing, successful, repeated, interrupted, corrupted,
+unavailable, conflicting, concurrent, and redacted-log paths. D4-C is next.
+
 #### D4-C: Desktop and Child Composition
 
 - make Electron Main use `NodePlaintextCredentialStore` for production writes
@@ -377,8 +386,8 @@ stderr. Tests must assert redaction on every new failure boundary.
 - D1 is complete by the Model Configuration Command Protocol commit.
 - D2 is complete by the Consistent Model Configuration Service commit.
 - D3 is complete by the Shared UI and Electron Configuration Commands commit.
-- D4-A Plaintext Store is complete. D4-B Legacy `safeStorage` Migration is the
-  next implementation step.
+- D4-A Plaintext Store and D4-B Legacy `safeStorage` Migration are complete.
+  D4-C Desktop and Child Composition is the next implementation step.
 - D5 through D12 remain pending.
 - Agent-facing Novel Tools and Persistent Agent Team work remain outside this
   active track.

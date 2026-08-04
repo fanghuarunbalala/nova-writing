@@ -6,6 +6,21 @@ This plan is the active repository implementation track as of August 4, 2026.
 It connects the existing Electron GUI Configuration and Conversation surfaces
 to the completed provider-neutral Core Runtime and child-process infrastructure.
 
+The Desktop Runtime Integration track is complete as of the D12 acceptance
+commit. The desktop Conversation flow is validated end to end:
+
+```text
+GUI UserMessageInputEvent
+  -> ManagedConversationHost
+  -> Node child-process Runtime Placement
+  -> Manifest-bound Agent Runtime
+  -> effective Model Configuration
+  -> child-accessible Credential Store
+  -> Pi-backed Provider execution
+  -> durable Assistant OutputEvent
+  -> GUI live display and replay
+```
+
 The objective is one real, replayable desktop Conversation flow:
 
 ```text
@@ -385,6 +400,22 @@ activation failures with redacted logs. D7 is next.
   Web, and CLI validation suite;
 - publish completion evidence and mark this track complete.
 
+D12 is complete. The `electron-e2e-conversation-acceptance` smoke drives the
+full production desktop chain through the GUI Workspace factory: it opens the
+Workspace application with a child-process placement, creates a Conversation
+bound to the default Novel Agent Manifest, enqueues a UserMessageInputEvent,
+spawns the desktop child main with the real Pi adapter and a deterministic
+fake Provider stream, restores the Manifest from the child-accessible Workspace
+store, publishes Assistant lifecycle OutputEvents through the real persistence
+RPC, and then closes and reopens the Workspace to prove durable refresh replay
+with a clean child shutdown (the child shutdown ack race is handled by the
+parent handle). The complete Core smoke suite (207/207), the root build, and
+the GUI/UI validation suites pass; stop, retry, and abnormal-exit behavior
+remain covered by the existing runtime stop/cancellation, failure-degradation,
+and host-child integration smokes. An opt-in real Provider smoke is not added
+because the deterministic fake Provider path and the existing redaction
+assertions cover the same failure boundaries without network access.
+
 ## 6. Dependency Order
 
 ```mermaid
@@ -430,7 +461,13 @@ stderr. Tests must assert redaction on every new failure boundary.
   and Child Composition are complete.
 - D5 Effective Model Execution Resolver is complete.
 - D6 Default Novel Conversation Agent Manifest is complete.
-- D7 Pi Provider Execution Factory is the next implementation step. D8 through
-  D12 remain pending.
+- D7 Pi Provider Execution Factory is complete.
+- D8 Real Model Connection Probe is complete.
+- D9 Desktop Runtime Child Composition Root is complete.
+- D10 Desktop Runtime Placement Wiring is complete.
+- D11 Runtime Status and Recovery UX is complete.
+- D12 End-to-End Desktop Conversation Acceptance is complete.
+- The Desktop Runtime Integration track D0 through D12 is complete. Persistent
+  Agent Team work resumes only after an explicit track change.
 - Agent-facing Novel Tools and Persistent Agent Team work remain outside this
   active track.

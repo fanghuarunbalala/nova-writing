@@ -85,6 +85,8 @@ export interface RuntimeChildAdapterFactory {
     readonly configuration: AgentRuntimeConfiguration;
     readonly lifecycleController: TurnController;
     readonly nudgeProviderCalls?: NudgeProviderCallCoordinatorType;
+    readonly eventSink: PublishingRuntimeEventSink;
+    readonly eventIdFactory: RuntimeEventIdFactory;
   }): Promise<AgentRuntimeAdapter>;
 }
 
@@ -230,6 +232,8 @@ export class DesktopRuntimeChildCompositionFactory
       configuration,
       lifecycleController,
       nudgeProviderCalls,
+      eventSink,
+      eventIdFactory,
     });
     const assembly = new AgentRuntimeExecutionAssembly({
       configuration,

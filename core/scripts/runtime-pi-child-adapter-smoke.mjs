@@ -110,6 +110,8 @@ const adapter = await factory.create({
   configuration: createConfiguration(conversationId),
   lifecycleController,
   nudgeProviderCalls: createNudgeCoordinator(),
+  eventSink,
+  eventIdFactory,
 });
 const compiler = new BaseContextCompiler({ logger });
 await lifecycleController.beginRun({

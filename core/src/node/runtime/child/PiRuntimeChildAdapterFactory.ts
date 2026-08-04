@@ -15,6 +15,7 @@ import {
   CompositePiAgentEventBridge,
   CorePiRuntimeMessageConverter,
   PiAgentCoreAdapter,
+  PiAssistantOutputBridge,
   PiAiProviderExecutionDispatcher,
   PiProviderExecutionFactory,
   PiTurnLifecycleBridge,
@@ -81,12 +82,16 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
     configuration,
     lifecycleController,
     nudgeProviderCalls,
+    eventSink,
+    eventIdFactory,
   }: Parameters<RuntimeChildAdapterFactory["create"]>[0]): Promise<AgentRuntimeAdapter> {
     try {
       return await this.#createOnce({
         configuration,
         lifecycleController,
         nudgeProviderCalls,
+        eventSink,
+        eventIdFactory,
       });
     } catch (error) {
       this.#logger.error("pi_runtime_child.adapter_failed", {
@@ -101,6 +106,8 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
     configuration,
     lifecycleController,
     nudgeProviderCalls,
+    eventSink,
+    eventIdFactory,
   }: Parameters<RuntimeChildAdapterFactory["create"]>[0]): Promise<AgentRuntimeAdapter> {
     const conversationId = configuration.conversationId;
     const descriptor = await this.#resolver.resolve({
@@ -125,6 +132,13 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
       new PiTurnLifecycleBridge({
         conversationId,
         lifecycleController,
+        logger: this.#logger,
+      }),
+      new PiAssistantOutputBridge({
+        conversationId,
+        turnStateReader: lifecycleController,
+        eventIdFactory,
+        eventSink,
         logger: this.#logger,
       }),
     ]);

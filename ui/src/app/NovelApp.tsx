@@ -68,6 +68,10 @@ import type {
   ApplicationCommandSource,
 } from "../command/index.js";
 import { useNovelApi } from "../client/index.js";
+import {
+  createNovelInspectorRendererRegistry,
+  useNovelWorkspaceOverview,
+} from "../novel/index.js";
 
 export interface NovelAppProps extends NovelAppProviderProps {
   readonly shell?: Omit<ApplicationShellProps, "children">;
@@ -162,6 +166,8 @@ function ConnectedApplicationShell({
   const { api, logger } = useNovelApi();
   const extensions = useNovelUiExtensions();
   const workspaceSnapshot = useWorkspaceControllerSnapshot(workspaceController);
+  const workspaceId = workspaceSnapshot.current?.id ?? snapshot.workspace?.id;
+  const novelOverview = useNovelWorkspaceOverview(workspaceId);
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const conversationCatalog = useMemo(
@@ -188,6 +194,30 @@ function ConnectedApplicationShell({
     () => new ProjectNavigationController({ shellStore, inspectorStore }),
     [inspectorStore, shellStore],
   );
+  const effectiveInspectorRenderers = useMemo(
+    () => createNovelInspectorRendererRegistry(
+      inspectorRenderers ?? emptyInspectorRendererRegistry,
+    ),
+    [inspectorRenderers],
+  );
+  useEffect(() => {
+    if (
+      novelOverview.phase !== "ready" ||
+      novelOverview.workspaceId !== workspaceId
+    ) {
+      return;
+    }
+    shellStore.setNovel({
+      id: novelOverview.overview.novelId,
+      label: workspaceSnapshot.current?.label ?? snapshot.workspace?.label ?? "小说",
+    });
+  }, [
+    novelOverview,
+    shellStore,
+    snapshot.workspace?.label,
+    workspaceId,
+    workspaceSnapshot.current?.label,
+  ]);
   const openCardInspector = (card: ConversationCardDescriptor): void => {
     if (card.inspectorTarget === undefined) return;
     inspectorStore.open(card.inspectorTarget, {
@@ -292,6 +322,8 @@ function ConnectedApplicationShell({
     onOpenSettings:
       shell?.onOpenSettings ?? (() => setSettingsDialogOpen(true)),
     onToggleSidebar: shell?.onToggleSidebar ?? toggleSidebar,
+    navigationDetails:
+      shell?.navigationDetails ?? createNavigationDetails(novelOverview),
     onNavigate:
       shell?.onNavigate ?? ((item) => {
         if (item === "new-conversation") {
@@ -319,7 +351,7 @@ function ConnectedApplicationShell({
     inspector:
       shell?.inspector ?? (
         <InspectorPanel
-          registry={inspectorRenderers ?? emptyInspectorRendererRegistry}
+          registry={effectiveInspectorRenderers}
         />
       ),
     emptyState:
@@ -379,6 +411,38 @@ function ConnectedApplicationShell({
       onOpenComposerReference={openComposerReference}
     />
   );
+}
+
+function createNavigationDetails(
+  state: ReturnType<typeof useNovelWorkspaceOverview>,
+): ApplicationShellProps["navigationDetails"] {
+  if (state.phase === "loading") {
+    return Object.freeze({
+      outline: Object.freeze({ badge: "…", state: "loading" }),
+      characters: Object.freeze({ badge: "…", state: "loading" }),
+      locations: Object.freeze({ badge: "…", state: "loading" }),
+      manuscript: Object.freeze({ badge: "…", state: "loading" }),
+    });
+  }
+  if (state.phase === "error") {
+    return Object.freeze({
+      outline: Object.freeze({ badge: "!", state: "error" }),
+      characters: Object.freeze({ badge: "!", state: "error" }),
+      locations: Object.freeze({ badge: "!", state: "error" }),
+      manuscript: Object.freeze({ badge: "!", state: "error" }),
+    });
+  }
+  if (state.phase !== "ready") return undefined;
+  const counts = state.overview.counts;
+  return Object.freeze({
+    outline: Object.freeze({ badge: String(counts.storyUnitCount), state: "ready" }),
+    characters: Object.freeze({ badge: String(counts.characterCount), state: "ready" }),
+    locations: Object.freeze({ badge: String(counts.locationCount), state: "ready" }),
+    manuscript: Object.freeze({
+      badge: `${counts.chapterCount}/${counts.manuscriptBlockCount}`,
+      state: "ready",
+    }),
+  });
 }
 
 function BoundConversationShell({

@@ -11,6 +11,7 @@ import { InspectorHost, type InspectorMode } from "./InspectorHost.js";
 import {
   ProjectSidebar,
   type ConversationSidebarItem,
+  type ProjectNavigationDetail,
   type ProjectNavigationItem,
 } from "./ProjectSidebar.js";
 import { TopMenu } from "./TopMenu.js";
@@ -19,6 +20,9 @@ import type { SidebarMode } from "../state/index.js";
 export interface ApplicationShellProps {
   readonly context?: CurrentContextBarProps;
   readonly conversations?: readonly ConversationSidebarItem[];
+  readonly navigationDetails?: Partial<
+    Readonly<Record<ProjectNavigationItem, ProjectNavigationDetail>>
+  >;
   readonly onNavigate?: (item: ProjectNavigationItem) => void;
   readonly onConversationSelect?: (conversationId: string) => void;
   readonly onOpenWorkspace?: () => void;
@@ -39,6 +43,7 @@ export interface ApplicationShellProps {
 export function ApplicationShell({
   context,
   conversations,
+  navigationDetails,
   onNavigate,
   onConversationSelect,
   onOpenWorkspace,
@@ -83,6 +88,7 @@ export function ApplicationShell({
         <ProjectSidebar
           mode={sidebarMode}
           conversations={conversations}
+          navigationDetails={navigationDetails}
           onNavigate={onNavigate}
           onConversationSelect={onConversationSelect}
         />

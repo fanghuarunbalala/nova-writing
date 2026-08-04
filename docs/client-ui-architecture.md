@@ -291,6 +291,15 @@ validates every response envelope, converts safe remote failures into
 `ApiRemoteError`, and strictly captures every returned Novel snapshot. React
 query binding remains the next separate checkpoint.
 
+The shared React shell now performs that binding. Opening a Workspace loads the
+canonical Novel Overview, binds the Novel identity into Shell context, and
+shows SQLite-derived counts beside the left Outline, Character, Location, and
+Manuscript entries. The default Inspector registry queries and renders an
+ordered Outline tree with status, StoryUnit detail, Character and Location
+indexes and profiles, Publication/Chapter/Block structure, and full Manuscript
+Block text only after explicit selection. Loading, empty, unavailable, and safe
+error states remain transport-neutral; no Novel mutation command is exposed.
+
 ## 7. One API Router, Multiple Transports
 
 Transport adapters must not implement separate business behavior.

@@ -13,9 +13,17 @@ export interface ConversationSidebarItem {
   readonly active?: boolean;
 }
 
+export interface ProjectNavigationDetail {
+  readonly badge?: string;
+  readonly state?: "loading" | "ready" | "error";
+}
+
 export interface ProjectSidebarProps {
   readonly mode?: "expanded" | "collapsed";
   readonly conversations?: readonly ConversationSidebarItem[];
+  readonly navigationDetails?: Partial<
+    Readonly<Record<ProjectNavigationItem, ProjectNavigationDetail>>
+  >;
   readonly onNavigate?: (item: ProjectNavigationItem) => void;
   readonly onConversationSelect?: (conversationId: string) => void;
 }
@@ -36,6 +44,7 @@ const NAVIGATION_ITEMS: readonly {
 export function ProjectSidebar({
   mode = "expanded",
   conversations = [],
+  navigationDetails = {},
   onNavigate,
   onConversationSelect,
 }: ProjectSidebarProps) {
@@ -43,19 +52,26 @@ export function ProjectSidebar({
     <aside className="novel-project-sidebar" data-sidebar-mode={mode} aria-label="项目导航">
       <section className="novel-sidebar-section">
         <h2 className="novel-sidebar-heading">创作</h2>
-        {NAVIGATION_ITEMS.map((item) => (
-          <button
-            className="novel-sidebar-button"
-            key={item.id}
-            type="button"
-            onClick={() => onNavigate?.(item.id)}
-          >
-            <span className="novel-sidebar-marker" aria-hidden="true">
-              {item.marker}
-            </span>
-            <span className="novel-sidebar-label">{item.label}</span>
-          </button>
-        ))}
+        {NAVIGATION_ITEMS.map((item) => {
+          const detail = navigationDetails[item.id];
+          return (
+            <button
+              className="novel-sidebar-button"
+              data-query-state={detail?.state}
+              key={item.id}
+              type="button"
+              onClick={() => onNavigate?.(item.id)}
+            >
+              <span className="novel-sidebar-marker" aria-hidden="true">
+                {item.marker}
+              </span>
+              <span className="novel-sidebar-label">{item.label}</span>
+              {detail?.badge !== undefined ? (
+                <span className="novel-sidebar-detail">{detail.badge}</span>
+              ) : null}
+            </button>
+          );
+        })}
       </section>
       <section className="novel-sidebar-section">
         <h2 className="novel-sidebar-heading">对话</h2>

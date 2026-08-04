@@ -255,6 +255,27 @@ The parameterized contract suite verifies:
 
 These adapters are testing utilities rather than production Electron IPC or network implementations. They simulate protocol placement and failure semantics without pretending to provide authentication, sockets, process isolation, SQLite durability, or Runtime execution.
 
+### 6.3 Implemented Novel Query Protocol Checkpoint
+
+The platform-neutral client protocol now defines nine version-1 read operations
+for Novel overview, Outline tree and StoryUnit detail, Character list and
+detail, Location list and detail, Manuscript structure, and Manuscript Block
+detail. Every request carries an explicit canonical or Conversation-Draft query
+scope; no transport payload implicitly selects or merges Draft state.
+
+Responses use immutable JSON-safe snapshots rather than Node adapters, SQLite
+handles, domain service instances, or UI components. Outline responses preserve
+the validated ordered StoryUnit tree plus derived progress, entity responses
+preserve stable profiles and versions, and Manuscript structure responses carry
+Publication hierarchy plus text-free Block summaries. Full Block text is
+returned only by the Block-detail response.
+
+Strict capture functions reject unknown fields, invalid identities, malformed
+tree relations, duplicate entities or blocks, inconsistent progress, invalid
+Publication/Manuscript ownership, and non-SHA-256 digests after a JSON round
+trip. Router registration, `DefaultNovelApiClient.novel`, and React query
+binding remain the next separate checkpoints.
+
 ## 7. One API Router, Multiple Transports
 
 Transport adapters must not implement separate business behavior.

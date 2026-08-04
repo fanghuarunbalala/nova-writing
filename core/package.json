@@ -53,6 +53,7 @@
     "smoke:novel-recovery-coordinator": "pnpm build && node scripts/novel-recovery-coordinator-smoke.mjs",
     "smoke:novel-rebase-recovery": "pnpm build && node scripts/novel-rebase-recovery-smoke.mjs",
     "smoke:novel-projection-recovery": "pnpm build && node scripts/novel-projection-recovery-smoke.mjs",
+    "smoke:novel-query-protocol": "pnpm build && node scripts/novel-query-protocol-smoke.mjs",
     "smoke:novel-projection-sqlite": "pnpm build && node scripts/novel-projection-sqlite-smoke.mjs",
     "smoke:novel-commit-recovery-stage": "pnpm build && node scripts/novel-commit-recovery-stage-smoke.mjs",
     "smoke:novel-recovery-stage-adapters": "pnpm build && node scripts/novel-recovery-stage-adapters-smoke.mjs",

@@ -63,7 +63,9 @@ const workspaceService = new DesktopWorkspaceService({
   locator: new NodeWorkspaceStoreLocator({
     storageRoot: join(app.getPath("userData"), "novel-storage"),
   }),
-  applicationFactory: new DesktopNovelWorkspaceApplicationFactory(),
+  applicationFactory: new DesktopNovelWorkspaceApplicationFactory({
+    storageRoot: join(app.getPath("userData"), "novel-storage"),
+  }),
 });
 const bootstrapTransport = new DesktopBootstrapApiTransport();
 const application = createElectronDesktopApplication({

@@ -5,8 +5,13 @@ import type {
   ConversationRuntimePlacement,
   Logger,
   WorkspaceStoreLocation,
+  ApiTransport,
 } from "@novel/core";
-import { NodeConversationApiApplication } from "@novel/core/node";
+import {
+  NodeConversationApiApplication,
+  NodeConversationProcessSupervisor,
+} from "@novel/core/node";
+import { createDesktopRuntimePlacement } from "../runtime/index.js";
 import type {
   DesktopWorkspaceApiApplication,
   DesktopWorkspaceApiApplicationFactory,
@@ -14,29 +19,83 @@ import type {
 
 export interface DesktopConversationApiApplicationFactoryOptions {
   readonly placement?: ConversationRuntimePlacement;
+  readonly storageRoot?: string;
   readonly logger?: Logger;
 }
 
 export class DesktopConversationApiApplicationFactory
   implements DesktopWorkspaceApiApplicationFactory
 {
-  private readonly placement: ConversationRuntimePlacement;
+  private readonly placementOverride?: ConversationRuntimePlacement;
+  private readonly storageRoot?: string;
   private readonly logger?: Logger;
 
   constructor(options: DesktopConversationApiApplicationFactoryOptions = {}) {
-    this.placement =
-      options.placement ?? new DesktopUnavailableConversationRuntimePlacement();
+    this.placementOverride = options.placement;
+    this.storageRoot = options.storageRoot;
     this.logger = options.logger;
   }
 
-  open(
+  async open(
     location: WorkspaceStoreLocation,
   ): Promise<DesktopWorkspaceApiApplication> {
-    return NodeConversationApiApplication.open({
-      workspace: location,
-      placement: this.placement,
-      ...(this.logger !== undefined ? { logger: this.logger } : {}),
-    });
+    let application: NodeConversationApiApplication | undefined;
+    let runtimePlacement: NodeConversationProcessSupervisor | undefined;
+    const placement =
+      this.placementOverride ??
+      createDesktopRuntimePlacement({
+        storageRoot: requireStorageRoot(this.storageRoot, location),
+        applicationProvider: async () => application,
+        ...(this.logger === undefined ? {} : { logger: this.logger }),
+      });
+    runtimePlacement =
+      placement instanceof NodeConversationProcessSupervisor
+        ? placement
+        : undefined;
+    try {
+      application = await NodeConversationApiApplication.open({
+        workspace: location,
+        placement,
+        ...(this.logger !== undefined ? { logger: this.logger } : {}),
+      });
+      return new DesktopConversationRuntimeApplication(
+        application,
+        runtimePlacement,
+      );
+    } catch (error) {
+      await runtimePlacement?.close().catch(() => undefined);
+      throw error;
+    }
+  }
+}
+
+function requireStorageRoot(
+  configured: string | undefined,
+  location: WorkspaceStoreLocation,
+): string {
+  if (configured !== undefined && configured.length > 0) return configured;
+  throw new TypeError(
+    `Desktop Runtime storage root is not configured for ${location.workspaceId}`,
+  );
+}
+
+class DesktopConversationRuntimeApplication
+  implements DesktopWorkspaceApiApplication
+{
+  readonly transport: ApiTransport;
+
+  constructor(
+    private readonly application: NodeConversationApiApplication,
+    private readonly runtimePlacement: NodeConversationProcessSupervisor | undefined,
+  ) {
+    this.transport = application.transport;
+  }
+
+  close(): Promise<void> {
+    return Promise.allSettled([
+      this.application.close(),
+      this.runtimePlacement?.close() ?? Promise.resolve(),
+    ]).then(() => undefined);
   }
 }
 

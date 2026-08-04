@@ -11,7 +11,9 @@ declare const locator: NodeWorkspaceStoreLocator;
 const service = new DesktopWorkspaceService({
   picker: { pickDirectory: async () => undefined },
   locator,
-  applicationFactory: new DesktopNovelWorkspaceApplicationFactory(),
+  applicationFactory: new DesktopNovelWorkspaceApplicationFactory({
+    storageRoot: "/tmp/storage",
+  }),
 });
 const transport = service.resolveTransport(1);
 const api = transport === undefined ? undefined : new DefaultNovelApiClient({ transport });

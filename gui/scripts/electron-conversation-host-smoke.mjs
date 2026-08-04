@@ -26,7 +26,9 @@ const locator = new NodeWorkspaceStoreLocator({
 const service = new DesktopWorkspaceService({
   picker: { pickDirectory: async () => workspaceRoot },
   locator,
-  applicationFactory: new DesktopNovelWorkspaceApplicationFactory(),
+  applicationFactory: new DesktopNovelWorkspaceApplicationFactory({
+    storageRoot: join(root, "storage"),
+  }),
 });
 const reference = await service.select(1);
 assert.ok(reference);

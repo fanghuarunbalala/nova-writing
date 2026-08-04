@@ -198,15 +198,22 @@ const blockedPlan = reconciler.reconcile({
   turn: activeTurn,
 });
 const blocked = createDependencies();
-await assert.rejects(
-  () => blocked.executor.execute(blockedPlan),
-  (error) =>
-    error instanceof RuntimeStartupExecutionError &&
-    error.failure === RUNTIME_STARTUP_EXECUTION_FAILURE.recoveryRequired,
+const blockedResult = await blocked.executor.execute(blockedPlan);
+assert.equal(blockedResult.repairCommits.length, 1);
+assert.equal(blockedResult.routeResults.length, 1);
+assert.equal(blockedResult.routeResults[0].sequence, controlInput.sequence);
+assert.equal(
+  blocked.turnController.getRunSnapshot().status,
+  RUN_STATUS.failed,
 );
-assert.equal(blocked.sink.events.length, 0);
-assert.equal(blocked.inputRouter.peekNext(), undefined);
-assert.equal(blocked.executor.getSnapshot().status, RUNTIME_STARTUP_EXECUTION_STATUS.idle);
+assert.equal(
+  blocked.turnController.getTurnSnapshot().status,
+  TURN_STATUS.failed,
+);
+assert.equal(
+  blocked.executor.getSnapshot().status,
+  RUNTIME_STARTUP_EXECUTION_STATUS.completed,
+);
 
 const rawFailure = new Error("FORBIDDEN_STARTUP_EXECUTOR_RAW_ERROR");
 const repairLogs = [];

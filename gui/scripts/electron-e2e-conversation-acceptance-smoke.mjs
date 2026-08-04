@@ -45,11 +45,13 @@ try {
     args: [fixturePath],
     env: { [DESKTOP_CHILD_STORAGE_ROOT_ENV]: storageRoot },
     persistenceProvider: {
-      provide: async () => {
+      provide: async (bootstrap) => {
         if (application === undefined) {
           throw new TypeError("application is not open");
         }
-        return application.getRuntimePersistence();
+        return application.getRuntimePersistence(
+          bootstrap.conversation.metadata.id,
+        );
       },
     },
     logger: parentLogger,

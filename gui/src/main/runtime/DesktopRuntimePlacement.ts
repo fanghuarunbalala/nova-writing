@@ -2,6 +2,7 @@
 import { fileURLToPath } from "node:url";
 import type { Logger } from "@novel/core";
 import {
+  DESKTOP_CHILD_LOG_ENV,
   DESKTOP_CHILD_STORAGE_ROOT_ENV,
   NodeConversationProcessSupervisor,
   createChildProcessConversationRuntimePlacement,
@@ -9,11 +10,12 @@ import {
 } from "@novel/core/node";
 
 export interface DesktopRuntimeApplicationPersistenceProvider {
-  getRuntimePersistence(): Promise<DesktopRuntimeChildPersistence>;
+  getRuntimePersistence(conversationId: string): Promise<DesktopRuntimeChildPersistence>;
 }
 
 export interface CreateDesktopRuntimePlacementOptions {
   readonly storageRoot: string;
+  readonly childLogPath?: string;
   readonly applicationProvider: () => Promise<
     DesktopRuntimeApplicationPersistenceProvider | undefined
   >;
@@ -32,16 +34,21 @@ export function createDesktopRuntimePlacement(
     env: {
       ELECTRON_RUN_AS_NODE: "1",
       [DESKTOP_CHILD_STORAGE_ROOT_ENV]: options.storageRoot,
+      ...(options.childLogPath === undefined
+        ? {}
+        : { [DESKTOP_CHILD_LOG_ENV]: options.childLogPath }),
     },
     persistenceProvider: {
-      provide: async () => {
+      provide: async (bootstrap) => {
         const application = await options.applicationProvider();
         if (application === undefined) {
           throw new TypeError(
             "Desktop Conversation application is not open",
           );
         }
-        return application.getRuntimePersistence();
+        return application.getRuntimePersistence(
+          bootstrap.conversation.metadata.id,
+        );
       },
     },
     ...(options.logger === undefined ? {} : { logger: options.logger }),

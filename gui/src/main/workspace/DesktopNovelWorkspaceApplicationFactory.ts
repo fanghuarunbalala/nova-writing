@@ -27,6 +27,7 @@ import type {
 export interface DesktopNovelWorkspaceApplicationFactoryOptions {
   readonly placement?: ConversationRuntimePlacement;
   readonly storageRoot?: string;
+  readonly childLogPath?: string;
   readonly agentManifestProvisioner?: AgentManifestProvisioner;
   readonly readinessPolicy?: EntityProfileReadinessPolicy;
   readonly logger?: Logger;
@@ -37,6 +38,7 @@ export class DesktopNovelWorkspaceApplicationFactory
 {
   private readonly placementOverride?: ConversationRuntimePlacement;
   private readonly storageRoot?: string;
+  private readonly childLogPath?: string;
   private readonly agentManifestProvisioner: AgentManifestProvisioner;
   private readonly readinessPolicy: EntityProfileReadinessPolicy;
   private readonly logger: Logger;
@@ -44,6 +46,7 @@ export class DesktopNovelWorkspaceApplicationFactory
   constructor(options: DesktopNovelWorkspaceApplicationFactoryOptions = {}) {
     this.placementOverride = options.placement;
     this.storageRoot = options.storageRoot;
+    this.childLogPath = options.childLogPath;
     this.agentManifestProvisioner =
       options.agentManifestProvisioner ??
       new DefaultNovelConversationManifestProvisioner({
@@ -68,6 +71,9 @@ export class DesktopNovelWorkspaceApplicationFactory
         this.placementOverride ??
         createDesktopRuntimePlacement({
           storageRoot: requireStorageRoot(this.storageRoot, location),
+          ...(this.childLogPath === undefined
+            ? {}
+            : { childLogPath: this.childLogPath }),
           applicationProvider: async () => conversationApplication,
           logger,
         });
@@ -172,8 +178,10 @@ class DesktopNovelWorkspaceApplication implements DesktopWorkspaceApiApplication
     }
   }
 
-  getRuntimePersistence(): Promise<DesktopRuntimeChildPersistence> {
-    return this.conversationApplication.getRuntimePersistence();
+  getRuntimePersistence(
+    conversationId: string,
+  ): Promise<DesktopRuntimeChildPersistence> {
+    return this.conversationApplication.getRuntimePersistence(conversationId);
   }
 }
 

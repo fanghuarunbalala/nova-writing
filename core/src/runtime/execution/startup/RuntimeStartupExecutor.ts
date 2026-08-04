@@ -16,10 +16,18 @@ import type {
   RuntimeInputRouteResult,
 } from "../input/InputRouter.js";
 import { RuntimeInputQueueFullError } from "../input/RuntimeInputErrors.js";
-import { RUN_STATUS } from "../RunLifecycle.js";
+import {
+  RUN_STATE_CHANGE_REASON,
+  RUN_STATUS,
+  type RunStatus,
+} from "../RunLifecycle.js";
 import { RunStateMachine } from "../state/RunStateMachine.js";
 import { TurnStateMachine } from "../state/TurnStateMachine.js";
-import { TURN_STATUS } from "../TurnLifecycle.js";
+import {
+  TURN_STATE_CHANGE_REASON,
+  TURN_STATUS,
+  type TurnStatus,
+} from "../TurnLifecycle.js";
 import {
   RUNTIME_STARTUP_LIFECYCLE_DISPOSITION,
   type RuntimeStartupOutcomeRepair,
@@ -149,7 +157,9 @@ export class RuntimeStartupExecutor {
       }
       if (
         capturedPlan.lifecycleDisposition !==
-        RUNTIME_STARTUP_LIFECYCLE_DISPOSITION.ready
+          RUNTIME_STARTUP_LIFECYCLE_DISPOSITION.ready &&
+        capturedPlan.lifecycleDisposition !==
+          RUNTIME_STARTUP_LIFECYCLE_DISPOSITION.recoveryRequired
       ) {
         throw this.error(
           capturedPlan.throughSequence,
@@ -279,6 +289,13 @@ export class RuntimeStartupExecutor {
       }
     }
 
+    if (
+      active.plan.lifecycleDisposition ===
+      RUNTIME_STARTUP_LIFECYCLE_DISPOSITION.recoveryRequired
+    ) {
+      await this.recoverOrphanedLifecycle(active);
+    }
+
     active.status = RUNTIME_STARTUP_EXECUTION_STATUS.routing;
     while (active.routeIndex < active.plan.routableInputs.length) {
       const input = active.plan.routableInputs[active.routeIndex];
@@ -356,6 +373,63 @@ export class RuntimeStartupExecutor {
     );
     return result;
   }
+
+  private async recoverOrphanedLifecycle(
+    active: ActiveExecution,
+  ): Promise<void> {
+    const turn = this.turnController.getTurnSnapshot();
+    if (turn !== undefined && !isTerminalTurnStatus(turn.status)) {
+      try {
+        await this.turnController.transitionTurn(
+          {
+            current: TURN_STATUS.failed,
+            reason: TURN_STATE_CHANGE_REASON.turnFailed,
+          },
+          {},
+        );
+      } catch {
+        active.status = RUNTIME_STARTUP_EXECUTION_STATUS.failed;
+        throw this.error(
+          active.plan.throughSequence,
+          RUNTIME_STARTUP_EXECUTION_FAILURE.restoreFailed,
+        );
+      }
+    }
+    const run = this.turnController.getRunSnapshot();
+    if (run !== undefined && !isTerminalRunStatus(run.status)) {
+      try {
+        await this.turnController.transitionRun(
+          {
+            current: RUN_STATUS.failed,
+            reason: RUN_STATE_CHANGE_REASON.executionFailed,
+          },
+          {},
+        );
+      } catch {
+        active.status = RUNTIME_STARTUP_EXECUTION_STATUS.failed;
+        throw this.error(
+          active.plan.throughSequence,
+          RUNTIME_STARTUP_EXECUTION_FAILURE.restoreFailed,
+        );
+      }
+    }
+  }
+}
+
+function isTerminalRunStatus(status: RunStatus): boolean {
+  return (
+    status === RUN_STATUS.completed ||
+    status === RUN_STATUS.failed ||
+    status === RUN_STATUS.cancelled
+  );
+}
+
+function isTerminalTurnStatus(status: TurnStatus): boolean {
+  return (
+    status === TURN_STATUS.completed ||
+    status === TURN_STATUS.failed ||
+    status === TURN_STATUS.cancelled
+  );
 }
 
 function capturePlan(plan: RuntimeStartupPlan, conversationId: string): RuntimeStartupPlan {

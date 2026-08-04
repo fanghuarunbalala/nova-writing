@@ -261,14 +261,16 @@ const activeReplay = Object.freeze({
   }),
 });
 const recovery = createActualCoordinator(new StaticReplayPlanner(activeReplay));
-await assert.rejects(
-  () => recovery.coordinator.start(bootstrap(8)),
-  (error) =>
-    error instanceof RuntimeBootstrapStartupError &&
-    error.failure === RUNTIME_BOOTSTRAP_STARTUP_FAILURE.recoveryRequired,
+const recoveryResult = await recovery.coordinator.start(bootstrap(8));
+assert.equal(
+  recoveryResult.activationReason,
+  CONVERSATION_RUNTIME_ACTIVATION_REASON.explicitRestore,
 );
-assert.equal(recovery.sink.events.length, 0);
-assert.equal(recovery.inputRouter.peekNext(), undefined);
+assert.equal(recoveryResult.outcomeRepairCount, 1);
+assert.equal(recoveryResult.routedInputCount, 1);
+assert.equal(recoveryResult.restoredRunId, activeReplay.run.runId);
+assert.equal(recovery.inputRouter.peekNext().id, controlInput.id);
+assert.equal(recovery.sink.events.length > 0, true);
 
 const replayRawError = new Error("FORBIDDEN_BOOTSTRAP_REPLAY_RAW_ERROR");
 const replayLogs = [];

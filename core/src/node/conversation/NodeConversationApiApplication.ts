@@ -210,7 +210,9 @@ export class NodeConversationApiApplication {
     }
   }
 
-  async getRuntimePersistence(): Promise<DesktopRuntimeChildPersistence> {
+  async getRuntimePersistence(
+    _conversationId: string,
+  ): Promise<DesktopRuntimeChildPersistence> {
     const context = this.store.createMessageProjectionContext({
       projector: new CoreRuntimeMessageProjector(),
     });
@@ -219,8 +221,10 @@ export class NodeConversationApiApplication {
       journalReader: this.store.journal,
       journalService: this.journal,
       messageStore: Object.freeze({
-        list: (query: ConversationMessageFileQuery) =>
-          context.messages.list(query),
+        list: async (query: ConversationMessageFileQuery) => {
+          await context.projections.synchronize(query.conversationId);
+          return context.messages.list(query);
+        },
       }),
     });
   }

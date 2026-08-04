@@ -36,7 +36,7 @@ export class DefaultRuntimeRunPreparationSourceFactory
     const conversationId = bootstrap.conversation.metadata.id;
     const source = new ProjectedUserMessageRunPreparationSource({
       conversationId,
-      projections: createChildProjectionService(conversationId),
+      projections: createChildProjectionService(conversationId, persistence),
       messages: {
         list: (query: Parameters<ConversationMessageFileStore["list"]>[0]) =>
           persistence.messages.list(query),
@@ -53,6 +53,7 @@ export class DefaultRuntimeRunPreparationSourceFactory
 
 function createChildProjectionService(
   conversationId: string,
+  persistence: Parameters<RuntimeRunPreparationSourceFactory["create"]>[0]["persistence"],
 ): ConversationMessageProjectionService {
   return Object.freeze({
     inspect: async () => {
@@ -60,19 +61,31 @@ function createChildProjectionService(
         "Runtime child projection inspection is outside the desktop V1 scope",
       );
     },
-    synchronize: async () =>
-      Object.freeze({
+    synchronize: async (cid: string) => {
+      const [messagesPage, journalPage] = await Promise.all([
+        persistence.messages.list({
+          conversationId: cid,
+          afterMessageIndex: 0,
+        }),
+        persistence.journal.listEvents({
+          conversationId: cid,
+          anchor: { from: "start" },
+          limit: 1,
+        }),
+      ]);
+      return Object.freeze({
         workspaceId: "desktop-child",
         projectorId: "core.conversation-message",
         projectorVersion: "1",
-        conversationId,
+        conversationId: cid,
         operations: Object.freeze([]),
-        previousSequence: 0,
-        projectedThroughSequence: 0,
-        journalHighWatermark: 0,
-        processedEventCount: 0,
+        previousSequence: messagesPage.projectedThroughSequence,
+        projectedThroughSequence: messagesPage.projectedThroughSequence,
+        journalHighWatermark: journalPage.highWatermark,
+        processedEventCount: messagesPage.items.length,
         appendedMessageCount: 0,
-      }),
+      });
+    },
     rebuild: async () => {
       throw new TypeError(
         "Runtime child projection rebuild is outside the desktop V1 scope",

@@ -1,5 +1,6 @@
 /** Desktop child stdio entrypoint composing the production Runtime. */
 import type { Readable, Writable } from "node:stream";
+import { appendFile } from "node:fs/promises";
 import {
   BaseContextCompiler,
   type AgentRuntimeConfigurationProfileResolver,
@@ -36,6 +37,8 @@ import {
 export const DESKTOP_CHILD_STORAGE_ROOT_ENV =
   "NOVEL_DESKTOP_STORAGE_ROOT" as const;
 
+export const DESKTOP_CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
+
 export interface RunDesktopRuntimeChildEntrypointOptions {
   readonly manifestStoreProvider?: (
     bootstrap: ConversationRuntimeBootstrap,
@@ -56,9 +59,7 @@ export interface RunDesktopRuntimeChildEntrypointOptions {
 export function runDesktopRuntimeChildEntrypoint(
   options: RunDesktopRuntimeChildEntrypointOptions = {},
 ): Promise<RuntimeChildEntrypointResult> {
-  const logger = (options.logger ?? noopLogger).child({
-    component: "desktop_runtime_child_entrypoint",
-  });
+  const logger = createEntrypointLogger(options.logger);
   const homeResolver = options.homeResolver ?? new NodeConfigurationHomeResolver();
   const application =
     options.application ??
@@ -98,6 +99,32 @@ export function runDesktopRuntimeChildEntrypoint(
     ...(options.writable === undefined ? {} : { writable: options.writable }),
     logger,
   });
+}
+
+function createEntrypointLogger(explicit: Logger | undefined): Logger {
+  if (explicit !== undefined) {
+    return explicit.child({ component: "desktop_runtime_child_entrypoint" });
+  }
+  const logPath = process.env[DESKTOP_CHILD_LOG_ENV];
+  if (logPath === undefined || logPath.length === 0) {
+    return noopLogger.child({ component: "desktop_runtime_child_entrypoint" });
+  }
+  const fileLogger: Logger = {
+    debug: () => undefined,
+    info: (event, fields) =>
+      void appendFile(logPath, `INFO ${event} ${safeLogFields(fields)}\n`),
+    warn: (event, fields) =>
+      void appendFile(logPath, `WARN ${event} ${safeLogFields(fields)}\n`),
+    error: (event, fields) =>
+      void appendFile(logPath, `ERROR ${event} ${safeLogFields(fields)}\n`),
+    child: () => fileLogger,
+  };
+  return fileLogger;
+}
+
+function safeLogFields(fields: Readonly<Record<string, unknown>> | undefined): string {
+  if (fields === undefined) return "{}";
+  return JSON.stringify(fields);
 }
 
 function createEnvManifestStoreProvider(

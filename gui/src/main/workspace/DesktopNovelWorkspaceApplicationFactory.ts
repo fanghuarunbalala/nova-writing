@@ -13,6 +13,7 @@ import {
 } from "@novel/core";
 import {
   DefaultNovelConversationManifestProvisioner,
+  type DesktopRuntimeChildPersistence,
   NodeConversationApiApplication,
   NodeNovelWorkspaceHost,
   NodeConversationProcessSupervisor,
@@ -169,6 +170,10 @@ class DesktopNovelWorkspaceApplication implements DesktopWorkspaceApiApplication
     if (failures.length > 0) {
       throw new DesktopNovelWorkspaceApplicationCloseError(failures);
     }
+  }
+
+  getRuntimePersistence(): Promise<DesktopRuntimeChildPersistence> {
+    return this.conversationApplication.getRuntimePersistence();
   }
 }
 

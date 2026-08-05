@@ -1,0 +1,23 @@
+/**
+ * InspectorHost 视觉（原型 .inspector）。
+ */
+.host {
+  position: relative;
+  flex: none;
+  min-height: 0;
+  display: flex;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.pending {
+  padding: 18px 14px;
+  font-size: var(--fs-body);
+  color: var(--color-faint);
+}

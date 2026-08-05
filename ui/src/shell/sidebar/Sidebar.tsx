@@ -1,7 +1,9 @@
 /**
  * Sidebar
  *
- * 左侧栏容器（对齐原型）：创建对话 + 内容组 + 对话 + 待办 + footing。
+ * 左侧栏容器（对齐原型 + spec 4.3 排序）：
+ * 新建 -> 对话 -> 审批(延后) -> 待办 -> 内容(auto-fill) -> footing。
+ * footing 始终贴底（margin-top: auto 由 WorkspaceFootingSection 提供）。
  */
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import type { NovelOverviewStore } from "../../domains/novel/overview/NovelOverviewStore.js";
@@ -58,10 +60,14 @@ export function Sidebar({
           onSelect={(id) => conversationCatalog.selectConversation(id)}
         />
       </SidebarSection>
-      <ContentSection overview={novelOverview} activePane={contentTab} onSelectPane={onSelectContentPane} />
+      {/*
+        审批 section（ApprovalQueueSection）随 approval 域延后（spec 4.3 / 11）。
+        落地后在此处插入，位于 对话 与 待办 之间。
+      */}
       <SidebarSection label="待办">
         <TodoSection schedule={schedule} scheduleTodo={scheduleTodo} onAction={onTodoAction} />
       </SidebarSection>
+      <ContentSection overview={novelOverview} activePane={contentTab} onSelectPane={onSelectContentPane} />
       <WorkspaceFootingSection
         workspaceId={workspaceId}
         label={workspaceLabel}

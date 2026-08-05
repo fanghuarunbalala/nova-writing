@@ -26,9 +26,11 @@
   letter-spacing: -0.01em;
   white-space: nowrap;
   background: var(--grad-accent);
+  background-size: 220% auto;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  animation: grad-flow 7s ease-in-out infinite;
 }
 
 .wsName {

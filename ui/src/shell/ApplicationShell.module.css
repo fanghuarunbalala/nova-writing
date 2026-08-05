@@ -1,5 +1,8 @@
 /**
  * NovelApplicationShell 布局（原型 .novel-shell 等价）。
+ *
+ * 不设置 background：让 body（global.css）的 radial-gradient 透显，与原型
+ * body 背景（橙色径向渐变 + 底色）一致。.shell 仅承担布局尺寸与 color/font 基线。
  */
 .shell {
   display: flex;
@@ -10,7 +13,6 @@
   min-height: 0;
   overflow: hidden;
   color: var(--color-fg);
-  background: var(--color-bg);
   font-family: var(--font-body);
 }
 
@@ -21,6 +23,5 @@
 }
 
 .body[data-sidebar-mode="collapsed"] .sidebar {
-  width: 0;
-  overflow: hidden;
+  margin-left: calc(-1 * var(--sidebar-width));
 }

@@ -29,10 +29,10 @@
   justify-content: center;
   min-width: 16px;
   height: 16px;
-  padding: 0 5px;
+  padding: 1px 7px;
   border-radius: var(--radius-pill);
-  background: var(--color-surface-2);
-  color: var(--color-muted);
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
   font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-bold);
 }

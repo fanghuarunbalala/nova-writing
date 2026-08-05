@@ -1,9 +1,16 @@
-/** Shared Settings dialog consuming built-in and extension-contributed sections. */
+/**
+ * SettingsDialog
+ *
+ * 设置弹窗（基于共享 Dialog 原语）：左侧分类导航 + 右侧设置面板。
+ * 内置"模型"分类；扩展可通过 sections 注入额外分类。
+ */
 import { useEffect, useState } from "react";
+import { Dialog } from "../shared/primitives/Dialog.js";
 import type { NovelSettingsSection } from "../extensions/index.js";
 import type { ApplicationSettingsStore } from "./ApplicationSettingsStore.js";
 import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
 import { ModelProviderSettingsPanel } from "./ModelProviderSettingsPanel.js";
+import styles from "./SettingsDialog.module.css";
 
 export interface SettingsDialogProps {
   readonly open: boolean;
@@ -24,69 +31,61 @@ export function SettingsDialog({
   useEffect(() => {
     if (open) setActiveSectionId("models");
   }, [open]);
-  if (!open) return null;
   const extensionSection = sections.find(
     (section) => section.id === activeSectionId,
   );
   const ExtensionSection = extensionSection?.component;
   return (
-    <div className="novel-dialog-backdrop" role="presentation">
-      <section
-        aria-label="设置"
-        aria-modal="true"
-        className="novel-dialog novel-settings-dialog"
-        role="dialog"
-      >
-        <header className="novel-dialog-header">
-          <div>
-            <span>Settings</span>
-            <h2>设置</h2>
-          </div>
-          <button aria-label="关闭设置" onClick={onDismiss} type="button">
-            ×
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (!value) onDismiss();
+      }}
+      title="设置"
+      size="xl"
+      footer={
+        <button type="button" onClick={onDismiss}>
+          完成
+        </button>
+      }
+    >
+      <div className={styles.layout}>
+        <nav aria-label="设置分类" className={styles.sidebar}>
+          <button
+            type="button"
+            className={styles.navItem}
+            data-active={activeSectionId === "models"}
+            onClick={() => setActiveSectionId("models")}
+          >
+            模型
           </button>
-        </header>
-        <div className="novel-dialog-content novel-settings-layout">
-          <nav aria-label="设置分类" className="novel-settings-sidebar">
+          {sections.map((section) => (
             <button
-              data-active={activeSectionId === "models"}
-              onClick={() => setActiveSectionId("models")}
               type="button"
+              key={section.id}
+              className={styles.navItem}
+              data-active={activeSectionId === section.id}
+              onClick={() => setActiveSectionId(section.id)}
             >
-              模型
+              {section.title}
             </button>
-            {sections.map((section) => (
-              <button
-                data-active={activeSectionId === section.id}
-                key={section.id}
-                onClick={() => setActiveSectionId(section.id)}
-                type="button"
-              >
-                {section.title}
-              </button>
-            ))}
-          </nav>
-          <div className="novel-settings-content">
-            {activeSectionId === "models" ? (
-              <ModelProviderSettingsPanel
-                store={store}
-                configuration={configuration}
-              />
-            ) : null}
-            {extensionSection !== undefined && ExtensionSection !== undefined ? (
-              <section className="novel-settings-section">
-                <h3>{extensionSection.title}</h3>
-                <ExtensionSection />
-              </section>
-            ) : null}
-          </div>
+          ))}
+        </nav>
+        <div className={styles.content}>
+          {activeSectionId === "models" ? (
+            <ModelProviderSettingsPanel
+              store={store}
+              configuration={configuration}
+            />
+          ) : null}
+          {extensionSection !== undefined && ExtensionSection !== undefined ? (
+            <section className={styles.extensionSection}>
+              <h3 className={styles.extensionTitle}>{extensionSection.title}</h3>
+              <ExtensionSection />
+            </section>
+          ) : null}
         </div>
-        <footer className="novel-dialog-footer">
-          <button onClick={onDismiss} type="button">
-            完成
-          </button>
-        </footer>
-      </section>
-    </div>
+      </div>
+    </Dialog>
   );
 }

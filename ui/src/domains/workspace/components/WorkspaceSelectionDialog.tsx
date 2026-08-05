@@ -1,5 +1,12 @@
-/** Shared Workspace chooser surface backed by WorkspaceController operations. */
+/**
+ * WorkspaceSelectionDialog
+ *
+ * 选择 Workspace 的模态弹窗（基于共享 Dialog 原语）。
+ * 包含：选择按钮 + 错误提示 + 最近使用列表。
+ */
+import { Dialog } from "../../../shared/primitives/Dialog.js";
 import type { WorkspaceControllerSnapshot } from "../controller/WorkspaceController.js";
+import styles from "./WorkspaceSelectionDialog.module.css";
 
 export interface WorkspaceSelectionDialogProps {
   readonly open: boolean;
@@ -18,80 +25,74 @@ export function WorkspaceSelectionDialog({
   onCloseWorkspace,
   onDismiss,
 }: WorkspaceSelectionDialogProps) {
-  if (!open) return null;
   const busy =
     snapshot.phase === "loading" ||
     snapshot.phase === "selecting" ||
     snapshot.phase === "opening" ||
     snapshot.phase === "closing";
   return (
-    <div className="novel-dialog-backdrop" role="presentation">
-      <section
-        aria-label="选择 Workspace"
-        aria-modal="true"
-        className="novel-dialog novel-workspace-dialog"
-        role="dialog"
-      >
-        <header className="novel-dialog-header">
-          <div>
-            <span>Workspace</span>
-            <h2>选择小说项目</h2>
-          </div>
-          <button aria-label="关闭 Workspace 选择" onClick={onDismiss} type="button">
-            ×
-          </button>
-        </header>
-        <div className="novel-dialog-content">
-          <p className="novel-dialog-description">
-            Workspace 对应一个小说项目根目录；当前窗口一次只打开一个 Workspace。
-          </p>
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (!value) onDismiss();
+      }}
+      title="选择小说项目"
+      description="Workspace 对应一个小说项目根目录；当前窗口一次只打开一个 Workspace。"
+      size="md"
+      footer={
+        <>
           <button
-            className="novel-primary-action"
-            disabled={busy}
-            onClick={onChoose}
             type="button"
-          >
-            {snapshot.phase === "selecting" || snapshot.phase === "opening"
-              ? "正在打开…"
-              : "选择 Workspace…"}
-          </button>
-          {snapshot.error !== undefined ? (
-            <p className="novel-dialog-error" role="status">
-              {snapshot.error.message}
-            </p>
-          ) : null}
-          <section className="novel-recent-workspaces">
-            <h3>最近使用</h3>
-            {snapshot.recent.length === 0 ? (
-              <p>暂无最近使用的 Workspace</p>
-            ) : (
-              snapshot.recent.map((workspace) => (
-                <button
-                  disabled={busy}
-                  key={workspace.id}
-                  onClick={() => onOpenRecent(workspace.id)}
-                  type="button"
-                >
-                  <strong>{workspace.label}</strong>
-                  <span>{workspace.id}</span>
-                </button>
-              ))
-            )}
-          </section>
-        </div>
-        <footer className="novel-dialog-footer">
-          <button
             disabled={busy || snapshot.current === undefined}
             onClick={onCloseWorkspace}
-            type="button"
           >
             关闭当前 Workspace
           </button>
-          <button onClick={onDismiss} type="button">
+          <button type="button" onClick={onDismiss}>
             完成
           </button>
-        </footer>
-      </section>
-    </div>
+        </>
+      }
+    >
+      <div className={styles.body}>
+        <button
+          type="button"
+          className={styles.choose}
+          disabled={busy}
+          onClick={onChoose}
+        >
+          {snapshot.phase === "selecting" || snapshot.phase === "opening"
+            ? "正在打开…"
+            : "选择 Workspace…"}
+        </button>
+        {snapshot.error !== undefined ? (
+          <p className={styles.error} role="status">
+            {snapshot.error.message}
+          </p>
+        ) : null}
+        <section className={styles.recent}>
+          <h3 className={styles.recentTitle}>最近使用</h3>
+          {snapshot.recent.length === 0 ? (
+            <p className={styles.recentEmpty}>暂无最近使用的 Workspace</p>
+          ) : (
+            <ul className={styles.recentList}>
+              {snapshot.recent.map((workspace) => (
+                <li key={workspace.id}>
+                  <button
+                    type="button"
+                    className={styles.recentItem}
+                    disabled={busy}
+                    onClick={() => onOpenRecent(workspace.id)}
+                  >
+                    <strong className={styles.recentLabel}>{workspace.label}</strong>
+                    <span className={styles.recentId}>{workspace.id}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </Dialog>
   );
 }

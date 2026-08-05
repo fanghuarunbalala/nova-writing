@@ -50,9 +50,10 @@ for (const label of ["项目", "编辑", "发布", "帮助"]) {
 for (const label of ["新对话", "安排", "大纲", "人物", "地点", "正文"]) {
   assert.match(markup, new RegExp(`>${label}<`));
 }
-for (const value of ["星海计划", "主线大纲", "开篇讨论", "Novel Main"]) {
-  assert.match(markup, new RegExp(value));
-}
+assert.match(markup, /星海计划/);
+assert.match(markup, /开篇讨论/);
+assert.equal(markup.includes("主线大纲"), false);
+assert.equal(markup.includes("Novel Main"), false);
 assert.match(markup, /data-inspector-mode="normal"/);
 assert.match(markup, /aria-label="项目导航"/);
 assert.match(markup, /aria-label="对话工作区"/);

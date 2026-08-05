@@ -1,4 +1,6 @@
 /** Persistent project navigation and Conversation history presentation. */
+import { useState } from "react";
+
 export type ProjectNavigationItem =
   | "new-conversation"
   | "schedule"
@@ -13,11 +15,23 @@ export interface ConversationSidebarItem {
   readonly active?: boolean;
 }
 
+export interface ProjectNavigationDetail {
+  readonly badge?: string;
+  readonly state?: "loading" | "ready" | "error";
+}
+
 export interface ProjectSidebarProps {
   readonly mode?: "expanded" | "collapsed";
   readonly conversations?: readonly ConversationSidebarItem[];
+  readonly navigationDetails?: Partial<
+    Readonly<Record<ProjectNavigationItem, ProjectNavigationDetail>>
+  >;
   readonly onNavigate?: (item: ProjectNavigationItem) => void;
   readonly onConversationSelect?: (conversationId: string) => void;
+  readonly onConversationEdit?: (
+    conversationId: string,
+    action: "delete",
+  ) => void;
 }
 
 const NAVIGATION_ITEMS: readonly {
@@ -36,26 +50,38 @@ const NAVIGATION_ITEMS: readonly {
 export function ProjectSidebar({
   mode = "expanded",
   conversations = [],
+  navigationDetails = {},
   onNavigate,
   onConversationSelect,
+  onConversationEdit,
 }: ProjectSidebarProps) {
+  const [openConversationMenu, setOpenConversationMenu] = useState<
+    string | undefined
+  >();
   return (
     <aside className="novel-project-sidebar" data-sidebar-mode={mode} aria-label="项目导航">
       <section className="novel-sidebar-section">
         <h2 className="novel-sidebar-heading">创作</h2>
-        {NAVIGATION_ITEMS.map((item) => (
-          <button
-            className="novel-sidebar-button"
-            key={item.id}
-            type="button"
-            onClick={() => onNavigate?.(item.id)}
-          >
-            <span className="novel-sidebar-marker" aria-hidden="true">
-              {item.marker}
-            </span>
-            <span className="novel-sidebar-label">{item.label}</span>
-          </button>
-        ))}
+        {NAVIGATION_ITEMS.map((item) => {
+          const detail = navigationDetails[item.id];
+          return (
+            <button
+              className="novel-sidebar-button"
+              data-query-state={detail?.state}
+              key={item.id}
+              type="button"
+              onClick={() => onNavigate?.(item.id)}
+            >
+              <span className="novel-sidebar-marker" aria-hidden="true">
+                {item.marker}
+              </span>
+              <span className="novel-sidebar-label">{item.label}</span>
+              {detail?.badge !== undefined ? (
+                <span className="novel-sidebar-detail">{detail.badge}</span>
+              ) : null}
+            </button>
+          );
+        })}
       </section>
       <section className="novel-sidebar-section">
         <h2 className="novel-sidebar-heading">对话</h2>
@@ -65,18 +91,57 @@ export function ProjectSidebar({
           </div>
         ) : (
           conversations.map((conversation) => (
-            <button
-              className="novel-sidebar-button"
-              data-active={conversation.active === true}
+            <div
+              className="novel-sidebar-conversation-row"
               key={conversation.id}
-              type="button"
-              onClick={() => onConversationSelect?.(conversation.id)}
+              style={{
+                position: "relative",
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+              }}
             >
-              <span className="novel-sidebar-marker" aria-hidden="true">
-                ●
-              </span>
-              <span className="novel-sidebar-label">{conversation.title}</span>
-            </button>
+              <button
+                className="novel-sidebar-button"
+                data-active={conversation.active === true}
+                style={{ flex: 1 }}
+                type="button"
+                onClick={() => onConversationSelect?.(conversation.id)}
+              >
+                <span className="novel-sidebar-marker" aria-hidden="true">
+                  ●
+                </span>
+                <span className="novel-sidebar-label">{conversation.title}</span>
+              </button>
+              <button
+                aria-label={`对话操作：${conversation.title}`}
+                className="novel-menu-button"
+                type="button"
+                onClick={() =>
+                  setOpenConversationMenu(
+                    openConversationMenu === conversation.id
+                      ? undefined
+                      : conversation.id,
+                  )
+                }
+              >
+                ⋯
+              </button>
+              {openConversationMenu === conversation.id ? (
+                <div className="novel-menu-popover">
+                  <button
+                    className="novel-menu-button"
+                    type="button"
+                    onClick={() => {
+                      setOpenConversationMenu(undefined);
+                      onConversationEdit?.(conversation.id, "delete");
+                    }}
+                  >
+                    删除
+                  </button>
+                </div>
+              ) : null}
+            </div>
           ))
         )}
       </section>

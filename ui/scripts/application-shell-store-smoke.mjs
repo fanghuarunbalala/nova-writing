@@ -60,7 +60,7 @@ await act(async () => {
 });
 const conversationNode = container.querySelector("[data-conversation-tree]");
 assert.match(container.textContent, /星海计划/);
-assert.match(container.textContent, /主线大纲/);
+assert.equal(container.textContent.includes("主线大纲"), false);
 assert.equal(
   container.querySelector(".novel-shell-body").dataset.sidebarMode,
   "collapsed",

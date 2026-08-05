@@ -1,0 +1,33 @@
+/**
+ * 共享动画 keyframes 与 utility class。
+ * 组件内动画优先复用这里；时长/缓动一律走 design tokens。
+ */
+@keyframes grad-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+@keyframes view-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes conv-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes msg-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 通用动画 utility class */
+.anim-grad-flow { animation: grad-flow 7s ease-in-out infinite; }
+.anim-view-in   { animation: view-in var(--duration-base) var(--ease-out); }
+.anim-msg-enter { animation: msg-enter var(--duration-base) var(--ease-out); }
+.anim-toast-in  { animation: toast-in var(--duration-fast) var(--ease-out); }

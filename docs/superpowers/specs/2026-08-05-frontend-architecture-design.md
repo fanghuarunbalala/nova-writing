@@ -319,11 +319,15 @@ ScheduleStore 订阅：
   --subhead-height:      58px;
   --sidebar-width:       292px;
   --sidebar-width-collapsed: 0;
-  --inspector-width-default: 360px;
-  --inspector-width-min: 280px;
-  --inspector-width-max: 560px;
+  --inspector-width-default: 384px;
+  --inspector-width-min: 300px;
+  --inspector-width-max: 680px;
   --inspector-width-wide: 480px;
+  --inspector-width-narrow: 344px;
 }
+
+> 布局尺寸已按 `vendor/index.html` 原型校准：inspector 默认 384px（原型 `--insp-w` 默认，
+> 窄屏 344px）、拖拽范围 [300, 680]（原型 MIN=300 / BASE_MAX=680）。
 
 /* Dark mode 预留（V1 不实现，但结构支持） */
 [data-theme="dark"] {

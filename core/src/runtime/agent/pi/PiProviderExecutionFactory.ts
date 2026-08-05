@@ -21,6 +21,10 @@ import type {
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { PiDispatchAwareStreamFunction } from "./PiDispatchAwareStreamFunction.js";
 import {
+  captureProviderRequestDebugSnapshot,
+  type ProviderRequestDebugRecorder,
+} from "./ProviderRequestDebugRecorder.js";
+import {
   PI_PROVIDER_EXECUTION_FAILURE,
   PiProviderExecutionError,
   type PiProviderExecutionFailure,
@@ -54,6 +58,7 @@ export interface PiProviderExecutionDispatcher {
 export interface PiProviderExecutionFactoryOptions {
   readonly dispatcher: PiProviderExecutionDispatcher;
   readonly credentials: CredentialVault;
+  readonly debugRecorder?: ProviderRequestDebugRecorder;
   readonly logger?: Logger;
 }
 
@@ -64,11 +69,13 @@ interface DispatchState {
 export class PiProviderExecutionFactory {
   readonly #dispatcher: PiProviderExecutionDispatcher;
   readonly #credentials: CredentialVault;
+  readonly #debugRecorder?: ProviderRequestDebugRecorder;
   readonly #logger: Logger;
 
   constructor(options: PiProviderExecutionFactoryOptions) {
     this.#dispatcher = options.dispatcher;
     this.#credentials = options.credentials;
+    this.#debugRecorder = options.debugRecorder;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "pi_provider_execution_factory",
     });
@@ -99,6 +106,7 @@ export class PiProviderExecutionFactory {
         hooks,
         state,
       );
+      await this.#recordDebugRequest(targetModel, context, options, descriptor);
       stream = this.#dispatcher.stream(
         descriptor.api as SupportedPiExecutionApi,
         targetModel,
@@ -157,6 +165,32 @@ export class PiProviderExecutionFactory {
           apiKey: secret,
         }),
     );
+  }
+
+  async #recordDebugRequest(
+    model: Parameters<PiDispatchAwareStreamFunction>[0],
+    context: Parameters<PiDispatchAwareStreamFunction>[1],
+    options: SimpleStreamOptions,
+    descriptor: EffectiveModelExecutionDescriptor,
+  ): Promise<void> {
+    if (this.#debugRecorder === undefined) return;
+    try {
+      const snapshot = captureProviderRequestDebugSnapshot({
+        recordedAt: new Date().toISOString(),
+        descriptor,
+        model,
+        context,
+        options,
+      });
+      await this.#debugRecorder.record(snapshot);
+      this.#logger.debug("pi_provider_execution.debug_recorded", {
+        api: descriptor.api,
+      });
+    } catch {
+      this.#logger.debug("pi_provider_execution.debug_record_failed", {
+        api: descriptor.api,
+      });
+    }
   }
 
   async #resolveNamedSecretHeaders(

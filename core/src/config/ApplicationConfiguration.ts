@@ -361,6 +361,7 @@ export function createDefaultApplicationConfiguration(): ApplicationConfiguratio
       contextMetricsEnabled: false,
       ipcMetricsEnabled: false,
       experimentalFeaturesEnabled: false,
+      providerRequestDumpEnabled: false,
     },
     modelConnections: [],
     modelProfiles: [],

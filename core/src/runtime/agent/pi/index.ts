@@ -13,6 +13,7 @@ export * from "./PiAssistantOutputBridgeErrors.js";
 export * from "./PiDispatchAwareStreamFunction.js";
 export * from "./PiProviderExecutionErrors.js";
 export * from "./PiProviderExecutionFactory.js";
+export * from "./ProviderRequestDebugRecorder.js";
 export * from "./PiRuntimeMessageConverter.js";
 export * from "./PiTurnLifecycleBridge.js";
 export * from "./PiTurnLifecycleBridgeErrors.js";

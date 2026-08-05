@@ -739,6 +739,8 @@ export interface DiagnosticSettingsSnapshot {
   readonly contextMetricsEnabled: boolean;
   readonly ipcMetricsEnabled: boolean;
   readonly experimentalFeaturesEnabled: boolean;
+  readonly providerRequestDumpEnabled?: boolean;
+  readonly providerRequestDumpPath?: string;
 }
 
 export class DiagnosticSettings {
@@ -748,6 +750,8 @@ export class DiagnosticSettings {
   readonly contextMetricsEnabled: boolean;
   readonly ipcMetricsEnabled: boolean;
   readonly experimentalFeaturesEnabled: boolean;
+  readonly providerRequestDumpEnabled: boolean;
+  readonly providerRequestDumpPath?: string;
 
   constructor(options: DiagnosticSettingsSnapshot) {
     this.logLevel = captureDiagnosticLogLevel(options.logLevel);
@@ -768,6 +772,16 @@ export class DiagnosticSettings {
       options.experimentalFeaturesEnabled,
       "Experimental features",
     );
+    this.providerRequestDumpEnabled =
+      options.providerRequestDumpEnabled ?? false;
+    this.providerRequestDumpPath =
+      options.providerRequestDumpPath === undefined
+        ? undefined
+        : captureOptionalNonBlank(
+            options.providerRequestDumpPath,
+            "Provider request dump path",
+            1024,
+          );
     Object.freeze(this);
   }
 
@@ -779,6 +793,10 @@ export class DiagnosticSettings {
       contextMetricsEnabled: this.contextMetricsEnabled,
       ipcMetricsEnabled: this.ipcMetricsEnabled,
       experimentalFeaturesEnabled: this.experimentalFeaturesEnabled,
+      providerRequestDumpEnabled: this.providerRequestDumpEnabled,
+      ...(this.providerRequestDumpPath === undefined
+        ? {}
+        : { providerRequestDumpPath: this.providerRequestDumpPath }),
     });
   }
 }

@@ -22,6 +22,7 @@ import {
   SUPPORTED_PI_EXECUTION_APIS,
   asPiAgentCoreClient,
   createPiExecutionModel,
+  type ProviderRequestDebugRecorder,
 } from "../../../runtime/agent/pi/index.js";
 import type { AgentRuntimeAdapter } from "../../../runtime/index.js";
 import type { RuntimeChildAdapterFactory } from "./DesktopRuntimeChildCompositionFactory.js";
@@ -32,6 +33,7 @@ export interface PiRuntimeChildAdapterFactoryOptions {
   readonly resolver?: EffectiveModelExecutionResolver;
   readonly providerExecutionFactory?: PiProviderExecutionFactory;
   readonly baseModel?: Model<Api>;
+  readonly debugRecorder?: ProviderRequestDebugRecorder;
   readonly logger?: Logger;
 }
 
@@ -72,6 +74,9 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
       new PiProviderExecutionFactory({
         dispatcher: new PiAiProviderExecutionDispatcher(),
         credentials: options.credentials,
+        ...(options.debugRecorder === undefined
+          ? {}
+          : { debugRecorder: options.debugRecorder }),
         logger,
       });
     this.#baseModel = options.baseModel ?? DEFAULT_BASE_MODEL;

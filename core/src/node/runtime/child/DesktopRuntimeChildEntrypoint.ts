@@ -9,6 +9,7 @@ import {
 import type {
   ApplicationConfigurationStore,
   CredentialStore,
+  DiagnosticLogLevel,
 } from "../../../config/index.js";
 import {
   NodeApplicationConfigurationStore,
@@ -16,6 +17,7 @@ import {
   NodePlaintextCredentialStore,
   NodeWorkspaceStoreLocator,
   SqliteWorkspaceStore,
+  createNodeProviderRequestDebugRecorder,
 } from "../../index.js";
 import type { AgentManifestStore } from "../../../agent/index.js";
 import type { ConversationRuntimeBootstrap } from "../../../conversation/index.js";
@@ -59,20 +61,51 @@ export interface RunDesktopRuntimeChildEntrypointOptions {
 export function runDesktopRuntimeChildEntrypoint(
   options: RunDesktopRuntimeChildEntrypointOptions = {},
 ): Promise<RuntimeChildEntrypointResult> {
-  const logger = createEntrypointLogger(options.logger);
   const homeResolver = options.homeResolver ?? new NodeConfigurationHomeResolver();
+  return initializeDesktopRuntimeChildEntrypoint(options, homeResolver);
+}
+
+async function initializeDesktopRuntimeChildEntrypoint(
+  options: RunDesktopRuntimeChildEntrypointOptions,
+  homeResolver: NodeConfigurationHomeResolver,
+): Promise<RuntimeChildEntrypointResult> {
+  const bootstrapLogger = createEntrypointLogger(options.logger, "info");
   const application =
     options.application ??
-    new NodeApplicationConfigurationStore({ homeResolver, logger });
+    new NodeApplicationConfigurationStore({
+      homeResolver,
+      logger: bootstrapLogger,
+    });
   const credentials =
     options.credentials ??
-    new NodePlaintextCredentialStore({ homeResolver, logger });
+    new NodePlaintextCredentialStore({ homeResolver, logger: bootstrapLogger });
+  const diagnostics = await application
+    .load()
+    .then((configuration) => configuration?.diagnostics)
+    .catch(() => undefined);
+  const logger = createEntrypointLogger(
+    options.logger,
+    diagnostics?.logLevel ?? "info",
+  );
+  const debugRecorder =
+    diagnostics?.providerRequestDumpEnabled === true &&
+    diagnostics.providerRequestDumpPath !== undefined
+      ? createNodeProviderRequestDebugRecorder({
+          path: diagnostics.providerRequestDumpPath,
+          logger,
+        })
+      : undefined;
   const manifestStoreProvider =
     options.manifestStoreProvider ??
     createEnvManifestStoreProvider(options.storageRoot, logger);
   const adapterFactory =
     options.adapterFactory ??
-    new PiRuntimeChildAdapterFactory({ application, credentials, logger });
+    new PiRuntimeChildAdapterFactory({
+      application,
+      credentials,
+      logger,
+      ...(debugRecorder === undefined ? {} : { debugRecorder }),
+    });
   const contextCompilerFactory =
     options.contextCompilerFactory ??
     Object.freeze({
@@ -101,7 +134,10 @@ export function runDesktopRuntimeChildEntrypoint(
   });
 }
 
-function createEntrypointLogger(explicit: Logger | undefined): Logger {
+function createEntrypointLogger(
+  explicit: Logger | undefined,
+  logLevel: DiagnosticLogLevel,
+): Logger {
   if (explicit !== undefined) {
     return explicit.child({ component: "desktop_runtime_child_entrypoint" });
   }
@@ -109,8 +145,13 @@ function createEntrypointLogger(explicit: Logger | undefined): Logger {
   if (logPath === undefined || logPath.length === 0) {
     return noopLogger.child({ component: "desktop_runtime_child_entrypoint" });
   }
+  const debugEnabled = logLevel === "debug";
   const fileLogger: Logger = {
-    debug: () => undefined,
+    debug: (event, fields) => {
+      if (debugEnabled) {
+        void appendFile(logPath, `DEBUG ${event} ${safeLogFields(fields)}\n`);
+      }
+    },
     info: (event, fields) =>
       void appendFile(logPath, `INFO ${event} ${safeLogFields(fields)}\n`),
     warn: (event, fields) =>

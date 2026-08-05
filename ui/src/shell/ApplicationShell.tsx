@@ -90,6 +90,7 @@ export function ApplicationShell({
   workspaceController,
   domainStores,
   toastStore,
+  extensions,
   onOpenWorkspace,
   onOpenSettings,
   overlays,
@@ -187,6 +188,7 @@ export function ApplicationShell({
         }
         onOpenWorkspace={() => onOpenWorkspace?.()}
         onOpenSettings={() => onOpenSettings?.()}
+        extensions={extensions}
       />
       <div className={styles.body} data-sidebar-mode={sidebarMode}>
         <Sidebar

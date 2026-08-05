@@ -1,0 +1,27 @@
+/**
+ * DesktopTitleBar 视觉：紧凑徽章 + 版本号，与 TopBar 间距对齐。
+ */
+.titleBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in oklab, var(--color-accent, oklch(55% 0.072 42)) 8%, transparent);
+  color: var(--color-accent-ink, oklch(47% 0.062 41));
+  font-family: var(--font-mono, ui-monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.badge {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+.version {
+  opacity: 0.85;
+}

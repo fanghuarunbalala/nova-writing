@@ -3,3 +3,4 @@
  */
 export * from "./createDesktopUiExtensions.js";
 export * from "./DesktopSettingsSections.js";
+export * from "./DesktopTitleBar.js";

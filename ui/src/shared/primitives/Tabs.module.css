@@ -1,0 +1,73 @@
+/**
+ * Tabs 视觉：line 下划线 / pill 胶囊（原型 .insp-tabs 风格）。
+ */
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.list {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: var(--fw-bold);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.tab:hover:not([data-disabled]) {
+  color: var(--color-fg);
+}
+
+.tab[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.line {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.line .tab {
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.line .tab[data-state="active"] {
+  color: var(--color-accent-ink);
+  border-bottom-color: var(--color-accent);
+}
+
+.pill {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.tabPill[data-state="active"] {
+  background: var(--color-surface);
+  color: var(--color-accent-ink);
+  box-shadow: 0 1px 3px rgba(20, 12, 6, 0.08);
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  padding-top: 8px;
+}

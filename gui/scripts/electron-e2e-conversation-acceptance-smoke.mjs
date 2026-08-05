@@ -65,7 +65,7 @@ try {
   application = await factory.open(location);
   let api = new DefaultNovelApiClient({ transport: application.transport });
   const conversation = await api.conversations.create({
-    agent: { agentType: "novel_agent", definitionVersion: "1.0.0" },
+    agent: { agentType: "novel", definitionVersion: "1.0.0" },
   });
   const handle = await api.conversations.open(conversation.id);
   await handle.input.enqueue(

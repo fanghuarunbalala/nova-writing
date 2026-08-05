@@ -10,6 +10,7 @@ import {
   captureNovelId,
   captureNovelReadScope,
   captureOrderKey,
+  captureParagraphId,
   capturePublicationChapter,
   capturePublicationChapterId,
   capturePublicationStructure,
@@ -21,9 +22,11 @@ import {
   type NovelPublicationQueryStore,
   type NovelReadScope,
   type NovelId,
+  type ParagraphId,
   type PublicationCatalogReadModel,
   type PublicationChapterReadModel,
   type PublicationChapter,
+  type PublicationChapterId,
   type PublicationStructure,
   type PublicationVolumeReadModel,
   type PublicationVolume,
@@ -41,7 +44,6 @@ interface VolumeRow {
   publication_id: string;
   order_key: string;
   title: string;
-  primary_story_unit_id: string | null;
 }
 
 interface ChapterRow {
@@ -52,8 +54,8 @@ interface ChapterRow {
   title: string;
 }
 
-const VOLUME_SELECT = `SELECT id, publication_id, order_key, title,
-  primary_story_unit_id FROM novel_publication_volumes`;
+const VOLUME_SELECT = `SELECT id, publication_id, order_key, title
+  FROM novel_publication_volumes`;
 const CHAPTER_SELECT = `SELECT id, publication_id, volume_id, order_key, title
   FROM novel_publication_chapters`;
 
@@ -131,15 +133,14 @@ export class SqliteNovelPublicationRepository
     const result = this.database
       .prepare(
         `INSERT OR IGNORE INTO novel_publication_volumes(
-           id, publication_id, order_key, title, primary_story_unit_id
-         ) VALUES (?, ?, ?, ?, ?)`,
+           id, publication_id, order_key, title
+         ) VALUES (?, ?, ?, ?)`,
       )
       .run(
         value.id,
         value.publicationId,
         value.orderKey,
         value.title,
-        value.primaryStoryUnitId ?? null,
       );
     return Number(result.changes) === 1;
   }
@@ -149,14 +150,13 @@ export class SqliteNovelPublicationRepository
     const result = this.database
       .prepare(
         `UPDATE novel_publication_volumes
-         SET publication_id = ?, order_key = ?, title = ?, primary_story_unit_id = ?
+         SET publication_id = ?, order_key = ?, title = ?
          WHERE id = ?`,
       )
       .run(
         value.publicationId,
         value.orderKey,
         value.title,
-        value.primaryStoryUnitId ?? null,
         value.id,
       );
     return Number(result.changes) === 1;
@@ -173,14 +173,17 @@ export class SqliteNovelPublicationRepository
     const row = this.database
       .prepare(`${CHAPTER_SELECT} WHERE id = ?`)
       .get(capturePublicationChapterId(id)) as ChapterRow | undefined;
-    return row === undefined ? undefined : decodeChapter(row);
+    if (row === undefined) return undefined;
+    return decodeChapter(row, this.listChapterParagraphIds(capturePublicationChapterId(id)));
   }
 
   listChapters(volumeId: PublicationChapter["volumeId"]): readonly PublicationChapter[] {
     const rows = this.database
       .prepare(`${CHAPTER_SELECT} WHERE volume_id = ? ORDER BY order_key, id`)
       .all(capturePublicationVolumeId(volumeId)) as unknown as ChapterRow[];
-    return Object.freeze(rows.map(decodeChapter));
+    return Object.freeze(rows.map((row) =>
+      decodeChapter(row, this.listChapterParagraphIds(capturePublicationChapterId(row.id)))
+    ));
   }
 
   findChapterAt(
@@ -192,7 +195,8 @@ export class SqliteNovelPublicationRepository
       .get(capturePublicationVolumeId(volumeId), captureOrderKey(orderKey)) as
       | ChapterRow
       | undefined;
-    return row === undefined ? undefined : decodeChapter(row);
+    if (row === undefined) return undefined;
+    return decodeChapter(row, this.listChapterParagraphIds(capturePublicationChapterId(row.id)));
   }
 
   getChapterDigest(id: PublicationChapter["id"]): string | undefined {
@@ -237,23 +241,66 @@ export class SqliteNovelPublicationRepository
   }
 
   deleteChapter(id: PublicationChapter["id"]): boolean {
+    const chapterId = capturePublicationChapterId(id);
     const result = this.database
       .prepare("DELETE FROM novel_publication_chapters WHERE id = ?")
-      .run(capturePublicationChapterId(id));
+      .run(chapterId);
+    this.database
+      .prepare("DELETE FROM novel_chapter_paragraphs WHERE chapter_id = ?")
+      .run(chapterId);
     return Number(result.changes) === 1;
   }
 
-  hasStoryUnit(id: string): boolean {
-    const row = this.database
-      .prepare("SELECT 1 AS present FROM novel_story_units WHERE id = ? LIMIT 1")
-      .get(id) as { present: number } | undefined;
-    return row !== undefined;
+  listChapterParagraphIds(chapterId: PublicationChapterId): readonly ParagraphId[] {
+    const rows = this.database
+      .prepare(
+        `SELECT paragraph_id FROM novel_chapter_paragraphs
+         WHERE chapter_id = ? ORDER BY position, paragraph_id`,
+      )
+      .all(capturePublicationChapterId(chapterId)) as Array<{ paragraph_id: string }>;
+    return Object.freeze(rows.map((row) => captureParagraphId(row.paragraph_id)));
   }
 
-  hasManuscriptBlocks(chapterId: PublicationChapter["id"]): boolean {
+  setChapterParagraphIds(
+    chapterId: PublicationChapterId,
+    paragraphIds: readonly ParagraphId[],
+  ): boolean {
+    const id = capturePublicationChapterId(chapterId);
+    this.database
+      .prepare("DELETE FROM novel_chapter_paragraphs WHERE chapter_id = ?")
+      .run(id);
+    if (paragraphIds.length === 0) return true;
+    const insert = this.database.prepare(
+      `INSERT OR IGNORE INTO novel_chapter_paragraphs(
+         chapter_id, paragraph_id, position
+       ) VALUES (?, ?, ?)`,
+    );
+    for (let position = 0; position < paragraphIds.length; position += 1) {
+      insert.run(id, captureParagraphId(paragraphIds[position]), position);
+    }
+    const count = this.database
+      .prepare(
+        "SELECT COUNT(*) AS count FROM novel_chapter_paragraphs WHERE chapter_id = ?",
+      )
+      .get(id) as { count: number };
+    return Number(count.count) === paragraphIds.length;
+  }
+
+  getChapterIdByParagraphId(paragraphId: ParagraphId): PublicationChapterId | undefined {
     const row = this.database
-      .prepare("SELECT 1 AS present FROM novel_manuscript_blocks WHERE chapter_id = ? LIMIT 1")
-      .get(capturePublicationChapterId(chapterId)) as { present: number } | undefined;
+      .prepare(
+        "SELECT chapter_id FROM novel_chapter_paragraphs WHERE paragraph_id = ? LIMIT 1",
+      )
+      .get(captureParagraphId(paragraphId)) as { chapter_id: string } | undefined;
+    return row === undefined
+      ? undefined
+      : capturePublicationChapterId(row.chapter_id);
+  }
+
+  hasParagraph(paragraphId: ParagraphId): boolean {
+    const row = this.database
+      .prepare("SELECT 1 AS present FROM novel_paragraphs WHERE id = ? LIMIT 1")
+      .get(captureParagraphId(paragraphId)) as { present: number } | undefined;
     return row !== undefined;
   }
 }
@@ -427,19 +474,20 @@ function decodeVolume(row: VolumeRow): PublicationVolume {
     publicationId: row.publication_id,
     orderKey: row.order_key,
     title: row.title,
-    ...(row.primary_story_unit_id === null
-      ? {}
-      : { primaryStoryUnitId: row.primary_story_unit_id }),
   });
 }
 
-function decodeChapter(row: ChapterRow): PublicationChapter {
+function decodeChapter(
+  row: ChapterRow,
+  paragraphIds: readonly ParagraphId[],
+): PublicationChapter {
   return capturePublicationChapter({
     id: row.id,
     publicationId: row.publication_id,
     volumeId: row.volume_id,
     orderKey: row.order_key,
     title: row.title,
+    paragraphIds,
   });
 }
 

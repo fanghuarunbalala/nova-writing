@@ -2,12 +2,8 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
-  ManuscriptCatalog,
-  ManuscriptRangeRepairValidator,
-  ManuscriptRepairCatalog,
   NOVEL_INVARIANT_FAILURE,
   NovelInvariantViolationError,
-  PublicationCatalog,
   StoryOutlineTree,
   captureNovelId,
   captureNovelReadScope,
@@ -68,31 +64,13 @@ export class SqliteNovelProjectionSourceReader
       const currentRevision = this.readRevision(database);
       const context = createSqliteNovelMutationContext(database);
       const outline = context.outline.findOutlineByNovelId(this.novelId);
-      const publication = context.publication.findPublicationByNovelId(this.novelId);
-      const manuscript = context.manuscript.findManuscriptByNovelId(this.novelId);
-      if (outline === undefined || publication === undefined || manuscript === undefined) {
+      if (outline === undefined) {
         throw this.invariant();
       }
       const outlineTree = new StoryOutlineTree({
         outline,
         units: context.outline.listStoryUnits(outline.id),
       });
-      const volumes = context.publication.listVolumes(publication.id);
-      const publicationCatalog = new PublicationCatalog({
-        publication,
-        volumes,
-        chapters: volumes.flatMap((volume) =>
-          context.publication.listChapters(volume.id)
-        ),
-      });
-      const manuscriptCatalog = new ManuscriptCatalog({
-        manuscript,
-        blocks: context.manuscript.listBlocks(manuscript.id),
-      }, publicationCatalog);
-      const repairCatalog = new ManuscriptRepairCatalog({
-        tombstones: context.manuscript.listTombstones(manuscript.id),
-        redirects: context.manuscript.listAnchorRedirects(),
-      }, manuscriptCatalog);
       const result = Object.freeze({
         outline: outlineTree,
         source: Object.freeze({
@@ -100,15 +78,11 @@ export class SqliteNovelProjectionSourceReader
           characters: context.characters.list(),
           locations: context.locations.list(),
           entityChanges: context.projectionEvidence.listEntityChanges(),
-          realizations: context.projectionEvidence.listRealizations(),
+          paragraphs: context.paragraph.listAllParagraphs(),
           characterBindings:
             context.projectionEvidence.listCharacterBindings(),
           locationBindings: context.projectionEvidence.listLocationBindings(),
         }),
-        ranges: new ManuscriptRangeRepairValidator(
-          manuscriptCatalog,
-          repairCatalog,
-        ),
       });
       database.exec("COMMIT");
       transactionStarted = false;
@@ -118,7 +92,7 @@ export class SqliteNovelProjectionSourceReader
         storyUnitCount: outlineTree.listDepthFirst().length,
         characterCount: result.source.characters.length,
         locationCount: result.source.locations.length,
-        realizationCount: result.source.realizations.length,
+        paragraphCount: result.source.paragraphs.length,
       });
       return result;
     } catch (error) {

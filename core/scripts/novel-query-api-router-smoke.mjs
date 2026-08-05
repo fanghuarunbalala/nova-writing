@@ -44,10 +44,9 @@ const publication = {
   publication: { id: "publication_main", novelId: "novel_query_router" },
   volumes: [{
     id: "volume_one",
-    publicationId: "publication_main",
-    orderKey: "8000",
-    title: "第一卷",
-    primaryStoryUnitId: "story_unit_root",
+  publicationId: "publication_main",
+  orderKey: "8000",
+  title: "第一卷",
   }],
   chapters: [{
     id: "chapter_one",
@@ -55,19 +54,19 @@ const publication = {
     volumeId: "volume_one",
     orderKey: "8000",
     title: "雨夜",
+    paragraphIds: ["paragraph_opening"],
   }],
 };
-const manuscriptBlock = {
-  id: "block_opening",
-  manuscriptId: "manuscript_main",
-  chapterId: "chapter_one",
+const paragraphValue = {
+  id: "paragraph_opening",
+  storyUnitId: "story_unit_root",
   orderKey: "8000",
   text: "雨落在站台上。",
 };
-const blockDigests = {
+const paragraphDigests = {
   textDigest: "a".repeat(64),
-  chapterDigest: "b".repeat(64),
   orderDigest: "c".repeat(64),
+  storyUnitDigest: "d".repeat(64),
 };
 const tree = new TestOutlineTree(rootUnit);
 const scopes = [];
@@ -111,20 +110,15 @@ const router = new NovelQueryApiRouter({
   publication: {
     getCatalog: async (scope) => (scopes.push(scope), { snapshot: publication }),
   },
-  manuscript: {
+  paragraphs: {
     getCatalog: async (scope) => (scopes.push(scope), {
       snapshot: {
-        manuscript: {
-          id: "manuscript_main",
-          novelId: "novel_query_router",
-          publicationId: "publication_main",
-        },
-        blocks: [manuscriptBlock],
+        paragraphs: [paragraphValue],
       },
-      blockDigests: { block_opening: blockDigests },
+      paragraphDigests: { paragraph_opening: paragraphDigests },
     }),
-    getBlock: async (scope, id) => (scopes.push(scope), id === manuscriptBlock.id
-      ? { block: manuscriptBlock, ...blockDigests }
+    getParagraph: async (scope, id) => (scopes.push(scope), id === paragraphValue.id
+      ? { paragraph: paragraphValue, ...paragraphDigests }
       : undefined),
   },
 });
@@ -134,8 +128,8 @@ const overview = await request(router, "overview", NOVEL_QUERY_API_OPERATION.ove
 });
 assert.equal(overview.sourceRevision, "revision_draft_base");
 assert.equal(overview.counts.storyUnitCount, 1);
-assert.equal(overview.counts.manuscriptBlockCount, 1);
-assert.equal(overview.roots.manuscriptAvailable, true);
+assert.equal(overview.counts.paragraphCount, 1);
+assert.equal(overview.roots.paragraphsAvailable, true);
 
 const outline = await request(router, "outline", NOVEL_QUERY_API_OPERATION.outlineGet, {
   scope: canonicalScope,
@@ -181,21 +175,21 @@ const locationDetail = await request(
 );
 assert.equal(locationDetail.location.id, location.id);
 
-const structure = await request(
+const paragraphCatalog = await request(
   router,
-  "manuscript-structure",
-  NOVEL_QUERY_API_OPERATION.manuscriptStructureGet,
+  "paragraph-catalog",
+  NOVEL_QUERY_API_OPERATION.paragraphCatalogGet,
   { scope: canonicalScope },
 );
-assert.equal(structure.blocks[0].text, undefined);
-assert.equal(structure.blocks[0].textLength, manuscriptBlock.text.length);
-const block = await request(
+assert.equal(paragraphCatalog.paragraphs[0].text, undefined);
+assert.equal(paragraphCatalog.paragraphs[0].textLength, paragraphValue.text.length);
+const paragraph = await request(
   router,
-  "manuscript-block",
-  NOVEL_QUERY_API_OPERATION.manuscriptBlockGet,
-  { scope: canonicalScope, blockId: manuscriptBlock.id },
+  "paragraph",
+  NOVEL_QUERY_API_OPERATION.paragraphGet,
+  { scope: canonicalScope, paragraphId: paragraphValue.id },
 );
-assert.equal(block.readModel.block.text, manuscriptBlock.text);
+assert.equal(paragraph.readModel.paragraph.text, paragraphValue.text);
 
 const missingDraft = await router.request({
   protocolVersion: API_PROTOCOL_VERSION,

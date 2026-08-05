@@ -1,26 +1,16 @@
 import assert from "node:assert/strict";
 import {
   FractionalOrderKeyFactory,
-  ManuscriptCatalog,
   NOVEL_PROJECTION_MODE,
   NOVEL_PROJECTION_TARGET_KIND,
   NOVEL_RECOVERY_PHASE,
   NovelProjectionRecoveryService,
-  ManuscriptRepairCatalog,
-  PublicationCatalog,
   StoryOutlineTree,
-  ManuscriptRangeRepairValidator,
   captureCharacterId,
-  captureManuscript,
-  captureManuscriptId,
   captureNovelId,
   captureNovelRevision,
-  capturePublicationChapter,
-  capturePublicationChapterId,
-  capturePublicationStructure,
-  capturePublicationStructureId,
-  capturePublicationVolume,
-  capturePublicationVolumeId,
+  captureParagraph,
+  captureParagraphId,
   captureStoryOutline,
   captureStoryOutlineId,
   captureStoryUnit,
@@ -46,45 +36,12 @@ const outline = new StoryOutlineTree({
     realizationStatus: "pending",
   })],
 });
-const publication = capturePublicationStructure({
-  id: capturePublicationStructureId("publication_projection_recovery"),
-  novelId,
-});
-const volume = capturePublicationVolume({
-  id: capturePublicationVolumeId("volume_projection_recovery"),
-  publicationId: publication.id,
-  title: "Volume",
+const paragraph = captureParagraph({
+  id: captureParagraphId("paragraph_projection_recovery"),
+  storyUnitId,
   orderKey,
+  text: "Recovery content",
 });
-const chapter = capturePublicationChapter({
-  id: capturePublicationChapterId("chapter_projection_recovery"),
-  publicationId: publication.id,
-  volumeId: volume.id,
-  title: "Chapter",
-  orderKey,
-});
-const publicationCatalog = new PublicationCatalog({
-  publication,
-  volumes: [volume],
-  chapters: [chapter],
-});
-const manuscript = captureManuscript({
-  id: captureManuscriptId("manuscript_projection_recovery"),
-  novelId,
-  publicationId: publication.id,
-});
-const manuscriptCatalog = new ManuscriptCatalog({
-  manuscript,
-  blocks: [],
-}, publicationCatalog);
-const repairCatalog = new ManuscriptRepairCatalog(
-  { tombstones: [], redirects: [] },
-  manuscriptCatalog,
-);
-const ranges = new ManuscriptRangeRepairValidator(
-  manuscriptCatalog,
-  repairCatalog,
-);
 const validTarget = {
   kind: NOVEL_PROJECTION_TARGET_KIND.storyUnitConformance,
   storyUnitId,
@@ -102,13 +59,12 @@ const service = new NovelProjectionRecoveryService({
       assert.equal(receivedNovelId, novelId);
       return {
         outline,
-        ranges,
         source: {
           currentRevision,
           characters: [],
           locations: [],
           entityChanges: [],
-          realizations: [],
+          paragraphs: [paragraph],
           characterBindings: [],
           locationBindings: [],
         },
@@ -148,7 +104,7 @@ assert.equal(replacement.rebuildRevision, currentRevision);
 assert.equal(replacement.entries.length, 1);
 assert.equal(replacement.entries[0].target.kind, validTarget.kind);
 assert.equal(
-  replacement.entries[0].projection.rangeStatuses.length,
+  replacement.entries[0].projection.warningCount,
   0,
 );
 console.log("novel projection recovery smoke passed");

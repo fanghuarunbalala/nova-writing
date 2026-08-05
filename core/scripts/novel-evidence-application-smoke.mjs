@@ -4,31 +4,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   FractionalOrderKeyFactory,
-  MANUSCRIPT_ANCHOR_BOUNDARY,
   NovelDraftSessionService,
   STORY_ENTITY_CHANGE_CATEGORY,
-  STORY_UNIT_CONFORMANCE_STATUS,
   canonicalNovelReadScope,
   captureCharacterId,
   captureLocationId,
-  captureManuscriptBlockId,
-  captureManuscriptId,
   captureNovelCommitId,
   captureNovelRevision,
   captureNovelTimestamp,
-  captureParagraphBlock,
-  capturePublicationChapter,
-  capturePublicationChapterId,
-  capturePublicationStructureId,
-  capturePublicationVolume,
-  capturePublicationVolumeId,
+  captureParagraph,
+  captureParagraphId,
   captureStoryOutlineId,
   captureStoryUnit,
   captureStoryUnitCharacterBinding,
   captureStoryUnitEntityChange,
   captureStoryUnitEntityChangeId,
   captureStoryUnitLocationBinding,
-  captureStoryUnitRealization,
   captureStoryUnitId,
   draftNovelReadScope,
 } from "../dist/index.js";
@@ -61,13 +52,21 @@ class CollectingLogger {
   warn(event, fields = {}) { this.record("warn", event, fields); }
   error(event, fields = {}) { this.record("error", event, fields); }
   child(bindings) { return new CollectingLogger(this.entries, { ...this.bindings, ...bindings }); }
-  record(level, event, fields) { this.entries.push({ level, event, fields: { ...this.bindings, ...fields } }); }
+  record(level, event, fields) {
+    this.entries.push({ level, event, fields: { ...this.bindings, ...fields } });
+  }
 }
+
 function assertRedacted(entries, forbiddenValues) {
   const serialized = JSON.stringify(entries);
   for (const value of forbiddenValues) assert.equal(serialized.includes(value), false);
-  for (const entry of entries) for (const key of Object.keys(entry.fields)) {
-    assert.equal(["payload", "content", "text", "title", "prompt", "path", "message", "error", "stack", "cause"].includes(key), false);
+  for (const entry of entries) {
+    for (const key of Object.keys(entry.fields)) {
+      assert.equal([
+        "payload", "content", "text", "title", "prompt", "path", "message",
+        "error", "stack", "cause",
+      ].includes(key), false);
+    }
   }
 }
 
@@ -77,9 +76,12 @@ const logs = [];
 const logger = new CollectingLogger(logs);
 let canonicalStore;
 let draftStore;
+
 try {
   await mkdir(workspaceRoot, { recursive: true });
-  const workspace = await new NodeWorkspaceStoreLocator({ storageRoot: join(root, "storage") }).resolve(workspaceRoot);
+  const workspace = await new NodeWorkspaceStoreLocator({
+    storageRoot: join(root, "storage"),
+  }).resolve(workspaceRoot);
   const location = await new NodeNovelStoreLocator().resolve(workspace);
   canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
@@ -104,13 +106,9 @@ try {
   const locationId = captureLocationId("location_evidence_application");
   const outlineId = captureStoryOutlineId("outline_evidence_application");
   const storyUnitId = captureStoryUnitId("story_unit_evidence_application");
-  const publicationId = capturePublicationStructureId("publication_evidence_application");
-  const volumeId = capturePublicationVolumeId("volume_evidence_application");
-  const chapterId = capturePublicationChapterId("chapter_evidence_application");
-  const manuscriptId = captureManuscriptId("manuscript_evidence_application");
-  const blockId = captureManuscriptBlockId("block_evidence_application");
+  const paragraphId = captureParagraphId("paragraph_evidence_application");
   const changeId = captureStoryUnitEntityChangeId("change_evidence_application");
-  const forbiddenText = "FORBIDDEN_EVIDENCE_MANUSCRIPT";
+  const forbiddenText = "FORBIDDEN_EVIDENCE_TEXT";
   const forbiddenNote = "FORBIDDEN_EVIDENCE_NOTE";
 
   await application.characters.create(session, characterId, { name: "Protagonist", aliases: [] });
@@ -124,16 +122,11 @@ try {
     planningStatus: "ready",
     realizationStatus: "in-progress",
   }));
-  await application.publication.createPublication(session, publicationId);
-  await application.publication.createVolume(session, capturePublicationVolume({
-    id: volumeId, publicationId, orderKey: order, title: "Volume",
-  }));
-  await application.publication.createChapter(session, capturePublicationChapter({
-    id: chapterId, publicationId, volumeId, orderKey: order, title: "Chapter",
-  }));
-  await application.manuscript.createManuscript(session, manuscriptId, publicationId);
-  await application.manuscript.createBlock(session, captureParagraphBlock({
-    id: blockId, manuscriptId, chapterId, orderKey: order, text: forbiddenText,
+  await application.paragraphs.createParagraph(session, captureParagraph({
+    id: paragraphId,
+    storyUnitId,
+    orderKey: order,
+    text: forbiddenText,
   }));
 
   const characterBinding = captureStoryUnitCharacterBinding({ storyUnitId, characterId, note: "Initial" });
@@ -147,23 +140,9 @@ try {
     summary: forbiddenNote,
     sourceEventIds: [],
   });
-  const realization = captureStoryUnitRealization({
-    storyUnitId,
-    ranges: [{
-      start: { blockId, boundary: MANUSCRIPT_ANCHOR_BOUNDARY.before },
-      end: { blockId, boundary: MANUSCRIPT_ANCHOR_BOUNDARY.after },
-    }],
-    sourceRevision: session.baseRevision,
-    validation: {
-      status: STORY_UNIT_CONFORMANCE_STATUS.conforming,
-      checkedNovelRevision: session.baseRevision,
-      findings: [],
-    },
-  });
   await application.evidence.putCharacterBinding(session, characterBinding);
   await application.evidence.putLocationBinding(session, locationBinding);
   await application.evidence.putEntityChange(session, change);
-  await application.evidence.putRealization(session, realization);
 
   const initialCharacter = (await application.evidenceQueries.listCharacterBindings(draftScope))[0];
   await application.evidence.putCharacterBinding(
@@ -181,14 +160,12 @@ try {
   assert.equal((await application.evidenceQueries.listCharacterBindings(draftScope))[0].value.note, forbiddenNote);
   assert.equal((await application.evidenceQueries.listLocationBindings(draftScope)).length, 0);
   assert.equal((await application.evidenceQueries.listEntityChanges(draftScope)).length, 0);
-  assert.equal((await application.evidenceQueries.getRealization(draftScope, storyUnitId)).recordDigest.length, 64);
   const admission = await application.evidenceQueries.evaluateCompletion(draftScope, storyUnitId);
   assert.equal(admission.status, "admitted");
   assert.equal(admission.storyUnit.realizationStatus, "completed");
-  assert.equal(await application.evidenceQueries.getRealization(canonicalNovelReadScope, storyUnitId), undefined);
 
   const changeSet = await application.changeSets.build(session);
-  assert.equal(changeSet.operationCount, 16);
+  assert.equal(changeSet.operationCount, 11);
   await application.commits.commit(session, {
     commitId: captureNovelCommitId("commit_evidence_application"),
     resultRevision: captureNovelRevision("revision_evidence_committed"),
@@ -196,10 +173,11 @@ try {
   });
   const restarted = createNodeNovelApplication({ location, novelId: canonical.novelId, clock, logger });
   assert.equal((await restarted.evidenceQueries.listCharacterBindings(canonicalNovelReadScope)).length, 1);
-  assert.equal((await restarted.evidenceQueries.listRealizations(canonicalNovelReadScope)).length, 1);
-  const staleAdmission = await restarted.evidenceQueries.evaluateCompletion(canonicalNovelReadScope, storyUnitId);
-  assert.equal(staleAdmission.status, "rejected");
-  assert.equal(staleAdmission.reason, "realization-revision-stale");
+  const canonicalAdmission = await restarted.evidenceQueries.evaluateCompletion(
+    canonicalNovelReadScope,
+    storyUnitId,
+  );
+  assert.equal(canonicalAdmission.status, "admitted");
   assertRedacted(logs, [root, forbiddenText, forbiddenNote]);
   console.log("novel evidence application smoke passed");
 } finally {

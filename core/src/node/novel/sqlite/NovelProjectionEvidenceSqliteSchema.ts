@@ -31,10 +31,4 @@ export const NOVEL_PROJECTION_EVIDENCE_SCHEMA_SQL = `
   CREATE INDEX novel_story_unit_entity_changes_unit_idx
   ON novel_story_unit_entity_changes(story_unit_id, id);
 
-  CREATE TABLE novel_story_unit_realizations (
-    story_unit_id TEXT PRIMARY KEY,
-    realization_json TEXT NOT NULL,
-    realization_digest TEXT NOT NULL CHECK (length(realization_digest) = 64),
-    FOREIGN KEY (story_unit_id) REFERENCES novel_story_units(id)
-  ) STRICT;
 `;

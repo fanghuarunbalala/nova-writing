@@ -8,7 +8,7 @@ import type {
 import type {
   CharacterId,
   LocationId,
-  ManuscriptBlockId,
+  ParagraphId,
   StoryUnitId,
 } from "../novel/index.js";
 import type {
@@ -16,10 +16,10 @@ import type {
   NovelCharactersSnapshot,
   NovelLocationSnapshot,
   NovelLocationsSnapshot,
-  NovelManuscriptBlockSnapshot,
-  NovelManuscriptStructureSnapshot,
   NovelOutlineSnapshot,
   NovelOverviewSnapshot,
+  NovelParagraphCatalogSnapshot,
+  NovelParagraphSnapshot,
   NovelQueryScope,
   NovelStoryUnitSnapshot,
 } from "./novel/index.js";
@@ -63,15 +63,15 @@ export interface NovelLocationApi {
   ): Promise<NovelLocationSnapshot>;
 }
 
-export interface NovelManuscriptApi {
-  getStructure(
+export interface NovelParagraphApi {
+  getCatalog(
     scope: NovelQueryScope,
-  ): Promise<NovelManuscriptStructureSnapshot>;
+  ): Promise<NovelParagraphCatalogSnapshot>;
 
-  getBlock(
+  get(
     scope: NovelQueryScope,
-    blockId: ManuscriptBlockId,
-  ): Promise<NovelManuscriptBlockSnapshot>;
+    paragraphId: ParagraphId,
+  ): Promise<NovelParagraphSnapshot>;
 }
 
 export interface NovelContentApi {
@@ -79,7 +79,7 @@ export interface NovelContentApi {
   readonly outline: NovelOutlineApi;
   readonly characters: NovelCharacterApi;
   readonly locations: NovelLocationApi;
-  readonly manuscript: NovelManuscriptApi;
+  readonly paragraphs: NovelParagraphApi;
 }
 
 export interface NovelApiClient {

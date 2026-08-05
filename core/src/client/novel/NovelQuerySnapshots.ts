@@ -1,33 +1,27 @@
 /** Versioned immutable Novel query snapshots validated before crossing a client boundary. */
 import {
-  ManuscriptCatalog,
-  PublicationCatalog,
   StoryOutlineTree,
   captureCharacter,
   captureLocation,
-  captureManuscript,
-  captureManuscriptBlockId,
   captureNovelId,
   captureNovelRevision,
   captureNovelSchemaVersion,
   captureNovelWorkspaceId,
   captureOrderKey,
-  captureParagraphBlock,
-  capturePublicationChapterId,
+  captureParagraph,
+  captureParagraphId,
   captureStoryUnit,
   captureStoryUnitId,
   captureStoryUnitRealizationStatus,
   type Character,
   type Location,
-  type Manuscript,
-  type ManuscriptBlockId,
   type NovelId,
   type NovelRevision,
   type NovelSchemaVersion,
   type OrderKey,
-  type ParagraphBlock,
-  type PublicationCatalogSnapshot,
-  type PublicationChapterId,
+  type Paragraph,
+  type ParagraphId,
+  type StoryUnitId,
   type StoryOutlineTreeSnapshot,
   type StoryUnit,
   type StoryUnitProgressProjection,
@@ -50,13 +44,13 @@ export interface NovelOverviewCounts {
   readonly locationCount: number;
   readonly volumeCount: number;
   readonly chapterCount: number;
-  readonly manuscriptBlockCount: number;
+  readonly paragraphCount: number;
 }
 
 export interface NovelOverviewRoots {
   readonly outlineAvailable: boolean;
   readonly publicationAvailable: boolean;
-  readonly manuscriptAvailable: boolean;
+  readonly paragraphsAvailable: boolean;
 }
 
 export interface NovelOverviewSnapshot extends NovelQuerySnapshotBase {
@@ -94,30 +88,27 @@ export interface NovelLocationSnapshot extends NovelQuerySnapshotBase {
   readonly location?: Location;
 }
 
-export interface NovelManuscriptBlockSummary {
-  readonly id: ManuscriptBlockId;
-  readonly chapterId: PublicationChapterId;
+export interface NovelParagraphSummary {
+  readonly id: ParagraphId;
+  readonly storyUnitId: StoryUnitId;
   readonly orderKey: OrderKey;
   readonly textLength: number;
   readonly textDigest: string;
 }
 
-export interface NovelManuscriptStructureSnapshot
-  extends NovelQuerySnapshotBase {
-  readonly publication?: PublicationCatalogSnapshot;
-  readonly manuscript?: Manuscript;
-  readonly blocks: readonly NovelManuscriptBlockSummary[];
+export interface NovelParagraphCatalogSnapshot extends NovelQuerySnapshotBase {
+  readonly paragraphs: readonly NovelParagraphSummary[];
 }
 
-export interface NovelManuscriptBlockReadSnapshot {
-  readonly block: ParagraphBlock;
+export interface NovelParagraphReadSnapshot {
+  readonly paragraph: Paragraph;
   readonly textDigest: string;
-  readonly chapterDigest: string;
   readonly orderDigest: string;
+  readonly storyUnitDigest: string;
 }
 
-export interface NovelManuscriptBlockSnapshot extends NovelQuerySnapshotBase {
-  readonly readModel?: NovelManuscriptBlockReadSnapshot;
+export interface NovelParagraphSnapshot extends NovelQuerySnapshotBase {
+  readonly readModel?: NovelParagraphReadSnapshot;
 }
 
 export function captureNovelOverviewSnapshot(
@@ -252,52 +243,26 @@ export function captureNovelLocationSnapshot(
   });
 }
 
-export function captureNovelManuscriptStructureSnapshot(
+export function captureNovelParagraphCatalogSnapshot(
   value: unknown,
-): NovelManuscriptStructureSnapshot {
-  const record = captureRecord(value, ["schemaVersion", "scope", "blocks"], [
-    "publication",
-    "manuscript",
-  ]);
-  const publication = record.publication === undefined
-    ? undefined
-    : new PublicationCatalog(record.publication).getSnapshot();
-  const manuscript = record.manuscript === undefined
-    ? undefined
-    : captureManuscript(record.manuscript);
-  if (
-    manuscript !== undefined &&
-    (publication === undefined ||
-      manuscript.novelId !== publication.publication.novelId ||
-      manuscript.publicationId !== publication.publication.id)
-  ) {
-    throw invalidSnapshot();
-  }
-  const blocks = captureDenseArray(record.blocks).map(captureBlockSummary);
-  assertUnique(blocks.map((block) => block.id));
-  const chapterIds = new Set(publication?.chapters.map((chapter) => chapter.id) ?? []);
-  if (
-    (manuscript === undefined && blocks.length > 0) ||
-    blocks.some((block) => !chapterIds.has(block.chapterId))
-  ) {
-    throw invalidSnapshot();
-  }
+): NovelParagraphCatalogSnapshot {
+  const record = captureRecord(value, ["schemaVersion", "scope", "paragraphs"]);
+  const paragraphs = captureDenseArray(record.paragraphs).map(captureParagraphSummary);
+  assertUnique(paragraphs.map((paragraph) => paragraph.id));
   return Object.freeze({
     schemaVersion: captureSnapshotVersion(record.schemaVersion),
     scope: captureNovelQueryScope(record.scope),
-    ...(publication === undefined ? {} : { publication }),
-    ...(manuscript === undefined ? {} : { manuscript }),
-    blocks: Object.freeze(blocks),
+    paragraphs: Object.freeze(paragraphs),
   });
 }
 
-export function captureNovelManuscriptBlockSnapshot(
+export function captureNovelParagraphSnapshot(
   value: unknown,
-): NovelManuscriptBlockSnapshot {
+): NovelParagraphSnapshot {
   const record = captureRecord(value, ["schemaVersion", "scope"], ["readModel"]);
   const readModel = record.readModel === undefined
     ? undefined
-    : captureBlockReadModel(record.readModel);
+    : captureParagraphReadModel(record.readModel);
   return Object.freeze({
     schemaVersion: captureSnapshotVersion(record.schemaVersion),
     scope: captureNovelQueryScope(record.scope),
@@ -312,7 +277,7 @@ function captureCounts(value: unknown): NovelOverviewCounts {
     "locationCount",
     "volumeCount",
     "chapterCount",
-    "manuscriptBlockCount",
+    "paragraphCount",
   ]);
   return Object.freeze({
     storyUnitCount: captureCount(record.storyUnitCount),
@@ -320,7 +285,7 @@ function captureCounts(value: unknown): NovelOverviewCounts {
     locationCount: captureCount(record.locationCount),
     volumeCount: captureCount(record.volumeCount),
     chapterCount: captureCount(record.chapterCount),
-    manuscriptBlockCount: captureCount(record.manuscriptBlockCount),
+    paragraphCount: captureCount(record.paragraphCount),
   });
 }
 
@@ -328,14 +293,14 @@ function captureRoots(value: unknown): NovelOverviewRoots {
   const record = captureRecord(value, [
     "outlineAvailable",
     "publicationAvailable",
-    "manuscriptAvailable",
+    "paragraphsAvailable",
   ]);
   const roots = Object.freeze({
     outlineAvailable: captureBoolean(record.outlineAvailable),
     publicationAvailable: captureBoolean(record.publicationAvailable),
-    manuscriptAvailable: captureBoolean(record.manuscriptAvailable),
+    paragraphsAvailable: captureBoolean(record.paragraphsAvailable),
   });
-  if (roots.manuscriptAvailable && !roots.publicationAvailable) {
+  if (roots.paragraphsAvailable && !roots.publicationAvailable) {
     throw invalidSnapshot();
   }
   return roots;
@@ -383,35 +348,35 @@ function captureStoryUnitFromTree(value: unknown): StoryUnit {
   return captureStoryUnit(value);
 }
 
-function captureBlockSummary(value: unknown): NovelManuscriptBlockSummary {
+function captureParagraphSummary(value: unknown): NovelParagraphSummary {
   const record = captureRecord(value, [
     "id",
-    "chapterId",
+    "storyUnitId",
     "orderKey",
     "textLength",
     "textDigest",
   ]);
   return Object.freeze({
-    id: captureManuscriptBlockId(record.id),
-    chapterId: capturePublicationChapterId(record.chapterId),
+    id: captureParagraphId(record.id),
+    storyUnitId: captureStoryUnitId(record.storyUnitId),
     orderKey: captureOrderKey(record.orderKey),
     textLength: captureCount(record.textLength),
     textDigest: captureDigest(record.textDigest),
   });
 }
 
-function captureBlockReadModel(value: unknown): NovelManuscriptBlockReadSnapshot {
+function captureParagraphReadModel(value: unknown): NovelParagraphReadSnapshot {
   const record = captureRecord(value, [
-    "block",
+    "paragraph",
     "textDigest",
-    "chapterDigest",
     "orderDigest",
+    "storyUnitDigest",
   ]);
   return Object.freeze({
-    block: captureParagraphBlock(record.block),
+    paragraph: captureParagraph(record.paragraph),
     textDigest: captureDigest(record.textDigest),
-    chapterDigest: captureDigest(record.chapterDigest),
     orderDigest: captureDigest(record.orderDigest),
+    storyUnitDigest: captureDigest(record.storyUnitDigest),
   });
 }
 

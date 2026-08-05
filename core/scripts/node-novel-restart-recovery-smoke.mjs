@@ -18,15 +18,13 @@ import {
   canonicalNovelReadScope,
   captureCharacter,
   captureCharacterId,
-  captureManuscript,
-  captureManuscriptBlockId,
-  captureManuscriptId,
   captureNovelCommitId,
   captureNovelEntityVersion,
   captureNovelOperationId,
   captureNovelRevision,
   captureNovelTimestamp,
-  captureParagraphBlock,
+  captureParagraph,
+  captureParagraphId,
   capturePublicationChapter,
   capturePublicationChapterId,
   capturePublicationStructure,
@@ -40,8 +38,7 @@ import {
   captureStoryUnitEntityChange,
   captureStoryUnitEntityChangeId,
   captureStoryUnitId,
-  captureStoryUnitRealization,
-  createManuscriptBlockSplitOperation,
+  createParagraphTextReplaceOperation,
 } from "../dist/index.js";
 import {
   NodeNovelOutboxRecoveryRunner,
@@ -158,25 +155,13 @@ try {
     volumeId: volume.id,
     orderKey: orderKeys.initial(),
     title: "Chapter",
+    paragraphIds: [],
   });
-  const manuscript = captureManuscript({
-    id: captureManuscriptId("manuscript_restart_recovery"),
-    novelId: metadata.novelId,
-    publicationId: publication.id,
-  });
-  const leftBlock = captureParagraphBlock({
-    id: captureManuscriptBlockId("block_restart_left"),
-    manuscriptId: manuscript.id,
-    chapterId: chapter.id,
+  const paragraph = captureParagraph({
+    id: captureParagraphId("paragraph_restart_recovery"),
+    storyUnitId: storyUnit.id,
     orderKey: orderKeys.initial(),
-    text: "Left and right",
-  });
-  const rightBlock = captureParagraphBlock({
-    id: captureManuscriptBlockId("block_restart_right"),
-    manuscriptId: manuscript.id,
-    chapterId: chapter.id,
-    orderKey: orderKeys.after(leftBlock.orderKey),
-    text: "right",
+    text: "Initial text",
   });
   const binding = captureStoryUnitCharacterBinding({
     storyUnitId: storyUnit.id,
@@ -191,20 +176,6 @@ try {
     summary: "after",
     sourceEventIds: [],
   });
-  const realization = captureStoryUnitRealization({
-    storyUnitId: storyUnit.id,
-    ranges: [{
-      start: { blockId: leftBlock.id, boundary: "before" },
-      end: { blockId: leftBlock.id, boundary: "after" },
-    }],
-    sourceRevision: metadata.currentRevision,
-    validation: {
-      status: "conforming",
-      checkedNovelRevision: metadata.currentRevision,
-      findings: [],
-    },
-  });
-
   withDatabase(location.canonicalDatabasePath, (database) => {
     database.exec("BEGIN IMMEDIATE");
     try {
@@ -215,11 +186,9 @@ try {
       context.publication.insertPublication(publication);
       context.publication.insertVolume(volume);
       context.publication.insertChapter(chapter);
-      context.manuscript.insertManuscript(manuscript);
-      context.manuscript.insertBlock(leftBlock);
+      context.paragraph.insertParagraph(paragraph);
       context.projectionEvidence.putCharacterBinding(binding);
       context.projectionEvidence.putEntityChange(change);
-      context.projectionEvidence.putRealization(realization);
       database.exec("COMMIT");
     } catch (error) {
       database.exec("ROLLBACK");
@@ -262,17 +231,16 @@ try {
   const expectedTextDigest = withDatabase(
     committingDraftPath,
     (database) => createSqliteNovelMutationContext(database)
-      .manuscript.getBlockDigest(leftBlock.id, "text"),
+      .paragraph.getParagraphDigest(paragraph.id, "text"),
     true,
   );
   await application.mutations.execute(
     committingDraft,
-    createManuscriptBlockSplitOperation({
-      operationId: captureNovelOperationId("operation_restart_split"),
-      blockId: leftBlock.id,
+    createParagraphTextReplaceOperation({
+      operationId: captureNovelOperationId("operation_restart_replace"),
+      paragraphId: paragraph.id,
       expectedTextDigest,
-      leftText: "Left",
-      rightBlock,
+      text: "Replaced text",
     }),
   );
   const resultRevision = captureNovelRevision("revision_restart_committed");
@@ -304,7 +272,6 @@ try {
   const projection = new NovelProjectionPlanner(
     projectionContext.outline,
     projectionContext.source,
-    projectionContext.ranges,
     readinessPolicy,
   ).projectCharacterState(projectionTarget);
   assert.notEqual(projection, undefined);

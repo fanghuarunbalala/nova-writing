@@ -177,28 +177,21 @@ function validateNovelDatabaseStructure(database: DatabaseSync): void {
               entity_version, created_at, updated_at
        FROM novel_locations LIMIT 0`,
       "SELECT id, novel_id FROM novel_publication_structures LIMIT 0",
-      `SELECT id, publication_id, order_key, title, primary_story_unit_id
+      `SELECT id, publication_id, order_key, title
        FROM novel_publication_volumes LIMIT 0`,
       `SELECT id, publication_id, volume_id, order_key, title
        FROM novel_publication_chapters LIMIT 0`,
-      "SELECT id, novel_id, publication_id FROM novel_manuscripts LIMIT 0",
-      `SELECT id, manuscript_id, chapter_id, order_key, text, text_digest,
-              chapter_digest, order_digest
-       FROM novel_manuscript_blocks LIMIT 0`,
-      `SELECT block_id, manuscript_id, former_chapter_id, former_order_key,
-              reason, replacement_block_id
-       FROM novel_manuscript_block_tombstones LIMIT 0`,
-      `SELECT source_block_id, source_boundary, target_block_id,
-              target_boundary, reason, review
-       FROM novel_manuscript_anchor_redirects LIMIT 0`,
+      `SELECT id, story_unit_id, order_key, text, text_digest,
+              order_digest, story_unit_digest
+       FROM novel_paragraphs LIMIT 0`,
+      `SELECT chapter_id, paragraph_id, position
+       FROM novel_chapter_paragraphs LIMIT 0`,
       `SELECT story_unit_id, character_id, binding_json, binding_digest
        FROM novel_story_unit_character_bindings LIMIT 0`,
       `SELECT story_unit_id, location_id, binding_json, binding_digest
        FROM novel_story_unit_location_bindings LIMIT 0`,
       `SELECT id, story_unit_id, change_json, change_digest
        FROM novel_story_unit_entity_changes LIMIT 0`,
-      `SELECT story_unit_id, realization_json, realization_digest
-       FROM novel_story_unit_realizations LIMIT 0`,
     ]) {
       database.prepare(statement);
     }

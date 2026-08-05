@@ -12,18 +12,10 @@ import {
   canonicalNovelReadScope,
   captureCharacter,
   captureCharacterId,
-  captureManuscript,
-  captureManuscriptBlockId,
-  captureManuscriptId,
   captureNovelEntityVersion,
   captureNovelTimestamp,
-  captureParagraphBlock,
-  capturePublicationChapter,
-  capturePublicationChapterId,
-  capturePublicationStructure,
-  capturePublicationStructureId,
-  capturePublicationVolume,
-  capturePublicationVolumeId,
+  captureParagraph,
+  captureParagraphId,
   captureStoryOutline,
   captureStoryOutlineId,
   captureStoryUnit,
@@ -31,7 +23,6 @@ import {
   captureStoryUnitEntityChange,
   captureStoryUnitEntityChangeId,
   captureStoryUnitId,
-  captureStoryUnitRealization,
   draftNovelReadScope,
 } from "../dist/index.js";
 import {
@@ -103,35 +94,12 @@ try {
     outlineId: outline.id,
     orderKey,
     title: "Evidence",
-    planningStatus: "outlined",
+    planningStatus: "ready",
     realizationStatus: "completed",
   });
-  const publication = capturePublicationStructure({
-    id: capturePublicationStructureId("publication_evidence"),
-    novelId: metadata.novelId,
-  });
-  const volume = capturePublicationVolume({
-    id: capturePublicationVolumeId("volume_evidence"),
-    publicationId: publication.id,
-    orderKey,
-    title: "Volume",
-  });
-  const chapter = capturePublicationChapter({
-    id: capturePublicationChapterId("chapter_evidence"),
-    publicationId: publication.id,
-    volumeId: volume.id,
-    orderKey,
-    title: "Chapter",
-  });
-  const manuscript = captureManuscript({
-    id: captureManuscriptId("manuscript_evidence"),
-    novelId: metadata.novelId,
-    publicationId: publication.id,
-  });
-  const block = captureParagraphBlock({
-    id: captureManuscriptBlockId("block_evidence"),
-    manuscriptId: manuscript.id,
-    chapterId: chapter.id,
+  const paragraph = captureParagraph({
+    id: captureParagraphId("paragraph_evidence"),
+    storyUnitId: storyUnit.id,
     orderKey,
     text: "Evidence text",
   });
@@ -149,20 +117,6 @@ try {
     summary: "changed",
     sourceEventIds: [],
   });
-  const realization = captureStoryUnitRealization({
-    storyUnitId: storyUnit.id,
-    ranges: [{
-      start: { blockId: block.id, boundary: "before" },
-      end: { blockId: block.id, boundary: "after" },
-    }],
-    sourceRevision: metadata.currentRevision,
-    validation: {
-      status: "conforming",
-      checkedNovelRevision: metadata.currentRevision,
-      findings: [],
-    },
-  });
-
   withDatabase(location.canonicalDatabasePath, (database) => {
     database.exec("BEGIN IMMEDIATE");
     try {
@@ -170,14 +124,9 @@ try {
       context.characters.insert(character);
       context.outline.insertOutline(outline);
       context.outline.insertStoryUnit(storyUnit);
-      context.publication.insertPublication(publication);
-      context.publication.insertVolume(volume);
-      context.publication.insertChapter(chapter);
-      context.manuscript.insertManuscript(manuscript);
-      context.manuscript.insertBlock(block);
+      context.paragraph.insertParagraph(paragraph);
       context.projectionEvidence.putCharacterBinding(binding);
       context.projectionEvidence.putEntityChange(change);
-      context.projectionEvidence.putRealization(realization);
       database.exec("COMMIT");
     } catch (error) {
       database.exec("ROLLBACK");
@@ -189,7 +138,10 @@ try {
     const evidence = createSqliteNovelMutationContext(database).projectionEvidence;
     assert.deepEqual(evidence.listCharacterBindings(), [binding]);
     assert.deepEqual(evidence.listEntityChanges(), [change]);
-    assert.deepEqual(evidence.listRealizations(), [realization]);
+    assert.equal(
+      createSqliteNovelMutationContext(database).paragraph.getParagraph(paragraph.id).text,
+      "Evidence text",
+    );
   }, true);
 
   const readinessPolicy = {
@@ -207,7 +159,9 @@ try {
   assert.equal(canonicalContext.outline.getUnit(storyUnit.id)?.id, storyUnit.id);
   assert.deepEqual(canonicalContext.source.characterBindings, [binding]);
   assert.deepEqual(canonicalContext.source.entityChanges, [change]);
-  assert.deepEqual(canonicalContext.source.realizations, [realization]);
+  assert.deepEqual(canonicalContext.source.paragraphs.map((value) => value.id), [
+    paragraph.id,
+  ]);
   const target = {
     kind: NOVEL_PROJECTION_TARGET_KIND.characterState,
     characterId: character.id,
@@ -217,7 +171,6 @@ try {
   const initialProjection = new NovelProjectionPlanner(
     canonicalContext.outline,
     canonicalContext.source,
-    canonicalContext.ranges,
     readinessPolicy,
   ).projectCharacterState(target);
   assert.notEqual(initialProjection, undefined);
@@ -283,10 +236,10 @@ try {
 
   withDatabase(draftPath, (database) => {
     database.prepare(
-      "UPDATE novel_story_unit_realizations SET realization_digest = ? WHERE story_unit_id = ?",
-    ).run("0".repeat(64), storyUnit.id);
+      "UPDATE novel_paragraphs SET text_digest = ? WHERE id = ?",
+    ).run("0".repeat(64), paragraph.id);
     assert.throws(() => createSqliteNovelMutationContext(database)
-      .projectionEvidence.listRealizations());
+      .paragraph.getParagraph(paragraph.id));
   });
 
   console.log("novel projection evidence SQLite smoke passed");

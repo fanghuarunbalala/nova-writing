@@ -191,6 +191,7 @@ try {
     volumeId,
     orderKey: first,
     title: "Initial chapter title",
+    paragraphIds: [],
   }));
   const initialChapter = await application.publicationQueries.getChapter(draftScope, chapterId);
   await application.publication.replaceChapter(
@@ -207,6 +208,7 @@ try {
     volumeId: temporaryVolumeId,
     orderKey: first,
     title: "Temporary chapter",
+    paragraphIds: [],
   }));
   const temporaryChapter = await application.publicationQueries.getChapter(
     draftScope,

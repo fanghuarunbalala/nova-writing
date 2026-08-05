@@ -4,7 +4,6 @@ import {
   NovelOperationExecutor,
   NovelOperationPreconditionError,
   STORY_ENTITY_CHANGE_CATEGORY,
-  STORY_UNIT_CONFORMANCE_STATUS,
   canonicalStringifyJson,
   captureCharacterId,
   captureLocationId,
@@ -15,7 +14,6 @@ import {
   captureStoryUnitEntityChangeId,
   captureStoryUnitId,
   captureStoryUnitLocationBinding,
-  captureStoryUnitRealization,
   createDefaultNovelOperationRegistry,
   createStoryUnitCharacterBindingDeleteOperation,
   createStoryUnitCharacterBindingPutOperation,
@@ -23,15 +21,12 @@ import {
   createStoryUnitEntityChangePutOperation,
   createStoryUnitLocationBindingDeleteOperation,
   createStoryUnitLocationBindingPutOperation,
-  createStoryUnitRealizationDeleteOperation,
-  createStoryUnitRealizationPutOperation,
 } from "../dist/index.js";
 
 class MemoryEvidenceRepository {
   characterBindings = new Map();
   locationBindings = new Map();
   changes = new Map();
-  realizations = new Map();
   storyUnits = new Set();
   characters = new Set();
   locations = new Set();
@@ -51,11 +46,6 @@ class MemoryEvidenceRepository {
   getEntityChangeDigest(id) { return digestValue(this.getEntityChange(id)); }
   putEntityChange(value) { this.changes.set(value.id, value); }
   deleteEntityChange(id) { return this.changes.delete(id); }
-  listRealizations() { return [...this.realizations.values()]; }
-  getRealization(id) { return this.realizations.get(id); }
-  getRealizationDigest(id) { return digestValue(this.getRealization(id)); }
-  putRealization(value) { this.realizations.set(value.storyUnitId, value); }
-  deleteRealization(id) { return this.realizations.delete(id); }
   hasStoryUnit(id) { return this.storyUnits.has(id); }
   hasCharacter(id) { return this.characters.has(id); }
   hasLocation(id) { return this.locations.has(id); }
@@ -71,7 +61,6 @@ const storyUnitId = captureStoryUnitId("story_unit_evidence_operations");
 const characterId = captureCharacterId("character_evidence_operations");
 const locationId = captureLocationId("location_evidence_operations");
 const changeId = captureStoryUnitEntityChangeId("change_evidence_operations");
-const revision = captureNovelRevision("revision_evidence_operations");
 const repository = new MemoryEvidenceRepository();
 repository.storyUnits.add(storyUnitId);
 repository.characters.add(characterId);
@@ -106,18 +95,6 @@ const change = captureStoryUnitEntityChange({
   sourceEventIds: [],
 });
 executor.executeSynchronous(context, createStoryUnitEntityChangePutOperation({ operationId: operationId(), change }));
-const realization = captureStoryUnitRealization({
-  storyUnitId,
-  ranges: [],
-  sourceRevision: revision,
-  validation: {
-    status: STORY_UNIT_CONFORMANCE_STATUS.pending,
-    checkedNovelRevision: revision,
-    findings: [],
-  },
-});
-executor.executeSynchronous(context, createStoryUnitRealizationPutOperation({ operationId: operationId(), realization }));
-
 executor.executeSynchronous(context, createStoryUnitCharacterBindingDeleteOperation({
   operationId: operationId(), storyUnitId, characterId,
   expectedRecordDigest: repository.getCharacterBindingDigest(storyUnitId, characterId),
@@ -130,13 +107,8 @@ executor.executeSynchronous(context, createStoryUnitEntityChangeDeleteOperation(
   operationId: operationId(), id: changeId,
   expectedRecordDigest: repository.getEntityChangeDigest(changeId),
 }));
-executor.executeSynchronous(context, createStoryUnitRealizationDeleteOperation({
-  operationId: operationId(), storyUnitId,
-  expectedRecordDigest: repository.getRealizationDigest(storyUnitId),
-}));
 assert.equal(repository.listCharacterBindings().length, 0);
 assert.equal(repository.listLocationBindings().length, 0);
 assert.equal(repository.listEntityChanges().length, 0);
-assert.equal(repository.listRealizations().length, 0);
 
 console.log("novel projection evidence operation smoke passed");

@@ -1,21 +1,16 @@
-/** Revision-bound StoryUnit realization and semantic conformance value contracts. */
-import { canonicalStringifyJson, type JsonObject } from "../../../event/index.js";
+/** Revision-bound StoryUnit conformance value contracts referencing Paragraphs. */
 import {
   NOVEL_PROTOCOL_FAILURE,
   NovelProtocolValidationError,
 } from "../../error/index.js";
 import {
-  captureStoryUnitId,
-  type StoryUnitId,
+  captureParagraphId,
+  type ParagraphId,
 } from "../../identity/index.js";
 import {
   captureNovelRevision,
   type NovelRevision,
 } from "../../version/index.js";
-import {
-  captureManuscriptRange,
-  type ManuscriptRange,
-} from "./ManuscriptAnchor.js";
 
 export const STORY_UNIT_CONFORMANCE_STATUS = {
   pending: "pending",
@@ -54,7 +49,7 @@ export interface StoryUnitConformanceFinding {
   readonly type: StoryUnitConformanceFindingType;
   readonly severity: StoryUnitConformanceSeverity;
   readonly note: string;
-  readonly manuscriptRanges: readonly ManuscriptRange[];
+  readonly paragraphIds: readonly ParagraphId[];
 }
 
 export interface StoryUnitConformanceResult {
@@ -63,42 +58,29 @@ export interface StoryUnitConformanceResult {
   readonly findings: readonly StoryUnitConformanceFinding[];
 }
 
-export interface StoryUnitRealization {
-  readonly storyUnitId: StoryUnitId;
-  readonly ranges: readonly ManuscriptRange[];
-  readonly sourceRevision: NovelRevision;
-  readonly validation: StoryUnitConformanceResult;
-}
-
 const FINDING_KEYS = new Set([
   "type",
   "severity",
   "note",
-  "manuscriptRanges",
+  "paragraphIds",
 ]);
 const RESULT_KEYS = new Set([
   "status",
   "checkedNovelRevision",
   "findings",
 ]);
-const REALIZATION_KEYS = new Set([
-  "storyUnitId",
-  "ranges",
-  "sourceRevision",
-  "validation",
-]);
 
 export function captureStoryUnitConformanceFinding(
   value: unknown,
 ): StoryUnitConformanceFinding {
   const candidate = captureRecord(value, FINDING_KEYS, invalidConformance);
-  captureDenseArray(candidate.manuscriptRanges, invalidConformance);
+  captureDenseArray(candidate.paragraphIds, invalidConformance);
   return Object.freeze({
     type: captureFindingType(candidate.type),
     severity: captureSeverity(candidate.severity),
     note: captureNote(candidate.note),
-    manuscriptRanges: Object.freeze(
-      candidate.manuscriptRanges.map(captureManuscriptRange),
+    paragraphIds: Object.freeze(
+      candidate.paragraphIds.map(captureParagraphId),
     ),
   });
 }
@@ -126,39 +108,6 @@ export function captureStoryUnitConformanceResult(
     status,
     checkedNovelRevision: captureNovelRevision(candidate.checkedNovelRevision),
     findings,
-  });
-}
-
-export function captureStoryUnitRealization(
-  value: unknown,
-): StoryUnitRealization {
-  const candidate = captureRecord(value, REALIZATION_KEYS, invalidRealization);
-  captureDenseArray(candidate.ranges, invalidRealization);
-  let ranges: readonly ManuscriptRange[];
-  let validation: StoryUnitConformanceResult;
-  try {
-    ranges = Object.freeze(candidate.ranges.map(captureManuscriptRange));
-    validation = captureStoryUnitConformanceResult(candidate.validation);
-  } catch (error) {
-    if (error instanceof NovelProtocolValidationError) throw invalidRealization();
-    throw error;
-  }
-  const rangeKeys = ranges.map((range) =>
-    canonicalStringifyJson(range as unknown as JsonObject)
-  );
-  const sourceRevision = captureNovelRevision(candidate.sourceRevision);
-  if (
-    new Set(rangeKeys).size !== rangeKeys.length ||
-    (validation.status !== STORY_UNIT_CONFORMANCE_STATUS.stale &&
-      validation.checkedNovelRevision !== sourceRevision)
-  ) {
-    throw invalidRealization();
-  }
-  return Object.freeze({
-    storyUnitId: captureStoryUnitId(candidate.storyUnitId),
-    ranges,
-    sourceRevision,
-    validation,
   });
 }
 
@@ -232,13 +181,7 @@ function captureSeverity(value: unknown): StoryUnitConformanceSeverity {
 }
 
 function captureNote(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value.length > 20_000 ||
-    value.trim().length === 0 ||
-    /\u0000/u.test(value)
-  ) {
+  if (typeof value !== "string" || value.length > 4_000) {
     throw invalidConformance();
   }
   return value;
@@ -248,12 +191,5 @@ function invalidConformance(): NovelProtocolValidationError {
   return new NovelProtocolValidationError(
     NOVEL_PROTOCOL_FAILURE.invalidStoryUnitConformance,
     "storyUnitConformance",
-  );
-}
-
-function invalidRealization(): NovelProtocolValidationError {
-  return new NovelProtocolValidationError(
-    NOVEL_PROTOCOL_FAILURE.invalidStoryUnitRealization,
-    "storyUnitRealization",
   );
 }

@@ -29,7 +29,6 @@ export type NovelConflictKind =
   | "entity-created"
   | "parent-changed"
   | "order-changed"
-  | "manuscript-block-modified"
   | "domain-invariant";
 
 export interface NovelConflict {

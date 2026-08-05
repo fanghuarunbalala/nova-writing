@@ -1,4 +1,4 @@
-/** Captures stable narrative work units independently from status and manuscript state. */
+/** Captures stable narrative work units independently from status and realization state. */
 import {
   NOVEL_PROTOCOL_FAILURE,
   NovelProtocolValidationError,

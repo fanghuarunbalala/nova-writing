@@ -2,11 +2,11 @@
 import {
   captureCharacterId,
   captureLocationId,
-  captureManuscriptBlockId,
+  captureParagraphId,
   captureStoryUnitId,
   type CharacterId,
   type LocationId,
-  type ManuscriptBlockId,
+  type ParagraphId,
   type StoryUnitId,
 } from "../../novel/index.js";
 
@@ -18,8 +18,8 @@ export const NOVEL_QUERY_API_OPERATION = Object.freeze({
   characterGet: "novel.characters.get",
   locationsList: "novel.locations.list",
   locationGet: "novel.locations.get",
-  manuscriptStructureGet: "novel.manuscript.structure.get",
-  manuscriptBlockGet: "novel.manuscript.block.get",
+  paragraphCatalogGet: "novel.paragraph.catalog.get",
+  paragraphGet: "novel.paragraph.get",
 } as const);
 
 export type NovelQueryApiOperation =
@@ -62,9 +62,9 @@ export interface NovelLocationQueryRequest extends NovelScopedQueryRequest {
   readonly locationId: LocationId;
 }
 
-export interface NovelManuscriptBlockQueryRequest
+export interface NovelParagraphQueryRequest
   extends NovelScopedQueryRequest {
-  readonly blockId: ManuscriptBlockId;
+  readonly paragraphId: ParagraphId;
 }
 
 export function captureNovelQueryScope(value: unknown): NovelQueryScope {
@@ -119,13 +119,13 @@ export function captureNovelLocationQueryRequest(
   });
 }
 
-export function captureNovelManuscriptBlockQueryRequest(
+export function captureNovelParagraphQueryRequest(
   value: unknown,
-): NovelManuscriptBlockQueryRequest {
-  const record = captureRecord(value, ["scope", "blockId"]);
+): NovelParagraphQueryRequest {
+  const record = captureRecord(value, ["scope", "paragraphId"]);
   return Object.freeze({
     scope: captureNovelQueryScope(record.scope),
-    blockId: captureManuscriptBlockId(record.blockId),
+    paragraphId: captureParagraphId(record.paragraphId),
   });
 }
 

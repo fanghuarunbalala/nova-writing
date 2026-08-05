@@ -15,7 +15,7 @@ import {
   NOVEL_QUERY_API_OPERATION,
   captureNovelCharacterQueryRequest,
   captureNovelLocationQueryRequest,
-  captureNovelManuscriptBlockQueryRequest,
+  captureNovelParagraphQueryRequest,
   captureNovelScopedQueryRequest,
   captureNovelStoryUnitQueryRequest,
   type NovelQueryScope,
@@ -25,25 +25,25 @@ import {
   captureNovelCharactersSnapshot,
   captureNovelLocationSnapshot,
   captureNovelLocationsSnapshot,
-  captureNovelManuscriptBlockSnapshot,
-  captureNovelManuscriptStructureSnapshot,
   captureNovelOutlineSnapshot,
   captureNovelOverviewSnapshot,
+  captureNovelParagraphCatalogSnapshot,
+  captureNovelParagraphSnapshot,
   captureNovelStoryUnitSnapshot,
   type NovelCharacterSnapshot,
   type NovelCharactersSnapshot,
   type NovelLocationSnapshot,
   type NovelLocationsSnapshot,
-  type NovelManuscriptBlockSnapshot,
-  type NovelManuscriptStructureSnapshot,
   type NovelOutlineSnapshot,
   type NovelOverviewSnapshot,
+  type NovelParagraphCatalogSnapshot,
+  type NovelParagraphSnapshot,
   type NovelStoryUnitSnapshot,
 } from "./NovelQuerySnapshots.js";
 import type {
   CharacterId,
   LocationId,
-  ManuscriptBlockId,
+  ParagraphId,
   StoryUnitId,
 } from "../../novel/index.js";
 
@@ -120,25 +120,25 @@ export class NovelQueryClient {
     );
   }
 
-  async getManuscriptStructure(
+  async getParagraphCatalog(
     scope: NovelQueryScope,
-  ): Promise<NovelManuscriptStructureSnapshot> {
+  ): Promise<NovelParagraphCatalogSnapshot> {
     const request = captureNovelScopedQueryRequest({ scope });
-    return captureNovelManuscriptStructureSnapshot(
+    return captureNovelParagraphCatalogSnapshot(
       await this.request(
-        NOVEL_QUERY_API_OPERATION.manuscriptStructureGet,
+        NOVEL_QUERY_API_OPERATION.paragraphCatalogGet,
         request,
       ),
     );
   }
 
-  async getManuscriptBlock(
+  async getParagraph(
     scope: NovelQueryScope,
-    blockId: ManuscriptBlockId,
-  ): Promise<NovelManuscriptBlockSnapshot> {
-    const request = captureNovelManuscriptBlockQueryRequest({ scope, blockId });
-    return captureNovelManuscriptBlockSnapshot(
-      await this.request(NOVEL_QUERY_API_OPERATION.manuscriptBlockGet, request),
+    paragraphId: ParagraphId,
+  ): Promise<NovelParagraphSnapshot> {
+    const request = captureNovelParagraphQueryRequest({ scope, paragraphId });
+    return captureNovelParagraphSnapshot(
+      await this.request(NOVEL_QUERY_API_OPERATION.paragraphGet, request),
     );
   }
 

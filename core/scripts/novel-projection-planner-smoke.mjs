@@ -1,31 +1,19 @@
 import assert from "node:assert/strict";
 import {
   FractionalOrderKeyFactory,
-  ManuscriptCatalog,
-  ManuscriptRangeRepairValidator,
-  ManuscriptRepairCatalog,
   NovelProjectionPlanner,
   NovelProtocolValidationError,
-  PublicationCatalog,
   StoryOutlineTree,
   captureCharacter,
   captureCharacterId,
   captureLocation,
   captureLocationId,
-  captureManuscript,
-  captureManuscriptBlockId,
-  captureManuscriptId,
   captureNovelEntityVersion,
   captureNovelId,
   captureNovelRevision,
   captureNovelTimestamp,
-  captureParagraphBlock,
-  capturePublicationChapter,
-  capturePublicationChapterId,
-  capturePublicationStructure,
-  capturePublicationStructureId,
-  capturePublicationVolume,
-  capturePublicationVolumeId,
+  captureParagraph,
+  captureParagraphId,
   captureStoryEventStepId,
   captureStoryOutline,
   captureStoryOutlineId,
@@ -33,7 +21,6 @@ import {
   captureStoryUnitEntityChange,
   captureStoryUnitEntityChangeId,
   captureStoryUnitId,
-  captureStoryUnitRealization,
 } from "../dist/index.js";
 
 const orders = new FractionalOrderKeyFactory();
@@ -56,47 +43,8 @@ const tree = new StoryOutlineTree({
   units: [root, completedLeaf, plannedLeaf, staleLeaf],
 });
 
-const publication = capturePublicationStructure({
-  id: capturePublicationStructureId("publication_projection_planner"),
-  novelId,
-});
-const volume = capturePublicationVolume({
-  id: capturePublicationVolumeId("volume_projection_planner"),
-  publicationId: publication.id,
-  orderKey: first,
-  title: "Volume",
-});
-const chapter = capturePublicationChapter({
-  id: capturePublicationChapterId("chapter_projection_planner"),
-  publicationId: publication.id,
-  volumeId: volume.id,
-  orderKey: first,
-  title: "Chapter",
-});
-const publicationCatalog = new PublicationCatalog({
-  publication,
-  volumes: [volume],
-  chapters: [chapter],
-});
-const manuscript = captureManuscript({
-  id: captureManuscriptId("manuscript_projection_planner"),
-  novelId,
-  publicationId: publication.id,
-});
-const completedBlock = block("block_completed", first);
-const staleBlock = block("block_stale", second);
-const manuscriptCatalog = new ManuscriptCatalog({
-  manuscript,
-  blocks: [staleBlock, completedBlock],
-}, publicationCatalog);
-const repairCatalog = new ManuscriptRepairCatalog(
-  { tombstones: [], redirects: [] },
-  manuscriptCatalog,
-);
-const rangeValidator = new ManuscriptRangeRepairValidator(
-  manuscriptCatalog,
-  repairCatalog,
-);
+const completedParagraph = paragraph("paragraph_completed", first);
+const staleParagraph = paragraph("paragraph_stale", second);
 
 const protagonist = character("character_protagonist", "Protagonist", undefined);
 const ally = character("character_ally", "Ally", "Healthy and cautious.");
@@ -117,27 +65,16 @@ const changes = [
   change("stale_condition", staleLeaf.id, "character", protagonist.id,
     "condition", "This stale evidence must not be confirmed."),
 ];
-const realizations = [
-  realization(
-    completedLeaf.id,
-    currentRevision,
-    completedBlock.id,
-    "conforming",
-    [{
-      type: "rhythm-mismatch",
-      severity: "warning",
-      note: "Accepted pacing variation.",
-      manuscriptRanges: [],
-    }],
-  ),
-  realization(staleLeaf.id, oldRevision, staleBlock.id, "conforming", []),
+const paragraphs = [
+  completedParagraph,
+  staleParagraph,
 ];
 const source = {
   currentRevision,
   characters: [ally, protagonist],
   locations: [harbor],
   entityChanges: changes,
-  realizations,
+  paragraphs,
   characterBindings: [{
     storyUnitId: plannedLeaf.id,
     characterId: protagonist.id,
@@ -168,7 +105,6 @@ const readinessPolicy = {
 const planner = new NovelProjectionPlanner(
   tree,
   source,
-  rangeValidator,
   readinessPolicy,
 );
 
@@ -244,12 +180,13 @@ assert.equal(planner.projectReadiness({
 
 const currentConformance = planner.projectStoryUnitConformance(completedLeaf.id);
 assert.equal(currentConformance.freshness, "current");
-assert.equal(currentConformance.warningCount, 1);
-assert.deepEqual(currentConformance.rangeStatuses, ["valid"]);
+assert.equal(currentConformance.warningCount, 0);
+assert.equal(currentConformance.validationStatus, "conforming");
 const pendingConformance = planner.projectStoryUnitConformance(plannedLeaf.id);
 assert.equal(pendingConformance.validationStatus, "pending");
 const staleConformance = planner.projectStoryUnitConformance(staleLeaf.id);
-assert.equal(staleConformance.freshness, "stale");
+assert.equal(staleConformance.freshness, "current");
+assert.equal(staleConformance.validationStatus, "conforming");
 
 assert.equal(planner.projectCharacterState({
   characterId: captureCharacterId("missing_character"),
@@ -260,7 +197,6 @@ assert.equal(planner.projectCharacterState({
 const secondPlanner = new NovelProjectionPlanner(
   tree,
   source,
-  rangeValidator,
   readinessPolicy,
 );
 assert.deepEqual(
@@ -297,7 +233,6 @@ for (const invalidSource of [
     () => new NovelProjectionPlanner(
       tree,
       invalidSource,
-      rangeValidator,
       readinessPolicy,
     ),
     (error) => error instanceof NovelProtocolValidationError &&
@@ -317,11 +252,10 @@ function storyUnit(label, parentId, orderKey, realizationStatus) {
   });
 }
 
-function block(id, orderKey) {
-  return captureParagraphBlock({
-    id: captureManuscriptBlockId(id),
-    manuscriptId: manuscript.id,
-    chapterId: chapter.id,
+function paragraph(id, orderKey) {
+  return captureParagraph({
+    id: captureParagraphId(id),
+    storyUnitId: captureStoryUnitId(`story_unit_${id.includes("completed") ? "completed" : "stale"}`),
     orderKey,
     text: id,
   });
@@ -365,22 +299,6 @@ function change(id, storyUnitId, entityType, entityId, category, summary, relate
     category,
     summary,
     sourceEventIds: [captureStoryEventStepId(`${id}_event`)],
-  });
-}
-
-function realization(storyUnitId, revision, blockId, status, findings) {
-  return captureStoryUnitRealization({
-    storyUnitId,
-    ranges: [{
-      start: { blockId, boundary: "before" },
-      end: { blockId, boundary: "after" },
-    }],
-    sourceRevision: revision,
-    validation: {
-      status,
-      checkedNovelRevision: revision,
-      findings,
-    },
   });
 }
 

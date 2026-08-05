@@ -16,11 +16,9 @@ import {
   captureStoryUnitCharacterBinding,
   captureStoryUnitEntityChange,
   captureStoryUnitLocationBinding,
-  captureStoryUnitRealization,
   type StoryUnitCharacterBinding,
   type StoryUnitEntityChange,
   type StoryUnitLocationBinding,
-  type StoryUnitRealization,
 } from "../model/index.js";
 import {
   createStoryUnitCharacterBindingDeleteOperation,
@@ -29,8 +27,6 @@ import {
   createStoryUnitEntityChangePutOperation,
   createStoryUnitLocationBindingDeleteOperation,
   createStoryUnitLocationBindingPutOperation,
-  createStoryUnitRealizationDeleteOperation,
-  createStoryUnitRealizationPutOperation,
   type NovelOperation,
 } from "../operation/index.js";
 import type { NovelDraftOperationReceipt } from "../port/index.js";
@@ -88,19 +84,6 @@ export class NovelEvidenceService {
     return this.execute(session, createStoryUnitEntityChangeDeleteOperation({
       operationId: this.operationId(), id, expectedRecordDigest,
     }), "entity_change.delete", { changeId: id });
-  }
-  putRealization(session: NovelDraftSession, realization: StoryUnitRealization, expectedRecordDigest?: string) {
-    const value = captureStoryUnitRealization(realization);
-    return this.execute(session, createStoryUnitRealizationPutOperation({
-      operationId: this.operationId(), realization: value,
-      ...(expectedRecordDigest === undefined ? {} : { expectedRecordDigest }),
-    }), "realization.put", { storyUnitId: value.storyUnitId });
-  }
-  deleteRealization(session: NovelDraftSession, storyUnitIdInput: StoryUnitId, expectedRecordDigest: string) {
-    const storyUnitId = captureStoryUnitId(storyUnitIdInput);
-    return this.execute(session, createStoryUnitRealizationDeleteOperation({
-      operationId: this.operationId(), storyUnitId, expectedRecordDigest,
-    }), "realization.delete", { storyUnitId });
   }
 
   private operationId() { return this.options.identityFactory.createOperationId(); }

@@ -20,7 +20,7 @@ for (const marker of [
   "### 12.2 Public Application Facade",
   "class NovelEvidenceService",
   "### 12.10 Platform-Neutral Application Examples",
-  "await application.manuscript.replaceBlockText",
+  "await application.paragraphs.replaceText",
   "await application.evidenceQueries.evaluateCompletion",
   "participant Client as \"CLI / GUI / Web\"",
   "### 12.11 Explicit Exclusions",

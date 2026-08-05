@@ -27,7 +27,7 @@ import {
   type StoryUnitId,
 } from "../../../novel/index.js";
 import { createSqliteNovelEntityMutationContext } from "./SqliteNovelEntityRepository.js";
-import { createSqliteNovelManuscriptMutationContext } from "./SqliteNovelManuscriptRepository.js";
+import { createSqliteNovelParagraphMutationContext } from "./SqliteNovelParagraphRepository.js";
 import { createSqliteNovelPublicationMutationContext } from "./SqliteNovelPublicationRepository.js";
 import { createSqliteNovelProjectionEvidenceMutationContext } from "./SqliteNovelProjectionEvidenceRepository.js";
 
@@ -71,7 +71,7 @@ export function createSqliteNovelMutationContext(
     ...createSqliteNovelEntityMutationContext(database),
     ...createSqliteNovelOutlineMutationContext(database),
     ...createSqliteNovelPublicationMutationContext(database),
-    ...createSqliteNovelManuscriptMutationContext(database),
+    ...createSqliteNovelParagraphMutationContext(database),
     ...createSqliteNovelProjectionEvidenceMutationContext(database),
   });
 }

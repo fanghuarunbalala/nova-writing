@@ -186,18 +186,16 @@ try {
   );
   assert.equal(metadata.updatedAt, metadata.createdAt);
   assert.deepEqual(inspectControlTables(location.canonicalDatabasePath), [
+    "novel_chapter_paragraphs",
     "novel_characters",
     "novel_commits",
     "novel_conversation_bindings",
     "novel_draft_sessions",
     "novel_leaf_story_unit_plans",
     "novel_locations",
-    "novel_manuscript_anchor_redirects",
-    "novel_manuscript_block_tombstones",
-    "novel_manuscript_blocks",
-    "novel_manuscripts",
     "novel_metadata",
     "novel_outbox",
+    "novel_paragraphs",
     "novel_projection_cache",
     "novel_publication_chapters",
     "novel_publication_structures",
@@ -209,7 +207,6 @@ try {
     "novel_story_unit_character_bindings",
     "novel_story_unit_entity_changes",
     "novel_story_unit_location_bindings",
-    "novel_story_unit_realizations",
     "novel_story_units",
   ]);
 

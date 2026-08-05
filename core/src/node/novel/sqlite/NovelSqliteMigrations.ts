@@ -11,7 +11,7 @@ import {
 } from "./NovelDatabaseErrors.js";
 import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
 import { NOVEL_OUTLINE_SCHEMA_SQL } from "./NovelOutlineSqliteSchema.js";
-import { NOVEL_PUBLICATION_MANUSCRIPT_SCHEMA_SQL } from "./NovelPublicationManuscriptSqliteSchema.js";
+import { NOVEL_PARAGRAPH_PUBLICATION_SCHEMA_SQL } from "./NovelParagraphPublicationSqliteSchema.js";
 import { NOVEL_PROJECTION_EVIDENCE_SCHEMA_SQL } from "./NovelProjectionEvidenceSqliteSchema.js";
 import { NOVEL_PROJECTION_CACHE_SCHEMA_SQL } from "./NovelProjectionSqliteSchema.js";
 
@@ -196,12 +196,28 @@ const NOVEL_MIGRATIONS: readonly NovelSqliteMigration[] = [
   {
     version: 9,
     name: "publication_manuscript_state",
-    sql: NOVEL_PUBLICATION_MANUSCRIPT_SCHEMA_SQL,
+    sql: NOVEL_PARAGRAPH_PUBLICATION_SCHEMA_SQL,
   },
   {
     version: 10,
     name: "projection_evidence_state",
     sql: NOVEL_PROJECTION_EVIDENCE_SCHEMA_SQL,
+  },
+  {
+    version: 11,
+    name: "paragraph_publication_rebuild",
+    sql: `
+      DROP TABLE IF EXISTS novel_chapter_paragraphs;
+      DROP TABLE IF EXISTS novel_paragraphs;
+      DROP TABLE IF EXISTS novel_manuscript_anchor_redirects;
+      DROP TABLE IF EXISTS novel_manuscript_block_tombstones;
+      DROP TABLE IF EXISTS novel_manuscript_blocks;
+      DROP TABLE IF EXISTS novel_manuscripts;
+      DROP TABLE IF EXISTS novel_publication_chapters;
+      DROP TABLE IF EXISTS novel_publication_volumes;
+      DROP TABLE IF EXISTS novel_publication_structures;
+      ${NOVEL_PARAGRAPH_PUBLICATION_SCHEMA_SQL}
+    `,
   },
 ];
 

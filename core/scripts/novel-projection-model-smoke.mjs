@@ -61,7 +61,6 @@ const conformance = captureStoryUnitConformanceProjection({
   sourceRevision: revision,
   freshness: "current",
   validationStatus: "conforming",
-  rangeStatuses: ["valid", "review-required"],
   warningCount: 1,
   errorCount: 0,
   evidenceStoryUnitIds: [targetStoryUnitId],
@@ -116,7 +115,7 @@ for (const invalid of [
   }),
   () => captureStoryUnitConformanceProjection({
     ...conformance,
-    rangeStatuses: ["unknown"],
+    validationStatus: "unknown",
   }),
   () => captureLocationCurrentStateProjection({
     ...location,

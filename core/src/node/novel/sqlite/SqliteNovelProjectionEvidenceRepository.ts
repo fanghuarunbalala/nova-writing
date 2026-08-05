@@ -11,13 +11,12 @@ import {
   captureStoryUnitEntityChangeId,
   captureStoryUnitId,
   captureStoryUnitLocationBinding,
-  captureStoryUnitRealization,
   type NovelMutableProjectionEvidenceRepository,
   type NovelProjectionEvidenceMutationContext,
+  type StoryUnitId,
   type StoryUnitCharacterBinding,
   type StoryUnitEntityChange,
   type StoryUnitLocationBinding,
-  type StoryUnitRealization,
 } from "../../../novel/index.js";
 
 interface EvidenceRow {
@@ -192,51 +191,7 @@ export class SqliteNovelProjectionEvidenceRepository
     );
   }
 
-  listRealizations(): readonly StoryUnitRealization[] {
-    return this.readAll(
-      `SELECT realization_json AS value_json, realization_digest AS value_digest
-       FROM novel_story_unit_realizations ORDER BY story_unit_id`,
-      captureStoryUnitRealization,
-    );
-  }
-
-  getRealization(storyUnitId: StoryUnitRealization["storyUnitId"]) {
-    return this.readOne(
-      "SELECT realization_json AS value_json, realization_digest AS value_digest FROM novel_story_unit_realizations WHERE story_unit_id = ?",
-      captureStoryUnitRealization,
-      captureStoryUnitId(storyUnitId),
-    );
-  }
-
-  getRealizationDigest(storyUnitId: StoryUnitRealization["storyUnitId"]) {
-    return this.readDigest(
-      "SELECT realization_digest AS value_digest FROM novel_story_unit_realizations WHERE story_unit_id = ?",
-      captureStoryUnitId(storyUnitId),
-    );
-  }
-
-  putRealization(realization: StoryUnitRealization): void {
-    const value = captureStoryUnitRealization(realization);
-    this.put(
-      `INSERT INTO novel_story_unit_realizations(
-         story_unit_id, realization_json, realization_digest
-       ) VALUES (?, ?, ?)
-       ON CONFLICT(story_unit_id) DO UPDATE SET
-         realization_json = excluded.realization_json,
-         realization_digest = excluded.realization_digest`,
-      [value.storyUnitId],
-      value,
-    );
-  }
-
-  deleteRealization(storyUnitId: StoryUnitRealization["storyUnitId"]): boolean {
-    return this.delete(
-      "DELETE FROM novel_story_unit_realizations WHERE story_unit_id = ?",
-      captureStoryUnitId(storyUnitId),
-    );
-  }
-
-  hasStoryUnit(storyUnitId: StoryUnitRealization["storyUnitId"]): boolean {
+  hasStoryUnit(storyUnitId: StoryUnitId): boolean {
     return this.exists("novel_story_units", "id", captureStoryUnitId(storyUnitId));
   }
 

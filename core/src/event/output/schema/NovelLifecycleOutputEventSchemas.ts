@@ -17,7 +17,7 @@ const DraftStatus = Type.Union([
 const ConflictKind = Type.Union([
   Type.Literal("field-modified"), Type.Literal("entity-deleted"),
   Type.Literal("entity-created"), Type.Literal("parent-changed"),
-  Type.Literal("order-changed"), Type.Literal("manuscript-block-modified"),
+  Type.Literal("order-changed"),
   Type.Literal("domain-invariant"),
 ]);
 const ResolutionStrategy = Type.Union([

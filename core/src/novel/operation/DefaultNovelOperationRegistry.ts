@@ -1,22 +1,22 @@
 /** Composes all accepted Novel Domain Operation handlers without provider details. */
 import type {
   NovelEntityMutationContext,
-  NovelManuscriptMutationContext,
   NovelOutlineMutationContext,
+  NovelParagraphMutationContext,
   NovelProjectionEvidenceMutationContext,
   NovelPublicationMutationContext,
 } from "../port/index.js";
 import { registerNovelEntityOperationHandlers } from "./entity/index.js";
 import { registerNovelProjectionEvidenceOperationHandlers } from "./evidence/index.js";
-import { registerNovelManuscriptOperationHandlers } from "./manuscript/index.js";
 import { registerNovelOutlineOperationHandlers } from "./outline/index.js";
+import { registerNovelParagraphOperationHandlers } from "./paragraph/index.js";
 import { registerNovelPublicationOperationHandlers } from "./publication/index.js";
 import { NovelOperationRegistry } from "./NovelOperationRegistry.js";
 
 export type NovelMutationContext = NovelEntityMutationContext &
   NovelOutlineMutationContext &
   NovelPublicationMutationContext &
-  NovelManuscriptMutationContext &
+  NovelParagraphMutationContext &
   NovelProjectionEvidenceMutationContext;
 
 export function createDefaultNovelOperationRegistry<
@@ -27,6 +27,6 @@ export function createDefaultNovelOperationRegistry<
   registerNovelProjectionEvidenceOperationHandlers(registry);
   registerNovelOutlineOperationHandlers(registry);
   registerNovelPublicationOperationHandlers(registry);
-  registerNovelManuscriptOperationHandlers(registry);
+  registerNovelParagraphOperationHandlers(registry);
   return registry;
 }

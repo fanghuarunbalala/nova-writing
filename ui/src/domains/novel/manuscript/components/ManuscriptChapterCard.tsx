@@ -1,7 +1,10 @@
 /**
  * ManuscriptChapterCard
  *
- * 章节卡片：标题 + 块列表。
+ * 章节卡片（原型 .chapter-card）：header（h4 + 可选 draft-tag + 可选 rev）
+ * + block 列表。
+ *
+ * header baseline 对齐；rev 用 mono/faint；draft 章节额外加 draft-tag。
  */
 import type { ManuscriptChapter } from "../store/ManuscriptStructureStore.js";
 import { ManuscriptBlock } from "./ManuscriptBlock.js";
@@ -24,8 +27,8 @@ export function ManuscriptChapterCard({
     <section className={styles.card}>
       <header className={styles.head}>
         <h4 className={styles.title}>{chapter.title}</h4>
-        {chapter.revision !== undefined ? <ManuscriptDraftTag revision={chapter.revision} /> : null}
-        {isDraft ? <span className={styles.isDraft}>草稿版本</span> : null}
+        {isDraft ? <ManuscriptDraftTag /> : null}
+        {chapter.revision !== undefined ? <span className={styles.rev}>{chapter.revision}</span> : null}
       </header>
       <div className={styles.blocks}>
         {chapter.blocks.map((block) => (

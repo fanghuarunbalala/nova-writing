@@ -112,7 +112,7 @@ describe("manuscript components", () => {
   it("renders block primitives", () => {
     render(<ManuscriptBlock block={{ blockId: "§3-01-04", digest: "8f3a70", text: "" }} />);
     expect(screen.getByText("§3-01-04")).toBeInTheDocument();
-    render(<ManuscriptDraftTag revision="r042" />);
-    expect(screen.getByText("r042")).toBeInTheDocument();
+    render(<ManuscriptDraftTag />);
+    expect(screen.getByText("草稿")).toBeInTheDocument();
   });
 });

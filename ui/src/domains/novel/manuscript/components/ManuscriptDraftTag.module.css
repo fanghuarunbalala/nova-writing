@@ -1,14 +1,15 @@
 /**
- * ManuscriptDraftTag 视觉。
+ * ManuscriptDraftTag 视觉（原型 .draft-tag）。
+ *
+ * warn-bg 底 + warn 色 + 10.5px/750 + 999px 圆角 + 2/8 padding。
  */
 .tag {
   display: inline-flex;
   align-items: center;
-  padding: 1px 7px;
+  padding: 2px 8px;
   border-radius: var(--radius-pill);
   background: var(--color-warn-bg);
   color: var(--color-warn);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
+  font-size: 10.5px;
+  font-weight: 750;
 }

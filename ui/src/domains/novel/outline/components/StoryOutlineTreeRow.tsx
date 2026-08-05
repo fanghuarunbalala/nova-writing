@@ -1,7 +1,10 @@
 /**
  * StoryOutlineTreeRow
  *
- * 大纲树行：缩进 + 展开箭头 + 标题 + 状态 + 阻塞/废弃注记。
+ * 大纲树行（原型 .unit）：caret + label + u-scope + u-status。
+ *
+ * 缩进与字重由 data-depth 属性驱动（CSS 规则 per depth），depth 1/2 带左侧
+ * 引导线。阻塞/废弃原因作为兄弟 OutlineBlockNote 渲染，缩进对齐父单元。
  */
 import { Icon } from "../../../../shared/primitives/Icon.js";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -28,11 +31,14 @@ export function StoryOutlineTreeRow({
   onToggleExpand,
 }: StoryOutlineTreeRowProps) {
   const hasChildren = unit.children.length > 0;
+  const noteKind = unit.realNode === "blocked" ? "blocked" : "abandoned";
+  const noteReason = unit.blockedReason ?? unit.abandonedReason;
   return (
     <div className={styles.rowGroup}>
       <div
         className={[styles.row, selected ? styles.selected : ""].filter(Boolean).join(" ")}
-        style={{ paddingLeft: `${10 + depth * 16}px` }}
+        data-depth={depth}
+        data-expanded={expanded ? "true" : "false"}
       >
         <button
           type="button"
@@ -53,13 +59,8 @@ export function StoryOutlineTreeRow({
         </button>
         <StoryOutlineTreeStatus planM={unit.planM} realNode={unit.realNode} />
       </div>
-      {unit.blockedReason !== undefined || unit.abandonedReason !== undefined ? (
-        <div style={{ paddingLeft: `${34 + depth * 16}px` }}>
-          <OutlineBlockNote
-            kind={unit.realNode === "blocked" ? "blocked" : "abandoned"}
-            reason={unit.blockedReason ?? unit.abandonedReason ?? ""}
-          />
-        </div>
+      {noteReason !== undefined ? (
+        <OutlineBlockNote kind={noteKind} reason={noteReason} depth={depth} />
       ) : null}
     </div>
   );

@@ -1,18 +1,129 @@
 /**
- * StoryOutlineTreeLegend 视觉。
+ * StoryOutlineTreeLegend 视觉（原型 .tree-legend + .lg-key + .plan-m + .real-node）。
+ *
+ * 顶部 wrap flex；每项 lg-key pill：边框 + 999px 圆角 + surface 底。
+ * plan-m 与 real-node 复用 .plan-m / .real-node 视觉规则（与
+ * StoryOutlineTreeStatus 同源）。
  */
 .legend {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 10px;
-  border-top: 1px solid var(--color-border);
-  font-size: var(--fs-xs);
-  color: var(--color-faint);
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
 }
 
 .item {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  font-size: 10px;
+  color: var(--color-muted);
+  font-weight: var(--fw-semibold);
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+}
+
+.label {
+  font-style: normal;
+}
+
+.planM {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  flex: none;
+}
+
+.seg {
+  width: 5px;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--color-border-strong) 72%, transparent);
+}
+
+.planM[data-value="1"] .seg:nth-child(-n + 1) {
+  background: var(--color-muted);
+  opacity: 0.85;
+}
+
+.planM[data-value="2"] .seg:nth-child(-n + 2) {
+  background: var(--color-info);
+  opacity: 0.9;
+}
+
+.planM[data-value="3"] .seg:nth-child(-n + 3) {
+  background: var(--color-success);
+}
+
+.realNode {
+  position: relative;
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+}
+
+.real-pending {
+  border: 1.5px solid var(--color-border-strong);
+  opacity: 0.62;
+}
+
+.real-in-progress {
+  border: 1.5px solid color-mix(in oklab, var(--color-accent) 55%, transparent);
+}
+
+.real-in-progress::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: nodePulse 1.8s ease-in-out infinite;
+}
+
+.real-completed {
+  background: var(--color-success);
+}
+
+.real-completed::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 3.4px;
+  width: 4px;
+  height: 2px;
+  border-left: 1.5px solid var(--color-bg);
+  border-bottom: 1.5px solid var(--color-bg);
+  transform: rotate(-45deg);
+}
+
+.real-blocked {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--color-danger);
+  transform: rotate(45deg);
+}
+
+.real-abandoned {
+  border: 1.5px solid var(--color-border-strong);
+  opacity: 0.45;
+}
+
+.real-abandoned::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 2.8px;
+  width: 10px;
+  height: 1.5px;
+  background: var(--color-muted);
+  border-radius: 1px;
+}
+
+@keyframes nodePulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }

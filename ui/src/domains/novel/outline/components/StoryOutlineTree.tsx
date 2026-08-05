@@ -43,8 +43,8 @@ function renderNode(
 export function StoryOutlineTree(props: StoryOutlineTreeProps) {
   return (
     <div className={styles.tree} data-workspace={props.workspaceId}>
-      {props.tree.map((node) => renderNode(node, 0, props))}
       <StoryOutlineTreeLegend />
+      {props.tree.map((node) => renderNode(node, 0, props))}
     </div>
   );
 }

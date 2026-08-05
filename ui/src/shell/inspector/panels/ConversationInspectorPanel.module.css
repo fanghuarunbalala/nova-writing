@@ -1,17 +1,30 @@
 /**
- * ConversationInspectorPanel 视觉。
+ * ConversationInspectorPanel 视觉（原型 .detail-body + .detail-card）。
+ *
+ * padding 14/16/30；title 14.5px/heavy；dMeta mono 10.5px/faint；
+ * meta dl 用 grid 对齐 dt/dd。
  */
 .panel {
   display: flex;
   flex-direction: column;
+  padding: 14px 16px 30px;
   gap: 10px;
-  padding: 14px;
 }
 
 .title {
-  font-size: var(--fs-h1);
-  font-weight: var(--fw-bold);
+  font-size: 14.5px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.01em;
   color: var(--color-fg);
+  margin: 0;
+}
+
+.dMeta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-faint);
+  letter-spacing: 0.02em;
+  word-break: break-all;
 }
 
 .meta {

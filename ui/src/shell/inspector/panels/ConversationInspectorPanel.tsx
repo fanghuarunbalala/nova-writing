@@ -1,7 +1,7 @@
 /**
  * ConversationInspectorPanel
  *
- * 对话元信息面板。
+ * 对话元信息面板（inspector 用）：标题 + 元数据列表（Agent / ID）。
  */
 import type { ConversationCatalogStore } from "../../../domains/conversation/store/ConversationCatalogStore.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
@@ -21,14 +21,11 @@ export function ConversationInspectorPanel({
   return (
     <div className={styles.panel}>
       <h3 className={styles.title}>{item?.title ?? conversationId}</h3>
+      <div className={styles.dMeta}>{conversationId}</div>
       <dl className={styles.meta}>
         <div>
           <dt>Agent</dt>
-          <dd>{item?.agentLabel ?? "—"}</dd>
-        </div>
-        <div>
-          <dt>ID</dt>
-          <dd>{conversationId}</dd>
+          <dd>{item?.agentLabel ?? "-"}</dd>
         </div>
       </dl>
     </div>

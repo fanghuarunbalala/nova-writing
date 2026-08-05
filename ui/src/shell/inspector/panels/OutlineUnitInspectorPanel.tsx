@@ -1,7 +1,10 @@
 /**
  * OutlineUnitInspectorPanel
  *
- * 大纲单元详情：在大纲树中定位节点并展示状态。
+ * 大纲单元详情（inspector 用）：在大纲树中定位节点并展示状态。
+ *
+ * 复用 StoryOutlineTreeStatus 与 OutlineBlockNote，结构与原型 detail-card 对齐：
+ * head（title + scope + status）+ dMeta（progress）+ note（block/abandoned）。
  */
 import { OutlineBlockNote } from "../../../domains/novel/outline/components/OutlineBlockNote.js";
 import { StoryOutlineTreeStatus } from "../../../domains/novel/outline/components/StoryOutlineTreeStatus.js";
@@ -40,15 +43,16 @@ export function OutlineUnitInspectorPanel({
   }
   return (
     <div className={styles.panel} data-workspace={workspaceId}>
-      <header className={styles.head}>
+      <div className={styles.head}>
         <h3 className={styles.title}>{unit.label}</h3>
         <span className={styles.scope}>{unit.scope}</span>
         <StoryOutlineTreeStatus planM={unit.planM} realNode={unit.realNode} />
-      </header>
+      </div>
+      <div className={styles.dMeta}>{unit.unitId}</div>
       {unit.progress !== undefined ? (
-        <span className={styles.progress}>
+        <div className={styles.dMeta}>
           已完成 {unit.progress.completed}/{unit.progress.total}
-        </span>
+        </div>
       ) : null}
       {unit.blockedReason !== undefined ? (
         <OutlineBlockNote kind="blocked" reason={unit.blockedReason} />

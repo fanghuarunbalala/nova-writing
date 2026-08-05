@@ -1,7 +1,11 @@
 /**
  * InspectorHost
  *
- * 右侧 inspector：按路由渲染 panel，拖拽调宽（范围来自 tokens）。
+ * 右侧 inspector（原型 .inspector）：拖拽调宽 + insp-head（kicker + close）
+ * + insp-body（按路由渲染 panel）。
+ *
+ * insp-head 的 kicker 按 panel 类型动态显示标签；close 触发 inspectorRouter.close()。
+ * 审批 tabs 待 approval 域落地后补充。
  */
 import { useState } from "react";
 import { DragHandle } from "../../shared/primitives/DragHandle.js";
@@ -19,6 +23,13 @@ import styles from "./InspectorHost.module.css";
 const DEFAULT_WIDTH = 384;
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 680;
+
+const KICKER_BY_KIND: Record<string, string> = {
+  entity: "档案 · 角色 / 地点",
+  outlineUnit: "大纲单元",
+  conversation: "对话元信息",
+  approval: "审批 · Diff 审核",
+};
 
 export interface InspectorHostProps {
   readonly inspectorRouter: InspectorRouter;
@@ -43,6 +54,7 @@ export function InspectorHost({
   const workspaceId =
     conversationCatalog.getSnapshot().workspaceId ??
     outlineTree.getSnapshot().workspaceId;
+  const kicker = KICKER_BY_KIND[route.state.kind] ?? "详情";
   return (
     <aside className={styles.host} style={{ width }}>
       <DragHandle
@@ -52,6 +64,17 @@ export function InspectorHost({
           setWidth((current) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, current + delta)))
         }
       />
+      <header className={styles.head}>
+        <span className={styles.kicker}>{kicker}</span>
+        <button
+          type="button"
+          className={styles.close}
+          aria-label="收起面板"
+          onClick={() => inspectorRouter.close()}
+        >
+          ✕
+        </button>
+      </header>
       <div className={styles.body}>
         {route.state.kind === "entity" ? (
           <EntityInspectorPanel

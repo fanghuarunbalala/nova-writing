@@ -15,7 +15,7 @@ export const THINKING_BLOCK_STYLES = `
   inset: -1.5px;
   border: 1.5px dashed transparent;
   border-radius: inherit;
-  background: linear-gradient(90deg, #a9c1e2, #8f7fd0, #a9c1e2) border-box;
+  background: linear-gradient(90deg, #b8c6d9, #c0b6dc, #b8c6d9) border-box;
   -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);

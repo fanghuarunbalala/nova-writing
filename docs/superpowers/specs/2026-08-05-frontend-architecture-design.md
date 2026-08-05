@@ -2949,22 +2949,28 @@ Playwright 截图验证，不引入 HTML demo）；ExternalStore 单元测试覆
 ### Phase 2: 五个域（3-4 周，可并行）
 
 并行轨道：
-- **轨道 A（关键路径）**：workspace -> conversation
-- **轨道 B**：novel（5 个 sub-domain 内部串行，但与其他域并行）
-- **轨道 C**：approval（⚠️ 已延后待定——approval 域后续再确定；依赖 core approval API 契约定稿）
-- **轨道 D（最后）**：schedule（依赖其他域 store 完成）
+- **轨道 A（关键路径）✅**：workspace -> conversation
+- **轨道 B ✅**：novel（5 个 sub-domain 内部串行，但与其他域并行）
+- **轨道 C ⏳**：approval（⚠️ 已延后待定——approval 域后续再确定；依赖 core approval API 契约定稿）
+- **轨道 D**：schedule（依赖其他域 store 完成）
 
 每域任务清单（以 conversation 为例）：
-- [ ] `domains/conversation/store/ConversationCatalogStore.ts`
-- [ ] `domains/conversation/store/ComposerDraftStore.ts`（重构已存在）
-- [ ] `domains/conversation/projection/*`
-- [ ] `domains/conversation/cards/ConversationCardRendererRegistry.ts`
-- [ ] `domains/conversation/cards/renderers/*`（6 个 renderer）
-- [ ] `domains/conversation/hooks/*`（4 个 hook）
-- [ ] `domains/conversation/components/*`（16 个组件 + .module.css）
-- [ ] 单元测试：store + projection
-- [ ] 组件测试：渲染 + 交互
-- [ ] 契约测试：ScriptedApiTransport
+- [x] `domains/conversation/store/ConversationCatalogStore.ts`
+- [x] `domains/conversation/store/ComposerDraftStore.ts`（域内重构；legacy 待 Phase 3 迁移后移除）
+- [x] `domains/conversation/projection/*`
+- [x] `domains/conversation/cards/ConversationCardRendererRegistry.ts`
+- [x] `domains/conversation/cards/renderers/*`（6 个 renderer）
+- [x] `domains/conversation/hooks/*`（4 个 hook）
+- [x] `domains/conversation/components/*`（16 个组件 + .module.css）
+- [x] 单元测试：store + projection
+- [x] 组件测试：渲染 + 交互
+- [ ] 契约测试：ScriptedApiTransport（已用 fake NovelApiClient；跨 transport 测试后续补）
+
+轨道 A/B 状态：
+- workspace ✅（WorkspaceControllerAdapter + hook + Footing/Label/RevisionMeta；
+  WorkspaceMetadataStore ⏳ 依赖 core workspace metadata API，§11 范围外）
+- conversation ✅（catalog 的 rename/delete/pin ⏳ 依赖 core 会话契约扩展）
+- novel ✅（overview/outline/manuscript/character/location 五个子域全部落地）
 
 **Gate**：每域单元测试 + 契约测试 + 组件渲染测试通过。
 

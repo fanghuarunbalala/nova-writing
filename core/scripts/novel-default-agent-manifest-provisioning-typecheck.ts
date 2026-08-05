@@ -10,4 +10,4 @@ const provisioner: AgentManifestProvisioner =
   new DefaultNovelConversationManifestProvisioner();
 void provisioner;
 void DEFAULT_NOVEL_AGENT_MANIFEST_ID;
-void isDefaultNovelConversationAgent("novel_agent", "1.0.0");
+void isDefaultNovelConversationAgent("novel", "1.0.0");

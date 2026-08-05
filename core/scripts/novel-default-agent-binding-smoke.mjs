@@ -95,7 +95,7 @@ try {
 
   const bound = await client.conversations.create({
     conversationId: "conversation-default-bound",
-    agent: { agentType: "novel_agent", definitionVersion: "1.0.0" },
+    agent: { agentType: "novel", definitionVersion: "1.0.0" },
   });
   const boundSnapshot = await bound.getSnapshot();
   assert.equal(
@@ -132,7 +132,7 @@ try {
   const explicit = await client.conversations.create({
     conversationId: "conversation-explicit-binding",
     agent: {
-      agentType: "novel_agent",
+      agentType: "novel",
       definitionVersion: "1.0.0",
       manifestId: "manifest:explicit",
       manifestDigest: `sha256:${"e".repeat(64)}`,
@@ -156,7 +156,7 @@ try {
   const missing = await client.conversations.create({
     conversationId: "conversation-missing-manifest",
     agent: {
-      agentType: "novel_agent",
+      agentType: "novel",
       definitionVersion: "1.0.0",
       manifestId: "manifest:missing",
       manifestDigest: `sha256:${"m".repeat(64)}`,
@@ -184,7 +184,7 @@ try {
   const mismatch = await client.conversations.create({
     conversationId: "conversation-mismatch",
     agent: {
-      agentType: "novel_agent",
+      agentType: "novel",
       definitionVersion: "1.0.0",
       manifestId: DEFAULT_NOVEL_AGENT_MANIFEST_ID,
       manifestDigest: `sha256:${"9".repeat(64)}`,

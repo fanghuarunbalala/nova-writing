@@ -18,6 +18,10 @@ import {
   loadToolGroupManifest,
   novelAgentDefinition,
 } from "../dist/index.js";
+import {
+  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  novelOutlineToolRegistry,
+} from "./fixtures/novel-outline-tools.mjs";
 
 class Sha256Digester {
   algorithm = "sha256";
@@ -55,7 +59,10 @@ const todoTool = defineTool({
   handler: { async execute() { return { content: [] }; } },
 });
 const assembly = await new AgentAssembler({
-  registry: new ToolRegistry([todoTool]),
+  registry: new ToolRegistry([
+    todoTool,
+    ...novelOutlineToolRegistry.list(),
+  ]),
   groups: new ToolGroupCatalog([
     loadToolGroupManifest(`
 schemaVersion: 1
@@ -64,6 +71,7 @@ version: 1.0.0
 label: Runtime todo tools
 tools: [TodoWrite]
 `),
+    NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   ]),
   manifestResolver: resolver,
   manifestStore: new InMemoryAgentManifestStore(),

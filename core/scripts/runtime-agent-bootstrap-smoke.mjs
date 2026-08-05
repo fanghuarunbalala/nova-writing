@@ -21,6 +21,10 @@ import {
   loadToolGroupManifest,
   novelAgentDefinition,
 } from "../dist/index.js";
+import {
+  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  novelOutlineToolRegistry,
+} from "./fixtures/novel-outline-tools.mjs";
 
 class Sha256Digester {
   algorithm = "sha256";
@@ -50,8 +54,12 @@ version: 1.0.0
 label: Runtime todo tools
 tools: [TodoWrite]
 `),
+  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
 ]);
-const registry = new ToolRegistry([todoTool()]);
+const registry = new ToolRegistry([
+  todoTool(),
+  ...novelOutlineToolRegistry.list(),
+]);
 const manifestStore = new InMemoryAgentManifestStore();
 const resolver = new AgentManifestResolver({
   promptBuilder: new SystemPromptBuilder({
@@ -128,9 +136,10 @@ assert.equal(
   configuration.assembly.systemPrompt.digest,
   assembly.systemPrompt.digest,
 );
-assert.deepEqual(configuration.assembly.toSnapshot().tools, [
-  { name: "TodoWrite", version: "1.0.0" },
-]);
+assert.deepEqual(
+  configuration.assembly.toSnapshot().tools.map((tool) => tool.name).sort(),
+  ["NovelOutlineEdit", "NovelOutlineRead", "NovelOutlineWrite", "TodoWrite"],
+);
 
 await assert.rejects(
   factory.create({
@@ -149,7 +158,10 @@ await assert.rejects(
 );
 assert.throws(
   () => new AgentAssemblyRestorer({
-    registry: new ToolRegistry([todoTool("2.0.0")]),
+    registry: new ToolRegistry([
+      todoTool("2.0.0"),
+      ...novelOutlineToolRegistry.list(),
+    ]),
     groups,
   }).restore(assembly.manifest),
   /does not match Agent Manifest/,

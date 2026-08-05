@@ -24,6 +24,10 @@ import {
   NodeWorkspaceStoreLocator,
   SqliteWorkspaceStore,
 } from "../dist/node/index.js";
+import {
+  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  novelOutlineToolRegistry,
+} from "./fixtures/novel-outline-tools.mjs";
 
 class Sha256Digester {
   algorithm = "sha256";
@@ -245,7 +249,7 @@ async function createManifest() {
     digester,
   });
   return new AgentAssembler({
-    registry: new ToolRegistry([tool]),
+    registry: new ToolRegistry([tool, ...novelOutlineToolRegistry.list()]),
     groups: new ToolGroupCatalog([
       loadToolGroupManifest(`
 schemaVersion: 1
@@ -254,6 +258,7 @@ version: 1.0.0
 label: Runtime todo tools
 tools: [TodoWrite]
 `),
+      NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
     ]),
     manifestResolver: resolver,
     manifestStore: new InMemoryAgentManifestStore(),

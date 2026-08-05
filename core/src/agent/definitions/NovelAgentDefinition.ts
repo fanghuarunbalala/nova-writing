@@ -1,4 +1,4 @@
-/** Initial standalone Novel Agent using only generic Prompt Sections and TodoWrite. */
+/** Standalone Novel Agent with generic Prompt Sections, TodoWrite, and outline tools. */
 import {
   AgentCommunicationPolicy,
   AgentDefinition,
@@ -12,7 +12,7 @@ import {
 } from "../../prompt/index.js";
 
 export const novelAgentDefinition = new AgentDefinition({
-  agentType: "novel_agent",
+  agentType: "novel",
   definitionVersion: "1.0.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
@@ -26,7 +26,7 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("context.reliability"),
     new PromptSectionItem("completion.contract"),
   ]),
-  tools: new AgentToolPolicy({ groupIds: ["runtime.todo"] }),
+  tools: new AgentToolPolicy({ groupIds: ["runtime.todo", "novel.outline"] }),
   delegation: new AgentDelegationPolicy({
     mode: "disabled",
     allowedAgentTypes: [],

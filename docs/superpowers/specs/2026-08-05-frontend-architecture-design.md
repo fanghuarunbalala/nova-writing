@@ -2,11 +2,12 @@
 
 ## 文档元信息
 
-- **文档状态**：完整 spec（待用户最终审阅）
+- **文档状态**：完整 spec（已评审；演进策略确认"全新设计"；approval 域待定，后续再确定）
 - **创建日期**：2026-08-05
 - **设计依据**：`vendor/index.html` 设计原型 + 现有 `@novel/ui` 与 `@novel/gui` 代码
 - **范围**：`@novel/ui`（共享 React 层）+ `@novel/gui/src/renderer`（桌面组合层）；`@novel/core` 前端契约保持稳定
 - **实施原则**：可维护、可迭代、可整合优先；非 MVP；spec 是单一真相源；实现不允许偏离 spec
+- **对齐原则**：`vendor/index.html` 设计原型是**视觉目标**（V1 全部表面与视觉细节以原型为准）；**代码架构**（分层、域、store、路由、样式体系）按本 spec 执行。两者冲突时：表面以原型为准，结构以 spec 为准。
 
 ---
 
@@ -16,7 +17,7 @@
 |---|---|---|
 | 演进策略 | 全新设计 | 现有 chat-first 单视图结构与原型多视图 + 审批 inspector + 双轴大纲不兼容；增量演进会留下结构性债务 |
 | 覆盖范围 | `@novel/ui` + `@novel/gui/src/renderer` | core 前端契约已稳定且经过契约测试；重做 core 会扩大爆炸半径 |
-| V1 表面 | 顶栏 + 侧栏 + 主区三视图 + 审批 inspector + overlays 全覆盖 | 用户明确要求 V1 覆盖原型全部表面 |
+| V1 表面 | 顶栏 + 侧栏 + 主区三视图 + overlays 全覆盖；审批 inspector 待定 | 用户明确要求 V1 覆盖原型全部表面；approval 域后续再确定，暂不列入实施约束 |
 | 模块组织 | Approach B 域优先垂直切片 | 业务域是更稳定的分解轴；跨表面复用是常态；与 core projection 域切分一致 |
 | 状态管理 | 外部 class store + `useSyncExternalStore` + immutable snapshot | 与 core 投影 store 一致；不引入新依赖；store 可在 React 外测试 |
 | 样式 | CSS Modules + design tokens（CSS 变量，OKLCH） | 零运行时；原生作用域；与原型 CSS 风格直接对齐；Vite 原生支持 |
@@ -24,6 +25,11 @@
 | 视图路由 | 自定义状态机（MainViewRouter + InspectorRouter） | 桌面应用无 URL；状态机简单可测；避免 history API 兼容性 |
 | 数据获取 | 自定义 hooks + `useSyncExternalStore` | 数据来自 core 投影/IPC 非 HTTP；保持栈精简 |
 | 测试 | 单元 + 组件 + 契约 + 视觉冒烟 | 多层覆盖；契约测试已有 ScriptedApiTransport 基础 |
+| 原型对齐 | `vendor/index.html` 是视觉目标；架构按本 spec | 表面/视觉细节以原型为准，防止单文件原型结构直接搬进代码；代码分层与状态管理以 spec 为准 |
+
+> **决策状态（2026-08-05 用户评审）**：
+> - ✅ 已确认：演进策略 = **全新设计**（现有 chat-first 单视图结构与原型多视图不兼容，不做增量演进）
+> - ⏳ 待定：**approval 域**（含审批 inspector、Phase 2 轨道 C、1.5.2/1.5.3 审批相关流程）后续再确定；以下相关章节为参考设计，不作为实施约束
 
 ---
 
@@ -122,6 +128,8 @@ ui/src/
 ```
 
 ### 1.5 五大关键数据流
+
+> 注：1.5.2（对话消息 -> 审批联动）与 1.5.3（审批通过 -> 小说域刷新）为 approval 相关参考流程，待 approval 域确定后重新确认。
 
 #### 1.5.1 Workspace 激活流
 
@@ -1878,6 +1886,9 @@ export class LocationStore extends ExternalStore<LocationSnapshot> { /* 同 Char
 
 ### 3.3 `domains/approval/` -- 审批域
 
+> **状态：待定（用户已确认 approval 域后续再确定）。** 本节为参考设计，不作为实施约束；
+> Phase 2 轨道 C 延后，待 core approval API 契约定稿后重新评审本节。
+
 **职责**：管理变更集（ChangeSet, CS-XXXX）队列、单个变更集 diff 详情、审批动作（批准/拒绝/请求修改/备注）。串联 conversation proposal 卡片与 inspector diff review。
 
 #### 3.3.1 目录结构
@@ -2935,7 +2946,7 @@ Playwright + Electron 跑端到端 7-step 流程：
 并行轨道：
 - **轨道 A（关键路径）**：workspace -> conversation
 - **轨道 B**：novel（5 个 sub-domain 内部串行，但与其他域并行）
-- **轨道 C**：approval（依赖 core approval API ready）
+- **轨道 C**：approval（⚠️ 已延后待定——approval 域后续再确定；依赖 core approval API 契约定稿）
 - **轨道 D（最后）**：schedule（依赖其他域 store 完成）
 
 每域任务清单（以 conversation 为例）：

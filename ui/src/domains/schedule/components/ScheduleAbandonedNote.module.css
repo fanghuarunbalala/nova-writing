@@ -1,0 +1,23 @@
+/**
+ * ScheduleAbandonedNote 视觉。
+ */
+.note {
+  flex: none;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-xs);
+}
+
+.blocked {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.abandoned {
+  background: var(--color-surface-2);
+  color: var(--color-faint);
+}

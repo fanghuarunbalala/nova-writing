@@ -1,0 +1,53 @@
+/**
+ * ScheduleTodoItem 视觉。
+ */
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.done {
+  opacity: 0.55;
+}
+
+.check {
+  flex: none;
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.action {
+  flex: none;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+  color: var(--color-accent-ink);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}

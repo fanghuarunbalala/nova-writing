@@ -1,0 +1,33 @@
+/**
+ * ScheduleStat 视觉。
+ */
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.num {
+  font-size: var(--fs-display);
+  font-weight: var(--fw-heavy);
+  color: var(--color-fg);
+}
+
+.label {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-muted);
+}
+
+.note {
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.stat.warn .num { color: var(--color-warn); }
+.stat.danger .num { color: var(--color-danger); }
+.stat.success .num { color: var(--color-success); }

@@ -1,0 +1,16 @@
+/**
+ * ScheduleTodoList 视觉。
+ */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.empty {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: var(--fs-body);
+  color: var(--color-faint);
+}

@@ -1,0 +1,32 @@
+/**
+ * ScheduleAxisFlow 视觉。
+ */
+.flow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.axis {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kicker {
+  flex: none;
+  width: 32px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.step {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--color-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}

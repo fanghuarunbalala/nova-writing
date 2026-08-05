@@ -1,0 +1,44 @@
+/**
+ * ScheduleProgressUnit 视觉。
+ */
+.unit {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-body);
+  color: var(--color-fg);
+}
+
+.unit:hover {
+  background: var(--color-surface-2);
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-border-strong);
+}
+
+.dot.in-progress { background: var(--color-info); }
+.dot.completed { background: var(--color-success); }
+.dot.blocked { background: var(--color-danger); }
+.dot.abandoned { background: var(--color-faint); opacity: 0.55; }
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}

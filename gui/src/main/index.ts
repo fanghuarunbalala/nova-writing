@@ -2,6 +2,7 @@ export * from "./DesktopApplication.js";
 export * from "./DesktopApplicationMenu.js";
 export * from "./DesktopBootstrapApiTransport.js";
 export * from "./DesktopMainPaths.js";
+export * from "./MainProcessLogger.js";
 export * from "./DesktopWindowManager.js";
 export * from "./conversation/index.js";
 export * from "./config/index.js";

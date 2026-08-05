@@ -21,6 +21,7 @@ import {
   ElectronSafeStorageCredentialCipher,
 } from "./config/index.js";
 import { createElectronDesktopApplication } from "./createElectronDesktopApplication.js";
+import { createMainProcessLogger } from "./MainProcessLogger.js";
 import {
   DesktopNovelWorkspaceApplicationFactory,
   DesktopWorkspaceService,
@@ -68,6 +69,9 @@ const configurationService = new DesktopConfigurationService({
   store: configurationStore,
   credentials: plaintextCredentialStore,
 });
+const mainLogger = createMainProcessLogger(
+  join(app.getPath("userData"), "runtime-main.log"),
+);
 const workspaceService = new DesktopWorkspaceService({
   picker: {
     pickDirectory: async () => {
@@ -84,6 +88,7 @@ const workspaceService = new DesktopWorkspaceService({
   applicationFactory: new DesktopNovelWorkspaceApplicationFactory({
     storageRoot: join(app.getPath("userData"), "novel-storage"),
     childLogPath: join(app.getPath("userData"), "runtime-child.log"),
+    logger: mainLogger,
     ...(debugLogLevel === undefined ? {} : { debugLogLevel }),
     ...(providerRequestDumpPath === undefined
       ? {}

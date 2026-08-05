@@ -109,8 +109,8 @@ function ThinkingBlock({
         onClick={onToggle}
       >
         <span>{content.redacted === true ? "思考摘要" : "思考过程"}</span>
-        <span className="novel-thinking-icon" aria-hidden="true">
-          {expanded ? "▾" : "▸"}
+        <span className="novel-thinking-chevron" aria-hidden="true">
+          ›
         </span>
       </button>
       <div className={`novel-thinking-content ${expanded ? "expanded" : "collapsed"}`}>

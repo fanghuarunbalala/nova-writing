@@ -1,31 +1,33 @@
-/** Cloud-like thinking block with a three-line preview and expand toggle. */
+/** Refined thinking block with a three-line preview and expand toggle. */
 export const THINKING_BLOCK_STYLES = `
 .novel-thinking-block {
-  margin: 6px 0;
-  border: 1px solid var(--novel-border);
-  border-radius: 16px 22px 18px 14px / 20px 14px 16px 22px;
-  background: var(--novel-surface-secondary);
-  padding: 8px 12px;
+  margin: 8px 0 10px;
+  border: 1px solid #e6e9f0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fafd 0%, #f2f5fa 100%);
+  padding: 10px 12px 12px;
 }
 
 .novel-thinking-toggle {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 7px;
   border: 0;
   padding: 0;
-  color: var(--novel-text-secondary);
+  color: #5b6472;
   background: transparent;
   font: inherit;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
   cursor: pointer;
 }
 
-.novel-thinking-toggle:hover {
-  color: var(--novel-text-primary);
+.novel-thinking-toggle::before {
+  content: "✦";
+  color: #8a94a6;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .novel-thinking-toggle:focus-visible {
@@ -34,23 +36,30 @@ export const THINKING_BLOCK_STYLES = `
   border-radius: 4px;
 }
 
-.novel-thinking-icon {
+.novel-thinking-chevron {
   width: 18px;
   height: 18px;
+  margin-left: auto;
   display: grid;
   place-items: center;
-  border: 1px solid var(--novel-border-strong);
+  border: 1px solid #dde2ea;
   border-radius: 50%;
-  color: var(--novel-text-secondary);
-  background: var(--novel-surface-primary);
+  color: #7c8698;
+  background: #ffffff;
   font-size: 11px;
   line-height: 1;
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.novel-thinking-block[data-expanded="true"] .novel-thinking-chevron {
+  transform: rotate(90deg);
 }
 
 .novel-thinking-content {
-  color: var(--novel-text-secondary);
+  margin-top: 7px;
+  color: #6b7280;
   font-size: 12px;
-  line-height: 1.65;
+  line-height: 1.7;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -60,9 +69,11 @@ export const THINKING_BLOCK_STYLES = `
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.novel-thinking-content.expanded {
-  margin-top: 6px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 55%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
 }
 `;

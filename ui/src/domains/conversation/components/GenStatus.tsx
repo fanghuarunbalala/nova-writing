@@ -1,7 +1,8 @@
 /**
  * GenStatus
  *
- * 生成状态行：idle/streaming/thinking/completed/failed；
+ * 生成状态行（原型 .gen-status）：胶囊容器 + 渐变动点 + 渐变文字。
+ * phase: idle/streaming/thinking/completed/failed；
  * 仅 streaming/thinking 有柔和动效，failed 用红色标识并可重试。
  */
 import styles from "./GenStatus.module.css";
@@ -31,7 +32,7 @@ export function GenStatus({ phase, stage, error, onRetry }: GenStatusProps) {
       data-live={live || undefined}
     >
       {live ? <span className={styles.dot} aria-hidden="true" /> : null}
-      <span>{stage ?? PHASE_TEXT[phase]}</span>
+      <span className={styles.main}>{stage ?? PHASE_TEXT[phase]}</span>
       {phase === "failed" && error !== undefined ? <span className={styles.error}>{error}</span> : null}
       {phase === "failed" && onRetry !== undefined ? (
         <button type="button" className={styles.retry} onClick={onRetry}>

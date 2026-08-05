@@ -1,7 +1,8 @@
 /**
  * ConversationComposer
  *
- * 输入区：模式栏 + 文本框 + 发送。发送后清空本地输入。
+ * 输入区（原型 .composer）：gen-status + form(textarea + send) + mode-bar。
+ * 模式栏置于 form 下方（与原型一致），发送后清空本地输入。
  */
 import { useState, type KeyboardEvent } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
@@ -41,7 +42,6 @@ export function ConversationComposer({ conversationId, enabled, onSend }: Conver
 
   return (
     <div className={styles.composer}>
-      <ComposerModeBar mode={mode} onChange={setMode} disabled={!enabled} />
       <form
         className={styles.form}
         onSubmit={(event) => {
@@ -49,14 +49,18 @@ export function ConversationComposer({ conversationId, enabled, onSend }: Conver
           submit();
         }}
       >
+        <label className={styles.srOnly} htmlFor={`composer-input-${conversationId}`}>
+          创作指令
+        </label>
         <textarea
+          id={`composer-input-${conversationId}`}
           className={styles.input}
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+          placeholder="输入创作指令，例如：让林夏在旧船坞发现货单、起草白鹭旅馆场景"
           disabled={!enabled}
-          rows={2}
+          rows={1}
           aria-label="对话输入"
           data-conversation={conversationId}
         />
@@ -64,6 +68,7 @@ export function ConversationComposer({ conversationId, enabled, onSend }: Conver
           发送
         </Button>
       </form>
+      <ComposerModeBar mode={mode} onChange={setMode} disabled={!enabled} />
     </div>
   );
 }

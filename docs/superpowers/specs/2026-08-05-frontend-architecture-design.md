@@ -2952,7 +2952,7 @@ Playwright 截图验证，不引入 HTML demo）；ExternalStore 单元测试覆
 - **轨道 A（关键路径）✅**：workspace -> conversation
 - **轨道 B ✅**：novel（5 个 sub-domain 内部串行，但与其他域并行）
 - **轨道 C ⏳**：approval（⚠️ 已延后待定——approval 域后续再确定；依赖 core approval API 契约定稿）
-- **轨道 D**：schedule（依赖其他域 store 完成）
+- **轨道 D ✅**：schedule（依赖其他域 store 完成）
 
 每域任务清单（以 conversation 为例）：
 - [x] `domains/conversation/store/ConversationCatalogStore.ts`
@@ -2971,6 +2971,7 @@ Playwright 截图验证，不引入 HTML demo）；ExternalStore 单元测试覆
   WorkspaceMetadataStore ⏳ 依赖 core workspace metadata API，§11 范围外）
 - conversation ✅（catalog 的 rename/delete/pin ⏳ 依赖 core 会话契约扩展）
 - novel ✅（overview/outline/manuscript/character/location 五个子域全部落地）
+- schedule ✅（派生 store；approval 类 todo 待 approval 域落地后补充）
 
 **Gate**：每域单元测试 + 契约测试 + 组件渲染测试通过。
 

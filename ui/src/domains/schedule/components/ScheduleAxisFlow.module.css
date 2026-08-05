@@ -1,32 +1,86 @@
 /**
- * ScheduleAxisFlow 视觉。
+ * ScheduleAxisFlow 视觉（原型 .axis-card + .axis-flow）。
+ *
+ * 单一描边卡片 + 标题 + 描述 + 单行流程线；流程线为 mono 字体，
+ * 用 arr（->）连接 chip，chip-old/chip-new/lg.real-abandoned 着色。
  */
+.card {
+  margin-top: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: 15px 17px;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.title {
+  font-size: 14px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.01em;
+  color: var(--color-fg);
+}
+
+.desc {
+  font-size: 12.5px;
+  color: var(--color-muted);
+  margin-top: 4px;
+  line-height: 1.6;
+}
+
 .flow {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-}
-
-.axis {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.kicker {
-  flex: none;
-  width: 32px;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: 12px;
+  align-items: center;
+}
+
+.axisLabel {
+  margin-left: 14px;
   color: var(--color-faint);
 }
 
-.step {
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-2);
-  color: var(--color-muted);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
+.axisLabel:first-child {
+  margin-left: 0;
+}
+
+.chip {
+  font-weight: 750;
+  color: var(--color-fg);
+}
+
+.chipOld {
+  font-weight: 700;
+  color: var(--color-danger);
+}
+
+.chipNew {
+  font-weight: 700;
+  color: var(--color-success);
+}
+
+.lgAbandoned {
+  font-size: 9.5px;
+  font-weight: 750;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  padding: 1.5px 6px;
+  border-radius: 5px;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.arr {
+  color: var(--color-faint);
+}
+
+.sep {
+  display: inline-block;
+  width: 14px;
 }

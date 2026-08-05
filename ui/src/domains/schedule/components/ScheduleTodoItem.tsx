@@ -1,9 +1,11 @@
 /**
  * ScheduleTodoItem
  *
- * 待办项：勾选 + 标题 + meta + tag + 可选动作。
+ * 待办项（原型 .todo）：勾选框 + 标题 + meta（含可选动作链接）+ 右侧 ttag。
+ *
+ * check 用 appearance:none 的 checkbox，未选 1.5px 描边方框，选中后 success 底
+ * + bg 色 ✓。ttag 按 decision/approval/profile/writing 四色映射。
  */
-import { Pill } from "../../../shared/primitives/Pill.js";
 import type { ScheduleTodoData } from "../projection/ScheduleProjection.js";
 import styles from "./ScheduleTodoItem.module.css";
 
@@ -13,11 +15,18 @@ export interface ScheduleTodoItemProps {
   readonly onAction?: (action: string) => void;
 }
 
-const TAG_VARIANT: Record<ScheduleTodoData["tag"], "pending" | "approved" | "changed" | "info"> = {
-  decision: "pending",
-  approval: "changed",
-  profile: "info",
-  writing: "approved",
+const TAG_LABEL: Record<ScheduleTodoData["tag"], string> = {
+  decision: "决策",
+  approval: "审批",
+  profile: "档案",
+  writing: "写作",
+};
+
+const TAG_CLASS: Record<ScheduleTodoData["tag"], string> = {
+  decision: styles.tagDecision,
+  approval: styles.tagApproval,
+  profile: styles.tagProfile,
+  writing: styles.tagWriting,
 };
 
 export function ScheduleTodoItem({ todo, onToggle, onAction }: ScheduleTodoItemProps) {
@@ -31,23 +40,26 @@ export function ScheduleTodoItem({ todo, onToggle, onAction }: ScheduleTodoItemP
           onChange={() => onToggle?.()}
           aria-label={todo.title}
         />
+        <span className={styles.checkMark} aria-hidden="true">✓</span>
       </label>
-      <span className={styles.body}>
-        <span className={styles.title}>{todo.title}</span>
-        <span className={styles.meta}>
-          <Pill variant={TAG_VARIANT[todo.tag]}>{todo.tag}</Pill>
-          {todo.meta}
-        </span>
+      <div className={styles.body}>
+        <div className={styles.title}>{todo.title}</div>
+        <div className={styles.meta}>
+          <span>{todo.meta}</span>
+          {todo.action !== undefined ? (
+            <button
+              type="button"
+              className={styles.action}
+              onClick={() => onAction?.(todo.action!.kind)}
+            >
+              {todo.action.label}
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <span className={[styles.ttag, TAG_CLASS[todo.tag]].filter(Boolean).join(" ")}>
+        {TAG_LABEL[todo.tag]}
       </span>
-      {todo.action !== undefined ? (
-        <button
-          type="button"
-          className={styles.action}
-          onClick={() => onAction?.(todo.action!.kind)}
-        >
-          {todo.action.label}
-        </button>
-      ) : null}
     </div>
   );
 }

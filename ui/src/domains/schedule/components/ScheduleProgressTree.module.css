@@ -1,9 +1,10 @@
 /**
  * ScheduleProgressTree 视觉。
+ *
+ * 仅作为容器，无 padding/gap；每行由 unit 自身 padding 控制。
  */
 .tree {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 4px 6px;
+  padding: 0;
 }

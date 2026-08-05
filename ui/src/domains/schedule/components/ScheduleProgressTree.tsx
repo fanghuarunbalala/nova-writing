@@ -1,7 +1,7 @@
 /**
  * ScheduleProgressTree
  *
- * 进度树容器（按 depth 缩进渲染）。
+ * 进度树容器：扁平渲染（depth 由 unit 自身 padding 表达），无外间距。
  */
 import type { ScheduleProgressUnitData } from "../projection/ScheduleProjection.js";
 import { ScheduleProgressUnit } from "./ScheduleProgressUnit.js";

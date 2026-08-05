@@ -1,30 +1,47 @@
 /**
- * ScheduleStat 视觉。
+ * ScheduleStat 视觉（原型 .stat）。
+ *
+ * 单元不带自身描边/圆角/底色，由 .row 容器统一承担；相邻单元用 border-left
+ * 分隔，第二行起补 border-top，与原型窄屏策略一致。
  */
 .stat {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 15px 18px;
+  border-left: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+}
+
+.stat:first-child,
+.stat:nth-child(3n + 1) {
+  border-left: 0;
+}
+
+.stat:nth-child(n + 4) {
+  border-top: 1px solid var(--color-border);
 }
 
 .num {
-  font-size: var(--fs-display);
+  font-size: 30px;
   font-weight: var(--fw-heavy);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
   color: var(--color-fg);
 }
 
 .label {
-  font-size: var(--fs-body);
-  font-weight: var(--fw-semibold);
+  font-size: 12.5px;
+  font-weight: 750;
+  margin-top: 2px;
   color: var(--color-muted);
 }
 
 .note {
-  font-size: var(--fs-xs);
+  font-size: 11px;
   color: var(--color-faint);
 }
 

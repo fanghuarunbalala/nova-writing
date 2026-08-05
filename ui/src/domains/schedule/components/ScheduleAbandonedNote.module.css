@@ -1,23 +1,25 @@
 /**
- * ScheduleAbandonedNote 视觉。
+ * ScheduleAbandonedNote 视觉（原型 .block-note / .abandoned-note）。
+ *
+ * 行内 flex 容器，弱化色 + 圆角；blocked 用 danger-bg，abandoned 用 surface-2。
+ * margin-left 由 inline style 注入（按 depth 缩进对齐父单元）。
  */
 .note {
-  flex: none;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  font-size: var(--fs-xs);
+  font-size: 11.5px;
+  color: var(--color-muted);
+  border-radius: 8px;
+  padding: 5px 9px;
+  margin: 4px 0;
+  display: inline-flex;
+  max-width: max-content;
 }
 
 .blocked {
   background: var(--color-danger-bg);
-  color: var(--color-danger);
+  color: var(--color-muted);
 }
 
 .abandoned {
   background: var(--color-surface-2);
-  color: var(--color-faint);
+  color: var(--color-muted);
 }

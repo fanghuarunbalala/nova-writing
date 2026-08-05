@@ -1,0 +1,26 @@
+/**
+ * NovelApplicationShell 布局（原型 .novel-shell 等价）。
+ */
+.shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--color-fg);
+  background: var(--color-bg);
+  font-family: var(--font-body);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.body[data-sidebar-mode="collapsed"] .sidebar {
+  width: 0;
+  overflow: hidden;
+}

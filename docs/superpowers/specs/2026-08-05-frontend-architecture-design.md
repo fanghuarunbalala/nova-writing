@@ -2978,16 +2978,18 @@ Playwright 截图验证，不引入 HTML demo）；ExternalStore 单元测试覆
 ### Phase 3: Shell 组合层（2 周）
 
 任务清单：
-- [ ] `shell/ApplicationShell.tsx`
-- [ ] `shell/topbar/*`（6 个组件）
-- [ ] `shell/sidebar/*`（容器 + 5 个 section）
-- [ ] `shell/main/*`（MainArea + 3 个 Surface + ContentTabs + MainSubHead）
-- [ ] `shell/inspector/*`（InspectorHost + 4 个 panel）
-- [ ] `shell/overlays/*`（OverlaysHost + ToastHost + CommandPalette 可选）
-- [ ] 跨域 effect 协调
-- [ ] 视觉冒烟测试建立
+- [x] `shell/ApplicationShell.tsx`（组合根以 `NovelApplicationShell.tsx` 落地；
+  spec 路径被另一会话未提交 legacy 占用，最终迁移提交时恢复命名）
+- [x] `shell/topbar/*`（6 个组件）
+- [x] `shell/sidebar/*`（容器 + sections；审批 section 随 approval 域延后）
+- [x] `shell/main/*`（MainArea + 3 个 Surface + ContentTabs + MainSubHead）
+- [x] `shell/inspector/*`（InspectorHost + entity/outline/conversation panel；
+  approval panel 为占位，待 approval 域）
+- [x] `shell/overlays/*`（OverlaysHost + ToastHost + CommandPalette 可选未做）
+- [x] 跨域 effect 协调（workspace 切换广播各域 load；选中联动 inspector）
+- [x] 视觉冒烟测试建立（jsdom 级 shell 冒烟；Playwright + Electron 7-step 在 Phase 5）
 
-**Gate**：7-step 视觉冒烟全过；与原型的视觉对比 diff < 5%。
+**Gate**：7-step 视觉冒烟全过；与原型的视觉对比 diff < 5%。（Playwright 部分归入 Phase 5）
 
 ### Phase 4: GUI Renderer（1 周）
 

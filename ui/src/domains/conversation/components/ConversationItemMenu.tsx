@@ -1,11 +1,14 @@
 /**
  * ConversationItemMenu
  *
- * 对话项 ⋯ 菜单：重命名/置顶/删除（回调存在时启用）。
+ * 对话项 ⋯ 菜单（原型 .conv-more + .conv-menu）：右侧绝对定位的 ⋯ 按钮，
+ * 点击展开下拉菜单（重命名/置顶/删除）。
+ *
+ * conv-more 20x20 始终可见（faint 色），hover 时显示 surface-2 背景，
+ * pinned 行默认 accent-ink；菜单用 Dropdown 组件渲染到 trigger 下方。
  */
 import { Dropdown, DropdownItem, DropdownSeparator } from "../../../shared/primitives/Dropdown.js";
-import { IconButton } from "../../../shared/primitives/IconButton.js";
-import { MoreHorizontal, Pencil, Pin, Trash2 } from "lucide-react";
+import { Pencil, Pin, Trash2 } from "lucide-react";
 import styles from "./ConversationItemMenu.module.css";
 
 export interface ConversationItemMenuProps {
@@ -24,12 +27,12 @@ export function ConversationItemMenu({
   onDelete,
 }: ConversationItemMenuProps) {
   return (
-    <div className={styles.menu}>
+    <div className={styles.wrap}>
       <Dropdown
         trigger={
-          <IconButton label="对话操作" size="sm">
-            <MoreHorizontal size={14} />
-          </IconButton>
+          <button type="button" className={styles.more} aria-label="对话操作" aria-haspopup="menu">
+            <span aria-hidden="true">⋯</span>
+          </button>
         }
       >
         {onRename !== undefined ? (

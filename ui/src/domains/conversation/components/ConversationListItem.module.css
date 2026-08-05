@@ -1,13 +1,16 @@
 /**
- * ConversationListItem 视觉：与侧栏 SideItem 同规格。
+ * ConversationListItem 视觉（原型 .conv-row + .conv-item + .conv-status + .conv-more）。
+ *
+ * conv-row 为 relative 容器；conv-item 主按钮 padding 8/30，左右 30px 留给
+ * status + more；conv-status 左侧绝对定位，generating/failed 时显示；
+ * conv-more 右侧绝对定位（始终可见，faint 色，见 ConversationItemMenu.module.css）。
+ * title 13px/750，sub 11px/550。
  */
 .row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 6px 8px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
+  border-radius: 9px;
   transition: background var(--duration-fast) var(--ease-out);
 }
 
@@ -24,10 +27,14 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  padding: 2px 0;
+  gap: 2px;
+  padding: 8px 30px;
+  border: 0;
+  background: none;
   text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
 }
 
 .title {
@@ -35,8 +42,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--fs-body);
-  font-weight: var(--fw-medium);
+  font-size: 13px;
+  font-weight: 750;
   color: var(--color-fg);
 }
 
@@ -44,8 +51,15 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--fs-xs);
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  line-height: 1.35;
   color: var(--color-faint);
+}
+
+.active .sub {
+  color: var(--color-accent-ink);
+  opacity: 0.72;
 }
 
 .agent {
@@ -58,22 +72,60 @@
   font-family: var(--font-mono);
 }
 
-.generating {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  animation: gen-pulse 1.2s ease-in-out infinite;
+.pinTag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  font-size: 9.5px;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  color: var(--color-accent-ink);
+  background: color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+  vertical-align: 1px;
 }
 
-@keyframes gen-pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+/* 状态指示器：左侧绝对定位，generating/failed 时显示 */
+.status {
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-base) var(--ease-out);
 }
 
-.failed {
-  width: 7px;
-  height: 7px;
+.generating .status,
+.failed .status {
+  opacity: 1;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: var(--color-danger);
+  border: 1.5px solid var(--color-border-strong);
+  border-top-color: color-mix(in oklab, var(--color-accent) 62%, var(--color-border-strong));
+  animation: conv-spin 0.9s linear infinite;
+  will-change: transform;
+}
+
+.failed .spinner {
+  width: 9px;
+  height: 9px;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--color-danger) 72%, transparent);
+  animation: none;
+}
+
+@keyframes conv-spin {
+  to { transform: rotate(360deg); }
 }

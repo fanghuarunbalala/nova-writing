@@ -1,0 +1,43 @@
+/**
+ * LocationDetailPanel 视觉。
+ */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.name {
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
+  color: var(--color-fg);
+}
+
+.role {
+  font-size: var(--fs-xs);
+  color: var(--color-muted);
+}
+
+.profile {
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  color: var(--color-muted);
+}
+
+.locate {
+  align-self: flex-start;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+  color: var(--color-accent-ink);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}

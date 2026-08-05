@@ -1,0 +1,66 @@
+/**
+ * LocationCard 视觉。
+ */
+.card {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-2);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.state {
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--color-faint);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+}
+
+.state.draft {
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+}
+
+.role {
+  font-size: var(--fs-xs);
+  color: var(--color-muted);
+}
+
+.note {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}

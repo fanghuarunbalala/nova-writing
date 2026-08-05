@@ -1,0 +1,47 @@
+/**
+ * StoryOutlineTreeStatus 视觉。
+ */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.bar {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.bar > span {
+  width: 5px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--color-border);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.bar > .on {
+  background: var(--color-accent);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-border-strong);
+}
+
+.dot.in-progress {
+  background: var(--color-info);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+.dot.completed { background: var(--color-success); }
+.dot.blocked { background: var(--color-danger); }
+.dot.abandoned { background: var(--color-faint); opacity: 0.55; }
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}

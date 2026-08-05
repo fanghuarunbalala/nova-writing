@@ -1,0 +1,20 @@
+/**
+ * OutlineBlockNote 视觉。
+ */
+.note {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  color: var(--color-muted);
+}
+
+.blocked {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.abandoned {
+  background: var(--color-surface-2);
+  color: var(--color-faint);
+}

@@ -1,3 +1,7 @@
+/* Novel design tokens + global baseline (spec 2.1) */
+@import "@novel/ui/shared/theme/tokens.css";
+@import "@novel/ui/shared/theme/global.css";
+
 :root {
   color: #20242a;
   background: #ffffff;
@@ -22,6 +26,3 @@ textarea,
 input {
   font: inherit;
 }
-/* Novel design tokens + global baseline (spec 2.1) */
-@import "@novel/ui/shared/theme/tokens.css";
-@import "@novel/ui/shared/theme/global.css";

@@ -7,6 +7,7 @@ import {
   StoryOutlineQueryService,
   StoryOutlineService,
   captureStoryOutlineId,
+  captureStoryUnitId,
   createNovelOutlineEditTool,
   createNovelOutlineReadTool,
   createNovelOutlineToolRegistry,
@@ -19,6 +20,7 @@ const service = new OutlineToolService({
   drafts: undefined as unknown as NovelDraftSessionService,
   identityFactory: {
     createStoryOutlineId: () => captureStoryOutlineId("outline_typecheck"),
+    createStoryUnitId: () => captureStoryUnitId("story_unit_typecheck"),
   },
 });
 

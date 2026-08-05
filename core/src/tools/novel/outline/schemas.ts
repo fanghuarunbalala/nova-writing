@@ -214,7 +214,7 @@ export type LeafPlanWriteValue = Static<typeof LeafPlanWriteSchema>;
 
 export const StoryUnitWriteSchema = Type.Object(
   {
-    id: Type.String({ pattern: ID_PATTERN }),
+    id: Type.Optional(Type.String({ pattern: ID_PATTERN })),
     title: Type.String({ minLength: 1, maxLength: 500 }),
     intent: Type.Optional(Type.String({ maxLength: 20_000 })),
     synopsis: Type.Optional(Type.String({ maxLength: 50_000 })),

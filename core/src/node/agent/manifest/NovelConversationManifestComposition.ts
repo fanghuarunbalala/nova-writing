@@ -9,6 +9,7 @@ import {
   type StoryOutlineQueryService,
   type StoryOutlineService,
   captureStoryOutlineId,
+  captureStoryUnitId,
 } from "../../../novel/index.js";
 import type { ConversationTodoWriter } from "../../../runtime/todo/index.js";
 import { ToolGroupCatalog } from "../../../tooling/group/index.js";
@@ -88,6 +89,7 @@ const unavailableOutlineToolService = new OutlineToolService({
   drafts: unavailableNovelDraftSessionService,
   identityFactory: {
     createStoryOutlineId: () => captureStoryOutlineId("unavailable_outline"),
+    createStoryUnitId: () => captureStoryUnitId("unavailable_story_unit"),
   },
 });
 

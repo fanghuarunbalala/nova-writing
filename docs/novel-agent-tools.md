@@ -77,7 +77,7 @@ type Scope = "canonical" | "draft";
 
 // Full value used by NovelOutlineWrite (create). All optional fields default.
 interface StoryUnitWrite {
-  id: string;                                    // required
+  id?: string;                                   // optional; host generates when omitted
   title: string;                                 // required
   intent?: string;
   synopsis?: string;
@@ -147,6 +147,18 @@ interface OutlineWriteResultItem {
                        // unknown_parent / duplicate_id / not_leaf / invalid_order_key
 }
 ```
+
+### 5.4 NovelCharacterRead / Write / Edit (confirmed, implemented)
+
+- `NovelCharacterRead` reads Character profiles for one explicit scope;
+  `characterId` omitted lists all. `entityVersion` stays inside the host.
+- `NovelCharacterWrite` batch-creates profiles. `id` is optional; the host
+  generates and returns it (a provided id is used and must be unique).
+- `NovelCharacterEdit` batch field-level PATCH. `id` is required. Provided
+  fields overwrite, omitted fields stay, `null` clears `summary` /
+  `initialState` / `authorNotes`, and `aliases` replaces the whole array when
+  provided (`[]` clears it). `name` cannot be cleared.
+- Group: `novel.entities`. Deletion is handled by the unified delete tool.
 
 ## 5. Confirmed: Outline Tools
 

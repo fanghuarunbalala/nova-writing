@@ -61,7 +61,10 @@ export interface OutlineToolServiceOptions {
   readonly outline: StoryOutlineService;
   readonly outlineQueries: StoryOutlineQueryService;
   readonly drafts: NovelDraftSessionService;
-  readonly identityFactory: Pick<StoryIdentityFactory, "createStoryOutlineId">;
+  readonly identityFactory: Pick<
+    StoryIdentityFactory,
+    "createStoryOutlineId" | "createStoryUnitId"
+  >;
   readonly orderKeys?: OrderKeyFactory;
   readonly logger?: Logger;
 }
@@ -192,8 +195,11 @@ export class OutlineToolService {
       requestedCount: arguments_.values.length,
     });
     for (const value of arguments_.values) {
+      const storyUnitId = captureStoryUnitId(
+        value.id ?? this.options.identityFactory.createStoryUnitId(),
+      );
       try {
-        items.push(await this.writeOne(session, scope, value));
+        items.push(await this.writeOne(session, scope, value, storyUnitId));
       } catch (error) {
         const reason = mapItemError(error);
         if (reason === undefined) {
@@ -205,7 +211,7 @@ export class OutlineToolService {
             conversationId,
           });
         }
-        items.push(rejectedItem(value.id, reason));
+        items.push(rejectedItem(storyUnitId, reason));
         break;
       }
     }
@@ -261,11 +267,12 @@ export class OutlineToolService {
     session: NovelDraftSession,
     scope: NovelReadScope,
     value: StoryUnitWriteValue,
+    storyUnitId: StoryUnitId,
   ): Promise<NovelOutlineItemDetails> {
     const tree = await this.options.outlineQueries.getTree(scope);
     if (
       tree !== undefined &&
-      tree.getUnit(captureStoryUnitId(value.id)) !== undefined
+      tree.getUnit(storyUnitId) !== undefined
     ) {
       throw new NovelOutlineItemFailure(ITEM_REJECTION.duplicateId);
     }
@@ -283,7 +290,7 @@ export class OutlineToolService {
     );
     const outline = await this.ensureOutline(session, scope);
     const unit = captureStoryUnit({
-      id: captureStoryUnitId(value.id),
+      id: storyUnitId,
       outlineId: outline.id,
       ...(value.parentId === undefined
         ? {}
@@ -312,7 +319,7 @@ export class OutlineToolService {
       );
       sequence = planReceipt.sequence;
     }
-    return Object.freeze({ id: value.id, status: "appended", sequence });
+    return Object.freeze({ id: storyUnitId, status: "appended", sequence });
   }
 
   private async editOne(

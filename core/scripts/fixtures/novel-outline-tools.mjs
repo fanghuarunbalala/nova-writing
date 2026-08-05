@@ -3,8 +3,11 @@ import {
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   OutlineToolService,
   captureStoryOutlineId,
+  captureStoryUnitId,
   createNovelOutlineToolRegistry,
 } from "../../dist/index.js";
+
+let fixtureCounter = 0;
 
 const unavailable = () =>
   Promise.reject(
@@ -35,6 +38,7 @@ const unavailableOutlineToolService = new OutlineToolService({
   },
   identityFactory: {
     createStoryOutlineId: () => captureStoryOutlineId("fixture_outline"),
+    createStoryUnitId: () => captureStoryUnitId(`fixture_story_unit_${fixtureCounter++}`),
   },
 });
 

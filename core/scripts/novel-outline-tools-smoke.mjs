@@ -141,6 +141,7 @@ try {
     drafts,
     identityFactory: {
       createStoryOutlineId: () => "outline_tool_auto",
+      createStoryUnitId: () => "story_unit_generated",
     },
     logger,
   });
@@ -371,6 +372,15 @@ try {
     ["story_unit_batch1", "story_unit_leaf", "story_unit_root"],
   );
 
+  // Write without an id: the host generates and returns the id.
+  const generatedWrite = await writeTool.handler.execute(
+    context(conversation, 18),
+    { values: [{ title: "Generated unit" }] },
+    progress,
+  );
+  assert.equal(generatedWrite.details.items[0].id, "story_unit_generated");
+  assert.equal(generatedWrite.details.items[0].status, "appended");
+
   // Draft isolation: another conversation sees no draft and cannot pollute ours.
   const otherConversation = "conversation_outline_tools_other";
   const otherRead = await readTool.handler.execute(
@@ -422,6 +432,7 @@ try {
     "EVENT_2_DESC",
     "Batch one",
     "Other conversation",
+    "Generated unit",
   ]);
   console.log("CORE_SMOKE_TEST_RESULT=pass novel-outline-tools");
 } finally {

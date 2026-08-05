@@ -1,0 +1,48 @@
+/**
+ * ManuscriptBlock 视觉。
+ */
+.block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.block:hover {
+  background: var(--color-surface-2);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.id {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-accent-ink);
+}
+
+.digest {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.draft {
+  font-size: var(--fs-xs);
+  color: var(--color-warn);
+}
+
+.text {
+  font-size: var(--fs-body);
+  color: var(--color-muted);
+}

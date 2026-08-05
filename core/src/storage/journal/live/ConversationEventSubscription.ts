@@ -7,7 +7,7 @@ import {
 } from "./ConversationEventFilter.js";
 import { ConversationEventSubscriptionOptionsError } from "./ConversationEventLiveErrors.js";
 
-export const DEFAULT_CONVERSATION_EVENT_SUBSCRIPTION_CAPACITY = 256;
+export const DEFAULT_CONVERSATION_EVENT_SUBSCRIPTION_CAPACITY = 4_096;
 export const MAX_CONVERSATION_EVENT_SUBSCRIPTION_CAPACITY = 4_096;
 
 export type ConversationEventSubscriptionStart =

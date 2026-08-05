@@ -18,7 +18,6 @@ import {
   type ElectronBridgeResult,
   type ElectronBridgeSubscriptionRead,
 } from "../../shared/index.js";
-
 export interface ElectronIpcMainInvokeEventPort {
   readonly sender: {
     readonly id: number;

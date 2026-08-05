@@ -29,7 +29,7 @@ type ConversationEventSubscriptionInitialization =
 
 export interface JournalConversationEventSubscriptionOptions {
   options: NormalizedConversationEventSubscriptionOptions;
-  liveSubscription: ConversationEventSubscription;
+  createLiveSubscription: () => ConversationEventSubscription;
   pager: ConversationEventCatchUpPager;
   getHighWatermark: (conversationId: string) => Promise<number>;
   logger?: Logger;
@@ -43,6 +43,9 @@ type JournalConversationEventSubscriptionState =
   | "closed"
   | "failed";
 
+const RECOVERED = Symbol("recovered");
+type Recovered = typeof RECOVERED;
+
 export class JournalConversationEventSubscription
   implements ConversationEventSubscription
 {
@@ -50,7 +53,8 @@ export class JournalConversationEventSubscription
   readonly conversationId: string;
 
   private readonly options: NormalizedConversationEventSubscriptionOptions;
-  private readonly liveSubscription: ConversationEventSubscription;
+  private readonly createLiveSubscription: () => ConversationEventSubscription;
+  private liveSubscription: ConversationEventSubscription;
   private readonly pager: ConversationEventCatchUpPager;
   private readonly getHighWatermark: (conversationId: string) => Promise<number>;
   private readonly logger: Logger;
@@ -67,6 +71,7 @@ export class JournalConversationEventSubscription
   private historyHasNext = false;
   private historyPageCount = 0;
   private skippedLiveDuplicateCount = 0;
+  private recoveryCount = 0;
   private failure?: Error;
   private readPending = false;
   private activeRead?: Promise<IteratorResult<PersistedConversationEventSnapshot>>;
@@ -75,7 +80,8 @@ export class JournalConversationEventSubscription
 
   constructor(options: JournalConversationEventSubscriptionOptions) {
     this.options = options.options;
-    this.liveSubscription = options.liveSubscription;
+    this.createLiveSubscription = options.createLiveSubscription;
+    this.liveSubscription = options.createLiveSubscription();
     this.id = this.liveSubscription.id;
     this.conversationId = this.options.conversationId;
     this.pager = options.pager;
@@ -173,56 +179,71 @@ export class JournalConversationEventSubscription
     }
     this.throwIfAborted();
 
-    while (this.subscriptionState === "history") {
-      if (this.historyEventIndex < this.historyEvents.length) {
+    while (true) {
+      while (this.subscriptionState === "history") {
+        if (this.historyEventIndex < this.historyEvents.length) {
+          this.throwIfAborted();
+          const event = this.historyEvents[this.historyEventIndex] as PersistedConversationEventSnapshot;
+          this.historyEventIndex += 1;
+          this.resumeSequence = event.sequence;
+          return { done: false, value: event };
+        }
+        if (this.historyEvents.length > 0 && !this.historyHasNext) {
+          this.enterLivePhase();
+          break;
+        }
+
         this.throwIfAborted();
-        const event = this.historyEvents[this.historyEventIndex] as PersistedConversationEventSnapshot;
-        this.historyEventIndex += 1;
-        this.resumeSequence = event.sequence;
-        return { done: false, value: event };
+        const page = await this.pager.readNext({
+          conversationId: this.conversationId,
+          afterSequence: this.historyCursor,
+          throughSequence: this.highWatermark,
+          filter: this.options.filter,
+        });
+        this.throwIfAborted();
+        if (this.isClosed()) {
+          return { done: true, value: undefined };
+        }
+        this.historyPageCount += 1;
+        this.historyEvents = page.events;
+        this.historyEventIndex = 0;
+        this.historyHasNext = page.hasNext;
+        if (page.nextAfterSequence !== undefined) {
+          this.historyCursor = page.nextAfterSequence;
+        }
+        this.logger.debug("conversation_event.catch_up.page_completed", {
+          highWatermark: this.highWatermark,
+          pageNumber: this.historyPageCount,
+          eventCount: page.events.length,
+          hasNext: page.hasNext,
+        });
+        if (page.events.length === 0) {
+          this.enterLivePhase();
+          break;
+        }
       }
-      if (this.historyEvents.length > 0 && !this.historyHasNext) {
-        this.enterLivePhase();
-        break;
-      }
-
-      this.throwIfAborted();
-      const page = await this.pager.readNext({
-        conversationId: this.conversationId,
-        afterSequence: this.historyCursor,
-        throughSequence: this.highWatermark,
-        filter: this.options.filter,
-      });
-      this.throwIfAborted();
-      if (this.isClosed()) {
-        return { done: true, value: undefined };
-      }
-      this.historyPageCount += 1;
-      this.historyEvents = page.events;
-      this.historyEventIndex = 0;
-      this.historyHasNext = page.hasNext;
-      if (page.nextAfterSequence !== undefined) {
-        this.historyCursor = page.nextAfterSequence;
-      }
-      this.logger.debug("conversation_event.catch_up.page_completed", {
-        highWatermark: this.highWatermark,
-        pageNumber: this.historyPageCount,
-        eventCount: page.events.length,
-        hasNext: page.hasNext,
-      });
-      if (page.events.length === 0) {
-        this.enterLivePhase();
-        break;
-      }
+      const liveResult = await this.readLiveWithRecovery();
+      if (liveResult === RECOVERED) continue;
+      return liveResult;
     }
-
-    return this.readLive();
   }
 
-  private async readLive(): Promise<IteratorResult<PersistedConversationEventSnapshot>> {
+  private async readLiveWithRecovery(): Promise<
+    IteratorResult<PersistedConversationEventSnapshot> | Recovered
+  > {
     while (true) {
       this.throwIfAborted();
-      const result = await this.liveSubscription.next();
+      let result: IteratorResult<PersistedConversationEventSnapshot>;
+      try {
+        result = await this.liveSubscription.next();
+      } catch (error) {
+        const normalized = this.normalizeFailure(error);
+        if (normalized instanceof ConversationEventSubscriptionOverflowError) {
+          await this.recoverFromOverflow(normalized);
+          return RECOVERED;
+        }
+        throw normalized;
+      }
       this.throwIfAborted();
       if (result.done) {
         this.subscriptionState = "closed";
@@ -245,6 +266,44 @@ export class JournalConversationEventSubscription
       this.resumeSequence = result.value.sequence;
       return result;
     }
+  }
+
+  private async recoverFromOverflow(
+    overflow: ConversationEventSubscriptionOverflowError,
+  ): Promise<void> {
+    this.recoveryCount += 1;
+    this.logger.warn("conversation_event.follow.recovery_started", {
+      errorCode: overflow.code,
+      capacity: overflow.capacity,
+      resumeSequence: this.resumeSequence,
+      highWatermark: this.highWatermark,
+      recoveryCount: this.recoveryCount,
+    });
+    await this.liveSubscription.close().catch(() => undefined);
+    const capturedHighWatermark = await this.getHighWatermark(
+      this.conversationId,
+    );
+    this.throwIfAborted();
+    if (
+      !Number.isSafeInteger(capturedHighWatermark) ||
+      capturedHighWatermark < 0
+    ) {
+      throw new TypeError(
+        "Journal High Watermark must be a non-negative safe integer",
+      );
+    }
+    this.highWatermark = capturedHighWatermark;
+    this.historyCursor = this.resumeSequence;
+    this.historyEvents = [];
+    this.historyEventIndex = 0;
+    this.historyHasNext = false;
+    this.subscriptionState = "history";
+    this.liveSubscription = this.createLiveSubscription();
+    this.logger.warn("conversation_event.follow.recovery_resubscribed", {
+      resumeSequence: this.resumeSequence,
+      highWatermark: this.highWatermark,
+      recoveryCount: this.recoveryCount,
+    });
   }
 
   private enterLivePhase(): void {

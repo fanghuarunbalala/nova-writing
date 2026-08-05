@@ -6,14 +6,30 @@
   flex-direction: column;
   flex: none;
   border-top: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: color-mix(in oklab, var(--color-surface) 76%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 12px 22px 16px;
 }
 
-.row {
+.form {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  padding: 8px 10px 10px;
+  gap: 10px;
+  max-width: 880px;
+  margin: 0 auto;
+  width: 100%;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--color-bg) 76%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 8px 8px 8px 15px;
+}
+
+.form:focus-within {
+  border-color: color-mix(in oklab, var(--color-accent) 42%, var(--color-border-strong));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 7%, transparent);
 }
 
 .input {
@@ -21,20 +37,14 @@
   min-height: 40px;
   max-height: 180px;
   resize: none;
-  padding: 9px 11px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-2);
+  padding: 9px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
   color: var(--color-fg);
   font-family: var(--font-body);
-  font-size: var(--fs-body);
-  line-height: 1.5;
-  outline: none;
-  transition: border-color var(--duration-fast) var(--ease-out);
-}
-
-.input:focus {
-  border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-border));
+  font-size: 14.5px;
+  line-height: 1.6;
 }
 
 .input:disabled {

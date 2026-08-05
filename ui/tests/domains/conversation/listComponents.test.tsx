@@ -55,7 +55,7 @@ describe("ConversationList", () => {
         onCreate={onCreate}
       />,
     );
-    expect(screen.getByRole("button", { name: "新建对话" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "创建对话" })).toBeInTheDocument();
     expect(screen.getByText("对话 a")).toBeInTheDocument();
     expect(screen.getByText("对话 b")).toBeInTheDocument();
   });
@@ -100,7 +100,7 @@ describe("NewConversationButton / ComposerModeBar / MessageReferenceChip", () =>
     const user = userEvent.setup();
     const onClick = vi.fn();
     render(<NewConversationButton onClick={onClick} />);
-    await user.click(screen.getByRole("button", { name: "新建对话" }));
+    await user.click(screen.getByRole("button", { name: "创建对话" }));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 

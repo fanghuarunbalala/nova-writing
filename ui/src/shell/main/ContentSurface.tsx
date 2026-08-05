@@ -11,13 +11,14 @@ import type { CharacterStore } from "../../domains/novel/character/store/Charact
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
 import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
-import { useState } from "react";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import { ContentTabs, type ContentTab } from "./ContentTabs.js";
 import styles from "./ContentSurface.module.css";
 
 export interface ContentSurfaceProps {
   readonly workspaceId: string | undefined;
+  readonly value: ContentTab;
+  readonly onChange: (tab: ContentTab) => void;
   readonly outlineTree: StoryOutlineTreeStore;
   readonly manuscript: ManuscriptStructureStore;
   readonly characters: CharacterStore;
@@ -29,6 +30,8 @@ export interface ContentSurfaceProps {
 
 export function ContentSurface({
   workspaceId,
+  value,
+  onChange,
   outlineTree,
   manuscript,
   characters,
@@ -41,7 +44,6 @@ export function ContentSurface({
   const manuscriptSnapshot = useExternalStore(manuscript);
   const characterSnapshot = useExternalStore(characters);
   const locationSnapshot = useExternalStore(locations);
-  const [tab, setTab] = useState<ContentTab>("outline");
   const renderTab = (tab: ContentTab) => {
     switch (tab) {
       case "outline":
@@ -82,7 +84,7 @@ export function ContentSurface({
   };
   return (
     <div className={styles.surface}>
-      <ContentTabs value={tab} onChange={setTab}>
+      <ContentTabs value={value} onChange={onChange}>
         {renderTab}
       </ContentTabs>
     </div>

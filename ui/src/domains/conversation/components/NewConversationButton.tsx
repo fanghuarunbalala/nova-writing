@@ -13,8 +13,16 @@ export interface NewConversationButtonProps {
 
 export function NewConversationButton({ onClick, disabled = false }: NewConversationButtonProps) {
   return (
-    <Button variant="secondary" size="sm" fullWidth leadingIcon={<Plus size={14} />} onClick={onClick} disabled={disabled}>
-      新建对话
+    <Button
+      variant="secondary"
+      size="sm"
+      fullWidth
+      className="novel-new-conv-btn"
+      leadingIcon={<Plus size={14} />}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      创建对话
     </Button>
   );
 }

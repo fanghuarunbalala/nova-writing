@@ -167,7 +167,7 @@ describe("ApplicationShell smoke", () => {
   it("switches to content view and opens the outline unit inspector", async () => {
     const user = userEvent.setup();
     await renderShell();
-    await user.click(screen.getByRole("tab", { name: "内容" }));
+    await user.click(screen.getByText("大纲"));
     expect(await screen.findByText("第一卷：旧船坞")).toBeInTheDocument();
     await user.click(screen.getByText("第一卷：旧船坞"));
     expect(document.querySelector("aside")).not.toBeNull();

@@ -7,9 +7,13 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 100%;
-  padding: 24px;
+  max-width: 560px;
+  margin: 8vh auto 0;
+  padding: 34px 26px;
   text-align: center;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 14px;
+  color: var(--color-muted);
 }
 
 .kicker {
@@ -22,12 +26,13 @@
 
 .empty h3 {
   font-size: var(--fs-h1);
-  font-weight: var(--fw-bold);
+  font-weight: var(--fw-heavy);
   color: var(--color-fg);
+  margin-bottom: 8px;
 }
 
 .empty p {
   max-width: 360px;
-  font-size: var(--fs-body);
-  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.6;
 }

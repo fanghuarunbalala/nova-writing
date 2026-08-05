@@ -6,6 +6,7 @@
 import { ConversationList } from "../../../domains/conversation/components/ConversationList.js";
 import type { ConversationCatalogStore } from "../../../domains/conversation/store/ConversationCatalogStore.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
+import styles from "./ConversationListSection.module.css";
 
 export interface ConversationListSectionProps {
   readonly store: ConversationCatalogStore;
@@ -14,6 +15,9 @@ export interface ConversationListSectionProps {
 
 export function ConversationListSection({ store, onSelect }: ConversationListSectionProps) {
   const snapshot = useExternalStore(store);
+  if (snapshot.conversations.length === 0) {
+    return <div className={styles.empty}>暂无对话 · 点击上方创建</div>;
+  }
   return (
     <ConversationList
       conversations={snapshot.conversations.map((item) => ({

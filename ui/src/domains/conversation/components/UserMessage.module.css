@@ -3,8 +3,8 @@
  */
 .message {
   display: flex;
-  gap: 9px;
-  padding: 8px 0;
+  gap: 12px;
+  padding: 18px 0 6px;
 }
 
 .body {

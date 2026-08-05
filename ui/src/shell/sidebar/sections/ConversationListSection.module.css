@@ -1,0 +1,8 @@
+/**
+ * ConversationListSection 视觉（原型 .conv-empty）。
+ */
+.empty {
+  padding: 6px 10px 10px;
+  font-size: 12px;
+  color: var(--color-faint);
+}

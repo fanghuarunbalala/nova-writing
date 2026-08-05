@@ -42,7 +42,13 @@ export function ConversationComposer({ conversationId, enabled, onSend }: Conver
   return (
     <div className={styles.composer}>
       <ComposerModeBar mode={mode} onChange={setMode} disabled={!enabled} />
-      <div className={styles.row}>
+      <form
+        className={styles.form}
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
         <textarea
           className={styles.input}
           value={text}
@@ -57,7 +63,7 @@ export function ConversationComposer({ conversationId, enabled, onSend }: Conver
         <Button variant="primary" onClick={submit} disabled={!enabled || text.trim() === ""}>
           发送
         </Button>
-      </div>
+      </form>
     </div>
   );
 }

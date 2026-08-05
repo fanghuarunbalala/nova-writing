@@ -101,3 +101,20 @@
 .loading {
   cursor: progress;
 }
+
+/* 原型 .new-conv-btn：创建对话按钮 */
+.button.novel-new-conv-btn {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-size: 13.5px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+.button.novel-new-conv-btn:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  border-color: var(--color-fg);
+}

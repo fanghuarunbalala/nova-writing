@@ -7,7 +7,7 @@
   gap: 10px;
   min-height: var(--subhead-height);
   flex: none;
-  padding: 0 14px;
+  padding: 13px 20px;
   background: color-mix(in oklab, var(--color-surface) 82%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);

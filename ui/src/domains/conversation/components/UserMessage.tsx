@@ -24,7 +24,7 @@ function formatTime(timestamp: number): string {
 export function UserMessage({ sequence, text, timestamp, onReferenceClick }: UserMessageProps) {
   return (
     <div className={styles.message} data-sequence={sequence}>
-      <Avatar variant="user" text="我" size="sm" />
+      <Avatar variant="user" text="我" size="md" />
       <div className={styles.body}>
         <div className={styles.head}>
           <span className={styles.who}>你</span>

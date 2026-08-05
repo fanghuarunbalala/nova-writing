@@ -51,7 +51,7 @@ export function AssistantMessage({
 }: AssistantMessageProps) {
   return (
     <div className={styles.message} data-sequence={sequence}>
-      <Avatar variant="agent" text={agentLabel.slice(0, 2)} size="sm" />
+      <Avatar variant="agent" text={agentLabel.slice(0, 2)} size="md" />
       <div className={styles.body}>
         <div className={styles.head}>
           <span className={styles.who}>{agentLabel}</span>

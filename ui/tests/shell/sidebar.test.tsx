@@ -55,34 +55,38 @@ function makeStores() {
   const novelOverview = new NovelOverviewStore({ api });
   const outlineTree = new StoryOutlineTreeStore({ api });
   const schedule = new ScheduleStore({ novelOverview, outlineTree, conversationCatalog });
-  return { conversationCatalog, schedule };
+  return { conversationCatalog, schedule, novelOverview };
 }
 
 describe("Sidebar", () => {
-  it("renders sections, conversations and toggles", async () => {
+  it("renders sections, conversations and content panes", async () => {
     const user = userEvent.setup();
-    const { conversationCatalog, schedule } = makeStores();
+    const { conversationCatalog, schedule, novelOverview } = makeStores();
     await conversationCatalog.loadWorkspace("w1");
-    const onToggle = vi.fn();
+    await novelOverview.loadWorkspace("w1");
     const onCreateConversation = vi.fn();
+    const onSelectContentPane = vi.fn();
     render(
       <Sidebar
         mode="expanded"
-        onToggle={onToggle}
         conversationCatalog={conversationCatalog}
+        novelOverview={novelOverview}
         onCreateConversation={onCreateConversation}
         schedule={schedule}
         scheduleTodo={new ScheduleTodoStore()}
+        contentTab="outline"
+        onSelectContentPane={onSelectContentPane}
         workspaceId="w1"
         workspaceLabel="白昼计划"
       />,
     );
     expect(screen.getByText("白昼计划")).toBeInTheDocument();
     expect(screen.getByText(/对话 tion_a/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "新建对话" }));
+    expect(screen.getByText("大纲")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "创建对话" }));
     expect(onCreateConversation).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole("button", { name: "收起侧栏" }));
-    expect(onToggle).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByText("人物"));
+    expect(onSelectContentPane).toHaveBeenCalledWith("characters");
   });
 });
 
@@ -96,8 +100,11 @@ describe("SidebarSection / SidebarToggleButton", () => {
   it("toggles collapse direction", async () => {
     const user = userEvent.setup();
     const onToggle = vi.fn();
-    render(<SidebarToggleButton collapsed={false} onToggle={onToggle} />);
+    const { rerender } = render(<SidebarToggleButton collapsed={false} onToggle={onToggle} />);
     await user.click(screen.getByRole("button", { name: "收起侧栏" }));
     expect(onToggle).toHaveBeenCalledTimes(1);
+    rerender(<SidebarToggleButton collapsed onToggle={onToggle} />);
+    await user.click(screen.getByRole("button", { name: "展开侧栏" }));
+    expect(onToggle).toHaveBeenCalledTimes(2);
   });
 });

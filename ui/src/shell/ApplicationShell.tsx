@@ -25,6 +25,7 @@ import type { ScheduleTodoStore } from "../domains/schedule/store/ScheduleTodoSt
 import type { WorkspaceControllerAdapter } from "../domains/workspace/store/WorkspaceControllerAdapter.js";
 import { InspectorHost } from "./inspector/InspectorHost.js";
 import { MainArea } from "./main/MainArea.js";
+import type { ContentTab } from "./main/ContentTabs.js";
 import { OverlaysHost } from "./overlays/OverlaysHost.js";
 import { Sidebar } from "./sidebar/Sidebar.js";
 import { TopBar } from "./topbar/TopBar.js";
@@ -69,6 +70,7 @@ export function ApplicationShell({
   const workspace = useExternalStore(workspaceAdapter);
   const mainView = useMainView(mainViewRouter);
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
+  const [contentTab, setContentTab] = useState<ContentTab>("outline");
   const workspaceId = workspace.current?.id;
 
   // 跨域副作用协调：workspace 变化时并行触发各域 load（spec 1.5.1）
@@ -129,12 +131,20 @@ export function ApplicationShell({
     [mainViewRouter],
   );
 
+  const handleSelectContentPane = useCallback(
+    (pane: ContentTab) => {
+      setContentTab(pane);
+      mainViewRouter.transition("content");
+    },
+    [mainViewRouter],
+  );
+
   return (
     <div className={styles.shell}>
       <TopBar
         mainViewState={mainView.state}
         onMainViewChange={(state) => mainViewRouter.transition(state)}
-        workspaceLabel={workspace.current?.label}
+        workspaceName={workspace.current?.label}
         sidebarMode={sidebarMode}
         onToggleSidebar={() =>
           setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded"))
@@ -145,13 +155,13 @@ export function ApplicationShell({
       <div className={styles.body} data-sidebar-mode={sidebarMode}>
         <Sidebar
           mode={sidebarMode}
-          onToggle={() =>
-            setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded"))
-          }
           conversationCatalog={domainStores.conversationCatalog}
+          novelOverview={domainStores.novelOverview}
           onCreateConversation={handleCreateConversation}
           schedule={domainStores.schedule}
           scheduleTodo={domainStores.scheduleTodo}
+          contentTab={contentTab}
+          onSelectContentPane={handleSelectContentPane}
           workspaceId={workspaceId}
           workspaceLabel={workspace.current?.label}
           onOpenWorkspace={onOpenWorkspace}
@@ -168,6 +178,8 @@ export function ApplicationShell({
           locations={domainStores.location}
           schedule={domainStores.schedule}
           scheduleTodo={domainStores.scheduleTodo}
+          contentTab={contentTab}
+          onContentTabChange={setContentTab}
           onCreateConversation={handleCreateConversation}
           onSelectOutlineUnit={handleSelectOutlineUnit}
           onSelectCharacter={handleSelectCharacter}

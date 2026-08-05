@@ -12,7 +12,7 @@ export interface NewConversationSectionProps {
 
 export function NewConversationSection({ onCreate, disabled = false }: NewConversationSectionProps) {
   return (
-    <div style={{ padding: "8px 10px 2px" }}>
+    <div style={{ padding: "12px 12px 6px" }}>
       <NewConversationButton onClick={onCreate} disabled={disabled} />
     </div>
   );

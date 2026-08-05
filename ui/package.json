@@ -13,8 +13,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-css.mjs",
-    "check": "tsc -p tsconfig.json --noEmit && eslint --no-error-on-unmatched-pattern \"src/shared/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
-    "lint": "eslint --no-error-on-unmatched-pattern \"src/shared/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
+    "check": "tsc -p tsconfig.json --noEmit && eslint --no-error-on-unmatched-pattern \"src/shared/**/*.{ts,tsx}\" \"src/domains/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
+    "lint": "eslint --no-error-on-unmatched-pattern \"src/shared/**/*.{ts,tsx}\" \"src/domains/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
     "test": "vitest run",
     "smoke:app-composition": "pnpm --dir ../core build && pnpm build && pnpm --dir ../gui build && pnpm --dir ../web build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-app-composition-typecheck.tsx && node scripts/novel-app-composition-smoke.mjs",
     "smoke:application-shell": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/application-shell-typecheck.tsx && node scripts/application-shell-smoke.mjs",

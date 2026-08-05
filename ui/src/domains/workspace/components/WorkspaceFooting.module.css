@@ -1,0 +1,31 @@
+/**
+ * WorkspaceFooting 视觉：贴底按钮，label + meta 两行。
+ */
+.footing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  color: var(--color-fg);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.footing:hover {
+  background: var(--color-surface-2);
+}
+
+.label {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}

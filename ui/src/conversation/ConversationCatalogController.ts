@@ -7,7 +7,7 @@ import {
 } from "@novel/core";
 
 export const DEFAULT_NOVEL_AGENT_BINDING = Object.freeze({
-  agentType: "novel_agent",
+  agentType: "novel",
   definitionVersion: "1.0.0",
 });
 
@@ -261,7 +261,7 @@ function captureCatalogItem(
     id,
     title: `对话 ${id.slice(-6)}`,
     agentType,
-    agentLabel: agentType === "novel_agent" ? "Novel Agent" : agentType,
+    agentLabel: agentType === "novel" ? "Novel Agent" : agentType,
   });
 }
 

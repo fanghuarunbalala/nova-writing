@@ -75,7 +75,7 @@ function createSnapshot(conversationId, index) {
       id: `binding-${conversationId}`,
       conversationId,
       revision: 1,
-      agentType: "novel_agent",
+      agentType: "novel",
       definitionVersion: "1.0.0",
       status: "active",
       createdAt: timestamp,

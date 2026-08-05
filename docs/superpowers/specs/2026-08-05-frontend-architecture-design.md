@@ -2913,37 +2913,38 @@ Playwright + Electron 跑端到端 7-step 流程：
 ### Phase 1: 共享基础设施（1.5 周）
 
 任务清单：
-- [ ] `shared/theme/tokens.css`（完整令牌）
-- [ ] `shared/theme/global.css`
-- [ ] `shared/theme/animations.css`
-- [ ] `shared/theme/ThemeProvider.tsx`
-- [ ] `shared/primitives/Button.tsx` + `.module.css`
-- [ ] `shared/primitives/IconButton.tsx`
-- [ ] `shared/primitives/Dialog.tsx`（Radix）
-- [ ] `shared/primitives/Dropdown.tsx`（Radix）
-- [ ] `shared/primitives/Tabs.tsx`（Radix）
-- [ ] `shared/primitives/Tooltip.tsx`（Radix）
-- [ ] `shared/primitives/Separator.tsx`
-- [ ] `shared/primitives/DragHandle.tsx`
-- [ ] `shared/primitives/Spinner.tsx`
-- [ ] `shared/primitives/Badge.tsx`
-- [ ] `shared/primitives/Pill.tsx`
-- [ ] `shared/primitives/Avatar.tsx`
-- [ ] `shared/primitives/Kbd.tsx`
-- [ ] `shared/primitives/Text.tsx`
-- [ ] `shared/primitives/Icon.tsx`
-- [ ] `shared/state/ExternalStore.ts`
-- [ ] `shared/state/ImmutableSnapshot.ts`
-- [ ] `shared/state/useExternalStore.ts`
-- [ ] `shared/state/TaskSerializer.ts`
-- [ ] `shared/state/ToastStore.ts`
-- [ ] `shared/routing/MainViewRouter.ts`
-- [ ] `shared/routing/InspectorRouter.ts`
-- [ ] `shared/routing/MainViewHistory.ts`
-- [ ] ESLint rule `no-restricted-imports` 配置
-- [ ] 单元测试覆盖 ExternalStore、ImmutableSnapshot、TaskSerializer、Routers
+- [x] `shared/theme/tokens.css`（完整令牌，数值对齐原型 `:root`）
+- [x] `shared/theme/global.css`
+- [x] `shared/theme/animations.css`
+- [x] `shared/theme/ThemeProvider.tsx`
+- [x] `shared/primitives/Button.tsx` + `.module.css`
+- [x] `shared/primitives/IconButton.tsx`
+- [x] `shared/primitives/Dialog.tsx`（Radix）
+- [x] `shared/primitives/Dropdown.tsx`（Radix）
+- [x] `shared/primitives/Tabs.tsx`（Radix）
+- [x] `shared/primitives/Tooltip.tsx`（Radix）
+- [x] `shared/primitives/Separator.tsx`
+- [x] `shared/primitives/DragHandle.tsx`
+- [x] `shared/primitives/Spinner.tsx`
+- [x] `shared/primitives/Badge.tsx`
+- [x] `shared/primitives/Pill.tsx`
+- [x] `shared/primitives/Avatar.tsx`
+- [x] `shared/primitives/Kbd.tsx`
+- [x] `shared/primitives/Text.tsx`
+- [x] `shared/primitives/Icon.tsx`
+- [x] `shared/state/ExternalStore.ts`
+- [x] `shared/state/ImmutableSnapshot.ts`
+- [x] `shared/state/useExternalStore.ts`
+- [x] `shared/state/TaskSerializer.ts`
+- [x] `shared/state/ToastStore.ts`
+- [x] `shared/routing/MainViewRouter.ts`
+- [x] `shared/routing/InspectorRouter.ts`
+- [x] `shared/routing/MainViewHistory.ts`
+- [x] ESLint rule `no-restricted-imports` 配置
+- [x] 单元测试覆盖 ExternalStore、ImmutableSnapshot、TaskSerializer、Routers
 
-**Gate**：所有 primitives 有视觉快照；ExternalStore 单元测试覆盖；ESLint 规则 CI 强制。
+**Gate**：所有 primitives 有组件渲染 + 交互测试（视觉对齐改由 Phase 3 真实应用
+Playwright 截图验证，不引入 HTML demo）；ExternalStore 单元测试覆盖；ESLint 规则 CI 强制。
 
 ### Phase 2: 五个域（3-4 周，可并行）
 

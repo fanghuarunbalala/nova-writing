@@ -6,6 +6,44 @@
     <link rel="stylesheet" href="theme.css" />
     <style>
       body { margin: 0; padding: 24px; }
+      .novel-thinking-block {
+        margin: 6px 0;
+        border: 1px solid var(--novel-border);
+        border-radius: 16px 22px 18px 14px / 20px 14px 16px 22px;
+        background: var(--novel-surface-secondary);
+        padding: 8px 12px;
+      }
+      .novel-thinking-toggle {
+        width: 100%;
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        border: 0; padding: 0;
+        color: var(--novel-text-secondary);
+        background: transparent;
+        font: inherit; font-size: 12px; font-weight: 600;
+        cursor: pointer;
+      }
+      .novel-thinking-toggle:hover { color: var(--novel-text-primary); }
+      .novel-thinking-icon {
+        width: 18px; height: 18px;
+        display: grid; place-items: center;
+        border: 1px solid var(--novel-border-strong);
+        border-radius: 50%;
+        color: var(--novel-text-secondary);
+        background: var(--novel-surface-primary);
+        font-size: 11px; line-height: 1;
+      }
+      .novel-thinking-content {
+        color: var(--novel-text-secondary);
+        font-size: 12px; line-height: 1.65;
+        white-space: pre-wrap; overflow-wrap: anywhere;
+      }
+      .novel-thinking-content.collapsed {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .novel-thinking-content.expanded { margin-top: 6px; }
     </style>
   </head>
   <body>
@@ -25,7 +63,13 @@
         <article class="novel-message novel-assistant-message" data-message-status="completed" data-sequence="2">
           <header class="novel-message-header"><span>助手</span><span>14:00</span><span class="novel-status-token">已完成</span></header>
           <div class="novel-assistant-content">
-            <details class="novel-thinking-block"><summary>思考过程</summary><div>先收敛人物动机，再压缩场景描述。</div></details>
+            <div class="novel-thinking-block" data-expanded="false">
+              <button class="novel-thinking-toggle" type="button" aria-expanded="false"><span>思考过程</span><span class="novel-thinking-icon">▸</span></button>
+              <div class="novel-thinking-content collapsed">先收敛人物动机。
+再压缩场景描述。
+然后把环境描写并入动作。
+最后检查节奏是否拖沓。</div>
+            </div>
             <div class="novel-message-text">可以。把“雨很大”改成“雨落得密”，用一句动作代替三句形容。</div>
           </div>
         </article>
@@ -68,6 +112,21 @@
 
       <button class="novel-follow-latest" type="button">有新消息，回到最新</button>
     </section>
+
+    <script>
+      document.addEventListener("click", (event) => {
+        const toggle = event.target.closest(".novel-thinking-toggle");
+        if (toggle === null) return;
+        const block = toggle.closest(".novel-thinking-block");
+        const content = block.querySelector(".novel-thinking-content");
+        const expanded = toggle.getAttribute("aria-expanded") === "true";
+        toggle.setAttribute("aria-expanded", String(!expanded));
+        toggle.querySelector(".novel-thinking-icon").textContent = expanded ? "▸" : "▾";
+        block.dataset.expanded = String(!expanded);
+        content.classList.toggle("expanded", !expanded);
+        content.classList.toggle("collapsed", expanded);
+      });
+    </script>
 
     <h2>连接状态</h2>
     <div class="novel-connection-status" data-connection-state="live" role="status"><span>已连接</span></div>

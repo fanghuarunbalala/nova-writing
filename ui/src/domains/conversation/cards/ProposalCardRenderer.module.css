@@ -1,0 +1,81 @@
+/**
+ * ProposalCardRenderer 视觉。
+ */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  color: var(--color-fg);
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.ops {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.op {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.opMark {
+  flex: none;
+  min-width: 30px;
+  text-align: center;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+
+.opMark.add { background: var(--color-success-bg); color: var(--color-success); }
+.opMark.mod { background: var(--color-warn-bg); color: var(--color-warn); }
+.opMark.del { background: var(--color-danger-bg); color: var(--color-danger); }
+.opMark.move { background: var(--color-info-bg); color: var(--color-info); }
+.opMark.plan { background: var(--color-surface-2); color: var(--color-muted); }
+
+.opText {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-body);
+  color: var(--color-fg);
+}
+
+.opKind {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.foot {
+  display: flex;
+  justify-content: flex-end;
+}

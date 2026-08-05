@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>02 · 会话时间线</title>
+    <link rel="stylesheet" href="theme.css" />
+    <style>
+      body { margin: 0; padding: 24px; }
+      .novel-runtime-status-anchor { position: sticky; bottom: 0; z-index: 5; padding: 8px 0 4px; background: var(--novel-surface-primary); }
+      .novel-runtime-status-bar {
+        display: flex; align-items: center; gap: 8px;
+        min-height: 32px; padding: 5px 12px;
+        border: 1px solid var(--novel-border-strong);
+        border-radius: 8px;
+        color: var(--novel-text-primary);
+        background: var(--novel-surface-secondary);
+        font-size: 12px;
+      }
+      .novel-runtime-status-bar[data-runtime-status="starting"],
+      .novel-runtime-status-bar[data-runtime-status="generating"] {
+        border-color: transparent; color: #ffffff;
+        background: linear-gradient(90deg, #5f718a, #7f93b5, #5f718a);
+        background-size: 200% 100%;
+        animation: demo-runtime-gradient 2.4s linear infinite;
+      }
+      .novel-runtime-status-bar[data-runtime-status="generating"] {
+        background: linear-gradient(90deg, #4f7fb0, #7a6fb5, #4f7fb0);
+        background-size: 200% 100%;
+        animation: demo-runtime-gradient 1.6s linear infinite;
+      }
+      .novel-runtime-status-bar[data-runtime-status="online"] { border-color: #bcd8c4; color: #1f6f43; background: #eef6f0; }
+      .novel-runtime-status-bar[data-runtime-status="stopped"] { color: #5b6472; background: #f2f3f5; }
+      .novel-runtime-status-bar[data-runtime-status="not_configured"],
+      .novel-runtime-status-bar[data-runtime-status="invalid_configuration"],
+      .novel-runtime-status-bar[data-runtime-status="missing_credential"],
+      .novel-runtime-status-bar[data-runtime-status="missing_manifest"] { border-color: #e8d3a8; color: #8a5b14; background: #fdf6ec; }
+      .novel-runtime-status-bar[data-runtime-status="crashed"] { border-color: #e5b8b8; color: #8a2f2f; background: #fdf0f0; }
+      .novel-runtime-status-bar .novel-runtime-status-code { color: inherit; opacity: 0.85; font-size: 11px; }
+      .novel-runtime-status-bar .novel-connection-action { margin-left: auto; border: 1px solid currentColor; border-radius: 6px; padding: 3px 9px; color: inherit; background: rgb(255 255 255 / 0.14); font: inherit; cursor: pointer; }
+      @keyframes demo-runtime-gradient { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+    </style>
+  </head>
+  <body>
+    <section class="novel-conversation-view" data-controller-state="live">
+      <header class="novel-conversation-header">
+        <span>Conversation</span>
+        <div class="novel-connection-status" data-runtime-status="generating" role="status"><span>生成中</span><button class="novel-connection-action" type="button">停止</button></div>
+      </header>
+
+      <div class="novel-conversation-timeline">
+        <article class="novel-message novel-user-message" data-sequence="1">
+          <header class="novel-message-header"><span>你</span><span>14:00</span></header>
+          <div class="novel-message-text">帮我把第一幕的雨夜相遇写得更克制一些。</div>
+          <button class="novel-connection-action" type="button">重发</button>
+        </article>
+
+        <article class="novel-message novel-assistant-message" data-message-status="completed" data-sequence="2">
+          <header class="novel-message-header"><span>助手</span><span>14:00</span><span class="novel-status-token">已完成</span></header>
+          <div class="novel-assistant-content">
+            <details class="novel-thinking-block"><summary>思考过程</summary><div>先收敛人物动机，再压缩场景描述。</div></details>
+            <div class="novel-message-text">可以。把“雨很大”改成“雨落得密”，用一句动作代替三句形容。</div>
+          </div>
+        </article>
+
+        <article class="novel-message novel-assistant-message" data-message-status="streaming" data-sequence="3">
+          <header class="novel-message-header"><span>助手</span><span>14:01</span><span class="novel-status-token">生成中</span></header>
+          <div class="novel-assistant-content">
+            <div class="novel-message-text">好，我按这个方向重写第一幕的开场：</div>
+            <span class="novel-streaming-cursor" aria-label="助手正在生成">●</span>
+          </div>
+        </article>
+
+        <article class="novel-message novel-assistant-message" data-message-status="failed" data-sequence="4">
+          <header class="novel-message-header"><span>助手</span><span>14:02</span><span class="novel-status-token">失败</span></header>
+          <div class="novel-assistant-content">
+            <p class="novel-message-notice" role="status">本轮生成失败：provider_error</p>
+            <button class="novel-connection-action" type="button">重试</button>
+          </div>
+        </article>
+
+        <article class="novel-message novel-assistant-message" data-message-status="cancelled" data-sequence="5">
+          <header class="novel-message-header"><span>助手</span><span>14:03</span><span class="novel-status-token">已停止</span></header>
+          <div class="novel-assistant-content">
+            <p class="novel-message-notice" role="status">本轮生成已停止</p>
+            <button class="novel-connection-action" type="button">重试</button>
+          </div>
+        </article>
+
+        <article class="novel-approval-card" data-approval-status="pending">
+          <header class="novel-card-header"><span>操作确认</span><span>14:04</span></header>
+          <h3>执行 TodoWrite</h3>
+          <p>更新当前创作计划为三步。</p>
+          <div class="novel-card-status">等待确认</div>
+          <footer>
+            <button class="novel-connection-action" type="button">允许</button>
+            <button class="novel-connection-action" type="button">拒绝</button>
+          </footer>
+        </article>
+      </div>
+
+      <button class="novel-follow-latest" type="button">有新消息，回到最新</button>
+    </section>
+
+    <h2>连接状态</h2>
+    <div class="novel-connection-status" data-connection-state="live" role="status"><span>已连接</span></div>
+    <div class="novel-connection-status" data-connection-state="disconnected" role="alert"><span>连接已断开</span><code class="novel-connection-error-code">ELECTRON_PRELOAD_BRIDGE_UNAVAILABLE</code><button class="novel-connection-action" type="button">重新连接</button></div>
+
+    <h2>运行状态（9 态 · 错误不用动效，用颜色区分）</h2>
+    <div class="novel-runtime-status-bar" data-runtime-status="starting" role="status"><span>启动中</span></div>
+    <div class="novel-runtime-status-bar" data-runtime-status="generating" role="status"><span>生成中</span><button class="novel-connection-action" type="button">停止</button></div>
+    <div class="novel-runtime-status-bar" data-runtime-status="online" role="status"><span>在线</span></div>
+    <div class="novel-runtime-status-bar" data-runtime-status="stopped" role="status"><span>已停止</span></div>
+    <div class="novel-runtime-status-bar" data-runtime-status="not_configured" role="alert"><span>未配置</span><code class="novel-runtime-status-code">model_profile_unselected</code><button class="novel-connection-action" type="button">重试</button><button class="novel-connection-action" type="button">打开设置</button></div>
+    <div class="novel-runtime-status-bar" data-runtime-status="invalid_configuration" role="alert"><span>配置无效</span></div>
+    <div class="novel-runtime-status-bar" data-runtime-status="missing_credential" role="alert"><span>缺少凭据</span></div>
+    <div class="novel-runtime-status-bar" data-runtime-status="missing_manifest" role="alert"><span>缺少 Agent 清单</span></div>
+    <div class="novel-runtime-status-bar" data-runtime-status="crashed" role="alert"><span>已崩溃</span></div>
+
+    <h2>对话框上方（固定于输入框之上）</h2>
+    <form class="novel-conversation-composer">
+      <div class="novel-runtime-status-anchor">
+        <div class="novel-runtime-status-bar" data-runtime-status="generating" role="status"><span>生成中</span><button class="novel-connection-action" type="button">停止</button></div>
+      </div>
+      <div class="novel-composer-host">
+        <textarea class="novel-composer-placeholder" aria-label="消息" placeholder="输入消息…"></textarea>
+        <div class="novel-composer-actions">
+          <button class="novel-send-button" type="submit">发送</button>
+          <button class="novel-stop-button" type="button">停止</button>
+        </div>
+      </div>
+    </form>
+  </body>
+</html>

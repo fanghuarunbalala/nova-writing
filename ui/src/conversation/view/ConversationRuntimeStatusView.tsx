@@ -1,5 +1,6 @@
 /** Desktop Runtime status token with safe retry, stop, and settings actions. */
 import type { ConversationRuntimeStatus } from "@novel/core";
+import { RUNTIME_STATUS_STYLES } from "../../theme/RuntimeStatusStyles.js";
 
 export interface ConversationRuntimeStatusViewProps {
   readonly status: ConversationRuntimeStatus;
@@ -40,42 +41,45 @@ export function ConversationRuntimeStatusView({
   const isFailure = FAILURE_STATUSES.has(status);
   const label = STATUS_LABELS[status] ?? "状态未知";
   return (
-    <div
-      className="novel-connection-status"
-      data-runtime-status={status}
-      role={isFailure ? "alert" : "status"}
-    >
-      <span>{label}</span>
-      {failureCode !== undefined ? (
-        <code className="novel-connection-error-code">{failureCode}</code>
-      ) : null}
-      {isFailure && onRetry !== undefined ? (
-        <button
-          className="novel-connection-action"
-          type="button"
-          onClick={onRetry}
-        >
-          重试
-        </button>
-      ) : null}
-      {status === "generating" && onStop !== undefined ? (
-        <button
-          className="novel-connection-action"
-          type="button"
-          onClick={onStop}
-        >
-          停止
-        </button>
-      ) : null}
-      {isFailure && onOpenSettings !== undefined ? (
-        <button
-          className="novel-connection-action"
-          type="button"
-          onClick={onOpenSettings}
-        >
-          打开设置
-        </button>
-      ) : null}
-    </div>
+    <>
+      <style>{RUNTIME_STATUS_STYLES}</style>
+      <div
+        className="novel-runtime-status-bar"
+        data-runtime-status={status}
+        role={isFailure ? "alert" : "status"}
+      >
+        <span>{label}</span>
+        {failureCode !== undefined ? (
+          <code className="novel-runtime-status-code">{failureCode}</code>
+        ) : null}
+        {isFailure && onRetry !== undefined ? (
+          <button
+            className="novel-connection-action"
+            type="button"
+            onClick={onRetry}
+          >
+            重试
+          </button>
+        ) : null}
+        {status === "generating" && onStop !== undefined ? (
+          <button
+            className="novel-connection-action"
+            type="button"
+            onClick={onStop}
+          >
+            停止
+          </button>
+        ) : null}
+        {isFailure && onOpenSettings !== undefined ? (
+          <button
+            className="novel-connection-action"
+            type="button"
+            onClick={onOpenSettings}
+          >
+            打开设置
+          </button>
+        ) : null}
+      </div>
+    </>
   );
 }

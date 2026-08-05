@@ -38,13 +38,6 @@ export function ConversationProjectionView({
     <section className="novel-conversation-view" data-controller-state={controllerState}>
       <header className="novel-conversation-header">
         <span>Conversation</span>
-        <ConversationRuntimeStatusView
-          status={interaction.runtime.status}
-          failureCode={interaction.runtime.failureCode}
-          onRetry={onRuntimeRetry}
-          onStop={interaction.runtime.canStop ? interaction.commands.stop : onRuntimeStop}
-          onOpenSettings={onRuntimeOpenSettings}
-        />
       </header>
       {controllerState !== "live" ? (
         <ConversationConnectionStatus snapshot={result.snapshot} resume={result.resume} />
@@ -82,6 +75,19 @@ export function ConversationProjectionView({
           });
         }}
       />
+      <div className="novel-runtime-status-anchor">
+        <ConversationRuntimeStatusView
+          status={interaction.runtime.status}
+          failureCode={interaction.runtime.failureCode}
+          onRetry={onRuntimeRetry}
+          onStop={
+            interaction.runtime.canStop
+              ? interaction.commands.stop
+              : onRuntimeStop
+          }
+          onOpenSettings={onRuntimeOpenSettings}
+        />
+      </div>
     </section>
   );
 }

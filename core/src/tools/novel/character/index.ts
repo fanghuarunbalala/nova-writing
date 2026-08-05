@@ -16,14 +16,14 @@ export {
   type NovelCharacterToolServiceOptions,
 } from "./ToolService.js";
 
-export const NOVEL_ENTITIES_TOOL_GROUP_MANIFEST: ToolGroupManifest =
+export const NOVEL_CHARACTER_TOOL_GROUP_MANIFEST: ToolGroupManifest =
   Object.freeze({
     schemaVersion: 1,
-    id: "novel.entities",
+    id: "novel.characters",
     version: "1.0.0",
-    label: "Novel Entities",
+    label: "Novel Characters",
     description:
-      "Read, write, and edit Character and Location profiles in a conversation Draft.",
+      "Read, write, and edit Character profiles in a conversation Draft.",
     tools: Object.freeze([
       "NovelCharacterRead",
       "NovelCharacterWrite",

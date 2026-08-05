@@ -5,9 +5,12 @@ import {
   type PromptDigester,
 } from "../../../prompt/index.js";
 import {
+  type CharacterQueryService,
+  type CharacterService,
   type NovelDraftSessionService,
   type StoryOutlineQueryService,
   type StoryOutlineService,
+  captureCharacterId,
   captureStoryOutlineId,
   captureStoryUnitId,
 } from "../../../novel/index.js";
@@ -19,6 +22,11 @@ import {
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   OutlineToolService,
   createNovelOutlineToolRegistry,
+} from "../../../tools/novel/index.js";
+import {
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NovelCharacterToolService,
+  createNovelCharacterToolRegistry,
 } from "../../../tools/novel/index.js";
 import { createTodoWriteTool } from "../../../tools/todo/index.js";
 import { NodeSha256PromptDigester } from "../../prompt/index.js";
@@ -83,6 +91,26 @@ const unavailableNovelDraftSessionService = Object.freeze({
   rollback: unavailableNovelService,
 }) as unknown as NovelDraftSessionService;
 
+const unavailableCharacterService = Object.freeze({
+  create: unavailableNovelService,
+  replace: unavailableNovelService,
+  delete: unavailableNovelService,
+}) as unknown as CharacterService;
+
+const unavailableCharacterQueryService = Object.freeze({
+  get: unavailableNovelService,
+  list: unavailableNovelService,
+}) as unknown as CharacterQueryService;
+
+const unavailableCharacterToolService = new NovelCharacterToolService({
+  characters: unavailableCharacterService,
+  characterQueries: unavailableCharacterQueryService,
+  drafts: unavailableNovelDraftSessionService,
+  identityFactory: {
+    createCharacterId: () => captureCharacterId("unavailable_character"),
+  },
+});
+
 const unavailableOutlineToolService = new OutlineToolService({
   outline: unavailableStoryOutlineService,
   outlineQueries: unavailableStoryOutlineQueryService,
@@ -104,10 +132,14 @@ export function createNovelConversationManifestComposition(
     ...createNovelOutlineToolRegistry({
       service: unavailableOutlineToolService,
     }).list(),
+    ...createNovelCharacterToolRegistry({
+      service: unavailableCharacterToolService,
+    }).list(),
   ]);
   const groups = new ToolGroupCatalog([
     loadToolGroupManifest(NOVEL_CONVERSATION_TOOL_GROUP_MANIFEST),
     NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+    NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   ]);
   const promptBuilder = new SystemPromptBuilder({
     sections: createDefaultPromptSectionRegistry(),

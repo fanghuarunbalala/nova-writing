@@ -26,7 +26,9 @@ import {
 } from "../dist/index.js";
 import { Type } from "typebox";
 import {
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  novelCharacterToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -128,6 +130,7 @@ const todoTool = defineTool({
 const toolRegistry = new ToolRegistry([
   todoTool,
   ...novelOutlineToolRegistry.list(),
+  ...novelCharacterToolRegistry.list(),
 ]);
 const toolGroups = new ToolGroupCatalog([
   loadToolGroupManifest(`
@@ -136,8 +139,9 @@ id: runtime.todo
 version: 1.0.0
 label: Runtime todo tools
 tools: [TodoWrite]
-`),
+  `),
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
 ]);
 const assembledStore = new InMemoryAgentManifestStore();
 const assembled = await new AgentAssembler({
@@ -157,7 +161,15 @@ assert.equal(assembled.toolView.require("TodoWrite").descriptor.name, todoTool.d
 assert.equal(assembled.toolView.require("TodoWrite").descriptor.version, todoTool.descriptor.version);
 assert.deepEqual(
   assembled.toSnapshot().tools.map((tool) => tool.name).sort(),
-  ["NovelOutlineEdit", "NovelOutlineRead", "NovelOutlineWrite", "TodoWrite"],
+  [
+    "NovelCharacterEdit",
+    "NovelCharacterRead",
+    "NovelCharacterWrite",
+    "NovelOutlineEdit",
+    "NovelOutlineRead",
+    "NovelOutlineWrite",
+    "TodoWrite",
+  ],
 );
 assert.equal(await assembledStore.get(assembled.manifest.manifestId), assembled.manifest);
 

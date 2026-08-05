@@ -21,11 +21,14 @@ assert.equal(
 
 const composition = createNovelConversationManifestComposition();
 assert.ok(composition.registry instanceof ToolRegistry);
-assert.equal(composition.registry.size, 4);
+assert.equal(composition.registry.size, 7);
 assert.equal(composition.registry.has("TodoWrite"), true);
 assert.equal(composition.registry.has("NovelOutlineRead"), true);
 assert.equal(composition.registry.has("NovelOutlineWrite"), true);
 assert.equal(composition.registry.has("NovelOutlineEdit"), true);
+assert.equal(composition.registry.has("NovelCharacterRead"), true);
+assert.equal(composition.registry.has("NovelCharacterWrite"), true);
+assert.equal(composition.registry.has("NovelCharacterEdit"), true);
 assert.ok(composition.groups instanceof ToolGroupCatalog);
 assert.ok(composition.promptBuilder instanceof SystemPromptBuilder);
 assert.ok(composition.digester instanceof NodeSha256PromptDigester);

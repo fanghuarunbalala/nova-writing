@@ -19,7 +19,9 @@ import {
   novelAgentDefinition,
 } from "../dist/index.js";
 import {
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  novelCharacterToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -62,6 +64,7 @@ const assembly = await new AgentAssembler({
   registry: new ToolRegistry([
     todoTool,
     ...novelOutlineToolRegistry.list(),
+    ...novelCharacterToolRegistry.list(),
   ]),
   groups: new ToolGroupCatalog([
     loadToolGroupManifest(`
@@ -70,8 +73,9 @@ id: runtime.todo
 version: 1.0.0
 label: Runtime todo tools
 tools: [TodoWrite]
-`),
+  `),
     NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+    NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   ]),
   manifestResolver: resolver,
   manifestStore: new InMemoryAgentManifestStore(),

@@ -1,6 +1,6 @@
 /** Compile-time contract examples for the Novel Character Tools. */
 import {
-  NOVEL_ENTITIES_TOOL_GROUP_MANIFEST,
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   CharacterQueryService,
   CharacterService,
   NovelCharacterToolService,
@@ -32,4 +32,4 @@ void editTool.descriptor.parameters;
 void registry.require("NovelCharacterRead").handler;
 void registry.require("NovelCharacterWrite").handler;
 void registry.require("NovelCharacterEdit").handler;
-void NOVEL_ENTITIES_TOOL_GROUP_MANIFEST.tools;
+void NOVEL_CHARACTER_TOOL_GROUP_MANIFEST.tools;

@@ -25,7 +25,9 @@ import {
   SqliteWorkspaceStore,
 } from "../dist/node/index.js";
 import {
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  novelCharacterToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -249,7 +251,11 @@ async function createManifest() {
     digester,
   });
   return new AgentAssembler({
-    registry: new ToolRegistry([tool, ...novelOutlineToolRegistry.list()]),
+    registry: new ToolRegistry([
+      tool,
+      ...novelOutlineToolRegistry.list(),
+      ...novelCharacterToolRegistry.list(),
+    ]),
     groups: new ToolGroupCatalog([
       loadToolGroupManifest(`
 schemaVersion: 1
@@ -257,8 +263,9 @@ id: runtime.todo
 version: 1.0.0
 label: Runtime todo tools
 tools: [TodoWrite]
-`),
+  `),
       NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+      NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
     ]),
     manifestResolver: resolver,
     manifestStore: new InMemoryAgentManifestStore(),

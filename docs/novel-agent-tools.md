@@ -158,7 +158,7 @@ interface OutlineWriteResultItem {
   fields overwrite, omitted fields stay, `null` clears `summary` /
   `initialState` / `authorNotes`, and `aliases` replaces the whole array when
   provided (`[]` clears it). `name` cannot be cleared.
-- Group: `novel.entities`. Deletion is handled by the unified delete tool.
+- Group: `novel.characters`. Deletion is handled by the unified delete tool.
 
 ## 5. Confirmed: Outline Tools
 

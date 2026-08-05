@@ -1,9 +1,13 @@
-/** Shared fixture: Novel Outline group manifest and an unavailable-service registry for assembly tests. */
+/** Shared fixture: Novel Outline + Character group manifests and unavailable-service registries for assembly tests. */
 import {
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  NovelCharacterToolService,
   OutlineToolService,
+  captureCharacterId,
   captureStoryOutlineId,
   captureStoryUnitId,
+  createNovelCharacterToolRegistry,
   createNovelOutlineToolRegistry,
 } from "../../dist/index.js";
 
@@ -46,4 +50,32 @@ export const novelOutlineToolRegistry = createNovelOutlineToolRegistry({
   service: unavailableOutlineToolService,
 });
 
-export { NOVEL_OUTLINE_TOOL_GROUP_MANIFEST };
+const unavailableCharacterToolService = new NovelCharacterToolService({
+  characters: {
+    create: unavailable,
+    replace: unavailable,
+    delete: unavailable,
+  },
+  characterQueries: {
+    get: unavailable,
+    list: unavailable,
+  },
+  drafts: {
+    startDraft: unavailable,
+    getActiveDraft: unavailable,
+    resetToMain: unavailable,
+    rollback: unavailable,
+  },
+  identityFactory: {
+    createCharacterId: () => captureCharacterId("fixture_character"),
+  },
+});
+
+export const novelCharacterToolRegistry = createNovelCharacterToolRegistry({
+  service: unavailableCharacterToolService,
+});
+
+export {
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+};

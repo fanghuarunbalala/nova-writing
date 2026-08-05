@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  NOVEL_ENTITIES_TOOL_GROUP_MANIFEST,
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NovelCharacterToolService,
   NovelDraftSessionService,
   captureCharacterId,
@@ -126,7 +126,7 @@ try {
     registry.list().map((tool) => tool.descriptor.name),
     ["NovelCharacterEdit", "NovelCharacterRead", "NovelCharacterWrite"],
   );
-  assert.deepEqual(NOVEL_ENTITIES_TOOL_GROUP_MANIFEST.tools, [
+  assert.deepEqual(NOVEL_CHARACTER_TOOL_GROUP_MANIFEST.tools, [
     "NovelCharacterRead",
     "NovelCharacterWrite",
     "NovelCharacterEdit",

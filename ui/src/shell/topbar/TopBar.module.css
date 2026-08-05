@@ -1,0 +1,20 @@
+/**
+ * TopBar 视觉（原型 .topbar）。
+ */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: var(--topbar-height);
+  flex: none;
+  padding: 0 16px;
+  background: color-mix(in oklab, var(--color-surface) 82%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--color-border);
+  z-index: 20;
+}
+
+.spacer {
+  flex: 1;
+}

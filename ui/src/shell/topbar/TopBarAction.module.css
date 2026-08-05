@@ -1,0 +1,41 @@
+/**
+ * TopBarAction 视觉（原型 .topbar .action）。
+ */
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.action:hover {
+  color: var(--color-fg);
+  background: color-mix(in oklab, var(--color-fg) 5%, transparent);
+}
+
+.action.active {
+  color: var(--color-accent-ink);
+  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+}

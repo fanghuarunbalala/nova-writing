@@ -1,0 +1,11 @@
+/**
+ * ScheduleSurface 视觉。
+ */
+.surface {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+}

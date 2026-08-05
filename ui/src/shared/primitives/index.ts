@@ -5,6 +5,7 @@ export * from "./Avatar.js";
 export * from "./Badge.js";
 export * from "./Button.js";
 export * from "./Dialog.js";
+export * from "./DragHandle.js";
 export * from "./Dropdown.js";
 export * from "./Icon.js";
 export * from "./IconButton.js";

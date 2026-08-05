@@ -1,14 +1,15 @@
 /**
  * NovelApp
  *
- * 共享 React 应用入口：把 api / workspace controller / 5 个域 store、
- * 路由、overlays 组装进 ApplicationShell（桌面与 Web 共用）。
+ * 共享 React 应用入口（spec 4.0.1）：把 api / workspace controller / 域 store、
+ * 路由、overlays 组装进 ApplicationShell，并用 NovelAppProvider 把 api/platform/
+ * extensions/logger/commandSource/configurationClient 发布到 Context。
  *
- * platform/commandSource 保留在 props 表面（组合层契约）；
- * 桌面专属扩展槽（titlebar/commands）在壳加扩展点后接入。
+ * platform/commandSource/configurationClient 保留在 props 表面（组合层契约）；
+ * 桌面专属扩展槽（titlebar/commands）在壳加扩展点后接入（Phase B）。
  */
 import { useMemo, useState, type ReactNode } from "react";
-import type { Logger, NovelApiClient } from "@novel/core";
+import { noopLogger, type Logger, type NovelApiClient } from "@novel/core";
 import type { ApplicationCommandSource } from "../command/index.js";
 import {
   ApplicationSettingsStore,
@@ -30,6 +31,7 @@ import {
   type WorkspaceControllerSnapshot,
 } from "../domains/index.js";
 import type { FrontendPlatform } from "../platform/index.js";
+import type { NovelUiExtensions } from "../extensions/index.js";
 import {
   InspectorRouter,
   MainViewRouter,
@@ -40,6 +42,7 @@ import {
   ApplicationShell,
   type ApplicationShellDomainStores,
 } from "../shell/ApplicationShell.js";
+import { NovelAppProvider } from "./NovelAppProvider.js";
 
 export interface NovelAppProps {
   readonly api: NovelApiClient;
@@ -48,6 +51,9 @@ export interface NovelAppProps {
   readonly commandSource?: ApplicationCommandSource;
   readonly configurationClient?: ApplicationConfigurationClient;
   readonly workspaceController?: WorkspaceController;
+  /** 第一方扩展点；不传时用 emptyNovelUiExtensions（spec 4.0.1） */
+  readonly extensions?: NovelUiExtensions;
+  /** 宿主追加的 overlay 节点（与默认 overlays 一并渲染进 OverlaysHost） */
   readonly overlays?: ReactNode;
 }
 
@@ -64,9 +70,12 @@ interface NovelAppReadyProps extends NovelAppProps {
 
 function NovelAppReady({
   api,
-  logger,
+  platform,
+  logger = noopLogger,
+  commandSource,
   configurationClient,
   workspaceController,
+  extensions,
   overlays,
 }: NovelAppReadyProps) {
   const domainStores = useMemo(
@@ -77,6 +86,9 @@ function NovelAppReady({
   const inspectorRouter = useMemo(() => new InspectorRouter(), []);
   const toastStore = useMemo(() => new ToastStore(), []);
   const settingsStore = useMemo(() => new ApplicationSettingsStore(), []);
+  // NovelApp 自身需要 workspace 快照以驱动 WorkspaceSelectionDialog overlay；
+  // ApplicationShell 内部还会再包一层 adapter 订阅同一个 controller（spec 4.1）。
+  // 两个 adapter 都只是 subscribe + 转发快照，开销可忽略。
   const workspaceAdapter = useMemo(
     () => new WorkspaceControllerAdapter(workspaceController),
     [workspaceController],
@@ -86,45 +98,58 @@ function NovelAppReady({
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
-    <ApplicationShell
+    <NovelAppProvider
       api={api}
+      platform={platform}
       logger={logger}
-      mainViewRouter={mainViewRouter}
-      inspectorRouter={inspectorRouter}
-      workspaceAdapter={workspaceAdapter}
-      domainStores={domainStores}
-      toastStore={toastStore}
-      onOpenWorkspace={() => setWorkspaceOpen(true)}
-      onOpenSettings={() => setSettingsOpen(true)}
-      overlays={
-        <>
-          <WorkspaceSelectionDialog
-            open={workspaceOpen}
-            snapshot={workspaceSnapshot}
-            onChoose={() => {
-              void workspaceController.chooseAndOpen();
-              setWorkspaceOpen(false);
-            }}
-            onOpenRecent={(workspaceId) => {
-              void workspaceController.openRecent(workspaceId);
-              setWorkspaceOpen(false);
-            }}
-            onCloseWorkspace={() => {
-              void workspaceController.closeCurrent();
-              setWorkspaceOpen(false);
-            }}
-            onDismiss={() => setWorkspaceOpen(false)}
-          />
-          <SettingsDialog
-            open={settingsOpen}
-            store={settingsStore}
-            configuration={configurationClient}
-            onDismiss={() => setSettingsOpen(false)}
-          />
-          {overlays}
-        </>
-      }
-    />
+      extensions={extensions}
+      commandSource={commandSource}
+      configurationClient={configurationClient}
+    >
+      <ApplicationShell
+        api={api}
+        logger={logger}
+        mainViewRouter={mainViewRouter}
+        inspectorRouter={inspectorRouter}
+        workspaceController={workspaceController}
+        domainStores={domainStores}
+        toastStore={toastStore}
+        settingsStore={settingsStore}
+        configurationClient={configurationClient}
+        commandSource={commandSource}
+        extensions={extensions}
+        onOpenWorkspace={() => setWorkspaceOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        overlays={
+          <>
+            <WorkspaceSelectionDialog
+              open={workspaceOpen}
+              snapshot={workspaceSnapshot}
+              onChoose={() => {
+                void workspaceController.chooseAndOpen();
+                setWorkspaceOpen(false);
+              }}
+              onOpenRecent={(workspaceId) => {
+                void workspaceController.openRecent(workspaceId);
+                setWorkspaceOpen(false);
+              }}
+              onCloseWorkspace={() => {
+                void workspaceController.closeCurrent();
+                setWorkspaceOpen(false);
+              }}
+              onDismiss={() => setWorkspaceOpen(false)}
+            />
+            <SettingsDialog
+              open={settingsOpen}
+              store={settingsStore}
+              configuration={configurationClient}
+              onDismiss={() => setSettingsOpen(false)}
+            />
+            {overlays}
+          </>
+        }
+      />
+    </NovelAppProvider>
   );
 }
 

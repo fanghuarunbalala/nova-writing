@@ -2418,37 +2418,157 @@ export const ScheduleProjection: {
 
 **职责**：把 5 个域拼装成可见表面。Shell 不持有业务状态，只做"路由 + 组合 + 协调副作用"。
 
+### 4.0 App 入口（app/）
+
+#### 4.0.1 `app/NovelApp.tsx`
+
+**职责**：共享 React 应用入口。接收宿主注入的 `api`/`platform`/`workspaceController`/`extensions`/`logger`/`commandSource`/`configurationClient`，构造域 store 集合、路由、toast/settings store，组装 `ApplicationShell` 与默认 overlays（WorkspaceSelectionDialog + SettingsDialog）。
+
+```tsx
+export interface NovelAppProps {
+  readonly api: NovelApiClient;
+  readonly platform: FrontendPlatform;
+  readonly logger?: Logger;
+  readonly commandSource?: ApplicationCommandSource;
+  readonly configurationClient?: ApplicationConfigurationClient;
+  readonly workspaceController?: WorkspaceController;
+  readonly extensions?: NovelUiExtensions;
+  /** 宿主追加的 overlay 节点（与默认 overlays 一并渲染进 OverlaysHost） */
+  readonly overlays?: ReactNode;
+}
+
+export function NovelApp(props: NovelAppProps): ReactElement;
+
+/**
+ * 工厂：构造 ApplicationShellDomainStores。
+ * 桌面/Web 共用；extensions 不参与 store 构造（store 只依赖 api/logger）。
+ */
+export function createDomainStores(
+  api: NovelApiClient,
+  logger?: Logger,
+): ApplicationShellDomainStores;
+```
+
+**行为约束**：
+- `workspaceController === undefined` 时渲染占位 `<div className="novel-shell-unavailable">` 而不是抛错（启动期等待宿主注入控制器）
+- `extensions === undefined` 时使用 `emptyNovelUiExtensions`，保证 ApplicationShell 永远拿到非空 extensions
+- 域 store 在 `useMemo([api, logger])` 内构造；workspace 切换由 ApplicationShell 的 effect 协调，NovelApp 不重复
+- 默认 overlays：WorkspaceSelectionDialog + SettingsDialog；宿主 overlays 追加在后面
+
+#### 4.0.2 `app/NovelAppProvider.tsx` + `app/NovelAppContext.ts`
+
+**职责**：把 `api`/`platform`/`extensions`/`logger`/`commandSource`/`configurationClient` 通过 React Context 暴露给深层组件，避免 prop drilling。
+
+```tsx
+export interface NovelAppContextValue {
+  readonly api: NovelApiClient;
+  readonly platform: FrontendPlatform;
+  readonly logger: Logger;
+  readonly extensions: NovelUiExtensions;
+  readonly commandSource?: ApplicationCommandSource;
+  readonly configurationClient?: ApplicationConfigurationClient;
+}
+
+export const NovelAppContext = createContext<NovelAppContextValue | null>(null);
+
+export interface NovelAppProviderProps extends NovelAppContextValue {
+  readonly children: ReactNode;
+}
+
+export function NovelAppProvider(props: NovelAppProviderProps): ReactElement;
+
+export function useNovelApp(): NovelAppContextValue;  // 未挂载时抛错
+export function useNovelApi(): NovelApiClient;        // 便捷 hook
+export function useNovelExtensions(): NovelUiExtensions;
+```
+
+**使用约束**：
+- NovelApp 内部用 `NovelAppProvider` 包裹 ApplicationShell，让 shell 内部任意深层组件可读取 context
+- 桌面端在 DesktopRendererBootstrap 之外不直接消费 context；context 主要服务于 extensions 注入的组件（如 DesktopTitleBar 需要访问 platform window port）
+- FrontendPlatformContext（见 2.3.3）仍保留为独立 context，便于只取 platform 的组件避免拿到完整 NovelAppContext
+
 ### 4.1 `shell/ApplicationShell.tsx`
 
 ```tsx
 export interface ApplicationShellProps {
+  readonly api: NovelApiClient;
+  readonly logger?: Logger;
   readonly mainViewRouter: MainViewRouter;
   readonly inspectorRouter: InspectorRouter;
-  readonly shellStore: ApplicationShellStore;
-  readonly workspaceController: WorkspaceController;
-  readonly domainStores: {
-    readonly conversationCatalog: ConversationCatalogStore;
-    readonly novelOverview: NovelOverviewStore;
-    readonly storyOutlineTree: StoryOutlineTreeStore;
-    readonly manuscriptStructure: ManuscriptStructureStore;
-    readonly character: CharacterStore;
-    readonly location: LocationStore;
-    readonly approvalQueue: ApprovalQueueStore;
-    readonly approvalChangeSet: ApprovalChangeSetStore;
-    readonly approvalAction: ApprovalActionStore;
-    readonly workspaceMetadata: WorkspaceMetadataStore;
-    readonly schedule: ScheduleStore;
-    readonly scheduleTodo: ScheduleTodoStore;
-  };
+  /**
+   * Workspace 控制器（宿主注入）。类型为 WorkspaceControllerPort（订阅接口），
+   * 既有 WorkspaceController 类与测试 fake 都实现该接口。ApplicationShell 内部
+   * 用 WorkspaceControllerAdapter 包成 ExternalStore 订阅快照；不要求调用方预先包装。
+   */
+  readonly workspaceController: WorkspaceControllerPort;
+  readonly domainStores: ApplicationShellDomainStores;
+  /**
+   * 跨域副作用协调所需的可选 store；V1 桌面端由 NovelApp 注入。
+   * toastStore 必填（OverlaysHost 需要）；settingsStore 可选。
+   */
+  readonly toastStore: ToastStore;
+  readonly settingsStore?: ApplicationSettingsStore;
+  readonly configurationClient?: ApplicationConfigurationClient;
+  readonly commandSource?: ApplicationCommandSource;
+  /**
+   * 第一方扩展点（titleBar/routes/sidebarPanels/inspectorPanels/settingsSections/commands）。
+   * 桌面端由 createDesktopUiExtensions() 注入；Web 端用 emptyNovelUiExtensions。
+   */
+  readonly extensions?: NovelUiExtensions;
+  /**
+   * Inspector panel 注册表（Phase 3 引入；当前 InspectorHost 用硬编码 switch）。
+   * 不传时 InspectorHost 走内置 panel 集合。
+   */
   readonly inspectorRenderers?: InspectorRendererRegistry;
   readonly conversationCardRenderers?: ConversationCardRendererRegistry;
   readonly conversationCardProjectors?: ConversationCardProjectorRegistry;
-  readonly settingsStore: ApplicationSettingsStore;
-  readonly configurationClient?: ApplicationConfigurationClient;
-  readonly commandSource?: ApplicationCommandSource;
-  readonly extensions: NovelUiExtensions;
+  readonly onOpenWorkspace?: () => void;
+  readonly onOpenSettings?: () => void;
+  readonly overlays?: ReactNode;
+}
+
+/**
+ * 域 store 集合。approval 域三个 store 与 workspaceMetadata 在 Phase 2 轨道 C 延后
+ * （见 3.3 状态说明与 11 后续工作）；当前为可选，Phase 2 轨道 C 落地后改为必填。
+ */
+export interface ApplicationShellDomainStores {
+  readonly conversationCatalog: ConversationCatalogStore;
+  readonly novelOverview: NovelOverviewStore;
+  readonly storyOutlineTree: StoryOutlineTreeStore;
+  readonly manuscriptStructure: ManuscriptStructureStore;
+  readonly character: CharacterStore;
+  readonly location: LocationStore;
+  readonly schedule: ScheduleStore;
+  readonly scheduleTodo: ScheduleTodoStore;
+  // ---- Phase 2 轨道 C 延后 ----
+  readonly approvalQueue?: ApprovalQueueStore;
+  readonly approvalChangeSet?: ApprovalChangeSetStore;
+  readonly approvalAction?: ApprovalActionStore;
+  readonly workspaceMetadata?: WorkspaceMetadataStore;
+}
+
+/**
+ * Inspector panel 注册表（Phase 3 引入，当前为前向声明）。
+ *
+ * Why: 桌面端可能注入桌面专属 inspector panel（如 desktop-runtime-status）；
+ * 注册表让扩展点不依赖硬编码 switch。当前 InspectorHost 用硬编码 switch，
+ * Phase 3 视觉打磨阶段再迁移到注册表驱动。
+ */
+export interface InspectorRendererRegistry {
+  readonly panels: ReadonlyMap<string, ComponentType<InspectorRendererProps>>;
+  register(kind: string, component: ComponentType<InspectorRendererProps>): void;
+  resolve(kind: string): ComponentType<InspectorRendererProps> | undefined;
+}
+
+export interface InspectorRendererProps {
+  readonly workspaceId: string | undefined;
+  readonly route: InspectorRoute;
 }
 ```
+
+**Shell 内部 UI 状态**（不进 store，本地 useState 即可）：`sidebarMode: "expanded" | "collapsed"`、`contentTab: ContentTab`、`inspectorWidth: number`。这些都是纯表现状态，无跨组件共享需求，不需要单独的 `ApplicationShellStore`。
+
+**WorkspaceController 接入**：ApplicationShell 用 `useMemo(() => new WorkspaceControllerAdapter(workspaceController), [workspaceController])` 在内部包一层 ExternalStore；卸载时调 `adapter.dispose()` 解除订阅。
 
 **DOM 结构**：
 
@@ -2674,27 +2794,42 @@ gui/src/renderer/
 └─ renderer.css
 ```
 
-### 5.2 组合根（DesktopNovelApp.tsx）
+### 5.2 组合根（DesktopRendererBootstrap.tsx + DesktopNovelApp.tsx）
+
+**职责分工**：
+- `DesktopRendererBootstrap.tsx`：组合根 -- 构造 transport / api / platform / workspaceController / commandSource / configurationClient / logger，挂载到 DOM
+- `DesktopNovelApp.tsx`：薄封装 -- 把宿主注入的 props 透传给共享 `NovelApp`，便于在测试或 Web 模式下替换
 
 ```tsx
-export function DesktopNovelApp() {
-  const bridge = useElectronPreloadBridge();
-  const transport = useMemo(() => new ElectronApiTransport(bridge), [bridge]);
-  const api = useMemo(() => new DefaultNovelApiClient(transport), [transport]);
-  const platform = useMemo(() => new ElectronFrontendPlatform(bridge), [bridge]);
-  const extensions = useMemo(() => createDesktopUiExtensions(), []);
-  const logger = useMemo(() => createDesktopLogger(), []);
+// DesktopRendererBootstrap.tsx
+export interface DesktopRendererComposition {
+  readonly transport: ElectronApiTransport;
+  readonly api: NovelApiClient;
+  readonly platform: FrontendPlatform;
+  readonly commandSource?: ApplicationCommandSource;
+  readonly configurationClient?: ApplicationConfigurationClient;
+  readonly workspaceController?: WorkspaceController;
+}
 
-  return (
-    <NovelApp
-      api={api}
-      platform={platform}
-      extensions={extensions}
-      logger={logger}
-    />
-  );
+export function createDesktopRendererComposition(
+  options: DesktopRendererCompositionOptions,
+): DesktopRendererComposition;
+
+export function mountDesktopRenderer(
+  options: MountDesktopRendererOptions,
+): MountedDesktopRenderer;
+```
+
+```tsx
+// DesktopNovelApp.tsx
+export type DesktopNovelAppProps = NovelAppProps;
+
+export function DesktopNovelApp(props: DesktopNovelAppProps): ReactElement {
+  return <NovelApp {...props} />;
 }
 ```
+
+**Phase B 落地后**：DesktopRendererBootstrap 会注入 `extensions = createDesktopUiExtensions()`，DesktopNovelApp 透传到 NovelApp。Phase A 阶段 `extensions` 默认 `emptyNovelUiExtensions`。
 
 ### 5.3 与 Main/Preload 集成点
 

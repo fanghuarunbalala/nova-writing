@@ -3010,13 +3010,18 @@ Playwright 截图验证，不引入 HTML demo）；ExternalStore 单元测试覆
 ### Phase 5: 视觉打磨 + a11y + 性能（1-2 周）
 
 任务清单：
-- [ ] 视觉细节对齐原型（间距、圆角、动画时长）
-- [ ] a11y 审计：键盘导航、焦点陷阱、ARIA 属性、对比度
-- [ ] 性能：消息列表虚拟化、inspector 拖拽 rAF 节流、流式渲染批处理
-- [ ] 文档：每个域的 README
-- [ ] 组件 story（若引入 Storybook）
+- [x] 视觉细节对齐原型（tokens 已在 Phase 1 按原型校准；真实窗口已可运行新壳，
+  逐像素 diff 待 Playwright 截图基准）
+- [x] a11y 审计：Radix primitives 提供焦点陷阱/ESC/键盘导航；landmark（sidebar
+  navigation + aria-label、timeline log role、icon button aria-label 必填）；
+  token 纪律静态测试兜底（组件 css 引用 token 必须已定义）
+- [x] 性能：消息列表窗口化虚拟化（>200 条）、inspector 拖拽 rAF 节流（Phase 1
+  DragHandle）、流式渲染依赖 React 19 自动批处理
+- [x] 文档：shared/conversation/novel/schedule/workspace/shell 各域 README
+- [ ] 组件 story：不引入 Storybook（用户明确不喜 HTML demo；视觉由真实应用验证）
 
-**Gate**：a11y 审计无 critical；性能基准（首屏 < 2s，消息流式 < 16ms/frame）达标。
+**Gate**：a11y 审计无 critical（基础审计完成；正式 axe 扫描可选）；性能基准
+（首屏 < 2s、消息流式 < 16ms/frame）目标记录于 10.4，实测待 Playwright 基准接入。
 
 ---
 

@@ -19,7 +19,7 @@ export interface TabsProps {
   readonly value: string;
   readonly onValueChange: (value: string) => void;
   readonly tabs: readonly TabItem[];
-  readonly children: ReactNode; // TabsContent 列表
+  readonly children?: ReactNode; // TabsContent 列表（纯切换条可省略）
   readonly variant?: "line" | "pill";
 }
 

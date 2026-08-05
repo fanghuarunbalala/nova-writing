@@ -1,0 +1,39 @@
+/**
+ * ProposalOp 视觉。
+ */
+.op {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 2px 0;
+}
+
+.mark {
+  flex: none;
+  min-width: 30px;
+  text-align: center;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+
+.mark.add { background: var(--color-success-bg); color: var(--color-success); }
+.mark.mod { background: var(--color-warn-bg); color: var(--color-warn); }
+.mark.del { background: var(--color-danger-bg); color: var(--color-danger); }
+.mark.move { background: var(--color-info-bg); color: var(--color-info); }
+.mark.plan { background: var(--color-surface-2); color: var(--color-muted); }
+
+.text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-body);
+  color: var(--color-fg);
+}
+
+.kind {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}

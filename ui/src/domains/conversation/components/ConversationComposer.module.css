@@ -1,0 +1,43 @@
+/**
+ * ConversationComposer 视觉。
+ */
+.composer {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px 10px;
+}
+
+.input {
+  flex: 1;
+  min-height: 40px;
+  max-height: 180px;
+  resize: none;
+  padding: 9px 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.input:focus {
+  border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-border));
+}
+
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

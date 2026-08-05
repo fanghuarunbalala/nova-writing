@@ -1,0 +1,38 @@
+/**
+ * UserMessage 视觉。
+ */
+.message {
+  display: flex;
+  gap: 9px;
+  padding: 8px 0;
+}
+
+.body {
+  min-width: 0;
+  flex: 1;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.who {
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-semibold);
+  color: var(--color-muted);
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.text {
+  margin-top: 2px;
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  color: var(--color-fg);
+}

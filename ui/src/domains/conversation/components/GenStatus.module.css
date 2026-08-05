@@ -1,0 +1,62 @@
+/**
+ * GenStatus 视觉：live 状态柔和渐变字色动画，failed 红色。
+ */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: var(--fs-xs);
+  color: var(--color-muted);
+}
+
+.status[data-live] {
+  background: linear-gradient(105deg, #b8c6d9 0%, #c0b6dc 50%, #b8c6d9 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: gen-grad-flow 7s ease-in-out infinite;
+  font-weight: var(--fw-semibold);
+}
+
+@keyframes gen-grad-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: gen-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes gen-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+.failed {
+  color: var(--color-danger);
+}
+
+.error {
+  margin-left: 4px;
+}
+
+.retry {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-border);
+  color: var(--color-danger);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.retry:hover {
+  background: var(--color-danger-bg);
+}

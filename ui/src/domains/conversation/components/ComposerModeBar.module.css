@@ -1,0 +1,7 @@
+/**
+ * ComposerModeBar 视觉。
+ */
+.bar {
+  display: flex;
+  padding: 6px 10px 0;
+}

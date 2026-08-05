@@ -1,0 +1,25 @@
+/**
+ * ThinkLine 视觉。
+ */
+.line {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 2px 0;
+  font-size: var(--fs-body);
+  color: var(--color-muted);
+}
+
+.tag {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-2);
+  color: var(--color-faint);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+
+.text {
+  min-width: 0;
+}

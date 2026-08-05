@@ -1,0 +1,13 @@
+/**
+ * ConversationItemMenu 视觉。
+ */
+.menu {
+  flex: none;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.row:hover .menu,
+.row:focus-within .menu {
+  opacity: 1;
+}

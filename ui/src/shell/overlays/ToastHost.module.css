@@ -1,0 +1,58 @@
+/**
+ * ToastHost 视觉。
+ */
+.host {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  font-size: var(--fs-body);
+  color: var(--color-fg);
+  animation: toast-in var(--duration-base) var(--ease-out);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.dismiss {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.dismiss:hover {
+  color: var(--color-fg);
+  background: var(--color-surface-2);
+}
+
+.info { border-left: 3px solid var(--color-info); }
+.success { border-left: 3px solid var(--color-success); }
+.warn { border-left: 3px solid var(--color-warn); }
+.danger { border-left: 3px solid var(--color-danger); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}

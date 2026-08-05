@@ -160,6 +160,17 @@ interface OutlineWriteResultItem {
   provided (`[]` clears it). `name` cannot be cleared.
 - Group: `novel.characters`. Deletion is handled by the unified delete tool.
 
+### 5.5 NovelLocationRead / Write / Edit (confirmed, implemented)
+
+- `NovelLocationRead` reads Location profiles for one explicit scope;
+  `locationId` omitted lists all.
+- `NovelLocationWrite` batch-creates profiles. `id` is optional; the host
+  generates and returns it (a provided id is used and must be unique).
+- `NovelLocationEdit` batch field-level PATCH. `id` is required. `null` clears
+  `summary` / `initialState` / `authorNotes`; `aliases` replaces the whole
+  array when provided (`[]` clears it); `name` cannot be cleared.
+- Group: `novel.locations`. Deletion is handled by the unified delete tool.
+
 ## 5. Confirmed: Outline Tools
 
 ### 5.1 NovelOutlineRead

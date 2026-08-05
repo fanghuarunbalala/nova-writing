@@ -28,8 +28,10 @@ import {
 import { SqliteSubagentBindingStore, SqliteWorkspaceStore } from "../dist/node/index.js";
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   novelCharacterToolRegistry,
+  novelLocationToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -117,6 +119,7 @@ function createAgentAssembler(workspaceStore) {
       tool,
       ...novelOutlineToolRegistry.list(),
       ...novelCharacterToolRegistry.list(),
+      ...novelLocationToolRegistry.list(),
     ]),
     groups: new ToolGroupCatalog([
       loadToolGroupManifest(`
@@ -128,6 +131,7 @@ tools: [TodoWrite]
   `),
       NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
       NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+      NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
     ]),
     manifestResolver: new AgentManifestResolver({
       promptBuilder: new SystemPromptBuilder({

@@ -7,10 +7,13 @@ import {
 import {
   type CharacterQueryService,
   type CharacterService,
+  type LocationQueryService,
+  type LocationService,
   type NovelDraftSessionService,
   type StoryOutlineQueryService,
   type StoryOutlineService,
   captureCharacterId,
+  captureLocationId,
   captureStoryOutlineId,
   captureStoryUnitId,
 } from "../../../novel/index.js";
@@ -27,6 +30,11 @@ import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NovelCharacterToolService,
   createNovelCharacterToolRegistry,
+} from "../../../tools/novel/index.js";
+import {
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+  NovelLocationToolService,
+  createNovelLocationToolRegistry,
 } from "../../../tools/novel/index.js";
 import { createTodoWriteTool } from "../../../tools/todo/index.js";
 import { NodeSha256PromptDigester } from "../../prompt/index.js";
@@ -102,6 +110,26 @@ const unavailableCharacterQueryService = Object.freeze({
   list: unavailableNovelService,
 }) as unknown as CharacterQueryService;
 
+const unavailableLocationService = Object.freeze({
+  create: unavailableNovelService,
+  replace: unavailableNovelService,
+  delete: unavailableNovelService,
+}) as unknown as LocationService;
+
+const unavailableLocationQueryService = Object.freeze({
+  get: unavailableNovelService,
+  list: unavailableNovelService,
+}) as unknown as LocationQueryService;
+
+const unavailableLocationToolService = new NovelLocationToolService({
+  locations: unavailableLocationService,
+  locationQueries: unavailableLocationQueryService,
+  drafts: unavailableNovelDraftSessionService,
+  identityFactory: {
+    createLocationId: () => captureLocationId("unavailable_location"),
+  },
+});
+
 const unavailableCharacterToolService = new NovelCharacterToolService({
   characters: unavailableCharacterService,
   characterQueries: unavailableCharacterQueryService,
@@ -135,11 +163,15 @@ export function createNovelConversationManifestComposition(
     ...createNovelCharacterToolRegistry({
       service: unavailableCharacterToolService,
     }).list(),
+    ...createNovelLocationToolRegistry({
+      service: unavailableLocationToolService,
+    }).list(),
   ]);
   const groups = new ToolGroupCatalog([
     loadToolGroupManifest(NOVEL_CONVERSATION_TOOL_GROUP_MANIFEST),
     NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
     NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+    NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   ]);
   const promptBuilder = new SystemPromptBuilder({
     sections: createDefaultPromptSectionRegistry(),

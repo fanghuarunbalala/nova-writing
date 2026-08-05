@@ -26,8 +26,10 @@ import {
 } from "../dist/node/index.js";
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   novelCharacterToolRegistry,
+  novelLocationToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -255,6 +257,7 @@ async function createManifest() {
       tool,
       ...novelOutlineToolRegistry.list(),
       ...novelCharacterToolRegistry.list(),
+      ...novelLocationToolRegistry.list(),
     ]),
     groups: new ToolGroupCatalog([
       loadToolGroupManifest(`
@@ -266,6 +269,7 @@ tools: [TodoWrite]
   `),
       NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
       NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+      NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
     ]),
     manifestResolver: resolver,
     manifestStore: new InMemoryAgentManifestStore(),

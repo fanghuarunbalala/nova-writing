@@ -27,7 +27,12 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("completion.contract"),
   ]),
   tools: new AgentToolPolicy({
-    groupIds: ["runtime.todo", "novel.outline", "novel.characters"],
+    groupIds: [
+      "runtime.todo",
+      "novel.outline",
+      "novel.characters",
+      "novel.locations",
+    ],
   }),
   delegation: new AgentDelegationPolicy({
     mode: "disabled",

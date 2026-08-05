@@ -23,8 +23,10 @@ import {
 } from "../dist/index.js";
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   novelCharacterToolRegistry,
+  novelLocationToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -58,11 +60,13 @@ tools: [TodoWrite]
   `),
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
 ]);
 const registry = new ToolRegistry([
   todoTool(),
   ...novelOutlineToolRegistry.list(),
   ...novelCharacterToolRegistry.list(),
+  ...novelLocationToolRegistry.list(),
 ]);
 const manifestStore = new InMemoryAgentManifestStore();
 const resolver = new AgentManifestResolver({
@@ -146,6 +150,9 @@ assert.deepEqual(
     "NovelCharacterEdit",
     "NovelCharacterRead",
     "NovelCharacterWrite",
+    "NovelLocationEdit",
+    "NovelLocationRead",
+    "NovelLocationWrite",
     "NovelOutlineEdit",
     "NovelOutlineRead",
     "NovelOutlineWrite",
@@ -174,6 +181,7 @@ assert.throws(
       todoTool("2.0.0"),
       ...novelOutlineToolRegistry.list(),
       ...novelCharacterToolRegistry.list(),
+      ...novelLocationToolRegistry.list(),
     ]),
     groups,
   }).restore(assembly.manifest),

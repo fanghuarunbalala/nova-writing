@@ -27,8 +27,10 @@ import {
 import { Type } from "typebox";
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   novelCharacterToolRegistry,
+  novelLocationToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -131,6 +133,7 @@ const toolRegistry = new ToolRegistry([
   todoTool,
   ...novelOutlineToolRegistry.list(),
   ...novelCharacterToolRegistry.list(),
+  ...novelLocationToolRegistry.list(),
 ]);
 const toolGroups = new ToolGroupCatalog([
   loadToolGroupManifest(`
@@ -142,6 +145,7 @@ tools: [TodoWrite]
   `),
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
 ]);
 const assembledStore = new InMemoryAgentManifestStore();
 const assembled = await new AgentAssembler({
@@ -165,6 +169,9 @@ assert.deepEqual(
     "NovelCharacterEdit",
     "NovelCharacterRead",
     "NovelCharacterWrite",
+    "NovelLocationEdit",
+    "NovelLocationRead",
+    "NovelLocationWrite",
     "NovelOutlineEdit",
     "NovelOutlineRead",
     "NovelOutlineWrite",

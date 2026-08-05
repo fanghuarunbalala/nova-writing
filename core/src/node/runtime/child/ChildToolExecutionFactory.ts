@@ -67,6 +67,7 @@ export const CHILD_TOOL_PERMISSION_RULES: readonly ToolPermissionRule[] =
         toolNames: Object.freeze([
           "NovelOutlineRead",
           "NovelCharacterRead",
+          "NovelLocationRead",
           "TodoWrite",
         ]),
       }),
@@ -81,6 +82,8 @@ export const CHILD_TOOL_PERMISSION_RULES: readonly ToolPermissionRule[] =
           "NovelOutlineEdit",
           "NovelCharacterWrite",
           "NovelCharacterEdit",
+          "NovelLocationWrite",
+          "NovelLocationEdit",
         ]),
       }),
     }),
@@ -104,6 +107,9 @@ export function createChildToolExecutionComposition(
     { toolName: "NovelCharacterRead", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelCharacterWrite", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelCharacterEdit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "NovelLocationRead", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "NovelLocationWrite", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "NovelLocationEdit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
   ]);
   const permissionPolicy = new LayeredToolPermissionPolicy([
     ...INITIAL_TOOL_PERMISSION_RULES,

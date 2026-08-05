@@ -22,6 +22,7 @@ import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { PiDispatchAwareStreamFunction } from "./PiDispatchAwareStreamFunction.js";
 import {
   captureProviderRequestDebugSnapshot,
+  providerRequestDebugSnapshotFields,
   type ProviderRequestDebugRecorder,
 } from "./ProviderRequestDebugRecorder.js";
 import {
@@ -173,7 +174,12 @@ export class PiProviderExecutionFactory {
     options: SimpleStreamOptions,
     descriptor: EffectiveModelExecutionDescriptor,
   ): Promise<void> {
-    if (this.#debugRecorder === undefined) return;
+    if (
+      this.#debugRecorder === undefined &&
+      this.#logger.verbose === undefined
+    ) {
+      return;
+    }
     try {
       const snapshot = captureProviderRequestDebugSnapshot({
         recordedAt: new Date().toISOString(),
@@ -182,7 +188,13 @@ export class PiProviderExecutionFactory {
         context,
         options,
       });
-      await this.#debugRecorder.record(snapshot);
+      if (this.#debugRecorder !== undefined) {
+        await this.#debugRecorder.record(snapshot);
+      }
+      this.#logger.verbose?.(
+        "pi_provider_execution.request",
+        providerRequestDebugSnapshotFields(snapshot),
+      );
       this.#logger.debug("pi_provider_execution.debug_recorded", {
         api: descriptor.api,
       });

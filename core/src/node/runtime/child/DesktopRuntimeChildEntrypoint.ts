@@ -21,7 +21,11 @@ import {
 } from "../../index.js";
 import type { AgentManifestStore } from "../../../agent/index.js";
 import type { ConversationRuntimeBootstrap } from "../../../conversation/index.js";
-import { noopLogger, type Logger } from "../../../observability/index.js";
+import {
+  noopLogger,
+  type LogFields,
+  type Logger,
+} from "../../../observability/index.js";
 import {
   DefaultRuntimeRunPreparationSourceFactory,
 } from "./DefaultRuntimeRunPreparationSourceFactory.js";
@@ -145,23 +149,49 @@ function createEntrypointLogger(
   if (logPath === undefined || logPath.length === 0) {
     return noopLogger.child({ component: "desktop_runtime_child_entrypoint" });
   }
-  const debugEnabled = logLevel === "debug";
+  const levelRank = LOG_LEVEL_RANK[logLevel];
+  const writeLine = (
+    level: string,
+    event: string,
+    fields: Readonly<Record<string, unknown>> | undefined,
+  ): void => {
+    void appendFile(logPath, `${level} ${event} ${safeLogFields(fields)}\n`);
+  };
   const fileLogger: Logger = {
     debug: (event, fields) => {
-      if (debugEnabled) {
-        void appendFile(logPath, `DEBUG ${event} ${safeLogFields(fields)}\n`);
+      if (levelRank >= LOG_LEVEL_RANK.debug) {
+        writeLine("DEBUG", event, fields);
       }
     },
-    info: (event, fields) =>
-      void appendFile(logPath, `INFO ${event} ${safeLogFields(fields)}\n`),
-    warn: (event, fields) =>
-      void appendFile(logPath, `WARN ${event} ${safeLogFields(fields)}\n`),
-    error: (event, fields) =>
-      void appendFile(logPath, `ERROR ${event} ${safeLogFields(fields)}\n`),
+    info: (event, fields) => {
+      if (levelRank >= LOG_LEVEL_RANK.info) writeLine("INFO", event, fields);
+    },
+    warn: (event, fields) => {
+      if (levelRank >= LOG_LEVEL_RANK.warn) writeLine("WARN", event, fields);
+    },
+    error: (event, fields) => {
+      writeLine("ERROR", event, fields);
+    },
+    ...(levelRank >= LOG_LEVEL_RANK.verbose
+      ? {
+          verbose: (event: string, fields?: LogFields) => {
+            writeLine("VERBOSE", event, fields);
+          },
+        }
+      : {}),
     child: () => fileLogger,
   };
   return fileLogger;
 }
+
+const LOG_LEVEL_RANK: Readonly<Record<DiagnosticLogLevel, number>> =
+  Object.freeze({
+    error: 0,
+    warn: 1,
+    info: 2,
+    debug: 3,
+    verbose: 4,
+  });
 
 function safeLogFields(fields: Readonly<Record<string, unknown>> | undefined): string {
   if (fields === undefined) return "{}";

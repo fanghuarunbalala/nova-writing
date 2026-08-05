@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  DiagnosticSettings,
   createDefaultApplicationConfiguration,
 } from "../dist/index.js";
 import {
@@ -149,6 +150,42 @@ try {
   const defaults = createDefaultApplicationConfiguration();
   assert.equal(defaults.diagnostics.providerRequestDumpEnabled, false);
   assert.equal(defaults.diagnostics.providerRequestDumpPath, undefined);
+
+  // Verbose logger records the provider request through the logger itself.
+  const verboseRecords = [];
+  const verboseLogger = {
+    debug() {},
+    info() {},
+    warn() {},
+    error() {},
+    verbose(event, fields) {
+      verboseRecords.push({ event, fields });
+    },
+    child() {
+      return this;
+    },
+  };
+  const verboseFactory = new PiProviderExecutionFactory({
+    dispatcher,
+    credentials,
+    logger: verboseLogger,
+  });
+  const verboseStreamFn = verboseFactory.create(descriptor);
+  await verboseStreamFn(model, context, options, hooks);
+  assert.equal(verboseRecords.length, 1);
+  assert.equal(verboseRecords[0].event, "pi_provider_execution.request");
+  const verboseFields = verboseRecords[0].fields;
+  assert.equal(verboseFields.messages[0].role, "user");
+  assert.equal(verboseFields.tools[0].name, "TestTool");
+  assert.equal(verboseFields.prompt, "DEBUG_SYSTEM_PROMPT");
+  assert.equal(verboseFields.config.modelProfileId, "profile_debug");
+  assert.equal(JSON.stringify(verboseFields).includes("SECRET_API_KEY"), false);
+
+  const verboseSettings = new DiagnosticSettings({
+    ...defaults.diagnostics.toSnapshot(),
+    logLevel: "verbose",
+  });
+  assert.equal(verboseSettings.logLevel, "verbose");
 
   console.log("CORE_SMOKE_TEST_RESULT=pass provider-request-debug-recorder");
 } finally {

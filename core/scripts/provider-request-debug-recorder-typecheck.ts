@@ -2,10 +2,12 @@
 import {
   PiProviderExecutionFactory,
   captureProviderRequestDebugSnapshot,
+  providerRequestDebugSnapshotFields,
   type ProviderRequestDebugRecorder,
   type ProviderRequestDebugSnapshot,
 } from "../src/runtime/agent/pi/index.js";
 import { createNodeProviderRequestDebugRecorder } from "../src/node/index.js";
+import type { Logger } from "../src/index.js";
 
 const recorder: ProviderRequestDebugRecorder =
   createNodeProviderRequestDebugRecorder({ path: "debug.jsonl" });
@@ -17,6 +19,19 @@ void snapshot.config.modelProfileId;
 void snapshot.messages;
 void snapshot.tools;
 void snapshot.prompt;
+void providerRequestDebugSnapshotFields(snapshot);
+
+const verboseLogger = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+  verbose() {},
+  child() {
+    return this;
+  },
+} satisfies Logger;
+void verboseLogger;
 
 void captureProviderRequestDebugSnapshot;
 void PiProviderExecutionFactory;

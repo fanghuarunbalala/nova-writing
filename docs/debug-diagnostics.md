@@ -9,8 +9,9 @@ Implemented for the desktop child Runtime and the provider execution boundary.
 The application configuration exposes diagnostic settings in the
 `diagnostics` section (`ApplicationSettings.DiagnosticSettings`):
 
-- `logLevel`: `"error" | "warn" | "info" | "debug"`. `"debug"` enables debug
-  level output from the desktop child file logger.
+- `logLevel`: `"error" | "warn" | "info" | "debug" | "verbose"`. `"debug"`
+  enables debug level output; `"verbose"` additionally enables provider
+  request records through the desktop child file logger.
 - `providerRequestDumpEnabled`: when `true`, every provider request is recorded
   as one JSONL record.
 - `providerRequestDumpPath`: the file receiving the JSONL records.
@@ -36,6 +37,14 @@ dump path.
 Secrets are never copied: credential references, secret headers, `apiKey`, and
 authorization headers are excluded from the snapshot. Oversized fields are
 truncated with a stable marker.
+
+## Verbose Logging
+
+The `Logger` interface exposes an optional `verbose` channel. The desktop
+child file logger implements it when `logLevel` is `"verbose"` and writes one
+`VERBOSE` record per provider request containing the same redacted snapshot
+(model, config, options, prompt, messages, tools). Provider request snapshots
+are only built when a debug recorder or a verbose-capable logger is present.
 
 The Node adapter `createNodeProviderRequestDebugRecorder` appends one JSONL
 line per request and never throws; a failed append is dropped with a debug log

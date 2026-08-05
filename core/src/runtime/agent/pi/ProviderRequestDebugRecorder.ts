@@ -6,6 +6,7 @@ import type { StreamFn } from "@earendil-works/pi-agent-core";
 import type { Context, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type { EffectiveModelExecutionDescriptor } from "../../../config/index.js";
 import type { JsonValue } from "../../../event/index.js";
+import type { LogFields } from "../../../observability/index.js";
 
 export const PROVIDER_REQUEST_DEBUG_LIMITS = Object.freeze({
   maximumMessageCount: 500,
@@ -55,6 +56,20 @@ export type ProviderRequestDebugModel = Parameters<StreamFn>[0];
 
 export interface ProviderRequestDebugRecorder {
   record(snapshot: ProviderRequestDebugSnapshot): Promise<void>;
+}
+
+export function providerRequestDebugSnapshotFields(
+  snapshot: ProviderRequestDebugSnapshot,
+): LogFields {
+  return {
+    api: snapshot.api,
+    model: snapshot.model,
+    config: snapshot.config,
+    options: snapshot.options,
+    ...(snapshot.prompt === undefined ? {} : { prompt: snapshot.prompt }),
+    messages: snapshot.messages,
+    tools: snapshot.tools,
+  };
 }
 
 export function captureProviderRequestDebugSnapshot(

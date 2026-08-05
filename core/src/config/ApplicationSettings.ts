@@ -18,7 +18,12 @@ export type CliOutputFormat = "text" | "json" | "jsonl";
 export type CliColorMode = "auto" | "always" | "never";
 export type ProxyMode = "system" | "disabled" | "custom";
 export type AgentAutonomyLevel = "cautious" | "balanced" | "autonomous";
-export type DiagnosticLogLevel = "error" | "warn" | "info" | "debug";
+export type DiagnosticLogLevel =
+  | "error"
+  | "warn"
+  | "info"
+  | "debug"
+  | "verbose";
 
 export interface GeneralSettingsSnapshot {
   readonly locale: string;
@@ -865,7 +870,13 @@ function captureAutonomyLevel(value: unknown): AgentAutonomyLevel {
 }
 
 function captureDiagnosticLogLevel(value: unknown): DiagnosticLogLevel {
-  if (value !== "error" && value !== "warn" && value !== "info" && value !== "debug") {
+  if (
+    value !== "error" &&
+    value !== "warn" &&
+    value !== "info" &&
+    value !== "debug" &&
+    value !== "verbose"
+  ) {
     throw new TypeError("Diagnostic log level is invalid");
   }
   return value;

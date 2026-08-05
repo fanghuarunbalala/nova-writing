@@ -1,11 +1,37 @@
 /** Refined thinking block with a three-line preview and expand toggle. */
 export const THINKING_BLOCK_STYLES = `
 .novel-thinking-block {
+  position: relative;
   margin: 8px 0 10px;
-  border: 1px solid #e6e9f0;
+  border: 1.5px dashed #c9d2df;
   border-radius: 12px;
   background: linear-gradient(180deg, #f8fafd 0%, #f2f5fa 100%);
   padding: 10px 12px 12px;
+}
+
+.novel-thinking-block[data-streaming="true"]::before {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border: 1.5px dashed transparent;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #a9c1e2, #8f7fd0, #a9c1e2) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  background-size: 200% 100%;
+  animation: thinking-border-flow 2s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes thinking-border-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
 }
 
 .novel-thinking-toggle {
@@ -65,15 +91,16 @@ export const THINKING_BLOCK_STYLES = `
 }
 
 .novel-thinking-content.collapsed {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  max-height: calc(1.7em * 3);
   overflow: hidden;
   -webkit-mask-image: linear-gradient(
-    to bottom,
-    #000 55%,
+    to top,
+    #000 90%,
     transparent 100%
   );
-  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to top, #000 90%, transparent 100%);
 }
 `;

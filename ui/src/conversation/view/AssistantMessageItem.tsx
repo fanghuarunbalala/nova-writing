@@ -57,6 +57,7 @@ export function AssistantMessageItem({
                 expanded={expandedThinking.has(index)}
                 key={`thinking-${index}`}
                 onToggle={() => toggleThinking(index)}
+                streaming={message.status === "streaming"}
               />
             ),
           )}
@@ -90,6 +91,7 @@ function ThinkingBlock({
   content,
   expanded,
   onToggle,
+  streaming,
 }: {
   readonly content: Extract<
     AssistantMessageProjection["content"][number],
@@ -97,11 +99,14 @@ function ThinkingBlock({
   >;
   readonly expanded: boolean;
   readonly onToggle: () => void;
+  readonly streaming: boolean;
 }) {
-  const lines = content.thinking.split("\n");
-  const preview = lines.slice(-3).join("\n");
   return (
-    <div className="novel-thinking-block" data-expanded={expanded}>
+    <div
+      className="novel-thinking-block"
+      data-expanded={expanded}
+      data-streaming={streaming}
+    >
       <button
         aria-expanded={expanded}
         className="novel-thinking-toggle"
@@ -114,7 +119,7 @@ function ThinkingBlock({
         </span>
       </button>
       <div className={`novel-thinking-content ${expanded ? "expanded" : "collapsed"}`}>
-        {expanded ? content.thinking : preview}
+        {content.thinking}
       </div>
     </div>
   );

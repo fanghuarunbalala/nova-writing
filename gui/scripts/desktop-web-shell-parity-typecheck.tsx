@@ -1,6 +1,6 @@
 /**
- * Compile-only proof that Desktop (new Phase 3 shell) and Web (legacy shared app)
- * both mount through their respective renderer entrypoints.
+ * Compile-only proof that Desktop and Web both mount the shared NovelApp
+ * (Phase 3+ shell) through their respective renderer entrypoints.
  */
 import type { ElectronPreloadBridge } from "../src/shared/index.js";
 import { mountDesktopRenderer } from "../src/renderer/index.js";
@@ -10,12 +10,6 @@ declare const bridge: ElectronPreloadBridge;
 declare const document: Document;
 declare const window: Window;
 
-const appProps = {
-  initialShellState: {
-    workspace: { id: "workspace-1", label: "Workspace One" },
-    novel: { id: "novel-1", label: "Novel One" },
-  },
-};
 const desktop = mountDesktopRenderer({
   window: { novelDesktop: bridge },
   document,
@@ -26,7 +20,7 @@ const web = mountWebBrowser({
   window,
   document,
   rootElementId: "web-root",
-  appProps,
+  appProps: {},
 });
 
 void desktop.close();

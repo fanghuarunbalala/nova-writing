@@ -1,11 +1,12 @@
 /** Process-local application settings state; persistence is supplied later by hosts. */
-import type { SidebarMode } from "../state/index.js";
 import {
   captureModelProviderSettingsInput,
   freezeModelProviderSettings,
   type ModelProviderSettings,
   type ModelProviderSettingsInput,
 } from "./ModelProviderSettings.js";
+
+export type SidebarMode = "expanded" | "collapsed";
 
 export interface ApplicationSettingsState {
   readonly sidebarMode?: SidebarMode;

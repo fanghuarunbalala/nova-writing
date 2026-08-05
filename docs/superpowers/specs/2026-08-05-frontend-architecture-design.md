@@ -2978,8 +2978,8 @@ Playwright 截图验证，不引入 HTML demo）；ExternalStore 单元测试覆
 ### Phase 3: Shell 组合层（2 周）
 
 任务清单：
-- [x] `shell/ApplicationShell.tsx`（组合根以 `NovelApplicationShell.tsx` 落地；
-  spec 路径被另一会话未提交 legacy 占用，最终迁移提交时恢复命名）
+- [x] `shell/ApplicationShell.tsx`（组合根已按 spec 命名；legacy 结构已删除，
+  `ui/src/index.ts` 已扁平导出）
 - [x] `shell/topbar/*`（6 个组件）
 - [x] `shell/sidebar/*`（容器 + sections；审批 section 随 approval 域延后）
 - [x] `shell/main/*`（MainArea + 3 个 Surface + ContentTabs + MainSubHead）

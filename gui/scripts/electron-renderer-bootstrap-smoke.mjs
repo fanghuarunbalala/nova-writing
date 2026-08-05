@@ -144,7 +144,7 @@ async function assertRendererMount() {
     });
   });
   // 新壳（Phase 3+）：未注入 WorkspaceController 时显示等待态，mount 契约成立
-  assert.ok(dom.window.document.querySelector(".novel-desktop-unavailable"));
+  assert.ok(dom.window.document.querySelector(".novel-shell-unavailable"));
   assert.match(dom.window.document.body.textContent, /等待 Workspace 控制器/);
   await act(async () => mounted.close());
   assert.equal(bridge.commandListeners.size, 0);

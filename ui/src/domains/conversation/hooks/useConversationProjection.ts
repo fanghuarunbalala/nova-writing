@@ -7,9 +7,9 @@
  */
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { InputEvent, InputReceipt, Logger, NovelApiClient } from "@novel/core";
-import { ConversationProjectionBinding } from "../../../conversation/ConversationProjectionBinding.js";
-import type { ConversationProjectionBindingSnapshot } from "../../../conversation/ConversationProjectionBindingTypes.js";
-import type { ConversationCardProjectorRegistry } from "../../../card/index.js";
+import { ConversationProjectionBinding } from "../binding/ConversationProjectionBinding.js";
+import type { ConversationProjectionBindingSnapshot } from "../binding/ConversationProjectionBindingTypes.js";
+import type { ConversationCardProjectorRegistry } from "../cards/projection/index.js";
 
 export interface UseConversationProjectionDeps {
   readonly api: NovelApiClient;

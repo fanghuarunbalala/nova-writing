@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { WorkspaceControllerAdapter, type WorkspaceControllerPort } from "../../../src/domains/workspace/store/WorkspaceControllerAdapter.js";
-import type { WorkspaceControllerSnapshot } from "../../../src/workspace/WorkspaceController.js";
+import type { WorkspaceControllerSnapshot } from "../../../src/domains/workspace/controller/WorkspaceController.js";
 
 class FakeController implements WorkspaceControllerPort {
   snapshot: WorkspaceControllerSnapshot;

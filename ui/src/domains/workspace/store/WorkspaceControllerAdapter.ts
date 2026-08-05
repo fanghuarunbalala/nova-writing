@@ -8,7 +8,7 @@
  * 这是 Phase 3 迁移完成前的桥接层；快照形状沿用现有 controller 定义。
  */
 import { ExternalStore } from "../../../shared/state/ExternalStore.js";
-import type { WorkspaceControllerSnapshot } from "../../../workspace/WorkspaceController.js";
+import type { WorkspaceControllerSnapshot } from "../controller/WorkspaceController.js";
 
 export interface WorkspaceControllerPort {
   subscribe(listener: () => void): () => void;

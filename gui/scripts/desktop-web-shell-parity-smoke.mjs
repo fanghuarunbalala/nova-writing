@@ -13,25 +13,6 @@ async function run() {
   await assertResponsiveShellStyles();
   const dom = installDom();
   const bridge = new TestElectronBridge();
-  const appProps = {
-    initialShellState: {
-      workspace: { id: "workspace-1", label: "创作空间" },
-      novel: { id: "novel-1", label: "长篇计划" },
-    },
-    shell: {
-      context: {
-        workspace: "创作空间",
-        meta: "长篇计划",
-        conversation: "主对话",
-        agent: "Novel Agent",
-      },
-      conversations: [
-        { id: "conversation-1", title: "主对话", active: true },
-        { id: "conversation-2", title: "支线讨论" },
-      ],
-    },
-  };
-
   let desktop;
   let web;
   await act(async () => {
@@ -45,21 +26,16 @@ async function run() {
       window: dom.window,
       document: dom.window.document,
       rootElementId: "web-root",
-      appProps,
+      appProps: {},
     });
   });
 
   const desktopRoot = requireElement(dom.window.document, "desktop-root");
   const webRoot = requireElement(dom.window.document, "web-root");
   assertDesktopFallback(desktopRoot);
-  assertWebLegacyShell(webRoot);
+  assertWebFallback(webRoot);
   assert.deepEqual(desktop.platform.capabilities, web.platform.capabilities);
   assert.equal(bridge.callCount, 0);
-
-  await act(async () => {
-    findButton(webRoot, "大纲").click();
-  });
-  assertWebLegacyShell(webRoot);
 
   await act(async () => {
     await Promise.all([desktop.close(), web.close()]);
@@ -67,7 +43,7 @@ async function run() {
   assert.equal(desktopRoot.childNodes.length, 0);
   assert.equal(webRoot.childNodes.length, 0);
 
-  console.log("desktop new shell / web legacy parity smoke passed");
+  console.log("desktop / web shared NovelApp parity smoke passed");
 }
 
 function assertDesktopFallback(desktopRoot) {
@@ -75,12 +51,8 @@ function assertDesktopFallback(desktopRoot) {
   assert.match(desktopRoot.textContent, /等待 Workspace 控制器/);
 }
 
-function assertWebLegacyShell(webRoot) {
-  assert.equal(
-    webRoot.querySelector(".novel-app-shell")?.getAttribute("data-menu-presentation"),
-    "inline",
-  );
-  assert.match(webRoot.textContent, /大纲/);
+function assertWebFallback(webRoot) {
+  assert.match(webRoot.textContent, /等待 Workspace 控制器/);
 }
 
 async function assertResponsiveShellStyles() {

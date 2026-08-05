@@ -10,3 +10,4 @@ export * from "./QuoteCardRenderer.js";
 export * from "./RichTextRenderer.js";
 export * from "./TableCardRenderer.js";
 export * from "./TextCardRenderer.js";
+export * from "./projection/index.js";

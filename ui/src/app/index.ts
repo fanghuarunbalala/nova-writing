@@ -1,2 +1,4 @@
+/**
+ * app 入口出口。
+ */
 export * from "./NovelApp.js";
-export * from "./NovelAppProvider.js";

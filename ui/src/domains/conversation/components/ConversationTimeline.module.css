@@ -1,11 +1,19 @@
 /**
- * ConversationTimeline 视觉。
+ * ConversationTimeline 视觉（原型 .timeline + .chat-inner）。
+ *
+ * timeline 提供滚动容器；inner 限制最大宽度 880px 并居中，与原型
+ * .chat-inner 一致。padding 8px 22px 24px（原型 .timeline padding）。
  */
 .timeline {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 16px;
+  padding: 8px 22px 24px;
+}
+
+.inner {
+  max-width: 880px;
+  margin: 0 auto;
 }
 
 .system {

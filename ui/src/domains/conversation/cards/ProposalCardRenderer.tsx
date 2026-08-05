@@ -2,6 +2,7 @@
  * ProposalCardRenderer
  *
  * proposal 卡片：tag/标题/meta + 变更操作列表 + 前往审批 Diff。
+ * op mark 用符号（+/~/−/->/○）对齐原型 .op-mark；kind 用中文标签。
  */
 import { Button } from "../../../shared/primitives/Button.js";
 import { Pill } from "../../../shared/primitives/Pill.js";
@@ -19,12 +20,22 @@ const TAG_VARIANT: Record<ProposalCardContent["tag"], "info" | "pending" | "appr
   applied: "approved",
 };
 
-const OP_MARK_LABEL: Record<ProposalOpData["mark"], string> = {
-  add: "新增",
-  mod: "修改",
-  del: "删除",
-  move: "移动",
+const OP_MARK_SYMBOL: Record<ProposalOpData["mark"], string> = {
+  add: "+",
+  mod: "~",
+  del: "−",
+  move: "->",
+  plan: "○",
+};
+
+const OP_KIND_LABEL: Record<ProposalOpData["kind"], string> = {
+  manuscript: "正文",
+  outline: "大纲",
+  character: "角色",
+  location: "地点",
+  todo: "待办",
   plan: "计划",
+  scope: "范围",
 };
 
 export interface ProposalCardRendererProps {
@@ -44,17 +55,15 @@ export function ProposalCardRenderer({ card, onAction }: ProposalCardRendererPro
       </header>
       <ul className={styles.ops}>
         {card.content.ops.map((op) => (
-          <li key={op.id} className={styles.op}>
-            <span className={[styles.opMark, styles[op.mark]].filter(Boolean).join(" ")}>
-              {OP_MARK_LABEL[op.mark]}
-            </span>
+          <li key={op.id} className={[styles.op, styles[op.mark]].filter(Boolean).join(" ")}>
+            <span className={styles.opMark} aria-hidden="true">{OP_MARK_SYMBOL[op.mark]}</span>
             <span className={styles.opText}>
               <RichTextRenderer
                 richText={op.description}
                 onReference={(reference) => onAction?.("reference", reference)}
               />
             </span>
-            <span className={styles.opKind}>{op.kind}</span>
+            <span className={styles.opKind}>{OP_KIND_LABEL[op.kind]}</span>
           </li>
         ))}
       </ul>

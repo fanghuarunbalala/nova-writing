@@ -1,18 +1,19 @@
 /**
  * ProposalOp
  *
- * 单条变更操作行：mark 徽标 + 描述 + 类型。
+ * 单条变更操作行（原型 .op）：mark 符号（+/~/−/→/○）+ 描述 + 类型。
+ * mark 用 mono 字体 + 颜色区分（无背景胶囊），与原型 .op-mark 一致。
  */
 import type { ProposalOpData } from "../projection/ConversationCardDescriptor.js";
 import { RichTextRenderer } from "../cards/RichTextRenderer.js";
 import styles from "./ProposalOp.module.css";
 
-const MARK_LABEL: Record<ProposalOpData["mark"], string> = {
-  add: "新增",
-  mod: "修改",
-  del: "删除",
-  move: "移动",
-  plan: "计划",
+const MARK_SYMBOL: Record<ProposalOpData["mark"], string> = {
+  add: "+",
+  mod: "~",
+  del: "−",
+  move: "→",
+  plan: "○",
 };
 
 const KIND_LABEL: Record<ProposalOpData["kind"], string> = {
@@ -31,10 +32,8 @@ export interface ProposalOpProps {
 
 export function ProposalOp({ op }: ProposalOpProps) {
   return (
-    <li className={styles.op}>
-      <span className={[styles.mark, styles[op.mark]].filter(Boolean).join(" ")}>
-        {MARK_LABEL[op.mark]}
-      </span>
+    <li className={[styles.op, styles[op.mark]].filter(Boolean).join(" ")}>
+      <span className={styles.mark} aria-hidden="true">{MARK_SYMBOL[op.mark]}</span>
       <span className={styles.text}>
         <RichTextRenderer richText={op.description} />
       </span>

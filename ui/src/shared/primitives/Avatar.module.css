@@ -1,5 +1,6 @@
 /**
- * Avatar 视觉：spec 6.5（34x34 / radius 10 / 居中 / 12px bold）。
+ * Avatar 视觉（原型 .avatar：34x34 / radius 10 / 居中 / 12px bold）。
+ * user/agent 都带 1px border，与原型一致。
  */
 .avatar {
   display: grid;
@@ -14,12 +15,14 @@
 
 .user {
   background: var(--color-surface-2);
-  color: var(--color-fg);
+  color: var(--color-muted);
+  border: 1px solid var(--color-border);
 }
 
 .agent {
-  background: color-mix(in oklab, var(--color-accent) 14%, var(--color-surface));
+  background: color-mix(in oklab, var(--color-accent) 12%, var(--color-surface));
   color: var(--color-accent-ink);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 20%, var(--color-border));
 }
 
 .sm { width: 24px; height: 24px; font-size: 10px; }

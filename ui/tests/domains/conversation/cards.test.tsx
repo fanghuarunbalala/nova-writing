@@ -85,7 +85,7 @@ describe("card renderers", () => {
     const rendered = renderer!.render({ card: proposalCard, onAction });
     render(<>{rendered}</>);
     expect(screen.getByText("调整雨景描写")).toBeInTheDocument();
-    expect(screen.getByText("修改")).toBeInTheDocument();
+    expect(screen.getByText("~")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "前往审批 Diff" }));
     expect(onAction).toHaveBeenCalledWith("view-diff", "CS-20260805-01");
   });

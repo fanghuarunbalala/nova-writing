@@ -1,38 +1,47 @@
 /**
- * ProposalOp 视觉。
+ * ProposalOp 视觉（原型 .op + .op-mark + .op-kind）。
+ *
+ * mark 用 mono 单字符（+/~/−/→/○）+ 颜色，无背景胶囊；op 行间用 dashed
+ * border-top 分隔（首行无）。kind 右对齐 mono 小字。
  */
 .op {
   display: flex;
   align-items: baseline;
-  gap: 7px;
-  padding: 2px 0;
+  gap: 9px;
+  padding: 9px 0;
+  border-top: 1px dashed var(--color-border);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.op:first-of-type {
+  margin-top: 10px;
 }
 
 .mark {
   flex: none;
-  min-width: 30px;
+  width: 16px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-heavy);
   text-align: center;
-  padding: 1px 5px;
-  border-radius: var(--radius-xs);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
 }
 
-.mark.add { background: var(--color-success-bg); color: var(--color-success); }
-.mark.mod { background: var(--color-warn-bg); color: var(--color-warn); }
-.mark.del { background: var(--color-danger-bg); color: var(--color-danger); }
-.mark.move { background: var(--color-info-bg); color: var(--color-info); }
-.mark.plan { background: var(--color-surface-2); color: var(--color-muted); }
+.op.add .mark { color: var(--color-success); }
+.op.mod .mark { color: var(--color-warn); }
+.op.del .mark { color: var(--color-danger); }
+.op.move .mark { color: var(--color-info); }
+.op.plan .mark { color: var(--color-muted); }
 
 .text {
   flex: 1;
   min-width: 0;
-  font-size: var(--fs-body);
   color: var(--color-fg);
 }
 
 .kind {
   flex: none;
+  margin-left: auto;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--color-faint);

@@ -1,5 +1,8 @@
 /**
- * AssistantMessage 视觉。
+ * AssistantMessage 视觉（原型 .msg.assistant + .msg-head + .msg-text）。
+ *
+ * 助手消息文本无气泡（区别于用户消息），font-size 15 / line-height 1.75，
+ * margin-top 7px，与原型 .msg-text 一致。.who 用 fg + 750。
  */
 .message {
   display: flex;
@@ -20,9 +23,9 @@
 }
 
 .who {
-  font-size: var(--fs-meta);
-  font-weight: var(--fw-semibold);
-  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--color-fg);
 }
 
 .time {
@@ -49,10 +52,11 @@
 .state.failed { color: var(--color-danger); }
 
 .text {
-  margin-top: 2px;
-  font-size: var(--fs-body);
-  line-height: 1.6;
+  margin-top: 7px;
+  font-size: 15px;
+  line-height: 1.75;
   color: var(--color-fg);
+  text-wrap: pretty;
 }
 
 .cards {

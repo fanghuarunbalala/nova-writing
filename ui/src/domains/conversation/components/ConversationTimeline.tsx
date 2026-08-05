@@ -65,58 +65,60 @@ export function ConversationTimeline({
         setViewportHeight(node.clientHeight);
       }}
     >
-      {virtualized ? (
-        <div
-          style={{ height: timelineWindow.startIndex * ROW_HEIGHT }}
-          aria-hidden="true"
-        />
-      ) : null}
-      {visibleItems.map((item) => {
-        switch (item.kind) {
-          case "user":
-            return (
-              <UserMessage
-                key={item.sequence}
-                sequence={item.sequence}
-                text={item.text}
-                timestamp={item.timestamp}
-                onReferenceClick={onMessageReferenceClick}
-              />
-            );
-          case "assistant":
-            return (
-              <AssistantMessage
-                key={item.sequence}
-                sequence={item.sequence}
-                agentLabel={item.agentLabel}
-                timestamp={item.timestamp}
-                approvalState={item.approvalState}
-                revision={item.revision}
-                thinkLines={item.thinkLines}
-                text={item.text}
-                cards={item.cards}
-                streaming={item.streaming}
-                onCardAction={(cardId, action, payload) => {
-                  if (action === "view-diff" && typeof payload === "string") {
-                    onProposalAction?.(payload, "view-diff");
-                  }
-                }}
-              />
-            );
-          case "system":
-            return (
-              <div key={item.sequence} className={styles.system}>
-                {item.text}
-              </div>
-            );
-        }
-      })}
-      {virtualized ? (
-        <div
-          style={{ height: (sorted.length - timelineWindow.endIndex) * ROW_HEIGHT }}
-          aria-hidden="true"
-        />
-      ) : null}
+      <div className={styles.inner}>
+        {virtualized ? (
+          <div
+            style={{ height: timelineWindow.startIndex * ROW_HEIGHT }}
+            aria-hidden="true"
+          />
+        ) : null}
+        {visibleItems.map((item) => {
+          switch (item.kind) {
+            case "user":
+              return (
+                <UserMessage
+                  key={item.sequence}
+                  sequence={item.sequence}
+                  text={item.text}
+                  timestamp={item.timestamp}
+                  onReferenceClick={onMessageReferenceClick}
+                />
+              );
+            case "assistant":
+              return (
+                <AssistantMessage
+                  key={item.sequence}
+                  sequence={item.sequence}
+                  agentLabel={item.agentLabel}
+                  timestamp={item.timestamp}
+                  approvalState={item.approvalState}
+                  revision={item.revision}
+                  thinkLines={item.thinkLines}
+                  text={item.text}
+                  cards={item.cards}
+                  streaming={item.streaming}
+                  onCardAction={(cardId, action, payload) => {
+                    if (action === "view-diff" && typeof payload === "string") {
+                      onProposalAction?.(payload, "view-diff");
+                    }
+                  }}
+                />
+              );
+            case "system":
+              return (
+                <div key={item.sequence} className={styles.system}>
+                  {item.text}
+                </div>
+              );
+          }
+        })}
+        {virtualized ? (
+          <div
+            style={{ height: (sorted.length - timelineWindow.endIndex) * ROW_HEIGHT }}
+            aria-hidden="true"
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

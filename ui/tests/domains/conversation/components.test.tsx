@@ -131,7 +131,7 @@ describe("ProposalBlock / ProposalOp", () => {
     );
     expect(screen.getByText("调整雨景描写")).toBeInTheDocument();
     expect(screen.getByText("r041 -> r042")).toBeInTheDocument();
-    expect(screen.getByText("修改")).toBeInTheDocument();
+    expect(screen.getByText("~")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "前往审批 Diff" }));
     expect(onViewDiff).toHaveBeenCalledWith("CS-1");
   });
@@ -142,7 +142,7 @@ describe("ProposalBlock / ProposalOp", () => {
         op={{ id: "op-2", mark: "add", kind: "character", description: { kind: "text", text: "新增角色 林夏" } }}
       />,
     );
-    expect(screen.getByText("新增")).toBeInTheDocument();
+    expect(screen.getByText("+")).toBeInTheDocument();
     expect(screen.getByText("新增角色 林夏")).toBeInTheDocument();
     expect(screen.getByText("角色")).toBeInTheDocument();
   });

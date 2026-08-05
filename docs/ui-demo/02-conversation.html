@@ -18,15 +18,21 @@
       }
       .novel-runtime-status-bar[data-runtime-status="starting"],
       .novel-runtime-status-bar[data-runtime-status="generating"] {
-        border-color: transparent; color: #ffffff;
-        background: linear-gradient(90deg, #5f718a, #7f93b5, #5f718a);
+        border-color: var(--novel-border-strong);
+        background-color: var(--novel-surface-secondary);
+        background-image: linear-gradient(90deg, #5f718a, #8ba0c4, #5f718a);
         background-size: 200% 100%;
-        animation: demo-runtime-gradient 2.4s linear infinite;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: demo-runtime-gradient-text 2.4s linear infinite;
       }
       .novel-runtime-status-bar[data-runtime-status="generating"] {
-        background: linear-gradient(90deg, #4f7fb0, #7a6fb5, #4f7fb0);
+        background-image: linear-gradient(90deg, #4f7fb0, #8a6fc4, #4f7fb0);
         background-size: 200% 100%;
-        animation: demo-runtime-gradient 1.6s linear infinite;
+        -webkit-background-clip: text;
+        background-clip: text;
+        animation-duration: 1.6s;
       }
       .novel-runtime-status-bar[data-runtime-status="online"] { border-color: #bcd8c4; color: #1f6f43; background: #eef6f0; }
       .novel-runtime-status-bar[data-runtime-status="stopped"] { color: #5b6472; background: #f2f3f5; }
@@ -37,7 +43,9 @@
       .novel-runtime-status-bar[data-runtime-status="crashed"] { border-color: #e5b8b8; color: #8a2f2f; background: #fdf0f0; }
       .novel-runtime-status-bar .novel-runtime-status-code { color: inherit; opacity: 0.85; font-size: 11px; }
       .novel-runtime-status-bar .novel-connection-action { margin-left: auto; border: 1px solid currentColor; border-radius: 6px; padding: 3px 9px; color: inherit; background: rgb(255 255 255 / 0.14); font: inherit; cursor: pointer; }
-      @keyframes demo-runtime-gradient { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+      .novel-runtime-status-bar[data-runtime-status="starting"] .novel-connection-action,
+      .novel-runtime-status-bar[data-runtime-status="generating"] .novel-connection-action { border-color: var(--novel-border-strong); color: var(--novel-text-primary); background: var(--novel-surface-quiet); }
+      @keyframes demo-runtime-gradient-text { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
     </style>
   </head>
   <body>

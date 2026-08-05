@@ -26,27 +26,22 @@ export const RUNTIME_STATUS_STYLES = `
 
 .novel-runtime-status-bar[data-runtime-status="starting"],
 .novel-runtime-status-bar[data-runtime-status="generating"] {
-  border-color: transparent;
-  color: #ffffff;
-  background: linear-gradient(
-    90deg,
-    #5f718a,
-    #7f93b5,
-    #5f718a
-  );
+  border-color: var(--novel-border-strong);
+  background-color: var(--novel-surface-secondary);
+  background-image: linear-gradient(90deg, #5f718a, #8ba0c4, #5f718a);
   background-size: 200% 100%;
-  animation: novel-runtime-gradient 2.4s linear infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: novel-runtime-gradient-text 2.4s linear infinite;
 }
 
 .novel-runtime-status-bar[data-runtime-status="generating"] {
-  background: linear-gradient(
-    90deg,
-    #4f7fb0,
-    #7a6fb5,
-    #4f7fb0
-  );
+  background-image: linear-gradient(90deg, #4f7fb0, #8a6fc4, #4f7fb0);
   background-size: 200% 100%;
-  animation: novel-runtime-gradient 1.6s linear infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation-duration: 1.6s;
 }
 
 .novel-runtime-status-bar[data-runtime-status="online"] {
@@ -92,7 +87,14 @@ export const RUNTIME_STATUS_STYLES = `
   cursor: pointer;
 }
 
-@keyframes novel-runtime-gradient {
+.novel-runtime-status-bar[data-runtime-status="starting"] .novel-connection-action,
+.novel-runtime-status-bar[data-runtime-status="generating"] .novel-connection-action {
+  border-color: var(--novel-border-strong);
+  color: var(--novel-text-primary);
+  background: var(--novel-surface-quiet);
+}
+
+@keyframes novel-runtime-gradient-text {
   0% {
     background-position: 0% 50%;
   }

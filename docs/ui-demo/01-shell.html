@@ -48,9 +48,6 @@
                 <span class="novel-sidebar-label">主线讨论</span>
               </button>
               <button class="novel-menu-button" aria-label="对话操作：主线讨论" type="button">⋯</button>
-              <div class="novel-menu-popover">
-                <button class="novel-menu-button" type="button">删除</button>
-              </div>
             </div>
             <div class="novel-sidebar-conversation-row">
               <button class="novel-sidebar-button" type="button" style="flex:1">
@@ -70,5 +67,37 @@
         </main>
       </div>
     </div>
+    <script>
+      document.addEventListener("click", (event) => {
+        const trigger = event.target.closest("[aria-label^='对话操作']");
+        const popovers = [...document.querySelectorAll(".novel-menu-popover")];
+        const insidePopover = event.target.closest(".novel-menu-popover") !== null;
+        if (trigger === null && !insidePopover) {
+          popovers.forEach((popover) => popover.remove());
+          return;
+        }
+        if (trigger !== null) {
+          const row = trigger.closest(".novel-sidebar-conversation-row");
+          const existing = row.querySelector(".novel-menu-popover");
+          if (existing !== null) {
+            existing.remove();
+            return;
+          }
+          const rect = trigger.getBoundingClientRect();
+          const popover = document.createElement("div");
+          popover.className = "novel-menu-popover";
+          popover.style.position = "fixed";
+          popover.style.top = rect.bottom + 4 + "px";
+          popover.style.left = rect.left + "px";
+          popover.style.zIndex = "30";
+          const item = document.createElement("button");
+          item.className = "novel-menu-button";
+          item.type = "button";
+          item.textContent = "删除";
+          popover.appendChild(item);
+          row.appendChild(popover);
+        }
+      });
+    </script>
   </body>
 </html>

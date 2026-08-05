@@ -1,5 +1,5 @@
 /** Persistent project navigation and Conversation history presentation. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export type ProjectNavigationItem =
   | "new-conversation"
@@ -56,8 +56,23 @@ export function ProjectSidebar({
   onConversationEdit,
 }: ProjectSidebarProps) {
   const [openConversationMenu, setOpenConversationMenu] = useState<
-    string | undefined
+    { readonly conversationId: string; readonly top: number; readonly left: number }
   >();
+
+  useEffect(() => {
+    if (openConversationMenu === undefined) return;
+    const handlePointerDown = (event: MouseEvent): void => {
+      const target = event.target;
+      if (
+        !(target instanceof Element) ||
+        target.closest(".novel-menu-popover") === null
+      ) {
+        setOpenConversationMenu(undefined);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [openConversationMenu]);
   return (
     <aside className="novel-project-sidebar" data-sidebar-mode={mode} aria-label="项目导航">
       <section className="novel-sidebar-section">
@@ -117,18 +132,33 @@ export function ProjectSidebar({
                 aria-label={`对话操作：${conversation.title}`}
                 className="novel-menu-button"
                 type="button"
-                onClick={() =>
-                  setOpenConversationMenu(
-                    openConversationMenu === conversation.id
-                      ? undefined
-                      : conversation.id,
-                  )
-                }
+                onClick={(event) => {
+                  if (
+                    openConversationMenu?.conversationId === conversation.id
+                  ) {
+                    setOpenConversationMenu(undefined);
+                    return;
+                  }
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setOpenConversationMenu({
+                    conversationId: conversation.id,
+                    top: rect.bottom + 4,
+                    left: rect.left,
+                  });
+                }}
               >
                 ⋯
               </button>
-              {openConversationMenu === conversation.id ? (
-                <div className="novel-menu-popover">
+              {openConversationMenu?.conversationId === conversation.id ? (
+                <div
+                  className="novel-menu-popover"
+                  style={{
+                    position: "fixed",
+                    top: openConversationMenu.top,
+                    left: openConversationMenu.left,
+                    zIndex: 30,
+                  }}
+                >
                   <button
                     className="novel-menu-button"
                     type="button"

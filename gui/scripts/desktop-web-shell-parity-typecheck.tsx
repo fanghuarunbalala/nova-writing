@@ -1,4 +1,7 @@
-/** Compile-only proof that Desktop and Web mount the same shared application contract. */
+/**
+ * Compile-only proof that Desktop (new Phase 3 shell) and Web (legacy shared app)
+ * both mount through their respective renderer entrypoints.
+ */
 import type { ElectronPreloadBridge } from "../src/shared/index.js";
 import { mountDesktopRenderer } from "../src/renderer/index.js";
 import { mountWebBrowser } from "../../web/src/browser/index.js";
@@ -17,7 +20,7 @@ const desktop = mountDesktopRenderer({
   window: { novelDesktop: bridge },
   document,
   rootElementId: "desktop-root",
-  appProps,
+  appProps: {},
 });
 const web = mountWebBrowser({
   window,

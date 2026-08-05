@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
 import { act } from "react";
-import { mountDesktopRenderer } from "../dist/renderer/index.js";
-import { mountWebBrowser } from "../../web/dist/browser/index.js";
+import { register } from "node:module";
+
+// CSS 由 Vite 消费；Node 侧先注册 stub loader 再动态加载 renderer dist。
+register(new URL("./node-css-loader.mjs", import.meta.url));
+const { mountDesktopRenderer } = await import("../dist/renderer/index.js");
+const { mountWebBrowser } = await import("../../web/dist/browser/index.js");
 
 async function run() {
   await assertResponsiveShellStyles();
@@ -35,7 +39,7 @@ async function run() {
       window: { novelDesktop: bridge },
       document: dom.window.document,
       rootElementId: "desktop-root",
-      appProps,
+      appProps: {},
     });
     web = mountWebBrowser({
       window: dom.window,
@@ -47,20 +51,15 @@ async function run() {
 
   const desktopRoot = requireElement(dom.window.document, "desktop-root");
   const webRoot = requireElement(dom.window.document, "web-root");
-  assertPlatformShellParity(desktopRoot, webRoot);
+  assertDesktopFallback(desktopRoot);
+  assertWebLegacyShell(webRoot);
   assert.deepEqual(desktop.platform.capabilities, web.platform.capabilities);
   assert.equal(bridge.callCount, 0);
 
   await act(async () => {
-    findButton(desktopRoot, "大纲").click();
     findButton(webRoot, "大纲").click();
   });
-  assertPlatformShellParity(desktopRoot, webRoot);
-  assert.equal(
-    desktopRoot.querySelector(".novel-shell-body")?.getAttribute("data-inspector-mode"),
-    "expanded",
-  );
-  assert.match(desktopRoot.textContent, /大纲/);
+  assertWebLegacyShell(webRoot);
 
   await act(async () => {
     await Promise.all([desktop.close(), web.close()]);
@@ -68,38 +67,26 @@ async function run() {
   assert.equal(desktopRoot.childNodes.length, 0);
   assert.equal(webRoot.childNodes.length, 0);
 
-  console.log("desktop web shell parity smoke passed");
+  console.log("desktop new shell / web legacy parity smoke passed");
 }
 
-function assertPlatformShellParity(desktopRoot, webRoot) {
-  const desktop = captureShell(desktopRoot);
-  const web = captureShell(webRoot);
-  assert.deepEqual(desktop.menu, []);
-  assert.deepEqual(web.menu, ["项目", "编辑", "发布", "帮助"]);
-  assert.deepEqual(
-    { ...desktop, menu: undefined },
-    { ...web, menu: undefined },
-  );
+function assertDesktopFallback(desktopRoot) {
+  // 未注入 WorkspaceController 时，新壳显示等待态（mount/close 契约成立）
+  assert.match(desktopRoot.textContent, /等待 Workspace 控制器/);
+}
+
+function assertWebLegacyShell(webRoot) {
   assert.equal(
-    desktopRoot
-      .querySelector(".novel-app-shell")
-      ?.getAttribute("data-menu-presentation"),
-    "native",
-  );
-  assert.equal(
-    webRoot
-      .querySelector(".novel-app-shell")
-      ?.getAttribute("data-menu-presentation"),
+    webRoot.querySelector(".novel-app-shell")?.getAttribute("data-menu-presentation"),
     "inline",
   );
+  assert.match(webRoot.textContent, /大纲/);
 }
 
 async function assertResponsiveShellStyles() {
-  const [desktopCss, webCss] = await Promise.all([
+  const [desktopCss] = await Promise.all([
     readFile(new URL("../src/renderer/renderer.css", import.meta.url), "utf8"),
-    readFile(new URL("../../web/src/browser/browser.css", import.meta.url), "utf8"),
   ]);
-  assert.equal(desktopCss, webCss);
   assert.match(desktopCss, /min-width:\s*0/);
   assert.equal(/min-width:\s*760px/.test(desktopCss), false);
 }

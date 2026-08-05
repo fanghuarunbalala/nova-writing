@@ -2994,23 +2994,18 @@ Playwright 截图验证，不引入 HTML demo）；ExternalStore 单元测试覆
 ### Phase 4: GUI Renderer（1 周）
 
 任务清单：
-- [ ] `gui/src/renderer/DesktopNovelApp.tsx`（组合根）
-- [ ] `gui/src/renderer/DesktopRendererBootstrap.tsx`
-- [ ] `gui/src/renderer/ElectronFrontendPlatform.ts`（完善）
-- [ ] `gui/src/renderer/extensions/createDesktopUiExtensions.tsx`
-- [ ] `gui/src/renderer/extensions/DesktopTitleBar.tsx`
-- [ ] `gui/src/renderer/extensions/DesktopRoutes.tsx`
-- [ ] `gui/src/renderer/extensions/DesktopCommands.ts`
-- [ ] `gui/src/renderer/extensions/DesktopSettingsSections.tsx`
-- [ ] `gui/src/renderer/platform/Desktop*Port.ts`（4 个 port）
-- [ ] `gui/src/renderer/features/local-runtime/`（按优先级）
-- [ ] `gui/src/renderer/features/desktop-settings/`
-- [ ] `gui/src/renderer/features/native-file-browser/`
-- [ ] `gui/src/renderer/features/system-tray/`
-- [ ] `gui/src/renderer/features/application-update/`
-- [ ] Preload 桥接扩展（按需）
+- [x] `gui/src/renderer/DesktopNovelApp.tsx`（组合根：Electron api + workspace
+  controller + 5 域 store + overlays 组装进 NovelApplicationShell）
+- [x] `gui/src/renderer/DesktopRendererBootstrap.tsx`（保持既有组合/mount 契约；
+  renderer smoke 更新为断言新壳挂载）
+- [x] `gui/src/renderer/ElectronFrontendPlatform.ts`（已存在，沿用）
+- [ ] `gui/src/renderer/extensions/*`（新壳尚无扩展槽位；随 shell 扩展点接入）
+- [ ] `gui/src/renderer/platform/Desktop*Port.ts`（4 个 port；桌面专属能力后续按优先级接入）
+- [ ] `gui/src/renderer/features/*`（local-runtime/desktop-settings/… 后续接入）
+- [x] 主题：renderer.css 引入 tokens.css + global.css（ui exports 增加 `./shared/*`）
 
 **Gate**：`pnpm gui` 启动真实 Electron 窗口，所有 V1 表面可交互。
+（构建 + jsdom 挂载冒烟已绿；真实窗口交互验证需手动 `pnpm gui` 确认）
 
 ### Phase 5: 视觉打磨 + a11y + 性能（1-2 周）
 

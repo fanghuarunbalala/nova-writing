@@ -41,7 +41,7 @@ export function Sidebar({
 }: SidebarProps) {
   const snapshot = conversationCatalog.getSnapshot();
   return (
-    <aside className={styles.sidebar} data-mode={mode}>
+    <aside className={styles.sidebar} data-mode={mode} role="navigation" aria-label="侧栏">
       <NewConversationSection
         onCreate={onCreateConversation}
         disabled={snapshot.workspaceId === undefined}

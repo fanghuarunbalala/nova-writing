@@ -24,7 +24,10 @@ import {
   createPiExecutionModel,
   type ProviderRequestDebugRecorder,
 } from "../../../runtime/agent/pi/index.js";
+import { DispatcherPiToolExecutionBridge } from "../../../runtime/agent/pi/DispatcherPiToolExecutionBridge.js";
+import { PiToolAdapter } from "../../../runtime/agent/pi/PiToolAdapter.js";
 import type { AgentRuntimeAdapter } from "../../../runtime/index.js";
+import type { ToolDispatcher } from "../../../runtime/tools/execution/index.js";
 import type { RuntimeChildAdapterFactory } from "./DesktopRuntimeChildCompositionFactory.js";
 
 export interface PiRuntimeChildAdapterFactoryOptions {
@@ -89,6 +92,7 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
     nudgeProviderCalls,
     eventSink,
     eventIdFactory,
+    toolDispatcher,
   }: Parameters<RuntimeChildAdapterFactory["create"]>[0]): Promise<AgentRuntimeAdapter> {
     try {
       return await this.#createOnce({
@@ -97,6 +101,7 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
         nudgeProviderCalls,
         eventSink,
         eventIdFactory,
+        toolDispatcher,
       });
     } catch (error) {
       this.#logger.error("pi_runtime_child.adapter_failed", {
@@ -113,6 +118,7 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
     nudgeProviderCalls,
     eventSink,
     eventIdFactory,
+    toolDispatcher,
   }: Parameters<RuntimeChildAdapterFactory["create"]>[0]): Promise<AgentRuntimeAdapter> {
     const conversationId = configuration.conversationId;
     const descriptor = await this.#resolver.resolve({
@@ -122,12 +128,25 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
     const dispatchAwareStreamFunction = this.#providerExecutionFactory.create(
       descriptor,
     );
+    const agentTools =
+      toolDispatcher === undefined
+        ? []
+        : [
+            ...new PiToolAdapter(
+              new DispatcherPiToolExecutionBridge({
+                dispatcher: toolDispatcher,
+                conversationId,
+                runId: () => lifecycleController.getRunSnapshot()?.runId,
+                turnId: () => lifecycleController.getTurnSnapshot()?.turnId,
+              }),
+            ).toAgentTools(configuration.assembly.toolView.listAllowed()),
+          ];
     const agent = new Agent({
       initialState: {
         model,
         systemPrompt: "",
         messages: [],
-        tools: [],
+        tools: agentTools,
       },
       streamFn: async () => {
         throw new TypeError("Base Pi stream function is not configured");

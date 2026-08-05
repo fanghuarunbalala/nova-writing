@@ -46,6 +46,8 @@ import {
   NudgeSelector,
   NudgeTemplateRegistry,
   InMemoryPendingNudgeStore,
+  RuntimeApprovalDecisionInputHandler,
+  RuntimeControlInputDispatcher,
   type NudgeLifecycleEventIdFactory,
   type NudgeProviderCallCoordinator as NudgeProviderCallCoordinatorType,
   RuntimeStartupExecutor,
@@ -60,7 +62,9 @@ import {
   type AgentRuntimeContextCompilerFactory,
   type RuntimeEventIdFactory,
   type RuntimeRunPreparationSource,
+  type ToolDispatcher,
 } from "../../../runtime/index.js";
+import { createChildToolExecutionComposition } from "./ChildToolExecutionFactory.js";
 import type { RuntimePersistencePorts } from "../../../runtime/ipc/index.js";
 import { createNovelConversationManifestComposition } from "../../agent/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
@@ -87,6 +91,7 @@ export interface RuntimeChildAdapterFactory {
     readonly nudgeProviderCalls?: NudgeProviderCallCoordinatorType;
     readonly eventSink: PublishingRuntimeEventSink;
     readonly eventIdFactory: RuntimeEventIdFactory;
+    readonly toolDispatcher?: ToolDispatcher;
   }): Promise<AgentRuntimeAdapter>;
 }
 
@@ -205,6 +210,11 @@ export class DesktopRuntimeChildCompositionFactory
       outputPublisher: new ChildRuntimeOutputPublisher(persistence, logger),
       logger,
     });
+    const toolExecution = createChildToolExecutionComposition({
+      registryView: configuration.assembly.toolView,
+      eventSink,
+      logger,
+    });
     const eventIdFactory = this.#eventIdFactory;
     const clock = { now: () => new Date().toISOString() };
     const lifecycleController = new TurnController({
@@ -234,6 +244,7 @@ export class DesktopRuntimeChildCompositionFactory
       nudgeProviderCalls,
       eventSink,
       eventIdFactory,
+      toolDispatcher: toolExecution.dispatcher,
     });
     const assembly = new AgentRuntimeExecutionAssembly({
       configuration,
@@ -265,13 +276,23 @@ export class DesktopRuntimeChildCompositionFactory
       agentAdapter,
       logger,
     });
-    const controlHandler = new RuntimeStopInputHandler({
-      conversationId,
-      stopFence: router,
-      lifecycleController,
-      outcomeRecorder,
-      cancellationPort,
-      logger,
+    const controlHandler = new RuntimeControlInputDispatcher({
+      stopHandler: new RuntimeStopInputHandler({
+        conversationId,
+        stopFence: router,
+        lifecycleController,
+        outcomeRecorder,
+        cancellationPort,
+        logger,
+      }),
+      approvalDecisionHandler: new RuntimeApprovalDecisionInputHandler({
+        conversationId,
+        coordinator: toolExecution.coordinator,
+        runId: () => lifecycleController.getRunSnapshot()?.runId,
+        turnId: () => lifecycleController.getTurnSnapshot()?.turnId,
+        outcomeRecorder,
+        logger,
+      }),
     });
     const inputPump = new RuntimeInputPump({
       conversationId,

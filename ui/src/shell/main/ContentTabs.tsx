@@ -2,6 +2,7 @@
  * ContentTabs
  *
  * 内容视图四 tab 切换（本地 state，不进 MainViewRouter）。
+ * variant="fill" 对齐原型 .pane-tabs（accent 浅底激活态）。
  */
 import { Tabs, TabsContent } from "../../shared/primitives/Tabs.js";
 import type { ReactNode } from "react";
@@ -27,7 +28,7 @@ export function ContentTabs({ value, onChange, children }: ContentTabsProps) {
       value={value}
       onValueChange={(next) => onChange(next as ContentTab)}
       tabs={CONTENT_TABS}
-      variant="line"
+      variant="fill"
     >
       {CONTENT_TABS.map((tab) => (
         <TabsContent key={tab.value} value={tab.value}>

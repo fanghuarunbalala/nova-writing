@@ -1,5 +1,5 @@
 /**
- * Tabs 视觉：line 下划线 / pill 胶囊（原型 .insp-tabs 风格）。
+ * Tabs 视觉：line 下划线 / pill 胶囊 / fill 填充背景（原型 .pane-tab）。
  */
 .root {
   display: flex;
@@ -66,8 +66,33 @@
   box-shadow: 0 1px 3px rgba(20, 12, 6, 0.08);
 }
 
+/* fill: 原型 .pane-tabs + .pane-tab。容器带 padding + surface 底 + 下边框；
+   tab 用 accent 浅底激活态（非下划线）。 */
+.fill {
+  gap: 4px;
+  padding: 9px 20px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tabFill {
+  padding: 7px 13px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+}
+
+.tabFill:hover:not([data-disabled]) {
+  color: var(--color-fg);
+  background: var(--color-surface-2);
+}
+
+.tabFill[data-state="active"] {
+  background: color-mix(in oklab, var(--color-accent) 13%, var(--color-surface));
+  color: var(--color-accent-ink);
+}
+
 .content {
   flex: 1;
   min-height: 0;
-  padding-top: 8px;
 }

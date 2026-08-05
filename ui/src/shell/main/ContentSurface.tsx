@@ -2,6 +2,8 @@
  * ContentSurface
  *
  * 内容视图：四 tab（大纲/正文/角色/地点），数据来自 novel 域 store。
+ * 内容区用 .paneBody + .paneInner 包裹（原型 .pane-body + .pane-inner），
+ * 提供 padding 与 max-width 1000 居中。
  */
 import { CharacterGrid } from "../../domains/novel/character/components/CharacterGrid.js";
 import { LocationGrid } from "../../domains/novel/location/components/LocationGrid.js";
@@ -45,9 +47,10 @@ export function ContentSurface({
   const characterSnapshot = useExternalStore(characters);
   const locationSnapshot = useExternalStore(locations);
   const renderTab = (tab: ContentTab) => {
+    let content;
     switch (tab) {
       case "outline":
-        return (
+        content = (
           <StoryOutlineTree
             workspaceId={workspaceId ?? ""}
             tree={outline.tree}
@@ -57,30 +60,35 @@ export function ContentSurface({
             onToggleExpand={(id) => outlineTree.toggleExpand(id)}
           />
         );
+        break;
       case "manuscript":
-        return (
+        content = (
           <ManuscriptChapterList
             workspaceId={workspaceId ?? ""}
             chapters={manuscriptSnapshot.chapters}
           />
         );
+        break;
       case "characters":
-        return (
+        content = (
           <CharacterGrid
             workspaceId={workspaceId ?? ""}
             characters={characterSnapshot.characters}
             onSelect={onSelectCharacter}
           />
         );
+        break;
       case "locations":
-        return (
+        content = (
           <LocationGrid
             workspaceId={workspaceId ?? ""}
             locations={locationSnapshot.locations}
             onSelect={onSelectLocation}
           />
         );
+        break;
     }
+    return <div className={styles.paneBody}><div className={styles.paneInner}>{content}</div></div>;
   };
   return (
     <div className={styles.surface}>

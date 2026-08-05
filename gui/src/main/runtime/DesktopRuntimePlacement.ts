@@ -2,8 +2,10 @@
 import { fileURLToPath } from "node:url";
 import type { Logger } from "@novel/core";
 import {
+  DESKTOP_CHILD_DEBUG_ENV,
   DESKTOP_CHILD_LOG_ENV,
   DESKTOP_CHILD_STORAGE_ROOT_ENV,
+  DESKTOP_PROVIDER_REQUEST_DUMP_ENV,
   NodeConversationProcessSupervisor,
   createChildProcessConversationRuntimePlacement,
   type DesktopRuntimeChildPersistence,
@@ -16,6 +18,8 @@ export interface DesktopRuntimeApplicationPersistenceProvider {
 export interface CreateDesktopRuntimePlacementOptions {
   readonly storageRoot: string;
   readonly childLogPath?: string;
+  readonly debugLogLevel?: "debug" | "verbose";
+  readonly providerRequestDumpPath?: string;
   readonly applicationProvider: () => Promise<
     DesktopRuntimeApplicationPersistenceProvider | undefined
   >;
@@ -37,6 +41,12 @@ export function createDesktopRuntimePlacement(
       ...(options.childLogPath === undefined
         ? {}
         : { [DESKTOP_CHILD_LOG_ENV]: options.childLogPath }),
+      ...(options.debugLogLevel === undefined
+        ? {}
+        : { [DESKTOP_CHILD_DEBUG_ENV]: options.debugLogLevel }),
+      ...(options.providerRequestDumpPath === undefined
+        ? {}
+        : { [DESKTOP_PROVIDER_REQUEST_DUMP_ENV]: options.providerRequestDumpPath }),
     },
     persistenceProvider: {
       provide: async (bootstrap) => {

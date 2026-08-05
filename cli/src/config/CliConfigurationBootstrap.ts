@@ -1,14 +1,15 @@
 /** Loads or initializes the shared Application Configuration before CLI Runtime startup. */
 import {
+  ApplicationConfiguration,
   createDefaultApplicationConfiguration,
   noopLogger,
-  type ApplicationConfiguration,
   type ApplicationConfigurationStore,
   type Logger,
 } from "@novel/core";
 import {
   NodeApplicationConfigurationStore,
   NodeConfigurationHomeResolver,
+  resolveChildDebugDiagnostics,
 } from "@novel/core/node";
 
 export interface CliConfigurationBootstrapOptions {
@@ -30,20 +31,45 @@ export class CliConfigurationBootstrap {
   async load(): Promise<ApplicationConfiguration> {
     this.#logger.debug("cli.configuration.load_started");
     const stored = await this.#store.load();
-    if (stored !== undefined) {
-      this.#logger.info("cli.configuration.load_completed", {
-        revision: stored.revision,
-        initialized: false,
-      });
-      return stored;
+    const configuration =
+      stored ?? createDefaultApplicationConfiguration();
+    if (stored === undefined) {
+      await this.#store.save(configuration);
     }
-    const defaults = createDefaultApplicationConfiguration();
-    await this.#store.save(defaults);
+    const resolved = resolveChildDebugDiagnostics(
+      {
+        logLevel: configuration.diagnostics.logLevel,
+        providerRequestDumpEnabled:
+          configuration.diagnostics.providerRequestDumpEnabled,
+        providerRequestDumpPath:
+          configuration.diagnostics.providerRequestDumpPath,
+      },
+      process.env,
+    );
+    const overridden =
+      resolved.logLevel !== configuration.diagnostics.logLevel ||
+      resolved.dumpPath !== configuration.diagnostics.providerRequestDumpPath ||
+      (resolved.dumpPath !== undefined) !==
+        (configuration.diagnostics.providerRequestDumpEnabled === true);
+    const effective = overridden
+      ? new ApplicationConfiguration({
+          ...configuration.toSnapshot(),
+          diagnostics: {
+            ...configuration.diagnostics.toSnapshot(),
+            logLevel: resolved.logLevel,
+            providerRequestDumpEnabled: resolved.dumpPath !== undefined,
+            ...(resolved.dumpPath === undefined
+              ? {}
+              : { providerRequestDumpPath: resolved.dumpPath }),
+          },
+        })
+      : configuration;
     this.#logger.info("cli.configuration.load_completed", {
-      revision: defaults.revision,
-      initialized: true,
+      revision: effective.revision,
+      initialized: stored === undefined,
+      debug: effective.diagnostics.logLevel,
     });
-    return defaults;
+    return effective;
   }
 }
 

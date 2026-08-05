@@ -45,6 +45,44 @@ export const DESKTOP_CHILD_STORAGE_ROOT_ENV =
 
 export const DESKTOP_CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
 
+export const DESKTOP_CHILD_DEBUG_ENV = "NOVEL_DEBUG" as const;
+
+export const DESKTOP_PROVIDER_REQUEST_DUMP_ENV =
+  "NOVEL_PROVIDER_REQUEST_DUMP" as const;
+
+export interface ChildDebugDiagnosticsInput {
+  readonly logLevel?: DiagnosticLogLevel;
+  readonly providerRequestDumpEnabled?: boolean;
+  readonly providerRequestDumpPath?: string;
+}
+
+export interface ChildDebugDiagnostics {
+  readonly logLevel: DiagnosticLogLevel;
+  readonly dumpPath?: string;
+}
+
+export function resolveChildDebugDiagnostics(
+  input: ChildDebugDiagnosticsInput,
+  environment: Readonly<Record<string, string | undefined>>,
+): ChildDebugDiagnostics {
+  const debugValue = environment[DESKTOP_CHILD_DEBUG_ENV];
+  const logLevel =
+    debugValue === "verbose"
+      ? "verbose"
+      : debugValue === "1" || debugValue === "debug"
+        ? "debug"
+        : (input.logLevel ?? "info");
+  const dumpPath =
+    environment[DESKTOP_PROVIDER_REQUEST_DUMP_ENV] ??
+    (input.providerRequestDumpEnabled === true
+      ? input.providerRequestDumpPath
+      : undefined);
+  return Object.freeze({
+    logLevel,
+    ...(dumpPath === undefined ? {} : { dumpPath }),
+  });
+}
+
 export interface RunDesktopRuntimeChildEntrypointOptions {
   readonly manifestStoreProvider?: (
     bootstrap: ConversationRuntimeBootstrap,
@@ -87,18 +125,25 @@ async function initializeDesktopRuntimeChildEntrypoint(
     .load()
     .then((configuration) => configuration?.diagnostics)
     .catch(() => undefined);
+  const childDebug = resolveChildDebugDiagnostics(
+    {
+      logLevel: diagnostics?.logLevel,
+      providerRequestDumpEnabled: diagnostics?.providerRequestDumpEnabled,
+      providerRequestDumpPath: diagnostics?.providerRequestDumpPath,
+    },
+    process.env,
+  );
   const logger = createEntrypointLogger(
     options.logger,
-    diagnostics?.logLevel ?? "info",
+    childDebug.logLevel,
   );
   const debugRecorder =
-    diagnostics?.providerRequestDumpEnabled === true &&
-    diagnostics.providerRequestDumpPath !== undefined
-      ? createNodeProviderRequestDebugRecorder({
-          path: diagnostics.providerRequestDumpPath,
+    childDebug.dumpPath === undefined
+      ? undefined
+      : createNodeProviderRequestDebugRecorder({
+          path: childDebug.dumpPath,
           logger,
-        })
-      : undefined;
+        });
   const manifestStoreProvider =
     options.manifestStoreProvider ??
     createEnvManifestStoreProvider(options.storageRoot, logger);

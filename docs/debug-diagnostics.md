@@ -19,6 +19,24 @@ The application configuration exposes diagnostic settings in the
 Defaults are `logLevel: "info"`, `providerRequestDumpEnabled: false`, and no
 dump path.
 
+Debug is switched on manually and uniformly through environment variables:
+
+- `NOVEL_DEBUG=1|debug|verbose` overrides the diagnostic log level for the
+  desktop child runtime and the CLI configuration bootstrap.
+- `NOVEL_PROVIDER_REQUEST_DUMP=<path>` enables the JSONL provider request dump
+  at the given path, overriding the configured dump path.
+
+## GUI Build Modes
+
+The GUI package supports debug and release build parameters:
+
+- `pnpm --dir gui build:debug` writes `dist/build-mode.json` with `debug` and
+  wires the desktop child with verbose logging plus a provider request dump
+  under the Electron `userData/debug/` directory (manual `NOVEL_DEBUG` /
+  `NOVEL_PROVIDER_REQUEST_DUMP` values always win).
+- `pnpm --dir gui build:release` (and `pnpm build`) writes `release`; no debug
+  wiring is applied unless the environment variables are set manually.
+
 ## Provider Request Dump
 
 `PiProviderExecutionFactory` accepts an optional

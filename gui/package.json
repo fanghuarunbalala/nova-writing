@@ -6,7 +6,9 @@
   "main": "dist/renderer/index.js",
   "types": "dist/renderer/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json && pnpm build:preload && pnpm build:renderer",
+    "build": "tsc -p tsconfig.json && node scripts/configure-build-mode.mjs release && pnpm build:preload && pnpm build:renderer",
+    "build:debug": "tsc -p tsconfig.json && node scripts/configure-build-mode.mjs debug && pnpm build:preload && pnpm build:renderer",
+    "build:release": "pnpm build",
     "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload/preload.cjs --log-level=warning",
     "build:renderer": "vite build",
     "check": "tsc -p tsconfig.json --noEmit",
@@ -20,6 +22,7 @@
     "smoke:electron-workspace-selection": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-workspace-selection-typecheck.ts && node scripts/electron-workspace-selection-smoke.mjs",
     "smoke:electron-conversation-host": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-conversation-host-typecheck.ts && node scripts/electron-conversation-host-smoke.mjs",
     "smoke:electron-workspace-runtime-placement": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-workspace-runtime-placement-typecheck.ts && node scripts/electron-workspace-runtime-placement-smoke.mjs",
+    "smoke:electron-build-mode": "node scripts/electron-build-mode-smoke.mjs",
     "smoke:electron-e2e-conversation-acceptance": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-e2e-conversation-acceptance-typecheck.ts && node scripts/electron-e2e-conversation-acceptance-smoke.mjs",
     "smoke:electron-configuration-client": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-configuration-client-typecheck.ts && node scripts/electron-configuration-client-smoke.mjs",
     "smoke:desktop-credential-composition": "pnpm --dir ../core build && pnpm build && node scripts/desktop-credential-composition-smoke.mjs",

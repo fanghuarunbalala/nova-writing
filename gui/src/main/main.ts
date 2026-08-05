@@ -1,5 +1,7 @@
 /** Launches the built secure Electron desktop application. */
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { app, dialog, Menu, safeStorage } from "electron";
 import {
   NodeApplicationConfigurationStore,
@@ -25,6 +27,22 @@ import {
 } from "./workspace/index.js";
 
 const paths = resolveDesktopMainPaths(import.meta.url);
+const buildMode = await readBuildMode(import.meta.url);
+const manualDebug = process.env.NOVEL_DEBUG;
+const manualDump = process.env.NOVEL_PROVIDER_REQUEST_DUMP;
+const debugLogLevel =
+  manualDebug === "verbose"
+    ? "verbose"
+    : manualDebug === "1" || manualDebug === "debug"
+      ? "debug"
+      : buildMode === "debug"
+        ? "verbose"
+        : undefined;
+const providerRequestDumpPath =
+  manualDump ??
+  (buildMode === "debug"
+    ? join(app.getPath("userData"), "debug", "provider-requests.jsonl")
+    : undefined);
 const configurationHome = new NodeConfigurationHomeResolver();
 const configurationStore = new NodeApplicationConfigurationStore({
   homeResolver: configurationHome,
@@ -66,6 +84,10 @@ const workspaceService = new DesktopWorkspaceService({
   applicationFactory: new DesktopNovelWorkspaceApplicationFactory({
     storageRoot: join(app.getPath("userData"), "novel-storage"),
     childLogPath: join(app.getPath("userData"), "runtime-child.log"),
+    ...(debugLogLevel === undefined ? {} : { debugLogLevel }),
+    ...(providerRequestDumpPath === undefined
+      ? {}
+      : { providerRequestDumpPath }),
   }),
 });
 const bootstrapTransport = new DesktopBootstrapApiTransport();
@@ -108,4 +130,17 @@ async function startDesktopApplication(): Promise<void> {
   await app.whenReady();
   await credentialMigration.migrateKnownCredentials();
   await application.start();
+}
+
+async function readBuildMode(entryModuleUrl: string): Promise<"debug" | "release"> {
+  try {
+    const raw = await readFile(
+      join(dirname(fileURLToPath(entryModuleUrl)), "..", "build-mode.json"),
+      "utf8",
+    );
+    const parsed = JSON.parse(raw) as { mode?: string };
+    return parsed.mode === "debug" ? "debug" : "release";
+  } catch {
+    return "release";
+  }
 }

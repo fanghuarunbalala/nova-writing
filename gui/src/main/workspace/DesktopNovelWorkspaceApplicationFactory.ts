@@ -28,6 +28,8 @@ export interface DesktopNovelWorkspaceApplicationFactoryOptions {
   readonly placement?: ConversationRuntimePlacement;
   readonly storageRoot?: string;
   readonly childLogPath?: string;
+  readonly debugLogLevel?: "debug" | "verbose";
+  readonly providerRequestDumpPath?: string;
   readonly agentManifestProvisioner?: AgentManifestProvisioner;
   readonly readinessPolicy?: EntityProfileReadinessPolicy;
   readonly logger?: Logger;
@@ -39,6 +41,8 @@ export class DesktopNovelWorkspaceApplicationFactory
   private readonly placementOverride?: ConversationRuntimePlacement;
   private readonly storageRoot?: string;
   private readonly childLogPath?: string;
+  private readonly debugLogLevel?: "debug" | "verbose";
+  private readonly providerRequestDumpPath?: string;
   private readonly agentManifestProvisioner: AgentManifestProvisioner;
   private readonly readinessPolicy: EntityProfileReadinessPolicy;
   private readonly logger: Logger;
@@ -47,6 +51,8 @@ export class DesktopNovelWorkspaceApplicationFactory
     this.placementOverride = options.placement;
     this.storageRoot = options.storageRoot;
     this.childLogPath = options.childLogPath;
+    this.debugLogLevel = options.debugLogLevel;
+    this.providerRequestDumpPath = options.providerRequestDumpPath;
     this.agentManifestProvisioner =
       options.agentManifestProvisioner ??
       new DefaultNovelConversationManifestProvisioner({
@@ -74,6 +80,12 @@ export class DesktopNovelWorkspaceApplicationFactory
           ...(this.childLogPath === undefined
             ? {}
             : { childLogPath: this.childLogPath }),
+          ...(this.debugLogLevel === undefined
+            ? {}
+            : { debugLogLevel: this.debugLogLevel }),
+          ...(this.providerRequestDumpPath === undefined
+            ? {}
+            : { providerRequestDumpPath: this.providerRequestDumpPath }),
           applicationProvider: async () => conversationApplication,
           logger,
         });

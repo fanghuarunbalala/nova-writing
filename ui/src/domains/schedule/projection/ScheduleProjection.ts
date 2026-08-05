@@ -50,7 +50,7 @@ export const ScheduleProjection = {
       { id: "characters", num: overview.counts.characterCount, label: "角色", note: "已建档" },
       { id: "locations", num: overview.counts.locationCount, label: "地点", note: "已建档" },
       { id: "chapters", num: overview.counts.chapterCount, label: "章节", note: "出版结构" },
-      { id: "blocks", num: overview.counts.manuscriptBlockCount, label: "正文块", note: "手稿" },
+      { id: "paragraphs", num: overview.counts.paragraphCount, label: "段落", note: "正文" },
     ];
     const progress = collectOutlineProgress(outline.tree);
     if (progress.total > 0) {

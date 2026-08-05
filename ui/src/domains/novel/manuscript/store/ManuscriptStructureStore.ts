@@ -1,10 +1,16 @@
 /**
  * ManuscriptStructureStore
  *
- * 手稿结构域 store：加载 publication 章节 + block 摘要。
- * 说明：core 结构快照只含 block 摘要（textLength/textDigest），
- * 正文文本由详情视图经 api.novel.manuscript.getBlock 懒加载（Phase 3 inspector）。
- * revision/isDraft/changeSetId core 暂无字段，保持 undefined。
+ * 手稿结构域 store：从 core 加载段落目录（NovelParagraphCatalogSnapshot），
+ * 映射成 UI 章节视图。
+ *
+ * 适配说明（core manuscript -> paragraph 重命名后）：
+ * - core client API 仅暴露 `api.novel.paragraphs.getCatalog(scope)`，返回扁平段落列表；
+ *   不再暴露 publication.chapters / blocks 两级结构。
+ * - UI 暂用单 chapter 容纳所有段落；Phase C 内容视图打磨阶段决定是否按 storyUnitId
+ *   分组、是否引入 publication chapter API（core §11 范围）。
+ * - 段落正文文本由 `api.novel.paragraphs.get(scope, paragraphId)` 懒加载（Phase 3 inspector）。
+ * - revision/isDraft/changeSetId core 暂无字段，保持 undefined。
  */
 import {
   canonicalNovelQueryScope,
@@ -16,10 +22,13 @@ import { ExternalStore } from "../../../../shared/state/ExternalStore.js";
 import type { NovelDomainError } from "../../outline/store/StoryOutlineTreeStore.js";
 
 export interface ManuscriptBlockData {
-  readonly blockId: string; // "§3-01-04"
-  readonly digest: string; // 短码 "8f3a70"
+  readonly blockId: string; // 段落 id（ParagraphId）
+  readonly digest: string; // 短码 "8f3a70"，取 textDigest 前 6 位
   readonly isDraft?: boolean;
-  readonly text: string;
+  readonly text: string; // 正文，结构快照中为空，由详情懒加载
+  readonly storyUnitId?: string;
+  readonly orderKey?: string;
+  readonly textLength?: number;
 }
 
 export interface ManuscriptChapter {
@@ -67,16 +76,18 @@ export class ManuscriptStructureStore extends ExternalStore<ManuscriptStructureS
       workspaceId: capturedId,
     });
     try {
-      const structure = await this.api.novel.manuscript.getStructure(canonicalNovelQueryScope);
+      const catalog = await this.api.novel.paragraphs.getCatalog(canonicalNovelQueryScope);
       if (generation !== this.generation) return;
-      const chapters = captureChapters(structure);
+      const chapters = captureChapters(catalog?.paragraphs ?? []);
       this.setSnapshot({
         phase: "ready",
         workspaceId: capturedId,
         chapters,
         error: undefined,
       });
-      this.logger.info("manuscript_structure.load_completed", { chapterCount: chapters.length });
+      this.logger.info("manuscript_structure.load_completed", {
+        paragraphCount: chapters[0]?.blocks.length ?? 0,
+      });
     } catch {
       if (generation !== this.generation) return;
       this.setSnapshot({
@@ -100,37 +111,41 @@ export class ManuscriptStructureStore extends ExternalStore<ManuscriptStructureS
   }
 }
 
+/**
+ * 把扁平段落列表映射成单 chapter 视图（"全部段落"）。
+ * Phase C 打磨阶段决定是否按 storyUnitId 分组或引入 publication chapter 结构。
+ */
 function captureChapters(
-  structure: {
-    readonly publication?: {
-      readonly chapters: readonly { readonly id: string; readonly title: string }[];
-    };
-    readonly blocks: readonly {
-      readonly id: string;
-      readonly chapterId: string;
-      readonly textDigest: string;
-    }[];
-  },
+  paragraphs: readonly {
+    readonly id: string;
+    readonly storyUnitId?: string;
+    readonly orderKey?: string;
+    readonly textLength?: number;
+    readonly textDigest: string;
+  }[],
 ): readonly ManuscriptChapter[] {
-  const chapters = structure.publication?.chapters ?? [];
-  return Object.freeze(
-    chapters.map((chapter) => {
-      const blocks = structure.blocks
-        .filter((block) => block.chapterId === chapter.id)
-        .map((block) =>
-          Object.freeze({
-            blockId: block.id,
-            digest: block.textDigest.slice(0, 6),
-            text: "",
-          }),
-        );
-      return Object.freeze({
-        chapterId: chapter.id,
-        title: chapter.title,
-        blocks: Object.freeze(blocks),
-      });
+  if (paragraphs.length === 0) return Object.freeze([]);
+  const blocks = paragraphs.map((paragraph) =>
+    Object.freeze({
+      blockId: paragraph.id,
+      digest: paragraph.textDigest.slice(0, 6),
+      text: "",
+      ...(paragraph.storyUnitId !== undefined
+        ? { storyUnitId: paragraph.storyUnitId }
+        : {}),
+      ...(paragraph.orderKey !== undefined ? { orderKey: paragraph.orderKey } : {}),
+      ...(paragraph.textLength !== undefined
+        ? { textLength: paragraph.textLength }
+        : {}),
     }),
   );
+  return Object.freeze([
+    Object.freeze({
+      chapterId: "__all_paragraphs__",
+      title: "全部段落",
+      blocks: Object.freeze(blocks),
+    }),
+  ]);
 }
 
 function requireNonBlank(value: string, label: string): string {

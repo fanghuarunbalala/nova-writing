@@ -1,8 +1,8 @@
 /**
  * useManuscriptBlock
  *
- * 从结构快照中按 blockId 取块。正文全文的懒加载（api.novel.manuscript.getBlock）
- * 由 Phase 3 详情 inspector 接入；此处只读快照摘要。
+ * 从结构快照中按 blockId 取块（blockId 实际是 ParagraphId）。正文全文的懒加载
+ * （api.novel.paragraphs.get）由 Phase 3 详情 inspector 接入；此处只读快照摘要。
  */
 import { useMemo } from "react";
 import { useExternalStore } from "../../../../shared/state/useExternalStore.js";

@@ -1,5 +1,9 @@
 /**
  * NovelOverviewStore 契约测试。
+ *
+ * 适配说明：core manuscript -> paragraph 重命名后，counts 字段从
+ * manuscriptBlockCount 改为 paragraphCount，roots 从 manuscriptAvailable 改为
+ * paragraphsAvailable。测试 fixture 同步更新。
  */
 import { describe, expect, it, vi } from "vitest";
 import { canonicalNovelQueryScope, type NovelApiClient, type NovelOverviewSnapshot } from "@novel/core";
@@ -18,9 +22,9 @@ const overview: NovelOverviewSnapshot = {
     locationCount: 2,
     volumeCount: 1,
     chapterCount: 5,
-    manuscriptBlockCount: 9,
+    paragraphCount: 9,
   },
-  roots: { outlineAvailable: true, publicationAvailable: true, manuscriptAvailable: true },
+  roots: { outlineAvailable: true, publicationAvailable: true, paragraphsAvailable: true },
 };
 
 function buildApi(overrides: Partial<NovelApiClient["novel"]["overview"]> = {}): NovelApiClient {
@@ -34,7 +38,7 @@ function buildApi(overrides: Partial<NovelApiClient["novel"]["overview"]> = {}):
       outline: {} as never,
       characters: {} as never,
       locations: {} as never,
-      manuscript: {} as never,
+      paragraphs: {} as never,
     },
   } as unknown as NovelApiClient;
 }
@@ -58,8 +62,9 @@ describe("NovelOverviewStore", () => {
       storyUnitCount: 12,
       characterCount: 3,
       locationCount: 2,
+      volumeCount: 1,
       chapterCount: 5,
-      manuscriptBlockCount: 9,
+      paragraphCount: 9,
     });
   });
 

@@ -27,6 +27,7 @@ import {
 } from "./ElectronPreloadBridgeResolver.js";
 import { ElectronApiTransport } from "./transport/index.js";
 import { ElectronApplicationConfigurationClient } from "./config/index.js";
+import { createDesktopUiExtensions } from "./extensions/index.js";
 
 export interface DesktopRendererCompositionOptions {
   readonly window: DesktopRendererWindowPort;
@@ -111,6 +112,8 @@ export function mountDesktopRenderer(
     );
   }
   const root = createRoot(rootElement);
+  // 桌面端默认注入 createDesktopUiExtensions()；调用方可通过 appProps.extensions 覆盖
+  const desktopExtensions = options.appProps?.extensions ?? createDesktopUiExtensions();
   root.render(
     <StrictMode>
       <DesktopNovelApp
@@ -125,6 +128,7 @@ export function mountDesktopRenderer(
         workspaceController={
           options.appProps?.workspaceController ?? composition.workspaceController
         }
+        extensions={desktopExtensions}
       />
     </StrictMode>,
   );

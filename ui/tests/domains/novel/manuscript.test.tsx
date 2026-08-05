@@ -1,32 +1,46 @@
 /**
  * manuscript 子域测试。
+ *
+ * 适配说明：core manuscript -> paragraph 重命名后，store 改为读取
+ * api.novel.paragraphs.getCatalog，UI 仍按 chapter -> blocks 视图渲染（单 chapter
+ * "全部段落" 容纳所有段落）。测试用 paragraph catalog fixture 替代旧 structure。
  */
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { NovelApiClient, NovelManuscriptStructureSnapshot } from "@novel/core";
+import type {
+  NovelApiClient,
+  NovelParagraphCatalogSnapshot,
+} from "@novel/core";
 import { ManuscriptStructureStore } from "../../../src/domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import { ManuscriptChapterList } from "../../../src/domains/novel/manuscript/components/ManuscriptChapterList.js";
 import { ManuscriptBlock } from "../../../src/domains/novel/manuscript/components/ManuscriptBlock.js";
 import { ManuscriptDraftTag } from "../../../src/domains/novel/manuscript/components/ManuscriptDraftTag.js";
 
-const structure: NovelManuscriptStructureSnapshot = {
+const catalog: NovelParagraphCatalogSnapshot = {
   schemaVersion: 1,
   scope: { kind: "canonical" },
-  publication: {
-    publication: { id: "pub_1", novelId: "novel_1" },
-    volumes: [],
-    chapters: [
-      { id: "chapter-301", publicationId: "pub_1", volumeId: "v1", orderKey: "0001", title: "Chapter 7" },
-    ],
-  },
-  manuscript: { id: "ms_1", novelId: "novel_1", publicationId: "pub_1" },
-  blocks: [
-    { id: "§3-01-04", chapterId: "chapter-301", orderKey: "0001", textLength: 120, textDigest: "8f3a70ff" },
+  paragraphs: [
+    {
+      id: "§3-01-04",
+      storyUnitId: "su-1",
+      orderKey: "0001",
+      textLength: 120,
+      textDigest: "8f3a70ff",
+    },
+    {
+      id: "§3-01-05",
+      storyUnitId: "su-1",
+      orderKey: "0002",
+      textLength: 80,
+      textDigest: "9e4b81ee",
+    },
   ],
 };
 
-function buildApi(overrides: Partial<NovelApiClient["novel"]["manuscript"]> = {}): NovelApiClient {
+function buildApi(
+  overrides: Partial<NovelApiClient["novel"]["paragraphs"]> = {},
+): NovelApiClient {
   return {
     conversations: {} as never,
     novel: {
@@ -34,9 +48,9 @@ function buildApi(overrides: Partial<NovelApiClient["novel"]["manuscript"]> = {}
       outline: {} as never,
       characters: {} as never,
       locations: {} as never,
-      manuscript: {
-        getStructure: vi.fn(async () => structure),
-        getBlock: vi.fn(),
+      paragraphs: {
+        getCatalog: vi.fn(async () => catalog),
+        get: vi.fn(),
         ...overrides,
       },
     },
@@ -44,24 +58,25 @@ function buildApi(overrides: Partial<NovelApiClient["novel"]["manuscript"]> = {}
 }
 
 describe("ManuscriptStructureStore", () => {
-  it("maps chapters and block summaries", async () => {
+  it("maps paragraphs into a single chapter view", async () => {
     const api = buildApi();
     const store = new ManuscriptStructureStore({ api });
     await store.loadWorkspace("w1");
     const snapshot = store.getSnapshot();
     expect(snapshot.phase).toBe("ready");
     expect(snapshot.chapters).toHaveLength(1);
-    expect(snapshot.chapters[0].title).toBe("Chapter 7");
+    expect(snapshot.chapters[0].title).toBe("全部段落");
     expect(snapshot.chapters[0].blocks[0]).toMatchObject({
       blockId: "§3-01-04",
       digest: "8f3a70",
       text: "",
     });
+    expect(snapshot.chapters[0].blocks).toHaveLength(2);
   });
 
   it("records a retryable error on failure", async () => {
     const api = buildApi({
-      getStructure: vi.fn(async () => {
+      getCatalog: vi.fn(async () => {
         throw new Error("down");
       }),
     });

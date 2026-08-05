@@ -157,7 +157,7 @@ class DesktopNovelWorkspaceApplication implements DesktopWorkspaceApiApplication
         locations: novelHost.application.locationQueries,
         outline: novelHost.application.outlineQueries,
         publication: novelHost.application.publicationQueries,
-        manuscript: novelHost.application.manuscriptQueries,
+        paragraphs: novelHost.application.paragraphQueries,
         logger,
       }),
     });

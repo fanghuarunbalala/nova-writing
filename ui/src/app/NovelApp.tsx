@@ -142,6 +142,7 @@ function NovelAppReady({
             <SettingsDialog
               open={settingsOpen}
               store={settingsStore}
+              sections={extensions?.settingsSections}
               configuration={configurationClient}
               onDismiss={() => setSettingsOpen(false)}
             />

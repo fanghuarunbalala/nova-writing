@@ -29,8 +29,9 @@ export interface NovelOverviewCounts {
   readonly storyUnitCount: number;
   readonly characterCount: number;
   readonly locationCount: number;
+  readonly volumeCount: number;
   readonly chapterCount: number;
-  readonly manuscriptBlockCount: number;
+  readonly paragraphCount: number;
 }
 
 export interface NovelOverviewSnapshot {
@@ -51,8 +52,9 @@ const EMPTY_SNAPSHOT: NovelOverviewSnapshot = Object.freeze({
     storyUnitCount: 0,
     characterCount: 0,
     locationCount: 0,
+    volumeCount: 0,
     chapterCount: 0,
-    manuscriptBlockCount: 0,
+    paragraphCount: 0,
   }),
   error: undefined,
 });
@@ -90,8 +92,9 @@ export class NovelOverviewStore extends ExternalStore<NovelOverviewSnapshot> {
           storyUnitCount: overview.counts.storyUnitCount,
           characterCount: overview.counts.characterCount,
           locationCount: overview.counts.locationCount,
+          volumeCount: overview.counts.volumeCount,
           chapterCount: overview.counts.chapterCount,
-          manuscriptBlockCount: overview.counts.manuscriptBlockCount,
+          paragraphCount: overview.counts.paragraphCount,
         },
         error: undefined,
       };

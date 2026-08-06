@@ -13,7 +13,7 @@ import {
   CcbReferenceSystemPromptSection,
   CcbReferenceUsingYourToolsPromptSection,
 } from "./ccb/CcbReferenceMainPromptSections.js";
-import { NovelIdentityPromptSection } from "./novel/NovelPromptSections.js";
+import { NovelIdentityPromptSection } from "./novel/NovelBasePromptSections.js";
 
 export class CoreRuntimeProtocolPromptSection extends PromptSection {
   constructor() {

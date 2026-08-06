@@ -1,14 +1,12 @@
 /**
- * Novel（中文网络小说创作）专用 Prompt Section。
- * Novel-domain prompt sections for Chinese web novel creation.
+ * Novel 基础与运行层 Prompt Section（identity / system / communication）。
+ * Novel base-and-runtime prompt sections (identity / system / communication).
  *
- * 结构对齐 CCB 参考段（标题 + 分条、逐段 render），内容为生产用中文文本。
- * Structurally aligned with the CCB reference sections (heading + bullets,
- * per-section render), with production Chinese content.
+ * 结构对齐 CCB 参考段，内容为生产用中文文本。
+ * Structurally aligned with the CCB reference sections, with production Chinese content.
  *
  * 约定 / Conventions：
- * - 只包含 stable base section：动态状态（当前 revision / draft 摘要 / todos /
- *   plan 约束）走 overlay 与 system.reminder 消息层，不写成 prompt 段。
+ * - 只包含 stable base section：动态状态走 overlay 与 system.reminder 消息层。
  * - 类注释中英双语（AGENTS.md 规则），渲染正文以中文为主。
  */
 import { PromptSection } from "../../section/PromptSection.js";

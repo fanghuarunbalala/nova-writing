@@ -170,17 +170,39 @@ toast）。core 零改动；`smoke:novel-approval` 通过；ui 200 测试全绿�
 
 范围：A1–A6、T7 命令部分。
 
-- 后端：NovelApiClient 增加 approval 面：
-  - 查询：`listPending(workspace/conversation)`、`getDetail(approvalRequestId)`（变更集
-    ops + base/target + draftSessionId + digest + evidence）。
-  - 命令：`approve(approvalRequestId)`、`requestChange(approvalRequestId, reason)`，
-    复用 NovelApprovalService / NovelChangeSetApproval / ConversationNovelBinding
-    的命令通道；批准通过 novel.approval.requested → resolve → commit 事件流落账。
-- 前端：ApprovalStore（shell 域 store）+ hook；InspectorHost 双 tab + 待审列表 +
-  Diff 详情（分组/old-new/ins-del/evidence）+ 操作区（批准并提交/请求修改/
-  提交修改请求/note-box/resolved-banner）；ProposalCardRenderer 补操作；顶栏 badge
-  接真实待审数；footer meta "r042 · 草稿 N 待审"。
-- 验证：core approval API smoke + ui 单测 + electron 审批流 e2e 冒烟。
+**重要对齐（2026-08-06）**：本步设计必须与已确认的
+`docs/novel-write-approval-plan.md`（决策 1A/2A/3A/4A）一致——审批是**写前审批**
+（写工具 permission `ask` → ToolApprovalRequest 带操作 diff 摘要 → 批准后单事务
+落库），**删除** draft/commit/rebase 与 novel approval 服务。因此：
+- **不用** novel.approval.requested 桥（当前未接线，且会被删除）；数据源用
+  对话投影已有的 `ToolApprovalProjection`（title/description/status/actorId/
+  requestedAt/resolvedAt/argumentDigest/toolName）。
+- 决策走已有 `ApprovalDecisionInputEvent`（command.tool.approval.decision），
+  UI 通过 conversation.input.enqueue 发送，core 无需新命令 API。
+- diff 详情 = 写工具 `describeOperation` 挂到 approval summary 的
+  title/description（依赖另一个轨道 P4 落地）；面板展示操作摘要 + 工具名 +
+  argumentDigest + 状态时间。
+
+**core 侧**：
+- 前置依赖另一个轨道 P1–P6（写工具真实执行 + 摘要）；本步 core 改动预计很小：
+  确认 ToolApprovalProjection 字段足够；可选扩展 ApprovalDecisionPayload 增加
+  reason 字段（原型"请求修改+说明"，当前只有 approved/rejected）。
+
+**前端改动**：
+1. `ApprovalStore`（从 binding projection.approvals 派生 pending/resolved 列表）。
+2. InspectorHost 双 tab（审批/档案）：审批 tab = 待审列表（count-pill）+ 详情
+   （identity/toolName/摘要/状态/时间）+ 操作（批准 / 拒绝=请求修改 →
+   enqueue ApprovalDecisionInputEvent）；resolved 显示 resolved-banner。
+3. 卡片投影切换：Step 2 的 novel.approval.requested projector 改为
+   system.tool.approval.requested → 工具审批卡（title/summary/approvalRequestId），
+   卡上"批准/拒绝"直接决策；ProposalCardRenderer 复用或新建 ToolApprovalCardRenderer。
+4. 顶栏审批 badge 接真实 pending 数；footer meta "r042 · N 待审"。
+5. Timeline 里 system "等待审批" 行升级为可点击打开面板。
+
+**待确认**：① 请求修改 reason 是否本期扩 payload（否→先二元决策）；② Step 2 的
+novel.approval.requested 投影是否删除（新架构下不再产生该事件）。
+
+验证：core smoke（审批决策输入→投影 resolved）+ ui 单测 + electron 审批流 e2e。
 
 ### Step 5：会话管理能力（后端，需确认 D2）
 

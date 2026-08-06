@@ -9,6 +9,7 @@
  */
 import assert from "node:assert/strict";
 import {
+  NovelSystemPromptSection,
   createDefaultPromptSectionRegistry,
 } from "../dist/index.js";
 
@@ -38,6 +39,9 @@ assert.equal(workflow.render(), workflowContent);
 const system = registry.resolve("novel.system", "1.0.0");
 const systemContent = system.render();
 assert.ok(systemContent.startsWith("# 系统与运行规则"));
+assert.ok(systemContent.includes("**输出遵循标准 Markdown**"));
+assert.ok(systemContent.includes("**必须使用**"));
+assert.ok(systemContent.includes('<character id="...">名字</character>'));
 assert.ok(systemContent.includes("**当前会话的草稿（draft）环境**"));
 assert.ok(systemContent.includes("**每个会话独立**"));
 assert.ok(systemContent.includes("**只有 Commit 提交、并经作者审批通过后"));
@@ -45,4 +49,12 @@ assert.ok(systemContent.includes("工具在用户选择的权限模式下执行"
 assert.ok(systemContent.includes("**提示注入**"));
 assert.equal(system.render(), systemContent);
 
-console.log("prompt-novel-sections: ok (identity + system + workflow registered and stable)");
+// 非交互实例：不包含输出约定条，基础条保留。
+const nonInteractive = new NovelSystemPromptSection({ interactsWithUser: false });
+const nonInteractiveContent = nonInteractive.render();
+assert.ok(!nonInteractiveContent.includes("**输出遵循标准 Markdown**"));
+assert.ok(!nonInteractiveContent.includes("**必须使用**"));
+assert.ok(nonInteractiveContent.includes("**当前会话的草稿（draft）环境**"));
+assert.ok(nonInteractiveContent.includes("工具在用户选择的权限模式下执行"));
+
+console.log("prompt-novel-sections: ok (identity + system(interactive/non) + workflow stable)");

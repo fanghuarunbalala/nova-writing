@@ -186,7 +186,7 @@ export function createDefaultPromptSectionRegistry(): PromptSectionRegistry {
     .register(new CcbReferenceUsingYourToolsPromptSection())
     .register(new CcbReferenceCommunicationStylePromptSection())
     .register(new NovelIdentityPromptSection())
-    .register(new NovelSystemPromptSection())
+    .register(new NovelSystemPromptSection({ interactsWithUser: true }))
     .register(new NovelWorkflowPromptSection())
     .freeze();
 }

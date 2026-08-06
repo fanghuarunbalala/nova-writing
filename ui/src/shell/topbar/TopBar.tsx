@@ -2,13 +2,13 @@
  * TopBar
  *
  * 顶栏（对齐原型）：侧栏切换 + wordmark + workspace 名/副标 + 右侧
- * 计划/审批/Workspace/设置动作 + 修订号。TopBarMenuSlot 渲染 extensions.titleBar
- * 注入的桌面专属内容（spec 4.2）。
+ * Workspace/设置动作 + 修订号。计划/审批入口已移除：计划与内容视图大纲
+ * 重叠（大纲进度 + 待办均在侧栏有入口）；审批域延后，占位按钮无意义。
+ * TopBarMenuSlot 渲染 extensions.titleBar 注入的桌面专属内容（spec 4.2）。
  */
-import { CalendarClock, FolderOpen, PanelLeft, Settings } from "lucide-react";
+import { FolderOpen, PanelLeft, Settings } from "lucide-react";
 import { Icon } from "../../shared/primitives/Icon.js";
 import { IconButton } from "../../shared/primitives/IconButton.js";
-import type { MainViewState } from "../../shared/routing/MainViewRouter.js";
 import type { NovelUiExtensions } from "../../extensions/NovelUiExtensions.js";
 import { TopBarAction } from "./TopBarAction.js";
 import { TopBarMenuSlot } from "./TopBarMenuSlot.js";
@@ -16,8 +16,6 @@ import { TopBarRevisionMeta } from "./TopBarRevisionMeta.js";
 import styles from "./TopBar.module.css";
 
 export interface TopBarProps {
-  readonly mainViewState: MainViewState;
-  readonly onMainViewChange: (state: MainViewState) => void;
   readonly workspaceName?: string;
   readonly workspaceSub?: string;
   readonly revision?: string;
@@ -25,14 +23,11 @@ export interface TopBarProps {
   readonly onToggleSidebar: () => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenSettings: () => void;
-  readonly approvalCount?: number;
   /** 第一方扩展点；titleBar 渲染到 TopBarMenuSlot（spec 4.2） */
   readonly extensions?: NovelUiExtensions;
 }
 
 export function TopBar({
-  mainViewState,
-  onMainViewChange,
   workspaceName,
   workspaceSub,
   revision,
@@ -40,7 +35,6 @@ export function TopBar({
   onToggleSidebar,
   onOpenWorkspace,
   onOpenSettings,
-  approvalCount = 0,
   extensions,
 }: TopBarProps) {
   const TitleBar = extensions?.titleBar;
@@ -62,18 +56,6 @@ export function TopBar({
         </TopBarMenuSlot>
       ) : null}
       <span className={styles.spacer} />
-      <TopBarAction
-        label="计划"
-        icon={<Icon icon={CalendarClock} size="sm" />}
-        active={mainViewState === "schedule"}
-        onClick={() => onMainViewChange("schedule")}
-      />
-      <TopBarAction
-        label="审批"
-        badge={approvalCount}
-        title="审批（待定）"
-        onClick={() => undefined}
-      />
       <TopBarRevisionMeta revision={revision} />
       <span className={styles.spacer} />
       <TopBarAction label="Workspace" icon={<Icon icon={FolderOpen} size="sm" />} onClick={onOpenWorkspace} />

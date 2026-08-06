@@ -14,7 +14,6 @@ import { useExternalStore } from "../shared/state/useExternalStore.js";
 import type { ToastStore } from "../shared/state/ToastStore.js";
 import type { MainViewRouter } from "../shared/routing/MainViewRouter.js";
 import type { InspectorRouter } from "../shared/routing/InspectorRouter.js";
-import { useMainView } from "../shared/routing/hooks.js";
 import type { ConversationCatalogStore } from "../domains/conversation/store/ConversationCatalogStore.js";
 import type { CharacterStore } from "../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../domains/novel/location/store/LocationStore.js";
@@ -103,7 +102,6 @@ export function ApplicationShell({
   useEffect(() => () => workspaceAdapter.dispose(), [workspaceAdapter]);
 
   const workspace = useExternalStore(workspaceAdapter);
-  const mainView = useMainView(mainViewRouter);
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
   const workspaceId = workspace.current?.id;
@@ -188,8 +186,6 @@ export function ApplicationShell({
   return (
     <div className={styles.shell}>
       <TopBar
-        mainViewState={mainView.state}
-        onMainViewChange={(state) => mainViewRouter.transition(state)}
         workspaceName={workspace.current?.label}
         sidebarMode={sidebarMode}
         onToggleSidebar={() =>

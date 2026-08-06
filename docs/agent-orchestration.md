@@ -5,7 +5,8 @@
 This document records the accepted design direction for Agent orchestration.
 The ephemeral Subagent Tool track completed Step S0 through Step S6 on August
 3, 2026. Novel Task N10 through Task N11 is now active. Persistent Agent, Agent
-Team, Team communication, `TaskOutput`, and `Sleep` remain future work.
+Team, and Team communication remain future work. Sleep and autonomous wake
+are explicitly not implemented.
 Completed Runtime Task 6B and Task 7 checkpoints remain closed.
 
 Runtime hardening R8 now also requires every ephemeral Subagent Child
@@ -13,8 +14,7 @@ Conversation created through the Catalog/Host adapter to use an independently
 assembled and persisted Agent Manifest. The adapter resolves the exact
 Definition version and stores the resulting `manifestId + manifestDigest` in
 the Child Conversation binding before Host activation. This does not resume
-Persistent Agent Team work or introduce Team communication, `TaskOutput`, or
-`Sleep`.
+Persistent Agent Team work or introduce Team communication.
 
 The central decisions are:
 
@@ -28,8 +28,9 @@ The central decisions are:
 5. all Agent creation, task assignment, cancellation, status query, and message
    delivery operations are non-blocking with respect to Agent execution;
 6. Subagents never implicitly inherit or fork parent Conversation context;
-7. required Subagent context is passed explicitly through the Task Prompt and
-   bounded Artifact references;
+7. required Subagent context is passed explicitly through the Task Prompt;
+   domain data is shared through query services rather than reference
+   parameters;
 8. a Subagent's final canonical Assistant Message is its result;
 9. a persistent Team member communicates results and messages through explicit
    Tools rather than exposing its last Assistant Message;
@@ -275,9 +276,10 @@ Ephemeral Agent Manifest
 It:
 
 - receives one bounded Task Prompt;
-- may receive bounded Artifact references owned or delegated by the parent;
 - receives no implicit Parent Messages, System Prompt, Checkpoint, Nudge, Tool
   trace, or Conversation state;
+- discovers domain data (canonical, Draft, Artifact) through shared query
+  services with its own read-only domain query Tools;
 - runs asynchronously in its own Conversation;
 - exposes status and result through an explicit query Tool;
 - treats its final canonical Assistant Message as its result;
@@ -285,73 +287,123 @@ It:
 - may retain its Journal for replay even when logically disposable.
 
 The current Task 6B `SubagentRequest.objective` remains a useful internal field.
-The model-facing `Task.prompt` is captured into that field and must also be
+The model-facing `Agent.prompt` is captured into that field and must also be
 persisted as a child Task InputEvent before activation is accepted.
 
-## 6. Non-Blocking Subagent Tools
+## 6. Execution and Work-Item Tools
 
-### 6.1 `Task`
+### 6.1 `Agent`
 
-`Task` creates one ephemeral child Agent. It waits only for durable creation,
-Task Input acceptance, and activation acceptance. It does not wait for Agent
-execution.
+`Agent` creates one ephemeral child Agent. It is always non-blocking and
+defaults to background execution: the tool waits only for durable creation,
+Task Input acceptance, and activation acceptance, never for Agent execution.
 
 ```ts
-interface SubagentTaskArguments {
+interface AgentArguments {
   readonly agentType: string;
   readonly prompt: string;
-  readonly artifactIds?: readonly string[];
 }
 ```
 
-The Prompt must be self-contained. Large or reusable source material is passed
-through validated Artifact identities rather than implicit context inheritance.
+The Prompt must be self-contained. Domain data is shared through existing
+query services; the child discovers it with its own Tools. The child never
+implicitly inherits Parent Messages, System Prompt, Checkpoint, Nudge, Tool
+trace, or Conversation state.
 
 ```ts
-interface SubagentTaskAcceptance {
-  readonly taskId: string;
-  readonly childConversationId: string;
+interface AgentAcceptance {
+  readonly runId: string;
+  readonly agentId: string;
   readonly status: "queued" | "running";
   readonly acceptedAt: string;
 }
 ```
 
-For the first ephemeral implementation, `taskId` and the existing `subagentId`
-are the same stable identity. The target definition version, Tool policy,
-parent identities, timestamp, process placement, and child identity are trusted
+For the first implementation, `runId` and the existing `subagentId` are the
+same stable identity. The target definition version, Tool policy, parent
+identities, timestamp, process placement, and child identity are trusted
 Runtime values rather than model arguments.
 
-### 6.2 `TaskGet`
+### 6.2 `TaskOutput`
 
-`TaskGet` is a process-free, read-only status and result query:
+`TaskOutput` is a process-free status and result query that may optionally
+wait for any one target run to reach terminal state:
 
 ```ts
-interface SubagentTaskSnapshot {
+interface TaskOutputArguments {
+  readonly runIds: readonly string[];
+  readonly block?: boolean;   // default false
+  readonly timeout?: number;  // default 30000, max 600000; only with block
+}
+
+type TaskOutputResult =
+  | { retrieval: "snapshot"; runs: readonly RunSnapshot[] }                        // block:false
+  | { retrieval: "success"; run: RunSnapshot; otherRuns: readonly RunSnapshot[] }  // first terminal
+  | { retrieval: "timeout"; runs: readonly RunSnapshot[] };
+```
+
+Semantics:
+
+- `block:false` returns the current snapshot of every target run;
+- `block:true` returns as soon as any one target run reaches a terminal state
+  (`completed`, `failed`, `cancelled`, or `orphaned`), together with the other
+  runs' current snapshots;
+- timeout returns `retrieval: "timeout"` plus all current snapshots; the
+  caller may block again.
+
+The query reads durable binding and Run state plus the child Message
+projection. It never calls `ConversationHost.ensureActive()` and never sends
+an InputEvent. Terminal OutputEvents remain published for observability and
+replay, but are never projected as a parent user message and never start a new
+parent turn. The main Agent manages background runs within its own turn.
+
+### 6.3 `TaskStop`
+
+`TaskStop` validates ownership, persists cancellation intent, and routes Stop
+to the child Conversation. It returns `cancellation_requested`,
+`already_terminal`, or `not_found` without waiting for Runtime termination.
+`TaskCancel` remains a transition alias.
+
+### 6.4 Work-Item Tools (`TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate`)
+
+Work items are planning-layer records owned by a task list. The list is
+resolved from the caller's context:
+
+- Main Agent: its own Conversation list;
+- Team leader and members: the shared team list (Team = TaskList);
+- Ephemeral Subagents: no Work-Item Tools; they track their own work with
+  `TodoWrite` in their own Conversation.
+
+```ts
+interface TaskCreateArguments {
+  readonly subject: string;
+  readonly description: string;
+  readonly activeForm?: string;
+  readonly metadata?: Record<string, unknown>;
+}
+interface TaskListArguments {
+  readonly status?: "pending" | "in_progress" | "completed";
+  readonly owner?: string;
+}
+interface TaskGetArguments {
   readonly taskId: string;
-  readonly status:
-    | "queued"
-    | "running"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "orphaned";
-  readonly runtimePresence: "active" | "dormant" | "absent";
-  readonly result?: {
-    readonly content: string;
-    readonly artifactReferences: readonly ArtifactReference[];
-  };
-  readonly errorCode?: string;
+}
+interface TaskUpdateArguments {
+  readonly taskId: string;
+  readonly subject?: string;
+  readonly description?: string;
+  readonly status?: "pending" | "in_progress" | "completed" | "deleted";
+  readonly owner?: string;
+  readonly blocks?: readonly string[];
+  readonly addBlockedBy?: readonly string[];
+  readonly metadata?: Record<string, unknown>;
 }
 ```
 
-The query reads durable binding and Run state plus the child Message projection.
-It never calls `ConversationHost.ensureActive()` and never sends an InputEvent.
-
-### 6.3 `TaskCancel`
-
-`TaskCancel` validates ownership, persists cancellation intent, and routes Stop
-to the child Conversation. It returns `cancellation_requested`,
-`already_terminal`, or `not_found` without waiting for Runtime termination.
+Work-item state is Runtime metadata: it never enters novel.sqlite,
+draft.sqlite, a ChangeSet, or Approval. `TodoWrite` remains the lightweight,
+per-Conversation planning tool and is the only planning tool available to
+Subagents and non-interactive sessions.
 
 ### 7.1 Query and Completion Boundaries
 
@@ -374,16 +426,20 @@ activates a Runtime or enqueues an InputEvent.
 
 ### 7.2 Subagent Tool Registry
 
-`createSubagentTaskToolRegistry` builds an immutable Registry containing exactly
-the current ephemeral Subagent Tools: `Task`, `TaskGet`, and `TaskCancel`.
-`Task`'s description and TypeBox schema are generated from the creator's
-validated allowed-Agent policy, with Agent definitions sorted deterministically.
-The handlers obtain definition version and child Tool policy from the trusted
-catalog; the model supplies only `agentType`, `prompt`, and optional Artifact
-identities.
+`createAgentExecutionToolRegistry` builds an immutable Registry containing
+exactly the execution Tools: `Agent`, `TaskOutput`, and `TaskStop`.
+Work-Item Tools (`TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate`) are
+registered through the role-bound Registry View for Main Agent and Team
+member contexts only; Ephemeral Subagent Views receive `TodoWrite` instead.
+`Agent`'s description and TypeBox schema are generated from the creator's
+validated allowed-Agent policy, with Agent definitions sorted
+deterministically. The handlers obtain definition version and child Tool
+policy from the trusted catalog; the model supplies only `agentType` and
+`prompt`.
 
 Each concrete Tool keeps its TypeBox schema, descriptor, and handler together
-in `core/src/tools/subagent/Task.ts`, `TaskGet.ts`, or `TaskCancel.ts`.
+in `core/src/tools/subagent/Agent.ts`, `TaskOutput.ts`, or `TaskStop.ts`;
+Work-Item Tools live under `core/src/tools/task/`.
 Provider-neutral Tool contracts, immutable Registry/View, and Group composition
 live under `core/src/tooling/`. Permission, Approval routing, sandbox, timeout,
 cancellation, retry, and trace execution live under
@@ -397,7 +453,7 @@ does not import concrete Tools. The application composition root selects and
 registers concrete Tools without coupling the generic Dispatcher to Subagent
 behavior.
 
-`TaskCancel` depends on a narrow cancellation-intent Port. That Port persists
+`TaskStop` depends on a narrow cancellation-intent Port. That Port persists
 the intent and routes child Stop without waiting for process termination. All
 three Tools return bounded structured `details` and short text content; Tool
 execution policy, permission, approval, sandbox, timeout, and trace behavior
@@ -465,7 +521,7 @@ Completion rules:
 - inactive-parent recovery: existing orphaned result.
 
 Parent lifecycle Events retain bounded summary and Artifact metadata. Full
-result content remains child-owned and is read through `TaskGet`.
+result content remains child-owned and is read through `TaskOutput`.
 
 ## 8. Agent Team Architecture
 
@@ -586,8 +642,11 @@ The first Orchestrator Tool set is conceptually:
 - `AgentStatus`: read durable member and active Task state without activation;
 - `AgentMessages`: read a cursor-based Team Inbox projection;
 - `AgentDisable`: reject new Tasks without deleting history;
-- the ephemeral `Task`, `TaskGet`, and `TaskCancel` Tools when the
-  Orchestrator definition permits Subagents.
+- Work-Item Tools `TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate` against
+  the shared team list;
+- the execution Tools `Agent`, `TaskOutput`, and `TaskStop` when the
+  Orchestrator definition permits Subagents;
+- `TodoWrite` as the per-Conversation planning fallback.
 
 `AgentTask` waits only for Task metadata and target InputEvent persistence:
 
@@ -595,7 +654,6 @@ The first Orchestrator Tool set is conceptually:
 interface AgentTaskArguments {
   readonly agentId: string;
   readonly prompt: string;
-  readonly artifactIds?: readonly string[];
 }
 ```
 
@@ -609,22 +667,27 @@ discovers current members through `AgentList` and durable Team state.
 
 Every persistent Team member receives bound communication Tools equivalent to:
 
-- `TaskOutput`: report progress, blocked state, completion, or failure for the
-  currently active Team Task;
+- `AgentReport`: report progress, blocked state, completion, or failure for
+  the currently active Team Task (renamed from `TaskOutput` to avoid
+  collision with the main-thread execution query Tool);
 - `OrchestratorMessage`: send a question or normal message;
 - `OrchestratorMessages`: query messages addressed to the member;
-- the ephemeral `Task`, `TaskGet`, and `TaskCancel` Tools when the member
-  definition permits Subagents.
+- Work-Item Tools `TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate` against
+  the shared team list;
+- `TodoWrite` for per-Conversation planning;
+- `Agent` when the member definition permits Subagents.
 
-The first implementation binds `TaskOutput` to the single active Task. The
+`TaskOutput` and `TaskStop` are main-thread execution Tools and are not
+available to Team members.
+
+The first implementation binds `AgentReport` to the single active Task. The
 model does not provide or override `taskId`, source Agent, Team, Orchestrator,
 or target Conversation identities.
 
 ```ts
-interface TaskOutputArguments {
+interface AgentReportArguments {
   readonly status: "progress" | "blocked" | "completed" | "failed";
   readonly summary: string;
-  readonly artifactIds?: readonly string[];
   readonly progress?: {
     readonly completed: number;
     readonly total: number;
@@ -715,23 +778,20 @@ Role-bound Tool sets:
 - ephemeral Subagent: reduced domain Tools only, with no Team management and no
   nested Subagent Tools.
 
-The Subagent `Task` descriptor is generated from the creator definition's
-allowed Subagent types. Persistent `agentId` values are runtime data and are
+The `Agent` descriptor is generated from the creator definition's allowed
+Agent types. Persistent `agentId` values are runtime data and are
 queried rather than embedded into Tool descriptors.
 
-## 15. Optional Sleep and Wake
+## 15. No Sleep and No Autonomous Wake
 
-Active query Tools remain authoritative: `TaskGet`, `AgentStatus`,
-`AgentMessages`, and `OrchestratorMessages` can always read current state.
-
-A later `Sleep` Tool may avoid busy polling. It must not hold a Tool Promise,
-Provider call, process, or timer open. It persists a bounded wait condition,
-ends the current Run as yielded or sleeping, and permits Runtime eviction. A
-matching durable InputEvent later causes `WakeCoordinator` to enqueue a wake
-signal and reactivate the Conversation through the Host.
-
-After wake, the Agent still explicitly queries state. Sleep does not carry or
-return another Agent's result.
+Decision: Sleep, wait conditions, and autonomous wake-on-event are not
+implemented. Background runs are managed explicitly inside the main Agent's
+turn through `TaskOutput` (`block` with `runIds`). A main Agent must not end
+its turn while it still depends on background results; it either waits in-turn
+or ends with a status report and is continued later by a new user message.
+Terminal OutputEvents are observable but never start a new parent turn.
+Scheduled autonomous loops are deferred and, when adopted, use a scheduling
+mechanism rather than Sleep.
 
 ## 16. Persistence and Recovery
 
@@ -742,10 +802,11 @@ agent_manifests
 agent_instances
 agent_teams
 agent_team_members
+agent_task_lists
 agent_tasks
-agent_wait_conditions
 subagent_bindings                 existing
 conversation_agent_bindings      existing
+conversation_todo                 existing
 ```
 
 Message and Prompt content remain in Conversation Journal, Message projection,
@@ -785,10 +846,10 @@ Required evolution:
   Cancellation values, defensive capture, and dynamic TypeBox parameter
   Schemas. They do not create a Child Conversation or execute a Tool.
 - Step S2 event values are implemented in the Core event boundary:
-  `TaskAssignedInputEvent` persists explicit Prompt and Artifact references;
-  its Message projector produces a provider-neutral `user` Message, and the
-  existing Agent-turn path accepts it without classifying it as a human
-  `user.message`.
+  `TaskAssignedInputEvent` persists the explicit Prompt; no implicit context
+  or reference parameters are carried; its Message projector produces a
+  provider-neutral `user` Message, and the existing Agent-turn path accepts it
+  without classifying it as a human `user.message`.
 - replace the create-then-activate-only path with a child Bootstrap port that
   persists `TaskAssignedInputEvent` before activation acceptance;
 - add `SubagentTaskService`, `SubagentQueryService`, and
@@ -812,10 +873,10 @@ Required evolution:
 
 - `TaskAssignedInputEvent` and Runtime Message projection;
 - child Bootstrap ordering;
-- non-blocking `Task` Tool;
+- non-blocking `Agent` Tool;
 - final Assistant completion bridge;
-- process-free `TaskGet`;
-- non-blocking `TaskCancel`.
+- process-free `TaskOutput` (block + any-first terminal);
+- non-blocking `TaskStop`.
 
 ### Phase 3: Persistent Agent Instance
 
@@ -837,15 +898,14 @@ Required evolution:
 - `AgentCommunicationService`;
 - Inbox projection and cursor query;
 - Orchestrator Tools;
-- member `TaskOutput` and Orchestrator communication Tools;
+- member `AgentReport` and Orchestrator communication Tools;
 - Artifact and oversized-content behavior.
 
-### Phase 6: Optional Sleep and Wake
+### Phase 6: Deferred Scheduling
 
-- wait-condition protocol and persistence;
-- Sleep Tool;
-- wake matching and Host reactivation;
-- recovery and cancellation behavior.
+Scheduled autonomous loops are deferred out of scope. When adopted, they use a
+scheduling mechanism (Cron-style) rather than Sleep; Sleep and autonomous
+wake-on-event are explicitly not implemented.
 
 ## 19. Accepted Direction and Unresolved Decisions
 
@@ -853,7 +913,8 @@ Accepted direction:
 
 1. all Agent forms use Conversation;
 2. Subagents start without implicit Parent context inheritance;
-3. explicit Prompt and Artifact references are the only Subagent context input;
+3. explicit Prompt is the only Subagent context input; domain data is shared
+   through query services and never passed by reference parameter;
 4. Subagent start, query, and cancellation are non-blocking;
 5. a Subagent result is its final canonical Assistant content;
 6. a Team member result or message requires an explicit communication Tool;
@@ -865,17 +926,22 @@ Accepted direction:
 12. Tool Registry Views and Runtime policy remain capability and permission
     authority;
 13. persistent Agent identity does not imply a permanently running process.
+14. Subagent planning is `TodoWrite` in its own Conversation; Work-Item Task
+    Tools are Main Agent and Team member Tools only; execution is always
+    non-blocking and managed explicitly with `TaskOutput`.
 
 Unresolved outside the active Subagent Tool slice or deferred to its owning
 Step:
 
-1. public Tool and Event names beyond `Task`, `TaskGet`, `TaskCancel`, and
-   `TaskAssignedInputEvent`;
+1. remaining event names for run lifecycle beyond `TaskAssignedInputEvent`
+   (proposed `AgentRun*` prefix); Tool names are fixed: `Agent`, `TaskOutput`,
+   `TaskStop`, `TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate`, `TodoWrite`;
 2. exact Agent identity versus Conversation identity mapping and ID factories;
 3. Agent Manifest digest and immutable snapshot persistence protocol;
 4. Team Inbox canonical storage and projection ownership;
 5. exact Team Task transition and crash-reconciliation rules;
-6. wake-on-message and optional Sleep semantics;
+6. scheduled autonomous loops are deferred to a future scheduling mechanism
+   (Sleep and wake-on-event are explicitly not implemented);
 7. message, result, Prompt, and Artifact limits;
 8. exact final Assistant selection and empty-result failure behavior;
 9. retention and cleanup policy for logically disposable child Conversations;

@@ -48,3 +48,10 @@ descriptive state for the Agent.
 
 `TodoRead` is intentionally deferred. Runtime context already exposes the
 current list, while clients read the OutputEvent stream or the Todo projection.
+
+## Subagent planning tool
+
+Ephemeral Subagents do not receive the Work-Item Task Tools
+(`TaskCreate`/`TaskList`/`TaskGet`/`TaskUpdate`). Their planning tool is
+`TodoWrite` against their own Conversation. Work-Item Task Tools are available
+only to the Main Agent (own list) and Team members (shared team list).

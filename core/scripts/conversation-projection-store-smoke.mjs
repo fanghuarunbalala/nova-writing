@@ -205,14 +205,24 @@ async function runProjectionContract(name, Transport) {
       toolVersion: "1.0.0",
       argumentDigest,
       summary: {
-        title: "Write manuscript file",
-        description: "Review one proposed file write",
+        title: "修改角色",
+        description: "目标：张三",
+        operations: [{ op: "edit", kind: "character", id: "char-1", title: "张三" }],
+        arguments: { values: [{ id: "char-1", value: { name: "张三" } }] },
       },
       requestedAt: "2026-08-02T04:00:09.000Z",
       expiresAt: "2026-08-02T04:10:09.000Z",
     }),
   );
   applyNext(store, await readEvent(subscription));
+  const pendingProjection = store.getSnapshot();
+  assert.equal(pendingProjection.approvals[0].status, "pending");
+  assert.deepEqual(pendingProjection.approvals[0].operations, [
+    { op: "edit", kind: "character", id: "char-1", title: "张三" },
+  ]);
+  assert.deepEqual(pendingProjection.approvals[0].arguments, {
+    values: [{ id: "char-1", value: { name: "张三" } }],
+  });
 
   await appendOutput(
     host,
@@ -296,6 +306,10 @@ async function runProjectionContract(name, Transport) {
   assert.equal(projected.runtimePresence.state, "online");
   assert.equal(projected.approvals[0].status, "approved");
   assert.equal(projected.approvals[0].actorId, "actor-user");
+  assert.equal("arguments" in projected.approvals[0], false, "resolved approval keeps summary only");
+  assert.deepEqual(projected.approvals[0].operations, [
+    { op: "edit", kind: "character", id: "char-1", title: "张三" },
+  ]);
   assert.equal(
     projected.events.at(-1).eventType,
     "system.tool.trace.recorded",

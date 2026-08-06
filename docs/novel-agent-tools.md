@@ -314,3 +314,6 @@ The following groups will be confirmed next, following the same conventions
 - Paragraphs hang on story units and the agent manages their `orderKey`; a
   chapter's `paragraphIds` is the serialization order and can split any story
   unit.
+- `NovelVolumeRead` returns Volume records only (id/title/orderKey); Chapter
+  structure and selections are read through `NovelChapterRead`, which supports
+  `includeContent` to expand a Chapter's selection into joined content.

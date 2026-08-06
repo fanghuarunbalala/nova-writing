@@ -102,14 +102,8 @@ export class NovelPublicationToolService {
     if (catalog === undefined) {
       return { volumes: [] };
     }
-    const { volumes, chapters } = catalog.snapshot;
     return {
-      volumes: volumes.map((volume) => {
-        const volumeChapters = chapters.filter(
-          (chapter) => chapter.volumeId === volume.id,
-        );
-        return toVolumeDetails(volume, volumeChapters);
-      }),
+      volumes: catalog.snapshot.volumes.map((volume) => toVolumeDetails(volume)),
     };
   }
 
@@ -535,25 +529,11 @@ function mapItemError(error: unknown): string | undefined {
 
 function toVolumeDetails(
   volume: { id: PublicationVolumeId; title: string; orderKey: OrderKey },
-  chapters: Array<{
-    id: PublicationChapterId;
-    title: string;
-    orderKey: OrderKey;
-    paragraphIds: readonly string[];
-  }>,
 ): NovelVolumeDetails {
   return Object.freeze({
     id: volume.id,
     title: volume.title,
     orderKey: volume.orderKey,
-    chapters: chapters.map((chapter) =>
-      Object.freeze({
-        id: chapter.id,
-        title: chapter.title,
-        orderKey: chapter.orderKey,
-        paragraphIds: [...chapter.paragraphIds],
-      })
-    ),
   });
 }
 

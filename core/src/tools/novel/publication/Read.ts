@@ -35,7 +35,7 @@ export function createVolumeReadTool(
       version: "1.0.0",
       label: "Novel Volume Read",
       description:
-        "Reads all Volumes in order for one explicit scope, each with its ordered Chapters and their paragraphIds summaries. Use the returned ids for NovelVolumeEdit and NovelChapterEdit.",
+        "Reads all Volumes in order for one explicit scope, returning each Volume's id, title, and orderKey only. Use NovelChapterRead to inspect Chapter contents and selections.",
       parameters: NovelVolumeReadParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage:

@@ -141,18 +141,10 @@ export type NovelChapterEditArguments = Static<
   typeof NovelChapterEditParametersSchema
 >;
 
-export type NovelChapterSummaryDetails = {
-  readonly id: string;
-  readonly title: string;
-  readonly orderKey: string;
-  readonly paragraphIds: string[];
-};
-
 export type NovelVolumeDetails = {
   readonly id: string;
   readonly title: string;
   readonly orderKey: string;
-  readonly chapters: NovelChapterSummaryDetails[];
 };
 
 export type NovelVolumeReadDetails = {

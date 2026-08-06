@@ -12,6 +12,7 @@
  */
 import {
   noopLogger,
+  novelAgentDefinition,
   type ConversationSnapshot,
   type Logger,
   type NovelApiClient,
@@ -19,9 +20,10 @@ import {
 import { ExternalStore } from "../../../shared/state/ExternalStore.js";
 import { TaskSerializer } from "../../../shared/state/TaskSerializer.js";
 
+// 与 core novelAgentDefinition 同源，避免版本漂移导致 manifest 绑定注入失败。
 export const DEFAULT_NOVEL_AGENT_BINDING = Object.freeze({
-  agentType: "novel",
-  definitionVersion: "1.0.0",
+  agentType: novelAgentDefinition.agentType,
+  definitionVersion: novelAgentDefinition.definitionVersion,
 });
 
 export type ConversationCatalogPhase = "idle" | "loading" | "ready" | "error";

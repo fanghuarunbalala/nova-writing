@@ -4,7 +4,19 @@
  * 对话时间线的数据模型（纯数据，不含 React 依赖）。
  * thinkLines 与 cards 由 core 事件投影产生，组件负责渲染。
  */
+import type { ToolApprovalProjection } from "@novel/core";
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
+
+/** 消息流审批卡数据（来自投影 tool-approval 项）。Approval card view data. */
+export interface ApprovalCardView {
+  readonly approvalRequestId: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly operations?: ToolApprovalProjection["operations"];
+  readonly arguments?: ToolApprovalProjection["arguments"];
+  readonly status: ToolApprovalProjection["status"];
+  readonly requestedAt: string;
+}
 
 /** 运行时事件行（对话内"本轮时序"）。Runtime event row. */
 export interface ConversationEventView {
@@ -73,4 +85,10 @@ export type ConversationTimelineItem =
       readonly timestamp: number;
       /** 工具审批行：携带 approvalRequestId 时可点击打开审批面板。 */
       readonly approvalRequestId?: string;
+    }
+  | {
+      readonly kind: "approval";
+      readonly sequence: number;
+      readonly timestamp: number;
+      readonly approval: ApprovalCardView;
     };

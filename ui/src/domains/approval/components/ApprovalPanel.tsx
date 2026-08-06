@@ -26,6 +26,34 @@ const STATUS_LABEL: Record<ApprovalView["status"], string> = {
   expired: "已过期",
 };
 
+const OP_SYMBOL: Record<string, string> = {
+  add: "+",
+  edit: "~",
+  delete: "−",
+};
+
+const OP_LABEL: Record<string, string> = {
+  add: "新增",
+  edit: "修改",
+  delete: "删除",
+};
+
+const KIND_LABEL: Record<string, string> = {
+  outline: "大纲单元",
+  character: "角色",
+  location: "地点",
+  paragraph: "段落",
+  volume: "卷",
+  chapter: "章节",
+};
+
+function opClass(op: string): string {
+  if (op === "add") return styles.add;
+  if (op === "edit") return styles.mod;
+  if (op === "delete") return styles.del;
+  return "";
+}
+
 function shortDigest(digest: string): string {
   return digest.length > 16 ? `${digest.slice(0, 8)}…${digest.slice(-4)}` : digest;
 }
@@ -101,6 +129,35 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
           <h4 className={styles.title}>{selected.title}</h4>
           {selected.description !== undefined ? (
             <p className={styles.desc}>{selected.description}</p>
+          ) : null}
+          {selected.operations !== undefined && selected.operations.length > 0 ? (
+            <ul className={styles.ops}>
+              {selected.operations.map((operation, index) => (
+                <li
+                  key={`${operation.op}-${operation.id ?? operation.title ?? index}`}
+                  className={[styles.op, opClass(operation.op)].filter(Boolean).join(" ")}
+                >
+                  <span className={styles.opMark} aria-hidden="true">
+                    {OP_SYMBOL[operation.op] ?? "•"}
+                  </span>
+                  <span className={styles.opText}>
+                    {OP_LABEL[operation.op] ?? operation.op}
+                    {KIND_LABEL[operation.kind] !== undefined
+                      ? KIND_LABEL[operation.kind]
+                      : ` ${operation.kind}`}
+                    {operation.title !== undefined ? `：${operation.title}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {selected.arguments !== undefined ? (
+            <div className={styles.args}>
+              <span className={styles.argsTitle}>完整参数</span>
+              <pre className={styles.argsBody}>
+                {JSON.stringify(selected.arguments, null, 2)}
+              </pre>
+            </div>
           ) : null}
           <div className={styles.statusLine}>
             <span className={[styles.pill, styles[selected.status]].join(" ")}>

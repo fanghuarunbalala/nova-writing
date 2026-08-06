@@ -8,6 +8,7 @@ import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ConversationTimelineItem as TimelineItem } from "../projection/ConversationTimelineItem.js";
 import type { MessageReference } from "./MessageReference.js";
 import { AssistantMessage } from "./AssistantMessage.js";
+import { ApprovalCard } from "./ApprovalCard.js";
 import { UserMessage } from "./UserMessage.js";
 import { computeTimelineWindow } from "./timelineWindow.js";
 import styles from "./ConversationTimeline.module.css";
@@ -24,6 +25,10 @@ export interface ConversationTimelineProps {
   readonly resolveReference?: ReferenceResolver;
   readonly onProposalAction?: (changeSetId: string, action: "approve" | "reject" | "view-diff") => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
+  readonly onApprovalDecision?: (
+    approvalRequestId: string,
+    decision: "approved" | "rejected",
+  ) => void;
 }
 
 export function ConversationTimeline({
@@ -34,6 +39,7 @@ export function ConversationTimeline({
   resolveReference,
   onProposalAction,
   onOpenApproval,
+  onApprovalDecision,
 }: ConversationTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -90,6 +96,7 @@ export function ConversationTimeline({
                 resolveReference,
                 onProposalAction,
                 onOpenApproval,
+                onApprovalDecision,
               })}
             </div>
           );
@@ -113,6 +120,10 @@ interface RenderItemDeps {
     action: "approve" | "reject" | "view-diff",
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
+  readonly onApprovalDecision?: (
+    approvalRequestId: string,
+    decision: "approved" | "rejected",
+  ) => void;
 }
 
 function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
@@ -121,6 +132,7 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
     resolveReference,
     onProposalAction,
     onOpenApproval,
+    onApprovalDecision,
   } = deps;
   switch (item.kind) {
     case "turn":
@@ -177,6 +189,22 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
         </button>
       ) : (
         <div className={styles.system}>{item.text}</div>
+      );
+    case "approval":
+      return (
+        <ApprovalCard
+          approval={item.approval}
+          onApprove={
+            onApprovalDecision === undefined
+              ? undefined
+              : (approvalRequestId) => onApprovalDecision(approvalRequestId, "approved")
+          }
+          onReject={
+            onApprovalDecision === undefined
+              ? undefined
+              : (approvalRequestId) => onApprovalDecision(approvalRequestId, "rejected")
+          }
+        />
       );
   }
 }

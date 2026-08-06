@@ -18,7 +18,6 @@ import { ConversationComposer } from "../../domains/conversation/components/Conv
 import { ConversationTimeline } from "../../domains/conversation/components/ConversationTimeline.js";
 import type { GenStatusProps } from "../../domains/conversation/components/GenStatus.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
-import { createDefaultConversationCardProjectorRegistry } from "../../domains/conversation/cards/projectors/index.js";
 import { useConversationProjection } from "../../domains/conversation/hooks/useConversationProjection.js";
 import { useConversationRuntimeStatus } from "../../domains/conversation/hooks/useConversationRuntimeStatus.js";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
@@ -107,14 +106,9 @@ function ActiveChatSurface({
   onOpenApproval,
   approvalStore,
 }: ActiveChatSurfaceProps) {
-  const cardProjectors = useMemo(
-    () => createDefaultConversationCardProjectorRegistry(),
-    [],
-  );
   const { snapshot, enqueue, resume } = useConversationProjection(conversationId, {
     api,
     logger,
-    cardProjectors,
   });
   // 同步投影里的工具审批到 shell 级 ApprovalStore（InspectorHost/TopBar 订阅）。
   useEffect(() => {
@@ -167,6 +161,9 @@ function ActiveChatSurface({
         resolveReference={resolveReference}
         onProposalAction={onProposalAction}
         onOpenApproval={onOpenApproval}
+        onApprovalDecision={(approvalRequestId, decision) => {
+          void approvalStore.decide(approvalRequestId, decision);
+        }}
       />
       <ConversationComposer
         conversationId={conversationId}

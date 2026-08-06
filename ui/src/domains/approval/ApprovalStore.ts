@@ -26,6 +26,10 @@ export interface ApprovalView {
   readonly toolName: string;
   readonly title: string;
   readonly description?: string;
+  /** 每目标一行的操作摘要。Per-target operation rows. */
+  readonly operations?: ToolApprovalProjection["operations"];
+  /** 完整工具参数（仅 pending 保留）。Full tool arguments while pending. */
+  readonly arguments?: ToolApprovalProjection["arguments"];
   readonly argumentDigest: `sha256:${string}`;
   readonly status: ApprovalStatus;
   readonly requestedAt: string;
@@ -109,6 +113,12 @@ export function toApprovalView(
     ...(projection.description === undefined
       ? {}
       : { description: projection.description }),
+    ...(projection.operations === undefined
+      ? {}
+      : { operations: projection.operations }),
+    ...(projection.arguments === undefined
+      ? {}
+      : { arguments: projection.arguments }),
     argumentDigest: projection.argumentDigest,
     status: projection.status as ApprovalStatus,
     requestedAt: projection.requestedAt,

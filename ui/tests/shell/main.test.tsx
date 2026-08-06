@@ -212,56 +212,48 @@ describe("chatSurfaceMapper", () => {
     }
   });
 
-  it("attaches approval cards to the owning assistant message by sequence", () => {
+  it("maps tool-approval timeline items into approval cards", () => {
     const items = mapProjectionTimeline(
       projection({
         timeline: [
           {
-            kind: "assistant-message",
-            assistantMessageId: "a1",
+            kind: "tool-approval",
+            approvalRequestId: "AR-1",
+            toolCallId: "call-1",
+            toolName: "NovelOutlineWrite",
+            toolVersion: "1.0.0",
+            argumentDigest: `sha256:${"0".repeat(64)}`,
             runId: "r1",
-            turnId: "t1",
-            startedSequence: 2,
-            lastSequence: 4,
+            requestedSequence: 3,
+            lastSequence: 3,
+            title: "新增大纲单元",
+            description: "目标：第一章 序章",
+            operations: [
+              { op: "add", kind: "outline", id: "s1", title: "第一章 序章" },
+            ],
+            arguments: {
+              values: [{ id: "s1", title: "第一章 序章", intent: "引入主角" }],
+            },
+            requestedAt: "2026-08-05T09:00:02.000Z",
+            expiresAt: "2026-08-05T09:15:02.000Z",
             timestamp: "2026-08-05T09:00:01.000Z",
-            status: "completed",
-            content: [{ type: "text", text: "已起草场景。" }],
+            status: "pending",
           },
         ],
       }),
-      [
-        {
-          cardId: "AR-1",
-          kind: "approval",
-          title: "变更提议",
-          summary: "base r041 → 待提交 · 2 个操作",
-          status: "pending",
-          conversationId: "c1",
-          sourceEventId: "e9",
-          sourceSequence: 3,
-          timestamp: "2026-08-05T09:00:02.000Z",
-        },
-        {
-          cardId: "AR-2",
-          kind: "approval",
-          title: "变更提议",
-          status: "pending",
-          conversationId: "c1",
-          sourceEventId: "e10",
-          sourceSequence: 9,
-          timestamp: "2026-08-05T09:00:03.000Z",
-        },
-      ],
+      [],
       "Novel Agent",
     );
     expect(items).toHaveLength(1);
-    if (items[0].kind === "assistant") {
-      expect(items[0].cards).toHaveLength(1);
-      if (items[0].cards[0].kind === "proposal") {
-        expect(items[0].cards[0].content.changeSetId).toBe("AR-1");
-        expect(items[0].cards[0].content.tag).toBe("proposal");
-        expect(items[0].cards[0].content.meta).toContain("2 个操作");
-      }
+    if (items[0].kind === "approval") {
+      expect(items[0].approval.approvalRequestId).toBe("AR-1");
+      expect(items[0].approval.title).toBe("新增大纲单元");
+      expect(items[0].approval.operations).toEqual([
+        { op: "add", kind: "outline", id: "s1", title: "第一章 序章" },
+      ]);
+      expect(items[0].approval.arguments).toEqual({
+        values: [{ id: "s1", title: "第一章 序章", intent: "引入主角" }],
+      });
     }
   });
 });

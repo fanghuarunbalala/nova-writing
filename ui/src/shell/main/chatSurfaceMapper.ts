@@ -97,11 +97,22 @@ export function mapProjectionTimeline(
       }
       case "tool-approval":
         items.push({
-          kind: "system",
+          kind: "approval",
           sequence: item.requestedSequence,
-          text: `等待审批：${item.title}`,
           timestamp: Date.parse(item.requestedAt) || 0,
-          approvalRequestId: item.approvalRequestId,
+          approval: {
+            approvalRequestId: item.approvalRequestId,
+            title: item.title,
+            ...(item.description === undefined
+              ? {}
+              : { description: item.description }),
+            ...(item.operations === undefined
+              ? {}
+              : { operations: item.operations }),
+            ...(item.arguments === undefined ? {} : { arguments: item.arguments }),
+            status: item.status,
+            requestedAt: item.requestedAt,
+          },
         });
         break;
     }
@@ -215,18 +226,6 @@ function toTimelineCard(
   card: GenericCardDescriptor,
 ): ConversationCardDescriptor | null {
   switch (card.kind) {
-    case "approval":
-      return {
-        kind: "proposal",
-        id: card.cardId,
-        content: {
-          tag: "proposal",
-          title: card.title,
-          ...(card.summary !== undefined ? { meta: card.summary } : {}),
-          changeSetId: card.cardId,
-          ops: Object.freeze([]),
-        },
-      };
     default:
       return null;
   }

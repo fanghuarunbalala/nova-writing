@@ -8,7 +8,14 @@
  * WorkspaceControllerAdapter 包成 ExternalStore 订阅快照。extensions 走默认
  * emptyNovelUiExtensions，桌面端由 Phase B 注入 createDesktopUiExtensions。
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
 import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
@@ -266,6 +273,21 @@ export function ApplicationShell({
     },
     [approvalStore, inspectorRouter],
   );
+
+  // 护栏：出现新的待审请求时自动打开审批面板（避免"有审批但看不到"）。
+  // Auto-open the approval panel when a new pending request appears.
+  const lastPendingCountRef = useRef(0);
+  useEffect(() => {
+    const previous = lastPendingCountRef.current;
+    lastPendingCountRef.current = approvalSnapshot.pendingCount;
+    if (
+      approvalSnapshot.pendingCount > 0 &&
+      previous === 0 &&
+      inspectorRouter.getSnapshot().state.kind === "closed"
+    ) {
+      inspectorRouter.transition({ kind: "approval", changeSetId: "" });
+    }
+  }, [approvalSnapshot.pendingCount, inspectorRouter]);
 
   const handleSelectContentPane = useCallback(
     (pane: ContentTab) => {

@@ -9,6 +9,8 @@ export const RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL = {
   kill: "SIGKILL",
 } as const;
 
+const DESKTOP_CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
+
 export type RuntimeChildProcessTerminationSignal =
   (typeof RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL)[keyof typeof RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL];
 
@@ -84,6 +86,9 @@ export class NodeRuntimeChildProcessLauncher
     this.#logger.info("runtime.process.launch_started", {
       conversationId,
       runtimeInstanceId,
+      childLogConfigured:
+        DESKTOP_CHILD_LOG_ENV in this.#env ||
+        DESKTOP_CHILD_LOG_ENV in globalThis.process.env,
     });
 
     let child: ChildProcessWithoutNullStreams;
@@ -108,7 +113,7 @@ export class NodeRuntimeChildProcessLauncher
       );
     }
 
-    const process = new SpawnedRuntimeChildProcess(child);
+    const process = new SpawnedRuntimeChildProcess(child, this.#logger);
     try {
       await process.waitForStart();
       this.#logger.info("runtime.process.launch_completed", {
@@ -137,14 +142,18 @@ class SpawnedRuntimeChildProcess implements RuntimeChildProcess {
   readonly #child: ChildProcessWithoutNullStreams;
   readonly #startPromise: Promise<void>;
   readonly #exitPromise: Promise<RuntimeChildProcessExitStatus>;
+  readonly #logger: Logger;
   #resolveStart!: () => void;
   #rejectStart!: (error: RuntimeChildProcessLaunchError) => void;
   #resolveExit!: (exit: RuntimeChildProcessExitStatus) => void;
   #started = false;
   #settled = false;
+  #stderrBytes = 0;
+  #stderrLines = 0;
 
-  constructor(child: ChildProcessWithoutNullStreams) {
+  constructor(child: ChildProcessWithoutNullStreams, logger: Logger) {
     this.#child = child;
+    this.#logger = logger.child({ component: "spawned_runtime_child_process" });
     this.stdin = child.stdin;
     this.stdout = child.stdout;
     this.#startPromise = new Promise<void>((resolve, reject) => {
@@ -154,13 +163,22 @@ class SpawnedRuntimeChildProcess implements RuntimeChildProcess {
     this.#exitPromise = new Promise((resolve) => {
       this.#resolveExit = resolve;
     });
-    child.stderr.resume();
+    child.stderr.on("data", (chunk: Buffer) => {
+      this.#stderrBytes += chunk.length;
+      this.#stderrLines += chunk.toString("utf8").split("\n").length - 1;
+    });
     child.once("spawn", () => {
       this.#started = true;
       this.#resolveStart();
     });
     child.on("error", (error) => this.#handleError(error));
     child.once("exit", (code, signal) => {
+      this.#logger.info("runtime.process.child_stderr_stats", {
+        code,
+        signal: signal ?? null,
+        bytes: this.#stderrBytes,
+        lines: this.#stderrLines,
+      });
       this.#settleExit(Object.freeze({
         kind: "exited",
         code,
@@ -171,6 +189,10 @@ class SpawnedRuntimeChildProcess implements RuntimeChildProcess {
 
   waitForStart(): Promise<void> {
     return this.#startPromise;
+  }
+
+  stderrStats(): Readonly<{ bytes: number; lines: number }> {
+    return Object.freeze({ bytes: this.#stderrBytes, lines: this.#stderrLines });
   }
 
   waitForExit(): Promise<RuntimeChildProcessExitStatus> {

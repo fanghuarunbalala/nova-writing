@@ -39,6 +39,7 @@ import {
   encodeRuntimeChildBootstrap,
   encodeRuntimeChildInput,
   encodeRuntimeChildShutdown,
+  RuntimeChildPayloadError,
 } from "./RuntimeChildProtocol.js";
 
 export interface ParentRuntimeChildIdentityFactory {
@@ -103,12 +104,23 @@ export class ParentRuntimeChildEndpointFactory
       this.#sessionIdFactory.create(),
       "Runtime child Session ID",
     );
-    await request.connection.send(captureRuntimeIpcFrame({
-      frameType: RUNTIME_IPC_FRAME_TYPE.welcome,
-      protocolVersion: RUNTIME_IPC_PROTOCOL_VERSION,
+    try {
+      await request.connection.send(captureRuntimeIpcFrame({
+        frameType: RUNTIME_IPC_FRAME_TYPE.welcome,
+        protocolVersion: RUNTIME_IPC_PROTOCOL_VERSION,
+        sessionId,
+        processNonce: hello.processNonce,
+      }));
+    } catch (error) {
+      this.#logger.error("runtime.child.welcome_send_failed", {
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      throw error;
+    }
+    this.#logger.info("runtime.child.welcome_sent", {
       sessionId,
-      processNonce: hello.processNonce,
-    }));
+      conversationId: request.bootstrap.conversation.metadata.id,
+    });
     const heartbeatMonitor = new RuntimeIpcHeartbeatMonitor();
     const notificationHandler: RuntimeIpcNotificationHandler = {
       handle: async (method, payload) => {
@@ -142,6 +154,13 @@ export class ParentRuntimeChildEndpointFactory
       });
       return endpoint;
     } catch (error) {
+      this.#logger.error("runtime.child.bootstrap_failed", {
+        sessionId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        ...(error instanceof ParentRuntimeChildEndpointError
+          ? { failure: error.failure }
+          : {}),
+      });
       await endpoint.close();
       throw error;
     }
@@ -163,20 +182,47 @@ export class ParentRuntimeChildEndpoint implements RuntimeChildProcessEndpoint {
   waitForUnhealthy(): Promise<void> { return this.#heartbeatMonitor.waitForUnhealthy(); }
 
   async bootstrap(bootstrap: ConversationRuntimeBootstrap): Promise<void> {
+    this.#logger.info("runtime.child.bootstrap_request_started", {
+      conversationId: bootstrap.conversation.metadata.id,
+      runtimeInstanceId: bootstrap.runtimeInstanceId,
+    });
+    let payload;
+    try {
+      payload = encodeRuntimeChildBootstrap(bootstrap);
+    } catch (error) {
+      // 记录协议编码失败（稳定标识，不记录 payload 内容）。
+      this.#logger.error("runtime.child.bootstrap_encode_failed", {
+        conversationId: bootstrap.conversation.metadata.id,
+        runtimeInstanceId: bootstrap.runtimeInstanceId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        ...(error instanceof RuntimeChildPayloadError
+          ? { payloadKind: error.payloadKind, errorCode: error.code }
+          : {}),
+      });
+      throw new ParentRuntimeChildEndpointError("bootstrap", "request_failed");
+    }
     let response;
     try {
       response = await this.#peer.request(
         RUNTIME_CHILD_RPC_METHOD.bootstrap,
-        encodeRuntimeChildBootstrap(bootstrap),
+        payload,
         { lane: "control" },
       );
     } catch {
+      this.#logger.error("runtime.child.bootstrap_request_failed", {
+        conversationId: bootstrap.conversation.metadata.id,
+        runtimeInstanceId: bootstrap.runtimeInstanceId,
+      });
       throw new ParentRuntimeChildEndpointError("bootstrap", "request_failed");
     }
     let acknowledgement;
     try {
       acknowledgement = captureRuntimeChildBootstrapAck(response);
     } catch {
+      this.#logger.error("runtime.child.bootstrap_response_invalid", {
+        conversationId: bootstrap.conversation.metadata.id,
+        runtimeInstanceId: bootstrap.runtimeInstanceId,
+      });
       throw new ParentRuntimeChildEndpointError("bootstrap", "invalid_response");
     }
     if (
@@ -184,6 +230,10 @@ export class ParentRuntimeChildEndpoint implements RuntimeChildProcessEndpoint {
       acknowledgement.runtimeInstanceId !== bootstrap.runtimeInstanceId ||
       acknowledgement.throughSequence !== bootstrap.journal.highWatermark
     ) {
+      this.#logger.error("runtime.child.bootstrap_identity_mismatch", {
+        conversationId: bootstrap.conversation.metadata.id,
+        runtimeInstanceId: bootstrap.runtimeInstanceId,
+      });
       throw new ParentRuntimeChildEndpointError("bootstrap", "identity_mismatch");
     }
   }

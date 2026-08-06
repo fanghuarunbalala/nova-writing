@@ -177,7 +177,23 @@ export class RuntimeIpcPeer {
     payload: JsonValue,
     options: RuntimeIpcRequestOptions = {},
   ): Promise<TData> {
-    this.#assertRunning();
+    try {
+      this.#assertRunning();
+    } catch (error) {
+      this.#logger.error("runtime.ipc.request_state_invalid", {
+        method: methodSource,
+        state: this.#state,
+        errorName: error instanceof Error ? error.name : typeof error,
+        ...(error instanceof Error && "code" in error
+          ? { errorCode: String((error as { code: unknown }).code) }
+          : {}),
+      });
+      throw error;
+    }
+    this.#logger.debug("runtime.ipc.request_started", {
+      method: methodSource,
+      state: this.#state,
+    });
     const requestId = captureIdentity(
       this.#requestIdFactory.create(),
       "Runtime IPC request ID",
@@ -221,6 +237,15 @@ export class RuntimeIpcPeer {
         if (!pending) return;
         this.#pending.delete(requestId);
         pending.removeAbort();
+        this.#logger.error("runtime.ipc.request_enqueue_failed", {
+          requestId,
+          method: frame.method,
+          state: this.#state,
+          errorName: error instanceof Error ? error.name : typeof error,
+          ...(error instanceof Error && "code" in error
+            ? { errorCode: String((error as { code: unknown }).code) }
+            : {}),
+        });
         pending.reject(error);
       });
       this.#logger.debug("runtime.ipc.request_enqueued", {
@@ -494,8 +519,18 @@ export class RuntimeIpcPeer {
         if (!item) return;
         try {
           await this.#connection.send(item.frame);
+          this.#logger.debug("runtime.ipc.frame_sent", {
+            frameType: item.frame.frameType,
+            ...(item.frame.frameType === "request"
+              ? { requestId: item.frame.requestId, method: item.frame.method }
+              : {}),
+          });
           item.resolve();
         } catch (error) {
+          this.#logger.error("runtime.ipc.frame_send_failed", {
+            frameType: item.frame.frameType,
+            errorName: error instanceof Error ? error.name : typeof error,
+          });
           item.reject(normalizeCloseError(error));
           await this.#terminate(normalizeCloseError(error), true);
           return;
@@ -523,6 +558,9 @@ export class RuntimeIpcPeer {
 
   async #terminate(error: Error, closeConnection: boolean): Promise<void> {
     if (this.#state === "closed") return;
+    this.#logger.error("runtime.ipc.peer_terminated", {
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
     this.#state = "closing";
     for (const pending of this.#pending.values()) {
       pending.removeAbort();

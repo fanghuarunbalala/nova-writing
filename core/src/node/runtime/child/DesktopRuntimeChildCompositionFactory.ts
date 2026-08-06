@@ -206,6 +206,9 @@ export class DesktopRuntimeChildCompositionFactory
     }
 
     const manifestStore = await this.#manifestStoreProvider(bootstrap);
+    logger.info("runtime_child.composition.manifest_store_opened", {
+      conversationId,
+    });
     const journal = new ChildRuntimeJournalReader(persistence);
     const eventSink = new PublishingRuntimeEventSink({
       outputPublisher: new ChildRuntimeOutputPublisher(persistence, logger),
@@ -227,6 +230,9 @@ export class DesktopRuntimeChildCompositionFactory
       todoWriter,
       logger,
     });
+    logger.info("runtime_child.composition.novel_registry_opened", {
+      conversationId,
+    });
     const configurationFactory = new AgentRuntimeConfigurationFactory({
       manifestStore,
       assemblyRestorer: new AgentAssemblyRestorer({
@@ -237,6 +243,11 @@ export class DesktopRuntimeChildCompositionFactory
       logger,
     });
     const configuration = await configurationFactory.create(bootstrap);
+    logger.info("runtime_child.composition.configuration_restored", {
+      conversationId,
+      agentType: configuration.assembly.agentType,
+      definitionVersion: configuration.assembly.definitionVersion,
+    });
     const contextCompiler = await this.#contextCompilerFactory.create(
       configuration,
     );
@@ -244,6 +255,9 @@ export class DesktopRuntimeChildCompositionFactory
       registryView: configuration.assembly.toolView,
       eventSink,
       logger,
+    });
+    logger.info("runtime_child.composition.tool_execution_created", {
+      conversationId,
     });
     const eventIdFactory = this.#eventIdFactory;
     const lifecycleController = new TurnController({

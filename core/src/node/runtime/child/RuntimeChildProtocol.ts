@@ -175,7 +175,7 @@ function captureConversation(value: unknown): ConversationRuntimeBootstrap["conv
     "createdAt",
     "updatedAt",
     "lastJournalSequence",
-  ], ["parentConversationId"]);
+  ], ["parentConversationId", "title", "pinned"]);
   const id = captureNonBlank(metadata.id, "bootstrap");
   const status = metadata.status;
   if (status !== "active" && status !== "archived" && status !== "disposed") {
@@ -279,7 +279,10 @@ function captureRecord(
 ): Record<string, unknown> {
   const record = captureOpenRecord(value, payloadKind);
   assertExactKeys(record, [...required, ...optional], required, payloadKind);
-  return record;
+  // JSON 帧不允许 undefined 值：可选字段（title/pinned 等）为 undefined 时过滤。
+  return Object.fromEntries(
+    Object.entries(record).filter((entry) => entry[1] !== undefined),
+  );
 }
 
 function captureOpenRecord(

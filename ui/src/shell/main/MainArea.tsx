@@ -41,6 +41,10 @@ export interface MainAreaProps {
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
+  readonly onProposalAction?: (
+    changeSetId: string,
+    action: "approve" | "reject" | "view-diff",
+  ) => void;
 }
 
 export function MainArea(props: MainAreaProps) {
@@ -58,6 +62,7 @@ export function MainArea(props: MainAreaProps) {
           onCreateConversation={props.onCreateConversation}
           onReferenceClick={props.onReferenceClick}
           resolveReference={props.resolveReference}
+          onProposalAction={props.onProposalAction}
         />
       ) : mainView.state === "content" ? (
         <ContentSurface

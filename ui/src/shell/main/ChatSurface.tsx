@@ -6,11 +6,13 @@
  * 生成状态（GenStatus）按原型置于 composer 输入框上方，live 时停止按钮 enqueue StopInputEvent。
  */
 import { StopInputEvent, UserMessageInputEvent, type Logger, type NovelApiClient } from "@novel/core";
+import { useMemo } from "react";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
 import { ConversationComposer } from "../../domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../domains/conversation/components/ConversationTimeline.js";
 import type { GenStatusProps } from "../../domains/conversation/components/GenStatus.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
+import { createDefaultConversationCardProjectorRegistry } from "../../domains/conversation/cards/projectors/index.js";
 import { useConversationProjection } from "../../domains/conversation/hooks/useConversationProjection.js";
 import { useConversationRuntimeStatus } from "../../domains/conversation/hooks/useConversationRuntimeStatus.js";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
@@ -27,6 +29,10 @@ export interface ChatSurfaceProps {
   readonly onCreateConversation: () => void;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
+  readonly onProposalAction?: (
+    changeSetId: string,
+    action: "approve" | "reject" | "view-diff",
+  ) => void;
 }
 
 export function ChatSurface({
@@ -36,6 +42,7 @@ export function ChatSurface({
   onCreateConversation,
   onReferenceClick,
   resolveReference,
+  onProposalAction,
 }: ChatSurfaceProps) {
   const catalog = useExternalStore(conversationCatalog);
   const activeId = catalog.activeConversationId;
@@ -51,6 +58,7 @@ export function ChatSurface({
       agentLabel={catalog.conversations.find((item) => item.id === activeId)?.agentLabel ?? ""}
       onReferenceClick={onReferenceClick}
       resolveReference={resolveReference}
+      onProposalAction={onProposalAction}
     />
   );
 }
@@ -63,6 +71,10 @@ interface ActiveChatSurfaceProps {
   readonly agentLabel: string;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
+  readonly onProposalAction?: (
+    changeSetId: string,
+    action: "approve" | "reject" | "view-diff",
+  ) => void;
 }
 
 function ActiveChatSurface({
@@ -73,9 +85,22 @@ function ActiveChatSurface({
   agentLabel,
   onReferenceClick,
   resolveReference,
+  onProposalAction,
 }: ActiveChatSurfaceProps) {
-  const { snapshot, enqueue, resume } = useConversationProjection(conversationId, { api, logger });
-  const timeline = mapProjectionTimeline(snapshot.projection, "Novel Agent");
+  const cardProjectors = useMemo(
+    () => createDefaultConversationCardProjectorRegistry(),
+    [],
+  );
+  const { snapshot, enqueue, resume } = useConversationProjection(conversationId, {
+    api,
+    logger,
+    cardProjectors,
+  });
+  const timeline = mapProjectionTimeline(
+    snapshot.projection,
+    snapshot.cards.cards,
+    "Novel Agent",
+  );
   const runtimeStatus = useConversationRuntimeStatus(snapshot.projection);
   const failed = runtimeStatus.state === "failed";
   const genPhase = failed
@@ -101,6 +126,7 @@ function ActiveChatSurface({
         streamingSequence={snapshot.projection.lastAppliedSequence}
         onMessageReferenceClick={onReferenceClick}
         resolveReference={resolveReference}
+        onProposalAction={onProposalAction}
       />
       <ConversationComposer
         conversationId={conversationId}

@@ -240,6 +240,21 @@ export function ApplicationShell({
     ],
   );
 
+  // proposal 卡操作：查看 Diff → 右侧审批占位面板；批准/修改待 Step 4 审批域接入。
+  const handleProposalAction = useCallback(
+    (changeSetId: string, action: "approve" | "reject" | "view-diff") => {
+      if (action === "view-diff") {
+        inspectorRouter.transition({ kind: "approval", changeSetId });
+        return;
+      }
+      toastStore.push({
+        kind: "info",
+        text: "批准 / 修改将在审批域接入后可用",
+      });
+    },
+    [inspectorRouter, toastStore],
+  );
+
   const handleSelectContentPane = useCallback(
     (pane: ContentTab) => {
       setContentTab(pane);
@@ -301,6 +316,7 @@ export function ApplicationShell({
           onReferenceClick={handleReferenceClick}
           resolveReference={resolveReference}
           locateReference={locateReference}
+          onProposalAction={handleProposalAction}
         />
         <InspectorHost
           inspectorRouter={inspectorRouter}

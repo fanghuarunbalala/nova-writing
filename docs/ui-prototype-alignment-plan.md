@@ -143,6 +143,13 @@ operationIds，**没有 op 明细**（新增哪块/改哪个字段），所以�
 详情 API 后可替换；空 ops 只保留"前往审批 Diff"入口；多 approval 事件天然按
 sequence 归属不同消息，无去重问题。
 
+**实现记录（2026-08-06）**：已提交 `feat: wire proposal cards from approval events`。
+新增 `cards/projectors/novelApprovalCardProjector.ts` 与注册工厂；ChatSurface 注入
+默认 registry 并传 `snapshot.cards` 给 mapper；mapper 按 sourceSequence 归属并把
+approval 卡映射为 rich proposal 卡（tag proposal / changeSetId / ops 空）；
+`onProposalAction` 接线（view-diff → inspector approval 路由，approve/reject →
+toast）。core 零改动；`smoke:novel-approval` 通过；ui 200 测试全绿。
+
 ### Step 3：运行时事件时序与工具条（前后端）
 
 范围：T2、T3、T4。

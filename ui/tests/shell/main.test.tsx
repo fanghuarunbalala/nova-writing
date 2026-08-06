@@ -64,6 +64,7 @@ describe("chatSurfaceMapper", () => {
           },
         ],
       }),
+      [],
       "Novel Agent",
     );
     expect(items).toHaveLength(2);
@@ -72,6 +73,59 @@ describe("chatSurfaceMapper", () => {
       expect(items[1].thinkLines).toHaveLength(1);
       expect(items[1].text).toBe("已改为：雨落得密。");
       expect(items[1].approvalState).toBe("completed");
+    }
+  });
+
+  it("attaches approval cards to the owning assistant message by sequence", () => {
+    const items = mapProjectionTimeline(
+      projection({
+        timeline: [
+          {
+            kind: "assistant-message",
+            assistantMessageId: "a1",
+            runId: "r1",
+            turnId: "t1",
+            startedSequence: 2,
+            lastSequence: 4,
+            timestamp: "2026-08-05T09:00:01.000Z",
+            status: "completed",
+            content: [{ type: "text", text: "已起草场景。" }],
+          },
+        ],
+      }),
+      [
+        {
+          cardId: "AR-1",
+          kind: "approval",
+          title: "变更提议",
+          summary: "base r041 → 待提交 · 2 个操作",
+          status: "pending",
+          conversationId: "c1",
+          sourceEventId: "e9",
+          sourceSequence: 3,
+          timestamp: "2026-08-05T09:00:02.000Z",
+        },
+        {
+          cardId: "AR-2",
+          kind: "approval",
+          title: "变更提议",
+          status: "pending",
+          conversationId: "c1",
+          sourceEventId: "e10",
+          sourceSequence: 9,
+          timestamp: "2026-08-05T09:00:03.000Z",
+        },
+      ],
+      "Novel Agent",
+    );
+    expect(items).toHaveLength(1);
+    if (items[0].kind === "assistant") {
+      expect(items[0].cards).toHaveLength(1);
+      if (items[0].cards[0].kind === "proposal") {
+        expect(items[0].cards[0].content.changeSetId).toBe("AR-1");
+        expect(items[0].cards[0].content.tag).toBe("proposal");
+        expect(items[0].cards[0].content.meta).toContain("2 个操作");
+      }
     }
   });
 });

@@ -51,6 +51,7 @@ import {
   SqliteNovelDraftOperationStore,
   SqliteNovelEntityQueryStore,
   SqliteNovelEvidenceQueryStore,
+  SqliteNovelCanonicalWriter,
   SqliteNovelLifecycleRecordWriter,
   SqliteNovelParagraphQueryStore,
   SqliteNovelOutlineQueryStore,
@@ -76,6 +77,7 @@ export interface NodeNovelApplicationOptions {
 
 export interface NodeNovelApplication {
   readonly mutations: NovelMutationService;
+  readonly canonicalWrites: SqliteNovelCanonicalWriter;
   readonly characters: CharacterService;
   readonly locations: LocationService;
   readonly outline: StoryOutlineService;
@@ -127,6 +129,14 @@ export function createNodeNovelApplication(
     new RandomNovelIdentityFactory();
   const registry = createDefaultNovelOperationRegistry<NovelMutationContext>();
   const executor = new NovelOperationExecutor(registry);
+  const canonicalWrites = new SqliteNovelCanonicalWriter({
+    location: options.location,
+    novelId: options.novelId,
+    executor,
+    revisionFactory: options.revisionFactory ?? new RandomNovelRevisionFactory(),
+    clock,
+    logger,
+  });
   const store = new SqliteNovelDraftOperationStore({
     location: options.location,
     novelId: options.novelId,
@@ -207,6 +217,7 @@ export function createNodeNovelApplication(
   logger.info("novel_application.created", {});
   return Object.freeze({
     mutations,
+    canonicalWrites,
     characters: new CharacterService({
       mutations,
       identityFactory,

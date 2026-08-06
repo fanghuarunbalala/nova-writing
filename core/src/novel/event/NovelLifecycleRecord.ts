@@ -26,6 +26,7 @@ export const NOVEL_LIFECYCLE_EVENT_TYPE = {
   draftStatusChanged: "draft.status.changed",
   draftRolledBack: "draft.rolled.back",
   draftOperationApplied: "draft.operation.applied",
+  canonicalWriteApplied: "canonical.write.applied",
   commitCompleted: "commit.completed",
   commitRecovered: "commit.recovered",
   rebasePrepared: "rebase.prepared",
@@ -45,6 +46,7 @@ export interface NovelLifecyclePayloads {
   readonly "draft.status.changed": { readonly draftSessionId: NovelDraftSessionId; readonly previousStatus: NovelDraftSessionStatus; readonly currentStatus: NovelDraftSessionStatus };
   readonly "draft.rolled.back": { readonly draftSessionId: NovelDraftSessionId; readonly baseRevision: NovelRevision };
   readonly "draft.operation.applied": { readonly draftSessionId: NovelDraftSessionId; readonly operationId: NovelOperationId; readonly operationType: string; readonly operationVersion: number; readonly sequence: number };
+  readonly "canonical.write.applied": { readonly operationId: NovelOperationId; readonly operationType: string; readonly operationVersion: number; readonly baseRevision: NovelRevision; readonly resultRevision: NovelRevision };
   readonly "commit.completed": { readonly draftSessionId: NovelDraftSessionId; readonly commitId: NovelCommitId; readonly baseRevision: NovelRevision; readonly resultRevision: NovelRevision; readonly operationCount: number };
   readonly "commit.recovered": { readonly draftSessionId: NovelDraftSessionId; readonly commitId: NovelCommitId; readonly resultRevision: NovelRevision; readonly recovery: "payload-regenerated" | "metadata-confirmed" };
   readonly "rebase.prepared": { readonly sourceDraftSessionId: NovelDraftSessionId; readonly candidateDraftSessionId: NovelDraftSessionId; readonly sourceBaseRevision: NovelRevision; readonly candidateBaseRevision: NovelRevision; readonly operationCount: number };
@@ -108,6 +110,8 @@ function capturePayload<T extends NovelLifecycleEventType>(type: T, input: Novel
       payload = { draftSessionId: captureNovelDraftSessionId(value.draftSessionId), previousStatus: captureNovelDraftSessionStatus(value.previousStatus), currentStatus: captureNovelDraftSessionStatus(value.currentStatus) }; break;
     case "draft.operation.applied":
       payload = { draftSessionId: captureNovelDraftSessionId(value.draftSessionId), operationId: captureNovelOperationId(value.operationId), operationType: captureOperationType(value.operationType), operationVersion: capturePositiveCount(value.operationVersion), sequence: capturePositiveCount(value.sequence) }; break;
+    case "canonical.write.applied":
+      payload = { operationId: captureNovelOperationId(value.operationId), operationType: captureOperationType(value.operationType), operationVersion: capturePositiveCount(value.operationVersion), baseRevision: captureNovelRevision(value.baseRevision), resultRevision: captureNovelRevision(value.resultRevision) }; break;
     case "commit.completed":
       payload = { draftSessionId: captureNovelDraftSessionId(value.draftSessionId), commitId: captureNovelCommitId(value.commitId), baseRevision: captureNovelRevision(value.baseRevision), resultRevision: captureNovelRevision(value.resultRevision), operationCount: captureCount(value.operationCount) }; break;
     case "commit.recovered":

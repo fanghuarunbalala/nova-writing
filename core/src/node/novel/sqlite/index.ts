@@ -13,6 +13,7 @@ export * from "./NovelProjectionEvidenceSqliteSchema.js";
 export * from "./NovelProjectionSqliteSchema.js";
 export * from "./NovelSqliteMigrations.js";
 export * from "./SqliteNovelCanonicalStore.js";
+export * from "./SqliteNovelCanonicalWriter.js";
 export * from "./SqliteConversationNovelBindingStore.js";
 export * from "./SqliteNovelApprovalStore.js";
 export * from "./SqliteNovelDraftStore.js";

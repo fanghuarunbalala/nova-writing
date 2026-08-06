@@ -1,4 +1,8 @@
-/** Standalone Novel Agent with generic Prompt Sections, TodoWrite, and outline tools. */
+/**
+ * 独立 Novel Agent：通用协议段 + novel.* 创作段 + TodoWrite 与大纲等工具。
+ * Standalone Novel Agent with generic protocol sections, novel.* creative
+ * sections, TodoWrite, and outline tools.
+ */
 import {
   AgentCommunicationPolicy,
   AgentDefinition,
@@ -6,21 +10,21 @@ import {
   AgentToolPolicy,
 } from "../definition/AgentDefinition.js";
 import {
-  InlinePromptItem,
   PromptRecipe,
   PromptSectionItem,
 } from "../../prompt/index.js";
 
 export const novelAgentDefinition = new AgentDefinition({
   agentType: "novel",
-  definitionVersion: "1.0.0",
+  definitionVersion: "1.1.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
     new PromptSectionItem("core.runtime.protocol"),
-    new PromptSectionItem("agent.identity"),
+    new PromptSectionItem("novel.identity"),
+    new PromptSectionItem("novel.system"),
     new PromptSectionItem("conversation.behavior"),
-    new InlinePromptItem("Respond in the language currently used by the user."),
+    new PromptSectionItem("novel.workflow"),
     new PromptSectionItem("tool.guidance"),
     new PromptSectionItem("todo.guidance"),
     new PromptSectionItem("context.reliability"),

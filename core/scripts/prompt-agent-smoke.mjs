@@ -58,33 +58,34 @@ const compiled = await builder.build({
 });
 
 assert.equal(compiled.agentType, "novel");
-assert.equal(compiled.definitionVersion, "1.0.0");
-assert.equal(compiled.blocks.length, 8);
+assert.equal(compiled.definitionVersion, "1.1.0");
+assert.equal(compiled.blocks.length, 9);
 assert.deepEqual(
   compiled.blocks.map((block) => block.sourceId),
   [
     "core.runtime.protocol",
-    "agent.identity",
+    "novel.identity",
+    "novel.system",
     "conversation.behavior",
-    "inline:4",
+    "novel.workflow",
     "tool.guidance",
     "todo.guidance",
     "context.reliability",
     "completion.contract",
   ],
 );
-assert.match(compiled.content, /Agent type: novel/);
+assert.match(compiled.content, /中文网络小说创作协作者/);
 assert.match(compiled.content, /TodoWrite@1.0.0/);
-assert.match(compiled.content, /Respond in the language/);
+assert.match(compiled.content, /# 创作流程/);
 assert.match(compiled.digest, /^sha256:[0-9a-f]{64}$/);
 
 const catalog = new AgentDefinitionCatalog([novelAgentDefinition]);
-assert.equal(catalog.resolve("novel").definitionVersion, "1.0.0");
+assert.equal(catalog.resolve("novel").definitionVersion, "1.1.0");
 assert.equal(novelAgentDefinition.delegation.mode, "disabled");
 assert.deepEqual(novelAgentDefinition.delegation.allowedAgentTypes, []);
-assert.deepEqual(novelAgentDefinition.toSnapshot().promptRecipe.items[3], {
-  kind: "inline",
-  content: "Respond in the language currently used by the user.",
+assert.deepEqual(novelAgentDefinition.toSnapshot().promptRecipe.items[4], {
+  kind: "section",
+  sectionId: "novel.workflow",
 });
 
 const invalidDefinition = new AgentDefinition({

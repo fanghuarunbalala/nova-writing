@@ -1,13 +1,19 @@
 /**
  * CCB 主 agent 参考 prompt 对齐冒烟。
+ * CCB main-agent reference prompt alignment smoke.
  *
- * 验证：
- * 1. createDefaultPromptSectionRegistry 包含全部 ccb.reference.* 静态段；
- * 2. ccb_main_reference AgentDefinition 按 CCB 顺序组装 6 个静态段；
- * 3. 每段 render() 输出与固化快照 digest 逐字一致（一字不差回归保护）；
- * 4. 组装结果包含关键标记（System / Doing tasks / Actions / Using your tools）。
+ * 验证 / Verifies:
+ * 1. createDefaultPromptSectionRegistry 包含全部 ccb.reference.* 静态段
+ *    the default registry contains all ccb.reference.* static sections;
+ * 2. ccb_main_reference AgentDefinition 按 CCB 顺序组装 6 个静态段
+ *    assembles the 6 static sections in CCB order;
+ * 3. 每段 render() 输出与固化快照 digest 逐字一致（一字不差回归保护）
+ *    every render() output matches the pinned snapshot digest (verbatim regression guard);
+ * 4. 组装结果包含关键标记（System / Doing tasks / Actions / Using your tools）
+ *    the assembled prompt contains key markers.
  *
  * 快照 digest 取自 CCB @ 2ccc216 对应函数的输出（见各段中文注释）。
+ * Snapshot digests are taken from CCB @ 2ccc216 section outputs (see section comments).
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";

@@ -1,25 +1,35 @@
 /**
  * CCB（claude-code-best/claude-code @ 2ccc216）主 agent 静态 System Prompt 参考段。
+ * CCB (claude-code-best/claude-code @ 2ccc216) main agent static system prompt reference sections.
  *
- * 来源：vendor 参考仓库 src/constants/prompts.ts（getSimpleIntroSection /
+ * 来源 / Source：vendor 参考仓库 src/constants/prompts.ts（getSimpleIntroSection /
  * getSimpleSystemSection / getSimpleDoingTasksSection / getActionsSection /
  * getUsingYourToolsSection / getOutputEfficiencySection）。
  *
- * 用途：作为研究参考，按 CCB 原文逐字复刻 CCB 主 agent 的静态 prompt 段，
+ * 用途 / Purpose：作为研究参考，按 CCB 原文逐字复刻 CCB 主 agent 的静态 prompt 段，
  * 供本项目的 PromptRecipe/SystemPromptBuilder 对齐与对比。
+ * Verbatim CCB main-agent prompt sections for PromptRecipe/SystemPromptBuilder alignment research.
  *
- * 约束：
+ * 约束 / Constraints：
  * - 文本与 CCB @ 2ccc216 逐字一致（含换行与缩进），render() 输出恒定。
+ *   Text matches CCB @ 2ccc216 verbatim; render() output is constant.
  * - 只读参考：不进入任何默认 AgentDefinition 的 Recipe，不用于线上提示。
+ *   Read-only reference: never part of any default AgentDefinition Recipe.
  * - CCB 仓库无 license，禁止直接用于产品默认 prompt（可作参考后改写）。
+ *   CCB has no license; do not ship verbatim text in product prompts.
  * - 模板段（using-tools）使用 CCB 默认代表性配置渲染，替换项见类注释。
+ *   Template sections render with CCB default representative configuration.
  */
 import { PromptSection } from "../../section/PromptSection.js";
 
 /**
  * CCB 参考段：Intro（静态开头）。
- * 对应 getSimpleIntroSection(outputStyleConfig = null) 的输出，
- * 已解析 CYBER_RISK_INSTRUCTION 与 "with software engineering tasks" 分支。
+ * CCB reference section: Intro (static opening).
+ *
+ * 对应 getSimpleIntroSection(outputStyleConfig = null) 的输出，已解析
+ * CYBER_RISK_INSTRUCTION 与 "with software engineering tasks" 分支。
+ * Renders getSimpleIntroSection(outputStyleConfig = null) with CYBER_RISK_INSTRUCTION
+ * and the "with software engineering tasks" branch resolved.
  */
 export class CcbReferenceIntroPromptSection extends PromptSection {
   constructor() {
@@ -30,7 +40,7 @@ export class CcbReferenceIntroPromptSection extends PromptSection {
     });
   }
 
-  /** 渲染 CCB 原文。外部调用方：参考/对齐测试用，返回恒定字符串。 */
+  /** 渲染 CCB 原文，返回恒定字符串（参考/对齐测试用）。Renders the verbatim CCB text as constant output. */
   override render(): string {
     return [
       "",
@@ -44,8 +54,11 @@ export class CcbReferenceIntroPromptSection extends PromptSection {
 
 /**
  * CCB 参考段：System（系统行为与工具二分）。
+ * CCB reference section: System (runtime behavior and tool dichotomy).
+ *
  * 对应 getSimpleSystemSection() 的输出（'# System' + prependBullets(items)），
  * 含 hooks 说明段（getHooksSection 内联展开）。
+ * Renders getSimpleSystemSection() output with the hooks section inlined.
  */
 export class CcbReferenceSystemPromptSection extends PromptSection {
   constructor() {
@@ -56,7 +69,7 @@ export class CcbReferenceSystemPromptSection extends PromptSection {
     });
   }
 
-  /** 渲染 CCB 原文。外部调用方：参考/对齐测试用，返回恒定字符串。 */
+  /** 渲染 CCB 原文，返回恒定字符串（参考/对齐测试用）。Renders the verbatim CCB text as constant output. */
   override render(): string {
     return [
       "# System",
@@ -74,10 +87,14 @@ export class CcbReferenceSystemPromptSection extends PromptSection {
 
 /**
  * CCB 参考段：Doing tasks（做事与编码风格）。
+ * CCB reference section: Doing tasks (work and code style).
+ *
  * 对应 getSimpleDoingTasksSection() 的输出，已解析两处模板变量：
+ * Renders getSimpleDoingTasksSection() with two template variables resolved:
  * - ASK_USER_QUESTION_TOOL_NAME -> "AskUserQuestion"
  * - MACRO.ISSUES_EXPLAINER -> "report issues on GitHub"
  * 顶层条目用 " - "，嵌套子条目（codeStyleSubitems / userHelpSubitems）用 "  - "。
+ * Top-level bullets use " - ", nested bullets use "  - ".
  */
 export class CcbReferenceDoingTasksPromptSection extends PromptSection {
   constructor() {
@@ -88,7 +105,7 @@ export class CcbReferenceDoingTasksPromptSection extends PromptSection {
     });
   }
 
-  /** 渲染 CCB 原文。外部调用方：参考/对齐测试用，返回恒定字符串。 */
+  /** 渲染 CCB 原文，返回恒定字符串（参考/对齐测试用）。Renders the verbatim CCB text as constant output. */
   override render(): string {
     return [
       "# Doing tasks",
@@ -122,7 +139,10 @@ export class CcbReferenceDoingTasksPromptSection extends PromptSection {
 
 /**
  * CCB 参考段：Executing actions with care（危险操作确认）。
+ * CCB reference section: Executing actions with care (risky-action confirmation).
+ *
  * 对应 getActionsSection() 的输出，完全静态、无模板变量。
+ * Renders getActionsSection() output; fully static, no template variables.
  */
 export class CcbReferenceActionsPromptSection extends PromptSection {
   constructor() {
@@ -133,7 +153,7 @@ export class CcbReferenceActionsPromptSection extends PromptSection {
     });
   }
 
-  /** 渲染 CCB 原文。外部调用方：参考/对齐测试用，返回恒定字符串。 */
+  /** 渲染 CCB 原文，返回恒定字符串（参考/对齐测试用）。Renders the verbatim CCB text as constant output. */
   override render(): string {
     return [
       "# Executing actions with care",
@@ -153,11 +173,16 @@ export class CcbReferenceActionsPromptSection extends PromptSection {
 
 /**
  * CCB 参考段：Using your tools（工具使用指引）。
+ * CCB reference section: Using your tools (tool usage guidance).
+ *
  * 对应 getUsingYourToolsSection(enabledTools) 在 CCB 默认代表性配置下的输出：
- * - 非 REPL 模式；
- * - 有 Bash、无 PowerShell；
- * - 启用 TaskCreate（v2 任务工具），故 taskToolName = "TaskCreate"；
- * - 核心工具清单按 CCB 默认核心集展开。
+ * Renders getUsingYourToolsSection(enabledTools) under CCB's representative default configuration:
+ * - 非 REPL 模式 / non-REPL mode;
+ * - 有 Bash、无 PowerShell / Bash enabled, PowerShell absent;
+ * - 启用 TaskCreate（v2 任务工具），故 taskToolName = "TaskCreate"
+ *   TaskCreate enabled, so taskToolName = "TaskCreate";
+ * - 核心工具清单按 CCB 默认核心集展开
+ *   core tool list expanded from CCB's default core set.
  */
 export class CcbReferenceUsingYourToolsPromptSection extends PromptSection {
   constructor() {
@@ -168,7 +193,7 @@ export class CcbReferenceUsingYourToolsPromptSection extends PromptSection {
     });
   }
 
-  /** 渲染 CCB 原文（代表性配置）。外部调用方：参考/对齐测试用，返回恒定字符串。 */
+  /** 渲染 CCB 原文（代表性配置），返回恒定字符串。Renders the verbatim CCB text (representative config) as constant output. */
   override render(): string {
     return [
       "# Using your tools",
@@ -181,7 +206,10 @@ export class CcbReferenceUsingYourToolsPromptSection extends PromptSection {
 
 /**
  * CCB 参考段：Communication style（面向人的写作风格）。
+ * CCB reference section: Communication style (human-facing writing style).
+ *
  * 对应 getOutputEfficiencySection() 的输出，完全静态、无模板变量。
+ * Renders getOutputEfficiencySection() output; fully static, no template variables.
  */
 export class CcbReferenceCommunicationStylePromptSection extends PromptSection {
   constructor() {
@@ -192,7 +220,7 @@ export class CcbReferenceCommunicationStylePromptSection extends PromptSection {
     });
   }
 
-  /** 渲染 CCB 原文。外部调用方：参考/对齐测试用，返回恒定字符串。 */
+  /** 渲染 CCB 原文，返回恒定字符串（参考/对齐测试用）。Renders the verbatim CCB text as constant output. */
   override render(): string {
     return [
       "# Communication style",

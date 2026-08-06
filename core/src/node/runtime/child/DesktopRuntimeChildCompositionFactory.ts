@@ -64,6 +64,9 @@ import {
   type RuntimeRunPreparationSource,
   type ToolDispatcher,
 } from "../../../runtime/index.js";
+import { RuntimePromptAssembler } from "../../../runtime/context/index.js";
+import { PromptAssemblyBuilder } from "../../../prompt/assembly/index.js";
+import type { PromptDigester } from "../../../prompt/index.js";
 import { createChildToolExecutionComposition } from "./ChildToolExecutionFactory.js";
 import type { RuntimePersistencePorts } from "../../../runtime/ipc/index.js";
 import { createNovelConversationManifestComposition } from "../../agent/index.js";
@@ -122,6 +125,7 @@ export class DesktopRuntimeChildCompositionFactory
   readonly #manifestGroups: ReturnType<typeof createNovelConversationManifestComposition>["groups"];
   readonly #eventSchemaRegistry: ReturnType<typeof createCoreEventSchemaRegistry>;
   readonly #eventIdFactory: RuntimeEventIdFactory;
+  readonly #promptDigester: PromptDigester;
   readonly #logger: Logger;
 
   constructor(options: DesktopRuntimeChildCompositionFactoryOptions) {
@@ -153,6 +157,7 @@ export class DesktopRuntimeChildCompositionFactory
       ]);
     this.#manifestRegistry = composition.registry;
     this.#manifestGroups = composition.groups;
+    this.#promptDigester = composition.digester;
     this.#eventSchemaRegistry =
       options.eventSchemaRegistry ?? createCoreEventSchemaRegistry();
     this.#eventIdFactory =
@@ -259,7 +264,12 @@ export class DesktopRuntimeChildCompositionFactory
     const runExecutor = new AgentRuntimeRunExecutor({
       conversationId,
       preparationSource,
-      contextCompiler,
+      assembler: new RuntimePromptAssembler(
+        new PromptAssemblyBuilder({
+          digester: this.#promptDigester,
+          logger,
+        }),
+      ),
       agentAdapter,
       lifecycleController,
       logger,

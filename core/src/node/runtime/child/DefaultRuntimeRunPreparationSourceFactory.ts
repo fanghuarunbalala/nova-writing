@@ -5,7 +5,7 @@
  * child scope and surface stable unsupported failures.
  */
 import {
-  AgentRuntimeSystemPromptSource,
+  AgentRuntimeBasePromptSource,
   ProjectedUserMessageRunPreparationSource,
 } from "../../../runtime/index.js";
 import type { ConversationMessageFileStore } from "../../../storage/index.js";
@@ -41,7 +41,7 @@ export class DefaultRuntimeRunPreparationSourceFactory
         list: (query: Parameters<ConversationMessageFileStore["list"]>[0]) =>
           persistence.messages.list(query),
       } as ConversationMessageFileStore,
-      systemPromptSource: new AgentRuntimeSystemPromptSource(configuration),
+      basePromptSource: new AgentRuntimeBasePromptSource(configuration),
       logger: this.#logger,
     });
     this.#logger.debug("runtime_run_preparation_source.created", {

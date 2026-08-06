@@ -122,11 +122,12 @@ persisted store step.
 
 ### Phase A: Work-Item Layer
 
-- `agent_task_lists` + `agent_tasks` tables;
+- `agent_task_lists` + `agent_tasks` tables (journal-first projection pattern);
 - `TaskCreate` / `TaskList` / `TaskGet` / `TaskUpdate`;
-- list resolution (teamName > leaderTeamName > sessionId) and concurrent write
-  safety;
-- focused smoke; commit.
+- list resolution (teamName > conversationId) and role-bound Tool views
+  (Main/Team receive Task Tools; Ephemeral views receive TodoWrite only);
+- focused smoke; commit. **Status: implemented (protocol layer, Task tools,
+  role view, boundary smoke).**
 
 ### Phase B: Execution Layer Alignment
 

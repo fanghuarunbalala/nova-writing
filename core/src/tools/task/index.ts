@@ -27,6 +27,7 @@ export * from "./TaskCreate.js";
 export * from "./TaskGet.js";
 export * from "./TaskList.js";
 export * from "./TaskUpdate.js";
+export * from "./WorkItemToolView.js";
 
 export interface CreateTaskToolRegistryOptions {
   readonly writer: WorkItemWriter;

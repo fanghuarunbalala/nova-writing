@@ -5,3 +5,4 @@ dist/
 .DS_Store
 target/
 .pnpm-store/
+vendor/claude-code/

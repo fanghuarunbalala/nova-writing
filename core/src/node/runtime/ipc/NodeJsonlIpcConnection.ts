@@ -123,12 +123,6 @@ export class NodeJsonlIpcConnection implements RuntimeIpcConnection {
     this.#logger = (options.logger ?? noopLogger).child({
       component: "node_jsonl_ipc_connection",
     });
-    this.#readable.on("end", () => {
-      this.#logger.info("runtime.ipc.readable_end_event", {});
-    });
-    this.#readable.on("close", () => {
-      this.#logger.info("runtime.ipc.readable_close_event", {});
-    });
     this.#readable.on("error", (error) => {
       this.#logger.info("runtime.ipc.readable_error_event", {
         errorName: error instanceof Error ? error.name : typeof error,

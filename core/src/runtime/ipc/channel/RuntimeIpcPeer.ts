@@ -519,12 +519,6 @@ export class RuntimeIpcPeer {
         if (!item) return;
         try {
           await this.#connection.send(item.frame);
-          this.#logger.debug("runtime.ipc.frame_sent", {
-            frameType: item.frame.frameType,
-            ...(item.frame.frameType === "request"
-              ? { requestId: item.frame.requestId, method: item.frame.method }
-              : {}),
-          });
           item.resolve();
         } catch (error) {
           this.#logger.error("runtime.ipc.frame_send_failed", {

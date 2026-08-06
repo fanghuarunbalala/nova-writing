@@ -25,6 +25,25 @@
   color: var(--color-faint);
 }
 
+/* 轮次分隔（原型 .turn-sep）：居中 mono faint，两侧细线。 */
+.turnSep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0 2px;
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.turnSep::before,
+.turnSep::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
 /* 消息入场：切换对话时按序错峰（原型 .msg.conv-in）。 */
 @keyframes conv-in {
   from {

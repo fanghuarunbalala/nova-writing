@@ -14,6 +14,7 @@ function projection(overrides: Partial<ConversationProjectionSnapshot>): Convers
     revision: 1,
     lastAppliedSequence: 3,
     events: [],
+    toolTraces: [],
     timeline: [],
     userMessages: [],
     assistantMessages: [],
@@ -67,12 +68,93 @@ describe("chatSurfaceMapper", () => {
       [],
       "Novel Agent",
     );
-    expect(items).toHaveLength(2);
-    expect(items[0].kind).toBe("user");
-    if (items[1].kind === "assistant") {
-      expect(items[1].thinkLines).toHaveLength(1);
-      expect(items[1].text).toBe("已改为：雨落得密。");
-      expect(items[1].approvalState).toBe("completed");
+    expect(items).toHaveLength(3);
+    expect(items[0].kind).toBe("turn");
+    expect(items[1].kind).toBe("user");
+    if (items[2].kind === "assistant") {
+      expect(items[2].thinkLines).toHaveLength(1);
+      expect(items[2].text).toBe("已改为：雨落得密。");
+      expect(items[2].approvalState).toBe("completed");
+    }
+  });
+
+  it("inserts turn separators and attaches event flow and tool traces", () => {
+    const items = mapProjectionTimeline(
+      projection({
+        events: [
+          {
+            eventId: "e-input",
+            sequence: 1,
+            direction: "input",
+            eventType: "user.message",
+            timestamp: "2026-08-05T09:00:00.000Z",
+            recordedAt: "2026-08-05T09:00:00.000Z",
+          },
+          {
+            eventId: "e-run",
+            sequence: 2,
+            direction: "output",
+            eventType: "agent.run.state.changed",
+            summary: "— → running · provider_started",
+            timestamp: "2026-08-05T09:00:01.000Z",
+            recordedAt: "2026-08-05T09:00:01.000Z",
+          },
+          {
+            eventId: "e-draft",
+            sequence: 3,
+            direction: "output",
+            eventType: "novel.draft.started",
+            summary: "草稿会话 DS-1 启动 · base r041",
+            timestamp: "2026-08-05T09:00:02.000Z",
+            recordedAt: "2026-08-05T09:00:02.000Z",
+          },
+        ],
+        toolTraces: [
+          {
+            traceId: "trace-1",
+            toolName: "CharacterList",
+            outcome: "ok",
+            durationMs: 42,
+            runId: "r1",
+            sequence: 3,
+            timestamp: "2026-08-05T09:00:02.000Z",
+          },
+        ],
+        timeline: [
+          {
+            kind: "user-message",
+            eventId: "e-input",
+            sequence: 1,
+            timestamp: "2026-08-05T09:00:00.000Z",
+            text: "继续",
+          },
+          {
+            kind: "assistant-message",
+            assistantMessageId: "a1",
+            runId: "r1",
+            turnId: "t1",
+            startedSequence: 2,
+            lastSequence: 5,
+            timestamp: "2026-08-05T09:00:01.000Z",
+            status: "completed",
+            content: [{ type: "text", text: "好。" }],
+          },
+        ],
+      }),
+      [],
+      "Novel Agent",
+    );
+    expect(items[0].kind).toBe("turn");
+    if (items[0].kind === "turn") {
+      expect(items[0].label).toContain("第 1 轮");
+    }
+    const assistant = items.find((item) => item.kind === "assistant");
+    if (assistant !== undefined && assistant.kind === "assistant") {
+      expect(assistant.eventFlow).toHaveLength(2);
+      expect(assistant.eventFlow[0].family).toBe("agent");
+      expect(assistant.eventFlow[1].summary).toContain("草稿会话");
+      expect(assistant.toolTraces).toHaveLength(1);
+      expect(assistant.toolTraces[0].toolName).toBe("CharacterList");
     }
   });
 

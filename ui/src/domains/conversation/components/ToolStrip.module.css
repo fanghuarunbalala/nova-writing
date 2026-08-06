@@ -1,0 +1,115 @@
+/**
+ * ToolStrip 视觉（原型 .tool-strip + .tool-chip + .tool-rows）。
+ */
+.strip {
+  margin-top: 10px;
+}
+
+.title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-faint);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.group {
+  flex: none;
+  max-width: 100%;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-2);
+  font-size: 11px;
+  color: var(--color-fg);
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--color-border-strong);
+}
+
+.chip b {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-accent-ink);
+}
+
+.bad {
+  color: var(--color-danger);
+  font-weight: 750;
+}
+
+.chev {
+  color: var(--color-faint);
+  font-size: 10px;
+}
+
+.rows {
+  margin-top: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 11.5px;
+}
+
+.outcome {
+  flex: none;
+  width: 42px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.ok {
+  color: var(--color-success);
+}
+
+.failed {
+  color: var(--color-danger);
+}
+
+.txt {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.time {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-faint);
+}

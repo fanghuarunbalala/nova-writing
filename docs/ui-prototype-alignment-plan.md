@@ -154,12 +154,17 @@ toast）。core 零改动；`smoke:novel-approval` 通过；ui 200 测试全绿�
 
 范围：T2、T3、T4。
 
-- 后端：projection 增加**脱敏 tool-trace 摘要**（从 system.tool.trace.recorded 投影：
-  label 聚合、ok/failed、耗时、runId/turnId；不落 payload/参数）。
-- 前端：新组件 `RuntimeEventFlow`（原型 .evt-flow：家族分色事件行 + 描述）与
-  `ToolStrip`（tool chips 聚合展开）；timeline item 模型扩展 eventFlow/toolStrip；
-  turn 分隔符组件（由 turns 投影派生"第 N 轮"）。
-- 验证：core smoke（tool-trace 投影）+ ui 单测 + electron 目检。
+- 后端（已实现 2026-08-06，提交 `feat: add redacted event summaries and tool-trace
+  projection`）：`ConversationEventDescriptor` 增加脱敏 `summary`（
+  `ConversationEventSummary.ts` 按事件类型从 payload 取 id/状态/计数/修订号，
+  不落正文/prompt/参数）；`ConversationProjectionSnapshot` 增加 `toolTraces`
+  （从 system.tool.trace.recorded 投影：toolName/outcome/durationMs/runId/turnId/
+  sequence）。投影 store smoke 扩展断言（含"摘要不得泄漏正文"）。
+- 前端（已实现，提交 `feat: render runtime event flow, tool strip and turn
+  separators`）：timeline item 新增 `turn`（第 N 轮 · 时间）与 assistant 的
+  `eventFlow`/`toolTraces`；新组件 `RuntimeEventFlow`（家族分色、默认折叠）与
+  `ToolStrip`（工具聚合 chips 展开行）；mapper 按 sequence 归属事件与 trace。
+- 验证：core smoke + ui 单测 + electron 目检。
 
 ### Step 4：审批面板（前后端，最大步）
 

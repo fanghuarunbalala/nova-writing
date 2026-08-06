@@ -8,7 +8,12 @@
 import type { ConversationProjectionSnapshot } from "@novel/core";
 import type { ConversationCardDescriptor as GenericCardDescriptor } from "../../domains/conversation/cards/projection/index.js";
 import type { ConversationCardDescriptor } from "../../domains/conversation/projection/ConversationCardDescriptor.js";
-import type { ConversationTimelineItem, ThinkLineData } from "../../domains/conversation/projection/ConversationTimelineItem.js";
+import type {
+  ConversationEventView,
+  ConversationTimelineItem,
+  ThinkLineData,
+  ToolTraceView,
+} from "../../domains/conversation/projection/ConversationTimelineItem.js";
 
 export function mapProjectionTimeline(
   projection: ConversationProjectionSnapshot,
@@ -16,16 +21,26 @@ export function mapProjectionTimeline(
   agentLabel: string,
 ): readonly ConversationTimelineItem[] {
   const items: ConversationTimelineItem[] = [];
+  let turnNumber = 0;
   for (const item of projection.timeline) {
     switch (item.kind) {
-      case "user-message":
+      case "user-message": {
+        turnNumber += 1;
+        const timestamp = Date.parse(item.timestamp) || 0;
+        items.push({
+          kind: "turn",
+          sequence: item.sequence - 0.5,
+          label: `第 ${turnNumber} 轮 · ${formatTime(timestamp)}`,
+          timestamp,
+        });
         items.push({
           kind: "user",
           sequence: item.sequence,
           text: item.text,
-          timestamp: Date.parse(item.timestamp) || 0,
+          timestamp,
         });
         break;
+      }
       case "assistant-message": {
         const timestamp = Date.parse(item.timestamp) || 0;
         const textParts: string[] = [];
@@ -47,6 +62,21 @@ export function mapProjectionTimeline(
           )
           .map(toTimelineCard)
           .filter((card): card is ConversationCardDescriptor => card !== null);
+        const eventFlow = projection.events
+          .filter(
+            (event) =>
+              event.direction === "output" &&
+              event.sequence >= item.startedSequence &&
+              event.sequence <= item.lastSequence,
+          )
+          .map(toEventView);
+        const toolTraces = projection.toolTraces
+          .filter(
+            (trace) =>
+              trace.sequence >= item.startedSequence &&
+              trace.sequence <= item.lastSequence,
+          )
+          .map(toTraceView);
         items.push({
           kind: "assistant",
           sequence: item.startedSequence,
@@ -56,6 +86,8 @@ export function mapProjectionTimeline(
           text: textParts.join(""),
           cards: Object.freeze(messageCards),
           streaming: item.status === "streaming",
+          eventFlow: Object.freeze(eventFlow),
+          toolTraces: Object.freeze(toolTraces),
           ...(item.status === "streaming" ? { approvalState: "generating" as const } : {}),
           ...(item.status === "completed" ? { approvalState: "completed" as const } : {}),
           ...(item.status === "failed" ? { approvalState: "failed" as const } : {}),
@@ -74,6 +106,43 @@ export function mapProjectionTimeline(
     }
   }
   return Object.freeze(items);
+}
+
+function toEventView(
+  event: ConversationProjectionSnapshot["events"][number],
+): ConversationEventView {
+  return Object.freeze({
+    sequence: event.sequence,
+    timestamp: Date.parse(event.timestamp) || 0,
+    eventType: event.eventType,
+    family: familyOf(event.eventType),
+    ...(event.summary === undefined ? {} : { summary: event.summary }),
+  });
+}
+
+function toTraceView(
+  trace: ConversationProjectionSnapshot["toolTraces"][number],
+): ToolTraceView {
+  return Object.freeze({
+    traceId: trace.traceId,
+    toolName: trace.toolName,
+    ...(trace.stage === undefined ? {} : { stage: trace.stage }),
+    outcome: trace.outcome,
+    ...(trace.durationMs === undefined ? {} : { durationMs: trace.durationMs }),
+  });
+}
+
+function familyOf(eventType: string): ConversationEventView["family"] {
+  if (eventType.startsWith("agent.")) return "agent";
+  if (eventType.startsWith("novel.")) return "novel";
+  if (eventType.startsWith("system.")) return "system";
+  return "other";
+}
+
+function formatTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 /** generic 卡 → rich 渲染描述；暂不支持的 kind 返回 null。 */

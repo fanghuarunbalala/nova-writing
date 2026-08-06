@@ -6,6 +6,24 @@
  */
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
 
+/** 运行时事件行（对话内"本轮时序"）。Runtime event row. */
+export interface ConversationEventView {
+  readonly sequence: number;
+  readonly timestamp: number;
+  readonly eventType: string;
+  readonly family: "agent" | "system" | "novel" | "other";
+  readonly summary?: string;
+}
+
+/** 工具调用行（对话内工具条）。Tool-trace row. */
+export interface ToolTraceView {
+  readonly traceId: string;
+  readonly toolName: string;
+  readonly stage?: string;
+  readonly outcome: "ok" | "failed";
+  readonly durationMs?: number;
+}
+
 export interface ThinkLineData {
   readonly id: string;
   readonly text: string;
@@ -20,6 +38,12 @@ export interface ThinkLineData {
 }
 
 export type ConversationTimelineItem =
+  | {
+      readonly kind: "turn";
+      readonly sequence: number;
+      readonly label: string;
+      readonly timestamp: number;
+    }
   | {
       readonly kind: "user";
       readonly sequence: number;
@@ -37,6 +61,8 @@ export type ConversationTimelineItem =
       readonly text: string;
       readonly cards: readonly ConversationCardDescriptor[];
       readonly streaming: boolean;
+      readonly eventFlow?: readonly ConversationEventView[];
+      readonly toolTraces?: readonly ToolTraceView[];
     }
   | {
       readonly kind: "system";

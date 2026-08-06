@@ -10,9 +10,15 @@ import type { ConversationCardRendererRegistry } from "../cards/ConversationCard
 import type {
   ConversationCardDescriptor,
 } from "../projection/ConversationCardDescriptor.js";
-import type { ThinkLineData } from "../projection/ConversationTimelineItem.js";
+import type {
+  ConversationEventView,
+  ThinkLineData,
+  ToolTraceView,
+} from "../projection/ConversationTimelineItem.js";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import { AssistantMarkdown } from "./assistantContent/AssistantMarkdown.js";
+import { RuntimeEventFlow } from "./RuntimeEventFlow.js";
+import { ToolStrip } from "./ToolStrip.js";
 import type { MessageReference } from "./MessageReference.js";
 import { ThinkBlock } from "./ThinkBlock.js";
 import styles from "./AssistantMessage.module.css";
@@ -43,6 +49,8 @@ export interface AssistantMessageProps {
   readonly text: string;
   readonly cards?: readonly ConversationCardDescriptor[];
   readonly streaming?: boolean;
+  readonly eventFlow?: readonly ConversationEventView[];
+  readonly toolTraces?: readonly ToolTraceView[];
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly onResolveReference?: ReferenceResolver;
   readonly cardRenderers?: ConversationCardRendererRegistry;
@@ -65,6 +73,8 @@ export function AssistantMessage({
   text,
   cards = [],
   streaming = false,
+  eventFlow = [],
+  toolTraces = [],
   onReferenceClick,
   onResolveReference,
   cardRenderers = createDefaultConversationCardRendererRegistry(),
@@ -92,6 +102,8 @@ export function AssistantMessage({
             resolveReference={onResolveReference}
           />
         </div>
+        {eventFlow.length > 0 ? <RuntimeEventFlow events={eventFlow} /> : null}
+        {toolTraces.length > 0 ? <ToolStrip traces={toolTraces} /> : null}
         {cards.length > 0 ? (
           <div className={styles.cards}>
             {cards.map((card) => {

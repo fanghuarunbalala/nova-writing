@@ -114,6 +114,12 @@ interface RenderItemDeps {
 function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
   const { onMessageReferenceClick, resolveReference, onProposalAction } = deps;
   switch (item.kind) {
+    case "turn":
+      return (
+        <div className={styles.turnSep}>
+          <span>{item.label}</span>
+        </div>
+      );
     case "user":
       return (
         <UserMessage
@@ -136,6 +142,8 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
           text={item.text}
           cards={item.cards}
           streaming={item.streaming}
+          eventFlow={item.eventFlow}
+          toolTraces={item.toolTraces}
           onResolveReference={resolveReference}
           onCardAction={(cardId, action, payload) => {
             if (action === "view-diff" && typeof payload === "string") {

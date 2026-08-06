@@ -9,6 +9,7 @@ import {
   type RuntimeMessageSchemaRegistry,
   type RuntimeMessageSnapshot,
 } from "../message/index.js";
+import { CORE_RUNTIME_MESSAGE_TYPE } from "../message/schema/CoreRuntimeMessageSchemas.js";
 import { ContextCheckpointOverlayRenderer } from "./ContextCheckpointOverlayRenderer.js";
 import { ContextProjectionPlanner } from "./ContextProjectionPlanner.js";
 import {
@@ -120,9 +121,19 @@ export class ContextProjectionProviderCallCoordinator {
       );
     }
 
+    // system.reminder 消息永不删除：无论窗口/固定策略如何，全部强制保留，
+    // 保持消息前缀稳定，不破坏 provider prefill 缓存。
+    // system.reminder messages are never deleted: always force-selected so the
+    // message prefix stays stable and provider prefill caches remain valid.
     const selectedMessageIds = new Set([
       ...plan.selectedPinnedMessageIds,
       ...plan.selectedRecentMessageIds,
+      ...canonicalMessages
+        .filter(
+          (message) =>
+            message.messageType === CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
+        )
+        .map((message) => message.id),
     ]);
     const projectedMessages = Object.freeze(
       canonicalMessages.filter((message) => selectedMessageIds.has(message.id)),
@@ -143,6 +154,10 @@ export class ContextProjectionProviderCallCoordinator {
     this.logger.info("runtime.context.projection_application_completed", {
       ...identity,
       checkpointId: plan.projection.checkpointId ?? "none",
+      reminderMessageCount: canonicalMessages.filter(
+        (message) =>
+          message.messageType === CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
+      ).length,
       projectedMessageCount: projectedMessages.length,
       selectedCheckpointItemCount:
         plan.projection.selectedCheckpointItemIds.length,
@@ -270,8 +285,25 @@ function assertCanonicalClassification(
   ];
   const classified = new Set(classifiedIds);
   const canonical = new Set(canonicalMessages.map((message) => message.id));
+  // system.reminder 消息豁免窗口分类：它们不计入 recent 预算、不参与裁剪，
+  // 由 selectedMessageIds 的强制保留兜底（见 prepare）。若 candidate 已把它们
+  // 放进 pinned/recent 也无妨——分类仍是合法的。
+  // system.reminder messages are exempt from window classification: they are
+  // never budgeted or dropped, and retention is guaranteed by the force-select
+  // in prepare(). Candidates may still classify them normally.
+  const reminderIds = new Set(
+    canonicalMessages
+      .filter(
+        (message) =>
+          message.messageType === CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
+      )
+      .map((message) => message.id),
+  );
+  const unclassifiedNonReminder = [...canonical].filter(
+    (messageId) => !reminderIds.has(messageId) && !classified.has(messageId),
+  );
   if (
-    classified.size !== canonical.size ||
+    unclassifiedNonReminder.length > 0 ||
     [...classified].some((messageId) => !canonical.has(messageId))
   ) {
     throw new TypeError("Context Projection classification is incomplete");

@@ -1,11 +1,12 @@
 /**
  * ConversationComposer
  *
- * 输入区（原型 .composer）：gen-status + form(textarea + send) + mode-bar。
- * 模式栏置于 form 下方（与原型一致），发送后清空本地输入。
+ * 输入区（原型 .composer）：gen-status（生成状态胶囊）+ form(textarea + send) + mode-bar。
+ * 生成状态胶囊位于输入框正上方（原型位置）；模式栏置于 form 下方，发送后清空本地输入。
  */
 import { useState, type KeyboardEvent } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
+import { GenStatus, type GenStatusProps } from "./GenStatus.js";
 import type { ComposerMode } from "../store/ComposerDraftStore.js";
 import { ComposerModeBar } from "./ComposerModeBar.js";
 import styles from "./ConversationComposer.module.css";
@@ -20,9 +21,16 @@ export interface ConversationComposerProps {
   readonly conversationId: string;
   readonly enabled: boolean;
   readonly onSend: (input: ComposerInput) => void;
+  /** 生成状态（原型 .gen-status）；undefined 时不渲染。由 ChatSurface 注入运行时状态。 */
+  readonly status?: GenStatusProps;
 }
 
-export function ConversationComposer({ conversationId, enabled, onSend }: ConversationComposerProps) {
+export function ConversationComposer({
+  conversationId,
+  enabled,
+  onSend,
+  status,
+}: ConversationComposerProps) {
   const [mode, setMode] = useState<ComposerMode>("review");
   const [text, setText] = useState("");
 
@@ -42,6 +50,7 @@ export function ConversationComposer({ conversationId, enabled, onSend }: Conver
 
   return (
     <div className={styles.composer}>
+      {status !== undefined ? <GenStatus {...status} /> : null}
       <form
         className={styles.form}
         onSubmit={(event) => {

@@ -1,13 +1,14 @@
 /**
  * GenStatus 视觉（原型 .gen-status + .gen-dot + .gen-main）。
  *
- * 胶囊容器：max-width 880px 居中，radius 999px，border accent 14%，半透明 surface
+ * 胶囊容器：max-width 1000px 靠左对齐（与 composer form / timeline 一致），radius 999px，border accent 14%，半透明 surface
  * 底 + blur(12px)。live 状态：9x9 渐变 dot + ring 动画 + 渐变文字 flow 动画。
+ * live 附带已用计时（等宽数字）与右侧"停止"按钮（margin-left auto）；
  * failed：红色文字 + 重试按钮（margin-left auto 右对齐）。
  */
 .status {
-  max-width: 880px;
-  margin: 0 auto 8px;
+  max-width: 1000px;
+  margin: 0 0 8px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -67,6 +68,32 @@
   background-clip: text;
   color: transparent;
   animation: gen-grad-flow 3.6s ease-in-out infinite;
+}
+
+.elapsed {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--color-faint);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  opacity: 0.86;
+}
+
+.stop {
+  margin-left: auto;
+  padding: 2px 10px;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  font-weight: var(--fw-heavy);
+  color: var(--color-accent-ink);
+  opacity: 0.86;
+  cursor: pointer;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.stop:hover {
+  opacity: 1;
 }
 
 @keyframes gen-grad-flow {

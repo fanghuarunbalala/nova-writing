@@ -2,13 +2,14 @@
  * ChatSurface
  *
  * 组合对话域：timeline + composer；无对话时渲染空态。
- * 发送经 core UserMessageInputEvent enqueue（投影 binding）。
+ * 发送经 core UserMessageInputEvent enqueue（投影 binding）；
+ * 生成状态（GenStatus）按原型置于 composer 输入框上方，live 时停止按钮 enqueue StopInputEvent。
  */
-import { UserMessageInputEvent, type Logger, type NovelApiClient } from "@novel/core";
+import { StopInputEvent, UserMessageInputEvent, type Logger, type NovelApiClient } from "@novel/core";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
 import { ConversationComposer } from "../../domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../domains/conversation/components/ConversationTimeline.js";
-import { GenStatus } from "../../domains/conversation/components/GenStatus.js";
+import type { GenStatusProps } from "../../domains/conversation/components/GenStatus.js";
 import { useConversationProjection } from "../../domains/conversation/hooks/useConversationProjection.js";
 import { useConversationRuntimeStatus } from "../../domains/conversation/hooks/useConversationRuntimeStatus.js";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
@@ -64,14 +65,18 @@ function ActiveChatSurface({ api, logger, conversationId, title, agentLabel }: A
     : runtimeStatus.state === "live"
       ? "streaming"
       : "idle";
+  const genStatus: GenStatusProps | undefined =
+    genPhase === "idle"
+      ? undefined
+      : {
+          phase: genPhase,
+          error: failed ? "会话运行不可用，消息未送达。" : undefined,
+          onRetry: failed ? () => { void resume(); } : undefined,
+          onStop: !failed ? () => { void enqueue(new StopInputEvent({ conversationId })); } : undefined,
+        };
   return (
     <div className={styles.surface}>
       <MainSubHead title={title} sub={agentLabel} />
-      <GenStatus
-        phase={genPhase}
-        error={failed ? "会话运行不可用，消息未送达。" : undefined}
-        onRetry={failed ? () => { void resume(); } : undefined}
-      />
       <ConversationTimeline
         conversationId={conversationId}
         items={timeline}
@@ -80,6 +85,7 @@ function ActiveChatSurface({ api, logger, conversationId, title, agentLabel }: A
       <ConversationComposer
         conversationId={conversationId}
         enabled={snapshot.state === "active" && !failed}
+        status={genStatus}
         onSend={(input) => {
           void enqueue(new UserMessageInputEvent({ conversationId, text: input.text }));
         }}

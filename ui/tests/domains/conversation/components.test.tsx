@@ -154,11 +154,17 @@ describe("GenStatus", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("shows stage while thinking and retry on failure", async () => {
+  it("shows stage, elapsed clock and stop while live, then retry on failure", async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();
-    const { rerender } = render(<GenStatus phase="thinking" stage="正在思考大纲…" />);
+    const onStop = vi.fn();
+    const { rerender } = render(
+      <GenStatus phase="thinking" stage="正在思考大纲…" onStop={onStop} />,
+    );
     expect(screen.getByRole("status")).toHaveTextContent("正在思考大纲…");
+    expect(screen.getByText(/已用时 0s/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "停止" }));
+    expect(onStop).toHaveBeenCalledTimes(1);
     rerender(<GenStatus phase="failed" error="连接中断" onRetry={onRetry} />);
     expect(screen.getByText("生成失败")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重试" }));
@@ -186,6 +192,20 @@ describe("ConversationComposer", () => {
     rerender(<ConversationComposer conversationId="c1" enabled={false} onSend={onSend} />);
     await user.type(screen.getByRole("textbox"), "hi");
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+  });
+
+  it("renders the generation status pill above the input when status is provided", () => {
+    const onSend = vi.fn();
+    render(
+      <ConversationComposer
+        conversationId="c1"
+        enabled
+        onSend={onSend}
+        status={{ phase: "streaming", onStop: () => undefined }}
+      />,
+    );
+    expect(screen.getByText("正在生成…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "停止" })).toBeInTheDocument();
   });
 });
 

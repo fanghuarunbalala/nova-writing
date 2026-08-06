@@ -30,7 +30,8 @@
     "smoke:electron-safe-storage-credential": "pnpm --dir ../core build && pnpm build && node scripts/electron-safe-storage-credential-cipher-smoke.mjs",
     "smoke:electron-configuration-bridge": "pnpm --dir ../core build && pnpm build && node scripts/electron-configuration-bridge-smoke.mjs",
     "smoke:electron-renderer-bootstrap": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-renderer-bootstrap-typecheck.tsx && node scripts/electron-renderer-bootstrap-smoke.mjs",
-    "smoke:desktop-web-shell-parity": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm --dir ../web build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/desktop-web-shell-parity-typecheck.tsx && node scripts/desktop-web-shell-parity-smoke.mjs"
+    "smoke:desktop-web-shell-parity": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm --dir ../web build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/desktop-web-shell-parity-typecheck.tsx && node scripts/desktop-web-shell-parity-smoke.mjs",
+    "smoke:electron-desktop-ports": "pnpm --dir ../core build && pnpm --dir ../ui build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/electron-desktop-ports-typecheck.ts && node scripts/electron-desktop-ports-smoke.mjs"
   },
   "dependencies": {
     "@novel/core": "workspace:*",

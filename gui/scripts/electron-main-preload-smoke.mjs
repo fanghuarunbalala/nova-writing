@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { register } from "node:module";
 import {
   ApiTransportDisconnectedError,
   ApiTransportError,
@@ -11,13 +12,17 @@ import {
   createElectronPreloadBridge,
   exposeDesktopApi,
 } from "../dist/preload/index.js";
-import { ElectronApiTransport } from "../dist/renderer/index.js";
 import {
   ELECTRON_API_IPC_CHANNEL,
   ELECTRON_API_IPC_CHANNELS,
   ELECTRON_APPLICATION_COMMAND_CHANNEL,
   NOVEL_DESKTOP_BRIDGE_KEY,
 } from "../dist/shared/index.js";
+
+// CSS 由 Vite 消费；Node 侧先注册 stub loader 再动态加载 renderer dist
+// （renderer/index.js 经 extensions -> DesktopTitleBar 触及 *.module.css）。
+register(new URL("./node-css-loader.mjs", import.meta.url));
+const { ElectronApiTransport } = await import("../dist/renderer/index.js");
 
 class FakeIpcMain {
   handlers = new Map();
@@ -191,9 +196,13 @@ assert.deepEqual(Object.keys(bridge7).sort(), [
   "closeSubscription",
   "commands",
   "configuration",
+  "files",
   "openSubscription",
   "readSubscription",
   "request",
+  "tray",
+  "updater",
+  "window",
   "workspaces",
 ]);
 assert.equal(Object.isFrozen(bridge7.workspaces), true);

@@ -1,4 +1,5 @@
 /** Compile-only proof for guarded Electron Renderer composition and mounting. */
+/// <reference path="../src/types/css-modules.d.ts" />
 import type { ElectronPreloadBridge } from "../src/shared/index.js";
 import {
   createDesktopRendererComposition,

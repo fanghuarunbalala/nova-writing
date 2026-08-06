@@ -2,7 +2,16 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, dialog, Menu, safeStorage } from "electron";
+import {
+  app,
+  autoUpdater,
+  dialog,
+  Menu,
+  Notification,
+  safeStorage,
+  shell,
+  Tray,
+} from "electron";
 import {
   NodeApplicationConfigurationStore,
   NodeConfigurationHomeResolver,
@@ -22,10 +31,21 @@ import {
 } from "./config/index.js";
 import { createElectronDesktopApplication } from "./createElectronDesktopApplication.js";
 import { createMainProcessLogger } from "./MainProcessLogger.js";
+import type { DesktopApplication } from "./DesktopApplication.js";
 import {
   DesktopNovelWorkspaceApplicationFactory,
   DesktopWorkspaceService,
 } from "./workspace/index.js";
+import {
+  DesktopNativeFileService,
+  DesktopSystemTrayService,
+  DesktopUpdaterService,
+  DesktopWindowService,
+  type ElectronAutoUpdaterPort,
+  type ElectronNotificationPort,
+  type ElectronTrayFactory,
+  type ElectronTrayPort,
+} from "./desktop/index.js";
 
 const paths = resolveDesktopMainPaths(import.meta.url);
 const buildMode = await readBuildMode(import.meta.url);
@@ -96,6 +116,36 @@ const workspaceService = new DesktopWorkspaceService({
   }),
 });
 const bootstrapTransport = new DesktopBootstrapApiTransport();
+
+// 桌面 4 个 platform service（spec 5.4）。windowService 用 closure 懒解析
+// application.windowManager：因为 DesktopApplication 内部构造 windowManager，
+// 必须在 application 创建后才能拿到引用。其它 3 个 service 不依赖 windowManager。
+let desktopApplicationRef: DesktopApplication | undefined;
+const windowService = new DesktopWindowService({
+  resolver: {
+    getPrimaryWindow: () => desktopApplicationRef?.windowManager.getPrimaryWindow(),
+  },
+});
+const updaterService = new DesktopUpdaterService({
+  autoUpdater: autoUpdater as unknown as ElectronAutoUpdaterPort,
+});
+const trayService = new DesktopSystemTrayService({
+  trayFactory: createElectronTrayFactory(),
+  notification: createElectronNotificationAdapter(),
+});
+const nativeFileService = new DesktopNativeFileService({
+  dialog: {
+    showOpenDialog: async (options) => {
+      const result = await dialog.showOpenDialog(
+        options as Parameters<typeof dialog.showOpenDialog>[0],
+      );
+      return result.canceled ? undefined : result.filePaths;
+    },
+  },
+  shell: {
+    openPath: async (path) => shell.openPath(path),
+  },
+});
 const application = createElectronDesktopApplication({
   resolveTransport: (senderId) =>
     workspaceService.resolveTransport(senderId) ?? bootstrapTransport,
@@ -103,7 +153,12 @@ const application = createElectronDesktopApplication({
   rendererTarget: { kind: "file", filePath: paths.rendererFilePath },
   workspaceService,
   configurationService,
+  windowService,
+  updaterService,
+  trayService,
+  nativeFileService,
 });
+desktopApplicationRef = application;
 Menu.setApplicationMenu(
   Menu.buildFromTemplate([
     ...createDesktopApplicationMenuTemplate({
@@ -148,4 +203,71 @@ async function readBuildMode(entryModuleUrl: string): Promise<"debug" | "release
   } catch {
     return "release";
   }
+}
+
+/**
+ * Electron Tray 工厂（spec 5.4 DesktopSystemTrayPort）。
+ *
+ * 仓库内暂无图标资产：path 为空 / 文件不存在时返回 undefined，service 据此
+ * 跳过 tray 创建（graceful degradation）。后续接入图标资产后无需改代码。
+ */
+function createElectronTrayFactory(): ElectronTrayFactory {
+  return Object.freeze({
+    create: (iconPath: string): ElectronTrayPort | undefined => {
+      if (typeof iconPath !== "string" || iconPath.trim().length === 0) return undefined;
+      try {
+        const tray = new Tray(iconPath);
+        return {
+          setImage: (path) => tray.setImage(path),
+          setToolTip: (text) => tray.setToolTip(text),
+          setContextMenu: (items) => {
+            const menu = Menu.buildFromTemplate(
+              items.map((item) => ({
+                id: item.id,
+                label: item.label,
+                type: item.separator === true ? "separator" : undefined,
+                enabled: item.enabled,
+              })),
+            );
+            tray.setContextMenu(menu);
+          },
+          displayBalloon: (options) => {
+            tray.displayBalloon({
+              title: options.title ?? "",
+              content: options.content ?? "",
+            });
+          },
+          destroy: () => tray.destroy(),
+          isDestroyed: () => tray.isDestroyed(),
+        };
+      } catch (error) {
+        console.warn(
+          JSON.stringify({
+            level: "warn",
+            event: "desktop_main.tray_create_failed",
+            error: String(error),
+          }),
+        );
+        return undefined;
+      }
+    },
+  });
+}
+
+/**
+ * Electron Notification 跨平台适配（spec 5.4 DesktopSystemTrayPort）。
+ *
+ * 使用 Electron Notification API；在 Windows 上 tray.displayBalloon 也可用，
+ * 但 Notification 在所有平台行为一致，作为统一入口。
+ */
+function createElectronNotificationAdapter(): ElectronNotificationPort {
+  return Object.freeze({
+    show: (options: { readonly title: string; readonly body?: string }) => {
+      const notification = new Notification({
+        title: options.title,
+        ...(options.body !== undefined ? { body: options.body } : {}),
+      });
+      notification.show();
+    },
+  });
 }

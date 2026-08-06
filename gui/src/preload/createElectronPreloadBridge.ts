@@ -12,18 +12,31 @@ import type {
   UpsertModelConfigurationRequest,
   UpsertModelConfigurationResult,
 } from "@novel/core";
+import type { FrontendFileReference } from "@novel/ui";
 import {
   ELECTRON_API_IPC_CHANNEL,
   ELECTRON_APPLICATION_COMMAND_CHANNEL,
   ELECTRON_CONFIGURATION_IPC_CHANNEL,
+  ELECTRON_NATIVE_FILE_IPC_CHANNEL,
+  ELECTRON_SYSTEM_TRAY_IPC_CHANNEL,
+  ELECTRON_UPDATER_IPC_CHANNEL,
+  ELECTRON_WINDOW_IPC_CHANNEL,
   ELECTRON_WORKSPACE_IPC_CHANNEL,
+  type DesktopFileSelectionOptions,
+  type DesktopTrayMenuItem,
+  type DesktopTrayNotification,
+  type DesktopUpdateInfo,
   type ElectronApplicationCommand,
   type ElectronApplicationCommandBridge,
   type ElectronBridgeAcknowledgement,
   type ElectronBridgeOpenSubscriptionRequest,
   type ElectronBridgeResult,
   type ElectronBridgeSubscriptionRead,
+  type ElectronNativeFileBridge,
   type ElectronPreloadBridge,
+  type ElectronSystemTrayBridge,
+  type ElectronUpdaterBridge,
+  type ElectronWindowBridge,
   type ElectronWorkspaceReference,
   type ElectronWorkspaceSession,
 } from "../shared/index.js";
@@ -72,6 +85,78 @@ export function createElectronPreloadBridge(
       close: () =>
         invoke<ElectronBridgeAcknowledgement>(
           ELECTRON_WORKSPACE_IPC_CHANNEL.close,
+        ),
+    }),
+    window: Object.freeze({
+      minimize: () =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_WINDOW_IPC_CHANNEL.minimize,
+        ),
+      maximize: () =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_WINDOW_IPC_CHANNEL.maximize,
+        ),
+      close: () =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_WINDOW_IPC_CHANNEL.close,
+        ),
+      setAlwaysOnTop: (alwaysOnTop: boolean) =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_WINDOW_IPC_CHANNEL.alwaysOnTopSet,
+          alwaysOnTop,
+        ),
+      setFullscreen: (fullscreen: boolean) =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_WINDOW_IPC_CHANNEL.fullscreenSet,
+          fullscreen,
+        ),
+    }),
+    updater: Object.freeze({
+      checkForUpdates: () =>
+        invoke<DesktopUpdateInfo | undefined>(
+          ELECTRON_UPDATER_IPC_CHANNEL.check,
+        ),
+      downloadUpdate: () =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_UPDATER_IPC_CHANNEL.download,
+        ),
+      quitAndInstall: () =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_UPDATER_IPC_CHANNEL.quitAndInstall,
+        ),
+    }),
+    tray: Object.freeze({
+      setTrayIcon: (iconPath: string) =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_SYSTEM_TRAY_IPC_CHANNEL.iconSet,
+          iconPath,
+        ),
+      setTrayMenu: (items: readonly DesktopTrayMenuItem[]) =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_SYSTEM_TRAY_IPC_CHANNEL.menuSet,
+          items,
+        ),
+      showTrayNotification: (notification: DesktopTrayNotification) =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_SYSTEM_TRAY_IPC_CHANNEL.notificationShow,
+          notification,
+        ),
+    }),
+    files: Object.freeze({
+      selectFile: (options?: DesktopFileSelectionOptions) =>
+        invoke<readonly FrontendFileReference[]>(
+          ELECTRON_NATIVE_FILE_IPC_CHANNEL.selectFile,
+          options,
+        ),
+      selectDirectory: (options?: DesktopFileSelectionOptions) =>
+        invoke<readonly FrontendFileReference[]>(
+          ELECTRON_NATIVE_FILE_IPC_CHANNEL.selectDirectory,
+          options,
+        ),
+      previewFile: (referenceId: string) =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_NATIVE_FILE_IPC_CHANNEL.preview,
+          referenceId,
         ),
     }),
     configuration: Object.freeze({

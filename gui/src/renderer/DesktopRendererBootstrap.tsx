@@ -11,7 +11,10 @@ import type {
   ApplicationConfigurationClient,
   FrontendPlatform,
 } from "@novel/ui";
-import type { ElectronConfigurationBridge } from "../shared/index.js";
+import type {
+  DesktopPlatformApi,
+  ElectronConfigurationBridge,
+} from "../shared/index.js";
 import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -28,6 +31,7 @@ import {
 import { ElectronApiTransport } from "./transport/index.js";
 import { ElectronApplicationConfigurationClient } from "./config/index.js";
 import { createDesktopUiExtensions } from "./extensions/index.js";
+import { createDesktopPlatformApi } from "./platform/index.js";
 
 export interface DesktopRendererCompositionOptions {
   readonly window: DesktopRendererWindowPort;
@@ -39,6 +43,7 @@ export interface DesktopRendererComposition {
   readonly transport: ElectronApiTransport;
   readonly api: NovelApiClient;
   readonly platform: FrontendPlatform;
+  readonly desktopPlatformApi: DesktopPlatformApi;
   readonly commandSource?: ApplicationCommandSource;
   readonly configurationBridge?: ElectronConfigurationBridge;
   readonly configurationClient?: ApplicationConfigurationClient;
@@ -67,6 +72,7 @@ export function createDesktopRendererComposition(
     component: "desktop_renderer_bootstrap",
   });
   const bridge = resolveElectronPreloadBridge(options.window);
+  const desktopPlatformApi = createDesktopPlatformApi(bridge);
   const transport = new ElectronApiTransport({
     bridge,
     logger,
@@ -77,10 +83,14 @@ export function createDesktopRendererComposition(
     bridge.configuration === undefined
       ? undefined
       : new ElectronApplicationConfigurationClient(bridge.configuration);
+  const frontendPlatform =
+    options.platform ??
+    createElectronFrontendPlatform({ files: desktopPlatformApi.files });
   return Object.freeze({
     transport,
     api: new DefaultNovelApiClient({ transport, logger }),
-    platform: options.platform ?? createElectronFrontendPlatform(),
+    platform: frontendPlatform,
+    desktopPlatformApi,
     ...(commandSource !== undefined ? { commandSource } : {}),
     ...(bridge.configuration !== undefined
       ? { configurationBridge: bridge.configuration }
@@ -112,8 +122,11 @@ export function mountDesktopRenderer(
     );
   }
   const root = createRoot(rootElement);
-  // 桌面端默认注入 createDesktopUiExtensions()；调用方可通过 appProps.extensions 覆盖
-  const desktopExtensions = options.appProps?.extensions ?? createDesktopUiExtensions();
+  // 桌面端默认注入 createDesktopUiExtensions()；window port 经 platformApi 注入
+  // title bar 控件。调用方可通过 appProps.extensions 覆盖。
+  const desktopExtensions =
+    options.appProps?.extensions ??
+    createDesktopUiExtensions({ window: composition.desktopPlatformApi.window });
   root.render(
     <StrictMode>
       <DesktopNovelApp

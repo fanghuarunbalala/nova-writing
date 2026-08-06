@@ -50,6 +50,11 @@ export interface DesktopBrowserWindowPort {
   loadFile(filePath: string): Promise<void>;
   show(): void;
   close(): void;
+  minimize(): void;
+  maximize(): void;
+  isMaximized(): boolean;
+  setAlwaysOnTop(alwaysOnTop: boolean): void;
+  setFullscreen(fullscreen: boolean): void;
   isDestroyed(): boolean;
 }
 
@@ -81,6 +86,17 @@ export class DesktopWindowManager {
 
   hasPrimaryWindow(): boolean {
     return this.primaryWindow?.isDestroyed() === false;
+  }
+
+  /**
+   * 返回当前主窗口实例（spec 5.4 DesktopWindowPort 解析目标）。
+   * 主窗口未创建或已销毁时返回 undefined；DesktopWindowService 据此决定是否
+   * 返回 ELECTRON_WINDOW_NOT_AVAILABLE 错误。
+   */
+  getPrimaryWindow(): DesktopBrowserWindowPort | undefined {
+    const window = this.primaryWindow;
+    if (window === undefined || window.isDestroyed()) return undefined;
+    return window;
   }
 
   ownsSender(senderId: number): boolean {

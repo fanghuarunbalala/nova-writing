@@ -117,7 +117,12 @@ try {
   assert.deepEqual(restored.toSnapshot(), manifest.toSnapshot());
   assert.equal(Object.isFrozen(restored), true);
   assert.deepEqual(
-    (await workspaceStore.agentManifests.getByAgent("novel", "1.0.0"))
+    (
+      await workspaceStore.agentManifests.getByAgent(
+        "novel",
+        novelAgentDefinition.definitionVersion,
+      )
+    )
       .map((value) => value.manifestId),
     [manifest.manifestId],
   );

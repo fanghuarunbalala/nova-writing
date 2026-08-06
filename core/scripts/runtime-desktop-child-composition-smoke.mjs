@@ -69,13 +69,14 @@ try {
     }),
     workspace: Object.freeze({
       workspaceId: workspace.workspaceId,
-      workdir: "/private/workdir",
+      workdir: workspace.workspaceRoot,
     }),
     activation: Object.freeze({ reason: "explicit_restore" }),
     journal: Object.freeze({ highWatermark: 0 }),
   });
 
   const factory = new DesktopRuntimeChildCompositionFactory({
+    novelStorageRoot: workspace.workspaceRoot,
     manifestStoreProvider: async () => manifestStore.agentManifests,
     adapterFactory: {
       async create({ lifecycleController }) {

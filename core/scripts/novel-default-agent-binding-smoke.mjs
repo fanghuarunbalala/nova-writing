@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import {
   DefaultNovelApiClient,
   UserMessageInputEvent,
+  novelAgentDefinition,
 } from "../dist/index.js";
 import {
   DEFAULT_NOVEL_AGENT_MANIFEST_ID,
@@ -95,7 +96,10 @@ try {
 
   const bound = await client.conversations.create({
     conversationId: "conversation-default-bound",
-    agent: { agentType: "novel", definitionVersion: "1.0.0" },
+    agent: {
+      agentType: "novel",
+      definitionVersion: novelAgentDefinition.definitionVersion,
+    },
   });
   const boundSnapshot = await bound.getSnapshot();
   assert.equal(

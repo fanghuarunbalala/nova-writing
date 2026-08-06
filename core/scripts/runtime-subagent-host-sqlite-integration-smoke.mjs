@@ -88,7 +88,7 @@ try {
   const registry = createCoreEventSchemaRegistry();
   const events = [];
   const lifecycle = new DefaultSubagentLifecycleCoordinator({ manager, eventSink: { async append(event) { const snapshot = registry.validateOutput(event.getSnapshot()); events.push(snapshot); return { status: "recorded", conversationId: snapshot.conversationId, eventId: snapshot.id, sequence: events.length, recordedAt: snapshot.timestamp }; } }, eventIdFactory: { create(input) { return `event-${input.subagentId}-${input.eventType}-${input.ordinal}`; } }, clock: { now: () => timestamp } });
-  const handle = await lifecycle.start({ schemaVersion: SUBAGENT_SCHEMA_VERSION, subagentId: "sqlite", parentConversationId: "conversation-parent", parentRunId: "run-parent", agentType: "novel", definitionVersion: "1.0.0", objective: "private objective", toolPolicyId: "policy-child", requestedAt: timestamp });
+  const handle = await lifecycle.start({ schemaVersion: SUBAGENT_SCHEMA_VERSION, subagentId: "sqlite", parentConversationId: "conversation-parent", parentRunId: "run-parent", agentType: "novel", definitionVersion: novelAgentDefinition.definitionVersion, objective: "private objective", toolPolicyId: "policy-child", requestedAt: timestamp });
   const child = await workspaceStore.conversations.getConversation(handle.binding.childConversationId);
   assert.equal(child.metadata.parentConversationId, "conversation-parent");
   assert.equal(child.activeAgentBinding.manifestId, "manifest:subagent:novel_agent");

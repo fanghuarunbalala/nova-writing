@@ -16,6 +16,7 @@ import {
   PromptRecipe,
   PromptSectionItem,
   ResolvedPromptRecipe,
+  novelAgentDefinition,
 } from "../dist/index.js";
 import {
   DEFAULT_NOVEL_AGENT_MANIFEST_ID,
@@ -43,14 +44,19 @@ try {
   const first = await provisioner.provision(workspaceStore.agentManifests);
   assert.equal(first.manifestId, DEFAULT_NOVEL_AGENT_MANIFEST_ID);
   assert.equal(first.agentType, "novel");
-  assert.equal(first.definitionVersion, "1.0.0");
+  assert.equal(first.definitionVersion, novelAgentDefinition.definitionVersion);
   assert.match(first.manifestDigest, /^sha256:[0-9a-f]{64}$/);
 
   const second = await provisioner.provision(workspaceStore.agentManifests);
   assert.equal(second.manifestId, first.manifestId);
   assert.equal(second.manifestDigest, first.manifestDigest);
   assert.equal(
-    (await workspaceStore.agentManifests.getByAgent("novel", "1.0.0"))
+    (
+      await workspaceStore.agentManifests.getByAgent(
+        "novel",
+        novelAgentDefinition.definitionVersion,
+      )
+    )
       .length,
     1,
   );

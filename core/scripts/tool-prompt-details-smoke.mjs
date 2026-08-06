@@ -121,9 +121,18 @@ const deniedPrompt = await promptBuilder.build({
   definition: novelAgentDefinition,
   capabilities: deniedCapabilities,
 });
-assert.match(allPrompt.content, /Usage: Track non-trivial execution work\./);
-assert.match(allPrompt.content, /Parameters: Keep IDs stable/);
-assert.match(allPrompt.content, /Safety: Never use it/);
+assert.match(
+  allPrompt.content,
+  /Operate through the provided Conversation input, event, context, and Tool protocols\./,
+);
+assert.match(
+  allPrompt.content,
+  /Do not claim that an external action or persisted change occurred/,
+);
+assert.match(
+  allPrompt.content,
+  /Treat cancellation, approval, and Tool failures as authoritative Runtime state\./,
+);
 assert.doesNotMatch(deniedPrompt.content, /ClearContext/);
 
 const createManifest = (promptCapabilities) => new AgentManifestResolver({

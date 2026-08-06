@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import {
   AgentRuntimeRunExecutor,
-  BaseContextCompiler,
   INPUT_EVENT_TYPE,
   InputRouter,
   OUTPUT_EVENT_TYPE,
@@ -17,7 +16,7 @@ const forbidden = [
   "FORBIDDEN_FAILURE_INPUT_TEXT",
   "FORBIDDEN_FAILURE_SYSTEM_PROMPT",
   "FORBIDDEN_FAILURE_PREPARATION_ERROR",
-  "FORBIDDEN_FAILURE_COMPILER_ERROR",
+  "FORBIDDEN_FAILURE_ASSEMBLER_ERROR",
   "FORBIDDEN_FAILURE_ADAPTER_ERROR",
   "FORBIDDEN_FAILURE_PATH",
 ];
@@ -149,12 +148,16 @@ async function runFailureScenario(phase) {
   });
   const router = new InputRouter({ conversationId, logger });
   let preparationCount = 0;
-  let compilerCount = 0;
+  let assemblerCount = 0;
   let adapterCount = 0;
   const validPreparation = (request) => Object.freeze({
     conversationId,
     runId: request.runId,
-    systemPrompt: "FORBIDDEN_FAILURE_SYSTEM_PROMPT FORBIDDEN_FAILURE_PATH",
+    basePrompt: Object.freeze({
+      content: "FORBIDDEN_FAILURE_SYSTEM_PROMPT FORBIDDEN_FAILURE_PATH",
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    }),
+    messageHighWatermark: 0,
     contextMessages: Object.freeze([]),
     invocation: Object.freeze({
       kind: "prompt",
@@ -172,16 +175,19 @@ async function runFailureScenario(phase) {
       return validPreparation(request);
     },
   });
-  const baseCompiler = new BaseContextCompiler({ logger });
-  const contextCompiler = Object.freeze({
-    compile: async (request) => {
-      compilerCount += 1;
+  const assembler = Object.freeze({
+    assemble: async () => {
+      assemblerCount += 1;
       if (phase === "compiler") {
         throw new Error(
-          "FORBIDDEN_FAILURE_COMPILER_ERROR FORBIDDEN_FAILURE_PATH",
+          "FORBIDDEN_FAILURE_ASSEMBLER_ERROR FORBIDDEN_FAILURE_PATH",
         );
       }
-      return baseCompiler.compile(request);
+      return Object.freeze({
+        systemPrompt:
+          "FORBIDDEN_FAILURE_SYSTEM_PROMPT FORBIDDEN_FAILURE_PATH",
+        messages: Object.freeze([]),
+      });
     },
   });
   const adapter = Object.freeze({
@@ -196,7 +202,7 @@ async function runFailureScenario(phase) {
   const runExecutor = new AgentRuntimeRunExecutor({
     conversationId,
     preparationSource,
-    contextCompiler,
+    assembler,
     agentAdapter: adapter,
     lifecycleController,
     logger,
@@ -268,7 +274,7 @@ async function runFailureScenario(phase) {
     false,
   );
   assert.equal(preparationCount, 1);
-  assert.equal(compilerCount, phase === "preparation" ? 0 : 1);
+  assert.equal(assemblerCount, phase === "preparation" ? 0 : 1);
   assert.equal(adapterCount, phase === "adapter" ? 1 : 0);
   await pump.stop();
 

@@ -1,21 +1,30 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   AGENT_RUNTIME_OUTCOME,
   AgentRuntimeRunExecutor,
   AgentRuntimeStopCancellationPort,
-  BaseContextCompiler,
   EXECUTION_CANCELLATION_REASON,
   INPUT_EVENT_TYPE,
   InputRouter,
   OUTPUT_EVENT_TYPE,
+  PromptAssemblyBuilder,
   RUN_STATUS,
   RuntimeInputOutcomeController,
   RuntimeInputPump,
+  RuntimePromptAssembler,
   RuntimeStopInputHandler,
   RuntimeUserMessageInputHandler,
   TURN_STATUS,
   TurnController,
 } from "../dist/index.js";
+
+class Sha256Digester {
+  algorithm = "sha256";
+  async digest(content) {
+    return `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
+  }
+}
 
 const conversationId = "conversation-agent-stop-preemption";
 const timestamp = "2026-08-01T23:20:00.000Z";
@@ -216,7 +225,12 @@ const runExecutor = new AgentRuntimeRunExecutor({
     prepare: async (request) => Object.freeze({
       conversationId,
       runId: request.runId,
-      systemPrompt: "FORBIDDEN_STOP_SYSTEM_PROMPT FORBIDDEN_STOP_PATH",
+      basePrompt: Object.freeze({
+        content: "FORBIDDEN_STOP_SYSTEM_PROMPT FORBIDDEN_STOP_PATH",
+        digest:
+          "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      }),
+      messageHighWatermark: 0,
       contextMessages: Object.freeze([]),
       invocation: Object.freeze({
         kind: "prompt",
@@ -224,7 +238,12 @@ const runExecutor = new AgentRuntimeRunExecutor({
       }),
     }),
   }),
-  contextCompiler: new BaseContextCompiler({ logger }),
+  assembler: new RuntimePromptAssembler(
+    new PromptAssemblyBuilder({
+      digester: new Sha256Digester(),
+      logger,
+    }),
+  ),
   agentAdapter: adapter,
   lifecycleController,
   logger,

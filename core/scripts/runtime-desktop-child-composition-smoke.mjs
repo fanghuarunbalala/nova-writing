@@ -109,7 +109,12 @@ try {
             Object.freeze({
               conversationId,
               runId: request.runId,
-              systemPrompt: "FORBIDDEN_CHILD_SYSTEM_PROMPT",
+              basePrompt: Object.freeze({
+                content: "FORBIDDEN_CHILD_SYSTEM_PROMPT",
+                digest:
+                  "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              }),
+              messageHighWatermark: 0,
               contextMessages: Object.freeze([]),
               invocation: Object.freeze({
                 kind: "prompt",

@@ -1,14 +1,13 @@
 /**
  * DesktopWindowService
  *
- * 窗口操作服务（spec 5.4 DesktopWindowPort）。包装 DesktopWindowManager 解析出的
- * 主 BrowserWindow，向 renderer 暴露 minimize / maximize / close / setAlwaysOnTop /
- * setFullscreen。
+ * 窗口操作服务（spec 5.4 DesktopWindowPort）。按 senderId 解析所属 BrowserWindow，
+ * 向 renderer 暴露 minimize / maximize / close / setAlwaysOnTop / setFullscreen。
  *
  * 设计约束：
- * - 单窗口应用：DesktopWindowService 始终操作 DesktopWindowManager.getPrimaryWindow()
- *   返回的主窗口；多窗口扩展不在 Phase B.3 范围内
- * - 主窗口未就绪或已销毁时抛 DesktopWindowError(ELECTRON_WINDOW_NOT_AVAILABLE)，
+ * - 多窗口：优先按 senderId 解析窗口（getWindowBySender）；解析器未实现时退回
+ *   getPrimaryWindow（兼容单窗口测试）
+ * - 窗口未就绪或已销毁时抛 DesktopWindowError(ELECTRON_WINDOW_NOT_AVAILABLE)，
  *   retryable=true 让 renderer 有机会重试
  * - 不暴露 filesystem / session 等敏感句柄，仅限窗口操作
  *
@@ -18,11 +17,12 @@ import { noopLogger, type Logger } from "@novel/core";
 import type { DesktopBrowserWindowPort } from "../../DesktopWindowManager.js";
 
 /**
- * 主窗口解析端口：返回当前可操作的主窗口或 undefined。
+ * 窗口解析端口：返回当前可操作的窗口或 undefined。
  * DesktopWindowManager 实现此接口；注入方式便于 service 单测。
  */
 export interface DesktopWindowResolver {
   getPrimaryWindow(): DesktopBrowserWindowPort | undefined;
+  getWindowBySender?(senderId: number): DesktopBrowserWindowPort | undefined;
 }
 
 export interface DesktopWindowServiceOptions {
@@ -91,15 +91,16 @@ export class DesktopWindowService implements DesktopWindowServicePort {
   }
 
   private requireWindow(senderId: number): DesktopBrowserWindowPort {
-    const window = this.resolver.getPrimaryWindow();
+    const window =
+      this.resolver.getWindowBySender?.(senderId) ??
+      this.resolver.getPrimaryWindow();
     if (window === undefined) {
       throw new DesktopWindowError(
         "ELECTRON_WINDOW_NOT_AVAILABLE",
         true,
-        "Primary desktop window is not available",
+        "Desktop window is not available",
       );
     }
-    void senderId; // senderId 仅用于日志，service 不做 sender 鉴权（由 IPC controller 负责）
     return window;
   }
 }

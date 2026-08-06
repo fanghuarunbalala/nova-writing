@@ -175,6 +175,11 @@ export class DesktopApplication {
     return this.windowManager.dispatchCommand(command);
   }
 
+  /** 菜单「新建项目…」：新开一个窗口（显示项目选择页）。 */
+  openNewWindow(): Promise<DesktopBrowserWindowPort> {
+    return this.windowManager.openWindow();
+  }
+
   private async startOnce(): Promise<void> {
     if (this.started) return;
     this.started = true;
@@ -230,8 +235,8 @@ export class DesktopApplication {
   }
 
   private readonly handleActivate = (): void => {
-    if (this.windowManager.hasPrimaryWindow()) return;
-    void this.windowManager.openPrimaryWindow().catch(() => {
+    if (this.windowManager.hasWindows()) return;
+    void this.windowManager.openWindow().catch(() => {
       this.logger.warn("desktop_application.activate_failed");
     });
   };

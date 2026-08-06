@@ -1,4 +1,10 @@
-/** Builds the native Electron application menu from fixed safe commands. */
+/**
+ * Builds the native Electron application menu from fixed safe commands.
+ *
+ * V0.2 精简菜单：项目（打开项目… / 新建项目…）、设置…、帮助。
+ * 「打开项目…」在聚焦窗口内打开项目选择弹窗；「新建项目…」由 main
+ * 进程直接新开一个窗口（新窗口显示项目选择页）。
+ */
 import type { MenuItemConstructorOptions } from "electron";
 import type { ElectronApplicationCommand } from "../shared/index.js";
 
@@ -6,6 +12,7 @@ export interface DesktopApplicationMenuOptions {
   readonly applicationName: string;
   readonly platform: string;
   readonly dispatch: (command: ElectronApplicationCommand) => void;
+  readonly openNewWindow: () => void;
 }
 
 export function createDesktopApplicationMenuTemplate(
@@ -16,44 +23,26 @@ export function createDesktopApplicationMenuTemplate(
       label: "项目",
       submenu: [
         {
-          label: "打开 Workspace…",
+          label: "打开项目…",
           accelerator: "CmdOrCtrl+O",
           click: () => options.dispatch("workspace.open"),
         },
         {
-          label: "关闭 Workspace",
-          accelerator: "CmdOrCtrl+Shift+W",
-          click: () => options.dispatch("workspace.close"),
+          label: "新建项目…",
+          accelerator: "CmdOrCtrl+N",
+          click: () => options.openNewWindow(),
         },
-        ...(options.platform === "darwin"
-          ? []
-          : [
-              { type: "separator" as const },
-              { role: "quit" as const, label: "退出" },
-            ]),
       ],
     },
     {
-      label: "编辑",
+      label: "设置",
       submenu: [
-        { role: "undo", label: "撤销" },
-        { role: "redo", label: "重做" },
-        { type: "separator" },
-        { role: "cut", label: "剪切" },
-        { role: "copy", label: "复制" },
-        { role: "paste", label: "粘贴" },
-        { role: "selectAll", label: "全选" },
-        { type: "separator" },
         {
           label: "设置…",
           accelerator: "CmdOrCtrl+,",
           click: () => options.dispatch("settings.open"),
         },
       ],
-    },
-    {
-      label: "发布",
-      submenu: [{ label: "发布设置…", enabled: false }],
     },
     {
       label: "帮助",

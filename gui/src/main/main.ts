@@ -129,6 +129,8 @@ let desktopApplicationRef: DesktopApplication | undefined;
 const windowService = new DesktopWindowService({
   resolver: {
     getPrimaryWindow: () => desktopApplicationRef?.windowManager.getPrimaryWindow(),
+    getWindowBySender: (senderId) =>
+      desktopApplicationRef?.windowManager.getWindowBySender(senderId),
   },
 });
 const updaterService = new DesktopUpdaterService({
@@ -171,6 +173,11 @@ Menu.setApplicationMenu(
       platform: process.platform,
       dispatch: (command) => {
         application.dispatchCommand(command);
+      },
+      openNewWindow: () => {
+        void application.openNewWindow().catch(() => {
+          // 新窗口打开失败（如 load 异常）时保持现状，不阻塞菜单。
+        });
       },
     }),
   ]),

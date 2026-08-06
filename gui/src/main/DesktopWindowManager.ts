@@ -1,4 +1,10 @@
-/** Owns the secure primary BrowserWindow and its sender cleanup lifecycle. */
+/**
+ * Owns secure BrowserWindows and their sender cleanup lifecycle.
+ *
+ * 多窗口（v0.2）：每个窗口以 webContents.id 为 senderId 注册；菜单命令
+ * 分发给聚焦窗口；窗口关闭时释放该 sender 对应的全部 IPC 会话（workspace/
+ * configuration/window 等）。DesktopWindowService 按 sender 解析到所属窗口。
+ */
 import { ApiTransportError, noopLogger, type Logger } from "@novel/core";
 import type { BrowserWindowConstructorOptions } from "electron";
 import {
@@ -45,7 +51,7 @@ export interface DesktopWebContentsPort {
 
 export interface DesktopBrowserWindowPort {
   readonly webContents: DesktopWebContentsPort;
-  on(event: "ready-to-show" | "closed", listener: () => void): void;
+  on(event: "ready-to-show" | "closed" | "focus", listener: () => void): void;
   loadURL(url: string): Promise<void>;
   loadFile(filePath: string): Promise<void>;
   show(): void;
@@ -72,10 +78,9 @@ export interface DesktopWindowManagerOptions {
 export class DesktopWindowManager {
   private readonly options: DesktopWindowManagerOptions;
   private readonly logger: Logger;
-  private readonly senderIds = new Set<number>();
+  private readonly windows = new Map<number, DesktopBrowserWindowPort>();
   private readonly cleanupTasks = new Set<Promise<void>>();
-  private primaryWindow?: DesktopBrowserWindowPort;
-  private openPromise?: Promise<DesktopBrowserWindowPort>;
+  private focusedWindow?: DesktopBrowserWindowPort;
 
   constructor(options: DesktopWindowManagerOptions) {
     this.options = options;
@@ -84,28 +89,42 @@ export class DesktopWindowManager {
     });
   }
 
+  /** 当前是否有至少一个窗口存活（macOS activate 用）。 */
+  hasWindows(): boolean {
+    return this.windows.size > 0;
+  }
+
+  /** 兼容旧名：窗口存在性判断（≥1 窗口）。 */
   hasPrimaryWindow(): boolean {
-    return this.primaryWindow?.isDestroyed() === false;
+    return this.hasWindows();
   }
 
   /**
-   * 返回当前主窗口实例（spec 5.4 DesktopWindowPort 解析目标）。
-   * 主窗口未创建或已销毁时返回 undefined；DesktopWindowService 据此决定是否
-   * 返回 ELECTRON_WINDOW_NOT_AVAILABLE 错误。
+   * 返回任一窗口实例（向后兼容 DesktopWindowService 的主窗口解析）。
    */
   getPrimaryWindow(): DesktopBrowserWindowPort | undefined {
-    const window = this.primaryWindow;
-    if (window === undefined || window.isDestroyed()) return undefined;
-    return window;
+    return this.windows.values().next().value;
+  }
+
+  /** 按 senderId 返回所属窗口（多窗口下窗口操作解析目标）。 */
+  getWindowBySender(senderId: number): DesktopBrowserWindowPort | undefined {
+    return this.windows.get(senderId);
+  }
+
+  /** 返回聚焦窗口；无聚焦或已销毁时退回任一存活窗口。 */
+  getFocusedWindow(): DesktopBrowserWindowPort | undefined {
+    const focused = this.focusedWindow;
+    if (focused !== undefined && !focused.isDestroyed()) return focused;
+    return this.getPrimaryWindow();
   }
 
   ownsSender(senderId: number): boolean {
-    return this.senderIds.has(senderId);
+    return this.windows.has(senderId);
   }
 
   dispatchCommand(command: ElectronApplicationCommand): boolean {
-    const window = this.primaryWindow;
-    if (window === undefined || window.isDestroyed()) return false;
+    const window = this.getFocusedWindow();
+    if (window === undefined) return false;
     window.webContents.send(ELECTRON_APPLICATION_COMMAND_CHANNEL, command);
     this.logger.debug("desktop_window.command_dispatched", {
       senderId: window.webContents.id,
@@ -115,55 +134,34 @@ export class DesktopWindowManager {
   }
 
   openPrimaryWindow(): Promise<DesktopBrowserWindowPort> {
-    if (this.primaryWindow?.isDestroyed() === false) {
-      return Promise.resolve(this.primaryWindow);
-    }
-    if (this.openPromise === undefined) {
-      const openPromise = this.openPrimaryWindowOnce();
-      this.openPromise = openPromise;
-      void openPromise.then(
-        () => {
-          if (this.openPromise === openPromise) this.openPromise = undefined;
-        },
-        () => {
-          if (this.openPromise === openPromise) this.openPromise = undefined;
-        },
-      );
-    }
-    return this.openPromise;
+    return this.openWindow();
   }
 
-  async closeAll(): Promise<void> {
-    const window = this.primaryWindow;
-    this.primaryWindow = undefined;
-    for (const senderId of [...this.senderIds]) {
-      this.senderIds.delete(senderId);
-      this.trackCleanup(senderId);
-    }
-    if (window !== undefined && !window.isDestroyed()) window.close();
-    const cleanupTasks = [...this.cleanupTasks];
-    await Promise.allSettled(cleanupTasks);
-    this.logger.info("desktop_window.close_all_completed", {
-      cleanupCount: cleanupTasks.length,
-    });
-  }
-
-  private async openPrimaryWindowOnce(): Promise<DesktopBrowserWindowPort> {
+  /** 打开一个新窗口（多窗口：每个窗口独立 senderId 与 workspace 会话）。 */
+  async openWindow(): Promise<DesktopBrowserWindowPort> {
     const window = this.options.createWindow(
       createSecureWindowOptions(this.options.preloadPath),
     );
     const senderId = validateSenderId(window.webContents.id);
-    this.primaryWindow = window;
-    this.senderIds.add(senderId);
+    this.windows.set(senderId, window);
+    this.focusedWindow = window;
     this.configureSecurity(window);
     window.on("ready-to-show", () => {
       if (!window.isDestroyed()) window.show();
     });
+    window.on("focus", () => {
+      this.focusedWindow = window;
+    });
     window.on("closed", () => {
-      if (this.primaryWindow === window) this.primaryWindow = undefined;
+      if (this.windows.delete(senderId) && this.focusedWindow === window) {
+        this.focusedWindow = undefined;
+      }
     });
     window.webContents.on("destroyed", () => {
-      if (this.senderIds.delete(senderId)) this.trackCleanup(senderId);
+      if (this.windows.delete(senderId)) {
+        if (this.focusedWindow === window) this.focusedWindow = undefined;
+        this.trackCleanup(senderId);
+      }
     });
     this.logger.info("desktop_window.open_started", { senderId });
     try {
@@ -182,6 +180,20 @@ export class DesktopWindowManager {
         "Electron desktop window failed to load",
       );
     }
+  }
+
+  async closeAll(): Promise<void> {
+    for (const [senderId, window] of [...this.windows.entries()]) {
+      this.windows.delete(senderId);
+      if (this.focusedWindow === window) this.focusedWindow = undefined;
+      this.trackCleanup(senderId);
+      if (!window.isDestroyed()) window.close();
+    }
+    const cleanupTasks = [...this.cleanupTasks];
+    await Promise.allSettled(cleanupTasks);
+    this.logger.info("desktop_window.close_all_completed", {
+      cleanupCount: cleanupTasks.length,
+    });
   }
 
   private configureSecurity(window: DesktopBrowserWindowPort): void {

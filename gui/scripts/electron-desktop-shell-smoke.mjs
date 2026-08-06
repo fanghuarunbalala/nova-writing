@@ -95,25 +95,24 @@ async function runDesktopShellSmoke() {
 
 function assertNativeMenuTemplate() {
   const commands = [];
+  const newWindows = [];
   const template = createDesktopApplicationMenuTemplate({
     applicationName: "Novel",
     platform: "darwin",
     dispatch: (command) => commands.push(command),
+    openNewWindow: () => newWindows.push(true),
   });
   assert.deepEqual(
     template.map((item) => item.label),
-    ["Novel", "项目", "编辑", "发布", "帮助"],
+    ["Novel", "项目", "设置", "帮助"],
   );
   const projectMenu = template[1].submenu;
   projectMenu[0].click();
   projectMenu[1].click();
-  const editMenu = template[2].submenu;
-  editMenu.find((item) => item.label === "设置…").click();
-  assert.deepEqual(commands, [
-    "workspace.open",
-    "workspace.close",
-    "settings.open",
-  ]);
+  const settingsMenu = template[2].submenu;
+  settingsMenu[0].click();
+  assert.deepEqual(commands, ["workspace.open", "settings.open"]);
+  assert.deepEqual(newWindows, [true]);
 }
 
 function assertSecureWindowOptions(options) {

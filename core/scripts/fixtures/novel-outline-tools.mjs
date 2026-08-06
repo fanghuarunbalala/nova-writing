@@ -1,11 +1,13 @@
 /** Shared fixture: Novel Outline + Character group manifests and unavailable-service registries for assembly tests. */
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   NovelCharacterToolService,
+  NovelDeleteToolService,
   NovelLocationToolService,
   NovelParagraphToolService,
   NovelPublicationToolService,
@@ -19,6 +21,7 @@ import {
   captureStoryOutlineId,
   captureStoryUnitId,
   createNovelCharacterToolRegistry,
+  createNovelDeleteToolRegistry,
   createNovelLocationToolRegistry,
   createNovelOutlineToolRegistry,
   createNovelParagraphToolRegistry,
@@ -182,8 +185,54 @@ export const novelPublicationToolRegistry = createNovelPublicationToolRegistry({
   service: unavailablePublicationToolService,
 });
 
+const unavailableDeleteToolService = new NovelDeleteToolService({
+  outline: {
+    deleteStoryUnit: unavailable,
+  },
+  outlineQueries: {
+    getStoryUnit: unavailable,
+  },
+  characters: {
+    delete: unavailable,
+  },
+  characterQueries: {
+    get: unavailable,
+  },
+  locations: {
+    delete: unavailable,
+  },
+  locationQueries: {
+    get: unavailable,
+  },
+  paragraphs: {
+    deleteParagraph: unavailable,
+  },
+  paragraphQueries: {
+    getParagraph: unavailable,
+  },
+  publication: {
+    deleteVolume: unavailable,
+    deleteChapter: unavailable,
+  },
+  publicationQueries: {
+    getVolume: unavailable,
+    getChapter: unavailable,
+  },
+  drafts: {
+    startDraft: unavailable,
+    getActiveDraft: unavailable,
+    resetToMain: unavailable,
+    rollback: unavailable,
+  },
+});
+
+export const novelDeleteToolRegistry = createNovelDeleteToolRegistry({
+  service: unavailableDeleteToolService,
+});
+
 export {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,

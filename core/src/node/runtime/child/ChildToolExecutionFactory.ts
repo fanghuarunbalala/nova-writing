@@ -93,6 +93,7 @@ export const CHILD_TOOL_PERMISSION_RULES: readonly ToolPermissionRule[] =
           "NovelVolumeEdit",
           "NovelChapterWrite",
           "NovelChapterEdit",
+          "NovelDelete",
         ]),
       }),
     }),
@@ -128,6 +129,7 @@ export function createChildToolExecutionComposition(
     { toolName: "NovelChapterRead", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelChapterWrite", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelChapterEdit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "NovelDelete", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
   ]);
   const permissionPolicy = new LayeredToolPermissionPolicy([
     ...INITIAL_TOOL_PERMISSION_RULES,

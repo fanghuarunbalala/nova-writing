@@ -26,11 +26,13 @@ import {
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
+  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   novelCharacterToolRegistry,
   novelLocationToolRegistry,
   novelParagraphToolRegistry,
   novelPublicationToolRegistry,
+  novelDeleteToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -67,6 +69,7 @@ tools: [TodoWrite]
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
+  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
 ]);
 const registry = new ToolRegistry([
   todoTool(),
@@ -75,6 +78,7 @@ const registry = new ToolRegistry([
   ...novelLocationToolRegistry.list(),
   ...novelParagraphToolRegistry.list(),
   ...novelPublicationToolRegistry.list(),
+  ...novelDeleteToolRegistry.list(),
 ]);
 const manifestStore = new InMemoryAgentManifestStore();
 const resolver = new AgentManifestResolver({
@@ -161,6 +165,7 @@ assert.deepEqual(
     "NovelCharacterEdit",
     "NovelCharacterRead",
     "NovelCharacterWrite",
+    "NovelDelete",
     "NovelLocationEdit",
     "NovelLocationRead",
     "NovelLocationWrite",
@@ -201,6 +206,7 @@ assert.throws(
       ...novelLocationToolRegistry.list(),
       ...novelParagraphToolRegistry.list(),
       ...novelPublicationToolRegistry.list(),
+      ...novelDeleteToolRegistry.list(),
     ]),
     groups,
   }).restore(assembly.manifest),

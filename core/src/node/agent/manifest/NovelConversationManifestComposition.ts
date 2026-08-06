@@ -45,9 +45,12 @@ import {
   createNovelLocationToolRegistry,
 } from "../../../tools/novel/index.js";
 import {
+  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
   NovelParagraphToolService,
+  NovelDeleteToolService,
   createNovelParagraphToolRegistry,
+  createNovelDeleteToolRegistry,
 } from "../../../tools/novel/index.js";
 import {
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
@@ -213,6 +216,20 @@ const unavailablePublicationToolService = new NovelPublicationToolService({
   },
 });
 
+const unavailableDeleteToolService = new NovelDeleteToolService({
+  outline: unavailableStoryOutlineService,
+  outlineQueries: unavailableStoryOutlineQueryService,
+  characters: unavailableCharacterService,
+  characterQueries: unavailableCharacterQueryService,
+  locations: unavailableLocationService,
+  locationQueries: unavailableLocationQueryService,
+  paragraphs: unavailableParagraphService,
+  paragraphQueries: unavailableParagraphQueryService,
+  publication: unavailablePublicationService,
+  publicationQueries: unavailablePublicationQueryService,
+  drafts: unavailableNovelDraftSessionService,
+});
+
 const unavailableOutlineToolService = new OutlineToolService({
   outline: unavailableStoryOutlineService,
   outlineQueries: unavailableStoryOutlineQueryService,
@@ -246,6 +263,9 @@ export function createNovelConversationManifestComposition(
     ...createNovelPublicationToolRegistry({
       service: unavailablePublicationToolService,
     }).list(),
+    ...createNovelDeleteToolRegistry({
+      service: unavailableDeleteToolService,
+    }).list(),
   ]);
   const groups = new ToolGroupCatalog([
     loadToolGroupManifest(NOVEL_CONVERSATION_TOOL_GROUP_MANIFEST),
@@ -254,6 +274,7 @@ export function createNovelConversationManifestComposition(
     NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
     NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
     NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
+    NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   ]);
   const promptBuilder = new SystemPromptBuilder({
     sections: createDefaultPromptSectionRegistry(),

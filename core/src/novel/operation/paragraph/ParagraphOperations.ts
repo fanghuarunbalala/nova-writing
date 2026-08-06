@@ -358,8 +358,8 @@ function applyParagraphDelete(
   assertParagraphDigest(store, operation, paragraphId, "storyUnitId");
   requireParagraph(store, operation, paragraphId);
   if (
-    !store.deleteParagraph(paragraphId) ||
-    !store.removeParagraphFromChapters(paragraphId)
+    !store.removeParagraphFromChapters(paragraphId) ||
+    !store.deleteParagraph(paragraphId)
   ) {
     throw precondition(operation, "domain_invariant", PARAGRAPH_ENTITY_TYPE, paragraphId);
   }

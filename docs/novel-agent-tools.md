@@ -6,17 +6,16 @@ Working draft for the deferred "Agent-facing Novel Tools" item
 (`docs/novel-domain.md` Open Question 13; `docs/novel-implementation-plan.md`
 Task N11-D deferral). Confirmed **group by group** with the user.
 
-**Confirmed and implemented:** outline, characters, locations, paragraph, and
-publication groups — `NovelOutlineRead/Write/Edit`,
+**Confirmed and implemented:** outline, characters, locations, paragraph,
+publication, and unified delete groups — `NovelOutlineRead/Write/Edit`,
 `NovelCharacterRead/Write/Edit`, `NovelLocationRead/Write/Edit`,
 `NovelParagraphRead/Write/Edit`, `NovelVolumeRead/Write/Edit`,
-`NovelChapterRead/Write/Edit` (see
-`core/src/tools/novel/{outline,character,location,paragraph,publication}/`).
+`NovelChapterRead/Write/Edit`, `NovelDelete` (see
+`core/src/tools/novel/{outline,character,location,paragraph,publication,delete}/`).
 
-**Pending:** unified delete and draft lifecycle. Each pending group will be
-confirmed and re-derived using the conventions in Section 2; the earlier
-16-tool draft is superseded and the total will be recounted as groups are
-confirmed.
+**Pending:** draft lifecycle. Each pending group will be confirmed and
+re-derived using the conventions in Section 2; the earlier 16-tool draft is
+superseded and the total will be recounted as groups are confirmed.
 
 **Removed:** `NovelCompletionEvaluate` and the separate Manuscript object.
 Manuscript identity is implicit (one per Novel); a StoryUnit's realization is
@@ -83,9 +82,16 @@ version: 1.0.0
 label: Novel Publication
 tools: [NovelVolumeRead, NovelVolumeWrite, NovelVolumeEdit,
         NovelChapterRead, NovelChapterWrite, NovelChapterEdit]
+
+# novel.delete (confirmed)
+schemaVersion: 1
+id: novel.delete
+version: 1.0.0
+label: Novel Delete
+tools: [NovelDelete]
 ```
 
-Pending groups (to be confirmed): `novel.delete`, `novel.draft`.
+Pending groups (to be confirmed): `novel.draft`.
 
 ## 4. Shared Value Contracts
 
@@ -295,7 +301,6 @@ The following groups will be confirmed next, following the same conventions
 (batch, PATCH, hidden types, no tool-surface digests):
 
 - characters / locations
-- unified delete
 - draft lifecycle (`NovelDraft`, `NovelDraftRollback`, `NovelDraftCommit`,
   `NovelDraftRebase`)
 
@@ -317,3 +322,9 @@ The following groups will be confirmed next, following the same conventions
 - `NovelVolumeRead` returns Volume records only (id/title/orderKey); Chapter
   structure and selections are read through `NovelChapterRead`, which supports
   `includeContent` to expand a Chapter's selection into joined content.
+- `NovelDelete` is one unified tool keyed by `kind` (`story_unit`,
+  `character`, `location`, `paragraph`, `volume`, `chapter`). It rejects
+  without cascading when dependencies exist (story unit with children or a
+  leaf plan, non-empty Volume). Deleting a paragraph also removes it from every
+  Chapter selection; deleting a Chapter keeps its Paragraphs under their
+  StoryUnits.

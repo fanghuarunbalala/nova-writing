@@ -204,6 +204,17 @@ novel.approval.requested 投影是否删除（新架构下不再产生该事件�
 
 验证：core smoke（审批决策输入→投影 resolved）+ ui 单测 + electron 审批流 e2e。
 
+**实现记录（2026-08-06）**：已提交 `feat: add approval panel, tool approval cards and
+decision actions`（决策 ①先二元、②删除 novel 投影）。core 零改动：
+- 新 `ApprovalStore`（shell 级）：从投影 `ToolApprovalProjection` 派生待审/已决 +
+  决策回调（ChatSurface 注入，enqueue `ApprovalDecisionInputEvent`）。
+- InspectorHost 双 tab（审批/档案）+ ApprovalPanel（待审列表 count-pill、详情、
+  批准/拒绝、resolved banner）。
+- 卡片投影器切换：novel.approval.requested → `system.tool.approval.requested`
+  （title/description 来自写工具 describeOperation 摘要）；proposal 卡补
+  批准/请求修改按钮；时间线"等待审批"行可点击打开面板。
+- TopBar badge 接 pendingCount；footer meta "r042 · N 待审"。
+
 ### Step 5：会话管理能力（后端，需确认 D2）
 
 范围：H5、H6。

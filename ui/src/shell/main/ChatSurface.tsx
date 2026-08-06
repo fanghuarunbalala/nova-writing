@@ -5,8 +5,14 @@
  * 发送经 core UserMessageInputEvent enqueue（投影 binding）；
  * 生成状态（GenStatus）按原型置于 composer 输入框上方，live 时停止按钮 enqueue StopInputEvent。
  */
-import { StopInputEvent, UserMessageInputEvent, type Logger, type NovelApiClient } from "@novel/core";
-import { useMemo } from "react";
+import {
+  ApprovalDecisionInputEvent,
+  StopInputEvent,
+  UserMessageInputEvent,
+  type Logger,
+  type NovelApiClient,
+} from "@novel/core";
+import { useEffect, useMemo } from "react";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
 import { ConversationComposer } from "../../domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../domains/conversation/components/ConversationTimeline.js";
@@ -18,6 +24,10 @@ import { useConversationRuntimeStatus } from "../../domains/conversation/hooks/u
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
+import {
+  mapApprovalViews,
+  type ApprovalStore,
+} from "../../domains/approval/ApprovalStore.js";
 import { MainSubHead } from "./MainSubHead.js";
 import { mapProjectionTimeline } from "./chatSurfaceMapper.js";
 import styles from "./ChatSurface.module.css";
@@ -33,6 +43,8 @@ export interface ChatSurfaceProps {
     changeSetId: string,
     action: "approve" | "reject" | "view-diff",
   ) => void;
+  readonly onOpenApproval?: (approvalRequestId: string) => void;
+  readonly approvalStore: ApprovalStore;
 }
 
 export function ChatSurface({
@@ -43,6 +55,8 @@ export function ChatSurface({
   onReferenceClick,
   resolveReference,
   onProposalAction,
+  onOpenApproval,
+  approvalStore,
 }: ChatSurfaceProps) {
   const catalog = useExternalStore(conversationCatalog);
   const activeId = catalog.activeConversationId;
@@ -59,6 +73,8 @@ export function ChatSurface({
       onReferenceClick={onReferenceClick}
       resolveReference={resolveReference}
       onProposalAction={onProposalAction}
+      onOpenApproval={onOpenApproval}
+      approvalStore={approvalStore}
     />
   );
 }
@@ -75,6 +91,8 @@ interface ActiveChatSurfaceProps {
     changeSetId: string,
     action: "approve" | "reject" | "view-diff",
   ) => void;
+  readonly onOpenApproval?: (approvalRequestId: string) => void;
+  readonly approvalStore: ApprovalStore;
 }
 
 function ActiveChatSurface({
@@ -86,6 +104,8 @@ function ActiveChatSurface({
   onReferenceClick,
   resolveReference,
   onProposalAction,
+  onOpenApproval,
+  approvalStore,
 }: ActiveChatSurfaceProps) {
   const cardProjectors = useMemo(
     () => createDefaultConversationCardProjectorRegistry(),
@@ -96,6 +116,25 @@ function ActiveChatSurface({
     logger,
     cardProjectors,
   });
+  // 同步投影里的工具审批到 shell 级 ApprovalStore（InspectorHost/TopBar 订阅）。
+  useEffect(() => {
+    approvalStore.setApprovals(mapApprovalViews(snapshot.projection.approvals));
+  }, [approvalStore, snapshot.projection.approvals]);
+  // 决策回调：InspectorHost 的批准/拒绝最终走 binding enqueue 决策输入事件。
+  useEffect(() => {
+    approvalStore.setDecisionHandler(
+      (approvalRequestId, decision, argumentDigest) =>
+        enqueue(
+          new ApprovalDecisionInputEvent({
+            conversationId,
+            approvalRequestId,
+            decision,
+            argumentDigest,
+          }),
+        ),
+    );
+    return () => approvalStore.setDecisionHandler(undefined);
+  }, [approvalStore, conversationId, enqueue]);
   const timeline = mapProjectionTimeline(
     snapshot.projection,
     snapshot.cards.cards,
@@ -127,6 +166,7 @@ function ActiveChatSurface({
         onMessageReferenceClick={onReferenceClick}
         resolveReference={resolveReference}
         onProposalAction={onProposalAction}
+        onOpenApproval={onOpenApproval}
       />
       <ConversationComposer
         conversationId={conversationId}

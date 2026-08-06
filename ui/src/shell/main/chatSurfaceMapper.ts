@@ -101,6 +101,7 @@ export function mapProjectionTimeline(
           sequence: item.requestedSequence,
           text: `等待审批：${item.title}`,
           timestamp: Date.parse(item.requestedAt) || 0,
+          approvalRequestId: item.approvalRequestId,
         });
         break;
     }

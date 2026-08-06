@@ -23,6 +23,7 @@ export interface ConversationTimelineProps {
   readonly onMessageReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onProposalAction?: (changeSetId: string, action: "approve" | "reject" | "view-diff") => void;
+  readonly onOpenApproval?: (approvalRequestId: string) => void;
 }
 
 export function ConversationTimeline({
@@ -32,6 +33,7 @@ export function ConversationTimeline({
   onMessageReferenceClick,
   resolveReference,
   onProposalAction,
+  onOpenApproval,
 }: ConversationTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -87,6 +89,7 @@ export function ConversationTimeline({
                 onMessageReferenceClick,
                 resolveReference,
                 onProposalAction,
+                onOpenApproval,
               })}
             </div>
           );
@@ -109,10 +112,16 @@ interface RenderItemDeps {
     changeSetId: string,
     action: "approve" | "reject" | "view-diff",
   ) => void;
+  readonly onOpenApproval?: (approvalRequestId: string) => void;
 }
 
 function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
-  const { onMessageReferenceClick, resolveReference, onProposalAction } = deps;
+  const {
+    onMessageReferenceClick,
+    resolveReference,
+    onProposalAction,
+    onOpenApproval,
+  } = deps;
   switch (item.kind) {
     case "turn":
       return (
@@ -146,13 +155,28 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
           toolTraces={item.toolTraces}
           onResolveReference={resolveReference}
           onCardAction={(cardId, action, payload) => {
-            if (action === "view-diff" && typeof payload === "string") {
+            if (typeof payload !== "string") return;
+            if (action === "view-diff") {
               onProposalAction?.(payload, "view-diff");
+            } else if (action === "approve") {
+              onProposalAction?.(payload, "approve");
+            } else if (action === "reject") {
+              onProposalAction?.(payload, "reject");
             }
           }}
         />
       );
     case "system":
-      return <div className={styles.system}>{item.text}</div>;
+      return item.approvalRequestId !== undefined && onOpenApproval !== undefined ? (
+        <button
+          type="button"
+          className={styles.systemAction}
+          onClick={() => onOpenApproval(item.approvalRequestId as string)}
+        >
+          {item.text}
+        </button>
+      ) : (
+        <div className={styles.system}>{item.text}</div>
+      );
   }
 }

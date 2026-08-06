@@ -5,6 +5,48 @@
  * 拖拽调宽由 DragHandle 提供；宽度由 inline style 注入。
  * insp-head 含 kicker（10px/0.1em letter-spacing）+ close 按钮（28x28 1px border）。
  */
+.tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  padding: 2px;
+}
+
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab:hover {
+  color: var(--color-fg);
+}
+
+.tabActive {
+  background: var(--color-surface);
+  color: var(--color-accent-ink);
+  box-shadow: 0 1px 3px rgba(20, 12, 6, 0.08);
+}
+
+.countPill {
+  font-size: 9.5px;
+  font-weight: 800;
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+  padding: 0 6px;
+  border-radius: 999px;
+}
 .host {
   position: relative;
   flex: none;

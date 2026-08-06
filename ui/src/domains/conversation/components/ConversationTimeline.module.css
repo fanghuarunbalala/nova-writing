@@ -25,6 +25,23 @@
   color: var(--color-faint);
 }
 
+.systemAction {
+  display: block;
+  margin: 4px auto;
+  padding: 3px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-accent-ink);
+  cursor: pointer;
+}
+
+.systemAction:hover {
+  border-color: color-mix(in oklab, var(--color-accent) 38%, var(--color-border));
+}
+
 /* 轮次分隔（原型 .turn-sep）：居中 mono faint，两侧细线。 */
 .turnSep {
   display: flex;

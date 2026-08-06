@@ -34,6 +34,8 @@ export interface SidebarProps {
   readonly onSelectContentPane: (pane: ContentTab) => void;
   readonly workspaceId?: string;
   readonly workspaceLabel?: string;
+  readonly revision?: string;
+  readonly pendingApprovalCount?: number;
   readonly onOpenWorkspace?: () => void;
   readonly onTodoAction?: (id: string, action: string) => void;
 }
@@ -50,6 +52,8 @@ export function Sidebar({
   onSelectContentPane,
   workspaceId,
   workspaceLabel,
+  revision,
+  pendingApprovalCount = 0,
   onOpenWorkspace,
   onTodoAction,
 }: SidebarProps) {
@@ -77,7 +81,13 @@ export function Sidebar({
       <WorkspaceFootingSection
         workspaceId={workspaceId}
         label={workspaceLabel}
-        meta={workspaceId === undefined ? "" : workspaceId.slice(0, 12)}
+        meta={
+          revision !== undefined
+            ? `${revision} · ${pendingApprovalCount} 待审`
+            : workspaceId === undefined
+              ? ""
+              : workspaceId.slice(0, 12)
+        }
         onClick={onOpenWorkspace}
       />
     </aside>

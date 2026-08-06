@@ -36,6 +36,7 @@ import type { NovelUiExtensions } from "../extensions/NovelUiExtensions.js";
 import type { ConversationCardRendererRegistry } from "../domains/conversation/cards/ConversationCardRendererRegistry.js";
 import type { ConversationCardProjectorRegistry } from "../domains/conversation/cards/projection/ConversationCardProjectorRegistry.js";
 import type { InspectorRendererRegistry } from "./inspector/InspectorRendererRegistry.js";
+import { ApprovalStore } from "../domains/approval/ApprovalStore.js";
 import { InspectorHost } from "./inspector/InspectorHost.js";
 import { MainArea } from "./main/MainArea.js";
 import type { ContentTab } from "./main/contentTab.js";
@@ -108,6 +109,8 @@ export function ApplicationShell({
 
   const workspace = useExternalStore(workspaceAdapter);
   const overview = useExternalStore(domainStores.novelOverview);
+  const approvalStore = useMemo(() => new ApprovalStore(), []);
+  const approvalSnapshot = useExternalStore(approvalStore);
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
   const [locateReference, setLocateReference] = useState<
@@ -247,12 +250,21 @@ export function ApplicationShell({
         inspectorRouter.transition({ kind: "approval", changeSetId });
         return;
       }
-      toastStore.push({
-        kind: "info",
-        text: "批准 / 修改将在审批域接入后可用",
-      });
+      void approvalStore.decide(
+        changeSetId,
+        action === "approve" ? "approved" : "rejected",
+      );
     },
-    [inspectorRouter, toastStore],
+    [approvalStore, inspectorRouter],
+  );
+
+  // 时间线"等待审批"行 → 打开审批面板并选中对应请求。
+  const handleOpenApproval = useCallback(
+    (approvalRequestId: string) => {
+      approvalStore.select(approvalRequestId);
+      inspectorRouter.transition({ kind: "approval", changeSetId: approvalRequestId });
+    },
+    [approvalStore, inspectorRouter],
   );
 
   const handleSelectContentPane = useCallback(
@@ -268,6 +280,7 @@ export function ApplicationShell({
       <TopBar
         workspaceName={workspace.current?.label}
         revision={overview.sourceRevision}
+        approvalBadge={approvalSnapshot.pendingCount}
         sidebarMode={sidebarMode}
         onToggleSidebar={() =>
           setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded"))
@@ -293,6 +306,8 @@ export function ApplicationShell({
           onSelectContentPane={handleSelectContentPane}
           workspaceId={workspaceId}
           workspaceLabel={workspace.current?.label}
+          revision={overview.sourceRevision}
+          pendingApprovalCount={approvalSnapshot.pendingCount}
           onOpenWorkspace={onOpenWorkspace}
           onTodoAction={handleTodoAction}
         />
@@ -317,6 +332,8 @@ export function ApplicationShell({
           resolveReference={resolveReference}
           locateReference={locateReference}
           onProposalAction={handleProposalAction}
+          onOpenApproval={handleOpenApproval}
+          approvalStore={approvalStore}
         />
         <InspectorHost
           inspectorRouter={inspectorRouter}
@@ -324,6 +341,7 @@ export function ApplicationShell({
           outlineTree={domainStores.storyOutlineTree}
           characters={domainStores.character}
           locations={domainStores.location}
+          approvalStore={approvalStore}
         />
       </div>
       <OverlaysHost toastStore={toastStore}>{overlays}</OverlaysHost>

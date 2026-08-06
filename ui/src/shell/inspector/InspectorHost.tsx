@@ -7,7 +7,7 @@
  * insp-head 的 kicker 按 panel 类型动态显示标签；close 触发 inspectorRouter.close()。
  * 审批 tabs 待 approval 域落地后补充。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DragHandle } from "../../shared/primitives/DragHandle.js";
 import { useInspectorRoute } from "../../shared/routing/hooks.js";
 import type { InspectorRouter } from "../../shared/routing/InspectorRouter.js";
@@ -15,6 +15,9 @@ import type { ConversationCatalogStore } from "../../domains/conversation/store/
 import type { CharacterStore } from "../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
+import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
+import { useExternalStore } from "../../shared/state/useExternalStore.js";
+import { ApprovalPanel } from "../../domains/approval/components/ApprovalPanel.js";
 import { ConversationInspectorPanel } from "./panels/ConversationInspectorPanel.js";
 import { EntityInspectorPanel } from "./panels/EntityInspectorPanel.js";
 import { OutlineUnitInspectorPanel } from "./panels/OutlineUnitInspectorPanel.js";
@@ -37,6 +40,7 @@ export interface InspectorHostProps {
   readonly outlineTree: StoryOutlineTreeStore;
   readonly characters: CharacterStore;
   readonly locations: LocationStore;
+  readonly approvalStore: ApprovalStore;
   readonly onLocateInContent?: (entityId: string) => void;
 }
 
@@ -46,10 +50,24 @@ export function InspectorHost({
   outlineTree,
   characters,
   locations,
+  approvalStore,
   onLocateInContent,
 }: InspectorHostProps) {
   const route = useInspectorRoute(inspectorRouter);
   const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [tab, setTab] = useState<"approval" | "detail">("approval");
+  const approvalSnapshot = useExternalStore(approvalStore);
+  useEffect(() => {
+    if (
+      route.state.kind === "entity" ||
+      route.state.kind === "outlineUnit" ||
+      route.state.kind === "conversation"
+    ) {
+      setTab("detail");
+    } else if (route.state.kind === "approval") {
+      setTab("approval");
+    }
+  }, [route.state.kind]);
   if (route.state.kind === "closed") return null;
   const workspaceId =
     conversationCatalog.getSnapshot().workspaceId ??
@@ -65,7 +83,30 @@ export function InspectorHost({
         }
       />
       <header className={styles.head}>
-        <span className={styles.kicker}>{kicker}</span>
+        <div className={styles.tabs} role="tablist" aria-label="右侧面板">
+          <button
+            type="button"
+            className={[styles.tab, tab === "approval" ? styles.tabActive : ""].filter(Boolean).join(" ")}
+            onClick={() => setTab("approval")}
+            aria-selected={tab === "approval"}
+            role="tab"
+          >
+            审批
+            {approvalSnapshot.pendingCount > 0 ? (
+              <span className={styles.countPill}>{approvalSnapshot.pendingCount} 待审</span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className={[styles.tab, tab === "detail" ? styles.tabActive : ""].filter(Boolean).join(" ")}
+            onClick={() => setTab("detail")}
+            aria-selected={tab === "detail"}
+            role="tab"
+          >
+            档案
+          </button>
+        </div>
+        <span className={styles.kicker}>{tab === "approval" ? "工具审批 · 批准是事件，批准后单事务落库" : kicker}</span>
         <button
           type="button"
           className={styles.close}
@@ -76,7 +117,9 @@ export function InspectorHost({
         </button>
       </header>
       <div className={styles.body}>
-        {route.state.kind === "entity" ? (
+        {tab === "approval" ? (
+          <ApprovalPanel store={approvalStore} />
+        ) : route.state.kind === "entity" ? (
           <EntityInspectorPanel
             workspaceId={workspaceId}
             entityType={route.state.entityType}

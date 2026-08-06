@@ -71,4 +71,6 @@ export type ConversationTimelineItem =
       readonly sequence: number;
       readonly text: string;
       readonly timestamp: number;
+      /** 工具审批行：携带 approvalRequestId 时可点击打开审批面板。 */
+      readonly approvalRequestId?: string;
     };

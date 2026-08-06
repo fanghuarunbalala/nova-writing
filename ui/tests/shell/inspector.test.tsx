@@ -9,6 +9,7 @@ import { ConversationCatalogStore } from "../../src/domains/conversation/store/C
 import { StoryOutlineTreeStore } from "../../src/domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { CharacterStore } from "../../src/domains/novel/character/store/CharacterStore.js";
 import { LocationStore } from "../../src/domains/novel/location/store/LocationStore.js";
+import { ApprovalStore } from "../../src/domains/approval/ApprovalStore.js";
 
 function buildApi() {
   return {
@@ -56,11 +57,12 @@ async function makeStores() {
   const outlineTree = new StoryOutlineTreeStore({ api });
   const characters = new CharacterStore({ api });
   const locations = new LocationStore({ api });
+  const approvalStore = new ApprovalStore();
   await conversationCatalog.loadWorkspace("w1");
   await outlineTree.loadWorkspace("w1");
   await characters.loadWorkspace("w1");
   await locations.loadWorkspace("w1");
-  return { conversationCatalog, outlineTree, characters, locations };
+  return { conversationCatalog, outlineTree, characters, locations, approvalStore };
 }
 
 describe("InspectorHost", () => {
@@ -78,12 +80,14 @@ describe("InspectorHost", () => {
     expect(screen.getByText("第一卷")).toBeInTheDocument();
   });
 
-  it("renders a deferred placeholder for approval", async () => {
+  it("renders approval tabs and empty panel for approval route", async () => {
     const stores = await makeStores();
     const router = new InspectorRouter();
     router.transition({ kind: "approval", changeSetId: "CS-1" });
     render(<InspectorHost inspectorRouter={router} {...stores} />);
-    expect(screen.getByText(/审批面板待定/)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "审批" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "档案" })).toBeInTheDocument();
+    expect(screen.getByText("暂无审批请求")).toBeInTheDocument();
   });
 
   it("resizes via the drag handle", async () => {

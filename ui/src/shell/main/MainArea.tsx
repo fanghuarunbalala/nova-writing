@@ -18,6 +18,7 @@ import { ContentSurface } from "./ContentSurface.js";
 import type { ContentTab } from "./contentTab.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
+import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
 import { ScheduleSurface } from "./ScheduleSurface.js";
 import styles from "./MainArea.module.css";
 
@@ -45,6 +46,8 @@ export interface MainAreaProps {
     changeSetId: string,
     action: "approve" | "reject" | "view-diff",
   ) => void;
+  readonly onOpenApproval?: (approvalRequestId: string) => void;
+  readonly approvalStore: ApprovalStore;
 }
 
 export function MainArea(props: MainAreaProps) {
@@ -63,6 +66,8 @@ export function MainArea(props: MainAreaProps) {
           onReferenceClick={props.onReferenceClick}
           resolveReference={props.resolveReference}
           onProposalAction={props.onProposalAction}
+          onOpenApproval={props.onOpenApproval}
+          approvalStore={props.approvalStore}
         />
       ) : mainView.state === "content" ? (
         <ContentSurface

@@ -75,6 +75,24 @@ export function ProposalCardRenderer({ card, onAction }: ProposalCardRendererPro
           >
             前往审批 Diff
           </Button>
+          {card.content.tag === "proposal" ? (
+            <>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => onAction?.("approve", card.content.changeSetId)}
+              >
+                批准
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost-danger"
+                onClick={() => onAction?.("reject", card.content.changeSetId)}
+              >
+                请求修改
+              </Button>
+            </>
+          ) : null}
         </footer>
       ) : null}
     </section>

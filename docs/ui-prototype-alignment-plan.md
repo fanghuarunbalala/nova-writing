@@ -104,15 +104,44 @@ Novel Markup v1 渲染引擎）。目标：把当前 `ui/` + `gui/` 桌面端逐
 
 范围：T1、T7（命令部分延后到 Step 4）。
 
-- 前端：实现并注册 card projectors（ConversationCardProjectorRegistry）：
-  `novel.approval.requested` → proposal 卡（changeSetId/baseRevision/operationIds）；
-  `agent.todo.updated` → plan 卡。将 ConversationProjectionBinding 升级为使用
-  ConversationCardProjectionStore，`chatSurfaceMapper` 从卡投影填充 `cards`。
-- 前端：`onProposalAction` 接线：view-diff → inspector 审批路由（Step 4 前为占位
-  面板）；approve/reject 在 Step 4 前禁用或 toast。
-- 后端：确认 `novel.approval.requested` / `agent.todo.updated` payload 序列化满足
-  卡数据（预计无需 core 改动，只做契约核对）。
-- 验证：ui 单测（投影→卡描述）、core 事件契约 smoke、electron 目检。
+**现状核对（2026-08-06 代码确认）**：binding 已用 `ConversationCardProjectionStore`
+且 `ConversationProjectionBindingSnapshot` 已含 `cards`（generic 描述：
+cardId/kind/title/summary/status/sourceSequence）；`useConversationProjection` 已支持
+`cardProjectors` 选项；rich 渲染器（Proposal/Plan/Diff/Table/Quote/Text）已注册并
+接线进 `AssistantMessage.cards`。**缺的只是：没有 projector 注册（cards 恒空）、
+mapper 硬编码 `cards: []`、`onProposalAction` 无人接。**
+
+**core 侧（预计零改动）**：`novel.approval.requested` payload 已注册 schema
+（requestVersion/approvalRequestId/novelId/draftSessionId/baseRevision/
+changeSetDigest/operationIds），前端可从事件 payload 读取。注意：事件只有
+operationIds，**没有 op 明细**（新增哪块/改哪个字段），所以本步 proposal 卡只带
+标题/meta/changeSetId，ops 留空；op 明细等 Step 4 审批详情 API。
+
+**前端改动（文件级）**：
+1. 新 projector：`ui/src/domains/conversation/cards/projectors/novelApprovalCardProjector.ts`
+   - eventType `novel.approval.requested` → generic 卡：
+     `cardId = payload.approvalRequestId`、`kind = "approval"`、
+     `title = "变更提议"`、`summary = base {baseRevision} → 待提交 · N 个操作`、
+     `status = "pending"`。
+   - 注册工厂 `createDefaultConversationCardProjectorRegistry()`（预留 task projector 插槽）。
+2. `ChatSurface`：useMemo 创建默认 registry 传入 `useConversationProjection`；
+   mapper 改为 `mapProjectionTimeline(snapshot.projection, snapshot.cards.cards, label)`；
+   新增 `onProposalAction` prop 传给 ConversationTimeline。
+3. `chatSurfaceMapper`：接受 cards；assistant 消息按
+   `startedSequence ≤ sourceSequence ≤ lastSequence` 归属；generic → rich 映射：
+   `approval → { kind: "proposal", content: { tag: "proposal", title, meta: summary,
+   changeSetId: cardId, ops: [] } }`；其余 kind 暂跳过。
+4. `MainArea` / `ApplicationShell`：`onProposalAction` 接线——view-diff →
+   `inspectorRouter.transition({ kind: "approval", changeSetId })`；
+   approve/reject → toast "审批操作将在审批域接入后可用"。
+5. 测试：projector 单测（伪造事件 → 卡描述）、mapper 归属边界单测、
+   ChatSurface onProposalAction 回调。
+6. 验证：core smoke（approval 事件 schema）+ ui test/check + electron 目检
+   （真实一轮生成 → proposal 卡出现，点"前往审批 Diff"打开右侧占位面板）。
+
+**决策点/风险**：proposal 卡标题事件里没有，Step 2 用固定"变更提议"，Step 4 审批
+详情 API 后可替换；空 ops 只保留"前往审批 Diff"入口；多 approval 事件天然按
+sequence 归属不同消息，无去重问题。
 
 ### Step 3：运行时事件时序与工具条（前后端）
 

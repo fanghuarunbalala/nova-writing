@@ -48,13 +48,23 @@ context.reliability
 completion.contract
 ```
 
-`SystemPromptBuilder` creates only the stable Base System Prompt. Runtime state
-is appended by the existing Runtime context path:
+`SystemPromptBuilder` creates only the stable Base System Prompt. Dynamic
+Runtime state is injected as `system.reminder` messages (`todo_reminder`,
+`compact_summary`, `nudge`, `plan_constraint`, `deferred_tools_delta`) into the
+Provider-call candidate by `PromptAssemblyBuilder`:
 
 ```text
-Base Prompt -> Checkpoint -> Current Todo -> Nudge -> Messages
+Base Prompt (only)
+  + canonical Messages
+  + system.reminder messages
+      -> PromptAssemblyBuilder
+      -> one Provider-call candidate (systemPrompt + messages + digest)
 ```
 
+Reminder messages are append-only and never deleted by compaction or
+projection, keeping the message prefix stable for Provider prefill caches.
+Checkpoint summaries, current todos, nudges, plan constraints, and deferred-tool
+lists all live in the message layer instead of the System Prompt string.
 Messages remain Provider message records rather than being flattened into the
 System Prompt string.
 

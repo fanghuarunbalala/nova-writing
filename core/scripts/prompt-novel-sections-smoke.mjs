@@ -57,4 +57,15 @@ assert.ok(!nonInteractiveContent.includes("**必须使用**"));
 assert.ok(nonInteractiveContent.includes("**当前会话的草稿（draft）环境**"));
 assert.ok(nonInteractiveContent.includes("工具在用户选择的权限模式下执行"));
 
-console.log("prompt-novel-sections: ok (identity + system(interactive/non) + workflow stable)");
+const doingTasks = registry.resolve("novel.doing-tasks", "1.0.0");
+const doingTasksContent = doingTasks.render();
+assert.ok(doingTasksContent.startsWith("# 创作任务"));
+assert.ok(doingTasksContent.includes("推进主线"));
+assert.ok(doingTasksContent.includes("节奏与悬念"));
+assert.ok(doingTasksContent.includes("人设与伏笔"));
+assert.ok(doingTasksContent.includes("设定一致"));
+assert.ok(doingTasksContent.includes("验证再报完成"));
+assert.ok(doingTasksContent.includes("作者给出偏好"));
+assert.equal(doingTasks.render(), doingTasksContent);
+
+console.log("prompt-novel-sections: ok (identity + system + workflow + doing-tasks stable)");

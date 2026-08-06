@@ -5,7 +5,7 @@ export const AGENT_RUNTIME_RUN_EXECUTION_FAILURE = {
   invalidRunState: "invalid_run_state",
   preparationFailed: "preparation_failed",
   invalidPreparation: "invalid_preparation",
-  contextCompileFailed: "context_compile_failed",
+  assemblyFailed: "assembly_failed",
   invalidCompiledContext: "invalid_compiled_context",
   adapterFailed: "adapter_failed",
   invalidAdapterResult: "invalid_adapter_result",

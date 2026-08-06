@@ -11,12 +11,12 @@ import {
   capturePromptDigest,
   type PromptDigest,
 } from "../PromptDigester.js";
-import type { CompiledSystemPrompt } from "../CompiledSystemPrompt.js";
+import type { PromptBase } from "../PromptDigester.js";
 
 export interface PromptAssemblyOptions {
   readonly conversationId: string;
   readonly runId: string;
-  readonly basePrompt: CompiledSystemPrompt;
+  readonly basePrompt: PromptBase;
   readonly messages: readonly RuntimeMessageSnapshot[];
   readonly messageHighWatermark: number;
   readonly systemPrompt: string;
@@ -36,7 +36,7 @@ export interface PromptAssemblySnapshot {
 export class PromptAssembly {
   readonly conversationId: string;
   readonly runId: string;
-  readonly basePrompt: CompiledSystemPrompt;
+  readonly basePrompt: PromptBase;
   readonly messages: readonly RuntimeMessageSnapshot[];
   readonly messageHighWatermark: number;
   readonly systemPrompt: string;

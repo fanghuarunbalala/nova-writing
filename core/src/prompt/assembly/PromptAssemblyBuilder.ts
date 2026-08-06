@@ -20,8 +20,7 @@ import {
   type RuntimeMessageSchemaRegistry,
   type RuntimeMessageSnapshot,
 } from "../../runtime/message/index.js";
-import type { CompiledSystemPrompt } from "../CompiledSystemPrompt.js";
-import type { PromptDigester } from "../PromptDigester.js";
+import type { PromptBase, PromptDigester } from "../PromptDigester.js";
 import {
   PromptAssembly,
 } from "./PromptAssembly.js";
@@ -33,7 +32,7 @@ import {
 export interface PromptAssemblyBuildRequest {
   readonly conversationId: string;
   readonly runId: string;
-  readonly basePrompt: CompiledSystemPrompt;
+  readonly basePrompt: PromptBase;
   readonly messages: readonly RuntimeMessageSnapshot[];
   readonly messageHighWatermark: number;
 }

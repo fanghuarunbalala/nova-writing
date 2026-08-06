@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   AGENT_RUNTIME_OUTCOME,
   AGENT_RUNTIME_RUN_EXECUTION_FAILURE,
   AgentRuntimeRunExecutor,
   AgentRuntimeRunExecutorError,
-  BaseContextCompiler,
   EXECUTION_CANCELLATION_REASON,
   INPUT_EVENT_TYPE,
+  PromptAssemblyBuilder,
   RUN_STATE_CHANGE_REASON,
   RUN_STATUS,
+  RuntimePromptAssembler,
   TurnController,
   TurnControllerStateError,
 } from "../dist/index.js";
@@ -32,6 +34,24 @@ class IncrementingEventIdFactory {
     this.count += 1;
     return `evt-agent-run-${input.scope}-${input.ordinal}-${this.count}`;
   }
+}
+
+class Sha256PromptDigester {
+  algorithm = "sha256";
+
+  async digest(content) {
+    return `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
+  }
+}
+
+const digester = new Sha256PromptDigester();
+const assembler = new RuntimePromptAssembler(new PromptAssemblyBuilder({ digester }));
+
+function basePromptFor(content) {
+  return {
+    content,
+    digest: `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`,
+  };
 }
 
 class RecordingSink {
@@ -144,7 +164,8 @@ function preparation(runId) {
   return {
     conversationId,
     runId,
-    systemPrompt: "FORBIDDEN_RUN_SYSTEM_PROMPT",
+    basePrompt: basePromptFor("FORBIDDEN_RUN_SYSTEM_PROMPT"),
+    messageHighWatermark: 1,
     contextMessages: [
       runtimeUserMessage("message-agent-run-context", "FORBIDDEN_RUN_CONTEXT_TEXT"),
     ],
@@ -161,7 +182,7 @@ function createExecutor(options) {
   return new AgentRuntimeRunExecutor({
     conversationId,
     preparationSource: options.preparationSource,
-    contextCompiler: options.contextCompiler ?? new BaseContextCompiler(),
+    assembler: options.assembler ?? assembler,
     agentAdapter: options.agentAdapter,
     lifecycleController: options.controller,
     logger: new CollectingLogger(options.logs),
@@ -179,14 +200,6 @@ const completedExecutor = createExecutor({
   logs: completedLogs,
   preparationSource: {
     prepare: async () => mutablePreparation,
-  },
-  contextCompiler: {
-    compile: async (request) => {
-      mutablePreparation.systemPrompt = "mutated-system-prompt";
-      mutablePreparation.contextMessages[0].payload.content[0].text = "mutated-context";
-      mutablePreparation.invocation.messages[0].payload.content[0].text = "mutated-prompt";
-      return new BaseContextCompiler().compile(request);
-    },
   },
   agentAdapter: {
     stream: async (request) => {
@@ -308,7 +321,7 @@ const terminalRaceLifecycle = {
 const terminalRaceExecutor = new AgentRuntimeRunExecutor({
   conversationId,
   preparationSource: { prepare: async () => preparation(terminalRaceRunId) },
-  contextCompiler: new BaseContextCompiler(),
+  assembler,
   agentAdapter: {
     stream: async () => ({
       conversationId,
@@ -334,8 +347,8 @@ const preparingStopExecutor = createExecutor({
   ...preparingStop,
   logs: [],
   preparationSource: { prepare: async () => preparation(preparingStopRunId) },
-  contextCompiler: {
-    compile: async (request) => {
+  assembler: {
+    assemble: async (request) => {
       await preparingStop.controller.transitionRun({
         current: RUN_STATUS.stopping,
         reason: RUN_STATE_CHANGE_REASON.stopRequested,
@@ -347,7 +360,7 @@ const preparingStopExecutor = createExecutor({
           cancellationReason: EXECUTION_CANCELLATION_REASON.stop,
         }),
       );
-      return new BaseContextCompiler().compile(request);
+      return assembler.assemble(request);
     },
   },
   agentAdapter: {
@@ -454,8 +467,9 @@ const invalidPreparationExecutor = createExecutor({
     prepare: async () => ({
       conversationId,
       runId: invalidPreparationRunId,
-      systemPrompt: "safe",
-      contextMessages: [duplicateMessage],
+      basePrompt: basePromptFor("safe"),
+      messageHighWatermark: 1,
+      contextMessages: [duplicateMessage, duplicateMessage],
       invocation: { kind: "prompt", messages: [duplicateMessage] },
     }),
   },
@@ -485,8 +499,8 @@ const invalidCompiledExecutor = createExecutor({
   ...invalidCompiled,
   logs: [],
   preparationSource: { prepare: async () => invalidCompiledPreparation },
-  contextCompiler: {
-    compile: async () => ({
+  assembler: {
+    assemble: async () => ({
       conversationId,
       runId: invalidCompiledRunId,
       systemPrompt: "safe",
@@ -540,7 +554,7 @@ const invalidCommit = await createRunningController(invalidCommitRunId, invalidC
 const invalidCommitExecutor = new AgentRuntimeRunExecutor({
   conversationId,
   preparationSource: { prepare: async () => preparation(invalidCommitRunId) },
-  contextCompiler: new BaseContextCompiler(),
+  assembler,
   agentAdapter: {
     stream: async () => ({
       conversationId,
@@ -577,8 +591,8 @@ const compilerFailureExecutor = createExecutor({
   preparationSource: {
     prepare: async () => preparation(compilerFailureRunId),
   },
-  contextCompiler: {
-    compile: async () => {
+  assembler: {
+    assemble: async () => {
       throw new Error("FORBIDDEN_RUN_COMPILER_ERROR FORBIDDEN_RUN_PATH");
     },
   },
@@ -594,7 +608,7 @@ await assert.rejects(
       runId: compilerFailureRunId,
       input: compilerFailureInput,
     }),
-  failure(AGENT_RUNTIME_RUN_EXECUTION_FAILURE.contextCompileFailed),
+  failure(AGENT_RUNTIME_RUN_EXECUTION_FAILURE.assemblyFailed),
 );
 assert.equal(compilerFailure.controller.getRunSnapshot().status, RUN_STATUS.running);
 
@@ -708,7 +722,7 @@ assert.equal(
   compilerFailureLogs.some(
     (record) =>
       record.event === "runtime.agent_run.execution_failed" &&
-      record.failure === AGENT_RUNTIME_RUN_EXECUTION_FAILURE.contextCompileFailed,
+      record.failure === AGENT_RUNTIME_RUN_EXECUTION_FAILURE.assemblyFailed,
   ),
   true,
 );

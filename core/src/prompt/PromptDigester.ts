@@ -2,6 +2,12 @@
 
 export type PromptDigest = `sha256:${string}`;
 
+/** 组装层依赖的最小 prompt 结构（内容 + digest）。Minimal prompt shape (content + digest) required by the assembly layer. */
+export interface PromptBase {
+  readonly content: string;
+  readonly digest: PromptDigest;
+}
+
 export interface PromptDigester {
   readonly algorithm: "sha256";
   digest(content: string): Promise<PromptDigest>;

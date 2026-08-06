@@ -35,7 +35,8 @@ import type {
   RuntimeRunPreparation,
   RuntimeRunPreparationSource,
 } from "./RuntimeRunPreparationSource.js";
-import type { RuntimeSystemPromptSource } from "./RuntimeSystemPromptSource.js";
+import type { RuntimeBasePromptSource } from "./RuntimeSystemPromptSource.js";
+import type { PromptBase } from "../../../prompt/index.js";
 
 const DEFAULT_PAGE_SIZE = 128;
 
@@ -43,7 +44,7 @@ export interface ProjectedUserMessageRunPreparationSourceOptions {
   conversationId: string;
   projections: ConversationMessageProjectionService;
   messages: ConversationMessageFileStore;
-  systemPromptSource: RuntimeSystemPromptSource;
+  basePromptSource: RuntimeBasePromptSource;
   messageSchemaRegistry?: RuntimeMessageSchemaRegistry;
   pageSize?: number;
   logger?: Logger;
@@ -62,7 +63,7 @@ export class ProjectedUserMessageRunPreparationSource
   private readonly conversationId: string;
   private readonly projections: ConversationMessageProjectionService;
   private readonly messages: ConversationMessageFileStore;
-  private readonly systemPromptSource: RuntimeSystemPromptSource;
+  private readonly basePromptSource: RuntimeBasePromptSource;
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
   private readonly pageSize: number;
   private readonly logger: Logger;
@@ -72,7 +73,7 @@ export class ProjectedUserMessageRunPreparationSource
     this.conversationId = options.conversationId;
     this.projections = options.projections;
     this.messages = options.messages;
-    this.systemPromptSource = options.systemPromptSource;
+    this.basePromptSource = options.basePromptSource;
     this.messageSchemaRegistry =
       options.messageSchemaRegistry ?? coreRuntimeMessageSchemaRegistry;
     this.pageSize = capturePageSize(options.pageSize ?? DEFAULT_PAGE_SIZE);
@@ -92,7 +93,7 @@ export class ProjectedUserMessageRunPreparationSource
     this.logger.info("runtime.run_preparation.started", toLogIdentity(captured));
 
     const projection = await this.synchronize(captured);
-    const systemPrompt = await this.resolveSystemPrompt(captured);
+    const basePrompt = await this.resolveBasePrompt(captured);
     const selected = await this.selectMessages(captured, projection);
 
     this.logger.info("runtime.run_preparation.completed", {
@@ -105,7 +106,8 @@ export class ProjectedUserMessageRunPreparationSource
     return Object.freeze({
       conversationId: captured.conversationId,
       runId: captured.runId,
-      systemPrompt,
+      basePrompt,
+      messageHighWatermark: selected.highWatermarkMessageIndex,
       contextMessages: selected.context,
       invocation: Object.freeze({
         kind: AGENT_RUNTIME_INVOCATION_KIND.prompt,
@@ -154,25 +156,29 @@ export class ProjectedUserMessageRunPreparationSource
     return result;
   }
 
-  private async resolveSystemPrompt(
+  private async resolveBasePrompt(
     request: RuntimeRunExecutionRequest,
-  ): Promise<string> {
-    let systemPrompt: string;
+  ): Promise<PromptBase> {
+    let basePrompt: PromptBase;
     try {
-      systemPrompt = await this.systemPromptSource.resolve(request);
+      basePrompt = await this.basePromptSource.resolve(request);
     } catch {
       throw this.fail(
-        PROJECTED_RUN_PREPARATION_FAILURE.systemPromptFailed,
+        PROJECTED_RUN_PREPARATION_FAILURE.basePromptFailed,
         request,
       );
     }
-    if (typeof systemPrompt !== "string") {
+    if (
+      basePrompt === null ||
+      typeof basePrompt !== "object" ||
+      typeof basePrompt.content !== "string"
+    ) {
       throw this.fail(
-        PROJECTED_RUN_PREPARATION_FAILURE.invalidSystemPrompt,
+        PROJECTED_RUN_PREPARATION_FAILURE.invalidBasePrompt,
         request,
       );
     }
-    return systemPrompt;
+    return basePrompt;
   }
 
   private async selectMessages(

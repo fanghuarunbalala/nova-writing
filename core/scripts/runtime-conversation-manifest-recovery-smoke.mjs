@@ -30,12 +30,14 @@ import {
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
+  NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   novelCharacterToolRegistry,
   novelLocationToolRegistry,
   novelParagraphToolRegistry,
   novelPublicationToolRegistry,
   novelDeleteToolRegistry,
+  novelDraftToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -267,6 +269,7 @@ async function createManifest() {
       ...novelParagraphToolRegistry.list(),
       ...novelPublicationToolRegistry.list(),
       ...novelDeleteToolRegistry.list(),
+      ...novelDraftToolRegistry.list(),
     ]),
     groups: new ToolGroupCatalog([
       loadToolGroupManifest(`
@@ -280,6 +283,7 @@ tools: [TodoWrite]
       NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
       NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
       NOVEL_DELETE_TOOL_GROUP_MANIFEST,
+      NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
       NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
       NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
     ]),

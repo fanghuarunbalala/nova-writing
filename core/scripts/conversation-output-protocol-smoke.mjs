@@ -24,6 +24,7 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
     "agent.assistant.message.failed",
     "agent.assistant.message.cancelled",
     "agent.todo.updated",
+    "agent.tasks.updated",
     "agent.subagent.started",
   "agent.subagent.progress",
   "agent.subagent.completed",

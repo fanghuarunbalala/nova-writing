@@ -7,15 +7,15 @@ Working draft for the deferred "Agent-facing Novel Tools" item
 Task N11-D deferral). Confirmed **group by group** with the user.
 
 **Confirmed and implemented:** outline, characters, locations, paragraph,
-publication, and unified delete groups — `NovelOutlineRead/Write/Edit`,
+publication, unified delete, and draft lifecycle groups —
+`NovelOutlineRead/Write/Edit`,
 `NovelCharacterRead/Write/Edit`, `NovelLocationRead/Write/Edit`,
 `NovelParagraphRead/Write/Edit`, `NovelVolumeRead/Write/Edit`,
-`NovelChapterRead/Write/Edit`, `NovelDelete` (see
-`core/src/tools/novel/{outline,character,location,paragraph,publication,delete}/`).
+`NovelChapterRead/Write/Edit`, `NovelDelete`, `NovelDraftStatus/Commit/Rollback/Rebase`
+(see `core/src/tools/novel/{outline,character,location,paragraph,publication,delete,draft}/`).
 
-**Pending:** draft lifecycle. Each pending group will be confirmed and
-re-derived using the conventions in Section 2; the earlier 16-tool draft is
-superseded and the total will be recounted as groups are confirmed.
+All planned groups are now confirmed and implemented. The earlier 16-tool
+draft is superseded; the confirmed surface is 24 tools (including TodoWrite).
 
 **Removed:** `NovelCompletionEvaluate` and the separate Manuscript object.
 Manuscript identity is implicit (one per Novel); a StoryUnit's realization is
@@ -89,9 +89,14 @@ id: novel.delete
 version: 1.0.0
 label: Novel Delete
 tools: [NovelDelete]
-```
 
-Pending groups (to be confirmed): `novel.draft`.
+# novel.draft (confirmed)
+schemaVersion: 1
+id: novel.draft
+version: 1.0.0
+label: Novel Draft Lifecycle
+tools: [NovelDraftStatus, NovelDraftCommit, NovelDraftRollback, NovelDraftRebase]
+```
 
 ## 4. Shared Value Contracts
 
@@ -301,8 +306,6 @@ The following groups will be confirmed next, following the same conventions
 (batch, PATCH, hidden types, no tool-surface digests):
 
 - characters / locations
-- draft lifecycle (`NovelDraft`, `NovelDraftRollback`, `NovelDraftCommit`,
-  `NovelDraftRebase`)
 
 ## 7. Resolved Decisions
 
@@ -328,3 +331,9 @@ The following groups will be confirmed next, following the same conventions
   leaf plan, non-empty Volume). Deleting a paragraph also removes it from every
   Chapter selection; deleting a Chapter keeps its Paragraphs under their
   StoryUnits.
+- Draft lifecycle is session-scoped (no `scope` parameter):
+  `NovelDraftStatus` reads the active Draft; `NovelDraftCommit` makes it
+  canonical (returning `rejected(approval_required)` when host approval is
+  missing); `NovelDraftRollback` discards it; `NovelDraftRebase` replays it
+  onto the latest canonical revision and reports `rebased`, `not_required`, or
+  `conflicted` summaries. Conflict resolution stays in the host.

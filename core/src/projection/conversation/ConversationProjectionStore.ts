@@ -42,6 +42,7 @@ import {
   ConversationProjectionSequenceConflictError,
   ConversationProjectionSequenceGapError,
 } from "./ConversationProjectionErrors.js";
+import { summarizeConversationEvent } from "./ConversationEventSummary.js";
 import type {
   AgentRunProjection,
   AgentTurnProjection,
@@ -54,6 +55,7 @@ import type {
   ConversationProjectionSnapshot,
   ConversationTimelineItem,
   ToolApprovalProjection,
+  ToolTraceSummaryProjection,
   UserMessageProjection,
 } from "./ConversationProjectionTypes.js";
 
@@ -89,6 +91,7 @@ export class ConversationProjectionStore {
   private readonly runs = new Map<string, AgentRunProjection>();
   private readonly turns = new Map<string, AgentTurnProjection>();
   private readonly approvals = new Map<string, ToolApprovalProjection>();
+  private readonly toolTraces: ToolTraceSummaryProjection[] = [];
   private readonly listeners = new Set<ConversationProjectionListener>();
   private runtimePresence?: RuntimePresence;
   private revision = 0;
@@ -222,9 +225,37 @@ export class ConversationProjectionStore {
       case OUTPUT_EVENT_TYPE.toolApprovalResolved:
         this.applyApprovalResolved(event);
         return;
+      case OUTPUT_EVENT_TYPE.toolTraceRecorded:
+        this.applyToolTrace(event);
+        return;
       default:
         return;
     }
+  }
+
+  private applyToolTrace(event: PersistedConversationEventSnapshot): void {
+    const payload = payloadRecord(event);
+    const runId = requireEventIdentity(event.eventType, "runId", event.runId);
+    const traceId = requireString(event.eventType, "traceId", payload.traceId);
+    const toolName = requireString(event.eventType, "toolName", payload.toolName);
+    const stage = typeof payload.stage === "string" ? payload.stage : undefined;
+    const durationMs =
+      typeof payload.durationMs === "number" ? payload.durationMs : undefined;
+    const outcome: "ok" | "failed" =
+      payload.errorCategory === undefined ? "ok" : "failed";
+    this.toolTraces.push(
+      Object.freeze({
+        traceId,
+        toolName,
+        ...(stage === undefined ? {} : { stage }),
+        outcome,
+        ...(durationMs === undefined ? {} : { durationMs }),
+        runId,
+        ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
+        sequence: event.sequence,
+        timestamp: event.timestamp,
+      }),
+    );
   }
 
   private applyUserMessage(event: PersistedConversationEventSnapshot): void {
@@ -581,6 +612,7 @@ export class ConversationProjectionStore {
       revision: this.revision,
       lastAppliedSequence: this.lastAppliedSequence,
       events: Object.freeze([...this.eventDescriptors]),
+      toolTraces: Object.freeze([...this.toolTraces]),
       timeline: Object.freeze(timeline),
       userMessages: Object.freeze([...this.userMessages]),
       assistantMessages: Object.freeze(assistantMessages),
@@ -617,11 +649,13 @@ export class ConversationProjectionStore {
 function createEventDescriptor(
   event: PersistedConversationEventSnapshot,
 ): ConversationEventDescriptor {
+  const summary = summarizeConversationEvent(event);
   return Object.freeze({
     eventId: event.id,
     sequence: event.sequence,
     direction: event.direction,
     eventType: event.eventType,
+    ...(summary === undefined ? {} : { summary }),
     timestamp: event.timestamp,
     recordedAt: event.recordedAt,
     ...(event.runId !== undefined ? { runId: event.runId } : {}),

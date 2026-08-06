@@ -14,6 +14,7 @@ import {
   RuntimePresenceChangedOutputEvent,
   ToolApprovalRequestedOutputEvent,
   ToolApprovalResolvedOutputEvent,
+  ToolTraceRecordedOutputEvent,
   UserMessageInputEvent,
 } from "../dist/index.js";
 import {
@@ -241,11 +242,49 @@ async function runProjectionContract(name, Transport) {
   });
   applyNext(store, await readEvent(subscription));
 
+  await appendOutput(
+    host,
+    new ToolTraceRecordedOutputEvent({
+      id: `evt-${name}-tool-trace`,
+      record: {
+        traceId: `trace-${name}-1`,
+        conversationId,
+        runId,
+        turnId,
+        toolCallId: `tool-call-${name}-trace`,
+        toolName: "CharacterList",
+        toolVersion: "1.0.0",
+        argumentDigest,
+        stage: "execution_completed",
+        timestamp: "2026-08-02T04:00:12.000Z",
+        attempt: 1,
+        durationMs: 42,
+      },
+    }),
+  );
+  applyNext(store, await readEvent(subscription));
+
   const projected = store.getSnapshot();
-  assert.equal(projected.lastAppliedSequence, 11);
-  assert.equal(projected.revision, 11);
-  assert.equal(notificationCount, 11);
-  assert.equal(projected.events.length, 11);
+  assert.equal(projected.lastAppliedSequence, 12);
+  assert.equal(projected.revision, 12);
+  assert.equal(notificationCount, 12);
+  assert.equal(projected.events.length, 12);
+  assert.equal(projected.toolTraces.length, 1);
+  assert.equal(projected.toolTraces[0].toolName, "CharacterList");
+  assert.equal(projected.toolTraces[0].outcome, "ok");
+  assert.equal(projected.toolTraces[0].durationMs, 42);
+  assert.equal(projected.toolTraces[0].sequence, 12);
+  // 输入事件无摘要；输出事件带脱敏摘要。
+  assert.equal(projected.events[0].summary, undefined);
+  const runSummary = projected.events.find(
+    (event) => event.eventType === "agent.run.state.changed",
+  );
+  assert.ok(runSummary?.summary?.includes("→"));
+  assert.equal(
+    JSON.stringify(projected.events).includes("Hello"),
+    false,
+    "event summaries must not leak message content",
+  );
   assert.equal(projected.timeline.length, 3);
   assert.equal(projected.userMessages[0].text, secretText);
   assert.deepEqual(projected.assistantMessages[0].content, [
@@ -259,13 +298,13 @@ async function runProjectionContract(name, Transport) {
   assert.equal(projected.approvals[0].actorId, "actor-user");
   assert.equal(
     projected.events.at(-1).eventType,
-    "novel.proposal.available",
+    "system.tool.trace.recorded",
   );
   assert.equal(JSON.stringify(logs).includes(secretText), false);
 
   const page = await conversation.events.list({ anchor: { from: "start" } });
   const rebuilt = new ConversationProjectionStore({ conversationId });
-  assert.deepEqual(rebuilt.applyMany(page.events), Array(11).fill("applied"));
+  assert.deepEqual(rebuilt.applyMany(page.events), Array(12).fill("applied"));
   assert.deepEqual(rebuilt.getSnapshot(), projected);
   assertProjectionFailures(conversationId, page.events);
 

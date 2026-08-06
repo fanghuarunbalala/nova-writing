@@ -22,10 +22,25 @@ export interface ConversationEventDescriptor {
   readonly sequence: number;
   readonly direction: "input" | "output";
   readonly eventType: string;
+  /** 脱敏事件摘要（中文描述，不落 payload 内容/正文/参数）。Redacted event summary. */
+  readonly summary?: string;
   readonly timestamp: string;
   readonly recordedAt: string;
   readonly runId?: string;
   readonly turnId?: string;
+}
+
+/** 脱敏工具调用摘要（用于对话内工具条聚合）。Redacted tool-trace summary. */
+export interface ToolTraceSummaryProjection {
+  readonly traceId: string;
+  readonly toolName: string;
+  readonly stage?: string;
+  readonly outcome: "ok" | "failed";
+  readonly durationMs?: number;
+  readonly runId: string;
+  readonly turnId?: string;
+  readonly sequence: number;
+  readonly timestamp: string;
 }
 
 export interface UserMessageProjection {
@@ -125,6 +140,7 @@ export interface ConversationProjectionSnapshot {
   readonly revision: number;
   readonly lastAppliedSequence: number;
   readonly events: readonly ConversationEventDescriptor[];
+  readonly toolTraces: readonly ToolTraceSummaryProjection[];
   readonly timeline: readonly ConversationTimelineItem[];
   readonly userMessages: readonly UserMessageProjection[];
   readonly assistantMessages: readonly AssistantMessageProjection[];

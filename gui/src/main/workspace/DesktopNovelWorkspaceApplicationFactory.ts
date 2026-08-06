@@ -117,7 +117,11 @@ export class DesktopNovelWorkspaceApplicationFactory
         runtimePlacement,
         logger,
       );
-    } catch {
+    } catch (error) {
+      // 记录失败类型便于诊断；不记录原始消息/堆栈/cause（脱敏）。
+      this.logger.error("desktop_workspace_application.open_failed_detail", {
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
       await conversationApplication?.close().catch(() => undefined);
       await runtimePlacement?.close().catch(() => undefined);
       logger.info("desktop_workspace_application.open_failed");

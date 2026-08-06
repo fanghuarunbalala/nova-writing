@@ -339,7 +339,10 @@ export class DesktopApiIpcController {
   private isAuthorizedSender(senderId: number): boolean {
     try {
       return this.authorizeSender(senderId) === true;
-    } catch {
+    } catch (error) {
+      this.logger.debug("desktop_ipc.authorization_failed", {
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
       return false;
     }
   }

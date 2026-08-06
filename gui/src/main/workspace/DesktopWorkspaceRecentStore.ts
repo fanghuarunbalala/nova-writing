@@ -101,8 +101,10 @@ export class DesktopWorkspaceRecentStore
       return Object.freeze(
         parsed.filter(isSession).slice(0, this.limit),
       );
-    } catch {
-      this.logger.warn("desktop_workspace.recent_parse_failed");
+    } catch (error) {
+      this.logger.warn("desktop_workspace.recent_parse_failed", {
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
       return Object.freeze([]);
     }
   }

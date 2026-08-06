@@ -178,12 +178,16 @@ export class NodeConversationApiApplication {
         hub,
         logger,
       );
-    } catch {
+    } catch (error) {
       if (store !== undefined) {
         const openedStore = store;
         await settleClose(() => openedStore.close());
       }
       logger.info("node_conversation_api.open_failed");
+      // 记录失败类型便于诊断；不记录原始消息/堆栈/cause（脱敏）。
+      logger.error("node_conversation_api.open_failed_detail", {
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
       throw new NodeConversationApiApplicationOpenError();
     }
   }

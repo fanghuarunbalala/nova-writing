@@ -179,6 +179,10 @@ export class DesktopRuntimeChildCompositionFactory
         conversationId: bootstrap?.conversation?.metadata?.id,
         failure: captureStableFailure(error),
       });
+      // 记录失败类型便于诊断；不记录原始消息/堆栈/cause（脱敏）。
+      this.#logger.error("runtime_child.composition_failed_detail", {
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
       throw error;
     }
   }

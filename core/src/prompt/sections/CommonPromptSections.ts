@@ -5,6 +5,14 @@ import {
   PromptSectionRegistry,
   PromptSectionRegistryAssembler,
 } from "../section/PromptSectionRegistry.js";
+import {
+  CcbReferenceActionsPromptSection,
+  CcbReferenceCommunicationStylePromptSection,
+  CcbReferenceDoingTasksPromptSection,
+  CcbReferenceIntroPromptSection,
+  CcbReferenceSystemPromptSection,
+  CcbReferenceUsingYourToolsPromptSection,
+} from "./ccb/CcbReferenceMainPromptSections.js";
 
 export class CoreRuntimeProtocolPromptSection extends PromptSection {
   constructor() {
@@ -166,5 +174,11 @@ export function createDefaultPromptSectionRegistry(): PromptSectionRegistry {
     .register(new TodoGuidancePromptSection())
     .register(new ContextReliabilityPromptSection())
     .register(new CompletionContractPromptSection())
+    .register(new CcbReferenceIntroPromptSection())
+    .register(new CcbReferenceSystemPromptSection())
+    .register(new CcbReferenceDoingTasksPromptSection())
+    .register(new CcbReferenceActionsPromptSection())
+    .register(new CcbReferenceUsingYourToolsPromptSection())
+    .register(new CcbReferenceCommunicationStylePromptSection())
     .freeze();
 }

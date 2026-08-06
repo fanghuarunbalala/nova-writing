@@ -252,7 +252,7 @@ export function createDefaultApplicationConfiguration(): ApplicationConfiguratio
       confirmBeforeExit: false,
       checkForUpdates: true,
       autoUpdateEnabled: false,
-      defaultAgentType: "novel_agent",
+      defaultAgentType: "novel",
     },
     agent: {
       responseLanguage: "auto",
@@ -361,6 +361,7 @@ export function createDefaultApplicationConfiguration(): ApplicationConfiguratio
       contextMetricsEnabled: false,
       ipcMetricsEnabled: false,
       experimentalFeaturesEnabled: false,
+      providerRequestDumpEnabled: false,
     },
     modelConnections: [],
     modelProfiles: [],

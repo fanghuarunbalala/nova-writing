@@ -298,15 +298,7 @@ Manuscript entries. The default Inspector registry queries and renders an
 ordered Outline tree with status, StoryUnit detail, Character and Location
 indexes and profiles, Publication/Chapter/Block structure, and full Manuscript
 Block text only after explicit selection. Loading, empty, unavailable, and safe
-error states remain transport-neutral, and retryable failures expose a retry
-action; no Novel mutation command is exposed. A non-durable canonical-only
-read cache now backs these queries: it is cleared on Workspace switch, pruned
-when the canonical Overview revision changes, never reads Draft scope, and is
-invalidated only through explicit cache boundaries until lifecycle-Event
-wiring lands. A default canonical commit-card projector turns persisted
-`novel.commit.completed` events into timeline cards that open the canonical
-Outline view; proposal-level and entity-level card targets remain
-host-supplied or await OutputEvents carrying canonical entity identity.
+error states remain transport-neutral; no Novel mutation command is exposed.
 
 ## 7. One API Router, Multiple Transports
 

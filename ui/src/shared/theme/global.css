@@ -1,0 +1,50 @@
+/**
+ * 全局基础样式：盒模型、根背景、排版基线、reduced-motion 降级。
+ * 由应用入口（NovelApp）作为副作用引入一次。
+ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+
+body {
+  background:
+    radial-gradient(
+      1200px 780px at 14% -8%,
+      color-mix(in oklab, var(--color-orange) 6%, transparent),
+      transparent 62%
+    ),
+    var(--color-bg);
+  background-attachment: fixed;
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.kicker {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}

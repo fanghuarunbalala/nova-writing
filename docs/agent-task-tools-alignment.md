@@ -165,3 +165,12 @@ persisted store step.
   §18, §19;
 - `runtime-todo.md`: Subagent planning tool section;
 - `docs/decisions/agent-task-tools-alignment.md`: decision record.
+
+## 11. Deferred Follow-Up
+
+The legacy chat-first novel GUI shell (`ui/src/novel` read cache, canonical
+card projectors, Inspector renderers, sidebar badges) was built on the
+pre-Phase-3 UI architecture and is not carried into the merged trunk. The
+read-only canonical Novel display features are deferred to a follow-up port
+onto the Phase-3 `ui/src/domains/novel` architecture; the Runtime work-item
+and execution Tool layers in this document are unaffected.

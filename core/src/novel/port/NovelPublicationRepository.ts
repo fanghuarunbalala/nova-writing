@@ -1,10 +1,10 @@
 /** Synchronous transaction-local repository for Publication structure mutations. */
 import type {
   NovelId,
+  ParagraphId,
   PublicationChapterId,
   PublicationStructureId,
   PublicationVolumeId,
-  StoryUnitId,
 } from "../identity/index.js";
 import type {
   OrderKey,
@@ -55,8 +55,13 @@ export interface NovelMutablePublicationRepository {
   insertChapter(chapter: PublicationChapter): boolean;
   replaceChapter(chapter: PublicationChapter): boolean;
   deleteChapter(id: PublicationChapterId): boolean;
-  hasStoryUnit(id: StoryUnitId): boolean;
-  hasManuscriptBlocks(chapterId: PublicationChapterId): boolean;
+  listChapterParagraphIds(chapterId: PublicationChapterId): readonly ParagraphId[];
+  setChapterParagraphIds(
+    chapterId: PublicationChapterId,
+    paragraphIds: readonly ParagraphId[],
+  ): boolean;
+  getChapterIdByParagraphId(paragraphId: ParagraphId): PublicationChapterId | undefined;
+  hasParagraph(paragraphId: ParagraphId): boolean;
 }
 
 export interface NovelPublicationMutationContext {

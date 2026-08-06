@@ -278,12 +278,18 @@ assert.equal(Object.isFrozen(providerCall.context), true);
 assert.equal(Object.isFrozen(providerCall.context.messages), true);
 assert.deepEqual(
   providerCall.context.messages.map((message) => message.id),
-  ["message-pinned", "message-recent-2"],
+  [
+    "message-pinned",
+    "message-recent-2",
+    "message:compact-summary:provider-call-1",
+  ],
 );
-assert.match(
-  providerCall.context.systemPrompt,
-  /^BASE_SYSTEM_PROMPT\n\n<CONTEXT_CHECKPOINT/,
+assert.equal(providerCall.context.systemPrompt, "BASE_SYSTEM_PROMPT");
+const compactSummary = providerCall.context.messages.find(
+  (message) => message.id === "message:compact-summary:provider-call-1",
 );
+assert.equal(compactSummary.payload.kind, "compact_summary");
+assert.match(compactSummary.payload.content, /<CONTEXT_CHECKPOINT/u);
 assert.equal(
   providerCall.projection.degradationLevel,
   CONTEXT_PROJECTION_DEGRADATION_LEVEL.recentWindowReduced,

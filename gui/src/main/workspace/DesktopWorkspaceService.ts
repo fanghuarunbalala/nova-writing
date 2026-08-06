@@ -12,6 +12,7 @@ import type {
   ElectronWorkspaceReference,
   ElectronWorkspaceSession,
 } from "../../shared/index.js";
+import type { DesktopWorkspaceRecentStorePort } from "./DesktopWorkspaceRecentStore.js";
 
 export interface DesktopWorkspaceDirectoryPicker {
   pickDirectory(): Promise<string | undefined>;
@@ -24,6 +25,8 @@ export interface DesktopWorkspaceServiceOptions {
     "resolve" | "getByWorkspaceId"
   >;
   readonly applicationFactory?: DesktopWorkspaceApiApplicationFactory;
+  /** 最近项目持久化；不传时保持内存态（跨重启不保留）。 */
+  readonly recentStore?: DesktopWorkspaceRecentStorePort;
   readonly logger?: Logger;
 }
 
@@ -70,15 +73,18 @@ export class DesktopWorkspaceService
   private readonly picker: DesktopWorkspaceDirectoryPicker;
   private readonly locator: DesktopWorkspaceServiceOptions["locator"];
   private readonly applicationFactory?: DesktopWorkspaceApiApplicationFactory;
+  private readonly recentStore?: DesktopWorkspaceRecentStorePort;
   private readonly logger: Logger;
   private readonly selections = new Map<string, PendingSelection>();
   private readonly currentBySender = new Map<number, ActiveWorkspace>();
   private readonly recent = new Map<string, ElectronWorkspaceSession>();
+  private recentHydrated = false;
 
   constructor(options: DesktopWorkspaceServiceOptions) {
     this.picker = options.picker;
     this.locator = options.locator;
     this.applicationFactory = options.applicationFactory;
+    this.recentStore = options.recentStore;
     this.logger = (options.logger ?? noopLogger).child({
       component: "desktop_workspace_service",
     });
@@ -98,9 +104,10 @@ export class DesktopWorkspaceService
     return Object.freeze({ referenceId, label });
   }
 
-  listRecent(_senderId: number): Promise<readonly ElectronWorkspaceSession[]> {
-    return Promise.resolve(
-      Object.freeze([...this.recent.values()].map((workspace) => ({ ...workspace }))),
+  async listRecent(_senderId: number): Promise<readonly ElectronWorkspaceSession[]> {
+    await this.hydrateRecent();
+    return Object.freeze(
+      [...this.recent.values()].map((workspace) => ({ ...workspace })),
     );
   }
 
@@ -134,6 +141,8 @@ export class DesktopWorkspaceService
     });
     this.recent.delete(session.id);
     this.recent.set(session.id, session);
+    this.recentHydrated = true;
+    await this.recordRecent(session);
     this.logger.info("desktop_workspace.open_completed", { senderId });
     return session;
   }
@@ -167,6 +176,33 @@ export class DesktopWorkspaceService
     if (selection.senderId !== senderId) throw new DesktopWorkspaceUnauthorizedError();
     this.selections.delete(referenceId);
     return this.locator.resolve(selection.workspaceRoot);
+  }
+
+  /** 首次读取最近列表时用持久化数据补齐内存态（open 已写时跳过）。 */
+  private async hydrateRecent(): Promise<void> {
+    if (this.recentHydrated || this.recentStore === undefined) return;
+    this.recentHydrated = true;
+    try {
+      const persisted = await this.recentStore.load();
+      for (const session of persisted) {
+        this.recent.delete(session.id);
+        this.recent.set(session.id, session);
+      }
+      this.logger.debug("desktop_workspace.recent_hydrated", {
+        recentCount: persisted.length,
+      });
+    } catch {
+      this.logger.warn("desktop_workspace.recent_hydrate_failed");
+    }
+  }
+
+  private async recordRecent(session: ElectronWorkspaceSession): Promise<void> {
+    if (this.recentStore === undefined) return;
+    try {
+      await this.recentStore.record(session);
+    } catch {
+      this.logger.warn("desktop_workspace.recent_record_failed");
+    }
   }
 }
 

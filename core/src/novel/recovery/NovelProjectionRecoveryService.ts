@@ -69,7 +69,6 @@ export class NovelProjectionRecoveryService implements NovelRecoveryStage {
     const planner = new NovelProjectionPlanner(
       context.outline,
       context.source,
-      context.ranges,
       this.options.readinessPolicy,
     );
     const entries: NovelProjectionCacheEntry[] = [];

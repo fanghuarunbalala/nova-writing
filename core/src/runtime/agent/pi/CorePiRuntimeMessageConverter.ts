@@ -43,6 +43,12 @@ interface CoreAssistantMessagePayload {
   }[];
 }
 
+interface SystemReminderMessagePayload {
+  readonly kind: string;
+  readonly content: string;
+  readonly order: number;
+}
+
 export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter {
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
   private readonly assistantMessageEnvelopeFactory?: PiAssistantMessageEnvelopeFactory;
@@ -134,6 +140,13 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
     ) {
       return this.convertAssistantMessage(message, identity);
     }
+    if (
+      message.role === "system" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.systemReminder &&
+      message.schemaVersion === RUNTIME_MESSAGE_SCHEMA_VERSION
+    ) {
+      return this.convertSystemReminderMessage(message);
+    }
     throw this.fail(
       CORE_PI_MESSAGE_CONVERSION_FAILURE.unsupportedMessage,
       identity.conversationId,
@@ -196,6 +209,23 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
     });
   }
 
+  /**
+   * 把 system.reminder 消息转为 Pi user 角色消息，内容包裹 <system-reminder> 标签。
+   * Converts a system.reminder message to a Pi user-role message wrapped in
+   * <system-reminder> tags. The reminder is preserved verbatim (never stripped)
+   * so the message prefix stays stable for prefill caching.
+   */
+  private convertSystemReminderMessage(message: RuntimeMessageSnapshot): AgentMessage {
+    const payload = message.payload as unknown as SystemReminderMessagePayload;
+    const text = `<system-reminder kind="${escapeKindAttribute(payload.kind)}">\n${payload.content}\n</system-reminder>`;
+    const content: Array<{ type: "text"; text: string }> = [{ type: "text", text }];
+    return Object.freeze({
+      role: "user",
+      content,
+      timestamp: Date.parse(message.timestamp),
+    });
+  }
+
   private fail(
     failure: CorePiMessageConversionFailure,
     conversationId?: string,
@@ -231,6 +261,14 @@ function captureRequestIdentity(
 
 function captureNonBlank(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function escapeKindAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function captureAssistantEnvelope(value: unknown): PiAssistantMessageEnvelope {

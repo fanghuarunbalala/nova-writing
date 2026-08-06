@@ -1,5 +1,6 @@
 /**
- * Coordinates one claimed Core Run through preparation, context compilation,
+ * 协调一次已认领的 Core Run：准备 → 组装（base + 消息）→ Agent 执行 → 持久化优先的终结。
+ * Coordinates one claimed Core Run through preparation, assembly (base + messages),
  * Agent execution, and persistence-first normal Run terminalization.
  */
 import {
@@ -18,8 +19,9 @@ import {
 } from "../../agent/index.js";
 import type {
   CompiledProviderContext,
-  ContextCompiler,
+  RuntimePromptAssembler,
 } from "../../context/index.js";
+import type { PromptBase } from "../../../prompt/index.js";
 import {
   coreRuntimeMessageSchemaRegistry,
   type RuntimeMessageSchemaRegistry,
@@ -59,7 +61,7 @@ export interface AgentRuntimeRunLifecycleController {
 export interface AgentRuntimeRunExecutorOptions {
   conversationId: string;
   preparationSource: RuntimeRunPreparationSource;
-  contextCompiler: ContextCompiler;
+  assembler: RuntimePromptAssembler;
   agentAdapter: AgentRuntimeAdapter;
   lifecycleController: AgentRuntimeRunLifecycleController;
   messageSchemaRegistry?: RuntimeMessageSchemaRegistry;
@@ -69,7 +71,8 @@ export interface AgentRuntimeRunExecutorOptions {
 interface CapturedRuntimeRunPreparation {
   readonly conversationId: string;
   readonly runId: string;
-  readonly systemPrompt: string;
+  readonly basePrompt: PromptBase;
+  readonly messageHighWatermark: number;
   readonly contextMessages: readonly RuntimeMessageSnapshot[];
   readonly invocation: AgentRuntimeInvocation;
 }
@@ -77,7 +80,7 @@ interface CapturedRuntimeRunPreparation {
 export class AgentRuntimeRunExecutor implements RuntimeRunExecutor {
   private readonly conversationId: string;
   private readonly preparationSource: RuntimeRunPreparationSource;
-  private readonly contextCompiler: ContextCompiler;
+  private readonly assembler: RuntimePromptAssembler;
   private readonly agentAdapter: AgentRuntimeAdapter;
   private readonly lifecycleController: AgentRuntimeRunLifecycleController;
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
@@ -88,7 +91,7 @@ export class AgentRuntimeRunExecutor implements RuntimeRunExecutor {
     assertNonBlank("Conversation ID", options.conversationId);
     this.conversationId = options.conversationId;
     this.preparationSource = options.preparationSource;
-    this.contextCompiler = options.contextCompiler;
+    this.assembler = options.assembler;
     this.agentAdapter = options.agentAdapter;
     this.lifecycleController = options.lifecycleController;
     this.messageSchemaRegistry =
@@ -242,15 +245,22 @@ export class AgentRuntimeRunExecutor implements RuntimeRunExecutor {
   ): Promise<CompiledProviderContext> {
     let context: CompiledProviderContext;
     try {
-      context = await this.contextCompiler.compile({
+      const assembly = await this.assembler.assemble({
         conversationId: request.conversationId,
         runId: request.runId,
-        systemPrompt: preparation.systemPrompt,
+        basePrompt: preparation.basePrompt,
         messages: preparation.contextMessages,
+        messageHighWatermark: preparation.messageHighWatermark,
       });
+      context = {
+        conversationId: request.conversationId,
+        runId: request.runId,
+        systemPrompt: assembly.systemPrompt,
+        messages: assembly.messages,
+      };
     } catch {
       throw this.fail(
-        AGENT_RUNTIME_RUN_EXECUTION_FAILURE.contextCompileFailed,
+        AGENT_RUNTIME_RUN_EXECUTION_FAILURE.assemblyFailed,
         request.runId,
         request,
       );
@@ -432,7 +442,12 @@ function capturePreparation(
     typeof preparation !== "object" ||
     preparation.conversationId !== request.conversationId ||
     preparation.runId !== request.runId ||
-    typeof preparation.systemPrompt !== "string" ||
+    preparation.basePrompt === null ||
+    typeof preparation.basePrompt !== "object" ||
+    typeof preparation.basePrompt.content !== "string" ||
+    typeof preparation.basePrompt.digest !== "string" ||
+    !Number.isSafeInteger(preparation.messageHighWatermark) ||
+    preparation.messageHighWatermark < 0 ||
     !Array.isArray(preparation.contextMessages)
   ) {
     throw new TypeError("Runtime Run preparation is invalid");
@@ -471,7 +486,8 @@ function capturePreparation(
   return Object.freeze({
     conversationId: request.conversationId,
     runId: request.runId,
-    systemPrompt: preparation.systemPrompt,
+    basePrompt: preparation.basePrompt,
+    messageHighWatermark: preparation.messageHighWatermark,
     contextMessages,
     invocation,
   });

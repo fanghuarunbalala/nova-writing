@@ -5,7 +5,6 @@ import {
   ConversationEventSubscriptionCursorAheadError,
   ConversationEventSubscriptionJournalPageError,
   ConversationEventSubscriptionJournalWatermarkError,
-  ConversationEventSubscriptionOverflowError,
   ConversationEventSubscriptionServiceClosingError,
   ConversationEventSubscriptionServiceClosedError,
   InMemoryConversationEventHub,
@@ -303,11 +302,14 @@ await overflowHub.publish(overflowEvent3);
 await overflowHub.publish(overflowEvent4);
 assert.equal((await overflowSubscription.next()).value.sequence, 1);
 assert.equal((await overflowSubscription.next()).value.sequence, 2);
-await assert.rejects(
-  () => overflowSubscription.next(),
-  (error) =>
-    error instanceof ConversationEventSubscriptionOverflowError &&
-    error.lastDeliveredSequence === 2,
+assert.equal((await overflowSubscription.next()).value.sequence, 3);
+assert.equal((await overflowSubscription.next()).value.sequence, 4);
+assert.ok(
+  logger.entries.some(
+    (entry) =>
+      entry.level === "warn" &&
+      entry.event === "conversation_event.follow.recovery_started",
+  ),
 );
 await closeServices(overflowService, overflowHub);
 

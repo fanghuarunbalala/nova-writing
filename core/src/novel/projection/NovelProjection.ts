@@ -12,14 +12,10 @@ import {
   type StoryEntityId,
   type StoryUnitId,
 } from "../identity/index.js";
-import type {
-  ManuscriptRangeRepairStatus,
-} from "../validation/ManuscriptRangeRepairValidator.js";
-import { MANUSCRIPT_RANGE_REPAIR_STATUS } from "../validation/ManuscriptRangeRepairValidator.js";
 import {
   STORY_UNIT_CONFORMANCE_STATUS,
   type StoryUnitConformanceStatus,
-} from "../model/manuscript/StoryUnitRealization.js";
+} from "../model/paragraph/StoryUnitConformance.js";
 import {
   captureNovelRevision,
   type NovelRevision,
@@ -88,7 +84,6 @@ export interface StoryUnitConformanceProjection {
   readonly sourceRevision: NovelRevision;
   readonly freshness: NovelProjectionFreshness;
   readonly validationStatus: StoryUnitConformanceStatus;
-  readonly rangeStatuses: readonly ManuscriptRangeRepairStatus[];
   readonly warningCount: number;
   readonly errorCount: number;
   readonly evidenceStoryUnitIds: readonly StoryUnitId[];
@@ -135,7 +130,6 @@ const CONFORMANCE_KEYS = new Set([
   "sourceRevision",
   "freshness",
   "validationStatus",
-  "rangeStatuses",
   "warningCount",
   "errorCount",
   "evidenceStoryUnitIds",
@@ -235,10 +229,6 @@ export function captureStoryUnitConformanceProjection(
   value: unknown,
 ): StoryUnitConformanceProjection {
   const candidate = captureRecord(value, CONFORMANCE_KEYS);
-  captureDenseArray(candidate.rangeStatuses);
-  const rangeStatuses = Object.freeze(
-    candidate.rangeStatuses.map(captureRangeStatus),
-  );
   const storyUnitId = captureStoryUnitId(candidate.storyUnitId);
   const evidenceStoryUnitIds = captureEvidence(candidate.evidenceStoryUnitIds);
   if (!evidenceStoryUnitIds.includes(storyUnitId)) throw invalidProjection();
@@ -247,7 +237,6 @@ export function captureStoryUnitConformanceProjection(
     sourceRevision: captureNovelRevision(candidate.sourceRevision),
     freshness: captureFreshness(candidate.freshness),
     validationStatus: captureValidationStatus(candidate.validationStatus),
-    rangeStatuses,
     warningCount: captureCount(candidate.warningCount),
     errorCount: captureCount(candidate.errorCount),
     evidenceStoryUnitIds,
@@ -330,15 +319,6 @@ function captureValidationStatus(value: unknown): StoryUnitConformanceStatus {
     throw invalidProjection();
   }
   return value as StoryUnitConformanceStatus;
-}
-
-function captureRangeStatus(value: unknown): ManuscriptRangeRepairStatus {
-  if (!Object.values(MANUSCRIPT_RANGE_REPAIR_STATUS).includes(
-    value as ManuscriptRangeRepairStatus,
-  )) {
-    throw invalidProjection();
-  }
-  return value as ManuscriptRangeRepairStatus;
 }
 
 function captureSummary(value: unknown): string {

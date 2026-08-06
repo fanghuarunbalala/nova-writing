@@ -1,10 +1,6 @@
-:root {
-  color: #20242a;
-  background: #ffffff;
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-}
+/* Novel design tokens + global baseline (spec 2.1) */
+@import "@novel/ui/shared/theme/tokens.css";
+@import "@novel/ui/shared/theme/global.css";
 
 html,
 body,
@@ -14,7 +10,6 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #ffffff;
 }
 
 button,

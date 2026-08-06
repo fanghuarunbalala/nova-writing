@@ -62,17 +62,17 @@ assert.equal(
 );
 assert.equal(
   (
-    await api.novel.manuscript.getStructure(canonicalNovelQueryScope)
-  ).blocks[0].textLength,
+    await api.novel.paragraphs.getCatalog(canonicalNovelQueryScope)
+  ).paragraphs[0].textLength,
   7,
 );
 assert.equal(
   (
-    await api.novel.manuscript.getBlock(
+    await api.novel.paragraphs.get(
       canonicalNovelQueryScope,
-      "block_opening",
+      "paragraph_opening",
     )
-  ).readModel.block.text,
+  ).readModel.paragraph.text,
   "雨落在站台上。",
 );
 
@@ -194,7 +194,6 @@ function responseData(operation) {
       publicationId: "publication_main",
       orderKey: "8000",
       title: "第一卷",
-      primaryStoryUnitId: unit.id,
     }],
     chapters: [{
       id: "chapter_one",
@@ -202,17 +201,12 @@ function responseData(operation) {
       volumeId: "volume_one",
       orderKey: "8000",
       title: "雨夜",
+      paragraphIds: ["paragraph_opening"],
     }],
   };
-  const manuscript = {
-    id: "manuscript_main",
-    novelId: "novel_query_client",
-    publicationId: "publication_main",
-  };
-  const block = {
-    id: "block_opening",
-    manuscriptId: manuscript.id,
-    chapterId: "chapter_one",
+  const paragraph = {
+    id: "paragraph_opening",
+    storyUnitId: unit.id,
     orderKey: "8000",
     text: "雨落在站台上。",
   };
@@ -231,12 +225,12 @@ function responseData(operation) {
           locationCount: 1,
           volumeCount: 1,
           chapterCount: 1,
-          manuscriptBlockCount: 1,
+          paragraphCount: 1,
         },
         roots: {
           outlineAvailable: true,
           publicationAvailable: true,
-          manuscriptAvailable: true,
+          paragraphsAvailable: true,
         },
       };
     case NOVEL_QUERY_API_OPERATION.outlineGet:
@@ -258,27 +252,25 @@ function responseData(operation) {
       return { ...base, locations: [location] };
     case NOVEL_QUERY_API_OPERATION.locationGet:
       return { ...base, location };
-    case NOVEL_QUERY_API_OPERATION.manuscriptStructureGet:
+    case NOVEL_QUERY_API_OPERATION.paragraphCatalogGet:
       return {
         ...base,
-        publication,
-        manuscript,
-        blocks: [{
-          id: block.id,
-          chapterId: block.chapterId,
-          orderKey: block.orderKey,
-          textLength: block.text.length,
+        paragraphs: [{
+          id: paragraph.id,
+          storyUnitId: paragraph.storyUnitId,
+          orderKey: paragraph.orderKey,
+          textLength: paragraph.text.length,
           textDigest: "a".repeat(64),
         }],
       };
-    case NOVEL_QUERY_API_OPERATION.manuscriptBlockGet:
+    case NOVEL_QUERY_API_OPERATION.paragraphGet:
       return {
         ...base,
         readModel: {
-          block,
+          paragraph,
           textDigest: "a".repeat(64),
-          chapterDigest: "b".repeat(64),
           orderDigest: "c".repeat(64),
+          storyUnitDigest: "d".repeat(64),
         },
       };
     default:

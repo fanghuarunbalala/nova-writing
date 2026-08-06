@@ -100,11 +100,23 @@ function userMessage(id, conversationId) {
 
 const messageConverter = {
   convert: async ({ messages }) =>
-    messages.map((message) => ({
-      role: "user",
-      content: message.payload.content.map((item) => ({ ...item })),
-      timestamp: Date.parse(message.timestamp),
-    })),
+    messages.map((message) => {
+      if (message.messageType === "system.reminder") {
+        return {
+          role: "user",
+          content: [{
+            type: "text",
+            text: `<system-reminder kind="${message.payload.kind}">\n${message.payload.content}\n</system-reminder>`,
+          }],
+          timestamp: Date.parse(message.timestamp),
+        };
+      }
+      return {
+        role: "user",
+        content: message.payload.content.map((item) => ({ ...item })),
+        timestamp: Date.parse(message.timestamp),
+      };
+    }),
 };
 
 function createNudgeRuntime(options = {}) {
@@ -178,6 +190,7 @@ const compiler = new BaseContextCompiler();
 const runtime = createNudgeRuntime();
 await scheduleOne(runtime.manager, "nudge-overlay-1", "run-overlay", 10);
 const providerPrompts = [];
+const providerMessages = [];
 let providerCallCount = 0;
 const overlayAgent = new Agent({
   initialState: { model, systemPrompt: "", messages: [], tools: [] },
@@ -193,6 +206,7 @@ const overlayAdapter = new PiAgentCoreAdapter({
   dispatchAwareStreamFunction: async (_model, context, _options, hooks) => {
     providerCallCount += 1;
     providerPrompts.push(context.systemPrompt);
+    providerMessages.push(context.messages);
     if (providerCallCount === 1) {
       await hooks.onDispatched("2026-08-02T00:00:02.000Z");
       await hooks.onDispatched("2026-08-02T00:00:02.000Z");
@@ -236,11 +250,21 @@ const overlayResult = await overlayAdapter.stream({
 });
 assert.equal(overlayResult.outcome, AGENT_RUNTIME_OUTCOME.completed);
 assert.equal(providerCallCount, 2);
-assert.equal(
-  providerPrompts[0],
-  `${baseSystemPrompt}\n\n${sensitiveReminder}:${sensitiveParameter}`,
-);
+// systemPrompt 恒为 base；nudge 以瞬态 system.reminder 消息注入本次调用。
+assert.equal(providerPrompts[0], baseSystemPrompt);
 assert.equal(providerPrompts[1], baseSystemPrompt);
+const nudgePiMessage = providerMessages[0].find((message) =>
+  Array.isArray(message.content) &&
+  message.content.some((item) => item.text?.includes(sensitiveReminder)),
+);
+assert.ok(nudgePiMessage, "nudge 应以瞬态消息出现在第一次 provider 调用");
+assert.ok(
+  nudgePiMessage.content.some((item) => item.text.includes(sensitiveParameter)),
+);
+assert.equal(
+  JSON.stringify(providerMessages[1]).includes(sensitiveReminder),
+  false,
+);
 assert.equal(overlayAgent.state.systemPrompt, baseSystemPrompt);
 assert.equal(overlayContext.systemPrompt, baseSystemPrompt);
 assert.equal(

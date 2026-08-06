@@ -21,6 +21,20 @@ import {
   loadToolGroupManifest,
   novelAgentDefinition,
 } from "../dist/index.js";
+import {
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
+  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
+  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  novelCharacterToolRegistry,
+  novelLocationToolRegistry,
+  novelParagraphToolRegistry,
+  novelPublicationToolRegistry,
+  novelDeleteToolRegistry,
+  novelOutlineToolRegistry,
+} from "./fixtures/novel-outline-tools.mjs";
 
 class Sha256Digester {
   algorithm = "sha256";
@@ -49,9 +63,23 @@ id: runtime.todo
 version: 1.0.0
 label: Runtime todo tools
 tools: [TodoWrite]
-`),
+  `),
+  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
+  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
 ]);
-const registry = new ToolRegistry([todoTool()]);
+const registry = new ToolRegistry([
+  todoTool(),
+  ...novelOutlineToolRegistry.list(),
+  ...novelCharacterToolRegistry.list(),
+  ...novelLocationToolRegistry.list(),
+  ...novelParagraphToolRegistry.list(),
+  ...novelPublicationToolRegistry.list(),
+  ...novelDeleteToolRegistry.list(),
+]);
 const manifestStore = new InMemoryAgentManifestStore();
 const resolver = new AgentManifestResolver({
   promptBuilder: new SystemPromptBuilder({
@@ -128,9 +156,31 @@ assert.equal(
   configuration.assembly.systemPrompt.digest,
   assembly.systemPrompt.digest,
 );
-assert.deepEqual(configuration.assembly.toSnapshot().tools, [
-  { name: "TodoWrite", version: "1.0.0" },
-]);
+assert.deepEqual(
+  configuration.assembly.toSnapshot().tools.map((tool) => tool.name).sort(),
+  [
+    "NovelChapterEdit",
+    "NovelChapterRead",
+    "NovelChapterWrite",
+    "NovelCharacterEdit",
+    "NovelCharacterRead",
+    "NovelCharacterWrite",
+    "NovelDelete",
+    "NovelLocationEdit",
+    "NovelLocationRead",
+    "NovelLocationWrite",
+    "NovelOutlineEdit",
+    "NovelOutlineRead",
+    "NovelOutlineWrite",
+    "NovelParagraphEdit",
+    "NovelParagraphRead",
+    "NovelParagraphWrite",
+    "NovelVolumeEdit",
+    "NovelVolumeRead",
+    "NovelVolumeWrite",
+    "TodoWrite",
+  ],
+);
 
 await assert.rejects(
   factory.create({
@@ -149,7 +199,15 @@ await assert.rejects(
 );
 assert.throws(
   () => new AgentAssemblyRestorer({
-    registry: new ToolRegistry([todoTool("2.0.0")]),
+    registry: new ToolRegistry([
+      todoTool("2.0.0"),
+      ...novelOutlineToolRegistry.list(),
+      ...novelCharacterToolRegistry.list(),
+      ...novelLocationToolRegistry.list(),
+      ...novelParagraphToolRegistry.list(),
+      ...novelPublicationToolRegistry.list(),
+      ...novelDeleteToolRegistry.list(),
+    ]),
     groups,
   }).restore(assembly.manifest),
   /does not match Agent Manifest/,

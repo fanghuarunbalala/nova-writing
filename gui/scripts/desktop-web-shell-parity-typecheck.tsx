@@ -1,4 +1,7 @@
-/** Compile-only proof that Desktop and Web mount the same shared application contract. */
+/**
+ * Compile-only proof that Desktop and Web both mount the shared NovelApp
+ * (Phase 3+ shell) through their respective renderer entrypoints.
+ */
 import type { ElectronPreloadBridge } from "../src/shared/index.js";
 import { mountDesktopRenderer } from "../src/renderer/index.js";
 import { mountWebBrowser } from "../../web/src/browser/index.js";
@@ -7,23 +10,17 @@ declare const bridge: ElectronPreloadBridge;
 declare const document: Document;
 declare const window: Window;
 
-const appProps = {
-  initialShellState: {
-    workspace: { id: "workspace-1", label: "Workspace One" },
-    novel: { id: "novel-1", label: "Novel One" },
-  },
-};
 const desktop = mountDesktopRenderer({
   window: { novelDesktop: bridge },
   document,
   rootElementId: "desktop-root",
-  appProps,
+  appProps: {},
 });
 const web = mountWebBrowser({
   window,
   document,
   rootElementId: "web-root",
-  appProps,
+  appProps: {},
 });
 
 void desktop.close();

@@ -40,14 +40,21 @@ projection rather than cross-Conversation Todo mutation.
 
 ## Provider context
 
-`TodoAwareRuntimeSystemPromptSource` composes the configured base prompt with a
-`<CURRENT_TODOS>` overlay before each Provider call. This is Runtime state, not
-a Message and not a temporary Nudge, so context compaction does not remove the
-current plan. The prompt overlay contains no hidden execution authority; it is
-descriptive state for the Agent.
+The current execution plan is delivered to the Provider as a `todo_reminder`
+`system.reminder` message (aligned with the CCB attachment semantics), built by
+`TodoPromptContributor.buildReminderMessage()` and merged with the canonical
+messages by `PromptAssemblyBuilder`. Reminder messages are append-only and never
+deleted by compaction or projection, keeping the message prefix stable so
+Provider prefill caches stay valid.
+
+`TodoAwareRuntimeSystemPromptSource` (the legacy implementation that appended
+`<CURRENT_TODOS>` into the System Prompt string) is not wired and is deprecated:
+the System Prompt carries only the stable base, and all dynamic content lives in
+the message layer.
 
 `TodoRead` is intentionally deferred. Runtime context already exposes the
-current list, while clients read the OutputEvent stream or the Todo projection.
+current list through the reminder message, while clients read the OutputEvent
+stream or the Todo projection.
 
 ## Subagent planning tool
 

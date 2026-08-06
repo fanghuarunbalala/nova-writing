@@ -1,35 +1,21 @@
-/** Deterministically admits a current conforming leaf Realization to completed state. */
+/** Deterministically admits a current conforming leaf StoryUnit to completed state. */
 import {
-  captureStoryUnitRealization,
   STORY_UNIT_CONFORMANCE_STATUS,
-  type ManuscriptRange,
+  type Paragraph,
   type StoryOutlineTree,
   type StoryUnit,
-  type StoryUnitRealization,
+  type StoryUnitConformanceResult,
 } from "../model/index.js";
-import {
-  captureStoryUnit,
-} from "../model/outline/StoryUnit.js";
+import { captureStoryUnit } from "../model/outline/StoryUnit.js";
 import { STORY_UNIT_REALIZATION_STATUS } from "../model/outline/StoryUnitStatus.js";
-import {
-  captureNovelRevision,
-  type NovelRevision,
-} from "../version/index.js";
-import {
-  MANUSCRIPT_RANGE_REPAIR_STATUS,
-  type ManuscriptRangeRepairValidator,
-} from "./ManuscriptRangeRepairValidator.js";
-
+import type { NovelRevision } from "../version/index.js";
 export const STORY_UNIT_COMPLETION_REJECTION = {
   storyUnitMissing: "story-unit-missing",
   storyUnitNotLeaf: "story-unit-not-leaf",
   storyUnitInactive: "story-unit-inactive",
-  rangesMissing: "ranges-missing",
-  realizationRevisionStale: "realization-revision-stale",
-  validationRevisionStale: "validation-revision-stale",
-  validationNotConforming: "validation-not-conforming",
-  rangeUnresolved: "range-unresolved",
-  rangeInverted: "range-inverted",
+  paragraphsMissing: "paragraphs-missing",
+  planMissing: "plan-missing",
+  conformanceNotConforming: "conformance-not-conforming",
 } as const;
 
 export type StoryUnitCompletionRejection =
@@ -39,78 +25,50 @@ export type StoryUnitCompletionAdmission =
   | {
       readonly status: "admitted";
       readonly storyUnit: StoryUnit;
-      readonly realization: StoryUnitRealization;
-      readonly resolvedRanges: readonly ManuscriptRange[];
-      readonly reviewedRepairCount: number;
+      readonly conformance: StoryUnitConformanceResult;
     }
   | {
       readonly status: "rejected";
-      readonly storyUnitId: StoryUnitRealization["storyUnitId"];
+      readonly storyUnitId: StoryUnit["id"];
       readonly reason: StoryUnitCompletionRejection;
     };
 
+export interface StoryUnitCompletionEvaluationInput {
+  readonly storyUnitId: StoryUnit["id"];
+  readonly paragraphs: readonly Paragraph[];
+  readonly hasAcceptedPlan: boolean;
+  readonly conformance: StoryUnitConformanceResult;
+  readonly currentRevision: NovelRevision;
+}
+
 export class StoryUnitCompletionAdmissionValidator {
-  private readonly currentRevision: NovelRevision;
+  constructor(private readonly outline: StoryOutlineTree) {}
 
-  constructor(
-    private readonly outline: StoryOutlineTree,
-    currentRevision: NovelRevision,
-    private readonly ranges: ManuscriptRangeRepairValidator,
-  ) {
-    this.currentRevision = captureNovelRevision(currentRevision);
-  }
-
-  evaluate(value: unknown): StoryUnitCompletionAdmission {
-    const realization = captureStoryUnitRealization(value);
-    const unit = this.outline.getUnit(realization.storyUnitId);
+  evaluate(input: StoryUnitCompletionEvaluationInput): StoryUnitCompletionAdmission {
+    const unit = this.outline.getUnit(input.storyUnitId);
     if (unit === undefined) {
-      return rejected(realization, STORY_UNIT_COMPLETION_REJECTION.storyUnitMissing);
+      return rejected(input.storyUnitId, STORY_UNIT_COMPLETION_REJECTION.storyUnitMissing);
     }
     if (this.outline.listChildren(unit.id).length > 0) {
-      return rejected(realization, STORY_UNIT_COMPLETION_REJECTION.storyUnitNotLeaf);
+      return rejected(input.storyUnitId, STORY_UNIT_COMPLETION_REJECTION.storyUnitNotLeaf);
     }
     if (
       unit.realizationStatus === STORY_UNIT_REALIZATION_STATUS.abandoned ||
       unit.blockState !== undefined
     ) {
-      return rejected(realization, STORY_UNIT_COMPLETION_REJECTION.storyUnitInactive);
+      return rejected(input.storyUnitId, STORY_UNIT_COMPLETION_REJECTION.storyUnitInactive);
     }
-    if (realization.ranges.length === 0) {
-      return rejected(realization, STORY_UNIT_COMPLETION_REJECTION.rangesMissing);
+    if (input.paragraphs.length === 0) {
+      return rejected(input.storyUnitId, STORY_UNIT_COMPLETION_REJECTION.paragraphsMissing);
     }
-    if (realization.sourceRevision !== this.currentRevision) {
-      return rejected(
-        realization,
-        STORY_UNIT_COMPLETION_REJECTION.realizationRevisionStale,
-      );
+    if (!input.hasAcceptedPlan) {
+      return rejected(input.storyUnitId, STORY_UNIT_COMPLETION_REJECTION.planMissing);
     }
-    if (realization.validation.checkedNovelRevision !== this.currentRevision) {
-      return rejected(
-        realization,
-        STORY_UNIT_COMPLETION_REJECTION.validationRevisionStale,
-      );
+    if (input.conformance.checkedNovelRevision !== input.currentRevision) {
+      return rejected(input.storyUnitId, STORY_UNIT_COMPLETION_REJECTION.conformanceNotConforming);
     }
-    if (
-      realization.validation.status !== STORY_UNIT_CONFORMANCE_STATUS.conforming
-    ) {
-      return rejected(
-        realization,
-        STORY_UNIT_COMPLETION_REJECTION.validationNotConforming,
-      );
-    }
-
-    const resolvedRanges: ManuscriptRange[] = [];
-    let reviewedRepairCount = 0;
-    for (const range of realization.ranges) {
-      const resolution = this.ranges.resolve(range);
-      if (resolution.status === MANUSCRIPT_RANGE_REPAIR_STATUS.unresolved) {
-        return rejected(realization, STORY_UNIT_COMPLETION_REJECTION.rangeUnresolved);
-      }
-      if (resolution.status === MANUSCRIPT_RANGE_REPAIR_STATUS.inverted) {
-        return rejected(realization, STORY_UNIT_COMPLETION_REJECTION.rangeInverted);
-      }
-      resolvedRanges.push(resolution.resolvedRange);
-      if (resolution.reviewRequired) reviewedRepairCount += 1;
+    if (input.conformance.status !== STORY_UNIT_CONFORMANCE_STATUS.conforming) {
+      return rejected(input.storyUnitId, STORY_UNIT_COMPLETION_REJECTION.conformanceNotConforming);
     }
     return Object.freeze({
       status: "admitted",
@@ -118,20 +76,14 @@ export class StoryUnitCompletionAdmissionValidator {
         ...unit,
         realizationStatus: STORY_UNIT_REALIZATION_STATUS.completed,
       }),
-      realization,
-      resolvedRanges: Object.freeze(resolvedRanges),
-      reviewedRepairCount,
+      conformance: input.conformance,
     });
   }
 }
 
 function rejected(
-  realization: StoryUnitRealization,
+  storyUnitId: StoryUnit["id"],
   reason: StoryUnitCompletionRejection,
 ): StoryUnitCompletionAdmission {
-  return Object.freeze({
-    status: "rejected",
-    storyUnitId: realization.storyUnitId,
-    reason,
-  });
+  return Object.freeze({ status: "rejected", storyUnitId, reason });
 }

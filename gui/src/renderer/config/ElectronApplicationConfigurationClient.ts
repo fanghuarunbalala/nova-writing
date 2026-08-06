@@ -5,6 +5,7 @@ import type {
   RemoveModelConfigurationResult,
   SetDefaultModelProfileRequest,
   SetDefaultModelProfileResult,
+  ModelConnectionProbeResult,
   UpsertModelConfigurationRequest,
   UpsertModelConfigurationResult,
 } from "@novel/core";
@@ -45,6 +46,10 @@ export class ElectronApplicationConfigurationClient
     request: RemoveModelConfigurationRequest,
   ): Promise<RemoveModelConfigurationResult> {
     return unwrapPromise(this.bridge.removeModelConfiguration(request));
+  }
+
+  probeModelConnection(): Promise<ModelConnectionProbeResult> {
+    return unwrapPromise(this.bridge.probeModelConnection());
   }
 
   getCredentialStatus(credentialRef: string) {

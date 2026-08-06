@@ -1,0 +1,78 @@
+/**
+ * ProposalBlock 视觉（原型 .proposal + .proposal-head + .op + .proposal-foot）。
+ *
+ * border-strong + radius 14 + shadow-1 + padding 14/16/13，与原型 .proposal 一致。
+ */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 13px;
+  padding: 14px 16px 13px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  transition:
+    border-color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
+}
+
+.block:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-1);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.01em;
+  color: var(--color-fg);
+}
+
+.meta {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.ops {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--color-border);
+  padding-top: 11px;
+  margin-top: 3px;
+}
+
+.diffButton {
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+  color: var(--color-accent-ink);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.diffButton:hover {
+  background: color-mix(in oklab, var(--color-accent) 16%, var(--color-surface));
+}

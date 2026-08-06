@@ -5,6 +5,7 @@ import type {
   ApiResponse,
   ApplicationConfigurationSnapshot,
   CredentialStatus,
+  ModelConnectionProbeResult,
   RemoveModelConfigurationRequest,
   RemoveModelConfigurationResult,
   SetDefaultModelProfileRequest,
@@ -12,6 +13,13 @@ import type {
   UpsertModelConfigurationRequest,
   UpsertModelConfigurationResult,
 } from "@novel/core";
+import type { FrontendFileReference } from "@novel/ui";
+import type {
+  DesktopFileSelectionOptions,
+  DesktopTrayMenuItem,
+  DesktopTrayNotification,
+  DesktopUpdateInfo,
+} from "./ElectronDesktopPorts.js";
 
 export interface ElectronBridgeFailure {
   readonly code: string;
@@ -59,6 +67,7 @@ export interface ElectronConfigurationBridge {
   removeModelConfiguration(
     request: RemoveModelConfigurationRequest,
   ): Promise<ElectronBridgeResult<RemoveModelConfigurationResult>>;
+  probeModelConnection(): Promise<ElectronBridgeResult<ModelConnectionProbeResult>>;
   getCredentialStatus(
     credentialRef: string,
   ): Promise<ElectronBridgeResult<CredentialStatus>>;
@@ -82,6 +91,65 @@ export interface ElectronApplicationCommandBridge {
   ): () => void;
 }
 
+/**
+ * 窗口操作 bridge（spec 5.4 DesktopWindowPort）。
+ * 每个方法对应一个 IPC channel，返回 ElectronBridgeResult<Acknowledgement>。
+ */
+export interface ElectronWindowBridge {
+  minimize(): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+  maximize(): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+  close(): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+  setAlwaysOnTop(
+    alwaysOnTop: boolean,
+  ): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+  setFullscreen(
+    fullscreen: boolean,
+  ): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+}
+
+/**
+ * 自动更新 bridge（spec 5.4 DesktopUpdaterPort）。
+ * checkForUpdates 返回 UpdateInfo | undefined（无更新时 undefined）。
+ */
+export interface ElectronUpdaterBridge {
+  checkForUpdates(): Promise<ElectronBridgeResult<DesktopUpdateInfo | undefined>>;
+  downloadUpdate(): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+  quitAndInstall(): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+}
+
+/**
+ * 系统托盘 bridge（spec 5.4 DesktopSystemTrayPort）。
+ * setTrayMenu 的 items 经 JSON 序列化传到 Main，点击事件暂不回传（Phase B.3 仅端口）。
+ */
+export interface ElectronSystemTrayBridge {
+  setTrayIcon(
+    iconPath: string,
+  ): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+  setTrayMenu(
+    items: readonly DesktopTrayMenuItem[],
+  ): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+  showTrayNotification(
+    notification: DesktopTrayNotification,
+  ): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+}
+
+/**
+ * 原生文件选择 bridge（spec 5.4 DesktopNativeFilePort）。
+ * selectFile/selectDirectory 返回 FrontendFileReference[]（shared 类型），
+ * referenceId 对 renderer 不透明；previewFile 触发系统预览。
+ */
+export interface ElectronNativeFileBridge {
+  selectFile(
+    options?: DesktopFileSelectionOptions,
+  ): Promise<ElectronBridgeResult<readonly FrontendFileReference[]>>;
+  selectDirectory(
+    options?: DesktopFileSelectionOptions,
+  ): Promise<ElectronBridgeResult<readonly FrontendFileReference[]>>;
+  previewFile(
+    referenceId: string,
+  ): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+}
+
 export interface ElectronBridgeOpenSubscriptionRequest {
   readonly subscriptionId: string;
   readonly request: ApiRequest;
@@ -95,6 +163,10 @@ export interface ElectronPreloadBridge {
   readonly commands?: ElectronApplicationCommandBridge;
   readonly workspaces?: ElectronWorkspaceBridge;
   readonly configuration?: ElectronConfigurationBridge;
+  readonly window?: ElectronWindowBridge;
+  readonly updater?: ElectronUpdaterBridge;
+  readonly tray?: ElectronSystemTrayBridge;
+  readonly files?: ElectronNativeFileBridge;
 
   request(
     request: ApiRequest,

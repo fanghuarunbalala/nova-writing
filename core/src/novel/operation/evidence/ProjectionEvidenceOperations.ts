@@ -20,11 +20,9 @@ import {
   captureStoryUnitCharacterBinding,
   captureStoryUnitEntityChange,
   captureStoryUnitLocationBinding,
-  captureStoryUnitRealization,
   type StoryUnitCharacterBinding,
   type StoryUnitEntityChange,
   type StoryUnitLocationBinding,
-  type StoryUnitRealization,
 } from "../../model/index.js";
 import type {
   NovelMutableProjectionEvidenceRepository,
@@ -45,8 +43,6 @@ export const NOVEL_EVIDENCE_OPERATION_TYPE = {
   locationBindingDelete: "story-unit-location-binding.delete",
   entityChangePut: "story-unit-entity-change.put",
   entityChangeDelete: "story-unit-entity-change.delete",
-  realizationPut: "story-unit-realization.put",
-  realizationDelete: "story-unit-realization.delete",
 } as const;
 
 const VERSION = captureNovelOperationVersion(1);
@@ -56,7 +52,6 @@ const LOCATION = "location";
 const CHARACTER_BINDING = "story-unit-character-binding";
 const LOCATION_BINDING = "story-unit-location-binding";
 const ENTITY_CHANGE = "story-unit-entity-change";
-const REALIZATION = "story-unit-realization";
 
 interface ValuePayload extends JsonObject { readonly value: JsonObject }
 interface BindingIdentityPayload extends JsonObject {
@@ -173,38 +168,6 @@ export function createStoryUnitEntityChangeDeleteOperation(input: {
   );
 }
 
-export function createStoryUnitRealizationPutOperation(input: {
-  operationId: NovelOperationId;
-  realization: StoryUnitRealization;
-  expectedRecordDigest?: string;
-}) {
-  const value = captureStoryUnitRealization(input.realization);
-  return putOperation(
-    input.operationId,
-    NOVEL_EVIDENCE_OPERATION_TYPE.realizationPut,
-    value,
-    REALIZATION,
-    value.storyUnitId,
-    input.expectedRecordDigest,
-    [exists(STORY_UNIT, value.storyUnitId)],
-  );
-}
-
-export function createStoryUnitRealizationDeleteOperation(input: {
-  operationId: NovelOperationId;
-  storyUnitId: StoryUnitId;
-  expectedRecordDigest: string;
-}) {
-  const id = captureStoryUnitId(input.storyUnitId);
-  return deleteIdentityOperation(
-    input.operationId,
-    NOVEL_EVIDENCE_OPERATION_TYPE.realizationDelete,
-    REALIZATION,
-    id,
-    input.expectedRecordDigest,
-  );
-}
-
 export function registerNovelProjectionEvidenceOperationHandlers<
   TContext extends NovelProjectionEvidenceMutationContext,
 >(registry: NovelOperationRegistry<TContext>): void {
@@ -215,8 +178,6 @@ export function registerNovelProjectionEvidenceOperationHandlers<
     [NOVEL_EVIDENCE_OPERATION_TYPE.locationBindingDelete, applyLocationBindingDelete],
     [NOVEL_EVIDENCE_OPERATION_TYPE.entityChangePut, applyEntityChangePut],
     [NOVEL_EVIDENCE_OPERATION_TYPE.entityChangeDelete, applyEntityChangeDelete],
-    [NOVEL_EVIDENCE_OPERATION_TYPE.realizationPut, applyRealizationPut],
-    [NOVEL_EVIDENCE_OPERATION_TYPE.realizationDelete, applyRealizationDelete],
   ];
   for (const [operationType, apply] of handlers) {
     registry.register({
@@ -282,22 +243,6 @@ function applyEntityChangeDelete(store: NovelMutableProjectionEvidenceRepository
   assertDeleteIdentityExpected(operation, ENTITY_CHANGE, id);
   assertDeleteState(store.getEntityChange(id), store.getEntityChangeDigest(id), operation, ENTITY_CHANGE, id);
   if (!store.deleteEntityChange(id)) throw invariant(operation, ENTITY_CHANGE, id);
-}
-
-function applyRealizationPut(store: NovelMutableProjectionEvidenceRepository, operation: NovelOperation): void {
-  const value = captureStoryUnitRealization(captureValue(operation));
-  const extra = [exists(STORY_UNIT, value.storyUnitId)];
-  assertPutExpected(operation, REALIZATION, value.storyUnitId, extra);
-  if (!store.hasStoryUnit(value.storyUnitId)) throw missing(operation, STORY_UNIT, value.storyUnitId);
-  assertPutState(store.getRealization(value.storyUnitId), store.getRealizationDigest(value.storyUnitId), operation, REALIZATION, value.storyUnitId);
-  store.putRealization(value);
-}
-
-function applyRealizationDelete(store: NovelMutableProjectionEvidenceRepository, operation: NovelOperation): void {
-  const id = captureStoryUnitId(captureIdentity(operation));
-  assertDeleteIdentityExpected(operation, REALIZATION, id);
-  assertDeleteState(store.getRealization(id), store.getRealizationDigest(id), operation, REALIZATION, id);
-  if (!store.deleteRealization(id)) throw invariant(operation, REALIZATION, id);
 }
 
 function putOperation(

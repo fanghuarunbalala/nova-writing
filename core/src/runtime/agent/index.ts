@@ -4,6 +4,7 @@ export * from "./AgentRuntimeConfigurationFactory.js";
 export * from "./AgentRuntimeConfigurationFactoryErrors.js";
 export * from "./AgentRuntimeExecutionAssembler.js";
 export * from "./AgentRuntimeExecutionAssembly.js";
+export * from "./AgentRuntimeBasePromptSource.js";
 export * from "./AgentRuntimePolicyServices.js";
 export * from "./AgentRuntimePolicyServicesErrors.js";
 export * from "./AgentRuntimeSystemPromptSource.js";

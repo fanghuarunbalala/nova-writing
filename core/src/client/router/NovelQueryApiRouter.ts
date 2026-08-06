@@ -2,10 +2,10 @@
 import type {
   CharacterQueryService,
   LocationQueryService,
-  ManuscriptQueryService,
   NovelCanonicalMetadata,
   NovelDraftSession,
   NovelReadScope,
+  ParagraphQueryService,
   PublicationQueryService,
   StoryOutlineQueryService,
 } from "../../novel/index.js";
@@ -30,7 +30,7 @@ import {
   NOVEL_QUERY_SCOPE_KIND,
   captureNovelCharacterQueryRequest,
   captureNovelLocationQueryRequest,
-  captureNovelManuscriptBlockQueryRequest,
+  captureNovelParagraphQueryRequest,
   captureNovelScopedQueryRequest,
   captureNovelStoryUnitQueryRequest,
   type NovelQueryApiOperation,
@@ -42,10 +42,10 @@ import {
   captureNovelCharactersSnapshot,
   captureNovelLocationSnapshot,
   captureNovelLocationsSnapshot,
-  captureNovelManuscriptBlockSnapshot,
-  captureNovelManuscriptStructureSnapshot,
   captureNovelOutlineSnapshot,
   captureNovelOverviewSnapshot,
+  captureNovelParagraphCatalogSnapshot,
+  captureNovelParagraphSnapshot,
   captureNovelStoryUnitSnapshot,
 } from "../novel/NovelQuerySnapshots.js";
 
@@ -68,7 +68,7 @@ export interface NovelQueryApiRouterOptions {
   readonly locations: LocationQueryService;
   readonly outline: StoryOutlineQueryService;
   readonly publication: PublicationQueryService;
-  readonly manuscript: ManuscriptQueryService;
+  readonly paragraphs: ParagraphQueryService;
   readonly logger?: Logger;
 }
 
@@ -158,24 +158,24 @@ export class NovelQueryApiRouter implements ApiTransport {
         return this.listLocations(payload);
       case NOVEL_QUERY_API_OPERATION.locationGet:
         return this.getLocation(payload);
-      case NOVEL_QUERY_API_OPERATION.manuscriptStructureGet:
-        return this.getManuscriptStructure(payload);
-      case NOVEL_QUERY_API_OPERATION.manuscriptBlockGet:
-        return this.getManuscriptBlock(payload);
+      case NOVEL_QUERY_API_OPERATION.paragraphCatalogGet:
+        return this.getParagraphCatalog(payload);
+      case NOVEL_QUERY_API_OPERATION.paragraphGet:
+        return this.getParagraph(payload);
     }
   }
 
   private async getOverview(payload: unknown) {
     const request = captureNovelScopedQueryRequest(payload);
     const resolved = await this.resolveScope(request.scope);
-    const [metadata, tree, characters, locations, publication, manuscript] =
+    const [metadata, tree, characters, locations, publication, paragraphs] =
       await Promise.all([
         this.options.metadata.getMetadata(),
         this.options.outline.getTree(resolved.domain),
         this.options.characters.list(resolved.domain),
         this.options.locations.list(resolved.domain),
         this.options.publication.getCatalog(resolved.domain),
-        this.options.manuscript.getCatalog(resolved.domain),
+        this.options.paragraphs.getCatalog(resolved.domain),
       ]);
     assertMetadataIdentity(metadata, this.options.workspaceId, this.options.novelId);
     return captureNovelOverviewSnapshot({
@@ -191,12 +191,12 @@ export class NovelQueryApiRouter implements ApiTransport {
         locationCount: locations.length,
         volumeCount: publication?.snapshot.volumes.length ?? 0,
         chapterCount: publication?.snapshot.chapters.length ?? 0,
-        manuscriptBlockCount: manuscript?.snapshot.blocks.length ?? 0,
+        paragraphCount: paragraphs?.snapshot.paragraphs.length ?? 0,
       },
       roots: {
         outlineAvailable: tree !== undefined,
         publicationAvailable: publication !== undefined,
-        manuscriptAvailable: manuscript !== undefined,
+        paragraphsAvailable: paragraphs !== undefined,
       },
     });
   }
@@ -276,41 +276,34 @@ export class NovelQueryApiRouter implements ApiTransport {
     });
   }
 
-  private async getManuscriptStructure(payload: unknown) {
+  private async getParagraphCatalog(payload: unknown) {
     const request = captureNovelScopedQueryRequest(payload);
     const resolved = await this.resolveScope(request.scope);
-    const [publication, manuscript] = await Promise.all([
-      this.options.publication.getCatalog(resolved.domain),
-      this.options.manuscript.getCatalog(resolved.domain),
-    ]);
-    return captureNovelManuscriptStructureSnapshot({
+    const catalog = await this.options.paragraphs.getCatalog(resolved.domain);
+    return captureNovelParagraphCatalogSnapshot({
       schemaVersion: NOVEL_QUERY_SNAPSHOT_VERSION,
       scope: resolved.client,
-      ...(publication === undefined ? {} : { publication: publication.snapshot }),
-      ...(manuscript === undefined
-        ? {}
-        : {
-            manuscript: manuscript.snapshot.manuscript,
-            blocks: manuscript.snapshot.blocks.map((block) => ({
-              id: block.id,
-              chapterId: block.chapterId,
-              orderKey: block.orderKey,
-              textLength: block.text.length,
-              textDigest: requireBlockDigest(manuscript.blockDigests, block.id),
-            })),
-          }),
-      ...(manuscript === undefined ? { blocks: [] } : {}),
+      paragraphs: (catalog?.snapshot.paragraphs ?? []).map((paragraph) => ({
+        id: paragraph.id,
+        storyUnitId: paragraph.storyUnitId,
+        orderKey: paragraph.orderKey,
+        textLength: paragraph.text.length,
+        textDigest: requireParagraphDigest(
+          catalog?.paragraphDigests ?? {},
+          paragraph.id,
+        ),
+      })),
     });
   }
 
-  private async getManuscriptBlock(payload: unknown) {
-    const request = captureNovelManuscriptBlockQueryRequest(payload);
+  private async getParagraph(payload: unknown) {
+    const request = captureNovelParagraphQueryRequest(payload);
     const resolved = await this.resolveScope(request.scope);
-    const readModel = await this.options.manuscript.getBlock(
+    const readModel = await this.options.paragraphs.getParagraph(
       resolved.domain,
-      request.blockId,
+      request.paragraphId,
     );
-    return captureNovelManuscriptBlockSnapshot({
+    return captureNovelParagraphSnapshot({
       schemaVersion: NOVEL_QUERY_SNAPSHOT_VERSION,
       scope: resolved.client,
       ...(readModel === undefined ? {} : { readModel }),
@@ -398,11 +391,11 @@ function assertMetadataIdentity(
   }
 }
 
-function requireBlockDigest(
+function requireParagraphDigest(
   digests: Readonly<Record<string, Readonly<{ textDigest: string }>>>,
-  blockId: string,
+  paragraphId: string,
 ): string {
-  const digest = digests[blockId]?.textDigest;
+  const digest = digests[paragraphId]?.textDigest;
   if (digest === undefined) throw new NovelQueryIntegrityError();
   return digest;
 }

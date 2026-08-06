@@ -1,4 +1,4 @@
-/** Captures objective ordered events that manuscript realization must satisfy. */
+/** Captures objective ordered events that realization must satisfy. */
 import {
   NOVEL_PROTOCOL_FAILURE,
   NovelProtocolValidationError,

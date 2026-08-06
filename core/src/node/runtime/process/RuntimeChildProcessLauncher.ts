@@ -45,6 +45,7 @@ export interface RuntimeChildProcessLauncher {
 export interface NodeRuntimeChildProcessLauncherOptions {
   readonly command: string;
   readonly args?: readonly string[];
+  readonly env?: Readonly<Record<string, string>>;
   readonly logger?: Logger;
 }
 
@@ -53,6 +54,7 @@ export class NodeRuntimeChildProcessLauncher
 {
   readonly #command: string;
   readonly #args: readonly string[];
+  readonly #env: Readonly<Record<string, string>>;
   readonly #logger: Logger;
 
   constructor(options: NodeRuntimeChildProcessLauncherOptions) {
@@ -62,6 +64,7 @@ export class NodeRuntimeChildProcessLauncher
         captureString(argument, `Runtime child argument ${index}`),
       ),
     );
+    this.#env = Object.freeze({ ...(options.env ?? {}) });
     this.#logger = (options.logger ?? noopLogger).child({
       component: "runtime_child_process_launcher",
     });
@@ -87,6 +90,7 @@ export class NodeRuntimeChildProcessLauncher
     try {
       child = spawn(this.#command, [...this.#args], {
         detached: false,
+        env: { ...globalThis.process.env, ...this.#env },
         shell: false,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,

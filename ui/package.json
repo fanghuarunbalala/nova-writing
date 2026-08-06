@@ -9,57 +9,40 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./shared/*": "./dist/shared/*"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit",
-    "smoke:app-composition": "pnpm --dir ../core build && pnpm build && pnpm --dir ../gui build && pnpm --dir ../web build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-app-composition-typecheck.tsx && node scripts/novel-app-composition-smoke.mjs",
-    "smoke:application-shell": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/application-shell-typecheck.tsx && node scripts/application-shell-smoke.mjs",
-    "smoke:workspace-settings-shell": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/workspace-settings-shell-typecheck.tsx && node scripts/workspace-settings-shell-smoke.mjs",
-    "smoke:persistent-model-connection-settings": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/persistent-model-connection-settings-typecheck.tsx && node scripts/persistent-model-connection-settings-smoke.mjs",
-    "smoke:application-shell-store": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/application-shell-store-typecheck.tsx && node scripts/application-shell-store-smoke.mjs",
-    "smoke:conversation-projection-hook": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-projection-hook-typecheck.tsx && node scripts/conversation-projection-hook-smoke.mjs",
-    "smoke:conversation-catalog-controller": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-catalog-controller-typecheck.ts && node scripts/conversation-catalog-controller-smoke.mjs",
-    "smoke:conversation-workspace-binding": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-workspace-binding-typecheck.tsx && node scripts/conversation-workspace-binding-smoke.mjs",
-    "smoke:conversation-timeline": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-timeline-typecheck.tsx && node scripts/conversation-timeline-smoke.mjs",
-    "smoke:conversation-connection-status": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-connection-status-typecheck.tsx && node scripts/conversation-connection-status-smoke.mjs",
-    "smoke:conversation-composer": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-composer-typecheck.tsx && node scripts/conversation-composer-smoke.mjs",
-    "smoke:inspector-store": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/inspector-store-typecheck.tsx && node scripts/inspector-store-smoke.mjs",
-    "smoke:inspector-panel": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/inspector-panel-typecheck.tsx && node scripts/inspector-panel-smoke.mjs",
-    "smoke:project-navigation": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/project-navigation-typecheck.tsx && node scripts/project-navigation-smoke.mjs",
-    "smoke:novel-query-workspace": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-query-workspace-typecheck.tsx && node scripts/novel-query-workspace-smoke.mjs",
-    "smoke:novel-read-cache": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-read-cache-typecheck.tsx && node scripts/novel-read-cache-smoke.mjs",
-    "smoke:novel-commit-card": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-commit-card-typecheck.tsx && node scripts/novel-commit-card-smoke.mjs",
-    "smoke:novel-query-race": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-query-workspace-typecheck.tsx && node scripts/novel-query-race-smoke.mjs",
-    "smoke:conversation-card": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-card-typecheck.tsx && node scripts/conversation-card-smoke.mjs",
-    "smoke:conversation-card-binding": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/conversation-card-binding-typecheck.tsx && node scripts/conversation-card-binding-smoke.mjs",
-    "smoke:story-outline-tree-model": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/story-outline-tree-model-typecheck.ts && node scripts/story-outline-tree-model-smoke.mjs",
-    "smoke:story-outline-tree": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/story-outline-tree-typecheck.tsx && node scripts/story-outline-tree-smoke.mjs",
-    "smoke:story-outline-large-tree": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/story-outline-tree-typecheck.tsx && node scripts/story-outline-large-tree-smoke.mjs",
-    "smoke:novel-change-review-shell": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-change-review-shell-typecheck.tsx && node scripts/novel-change-review-shell-smoke.mjs",
-    "smoke:entity-change-reviewer": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/entity-change-reviewer-typecheck.tsx && node scripts/entity-change-reviewer-smoke.mjs",
-    "smoke:outline-change-reviewer": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/outline-change-reviewer-typecheck.tsx && node scripts/outline-change-reviewer-smoke.mjs",
-    "smoke:manuscript-change-reviewer": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/manuscript-change-reviewer-typecheck.tsx && node scripts/manuscript-change-reviewer-smoke.mjs",
-    "smoke:composer-draft-store": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/composer-draft-store-typecheck.tsx && node scripts/composer-draft-store-smoke.mjs",
-    "smoke:reference-in-conversation": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/reference-in-conversation-typecheck.tsx && node scripts/reference-in-conversation-smoke.mjs",
-    "smoke:story-outline-reference": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/story-outline-reference-typecheck.tsx && node scripts/story-outline-reference-smoke.mjs",
-    "smoke:manuscript-reference": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/manuscript-reference-typecheck.tsx && node scripts/manuscript-reference-smoke.mjs",
-    "smoke:entity-field-reference": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/entity-field-reference-typecheck.tsx && node scripts/entity-field-reference-smoke.mjs",
-    "smoke:novel-operation-reference": "pnpm --dir ../core build && pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --jsx react-jsx --skipLibCheck scripts/novel-operation-reference-typecheck.tsx && node scripts/novel-operation-reference-smoke.mjs"
+    "build": "tsc -p tsconfig.json && node scripts/copy-css.mjs",
+    "check": "tsc -p tsconfig.json --noEmit && eslint --no-error-on-unmatched-pattern \"src/shared/**/*.{ts,tsx}\" \"src/domains/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
+    "lint": "eslint --no-error-on-unmatched-pattern \"src/shared/**/*.{ts,tsx}\" \"src/domains/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@novel/core": "workspace:*"
+    "@novel/core": "workspace:*",
+    "@radix-ui/react-dialog": "^1.1.23",
+    "@radix-ui/react-dropdown-menu": "^2.1.24",
+    "@radix-ui/react-tabs": "^1.1.21",
+    "@radix-ui/react-tooltip": "^1.2.16",
+    "lucide-react": "^1.28.0"
   },
   "peerDependencies": {
     "react": ">=19.2.0 <20"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.3",
     "@types/jsdom": "28.0.3",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
+    "@typescript-eslint/eslint-plugin": "^8",
+    "@typescript-eslint/parser": "^8",
+    "eslint": "^8",
     "jsdom": "30.0.1",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "vitest": "^4.1.10"
   }
 }

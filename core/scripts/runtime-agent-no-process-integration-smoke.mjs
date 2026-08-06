@@ -1,23 +1,32 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   AGENT_RUNTIME_OUTCOME,
   AgentRuntimeRunExecutor,
   AgentRuntimeStopCancellationPort,
-  BaseContextCompiler,
   EXECUTION_CANCELLATION_REASON,
   INPUT_EVENT_TYPE,
   InputRouter,
   OUTPUT_EVENT_TYPE,
   ProjectedUserMessageRunPreparationSource,
+  PromptAssemblyBuilder,
   RUN_STATUS,
   RuntimeInputOutcomeController,
   RuntimeInputPump,
+  RuntimePromptAssembler,
   RuntimeStopInputHandler,
   RuntimeUserMessageInputHandler,
   TURN_STATE_CHANGE_REASON,
   TURN_STATUS,
   TurnController,
 } from "../dist/index.js";
+
+class Sha256Digester {
+  algorithm = "sha256";
+  async digest(content) {
+    return `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
+  }
+}
 
 const conversationId = "conversation-agent-no-process";
 const timestamp = "2026-08-01T23:00:00.000Z";
@@ -206,9 +215,11 @@ const preparationSource = new ProjectedUserMessageRunPreparationSource({
       hasMore: false,
     }),
   }),
-  systemPromptSource: Object.freeze({
-    resolve: async () =>
-      "FORBIDDEN_NO_PROCESS_SYSTEM_PROMPT FORBIDDEN_NO_PROCESS_PATH",
+  basePromptSource: Object.freeze({
+    resolve: async () => ({
+      content: "FORBIDDEN_NO_PROCESS_SYSTEM_PROMPT FORBIDDEN_NO_PROCESS_PATH",
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    }),
   }),
   logger,
 });
@@ -235,7 +246,12 @@ const adapter = Object.freeze({
 const runExecutor = new AgentRuntimeRunExecutor({
   conversationId,
   preparationSource,
-  contextCompiler: new BaseContextCompiler({ logger }),
+  assembler: new RuntimePromptAssembler(
+    new PromptAssemblyBuilder({
+      digester: new Sha256Digester(),
+      logger,
+    }),
+  ),
   agentAdapter: adapter,
   lifecycleController,
   logger,

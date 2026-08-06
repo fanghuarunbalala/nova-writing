@@ -10,7 +10,6 @@ import {
   capturePublicationStructureId,
   capturePublicationVolume,
   capturePublicationVolumeId,
-  captureStoryUnitId,
 } from "../dist/index.js";
 
 const orders = new FractionalOrderKeyFactory();
@@ -25,7 +24,6 @@ const volumeOne = capturePublicationVolume({
   publicationId: publication.id,
   orderKey: first,
   title: "Volume One",
-  primaryStoryUnitId: captureStoryUnitId("story_unit_volume_one"),
 });
 const volumeTwo = capturePublicationVolume({
   id: capturePublicationVolumeId("volume_two"),
@@ -39,6 +37,7 @@ const chapterOne = capturePublicationChapter({
   volumeId: volumeOne.id,
   orderKey: first,
   title: "Chapter One",
+  paragraphIds: [],
 });
 const chapterTwo = capturePublicationChapter({
   id: capturePublicationChapterId("chapter_two"),
@@ -46,6 +45,7 @@ const chapterTwo = capturePublicationChapter({
   volumeId: volumeOne.id,
   orderKey: second,
   title: "Chapter Two",
+  paragraphIds: [],
 });
 const catalog = new PublicationCatalog({
   publication,

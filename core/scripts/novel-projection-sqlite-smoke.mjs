@@ -179,7 +179,6 @@ function conformanceEntry(target, sourceRevision) {
       sourceRevision: captureNovelRevision(sourceRevision),
       freshness: NOVEL_PROJECTION_FRESHNESS.current,
       validationStatus: "pending",
-      rangeStatuses: Object.freeze([]),
       warningCount: 0,
       errorCount: 0,
       evidenceStoryUnitIds: Object.freeze([target.storyUnitId]),

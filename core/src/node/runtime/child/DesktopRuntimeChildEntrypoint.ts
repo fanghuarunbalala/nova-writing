@@ -1,0 +1,266 @@
+/** Desktop child stdio entrypoint composing the production Runtime. */
+import type { Readable, Writable } from "node:stream";
+import { appendFile } from "node:fs/promises";
+import {
+  BaseContextCompiler,
+  type AgentRuntimeConfigurationProfileResolver,
+  type AgentRuntimeContextCompilerFactory,
+} from "../../../runtime/index.js";
+import type {
+  ApplicationConfigurationStore,
+  CredentialStore,
+  DiagnosticLogLevel,
+} from "../../../config/index.js";
+import {
+  NodeApplicationConfigurationStore,
+  NodeConfigurationHomeResolver,
+  NodePlaintextCredentialStore,
+  NodeWorkspaceStoreLocator,
+  SqliteWorkspaceStore,
+  createNodeProviderRequestDebugRecorder,
+} from "../../index.js";
+import type { AgentManifestStore } from "../../../agent/index.js";
+import type { ConversationRuntimeBootstrap } from "../../../conversation/index.js";
+import {
+  noopLogger,
+  type LogFields,
+  type Logger,
+} from "../../../observability/index.js";
+import {
+  DefaultRuntimeRunPreparationSourceFactory,
+} from "./DefaultRuntimeRunPreparationSourceFactory.js";
+import {
+  DesktopRuntimeChildCompositionFactory,
+  type RuntimeChildAdapterFactory,
+  type RuntimeRunPreparationSourceFactory,
+} from "./DesktopRuntimeChildCompositionFactory.js";
+import { PiRuntimeChildAdapterFactory } from "./PiRuntimeChildAdapterFactory.js";
+import {
+  runNodeRuntimeChildEntrypoint,
+  type RuntimeChildEntrypointResult,
+} from "./RuntimeChildEntrypoint.js";
+
+export const DESKTOP_CHILD_STORAGE_ROOT_ENV =
+  "NOVEL_DESKTOP_STORAGE_ROOT" as const;
+
+export const DESKTOP_CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
+
+export const DESKTOP_CHILD_DEBUG_ENV = "NOVEL_DEBUG" as const;
+
+export const DESKTOP_PROVIDER_REQUEST_DUMP_ENV =
+  "NOVEL_PROVIDER_REQUEST_DUMP" as const;
+
+export interface ChildDebugDiagnosticsInput {
+  readonly logLevel?: DiagnosticLogLevel;
+  readonly providerRequestDumpEnabled?: boolean;
+  readonly providerRequestDumpPath?: string;
+}
+
+export interface ChildDebugDiagnostics {
+  readonly logLevel: DiagnosticLogLevel;
+  readonly dumpPath?: string;
+}
+
+export function resolveChildDebugDiagnostics(
+  input: ChildDebugDiagnosticsInput,
+  environment: Readonly<Record<string, string | undefined>>,
+): ChildDebugDiagnostics {
+  const debugValue = environment[DESKTOP_CHILD_DEBUG_ENV];
+  const logLevel =
+    debugValue === "verbose"
+      ? "verbose"
+      : debugValue === "1" || debugValue === "debug"
+        ? "debug"
+        : (input.logLevel ?? "info");
+  const dumpPath =
+    environment[DESKTOP_PROVIDER_REQUEST_DUMP_ENV] ??
+    (input.providerRequestDumpEnabled === true
+      ? input.providerRequestDumpPath
+      : undefined);
+  return Object.freeze({
+    logLevel,
+    ...(dumpPath === undefined ? {} : { dumpPath }),
+  });
+}
+
+export interface RunDesktopRuntimeChildEntrypointOptions {
+  readonly manifestStoreProvider?: (
+    bootstrap: ConversationRuntimeBootstrap,
+  ) => Promise<AgentManifestStore>;
+  readonly adapterFactory?: RuntimeChildAdapterFactory;
+  readonly contextCompilerFactory?: AgentRuntimeContextCompilerFactory;
+  readonly preparationSourceFactory?: RuntimeRunPreparationSourceFactory;
+  readonly profileResolver?: AgentRuntimeConfigurationProfileResolver;
+  readonly application?: ApplicationConfigurationStore;
+  readonly credentials?: CredentialStore;
+  readonly storageRoot?: string;
+  readonly homeResolver?: NodeConfigurationHomeResolver;
+  readonly readable?: Readable;
+  readonly writable?: Writable;
+  readonly logger?: Logger;
+}
+
+export function runDesktopRuntimeChildEntrypoint(
+  options: RunDesktopRuntimeChildEntrypointOptions = {},
+): Promise<RuntimeChildEntrypointResult> {
+  const homeResolver = options.homeResolver ?? new NodeConfigurationHomeResolver();
+  return initializeDesktopRuntimeChildEntrypoint(options, homeResolver);
+}
+
+async function initializeDesktopRuntimeChildEntrypoint(
+  options: RunDesktopRuntimeChildEntrypointOptions,
+  homeResolver: NodeConfigurationHomeResolver,
+): Promise<RuntimeChildEntrypointResult> {
+  const bootstrapLogger = createEntrypointLogger(options.logger, "info");
+  const application =
+    options.application ??
+    new NodeApplicationConfigurationStore({
+      homeResolver,
+      logger: bootstrapLogger,
+    });
+  const credentials =
+    options.credentials ??
+    new NodePlaintextCredentialStore({ homeResolver, logger: bootstrapLogger });
+  const diagnostics = await application
+    .load()
+    .then((configuration) => configuration?.diagnostics)
+    .catch(() => undefined);
+  const childDebug = resolveChildDebugDiagnostics(
+    {
+      logLevel: diagnostics?.logLevel,
+      providerRequestDumpEnabled: diagnostics?.providerRequestDumpEnabled,
+      providerRequestDumpPath: diagnostics?.providerRequestDumpPath,
+    },
+    process.env,
+  );
+  const logger = createEntrypointLogger(
+    options.logger,
+    childDebug.logLevel,
+  );
+  const debugRecorder =
+    childDebug.dumpPath === undefined
+      ? undefined
+      : createNodeProviderRequestDebugRecorder({
+          path: childDebug.dumpPath,
+          logger,
+        });
+  const manifestStoreProvider =
+    options.manifestStoreProvider ??
+    createEnvManifestStoreProvider(options.storageRoot, logger);
+  const adapterFactory =
+    options.adapterFactory ??
+    new PiRuntimeChildAdapterFactory({
+      application,
+      credentials,
+      logger,
+      ...(debugRecorder === undefined ? {} : { debugRecorder }),
+    });
+  const contextCompilerFactory =
+    options.contextCompilerFactory ??
+    Object.freeze({
+      async create() {
+        return new BaseContextCompiler({ logger });
+      },
+    });
+  const preparationSourceFactory =
+    options.preparationSourceFactory ??
+    new DefaultRuntimeRunPreparationSourceFactory({ logger });
+  const compositionFactory = new DesktopRuntimeChildCompositionFactory({
+    manifestStoreProvider,
+    adapterFactory,
+    contextCompilerFactory,
+    preparationSourceFactory,
+    ...(options.profileResolver === undefined
+      ? {}
+      : { profileResolver: options.profileResolver }),
+    logger,
+  });
+  return runNodeRuntimeChildEntrypoint({
+    compositionFactory,
+    ...(options.readable === undefined ? {} : { readable: options.readable }),
+    ...(options.writable === undefined ? {} : { writable: options.writable }),
+    logger,
+  });
+}
+
+function createEntrypointLogger(
+  explicit: Logger | undefined,
+  logLevel: DiagnosticLogLevel,
+): Logger {
+  if (explicit !== undefined) {
+    return explicit.child({ component: "desktop_runtime_child_entrypoint" });
+  }
+  const logPath = process.env[DESKTOP_CHILD_LOG_ENV];
+  if (logPath === undefined || logPath.length === 0) {
+    return noopLogger.child({ component: "desktop_runtime_child_entrypoint" });
+  }
+  const levelRank = LOG_LEVEL_RANK[logLevel];
+  const writeLine = (
+    level: string,
+    event: string,
+    fields: Readonly<Record<string, unknown>> | undefined,
+  ): void => {
+    void appendFile(logPath, `${level} ${event} ${safeLogFields(fields)}\n`);
+  };
+  const fileLogger: Logger = {
+    debug: (event, fields) => {
+      if (levelRank >= LOG_LEVEL_RANK.debug) {
+        writeLine("DEBUG", event, fields);
+      }
+    },
+    info: (event, fields) => {
+      if (levelRank >= LOG_LEVEL_RANK.info) writeLine("INFO", event, fields);
+    },
+    warn: (event, fields) => {
+      if (levelRank >= LOG_LEVEL_RANK.warn) writeLine("WARN", event, fields);
+    },
+    error: (event, fields) => {
+      writeLine("ERROR", event, fields);
+    },
+    ...(levelRank >= LOG_LEVEL_RANK.verbose
+      ? {
+          verbose: (event: string, fields?: LogFields) => {
+            writeLine("VERBOSE", event, fields);
+          },
+        }
+      : {}),
+    child: () => fileLogger,
+  };
+  return fileLogger;
+}
+
+const LOG_LEVEL_RANK: Readonly<Record<DiagnosticLogLevel, number>> =
+  Object.freeze({
+    error: 0,
+    warn: 1,
+    info: 2,
+    debug: 3,
+    verbose: 4,
+  });
+
+function safeLogFields(fields: Readonly<Record<string, unknown>> | undefined): string {
+  if (fields === undefined) return "{}";
+  return JSON.stringify(fields);
+}
+
+function createEnvManifestStoreProvider(
+  storageRoot: string | undefined,
+  logger: Logger,
+): (bootstrap: ConversationRuntimeBootstrap) => Promise<AgentManifestStore> {
+  return async (bootstrap) => {
+    const root =
+      storageRoot ?? process.env[DESKTOP_CHILD_STORAGE_ROOT_ENV];
+    if (root === undefined || root.length === 0) {
+      throw new TypeError("Desktop child storage root is not configured");
+    }
+    const location = await new NodeWorkspaceStoreLocator({
+      storageRoot: root,
+    }).resolve(bootstrap.workspace.workdir);
+    const store = await SqliteWorkspaceStore.open({
+      workspace: location,
+      logger,
+    });
+    logger.debug("runtime_child.manifest_store_opened");
+    return store.agentManifests;
+  };
+}

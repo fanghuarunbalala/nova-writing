@@ -8,7 +8,6 @@ import type {
   StoryUnitCharacterBinding,
   StoryUnitEntityChange,
   StoryUnitLocationBinding,
-  StoryUnitRealization,
 } from "../model/index.js";
 import type { StoryUnitCompletionAdmission } from "../validation/index.js";
 import { captureNovelReadScope, type NovelReadScope } from "./NovelReadScope.js";
@@ -23,12 +22,6 @@ export class NovelEvidenceQueryService {
   }
   listEntityChanges(scope: NovelReadScope): Promise<readonly NovelEvidenceReadModel<StoryUnitEntityChange>[]> {
     return this.store.listEntityChanges(captureNovelReadScope(scope));
-  }
-  listRealizations(scope: NovelReadScope): Promise<readonly NovelEvidenceReadModel<StoryUnitRealization>[]> {
-    return this.store.listRealizations(captureNovelReadScope(scope));
-  }
-  getRealization(scope: NovelReadScope, storyUnitId: StoryUnitId) {
-    return this.store.getRealization(captureNovelReadScope(scope), captureStoryUnitId(storyUnitId));
   }
   evaluateCompletion(scope: NovelReadScope, storyUnitId: StoryUnitId): Promise<StoryUnitCompletionAdmission | undefined> {
     return this.store.evaluateCompletion(captureNovelReadScope(scope), captureStoryUnitId(storyUnitId));

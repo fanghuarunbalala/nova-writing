@@ -1,0 +1,23 @@
+/**
+ * MessageReference chip 视觉。
+ */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--color-accent-ink);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.chip:hover {
+  border-color: var(--color-border-strong);
+  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+}

@@ -1,0 +1,13 @@
+/**
+ * TopBarRevisionMeta 视觉（原型 .rev-meta）。
+ *
+ * 与 .kicker 区别：无 letter-spacing、无 text-transform（修订号 r042 不应被大写）。
+ * padding-left: 4px 与右侧动作保持间距。
+ */
+.revMeta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  color: var(--color-faint);
+  white-space: nowrap;
+  padding-left: 4px;
+}

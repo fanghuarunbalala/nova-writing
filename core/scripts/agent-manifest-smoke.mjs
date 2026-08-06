@@ -25,6 +25,20 @@ import {
   hydrateAgentManifest,
 } from "../dist/index.js";
 import { Type } from "typebox";
+import {
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
+  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
+  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  novelCharacterToolRegistry,
+  novelLocationToolRegistry,
+  novelParagraphToolRegistry,
+  novelPublicationToolRegistry,
+  novelDeleteToolRegistry,
+  novelOutlineToolRegistry,
+} from "./fixtures/novel-outline-tools.mjs";
 
 class Sha256Digester {
   algorithm = "sha256";
@@ -67,7 +81,7 @@ function createResolver(createdAt = "2026-08-03T00:00:00.000Z") {
 }
 
 const manifest = await createResolver().resolve(novelAgentDefinition);
-assert.equal(manifest.agentType, "novel_agent");
+assert.equal(manifest.agentType, "novel");
 assert.equal(manifest.definitionVersion, "1.0.0");
 assert.equal(manifest.schemaVersion, 2);
 assert.equal(manifest.capabilityProfile.profileId, "communication.standalone");
@@ -121,7 +135,15 @@ const todoTool = defineTool({
   },
   handler: { async execute() { return { content: [] }; } },
 });
-const toolRegistry = new ToolRegistry([todoTool]);
+const toolRegistry = new ToolRegistry([
+  todoTool,
+  ...novelOutlineToolRegistry.list(),
+  ...novelCharacterToolRegistry.list(),
+  ...novelLocationToolRegistry.list(),
+  ...novelParagraphToolRegistry.list(),
+  ...novelPublicationToolRegistry.list(),
+  ...novelDeleteToolRegistry.list(),
+]);
 const toolGroups = new ToolGroupCatalog([
   loadToolGroupManifest(`
 schemaVersion: 1
@@ -129,7 +151,13 @@ id: runtime.todo
 version: 1.0.0
 label: Runtime todo tools
 tools: [TodoWrite]
-`),
+  `),
+  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
+  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
 ]);
 const assembledStore = new InMemoryAgentManifestStore();
 const assembled = await new AgentAssembler({
@@ -144,18 +172,40 @@ const assembled = await new AgentAssembler({
   manifestStore: assembledStore,
   logger,
 }).assemble(novelAgentDefinition);
-assert.equal(assembled.agentType, "novel_agent");
+assert.equal(assembled.agentType, "novel");
 assert.equal(assembled.toolView.require("TodoWrite").descriptor.name, todoTool.descriptor.name);
 assert.equal(assembled.toolView.require("TodoWrite").descriptor.version, todoTool.descriptor.version);
-assert.deepEqual(assembled.toSnapshot().tools, [
-  { name: "TodoWrite", version: "1.0.0" },
-]);
+assert.deepEqual(
+  assembled.toSnapshot().tools.map((tool) => tool.name).sort(),
+  [
+    "NovelChapterEdit",
+    "NovelChapterRead",
+    "NovelChapterWrite",
+    "NovelCharacterEdit",
+    "NovelCharacterRead",
+    "NovelCharacterWrite",
+    "NovelDelete",
+    "NovelLocationEdit",
+    "NovelLocationRead",
+    "NovelLocationWrite",
+    "NovelOutlineEdit",
+    "NovelOutlineRead",
+    "NovelOutlineWrite",
+    "NovelParagraphEdit",
+    "NovelParagraphRead",
+    "NovelParagraphWrite",
+    "NovelVolumeEdit",
+    "NovelVolumeRead",
+    "NovelVolumeWrite",
+    "TodoWrite",
+  ],
+);
 assert.equal(await assembledStore.get(assembled.manifest.manifestId), assembled.manifest);
 
 const store = new InMemoryAgentManifestStore();
 await store.save(manifest);
 assert.equal(await store.get(manifest.manifestId), manifest);
-assert.deepEqual(await store.getByAgent("novel_agent", "1.0.0"), [manifest]);
+assert.deepEqual(await store.getByAgent("novel", "1.0.0"), [manifest]);
 
 const conflictingManifest = await createResolver("2026-08-03T00:00:01.000Z")
   .resolve(novelAgentDefinition);

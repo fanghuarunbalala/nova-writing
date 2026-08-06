@@ -57,7 +57,7 @@ const compiled = await builder.build({
   capabilities,
 });
 
-assert.equal(compiled.agentType, "novel_agent");
+assert.equal(compiled.agentType, "novel");
 assert.equal(compiled.definitionVersion, "1.0.0");
 assert.equal(compiled.blocks.length, 8);
 assert.deepEqual(
@@ -73,13 +73,13 @@ assert.deepEqual(
     "completion.contract",
   ],
 );
-assert.match(compiled.content, /Agent type: novel_agent/);
+assert.match(compiled.content, /Agent type: novel/);
 assert.match(compiled.content, /TodoWrite@1.0.0/);
 assert.match(compiled.content, /Respond in the language/);
 assert.match(compiled.digest, /^sha256:[0-9a-f]{64}$/);
 
 const catalog = new AgentDefinitionCatalog([novelAgentDefinition]);
-assert.equal(catalog.resolve("novel_agent").definitionVersion, "1.0.0");
+assert.equal(catalog.resolve("novel").definitionVersion, "1.0.0");
 assert.equal(novelAgentDefinition.delegation.mode, "disabled");
 assert.deepEqual(novelAgentDefinition.delegation.allowedAgentTypes, []);
 assert.deepEqual(novelAgentDefinition.toSnapshot().promptRecipe.items[3], {

@@ -6,6 +6,21 @@ This plan is the active repository implementation track as of August 4, 2026.
 It connects the existing Electron GUI Configuration and Conversation surfaces
 to the completed provider-neutral Core Runtime and child-process infrastructure.
 
+The Desktop Runtime Integration track is complete as of the D12 acceptance
+commit. The desktop Conversation flow is validated end to end:
+
+```text
+GUI UserMessageInputEvent
+  -> ManagedConversationHost
+  -> Node child-process Runtime Placement
+  -> Manifest-bound Agent Runtime
+  -> effective Model Configuration
+  -> child-accessible Credential Store
+  -> Pi-backed Provider execution
+  -> durable Assistant OutputEvent
+  -> GUI live display and replay
+```
+
 The objective is one real, replayable desktop Conversation flow:
 
 ```text
@@ -299,7 +314,8 @@ secret values. Stable redacted readiness failures cover unavailable loading,
 unselected or missing Profiles, missing or disabled Connections, unsupported
 APIs, and missing or unavailable Credentials. The
 `effective-model-execution-resolver-smoke.mjs` validation covers all four
-precedence layers and failure boundaries. D6 is next.
+precedence layers and failure boundaries. D6 is complete by the Default Novel
+Conversation Agent Manifest commits.
 
 ### Task D6: Default Novel Conversation Agent Manifest
 
@@ -308,6 +324,24 @@ precedence layers and failure boundaries. D6 is next.
 - bind new Conversations to immutable Manifest ID and digest values;
 - inject the Manifest Store into production bootstrap composition;
 - prove restart restoration and strict missing/digest-mismatch behavior.
+
+D6 is complete. The production `DefaultNovelConversationManifestProvisioner`
+assembles the accepted `novelAgentDefinition` through the shared
+`AgentAssembler` with a deterministic `manifest:novel_agent:1.0.0` identity,
+persists it idempotently in the Workspace SQLite Agent Manifest Store
+(get-first reuse with restart restoration; `manifest_conflict` and identity
+mismatch normalized to stable errors), and is composed into
+`NodeConversationApiApplication.open` from
+`DesktopNovelWorkspaceApplicationFactory`. New Conversations for the default
+Agent are bound server-side to the immutable Manifest ID and digest through a
+decorating catalog that leaves the public Router, Catalog service, Client, and
+Transport contracts unchanged and keeps the Renderer store-free. The
+`novel-conversation-manifest-composition`,
+`novel-default-agent-manifest-provisioning`, and `novel-default-agent-binding`
+validations prove the production assembly primitives, idempotent provisioning,
+restart restoration, binding completion, explicit and non-default binding
+pass-through, and strict `agent_manifest_missing` / `agent_manifest_mismatch`
+activation failures with redacted logs. D7 is next.
 
 ### Task D7: Pi Provider Execution Factory
 
@@ -366,6 +400,22 @@ precedence layers and failure boundaries. D6 is next.
   Web, and CLI validation suite;
 - publish completion evidence and mark this track complete.
 
+D12 is complete. The `electron-e2e-conversation-acceptance` smoke drives the
+full production desktop chain through the GUI Workspace factory: it opens the
+Workspace application with a child-process placement, creates a Conversation
+bound to the default Novel Agent Manifest, enqueues a UserMessageInputEvent,
+spawns the desktop child main with the real Pi adapter and a deterministic
+fake Provider stream, restores the Manifest from the child-accessible Workspace
+store, publishes Assistant lifecycle OutputEvents through the real persistence
+RPC, and then closes and reopens the Workspace to prove durable refresh replay
+with a clean child shutdown (the child shutdown ack race is handled by the
+parent handle). The complete Core smoke suite (207/207), the root build, and
+the GUI/UI validation suites pass; stop, retry, and abnormal-exit behavior
+remain covered by the existing runtime stop/cancellation, failure-degradation,
+and host-child integration smokes. An opt-in real Provider smoke is not added
+because the deterministic fake Provider path and the existing redaction
+assertions cover the same failure boundaries without network access.
+
 ## 6. Dependency Order
 
 ```mermaid
@@ -410,7 +460,14 @@ stderr. Tests must assert redaction on every new failure boundary.
 - D4-A Plaintext Store, D4-B Legacy `safeStorage` Migration, and D4-C Desktop
   and Child Composition are complete.
 - D5 Effective Model Execution Resolver is complete.
-- D6 Default Novel Conversation Agent Manifest is the next implementation step.
-  D7 through D12 remain pending.
+- D6 Default Novel Conversation Agent Manifest is complete.
+- D7 Pi Provider Execution Factory is complete.
+- D8 Real Model Connection Probe is complete.
+- D9 Desktop Runtime Child Composition Root is complete.
+- D10 Desktop Runtime Placement Wiring is complete.
+- D11 Runtime Status and Recovery UX is complete.
+- D12 End-to-End Desktop Conversation Acceptance is complete.
+- The Desktop Runtime Integration track D0 through D12 is complete. Persistent
+  Agent Team work resumes only after an explicit track change.
 - Agent-facing Novel Tools and Persistent Agent Team work remain outside this
   active track.

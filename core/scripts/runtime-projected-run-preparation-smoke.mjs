@@ -212,8 +212,11 @@ const fakeSource = new ProjectedUserMessageRunPreparationSource({
   conversationId,
   projections: fakeProjection(3, fakeRecords.length),
   messages: fakeMessageStore(fakeRecords, 3, fakeListCalls),
-  systemPromptSource: {
-    resolve: async () => "FORBIDDEN_PREPARATION_SYSTEM_PROMPT",
+  basePromptSource: {
+    resolve: async () => ({
+      content: "FORBIDDEN_PREPARATION_SYSTEM_PROMPT",
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    }),
   },
   pageSize: 2,
   logger: new CollectingLogger(fakeLogs),
@@ -273,7 +276,12 @@ const ambiguousSource = new ProjectedUserMessageRunPreparationSource({
   conversationId,
   projections: fakeProjection(2, 2),
   messages: fakeMessageStore(ambiguousRecords, 2, []),
-  systemPromptSource: { resolve: async () => "safe" },
+  basePromptSource: {
+    resolve: async () => ({
+      content: "safe",
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    }),
+  },
 });
 await assert.rejects(
   () =>
@@ -289,7 +297,12 @@ const behindSource = new ProjectedUserMessageRunPreparationSource({
   conversationId,
   projections: fakeProjection(1, 0),
   messages: fakeMessageStore([], 1, []),
-  systemPromptSource: { resolve: async () => "safe" },
+  basePromptSource: {
+    resolve: async () => ({
+      content: "safe",
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    }),
+  },
 });
 await assert.rejects(
   () =>
@@ -306,7 +319,7 @@ const promptFailureSource = new ProjectedUserMessageRunPreparationSource({
   conversationId,
   projections: fakeProjection(2, ambiguousRecords.length),
   messages: fakeMessageStore(ambiguousRecords, 2, []),
-  systemPromptSource: {
+  basePromptSource: {
     resolve: async () => {
       throw new Error("FORBIDDEN_PREPARATION_ERROR");
     },
@@ -320,7 +333,7 @@ await assert.rejects(
       runId: "run-projected-preparation-prompt-failure",
       input: currentInput,
     }),
-  failure(PROJECTED_RUN_PREPARATION_FAILURE.systemPromptFailed),
+  failure(PROJECTED_RUN_PREPARATION_FAILURE.basePromptFailed),
 );
 
 const temporaryRoot = await mkdtemp(join(tmpdir(), "novel-projected-preparation-"));
@@ -406,10 +419,13 @@ try {
     conversationId,
     projections: projectionContext.projections,
     messages: projectionContext.messages,
-    systemPromptSource: {
+    basePromptSource: {
       resolve: async (request) => {
         promptRequest = request;
-        return "FORBIDDEN_PREPARATION_SYSTEM_PROMPT";
+        return {
+          content: "FORBIDDEN_PREPARATION_SYSTEM_PROMPT",
+          digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        };
       },
     },
     pageSize: 1,

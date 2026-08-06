@@ -189,7 +189,7 @@ function captureConversation(value: unknown): ConversationRuntimeBootstrap["conv
     "definitionVersion",
     "status",
     "createdAt",
-  ], ["manifestDigest", "supersededAt"]);
+  ], ["manifestId", "manifestDigest", "supersededAt"]);
   const bindingStatus = binding.status;
   if (
     bindingStatus !== "active" &&
@@ -218,6 +218,9 @@ function captureConversation(value: unknown): ConversationRuntimeBootstrap["conv
       revision: captureInteger(binding.revision, 1, "bootstrap"),
       agentType: captureNonBlank(binding.agentType, "bootstrap"),
       definitionVersion: captureNonBlank(binding.definitionVersion, "bootstrap"),
+      ...(binding.manifestId !== undefined
+        ? { manifestId: captureNonBlank(binding.manifestId, "bootstrap") }
+        : {}),
       ...(binding.manifestDigest !== undefined
         ? { manifestDigest: captureNonBlank(binding.manifestDigest, "bootstrap") }
         : {}),

@@ -5,7 +5,6 @@ import type {
   NovelProjectionTarget,
 } from "../projection/index.js";
 import type { StoryOutlineTree } from "../model/index.js";
-import type { ManuscriptRangeRepairValidator } from "../validation/index.js";
 import type { NovelId } from "../identity/index.js";
 import type { NovelRevision } from "../version/index.js";
 
@@ -30,7 +29,6 @@ export interface PutNovelProjectionCacheInput {
 export interface NovelProjectionPlanningContext {
   readonly outline: StoryOutlineTree;
   readonly source: NovelProjectionSourceSnapshot;
-  readonly ranges: ManuscriptRangeRepairValidator;
 }
 
 export interface NovelProjectionSourceReader {

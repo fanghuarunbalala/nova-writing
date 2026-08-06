@@ -18,7 +18,12 @@ export type CliOutputFormat = "text" | "json" | "jsonl";
 export type CliColorMode = "auto" | "always" | "never";
 export type ProxyMode = "system" | "disabled" | "custom";
 export type AgentAutonomyLevel = "cautious" | "balanced" | "autonomous";
-export type DiagnosticLogLevel = "error" | "warn" | "info" | "debug";
+export type DiagnosticLogLevel =
+  | "error"
+  | "warn"
+  | "info"
+  | "debug"
+  | "verbose";
 
 export interface GeneralSettingsSnapshot {
   readonly locale: string;
@@ -739,6 +744,8 @@ export interface DiagnosticSettingsSnapshot {
   readonly contextMetricsEnabled: boolean;
   readonly ipcMetricsEnabled: boolean;
   readonly experimentalFeaturesEnabled: boolean;
+  readonly providerRequestDumpEnabled?: boolean;
+  readonly providerRequestDumpPath?: string;
 }
 
 export class DiagnosticSettings {
@@ -748,6 +755,8 @@ export class DiagnosticSettings {
   readonly contextMetricsEnabled: boolean;
   readonly ipcMetricsEnabled: boolean;
   readonly experimentalFeaturesEnabled: boolean;
+  readonly providerRequestDumpEnabled: boolean;
+  readonly providerRequestDumpPath?: string;
 
   constructor(options: DiagnosticSettingsSnapshot) {
     this.logLevel = captureDiagnosticLogLevel(options.logLevel);
@@ -768,6 +777,16 @@ export class DiagnosticSettings {
       options.experimentalFeaturesEnabled,
       "Experimental features",
     );
+    this.providerRequestDumpEnabled =
+      options.providerRequestDumpEnabled ?? false;
+    this.providerRequestDumpPath =
+      options.providerRequestDumpPath === undefined
+        ? undefined
+        : captureOptionalNonBlank(
+            options.providerRequestDumpPath,
+            "Provider request dump path",
+            1024,
+          );
     Object.freeze(this);
   }
 
@@ -779,6 +798,10 @@ export class DiagnosticSettings {
       contextMetricsEnabled: this.contextMetricsEnabled,
       ipcMetricsEnabled: this.ipcMetricsEnabled,
       experimentalFeaturesEnabled: this.experimentalFeaturesEnabled,
+      providerRequestDumpEnabled: this.providerRequestDumpEnabled,
+      ...(this.providerRequestDumpPath === undefined
+        ? {}
+        : { providerRequestDumpPath: this.providerRequestDumpPath }),
     });
   }
 }
@@ -847,7 +870,13 @@ function captureAutonomyLevel(value: unknown): AgentAutonomyLevel {
 }
 
 function captureDiagnosticLogLevel(value: unknown): DiagnosticLogLevel {
-  if (value !== "error" && value !== "warn" && value !== "info" && value !== "debug") {
+  if (
+    value !== "error" &&
+    value !== "warn" &&
+    value !== "info" &&
+    value !== "debug" &&
+    value !== "verbose"
+  ) {
     throw new TypeError("Diagnostic log level is invalid");
   }
   return value;

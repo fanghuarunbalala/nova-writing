@@ -1,496 +1,200 @@
-/** Stable shared React application entrypoint used by desktop and Web shells. */
-import type { ReactNode } from "react";
+/**
+ * NovelApp
+ *
+ * 共享 React 应用入口（spec 4.0.1）：把 api / workspace controller / 域 store、
+ * 路由、overlays 组装进 ApplicationShell，并用 NovelAppProvider 把 api/platform/
+ * extensions/logger/commandSource/configurationClient 发布到 Context。
+ *
+ * platform/commandSource/configurationClient 保留在 props 表面（组合层契约）；
+ * 桌面专属扩展槽（titlebar/commands）在壳加扩展点后接入（Phase B）。
+ */
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { noopLogger, type Logger, type NovelApiClient } from "@novel/core";
+import type { ApplicationCommandSource } from "../command/index.js";
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import {
-  ApplicationShell,
-  type ApplicationShellProps,
-} from "../shell/index.js";
-import {
-  NovelAppProvider,
-  type NovelAppProviderProps,
-} from "./NovelAppProvider.js";
-import {
-  ApplicationShellStoreProvider,
-  type ApplicationShellState,
-  type ApplicationShellStore,
-  useApplicationShellStore,
-  useApplicationShellSnapshot,
-} from "../state/index.js";
-import {
-  ConversationCatalogController,
-  ConversationComposer,
-  useConversationProjection,
-} from "../conversation/index.js";
-import { ConversationProjectionView } from "../conversation/view/index.js";
-import {
-  emptyInspectorRendererRegistry,
-  InspectorPanel,
-  type InspectorRendererRegistry,
-  InspectorStoreProvider,
-  type InspectorStore,
-  type InspectorStoreInitialState,
-  useInspectorStore,
-  useInspectorSnapshot,
-} from "../inspector/index.js";
-import { ProjectNavigationController } from "../navigation/index.js";
-import type {
-  ConversationCardDescriptor,
-  ConversationCardProjectorRegistry,
-  ConversationCardRendererRegistry,
-} from "../card/index.js";
-import {
-  ComposerDraftStoreProvider,
-  type ComposerContentReference,
-  type ComposerDraftInitialState,
-  type ComposerDraftStore,
-} from "../composer/index.js";
-import {
-  type ApplicationConfigurationClient,
   ApplicationSettingsStore,
   SettingsDialog,
+  type ApplicationConfigurationClient,
 } from "../settings/index.js";
-import { useNovelUiExtensions } from "../extensions/index.js";
 import {
+  CharacterStore,
+  ConversationCatalogStore,
+  LocationStore,
+  ManuscriptStructureStore,
+  NovelOverviewStore,
+  ProjectSelectionPage,
+  ScheduleStore,
+  ScheduleTodoStore,
+  StoryOutlineTreeStore,
   WorkspaceController,
-  WorkspaceEmptyState,
+  WorkspaceControllerAdapter,
   WorkspaceSelectionDialog,
-  useWorkspaceControllerSnapshot,
-} from "../workspace/index.js";
-import type {
-  ApplicationCommand,
-  ApplicationCommandSource,
-} from "../command/index.js";
-import { useNovelApi } from "../client/index.js";
+  type WorkspaceControllerSnapshot,
+} from "../domains/index.js";
+import type { FrontendPlatform } from "../platform/index.js";
+import type { NovelUiExtensions } from "../extensions/index.js";
 import {
-  createDefaultNovelCardProjectorRegistry,
-  createNovelInspectorRendererRegistry,
-  NovelReadCacheProvider,
-  useNovelWorkspaceOverview,
-} from "../novel/index.js";
+  InspectorRouter,
+  MainViewRouter,
+  ToastStore,
+  useExternalStore,
+} from "../shared/index.js";
+import {
+  ApplicationShell,
+  type ApplicationShellDomainStores,
+} from "../shell/ApplicationShell.js";
+import { NovelAppProvider } from "./NovelAppProvider.js";
 
-export interface NovelAppProps extends NovelAppProviderProps {
-  readonly shell?: Omit<ApplicationShellProps, "children">;
-  readonly shellStore?: ApplicationShellStore;
-  readonly initialShellState?: ApplicationShellState;
-  readonly inspectorStore?: InspectorStore;
-  readonly initialInspectorState?: InspectorStoreInitialState;
-  readonly inspectorRenderers?: InspectorRendererRegistry;
-  readonly conversationCardProjectors?: ConversationCardProjectorRegistry;
-  readonly conversationCardRenderers?: ConversationCardRendererRegistry;
-  readonly composerDraftStore?: ComposerDraftStore;
-  readonly initialComposerDrafts?: readonly ComposerDraftInitialState[];
-  readonly workspaceController?: WorkspaceController;
-  readonly settingsStore?: ApplicationSettingsStore;
-  readonly configurationClient?: ApplicationConfigurationClient;
+export interface NovelAppProps {
+  readonly api: NovelApiClient;
+  readonly platform: FrontendPlatform;
+  readonly logger?: Logger;
   readonly commandSource?: ApplicationCommandSource;
-  readonly children?: ReactNode;
+  readonly configurationClient?: ApplicationConfigurationClient;
+  readonly workspaceController?: WorkspaceController;
+  /** 第一方扩展点；不传时用 emptyNovelUiExtensions（spec 4.0.1） */
+  readonly extensions?: NovelUiExtensions;
+  /** 宿主追加的 overlay 节点（与默认 overlays 一并渲染进 OverlaysHost） */
+  readonly overlays?: ReactNode;
 }
 
 export function NovelApp(props: NovelAppProps) {
-  const defaultWorkspaceController = useMemo(
-    () => new WorkspaceController({ logger: props.logger }),
-    [props.logger],
+  if (props.workspaceController === undefined) {
+    return <div className="novel-shell-unavailable">等待 Workspace 控制器…</div>;
+  }
+  return <NovelAppReady {...props} workspaceController={props.workspaceController} />;
+}
+
+interface NovelAppReadyProps extends NovelAppProps {
+  readonly workspaceController: WorkspaceController;
+}
+
+function NovelAppReady({
+  api,
+  platform,
+  logger = noopLogger,
+  commandSource,
+  configurationClient,
+  workspaceController,
+  extensions,
+  overlays,
+}: NovelAppReadyProps) {
+  const domainStores = useMemo(
+    () => createDomainStores(api, logger),
+    [api, logger],
   );
-  const defaultSettingsStore = useMemo(
-    () =>
-      new ApplicationSettingsStore({
-        sidebarMode: props.initialShellState?.sidebarMode,
-      }),
-    [props.initialShellState?.sidebarMode],
+  const mainViewRouter = useMemo(() => new MainViewRouter(), []);
+  const inspectorRouter = useMemo(() => new InspectorRouter(), []);
+  const toastStore = useMemo(() => new ToastStore(), []);
+  const settingsStore = useMemo(() => new ApplicationSettingsStore(), []);
+  // NovelApp 自身需要 workspace 快照以驱动 WorkspaceSelectionDialog overlay；
+  // ApplicationShell 内部还会再包一层 adapter 订阅同一个 controller（spec 4.1）。
+  // 两个 adapter 都只是 subscribe + 转发快照，开销可忽略。
+  const workspaceAdapter = useMemo(
+    () => new WorkspaceControllerAdapter(workspaceController),
+    [workspaceController],
   );
-  const defaultCardProjectors = useMemo(
-    () => createDefaultNovelCardProjectorRegistry(),
-    [],
-  );
+  const workspaceSnapshot: WorkspaceControllerSnapshot = useExternalStore(workspaceAdapter);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // 启动时刷新最近项目（持久化来源），供选择页展示；不自动打开任何 Workspace。
+  useEffect(() => {
+    void workspaceController.refresh();
+  }, [workspaceController]);
+
   return (
-    <NovelAppProvider {...props}>
-      <NovelReadCacheProvider>
-        <ApplicationShellStoreProvider
-          store={props.shellStore}
-          initialState={props.initialShellState}
-        >
-          <ComposerDraftStoreProvider
-            store={props.composerDraftStore}
-            initialDrafts={props.initialComposerDrafts}
-          >
-            <InspectorStoreProvider
-              store={props.inspectorStore}
-              initialState={props.initialInspectorState}
-            >
-              <ConnectedApplicationShell
-                shell={props.shell}
-                inspectorRenderers={props.inspectorRenderers}
-                conversationCardProjectors={
-                  props.conversationCardProjectors ?? defaultCardProjectors
-                }
-                conversationCardRenderers={props.conversationCardRenderers}
-                commandSource={props.commandSource}
-                settingsStore={props.settingsStore ?? defaultSettingsStore}
-                configurationClient={props.configurationClient}
-                workspaceController={
-                  props.workspaceController ?? defaultWorkspaceController
-                }
-              >
-                {props.children}
-              </ConnectedApplicationShell>
-            </InspectorStoreProvider>
-          </ComposerDraftStoreProvider>
-        </ApplicationShellStoreProvider>
-      </NovelReadCacheProvider>
+    <NovelAppProvider
+      api={api}
+      platform={platform}
+      logger={logger}
+      extensions={extensions}
+      commandSource={commandSource}
+      configurationClient={configurationClient}
+    >
+      {workspaceSnapshot.current === undefined ? (
+        <ProjectSelectionPage
+          snapshot={workspaceSnapshot}
+          onChoose={() => {
+            void workspaceController.chooseAndOpen();
+          }}
+          onOpenRecent={(workspaceId) => {
+            void workspaceController.openRecent(workspaceId);
+          }}
+        />
+      ) : (
+        <ApplicationShell
+          api={api}
+          logger={logger}
+          mainViewRouter={mainViewRouter}
+          inspectorRouter={inspectorRouter}
+          workspaceController={workspaceController}
+          domainStores={domainStores}
+          toastStore={toastStore}
+          settingsStore={settingsStore}
+          configurationClient={configurationClient}
+          commandSource={commandSource}
+          extensions={extensions}
+          onOpenWorkspace={() => setWorkspaceOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          overlays={
+            <>
+              <WorkspaceSelectionDialog
+                open={workspaceOpen}
+                snapshot={workspaceSnapshot}
+                onChoose={() => {
+                  void workspaceController.chooseAndOpen();
+                  setWorkspaceOpen(false);
+                }}
+                onOpenRecent={(workspaceId) => {
+                  void workspaceController.openRecent(workspaceId);
+                  setWorkspaceOpen(false);
+                }}
+                onCloseWorkspace={() => {
+                  void workspaceController.closeCurrent();
+                  setWorkspaceOpen(false);
+                }}
+                onDismiss={() => setWorkspaceOpen(false)}
+              />
+              <SettingsDialog
+                open={settingsOpen}
+                store={settingsStore}
+                sections={extensions?.settingsSections}
+                configuration={configurationClient}
+                onDismiss={() => setSettingsOpen(false)}
+              />
+              {overlays}
+            </>
+          }
+        />
+      )}
     </NovelAppProvider>
   );
 }
 
-function ConnectedApplicationShell({
-  shell,
-  inspectorRenderers,
-  conversationCardProjectors,
-  conversationCardRenderers,
-  commandSource,
-  settingsStore,
-  configurationClient,
-  workspaceController,
-  children,
-}: {
-  readonly shell?: Omit<ApplicationShellProps, "children">;
-  readonly inspectorRenderers?: InspectorRendererRegistry;
-  readonly conversationCardProjectors?: ConversationCardProjectorRegistry;
-  readonly conversationCardRenderers?: ConversationCardRendererRegistry;
-  readonly commandSource?: ApplicationCommandSource;
-  readonly settingsStore: ApplicationSettingsStore;
-  readonly configurationClient?: ApplicationConfigurationClient;
-  readonly workspaceController: WorkspaceController;
-  readonly children?: ReactNode;
-}) {
-  const snapshot = useApplicationShellSnapshot();
-  const shellStore = useApplicationShellStore();
-  const inspectorSnapshot = useInspectorSnapshot();
-  const inspectorStore = useInspectorStore();
-  const { api, logger } = useNovelApi();
-  const extensions = useNovelUiExtensions();
-  const workspaceSnapshot = useWorkspaceControllerSnapshot(workspaceController);
-  const workspaceId = workspaceSnapshot.current?.id ?? snapshot.workspace?.id;
-  const novelOverview = useNovelWorkspaceOverview(workspaceId);
-  const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const conversationCatalog = useMemo(
-    () => new ConversationCatalogController({ api, logger }),
-    [api, logger],
-  );
-  const subscribeConversationCatalog = useCallback(
-    (listener: () => void) => conversationCatalog.subscribe(listener),
-    [conversationCatalog],
-  );
-  const getConversationCatalogSnapshot = useCallback(
-    () => conversationCatalog.getSnapshot(),
-    [conversationCatalog],
-  );
-  const conversationCatalogSnapshot = useSyncExternalStore(
-    subscribeConversationCatalog,
-    getConversationCatalogSnapshot,
-    getConversationCatalogSnapshot,
-  );
-  useEffect(() => {
-    void workspaceController.refresh();
-  }, [workspaceController]);
-  const projectNavigation = useMemo(
-    () => new ProjectNavigationController({ shellStore, inspectorStore }),
-    [inspectorStore, shellStore],
-  );
-  const effectiveInspectorRenderers = useMemo(
-    () => createNovelInspectorRendererRegistry(
-      inspectorRenderers ?? emptyInspectorRendererRegistry,
-    ),
-    [inspectorRenderers],
-  );
-  useEffect(() => {
-    if (
-      novelOverview.phase !== "ready" ||
-      novelOverview.workspaceId !== workspaceId
-    ) {
-      return;
-    }
-    shellStore.setNovel({
-      id: novelOverview.overview.novelId,
-      label: workspaceSnapshot.current?.label ?? snapshot.workspace?.label ?? "小说",
-    });
-  }, [
+export function createDomainStores(
+  api: NovelApiClient,
+  logger?: Logger,
+): ApplicationShellDomainStores {
+  const conversationCatalog = new ConversationCatalogStore({ api, logger });
+  const novelOverview = new NovelOverviewStore({ api, logger });
+  const storyOutlineTree = new StoryOutlineTreeStore({ api, logger });
+  const manuscriptStructure = new ManuscriptStructureStore({ api, logger });
+  const character = new CharacterStore({ api, logger });
+  const location = new LocationStore({ api, logger });
+  const schedule = new ScheduleStore({
     novelOverview,
-    shellStore,
-    snapshot.workspace?.label,
-    workspaceId,
-    workspaceSnapshot.current?.label,
-  ]);
-  const openCardInspector = (card: ConversationCardDescriptor): void => {
-    if (card.inspectorTarget === undefined) return;
-    inspectorStore.open(card.inspectorTarget, {
-      ...(card.inspectorSize !== undefined ? { mode: card.inspectorSize } : {}),
-    });
-  };
-  const openComposerReference = (reference: ComposerContentReference): void => {
-    inspectorStore.open(reference.target);
-  };
-  const openWorkspaceDialog = (): void => {
-    workspaceController.clearError();
-    setWorkspaceDialogOpen(true);
-  };
-  const applyConversation = (
-    conversation:
-      | {
-          readonly id: string;
-          readonly title: string;
-          readonly agentType: string;
-          readonly agentLabel: string;
-        }
-      | undefined,
-  ): void => {
-    shellStore.setConversation(
-      conversation === undefined
-        ? undefined
-        : { id: conversation.id, label: conversation.title },
-    );
-    shellStore.setAgent(
-      conversation === undefined
-        ? undefined
-        : { id: conversation.agentType, label: conversation.agentLabel },
-    );
-  };
-  const applyWorkspace = async (workspace: {
-    readonly id: string;
-    readonly label: string;
-  }): Promise<void> => {
-    shellStore.replaceContext({
-      workspace: { id: workspace.id, label: workspace.label },
-    });
-    setWorkspaceDialogOpen(false);
-    const conversation = await conversationCatalog.openWorkspace(workspace.id);
-    if (conversationCatalog.getSnapshot().workspaceId === workspace.id) {
-      applyConversation(conversation);
-    }
-  };
-  const chooseWorkspace = async (): Promise<void> => {
-    const workspace = await workspaceController.chooseAndOpen();
-    if (workspace !== undefined) await applyWorkspace(workspace);
-  };
-  const openRecentWorkspace = async (workspaceId: string): Promise<void> => {
-    const workspace = await workspaceController.openRecent(workspaceId);
-    if (workspace !== undefined) await applyWorkspace(workspace);
-  };
-  const closeWorkspace = async (): Promise<void> => {
-    if (!(await workspaceController.closeCurrent())) return;
-    conversationCatalog.clearWorkspace();
-    shellStore.replaceContext({});
-    setWorkspaceDialogOpen(false);
-  };
-  const context = {
-    workspace:
-      shell?.context?.workspace ??
-      workspaceSnapshot.current?.label ??
-      snapshot.workspace?.label,
-    meta: shell?.context?.meta ?? snapshot.meta?.label ?? snapshot.novel?.label,
-    conversation: shell?.context?.conversation ?? snapshot.conversation?.label,
-    agent: shell?.context?.agent ?? snapshot.agent?.label,
-    onWorkspaceSelect:
-      shell?.context?.onWorkspaceSelect ?? openWorkspaceDialog,
-  };
-  const workspaceOpen =
-    workspaceSnapshot.current !== undefined || snapshot.workspace !== undefined;
-  const sidebarMode = shell?.sidebarMode ?? snapshot.sidebarMode;
-  const toggleSidebar = (): void => {
-    const nextMode = sidebarMode === "expanded" ? "collapsed" : "expanded";
-    settingsStore.setSidebarMode(nextMode);
-    shellStore.setSidebarMode(nextMode);
-  };
-  const commandHandlerRef = useRef<(command: ApplicationCommand) => void>(() => {});
-  commandHandlerRef.current = (command) => {
-    if (command === "workspace.open") openWorkspaceDialog();
-    else if (command === "workspace.close") void closeWorkspace();
-    else if (command === "settings.open") setSettingsDialogOpen(true);
-  };
-  useEffect(() => {
-    if (commandSource === undefined) return undefined;
-    return commandSource.subscribe((command) => commandHandlerRef.current(command));
-  }, [commandSource]);
-  const shellProps = {
-    ...shell,
-    context,
-    sidebarMode,
-    inspectorMode: shell?.inspectorMode ?? inspectorSnapshot.mode,
-    workspaceOpen,
-    onOpenWorkspace: shell?.onOpenWorkspace ?? openWorkspaceDialog,
-    onCloseWorkspace:
-      shell?.onCloseWorkspace ?? (() => {
-        void closeWorkspace();
-      }),
-    onOpenSettings:
-      shell?.onOpenSettings ?? (() => setSettingsDialogOpen(true)),
-    onToggleSidebar: shell?.onToggleSidebar ?? toggleSidebar,
-    navigationDetails:
-      shell?.navigationDetails ?? createNavigationDetails(novelOverview),
-    onNavigate:
-      shell?.onNavigate ?? ((item) => {
-        if (item === "new-conversation") {
-          void conversationCatalog.createConversation().then(applyConversation);
-          return;
-        }
-        projectNavigation.navigate(item);
-      }),
-    conversations:
-      shell?.conversations ??
-      conversationCatalogSnapshot.conversations.map((conversation) => ({
-        id: conversation.id,
-        title: conversation.title,
-        active:
-          conversation.id ===
-          conversationCatalogSnapshot.activeConversationId,
-      })),
-    onConversationSelect:
-      shell?.onConversationSelect ??
-      ((conversationId) => {
-        applyConversation(
-          conversationCatalog.selectConversation(conversationId),
-        );
-      }),
-    inspector:
-      shell?.inspector ?? (
-        <InspectorPanel
-          registry={effectiveInspectorRenderers}
-        />
-      ),
-    emptyState:
-      shell?.emptyState ??
-      (!workspaceOpen ? (
-        <WorkspaceEmptyState onSelectWorkspace={openWorkspaceDialog} />
-      ) : snapshot.conversation === undefined ? (
-        <div className="novel-conversation-empty" role="status">
-          {conversationCatalogSnapshot.phase === "loading" ||
-          conversationCatalogSnapshot.phase === "creating"
-            ? "正在准备对话…"
-            : conversationCatalogSnapshot.phase === "error"
-              ? "暂时无法加载对话，请重试新建对话"
-              : "选择或新建一个对话"}
-        </div>
-      ) : undefined),
-    overlays: (
-      <>
-        {shell?.overlays}
-        <WorkspaceSelectionDialog
-          onChoose={() => {
-            void chooseWorkspace();
-          }}
-          onCloseWorkspace={() => {
-            void closeWorkspace();
-          }}
-          onDismiss={() => {
-            workspaceController.clearError();
-            setWorkspaceDialogOpen(false);
-          }}
-          onOpenRecent={(workspaceId) => {
-            void openRecentWorkspace(workspaceId);
-          }}
-          open={workspaceDialogOpen}
-          snapshot={workspaceSnapshot}
-        />
-        <SettingsDialog
-          onDismiss={() => setSettingsDialogOpen(false)}
-          open={settingsDialogOpen}
-          sections={extensions.settingsSections}
-          store={settingsStore}
-          configuration={configurationClient}
-        />
-      </>
-    ),
-  };
-  if (children !== undefined || snapshot.conversation === undefined) {
-    return <ApplicationShell {...shellProps}>{children}</ApplicationShell>;
-  }
-  return (
-    <BoundConversationShell
-      shell={shellProps}
-      conversationId={snapshot.conversation.id}
-      cardProjectors={conversationCardProjectors}
-      cardRenderers={conversationCardRenderers}
-      onOpenCardInspector={openCardInspector}
-      onOpenComposerReference={openComposerReference}
-    />
-  );
-}
-
-function createNavigationDetails(
-  state: ReturnType<typeof useNovelWorkspaceOverview>,
-): ApplicationShellProps["navigationDetails"] {
-  if (state.phase === "loading") {
-    return Object.freeze({
-      outline: Object.freeze({ badge: "…", state: "loading" }),
-      characters: Object.freeze({ badge: "…", state: "loading" }),
-      locations: Object.freeze({ badge: "…", state: "loading" }),
-      manuscript: Object.freeze({ badge: "…", state: "loading" }),
-    });
-  }
-  if (state.phase === "error") {
-    return Object.freeze({
-      outline: Object.freeze({ badge: "!", state: "error" }),
-      characters: Object.freeze({ badge: "!", state: "error" }),
-      locations: Object.freeze({ badge: "!", state: "error" }),
-      manuscript: Object.freeze({ badge: "!", state: "error" }),
-    });
-  }
-  if (state.phase !== "ready") return undefined;
-  const counts = state.overview.counts;
-  return Object.freeze({
-    outline: Object.freeze({ badge: String(counts.storyUnitCount), state: "ready" }),
-    characters: Object.freeze({ badge: String(counts.characterCount), state: "ready" }),
-    locations: Object.freeze({ badge: String(counts.locationCount), state: "ready" }),
-    manuscript: Object.freeze({
-      badge: `${counts.chapterCount}/${counts.manuscriptBlockCount}`,
-      state: "ready",
-    }),
+    outlineTree: storyOutlineTree,
+    conversationCatalog,
+    logger,
   });
-}
-
-function BoundConversationShell({
-  shell,
-  conversationId,
-  cardProjectors,
-  cardRenderers,
-  onOpenCardInspector,
-  onOpenComposerReference,
-}: {
-  readonly shell: Omit<ApplicationShellProps, "children">;
-  readonly conversationId: string;
-  readonly cardProjectors?: ConversationCardProjectorRegistry;
-  readonly cardRenderers?: ConversationCardRendererRegistry;
-  readonly onOpenCardInspector?: (card: ConversationCardDescriptor) => void;
-  readonly onOpenComposerReference?: (reference: ComposerContentReference) => void;
-}) {
-  const result = useConversationProjection(conversationId, { cardProjectors });
-  const connected = result.snapshot.controller?.state === "live";
-  return (
-    <ApplicationShell
-      {...shell}
-      composer={
-        shell.composer ?? (
-          <ConversationComposer
-            conversationId={conversationId}
-            enabled={connected}
-            enqueue={result.enqueue}
-            onOpenReference={onOpenComposerReference}
-          />
-        )
-      }
-    >
-      <ConversationProjectionView
-        result={result}
-        cardRenderers={cardRenderers}
-        onOpenCardInspector={onOpenCardInspector}
-      />
-    </ApplicationShell>
-  );
+  return {
+    conversationCatalog,
+    novelOverview,
+    storyOutlineTree,
+    manuscriptStructure,
+    character,
+    location,
+    schedule,
+    scheduleTodo: new ScheduleTodoStore(),
+  };
 }

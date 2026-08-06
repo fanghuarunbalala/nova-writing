@@ -8,6 +8,7 @@ import {
   type ApplicationConfigurationStore,
   type CredentialStatus,
   type CredentialStore,
+  type ModelConnectionProbeResult,
   type ModelConfigurationCommandService,
   type RemoveModelConfigurationRequest,
   type RemoveModelConfigurationResult,
@@ -16,6 +17,7 @@ import {
   type UpsertModelConfigurationRequest,
   type UpsertModelConfigurationResult,
 } from "@novel/core";
+import { ModelConnectionProbeService } from "@novel/core/node";
 
 export interface DesktopConfigurationServicePort {
   load(): Promise<ApplicationConfigurationSnapshot>;
@@ -34,6 +36,7 @@ export interface DesktopConfigurationServicePort {
   getCredentialStatus(credentialRef: string): Promise<CredentialStatus>;
   saveCredential(credentialRef: string, secret: string): Promise<void>;
   deleteCredential(credentialRef: string): Promise<void>;
+  probeModelConnection(): Promise<ModelConnectionProbeResult>;
 }
 
 export interface DesktopConfigurationServiceOptions {
@@ -47,6 +50,7 @@ export class DesktopConfigurationService
   readonly #store: ApplicationConfigurationStore;
   readonly #credentials: CredentialStore;
   readonly #modelCommands: ModelConfigurationCommandService;
+  readonly #probe: ModelConnectionProbeService;
   #current?: Promise<ApplicationConfiguration>;
   #mutationTail: Promise<void> = Promise.resolve();
 
@@ -55,6 +59,10 @@ export class DesktopConfigurationService
     this.#credentials = options.credentials;
     this.#modelCommands = new StorageModelConfigurationCommandService({
       store: options.store,
+      credentials: options.credentials,
+    });
+    this.#probe = new ModelConnectionProbeService({
+      application: options.store,
       credentials: options.credentials,
     });
   }
@@ -133,6 +141,10 @@ export class DesktopConfigurationService
   async deleteCredential(credentialRef: string): Promise<void> {
     const reference = await this.#requireCredentialReference(credentialRef);
     await this.#credentials.delete(reference);
+  }
+
+  probeModelConnection(): Promise<ModelConnectionProbeResult> {
+    return this.#probe.probe();
   }
 
   #loadCurrent(): Promise<ApplicationConfiguration> {

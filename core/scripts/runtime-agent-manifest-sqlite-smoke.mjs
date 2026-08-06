@@ -27,6 +27,20 @@ import {
   NodeWorkspaceStoreLocator,
   SqliteWorkspaceStore,
 } from "../dist/node/index.js";
+import {
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
+  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
+  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  novelCharacterToolRegistry,
+  novelLocationToolRegistry,
+  novelParagraphToolRegistry,
+  novelPublicationToolRegistry,
+  novelDeleteToolRegistry,
+  novelOutlineToolRegistry,
+} from "./fixtures/novel-outline-tools.mjs";
 
 class Sha256Digester {
   algorithm = "sha256";
@@ -56,7 +70,15 @@ const resolver = new AgentManifestResolver({
   digester: new Sha256Digester(),
 });
 const manifest = await new AgentAssembler({
-  registry: new ToolRegistry([tool]),
+  registry: new ToolRegistry([
+    tool,
+    ...novelOutlineToolRegistry.list(),
+    ...novelCharacterToolRegistry.list(),
+    ...novelLocationToolRegistry.list(),
+    ...novelParagraphToolRegistry.list(),
+    ...novelPublicationToolRegistry.list(),
+    ...novelDeleteToolRegistry.list(),
+  ]),
   groups: new ToolGroupCatalog([
     loadToolGroupManifest(`
 schemaVersion: 1
@@ -64,7 +86,13 @@ id: runtime.todo
 version: 1.0.0
 label: Runtime todo tools
 tools: [TodoWrite]
-`),
+  `),
+    NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+    NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+    NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+    NOVEL_DELETE_TOOL_GROUP_MANIFEST,
+    NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+    NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   ]),
   manifestResolver: resolver,
   manifestStore: new InMemoryAgentManifestStore(),
@@ -85,7 +113,7 @@ try {
   assert.deepEqual(restored.toSnapshot(), manifest.toSnapshot());
   assert.equal(Object.isFrozen(restored), true);
   assert.deepEqual(
-    (await workspaceStore.agentManifests.getByAgent("novel_agent", "1.0.0"))
+    (await workspaceStore.agentManifests.getByAgent("novel", "1.0.0"))
       .map((value) => value.manifestId),
     [manifest.manifestId],
   );

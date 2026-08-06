@@ -9,6 +9,11 @@ import {
   type RuntimeMessageSchemaRegistry,
   type RuntimeMessageSnapshot,
 } from "../message/index.js";
+import {
+  CORE_RUNTIME_MESSAGE_TYPE,
+  RUNTIME_MESSAGE_SCHEMA_VERSION,
+  type RuntimeMessageDraft,
+} from "../message/index.js";
 import { ContextCheckpointOverlayRenderer } from "./ContextCheckpointOverlayRenderer.js";
 import { ContextProjectionPlanner } from "./ContextProjectionPlanner.js";
 import {
@@ -120,22 +125,43 @@ export class ContextProjectionProviderCallCoordinator {
       );
     }
 
+    // system.reminder 消息永不删除：无论窗口/固定策略如何，全部强制保留，
+    // 保持消息前缀稳定，不破坏 provider prefill 缓存。
+    // system.reminder messages are never deleted: always force-selected so the
+    // message prefix stays stable and provider prefill caches remain valid.
     const selectedMessageIds = new Set([
       ...plan.selectedPinnedMessageIds,
       ...plan.selectedRecentMessageIds,
+      ...canonicalMessages
+        .filter(
+          (message) =>
+            message.messageType === CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
+        )
+        .map((message) => message.id),
     ]);
     const projectedMessages = Object.freeze(
       canonicalMessages.filter((message) => selectedMessageIds.has(message.id)),
     );
-    const systemPrompt = checkpointOverlay
-      ? appendSystemPromptOverlay(request.baseSystemPrompt, checkpointOverlay.content)
-      : request.baseSystemPrompt;
+    // checkpoint 摘要以 compact_summary system.reminder 消息进入消息层，
+    // 不再拼进 system prompt（systemPrompt 恒为 base，保持 prefill 缓存稳定）。
+    // Checkpoint summaries are delivered as compact_summary system.reminder
+    // messages; the system prompt always stays the base.
+    const compactSummaryMessage = checkpointOverlay
+      ? createCompactSummaryMessage(
+          identity,
+          checkpointOverlay,
+          canonicalMessages,
+        )
+      : undefined;
+    const systemPrompt = request.baseSystemPrompt;
     const result = Object.freeze({
       context: Object.freeze({
         conversationId: identity.conversationId,
         runId: identity.runId,
         systemPrompt,
-        messages: projectedMessages,
+        messages: compactSummaryMessage === undefined
+          ? projectedMessages
+          : Object.freeze([...projectedMessages, compactSummaryMessage]),
       }),
       projection: plan.projection,
       ...(checkpointOverlay === undefined ? {} : { checkpointOverlay }),
@@ -143,7 +169,12 @@ export class ContextProjectionProviderCallCoordinator {
     this.logger.info("runtime.context.projection_application_completed", {
       ...identity,
       checkpointId: plan.projection.checkpointId ?? "none",
-      projectedMessageCount: projectedMessages.length,
+      reminderMessageCount: canonicalMessages.filter(
+        (message) =>
+          message.messageType === CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
+      ).length,
+        projectedMessageCount: projectedMessages.length,
+        compactSummaryCount: compactSummaryMessage === undefined ? 0 : 1,
       selectedCheckpointItemCount:
         plan.projection.selectedCheckpointItemIds.length,
       degradationLevel: plan.projection.degradationLevel,
@@ -270,16 +301,71 @@ function assertCanonicalClassification(
   ];
   const classified = new Set(classifiedIds);
   const canonical = new Set(canonicalMessages.map((message) => message.id));
+  // system.reminder 消息豁免窗口分类：它们不计入 recent 预算、不参与裁剪，
+  // 由 selectedMessageIds 的强制保留兜底（见 prepare）。若 candidate 已把它们
+  // 放进 pinned/recent 也无妨——分类仍是合法的。
+  // system.reminder messages are exempt from window classification: they are
+  // never budgeted or dropped, and retention is guaranteed by the force-select
+  // in prepare(). Candidates may still classify them normally.
+  const reminderIds = new Set(
+    canonicalMessages
+      .filter(
+        (message) =>
+          message.messageType === CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
+      )
+      .map((message) => message.id),
+  );
+  const unclassifiedNonReminder = [...canonical].filter(
+    (messageId) => !reminderIds.has(messageId) && !classified.has(messageId),
+  );
   if (
-    classified.size !== canonical.size ||
+    unclassifiedNonReminder.length > 0 ||
     [...classified].some((messageId) => !canonical.has(messageId))
   ) {
     throw new TypeError("Context Projection classification is incomplete");
   }
 }
 
-function appendSystemPromptOverlay(base: string, overlay: string): string {
-  return base.length === 0 ? overlay : `${base}\n\n${overlay}`;
+/**
+ * 把 checkpoint 摘要构造成 compact_summary system.reminder 消息草稿。
+ * Builds a compact_summary system.reminder message draft from a checkpoint overlay.
+ */
+function createCompactSummaryMessage(
+  identity: ProjectionProviderCallIdentity,
+  overlay: ContextCheckpointOverlay,
+  canonicalMessages: readonly RuntimeMessageSnapshot[],
+): RuntimeMessageSnapshot {
+  // 时间戳从既有消息派生，保证每次调用结果确定（不破坏候选 digest）。
+  // Derive the timestamp from existing messages so the candidate stays deterministic.
+  const derivedTimestamp =
+    canonicalMessages.length > 0
+      ? canonicalMessages[canonicalMessages.length - 1]!.timestamp
+      : "1970-01-01T00:00:00.000Z";
+  const highestOrder = canonicalMessages.reduce(
+    (max, message) =>
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.systemReminder &&
+      typeof (message.payload as { order?: unknown }).order === "number"
+        ? Math.max(
+            max,
+            (message.payload as { order: number }).order,
+          )
+        : max,
+    0,
+  );
+  return {
+    id: `message:compact-summary:${identity.providerCallId}`,
+    conversationId: identity.conversationId,
+    role: "system",
+    messageType: CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
+    schemaVersion: RUNTIME_MESSAGE_SCHEMA_VERSION,
+    timestamp: derivedTimestamp,
+    runId: identity.runId,
+    payload: {
+      kind: "compact_summary",
+      content: overlay.content,
+      order: highestOrder + 1,
+    },
+  };
 }
 
 function captureNonBlank(value: unknown): string | undefined {

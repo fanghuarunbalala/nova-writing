@@ -2,8 +2,6 @@
 
 export const PROMPT_ASSEMBLY_FAILURE = {
   invalidRequest: "invalid_request",
-  invalidContribution: "invalid_contribution",
-  duplicateContribution: "duplicate_contribution",
   invalidMessage: "invalid_message",
   conversationMismatch: "conversation_mismatch",
   duplicateMessage: "duplicate_message",

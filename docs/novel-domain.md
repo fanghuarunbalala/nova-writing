@@ -530,71 +530,48 @@ flowchart LR
     Event --> Change
 ```
 
-## 7. Manuscript Organization
+## 7. Paragraph Organization
 
-**Accepted direction:** written content uses stable content Blocks organized by publication containers.
+**Accepted direction:** written content is a set of Paragraphs owned by
+StoryUnits; Chapters reference Paragraphs for serialization.
 
 ```ts
-interface ParagraphBlock {
-  readonly id: ManuscriptBlockId;
-  readonly manuscriptId: ManuscriptId;
-  readonly chapterId: PublicationChapterId;
-  readonly orderKey: OrderKey;
+interface Paragraph {
+  readonly id: ParagraphId;
+  readonly storyUnitId: StoryUnitId;
+  readonly orderKey: OrderKey;   // unique among Paragraphs of the same StoryUnit
   readonly text: string;
 }
 ```
 
-- One Novel-owned Manuscript binds one PublicationStructure in V1.
-- Paragraph is the initial persistent editing unit.
-- Sentence is not a persistent domain entity; precise operations use offsets within a Block.
-- Chapter is an ordered container of Manuscript Blocks rather than a fragile global array-index range.
-- Volume is an ordered container of Chapters.
-- StoryUnit does not become owned by Chapter merely because its realization appears in that Chapter.
-- Block IDs are unique across the Manuscript, while OrderKeys are unique among Blocks in the same Chapter.
-- Canonical traversal follows Publication Volume order, Chapter order, then Chapter-local Block order.
-- Empty Paragraph text is valid while a Draft incrementally realizes an outline leaf.
+- Paragraph is the initial persistent editing unit. Sentence is not a
+  persistent domain entity.
+- A StoryUnit's realization is its own ordered Paragraphs; there is no separate
+  Manuscript root and no range/offset mapping.
+- OrderKeys are unique among Paragraphs of the same StoryUnit; native string
+  comparison is authoritative. An omitted `orderKey` appends after the last
+  sibling.
+- Writing and serialization are decoupled: Paragraphs exist under a StoryUnit
+  before they are placed into any Chapter (unplaced content is draft state).
+- A StoryUnit may be realized across multiple Chapters, and a Chapter may
+  contain Paragraphs from multiple StoryUnits. Membership never moves content.
+- Empty Paragraph text is valid while a Draft incrementally realizes an outline
+  leaf.
 
 ```mermaid
 flowchart TD
-    Volume["Volume"] --> ChapterA["Chapter"]
-    Volume --> ChapterB["Chapter"]
-    ChapterA --> BlocksA["Ordered Manuscript Blocks"]
-    ChapterB --> BlocksB["Ordered Manuscript Blocks"]
+    StoryUnit["StoryUnit"] --> P1["Paragraph (orderKey)"]
+    StoryUnit --> P2["Paragraph (orderKey)"]
+    Chapter["Chapter (paragraphIds, ordered)"] --> P1
+    Chapter --> P3["Paragraph from another StoryUnit"]
+    Volume["Volume"] --> Chapter
 ```
 
-## 8. Manuscript Anchors, Realization, and Conformance
+## 8. Realization and Conformance
 
-StoryUnits associate with written content through stable Block anchors:
-
-```ts
-interface ManuscriptAnchor {
-  readonly blockId: ManuscriptBlockId;
-  readonly boundary: "before" | "after";
-}
-
-interface ManuscriptRange {
-  readonly start: ManuscriptAnchor;
-  readonly end: ManuscriptAnchor;
-}
-
-interface StoryUnitRealization {
-  readonly storyUnitId: StoryUnitId;
-  readonly ranges: readonly ManuscriptRange[];
-  readonly sourceRevision: NovelRevision;
-  readonly validation: StoryUnitConformanceResult;
-}
-```
-
-- Ranges never use array indexes.
-- Within one Block, the `before` boundary sorts before the `after` boundary.
-- Across Blocks, boundary order follows canonical Volume, Chapter, and Block order.
-- Equal start and end anchors form a valid empty Range; only inverted order is rejected.
-- Blocks inserted between existing anchors are naturally included according to current order.
-- Anchor bias determines whether insertion at an exact boundary belongs inside or outside a range.
-- One StoryUnit may realize across multiple ranges and Chapters.
-- Node movement in the outline does not invalidate manuscript realization because the StoryUnit ID remains stable.
-
-The manuscript is an implementation of the StoryUnit specification rather than an independent source of alternate story facts. A realization records where the StoryUnit is implemented and whether that content conforms to the current outline.
+Realization is derived: a StoryUnit's realized content is exactly the
+Paragraphs bound to it. No stored range or anchor state exists, so structural
+edits (split, merge, move, delete) never require tombstone or redirect repair.
 
 ```ts
 type StoryUnitConformanceStatus =
@@ -618,7 +595,7 @@ interface StoryUnitConformanceFinding {
   readonly type: StoryUnitConformanceFindingType;
   readonly severity: "warning" | "error";
   readonly note: string;
-  readonly manuscriptRanges: readonly ManuscriptRange[];
+  readonly paragraphIds: readonly ParagraphId[];
 }
 
 interface StoryUnitConformanceResult {
@@ -628,72 +605,48 @@ interface StoryUnitConformanceResult {
 }
 ```
 
-Conformance semantics:
+Conformance is evaluated as a pure function of the current leaf plan, the
+StoryUnit's own Paragraphs, and the current `NovelRevision`. V1 baseline
+semantics:
 
-- `pending` means the current manuscript ranges have not yet been checked.
-- `conforming` means the manuscript satisfies the current StoryUnit Events, entity changes, Character and Location bindings, time requirements, and accepted rhythm expectations.
-- `non-conforming` means required semantics are missing, contradicted, or changed by the manuscript.
-- `stale` means either the relevant outline or manuscript changed after validation.
-- Additional prose detail is allowed when it does not create a conflicting persistent story fact.
-- A new semantic Event or entity change must either be removed from the manuscript or explicitly added to the outline through an accepted outline mutation before validation can succeed.
+- no Paragraphs => `pending`;
+- Paragraphs without an accepted leaf plan (`planningStatus: ready`) =>
+  `non-conforming` with a `missing-event` finding;
+- accepted plan plus non-empty Paragraphs => `conforming`.
 
-A StoryUnit may enter `realizationStatus: completed` only when it has at least one current ManuscriptRange and a `conforming` validation checked against the current global NovelRevision. Conformance failure keeps the StoryUnit in progress; it does not create an alternate actual-facts table.
+Semantic finding types (Event/entity-change/rhythm matching against prose) are
+preserved for a future host extension; V1 does not attempt that prose analysis.
+`stale` remains reserved for validation against a checked revision older than
+the current one.
 
-Completion admission is deterministic and provider-neutral. The StoryUnit must
-be an active leaf, the Realization and validation revisions must both equal the
-current global NovelRevision, and every Range must resolve without becoming
-unresolved or inverted. A current conforming result may admit a Range whose
-structural repair is marked review-required because that result is the explicit
-current semantic review; stale or pending validation never clears that flag.
+A StoryUnit may enter `realizationStatus: completed` only when it is an active
+leaf with at least one Paragraph, an accepted leaf plan, and a current
+`conforming` result checked against the current global `NovelRevision`.
+Conformance failure keeps the StoryUnit in progress; it does not create an
+alternate actual-facts table.
 
-`ManuscriptRange` uses half-open `[start, end)` semantics. Both anchors belong
-to the same Manuscript and reference stable Block boundaries. V1 does not
-define character-offset anchors or an independent `ManuscriptRevision`.
-
-If the human changes creative direction, or accepts an Agent proposal that changes it while drafting, the outline is explicitly revised and the manuscript is revalidated. The model treats this as a specification change rather than silent manuscript divergence.
-
-Deletion and structural edits require reference preservation:
-
-- Deleted Blocks first become tombstones rather than disappearing while references still exist.
-- Splitting a Block preserves one stable ID and records how anchors transform into the new Block.
-- Merging Blocks retains a stable target and records a redirect from removed IDs.
-- Moving a Block preserves its ID and changes only its container and ordering key.
-- Invalid, inverted, disconnected, or orphaned ranges must be surfaced for repair rather than silently reinterpreted.
-
-Accepted V1 structural-repair semantics:
-
-- Move preserves identity and text. It changes only Chapter and OrderKey and
-  may make an existing Range invalid, which must be surfaced by revalidation.
-- Split retains the source ID on the left and creates a new right Block. The
-  old `after(source)` boundary redirects to `after(right)` so pre-split Ranges
-  retain their enclosing boundary; callers use `before(right)` for the new seam.
-- Merge only accepts adjacent Blocks in one Chapter, retains the left ID, and
-  tombstones the right ID. Both removed boundaries redirect to matching
-  boundaries on the retained Block and require semantic review.
-- Delete creates a Tombstone and no automatic Redirect. An explicit Anchor
-  Repair Operation selects a surviving target and requires review.
-- Redirect resolution is durable, cycle-free, and may follow a chain created by
-  later structural edits. Any review-required hop makes the final resolution
-  review-required.
-- Structural Operation payloads carry final text rather than split offsets or
-  merge separator policies. Expected text, Chapter, and OrderKey digests make
-  replay deterministic and surface concurrent edits as precondition failures.
-- The Operation handlers are synchronous and transaction-local. Durable SQLite
-  mapping is an adapter responsibility and does not change these contracts.
-- Range repair returns one explicit status: `valid` when automatic redirects
-  preserve order, `review-required` when any redirect needs semantic review,
-  `unresolved` when an Anchor remains tombstoned or orphaned, and `inverted`
-  when current Block order reverses the resolved boundaries.
+If the human changes creative direction, or accepts an Agent proposal that
+changes it while drafting, the outline is explicitly revised and the StoryUnit
+is revalidated. The model treats this as a specification change rather than
+silent manuscript divergence.
 
 ## 9. Publication Relationship
 
-Chapter and Volume are publication structures whose actual authority is written content.
+Chapter and Volume are publication structures whose actual authority is written
+content.
 
-- A Chapter owns an ordered collection of Manuscript Blocks.
-- A Chapter may also have optional planned StoryUnit coverage before content exists.
-- Planned StoryUnit coverage answers what the chapter intends to contain; Manuscript Blocks answer what it actually contains.
-- A Volume owns ordered Chapters, and its actual manuscript coverage is derived from them rather than duplicated as another authoritative range.
-- A Volume may reference a primary higher-level StoryUnit for narrative intent, but that association is not its content boundary.
+- A Chapter owns an ordered `paragraphIds` selection (not copied content).
+- A Chapter may break at any Paragraph boundary, including mid-StoryUnit, which
+  is how a serialized cliffhanger is represented.
+- A Paragraph belongs to at most one Chapter; moving content between Chapters
+  edits the Chapter selections.
+- Within one Chapter, Paragraphs from the same StoryUnit must appear in that
+  StoryUnit's `orderKey` order (host-enforced invariant).
+- Deleting a Paragraph atomically removes it from every Chapter selection.
+- A Volume owns ordered Chapters; Chapter order is explicit and Chapter
+  membership derives volume content. Volumes carry no content references.
+- Planned StoryUnit coverage (an empty Chapter intended for future content) is
+  just a Chapter with an empty selection.
 
 ## 10. Multi-Conversation Draft and Commit Model
 
@@ -1351,7 +1304,9 @@ The binding and realization do not own one another. Both refer to the same stabl
 
 - `StoryUnitCharacterBinding` records planned character participation in the outline.
 - `StoryUnitLocationBinding` records planned primary, secondary, or mentioned Locations in the outline.
-- `StoryUnitRealization` uses the contract in Section 8 to record where that StoryUnit was realized and whether the manuscript conforms to the current outline.
+- Realization is derived (Section 8): a StoryUnit's realized content is its own
+  Paragraphs, and conformance is evaluated from the current leaf plan, those
+  Paragraphs, and the current revision.
 - Character and Location current-state projections summarize an entity at a selected StoryUnit position by replaying relevant completed and conforming leaf StoryUnit changes.
 
 Character and Location store only stable identity, an optional initial condition, and author constraints that should not be repeatedly inferred from the outline. Current location, injuries, relationships, life state, ownership, access, damage, occupancy, and similar changing information remain derived from StoryUnit bindings and entity-change records rather than becoming mutable profile fields.
@@ -2089,21 +2044,16 @@ await application.outline.createStoryUnit(session, storyUnit);
 await application.publication.createPublication(session, publicationId);
 await application.publication.createVolume(session, volume);
 await application.publication.createChapter(session, chapter);
-await application.manuscript.createManuscript(
-  session,
-  manuscriptId,
-  publicationId,
-);
-await application.manuscript.createBlock(session, paragraphBlock);
+await application.paragraphs.createParagraph(session, paragraph);
 
-const block = await application.manuscriptQueries.getBlock(
+const paragraphRead = await application.paragraphQueries.getParagraph(
   scope,
-  paragraphBlock.id,
+  paragraph.id,
 );
-await application.manuscript.replaceBlockText(
+await application.paragraphs.replaceText(
   session,
-  paragraphBlock.id,
-  block.textDigest,
+  paragraph.id,
+  paragraphRead.textDigest,
   revisedText,
 );
 ```
@@ -2114,11 +2064,10 @@ Authoritative Evidence and completion admission:
 await application.evidence.putCharacterBinding(session, characterBinding);
 await application.evidence.putLocationBinding(session, locationBinding);
 await application.evidence.putEntityChange(session, entityChange);
-await application.evidence.putRealization(session, realization);
 
 const admission = await application.evidenceQueries.evaluateCompletion(
   scope,
-  realization.storyUnitId,
+  storyUnitId,
 );
 if (admission?.status === "rejected") {
   // The caller decides how to display or revise the rejected work.
@@ -2255,16 +2204,16 @@ const session =
 const scope = draftNovelReadScope(session);
 
 await application.outline.createStoryUnit(session, storyUnit);
-await application.manuscript.createBlock(session, paragraphBlock);
+await application.paragraphs.createParagraph(session, paragraph);
 
-const block = await application.manuscriptQueries.getBlock(
+const paragraphRead = await application.paragraphQueries.getParagraph(
   scope,
-  paragraphBlock.id,
+  paragraph.id,
 );
-await application.manuscript.replaceBlockText(
+await application.paragraphs.replaceText(
   session,
-  paragraphBlock.id,
-  block.textDigest,
+  paragraph.id,
+  paragraphRead.textDigest,
   revisedText,
 );
 ```

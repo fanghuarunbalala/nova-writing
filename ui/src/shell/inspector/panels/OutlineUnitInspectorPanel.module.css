@@ -1,0 +1,45 @@
+/**
+ * OutlineUnitInspectorPanel 视觉（原型 .detail-body + .detail-card）。
+ *
+ * padding 14/16/30；head baseline 对齐；dMeta mono 10.5px/faint。
+ */
+.panel {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 30px;
+  gap: 10px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 14.5px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.01em;
+  color: var(--color-fg);
+  margin: 0;
+}
+
+.scope {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--color-faint);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-weight: var(--fw-medium);
+}
+
+.dMeta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-faint);
+  letter-spacing: 0.02em;
+  word-break: break-all;
+}

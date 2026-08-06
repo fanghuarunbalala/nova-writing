@@ -1,0 +1,71 @@
+/**
+ * AssistantMessage 视觉（原型 .msg.assistant + .msg-head + .msg-text）。
+ *
+ * 助手消息文本无气泡（区别于用户消息），font-size 15 / line-height 1.75，
+ * margin-top 7px，与原型 .msg-text 一致。.who 用 fg + 750。
+ */
+.message {
+  display: flex;
+  gap: 12px;
+  padding: 18px 0 6px;
+}
+
+.body {
+  min-width: 0;
+  flex: 1;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.who {
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--color-fg);
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.revision {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-accent-ink);
+}
+
+.state {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+
+.state.generating { color: var(--color-info); }
+.state.completed { color: var(--color-success); }
+.state.submitted { color: var(--color-warn); }
+.state.failed { color: var(--color-danger); }
+
+.text {
+  margin-top: 7px;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--color-fg);
+  text-wrap: pretty;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.card {
+  min-width: 0;
+}

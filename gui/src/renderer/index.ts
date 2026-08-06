@@ -5,4 +5,5 @@ export * from "./ElectronFrontendPlatform.js";
 export * from "./ElectronWorkspaceController.js";
 export * from "./ElectronPreloadBridgeResolver.js";
 export * from "./config/index.js";
+export * from "./extensions/index.js";
 export * from "./transport/index.js";

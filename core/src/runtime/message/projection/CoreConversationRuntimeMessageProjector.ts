@@ -4,6 +4,7 @@ import { coreRuntimeMessageSchemaRegistry } from "../CoreRuntimeMessageSchemaReg
 import type { RuntimeMessageSchemaRegistry } from "../RuntimeMessageSchemaRegistry.js";
 import { CompositeRuntimeMessageProjector } from "./CompositeRuntimeMessageProjector.js";
 import { CoreAssistantRuntimeMessageProjector } from "./CoreAssistantRuntimeMessageProjector.js";
+import { CoreReminderRuntimeMessageProjector } from "./CoreReminderRuntimeMessageProjector.js";
 import { CoreRuntimeMessageProjector } from "./CoreRuntimeMessageProjector.js";
 
 export interface CoreConversationRuntimeMessageProjectorOptions {
@@ -19,6 +20,7 @@ export class CoreConversationRuntimeMessageProjector extends CompositeRuntimeMes
       projectors: [
         new CoreRuntimeMessageProjector(),
         new CoreAssistantRuntimeMessageProjector(),
+        new CoreReminderRuntimeMessageProjector(),
       ],
       messageSchemaRegistry:
         options.messageSchemaRegistry ?? coreRuntimeMessageSchemaRegistry,

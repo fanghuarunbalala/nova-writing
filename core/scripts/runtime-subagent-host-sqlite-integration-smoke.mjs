@@ -26,6 +26,20 @@ import {
   novelAgentDefinition,
 } from "../dist/index.js";
 import { SqliteSubagentBindingStore, SqliteWorkspaceStore } from "../dist/node/index.js";
+import {
+  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
+  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
+  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  novelCharacterToolRegistry,
+  novelLocationToolRegistry,
+  novelParagraphToolRegistry,
+  novelPublicationToolRegistry,
+  novelDeleteToolRegistry,
+  novelOutlineToolRegistry,
+} from "./fixtures/novel-outline-tools.mjs";
 
 class Sha256Digester {
   algorithm = "sha256";
@@ -72,7 +86,7 @@ try {
   const registry = createCoreEventSchemaRegistry();
   const events = [];
   const lifecycle = new DefaultSubagentLifecycleCoordinator({ manager, eventSink: { async append(event) { const snapshot = registry.validateOutput(event.getSnapshot()); events.push(snapshot); return { status: "recorded", conversationId: snapshot.conversationId, eventId: snapshot.id, sequence: events.length, recordedAt: snapshot.timestamp }; } }, eventIdFactory: { create(input) { return `event-${input.subagentId}-${input.eventType}-${input.ordinal}`; } }, clock: { now: () => timestamp } });
-  const handle = await lifecycle.start({ schemaVersion: SUBAGENT_SCHEMA_VERSION, subagentId: "sqlite", parentConversationId: "conversation-parent", parentRunId: "run-parent", agentType: "novel_agent", definitionVersion: "1.0.0", objective: "private objective", toolPolicyId: "policy-child", requestedAt: timestamp });
+  const handle = await lifecycle.start({ schemaVersion: SUBAGENT_SCHEMA_VERSION, subagentId: "sqlite", parentConversationId: "conversation-parent", parentRunId: "run-parent", agentType: "novel", definitionVersion: "1.0.0", objective: "private objective", toolPolicyId: "policy-child", requestedAt: timestamp });
   const child = await workspaceStore.conversations.getConversation(handle.binding.childConversationId);
   assert.equal(child.metadata.parentConversationId, "conversation-parent");
   assert.equal(child.activeAgentBinding.manifestId, "manifest:subagent:novel_agent");
@@ -107,7 +121,15 @@ function createAgentAssembler(workspaceStore) {
     handler: { async execute() { return { content: [] }; } },
   });
   return new AgentAssembler({
-    registry: new ToolRegistry([tool]),
+    registry: new ToolRegistry([
+      tool,
+      ...novelOutlineToolRegistry.list(),
+      ...novelCharacterToolRegistry.list(),
+      ...novelLocationToolRegistry.list(),
+      ...novelParagraphToolRegistry.list(),
+      ...novelPublicationToolRegistry.list(),
+      ...novelDeleteToolRegistry.list(),
+    ]),
     groups: new ToolGroupCatalog([
       loadToolGroupManifest(`
 schemaVersion: 1
@@ -115,7 +137,13 @@ id: runtime.todo
 version: 1.0.0
 label: Runtime todo tools
 tools: [TodoWrite]
-`),
+  `),
+      NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+      NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+      NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+      NOVEL_DELETE_TOOL_GROUP_MANIFEST,
+      NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+      NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
     ]),
     manifestResolver: new AgentManifestResolver({
       promptBuilder: new SystemPromptBuilder({

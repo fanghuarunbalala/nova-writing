@@ -25,5 +25,11 @@ export interface Logger {
 
   error(event: string, fields?: LogFields): void;
 
+  /**
+   * Optional provider-request detail channel. Adapters that support verbose
+   * output implement this; callers must use `logger.verbose?.(...)`.
+   */
+  verbose?(event: string, fields?: LogFields): void;
+
   child(bindings: LogFields): Logger;
 }

@@ -1,20 +1,29 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   AGENT_RUNTIME_OUTCOME,
   AgentRuntimeRunExecutor,
-  BaseContextCompiler,
   INPUT_EVENT_TYPE,
   InputRouter,
   OUTPUT_EVENT_TYPE,
   ProjectedUserMessageRunPreparationSource,
+  PromptAssemblyBuilder,
   RUN_STATUS,
   RuntimeInputOutcomeController,
   RuntimeInputPump,
+  RuntimePromptAssembler,
   RuntimeUserMessageInputHandler,
   TURN_STATE_CHANGE_REASON,
   TURN_STATUS,
   TurnController,
 } from "../dist/index.js";
+
+class Sha256Digester {
+  algorithm = "sha256";
+  async digest(content) {
+    return `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
+  }
+}
 
 const conversationId = "conversation-agent-turn-fifo";
 const timestamp = "2026-08-01T23:10:00.000Z";
@@ -235,8 +244,11 @@ const preparationSource = new ProjectedUserMessageRunPreparationSource({
     },
   }),
   messages: fakeMessageStore(records),
-  systemPromptSource: Object.freeze({
-    resolve: async () => "FORBIDDEN_FIFO_SYSTEM_PROMPT FORBIDDEN_FIFO_PATH",
+  basePromptSource: Object.freeze({
+    resolve: async () => ({
+      content: "FORBIDDEN_FIFO_SYSTEM_PROMPT FORBIDDEN_FIFO_PATH",
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    }),
   }),
   pageSize: 1,
   logger,
@@ -270,7 +282,12 @@ const adapter = Object.freeze({
 const runExecutor = new AgentRuntimeRunExecutor({
   conversationId,
   preparationSource,
-  contextCompiler: new BaseContextCompiler({ logger }),
+  assembler: new RuntimePromptAssembler(
+    new PromptAssemblyBuilder({
+      digester: new Sha256Digester(),
+      logger,
+    }),
+  ),
   agentAdapter: adapter,
   lifecycleController,
   logger,

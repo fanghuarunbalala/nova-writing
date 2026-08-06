@@ -25,6 +25,7 @@ import {
   captureStoryUnitCharacterBinding,
   captureStoryUnitEntityChange,
   captureStoryUnitLocationBinding,
+  STORY_UNIT_PLANNING_STATUS,
   type StoryOutlineTree,
   type StoryUnit,
   type StoryUnitCharacterBinding,
@@ -34,13 +35,10 @@ import {
 import {
   STORY_UNIT_CONFORMANCE_SEVERITY,
   STORY_UNIT_CONFORMANCE_STATUS,
-  captureStoryUnitRealization,
-  type StoryUnitRealization,
-} from "../model/manuscript/index.js";
-import type { ManuscriptRangeRepairValidator } from "../validation/index.js";
-import {
-  MANUSCRIPT_RANGE_REPAIR_STATUS,
-} from "../validation/index.js";
+  captureParagraph,
+  type Paragraph,
+} from "../model/index.js";
+import { StoryUnitConformanceEvaluator } from "../validation/index.js";
 import {
   captureNovelRevision,
   type NovelRevision,
@@ -80,7 +78,7 @@ export interface NovelProjectionSourceSnapshot {
   readonly characters: readonly Character[];
   readonly locations: readonly Location[];
   readonly entityChanges: readonly StoryUnitEntityChange[];
-  readonly realizations: readonly StoryUnitRealization[];
+  readonly paragraphs: readonly Paragraph[];
   readonly characterBindings: readonly StoryUnitCharacterBinding[];
   readonly locationBindings: readonly StoryUnitLocationBinding[];
 }
@@ -90,7 +88,7 @@ const SOURCE_KEYS = new Set([
   "characters",
   "locations",
   "entityChanges",
-  "realizations",
+  "paragraphs",
   "characterBindings",
   "locationBindings",
 ]);
@@ -99,10 +97,11 @@ export class NovelProjectionPlanner {
   private readonly source: NovelProjectionSourceSnapshot;
   private readonly charactersById: ReadonlyMap<CharacterId, Character>;
   private readonly locationsById: ReadonlyMap<LocationId, Location>;
-  private readonly realizationsByStoryUnitId: ReadonlyMap<
+  private readonly paragraphsByStoryUnitId: ReadonlyMap<
     StoryUnitId,
-    StoryUnitRealization
+    readonly Paragraph[]
   >;
+  private readonly conformanceEvaluator: StoryUnitConformanceEvaluator;
   private readonly characterBindingsByKey: ReadonlyMap<
     string,
     StoryUnitCharacterBinding
@@ -117,14 +116,14 @@ export class NovelProjectionPlanner {
   constructor(
     private readonly outline: StoryOutlineTree,
     value: unknown,
-    private readonly ranges: ManuscriptRangeRepairValidator,
     private readonly readinessPolicy: EntityProfileReadinessPolicy,
   ) {
     this.source = captureSource(value);
+    this.conformanceEvaluator = new StoryUnitConformanceEvaluator();
     const indexed = indexSource(this.source, outline);
     this.charactersById = indexed.charactersById;
     this.locationsById = indexed.locationsById;
-    this.realizationsByStoryUnitId = indexed.realizationsByStoryUnitId;
+    this.paragraphsByStoryUnitId = indexed.paragraphsByStoryUnitId;
     this.characterBindingsByKey = indexed.characterBindingsByKey;
     this.locationBindingsByKey = indexed.locationBindingsByKey;
     this.orderedUnits = outline.listDepthFirst();
@@ -259,37 +258,27 @@ export class NovelProjectionPlanner {
   ): StoryUnitConformanceProjection | undefined {
     const storyUnitId = captureStoryUnitId(storyUnitIdInput);
     if (this.outline.getUnit(storyUnitId) === undefined) return undefined;
-    const realization = this.realizationsByStoryUnitId.get(storyUnitId);
-    if (realization === undefined) {
-      return captureStoryUnitConformanceProjection({
-        storyUnitId,
-        sourceRevision: this.source.currentRevision,
-        freshness: NOVEL_PROJECTION_FRESHNESS.current,
-        validationStatus: STORY_UNIT_CONFORMANCE_STATUS.pending,
-        rangeStatuses: [],
-        warningCount: 0,
-        errorCount: 0,
-        evidenceStoryUnitIds: [storyUnitId],
-      });
-    }
-    const current = realization.sourceRevision === this.source.currentRevision &&
-      realization.validation.checkedNovelRevision === this.source.currentRevision;
-    const rangeStatuses = realization.ranges.map(
-      (range) => this.ranges.resolve(range).status,
-    );
+    const paragraphs = this.paragraphsByStoryUnitId.get(storyUnitId) ?? [];
+    const unit = this.outline.getUnit(storyUnitId);
+    const hasAcceptedPlan = unit?.planningStatus === STORY_UNIT_PLANNING_STATUS.ready;
+    const conformance = this.conformanceEvaluator.evaluate({
+      paragraphs,
+      hasAcceptedPlan,
+      currentRevision: this.source.currentRevision,
+    });
+    const freshness = conformance.checkedNovelRevision === this.source.currentRevision
+      ? NOVEL_PROJECTION_FRESHNESS.current
+      : NOVEL_PROJECTION_FRESHNESS.stale;
     return captureStoryUnitConformanceProjection({
       storyUnitId,
-      sourceRevision: realization.sourceRevision,
-      freshness: current
-        ? NOVEL_PROJECTION_FRESHNESS.current
-        : NOVEL_PROJECTION_FRESHNESS.stale,
-      validationStatus: realization.validation.status,
-      rangeStatuses,
-      warningCount: realization.validation.findings.filter(
+      sourceRevision: this.source.currentRevision,
+      freshness,
+      validationStatus: conformance.status,
+      warningCount: conformance.findings.filter(
         (finding) =>
           finding.severity === STORY_UNIT_CONFORMANCE_SEVERITY.warning,
       ).length,
-      errorCount: realization.validation.findings.filter(
+      errorCount: conformance.findings.filter(
         (finding) => finding.severity === STORY_UNIT_CONFORMANCE_SEVERITY.error,
       ).length,
       evidenceStoryUnitIds: [storyUnitId],
@@ -334,18 +323,16 @@ export class NovelProjectionPlanner {
   }
 
   private isConfirmed(unit: StoryUnit): boolean {
-    const realization = this.realizationsByStoryUnitId.get(unit.id);
+    const paragraphs = this.paragraphsByStoryUnitId.get(unit.id) ?? [];
+    const conformance = this.conformanceEvaluator.evaluate({
+      paragraphs,
+      hasAcceptedPlan: unit.planningStatus === STORY_UNIT_PLANNING_STATUS.ready,
+      currentRevision: this.source.currentRevision,
+    });
     return unit.realizationStatus === STORY_UNIT_REALIZATION_STATUS.completed &&
-      realization !== undefined &&
-      realization.sourceRevision === this.source.currentRevision &&
-      realization.validation.checkedNovelRevision === this.source.currentRevision &&
-      realization.validation.status === STORY_UNIT_CONFORMANCE_STATUS.conforming &&
-      realization.ranges.length > 0 &&
-      realization.ranges.every((range) => {
-        const status = this.ranges.resolve(range).status;
-        return status === MANUSCRIPT_RANGE_REPAIR_STATUS.valid ||
-          status === MANUSCRIPT_RANGE_REPAIR_STATUS.reviewRequired;
-      });
+      paragraphs.length > 0 &&
+      conformance.checkedNovelRevision === this.source.currentRevision &&
+      conformance.status === STORY_UNIT_CONFORMANCE_STATUS.conforming;
   }
 }
 
@@ -355,7 +342,7 @@ function captureSource(value: unknown): NovelProjectionSourceSnapshot {
     "characters",
     "locations",
     "entityChanges",
-    "realizations",
+    "paragraphs",
     "characterBindings",
     "locationBindings",
   ]) {
@@ -372,8 +359,8 @@ function captureSource(value: unknown): NovelProjectionSourceSnapshot {
     entityChanges: Object.freeze(
       candidate.entityChanges.map(captureStoryUnitEntityChange),
     ),
-    realizations: Object.freeze(
-      candidate.realizations.map(captureStoryUnitRealization),
+    paragraphs: Object.freeze(
+      candidate.paragraphs.map(captureParagraph),
     ),
     characterBindings: Object.freeze(
       candidate.characterBindings.map(captureStoryUnitCharacterBinding),
@@ -390,10 +377,7 @@ function indexSource(
 ) {
   const charactersById = uniqueMap(source.characters, (entity) => entity.id);
   const locationsById = uniqueMap(source.locations, (entity) => entity.id);
-  const realizationsByStoryUnitId = uniqueMap(
-    source.realizations,
-    (realization) => realization.storyUnitId,
-  );
+  const paragraphsByStoryUnitId = indexParagraphs(source.paragraphs);
   const characterBindingsByKey = uniqueMap(
     source.characterBindings,
     (binding) => bindingKey(binding.storyUnitId, binding.characterId),
@@ -402,8 +386,8 @@ function indexSource(
     source.locationBindings,
     (binding) => bindingKey(binding.storyUnitId, binding.locationId),
   );
-  for (const realization of source.realizations) {
-    if (outline.getUnit(realization.storyUnitId) === undefined) {
+  for (const paragraph of source.paragraphs) {
+    if (outline.getUnit(paragraph.storyUnitId) === undefined) {
       throw invalidProjection();
     }
   }
@@ -437,10 +421,26 @@ function indexSource(
   return {
     charactersById,
     locationsById,
-    realizationsByStoryUnitId,
+    paragraphsByStoryUnitId,
     characterBindingsByKey,
     locationBindingsByKey,
   };
+}
+
+function indexParagraphs(
+  paragraphs: readonly Paragraph[],
+): ReadonlyMap<StoryUnitId, readonly Paragraph[]> {
+  const byStoryUnitId = new Map<StoryUnitId, Paragraph[]>();
+  for (const paragraph of paragraphs) {
+    const existing = byStoryUnitId.get(paragraph.storyUnitId) ?? [];
+    existing.push(paragraph);
+    byStoryUnitId.set(paragraph.storyUnitId, existing);
+  }
+  const frozen = new Map<StoryUnitId, readonly Paragraph[]>();
+  for (const [storyUnitId, values] of byStoryUnitId) {
+    frozen.set(storyUnitId, Object.freeze(values));
+  }
+  return frozen;
 }
 
 function uniqueMap<T, K>(

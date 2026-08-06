@@ -1,0 +1,120 @@
+/**
+ * Button 视觉：原型 .btn 系列（primary/ghost-danger 等）+ spec 2.2.1 尺寸表。
+ */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.button:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.primary {
+  background: var(--grad-accent);
+  color: #fff;
+}
+
+.primary:hover:not(:disabled) {
+  box-shadow: var(--shadow-1);
+}
+
+.secondary {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-fg);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-strong);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--color-muted);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+}
+
+.ghost-danger {
+  background: transparent;
+  color: var(--color-danger);
+}
+
+.ghost-danger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
+
+.link {
+  background: transparent;
+  color: var(--color-accent-ink);
+  padding: 0;
+}
+
+.link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.sizeSm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.sizeMd {
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+.sizeLg {
+  padding: 9px 16px;
+  font-size: 14px;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.loading {
+  cursor: progress;
+}
+
+/* 原型 .new-conv-btn：创建对话按钮 */
+.button.novel-new-conv-btn {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-size: 13.5px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+.button.novel-new-conv-btn:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  border-color: var(--color-fg);
+}

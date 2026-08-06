@@ -1,0 +1,57 @@
+/**
+ * ManuscriptBlock 视觉（原型 .block + .b-head + .b-id + .b-dg + .b-draft + p）。
+ *
+ * 块用 dashed border-top 分隔（首块无边框）；b-head mono 10.5px/faint；
+ * b-draft warn 750；p 14.5px/1.85/fg/text-wrap:pretty。
+ */
+.block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 0;
+  border: 0;
+  border-top: 1px dashed var(--color-border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.block:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.head {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-faint);
+}
+
+.id {
+  font-weight: var(--fw-semibold);
+  color: var(--color-faint);
+}
+
+.digest {
+  color: var(--color-faint);
+}
+
+.draft {
+  color: var(--color-warn);
+  font-weight: 750;
+}
+
+.text {
+  font-size: 14.5px;
+  line-height: 1.85;
+  color: var(--color-fg);
+  text-wrap: pretty;
+  margin: 0;
+}

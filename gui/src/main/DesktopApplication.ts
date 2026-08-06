@@ -12,6 +12,22 @@ import {
   type DesktopWorkspaceServicePort,
 } from "./workspace/index.js";
 import {
+  DesktopNativeFileIpcController,
+  type DesktopNativeFileServicePort,
+} from "./desktop/nativefile/index.js";
+import {
+  DesktopWindowIpcController,
+  type DesktopWindowServicePort,
+} from "./desktop/window/index.js";
+import {
+  DesktopUpdaterIpcController,
+  type DesktopUpdaterServicePort,
+} from "./desktop/updater/index.js";
+import {
+  DesktopSystemTrayIpcController,
+  type DesktopSystemTrayServicePort,
+} from "./desktop/tray/index.js";
+import {
   DesktopWindowManager,
   type DesktopBrowserWindowPort,
   type DesktopRendererTarget,
@@ -39,6 +55,10 @@ export interface DesktopApplicationOptions {
   readonly logger?: Logger;
   readonly workspaceService?: DesktopWorkspaceServicePort;
   readonly configurationService?: DesktopConfigurationServicePort;
+  readonly windowService?: DesktopWindowServicePort;
+  readonly updaterService?: DesktopUpdaterServicePort;
+  readonly trayService?: DesktopSystemTrayServicePort;
+  readonly nativeFileService?: DesktopNativeFileServicePort;
 }
 
 export class DesktopApplication {
@@ -49,6 +69,10 @@ export class DesktopApplication {
   private readonly controller: DesktopApiIpcController;
   private readonly workspaceController?: DesktopWorkspaceIpcController;
   private readonly configurationController?: DesktopConfigurationIpcController;
+  private readonly windowController?: DesktopWindowIpcController;
+  private readonly updaterController?: DesktopUpdaterIpcController;
+  private readonly trayController?: DesktopSystemTrayIpcController;
+  private readonly nativeFileController?: DesktopNativeFileIpcController;
   private readonly platform: string;
   private readonly logger: Logger;
   private started = false;
@@ -63,12 +87,13 @@ export class DesktopApplication {
       component: "desktop_application",
     });
     let windowManager: DesktopWindowManager;
+    const authorizeSender = (senderId: number) => windowManager.ownsSender(senderId);
     this.controller = new DesktopApiIpcController({
       ...(options.transport !== undefined ? { transport: options.transport } : {}),
       ...(options.resolveTransport !== undefined
         ? { resolveTransport: options.resolveTransport }
         : {}),
-      authorizeSender: (senderId) => windowManager.ownsSender(senderId),
+      authorizeSender,
       logger: this.logger,
     });
     this.workspaceController =
@@ -76,14 +101,42 @@ export class DesktopApplication {
         ? undefined
         : new DesktopWorkspaceIpcController({
             service: options.workspaceService,
-            authorizeSender: (senderId) => windowManager.ownsSender(senderId),
+            authorizeSender,
             logger: this.logger,
           });
     this.configurationController = options.configurationService === undefined
       ? undefined
       : new DesktopConfigurationIpcController({
         service: options.configurationService,
-        authorizeSender: (senderId) => windowManager.ownsSender(senderId),
+        authorizeSender,
+        logger: this.logger,
+      });
+    this.windowController = options.windowService === undefined
+      ? undefined
+      : new DesktopWindowIpcController({
+        service: options.windowService,
+        authorizeSender,
+        logger: this.logger,
+      });
+    this.updaterController = options.updaterService === undefined
+      ? undefined
+      : new DesktopUpdaterIpcController({
+        service: options.updaterService,
+        authorizeSender,
+        logger: this.logger,
+      });
+    this.trayController = options.trayService === undefined
+      ? undefined
+      : new DesktopSystemTrayIpcController({
+        service: options.trayService,
+        authorizeSender,
+        logger: this.logger,
+      });
+    this.nativeFileController = options.nativeFileService === undefined
+      ? undefined
+      : new DesktopNativeFileIpcController({
+        service: options.nativeFileService,
+        authorizeSender,
         logger: this.logger,
       });
     windowManager = new DesktopWindowManager({
@@ -94,6 +147,10 @@ export class DesktopApplication {
         await Promise.all([
           this.controller.releaseSender(senderId),
           this.workspaceController?.releaseSender(senderId),
+          this.windowController?.releaseSender(senderId),
+          this.updaterController?.releaseSender(senderId),
+          this.trayController?.releaseSender(senderId),
+          this.nativeFileController?.releaseSender(senderId),
         ]);
       },
       ...(options.isNavigationAllowed !== undefined
@@ -118,12 +175,21 @@ export class DesktopApplication {
     return this.windowManager.dispatchCommand(command);
   }
 
+  /** 菜单「新建项目…」：新开一个窗口（显示项目选择页）。 */
+  openNewWindow(): Promise<DesktopBrowserWindowPort> {
+    return this.windowManager.openWindow();
+  }
+
   private async startOnce(): Promise<void> {
     if (this.started) return;
     this.started = true;
     this.controller.register(this.ipcMain);
     this.workspaceController?.register(this.ipcMain);
     this.configurationController?.register(this.ipcMain);
+    this.windowController?.register(this.ipcMain);
+    this.updaterController?.register(this.ipcMain);
+    this.trayController?.register(this.ipcMain);
+    this.nativeFileController?.register(this.ipcMain);
     this.app.on("activate", this.handleActivate);
     this.app.on("window-all-closed", this.handleWindowAllClosed);
     this.logger.info("desktop_application.start_started");
@@ -152,6 +218,10 @@ export class DesktopApplication {
       this.controller.dispose(),
       this.workspaceController?.dispose() ?? Promise.resolve(),
       this.configurationController?.dispose() ?? Promise.resolve(),
+      this.windowController?.dispose() ?? Promise.resolve(),
+      this.updaterController?.dispose() ?? Promise.resolve(),
+      this.trayController?.dispose() ?? Promise.resolve(),
+      this.nativeFileController?.dispose() ?? Promise.resolve(),
     ]);
     const failureCount = results.filter((result) => result.status === "rejected").length;
     this.logger.info("desktop_application.stop_completed", { failureCount });
@@ -165,8 +235,8 @@ export class DesktopApplication {
   }
 
   private readonly handleActivate = (): void => {
-    if (this.windowManager.hasPrimaryWindow()) return;
-    void this.windowManager.openPrimaryWindow().catch(() => {
+    if (this.windowManager.hasWindows()) return;
+    void this.windowManager.openWindow().catch(() => {
       this.logger.warn("desktop_application.activate_failed");
     });
   };

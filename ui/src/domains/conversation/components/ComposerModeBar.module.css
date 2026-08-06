@@ -1,0 +1,167 @@
+/**
+ * ComposerModeBar 视觉（原型 .mode-bar + .mode-switch）。
+ *
+ * 置于 form 下方：max-width 1000px 靠左对齐（与输入框一致），border-top 分隔，
+ * 左右 space-between（左侧切换按钮 + 右侧模式提示点）。三模式配色与原型一致：
+ * 草案=蓝 / 直接执行=绿 / 审批=砖红，全部低饱和 + 半透明底。
+ */
+.bar {
+  max-width: 1000px;
+  width: 100%;
+  margin: 10px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--color-border);
+  padding: 9px 0 0;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 13px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-strong);
+  background: color-mix(in oklab, var(--color-surface) 62%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 12.5px;
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.switch:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  border-color: color-mix(in oklab, var(--color-accent) 32%, var(--color-border-strong));
+}
+
+.switch:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-accent) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.switch:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.name {
+  color: var(--color-accent-ink);
+}
+
+.desc {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-faint);
+}
+
+.chev {
+  font-size: 11px;
+  color: var(--color-faint);
+  font-weight: 500;
+  opacity: 0.62;
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+}
+
+.switch:hover:not(:disabled) .chev {
+  transform: translateX(2px);
+  opacity: 0.85;
+}
+
+/* 模式配色：草案=蓝 / 直接执行=绿 / 审批=砖红 */
+.plan {
+  border-color: color-mix(in oklab, var(--color-info) 26%, var(--color-border-strong));
+  background: color-mix(in oklab, var(--color-info) 7%, transparent);
+}
+
+.plan .name {
+  color: color-mix(in oklab, var(--color-info) 86%, var(--color-fg));
+}
+
+.plan .desc {
+  color: color-mix(in oklab, var(--color-info) 62%, var(--color-faint));
+}
+
+.plan:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-info) 12%, transparent);
+  border-color: color-mix(in oklab, var(--color-info) 42%, var(--color-border-strong));
+}
+
+.bypass {
+  border-color: color-mix(in oklab, var(--color-success) 28%, var(--color-border-strong));
+  background: color-mix(in oklab, var(--color-success) 7%, transparent);
+}
+
+.bypass .name {
+  color: color-mix(in oklab, var(--color-success) 82%, var(--color-fg));
+}
+
+.bypass .desc {
+  color: color-mix(in oklab, var(--color-success) 58%, var(--color-faint));
+}
+
+.bypass:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-success) 12%, transparent);
+  border-color: color-mix(in oklab, var(--color-success) 42%, var(--color-border-strong));
+}
+
+.review {
+  border-color: color-mix(in oklab, var(--color-accent) 28%, var(--color-border-strong));
+  background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+}
+
+.review .name {
+  color: var(--color-accent-ink);
+}
+
+.review .desc {
+  color: color-mix(in oklab, var(--color-accent) 58%, var(--color-faint));
+}
+
+.review:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  border-color: color-mix(in oklab, var(--color-accent) 42%, var(--color-border-strong));
+}
+
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--color-faint);
+  letter-spacing: 0.01em;
+  opacity: 0.74;
+}
+
+.hintItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dot-plan {
+  background: color-mix(in oklab, var(--color-info) 55%, transparent);
+}
+
+.dot-bypass {
+  background: color-mix(in oklab, var(--color-success) 52%, transparent);
+}
+
+.dot-review {
+  background: color-mix(in oklab, var(--color-accent) 52%, transparent);
+}

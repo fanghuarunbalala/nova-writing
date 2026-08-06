@@ -1,0 +1,102 @@
+/**
+ * ProposalCardRenderer 视觉（原型 .proposal + .op + .op-mark + .op-kind）。
+ *
+ * card: border-strong + radius 14 + shadow-1 + padding 14/16/13。
+ * op: dashed border-top 分隔（首行无）+ mono 单字符 mark（无背景胶囊）。
+ */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 13px;
+  padding: 14px 16px 13px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  transition:
+    border-color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.01em;
+  color: var(--color-fg);
+}
+
+.meta {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.ops {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.op {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 9px 0;
+  border-top: 1px dashed var(--color-border);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.op:first-of-type {
+  margin-top: 10px;
+}
+
+.opMark {
+  flex: none;
+  width: 16px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-heavy);
+  text-align: center;
+}
+
+.op.add .opMark { color: var(--color-success); }
+.op.mod .opMark { color: var(--color-warn); }
+.op.del .opMark { color: var(--color-danger); }
+.op.move .opMark { color: var(--color-info); }
+.op.plan .opMark { color: var(--color-muted); }
+
+.opText {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-fg);
+}
+
+.opKind {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--color-border);
+  padding-top: 11px;
+  margin-top: 3px;
+}

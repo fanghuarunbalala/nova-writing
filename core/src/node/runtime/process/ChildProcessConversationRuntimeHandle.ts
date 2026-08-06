@@ -131,7 +131,9 @@ export class ChildProcessConversationRuntimeHandle
     let commandFailed = false;
     const graceful = this.#endpoint.shutdown({ reason }).catch(() => {
       commandFailed = true;
-      this.#process.terminate(RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL.terminate);
+      if (!this.#exited) {
+        this.#process.terminate(RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL.terminate);
+      }
     });
     const completed = await Promise.race([
       Promise.all([graceful, this.#exitPromise]).then(() => true),
@@ -143,7 +145,7 @@ export class ChildProcessConversationRuntimeHandle
       this.#process.terminate(RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL.kill);
       await this.#exitPromise;
     }
-    if (commandFailed) {
+    if (commandFailed && !this.#exited) {
       throw new ChildProcessConversationRuntimeHandleError(
         this.conversationId,
         this.runtimeInstanceId,

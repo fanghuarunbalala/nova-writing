@@ -31,6 +31,7 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "agent.subagent.cancelled",
   "system.nudge.scheduled",
   "system.reminder.injected",
+  "system.reminder.attached",
   "system.nudge.expired",
   "system.context.compaction.started",
   "system.context.compaction.completed",

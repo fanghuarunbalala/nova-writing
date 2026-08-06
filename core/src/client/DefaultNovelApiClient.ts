@@ -12,7 +12,7 @@ import { noopLogger, type Logger } from "../observability/index.js";
 import type {
   CharacterId,
   LocationId,
-  ManuscriptBlockId,
+  ParagraphId,
   StoryUnitId,
 } from "../novel/index.js";
 import type { ApiTransport } from "../transport/index.js";
@@ -104,11 +104,11 @@ function createDefaultNovelContentApi(client: NovelQueryClient): NovelContentApi
       get: (scope: NovelQueryScope, locationId: LocationId) =>
         client.getLocation(scope, locationId),
     }),
-    manuscript: Object.freeze({
-      getStructure: (scope: NovelQueryScope) =>
-        client.getManuscriptStructure(scope),
-      getBlock: (scope: NovelQueryScope, blockId: ManuscriptBlockId) =>
-        client.getManuscriptBlock(scope, blockId),
+    paragraphs: Object.freeze({
+      getCatalog: (scope: NovelQueryScope) =>
+        client.getParagraphCatalog(scope),
+      get: (scope: NovelQueryScope, paragraphId: ParagraphId) =>
+        client.getParagraph(scope, paragraphId),
     }),
   });
 }

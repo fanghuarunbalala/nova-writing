@@ -7,7 +7,7 @@ import {
 } from "../../../novel/index.js";
 import { NOVEL_ENTITY_SCHEMA_SQL } from "./NovelEntitySqliteSchema.js";
 import { NOVEL_OUTLINE_SCHEMA_SQL } from "./NovelOutlineSqliteSchema.js";
-import { NOVEL_PUBLICATION_MANUSCRIPT_SCHEMA_SQL } from "./NovelPublicationManuscriptSqliteSchema.js";
+import { NOVEL_PARAGRAPH_PUBLICATION_SCHEMA_SQL } from "./NovelParagraphPublicationSqliteSchema.js";
 import { NOVEL_PROJECTION_EVIDENCE_SCHEMA_SQL } from "./NovelProjectionEvidenceSqliteSchema.js";
 import { NOVEL_PROJECTION_CACHE_SCHEMA_SQL } from "./NovelProjectionSqliteSchema.js";
 
@@ -312,7 +312,7 @@ const DRAFT_MIGRATIONS = [
   {
     version: 10,
     name: "publication_manuscript_state",
-    sql: `${NOVEL_PUBLICATION_MANUSCRIPT_SCHEMA_SQL.replaceAll(
+    sql: `${NOVEL_PARAGRAPH_PUBLICATION_SCHEMA_SQL.replaceAll(
       "CREATE TABLE ",
       "CREATE TABLE IF NOT EXISTS ",
     ).replaceAll(

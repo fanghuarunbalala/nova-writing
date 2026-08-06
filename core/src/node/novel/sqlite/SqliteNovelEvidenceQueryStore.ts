@@ -3,13 +3,11 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   NOVEL_INVARIANT_FAILURE,
-  ManuscriptCatalog,
-  ManuscriptRangeRepairValidator,
-  ManuscriptRepairCatalog,
   NovelInvariantViolationError,
-  PublicationCatalog,
+  STORY_UNIT_PLANNING_STATUS,
   StoryOutlineTree,
   StoryUnitCompletionAdmissionValidator,
+  StoryUnitConformanceEvaluator,
   captureNovelId,
   captureNovelReadScope,
   captureNovelRevision,
@@ -24,7 +22,6 @@ import {
   type StoryUnitEntityChange,
   type StoryUnitId,
   type StoryUnitLocationBinding,
-  type StoryUnitRealization,
 } from "../../../novel/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
@@ -72,55 +69,36 @@ export class SqliteNovelEvidenceQueryStore implements NovelProjectionEvidenceQue
       })),
     ));
   }
-  listRealizations(scope: NovelReadScope): Promise<readonly NovelEvidenceReadModel<StoryUnitRealization>[]> {
-    return this.read(scope, (context) => Object.freeze(
-      context.projectionEvidence.listRealizations().map((value) => Object.freeze({
-        value,
-        recordDigest: requireDigest(context.projectionEvidence.getRealizationDigest(value.storyUnitId)),
-      })),
-    ));
-  }
-  getRealization(scope: NovelReadScope, storyUnitIdInput: StoryUnitId) {
-    const storyUnitId = captureStoryUnitId(storyUnitIdInput);
-    return this.read(scope, (context) => {
-      const value = context.projectionEvidence.getRealization(storyUnitId);
-      return value === undefined ? undefined : Object.freeze({
-        value,
-        recordDigest: requireDigest(context.projectionEvidence.getRealizationDigest(storyUnitId)),
-      });
-    });
-  }
   evaluateCompletion(
     scope: NovelReadScope,
     storyUnitIdInput: StoryUnitId,
   ): Promise<StoryUnitCompletionAdmission | undefined> {
     const storyUnitId = captureStoryUnitId(storyUnitIdInput);
     return this.read(scope, (context, revision) => {
-      const realization = context.projectionEvidence.getRealization(storyUnitId);
-      if (realization === undefined) return undefined;
       const outline = context.outline.findOutlineByNovelId(this.novelId);
-      const publication = context.publication.findPublicationByNovelId(this.novelId);
-      const manuscript = context.manuscript.findManuscriptByNovelId(this.novelId);
-      if (outline === undefined || publication === undefined || manuscript === undefined) throw new Error();
-      const volumes = context.publication.listVolumes(publication.id);
-      const publicationCatalog = new PublicationCatalog({
-        publication,
-        volumes,
-        chapters: volumes.flatMap((volume) => context.publication.listChapters(volume.id)),
+      if (outline === undefined) throw new Error();
+      const outlineTree = new StoryOutlineTree({
+        outline,
+        units: context.outline.listStoryUnits(outline.id),
       });
-      const manuscriptCatalog = new ManuscriptCatalog({
-        manuscript,
-        blocks: context.manuscript.listBlocks(manuscript.id),
-      }, publicationCatalog);
-      const repairs = new ManuscriptRepairCatalog({
-        tombstones: context.manuscript.listTombstones(manuscript.id),
-        redirects: context.manuscript.listAnchorRedirects(),
-      }, manuscriptCatalog);
-      return new StoryUnitCompletionAdmissionValidator(
-        new StoryOutlineTree({ outline, units: context.outline.listStoryUnits(outline.id) }),
-        revision,
-        new ManuscriptRangeRepairValidator(manuscriptCatalog, repairs),
-      ).evaluate(realization);
+      const unit = outlineTree.getUnit(storyUnitId);
+      if (unit === undefined) return undefined;
+      const paragraphs = context.paragraph.listParagraphsByStoryUnit(storyUnitId);
+      const hasAcceptedPlan =
+        unit.planningStatus === STORY_UNIT_PLANNING_STATUS.ready;
+      const conformance = new StoryUnitConformanceEvaluator().evaluate({
+        paragraphs,
+        hasAcceptedPlan,
+        currentRevision: revision,
+      });
+      return new StoryUnitCompletionAdmissionValidator(outlineTree)
+        .evaluate({
+          storyUnitId,
+          paragraphs,
+          hasAcceptedPlan,
+          conformance,
+          currentRevision: revision,
+        });
     });
   }
 

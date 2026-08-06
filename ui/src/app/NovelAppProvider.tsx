@@ -1,38 +1,91 @@
-/** Composes API, platform, and bounded extension providers for shared UI. */
+/**
+ * NovelAppProvider
+ *
+ * 顶层 Context 提供者（spec 4.0.2）。把宿主注入的 api/platform/extensions/logger/
+ * commandSource/configurationClient 同时发布到三个 context：
+ *   - NovelAppContext（聚合，便于一次性读取）
+ *   - FrontendPlatformContext（兼容 useFrontendPlatform）
+ *   - NovelUiExtensionsContext（兼容 useNovelUiExtensions，含 id 唯一性校验）
+ *
+ * 这样既保留单一聚合入口，又复用既有细粒度 hook，避免深层组件因 NovelAppContext
+ * 任意字段变化而被迫重渲染。
+ */
+import { useContext, useMemo, type ReactElement, type ReactNode } from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
-import type { ReactNode } from "react";
-import { NovelApiProvider } from "../client/NovelApiContext.js";
+import { NovelAppContext, type NovelAppContextValue } from "./NovelAppContext.js";
+import { FrontendPlatformProvider } from "../platform/FrontendPlatformContext.js";
 import {
   NovelUiExtensionsProvider,
-  type NovelUiExtensions,
-} from "../extensions/index.js";
-import {
-  FrontendPlatformProvider,
-  type FrontendPlatform,
-} from "../platform/index.js";
+  useNovelUiExtensions,
+} from "../extensions/NovelUiExtensionsContext.js";
+import type { ApplicationCommandSource } from "../command/ApplicationCommandSource.js";
+import type { ApplicationConfigurationClient } from "../settings/ApplicationConfigurationClient.js";
+import type { FrontendPlatform } from "../platform/FrontendPlatform.js";
+import type { NovelUiExtensions } from "../extensions/NovelUiExtensions.js";
 
 export interface NovelAppProviderProps {
   readonly api: NovelApiClient;
   readonly platform: FrontendPlatform;
+  readonly logger: Logger;
   readonly extensions?: NovelUiExtensions;
-  readonly logger?: Logger;
-  readonly children?: ReactNode;
+  readonly commandSource?: ApplicationCommandSource;
+  readonly configurationClient?: ApplicationConfigurationClient;
+  readonly children: ReactNode;
 }
 
-export function NovelAppProvider({
+export function NovelAppProvider(props: NovelAppProviderProps): ReactElement {
+  const { api, platform, logger, commandSource, configurationClient, children } = props;
+  // NovelUiExtensionsProvider 内部做 id 唯一性校验与 freeze，先让它把 extensions 规范化
+  return (
+    <NovelUiExtensionsProvider extensions={props.extensions}>
+      <NovelAppProviderInner
+        api={api}
+        platform={platform}
+        logger={logger}
+        commandSource={commandSource}
+        configurationClient={configurationClient}
+      >
+        {children}
+      </NovelAppProviderInner>
+    </NovelUiExtensionsProvider>
+  );
+}
+
+function NovelAppProviderInner({
   api,
   platform,
-  extensions,
   logger,
+  commandSource,
+  configurationClient,
   children,
-}: NovelAppProviderProps) {
-  return (
-    <NovelApiProvider api={api} logger={logger}>
-      <FrontendPlatformProvider platform={platform}>
-        <NovelUiExtensionsProvider extensions={extensions}>
-          {children}
-        </NovelUiExtensionsProvider>
-      </FrontendPlatformProvider>
-    </NovelApiProvider>
+}: Omit<NovelAppProviderProps, "extensions">): ReactElement {
+  const extensions = useNovelUiExtensions();
+  const value = useMemo<NovelAppContextValue>(
+    () => ({
+      api,
+      platform,
+      logger,
+      extensions,
+      ...(commandSource !== undefined ? { commandSource } : {}),
+      ...(configurationClient !== undefined ? { configurationClient } : {}),
+    }),
+    [api, platform, logger, extensions, commandSource, configurationClient],
   );
+  return (
+    <FrontendPlatformProvider platform={platform}>
+      <NovelAppContext.Provider value={value}>{children}</NovelAppContext.Provider>
+    </FrontendPlatformProvider>
+  );
+}
+
+export function useNovelApp(): NovelAppContextValue {
+  const value = useContext(NovelAppContext);
+  if (value === null) {
+    throw new Error("NovelAppProvider is required; wrap consumers in <NovelAppProvider>");
+  }
+  return value;
+}
+
+export function useNovelApi(): NovelApiClient {
+  return useNovelApp().api;
 }

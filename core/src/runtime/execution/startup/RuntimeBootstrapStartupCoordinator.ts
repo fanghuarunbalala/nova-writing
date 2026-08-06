@@ -128,13 +128,10 @@ export class RuntimeBootstrapStartupCoordinator {
         throw this.fail(RUNTIME_BOOTSTRAP_STARTUP_FAILURE.reconcileFailed);
       }
       if (
-        startupPlan.lifecycleDisposition ===
-        RUNTIME_STARTUP_LIFECYCLE_DISPOSITION.recoveryRequired
-      ) {
-        throw this.fail(RUNTIME_BOOTSTRAP_STARTUP_FAILURE.recoveryRequired);
-      }
-      if (
-        startupPlan.lifecycleDisposition !== RUNTIME_STARTUP_LIFECYCLE_DISPOSITION.ready
+        startupPlan.lifecycleDisposition !==
+          RUNTIME_STARTUP_LIFECYCLE_DISPOSITION.ready &&
+        startupPlan.lifecycleDisposition !==
+          RUNTIME_STARTUP_LIFECYCLE_DISPOSITION.recoveryRequired
       ) {
         throw this.fail(RUNTIME_BOOTSTRAP_STARTUP_FAILURE.reconcileFailed);
       }

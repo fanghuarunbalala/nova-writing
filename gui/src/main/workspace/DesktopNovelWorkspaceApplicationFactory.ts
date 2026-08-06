@@ -6,17 +6,19 @@ import {
   noopLogger,
   type ApiTransport,
   type ConversationRuntimePlacement,
+  type AgentManifestProvisioner,
   type EntityProfileReadinessPolicy,
   type Logger,
   type WorkspaceStoreLocation,
 } from "@novel/core";
 import {
+  DefaultNovelConversationManifestProvisioner,
+  type DesktopRuntimeChildPersistence,
   NodeConversationApiApplication,
   NodeNovelWorkspaceHost,
+  NodeConversationProcessSupervisor,
 } from "@novel/core/node";
-import {
-  DesktopUnavailableConversationRuntimePlacement,
-} from "../conversation/DesktopConversationApiApplicationFactory.js";
+import { createDesktopRuntimePlacement } from "../runtime/index.js";
 import type {
   DesktopWorkspaceApiApplication,
   DesktopWorkspaceApiApplicationFactory,
@@ -24,6 +26,11 @@ import type {
 
 export interface DesktopNovelWorkspaceApplicationFactoryOptions {
   readonly placement?: ConversationRuntimePlacement;
+  readonly storageRoot?: string;
+  readonly childLogPath?: string;
+  readonly debugLogLevel?: "debug" | "verbose";
+  readonly providerRequestDumpPath?: string;
+  readonly agentManifestProvisioner?: AgentManifestProvisioner;
   readonly readinessPolicy?: EntityProfileReadinessPolicy;
   readonly logger?: Logger;
 }
@@ -31,13 +38,26 @@ export interface DesktopNovelWorkspaceApplicationFactoryOptions {
 export class DesktopNovelWorkspaceApplicationFactory
   implements DesktopWorkspaceApiApplicationFactory
 {
-  private readonly placement: ConversationRuntimePlacement;
+  private readonly placementOverride?: ConversationRuntimePlacement;
+  private readonly storageRoot?: string;
+  private readonly childLogPath?: string;
+  private readonly debugLogLevel?: "debug" | "verbose";
+  private readonly providerRequestDumpPath?: string;
+  private readonly agentManifestProvisioner: AgentManifestProvisioner;
   private readonly readinessPolicy: EntityProfileReadinessPolicy;
   private readonly logger: Logger;
 
   constructor(options: DesktopNovelWorkspaceApplicationFactoryOptions = {}) {
-    this.placement =
-      options.placement ?? new DesktopUnavailableConversationRuntimePlacement();
+    this.placementOverride = options.placement;
+    this.storageRoot = options.storageRoot;
+    this.childLogPath = options.childLogPath;
+    this.debugLogLevel = options.debugLogLevel;
+    this.providerRequestDumpPath = options.providerRequestDumpPath;
+    this.agentManifestProvisioner =
+      options.agentManifestProvisioner ??
+      new DefaultNovelConversationManifestProvisioner({
+        logger: options.logger,
+      });
     this.readinessPolicy =
       options.readinessPolicy ?? DESKTOP_DEFAULT_READINESS_POLICY;
     this.logger = (options.logger ?? noopLogger).child({
@@ -50,11 +70,33 @@ export class DesktopNovelWorkspaceApplicationFactory
   ): Promise<DesktopWorkspaceApiApplication> {
     const logger = this.logger.child({ workspaceId: location.workspaceId });
     let conversationApplication: NodeConversationApiApplication | undefined;
+    let runtimePlacement: NodeConversationProcessSupervisor | undefined;
     logger.info("desktop_workspace_application.open_started");
     try {
+      const placement =
+        this.placementOverride ??
+        createDesktopRuntimePlacement({
+          storageRoot: requireStorageRoot(this.storageRoot, location),
+          ...(this.childLogPath === undefined
+            ? {}
+            : { childLogPath: this.childLogPath }),
+          ...(this.debugLogLevel === undefined
+            ? {}
+            : { debugLogLevel: this.debugLogLevel }),
+          ...(this.providerRequestDumpPath === undefined
+            ? {}
+            : { providerRequestDumpPath: this.providerRequestDumpPath }),
+          applicationProvider: async () => conversationApplication,
+          logger,
+        });
+      runtimePlacement =
+        placement instanceof NodeConversationProcessSupervisor
+          ? placement
+          : undefined;
       conversationApplication = await NodeConversationApiApplication.open({
         workspace: location,
-        placement: this.placement,
+        placement,
+        agentManifestProvisioner: this.agentManifestProvisioner,
         logger,
       });
       const novelHost = await NodeNovelWorkspaceHost.open({
@@ -72,14 +114,26 @@ export class DesktopNovelWorkspaceApplicationFactory
       return new DesktopNovelWorkspaceApplication(
         conversationApplication,
         novelHost,
+        runtimePlacement,
         logger,
       );
     } catch {
       await conversationApplication?.close().catch(() => undefined);
+      await runtimePlacement?.close().catch(() => undefined);
       logger.info("desktop_workspace_application.open_failed");
       throw new DesktopNovelWorkspaceApplicationOpenError();
     }
   }
+}
+
+function requireStorageRoot(
+  configured: string | undefined,
+  location: WorkspaceStoreLocation,
+): string {
+  if (configured !== undefined && configured.length > 0) return configured;
+  throw new TypeError(
+    `Desktop Runtime storage root is not configured for ${location.workspaceId}`,
+  );
 }
 
 class DesktopNovelWorkspaceApplication implements DesktopWorkspaceApiApplication {
@@ -89,6 +143,7 @@ class DesktopNovelWorkspaceApplication implements DesktopWorkspaceApiApplication
   constructor(
     private readonly conversationApplication: NodeConversationApiApplication,
     private readonly novelHost: NodeNovelWorkspaceHost,
+    private readonly runtimePlacement: NodeConversationProcessSupervisor | undefined,
     private readonly logger: Logger,
   ) {
     this.transport = new WorkspaceApiRouter({
@@ -102,7 +157,7 @@ class DesktopNovelWorkspaceApplication implements DesktopWorkspaceApiApplication
         locations: novelHost.application.locationQueries,
         outline: novelHost.application.outlineQueries,
         publication: novelHost.application.publicationQueries,
-        manuscript: novelHost.application.manuscriptQueries,
+        paragraphs: novelHost.application.paragraphQueries,
         logger,
       }),
     });
@@ -122,12 +177,23 @@ class DesktopNovelWorkspaceApplication implements DesktopWorkspaceApiApplication
       () => this.conversationApplication.close(),
       failures,
     );
+    await closeStage(
+      "runtime_placement",
+      () => this.runtimePlacement?.close() ?? Promise.resolve(),
+      failures,
+    );
     this.logger.info("desktop_workspace_application.close_completed", {
       failureCount: failures.length,
     });
     if (failures.length > 0) {
       throw new DesktopNovelWorkspaceApplicationCloseError(failures);
     }
+  }
+
+  getRuntimePersistence(
+    conversationId: string,
+  ): Promise<DesktopRuntimeChildPersistence> {
+    return this.conversationApplication.getRuntimePersistence(conversationId);
   }
 }
 

@@ -60,6 +60,11 @@ Planning is mandatory even when the agent has authority to continue automaticall
 - Do not silently resolve questions explicitly marked unresolved or deferred.
 - Do not change unrelated code or repair unrelated failures.
 - Important TypeScript files should include concise top-level purpose or example comments.
+- Key classes and exported methods require bilingual JSDoc comments: a Chinese
+  explanation followed by the matching English line (中英双语注释). New or
+  modified key classes and exported methods must carry both languages;
+  existing English-only comments may be upgraded incrementally within related
+  commits, not rewritten in unrelated commits.
 - Important execution paths should use structured `info` and `debug` logs.
 - Logs must never expose Event payloads, novel text, prompts, configuration contents, Tool data, credentials, Store/work paths, JSONL lines, raw error messages, stacks, causes, or Runtime stderr.
 - Each commit must leave the repository in a validated, reviewable state.

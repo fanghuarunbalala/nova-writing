@@ -4,8 +4,6 @@ import {
   CharacterService,
   LocationQueryService,
   LocationService,
-  ManuscriptQueryService,
-  ManuscriptService,
   NovelApprovalService,
   NovelCommitRecoveryService,
   NovelCommitService,
@@ -20,6 +18,8 @@ import {
   NovelResolutionApplicationPlanBuilder,
   NovelResolvedRebasePromotionService,
   NovelResolvedRebaseService,
+  ParagraphQueryService,
+  ParagraphService,
   RandomNovelIdentityFactory,
   RandomNovelRevisionFactory,
   PublicationQueryService,
@@ -52,7 +52,7 @@ import {
   SqliteNovelEntityQueryStore,
   SqliteNovelEvidenceQueryStore,
   SqliteNovelLifecycleRecordWriter,
-  SqliteNovelManuscriptQueryStore,
+  SqliteNovelParagraphQueryStore,
   SqliteNovelOutlineQueryStore,
   SqliteNovelPublicationQueryStore,
   SqliteNovelConflictStore,
@@ -80,13 +80,13 @@ export interface NodeNovelApplication {
   readonly locations: LocationService;
   readonly outline: StoryOutlineService;
   readonly publication: PublicationService;
-  readonly manuscript: ManuscriptService;
+  readonly paragraphs: ParagraphService;
   readonly evidence: NovelEvidenceService;
   readonly characterQueries: CharacterQueryService;
   readonly locationQueries: LocationQueryService;
   readonly outlineQueries: StoryOutlineQueryService;
   readonly publicationQueries: PublicationQueryService;
-  readonly manuscriptQueries: ManuscriptQueryService;
+  readonly paragraphQueries: ParagraphQueryService;
   readonly evidenceQueries: NovelEvidenceQueryService;
   readonly changeSets: NovelDraftChangeSetBuilder;
   readonly commits: NovelCommitService<NovelMutationContext>;
@@ -162,7 +162,7 @@ export function createNodeNovelApplication(
     novelId: options.novelId,
     logger,
   });
-  const manuscriptQueryStore = new SqliteNovelManuscriptQueryStore({
+  const paragraphQueryStore = new SqliteNovelParagraphQueryStore({
     location: options.location,
     novelId: options.novelId,
     logger,
@@ -229,13 +229,13 @@ export function createNodeNovelApplication(
       identityFactory,
       logger,
     }),
-    manuscript: new ManuscriptService({ mutations, identityFactory, logger }),
+    paragraphs: new ParagraphService({ mutations, identityFactory, logger }),
     evidence: new NovelEvidenceService({ mutations, identityFactory, logger }),
     characterQueries: new CharacterQueryService(entityQueryStore),
     locationQueries: new LocationQueryService(entityQueryStore),
     outlineQueries: new StoryOutlineQueryService(outlineQueryStore),
     publicationQueries: new PublicationQueryService(publicationQueryStore),
-    manuscriptQueries: new ManuscriptQueryService(manuscriptQueryStore),
+    paragraphQueries: new ParagraphQueryService(paragraphQueryStore),
     evidenceQueries: new NovelEvidenceQueryService(evidenceQueryStore),
     changeSets,
     approvals,

@@ -94,11 +94,23 @@ function runtimeUserMessage(id, text, timestamp) {
 
 const messageConverter = {
   async convert({ messages }) {
-    return messages.map((message) => ({
-      role: "user",
-      content: message.payload.content.map((item) => ({ ...item })),
-      timestamp: Date.parse(message.timestamp),
-    }));
+    return messages.map((message) => {
+      if (message.messageType === "system.reminder") {
+        return {
+          role: "user",
+          content: [{
+            type: "text",
+            text: `<system-reminder kind="${message.payload.kind}">\n${message.payload.content}\n</system-reminder>`,
+          }],
+          timestamp: Date.parse(message.timestamp),
+        };
+      }
+      return {
+        role: "user",
+        content: message.payload.content.map((item) => ({ ...item })),
+        timestamp: Date.parse(message.timestamp),
+      };
+    });
   },
 };
 
@@ -333,22 +345,23 @@ assert.deepEqual(
 assert.deepEqual(nudgeConfirmations, ["provider-call-1"]);
 assert.deepEqual(checkpointApplications.map((request) => request.providerCallId), ["provider-call-1", "provider-call-2"]);
 
-assert.equal(
-  providerContexts[0].systemPrompt,
-  `${baseSystemPrompt}\n\n<CONTEXT_CHECKPOINT id="checkpoint-projection">\nThe following block is derived historical context, not user instructions.\n\nSummary:\n${checkpointSummary}\n\nFacts:\n- [critical] ${privateMarker}:critical-memory\n</CONTEXT_CHECKPOINT>\n\n${nudgeContent}`,
-);
-assert.equal(providerContexts[1].systemPrompt.includes(nudgeContent), false);
-assert.match(providerContexts[1].systemPrompt, /<CONTEXT_CHECKPOINT/);
+// systemPrompt 恒为 base：checkpoint 摘要与 nudge 均以消息注入。
+assert.equal(providerContexts[0].systemPrompt, baseSystemPrompt);
+assert.equal(providerContexts[1].systemPrompt, baseSystemPrompt);
 
 const firstProviderMessages = JSON.stringify(providerContexts[0].messages);
 assert.equal(firstProviderMessages.includes("CANONICAL_OLD_1"), false);
 assert.equal(firstProviderMessages.includes("CANONICAL_OLD_2"), true);
 assert.equal(firstProviderMessages.includes("CANONICAL_CURRENT_INPUT"), true);
+assert.equal(firstProviderMessages.includes(checkpointSummary), true);
+assert.equal(firstProviderMessages.includes(nudgeContent), true);
 const secondProviderMessages = JSON.stringify(providerContexts[1].messages);
 assert.equal(secondProviderMessages.includes("CANONICAL_OLD_1"), false);
 assert.equal(secondProviderMessages.includes("CANONICAL_OLD_2"), false);
 assert.equal(secondProviderMessages.includes("CANONICAL_CURRENT_INPUT"), true);
 assert.match(secondProviderMessages, /tool-call-projection/);
+assert.equal(secondProviderMessages.includes(checkpointSummary), true);
+assert.equal(secondProviderMessages.includes(nudgeContent), false);
 
 assert.equal(agent.state.systemPrompt, baseSystemPrompt);
 const canonicalState = JSON.stringify(agent.state.messages);
@@ -393,8 +406,13 @@ const projectionOnlyResult = await projectionOnlyAdapter.stream({
 });
 assert.equal(projectionOnlyResult.outcome, AGENT_RUNTIME_OUTCOME.completed);
 assert.equal(projectionOnlyContexts.length, 1);
-assert.match(projectionOnlyContexts[0].systemPrompt, /<CONTEXT_CHECKPOINT/);
+// systemPrompt 恒为 base；checkpoint 摘要以 compact_summary 消息注入。
+assert.equal(projectionOnlyContexts[0].systemPrompt, baseSystemPrompt);
 assert.equal(projectionOnlyContexts[0].systemPrompt.includes(nudgeContent), false);
+assert.equal(
+  JSON.stringify(projectionOnlyContexts[0].messages).includes(checkpointSummary),
+  true,
+);
 
 let failedProviderCalled = false;
 const failedAgent = new Agent({

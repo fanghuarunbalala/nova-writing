@@ -1,0 +1,45 @@
+/**
+ * ThinkLine 视觉（原型 .tline + .tl-mark + .tl-tag）。
+ *
+ * 行间 dashed border-top 分隔（首行无）；6x6 accent dot 作 mark；
+ * tag 为 accent-ink 圆角胶囊。font-size 13 / line-height 1.65 / muted。
+ */
+.line {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-top: 1px dashed var(--color-border);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--color-muted);
+}
+
+.line:first-child {
+  border-top: 0;
+}
+
+.mark {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  margin-top: 8px;
+  flex: none;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.tag {
+  flex: none;
+  align-self: center;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--color-accent) 10%, var(--color-surface));
+  color: var(--color-accent-ink);
+  font-size: var(--fs-xs);
+  font-weight: 750;
+}

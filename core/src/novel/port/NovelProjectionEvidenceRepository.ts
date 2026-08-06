@@ -9,7 +9,6 @@ import type {
   StoryUnitCharacterBinding,
   StoryUnitEntityChange,
   StoryUnitLocationBinding,
-  StoryUnitRealization,
 } from "../model/index.js";
 import type { NovelReadScope } from "../query/index.js";
 import type { StoryUnitCompletionAdmission } from "../validation/index.js";
@@ -36,11 +35,6 @@ export interface NovelMutableProjectionEvidenceRepository {
   getEntityChangeDigest(id: StoryUnitEntityChangeId): string | undefined;
   putEntityChange(change: StoryUnitEntityChange): void;
   deleteEntityChange(id: StoryUnitEntityChangeId): boolean;
-  listRealizations(): readonly StoryUnitRealization[];
-  getRealization(storyUnitId: StoryUnitId): StoryUnitRealization | undefined;
-  getRealizationDigest(storyUnitId: StoryUnitId): string | undefined;
-  putRealization(realization: StoryUnitRealization): void;
-  deleteRealization(storyUnitId: StoryUnitId): boolean;
   hasStoryUnit(storyUnitId: StoryUnitId): boolean;
   hasCharacter(characterId: CharacterId): boolean;
   hasLocation(locationId: LocationId): boolean;
@@ -59,11 +53,6 @@ export interface NovelProjectionEvidenceQueryStore {
   listCharacterBindings(scope: NovelReadScope): Promise<readonly NovelEvidenceReadModel<StoryUnitCharacterBinding>[]>;
   listLocationBindings(scope: NovelReadScope): Promise<readonly NovelEvidenceReadModel<StoryUnitLocationBinding>[]>;
   listEntityChanges(scope: NovelReadScope): Promise<readonly NovelEvidenceReadModel<StoryUnitEntityChange>[]>;
-  listRealizations(scope: NovelReadScope): Promise<readonly NovelEvidenceReadModel<StoryUnitRealization>[]>;
-  getRealization(
-    scope: NovelReadScope,
-    storyUnitId: StoryUnitId,
-  ): Promise<NovelEvidenceReadModel<StoryUnitRealization> | undefined>;
   evaluateCompletion(
     scope: NovelReadScope,
     storyUnitId: StoryUnitId,

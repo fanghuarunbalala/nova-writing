@@ -1,0 +1,90 @@
+/**
+ * Dialog 视觉：居中 content、遮罩、size 宽度表（spec 2.2.3）。
+ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: color-mix(in oklab, var(--color-fg) 26%, transparent);
+  animation: dialog-fade var(--duration-fast) var(--ease-out);
+}
+
+.content {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 51;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  width: calc(100vw - 48px);
+  max-height: calc(100vh - 80px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-2);
+  animation: dialog-in var(--duration-base) var(--ease-out);
+}
+
+.sm { max-width: 400px; }
+.md { max-width: 560px; }
+.lg { max-width: 720px; }
+.xl { max-width: 960px; }
+
+.title {
+  padding: 16px 20px 0;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
+  color: var(--color-fg);
+}
+
+.description {
+  padding: 4px 20px 0;
+  font-size: var(--fs-body);
+  color: var(--color-muted);
+}
+
+.body {
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  font-size: 16px;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.close:hover {
+  color: var(--color-fg);
+  background: var(--color-surface-2);
+}
+
+@keyframes dialog-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: translate(-50%, -48%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}

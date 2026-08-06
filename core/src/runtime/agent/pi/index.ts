@@ -1,6 +1,7 @@
 export * from "./CorePiRuntimeMessageConverter.js";
 export * from "./CorePiRuntimeMessageConverterErrors.js";
 export * from "./CompositePiAgentEventBridge.js";
+export * from "./PiAiProviderExecutionDispatcher.js";
 export * from "./PiAgentCoreAdapter.js";
 export * from "./PiAgentCoreAdapterErrors.js";
 export * from "./PiAgentCoreAssistantMessageEnvelopeFactory.js";
@@ -10,6 +11,9 @@ export * from "./PiAssistantMessageEnvelopeFactory.js";
 export * from "./PiAssistantOutputBridge.js";
 export * from "./PiAssistantOutputBridgeErrors.js";
 export * from "./PiDispatchAwareStreamFunction.js";
+export * from "./PiProviderExecutionErrors.js";
+export * from "./PiProviderExecutionFactory.js";
+export * from "./ProviderRequestDebugRecorder.js";
 export * from "./PiRuntimeMessageConverter.js";
 export * from "./PiTurnLifecycleBridge.js";
 export * from "./PiTurnLifecycleBridgeErrors.js";

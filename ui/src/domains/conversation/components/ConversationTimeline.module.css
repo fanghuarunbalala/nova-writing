@@ -1,0 +1,26 @@
+/**
+ * ConversationTimeline 视觉（原型 .timeline + .chat-inner）。
+ *
+ * timeline 提供滚动容器；inner 限制最大宽度 1000px 并靠左对齐（贴侧栏），
+ * 右侧保留约 120px+ 呼吸留白，与左侧 sidebar 形成非对称但协调的布局。
+ * padding 8px 22px 24px。
+ */
+.timeline {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 22px 24px;
+}
+
+.inner {
+  max-width: 1000px;
+  margin: 0;
+}
+
+.system {
+  padding: 4px 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}

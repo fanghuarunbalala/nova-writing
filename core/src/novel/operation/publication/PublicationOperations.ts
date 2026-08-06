@@ -6,12 +6,15 @@ import {
   NovelProtocolValidationError,
 } from "../../error/index.js";
 import {
+  captureParagraphId,
   capturePublicationChapterId,
   capturePublicationStructureId,
   capturePublicationVolumeId,
   type NovelOperationId,
+  type ParagraphId,
   type PublicationChapterId,
   type PublicationVolumeId,
+  type StoryUnitId,
 } from "../../identity/index.js";
 import {
   capturePublicationChapter,
@@ -21,8 +24,12 @@ import {
   type PublicationStructure,
   type PublicationVolume,
 } from "../../model/index.js";
+import { compareOrderKeys } from "../../model/outline/OrderKey.js";
+import type { OrderKey } from "../../model/index.js";
 import type {
+  NovelMutableParagraphRepository,
   NovelMutablePublicationRepository,
+  NovelParagraphMutationContext,
   NovelPublicationMutationContext,
 } from "../../port/index.js";
 import { captureNovelOperationVersion } from "../../version/index.js";
@@ -48,7 +55,7 @@ const PUBLICATION_ENTITY_TYPE = "publication";
 const PUBLICATION_NOVEL_ENTITY_TYPE = "publication-for-novel";
 const VOLUME_ENTITY_TYPE = "publication-volume";
 const CHAPTER_ENTITY_TYPE = "publication-chapter";
-const STORY_UNIT_ENTITY_TYPE = "story-unit";
+const PARAGRAPH_ENTITY_TYPE = "paragraph";
 
 interface PublicationPayload extends JsonObject {
   readonly publication: JsonObject;
@@ -178,7 +185,7 @@ export function createPublicationChapterDeleteOperation(input: {
 }
 
 export function registerNovelPublicationOperationHandlers<
-  TContext extends NovelPublicationMutationContext,
+  TContext extends NovelPublicationMutationContext & NovelParagraphMutationContext,
 >(registry: NovelOperationRegistry<TContext>): void {
   registry.register({
     operationType: NOVEL_PUBLICATION_OPERATION_TYPE.publicationCreate,
@@ -203,12 +210,14 @@ export function registerNovelPublicationOperationHandlers<
   registry.register({
     operationType: NOVEL_PUBLICATION_OPERATION_TYPE.chapterCreate,
     operationVersion: PUBLICATION_OPERATION_VERSION,
-    apply: (context, operation) => applyChapterCreate(context.publication, operation),
+    apply: (context, operation) =>
+      applyChapterCreate(context.publication, context.paragraph, operation),
   });
   registry.register({
     operationType: NOVEL_PUBLICATION_OPERATION_TYPE.chapterReplace,
     operationVersion: PUBLICATION_OPERATION_VERSION,
-    apply: (context, operation) => applyChapterReplace(context.publication, operation),
+    apply: (context, operation) =>
+      applyChapterReplace(context.publication, context.paragraph, operation),
   });
   registry.register({
     operationType: NOVEL_PUBLICATION_OPERATION_TYPE.chapterDelete,
@@ -254,7 +263,6 @@ function applyVolumeCreate(
   if (store.getVolume(volume.id) !== undefined) {
     throw precondition(operation, "entity_exists", VOLUME_ENTITY_TYPE, volume.id);
   }
-  assertVolumeReferences(store, operation, volume);
   assertVolumePosition(store, operation, volume);
   if (!store.insertVolume(volume)) {
     throw precondition(operation, "domain_invariant", VOLUME_ENTITY_TYPE, volume.id);
@@ -273,7 +281,6 @@ function applyVolumeReplace(
   if (existing.publicationId !== volume.publicationId) {
     throw precondition(operation, "domain_invariant", VOLUME_ENTITY_TYPE, volume.id);
   }
-  assertVolumeReferences(store, operation, volume);
   assertVolumePosition(store, operation, volume, volume.id);
   if (!store.replaceVolume(volume)) {
     throw precondition(operation, "domain_invariant", VOLUME_ENTITY_TYPE, volume.id);
@@ -301,6 +308,7 @@ function applyVolumeDelete(
 
 function applyChapterCreate(
   store: NovelMutablePublicationRepository,
+  paragraphs: NovelMutableParagraphRepository,
   operation: NovelOperation,
 ): void {
   const chapter = capturePublicationChapter(captureNestedPayload(operation.payload, "chapter"));
@@ -311,13 +319,18 @@ function applyChapterCreate(
     throw precondition(operation, "entity_exists", CHAPTER_ENTITY_TYPE, chapter.id);
   }
   assertChapterPosition(store, operation, chapter);
+  assertChapterSelection(store, paragraphs, operation, chapter);
   if (!store.insertChapter(chapter)) {
+    throw precondition(operation, "domain_invariant", CHAPTER_ENTITY_TYPE, chapter.id);
+  }
+  if (!store.setChapterParagraphIds(chapter.id, chapter.paragraphIds)) {
     throw precondition(operation, "domain_invariant", CHAPTER_ENTITY_TYPE, chapter.id);
   }
 }
 
 function applyChapterReplace(
   store: NovelMutablePublicationRepository,
+  paragraphs: NovelMutableParagraphRepository,
   operation: NovelOperation,
 ): void {
   const chapter = capturePublicationChapter(captureNestedPayload(operation.payload, "chapter"));
@@ -330,7 +343,11 @@ function applyChapterReplace(
     throw precondition(operation, "domain_invariant", CHAPTER_ENTITY_TYPE, chapter.id);
   }
   assertChapterPosition(store, operation, chapter, chapter.id);
+  assertChapterSelection(store, paragraphs, operation, chapter, chapter.id);
   if (!store.replaceChapter(chapter)) {
+    throw precondition(operation, "domain_invariant", CHAPTER_ENTITY_TYPE, chapter.id);
+  }
+  if (!store.setChapterParagraphIds(chapter.id, chapter.paragraphIds)) {
     throw precondition(operation, "domain_invariant", CHAPTER_ENTITY_TYPE, chapter.id);
   }
 }
@@ -346,9 +363,6 @@ function applyChapterDelete(
   ]);
   requireChapter(store, operation, id);
   assertRecordDigest(store.getChapterDigest(id), operation, CHAPTER_ENTITY_TYPE, id);
-  if (store.hasManuscriptBlocks(id)) {
-    throw precondition(operation, "entity_referenced", CHAPTER_ENTITY_TYPE, id);
-  }
   if (!store.deleteChapter(id)) {
     throw precondition(operation, "domain_invariant", CHAPTER_ENTITY_TYPE, id);
   }
@@ -367,9 +381,6 @@ function volumeExpected(
     ...(mode === "replace"
       ? [fieldDigest(VOLUME_ENTITY_TYPE, volume.id, "record", expectedRecordDigest ?? "")]
       : []),
-    ...(volume.primaryStoryUnitId === undefined
-      ? []
-      : [exists(STORY_UNIT_ENTITY_TYPE, volume.primaryStoryUnitId)]),
   ]);
 }
 
@@ -387,6 +398,7 @@ function chapterExpected(
     ...(mode === "replace"
       ? [fieldDigest(CHAPTER_ENTITY_TYPE, chapter.id, "record", expectedRecordDigest ?? "")]
       : []),
+    ...chapter.paragraphIds.map((paragraphId) => exists(PARAGRAPH_ENTITY_TYPE, paragraphId)),
   ]);
 }
 
@@ -438,24 +450,6 @@ function requireOwningVolume(
   return volume;
 }
 
-function assertVolumeReferences(
-  store: NovelMutablePublicationRepository,
-  operation: NovelOperation,
-  volume: PublicationVolume,
-): void {
-  if (
-    volume.primaryStoryUnitId !== undefined &&
-    !store.hasStoryUnit(volume.primaryStoryUnitId)
-  ) {
-    throw precondition(
-      operation,
-      "entity_missing",
-      STORY_UNIT_ENTITY_TYPE,
-      volume.primaryStoryUnitId,
-    );
-  }
-}
-
 function assertVolumePosition(
   store: NovelMutablePublicationRepository,
   operation: NovelOperation,
@@ -477,6 +471,63 @@ function assertChapterPosition(
   const occupied = store.findChapterAt(chapter.volumeId, chapter.orderKey);
   if (occupied !== undefined && occupied.id !== ignoredId) {
     throw precondition(operation, "domain_invariant", CHAPTER_ENTITY_TYPE, chapter.id, "orderKey");
+  }
+}
+
+function assertChapterSelection(
+  store: NovelMutablePublicationRepository,
+  paragraphs: NovelMutableParagraphRepository,
+  operation: NovelOperation,
+  chapter: PublicationChapter,
+  ignoredChapterId?: PublicationChapterId,
+): void {
+  const seen = new Set<ParagraphId>();
+  let previousStoryUnitId: StoryUnitId | undefined;
+  let previousOrderKey: OrderKey | undefined;
+  for (const paragraphId of chapter.paragraphIds) {
+    if (seen.has(paragraphId)) {
+      throw precondition(
+        operation,
+        "domain_invariant",
+        CHAPTER_ENTITY_TYPE,
+        chapter.id,
+        "paragraphSelection",
+      );
+    }
+    seen.add(paragraphId);
+    const paragraph = paragraphs.getParagraph(paragraphId);
+    if (paragraph === undefined) {
+      throw precondition(
+        operation,
+        "entity_missing",
+        PARAGRAPH_ENTITY_TYPE,
+        paragraphId,
+      );
+    }
+    if (
+      previousStoryUnitId === paragraph.storyUnitId &&
+      previousOrderKey !== undefined &&
+      compareOrderKeys(paragraph.orderKey, previousOrderKey) < 0
+    ) {
+      throw precondition(
+        operation,
+        "domain_invariant",
+        CHAPTER_ENTITY_TYPE,
+        chapter.id,
+        "paragraphOrder",
+      );
+    }
+    previousStoryUnitId = paragraph.storyUnitId;
+    previousOrderKey = paragraph.orderKey;
+    const owner = store.getChapterIdByParagraphId(paragraphId);
+    if (owner !== undefined && owner !== ignoredChapterId) {
+      throw precondition(
+        operation,
+        "entity_referenced",
+        PARAGRAPH_ENTITY_TYPE,
+        paragraphId,
+      );
+    }
   }
 }
 

@@ -2,16 +2,20 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
 import { act } from "react";
+import { register } from "node:module";
 import {
   ApiTransportError,
   DefaultNovelApiClient,
 } from "../../core/dist/index.js";
-import {
+
+// CSS 由 Vite 消费；Node 侧先注册 stub loader 再动态加载 renderer dist。
+register(new URL("./node-css-loader.mjs", import.meta.url));
+const {
   createDesktopRendererComposition,
   createElectronFrontendPlatform,
   mountDesktopRenderer,
   resolveElectronPreloadBridge,
-} from "../dist/renderer/index.js";
+} = await import("../dist/renderer/index.js");
 
 class TestElectronBridge {
   constructor() {
@@ -139,20 +143,9 @@ async function assertRendererMount() {
       document: dom.window.document,
     });
   });
-  assert.ok(dom.window.document.querySelector(".novel-app-shell"));
-  assert.equal(dom.window.document.querySelector(".novel-top-menu"), null);
-  assert.equal(
-    dom.window.document
-      .querySelector(".novel-app-shell")
-      ?.getAttribute("data-menu-presentation"),
-    "native",
-  );
-  assert.ok(dom.window.document.querySelector('button[aria-label="收起侧边栏"]'));
-  assert.ok(dom.window.document.querySelector(".novel-project-sidebar"));
-  assert.match(dom.window.document.body.textContent, /新对话/);
-  assert.match(dom.window.document.body.textContent, /大纲/);
-  await act(async () => bridge.emitCommand("settings.open"));
-  assert.ok(dom.window.document.querySelector('[role="dialog"][aria-label="设置"]'));
+  // 新壳（Phase 3+）：未注入 WorkspaceController 时显示等待态，mount 契约成立
+  assert.ok(dom.window.document.querySelector(".novel-shell-unavailable"));
+  assert.match(dom.window.document.body.textContent, /等待 Workspace 控制器/);
   await act(async () => mounted.close());
   assert.equal(bridge.commandListeners.size, 0);
   assert.equal(dom.window.document.getElementById("root").childNodes.length, 0);

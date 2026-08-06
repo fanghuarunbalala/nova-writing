@@ -1,0 +1,49 @@
+/**
+ * UserMessage 视觉（原型 .msg.user + .msg-head + .msg-text）。
+ *
+ * 用户消息文本带 accent 浅底气泡 + 非对称 border-radius（16px 4px 16px 16px），
+ * 与原型 .msg.user .msg-text 一致。.who 用 fg + 750（区别于 .time 的 faint）。
+ */
+.message {
+  display: flex;
+  gap: 12px;
+  padding: 18px 0 6px;
+}
+
+.body {
+  min-width: 0;
+  flex: 1;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.who {
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--color-fg);
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.text {
+  display: inline-block;
+  margin-top: 7px;
+  padding: 10px 15px;
+  border-radius: 16px 4px 16px 16px;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 15%, var(--color-border));
+  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+  color: var(--color-accent-ink);
+  font-size: 15px;
+  font-weight: var(--fw-regular);
+  line-height: 1.75;
+  text-wrap: pretty;
+  max-width: 100%;
+}

@@ -51,17 +51,19 @@ export class JournalConversationEventSubscriptionService
   subscribe(options: ConversationEventSubscriptionOptions): ConversationEventSubscription {
     this.assertOpen();
     const normalized = normalizeConversationEventSubscriptionOptions(options);
-    const liveSubscription = this.hub.subscribe({
-      conversationId: normalized.conversationId,
-      filter: normalized.filter,
-      capacity: normalized.liveBufferCapacity,
-      ...(normalized.signal !== undefined ? { signal: normalized.signal } : {}),
-    });
     let subscription: JournalConversationEventSubscription;
     try {
       subscription = new JournalConversationEventSubscription({
         options: normalized,
-        liveSubscription,
+        createLiveSubscription: () =>
+          this.hub.subscribe({
+            conversationId: normalized.conversationId,
+            filter: normalized.filter,
+            capacity: normalized.liveBufferCapacity,
+            ...(normalized.signal !== undefined
+              ? { signal: normalized.signal }
+              : {}),
+          }),
         pager: this.pager,
         getHighWatermark: (conversationId) =>
           this.journal.getHighWatermark(conversationId),
@@ -76,7 +78,6 @@ export class JournalConversationEventSubscriptionService
         },
       });
     } catch (error) {
-      void liveSubscription.close();
       throw error;
     }
     this.subscriptions.add(subscription);

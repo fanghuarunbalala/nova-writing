@@ -7,11 +7,11 @@ import {
   captureNovelCharacterQueryRequest,
   captureNovelCharactersSnapshot,
   captureNovelLocationSnapshot,
-  captureNovelManuscriptBlockQueryRequest,
-  captureNovelManuscriptBlockSnapshot,
-  captureNovelManuscriptStructureSnapshot,
   captureNovelOutlineSnapshot,
   captureNovelOverviewSnapshot,
+  captureNovelParagraphCatalogSnapshot,
+  captureNovelParagraphQueryRequest,
+  captureNovelParagraphSnapshot,
   captureNovelQueryScope,
   captureNovelScopedQueryRequest,
   captureNovelStoryUnitQueryRequest,
@@ -32,8 +32,8 @@ assert.deepEqual(Object.values(NOVEL_QUERY_API_OPERATION), [
   "novel.characters.get",
   "novel.locations.list",
   "novel.locations.get",
-  "novel.manuscript.structure.get",
-  "novel.manuscript.block.get",
+  "novel.paragraph.catalog.get",
+  "novel.paragraph.get",
 ]);
 assert.equal(captureNovelQueryScope(canonicalScope), canonicalScope);
 assert.deepEqual(captureNovelScopedQueryRequest({ scope: draftScope }), {
@@ -54,11 +54,11 @@ assert.equal(
   "character_primary",
 );
 assert.equal(
-  captureNovelManuscriptBlockQueryRequest({
+  captureNovelParagraphQueryRequest({
     scope: canonicalScope,
-    blockId: "block_opening",
-  }).blockId,
-  "block_opening",
+    paragraphId: "paragraph_opening",
+  }).paragraphId,
+  "paragraph_opening",
 );
 
 const rootUnit = {
@@ -176,49 +176,41 @@ const publication = {
       volumeId: "volume_one",
       orderKey: "8000",
       title: "雨夜",
+      paragraphIds: ["paragraph_opening"],
     },
   ],
 };
-const manuscript = {
-  id: "manuscript_main",
-  novelId: "novel_query_protocol",
-  publicationId: "publication_main",
-};
-const structure = captureNovelManuscriptStructureSnapshot(jsonRoundTrip({
+const paragraphCatalog = captureNovelParagraphCatalogSnapshot(jsonRoundTrip({
   schemaVersion: NOVEL_QUERY_SNAPSHOT_VERSION,
   scope: canonicalScope,
-  publication,
-  manuscript,
-  blocks: [
+  paragraphs: [
     {
-      id: "block_opening",
-      chapterId: "chapter_one",
+      id: "paragraph_opening",
+      storyUnitId: "story_unit_root",
       orderKey: "8000",
       textLength: 12,
       textDigest: digest,
     },
   ],
 }));
-assert.equal(structure.publication.chapters.length, 1);
-assert.equal(structure.blocks[0].textLength, 12);
+assert.equal(paragraphCatalog.paragraphs[0].textLength, 12);
 
-const block = captureNovelManuscriptBlockSnapshot(jsonRoundTrip({
+const paragraphSnapshot = captureNovelParagraphSnapshot(jsonRoundTrip({
   schemaVersion: NOVEL_QUERY_SNAPSHOT_VERSION,
   scope: canonicalScope,
   readModel: {
-    block: {
-      id: "block_opening",
-      manuscriptId: "manuscript_main",
-      chapterId: "chapter_one",
+    paragraph: {
+      id: "paragraph_opening",
+      storyUnitId: "story_unit_root",
       orderKey: "8000",
       text: "雨落在站台上。",
     },
     textDigest: digest,
-    chapterDigest: "b".repeat(64),
     orderDigest: "c".repeat(64),
+    storyUnitDigest: "d".repeat(64),
   },
 }));
-assert.equal(block.readModel.block.text, "雨落在站台上。");
+assert.equal(paragraphSnapshot.readModel.paragraph.text, "雨落在站台上。");
 
 const overview = captureNovelOverviewSnapshot(jsonRoundTrip({
   schemaVersion: NOVEL_QUERY_SNAPSHOT_VERSION,
@@ -233,12 +225,12 @@ const overview = captureNovelOverviewSnapshot(jsonRoundTrip({
     locationCount: 1,
     volumeCount: 1,
     chapterCount: 1,
-    manuscriptBlockCount: 1,
+    paragraphCount: 1,
   },
   roots: {
     outlineAvailable: true,
     publicationAvailable: true,
-    manuscriptAvailable: true,
+    paragraphsAvailable: true,
   },
 }));
 assert.equal(overview.counts.storyUnitCount, 2);
@@ -256,11 +248,25 @@ assert.throws(
   /snapshot is invalid/u,
 );
 assert.throws(
-  () => captureNovelManuscriptStructureSnapshot({
+  () => captureNovelParagraphCatalogSnapshot({
     schemaVersion: 1,
     scope: canonicalScope,
-    manuscript,
-    blocks: [],
+    paragraphs: [
+      {
+        id: "paragraph_opening",
+        storyUnitId: "story_unit_root",
+        orderKey: "8000",
+        textLength: 12,
+        textDigest: digest,
+      },
+      {
+        id: "paragraph_opening",
+        storyUnitId: "story_unit_root",
+        orderKey: "8000",
+        textLength: 12,
+        textDigest: digest,
+      },
+    ],
   }),
   /snapshot is invalid/u,
 );

@@ -25,6 +25,7 @@ import {
 
 const DEFAULT_REPLAY_PAGE_SIZE = 200;
 const MAX_REPLAY_PAGE_SIZE = 1_000;
+const MAX_PROJECTION_RESUME_ATTEMPTS = 5;
 
 export interface ConversationProjectionControllerOptions {
   readonly conversation: Conversation;
@@ -54,6 +55,8 @@ export class ConversationProjectionController {
   private connectionPromise?: Promise<void>;
   private pumpPromise?: Promise<void>;
   private stopPromise?: Promise<void>;
+  private resumeAttempt = 0;
+  private resumeTimer?: ReturnType<typeof setTimeout>;
 
   constructor(options: ConversationProjectionControllerOptions) {
     if (options.conversation.id !== options.store.conversationId) {
@@ -105,7 +108,8 @@ export class ConversationProjectionController {
     if (this.connectionPromise !== undefined) return this.connectionPromise;
     if (
       this.controllerState !==
-      CONVERSATION_PROJECTION_CONTROLLER_STATE.disconnected
+        CONVERSATION_PROJECTION_CONTROLLER_STATE.disconnected &&
+      this.controllerState !== CONVERSATION_PROJECTION_CONTROLLER_STATE.failed
     ) {
       throw new ConversationProjectionControllerStateError(
         "resume",
@@ -188,6 +192,7 @@ export class ConversationProjectionController {
       }
       this.assertConnectionActive(generation, signal);
       this.transition(CONVERSATION_PROJECTION_CONTROLLER_STATE.live);
+      this.resumeAttempt = 0;
       this.logger.info("conversation.projection.connection_live", {
         operation,
         generation,
@@ -271,6 +276,45 @@ export class ConversationProjectionController {
     if (this.subscription === subscription) this.subscription = undefined;
     await Promise.allSettled([subscription.close()]);
     this.transitionFailure(error);
+    if (!this.isConnectionSuperseded(generation, signal)) {
+      this.scheduleAutoResume(generation, signal);
+    }
+  }
+
+  private scheduleAutoResume(
+    generation: number,
+    signal: AbortSignal,
+  ): void {
+    if (
+      this.controllerState !==
+        CONVERSATION_PROJECTION_CONTROLLER_STATE.disconnected &&
+      this.controllerState !== CONVERSATION_PROJECTION_CONTROLLER_STATE.failed
+    ) {
+      return;
+    }
+    if (this.resumeAttempt >= MAX_PROJECTION_RESUME_ATTEMPTS) {
+      this.logger.warn("conversation.projection.auto_resume_limit_reached", {
+        attempt: this.resumeAttempt,
+      });
+      return;
+    }
+    const delayMs = Math.min(1_000 * 2 ** this.resumeAttempt, 30_000);
+    this.resumeAttempt += 1;
+    this.logger.warn("conversation.projection.auto_resume_scheduled", {
+      generation,
+      attempt: this.resumeAttempt,
+      delayMs,
+      lastAppliedSequence: this.store.getSnapshot().lastAppliedSequence,
+    });
+    this.resumeTimer = setTimeout(() => {
+      this.resumeTimer = undefined;
+      if (this.isConnectionSuperseded(generation, signal)) return;
+      void this.resume().catch((error: unknown) => {
+        this.logger.warn("conversation.projection.auto_resume_failed", {
+          errorName: getErrorName(error),
+        });
+      });
+    }, delayMs);
   }
 
   private transitionFailure(error: unknown): void {
@@ -295,6 +339,10 @@ export class ConversationProjectionController {
       return;
     }
     this.transition(CONVERSATION_PROJECTION_CONTROLLER_STATE.stopping);
+    if (this.resumeTimer !== undefined) {
+      clearTimeout(this.resumeTimer);
+      this.resumeTimer = undefined;
+    }
     const generation = ++this.generation;
     this.abortController?.abort();
     const subscription = this.subscription;

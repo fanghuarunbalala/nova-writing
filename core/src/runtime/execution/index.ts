@@ -1,5 +1,6 @@
 export * from "./ConversationRuntime.js";
 export * from "./ConversationRuntimeErrors.js";
+export * from "./ConversationRuntimeStatus.js";
 export * from "./ConversationRuntimeState.js";
 export * from "./ExecutionCancellationReason.js";
 export * from "./agent/index.js";

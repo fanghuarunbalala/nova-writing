@@ -1154,114 +1154,80 @@ the active Draft slot, commits to canonical state, and advances the global
 explicit `ManuscriptAnchor`, `ManuscriptRange`, and Manuscript revision
 contracts.
 
-## 16. Task N10: Manuscript, Publication, and Realization
+## 16. Task N10: Paragraph, Publication, and Realization
 
-The Anchor, Range, and revision contracts were explicitly confirmed on August
-3, 2026. Task N10 may proceed.
+The tool-surface decision of August 5, 2026 replaced the Manuscript,
+Anchor/Range, Tombstone, and Redirect model with direct Paragraph ownership by
+StoryUnits and Chapter-level Paragraph selections. The earlier Anchor/Range
+contracts are superseded and removed.
 
 Accepted V1 contracts:
 
-- `ManuscriptAnchor` is a stable Block-boundary reference containing
-  `blockId` and `boundary: "before" | "after"`; character offsets are excluded
-- `ManuscriptRange` is a half-open `[start, end)` interval whose anchors belong
-  to the same Manuscript and form a valid non-inverted order
-- V1 has no independent `ManuscriptRevision`; Manuscript, Outline, Anchor,
-  Range, and conformance state use the global `NovelRevision`
-- split, merge, and delete repair anchors through stable Block IDs, Tombstones,
-  and Redirect records rather than silently changing their meaning
+- `Paragraph` is `{ id, storyUnitId, orderKey, text }`; `orderKey` is unique
+  among Paragraphs of the same StoryUnit.
+- A Chapter owns an ordered `paragraphIds` selection, so a Chapter may break
+  mid-StoryUnit (cliffhanger) and a StoryUnit may span Chapters.
+- V1 has no Manuscript root, no ranges, no character offsets, and no
+  independent Manuscript revision; conformance uses the global `NovelRevision`.
+- split/merge/move/delete are ordinary Paragraph create/replace/delete
+  combinations; deleting a Paragraph atomically removes it from every Chapter
+  selection. No Tombstones or Redirects exist.
 
 ### N10-A Publication
 
-Implement Volume and Chapter as publication structures separate from StoryOutline.
+Implement Volume and Chapter as publication structures separate from
+StoryOutline, with Chapter-level Paragraph selection.
 
-**Status:** Publication identity and immutable model contracts are complete.
-One Novel-owned PublicationStructure contains globally ordered Volumes and
-Volume-owned ordered Chapters. IDs and sibling OrderKeys are unique, ownership
-is validated, a Volume may reference one primary StoryUnit for intent, and
-planned StoryUnit coverage plus Manuscript Block ownership remain deferred to
-their owning steps.
+**Status:** complete. One Novel-owned PublicationStructure contains ordered
+Volumes and Volume-owned ordered Chapters. A Chapter carries ordered
+`paragraphIds` with uniqueness per Chapter, a single Chapter owner per
+Paragraph, and a same-StoryUnit order invariant. Volumes carry no content
+references.
 
-### N10-B Manuscript Blocks
+### N10-B Paragraphs
 
-Implement stable Paragraph Blocks and ordering without sentence-level domain objects.
+Implement stable Paragraphs owned by StoryUnits without sentence-level domain
+objects.
 
-**Status:** Manuscript identity and immutable Paragraph Block model contracts are
-complete. One Novel-owned Manuscript binds one PublicationStructure; each Block
-belongs to that Manuscript and references an existing Publication Chapter.
-Block IDs are unique across the Manuscript, sibling OrderKeys are unique within
-each Chapter, and deterministic traversal follows Volume, Chapter, then Block
-order. Empty Paragraph text remains valid for incremental drafting. Sentence
-entities, structural edits, Tombstones, Redirects, and anchors remain deferred
-to their owning N10 steps.
+**Status:** complete. `Paragraph` binds one StoryUnit with a StoryUnit-local
+OrderKey. Realization is derived from Paragraph ownership, so no Chapter
+membership is required to write content. Empty Paragraph text remains valid
+for incremental drafting.
 
-### N10-C Anchors and Ranges
+### N10-C Paragraph Operations
 
-Resolve and implement ManuscriptAnchor and ManuscriptRange.
+Implement deterministic Paragraph create/replace/delete Operations.
 
-**Status:** stable Block-boundary Anchor and half-open Range contracts are
-complete. Strict immutable capture permits only `blockId` plus
-`boundary: "before" | "after"`; Range contains exactly `start` and `end`.
-`ManuscriptAnchorValidator` resolves both anchors against one current
-ManuscriptCatalog, orders boundaries by canonical Publication and Block order,
-accepts equal boundaries as an empty Range, and rejects missing or inverted
-references. Character offsets, Tombstone/Redirect repair, and structural edit
-semantics remain deferred to N10-D.
+**Status:** complete. `paragraph.create`,
+`paragraph.text.replace`, `paragraph.order.replace`,
+`paragraph.story-unit.replace`, and `paragraph.delete` are synchronous,
+serializable, and guarded by existence plus field-digest preconditions.
+`paragraph.delete` also removes the Paragraph from every Chapter selection in
+the same transaction.
 
-### N10-D Structural Repair
+### N10-D Chapter Selection
 
-Implement Block move, split, merge, Tombstone, Redirect, and anchor repair Operations.
+Implement Chapter `paragraphIds` selection invariants and publication SQLite
+persistence.
 
-The V1 structural-repair contract was explicitly confirmed on August 3, 2026:
-
-- Move preserves Block ID and text, changes only Chapter and OrderKey, and
-  revalidates affected Ranges without creating a Redirect.
-- Split keeps the source Block ID on the left, creates a caller-supplied right
-  Block ID, carries final left/right text plus the expected source-text digest,
-  and redirects the pre-split `after(source)` anchor to `after(right)`.
-- Merge is limited to adjacent Blocks in one Chapter, retains the left Block
-  ID, tombstones the right Block, carries final merged text plus both expected
-  text digests, and records review-required redirects from the removed Block's
-  boundaries to the retained Block's matching boundaries.
-- Delete tombstones the Block without guessing a replacement anchor.
-- `manuscript-anchor.repair` explicitly redirects a tombstoned boundary to a
-  surviving Anchor and always requires review.
-- Structural Operations remain synchronous, deterministic, serializable, and
-  guarded by digest and existence preconditions. V1 adds neither character
-  offsets nor a separate Manuscript revision.
-
-**Status:** the contract, D-A repair model, and D-B structural Operations are
-complete. Strict immutable
-Tombstones distinguish delete from merge and retain former ownership and order.
-Redirects distinguish split, merge, and manual repair and encode automatic or
-review-required semantics. `ManuscriptRepairCatalog` rejects active/tombstone
-identity overlap, invalid reason mappings, duplicate sources, dangling targets,
-and cycles; resolution follows durable chains to one active Anchor and
-propagates review requirements. A synchronous transaction-local Manuscript
-Repository Port now supports version-1 move, split, merge, delete, and explicit
-Anchor Repair Operations. Their envelopes contain only stable IDs, final text,
-OrderKeys, Anchors, and precondition digests; handlers validate placement and
-adjacency before deterministic mutation. N11-B-I1 adds shared canonical/Draft
-SQLite persistence for Publication, Manuscript, Paragraph Blocks, Tombstones,
-and Redirects; registers Manuscript handlers in the default Operation Registry;
-and validates snapshot-isolated structural replay. D-C completes structural integration with
-`ManuscriptRangeRepairValidator`, which resolves both boundaries through the
-durable repair chain and returns `valid`, `review-required`, `unresolved`, or
-`inverted` rather than silently reinterpreting the Range.
+**Status:** complete. Chapter create/replace validate referenced Paragraphs,
+reject duplicate selections and cross-Chapter ownership, and enforce
+same-StoryUnit Paragraph order within one Chapter. A junction table persists
+the ordered selection; Chapter record digests include it.
 
 ### N10-E Realization and Conformance
 
-Implement StoryUnitRealization, current revision binding, conformance findings, and completion admission.
+Implement derived Realization, structural conformance evaluation, and
+completion admission.
 
-**Status:** complete. Strict immutable StoryUnitRealization records bind one
-StoryUnit, zero or more unique ManuscriptRanges, one global source
-NovelRevision, and a Conformance Result. Pending, conforming, non-conforming,
-and stale states enforce finding-severity invariants without deciding whether a
-human, deterministic checker, or model-assisted adapter produced the findings.
-`StoryUnitCompletionAdmissionValidator` admits only an active leaf with at
-least one structurally resolvable Range, a current realization revision, and a
-current conforming validation. Review-required redirects may be admitted only
-because that current conformance result represents the required semantic
-review; unresolved or inverted Ranges are always rejected. Task N10 is complete.
+**Status:** complete. `StoryUnitConformanceEvaluator` is a pure function of the
+current leaf plan, the StoryUnit's Paragraphs, and the current revision:
+empty Paragraphs => `pending`; Paragraphs without an accepted plan =>
+`non-conforming`; accepted plan plus non-empty Paragraphs => `conforming`.
+Semantic finding types remain for a future host extension.
+`StoryUnitCompletionAdmissionValidator` admits only an active leaf with
+Paragraphs, an accepted leaf plan, and a current conforming result. Task N10 is
+complete.
 
 ## 17. Task N11: Projection, Recovery, and End-to-End Validation
 

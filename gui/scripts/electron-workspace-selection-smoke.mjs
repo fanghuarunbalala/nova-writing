@@ -2,15 +2,20 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { register } from "node:module";
 import { noopLogger } from "../../core/dist/index.js";
 import { NodeWorkspaceStoreLocator } from "../../core/dist/node/index.js";
 import {
   DesktopWorkspaceIpcController,
+  DesktopWorkspaceRecentStore,
   DesktopWorkspaceService,
 } from "../dist/main/index.js";
 import { createElectronPreloadBridge } from "../dist/preload/index.js";
-import { createElectronWorkspaceController } from "../dist/renderer/index.js";
 import { ELECTRON_WORKSPACE_IPC_CHANNELS } from "../dist/shared/index.js";
+
+// CSS 由 Vite 消费；Node 侧先注册 stub loader 再动态加载 renderer dist。
+register(new URL("./node-css-loader.mjs", import.meta.url));
+const { createElectronWorkspaceController } = await import("../dist/renderer/index.js");
 
 async function run() {
   const root = await mkdtemp(join(tmpdir(), "novel-electron-workspace-"));
@@ -18,9 +23,13 @@ async function run() {
   await mkdir(workspaceRoot, { recursive: true });
   const picks = [workspaceRoot, workspaceRoot];
   const applications = [];
+  const recentStore = new DesktopWorkspaceRecentStore({
+    filePath: join(root, "workspace-recent.json"),
+  });
   const service = new DesktopWorkspaceService({
     picker: { pickDirectory: async () => picks.shift() },
     locator: new NodeWorkspaceStoreLocator({ storageRoot: join(root, "storage") }),
+    recentStore,
     applicationFactory: {
       open: async (location) => {
         const application = {
@@ -68,6 +77,12 @@ async function run() {
 
   await ownerController.refresh();
   assert.deepEqual(ownerController.getSnapshot().recent, [opened]);
+  const resumed = new DesktopWorkspaceService({
+    picker: { pickDirectory: async () => undefined },
+    locator: new NodeWorkspaceStoreLocator({ storageRoot: join(root, "storage") }),
+    recentStore,
+  });
+  assert.deepEqual(await resumed.listRecent(0), [opened]);
   assert.equal(await ownerController.closeCurrent(), true);
   assert.equal(ownerController.getSnapshot().current, undefined);
   assert.equal(service.resolveTransport(1), undefined);

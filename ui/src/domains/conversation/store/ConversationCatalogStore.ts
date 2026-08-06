@@ -36,6 +36,8 @@ export interface ConversationCatalogItem {
   readonly title: string;
   readonly agentType: string;
   readonly agentLabel: string;
+  readonly lastActivityAt: number;
+  readonly pinned?: boolean;
   readonly status?: ConversationCatalogStatus;
 }
 
@@ -190,6 +192,76 @@ export class ConversationCatalogStore extends ExternalStore<ConversationCatalogS
     if (workspaceId === undefined) return Promise.resolve();
     return this.loadWorkspace(workspaceId);
   }
+
+  /** 重命名对话。Renames a conversation. */
+  renameConversation(id: string, title: string): Promise<void> {
+    const capturedId = requireNonBlank(id, "Conversation id");
+    const capturedTitle = requireNonBlank(title, "Conversation title");
+    return this.serializer.run(async () => {
+      this.logger.info("conversation_catalog.rename_started");
+      try {
+        await this.api.conversations.rename(capturedId, capturedTitle);
+        this.setSnapshot({
+          ...this.snapshot,
+          conversations: Object.freeze(
+            this.snapshot.conversations.map((item) =>
+              item.id === capturedId ? { ...item, title: capturedTitle } : item,
+            ),
+          ),
+        });
+      } catch {
+        this.logger.warn("conversation_catalog.rename_failed");
+        throw new Error("rename-failed");
+      }
+    });
+  }
+
+  /** 置顶/取消置顶。Pins or unpins a conversation. */
+  pinConversation(id: string, pinned: boolean): Promise<void> {
+    const capturedId = requireNonBlank(id, "Conversation id");
+    return this.serializer.run(async () => {
+      this.logger.info("conversation_catalog.pin_started", { pinned });
+      try {
+        await this.api.conversations.pin(capturedId, pinned);
+        this.setSnapshot({
+          ...this.snapshot,
+          conversations: Object.freeze(
+            this.snapshot.conversations.map((item) =>
+              item.id === capturedId ? { ...item, pinned } : item,
+            ),
+          ),
+        });
+      } catch {
+        this.logger.warn("conversation_catalog.pin_failed");
+        throw new Error("pin-failed");
+      }
+    });
+  }
+
+  /** 删除对话（软删除）。Deletes a conversation (soft). */
+  deleteConversation(id: string): Promise<void> {
+    const capturedId = requireNonBlank(id, "Conversation id");
+    return this.serializer.run(async () => {
+      this.logger.info("conversation_catalog.delete_started");
+      try {
+        await this.api.conversations.delete(capturedId);
+        const conversations = Object.freeze(
+          this.snapshot.conversations.filter((item) => item.id !== capturedId),
+        );
+        this.setSnapshot({
+          ...this.snapshot,
+          conversations,
+          activeConversationId:
+            this.snapshot.activeConversationId === capturedId
+              ? conversations[0]?.id
+              : this.snapshot.activeConversationId,
+        });
+      } catch {
+        this.logger.warn("conversation_catalog.delete_failed");
+        throw new Error("delete-failed");
+      }
+    });
+  }
 }
 
 function captureCatalogItems(
@@ -198,9 +270,14 @@ function captureCatalogItems(
 ): readonly ConversationCatalogItem[] {
   return Object.freeze(
     [...snapshots]
-      .sort((left, right) =>
-        right.metadata.updatedAt.localeCompare(left.metadata.updatedAt),
-      )
+      .sort((left, right) => {
+        const leftPinned = left.metadata.pinned === true ? 0 : 1;
+        const rightPinned = right.metadata.pinned === true ? 0 : 1;
+        return (
+          leftPinned - rightPinned ||
+          right.metadata.updatedAt.localeCompare(left.metadata.updatedAt)
+        );
+      })
       .map((snapshot) => captureCatalogItem(workspaceId, snapshot)),
   );
 }
@@ -216,11 +293,14 @@ function captureCatalogItem(
   const agentType = requireNonBlank(snapshot.activeAgentBinding.agentType, "Agent type");
   // 后端暂未返回 status；字段先铺路，API 提供后直接透传。
   const status = (snapshot as { status?: ConversationCatalogStatus }).status;
+  const title = snapshot.metadata.title ?? `对话 ${id.slice(-6)}`;
   return Object.freeze({
     id,
-    title: `对话 ${id.slice(-6)}`,
+    title,
     agentType,
     agentLabel: agentType === "novel" ? "Novel Agent" : agentType,
+    lastActivityAt: Date.parse(snapshot.metadata.updatedAt) || 0,
+    ...(snapshot.metadata.pinned === true ? { pinned: true } : {}),
     ...(status === undefined ? {} : { status }),
   });
 }

@@ -219,10 +219,12 @@ decision actions`（决策 ①先二元、②删除 novel 投影）。core 零�
 
 范围：H5、H6。
 
-- 后端：conversation API 增加 rename/delete/pin 操作 + catalog 持久化 +
-  lastActivityAt 时间戳投影。
-- 前端：ConversationListSection 接线 onPin/onRename/onDelete；时间显示。
-- 若 D2 决定本期不做，标记 deferred，菜单隐藏。
+- 后端（已实现 2026-08-06，D2 确认本期做）：conversation API 增加
+  `rename / pin / delete` 操作 + catalog 持久化（title/pinned 列，migration v6）；
+  `lastActivityAt` 由 metadata.updatedAt 提供。
+- 前端（已实现）：ConversationCatalogStore 增加 rename/pin/delete 动作；
+  ConversationListSection 接线菜单（重命名用 prompt、置顶、删除）与时间显示；
+  置顶排序优先。
 
 ### Step 6：响应式与侧栏打磨（纯前端）
 

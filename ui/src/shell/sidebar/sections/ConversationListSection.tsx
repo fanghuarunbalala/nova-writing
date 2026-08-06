@@ -24,11 +24,26 @@ export function ConversationListSection({ store, onSelect }: ConversationListSec
         id: item.id,
         title: item.title,
         agentLabel: item.agentLabel,
-        lastActivityAt: 0, // catalog 快照暂无时间戳；Phase 2 契约扩展后补齐
+        lastActivityAt: item.lastActivityAt,
+        ...(item.pinned === undefined ? {} : { pinned: item.pinned }),
         ...(item.status === undefined ? {} : { status: item.status }),
       }))}
       activeId={snapshot.activeConversationId}
       onSelect={onSelect}
+      onRename={(id) => {
+        const current =
+          snapshot.conversations.find((item) => item.id === id)?.title ?? "";
+        const next = window.prompt("重命名对话", current);
+        if (next !== null && next.trim() !== "") {
+          void store.renameConversation(id, next.trim());
+        }
+      }}
+      onPin={(id, pinned) => {
+        void store.pinConversation(id, pinned);
+      }}
+      onDelete={(id) => {
+        void store.deleteConversation(id);
+      }}
     />
   );
 }

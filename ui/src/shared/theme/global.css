@@ -41,6 +41,41 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
+/* 细节打磨（原型）：细滚动条、accent 选区、focus-visible 描边。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--color-fg) 16%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--color-fg) 15%, transparent);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--color-fg) 26%, transparent);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-accent) 16%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-accent) 42%, transparent);
+  outline-offset: 2px;
+}
+
 .kicker {
   font-family: var(--font-mono);
   font-size: var(--fs-mono);

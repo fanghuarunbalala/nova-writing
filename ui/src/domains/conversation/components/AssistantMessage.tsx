@@ -17,7 +17,21 @@ import type { MessageReference } from "./MessageReference.js";
 import { ThinkBlock } from "./ThinkBlock.js";
 import styles from "./AssistantMessage.module.css";
 
-export type AssistantApprovalState = "generating" | "completed" | "submitted" | "failed";
+export type AssistantApprovalState =
+  | "generating"
+  | "completed"
+  | "submitted"
+  | "failed"
+  | "cancelled";
+
+/** 消息头状态中文标签（原型 .approval-state）。 */
+const APPROVAL_STATE_LABEL: Record<AssistantApprovalState, string> = {
+  generating: "生成中",
+  completed: "已完成",
+  submitted: "已提交",
+  failed: "生成失败",
+  cancelled: "已停止",
+};
 
 export interface AssistantMessageProps {
   readonly sequence: number;
@@ -66,7 +80,7 @@ export function AssistantMessage({
           {revision !== undefined ? <span className={styles.revision}>{revision}</span> : null}
           {approvalState !== undefined ? (
             <span className={[styles.state, styles[approvalState]].filter(Boolean).join(" ")}>
-              {approvalState}
+              {APPROVAL_STATE_LABEL[approvalState]}
             </span>
           ) : null}
         </div>

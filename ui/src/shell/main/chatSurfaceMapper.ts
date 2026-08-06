@@ -44,8 +44,10 @@ export function mapProjectionTimeline(
           text: textParts.join(""),
           cards: Object.freeze([]),
           streaming: item.status === "streaming",
+          ...(item.status === "streaming" ? { approvalState: "generating" as const } : {}),
           ...(item.status === "completed" ? { approvalState: "completed" as const } : {}),
           ...(item.status === "failed" ? { approvalState: "failed" as const } : {}),
+          ...(item.status === "cancelled" ? { approvalState: "cancelled" as const } : {}),
         });
         break;
       }

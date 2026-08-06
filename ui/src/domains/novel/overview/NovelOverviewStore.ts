@@ -39,6 +39,8 @@ export interface NovelOverviewSnapshot {
   readonly workspaceId: string | undefined;
   readonly novelId: string | undefined;
   readonly label: string | undefined;
+  /** 当前正式稿修订号（原型 rev-meta，如 r042）。Current canonical revision. */
+  readonly sourceRevision: string | undefined;
   readonly counts: NovelOverviewCounts;
   readonly error: NovelOverviewError | undefined;
 }
@@ -48,6 +50,7 @@ const EMPTY_SNAPSHOT: NovelOverviewSnapshot = Object.freeze({
   workspaceId: undefined,
   novelId: undefined,
   label: undefined,
+  sourceRevision: undefined,
   counts: Object.freeze({
     storyUnitCount: 0,
     characterCount: 0,
@@ -88,6 +91,7 @@ export class NovelOverviewStore extends ExternalStore<NovelOverviewSnapshot> {
         workspaceId: capturedId,
         novelId: overview.novelId,
         label: overview.novelId,
+        sourceRevision: overview.sourceRevision,
         counts: {
           storyUnitCount: overview.counts.storyUnitCount,
           characterCount: overview.counts.characterCount,

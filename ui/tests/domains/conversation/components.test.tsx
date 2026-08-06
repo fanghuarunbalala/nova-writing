@@ -240,7 +240,7 @@ describe("ChatEmptyState", () => {
     const user = userEvent.setup();
     const onCreate = vi.fn();
     render(<ChatEmptyState onCreate={onCreate} />);
-    expect(screen.getByText("还没有对话")).toBeInTheDocument();
+    expect(screen.getByText("新对话")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "新建对话" }));
     expect(onCreate).toHaveBeenCalledTimes(1);
   });

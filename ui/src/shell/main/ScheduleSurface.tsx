@@ -21,15 +21,21 @@ export interface ScheduleSurfaceProps {
   readonly schedule: ScheduleStore;
   readonly scheduleTodo: ScheduleTodoStore;
   readonly onTodoAction?: (id: string, action: string) => void;
+  readonly onBack?: () => void;
 }
 
-export function ScheduleSurface({ schedule, scheduleTodo, onTodoAction }: ScheduleSurfaceProps) {
+export function ScheduleSurface({
+  schedule,
+  scheduleTodo,
+  onTodoAction,
+  onBack,
+}: ScheduleSurfaceProps) {
   const overview = useScheduleOverview(schedule);
   const todos = useScheduleTodos(schedule, scheduleTodo);
   const progress = useScheduleProgress(schedule);
   return (
     <div className={styles.surface}>
-      <MainSubHead title="创作计划" sub="待办 + 大纲进度 · 规划 / 实现双状态轴" />
+      <MainSubHead title="创作计划" sub="待办 + 大纲进度 · 规划 / 实现双状态轴" onBack={onBack} />
       <div className={styles.paneBody}>
         <div className={styles.paneInner}>
           <ScheduleStatRow stats={overview.stats} />

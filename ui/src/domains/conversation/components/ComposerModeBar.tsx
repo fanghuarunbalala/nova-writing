@@ -18,9 +18,9 @@ export interface ComposerModeMeta {
 }
 
 export const COMPOSER_MODES: readonly ComposerModeMeta[] = Object.freeze([
-  { value: "plan", label: "草案", description: "只规划 · 不产生变更", tone: "plan" },
+  { value: "plan", label: "计划", description: "只规划 · 不产生变更", tone: "plan" },
   { value: "bypass", label: "直接执行", description: "跳过审批 · 立即落地", tone: "bypass" },
-  { value: "review", label: "审批", description: "提议后审批提交", tone: "review" },
+  { value: "review", label: "需审核", description: "提议后审批提交", tone: "review" },
 ]);
 
 export interface ComposerModeBarProps {

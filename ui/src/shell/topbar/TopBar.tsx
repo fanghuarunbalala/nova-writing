@@ -19,10 +19,13 @@ export interface TopBarProps {
   readonly workspaceName?: string;
   readonly workspaceSub?: string;
   readonly revision?: string;
+  readonly approvalBadge?: number;
   readonly sidebarMode: "expanded" | "collapsed";
   readonly onToggleSidebar: () => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenSettings: () => void;
+  readonly onOpenSchedule?: () => void;
+  readonly onOpenApproval?: () => void;
   /** 第一方扩展点；titleBar 渲染到 TopBarMenuSlot（spec 4.2） */
   readonly extensions?: NovelUiExtensions;
 }
@@ -31,10 +34,13 @@ export function TopBar({
   workspaceName,
   workspaceSub,
   revision,
+  approvalBadge,
   sidebarMode,
   onToggleSidebar,
   onOpenWorkspace,
   onOpenSettings,
+  onOpenSchedule,
+  onOpenApproval,
   extensions,
 }: TopBarProps) {
   const TitleBar = extensions?.titleBar;
@@ -56,6 +62,12 @@ export function TopBar({
         </TopBarMenuSlot>
       ) : null}
       <span className={styles.spacer} />
+      {onOpenSchedule !== undefined ? (
+        <TopBarAction label="计划" onClick={onOpenSchedule} />
+      ) : null}
+      {onOpenApproval !== undefined ? (
+        <TopBarAction label="审批" badge={approvalBadge} onClick={onOpenApproval} />
+      ) : null}
       <TopBarRevisionMeta revision={revision} />
       <span className={styles.spacer} />
       <TopBarAction label="Workspace" icon={<Icon icon={FolderOpen} size="sm" />} onClick={onOpenWorkspace} />

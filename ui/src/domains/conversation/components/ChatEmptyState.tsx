@@ -13,9 +13,8 @@ export interface ChatEmptyStateProps {
 export function ChatEmptyState({ onCreate }: ChatEmptyStateProps) {
   return (
     <div className={styles.empty}>
-      <span className={styles.kicker}>开始创作</span>
-      <h3>还没有对话</h3>
-      <p>新建一个对话，和 Novel Agent 一起组织大纲、人物与正文。</p>
+      <h3>新对话</h3>
+      <p>描述你想推进的创作任务：起草场景、修订正文、推进大纲节点。Novel Agent 会直接生成草稿与提议，供你审批。</p>
       {onCreate !== undefined ? (
         <Button variant="primary" onClick={onCreate}>
           新建对话

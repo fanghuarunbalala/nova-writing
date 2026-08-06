@@ -107,6 +107,7 @@ export function ApplicationShell({
   useEffect(() => () => workspaceAdapter.dispose(), [workspaceAdapter]);
 
   const workspace = useExternalStore(workspaceAdapter);
+  const overview = useExternalStore(domainStores.novelOverview);
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
   const [locateReference, setLocateReference] = useState<
@@ -251,12 +252,17 @@ export function ApplicationShell({
     <div className={styles.shell}>
       <TopBar
         workspaceName={workspace.current?.label}
+        revision={overview.sourceRevision}
         sidebarMode={sidebarMode}
         onToggleSidebar={() =>
           setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded"))
         }
         onOpenWorkspace={() => onOpenWorkspace?.()}
         onOpenSettings={() => onOpenSettings?.()}
+        onOpenSchedule={() => mainViewRouter.transition("schedule")}
+        onOpenApproval={() =>
+          inspectorRouter.transition({ kind: "approval", changeSetId: "" })
+        }
         extensions={extensions}
       />
       <div className={styles.body} data-sidebar-mode={sidebarMode}>

@@ -3,7 +3,7 @@
  *
  * 按 sequence 排序渲染时间线；新消息到达自动滚到底（用户上滚除外）。
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ConversationTimelineItem as TimelineItem } from "../projection/ConversationTimelineItem.js";
 import type { MessageReference } from "./MessageReference.js";
@@ -26,6 +26,7 @@ export interface ConversationTimelineProps {
 }
 
 export function ConversationTimeline({
+  conversationId,
   items,
   streamingSequence,
   onMessageReferenceClick,
@@ -68,54 +69,27 @@ export function ConversationTimeline({
         setViewportHeight(node.clientHeight);
       }}
     >
-      <div className={styles.inner}>
+      <div className={styles.inner} key={conversationId}>
         {virtualized ? (
           <div
             style={{ height: timelineWindow.startIndex * ROW_HEIGHT }}
             aria-hidden="true"
           />
         ) : null}
-        {visibleItems.map((item) => {
-          switch (item.kind) {
-            case "user":
-              return (
-                <UserMessage
-                  key={item.sequence}
-                  sequence={item.sequence}
-                  text={item.text}
-                  timestamp={item.timestamp}
-                  onReferenceClick={onMessageReferenceClick}
-                  resolveReference={resolveReference}
-                />
-              );
-            case "assistant":
-              return (
-                <AssistantMessage
-                  key={item.sequence}
-                  sequence={item.sequence}
-                  agentLabel={item.agentLabel}
-                  timestamp={item.timestamp}
-                  approvalState={item.approvalState}
-                  revision={item.revision}
-                  thinkLines={item.thinkLines}
-                  text={item.text}
-                  cards={item.cards}
-                  streaming={item.streaming}
-                  onResolveReference={resolveReference}
-                  onCardAction={(cardId, action, payload) => {
-                    if (action === "view-diff" && typeof payload === "string") {
-                      onProposalAction?.(payload, "view-diff");
-                    }
-                  }}
-                />
-              );
-            case "system":
-              return (
-                <div key={item.sequence} className={styles.system}>
-                  {item.text}
-                </div>
-              );
-          }
+        {visibleItems.map((item, index) => {
+          return (
+            <div
+              key={item.sequence}
+              className={styles.enter}
+              style={{ animationDelay: `${Math.min(index * 0.03, 0.42)}s` }}
+            >
+              {renderItem(item, {
+                onMessageReferenceClick,
+                resolveReference,
+                onProposalAction,
+              })}
+            </div>
+          );
         })}
         {virtualized ? (
           <div
@@ -126,4 +100,51 @@ export function ConversationTimeline({
       </div>
     </div>
   );
+}
+
+interface RenderItemDeps {
+  readonly onMessageReferenceClick?: (reference: MessageReference) => void;
+  readonly resolveReference?: ReferenceResolver;
+  readonly onProposalAction?: (
+    changeSetId: string,
+    action: "approve" | "reject" | "view-diff",
+  ) => void;
+}
+
+function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
+  const { onMessageReferenceClick, resolveReference, onProposalAction } = deps;
+  switch (item.kind) {
+    case "user":
+      return (
+        <UserMessage
+          sequence={item.sequence}
+          text={item.text}
+          timestamp={item.timestamp}
+          onReferenceClick={onMessageReferenceClick}
+          resolveReference={resolveReference}
+        />
+      );
+    case "assistant":
+      return (
+        <AssistantMessage
+          sequence={item.sequence}
+          agentLabel={item.agentLabel}
+          timestamp={item.timestamp}
+          approvalState={item.approvalState}
+          revision={item.revision}
+          thinkLines={item.thinkLines}
+          text={item.text}
+          cards={item.cards}
+          streaming={item.streaming}
+          onResolveReference={resolveReference}
+          onCardAction={(cardId, action, payload) => {
+            if (action === "view-diff" && typeof payload === "string") {
+              onProposalAction?.(payload, "view-diff");
+            }
+          }}
+        />
+      );
+    case "system":
+      return <div className={styles.system}>{item.text}</div>;
+  }
 }

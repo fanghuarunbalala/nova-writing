@@ -16,7 +16,15 @@ import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/st
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import type { ContentTab } from "./contentTab.js";
+import { MainSubHead } from "./MainSubHead.js";
 import styles from "./ContentSurface.module.css";
+
+const PANE_META: Record<ContentTab, { readonly title: string; readonly kicker: string }> = {
+  outline: { title: "大纲", kicker: "故事单元 · 规划轴与实现轴" },
+  manuscript: { title: "正文", kicker: "章节与正文块 · 草稿 / 正式稿" },
+  characters: { title: "人物", kicker: "角色档案" },
+  locations: { title: "地点", kicker: "地点档案" },
+};
 
 export interface ContentSurfaceProps {
   readonly workspaceId: string | undefined;
@@ -29,6 +37,7 @@ export interface ContentSurfaceProps {
   readonly onSelectCharacter?: (characterId: string) => void;
   readonly onSelectLocation?: (locationId: string) => void;
   readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
+  readonly onBack?: () => void;
 }
 
 export function ContentSurface({
@@ -42,6 +51,7 @@ export function ContentSurface({
   onSelectCharacter,
   onSelectLocation,
   locateReference,
+  onBack,
 }: ContentSurfaceProps) {
   const outline = useExternalStore(outlineTree);
   const manuscriptSnapshot = useExternalStore(manuscript);
@@ -98,6 +108,7 @@ export function ContentSurface({
   };
   return (
     <div className={styles.surface}>
+      <MainSubHead title={PANE_META[value].title} sub={PANE_META[value].kicker} onBack={onBack} />
       {renderTab(value)}
     </div>
   );

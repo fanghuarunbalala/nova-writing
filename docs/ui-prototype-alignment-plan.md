@@ -93,8 +93,11 @@ Novel Markup v1 渲染引擎）。目标：把当前 `ui/` + `gui/` 桌面端逐
   （从域 store 解析档案名与 known）、ChatSurface 引用点击路由（character/location/
   outline → inspector；chapter/paragraph → 正文 pane 定位闪烁；missing → toast）、
   assistantMarkdown 标准 MD 视觉（表格圆角容器/引用块楷体/code 边框/标题/pretty）。
-- 后续小项：ChatEmptyState 文案、ComposerModeBar 文案、AssistantMessage 中文状态、
-  ContentSurface sub-head + back、TopBar wordmark/rev-meta、global.css 滚动条/选区/焦点。
+- 后续小项（已实现 2026-08-06）：ChatEmptyState 文案（新对话 + 创作引导）、
+  ComposerModeBar 文案（计划/直接执行/需审核）、AssistantMessage 中文状态
+  （生成中/已完成/已提交/已停止/生成失败，含 cancelled 映射）、消息入场错峰动效、
+  ContentSurface/ScheduleSurface sub-head + back、TopBar 计划/审批按钮 + rev-meta
+  （接 NovelOverviewStore.sourceRevision）、global.css 滚动条/选区/焦点。
 - 验证：ui 单测（渲染器逐标签用例）+ `pnpm --dir ui check` + electron 目检。
 
 ### Step 2：结构化卡片管线接线（前端 + core 事件确认）

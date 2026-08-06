@@ -71,12 +71,14 @@ export function MainArea(props: MainAreaProps) {
           onSelectCharacter={props.onSelectCharacter}
           onSelectLocation={props.onSelectLocation}
           locateReference={props.locateReference}
+          onBack={() => props.mainViewRouter.transition("chat")}
         />
       ) : (
         <ScheduleSurface
           schedule={props.schedule}
           scheduleTodo={props.scheduleTodo}
           onTodoAction={props.onTodoAction}
+          onBack={() => props.mainViewRouter.transition("chat")}
         />
       )}
     </main>

@@ -17,7 +17,7 @@
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--color-accent);
-  color: var(--color-accent-ink);
+  color: #fff;
   font-size: var(--fs-body);
   font-weight: var(--fw-heavy);
   cursor: pointer;

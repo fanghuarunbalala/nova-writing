@@ -13,7 +13,10 @@ import {
   CcbReferenceSystemPromptSection,
   CcbReferenceUsingYourToolsPromptSection,
 } from "./ccb/CcbReferenceMainPromptSections.js";
-import { NovelIdentityPromptSection } from "./novel/NovelBasePromptSections.js";
+import {
+  NovelIdentityPromptSection,
+  NovelSystemPromptSection,
+} from "./novel/NovelBasePromptSections.js";
 import { NovelWorkflowPromptSection } from "./novel/NovelCraftPromptSections.js";
 
 export class CoreRuntimeProtocolPromptSection extends PromptSection {
@@ -183,6 +186,7 @@ export function createDefaultPromptSectionRegistry(): PromptSectionRegistry {
     .register(new CcbReferenceUsingYourToolsPromptSection())
     .register(new CcbReferenceCommunicationStylePromptSection())
     .register(new NovelIdentityPromptSection())
+    .register(new NovelSystemPromptSection())
     .register(new NovelWorkflowPromptSection())
     .freeze();
 }

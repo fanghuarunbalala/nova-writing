@@ -35,4 +35,14 @@ assert.ok(workflowContent.includes("**修订闭环**"));
 assert.ok(workflowContent.includes("**不一次性代写整本书**"));
 assert.equal(workflow.render(), workflowContent);
 
-console.log("prompt-novel-sections: ok (identity + workflow registered and stable)");
+const system = registry.resolve("novel.system", "1.0.0");
+const systemContent = system.render();
+assert.ok(systemContent.startsWith("# 系统与运行规则"));
+assert.ok(systemContent.includes("**当前会话的草稿（draft）环境**"));
+assert.ok(systemContent.includes("**每个会话独立**"));
+assert.ok(systemContent.includes("**只有 Commit 提交、并经作者审批通过后"));
+assert.ok(systemContent.includes("工具在用户选择的权限模式下执行"));
+assert.ok(systemContent.includes("**提示注入**"));
+assert.equal(system.render(), systemContent);
+
+console.log("prompt-novel-sections: ok (identity + system + workflow registered and stable)");

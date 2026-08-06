@@ -1,14 +1,14 @@
 /**
  * ComposerModeBar
  *
- * 输入模式切换（对齐原型 .mode-bar + .mode-switch）：单个循环切换按钮
+ * 执行模式切换（对齐原型 .mode-bar + .mode-switch）：单个循环切换按钮
  * （模式名 + 描述 + chevron），右侧模式提示点。
- * 点击按 对话 → 计划 → 改写 → 续写 → 对话 循环。
+ * 点击按 草案 → 直接执行 → 审批 → 草案 循环（原型 MODE_ORDER）。
  */
 import type { ComposerMode } from "../store/ComposerDraftStore.js";
 import styles from "./ComposerModeBar.module.css";
 
-export type ComposerModeTone = "chat" | "plan" | "rewrite" | "continue";
+export type ComposerModeTone = "plan" | "bypass" | "review";
 
 export interface ComposerModeMeta {
   readonly value: ComposerMode;
@@ -18,10 +18,9 @@ export interface ComposerModeMeta {
 }
 
 export const COMPOSER_MODES: readonly ComposerModeMeta[] = Object.freeze([
-  { value: "chat", label: "对话", description: "直接对话推进创作", tone: "chat" },
-  { value: "plan", label: "计划", description: "先给计划再执行", tone: "plan" },
-  { value: "rewrite", label: "改写", description: "改写现有正文", tone: "rewrite" },
-  { value: "continue", label: "续写", description: "顺着当前进度续写", tone: "continue" },
+  { value: "plan", label: "草案", description: "只规划 · 不产生变更", tone: "plan" },
+  { value: "bypass", label: "直接执行", description: "跳过审批 · 立即落地", tone: "bypass" },
+  { value: "review", label: "审批", description: "提议后审批提交", tone: "review" },
 ]);
 
 export interface ComposerModeBarProps {

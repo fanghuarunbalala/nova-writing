@@ -2,9 +2,8 @@
  * ComposerModeBar 视觉（原型 .mode-bar + .mode-switch）。
  *
  * 置于 form 下方：max-width 1000px 靠左对齐（与输入框一致），border-top 分隔，
- * 左右 space-between
- * （左侧切换按钮 + 右侧模式提示点）。四种模式低饱和配色：
- * 对话=砖红 / 计划=蓝 / 改写=橙 / 续写=绿。
+ * 左右 space-between（左侧切换按钮 + 右侧模式提示点）。三模式配色与原型一致：
+ * 草案=蓝 / 直接执行=绿 / 审批=砖红，全部低饱和 + 半透明底。
  */
 .bar {
   max-width: 1000px;
@@ -78,25 +77,7 @@
   opacity: 0.85;
 }
 
-/* 模式配色：低饱和 + 半透明底 */
-.chat {
-  border-color: color-mix(in oklab, var(--color-accent) 28%, var(--color-border-strong));
-  background: color-mix(in oklab, var(--color-accent) 8%, transparent);
-}
-
-.chat .name {
-  color: var(--color-accent-ink);
-}
-
-.chat .desc {
-  color: color-mix(in oklab, var(--color-accent) 58%, var(--color-faint));
-}
-
-.chat:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--color-accent) 12%, transparent);
-  border-color: color-mix(in oklab, var(--color-accent) 42%, var(--color-border-strong));
-}
-
+/* 模式配色：草案=蓝 / 直接执行=绿 / 审批=砖红 */
 .plan {
   border-color: color-mix(in oklab, var(--color-info) 26%, var(--color-border-strong));
   background: color-mix(in oklab, var(--color-info) 7%, transparent);
@@ -115,40 +96,40 @@
   border-color: color-mix(in oklab, var(--color-info) 42%, var(--color-border-strong));
 }
 
-.rewrite {
-  border-color: color-mix(in oklab, var(--color-warn) 26%, var(--color-border-strong));
-  background: color-mix(in oklab, var(--color-warn) 7%, transparent);
-}
-
-.rewrite .name {
-  color: color-mix(in oklab, var(--color-warn) 82%, var(--color-fg));
-}
-
-.rewrite .desc {
-  color: color-mix(in oklab, var(--color-warn) 58%, var(--color-faint));
-}
-
-.rewrite:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--color-warn) 12%, transparent);
-  border-color: color-mix(in oklab, var(--color-warn) 42%, var(--color-border-strong));
-}
-
-.continue {
+.bypass {
   border-color: color-mix(in oklab, var(--color-success) 28%, var(--color-border-strong));
   background: color-mix(in oklab, var(--color-success) 7%, transparent);
 }
 
-.continue .name {
+.bypass .name {
   color: color-mix(in oklab, var(--color-success) 82%, var(--color-fg));
 }
 
-.continue .desc {
+.bypass .desc {
   color: color-mix(in oklab, var(--color-success) 58%, var(--color-faint));
 }
 
-.continue:hover:not(:disabled) {
+.bypass:hover:not(:disabled) {
   background: color-mix(in oklab, var(--color-success) 12%, transparent);
   border-color: color-mix(in oklab, var(--color-success) 42%, var(--color-border-strong));
+}
+
+.review {
+  border-color: color-mix(in oklab, var(--color-accent) 28%, var(--color-border-strong));
+  background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+}
+
+.review .name {
+  color: var(--color-accent-ink);
+}
+
+.review .desc {
+  color: color-mix(in oklab, var(--color-accent) 58%, var(--color-faint));
+}
+
+.review:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  border-color: color-mix(in oklab, var(--color-accent) 42%, var(--color-border-strong));
 }
 
 .hint {
@@ -173,18 +154,14 @@
   border-radius: 50%;
 }
 
-.dot-chat {
-  background: color-mix(in oklab, var(--color-accent) 52%, transparent);
-}
-
 .dot-plan {
   background: color-mix(in oklab, var(--color-info) 55%, transparent);
 }
 
-.dot-rewrite {
-  background: color-mix(in oklab, var(--color-warn) 55%, transparent);
+.dot-bypass {
+  background: color-mix(in oklab, var(--color-success) 52%, transparent);
 }
 
-.dot-continue {
-  background: color-mix(in oklab, var(--color-success) 52%, transparent);
+.dot-review {
+  background: color-mix(in oklab, var(--color-accent) 52%, transparent);
 }

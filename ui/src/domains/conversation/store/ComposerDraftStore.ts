@@ -6,7 +6,8 @@
  */
 import { ExternalStore } from "../../../shared/state/ExternalStore.js";
 
-export type ComposerMode = "chat" | "plan" | "rewrite" | "continue";
+/** 执行模式（对齐原型）：草案（只规划）/ 直接执行（跳过审批）/ 审批（提议后提交）。 */
+export type ComposerMode = "plan" | "bypass" | "review";
 
 export interface ComposerReference {
   readonly kind: "character" | "location" | "outline";
@@ -26,7 +27,7 @@ function defaultDraft(conversationId: string): ComposerDraft {
   return Object.freeze({
     conversationId,
     text: "",
-    mode: "chat" as const,
+    mode: "review" as const,
     references: Object.freeze([]),
     updatedAt: 0,
   });

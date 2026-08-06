@@ -16,7 +16,7 @@ describe("ComposerDraftStore", () => {
     const draft = store.getDraft("c1");
     expect(draft.conversationId).toBe("c1");
     expect(draft.text).toBe("");
-    expect(draft.mode).toBe("chat");
+    expect(draft.mode).toBe("review");
     expect(draft.references).toHaveLength(0);
   });
 
@@ -25,13 +25,13 @@ describe("ComposerDraftStore", () => {
     store.setText("c1", "你好");
     const draft = store.getDraft("c1");
     expect(draft.text).toBe("你好");
-    expect(draft.mode).toBe("chat");
+    expect(draft.mode).toBe("review");
   });
 
   it("setMode switches the composer mode", () => {
     const store = new ComposerDraftStore();
-    store.setMode("c1", "rewrite");
-    expect(store.getDraft("c1").mode).toBe("rewrite");
+    store.setMode("c1", "bypass");
+    expect(store.getDraft("c1").mode).toBe("bypass");
   });
 
   it("addReference appends and dedupes by kind+id", () => {

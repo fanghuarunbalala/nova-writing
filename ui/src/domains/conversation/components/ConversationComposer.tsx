@@ -23,7 +23,7 @@ export interface ConversationComposerProps {
 }
 
 export function ConversationComposer({ conversationId, enabled, onSend }: ConversationComposerProps) {
-  const [mode, setMode] = useState<ComposerMode>("chat");
+  const [mode, setMode] = useState<ComposerMode>("review");
   const [text, setText] = useState("");
 
   const submit = (): void => {

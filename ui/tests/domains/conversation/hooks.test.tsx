@@ -81,8 +81,8 @@ describe("useComposerDraft", () => {
           <button type="button" onClick={() => setText("草稿")}>
             写草稿
           </button>
-          <button type="button" onClick={() => setMode("rewrite")}>
-            改写
+          <button type="button" onClick={() => setMode("bypass")}>
+            直接执行
           </button>
         </>
       );
@@ -91,8 +91,8 @@ describe("useComposerDraft", () => {
     render(<Probe />);
     expect(screen.getByRole("status")).toHaveTextContent("(empty):none");
     await user.click(screen.getByRole("button", { name: "写草稿" }));
-    await user.click(screen.getByRole("button", { name: "改写" }));
-    expect(screen.getByRole("status")).toHaveTextContent("草稿:rewrite");
+    await user.click(screen.getByRole("button", { name: "直接执行" }));
+    expect(screen.getByRole("status")).toHaveTextContent("草稿:bypass");
   });
 });
 

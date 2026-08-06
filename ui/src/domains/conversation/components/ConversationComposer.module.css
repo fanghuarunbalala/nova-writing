@@ -2,7 +2,8 @@
  * ConversationComposer 视觉（原型 .composer + .composer form + .composer textarea）。
  *
  * composer 容器：border-top + 半透明 surface 底 + blur(16px)，padding 12/22/16。
- * form：max-width 1080px 居中，border 1px strong，radius 14px，半透明 bg + blur(12px)，
+ * form：max-width 1000px 靠左对齐（与 timeline 一致，右侧留白），
+ *       border 1px strong，radius 14px，半透明 bg + blur(12px)，
  *       focus-within 时 border 变 accent 42% + 3px accent 7% 光晕。
  * textarea：flex 1，14.5px/1.6，min-height 44 / max-height 140，caret-color accent-ink，
  *           placeholder faint 0.82 透明度。
@@ -23,8 +24,8 @@
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  max-width: 1080px;
-  margin: 0 auto;
+  max-width: 1000px;
+  margin: 0;
   width: 100%;
   border: 1px solid var(--color-border-strong);
   border-radius: 14px;

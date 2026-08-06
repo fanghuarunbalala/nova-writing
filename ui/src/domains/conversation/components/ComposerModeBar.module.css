@@ -1,14 +1,15 @@
 /**
  * ComposerModeBar 视觉（原型 .mode-bar + .mode-switch）。
  *
- * 置于 form 下方：max-width 1080px 居中，border-top 分隔，左右 space-between
+ * 置于 form 下方：max-width 1000px 靠左对齐（与输入框一致），border-top 分隔，
+ * 左右 space-between
  * （左侧切换按钮 + 右侧模式提示点）。四种模式低饱和配色：
  * 对话=砖红 / 计划=蓝 / 改写=橙 / 续写=绿。
  */
 .bar {
-  max-width: 1080px;
+  max-width: 1000px;
   width: 100%;
-  margin: 10px auto 0;
+  margin: 10px 0 0;
   display: flex;
   align-items: center;
   justify-content: space-between;

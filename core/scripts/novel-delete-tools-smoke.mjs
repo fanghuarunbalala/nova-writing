@@ -5,9 +5,10 @@ import { join } from "node:path";
 import {
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   NovelDeleteToolService,
-  NovelDraftSessionService,
+  canonicalNovelReadScope,
   captureCharacterId,
   captureLocationId,
+  captureNovelOperationId,
   captureNovelRevision,
   captureNovelTimestamp,
   captureParagraph,
@@ -17,18 +18,24 @@ import {
   capturePublicationStructureId,
   capturePublicationVolume,
   capturePublicationVolumeId,
+  captureStoryOutline,
   captureStoryOutlineId,
   captureStoryUnit,
   captureStoryUnitId,
+  createCharacterCreateOperation,
+  createLocationCreateOperation,
   createNovelDeleteToolRegistry,
-  draftNovelReadScope,
+  createParagraphCreateOperation,
+  createPublicationChapterCreateOperation,
+  createPublicationCreateOperation,
+  createPublicationVolumeCreateOperation,
+  createStoryOutlineCreateOperation,
+  createStoryUnitCreateOperation,
 } from "../dist/index.js";
 import {
   NodeNovelStoreLocator,
   NodeWorkspaceStoreLocator,
   SqliteNovelCanonicalStore,
-  SqliteNovelDraftStore,
-  SqliteNovelSnapshotter,
   createNodeNovelApplication,
 } from "../dist/node/index.js";
 
@@ -70,8 +77,6 @@ class CollectingLogger {
 const root = await mkdtemp(join(tmpdir(), "novel-delete-tools-"));
 const logs = [];
 const logger = new CollectingLogger(logs);
-let canonicalStore;
-let draftStore;
 
 const context = (conversationId, index) => ({
   conversationId,
@@ -88,33 +93,14 @@ try {
     storageRoot: join(root, "storage"),
   }).resolve(workspaceRoot);
   const location = await new NodeNovelStoreLocator().resolve(workspace);
-  canonicalStore = await SqliteNovelCanonicalStore.open({
+  const canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
     revisionFactory: new FixedRevisionFactory("revision_delete_tools_base"),
     logger,
   });
   const canonical = await canonicalStore.getMetadata();
-  draftStore = await SqliteNovelDraftStore.open({
-    location,
-    novelId: canonical.novelId,
-    logger,
-  });
   const clock = new SequenceClock();
-  let draftSequence = 0;
-  const drafts = new NovelDraftSessionService({
-    canonicalStore,
-    draftStore,
-    snapshotter: new SqliteNovelSnapshotter({
-      location,
-      novelId: canonical.novelId,
-      logger,
-    }),
-    identityFactory: {
-      createDraftSessionId: () => `draft_delete_tools_${++draftSequence}`,
-    },
-    clock,
-    logger,
-  });
+  let operationSequence = 0;
   const application = createNodeNovelApplication({
     location,
     novelId: canonical.novelId,
@@ -122,17 +108,16 @@ try {
     logger,
   });
   const service = new NovelDeleteToolService({
-    outline: application.outline,
     outlineQueries: application.outlineQueries,
-    characters: application.characters,
     characterQueries: application.characterQueries,
-    locations: application.locations,
     locationQueries: application.locationQueries,
-    paragraphs: application.paragraphs,
     paragraphQueries: application.paragraphQueries,
-    publication: application.publication,
     publicationQueries: application.publicationQueries,
-    drafts,
+    canonicalWrites: application.canonicalWrites,
+    identityFactory: {
+      createOperationId: () =>
+        captureNovelOperationId(`delete_tool_operation_${++operationSequence}`),
+    },
     logger,
   });
   const registry = createNovelDeleteToolRegistry({ service, logger });
@@ -143,7 +128,6 @@ try {
   assert.deepEqual(NOVEL_DELETE_TOOL_GROUP_MANIFEST.tools, ["NovelDelete"]);
 
   const conversation = "conversation_delete_tools";
-  const session = await drafts.startDraft(conversation);
   const outlineId = captureStoryOutlineId("outline_delete_tools");
   const parentId = captureStoryUnitId("story_unit_parent_delete");
   const leafId = captureStoryUnitId("story_unit_leaf_delete");
@@ -154,53 +138,83 @@ try {
   const chapterId = capturePublicationChapterId("chapter_delete");
   const publicationId = capturePublicationStructureId("publication_delete");
 
-  await application.outline.createOutline(session, outlineId);
-  await application.outline.createStoryUnit(session, captureStoryUnit({
-    id: parentId,
-    outlineId,
-    orderKey: "8000",
-    title: "Parent",
-    planningStatus: "outlined",
-    realizationStatus: "pending",
-  }));
-  await application.outline.createStoryUnit(session, captureStoryUnit({
-    id: leafId,
-    outlineId,
-    parentId,
-    orderKey: "8000",
-    title: "Leaf",
-    planningStatus: "ready",
-    realizationStatus: "in-progress",
-  }));
-  await application.characters.create(session, characterId, {
-    name: "Delete Me",
-    aliases: [],
+  await application.canonicalWrites.applyOperations({
+    operations: [
+      createStoryOutlineCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        outline: captureStoryOutline({ id: outlineId, novelId: canonical.novelId }),
+      }),
+      createStoryUnitCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        storyUnit: captureStoryUnit({
+          id: parentId,
+          outlineId,
+          orderKey: "8000",
+          title: "Parent",
+          planningStatus: "outlined",
+          realizationStatus: "pending",
+        }),
+      }),
+      createStoryUnitCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        storyUnit: captureStoryUnit({
+          id: leafId,
+          outlineId,
+          parentId,
+          orderKey: "8000",
+          title: "Leaf",
+          planningStatus: "ready",
+          realizationStatus: "in-progress",
+        }),
+      }),
+      createCharacterCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        id: characterId,
+        profile: { name: "Delete Me", aliases: [] },
+        timestamp: clock.now(),
+      }),
+      createLocationCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        id: locationId,
+        profile: { name: "Delete Place", aliases: [] },
+        timestamp: clock.now(),
+      }),
+      createParagraphCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        paragraph: captureParagraph({
+          id: paragraphId,
+          storyUnitId: leafId,
+          orderKey: "8000",
+          text: "Delete this paragraph.",
+        }),
+      }),
+      createPublicationCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        publication: { id: publicationId, novelId: canonical.novelId },
+      }),
+      createPublicationVolumeCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        volume: capturePublicationVolume({
+          id: volumeId,
+          publicationId,
+          orderKey: "8000",
+          title: "Delete Volume",
+        }),
+      }),
+      createPublicationChapterCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        chapter: capturePublicationChapter({
+          id: chapterId,
+          publicationId,
+          volumeId,
+          orderKey: "8000",
+          title: "Delete Chapter",
+          paragraphIds: [paragraphId],
+        }),
+      }),
+    ],
+    conversationId: conversation,
   });
-  await application.locations.create(session, locationId, {
-    name: "Delete Place",
-    aliases: [],
-  });
-  await application.paragraphs.createParagraph(session, captureParagraph({
-    id: paragraphId,
-    storyUnitId: leafId,
-    orderKey: "8000",
-    text: "Delete this paragraph.",
-  }));
-  await application.publication.createPublication(session, publicationId);
-  await application.publication.createVolume(session, capturePublicationVolume({
-    id: volumeId,
-    publicationId,
-    orderKey: "8000",
-    title: "Delete Volume",
-  }));
-  await application.publication.createChapter(session, capturePublicationChapter({
-    id: chapterId,
-    publicationId,
-    volumeId,
-    orderKey: "8000",
-    title: "Delete Chapter",
-    paragraphIds: [paragraphId],
-  }));
 
   const deleteTool = registry.require("NovelDelete");
 
@@ -219,9 +233,9 @@ try {
     { values: [{ kind: "paragraph", id: paragraphId }] },
     progress,
   );
-  assert.equal(paragraphDelete.details.items[0].status, "deleted");
+  assert.equal(paragraphDelete.details.items[0].status, "applied");
   const chapterRead = await application.publicationQueries.getChapter(
-    draftNovelReadScope(session),
+    canonicalNovelReadScope,
     chapterId,
   );
   assert.deepEqual(chapterRead.chapter.paragraphIds, []);
@@ -232,13 +246,13 @@ try {
     { values: [{ kind: "character", id: characterId }] },
     progress,
   );
-  assert.equal(characterDelete.details.items[0].status, "deleted");
+  assert.equal(characterDelete.details.items[0].status, "applied");
   const locationDelete = await deleteTool.handler.execute(
     context(conversation, 4),
     { values: [{ kind: "location", id: locationId }] },
     progress,
   );
-  assert.equal(locationDelete.details.items[0].status, "deleted");
+  assert.equal(locationDelete.details.items[0].status, "applied");
 
   // Leaf story unit without children or plan deletes.
   const leafDelete = await deleteTool.handler.execute(
@@ -246,7 +260,7 @@ try {
     { values: [{ kind: "story_unit", id: leafId }] },
     progress,
   );
-  assert.equal(leafDelete.details.items[0].status, "deleted");
+  assert.equal(leafDelete.details.items[0].status, "applied");
 
   // Volume with a chapter rejects; after chapter delete the volume deletes.
   const volumeRejected = await deleteTool.handler.execute(
@@ -261,24 +275,36 @@ try {
     { values: [{ kind: "chapter", id: chapterId }] },
     progress,
   );
-  assert.equal(chapterDelete.details.items[0].status, "deleted");
+  assert.equal(chapterDelete.details.items[0].status, "applied");
   const volumeDelete = await deleteTool.handler.execute(
     context(conversation, 8),
     { values: [{ kind: "volume", id: volumeId }] },
     progress,
   );
-  assert.equal(volumeDelete.details.items[0].status, "deleted");
+  assert.equal(volumeDelete.details.items[0].status, "applied");
 
-  // Missing id reports not_found.
+  // Missing id reports rejected with not_found reason.
   const missingResult = await deleteTool.handler.execute(
     context(conversation, 9),
     { values: [{ kind: "character", id: "character_missing_delete" }] },
     progress,
   );
-  assert.equal(missingResult.details.items[0].status, "not_found");
+  assert.equal(missingResult.details.items[0].status, "rejected");
+  assert.equal(missingResult.details.items[0].reason, "not_found");
+
+  // Redaction: no novel content in structured logs.
+  const serialized = JSON.stringify(logs);
+  for (const forbidden of [
+    "Delete Me",
+    "Delete Place",
+    "Delete this paragraph.",
+    "Delete Volume",
+    root,
+  ]) {
+    assert.equal(serialized.includes(forbidden), false);
+  }
+
   console.log("novel delete tools smoke passed");
 } finally {
-  await draftStore?.close();
-  await canonicalStore?.close();
   await rm(root, { recursive: true, force: true });
 }

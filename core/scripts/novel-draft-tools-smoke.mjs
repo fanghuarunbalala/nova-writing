@@ -6,11 +6,16 @@ import {
   NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
   NovelDraftSessionService,
   NovelDraftToolService,
+  captureNovelOperationId,
   captureNovelRevision,
   captureNovelTimestamp,
+  captureStoryOutline,
   captureStoryOutlineId,
   captureStoryUnit,
   captureStoryUnitId,
+  createStoryOutlineCreateOperation,
+  createStoryUnitCreateOperation,
+  createStoryUnitReplaceOperation,
   createNovelDraftToolRegistry,
   draftNovelReadScope,
 } from "../dist/index.js";
@@ -179,15 +184,30 @@ try {
 
   // Create a Draft and write one story unit, then inspect status.
   const session = await drafts.startDraft(conversation);
-  await application.outline.createOutline(session, outlineId);
-  await application.outline.createStoryUnit(session, captureStoryUnit({
-    id: storyUnitId,
-    outlineId,
-    orderKey: "8000",
-    title: "Draft unit",
-    planningStatus: "idea",
-    realizationStatus: "pending",
-  }));
+  await application.mutations.execute(
+    session,
+    createStoryOutlineCreateOperation({
+      operationId: captureNovelOperationId("draft_smoke_outline"),
+      outline: captureStoryOutline({
+        id: outlineId,
+        novelId: canonical.novelId,
+      }),
+    }),
+  );
+  await application.mutations.execute(
+    session,
+    createStoryUnitCreateOperation({
+      operationId: captureNovelOperationId("draft_smoke_unit"),
+      storyUnit: captureStoryUnit({
+        id: storyUnitId,
+        outlineId,
+        orderKey: "8000",
+        title: "Draft unit",
+        planningStatus: "idea",
+        realizationStatus: "pending",
+      }),
+    }),
+  );
   const withDraft = await statusTool.handler.execute(
     context(conversation, 2),
     {},
@@ -229,29 +249,35 @@ try {
     draftNovelReadScope(conflictA),
     storyUnitId,
   );
-  await application.outline.replaceStoryUnit(
+  await application.mutations.execute(
     conflictA,
-    storyUnitId,
-    readA.contentDigest,
-    {
-      title: "Edited by A",
-      planningStatus: readA.unit.planningStatus,
-      realizationStatus: readA.unit.realizationStatus,
-    },
+    createStoryUnitReplaceOperation({
+      operationId: captureNovelOperationId("draft_smoke_replace_a"),
+      storyUnitId,
+      expectedContentDigest: readA.contentDigest,
+      content: {
+        title: "Edited by A",
+        planningStatus: readA.unit.planningStatus,
+        realizationStatus: readA.unit.realizationStatus,
+      },
+    }),
   );
   const readB = await application.outlineQueries.getStoryUnit(
     draftNovelReadScope(conflictB),
     storyUnitId,
   );
-  await application.outline.replaceStoryUnit(
+  await application.mutations.execute(
     conflictB,
-    storyUnitId,
-    readB.contentDigest,
-    {
-      title: "Edited by B",
-      planningStatus: readB.unit.planningStatus,
-      realizationStatus: readB.unit.realizationStatus,
-    },
+    createStoryUnitReplaceOperation({
+      operationId: captureNovelOperationId("draft_smoke_replace_b"),
+      storyUnitId,
+      expectedContentDigest: readB.contentDigest,
+      content: {
+        title: "Edited by B",
+        planningStatus: readB.unit.planningStatus,
+        realizationStatus: readB.unit.realizationStatus,
+      },
+    }),
   );
   await commitTool.handler.execute(
     context(conflictConversationA, 6),

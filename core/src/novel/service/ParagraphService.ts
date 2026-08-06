@@ -1,5 +1,6 @@
-/** Canonical Paragraph mutation service emitting deterministic Operations. */
+/** Draft-only Paragraph mutation service emitting deterministic Operations. */
 import { noopLogger, type Logger } from "../../observability/index.js";
+import { captureNovelDraftSession, type NovelDraftSession } from "../draft/index.js";
 import {
   captureParagraphId,
   captureStoryUnitId,
@@ -22,14 +23,11 @@ import {
   createParagraphTextReplaceOperation,
   type NovelOperation,
 } from "../operation/index.js";
-import type {
-  NovelCanonicalWritePort,
-  NovelCanonicalWriteResult,
-} from "../port/index.js";
-import { captureNovelRevision, type NovelRevision } from "../version/index.js";
+import type { NovelDraftOperationReceipt } from "../port/index.js";
+import type { NovelMutationService } from "./NovelMutationService.js";
 
 export interface ParagraphServiceOptions {
-  readonly canonicalWrites: NovelCanonicalWritePort;
+  readonly mutations: NovelMutationService;
   readonly identityFactory: { createOperationId(): NovelOperationId };
   readonly logger?: Logger;
 }
@@ -44,69 +42,64 @@ export class ParagraphService {
   }
 
   createParagraph(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     paragraph: Paragraph,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
     const value = captureParagraph(paragraph);
-    return this.execute(conversationId, baseRevision, createParagraphCreateOperation({
+    return this.execute(session, createParagraphCreateOperation({
       operationId: this.operationId(), paragraph: value,
     }), "paragraph.create", { storyUnitId: value.storyUnitId, paragraphId: value.id });
   }
 
   replaceText(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     paragraphId: ParagraphId,
     expectedTextDigest: string,
     text: string,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
     const id = captureParagraphId(paragraphId);
-    return this.execute(conversationId, baseRevision, createParagraphTextReplaceOperation({
+    return this.execute(session, createParagraphTextReplaceOperation({
       operationId: this.operationId(), paragraphId: id,
       expectedTextDigest, text: captureParagraphText(text),
     }), "paragraph.text.replace", { paragraphId: id });
   }
 
   replaceOrder(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     paragraphId: ParagraphId,
     expectedOrderDigest: string,
     orderKey: OrderKey,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
     const id = captureParagraphId(paragraphId);
-    return this.execute(conversationId, baseRevision, createParagraphOrderReplaceOperation({
+    return this.execute(session, createParagraphOrderReplaceOperation({
       operationId: this.operationId(), paragraphId: id,
       expectedOrderDigest, orderKey: captureOrderKey(orderKey),
     }), "paragraph.order.replace", { paragraphId: id });
   }
 
   replaceStoryUnit(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     paragraphId: ParagraphId,
     expectedStoryUnitDigest: string,
     storyUnitId: StoryUnitId,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
     const id = captureParagraphId(paragraphId);
     const target = captureStoryUnitId(storyUnitId);
-    return this.execute(conversationId, baseRevision, createParagraphStoryUnitReplaceOperation({
+    return this.execute(session, createParagraphStoryUnitReplaceOperation({
       operationId: this.operationId(), paragraphId: id,
       expectedStoryUnitDigest, storyUnitId: target,
     }), "paragraph.story-unit.replace", { paragraphId: id, storyUnitId: target });
   }
 
   deleteParagraph(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     paragraphId: ParagraphId,
     expectedTextDigest: string,
     expectedOrderDigest: string,
     expectedStoryUnitDigest: string,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
     const id = captureParagraphId(paragraphId);
-    return this.execute(conversationId, baseRevision, createParagraphDeleteOperation({
+    return this.execute(session, createParagraphDeleteOperation({
       operationId: this.operationId(), paragraphId: id,
       expectedTextDigest, expectedOrderDigest, expectedStoryUnitDigest,
     }), "paragraph.delete", { paragraphId: id });
@@ -117,27 +110,22 @@ export class ParagraphService {
   }
 
   private async execute(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    sessionInput: NovelDraftSession,
     operation: NovelOperation,
     action: string,
     identities: Readonly<Record<string, string>>,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
+    const session = captureNovelDraftSession(sessionInput);
     this.logger.debug("novel_paragraph.mutation.started", {
+      novelId: session.novelId, draftSessionId: session.id,
       operationId: operation.operationId, action, ...identities,
     });
-    const result = await this.options.canonicalWrites.applyOperations({
-      operations: [operation],
-      conversationId,
-      ...(baseRevision === undefined
-        ? {}
-        : { baseRevision: captureNovelRevision(baseRevision) }),
-    });
+    const receipt = await this.options.mutations.execute(session, operation);
     this.logger.info("novel_paragraph.mutation.completed", {
+      novelId: session.novelId, draftSessionId: session.id,
       operationId: operation.operationId, action,
-      resultRevision: result.resultRevision, status: result.status,
-      ...identities,
+      sequence: receipt.sequence, status: receipt.status, ...identities,
     });
-    return result;
+    return receipt;
   }
 }

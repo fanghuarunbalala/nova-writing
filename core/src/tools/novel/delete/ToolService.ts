@@ -130,6 +130,29 @@ export class NovelDeleteToolService {
       });
       return { items, revision: { currentRevision: result.resultRevision } };
     } catch (error) {
+      // 事务内前置条件失败（例如 referenced）映射为整批 rejected（2A 已回滚）。
+      if (error instanceof NovelOperationPreconditionError) {
+        const first = arguments_.values[0];
+        this.logger.info("novel_delete_tool.delete.precondition_batch", {
+          conversationId,
+          errorName: error.name,
+          errorCode: error.code,
+        });
+        return {
+          items: [
+            {
+              kind: first.kind,
+              id: first.id,
+              status: "rejected",
+              reason:
+                error.failure === "entity_referenced"
+                  ? ITEM_REJECTION.referenced
+                  : ITEM_REJECTION.preconditionFailed,
+            },
+          ],
+          revision: { currentRevision },
+        };
+      }
       this.logger.info("novel_delete_tool.delete.failed", {
         conversationId,
         errorName: error instanceof Error ? error.name : typeof error,

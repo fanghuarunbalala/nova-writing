@@ -22,6 +22,7 @@ import {
 import {
   SqliteNovelCanonicalStore,
   SqliteNovelCanonicalWriter,
+  createSqliteNovelMutationContext,
 } from "../dist/node/index.js";
 
 const NOVEL_ID = captureNovelId("novel_canonical_writer");
@@ -149,6 +150,7 @@ async function main() {
       location,
       novelId: NOVEL_ID,
       executor,
+      contextFactory: createSqliteNovelMutationContext,
       revisionFactory: new SequenceRevisionFactory(),
       clock: new SequenceClock(),
       logger,

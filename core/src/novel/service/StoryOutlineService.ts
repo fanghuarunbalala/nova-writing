@@ -1,9 +1,12 @@
-/** Canonical Story Outline mutation service that emits deterministic Operations. */
+/** Draft-only Story Outline mutation service that emits deterministic Operations. */
 import { noopLogger, type Logger } from "../../observability/index.js";
+import {
+  captureNovelDraftSession,
+  type NovelDraftSession,
+} from "../draft/index.js";
 import {
   captureStoryOutlineId,
   captureStoryUnitId,
-  type NovelId,
   type NovelOperationId,
   type StoryOutlineId,
   type StoryUnitId,
@@ -27,16 +30,11 @@ import {
   createStoryUnitMoveOperation,
   createStoryUnitReplaceOperation,
 } from "../operation/index.js";
-import type {
-  NovelCanonicalWritePort,
-  NovelCanonicalWriteResult,
-} from "../port/index.js";
-import { captureNovelRevision, type NovelRevision } from "../version/index.js";
-import type { NovelOperation } from "../operation/index.js";
+import type { NovelDraftOperationReceipt } from "../port/index.js";
+import type { NovelMutationService } from "./NovelMutationService.js";
 
 export interface StoryOutlineServiceOptions {
-  readonly novelId: NovelId;
-  readonly canonicalWrites: NovelCanonicalWritePort;
+  readonly mutations: NovelMutationService;
   readonly identityFactory: {
     createOperationId(): NovelOperationId;
   };
@@ -53,17 +51,16 @@ export class StoryOutlineService {
   }
 
   createOutline(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     id: StoryOutlineId,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
+    const draft = captureNovelDraftSession(session);
     const outlineId = captureStoryOutlineId(id);
     return this.execute(
-      conversationId,
-      baseRevision,
+      draft,
       createStoryOutlineCreateOperation({
         operationId: this.options.identityFactory.createOperationId(),
-        outline: { id: outlineId, novelId: this.options.novelId },
+        outline: { id: outlineId, novelId: draft.novelId },
       }),
       "create",
       { outlineId },
@@ -71,14 +68,13 @@ export class StoryOutlineService {
   }
 
   createStoryUnit(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     storyUnit: StoryUnit,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
+    const draft = captureNovelDraftSession(session);
     const unit = captureStoryUnit(storyUnit);
     return this.execute(
-      conversationId,
-      baseRevision,
+      draft,
       createStoryUnitCreateOperation({
         operationId: this.options.identityFactory.createOperationId(),
         storyUnit: unit,
@@ -89,16 +85,15 @@ export class StoryOutlineService {
   }
 
   replaceStoryUnit(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     id: StoryUnitId,
     expectedContentDigest: string,
     content: StoryUnitContent,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
+    const draft = captureNovelDraftSession(session);
     const storyUnitId = captureStoryUnitId(id);
     return this.execute(
-      conversationId,
-      baseRevision,
+      draft,
       createStoryUnitReplaceOperation({
         operationId: this.options.identityFactory.createOperationId(),
         storyUnitId,
@@ -111,8 +106,7 @@ export class StoryOutlineService {
   }
 
   moveStoryUnit(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     input: {
       readonly storyUnitId: StoryUnitId;
       readonly expectedParentDigest: string;
@@ -120,11 +114,11 @@ export class StoryOutlineService {
       readonly parentId?: StoryUnitId;
       readonly orderKey: OrderKey;
     },
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
+    const draft = captureNovelDraftSession(session);
     const storyUnitId = captureStoryUnitId(input.storyUnitId);
     return this.execute(
-      conversationId,
-      baseRevision,
+      draft,
       createStoryUnitMoveOperation({
         operationId: this.options.identityFactory.createOperationId(),
         storyUnitId,
@@ -141,19 +135,18 @@ export class StoryOutlineService {
   }
 
   deleteStoryUnit(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     input: {
       readonly storyUnitId: StoryUnitId;
       readonly expectedContentDigest: string;
       readonly expectedParentDigest: string;
       readonly expectedOrderDigest: string;
     },
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
+    const draft = captureNovelDraftSession(session);
     const storyUnitId = captureStoryUnitId(input.storyUnitId);
     return this.execute(
-      conversationId,
-      baseRevision,
+      draft,
       createStoryUnitDeleteOperation({
         operationId: this.options.identityFactory.createOperationId(),
         storyUnitId,
@@ -167,15 +160,14 @@ export class StoryOutlineService {
   }
 
   replaceLeafStoryUnitPlan(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     plan: LeafStoryUnitPlan,
     expectedPlanDigest?: string,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
+    const draft = captureNovelDraftSession(session);
     const value = captureLeafStoryUnitPlan(plan);
     return this.execute(
-      conversationId,
-      baseRevision,
+      draft,
       createLeafStoryUnitPlanReplaceOperation({
         operationId: this.options.identityFactory.createOperationId(),
         plan: value,
@@ -187,15 +179,14 @@ export class StoryOutlineService {
   }
 
   clearLeafStoryUnitPlan(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
+    session: NovelDraftSession,
     storyUnitIdInput: StoryUnitId,
     expectedPlanDigest: string,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
+    const draft = captureNovelDraftSession(session);
     const storyUnitId = captureStoryUnitId(storyUnitIdInput);
     return this.execute(
-      conversationId,
-      baseRevision,
+      draft,
       createLeafStoryUnitPlanClearOperation({
         operationId: this.options.identityFactory.createOperationId(),
         storyUnitId,
@@ -207,33 +198,30 @@ export class StoryOutlineService {
   }
 
   private async execute(
-    conversationId: string,
-    baseRevision: NovelRevision | undefined,
-    operation: NovelOperation,
+    session: NovelDraftSession,
+    operation: Parameters<NovelMutationService["execute"]>[1],
     action: string,
     identity: Readonly<Record<string, string>>,
-  ): Promise<NovelCanonicalWriteResult> {
+  ): Promise<NovelDraftOperationReceipt> {
     this.logger.debug("novel_story_outline.operation.started", {
+      novelId: session.novelId,
+      draftSessionId: session.id,
       operationId: operation.operationId,
       operationType: operation.type,
       action,
       ...identity,
     });
-    const result = await this.options.canonicalWrites.applyOperations({
-      operations: [operation],
-      conversationId,
-      ...(baseRevision === undefined
-        ? {}
-        : { baseRevision: captureNovelRevision(baseRevision) }),
-    });
+    const receipt = await this.options.mutations.execute(session, operation);
     this.logger.info("novel_story_outline.operation.completed", {
+      novelId: session.novelId,
+      draftSessionId: session.id,
       operationId: operation.operationId,
       operationType: operation.type,
       action,
-      resultRevision: result.resultRevision,
-      status: result.status,
+      sequence: receipt.sequence,
+      status: receipt.status,
       ...identity,
     });
-    return result;
+    return receipt;
   }
 }

@@ -10,6 +10,7 @@ import {
   NovelCommitWriter,
   NovelCommitRecoveryService,
   NovelApprovalService,
+  NovelMutationService,
   NovelOperationExecutor,
   NovelOperationRegistry,
   RandomNovelIdentityFactory,
@@ -50,6 +51,7 @@ export interface NodeNovelEntityApplicationOptions {
 }
 
 export interface NodeNovelEntityApplication {
+  readonly mutations: NovelMutationService;
   readonly characters: CharacterService;
   readonly locations: LocationService;
   readonly characterQueries: CharacterQueryService;
@@ -97,6 +99,7 @@ export function createNodeNovelEntityApplication(
     clock,
     logger,
   });
+  const mutations = new NovelMutationService({ writer, logger });
   const queryStore = new SqliteNovelEntityQueryStore({
     location: options.location,
     novelId: options.novelId,
@@ -141,14 +144,15 @@ export function createNodeNovelEntityApplication(
   });
   logger.info("novel_entity_application.created", {});
   return Object.freeze({
+    mutations,
     characters: new CharacterService({
-      canonicalWrites,
+      mutations,
       identityFactory,
       clock,
       logger,
     }),
     locations: new LocationService({
-      canonicalWrites,
+      mutations,
       identityFactory,
       clock,
       logger,

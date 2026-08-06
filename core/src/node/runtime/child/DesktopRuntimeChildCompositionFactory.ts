@@ -72,12 +72,19 @@ import type { RuntimePersistencePorts } from "../../../runtime/ipc/index.js";
 import { createNovelConversationManifestComposition } from "../../agent/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { createCoreEventSchemaRegistry } from "../../../event/index.js";
+import {
+  ConversationTodoCoordinator,
+  InMemoryConversationTodoStore,
+} from "../../../runtime/todo/index.js";
 import { NodeSha256RuntimeEventIdHasher } from "../NodeSha256RuntimeEventIdHasher.js";
+import { openChildNovelToolRegistry } from "./novel/index.js";
 import type {
   RuntimeChildCompositionContext,
   RuntimeChildCompositionFactory,
   RuntimeChildRuntime,
 } from "./RuntimeChildCompositionFactory.js";
+
+const DESKTOP_CHILD_STORAGE_ROOT_ENV = "NOVEL_DESKTOP_STORAGE_ROOT" as const;
 
 export interface RuntimeRunPreparationSourceFactory {
   create(options: {
@@ -102,6 +109,7 @@ export interface DesktopRuntimeChildCompositionFactoryOptions {
   readonly manifestStoreProvider: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<AgentManifestStore>;
+  readonly novelStorageRoot?: string;
   readonly adapterFactory: RuntimeChildAdapterFactory;
   readonly contextCompilerFactory: AgentRuntimeContextCompilerFactory;
   readonly preparationSourceFactory: RuntimeRunPreparationSourceFactory;
@@ -117,12 +125,11 @@ export class DesktopRuntimeChildCompositionFactory
   readonly #manifestStoreProvider: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<AgentManifestStore>;
+  readonly #novelStorageRoot?: string;
   readonly #adapterFactory: RuntimeChildAdapterFactory;
   readonly #contextCompilerFactory: AgentRuntimeContextCompilerFactory;
   readonly #preparationSourceFactory: RuntimeRunPreparationSourceFactory;
   readonly #profileResolver: AgentRuntimeConfigurationProfileResolver;
-  readonly #manifestRegistry: ReturnType<typeof createNovelConversationManifestComposition>["registry"];
-  readonly #manifestGroups: ReturnType<typeof createNovelConversationManifestComposition>["groups"];
   readonly #eventSchemaRegistry: ReturnType<typeof createCoreEventSchemaRegistry>;
   readonly #eventIdFactory: RuntimeEventIdFactory;
   readonly #promptDigester: PromptDigester;
@@ -134,6 +141,7 @@ export class DesktopRuntimeChildCompositionFactory
     });
     const composition = createNovelConversationManifestComposition();
     this.#manifestStoreProvider = options.manifestStoreProvider;
+    this.#novelStorageRoot = options.novelStorageRoot;
     this.#adapterFactory = options.adapterFactory;
     this.#contextCompilerFactory = options.contextCompilerFactory;
     this.#preparationSourceFactory = options.preparationSourceFactory;
@@ -155,8 +163,6 @@ export class DesktopRuntimeChildCompositionFactory
           }),
         }),
       ]);
-    this.#manifestRegistry = composition.registry;
-    this.#manifestGroups = composition.groups;
     this.#promptDigester = composition.digester;
     this.#eventSchemaRegistry =
       options.eventSchemaRegistry ?? createCoreEventSchemaRegistry();
@@ -200,11 +206,32 @@ export class DesktopRuntimeChildCompositionFactory
     }
 
     const manifestStore = await this.#manifestStoreProvider(bootstrap);
+    const journal = new ChildRuntimeJournalReader(persistence);
+    const eventSink = new PublishingRuntimeEventSink({
+      outputPublisher: new ChildRuntimeOutputPublisher(persistence, logger),
+      logger,
+    });
+    const clock = { now: () => new Date().toISOString() };
+    const todoStore = new InMemoryConversationTodoStore();
+    const todoWriter = new ConversationTodoCoordinator({
+      store: todoStore,
+      eventSink,
+      clock,
+      logger,
+    });
+    const novelTools = await openChildNovelToolRegistry({
+      storageRoot: requireNovelStorageRoot(
+        this.#novelStorageRoot ?? process.env[DESKTOP_CHILD_STORAGE_ROOT_ENV],
+      ),
+      workdir: bootstrap.workspace.workdir,
+      todoWriter,
+      logger,
+    });
     const configurationFactory = new AgentRuntimeConfigurationFactory({
       manifestStore,
       assemblyRestorer: new AgentAssemblyRestorer({
-        registry: this.#manifestRegistry,
-        groups: this.#manifestGroups,
+        registry: novelTools.registry,
+        groups: novelTools.groups,
       }),
       profileResolver: this.#profileResolver,
       logger,
@@ -213,19 +240,12 @@ export class DesktopRuntimeChildCompositionFactory
     const contextCompiler = await this.#contextCompilerFactory.create(
       configuration,
     );
-
-    const journal = new ChildRuntimeJournalReader(persistence);
-    const eventSink = new PublishingRuntimeEventSink({
-      outputPublisher: new ChildRuntimeOutputPublisher(persistence, logger),
-      logger,
-    });
     const toolExecution = createChildToolExecutionComposition({
       registryView: configuration.assembly.toolView,
       eventSink,
       logger,
     });
     const eventIdFactory = this.#eventIdFactory;
-    const clock = { now: () => new Date().toISOString() };
     const lifecycleController = new TurnController({
       conversationId,
       eventIdFactory,
@@ -356,6 +376,13 @@ export class DesktopRuntimeChildCompositionFactory
     });
     return new ConversationRuntimeChild(runtime, logger);
   }
+}
+
+function requireNovelStorageRoot(value: string | undefined): string {
+  if (value === undefined || value.length === 0) {
+    throw new TypeError("Desktop child Novel storage root is not configured");
+  }
+  return value;
 }
 
 class ConversationRuntimeChild implements RuntimeChildRuntime {

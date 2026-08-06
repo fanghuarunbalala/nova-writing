@@ -1,20 +1,22 @@
-/** Immutable final Prompt and Message candidate for one provider call. */
+/**
+ * 一次 provider 调用的最终不可变 prompt 与消息候选。
+ * Immutable final Prompt and Message candidate for one provider call.
+ *
+ * systemPrompt 恒为 base 内容；动态内容以 system.reminder 消息存在于 messages 中。
+ * The system prompt is always the base content; dynamic content lives in
+ * system.reminder messages inside `messages`.
+ */
 import type { RuntimeMessageSnapshot } from "../../runtime/message/index.js";
 import {
   capturePromptDigest,
   type PromptDigest,
 } from "../PromptDigester.js";
 import type { CompiledSystemPrompt } from "../CompiledSystemPrompt.js";
-import {
-  PromptContribution,
-  type PromptContributionSnapshot,
-} from "./PromptContribution.js";
 
 export interface PromptAssemblyOptions {
   readonly conversationId: string;
   readonly runId: string;
   readonly basePrompt: CompiledSystemPrompt;
-  readonly overlays: readonly PromptContribution[];
   readonly messages: readonly RuntimeMessageSnapshot[];
   readonly messageHighWatermark: number;
   readonly systemPrompt: string;
@@ -25,7 +27,6 @@ export interface PromptAssemblySnapshot {
   readonly conversationId: string;
   readonly runId: string;
   readonly basePromptDigest: PromptDigest;
-  readonly overlays: readonly PromptContributionSnapshot[];
   readonly messages: readonly RuntimeMessageSnapshot[];
   readonly messageHighWatermark: number;
   readonly systemPrompt: string;
@@ -36,7 +37,6 @@ export class PromptAssembly {
   readonly conversationId: string;
   readonly runId: string;
   readonly basePrompt: CompiledSystemPrompt;
-  readonly overlays: readonly PromptContribution[];
   readonly messages: readonly RuntimeMessageSnapshot[];
   readonly messageHighWatermark: number;
   readonly systemPrompt: string;
@@ -48,9 +48,6 @@ export class PromptAssembly {
     if (!options.basePrompt || typeof options.basePrompt.content !== "string") {
       throw new TypeError("Prompt Assembly Base Prompt is invalid");
     }
-    if (!Array.isArray(options.overlays)) {
-      throw new TypeError("Prompt Assembly overlays are invalid");
-    }
     if (!Array.isArray(options.messages)) {
       throw new TypeError("Prompt Assembly messages are invalid");
     }
@@ -61,14 +58,6 @@ export class PromptAssembly {
       throw new TypeError("Prompt Assembly system Prompt is invalid");
     }
     this.basePrompt = options.basePrompt;
-    this.overlays = Object.freeze(
-      options.overlays.map((overlay) => {
-        if (!(overlay instanceof PromptContribution)) {
-          throw new TypeError("Prompt Assembly overlay is invalid");
-        }
-        return overlay;
-      }),
-    );
     this.messages = Object.freeze(options.messages.map((message) => freezeJsonClone(message)));
     this.messageHighWatermark = options.messageHighWatermark;
     this.systemPrompt = options.systemPrompt;
@@ -81,7 +70,6 @@ export class PromptAssembly {
       conversationId: this.conversationId,
       runId: this.runId,
       basePromptDigest: this.basePrompt.digest,
-      overlays: Object.freeze(this.overlays.map((overlay) => overlay.toSnapshot())),
       messages: this.messages,
       messageHighWatermark: this.messageHighWatermark,
       systemPrompt: this.systemPrompt,

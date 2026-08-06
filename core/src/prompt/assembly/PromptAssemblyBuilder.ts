@@ -1,4 +1,15 @@
-/** Deterministically assembles Base Prompt, overlays, and canonical Messages. */
+/**
+ * 一次 provider 调用候选（base + 消息）的确定性组装器。
+ * Deterministically assembles one provider-call candidate from the Base Prompt
+ * and canonical Messages.
+ *
+ * 动态内容（todo / nudge / plan 约束 / deferred 名单）以 system.reminder 消息
+ * 进入 messages，不再拼接进 system prompt；systemPrompt 恒等于 basePrompt.content，
+ * 保持 base 稳定可缓存，不破坏 provider prefill 缓存。
+ * Dynamic content (todos, nudges, plan constraints, deferred-tool lists) arrives
+ * as system.reminder messages inside `messages`; the system prompt always equals
+ * the base content so it stays stable and provider prefill caches stay valid.
+ */
 import {
   canonicalStringifyJson,
   type JsonValue,
@@ -15,32 +26,14 @@ import {
   PromptAssembly,
 } from "./PromptAssembly.js";
 import {
-  PromptContribution,
-  type PromptContributionKind,
-  type PromptLayerKind,
-  type PromptContributionPersistence,
-} from "./PromptContribution.js";
-import {
   PROMPT_ASSEMBLY_FAILURE,
   PromptAssemblyError,
 } from "./PromptAssemblyErrors.js";
-
-export interface PromptContributionInput {
-  readonly kind: PromptContributionKind;
-  readonly sourceId: string;
-  readonly sourceVersion?: string;
-  readonly layer: PromptLayerKind;
-  readonly persistence: PromptContributionPersistence;
-  readonly order: number;
-  readonly content: string;
-}
 
 export interface PromptAssemblyBuildRequest {
   readonly conversationId: string;
   readonly runId: string;
   readonly basePrompt: CompiledSystemPrompt;
-  readonly checkpointOverlays?: readonly PromptContributionInput[];
-  readonly nudgeOverlays?: readonly PromptContributionInput[];
   readonly messages: readonly RuntimeMessageSnapshot[];
   readonly messageHighWatermark: number;
 }
@@ -70,43 +63,29 @@ export class PromptAssemblyBuilder {
     this.#logger.debug("prompt.assembly_started", {
       ...identity,
       messageCount: Array.isArray(request.messages) ? request.messages.length : 0,
-      checkpointOverlayCount: request.checkpointOverlays?.length ?? 0,
-      nudgeOverlayCount: request.nudgeOverlays?.length ?? 0,
     });
     try {
       if (!request.basePrompt) {
         throw this.failure(PROMPT_ASSEMBLY_FAILURE.invalidRequest, identity);
       }
       assertHighWatermark(request.messageHighWatermark, identity);
-      const overlays = [
-        ...(await captureContributions(
-          request.checkpointOverlays ?? [],
-          identity,
-          this.#digester,
-        )),
-        ...(await captureContributions(
-          request.nudgeOverlays ?? [],
-          identity,
-          this.#digester,
-        )),
-      ].sort(compareContributions);
-      assertUniqueContributions(overlays, identity);
       const messages = captureMessages(
         request.messages,
         identity,
         this.#messageSchemaRegistry,
       );
-      const systemPrompt = [
-        request.basePrompt.content,
-        ...overlays.map((overlay) => overlay.content),
-      ].join("\n\n");
+      const systemPrompt = request.basePrompt.content;
       const digest = await this.#digester.digest(
         canonicalStringifyJson({
           conversationId: identity.conversationId,
           runId: identity.runId,
           basePromptDigest: request.basePrompt.digest,
-          overlays: overlays.map((overlay) => overlay.toSnapshot()),
-          messageIds: messages.map((message) => message.id),
+          messages: messages.map((message) => ({
+            id: message.id,
+            role: message.role,
+            messageType: message.messageType,
+            payload: message.payload,
+          })),
           messageHighWatermark: request.messageHighWatermark,
           systemPrompt,
         } as unknown as JsonValue),
@@ -115,7 +94,6 @@ export class PromptAssemblyBuilder {
         conversationId: identity.conversationId,
         runId: identity.runId,
         basePrompt: request.basePrompt,
-        overlays,
         messages,
         messageHighWatermark: request.messageHighWatermark,
         systemPrompt,
@@ -123,7 +101,6 @@ export class PromptAssemblyBuilder {
       });
       this.#logger.info("prompt.assembly_completed", {
         ...identity,
-        overlayCount: assembly.overlays.length,
         messageCount: assembly.messages.length,
         assemblyDigest: assembly.digest,
       });
@@ -176,55 +153,6 @@ function assertHighWatermark(
   }
 }
 
-async function captureContributions(
-  inputs: readonly PromptContributionInput[],
-  identity: PromptAssemblyIdentity,
-  digester: PromptDigester,
-): Promise<readonly PromptContribution[]> {
-  if (!Array.isArray(inputs)) {
-    throw new PromptAssemblyError(
-      PROMPT_ASSEMBLY_FAILURE.invalidContribution,
-      identity.conversationId,
-      identity.runId,
-    );
-  }
-  return Promise.all(inputs.map(async (input) => {
-    if (
-      (input.layer === "checkpoint" && input.kind !== "checkpoint") ||
-      (input.layer === "nudge" && input.kind !== "nudge")
-    ) {
-      throw new PromptAssemblyError(
-        PROMPT_ASSEMBLY_FAILURE.invalidContribution,
-        identity.conversationId,
-        identity.runId,
-      );
-    }
-    const digest = await digester.digest(input.content);
-    return new PromptContribution({
-      ...input,
-      digest,
-    });
-  }));
-}
-
-function assertUniqueContributions(
-  contributions: readonly PromptContribution[],
-  identity: PromptAssemblyIdentity,
-): void {
-  const seen = new Set<string>();
-  for (const contribution of contributions) {
-    const key = `${contribution.layer}:${contribution.sourceId}`;
-    if (seen.has(key)) {
-      throw new PromptAssemblyError(
-        PROMPT_ASSEMBLY_FAILURE.duplicateContribution,
-        identity.conversationId,
-        identity.runId,
-      );
-    }
-    seen.add(key);
-  }
-}
-
 function captureMessages(
   messages: readonly RuntimeMessageSnapshot[],
   identity: PromptAssemblyIdentity,
@@ -266,20 +194,6 @@ function captureMessages(
     seen.add(captured.id);
     return deepFreeze(JSON.parse(JSON.stringify(captured)) as RuntimeMessageSnapshot);
   }));
-}
-
-function compareContributions(
-  left: PromptContribution,
-  right: PromptContribution,
-): number {
-  const layerDifference = layerOrder(left.layer) - layerOrder(right.layer);
-  if (layerDifference !== 0) return layerDifference;
-  if (left.order !== right.order) return left.order - right.order;
-  return left.sourceId.localeCompare(right.sourceId);
-}
-
-function layerOrder(layer: PromptContribution["layer"]): number {
-  return layer === "base" ? 0 : layer === "checkpoint" ? 1 : 2;
 }
 
 interface PromptAssemblyIdentity {

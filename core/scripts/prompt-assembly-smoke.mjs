@@ -1,3 +1,13 @@
+/**
+ * PromptAssemblyBuilder 冒烟（Step 2 of PromptAssembly refactor）。
+ * PromptAssemblyBuilder smoke (Step 2 of the PromptAssembly refactor).
+ *
+ * 验证 / Verifies:
+ * 1. systemPrompt 恒等于 basePrompt.content（动态内容不再拼接进 system prompt）；
+ * 2. system.reminder 消息随 messages 原样保留（顺序不变、不剥离）；
+ * 3. 相同输入 digest 稳定，reminder 内容变化时 digest 变化；
+ * 4. 错误路径：会话不匹配、重复消息 ID 拒绝。
+ */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
@@ -34,7 +44,7 @@ const basePrompt = await promptBuilder.build({
 });
 const assembler = new RuntimePromptAssembler(new PromptAssemblyBuilder({ digester }));
 
-const message = {
+const userMessage = {
   id: "message:user-1",
   conversationId: "conversation:assembly",
   role: "user",
@@ -46,64 +56,62 @@ const message = {
     content: [{ type: "text", text: "Hello" }],
   },
 };
+const reminderMessage = {
+  id: "message:reminder-1",
+  conversationId: "conversation:assembly",
+  role: "system",
+  messageType: "system.reminder",
+  schemaVersion: 1,
+  timestamp: "2026-08-03T00:00:01.000Z",
+  runId: "run:1",
+  payload: {
+    kind: "todo_reminder",
+    content: "<CURRENT_TODOS revision=\"2\">\n- [pending] t1: outline\n</CURRENT_TODOS>",
+    order: 1,
+  },
+};
 
 const request = {
   conversationId: "conversation:assembly",
   runId: "run:1",
   basePrompt,
-  checkpointOverlays: [{
-    kind: "checkpoint",
-    sourceId: "checkpoint:latest",
-    layer: "checkpoint",
-    persistence: "checkpoint",
-    order: 1,
-    content: "Checkpoint overlay",
-  }],
-  nudgeOverlays: [{
-    kind: "nudge",
-    sourceId: "nudge:turn-close",
-    layer: "nudge",
-    persistence: "one_shot",
-    order: 1,
-    content: "Nudge overlay",
-  }],
-  messages: [message],
-  messageHighWatermark: 1,
+  messages: [userMessage, reminderMessage],
+  messageHighWatermark: 2,
 };
 
 const assembly = await assembler.assemble(request);
 assert.equal(assembly.conversationId, request.conversationId);
 assert.equal(assembly.runId, request.runId);
-assert.deepEqual(
-  assembly.overlays.map((overlay) => overlay.sourceId),
-  ["checkpoint:latest", "nudge:turn-close"],
-);
-assert.match(assembly.systemPrompt, /Checkpoint overlay/);
-assert.match(assembly.systemPrompt, /Nudge overlay/);
-assert.equal(assembly.messages.length, 1);
-assert.equal(assembly.messages[0].id, message.id);
+// 1. systemPrompt 只含 base / system prompt is base-only.
+assert.equal(assembly.systemPrompt, basePrompt.content);
+assert.ok(!assembly.systemPrompt.includes("CURRENT_TODOS"));
+// 2. 消息原样保留（含 system.reminder） / messages preserved with the reminder.
+assert.equal(assembly.messages.length, 2);
+assert.equal(assembly.messages[0].id, userMessage.id);
+assert.equal(assembly.messages[1].id, reminderMessage.id);
+assert.equal(assembly.messages[1].messageType, "system.reminder");
 assert.ok(Object.isFrozen(assembly));
 assert.ok(Object.isFrozen(assembly.messages));
-assert.ok(Object.isFrozen(assembly.messages[0]));
+assert.ok(Object.isFrozen(assembly.messages[1]));
 assert.match(assembly.digest, /^sha256:[0-9a-f]{64}$/);
 
+// 3. 相同输入 digest 稳定；reminder 内容变化时 digest 变化。
 const repeatedAssembly = await assembler.assemble(request);
 assert.equal(repeatedAssembly.digest, assembly.digest);
-assert.equal(repeatedAssembly.overlays[0].digest, assembly.overlays[0].digest);
-
 const changedAssembly = await assembler.assemble({
   ...request,
-  nudgeOverlays: [{
-    ...request.nudgeOverlays[0],
-    content: "Changed nudge overlay",
+  messages: [userMessage, {
+    ...reminderMessage,
+    payload: { ...reminderMessage.payload, content: "<CURRENT_TODOS revision=\"3\"/>" },
   }],
 });
 assert.notEqual(changedAssembly.digest, assembly.digest);
 
+// 4. 错误路径 / error paths.
 await assert.rejects(
   () => assembler.assemble({
     ...request,
-    messages: [{ ...message, conversationId: "conversation:other" }],
+    messages: [{ ...userMessage, conversationId: "conversation:other" }],
   }),
   (error) => {
     assert.ok(error instanceof PromptAssemblyError);
@@ -115,20 +123,13 @@ await assert.rejects(
 await assert.rejects(
   () => assembler.assemble({
     ...request,
-    nudgeOverlays: [{
-      ...request.nudgeOverlays[0],
-      sourceId: "nudge:duplicate",
-    }, {
-      ...request.nudgeOverlays[0],
-      sourceId: "nudge:duplicate",
-      order: 2,
-    }],
+    messages: [userMessage, { ...userMessage, id: "message:user-1" }],
   }),
   (error) => {
     assert.ok(error instanceof PromptAssemblyError);
-    assert.equal(error.failure, "duplicate_contribution");
+    assert.equal(error.failure, "duplicate_message");
     return true;
   },
 );
 
-console.log("prompt assembly smoke: passed");
+console.log("prompt assembly smoke: passed (base-only systemPrompt, reminder preserved)");

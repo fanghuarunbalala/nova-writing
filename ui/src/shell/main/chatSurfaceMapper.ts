@@ -62,16 +62,19 @@ export function mapProjectionTimeline(
           )
           .map(toTimelineCard)
           .filter((card): card is ConversationCardDescriptor => card !== null);
-        const eventFlow = eventFlowOf(
-          projection,
-          item.startedSequence,
-          item.lastSequence,
-        );
+        // 工具调用常发生在消息 completed 之后、同一 turn 内（turn 边界由
+        // turn.state.changed 的 lastSequence 界定），因此事件流/工具条范围取
+        // 到 turn 结束，而不是消息自己的 lastSequence。
+        const turnEnd =
+          projection.turns.find(
+            (turn) => turn.runId === item.runId && turn.turnId === item.turnId,
+          )?.lastSequence ?? item.lastSequence;
+        const eventFlow = eventFlowOf(projection, item.startedSequence, turnEnd);
         const toolTraces = projection.toolTraces
           .filter(
             (trace) =>
               trace.sequence >= item.startedSequence &&
-              trace.sequence <= item.lastSequence,
+              trace.sequence <= turnEnd,
           )
           .map(toTraceView);
         items.push({

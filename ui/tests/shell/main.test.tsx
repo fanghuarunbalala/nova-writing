@@ -147,6 +147,25 @@ describe("chatSurfaceMapper", () => {
             sequence: 5,
             timestamp: "2026-08-05T09:00:04.000Z",
           },
+          {
+            traceId: "trace-3",
+            toolName: "NovelVolumeRead",
+            stage: "execution_failed",
+            outcome: "failed",
+            runId: "r1",
+            sequence: 7,
+            timestamp: "2026-08-05T09:00:05.000Z",
+          },
+        ],
+        turns: [
+          {
+            runId: "r1",
+            turnId: "t1",
+            previous: null,
+            current: "running",
+            reason: "provider_started",
+            lastSequence: 8,
+          },
         ],
         timeline: [
           {
@@ -178,15 +197,17 @@ describe("chatSurfaceMapper", () => {
     }
     const assistant = items.find((item) => item.kind === "assistant");
     if (assistant !== undefined && assistant.kind === "assistant") {
-      // delta 与中间 trace 阶段不进事件流；只保留普通事件与终态 trace。
-      expect(assistant.eventFlow).toHaveLength(3);
+      // delta 与中间 trace 阶段不进事件流；只保留普通事件与终态 trace；
+      // 消息 completed 之后、turn 结束之前（gap）的失败 trace 也归属到本轮。
+      expect(assistant.eventFlow).toHaveLength(4);
       expect(assistant.eventFlow[0].family).toBe("agent");
       expect(assistant.eventFlow[1].summary).toContain("草稿会话");
       expect(assistant.eventFlow[2].eventType).toBe("system.tool.trace.recorded");
       expect(assistant.eventFlow[2].outcome).toBe("failed");
+      expect(assistant.eventFlow[3].outcome).toBe("failed");
       expect(assistant.eventFlow.some((event) => event.eventType === "agent.assistant.message.delta")).toBe(false);
       expect(assistant.eventFlow.some((event) => event.summary?.includes("sandbox_started"))).toBe(false);
-      expect(assistant.toolTraces).toHaveLength(2);
+      expect(assistant.toolTraces).toHaveLength(3);
       expect(assistant.toolTraces[0].toolName).toBe("CharacterList");
     }
   });

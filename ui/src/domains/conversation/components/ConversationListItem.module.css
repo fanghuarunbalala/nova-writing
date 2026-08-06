@@ -126,6 +126,21 @@
   animation: none;
 }
 
+/* unavailable：静态不可用标记（无动效）。 */
+.unavailable .status,
+.unavailable .spinner {
+  opacity: 1;
+}
+
+.unavailable .spinner {
+  width: 9px;
+  height: 9px;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--color-muted) 60%, transparent);
+  animation: none;
+}
+
 @keyframes conv-spin {
   to { transform: rotate(360deg); }
 }

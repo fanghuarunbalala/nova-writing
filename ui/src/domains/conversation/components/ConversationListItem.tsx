@@ -19,7 +19,7 @@ export interface ConversationListItemData {
   readonly title: string;
   readonly agentLabel: string;
   readonly lastActivityAt: number;
-  readonly status?: "generating" | "failed";
+  readonly status?: "generating" | "failed" | "unavailable";
   readonly pinned?: boolean;
 }
 
@@ -38,9 +38,10 @@ function formatTime(timestamp: number): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-const STATUS_LABEL: Record<"generating" | "failed", string> = {
+const STATUS_LABEL: Record<"generating" | "failed" | "unavailable", string> = {
   generating: "生成中",
   failed: "失败",
+  unavailable: "不可用",
 };
 
 export function ConversationListItem({

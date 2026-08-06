@@ -26,11 +26,15 @@ export const DEFAULT_NOVEL_AGENT_BINDING = Object.freeze({
 
 export type ConversationCatalogPhase = "idle" | "loading" | "ready" | "error";
 
+/** 会话运行状态（供列表标识：生成中 / 失败 / 不可用）。Conversation runtime status for list display. */
+export type ConversationCatalogStatus = "generating" | "failed" | "unavailable";
+
 export interface ConversationCatalogItem {
   readonly id: string;
   readonly title: string;
   readonly agentType: string;
   readonly agentLabel: string;
+  readonly status?: ConversationCatalogStatus;
 }
 
 export interface ConversationCatalogError {
@@ -208,11 +212,14 @@ function captureCatalogItem(
   }
   const id = requireNonBlank(snapshot.metadata.id, "Conversation id");
   const agentType = requireNonBlank(snapshot.activeAgentBinding.agentType, "Agent type");
+  // 后端暂未返回 status；字段先铺路，API 提供后直接透传。
+  const status = (snapshot as { status?: ConversationCatalogStatus }).status;
   return Object.freeze({
     id,
     title: `对话 ${id.slice(-6)}`,
     agentType,
     agentLabel: agentType === "novel" ? "Novel Agent" : agentType,
+    ...(status === undefined ? {} : { status }),
   });
 }
 

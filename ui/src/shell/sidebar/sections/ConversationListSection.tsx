@@ -25,6 +25,7 @@ export function ConversationListSection({ store, onSelect }: ConversationListSec
         title: item.title,
         agentLabel: item.agentLabel,
         lastActivityAt: 0, // catalog 快照暂无时间戳；Phase 2 契约扩展后补齐
+        ...(item.status === undefined ? {} : { status: item.status }),
       }))}
       activeId={snapshot.activeConversationId}
       onSelect={onSelect}

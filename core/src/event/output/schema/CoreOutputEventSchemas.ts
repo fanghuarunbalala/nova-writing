@@ -319,6 +319,60 @@ const AgentTodoUpdatedSnapshotSchema = Type.Object(
   { additionalProperties: true },
 );
 
+const WorkItemItemSchema = Type.Object(
+  {
+    id: Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }),
+    subject: Type.String({ minLength: 1, maxLength: 200 }),
+    description: Type.String({ minLength: 0, maxLength: 4_000 }),
+    status: Type.Union([
+      Type.Literal("pending"),
+      Type.Literal("in_progress"),
+      Type.Literal("completed"),
+      Type.Literal("deleted"),
+    ]),
+    activeForm: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 120 }),
+    ),
+    owner: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+    blocks: Type.Array(
+      Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }),
+      { maxItems: 32 },
+    ),
+    blockedBy: Type.Array(
+      Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }),
+      { maxItems: 32 },
+    ),
+    metadata: Type.Record(
+      Type.String({ minLength: 1, maxLength: 64 }),
+      Type.Unknown(),
+      { maxProperties: 16 },
+    ),
+    createdAt: Type.String({ minLength: 1 }),
+    updatedAt: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentWorkItemsUpdatedPayloadSchema = Type.Object(
+  {
+    toolCallId: Type.String({ minLength: 1, maxLength: 256 }),
+    listId: Type.String({ minLength: 1, maxLength: 512 }),
+    revision: Type.Integer({ minimum: 1 }),
+    nextTaskSequence: Type.Integer({ minimum: 1 }),
+    items: Type.Array(WorkItemItemSchema, { maxItems: 256 }),
+    updatedAt: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+const AgentWorkItemsUpdatedSnapshotSchema = Type.Object(
+  {
+    runId: Type.String({ minLength: 1 }),
+    turnId: Type.Optional(Type.String({ minLength: 1 })),
+  },
+  { additionalProperties: true },
+);
+
 const NudgePublicIdentityProperties = {
   nudgeId: Type.String({ minLength: 1 }),
   policyId: Type.String({ minLength: 1 }),
@@ -637,6 +691,14 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     schemaVersion: EVENT_SCHEMA_VERSION,
     payloadSchema: AgentTodoUpdatedPayloadSchema,
     snapshotSchema: AgentTodoUpdatedSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.agentWorkItemsUpdated,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: AgentWorkItemsUpdatedPayloadSchema,
+    snapshotSchema: AgentWorkItemsUpdatedSnapshotSchema,
   });
 
   for (const [eventType, payloadSchema] of [

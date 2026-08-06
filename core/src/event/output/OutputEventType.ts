@@ -11,6 +11,7 @@ export const OUTPUT_EVENT_TYPE = {
   agentAssistantMessageFailed: "agent.assistant.message.failed",
   agentAssistantMessageCancelled: "agent.assistant.message.cancelled",
   agentTodoUpdated: "agent.todo.updated",
+  agentWorkItemsUpdated: "agent.tasks.updated",
   subagentStarted: "agent.subagent.started",
   subagentProgress: "agent.subagent.progress",
   subagentCompleted: "agent.subagent.completed",

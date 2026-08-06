@@ -86,6 +86,13 @@ All of the above are Runtime metadata: never novel.sqlite, never draft.sqlite,
 never a ChangeSet, never Approval. Shared team lists require concurrent write
 safety (file lock + high-watermark ID, matching the reference implementation).
 
+Implementation follows the journal-first projection pattern established by
+`TodoWrite`: each mutation appends a complete `agent.tasks.updated` OutputEvent
+to the acting Conversation journal, and the in-memory list store is rebuilt by
+replaying those events. `agent_task_lists` and `agent_tasks` are logical
+storage; cross-process locking for shared team lists is deferred to the
+persisted store step.
+
 ## 6. Boundary Rules
 
 1. Work-item and Todo state changes never trigger Approval (independent of

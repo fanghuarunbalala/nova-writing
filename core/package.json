@@ -86,6 +86,7 @@
     "smoke:tool-approval-events": "pnpm build && node scripts/tool-approval-events-smoke.mjs",
     "smoke:tool-interaction-coordinator": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-interaction-coordinator-typecheck.ts && node scripts/tool-interaction-coordinator-smoke.mjs",
     "smoke:todo-write": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/todo-write-typecheck.ts && node scripts/todo-write-smoke.mjs",
+    "smoke:runtime-work-item-tasks": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/runtime-work-item-tasks-typecheck.ts && node scripts/runtime-work-item-tasks-smoke.mjs",
     "smoke:tool-dispatcher": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-dispatcher-typecheck.ts && node scripts/tool-dispatcher-smoke.mjs",
     "smoke:tool-execution-control": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/tool-execution-control-typecheck.ts && node scripts/tool-execution-control-smoke.mjs",
     "smoke:tool-execution-integration": "pnpm build && node scripts/tool-execution-integration-smoke.mjs",

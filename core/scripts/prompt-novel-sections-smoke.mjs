@@ -26,4 +26,13 @@ assert.ok(content.includes("作者是最终决策者"));
 // 恒定输出：同段重复渲染逐字一致。
 assert.equal(section.render(), content);
 
-console.log("prompt-novel-sections: ok (novel.identity registered and stable)");
+const workflow = registry.resolve("novel.workflow", "1.0.0");
+const workflowContent = workflow.render();
+assert.ok(workflowContent.startsWith("# 创作流程"));
+assert.ok(workflowContent.includes("**大纲先行**"));
+assert.ok(workflowContent.includes("**逐章推进**"));
+assert.ok(workflowContent.includes("**修订闭环**"));
+assert.ok(workflowContent.includes("**不一次性代写整本书**"));
+assert.equal(workflow.render(), workflowContent);
+
+console.log("prompt-novel-sections: ok (identity + workflow registered and stable)");

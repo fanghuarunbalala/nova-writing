@@ -14,6 +14,7 @@ import {
   CcbReferenceUsingYourToolsPromptSection,
 } from "./ccb/CcbReferenceMainPromptSections.js";
 import { NovelIdentityPromptSection } from "./novel/NovelBasePromptSections.js";
+import { NovelWorkflowPromptSection } from "./novel/NovelCraftPromptSections.js";
 
 export class CoreRuntimeProtocolPromptSection extends PromptSection {
   constructor() {
@@ -182,5 +183,6 @@ export function createDefaultPromptSectionRegistry(): PromptSectionRegistry {
     .register(new CcbReferenceUsingYourToolsPromptSection())
     .register(new CcbReferenceCommunicationStylePromptSection())
     .register(new NovelIdentityPromptSection())
+    .register(new NovelWorkflowPromptSection())
     .freeze();
 }

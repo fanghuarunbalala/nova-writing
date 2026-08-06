@@ -27,10 +27,16 @@ function mapToUiState(
 ): ConversationRuntimeUiState {
   switch (status) {
     case CONVERSATION_RUNTIME_STATUS.starting:
-    case CONVERSATION_RUNTIME_STATUS.online:
     case CONVERSATION_RUNTIME_STATUS.generating:
       return "live";
+    // online = 运行时在线但空闲（回合已完成/等待输入），不显示"生成中"。
+    case CONVERSATION_RUNTIME_STATUS.online:
+      return "idle";
     case CONVERSATION_RUNTIME_STATUS.crashed:
+    case CONVERSATION_RUNTIME_STATUS.missingManifest:
+    case CONVERSATION_RUNTIME_STATUS.notConfigured:
+    case CONVERSATION_RUNTIME_STATUS.invalidConfiguration:
+    case CONVERSATION_RUNTIME_STATUS.missingCredential:
       return "failed";
     default:
       return "disconnected";

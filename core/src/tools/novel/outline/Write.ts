@@ -1,4 +1,4 @@
-/** NovelOutlineWrite tool: batch-creates story units in the conversation Draft. */
+/** NovelOutlineWrite tool: batch-creates story units in the canonical outline after approval. */
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { ToolError } from "../../../runtime/tools/execution/index.js";
 import {
@@ -31,15 +31,15 @@ export function createWriteTool(
       version: "1.0.0",
       label: "Novel Outline Write",
       description:
-        "Batch-creates story units in the conversation Draft. The outline identity is created automatically. New units default to planningStatus=idea, realizationStatus=pending, root parent, and append order. Attach leaf to create the leaf plan in the same call. Items apply in order; the batch stops at the first rejected item.",
+        "Batch-creates story units in the canonical outline. The outline identity is created automatically. New units default to planningStatus=idea, realizationStatus=pending, root parent, and append order. Attach leaf to create the leaf plan in the same call. The whole batch is approved first, then applied in one atomic transaction; any rejected item leaves the batch unapplied.",
       parameters: NovelOutlineWriteParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage:
-          "Omit orderKey to append after the last sibling under the target parent.",
+          "Omit orderKey to append after the last sibling under the target parent. Pass baseRevision from a recent read to detect concurrent changes.",
         parameterGuidance:
           "value must be complete. Create fails with duplicate_id when the id already exists.",
         safetyGuidance:
-          "Writes are Draft-only until NovelDraftCommit. No digests are required at the tool surface.",
+          "Writes require approval and apply to canonical immediately after approval. The returned revision.currentRevision is the new optimistic-lock carrier.",
       }),
     },
     handler: {
@@ -55,7 +55,7 @@ export function createWriteTool(
             runId: context.runId,
             toolCallId: context.toolCallId,
             appliedCount: details.items.filter(
-              (item) => item.status === "appended",
+              (item) => item.status === "applied",
             ).length,
             rejectedCount: details.items.filter(
               (item) => item.status === "rejected",

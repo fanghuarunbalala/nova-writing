@@ -52,7 +52,7 @@ export function createCharacterEditTool(
           logger.info("novel_character_tool.edit.completed", {
             conversationId: context.conversationId,
             appliedCount: details.items.filter(
-              (item) => item.status === "appended",
+              (item) => item.status === "applied",
             ).length,
           });
           return editResult(details);

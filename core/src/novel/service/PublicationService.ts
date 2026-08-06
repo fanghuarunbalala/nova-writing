@@ -1,13 +1,10 @@
-/** Draft-only Publication mutation service that emits deterministic Operations. */
+/** Canonical Publication mutation service that emits deterministic Operations. */
 import { noopLogger, type Logger } from "../../observability/index.js";
-import {
-  captureNovelDraftSession,
-  type NovelDraftSession,
-} from "../draft/index.js";
 import {
   capturePublicationChapterId,
   capturePublicationStructureId,
   capturePublicationVolumeId,
+  type NovelId,
   type NovelOperationId,
   type PublicationChapterId,
   type PublicationStructureId,
@@ -28,11 +25,16 @@ import {
   createPublicationVolumeDeleteOperation,
   createPublicationVolumeReplaceOperation,
 } from "../operation/index.js";
-import type { NovelDraftOperationReceipt } from "../port/index.js";
-import type { NovelMutationService } from "./NovelMutationService.js";
+import type {
+  NovelCanonicalWritePort,
+  NovelCanonicalWriteResult,
+} from "../port/index.js";
+import { captureNovelRevision, type NovelRevision } from "../version/index.js";
+import type { NovelOperation } from "../operation/index.js";
 
 export interface PublicationServiceOptions {
-  readonly mutations: NovelMutationService;
+  readonly novelId: NovelId;
+  readonly canonicalWrites: NovelCanonicalWritePort;
   readonly identityFactory: {
     createOperationId(): NovelOperationId;
   };
@@ -49,16 +51,17 @@ export class PublicationService {
   }
 
   createPublication(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     id: PublicationStructureId,
-  ): Promise<NovelDraftOperationReceipt> {
-    const draft = captureNovelDraftSession(session);
+  ): Promise<NovelCanonicalWriteResult> {
     const publicationId = capturePublicationStructureId(id);
     return this.execute(
-      draft,
+      conversationId,
+      baseRevision,
       createPublicationCreateOperation({
         operationId: this.options.identityFactory.createOperationId(),
-        publication: { id: publicationId, novelId: draft.novelId },
+        publication: { id: publicationId, novelId: this.options.novelId },
       }),
       "create",
       { publicationId },
@@ -66,13 +69,14 @@ export class PublicationService {
   }
 
   createVolume(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     volume: PublicationVolume,
-  ): Promise<NovelDraftOperationReceipt> {
-    const draft = captureNovelDraftSession(session);
+  ): Promise<NovelCanonicalWriteResult> {
     const value = capturePublicationVolume(volume);
     return this.execute(
-      draft,
+      conversationId,
+      baseRevision,
       createPublicationVolumeCreateOperation({
         operationId: this.options.identityFactory.createOperationId(),
         volume: value,
@@ -83,14 +87,15 @@ export class PublicationService {
   }
 
   replaceVolume(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     volume: PublicationVolume,
     expectedRecordDigest: string,
-  ): Promise<NovelDraftOperationReceipt> {
-    const draft = captureNovelDraftSession(session);
+  ): Promise<NovelCanonicalWriteResult> {
     const value = capturePublicationVolume(volume);
     return this.execute(
-      draft,
+      conversationId,
+      baseRevision,
       createPublicationVolumeReplaceOperation({
         operationId: this.options.identityFactory.createOperationId(),
         volume: value,
@@ -102,14 +107,15 @@ export class PublicationService {
   }
 
   deleteVolume(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     id: PublicationVolumeId,
     expectedRecordDigest: string,
-  ): Promise<NovelDraftOperationReceipt> {
-    const draft = captureNovelDraftSession(session);
+  ): Promise<NovelCanonicalWriteResult> {
     const volumeId = capturePublicationVolumeId(id);
     return this.execute(
-      draft,
+      conversationId,
+      baseRevision,
       createPublicationVolumeDeleteOperation({
         operationId: this.options.identityFactory.createOperationId(),
         id: volumeId,
@@ -121,13 +127,14 @@ export class PublicationService {
   }
 
   createChapter(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     chapter: PublicationChapter,
-  ): Promise<NovelDraftOperationReceipt> {
-    const draft = captureNovelDraftSession(session);
+  ): Promise<NovelCanonicalWriteResult> {
     const value = capturePublicationChapter(chapter);
     return this.execute(
-      draft,
+      conversationId,
+      baseRevision,
       createPublicationChapterCreateOperation({
         operationId: this.options.identityFactory.createOperationId(),
         chapter: value,
@@ -142,14 +149,15 @@ export class PublicationService {
   }
 
   replaceChapter(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     chapter: PublicationChapter,
     expectedRecordDigest: string,
-  ): Promise<NovelDraftOperationReceipt> {
-    const draft = captureNovelDraftSession(session);
+  ): Promise<NovelCanonicalWriteResult> {
     const value = capturePublicationChapter(chapter);
     return this.execute(
-      draft,
+      conversationId,
+      baseRevision,
       createPublicationChapterReplaceOperation({
         operationId: this.options.identityFactory.createOperationId(),
         chapter: value,
@@ -165,14 +173,15 @@ export class PublicationService {
   }
 
   deleteChapter(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     id: PublicationChapterId,
     expectedRecordDigest: string,
-  ): Promise<NovelDraftOperationReceipt> {
-    const draft = captureNovelDraftSession(session);
+  ): Promise<NovelCanonicalWriteResult> {
     const chapterId = capturePublicationChapterId(id);
     return this.execute(
-      draft,
+      conversationId,
+      baseRevision,
       createPublicationChapterDeleteOperation({
         operationId: this.options.identityFactory.createOperationId(),
         id: chapterId,
@@ -184,28 +193,31 @@ export class PublicationService {
   }
 
   private async execute(
-    session: NovelDraftSession,
-    operation: Parameters<NovelMutationService["execute"]>[1],
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
+    operation: NovelOperation,
     action: string,
     identities: Readonly<Record<string, string>>,
-  ): Promise<NovelDraftOperationReceipt> {
+  ): Promise<NovelCanonicalWriteResult> {
     this.logger.debug("novel_publication.mutation.started", {
-      novelId: session.novelId,
-      draftSessionId: session.id,
       operationId: operation.operationId,
       action,
       ...identities,
     });
-    const receipt = await this.options.mutations.execute(session, operation);
+    const result = await this.options.canonicalWrites.applyOperations({
+      operations: [operation],
+      conversationId,
+      ...(baseRevision === undefined
+        ? {}
+        : { baseRevision: captureNovelRevision(baseRevision) }),
+    });
     this.logger.info("novel_publication.mutation.completed", {
-      novelId: session.novelId,
-      draftSessionId: session.id,
       operationId: operation.operationId,
       action,
-      sequence: receipt.sequence,
-      status: receipt.status,
+      resultRevision: result.resultRevision,
+      status: result.status,
       ...identities,
     });
-    return receipt;
+    return result;
   }
 }

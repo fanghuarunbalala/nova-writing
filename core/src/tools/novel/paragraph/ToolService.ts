@@ -5,19 +5,23 @@
  */
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import {
-  NovelDraftSessionService,
   FractionalOrderKeyFactory,
   NovelOperationPreconditionError,
   NovelProtocolValidationError,
   ParagraphQueryService,
-  ParagraphService,
   canonicalNovelReadScope,
   captureOrderKey,
+  captureNovelRevision,
   captureParagraph,
   captureParagraphId,
   captureStoryUnitId,
-  draftNovelReadScope,
-  type NovelDraftSession,
+  createParagraphCreateOperation,
+  createParagraphOrderReplaceOperation,
+  createParagraphStoryUnitReplaceOperation,
+  createParagraphTextReplaceOperation,
+  type NovelCanonicalWritePort,
+  type NovelOperation,
+  type NovelOperationId,
   type NovelReadScope,
   type ParagraphId,
   type StoryUnitId,
@@ -37,10 +41,12 @@ import type {
 } from "./schemas.js";
 
 export interface NovelParagraphToolServiceOptions {
-  readonly paragraphs: ParagraphService;
   readonly paragraphQueries: ParagraphQueryService;
-  readonly drafts: NovelDraftSessionService;
-  readonly identityFactory: { createParagraphId(): ParagraphId };
+  readonly canonicalWrites: NovelCanonicalWritePort;
+  readonly identityFactory: {
+    createParagraphId(): ParagraphId;
+    createOperationId(): NovelOperationId;
+  };
   readonly orderKeys?: {
     initial(): OrderKey;
     after(orderKey: OrderKey): OrderKey;
@@ -73,10 +79,8 @@ export class NovelParagraphToolService {
     conversationId: string,
     arguments_: NovelParagraphReadArguments,
   ): Promise<NovelParagraphReadDetails> {
-    const scope = await this.resolveReadScope(conversationId, arguments_.scope);
-    if (scope === undefined) {
-      return { paragraphs: [] };
-    }
+    const scope = canonicalNovelReadScope;
+    const revision = await this.options.canonicalWrites.getCurrentRevision();
     const paragraphs =
       arguments_.storyUnitId === undefined
         ? (await this.options.paragraphQueries.getCatalog(scope))?.snapshot
@@ -87,6 +91,7 @@ export class NovelParagraphToolService {
           )).map((readModel) => readModel.paragraph);
     return {
       paragraphs: paragraphs.map((paragraph) => toParagraphDetails(paragraph)),
+      revision: { currentRevision: revision },
     };
   }
 
@@ -94,12 +99,17 @@ export class NovelParagraphToolService {
     conversationId: string,
     arguments_: NovelParagraphWriteArguments,
   ): Promise<NovelParagraphWriteDetails> {
-    const session = await this.resolveOrStartDraft(conversationId);
-    const scope = draftNovelReadScope(session);
+    const scope = canonicalNovelReadScope;
+    const currentRevision =
+      await this.options.canonicalWrites.getCurrentRevision();
+    const baseRevision =
+      arguments_.baseRevision === undefined
+        ? undefined
+        : captureNovelRevision(arguments_.baseRevision);
+    const operations: NovelOperation[] = [];
     const items: NovelParagraphItemDetails[] = [];
     this.logger.info("novel_paragraph_tool.write.started", {
       conversationId,
-      draftSessionId: session.id,
       requestedCount: arguments_.values.length,
     });
     for (const value of arguments_.values) {
@@ -107,7 +117,13 @@ export class NovelParagraphToolService {
         value.id ?? this.options.identityFactory.createParagraphId(),
       );
       try {
-        items.push(await this.writeOne(session, scope, value, paragraphId));
+        await this.appendWriteOperation({
+          scope,
+          value,
+          paragraphId,
+          operations,
+        });
+        items.push({ id: paragraphId, status: "applied" });
       } catch (error) {
         const reason = mapItemError(error);
         if (reason === undefined) {
@@ -115,38 +131,76 @@ export class NovelParagraphToolService {
             code: "NOVEL_PARAGRAPH_WRITE_FAILED",
             category: "execution",
             retryable: true,
-            sideEffectStatus: "possible",
+            sideEffectStatus: "none",
             conversationId,
           });
         }
-        items.push(rejectedItem(paragraphId, reason));
-        break;
+        this.logger.info("novel_paragraph_tool.write.rejected_batch", {
+          conversationId,
+          reason,
+        });
+        return {
+          items: [{ id: paragraphId, status: "rejected", reason }],
+          revision: { currentRevision },
+        };
       }
     }
-    this.logger.info("novel_paragraph_tool.write.completed", {
-      conversationId,
-      draftSessionId: session.id,
-      appliedCount: items.filter((item) => item.status === "appended").length,
-      rejectedCount: items.filter((item) => item.status === "rejected").length,
-    });
-    return { items };
+    if (operations.length === 0) {
+      return { items, revision: { currentRevision } };
+    }
+    try {
+      const result = await this.options.canonicalWrites.applyOperations({
+        operations,
+        conversationId,
+        ...(baseRevision === undefined ? {} : { baseRevision }),
+      });
+      this.logger.info("novel_paragraph_tool.write.completed", {
+        conversationId,
+        appliedCount: items.length,
+        resultRevision: result.resultRevision,
+      });
+      return { items, revision: { currentRevision: result.resultRevision } };
+    } catch (error) {
+      this.logger.info("novel_paragraph_tool.write.failed", {
+        conversationId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      throw new ToolError({
+        code: "NOVEL_PARAGRAPH_WRITE_FAILED",
+        category: "execution",
+        retryable: true,
+        sideEffectStatus: "none",
+        conversationId,
+      });
+    }
   }
 
   async edit(
     conversationId: string,
     arguments_: NovelParagraphEditArguments,
   ): Promise<NovelParagraphWriteDetails> {
-    const session = await this.resolveOrStartDraft(conversationId);
-    const scope = draftNovelReadScope(session);
+    const scope = canonicalNovelReadScope;
+    const currentRevision =
+      await this.options.canonicalWrites.getCurrentRevision();
+    const baseRevision =
+      arguments_.baseRevision === undefined
+        ? undefined
+        : captureNovelRevision(arguments_.baseRevision);
+    const operations: NovelOperation[] = [];
     const items: NovelParagraphItemDetails[] = [];
     this.logger.info("novel_paragraph_tool.edit.started", {
       conversationId,
-      draftSessionId: session.id,
       requestedCount: arguments_.values.length,
     });
     for (const patch of arguments_.values) {
       try {
-        items.push(await this.editOne(session, scope, patch.id, patch.value));
+        await this.appendEditOperation({
+          scope,
+          id: patch.id,
+          patch: patch.value,
+          operations,
+        });
+        items.push({ id: patch.id, status: "applied" });
       } catch (error) {
         const reason = mapItemError(error);
         if (reason === undefined) {
@@ -154,29 +208,57 @@ export class NovelParagraphToolService {
             code: "NOVEL_PARAGRAPH_EDIT_FAILED",
             category: "execution",
             retryable: true,
-            sideEffectStatus: "possible",
+            sideEffectStatus: "none",
             conversationId,
           });
         }
-        items.push(rejectedItem(patch.id, reason));
-        break;
+        this.logger.info("novel_paragraph_tool.edit.rejected_batch", {
+          conversationId,
+          reason,
+        });
+        return {
+          items: [{ id: patch.id, status: "rejected", reason }],
+          revision: { currentRevision },
+        };
       }
     }
-    this.logger.info("novel_paragraph_tool.edit.completed", {
-      conversationId,
-      draftSessionId: session.id,
-      appliedCount: items.filter((item) => item.status === "updated").length,
-      rejectedCount: items.filter((item) => item.status === "rejected").length,
-    });
-    return { items };
+    if (operations.length === 0) {
+      return { items, revision: { currentRevision } };
+    }
+    try {
+      const result = await this.options.canonicalWrites.applyOperations({
+        operations,
+        conversationId,
+        ...(baseRevision === undefined ? {} : { baseRevision }),
+      });
+      this.logger.info("novel_paragraph_tool.edit.completed", {
+        conversationId,
+        appliedCount: items.length,
+        resultRevision: result.resultRevision,
+      });
+      return { items, revision: { currentRevision: result.resultRevision } };
+    } catch (error) {
+      this.logger.info("novel_paragraph_tool.edit.failed", {
+        conversationId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      throw new ToolError({
+        code: "NOVEL_PARAGRAPH_EDIT_FAILED",
+        category: "execution",
+        retryable: true,
+        sideEffectStatus: "none",
+        conversationId,
+      });
+    }
   }
 
-  private async writeOne(
-    session: NovelDraftSession,
-    scope: NovelReadScope,
-    value: ParagraphWriteValue,
-    paragraphId: ParagraphId,
-  ): Promise<NovelParagraphItemDetails> {
+  private async appendWriteOperation(input: {
+    readonly scope: NovelReadScope;
+    readonly value: ParagraphWriteValue;
+    readonly paragraphId: ParagraphId;
+    readonly operations: NovelOperation[];
+  }): Promise<void> {
+    const { scope, value, paragraphId, operations } = input;
     if ((await this.options.paragraphQueries.getParagraph(scope, paragraphId)) !== undefined) {
       throw new NovelParagraphItemFailure(ITEM_REJECTION.duplicateId);
     }
@@ -190,92 +272,71 @@ export class NovelParagraphToolService {
       orderKey,
       text: value.text,
     });
-    const receipt = await this.options.paragraphs.createParagraph(session, paragraph);
-    return Object.freeze({
-      id: paragraphId,
-      status: "appended",
-      sequence: receipt.sequence,
-    });
+    operations.push(
+      createParagraphCreateOperation({
+        operationId: this.options.identityFactory.createOperationId(),
+        paragraph,
+      }),
+    );
   }
 
-  private async editOne(
-    session: NovelDraftSession,
-    scope: NovelReadScope,
-    idInput: string,
-    patch: NovelParagraphEditValue,
-  ): Promise<NovelParagraphItemDetails> {
-    const id = captureParagraphId(idInput);
-    const current = await this.options.paragraphQueries.getParagraph(scope, id);
+  private async appendEditOperation(input: {
+    readonly scope: NovelReadScope;
+    readonly id: string;
+    readonly patch: NovelParagraphEditValue;
+    readonly operations: NovelOperation[];
+  }): Promise<void> {
+    const id = captureParagraphId(input.id);
+    const current = await this.options.paragraphQueries.getParagraph(
+      input.scope,
+      id,
+    );
     if (current === undefined) {
       throw new NovelParagraphItemFailure(ITEM_REJECTION.notFound);
     }
-    const storyUnitId = patch.storyUnitId === undefined
+    const storyUnitId = input.patch.storyUnitId === undefined
       ? current.paragraph.storyUnitId
-      : captureStoryUnitId(patch.storyUnitId);
-    const orderKey = patch.orderKey === undefined
+      : captureStoryUnitId(input.patch.storyUnitId);
+    const orderKey = input.patch.orderKey === undefined
       ? current.paragraph.orderKey
-      : captureOrderKey(patch.orderKey);
-    const text = patch.text ?? current.paragraph.text;
+      : captureOrderKey(input.patch.orderKey);
+    const text = input.patch.text ?? current.paragraph.text;
     if (
       storyUnitId === current.paragraph.storyUnitId &&
       orderKey === current.paragraph.orderKey &&
       text === current.paragraph.text
     ) {
-      return Object.freeze({ id, status: "duplicate" });
+      return;
     }
     if (orderKey !== current.paragraph.orderKey) {
-      await this.options.paragraphs.replaceOrder(
-        session,
-        id,
-        current.orderDigest,
-        orderKey as never,
+      input.operations.push(
+        createParagraphOrderReplaceOperation({
+          operationId: this.options.identityFactory.createOperationId(),
+          paragraphId: id,
+          expectedOrderDigest: current.orderDigest,
+          orderKey,
+        }),
       );
     }
     if (storyUnitId !== current.paragraph.storyUnitId) {
-      const refreshed = await this.options.paragraphQueries.getParagraph(scope, id);
-      if (refreshed === undefined) {
-        throw new NovelParagraphItemFailure(ITEM_REJECTION.notFound);
-      }
-      await this.options.paragraphs.replaceStoryUnit(
-        session,
-        id,
-        refreshed.storyUnitDigest,
-        storyUnitId as never,
+      input.operations.push(
+        createParagraphStoryUnitReplaceOperation({
+          operationId: this.options.identityFactory.createOperationId(),
+          paragraphId: id,
+          expectedStoryUnitDigest: current.storyUnitDigest,
+          storyUnitId,
+        }),
       );
     }
     if (text !== current.paragraph.text) {
-      const refreshed = await this.options.paragraphQueries.getParagraph(scope, id);
-      if (refreshed === undefined) {
-        throw new NovelParagraphItemFailure(ITEM_REJECTION.notFound);
-      }
-      await this.options.paragraphs.replaceText(
-        session,
-        id,
-        refreshed.textDigest,
-        text,
+      input.operations.push(
+        createParagraphTextReplaceOperation({
+          operationId: this.options.identityFactory.createOperationId(),
+          paragraphId: id,
+          expectedTextDigest: current.textDigest,
+          text,
+        }),
       );
-    }
-    return Object.freeze({ id, status: "updated" });
-  }
-
-  private async resolveOrStartDraft(
-    conversationId: string,
-  ): Promise<NovelDraftSession> {
-    const existing = await this.options.drafts.getActiveDraft(conversationId);
-    if (existing !== undefined) return existing;
-    try {
-      return await this.options.drafts.startDraft(conversationId);
-    } catch {
-      this.logger.warn("novel_paragraph_tool.draft.start_failed", {
-        conversationId,
-      });
-      throw new ToolError({
-        code: "NOVEL_DRAFT_START_FAILED",
-        category: "execution",
-        retryable: true,
-        sideEffectStatus: "possible",
-        conversationId,
-      });
     }
   }
 
@@ -293,14 +354,6 @@ export class NovelParagraphToolService {
       : this.orderKeys.after(last.paragraph.orderKey);
   }
 
-  private async resolveReadScope(
-    conversationId: string,
-    scope: NovelParagraphReadArguments["scope"],
-  ): Promise<NovelReadScope | undefined> {
-    if (scope === "canonical") return canonicalNovelReadScope;
-    const session = await this.options.drafts.getActiveDraft(conversationId);
-    return session === undefined ? undefined : draftNovelReadScope(session);
-  }
 }
 
 class NovelParagraphItemFailure extends Error {

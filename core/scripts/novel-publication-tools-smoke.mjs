@@ -4,26 +4,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
-  NovelDraftSessionService,
   NovelPublicationToolService,
+  captureNovelOperationId,
   captureNovelRevision,
   captureNovelTimestamp,
   captureParagraph,
   captureParagraphId,
-  capturePublicationChapterId,
-  capturePublicationStructureId,
-  capturePublicationVolumeId,
+  captureStoryOutline,
   captureStoryOutlineId,
   captureStoryUnit,
   captureStoryUnitId,
   createNovelPublicationToolRegistry,
+  createParagraphCreateOperation,
+  createStoryOutlineCreateOperation,
+  createStoryUnitCreateOperation,
 } from "../dist/index.js";
 import {
   NodeNovelStoreLocator,
   NodeWorkspaceStoreLocator,
   SqliteNovelCanonicalStore,
-  SqliteNovelDraftStore,
-  SqliteNovelSnapshotter,
   createNodeNovelApplication,
 } from "../dist/node/index.js";
 
@@ -40,7 +39,7 @@ class SequenceClock {
   offset = 0;
   now() {
     return captureNovelTimestamp(
-      new Date(Date.UTC(2026, 7, 6, 10, 0, 0, this.offset++)).toISOString(),
+      new Date(Date.UTC(2026, 7, 6, 9, 0, 0, this.offset++)).toISOString(),
     );
   }
 }
@@ -65,8 +64,6 @@ class CollectingLogger {
 const root = await mkdtemp(join(tmpdir(), "novel-publication-tools-"));
 const logs = [];
 const logger = new CollectingLogger(logs);
-let canonicalStore;
-let draftStore;
 
 const context = (conversationId, index) => ({
   conversationId,
@@ -83,35 +80,16 @@ try {
     storageRoot: join(root, "storage"),
   }).resolve(workspaceRoot);
   const location = await new NodeNovelStoreLocator().resolve(workspace);
-  canonicalStore = await SqliteNovelCanonicalStore.open({
+  const canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
     revisionFactory: new FixedRevisionFactory("revision_publication_tools_base"),
     logger,
   });
   const canonical = await canonicalStore.getMetadata();
-  draftStore = await SqliteNovelDraftStore.open({
-    location,
-    novelId: canonical.novelId,
-    logger,
-  });
   const clock = new SequenceClock();
-  let draftSequence = 0;
+  let operationSequence = 0;
   let volumeSequence = 0;
   let chapterSequence = 0;
-  const drafts = new NovelDraftSessionService({
-    canonicalStore,
-    draftStore,
-    snapshotter: new SqliteNovelSnapshotter({
-      location,
-      novelId: canonical.novelId,
-      logger,
-    }),
-    identityFactory: {
-      createDraftSessionId: () => `draft_publication_tools_${++draftSequence}`,
-    },
-    clock,
-    logger,
-  });
   const application = createNodeNovelApplication({
     location,
     novelId: canonical.novelId,
@@ -119,17 +97,18 @@ try {
     logger,
   });
   const service = new NovelPublicationToolService({
-    publication: application.publication,
+    novelId: canonical.novelId,
     publicationQueries: application.publicationQueries,
     paragraphs: application.paragraphQueries,
-    drafts,
+    canonicalWrites: application.canonicalWrites,
     identityFactory: {
-      createPublicationStructureId: () =>
-        capturePublicationStructureId("publication_tools_auto"),
+      createPublicationStructureId: () => "publication_tool_auto",
       createPublicationVolumeId: () =>
-        capturePublicationVolumeId(`volume_generated_${++volumeSequence}`),
+        `volume_tool_generated_${++volumeSequence}`,
       createPublicationChapterId: () =>
-        capturePublicationChapterId(`chapter_generated_${++chapterSequence}`),
+        `chapter_tool_generated_${++chapterSequence}`,
+      createOperationId: () =>
+        captureNovelOperationId(`publication_tool_operation_${++operationSequence}`),
     },
     logger,
   });
@@ -155,32 +134,51 @@ try {
   ]);
 
   const conversation = "conversation_publication_tools";
-  const session = await drafts.startDraft(conversation);
   const outlineId = captureStoryOutlineId("outline_publication_tools");
   const storyUnitId = captureStoryUnitId("story_unit_publication_tools");
-  await application.outline.createOutline(session, outlineId);
-  await application.outline.createStoryUnit(session, captureStoryUnit({
-    id: storyUnitId,
-    outlineId,
-    orderKey: "8000",
-    title: "Leaf",
-    planningStatus: "ready",
-    realizationStatus: "in-progress",
-  }));
   const paragraphOneId = captureParagraphId("paragraph_publication_one");
   const paragraphTwoId = captureParagraphId("paragraph_publication_two");
-  await application.paragraphs.createParagraph(session, captureParagraph({
-    id: paragraphOneId,
-    storyUnitId,
-    orderKey: "8000",
-    text: "Opening line.",
-  }));
-  await application.paragraphs.createParagraph(session, captureParagraph({
-    id: paragraphTwoId,
-    storyUnitId,
-    orderKey: "80008000",
-    text: "Cliffhanger line.",
-  }));
+  await application.canonicalWrites.applyOperations({
+    operations: [
+      createStoryOutlineCreateOperation({
+        operationId: captureNovelOperationId(`publication_tool_setup_${++operationSequence}`),
+        outline: captureStoryOutline({
+          id: outlineId,
+          novelId: canonical.novelId,
+        }),
+      }),
+      createStoryUnitCreateOperation({
+        operationId: captureNovelOperationId(`publication_tool_setup_${++operationSequence}`),
+        storyUnit: captureStoryUnit({
+          id: storyUnitId,
+          outlineId,
+          orderKey: "8000",
+          title: "Leaf",
+          planningStatus: "ready",
+          realizationStatus: "in-progress",
+        }),
+      }),
+      createParagraphCreateOperation({
+        operationId: captureNovelOperationId(`publication_tool_setup_${++operationSequence}`),
+        paragraph: captureParagraph({
+          id: paragraphOneId,
+          storyUnitId,
+          orderKey: "8000",
+          text: "Opening line.",
+        }),
+      }),
+      createParagraphCreateOperation({
+        operationId: captureNovelOperationId(`publication_tool_setup_${++operationSequence}`),
+        paragraph: captureParagraph({
+          id: paragraphTwoId,
+          storyUnitId,
+          orderKey: "80008000",
+          text: "Cliffhanger line.",
+        }),
+      }),
+    ],
+    conversationId: conversation,
+  });
 
   const volumeWriteTool = registry.require("NovelVolumeWrite");
   const volumeReadTool = registry.require("NovelVolumeRead");
@@ -193,12 +191,12 @@ try {
     { values: [{ title: "Volume One" }] },
     progress,
   );
-  assert.equal(volumeWrite.details.items[0].status, "appended");
+  assert.equal(volumeWrite.details.items[0].status, "applied");
   const volumeId = volumeWrite.details.items[0].id;
 
   const volumeRead = await volumeReadTool.handler.execute(
     context(conversation, 2),
-    { scope: "draft" },
+    {},
     progress,
   );
   assert.equal(volumeRead.details.volumes.length, 1);
@@ -217,12 +215,16 @@ try {
     },
     progress,
   );
-  assert.equal(chapterWrite.details.items[0].status, "appended");
+  assert.equal(
+    chapterWrite.details.items[0].status,
+    "applied",
+    chapterWrite.details.items[0].reason,
+  );
   const chapterId = chapterWrite.details.items[0].id;
 
   const chapterRead = await chapterReadTool.handler.execute(
     context(conversation, 4),
-    { scope: "draft", chapterId, includeContent: true },
+    { chapterId, includeContent: true },
     progress,
   );
   assert.equal(chapterRead.details.chapters.length, 1);
@@ -249,7 +251,7 @@ try {
     },
     progress,
   );
-  assert.equal(chapterEdit.details.items[0].status, "updated");
+  assert.equal(chapterEdit.details.items[0].status, "applied");
   const splitWrite = await chapterWriteTool.handler.execute(
     context(conversation, 6),
     {
@@ -263,19 +265,30 @@ try {
     },
     progress,
   );
-  assert.equal(splitWrite.details.items[0].status, "appended");
+  assert.equal(splitWrite.details.items[0].status, "applied");
   const readAll = await chapterReadTool.handler.execute(
     context(conversation, 7),
-    { scope: "draft", volumeId, includeContent: true },
+    { volumeId, includeContent: true },
     progress,
   );
   assert.deepEqual(
     readAll.details.chapters.map((chapter) => chapter.paragraphIds),
     [[paragraphOneId], [paragraphTwoId]],
   );
+
+  // Redaction: no chapter/paragraph text in structured logs.
+  const serialized = JSON.stringify(logs);
+  for (const forbidden of [
+    "Volume One",
+    "Chapter One",
+    "Opening line.",
+    "Cliffhanger line.",
+    root,
+  ]) {
+    assert.equal(serialized.includes(forbidden), false);
+  }
+
   console.log("novel publication tools smoke passed");
 } finally {
-  await draftStore?.close();
-  await canonicalStore?.close();
   await rm(root, { recursive: true, force: true });
 }

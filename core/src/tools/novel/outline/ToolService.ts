@@ -9,16 +9,15 @@ import {
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import {
   FractionalOrderKeyFactory,
-  NovelDraftSessionService,
   NovelOperationPreconditionError,
   NovelProtocolValidationError,
   StoryOutlineQueryService,
-  StoryOutlineService,
   canonicalNovelReadScope,
   captureCharacterId,
   captureLeafStoryUnitPlan,
   captureLocationId,
   captureOrderKey,
+  captureNovelRevision,
   captureRhythmBeatId,
   captureStoryEntityId,
   captureStoryEventStepId,
@@ -26,13 +25,20 @@ import {
   captureStoryUnitContent,
   captureStoryUnitEntityChangeId,
   captureStoryUnitId,
-  draftNovelReadScope,
+  createLeafStoryUnitPlanClearOperation,
+  createLeafStoryUnitPlanReplaceOperation,
+  createStoryOutlineCreateOperation,
+  createStoryUnitCreateOperation,
+  createStoryUnitMoveOperation,
+  createStoryUnitReplaceOperation,
   type LeafStoryUnitPlan,
-  type NovelDraftSession,
+  type NovelCanonicalWritePort,
+  type NovelId,
+  type NovelOperation,
+  type NovelOperationId,
   type NovelReadScope,
   type OrderKey,
   type OrderKeyFactory,
-  type StoryIdentityFactory,
   type StoryOutlineId,
   type StoryOutlineTree,
   type StoryUnit,
@@ -41,7 +47,6 @@ import {
   type StoryUnitContent,
   type StoryUnitId,
 } from "../../../novel/index.js";
-import { ToolError } from "../../../runtime/tools/execution/index.js";
 import type {
   LeafPlanToolValue,
   LeafPlanWriteValue,
@@ -54,20 +59,21 @@ import type {
   NovelOutlineWriteArguments,
   NovelOutlineWriteDetails,
   StoryUnitWriteValue,
-  ToolScope,
 } from "./schemas.js";
 
 export interface OutlineToolServiceOptions {
-  readonly outline: StoryOutlineService;
+  readonly novelId: NovelId;
   readonly outlineQueries: StoryOutlineQueryService;
-  readonly drafts: NovelDraftSessionService;
-  readonly identityFactory: Pick<
-    StoryIdentityFactory,
-    "createStoryOutlineId" | "createStoryUnitId"
-  >;
+  readonly canonicalWrites: NovelCanonicalWritePort;
+  readonly identityFactory: {
+    createStoryOutlineId(): StoryOutlineId;
+    createStoryUnitId(): StoryUnitId;
+    createOperationId(): NovelOperationId;
+  };
   readonly orderKeys?: OrderKeyFactory;
   readonly logger?: Logger;
 }
+import { ToolError } from "../../../runtime/tools/execution/index.js";
 
 const ITEM_REJECTION = {
   notFound: "not_found",
@@ -95,17 +101,19 @@ export class OutlineToolService {
     conversationId: string,
     arguments_: NovelOutlineReadArguments,
   ): Promise<NovelOutlineReadDetails> {
-    const scope = await this.resolveReadScope(conversationId, arguments_.scope);
-    if (scope === undefined) {
-      return { units: [] };
-    }
+    const scope = canonicalNovelReadScope;
+    const revision = await this.options.canonicalWrites.getCurrentRevision();
     const outline = await this.options.outlineQueries.getOutline(scope);
     if (outline === undefined) {
-      return { units: [] };
+      return { units: [], revision: { currentRevision: revision } };
     }
     const tree = await this.options.outlineQueries.getTree(scope);
     if (tree === undefined) {
-      return { outline: { id: outline.id, novelId: outline.novelId }, units: [] };
+      return {
+        outline: { id: outline.id, novelId: outline.novelId },
+        units: [],
+        revision: { currentRevision: revision },
+      };
     }
     const selected =
       arguments_.storyUnitId === undefined
@@ -179,19 +187,33 @@ export class OutlineToolService {
       }
       units.push(entry);
     }
-    return { outline: { id: outline.id, novelId: outline.novelId }, units };
+    return {
+      outline: { id: outline.id, novelId: outline.novelId },
+      units,
+      revision: { currentRevision: revision },
+    };
   }
 
   async write(
     conversationId: string,
     arguments_: NovelOutlineWriteArguments,
   ): Promise<NovelOutlineWriteDetails> {
-    const session = await this.resolveOrStartDraft(conversationId);
-    const scope = draftNovelReadScope(session);
+    const scope = canonicalNovelReadScope;
+    const currentRevision =
+      await this.options.canonicalWrites.getCurrentRevision();
+    const baseRevision =
+      arguments_.baseRevision === undefined
+        ? undefined
+        : captureNovelRevision(arguments_.baseRevision);
+    const outline = await this.options.outlineQueries.getOutline(scope);
+    const tree = await this.options.outlineQueries.getTree(scope);
+    const operations: NovelOperation[] = [];
+    const createdIds = new Set<string>();
     const items: NovelOutlineItemDetails[] = [];
+    const outlineId =
+      outline === undefined ? this.appendOutlineCreate(operations) : outline.id;
     this.logger.info("novel_outline_tool.write.started", {
       conversationId,
-      draftSessionId: session.id,
       requestedCount: arguments_.values.length,
     });
     for (const value of arguments_.values) {
@@ -199,7 +221,16 @@ export class OutlineToolService {
         value.id ?? this.options.identityFactory.createStoryUnitId(),
       );
       try {
-        items.push(await this.writeOne(session, scope, value, storyUnitId));
+        this.appendWriteOperations({
+          outlineId,
+          tree,
+          value,
+          storyUnitId,
+          operations,
+          createdIds,
+        });
+        createdIds.add(storyUnitId);
+        items.push({ id: storyUnitId, status: "applied" });
       } catch (error) {
         const reason = mapItemError(error);
         if (reason === undefined) {
@@ -207,38 +238,77 @@ export class OutlineToolService {
             code: "NOVEL_OUTLINE_WRITE_FAILED",
             category: "execution",
             retryable: true,
-            sideEffectStatus: "possible",
+            sideEffectStatus: "none",
             conversationId,
           });
         }
-        items.push(rejectedItem(storyUnitId, reason));
-        break;
+        // 2A：任一校验失败整批拒绝，不提交任何操作。
+        this.logger.info("novel_outline_tool.write.rejected_batch", {
+          conversationId,
+          reason,
+        });
+        return {
+          items: [{ id: storyUnitId, status: "rejected", reason }],
+          revision: { currentRevision },
+        };
       }
     }
-    this.logger.info("novel_outline_tool.write.completed", {
-      conversationId,
-      draftSessionId: session.id,
-      appliedCount: items.filter((item) => item.status === "appended").length,
-      rejectedCount: items.filter((item) => item.status === "rejected").length,
-    });
-    return { items };
+    if (operations.length === 0) {
+      return { items, revision: { currentRevision } };
+    }
+    try {
+      const result = await this.options.canonicalWrites.applyOperations({
+        operations,
+        conversationId,
+        ...(baseRevision === undefined ? {} : { baseRevision }),
+      });
+      this.logger.info("novel_outline_tool.write.completed", {
+        conversationId,
+        appliedCount: items.length,
+        resultRevision: result.resultRevision,
+      });
+      return { items, revision: { currentRevision: result.resultRevision } };
+    } catch (error) {
+      this.logger.info("novel_outline_tool.write.failed", {
+        conversationId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      throw new ToolError({
+        code: "NOVEL_OUTLINE_WRITE_FAILED",
+        category: "execution",
+        retryable: true,
+        sideEffectStatus: "none",
+        conversationId,
+      });
+    }
   }
 
   async edit(
     conversationId: string,
     arguments_: NovelOutlineEditArguments,
   ): Promise<NovelOutlineWriteDetails> {
-    const session = await this.resolveOrStartDraft(conversationId);
-    const scope = draftNovelReadScope(session);
+    const scope = canonicalNovelReadScope;
+    const currentRevision =
+      await this.options.canonicalWrites.getCurrentRevision();
+    const baseRevision =
+      arguments_.baseRevision === undefined
+        ? undefined
+        : captureNovelRevision(arguments_.baseRevision);
+    const operations: NovelOperation[] = [];
     const items: NovelOutlineItemDetails[] = [];
     this.logger.info("novel_outline_tool.edit.started", {
       conversationId,
-      draftSessionId: session.id,
       requestedCount: arguments_.values.length,
     });
     for (const patch of arguments_.values) {
       try {
-        items.push(await this.editOne(session, scope, patch.id, patch.value));
+        await this.appendEditOperations({
+          scope,
+          id: patch.id,
+          patch: patch.value,
+          operations,
+        });
+        items.push({ id: patch.id, status: "applied" });
       } catch (error) {
         const reason = mapItemError(error);
         if (reason === undefined) {
@@ -246,30 +316,62 @@ export class OutlineToolService {
             code: "NOVEL_OUTLINE_EDIT_FAILED",
             category: "execution",
             retryable: true,
-            sideEffectStatus: "possible",
+            sideEffectStatus: "none",
             conversationId,
           });
         }
-        items.push(rejectedItem(patch.id, reason));
-        break;
+        // 2A：任一校验失败整批拒绝，不提交任何操作。
+        this.logger.info("novel_outline_tool.edit.rejected_batch", {
+          conversationId,
+          reason,
+        });
+        return {
+          items: [{ id: patch.id, status: "rejected", reason }],
+          revision: { currentRevision },
+        };
       }
     }
-    this.logger.info("novel_outline_tool.edit.completed", {
-      conversationId,
-      draftSessionId: session.id,
-      appliedCount: items.filter((item) => item.status === "appended").length,
-      rejectedCount: items.filter((item) => item.status === "rejected").length,
-    });
-    return { items };
+    if (operations.length === 0) {
+      return { items, revision: { currentRevision } };
+    }
+    try {
+      const result = await this.options.canonicalWrites.applyOperations({
+        operations,
+        conversationId,
+        ...(baseRevision === undefined ? {} : { baseRevision }),
+      });
+      this.logger.info("novel_outline_tool.edit.completed", {
+        conversationId,
+        appliedCount: items.length,
+        resultRevision: result.resultRevision,
+      });
+      return { items, revision: { currentRevision: result.resultRevision } };
+    } catch (error) {
+      this.logger.info("novel_outline_tool.edit.failed", {
+        conversationId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      throw new ToolError({
+        code: "NOVEL_OUTLINE_EDIT_FAILED",
+        category: "execution",
+        retryable: true,
+        sideEffectStatus: "none",
+        conversationId,
+      });
+    }
   }
 
-  private async writeOne(
-    session: NovelDraftSession,
-    scope: NovelReadScope,
-    value: StoryUnitWriteValue,
-    storyUnitId: StoryUnitId,
-  ): Promise<NovelOutlineItemDetails> {
-    const tree = await this.options.outlineQueries.getTree(scope);
+  /** 收集一次批量写操作（校验 + 构造），不执行；调用方统一在一个事务中提交。 */
+  private appendWriteOperations(input: {
+    readonly outlineId: StoryOutlineId;
+    readonly tree: StoryOutlineTree | undefined;
+    readonly value: StoryUnitWriteValue;
+    readonly storyUnitId: StoryUnitId;
+    readonly operations: NovelOperation[];
+    readonly createdIds: Set<string>;
+  }): void {
+    const { outlineId, tree, value, storyUnitId, operations, createdIds } =
+      input;
     if (
       tree !== undefined &&
       tree.getUnit(storyUnitId) !== undefined
@@ -279,7 +381,8 @@ export class OutlineToolService {
     if (
       value.parentId !== undefined &&
       (tree === undefined ||
-        tree.getUnit(captureStoryUnitId(value.parentId)) === undefined)
+        tree.getUnit(captureStoryUnitId(value.parentId)) === undefined) &&
+      !createdIds.has(value.parentId)
     ) {
       throw new NovelOutlineItemFailure(ITEM_REJECTION.unknownParent);
     }
@@ -288,10 +391,9 @@ export class OutlineToolService {
       value.parentId,
       value.orderKey,
     );
-    const outline = await this.ensureOutline(session, scope);
     const unit = captureStoryUnit({
       id: storyUnitId,
-      outlineId: outline.id,
+      outlineId,
       ...(value.parentId === undefined
         ? {}
         : { parentId: captureStoryUnitId(value.parentId) }),
@@ -309,132 +411,146 @@ export class OutlineToolService {
         ? {}
         : { abandonment: captureAbandonment(value.abandonment) }),
     });
-    const receipt = await this.options.outline.createStoryUnit(session, unit);
-    let sequence = receipt.sequence;
+    operations.push(
+      createStoryUnitCreateOperation({
+        operationId: this.options.identityFactory.createOperationId(),
+        storyUnit: unit,
+      }),
+    );
     if (value.leaf !== undefined) {
       const plan = buildPlanFromWrite(value.leaf, unit.id);
-      const planReceipt = await this.options.outline.replaceLeafStoryUnitPlan(
-        session,
-        plan,
+      operations.push(
+        createLeafStoryUnitPlanReplaceOperation({
+          operationId: this.options.identityFactory.createOperationId(),
+          plan,
+        }),
       );
-      sequence = planReceipt.sequence;
     }
-    return Object.freeze({ id: storyUnitId, status: "appended", sequence });
   }
 
-  private async editOne(
-    session: NovelDraftSession,
-    scope: NovelReadScope,
-    idInput: string,
-    patch: NovelOutlineEditValue,
-  ): Promise<NovelOutlineItemDetails> {
-    const id = captureStoryUnitId(idInput);
-    const current = await this.options.outlineQueries.getStoryUnit(scope, id);
+  /** 收集 outline 创建操作并返回新 outline id。Appends outline create and returns its id. */
+  private appendOutlineCreate(
+    operations: NovelOperation[],
+  ): StoryOutlineId {
+    const outlineId = this.options.identityFactory.createStoryOutlineId();
+    operations.push(
+      createStoryOutlineCreateOperation({
+        operationId: this.options.identityFactory.createOperationId(),
+        outline: { id: outlineId, novelId: this.options.novelId },
+      }),
+    );
+    return outlineId;
+  }
+
+  /** 收集一次批量编辑操作（校验 + 构造），不执行；调用方统一在一个事务中提交。 */
+  private async appendEditOperations(input: {
+    readonly scope: NovelReadScope;
+    readonly id: string;
+    readonly patch: NovelOutlineEditValue;
+    readonly operations: NovelOperation[];
+  }): Promise<void> {
+    const id = captureStoryUnitId(input.id);
+    const current = await this.options.outlineQueries.getStoryUnit(
+      input.scope,
+      id,
+    );
     if (current === undefined) {
       throw new NovelOutlineItemFailure(ITEM_REJECTION.notFound);
     }
     const unit = current.unit;
-    const mergedContent = mergeContent(unit, patch);
-    let sequence: number | undefined;
+    const mergedContent = mergeContent(unit, input.patch);
     if (
       canonicalStringifyJson(mergedContent as unknown as JsonValue) !==
       canonicalStringifyJson(unitContent(unit) as unknown as JsonValue)
     ) {
-      const receipt = await this.options.outline.replaceStoryUnit(
-        session,
-        id,
-        current.contentDigest,
-        mergedContent,
+      input.operations.push(
+        createStoryUnitReplaceOperation({
+          operationId: this.options.identityFactory.createOperationId(),
+          storyUnitId: id,
+          expectedContentDigest: current.contentDigest,
+          content: mergedContent,
+        }),
       );
-      sequence = receipt.sequence;
     }
     const parentChanged =
-      patch.parentId !== undefined &&
-      (patch.parentId === null ? undefined : patch.parentId) !== unit.parentId;
+      input.patch.parentId !== undefined &&
+      (input.patch.parentId === null ? undefined : input.patch.parentId) !==
+        unit.parentId;
     const orderChanged =
-      patch.orderKey !== undefined && patch.orderKey !== unit.orderKey;
+      input.patch.orderKey !== undefined &&
+      input.patch.orderKey !== unit.orderKey;
     if (parentChanged || orderChanged) {
       const targetParent =
-        patch.parentId === null
+        input.patch.parentId === null
           ? undefined
-          : (patch.parentId ?? unit.parentId);
+          : (input.patch.parentId ?? unit.parentId);
       if (
         targetParent !== undefined &&
         (await this.options.outlineQueries.getStoryUnit(
-          scope,
+          input.scope,
           captureStoryUnitId(targetParent),
         )) === undefined
       ) {
         throw new NovelOutlineItemFailure(ITEM_REJECTION.unknownParent);
       }
       const orderKey =
-        patch.orderKey === undefined
-          ? await this.appendOrderKey(scope, targetParent)
-          : this.captureUnitOrderKey(patch.orderKey);
-      const receipt = await this.options.outline.moveStoryUnit(session, {
-        storyUnitId: id,
-        expectedParentDigest: current.parentDigest,
-        expectedOrderDigest: current.orderDigest,
-        ...(targetParent === undefined
-          ? {}
-          : { parentId: captureStoryUnitId(targetParent) }),
-        orderKey,
-      });
-      sequence = receipt.sequence;
+        input.patch.orderKey === undefined
+          ? await this.appendOrderKey(input.scope, targetParent)
+          : this.captureUnitOrderKey(input.patch.orderKey);
+      input.operations.push(
+        createStoryUnitMoveOperation({
+          operationId: this.options.identityFactory.createOperationId(),
+          storyUnitId: id,
+          expectedParentDigest: current.parentDigest,
+          expectedOrderDigest: current.orderDigest,
+          ...(targetParent === undefined
+            ? {}
+            : { parentId: captureStoryUnitId(targetParent) }),
+          orderKey,
+        }),
+      );
     }
-    if (patch.leaf === null) {
+    if (input.patch.leaf === null) {
       const plan = await this.options.outlineQueries.getLeafStoryUnitPlan(
-        scope,
+        input.scope,
         id,
       );
       if (plan !== undefined) {
-        const receipt = await this.options.outline.clearLeafStoryUnitPlan(
-          session,
-          id,
-          plan.planDigest,
+        input.operations.push(
+          createLeafStoryUnitPlanClearOperation({
+            operationId: this.options.identityFactory.createOperationId(),
+            storyUnitId: id,
+            expectedPlanDigest: plan.planDigest,
+          }),
         );
-        sequence = receipt.sequence;
       }
-    } else if (patch.leaf !== undefined) {
-      const tree = await this.options.outlineQueries.getTree(scope);
+    } else if (input.patch.leaf !== undefined) {
+      const tree = await this.options.outlineQueries.getTree(input.scope);
       if (tree !== undefined && tree.listChildren(id).length > 0) {
         throw new NovelOutlineItemFailure(ITEM_REJECTION.notLeaf);
       }
-      const currentPlan = await this.options.outlineQueries.getLeafStoryUnitPlan(
-        scope,
-        id,
-      );
-      const mergedPlan = mergePlan(currentPlan?.plan, patch.leaf, id);
+      const currentPlan =
+        await this.options.outlineQueries.getLeafStoryUnitPlan(
+          input.scope,
+          id,
+        );
+      const mergedPlan = mergePlan(currentPlan?.plan, input.patch.leaf, id);
       if (
         currentPlan === undefined ||
         canonicalStringifyJson(mergedPlan as unknown as JsonValue) !==
           canonicalStringifyJson(currentPlan.plan as unknown as JsonValue)
       ) {
-        const receipt = await this.options.outline.replaceLeafStoryUnitPlan(
-          session,
-          mergedPlan,
-          currentPlan?.planDigest,
+        input.operations.push(
+          createLeafStoryUnitPlanReplaceOperation({
+            operationId: this.options.identityFactory.createOperationId(),
+            plan: mergedPlan,
+            ...(currentPlan === undefined
+              ? {}
+              : { expectedPlanDigest: currentPlan.planDigest }),
+          }),
         );
-        sequence = receipt.sequence;
       }
     }
-    if (sequence === undefined) {
-      return Object.freeze({ id: idInput, status: "duplicate" });
-    }
-    return Object.freeze({ id: idInput, status: "appended", sequence });
-  }
-
-  private async ensureOutline(
-    session: NovelDraftSession,
-    scope: NovelReadScope,
-  ): Promise<{ readonly id: StoryOutlineId; readonly novelId: string }> {
-    const existing = await this.options.outlineQueries.getOutline(scope);
-    if (existing !== undefined) {
-      return existing;
-    }
-    const outlineId = this.options.identityFactory.createStoryOutlineId();
-    await this.options.outline.createOutline(session, outlineId);
-    return Object.freeze({ id: outlineId, novelId: session.novelId });
   }
 
   private resolveWriteOrderKey(
@@ -482,35 +598,6 @@ export class OutlineToolService {
     }
   }
 
-  private async resolveOrStartDraft(
-    conversationId: string,
-  ): Promise<NovelDraftSession> {
-    const existing = await this.options.drafts.getActiveDraft(conversationId);
-    if (existing !== undefined) return existing;
-    try {
-      return await this.options.drafts.startDraft(conversationId);
-    } catch {
-      this.logger.warn("novel_outline_tool.draft.start_failed", {
-        conversationId,
-      });
-      throw new ToolError({
-        code: "NOVEL_DRAFT_START_FAILED",
-        category: "execution",
-        retryable: true,
-        sideEffectStatus: "possible",
-        conversationId,
-      });
-    }
-  }
-
-  private async resolveReadScope(
-    conversationId: string,
-    scope: ToolScope,
-  ): Promise<NovelReadScope | undefined> {
-    if (scope === "canonical") return canonicalNovelReadScope;
-    const session = await this.options.drafts.getActiveDraft(conversationId);
-    return session === undefined ? undefined : draftNovelReadScope(session);
-  }
 }
 
 class NovelOutlineItemFailure extends Error {

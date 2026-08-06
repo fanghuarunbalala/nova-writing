@@ -53,7 +53,7 @@ export function createCharacterWriteTool(
           logger.info("novel_character_tool.write.completed", {
             conversationId: context.conversationId,
             appliedCount: details.items.filter(
-              (item) => item.status === "appended",
+              (item) => item.status === "applied",
             ).length,
           });
           return writeResult(details);

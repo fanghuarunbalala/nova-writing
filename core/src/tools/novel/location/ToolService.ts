@@ -7,17 +7,21 @@ import { canonicalStringifyJson, type JsonValue } from "../../../event/index.js"
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import {
   LocationQueryService,
-  LocationService,
-  NovelDraftSessionService,
   NovelOperationPreconditionError,
   NovelProtocolValidationError,
+  SystemNovelClock,
   canonicalNovelReadScope,
   captureLocationId,
+  captureNovelRevision,
   captureStableEntityProfile,
-  draftNovelReadScope,
+  createLocationCreateOperation,
+  createLocationReplaceOperation,
   type Location,
   type LocationId,
-  type NovelDraftSession,
+  type NovelCanonicalWritePort,
+  type NovelClock,
+  type NovelOperation,
+  type NovelOperationId,
   type NovelReadScope,
 } from "../../../novel/index.js";
 import { ToolError } from "../../../runtime/tools/execution/index.js";
@@ -34,10 +38,13 @@ import type {
 } from "./schemas.js";
 
 export interface NovelLocationToolServiceOptions {
-  readonly locations: LocationService;
   readonly locationQueries: LocationQueryService;
-  readonly drafts: NovelDraftSessionService;
-  readonly identityFactory: { createLocationId(): LocationId };
+  readonly canonicalWrites: NovelCanonicalWritePort;
+  readonly identityFactory: {
+    createLocationId(): LocationId;
+    createOperationId(): NovelOperationId;
+  };
+  readonly clock?: NovelClock;
   readonly logger?: Logger;
 }
 
@@ -50,21 +57,21 @@ const ITEM_REJECTION = {
 
 export class NovelLocationToolService {
   private readonly logger: Logger;
+  private readonly clock: NovelClock;
 
   constructor(private readonly options: NovelLocationToolServiceOptions) {
     this.logger = (options.logger ?? noopLogger).child({
       component: "novel_location_tool_service",
     });
+    this.clock = options.clock ?? new SystemNovelClock();
   }
 
   async read(
     conversationId: string,
     arguments_: NovelLocationReadArguments,
   ): Promise<NovelLocationReadDetails> {
-    const scope = await this.resolveReadScope(conversationId, arguments_.scope);
-    if (scope === undefined) {
-      return { locations: [] };
-    }
+    const scope = canonicalNovelReadScope;
+    const revision = await this.options.canonicalWrites.getCurrentRevision();
     const locations =
       arguments_.locationId === undefined
         ? await this.options.locationQueries.list(scope)
@@ -75,6 +82,7 @@ export class NovelLocationToolService {
             .filter((value): value is Location => value !== undefined);
     return {
       locations: locations.map((location) => toLocationDetails(location)),
+      revision: { currentRevision: revision },
     };
   }
 
@@ -82,12 +90,18 @@ export class NovelLocationToolService {
     conversationId: string,
     arguments_: NovelLocationWriteArguments,
   ): Promise<NovelLocationWriteDetails> {
-    const session = await this.resolveOrStartDraft(conversationId);
-    const scope = draftNovelReadScope(session);
+    const scope = canonicalNovelReadScope;
+    const currentRevision =
+      await this.options.canonicalWrites.getCurrentRevision();
+    const baseRevision =
+      arguments_.baseRevision === undefined
+        ? undefined
+        : captureNovelRevision(arguments_.baseRevision);
+    const existing = await this.options.locationQueries.list(scope);
+    const operations: NovelOperation[] = [];
     const items: NovelLocationItemDetails[] = [];
     this.logger.info("novel_location_tool.write.started", {
       conversationId,
-      draftSessionId: session.id,
       requestedCount: arguments_.values.length,
     });
     for (const value of arguments_.values) {
@@ -95,7 +109,13 @@ export class NovelLocationToolService {
         value.id ?? this.options.identityFactory.createLocationId(),
       );
       try {
-        items.push(await this.writeOne(session, scope, value, locationId));
+        this.appendWriteOperation({
+          existing,
+          value,
+          locationId,
+          operations,
+        });
+        items.push({ id: locationId, status: "applied" });
       } catch (error) {
         const reason = mapItemError(error);
         if (reason === undefined) {
@@ -103,38 +123,80 @@ export class NovelLocationToolService {
             code: "NOVEL_LOCATION_WRITE_FAILED",
             category: "execution",
             retryable: true,
-            sideEffectStatus: "possible",
+            sideEffectStatus: "none",
             conversationId,
           });
         }
-        items.push(rejectedItem(locationId, reason));
-        break;
+        this.logger.info("novel_location_tool.write.rejected_batch", {
+          conversationId,
+          reason,
+        });
+        return {
+          items: [{ id: locationId, status: "rejected", reason }],
+          revision: { currentRevision },
+        };
       }
     }
-    this.logger.info("novel_location_tool.write.completed", {
-      conversationId,
-      draftSessionId: session.id,
-      appliedCount: items.filter((item) => item.status === "appended").length,
-      rejectedCount: items.filter((item) => item.status === "rejected").length,
-    });
-    return { items };
+    if (operations.length === 0) {
+      return { items, revision: { currentRevision } };
+    }
+    try {
+      const result = await this.options.canonicalWrites.applyOperations({
+        operations,
+        conversationId,
+        ...(baseRevision === undefined ? {} : { baseRevision }),
+      });
+      this.logger.info("novel_location_tool.write.completed", {
+        conversationId,
+        appliedCount: items.length,
+        resultRevision: result.resultRevision,
+      });
+      return { items, revision: { currentRevision: result.resultRevision } };
+    } catch (error) {
+      this.logger.info("novel_location_tool.write.failed", {
+        conversationId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      throw new ToolError({
+        code: "NOVEL_LOCATION_WRITE_FAILED",
+        category: "execution",
+        retryable: true,
+        sideEffectStatus: "none",
+        conversationId,
+      });
+    }
   }
 
   async edit(
     conversationId: string,
     arguments_: NovelLocationEditArguments,
   ): Promise<NovelLocationWriteDetails> {
-    const session = await this.resolveOrStartDraft(conversationId);
-    const scope = draftNovelReadScope(session);
+    const scope = canonicalNovelReadScope;
+    const currentRevision =
+      await this.options.canonicalWrites.getCurrentRevision();
+    const baseRevision =
+      arguments_.baseRevision === undefined
+        ? undefined
+        : captureNovelRevision(arguments_.baseRevision);
+    const existing = await this.options.locationQueries.list(scope);
+    const existingById = new Map(
+      existing.map((location) => [location.id, location]),
+    );
+    const operations: NovelOperation[] = [];
     const items: NovelLocationItemDetails[] = [];
     this.logger.info("novel_location_tool.edit.started", {
       conversationId,
-      draftSessionId: session.id,
       requestedCount: arguments_.values.length,
     });
     for (const patch of arguments_.values) {
       try {
-        items.push(await this.editOne(session, scope, patch.id, patch.value));
+        this.appendEditOperation({
+          existingById,
+          id: patch.id,
+          patch: patch.value,
+          operations,
+        });
+        items.push({ id: patch.id, status: "applied" });
       } catch (error) {
         const reason = mapItemError(error);
         if (reason === undefined) {
@@ -142,32 +204,58 @@ export class NovelLocationToolService {
             code: "NOVEL_LOCATION_EDIT_FAILED",
             category: "execution",
             retryable: true,
-            sideEffectStatus: "possible",
+            sideEffectStatus: "none",
             conversationId,
           });
         }
-        items.push(rejectedItem(patch.id, reason));
-        break;
+        this.logger.info("novel_location_tool.edit.rejected_batch", {
+          conversationId,
+          reason,
+        });
+        return {
+          items: [{ id: patch.id, status: "rejected", reason }],
+          revision: { currentRevision },
+        };
       }
     }
-    this.logger.info("novel_location_tool.edit.completed", {
-      conversationId,
-      draftSessionId: session.id,
-      appliedCount: items.filter((item) => item.status === "appended").length,
-      rejectedCount: items.filter((item) => item.status === "rejected").length,
-    });
-    return { items };
+    if (operations.length === 0) {
+      return { items, revision: { currentRevision } };
+    }
+    try {
+      const result = await this.options.canonicalWrites.applyOperations({
+        operations,
+        conversationId,
+        ...(baseRevision === undefined ? {} : { baseRevision }),
+      });
+      this.logger.info("novel_location_tool.edit.completed", {
+        conversationId,
+        appliedCount: items.length,
+        resultRevision: result.resultRevision,
+      });
+      return { items, revision: { currentRevision: result.resultRevision } };
+    } catch (error) {
+      this.logger.info("novel_location_tool.edit.failed", {
+        conversationId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      throw new ToolError({
+        code: "NOVEL_LOCATION_EDIT_FAILED",
+        category: "execution",
+        retryable: true,
+        sideEffectStatus: "none",
+        conversationId,
+      });
+    }
   }
 
-  private async writeOne(
-    session: NovelDraftSession,
-    scope: NovelReadScope,
-    value: LocationProfileWriteValue,
-    locationId: LocationId,
-  ): Promise<NovelLocationItemDetails> {
-    if (
-      (await this.options.locationQueries.get(scope, locationId)) !== undefined
-    ) {
+  private appendWriteOperation(input: {
+    readonly existing: readonly Location[];
+    readonly value: LocationProfileWriteValue;
+    readonly locationId: LocationId;
+    readonly operations: NovelOperation[];
+  }): void {
+    const { existing, value, locationId, operations } = input;
+    if (existing.some((location) => location.id === locationId)) {
       throw new NovelLocationItemFailure(ITEM_REJECTION.duplicateId);
     }
     const profile = captureStableEntityProfile({
@@ -181,83 +269,53 @@ export class NovelLocationToolService {
         ? {}
         : { authorNotes: value.authorNotes }),
     });
-    const receipt = await this.options.locations.create(
-      session,
-      locationId,
-      profile,
+    operations.push(
+      createLocationCreateOperation({
+        operationId: this.options.identityFactory.createOperationId(),
+        id: locationId,
+        profile,
+        timestamp: this.clock.now(),
+      }),
     );
-    return Object.freeze({
-      id: locationId,
-      status: "appended",
-      sequence: receipt.sequence,
-    });
   }
 
-  private async editOne(
-    session: NovelDraftSession,
-    scope: NovelReadScope,
-    idInput: string,
-    patch: NovelLocationEditValue,
-  ): Promise<NovelLocationItemDetails> {
-    const id = captureLocationId(idInput);
-    const current = await this.options.locationQueries.get(scope, id);
+  private appendEditOperation(input: {
+    readonly existingById: ReadonlyMap<string, Location>;
+    readonly id: string;
+    readonly patch: NovelLocationEditValue;
+    readonly operations: NovelOperation[];
+  }): void {
+    const id = captureLocationId(input.id);
+    const current = input.existingById.get(id);
     if (current === undefined) {
       throw new NovelLocationItemFailure(ITEM_REJECTION.notFound);
     }
     const merged = captureStableEntityProfile({
-      name: patch.name ?? current.name,
-      aliases: patch.aliases ?? current.aliases,
-      ...mergeOptional("summary", current.summary, patch.summary),
-      ...mergeOptional("initialState", current.initialState, patch.initialState),
-      ...mergeOptional("authorNotes", current.authorNotes, patch.authorNotes),
+      name: input.patch.name ?? current.name,
+      aliases: input.patch.aliases ?? current.aliases,
+      ...mergeOptional("summary", current.summary, input.patch.summary),
+      ...mergeOptional(
+        "initialState",
+        current.initialState,
+        input.patch.initialState,
+      ),
+      ...mergeOptional("authorNotes", current.authorNotes, input.patch.authorNotes),
     });
     if (
       canonicalStringifyJson(merged as unknown as JsonValue) ===
       canonicalStringifyJson(profileOf(current) as unknown as JsonValue)
     ) {
-      return Object.freeze({ id, status: "duplicate" });
+      return;
     }
-    const receipt = await this.options.locations.replace(
-      session,
-      id,
-      current.entityVersion,
-      merged,
+    input.operations.push(
+      createLocationReplaceOperation({
+        operationId: this.options.identityFactory.createOperationId(),
+        id,
+        expectedEntityVersion: current.entityVersion,
+        profile: merged,
+        timestamp: this.clock.now(),
+      }),
     );
-    return Object.freeze({
-      id,
-      status: "appended",
-      sequence: receipt.sequence,
-    });
-  }
-
-  private async resolveOrStartDraft(
-    conversationId: string,
-  ): Promise<NovelDraftSession> {
-    const existing = await this.options.drafts.getActiveDraft(conversationId);
-    if (existing !== undefined) return existing;
-    try {
-      return await this.options.drafts.startDraft(conversationId);
-    } catch {
-      this.logger.warn("novel_location_tool.draft.start_failed", {
-        conversationId,
-      });
-      throw new ToolError({
-        code: "NOVEL_DRAFT_START_FAILED",
-        category: "execution",
-        retryable: true,
-        sideEffectStatus: "possible",
-        conversationId,
-      });
-    }
-  }
-
-  private async resolveReadScope(
-    conversationId: string,
-    scope: NovelLocationReadArguments["scope"],
-  ): Promise<NovelReadScope | undefined> {
-    if (scope === "canonical") return canonicalNovelReadScope;
-    const session = await this.options.drafts.getActiveDraft(conversationId);
-    return session === undefined ? undefined : draftNovelReadScope(session);
   }
 }
 

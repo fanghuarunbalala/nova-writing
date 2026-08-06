@@ -77,7 +77,7 @@ export interface NodeNovelApplicationOptions {
 
 export interface NodeNovelApplication {
   readonly mutations: NovelMutationService;
-  readonly canonicalWrites: SqliteNovelCanonicalWriter;
+  readonly canonicalWrites: SqliteNovelCanonicalWriter<NovelMutationContext>;
   readonly characters: CharacterService;
   readonly locations: LocationService;
   readonly outline: StoryOutlineService;
@@ -129,10 +129,11 @@ export function createNodeNovelApplication(
     new RandomNovelIdentityFactory();
   const registry = createDefaultNovelOperationRegistry<NovelMutationContext>();
   const executor = new NovelOperationExecutor(registry);
-  const canonicalWrites = new SqliteNovelCanonicalWriter({
+  const canonicalWrites = new SqliteNovelCanonicalWriter<NovelMutationContext>({
     location: options.location,
     novelId: options.novelId,
     executor,
+    contextFactory: createSqliteNovelMutationContext,
     revisionFactory: options.revisionFactory ?? new RandomNovelRevisionFactory(),
     clock,
     logger,
@@ -219,29 +220,39 @@ export function createNodeNovelApplication(
     mutations,
     canonicalWrites,
     characters: new CharacterService({
-      mutations,
+      canonicalWrites,
       identityFactory,
       clock,
       logger,
     }),
     locations: new LocationService({
-      mutations,
+      canonicalWrites,
       identityFactory,
       clock,
       logger,
     }),
     outline: new StoryOutlineService({
-      mutations,
+      novelId: options.novelId,
+      canonicalWrites,
       identityFactory,
       logger,
     }),
     publication: new PublicationService({
-      mutations,
+      novelId: options.novelId,
+      canonicalWrites,
       identityFactory,
       logger,
     }),
-    paragraphs: new ParagraphService({ mutations, identityFactory, logger }),
-    evidence: new NovelEvidenceService({ mutations, identityFactory, logger }),
+    paragraphs: new ParagraphService({
+      canonicalWrites,
+      identityFactory,
+      logger,
+    }),
+    evidence: new NovelEvidenceService({
+      canonicalWrites,
+      identityFactory,
+      logger,
+    }),
     characterQueries: new CharacterQueryService(entityQueryStore),
     locationQueries: new LocationQueryService(entityQueryStore),
     outlineQueries: new StoryOutlineQueryService(outlineQueryStore),

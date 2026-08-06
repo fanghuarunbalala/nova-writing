@@ -52,7 +52,7 @@ export function createParagraphEditTool(
           logger.info("novel_paragraph_tool.edit.completed", {
             conversationId: context.conversationId,
             appliedCount: details.items.filter(
-              (item) => item.status === "updated",
+              (item) => item.status === "applied",
             ).length,
           });
           return editResult(details);

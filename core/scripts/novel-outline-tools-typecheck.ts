@@ -1,13 +1,15 @@
 /** Compile-time contract examples for the Novel Outline Tools. */
 import {
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
-  NovelDraftSessionService,
   NovelOutlineReadParametersSchema,
   OutlineToolService,
   StoryOutlineQueryService,
   StoryOutlineService,
+  captureNovelId,
   captureStoryOutlineId,
   captureStoryUnitId,
+  captureNovelOperationId,
+  type NovelCanonicalWritePort,
   createNovelOutlineEditTool,
   createNovelOutlineReadTool,
   createNovelOutlineToolRegistry,
@@ -15,12 +17,13 @@ import {
 } from "../src/index.js";
 
 const service = new OutlineToolService({
-  outline: undefined as unknown as StoryOutlineService,
+  novelId: captureNovelId("novel_typecheck"),
   outlineQueries: undefined as unknown as StoryOutlineQueryService,
-  drafts: undefined as unknown as NovelDraftSessionService,
+  canonicalWrites: undefined as unknown as NovelCanonicalWritePort,
   identityFactory: {
     createStoryOutlineId: () => captureStoryOutlineId("outline_typecheck"),
     createStoryUnitId: () => captureStoryUnitId("story_unit_typecheck"),
+    createOperationId: () => captureNovelOperationId("outline_operation_typecheck"),
   },
 });
 

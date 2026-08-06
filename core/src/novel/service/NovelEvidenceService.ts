@@ -1,6 +1,5 @@
-/** Draft-only authoritative Evidence mutation service. */
+/** Canonical authoritative Evidence mutation service. */
 import { noopLogger, type Logger } from "../../observability/index.js";
-import { captureNovelDraftSession, type NovelDraftSession } from "../draft/index.js";
 import {
   captureCharacterId,
   captureLocationId,
@@ -29,11 +28,14 @@ import {
   createStoryUnitLocationBindingPutOperation,
   type NovelOperation,
 } from "../operation/index.js";
-import type { NovelDraftOperationReceipt } from "../port/index.js";
-import type { NovelMutationService } from "./NovelMutationService.js";
+import type {
+  NovelCanonicalWritePort,
+  NovelCanonicalWriteResult,
+} from "../port/index.js";
+import { captureNovelRevision, type NovelRevision } from "../version/index.js";
 
 export interface NovelEvidenceServiceOptions {
-  readonly mutations: NovelMutationService;
+  readonly canonicalWrites: NovelCanonicalWritePort;
   readonly identityFactory: { createOperationId(): NovelOperationId };
   readonly logger?: Logger;
 }
@@ -44,59 +46,103 @@ export class NovelEvidenceService {
     this.logger = (options.logger ?? noopLogger).child({ component: "novel_evidence_service" });
   }
 
-  putCharacterBinding(session: NovelDraftSession, binding: StoryUnitCharacterBinding, expectedRecordDigest?: string) {
+  putCharacterBinding(
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
+    binding: StoryUnitCharacterBinding,
+    expectedRecordDigest?: string,
+  ) {
     const value = captureStoryUnitCharacterBinding(binding);
-    return this.execute(session, createStoryUnitCharacterBindingPutOperation({
+    return this.execute(conversationId, baseRevision, createStoryUnitCharacterBindingPutOperation({
       operationId: this.operationId(), binding: value,
       ...(expectedRecordDigest === undefined ? {} : { expectedRecordDigest }),
     }), "character_binding.put", { storyUnitId: value.storyUnitId, characterId: value.characterId });
   }
-  deleteCharacterBinding(session: NovelDraftSession, storyUnitIdInput: StoryUnitId, characterIdInput: CharacterId, expectedRecordDigest: string) {
+  deleteCharacterBinding(
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
+    storyUnitIdInput: StoryUnitId,
+    characterIdInput: CharacterId,
+    expectedRecordDigest: string,
+  ) {
     const storyUnitId = captureStoryUnitId(storyUnitIdInput);
     const characterId = captureCharacterId(characterIdInput);
-    return this.execute(session, createStoryUnitCharacterBindingDeleteOperation({
+    return this.execute(conversationId, baseRevision, createStoryUnitCharacterBindingDeleteOperation({
       operationId: this.operationId(), storyUnitId, characterId, expectedRecordDigest,
     }), "character_binding.delete", { storyUnitId, characterId });
   }
-  putLocationBinding(session: NovelDraftSession, binding: StoryUnitLocationBinding, expectedRecordDigest?: string) {
+  putLocationBinding(
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
+    binding: StoryUnitLocationBinding,
+    expectedRecordDigest?: string,
+  ) {
     const value = captureStoryUnitLocationBinding(binding);
-    return this.execute(session, createStoryUnitLocationBindingPutOperation({
+    return this.execute(conversationId, baseRevision, createStoryUnitLocationBindingPutOperation({
       operationId: this.operationId(), binding: value,
       ...(expectedRecordDigest === undefined ? {} : { expectedRecordDigest }),
     }), "location_binding.put", { storyUnitId: value.storyUnitId, locationId: value.locationId });
   }
-  deleteLocationBinding(session: NovelDraftSession, storyUnitIdInput: StoryUnitId, locationIdInput: LocationId, expectedRecordDigest: string) {
+  deleteLocationBinding(
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
+    storyUnitIdInput: StoryUnitId,
+    locationIdInput: LocationId,
+    expectedRecordDigest: string,
+  ) {
     const storyUnitId = captureStoryUnitId(storyUnitIdInput);
     const locationId = captureLocationId(locationIdInput);
-    return this.execute(session, createStoryUnitLocationBindingDeleteOperation({
+    return this.execute(conversationId, baseRevision, createStoryUnitLocationBindingDeleteOperation({
       operationId: this.operationId(), storyUnitId, locationId, expectedRecordDigest,
     }), "location_binding.delete", { storyUnitId, locationId });
   }
-  putEntityChange(session: NovelDraftSession, change: StoryUnitEntityChange, expectedRecordDigest?: string) {
+  putEntityChange(
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
+    change: StoryUnitEntityChange,
+    expectedRecordDigest?: string,
+  ) {
     const value = captureStoryUnitEntityChange(change);
-    return this.execute(session, createStoryUnitEntityChangePutOperation({
+    return this.execute(conversationId, baseRevision, createStoryUnitEntityChangePutOperation({
       operationId: this.operationId(), change: value,
       ...(expectedRecordDigest === undefined ? {} : { expectedRecordDigest }),
     }), "entity_change.put", { storyUnitId: value.storyUnitId, changeId: value.id });
   }
-  deleteEntityChange(session: NovelDraftSession, idInput: StoryUnitEntityChangeId, expectedRecordDigest: string) {
+  deleteEntityChange(
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
+    idInput: StoryUnitEntityChangeId,
+    expectedRecordDigest: string,
+  ) {
     const id = captureStoryUnitEntityChangeId(idInput);
-    return this.execute(session, createStoryUnitEntityChangeDeleteOperation({
+    return this.execute(conversationId, baseRevision, createStoryUnitEntityChangeDeleteOperation({
       operationId: this.operationId(), id, expectedRecordDigest,
     }), "entity_change.delete", { changeId: id });
   }
 
   private operationId() { return this.options.identityFactory.createOperationId(); }
-  private async execute(sessionInput: NovelDraftSession, operation: NovelOperation, action: string, identities: Readonly<Record<string, string>>): Promise<NovelDraftOperationReceipt> {
-    const session = captureNovelDraftSession(sessionInput);
+  private async execute(
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
+    operation: NovelOperation,
+    action: string,
+    identities: Readonly<Record<string, string>>,
+  ): Promise<NovelCanonicalWriteResult> {
     this.logger.debug("novel_evidence.mutation.started", {
-      novelId: session.novelId, draftSessionId: session.id, operationId: operation.operationId, action, ...identities,
+      operationId: operation.operationId, action, ...identities,
     });
-    const receipt = await this.options.mutations.execute(session, operation);
+    const result = await this.options.canonicalWrites.applyOperations({
+      operations: [operation],
+      conversationId,
+      ...(baseRevision === undefined
+        ? {}
+        : { baseRevision: captureNovelRevision(baseRevision) }),
+    });
     this.logger.info("novel_evidence.mutation.completed", {
-      novelId: session.novelId, draftSessionId: session.id, operationId: operation.operationId,
-      action, sequence: receipt.sequence, status: receipt.status, ...identities,
+      operationId: operation.operationId,
+      action, resultRevision: result.resultRevision, status: result.status,
+      ...identities,
     });
-    return receipt;
+    return result;
   }
 }

@@ -1,4 +1,4 @@
-/** NovelOutlineRead tool: reads the outline tree for one explicit scope. */
+/** NovelOutlineRead tool: reads the canonical outline tree and its current revision. */
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { ToolError } from "../../../runtime/tools/execution/index.js";
 import {
@@ -31,14 +31,15 @@ export function createReadTool(
       version: "1.0.0",
       label: "Novel Outline Read",
       description:
-        "Reads the story outline for one explicit scope. Returns ordered StoryUnit nodes with planning/realization status, optional leaf plans, and derived progress. Use the returned structure as the source for NovelOutlineWrite and NovelOutlineEdit values.",
+        "Reads the canonical story outline. Returns ordered StoryUnit nodes with planning/realization status, optional leaf plans, derived progress, and revision.currentRevision as the optimistic-lock carrier. Use the returned structure as the source for NovelOutlineWrite and NovelOutlineEdit values.",
       parameters: NovelOutlineReadParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage:
-          "Use scope=draft to preview uncommitted work or canonical for committed state.",
+          "Pass revision.currentRevision as baseRevision to a following write or edit to detect concurrent changes.",
         parameterGuidance:
           "Omit storyUnitId for the whole tree. Set includePlans=true to attach leaf plans.",
-        safetyGuidance: "Read-only. Never constructs digests or revisions.",
+        safetyGuidance:
+          "Read-only. Returns revision.currentRevision for optimistic locking.",
       }),
     },
     handler: {

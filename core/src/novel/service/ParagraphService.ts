@@ -1,6 +1,5 @@
-/** Draft-only Paragraph mutation service emitting deterministic Operations. */
+/** Canonical Paragraph mutation service emitting deterministic Operations. */
 import { noopLogger, type Logger } from "../../observability/index.js";
-import { captureNovelDraftSession, type NovelDraftSession } from "../draft/index.js";
 import {
   captureParagraphId,
   captureStoryUnitId,
@@ -23,11 +22,14 @@ import {
   createParagraphTextReplaceOperation,
   type NovelOperation,
 } from "../operation/index.js";
-import type { NovelDraftOperationReceipt } from "../port/index.js";
-import type { NovelMutationService } from "./NovelMutationService.js";
+import type {
+  NovelCanonicalWritePort,
+  NovelCanonicalWriteResult,
+} from "../port/index.js";
+import { captureNovelRevision, type NovelRevision } from "../version/index.js";
 
 export interface ParagraphServiceOptions {
-  readonly mutations: NovelMutationService;
+  readonly canonicalWrites: NovelCanonicalWritePort;
   readonly identityFactory: { createOperationId(): NovelOperationId };
   readonly logger?: Logger;
 }
@@ -42,64 +44,69 @@ export class ParagraphService {
   }
 
   createParagraph(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     paragraph: Paragraph,
-  ): Promise<NovelDraftOperationReceipt> {
+  ): Promise<NovelCanonicalWriteResult> {
     const value = captureParagraph(paragraph);
-    return this.execute(session, createParagraphCreateOperation({
+    return this.execute(conversationId, baseRevision, createParagraphCreateOperation({
       operationId: this.operationId(), paragraph: value,
     }), "paragraph.create", { storyUnitId: value.storyUnitId, paragraphId: value.id });
   }
 
   replaceText(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     paragraphId: ParagraphId,
     expectedTextDigest: string,
     text: string,
-  ): Promise<NovelDraftOperationReceipt> {
+  ): Promise<NovelCanonicalWriteResult> {
     const id = captureParagraphId(paragraphId);
-    return this.execute(session, createParagraphTextReplaceOperation({
+    return this.execute(conversationId, baseRevision, createParagraphTextReplaceOperation({
       operationId: this.operationId(), paragraphId: id,
       expectedTextDigest, text: captureParagraphText(text),
     }), "paragraph.text.replace", { paragraphId: id });
   }
 
   replaceOrder(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     paragraphId: ParagraphId,
     expectedOrderDigest: string,
     orderKey: OrderKey,
-  ): Promise<NovelDraftOperationReceipt> {
+  ): Promise<NovelCanonicalWriteResult> {
     const id = captureParagraphId(paragraphId);
-    return this.execute(session, createParagraphOrderReplaceOperation({
+    return this.execute(conversationId, baseRevision, createParagraphOrderReplaceOperation({
       operationId: this.operationId(), paragraphId: id,
       expectedOrderDigest, orderKey: captureOrderKey(orderKey),
     }), "paragraph.order.replace", { paragraphId: id });
   }
 
   replaceStoryUnit(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     paragraphId: ParagraphId,
     expectedStoryUnitDigest: string,
     storyUnitId: StoryUnitId,
-  ): Promise<NovelDraftOperationReceipt> {
+  ): Promise<NovelCanonicalWriteResult> {
     const id = captureParagraphId(paragraphId);
     const target = captureStoryUnitId(storyUnitId);
-    return this.execute(session, createParagraphStoryUnitReplaceOperation({
+    return this.execute(conversationId, baseRevision, createParagraphStoryUnitReplaceOperation({
       operationId: this.operationId(), paragraphId: id,
       expectedStoryUnitDigest, storyUnitId: target,
     }), "paragraph.story-unit.replace", { paragraphId: id, storyUnitId: target });
   }
 
   deleteParagraph(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     paragraphId: ParagraphId,
     expectedTextDigest: string,
     expectedOrderDigest: string,
     expectedStoryUnitDigest: string,
-  ): Promise<NovelDraftOperationReceipt> {
+  ): Promise<NovelCanonicalWriteResult> {
     const id = captureParagraphId(paragraphId);
-    return this.execute(session, createParagraphDeleteOperation({
+    return this.execute(conversationId, baseRevision, createParagraphDeleteOperation({
       operationId: this.operationId(), paragraphId: id,
       expectedTextDigest, expectedOrderDigest, expectedStoryUnitDigest,
     }), "paragraph.delete", { paragraphId: id });
@@ -110,22 +117,27 @@ export class ParagraphService {
   }
 
   private async execute(
-    sessionInput: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     operation: NovelOperation,
     action: string,
     identities: Readonly<Record<string, string>>,
-  ): Promise<NovelDraftOperationReceipt> {
-    const session = captureNovelDraftSession(sessionInput);
+  ): Promise<NovelCanonicalWriteResult> {
     this.logger.debug("novel_paragraph.mutation.started", {
-      novelId: session.novelId, draftSessionId: session.id,
       operationId: operation.operationId, action, ...identities,
     });
-    const receipt = await this.options.mutations.execute(session, operation);
-    this.logger.info("novel_paragraph.mutation.completed", {
-      novelId: session.novelId, draftSessionId: session.id,
-      operationId: operation.operationId, action,
-      sequence: receipt.sequence, status: receipt.status, ...identities,
+    const result = await this.options.canonicalWrites.applyOperations({
+      operations: [operation],
+      conversationId,
+      ...(baseRevision === undefined
+        ? {}
+        : { baseRevision: captureNovelRevision(baseRevision) }),
     });
-    return receipt;
+    this.logger.info("novel_paragraph.mutation.completed", {
+      operationId: operation.operationId, action,
+      resultRevision: result.resultRevision, status: result.status,
+      ...identities,
+    });
+    return result;
   }
 }

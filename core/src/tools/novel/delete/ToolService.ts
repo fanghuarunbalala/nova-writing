@@ -8,26 +8,29 @@
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import {
   CharacterQueryService,
-  CharacterService,
   LocationQueryService,
-  LocationService,
-  NovelDraftSessionService,
   NovelOperationPreconditionError,
   NovelProtocolValidationError,
   ParagraphQueryService,
-  ParagraphService,
   PublicationQueryService,
-  PublicationService,
   StoryOutlineQueryService,
-  StoryOutlineService,
+  canonicalNovelReadScope,
   captureCharacterId,
   captureLocationId,
+  captureNovelRevision,
   captureParagraphId,
   capturePublicationChapterId,
   capturePublicationVolumeId,
   captureStoryUnitId,
-  draftNovelReadScope,
-  type NovelDraftSession,
+  createCharacterDeleteOperation,
+  createLocationDeleteOperation,
+  createParagraphDeleteOperation,
+  createPublicationChapterDeleteOperation,
+  createPublicationVolumeDeleteOperation,
+  createStoryUnitDeleteOperation,
+  type NovelCanonicalWritePort,
+  type NovelOperation,
+  type NovelOperationId,
   type NovelReadScope,
 } from "../../../novel/index.js";
 import { ToolError } from "../../../runtime/tools/execution/index.js";
@@ -39,17 +42,13 @@ import type {
 } from "./schemas.js";
 
 export interface NovelDeleteToolServiceOptions {
-  readonly outline: StoryOutlineService;
   readonly outlineQueries: StoryOutlineQueryService;
-  readonly characters: CharacterService;
   readonly characterQueries: CharacterQueryService;
-  readonly locations: LocationService;
   readonly locationQueries: LocationQueryService;
-  readonly paragraphs: ParagraphService;
   readonly paragraphQueries: ParagraphQueryService;
-  readonly publication: PublicationService;
   readonly publicationQueries: PublicationQueryService;
-  readonly drafts: NovelDraftSessionService;
+  readonly canonicalWrites: NovelCanonicalWritePort;
+  readonly identityFactory: { createOperationId(): NovelOperationId };
   readonly logger?: Logger;
 }
 
@@ -73,17 +72,27 @@ export class NovelDeleteToolService {
     conversationId: string,
     arguments_: NovelDeleteArguments,
   ): Promise<NovelDeleteDetails> {
-    const session = await this.resolveOrStartDraft(conversationId);
-    const scope = draftNovelReadScope(session);
+    const scope = canonicalNovelReadScope;
+    const currentRevision =
+      await this.options.canonicalWrites.getCurrentRevision();
+    const baseRevision =
+      arguments_.baseRevision === undefined
+        ? undefined
+        : captureNovelRevision(arguments_.baseRevision);
+    const operations: NovelOperation[] = [];
     const items: NovelDeleteItemDetails[] = [];
     this.logger.info("novel_delete_tool.delete.started", {
       conversationId,
-      draftSessionId: session.id,
       requestedCount: arguments_.values.length,
     });
     for (const value of arguments_.values) {
       try {
-        items.push(await this.deleteOne(session, scope, value));
+        await this.appendDeleteOperation({
+          scope,
+          value,
+          operations,
+        });
+        items.push({ kind: value.kind, id: value.id, status: "applied" });
       } catch (error) {
         const reason = mapItemError(error);
         if (reason === undefined) {
@@ -91,175 +100,196 @@ export class NovelDeleteToolService {
             code: "NOVEL_DELETE_FAILED",
             category: "execution",
             retryable: true,
-            sideEffectStatus: "possible",
+            sideEffectStatus: "none",
             conversationId,
           });
         }
-        items.push(rejectedItem(value.kind, value.id, reason));
-        break;
+        this.logger.info("novel_delete_tool.delete.rejected_batch", {
+          conversationId,
+          reason,
+        });
+        return {
+          items: [{ kind: value.kind, id: value.id, status: "rejected", reason }],
+          revision: { currentRevision },
+        };
       }
     }
-    this.logger.info("novel_delete_tool.delete.completed", {
-      conversationId,
-      draftSessionId: session.id,
-      appliedCount: items.filter((item) => item.status === "deleted").length,
-      rejectedCount: items.filter((item) => item.status === "rejected").length,
-    });
-    return { items };
-  }
-
-  private async deleteOne(
-    session: NovelDraftSession,
-    scope: NovelReadScope,
-    value: { kind: NovelDeleteKind; id: string },
-  ): Promise<NovelDeleteItemDetails> {
-    switch (value.kind) {
-      case "story_unit":
-        return this.deleteStoryUnit(session, scope, value.id);
-      case "character":
-        return this.deleteCharacter(session, scope, value.id);
-      case "location":
-        return this.deleteLocation(session, scope, value.id);
-      case "paragraph":
-        return this.deleteParagraph(session, scope, value.id);
-      case "volume":
-        return this.deleteVolume(session, scope, value.id);
-      case "chapter":
-        return this.deleteChapter(session, scope, value.id);
+    if (operations.length === 0) {
+      return { items, revision: { currentRevision } };
+    }
+    try {
+      const result = await this.options.canonicalWrites.applyOperations({
+        operations,
+        conversationId,
+        ...(baseRevision === undefined ? {} : { baseRevision }),
+      });
+      this.logger.info("novel_delete_tool.delete.completed", {
+        conversationId,
+        appliedCount: items.length,
+        resultRevision: result.resultRevision,
+      });
+      return { items, revision: { currentRevision: result.resultRevision } };
+    } catch (error) {
+      this.logger.info("novel_delete_tool.delete.failed", {
+        conversationId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      throw new ToolError({
+        code: "NOVEL_DELETE_FAILED",
+        category: "execution",
+        retryable: true,
+        sideEffectStatus: "none",
+        conversationId,
+      });
     }
   }
 
-  private async deleteStoryUnit(
-    session: NovelDraftSession,
+  private async appendDeleteOperation(input: {
+    readonly scope: NovelReadScope;
+    readonly value: { kind: NovelDeleteKind; id: string };
+    readonly operations: NovelOperation[];
+  }): Promise<void> {
+    const { scope, value, operations } = input;
+    switch (value.kind) {
+      case "story_unit":
+        await this.appendStoryUnitDelete(scope, value.id, operations);
+        return;
+      case "character":
+        await this.appendCharacterDelete(scope, value.id, operations);
+        return;
+      case "location":
+        await this.appendLocationDelete(scope, value.id, operations);
+        return;
+      case "paragraph":
+        await this.appendParagraphDelete(scope, value.id, operations);
+        return;
+      case "volume":
+        await this.appendVolumeDelete(scope, value.id, operations);
+        return;
+      case "chapter":
+        await this.appendChapterDelete(scope, value.id, operations);
+        return;
+    }
+  }
+
+  private async appendStoryUnitDelete(
     scope: NovelReadScope,
     idInput: string,
-  ): Promise<NovelDeleteItemDetails> {
+    operations: NovelOperation[],
+  ): Promise<void> {
     const storyUnitId = captureStoryUnitId(idInput);
     const current = await this.options.outlineQueries.getStoryUnit(scope, storyUnitId);
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
-    const receipt = await this.options.outline.deleteStoryUnit(session, {
-      storyUnitId,
-      expectedContentDigest: current.contentDigest,
-      expectedParentDigest: current.parentDigest,
-      expectedOrderDigest: current.orderDigest,
-    });
-    return deletedItem("story_unit", storyUnitId, receipt.sequence);
+    operations.push(
+      createStoryUnitDeleteOperation({
+        operationId: this.options.identityFactory.createOperationId(),
+        storyUnitId,
+        expectedContentDigest: current.contentDigest,
+        expectedParentDigest: current.parentDigest,
+        expectedOrderDigest: current.orderDigest,
+      }),
+    );
   }
 
-  private async deleteCharacter(
-    session: NovelDraftSession,
+  private async appendCharacterDelete(
     scope: NovelReadScope,
     idInput: string,
-  ): Promise<NovelDeleteItemDetails> {
+    operations: NovelOperation[],
+  ): Promise<void> {
     const characterId = captureCharacterId(idInput);
     const current = await this.options.characterQueries.get(scope, characterId);
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
-    const receipt = await this.options.characters.delete(
-      session,
-      characterId,
-      current.entityVersion,
+    operations.push(
+      createCharacterDeleteOperation({
+        operationId: this.options.identityFactory.createOperationId(),
+        id: characterId,
+        expectedEntityVersion: current.entityVersion,
+      }),
     );
-    return deletedItem("character", characterId, receipt.sequence);
   }
 
-  private async deleteLocation(
-    session: NovelDraftSession,
+  private async appendLocationDelete(
     scope: NovelReadScope,
     idInput: string,
-  ): Promise<NovelDeleteItemDetails> {
+    operations: NovelOperation[],
+  ): Promise<void> {
     const locationId = captureLocationId(idInput);
     const current = await this.options.locationQueries.get(scope, locationId);
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
-    const receipt = await this.options.locations.delete(
-      session,
-      locationId,
-      current.entityVersion,
+    operations.push(
+      createLocationDeleteOperation({
+        operationId: this.options.identityFactory.createOperationId(),
+        id: locationId,
+        expectedEntityVersion: current.entityVersion,
+      }),
     );
-    return deletedItem("location", locationId, receipt.sequence);
   }
 
-  private async deleteParagraph(
-    session: NovelDraftSession,
+  private async appendParagraphDelete(
     scope: NovelReadScope,
     idInput: string,
-  ): Promise<NovelDeleteItemDetails> {
+    operations: NovelOperation[],
+  ): Promise<void> {
     const paragraphId = captureParagraphId(idInput);
     const current = await this.options.paragraphQueries.getParagraph(scope, paragraphId);
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
-    const receipt = await this.options.paragraphs.deleteParagraph(
-      session,
-      paragraphId,
-      current.textDigest,
-      current.orderDigest,
-      current.storyUnitDigest,
+    operations.push(
+      createParagraphDeleteOperation({
+        operationId: this.options.identityFactory.createOperationId(),
+        paragraphId,
+        expectedTextDigest: current.textDigest,
+        expectedOrderDigest: current.orderDigest,
+        expectedStoryUnitDigest: current.storyUnitDigest,
+      }),
     );
-    return deletedItem("paragraph", paragraphId, receipt.sequence);
   }
 
-  private async deleteVolume(
-    session: NovelDraftSession,
+  private async appendVolumeDelete(
     scope: NovelReadScope,
     idInput: string,
-  ): Promise<NovelDeleteItemDetails> {
+    operations: NovelOperation[],
+  ): Promise<void> {
     const volumeId = capturePublicationVolumeId(idInput);
     const current = await this.options.publicationQueries.getVolume(scope, volumeId);
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
-    const receipt = await this.options.publication.deleteVolume(
-      session,
-      volumeId,
-      current.recordDigest,
+    operations.push(
+      createPublicationVolumeDeleteOperation({
+        operationId: this.options.identityFactory.createOperationId(),
+        id: volumeId,
+        expectedRecordDigest: current.recordDigest,
+      }),
     );
-    return deletedItem("volume", volumeId, receipt.sequence);
   }
 
-  private async deleteChapter(
-    session: NovelDraftSession,
+  private async appendChapterDelete(
     scope: NovelReadScope,
     idInput: string,
-  ): Promise<NovelDeleteItemDetails> {
+    operations: NovelOperation[],
+  ): Promise<void> {
     const chapterId = capturePublicationChapterId(idInput);
     const current = await this.options.publicationQueries.getChapter(scope, chapterId);
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
-    const receipt = await this.options.publication.deleteChapter(
-      session,
-      chapterId,
-      current.recordDigest,
+    operations.push(
+      createPublicationChapterDeleteOperation({
+        operationId: this.options.identityFactory.createOperationId(),
+        id: chapterId,
+        expectedRecordDigest: current.recordDigest,
+      }),
     );
-    return deletedItem("chapter", chapterId, receipt.sequence);
   }
 
-  private async resolveOrStartDraft(
-    conversationId: string,
-  ): Promise<NovelDraftSession> {
-    const existing = await this.options.drafts.getActiveDraft(conversationId);
-    if (existing !== undefined) return existing;
-    try {
-      return await this.options.drafts.startDraft(conversationId);
-    } catch {
-      this.logger.warn("novel_delete_tool.draft.start_failed", {
-        conversationId,
-      });
-      throw new ToolError({
-        code: "NOVEL_DRAFT_START_FAILED",
-        category: "execution",
-        retryable: true,
-        sideEffectStatus: "possible",
-        conversationId,
-      });
-    }
-  }
 }
 
 class NovelDeleteItemFailure extends Error {
@@ -272,13 +302,11 @@ class NovelDeleteItemFailure extends Error {
 function deletedItem(
   kind: NovelDeleteKind,
   id: string,
-  sequence?: number,
 ): NovelDeleteItemDetails {
   return Object.freeze({
     kind,
     id,
-    status: "deleted",
-    ...(sequence === undefined ? {} : { sequence }),
+    status: "applied",
   });
 }
 
@@ -288,7 +316,7 @@ function rejectedItem(
   reason: string,
 ): NovelDeleteItemDetails {
   if (reason === ITEM_REJECTION.notFound) {
-    return Object.freeze({ kind, id, status: "not_found" });
+    return Object.freeze({ kind, id, status: "rejected", reason });
   }
   return Object.freeze({ kind, id, status: "rejected", reason });
 }

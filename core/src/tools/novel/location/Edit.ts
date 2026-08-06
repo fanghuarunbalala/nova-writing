@@ -52,7 +52,7 @@ export function createLocationEditTool(
           logger.info("novel_location_tool.edit.completed", {
             conversationId: context.conversationId,
             appliedCount: details.items.filter(
-              (item) => item.status === "appended",
+              (item) => item.status === "applied",
             ).length,
           });
           return editResult(details);

@@ -24,13 +24,17 @@ import {
   captureNovelRevision,
   type NovelClock,
   type NovelId,
-  type NovelMutationContext,
   type NovelOperation,
   type NovelOperationExecutor,
   type NovelOperationId,
   type NovelRevision,
   type NovelRevisionFactory,
 } from "../../../novel/index.js";
+import type {
+  NovelCanonicalWriteInput,
+  NovelCanonicalWritePort,
+  NovelCanonicalWriteResult,
+} from "../../../novel/port/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
 import {
@@ -38,12 +42,12 @@ import {
   NovelDatabaseError,
 } from "./NovelDatabaseErrors.js";
 import { insertNovelLifecycleOutboxRecord } from "./NodeNovelLifecycleOutboxEncoder.js";
-import { createSqliteNovelMutationContext } from "./SqliteNovelOutlineRepository.js";
 
-export interface SqliteNovelCanonicalWriterOptions {
+export interface SqliteNovelCanonicalWriterOptions<TContext> {
   readonly location: NodeNovelStoreLocation;
   readonly novelId: NovelId;
-  readonly executor: NovelOperationExecutor<NovelMutationContext>;
+  readonly executor: NovelOperationExecutor<TContext>;
+  readonly contextFactory: (database: DatabaseSync) => TContext;
   readonly revisionFactory?: NovelRevisionFactory;
   readonly clock?: NovelClock;
   readonly logger?: Logger;
@@ -62,18 +66,22 @@ export interface ApplyNovelCanonicalOperationResult {
   readonly resultRevision: NovelRevision;
 }
 
-export class SqliteNovelCanonicalWriter {
+export class SqliteNovelCanonicalWriter<TContext>
+  implements NovelCanonicalWritePort
+{
   readonly #location: NodeNovelStoreLocation;
   readonly #novelId: NovelId;
-  readonly #executor: NovelOperationExecutor<NovelMutationContext>;
+  readonly #executor: NovelOperationExecutor<TContext>;
+  readonly #contextFactory: (database: DatabaseSync) => TContext;
   readonly #revisionFactory: NovelRevisionFactory;
   readonly #clock: NovelClock;
   readonly #logger: Logger;
 
-  constructor(options: SqliteNovelCanonicalWriterOptions) {
+  constructor(options: SqliteNovelCanonicalWriterOptions<TContext>) {
     this.#location = options.location;
     this.#novelId = captureNovelId(options.novelId);
     this.#executor = options.executor;
+    this.#contextFactory = options.contextFactory;
     this.#revisionFactory =
       options.revisionFactory ?? new RandomNovelRevisionFactory();
     this.#clock = options.clock ?? new SystemNovelClock();
@@ -84,11 +92,30 @@ export class SqliteNovelCanonicalWriter {
     });
   }
 
-  /** 应用一次 canonical 写操作（单个自动短事务）。Applies one canonical write in one short transaction. */
+  /** 应用一次 canonical 写操作（委托批量事务）。Applies one canonical write via the batch transaction. */
   async applyOperation(
     input: ApplyNovelCanonicalOperationInput,
   ): Promise<ApplyNovelCanonicalOperationResult> {
-    const capturedOperation = captureNovelOperation(input.operation);
+    const result = await this.applyOperations({
+      operations: [input.operation],
+      conversationId: input.conversationId,
+      ...(input.baseRevision === undefined
+        ? {}
+        : { baseRevision: input.baseRevision }),
+    });
+    return Object.freeze({
+      status: "applied",
+      operationId: result.operationIds[0],
+      baseRevision: result.baseRevision,
+      resultRevision: result.resultRevision,
+    });
+  }
+
+  /** 批量应用 canonical 写操作（一个自动短事务，任一失败整批回滚）。Applies a batch in one short transaction, rolling back on any failure. */
+  async applyOperations(
+    input: NovelCanonicalWriteInput,
+  ): Promise<NovelCanonicalWriteResult> {
+    const capturedOperations = input.operations.map(captureNovelOperation);
     const conversationId = captureNovelConversationId(input.conversationId);
     const baseRevision =
       input.baseRevision === undefined
@@ -96,9 +123,7 @@ export class SqliteNovelCanonicalWriter {
         : captureNovelRevision(input.baseRevision);
     this.#logger.info("novel_canonical_write.transaction.started", {
       novelId: this.#novelId,
-      operationId: capturedOperation.operationId,
-      operationType: capturedOperation.type,
-      operationVersion: capturedOperation.operationVersion,
+      operationCount: capturedOperations.length,
     });
     let database: DatabaseSync | undefined;
     let transactionStarted = false;
@@ -126,10 +151,10 @@ export class SqliteNovelCanonicalWriter {
         );
       }
       const resultRevision = this.#revisionFactory.createRevision();
-      this.#executor.executeSynchronous(
-        createSqliteNovelMutationContext(database),
-        capturedOperation,
-      );
+      const context = this.#contextFactory(database);
+      for (const operation of capturedOperations) {
+        this.#executor.executeSynchronous(context, operation);
+      }
       const occurredAt = this.#clock.now();
       const update = database
         .prepare(
@@ -138,31 +163,36 @@ export class SqliteNovelCanonicalWriter {
         )
         .run(resultRevision, occurredAt, this.#novelId, actualRevision);
       if (Number(update.changes) !== 1) throw invariant(this.#novelId);
-      insertNovelLifecycleOutboxRecord(database, {
-        recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
-        eventId: `canonical-write:${resultRevision}`,
-        eventType: NOVEL_LIFECYCLE_EVENT_TYPE.canonicalWriteApplied,
-        novelId: this.#novelId,
-        conversationId,
-        occurredAt,
-        payload: {
-          operationId: capturedOperation.operationId,
-          operationType: capturedOperation.type,
-          operationVersion: capturedOperation.operationVersion,
-          baseRevision: actualRevision,
-          resultRevision,
-        },
+      const openDatabase = database;
+      capturedOperations.forEach((operation, index) => {
+        insertNovelLifecycleOutboxRecord(openDatabase, {
+          recordVersion: NOVEL_LIFECYCLE_RECORD_VERSION,
+          eventId: `canonical-write:${resultRevision}:${index}`,
+          eventType: NOVEL_LIFECYCLE_EVENT_TYPE.canonicalWriteApplied,
+          novelId: this.#novelId,
+          conversationId,
+          occurredAt,
+          payload: {
+            operationId: operation.operationId,
+            operationType: operation.type,
+            operationVersion: operation.operationVersion,
+            baseRevision: actualRevision,
+            resultRevision,
+          },
+        });
       });
       database.exec("COMMIT");
       transactionStarted = false;
       this.#logger.info("novel_canonical_write.transaction.completed", {
         novelId: this.#novelId,
-        operationId: capturedOperation.operationId,
+        operationCount: capturedOperations.length,
         resultRevision,
       });
       return Object.freeze({
         status: "applied",
-        operationId: capturedOperation.operationId,
+        operationIds: capturedOperations.map(
+          (operation) => operation.operationId,
+        ),
         baseRevision: actualRevision,
         resultRevision,
       });
@@ -175,7 +205,7 @@ export class SqliteNovelCanonicalWriter {
       // 只记录稳定失败类型；不记录原始消息/堆栈/cause（脱敏）。
       this.#logger.info("novel_canonical_write.transaction.failed", {
         novelId: this.#novelId,
-        operationId: capturedOperation.operationId,
+        operationCount: capturedOperations.length,
         errorName: error instanceof Error ? error.name : typeof error,
         ...(error instanceof Error && "code" in error
           ? { errorCode: String((error as { code: unknown }).code) }
@@ -191,6 +221,29 @@ export class SqliteNovelCanonicalWriter {
       try {
         database?.close();
       } catch {}
+    }
+  }
+
+  /** 读取当前 canonical revision（乐观锁载体）。Reads the current canonical revision. */
+  async getCurrentRevision(): Promise<NovelRevision> {
+    const database = new DatabaseSync(
+      this.#location.canonicalDatabasePath,
+      { readOnly: true },
+    );
+    try {
+      const metadata = database
+        .prepare(
+          "SELECT novel_id, current_revision FROM novel_metadata WHERE singleton = 1",
+        )
+        .get() as
+        | { novel_id: string; current_revision: string }
+        | undefined;
+      if (metadata?.novel_id !== this.#novelId) {
+        throw invariant(this.#novelId);
+      }
+      return captureNovelRevision(metadata.current_revision);
+    } finally {
+      database.close();
     }
   }
 }

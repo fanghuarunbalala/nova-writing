@@ -21,6 +21,7 @@ export * from "./NovelOutlineRepository.js";
 export * from "./NovelOutlineQueryStore.js";
 export * from "./NovelProjectionStore.js";
 export * from "./NovelProjectionEvidenceRepository.js";
+export * from "./NovelCanonicalPort.js";
 export * from "./NovelRevisionFactory.js";
 export * from "./NovelRebaseCandidateStore.js";
 export * from "./NovelResolvedRebaseCandidateStore.js";

@@ -10,7 +10,6 @@ import {
   NovelCommitWriter,
   NovelCommitRecoveryService,
   NovelApprovalService,
-  NovelMutationService,
   NovelOperationExecutor,
   NovelOperationRegistry,
   RandomNovelIdentityFactory,
@@ -33,6 +32,7 @@ import {
   SqliteNovelCommitStore,
   SqliteNovelLifecycleRecordWriter,
   SqliteNovelApprovalStore,
+  SqliteNovelCanonicalWriter,
   createSqliteNovelEntityMutationContext,
 } from "../sqlite/index.js";
 import { NodeNovelCommitHistoryStore } from "../history/index.js";
@@ -50,7 +50,6 @@ export interface NodeNovelEntityApplicationOptions {
 }
 
 export interface NodeNovelEntityApplication {
-  readonly mutations: NovelMutationService;
   readonly characters: CharacterService;
   readonly locations: LocationService;
   readonly characterQueries: CharacterQueryService;
@@ -82,6 +81,15 @@ export function createNodeNovelEntityApplication(
   });
   const operationDigester = new NodeSha256NovelOperationDigester();
   const executor = new NovelOperationExecutor(registry);
+  const canonicalWrites = new SqliteNovelCanonicalWriter<NovelEntityMutationContext>({
+    location: options.location,
+    novelId: options.novelId,
+    executor,
+    contextFactory: createSqliteNovelEntityMutationContext,
+    revisionFactory: options.revisionFactory ?? new RandomNovelRevisionFactory(),
+    clock,
+    logger,
+  });
   const writer = new NovelDraftOperationWriter({
     store,
     executor,
@@ -89,7 +97,6 @@ export function createNodeNovelEntityApplication(
     clock,
     logger,
   });
-  const mutations = new NovelMutationService({ writer, logger });
   const queryStore = new SqliteNovelEntityQueryStore({
     location: options.location,
     novelId: options.novelId,
@@ -134,15 +141,14 @@ export function createNodeNovelEntityApplication(
   });
   logger.info("novel_entity_application.created", {});
   return Object.freeze({
-    mutations,
     characters: new CharacterService({
-      mutations,
+      canonicalWrites,
       identityFactory,
       clock,
       logger,
     }),
     locations: new LocationService({
-      mutations,
+      canonicalWrites,
       identityFactory,
       clock,
       logger,

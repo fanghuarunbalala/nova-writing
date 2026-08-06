@@ -15,6 +15,9 @@ export type NovelDeleteKind = Static<typeof NovelDeleteKindSchema>;
 
 export const NovelDeleteParametersSchema = Type.Object(
   {
+    baseRevision: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 128 }),
+    ),
     values: Type.Array(
       Type.Object(
         {
@@ -33,11 +36,11 @@ export type NovelDeleteArguments = Static<typeof NovelDeleteParametersSchema>;
 export type NovelDeleteItemDetails = {
   readonly kind: NovelDeleteKind;
   readonly id: string;
-  readonly status: "deleted" | "not_found" | "rejected";
-  readonly sequence?: number;
+  readonly status: "applied" | "rejected";
   readonly reason?: string;
 };
 
 export type NovelDeleteDetails = {
   readonly items: NovelDeleteItemDetails[];
+  readonly revision: { readonly currentRevision: string };
 };

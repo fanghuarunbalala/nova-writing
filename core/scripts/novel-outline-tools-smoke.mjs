@@ -4,19 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
-  NovelDraftSessionService,
   OutlineToolService,
-  captureNovelCommitId,
+  captureCharacterId,
+  captureNovelId,
+  captureNovelOperationId,
   captureNovelRevision,
   captureNovelTimestamp,
+  createCharacterCreateOperation,
   createNovelOutlineToolRegistry,
 } from "../dist/index.js";
 import {
   NodeNovelStoreLocator,
   NodeWorkspaceStoreLocator,
   SqliteNovelCanonicalStore,
-  SqliteNovelDraftStore,
-  SqliteNovelSnapshotter,
   createNodeNovelApplication,
 } from "../dist/node/index.js";
 
@@ -83,8 +83,6 @@ function assertRedacted(entries, forbiddenValues) {
 const root = await mkdtemp(join(tmpdir(), "novel-outline-tools-"));
 const logs = [];
 const logger = new CollectingLogger(logs);
-let canonicalStore;
-let draftStore;
 
 const context = (conversationId, index) => ({
   conversationId,
@@ -102,46 +100,29 @@ try {
     storageRoot: join(root, "storage"),
   }).resolve(workspaceRoot);
   const location = await new NodeNovelStoreLocator().resolve(workspace);
-  canonicalStore = await SqliteNovelCanonicalStore.open({
+  const canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
     revisionFactory: new FixedRevisionFactory("revision_outline_tools_base"),
     logger,
   });
   const canonical = await canonicalStore.getMetadata();
-  draftStore = await SqliteNovelDraftStore.open({
-    location,
-    novelId: canonical.novelId,
-    logger,
-  });
   const clock = new SequenceClock();
-  let draftSequence = 0;
-  const drafts = new NovelDraftSessionService({
-    canonicalStore,
-    draftStore,
-    snapshotter: new SqliteNovelSnapshotter({
-      location,
-      novelId: canonical.novelId,
-      logger,
-    }),
-    identityFactory: {
-      createDraftSessionId: () => `draft_outline_tools_${++draftSequence}`,
-    },
-    clock,
-    logger,
-  });
   const application = createNodeNovelApplication({
     location,
     novelId: canonical.novelId,
     clock,
     logger,
   });
+  let operationSequence = 0;
   const service = new OutlineToolService({
-    outline: application.outline,
+    novelId: canonical.novelId,
     outlineQueries: application.outlineQueries,
-    drafts,
+    canonicalWrites: application.canonicalWrites,
     identityFactory: {
       createStoryOutlineId: () => "outline_tool_auto",
       createStoryUnitId: () => "story_unit_generated",
+      createOperationId: () =>
+        captureNovelOperationId(`outline_tool_operation_${++operationSequence}`),
     },
     logger,
   });
@@ -157,10 +138,16 @@ try {
   ]);
 
   const conversation = "conversation_outline_tools";
-  const session = await drafts.startDraft(conversation);
-  await application.characters.create(session, "character_protagonist", {
-    name: "PROTAGONIST_NAME",
-    aliases: [],
+  await application.canonicalWrites.applyOperations({
+    operations: [
+      createCharacterCreateOperation({
+        operationId: captureNovelOperationId("outline_tool_character"),
+        id: captureCharacterId("character_protagonist"),
+        profile: { name: "PROTAGONIST_NAME", aliases: [] },
+        timestamp: clock.now(),
+      }),
+    ],
+    conversationId: conversation,
   });
 
   // Write: batch create with defaults, auto outline, embedded leaf plan.
@@ -195,18 +182,20 @@ try {
     progress,
   );
   assert.deepEqual(
-    writeResult.details.items.map((item) => [item.id, item.status, item.sequence]),
+    writeResult.details.items.map((item) => [item.id, item.status]),
     [
-      ["story_unit_root", "appended", 3],
-      ["story_unit_leaf", "appended", 5],
+      ["story_unit_root", "applied"],
+      ["story_unit_leaf", "applied"],
     ],
   );
+  const writeRevision = writeResult.details.revision.currentRevision;
+  assert.notEqual(writeRevision, "revision_outline_tools_base");
 
-  // Read draft: auto-created outline, defaults, embedded plan without storyUnitId.
+  // Read canonical: auto-created outline, defaults, embedded plan without storyUnitId.
   const readTool = registry.require("NovelOutlineRead");
   const readResult = await readTool.handler.execute(
     context(conversation, 2),
-    { scope: "draft", includePlans: true },
+    { includePlans: true },
     progress,
   );
   assert.equal(readResult.details.outline.id, "outline_tool_auto");
@@ -222,20 +211,22 @@ try {
   assert.equal(leafUnit.parentId, "story_unit_root");
   assert.equal(leafUnit.plan.characters[0].characterId, "character_protagonist");
   assert.equal(JSON.stringify(leafUnit.plan).includes("storyUnitId"), false);
+  assert.equal(readResult.details.revision.currentRevision, writeRevision);
 
   // Edit: partial overwrite, null clearing, leaf partial update, leaf:null clear.
   const editTool = registry.require("NovelOutlineEdit");
   const titleEdit = await editTool.handler.execute(
     context(conversation, 3),
     {
+      baseRevision: writeRevision,
       values: [{ id: "story_unit_leaf", value: { title: "Second leaf" } }],
     },
     progress,
   );
-  assert.equal(titleEdit.details.items[0].status, "appended");
+  assert.equal(titleEdit.details.items[0].status, "applied");
   const afterTitle = await readTool.handler.execute(
     context(conversation, 4),
-    { scope: "draft", storyUnitId: "story_unit_leaf", includePlans: true },
+    { storyUnitId: "story_unit_leaf", includePlans: true },
     progress,
   );
   assert.equal(afterTitle.details.units[0].title, "Second leaf");
@@ -248,7 +239,7 @@ try {
   );
   const afterIntentClear = await readTool.handler.execute(
     context(conversation, 6),
-    { scope: "draft", storyUnitId: "story_unit_leaf" },
+    { storyUnitId: "story_unit_leaf" },
     progress,
   );
   assert.equal(afterIntentClear.details.units[0].intent, undefined);
@@ -277,15 +268,12 @@ try {
   );
   const afterPlanPartial = await readTool.handler.execute(
     context(conversation, 8),
-    { scope: "draft", storyUnitId: "story_unit_leaf", includePlans: true },
+    { storyUnitId: "story_unit_leaf", includePlans: true },
     progress,
   );
   assert.equal(afterPlanPartial.details.units[0].plan.events.length, 1);
   assert.equal(afterPlanPartial.details.units[0].plan.events[0].id, "event_2");
-  assert.equal(
-    afterPlanPartial.details.units[0].plan.characters.length,
-    1,
-  );
+  assert.equal(afterPlanPartial.details.units[0].plan.characters.length, 1);
 
   await editTool.handler.execute(
     context(conversation, 9),
@@ -294,21 +282,21 @@ try {
   );
   const afterPlanClear = await readTool.handler.execute(
     context(conversation, 10),
-    { scope: "draft", storyUnitId: "story_unit_leaf", includePlans: true },
+    { storyUnitId: "story_unit_leaf", includePlans: true },
     progress,
   );
   assert.equal(afterPlanClear.details.units[0].plan, undefined);
 
-  // Edit: move to root via parentId:null; missing target rejected.
+  // Edit: move to root via parentId:null; missing target rejected (whole batch unapplied).
   const moveEdit = await editTool.handler.execute(
     context(conversation, 11),
     { values: [{ id: "story_unit_leaf", value: { parentId: null } }] },
     progress,
   );
-  assert.equal(moveEdit.details.items[0].status, "appended");
+  assert.equal(moveEdit.details.items[0].status, "applied");
   const afterMove = await readTool.handler.execute(
     context(conversation, 12),
-    { scope: "draft", storyUnitId: "story_unit_leaf" },
+    { storyUnitId: "story_unit_leaf" },
     progress,
   );
   assert.equal(afterMove.details.units[0].parentId, undefined);
@@ -324,7 +312,7 @@ try {
     ["rejected", "not_found"],
   );
 
-  // Write: duplicate rejected, batch stops after the first rejected item.
+  // Write: duplicate rejected with the whole batch left unapplied.
   const duplicateWrite = await writeTool.handler.execute(
     context(conversation, 14),
     {
@@ -338,105 +326,51 @@ try {
   );
   assert.deepEqual(
     duplicateWrite.details.items.map((item) => [item.id, item.status]),
-    [
-      ["story_unit_batch1", "appended"],
-      ["story_unit_root", "rejected"],
-    ],
+    [["story_unit_root", "rejected"]],
   );
-  assert.equal(duplicateWrite.details.items[1].reason, "duplicate_id");
-
-  // Canonical scope is empty until commit.
-  const canonicalBefore = await readTool.handler.execute(
+  assert.equal(duplicateWrite.details.items[0].reason, "duplicate_id");
+  const afterRejectedBatch = await readTool.handler.execute(
     context(conversation, 15),
-    { scope: "canonical" },
+    {},
     progress,
   );
-  assert.equal(canonicalBefore.details.units.length, 0);
+  assert.equal(
+    afterRejectedBatch.details.units.some(
+      (unit) => unit.id === "story_unit_batch1",
+    ),
+    false,
+  );
 
-  const resultRevision = captureNovelRevision("revision_outline_tools_committed");
-  const committed = await application.commits.commit(session, {
-    commitId: captureNovelCommitId("commit_outline_tools"),
-    resultRevision,
-    committedAt: captureNovelTimestamp("2026-08-05T10:30:00.000Z"),
-  });
-  assert.equal(committed.status, "committed");
-
-  const canonicalAfter = await readTool.handler.execute(
+  // Optimistic lock: stale baseRevision write is rejected as a ToolError.
+  const staleWrite = writeTool.handler.execute(
     context(conversation, 16),
-    { scope: "canonical" },
+    {
+      baseRevision: writeRevision,
+      values: [{ id: "story_unit_stale", title: "Stale" }],
+    },
     progress,
   );
-  assert.equal(canonicalAfter.details.units.length, 3);
-  assert.deepEqual(
-    canonicalAfter.details.units.map((unit) => unit.id).sort(),
-    ["story_unit_batch1", "story_unit_leaf", "story_unit_root"],
-  );
+  await assert.rejects(staleWrite, (error) => {
+    assert.equal(error.code, "NOVEL_OUTLINE_WRITE_FAILED");
+    return true;
+  });
 
   // Write without an id: the host generates and returns the id.
   const generatedWrite = await writeTool.handler.execute(
-    context(conversation, 18),
+    context(conversation, 17),
     { values: [{ title: "Generated unit" }] },
     progress,
   );
   assert.equal(generatedWrite.details.items[0].id, "story_unit_generated");
-  assert.equal(generatedWrite.details.items[0].status, "appended");
+  assert.equal(generatedWrite.details.items[0].status, "applied");
 
-  // Draft isolation: another conversation sees no draft and cannot pollute ours.
-  const otherConversation = "conversation_outline_tools_other";
-  const otherRead = await readTool.handler.execute(
-    context(otherConversation, 1),
-    { scope: "draft" },
-    progress,
-  );
-  assert.equal(otherRead.details.units.length, 0);
-  await writeTool.handler.execute(
-    context(otherConversation, 2),
-    { values: [{ id: "story_unit_other", title: "Other conversation" }] },
-    progress,
-  );
-  const firstReadAgain = await readTool.handler.execute(
-    context(conversation, 17),
-    { scope: "draft" },
-    progress,
-  );
-  assert.equal(
-    firstReadAgain.details.units.some((unit) => unit.id === "story_unit_other"),
-    false,
-  );
-  const otherReadAfter = await readTool.handler.execute(
-    context(otherConversation, 3),
-    { scope: "draft" },
-    progress,
-  );
-  assert.equal(otherReadAfter.details.units.length, 4);
-  assert.equal(
-    otherReadAfter.details.units.some(
-      (unit) => unit.id === "story_unit_other",
-    ),
-    true,
-  );
-  const canonicalAfterOther = await readTool.handler.execute(
-    context(otherConversation, 4),
-    { scope: "canonical" },
-    progress,
-  );
-  assert.equal(canonicalAfterOther.details.units.length, 3);
-
-  assertRedacted(logs, [
-    "Root arc",
-    "First leaf",
-    "Second leaf",
-    "INTENT_MARKER",
-    "PROTAGONIST_NAME",
+  await assertRedacted(logs, [
+    root,
     "EVENT_DESC",
-    "EVENT_2_DESC",
-    "Batch one",
-    "Other conversation",
-    "Generated unit",
+    "PROTAGONIST_NAME",
+    "INTENT_MARKER",
   ]);
-  console.log("CORE_SMOKE_TEST_RESULT=pass novel-outline-tools");
+  process.stdout.write("novel-outline-tools smoke passed\n");
 } finally {
-  if (draftStore) await draftStore.close();
-  if (canonicalStore) await canonicalStore.close();
   await rm(root, { recursive: true, force: true });
 }

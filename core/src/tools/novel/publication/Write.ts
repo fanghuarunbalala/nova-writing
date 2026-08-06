@@ -55,7 +55,7 @@ export function createVolumeWriteTool(
           logger.info("novel_publication_tool.volume.write.completed", {
             conversationId: context.conversationId,
             appliedCount: details.items.filter(
-              (item) => item.status === "appended",
+              (item) => item.status === "applied",
             ).length,
           });
           return writeResult(details, "Volumes written.");
@@ -116,7 +116,7 @@ export function createChapterWriteTool(
           logger.info("novel_publication_tool.chapter.write.completed", {
             conversationId: context.conversationId,
             appliedCount: details.items.filter(
-              (item) => item.status === "appended",
+              (item) => item.status === "applied",
             ).length,
           });
           return writeResult(details, "Chapters written.");

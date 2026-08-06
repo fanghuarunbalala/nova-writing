@@ -4,22 +4,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
-  NovelDraftSessionService,
   NovelParagraphToolService,
+  captureNovelOperationId,
   captureNovelRevision,
   captureNovelTimestamp,
   captureParagraphId,
+  captureStoryOutline,
   captureStoryOutlineId,
   captureStoryUnit,
   captureStoryUnitId,
   createNovelParagraphToolRegistry,
+  createStoryOutlineCreateOperation,
+  createStoryUnitCreateOperation,
 } from "../dist/index.js";
 import {
   NodeNovelStoreLocator,
   NodeWorkspaceStoreLocator,
   SqliteNovelCanonicalStore,
-  SqliteNovelDraftStore,
-  SqliteNovelSnapshotter,
   createNodeNovelApplication,
 } from "../dist/node/index.js";
 
@@ -61,8 +62,6 @@ class CollectingLogger {
 const root = await mkdtemp(join(tmpdir(), "novel-paragraph-tools-"));
 const logs = [];
 const logger = new CollectingLogger(logs);
-let canonicalStore;
-let draftStore;
 
 const context = (conversationId, index) => ({
   conversationId,
@@ -79,34 +78,15 @@ try {
     storageRoot: join(root, "storage"),
   }).resolve(workspaceRoot);
   const location = await new NodeNovelStoreLocator().resolve(workspace);
-  canonicalStore = await SqliteNovelCanonicalStore.open({
+  const canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
     revisionFactory: new FixedRevisionFactory("revision_paragraph_tools_base"),
     logger,
   });
   const canonical = await canonicalStore.getMetadata();
-  draftStore = await SqliteNovelDraftStore.open({
-    location,
-    novelId: canonical.novelId,
-    logger,
-  });
   const clock = new SequenceClock();
-  let draftSequence = 0;
   let paragraphSequence = 0;
-  const drafts = new NovelDraftSessionService({
-    canonicalStore,
-    draftStore,
-    snapshotter: new SqliteNovelSnapshotter({
-      location,
-      novelId: canonical.novelId,
-      logger,
-    }),
-    identityFactory: {
-      createDraftSessionId: () => `draft_paragraph_tools_${++draftSequence}`,
-    },
-    clock,
-    logger,
-  });
+  let operationSequence = 0;
   const application = createNodeNovelApplication({
     location,
     novelId: canonical.novelId,
@@ -114,12 +94,13 @@ try {
     logger,
   });
   const service = new NovelParagraphToolService({
-    paragraphs: application.paragraphs,
     paragraphQueries: application.paragraphQueries,
-    drafts,
+    canonicalWrites: application.canonicalWrites,
     identityFactory: {
       createParagraphId: () =>
         captureParagraphId(`paragraph_generated_${++paragraphSequence}`),
+      createOperationId: () =>
+        captureNovelOperationId(`paragraph_tool_operation_${++operationSequence}`),
     },
     logger,
   });
@@ -135,18 +116,31 @@ try {
   ]);
 
   const conversation = "conversation_paragraph_tools";
-  const session = await drafts.startDraft(conversation);
   const outlineId = captureStoryOutlineId("outline_paragraph_tools");
   const storyUnitId = captureStoryUnitId("story_unit_paragraph_tools");
-  await application.outline.createOutline(session, outlineId);
-  await application.outline.createStoryUnit(session, captureStoryUnit({
-    id: storyUnitId,
-    outlineId,
-    orderKey: "8000",
-    title: "Leaf",
-    planningStatus: "ready",
-    realizationStatus: "in-progress",
-  }));
+  await application.canonicalWrites.applyOperations({
+    operations: [
+      createStoryOutlineCreateOperation({
+        operationId: captureNovelOperationId(`paragraph_tool_setup_${++operationSequence}`),
+        outline: captureStoryOutline({
+          id: outlineId,
+          novelId: canonical.novelId,
+        }),
+      }),
+      createStoryUnitCreateOperation({
+        operationId: captureNovelOperationId(`paragraph_tool_setup_${++operationSequence}`),
+        storyUnit: captureStoryUnit({
+          id: storyUnitId,
+          outlineId,
+          orderKey: "8000",
+          title: "Leaf",
+          planningStatus: "ready",
+          realizationStatus: "in-progress",
+        }),
+      }),
+    ],
+    conversationId: conversation,
+  });
 
   const writeTool = registry.require("NovelParagraphWrite");
   const readTool = registry.require("NovelParagraphRead");
@@ -170,14 +164,15 @@ try {
   assert.deepEqual(
     writeResult.details.items.map((item) => [item.id, item.status]),
     [
-      ["paragraph_generated_1", "appended"],
-      ["paragraph_second", "appended"],
+      ["paragraph_generated_1", "applied"],
+      ["paragraph_second", "applied"],
     ],
   );
+  const writeRevision = writeResult.details.revision.currentRevision;
 
   const readResult = await readTool.handler.execute(
     context(conversation, 2),
-    { scope: "draft", storyUnitId },
+    { storyUnitId },
     progress,
   );
   assert.deepEqual(
@@ -185,10 +180,12 @@ try {
     ["paragraph_generated_1", "paragraph_second"],
   );
   assert.equal(readResult.details.paragraphs[0].text, "First paragraph");
+  assert.equal(readResult.details.revision.currentRevision, writeRevision);
 
   const editResult = await editTool.handler.execute(
     context(conversation, 3),
     {
+      baseRevision: writeRevision,
       values: [
         {
           id: "paragraph_second",
@@ -198,10 +195,10 @@ try {
     },
     progress,
   );
-  assert.equal(editResult.details.items[0].status, "updated");
+  assert.equal(editResult.details.items[0].status, "applied");
   const afterEdit = await readTool.handler.execute(
     context(conversation, 4),
-    { scope: "draft", storyUnitId },
+    { storyUnitId },
     progress,
   );
   assert.equal(
@@ -209,15 +206,43 @@ try {
     "Second paragraph revised",
   );
 
-  const canonicalRead = await readTool.handler.execute(
+  // Missing paragraph edit rejects the whole batch.
+  const missingEdit = await editTool.handler.execute(
     context(conversation, 5),
-    { scope: "canonical" },
+    {
+      values: [
+        { id: "paragraph_missing", value: { text: "x" } },
+        { id: "paragraph_second", value: { text: "y" } },
+      ],
+    },
     progress,
   );
-  assert.equal(canonicalRead.details.paragraphs.length, 0);
+  assert.deepEqual(
+    [missingEdit.details.items[0].status, missingEdit.details.items[0].reason],
+    ["rejected", "not_found"],
+  );
+  const afterRejected = await readTool.handler.execute(
+    context(conversation, 6),
+    { storyUnitId },
+    progress,
+  );
+  assert.equal(
+    afterRejected.details.paragraphs[1].text,
+    "Second paragraph revised",
+  );
+
+  // Redaction: no paragraph text in structured logs.
+  const serialized = JSON.stringify(logs);
+  for (const forbidden of [
+    "First paragraph",
+    "Second paragraph",
+    "Second paragraph revised",
+    root,
+  ]) {
+    assert.equal(serialized.includes(forbidden), false);
+  }
+
   console.log("novel paragraph tools smoke passed");
 } finally {
-  await draftStore?.close();
-  await canonicalStore?.close();
   await rm(root, { recursive: true, force: true });
 }

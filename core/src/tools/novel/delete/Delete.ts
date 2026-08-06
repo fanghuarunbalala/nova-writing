@@ -51,8 +51,8 @@ export function createDeleteTool(
           );
           logger.info("novel_delete_tool.delete.completed", {
             conversationId: context.conversationId,
-            deletedCount: details.items.filter(
-              (item) => item.status === "deleted",
+            appliedCount: details.items.filter(
+              (item) => item.status === "applied",
             ).length,
           });
           return deleteResult(details);

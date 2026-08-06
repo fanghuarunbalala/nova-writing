@@ -1,4 +1,4 @@
-/** NovelOutlineEdit tool: batch field-level partial updates of story units. */
+/** NovelOutlineEdit tool: batch field-level partial updates of canonical story units after approval. */
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { ToolError } from "../../../runtime/tools/execution/index.js";
 import {
@@ -31,15 +31,15 @@ export function createEditTool(
       version: "1.0.0",
       label: "Novel Outline Edit",
       description:
-        "Batch field-level partial updates (PATCH) of existing story units in the Draft. Provided fields overwrite, omitted fields are untouched, and null clears an optional field or array. leaf:null clears the whole plan. parentId:null moves to root; providing orderKey reorders. Moving is expressed as an Edit of parentId/orderKey.",
+        "Batch field-level partial updates (PATCH) of existing canonical story units. Provided fields overwrite, omitted fields are untouched, and null clears an optional field or array. leaf:null clears the whole plan. parentId:null moves to root; providing orderKey reorders. Moving is expressed as an Edit of parentId/orderKey. The batch is approved first and applied in one atomic transaction.",
       parameters: NovelOutlineEditParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage:
-          "Read first with NovelOutlineRead, modify the fields you need, then Edit only those fields.",
+          "Read first with NovelOutlineRead, modify the fields you need, pass revision.currentRevision as baseRevision, then Edit only those fields.",
         parameterGuidance:
           "Provide null to clear intent/synopsis/scope/blockState/abandonment/leaf. Array fields replace the whole array when provided.",
         safetyGuidance:
-          "Edits are Draft-only until NovelDraftCommit. A failed item stops the batch; earlier items remain applied.",
+          "Edits require approval and apply to canonical immediately after approval. Any rejected item leaves the batch unapplied.",
       }),
     },
     handler: {
@@ -55,7 +55,7 @@ export function createEditTool(
             runId: context.runId,
             toolCallId: context.toolCallId,
             appliedCount: details.items.filter(
-              (item) => item.status === "appended",
+              (item) => item.status === "applied",
             ).length,
             rejectedCount: details.items.filter(
               (item) => item.status === "rejected",

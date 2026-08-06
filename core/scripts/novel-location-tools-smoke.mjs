@@ -4,10 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
-  NovelDraftSessionService,
   NovelLocationToolService,
   captureLocationId,
-  captureNovelCommitId,
+  captureNovelOperationId,
   captureNovelRevision,
   captureNovelTimestamp,
   createNovelLocationToolRegistry,
@@ -16,8 +15,6 @@ import {
   NodeNovelStoreLocator,
   NodeWorkspaceStoreLocator,
   SqliteNovelCanonicalStore,
-  SqliteNovelDraftStore,
-  SqliteNovelSnapshotter,
   createNodeNovelApplication,
 } from "../dist/node/index.js";
 
@@ -59,8 +56,6 @@ class CollectingLogger {
 const root = await mkdtemp(join(tmpdir(), "novel-location-tools-"));
 const logs = [];
 const logger = new CollectingLogger(logs);
-let canonicalStore;
-let draftStore;
 
 const context = (conversationId, index) => ({
   conversationId,
@@ -77,34 +72,15 @@ try {
     storageRoot: join(root, "storage"),
   }).resolve(workspaceRoot);
   const location = await new NodeNovelStoreLocator().resolve(workspace);
-  canonicalStore = await SqliteNovelCanonicalStore.open({
+  const canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
     revisionFactory: new FixedRevisionFactory("revision_location_tools_base"),
     logger,
   });
   const canonical = await canonicalStore.getMetadata();
-  draftStore = await SqliteNovelDraftStore.open({
-    location,
-    novelId: canonical.novelId,
-    logger,
-  });
   const clock = new SequenceClock();
-  let draftSequence = 0;
   let locationSequence = 0;
-  const drafts = new NovelDraftSessionService({
-    canonicalStore,
-    draftStore,
-    snapshotter: new SqliteNovelSnapshotter({
-      location,
-      novelId: canonical.novelId,
-      logger,
-    }),
-    identityFactory: {
-      createDraftSessionId: () => `draft_location_tools_${++draftSequence}`,
-    },
-    clock,
-    logger,
-  });
+  let operationSequence = 0;
   const application = createNodeNovelApplication({
     location,
     novelId: canonical.novelId,
@@ -112,13 +88,15 @@ try {
     logger,
   });
   const service = new NovelLocationToolService({
-    locations: application.locations,
     locationQueries: application.locationQueries,
-    drafts,
+    canonicalWrites: application.canonicalWrites,
     identityFactory: {
       createLocationId: () =>
         captureLocationId(`location_generated_${++locationSequence}`),
+      createOperationId: () =>
+        captureNovelOperationId(`location_tool_operation_${++operationSequence}`),
     },
+    clock,
     logger,
   });
   const registry = createNovelLocationToolRegistry({ service, logger });
@@ -137,16 +115,17 @@ try {
   const readTool = registry.require("NovelLocationRead");
   const editTool = registry.require("NovelLocationEdit");
 
+  // Write: host-generated id, explicit id, batch order.
   const writeResult = await writeTool.handler.execute(
     context(conversation, 1),
     {
       values: [
-        { name: "Home", aliases: [], summary: "SMOKE_LOCATION_SUMMARY" },
+        { name: "Kingdom", aliases: [], summary: "SMOKE_SUMMARY" },
         {
           id: "location_city",
           name: "City",
-          aliases: ["Metropolis"],
-          authorNotes: "SMOKE_LOCATION_NOTES",
+          aliases: ["Capital"],
+          authorNotes: "SMOKE_NOTES",
         },
       ],
     },
@@ -155,109 +134,121 @@ try {
   assert.deepEqual(
     writeResult.details.items.map((item) => [item.id, item.status]),
     [
-      ["location_generated_1", "appended"],
-      ["location_city", "appended"],
+      ["location_generated_1", "applied"],
+      ["location_city", "applied"],
     ],
   );
+  const writeRevision = writeResult.details.revision.currentRevision;
+  assert.notEqual(writeRevision, "revision_location_tools_base");
 
+  // Read: lists both; get one; revision matches write.
   const readResult = await readTool.handler.execute(
     context(conversation, 2),
-    { scope: "draft" },
+    {},
     progress,
   );
   assert.equal(readResult.details.locations.length, 2);
   const city = readResult.details.locations.find(
-    (location) => location.id === "location_city",
+    (entry) => entry.id === "location_city",
   );
   assert.equal(city.name, "City");
-  assert.deepEqual(city.aliases, ["Metropolis"]);
+  assert.deepEqual(city.aliases, ["Capital"]);
+  assert.equal(city.authorNotes, "SMOKE_NOTES");
+  assert.equal(readResult.details.revision.currentRevision, writeRevision);
 
+  // Edit: partial patch, null clearing, aliases replacement.
   const editResult = await editTool.handler.execute(
     context(conversation, 3),
     {
+      baseRevision: writeRevision,
       values: [
         {
           id: "location_city",
-          value: {
-            summary: "SMOKE_LOCATION_SUMMARY",
-            authorNotes: null,
-            aliases: [],
-          },
+          value: { summary: "SMOKE_SUMMARY", authorNotes: null, aliases: [] },
         },
       ],
     },
     progress,
   );
-  assert.equal(editResult.details.items[0].status, "appended");
+  assert.equal(editResult.details.items[0].status, "applied");
   const afterEdit = await readTool.handler.execute(
     context(conversation, 4),
-    { scope: "draft", locationId: "location_city" },
+    { locationId: "location_city" },
     progress,
   );
+  assert.equal(afterEdit.details.locations[0].summary, "SMOKE_SUMMARY");
   assert.equal(afterEdit.details.locations[0].authorNotes, undefined);
   assert.deepEqual(afterEdit.details.locations[0].aliases, []);
   assert.equal(afterEdit.details.locations[0].name, "City");
 
+  // Edit: no-op patch applies as a no-change success.
   const noopEdit = await editTool.handler.execute(
     context(conversation, 5),
     { values: [{ id: "location_city", value: { name: "City" } }] },
     progress,
   );
-  assert.equal(noopEdit.details.items[0].status, "duplicate");
+  assert.equal(noopEdit.details.items[0].status, "applied");
 
+  // Edit: missing location rejected; whole batch left unapplied.
   const missingEdit = await editTool.handler.execute(
     context(conversation, 6),
-    { values: [{ id: "location_missing", value: { name: "x" } }] },
+    {
+      values: [
+        { id: "location_missing", value: { name: "x" } },
+        { id: "location_city", value: { name: "y" } },
+      ],
+    },
     progress,
   );
   assert.deepEqual(
     [missingEdit.details.items[0].status, missingEdit.details.items[0].reason],
     ["rejected", "not_found"],
   );
+  assert.equal(missingEdit.details.items.length, 1);
 
+  // Write: duplicate id rejected.
   const duplicateWrite = await writeTool.handler.execute(
     context(conversation, 7),
     { values: [{ id: "location_city", name: "Dup" }] },
     progress,
   );
   assert.deepEqual(
-    [duplicateWrite.details.items[0].status, duplicateWrite.details.items[0].reason],
+    [
+      duplicateWrite.details.items[0].status,
+      duplicateWrite.details.items[0].reason,
+    ],
     ["rejected", "duplicate_id"],
   );
 
-  const canonicalBefore = await readTool.handler.execute(
-    context(conversation, 8),
-    { scope: "canonical" },
-    progress,
+  // Optimistic lock: stale baseRevision write is rejected.
+  await assert.rejects(
+    writeTool.handler.execute(
+      context(conversation, 8),
+      {
+        baseRevision: writeRevision,
+        values: [{ name: "Stale", aliases: [] }],
+      },
+      progress,
+    ),
+    (error) => {
+      assert.equal(error.code, "NOVEL_LOCATION_WRITE_FAILED");
+      return true;
+    },
   );
-  assert.equal(canonicalBefore.details.locations.length, 0);
 
-  const session = await drafts.getActiveDraft(conversation);
-  await application.commits.commit(session, {
-    commitId: captureNovelCommitId("commit_location_tools"),
-    resultRevision: captureNovelRevision("revision_location_tools_committed"),
-    committedAt: captureNovelTimestamp("2026-08-05T10:30:00.000Z"),
-  });
-  const canonicalAfter = await readTool.handler.execute(
-    context(conversation, 9),
-    { scope: "canonical" },
-    progress,
-  );
-  assert.equal(canonicalAfter.details.locations.length, 2);
-
+  // Redaction: no profile content in structured logs.
   const serialized = JSON.stringify(logs);
   for (const forbidden of [
-    "SMOKE_LOCATION_SUMMARY",
-    "SMOKE_LOCATION_NOTES",
-    "Home",
+    "SMOKE_SUMMARY",
+    "SMOKE_NOTES",
+    "Kingdom",
     "City",
+    root,
   ]) {
     assert.equal(serialized.includes(forbidden), false);
   }
 
   console.log("CORE_SMOKE_TEST_RESULT=pass novel-location-tools");
 } finally {
-  if (draftStore) await draftStore.close();
-  if (canonicalStore) await canonicalStore.close();
   await rm(root, { recursive: true, force: true });
 }

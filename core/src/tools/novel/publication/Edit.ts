@@ -55,7 +55,7 @@ export function createVolumeEditTool(
           logger.info("novel_publication_tool.volume.edit.completed", {
             conversationId: context.conversationId,
             appliedCount: details.items.filter(
-              (item) => item.status === "updated",
+              (item) => item.status === "applied",
             ).length,
           });
           return editResult(details, "Volumes edited.");
@@ -116,7 +116,7 @@ export function createChapterEditTool(
           logger.info("novel_publication_tool.chapter.edit.completed", {
             conversationId: context.conversationId,
             appliedCount: details.items.filter(
-              (item) => item.status === "updated",
+              (item) => item.status === "applied",
             ).length,
           });
           return editResult(details, "Chapters edited.");

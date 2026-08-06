@@ -1,9 +1,5 @@
-/** Draft-only Character mutation service that constructs deterministic Operations. */
+/** Canonical Character mutation service that constructs deterministic Operations. */
 import { noopLogger, type Logger } from "../../observability/index.js";
-import {
-  captureNovelDraftSession,
-  type NovelDraftSession,
-} from "../draft/index.js";
 import {
   captureCharacterId,
   type CharacterId,
@@ -17,16 +13,19 @@ import {
 } from "../operation/index.js";
 import type {
   NovelClock,
-  NovelDraftOperationReceipt,
+  NovelCanonicalWritePort,
+  NovelCanonicalWriteResult,
 } from "../port/index.js";
 import {
   captureNovelEntityVersion,
+  captureNovelRevision,
   type NovelEntityVersion,
+  type NovelRevision,
 } from "../version/index.js";
-import type { NovelMutationService } from "./NovelMutationService.js";
+import type { NovelOperation } from "../operation/index.js";
 
 export interface CharacterServiceOptions {
-  readonly mutations: NovelMutationService;
+  readonly canonicalWrites: NovelCanonicalWritePort;
   readonly identityFactory: {
     createOperationId(): NovelOperationId;
   };
@@ -44,11 +43,11 @@ export class CharacterService {
   }
 
   async create(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     id: CharacterId,
     profile: StableEntityProfile,
-  ): Promise<NovelDraftOperationReceipt> {
-    const draft = captureNovelDraftSession(session);
+  ): Promise<NovelCanonicalWriteResult> {
     const characterId = captureCharacterId(id);
     const operation = createCharacterCreateOperation({
       operationId: this.options.identityFactory.createOperationId(),
@@ -56,23 +55,18 @@ export class CharacterService {
       profile,
       timestamp: this.options.clock.now(),
     });
-    const receipt = await this.options.mutations.execute(draft, operation);
-    this.logger.info("novel_character.create.completed", {
-      novelId: draft.novelId,
-      draftSessionId: draft.id,
+    return this.execute(conversationId, baseRevision, operation, "create", {
       characterId,
-      operationId: operation.operationId,
     });
-    return receipt;
   }
 
   async replace(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     id: CharacterId,
     expectedEntityVersion: NovelEntityVersion,
     profile: StableEntityProfile,
-  ): Promise<NovelDraftOperationReceipt> {
-    const draft = captureNovelDraftSession(session);
+  ): Promise<NovelCanonicalWriteResult> {
     const characterId = captureCharacterId(id);
     const operation = createCharacterReplaceOperation({
       operationId: this.options.identityFactory.createOperationId(),
@@ -81,35 +75,56 @@ export class CharacterService {
       profile,
       timestamp: this.options.clock.now(),
     });
-    const receipt = await this.options.mutations.execute(draft, operation);
-    this.logger.info("novel_character.replace.completed", {
-      novelId: draft.novelId,
-      draftSessionId: draft.id,
+    return this.execute(conversationId, baseRevision, operation, "replace", {
       characterId,
-      operationId: operation.operationId,
     });
-    return receipt;
   }
 
   async delete(
-    session: NovelDraftSession,
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
     id: CharacterId,
     expectedEntityVersion: NovelEntityVersion,
-  ): Promise<NovelDraftOperationReceipt> {
-    const draft = captureNovelDraftSession(session);
+  ): Promise<NovelCanonicalWriteResult> {
     const characterId = captureCharacterId(id);
     const operation = createCharacterDeleteOperation({
       operationId: this.options.identityFactory.createOperationId(),
       id: characterId,
       expectedEntityVersion: captureNovelEntityVersion(expectedEntityVersion),
     });
-    const receipt = await this.options.mutations.execute(draft, operation);
-    this.logger.info("novel_character.delete.completed", {
-      novelId: draft.novelId,
-      draftSessionId: draft.id,
+    return this.execute(conversationId, baseRevision, operation, "delete", {
       characterId,
-      operationId: operation.operationId,
     });
-    return receipt;
+  }
+
+  private async execute(
+    conversationId: string,
+    baseRevision: NovelRevision | undefined,
+    operation: NovelOperation,
+    action: string,
+    identity: Readonly<Record<string, string>>,
+  ): Promise<NovelCanonicalWriteResult> {
+    this.logger.debug("novel_character.operation.started", {
+      operationId: operation.operationId,
+      operationType: operation.type,
+      action,
+      ...identity,
+    });
+    const result = await this.options.canonicalWrites.applyOperations({
+      operations: [operation],
+      conversationId,
+      ...(baseRevision === undefined
+        ? {}
+        : { baseRevision: captureNovelRevision(baseRevision) }),
+    });
+    this.logger.info("novel_character.operation.completed", {
+      operationId: operation.operationId,
+      operationType: operation.type,
+      action,
+      resultRevision: result.resultRevision,
+      status: result.status,
+      ...identity,
+    });
+    return result;
   }
 }

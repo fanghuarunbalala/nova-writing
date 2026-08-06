@@ -4,8 +4,9 @@ import {
   CharacterQueryService,
   CharacterService,
   NovelCharacterToolService,
-  NovelDraftSessionService,
   captureCharacterId,
+  captureNovelOperationId,
+  type NovelCanonicalWritePort,
   createNovelCharacterEditTool,
   createNovelCharacterReadTool,
   createNovelCharacterToolRegistry,
@@ -13,11 +14,11 @@ import {
 } from "../src/index.js";
 
 const service = new NovelCharacterToolService({
-  characters: undefined as unknown as CharacterService,
   characterQueries: undefined as unknown as CharacterQueryService,
-  drafts: undefined as unknown as NovelDraftSessionService,
+  canonicalWrites: undefined as unknown as NovelCanonicalWritePort,
   identityFactory: {
     createCharacterId: () => captureCharacterId("character_typecheck"),
+    createOperationId: () => captureNovelOperationId("character_operation_typecheck"),
   },
 });
 

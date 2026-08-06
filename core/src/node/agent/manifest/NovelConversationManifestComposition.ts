@@ -10,6 +10,7 @@ import {
   type LocationQueryService,
   type LocationService,
   type NovelCommitService,
+  type NovelCanonicalWritePort,
   type NovelDraftChangeSetBuilder,
   type NovelDraftSessionService,
   type ParagraphQueryService,
@@ -20,6 +21,8 @@ import {
   type StoryOutlineService,
   captureCharacterId,
   captureLocationId,
+  captureNovelId,
+  captureNovelOperationId,
   captureParagraphId,
   capturePublicationChapterId,
   capturePublicationStructureId,
@@ -89,6 +92,23 @@ const unavailableTodoWriter: ConversationTodoWriter = Object.freeze({
     return Promise.reject(
       new TypeError(
         "Conversation todo writer is unavailable during manifest assembly",
+      ),
+    );
+  },
+});
+
+const unavailableCanonicalWritePort: NovelCanonicalWritePort = Object.freeze({
+  applyOperations() {
+    return Promise.reject(
+      new TypeError(
+        "Novel canonical write port is unavailable during manifest assembly",
+      ),
+    );
+  },
+  getCurrentRevision() {
+    return Promise.reject(
+      new TypeError(
+        "Novel canonical revision is unavailable during manifest assembly",
       ),
     );
   },
@@ -180,37 +200,37 @@ const unavailablePublicationQueryService = Object.freeze({
 }) as unknown as PublicationQueryService;
 
 const unavailableLocationToolService = new NovelLocationToolService({
-  locations: unavailableLocationService,
   locationQueries: unavailableLocationQueryService,
-  drafts: unavailableNovelDraftSessionService,
+  canonicalWrites: unavailableCanonicalWritePort,
   identityFactory: {
     createLocationId: () => captureLocationId("unavailable_location"),
+    createOperationId: () => captureNovelOperationId("unavailable_operation"),
   },
 });
 
 const unavailableCharacterToolService = new NovelCharacterToolService({
-  characters: unavailableCharacterService,
   characterQueries: unavailableCharacterQueryService,
-  drafts: unavailableNovelDraftSessionService,
+  canonicalWrites: unavailableCanonicalWritePort,
   identityFactory: {
     createCharacterId: () => captureCharacterId("unavailable_character"),
+    createOperationId: () => captureNovelOperationId("unavailable_operation"),
   },
 });
 
 const unavailableParagraphToolService = new NovelParagraphToolService({
-  paragraphs: unavailableParagraphService,
   paragraphQueries: unavailableParagraphQueryService,
-  drafts: unavailableNovelDraftSessionService,
+  canonicalWrites: unavailableCanonicalWritePort,
   identityFactory: {
     createParagraphId: () => captureParagraphId("unavailable_paragraph"),
+    createOperationId: () => captureNovelOperationId("unavailable_operation"),
   },
 });
 
 const unavailablePublicationToolService = new NovelPublicationToolService({
-  publication: unavailablePublicationService,
+  novelId: captureNovelId("unavailable_novel"),
   publicationQueries: unavailablePublicationQueryService,
   paragraphs: unavailableParagraphQueryService,
-  drafts: unavailableNovelDraftSessionService,
+  canonicalWrites: unavailableCanonicalWritePort,
   identityFactory: {
     createPublicationStructureId: () =>
       capturePublicationStructureId("unavailable_publication"),
@@ -218,21 +238,20 @@ const unavailablePublicationToolService = new NovelPublicationToolService({
       capturePublicationVolumeId("unavailable_volume"),
     createPublicationChapterId: () =>
       capturePublicationChapterId("unavailable_chapter"),
+    createOperationId: () => captureNovelOperationId("unavailable_operation"),
   },
 });
 
 const unavailableDeleteToolService = new NovelDeleteToolService({
-  outline: unavailableStoryOutlineService,
   outlineQueries: unavailableStoryOutlineQueryService,
-  characters: unavailableCharacterService,
   characterQueries: unavailableCharacterQueryService,
-  locations: unavailableLocationService,
   locationQueries: unavailableLocationQueryService,
-  paragraphs: unavailableParagraphService,
   paragraphQueries: unavailableParagraphQueryService,
-  publication: unavailablePublicationService,
   publicationQueries: unavailablePublicationQueryService,
-  drafts: unavailableNovelDraftSessionService,
+  canonicalWrites: unavailableCanonicalWritePort,
+  identityFactory: {
+    createOperationId: () => captureNovelOperationId("unavailable_operation"),
+  },
 });
 
 const unavailableDraftToolService = new NovelDraftToolService({
@@ -251,12 +270,13 @@ const unavailableDraftToolService = new NovelDraftToolService({
 });
 
 const unavailableOutlineToolService = new OutlineToolService({
-  outline: unavailableStoryOutlineService,
+  novelId: captureNovelId("unavailable_novel"),
   outlineQueries: unavailableStoryOutlineQueryService,
-  drafts: unavailableNovelDraftSessionService,
+  canonicalWrites: unavailableCanonicalWritePort,
   identityFactory: {
     createStoryOutlineId: () => captureStoryOutlineId("unavailable_outline"),
     createStoryUnitId: () => captureStoryUnitId("unavailable_story_unit"),
+    createOperationId: () => captureNovelOperationId("unavailable_operation"),
   },
 });
 

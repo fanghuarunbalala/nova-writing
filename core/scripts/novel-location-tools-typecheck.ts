@@ -3,9 +3,10 @@ import {
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   LocationQueryService,
   LocationService,
-  NovelDraftSessionService,
   NovelLocationToolService,
   captureLocationId,
+  captureNovelOperationId,
+  type NovelCanonicalWritePort,
   createNovelLocationEditTool,
   createNovelLocationReadTool,
   createNovelLocationToolRegistry,
@@ -13,11 +14,11 @@ import {
 } from "../src/index.js";
 
 const service = new NovelLocationToolService({
-  locations: undefined as unknown as LocationService,
   locationQueries: undefined as unknown as LocationQueryService,
-  drafts: undefined as unknown as NovelDraftSessionService,
+  canonicalWrites: undefined as unknown as NovelCanonicalWritePort,
   identityFactory: {
     createLocationId: () => captureLocationId("location_typecheck"),
+    createOperationId: () => captureNovelOperationId("location_operation_typecheck"),
   },
 });
 

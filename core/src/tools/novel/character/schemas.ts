@@ -1,11 +1,5 @@
 /** Shared TypeBox schemas and tool-visible JSON contracts for Novel Character tools. */
 import { Type, type Static } from "typebox";
-import {
-  ScopeSchema,
-  type ToolScope,
-} from "../outline/schemas.js";
-
-export { ScopeSchema, type ToolScope };
 
 const ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$";
 
@@ -28,7 +22,6 @@ export type CharacterProfileWriteValue = Static<
 
 export const NovelCharacterReadParametersSchema = Type.Object(
   {
-    scope: ScopeSchema,
     characterId: Type.Optional(Type.String({ pattern: ID_PATTERN })),
   },
   { additionalProperties: false },
@@ -39,6 +32,9 @@ export type NovelCharacterReadArguments = Static<
 
 export const NovelCharacterWriteParametersSchema = Type.Object(
   {
+    baseRevision: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 128 }),
+    ),
     values: Type.Array(CharacterProfileWriteSchema, {
       minItems: 1,
       maxItems: 64,
@@ -76,6 +72,9 @@ export type NovelCharacterEditValue = Static<
 
 export const NovelCharacterEditParametersSchema = Type.Object(
   {
+    baseRevision: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 128 }),
+    ),
     values: Type.Array(
       Type.Object(
         {
@@ -106,15 +105,16 @@ export type NovelCharacterDetails = {
 
 export type NovelCharacterReadDetails = {
   readonly characters: NovelCharacterDetails[];
+  readonly revision: { readonly currentRevision: string };
 };
 
 export type NovelCharacterItemDetails = {
   readonly id: string;
-  readonly status: "appended" | "duplicate" | "rejected";
-  readonly sequence?: number;
+  readonly status: "applied" | "rejected";
   readonly reason?: string;
 };
 
 export type NovelCharacterWriteDetails = {
   readonly items: NovelCharacterItemDetails[];
+  readonly revision: { readonly currentRevision: string };
 };

@@ -1,11 +1,5 @@
 /** Shared TypeBox schemas and tool-visible JSON contracts for Novel Location tools. */
 import { Type, type Static } from "typebox";
-import {
-  ScopeSchema,
-  type ToolScope,
-} from "../outline/schemas.js";
-
-export { ScopeSchema, type ToolScope };
 
 const ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$";
 
@@ -28,7 +22,6 @@ export type LocationProfileWriteValue = Static<
 
 export const NovelLocationReadParametersSchema = Type.Object(
   {
-    scope: ScopeSchema,
     locationId: Type.Optional(Type.String({ pattern: ID_PATTERN })),
   },
   { additionalProperties: false },
@@ -39,6 +32,9 @@ export type NovelLocationReadArguments = Static<
 
 export const NovelLocationWriteParametersSchema = Type.Object(
   {
+    baseRevision: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 128 }),
+    ),
     values: Type.Array(LocationProfileWriteSchema, {
       minItems: 1,
       maxItems: 64,
@@ -76,6 +72,9 @@ export type NovelLocationEditValue = Static<
 
 export const NovelLocationEditParametersSchema = Type.Object(
   {
+    baseRevision: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 128 }),
+    ),
     values: Type.Array(
       Type.Object(
         {
@@ -106,15 +105,16 @@ export type NovelLocationDetails = {
 
 export type NovelLocationReadDetails = {
   readonly locations: NovelLocationDetails[];
+  readonly revision: { readonly currentRevision: string };
 };
 
 export type NovelLocationItemDetails = {
   readonly id: string;
-  readonly status: "appended" | "duplicate" | "rejected";
-  readonly sequence?: number;
+  readonly status: "applied" | "rejected";
   readonly reason?: string;
 };
 
 export type NovelLocationWriteDetails = {
   readonly items: NovelLocationItemDetails[];
+  readonly revision: { readonly currentRevision: string };
 };

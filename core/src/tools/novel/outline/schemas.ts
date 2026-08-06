@@ -4,12 +4,6 @@ import { Type, type Static } from "typebox";
 const ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$";
 const ORDER_KEY_PATTERN = "^(?:[0-9A-F]{4})+$";
 
-export const ScopeSchema = Type.Union([
-  Type.Literal("canonical"),
-  Type.Literal("draft"),
-]);
-export type ToolScope = Static<typeof ScopeSchema>;
-
 const StoryUnitScopeSchema = Type.Union([
   Type.Literal("saga"),
   Type.Literal("arc"),
@@ -17,6 +11,13 @@ const StoryUnitScopeSchema = Type.Union([
   Type.Literal("scene"),
   Type.Literal("custom"),
 ]);
+
+/** 暂存兼容导出：draft scope 已废弃，其余工具组切换完成后移除。 */
+export const ScopeSchema = Type.Union([
+  Type.Literal("canonical"),
+  Type.Literal("draft"),
+]);
+export type ToolScope = Static<typeof ScopeSchema>;
 
 const PlanningStatusSchema = Type.Union([
   Type.Literal("idea"),
@@ -272,7 +273,6 @@ const PartialLeafPlanWriteSchema = Type.Object(
 
 export const NovelOutlineReadParametersSchema = Type.Object(
   {
-    scope: ScopeSchema,
     storyUnitId: Type.Optional(Type.String({ pattern: ID_PATTERN })),
     includePlans: Type.Optional(Type.Boolean()),
   },
@@ -284,6 +284,9 @@ export type NovelOutlineReadArguments = Static<
 
 export const NovelOutlineWriteParametersSchema = Type.Object(
   {
+    baseRevision: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 128 }),
+    ),
     values: Type.Array(StoryUnitWriteSchema, { minItems: 1, maxItems: 64 }),
   },
   { additionalProperties: false },
@@ -324,6 +327,9 @@ export type NovelOutlineEditValue = Static<typeof NovelOutlineEditValueSchema>;
 
 export const NovelOutlineEditParametersSchema = Type.Object(
   {
+    baseRevision: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 128 }),
+    ),
     values: Type.Array(
       Type.Object(
         {
@@ -420,15 +426,16 @@ export type NovelOutlineUnitDetails = {
 export type NovelOutlineReadDetails = {
   readonly outline?: { readonly id: string; readonly novelId: string };
   readonly units: NovelOutlineUnitDetails[];
+  readonly revision: { readonly currentRevision: string };
 };
 
 export type NovelOutlineItemDetails = {
   readonly id: string;
-  readonly status: "appended" | "duplicate" | "rejected";
-  readonly sequence?: number;
+  readonly status: "applied" | "rejected";
   readonly reason?: string;
 };
 
 export type NovelOutlineWriteDetails = {
   readonly items: NovelOutlineItemDetails[];
+  readonly revision: { readonly currentRevision: string };
 };

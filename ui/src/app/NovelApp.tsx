@@ -8,7 +8,7 @@
  * platform/commandSource/configurationClient 保留在 props 表面（组合层契约）；
  * 桌面专属扩展槽（titlebar/commands）在壳加扩展点后接入（Phase B）。
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { noopLogger, type Logger, type NovelApiClient } from "@novel/core";
 import type { ApplicationCommandSource } from "../command/index.js";
 import {
@@ -22,6 +22,7 @@ import {
   LocationStore,
   ManuscriptStructureStore,
   NovelOverviewStore,
+  ProjectSelectionPage,
   ScheduleStore,
   ScheduleTodoStore,
   StoryOutlineTreeStore,
@@ -96,6 +97,10 @@ function NovelAppReady({
   const workspaceSnapshot: WorkspaceControllerSnapshot = useExternalStore(workspaceAdapter);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 启动时刷新最近项目（持久化来源），供选择页展示；不自动打开任何 Workspace。
+  useEffect(() => {
+    void workspaceController.refresh();
+  }, [workspaceController]);
 
   return (
     <NovelAppProvider
@@ -106,50 +111,62 @@ function NovelAppReady({
       commandSource={commandSource}
       configurationClient={configurationClient}
     >
-      <ApplicationShell
-        api={api}
-        logger={logger}
-        mainViewRouter={mainViewRouter}
-        inspectorRouter={inspectorRouter}
-        workspaceController={workspaceController}
-        domainStores={domainStores}
-        toastStore={toastStore}
-        settingsStore={settingsStore}
-        configurationClient={configurationClient}
-        commandSource={commandSource}
-        extensions={extensions}
-        onOpenWorkspace={() => setWorkspaceOpen(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
-        overlays={
-          <>
-            <WorkspaceSelectionDialog
-              open={workspaceOpen}
-              snapshot={workspaceSnapshot}
-              onChoose={() => {
-                void workspaceController.chooseAndOpen();
-                setWorkspaceOpen(false);
-              }}
-              onOpenRecent={(workspaceId) => {
-                void workspaceController.openRecent(workspaceId);
-                setWorkspaceOpen(false);
-              }}
-              onCloseWorkspace={() => {
-                void workspaceController.closeCurrent();
-                setWorkspaceOpen(false);
-              }}
-              onDismiss={() => setWorkspaceOpen(false)}
-            />
-            <SettingsDialog
-              open={settingsOpen}
-              store={settingsStore}
-              sections={extensions?.settingsSections}
-              configuration={configurationClient}
-              onDismiss={() => setSettingsOpen(false)}
-            />
-            {overlays}
-          </>
-        }
-      />
+      {workspaceSnapshot.current === undefined ? (
+        <ProjectSelectionPage
+          snapshot={workspaceSnapshot}
+          onChoose={() => {
+            void workspaceController.chooseAndOpen();
+          }}
+          onOpenRecent={(workspaceId) => {
+            void workspaceController.openRecent(workspaceId);
+          }}
+        />
+      ) : (
+        <ApplicationShell
+          api={api}
+          logger={logger}
+          mainViewRouter={mainViewRouter}
+          inspectorRouter={inspectorRouter}
+          workspaceController={workspaceController}
+          domainStores={domainStores}
+          toastStore={toastStore}
+          settingsStore={settingsStore}
+          configurationClient={configurationClient}
+          commandSource={commandSource}
+          extensions={extensions}
+          onOpenWorkspace={() => setWorkspaceOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          overlays={
+            <>
+              <WorkspaceSelectionDialog
+                open={workspaceOpen}
+                snapshot={workspaceSnapshot}
+                onChoose={() => {
+                  void workspaceController.chooseAndOpen();
+                  setWorkspaceOpen(false);
+                }}
+                onOpenRecent={(workspaceId) => {
+                  void workspaceController.openRecent(workspaceId);
+                  setWorkspaceOpen(false);
+                }}
+                onCloseWorkspace={() => {
+                  void workspaceController.closeCurrent();
+                  setWorkspaceOpen(false);
+                }}
+                onDismiss={() => setWorkspaceOpen(false)}
+              />
+              <SettingsDialog
+                open={settingsOpen}
+                store={settingsStore}
+                sections={extensions?.settingsSections}
+                configuration={configurationClient}
+                onDismiss={() => setSettingsOpen(false)}
+              />
+              {overlays}
+            </>
+          }
+        />
+      )}
     </NovelAppProvider>
   );
 }

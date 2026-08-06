@@ -34,6 +34,7 @@ import { createMainProcessLogger } from "./MainProcessLogger.js";
 import type { DesktopApplication } from "./DesktopApplication.js";
 import {
   DesktopNovelWorkspaceApplicationFactory,
+  DesktopWorkspaceRecentStore,
   DesktopWorkspaceService,
 } from "./workspace/index.js";
 import {
@@ -113,6 +114,10 @@ const workspaceService = new DesktopWorkspaceService({
     ...(providerRequestDumpPath === undefined
       ? {}
       : { providerRequestDumpPath }),
+  }),
+  recentStore: new DesktopWorkspaceRecentStore({
+    filePath: join(app.getPath("userData"), "workspace-recent.json"),
+    logger: mainLogger,
   }),
 });
 const bootstrapTransport = new DesktopBootstrapApiTransport();

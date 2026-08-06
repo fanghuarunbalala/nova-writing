@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ProjectSelectionPage } from "../../../src/domains/workspace/components/ProjectSelectionPage.js";
 import { WorkspaceFooting } from "../../../src/domains/workspace/components/WorkspaceFooting.js";
 import { WorkspaceLabel } from "../../../src/domains/workspace/components/WorkspaceLabel.js";
 import { WorkspaceRevisionMeta } from "../../../src/domains/workspace/components/WorkspaceRevisionMeta.js";
@@ -40,5 +41,58 @@ describe("WorkspaceRevisionMeta", () => {
     render(<WorkspaceRevisionMeta revision="r041" />);
     expect(screen.getByText("r041")).toBeInTheDocument();
     expect(screen.queryByText(/最后提交/)).not.toBeInTheDocument();
+  });
+});
+
+describe("ProjectSelectionPage", () => {
+  const snapshot = (overrides = {}) => ({
+    revision: 1,
+    phase: "idle",
+    recent: [{ id: "ws-1", label: "白昼计划" }],
+    ...overrides,
+  });
+
+  it("renders choose action and recent projects, opening a recent item on click", async () => {
+    const user = userEvent.setup();
+    const onChoose = vi.fn();
+    const onOpenRecent = vi.fn();
+    render(
+      <ProjectSelectionPage
+        snapshot={snapshot()}
+        onChoose={onChoose}
+        onOpenRecent={onOpenRecent}
+      />,
+    );
+    expect(screen.getByText("选择小说项目")).toBeInTheDocument();
+    expect(screen.getByText("白昼计划")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "选择 Workspace…" }));
+    expect(onChoose).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: /白昼计划/ }));
+    expect(onOpenRecent).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("shows empty hint, error banner and busy states", () => {
+    const { rerender } = render(
+      <ProjectSelectionPage
+        snapshot={snapshot({ recent: [] })}
+        onChoose={vi.fn()}
+        onOpenRecent={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("暂无最近使用的项目")).toBeInTheDocument();
+
+    rerender(
+      <ProjectSelectionPage
+        snapshot={snapshot({
+          phase: "opening",
+          error: { code: "OPEN_FAILED", retryable: true, message: "打开失败" },
+        })}
+        onChoose={vi.fn()}
+        onOpenRecent={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("正在打开…")).toBeInTheDocument();
+    expect(screen.getByText("打开失败")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "正在打开…" })).toBeDisabled();
   });
 });

@@ -129,7 +129,7 @@ describe("NovelApp launch routing", () => {
   it("renders the project selection page when no workspace is open", async () => {
     const { controller, sessions } = buildController();
     render(<NovelApp api={buildApi()} platform={platform} workspaceController={controller} />);
-    expect(await screen.findByText("选择小说项目")).toBeInTheDocument();
+    expect(await screen.findByText("开始创作")).toBeInTheDocument();
     expect(await screen.findByText("白昼计划")).toBeInTheDocument();
     expect(sessions.listRecent).toHaveBeenCalledTimes(1);
   });
@@ -144,6 +144,8 @@ describe("NovelApp launch routing", () => {
       label: "白昼计划",
     });
     expect(await screen.findByText("Novel")).toBeInTheDocument();
-    expect(screen.queryByText("选择小说项目")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "打开项目文件夹…" }),
+    ).not.toBeInTheDocument();
   });
 });

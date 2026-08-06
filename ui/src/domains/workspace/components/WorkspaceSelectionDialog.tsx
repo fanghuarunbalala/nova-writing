@@ -1,8 +1,8 @@
 /**
  * WorkspaceSelectionDialog
  *
- * 选择 Workspace 的模态弹窗（基于共享 Dialog 原语）。
- * 包含：选择按钮 + 错误提示 + 最近使用列表。
+ * 打开项目的模态弹窗（基于共享 Dialog 原语）。
+ * 包含：打开按钮 + 错误提示 + 最近打开列表。
  */
 import { Dialog } from "../../../shared/primitives/Dialog.js";
 import type { WorkspaceControllerSnapshot } from "../controller/WorkspaceController.js";
@@ -36,8 +36,8 @@ export function WorkspaceSelectionDialog({
       onOpenChange={(value) => {
         if (!value) onDismiss();
       }}
-      title="选择小说项目"
-      description="Workspace 对应一个小说项目根目录；当前窗口一次只打开一个 Workspace。"
+      title="打开项目"
+      description="打开一个小说项目文件夹；当前窗口一次只打开一个项目。"
       size="md"
       footer={
         <>
@@ -63,7 +63,7 @@ export function WorkspaceSelectionDialog({
         >
           {snapshot.phase === "selecting" || snapshot.phase === "opening"
             ? "正在打开…"
-            : "选择 Workspace…"}
+            : "打开项目文件夹…"}
         </button>
         {snapshot.error !== undefined ? (
           <p className={styles.error} role="status">
@@ -71,9 +71,9 @@ export function WorkspaceSelectionDialog({
           </p>
         ) : null}
         <section className={styles.recent}>
-          <h3 className={styles.recentTitle}>最近使用</h3>
+          <h3 className={styles.recentTitle}>最近打开</h3>
           {snapshot.recent.length === 0 ? (
-            <p className={styles.recentEmpty}>暂无最近使用的 Workspace</p>
+            <p className={styles.recentEmpty}>还没有打开过项目</p>
           ) : (
             <ul className={styles.recentList}>
               {snapshot.recent.map((workspace) => (

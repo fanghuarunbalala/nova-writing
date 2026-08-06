@@ -1,7 +1,7 @@
 /**
  * ProjectSelectionPage
  *
- * 启动时（未打开任何 Workspace）的全屏「选择小说项目」页：居中紧凑卡片，
+ * 启动时（未打开任何项目）的全屏「打开项目」页：居中紧凑卡片，
  * 提供原生目录选择、最近项目列表与错误提示。选中打开成功后由 NovelApp
  * 切换到 ApplicationShell 工作台；关闭当前 Workspace 时回到本页。
  */
@@ -29,15 +29,13 @@ export function ProjectSelectionPage({
     ? "正在打开…"
     : snapshot.phase === "loading"
       ? "正在加载…"
-      : "选择 Workspace…";
+      : "打开项目文件夹…";
   return (
     <div className={styles.page}>
-      <section className={styles.card} aria-label="选择小说项目">
+      <section className={styles.card} aria-label="打开项目">
         <span className={styles.kicker}>Novel · 创作工作台</span>
-        <h1 className={styles.title}>选择小说项目</h1>
-        <p className={styles.description}>
-          打开一个 Workspace（小说项目根目录）后进入创作工作台。
-        </p>
+        <h1 className={styles.title}>开始创作</h1>
+        <p className={styles.description}>选择或新建一个小说项目文件夹，打开后进入创作工作台。</p>
         <button
           type="button"
           className={styles.choose}
@@ -52,9 +50,9 @@ export function ProjectSelectionPage({
           </p>
         ) : null}
         <section className={styles.recent}>
-          <h2 className={styles.recentTitle}>最近使用</h2>
+          <h2 className={styles.recentTitle}>最近打开</h2>
           {snapshot.recent.length === 0 ? (
-            <p className={styles.recentEmpty}>暂无最近使用的项目</p>
+            <p className={styles.recentEmpty}>还没有打开过项目</p>
           ) : (
             <ul className={styles.recentList}>
               {snapshot.recent.map((workspace) => (

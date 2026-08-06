@@ -63,9 +63,9 @@ describe("ProjectSelectionPage", () => {
         onOpenRecent={onOpenRecent}
       />,
     );
-    expect(screen.getByText("选择小说项目")).toBeInTheDocument();
+    expect(screen.getByText("开始创作")).toBeInTheDocument();
     expect(screen.getByText("白昼计划")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "选择 Workspace…" }));
+    await user.click(screen.getByRole("button", { name: "打开项目文件夹…" }));
     expect(onChoose).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: /白昼计划/ }));
     expect(onOpenRecent).toHaveBeenCalledWith("ws-1");
@@ -79,7 +79,7 @@ describe("ProjectSelectionPage", () => {
         onOpenRecent={vi.fn()}
       />,
     );
-    expect(screen.getByText("暂无最近使用的项目")).toBeInTheDocument();
+    expect(screen.getByText("还没有打开过项目")).toBeInTheDocument();
 
     rerender(
       <ProjectSelectionPage

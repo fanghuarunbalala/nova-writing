@@ -37,17 +37,17 @@
 
 .title {
   margin: 0;
-  font-size: 17px;
+  font-size: 22px;
   font-weight: var(--fw-heavy);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: var(--color-fg);
 }
 
 .description {
   margin: 0;
-  font-size: var(--fs-meta);
+  font-size: 13px;
   color: var(--color-muted);
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .choose {

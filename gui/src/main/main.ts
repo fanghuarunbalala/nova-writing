@@ -97,7 +97,7 @@ const workspaceService = new DesktopWorkspaceService({
   picker: {
     pickDirectory: async () => {
       const result = await dialog.showOpenDialog({
-        title: "选择小说项目 Workspace",
+        title: "打开小说项目文件夹",
         properties: ["openDirectory", "createDirectory"],
       });
       return result.canceled ? undefined : result.filePaths[0];

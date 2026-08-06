@@ -93,7 +93,7 @@ export class WorkspaceController {
           recentCount: recent.length,
         });
       } catch {
-        this.reject("WORKSPACE_LIST_FAILED", true, "无法读取最近使用的 Workspace");
+        this.reject("WORKSPACE_LIST_FAILED", true, "无法读取最近打开的项目");
       }
     });
   }
@@ -128,7 +128,7 @@ export class WorkspaceController {
     return this.runExclusive(async () => {
       const recent = this.snapshot.recent.find((workspace) => workspace.id === workspaceId);
       if (recent === undefined) {
-        this.reject("WORKSPACE_RECENT_NOT_FOUND", false, "最近使用的 Workspace 不存在");
+        this.reject("WORKSPACE_RECENT_NOT_FOUND", false, "最近打开的项目不存在");
         return undefined;
       }
       return this.openReference({ referenceId: recent.id, label: recent.label });

@@ -30,9 +30,13 @@ import {
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   novelCharacterToolRegistry,
   novelLocationToolRegistry,
+  novelParagraphToolRegistry,
+  novelPublicationToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -69,6 +73,8 @@ const manifest = await new AgentAssembler({
     ...novelOutlineToolRegistry.list(),
     ...novelCharacterToolRegistry.list(),
     ...novelLocationToolRegistry.list(),
+    ...novelParagraphToolRegistry.list(),
+    ...novelPublicationToolRegistry.list(),
   ]),
   groups: new ToolGroupCatalog([
     loadToolGroupManifest(`
@@ -81,6 +87,8 @@ tools: [TodoWrite]
     NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
     NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
     NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+    NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+    NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   ]),
   manifestResolver: resolver,
   manifestStore: new InMemoryAgentManifestStore(),

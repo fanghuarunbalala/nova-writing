@@ -6,14 +6,17 @@ Working draft for the deferred "Agent-facing Novel Tools" item
 (`docs/novel-domain.md` Open Question 13; `docs/novel-implementation-plan.md`
 Task N11-D deferral). Confirmed **group by group** with the user.
 
-**Confirmed and implemented:** outline, characters, and locations groups —
-`NovelOutlineRead/Write/Edit`, `NovelCharacterRead/Write/Edit`,
-`NovelLocationRead/Write/Edit` (see `core/src/tools/novel/{outline,character,location}/`).
+**Confirmed and implemented:** outline, characters, locations, paragraph, and
+publication groups — `NovelOutlineRead/Write/Edit`,
+`NovelCharacterRead/Write/Edit`, `NovelLocationRead/Write/Edit`,
+`NovelParagraphRead/Write/Edit`, `NovelVolumeRead/Write/Edit`,
+`NovelChapterRead/Write/Edit` (see
+`core/src/tools/novel/{outline,character,location,paragraph,publication}/`).
 
-**Pending:** paragraphs (body text), publication (volumes/chapters), unified
-delete, and draft lifecycle. Each pending group will be confirmed and
-re-derived using the conventions in Section 2; the earlier 16-tool draft is
-superseded and the total will be recounted as groups are confirmed.
+**Pending:** unified delete and draft lifecycle. Each pending group will be
+confirmed and re-derived using the conventions in Section 2; the earlier
+16-tool draft is superseded and the total will be recounted as groups are
+confirmed.
 
 **Removed:** `NovelCompletionEvaluate` and the separate Manuscript object.
 Manuscript identity is implicit (one per Novel); a StoryUnit's realization is
@@ -65,10 +68,24 @@ id: novel.outline
 version: 1.0.0
 label: Novel Outline
 tools: [NovelOutlineRead, NovelOutlineWrite, NovelOutlineEdit]
+
+# novel.paragraph (confirmed)
+schemaVersion: 1
+id: novel.paragraph
+version: 1.0.0
+label: Novel Paragraphs
+tools: [NovelParagraphRead, NovelParagraphWrite, NovelParagraphEdit]
+
+# novel.publication (confirmed)
+schemaVersion: 1
+id: novel.publication
+version: 1.0.0
+label: Novel Publication
+tools: [NovelVolumeRead, NovelVolumeWrite, NovelVolumeEdit,
+        NovelChapterRead, NovelChapterWrite, NovelChapterEdit]
 ```
 
-Pending groups (to be confirmed): `novel.paragraph` (body text),
-`novel.publication` (volumes/chapters), `novel.delete`, `novel.draft`.
+Pending groups (to be confirmed): `novel.delete`, `novel.draft`.
 
 ## 4. Shared Value Contracts
 
@@ -278,9 +295,6 @@ The following groups will be confirmed next, following the same conventions
 (batch, PATCH, hidden types, no tool-surface digests):
 
 - characters / locations
-- paragraph (body text under a story unit; orderKey is story-unit-local)
-- publication (volumes/chapters; a chapter is an ordered selection of
-  `paragraphIds`, so it may break mid-story-unit for a cliffhanger)
 - unified delete
 - draft lifecycle (`NovelDraft`, `NovelDraftRollback`, `NovelDraftCommit`,
   `NovelDraftRebase`)

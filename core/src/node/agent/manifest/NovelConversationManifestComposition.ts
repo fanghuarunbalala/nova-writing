@@ -10,10 +10,18 @@ import {
   type LocationQueryService,
   type LocationService,
   type NovelDraftSessionService,
+  type ParagraphQueryService,
+  type ParagraphService,
+  type PublicationQueryService,
+  type PublicationService,
   type StoryOutlineQueryService,
   type StoryOutlineService,
   captureCharacterId,
   captureLocationId,
+  captureParagraphId,
+  capturePublicationChapterId,
+  capturePublicationStructureId,
+  capturePublicationVolumeId,
   captureStoryOutlineId,
   captureStoryUnitId,
 } from "../../../novel/index.js";
@@ -35,6 +43,16 @@ import {
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NovelLocationToolService,
   createNovelLocationToolRegistry,
+} from "../../../tools/novel/index.js";
+import {
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NovelParagraphToolService,
+  createNovelParagraphToolRegistry,
+} from "../../../tools/novel/index.js";
+import {
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
+  NovelPublicationToolService,
+  createNovelPublicationToolRegistry,
 } from "../../../tools/novel/index.js";
 import { createTodoWriteTool } from "../../../tools/todo/index.js";
 import { NodeSha256PromptDigester } from "../../prompt/index.js";
@@ -121,6 +139,38 @@ const unavailableLocationQueryService = Object.freeze({
   list: unavailableNovelService,
 }) as unknown as LocationQueryService;
 
+const unavailableParagraphService = Object.freeze({
+  createParagraph: unavailableNovelService,
+  replaceText: unavailableNovelService,
+  replaceOrder: unavailableNovelService,
+  replaceStoryUnit: unavailableNovelService,
+  deleteParagraph: unavailableNovelService,
+}) as unknown as ParagraphService;
+
+const unavailableParagraphQueryService = Object.freeze({
+  getCatalog: unavailableNovelService,
+  getParagraph: unavailableNovelService,
+  listParagraphsByStoryUnit: unavailableNovelService,
+}) as unknown as ParagraphQueryService;
+
+const unavailablePublicationService = Object.freeze({
+  createPublication: unavailableNovelService,
+  createVolume: unavailableNovelService,
+  replaceVolume: unavailableNovelService,
+  deleteVolume: unavailableNovelService,
+  createChapter: unavailableNovelService,
+  replaceChapter: unavailableNovelService,
+  deleteChapter: unavailableNovelService,
+}) as unknown as PublicationService;
+
+const unavailablePublicationQueryService = Object.freeze({
+  getCatalog: unavailableNovelService,
+  getVolume: unavailableNovelService,
+  listVolumes: unavailableNovelService,
+  getChapter: unavailableNovelService,
+  listChapters: unavailableNovelService,
+}) as unknown as PublicationQueryService;
+
 const unavailableLocationToolService = new NovelLocationToolService({
   locations: unavailableLocationService,
   locationQueries: unavailableLocationQueryService,
@@ -136,6 +186,30 @@ const unavailableCharacterToolService = new NovelCharacterToolService({
   drafts: unavailableNovelDraftSessionService,
   identityFactory: {
     createCharacterId: () => captureCharacterId("unavailable_character"),
+  },
+});
+
+const unavailableParagraphToolService = new NovelParagraphToolService({
+  paragraphs: unavailableParagraphService,
+  paragraphQueries: unavailableParagraphQueryService,
+  drafts: unavailableNovelDraftSessionService,
+  identityFactory: {
+    createParagraphId: () => captureParagraphId("unavailable_paragraph"),
+  },
+});
+
+const unavailablePublicationToolService = new NovelPublicationToolService({
+  publication: unavailablePublicationService,
+  publicationQueries: unavailablePublicationQueryService,
+  paragraphs: unavailableParagraphQueryService,
+  drafts: unavailableNovelDraftSessionService,
+  identityFactory: {
+    createPublicationStructureId: () =>
+      capturePublicationStructureId("unavailable_publication"),
+    createPublicationVolumeId: () =>
+      capturePublicationVolumeId("unavailable_volume"),
+    createPublicationChapterId: () =>
+      capturePublicationChapterId("unavailable_chapter"),
   },
 });
 
@@ -166,12 +240,20 @@ export function createNovelConversationManifestComposition(
     ...createNovelLocationToolRegistry({
       service: unavailableLocationToolService,
     }).list(),
+    ...createNovelParagraphToolRegistry({
+      service: unavailableParagraphToolService,
+    }).list(),
+    ...createNovelPublicationToolRegistry({
+      service: unavailablePublicationToolService,
+    }).list(),
   ]);
   const groups = new ToolGroupCatalog([
     loadToolGroupManifest(NOVEL_CONVERSATION_TOOL_GROUP_MANIFEST),
     NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
     NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
     NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+    NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+    NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   ]);
   const promptBuilder = new SystemPromptBuilder({
     sections: createDefaultPromptSectionRegistry(),

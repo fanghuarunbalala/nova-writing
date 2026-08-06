@@ -28,9 +28,13 @@ import { Type } from "typebox";
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   novelCharacterToolRegistry,
   novelLocationToolRegistry,
+  novelParagraphToolRegistry,
+  novelPublicationToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -134,6 +138,8 @@ const toolRegistry = new ToolRegistry([
   ...novelOutlineToolRegistry.list(),
   ...novelCharacterToolRegistry.list(),
   ...novelLocationToolRegistry.list(),
+  ...novelParagraphToolRegistry.list(),
+  ...novelPublicationToolRegistry.list(),
 ]);
 const toolGroups = new ToolGroupCatalog([
   loadToolGroupManifest(`
@@ -146,6 +152,8 @@ tools: [TodoWrite]
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
 ]);
 const assembledStore = new InMemoryAgentManifestStore();
 const assembled = await new AgentAssembler({
@@ -166,6 +174,9 @@ assert.equal(assembled.toolView.require("TodoWrite").descriptor.version, todoToo
 assert.deepEqual(
   assembled.toSnapshot().tools.map((tool) => tool.name).sort(),
   [
+    "NovelChapterEdit",
+    "NovelChapterRead",
+    "NovelChapterWrite",
     "NovelCharacterEdit",
     "NovelCharacterRead",
     "NovelCharacterWrite",
@@ -175,6 +186,12 @@ assert.deepEqual(
     "NovelOutlineEdit",
     "NovelOutlineRead",
     "NovelOutlineWrite",
+    "NovelParagraphEdit",
+    "NovelParagraphRead",
+    "NovelParagraphWrite",
+    "NovelVolumeEdit",
+    "NovelVolumeRead",
+    "NovelVolumeWrite",
     "TodoWrite",
   ],
 );

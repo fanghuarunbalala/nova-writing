@@ -32,6 +32,8 @@ export const novelAgentDefinition = new AgentDefinition({
       "novel.outline",
       "novel.characters",
       "novel.locations",
+      "novel.paragraph",
+      "novel.publication",
     ],
   }),
   delegation: new AgentDelegationPolicy({

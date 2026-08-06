@@ -2,17 +2,27 @@
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   NovelCharacterToolService,
   NovelLocationToolService,
+  NovelParagraphToolService,
+  NovelPublicationToolService,
   OutlineToolService,
   captureCharacterId,
   captureLocationId,
+  captureParagraphId,
+  capturePublicationChapterId,
+  capturePublicationStructureId,
+  capturePublicationVolumeId,
   captureStoryOutlineId,
   captureStoryUnitId,
   createNovelCharacterToolRegistry,
   createNovelLocationToolRegistry,
   createNovelOutlineToolRegistry,
+  createNovelParagraphToolRegistry,
+  createNovelPublicationToolRegistry,
 } from "../../dist/index.js";
 
 let fixtureCounter = 0;
@@ -104,8 +114,78 @@ export const novelLocationToolRegistry = createNovelLocationToolRegistry({
   service: unavailableLocationToolService,
 });
 
+const unavailableParagraphToolService = new NovelParagraphToolService({
+  paragraphs: {
+    createParagraph: unavailable,
+    replaceText: unavailable,
+    replaceOrder: unavailable,
+    replaceStoryUnit: unavailable,
+    deleteParagraph: unavailable,
+  },
+  paragraphQueries: {
+    getCatalog: unavailable,
+    getParagraph: unavailable,
+    listParagraphsByStoryUnit: unavailable,
+  },
+  drafts: {
+    startDraft: unavailable,
+    getActiveDraft: unavailable,
+    resetToMain: unavailable,
+    rollback: unavailable,
+  },
+  identityFactory: {
+    createParagraphId: () => captureParagraphId("fixture_paragraph"),
+  },
+});
+
+const unavailablePublicationToolService = new NovelPublicationToolService({
+  publication: {
+    createPublication: unavailable,
+    createVolume: unavailable,
+    replaceVolume: unavailable,
+    deleteVolume: unavailable,
+    createChapter: unavailable,
+    replaceChapter: unavailable,
+    deleteChapter: unavailable,
+  },
+  publicationQueries: {
+    getCatalog: unavailable,
+    getVolume: unavailable,
+    listVolumes: unavailable,
+    getChapter: unavailable,
+    listChapters: unavailable,
+  },
+  paragraphs: {
+    getCatalog: unavailable,
+    getParagraph: unavailable,
+    listParagraphsByStoryUnit: unavailable,
+  },
+  drafts: {
+    startDraft: unavailable,
+    getActiveDraft: unavailable,
+    resetToMain: unavailable,
+    rollback: unavailable,
+  },
+  identityFactory: {
+    createPublicationStructureId: () =>
+      capturePublicationStructureId("fixture_publication"),
+    createPublicationVolumeId: () => capturePublicationVolumeId("fixture_volume"),
+    createPublicationChapterId: () => capturePublicationChapterId("fixture_chapter"),
+  },
+});
+
+export const novelParagraphToolRegistry = createNovelParagraphToolRegistry({
+  service: unavailableParagraphToolService,
+});
+
+export const novelPublicationToolRegistry = createNovelPublicationToolRegistry({
+  service: unavailablePublicationToolService,
+});
+
 export {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
 };

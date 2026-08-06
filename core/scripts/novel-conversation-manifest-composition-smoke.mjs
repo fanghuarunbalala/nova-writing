@@ -21,7 +21,7 @@ assert.equal(
 
 const composition = createNovelConversationManifestComposition();
 assert.ok(composition.registry instanceof ToolRegistry);
-assert.equal(composition.registry.size, 10);
+assert.equal(composition.registry.size, 19);
 assert.equal(composition.registry.has("TodoWrite"), true);
 assert.equal(composition.registry.has("NovelOutlineRead"), true);
 assert.equal(composition.registry.has("NovelOutlineWrite"), true);
@@ -32,6 +32,15 @@ assert.equal(composition.registry.has("NovelCharacterEdit"), true);
 assert.equal(composition.registry.has("NovelLocationRead"), true);
 assert.equal(composition.registry.has("NovelLocationWrite"), true);
 assert.equal(composition.registry.has("NovelLocationEdit"), true);
+assert.equal(composition.registry.has("NovelParagraphRead"), true);
+assert.equal(composition.registry.has("NovelParagraphWrite"), true);
+assert.equal(composition.registry.has("NovelParagraphEdit"), true);
+assert.equal(composition.registry.has("NovelVolumeRead"), true);
+assert.equal(composition.registry.has("NovelVolumeWrite"), true);
+assert.equal(composition.registry.has("NovelVolumeEdit"), true);
+assert.equal(composition.registry.has("NovelChapterRead"), true);
+assert.equal(composition.registry.has("NovelChapterWrite"), true);
+assert.equal(composition.registry.has("NovelChapterEdit"), true);
 assert.ok(composition.groups instanceof ToolGroupCatalog);
 assert.ok(composition.promptBuilder instanceof SystemPromptBuilder);
 assert.ok(composition.digester instanceof NodeSha256PromptDigester);

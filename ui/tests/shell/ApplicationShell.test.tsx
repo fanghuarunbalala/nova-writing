@@ -173,4 +173,93 @@ describe("ApplicationShell smoke", () => {
     expect(document.querySelector("aside")).not.toBeNull();
     expect(screen.getAllByText("第一卷：旧船坞").length).toBeGreaterThanOrEqual(2);
   });
+
+  it("switches to the selected conversation when a sidebar conversation is clicked", async () => {
+    const user = userEvent.setup();
+    const api = buildApi();
+    api.conversations.list = vi.fn(async () => ({
+      conversations: [
+        {
+          metadata: {
+            id: "conversation_000001",
+            workspaceId: "w1",
+            rootConversationId: "conversation_000001",
+            status: "active",
+            createdAt: "2026-08-05T09:00:00.000Z",
+            updatedAt: "2026-08-05T09:00:00.000Z",
+            lastJournalSequence: 0,
+          },
+          activeAgentBinding: {
+            id: "b1",
+            conversationId: "conversation_000001",
+            revision: 1,
+            status: "active",
+            createdAt: "2026-08-05T09:00:00.000Z",
+            agentType: "novel",
+            definitionVersion: "1.0.0",
+          },
+        },
+        {
+          metadata: {
+            id: "conversation_000002",
+            workspaceId: "w1",
+            rootConversationId: "conversation_000002",
+            status: "active",
+            createdAt: "2026-08-05T09:01:00.000Z",
+            updatedAt: "2026-08-05T09:01:00.000Z",
+            lastJournalSequence: 0,
+          },
+          activeAgentBinding: {
+            id: "b2",
+            conversationId: "conversation_000002",
+            revision: 1,
+            status: "active",
+            createdAt: "2026-08-05T09:01:00.000Z",
+            agentType: "novel",
+            definitionVersion: "1.0.0",
+          },
+        },
+      ],
+    }));
+    const conversationCatalog = new ConversationCatalogStore({ api });
+    const novelOverview = new NovelOverviewStore({ api });
+    const storyOutlineTree = new StoryOutlineTreeStore({ api });
+    const manuscriptStructure = new ManuscriptStructureStore({ api });
+    const character = new CharacterStore({ api });
+    const location = new LocationStore({ api });
+    const schedule = new ScheduleStore({ novelOverview, outlineTree: storyOutlineTree, conversationCatalog });
+    const workspaceController = new FakeWorkspaceController({
+      revision: 1,
+      phase: "ready",
+      current: { id: "w1", label: "白昼计划" },
+      recent: [],
+    });
+    render(
+      <ApplicationShell
+        api={api}
+        mainViewRouter={new MainViewRouter()}
+        inspectorRouter={new InspectorRouter()}
+        workspaceController={workspaceController}
+        domainStores={{
+          conversationCatalog,
+          novelOverview,
+          storyOutlineTree,
+          manuscriptStructure,
+          character,
+          location,
+          schedule,
+          scheduleTodo: new ScheduleTodoStore(),
+        }}
+        toastStore={new ToastStore()}
+      />,
+    );
+    await screen.findAllByText("对话 000002");
+    // 用户场景：先切到内容视图，再点侧栏对话，应切回聊天并展示对应会话
+    await user.click(screen.getByText("大纲"));
+    expect(await screen.findByText("第一卷：旧船坞")).toBeInTheDocument();
+    await user.click(screen.getAllByText("对话 000001")[0]);
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "对话 000001" }),
+    ).toBeInTheDocument();
+  });
 });

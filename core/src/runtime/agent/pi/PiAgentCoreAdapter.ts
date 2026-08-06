@@ -26,6 +26,8 @@ import type {
 } from "../../nudge/index.js";
 import {
   coreRuntimeMessageSchemaRegistry,
+  CORE_RUNTIME_MESSAGE_TYPE,
+  RUNTIME_MESSAGE_SCHEMA_VERSION,
   type RuntimeMessageSchemaRegistry,
   type RuntimeMessageSnapshot,
 } from "../../message/index.js";
@@ -423,6 +425,42 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     }
   }
 
+  /**
+   * 把 nudge 构造成瞬态 system.reminder 消息并转换为 Pi 消息。
+   * Builds a transient system.reminder message from nudge content and converts it
+   * to a Pi message for this provider call only (never persisted).
+   */
+  private async buildTransientReminderMessages(
+    content: string,
+    request: CapturedAgentRuntimeStreamRequest,
+  ): Promise<readonly AgentMessage[]> {
+    const order = request.context.messages.length + 1;
+    const timestamp =
+      request.context.messages.length > 0
+        ? request.context.messages[request.context.messages.length - 1]!.timestamp
+        : "1970-01-01T00:00:00.000Z";
+    const snapshot: RuntimeMessageSnapshot = {
+      id: `message:transient:${request.runId}:${order}`,
+      conversationId: request.conversationId,
+      role: "system",
+      messageType: CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
+      schemaVersion: RUNTIME_MESSAGE_SCHEMA_VERSION,
+      timestamp,
+      runId: request.runId,
+      payload: {
+        kind: "nudge",
+        content,
+        order,
+      },
+    };
+    return this.messageConverter.convert({
+      conversationId: request.conversationId,
+      runId: request.runId,
+      purpose: PI_RUNTIME_MESSAGE_CONVERSION_PURPOSE.prompt,
+      messages: [snapshot],
+    });
+  }
+
   private async transformProviderContext(
     messages: AgentMessage[],
     _signal?: AbortSignal,
@@ -477,6 +515,26 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         (_message, index) =>
           selectedIds.has(active.canonicalRuntimeMessages![index]!.id),
       );
+      // 投影新增的 compact_summary 等 system.reminder 消息不在 canonical 转换结果里，
+      // 需单独转换并插入（保持前缀稳定、不污染 state.messages）。
+      // Projection-added system.reminder messages (e.g. compact_summary) are not in
+      // the canonical Pi conversion; convert them separately and insert them without
+      // touching agent.state.messages.
+      const canonicalIds = new Set(
+        active.canonicalRuntimeMessages.map((message) => message.id),
+      );
+      const extraReminderMessages = result.context.messages.filter(
+        (message) => !canonicalIds.has(message.id),
+      );
+      let extraReminderPi: readonly AgentMessage[] = [];
+      if (extraReminderMessages.length > 0) {
+        extraReminderPi = await this.messageConverter.convert({
+          conversationId: active.request.conversationId,
+          runId: active.request.runId,
+          purpose: PI_RUNTIME_MESSAGE_CONVERSION_PURPOSE.context,
+          messages: extraReminderMessages,
+        });
+      }
       active.pendingContextProjection = Object.freeze({
         providerCallId,
         result,
@@ -494,6 +552,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       });
       return [
         ...projectedCanonical,
+        ...extraReminderPi,
         ...messages.slice(canonicalCount),
       ];
     } catch {
@@ -601,16 +660,33 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       },
     });
 
+    // systemPrompt 恒为 base（投影与 nudge 均不再拼入 system prompt）；
+    // nudge 作为瞬态 system.reminder 消息注入本次 provider 调用的消息数组，
+    // 不进 canonical、不落 state.messages（保持敏感内容脱敏）。
+    // The system prompt always stays the base; nudges are injected as transient
+    // system.reminder messages into this provider call only, never persisted or
+    // written to agent.state.messages (keeping sensitive content redacted).
     const projectedSystemPrompt =
       pendingProjection?.result.context.systemPrompt ?? context.systemPrompt ?? "";
+    let transientReminderMessages: readonly AgentMessage[] = [];
+    if (prepared) {
+      transientReminderMessages = await this.buildTransientReminderMessages(
+        prepared.overlay.content,
+        active.request,
+      );
+    }
+    const transientMessages = transientReminderMessages as readonly unknown[];
     const providerContext = {
       ...context,
-      systemPrompt: prepared
-        ? appendSystemPromptOverlay(
-            projectedSystemPrompt,
-            prepared.overlay.content,
-          )
-        : projectedSystemPrompt,
+      systemPrompt: projectedSystemPrompt,
+      ...(transientMessages.length > 0
+        ? {
+            messages: [
+              ...context.messages,
+              ...transientMessages,
+            ] as typeof context.messages,
+          }
+        : {}),
     };
     let response: Awaited<ReturnType<StreamFn>>;
     try {
@@ -882,8 +958,4 @@ function createDispatchLifecycle(
   prepared: PreparedNudgeProviderCall | undefined,
 ): DispatchLifecycle {
   return { state: prepared ? "pending" : "inactive" };
-}
-
-function appendSystemPromptOverlay(base: string, overlay: string): string {
-  return base.length === 0 ? overlay : `${base}\n\n${overlay}`;
 }

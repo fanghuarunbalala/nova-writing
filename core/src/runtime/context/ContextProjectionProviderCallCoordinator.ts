@@ -9,7 +9,11 @@ import {
   type RuntimeMessageSchemaRegistry,
   type RuntimeMessageSnapshot,
 } from "../message/index.js";
-import { CORE_RUNTIME_MESSAGE_TYPE } from "../message/schema/CoreRuntimeMessageSchemas.js";
+import {
+  CORE_RUNTIME_MESSAGE_TYPE,
+  RUNTIME_MESSAGE_SCHEMA_VERSION,
+  type RuntimeMessageDraft,
+} from "../message/index.js";
 import { ContextCheckpointOverlayRenderer } from "./ContextCheckpointOverlayRenderer.js";
 import { ContextProjectionPlanner } from "./ContextProjectionPlanner.js";
 import {
@@ -138,15 +142,26 @@ export class ContextProjectionProviderCallCoordinator {
     const projectedMessages = Object.freeze(
       canonicalMessages.filter((message) => selectedMessageIds.has(message.id)),
     );
-    const systemPrompt = checkpointOverlay
-      ? appendSystemPromptOverlay(request.baseSystemPrompt, checkpointOverlay.content)
-      : request.baseSystemPrompt;
+    // checkpoint 摘要以 compact_summary system.reminder 消息进入消息层，
+    // 不再拼进 system prompt（systemPrompt 恒为 base，保持 prefill 缓存稳定）。
+    // Checkpoint summaries are delivered as compact_summary system.reminder
+    // messages; the system prompt always stays the base.
+    const compactSummaryMessage = checkpointOverlay
+      ? createCompactSummaryMessage(
+          identity,
+          checkpointOverlay,
+          canonicalMessages,
+        )
+      : undefined;
+    const systemPrompt = request.baseSystemPrompt;
     const result = Object.freeze({
       context: Object.freeze({
         conversationId: identity.conversationId,
         runId: identity.runId,
         systemPrompt,
-        messages: projectedMessages,
+        messages: compactSummaryMessage === undefined
+          ? projectedMessages
+          : Object.freeze([...projectedMessages, compactSummaryMessage]),
       }),
       projection: plan.projection,
       ...(checkpointOverlay === undefined ? {} : { checkpointOverlay }),
@@ -158,7 +173,8 @@ export class ContextProjectionProviderCallCoordinator {
         (message) =>
           message.messageType === CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
       ).length,
-      projectedMessageCount: projectedMessages.length,
+        projectedMessageCount: projectedMessages.length,
+        compactSummaryCount: compactSummaryMessage === undefined ? 0 : 1,
       selectedCheckpointItemCount:
         plan.projection.selectedCheckpointItemIds.length,
       degradationLevel: plan.projection.degradationLevel,
@@ -310,8 +326,46 @@ function assertCanonicalClassification(
   }
 }
 
-function appendSystemPromptOverlay(base: string, overlay: string): string {
-  return base.length === 0 ? overlay : `${base}\n\n${overlay}`;
+/**
+ * 把 checkpoint 摘要构造成 compact_summary system.reminder 消息草稿。
+ * Builds a compact_summary system.reminder message draft from a checkpoint overlay.
+ */
+function createCompactSummaryMessage(
+  identity: ProjectionProviderCallIdentity,
+  overlay: ContextCheckpointOverlay,
+  canonicalMessages: readonly RuntimeMessageSnapshot[],
+): RuntimeMessageSnapshot {
+  // 时间戳从既有消息派生，保证每次调用结果确定（不破坏候选 digest）。
+  // Derive the timestamp from existing messages so the candidate stays deterministic.
+  const derivedTimestamp =
+    canonicalMessages.length > 0
+      ? canonicalMessages[canonicalMessages.length - 1]!.timestamp
+      : "1970-01-01T00:00:00.000Z";
+  const highestOrder = canonicalMessages.reduce(
+    (max, message) =>
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.systemReminder &&
+      typeof (message.payload as { order?: unknown }).order === "number"
+        ? Math.max(
+            max,
+            (message.payload as { order: number }).order,
+          )
+        : max,
+    0,
+  );
+  return {
+    id: `message:compact-summary:${identity.providerCallId}`,
+    conversationId: identity.conversationId,
+    role: "system",
+    messageType: CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
+    schemaVersion: RUNTIME_MESSAGE_SCHEMA_VERSION,
+    timestamp: derivedTimestamp,
+    runId: identity.runId,
+    payload: {
+      kind: "compact_summary",
+      content: overlay.content,
+      order: highestOrder + 1,
+    },
+  };
 }
 
 function captureNonBlank(value: unknown): string | undefined {

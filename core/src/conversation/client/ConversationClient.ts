@@ -91,6 +91,48 @@ export class ConversationClient {
     return validateConversationCatalogResult(result);
   }
 
+  async rename(
+    conversationId: string,
+    title: string,
+  ): Promise<ConversationSnapshot> {
+    const validatedConversationId = validateConversationId(conversationId);
+    const validatedTitle = validateConversationTitle(title);
+    const snapshot = await this.request(
+      CONVERSATION_API_OPERATION.rename,
+      {
+        conversationId: validatedConversationId,
+        title: validatedTitle,
+      },
+      validatedConversationId,
+    );
+    return validateConversationSnapshot(snapshot);
+  }
+
+  async pin(
+    conversationId: string,
+    pinned: boolean,
+  ): Promise<ConversationSnapshot> {
+    const validatedConversationId = validateConversationId(conversationId);
+    const snapshot = await this.request(
+      CONVERSATION_API_OPERATION.pin,
+      {
+        conversationId: validatedConversationId,
+        pinned,
+      },
+      validatedConversationId,
+    );
+    return validateConversationSnapshot(snapshot);
+  }
+
+  async delete(conversationId: string): Promise<void> {
+    const validatedConversationId = validateConversationId(conversationId);
+    await this.request(
+      CONVERSATION_API_OPERATION.delete,
+      { conversationId: validatedConversationId },
+      validatedConversationId,
+    );
+  }
+
   async enqueueInput(
     conversationId: string,
     event: InputEvent,
@@ -343,6 +385,12 @@ function validateConversationSnapshot(
         "Root Conversation id",
       ),
       status,
+      ...(metadata.title !== undefined
+        ? { title: assertNonEmptyString(metadata.title, "Conversation title") }
+        : {}),
+      ...(metadata.pinned !== undefined
+        ? { pinned: assertBoolean(metadata.pinned, "Conversation pinned") }
+        : {}),
       createdAt: assertNonEmptyString(metadata.createdAt, "Conversation createdAt"),
       updatedAt: assertNonEmptyString(metadata.updatedAt, "Conversation updatedAt"),
       lastJournalSequence: assertSafeInteger(
@@ -510,6 +558,24 @@ function validateConversationId(value: string): string {
   return assertNonEmptyString(value, "Conversation id");
 }
 
+function validateConversationTitle(value: string): string {
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    value.length > 240
+  ) {
+    throw new ConversationClientProtocolError("Conversation title is invalid");
+  }
+  return value.trim();
+}
+
+function assertBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new ConversationClientProtocolError(`${label} must be a boolean`);
+  }
+  return value;
+}
+
 function validateRequestId(value: string): string {
   return assertNonEmptyString(value, "API request id");
 }
@@ -524,13 +590,6 @@ function assertRecord(value: unknown, label: string): Record<string, unknown> {
 function assertNonEmptyString(value: unknown, label: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new ConversationClientProtocolError(`${label} must be a non-empty string`);
-  }
-  return value;
-}
-
-function assertBoolean(value: unknown, label: string): boolean {
-  if (typeof value !== "boolean") {
-    throw new ConversationClientProtocolError(`${label} must be a boolean`);
   }
   return value;
 }

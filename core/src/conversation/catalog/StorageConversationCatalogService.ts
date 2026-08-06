@@ -4,6 +4,7 @@ import {
   ConversationAgentBindingMissingError,
   type ConversationCatalogStore,
   type ConversationListQuery,
+  type ConversationMetadata,
 } from "../../storage/index.js";
 import type { ConversationSnapshot } from "../ConversationSnapshot.js";
 import {
@@ -50,6 +51,8 @@ export class StorageConversationCatalogService
       options.parentConversationId,
       "Parent Conversation id",
     );
+    const title = captureOptionalNonEmptyString(options.title, "Conversation title");
+    const pinned = captureOptionalBoolean(options.pinned, "Conversation pinned");
     const agent = Object.freeze({
       agentType: captureNonEmptyString(options.agent.agentType, "Agent type"),
       definitionVersion: captureNonEmptyString(
@@ -76,11 +79,14 @@ export class StorageConversationCatalogService
     this.logger.info("conversation_catalog.create_started", {
       conversationId,
       hasParent: parentConversationId !== undefined,
+      hasTitle: title !== undefined,
     });
     const stored = await this.catalog.createConversation({
       id: conversationId,
       workspaceId: this.workspaceId,
       ...(parentConversationId !== undefined ? { parentConversationId } : {}),
+      ...(title === undefined ? {} : { title }),
+      ...(pinned === undefined ? {} : { pinned }),
       agent,
     });
     this.logger.info("conversation_catalog.create_completed", {
@@ -139,6 +145,50 @@ export class StorageConversationCatalogService
     });
     return Object.freeze({ conversations: Object.freeze(conversations) });
   }
+
+  async rename(
+    conversationId: string,
+    title: string,
+  ): Promise<ConversationSnapshot> {
+    const capturedId = captureNonEmptyString(conversationId, "Conversation id");
+    const capturedTitle = captureNonEmptyString(title, "Conversation title");
+    this.logger.info("conversation_catalog.rename_started", {
+      conversationId: capturedId,
+    });
+    const metadata = await this.catalog.renameConversation(capturedId, capturedTitle);
+    return this.toSnapshot(metadata);
+  }
+
+  async pin(
+    conversationId: string,
+    pinned: boolean,
+  ): Promise<ConversationSnapshot> {
+    const capturedId = captureNonEmptyString(conversationId, "Conversation id");
+    this.logger.info("conversation_catalog.pin_started", {
+      conversationId: capturedId,
+      pinned,
+    });
+    const metadata = await this.catalog.setConversationPinned(capturedId, pinned);
+    return this.toSnapshot(metadata);
+  }
+
+  async delete(conversationId: string): Promise<void> {
+    const capturedId = captureNonEmptyString(conversationId, "Conversation id");
+    this.logger.info("conversation_catalog.delete_started", {
+      conversationId: capturedId,
+    });
+    await this.catalog.deleteConversation(capturedId);
+  }
+
+  private async toSnapshot(
+    metadata: ConversationMetadata,
+  ): Promise<ConversationSnapshot> {
+    const activeAgentBinding = await this.catalog.getActiveAgentBinding(metadata.id);
+    if (activeAgentBinding === undefined) {
+      throw new ConversationAgentBindingMissingError(metadata.id);
+    }
+    return freezeSnapshot({ metadata, activeAgentBinding });
+  }
 }
 
 function freezeSnapshot(snapshot: ConversationSnapshot): ConversationSnapshot {
@@ -160,6 +210,14 @@ function captureOptionalNonEmptyString(
   label: string,
 ): string | undefined {
   return value === undefined ? undefined : captureNonEmptyString(value, label);
+}
+
+function captureOptionalBoolean(value: unknown, label: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    throw new TypeError(`${label} must be a boolean`);
+  }
+  return value;
 }
 
 function captureLimit(value: unknown): number {

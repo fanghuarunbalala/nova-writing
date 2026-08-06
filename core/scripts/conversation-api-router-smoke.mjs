@@ -60,6 +60,38 @@ await assert.rejects(
     error.category === "conflict",
 );
 
+const renamedHandle = await api.conversations.rename(
+  "conversation-router-created",
+  "新标题",
+);
+await renamedHandle.close();
+const renamedCatalog = await api.conversations.list({ status: "active", limit: 10 });
+assert.equal(
+  renamedCatalog.conversations.find(
+    (snapshot) => snapshot.metadata.id === "conversation-router-created",
+  )?.metadata.title,
+  "新标题",
+);
+
+const pinnedHandle = await api.conversations.pin("conversation-router-created", true);
+await pinnedHandle.close();
+const pinnedCatalog = await api.conversations.list({ status: "active", limit: 10 });
+assert.equal(
+  pinnedCatalog.conversations.find(
+    (snapshot) => snapshot.metadata.id === "conversation-router-created",
+  )?.metadata.pinned,
+  true,
+);
+
+await api.conversations.delete("conversation-router-created");
+const deletedCatalog = await api.conversations.list({ status: "active", limit: 10 });
+assert.equal(
+  deletedCatalog.conversations.some(
+    (snapshot) => snapshot.metadata.id === "conversation-router-created",
+  ),
+  false,
+);
+
 const conversation = await api.conversations.open(conversationId);
 const events = conversation.events.subscribe({ start: { from: "start" } });
 const privateText = "private-conversation-router-message";
@@ -200,6 +232,61 @@ class TestConversationServices {
         )
         .slice(0, options.limit),
     };
+  }
+
+  async rename(conversationId, title) {
+    const index = this.catalogSnapshots.findIndex(
+      (snapshot) => snapshot.metadata.id === conversationId,
+    );
+    if (index < 0) throw new ConversationNotFoundError(conversationId);
+    const current = this.catalogSnapshots[index];
+    const updated = Object.freeze({
+      metadata: Object.freeze({
+        ...current.metadata,
+        title,
+        updatedAt: "2026-08-03T02:00:00.000Z",
+      }),
+      activeAgentBinding: current.activeAgentBinding,
+    });
+    this.catalogSnapshots = this.catalogSnapshots.map((item, itemIndex) =>
+      itemIndex === index ? updated : item,
+    );
+    return updated;
+  }
+
+  async pin(conversationId, pinned) {
+    const index = this.catalogSnapshots.findIndex(
+      (snapshot) => snapshot.metadata.id === conversationId,
+    );
+    if (index < 0) throw new ConversationNotFoundError(conversationId);
+    const current = this.catalogSnapshots[index];
+    const updated = Object.freeze({
+      metadata: Object.freeze({
+        ...current.metadata,
+        pinned,
+        updatedAt: "2026-08-03T02:01:00.000Z",
+      }),
+      activeAgentBinding: current.activeAgentBinding,
+    });
+    this.catalogSnapshots = this.catalogSnapshots.map((item, itemIndex) =>
+      itemIndex === index ? updated : item,
+    );
+    return updated;
+  }
+
+  async delete(conversationId) {
+    const index = this.catalogSnapshots.findIndex(
+      (snapshot) => snapshot.metadata.id === conversationId,
+    );
+    if (index < 0) throw new ConversationNotFoundError(conversationId);
+    this.catalogSnapshots = this.catalogSnapshots.map((item, itemIndex) =>
+      itemIndex === index
+        ? Object.freeze({
+            metadata: Object.freeze({ ...item.metadata, status: "disposed" }),
+            activeAgentBinding: item.activeAgentBinding,
+          })
+        : item,
+    );
   }
 
   async enqueue(requestConversationId, event) {

@@ -155,6 +155,14 @@ const MIGRATIONS: Migration[] = [
       ON agent_manifests(agent_type, definition_version, created_at, manifest_id);
     `,
   },
+  {
+    version: 6,
+    name: "conversation_title_and_pinned",
+    sql: `
+      ALTER TABLE conversations ADD COLUMN title TEXT NOT NULL DEFAULT '';
+      ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 export function runCoreSqliteMigrations(database: DatabaseSync): void {

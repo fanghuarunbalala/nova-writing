@@ -9,6 +9,8 @@ export interface CreateConversationInput {
   workspaceId: string;
   parentConversationId?: string;
   agent: AgentBindingIdentity;
+  title?: string;
+  pinned?: boolean;
   createdAt?: string;
 }
 
@@ -45,4 +47,16 @@ export interface ConversationCatalogStore
   createConversation(input: CreateConversationInput): Promise<StoredConversation>;
 
   getConversation(conversationId: string): Promise<StoredConversation | undefined>;
+
+  /** 重命名对话。Renames a conversation. */
+  renameConversation(conversationId: string, title: string): Promise<ConversationMetadata>;
+
+  /** 置顶/取消置顶。Pins or unpins a conversation. */
+  setConversationPinned(
+    conversationId: string,
+    pinned: boolean,
+  ): Promise<ConversationMetadata>;
+
+  /** 删除对话（软删除：status → disposed）。Soft-deletes a conversation. */
+  deleteConversation(conversationId: string): Promise<void>;
 }

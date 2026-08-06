@@ -12,6 +12,9 @@ import type { InputEventSnapshot } from "../../event/index.js";
 export const CONVERSATION_API_OPERATION = {
   create: "conversation.create",
   list: "conversation.list",
+  rename: "conversation.rename",
+  pin: "conversation.pin",
+  delete: "conversation.delete",
   inputEnqueue: "conversation.input.enqueue",
   eventsList: "conversation.events.list",
   eventsSubscribe: "conversation.events.subscribe",
@@ -32,6 +35,14 @@ export interface CreateConversationRequest {
 
 export interface ListConversationsRequest {
   readonly options: ListConversationsOptions;
+}
+
+export interface RenameConversationRequest extends ConversationIdentityRequest {
+  readonly title: string;
+}
+
+export interface PinConversationRequest extends ConversationIdentityRequest {
+  readonly pinned: boolean;
 }
 
 export interface EnqueueConversationInputRequest

@@ -9,6 +9,8 @@ export interface CreateConversationOptions {
   readonly conversationId?: string;
   readonly parentConversationId?: string;
   readonly agent: AgentBindingIdentity;
+  readonly title?: string;
+  readonly pinned?: boolean;
 }
 
 export interface ListConversationsOptions {
@@ -26,6 +28,15 @@ export interface ConversationCatalogService {
   create(options: CreateConversationOptions): Promise<ConversationSnapshot>;
 
   list(options?: ListConversationsOptions): Promise<ConversationCatalogResult>;
+
+  /** 重命名对话。Renames a conversation. */
+  rename(conversationId: string, title: string): Promise<ConversationSnapshot>;
+
+  /** 置顶/取消置顶。Pins or unpins a conversation. */
+  pin(conversationId: string, pinned: boolean): Promise<ConversationSnapshot>;
+
+  /** 删除对话（软删除）。Deletes a conversation (soft). */
+  delete(conversationId: string): Promise<void>;
 }
 
 export interface ConversationIdGenerator {

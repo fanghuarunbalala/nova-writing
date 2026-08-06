@@ -40,6 +40,18 @@ export class DefaultNovelAgentBindingConversationCatalog
   ): Promise<ConversationCatalogResult> {
     return this.#delegate.list(options);
   }
+
+  rename(conversationId: string, title: string): Promise<ConversationSnapshot> {
+    return this.#delegate.rename(conversationId, title);
+  }
+
+  pin(conversationId: string, pinned: boolean): Promise<ConversationSnapshot> {
+    return this.#delegate.pin(conversationId, pinned);
+  }
+
+  delete(conversationId: string): Promise<void> {
+    return this.#delegate.delete(conversationId);
+  }
 }
 
 function completeDefaultBinding(

@@ -176,6 +176,19 @@ export class ConversationApiRouter implements ApiTransport {
         return this.catalog.create(captureCreateConversationOptions(payload.options));
       case CONVERSATION_API_OPERATION.list:
         return this.catalog.list(captureListConversationsOptions(payload.options));
+      case CONVERSATION_API_OPERATION.rename:
+        return this.catalog.rename(
+          captureConversationId(payload.conversationId),
+          captureNonBlank(payload.title, "Conversation title"),
+        );
+      case CONVERSATION_API_OPERATION.pin:
+        return this.catalog.pin(
+          captureConversationId(payload.conversationId),
+          captureBoolean(payload.pinned),
+        );
+      case CONVERSATION_API_OPERATION.delete:
+        await this.catalog.delete(captureConversationId(payload.conversationId));
+        return Object.freeze({ deleted: true });
     }
     const conversationId = captureConversationId(payload.conversationId);
     switch (request.operation) {
@@ -395,6 +408,12 @@ function expectedPayloadKeys(operation: string): readonly string[] {
     case CONVERSATION_API_OPERATION.create:
     case CONVERSATION_API_OPERATION.list:
       return ["options"];
+    case CONVERSATION_API_OPERATION.rename:
+      return ["conversationId", "title"];
+    case CONVERSATION_API_OPERATION.pin:
+      return ["conversationId", "pinned"];
+    case CONVERSATION_API_OPERATION.delete:
+      return ["conversationId"];
     case CONVERSATION_API_OPERATION.inputEnqueue:
       return ["conversationId", "inputEvent"];
     case CONVERSATION_API_OPERATION.eventsList:
@@ -420,9 +439,22 @@ function captureConversationId(value: unknown): string {
   return captureNonEmptyString(value, "Conversation id");
 }
 
+function captureNonBlank(value: unknown, label: string): string {
+  return captureNonEmptyString(value, label);
+}
+
+function captureBoolean(value: unknown): boolean {
+  if (typeof value !== "boolean") {
+    throw new ConversationApiRouterProtocolError("pinned must be a boolean");
+  }
+  return value;
+}
+
 function captureCreateConversationOptions(value: unknown): {
   conversationId?: string;
   parentConversationId?: string;
+  title?: string;
+  pinned?: boolean;
   agent: {
     agentType: string;
     definitionVersion: string;
@@ -431,7 +463,13 @@ function captureCreateConversationOptions(value: unknown): {
   };
 } {
   const options = captureJsonRecord(value, "Conversation create options");
-  assertAllowedKeys(options, ["conversationId", "parentConversationId", "agent"]);
+  assertAllowedKeys(options, [
+    "conversationId",
+    "parentConversationId",
+    "title",
+    "pinned",
+    "agent",
+  ]);
   if (!("agent" in options)) {
     throw new ConversationApiRouterProtocolError(
       "Conversation create options require an Agent binding",
@@ -460,6 +498,12 @@ function captureCreateConversationOptions(value: unknown): {
             "Parent Conversation id",
           ),
         }
+      : {}),
+    ...(options.title !== undefined
+      ? { title: captureNonEmptyString(options.title, "Conversation title") }
+      : {}),
+    ...(options.pinned !== undefined
+      ? { pinned: captureBoolean(options.pinned) }
       : {}),
     agent: {
       agentType: captureNonEmptyString(agent.agentType, "Agent type"),

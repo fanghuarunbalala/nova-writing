@@ -29,6 +29,12 @@ export interface ConversationApi {
 
   list(options?: ListConversationsOptions): Promise<ConversationCatalogResult>;
 
+  rename(conversationId: string, title: string): Promise<Conversation>;
+
+  pin(conversationId: string, pinned: boolean): Promise<Conversation>;
+
+  delete(conversationId: string): Promise<void>;
+
   open(conversationId: string): Promise<Conversation>;
 }
 

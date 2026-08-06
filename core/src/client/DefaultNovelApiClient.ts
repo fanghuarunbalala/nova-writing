@@ -74,6 +74,28 @@ class DefaultConversationApi implements ConversationApi {
     return this.client.list(options);
   }
 
+  async rename(conversationId: string, title: string): Promise<Conversation> {
+    const snapshot = await this.client.rename(conversationId, title);
+    return new ConversationProxy({
+      snapshot,
+      client: this.client,
+      logger: this.logger,
+    });
+  }
+
+  async pin(conversationId: string, pinned: boolean): Promise<Conversation> {
+    const snapshot = await this.client.pin(conversationId, pinned);
+    return new ConversationProxy({
+      snapshot,
+      client: this.client,
+      logger: this.logger,
+    });
+  }
+
+  delete(conversationId: string): Promise<void> {
+    return this.client.delete(conversationId);
+  }
+
   async open(conversationId: string): Promise<Conversation> {
     const snapshot = await this.client.getSnapshot(conversationId);
     return new ConversationProxy({

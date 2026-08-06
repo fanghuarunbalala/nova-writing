@@ -6,6 +6,10 @@ export interface ConversationMetadata {
   parentConversationId?: string;
   rootConversationId: string;
   status: ConversationStatus;
+  /** 对话标题（可改名）。Conversation title (renameable). */
+  title?: string;
+  /** 是否置顶。Whether the conversation is pinned. */
+  pinned?: boolean;
   createdAt: string;
   updatedAt: string;
   lastJournalSequence: number;

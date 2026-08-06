@@ -24,6 +24,8 @@ interface ConversationRow {
   parent_conversation_id: string | null;
   root_conversation_id: string;
   status: ConversationStatus;
+  title: string;
+  pinned: number;
   created_at: string;
   updated_at: string;
   last_journal_sequence: number;
@@ -84,16 +86,20 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
              parent_conversation_id,
              root_conversation_id,
              status,
+             title,
+             pinned,
              created_at,
              updated_at,
              last_journal_sequence
-           ) VALUES (?, ?, ?, ?, 'active', ?, ?, 0)`,
+           ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, 0)`,
         )
         .run(
           input.id,
           input.workspaceId,
           input.parentConversationId ?? null,
           rootConversationId,
+          input.title ?? "新对话",
+          input.pinned === true ? 1 : 0,
           timestamp,
           timestamp,
         );
@@ -134,6 +140,8 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
             : {}),
           rootConversationId,
           status: "active",
+          title: input.title ?? "新对话",
+          pinned: input.pinned === true,
           createdAt: timestamp,
           updatedAt: timestamp,
           lastJournalSequence: 0,
@@ -235,6 +243,66 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
     return rows.map((row) => this.mapAgentBindingRow(row));
   }
 
+  async renameConversation(
+    conversationId: string,
+    title: string,
+  ): Promise<ConversationMetadata> {
+    this.assertOpen();
+    if (typeof title !== "string" || title.trim().length === 0) {
+      throw new TypeError("Conversation title must be a non-empty string");
+    }
+    const current = this.selectConversationRow(conversationId);
+    if (current === undefined) {
+      throw new Error("Conversation not found");
+    }
+    const updatedAt = new Date().toISOString();
+    this.database
+      .prepare(
+        `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(title.trim(), updatedAt, conversationId);
+    return this.mapConversationRow({
+      ...current,
+      title: title.trim(),
+      updated_at: updatedAt,
+    });
+  }
+
+  async setConversationPinned(
+    conversationId: string,
+    pinned: boolean,
+  ): Promise<ConversationMetadata> {
+    this.assertOpen();
+    const current = this.selectConversationRow(conversationId);
+    if (current === undefined) {
+      throw new Error("Conversation not found");
+    }
+    const updatedAt = new Date().toISOString();
+    this.database
+      .prepare(
+        `UPDATE conversations SET pinned = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(pinned ? 1 : 0, updatedAt, conversationId);
+    return this.mapConversationRow({
+      ...current,
+      pinned: pinned ? 1 : 0,
+      updated_at: updatedAt,
+    });
+  }
+
+  async deleteConversation(conversationId: string): Promise<void> {
+    this.assertOpen();
+    const current = this.selectConversationRow(conversationId);
+    if (current === undefined) {
+      throw new Error("Conversation not found");
+    }
+    this.database
+      .prepare(
+        `UPDATE conversations SET status = 'disposed', updated_at = ? WHERE id = ?`,
+      )
+      .run(new Date().toISOString(), conversationId);
+  }
+
   private selectConversationRow(conversationId: string): ConversationRow | undefined {
     return this.database.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId) as
       | ConversationRow
@@ -250,6 +318,8 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
         : {}),
       rootConversationId: row.root_conversation_id,
       status: row.status,
+      title: row.title,
+      pinned: row.pinned === 1,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       lastJournalSequence: row.last_journal_sequence,

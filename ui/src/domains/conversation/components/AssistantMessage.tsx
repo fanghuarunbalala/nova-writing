@@ -11,6 +11,8 @@ import type {
   ConversationCardDescriptor,
 } from "../projection/ConversationCardDescriptor.js";
 import type { ThinkLineData } from "../projection/ConversationTimelineItem.js";
+import { AssistantMarkdown } from "./assistantContent/AssistantMarkdown.js";
+import type { MessageReference } from "./MessageReference.js";
 import { ThinkBlock } from "./ThinkBlock.js";
 import styles from "./AssistantMessage.module.css";
 
@@ -26,6 +28,7 @@ export interface AssistantMessageProps {
   readonly text: string;
   readonly cards?: readonly ConversationCardDescriptor[];
   readonly streaming?: boolean;
+  readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly cardRenderers?: ConversationCardRendererRegistry;
   readonly onCardAction?: (cardId: string, action: string, payload?: unknown) => void;
 }
@@ -46,6 +49,7 @@ export function AssistantMessage({
   text,
   cards = [],
   streaming = false,
+  onReferenceClick,
   cardRenderers = createDefaultConversationCardRendererRegistry(),
   onCardAction,
 }: AssistantMessageProps) {
@@ -64,7 +68,9 @@ export function AssistantMessage({
           ) : null}
         </div>
         {thinkLines.length > 0 ? <ThinkBlock lines={thinkLines} expanded={streaming} streaming={streaming} onToggle={() => undefined} /> : null}
-        <div className={styles.text}>{text}</div>
+        <div className={styles.text}>
+          <AssistantMarkdown text={text} onReferenceClick={onReferenceClick} />
+        </div>
         {cards.length > 0 ? (
           <div className={styles.cards}>
             {cards.map((card) => {

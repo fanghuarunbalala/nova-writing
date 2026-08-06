@@ -6,7 +6,7 @@
 import styles from "./MessageReference.module.css";
 
 export interface MessageReference {
-  readonly refKind: "character" | "location" | "outline";
+  readonly refKind: "character" | "location" | "outline" | "paragraph";
   readonly id: string;
   readonly label: string;
 }

@@ -84,6 +84,18 @@ export interface SubagentTaskCancelArguments {
   readonly taskId: string;
 }
 
+export const SUBAGENT_TASK_OUTPUT_LIMITS = Object.freeze({
+  maximumRunIds: 16,
+  defaultTimeoutMs: 30_000,
+  maximumTimeoutMs: 600_000,
+} as const);
+
+export interface SubagentTaskOutputArguments {
+  readonly runIds: readonly string[];
+  readonly block: boolean;
+  readonly timeout: number;
+}
+
 export interface SubagentTaskCancellation {
   readonly schemaVersion: typeof SUBAGENT_TASK_SCHEMA_VERSION;
   readonly taskId: string;

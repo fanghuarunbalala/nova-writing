@@ -61,5 +61,5 @@ const registry = createAgentExecutionToolRegistry({
 });
 
 void registry.require("Agent").descriptor.parameters;
-void registry.require("TaskGet").handler;
+void registry.require("TaskOutput").handler;
 void registry.require("TaskStop").handler;

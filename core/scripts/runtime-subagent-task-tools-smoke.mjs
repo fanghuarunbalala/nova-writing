@@ -73,6 +73,13 @@ const querySnapshots = new Map([
     status: "running",
     runtimePresence: "active",
   }],
+  ["done", {
+    schemaVersion: 1,
+    taskId: "done",
+    childConversationId: "conversation-child-done",
+    status: "completed",
+    runtimePresence: "absent",
+  }],
 ]);
 const query = new SubagentTaskQueryService({
   bindings,
@@ -115,11 +122,12 @@ const registry = createAgentExecutionToolRegistry({
       return "cancellation_requested";
     },
   },
+  pollIntervalMs: 10,
   taskIdFactory: { create() { return "task-created"; } },
   clock: { now() { return timestamp; } },
 });
 
-assert.deepEqual(registry.list().map((tool) => tool.descriptor.name), ["Agent", "TaskGet", "TaskStop"]);
+assert.deepEqual(registry.list().map((tool) => tool.descriptor.name), ["Agent", "TaskOutput", "TaskStop"]);
 const agent = registry.require("Agent");
 assert.match(agent.descriptor.description, /explore \(Explorer\): Inspect bounded evidence\./);
 assert.match(agent.descriptor.description, /write \(Writer\): Draft bounded prose\./);
@@ -146,11 +154,41 @@ assert.equal(spawnRequests[0].toolPolicyId, "policy-explore");
 assert.equal(spawnRequests[0].parentConversationId, "conversation-parent");
 assert.equal(spawnRequests[0].parentRunId, "run-parent");
 
-const taskGet = registry.require("TaskGet");
-const snapshot = await taskGet.handler.execute(context, { taskId: "running" }, { emit: async () => {} });
-assert.equal(snapshot.details.status, "running");
+const taskOutput = registry.require("TaskOutput");
+const snapshot = await taskOutput.handler.execute(
+  context,
+  { runIds: ["running"] },
+  { emit: async () => {} },
+);
+assert.equal(snapshot.details.retrieval, "snapshot");
+assert.equal(snapshot.details.runs.length, 1);
+assert.equal(snapshot.details.runs[0].status, "running");
+
+const success = await taskOutput.handler.execute(
+  context,
+  { runIds: ["running", "done"], block: true, timeout: 100 },
+  { emit: async () => {} },
+);
+assert.equal(success.details.retrieval, "success");
+assert.equal(success.details.run.taskId, "done");
+assert.equal(success.details.run.status, "completed");
+assert.equal(success.details.otherRuns.length, 1);
+assert.equal(success.details.otherRuns[0].taskId, "running");
+
+const timedOut = await taskOutput.handler.execute(
+  context,
+  { runIds: ["running"], block: true, timeout: 20 },
+  { emit: async () => {} },
+);
+assert.equal(timedOut.details.retrieval, "timeout");
+assert.equal(timedOut.details.runs.length, 1);
+
 await assert.rejects(
-  taskGet.handler.execute(context, { taskId: "missing" }, { emit: async () => {} }),
+  taskOutput.handler.execute(
+    context,
+    { runIds: ["missing"] },
+    { emit: async () => {} },
+  ),
   (error) => error instanceof ToolError && error.code === "SUBAGENT_TASK_NOT_FOUND",
 );
 

@@ -10,17 +10,17 @@ import {
   type CreateTaskStopToolOptions,
 } from "./TaskStop.js";
 import {
-  createTaskGetTool,
-  type CreateTaskGetToolOptions,
-} from "./TaskGet.js";
+  createTaskOutputTool,
+  type CreateTaskOutputToolOptions,
+} from "./TaskOutput.js";
 
 export * from "./Agent.js";
 export * from "./TaskStop.js";
-export * from "./TaskGet.js";
+export * from "./TaskOutput.js";
 
 export type AgentExecutionToolRegistryOptions =
   Omit<CreateAgentToolOptions, "logger"> &
-  Omit<CreateTaskGetToolOptions, "logger"> &
+  Omit<CreateTaskOutputToolOptions, "logger"> &
   Omit<CreateTaskStopToolOptions, "logger"> & {
     readonly logger?: Logger;
   };
@@ -30,7 +30,7 @@ export function createAgentExecutionToolRegistry(
 ): ToolRegistry {
   return new ToolRegistry([
     createAgentTool(options),
-    createTaskGetTool(options),
+    createTaskOutputTool(options),
     createTaskStopTool(options),
   ]);
 }

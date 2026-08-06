@@ -9,6 +9,7 @@ import {
 import {
   SUBAGENT_RUNTIME_PRESENCE,
   SUBAGENT_TASK_CANCELLATION_STATUS,
+  SUBAGENT_TASK_OUTPUT_LIMITS,
   SUBAGENT_TASK_SCHEMA_VERSION,
   SUBAGENT_TASK_STATUS,
   type SubagentDefinition,
@@ -18,6 +19,7 @@ import {
   type SubagentTaskCancelArguments,
   type SubagentTaskGetArguments,
   type SubagentTaskLimits,
+  type SubagentTaskOutputArguments,
   type SubagentTaskSnapshot,
   type SubagentToolCompositionPolicy,
 } from "./SubagentTaskProtocol.js";
@@ -118,6 +120,29 @@ export function captureSubagentTaskGetArguments(
 }
 
 export const captureSubagentTaskCancelArguments = captureSubagentTaskGetArguments;
+
+export function captureSubagentTaskOutputArguments(
+  value: unknown,
+): SubagentTaskOutputArguments {
+  return capture(
+    value,
+    SUBAGENT_TASK_PROTOCOL_FAILURE.invalidArguments,
+    (record) => {
+      exactKeys(record, ["runIds"], ["block", "timeout"]);
+      const runIds = identityList(
+        record.runIds,
+        SUBAGENT_TASK_OUTPUT_LIMITS.maximumRunIds,
+      );
+      if (runIds.length === 0) throw new Error();
+      const block = booleanValue(record.block);
+      const timeout =
+        record.timeout === undefined
+          ? SUBAGENT_TASK_OUTPUT_LIMITS.defaultTimeoutMs
+          : timeoutValue(record.timeout);
+      return Object.freeze({ runIds, block, timeout });
+    },
+  );
+}
 
 export function captureSubagentTaskAcceptance(
   value: unknown,
@@ -277,6 +302,22 @@ function positiveInteger(value: unknown): number {
 
 function nonNegativeInteger(value: unknown): number {
   if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error();
+  return value as number;
+}
+
+function booleanValue(value: unknown): boolean {
+  if (value !== undefined && typeof value !== "boolean") throw new Error();
+  return value === true;
+}
+
+function timeoutValue(value: unknown): number {
+  if (
+    !Number.isSafeInteger(value) ||
+    (value as number) < 1 ||
+    (value as number) > SUBAGENT_TASK_OUTPUT_LIMITS.maximumTimeoutMs
+  ) {
+    throw new Error();
+  }
   return value as number;
 }
 

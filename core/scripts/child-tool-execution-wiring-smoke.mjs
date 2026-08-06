@@ -124,6 +124,13 @@ const writePromise = composition.dispatcher.execute(
 );
 const writeRequest = await waitForPending("NovelOutlineWrite");
 assert.ok(writeRequest);
+assert.equal(writeRequest.summary.title, "新增大纲单元");
+assert.deepEqual(writeRequest.summary.operations, [
+  { op: "add", kind: "outline", id: "s", title: "t" },
+]);
+assert.deepEqual(writeRequest.summary.arguments, {
+  values: [{ id: "s", title: "t" }],
+});
 assert.ok(
   events.some(
     (event) => event.getEventType?.() === "system.tool.approval.requested",
@@ -164,6 +171,13 @@ const editPromise = composition.dispatcher.execute(
 );
 const editRequest = await waitForPending("NovelOutlineEdit");
 assert.ok(editRequest);
+assert.equal(editRequest.summary.title, "修改大纲单元");
+assert.deepEqual(editRequest.summary.operations, [
+  { op: "edit", kind: "outline", id: "s", title: "x" },
+]);
+assert.deepEqual(editRequest.summary.arguments, {
+  values: [{ id: "s", value: { title: "x" } }],
+});
 await composition.coordinator.resolve(
   {
     id: "decision-edit",

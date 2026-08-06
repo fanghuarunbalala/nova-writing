@@ -437,6 +437,20 @@ export const ToolApprovalRequestedPayloadSchema = Type.Object({
   summary: Type.Object({
     title: Type.String({ minLength: 1, maxLength: 256 }),
     description: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
+    arguments: Type.Optional(Type.Any()),
+    operations: Type.Optional(Type.Array(
+      Type.Object({
+        op: Type.Union([
+          Type.Literal("add"),
+          Type.Literal("edit"),
+          Type.Literal("delete"),
+        ]),
+        kind: Type.String({ minLength: 1, maxLength: 64 }),
+        id: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
+        title: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+      }, { additionalProperties: false }),
+      { minItems: 1, maxItems: 64 },
+    )),
   }, { additionalProperties: false }),
   requestedAt: Type.String({ minLength: 1 }),
   expiresAt: Type.String({ minLength: 1 }),

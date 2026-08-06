@@ -5,6 +5,8 @@ import type {
   AssistantMessageFailureCode,
   ToolApprovalResolutionDecision,
 } from "../../event/index.js";
+import type { ToolApprovalOperationSummary } from "../../event/output/payload/ToolApprovalLifecyclePayloads.js";
+import type { JsonValue } from "../../event/protocol/index.js";
 import type {
   RunStateChangeReason,
   RunStatus,
@@ -123,6 +125,10 @@ export interface ToolApprovalProjection {
   readonly lastSequence: number;
   readonly title: string;
   readonly description?: string;
+  /** 完整工具参数（仅 pending 保留，决议后裁掉）。Full arguments while pending. */
+  readonly arguments?: JsonValue;
+  /** 每目标一行的操作摘要。Per-target operation rows. */
+  readonly operations?: readonly ToolApprovalOperationSummary[];
   readonly requestedAt: string;
   readonly expiresAt: string;
   readonly status: "pending" | ToolApprovalResolutionDecision;

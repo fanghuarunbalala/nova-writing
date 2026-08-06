@@ -3,6 +3,8 @@
  * Approval coordinator from the restored Manifest Tool View.
  */
 import { noopLogger, type Logger } from "../../../observability/index.js";
+import type { ToolApprovalOperationSummary } from "../../../event/output/payload/ToolApprovalLifecyclePayloads.js";
+import type { JsonValue } from "../../../event/protocol/index.js";
 import {
   InMemoryInteractionCoordinator,
   type InteractionCoordinator,
@@ -168,19 +170,202 @@ function createChildToolApprovalRequestFactory(): ToolApprovalRequestFactory {
       const approvalRequestId =
         `tool-approval:${input.identity.conversationId}:${input.identity.runId}:${input.identity.toolCallId}`;
       const requestedAt = new Date().toISOString();
+      const operations = buildApprovalOperations(input);
+      const summary = buildApprovalSummary(input, operations);
       return Object.freeze({
         approvalRequestId,
         identity: input.identity,
         ...(input.turnId === undefined ? {} : { turnId: input.turnId }),
-        summary: Object.freeze({
-          title: input.toolLabel,
-          ...(input.toolDescription === undefined
-            ? {}
-            : { description: input.toolDescription }),
-        }),
+        summary,
         requestedAt,
         expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
       });
     },
   };
+}
+
+const MAX_APPROVAL_ARGUMENTS_BYTES = 256 * 1024;
+
+const APPROVAL_OP_LABEL = {
+  add: "新增",
+  edit: "修改",
+  delete: "删除",
+} as const;
+
+const APPROVAL_KIND_LABEL: Record<string, string> = Object.freeze({
+  outline: "大纲单元",
+  character: "角色",
+  location: "地点",
+  paragraph: "段落",
+  volume: "卷",
+  chapter: "章节",
+});
+
+const WRITE_KIND_BY_TOOL_NAME: Record<string, string> = Object.freeze({
+  NovelOutlineWrite: "outline",
+  NovelOutlineEdit: "outline",
+  NovelCharacterWrite: "character",
+  NovelCharacterEdit: "character",
+  NovelLocationWrite: "location",
+  NovelLocationEdit: "location",
+  NovelParagraphWrite: "paragraph",
+  NovelParagraphEdit: "paragraph",
+  NovelVolumeWrite: "volume",
+  NovelVolumeEdit: "volume",
+  NovelChapterWrite: "chapter",
+  NovelChapterEdit: "chapter",
+});
+
+const NOVEL_DELETE_KIND_MAP: Record<string, string> = Object.freeze({
+  story_unit: "outline",
+  character: "character",
+  location: "location",
+  paragraph: "paragraph",
+  volume: "volume",
+  chapter: "chapter",
+});
+
+/** 从工具名推导操作类型（Write/Edit/Delete 后缀）。Derive op from tool name. */
+function approvalOpOf(toolName: string): ToolApprovalOperationSummary["op"] | undefined {
+  if (toolName.endsWith("Write")) return "add";
+  if (toolName.endsWith("Edit")) return "edit";
+  if (toolName === "NovelDelete") return "delete";
+  return undefined;
+}
+
+/** 从工具参数提取每目标一行的操作摘要。Build per-target operation rows. */
+function buildApprovalOperations(
+  input: Parameters<ToolApprovalRequestFactory["create"]>[0],
+): readonly ToolApprovalOperationSummary[] {
+  const toolName = input.identity.toolName;
+  const op = approvalOpOf(toolName);
+  if (op === undefined || !isRecord(input.arguments)) return Object.freeze([]);
+  const values = input.arguments.values;
+  if (!Array.isArray(values) || values.length === 0) return Object.freeze([]);
+
+  if (op === "delete") {
+    return Object.freeze(
+      values
+        .map((value, index): ToolApprovalOperationSummary | undefined => {
+          if (!isRecord(value) || typeof value.id !== "string") return undefined;
+          const kind = NOVEL_DELETE_KIND_MAP[
+            typeof value.kind === "string" ? value.kind : ""
+          ];
+          if (kind === undefined) return undefined;
+          return Object.freeze({ op, kind, id: value.id, title: value.id });
+        })
+        .filter((item): item is ToolApprovalOperationSummary => item !== undefined),
+    );
+  }
+
+  const kind = WRITE_KIND_BY_TOOL_NAME[toolName];
+  if (kind === undefined) return Object.freeze([]);
+  return Object.freeze(
+    values
+      .map((value, index): ToolApprovalOperationSummary | undefined => {
+        if (!isRecord(value)) return undefined;
+        const patch = isRecord(value.value) ? value.value : undefined;
+        const id = asString(value.id) ?? asString(patch?.id);
+        const title =
+          asString(value.title) ??
+          asString(value.name) ??
+          asString(patch?.title) ??
+          asString(patch?.name) ??
+          id ??
+          `#${index + 1}`;
+        return Object.freeze({
+          op,
+          kind,
+          ...(id === undefined ? {} : { id }),
+          ...(title === undefined ? {} : { title: boundedApprovalText(title, 500) }),
+        });
+      })
+      .filter((item): item is ToolApprovalOperationSummary => item !== undefined),
+  );
+}
+
+/** 组装审批摘要：标题/描述/操作行/完整参数（超限降级省略）。Build approval summary. */
+function buildApprovalSummary(
+  input: Parameters<ToolApprovalRequestFactory["create"]>[0],
+  operations: readonly ToolApprovalOperationSummary[],
+): ToolApprovalRequest["summary"] {
+  const first = operations[0];
+  const title =
+    first === undefined
+      ? input.toolLabel
+      : `${APPROVAL_OP_LABEL[first.op]}${APPROVAL_KIND_LABEL[first.kind] ?? first.kind}`;
+  const descriptions: string[] = [];
+  if (operations.length > 0) {
+    const targets = operations
+      .map((operation) => operation.title ?? operation.id)
+      .filter((item): item is string => item !== undefined);
+    descriptions.push(
+      compactTargets(targets, operations.length),
+    );
+  }
+  const arguments_ = boundedApprovalArguments(input.arguments);
+  if (arguments_ === undefined) {
+    descriptions.push("参数超过展示上限，未随审批携带完整内容");
+  }
+  return Object.freeze({
+    title,
+    ...(descriptions.length > 0
+      ? { description: descriptions.join("；") }
+      : {}),
+    ...(arguments_ === undefined ? {} : { arguments: arguments_ }),
+    ...(operations.length > 0 ? { operations } : {}),
+  });
+}
+
+function compactTargets(targets: readonly string[], total: number): string {
+  const prefix = `目标：${targets.join("、")}`;
+  const bytes = new TextEncoder().encode(prefix).byteLength;
+  if (bytes <= 1024) return prefix;
+  const kept: string[] = [];
+  let used = 0;
+  for (const target of targets) {
+    const next = used === 0 ? target : `${target}、`;
+    const nextBytes = new TextEncoder().encode(next).byteLength;
+    if (used + nextBytes > 900) break;
+    kept.push(target);
+    used += new TextEncoder().encode(`${target}、`).byteLength;
+  }
+  return `目标：${kept.join("、")} 等 ${total} 项`;
+}
+
+function boundedApprovalArguments(value: JsonValue): JsonValue | undefined {
+  try {
+    const serialized = JSON.stringify(value);
+    if (
+      serialized === undefined ||
+      new TextEncoder().encode(serialized).byteLength > MAX_APPROVAL_ARGUMENTS_BYTES
+    ) {
+      return undefined;
+    }
+    return value;
+  } catch {
+    return undefined;
+  }
+}
+
+function boundedApprovalText(value: string, maximumBytes: number): string {
+  if (new TextEncoder().encode(value).byteLength <= maximumBytes) return value;
+  const characters = [...value];
+  let kept = "";
+  let used = 0;
+  for (const character of characters) {
+    const bytes = new TextEncoder().encode(character).byteLength;
+    if (used + bytes > maximumBytes) break;
+    kept += character;
+    used += bytes;
+  }
+  return kept;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }

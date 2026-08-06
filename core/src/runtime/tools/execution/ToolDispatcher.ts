@@ -49,6 +49,8 @@ export interface ToolApprovalRequestFactoryInput {
   readonly turnId?: string;
   readonly toolLabel: string;
   readonly toolDescription: string;
+  /** 本次调用的完整工具参数（供审批摘要携带完整参数）。Full tool arguments. */
+  readonly arguments: JsonValue;
 }
 
 export interface ToolApprovalRequestFactory {
@@ -326,6 +328,7 @@ export class ToolExecutionPipeline {
         ...(invocation.turnId === undefined ? {} : { turnId: invocation.turnId }),
         toolLabel: tool.descriptor.label,
         toolDescription: tool.descriptor.description,
+        arguments: invocation.arguments,
       });
       if (!sameApprovalIdentity(request.identity, identity)) throw new Error();
     } catch {

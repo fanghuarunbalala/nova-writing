@@ -35,6 +35,7 @@ import {
   type TurnStateChangeReason,
   type TurnStatus,
 } from "../../runtime/execution/TurnLifecycle.js";
+import type { ToolApprovalOperationSummary } from "../../event/output/payload/ToolApprovalLifecyclePayloads.js";
 import {
   ConversationProjectionConversationMismatchError,
   ConversationProjectionEventIdentityConflictError,
@@ -547,6 +548,12 @@ export class ConversationProjectionStore {
               ),
             }
           : {}),
+        ...(summary.arguments === undefined
+          ? {}
+          : { arguments: requireJsonValue(event.eventType, "summary.arguments", summary.arguments) }),
+        ...(summary.operations === undefined
+          ? {}
+          : { operations: requireApprovalOperations(event.eventType, summary.operations) }),
         requestedAt: requireString(
           event.eventType,
           "requestedAt",
@@ -579,10 +586,13 @@ export class ConversationProjectionStore {
       throw payloadError(event.eventType, "Tool Approval identity changed");
     }
     const decision = parseApprovalDecision(event.eventType, payload.decision);
+    // 决议后只保留摘要，裁掉完整参数（避免投影长期累积大内容）。
+    const { arguments: droppedArguments, ...summaryFields } = approval;
+    void droppedArguments;
     this.approvals.set(
       approvalRequestId,
       Object.freeze({
-        ...approval,
+        ...summaryFields,
         lastSequence: event.sequence,
         status: decision,
         ...(payload.actorId !== undefined
@@ -717,6 +727,64 @@ function requireArray(eventType: string, label: string, value: unknown): unknown
     throw payloadError(eventType, `${label} must be an array`);
   }
   return value;
+}
+
+function requireJsonValue(
+  eventType: string,
+  label: string,
+  value: unknown,
+): JsonValue {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value as JsonValue;
+  }
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map((item) => requireJsonValue(eventType, label, item))) as JsonValue;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(record)) {
+      result[key] = requireJsonValue(eventType, label, item);
+    }
+    return Object.freeze(result) as JsonValue;
+  }
+  throw payloadError(eventType, `${label} must be a JSON value`);
+}
+
+function requireApprovalOperations(
+  eventType: string,
+  value: unknown,
+): readonly ToolApprovalOperationSummary[] {
+  const operations = requireArray(eventType, "summary.operations", value);
+  return Object.freeze(
+    operations.map((item, index) => {
+      const record = requireRecord(
+        eventType,
+        `summary.operations[${index}]`,
+        item,
+      );
+      const op = record.op;
+      if (op !== "add" && op !== "edit" && op !== "delete") {
+        throw payloadError(eventType, `summary.operations[${index}].op is invalid`);
+      }
+      return Object.freeze({
+        op,
+        kind: requireString(eventType, `summary.operations[${index}].kind`, record.kind),
+        ...(record.id === undefined
+          ? {}
+          : { id: requireString(eventType, `summary.operations[${index}].id`, record.id) }),
+        ...(record.title === undefined
+          ? {}
+          : { title: requireString(eventType, `summary.operations[${index}].title`, record.title) }),
+      });
+    }),
+  );
 }
 
 function requireString(

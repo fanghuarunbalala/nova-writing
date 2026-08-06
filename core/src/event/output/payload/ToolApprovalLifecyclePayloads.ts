@@ -1,10 +1,27 @@
-/** Redacted public payloads for the Tool approval interaction lifecycle. */
-import type { JsonObject } from "../../protocol/JsonValue.js";
+/** Public payloads for the Tool approval interaction lifecycle. */
+import type { JsonObject, JsonValue } from "../../protocol/JsonValue.js";
 import { OutputPayload } from "../OutputPayload.js";
 
+/**
+ * 审批操作行（每目标一行，供前端审批卡渲染；不含完整内容）。
+ * One human-facing operation row per approval target (op + kind + identifier).
+ */
+export interface ToolApprovalOperationSummary {
+  readonly op: "add" | "edit" | "delete";
+  /** Provider-neutral 实体类型键（如 outline/character/paragraph）。Entity-kind key. */
+  readonly kind: string;
+  readonly id?: string;
+  readonly title?: string;
+}
+
+/** 审批摘要：标题、描述、结构化操作行，以及完整工具参数（可选）。Approval summary. */
 export interface ToolApprovalSummary {
   readonly title: string;
   readonly description?: string;
+  /** 完整工具参数，随审批事件自动携带（超限时由工厂降级省略）。Full tool arguments. */
+  readonly arguments?: JsonValue;
+  /** 每目标一行的操作摘要（列表渲染用）。Per-target operation rows. */
+  readonly operations?: readonly ToolApprovalOperationSummary[];
 }
 
 export interface ToolApprovalPublicIdentityOptions {
@@ -78,9 +95,29 @@ export class ToolApprovalRequestedPayload extends ToolApprovalLifecyclePayload {
   }
 
   toObject(): JsonObject {
+    const summary: Record<string, JsonValue> = {
+      title: this.summary.title,
+    };
+    if (this.summary.description !== undefined) {
+      summary.description = this.summary.description;
+    }
+    if (this.summary.arguments !== undefined) {
+      summary.arguments = this.summary.arguments;
+    }
+    if (this.summary.operations !== undefined) {
+      summary.operations = this.summary.operations.map((operation) => {
+        const row: Record<string, JsonValue> = {
+          op: operation.op,
+          kind: operation.kind,
+        };
+        if (operation.id !== undefined) row.id = operation.id;
+        if (operation.title !== undefined) row.title = operation.title;
+        return row;
+      });
+    }
     return {
       ...this.identityObject(),
-      summary: { ...this.summary },
+      summary,
       requestedAt: this.requestedAt,
       expiresAt: this.expiresAt,
     };
@@ -125,10 +162,82 @@ function captureSummary(value: ToolApprovalSummary): ToolApprovalSummary {
   const description = value.description === undefined
     ? undefined
     : requireBoundedText("Approval summary description", value.description, 1024);
+  const arguments_ = value.arguments === undefined
+    ? undefined
+    : requireBoundedJson("Approval summary arguments", value.arguments);
+  const operations = value.operations === undefined
+    ? undefined
+    : requireOperations(value.operations);
   return Object.freeze({
     title,
     ...(description === undefined ? {} : { description }),
+    ...(arguments_ === undefined ? {} : { arguments: arguments_ }),
+    ...(operations === undefined ? {} : { operations }),
   });
+}
+
+const MAX_APPROVAL_ARGUMENTS_BYTES = 256 * 1024;
+const MAX_APPROVAL_OPERATIONS = 64;
+
+function requireBoundedJson(
+  label: string,
+  value: JsonValue,
+): JsonValue {
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    throw new TypeError(`${label} is not serializable`);
+  }
+  if (
+    serialized === undefined ||
+    new TextEncoder().encode(serialized).byteLength > MAX_APPROVAL_ARGUMENTS_BYTES
+  ) {
+    throw new TypeError(`${label} exceeds the size limit`);
+  }
+  return value;
+}
+
+function requireOperations(
+  value: readonly ToolApprovalOperationSummary[],
+): readonly ToolApprovalOperationSummary[] {
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > MAX_APPROVAL_OPERATIONS
+  ) {
+    throw new TypeError("Approval summary operations are invalid");
+  }
+  return Object.freeze(
+    value.map((item) => {
+      if (!item || typeof item !== "object") {
+        throw new TypeError("Approval summary operation is invalid");
+      }
+      const op = requireApprovalOperation(item.op);
+      const kind = requireBoundedText("Approval operation kind", item.kind, 64);
+      const id = item.id === undefined
+        ? undefined
+        : requireBoundedText("Approval operation id", item.id, 256);
+      const title = item.title === undefined
+        ? undefined
+        : requireBoundedText("Approval operation title", item.title, 500);
+      return Object.freeze({
+        op,
+        kind,
+        ...(id === undefined ? {} : { id }),
+        ...(title === undefined ? {} : { title }),
+      });
+    }),
+  );
+}
+
+function requireApprovalOperation(
+  value: ToolApprovalOperationSummary["op"],
+): ToolApprovalOperationSummary["op"] {
+  if (value !== "add" && value !== "edit" && value !== "delete") {
+    throw new TypeError("Approval operation op is invalid");
+  }
+  return value;
 }
 
 function requireBoundedText(label: string, value: unknown, maximumBytes: number): string {

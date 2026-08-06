@@ -33,12 +33,12 @@ export class SystemPromptBuilder {
   constructor(options: SystemPromptBuilderOptions) {
     this.#sections = options.sections;
     this.#digester = options.digester;
-    this.#requiredSectionIds = Object.freeze(
-      [...(options.requiredSectionIds ?? [
-        "core.runtime.protocol",
-        "completion.contract",
-      ])],
-    );
+    // 暂时不默认必选任何段：必选段校验机制后续再确定。
+    // Temporarily no default required sections; the required-section validation
+    // mechanism will be decided later.
+    this.#requiredSectionIds = Object.freeze([
+      ...(options.requiredSectionIds ?? []),
+    ]);
     this.#logger = (options.logger ?? noopLogger).child({
       component: "system_prompt_builder",
     });

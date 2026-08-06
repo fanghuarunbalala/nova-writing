@@ -23,12 +23,12 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("core.runtime.protocol"),
     new PromptSectionItem("novel.identity"),
     new PromptSectionItem("novel.system"),
-    new PromptSectionItem("conversation.behavior"),
-    new PromptSectionItem("novel.workflow"),
-    new PromptSectionItem("tool.guidance"),
-    new PromptSectionItem("todo.guidance"),
-    new PromptSectionItem("context.reliability"),
-    new PromptSectionItem("completion.contract"),
+    // new PromptSectionItem("conversation.behavior"),
+    // new PromptSectionItem("novel.workflow"),
+    // new PromptSectionItem("tool.guidance"),
+    // new PromptSectionItem("todo.guidance"),
+    // new PromptSectionItem("context.reliability"),
+    // new PromptSectionItem("completion.contract"),
   ]),
   tools: new AgentToolPolicy({
     groupIds: [

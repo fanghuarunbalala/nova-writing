@@ -19,6 +19,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "smoke:prompt-ccb-main-reference": "pnpm build && node scripts/prompt-ccb-main-reference-smoke.mjs",
+    "smoke:runtime-system-reminder": "pnpm build && node scripts/runtime-system-reminder-smoke.mjs",
     "smoke:configuration-foundation": "pnpm build && node scripts/configuration-foundation-smoke.mjs",
     "smoke:effective-model-execution": "pnpm build && node scripts/effective-model-execution-resolver-smoke.mjs",
     "smoke:model-connection-probe": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/model-connection-probe-typecheck.ts && node scripts/model-connection-probe-smoke.mjs",

@@ -18,6 +18,7 @@ export const OUTPUT_EVENT_TYPE = {
   subagentCancelled: "agent.subagent.cancelled",
   nudgeScheduled: "system.nudge.scheduled",
   systemReminderInjected: "system.reminder.injected",
+  systemReminderAttached: "system.reminder.attached",
   nudgeExpired: "system.nudge.expired",
   contextCompactionStarted: "system.context.compaction.started",
   contextCompactionCompleted: "system.context.compaction.completed",

@@ -3,6 +3,7 @@ import { Type } from "typebox";
 import { EVENT_SCHEMA_VERSION } from "../../protocol/EventMetadata.js";
 import type { EventSchemaRegistry } from "../../protocol/EventSchemaRegistry.js";
 import { OUTPUT_EVENT_TYPE } from "../OutputEventType.js";
+import { REMINDER_KIND } from "../payload/SystemReminderAttachedPayload.js";
 import { registerNovelLifecycleOutputEventSchemas } from "./NovelLifecycleOutputEventSchemas.js";
 
 const RuntimePresenceStateSchema = Type.Union([
@@ -341,6 +342,17 @@ export const SystemReminderInjectedPayloadSchema = Type.Object(
     leaseId: Type.String({ minLength: 1 }),
     providerCallId: Type.String({ minLength: 1 }),
     state: Type.Literal("consumed"),
+  },
+  { additionalProperties: false },
+);
+
+/** 通用系统提醒附加事件负载 schema（kind/content/order）。Generic system-reminder attached payload schema. */
+export const SystemReminderAttachedPayloadSchema = Type.Object(
+  {
+    reminderId: Type.String({ minLength: 1 }),
+    kind: Type.Union(REMINDER_KIND.map((kind) => Type.Literal(kind))),
+    content: Type.String({ minLength: 1 }),
+    order: Type.Integer({ minimum: 0 }),
   },
   { additionalProperties: false },
 );
@@ -690,6 +702,13 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     schemaVersion: EVENT_SCHEMA_VERSION,
     payloadSchema: SystemReminderInjectedPayloadSchema,
     snapshotSchema: NudgeLifecycleSnapshotSchema,
+  });
+
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.systemReminderAttached,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: SystemReminderAttachedPayloadSchema,
   });
 
   registry.register({

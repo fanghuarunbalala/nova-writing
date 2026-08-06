@@ -21,7 +21,7 @@ assert.equal(
 
 const composition = createNovelConversationManifestComposition();
 assert.ok(composition.registry instanceof ToolRegistry);
-assert.equal(composition.registry.size, 24);
+assert.equal(composition.registry.size, 20);
 assert.equal(composition.registry.has("TodoWrite"), true);
 assert.equal(composition.registry.has("NovelOutlineRead"), true);
 assert.equal(composition.registry.has("NovelOutlineWrite"), true);
@@ -42,10 +42,10 @@ assert.equal(composition.registry.has("NovelChapterRead"), true);
 assert.equal(composition.registry.has("NovelChapterWrite"), true);
 assert.equal(composition.registry.has("NovelChapterEdit"), true);
 assert.equal(composition.registry.has("NovelDelete"), true);
-assert.equal(composition.registry.has("NovelDraftStatus"), true);
-assert.equal(composition.registry.has("NovelDraftCommit"), true);
-assert.equal(composition.registry.has("NovelDraftRollback"), true);
-assert.equal(composition.registry.has("NovelDraftRebase"), true);
+assert.equal(composition.registry.has("NovelDraftStatus"), false);
+assert.equal(composition.registry.has("NovelDraftCommit"), false);
+assert.equal(composition.registry.has("NovelDraftRollback"), false);
+assert.equal(composition.registry.has("NovelDraftRebase"), false);
 assert.ok(composition.groups instanceof ToolGroupCatalog);
 assert.ok(composition.promptBuilder instanceof SystemPromptBuilder);
 assert.ok(composition.digester instanceof NodeSha256PromptDigester);

@@ -82,13 +82,13 @@ try {
     logger,
   });
 
-  // 注册表包含全部工具组（真实 novel 工具 + TodoWrite + draft 桩）。
+  // 注册表包含全部真实 novel 工具 + TodoWrite，不包含 draft 工具。
   const names = novelTools.registry.list().map((tool) => tool.descriptor.name);
   assert.ok(names.includes("NovelOutlineWrite"));
   assert.ok(names.includes("NovelCharacterWrite"));
   assert.ok(names.includes("NovelDelete"));
   assert.ok(names.includes("TodoWrite"));
-  assert.ok(names.includes("NovelDraftCommit"));
+  assert.equal(names.includes("NovelDraftStatus"), false);
   assert.deepEqual(NOVEL_OUTLINE_TOOL_GROUP_MANIFEST.tools, [
     "NovelOutlineRead",
     "NovelOutlineWrite",
@@ -145,16 +145,6 @@ try {
     ),
     (error) => {
       assert.equal(error.code, "NOVEL_OUTLINE_WRITE_FAILED");
-      return true;
-    },
-  );
-
-  // draft 工具仍是不可用桩（P4 移除）。
-  const draftStatus = novelTools.registry.require("NovelDraftStatus");
-  await assert.rejects(
-    draftStatus.handler.execute(context(conversation, 4), {}, progress),
-    (error) => {
-      assert.equal(error.code, "NOVEL_DRAFT_STATUS_FAILED");
       return true;
     },
   );

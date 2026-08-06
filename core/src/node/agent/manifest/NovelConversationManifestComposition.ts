@@ -11,8 +11,6 @@ import {
   type LocationService,
   type NovelCommitService,
   type NovelCanonicalWritePort,
-  type NovelDraftChangeSetBuilder,
-  type NovelDraftSessionService,
   type ParagraphQueryService,
   type ParagraphService,
   type PublicationQueryService,
@@ -50,13 +48,10 @@ import {
   createNovelLocationToolRegistry,
 } from "../../../tools/novel/index.js";
 import {
-  NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
-  NovelDraftToolService,
   NovelParagraphToolService,
   NovelDeleteToolService,
-  createNovelDraftToolRegistry,
   createNovelParagraphToolRegistry,
   createNovelDeleteToolRegistry,
 } from "../../../tools/novel/index.js";
@@ -137,13 +132,6 @@ const unavailableStoryOutlineQueryService = Object.freeze({
   getStoryUnit: unavailableNovelService,
   getLeafStoryUnitPlan: unavailableNovelService,
 }) as unknown as StoryOutlineQueryService;
-
-const unavailableNovelDraftSessionService = Object.freeze({
-  startDraft: unavailableNovelService,
-  getActiveDraft: unavailableNovelService,
-  resetToMain: unavailableNovelService,
-  rollback: unavailableNovelService,
-}) as unknown as NovelDraftSessionService;
 
 const unavailableCharacterService = Object.freeze({
   create: unavailableNovelService,
@@ -254,21 +242,6 @@ const unavailableDeleteToolService = new NovelDeleteToolService({
   },
 });
 
-const unavailableDraftToolService = new NovelDraftToolService({
-  drafts: unavailableNovelDraftSessionService,
-  commits: Object.freeze({
-    commit: unavailableNovelService,
-  }) as unknown as NovelCommitService<never>,
-  changeSets: Object.freeze({
-    build: unavailableNovelService,
-  }) as unknown as NovelDraftChangeSetBuilder,
-  prepareRebase: async () => {
-    throw new TypeError(
-      "Novel rebase service is unavailable during manifest assembly",
-    );
-  },
-});
-
 const unavailableOutlineToolService = new OutlineToolService({
   novelId: captureNovelId("unavailable_novel"),
   outlineQueries: unavailableStoryOutlineQueryService,
@@ -306,9 +279,6 @@ export function createNovelConversationManifestComposition(
     ...createNovelDeleteToolRegistry({
       service: unavailableDeleteToolService,
     }).list(),
-    ...createNovelDraftToolRegistry({
-      service: unavailableDraftToolService,
-    }).list(),
   ]);
   const groups = new ToolGroupCatalog([
     loadToolGroupManifest(NOVEL_CONVERSATION_TOOL_GROUP_MANIFEST),
@@ -318,7 +288,6 @@ export function createNovelConversationManifestComposition(
     NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
     NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
     NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-    NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
   ]);
   const promptBuilder = new SystemPromptBuilder({
     sections: createDefaultPromptSectionRegistry(),

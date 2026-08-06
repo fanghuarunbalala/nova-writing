@@ -1,11 +1,9 @@
 /**
  * 在 child 进程内打开真实 Novel 工具注册表：直连 novel.sqlite（WAL 多进程），
- * 构造真实查询服务与 canonical writer，供 child 工具执行使用；draft 工具
- * 在 draft 移除步骤（P4）前保持不可用桩。
+ * 构造真实查询服务与 canonical writer，供 child 工具执行使用。
  * Opens the real Novel tool registry inside the child process: direct
  * novel.sqlite access (WAL multi-process) with real query services and the
- * canonical writer for tool execution; draft tools stay as unavailable stubs
- * until the draft removal step (P4).
+ * canonical writer for tool execution.
  */
 import { randomUUID } from "node:crypto";
 import { noopLogger, type Logger } from "../../../../observability/index.js";
@@ -26,9 +24,6 @@ import {
   capturePublicationStructureId,
   capturePublicationVolumeId,
   createDefaultNovelOperationRegistry,
-  type NovelCommitService,
-  type NovelDraftChangeSetBuilder,
-  type NovelDraftSessionService,
   type CharacterId,
   type LocationId,
   type NovelMutationContext,
@@ -51,11 +46,6 @@ import {
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   NovelDeleteToolService,
   createNovelDeleteToolRegistry,
-} from "../../../../tools/novel/index.js";
-import {
-  NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
-  NovelDraftToolService,
-  createNovelDraftToolRegistry,
 } from "../../../../tools/novel/index.js";
 import {
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
@@ -259,10 +249,6 @@ export function createChildNovelToolRegistry(
       }),
       logger,
     }).list(),
-    ...createNovelDraftToolRegistry({
-      service: unavailableDraftToolService,
-      logger,
-    }).list(),
   ]);
   const groups = new ToolGroupCatalog([
     loadToolGroupManifest(RUNTIME_TODO_TOOL_GROUP_MANIFEST),
@@ -272,7 +258,6 @@ export function createChildNovelToolRegistry(
     NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
     NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
     NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-    NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
   ]);
   return Object.freeze({ registry, groups });
 }
@@ -321,31 +306,3 @@ class ChildNovelIdentityFactory {
 function randomIdentity(prefix: string): string {
   return `${prefix}_${randomUUID().replaceAll("-", "")}`;
 }
-
-const unavailableDraftSessionService = Object.freeze({
-  startDraft() {
-    return Promise.reject(new TypeError("Draft tools are unavailable"));
-  },
-  getActiveDraft() {
-    return Promise.reject(new TypeError("Draft tools are unavailable"));
-  },
-  resetToMain() {
-    return Promise.reject(new TypeError("Draft tools are unavailable"));
-  },
-  rollback() {
-    return Promise.reject(new TypeError("Draft tools are unavailable"));
-  },
-}) as unknown as NovelDraftSessionService;
-
-const unavailableDraftToolService = new NovelDraftToolService({
-  drafts: unavailableDraftSessionService,
-  commits: Object.freeze({
-    commit: () => Promise.reject(new TypeError("Draft tools are unavailable")),
-  }) as unknown as NovelCommitService<never>,
-  changeSets: Object.freeze({
-    build: () => Promise.reject(new TypeError("Draft tools are unavailable")),
-  }) as unknown as NovelDraftChangeSetBuilder,
-  prepareRebase: () => {
-    throw new TypeError("Draft tools are unavailable");
-  },
-});

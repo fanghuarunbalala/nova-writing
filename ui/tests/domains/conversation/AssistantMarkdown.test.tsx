@@ -33,4 +33,29 @@ describe("AssistantMarkdown", () => {
       label: "主线",
     });
   });
+
+  it("chapter 引用渲染为 chip", () => {
+    render(
+      <AssistantMarkdown text={"<chapter id=\"chapter-301\">第一章</chapter>"} />,
+    );
+    expect(screen.getByText("第一章")).toBeTruthy();
+  });
+
+  it("自闭合引用从 resolver 取档案名，missing 态标记未建档", () => {
+    const resolveReference = (ref: { refKind: "character" | "location" | "outline" | "chapter" | "paragraph"; id: string }) =>
+      ref.id === "loc-7"
+        ? { label: "旧船坞 7 号", known: true }
+        : { label: "失踪的船员", known: false };
+    render(
+      <AssistantMarkdown
+        text={"<location id=\"loc-7\"/> 与 <character id=\"char-x\">失踪的船员</character>"}
+        resolveReference={resolveReference}
+      />,
+    );
+    expect(screen.getByText("旧船坞 7 号")).toBeTruthy();
+    expect(screen.getByText("失踪的船员").closest("button")).toHaveAttribute(
+      "title",
+      "暂未建立「失踪的船员」的档案",
+    );
+  });
 });

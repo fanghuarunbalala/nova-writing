@@ -42,6 +42,7 @@
   --font-body:    "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
     "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
   --font-mono:    "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  --font-kai:     "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
 
   /* ============ 字号 ============ */
   --fs-display: 19px;

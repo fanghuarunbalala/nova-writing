@@ -5,7 +5,7 @@
  */
 import { Avatar } from "../../../shared/primitives/Avatar.js";
 import { parseMessageText } from "./parseMessageText.js";
-import type { MessageReference } from "./MessageReference.js";
+import type { MessageReference, ResolvedReference } from "./MessageReference.js";
 import styles from "./UserMessage.module.css";
 
 export interface UserMessageProps {
@@ -13,6 +13,7 @@ export interface UserMessageProps {
   readonly text: string;
   readonly timestamp: number;
   readonly onReferenceClick?: (reference: MessageReference) => void;
+  readonly resolveReference?: (reference: MessageReference) => ResolvedReference | undefined;
 }
 
 function formatTime(timestamp: number): string {
@@ -21,7 +22,13 @@ function formatTime(timestamp: number): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function UserMessage({ sequence, text, timestamp, onReferenceClick }: UserMessageProps) {
+export function UserMessage({
+  sequence,
+  text,
+  timestamp,
+  onReferenceClick,
+  resolveReference,
+}: UserMessageProps) {
   return (
     <div className={styles.message} data-sequence={sequence}>
       <Avatar variant="user" text="我" size="md" />
@@ -30,7 +37,9 @@ export function UserMessage({ sequence, text, timestamp, onReferenceClick }: Use
           <span className={styles.who}>你</span>
           <time className={styles.time}>{formatTime(timestamp)}</time>
         </div>
-        <div className={styles.text}>{parseMessageText(text, onReferenceClick)}</div>
+        <div className={styles.text}>
+          {parseMessageText(text, onReferenceClick, resolveReference)}
+        </div>
       </div>
     </div>
   );

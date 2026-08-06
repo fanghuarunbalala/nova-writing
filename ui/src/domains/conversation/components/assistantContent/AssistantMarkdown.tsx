@@ -10,6 +10,7 @@ import remarkGfm from "remark-gfm";
 import {
   MessageReferenceChip,
   type MessageReference,
+  type ResolvedReference,
 } from "../MessageReference.js";
 import { extractReferenceTags } from "./extractReferenceTags.js";
 import styles from "./assistantMarkdown.module.css";
@@ -17,6 +18,8 @@ import styles from "./assistantMarkdown.module.css";
 export interface AssistantMarkdownProps {
   readonly text: string;
   readonly onReferenceClick?: (reference: MessageReference) => void;
+  /** 解析引用档案（名字/是否已建档）；自闭合引用与 missing 态依赖它。 */
+  readonly resolveReference?: (reference: MessageReference) => ResolvedReference | undefined;
 }
 
 const REFERENCE_PREFIX = "cc://";
@@ -24,6 +27,7 @@ const REFERENCE_PREFIX = "cc://";
 export function AssistantMarkdown({
   text,
   onReferenceClick,
+  resolveReference,
 }: AssistantMarkdownProps) {
   const content = extractReferenceTags(text);
   return (
@@ -38,10 +42,12 @@ export function AssistantMarkdown({
             if (typeof href === "string" && href.startsWith(REFERENCE_PREFIX)) {
               const reference = parseReferenceHref(href);
               if (reference !== null) {
+                const resolved = resolveReference?.(reference);
                 return (
                   <MessageReferenceChip
                     reference={reference}
                     onClick={onReferenceClick}
+                    resolved={resolved}
                   />
                 );
               }
@@ -65,7 +71,8 @@ function parseReferenceHref(href: string): MessageReference | null {
     kind !== "character" &&
     kind !== "location" &&
     kind !== "outline" &&
-    kind !== "paragraph"
+    kind !== "paragraph" &&
+    kind !== "chapter"
   ) {
     return null;
   }
@@ -76,7 +83,11 @@ function parseReferenceHref(href: string): MessageReference | null {
     idEnd < 0
       ? id
       : safeDecode(remainder.slice(idEnd + 1));
-  return Object.freeze({ refKind: kind, id, label });
+  return Object.freeze({
+    refKind: kind as MessageReference["refKind"],
+    id,
+    ...(label !== "" ? { label } : {}),
+  });
 }
 
 function safeDecode(value: string): string {

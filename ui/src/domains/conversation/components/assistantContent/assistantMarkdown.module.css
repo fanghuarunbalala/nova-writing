@@ -1,8 +1,16 @@
-/** Assistant Markdown 正文排版。Prose layout for assistant markdown content. */
+/**
+ * Assistant Markdown 正文排版（对齐原型 .msg-text 与 .nm-* 系列）。
+ * Prose layout aligned with the prototype .msg-text and .nm-* styles.
+ *
+ * 标准 Markdown 元素（react-markdown 输出）复刻原型视觉：标题带下边框、
+ * 表格为圆角容器且无竖线、引用块左侧 accent 细线 + 楷体、列表网格间距、
+ * code 带边框底、正文 text-wrap: pretty。
+ */
 .markdown {
   font-size: 15px;
   line-height: 1.75;
   min-width: 0;
+  text-wrap: pretty;
 }
 
 .markdown p {
@@ -13,19 +21,114 @@
   margin-bottom: 0;
 }
 
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  display: block;
+  font-family: var(--font-display);
+  color: var(--color-fg);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  margin: 14px 0 6px;
+  text-wrap: balance;
+}
+
+.markdown h1 {
+  font-size: 19px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.markdown h2 {
+  font-size: 16.5px;
+}
+
+.markdown h3 {
+  font-size: 15px;
+  color: var(--color-muted);
+}
+
+.markdown h1:first-child,
+.markdown h2:first-child,
+.markdown h3:first-child {
+  margin-top: 4px;
+}
+
 .markdown table {
+  width: 100%;
   border-collapse: collapse;
-  margin: 0.6em 0;
+  margin: 10px 0 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 
 .markdown th,
 .markdown td {
-  border: 1px solid rgba(127, 127, 127, 0.35);
-  padding: 4px 8px;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.markdown th {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--color-muted);
+  background: var(--color-surface-2);
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+}
+
+.markdown td {
+  color: var(--color-fg);
+  border-top: 1px solid var(--color-border);
+}
+
+.markdown th:first-child,
+.markdown td:first-child {
+  padding-left: 12px;
+}
+
+.markdown tr:hover td {
+  background: color-mix(in oklab, var(--color-accent) 4%, transparent);
 }
 
 .markdown code {
-  background: rgba(127, 127, 127, 0.15);
-  border-radius: 4px;
-  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  padding: 1px 5px;
+  color: var(--color-fg);
+}
+
+.markdown strong {
+  font-weight: 800;
+}
+
+.markdown blockquote {
+  margin: 10px 0 4px;
+  padding: 10px 14px;
+  border-left: 2px solid color-mix(in oklab, var(--color-accent) 45%, transparent);
+  background: color-mix(in oklab, var(--color-accent) 6%, transparent);
+  border-radius: 0 8px 8px 0;
+  color: var(--color-muted);
+  font-size: 13.5px;
+  font-family: var(--font-kai);
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 8px 0 4px;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+
+.markdown li {
+  font-size: 13.5px;
+  line-height: 1.6;
 }

@@ -80,7 +80,7 @@ export class NovelSystemPromptSection extends PromptSection {
       "- 当对话接近上下文上限时，系统会自动压缩之前的消息，所以对话不受上下文窗口限制；重要信息（设定、伏笔、作者偏好）**要及时记入回复或草稿**。",
     ];
     const interactive = [
-      "- 你在工具调用之外输出的所有文本都会显示给作者。用中文文本与作者交流；章节正文按作者指定的格式输出。**输出遵循标准 Markdown**（粗体、列表、标题、表格等均可）；引用既有实体时**必须使用**对应标签：<character id=\"...\">名字</character>、<location id=\"...\">名字</location>、<outline id=\"...\">名字</outline>、<paragraph id=\"...\">名字</paragraph>；未闭合或未知标签不会进入正文（会被剥离），其内部文本按纯文本显示。",
+      "- 你在工具调用之外输出的所有文本都会显示给作者。用中文文本与作者交流；章节正文按作者指定的格式输出。**输出遵循标准 Markdown**（粗体、列表、标题、表格等均可）；引用既有实体时**必须使用**对应标签：<character id=\"...\">名字</character>、<location id=\"...\">名字</location>、<outline id=\"...\">名字</outline>、<chapter id=\"...\">章节名</chapter>、<paragraph id=\"...\">段落名</paragraph>；也支持自闭合写法 <kind id=\"...\"/>（名字自动取档案）或 <kind id=\"...\" name=\"别名\"/>（覆盖显示名）；未闭合或未知标签不会进入正文（会被剥离），其内部文本按纯文本显示。",
     ];
     return [
       "# 系统与运行规则",

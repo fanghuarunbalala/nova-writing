@@ -10,6 +10,7 @@ import styles from "./ManuscriptChapterList.module.css";
 export interface ManuscriptChapterListProps {
   readonly workspaceId: string;
   readonly chapters: readonly ManuscriptChapter[];
+  readonly locate?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number };
   readonly onSelectBlock?: (blockId: string) => void;
   readonly onOpenDraft?: (changeSetId: string) => void;
 }
@@ -17,6 +18,7 @@ export interface ManuscriptChapterListProps {
 export function ManuscriptChapterList({
   workspaceId,
   chapters,
+  locate,
   onSelectBlock,
   onOpenDraft,
 }: ManuscriptChapterListProps) {
@@ -26,6 +28,7 @@ export function ManuscriptChapterList({
         <ManuscriptChapterCard
           key={chapter.chapterId}
           chapter={chapter}
+          locate={locate}
           onSelectBlock={onSelectBlock}
           onOpenDraft={onOpenDraft}
         />

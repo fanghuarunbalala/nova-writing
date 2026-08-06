@@ -16,6 +16,8 @@ import type { ScheduleTodoStore } from "../../domains/schedule/store/ScheduleTod
 import { ChatSurface } from "./ChatSurface.js";
 import { ContentSurface } from "./ContentSurface.js";
 import type { ContentTab } from "./contentTab.js";
+import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
+import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
 import { ScheduleSurface } from "./ScheduleSurface.js";
 import styles from "./MainArea.module.css";
 
@@ -36,6 +38,9 @@ export interface MainAreaProps {
   readonly onSelectCharacter?: (characterId: string) => void;
   readonly onSelectLocation?: (locationId: string) => void;
   readonly onTodoAction?: (id: string, action: string) => void;
+  readonly onReferenceClick?: (reference: MessageReference) => void;
+  readonly resolveReference?: ReferenceResolver;
+  readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
 }
 
 export function MainArea(props: MainAreaProps) {
@@ -51,6 +56,8 @@ export function MainArea(props: MainAreaProps) {
           logger={props.logger}
           conversationCatalog={props.conversationCatalog}
           onCreateConversation={props.onCreateConversation}
+          onReferenceClick={props.onReferenceClick}
+          resolveReference={props.resolveReference}
         />
       ) : mainView.state === "content" ? (
         <ContentSurface
@@ -63,6 +70,7 @@ export function MainArea(props: MainAreaProps) {
           onSelectOutlineUnit={props.onSelectOutlineUnit}
           onSelectCharacter={props.onSelectCharacter}
           onSelectLocation={props.onSelectLocation}
+          locateReference={props.locateReference}
         />
       ) : (
         <ScheduleSurface

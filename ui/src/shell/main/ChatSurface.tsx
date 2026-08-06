@@ -10,10 +10,12 @@ import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyS
 import { ConversationComposer } from "../../domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../domains/conversation/components/ConversationTimeline.js";
 import type { GenStatusProps } from "../../domains/conversation/components/GenStatus.js";
+import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
 import { useConversationProjection } from "../../domains/conversation/hooks/useConversationProjection.js";
 import { useConversationRuntimeStatus } from "../../domains/conversation/hooks/useConversationRuntimeStatus.js";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
+import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import { MainSubHead } from "./MainSubHead.js";
 import { mapProjectionTimeline } from "./chatSurfaceMapper.js";
 import styles from "./ChatSurface.module.css";
@@ -23,6 +25,8 @@ export interface ChatSurfaceProps {
   readonly logger?: Logger;
   readonly conversationCatalog: ConversationCatalogStore;
   readonly onCreateConversation: () => void;
+  readonly onReferenceClick?: (reference: MessageReference) => void;
+  readonly resolveReference?: ReferenceResolver;
 }
 
 export function ChatSurface({
@@ -30,6 +34,8 @@ export function ChatSurface({
   logger,
   conversationCatalog,
   onCreateConversation,
+  onReferenceClick,
+  resolveReference,
 }: ChatSurfaceProps) {
   const catalog = useExternalStore(conversationCatalog);
   const activeId = catalog.activeConversationId;
@@ -43,6 +49,8 @@ export function ChatSurface({
       conversationId={activeId}
       title={catalog.conversations.find((item) => item.id === activeId)?.title ?? "对话"}
       agentLabel={catalog.conversations.find((item) => item.id === activeId)?.agentLabel ?? ""}
+      onReferenceClick={onReferenceClick}
+      resolveReference={resolveReference}
     />
   );
 }
@@ -53,9 +61,19 @@ interface ActiveChatSurfaceProps {
   readonly conversationId: string;
   readonly title: string;
   readonly agentLabel: string;
+  readonly onReferenceClick?: (reference: MessageReference) => void;
+  readonly resolveReference?: ReferenceResolver;
 }
 
-function ActiveChatSurface({ api, logger, conversationId, title, agentLabel }: ActiveChatSurfaceProps) {
+function ActiveChatSurface({
+  api,
+  logger,
+  conversationId,
+  title,
+  agentLabel,
+  onReferenceClick,
+  resolveReference,
+}: ActiveChatSurfaceProps) {
   const { snapshot, enqueue, resume } = useConversationProjection(conversationId, { api, logger });
   const timeline = mapProjectionTimeline(snapshot.projection, "Novel Agent");
   const runtimeStatus = useConversationRuntimeStatus(snapshot.projection);
@@ -81,6 +99,8 @@ function ActiveChatSurface({ api, logger, conversationId, title, agentLabel }: A
         conversationId={conversationId}
         items={timeline}
         streamingSequence={snapshot.projection.lastAppliedSequence}
+        onMessageReferenceClick={onReferenceClick}
+        resolveReference={resolveReference}
       />
       <ConversationComposer
         conversationId={conversationId}

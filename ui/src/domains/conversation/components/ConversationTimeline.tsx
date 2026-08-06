@@ -4,6 +4,7 @@
  * 按 sequence 排序渲染时间线；新消息到达自动滚到底（用户上滚除外）。
  */
 import { useEffect, useRef, useState } from "react";
+import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ConversationTimelineItem as TimelineItem } from "../projection/ConversationTimelineItem.js";
 import type { MessageReference } from "./MessageReference.js";
 import { AssistantMessage } from "./AssistantMessage.js";
@@ -20,6 +21,7 @@ export interface ConversationTimelineProps {
   readonly items: readonly TimelineItem[];
   readonly streamingSequence?: number;
   readonly onMessageReferenceClick?: (reference: MessageReference) => void;
+  readonly resolveReference?: ReferenceResolver;
   readonly onProposalAction?: (changeSetId: string, action: "approve" | "reject" | "view-diff") => void;
 }
 
@@ -27,6 +29,7 @@ export function ConversationTimeline({
   items,
   streamingSequence,
   onMessageReferenceClick,
+  resolveReference,
   onProposalAction,
 }: ConversationTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -82,6 +85,7 @@ export function ConversationTimeline({
                   text={item.text}
                   timestamp={item.timestamp}
                   onReferenceClick={onMessageReferenceClick}
+                  resolveReference={resolveReference}
                 />
               );
             case "assistant":
@@ -97,6 +101,7 @@ export function ConversationTimeline({
                   text={item.text}
                   cards={item.cards}
                   streaming={item.streaming}
+                  onResolveReference={resolveReference}
                   onCardAction={(cardId, action, payload) => {
                     if (action === "view-diff" && typeof payload === "string") {
                       onProposalAction?.(payload, "view-diff");

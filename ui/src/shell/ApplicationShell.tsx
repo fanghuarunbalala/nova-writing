@@ -11,6 +11,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
+import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
+import {
+  createDomainReferenceResolver,
+  type ReferenceResolver,
+} from "../domains/conversation/reference/ReferenceResolver.js";
 import type { ToastStore } from "../shared/state/ToastStore.js";
 import type { MainViewRouter } from "../shared/routing/MainViewRouter.js";
 import type { InspectorRouter } from "../shared/routing/InspectorRouter.js";
@@ -104,6 +109,9 @@ export function ApplicationShell({
   const workspace = useExternalStore(workspaceAdapter);
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
+  const [locateReference, setLocateReference] = useState<
+    { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null
+  >(null);
   const workspaceId = workspace.current?.id;
   // extensions 当前由 NovelApp 在 NovelAppProvider 内提供；shell 内 TopBar/Sidebar
   // 的扩展 slot（TopBarMenuSlot / sidebarPanels）在 Phase B 落地后从此处取用。
@@ -175,6 +183,62 @@ export function ApplicationShell({
     [mainViewRouter],
   );
 
+  // 引用解析器：从各域 store 当前快照读取档案名与是否已建档。
+  const resolveReference: ReferenceResolver = useCallback(
+    createDomainReferenceResolver({
+      characters: domainStores.character,
+      locations: domainStores.location,
+      outline: domainStores.storyOutlineTree,
+      manuscript: domainStores.manuscriptStructure,
+    }),
+    [domainStores],
+  );
+
+  // 消息内引用点击：角色/地点/大纲 → inspector 档案；章节/段落 → 正文 pane 定位；
+  // 未建档 → toast 提示。
+  const handleReferenceClick = useCallback(
+    (reference: MessageReference) => {
+      const resolved = resolveReference(reference);
+      if (resolved !== undefined && !resolved.known) {
+        toastStore.push({
+          kind: "warn",
+          text: `暂未建立「${resolved.label}」的档案`,
+        });
+      }
+      switch (reference.refKind) {
+        case "character":
+          handleSelectCharacter(reference.id);
+          break;
+        case "location":
+          handleSelectLocation(reference.id);
+          break;
+        case "outline":
+          handleSelectOutlineUnit(reference.id);
+          break;
+        case "chapter":
+        case "paragraph": {
+          const kind = reference.refKind;
+          setContentTab("manuscript");
+          mainViewRouter.transition("content");
+          setLocateReference((current) => ({
+            kind,
+            id: reference.id,
+            nonce: (current?.nonce ?? 0) + 1,
+          }));
+          break;
+        }
+      }
+    },
+    [
+      handleSelectCharacter,
+      handleSelectLocation,
+      handleSelectOutlineUnit,
+      mainViewRouter,
+      resolveReference,
+      toastStore,
+    ],
+  );
+
   const handleSelectContentPane = useCallback(
     (pane: ContentTab) => {
       setContentTab(pane);
@@ -228,6 +292,9 @@ export function ApplicationShell({
           onSelectCharacter={handleSelectCharacter}
           onSelectLocation={handleSelectLocation}
           onTodoAction={handleTodoAction}
+          onReferenceClick={handleReferenceClick}
+          resolveReference={resolveReference}
+          locateReference={locateReference}
         />
         <InspectorHost
           inspectorRouter={inspectorRouter}

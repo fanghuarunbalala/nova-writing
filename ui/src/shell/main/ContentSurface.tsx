@@ -28,6 +28,7 @@ export interface ContentSurfaceProps {
   readonly onSelectOutlineUnit?: (unitId: string) => void;
   readonly onSelectCharacter?: (characterId: string) => void;
   readonly onSelectLocation?: (locationId: string) => void;
+  readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
 }
 
 export function ContentSurface({
@@ -40,6 +41,7 @@ export function ContentSurface({
   onSelectOutlineUnit,
   onSelectCharacter,
   onSelectLocation,
+  locateReference,
 }: ContentSurfaceProps) {
   const outline = useExternalStore(outlineTree);
   const manuscriptSnapshot = useExternalStore(manuscript);
@@ -65,6 +67,11 @@ export function ContentSurface({
           <ManuscriptChapterList
             workspaceId={workspaceId ?? ""}
             chapters={manuscriptSnapshot.chapters}
+            locate={
+              locateReference == null
+                ? undefined
+                : { kind: locateReference.kind, id: locateReference.id, nonce: locateReference.nonce }
+            }
           />
         );
         break;

@@ -17,7 +17,12 @@ export interface ManuscriptBlockProps {
 
 export function ManuscriptBlock({ block, onSelect }: ManuscriptBlockProps) {
   return (
-    <button type="button" className={styles.block} onClick={onSelect}>
+    <button
+      type="button"
+      className={styles.block}
+      onClick={onSelect}
+      data-block-id={block.blockId}
+    >
       <div className={styles.head}>
         <span className={styles.id}>{block.blockId}</span>
         {block.isDraft === true ? <span className={styles.draft}>草稿</span> : null}

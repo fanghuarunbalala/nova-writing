@@ -5,13 +5,24 @@
  * 解析为文本节点与 MessageReference chip 的混合渲染。
  */
 import type { ReactNode } from "react";
-import { MessageReferenceChip, type MessageReference } from "./MessageReference.js";
+import {
+  MessageReferenceChip,
+  type MessageReference,
+  type ResolvedReference,
+} from "./MessageReference.js";
 
-const INLINE_TAG_PATTERN = /<(character|location|outline)\s+id="([^"]+)">([^<]*)<\/\1>/g;
+const REF_KIND = "character|location|outline|chapter|paragraph";
+
+/** 成对或自闭合引用标签；自闭合时 group 4 为空。 */
+const INLINE_TAG_PATTERN = new RegExp(
+  `<(${REF_KIND})\\s+id="([^"]+)"(?:\\s+name="([^"]*)")?\\s*(?:\\/>|>([^<]*)<\\/\\1>)`,
+  "g",
+);
 
 export function parseMessageText(
   text: string,
   onReferenceClick?: (reference: MessageReference) => void,
+  resolveReference?: (reference: MessageReference) => ResolvedReference | undefined,
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
@@ -23,13 +34,21 @@ export function parseMessageText(
       nodes.push(text.slice(lastIndex, match.index));
     }
     const refKind = match[1] as MessageReference["refKind"];
+    const name = match[3];
+    const inner = match[4];
+    const label = name !== undefined && name !== "" ? name : (inner ?? "");
     const reference: MessageReference = {
       refKind,
       id: match[2],
-      label: match[3] || match[2],
+      ...(label !== "" ? { label } : {}),
     };
     nodes.push(
-      <MessageReferenceChip key={`ref-${key++}`} reference={reference} onClick={onReferenceClick} />,
+      <MessageReferenceChip
+        key={`ref-${key++}`}
+        reference={reference}
+        onClick={onReferenceClick}
+        resolved={resolveReference?.(reference)}
+      />,
     );
     lastIndex = match.index + match[0].length;
   }

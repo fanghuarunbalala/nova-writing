@@ -1,23 +1,36 @@
 /**
- * MessageReference chip 视觉。
+ * MessageReference 视觉（原型 .xr）：行内下划线可点击；missing 态虚线下划线。
+ * hover 显示 accent 浅底；focus-visible 沿用全局焦点描边。
  */
 .chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 7px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-2);
-  color: var(--color-accent-ink);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--color-accent) 55%, transparent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  border-radius: 2px;
   cursor: pointer;
   transition:
-    border-color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out);
+    background var(--duration-fast) var(--ease-out),
+    text-decoration-color var(--duration-fast) var(--ease-out);
 }
 
 .chip:hover {
-  border-color: var(--color-border-strong);
-  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+  background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  text-decoration-color: var(--color-accent-ink);
+}
+
+.missing {
+  text-decoration-style: dotted;
+  color: var(--color-muted);
+  cursor: help;
+}
+
+.missing:hover {
+  text-decoration-color: var(--color-muted);
 }

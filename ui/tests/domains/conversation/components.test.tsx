@@ -86,6 +86,32 @@ describe("UserMessage", () => {
       label: "林夏",
     });
   });
+
+  it("renders chapter and self-closing reference chips", async () => {
+    const user = userEvent.setup();
+    const onReferenceClick = vi.fn();
+    const resolveReference = () => ({ label: "第一章 · 旧船坞", known: true });
+    render(
+      <UserMessage
+        sequence={2}
+        text={'翻到<chapter id="chapter-301">第一章</chapter>和<location id="loc-dock7"/>。'}
+        timestamp={1000}
+        onReferenceClick={onReferenceClick}
+        resolveReference={resolveReference}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "第一章" }));
+    expect(onReferenceClick).toHaveBeenCalledWith({
+      refKind: "chapter",
+      id: "chapter-301",
+      label: "第一章",
+    });
+    await user.click(screen.getByRole("button", { name: "第一章 · 旧船坞" }));
+    expect(onReferenceClick).toHaveBeenCalledWith({
+      refKind: "location",
+      id: "loc-dock7",
+    });
+  });
 });
 
 describe("ThinkBlock / ThinkLine", () => {

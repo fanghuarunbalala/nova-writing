@@ -5,6 +5,18 @@
  * h4 14.5px/800；rev mono 11px/faint；draft-tag warn pill。
  * block 用 dashed border-top 分隔，首块无边框。
  */
+@keyframes block-flash {
+  0%, 100% {
+    background: transparent;
+  }
+  25% {
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  }
+}
+
+.flash {
+  animation: block-flash 1.8s ease;
+}
 .card {
   display: flex;
   flex-direction: column;

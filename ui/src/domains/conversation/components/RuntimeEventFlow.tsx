@@ -49,6 +49,9 @@ export function RuntimeEventFlow({ events }: RuntimeEventFlowProps) {
               {event.summary !== undefined ? (
                 <span className={styles.desc}>{event.summary}</span>
               ) : null}
+              {event.outcome === "failed" ? (
+                <span className={styles.failed}>失败</span>
+              ) : null}
             </li>
           ))}
         </ol>

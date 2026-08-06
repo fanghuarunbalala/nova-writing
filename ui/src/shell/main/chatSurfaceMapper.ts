@@ -62,14 +62,11 @@ export function mapProjectionTimeline(
           )
           .map(toTimelineCard)
           .filter((card): card is ConversationCardDescriptor => card !== null);
-        const eventFlow = projection.events
-          .filter(
-            (event) =>
-              event.direction === "output" &&
-              event.sequence >= item.startedSequence &&
-              event.sequence <= item.lastSequence,
-          )
-          .map(toEventView);
+        const eventFlow = eventFlowOf(
+          projection,
+          item.startedSequence,
+          item.lastSequence,
+        );
         const toolTraces = projection.toolTraces
           .filter(
             (trace) =>
@@ -108,6 +105,21 @@ export function mapProjectionTimeline(
   return Object.freeze(items);
 }
 
+const DELTA_EVENT_TYPE = "agent.assistant.message.delta";
+const TOOL_TRACE_EVENT_TYPE = "system.tool.trace.recorded";
+const TERMINAL_TRACE_STAGES = new Set([
+  "execution_completed",
+  "execution_failed",
+  "timed_out",
+  "cancelled",
+]);
+const TERMINAL_STAGE_LABEL: Record<string, string> = {
+  execution_completed: "完成",
+  execution_failed: "失败",
+  timed_out: "超时",
+  cancelled: "已取消",
+};
+
 function toEventView(
   event: ConversationProjectionSnapshot["events"][number],
 ): ConversationEventView {
@@ -117,6 +129,55 @@ function toEventView(
     eventType: event.eventType,
     family: familyOf(event.eventType),
     ...(event.summary === undefined ? {} : { summary: event.summary }),
+  });
+}
+
+/** 事件流只保留终态工具 trace：delta 与中间阶段均不进事件流。 */
+function eventFlowOf(
+  projection: ConversationProjectionSnapshot,
+  startedSequence: number,
+  lastSequence: number,
+): readonly ConversationEventView[] {
+  const views = projection.events
+    .filter(
+      (event) =>
+        event.direction === "output" &&
+        event.sequence >= startedSequence &&
+        event.sequence <= lastSequence &&
+        event.eventType !== DELTA_EVENT_TYPE &&
+        event.eventType !== TOOL_TRACE_EVENT_TYPE,
+    )
+    .map(toEventView);
+  const terminalTraces = projection.toolTraces
+    .filter(
+      (trace) =>
+        trace.sequence >= startedSequence &&
+        trace.sequence <= lastSequence &&
+        trace.stage !== undefined &&
+        TERMINAL_TRACE_STAGES.has(trace.stage),
+    )
+    .map((trace) => toTerminalTraceView(trace));
+  return Object.freeze(
+    [...views, ...terminalTraces].sort((left, right) => left.sequence - right.sequence),
+  );
+}
+
+function toTerminalTraceView(
+  trace: ConversationProjectionSnapshot["toolTraces"][number],
+): ConversationEventView {
+  const failed =
+    trace.stage !== undefined &&
+    (trace.stage === "execution_failed" ||
+      trace.stage === "timed_out" ||
+      trace.stage === "cancelled");
+  const stageLabel = trace.stage === undefined ? "完成" : TERMINAL_STAGE_LABEL[trace.stage] ?? trace.stage;
+  return Object.freeze({
+    sequence: trace.sequence,
+    timestamp: Date.parse(trace.timestamp) || 0,
+    eventType: TOOL_TRACE_EVENT_TYPE,
+    family: "system",
+    summary: `工具 ${trace.toolName} · ${stageLabel}`,
+    outcome: failed ? "failed" : "ok",
   });
 }
 

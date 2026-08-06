@@ -13,6 +13,8 @@ export interface ConversationEventView {
   readonly eventType: string;
   readonly family: "agent" | "system" | "novel" | "other";
   readonly summary?: string;
+  /** 终态工具调用结果（失败时事件流显示"失败"标记）。Terminal trace outcome. */
+  readonly outcome?: "ok" | "failed";
 }
 
 /** 工具调用行（对话内工具条）。Tool-trace row. */

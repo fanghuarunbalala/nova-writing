@@ -29,6 +29,25 @@ describe("RuntimeEventFlow", () => {
     expect(screen.getByText("agent.run.state.changed")).toBeInTheDocument();
     expect(screen.getByText("— → running")).toBeInTheDocument();
   });
+
+  it("marks failed terminal tool calls with a failure badge", () => {
+    render(
+      <RuntimeEventFlow
+        events={[
+          {
+            sequence: 5,
+            timestamp: Date.parse("2026-08-05T09:00:04.000Z"),
+            eventType: "system.tool.trace.recorded",
+            family: "system",
+            summary: "工具 NovelOutlineRead · 失败",
+            outcome: "failed",
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "展开本轮时序" }));
+    expect(screen.getByText("失败")).toBeInTheDocument();
+  });
 });
 
 describe("ToolStrip", () => {

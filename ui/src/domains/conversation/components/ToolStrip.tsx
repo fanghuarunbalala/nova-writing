@@ -15,31 +15,52 @@ export interface ToolStripProps {
   readonly traces: readonly ToolTraceView[];
 }
 
-interface ToolGroup {
-  toolName: string;
-  total: number;
-  ok: number;
-  failed: number;
-  traces: ToolTraceView[];
+interface ToolCallRow {
+  readonly traceId: string;
+  readonly outcome: "ok" | "failed";
+  readonly durationMs?: number;
 }
 
+interface ToolGroup {
+  toolName: string;
+  calls: ToolCallRow[];
+}
+
+const TERMINAL_STAGES = new Set([
+  "execution_completed",
+  "execution_failed",
+  "timed_out",
+  "cancelled",
+]);
+
 function groupTraces(traces: readonly ToolTraceView[]): readonly ToolGroup[] {
-  const byName = new Map<string, ToolGroup>();
+  const rawByName = new Map<string, ToolTraceView[]>();
   for (const trace of traces) {
-    const group = byName.get(trace.toolName) ?? {
-      toolName: trace.toolName,
-      total: 0,
-      ok: 0,
-      failed: 0,
-      traces: [],
-    };
-    group.total += 1;
-    if (trace.outcome === "ok") group.ok += 1;
-    else group.failed += 1;
-    group.traces = [...group.traces, trace];
-    byName.set(trace.toolName, group);
+    const rows = rawByName.get(trace.toolName) ?? [];
+    rows.push(trace);
+    rawByName.set(trace.toolName, rows);
   }
-  return [...byName.values()];
+  return [...rawByName.entries()].map(([toolName, traces]) => {
+    const byTraceId = new Map<string, ToolTraceView[]>();
+    for (const trace of traces) {
+      const rows = byTraceId.get(trace.traceId) ?? [];
+      rows.push(trace);
+      byTraceId.set(trace.traceId, rows);
+    }
+    const calls: ToolCallRow[] = [...byTraceId.values()].map((rows) => {
+      const terminal =
+        rows.find((row) => row.stage !== undefined && TERMINAL_STAGES.has(row.stage)) ??
+        rows[rows.length - 1];
+      return {
+        traceId: terminal.traceId,
+        outcome: terminal.outcome,
+        ...(terminal.durationMs === undefined
+          ? {}
+          : { durationMs: terminal.durationMs }),
+      };
+    });
+    return { toolName, calls };
+  });
 }
 
 export function ToolStrip({ traces }: ToolStripProps) {
@@ -55,6 +76,9 @@ export function ToolStrip({ traces }: ToolStripProps) {
       <div className={styles.chips}>
         {groups.map((group) => {
           const open = expanded === group.toolName;
+          const failedCount = group.calls.filter(
+            (call) => call.outcome === "failed",
+          ).length;
           return (
             <div key={group.toolName} className={styles.group}>
               <button
@@ -64,23 +88,20 @@ export function ToolStrip({ traces }: ToolStripProps) {
                 aria-expanded={open}
               >
                 <span>{group.toolName}</span>
-                <b>×{group.total}</b>
-                {group.failed > 0 ? <span className={styles.bad}>失败 {group.failed}</span> : null}
+                <b>×{group.calls.length}</b>
+                {failedCount > 0 ? <span className={styles.bad}>失败 {failedCount}</span> : null}
                 <span className={styles.chev}>{open ? "▾" : "›"}</span>
               </button>
               {open ? (
                 <div className={styles.rows}>
-                  {group.traces.map((trace) => (
-                    <div key={trace.traceId} className={styles.row}>
-                      <span className={[styles.outcome, trace.outcome === "ok" ? styles.ok : styles.failed].join(" ")}>
-                        {trace.outcome === "ok" ? "ok" : "failed"}
+                  {group.calls.map((call) => (
+                    <div key={call.traceId} className={styles.row}>
+                      <span className={[styles.outcome, call.outcome === "ok" ? styles.ok : styles.failed].join(" ")}>
+                        {call.outcome === "ok" ? "ok" : "failed"}
                       </span>
-                      <span className={styles.txt}>
-                        {trace.toolName}
-                        {trace.stage !== undefined ? ` · ${trace.stage}` : ""}
-                      </span>
-                      {trace.durationMs !== undefined ? (
-                        <span className={styles.time}>{(trace.durationMs / 1000).toFixed(1)}s</span>
+                      <span className={styles.txt}>{group.toolName}</span>
+                      {call.durationMs !== undefined ? (
+                        <span className={styles.time}>{(call.durationMs / 1000).toFixed(1)}s</span>
                       ) : null}
                     </div>
                   ))}

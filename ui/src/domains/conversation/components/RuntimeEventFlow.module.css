@@ -90,3 +90,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.failed {
+  flex: none;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-danger);
+  background: color-mix(in oklab, var(--color-danger) 12%, transparent);
+  border-radius: 999px;
+  padding: 1px 7px;
+}

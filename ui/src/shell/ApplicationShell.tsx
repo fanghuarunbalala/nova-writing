@@ -133,6 +133,15 @@ export function ApplicationShell({
     void domainStores.conversationCatalog.createConversation();
   }, [domainStores]);
 
+  // 选择对话时同步切换主视图到 chat，确保 ChatSurface 渲染对应会话
+  const handleSelectConversation = useCallback(
+    (id: string) => {
+      domainStores.conversationCatalog.selectConversation(id);
+      mainViewRouter.transition("chat");
+    },
+    [domainStores, mainViewRouter],
+  );
+
   const handleSelectOutlineUnit = useCallback(
     (unitId: string) => {
       domainStores.storyOutlineTree.selectUnit(unitId);
@@ -196,6 +205,7 @@ export function ApplicationShell({
           conversationCatalog={domainStores.conversationCatalog}
           novelOverview={domainStores.novelOverview}
           onCreateConversation={handleCreateConversation}
+          onSelectConversation={handleSelectConversation}
           schedule={domainStores.schedule}
           scheduleTodo={domainStores.scheduleTodo}
           contentTab={contentTab}

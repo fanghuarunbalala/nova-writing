@@ -13,6 +13,9 @@
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--color-border);
   z-index: 20;
+  /* 无边框窗口下，TopBar 整体作为拖拽区域（spec 5.4 DesktopWindowPort）。
+     交互元素（按钮、输入）需单独标记 -webkit-app-region: no-drag。 */
+  -webkit-app-region: drag;
 }
 
 .spacer {
@@ -44,6 +47,7 @@
   padding: 2px 6px;
   margin: -2px -6px;
   transition: background var(--duration-fast) var(--ease-out);
+  -webkit-app-region: no-drag;
 }
 
 .wsName:hover {
@@ -55,4 +59,9 @@
   color: var(--color-faint);
   font-family: var(--font-mono);
   white-space: nowrap;
+}
+
+/* 所有按钮（IconButton / TopBarAction）在 drag 区域内需标记 no-drag 才可点击 */
+.topbar button {
+  -webkit-app-region: no-drag;
 }

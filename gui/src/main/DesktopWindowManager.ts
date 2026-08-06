@@ -230,6 +230,12 @@ export function createSecureWindowOptions(
     minHeight: 720,
     show: false,
     backgroundColor: "#F7F8FA",
+    // 隐藏原生 title bar，仅保留 in-app TopBar（spec 5.4 DesktopWindowPort）。
+    // macOS 用 hiddenInset 保留 traffic lights 并 inset 内容；其它平台 frame:false
+    // 完全无边框，由 DesktopTitleBar 的 minimize/maximize/close 按钮提供窗口控制。
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset" as const }
+      : { frame: false as const }),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,

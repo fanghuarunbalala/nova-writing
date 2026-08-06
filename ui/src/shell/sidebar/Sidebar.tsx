@@ -23,6 +23,11 @@ export interface SidebarProps {
   readonly conversationCatalog: ConversationCatalogStore;
   readonly novelOverview: NovelOverviewStore;
   readonly onCreateConversation: () => void;
+  /**
+   * 选择对话时触发。宿主应在此同时调用 catalog.selectConversation(id)
+   * 与 mainViewRouter.transition("chat")，以保证 ChatSurface 切换到对应对话。
+   */
+  readonly onSelectConversation: (id: string) => void;
   readonly schedule: ScheduleStore;
   readonly scheduleTodo: ScheduleTodoStore;
   readonly contentTab: ContentTab;
@@ -38,6 +43,7 @@ export function Sidebar({
   conversationCatalog,
   novelOverview,
   onCreateConversation,
+  onSelectConversation,
   schedule,
   scheduleTodo,
   contentTab,
@@ -54,10 +60,11 @@ export function Sidebar({
         onCreate={onCreateConversation}
         disabled={snapshot.workspaceId === undefined}
       />
+      <ContentSection overview={novelOverview} activePane={contentTab} onSelectPane={onSelectContentPane} />
       <SidebarSection label="对话" count={snapshot.conversations.length}>
         <ConversationListSection
           store={conversationCatalog}
-          onSelect={(id) => conversationCatalog.selectConversation(id)}
+          onSelect={onSelectConversation}
         />
       </SidebarSection>
       {/*
@@ -67,7 +74,6 @@ export function Sidebar({
       <SidebarSection label="待办">
         <TodoSection schedule={schedule} scheduleTodo={scheduleTodo} onAction={onTodoAction} />
       </SidebarSection>
-      <ContentSection overview={novelOverview} activePane={contentTab} onSelectPane={onSelectContentPane} />
       <WorkspaceFootingSection
         workspaceId={workspaceId}
         label={workspaceLabel}

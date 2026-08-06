@@ -15,7 +15,7 @@ import type { ScheduleStore } from "../../domains/schedule/store/ScheduleStore.j
 import type { ScheduleTodoStore } from "../../domains/schedule/store/ScheduleTodoStore.js";
 import { ChatSurface } from "./ChatSurface.js";
 import { ContentSurface } from "./ContentSurface.js";
-import type { ContentTab } from "./ContentTabs.js";
+import type { ContentTab } from "./contentTab.js";
 import { ScheduleSurface } from "./ScheduleSurface.js";
 import styles from "./MainArea.module.css";
 
@@ -31,7 +31,6 @@ export interface MainAreaProps {
   readonly schedule: ScheduleStore;
   readonly scheduleTodo: ScheduleTodoStore;
   readonly contentTab: ContentTab;
-  readonly onContentTabChange: (tab: ContentTab) => void;
   readonly onCreateConversation: () => void;
   readonly onSelectOutlineUnit?: (unitId: string) => void;
   readonly onSelectCharacter?: (characterId: string) => void;
@@ -57,7 +56,6 @@ export function MainArea(props: MainAreaProps) {
         <ContentSurface
           workspaceId={workspaceId}
           value={props.contentTab}
-          onChange={props.onContentTabChange}
           outlineTree={props.outlineTree}
           manuscript={props.manuscript}
           characters={props.characters}

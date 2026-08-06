@@ -5,7 +5,7 @@
  */
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
 import type { NovelOverviewStore } from "../../../domains/novel/overview/NovelOverviewStore.js";
-import type { ContentTab } from "../../main/ContentTabs.js";
+import type { ContentTab } from "../../main/contentTab.js";
 import { SidebarSection } from "../SidebarSection.js";
 import styles from "./ContentSection.module.css";
 

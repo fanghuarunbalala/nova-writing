@@ -1,11 +1,9 @@
 /**
- * main 区组件测试：MainSubHead / ContentTabs / chatSurfaceMapper。
+ * main 区组件测试：MainSubHead / chatSurfaceMapper。
  */
 import { describe, expect, it, vi } from "vitest";
-import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ContentTabs } from "../../src/shell/main/ContentTabs.js";
 import { MainSubHead } from "../../src/shell/main/MainSubHead.js";
 import { mapProjectionTimeline } from "../../src/shell/main/chatSurfaceMapper.js";
 import type { ConversationProjectionSnapshot } from "@novel/core";
@@ -35,24 +33,6 @@ describe("MainSubHead", () => {
     expect(screen.getByText("Novel Agent")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "返回" }));
     expect(onBack).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("ContentTabs", () => {
-  it("switches tabs via local state", async () => {
-    const user = userEvent.setup();
-    function Harness() {
-      const [tab, setTab] = useState<"outline" | "manuscript">("outline");
-      return (
-        <ContentTabs value={tab} onChange={setTab}>
-          {(value) => (value === "outline" ? <span>大纲面板</span> : <span>正方面板</span>)}
-        </ContentTabs>
-      );
-    }
-    render(<Harness />);
-    expect(screen.getByText("大纲面板")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "正文" }));
-    expect(screen.getByText("正方面板")).toBeInTheDocument();
   });
 });
 

@@ -34,7 +34,7 @@ import type { ConversationCardProjectorRegistry } from "../domains/conversation/
 import type { InspectorRendererRegistry } from "./inspector/InspectorRendererRegistry.js";
 import { InspectorHost } from "./inspector/InspectorHost.js";
 import { MainArea } from "./main/MainArea.js";
-import type { ContentTab } from "./main/ContentTabs.js";
+import type { ContentTab } from "./main/contentTab.js";
 import { OverlaysHost } from "./overlays/OverlaysHost.js";
 import { Sidebar } from "./sidebar/Sidebar.js";
 import { TopBar } from "./topbar/TopBar.js";
@@ -227,7 +227,6 @@ export function ApplicationShell({
           schedule={domainStores.schedule}
           scheduleTodo={domainStores.scheduleTodo}
           contentTab={contentTab}
-          onContentTabChange={setContentTab}
           onCreateConversation={handleCreateConversation}
           onSelectOutlineUnit={handleSelectOutlineUnit}
           onSelectCharacter={handleSelectCharacter}

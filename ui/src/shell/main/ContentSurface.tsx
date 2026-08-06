@@ -1,7 +1,8 @@
 /**
  * ContentSurface
  *
- * 内容视图：四 tab（大纲/正文/角色/地点），数据来自 novel 域 store。
+ * 内容视图：按侧栏选中的 pane（大纲/正文/人物/地点）渲染对应域内容；
+ * 数据来自 novel 域 store。
  * 内容区用 .paneBody + .paneInner 包裹（原型 .pane-body + .pane-inner），
  * 提供 padding 与 max-width 1000 居中。
  */
@@ -14,13 +15,12 @@ import type { LocationStore } from "../../domains/novel/location/store/LocationS
 import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
-import { ContentTabs, type ContentTab } from "./ContentTabs.js";
+import type { ContentTab } from "./contentTab.js";
 import styles from "./ContentSurface.module.css";
 
 export interface ContentSurfaceProps {
   readonly workspaceId: string | undefined;
   readonly value: ContentTab;
-  readonly onChange: (tab: ContentTab) => void;
   readonly outlineTree: StoryOutlineTreeStore;
   readonly manuscript: ManuscriptStructureStore;
   readonly characters: CharacterStore;
@@ -33,7 +33,6 @@ export interface ContentSurfaceProps {
 export function ContentSurface({
   workspaceId,
   value,
-  onChange,
   outlineTree,
   manuscript,
   characters,
@@ -92,9 +91,7 @@ export function ContentSurface({
   };
   return (
     <div className={styles.surface}>
-      <ContentTabs value={value} onChange={onChange}>
-        {renderTab}
-      </ContentTabs>
+      {renderTab(value)}
     </div>
   );
 }

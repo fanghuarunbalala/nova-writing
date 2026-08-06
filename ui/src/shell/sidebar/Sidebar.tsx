@@ -9,7 +9,7 @@ import type { ConversationCatalogStore } from "../../domains/conversation/store/
 import type { NovelOverviewStore } from "../../domains/novel/overview/NovelOverviewStore.js";
 import type { ScheduleStore } from "../../domains/schedule/store/ScheduleStore.js";
 import type { ScheduleTodoStore } from "../../domains/schedule/store/ScheduleTodoStore.js";
-import type { ContentTab } from "../main/ContentTabs.js";
+import type { ContentTab } from "../main/contentTab.js";
 import { ContentSection } from "./sections/ContentSection.js";
 import { ConversationListSection } from "./sections/ConversationListSection.js";
 import { NewConversationSection } from "./sections/NewConversationSection.js";

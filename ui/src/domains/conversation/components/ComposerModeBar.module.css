@@ -1,17 +1,188 @@
 /**
- * ComposerModeBar 视觉（原型 .mode-bar）。
+ * ComposerModeBar 视觉（原型 .mode-bar + .mode-switch）。
  *
- * 置于 form 下方：max-width 880px 居中，margin-top 10px，border-top 1px，
- * padding-top 9px，flex space-between。当前使用 Tabs pill 实现 4 模式切换
- * （原型为单按钮循环 3 模式，模式系统差异待 spec 统一）。
+ * 置于 form 下方：max-width 880px 居中，border-top 分隔，左右 space-between
+ * （左侧切换按钮 + 右侧模式提示点）。四种模式低饱和配色：
+ * 对话=砖红 / 计划=蓝 / 改写=橙 / 续写=绿。
  */
 .bar {
   max-width: 880px;
   margin: 10px auto 0;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
   border-top: 1px solid var(--color-border);
   padding: 9px 0 0;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 13px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-strong);
+  background: color-mix(in oklab, var(--color-surface) 62%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 12.5px;
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.switch:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  border-color: color-mix(in oklab, var(--color-accent) 32%, var(--color-border-strong));
+}
+
+.switch:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-accent) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.switch:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.name {
+  color: var(--color-accent-ink);
+}
+
+.desc {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-faint);
+}
+
+.chev {
+  font-size: 11px;
+  color: var(--color-faint);
+  font-weight: 500;
+  opacity: 0.62;
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+}
+
+.switch:hover:not(:disabled) .chev {
+  transform: translateX(2px);
+  opacity: 0.85;
+}
+
+/* 模式配色：低饱和 + 半透明底 */
+.chat {
+  border-color: color-mix(in oklab, var(--color-accent) 28%, var(--color-border-strong));
+  background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+}
+
+.chat .name {
+  color: var(--color-accent-ink);
+}
+
+.chat .desc {
+  color: color-mix(in oklab, var(--color-accent) 58%, var(--color-faint));
+}
+
+.chat:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  border-color: color-mix(in oklab, var(--color-accent) 42%, var(--color-border-strong));
+}
+
+.plan {
+  border-color: color-mix(in oklab, var(--color-info) 26%, var(--color-border-strong));
+  background: color-mix(in oklab, var(--color-info) 7%, transparent);
+}
+
+.plan .name {
+  color: color-mix(in oklab, var(--color-info) 86%, var(--color-fg));
+}
+
+.plan .desc {
+  color: color-mix(in oklab, var(--color-info) 62%, var(--color-faint));
+}
+
+.plan:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-info) 12%, transparent);
+  border-color: color-mix(in oklab, var(--color-info) 42%, var(--color-border-strong));
+}
+
+.rewrite {
+  border-color: color-mix(in oklab, var(--color-warn) 26%, var(--color-border-strong));
+  background: color-mix(in oklab, var(--color-warn) 7%, transparent);
+}
+
+.rewrite .name {
+  color: color-mix(in oklab, var(--color-warn) 82%, var(--color-fg));
+}
+
+.rewrite .desc {
+  color: color-mix(in oklab, var(--color-warn) 58%, var(--color-faint));
+}
+
+.rewrite:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-warn) 12%, transparent);
+  border-color: color-mix(in oklab, var(--color-warn) 42%, var(--color-border-strong));
+}
+
+.continue {
+  border-color: color-mix(in oklab, var(--color-success) 28%, var(--color-border-strong));
+  background: color-mix(in oklab, var(--color-success) 7%, transparent);
+}
+
+.continue .name {
+  color: color-mix(in oklab, var(--color-success) 82%, var(--color-fg));
+}
+
+.continue .desc {
+  color: color-mix(in oklab, var(--color-success) 58%, var(--color-faint));
+}
+
+.continue:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-success) 12%, transparent);
+  border-color: color-mix(in oklab, var(--color-success) 42%, var(--color-border-strong));
+}
+
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--color-faint);
+  letter-spacing: 0.01em;
+  opacity: 0.74;
+}
+
+.hintItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dot-chat {
+  background: color-mix(in oklab, var(--color-accent) 52%, transparent);
+}
+
+.dot-plan {
+  background: color-mix(in oklab, var(--color-info) 55%, transparent);
+}
+
+.dot-rewrite {
+  background: color-mix(in oklab, var(--color-warn) 55%, transparent);
+}
+
+.dot-continue {
+  background: color-mix(in oklab, var(--color-success) 52%, transparent);
 }

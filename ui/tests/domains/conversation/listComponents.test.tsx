@@ -104,12 +104,17 @@ describe("NewConversationButton / ComposerModeBar / MessageReferenceChip", () =>
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it("ComposerModeBar switches mode", async () => {
+  it("ComposerModeBar cycles mode and renders hint", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<ComposerModeBar mode="chat" onChange={onChange} />);
-    await user.click(screen.getByText("改写"));
-    expect(onChange).toHaveBeenCalledWith("rewrite");
+    const { rerender } = render(<ComposerModeBar mode="chat" onChange={onChange} />);
+    expect(screen.getByText("直接对话推进创作")).toBeInTheDocument();
+    expect(screen.getByText("续写")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /执行模式：对话/ }));
+    expect(onChange).toHaveBeenCalledWith("plan");
+    rerender(<ComposerModeBar mode="rewrite" onChange={onChange} />);
+    await user.click(screen.getByRole("button", { name: /执行模式：改写/ }));
+    expect(onChange).toHaveBeenLastCalledWith("continue");
   });
 
   it("MessageReferenceChip fires onClick with the reference", async () => {

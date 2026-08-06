@@ -21,6 +21,7 @@ import {
   NodePlaintextCredentialStore,
   NodeWorkspaceStoreLocator,
 } from "@novel/core/node";
+import { ELECTRON_WORKSPACE_IPC_CHANNEL } from "../shared/ElectronIpcProtocol.js";
 import { DesktopBootstrapApiTransport } from "./DesktopBootstrapApiTransport.js";
 import { createDesktopApplicationMenuTemplate } from "./DesktopApplicationMenu.js";
 import { resolveDesktopMainPaths } from "./DesktopMainPaths.js";
@@ -115,6 +116,12 @@ const workspaceService = new DesktopWorkspaceService({
       ? {}
       : { providerRequestDumpPath }),
   }),
+  onOpened: (senderId, session) => {
+    const window =
+      desktopApplicationRef?.windowManager.getWindowBySender(senderId) ??
+      desktopApplicationRef?.windowManager.getPrimaryWindow();
+    window?.webContents.send(ELECTRON_WORKSPACE_IPC_CHANNEL.opened, session);
+  },
   recentStore: new DesktopWorkspaceRecentStore({
     filePath: join(app.getPath("userData"), "workspace-recent.json"),
     logger: mainLogger,

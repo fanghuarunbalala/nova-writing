@@ -51,6 +51,10 @@ export interface ElectronWorkspaceBridge {
     reference: ElectronWorkspaceReference,
   ): Promise<ElectronBridgeResult<ElectronWorkspaceSession>>;
   close(): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+  /** 订阅主进程 workspace 已打开推送（renderer 错过 open 响应时同步状态）。Subscribes to workspace-opened push events. */
+  onWorkspaceOpened(
+    listener: (session: ElectronWorkspaceSession) => void,
+  ): () => void;
 }
 
 export interface ElectronConfigurationBridge {

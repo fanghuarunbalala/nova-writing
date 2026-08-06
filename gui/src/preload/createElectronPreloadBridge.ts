@@ -86,6 +86,29 @@ export function createElectronPreloadBridge(
         invoke<ElectronBridgeAcknowledgement>(
           ELECTRON_WORKSPACE_IPC_CHANNEL.close,
         ),
+      onWorkspaceOpened: (
+        listener: (session: ElectronWorkspaceSession) => void,
+      ) => {
+        if (
+          options.ipcRenderer.on === undefined ||
+          options.ipcRenderer.removeListener === undefined
+        ) {
+          return () => undefined;
+        }
+        const handler = (_event: unknown, value: unknown): void => {
+          if (value !== undefined) listener(value as ElectronWorkspaceSession);
+        };
+        options.ipcRenderer.on(
+          ELECTRON_WORKSPACE_IPC_CHANNEL.opened,
+          handler,
+        );
+        return () => {
+          options.ipcRenderer.removeListener?.(
+            ELECTRON_WORKSPACE_IPC_CHANNEL.opened,
+            handler,
+          );
+        };
+      },
     }),
     window: Object.freeze({
       minimize: () =>

@@ -22,6 +22,7 @@ import type {
   ElectronWindowBridge,
   ElectronWorkspaceBridge,
   ElectronWorkspaceReference,
+  ElectronWorkspaceSession,
 } from "../shared/index.js";
 
 declare global {
@@ -173,7 +174,13 @@ function resolveWorkspaceBridge(value: unknown): ElectronWorkspaceBridge | undef
     throw bridgeUnavailable();
   }
   const record = value as Record<string, unknown>;
-  const methods = ["close", "listRecent", "open", "select"] as const;
+  const methods = [
+    "close",
+    "listRecent",
+    "onWorkspaceOpened",
+    "open",
+    "select",
+  ] as const;
   const keys = Object.keys(record).sort();
   if (
     keys.length !== methods.length ||
@@ -188,6 +195,9 @@ function resolveWorkspaceBridge(value: unknown): ElectronWorkspaceBridge | undef
     listRecent: () => bridge.listRecent(),
     open: (reference: ElectronWorkspaceReference) => bridge.open(reference),
     close: () => bridge.close(),
+    onWorkspaceOpened: (
+      listener: (session: ElectronWorkspaceSession) => void,
+    ) => bridge.onWorkspaceOpened(listener),
   });
 }
 

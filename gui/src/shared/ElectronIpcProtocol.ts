@@ -19,6 +19,7 @@ export const ELECTRON_WORKSPACE_IPC_CHANNEL = Object.freeze({
   select: "novel.workspace.v1.select",
   listRecent: "novel.workspace.v1.list-recent",
   open: "novel.workspace.v1.open",
+  opened: "novel.workspace.v1.opened",
   close: "novel.workspace.v1.close",
 } as const);
 

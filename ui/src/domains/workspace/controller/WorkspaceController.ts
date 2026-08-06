@@ -98,6 +98,17 @@ export class WorkspaceController {
     });
   }
 
+  /**
+   * 应用主进程推送的已打开会话：renderer 错过 open 响应（重启/自动打开）时
+   * 同步 current 与 ready 状态。Applies a workspace-opened push from the main
+   * process so the renderer syncs state when it missed the open response.
+   */
+  notifyOpened(session: WorkspaceSessionView): void {
+    const captured = captureWorkspaceSession(session);
+    if (this.snapshot.current?.id === captured.id) return;
+    this.publish({ phase: "ready", current: captured });
+  }
+
   chooseAndOpen(): Promise<WorkspaceSessionView | undefined> {
     return this.runExclusive(async () => {
       this.publish({ phase: "selecting" });

@@ -25,6 +25,11 @@ export interface DesktopWorkspaceServiceOptions {
     "resolve" | "getByWorkspaceId"
   >;
   readonly applicationFactory?: DesktopWorkspaceApiApplicationFactory;
+  /** open 成功后向对应 sender 推送会话（主进程 -> renderer 状态通道）。 */
+  readonly onOpened?: (
+    senderId: number,
+    session: ElectronWorkspaceSession,
+  ) => void;
   /** 最近项目持久化；不传时保持内存态（跨重启不保留）。 */
   readonly recentStore?: DesktopWorkspaceRecentStorePort;
   readonly logger?: Logger;
@@ -73,6 +78,7 @@ export class DesktopWorkspaceService
   private readonly picker: DesktopWorkspaceDirectoryPicker;
   private readonly locator: DesktopWorkspaceServiceOptions["locator"];
   private readonly applicationFactory?: DesktopWorkspaceApiApplicationFactory;
+  private readonly onOpened?: DesktopWorkspaceServiceOptions["onOpened"];
   private readonly recentStore?: DesktopWorkspaceRecentStorePort;
   private readonly logger: Logger;
   private readonly selections = new Map<string, PendingSelection>();
@@ -84,6 +90,7 @@ export class DesktopWorkspaceService
     this.picker = options.picker;
     this.locator = options.locator;
     this.applicationFactory = options.applicationFactory;
+    this.onOpened = options.onOpened;
     this.recentStore = options.recentStore;
     this.logger = (options.logger ?? noopLogger).child({
       component: "desktop_workspace_service",
@@ -143,6 +150,7 @@ export class DesktopWorkspaceService
     this.recent.set(session.id, session);
     this.recentHydrated = true;
     await this.recordRecent(session);
+    this.onOpened?.(senderId, session);
     this.logger.info("desktop_workspace.open_completed", { senderId });
     return session;
   }
@@ -191,8 +199,10 @@ export class DesktopWorkspaceService
       this.logger.debug("desktop_workspace.recent_hydrated", {
         recentCount: persisted.length,
       });
-    } catch {
-      this.logger.warn("desktop_workspace.recent_hydrate_failed");
+    } catch (error) {
+      this.logger.warn("desktop_workspace.recent_hydrate_failed", {
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
     }
   }
 
@@ -200,8 +210,10 @@ export class DesktopWorkspaceService
     if (this.recentStore === undefined) return;
     try {
       await this.recentStore.record(session);
-    } catch {
-      this.logger.warn("desktop_workspace.recent_record_failed");
+    } catch (error) {
+      this.logger.warn("desktop_workspace.recent_record_failed", {
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
     }
   }
 }

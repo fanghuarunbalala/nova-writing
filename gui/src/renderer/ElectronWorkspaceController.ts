@@ -15,7 +15,7 @@ export function createElectronWorkspaceController(
 ): WorkspaceController | undefined {
   const workspaces = bridge.workspaces;
   if (workspaces === undefined) return undefined;
-  return new WorkspaceController({
+  const controller = new WorkspaceController({
     logger,
     picker: {
       pickWorkspace: async () => unwrap(await workspaces.select()),
@@ -29,6 +29,9 @@ export function createElectronWorkspaceController(
       },
     },
   });
+  // 主进程 workspace 已打开推送：renderer 错过 open 响应（重启/自动打开）时同步。
+  workspaces.onWorkspaceOpened((session) => controller.notifyOpened(session));
+  return controller;
 }
 
 function unwrap<TValue>(result: ElectronBridgeResult<TValue>): TValue {

@@ -2,7 +2,7 @@
 import {
   SubagentDefinitionCatalog,
   SubagentTaskQueryService,
-  createSubagentTaskToolRegistry,
+  createAgentExecutionToolRegistry,
   type SubagentBinding,
   type SubagentTaskLimits,
 } from "../src/index.js";
@@ -35,7 +35,7 @@ const query = new SubagentTaskQueryService({
   limits,
 });
 
-const registry = createSubagentTaskToolRegistry({
+const registry = createAgentExecutionToolRegistry({
   definitions,
   policy: {
     allowedAgentTypes: ["explore"],
@@ -55,14 +55,11 @@ const registry = createSubagentTaskToolRegistry({
     subscribe() { throw new Error("not implemented"); },
   },
   query,
-  artifactResolver: {
-    async resolve() { return []; },
-  },
   cancellation: {
     async requestCancellation() { return "cancellation_requested"; },
   },
 });
 
-void registry.require("Task").descriptor.parameters;
+void registry.require("Agent").descriptor.parameters;
 void registry.require("TaskGet").handler;
-void registry.require("TaskCancel").handler;
+void registry.require("TaskStop").handler;

@@ -1,4 +1,4 @@
-/** Defines the TaskCancel schema, descriptor, ownership checks, and cancellation-intent handler. */
+/** Defines the TaskStop schema, descriptor, ownership checks, and cancellation-intent handler. */
 import { Type } from "typebox";
 import type { JsonValue } from "../../event/protocol/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
@@ -25,10 +25,13 @@ import {
   type ToolResult,
 } from "../../tooling/protocol/index.js";
 
-export const SubagentTaskCancelParametersSchema = Type.Object(
+export const SubagentTaskStopParametersSchema = Type.Object(
   { taskId: Type.String({ minLength: 1, maxLength: 256 }) },
   { additionalProperties: false },
 );
+
+export const SubagentTaskCancelParametersSchema =
+  SubagentTaskStopParametersSchema;
 
 export type SubagentTaskCancellationIntentOutcome =
   | "cancellation_requested"
@@ -41,25 +44,25 @@ export interface SubagentTaskCancellationIntentPort {
   ): Promise<SubagentTaskCancellationIntentOutcome>;
 }
 
-export interface CreateTaskCancelToolOptions {
+export interface CreateTaskStopToolOptions {
   readonly bindings: SubagentBindingStore;
   readonly cancellation: SubagentTaskCancellationIntentPort;
   readonly logger?: Logger;
 }
 
-export function createTaskCancelTool(
-  options: CreateTaskCancelToolOptions,
+export function createTaskStopTool(
+  options: CreateTaskStopToolOptions,
 ): RegisteredTool {
   const logger = (options.logger ?? noopLogger).child({
-    component: "subagent_task_cancel_tool",
+    component: "subagent_task_stop_tool",
   });
   return defineTool({
     descriptor: {
-      name: "TaskCancel",
+      name: "TaskStop",
       version: "1.0.0",
-      label: "Task Cancel",
+      label: "Task Stop",
       description: "Requests cancellation of one owned asynchronous Subagent Task without waiting for child Runtime termination.",
-      parameters: SubagentTaskCancelParametersSchema,
+      parameters: SubagentTaskStopParametersSchema,
     },
     handler: {
       async execute(context, arguments_) {
@@ -87,14 +90,14 @@ export function createTaskCancelTool(
             SUBAGENT_CANCELLATION_REASON.explicit,
           );
         } catch {
-          throw taskCancelFailure(context);
+          throw taskStopFailure(context);
         }
         const cancellation = captureSubagentTaskCancellation({
           schemaVersion: SUBAGENT_TASK_SCHEMA_VERSION,
           taskId: binding.subagentId,
           status,
         });
-        logger.info("runtime.subagent.task_cancel_tool.completed", {
+        logger.info("runtime.subagent.task_stop_tool.completed", {
           taskId: cancellation.taskId,
           parentConversationId: context.conversationId,
           parentRunId: context.runId,
@@ -132,7 +135,7 @@ function isTerminal(status: SubagentBinding["status"]): boolean {
     status === SUBAGENT_STATUS.orphaned;
 }
 
-function taskCancelFailure(context: ToolExecutionContext): ToolError {
+function taskStopFailure(context: ToolExecutionContext): ToolError {
   return new ToolError({
     code: "SUBAGENT_TASK_CANCEL_FAILED",
     category: "execution",
@@ -141,7 +144,11 @@ function taskCancelFailure(context: ToolExecutionContext): ToolError {
     conversationId: context.conversationId,
     runId: context.runId,
     toolCallId: context.toolCallId,
-    toolName: "TaskCancel",
+    toolName: "TaskStop",
     toolVersion: "1.0.0",
   });
 }
+
+export type CreateTaskCancelToolOptions = CreateTaskStopToolOptions;
+
+export const createTaskCancelTool = createTaskStopTool;

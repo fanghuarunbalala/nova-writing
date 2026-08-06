@@ -1,8 +1,7 @@
-/** Defines the dynamic Task schema, descriptor, and asynchronous Subagent bootstrap handler. */
+/** Defines the dynamic Agent schema, descriptor, and asynchronous Subagent bootstrap handler. */
 import { Type, type TObject, type TSchema } from "typebox";
 import type { JsonValue } from "../../event/protocol/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
-import type { ArtifactReference } from "../../storage/artifact/index.js";
 import type { ChildConversationManager } from "../../runtime/subagent/ChildConversationManagerProtocol.js";
 import type { SubagentDefinitionReader } from "../../runtime/subagent/SubagentDefinitionCatalog.js";
 import {
@@ -35,24 +34,16 @@ export interface SubagentTaskClock {
   now(): string;
 }
 
-export interface SubagentTaskArtifactResolver {
-  resolve(
-    parentConversationId: string,
-    artifactIds: readonly string[],
-  ): Promise<readonly ArtifactReference[]>;
-}
-
-export interface CreateTaskToolOptions {
+export interface CreateAgentToolOptions {
   readonly definitions: SubagentDefinitionReader;
   readonly policy: SubagentToolCompositionPolicy;
   readonly manager: ChildConversationManager;
-  readonly artifactResolver: SubagentTaskArtifactResolver;
   readonly taskIdFactory?: SubagentTaskIdFactory;
   readonly clock?: SubagentTaskClock;
   readonly logger?: Logger;
 }
 
-export function createSubagentTaskParametersSchema(options: {
+export function createAgentParametersSchema(options: {
   readonly definitions: SubagentDefinitionReader;
   readonly policy: SubagentToolCompositionPolicy;
 }): TObject {
@@ -73,39 +64,34 @@ export function createSubagentTaskParametersSchema(options: {
         minLength: 1,
         maxLength: policy.limits.maximumPromptBytes,
       }),
-      artifactIds: Type.Optional(Type.Array(
-        Type.String({ minLength: 1, maxLength: 256 }),
-        {
-          maxItems: policy.limits.maximumArtifactReferences,
-          uniqueItems: true,
-        },
-      )),
     },
     { additionalProperties: false },
   );
 }
 
-export function createTaskTool(options: CreateTaskToolOptions): RegisteredTool {
+export const createSubagentTaskParametersSchema = createAgentParametersSchema;
+
+export function createAgentTool(options: CreateAgentToolOptions): RegisteredTool {
   const policy = captureSubagentToolCompositionPolicy(
     options.policy,
     options.definitions,
   );
-  const parameters = createSubagentTaskParametersSchema({
+  const parameters = createAgentParametersSchema({
     definitions: options.definitions,
     policy,
   });
   const taskIdFactory = options.taskIdFactory ?? RANDOM_SUBAGENT_TASK_ID_FACTORY;
   const clock = options.clock ?? SYSTEM_SUBAGENT_TASK_CLOCK;
   const logger = (options.logger ?? noopLogger).child({
-    component: "subagent_task_tool",
+    component: "subagent_agent_tool",
   });
 
   return defineTool({
     descriptor: {
-      name: "Task",
+      name: "Agent",
       version: "1.0.0",
-      label: "Task",
-      description: createTaskDescription(options.definitions, policy),
+      label: "Agent",
+      description: createAgentDescription(options.definitions, policy),
       parameters,
     },
     handler: {
@@ -117,20 +103,6 @@ export function createTaskTool(options: CreateTaskToolOptions): RegisteredTool {
         });
         const definition = options.definitions.require(captured.agentType);
         const taskId = taskIdFactory.create(context);
-        let artifactReferences: readonly ArtifactReference[];
-        try {
-          artifactReferences = await options.artifactResolver.resolve(
-            context.conversationId,
-            captured.artifactIds ?? [],
-          );
-        } catch {
-          throw taskFailure(
-            context,
-            "SUBAGENT_ARTIFACT_RESOLUTION_FAILED",
-            false,
-            "none",
-          );
-        }
         context.signal.throwIfAborted();
         try {
           const binding = await options.manager.spawn({
@@ -143,7 +115,6 @@ export function createTaskTool(options: CreateTaskToolOptions): RegisteredTool {
             definitionVersion: definition.definitionVersion,
             objective: captured.prompt,
             toolPolicyId: definition.toolPolicyId,
-            ...(artifactReferences.length === 0 ? {} : { artifactReferences }),
             requestedAt: clock.now(),
           });
           const acceptance = captureSubagentTaskAcceptance({
@@ -159,7 +130,6 @@ export function createTaskTool(options: CreateTaskToolOptions): RegisteredTool {
             parentConversationId: context.conversationId,
             parentRunId: context.runId,
             agentType: definition.agentType,
-            artifactCount: artifactReferences.length,
             status: acceptance.status,
           });
           return taskAcceptanceResult(acceptance);
@@ -183,7 +153,7 @@ export function createTaskTool(options: CreateTaskToolOptions): RegisteredTool {
   });
 }
 
-function createTaskDescription(
+function createAgentDescription(
   definitions: SubagentDefinitionReader,
   policy: SubagentToolCompositionPolicy,
 ): string {

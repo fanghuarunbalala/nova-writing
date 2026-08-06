@@ -2,35 +2,39 @@
 import type { Logger } from "../../observability/index.js";
 import { ToolRegistry } from "../../tooling/registry/index.js";
 import {
-  createTaskTool,
-  type CreateTaskToolOptions,
-} from "./Task.js";
+  createAgentTool,
+  type CreateAgentToolOptions,
+} from "./Agent.js";
 import {
-  createTaskCancelTool,
-  type CreateTaskCancelToolOptions,
-} from "./TaskCancel.js";
+  createTaskStopTool,
+  type CreateTaskStopToolOptions,
+} from "./TaskStop.js";
 import {
   createTaskGetTool,
   type CreateTaskGetToolOptions,
 } from "./TaskGet.js";
 
-export * from "./Task.js";
-export * from "./TaskCancel.js";
+export * from "./Agent.js";
+export * from "./TaskStop.js";
 export * from "./TaskGet.js";
 
-export type SubagentTaskToolRegistryOptions =
-  Omit<CreateTaskToolOptions, "logger"> &
+export type AgentExecutionToolRegistryOptions =
+  Omit<CreateAgentToolOptions, "logger"> &
   Omit<CreateTaskGetToolOptions, "logger"> &
-  Omit<CreateTaskCancelToolOptions, "logger"> & {
+  Omit<CreateTaskStopToolOptions, "logger"> & {
     readonly logger?: Logger;
   };
 
-export function createSubagentTaskToolRegistry(
-  options: SubagentTaskToolRegistryOptions,
+export function createAgentExecutionToolRegistry(
+  options: AgentExecutionToolRegistryOptions,
 ): ToolRegistry {
   return new ToolRegistry([
-    createTaskTool(options),
+    createAgentTool(options),
     createTaskGetTool(options),
-    createTaskCancelTool(options),
+    createTaskStopTool(options),
   ]);
 }
+
+export type SubagentTaskToolRegistryOptions = AgentExecutionToolRegistryOptions;
+
+export const createSubagentTaskToolRegistry = createAgentExecutionToolRegistry;

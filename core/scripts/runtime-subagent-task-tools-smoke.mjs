@@ -5,7 +5,7 @@ import {
   SubagentDefinitionCatalog,
   SubagentTaskQueryService,
   ToolError,
-  createSubagentTaskToolRegistry,
+  createAgentExecutionToolRegistry,
 } from "../dist/index.js";
 
 const timestamp = "2026-08-03T00:00:00.000Z";
@@ -87,7 +87,7 @@ const query = new SubagentTaskQueryService({
   limits,
 });
 
-const registry = createSubagentTaskToolRegistry({
+const registry = createAgentExecutionToolRegistry({
   definitions,
   policy: {
     allowedAgentTypes: ["write", "explore"],
@@ -109,20 +109,6 @@ const registry = createSubagentTaskToolRegistry({
   query: {
     async get(scope) { return querySnapshots.get(scope.taskId); },
   },
-  artifactResolver: {
-    async resolve(parentConversationId, artifactIds) {
-      assert.equal(parentConversationId, "conversation-parent");
-      assert.deepEqual(artifactIds, ["artifact-1"]);
-      return [{
-        schemaVersion: 1,
-        artifactId: "artifact-1",
-        conversationId: parentConversationId,
-        contentType: "text/plain",
-        byteLength: 32,
-        digest: `sha256:${"a".repeat(64)}`,
-      }];
-    },
-  },
   cancellation: {
     async requestCancellation(value, reason) {
       cancellationRequests.push({ value, reason });
@@ -133,12 +119,12 @@ const registry = createSubagentTaskToolRegistry({
   clock: { now() { return timestamp; } },
 });
 
-assert.deepEqual(registry.list().map((tool) => tool.descriptor.name), ["Task", "TaskCancel", "TaskGet"]);
-const task = registry.require("Task");
-assert.match(task.descriptor.description, /explore \(Explorer\): Inspect bounded evidence\./);
-assert.match(task.descriptor.description, /write \(Writer\): Draft bounded prose\./);
-assert.equal(Compile(task.descriptor.parameters).Check({ agentType: "explore", prompt: "scan" }), true);
-assert.equal(Compile(task.descriptor.parameters).Check({ agentType: "unknown", prompt: "scan" }), false);
+assert.deepEqual(registry.list().map((tool) => tool.descriptor.name), ["Agent", "TaskGet", "TaskStop"]);
+const agent = registry.require("Agent");
+assert.match(agent.descriptor.description, /explore \(Explorer\): Inspect bounded evidence\./);
+assert.match(agent.descriptor.description, /write \(Writer\): Draft bounded prose\./);
+assert.equal(Compile(agent.descriptor.parameters).Check({ agentType: "explore", prompt: "scan" }), true);
+assert.equal(Compile(agent.descriptor.parameters).Check({ agentType: "unknown", prompt: "scan" }), false);
 
 const context = {
   conversationId: "conversation-parent",
@@ -147,15 +133,14 @@ const context = {
   toolCallId: "tool-call-1",
   signal: new AbortController().signal,
 };
-const accepted = await task.handler.execute(context, {
+const accepted = await agent.handler.execute(context, {
   agentType: "explore",
   prompt: "Inspect the bounded evidence.",
-  artifactIds: ["artifact-1"],
 }, { emit: async () => {} });
 assert.equal(accepted.details.taskId, "task-created");
 assert.equal(accepted.details.status, "running");
 assert.equal(spawnRequests.length, 1);
-assert.deepEqual(spawnRequests[0].artifactReferences.map((value) => value.artifactId), ["artifact-1"]);
+assert.equal(spawnRequests[0].artifactReferences, undefined);
 assert.equal(spawnRequests[0].definitionVersion, "2.0.0");
 assert.equal(spawnRequests[0].toolPolicyId, "policy-explore");
 assert.equal(spawnRequests[0].parentConversationId, "conversation-parent");
@@ -169,16 +154,16 @@ await assert.rejects(
   (error) => error instanceof ToolError && error.code === "SUBAGENT_TASK_NOT_FOUND",
 );
 
-const taskCancel = registry.require("TaskCancel");
-const cancellation = await taskCancel.handler.execute(context, { taskId: "running" }, { emit: async () => {} });
+const taskStop = registry.require("TaskStop");
+const cancellation = await taskStop.handler.execute(context, { taskId: "running" }, { emit: async () => {} });
 assert.equal(cancellation.details.status, "cancellation_requested");
 assert.equal(cancellationRequests.length, 1);
 assert.equal(cancellationRequests[0].reason, "explicit");
-const terminalCancellation = await taskCancel.handler.execute(context, { taskId: "done" }, { emit: async () => {} });
+const terminalCancellation = await taskStop.handler.execute(context, { taskId: "done" }, { emit: async () => {} });
 assert.equal(terminalCancellation.details.status, "already_terminal");
-const missingCancellation = await taskCancel.handler.execute(context, { taskId: "missing" }, { emit: async () => {} });
+const missingCancellation = await taskStop.handler.execute(context, { taskId: "missing" }, { emit: async () => {} });
 assert.equal(missingCancellation.details.status, "not_found");
-const foreignCancellation = await taskCancel.handler.execute({ ...context, runId: "run-foreign" }, { taskId: "running" }, { emit: async () => {} });
+const foreignCancellation = await taskStop.handler.execute({ ...context, runId: "run-foreign" }, { taskId: "running" }, { emit: async () => {} });
 assert.equal(foreignCancellation.details.status, "not_found");
 
-console.log("Runtime Subagent Task Tools smoke passed");
+console.log("Runtime Agent Execution Tools smoke passed");

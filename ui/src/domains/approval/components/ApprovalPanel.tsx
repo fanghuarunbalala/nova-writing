@@ -16,6 +16,8 @@ import styles from "./ApprovalPanel.module.css";
 
 export interface ApprovalPanelProps {
   readonly store: ApprovalStore;
+  /** 会话 id → 标题（用于全局审批归属展示）。Conversation title labels. */
+  readonly conversationLabels?: ReadonlyMap<string, string>;
 }
 
 interface ApprovalGroup {
@@ -73,7 +75,7 @@ function formatTime(value: string): string {
 }
 
 function groupKeyOf(approval: ApprovalView): string {
-  return approval.turnId ?? approval.approvalRequestId;
+  return `${approval.conversationId}:${approval.turnId ?? approval.approvalRequestId}`;
 }
 
 function groupStatus(approvals: readonly ApprovalView[]): ApprovalView["status"] {
@@ -107,7 +109,10 @@ function groupApprovals(
   );
 }
 
-export function ApprovalPanel({ store }: ApprovalPanelProps) {
+export function ApprovalPanel({
+  store,
+  conversationLabels,
+}: ApprovalPanelProps) {
   const snapshot = useExternalStore(store);
   const [selectedKey, setSelectedKey] = useState<string | undefined>(undefined);
   const [hoveredKey, setHoveredKey] = useState<string | undefined>(undefined);
@@ -140,6 +145,10 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
     }
   };
 
+  const conversationLabel = (conversationId: string): string => {
+    return conversationLabels?.get(conversationId) ?? shortId(conversationId);
+  };
+
   const operations = selectedGroup?.approvals.flatMap(
     (approval) => approval.operations ?? [],
   );
@@ -163,6 +172,14 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
             const toolNames = [
               ...new Set(group.approvals.map((approval) => approval.toolName)),
             ];
+            const conversationId = group.approvals[0].conversationId;
+            const conversationDisposed =
+              group.approvals[0].conversationStatus !== "active";
+            const legacy = group.approvals.every(
+              (approval) =>
+                (approval.operations?.length ?? 0) === 0 &&
+                approval.arguments === undefined,
+            );
             const title = group.approvals[0].title;
             const label =
               group.approvals.length > 1
@@ -197,8 +214,13 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
                   </span>
                 </span>
                 <span className={styles.title}>{label}</span>
+                {legacy ? <span className={styles.legacy}>旧版</span> : null}
+                {conversationDisposed ? (
+                  <span className={styles.legacy}>会话已删除</span>
+                ) : null}
                 <span className={styles.meta}>
-                  {toolNames.join(" · ")} · {formatTime(group.requestedAt)}
+                  {conversationLabel(conversationId)} · {toolNames.join(" · ")} ·{" "}
+                  {formatTime(group.requestedAt)}
                 </span>
               </button>
             );
@@ -246,6 +268,7 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
           <div className={styles.identity}>
             <span className={styles.csId}>{shortId(selectedGroup.key)}</span>
             <span className={styles.meta}>
+              {conversationLabel(selectedGroup.approvals[0].conversationId)} ·{" "}
               {selectedGroup.approvals
                 .map((approval) => approval.toolName)
                 .join(" · ")}
@@ -293,6 +316,12 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
               ))}
             </div>
           ) : null}
+          {(operations?.length ?? 0) === 0 &&
+          (argumentGroups?.length ?? 0) === 0 ? (
+            <p className={styles.emptyDetail}>
+              旧版本审批 · 无参数详情（建议在新会话重新发起写入）
+            </p>
+          ) : null}
           <div className={styles.statusLine}>
             <span
               className={[styles.pill, styles[selectedGroup.status]].join(" ")}
@@ -314,6 +343,7 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
               <Button
                 variant="primary"
                 size="sm"
+                disabled={selectedGroup.approvals[0].conversationStatus !== "active"}
                 onClick={() => decideGroup(selectedGroup, "approved")}
               >
                 批准
@@ -321,6 +351,7 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
               <Button
                 variant="ghost-danger"
                 size="sm"
+                disabled={selectedGroup.approvals[0].conversationStatus !== "active"}
                 onClick={() => decideGroup(selectedGroup, "rejected")}
               >
                 拒绝

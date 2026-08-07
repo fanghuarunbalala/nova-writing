@@ -9,7 +9,7 @@
  * the conversation projection and holds a decision callback (injected by
  * ChatSurface, sent via ApprovalDecisionInputEvent enqueue).
  */
-import type { ToolApprovalProjection } from "@novel/core";
+import type { GlobalApprovalProjection } from "@novel/core";
 import { ExternalStore } from "../../shared/state/ExternalStore.js";
 
 export type ApprovalDecision = "approved" | "rejected";
@@ -22,6 +22,8 @@ export type ApprovalStatus =
   | "expired";
 
 export interface ApprovalView {
+  readonly conversationId: string;
+  readonly conversationStatus: GlobalApprovalProjection["conversationStatus"];
   readonly approvalRequestId: string;
   /** 所属 turn（同轮审批可合并展示）。Owning turn for per-turn grouping. */
   readonly turnId?: string;
@@ -29,9 +31,9 @@ export interface ApprovalView {
   readonly title: string;
   readonly description?: string;
   /** 每目标一行的操作摘要。Per-target operation rows. */
-  readonly operations?: ToolApprovalProjection["operations"];
+  readonly operations?: GlobalApprovalProjection["operations"];
   /** 完整工具参数（仅 pending 保留）。Full tool arguments while pending. */
-  readonly arguments?: ToolApprovalProjection["arguments"];
+  readonly arguments?: GlobalApprovalProjection["arguments"];
   readonly argumentDigest: `sha256:${string}`;
   readonly status: ApprovalStatus;
   readonly requestedAt: string;
@@ -106,9 +108,11 @@ export class ApprovalStore extends ExternalStore<ApprovalStoreSnapshot> {
 }
 
 export function toApprovalView(
-  projection: ToolApprovalProjection,
+  projection: GlobalApprovalProjection,
 ): ApprovalView {
   return Object.freeze({
+    conversationId: projection.conversationId,
+    conversationStatus: projection.conversationStatus,
     approvalRequestId: projection.approvalRequestId,
     ...(projection.turnId === undefined
       ? {}
@@ -135,7 +139,7 @@ export function toApprovalView(
 }
 
 export function mapApprovalViews(
-  projections: readonly ToolApprovalProjection[],
+  projections: readonly GlobalApprovalProjection[],
 ): readonly ApprovalView[] {
   return Object.freeze(projections.map(toApprovalView));
 }

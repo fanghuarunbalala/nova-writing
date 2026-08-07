@@ -122,7 +122,17 @@ export function InspectorHost({
       </header>
       <div className={styles.body}>
         {tab === "approval" ? (
-          <ApprovalPanel store={approvalStore} />
+          <ApprovalPanel
+            store={approvalStore}
+            conversationLabels={new Map(
+              conversationCatalog
+                .getSnapshot()
+                .conversations.map((conversation) => [
+                  conversation.id,
+                  conversation.title ?? conversation.id,
+                ]),
+            )}
+          />
         ) : route.state.kind === "entity" ? (
           <EntityInspectorPanel
             workspaceId={workspaceId}

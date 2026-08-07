@@ -23,6 +23,14 @@ function buildApi() {
   return {
     conversations: {
       list: vi.fn(async () => ({ conversations: [] })),
+      listApprovals: vi.fn(async () => []),
+      enqueueInput: vi.fn(async () => ({
+        status: "accepted",
+        conversationId: "conversation_x",
+        inputEventId: "input_x",
+        sequence: 1,
+        acceptedAt: "2026-08-05T09:00:00.000Z",
+      })),
       create: vi.fn(async () => ({
         getSnapshot: async () => ({
           metadata: {

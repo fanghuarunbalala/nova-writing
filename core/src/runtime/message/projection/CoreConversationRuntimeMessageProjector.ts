@@ -16,7 +16,8 @@ export class CoreConversationRuntimeMessageProjector extends CompositeRuntimeMes
   constructor(options: CoreConversationRuntimeMessageProjectorOptions = {}) {
     super({
       id: "core.conversation-message",
-      version: "1",
+      // 内部 assistant 投影行为变更（含工具轮次文本），版本递增以触发重建。
+      version: "2",
       projectors: [
         new CoreRuntimeMessageProjector(),
         new CoreAssistantRuntimeMessageProjector(),

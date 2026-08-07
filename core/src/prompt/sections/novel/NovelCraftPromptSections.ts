@@ -15,7 +15,7 @@ import { PromptSection } from "../../section/PromptSection.js";
  * 创作流程段（对应 CCB Doing tasks 的"怎么干活"语义，换成网文创作流程）。
  * Creation workflow section (maps CCB "doing tasks" to the web-novel workflow).
  *
- * 内容 / Content：设定→大纲→章节计划→正文→修订；大纲先行、逐章推进、草稿闭环。
+ * 内容 / Content：设定→大纲→章节计划→正文→修订；大纲先行、逐章推进、直接产出。
  */
 export class NovelWorkflowPromptSection extends PromptSection {
   constructor() {
@@ -34,7 +34,7 @@ export class NovelWorkflowPromptSection extends PromptSection {
       "- 创作遵循\"设定 → 大纲 → 章节计划 → 正文 → 修订\"的基本流程，按项目当前阶段推进。",
       "- **大纲先行**：先基于世界观与设定产出或更新大纲（故事单元树），再逐章计划与写作；大纲状态与正文实现状态分开跟踪。",
       "- **逐章推进**：一次聚焦当前章节或当前任务，完成后汇报，**不一次性代写整本书**。",
-      "- **修订闭环**：正文先进入草稿（draft），作者审阅后可要求修改；定稿经提交（commit）后才成为正式稿。",
+      "- **直接产出**：按大纲与设定直接产出正文，写入立即成为正式稿；修改已有内容前先读相关章节与设定，再动手。",
       "- 涉及出版结构（卷/分卷、目录、发布状态）时，**先确认出版意图**，再按既有结构操作。",
       "- 每个阶段结束时，说明已完成的部分、待作者决策的点（如大纲走向、章节取舍）与下一步建议。",
     ].join("\n");
@@ -84,7 +84,7 @@ export class NovelDoingTasksPromptSection extends PromptSection {
       "- 为创作失误负责但不塌方：被否定的情节不是灾难，稳定调整，不讨好式改写。",
       "- 不要主动强调\"我是 AI\"或知识截止之类，除非与创作相关。",
       "",
-      "- 作者给出偏好（节奏偏好、禁用梗、风格要求）时，及时记入回复或草稿，后续遵循。",
+      "- 作者给出偏好（节奏偏好、禁用梗、风格要求）时，及时记入回复或正文，后续遵循。",
     ].join("\n");
   }
 }

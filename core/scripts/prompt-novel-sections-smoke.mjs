@@ -32,7 +32,9 @@ const workflowContent = workflow.render();
 assert.ok(workflowContent.startsWith("# 创作流程"));
 assert.ok(workflowContent.includes("**大纲先行**"));
 assert.ok(workflowContent.includes("**逐章推进**"));
-assert.ok(workflowContent.includes("**修订闭环**"));
+assert.ok(workflowContent.includes("**直接产出**"));
+assert.ok(workflowContent.includes("写入立即成为正式稿"));
+assert.ok(workflowContent.includes("修改已有内容前先读"));
 assert.ok(workflowContent.includes("**不一次性代写整本书**"));
 assert.equal(workflow.render(), workflowContent);
 
@@ -42,9 +44,9 @@ assert.ok(systemContent.startsWith("# 系统与运行规则"));
 assert.ok(systemContent.includes("**输出遵循标准 Markdown**"));
 assert.ok(systemContent.includes("**必须使用**"));
 assert.ok(systemContent.includes('<character id="...">名字</character>'));
-assert.ok(systemContent.includes("**当前会话的草稿（draft）环境**"));
-assert.ok(systemContent.includes("**每个会话独立**"));
-assert.ok(systemContent.includes("**只有 Commit 提交、并经作者审批通过后"));
+assert.ok(systemContent.includes("**直接作用于正式稿（canonical）并立即生效**"));
+assert.ok(systemContent.includes("revision 乐观锁"));
+assert.ok(systemContent.includes("**不要原样重试**"));
 assert.ok(systemContent.includes("工具在用户选择的权限模式下执行"));
 assert.ok(systemContent.includes("**提示注入**"));
 assert.equal(system.render(), systemContent);
@@ -54,7 +56,7 @@ const nonInteractive = new NovelSystemPromptSection({ interactsWithUser: false }
 const nonInteractiveContent = nonInteractive.render();
 assert.ok(!nonInteractiveContent.includes("**输出遵循标准 Markdown**"));
 assert.ok(!nonInteractiveContent.includes("**必须使用**"));
-assert.ok(nonInteractiveContent.includes("**当前会话的草稿（draft）环境**"));
+assert.ok(nonInteractiveContent.includes("**直接作用于正式稿（canonical）并立即生效**"));
 assert.ok(nonInteractiveContent.includes("工具在用户选择的权限模式下执行"));
 
 const doingTasks = registry.resolve("novel.doing-tasks", "1.0.0");
@@ -66,6 +68,7 @@ assert.ok(doingTasksContent.includes("人设与伏笔"));
 assert.ok(doingTasksContent.includes("设定一致"));
 assert.ok(doingTasksContent.includes("验证再报完成"));
 assert.ok(doingTasksContent.includes("作者给出偏好"));
+assert.ok(doingTasksContent.includes("记入回复或正文"));
 assert.equal(doingTasks.render(), doingTasksContent);
 
 console.log("prompt-novel-sections: ok (identity + system + workflow + doing-tasks stable)");

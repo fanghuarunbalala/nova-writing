@@ -26,7 +26,11 @@ import type {
   NovelParagraphMutationContext,
   ParagraphDigestField,
 } from "../../port/index.js";
-import { captureNovelOperationVersion } from "../../version/index.js";
+import {
+  captureNovelEntityVersion,
+  captureNovelOperationVersion,
+  type NovelEntityVersion,
+} from "../../version/index.js";
 import {
   captureNovelOperation,
   type NovelOperation,
@@ -57,16 +61,24 @@ interface ParagraphIdentityPayload extends JsonObject {
 interface ParagraphTextReplacePayload extends JsonObject {
   readonly paragraphId: string;
   readonly text: string;
+  readonly expectedEntityVersion: number | null;
 }
 
 interface ParagraphOrderReplacePayload extends JsonObject {
   readonly paragraphId: string;
   readonly orderKey: string;
+  readonly expectedEntityVersion: number | null;
 }
 
 interface ParagraphStoryUnitReplacePayload extends JsonObject {
   readonly paragraphId: string;
   readonly storyUnitId: string;
+  readonly expectedEntityVersion: number | null;
+}
+
+interface ParagraphDeletePayload extends JsonObject {
+  readonly paragraphId: string;
+  readonly expectedEntityVersion: number | null;
 }
 
 export function createParagraphCreateOperation(input: {
@@ -94,11 +106,16 @@ export function createParagraphTextReplaceOperation(input: {
   readonly paragraphId: ParagraphId;
   readonly expectedTextDigest: string;
   readonly text: string;
+  readonly expectedEntityVersion?: NovelEntityVersion;
 }): NovelOperation<
   typeof NOVEL_PARAGRAPH_OPERATION_TYPE.textReplace,
   ParagraphTextReplacePayload
 > {
   const paragraphId = captureParagraphId(input.paragraphId);
+  const expectedEntityVersion =
+    input.expectedEntityVersion === undefined
+      ? undefined
+      : captureNovelEntityVersion(input.expectedEntityVersion);
   return captureNovelOperation({
     operationId: input.operationId,
     operationVersion: PARAGRAPH_OPERATION_VERSION,
@@ -106,8 +123,15 @@ export function createParagraphTextReplaceOperation(input: {
     expected: [
       exists(PARAGRAPH_ENTITY_TYPE, paragraphId),
       fieldDigest(PARAGRAPH_ENTITY_TYPE, paragraphId, "text", input.expectedTextDigest),
+      ...(expectedEntityVersion === undefined
+        ? []
+        : [version(PARAGRAPH_ENTITY_TYPE, paragraphId, expectedEntityVersion)]),
     ],
-    payload: { paragraphId, text: captureParagraphText(input.text) },
+    payload: {
+      paragraphId,
+      text: captureParagraphText(input.text),
+      expectedEntityVersion: expectedEntityVersion ?? null,
+    },
   });
 }
 
@@ -116,12 +140,17 @@ export function createParagraphOrderReplaceOperation(input: {
   readonly paragraphId: ParagraphId;
   readonly expectedOrderDigest: string;
   readonly orderKey: OrderKey;
+  readonly expectedEntityVersion?: NovelEntityVersion;
 }): NovelOperation<
   typeof NOVEL_PARAGRAPH_OPERATION_TYPE.orderReplace,
   ParagraphOrderReplacePayload
 > {
   const paragraphId = captureParagraphId(input.paragraphId);
   const orderKey = captureOrderKey(input.orderKey);
+  const expectedEntityVersion =
+    input.expectedEntityVersion === undefined
+      ? undefined
+      : captureNovelEntityVersion(input.expectedEntityVersion);
   return captureNovelOperation({
     operationId: input.operationId,
     operationVersion: PARAGRAPH_OPERATION_VERSION,
@@ -129,8 +158,15 @@ export function createParagraphOrderReplaceOperation(input: {
     expected: [
       exists(PARAGRAPH_ENTITY_TYPE, paragraphId),
       fieldDigest(PARAGRAPH_ENTITY_TYPE, paragraphId, "orderKey", input.expectedOrderDigest),
+      ...(expectedEntityVersion === undefined
+        ? []
+        : [version(PARAGRAPH_ENTITY_TYPE, paragraphId, expectedEntityVersion)]),
     ],
-    payload: { paragraphId, orderKey },
+    payload: {
+      paragraphId,
+      orderKey,
+      expectedEntityVersion: expectedEntityVersion ?? null,
+    },
   });
 }
 
@@ -139,12 +175,17 @@ export function createParagraphStoryUnitReplaceOperation(input: {
   readonly paragraphId: ParagraphId;
   readonly expectedStoryUnitDigest: string;
   readonly storyUnitId: StoryUnitId;
+  readonly expectedEntityVersion?: NovelEntityVersion;
 }): NovelOperation<
   typeof NOVEL_PARAGRAPH_OPERATION_TYPE.storyUnitReplace,
   ParagraphStoryUnitReplacePayload
 > {
   const paragraphId = captureParagraphId(input.paragraphId);
   const storyUnitId = captureStoryUnitId(input.storyUnitId);
+  const expectedEntityVersion =
+    input.expectedEntityVersion === undefined
+      ? undefined
+      : captureNovelEntityVersion(input.expectedEntityVersion);
   return captureNovelOperation({
     operationId: input.operationId,
     operationVersion: PARAGRAPH_OPERATION_VERSION,
@@ -158,8 +199,15 @@ export function createParagraphStoryUnitReplaceOperation(input: {
         input.expectedStoryUnitDigest,
       ),
       exists(STORY_UNIT_ENTITY_TYPE, storyUnitId),
+      ...(expectedEntityVersion === undefined
+        ? []
+        : [version(PARAGRAPH_ENTITY_TYPE, paragraphId, expectedEntityVersion)]),
     ],
-    payload: { paragraphId, storyUnitId },
+    payload: {
+      paragraphId,
+      storyUnitId,
+      expectedEntityVersion: expectedEntityVersion ?? null,
+    },
   });
 }
 
@@ -169,11 +217,16 @@ export function createParagraphDeleteOperation(input: {
   readonly expectedTextDigest: string;
   readonly expectedOrderDigest: string;
   readonly expectedStoryUnitDigest: string;
+  readonly expectedEntityVersion?: NovelEntityVersion;
 }): NovelOperation<
   typeof NOVEL_PARAGRAPH_OPERATION_TYPE.delete,
-  ParagraphIdentityPayload
+  ParagraphDeletePayload
 > {
   const paragraphId = captureParagraphId(input.paragraphId);
+  const expectedEntityVersion =
+    input.expectedEntityVersion === undefined
+      ? undefined
+      : captureNovelEntityVersion(input.expectedEntityVersion);
   return captureNovelOperation({
     operationId: input.operationId,
     operationVersion: PARAGRAPH_OPERATION_VERSION,
@@ -188,8 +241,14 @@ export function createParagraphDeleteOperation(input: {
         "storyUnitId",
         input.expectedStoryUnitDigest,
       ),
+      ...(expectedEntityVersion === undefined
+        ? []
+        : [version(PARAGRAPH_ENTITY_TYPE, paragraphId, expectedEntityVersion)]),
     ],
-    payload: { paragraphId },
+    payload: {
+      paragraphId,
+      expectedEntityVersion: expectedEntityVersion ?? null,
+    },
   });
 }
 
@@ -264,16 +323,32 @@ function applyParagraphTextReplace(
   store: NovelMutableParagraphRepository,
   operation: NovelOperation,
 ): void {
-  const payload = capturePayloadObject(operation.payload, ["paragraphId", "text"]);
+  const payload = capturePayloadObject(operation.payload, [
+    "paragraphId",
+    "text",
+    "expectedEntityVersion",
+  ]);
   const paragraphId = captureParagraphId(payload.paragraphId);
   const text = captureParagraphText(payload.text);
+  const expectedVersion = optionalEntityVersion(payload.expectedEntityVersion);
   assertExpected(operation, [
     exists(PARAGRAPH_ENTITY_TYPE, paragraphId),
     fieldDigest(PARAGRAPH_ENTITY_TYPE, paragraphId, "text", expectedDigest(operation, 1)),
+    ...(expectedVersion === undefined
+      ? []
+      : [version(PARAGRAPH_ENTITY_TYPE, paragraphId, expectedVersion)]),
   ]);
   assertParagraphDigest(store, operation, paragraphId, "text");
   const paragraph = requireParagraph(store, operation, paragraphId);
-  if (!store.replaceParagraph(captureParagraph({ ...paragraph, text }))) {
+  if (!store.replaceParagraph(captureParagraph({ ...paragraph, text }), expectedVersion)) {
+    if (expectedVersion !== undefined) {
+      throw new NovelOperationPreconditionError(
+        "entity_version_mismatch",
+        PARAGRAPH_ENTITY_TYPE,
+        paragraphId,
+        operation.operationId,
+      );
+    }
     throw precondition(operation, "domain_invariant", PARAGRAPH_ENTITY_TYPE, paragraphId);
   }
 }
@@ -282,12 +357,20 @@ function applyParagraphOrderReplace(
   store: NovelMutableParagraphRepository,
   operation: NovelOperation,
 ): void {
-  const payload = capturePayloadObject(operation.payload, ["paragraphId", "orderKey"]);
+  const payload = capturePayloadObject(operation.payload, [
+    "paragraphId",
+    "orderKey",
+    "expectedEntityVersion",
+  ]);
   const paragraphId = captureParagraphId(payload.paragraphId);
   const orderKey = captureOrderKey(payload.orderKey);
+  const expectedVersion = optionalEntityVersion(payload.expectedEntityVersion);
   assertExpected(operation, [
     exists(PARAGRAPH_ENTITY_TYPE, paragraphId),
     fieldDigest(PARAGRAPH_ENTITY_TYPE, paragraphId, "orderKey", expectedDigest(operation, 1)),
+    ...(expectedVersion === undefined
+      ? []
+      : [version(PARAGRAPH_ENTITY_TYPE, paragraphId, expectedVersion)]),
   ]);
   assertParagraphDigest(store, operation, paragraphId, "orderKey");
   const paragraph = requireParagraph(store, operation, paragraphId);
@@ -295,7 +378,15 @@ function applyParagraphOrderReplace(
   if (occupant !== undefined && occupant.id !== paragraph.id) {
     throw precondition(operation, "domain_invariant", PARAGRAPH_ENTITY_TYPE, paragraph.id);
   }
-  if (!store.replaceParagraph(captureParagraph({ ...paragraph, orderKey }))) {
+  if (!store.replaceParagraph(captureParagraph({ ...paragraph, orderKey }), expectedVersion)) {
+    if (expectedVersion !== undefined) {
+      throw new NovelOperationPreconditionError(
+        "entity_version_mismatch",
+        PARAGRAPH_ENTITY_TYPE,
+        paragraphId,
+        operation.operationId,
+      );
+    }
     throw precondition(operation, "domain_invariant", PARAGRAPH_ENTITY_TYPE, paragraph.id);
   }
 }
@@ -304,9 +395,14 @@ function applyParagraphStoryUnitReplace(
   store: NovelMutableParagraphRepository,
   operation: NovelOperation,
 ): void {
-  const payload = capturePayloadObject(operation.payload, ["paragraphId", "storyUnitId"]);
+  const payload = capturePayloadObject(operation.payload, [
+    "paragraphId",
+    "storyUnitId",
+    "expectedEntityVersion",
+  ]);
   const paragraphId = captureParagraphId(payload.paragraphId);
   const storyUnitId = captureStoryUnitId(payload.storyUnitId);
+  const expectedVersion = optionalEntityVersion(payload.expectedEntityVersion);
   assertExpected(operation, [
     exists(PARAGRAPH_ENTITY_TYPE, paragraphId),
     fieldDigest(
@@ -316,6 +412,9 @@ function applyParagraphStoryUnitReplace(
       expectedDigest(operation, 1),
     ),
     exists(STORY_UNIT_ENTITY_TYPE, storyUnitId),
+    ...(expectedVersion === undefined
+      ? []
+      : [version(PARAGRAPH_ENTITY_TYPE, paragraphId, expectedVersion)]),
   ]);
   assertParagraphDigest(store, operation, paragraphId, "storyUnitId");
   const paragraph = requireParagraph(store, operation, paragraphId);
@@ -331,7 +430,15 @@ function applyParagraphStoryUnitReplace(
   if (occupant !== undefined && occupant.id !== paragraph.id) {
     throw precondition(operation, "domain_invariant", PARAGRAPH_ENTITY_TYPE, paragraph.id);
   }
-  if (!store.replaceParagraph(captureParagraph({ ...paragraph, storyUnitId }))) {
+  if (!store.replaceParagraph(captureParagraph({ ...paragraph, storyUnitId }), expectedVersion)) {
+    if (expectedVersion !== undefined) {
+      throw new NovelOperationPreconditionError(
+        "entity_version_mismatch",
+        PARAGRAPH_ENTITY_TYPE,
+        paragraphId,
+        operation.operationId,
+      );
+    }
     throw precondition(operation, "domain_invariant", PARAGRAPH_ENTITY_TYPE, paragraph.id);
   }
 }
@@ -340,8 +447,12 @@ function applyParagraphDelete(
   store: NovelMutableParagraphRepository,
   operation: NovelOperation,
 ): void {
-  const payload = capturePayloadObject(operation.payload, ["paragraphId"]);
+  const payload = capturePayloadObject(operation.payload, [
+    "paragraphId",
+    "expectedEntityVersion",
+  ]);
   const paragraphId = captureParagraphId(payload.paragraphId);
+  const expectedVersion = optionalEntityVersion(payload.expectedEntityVersion);
   assertExpected(operation, [
     exists(PARAGRAPH_ENTITY_TYPE, paragraphId),
     fieldDigest(PARAGRAPH_ENTITY_TYPE, paragraphId, "text", expectedDigest(operation, 1)),
@@ -352,6 +463,9 @@ function applyParagraphDelete(
       "storyUnitId",
       expectedDigest(operation, 3),
     ),
+    ...(expectedVersion === undefined
+      ? []
+      : [version(PARAGRAPH_ENTITY_TYPE, paragraphId, expectedVersion)]),
   ]);
   assertParagraphDigest(store, operation, paragraphId, "text");
   assertParagraphDigest(store, operation, paragraphId, "orderKey");
@@ -359,8 +473,16 @@ function applyParagraphDelete(
   requireParagraph(store, operation, paragraphId);
   if (
     !store.removeParagraphFromChapters(paragraphId) ||
-    !store.deleteParagraph(paragraphId)
+    !store.deleteParagraph(paragraphId, expectedVersion)
   ) {
+    if (expectedVersion !== undefined) {
+      throw new NovelOperationPreconditionError(
+        "entity_version_mismatch",
+        PARAGRAPH_ENTITY_TYPE,
+        paragraphId,
+        operation.operationId,
+      );
+    }
     throw precondition(operation, "domain_invariant", PARAGRAPH_ENTITY_TYPE, paragraphId);
   }
 }
@@ -460,6 +582,27 @@ function fieldDigest(
     fieldPath,
     expectedDigest,
   });
+}
+
+function version(
+  entityType: string,
+  entityId: string,
+  expectedEntityVersion: NovelEntityVersion,
+): NovelOperationPrecondition {
+  return Object.freeze({
+    kind: "entity-version",
+    entityType,
+    entityId,
+    expectedEntityVersion,
+  });
+}
+
+function optionalEntityVersion(
+  value: unknown,
+): NovelEntityVersion | undefined {
+  return value === null || value === undefined
+    ? undefined
+    : captureNovelEntityVersion(value);
 }
 
 function expectedDigest(operation: NovelOperation, index: number): string {

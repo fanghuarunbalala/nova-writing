@@ -288,6 +288,8 @@ export class NovelParagraphToolService {
     if (current === undefined) {
       throw new NovelParagraphItemFailure(ITEM_REJECTION.notFound);
     }
+    const currentVersion =
+      await this.options.paragraphQueries.getParagraphVersion(input.scope, id);
     const storyUnitId = input.patch.storyUnitId === undefined
       ? current.paragraph.storyUnitId
       : captureStoryUnitId(input.patch.storyUnitId);
@@ -309,6 +311,9 @@ export class NovelParagraphToolService {
           paragraphId: id,
           expectedOrderDigest: current.orderDigest,
           orderKey,
+          ...(currentVersion === undefined
+            ? {}
+            : { expectedEntityVersion: currentVersion }),
         }),
       );
     }
@@ -319,6 +324,9 @@ export class NovelParagraphToolService {
           paragraphId: id,
           expectedStoryUnitDigest: current.storyUnitDigest,
           storyUnitId,
+          ...(currentVersion === undefined
+            ? {}
+            : { expectedEntityVersion: currentVersion }),
         }),
       );
     }
@@ -329,6 +337,9 @@ export class NovelParagraphToolService {
           paragraphId: id,
           expectedTextDigest: current.textDigest,
           text,
+          ...(currentVersion === undefined
+            ? {}
+            : { expectedEntityVersion: currentVersion }),
         }),
       );
     }

@@ -8,6 +8,7 @@ import type {
   Paragraph,
 } from "../model/index.js";
 import type { NovelReadScope } from "../query/index.js";
+import type { NovelEntityVersion } from "../version/index.js";
 
 export type ParagraphDigestField = "text" | "orderKey" | "storyUnitId";
 
@@ -20,9 +21,17 @@ export interface NovelMutableParagraphRepository {
     id: ParagraphId,
     field: ParagraphDigestField,
   ): string | undefined;
+  /** 读取实体的当前版本（per-entity 乐观锁）。Current entity version. */
+  getParagraphVersion(id: ParagraphId): NovelEntityVersion | undefined;
   insertParagraph(paragraph: Paragraph): boolean;
-  replaceParagraph(paragraph: Paragraph): boolean;
-  deleteParagraph(id: ParagraphId): boolean;
+  replaceParagraph(
+    paragraph: Paragraph,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean;
+  deleteParagraph(
+    id: ParagraphId,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean;
   removeParagraphFromChapters(paragraphId: ParagraphId): boolean;
   hasStoryUnit(storyUnitId: StoryUnitId): boolean;
 }
@@ -55,6 +64,11 @@ export interface NovelParagraphQueryStore {
     scope: NovelReadScope,
     id: ParagraphId,
   ): Promise<ParagraphReadModel | undefined>;
+  /** 读取实体当前版本（per-entity 乐观锁）。Current entity version. */
+  getParagraphVersion(
+    scope: NovelReadScope,
+    id: ParagraphId,
+  ): Promise<NovelEntityVersion | undefined>;
   listParagraphsByStoryUnit(
     scope: NovelReadScope,
     storyUnitId: StoryUnitId,

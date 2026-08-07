@@ -11,6 +11,7 @@ import {
   type NovelParagraphMutationContext,
   type Paragraph,
   type ParagraphDigestField,
+  type NovelEntityVersion,
 } from "../../../novel/index.js";
 
 interface ParagraphRow {
@@ -37,6 +38,9 @@ export function createSqliteNovelParagraphMutationContext(
 export class SqliteNovelParagraphRepository
   implements NovelMutableParagraphRepository
 {
+  /** 本事务内已校验并推进过版本的实体（批内同实体多操作只校验一次）。 */
+  private readonly confirmedVersions = new Set<string>();
+
   constructor(private readonly database: DatabaseSync) {}
 
   getParagraph(id: Paragraph["id"]): Paragraph | undefined {
@@ -44,6 +48,13 @@ export class SqliteNovelParagraphRepository
       .prepare(`${PARAGRAPH_SELECT} WHERE id = ?`)
       .get(captureParagraphId(id)) as ParagraphRow | undefined;
     return row === undefined ? undefined : decodeParagraph(row);
+  }
+
+  getParagraphVersion(id: Paragraph["id"]): NovelEntityVersion | undefined {
+    const row = this.database
+      .prepare("SELECT entity_version FROM novel_paragraphs WHERE id = ?")
+      .get(captureParagraphId(id)) as { entity_version: number } | undefined;
+    return row === undefined ? undefined : Number(row.entity_version) as NovelEntityVersion;
   }
 
   listAllParagraphs(): readonly Paragraph[] {
@@ -109,14 +120,40 @@ export class SqliteNovelParagraphRepository
     return Number(result.changes) === 1;
   }
 
-  replaceParagraph(paragraph: Paragraph): boolean {
+  replaceParagraph(
+    paragraph: Paragraph,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean {
     const encoded = encodeParagraph(paragraph);
+    if (
+      expectedEntityVersion !== undefined &&
+      !this.confirmedVersions.has(paragraph.id)
+    ) {
+      const row = this.database
+        .prepare("SELECT entity_version FROM novel_paragraphs WHERE id = ?")
+        .get(captureParagraphId(paragraph.id)) as
+        | { entity_version: number }
+        | undefined;
+      if (
+        row === undefined ||
+        Number(row.entity_version) !== (expectedEntityVersion as number)
+      ) {
+        return false;
+      }
+      this.confirmedVersions.add(paragraph.id);
+    }
     const result = this.database
       .prepare(
-        `UPDATE novel_paragraphs
-         SET story_unit_id = ?, order_key = ?, text = ?,
-             text_digest = ?, order_digest = ?, story_unit_digest = ?
-         WHERE id = ?`,
+        expectedEntityVersion === undefined
+          ? `UPDATE novel_paragraphs
+             SET story_unit_id = ?, order_key = ?, text = ?,
+                 text_digest = ?, order_digest = ?, story_unit_digest = ?
+             WHERE id = ?`
+          : `UPDATE novel_paragraphs
+             SET story_unit_id = ?, order_key = ?, text = ?,
+                 text_digest = ?, order_digest = ?, story_unit_digest = ?,
+                 entity_version = entity_version + 1
+             WHERE id = ?`,
       )
       .run(
         encoded[1],
@@ -130,7 +167,27 @@ export class SqliteNovelParagraphRepository
     return Number(result.changes) === 1;
   }
 
-  deleteParagraph(id: Paragraph["id"]): boolean {
+  deleteParagraph(
+    id: Paragraph["id"],
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean {
+    if (
+      expectedEntityVersion !== undefined &&
+      !this.confirmedVersions.has(captureParagraphId(id))
+    ) {
+      const row = this.database
+        .prepare("SELECT entity_version FROM novel_paragraphs WHERE id = ?")
+        .get(captureParagraphId(id)) as
+        | { entity_version: number }
+        | undefined;
+      if (
+        row === undefined ||
+        Number(row.entity_version) !== (expectedEntityVersion as number)
+      ) {
+        return false;
+      }
+      this.confirmedVersions.add(captureParagraphId(id));
+    }
     const result = this.database
       .prepare("DELETE FROM novel_paragraphs WHERE id = ?")
       .run(captureParagraphId(id));

@@ -43,7 +43,9 @@ export interface ChatSurfaceProps {
     action: "approve" | "reject" | "view-diff",
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
-  readonly approvalStore: ApprovalStore;
+  /** 写操作落库后刷新 novel 数据 store。Refresh novel data after approved writes. */
+ readonly approvalStore: ApprovalStore;
+  readonly onNovelDataChanged?: () => void;
 }
 
 export function ChatSurface({
@@ -56,6 +58,7 @@ export function ChatSurface({
   onProposalAction,
   onOpenApproval,
   approvalStore,
+  onNovelDataChanged,
 }: ChatSurfaceProps) {
   const catalog = useExternalStore(conversationCatalog);
   const activeId = catalog.activeConversationId;
@@ -74,6 +77,7 @@ export function ChatSurface({
       onProposalAction={onProposalAction}
       onOpenApproval={onOpenApproval}
       approvalStore={approvalStore}
+      onNovelDataChanged={onNovelDataChanged}
     />
   );
 }
@@ -91,6 +95,7 @@ interface ActiveChatSurfaceProps {
     action: "approve" | "reject" | "view-diff",
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
+  readonly onNovelDataChanged?: () => void;
   readonly approvalStore: ApprovalStore;
 }
 
@@ -105,6 +110,7 @@ function ActiveChatSurface({
   onProposalAction,
   onOpenApproval,
   approvalStore,
+  onNovelDataChanged,
 }: ActiveChatSurfaceProps) {
   const { snapshot, enqueue, resume } = useConversationProjection(conversationId, {
     api,
@@ -117,18 +123,20 @@ function ActiveChatSurface({
   // 决策回调：InspectorHost 的批准/拒绝最终走 binding enqueue 决策输入事件。
   useEffect(() => {
     approvalStore.setDecisionHandler(
-      (approvalRequestId, decision, argumentDigest) =>
-        enqueue(
+      (approvalRequestId, decision, argumentDigest) => {
+        if (decision === "approved") onNovelDataChanged?.();
+        return enqueue(
           new ApprovalDecisionInputEvent({
             conversationId,
             approvalRequestId,
             decision,
             argumentDigest,
           }),
-        ),
+        );
+      },
     );
     return () => approvalStore.setDecisionHandler(undefined);
-  }, [approvalStore, conversationId, enqueue]);
+  }, [approvalStore, conversationId, enqueue, onNovelDataChanged]);
   const timeline = mapProjectionTimeline(
     snapshot.projection,
     snapshot.cards.cards,

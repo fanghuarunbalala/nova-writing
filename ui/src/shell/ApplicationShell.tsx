@@ -274,6 +274,45 @@ export function ApplicationShell({
     [approvalStore, inspectorRouter],
   );
 
+  // 写操作落库后刷新 novel 数据 store（大纲/人物/地点/正文/概览），
+  // 让 GUI 内容视图立即反映批准后的正式稿变更。
+  // Reload novel data stores after an approved write so content views refresh.
+  const refreshNovelData = useCallback(() => {
+    if (workspaceId === undefined) return;
+    const {
+      novelOverview,
+      storyOutlineTree,
+      manuscriptStructure,
+      character,
+      location,
+    } = domainStores;
+    void novelOverview.loadWorkspace(workspaceId);
+    void storyOutlineTree.loadWorkspace(workspaceId);
+    void manuscriptStructure.loadWorkspace(workspaceId);
+    void character.loadWorkspace(workspaceId);
+    void location.loadWorkspace(workspaceId);
+  }, [domainStores, workspaceId]);
+
+  // 同一轮多个审批连续批准时合并刷新（防抖）。
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const handleNovelDataChanged = useCallback(() => {
+    if (refreshTimerRef.current !== undefined) {
+      clearTimeout(refreshTimerRef.current);
+    }
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = undefined;
+      refreshNovelData();
+    }, 400);
+  }, [refreshNovelData]);
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current !== undefined) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    },
+    [],
+  );
+
   // 护栏：出现新的待审请求时自动打开审批面板（避免"有审批但看不到"）。
   // Auto-open the approval panel when a new pending request appears.
   const lastPendingCountRef = useRef(0);
@@ -355,6 +394,7 @@ export function ApplicationShell({
           locateReference={locateReference}
           onProposalAction={handleProposalAction}
           onOpenApproval={handleOpenApproval}
+          onNovelDataChanged={handleNovelDataChanged}
           approvalStore={approvalStore}
         />
         <InspectorHost

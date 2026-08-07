@@ -47,6 +47,7 @@ export interface MainAreaProps {
     action: "approve" | "reject" | "view-diff",
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
+  readonly onNovelDataChanged?: () => void;
   readonly approvalStore: ApprovalStore;
 }
 
@@ -67,6 +68,7 @@ export function MainArea(props: MainAreaProps) {
           resolveReference={props.resolveReference}
           onProposalAction={props.onProposalAction}
           onOpenApproval={props.onOpenApproval}
+          onNovelDataChanged={props.onNovelDataChanged}
           approvalStore={props.approvalStore}
         />
       ) : mainView.state === "content" ? (

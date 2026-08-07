@@ -436,9 +436,54 @@ function errorMessageOf(error: unknown): string | undefined {
 
 /** 开发阶段记录原始错误消息（截断防刷屏）。Raw provider error message, truncated. */
 function captureProviderErrorMessage(error: unknown): string | undefined {
-  const message = errorMessageOf(error);
-  if (message === undefined) return undefined;
-  return message.length <= 512 ? message : `${message.slice(0, 512)}…`;
+  const found = findErrorMessage(error, 0);
+  if (found === undefined) {
+    const serialized = serializeErrorObject(error);
+    return serialized === undefined
+      ? undefined
+      : serialized.length <= 512
+        ? serialized
+        : `${serialized.slice(0, 512)}…`;
+  }
+  return found.length <= 512 ? found : `${found.slice(0, 512)}…`;
+}
+
+/** 递归查找错误消息（支持嵌套 error/cause）。Recursively find a provider error message. */
+function findErrorMessage(value: unknown, depth: number): string | undefined {
+  if (depth > 3 || value === null || value === undefined) return undefined;
+  if (typeof value === "string" && value.trim().length > 0) return value;
+  if (typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of ["message", "error", "cause", "reason"]) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate;
+    }
+    const nested = findErrorMessage(candidate, depth + 1);
+    if (nested !== undefined) return nested;
+  }
+  return undefined;
+}
+
+/** 开发阶段：序列化错误对象摘要（循环安全）。Serialize an error object safely. */
+function serializeErrorObject(error: unknown): string | undefined {
+  if (error === null || typeof error !== "object") return undefined;
+  try {
+    const seen = new WeakSet<object>();
+    return JSON.stringify(
+      error,
+      (_key, value) => {
+        if (typeof value === "object" && value !== null) {
+          if (seen.has(value)) return "[Circular]";
+          seen.add(value);
+        }
+        return value;
+      },
+      0,
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 function getErrorName(error: unknown): string {

@@ -26,7 +26,10 @@ import {
   ToolExecutionPipeline,
   TrustedProcessSandboxExecutor,
 } from "../../../runtime/tools/execution/index.js";
-import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
+import {
+  ComposeApprovalLifecycleSink,
+  ComposeModeStateProvider,
+} from "../../../runtime/compose/index.js";
 import type {
   ToolRegistryView,
   ToolResultLimits,
@@ -91,6 +94,22 @@ export const CHILD_TOOL_PERMISSION_RULES: readonly ToolPermissionRule[] =
       }),
     }),
     Object.freeze({
+      ruleId: "child_compose_enter_allow",
+      source: "built_in",
+      effect: "allow",
+      match: Object.freeze({
+        toolNames: Object.freeze(["EnterComposeMode"]),
+      }),
+    }),
+    Object.freeze({
+      ruleId: "child_compose_exit_ask",
+      source: "built_in",
+      effect: "ask",
+      match: Object.freeze({
+        toolNames: Object.freeze(["ExitComposeMode"]),
+      }),
+    }),
+    Object.freeze({
       ruleId: "child_write_edit_ask",
       source: "built_in",
       effect: "ask",
@@ -123,8 +142,15 @@ export function createChildToolExecutionComposition(
   const logger = (options.logger ?? noopLogger).child({
     component: "child_tool_execution",
   });
+  const eventSink =
+    options.composeStateProvider === undefined
+      ? options.eventSink
+      : new ComposeApprovalLifecycleSink(
+          options.eventSink,
+          options.composeStateProvider,
+        );
   const coordinator = new InMemoryInteractionCoordinator({
-    eventSink: options.eventSink,
+    eventSink,
     logger,
   });
   const policyResolver = new StaticToolExecutionPolicyResolver([
@@ -133,6 +159,8 @@ export function createChildToolExecutionComposition(
     { toolName: "Glob", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "Write", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "Edit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "EnterComposeMode", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "ExitComposeMode", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelOutlineRead", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelOutlineWrite", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelOutlineEdit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
@@ -175,7 +203,7 @@ export function createChildToolExecutionComposition(
       sandboxExecutor: new TrustedProcessSandboxExecutor(),
       resultLimits: DEFAULT_TOOL_RESULT_LIMITS,
       traceSink: new RuntimeEventToolTraceSink({
-        eventSink: options.eventSink,
+        eventSink,
       }),
       logger,
     }),
@@ -308,6 +336,12 @@ function buildApprovalSummary(
   input: Parameters<ToolApprovalRequestFactory["create"]>[0],
   operations: readonly ToolApprovalOperationSummary[],
 ): ToolApprovalRequest["summary"] {
+  if (input.identity.toolName === "ExitComposeMode") {
+    return Object.freeze({
+      title: "提交设计草稿",
+      description: "请确认设计草稿内容后批准；批准后按草稿内容落库。",
+    });
+  }
   const first = operations[0];
   const title =
     first === undefined

@@ -25,6 +25,7 @@ import {
   hydrateAgentManifest,
 } from "../dist/index.js";
 import { RUNTIME_FILES_TOOL_GROUP_MANIFEST, createFileToolRegistry, FileToolService } from "../dist/index.js";
+import { NOVEL_COMPOSE_TOOL_GROUP_MANIFEST, ComposeToolService, ComposeModeStateProvider, createNovelComposeToolRegistry } from "../dist/index.js";
 import { Type } from "typebox";
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
@@ -141,6 +142,7 @@ const toolRegistry = new ToolRegistry([
   ...novelDeleteToolRegistry.list(),
   ...novelDraftToolRegistry.list(),
   ...createFileToolRegistry({ service: new FileToolService({ designRoot: "/unavailable/design" }) }).list(),
+  ...createNovelComposeToolRegistry({ service: new ComposeToolService({ composeState: new ComposeModeStateProvider(), designRoot: "/unavailable/design" }) }).list(),
 ]);
 const toolGroups = new ToolGroupCatalog([
   loadToolGroupManifest(`
@@ -158,6 +160,7 @@ tools: [TodoWrite]
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
   RUNTIME_FILES_TOOL_GROUP_MANIFEST,
+  NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
 ]);
 const assembledStore = new InMemoryAgentManifestStore();
 const assembled = await new AgentAssembler({
@@ -179,6 +182,8 @@ assert.deepEqual(
   assembled.toSnapshot().tools.map((tool) => tool.name).sort(),
   [
     "Edit",
+    "EnterComposeMode",
+    "ExitComposeMode",
     "Glob",
     "NovelChapterEdit",
     "NovelChapterRead",

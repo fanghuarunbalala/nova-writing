@@ -33,6 +33,7 @@ export const novelAgentDefinition = new AgentDefinition({
     groupIds: [
       "runtime.todo",
       "runtime.files",
+      "novel.compose",
       "novel.outline",
       "novel.characters",
       "novel.locations",

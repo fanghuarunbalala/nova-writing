@@ -26,6 +26,7 @@ import {
   novelAgentDefinition,
 } from "../dist/index.js";
 import { RUNTIME_FILES_TOOL_GROUP_MANIFEST, createFileToolRegistry, FileToolService } from "../dist/index.js";
+import { NOVEL_COMPOSE_TOOL_GROUP_MANIFEST, ComposeToolService, ComposeModeStateProvider, createNovelComposeToolRegistry } from "../dist/index.js";
 import { SqliteSubagentBindingStore, SqliteWorkspaceStore } from "../dist/node/index.js";
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
@@ -134,6 +135,7 @@ function createAgentAssembler(workspaceStore) {
       ...novelDeleteToolRegistry.list(),
       ...novelDraftToolRegistry.list(),
       ...createFileToolRegistry({ service: new FileToolService({ designRoot: "/unavailable/design" }) }).list(),
+      ...createNovelComposeToolRegistry({ service: new ComposeToolService({ composeState: new ComposeModeStateProvider(), designRoot: "/unavailable/design" }) }).list(),
     ]),
     groups: new ToolGroupCatalog([
       loadToolGroupManifest(`
@@ -149,6 +151,7 @@ tools: [TodoWrite]
       NOVEL_DELETE_TOOL_GROUP_MANIFEST,
       NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
       RUNTIME_FILES_TOOL_GROUP_MANIFEST,
+      NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
       NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
       NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
     ]),

@@ -13,6 +13,7 @@ import {
   SqliteNovelCanonicalStore,
   openChildNovelToolRegistry,
 } from "../dist/node/index.js";
+import { ComposeModeStateProvider } from "../dist/index.js";
 
 class FixedRevisionFactory {
   createRevision() {
@@ -79,6 +80,19 @@ try {
     storageRoot: join(root, "storage"),
     workdir: workspaceRoot,
     todoWriter,
+    composeState: new ComposeModeStateProvider(),
+    eventSink: {
+      async append(event) {
+        logs.push({ level: "event", event: event.getEventType() });
+        return {
+          status: "recorded",
+          conversationId: event.conversationId,
+          eventId: `evt-${logs.length}`,
+          sequence: logs.length,
+          recordedAt: "2026-08-07T00:00:00.000Z",
+        };
+      },
+    },
     logger,
   });
 
@@ -88,12 +102,15 @@ try {
   assert.ok(names.includes("NovelCharacterWrite"));
   assert.ok(names.includes("NovelDelete"));
   assert.ok(names.includes("TodoWrite"));
+  assert.ok(names.includes("EnterComposeMode"));
+  assert.ok(names.includes("ExitComposeMode"));
   assert.ok(names.includes("Read"));
   assert.ok(names.includes("Glob"));
   assert.ok(names.includes("Write"));
   assert.ok(names.includes("Edit"));
   assert.equal(names.includes("NovelDraftStatus"), false);
   assert.equal(novelTools.groups.has("runtime.files"), true);
+  assert.equal(novelTools.groups.has("novel.compose"), true);
   assert.deepEqual(NOVEL_OUTLINE_TOOL_GROUP_MANIFEST.tools, [
     "NovelOutlineRead",
     "NovelOutlineWrite",

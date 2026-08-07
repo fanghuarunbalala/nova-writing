@@ -76,6 +76,7 @@ import {
   ConversationTodoCoordinator,
   InMemoryConversationTodoStore,
 } from "../../../runtime/todo/index.js";
+import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
 import { NodeSha256RuntimeEventIdHasher } from "../NodeSha256RuntimeEventIdHasher.js";
 import { openChildNovelToolRegistry } from "./novel/index.js";
 import type {
@@ -222,12 +223,15 @@ export class DesktopRuntimeChildCompositionFactory
       clock,
       logger,
     });
+    const composeState = new ComposeModeStateProvider();
     const novelTools = await openChildNovelToolRegistry({
       storageRoot: requireNovelStorageRoot(
         this.#novelStorageRoot ?? process.env[DESKTOP_CHILD_STORAGE_ROOT_ENV],
       ),
       workdir: bootstrap.workspace.workdir,
       todoWriter,
+      composeState,
+      eventSink,
       logger,
     });
     logger.info("runtime_child.composition.novel_registry_opened", {
@@ -254,6 +258,7 @@ export class DesktopRuntimeChildCompositionFactory
     const toolExecution = createChildToolExecutionComposition({
       registryView: configuration.assembly.toolView,
       eventSink,
+      composeStateProvider: composeState,
       logger,
     });
     logger.info("runtime_child.composition.tool_execution_created", {

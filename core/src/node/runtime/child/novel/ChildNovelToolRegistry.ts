@@ -70,10 +70,17 @@ import {
 } from "../../../../tools/novel/index.js";
 import { createTodoToolRegistry } from "../../../../tools/todo/index.js";
 import {
+  NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
+  ComposeToolService,
+  createNovelComposeToolRegistry,
+} from "../../../../tools/novel/index.js";
+import {
   RUNTIME_FILES_TOOL_GROUP_MANIFEST,
   createFileToolRegistry,
 } from "../../../../tools/files/index.js";
 import { FileToolService } from "../../../../tools/files/index.js";
+import { ComposeModeStateProvider } from "../../../../runtime/compose/index.js";
+import type { RuntimeEventSink } from "../../../../runtime/execution/event/index.js";
 import { NodeNovelStoreLocator } from "../../../novel/workspace/index.js";
 import type { NodeNovelStoreLocation } from "../../../novel/workspace/index.js";
 import {
@@ -99,6 +106,8 @@ export interface ChildNovelToolRegistryOptions {
   readonly storageRoot: string;
   readonly workdir: string;
   readonly todoWriter: ConversationTodoWriter;
+  readonly composeState: ComposeModeStateProvider;
+  readonly eventSink: RuntimeEventSink;
   readonly logger?: Logger;
 }
 
@@ -106,6 +115,8 @@ export interface CreateChildNovelToolRegistryOptions {
   readonly location: NodeNovelStoreLocation;
   readonly novelId: import("../../../../novel/index.js").NovelId;
   readonly todoWriter: ConversationTodoWriter;
+  readonly composeState: ComposeModeStateProvider;
+  readonly eventSink: RuntimeEventSink;
   /** 工作区 .novel/design 目录绝对路径（runtime.files 读作用域）。 */
   /** Absolute path to the workspace design directory (runtime.files read scope). */
   readonly designRoot: string;
@@ -145,6 +156,8 @@ export async function openChildNovelToolRegistry(
     novelId,
     designRoot,
     todoWriter: options.todoWriter,
+    composeState: options.composeState,
+    eventSink: options.eventSink,
     logger,
   });
 }
@@ -197,6 +210,15 @@ export function createChildNovelToolRegistry(
 
   const registry = new ToolRegistry([
     ...createTodoToolRegistry({ writer: options.todoWriter }).list(),
+    ...createNovelComposeToolRegistry({
+      service: new ComposeToolService({
+        composeState: options.composeState,
+        designRoot: options.designRoot,
+        eventSink: options.eventSink,
+        logger,
+      }),
+      logger,
+    }).list(),
     ...createFileToolRegistry({
       service: new FileToolService({ designRoot: options.designRoot }),
       logger,
@@ -267,6 +289,7 @@ export function createChildNovelToolRegistry(
   ]);
   const groups = new ToolGroupCatalog([
     loadToolGroupManifest(RUNTIME_TODO_TOOL_GROUP_MANIFEST),
+    NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
     RUNTIME_FILES_TOOL_GROUP_MANIFEST,
     NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
     NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,

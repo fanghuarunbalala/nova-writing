@@ -3,6 +3,7 @@
  * Compose tool service: entering (design file + state transition + event) and
  * post-approval settlement.
  */
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { noopLogger, type Logger } from "../../../observability/index.js";
@@ -32,7 +33,22 @@ export interface ComposeToolServiceOptions {
   readonly composeState: ComposeModeStateProvider;
   readonly designRoot: string;
   readonly eventSink?: RuntimeEventSink;
+  /** 批准后写入审计记录的可选 recorder。Optional audit recorder for approved commits. */
+  readonly commitRecorder?: NovelComposeCommitRecorder;
   readonly logger?: Logger;
+}
+
+export interface NovelComposeCommitRecord {
+  readonly designId: string;
+  readonly conversationId: string;
+  readonly approvedAt: string;
+  readonly revisionBase?: string;
+  readonly contentDigest: string;
+  readonly archivePath: string;
+}
+
+export interface NovelComposeCommitRecorder {
+  record(record: NovelComposeCommitRecord): Promise<void>;
 }
 
 export type ComposeEnterDetails = {
@@ -53,12 +69,14 @@ export class ComposeToolService {
   readonly #composeState: ComposeModeStateProvider;
   readonly #designRoot: string;
   readonly #eventSink: RuntimeEventSink;
+  readonly #commitRecorder: NovelComposeCommitRecorder | undefined;
   readonly #logger: Logger;
 
   constructor(options: ComposeToolServiceOptions) {
     this.#composeState = options.composeState;
     this.#designRoot = path.resolve(options.designRoot);
     this.#eventSink = options.eventSink ?? NOOP_RUNTIME_EVENT_SINK;
+    this.#commitRecorder = options.commitRecorder;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "novel_compose_tool_service",
     });
@@ -105,8 +123,34 @@ export class ComposeToolService {
   /** Post-approval settlement: transitions to applied and emits applied (handler runs after approval). */
   async exit(conversationId: string): Promise<ComposeExitDetails> {
     const snapshot = this.#composeState.approve(conversationId);
+    const designFilePath = snapshot.designFilePath ?? "";
+    let contentDigest = "";
+    let archivePath = "";
+    if (designFilePath !== "") {
+      try {
+        const content = await fs.readFile(designFilePath, "utf8");
+        contentDigest = createHash("sha256").update(content).digest("hex");
+        const archiveDir = path.join(this.#designRoot, "archive");
+        await fs.mkdir(archiveDir, { recursive: true });
+        archivePath = path.join(archiveDir, path.basename(designFilePath));
+        await fs.rename(designFilePath, archivePath);
+      } catch (error) {
+        this.#logger.debug("novel_compose.archive_skipped", {
+          conversationId,
+        });
+      }
+    }
+    if (this.#commitRecorder !== undefined && contentDigest !== "") {
+      await this.#commitRecorder.record({
+        designId: path.basename(designFilePath, ".md"),
+        conversationId,
+        approvedAt: new Date().toISOString(),
+        contentDigest,
+        archivePath,
+      });
+    }
     await this.#emit(conversationId, "compose.applied", {
-      designFilePath: snapshot.designFilePath ?? "",
+      designFilePath,
       phase: snapshot.phase,
       ...(snapshot.preComposeMode === undefined
         ? {}
@@ -117,7 +161,7 @@ export class ComposeToolService {
       phase: snapshot.phase,
     });
     return Object.freeze({
-      designFilePath: snapshot.designFilePath ?? "",
+      designFilePath,
       phase: snapshot.phase,
       ...(snapshot.preComposeMode === undefined
         ? {}

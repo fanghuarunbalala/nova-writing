@@ -219,6 +219,24 @@ const NOVEL_MIGRATIONS: readonly NovelSqliteMigration[] = [
       ${NOVEL_PARAGRAPH_PUBLICATION_SCHEMA_SQL}
     `,
   },
+  {
+    version: 12,
+    name: "novel_compose_commits",
+    sql: `
+      CREATE TABLE novel_compose_commits (
+        design_id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        novel_id TEXT NOT NULL,
+        approved_at TEXT NOT NULL,
+        revision_base TEXT,
+        content_digest TEXT NOT NULL,
+        archive_path TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX novel_compose_commits_conversation_idx
+        ON novel_compose_commits(conversation_id, approved_at, design_id);
+    `,
+  },
 ];
 
 export const LATEST_NOVEL_SCHEMA_VERSION: NovelSchemaVersion =

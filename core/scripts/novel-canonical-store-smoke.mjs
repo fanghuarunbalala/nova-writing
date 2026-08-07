@@ -189,6 +189,7 @@ try {
     "novel_chapter_paragraphs",
     "novel_characters",
     "novel_commits",
+    "novel_compose_commits",
     "novel_conversation_bindings",
     "novel_draft_sessions",
     "novel_leaf_story_unit_plans",

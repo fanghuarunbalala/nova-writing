@@ -86,6 +86,7 @@ import type { NodeNovelStoreLocation } from "../../../novel/workspace/index.js";
 import {
   SqliteNovelCanonicalStore,
   SqliteNovelCanonicalWriter,
+  SqliteNovelComposeCommitStore,
   SqliteNovelEntityQueryStore,
   SqliteNovelOutlineQueryStore,
   SqliteNovelParagraphQueryStore,
@@ -203,6 +204,11 @@ export function createChildNovelToolRegistry(
     logger,
   });
   const characterQueries = new CharacterQueryService(entityQueryStore);
+  const composeCommitStore = new SqliteNovelComposeCommitStore({
+    location: options.location,
+    novelId: options.novelId,
+    logger,
+  });
   const locationQueries = new LocationQueryService(entityQueryStore);
   const outlineQueries = new StoryOutlineQueryService(outlineQueryStore);
   const paragraphQueries = new ParagraphQueryService(paragraphQueryStore);
@@ -215,6 +221,7 @@ export function createChildNovelToolRegistry(
         composeState: options.composeState,
         designRoot: options.designRoot,
         eventSink: options.eventSink,
+        commitRecorder: composeCommitStore,
         logger,
       }),
       logger,

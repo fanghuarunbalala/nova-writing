@@ -123,7 +123,11 @@ export class PiProviderExecutionFactory {
         message: errorMessageOf(error),
         status: state.status,
       });
-      this.#logger.info("pi_provider_execution.failed", { failure });
+      this.#logger.info("pi_provider_execution.failed", {
+        failure,
+        errorName: getErrorName(error),
+        ...(state.status === undefined ? {} : { status: state.status }),
+      });
       return createFailureStream(failure, descriptor.api);
     }
     return this.#normalize(stream, state, hooks, descriptor.api);
@@ -247,7 +251,11 @@ export class PiProviderExecutionFactory {
                   message: event.error.errorMessage,
                   status: state.status,
                 });
-          this.#logger.info("pi_provider_execution.failed", { failure });
+          this.#logger.info("pi_provider_execution.failed", {
+            failure,
+            errorName: getErrorName(event.error),
+            ...(state.status === undefined ? {} : { status: state.status }),
+          });
           const normalized = normalizeErrorEvent(event, failure);
           output.push(normalized);
           output.end(normalized.error);
@@ -410,6 +418,10 @@ const EMPTY_USAGE: Usage = Object.freeze({
 function errorMessageOf(error: unknown): string | undefined {
   if (error instanceof Error) return error.message;
   return undefined;
+}
+
+function getErrorName(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error;
 }
 
 /** Buffered Pi event stream satisfying the AssistantMessageEventStream surface. */

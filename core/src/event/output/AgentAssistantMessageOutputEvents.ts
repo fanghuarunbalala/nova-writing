@@ -84,6 +84,7 @@ export type AgentAssistantMessageFailedOutputEventOptions =
   AgentAssistantMessageBaseOptions & {
     assistantMessageId: string;
     failureCode: AssistantMessageFailureCode;
+    failureDetail?: string;
   };
 
 export class AgentAssistantMessageFailedOutputEvent extends AgentOutputEvent {
@@ -94,6 +95,7 @@ export class AgentAssistantMessageFailedOutputEvent extends AgentOutputEvent {
       new AgentAssistantMessageFailedPayload(
         options.assistantMessageId,
         options.failureCode,
+        options.failureDetail,
       ),
       { ...options, ...identity },
     );

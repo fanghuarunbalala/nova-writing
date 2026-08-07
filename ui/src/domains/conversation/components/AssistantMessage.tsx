@@ -45,6 +45,7 @@ export interface AssistantMessageProps {
   readonly timestamp: number;
   readonly approvalState?: AssistantApprovalState;
   readonly revision?: string;
+  readonly failureDetail?: string;
   readonly thinkLines?: readonly ThinkLineData[];
   readonly text: string;
   readonly cards?: readonly ConversationCardDescriptor[];
@@ -69,6 +70,7 @@ export function AssistantMessage({
   timestamp,
   approvalState,
   revision,
+  failureDetail,
   thinkLines = [],
   text,
   cards = [],
@@ -102,6 +104,9 @@ export function AssistantMessage({
             resolveReference={onResolveReference}
           />
         </div>
+        {approvalState === "failed" && failureDetail !== undefined ? (
+          <p className={styles.failureDetail}>{failureDetail}</p>
+        ) : null}
         {eventFlow.length > 0 ? <RuntimeEventFlow events={eventFlow} /> : null}
         {toolTraces.length > 0 ? <ToolStrip traces={toolTraces} /> : null}
         {cards.length > 0 ? (

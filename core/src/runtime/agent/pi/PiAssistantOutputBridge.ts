@@ -413,6 +413,9 @@ function createTerminalEvent(options: TerminalEventOptions) {
         options.message.stopReason === "error"
           ? ASSISTANT_MESSAGE_FAILURE_CODE.providerError
           : ASSISTANT_MESSAGE_FAILURE_CODE.providerAborted,
+      ...(options.message.stopReason === "error"
+        ? { failureDetail: providerFailureDetail(options.message) }
+        : {}),
     });
   }
   return new AgentAssistantMessageCompletedOutputEvent({
@@ -422,6 +425,19 @@ function createTerminalEvent(options: TerminalEventOptions) {
     completionReason: mapCompletionReason(options.message.stopReason),
     hasToolCalls: options.message.content.some((item) => item.type === "toolCall"),
   });
+}
+
+/** 从 provider 错误文本映射为脱敏中文摘要（不暴露原始错误）。Map provider error to a redacted Chinese summary. */
+function providerFailureDetail(
+  message: { readonly errorMessage?: string },
+): string | undefined {
+  const text = message.errorMessage ?? "";
+  if (/timeout|timed out|deadline/i.test(text)) return "模型请求超时，请重试";
+  if (/rate.?limit|429/i.test(text)) return "模型请求触发限流，请稍后重试";
+  if (/auth|unauthorized|401|api ?key/i.test(text)) return "模型 API 认证失败，请检查配置";
+  if (/network|fetch failed|socket|econn/i.test(text)) return "网络连接失败，请检查网络后重试";
+  const trimmed = text.trim();
+  return trimmed.length === 0 ? undefined : trimmed.slice(0, 120);
 }
 
 function terminalBase(options: TerminalEventOptions, eventType: string) {

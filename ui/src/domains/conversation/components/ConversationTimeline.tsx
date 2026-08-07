@@ -159,6 +159,7 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
           timestamp={item.timestamp}
           approvalState={item.approvalState}
           revision={item.revision}
+          failureDetail={item.failureDetail}
           thinkLines={item.thinkLines}
           text={item.text}
           cards={item.cards}

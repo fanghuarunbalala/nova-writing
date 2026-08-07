@@ -73,6 +73,7 @@ interface MutableAssistantProjection {
   completionReason?: AssistantMessageCompletionReason;
   hasToolCalls?: boolean;
   failureCode?: AssistantMessageFailureCode;
+  failureDetail?: string;
 }
 
 export interface ConversationProjectionStoreOptions {
@@ -497,6 +498,9 @@ export class ConversationProjectionStore {
         throw payloadError(event.eventType, "Assistant failure code is invalid");
       }
       assistant.failureCode = failureCode;
+      if (typeof payload.failureDetail === "string" && payload.failureDetail.length > 0) {
+        assistant.failureDetail = payload.failureDetail;
+      }
     }
     assistant.status = status;
     assistant.lastSequence = event.sequence;
@@ -705,6 +709,9 @@ function toAssistantProjection(
       : {}),
     ...(assistant.failureCode !== undefined
       ? { failureCode: assistant.failureCode }
+      : {}),
+    ...(assistant.failureDetail !== undefined
+      ? { failureDetail: assistant.failureDetail }
       : {}),
   });
 }

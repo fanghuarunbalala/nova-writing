@@ -284,6 +284,7 @@ export const AgentAssistantMessageFailedPayloadSchema = Type.Object(
       Type.Literal("provider_error"),
       Type.Literal("provider_aborted"),
     ]),
+    failureDetail: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
   },
   { additionalProperties: false },
 );

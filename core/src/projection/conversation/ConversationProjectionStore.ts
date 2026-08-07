@@ -536,6 +536,7 @@ export class ConversationProjectionStore {
         toolVersion: requireString(event.eventType, "toolVersion", payload.toolVersion),
         argumentDigest: requireDigest(event.eventType, payload.argumentDigest),
         runId,
+        ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
         requestedSequence: event.sequence,
         lastSequence: event.sequence,
         title: requireString(event.eventType, "summary.title", summary.title),

@@ -59,8 +59,8 @@ function opClass(op: string): string {
 
 export interface ApprovalCardProps {
   readonly approval: ApprovalCardView;
-  readonly onApprove?: (approvalRequestId: string) => void;
-  readonly onReject?: (approvalRequestId: string) => void;
+  readonly onApprove?: (approvalRequestIds: readonly string[]) => void;
+  readonly onReject?: (approvalRequestIds: readonly string[]) => void;
 }
 
 export function ApprovalCard({
@@ -70,11 +70,14 @@ export function ApprovalCard({
 }: ApprovalCardProps) {
   const [showArguments, setShowArguments] = useState(false);
   const pending = approval.status === "pending";
-  const operations = approval.operations ?? [];
-  const serializedArguments =
-    approval.arguments === undefined
-      ? undefined
-      : JSON.stringify(approval.arguments, null, 2);
+  const operations = approval.operations;
+  const argumentGroups = approval.argumentGroups.filter(
+    (group) => group.arguments !== undefined,
+  );
+  const statusText =
+    approval.status === "pending" && approval.approvalRequestIds.length > 1
+      ? `待批准 ${approval.approvalRequestIds.length} 项`
+      : STATUS_LABEL[approval.status] ?? approval.status;
   return (
     <section className={styles.card} data-status={approval.status}>
       <header className={styles.head}>
@@ -83,7 +86,7 @@ export function ApprovalCard({
         </span>
         <h4 className={styles.title}>{approval.title}</h4>
         <span className={styles.meta}>
-          {approval.toolName} · {formatTime(approval.requestedAt)}
+          {approval.toolNames.join(" · ")} · {formatTime(approval.requestedAt)}
         </span>
       </header>
       {operations.length > 0 ? (
@@ -118,7 +121,7 @@ export function ApprovalCard({
       ) : approval.description !== undefined ? (
         <p className={styles.desc}>{approval.description}</p>
       ) : null}
-      {serializedArguments !== undefined ? (
+      {argumentGroups.length > 0 ? (
         <div className={styles.args}>
           <button
             type="button"
@@ -129,7 +132,16 @@ export function ApprovalCard({
             {showArguments ? "收起完整参数" : "查看完整参数"}
           </button>
           {showArguments ? (
-            <pre className={styles.argsBody}>{serializedArguments}</pre>
+            <div className={styles.argsBody}>
+              {argumentGroups.map((group, index) => (
+                <div key={`${group.toolName}-${index}`} className={styles.argsGroup}>
+                  <span className={styles.argsTool}>{group.toolName}</span>
+                  <pre className={styles.argsPre}>
+                    {JSON.stringify(group.arguments, null, 2)}
+                  </pre>
+                </div>
+              ))}
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -139,21 +151,21 @@ export function ApprovalCard({
             <Button
               size="sm"
               variant="primary"
-              onClick={() => onApprove?.(approval.approvalRequestId)}
+              onClick={() => onApprove?.(approval.approvalRequestIds)}
             >
               批准
             </Button>
             <Button
               size="sm"
               variant="ghost-danger"
-              onClick={() => onReject?.(approval.approvalRequestId)}
+              onClick={() => onReject?.(approval.approvalRequestIds)}
             >
               请求修改
             </Button>
           </>
         ) : null}
         <span className={[styles.status, styles[approval.status]].filter(Boolean).join(" ")}>
-          {STATUS_LABEL[approval.status] ?? approval.status}
+          {statusText}
         </span>
       </footer>
     </section>

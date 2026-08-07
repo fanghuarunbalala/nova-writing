@@ -5,7 +5,10 @@
  * 结构化卡片：binding 快照的 generic 卡（ConversationCardProjectionStore 产出）
  * 按 sourceSequence 归属到对应 assistant 消息，并映射为 rich 描述供渲染器使用。
  */
-import type { ConversationProjectionSnapshot } from "@novel/core";
+import type {
+  ConversationProjectionSnapshot,
+  ToolApprovalProjection,
+} from "@novel/core";
 import type { ConversationCardDescriptor as GenericCardDescriptor } from "../../domains/conversation/cards/projection/index.js";
 import type { ConversationCardDescriptor } from "../../domains/conversation/projection/ConversationCardDescriptor.js";
 import type {
@@ -21,6 +24,8 @@ export function mapProjectionTimeline(
   agentLabel: string,
 ): readonly ConversationTimelineItem[] {
   const items: ConversationTimelineItem[] = [];
+  const approvalGroups = groupApprovalRequests(projection.timeline);
+  const emittedApprovalGroups = new Set<string>();
   let turnNumber = 0;
   for (const item of projection.timeline) {
     switch (item.kind) {
@@ -95,30 +100,82 @@ export function mapProjectionTimeline(
         });
         break;
       }
-      case "tool-approval":
-        items.push({
-          kind: "approval",
-          sequence: item.requestedSequence,
-          timestamp: Date.parse(item.requestedAt) || 0,
-          approval: {
-            approvalRequestId: item.approvalRequestId,
-            toolName: item.toolName,
-            title: item.title,
-            ...(item.description === undefined
-              ? {}
-              : { description: item.description }),
-            ...(item.operations === undefined
-              ? {}
-              : { operations: item.operations }),
-            ...(item.arguments === undefined ? {} : { arguments: item.arguments }),
-            status: item.status,
-            requestedAt: item.requestedAt,
-          },
-        });
+      case "tool-approval": {
+        const groupKey = item.turnId ?? `req-${item.approvalRequestId}`;
+        if (emittedApprovalGroups.has(groupKey)) break;
+        emittedApprovalGroups.add(groupKey);
+        const group = approvalGroups.get(groupKey);
+        if (group === undefined) break;
+        items.push(toApprovalCardItem(group, groupKey));
         break;
+      }
     }
   }
   return Object.freeze(items);
+}
+
+/** 同一 turn 的工具审批合并为一组（无 turnId 时各自成组）。Group by turn. */
+function groupApprovalRequests(
+  timeline: ConversationProjectionSnapshot["timeline"],
+): Map<string, readonly ToolApprovalProjection[]> {
+  const groups = new Map<string, ToolApprovalProjection[]>();
+  for (const item of timeline) {
+    if (item.kind !== "tool-approval") continue;
+    const key = item.turnId ?? `req-${item.approvalRequestId}`;
+    const list = groups.get(key) ?? [];
+    list.push(item);
+    groups.set(key, list);
+  }
+  return groups;
+}
+
+function groupApprovalStatus(
+  group: readonly ToolApprovalProjection[],
+): ToolApprovalProjection["status"] {
+  if (group.some((item) => item.status === "pending")) return "pending";
+  if (group.some((item) => item.status === "rejected")) return "rejected";
+  return group[group.length - 1].status;
+}
+
+function toApprovalCardItem(
+  group: readonly ToolApprovalProjection[],
+  groupKey: string,
+): ConversationTimelineItem {
+  const operations = Object.freeze(
+    group.flatMap((item) => item.operations ?? []),
+  );
+  const toolNames = Object.freeze([
+    ...new Set(group.map((item) => item.toolName)),
+  ]);
+  const argumentGroups = Object.freeze(
+    group.map((item) =>
+      Object.freeze({
+        toolName: item.toolName,
+        ...(item.arguments === undefined
+          ? {}
+          : { arguments: item.arguments }),
+      }),
+    ),
+  );
+  const requestedAt = group[0].requestedAt;
+  return Object.freeze({
+    kind: "approval" as const,
+    sequence: Math.min(...group.map((item) => item.requestedSequence)),
+    timestamp: Date.parse(requestedAt) || 0,
+    approval: Object.freeze({
+      groupKey,
+      approvalRequestIds: Object.freeze(group.map((item) => item.approvalRequestId)),
+      toolNames,
+      title: group[0].title,
+      ...(group[0].description === undefined
+        ? {}
+        : { description: group[0].description }),
+      operations,
+      argumentGroups,
+      status: groupApprovalStatus(group),
+      requestedAt,
+    }),
+  });
 }
 
 const DELTA_EVENT_TYPE = "agent.assistant.message.delta";

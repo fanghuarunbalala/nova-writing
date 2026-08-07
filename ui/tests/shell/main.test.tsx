@@ -246,14 +246,78 @@ describe("chatSurfaceMapper", () => {
     );
     expect(items).toHaveLength(1);
     if (items[0].kind === "approval") {
-      expect(items[0].approval.approvalRequestId).toBe("AR-1");
+      expect(items[0].approval.approvalRequestIds).toEqual(["AR-1"]);
       expect(items[0].approval.title).toBe("新增大纲单元");
       expect(items[0].approval.operations).toEqual([
         { op: "add", kind: "outline", id: "s1", title: "第一章 序章" },
       ]);
-      expect(items[0].approval.arguments).toEqual({
-        values: [{ id: "s1", title: "第一章 序章", intent: "引入主角" }],
-      });
+      expect(items[0].approval.argumentGroups).toEqual([
+        {
+          toolName: "NovelOutlineWrite",
+          arguments: {
+            values: [{ id: "s1", title: "第一章 序章", intent: "引入主角" }],
+          },
+        },
+      ]);
+    }
+  });
+
+  it("groups tool approvals of the same turn into one card", () => {
+    const digest = `sha256:${"0".repeat(64)}`;
+    const base = {
+      toolCallId: "call-1",
+      toolName: "NovelOutlineWrite",
+      toolVersion: "1.0.0",
+      argumentDigest: digest,
+      runId: "r1",
+      turnId: "t1",
+      lastSequence: 3,
+      title: "新增大纲单元",
+      description: "目标：第一章",
+      operations: [{ op: "add", kind: "outline", id: "s1", title: "第一章" }],
+      arguments: { values: [{ id: "s1", title: "第一章" }] },
+      requestedAt: "2026-08-05T09:00:02.000Z",
+      expiresAt: "2026-08-05T09:15:02.000Z",
+      timestamp: "2026-08-05T09:00:01.000Z",
+      status: "pending",
+    };
+    const items = mapProjectionTimeline(
+      projection({
+        timeline: [
+          {
+            kind: "tool-approval",
+            approvalRequestId: "AR-1",
+            requestedSequence: 3,
+            ...base,
+          },
+          {
+            kind: "tool-approval",
+            approvalRequestId: "AR-2",
+            requestedSequence: 4,
+            ...base,
+            toolName: "NovelCharacterWrite",
+            operations: [
+              { op: "add", kind: "character", id: "c1", title: "张三" },
+            ],
+            arguments: { values: [{ id: "c1", name: "张三" }] },
+          },
+        ],
+      }),
+      [],
+      "Novel Agent",
+    );
+    expect(items).toHaveLength(1);
+    if (items[0].kind === "approval") {
+      expect(items[0].approval.approvalRequestIds).toEqual(["AR-1", "AR-2"]);
+      expect(items[0].approval.toolNames).toEqual([
+        "NovelOutlineWrite",
+        "NovelCharacterWrite",
+      ]);
+      expect(items[0].approval.operations).toEqual([
+        { op: "add", kind: "outline", id: "s1", title: "第一章" },
+        { op: "add", kind: "character", id: "c1", title: "张三" },
+      ]);
+      expect(items[0].approval.argumentGroups).toHaveLength(2);
     }
   });
 });

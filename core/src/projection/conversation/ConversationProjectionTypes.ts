@@ -121,6 +121,7 @@ export interface ToolApprovalProjection {
   readonly toolVersion: string;
   readonly argumentDigest: `sha256:${string}`;
   readonly runId: string;
+  readonly turnId?: string;
   readonly requestedSequence: number;
   readonly lastSequence: number;
   readonly title: string;

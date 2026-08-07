@@ -26,7 +26,7 @@ export interface ConversationTimelineProps {
   readonly onProposalAction?: (changeSetId: string, action: "approve" | "reject" | "view-diff") => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
   readonly onApprovalDecision?: (
-    approvalRequestId: string,
+    approvalRequestIds: readonly string[],
     decision: "approved" | "rejected",
   ) => void;
 }
@@ -121,7 +121,7 @@ interface RenderItemDeps {
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
   readonly onApprovalDecision?: (
-    approvalRequestId: string,
+    approvalRequestIds: readonly string[],
     decision: "approved" | "rejected",
   ) => void;
 }
@@ -197,12 +197,12 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
           onApprove={
             onApprovalDecision === undefined
               ? undefined
-              : (approvalRequestId) => onApprovalDecision(approvalRequestId, "approved")
+              : (approvalRequestIds) => onApprovalDecision(approvalRequestIds, "approved")
           }
           onReject={
             onApprovalDecision === undefined
               ? undefined
-              : (approvalRequestId) => onApprovalDecision(approvalRequestId, "rejected")
+              : (approvalRequestIds) => onApprovalDecision(approvalRequestIds, "rejected")
           }
         />
       );

@@ -61,7 +61,7 @@
   display: flex;
   flex-direction: column;
   padding: 0;
-  margin: 0;
+  margin: 10px 0 0;
   list-style: none;
 }
 
@@ -69,14 +69,14 @@
   display: flex;
   align-items: baseline;
   gap: 9px;
-  padding: 9px 0;
-  border-top: 1px dashed var(--color-border);
+  padding: 9px 10px;
+  border-radius: 9px;
   font-size: 13px;
   line-height: 1.55;
 }
 
-.op:first-of-type {
-  margin-top: 10px;
+.op + .op {
+  margin-top: 6px;
 }
 
 .opMark {
@@ -87,8 +87,22 @@
   text-align: center;
 }
 
+.add {
+  background: color-mix(in oklab, var(--color-success) 9%, var(--color-surface));
+}
+
 .add .opMark { color: var(--color-success); }
+
+.mod {
+  background: color-mix(in oklab, var(--color-warn) 8%, var(--color-surface));
+}
+
 .mod .opMark { color: var(--color-warn); }
+
+.del {
+  background: color-mix(in oklab, var(--color-danger) 8%, var(--color-surface));
+}
+
 .del .opMark { color: var(--color-danger); }
 
 .opText {
@@ -139,6 +153,9 @@
 }
 
 .argsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   max-height: 260px;
   overflow: auto;
   margin: 0;
@@ -146,9 +163,26 @@
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-surface-2);
+}
+
+.argsGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.argsTool {
   font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--color-accent-ink);
+}
+
+.argsPre {
+  margin: 0;
   font-size: 11px;
   line-height: 1.5;
+  font-family: var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--color-fg);

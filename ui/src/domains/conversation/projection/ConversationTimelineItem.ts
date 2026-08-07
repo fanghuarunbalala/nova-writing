@@ -7,14 +7,25 @@
 import type { ToolApprovalProjection } from "@novel/core";
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
 
-/** 消息流审批卡数据（来自投影 tool-approval 项）。Approval card view data. */
+/**
+ * 消息流审批卡数据：同一轮（turn）的多个工具审批合并为一张卡。
+ * Approval card view: tool-approval items of one turn are grouped into one card.
+ */
 export interface ApprovalCardView {
-  readonly approvalRequestId: string;
-  readonly toolName: string;
+  /** 分组键（runId:turnId，无 turnId 时退回 approvalRequestId）。Group key. */
+  readonly groupKey: string;
+  /** 本卡涵盖的全部审批请求 id（批准/请求修改作用于全部）。All request ids. */
+  readonly approvalRequestIds: readonly string[];
+  readonly toolNames: readonly string[];
   readonly title: string;
   readonly description?: string;
-  readonly operations?: ToolApprovalProjection["operations"];
-  readonly arguments?: ToolApprovalProjection["arguments"];
+  /** 汇总后的操作行。Merged per-target operation rows. */
+  readonly operations: NonNullable<ToolApprovalProjection["operations"]>;
+  /** 各请求的完整参数（展开时按工具分段展示）。Full arguments per request. */
+  readonly argumentGroups: readonly {
+    readonly toolName: string;
+    readonly arguments?: ToolApprovalProjection["arguments"];
+  }[];
   readonly status: ToolApprovalProjection["status"];
   readonly requestedAt: string;
 }

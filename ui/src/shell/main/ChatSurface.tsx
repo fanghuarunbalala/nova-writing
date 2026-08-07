@@ -161,8 +161,10 @@ function ActiveChatSurface({
         resolveReference={resolveReference}
         onProposalAction={onProposalAction}
         onOpenApproval={onOpenApproval}
-        onApprovalDecision={(approvalRequestId, decision) => {
-          void approvalStore.decide(approvalRequestId, decision);
+        onApprovalDecision={(approvalRequestIds, decision) => {
+          for (const approvalRequestId of approvalRequestIds) {
+            void approvalStore.decide(approvalRequestId, decision);
+          }
         }}
       />
       <ConversationComposer

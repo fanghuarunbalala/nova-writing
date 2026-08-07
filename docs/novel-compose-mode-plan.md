@@ -212,7 +212,7 @@ designing（写 design md）
 | 步 | 内容 | 验证 |
 |---|---|---|
 | M0 | 权限模式 compose + `EnterComposeMode/ExitComposeMode` + `preComposeMode` 保存/恢复 + `novel.compose.*` 事件 | smoke：状态迁移、compose 内 canonical 写 deny |
-| M1 | 新增 `runtime.files`（Read/Glob/Write/Edit：读∈design 目录、写==当前 design 文件；**Grep 延后**）+ design md 工件 | smoke：仅 design 路径可写、越界拒绝 |
+| ~~M1~~ ✅ | 新增 `runtime.files`（Read/Glob/Write/Edit：读∈design 目录、写==当前 design 文件；**Grep 延后**）+ design md 工件 | 已实现：TypeBox schemas + FileToolService（picomatch glob / realpath 沙箱 / 原子写）+ 工具定义与 registry + 接线（child registry、manifest composition、agent policy、`child_files_read_allow`）+ service/registry/wiring 冒烟；全量 smoke 225 全绿 |
 | M2 | `ExitComposeMode` 接入 `system.tool.approval.requested/resolved`；批准→恢复模式；拒绝→留在 compose | smoke：批准/拒绝状态与权限断言 |
 | M3 | 落库收口：`novel_operations` commit 记录 + md 归档（依赖 `SqliteNovelCanonicalWriter` 基座） | 集成冒烟：设计→批准→落库→记录 |
 | M4 | 提示词 `runtime.composeMode` + overlay 动态挂载 + 每轮 reminder | prompt smoke 断言各状态文案 |

@@ -44,6 +44,14 @@ const registry = new ToolRegistry([
   fakeTool("NovelOutlineRead", { scope: Type.Any() }),
   fakeTool("NovelOutlineWrite", { values: Type.Any() }),
   fakeTool("NovelOutlineEdit", { values: Type.Any() }),
+  fakeTool("Read", { file_path: Type.String() }),
+  fakeTool("Glob", { pattern: Type.String() }),
+  fakeTool("Write", { file_path: Type.String(), content: Type.String() }),
+  fakeTool("Edit", {
+    file_path: Type.String(),
+    old_string: Type.String(),
+    new_string: Type.String(),
+  }),
 ]);
 const groups = new ToolGroupCatalog([
   {
@@ -51,7 +59,16 @@ const groups = new ToolGroupCatalog([
     id: "child.smoke",
     version: "1.0.0",
     label: "Child Smoke",
-    tools: ["TodoWrite", "NovelOutlineRead", "NovelOutlineWrite", "NovelOutlineEdit"],
+    tools: [
+      "TodoWrite",
+      "NovelOutlineRead",
+      "NovelOutlineWrite",
+      "NovelOutlineEdit",
+      "Read",
+      "Glob",
+      "Write",
+      "Edit",
+    ],
   },
 ]);
 const view = new ToolRegistryView({
@@ -91,7 +108,16 @@ const providerTools = new PiToolAdapter(
 ).toAgentTools(view.listAllowed());
 assert.deepEqual(
   providerTools.map((tool) => tool.name).sort(),
-  ["NovelOutlineEdit", "NovelOutlineRead", "NovelOutlineWrite", "TodoWrite"],
+  [
+    "Edit",
+    "Glob",
+    "NovelOutlineEdit",
+    "NovelOutlineRead",
+    "NovelOutlineWrite",
+    "Read",
+    "TodoWrite",
+    "Write",
+  ],
 );
 
 const signal = new AbortController().signal;
@@ -265,6 +291,72 @@ await assert.rejects(
       payload: {},
     }),
   RuntimeApprovalDecisionInputError,
+);
+
+// runtime.files 权限：Read/Glob 直接放行（child_files_read_allow）；Write/Edit 在 idle 默认 deny。
+// runtime.files permissions: Read/Glob pass through; Write/Edit are denied outside compose.
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-file-read",
+    toolName: "Read",
+    toolVersion: "1.0.0",
+    arguments: { file_path: "/design/chapter-1.md" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Read");
+
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-file-glob",
+    toolName: "Glob",
+    toolVersion: "1.0.0",
+    arguments: { pattern: "**/*.md" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Glob");
+
+await assert.rejects(
+  () =>
+    composition.dispatcher.execute(
+      {
+        conversationId: "conv-tools",
+        runId: "run-1",
+        toolCallId: "call-file-write",
+        toolName: "Write",
+        toolVersion: "1.0.0",
+        arguments: { file_path: "/design/chapter-1.md", content: "x" },
+      },
+      { signal },
+    ),
+  (error) =>
+    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+);
+
+await assert.rejects(
+  () =>
+    composition.dispatcher.execute(
+      {
+        conversationId: "conv-tools",
+        runId: "run-1",
+        toolCallId: "call-file-edit",
+        toolName: "Edit",
+        toolVersion: "1.0.0",
+        arguments: {
+          file_path: "/design/chapter-1.md",
+          old_string: "a",
+          new_string: "b",
+        },
+      },
+      { signal },
+    ),
+  (error) =>
+    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
 );
 
 assert.ok(CHILD_TOOL_PERMISSION_RULES.length >= 2);

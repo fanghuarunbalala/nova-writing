@@ -427,17 +427,13 @@ function createTerminalEvent(options: TerminalEventOptions) {
   });
 }
 
-/** 从 provider 错误文本映射为脱敏中文摘要（不暴露原始错误）。Map provider error to a redacted Chinese summary. */
+/** 开发阶段：直接展示 provider 原始错误文本（截断）。Raw provider error text, truncated. */
 function providerFailureDetail(
   message: { readonly errorMessage?: string },
 ): string | undefined {
   const text = message.errorMessage ?? "";
-  if (/timeout|timed out|deadline/i.test(text)) return "模型请求超时，请重试";
-  if (/rate.?limit|429/i.test(text)) return "模型请求触发限流，请稍后重试";
-  if (/auth|unauthorized|401|api ?key/i.test(text)) return "模型 API 认证失败，请检查配置";
-  if (/network|fetch failed|socket|econn/i.test(text)) return "网络连接失败，请检查网络后重试";
   const trimmed = text.trim();
-  return trimmed.length === 0 ? undefined : trimmed.slice(0, 120);
+  return trimmed.length === 0 ? undefined : trimmed.slice(0, 240);
 }
 
 function terminalBase(options: TerminalEventOptions, eventType: string) {

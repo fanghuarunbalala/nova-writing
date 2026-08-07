@@ -126,6 +126,10 @@ export class PiProviderExecutionFactory {
       this.#logger.info("pi_provider_execution.failed", {
         failure,
         errorName: getErrorName(error),
+        ...(captureProviderErrorMessage(error) === undefined
+          ? {}
+          : { message: captureProviderErrorMessage(error) }),
+        ...captureProviderErrorCode(error),
         ...(state.status === undefined ? {} : { status: state.status }),
       });
       return createFailureStream(failure, descriptor.api);
@@ -254,6 +258,10 @@ export class PiProviderExecutionFactory {
           this.#logger.info("pi_provider_execution.failed", {
             failure,
             errorName: getErrorName(event.error),
+            ...(captureProviderErrorMessage(event.error) === undefined
+              ? {}
+              : { message: captureProviderErrorMessage(event.error) }),
+            ...captureProviderErrorCode(event.error),
             ...(state.status === undefined ? {} : { status: state.status }),
           });
           const normalized = normalizeErrorEvent(event, failure);
@@ -417,11 +425,51 @@ const EMPTY_USAGE: Usage = Object.freeze({
 
 function errorMessageOf(error: unknown): string | undefined {
   if (error instanceof Error) return error.message;
+  if (error !== null && typeof error === "object") {
+    const message = (error as Record<string, unknown>).message;
+    return typeof message === "string" && message.trim().length > 0
+      ? message
+      : undefined;
+  }
   return undefined;
+}
+
+/** 开发阶段记录原始错误消息（截断防刷屏）。Raw provider error message, truncated. */
+function captureProviderErrorMessage(error: unknown): string | undefined {
+  const message = errorMessageOf(error);
+  if (message === undefined) return undefined;
+  return message.length <= 512 ? message : `${message.slice(0, 512)}…`;
 }
 
 function getErrorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
+}
+
+/** 提取错误对象的脱敏标识（code/status/type），不落原始消息。Redacted error code/status/type. */
+function captureProviderErrorCode(
+  error: unknown,
+): {
+  readonly errorCode?: string;
+  readonly errorStatus?: string;
+  readonly errorType?: string;
+} {
+  if (error === null || typeof error !== "object") return {};
+  const record = error as Record<string, unknown>;
+  const code =
+    typeof record.code === "string" && record.code.trim().length > 0
+      ? record.code.trim().slice(0, 64)
+      : undefined;
+  const status =
+    typeof record.status === "number" ? String(record.status) : undefined;
+  const type =
+    typeof record.type === "string" && record.type.trim().length > 0
+      ? record.type.trim().slice(0, 64)
+      : undefined;
+  return {
+    ...(code === undefined ? {} : { errorCode: code }),
+    ...(status === undefined ? {} : { errorStatus: status }),
+    ...(type === undefined ? {} : { errorType: type }),
+  };
 }
 
 /** Buffered Pi event stream satisfying the AssistantMessageEventStream surface. */

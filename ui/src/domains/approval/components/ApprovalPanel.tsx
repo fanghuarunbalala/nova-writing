@@ -2,13 +2,13 @@
  * ApprovalPanel
  *
  * 审批面板（原型 .insp-list + .appr-scroll + .identity + .detail-foot）：
- * 上为待审/已决列表，下为选中审批的详情（工具名、操作摘要、digest、状态）
- * 与操作（批准 / 拒绝；已决显示 resolved banner）。
+ * 同一轮（turn）的多个工具审批合并为一个待审条目；上为分组列表，
+ * 下为选中组的详情（操作行、完整参数、批准/请求修改，作用于组内全部请求）。
  *
- * Approval panel: request list on top, selected request detail below with
- * approve/reject actions (or a resolved banner).
+ * Approval panel: per-turn grouped request list on top, group detail below
+ * with merged op rows, full arguments, and approve/reject across the group.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
 import type { ApprovalStore, ApprovalView } from "../ApprovalStore.js";
@@ -16,6 +16,13 @@ import styles from "./ApprovalPanel.module.css";
 
 export interface ApprovalPanelProps {
   readonly store: ApprovalStore;
+}
+
+interface ApprovalGroup {
+  readonly key: string;
+  readonly approvals: readonly ApprovalView[];
+  readonly status: ApprovalView["status"];
+  readonly requestedAt: string;
 }
 
 const STATUS_LABEL: Record<ApprovalView["status"], string> = {
@@ -42,7 +49,7 @@ const KIND_LABEL: Record<string, string> = {
   outline: "大纲单元",
   character: "角色",
   location: "地点",
-  paragraph: "段落",
+  paragraph: "正文块",
   volume: "卷",
   chapter: "章节",
 };
@@ -54,8 +61,8 @@ function opClass(op: string): string {
   return "";
 }
 
-function shortDigest(digest: string): string {
-  return digest.length > 16 ? `${digest.slice(0, 8)}…${digest.slice(-4)}` : digest;
+function shortId(value: string): string {
+  return value.length > 24 ? `…${value.slice(-12)}` : value;
 }
 
 function formatTime(value: string): string {
@@ -65,77 +72,144 @@ function formatTime(value: string): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function groupKeyOf(approval: ApprovalView): string {
+  return approval.turnId ?? approval.approvalRequestId;
+}
+
+function groupStatus(approvals: readonly ApprovalView[]): ApprovalView["status"] {
+  if (approvals.some((item) => item.status === "pending")) return "pending";
+  if (approvals.some((item) => item.status === "rejected")) return "rejected";
+  return approvals[approvals.length - 1].status;
+}
+
+function groupApprovals(
+  approvals: readonly ApprovalView[],
+): readonly ApprovalGroup[] {
+  const raw = new Map<string, ApprovalView[]>();
+  for (const approval of approvals) {
+    const key = groupKeyOf(approval);
+    const list = raw.get(key) ?? [];
+    list.push(approval);
+    raw.set(key, list);
+  }
+  return Object.freeze(
+    [...raw.entries()]
+      .map(([key, list]) =>
+        Object.freeze({
+          key,
+          approvals: Object.freeze(list),
+          status: groupStatus(list),
+          requestedAt: list[0].requestedAt,
+        }),
+      )
+      .sort((left, right) => left.requestedAt.localeCompare(right.requestedAt)),
+  );
+}
+
 export function ApprovalPanel({ store }: ApprovalPanelProps) {
   const snapshot = useExternalStore(store);
-  const selected =
-    snapshot.approvals.find(
-      (approval) => approval.approvalRequestId === snapshot.selectedId,
-    ) ??
-    snapshot.approvals.find((approval) => approval.status === "pending") ??
-    snapshot.approvals[0];
-
-  const sorted = useMemo(
-    () =>
-      [...snapshot.approvals].sort((left, right) =>
-        left.requestedAt.localeCompare(right.requestedAt),
-      ),
+  const [selectedKey, setSelectedKey] = useState<string | undefined>(undefined);
+  const groups = useMemo(
+    () => groupApprovals(snapshot.approvals),
     [snapshot.approvals],
+  );
+  const selectedGroup =
+    groups.find((group) => group.key === selectedKey) ??
+    (snapshot.selectedId === undefined
+      ? undefined
+      : groups.find((group) =>
+          group.approvals.some(
+            (approval) => approval.approvalRequestId === snapshot.selectedId,
+          ),
+        )) ??
+    groups.find((group) => group.status === "pending") ??
+    groups[0];
+
+  const decideGroup = (
+    group: ApprovalGroup,
+    decision: "approved" | "rejected",
+  ): void => {
+    for (const approval of group.approvals) {
+      if (approval.status === "pending") {
+        void store.decide(approval.approvalRequestId, decision);
+      }
+    }
+  };
+
+  const operations = selectedGroup?.approvals.flatMap(
+    (approval) => approval.operations ?? [],
+  );
+  const argumentGroups = selectedGroup?.approvals.flatMap((approval) =>
+    approval.arguments === undefined
+      ? []
+      : [{ toolName: approval.toolName, arguments: approval.arguments }],
   );
 
   return (
     <div className={styles.panel}>
       <nav className={styles.list}>
-        {sorted.length === 0 ? (
+        {groups.length === 0 ? (
           <div className={styles.empty}>暂无审批请求</div>
         ) : (
-          sorted.map((approval) => (
-            <button
-              key={approval.approvalRequestId}
-              type="button"
-              className={[
-                styles.row,
-                selected?.approvalRequestId === approval.approvalRequestId
-                  ? styles.active
-                  : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => store.select(approval.approvalRequestId)}
-            >
-              <span className={styles.row1}>
-                <span className={styles.id}>
-                  {approval.approvalRequestId}
+          groups.map((group) => {
+            const toolNames = [
+              ...new Set(group.approvals.map((approval) => approval.toolName)),
+            ];
+            const title = group.approvals[0].title;
+            const label =
+              group.approvals.length > 1
+                ? `${title} 等 ${group.approvals.length} 项`
+                : title;
+            return (
+              <button
+                key={group.key}
+                type="button"
+                className={[
+                  styles.row,
+                  selectedGroup?.key === group.key ? styles.active : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => setSelectedKey(group.key)}
+              >
+                <span className={styles.row1}>
+                  <span className={styles.id}>{shortId(group.key)}</span>
+                  <span
+                    className={[styles.pill, styles[group.status]].join(" ")}
+                  >
+                    {group.status === "pending" && group.approvals.length > 1
+                      ? `待批准 ${group.approvals.length} 项`
+                      : STATUS_LABEL[group.status]}
+                  </span>
                 </span>
-                <span className={[styles.pill, styles[approval.status]].join(" ")}>
-                  {STATUS_LABEL[approval.status]}
+                <span className={styles.title}>{label}</span>
+                <span className={styles.meta}>
+                  {toolNames.join(" · ")} · {formatTime(group.requestedAt)}
                 </span>
-              </span>
-              <span className={styles.title}>{approval.title}</span>
-              <span className={styles.meta}>
-                {approval.toolName} · {formatTime(approval.requestedAt)}
-              </span>
-            </button>
-          ))
+              </button>
+            );
+          })
         )}
       </nav>
-      {selected !== undefined ? (
+      {selectedGroup !== undefined ? (
         <div className={styles.detail}>
           <div className={styles.identity}>
-            <span className={styles.csId}>{selected.approvalRequestId}</span>
+            <span className={styles.csId}>{shortId(selectedGroup.key)}</span>
             <span className={styles.meta}>
-              {selected.toolName} · digest {shortDigest(selected.argumentDigest)}
+              {selectedGroup.approvals
+                .map((approval) => approval.toolName)
+                .join(" · ")}
             </span>
           </div>
-          <h4 className={styles.title}>{selected.title}</h4>
-          {selected.description !== undefined ? (
-            <p className={styles.desc}>{selected.description}</p>
-          ) : null}
-          {selected.operations !== undefined && selected.operations.length > 0 ? (
+          <h4 className={styles.title}>{selectedGroup.approvals[0].title}</h4>
+          {operations !== undefined && operations.length > 0 ? (
             <ul className={styles.ops}>
-              {selected.operations.map((operation, index) => (
+              {operations.map((operation, index) => (
                 <li
                   key={`${operation.op}-${operation.id ?? operation.title ?? index}`}
-                  className={[styles.op, opClass(operation.op)].filter(Boolean).join(" ")}
+                  className={[styles.op, opClass(operation.op)]
+                    .filter(Boolean)
+                    .join(" ")}
                 >
                   <span className={styles.opMark} aria-hidden="true">
                     {OP_SYMBOL[operation.op] ?? "•"}
@@ -152,55 +226,58 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
               ))}
             </ul>
           ) : null}
-          {selected.arguments !== undefined ? (
+          {argumentGroups !== undefined && argumentGroups.length > 0 ? (
             <div className={styles.args}>
               <span className={styles.argsTitle}>完整参数</span>
-              <pre className={styles.argsBody}>
-                {JSON.stringify(selected.arguments, null, 2)}
-              </pre>
+              {argumentGroups.map((group, index) => (
+                <div
+                  key={`${group.toolName}-${index}`}
+                  className={styles.argsGroup}
+                >
+                  <span className={styles.argsTool}>{group.toolName}</span>
+                  <pre className={styles.argsBody}>
+                    {JSON.stringify(group.arguments, null, 2)}
+                  </pre>
+                </div>
+              ))}
             </div>
           ) : null}
           <div className={styles.statusLine}>
-            <span className={[styles.pill, styles[selected.status]].join(" ")}>
-              {STATUS_LABEL[selected.status]}
+            <span
+              className={[styles.pill, styles[selectedGroup.status]].join(" ")}
+            >
+              {STATUS_LABEL[selectedGroup.status]}
             </span>
             <span className={styles.meta}>
-              请求 {formatTime(selected.requestedAt)}
-              {selected.resolvedAt !== undefined
-                ? ` · 处理 ${formatTime(selected.resolvedAt)}`
-                : ""}
+              请求 {formatTime(selectedGroup.requestedAt)}
             </span>
           </div>
-          {selected.status === "pending" ? (
+          {selectedGroup.status === "pending" ? (
             <div className={styles.actions}>
               <span className={styles.count}>
-                {selected.operations?.length ?? 0} 处变更
+                {selectedGroup.approvals.filter(
+                  (approval) => approval.status === "pending",
+                ).length}{" "}
+                项待批准
               </span>
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => {
-                  void store.decide(selected.approvalRequestId, "approved");
-                }}
+                onClick={() => decideGroup(selectedGroup, "approved")}
               >
                 批准
               </Button>
               <Button
                 variant="ghost-danger"
                 size="sm"
-                onClick={() => {
-                  void store.decide(selected.approvalRequestId, "rejected");
-                }}
+                onClick={() => decideGroup(selectedGroup, "rejected")}
               >
                 拒绝
               </Button>
             </div>
           ) : (
             <div className={styles.banner}>
-              已处理 · {STATUS_LABEL[selected.status]}
-              {selected.actorId !== undefined
-                ? ` · ${selected.actorId}`
-                : ""}
+              已处理 · {STATUS_LABEL[selectedGroup.status]}
             </div>
           )}
         </div>

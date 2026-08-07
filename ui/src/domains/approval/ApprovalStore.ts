@@ -23,6 +23,8 @@ export type ApprovalStatus =
 
 export interface ApprovalView {
   readonly approvalRequestId: string;
+  /** 所属 turn（同轮审批可合并展示）。Owning turn for per-turn grouping. */
+  readonly turnId?: string;
   readonly toolName: string;
   readonly title: string;
   readonly description?: string;
@@ -108,6 +110,9 @@ export function toApprovalView(
 ): ApprovalView {
   return Object.freeze({
     approvalRequestId: projection.approvalRequestId,
+    ...(projection.turnId === undefined
+      ? {}
+      : { turnId: projection.turnId }),
     toolName: projection.toolName,
     title: projection.title,
     ...(projection.description === undefined

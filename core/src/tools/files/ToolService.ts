@@ -44,27 +44,27 @@ export interface FileToolServiceOptions {
   readonly logger?: Logger;
 }
 
-export interface FileReadDetails {
+export type FileReadDetails = {
   readonly file_path: string;
   readonly content: string;
   readonly sizeBytes: number;
   readonly totalLines: number;
   readonly truncated: boolean;
-}
+};
 
-export interface FileGlobDetails {
-  readonly matches: readonly string[];
-}
+export type FileGlobDetails = {
+  readonly matches: string[];
+};
 
-export interface FileWriteDetails {
+export type FileWriteDetails = {
   readonly file_path: string;
   readonly sizeBytes: number;
-}
+};
 
-export interface FileEditDetails {
+export type FileEditDetails = {
   readonly file_path: string;
   readonly sizeBytes: number;
-}
+};
 
 const DEFAULT_MAX_FILE_BYTES = 512 * 1024;
 
@@ -136,7 +136,7 @@ export class FileToolService {
     }
     found.sort((a, b) => b.mtimeMs - a.mtimeMs);
     return Object.freeze({
-      matches: Object.freeze(found.map((entry) => entry.filePath)),
+      matches: found.map((entry) => entry.filePath),
     });
   }
 

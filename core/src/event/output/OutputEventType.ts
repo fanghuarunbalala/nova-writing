@@ -43,6 +43,12 @@ export const OUTPUT_EVENT_TYPE = {
   novelRecoveryCompleted: "novel.recovery.completed",
   novelApprovalRequested: "novel.approval.requested",
   novelCanonicalWriteApplied: "novel.canonical.write.applied",
+  novelComposeBegin: "novel.compose.begin",
+  novelComposeSubmitted: "novel.compose.submitted",
+  novelComposeApproved: "novel.compose.approved",
+  novelComposeRejected: "novel.compose.rejected",
+  novelComposeApplied: "novel.compose.applied",
+  novelComposeDiscarded: "novel.compose.discarded",
 } as const;
 
 export type CoreOutputEventType =

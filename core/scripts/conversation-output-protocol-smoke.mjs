@@ -56,6 +56,12 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "novel.recovery.completed",
   "novel.approval.requested",
   "novel.canonical.write.applied",
+  "novel.compose.begin",
+  "novel.compose.submitted",
+  "novel.compose.approved",
+  "novel.compose.rejected",
+  "novel.compose.applied",
+  "novel.compose.discarded",
 ]);
 
 const previous = {

@@ -19,6 +19,7 @@ export function createRuntime(config: RuntimeConfig): Runtime {
 }
 
 export * from "./agent/index.js";
+export * from "./compose/index.js";
 export * from "./context/index.js";
 export * from "./execution/index.js";
 export * from "./interaction/index.js";

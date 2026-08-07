@@ -1,75 +1,73 @@
 /**
- * Compose 提示层冒烟：静态段注册 + overlay/reminder 文案随状态变化。
- * Smoke for the compose prompt layer: section registration plus state-driven overlay/reminder text.
+ * Compose 提示层冒烟：动态段按 compose 状态渲染，RuntimeSystemPromptBuilder 空段跳过。
+ * Smoke for the compose prompt layer: the dynamic section renders by compose
+ * state, and RuntimeSystemPromptBuilder skips empty blocks.
  */
 import assert from "node:assert/strict";
 import {
-  ComposeAwareRuntimeSystemPromptSource,
-  ComposeModeStateProvider,
-  ComposePromptContributor,
+  DynamicPromptSection,
+  NovelComposeModePromptSection,
+  RuntimeSystemPromptBuilder,
   createDefaultPromptSectionRegistry,
 } from "../dist/index.js";
 
-// 静态段已注册且可解析
 const registry = createDefaultPromptSectionRegistry();
-const composeSection = registry.resolve("novel.compose");
-assert.ok(composeSection.render().includes("设计模式"));
-assert.ok(composeSection.render().includes("ExitComposeMode"));
+const section = registry.resolve("novel.compose");
+assert.ok(section instanceof NovelComposeModePromptSection);
+assert.ok(section instanceof DynamicPromptSection);
+assert.equal(section.kind, "dynamic");
+assert.equal(section.render(), "");
 
-// 状态驱动 overlay
-const state = new ComposeModeStateProvider();
-const contributor = new ComposePromptContributor(state);
-const conversationId = "conversation:prompt-compose";
-
-assert.equal(await contributor.append(conversationId, "BASE"), "BASE");
-
-state.enter(conversationId, {
-  designFilePath: "/workspace/.novel/design/conversation-prompt-compose.md",
+// 按输入状态渲染：非活动/已结束为空，designing/pending 有内容。
+assert.equal(section.renderDynamic({}), "");
+assert.equal(
+  section.renderDynamic({ compose: { phase: "applied", active: false } }),
+  "",
+);
+assert.equal(
+  section.renderDynamic({ compose: { phase: "discarded", active: false } }),
+  "",
+);
+const designing = section.renderDynamic({
+  compose: { phase: "designing", active: true },
 });
-const designing = await contributor.append(conversationId, "BASE");
 assert.ok(designing.includes("设计模式"));
-assert.ok(designing.startsWith("BASE"));
-
-state.submit(conversationId);
-const pending = await contributor.append(conversationId, "BASE");
+assert.ok(designing.includes("ExitComposeMode"));
+const pending = section.renderDynamic({
+  compose: { phase: "pending", active: true },
+});
 assert.ok(pending.includes("等待作者审批"));
 
-state.approve(conversationId);
-assert.equal(await contributor.append(conversationId, "BASE"), "BASE");
-
-// reminder 草稿：designing 有 compose_reminder；idle 无
-const reminderInput = {
-  conversationId,
-  runId: "run-1",
-  reminderId: "reminder-1",
-  order: 1,
-  timestamp: "2026-08-07T00:00:00.000Z",
-};
-assert.equal(
-  contributor.buildReminderMessage(reminderInput, state.snapshot(conversationId)),
-  null,
-);
-state.enter(conversationId, {
-  designFilePath: "/workspace/.novel/design/conversation-prompt-compose.md",
-});
-const draft = contributor.buildReminderMessage(
-  reminderInput,
-  state.snapshot(conversationId),
-);
-assert.equal(draft.payload.kind, "compose_reminder");
-assert.equal(draft.role, "system");
-
-// SystemPrompt 源包装：激活时附加、批准后恢复
-const baseSource = {
+// RuntimeSystemPromptBuilder：活动时附加、非活动时跳过（base 不变）。
+const staticSource = {
   async resolve() {
-    return "BASE_PROMPT";
+    return { content: "BASE_PROMPT", digest: "base-digest" };
   },
 };
-const aware = new ComposeAwareRuntimeSystemPromptSource(baseSource, state);
-const request = { conversationId, runId: "run-1" };
-const composed = await aware.resolve(request);
-assert.ok(composed.includes("设计模式"));
-state.approve(conversationId);
-assert.equal(await aware.resolve(request), "BASE_PROMPT");
+const digester = {
+  async digest(content) {
+    return `digest:${content.length}`;
+  },
+};
+const builder = new RuntimeSystemPromptBuilder({
+  staticSource,
+  dynamicSections: [section],
+  input: async () => ({
+    compose: { phase: "designing", active: true },
+  }),
+  digester,
+});
+const composed = await builder.resolve({ conversationId: "c", runId: "r" });
+assert.ok(composed.content.includes("设计模式"));
+assert.ok(composed.content.startsWith("BASE_PROMPT"));
+
+const idleBuilder = new RuntimeSystemPromptBuilder({
+  staticSource,
+  dynamicSections: [section],
+  input: async () => ({}),
+  digester,
+});
+const idle = await idleBuilder.resolve({ conversationId: "c", runId: "r" });
+assert.equal(idle.content, "BASE_PROMPT");
 
 console.log("prompt compose mode smoke passed");

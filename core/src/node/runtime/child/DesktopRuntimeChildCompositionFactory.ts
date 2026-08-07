@@ -117,6 +117,9 @@ export interface DesktopRuntimeChildCompositionFactoryOptions {
   readonly profileResolver?: AgentRuntimeConfigurationProfileResolver;
   readonly eventSchemaRegistry?: ReturnType<typeof createCoreEventSchemaRegistry>;
   readonly eventIdFactory?: RuntimeEventIdFactory;
+  /** 外部共享的 compose 状态源（与 run preparation source 同一实例）。 */
+  /** Externally shared compose state source (same instance as the run preparation source). */
+  readonly composeState?: ComposeModeStateProvider;
   readonly logger?: Logger;
 }
 
@@ -133,6 +136,7 @@ export class DesktopRuntimeChildCompositionFactory
   readonly #profileResolver: AgentRuntimeConfigurationProfileResolver;
   readonly #eventSchemaRegistry: ReturnType<typeof createCoreEventSchemaRegistry>;
   readonly #eventIdFactory: RuntimeEventIdFactory;
+  readonly #composeState: ComposeModeStateProvider;
   readonly #promptDigester: PromptDigester;
   readonly #logger: Logger;
 
@@ -172,6 +176,7 @@ export class DesktopRuntimeChildCompositionFactory
       new Sha256RuntimeEventIdFactory({
         hasher: new NodeSha256RuntimeEventIdHasher(),
       });
+    this.#composeState = options.composeState ?? new ComposeModeStateProvider();
     this.#logger = logger;
   }
 
@@ -223,7 +228,7 @@ export class DesktopRuntimeChildCompositionFactory
       clock,
       logger,
     });
-    const composeState = new ComposeModeStateProvider();
+    const composeState = this.#composeState;
     const novelTools = await openChildNovelToolRegistry({
       storageRoot: requireNovelStorageRoot(
         this.#novelStorageRoot ?? process.env[DESKTOP_CHILD_STORAGE_ROOT_ENV],
@@ -298,7 +303,6 @@ export class DesktopRuntimeChildCompositionFactory
       configuration,
       contextCompiler,
       agentAdapter,
-      composeState,
     });
     const preparationSource = await this.#preparationSourceFactory.create({
       configuration,

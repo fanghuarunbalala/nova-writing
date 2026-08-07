@@ -175,13 +175,13 @@ designing（写 design md）
 
 ## 8. 提示层
 
-- 新增静态提示段 `runtime.composeMode`（注册进 `CommonPromptSections`，**不进 base recipe**，由 overlay 通道按状态动态挂载）；
-- 每轮 reminder 在 provider dispatch 以 system.reminder 消息注入（复用 checkpoint/nudge 的消息层机制）；
-- 文案要点：
+- 新增**动态提示段** `novel.compose`（`NovelComposeModePromptSection extends DynamicPromptSection`，注册进 `CommonPromptSections`，并加入 novel agent recipe 的静态段之后）；
+- 遵循 main prompt 架构：dynamic 段**编译期不产生内容**（不进 manifest 编译产物），运行时由 `RuntimeSystemPromptBuilder` 每调用渲染——`renderDynamic(input)` 按 `input.compose` 状态决定内容，**空串自动跳过**（非 compose 零污染）；
+- compose 快照由 `DefaultRuntimeRunPreparationSourceFactory` 在每调用 `input` 中注入（与 `core.environment` 同机制），composeState 由 `DesktopRuntimeChildEntrypoint` 创建并共享给 run preparation source 与 composition factory；
+- 文案要点（仅 designing / pending 有内容）：
   - designing："当前处于设计模式：只读正式稿，唯一可写是设计草稿文件；逐步写出内容；结束时用 ExitComposeMode 提交，不要用文本询问审批。"
   - pending："设计草稿已提交审批，等待作者确认。"
-  - 拒绝后："作者拒绝了设计草稿：按反馈修订草稿文件后重新提交。"
-  - 批准后（恢复模式）："设计草稿已批准：按草稿内容通过 novel 写工具落库，不得新增未批准内容。"
+- 大纲/正文的产出方向由用户指令与对话上下文决定，**不在提示段硬编码类型**。
 - 大纲/正文的产出方向由用户指令与对话上下文决定，**不在提示段硬编码类型**。
 
 ## 9. Subagent（预留）
@@ -215,7 +215,7 @@ designing（写 design md）
 | ~~M1~~ ✅ | 新增 `runtime.files`（Read/Glob/Write/Edit：读∈design 目录、写==当前 design 文件；**Grep 延后**）+ design md 工件 | 已实现：TypeBox schemas + FileToolService（picomatch glob / realpath 沙箱 / 原子写）+ 工具定义与 registry + 接线（child registry、manifest composition、agent policy、`child_files_read_allow`）+ service/registry/wiring 冒烟；全量 smoke 225 全绿 |
 | ~~M2~~ ✅ | `ExitComposeMode` 接入 `system.tool.approval.requested/resolved`；批准→恢复模式；拒绝→留在 compose | 已实现：Exit 走 tool.approval（摘要"提交设计草稿"）、批准→`applied`、拒绝→回 `designing`；`novel-compose-tools-smoke` 覆盖 |
 | ~~M3~~ ✅ | 落库收口：审计 commit 记录 + md 归档（依赖 canonical 基座） | 已实现：`novel_compose_commits` 表（迁移 v12）+ `SqliteNovelComposeCommitStore` + `ComposeToolService.exit` 归档与摘要；`novel-compose-commit-smoke` 覆盖；全量 smoke 228 全绿 |
-| ~~M4~~ ✅ | 提示词 `novel.compose` 静态段 + overlay 动态挂载 + `compose_reminder` 消息草稿 | 已实现：`NovelComposeModePromptSection`（注册进默认 registry）+ `ComposePromptContributor`（overlay + `buildReminderMessage`）+ `ComposeAwareRuntimeSystemPromptSource`（AgentRuntimeExecutionAssembly 可选接线）；`prompt-compose-mode-smoke` 覆盖各状态文案 |
+| ~~M4~~ ✅ | 提示词 `novel.compose` **动态段**（DynamicPromptSection）+ recipe 项 + 每调用 input 注入 compose 快照 | 已实现：`NovelComposeModePromptSection`（renderDynamic 按 compose 状态渲染、空串跳过）+ recipe 加入 `novel.compose` + `DefaultRuntimeRunPreparationSourceFactory` 注入 compose 快照；`prompt-compose-mode-smoke` 覆盖段级与 builder 级断言 |
 | M5 | GUI：设计卡（渲染/编辑）、徽标、审批面板联调 | ui test + 手动 Electron 验证 |
 | M6 | 删除旧 draft/commit/rebase 模块（`core/src/novel/draft` 等） | 全量 smoke |
 

@@ -31,6 +31,7 @@ import {
 import {
   DefaultRuntimeRunPreparationSourceFactory,
 } from "./DefaultRuntimeRunPreparationSourceFactory.js";
+import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
 import {
   DesktopRuntimeChildCompositionFactory,
   type RuntimeChildAdapterFactory,
@@ -180,6 +181,7 @@ async function initializeDesktopRuntimeChildEntrypoint(
       return undefined;
     }
   };
+  const composeState = new ComposeModeStateProvider();
   const contextCompilerFactory =
     options.contextCompilerFactory ??
     Object.freeze({
@@ -190,6 +192,7 @@ async function initializeDesktopRuntimeChildEntrypoint(
   const preparationSourceFactory =
     options.preparationSourceFactory ??
     new DefaultRuntimeRunPreparationSourceFactory({
+      composeState,
       sections: createDefaultPromptSectionRegistry(),
       digester: new NodeSha256PromptDigester(),
       resolveModelId,
@@ -200,6 +203,7 @@ async function initializeDesktopRuntimeChildEntrypoint(
     adapterFactory,
     contextCompilerFactory,
     preparationSourceFactory,
+    composeState,
     ...(options.profileResolver === undefined
       ? {}
       : { profileResolver: options.profileResolver }),

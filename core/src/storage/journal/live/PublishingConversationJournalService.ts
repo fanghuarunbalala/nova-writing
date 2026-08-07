@@ -10,6 +10,7 @@
  */
 import {
   canonicalStringifyJson,
+  OUTPUT_EVENT_TYPE,
   type JsonValue,
 } from "../../../event/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
@@ -52,6 +53,8 @@ export class PublishingConversationJournalService
   private readonly hub: ConversationEventHub;
   private readonly logger: Logger;
   private readonly serializer = new ConversationOperationSerializer();
+  /** 流式 delta 的内存序号（不落盘、不占 journal sequence）。 */
+  private readonly streamingSequenceByConversation = new Map<string, number>();
   private serviceState: ConversationJournalServiceState = "open";
   private pendingOperationCount = 0;
   private closePromise?: Promise<void>;
@@ -102,6 +105,10 @@ export class PublishingConversationJournalService
   ): Promise<ConversationJournalAppendResult> {
     const { conversationId, id: eventId, eventType } = request.snapshot;
     const { direction } = request;
+    // 流式 delta 只广播不落盘：结束后的 completed 事件才写入 journal。
+    if (eventType === OUTPUT_EVENT_TYPE.agentAssistantMessageDelta) {
+      return this.appendStreamingDelta(request);
+    }
     let receivedReceipt: JournalAppendReceipt;
     try {
       receivedReceipt = await this.journal.append(request);
@@ -151,6 +158,33 @@ export class PublishingConversationJournalService
     }
 
     const livePublication = await this.publishLive(event);
+    return Object.freeze({ receipt, event, livePublication });
+  }
+
+  private async appendStreamingDelta(
+    request: JournalAppendRequest,
+  ): Promise<ConversationJournalAppendResult> {
+    const { conversationId, id: eventId, eventType } = request.snapshot;
+    const { direction } = request;
+    const sequence =
+      (this.streamingSequenceByConversation.get(conversationId) ?? 0) + 1;
+    this.streamingSequenceByConversation.set(conversationId, sequence);
+    const receipt: JournalAppendReceipt = Object.freeze({
+      status: "appended",
+      conversationId,
+      eventId,
+      direction,
+      sequence,
+      recordedAt: new Date().toISOString(),
+    });
+    const event = createPersistedEvent(request, receipt);
+    const livePublication = await this.publishLive(event);
+    this.logger.debug("conversation_journal.delta.streamed", {
+      conversationId,
+      eventId,
+      eventType,
+      sequence,
+    });
     return Object.freeze({ receipt, event, livePublication });
   }
 

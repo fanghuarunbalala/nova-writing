@@ -275,15 +275,16 @@ async function runProjectionContract(name, Transport) {
   applyNext(store, await readEvent(subscription));
 
   const projected = store.getSnapshot();
-  assert.equal(projected.lastAppliedSequence, 12);
-  assert.equal(projected.revision, 12);
+  // 流式 delta 不落盘、不占 journal sequence（本场景 2 条 delta 不计入）。
+  assert.equal(projected.lastAppliedSequence, 10);
+  assert.equal(projected.revision, 10);
   assert.equal(notificationCount, 12);
-  assert.equal(projected.events.length, 12);
+  assert.equal(projected.events.length, 10);
   assert.equal(projected.toolTraces.length, 1);
   assert.equal(projected.toolTraces[0].toolName, "CharacterList");
   assert.equal(projected.toolTraces[0].outcome, "ok");
   assert.equal(projected.toolTraces[0].durationMs, 42);
-  assert.equal(projected.toolTraces[0].sequence, 12);
+  assert.equal(projected.toolTraces[0].sequence, 10);
   // 输入事件无摘要；输出事件带脱敏摘要。
   assert.equal(projected.events[0].summary, undefined);
   const runSummary = projected.events.find(
@@ -318,7 +319,7 @@ async function runProjectionContract(name, Transport) {
 
   const page = await conversation.events.list({ anchor: { from: "start" } });
   const rebuilt = new ConversationProjectionStore({ conversationId });
-  assert.deepEqual(rebuilt.applyMany(page.events), Array(12).fill("applied"));
+  assert.deepEqual(rebuilt.applyMany(page.events), Array(10).fill("applied"));
   assert.deepEqual(rebuilt.getSnapshot(), projected);
   assertProjectionFailures(conversationId, page.events);
 

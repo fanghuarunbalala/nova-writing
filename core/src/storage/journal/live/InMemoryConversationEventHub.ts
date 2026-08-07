@@ -1,5 +1,6 @@
 /**
- * Process-local broadcast Hub for Events that already committed to Journal.
+ * Process-local broadcast Hub for Events that already committed to Journal,
+ * plus streaming deltas that are broadcast without durable sequence.
  * Historical replay remains a separate Journal subscription service concern.
  *
  * @example
@@ -9,7 +10,7 @@
  * await hub.publish(persistedEvent);
  * ```
  */
-import { isEventType } from "../../../event/index.js";
+import { OUTPUT_EVENT_TYPE, isEventType } from "../../../event/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { PersistedConversationEventSnapshot } from "../PersistedConversationEventSnapshot.js";
 import type { ConversationEventHub } from "./ConversationEventHub.js";
@@ -53,8 +54,11 @@ export class InMemoryConversationEventHub implements ConversationEventHub {
     this.assertOpen();
     this.validatePersistedEvent(event);
     const channel = this.getOrCreateChannel(event.conversationId);
-    this.assertNextSequence(event, channel);
-    channel.lastPublishedSequence = event.sequence;
+    // 流式 delta 不落盘：不参与 journal sequence 校验、不占位。
+    if (event.eventType !== OUTPUT_EVENT_TYPE.agentAssistantMessageDelta) {
+      this.assertNextSequence(event, channel);
+      channel.lastPublishedSequence = event.sequence;
+    }
 
     const subscriptions = [...channel.subscriptions.values()];
     let enqueuedCount = 0;

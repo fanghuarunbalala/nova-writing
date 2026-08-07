@@ -50,6 +50,7 @@ export function registerNovelLifecycleOutputEventSchemas(
     [OUTPUT_EVENT_TYPE.novelConflictResolved, payload({ draftSessionId: Id, conflictId: Id, strategy: ResolutionStrategy })],
     [OUTPUT_EVENT_TYPE.novelRecoveryCompleted, payload({ scope: Type.Union([Type.Literal("draft"), Type.Literal("commit"), Type.Literal("rebase"), Type.Literal("projection")]), outcome: Type.Union([Type.Literal("recovered"), Type.Literal("cleaned"), Type.Literal("verified"), Type.Literal("rebuilt")]), affectedCount: Count })],
     [OUTPUT_EVENT_TYPE.novelApprovalRequested, Type.Object({ requestVersion: Type.Literal(1), approvalRequestId: Type.String({ minLength: 1, maxLength: 255 }), novelId: Id, draftSessionId: Id, baseRevision: Revision, changeSetDigest: Digest, operationIds: Type.Array(Id, { uniqueItems: true }) }, { additionalProperties: false })],
+    [OUTPUT_EVENT_TYPE.novelCanonicalWriteApplied, payload({ operationId: Id, operationType: Type.String({ pattern: "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+){1,15}$" }), operationVersion: Type.Integer({ minimum: 1 }), baseRevision: Revision, resultRevision: Revision })],
   ] as const;
   for (const [eventType, payloadSchema] of definitions) {
     registry.register({

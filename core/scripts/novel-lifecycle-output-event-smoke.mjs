@@ -21,6 +21,7 @@ const records = [
   { ...base, eventId: "novel-event:draft-started", eventType: NOVEL_LIFECYCLE_EVENT_TYPE.draftStarted, payload: { draftSessionId: captureNovelDraftSessionId("draft-output"), baseRevision: captureNovelRevision("revision-output-base") } },
   { ...base, eventId: "novel-event:commit-completed", eventType: NOVEL_LIFECYCLE_EVENT_TYPE.commitCompleted, payload: { draftSessionId: captureNovelDraftSessionId("draft-output"), commitId: captureNovelCommitId("commit-output"), baseRevision: captureNovelRevision("revision-output-base"), resultRevision: captureNovelRevision("revision-output-result"), operationCount: 2 } },
   { ...base, eventId: "novel-event:recovery", eventType: NOVEL_LIFECYCLE_EVENT_TYPE.recoveryCompleted, payload: { scope: "draft", outcome: "recovered", affectedCount: 1 } },
+  { ...base, eventId: "novel-event:canonical-write-applied", eventType: NOVEL_LIFECYCLE_EVENT_TYPE.canonicalWriteApplied, payload: { operationId: "op-canonical-write-applied", operationType: "story-unit.create", operationVersion: 1, baseRevision: captureNovelRevision("revision-output-base"), resultRevision: captureNovelRevision("revision-output-result") } },
 ];
 for (const record of records) {
   const event = new NovelLifecycleOutputEvent(record);

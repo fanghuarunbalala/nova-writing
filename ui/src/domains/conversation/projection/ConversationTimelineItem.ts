@@ -10,6 +10,7 @@ import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js
 /** 消息流审批卡数据（来自投影 tool-approval 项）。Approval card view data. */
 export interface ApprovalCardView {
   readonly approvalRequestId: string;
+  readonly toolName: string;
   readonly title: string;
   readonly description?: string;
   readonly operations?: ToolApprovalProjection["operations"];

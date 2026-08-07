@@ -1,15 +1,16 @@
 /**
  * ApprovalCard
  *
- * 消息流审批卡（对齐原型 .proposal：tag + head + ops + foot）：
- * 每目标一行操作摘要，可展开查看完整参数；pending 时可批准/请求修改。
+ * 消息流审批卡（对齐原型 .proposal：ptag + head + ops + foot）：
+ * 每目标一行操作摘要（op-mark + 目标名 + 英文 kind），可展开查看完整参数，
+ * pending 时可批准/请求修改，foot 右侧显示审批状态。
  *
- * In-chat approval card: per-target operation rows, expandable full arguments,
- * approve / request-changes actions while pending.
+ * In-chat approval card aligned with the proposal prototype: accent ptag,
+ * per-target op rows, expandable full arguments, approve / request-changes
+ * actions and a trailing approval-state label.
  */
 import { useState } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
-import { Pill } from "../../../shared/primitives/Pill.js";
 import type { ApprovalCardView } from "../projection/ConversationTimelineItem.js";
 import styles from "./ApprovalCard.module.css";
 
@@ -29,13 +30,13 @@ const KIND_LABEL: Record<string, string> = {
   outline: "大纲单元",
   character: "角色",
   location: "地点",
-  paragraph: "段落",
+  paragraph: "正文块",
   volume: "卷",
   chapter: "章节",
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: "待审批",
+  pending: "待批准",
   approved: "已批准",
   rejected: "已拒绝",
   cancelled: "已取消",
@@ -46,7 +47,7 @@ function formatTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function opClass(op: string): string {
@@ -77,19 +78,13 @@ export function ApprovalCard({
   return (
     <section className={styles.card} data-status={approval.status}>
       <header className={styles.head}>
-        <Pill
-          variant={
-            approval.status === "pending"
-              ? "pending"
-              : approval.status === "approved"
-                ? "approved"
-                : "info"
-          }
-        >
-          {STATUS_LABEL[approval.status] ?? approval.status}
-        </Pill>
+        <span className={[styles.tag, styles[approval.status]].filter(Boolean).join(" ")}>
+          审批
+        </span>
         <h4 className={styles.title}>{approval.title}</h4>
-        <span className={styles.meta}>{formatTime(approval.requestedAt)}</span>
+        <span className={styles.meta}>
+          {approval.toolName} · {formatTime(approval.requestedAt)}
+        </span>
       </header>
       {operations.length > 0 ? (
         <ul className={styles.ops}>
@@ -106,14 +101,17 @@ export function ApprovalCard({
                 {KIND_LABEL[operation.kind] !== undefined
                   ? KIND_LABEL[operation.kind]
                   : ` ${operation.kind}`}
-                {operation.title !== undefined ? `：${operation.title}` : ""}
+                {operation.title !== undefined ? (
+                  <>
+                    {" "}
+                    <b>{operation.title}</b>
+                  </>
+                ) : null}
                 {operation.id !== undefined && operation.id !== operation.title
-                  ? `（${operation.id}）`
+                  ? ` · ${operation.id}`
                   : ""}
               </span>
-              <span className={styles.opKind}>
-                {KIND_LABEL[operation.kind] ?? operation.kind}
-              </span>
+              <span className={styles.opKind}>{operation.kind}</span>
             </li>
           ))}
         </ul>
@@ -135,24 +133,29 @@ export function ApprovalCard({
           ) : null}
         </div>
       ) : null}
-      {pending ? (
-        <footer className={styles.foot}>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => onApprove?.(approval.approvalRequestId)}
-          >
-            批准
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost-danger"
-            onClick={() => onReject?.(approval.approvalRequestId)}
-          >
-            请求修改
-          </Button>
-        </footer>
-      ) : null}
+      <footer className={styles.foot}>
+        {pending ? (
+          <>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => onApprove?.(approval.approvalRequestId)}
+            >
+              批准
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost-danger"
+              onClick={() => onReject?.(approval.approvalRequestId)}
+            >
+              请求修改
+            </Button>
+          </>
+        ) : null}
+        <span className={[styles.status, styles[approval.status]].filter(Boolean).join(" ")}>
+          {STATUS_LABEL[approval.status] ?? approval.status}
+        </span>
+      </footer>
     </section>
   );
 }

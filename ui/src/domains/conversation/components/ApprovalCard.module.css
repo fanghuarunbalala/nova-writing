@@ -1,5 +1,5 @@
 /**
- * ApprovalCard 视觉（对齐原型 .proposal：tag + head + ops + foot）。
+ * ApprovalCard 视觉（对齐原型 .proposal：ptag + head + ops + foot）。
  */
 .card {
   display: flex;
@@ -20,10 +20,32 @@
   flex-wrap: wrap;
 }
 
+.tag {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--color-accent-ink);
+  background: color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.tag.approved {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.tag.rejected,
+.tag.cancelled,
+.tag.expired {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
 .title {
   margin: 0;
   font-size: 15px;
-  font-weight: var(--fw-heavy);
+  font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--color-fg);
 }
@@ -31,7 +53,7 @@
 .meta {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: 11px;
   color: var(--color-faint);
 }
 
@@ -61,8 +83,7 @@
   flex: none;
   width: 16px;
   font-family: var(--font-mono);
-  font-size: var(--fs-body);
-  font-weight: var(--fw-heavy);
+  font-weight: 800;
   text-align: center;
 }
 
@@ -77,11 +98,15 @@
   overflow-wrap: anywhere;
 }
 
+.opText b {
+  font-weight: 750;
+}
+
 .opKind {
   flex: none;
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: 10.5px;
   color: var(--color-faint);
 }
 
@@ -104,8 +129,13 @@
   border: 0;
   background: none;
   font-size: 12px;
-  color: var(--color-info);
+  font-weight: 750;
+  color: var(--color-accent-ink);
   cursor: pointer;
+}
+
+.argsToggle:hover {
+  text-decoration: underline;
 }
 
 .argsBody {
@@ -126,10 +156,22 @@
 
 .foot {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   border-top: 1px solid var(--color-border);
   padding-top: 11px;
   margin-top: 3px;
 }
+
+.status {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 750;
+}
+
+.status.pending { color: var(--color-warn); }
+.status.approved { color: var(--color-success); }
+.status.rejected,
+.status.cancelled,
+.status.expired { color: var(--color-muted); }

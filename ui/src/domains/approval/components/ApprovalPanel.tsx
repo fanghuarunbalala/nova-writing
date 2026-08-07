@@ -147,6 +147,7 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
                       : ` ${operation.kind}`}
                     {operation.title !== undefined ? `：${operation.title}` : ""}
                   </span>
+                  <span className={styles.opKind}>{operation.kind}</span>
                 </li>
               ))}
             </ul>
@@ -172,6 +173,9 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
           </div>
           {selected.status === "pending" ? (
             <div className={styles.actions}>
+              <span className={styles.count}>
+                {selected.operations?.length ?? 0} 处变更
+              </span>
               <Button
                 variant="primary"
                 size="sm"

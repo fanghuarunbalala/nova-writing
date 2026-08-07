@@ -102,6 +102,7 @@ export function mapProjectionTimeline(
           timestamp: Date.parse(item.requestedAt) || 0,
           approval: {
             approvalRequestId: item.approvalRequestId,
+            toolName: item.toolName,
             title: item.title,
             ...(item.description === undefined
               ? {}

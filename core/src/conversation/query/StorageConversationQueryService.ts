@@ -72,6 +72,7 @@ export class StorageConversationQueryService implements ConversationQueryService
   async listApprovals(): Promise<readonly GlobalApprovalProjection[]> {
     const conversations = await this.catalog.listConversationMetadata({
       workspaceId: this.workspaceId,
+      status: "active",
     });
     const approvals: GlobalApprovalProjection[] = [];
     for (const conversation of conversations) {

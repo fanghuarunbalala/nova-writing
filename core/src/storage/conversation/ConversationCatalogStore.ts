@@ -57,6 +57,6 @@ export interface ConversationCatalogStore
     pinned: boolean,
   ): Promise<ConversationMetadata>;
 
-  /** 删除对话（软删除：status → disposed）。Soft-deletes a conversation. */
+  /** 硬删除对话（物理移除会话及其关联记录）。Hard-deletes a conversation. */
   deleteConversation(conversationId: string): Promise<void>;
 }

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import {
   ConversationAgentBindingMissingError,
@@ -292,15 +294,37 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
 
   async deleteConversation(conversationId: string): Promise<void> {
     this.assertOpen();
-    const current = this.selectConversationRow(conversationId);
-    if (current === undefined) {
-      throw new Error("Conversation not found");
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      if (this.selectConversationRow(conversationId) === undefined) {
+        throw new Error("Conversation not found");
+      }
+      // 硬删除：物理移除会话及其全部关联记录（journal / bindings / 子代理）。
+      this.database
+        .prepare("DELETE FROM subagent_binding_changes WHERE conversation_id = ?")
+        .run(conversationId);
+      this.database
+        .prepare("DELETE FROM subagent_bindings WHERE conversation_id = ?")
+        .run(conversationId);
+      this.database
+        .prepare("DELETE FROM conversation_agent_bindings WHERE conversation_id = ?")
+        .run(conversationId);
+      this.database
+        .prepare("DELETE FROM journal_records WHERE conversation_id = ?")
+        .run(conversationId);
+      this.database
+        .prepare("DELETE FROM conversations WHERE id = ?")
+        .run(conversationId);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
     }
-    this.database
-      .prepare(
-        `UPDATE conversations SET status = 'disposed', updated_at = ? WHERE id = ?`,
-      )
-      .run(new Date().toISOString(), conversationId);
+    // 删除该会话的消息投影目录（硬删除后不可恢复）。
+    await rm(
+      join(this.workspace.storeDir, "conversations", conversationId),
+      { recursive: true, force: true },
+    );
   }
 
   private selectConversationRow(conversationId: string): ConversationRow | undefined {

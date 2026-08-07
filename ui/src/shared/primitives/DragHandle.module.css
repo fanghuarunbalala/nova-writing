@@ -2,7 +2,7 @@
  * DragHandle 视觉：细窄热区 + hover/dragging 高亮引导线。
  */
 .handle {
-  position: relative;
+  position: static;
   flex: none;
   touch-action: none;
   z-index: 5;
@@ -22,9 +22,11 @@
 }
 
 .horizontal {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
   width: 6px;
-  height: 100%;
-  margin-left: -3px;
   cursor: col-resize;
 }
 

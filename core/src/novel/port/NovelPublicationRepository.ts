@@ -14,6 +14,7 @@ import type {
   PublicationVolume,
 } from "../model/index.js";
 import type { NovelReadScope } from "../query/index.js";
+import type { NovelEntityVersion } from "../version/index.js";
 
 export interface PublicationVolumeReadModel {
   readonly volume: PublicationVolume;
@@ -42,9 +43,17 @@ export interface NovelMutablePublicationRepository {
     orderKey: OrderKey,
   ): PublicationVolume | undefined;
   getVolumeDigest(id: PublicationVolumeId): string | undefined;
+  /** 读取实体的当前版本（per-entity 乐观锁）。Current entity version. */
+  getVolumeVersion(id: PublicationVolumeId): NovelEntityVersion | undefined;
   insertVolume(volume: PublicationVolume): boolean;
-  replaceVolume(volume: PublicationVolume): boolean;
-  deleteVolume(id: PublicationVolumeId): boolean;
+  replaceVolume(
+    volume: PublicationVolume,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean;
+  deleteVolume(
+    id: PublicationVolumeId,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean;
   getChapter(id: PublicationChapterId): PublicationChapter | undefined;
   listChapters(volumeId: PublicationVolumeId): readonly PublicationChapter[];
   findChapterAt(
@@ -52,9 +61,17 @@ export interface NovelMutablePublicationRepository {
     orderKey: OrderKey,
   ): PublicationChapter | undefined;
   getChapterDigest(id: PublicationChapterId): string | undefined;
+  /** 读取实体的当前版本（per-entity 乐观锁）。Current entity version. */
+  getChapterVersion(id: PublicationChapterId): NovelEntityVersion | undefined;
   insertChapter(chapter: PublicationChapter): boolean;
-  replaceChapter(chapter: PublicationChapter): boolean;
-  deleteChapter(id: PublicationChapterId): boolean;
+  replaceChapter(
+    chapter: PublicationChapter,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean;
+  deleteChapter(
+    id: PublicationChapterId,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean;
   listChapterParagraphIds(chapterId: PublicationChapterId): readonly ParagraphId[];
   setChapterParagraphIds(
     chapterId: PublicationChapterId,
@@ -74,6 +91,11 @@ export interface NovelPublicationQueryStore {
     scope: NovelReadScope,
     id: PublicationVolumeId,
   ): Promise<PublicationVolumeReadModel | undefined>;
+  /** 读取实体当前版本（per-entity 乐观锁）。Current entity version. */
+  getVolumeVersion(
+    scope: NovelReadScope,
+    id: PublicationVolumeId,
+  ): Promise<NovelEntityVersion | undefined>;
   listVolumes(
     scope: NovelReadScope,
   ): Promise<readonly PublicationVolumeReadModel[]>;
@@ -81,6 +103,11 @@ export interface NovelPublicationQueryStore {
     scope: NovelReadScope,
     id: PublicationChapterId,
   ): Promise<PublicationChapterReadModel | undefined>;
+  /** 读取实体当前版本（per-entity 乐观锁）。Current entity version. */
+  getChapterVersion(
+    scope: NovelReadScope,
+    id: PublicationChapterId,
+  ): Promise<NovelEntityVersion | undefined>;
   listChapters(
     scope: NovelReadScope,
     volumeId: PublicationVolumeId,

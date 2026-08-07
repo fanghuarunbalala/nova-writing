@@ -22,6 +22,7 @@ import {
   type NovelPublicationQueryStore,
   type NovelReadScope,
   type NovelId,
+  type NovelEntityVersion,
   type ParagraphId,
   type PublicationCatalogReadModel,
   type PublicationChapterReadModel,
@@ -70,6 +71,9 @@ export function createSqliteNovelPublicationMutationContext(
 export class SqliteNovelPublicationRepository
   implements NovelMutablePublicationRepository
 {
+  /** 本事务内已校验并推进过版本的实体（批内同实体多操作只校验一次）。 */
+  private readonly confirmedVersions = new Set<string>();
+
   constructor(private readonly database: DatabaseSync) {}
 
   getPublication(id: PublicationStructure["id"]): PublicationStructure | undefined {
@@ -128,6 +132,17 @@ export class SqliteNovelPublicationRepository
     return volume === undefined ? undefined : digestPublicationRecord(volume);
   }
 
+  getVolumeVersion(id: PublicationVolume["id"]): NovelEntityVersion | undefined {
+    const row = this.database
+      .prepare("SELECT entity_version FROM novel_publication_volumes WHERE id = ?")
+      .get(capturePublicationVolumeId(id)) as
+      | { entity_version: number }
+      | undefined;
+    return row === undefined
+      ? undefined
+      : (Number(row.entity_version) as NovelEntityVersion);
+  }
+
   insertVolume(volume: PublicationVolume): boolean {
     const value = capturePublicationVolume(volume);
     const result = this.database
@@ -145,13 +160,39 @@ export class SqliteNovelPublicationRepository
     return Number(result.changes) === 1;
   }
 
-  replaceVolume(volume: PublicationVolume): boolean {
+  replaceVolume(
+    volume: PublicationVolume,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean {
     const value = capturePublicationVolume(volume);
+    const volumeId = value.id;
+    if (
+      expectedEntityVersion !== undefined &&
+      !this.confirmedVersions.has(volumeId)
+    ) {
+      const row = this.database
+        .prepare("SELECT entity_version FROM novel_publication_volumes WHERE id = ?")
+        .get(capturePublicationVolumeId(volumeId)) as
+        | { entity_version: number }
+        | undefined;
+      if (
+        row === undefined ||
+        Number(row.entity_version) !== (expectedEntityVersion as number)
+      ) {
+        return false;
+      }
+      this.confirmedVersions.add(volumeId);
+    }
     const result = this.database
       .prepare(
-        `UPDATE novel_publication_volumes
-         SET publication_id = ?, order_key = ?, title = ?
-         WHERE id = ?`,
+        expectedEntityVersion === undefined
+          ? `UPDATE novel_publication_volumes
+             SET publication_id = ?, order_key = ?, title = ?
+             WHERE id = ?`
+          : `UPDATE novel_publication_volumes
+             SET publication_id = ?, order_key = ?, title = ?,
+                 entity_version = entity_version + 1
+             WHERE id = ?`,
       )
       .run(
         value.publicationId,
@@ -162,10 +203,29 @@ export class SqliteNovelPublicationRepository
     return Number(result.changes) === 1;
   }
 
-  deleteVolume(id: PublicationVolume["id"]): boolean {
+  deleteVolume(
+    id: PublicationVolume["id"],
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean {
+    const volumeId = capturePublicationVolumeId(id);
+    if (
+      expectedEntityVersion !== undefined &&
+      !this.confirmedVersions.has(volumeId)
+    ) {
+      const row = this.database
+        .prepare("SELECT entity_version FROM novel_publication_volumes WHERE id = ?")
+        .get(volumeId) as { entity_version: number } | undefined;
+      if (
+        row === undefined ||
+        Number(row.entity_version) !== (expectedEntityVersion as number)
+      ) {
+        return false;
+      }
+      this.confirmedVersions.add(volumeId);
+    }
     const result = this.database
       .prepare("DELETE FROM novel_publication_volumes WHERE id = ?")
-      .run(capturePublicationVolumeId(id));
+      .run(volumeId);
     return Number(result.changes) === 1;
   }
 
@@ -204,6 +264,17 @@ export class SqliteNovelPublicationRepository
     return chapter === undefined ? undefined : digestPublicationRecord(chapter);
   }
 
+  getChapterVersion(id: PublicationChapter["id"]): NovelEntityVersion | undefined {
+    const row = this.database
+      .prepare("SELECT entity_version FROM novel_publication_chapters WHERE id = ?")
+      .get(capturePublicationChapterId(id)) as
+      | { entity_version: number }
+      | undefined;
+    return row === undefined
+      ? undefined
+      : (Number(row.entity_version) as NovelEntityVersion);
+  }
+
   insertChapter(chapter: PublicationChapter): boolean {
     const value = capturePublicationChapter(chapter);
     const result = this.database
@@ -222,13 +293,39 @@ export class SqliteNovelPublicationRepository
     return Number(result.changes) === 1;
   }
 
-  replaceChapter(chapter: PublicationChapter): boolean {
+  replaceChapter(
+    chapter: PublicationChapter,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean {
     const value = capturePublicationChapter(chapter);
+    const chapterId = value.id;
+    if (
+      expectedEntityVersion !== undefined &&
+      !this.confirmedVersions.has(chapterId)
+    ) {
+      const row = this.database
+        .prepare("SELECT entity_version FROM novel_publication_chapters WHERE id = ?")
+        .get(capturePublicationChapterId(chapterId)) as
+        | { entity_version: number }
+        | undefined;
+      if (
+        row === undefined ||
+        Number(row.entity_version) !== (expectedEntityVersion as number)
+      ) {
+        return false;
+      }
+      this.confirmedVersions.add(chapterId);
+    }
     const result = this.database
       .prepare(
-        `UPDATE novel_publication_chapters
-         SET publication_id = ?, volume_id = ?, order_key = ?, title = ?
-         WHERE id = ?`,
+        expectedEntityVersion === undefined
+          ? `UPDATE novel_publication_chapters
+             SET publication_id = ?, volume_id = ?, order_key = ?, title = ?
+             WHERE id = ?`
+          : `UPDATE novel_publication_chapters
+             SET publication_id = ?, volume_id = ?, order_key = ?, title = ?,
+                 entity_version = entity_version + 1
+             WHERE id = ?`,
       )
       .run(
         value.publicationId,
@@ -240,8 +337,26 @@ export class SqliteNovelPublicationRepository
     return Number(result.changes) === 1;
   }
 
-  deleteChapter(id: PublicationChapter["id"]): boolean {
+  deleteChapter(
+    id: PublicationChapter["id"],
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean {
     const chapterId = capturePublicationChapterId(id);
+    if (
+      expectedEntityVersion !== undefined &&
+      !this.confirmedVersions.has(chapterId)
+    ) {
+      const row = this.database
+        .prepare("SELECT entity_version FROM novel_publication_chapters WHERE id = ?")
+        .get(chapterId) as { entity_version: number } | undefined;
+      if (
+        row === undefined ||
+        Number(row.entity_version) !== (expectedEntityVersion as number)
+      ) {
+        return false;
+      }
+      this.confirmedVersions.add(chapterId);
+    }
     const result = this.database
       .prepare("DELETE FROM novel_publication_chapters WHERE id = ?")
       .run(chapterId);
@@ -361,6 +476,16 @@ export class SqliteNovelPublicationQueryStore implements NovelPublicationQuerySt
     });
   }
 
+  getVolumeVersion(
+    scope: NovelReadScope,
+    id: PublicationVolume["id"],
+  ): Promise<NovelEntityVersion | undefined> {
+    const volumeId = capturePublicationVolumeId(id);
+    return this.read(scope, (repository) =>
+      repository.getVolumeVersion(volumeId),
+    );
+  }
+
   listVolumes(scope: NovelReadScope): Promise<readonly PublicationVolumeReadModel[]> {
     return this.read(scope, (repository) => {
       const publication = repository.findPublicationByNovelId(this.novelId);
@@ -388,6 +513,16 @@ export class SqliteNovelPublicationQueryStore implements NovelPublicationQuerySt
             recordDigest: requireDigest(repository.getChapterDigest(chapterId)),
           });
     });
+  }
+
+  getChapterVersion(
+    scope: NovelReadScope,
+    id: PublicationChapter["id"],
+  ): Promise<NovelEntityVersion | undefined> {
+    const chapterId = capturePublicationChapterId(id);
+    return this.read(scope, (repository) =>
+      repository.getChapterVersion(chapterId),
+    );
   }
 
   listChapters(

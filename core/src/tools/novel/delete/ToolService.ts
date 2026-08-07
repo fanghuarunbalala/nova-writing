@@ -292,11 +292,16 @@ export class NovelDeleteToolService {
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
+    const currentVersion =
+      await this.options.publicationQueries.getVolumeVersion(scope, volumeId);
     operations.push(
       createPublicationVolumeDeleteOperation({
         operationId: this.options.identityFactory.createOperationId(),
         id: volumeId,
         expectedRecordDigest: current.recordDigest,
+        ...(currentVersion === undefined
+          ? {}
+          : { expectedEntityVersion: currentVersion }),
       }),
     );
   }
@@ -311,11 +316,16 @@ export class NovelDeleteToolService {
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
+    const currentVersion =
+      await this.options.publicationQueries.getChapterVersion(scope, chapterId);
     operations.push(
       createPublicationChapterDeleteOperation({
         operationId: this.options.identityFactory.createOperationId(),
         id: chapterId,
         expectedRecordDigest: current.recordDigest,
+        ...(currentVersion === undefined
+          ? {}
+          : { expectedEntityVersion: currentVersion }),
       }),
     );
   }

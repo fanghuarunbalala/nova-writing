@@ -11,6 +11,7 @@ import type {
   PublicationChapterReadModel,
   PublicationVolumeReadModel,
 } from "../port/index.js";
+import type { NovelEntityVersion } from "../version/index.js";
 import { captureNovelReadScope, type NovelReadScope } from "./NovelReadScope.js";
 
 export class PublicationQueryService {
@@ -30,6 +31,16 @@ export class PublicationQueryService {
     );
   }
 
+  getVolumeVersion(
+    scope: NovelReadScope,
+    id: PublicationVolumeId,
+  ): Promise<NovelEntityVersion | undefined> {
+    return this.store.getVolumeVersion(
+      captureNovelReadScope(scope),
+      capturePublicationVolumeId(id),
+    );
+  }
+
   listVolumes(scope: NovelReadScope): Promise<readonly PublicationVolumeReadModel[]> {
     return this.store.listVolumes(captureNovelReadScope(scope));
   }
@@ -39,6 +50,16 @@ export class PublicationQueryService {
     id: PublicationChapterId,
   ): Promise<PublicationChapterReadModel | undefined> {
     return this.store.getChapter(
+      captureNovelReadScope(scope),
+      capturePublicationChapterId(id),
+    );
+  }
+
+  getChapterVersion(
+    scope: NovelReadScope,
+    id: PublicationChapterId,
+  ): Promise<NovelEntityVersion | undefined> {
+    return this.store.getChapterVersion(
       captureNovelReadScope(scope),
       capturePublicationChapterId(id),
     );

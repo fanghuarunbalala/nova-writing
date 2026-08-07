@@ -146,6 +146,20 @@ try {
   assert.equal(toolResults[1].isError, true);
   assert.ok(String(toolResults[1].content[0]?.text ?? "").includes("失败"));
 
+  // 重排验证：assistant toolCall(call-1) 后必须紧跟对应的 toolResult(call-1)。
+  const call1Index = piMessages.findIndex(
+    (message) =>
+      message.role === "assistant" &&
+      Array.isArray(message.content) &&
+      message.content.some(
+        (block) => block.type === "toolCall" && block.id === "call-1",
+      ),
+  );
+  assert.ok(call1Index >= 0, "call-1 toolCall should exist");
+  const follower = piMessages[call1Index + 1];
+  assert.equal(follower?.role, "toolResult");
+  assert.equal(follower?.toolCallId, "call-1");
+
   await context.close();
   await store.close();
   console.log("tool context rebuild smoke passed");

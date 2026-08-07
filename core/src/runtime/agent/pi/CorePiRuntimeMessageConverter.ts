@@ -74,6 +74,60 @@ function formatToolResult(value: unknown): string {
   }
 }
 
+/**
+ * 把工具消息重排为 request/result 交替（OpenAI 要求每个 assistant tool_calls
+ * 紧跟对应 tool 响应）；保持消息总数不变，满足 context projection 的 1:1 校验。
+ * Reorder tool messages so each toolCall is immediately followed by its result.
+ */
+function reorderToolMessages(
+  messages: readonly RuntimeMessageSnapshot[],
+): readonly RuntimeMessageSnapshot[] {
+  const resultsByToolCallId = new Map<string, RuntimeMessageSnapshot>();
+  const pairedRequestIds = new Set<string>();
+  for (const message of messages) {
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolResult
+    ) {
+      const payload = message.payload as Record<string, unknown>;
+      const toolCallId =
+        typeof payload.toolCallId === "string" ? payload.toolCallId : "";
+      if (toolCallId !== "") resultsByToolCallId.set(toolCallId, message);
+    }
+  }
+  const output: RuntimeMessageSnapshot[] = [];
+  for (const message of messages) {
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolRequest
+    ) {
+      const payload = message.payload as Record<string, unknown>;
+      const toolCallId =
+        typeof payload.toolCallId === "string" ? payload.toolCallId : "";
+      output.push(message);
+      if (toolCallId !== "") {
+        const result = resultsByToolCallId.get(toolCallId);
+        if (result !== undefined) {
+          output.push(result);
+          pairedRequestIds.add(toolCallId);
+        }
+      }
+      continue;
+    }
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolResult
+    ) {
+      const payload = message.payload as Record<string, unknown>;
+      const toolCallId =
+        typeof payload.toolCallId === "string" ? payload.toolCallId : "";
+      if (toolCallId !== "" && pairedRequestIds.has(toolCallId)) continue;
+    }
+    output.push(message);
+  }
+  return output;
+}
+
 export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter {
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
   private readonly assistantMessageEnvelopeFactory?: PiAssistantMessageEnvelopeFactory;
@@ -110,7 +164,8 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
       messageCount: request.messages.length,
     });
     const seenIds = new Set<string>();
-    const converted = request.messages.map((message) => {
+    const reordered = reorderToolMessages(request.messages);
+    const converted = reordered.map((message) => {
       let validated: RuntimeMessageSnapshot;
       try {
         validated = this.messageSchemaRegistry.validateSnapshot(message);

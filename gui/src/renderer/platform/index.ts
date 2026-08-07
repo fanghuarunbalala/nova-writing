@@ -6,6 +6,7 @@
  */
 export * from "./DesktopPlatformApi.js";
 export * from "./ElectronNativeFilePort.js";
+export * from "./ElectronDesignFilePort.js";
 export * from "./ElectronSystemTrayPort.js";
 export * from "./ElectronUpdaterPort.js";
 export * from "./ElectronWindowPort.js";

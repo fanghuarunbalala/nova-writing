@@ -15,6 +15,7 @@ import type {
   ElectronApplicationCommandBridge,
   ElectronBridgeOpenSubscriptionRequest,
   ElectronConfigurationBridge,
+  ElectronDesignBridge,
   ElectronNativeFileBridge,
   ElectronPreloadBridge,
   ElectronSystemTrayBridge,
@@ -61,6 +62,7 @@ export function resolveElectronPreloadBridge(
     ...(record.updater === undefined ? [] : ["updater"]),
     ...(record.tray === undefined ? [] : ["tray"]),
     ...(record.files === undefined ? [] : ["files"]),
+    ...(record.design === undefined ? [] : ["design"]),
   ].sort();
   if (
     keys.length !== acceptedKeys.length ||
@@ -78,6 +80,7 @@ export function resolveElectronPreloadBridge(
   const updater = resolveUpdaterBridge(record.updater);
   const tray = resolveSystemTrayBridge(record.tray);
   const files = resolveNativeFileBridge(record.files);
+  const design = resolveDesignBridge(record.design);
   const bridge = candidate as ElectronPreloadBridge;
   const resolved: ElectronPreloadBridge = {
     ...(commands !== undefined ? { commands } : {}),
@@ -87,6 +90,7 @@ export function resolveElectronPreloadBridge(
     ...(updater !== undefined ? { updater } : {}),
     ...(tray !== undefined ? { tray } : {}),
     ...(files !== undefined ? { files } : {}),
+    ...(design !== undefined ? { design } : {}),
     request: (request: ApiRequest) => bridge.request(request),
     cancelRequest: (requestId: string) => bridge.cancelRequest(requestId),
     openSubscription: (request: ElectronBridgeOpenSubscriptionRequest) =>
@@ -97,6 +101,29 @@ export function resolveElectronPreloadBridge(
       bridge.closeSubscription(subscriptionId),
   };
   return Object.freeze(resolved);
+}
+
+function resolveDesignBridge(value: unknown): ElectronDesignBridge | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw bridgeUnavailable();
+  }
+  const record = value as Record<string, unknown>;
+  const methods = ["read", "write"] as const;
+  const keys = Object.keys(record).sort();
+  if (
+    keys.length !== methods.length ||
+    methods.some((method, index) => keys[index] !== method) ||
+    methods.some((method) => typeof record[method] !== "function")
+  ) {
+    throw bridgeUnavailable();
+  }
+  const bridge = value as ElectronDesignBridge;
+  return Object.freeze({
+    read: (conversationId: string) => bridge.read(conversationId),
+    write: (conversationId: string, content: string) =>
+      bridge.write(conversationId, content),
+  });
 }
 
 function resolveConfigurationBridge(

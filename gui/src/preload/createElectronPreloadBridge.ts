@@ -17,6 +17,7 @@ import {
   ELECTRON_API_IPC_CHANNEL,
   ELECTRON_APPLICATION_COMMAND_CHANNEL,
   ELECTRON_CONFIGURATION_IPC_CHANNEL,
+  ELECTRON_DESIGN_IPC_CHANNEL,
   ELECTRON_NATIVE_FILE_IPC_CHANNEL,
   ELECTRON_SYSTEM_TRAY_IPC_CHANNEL,
   ELECTRON_UPDATER_IPC_CHANNEL,
@@ -32,6 +33,7 @@ import {
   type ElectronBridgeOpenSubscriptionRequest,
   type ElectronBridgeResult,
   type ElectronBridgeSubscriptionRead,
+  type ElectronDesignFileSnapshot,
   type ElectronNativeFileBridge,
   type ElectronPreloadBridge,
   type ElectronSystemTrayBridge,
@@ -109,6 +111,19 @@ export function createElectronPreloadBridge(
           );
         };
       },
+    }),
+    design: Object.freeze({
+      read: (conversationId: string) =>
+        invoke<ElectronDesignFileSnapshot>(
+          ELECTRON_DESIGN_IPC_CHANNEL.read,
+          conversationId,
+        ),
+      write: (conversationId: string, content: string) =>
+        invoke<ElectronBridgeAcknowledgement>(
+          ELECTRON_DESIGN_IPC_CHANNEL.write,
+          conversationId,
+          content,
+        ),
     }),
     window: Object.freeze({
       minimize: () =>

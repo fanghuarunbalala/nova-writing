@@ -319,10 +319,19 @@ export function ApplicationShell({
   useEffect(() => {
     const previous = lastPendingCountRef.current;
     lastPendingCountRef.current = approvalSnapshot.pendingCount;
+    const route = inspectorRouter.getSnapshot().state;
+    // 审批全部处理完 → 自动收起面板，避免空占位。
+    if (
+      approvalSnapshot.pendingCount === 0 &&
+      route.kind === "approval"
+    ) {
+      inspectorRouter.close();
+      return;
+    }
     if (
       approvalSnapshot.pendingCount > 0 &&
       previous === 0 &&
-      inspectorRouter.getSnapshot().state.kind === "closed"
+      route.kind === "closed"
     ) {
       inspectorRouter.transition({ kind: "approval", changeSetId: "" });
     }

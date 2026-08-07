@@ -102,7 +102,8 @@ function groupApprovals(
           requestedAt: list[0].requestedAt,
         }),
       )
-      .sort((left, right) => left.requestedAt.localeCompare(right.requestedAt)),
+      // 最新审批在前，打开面板时默认看到最新的待审组。
+      .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)),
   );
 }
 

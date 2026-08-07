@@ -70,6 +70,15 @@ assert.ok(actionsContent.includes("revision 冲突"));
 assert.ok(actionsContent.includes("**先问作者**"));
 assert.equal(actions.render(), actionsContent);
 
+const communication = registry.resolve("novel.communication", "1.0.0");
+const communicationContent = communication.render();
+assert.ok(communicationContent.startsWith("# 交流风格"));
+assert.ok(communicationContent.includes("面向作者写作"));
+assert.ok(communicationContent.includes("**不要叙述内部机制**"));
+assert.ok(communicationContent.includes("**简单回答用散文**"));
+assert.ok(communicationContent.includes("**不适用于正文输出本身**"));
+assert.equal(communication.render(), communicationContent);
+
 console.log(
-  "prompt-novel-sections: ok (identity + system + doing-tasks + actions stable)",
+  "prompt-novel-sections: ok (identity + system + communication + doing-tasks + actions stable)",
 );

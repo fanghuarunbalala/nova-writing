@@ -14,6 +14,7 @@ import {
   CcbReferenceUsingYourToolsPromptSection,
 } from "./ccb/CcbReferenceMainPromptSections.js";
 import {
+  NovelCommunicationPromptSection,
   NovelIdentityPromptSection,
   NovelSystemPromptSection,
 } from "./novel/NovelBasePromptSections.js";
@@ -188,6 +189,7 @@ export function createDefaultPromptSectionRegistry(): PromptSectionRegistry {
     .register(new CcbReferenceCommunicationStylePromptSection())
     .register(new NovelIdentityPromptSection())
     .register(new NovelSystemPromptSection({ interactsWithUser: true }))
+    .register(new NovelCommunicationPromptSection())
     .register(new NovelDoingTasksPromptSection())
     .register(new NovelActionsPromptSection())
     .freeze();

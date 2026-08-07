@@ -66,12 +66,15 @@ export interface ApprovalCardProps {
   readonly approval: ApprovalCardView;
   readonly onApprove?: (approvalRequestIds: readonly string[]) => void;
   readonly onReject?: (approvalRequestIds: readonly string[]) => void;
+  /** 打开右侧审批面板并选中该组。Open the approval panel for this group. */
+  readonly onOpenApproval?: (approvalRequestId: string) => void;
 }
 
 export function ApprovalCard({
   approval,
   onApprove,
   onReject,
+  onOpenApproval,
 }: ApprovalCardProps) {
   const [showArguments, setShowArguments] = useState(false);
   const [viewTool, setViewTool] = useState<string | undefined>(undefined);
@@ -189,6 +192,15 @@ export function ApprovalCard({
         </div>
       ) : null}
       <footer className={styles.foot}>
+        {onOpenApproval !== undefined && approval.approvalRequestIds.length > 0 ? (
+          <Button
+            size="sm"
+            variant="link"
+            onClick={() => onOpenApproval(approval.approvalRequestIds[0])}
+          >
+            前往审批 →
+          </Button>
+        ) : null}
         {pending ? (
           <>
             <Button

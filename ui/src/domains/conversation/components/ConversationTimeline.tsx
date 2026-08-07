@@ -204,6 +204,11 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
               ? undefined
               : (approvalRequestIds) => onApprovalDecision(approvalRequestIds, "rejected")
           }
+          onOpenApproval={
+            onOpenApproval === undefined
+              ? undefined
+              : (approvalRequestId) => onOpenApproval(approvalRequestId)
+          }
         />
       );
   }

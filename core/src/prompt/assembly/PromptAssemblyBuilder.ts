@@ -28,6 +28,10 @@ import {
   PROMPT_ASSEMBLY_FAILURE,
   PromptAssemblyError,
 } from "./PromptAssemblyErrors.js";
+import {
+  appendEnvironmentOverlay,
+  type EnvironmentInfoProvider,
+} from "../environment/index.js";
 
 export interface PromptAssemblyBuildRequest {
   readonly conversationId: string;
@@ -40,18 +44,26 @@ export interface PromptAssemblyBuildRequest {
 export interface PromptAssemblyBuilderOptions {
   readonly digester: PromptDigester;
   readonly messageSchemaRegistry?: RuntimeMessageSchemaRegistry;
+  /**
+   * 可选环境信息提供者：存在时每次 build 把环境块刷新进 systemPrompt。
+   * Optional environment info provider: when present, each build refreshes the
+   * environment block into the systemPrompt.
+   */
+  readonly environmentInfo?: EnvironmentInfoProvider;
   readonly logger?: Logger;
 }
 
 export class PromptAssemblyBuilder {
   readonly #digester: PromptDigester;
   readonly #messageSchemaRegistry: RuntimeMessageSchemaRegistry;
+  readonly #environmentInfo?: EnvironmentInfoProvider;
   readonly #logger: Logger;
 
   constructor(options: PromptAssemblyBuilderOptions) {
     this.#digester = options.digester;
     this.#messageSchemaRegistry = options.messageSchemaRegistry ??
       coreRuntimeMessageSchemaRegistry;
+    this.#environmentInfo = options.environmentInfo;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "prompt_assembly_builder",
     });
@@ -73,7 +85,9 @@ export class PromptAssemblyBuilder {
         identity,
         this.#messageSchemaRegistry,
       );
-      const systemPrompt = request.basePrompt.content;
+      const systemPrompt = await this.#resolveSystemPrompt(
+        request.basePrompt.content,
+      );
       const digest = await this.#digester.digest(
         canonicalStringifyJson({
           conversationId: identity.conversationId,
@@ -114,6 +128,15 @@ export class PromptAssemblyBuilder {
       });
       throw normalized;
     }
+  }
+
+  /** 解析最终 systemPrompt：base + 可选环境块（每轮刷新）。Resolves the final systemPrompt: base plus the optional per-call environment block. */
+  async #resolveSystemPrompt(base: string): Promise<string> {
+    if (this.#environmentInfo === undefined) {
+      return base;
+    }
+    const snapshot = await this.#environmentInfo.snapshot();
+    return appendEnvironmentOverlay(base, snapshot);
   }
 
   private failure(

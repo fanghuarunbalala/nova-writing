@@ -68,6 +68,17 @@ lists all live in the message layer instead of the System Prompt string.
 Messages remain Provider message records rather than being flattened into the
 System Prompt string.
 
+## Environment block
+
+Each provider call appends an environment block to the System Prompt before
+digesting: current local date with timezone, platform, model id (when
+resolvable), and the workspace working directory. `PromptAssemblyBuilder`
+refreshes the block per call through an optional `EnvironmentInfoProvider`;
+the rest of the base stays constant, and the block changes at most once per
+day (date rollover). Model resolution failure degrades to omitting the model
+line. The Node host supplies the snapshot via `NodeEnvironmentInfoProvider`,
+resolving the model lazily through `EffectiveModelExecutionResolver`.
+
 ## Initial Novel Agent
 
 `novel_agent@1.0.0` is standalone:

@@ -18,6 +18,7 @@ import { OutputPayload } from "../OutputPayload.js";
 /** 提醒种类枚举（对齐 CCB attachment 类型）。Reminder kind enum (aligned with CCB attachment types). */
 export const REMINDER_KIND = [
   "todo_reminder",
+  "compose_reminder",
   "task_reminder",
   "plan_constraint",
   "deferred_tools_delta",

@@ -298,6 +298,7 @@ export class DesktopRuntimeChildCompositionFactory
       configuration,
       contextCompiler,
       agentAdapter,
+      composeState,
     });
     const preparationSource = await this.#preparationSourceFactory.create({
       configuration,

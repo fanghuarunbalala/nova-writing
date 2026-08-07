@@ -77,10 +77,10 @@ class ComposeAwareToolPermissionPolicy implements ToolPermissionPolicy {
       if (CANONICAL_NOVEL_WRITES.has(e.invocation.toolName)) {
         return deny("compose.canonical_write_denied"); // 12 个 canonical 写 → deny
       }
-      if (FILE_TOOLS.has(e.invocation.toolName)) {
+      if (FILE_TOOLS.has(e.invocation.toolName)) { // Read/Glob/Grep/Write/Edit
         const path = readPathArg(e.invocation.arguments); // 权限层可读原始参数
-        if (path !== s.designFilePath) {
-          return deny("compose.file_outside_design"); // Read/Edit/Write 仅 design 文件
+        if (!isWithinDesignScope(e.invocation.toolName, path, s)) {
+          return deny("compose.file_outside_design"); // 读∈design 目录；写==当前 design 文件
         }
       }
     }
@@ -115,7 +115,7 @@ designing（写 design md）
     → archived（commit 记录 + md 归档/删除）
 ```
 
-- **designing**：agent 用 `Read`/`Edit`/`Write` 增量写 md；用户可直接编辑；
+- **designing**：agent 用 `Glob`/`Grep`/`Read` 调研、`Write`/`Edit` 增量写 md；用户可直接编辑；
 - **pending**：审批卡展示 md 渲染内容 + 轻量摘要；
 - **applied**：批准后按 `preComposeMode` 权限用 novel 写工具落库（单事务 + baseRevision 乐观锁）；
 - **archived**：`novel_operations` 写一条 commit 记录 `{ designId, operationIds[], revisionFrom, revisionTo, approvedAt, conversationId }`，md 归档。
@@ -126,11 +126,34 @@ designing（写 design md）
 |---|---|---|
 | `EnterComposeMode` | `{ purpose?: string }` | 进入 compose；创建 design md；注入权限规则 |
 | `ExitComposeMode` | `{}` | 提交审批；批准→恢复 preComposeMode；拒绝→留在 compose |
-| `Read` / `Edit` / `Write`（新增 `runtime.files` 组） | 标准文件工具 | v1 仅 design 文件作用域 |
+| `Read`（新增 `runtime.files` 组） | `{ file_path }` | 读文件；作用域 = design 目录（只读） |
+| `Glob` | `{ pattern }` | 按模式找文件（如 `**/*.md`）；作用域 = design 目录 |
+| `Grep` | `{ pattern, path? }` | 按内容搜索；作用域 = design 目录 |
+| `Write` | `{ file_path, content }` | 写文件；**仅当前会话 design 文件** |
+| `Edit` | `{ file_path, edits[] }` | 增量修改；**仅当前会话 design 文件** |
 | 6 个 novel 读工具 | 现状 | 全程可用 |
 | 12 个 canonical 写工具 | 现状 | 按权限矩阵 |
 
 错误码新增：`NOVEL_COMPOSE_STATE_INVALID`、`NOVEL_COMPOSE_ALREADY_SUBMITTED`、`NOVEL_DESIGN_FILE_TOO_LARGE`、`NOVEL_DESIGN_FILE_NOT_FOUND`。
+
+### runtime.files 工具细节
+
+对齐 CCB plan 模式工具集（`Read/Glob/Grep` 调研 + `Write/Edit` 写 plan 文件）；我们无 Bash/Web 工具，故 v1 文件工具组 = 这 5 个。
+
+| 工具 | 参数 | 行为与约束 |
+|---|---|---|
+| `Read` | `file_path` | 读取文件内容；路径解析后必须落在 `.novel/design/` 目录内；大小上限 512KB，超限报 `NOVEL_DESIGN_FILE_TOO_LARGE` |
+| `Glob` | `pattern` | 返回匹配路径（按 mtime 排序）；基准目录 = `.novel/design/`，禁止 `..` 逃逸与绝对路径 |
+| `Grep` | `pattern`, `path?` | 内容搜索；`path` 缺省 = design 目录，显式 `path` 也必须落在 design 目录内 |
+| `Write` | `file_path`, `content` | 整文件写入；`file_path` 必须**等于当前会话 designFilePath**（不是目录内任意文件） |
+| `Edit` | `file_path`, `edits[]` | 增量编辑；`file_path` 必须等于当前会话 designFilePath |
+
+路径校验规则（ToolService 内统一实现，纵深防御）：
+
+- 解析 `realpath` 后校验（防 `../`、防 symlink 逃逸）；
+- 读类（Read/Glob/Grep）作用域 = design 目录；写类（Write/Edit）作用域 = 当前会话 design 文件；
+- 越界统一报 `NOVEL_DESIGN_FILE_PATH_FORBIDDEN`；
+- GUI 直接编辑写回文件（主进程 `NovelDesignFilePort`），agent 经 `Read` 看到最新内容。
 
 ## 6. 权限矩阵
 
@@ -138,8 +161,8 @@ designing（写 design md）
 |---|---|---|---|
 | 6 个 novel 读工具 | ✅ | ✅ | ✅ |
 | 12 个 canonical 写工具 | ask | **deny** | 按 preComposeMode（default=ask / bypass=allow / …） |
-| `Read`（文件） | — | ✅ 仅 design 文件 | ✅（可读已批内容） |
-| `Edit` / `Write`（文件） | — | ✅ 仅 design 文件 | ❌（内容冻结，落库走 novel 工具） |
+| `Read` / `Glob` / `Grep`（文件） | ❌（无 design 上下文） | ✅ design 目录内 | ✅（只读，可核对已批内容） |
+| `Edit` / `Write`（文件） | ❌ | ✅ 仅当前会话 design 文件 | ❌（内容冻结，落库走 novel 工具） |
 | `EnterComposeMode` | ✅ | ❌ | ✅ |
 | `ExitComposeMode` | ❌ | ✅ | ❌ |
 
@@ -191,7 +214,7 @@ designing（写 design md）
 | 步 | 内容 | 验证 |
 |---|---|---|
 | M0 | 权限模式 compose + `EnterComposeMode/ExitComposeMode` + `preComposeMode` 保存/恢复 + `novel.compose.*` 事件 | smoke：状态迁移、compose 内 canonical 写 deny |
-| M1 | 新增 `runtime.files`（Read/Edit/Write，design 文件作用域）+ design md 工件 | smoke：仅 design 路径可写 |
+| M1 | 新增 `runtime.files`（Read/Glob/Grep/Write/Edit：读∈design 目录、写==当前 design 文件）+ design md 工件 | smoke：仅 design 路径可写、越界拒绝 |
 | M2 | `ExitComposeMode` 接入 `system.tool.approval.requested/resolved`；批准→恢复模式；拒绝→留在 compose | smoke：批准/拒绝状态与权限断言 |
 | M3 | 落库收口：`novel_operations` commit 记录 + md 归档（依赖 `SqliteNovelCanonicalWriter` 基座） | 集成冒烟：设计→批准→落库→记录 |
 | M4 | 提示词 `runtime.composeMode` + overlay 动态挂载 + 每轮 reminder | prompt smoke 断言各状态文案 |
@@ -212,6 +235,6 @@ designing（写 design md）
 3. 模式层**不区分** outline/prose；区分只在提示词与 subagent 指令；
 4. **一致性（大纲↔正文联动）暂缓**；
 5. `ExitComposeMode` **不预留** `allowedNovelTools` 参数位（v1 完全恢复原模式，后置再议）；
-6. `runtime.files` v1 仅 design 文件作用域；`EnterComposeMode` 不需用户批准（直接进入）；
+6. `runtime.files` = `Read/Glob/Grep/Write/Edit`；读∈design 目录、写==当前会话 design 文件；非 compose 时文件工具不可用；`EnterComposeMode` 不需用户批准（直接进入）；
 7. `AskUserQuestion` 后续讨论；
 8. subagent 预留 `Explore` / `Compose` 两种只读类型，v1 不接线。

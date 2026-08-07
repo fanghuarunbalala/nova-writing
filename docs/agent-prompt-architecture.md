@@ -87,9 +87,13 @@ block changes at most once per day (date rollover).
 
 ## Initial Novel Agent
 
-`novel_agent@1.0.0` is standalone:
+`novel_agent@1.1.0` is standalone:
 
-- Prompt uses only generic Sections plus one language Inline instruction.
-- Tool policy contains only `runtime.todo` and therefore `TodoWrite`.
+- Prompt Recipe: `core.runtime.protocol`, `novel.identity`, `novel.system`,
+  then the dynamic `core.environment` section (static-first, dynamic-last).
+  `novel.communication`, `novel.doing-tasks`, and `novel.actions` are
+  registered but not yet wired into the Recipe.
+- Tool policy: `runtime.todo` plus the novel groups
+  (outline/characters/locations/paragraph/publication/delete).
 - Delegation is disabled.
-- Novel-domain Tools and Subagent/Agent Team capabilities are not assembled.
+- Subagent/Agent Team capabilities are not assembled.

@@ -9,7 +9,7 @@
  * In-chat approval card: op-chip pill rows with per-row "查看" (reveal that
  * tool's full arguments), and footer-level approve / request-changes actions.
  */
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import type { ApprovalCardView } from "../projection/ConversationTimelineItem.js";
 import styles from "./ApprovalCard.module.css";
@@ -77,8 +77,6 @@ export function ApprovalCard({
   onOpenApproval,
 }: ApprovalCardProps) {
   const [showArguments, setShowArguments] = useState(false);
-  const [viewTool, setViewTool] = useState<string | undefined>(undefined);
-  const argsBodyRef = useRef<HTMLDivElement>(null);
   const pending = approval.status === "pending";
   const operations = approval.operations;
   const argumentGroups = approval.argumentGroups.filter(
@@ -88,16 +86,6 @@ export function ApprovalCard({
     approval.status === "pending" && approval.approvalRequestIds.length > 1
       ? `待批准 ${approval.approvalRequestIds.length} 项`
       : STATUS_LABEL[approval.status] ?? approval.status;
-
-  // "查看"某行后：展开参数并滚动到对应工具的参数段。
-  useEffect(() => {
-    if (!showArguments || viewTool === undefined) return;
-    const target = argsBodyRef.current?.querySelector(
-      `[data-tool="${viewTool}"]`,
-    );
-    target?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    setViewTool(undefined);
-  }, [showArguments, viewTool]);
 
   return (
     <section className={styles.card} data-status={approval.status}>
@@ -150,8 +138,8 @@ export function ApprovalCard({
                   type="button"
                   className={styles.opView}
                   onClick={() => {
-                    setShowArguments(true);
-                    setViewTool(operation.toolName);
+                    // 行内"查看"：打开右侧审批面板并选中本组（跳转定位）。
+                    onOpenApproval?.(approval.approvalRequestIds[0]);
                   }}
                 >
                   查看
@@ -174,7 +162,7 @@ export function ApprovalCard({
             {showArguments ? "收起完整参数" : "查看完整参数"}
           </button>
           {showArguments ? (
-            <div className={styles.argsBody} ref={argsBodyRef}>
+            <div className={styles.argsBody}>
               {argumentGroups.map((group, index) => (
                 <div
                   key={`${group.toolName}-${index}`}

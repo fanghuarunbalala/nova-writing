@@ -100,15 +100,17 @@ export function InspectorHost({
               <span className={styles.countPill}>{approvalSnapshot.pendingCount} 待审</span>
             ) : null}
           </button>
-          <button
-            type="button"
-            className={[styles.tab, tab === "detail" ? styles.tabActive : ""].filter(Boolean).join(" ")}
-            onClick={() => setTab("detail")}
-            aria-selected={tab === "detail"}
-            role="tab"
-          >
-            档案
-          </button>
+          {route.state.kind !== "approval" ? (
+            <button
+              type="button"
+              className={[styles.tab, tab === "detail" ? styles.tabActive : ""].filter(Boolean).join(" ")}
+              onClick={() => setTab("detail")}
+              aria-selected={tab === "detail"}
+              role="tab"
+            >
+              档案
+            </button>
+          ) : null}
         </div>
         <span className={styles.kicker}>{tab === "approval" ? "审批参数 · 批准执行后才产出 Diff" : kicker}</span>
         <button

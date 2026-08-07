@@ -26,6 +26,7 @@ import {
 } from "../../../runtime/agent/pi/index.js";
 import { DispatcherPiToolExecutionBridge } from "../../../runtime/agent/pi/DispatcherPiToolExecutionBridge.js";
 import { PiToolAdapter } from "../../../runtime/agent/pi/PiToolAdapter.js";
+import { PiAgentCoreAssistantMessageEnvelopeFactory } from "../../../runtime/agent/pi/PiAgentCoreAssistantMessageEnvelopeFactory.js";
 import type { AgentRuntimeAdapter } from "../../../runtime/index.js";
 import type { ToolDispatcher } from "../../../runtime/tools/execution/index.js";
 import type { RuntimeChildAdapterFactory } from "./DesktopRuntimeChildCompositionFactory.js";
@@ -169,6 +170,9 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
     const adapter = new PiAgentCoreAdapter({
       agent: asPiAgentCoreClient(agent),
       messageConverter: new CorePiRuntimeMessageConverter({
+        assistantMessageEnvelopeFactory: new PiAgentCoreAssistantMessageEnvelopeFactory(
+          asPiAgentCoreClient(agent),
+        ),
         logger: this.#logger,
       }),
       eventBridge,

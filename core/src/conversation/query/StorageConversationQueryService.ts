@@ -72,11 +72,11 @@ export class StorageConversationQueryService implements ConversationQueryService
   async listApprovals(): Promise<readonly GlobalApprovalProjection[]> {
     const conversations = await this.catalog.listConversationMetadata({
       workspaceId: this.workspaceId,
-      status: "active",
     });
     const approvals: GlobalApprovalProjection[] = [];
     for (const conversation of conversations) {
       const conversationId = conversation.id;
+      const conversationStatus = conversation.status;
       const byId = new Map<string, GlobalApprovalProjection>();
       let afterSequence: number | undefined;
       while (true) {
@@ -90,7 +90,7 @@ export class StorageConversationQueryService implements ConversationQueryService
           limit: APPROVAL_PAGE_LIMIT,
         });
         for (const event of page.events) {
-          applyApprovalEvent(byId, conversationId, event);
+          applyApprovalEvent(byId, conversationId, conversationStatus, event);
         }
         if (!page.hasNext || page.events.length === 0) break;
         afterSequence = page.events[page.events.length - 1].sequence;
@@ -147,6 +147,7 @@ const APPROVAL_PAGE_LIMIT = 500;
 function applyApprovalEvent(
   byId: Map<string, GlobalApprovalProjection>,
   conversationId: string,
+  conversationStatus: GlobalApprovalProjection["conversationStatus"],
   event: PersistedConversationEventSnapshot,
 ): void {
   const payload = isRecord(event.payload) ? event.payload : {};
@@ -163,6 +164,7 @@ function applyApprovalEvent(
       approvalRequestId,
       Object.freeze({
         conversationId,
+        conversationStatus,
         approvalRequestId,
         toolCallId: asString(payload.toolCallId) ?? "",
         toolName: asString(payload.toolName) ?? "?",

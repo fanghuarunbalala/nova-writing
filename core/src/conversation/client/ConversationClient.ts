@@ -499,6 +499,16 @@ function validateGlobalApproval(value: unknown): GlobalApprovalProjection {
       record.conversationId,
       "Approval conversation id",
     ),
+    conversationStatus:
+      record.conversationStatus === "active" ||
+      record.conversationStatus === "archived" ||
+      record.conversationStatus === "disposed"
+        ? record.conversationStatus
+        : (() => {
+            throw new ConversationClientProtocolError(
+              "Approval conversation status is invalid",
+            );
+          })(),
     approvalRequestId: assertNonEmptyString(
       record.approvalRequestId,
       "Approval request id",

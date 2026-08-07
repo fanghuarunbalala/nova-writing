@@ -11,6 +11,12 @@ export type GlobalApprovalStatus =
   | "cancelled"
   | "expired";
 
+/** 审批所属会话状态。Owning conversation status. */
+export type GlobalApprovalConversationStatus =
+  | "active"
+  | "archived"
+  | "disposed";
+
 /** 审批操作行（与审批事件 summary.operations 同构）。Approval operation row. */
 export interface GlobalApprovalOperation {
   readonly op: "add" | "edit" | "delete";
@@ -22,6 +28,7 @@ export interface GlobalApprovalOperation {
 /** 一条全局审批（含所属会话）。One approval with its owning conversation. */
 export interface GlobalApprovalProjection {
   readonly conversationId: string;
+  readonly conversationStatus: GlobalApprovalConversationStatus;
   readonly approvalRequestId: string;
   readonly toolCallId: string;
   readonly toolName: string;

@@ -41,6 +41,8 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "system.tool.approval.requested",
   "system.tool.approval.resolved",
   "system.tool.trace.recorded",
+  "system.tool.request.recorded",
+  "system.tool.result.recorded",
   "novel.draft.started",
   "novel.draft.status.changed",
   "novel.draft.rolled.back",

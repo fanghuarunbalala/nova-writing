@@ -23,6 +23,7 @@ import {
   novelAgentDefinition,
   ResolvedPromptRecipe,
 } from "../dist/index.js";
+import { RUNTIME_FILES_TOOL_GROUP_MANIFEST, createFileToolRegistry, FileToolService } from "../dist/index.js";
 import {
   NodeWorkspaceStoreLocator,
   SqliteWorkspaceStore,
@@ -81,6 +82,7 @@ const manifest = await new AgentAssembler({
     ...novelPublicationToolRegistry.list(),
     ...novelDeleteToolRegistry.list(),
     ...novelDraftToolRegistry.list(),
+    ...createFileToolRegistry({ service: new FileToolService({ designRoot: "/unavailable/design" }) }).list(),
   ]),
   groups: new ToolGroupCatalog([
     loadToolGroupManifest(`
@@ -95,6 +97,7 @@ tools: [TodoWrite]
     NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
     NOVEL_DELETE_TOOL_GROUP_MANIFEST,
     NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
+    RUNTIME_FILES_TOOL_GROUP_MANIFEST,
     NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
     NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   ]),

@@ -6,6 +6,7 @@
  * canonical writer for tool execution.
  */
 import { randomUUID } from "node:crypto";
+import * as path from "node:path";
 import { noopLogger, type Logger } from "../../../../observability/index.js";
 import {
   CharacterQueryService,
@@ -68,6 +69,11 @@ import {
   createNovelPublicationToolRegistry,
 } from "../../../../tools/novel/index.js";
 import { createTodoToolRegistry } from "../../../../tools/todo/index.js";
+import {
+  RUNTIME_FILES_TOOL_GROUP_MANIFEST,
+  createFileToolRegistry,
+} from "../../../../tools/files/index.js";
+import { FileToolService } from "../../../../tools/files/index.js";
 import { NodeNovelStoreLocator } from "../../../novel/workspace/index.js";
 import type { NodeNovelStoreLocation } from "../../../novel/workspace/index.js";
 import {
@@ -96,6 +102,16 @@ export interface ChildNovelToolRegistryOptions {
   readonly logger?: Logger;
 }
 
+export interface CreateChildNovelToolRegistryOptions {
+  readonly location: NodeNovelStoreLocation;
+  readonly novelId: import("../../../../novel/index.js").NovelId;
+  readonly todoWriter: ConversationTodoWriter;
+  /** 工作区 .novel/design 目录绝对路径（runtime.files 读作用域）。 */
+  /** Absolute path to the workspace design directory (runtime.files read scope). */
+  readonly designRoot: string;
+  readonly logger?: Logger;
+}
+
 export interface ChildNovelToolRegistry {
   readonly registry: ToolRegistry;
   readonly groups: ToolGroupCatalog;
@@ -111,6 +127,7 @@ export async function openChildNovelToolRegistry(
   const workspace = await new NodeWorkspaceStoreLocator({
     storageRoot: options.storageRoot,
   }).resolve(options.workdir);
+  const designRoot = path.join(workspace.workspaceRoot, ".novel", "design");
   const location = await new NodeNovelStoreLocator().resolve(workspace);
   const canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
@@ -126,16 +143,10 @@ export async function openChildNovelToolRegistry(
   return createChildNovelToolRegistry({
     location,
     novelId,
+    designRoot,
     todoWriter: options.todoWriter,
     logger,
   });
-}
-
-export interface CreateChildNovelToolRegistryOptions {
-  readonly location: NodeNovelStoreLocation;
-  readonly novelId: import("../../../../novel/index.js").NovelId;
-  readonly todoWriter: ConversationTodoWriter;
-  readonly logger?: Logger;
 }
 
 export function createChildNovelToolRegistry(
@@ -186,6 +197,10 @@ export function createChildNovelToolRegistry(
 
   const registry = new ToolRegistry([
     ...createTodoToolRegistry({ writer: options.todoWriter }).list(),
+    ...createFileToolRegistry({
+      service: new FileToolService({ designRoot: options.designRoot }),
+      logger,
+    }).list(),
     ...createNovelOutlineToolRegistry({
       service: new OutlineToolService({
         novelId: options.novelId,
@@ -252,6 +267,7 @@ export function createChildNovelToolRegistry(
   ]);
   const groups = new ToolGroupCatalog([
     loadToolGroupManifest(RUNTIME_TODO_TOOL_GROUP_MANIFEST),
+    RUNTIME_FILES_TOOL_GROUP_MANIFEST,
     NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
     NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
     NOVEL_LOCATION_TOOL_GROUP_MANIFEST,

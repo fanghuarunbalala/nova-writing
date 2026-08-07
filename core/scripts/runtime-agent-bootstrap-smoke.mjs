@@ -21,6 +21,7 @@ import {
   loadToolGroupManifest,
   novelAgentDefinition,
 } from "../dist/index.js";
+import { RUNTIME_FILES_TOOL_GROUP_MANIFEST, createFileToolRegistry, FileToolService } from "../dist/index.js";
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
@@ -73,6 +74,7 @@ tools: [TodoWrite]
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
+  RUNTIME_FILES_TOOL_GROUP_MANIFEST,
 ]);
 const registry = new ToolRegistry([
   todoTool(),
@@ -83,6 +85,7 @@ const registry = new ToolRegistry([
   ...novelPublicationToolRegistry.list(),
   ...novelDeleteToolRegistry.list(),
   ...novelDraftToolRegistry.list(),
+  ...createFileToolRegistry({ service: new FileToolService({ designRoot: "/unavailable/design" }) }).list(),
 ]);
 const manifestStore = new InMemoryAgentManifestStore();
 const resolver = new AgentManifestResolver({
@@ -163,6 +166,8 @@ assert.equal(
 assert.deepEqual(
   configuration.assembly.toSnapshot().tools.map((tool) => tool.name).sort(),
   [
+    "Edit",
+    "Glob",
     "NovelChapterEdit",
     "NovelChapterRead",
     "NovelChapterWrite",
@@ -182,7 +187,9 @@ assert.deepEqual(
     "NovelVolumeEdit",
     "NovelVolumeRead",
     "NovelVolumeWrite",
+    "Read",
     "TodoWrite",
+    "Write",
   ],
 );
 
@@ -212,6 +219,7 @@ assert.throws(
       ...novelPublicationToolRegistry.list(),
       ...novelDeleteToolRegistry.list(),
       ...novelDraftToolRegistry.list(),
+      ...createFileToolRegistry({ service: new FileToolService({ designRoot: "/unavailable/design" }) }).list(),
     ]),
     groups,
   }).restore(assembly.manifest),

@@ -32,6 +32,7 @@ export const novelAgentDefinition = new AgentDefinition({
   tools: new AgentToolPolicy({
     groupIds: [
       "runtime.todo",
+      "runtime.files",
       "novel.outline",
       "novel.characters",
       "novel.locations",

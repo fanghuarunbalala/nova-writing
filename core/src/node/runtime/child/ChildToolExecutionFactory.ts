@@ -79,6 +79,14 @@ export const CHILD_TOOL_PERMISSION_RULES: readonly ToolPermissionRule[] =
       }),
     }),
     Object.freeze({
+      ruleId: "child_files_read_allow",
+      source: "built_in",
+      effect: "allow",
+      match: Object.freeze({
+        toolNames: Object.freeze(["Read", "Glob"]),
+      }),
+    }),
+    Object.freeze({
       ruleId: "child_write_edit_ask",
       source: "built_in",
       effect: "ask",
@@ -117,6 +125,10 @@ export function createChildToolExecutionComposition(
   });
   const policyResolver = new StaticToolExecutionPolicyResolver([
     { toolName: "TodoWrite", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "Read", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "Glob", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "Write", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "Edit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelOutlineRead", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelOutlineWrite", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelOutlineEdit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },

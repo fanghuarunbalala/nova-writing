@@ -24,6 +24,7 @@ import {
   novelAgentDefinition,
   hydrateAgentManifest,
 } from "../dist/index.js";
+import { RUNTIME_FILES_TOOL_GROUP_MANIFEST, createFileToolRegistry, FileToolService } from "../dist/index.js";
 import { Type } from "typebox";
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
@@ -139,6 +140,7 @@ const toolRegistry = new ToolRegistry([
   ...novelPublicationToolRegistry.list(),
   ...novelDeleteToolRegistry.list(),
   ...novelDraftToolRegistry.list(),
+  ...createFileToolRegistry({ service: new FileToolService({ designRoot: "/unavailable/design" }) }).list(),
 ]);
 const toolGroups = new ToolGroupCatalog([
   loadToolGroupManifest(`
@@ -155,6 +157,7 @@ tools: [TodoWrite]
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
+  RUNTIME_FILES_TOOL_GROUP_MANIFEST,
 ]);
 const assembledStore = new InMemoryAgentManifestStore();
 const assembled = await new AgentAssembler({
@@ -175,6 +178,8 @@ assert.equal(assembled.toolView.require("TodoWrite").descriptor.version, todoToo
 assert.deepEqual(
   assembled.toSnapshot().tools.map((tool) => tool.name).sort(),
   [
+    "Edit",
+    "Glob",
     "NovelChapterEdit",
     "NovelChapterRead",
     "NovelChapterWrite",
@@ -194,7 +199,9 @@ assert.deepEqual(
     "NovelVolumeEdit",
     "NovelVolumeRead",
     "NovelVolumeWrite",
+    "Read",
     "TodoWrite",
+    "Write",
   ],
 );
 assert.equal(await assembledStore.get(assembled.manifest.manifestId), assembled.manifest);

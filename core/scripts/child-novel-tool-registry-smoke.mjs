@@ -88,7 +88,12 @@ try {
   assert.ok(names.includes("NovelCharacterWrite"));
   assert.ok(names.includes("NovelDelete"));
   assert.ok(names.includes("TodoWrite"));
+  assert.ok(names.includes("Read"));
+  assert.ok(names.includes("Glob"));
+  assert.ok(names.includes("Write"));
+  assert.ok(names.includes("Edit"));
   assert.equal(names.includes("NovelDraftStatus"), false);
+  assert.equal(novelTools.groups.has("runtime.files"), true);
   assert.deepEqual(NOVEL_OUTLINE_TOOL_GROUP_MANIFEST.tools, [
     "NovelOutlineRead",
     "NovelOutlineWrite",

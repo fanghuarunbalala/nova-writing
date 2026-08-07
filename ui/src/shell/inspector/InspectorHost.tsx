@@ -58,6 +58,10 @@ export function InspectorHost({
   const [tab, setTab] = useState<"approval" | "detail">("approval");
   const approvalSnapshot = useExternalStore(approvalStore);
   useEffect(() => {
+    console.info("[inspector] host route changed", {
+      kind: route.state.kind,
+      tab,
+    });
     if (
       route.state.kind === "entity" ||
       route.state.kind === "outlineUnit" ||
@@ -67,7 +71,7 @@ export function InspectorHost({
     } else if (route.state.kind === "approval") {
       setTab("approval");
     }
-  }, [route.state.kind]);
+  }, [route.state.kind, tab]);
   if (route.state.kind === "closed") return null;
   const workspaceId =
     conversationCatalog.getSnapshot().workspaceId ??

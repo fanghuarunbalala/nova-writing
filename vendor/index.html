@@ -29,8 +29,15 @@
     --info-bg:       oklch(97.2% 0.007 236);
     --grad: linear-gradient(105deg, var(--orange) 0%, var(--accent) 48%, var(--red) 100%);
     --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04), 0 8px 24px rgba(40, 22, 10, 0.045);
-    --font-display: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
-    --font-body: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    /* 字体配对（英文在前、中文兜底：每种文字都落到为它设计的字体）
+       - --font-display / --font-ui：黑体（英文 SF Pro / Segoe UI，中文苹方）
+       - --font-body：宋体正文（英文 Iowan Old Style 衬线，中文宋体/思源宋体）
+       - --font-kai：楷体点缀（引用块 / 空态引导）
+       - --font-mono：等宽（事件名 / 时间 / ID / 代码） */
+    --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    --font-body: "Iowan Old Style", "Palatino Linotype", "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif;
+    --font-kai: "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "Songti SC", "Noto Serif SC", serif;
     --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
   }
 
@@ -42,7 +49,7 @@
       var(--bg);
     background-attachment: fixed;
     color: var(--fg);
-    font-family: var(--font-body);
+    font-family: var(--font-ui);
     font-size: 15px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -64,9 +71,10 @@
   }
   @keyframes grad-flow { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
   @media (prefers-reduced-motion: reduce) {
-    .grad, .btn.primary, .todo.done .check, .run-status::before, .gen-status .gen-dot::after, .gen-status .gen-main, .conv-status .st-spin, .real-node.in-progress::after, .tline.active p::after, .chip-dot.d-in-progress { animation: none; }
-    .view.active, .msg.enter, .msg.conv-in, .chat-empty, .pane-section:not([hidden]), .think[data-expanded="true"] .think-lines { animation: none !important; }
-    .inspector, .sidebar, .toast, .conv-menu, .msg, .pane-section, .think-lines, .mode-switch .m-chev, .ref-flash { transition: none !important; }
+    .grad, .btn.primary, .todo.done .check, .gen-status .gen-dot::after, .gen-status .gen-main, .conv-status .st-spin, .real-node.in-progress::after, .chip-dot.d-in-progress { animation: none; }
+    .appr-hover, .view.active, .msg.enter, .msg.conv-in, .chat-empty, .pane-section:not([hidden]), .evt-timeline, .tool-rows, .exec-sec.on { animation: none !important; }
+    .inspector, .sidebar, .toast, .conv-menu, .msg, .pane-section, .mode-switch .m-chev, .ref-flash, .tool-chip .chev { transition: none !important; }
+    .op-act button, .drow.op-flash, .appr.flash { transition: none !important; animation: none !important; }
   }
 
   .kicker {
@@ -291,30 +299,41 @@
     margin-left: 7px; vertical-align: 2px;
   }
 
-  /* 审批队列 */
+  /* 审批目录：一行极简项（Codex 式），悬浮出小预览 */
   .appr {
-    display: flex; flex-direction: column; gap: 3px;
-    width: 100%; margin-bottom: 6px; padding: 9px 10px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface);
+    position: relative;
+    display: flex; align-items: center;
+    width: 100%; margin-bottom: 2px; padding: 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
     text-align: left;
-    transition: border-color 0.15s, background 0.15s;
+    transition: background 0.15s, border-color 0.15s;
   }
-  .appr:hover { border-color: var(--border-strong); }
+  .appr:hover { background: var(--surface-2); border-color: transparent; }
   .appr.active {
-    border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
-    background: color-mix(in oklab, var(--accent) 7%, var(--surface));
+    border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+    background: color-mix(in oklab, var(--accent) 8%, var(--surface));
   }
-  .appr .row1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
-  .appr-id { font-family: var(--font-mono); font-size: 10.5px; font-weight: 800; color: var(--muted); }
-  .appr-title { font-size: 12.5px; font-weight: 700; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .appr-meta { font-size: 10.5px; color: var(--faint); font-family: var(--font-mono); }
+  /* 从对话提议卡「查看」跳入时，目录行做一圈柔和高亮 */
+  .appr.flash { animation: appr-flash 1.7s ease-out; }
+  @keyframes appr-flash { from { background-color: color-mix(in oklab, var(--accent) 16%, transparent); } to { background-color: transparent; } }
+  .appr-main {
+    flex: 1; min-width: 0; text-align: left;
+    display: flex; align-items: center; gap: 7px;
+    background: none; border: 0; padding: 0; margin: 0;
+    color: inherit; font: inherit; cursor: pointer;
+  }
+  .appr-main:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+  .appr-id { font-family: var(--font-mono); font-size: 9.5px; font-weight: 600; color: var(--faint); flex: none; }
+  .appr-title { font-size: 12.5px; font-weight: 700; line-height: 1.4; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .appr-meta { display: none; }
+  .insp-list .appr-note { display: none; }
   .pill { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; letter-spacing: 0.03em; white-space: nowrap; }
   .pill.pending { background: var(--warn-bg); color: var(--warn); }
   .pill.approved { background: var(--success-bg); color: var(--success); }
-  .pill.changed { background: var(--danger-bg); color: var(--danger); }
   .pill.info { background: var(--info-bg); color: var(--info); }
+  .pill.rejected { background: var(--danger-bg); color: var(--danger); }
 
   /* 待办 */
   .todo { display: flex; gap: 9px; align-items: flex-start; padding: 7px 8px; border-radius: 9px; }
@@ -327,7 +346,7 @@
     font-size: 11px; font-weight: 800; color: transparent;
   }
   .todo.done .check { background: var(--success); border-color: transparent; color: var(--bg); }
-  .t-title { font-size: 12.5px; font-weight: 650; line-height: 1.45; }
+  .t-title { font-size: 12.5px; font-weight: 650; line-height: 1.45; font-family: var(--font-body); }
   .todo.done .t-title { color: var(--faint); text-decoration: line-through; }
   .t-meta { font-size: 11px; color: var(--faint); margin-top: 2px; }
   .t-meta b { color: var(--muted); font-weight: 650; }
@@ -385,7 +404,13 @@
     color: var(--muted);
   }
   .chat-empty h3 { font-size: 16px; font-weight: 800; color: var(--fg); margin-bottom: 8px; }
-  .chat-empty p { font-size: 13px; line-height: 1.6; }
+  .chat-empty p { font-size: 13px; line-height: 1.6; font-family: var(--font-kai); }
+  /* 多轮对话 · turn 分隔线：每轮开始处一条细线 + 轮次标签（对话1-4 同步） */
+  .turn-sep { display: flex; align-items: center; gap: 12px; margin: 24px 0 2px; color: var(--faint); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.16em; font-weight: 600; }
+  .turn-sep::before, .turn-sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .turn-sep::before { background: linear-gradient(to right, transparent, var(--border-strong)); }
+  .turn-sep::after { background: linear-gradient(to left, transparent, var(--border-strong)); }
+  .turn-sep:first-child { margin-top: 10px; }
   .msg { display: flex; gap: 12px; padding: 18px 0 6px; }
   .avatar {
     width: 34px; height: 34px; flex: none;
@@ -405,9 +430,27 @@
   .approval-state { font-size: 10.5px; font-weight: 750; }
   .approval-state.approved { color: var(--success); }
   .approval-state.pending { color: var(--warn); }
+  .approval-state.rejected { color: var(--danger); }
   .approval-state.stopped { color: var(--muted); }
-  .approval-state.failed { color: var(--danger); }
-  .msg-text { font-size: 15px; line-height: 1.75; color: var(--fg); margin-top: 7px; text-wrap: pretty; }
+  .approval-state.failed { color: color-mix(in oklab, var(--danger) 82%, var(--muted)); }
+  /* ============================================================
+     【Markdown 美化】助理正文渲染样式（本段全部属于 markdown 排版）
+     范围：
+       - .msg-text            正文排版（字号 / 行高 / 颜色 / 两端平衡）
+       - .xr                  实体引用（人物 / 地点 / 章节 / 大纲 → 下划线可点击）
+       - .n-hl / code         高亮与行内代码
+       - .nm-table            表格（容器圆角 + 行分隔，去网格竖线）
+       - .nm-quote            引用块（左侧砖红细线）
+       - .nm-list             列表
+       - .nm-h1 / .nm-h2 / .nm-h3  标题（块级，对话内嵌结构）
+     渲染标准：content-markup.md（Novel Markup v1）
+     真实项目对应文件：
+       ui/src/domains/conversation/components/assistantContent/
+       assistantMarkdown.module.css（react-markdown v10 + remark-gfm 渲染）
+     移植时把下面这些规则连同 :root 的 --font-mono / --surface-2 等 token
+     一起搬到真实项目，正文即与原型一致。
+     ============================================================ */
+  .msg-text { font-size: 15px; line-height: 1.75; color: var(--fg); margin-top: 7px; text-wrap: pretty; font-family: var(--font-body); }
   .msg.user .msg-text {
     display: inline-block;
     background: color-mix(in oklab, var(--accent) 9%, var(--surface));
@@ -416,11 +459,9 @@
     border-radius: 16px 4px 16px 16px;
     border: 1px solid color-mix(in oklab, var(--accent) 15%, var(--border));
   }
-  .run-status { font-size: 12px; color: var(--warn); font-weight: 700; }
-  .run-status::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); margin-right: 7px; vertical-align: 1px; animation: blink 1.2s steps(2) infinite; }
-  .run-status button { color: var(--accent-ink); font-weight: 700; }
-
-  /* 内联内容渲染：assistant 标签 → 带下划线的档案引用 */
+  /* Markdown 美化 · 实体引用：assistant 标签 → 带下划线的档案引用
+     （真实项目 AssistantMarkdown.tsx 中由 extractReferenceTags 转为
+       cc://character/... 链接后渲染成 chip；原型用下划线形式） */
   .xr {
     color: var(--accent-ink);
     text-decoration: underline;
@@ -444,37 +485,69 @@
   }
   .unit.ref-flash { background: color-mix(in oklab, var(--accent) 9%, var(--surface)); }
 
-  /* ============ 自定义标记渲染（Novel Markup） ============ */
+  /* ============ Markdown 美化 · 自定义标记渲染（Novel Markup） ============
+     以下 .n-hl / code / b / .nm-table / .nm-quote / .nm-list 是正文里
+     高亮、代码、表格、引用块、列表的视觉定义；真实项目对应
+     assistantMarkdown.module.css 中相同语义的规则。 */
   .msg-text .n-hl { background: color-mix(in oklab, var(--accent) 14%, transparent); color: var(--accent-ink); border-radius: 3px; padding: 0 3px; }
-  .msg-text code, .tline code { font-family: var(--font-mono); font-size: 0.92em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; color: var(--fg); }
+  .msg-text code { font-family: var(--font-mono); font-size: 0.92em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; color: var(--fg); }
   .msg-text b { font-weight: 800; }
+  /* Markdown 美化 · 标题（块级）：h1 / h2 / h3 → 对话内嵌的层级标题，
+     视觉上收敛在正文尺度内，不喧宾夺主。 */
+  .msg-text .nm-h1, .msg-text .nm-h2, .msg-text .nm-h3 { display: block; font-family: var(--font-display); color: var(--fg); font-weight: 800; letter-spacing: -0.01em; line-height: 1.35; margin: 14px 0 6px; text-wrap: balance; }
+  .msg-text .nm-h1 { font-size: 19px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .msg-text .nm-h2 { font-size: 16.5px; }
+  .msg-text .nm-h3 { font-size: 15px; color: var(--muted); }
+  .msg-text .nm-h1:first-child, .msg-text .nm-h2:first-child, .msg-text .nm-h3:first-child { margin-top: 4px; }
   .nm-table { margin: 10px 0 4px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   .nm-table table { width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.55; }
-  .nm-table th { font-size: 10.5px; font-weight: 800; text-align: left; color: var(--muted); background: var(--surface-2); padding: 7px 10px; letter-spacing: 0.04em; }
-  .nm-table td { padding: 7px 10px; color: var(--fg); border-top: 1px solid var(--border); }
+  .nm-table th { font-size: 10.5px; font-weight: 800; text-align: left; color: var(--muted); background: var(--surface-2); padding: 7px 10px; letter-spacing: 0.04em; font-family: var(--font-ui); }
+  .nm-table td { padding: 7px 10px; color: var(--fg); border-top: 1px solid var(--border); font-family: var(--font-body); }
   .nm-table th:first-child, .nm-table td:first-child { padding-left: 12px; }
   .nm-table tr:hover td { background: color-mix(in oklab, var(--accent) 4%, transparent); }
-  .nm-quote { margin: 10px 0 4px; padding: 10px 14px; border-left: 2px solid color-mix(in oklab, var(--accent) 45%, transparent); background: color-mix(in oklab, var(--accent) 6%, transparent); border-radius: 0 8px 8px 0; color: var(--muted); font-size: 13.5px; }
+  .nm-quote { margin: 10px 0 4px; padding: 10px 14px; border-left: 2px solid color-mix(in oklab, var(--accent) 45%, transparent); background: color-mix(in oklab, var(--accent) 6%, transparent); border-radius: 0 8px 8px 0; color: var(--muted); font-size: 13.5px; font-family: var(--font-kai); }
   .nm-list { margin: 8px 0 4px; padding-left: 20px; display: grid; gap: 4px; }
   .nm-list li { font-size: 13.5px; line-height: 1.6; }
 
-  /* 思考内容 */
-  .think { margin-top: 11px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
-  .think-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; font-size: 12px; font-weight: 750; color: var(--muted); }
-  .think-toggle:hover { color: var(--fg); }
-  .think-toggle .chev { margin-left: auto; transition: transform 0.18s ease; color: var(--faint); }
-  .think[data-expanded="true"] .think-toggle .chev { transform: rotate(90deg); }
-  .think-lines { display: none; padding: 2px 12px 10px; }
-  .think[data-expanded="true"] .think-lines { display: block; animation: think-in 0.2s ease; }
+  /* 通用轻量入场动画（事件时序 / 工具明细共用） */
   @keyframes think-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
-  .tline { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px dashed var(--border); font-size: 13px; line-height: 1.65; color: var(--muted); }
-  .tline:first-child { border-top: 0; }
-  .tl-mark { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-top: 8px; flex: none; opacity: 0; transition: opacity 0.2s; }
-  .tline.show .tl-mark { opacity: 1; }
-  .tline p { flex: 1; min-width: 0; }
-  .tl-tag { flex: none; align-self: center; font-size: 10.5px; font-weight: 750; color: var(--accent-ink); background: color-mix(in oklab, var(--accent) 10%, var(--surface)); padding: 1px 8px; border-radius: 999px; }
-  .tline.active p::after { content: ""; display: inline-block; width: 2px; height: 1em; background: var(--accent); margin-left: 3px; vertical-align: -0.16em; animation: blink 1s steps(2) infinite; }
-  @keyframes blink { 50% { opacity: 0; } }
+
+  /* 运行时事件流（对话4 演示 · 对应 core 输出事件，映射表见 output-events-map.md）
+     单次用户指令内 agent 走多轮：每轮事件按发生顺序嵌入 → 工具聚合 → 最终正文 */
+  .evt-flow { margin-top: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
+  .evt-flow-head { display: flex; align-items: baseline; gap: 10px; padding: 10px 12px 8px; border-bottom: 1px solid var(--border); }
+  .evt-flow-title { font-size: 12px; font-weight: 800; letter-spacing: 0.02em; color: var(--fg); }
+  .evt-flow-meta { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+  /* 单条时序线：agent / system / novel 事件按时间先后交错排列，竖线 + 族色圆点 */
+  .evt-timeline { padding: 4px 14px 10px; animation: think-in 0.2s ease; }
+  .evt-row { position: relative; display: flex; align-items: baseline; gap: 8px; padding: 6px 0 6px 18px; font-size: 11.5px; line-height: 1.5; }
+  .evt-row::before { content: ""; position: absolute; left: 3px; top: 0; bottom: 0; width: 1px; background: var(--border); }
+  .evt-row:first-child::before { top: 11px; }
+  .evt-row:last-child::before { bottom: auto; height: 11px; }
+  .evt-row::after { content: ""; position: absolute; left: 0; top: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: 0.85; }
+  .evt-row[data-family="agent"]::after { background: color-mix(in oklab, var(--accent) 72%, transparent); }
+  .evt-row[data-family="system"]::after { background: color-mix(in oklab, var(--info) 72%, transparent); }
+  .evt-row[data-family="novel"]::after { background: color-mix(in oklab, var(--success) 72%, transparent); }
+  .evt-time { flex: none; font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+  .evt-name { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; }
+  .evt-desc { flex: 1; min-width: 0; line-height: 1.55; overflow-wrap: anywhere; color: var(--muted); }
+
+  /* 工具调用聚合条（system.tool.trace.recorded · 同 label 聚合 · 点击展开单条元数据） */
+  .tool-strip { border-top: 1px solid var(--border); padding: 9px 12px 11px; background: var(--surface-2); }
+  .tool-title { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; font-weight: 800; color: var(--muted); }
+  .tool-meta { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--faint); font-weight: 400; }
+  .tool-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .tool-chip { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 11px; color: var(--accent-ink); background: color-mix(in oklab, var(--accent) 9%, var(--surface)); border: 1px solid color-mix(in oklab, var(--accent) 18%, var(--border)); border-radius: 7px; padding: 4px 9px; transition: background 0.15s, border-color 0.15s; }
+  .tool-chip:hover { background: color-mix(in oklab, var(--accent) 14%, var(--surface)); border-color: color-mix(in oklab, var(--accent) 30%, var(--border-strong)); }
+  .tool-chip b { font-weight: 800; }
+  .tool-chip .chev { font-size: 10px; opacity: 0.65; transition: transform 0.18s ease; }
+  .tool-chip[aria-expanded="true"] .chev { transform: rotate(90deg); }
+  .tool-rows { margin-top: 7px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow: hidden; animation: think-in 0.2s ease; }
+  .tool-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; font-size: 11.5px; border-top: 1px dashed var(--border); }
+  .tool-row:first-child { border-top: 0; }
+  .tool-ok { flex: none; font-family: var(--font-mono); font-size: 10px; font-weight: 800; color: var(--success); }
+  .tool-txt { flex: 1; min-width: 0; color: var(--fg); }
+  .tool-time { flex: none; font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
 
   /* 提议卡片 */
   .proposal { margin-top: 13px; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface); padding: 14px 16px 13px; box-shadow: var(--shadow-1); }
@@ -482,37 +555,81 @@
   .ptag { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--accent-ink); background: color-mix(in oklab, var(--accent) 11%, var(--surface)); padding: 2px 8px; border-radius: 999px; }
   .proposal h4 { font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
   .proposal .meta { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--faint); }
-  .op { display: flex; align-items: baseline; gap: 9px; padding: 9px 0; border-top: 1px dashed var(--border); font-size: 13px; line-height: 1.55; }
+  .op { display: flex; align-items: center; gap: 9px; padding: 9px 0; border-top: 1px dashed var(--border); font-size: 13px; line-height: 1.55; }
   .op:first-of-type { margin-top: 10px; }
   .op-mark { font-family: var(--font-mono); font-weight: 800; width: 16px; flex: none; }
   .op.add .op-mark { color: var(--success); }
   .op.mod .op-mark { color: var(--warn); }
+  .op.del .op-mark { color: var(--danger); }
+  .op.move .op-mark { color: var(--info); }
+  /* 操作类型色块：单层语义（底 + 字同一色系），与审批 Diff 的词语标签语言一致 */
+  .op-chip { display: inline-flex; align-items: center; gap: 4px; flex: none; font: 800 10.5px/1 var(--font-ui); letter-spacing: 0.02em; padding: 4px 9px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap; }
+  .op-chip.add { color: var(--success); background: var(--success-bg); border-color: color-mix(in oklab, var(--success) 24%, transparent); }
+  .op-chip.mod { color: var(--warn); background: var(--warn-bg); border-color: color-mix(in oklab, var(--warn) 26%, transparent); }
+  .op-chip.del { color: var(--danger); background: var(--danger-bg); border-color: color-mix(in oklab, var(--danger) 24%, transparent); }
+  .op-chip.move { color: var(--info); background: var(--info-bg); border-color: color-mix(in oklab, var(--info) 24%, transparent); }
   .op b { font-weight: 750; }
-  .op-kind { margin-left: auto; flex: none; font-family: var(--font-mono); font-size: 10.5px; color: var(--faint); }
-  .proposal-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 11px; margin-top: 3px; }
-  .proposal-foot .approval-state { margin-left: auto; }
-
-  /* 生成失败卡片：低饱和描边 + 浅底，无左侧色条 */
-  .fail-card {
-    margin-top: 10px; padding: 12px 14px;
-    border: 1px solid color-mix(in oklab, var(--danger) 22%, var(--border));
-    background: color-mix(in oklab, var(--danger-bg) 64%, var(--surface));
-    border-radius: 12px;
-    display: flex; flex-direction: column; gap: 7px;
+  .op-txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .op-act { flex: none; display: inline-flex; gap: 6px; }
+  /* 范围标签：中性小胶囊，不再与操作色块抢视觉 */
+  .proposal .op-kind { margin-left: auto; flex: none; font: 600 10px/1 var(--font-mono); letter-spacing: 0.02em; color: var(--faint); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; }
+  .op-act button {
+    font: 500 11px/1 var(--font-ui);
+    color: var(--muted);
+    background: color-mix(in oklab, var(--surface) 76%, transparent);
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    padding: 4px 9px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s, background-color .15s;
   }
-  .fail-card .fail-title {
-    display: flex; align-items: baseline; gap: 8px;
-    font-size: 13px; font-weight: 750;
-    color: var(--danger);
+  .op-act button:hover { color: var(--accent-ink); border-color: color-mix(in oklab, var(--accent) 45%, var(--border-strong)); background: color-mix(in oklab, var(--accent) 8%, var(--surface)); }
+  .op-act button:disabled { opacity: .45; cursor: default; }
+  .drow.op-flash { animation: op-flash 1.7s ease-out; }
+  @keyframes op-flash { from { background-color: color-mix(in oklab, var(--accent) 14%, transparent); } to { background-color: transparent; } }
+  .proposal-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 11px; margin-top: 3px; }
+  /* 底部状态：色块胶囊 + 状态点，与右侧目录的 pill 语言一致 */
+  .proposal-foot .approval-state { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 750; letter-spacing: 0.02em; padding: 4px 10px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap; }
+  .proposal-foot .approval-state::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.85; }
+  .proposal-foot .approval-state.pending { color: var(--warn); background: var(--warn-bg); border-color: color-mix(in oklab, var(--warn) 26%, transparent); }
+  .proposal-foot .approval-state.approved { color: var(--success); background: var(--success-bg); border-color: color-mix(in oklab, var(--success) 24%, transparent); }
+  .proposal-foot .approval-state.rejected { color: var(--danger); background: var(--danger-bg); border-color: color-mix(in oklab, var(--danger) 24%, transparent); }
+  .proposal-foot .approval-state.stopped, .proposal-foot .approval-state.failed { color: var(--muted); background: var(--surface-2); border-color: var(--border-strong); }
+
+  /* 生成失败卡片：安静的细条 + 圆点 + 原因 + 轻量重试，头部状态已承担标题 */
+  .fail-card {
+    margin-top: 10px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid color-mix(in oklab, var(--danger) 16%, var(--border));
+    background: color-mix(in oklab, var(--danger-bg) 42%, var(--surface));
+    border-radius: 10px;
+  }
+  .fail-card::before {
+    content: ""; flex: none;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: color-mix(in oklab, var(--danger) 72%, transparent);
   }
   .fail-card .fail-reason {
-    font-size: 12.5px; line-height: 1.6;
+    flex: 1; min-width: 0;
+    font-size: 12.5px; line-height: 1.55;
     color: var(--muted);
   }
-  .fail-card .fail-actions {
-    display: flex; gap: 8px; margin-top: 2px;
+  .fail-card .fail-actions { flex: none; }
+  .fail-retry {
+    padding: 5px 11px; font-size: 12px; font-weight: 750;
+    border: 1px solid color-mix(in oklab, var(--danger) 24%, var(--border-strong));
+    border-radius: 8px;
+    background: transparent;
+    color: color-mix(in oklab, var(--danger) 82%, var(--muted));
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
   }
-  .fail-card .fail-actions .btn { padding: 6px 13px; font-size: 12.5px; }
+  .fail-retry:hover {
+    background: color-mix(in oklab, var(--danger-bg) 60%, var(--surface));
+    border-color: color-mix(in oklab, var(--danger) 42%, var(--border-strong));
+    color: var(--danger);
+  }
+  .fail-retry:active { transform: translateY(1px); }
 
   /* 按钮 */
   .btn { font-size: 13px; font-weight: 750; padding: 8px 14px; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--fg); transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s; }
@@ -521,7 +638,6 @@
   .btn.primary { background: var(--fg); border: 0; color: var(--bg); box-shadow: 0 1px 2px rgba(40, 22, 10, 0.08); }
   .btn.primary:hover { background: oklch(26% 0.012 46); transform: translateY(-1px); box-shadow: 0 4px 10px rgba(40, 22, 10, 0.1); }
   .btn.primary:active { transform: translateY(0); }
-  .btn.ghost-danger { border-color: transparent; background: var(--danger-bg); color: var(--danger); }
   .btn.link { border: 0; color: var(--accent-ink); font-weight: 750; padding: 6px 8px; }
   .btn[disabled] { opacity: 0.55; cursor: default; }
   .btn[disabled]:hover, .btn[disabled]:active { transform: none; box-shadow: none; border-color: var(--border-strong); }
@@ -639,7 +755,7 @@
 
   /* ============ 右侧审批面板 ============ */
   .inspector {
-    width: var(--insp-w, 384px);
+    width: var(--insp-w, 860px);
     flex: none;
     order: 2;
     background: color-mix(in oklab, var(--surface) 78%, transparent);
@@ -651,7 +767,7 @@
     min-height: 0;
     overflow: hidden;
     position: relative;
-    margin-right: calc(-1 * var(--insp-w, 384px));
+    margin-right: calc(-1 * var(--insp-w, 860px));
     transition: margin-right 0.24s cubic-bezier(0.22, 1, 0.36, 1);
   }
   body.insp-open .inspector { margin-right: 0; }
@@ -697,30 +813,106 @@
     background: var(--surface);
   }
   .insp-close:hover { border-color: var(--border-strong); color: var(--fg); }
-  .insp-body { flex: 1; min-height: 0; overflow-y: auto; }
-  .insp-list { padding: 10px 12px 4px; }
+  .insp-body { flex: 1; min-height: 0; }
+  /* 审批两栏：左目录（变更集队列） + 右内容（参数 / 执行结果 Diff） */
+  #inspApprovalBody:not([hidden]) { display: flex; flex-direction: row; overflow: hidden; }
+  .insp-list {
+    flex: none; width: 238px;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 10px 10px 16px;
+    background: color-mix(in oklab, var(--surface) 55%, transparent);
+  }
+  .appr-dir-head {
+    display: flex; align-items: center; gap: 7px;
+    padding: 2px 4px 9px;
+    font-size: 10px; font-weight: 750;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+  .appr-dir-head .cnt {
+    font-family: var(--font-mono);
+    font-size: 9.5px; font-weight: 800;
+    color: var(--faint);
+  }
+  /* 审批目录：按对话分组，组间按最近审批排序 */
+  .appr-group + .appr-group { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border); }
+  .appr-group-head {
+    display: flex; align-items: center; gap: 4px; width: 100%;
+    margin: 0 0 3px; padding: 2px; border-radius: 7px;
+    transition: background 0.15s;
+  }
+  .appr-group-head .ag-main {
+    display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0;
+    background: none; border: 0; padding: 2px 4px;
+    color: var(--muted); cursor: pointer; text-align: left; font: inherit;
+    border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .appr-group-head:hover { background: color-mix(in oklab, var(--surface-2) 55%, transparent); }
+  .appr-group-head:hover .ag-main { color: var(--fg); }
+  .ag-jump {
+    flex: none; font: 600 10px/1 var(--font-ui); letter-spacing: 0.02em;
+    color: var(--faint); background: transparent;
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 7px; cursor: pointer; opacity: 0.55;
+    transition: color 0.15s, border-color 0.15s, background 0.15s, opacity 0.15s;
+  }
+  .ag-jump:hover {
+    color: var(--accent-ink); opacity: 1;
+    border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+    background: color-mix(in oklab, var(--accent) 8%, transparent);
+  }
+  .ag-name { font-size: 11px; font-weight: 750; color: var(--fg); letter-spacing: 0.01em; flex: none; }
+  .ag-sub { font-size: 10px; color: var(--faint); flex: 1; min-width: 0; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ag-cnt {
+    flex: none; font-family: var(--font-mono); font-size: 9.5px; font-weight: 800;
+    color: var(--faint); background: color-mix(in oklab, var(--fg) 7%, transparent);
+    padding: 1px 6px; border-radius: 999px;
+  }
+  /* 悬浮小预览：行极简，hover 展示细节（Codex 式） */
+  .appr-hover {
+    position: fixed; z-index: 1200;
+    width: 264px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: color-mix(in oklab, var(--surface) 88%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 10px 28px rgba(20, 12, 6, 0.12);
+    pointer-events: none;
+    font-family: var(--font-body);
+    animation: appr-hover-in 0.16s ease both;
+  }
+  @keyframes appr-hover-in {
+    from { opacity: 0; transform: translateY(3px) scale(0.985); }
+    to { opacity: 1; transform: none; }
+  }
+  .appr-hover .ah-head { display: flex; align-items: center; gap: 7px; }
+  .appr-hover .ah-id { font-family: var(--font-mono); font-size: 10.5px; font-weight: 800; color: var(--muted); }
+  .appr-hover .ah-title { font-size: 13px; font-weight: 750; line-height: 1.45; margin-top: 5px; color: var(--fg); }
+  .appr-hover .ah-meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--faint); margin-top: 5px; }
+  .appr-hover .ah-note { font-size: 12px; line-height: 1.55; color: var(--muted); margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--border); }
+  .appr-hover .ah-note b { font-weight: 650; color: var(--accent-ink); }
+  .appr-hover .ah-ops { font-family: var(--font-mono); font-size: 10.5px; color: var(--faint); margin-top: 7px; }
+  .appr-hover .ah-hint { font-size: 10.5px; color: var(--accent-ink); margin-top: 8px; letter-spacing: 0.03em; }
 
-  /* 右侧面板：审批 / 档案 双模式 */
-  .insp-tabs { display: inline-flex; align-items: center; gap: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 2px; }
-  .insp-tab { border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s ease, color 0.15s ease; }
-  .insp-tab:hover { color: var(--fg); }
-  .insp-tab.active { background: var(--surface); color: var(--accent-ink); box-shadow: 0 1px 3px rgba(20, 12, 6, 0.08); }
-  .insp-tab .count-pill { font-size: 9.5px; font-weight: 800; background: var(--warn-bg); color: var(--warn); padding: 0 6px; border-radius: 999px; }
+  /* 右侧面板：单模式上下文标题（无 tab 切换，模式由入口决定） */
+  .insp-title { font-size: 13px; font-weight: 700; letter-spacing: 0.01em; color: var(--fg); margin: 0; }
   .detail-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px 30px; }
   .detail-card .d-meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--faint); margin-top: 10px; letter-spacing: 0.02em; }
   .detail-card .d-foot { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
-  .inspector .appr-scroll { flex: none; overflow: visible; padding: 8px 14px 28px; }
+  .inspector .appr-scroll { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 18px 32px; }
   .inspector .appr-wrap { max-width: none; margin: 0; }
   .inspector .identity { flex-wrap: wrap; gap: 5px 9px; font-size: 11px; }
   .inspector .identity .cs-meta { flex-basis: 100%; }
   .inspector .diff-sec { margin-top: 16px; }
   .inspector .diff-box { border-radius: 10px; }
   .inspector .drow { padding: 10px 11px; gap: 9px; }
-  .inspector .inline-diff { font-size: 12.5px; }
   .inspector .legend { flex-wrap: wrap; gap: 10px; margin-top: 5px; }
   .inspector .detail-foot { margin-top: 16px; gap: 9px; }
   .inspector .detail-foot .actions { margin-left: 0; width: 100%; }
-  .inspector .request-box textarea { font-size: 12px; }
   .inspector .old-new .tag { width: 74px; }
   .inspector .resolved-banner { font-size: 12px; padding: 8px 11px; }
 
@@ -734,52 +926,61 @@
   .diff-sec { margin-top: 24px; }
   .diff-sec h3 { display: flex; align-items: baseline; gap: 8px; font-size: 14px; font-weight: 800; letter-spacing: -0.01em; }
   .diff-sec h3 .n { font-family: var(--font-mono); font-size: 11px; color: var(--faint); font-weight: 550; }
-  .legend { display: flex; gap: 14px; margin-top: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--faint); }
-  .legend i { font-style: normal; font-weight: 800; }
-  .legend .g { color: var(--success); } .legend .r { color: var(--danger); } .legend .b { color: var(--info); } .legend .a { color: var(--warn); }
+  .legend { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
   .diff-box { margin-top: 9px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
-  .drow { display: flex; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--border); }
+  .box-head { padding: 9px 14px 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--faint); }
+  .drow { display: flex; gap: 11px; padding: 12px 14px; border-top: 1px solid var(--border); align-items: flex-start; }
   .drow:first-child { border-top: 0; }
   .dmark { font-family: var(--font-mono); font-weight: 800; width: 16px; flex: none; }
-  .drow.add .dmark { color: var(--success); }
-  .drow.mod { background: color-mix(in oklab, var(--warn) 3.5%, var(--surface)); }
-  .drow.mod .dmark { color: var(--warn); }
-  .d-main { flex: 1; min-width: 0; }
+  /* Diff 操作类型语义：词语动作标签 + 低调语义色，不再用整行底色堆叠 */
+  .act { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 21px; flex: none; border-radius: 6px; font-size: 11px; font-weight: 750; letter-spacing: 0.03em; }
+  .act-sm { width: auto; height: 18px; padding: 0 8px; font-size: 10px; border-radius: 5px; }
+  .act-add { color: var(--success); background: color-mix(in oklab, var(--success) 10%, var(--surface)); }
+  .act-del { color: var(--danger); background: color-mix(in oklab, var(--danger) 9%, var(--surface)); }
+  .act-mod { color: var(--warn); background: color-mix(in oklab, var(--warn) 9%, var(--surface)); }
+  .act-move { color: var(--info); background: color-mix(in oklab, var(--info) 10%, var(--surface)); }
+  .d-main { flex: 1; min-width: 0; font-family: var(--font-body); }
   .d-title { font-size: 13px; font-weight: 750; display: block; }
   .d-id { font-family: var(--font-mono); font-size: 10.5px; color: var(--faint); margin-left: 8px; font-weight: 500; }
-  .inline-diff { font-size: 13px; line-height: 1.7; color: var(--fg); margin-top: 5px; text-wrap: pretty; }
-  .inline-diff ins { background: color-mix(in oklab, var(--success) 15%, var(--surface)); color: var(--success); text-decoration: none; border-radius: 3px; padding: 0 2px; }
-  .inline-diff del { background: color-mix(in oklab, var(--danger) 12%, var(--surface)); color: var(--danger); border-radius: 3px; padding: 0 2px; }
+  .new-text { font-size: 13px; line-height: 1.7; color: var(--fg); margin-top: 5px; text-wrap: pretty; }
   .evid { font-family: var(--font-mono); font-size: 11px; color: var(--faint); margin-top: 7px; }
   .old-new { margin-top: 6px; }
-  .old-new .row { display: flex; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 12px; margin-top: 4px; }
+  .old-new .row { display: flex; gap: 8px; align-items: baseline; font-family: var(--font-mono); font-size: 12px; margin-top: 4px; }
   .old-new .tag { color: var(--faint); font-size: 10.5px; width: 92px; flex: none; }
-  .chip-old { color: var(--danger); font-weight: 700; }
-  .chip-new { color: var(--success); font-weight: 700; }
+  .old-new .row.seg .tag { width: 30px; }
+  .old-new .arr { color: var(--faint); flex: none; }
+  .old-txt { color: var(--danger); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--danger) 50%, transparent); font-family: var(--font-body); }
+  .new-txt { color: var(--success); font-family: var(--font-body); }
+  .chip-old { color: var(--danger); font-weight: 700; background: color-mix(in oklab, var(--danger) 9%, var(--surface)); border-radius: 4px; padding: 1px 5px; }
+  .chip-new { color: var(--success); font-weight: 700; background: color-mix(in oklab, var(--success) 10%, var(--surface)); border-radius: 4px; padding: 1px 5px; }
+  /* 审批参数（novel.approval.requested 载荷：仅参数，无 diff） */
+  .params { margin-top: 7px; display: grid; gap: 4px; }
+  .params .row { display: flex; gap: 10px; align-items: baseline; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6; }
+  .params .tag { color: var(--faint); width: 92px; flex: none; font-size: 10.5px; }
+  .params .val { color: var(--fg); word-break: break-word; }
+  .params .val.long { color: var(--muted); font-weight: 450; }
+  .drow.op .dmark { color: var(--accent-ink); }
+  .op-kind { margin-left: auto; flex: none; font-family: var(--font-mono); font-size: 10.5px; color: var(--faint); }
+  /* 执行结果 Diff：仅批准执行完成后才展示 */
+  .exec-sec { display: none; }
+  .exec-sec.on { display: block; animation: exec-in 0.32s ease both; }
+  @keyframes exec-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
   .detail-foot { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .detail-foot .count { font-size: 12px; color: var(--faint); font-family: var(--font-mono); }
   .detail-foot .actions { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .resolved-banner { background: var(--success-bg); color: var(--success); border-radius: 10px; padding: 9px 13px; font-size: 13px; font-weight: 750; }
-  .request-box { display: none; width: 100%; margin-top: 12px; }
-  .request-box.open { display: block; }
-  .request-box textarea { width: 100%; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg); font: inherit; font-size: 13px; padding: 10px 12px; resize: vertical; min-height: 68px; outline: 0; }
-  .request-box textarea:focus { border-color: var(--accent); }
-  .request-box .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
   .note-box { display: none; margin-top: 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); padding: 10px 12px; }
   .note-box.open { display: block; }
   .note-box .note-head { display: flex; align-items: baseline; gap: 8px; font-size: 11px; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 5px; }
   .note-box .note-kind { font-weight: 600; color: var(--accent-ink); }
   .note-box.ok .note-kind { color: var(--success); }
+  .note-box.rej .note-kind { color: var(--danger); }
   .note-box .note-body { font-size: 13px; line-height: 1.55; color: var(--fg); }
-  .appr-note { display: block; margin-top: 3px; font-size: 11px; line-height: 1.5; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .appr-note { display: block; margin-top: 3px; font-size: 11px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
   .appr-note b { font-weight: 600; color: var(--accent-ink); }
   .cs-pane[hidden] { display: none; }
 
   /* ============ 内容视图 ============ */
-  .pane-tabs { flex: none; display: flex; gap: 4px; padding: 9px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
-  .pane-tab { padding: 7px 13px; border-radius: 8px; font-size: 13px; font-weight: 650; color: var(--muted); transition: background 0.15s, color 0.15s; }
-  .pane-tab:hover { color: var(--fg); background: var(--surface-2); }
-  .pane-tab.active { background: color-mix(in oklab, var(--accent) 13%, var(--surface)); color: var(--accent-ink); }
   .pane-body { flex: 1; overflow-y: auto; padding: 18px 22px 40px; }
   .pane-inner { max-width: 1000px; margin: 0 auto; }
   .pane-section[hidden] { display: none; }
@@ -848,7 +1049,7 @@
   .block:first-of-type { border-top: 0; }
   .b-head { display: flex; gap: 9px; align-items: center; font-family: var(--font-mono); font-size: 10.5px; color: var(--faint); margin-bottom: 4px; }
   .b-draft { color: var(--warn); font-weight: 750; }
-  .block p { font-size: 14.5px; line-height: 1.85; color: var(--fg); text-wrap: pretty; }
+  .block p { font-size: 14.5px; line-height: 1.85; color: var(--fg); text-wrap: pretty; font-family: var(--font-body); }
 
   .entity-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 13px; margin-top: 14px; }
   .entity { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 14px 15px; }
@@ -856,7 +1057,7 @@
   .e-av { width: 34px; height: 34px; flex: none; border-radius: 10px; background: color-mix(in oklab, var(--accent) 12%, var(--surface-2)); border: 1px solid color-mix(in oklab, var(--accent) 18%, var(--border-strong)); color: var(--accent-ink); font-weight: 800; font-size: 13px; display: grid; place-items: center; }
   .e-name { font-weight: 800; font-size: 14px; display: block; line-height: 1.3; }
   .e-role { font-size: 11.5px; color: var(--faint); }
-  .e-note { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.65; }
+  .e-note { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.65; font-family: var(--font-body); }
   .e-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .e-chips > span { font-size: 10.5px; font-weight: 600; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; display: inline-flex; align-items: center; gap: 5px; }
   .chip-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex: none; }
@@ -902,10 +1103,13 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   /* ============ 窄屏 ============ */
+  @media (max-width: 1280px) {
+    .inspector { --insp-w: 720px; }
+  }
   @media (max-width: 1080px) {
-    .sidebar { width: 256px; }
-    body.side-closed .sidebar { margin-left: -256px; }
-    .inspector { --insp-w: 344px; }
+    .sidebar { width: 240px; }
+    body.side-closed .sidebar { margin-left: -240px; }
+    .inspector { --insp-w: 640px; }
   }
   @media (max-width: 860px) {
     .sidebar {
@@ -921,20 +1125,38 @@
     .stat + .stat { border-left: 0; border-top: 1px solid var(--border); }
     .ws-name, .ws-sub, .rev-meta { display: none; }
   }
-  @media (max-width: 920px) {
+  /* 右侧面板较宽（两栏），窗口不足以并排时改为浮层抽屉，避免挤压聊天区 */
+  @media (max-width: 1200px) {
     .inspector {
       position: fixed;
       top: 56px; right: 0; bottom: 0;
       z-index: 42;
-      width: min(384px, 94vw);
+      width: min(760px, 94vw);
       margin-right: 0;
       transform: translateX(102%);
-      transition: transform 0.22s ease;
+      transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
       box-shadow: -18px 0 50px rgba(20, 12, 6, 0.18);
     }
     body.insp-open .inspector { transform: none; }
     .insp-close { display: grid; }
     .insp-drag { display: none; }
+  }
+  @media (max-width: 640px) {
+    #inspApprovalBody { flex-direction: column; }
+    #apprList {
+      width: auto; flex: none;
+      border-right: 0; border-bottom: 1px solid var(--border);
+      display: flex; gap: 6px;
+      overflow-x: auto;
+      padding: 8px 10px 10px;
+    }
+    .inspector .appr { flex: none; width: 250px; margin-bottom: 0; }
+    .appr-dir-head { flex: none; padding: 2px 4px 0; }
+    .appr-group { display: contents; }
+    .appr-group-head { flex: none; width: auto; padding: 2px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); margin: 0; }
+    .appr-group-head .ag-main { padding: 2px 8px; }
+    .ag-sub { display: none; }
+    .inspector .appr-scroll { padding: 14px 14px 28px; }
   }
 
   /* ============ 细节打磨：滚动条 / 选区 / 焦点 / 卡片触感 / 入场动效 ============ */
@@ -1025,6 +1247,30 @@
             <button class="menu-del" type="button" role="menuitem">删除</button>
           </div>
         </div>
+        <div class="conv-row" data-conv="c3">
+          <span class="conv-status" aria-hidden="true"><span class="st-spin"></span></span>
+          <button class="conv-more" type="button" aria-label="对话操作" aria-haspopup="menu" aria-expanded="false">…</button>
+          <button class="conv-item" type="button" data-conv="c3">
+            <span class="conv-title">对话3</span>
+            <span class="conv-sub">Markdown 演示 · 全部标签渲染</span>
+          </button>
+          <div class="conv-menu" role="menu">
+            <button class="menu-pin" type="button" role="menuitem">置顶</button>
+            <button class="menu-del" type="button" role="menuitem">删除</button>
+          </div>
+        </div>
+        <div class="conv-row" data-conv="c4">
+          <span class="conv-status" aria-hidden="true"><span class="st-spin"></span></span>
+          <button class="conv-more" type="button" aria-label="对话操作" aria-haspopup="menu" aria-expanded="false">…</button>
+          <button class="conv-item" type="button" data-conv="c4">
+            <span class="conv-title">对话4</span>
+            <span class="conv-sub">运行时事件演示 · 单次指令 · 内部 3 轮</span>
+          </button>
+          <div class="conv-menu" role="menu">
+            <button class="menu-pin" type="button" role="menuitem">置顶</button>
+            <button class="menu-del" type="button" role="menuitem">删除</button>
+          </div>
+        </div>
       </div>
 
       <div class="side-foot">
@@ -1046,9 +1292,10 @@
         <div class="timeline" id="timeline">
           <div class="chat-empty" id="chatEmpty" style="display:none">
             <h3>新对话</h3>
-            <p>描述你想推进的创作任务：起草场景、修订正文、推进大纲节点。Novel Writer 会先给出思考内容，再生成提议供你审批。</p>
+            <p>描述你想推进的创作任务：起草场景、修订正文、推进大纲节点。Novel Writer 会直接生成草稿与提议，供你审批。</p>
           </div>
           <div class="chat-inner">
+            <div class="turn-sep" data-conv="c1"><span>第 1 轮 · 14:02</span></div>
             <article class="msg user" data-conv="c1">
               <div class="avatar user">我</div>
               <div class="msg-body">
@@ -1061,48 +1308,155 @@
               <div class="avatar agent">NW</div>
               <div class="msg-body">
                 <div class="msg-head"><span class="who">Novel Writer</span><span>14:02</span><span class="approval-state approved">已完成</span></div>
-                <div class="think" data-expanded="false" id="think-1">
-                  <button class="think-toggle" type="button" onclick="toggleThink('think-1')"><span>思考内容</span><span class="chev">›</span></button>
-                  <div class="think-lines">
-                    <div class="tline show"><span class="tl-mark"></span><p>货单上的铅笔批注要接回第二卷「沉船名单」的伏笔——顾一舟的船名不能在这块正文里首次出现，否则线索落地得太轻。</p><span class="tl-tag">伏笔</span></div>
-                    <div class="tline show"><span class="tl-mark"></span><p>林夏的视角要守住：她先认出的是货单格式，怀疑留在段落末尾，不替读者点破。</p><span class="tl-tag">视角</span></div>
-                    <div class="tline show"><span class="tl-mark"></span><p>&lt;location id="loc-dock7"&gt;旧船坞 7 号&lt;/location&gt; 的地点档案里潮汐水位未写死，场景补一句环境约束，与第三卷时间线对齐。</p><span class="tl-tag">地点</span></div>
-                    <div class="tline show"><span class="tl-mark"></span><p>变更集 CS-20260805-01 只动正文与大纲状态，不触碰 r041 已锁定的结局伏笔。</p><span class="tl-tag">变更</span></div>
-                  </div>
-                </div>
                 <div class="msg-text">可以。已起草「&lt;location id="loc-dock7"&gt;旧船坞 7 号&lt;/location&gt;」场景（新增两块正文），并提议把大纲节点「&lt;outline id="unit-trace"&gt;追踪错误目标&lt;/outline&gt;」标为创作中、挂上阻塞原因「决策待定」。共 2 处变更，等你审。</div>
-                <div class="proposal">
+                <div class="proposal" data-cs="cs1">
                   <div class="proposal-head">
                     <span class="ptag">提议</span>
                     <h4>继续第三卷：旧船坞 7 号</h4>
                     <span class="meta">CS-20260805-01 · r041 → r042</span>
                   </div>
-                  <div class="op add"><span class="op-mark">+</span><span>新增正文块 <b>§3-01-04</b> · 旧船坞 7 号（货单发现）</span><span class="op-kind">manuscript</span></div>
-                  <div class="op add"><span class="op-mark">+</span><span>新增正文块 <b>§3-01-05</b> · 旧船坞 7 号（林夏的猜测）</span><span class="op-kind">manuscript</span></div>
-                  <div class="op mod"><span class="op-mark">~</span><span>修改「追踪错误目标」：realization <b>pending → in-progress</b>，新增阻塞原因 <b>decision-required</b></span><span class="op-kind">outline</span></div>
+                  <div class="op add"><span class="op-chip add">+ 新增</span><span class="op-txt" title="新增正文块 §3-01-04 · 旧船坞 7 号（货单发现）">新增正文块 <b>§3-01-04</b> · 旧船坞 7 号（货单发现）</span><span class="op-kind">manuscript</span><span class="op-act"><button type="button" onclick="selectCs('cs1',false,0)">查看</button><button type="button" onclick="approveCs('cs1')">审批</button></span></div>
+                  <div class="op add"><span class="op-chip add">+ 新增</span><span class="op-txt" title="新增正文块 §3-01-05 · 旧船坞 7 号（林夏的猜测）">新增正文块 <b>§3-01-05</b> · 旧船坞 7 号（林夏的猜测）</span><span class="op-kind">manuscript</span><span class="op-act"><button type="button" onclick="selectCs('cs1',false,1)">查看</button><button type="button" onclick="approveCs('cs1')">审批</button></span></div>
+                  <div class="op mod"><span class="op-chip mod">~ 修改</span><span class="op-txt" title="修改「追踪错误目标」：realization pending → in-progress，新增阻塞原因 decision-required">修改「追踪错误目标」：realization <b>pending → in-progress</b>，新增阻塞原因 <b>decision-required</b></span><span class="op-kind">outline</span><span class="op-act"><button type="button" onclick="selectCs('cs1',false,2)">查看</button><button type="button" onclick="approveCs('cs1')">审批</button></span></div>
                   <div class="proposal-foot">
-                    <button class="btn link" type="button" onclick="selectCs('cs1')">查看 Diff →</button>
-                    <button class="btn primary" type="button" onclick="approveCs('cs1')">批准</button>
-                    <button class="btn ghost-danger" type="button" onclick="requestChange('cs1')">请求修改</button>
                     <span class="approval-state pending" id="state-cs1">待批准</span>
                   </div>
                 </div>
               </div>
             </article>
 
+            <div class="turn-sep" data-conv="c2"><span>第 1 轮 · 13:58</span></div>
             <article class="msg assistant" data-conv="c2">
               <div class="avatar agent">NW</div>
               <div class="msg-body">
                 <div class="msg-head"><span class="who">Novel Writer</span><span>13:58</span><span class="approval-state approved">已提交 r039</span></div>
-                <div class="think" data-expanded="false" id="think-2">
-                  <button class="think-toggle" type="button" onclick="toggleThink('think-2')"><span>思考内容</span><span class="chev">›</span></button>
-                  <div class="think-lines">
-                    <div class="tline show"><span class="tl-mark"></span><p>「雨很大」是陈述句，换成「雨落得密」后由动作带氛围，环境不再抢人物。</p><span class="tl-tag">语言</span></div>
-                    <div class="tline show"><span class="tl-mark"></span><p>删掉三句环境形容词后段落从 26 句缩到 22 句，节奏收紧，不补新信息。</p><span class="tl-tag">节奏</span></div>
-                    <div class="tline show"><span class="tl-mark"></span><p>结尾留白保留：&lt;character id="char-linxia"&gt;林夏&lt;/character&gt; 初见 &lt;character id="char-zhoucheng"&gt;周诚&lt;/character&gt; 时还不知道他的船名，这句不能提前给。</p><span class="tl-tag">一致性</span></div>
+                <div class="msg-text">开篇雨夜修改完成并已提交 r039：§1-01-01 的雨夜段落重写完毕，动作节拍与悬念位未动。修改摘要：&lt;table&gt;&lt;row&gt;&lt;cell&gt;范围&lt;/cell&gt;&lt;cell&gt;改动&lt;/cell&gt;&lt;cell&gt;状态&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;§1-01-01&lt;/cell&gt;&lt;cell&gt;雨夜段落重写，&lt;b&gt;26 句 → 22 句&lt;/b&gt;，&lt;hl&gt;节奏收紧&lt;/hl&gt;&lt;/cell&gt;&lt;cell&gt;已提交&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;§1-01-02&lt;/cell&gt;&lt;cell&gt;&lt;code&gt;pending → submitted&lt;/code&gt;&lt;/cell&gt;&lt;cell&gt;已提交&lt;/cell&gt;&lt;/row&gt;&lt;/table&gt;&lt;quote&gt;悬念位未动：&lt;character id="char-linxia"/&gt; 初见 &lt;character id="char-zhoucheng"/&gt; 时还不知道他的船名。&lt;/quote&gt;</div>
+              </div>
+            </article>
+
+            <div class="turn-sep" data-conv="c3"><span>第 1 轮 · 15:20</span></div>
+            <article class="msg user" data-conv="c3">
+              <div class="avatar user">我</div>
+              <div class="msg-body">
+                <div class="msg-head"><span class="who">你</span><span>15:20</span></div>
+                <div class="msg-text">把 Novel Markup 的全部渲染能力演示一遍：标题、行内样式、实体引用、表格、列表、引用块，每个都要能点能看。</div>
+              </div>
+            </article>
+
+            <article class="msg assistant" data-conv="c3">
+              <div class="avatar agent">NW</div>
+              <div class="msg-body">
+                <div class="msg-head"><span class="who">Novel Writer</span><span>15:20</span><span class="approval-state approved">演示</span></div>
+                <div class="msg-text">这是 Novel Markup v1 的完整渲染演示，标准见 content-markup.md：先看块级标题：&lt;h1&gt;第一卷 · 雾港来客&lt;/h1&gt;&lt;h2&gt;第一章 · 旧船坞&lt;/h2&gt;&lt;h3&gt;§1-01-01 · 雨夜&lt;/h3&gt;行内样式：&lt;b&gt;粗体&lt;/b&gt;、&lt;i&gt;斜体&lt;/i&gt;、&lt;u&gt;下划线&lt;/u&gt;、&lt;s&gt;删除线&lt;/s&gt;，术语用 &lt;code&gt;story-unit&lt;/code&gt;，关键结论用 &lt;hl&gt;高亮&lt;/hl&gt;。实体引用：成对写法 &lt;character id="char-linxia"&gt;林夏&lt;/character&gt;；自闭合写法 &lt;location id="loc-dock7"/&gt;（名字自动取档案）；name 覆盖 &lt;location id="loc-dock7" name="七号坞"/&gt;；章节 &lt;chapter id="chapter-301"/&gt;；大纲节点 &lt;outline id="unit-trace"/&gt;；未建档的 id 显示虚线下划线 &lt;character id="char-unknown"&gt;失踪的船员&lt;/character&gt;，点击提示暂未建立档案。表格（首行自动当表头，行内可嵌套）：&lt;table&gt;&lt;row&gt;&lt;cell&gt;标签&lt;/cell&gt;&lt;cell&gt;示例&lt;/cell&gt;&lt;cell&gt;说明&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;&lt;code&gt;b / hl&lt;/code&gt;&lt;/cell&gt;&lt;cell&gt;&lt;b&gt;26 句 → 22 句&lt;/b&gt;，&lt;hl&gt;节奏收紧&lt;/hl&gt;&lt;/cell&gt;&lt;cell&gt;单元格里能用行内标签&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;&lt;code&gt;character&lt;/code&gt;&lt;/cell&gt;&lt;cell&gt;&lt;character id="char-zhoucheng"/&gt;&lt;/cell&gt;&lt;cell&gt;点击在右侧看档案&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;&lt;code&gt;outline&lt;/code&gt;&lt;/cell&gt;&lt;cell&gt;&lt;outline id="unit-tide"/&gt;&lt;/cell&gt;&lt;cell&gt;大纲节点档案&lt;/cell&gt;&lt;/row&gt;&lt;/table&gt;列表：&lt;list&gt;&lt;item&gt;大纲：&lt;outline id="unit-tide"/&gt; 待推进&lt;/item&gt;&lt;item&gt;正文：§3-01-06 草稿待审&lt;/item&gt;&lt;item&gt;人物：&lt;character id="char-guyizhou"/&gt; 的船名暂不点破&lt;/item&gt;&lt;/list&gt;引用块：&lt;quote&gt;悬念位未动：&lt;character id="char-linxia"/&gt; 初见 &lt;character id="char-zhoucheng"/&gt; 时还不知道他的船名。&lt;/quote&gt;</div>
+              </div>
+            </article>
+
+            <div class="turn-sep" data-conv="c4"><span>第 1 轮对话 · 16:04</span></div>
+            <article class="msg user" data-conv="c4">
+              <div class="avatar user">我</div>
+              <div class="msg-body">
+                <div class="msg-head"><span class="who">你</span><span>16:04</span></div>
+                <div class="msg-text">把旧船坞 7 号的货单发现场景写出来：先核对人物和地点档案再落笔；检查潮汐时间线和正文有没有冲突，有冲突按「保留新语义」处理；全部完成后直接提交。</div>
+              </div>
+            </article>
+
+            <article class="msg assistant" data-conv="c4">
+              <div class="avatar agent">NW</div>
+              <div class="msg-body">
+                <div class="msg-head"><span class="who">Novel Writer</span><span>16:10</span><span class="approval-state approved">3 轮 · 已提交</span></div>
+                <div class="turn-sep" data-conv="c4"><span>第 1 轮 · 16:04</span></div>
+                <div class="evt-flow" data-od-id="runtime-events-1">
+                  <div class="evt-flow-head">
+                    <span class="evt-flow-title">本轮时序</span>
+                    <span class="evt-flow-meta">16:04:02 → 16:04:10 · 事件名与 core 一致</span>
+                  </div>
+                  <div class="evt-timeline">
+                    <div class="evt-row" data-family="system"><span class="evt-time">16:04:02</span><code class="evt-name">system.input.routed</code><span class="evt-desc" title="指令 → handler NovelWriter · routed">指令 → handler NovelWriter · routed</span></div>
+                    <div class="evt-row" data-family="agent"><span class="evt-time">16:04:02</span><code class="evt-name">agent.run.state.changed</code><span class="evt-desc" title="running → idle · reason completed">running → idle · reason completed</span></div>
+                    <div class="evt-row" data-family="agent"><span class="evt-time">16:04:02</span><code class="evt-name">agent.turn.state.changed</code><span class="evt-desc" title="planning → executing → completed">planning → executing → completed</span></div>
+                    <div class="evt-row" data-family="agent"><span class="evt-time">16:04:03</span><code class="evt-name">agent.assistant.message.started</code><span class="evt-desc" title="msg-1723 · 思考通道开启">msg-1723 · 思考通道开启</span></div>
+                    <div class="evt-row" data-family="agent"><span class="evt-time">16:04:03-09</span><code class="evt-name">agent.assistant.message.delta</code><span class="evt-desc" title="thinking ×2 · text ×4">thinking ×2 · text ×4</span></div>
+                    <div class="evt-row" data-family="system"><span class="evt-time">16:04:04</span><code class="evt-name">system.tool.trace.recorded</code><span class="evt-desc" title="读取档案 ×3 · 全部 ok">读取档案 ×3 · 全部 ok</span></div>
+                    <div class="evt-row" data-family="novel"><span class="evt-time">16:04:05</span><code class="evt-name">novel.draft.started</code><span class="evt-desc" title="DS-07f3 · base r041">DS-07f3 · base r041</span></div>
+                    <div class="evt-row" data-family="novel"><span class="evt-time">16:04:09</span><code class="evt-name">novel.draft.operation.applied</code><span class="evt-desc" title="×3 · sequence 1-3 · 正文+大纲">×3 · sequence 1-3 · 正文+大纲</span></div>
+                    <div class="evt-row" data-family="novel"><span class="evt-time">16:04:10</span><code class="evt-name">novel.approval.requested</code><span class="evt-desc" title="AR-09 · base r041 → r042 · digest 4f8ac2…c21e">AR-09 · base r041 → r042 · digest 4f8ac2…c21e</span></div>
+                    <div class="evt-row" data-family="agent"><span class="evt-time">16:04:10</span><code class="evt-name">agent.assistant.message.completed</code><span class="evt-desc" title="completionReason stop · hasToolCalls true">completionReason stop · hasToolCalls true</span></div>
+                    <div class="evt-row" data-family="system"><span class="evt-time">16:04:10</span><code class="evt-name">system.input.processed</code><span class="evt-desc" title="terminal completed">terminal completed</span></div>
+                  </div>
+                  <div class="tool-strip">
+                    <span class="tool-title">工具调用 <span class="tool-meta">system.tool.trace.recorded · 同 label 聚合</span></span>
+                    <div class="tool-chips">
+                      <button class="tool-chip" type="button" onclick="toggleToolRows(this,'tool4a-read')" aria-expanded="false">读取档案 <b>×3</b><span class="chev">›</span></button>
+                    </div>
+                    <div class="tool-rows" id="tool4a-read" style="display:none">
+                      <div class="tool-row"><span class="tool-ok">ok</span><span class="tool-txt">人物档案 · 林夏</span><span class="tool-time">1.2s</span></div>
+                      <div class="tool-row"><span class="tool-ok">ok</span><span class="tool-txt">地点档案 · 旧船坞 7 号</span><span class="tool-time">0.8s</span></div>
+                      <div class="tool-row"><span class="tool-ok">ok</span><span class="tool-txt">章节档案 · 第三卷</span><span class="tool-time">0.6s</span></div>
+                    </div>
                   </div>
                 </div>
-                <div class="msg-text">开篇雨夜修改完成并已提交 r039：§1-01-01 的雨夜段落重写完毕，动作节拍与悬念位未动。修改摘要：&lt;table&gt;&lt;row&gt;&lt;cell&gt;范围&lt;/cell&gt;&lt;cell&gt;改动&lt;/cell&gt;&lt;cell&gt;状态&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;§1-01-01&lt;/cell&gt;&lt;cell&gt;雨夜段落重写，&lt;b&gt;26 句 → 22 句&lt;/b&gt;，&lt;hl&gt;节奏收紧&lt;/hl&gt;&lt;/cell&gt;&lt;cell&gt;已提交&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;§1-01-02&lt;/cell&gt;&lt;cell&gt;&lt;code&gt;pending → submitted&lt;/code&gt;&lt;/cell&gt;&lt;cell&gt;已提交&lt;/cell&gt;&lt;/row&gt;&lt;/table&gt;&lt;quote&gt;悬念位未动：&lt;character id="char-linxia"/&gt; 初见 &lt;character id="char-zhoucheng"/&gt; 时还不知道他的船名。&lt;/quote&gt;</div>
+                <div class="turn-sep" data-conv="c4"><span>第 2 轮 · 16:07</span></div>
+                <div class="evt-flow" data-od-id="runtime-events-2">
+                  <div class="evt-flow-head">
+                    <span class="evt-flow-title">本轮时序</span>
+                    <span class="evt-flow-meta">16:07:02 → 16:07:06 · 事件名与 core 一致</span>
+                  </div>
+                  <div class="evt-timeline">
+                    <div class="evt-row" data-family="system"><span class="evt-time">16:07:02</span><code class="evt-name">system.tool.trace.recorded</code><span class="evt-desc" title="搜索正文 ×2 · 一致性检查 ×1 · 全部 ok">搜索正文 ×2 · 一致性检查 ×1 · 全部 ok</span></div>
+                    <div class="evt-row" data-family="system"><span class="evt-time">16:07:03</span><code class="evt-name">system.tool.approval.requested</code><span class="evt-desc" title="AR-08 · 读取类 · permissionEffect allow">AR-08 · 读取类 · permissionEffect allow</span></div>
+                    <div class="evt-row" data-family="system"><span class="evt-time">16:07:03</span><code class="evt-name">system.tool.approval.resolved</code><span class="evt-desc" title="approved · 4ms">approved · 4ms</span></div>
+                    <div class="evt-row" data-family="novel"><span class="evt-time">16:07:04</span><code class="evt-name">novel.rebase.prepared</code><span class="evt-desc" title="候选 DS-07f2 · base r041">候选 DS-07f2 · base r041</span></div>
+                    <div class="evt-row" data-family="novel"><span class="evt-time">16:07:04</span><code class="evt-name">novel.rebase.conflicted</code><span class="evt-desc" title="冲突 2 处 · 潮汐时间线">冲突 2 处 · 潮汐时间线</span></div>
+                    <div class="evt-row" data-family="novel"><span class="evt-time">16:07:05</span><code class="evt-name">novel.conflict.detected</code><span class="evt-desc" title="CON-03 · continuity-conflict">CON-03 · continuity-conflict</span></div>
+                    <div class="evt-row" data-family="novel"><span class="evt-time">16:07:05</span><code class="evt-name">novel.conflict.resolved</code><span class="evt-desc" title="keep-new · 保留新语义">keep-new · 保留新语义</span></div>
+                    <div class="evt-row" data-family="novel"><span class="evt-time">16:07:06</span><code class="evt-name">novel.rebase.resolved</code><span class="evt-desc" title="生效操作 5 · 无残留冲突">生效操作 5 · 无残留冲突</span></div>
+                    <div class="evt-row" data-family="novel"><span class="evt-time">16:07:06</span><code class="evt-name">novel.rebase.promoted</code><span class="evt-desc" title="候选已并入主线 · base r041">候选已并入主线 · base r041</span></div>
+                  </div>
+                  <div class="tool-strip">
+                    <span class="tool-title">工具调用 <span class="tool-meta">system.tool.trace.recorded · 同 label 聚合</span></span>
+                    <div class="tool-chips">
+                      <button class="tool-chip" type="button" onclick="toggleToolRows(this,'tool4b-search')" aria-expanded="false">搜索正文 <b>×2</b><span class="chev">›</span></button>
+                      <button class="tool-chip" type="button" onclick="toggleToolRows(this,'tool4b-check')" aria-expanded="false">一致性检查 <b>×1</b><span class="chev">›</span></button>
+                    </div>
+                    <div class="tool-rows" id="tool4b-search" style="display:none">
+                      <div class="tool-row"><span class="tool-ok">ok</span><span class="tool-txt">「旧船坞」· 命中 2 处</span><span class="tool-time">0.7s</span></div>
+                      <div class="tool-row"><span class="tool-ok">ok</span><span class="tool-txt">「潮汐」· 命中 1 处</span><span class="tool-time">0.5s</span></div>
+                    </div>
+                    <div class="tool-rows" id="tool4b-check" style="display:none">
+                      <div class="tool-row"><span class="tool-ok">ok</span><span class="tool-txt">一致性检查 · 通过</span><span class="tool-time">0.9s</span></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="turn-sep" data-conv="c4"><span>第 3 轮 · 16:09</span></div>
+                <div class="evt-flow" data-od-id="runtime-events-3">
+                  <div class="evt-flow-head">
+                    <span class="evt-flow-title">本轮时序</span>
+                    <span class="evt-flow-meta">16:09:01 → 16:09:05 · 事件名与 core 一致</span>
+                  </div>
+                  <div class="evt-timeline">
+                    <div class="evt-row" data-family="agent"><span class="evt-time">16:09:01</span><code class="evt-name">agent.run.state.changed</code><span class="evt-desc" title="idle → running → idle · completed">idle → running → idle · completed</span></div>
+                    <div class="evt-row" data-family="agent"><span class="evt-time">16:09:02</span><code class="evt-name">agent.todo.updated</code><span class="evt-desc" title="快照 4 项 · 2 完成 · revision 4">快照 4 项 · 2 完成 · revision 4</span></div>
+                    <div class="evt-row" data-family="agent"><span class="evt-time">16:09:02</span><code class="evt-name">agent.tasks.updated</code><span class="evt-desc" title="work-items 3 项全部完成">work-items 3 项全部完成</span></div>
+                    <div class="evt-row" data-family="agent"><span class="evt-time">16:09:03</span><code class="evt-name">agent.subagent.completed</code><span class="evt-desc" title="sp-01 地点档案核对 · 1.2s · ok">sp-01 地点档案核对 · 1.2s · ok</span></div>
+                    <div class="evt-row" data-family="agent"><span class="evt-time">16:09:03</span><code class="evt-name">agent.subagent.completed</code><span class="evt-desc" title="sp-02 船只档案核对 · 0.9s · ok">sp-02 船只档案核对 · 0.9s · ok</span></div>
+                    <div class="evt-row" data-family="system"><span class="evt-time">16:09:04</span><code class="evt-name">system.tool.approval.resolved</code><span class="evt-desc" title="AR-09 · approved">AR-09 · approved</span></div>
+                    <div class="evt-row" data-family="novel"><span class="evt-time">16:09:04</span><code class="evt-name">novel.commit.completed</code><span class="evt-desc" title="commitId c-8a21 · resultRevision r042 · operationCount 5">commitId c-8a21 · resultRevision r042 · operationCount 5</span></div>
+                    <div class="evt-row" data-family="novel"><span class="evt-time">16:09:04</span><code class="evt-name">novel.recovery.completed</code><span class="evt-desc" title="scope projection · outcome ok">scope projection · outcome ok</span></div>
+                    <div class="evt-row" data-family="system"><span class="evt-time">16:09:05</span><code class="evt-name">system.context.compaction.completed</code><span class="evt-desc" title="47 条消息 → 摘要 · 保留 12 条关键">47 条消息 → 摘要 · 保留 12 条关键</span></div>
+                    <div class="evt-row" data-family="system"><span class="evt-time">16:09:05</span><code class="evt-name">system.nudge.scheduled</code><span class="evt-desc" title="「更新潮汐时刻表」待办 · 16:02 触发">「更新潮汐时刻表」待办 · 16:02 触发</span></div>
+                    <div class="evt-row" data-family="system"><span class="evt-time">16:09:05</span><code class="evt-name">system.reminder.injected</code><span class="evt-desc" title="提醒内容脱敏 · 附加到当前 turn">提醒内容脱敏 · 附加到当前 turn</span></div>
+                  </div>
+                  <div class="tool-strip">
+                    <span class="tool-title">工具调用 <span class="tool-meta">system.tool.trace.recorded · 同 label 聚合</span></span>
+                    <div class="tool-chips">
+                      <button class="tool-chip" type="button" onclick="toggleToolRows(this,'tool4c-outline')" aria-expanded="false">更新大纲状态 <b>×1</b><span class="chev">›</span></button>
+                    </div>
+                    <div class="tool-rows" id="tool4c-outline" style="display:none">
+                      <div class="tool-row"><span class="tool-ok">ok</span><span class="tool-txt">追踪错误目标 → completed</span><span class="tool-time">0.6s</span></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="msg-text">已完成，3 轮内部执行走完：货单发现场景起草完毕（CS-20260805-03 · 正文 3 处 · 大纲 1 处）；2 处潮汐冲突已按「保留新语义」解决并 rebase 到最新基线；最终提交 r041 → r042（5 个操作），正文与大纲已落盘，work-items 全部闭环。其余边缘事件（compaction.started/failed、checkpoint.applied、nudge.expired、reminder.attached、draft.rolled.back、commit.recovered）的逐条映射见 output-events-map.md。</div>
               </div>
             </article>
           </div>
@@ -1134,34 +1488,69 @@
       <section class="view inspector" id="view-approval" data-od-id="approval">
         <div class="insp-drag" id="inspDrag" role="separator" aria-orientation="vertical" aria-label="拖动调整面板宽度"></div>
         <header class="insp-head">
-          <div class="insp-tabs" role="tablist" aria-label="右侧面板">
-            <button id="inspTabAppr" class="insp-tab active" type="button" role="tab" aria-selected="true" onclick="setInspMode('approval')">审批<span class="count-pill" id="pendingCount">2 待审</span></button>
-            <button id="inspTabDetail" class="insp-tab" type="button" role="tab" aria-selected="false" onclick="setInspMode('detail')">档案</button>
-          </div>
+          <h3 class="insp-title" id="inspTitle">审批</h3>
           <button class="insp-close" id="inspClose" type="button" aria-label="收起面板">✕</button>
-          <span class="kicker" id="apprKicker">Diff 审核 · 批准是事件，提交后才推进权威状态</span>
+          <span class="kicker" id="apprKicker">审批参数 · 变更集不可变，批准执行后才产出 Diff</span>
         </header>
         <div class="insp-body" id="inspApprovalBody">
-          <nav id="apprList" class="insp-list">
-            <button class="appr" type="button" data-cs="cs1" onclick="selectCs('cs1')">
-              <span class="row1"><span class="appr-id">CS-20260805-01</span><span class="pill pending">待批准</span></span>
-              <span class="appr-title">旧船坞 7 号：货单发现场景</span>
-              <span class="appr-meta">正文 + 大纲 · 14:02 · base r041</span>
-              <span class="appr-note" id="appr-note-cs1" hidden></span>
-            </button>
-            <button class="appr" type="button" data-cs="cs2" onclick="selectCs('cs2')">
-              <span class="row1"><span class="appr-id">CS-20260805-02</span><span class="pill pending">待批准</span></span>
-              <span class="appr-title">林夏 · 作者备注更新</span>
-              <span class="appr-meta">人物档案 · 14:03 · base r041</span>
-              <span class="appr-note" id="appr-note-cs2" hidden></span>
-            </button>
-            <button class="appr" type="button" data-cs="cs3" onclick="selectCs('cs3')">
-              <span class="row1"><span class="appr-id">CS-20260804-03</span><span class="pill approved">已批准</span></span>
-              <span class="appr-title">移动「潮汐时刻表」至灯塔调查线</span>
-              <span class="appr-meta">大纲 · 昨天 · 已提交 r041</span>
-              <span class="appr-note" id="appr-note-cs3" hidden></span>
-            </button>
+          <nav id="apprList" class="insp-list" aria-label="变更集目录">
+            <div class="appr-dir-head">审批队列 <span class="cnt" id="dirCount">3</span></div>
+            <div class="appr-group" data-conv="c1">
+              <div class="appr-group-head" data-gconv="c1">
+                <button class="ag-main" type="button" title="切换到该对话">
+                <span class="ag-name">对话1</span>
+                <span class="ag-sub">继续第三卷 · 旧船坞 7 号</span>
+                <span class="ag-cnt" data-count>2</span>
+                </button>
+                <button class="ag-jump" type="button" title="跳到对话1">跳转</button>
+              </div>
+              <div class="appr" data-cs="cs1" data-conv="c1" data-last="2026-08-05T14:02:00" data-ops="4">
+                <button class="appr-main" type="button" onclick="selectCs('cs1')">
+                  <span class="appr-title" title="旧船坞 7 号：货单发现场景">旧船坞 7 号：货单发现场景</span>
+                  <span class="appr-id">CS-20260805-01</span>
+                  <span class="pill pending">待批准</span>
+                  <span class="appr-meta">正文 + 大纲 · 14:02 · base r041</span>
+                  <span class="appr-note" id="appr-note-cs1" hidden></span>
+                </button>
+              </div>
+              <div class="appr" data-cs="cs2" data-conv="c1" data-last="2026-08-05T14:03:00" data-ops="1">
+                <button class="appr-main" type="button" onclick="selectCs('cs2')">
+                  <span class="appr-title" title="林夏 · 作者备注更新">林夏 · 作者备注更新</span>
+                  <span class="appr-id">CS-20260805-02</span>
+                  <span class="pill pending">待批准</span>
+                  <span class="appr-meta">人物档案 · 14:03 · base r041</span>
+                  <span class="appr-note" id="appr-note-cs2" hidden></span>
+                </button>
+              </div>
+            </div>
+            <div class="appr-group" data-conv="c2">
+              <div class="appr-group-head" data-gconv="c2">
+                <button class="ag-main" type="button" title="切换到该对话">
+                <span class="ag-name">对话2</span>
+                <span class="ag-sub">开篇雨夜修订 · r039</span>
+                <span class="ag-cnt" data-count>1</span>
+                </button>
+                <button class="ag-jump" type="button" title="跳到对话2">跳转</button>
+              </div>
+              <div class="appr" data-cs="cs3" data-conv="c2" data-last="2026-08-04T20:41:00" data-ops="1">
+                <button class="appr-main" type="button" onclick="selectCs('cs3')">
+                  <span class="appr-title" title="移动「潮汐时刻表」至灯塔调查线">移动「潮汐时刻表」至灯塔调查线</span>
+                  <span class="appr-id">CS-20260804-03</span>
+                  <span class="pill approved">已批准</span>
+                  <span class="appr-meta">大纲 · 昨天 · 已提交 r041</span>
+                  <span class="appr-note" id="appr-note-cs3" hidden></span>
+                </button>
+              </div>
+            </div>
           </nav>
+          <div class="appr-hover" id="apprHover" hidden role="tooltip" aria-label="变更集预览">
+            <div class="ah-head"><span class="ah-id"></span><span class="ah-pill pill"></span></div>
+            <div class="ah-title"></div>
+            <div class="ah-meta"></div>
+            <div class="ah-note" hidden></div>
+            <div class="ah-ops" hidden></div>
+            <div class="ah-hint">点击查看审批参数 →</div>
+          </div>
           <div class="appr-scroll">
           <div class="appr-wrap">
             <div class="cs-pane" data-cs="cs1">
@@ -1171,11 +1560,62 @@
                 <span class="immutable">◈ 不可变</span>
               </div>
               <section class="diff-sec">
-                <h3>大纲 Diff <span class="n">1 处</span></h3>
-                <div class="legend"><span><i class="g">+</i> 新增</span><span><i class="r">−</i> 删除</span><span><i class="b">→</i> 移动</span><span><i class="a">~</i> 修改</span></div>
+                <h3>审批参数 <span class="n">APR-20260805-01 · 4 个操作</span></h3>
                 <div class="diff-box">
+                  <div class="drow op">
+                    <span class="dmark">1</span>
+                    <div class="d-main">
+                      <span class="d-title">paragraph.create <span class="d-id">OP-8f3a70-01</span></span>
+                      <div class="params">
+                        <div class="row"><span class="tag">storyUnitId</span><span class="val">SU-3-01-04 · 旧船坞 7 号（货单发现）</span></div>
+                        <div class="row"><span class="tag">orderKey</span><span class="val">3-01-04.1</span></div>
+                        <div class="row"><span class="tag">text</span><span class="val long">货单的边缘被泡得发白，铅笔字却还认得出来：四号仓、三十箱、九号晚潮。批注里夹着一个船名——「青屿号」。</span></div>
+                      </div>
+                    </div>
+                    <span class="op-kind">manuscript</span>
+                  </div>
+                  <div class="drow op">
+                    <span class="dmark">2</span>
+                    <div class="d-main">
+                      <span class="d-title">paragraph.create <span class="d-id">OP-c02b81-02</span></span>
+                      <div class="params">
+                        <div class="row"><span class="tag">storyUnitId</span><span class="val">SU-3-01-05 · 旧船坞 7 号（林夏的猜测）</span></div>
+                        <div class="row"><span class="tag">orderKey</span><span class="val">3-01-05.1</span></div>
+                        <div class="row"><span class="tag">text</span><span class="val long">林夏没有马上开口。顾一舟的船名出现在 1987 年的货单上，而那份货单，正躺在四年前就该拆掉的船坞里。</span></div>
+                      </div>
+                    </div>
+                    <span class="op-kind">manuscript</span>
+                  </div>
+                  <div class="drow op">
+                    <span class="dmark">3</span>
+                    <div class="d-main">
+                      <span class="d-title">story-unit.replace <span class="d-id">SU-2-1-1 · 追踪错误目标</span></span>
+                      <div class="params">
+                        <div class="row"><span class="tag">realization</span><span class="val">in-progress</span></div>
+                        <div class="row"><span class="tag">blockState</span><span class="val">decision-required · 依赖「潮汐时刻表」</span></div>
+                      </div>
+                    </div>
+                    <span class="op-kind">outline</span>
+                  </div>
+                  <div class="drow op">
+                    <span class="dmark">4</span>
+                    <div class="d-main">
+                      <span class="d-title">character.replace <span class="d-id">顾一舟 · authorNotes</span></span>
+                      <div class="params">
+                        <div class="row"><span class="tag">authorNotes</span><span class="val long">航运公司经理。货单上的铅笔批注与他有关，暂不点破。</span></div>
+                      </div>
+                    </div>
+                    <span class="op-kind">character</span>
+                  </div>
+                </div>
+              </section>
+              <section class="diff-sec exec-sec" id="exec-cs1">
+                <h3>执行结果 · Diff <span class="n">r041 → r042 · commit 已落地</span></h3>
+                <div class="legend"><span class="act act-sm act-add">新增</span><span class="act act-sm act-del">删除</span><span class="act act-sm act-mod">修改</span><span class="act act-sm act-move">移动</span></div>
+                <div class="diff-box">
+                  <div class="box-head">大纲</div>
                   <div class="drow mod">
-                    <span class="dmark">~</span>
+                    <span class="act act-mod">修改</span>
                     <div class="d-main">
                       <span class="d-title">追踪错误目标<span class="d-id">SU-2-1-1 · SCENE</span></span>
                       <div class="old-new">
@@ -1183,55 +1623,46 @@
                         <div class="row"><span class="tag">blockState</span><span class="chip-old">无</span><span class="arr">→</span><span class="chip-new">decision-required · 依赖「潮汐时刻表」</span></div>
                       </div>
                     </div>
-                    <span class="op-kind">outline</span>
                   </div>
                 </div>
-              </section>
-              <section class="diff-sec">
-                <h3>正文 Diff <span class="n">2 处</span></h3>
                 <div class="diff-box">
+                  <div class="box-head">正文</div>
                   <div class="drow add">
-                    <span class="dmark">+</span>
+                    <span class="act act-add">新增</span>
                     <div class="d-main">
                       <span class="d-title">§3-01-04 · 旧船坞 7 号（货单发现）</span>
-                      <p class="inline-diff">货单的边缘被泡得发白，铅笔字却还认得出来：四号仓、三十箱、九号晚潮。批注里夹着一个船名——<ins>「青屿号」</ins>。</p>
+                      <p class="new-text">货单的边缘被泡得发白，铅笔字却还认得出来：四号仓、三十箱、九号晚潮。批注里夹着一个船名——「青屿号」。</p>
                     </div>
-                    <span class="op-kind">manuscript</span>
                   </div>
                   <div class="drow add">
-                    <span class="dmark">+</span>
+                    <span class="act act-add">新增</span>
                     <div class="d-main">
                       <span class="d-title">§3-01-05 · 旧船坞 7 号（林夏的猜测）</span>
-                      <p class="inline-diff">林夏没有马上开口。<ins>顾一舟的船名出现在 1987 年的货单上，而那份货单，正躺在四年前就该拆掉的船坞里。</ins></p>
+                      <p class="new-text">林夏没有马上开口。顾一舟的船名出现在 1987 年的货单上，而那份货单，正躺在四年前就该拆掉的船坞里。</p>
                     </div>
-                    <span class="op-kind">manuscript</span>
                   </div>
                 </div>
-              </section>
-              <section class="diff-sec">
-                <h3>实体字段 Diff <span class="n">1 处</span></h3>
                 <div class="diff-box">
+                  <div class="box-head">人物 · 档案</div>
                   <div class="drow mod">
-                    <span class="dmark">~</span>
+                    <span class="act act-mod">修改</span>
                     <div class="d-main">
                       <span class="d-title">顾一舟 · 作者备注</span>
-                      <p class="inline-diff"><del>航运公司经理。</del><ins>航运公司经理。货单上的铅笔批注与他有关，暂不点破。</ins></p>
-                      <p class="evid">evidence · draft DS-07f3, sequence 8 · 提议来源：Novel Writer</p>
+                      <div class="old-new">
+                        <div class="row seg"><span class="tag">原文</span><span class="old-txt">航运公司经理。</span></div>
+                        <div class="row seg"><span class="tag">新文</span><span class="new-txt">航运公司经理。货单上的铅笔批注与他有关，暂不点破。</span></div>
+                      </div>
+                      <p class="evid">evidence · commit r042, sequence 8 · 执行完成后的投影</p>
                     </div>
-                    <span class="op-kind">character</span>
                   </div>
                 </div>
               </section>
               <div class="detail-foot">
-                <span class="count">4 处变更 · 全部来自同一 Draft Session</span>
-                <div class="actions">
-                  <button class="btn ghost-danger" type="button" onclick="requestChange('cs1')">请求修改</button>
-                  <button class="btn primary" type="button" onclick="approveCs('cs1')">批准并提交</button>
-                  <span class="pill pending" id="pill-cs1">待批准</span>
-                </div>
-                <div class="request-box" id="req-cs1">
-                  <textarea placeholder="说明需要修改的地方…（该操作会以输入事件回传对话，变更集保持不可变）"></textarea>
-                  <div class="row"><button class="btn ghost-danger" type="button" onclick="submitRequest('cs1')">提交修改请求</button><button class="btn" type="button" onclick="requestChange('cs1')">取消</button></div>
+                <span class="count">4 个操作 · 全部来自同一 Draft Session</span>
+                <span class="pill pending" id="pill-cs1">待批准</span>
+                <div class="actions act-main">
+                  <button class="btn" type="button" onclick="rejectCs('cs1')" id="rej-btn-cs1">驳回</button>
+                  <button class="btn primary" type="button" onclick="approveCs('cs1')">审批</button>
                 </div>
                 <div class="note-box" id="note-cs1"></div>
               </div>
@@ -1244,29 +1675,43 @@
                 <span class="immutable">◈ 不可变</span>
               </div>
               <section class="diff-sec">
-                <h3>实体字段 Diff <span class="n">1 处</span></h3>
+                <h3>审批参数 <span class="n">APR-20260805-02 · 1 个操作</span></h3>
                 <div class="diff-box">
-                  <div class="drow mod">
-                    <span class="dmark">~</span>
+                  <div class="drow op">
+                    <span class="dmark">1</span>
                     <div class="d-main">
-                      <span class="d-title">林夏 · 作者备注</span>
-                      <p class="inline-diff"><del>第三卷起对旧船坞线索保持怀疑。</del><ins>第三卷起对旧船坞线索保持怀疑，少说多做。</ins></p>
-                      <p class="evid">evidence · draft DS-07f4, sequence 3 · 提议来源：Novel Writer</p>
+                      <span class="d-title">character.replace <span class="d-id">林夏 · authorNotes</span></span>
+                      <div class="params">
+                        <div class="row"><span class="tag">authorNotes</span><span class="val long">第三卷起对旧船坞线索保持怀疑，少说多做。</span></div>
+                      </div>
                     </div>
                     <span class="op-kind">character</span>
                   </div>
                 </div>
               </section>
-              <div class="detail-foot">
-                <span class="count">1 处变更</span>
-                <div class="actions">
-                  <button class="btn ghost-danger" type="button" onclick="requestChange('cs2')">请求修改</button>
-                  <button class="btn primary" type="button" onclick="approveCs('cs2')">批准并提交</button>
-                  <span class="pill pending" id="pill-cs2">待批准</span>
+              <section class="diff-sec exec-sec" id="exec-cs2">
+                <h3>执行结果 · Diff <span class="n">r041 → r042 · commit 已落地</span></h3>
+                <div class="diff-box">
+                  <div class="box-head">人物 · 档案</div>
+                  <div class="drow mod">
+                    <span class="act act-mod">修改</span>
+                    <div class="d-main">
+                      <span class="d-title">林夏 · 作者备注</span>
+                      <div class="old-new">
+                        <div class="row seg"><span class="tag">原文</span><span class="old-txt">第三卷起对旧船坞线索保持怀疑。</span></div>
+                        <div class="row seg"><span class="tag">新文</span><span class="new-txt">第三卷起对旧船坞线索保持怀疑，少说多做。</span></div>
+                      </div>
+                      <p class="evid">evidence · commit r042, sequence 3 · 执行完成后的投影</p>
+                    </div>
+                  </div>
                 </div>
-                <div class="request-box" id="req-cs2">
-                  <textarea placeholder="说明需要修改的地方…（该操作会以输入事件回传对话，变更集保持不可变）"></textarea>
-                  <div class="row"><button class="btn ghost-danger" type="button" onclick="submitRequest('cs2')">提交修改请求</button><button class="btn" type="button" onclick="requestChange('cs2')">取消</button></div>
+              </section>
+              <div class="detail-foot">
+                <span class="count">1 个操作</span>
+                <span class="pill pending" id="pill-cs2">待批准</span>
+                <div class="actions act-main">
+                  <button class="btn" type="button" onclick="rejectCs('cs2')" id="rej-btn-cs2">驳回</button>
+                  <button class="btn primary" type="button" onclick="approveCs('cs2')">审批</button>
                 </div>
                 <div class="note-box" id="note-cs2"></div>
               </div>
@@ -1278,18 +1723,38 @@
                 <span class="cs-meta">base r040 → target r041 · draft DS-06a9 · digest 7e0f1b…aa90</span>
                 <span class="immutable">◈ 不可变</span>
               </div>
-              <div style="margin-top:18px"><div class="resolved-banner">已批准并提交 · NovelRevision r041 · 输出事件已入账</div></div>
-              <div class="note-box" id="note-cs3"></div>
               <section class="diff-sec">
-                <h3>大纲 Diff <span class="n">1 处</span></h3>
+                <h3>审批参数 <span class="n">APR-20260804-03 · 1 个操作</span></h3>
                 <div class="diff-box">
-                  <div class="drow mod">
-                    <span class="dmark">→</span>
+                  <div class="drow op">
+                    <span class="dmark">1</span>
                     <div class="d-main">
-                      <span class="d-title">移动「潮汐时刻表」至灯塔调查线<span class="d-id">SU-2-1-2 · SCENE</span></span>
-                      <p class="inline-diff">规划成熟度 <del>outlined</del> <ins>ready</ins>，正文实现保持 pending，等待事件确认。</p>
+                      <span class="d-title">story-unit.move <span class="d-id">SU-2-1-2 · 潮汐时刻表</span></span>
+                      <div class="params">
+                        <div class="row"><span class="tag">targetParent</span><span class="val">灯塔调查线</span></div>
+                        <div class="row"><span class="tag">orderKey</span><span class="val">2-1-2.1</span></div>
+                      </div>
                     </div>
                     <span class="op-kind">outline</span>
+                  </div>
+                </div>
+              </section>
+              <div style="margin-top:18px"><div class="resolved-banner">已批准并执行 · NovelRevision r041 · 以下为执行完成后的 Diff</div></div>
+              <div class="note-box" id="note-cs3"></div>
+              <section class="diff-sec exec-sec on" id="exec-cs3">
+                <h3>执行结果 · Diff <span class="n">r040 → r041 · commit 已落地</span></h3>
+                <div class="diff-box">
+                  <div class="box-head">大纲</div>
+                  <div class="drow move">
+                    <span class="act act-move">移动</span>
+                    <div class="d-main">
+                      <span class="d-title">移动「潮汐时刻表」至灯塔调查线<span class="d-id">SU-2-1-2 · SCENE</span></span>
+                      <div class="old-new">
+                        <div class="row"><span class="tag">原位置</span><span class="chip-old">旧船坞 7 号 · 线索</span></div>
+                        <div class="row"><span class="tag">移动至</span><span class="chip-new">灯塔调查线</span></div>
+                      </div>
+                      <p class="evid">evidence · commit r041, sequence 1 · 执行完成后的投影</p>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -1302,43 +1767,63 @@
                 <span class="immutable">◈ 不可变</span>
               </div>
               <section class="diff-sec">
-                <h3>正文 Diff <span class="n">1 处</span></h3>
+                <h3>审批参数 <span class="n">APR-20260805-03 · 2 个操作</span></h3>
                 <div class="diff-box">
-                  <div class="drow add">
-                    <span class="dmark">+</span>
+                  <div class="drow op">
+                    <span class="dmark">1</span>
                     <div class="d-main">
-                      <span class="d-title">§3-01-06 · 白鹭旅馆（晨谈）</span>
-                      <p class="inline-diff">老板娘端来两碗粥，<ins>先看了林夏一眼，才把潮汐时刻表压在碗底推过来。</ins></p>
+                      <span class="d-title">paragraph.create <span class="d-id">OP-6e11d2-01</span></span>
+                      <div class="params">
+                        <div class="row"><span class="tag">storyUnitId</span><span class="val">SU-3-01-06 · 白鹭旅馆（晨谈）</span></div>
+                        <div class="row"><span class="tag">orderKey</span><span class="val">3-01-06.1</span></div>
+                        <div class="row"><span class="tag">text</span><span class="val long">老板娘端来两碗粥，先看了林夏一眼，才把潮汐时刻表压在碗底推过来。</span></div>
+                      </div>
                     </div>
                     <span class="op-kind">manuscript</span>
                   </div>
-                </div>
-              </section>
-              <section class="diff-sec">
-                <h3>大纲 Diff <span class="n">1 处</span></h3>
-                <div class="diff-box">
-                  <div class="drow mod">
-                    <span class="dmark">~</span>
+                  <div class="drow op">
+                    <span class="dmark">2</span>
                     <div class="d-main">
-                      <span class="d-title">追踪错误目标<span class="d-id">SU-2-1-1 · SCENE</span></span>
-                      <div class="old-new">
-                        <div class="row"><span class="tag">blockState</span><span class="chip-old">decision-required</span><span class="arr">→</span><span class="chip-new">已确认</span></div>
+                      <span class="d-title">story-unit.replace <span class="d-id">SU-2-1-1 · 追踪错误目标</span></span>
+                      <div class="params">
+                        <div class="row"><span class="tag">blockState</span><span class="val">已确认</span></div>
                       </div>
                     </div>
                     <span class="op-kind">outline</span>
                   </div>
                 </div>
               </section>
-              <div class="detail-foot">
-                <span class="count">2 处变更 · 全部来自同一 Draft Session</span>
-                <div class="actions">
-                  <button class="btn ghost-danger" type="button" onclick="requestChange('cs3-new')">请求修改</button>
-                  <button class="btn primary" type="button" onclick="approveCs('cs3-new')">批准并提交</button>
-                  <span class="pill pending" id="pill-cs3-new">待批准</span>
+              <section class="diff-sec exec-sec" id="exec-cs3-new">
+                <h3>执行结果 · Diff <span class="n">r041 → r042 · commit 已落地</span></h3>
+                <div class="diff-box">
+                  <div class="box-head">正文</div>
+                  <div class="drow add">
+                    <span class="act act-add">新增</span>
+                    <div class="d-main">
+                      <span class="d-title">§3-01-06 · 白鹭旅馆（晨谈）</span>
+                      <p class="new-text">老板娘端来两碗粥，先看了林夏一眼，才把潮汐时刻表压在碗底推过来。</p>
+                    </div>
+                  </div>
                 </div>
-                <div class="request-box" id="req-cs3-new">
-                  <textarea placeholder="说明需要修改的地方…（该操作会以输入事件回传对话，变更集保持不可变）"></textarea>
-                  <div class="row"><button class="btn ghost-danger" type="button" onclick="submitRequest('cs3-new')">提交修改请求</button><button class="btn" type="button" onclick="requestChange('cs3-new')">取消</button></div>
+                <div class="diff-box">
+                  <div class="box-head">大纲</div>
+                  <div class="drow mod">
+                    <span class="act act-mod">修改</span>
+                    <div class="d-main">
+                      <span class="d-title">追踪错误目标<span class="d-id">SU-2-1-1 · SCENE</span></span>
+                      <div class="old-new">
+                        <div class="row"><span class="tag">blockState</span><span class="chip-old">decision-required</span><span class="arr">→</span><span class="chip-new">已确认</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+              <div class="detail-foot">
+                <span class="count">2 个操作 · 全部来自同一 Draft Session</span>
+                <span class="pill pending" id="pill-cs3-new">待批准</span>
+                <div class="actions act-main">
+                  <button class="btn" type="button" onclick="rejectCs('cs3-new')" id="rej-btn-cs3-new">驳回</button>
+                  <button class="btn primary" type="button" onclick="approveCs('cs3-new')">审批</button>
                 </div>
                 <div class="note-box" id="note-cs3-new"></div>
               </div>
@@ -1359,12 +1844,6 @@
           <span class="spacer"></span>
           <span class="kicker" id="contentKicker">故事单元 · 规划轴与实现轴</span>
         </header>
-        <nav class="pane-tabs" id="paneTabs">
-          <button class="pane-tab active" type="button" data-pane="outline" onclick="selectPane('outline')">大纲</button>
-          <button class="pane-tab" type="button" data-pane="manuscript" onclick="selectPane('manuscript')">正文</button>
-          <button class="pane-tab" type="button" data-pane="characters" onclick="selectPane('characters')">人物</button>
-          <button class="pane-tab" type="button" data-pane="locations" onclick="selectPane('locations')">地点</button>
-        </nav>
         <div class="pane-body">
           <div class="pane-inner">
             <div class="pane-section" data-pane="outline">
@@ -1419,7 +1898,7 @@
                 <header><h4>草稿 · 待审批</h4><span class="draft-tag">草稿</span><span class="rev">CS-20260805-01</span></header>
                 <div class="block"><div class="b-head"><span class="b-id">§3-01-04</span><span class="b-draft">草稿</span><span class="b-dg">8f3a70</span></div><p>货单的边缘被泡得发白，铅笔字却还认得出来：四号仓、三十箱、九号晚潮。批注里夹着一个船名——「青屿号」。</p></div>
                 <div class="block"><div class="b-head"><span class="b-id">§3-01-05</span><span class="b-draft">草稿</span><span class="b-dg">c02b81</span></div><p>林夏没有马上开口。顾一舟的船名出现在 1987 年的货单上，而那份货单，正躺在四年前就该拆掉的船坞里。</p></div>
-                <div class="proposal-foot" style="border:0;padding-top:6px;margin-top:0"><button class="btn link" type="button" onclick="selectCs('cs1')">前往审批 Diff →</button></div>
+                <div class="proposal-foot" style="border:0;padding-top:6px;margin-top:0"><button class="btn link" type="button" onclick="selectCs('cs1')">前往审批 →</button></div>
               </div>
             </div>
 
@@ -1479,7 +1958,7 @@
                   <button class="check" type="button" onclick="toggleTodo(this)">✓</button>
                   <div>
                     <div class="t-title">审阅 CS-20260805-01 · 旧船坞 7 号场景</div>
-                    <div class="t-meta">4 处变更 · <b onclick="selectCs('cs1')" style="cursor:pointer;color:var(--accent-ink)">去审批</b></div>
+                    <div class="t-meta">4 个操作 · <b onclick="selectCs('cs1')" style="cursor:pointer;color:var(--accent-ink)">去审批</b></div>
                   </div>
                   <span class="ttag approval" style="margin-left:auto">审批</span>
                 </div>
@@ -1575,10 +2054,14 @@
       'unit-entrance': { kind: 'outline', name: '人物登场：林夏与老周' },
       'unit-bill': { kind: 'outline', name: '货单上的铅笔批注' }
     };
-    /* 自定义标记标准（Novel Markup）：
-       行内：b / i / u / s / code / hl；引用：character / location / chapter / outline（成对或自闭合）
-       块级：table(row/cell) / list(item) / quote
-       文本先整体转义，只认白名单标签，未定义标签按字面显示。 */
+    /* ============ Markdown 美化 · 渲染引擎（Novel Markup v1） ============
+       原型用这套自建标记渲染助理正文；真实项目对应
+       AssistantMarkdown.tsx（react-markdown v10 + remark-gfm）。
+       标准：行内 b / i / u / s / code / hl；引用 character / location /
+       chapter / outline（成对或自闭合）；块级 h1 / h2 / h3、
+       table(row/cell) / list(item) / quote。文本先整体转义，
+       只认白名单标签，未定义标签按字面显示。视觉样式见上方
+       「Markdown 美化」CSS 段。 */
     var REF_PAIR_RE = /&lt;(character|location|chapter|outline)\s+id="([^"]+)"(?:\s+name="([^"]*)")?&gt;([\s\S]*?)&lt;\/\1&gt;/g;
     var REF_SELF_RE = /&lt;(character|location|chapter|outline)\s+id="([^"]+)"(?:\s+name="([^"]*)")?\s*\/&gt;/g;
     var INLINE_STYLE_RE = /&lt;(b|i|u|s|code|hl)&gt;([\s\S]*?)&lt;\/\1&gt;/g;
@@ -1588,6 +2071,7 @@
     var LIST_RE = /&lt;list&gt;([\s\S]*?)&lt;\/list&gt;/g;
     var ITEM_RE = /&lt;item&gt;([\s\S]*?)&lt;\/item&gt;/g;
     var QUOTE_RE = /&lt;quote&gt;([\s\S]*?)&lt;\/quote&gt;/g;
+    var HEADING_RE = /&lt;(h1|h2|h3)&gt;([\s\S]*?)&lt;\/\1&gt;/g;
 
     function escapeHtml(s) {
       return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -1642,6 +2126,9 @@
       out = out.replace(QUOTE_RE, function (m, inner) {
         return '<blockquote class="nm-quote">' + renderInline(inner) + '</blockquote>';
       });
+      out = out.replace(HEADING_RE, function (m, tag, inner) {
+        return '<' + tag + ' class="nm-h' + tag.charAt(1) + '">' + renderInline(inner) + '</' + tag + '>';
+      });
       return renderInline(out);
     }
     function refFlash(el) {
@@ -1689,16 +2176,18 @@
       state.inspMode = mode;
       var appr = document.getElementById('inspApprovalBody');
       var det = document.getElementById('inspDetailBody');
-      var tabA = document.getElementById('inspTabAppr');
-      var tabD = document.getElementById('inspTabDetail');
       var kicker = document.getElementById('apprKicker');
+      var title = document.getElementById('inspTitle');
       if (appr) appr.hidden = mode !== 'approval';
       if (det) det.hidden = mode !== 'detail';
-      if (tabA) { tabA.classList.toggle('active', mode === 'approval'); tabA.setAttribute('aria-selected', mode === 'approval' ? 'true' : 'false'); }
-      if (tabD) { tabD.classList.toggle('active', mode === 'detail'); tabD.setAttribute('aria-selected', mode === 'detail' ? 'true' : 'false'); }
-      if (kicker) kicker.textContent = mode === 'detail'
-        ? '人物 / 地点 / 章节 / 大纲档案 · 点击对话里的引用在右侧查看'
-        : (state.cs === 'cs3' ? '已批准并提交 · 只读视图' : 'Diff 审核 · 批准是事件，提交后才推进权威状态');
+      if (title) title.textContent = mode === 'detail' ? '档案' : '审批';
+      if (kicker) {
+        var execSec = document.querySelector('.cs-pane[data-cs="' + state.cs + '"] .exec-sec');
+        var executed = execSec && execSec.classList.contains('on');
+        kicker.textContent = mode === 'detail'
+          ? '人物 / 地点 / 章节 / 大纲档案 · 点击对话里的引用在右侧查看'
+          : (executed ? '已批准并提交 · 执行完成后的 Diff' : '审批参数 · 批准执行后才产出 Diff');
+      }
     }
     window.openDetail = function (kind, id) {
       var d = ARCHIVE_DATA[id] || {
@@ -1754,8 +2243,8 @@
       openDetail(entry.kind, id);
     };
 
-    // 渲染已有消息与思考内容里的标签，并挂点击/键盘跳转（脚本位于 body 末尾，DOM 已就绪）
-    document.querySelectorAll('#timeline .msg-text, #timeline .tline p').forEach(function (el) {
+    // 渲染已有消息里的标签，并挂点击/键盘跳转（脚本位于 body 末尾，DOM 已就绪）
+    document.querySelectorAll('#timeline .msg-text').forEach(function (el) {
       el.innerHTML = renderRich(el.textContent);
     });
     document.getElementById('timeline').addEventListener('click', function (e) {
@@ -1791,9 +2280,6 @@
 
     function selectPane(pane) {
       state.pane = pane;
-      document.querySelectorAll('.pane-tab').forEach(function (tab) {
-        tab.classList.toggle('active', tab.dataset.pane === pane);
-      });
       document.querySelectorAll('.pane-section').forEach(function (sec) {
         sec.hidden = sec.dataset.pane !== pane;
       });
@@ -1801,9 +2287,33 @@
     }
 
     /* ============ 对话列表 ============ */
+    /* ============ 输出事件映射（core 42 个 output event → 原型体现） ============
+       agent.*（14）
+         ✅ 直接体现  message.{started,delta,completed,failed,cancelled}
+                       → 消息生成 / 失败卡 / 已停止态
+                       todo.updated → 计划视图待办列表（勾选 + 计数 + localStorage）
+         ◐ 间接体现  run.state.changed → 生成状态条 + 对话项生成环 + 已停止/失败态
+                       turn.state.changed → 底部模式条（计划 / 直接执行 / 需审核）决定分支
+         - 未体现    tasks.updated（work-items）、subagent.* → 对话4「运行时事件演示」
+       system.*（14）
+         ◐ 间接      tool.approval.{requested,resolved} → 审批面板（变更集域，工具级未单独展示）
+                      tool.trace.recorded → 工具聚合条（同 label 聚合、点击展开元数据）
+         - 未体现    input.{routed,processed}、nudge/reminder、context.compaction/checkpoint、
+                      runtime.presence（已按要求移除）→ 对话4 补演示
+       novel.*（14）
+         ✅ 直接体现  approval.requested → 右侧审批队列（CS 编号 + base revision + digest + 操作参数；审批仅展示参数，无 diff）
+         ◐ 间接      draft.{started,status.changed,operation.applied} → 提议卡（draft id + 操作列表）
+                       commit.completed → 批准执行完成后才产出 Diff（baseRevision → resultRevision）
+         - 未体现    rolled.back、commit.recovered、rebase.*、conflict.*、recovery.completed
+                       → 对话4 多轮演示（事件随 turn 嵌入 · 时序完整展开）
+       完整映射表见 output-events-map.md；对话4 用「单次用户指令 + agent 内部多轮执行」
+       （一条用户消息，agent 内部走 3 轮：起草 → 冲突检查 → 提交收尾）把事件自然嵌入助理消息。
+    ============ */
     var CONVS = {
       c1: { title: '继续第三卷', sub: '第三卷 · 回声 · 与 Novel Writer 的对话', place: '继续第三卷… 输入创作指令，例如：让林夏在旧船坞发现货单、起草白鹭旅馆场景' },
-      c2: { title: '开篇雨夜修订', sub: '第一卷 · 第一章 · 已提交 r039', place: '输入修订指令…' }
+      c2: { title: '开篇雨夜修订', sub: '第一卷 · 第一章 · 已提交 r039', place: '输入修订指令…' },
+      c3: { title: 'Markdown 演示', sub: 'Novel Markup v1 · 全部标签渲染', place: '在演示对话里试新的标记…' },
+      c4: { title: '运行时事件演示', sub: '多轮对话 · 事件随 turn 嵌入', place: '在事件演示对话里看多轮运行时…' }
     };
     function selectConv(id, silent) {
       if (!id || !document.querySelector('.conv-item[data-conv="' + id + '"]')) {
@@ -1814,7 +2324,7 @@
         document.getElementById('chatTitle').textContent = '无对话';
         document.getElementById('chatSub').textContent = '点击左侧「＋ 创建对话」开始';
         document.getElementById('composerInput').placeholder = '创建对话后即可输入创作指令…';
-        document.querySelectorAll('#timeline .msg').forEach(function (m) { m.style.display = 'none'; });
+        document.querySelectorAll('#timeline .msg, #timeline .turn-sep').forEach(function (m) { m.style.display = 'none'; });
         document.getElementById('chatEmpty').style.display = '';
         if (!silent) showView('chat');
         persist();
@@ -1829,7 +2339,7 @@
       document.getElementById('chatSub').textContent = c.sub;
       document.getElementById('composerInput').placeholder = c.place;
       var visible = 0;
-      document.querySelectorAll('#timeline .msg').forEach(function (m) {
+      document.querySelectorAll('#timeline .msg, #timeline .turn-sep').forEach(function (m) {
         var on = !m.dataset.conv || m.dataset.conv === id;
         m.style.display = on ? '' : 'none';
         if (on) visible++;
@@ -1920,7 +2430,7 @@
       if (wasActive && generating) window.stopGeneration();
       delete CONVS[id];
       row.remove();
-      document.querySelectorAll('#timeline .msg[data-conv="' + id + '"]').forEach(function (m) { m.remove(); });
+      document.querySelectorAll('#timeline .msg[data-conv="' + id + '"], #timeline .turn-sep[data-conv="' + id + '"]').forEach(function (m) { m.remove(); });
       saveConvs();
       updateConvEmpty();
       if (wasActive) {
@@ -1953,6 +2463,15 @@
       });
     }
     document.querySelectorAll('#convGroup .conv-row').forEach(bindConvMenu);
+    /* 审批目录分组头：主按钮切对话，跳转按钮切对话并收起面板（静态 + 动态统一走委托） */
+    document.addEventListener('click', function (e) {
+      var jump = e.target.closest('.ag-jump');
+      var group = jump ? jump.closest('.appr-group') : null;
+      if (group && group.dataset.conv) { jumpToConv(group.dataset.conv); return; }
+      var main = e.target.closest('.ag-main');
+      group = main ? main.closest('.appr-group') : null;
+      if (group && group.dataset.conv) selectConv(group.dataset.conv);
+    });
     document.addEventListener('click', function (e) {
       if (!e.target.closest('.conv-menu') && !e.target.closest('.conv-more')) closeConvMenus();
     });
@@ -1964,9 +2483,10 @@
       document.body.classList.toggle('insp-open', open);
       var b = document.getElementById('approvalBtn');
       if (b) b.classList.toggle('active', open);
+      if (!open) hideApprPreview();
     }
 
-    function selectCs(id, silent) {
+    function selectCs(id, silent, opIdx) {
       state.cs = id;
       setInspMode('approval');
       if (!silent) setInsp(true);
@@ -1976,6 +2496,31 @@
       document.querySelectorAll('.cs-pane').forEach(function (p) {
         p.hidden = p.dataset.cs !== id;
       });
+      if (typeof opIdx === 'number') {
+        // 从对话提议卡「查看」进入：默认跳到审批面板目录中对应的变更集行
+        var dirRow = document.querySelector('.appr[data-cs="' + id + '"]');
+        if (dirRow) {
+          dirRow.classList.remove('flash');
+          void dirRow.offsetWidth;
+          dirRow.classList.add('flash');
+          var dirList = document.getElementById('apprList');
+          if (dirList) {
+            dirList.scrollTop = Math.max(0, dirRow.getBoundingClientRect().top - dirList.getBoundingClientRect().top + dirList.scrollTop - 8);
+          }
+        }
+        // 详情面板同步定位到对应操作行，作为查看该条参数的上下文
+        var paneEl = document.querySelector('.cs-pane[data-cs="' + id + '"]');
+        var row = paneEl ? paneEl.querySelectorAll('.drow.op')[opIdx] : null;
+        if (row) {
+          row.classList.remove('op-flash');
+          void row.offsetWidth;
+          row.classList.add('op-flash');
+          var sc = row.closest('.appr-scroll') || document.querySelector('.appr-scroll');
+          if (sc) {
+            sc.scrollTop = Math.max(0, row.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 84);
+          }
+        }
+      }
     }
 
     /* ============ 侧栏折叠 ============ */
@@ -1990,12 +2535,29 @@
     document.getElementById('inspClose').addEventListener('click', function () {
       setInsp(false);
     });
+    var apprListEl = document.getElementById('apprList');
+    if (apprListEl) {
+      apprListEl.addEventListener('mouseover', function (e) {
+        var row = e.target.closest('.appr');
+        if (row) showApprPreview(row);
+      });
+      apprListEl.addEventListener('mouseleave', hideApprPreview);
+      apprListEl.addEventListener('scroll', hideApprPreview, { passive: true });
+      apprListEl.addEventListener('focusin', function (e) {
+        var row = e.target.closest('.appr');
+        if (row) showApprPreview(row);
+      });
+      apprListEl.addEventListener('focusout', hideApprPreview);
+    }
     document.getElementById('scheduleBtn').addEventListener('click', function () {
       showView('schedule');
     });
     document.getElementById('approvalBtn').addEventListener('click', function () {
-      setInspMode('approval');
-      setInsp(!document.body.classList.contains('insp-open'));
+      if (document.body.classList.contains('insp-open') && state.inspMode === 'detail') {
+        setInspMode('approval');
+      } else {
+        setInsp(!document.body.classList.contains('insp-open'));
+      }
     });
     document.querySelectorAll('.conv-item').forEach(function (el) {
       el.addEventListener('click', function () { selectConv(el.dataset.conv); });
@@ -2050,10 +2612,13 @@
       }
     });
 
-    /* ============ 思考内容 ============ */
-    window.toggleThink = function (id) {
-      var el = document.getElementById(id);
-      el.dataset.expanded = el.dataset.expanded === 'true' ? 'false' : 'true';
+    /* ============ 运行时事件流（对话4 演示 · 一次用户消息内的 agent 多轮时序） ============ */
+    window.toggleToolRows = function (btn, id) {
+      var rows = document.getElementById(id);
+      if (!rows) return;
+      var on = rows.style.display !== 'none';
+      rows.style.display = on ? 'none' : '';
+      btn.setAttribute('aria-expanded', String(!on));
     };
 
     /* ============ 大纲树 ============ */
@@ -2083,20 +2648,132 @@
     };
 
     /* ============ 审批动作 ============ */
+    /* 审批目录：按对话分组，组间按最近审批排序（组内保持时间升序） */
+    function convLabelOf(id, sub) {
+      var item = document.querySelector('.conv-item[data-conv="' + id + '"]');
+      if (!item) return sub ? '' : '对话' + (id || '').slice(1);
+      if (sub) {
+        var s = item.querySelector('.conv-sub');
+        return s ? s.textContent.trim() : '';
+      }
+      var t = item.querySelector('.conv-title');
+      var name = t ? t.textContent.replace(/置顶|取消置顶/g, '').trim() : ('对话' + (id || '').slice(1));
+      return name;
+    }
+    function ensureApprGroup(convId) {
+      var list = document.getElementById('apprList');
+      var g = list.querySelector('.appr-group[data-conv="' + convId + '"]');
+      if (g) return g;
+      g = document.createElement('div');
+      g.className = 'appr-group';
+      g.dataset.conv = convId;
+      var head = document.createElement('div');
+      head.className = 'appr-group-head';
+      head.dataset.gconv = convId;
+      var main = document.createElement('button');
+      main.type = 'button';
+      main.className = 'ag-main';
+      main.title = '切换到该对话';
+      main.innerHTML = '<span class="ag-name"></span><span class="ag-sub"></span><span class="ag-cnt" data-count></span>';
+      main.querySelector('.ag-name').textContent = convLabelOf(convId, false);
+      main.querySelector('.ag-sub').textContent = convLabelOf(convId, true);
+      var jump = document.createElement('button');
+      jump.type = 'button';
+      jump.className = 'ag-jump';
+      jump.title = '跳到' + convLabelOf(convId, false);
+      jump.textContent = '跳转';
+      head.appendChild(main);
+      head.appendChild(jump);
+      g.appendChild(head);
+      list.appendChild(g);
+      return g;
+    }
+    function jumpToConv(id) {
+      selectConv(id);
+      setInsp(false);
+    }
+    function groupLast(g) {
+      var max = '';
+      g.querySelectorAll('.appr').forEach(function (a) {
+        var v = a.dataset.last || '';
+        if (v > max) max = v;
+      });
+      return max;
+    }
+    function sortApprGroups() {
+      var list = document.getElementById('apprList');
+      if (!list) return;
+      var groups = Array.prototype.slice.call(list.querySelectorAll('.appr-group'));
+      groups.sort(function (a, b) {
+        var la = groupLast(a), lb = groupLast(b);
+        return la < lb ? 1 : la > lb ? -1 : 0;
+      });
+      groups.forEach(function (g) { list.appendChild(g); });
+    }
     function updateQueueCounts() {
       var pending = document.querySelectorAll('#apprList .pill.pending').length;
-      document.getElementById('pendingCount').textContent = pending + ' 待审';
       var ab = document.getElementById('approvalBadge');
       if (ab) ab.textContent = pending;
+      var dc = document.getElementById('dirCount');
+      if (dc) dc.textContent = document.querySelectorAll('#apprList .appr').length;
+      document.querySelectorAll('#apprList .appr-group').forEach(function (g) {
+        var c = g.querySelector('.ag-cnt');
+        if (c) c.textContent = g.querySelectorAll('.appr').length;
+      });
+    }
+    /* 目录行悬浮小预览：行内只留一行极简信息，细节在 hover 浮层展示 */
+    function hideApprPreview() {
+      var h = document.getElementById('apprHover');
+      if (h) h.hidden = true;
+    }
+    function showApprPreview(row) {
+      if (!row || !row.classList.contains('appr')) return;
+      var h = document.getElementById('apprHover');
+      if (!h) return;
+      var txt = function (sel) { var el = row.querySelector(sel); return el ? el.textContent : ''; };
+      h.querySelector('.ah-id').textContent = txt('.appr-id');
+      h.querySelector('.ah-title').textContent = txt('.appr-title');
+      h.querySelector('.ah-meta').textContent = txt('.appr-meta');
+      var pill = row.querySelector('.pill');
+      var pillEl = h.querySelector('.ah-pill');
+      if (pill) {
+        pillEl.textContent = pill.textContent;
+        pillEl.className = 'ah-pill pill ' + (pill.className.split('pill')[1] || '').trim();
+      } else {
+        pillEl.textContent = '';
+        pillEl.className = 'ah-pill pill';
+      }
+      var note = row.querySelector('.appr-note');
+      var noteBox = h.querySelector('.ah-note');
+      if (note && note.textContent.trim()) {
+        noteBox.hidden = false;
+        noteBox.innerHTML = note.innerHTML;
+      } else {
+        noteBox.hidden = true;
+        noteBox.textContent = '';
+      }
+      var ops = row.getAttribute('data-ops');
+      var opsBox = h.querySelector('.ah-ops');
+      if (ops) { opsBox.hidden = false; opsBox.textContent = ops + ' 个操作'; }
+      else { opsBox.hidden = true; }
+      var insp = document.querySelector('.inspector');
+      var ir = insp ? insp.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth };
+      var r = row.getBoundingClientRect();
+      var w = h.offsetWidth || 264;
+      var left = r.right - ir.left + 10;
+      if (left + w > ir.width - 10) left = Math.max(8, r.left - ir.left - w - 10);
+      h.style.left = Math.max(8, left) + 'px';
+      h.style.top = Math.max(8, r.top - ir.top - 6) + 'px';
+      h.hidden = false;
     }
     function renderCsNote(id) {
       var n = (state.notes || {})[id];
       var pane = document.getElementById('note-' + id);
       var side = document.getElementById('appr-note-' + id);
       if (n && n.text) {
-        var kind = n.kind === 'approve' ? '审批附注' : '修改意见';
+        var kind = n.kind === 'approve' ? '审批附注' : '驳回说明';
         if (pane) {
-          pane.className = 'note-box open' + (n.kind === 'approve' ? ' ok' : '');
+          pane.className = 'note-box open' + (n.kind === 'approve' ? ' ok' : ' rej');
           pane.innerHTML = '<div class="note-head"><span class="note-kind">' + kind + '</span><span class="note-ts">' + escapeHtml(n.ts || '刚刚') + '</span></div><div class="note-body">' + escapeHtml(n.text) + '</div>';
         }
         if (side) {
@@ -2109,55 +2786,62 @@
       }
     }
     window.approveCs = function (id) {
-      var box = document.getElementById('req-' + id);
-      var ta = box ? box.querySelector('textarea') : null;
-      var text = ta ? ta.value.trim() : '';
-      if (text) {
-        state.notes = state.notes || {};
-        state.notes[id] = { kind: 'approve', text: text, ts: timeNow() };
-        if (ta) ta.value = '';
-        if (box) box.classList.remove('open');
-        renderCsNote(id);
-      }
       var pill = document.getElementById('pill-' + id);
       var st = document.getElementById('state-' + id);
-      if (pill) { pill.textContent = '已批准 · 等待提交'; pill.className = 'pill approved'; }
-      if (st) { st.textContent = '已批准 · 等待提交'; st.className = 'approval-state approved'; }
       var pane = document.querySelector('.cs-pane[data-cs="' + id + '"]');
-      if (pane) pane.querySelectorAll('.actions .btn').forEach(function (b) { b.disabled = true; });
       var side = document.querySelector('.appr[data-cs="' + id + '"] .pill');
-      if (side) { side.textContent = '已批准'; side.className = 'pill approved'; }
       var foot = document.querySelector('.appr[data-cs="' + id + '"] .appr-meta');
-      if (foot && id === 'cs3-new') foot.textContent = '正文 + 大纲 · 刚刚 · base r041';
+      if (pill) { pill.textContent = '已批准 · 执行中'; pill.className = 'pill approved'; }
+      if (st) { st.textContent = '已批准 · 执行中'; st.className = 'approval-state approved'; }
+      if (side) { side.textContent = '已批准 · 执行中'; side.className = 'pill approved'; }
+      if (foot && id === 'cs3-new') foot.textContent = '正文 + 大纲 · 刚刚 · 执行中…';
+      if (pane) pane.querySelectorAll('.actions .btn').forEach(function (b) { b.disabled = true; });
+      var prop = document.querySelector('.proposal[data-cs="' + id + '"]');
+      if (prop) prop.querySelectorAll('.op-act button').forEach(function (b) { b.disabled = true; });
       updateQueueCounts();
       persist();
-      toast(text ? '已批准 · 你的附注已随审批输入事件入账' : '审批输入事件已入账，等待持久化确认…');
+      toast('已批准 · 正在执行变更集（执行完成才产出 Diff）…');
+      setTimeout(function () {
+        var execSec = pane ? pane.querySelector('.exec-sec') : null;
+        if (pill) { pill.textContent = '已提交 r042'; pill.className = 'pill approved'; }
+        if (st) { st.textContent = '已提交 r042'; st.className = 'approval-state approved'; }
+        if (side) { side.textContent = '已提交'; side.className = 'pill approved'; }
+        if (foot && id === 'cs3-new') foot.textContent = '正文 + 大纲 · 刚刚 · 已提交 r042';
+        if (execSec) {
+          var prev = execSec.previousElementSibling;
+          var hasBanner = prev && prev.querySelector && prev.querySelector('.resolved-banner');
+          if (!hasBanner) {
+            var wrap = document.createElement('div');
+            wrap.style.marginTop = '18px';
+            var b = document.createElement('div');
+            b.className = 'resolved-banner';
+            b.textContent = '已批准并执行 · NovelRevision r042 · 以下为执行完成后的 Diff';
+            wrap.appendChild(b);
+            execSec.parentNode.insertBefore(wrap, execSec);
+          }
+          execSec.classList.add('on');
+        }
+        updateQueueCounts();
+        persist();
+        toast('执行完成 · r042 已提交，执行结果 Diff 已生成');
+      }, 1100);
     };
-    window.requestChange = function (id) {
-      var box = document.getElementById('req-' + id);
-      box.classList.toggle('open');
-      var ta = box ? box.querySelector('textarea') : null;
-      if (box.classList.contains('open') && ta) ta.focus();
-    };
-    window.submitRequest = function (id) {
-      var box = document.getElementById('req-' + id);
-      var ta = box ? box.querySelector('textarea') : null;
-      var text = ta ? ta.value.trim() : '';
-      if (!text) { toast('先写下修改意见再提交'); if (ta) ta.focus(); return; }
-      state.notes = state.notes || {};
-      state.notes[id] = { kind: 'request', text: text, ts: timeNow() };
-      renderCsNote(id);
+    window.rejectCs = function (id) {
       var pill = document.getElementById('pill-' + id);
       var st = document.getElementById('state-' + id);
-      if (pill) { pill.textContent = '需修改'; pill.className = 'pill changed'; }
-      if (st) { st.textContent = '已请求修改'; st.className = 'approval-state pending'; }
+      var pane = document.querySelector('.cs-pane[data-cs="' + id + '"]');
       var side = document.querySelector('.appr[data-cs="' + id + '"] .pill');
-      if (side) { side.textContent = '需修改'; side.className = 'pill changed'; }
-      if (box) box.classList.remove('open');
-      if (ta) ta.value = '';
+      var foot = document.querySelector('.appr[data-cs="' + id + '"] .appr-meta');
+      if (pill) { pill.textContent = '已驳回'; pill.className = 'pill rejected'; }
+      if (st) { st.textContent = '已驳回'; st.className = 'approval-state rejected'; }
+      if (side) { side.textContent = '已驳回'; side.className = 'pill rejected'; }
+      if (foot && id === 'cs3-new') foot.textContent = '正文 + 大纲 · 刚刚 · 已驳回';
+      if (pane) pane.querySelectorAll('.actions .btn').forEach(function (b) { b.disabled = true; });
+      var prop = document.querySelector('.proposal[data-cs="' + id + '"]');
+      if (prop) prop.querySelectorAll('.op-act button').forEach(function (b) { b.disabled = true; });
       updateQueueCounts();
       persist();
-      toast('修改请求已回传对话 · 你的意见已附在变更集上');
+      toast('已驳回 · 未执行变更集，不会产出 Diff');
     };
 
     /* ============ 发送 + 模拟生成 ============ */
@@ -2176,24 +2860,10 @@
         '<div class="avatar agent">NW</div>' +
         '<div class="msg-body">' +
         '<div class="msg-head"><span class="who">Novel Writer</span><span>' + t + '</span><span class="approval-state pending">生成中</span></div>' +
-        '<div class="think" data-expanded="true" data-streaming="true">' +
-        '<button class="think-toggle" type="button"><span>思考内容</span><span class="chev">›</span></button>' +
-        '<div class="think-lines"></div></div>' +
         '<div class="msg-text"></div></div>';
       return assistant;
     }
-    function buildThinkLines(mode) {
-      return (mode === 'plan') ? [
-        { text: '先不触碰正文：把「<outline id="unit-trace">追踪错误目标</outline>」的前置条件列清（潮汐时刻表待决策），确认后再落地。', tag: '计划' },
-        { text: '晨谈场景的写作顺序排定：地点档案 → <character id="char-linxia">林夏</character> 视角 → 段落草稿，每步带检查点。', tag: '顺序' },
-        { text: '已知信息保持不动，新增设定一律以提议暂存，r041 权威状态本消息不改。', tag: '范围' }
-      ] : [
-        { text: '大纲里「<outline id="unit-trace">追踪错误目标</outline>」目前是 realization pending——先把它推进到 in-progress，正文才有落点。', tag: '大纲' },
-        { text: '草稿守住 <character id="char-linxia">林夏</character> 的视角：她不知道的事不写进叙述，晨谈只给她能观察到的部分。', tag: '视角' },
-        { text: '新增内容与 r042 货单批注的伏笔一致，不引入新人物名，避免打散沉船名单的线索。', tag: '伏笔' }
-      ];
-    }
-    function runGeneration(assistant, textEl, lines) {
+    function runGeneration(assistant, textEl) {
       generating = true;
       generatingConv = assistant.dataset.conv || state.conv;
       setConvGenerating(generatingConv, true);
@@ -2202,32 +2872,12 @@
       startGenClock();
       var headState = assistant.querySelector('.msg-head .approval-state');
       if (headState) { headState.textContent = '生成中'; headState.className = 'approval-state pending'; }
-      var th = assistant.querySelector('.think');
-      if (th) { th.dataset.streaming = 'true'; th.dataset.expanded = 'true'; }
-      var lineWrap = assistant.querySelector('.think-lines');
-      lineWrap.innerHTML = '';
-      lines.forEach(function (l) {
-        var d = document.createElement('div');
-        d.className = 'tline';
-        d.innerHTML = '<span class="tl-mark"></span><p></p><span class="tl-tag"></span>';
-        d.querySelector('p').innerHTML = renderRich(l.text);
-        d.querySelector('.tl-tag').textContent = l.tag;
-        lineWrap.appendChild(d);
-      });
-      var idx = 0;
       genTimer = setInterval(function () {
         if (!generating) return;
-        var rows = lineWrap.children;
-        if (idx > 0) rows[idx - 1].classList.remove('active');
-        if (idx >= rows.length) {
-          finishAssistant(assistant, textEl);
-          return;
-        }
-        rows[idx].classList.add('show');
-        rows[idx].classList.add('active');
-        scrollBottom();
-        idx++;
-      }, 760);
+        clearInterval(genTimer);
+        genTimer = null;
+        finishAssistant(assistant, textEl);
+      }, 1400);
     }
     function failAssistant(assistant, textEl, reason, convId) {
       clearInterval(genTimer);
@@ -2239,26 +2889,21 @@
       generatingConv = '';
       generating = false;
       stopGenClock();
-      var th = assistant.querySelector('.think');
-      if (th) {
-        th.dataset.streaming = 'false';
-        th.querySelectorAll('.tline.active').forEach(function (l) { l.classList.remove('active'); });
-      }
       var headState = assistant.querySelector('.msg-head .approval-state');
       if (headState) { headState.textContent = '生成失败'; headState.className = 'approval-state failed'; }
       var old = assistant.querySelector('.msg-body .fail-card');
       if (old) old.remove();
       var card = document.createElement('div');
       card.className = 'fail-card';
+      card.setAttribute('role', 'status');
       card.innerHTML =
-        '<div class="fail-title">生成失败</div>' +
         '<div class="fail-reason">' + escapeHtml(reason || 'Novel Writer 未返回有效结果') + '</div>' +
         '<div class="fail-actions">' +
-        '<button class="btn primary" type="button">重试</button>' +
+        '<button class="fail-retry" type="button">重试</button>' +
         '</div>';
-      card.querySelector('.btn.primary').onclick = function () {
+      card.querySelector('.fail-retry').onclick = function () {
         card.remove();
-        runGeneration(assistant, textEl, buildThinkLines(state.mode));
+        runGeneration(assistant, textEl);
       };
       assistant.querySelector('.msg-body').appendChild(card);
       scrollBottom();
@@ -2269,10 +2914,10 @@
     (function () {
       var insp = document.getElementById('view-approval');
       var drag = document.getElementById('inspDrag');
-      var MIN = 300, BASE_MAX = 680;
+      var MIN = 560, BASE_MAX = 1120;
       // 上限随窗口宽度收缩，保证聊天区不被挤没（侧栏 + 面板 + 至少 ~340px 聊天）
       function maxW() {
-        return Math.max(MIN, Math.min(BASE_MAX, window.innerWidth - 620));
+        return Math.max(MIN, Math.min(BASE_MAX, window.innerWidth - 520));
       }
       function clampW(w) { return Math.max(MIN, Math.min(maxW(), Math.round(w))); }
       function applyW(w) { insp.style.setProperty('--insp-w', w + 'px'); }
@@ -2324,7 +2969,7 @@
         window.addEventListener('pointercancel', cancel);
       });
       window.addEventListener('resize', function () {
-        var w = parseInt(getComputedStyle(insp).getPropertyValue('--insp-w') || '384', 10);
+        var w = parseInt(getComputedStyle(insp).getPropertyValue('--insp-w') || '860', 10);
         if (!isNaN(w)) applyW(clampW(w));
       });
     })();
@@ -2356,9 +3001,6 @@
         if (live) {
           var st = live.querySelector('.msg-head .approval-state');
           if (st) { st.textContent = '已停止'; st.className = 'approval-state stopped'; }
-          live.querySelectorAll('.tline.active').forEach(function (l) { l.classList.remove('active'); });
-          var th = live.querySelector('.think');
-          if (th) th.dataset.streaming = 'false';
         }
       }
       generatingConv = '';
@@ -2383,7 +3025,6 @@
       generatingConv = '';
       generating = false;
       stopGenClock();
-      assistant.querySelector('.think').dataset.streaming = 'false';
       var headState = assistant.querySelector('.msg-head .approval-state');
       var t = timeNow();
 
@@ -2402,6 +3043,7 @@
         pTxt[0].innerHTML = renderRich('推进「<outline id="unit-trace">追踪错误目标</outline>」为 <b>in-progress</b>（前置：潮汐时刻表待决策）');
         pTxt[1].innerHTML = renderRich('起草白鹭旅馆晨谈：地点档案 → <character id="char-linxia">林夏</character> 视角 → 段落草稿');
         pTxt[2].innerHTML = renderRich('新增设定以提议暂存，不写入 r041 权威状态');
+        pTxt.forEach(function (el) { el.title = el.textContent; });
         assistant.querySelector('.msg-body').appendChild(planCard);
         scrollBottom();
         return;
@@ -2415,12 +3057,13 @@
         diffCard.className = 'proposal';
         diffCard.innerHTML =
           '<div class="proposal-head"><span class="ptag">已应用</span><h4>CS-20260805-03 · 直接落地</h4><span class="meta">bypass · r041 → r042</span></div>' +
-          '<div class="op add"><span class="op-mark">+</span><span class="op-txt"></span><span class="op-kind">manuscript</span></div>' +
-          '<div class="op mod"><span class="op-mark">~</span><span class="op-txt"></span><span class="op-kind">outline</span></div>' +
+          '<div class="op add"><span class="op-chip add">+ 新增</span><span class="op-txt"></span><span class="op-kind">manuscript</span></div>' +
+          '<div class="op mod"><span class="op-chip mod">~ 修改</span><span class="op-txt"></span><span class="op-kind">outline</span></div>' +
           '<div class="proposal-foot"><span class="approval-state approved">已直接应用 · 无需审批</span></div>';
         var bTxt = diffCard.querySelectorAll('.op-txt');
         bTxt[0].innerHTML = renderRich('新增正文块 <b>§3-01-06</b> · 白鹭旅馆（晨谈）');
         bTxt[1].innerHTML = renderRich('修改「<outline id="unit-trace">追踪错误目标</outline>」：阻塞原因 decision-required → <b>已确认</b>');
+        bTxt.forEach(function (el) { el.title = el.textContent; });
         assistant.querySelector('.msg-body').appendChild(diffCard);
         scrollBottom();
         return;
@@ -2431,31 +3074,31 @@
       textEl.innerHTML = renderRich('已按你的方向起草。变更集 CS-20260805-03 已生成：新增正文块 §3-01-06（<character id="char-linxia">林夏</character> 与白鹭旅馆老板娘晨谈），并把「<outline id="unit-trace">追踪错误目标</outline>」的阻塞改为等待你确认。等你审批。');
       var proposal = document.createElement('div');
       proposal.className = 'proposal';
+      proposal.dataset.cs = 'cs3-new';
       proposal.innerHTML =
         '<div class="proposal-head"><span class="ptag">提议</span><h4>CS-20260805-03 · 回应你的消息</h4><span class="meta">r041 → r042</span></div>' +
-        '<div class="op add"><span class="op-mark">+</span><span>新增正文块 <b>§3-01-06</b> · 白鹭旅馆（晨谈）</span><span class="op-kind">manuscript</span></div>' +
-        '<div class="op mod"><span class="op-mark">~</span><span>修改「追踪错误目标」：阻塞原因 decision-required → <b>已确认</b></span><span class="op-kind">outline</span></div>' +
+        '<div class="op add"><span class="op-chip add">+ 新增</span><span class="op-txt" title="新增正文块 §3-01-06 · 白鹭旅馆（晨谈）">新增正文块 <b>§3-01-06</b> · 白鹭旅馆（晨谈）</span><span class="op-kind">manuscript</span><span class="op-act"><button type="button" onclick="selectCs(\'cs3-new\',false,0)">查看</button><button type="button" onclick="approveCs(\'cs3-new\')">审批</button></span></div>' +
+        '<div class="op mod"><span class="op-chip mod">~ 修改</span><span class="op-txt" title="修改「追踪错误目标」：阻塞原因 decision-required → 已确认">修改「追踪错误目标」：阻塞原因 decision-required → <b>已确认</b></span><span class="op-kind">outline</span><span class="op-act"><button type="button" onclick="selectCs(\'cs3-new\',false,1)">查看</button><button type="button" onclick="approveCs(\'cs3-new\')">审批</button></span></div>' +
         '<div class="proposal-foot">' +
-        '<button class="btn link" type="button">查看 Diff →</button>' +
-        '<button class="btn primary" type="button">批准</button>' +
-        '<button class="btn ghost-danger" type="button">请求修改</button>' +
         '<span class="approval-state pending">待批准</span></div>';
-      proposal.querySelector('.btn.link').onclick = function () { selectCs('cs3-new'); };
-      proposal.querySelector('.btn.primary').onclick = function () { approveCs('cs3-new'); };
-      proposal.querySelector('.btn.ghost-danger').onclick = function () { setInspMode('approval'); setInsp(true); requestChange('cs3-new'); };
       assistant.querySelector('.msg-body').appendChild(proposal);
 
-      var item = document.createElement('button');
+      var item = document.createElement('div');
       item.className = 'appr';
-      item.type = 'button';
       item.dataset.cs = 'cs3-new';
-      item.setAttribute('onclick', "selectCs('cs3-new')");
+      item.dataset.conv = state.conv;
+      item.setAttribute('data-ops', '2');
+      item.setAttribute('data-last', new Date().toISOString());
       item.innerHTML =
-        '<span class="row1"><span class="appr-id">CS-20260805-03</span><span class="pill pending">待批准</span></span>' +
-        '<span class="appr-title">白鹭旅馆 · 晨谈场景</span>' +
+        '<button class="appr-main" type="button" onclick="selectCs(\'cs3-new\')">' +
+        '<span class="appr-title" title="白鹭旅馆 · 晨谈场景">白鹭旅馆 · 晨谈场景</span>' +
+        '<span class="appr-id">CS-20260805-03</span>' +
+        '<span class="pill pending">待批准</span>' +
         '<span class="appr-meta">正文 + 大纲 · ' + t + ' · base r041</span>' +
-        '<span class="appr-note" id="appr-note-cs3-new" hidden></span>';
-      document.getElementById('apprList').insertBefore(item, document.getElementById('apprList').firstChild);
+        '<span class="appr-note" id="appr-note-cs3-new" hidden></span>' +
+        '</button>';
+      ensureApprGroup(state.conv).appendChild(item);
+      sortApprGroups();
       updateQueueCounts();
       scrollBottom();
     }
@@ -2471,6 +3114,13 @@
       userMsg.className = 'msg user enter';
       userMsg.dataset.conv = state.conv;
       userMsg.innerHTML = '<div class="avatar user">我</div><div class="msg-body"><div class="msg-head"><span class="who">你</span><span>' + t + '</span></div><div class="msg-text"></div></div>';
+      if (tl.querySelector('.msg[data-conv="' + state.conv + '"]')) {
+        var sep = document.createElement('div');
+        sep.className = 'turn-sep';
+        sep.dataset.conv = state.conv;
+        sep.innerHTML = '<span>新一轮对话 · ' + t + '</span>';
+        tl.appendChild(sep);
+      }
       userMsg.querySelector('.msg-text').textContent = value;
       tl.appendChild(userMsg);
       document.getElementById('chatEmpty').style.display = 'none';
@@ -2482,7 +3132,7 @@
       tl.appendChild(assistant);
       scrollBottom();
 
-      runGeneration(assistant, assistant.querySelector('.msg-text'), buildThinkLines(state.mode));
+      runGeneration(assistant, assistant.querySelector('.msg-text'));
     }
 
     document.getElementById('composerForm').addEventListener('submit', function (e) {
@@ -2550,6 +3200,7 @@
     } catch (e) {}
     updateTodoCount();
     updateQueueCounts();
+    sortApprGroups();
 
     // 恢复执行模式
     setMode(state.mode || 'review');

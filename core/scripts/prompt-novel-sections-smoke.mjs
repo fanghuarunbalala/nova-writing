@@ -71,4 +71,16 @@ assert.ok(doingTasksContent.includes("作者给出偏好"));
 assert.ok(doingTasksContent.includes("记入回复或正文"));
 assert.equal(doingTasks.render(), doingTasksContent);
 
-console.log("prompt-novel-sections: ok (identity + system + workflow + doing-tasks stable)");
+const actions = registry.resolve("novel.actions", "1.0.0");
+const actionsContent = actions.render();
+assert.ok(actionsContent.startsWith("# 谨慎行动"));
+assert.ok(actionsContent.includes("**考虑可逆性与影响范围**"));
+assert.ok(actionsContent.includes("**写入即正式稿（canonical）**"));
+assert.ok(actionsContent.includes("**必须先确认**"));
+assert.ok(actionsContent.includes("revision 冲突"));
+assert.ok(actionsContent.includes("**先问作者**"));
+assert.equal(actions.render(), actionsContent);
+
+console.log(
+  "prompt-novel-sections: ok (identity + system + workflow + doing-tasks + actions stable)",
+);

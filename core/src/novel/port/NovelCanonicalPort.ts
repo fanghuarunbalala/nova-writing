@@ -12,7 +12,7 @@ import type { NovelRevision } from "../version/index.js";
 export interface NovelCanonicalWriteInput {
   readonly operations: readonly NovelOperation[];
   readonly conversationId: string;
-  /** 乐观锁载体：必须来自一次读取，事务内与 current_revision 比对。Required lock. */
+  /** 兼容字段：数据版本标识；冲突判定由 operation 的 per-entity 版本前置条件负责。 */
   readonly baseRevision: NovelRevision;
 }
 

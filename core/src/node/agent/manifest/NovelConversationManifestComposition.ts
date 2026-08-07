@@ -1,6 +1,6 @@
 /** Production assembly dependencies for the default Novel Conversation Agent. */
 import {
-  SystemPromptBuilder,
+  ManifestSystemPromptCompiler,
   createDefaultPromptSectionRegistry,
   type PromptDigester,
 } from "../../../prompt/index.js";
@@ -66,7 +66,7 @@ import { NodeSha256PromptDigester } from "../../prompt/index.js";
 export interface NovelConversationManifestComposition {
   readonly registry: ToolRegistry;
   readonly groups: ToolGroupCatalog;
-  readonly promptBuilder: SystemPromptBuilder;
+  readonly promptBuilder: ManifestSystemPromptCompiler;
   readonly digester: PromptDigester;
 }
 
@@ -289,7 +289,7 @@ export function createNovelConversationManifestComposition(
     NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
     NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   ]);
-  const promptBuilder = new SystemPromptBuilder({
+  const promptBuilder = new ManifestSystemPromptCompiler({
     sections: createDefaultPromptSectionRegistry(),
     digester,
   });

@@ -66,10 +66,7 @@ import {
 } from "../../../runtime/index.js";
 import { RuntimePromptAssembler } from "../../../runtime/context/index.js";
 import { PromptAssemblyBuilder } from "../../../prompt/assembly/index.js";
-import type {
-  EnvironmentInfoProvider,
-  PromptDigester,
-} from "../../../prompt/index.js";
+import type { PromptDigester } from "../../../prompt/index.js";
 import { createChildToolExecutionComposition } from "./ChildToolExecutionFactory.js";
 import type { RuntimePersistencePorts } from "../../../runtime/ipc/index.js";
 import { createNovelConversationManifestComposition } from "../../agent/index.js";
@@ -116,14 +113,6 @@ export interface DesktopRuntimeChildCompositionFactoryOptions {
   readonly adapterFactory: RuntimeChildAdapterFactory;
   readonly contextCompilerFactory: AgentRuntimeContextCompilerFactory;
   readonly preparationSourceFactory: RuntimeRunPreparationSourceFactory;
-  /**
-   * 可选环境信息提供者工厂：按 bootstrap 构建（工作目录来自 bootstrap）。
-   * Optional environment info provider factory, built per bootstrap (workdir
-   * comes from the bootstrap).
-   */
-  readonly environmentInfoProviderFactory?: (
-    bootstrap: ConversationRuntimeBootstrap,
-  ) => EnvironmentInfoProvider;
   readonly profileResolver?: AgentRuntimeConfigurationProfileResolver;
   readonly eventSchemaRegistry?: ReturnType<typeof createCoreEventSchemaRegistry>;
   readonly eventIdFactory?: RuntimeEventIdFactory;
@@ -140,9 +129,6 @@ export class DesktopRuntimeChildCompositionFactory
   readonly #adapterFactory: RuntimeChildAdapterFactory;
   readonly #contextCompilerFactory: AgentRuntimeContextCompilerFactory;
   readonly #preparationSourceFactory: RuntimeRunPreparationSourceFactory;
-  readonly #environmentInfoProviderFactory?: (
-    bootstrap: ConversationRuntimeBootstrap,
-  ) => EnvironmentInfoProvider;
   readonly #profileResolver: AgentRuntimeConfigurationProfileResolver;
   readonly #eventSchemaRegistry: ReturnType<typeof createCoreEventSchemaRegistry>;
   readonly #eventIdFactory: RuntimeEventIdFactory;
@@ -159,7 +145,6 @@ export class DesktopRuntimeChildCompositionFactory
     this.#adapterFactory = options.adapterFactory;
     this.#contextCompilerFactory = options.contextCompilerFactory;
     this.#preparationSourceFactory = options.preparationSourceFactory;
-    this.#environmentInfoProviderFactory = options.environmentInfoProviderFactory;
     this.#profileResolver =
       options.profileResolver ??
       new InMemoryAgentRuntimeConfigurationProfileResolver([
@@ -320,9 +305,6 @@ export class DesktopRuntimeChildCompositionFactory
       assembler: new RuntimePromptAssembler(
         new PromptAssemblyBuilder({
           digester: this.#promptDigester,
-          ...(this.#environmentInfoProviderFactory === undefined
-            ? {}
-            : { environmentInfo: this.#environmentInfoProviderFactory(bootstrap) }),
           logger,
         }),
       ),

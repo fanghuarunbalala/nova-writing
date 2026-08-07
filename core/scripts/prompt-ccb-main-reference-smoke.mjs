@@ -18,8 +18,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
+  ManifestSystemPromptCompiler,
   PromptCapabilitySnapshot,
-  SystemPromptBuilder,
   ccbMainReferenceAgentDefinition,
   createDefaultPromptSectionRegistry,
 } from "../dist/index.js";
@@ -69,13 +69,13 @@ async function main() {
   }
 
   // 2-3. 按 ccb_main_reference Recipe 组装，校验顺序与内容。
-  const builder = new SystemPromptBuilder({
+  const builder = new ManifestSystemPromptCompiler({
     sections: registry,
     digester: new Sha256PromptDigester(),
     // 参考 Recipe 不包含 core.runtime.protocol / completion.contract，需显式放行。
     requiredSectionIds: [],
   });
-  const compiled = await builder.build({
+  const compiled = await builder.compile({
     definition: ccbMainReferenceAgentDefinition,
     capabilities: new PromptCapabilitySnapshot([]),
   });

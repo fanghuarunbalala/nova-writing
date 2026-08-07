@@ -1,4 +1,10 @@
-/** Deterministically compiles an Agent Prompt Recipe without reading Runtime state. */
+/**
+ * Manifest Prompt Compiler：编译静态 Prompt Section 为冻结的 base system prompt，
+ * 存入 Agent Manifest。动态段由 RuntimeSystemPromptBuilder 每调用渲染。
+ * Compiles static Prompt Sections into the frozen base system prompt recorded
+ * in the Agent Manifest. Dynamic sections are rendered per call by
+ * RuntimeSystemPromptBuilder.
+ */
 import { noopLogger, type Logger } from "../observability/index.js";
 import type { AgentDefinition } from "../agent/definition/AgentDefinition.js";
 import { CompiledSystemPrompt } from "./CompiledSystemPrompt.js";
@@ -12,25 +18,25 @@ import {
 } from "./PromptPlanItem.js";
 import type { PromptSectionRegistry } from "./section/PromptSectionRegistry.js";
 
-export interface SystemPromptBuilderOptions {
+export interface ManifestSystemPromptCompilerOptions {
   readonly sections: PromptSectionRegistry;
   readonly digester: PromptDigester;
   readonly requiredSectionIds?: readonly string[];
   readonly logger?: Logger;
 }
 
-export interface SystemPromptBuildRequest {
+export interface ManifestSystemPromptCompileRequest {
   readonly definition: AgentDefinition;
   readonly capabilities: PromptCapabilitySnapshot;
 }
 
-export class SystemPromptBuilder {
+export class ManifestSystemPromptCompiler {
   readonly #sections: PromptSectionRegistry;
   readonly #digester: PromptDigester;
   readonly #requiredSectionIds: readonly string[];
   readonly #logger: Logger;
 
-  constructor(options: SystemPromptBuilderOptions) {
+  constructor(options: ManifestSystemPromptCompilerOptions) {
     this.#sections = options.sections;
     this.#digester = options.digester;
     // 暂时不默认必选任何段：必选段校验机制后续再确定。
@@ -40,30 +46,52 @@ export class SystemPromptBuilder {
       ...(options.requiredSectionIds ?? []),
     ]);
     this.#logger = (options.logger ?? noopLogger).child({
-      component: "system_prompt_builder",
+      component: "manifest_system_prompt_compiler",
     });
   }
 
-  async build(request: SystemPromptBuildRequest): Promise<CompiledSystemPrompt> {
+  /** 编译使用的 section registry（供 recipe 解析动态段）。Section registry used for compilation (dynamic-section resolution). */
+  get sections(): PromptSectionRegistry {
+    return this.#sections;
+  }
+
+  /**
+   * 编译静态段为 base prompt（一次）；动态段跳过，静态必须在动态之前。
+   * Compiles static sections into the base prompt once; dynamic sections are
+   * skipped, and static sections must precede dynamic ones.
+   */
+  async compile(
+    request: ManifestSystemPromptCompileRequest,
+  ): Promise<CompiledSystemPrompt> {
     const definition = request.definition;
     const context = new PromptContext({
       definition,
       capabilities: request.capabilities,
     });
     this.#assertRequiredSections(definition);
-    this.#logger.debug("prompt.build_started", {
+    this.#logger.debug("prompt.compile_started", {
       agentType: definition.agentType,
       definitionVersion: definition.definitionVersion,
       promptItemCount: definition.promptRecipe.items.length,
     });
 
     const blocks: PromptBlock[] = [];
+    let sawDynamic = false;
     for (const [index, item] of definition.promptRecipe.items.entries()) {
       if (item instanceof PromptSectionItem) {
         const section = this.#sections.resolve(
           item.sectionId,
           item.requestedVersion,
         );
+        if (section.kind === "dynamic") {
+          sawDynamic = true;
+          continue;
+        }
+        if (sawDynamic) {
+          throw new TypeError(
+            "Static Prompt Section must precede dynamic sections",
+          );
+        }
         const content = requireRenderedContent(section.render(context));
         blocks.push(new PromptBlock({
           sourceKind: "section",
@@ -94,7 +122,7 @@ export class SystemPromptBuilder {
       content,
       digest: await this.#digester.digest(content),
     });
-    this.#logger.info("prompt.build_completed", {
+    this.#logger.info("prompt.compile_completed", {
       agentType: compiled.agentType,
       definitionVersion: compiled.definitionVersion,
       promptBlockCount: compiled.blocks.length,

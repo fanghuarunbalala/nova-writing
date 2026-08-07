@@ -12,7 +12,7 @@ import {
   PromptSection,
   PromptSectionItem,
   PromptSectionRegistry,
-  SystemPromptBuilder,
+  ManifestSystemPromptCompiler,
   createDefaultPromptSectionRegistry,
   novelAgentDefinition,
 } from "../dist/index.js";
@@ -48,21 +48,28 @@ const capabilities = new PromptCapabilitySnapshot([{
   label: "Todo Write",
   description: "Maintains the current execution plan.",
 }]);
-const builder = new SystemPromptBuilder({
+const builder = new ManifestSystemPromptCompiler({
   sections: createDefaultPromptSectionRegistry(),
   digester: new Sha256PromptDigester(),
 });
-const compiled = await builder.build({
+const compiled = await builder.compile({
   definition: novelAgentDefinition,
   capabilities,
 });
 
 assert.equal(compiled.agentType, "novel");
 assert.equal(compiled.definitionVersion, novelAgentDefinition.definitionVersion);
-assert.equal(compiled.blocks.length, novelAgentDefinition.promptRecipe.items.length);
+const expectedStaticBlocks = novelAgentDefinition.promptRecipe.items.filter(
+  (item) =>
+    item.kind === "inline" ||
+    createDefaultPromptSectionRegistry()
+      .resolve(item.sectionId, item.requestedVersion)
+      .kind === "static",
+);
+assert.equal(compiled.blocks.length, expectedStaticBlocks.length);
 assert.deepEqual(
   compiled.blocks.map((block) => block.sourceId),
-  novelAgentDefinition.promptRecipe.items.map((item) =>
+  expectedStaticBlocks.map((item) =>
     item.kind === "section" ? item.sectionId : (item.sourceId ?? "inline"),
   ),
 );
@@ -74,7 +81,7 @@ const catalog = new AgentDefinitionCatalog([novelAgentDefinition]);
 assert.equal(catalog.resolve("novel").definitionVersion, novelAgentDefinition.definitionVersion);
 assert.equal(novelAgentDefinition.delegation.mode, "disabled");
 assert.deepEqual(novelAgentDefinition.delegation.allowedAgentTypes, []);
-assert.equal(novelAgentDefinition.toSnapshot().promptRecipe.items.length, 3);
+assert.equal(novelAgentDefinition.toSnapshot().promptRecipe.items.length, 4);
 
 const invalidDefinition = new AgentDefinition({
   agentType: "invalid_agent",
@@ -90,9 +97,9 @@ const invalidDefinition = new AgentDefinition({
   communication: new AgentCommunicationPolicy("standalone"),
   runtimePolicyId: "default",
 });
-// 必选段校验机制暂未启用（SystemPromptBuilder 默认 requiredSectionIds 为空），
+// 必选段校验机制暂未启用（ManifestSystemPromptCompiler 默认 requiredSectionIds 为空），
 // 缺段定义当前可正常编译；机制恢复后此处恢复 rejects 断言。
-const invalidCompiled = await builder.build({
+const invalidCompiled = await builder.compile({
   definition: invalidDefinition,
   capabilities,
 });

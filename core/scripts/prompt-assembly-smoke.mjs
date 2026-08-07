@@ -15,7 +15,7 @@ import {
   PromptAssemblyError,
   PromptCapabilitySnapshot,
   RuntimePromptAssembler,
-  SystemPromptBuilder,
+  ManifestSystemPromptCompiler,
   createDefaultPromptSectionRegistry,
   novelAgentDefinition,
 } from "../dist/index.js";
@@ -29,11 +29,11 @@ class Sha256PromptDigester {
 }
 
 const digester = new Sha256PromptDigester();
-const promptBuilder = new SystemPromptBuilder({
+const promptBuilder = new ManifestSystemPromptCompiler({
   sections: createDefaultPromptSectionRegistry(),
   digester,
 });
-const basePrompt = await promptBuilder.build({
+const basePrompt = await promptBuilder.compile({
   definition: novelAgentDefinition,
   capabilities: new PromptCapabilitySnapshot([{
     name: "TodoWrite",

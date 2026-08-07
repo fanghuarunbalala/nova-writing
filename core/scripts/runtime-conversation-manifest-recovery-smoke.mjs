@@ -10,7 +10,7 @@ import {
   DefaultNovelApiClient,
   InMemoryAgentManifestStore,
   PromptCapabilitySnapshot,
-  SystemPromptBuilder,
+  ManifestSystemPromptCompiler,
   ToolGroupCatalog,
   ToolRegistry,
   UserMessageInputEvent,
@@ -251,7 +251,7 @@ async function createManifest() {
   });
   const digester = new Sha256Digester();
   const resolver = new AgentManifestResolver({
-    promptBuilder: new SystemPromptBuilder({
+    promptBuilder: new ManifestSystemPromptCompiler({
       sections: createDefaultPromptSectionRegistry(),
       digester,
     }),

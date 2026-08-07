@@ -11,6 +11,7 @@ import {
 } from "./AgentManifest.js";
 import {
   ResolvedInlinePromptItem,
+  ResolvedPromptPlanItem,
   ResolvedPromptRecipe,
   ResolvedPromptSectionItem,
 } from "./ResolvedPromptRecipe.js";
@@ -23,7 +24,8 @@ import {
   InlinePromptItem,
   PromptSectionItem,
 } from "../../prompt/PromptPlanItem.js";
-import type { SystemPromptBuilder } from "../../prompt/SystemPromptBuilder.js";
+import type { PromptSectionRegistry } from "../../prompt/section/PromptSectionRegistry.js";
+import type { ManifestSystemPromptCompiler } from "../../prompt/ManifestSystemPromptCompiler.js";
 import {
   createLegacyResolvedAgentCapabilities,
   type ResolvedAgentCapabilities,
@@ -41,7 +43,7 @@ export interface AgentManifestClock {
 }
 
 export interface AgentManifestResolverOptions {
-  readonly promptBuilder: SystemPromptBuilder;
+  readonly promptBuilder: ManifestSystemPromptCompiler;
   readonly promptCapabilities: PromptCapabilitySnapshot;
   readonly manifestIdFactory: AgentManifestIdFactory;
   readonly clock: AgentManifestClock;
@@ -50,7 +52,7 @@ export interface AgentManifestResolverOptions {
 }
 
 export class AgentManifestResolver {
-  readonly #promptBuilder: SystemPromptBuilder;
+  readonly #promptBuilder: ManifestSystemPromptCompiler;
   readonly #promptCapabilities: PromptCapabilitySnapshot;
   readonly #manifestIdFactory: AgentManifestIdFactory;
   readonly #clock: AgentManifestClock;
@@ -83,11 +85,15 @@ export class AgentManifestResolver {
       definitionVersion: definition.definitionVersion,
     });
 
-    const compiledPrompt = await this.#promptBuilder.build({
+    const compiledPrompt = await this.#promptBuilder.compile({
       definition,
       capabilities: promptCapabilities,
     });
-    const promptRecipe = resolvePromptRecipe(definition, compiledPrompt);
+    const promptRecipe = resolvePromptRecipe(
+      definition,
+      compiledPrompt,
+      this.#promptBuilder.sections,
+    );
     const capabilityProfile = resolvedCapabilities ??
       createLegacyResolvedAgentCapabilities(
         definition,
@@ -152,38 +158,53 @@ export class AgentManifestResolver {
 function resolvePromptRecipe(
   definition: AgentDefinition,
   compiledPrompt: CompiledSystemPrompt,
+  sections: PromptSectionRegistry,
 ): ResolvedPromptRecipe {
-  if (compiledPrompt.blocks.length !== definition.promptRecipe.items.length) {
+  const items: ResolvedPromptPlanItem[] = [];
+  const blocks = compiledPrompt.blocks;
+  let blockIndex = 0;
+  for (const item of definition.promptRecipe.items) {
+    if (item instanceof PromptSectionItem) {
+      const section = sections.resolve(item.sectionId, item.requestedVersion);
+      if (section.kind === "dynamic") {
+        items.push(new ResolvedPromptSectionItem({
+          sectionId: section.id,
+          version: section.version,
+        }));
+        continue;
+      }
+      const block = blocks[blockIndex++];
+      if (
+        block === undefined ||
+        block.sourceKind !== "section" ||
+        block.sourceId !== item.sectionId ||
+        block.sourceVersion === undefined
+      ) {
+        throw new TypeError("Compiled Prompt Section identity does not match Recipe");
+      }
+      items.push(new ResolvedPromptSectionItem({
+        sectionId: block.sourceId,
+        version: block.sourceVersion,
+      }));
+      continue;
+    }
+    if (item instanceof InlinePromptItem) {
+      const block = blocks[blockIndex++];
+      if (block === undefined || block.sourceKind !== "inline") {
+        throw new TypeError("Compiled inline Prompt identity does not match Recipe");
+      }
+      items.push(new ResolvedInlinePromptItem({
+        sourceId: block.sourceId,
+        content: block.content,
+      }));
+      continue;
+    }
+    throw new TypeError("Prompt Recipe item is unsupported");
+  }
+  if (blockIndex !== blocks.length) {
     throw new TypeError("Compiled Prompt block count does not match Recipe");
   }
-  return new ResolvedPromptRecipe(
-    definition.promptRecipe.items.map((item, index) => {
-      const block = compiledPrompt.blocks[index]!;
-      if (item instanceof PromptSectionItem) {
-        if (
-          block.sourceKind !== "section" ||
-          block.sourceId !== item.sectionId ||
-          block.sourceVersion === undefined
-        ) {
-          throw new TypeError("Compiled Prompt Section identity does not match Recipe");
-        }
-        return new ResolvedPromptSectionItem({
-          sectionId: block.sourceId,
-          version: block.sourceVersion,
-        });
-      }
-      if (item instanceof InlinePromptItem) {
-        if (block.sourceKind !== "inline") {
-          throw new TypeError("Compiled inline Prompt identity does not match Recipe");
-        }
-        return new ResolvedInlinePromptItem({
-          sourceId: block.sourceId,
-          content: block.content,
-        });
-      }
-      throw new TypeError("Prompt Recipe item is unsupported");
-    }),
-  );
+  return new ResolvedPromptRecipe(items);
 }
 
 interface ManifestDigestPayloadOptions {

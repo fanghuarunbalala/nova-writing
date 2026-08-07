@@ -16,6 +16,7 @@ import {
   NodeApplicationConfigurationStore,
   NodeConfigurationHomeResolver,
   NodePlaintextCredentialStore,
+  NodeSha256PromptDigester,
   NodeWorkspaceStoreLocator,
   SqliteWorkspaceStore,
   createNodeProviderRequestDebugRecorder,
@@ -36,8 +37,8 @@ import {
   type RuntimeRunPreparationSourceFactory,
 } from "./DesktopRuntimeChildCompositionFactory.js";
 import { PiRuntimeChildAdapterFactory } from "./PiRuntimeChildAdapterFactory.js";
-import { NodeEnvironmentInfoProvider } from "./NodeEnvironmentInfoProvider.js";
 import { SUPPORTED_PI_EXECUTION_APIS } from "../../../runtime/agent/pi/index.js";
+import { createDefaultPromptSectionRegistry } from "../../../prompt/index.js";
 import {
   runNodeRuntimeChildEntrypoint,
   type RuntimeChildEntrypointResult,
@@ -179,14 +180,6 @@ async function initializeDesktopRuntimeChildEntrypoint(
       return undefined;
     }
   };
-  const environmentInfoProviderFactory = (
-    bootstrap: ConversationRuntimeBootstrap,
-  ) =>
-    new NodeEnvironmentInfoProvider({
-      workdir: bootstrap.workspace.workdir,
-      resolveModelId,
-      logger,
-    });
   const contextCompilerFactory =
     options.contextCompilerFactory ??
     Object.freeze({
@@ -196,13 +189,17 @@ async function initializeDesktopRuntimeChildEntrypoint(
     });
   const preparationSourceFactory =
     options.preparationSourceFactory ??
-    new DefaultRuntimeRunPreparationSourceFactory({ logger });
+    new DefaultRuntimeRunPreparationSourceFactory({
+      sections: createDefaultPromptSectionRegistry(),
+      digester: new NodeSha256PromptDigester(),
+      resolveModelId,
+      logger,
+    });
   const compositionFactory = new DesktopRuntimeChildCompositionFactory({
     manifestStoreProvider,
     adapterFactory,
     contextCompilerFactory,
     preparationSourceFactory,
-    environmentInfoProviderFactory,
     ...(options.profileResolver === undefined
       ? {}
       : { profileResolver: options.profileResolver }),

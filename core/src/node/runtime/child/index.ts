@@ -1,5 +1,4 @@
 export * from "./DefaultRuntimeRunPreparationSourceFactory.js";
-export * from "./NodeEnvironmentInfoProvider.js";
 export * from "./ChildToolExecutionFactory.js";
 export * from "./DesktopRuntimeChildCompositionFactory.js";
 export * from "./DesktopRuntimeChildEndpointFactory.js";

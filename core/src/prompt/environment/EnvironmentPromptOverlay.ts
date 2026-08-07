@@ -23,11 +23,17 @@ export interface EnvironmentInfoSnapshot {
 }
 
 /**
- * 环境信息提供者：每次 provider-call 取一次快照（日期必须新鲜）。
- * Environment info provider: returns one snapshot per provider call (fresh date).
+ * 运行时注入给动态环境段的静态环境数据（日期/时区/平台在渲染时现场计算）。
+ * Static environment data injected into the dynamic environment section at
+ * runtime (date/timezone/platform are computed at render time).
  */
-export interface EnvironmentInfoProvider {
-  snapshot(): Promise<EnvironmentInfoSnapshot>;
+export interface PromptEnvironmentSnapshot {
+  /** 工作目录（文件系统路径）。Working directory (filesystem path). */
+  readonly workdir: string;
+  /** 平台显示名（host 提供），如 macOS。Platform display name from the host, e.g. macOS. */
+  readonly platform: string;
+  /** 模型 id；解析失败时省略。Model id; omitted when resolution fails. */
+  readonly modelId?: string;
 }
 
 /**

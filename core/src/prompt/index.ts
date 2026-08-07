@@ -5,7 +5,7 @@ export * from "./PromptContext.js";
 export * from "./PromptDigester.js";
 export * from "./PromptPlanItem.js";
 export * from "./PromptRecipe.js";
-export * from "./SystemPromptBuilder.js";
+export * from "./ManifestSystemPromptCompiler.js";
 export * from "./assembly/index.js";
 export * from "./environment/index.js";
 export * from "./section/index.js";

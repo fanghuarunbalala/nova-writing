@@ -8,6 +8,7 @@ export * from "./AgentRuntimeBasePromptSource.js";
 export * from "./AgentRuntimePolicyServices.js";
 export * from "./AgentRuntimePolicyServicesErrors.js";
 export * from "./AgentRuntimeSystemPromptSource.js";
+export * from "./RuntimeSystemPromptBuilder.js";
 export * from "./InMemoryAgentRuntimeConfigurationProfileResolver.js";
 export * from "./InMemoryAgentRuntimePolicyServicesResolver.js";
 export * from "./PolicyBoundAgentRuntimeAdapterFactory.js";

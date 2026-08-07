@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
-  SystemPromptBuilder,
+  ManifestSystemPromptCompiler,
   ToolGroupCatalog,
   ToolRegistry,
 } from "../dist/index.js";
@@ -47,7 +47,7 @@ assert.equal(composition.registry.has("NovelDraftCommit"), false);
 assert.equal(composition.registry.has("NovelDraftRollback"), false);
 assert.equal(composition.registry.has("NovelDraftRebase"), false);
 assert.ok(composition.groups instanceof ToolGroupCatalog);
-assert.ok(composition.promptBuilder instanceof SystemPromptBuilder);
+assert.ok(composition.promptBuilder instanceof ManifestSystemPromptCompiler);
 assert.ok(composition.digester instanceof NodeSha256PromptDigester);
 
 console.log("Novel conversation manifest composition smoke passed");

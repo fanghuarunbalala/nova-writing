@@ -64,10 +64,10 @@ try {
   });
 
   const first = await client.conversations.create({
-    agent: { agentType: "novel", definitionVersion: "1.1.0" },
+    agent: { agentType: "novel", definitionVersion: "1.2.0" },
   });
   const second = await client.conversations.create({
-    agent: { agentType: "novel", definitionVersion: "1.1.0" },
+    agent: { agentType: "novel", definitionVersion: "1.2.0" },
   });
 
   const publish = async (event) => {

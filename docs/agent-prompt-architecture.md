@@ -87,7 +87,7 @@ block changes at most once per day (date rollover).
 
 ## Initial Novel Agent
 
-`novel_agent@1.1.0` is standalone:
+`novel_agent@1.2.0` is standalone:
 
 - Prompt Recipe: `core.runtime.protocol`, `novel.identity`, `novel.system`,
   then the dynamic `core.environment` section (static-first, dynamic-last).

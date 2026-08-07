@@ -17,7 +17,7 @@ import {
   type NovelConversationManifestComposition,
 } from "./NovelConversationManifestComposition.js";
 
-export const DEFAULT_NOVEL_AGENT_MANIFEST_ID = "manifest:novel:1.1.0" as const;
+export const DEFAULT_NOVEL_AGENT_MANIFEST_ID = "manifest:novel:1.2.0" as const;
 
 export type DefaultNovelConversationManifestFailure = "conflict" | "mismatch";
 

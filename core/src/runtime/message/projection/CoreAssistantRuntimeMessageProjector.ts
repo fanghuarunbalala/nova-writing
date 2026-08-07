@@ -1,4 +1,8 @@
-/** Projects completed Tool-free Assistant output into canonical text history. */
+/**
+ * Projects completed Assistant output into canonical text history.
+ * 投影所有 completed 助手消息（含工具调用轮次的文本回复）；
+ * 仅当没有任何文本内容时不投影。
+ */
 import { OUTPUT_EVENT_TYPE } from "../../../event/index.js";
 import type { JsonObject } from "../../../event/index.js";
 import type { PersistedConversationEventSnapshot } from "../../../storage/index.js";
@@ -14,7 +18,8 @@ const COMPLETION_REASONS = new Set(["stop", "length", "tool_use"]);
 
 export class CoreAssistantRuntimeMessageProjector implements RuntimeMessageProjector {
   readonly id = "core.assistant-message";
-  readonly version = "1";
+  // 行为变更（含工具调用轮次的文本），版本递增以触发消息投影自动重建。
+  readonly version = "2";
 
   project(event: PersistedConversationEventSnapshot): readonly RuntimeMessageDraft[] {
     if (
@@ -25,7 +30,6 @@ export class CoreAssistantRuntimeMessageProjector implements RuntimeMessageProje
     }
 
     const payload = this.capturePayload(event.payload, event.id);
-    if (payload.hasToolCalls) return [];
 
     const runId = captureNonBlank(event.runId);
     const turnId = captureNonBlank(event.turnId);
@@ -33,6 +37,12 @@ export class CoreAssistantRuntimeMessageProjector implements RuntimeMessageProje
       throw this.fail("Completed Assistant event identity is invalid", event.id);
     }
 
+    const content = payload.content.flatMap((item) =>
+      item.type === "text" && item.text.length > 0
+        ? [{ type: "text" as const, text: item.text }]
+        : [],
+    );
+    if (content.length === 0) return [];
     return [
       {
         role: "assistant",
@@ -41,13 +51,7 @@ export class CoreAssistantRuntimeMessageProjector implements RuntimeMessageProje
         timestamp: event.timestamp,
         runId,
         turnId,
-        payload: {
-          content: payload.content.flatMap((item) =>
-            item.type === "text" && item.text.length > 0
-              ? [{ type: "text" as const, text: item.text }]
-              : [],
-          ),
-        },
+        payload: { content },
       },
     ];
   }

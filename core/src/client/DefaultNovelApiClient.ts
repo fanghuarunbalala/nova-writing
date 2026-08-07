@@ -6,8 +6,10 @@ import {
   type Conversation,
   type ConversationCatalogResult,
   type CreateConversationOptions,
+  type GlobalApprovalProjection,
   type ListConversationsOptions,
 } from "../conversation/index.js";
+import type { InputEvent, InputReceipt } from "../event/index.js";
 import { noopLogger, type Logger } from "../observability/index.js";
 import type {
   CharacterId,
@@ -103,6 +105,17 @@ class DefaultConversationApi implements ConversationApi {
       client: this.client,
       logger: this.logger,
     });
+  }
+
+  listApprovals(): Promise<readonly GlobalApprovalProjection[]> {
+    return this.client.listApprovals();
+  }
+
+  enqueueInput(
+    conversationId: string,
+    event: InputEvent,
+  ): Promise<InputReceipt> {
+    return this.client.enqueueInput(conversationId, event);
   }
 }
 

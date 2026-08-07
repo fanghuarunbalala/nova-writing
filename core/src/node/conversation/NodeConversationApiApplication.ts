@@ -104,6 +104,7 @@ export class NodeConversationApiApplication {
           : {}),
       });
       const queries = new StorageConversationQueryService({
+        workspaceId: options.workspace.workspaceId,
         catalog: store.conversations,
         journal: store.journal,
         subscriptions,

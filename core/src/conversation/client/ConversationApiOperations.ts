@@ -16,6 +16,7 @@ export const CONVERSATION_API_OPERATION = {
   pin: "conversation.pin",
   delete: "conversation.delete",
   inputEnqueue: "conversation.input.enqueue",
+  approvalsList: "conversation.approvals.list",
   eventsList: "conversation.events.list",
   eventsSubscribe: "conversation.events.subscribe",
   snapshotGet: "conversation.snapshot.get",

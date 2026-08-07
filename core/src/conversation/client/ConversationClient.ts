@@ -26,6 +26,10 @@ import type {
 } from "../ConversationEvents.js";
 import type { ConversationSnapshot } from "../ConversationSnapshot.js";
 import type {
+  GlobalApprovalProjection,
+  GlobalApprovalStatus,
+} from "../ConversationApprovalProjection.js";
+import type {
   ConversationCatalogResult,
   CreateConversationOptions,
   ListConversationsOptions,
@@ -161,6 +165,14 @@ export class ConversationClient {
       validatedConversationId,
     );
     return validateConversationSnapshot(snapshot, validatedConversationId);
+  }
+
+  async listApprovals(): Promise<readonly GlobalApprovalProjection[]> {
+    const data = await this.request(
+      CONVERSATION_API_OPERATION.approvalsList,
+      {},
+    );
+    return validateGlobalApprovals(data);
   }
 
   async getRuntimePresence(conversationId: string): Promise<RuntimePresence> {
@@ -454,6 +466,117 @@ function validateConversationCatalogResult(
       ),
     ),
   });
+}
+
+function validateGlobalApprovals(
+  value: unknown,
+): readonly GlobalApprovalProjection[] {
+  const record = assertRecord(value, "Approvals response");
+  if (!Array.isArray(record.approvals)) {
+    throw new ConversationClientProtocolError(
+      "Approvals response must contain an array",
+    );
+  }
+  return Object.freeze(
+    record.approvals.map((item) => validateGlobalApproval(item)),
+  );
+}
+
+function validateGlobalApproval(value: unknown): GlobalApprovalProjection {
+  const record = assertRecord(value, "Approval");
+  const status = record.status;
+  if (
+    status !== "pending" &&
+    status !== "approved" &&
+    status !== "rejected" &&
+    status !== "cancelled" &&
+    status !== "expired"
+  ) {
+    throw new ConversationClientProtocolError("Approval status is invalid");
+  }
+  return Object.freeze({
+    conversationId: assertNonEmptyString(
+      record.conversationId,
+      "Approval conversation id",
+    ),
+    approvalRequestId: assertNonEmptyString(
+      record.approvalRequestId,
+      "Approval request id",
+    ),
+    toolCallId: assertNonEmptyString(record.toolCallId, "Approval tool call id"),
+    toolName: assertNonEmptyString(record.toolName, "Approval tool name"),
+    toolVersion: assertNonEmptyString(record.toolVersion, "Approval tool version"),
+    argumentDigest: assertNonEmptyString(
+      record.argumentDigest,
+      "Approval argument digest",
+    ) as `sha256:${string}`,
+    runId: assertNonEmptyString(record.runId, "Approval run id"),
+    ...(record.turnId !== undefined
+      ? { turnId: assertNonEmptyString(record.turnId, "Approval turn id") }
+      : {}),
+    title: assertNonEmptyString(record.title, "Approval title"),
+    ...(record.description !== undefined
+      ? {
+          description: assertNonEmptyString(
+            record.description,
+            "Approval description",
+          ),
+        }
+      : {}),
+    ...(record.operations !== undefined
+      ? { operations: validateGlobalOperations(record.operations) }
+      : {}),
+    ...(record.arguments !== undefined
+      ? { arguments: record.arguments as GlobalApprovalProjection["arguments"] }
+      : {}),
+    status: status as GlobalApprovalStatus,
+    requestedAt: assertNonEmptyString(record.requestedAt, "Approval requestedAt"),
+    expiresAt: assertNonEmptyString(record.expiresAt, "Approval expiresAt"),
+    ...(record.actorId !== undefined
+      ? { actorId: assertNonEmptyString(record.actorId, "Approval actor id") }
+      : {}),
+    ...(record.resolvedAt !== undefined
+      ? { resolvedAt: assertNonEmptyString(record.resolvedAt, "Approval resolvedAt") }
+      : {}),
+  });
+}
+
+function validateGlobalOperations(
+  value: unknown,
+): GlobalApprovalProjection["operations"] {
+  if (!Array.isArray(value)) {
+    throw new ConversationClientProtocolError(
+      "Approval operations must be an array",
+    );
+  }
+  return Object.freeze(
+    value.map((item) => {
+      const operation = assertRecord(item, "Approval operation");
+      const op = operation.op;
+      if (op !== "add" && op !== "edit" && op !== "delete") {
+        throw new ConversationClientProtocolError(
+          "Approval operation op is invalid",
+        );
+      }
+      return Object.freeze({
+        op,
+        kind: assertNonEmptyString(operation.kind, "Approval operation kind"),
+        ...(operation.id !== undefined
+          ? {
+              id: assertNonEmptyString(operation.id, "Approval operation id"),
+            }
+          : {}),
+        ...(operation.title !== undefined
+          ? {
+              title: assertNonEmptyString(
+                operation.title,
+                "Approval operation title",
+              ),
+            }
+          : {}),
+      });
+    }),
+  );
 }
 
 function validateRuntimePresence(value: unknown): RuntimePresence {

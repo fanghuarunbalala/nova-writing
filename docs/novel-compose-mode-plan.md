@@ -1,0 +1,217 @@
+# Novel Compose 模式（设计门）方案
+
+> 状态：已确认（2026-08-07 讨论冻结）
+> 对齐对象：Claude Code（CCB）plan 模式——权限模式 + 会话工件 + Enter/ExitPlanMode + 审批门。
+> 相关文档：`docs/architecture.md`、`docs/novel-agent-tools.md`、`docs/novel-write-approval-plan.md`。
+
+## 1. 背景与动机
+
+创作流程需要"先设计、后落库"：agent 先产出**内容草稿**（大纲或正文），作者审的是内容本身、可直接编辑，确认后 agent 再落库。
+
+对齐 CCB plan 架构，我们得到**一个通用"设计门"**：
+
+- 大纲草稿与正文草稿走同一个机制，区别只在**提示词内容**与 **subagent 指令**；
+- 模式/工具/审批/落库完全一致，不在机制层区分内容类型；
+- 取代旧 draft/commit/rebase 机制，并让"逐条 write 前审批"退居为默认模式行为。
+
+## 2. 核心概念与不变量
+
+1. **compose 是临时权限模式**：进入时保存 `preComposeMode`，退出（批准）时恢复 `preComposeMode`；**不存在独立的 executing 权限态**。
+2. **bypass 不由 compose 授予**：批准后的落库权限完全由 `preComposeMode` 决定——进入前是 bypass 就回到 bypass，是 default 就回到 default（逐条 ask）。
+3. **机制不区分内容类型**（outline / prose）：内容方向由用户指令与提示词决定。
+4. **正式稿只由 novel 写工具修改**：compose 期间 canonical 写全部 deny，只有 design md 可写。
+5. **设计会话（design session）与权限模式正交**：工件 + 审批 + 落库记录是独立生命周期。
+
+## 3. 权限模式层
+
+### 模式集
+
+`default | acceptEdits | bypassPermissions | dontAsk | auto | compose`
+
+`compose` 为内部临时模式，仅通过 `EnterComposeMode` / `ExitComposeMode` 进入和退出。
+
+### 进入（EnterComposeMode）
+
+```ts
+EnterComposeMode { purpose?: string }
+```
+
+1. 保存当前权限模式为 `preComposeMode`；
+2. 创建会话 design md（`.novel/design/<conversationId>.md`，自由 Markdown）；
+3. 注入 session 级权限规则：
+   - 12 个 canonical 写工具 → **deny**；
+   - `Read` / `Edit` / `Write` → **仅 design 文件路径 allow**；
+   - 6 个 novel 读工具 → 保持 allow。
+
+进入**不需要用户批准**（只写 md、不碰正式稿，零风险；ExitComposeMode 才是唯一审批门）。
+
+### 退出（ExitComposeMode）
+
+```ts
+ExitComposeMode {}
+```
+
+1. 触发审批：复用 `system.tool.approval.requested`（见 §7）；
+2. **批准** → 移除 compose 权限规则，模式恢复为 `preComposeMode`；agent 按恢复后的模式用 novel 写工具落库；
+3. **拒绝** → 留在 compose，修订 design md 后重新提交。
+
+### 权限实现
+
+通过 `LayeredToolPermissionPolicy` 的 **session 级规则注入/移除**实现，不落静态规则：
+
+- 进入 compose → 注入 deny（canonical 写）+ 路径 allow（design 文件）；
+- 批准退出 → 移除 compose 规则，恢复静态 `child_write_edit_ask` 等原行为；
+- 归档/放弃 → 清理全部 compose 规则。
+
+### 动态 deny 实现（tool exec 层）
+
+**推荐：状态感知的包装策略，不改 `LayeredToolPermissionPolicy`（不可变）。**
+
+```ts
+class ComposeAwareToolPermissionPolicy implements ToolPermissionPolicy {
+  constructor(base: ToolPermissionPolicy, state: ComposeModeStateProvider) {}
+
+  evaluate(e: ToolPermissionEvaluation): ToolPermissionDecision {
+    const s = this.state.snapshot(); // 会话级 compose 状态，每次调用实时读
+    if (s.active) {
+      if (CANONICAL_NOVEL_WRITES.has(e.invocation.toolName)) {
+        return deny("compose.canonical_write_denied"); // 12 个 canonical 写 → deny
+      }
+      if (FILE_TOOLS.has(e.invocation.toolName)) {
+        const path = readPathArg(e.invocation.arguments); // 权限层可读原始参数
+        if (path !== s.designFilePath) {
+          return deny("compose.file_outside_design"); // Read/Edit/Write 仅 design 文件
+        }
+      }
+    }
+    return this.base.evaluate(e); // 非 compose → 透传静态规则（ask/allow）
+  }
+}
+```
+
+- 判定链：`ToolDispatcher.#evaluatePermission → ComposeAware.evaluate → deny → #authorize 抛 TOOL_PERMISSION_DENIED`（不进审批、不弹卡、trace 记终态）；
+- 组装点：`ChildToolExecutionFactory` 的 `permissionPolicy` 换成 `new ComposeAwareToolPermissionPolicy(layered, composeStateProvider)`；
+- 动态性来自 **state**（enter/exit/approve 改状态），不是规则集变动；"恢复 preComposeMode" = `active=false` 透传 base；
+- 路径校验放权限层，因为 `CapturedToolInvocation` 带原始 `arguments`（对齐 CCB kvK）；ToolService 内再做一次路径/状态兜底（纵深防御）。
+
+**preComposeMode 现状说明**：harness 目前没有权限模式概念（只有静态 allow/ask/deny 规则），因此 v1 的"恢复 preComposeMode"实际等价于"回到静态规则（default=ask）"；`preComposeMode` 作为扩展点预留——将来实现 bypassPermissions/acceptEdits 权限模式时，进入保存、批准恢复，bypass 与否由该模式决定（与 CCB 对齐）。
+
+## 4. 设计会话层
+
+### 工件
+
+`<workspace>/.novel/design/<conversationId>.md`
+
+- 自由 Markdown，零格式约束（对齐 CCB plan 文件）；
+- 内容就是"这轮要写什么"的完整草稿（大纲草稿或正文草稿，由指令决定）；
+- 作者可在 GUI 直接编辑该文件。
+
+### 生命周期
+
+```
+designing（写 design md）
+  → pending（ExitComposeMode 审批）
+    → applied（批准后 agent 落库）
+    → archived（commit 记录 + md 归档/删除）
+```
+
+- **designing**：agent 用 `Read`/`Edit`/`Write` 增量写 md；用户可直接编辑；
+- **pending**：审批卡展示 md 渲染内容 + 轻量摘要；
+- **applied**：批准后按 `preComposeMode` 权限用 novel 写工具落库（单事务 + baseRevision 乐观锁）；
+- **archived**：`novel_operations` 写一条 commit 记录 `{ designId, operationIds[], revisionFrom, revisionTo, approvedAt, conversationId }`，md 归档。
+
+## 5. 工具清单
+
+| 工具 | 签名 | 说明 |
+|---|---|---|
+| `EnterComposeMode` | `{ purpose?: string }` | 进入 compose；创建 design md；注入权限规则 |
+| `ExitComposeMode` | `{}` | 提交审批；批准→恢复 preComposeMode；拒绝→留在 compose |
+| `Read` / `Edit` / `Write`（新增 `runtime.files` 组） | 标准文件工具 | v1 仅 design 文件作用域 |
+| 6 个 novel 读工具 | 现状 | 全程可用 |
+| 12 个 canonical 写工具 | 现状 | 按权限矩阵 |
+
+错误码新增：`NOVEL_COMPOSE_STATE_INVALID`、`NOVEL_COMPOSE_ALREADY_SUBMITTED`、`NOVEL_DESIGN_FILE_TOO_LARGE`、`NOVEL_DESIGN_FILE_NOT_FOUND`。
+
+## 6. 权限矩阵
+
+| 工具 | idle | compose | 批准后（= preComposeMode） |
+|---|---|---|---|
+| 6 个 novel 读工具 | ✅ | ✅ | ✅ |
+| 12 个 canonical 写工具 | ask | **deny** | 按 preComposeMode（default=ask / bypass=allow / …） |
+| `Read`（文件） | — | ✅ 仅 design 文件 | ✅（可读已批内容） |
+| `Edit` / `Write`（文件） | — | ✅ 仅 design 文件 | ❌（内容冻结，落库走 novel 工具） |
+| `EnterComposeMode` | ✅ | ❌ | ✅ |
+| `ExitComposeMode` | ❌ | ✅ | ❌ |
+
+## 7. 审批复用
+
+- `ExitComposeMode` 构造 `ToolApprovalRequestedPayload`：
+  - `approvalRequestId = novel-compose:<conversationId>:<sha256>`；
+  - `summary.title = "提交设计草稿"`；
+  - `summary.description` = 轻量变更摘要（自动生成，仅辅助，不是确认对象——确认对象是 md 内容本身）。
+- 批准/拒绝走现有 `ApprovalDecisionInputEvent` → runtime 解析 compose 审批 → 恢复模式 / 留在 compose。
+- GUI 审批卡渲染 md 内容（复用 novel markdown 渲染器），现有审批面板/卡片管线不改。
+
+## 8. 提示层
+
+- 新增静态提示段 `runtime.composeMode`（注册进 `CommonPromptSections`，**不进 base recipe**，由 overlay 通道按状态动态挂载）；
+- 每轮 reminder 在 provider dispatch 以 system.reminder 消息注入（复用 checkpoint/nudge 的消息层机制）；
+- 文案要点：
+  - designing："当前处于设计模式：只读正式稿，唯一可写是设计草稿文件；逐步写出内容；结束时用 ExitComposeMode 提交，不要用文本询问审批。"
+  - pending："设计草稿已提交审批，等待作者确认。"
+  - 拒绝后："作者拒绝了设计草稿：按反馈修订草稿文件后重新提交。"
+  - 批准后（恢复模式）："设计草稿已批准：按草稿内容通过 novel 写工具落库，不得新增未批准内容。"
+- 大纲/正文的产出方向由用户指令与对话上下文决定，**不在提示段硬编码类型**。
+
+## 9. Subagent（预留）
+
+| 类型 | 对齐 CCB | model | 工具 | 产出 |
+|---|---|---|---|---|
+| `Explore` | Explore | 便宜档 | 仅 6 个 novel 读工具 + TodoWrite；无写/无文件/不能派生 | 设定、时间线、伏笔、矛盾点结论（返回文本） |
+| `Compose` | Plan | inherit | 同上只读 | 大纲或正文设计文本（按指令区分；返回文本，不写 design md） |
+
+- 两者独立会话、不共享 compose 状态；
+- v1 暂不接线（novel agent `delegation: disabled`），只预留 manifest 与工具策略设计；
+- Explore/Compose 的内容区分只靠**子代理提示词**，不建两套工具。
+
+## 10. GUI
+
+- **设计卡**（ChatSurface 新投影器）：渲染 design md（novel markdown 渲染器 + 引用），带"编辑"切换 → 直接改正文 → 保存（主进程写回工件文件，不经工具）；
+- **状态徽标**（TopBar）：设计中 / 待审批（批准后恢复模式，无"执行中"态）；
+- **审批面板复用**：InspectorHost 审批 tab 展示 ExitComposeMode 卡片（正文 + 摘要 + 批准/拒绝）；
+- **事件流**：`novel.compose.begin/submitted/approved/rejected/applied/discarded` 终态进 `RuntimeEventFlow`。
+
+## 11. 一致性（大纲 ↔ 正文）——暂缓
+
+2026-08-07 决策：大纲与正文的一致性联动（偏差声明、受影响章节清单）**暂不实现**，后续再议。
+提示词中不包含一致性义务文案。
+
+## 12. 分步实施
+
+| 步 | 内容 | 验证 |
+|---|---|---|
+| M0 | 权限模式 compose + `EnterComposeMode/ExitComposeMode` + `preComposeMode` 保存/恢复 + `novel.compose.*` 事件 | smoke：状态迁移、compose 内 canonical 写 deny |
+| M1 | 新增 `runtime.files`（Read/Edit/Write，design 文件作用域）+ design md 工件 | smoke：仅 design 路径可写 |
+| M2 | `ExitComposeMode` 接入 `system.tool.approval.requested/resolved`；批准→恢复模式；拒绝→留在 compose | smoke：批准/拒绝状态与权限断言 |
+| M3 | 落库收口：`novel_operations` commit 记录 + md 归档（依赖 `SqliteNovelCanonicalWriter` 基座） | 集成冒烟：设计→批准→落库→记录 |
+| M4 | 提示词 `runtime.composeMode` + overlay 动态挂载 + 每轮 reminder | prompt smoke 断言各状态文案 |
+| M5 | GUI：设计卡（渲染/编辑）、徽标、审批面板联调 | ui test + 手动 Electron 验证 |
+| M6 | 删除旧 draft/commit/rebase 模块（`core/src/novel/draft` 等） | 全量 smoke |
+
+## 13. 与既有代码的关系
+
+- **新增**：`runtime.files` 工具组（M1 前置）；compose 权限规则与工具（`novel.compose` 组）；`runtime.composeMode` 提示段；
+- **复用**：`system.tool.approval.*` 审批管线、`ApprovalDecisionInputEvent`、审批卡/面板、`LayeredToolPermissionPolicy` session 规则、novel markdown 渲染器、消息层 reminder 注入（checkpoint/nudge 机制）；
+- **基座**：落库依赖 `SqliteNovelCanonicalWriter`（单事务 + baseRevision 乐观锁；若未合入，M3 前先补 P1）；
+- **删除（M6）**：旧 `core/src/novel/draft`、`core/src/novel/commit`、`core/src/novel/approval`（changeSet 审批）等被取代机制。
+
+## 14. 决策记录（2026-08-07）
+
+1. 模式名 **compose**；工具 `EnterComposeMode` / `ExitComposeMode`；
+2. 批准后**恢复 preComposeMode**，无 executing 态；bypass 与否取决于进入前的模式；
+3. 模式层**不区分** outline/prose；区分只在提示词与 subagent 指令；
+4. **一致性（大纲↔正文联动）暂缓**；
+5. `ExitComposeMode` **不预留** `allowedNovelTools` 参数位（v1 完全恢复原模式，后置再议）；
+6. `runtime.files` v1 仅 design 文件作用域；`EnterComposeMode` 不需用户批准（直接进入）；
+7. `AskUserQuestion` 后续讨论；
+8. subagent 预留 `Explore` / `Compose` 两种只读类型，v1 不接线。

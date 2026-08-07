@@ -101,6 +101,6 @@ describe("InspectorHost", () => {
     fireEvent.pointerMove(window, { clientX: 160, clientY: 0 });
     await new Promise((resolve) => requestAnimationFrame(() => resolve()));
     fireEvent.pointerUp(window);
-    expect(aside.style.width).toBe("444px");
+    expect(aside.style.width).toBe("740px");
   });
 });

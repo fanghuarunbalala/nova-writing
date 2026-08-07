@@ -316,6 +316,39 @@ export function ApprovalPanel({
               ))}
             </div>
           ) : null}
+          <section className={styles.diffSec}>
+            <h3 className={styles.diffTitle}>
+              大纲 Diff
+              <span className={styles.diffCount}>待生成</span>
+            </h3>
+            <p className={styles.diffPlaceholder}>
+              批准执行后生成 before → after
+            </p>
+          </section>
+          <section className={styles.diffSec}>
+            <h3 className={styles.diffTitle}>
+              正文 Diff
+              <span className={styles.diffCount}>待生成</span>
+            </h3>
+            <p className={styles.diffPlaceholder}>
+              批准执行后生成 before → after
+            </p>
+          </section>
+          <section className={styles.diffSec}>
+            <h3 className={styles.diffTitle}>
+              实体字段 Diff
+              <span className={styles.diffCount}>待生成</span>
+            </h3>
+            <p className={styles.diffPlaceholder}>
+              批准执行后生成 before → after
+            </p>
+          </section>
+          <section className={styles.diffSec}>
+            <h3 className={styles.diffTitle}>执行结果</h3>
+            <p className={styles.diffPlaceholder}>
+              工具执行结果与变更摘要将在此展示
+            </p>
+          </section>
           {(operations?.length ?? 0) === 0 &&
           (argumentGroups?.length ?? 0) === 0 ? (
             <p className={styles.emptyDetail}>

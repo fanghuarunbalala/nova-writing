@@ -11,5 +11,6 @@ export * from "./RuntimeInputProcessedPayload.js";
 export * from "./SubagentLifecyclePayloads.js";
 export * from "./ToolApprovalLifecyclePayloads.js";
 export * from "./ToolTraceRecordedPayload.js";
+export * from "./ToolRequestResultPayloads.js";
 export * from "./AgentTodoUpdatedPayload.js";
 export * from "./AgentWorkItemsUpdatedPayload.js";

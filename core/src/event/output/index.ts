@@ -21,6 +21,7 @@ export * from "./schema/index.js";
 export * from "./SystemOutputEvent.js";
 export * from "./ToolApprovalLifecycleOutputEvents.js";
 export * from "./ToolTraceRecordedOutputEvent.js";
+export * from "./ToolRequestResultOutputEvents.js";
 export * from "./payload/index.js";
 export * from "./AgentTodoUpdatedOutputEvent.js";
 export * from "./AgentWorkItemsUpdatedOutputEvent.js";

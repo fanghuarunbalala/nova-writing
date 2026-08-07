@@ -21,6 +21,7 @@ import {
   captureToolResult,
 } from "../../../tooling/protocol/ToolProtocolValidator.js";
 import { ToolProtocolError } from "../../../tooling/protocol/ToolProtocolErrors.js";
+import type { ToolLifecycleSink } from "./ToolLifecycleSink.js";
 import type { ToolRegistryView } from "../../../tooling/registry/ToolRegistryView.js";
 import type {
   CapturedToolInvocation,
@@ -98,6 +99,7 @@ export interface ToolExecutionPipelineOptions {
   readonly sandboxExecutor: SandboxExecutor;
   readonly resultLimits: ToolResultLimits;
   readonly traceSink: ToolTraceSink;
+  readonly lifecycleSink?: ToolLifecycleSink;
   readonly clock?: ToolExecutionClock;
   readonly timer?: ToolExecutionTimer;
   readonly traceIdFactory?: ToolTraceIdFactory;
@@ -125,6 +127,7 @@ export class ToolExecutionPipeline {
   readonly #sandboxExecutor: SandboxExecutor;
   readonly #resultLimits: ToolResultLimits;
   readonly #traceSink: ToolTraceSink;
+  readonly #lifecycleSink: ToolLifecycleSink | undefined;
   readonly #clock: ToolExecutionClock;
   readonly #timer: ToolExecutionTimer;
   readonly #traceIdFactory: ToolTraceIdFactory;
@@ -141,6 +144,7 @@ export class ToolExecutionPipeline {
     this.#sandboxExecutor = options.sandboxExecutor;
     this.#resultLimits = captureResultLimits(options.resultLimits);
     this.#traceSink = options.traceSink;
+    this.#lifecycleSink = options.lifecycleSink;
     this.#clock = options.clock ?? SYSTEM_TOOL_EXECUTION_CLOCK;
     this.#timer = options.timer ?? SYSTEM_TOOL_EXECUTION_TIMER;
     this.#traceIdFactory = options.traceIdFactory ?? DEFAULT_TOOL_TRACE_ID_FACTORY;
@@ -189,6 +193,21 @@ export class ToolExecutionPipeline {
       await this.#authorize(active, tool, executionPolicy, permission);
       assertSandboxCapability(this.#sandboxExecutor, executionPolicy, invocation, tool);
       if (active.controller.signal.aborted) throw cancelledError(invocation, "none", tool);
+      if (this.#lifecycleSink !== undefined) {
+        const truncatedArguments = truncateJsonValue(arguments_, TOOL_RECORD_BYTE_LIMIT);
+        await this.#lifecycleSink.appendRequest({
+          conversationId: invocation.conversationId,
+          runId: invocation.runId,
+          ...(invocation.turnId === undefined
+            ? {}
+            : { turnId: invocation.turnId }),
+          toolCallId: invocation.toolCallId,
+          toolName: tool.descriptor.name,
+          toolVersion: tool.descriptor.version,
+          arguments: truncatedArguments.value as JsonValue,
+          truncated: truncatedArguments.truncated,
+        });
+      }
 
       const progress = createValidatedProgressSink(
         options.progress ?? noopToolProgressSink,
@@ -202,6 +221,28 @@ export class ToolExecutionPipeline {
         arguments_,
         progress,
       );
+      if (this.#lifecycleSink !== undefined) {
+        const resultValue = result.details ?? result.content[0]?.text;
+        const truncatedResult = truncateJsonValue(
+          resultValue,
+          TOOL_RECORD_BYTE_LIMIT,
+        );
+        await this.#lifecycleSink.appendResult({
+          conversationId: invocation.conversationId,
+          runId: invocation.runId,
+          ...(invocation.turnId === undefined
+            ? {}
+            : { turnId: invocation.turnId }),
+          toolCallId: invocation.toolCallId,
+          toolName: tool.descriptor.name,
+          toolVersion: tool.descriptor.version,
+          outcome: "ok",
+          ...(truncatedResult.value === undefined
+            ? {}
+            : { result: truncatedResult.value as JsonValue }),
+          truncated: truncatedResult.truncated,
+        });
+      }
       this.#logger.info("runtime.tool.execution_completed", {
         ...logIdentity(invocation, tool),
         resultBlockCount: result.content.length,
@@ -210,6 +251,21 @@ export class ToolExecutionPipeline {
       return result;
     } catch (error) {
       const normalized = normalizeToolFailure(error, invocation);
+      if (this.#lifecycleSink !== undefined && active.tool !== undefined) {
+        await this.#lifecycleSink.appendResult({
+          conversationId: invocation.conversationId,
+          runId: invocation.runId,
+          ...(invocation.turnId === undefined
+            ? {}
+            : { turnId: invocation.turnId }),
+          toolCallId: invocation.toolCallId,
+          toolName: active.tool.descriptor.name,
+          toolVersion: active.tool.descriptor.version,
+          outcome: "failed",
+          errorCode: normalized.code,
+          truncated: false,
+        });
+      }
       if (!active.terminalTraceRecorded && active.tool) {
         const stage = normalized.category === "cancelled"
           ? "cancelled"
@@ -906,3 +962,53 @@ const DEFAULT_TOOL_TRACE_ID_FACTORY: ToolTraceIdFactory = Object.freeze({
     return `trace_${invocation.runId}_${invocation.toolCallId}`;
   },
 });
+
+const TOOL_RECORD_BYTE_LIMIT = 512 * 1024;
+
+interface TruncatedJsonValue {
+  readonly value: JsonValue | undefined;
+  readonly truncated: boolean;
+}
+
+/** 递归截断超长字符串字段（保留前缀，标记截断）。Truncate oversized strings. */
+function truncateJsonValue(
+  value: unknown,
+  maximumBytes: number,
+): TruncatedJsonValue {
+  if (typeof value === "string") {
+    const bytes = new TextEncoder().encode(value).byteLength;
+    if (bytes <= maximumBytes) {
+      return { value, truncated: false };
+    }
+    const characters = [...value];
+    let kept = "";
+    let used = 0;
+    for (const character of characters) {
+      const characterBytes = new TextEncoder().encode(character).byteLength;
+      if (used + characterBytes > maximumBytes) break;
+      kept += character;
+      used += characterBytes;
+    }
+    return { value: kept, truncated: true };
+  }
+  if (Array.isArray(value)) {
+    let truncated = false;
+    const items = value.map((item) => {
+      const result = truncateJsonValue(item, maximumBytes);
+      if (result.truncated) truncated = true;
+      return result.value;
+    });
+    return { value: items as JsonValue, truncated };
+  }
+  if (value !== null && typeof value === "object") {
+    let truncated = false;
+    const record: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      const result = truncateJsonValue(item, maximumBytes);
+      if (result.truncated) truncated = true;
+      record[key] = result.value;
+    }
+    return { value: record as JsonValue, truncated };
+  }
+  return { value: value as JsonValue, truncated: false };
+}

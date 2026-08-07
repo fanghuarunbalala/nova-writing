@@ -19,6 +19,27 @@
   gap: 4px;
 }
 
+.dirHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 4px 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+}
+
+.cnt {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-accent-ink);
+  background: color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+
 .empty {
   padding: 18px 12px;
   font-size: 12.5px;
@@ -47,6 +68,74 @@
 .row.active {
   border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-border));
   background: color-mix(in oklab, var(--color-accent) 7%, transparent);
+}
+
+.apprHover {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 4px 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+}
+
+.ahHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ahId {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--color-muted);
+}
+
+.ahTitle {
+  font-size: 12.5px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.ahMeta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-faint);
+}
+
+.ahOps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  margin: 4px 0 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--color-fg);
+}
+
+.ahMark {
+  display: inline-block;
+  width: 14px;
+  font-family: var(--font-mono);
+  font-weight: 800;
+}
+
+.ahMark.add { color: var(--color-success); }
+.ahMark.edit { color: var(--color-warn); }
+.ahMark.delete { color: var(--color-danger); }
+
+.ahHint {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 750;
+  color: var(--color-accent-ink);
 }
 
 .row1 {
@@ -116,6 +205,12 @@
   gap: 3px;
   font-family: var(--font-mono);
   margin-bottom: 10px;
+}
+
+.immutable {
+  color: var(--color-accent-ink);
+  font-weight: 750;
+  font-size: 11px;
 }
 
 .csId {

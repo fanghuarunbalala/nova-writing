@@ -67,61 +67,81 @@
 
 .op {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 9px;
-  padding: 9px 10px;
-  border-radius: 9px;
+  padding: 9px 0;
+  border-top: 1px dashed var(--color-border);
   font-size: 13px;
   line-height: 1.55;
 }
 
-.op + .op {
-  margin-top: 6px;
+.op:first-of-type {
+  margin-top: 8px;
 }
 
-.opMark {
+.opChip {
   flex: none;
-  width: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-family: var(--font-mono);
+  font-size: 10px;
   font-weight: 800;
-  text-align: center;
+  padding: 2px 8px;
+  border-radius: 999px;
 }
 
-.add {
-  background: color-mix(in oklab, var(--color-success) 9%, var(--color-surface));
+.opChip.add {
+  color: var(--color-success);
+  background: var(--color-success-bg);
 }
 
-.add .opMark { color: var(--color-success); }
-
-.mod {
-  background: color-mix(in oklab, var(--color-warn) 8%, var(--color-surface));
+.opChip.edit {
+  color: var(--color-warn);
+  background: var(--color-warn-bg);
 }
 
-.mod .opMark { color: var(--color-warn); }
-
-.del {
-  background: color-mix(in oklab, var(--color-danger) 8%, var(--color-surface));
+.opChip.delete {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
 }
 
-.del .opMark { color: var(--color-danger); }
-
-.opText {
+.opTxt {
   flex: 1;
   min-width: 0;
   color: var(--color-fg);
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.opText b {
+.opTxt b {
   font-weight: 750;
 }
 
 .opKind {
   flex: none;
-  margin-left: auto;
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--color-faint);
+}
+
+.opAct {
+  flex: none;
+}
+
+.opView {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--color-accent-ink);
+  cursor: pointer;
+}
+
+.opView:hover {
+  text-decoration: underline;
 }
 
 .desc {

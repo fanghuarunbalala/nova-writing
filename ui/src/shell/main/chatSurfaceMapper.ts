@@ -142,7 +142,11 @@ function toApprovalCardItem(
   groupKey: string,
 ): ConversationTimelineItem {
   const operations = Object.freeze(
-    group.flatMap((item) => item.operations ?? []),
+    group.flatMap((item) =>
+      (item.operations ?? []).map((operation) =>
+        Object.freeze({ ...operation, toolName: item.toolName }),
+      ),
+    ),
   );
   const toolNames = Object.freeze([
     ...new Set(group.map((item) => item.toolName)),

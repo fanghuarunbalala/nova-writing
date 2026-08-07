@@ -7,6 +7,13 @@
 import type { ToolApprovalProjection } from "@novel/core";
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
 
+/** 审批操作行（携带所属工具名，供"查看"定位参数段）。Approval op row. */
+export type ApprovalOperationRow = NonNullable<
+  ToolApprovalProjection["operations"]
+>[number] & {
+  readonly toolName: string;
+};
+
 /**
  * 消息流审批卡数据：同一轮（turn）的多个工具审批合并为一张卡。
  * Approval card view: tool-approval items of one turn are grouped into one card.
@@ -20,7 +27,7 @@ export interface ApprovalCardView {
   readonly title: string;
   readonly description?: string;
   /** 汇总后的操作行。Merged per-target operation rows. */
-  readonly operations: NonNullable<ToolApprovalProjection["operations"]>;
+  readonly operations: readonly ApprovalOperationRow[];
   /** 各请求的完整参数（展开时按工具分段展示）。Full arguments per request. */
   readonly argumentGroups: readonly {
     readonly toolName: string;

@@ -1,15 +1,15 @@
 /**
  * ApprovalCard
  *
- * 消息流审批卡（对齐原型 .proposal：ptag + head + ops + foot）：
- * 每目标一行操作摘要（op-mark + 目标名 + 英文 kind），可展开查看完整参数，
- * pending 时可批准/请求修改，foot 右侧显示审批状态。
+ * 消息流审批卡（对齐原型最新版 .proposal）：每操作行 = op-chip 胶囊
+ * （＋ 新增 / ～ 修改 / − 删除）+ 目标文本 + 英文 kind + 行内"查看"按钮；
+ * 查看展开完整参数并滚动到对应工具的参数段。foot 保留整轮批准/请求修改
+ * 与右侧审批状态。
  *
- * In-chat approval card aligned with the proposal prototype: accent ptag,
- * per-target op rows, expandable full arguments, approve / request-changes
- * actions and a trailing approval-state label.
+ * In-chat approval card: op-chip pill rows with per-row "查看" (reveal that
+ * tool's full arguments), and footer-level approve / request-changes actions.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import type { ApprovalCardView } from "../projection/ConversationTimelineItem.js";
 import styles from "./ApprovalCard.module.css";
@@ -50,11 +50,16 @@ function formatTime(value: string): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function opClass(op: string): string {
-  if (op === "add") return styles.add;
-  if (op === "edit") return styles.mod;
-  if (op === "delete") return styles.del;
-  return "";
+function operationText(operation: ApprovalCardView["operations"][number]): string {
+  const kindLabel = KIND_LABEL[operation.kind] ?? operation.kind;
+  const target = operation.title ?? operation.id;
+  const idSuffix =
+    operation.id !== undefined && operation.id !== operation.title
+      ? ` · ${operation.id}`
+      : "";
+  return `${OP_LABEL[operation.op] ?? operation.op}${kindLabel}${
+    target !== undefined ? ` ${target}` : ""
+  }${idSuffix}`;
 }
 
 export interface ApprovalCardProps {
@@ -69,6 +74,8 @@ export function ApprovalCard({
   onReject,
 }: ApprovalCardProps) {
   const [showArguments, setShowArguments] = useState(false);
+  const [viewTool, setViewTool] = useState<string | undefined>(undefined);
+  const argsBodyRef = useRef<HTMLDivElement>(null);
   const pending = approval.status === "pending";
   const operations = approval.operations;
   const argumentGroups = approval.argumentGroups.filter(
@@ -78,10 +85,25 @@ export function ApprovalCard({
     approval.status === "pending" && approval.approvalRequestIds.length > 1
       ? `待批准 ${approval.approvalRequestIds.length} 项`
       : STATUS_LABEL[approval.status] ?? approval.status;
+
+  // "查看"某行后：展开参数并滚动到对应工具的参数段。
+  useEffect(() => {
+    if (!showArguments || viewTool === undefined) return;
+    const target = argsBodyRef.current?.querySelector(
+      `[data-tool="${viewTool}"]`,
+    );
+    target?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    setViewTool(undefined);
+  }, [showArguments, viewTool]);
+
   return (
     <section className={styles.card} data-status={approval.status}>
       <header className={styles.head}>
-        <span className={[styles.tag, styles[approval.status]].filter(Boolean).join(" ")}>
+        <span
+          className={[styles.tag, styles[approval.status]]
+            .filter(Boolean)
+            .join(" ")}
+        >
           审批
         </span>
         <h4 className={styles.title}>{approval.title}</h4>
@@ -93,17 +115,22 @@ export function ApprovalCard({
         <ul className={styles.ops}>
           {operations.map((operation, index) => (
             <li
-              key={`${operation.op}-${operation.id ?? operation.title ?? index}`}
-              className={[styles.op, opClass(operation.op)].filter(Boolean).join(" ")}
+              key={`${operation.toolName}-${operation.op}-${operation.id ?? operation.title ?? index}`}
+              className={[styles.op, styles[operation.op]]
+                .filter(Boolean)
+                .join(" ")}
             >
-              <span className={styles.opMark} aria-hidden="true">
-                {OP_SYMBOL[operation.op] ?? "•"}
+              <span
+                className={[styles.opChip, styles[operation.op]]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                {OP_SYMBOL[operation.op] ?? "•"} {OP_LABEL[operation.op] ?? operation.op}
               </span>
-              <span className={styles.opText}>
-                {OP_LABEL[operation.op] ?? operation.op}
+              <span className={styles.opTxt} title={operationText(operation)}>
                 {KIND_LABEL[operation.kind] !== undefined
                   ? KIND_LABEL[operation.kind]
-                  : ` ${operation.kind}`}
+                  : operation.kind}
                 {operation.title !== undefined ? (
                   <>
                     {" "}
@@ -115,6 +142,18 @@ export function ApprovalCard({
                   : ""}
               </span>
               <span className={styles.opKind}>{operation.kind}</span>
+              <span className={styles.opAct}>
+                <button
+                  type="button"
+                  className={styles.opView}
+                  onClick={() => {
+                    setShowArguments(true);
+                    setViewTool(operation.toolName);
+                  }}
+                >
+                  查看
+                </button>
+              </span>
             </li>
           ))}
         </ul>
@@ -132,9 +171,13 @@ export function ApprovalCard({
             {showArguments ? "收起完整参数" : "查看完整参数"}
           </button>
           {showArguments ? (
-            <div className={styles.argsBody}>
+            <div className={styles.argsBody} ref={argsBodyRef}>
               {argumentGroups.map((group, index) => (
-                <div key={`${group.toolName}-${index}`} className={styles.argsGroup}>
+                <div
+                  key={`${group.toolName}-${index}`}
+                  className={styles.argsGroup}
+                  data-tool={group.toolName}
+                >
                   <span className={styles.argsTool}>{group.toolName}</span>
                   <pre className={styles.argsPre}>
                     {JSON.stringify(group.arguments, null, 2)}
@@ -164,7 +207,11 @@ export function ApprovalCard({
             </Button>
           </>
         ) : null}
-        <span className={[styles.status, styles[approval.status]].filter(Boolean).join(" ")}>
+        <span
+          className={[styles.status, styles[approval.status]]
+            .filter(Boolean)
+            .join(" ")}
+        >
           {statusText}
         </span>
       </footer>

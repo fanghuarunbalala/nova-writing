@@ -109,10 +109,13 @@ function groupApprovals(
 export function ApprovalPanel({ store }: ApprovalPanelProps) {
   const snapshot = useExternalStore(store);
   const [selectedKey, setSelectedKey] = useState<string | undefined>(undefined);
+  const [hoveredKey, setHoveredKey] = useState<string | undefined>(undefined);
   const groups = useMemo(
     () => groupApprovals(snapshot.approvals),
     [snapshot.approvals],
   );
+  const hoveredGroup =
+    groups.find((group) => group.key === hoveredKey) ?? undefined;
   const selectedGroup =
     groups.find((group) => group.key === selectedKey) ??
     (snapshot.selectedId === undefined
@@ -148,6 +151,10 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
   return (
     <div className={styles.panel}>
       <nav className={styles.list}>
+        <div className={styles.dirHead}>
+          审批队列
+          <span className={styles.cnt}>{groups.length}</span>
+        </div>
         {groups.length === 0 ? (
           <div className={styles.empty}>暂无审批请求</div>
         ) : (
@@ -171,6 +178,12 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
                   .filter(Boolean)
                   .join(" ")}
                 onClick={() => setSelectedKey(group.key)}
+                onMouseEnter={() => setHoveredKey(group.key)}
+                onMouseLeave={() =>
+                  setHoveredKey((current) =>
+                    current === group.key ? undefined : current,
+                  )
+                }
               >
                 <span className={styles.row1}>
                   <span className={styles.id}>{shortId(group.key)}</span>
@@ -191,6 +204,42 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
           })
         )}
       </nav>
+      {hoveredGroup !== undefined ? (
+        <div className={styles.apprHover} role="tooltip">
+          <div className={styles.ahHead}>
+            <span className={styles.ahId}>{shortId(hoveredGroup.key)}</span>
+            <span className={[styles.pill, styles[hoveredGroup.status]].join(" ")}>
+              {STATUS_LABEL[hoveredGroup.status]}
+            </span>
+          </div>
+          <span className={styles.ahTitle}>{hoveredGroup.approvals[0].title}</span>
+          <span className={styles.ahMeta}>
+            {[
+              ...new Set(
+                hoveredGroup.approvals.map((approval) => approval.toolName),
+              ),
+            ].join(" · ")}
+          </span>
+          {hoveredGroup.approvals.some(
+            (approval) => (approval.operations?.length ?? 0) > 0,
+          ) ? (
+            <ul className={styles.ahOps}>
+              {hoveredGroup.approvals
+                .flatMap((approval) => approval.operations ?? [])
+                .slice(0, 3)
+                .map((operation, index) => (
+                  <li key={`${operation.op}-${operation.id ?? operation.title ?? index}`}>
+                    <span className={[styles.ahMark, styles[operation.op]].join(" ")}>
+                      {OP_SYMBOL[operation.op] ?? "•"}
+                    </span>
+                    {operation.title ?? operation.id ?? operation.kind}
+                  </li>
+                ))}
+            </ul>
+          ) : null}
+          <span className={styles.ahHint}>点击查看审批参数 →</span>
+        </div>
+      ) : null}
       {selectedGroup !== undefined ? (
         <div className={styles.detail}>
           <div className={styles.identity}>
@@ -200,6 +249,7 @@ export function ApprovalPanel({ store }: ApprovalPanelProps) {
                 .map((approval) => approval.toolName)
                 .join(" · ")}
             </span>
+            <span className={styles.immutable}>◈ 不可变</span>
           </div>
           <h4 className={styles.title}>{selectedGroup.approvals[0].title}</h4>
           {operations !== undefined && operations.length > 0 ? (

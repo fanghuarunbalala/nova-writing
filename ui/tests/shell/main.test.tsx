@@ -249,7 +249,13 @@ describe("chatSurfaceMapper", () => {
       expect(items[0].approval.approvalRequestIds).toEqual(["AR-1"]);
       expect(items[0].approval.title).toBe("新增大纲单元");
       expect(items[0].approval.operations).toEqual([
-        { op: "add", kind: "outline", id: "s1", title: "第一章 序章" },
+        {
+          op: "add",
+          kind: "outline",
+          id: "s1",
+          title: "第一章 序章",
+          toolName: "NovelOutlineWrite",
+        },
       ]);
       expect(items[0].approval.argumentGroups).toEqual([
         {
@@ -314,8 +320,20 @@ describe("chatSurfaceMapper", () => {
         "NovelCharacterWrite",
       ]);
       expect(items[0].approval.operations).toEqual([
-        { op: "add", kind: "outline", id: "s1", title: "第一章" },
-        { op: "add", kind: "character", id: "c1", title: "张三" },
+        {
+          op: "add",
+          kind: "outline",
+          id: "s1",
+          title: "第一章",
+          toolName: "NovelOutlineWrite",
+        },
+        {
+          op: "add",
+          kind: "character",
+          id: "c1",
+          title: "张三",
+          toolName: "NovelCharacterWrite",
+        },
       ]);
       expect(items[0].approval.argumentGroups).toHaveLength(2);
     }

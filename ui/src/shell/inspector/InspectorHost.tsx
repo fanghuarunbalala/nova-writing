@@ -106,7 +106,7 @@ export function InspectorHost({
             档案
           </button>
         </div>
-        <span className={styles.kicker}>{tab === "approval" ? "工具审批 · 批准是事件，批准后单事务落库" : kicker}</span>
+        <span className={styles.kicker}>{tab === "approval" ? "审批参数 · 批准执行后才产出 Diff" : kicker}</span>
         <button
           type="button"
           className={styles.close}

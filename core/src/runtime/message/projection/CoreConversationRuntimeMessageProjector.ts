@@ -6,6 +6,7 @@ import { CompositeRuntimeMessageProjector } from "./CompositeRuntimeMessageProje
 import { CoreAssistantRuntimeMessageProjector } from "./CoreAssistantRuntimeMessageProjector.js";
 import { CoreReminderRuntimeMessageProjector } from "./CoreReminderRuntimeMessageProjector.js";
 import { CoreRuntimeMessageProjector } from "./CoreRuntimeMessageProjector.js";
+import { CoreToolMessageProjector } from "./CoreToolMessageProjector.js";
 
 export interface CoreConversationRuntimeMessageProjectorOptions {
   messageSchemaRegistry?: RuntimeMessageSchemaRegistry;
@@ -16,12 +17,13 @@ export class CoreConversationRuntimeMessageProjector extends CompositeRuntimeMes
   constructor(options: CoreConversationRuntimeMessageProjectorOptions = {}) {
     super({
       id: "core.conversation-message",
-      // 内部 assistant 投影行为变更（含工具轮次文本），版本递增以触发重建。
-      version: "2",
+      // 工具请求/结果消息投影加入，版本递增以触发重建。
+      version: "3",
       projectors: [
         new CoreRuntimeMessageProjector(),
         new CoreAssistantRuntimeMessageProjector(),
         new CoreReminderRuntimeMessageProjector(),
+        new CoreToolMessageProjector(),
       ],
       messageSchemaRegistry:
         options.messageSchemaRegistry ?? coreRuntimeMessageSchemaRegistry,

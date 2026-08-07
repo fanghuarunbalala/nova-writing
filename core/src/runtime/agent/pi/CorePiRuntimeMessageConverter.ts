@@ -49,6 +49,31 @@ interface SystemReminderMessagePayload {
   readonly order: number;
 }
 
+interface CoreToolRequestMessagePayload {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly arguments: unknown;
+}
+
+interface CoreToolResultMessagePayload {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly outcome: "ok" | "failed";
+  readonly result?: unknown;
+  readonly errorCode?: string;
+  readonly truncated: boolean;
+}
+
+function formatToolResult(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === undefined || value === null) return "(空结果)";
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter {
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
   private readonly assistantMessageEnvelopeFactory?: PiAssistantMessageEnvelopeFactory;
@@ -147,6 +172,20 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
     ) {
       return this.convertSystemReminderMessage(message);
     }
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolRequest &&
+      message.schemaVersion === RUNTIME_MESSAGE_SCHEMA_VERSION
+    ) {
+      return this.convertToolRequestMessage(message, identity);
+    }
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolResult &&
+      message.schemaVersion === RUNTIME_MESSAGE_SCHEMA_VERSION
+    ) {
+      return this.convertToolResultMessage(message);
+    }
     throw this.fail(
       CORE_PI_MESSAGE_CONVERSION_FAILURE.unsupportedMessage,
       identity.conversationId,
@@ -224,6 +263,56 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
       content,
       timestamp: Date.parse(message.timestamp),
     });
+  }
+
+  /** 工具请求 → Pi assistant toolUse（历史 tool_call 块）。Tool request to assistant toolUse. */
+  private convertToolRequestMessage(
+    message: RuntimeMessageSnapshot,
+    identity: RuntimeIdentity,
+  ): AgentMessage {
+    if (this.assistantMessageEnvelopeFactory === undefined) {
+      throw this.fail(
+        CORE_PI_MESSAGE_CONVERSION_FAILURE.assistantEnvelopeUnavailable,
+        identity.conversationId,
+        identity.runId,
+      );
+    }
+    const envelope = this.assistantMessageEnvelopeFactory.create();
+    const payload = message.payload as unknown as CoreToolRequestMessagePayload;
+    return {
+      role: "assistant",
+      content: [
+        {
+          type: "toolCall",
+          id: payload.toolCallId,
+          name: payload.toolName,
+          arguments: payload.arguments as Record<string, unknown>,
+        },
+      ],
+      api: envelope.api,
+      provider: envelope.provider,
+      model: envelope.model,
+      usage: createEmptyUsage(),
+      stopReason: "toolUse",
+      timestamp: Date.parse(message.timestamp),
+    } as unknown as AgentMessage;
+  }
+
+  /** 工具结果 → Pi toolResult 消息。Tool result to Pi toolResult message. */
+  private convertToolResultMessage(message: RuntimeMessageSnapshot): AgentMessage {
+    const payload = message.payload as unknown as CoreToolResultMessagePayload;
+    const failed = payload.outcome === "failed";
+    const text = failed
+      ? `工具执行失败（${payload.errorCode ?? "unknown"}）`
+      : formatToolResult(payload.result);
+    return {
+      role: "toolResult",
+      toolCallId: payload.toolCallId,
+      toolName: payload.toolName,
+      content: [{ type: "text", text }],
+      isError: failed,
+      timestamp: Date.parse(message.timestamp),
+    } as unknown as AgentMessage;
   }
 
   private fail(

@@ -284,9 +284,7 @@ export type NovelOutlineReadArguments = Static<
 
 export const NovelOutlineWriteParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(StoryUnitWriteSchema, { minItems: 1, maxItems: 64 }),
   },
   { additionalProperties: false },
@@ -327,9 +325,7 @@ export type NovelOutlineEditValue = Static<typeof NovelOutlineEditValueSchema>;
 
 export const NovelOutlineEditParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(
       Type.Object(
         {

@@ -214,6 +214,7 @@ try {
       }),
     ],
     conversationId: conversation,
+    baseRevision: await application.canonicalWrites.getCurrentRevision(),
   });
 
   const deleteTool = registry.require("NovelDelete");
@@ -221,7 +222,9 @@ try {
   // Referenced: parent story unit has a child.
   const referencedResult = await deleteTool.handler.execute(
     context(conversation, 1),
-    { values: [{ kind: "story_unit", id: parentId }] },
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ kind: "story_unit", id: parentId }] },
     progress,
   );
   assert.equal(referencedResult.details.items[0].status, "rejected");
@@ -230,7 +233,9 @@ try {
   // Paragraph delete removes it from the chapter selection too.
   const paragraphDelete = await deleteTool.handler.execute(
     context(conversation, 2),
-    { values: [{ kind: "paragraph", id: paragraphId }] },
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ kind: "paragraph", id: paragraphId }] },
     progress,
   );
   assert.equal(paragraphDelete.details.items[0].status, "applied");
@@ -243,13 +248,17 @@ try {
   // Character and location delete directly.
   const characterDelete = await deleteTool.handler.execute(
     context(conversation, 3),
-    { values: [{ kind: "character", id: characterId }] },
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ kind: "character", id: characterId }] },
     progress,
   );
   assert.equal(characterDelete.details.items[0].status, "applied");
   const locationDelete = await deleteTool.handler.execute(
     context(conversation, 4),
-    { values: [{ kind: "location", id: locationId }] },
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ kind: "location", id: locationId }] },
     progress,
   );
   assert.equal(locationDelete.details.items[0].status, "applied");
@@ -257,7 +266,9 @@ try {
   // Leaf story unit without children or plan deletes.
   const leafDelete = await deleteTool.handler.execute(
     context(conversation, 5),
-    { values: [{ kind: "story_unit", id: leafId }] },
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ kind: "story_unit", id: leafId }] },
     progress,
   );
   assert.equal(leafDelete.details.items[0].status, "applied");
@@ -265,20 +276,26 @@ try {
   // Volume with a chapter rejects; after chapter delete the volume deletes.
   const volumeRejected = await deleteTool.handler.execute(
     context(conversation, 6),
-    { values: [{ kind: "volume", id: volumeId }] },
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ kind: "volume", id: volumeId }] },
     progress,
   );
   assert.equal(volumeRejected.details.items[0].status, "rejected");
   assert.equal(volumeRejected.details.items[0].reason, "referenced");
   const chapterDelete = await deleteTool.handler.execute(
     context(conversation, 7),
-    { values: [{ kind: "chapter", id: chapterId }] },
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ kind: "chapter", id: chapterId }] },
     progress,
   );
   assert.equal(chapterDelete.details.items[0].status, "applied");
   const volumeDelete = await deleteTool.handler.execute(
     context(conversation, 8),
-    { values: [{ kind: "volume", id: volumeId }] },
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ kind: "volume", id: volumeId }] },
     progress,
   );
   assert.equal(volumeDelete.details.items[0].status, "applied");
@@ -286,7 +303,9 @@ try {
   // Missing id reports rejected with not_found reason.
   const missingResult = await deleteTool.handler.execute(
     context(conversation, 9),
-    { values: [{ kind: "character", id: "character_missing_delete" }] },
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ kind: "character", id: "character_missing_delete" }] },
     progress,
   );
   assert.equal(missingResult.details.items[0].status, "rejected");

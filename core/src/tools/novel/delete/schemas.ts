@@ -15,9 +15,7 @@ export type NovelDeleteKind = Static<typeof NovelDeleteKindSchema>;
 
 export const NovelDeleteParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(
       Type.Object(
         {

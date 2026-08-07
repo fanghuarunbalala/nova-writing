@@ -35,7 +35,7 @@ export function createWriteTool(
       parameters: NovelOutlineWriteParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage:
-          "Omit orderKey to append after the last sibling under the target parent. Pass baseRevision from a recent read to detect concurrent changes.",
+          "Omit orderKey to append after the last sibling under the target parent. baseRevision is required: pass revision.currentRevision from the most recent read; missing or stale revisions are rejected.",
         parameterGuidance:
           "value must be complete. Create fails with duplicate_id when the id already exists.",
         safetyGuidance:

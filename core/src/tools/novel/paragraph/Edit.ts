@@ -38,7 +38,7 @@ export function createParagraphEditTool(
           "Edit the fields you want to change; omitted fields keep their values.",
         parameterGuidance:
           "id is required. text/orderKey/storyUnitId are optional.",
-        safetyGuidance: "Writes are Draft-only until NovelDraftCommit.",
+        safetyGuidance: "baseRevision is required: pass revision.currentRevision from the most recent read; missing or stale revisions are rejected. Writes require approval and apply to canonical immediately after approval.",
       }),
     },
     handler: {

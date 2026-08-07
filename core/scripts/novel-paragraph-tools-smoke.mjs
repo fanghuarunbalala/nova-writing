@@ -140,6 +140,7 @@ try {
       }),
     ],
     conversationId: conversation,
+    baseRevision: await application.canonicalWrites.getCurrentRevision(),
   });
 
   const writeTool = registry.require("NovelParagraphWrite");
@@ -149,6 +150,7 @@ try {
   const writeResult = await writeTool.handler.execute(
     context(conversation, 1),
     {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
       values: [
         { storyUnitId, text: "First paragraph" },
         {
@@ -210,6 +212,7 @@ try {
   const missingEdit = await editTool.handler.execute(
     context(conversation, 5),
     {
+      baseRevision: afterEdit.details.revision.currentRevision,
       values: [
         { id: "paragraph_missing", value: { text: "x" } },
         { id: "paragraph_second", value: { text: "y" } },

@@ -32,9 +32,7 @@ export type NovelLocationReadArguments = Static<
 
 export const NovelLocationWriteParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(LocationProfileWriteSchema, {
       minItems: 1,
       maxItems: 64,
@@ -72,9 +70,7 @@ export type NovelLocationEditValue = Static<
 
 export const NovelLocationEditParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(
       Type.Object(
         {

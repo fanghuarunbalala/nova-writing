@@ -148,6 +148,7 @@ try {
       }),
     ],
     conversationId: conversation,
+    baseRevision: await application.canonicalWrites.getCurrentRevision(),
   });
 
   // Write: batch create with defaults, auto outline, embedded leaf plan.
@@ -155,6 +156,7 @@ try {
   const writeResult = await writeTool.handler.execute(
     context(conversation, 1),
     {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
       values: [
         { id: "story_unit_root", title: "Root arc" },
         {
@@ -234,7 +236,10 @@ try {
 
   await editTool.handler.execute(
     context(conversation, 5),
-    { values: [{ id: "story_unit_leaf", value: { intent: null } }] },
+    {
+      baseRevision: afterTitle.details.revision.currentRevision,
+      values: [{ id: "story_unit_leaf", value: { intent: null } }],
+    },
     progress,
   );
   const afterIntentClear = await readTool.handler.execute(
@@ -247,6 +252,7 @@ try {
   await editTool.handler.execute(
     context(conversation, 7),
     {
+      baseRevision: afterIntentClear.details.revision.currentRevision,
       values: [
         {
           id: "story_unit_leaf",
@@ -277,7 +283,10 @@ try {
 
   await editTool.handler.execute(
     context(conversation, 9),
-    { values: [{ id: "story_unit_leaf", value: { leaf: null } }] },
+    {
+      baseRevision: afterPlanPartial.details.revision.currentRevision,
+      values: [{ id: "story_unit_leaf", value: { leaf: null } }],
+    },
     progress,
   );
   const afterPlanClear = await readTool.handler.execute(
@@ -290,7 +299,10 @@ try {
   // Edit: move to root via parentId:null; missing target rejected (whole batch unapplied).
   const moveEdit = await editTool.handler.execute(
     context(conversation, 11),
-    { values: [{ id: "story_unit_leaf", value: { parentId: null } }] },
+    {
+      baseRevision: afterPlanClear.details.revision.currentRevision,
+      values: [{ id: "story_unit_leaf", value: { parentId: null } }],
+    },
     progress,
   );
   assert.equal(moveEdit.details.items[0].status, "applied");
@@ -304,7 +316,10 @@ try {
 
   const missingEdit = await editTool.handler.execute(
     context(conversation, 13),
-    { values: [{ id: "story_unit_missing", value: { title: "x" } }] },
+    {
+      baseRevision: afterMove.details.revision.currentRevision,
+      values: [{ id: "story_unit_missing", value: { title: "x" } }],
+    },
     progress,
   );
   assert.deepEqual(
@@ -316,6 +331,7 @@ try {
   const duplicateWrite = await writeTool.handler.execute(
     context(conversation, 14),
     {
+      baseRevision: afterMove.details.revision.currentRevision,
       values: [
         { id: "story_unit_batch1", title: "Batch one" },
         { id: "story_unit_root", title: "Duplicate" },
@@ -358,7 +374,10 @@ try {
   // Write without an id: the host generates and returns the id.
   const generatedWrite = await writeTool.handler.execute(
     context(conversation, 17),
-    { values: [{ title: "Generated unit" }] },
+    {
+      baseRevision: afterRejectedBatch.details.revision.currentRevision,
+      values: [{ title: "Generated unit" }],
+    },
     progress,
   );
   assert.equal(generatedWrite.details.items[0].id, "story_unit_generated");

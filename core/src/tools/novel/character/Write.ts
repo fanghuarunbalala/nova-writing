@@ -39,7 +39,7 @@ export function createCharacterWriteTool(
         parameterGuidance:
           "name is required and aliases may be empty. summary/initialState/authorNotes are optional.",
         safetyGuidance:
-          "Writes are Draft-only until NovelDraftCommit.",
+          "baseRevision is required: pass revision.currentRevision from the most recent read; missing or stale revisions are rejected. Writes require approval and apply to canonical immediately after approval.",
       }),
     },
     handler: {

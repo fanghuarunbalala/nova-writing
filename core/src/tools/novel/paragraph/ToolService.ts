@@ -102,10 +102,7 @@ export class NovelParagraphToolService {
     const scope = canonicalNovelReadScope;
     const currentRevision =
       await this.options.canonicalWrites.getCurrentRevision();
-    const baseRevision =
-      arguments_.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(arguments_.baseRevision);
+    const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const operations: NovelOperation[] = [];
     const items: NovelParagraphItemDetails[] = [];
     this.logger.info("novel_paragraph_tool.write.started", {
@@ -152,7 +149,7 @@ export class NovelParagraphToolService {
       const result = await this.options.canonicalWrites.applyOperations({
         operations,
         conversationId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+        baseRevision,
       });
       this.logger.info("novel_paragraph_tool.write.completed", {
         conversationId,
@@ -182,10 +179,7 @@ export class NovelParagraphToolService {
     const scope = canonicalNovelReadScope;
     const currentRevision =
       await this.options.canonicalWrites.getCurrentRevision();
-    const baseRevision =
-      arguments_.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(arguments_.baseRevision);
+    const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const operations: NovelOperation[] = [];
     const items: NovelParagraphItemDetails[] = [];
     this.logger.info("novel_paragraph_tool.edit.started", {
@@ -229,7 +223,7 @@ export class NovelParagraphToolService {
       const result = await this.options.canonicalWrites.applyOperations({
         operations,
         conversationId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+        baseRevision,
       });
       this.logger.info("novel_paragraph_tool.edit.completed", {
         conversationId,

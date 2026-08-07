@@ -163,6 +163,7 @@ async function main() {
         outline: captureStoryOutline({ id: outlineId, novelId: NOVEL_ID }),
       }),
       conversationId: CONVERSATION_ID,
+      baseRevision: "revision_initial",
     });
     assert.equal(outlineCreate.status, "applied");
     assert.equal(outlineCreate.baseRevision, "revision_initial");

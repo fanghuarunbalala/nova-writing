@@ -119,6 +119,7 @@ try {
   const writeResult = await writeTool.handler.execute(
     context(conversation, 1),
     {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
       values: [
         { name: "Kingdom", aliases: [], summary: "SMOKE_SUMMARY" },
         {
@@ -184,7 +185,10 @@ try {
   // Edit: no-op patch applies as a no-change success.
   const noopEdit = await editTool.handler.execute(
     context(conversation, 5),
-    { values: [{ id: "location_city", value: { name: "City" } }] },
+    {
+      baseRevision: afterEdit.details.revision.currentRevision,
+      values: [{ id: "location_city", value: { name: "City" } }],
+    },
     progress,
   );
   assert.equal(noopEdit.details.items[0].status, "applied");
@@ -193,6 +197,7 @@ try {
   const missingEdit = await editTool.handler.execute(
     context(conversation, 6),
     {
+      baseRevision: afterEdit.details.revision.currentRevision,
       values: [
         { id: "location_missing", value: { name: "x" } },
         { id: "location_city", value: { name: "y" } },
@@ -209,7 +214,10 @@ try {
   // Write: duplicate id rejected.
   const duplicateWrite = await writeTool.handler.execute(
     context(conversation, 7),
-    { values: [{ id: "location_city", name: "Dup" }] },
+    {
+      baseRevision: afterEdit.details.revision.currentRevision,
+      values: [{ id: "location_city", name: "Dup" }],
+    },
     progress,
   );
   assert.deepEqual(

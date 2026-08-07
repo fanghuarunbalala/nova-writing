@@ -41,7 +41,7 @@ export function createVolumeEditTool(
         usage:
           "Edit title or orderKey; omitted fields keep their values.",
         parameterGuidance: "id is required; title/orderKey are optional.",
-        safetyGuidance: "Writes are Draft-only until NovelDraftCommit.",
+        safetyGuidance: "baseRevision is required: pass revision.currentRevision from the most recent read; missing or stale revisions are rejected. Writes require approval and apply to canonical immediately after approval.",
       }),
     },
     handler: {
@@ -102,7 +102,7 @@ export function createChapterEditTool(
           "To split a Chapter, provide the new tail list to the next Chapter and the shortened list to this one.",
         parameterGuidance:
           "id is required. paragraphIds, when provided, is the complete replacement list.",
-        safetyGuidance: "Writes are Draft-only until NovelDraftCommit.",
+        safetyGuidance: "baseRevision is required: pass revision.currentRevision from the most recent read; missing or stale revisions are rejected. Writes require approval and apply to canonical immediately after approval.",
       }),
     },
     handler: {

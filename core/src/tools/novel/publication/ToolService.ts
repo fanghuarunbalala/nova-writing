@@ -156,10 +156,7 @@ export class NovelPublicationToolService {
     const scope = canonicalNovelReadScope;
     const currentRevision =
       await this.options.canonicalWrites.getCurrentRevision();
-    const baseRevision =
-      arguments_.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(arguments_.baseRevision);
+    const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const operations: NovelOperation[] = [];
     const publication = await this.ensurePublication(scope, operations);
     const items: NovelPublicationItemDetails[] = [];
@@ -208,7 +205,7 @@ export class NovelPublicationToolService {
       const result = await this.options.canonicalWrites.applyOperations({
         operations,
         conversationId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+        baseRevision,
       });
       this.logger.info("novel_publication_tool.volume.write.completed", {
         conversationId,
@@ -238,10 +235,7 @@ export class NovelPublicationToolService {
     const scope = canonicalNovelReadScope;
     const currentRevision =
       await this.options.canonicalWrites.getCurrentRevision();
-    const baseRevision =
-      arguments_.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(arguments_.baseRevision);
+    const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const operations: NovelOperation[] = [];
     const items: NovelPublicationItemDetails[] = [];
     for (const patch of arguments_.values) {
@@ -281,7 +275,7 @@ export class NovelPublicationToolService {
       const result = await this.options.canonicalWrites.applyOperations({
         operations,
         conversationId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+        baseRevision,
       });
       this.logger.info("novel_publication_tool.volume.edit.completed", {
         conversationId,
@@ -311,10 +305,7 @@ export class NovelPublicationToolService {
     const scope = canonicalNovelReadScope;
     const currentRevision =
       await this.options.canonicalWrites.getCurrentRevision();
-    const baseRevision =
-      arguments_.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(arguments_.baseRevision);
+    const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const operations: NovelOperation[] = [];
     const publication = await this.ensurePublication(scope, operations);
     const items: NovelPublicationItemDetails[] = [];
@@ -363,7 +354,7 @@ export class NovelPublicationToolService {
       const result = await this.options.canonicalWrites.applyOperations({
         operations,
         conversationId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+        baseRevision,
       });
       this.logger.info("novel_publication_tool.chapter.write.completed", {
         conversationId,
@@ -393,10 +384,7 @@ export class NovelPublicationToolService {
     const scope = canonicalNovelReadScope;
     const currentRevision =
       await this.options.canonicalWrites.getCurrentRevision();
-    const baseRevision =
-      arguments_.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(arguments_.baseRevision);
+    const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const operations: NovelOperation[] = [];
     const items: NovelPublicationItemDetails[] = [];
     for (const patch of arguments_.values) {
@@ -436,7 +424,7 @@ export class NovelPublicationToolService {
       const result = await this.options.canonicalWrites.applyOperations({
         operations,
         conversationId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+        baseRevision,
       });
       this.logger.info("novel_publication_tool.chapter.edit.completed", {
         conversationId,

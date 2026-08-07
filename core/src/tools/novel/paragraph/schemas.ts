@@ -28,9 +28,7 @@ export type NovelParagraphReadArguments = Static<
 
 export const NovelParagraphWriteParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(ParagraphWriteSchema, {
       minItems: 1,
       maxItems: 64,
@@ -56,9 +54,7 @@ export type NovelParagraphEditValue = Static<
 
 export const NovelParagraphEditParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(
       Type.Object(
         {

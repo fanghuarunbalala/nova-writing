@@ -75,10 +75,7 @@ export class NovelDeleteToolService {
     const scope = canonicalNovelReadScope;
     const currentRevision =
       await this.options.canonicalWrites.getCurrentRevision();
-    const baseRevision =
-      arguments_.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(arguments_.baseRevision);
+    const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const operations: NovelOperation[] = [];
     const items: NovelDeleteItemDetails[] = [];
     this.logger.info("novel_delete_tool.delete.started", {
@@ -121,7 +118,7 @@ export class NovelDeleteToolService {
       const result = await this.options.canonicalWrites.applyOperations({
         operations,
         conversationId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+        baseRevision,
       });
       this.logger.info("novel_delete_tool.delete.completed", {
         conversationId,

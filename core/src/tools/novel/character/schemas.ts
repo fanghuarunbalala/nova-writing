@@ -32,9 +32,7 @@ export type NovelCharacterReadArguments = Static<
 
 export const NovelCharacterWriteParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(CharacterProfileWriteSchema, {
       minItems: 1,
       maxItems: 64,
@@ -72,9 +70,7 @@ export type NovelCharacterEditValue = Static<
 
 export const NovelCharacterEditParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(
       Type.Object(
         {

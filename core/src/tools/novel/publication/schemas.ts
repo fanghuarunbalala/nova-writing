@@ -40,9 +40,7 @@ export type NovelVolumeReadArguments = Static<
 
 export const NovelVolumeWriteParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(VolumeWriteSchema, { minItems: 1, maxItems: 64 }),
   },
   { additionalProperties: false },
@@ -62,9 +60,7 @@ export type NovelVolumeEditValue = Static<typeof NovelVolumeEditValueSchema>;
 
 export const NovelVolumeEditParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(
       Type.Object(
         {
@@ -96,9 +92,7 @@ export type NovelChapterReadArguments = Static<
 
 export const NovelChapterWriteParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(ChapterWriteSchema, { minItems: 1, maxItems: 64 }),
   },
   { additionalProperties: false },
@@ -125,9 +119,7 @@ export type NovelChapterEditValue = Static<typeof NovelChapterEditValueSchema>;
 
 export const NovelChapterEditParametersSchema = Type.Object(
   {
-    baseRevision: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128 }),
-    ),
+    baseRevision: Type.String({ minLength: 1, maxLength: 128 }),
     values: Type.Array(
       Type.Object(
         {

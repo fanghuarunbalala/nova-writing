@@ -201,10 +201,7 @@ export class OutlineToolService {
     const scope = canonicalNovelReadScope;
     const currentRevision =
       await this.options.canonicalWrites.getCurrentRevision();
-    const baseRevision =
-      arguments_.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(arguments_.baseRevision);
+    const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const outline = await this.options.outlineQueries.getOutline(scope);
     const tree = await this.options.outlineQueries.getTree(scope);
     const operations: NovelOperation[] = [];
@@ -260,7 +257,7 @@ export class OutlineToolService {
       const result = await this.options.canonicalWrites.applyOperations({
         operations,
         conversationId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+        baseRevision,
       });
       this.logger.info("novel_outline_tool.write.completed", {
         conversationId,
@@ -290,10 +287,7 @@ export class OutlineToolService {
     const scope = canonicalNovelReadScope;
     const currentRevision =
       await this.options.canonicalWrites.getCurrentRevision();
-    const baseRevision =
-      arguments_.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(arguments_.baseRevision);
+    const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const operations: NovelOperation[] = [];
     const items: NovelOutlineItemDetails[] = [];
     this.logger.info("novel_outline_tool.edit.started", {
@@ -338,7 +332,7 @@ export class OutlineToolService {
       const result = await this.options.canonicalWrites.applyOperations({
         operations,
         conversationId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+        baseRevision,
       });
       this.logger.info("novel_outline_tool.edit.completed", {
         conversationId,

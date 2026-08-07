@@ -93,10 +93,7 @@ export class NovelCharacterToolService {
     const scope = canonicalNovelReadScope;
     const currentRevision =
       await this.options.canonicalWrites.getCurrentRevision();
-    const baseRevision =
-      arguments_.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(arguments_.baseRevision);
+    const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const existing = await this.options.characterQueries.list(scope);
     const operations: NovelOperation[] = [];
     const items: NovelCharacterItemDetails[] = [];
@@ -144,7 +141,7 @@ export class NovelCharacterToolService {
       const result = await this.options.canonicalWrites.applyOperations({
         operations,
         conversationId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+        baseRevision,
       });
       this.logger.info("novel_character_tool.write.completed", {
         conversationId,
@@ -174,10 +171,7 @@ export class NovelCharacterToolService {
     const scope = canonicalNovelReadScope;
     const currentRevision =
       await this.options.canonicalWrites.getCurrentRevision();
-    const baseRevision =
-      arguments_.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(arguments_.baseRevision);
+    const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const existing = await this.options.characterQueries.list(scope);
     const existingById = new Map(
       existing.map((character) => [character.id, character]),
@@ -225,7 +219,7 @@ export class NovelCharacterToolService {
       const result = await this.options.canonicalWrites.applyOperations({
         operations,
         conversationId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+        baseRevision,
       });
       this.logger.info("novel_character_tool.edit.completed", {
         conversationId,

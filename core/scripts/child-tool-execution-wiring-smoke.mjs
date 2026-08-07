@@ -118,7 +118,10 @@ const writePromise = composition.dispatcher.execute(
     toolCallId: "call-write",
     toolName: "NovelOutlineWrite",
     toolVersion: "1.0.0",
-    arguments: { values: [{ id: "s", title: "t" }] },
+    arguments: {
+      baseRevision: "revision_tool_execution_base",
+      values: [{ id: "s", title: "t" }],
+    },
   },
   { signal },
 );
@@ -129,6 +132,7 @@ assert.deepEqual(writeRequest.summary.operations, [
   { op: "add", kind: "outline", id: "s", title: "t" },
 ]);
 assert.deepEqual(writeRequest.summary.arguments, {
+  baseRevision: "revision_tool_execution_base",
   values: [{ id: "s", title: "t" }],
 });
 assert.ok(
@@ -165,7 +169,10 @@ const editPromise = composition.dispatcher.execute(
     toolCallId: "call-edit",
     toolName: "NovelOutlineEdit",
     toolVersion: "1.0.0",
-    arguments: { values: [{ id: "s", value: { title: "x" } }] },
+    arguments: {
+      baseRevision: "revision_tool_execution_base",
+      values: [{ id: "s", value: { title: "x" } }],
+    },
   },
   { signal },
 );
@@ -176,6 +183,7 @@ assert.deepEqual(editRequest.summary.operations, [
   { op: "edit", kind: "outline", id: "s", title: "x" },
 ]);
 assert.deepEqual(editRequest.summary.arguments, {
+  baseRevision: "revision_tool_execution_base",
   values: [{ id: "s", value: { title: "x" } }],
 });
 await composition.coordinator.resolve(

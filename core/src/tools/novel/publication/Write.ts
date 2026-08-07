@@ -41,7 +41,7 @@ export function createVolumeWriteTool(
         usage:
           "Omit id to let the host generate one. Use the returned id for NovelVolumeEdit.",
         parameterGuidance: "title is required; orderKey appends when omitted.",
-        safetyGuidance: "Writes are Draft-only until NovelDraftCommit.",
+        safetyGuidance: "baseRevision is required: pass revision.currentRevision from the most recent read; missing or stale revisions are rejected. Writes require approval and apply to canonical immediately after approval.",
       }),
     },
     handler: {
@@ -102,7 +102,7 @@ export function createChapterWriteTool(
           "Create an empty Chapter first, then place content with NovelChapterEdit paragraphIds.",
         parameterGuidance:
           "volumeId is required; title defaults to 'Untitled Chapter'.",
-        safetyGuidance: "Writes are Draft-only until NovelDraftCommit.",
+        safetyGuidance: "baseRevision is required: pass revision.currentRevision from the most recent read; missing or stale revisions are rejected. Writes require approval and apply to canonical immediately after approval.",
       }),
     },
     handler: {

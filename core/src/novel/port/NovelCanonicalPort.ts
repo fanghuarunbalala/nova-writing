@@ -12,7 +12,8 @@ import type { NovelRevision } from "../version/index.js";
 export interface NovelCanonicalWriteInput {
   readonly operations: readonly NovelOperation[];
   readonly conversationId: string;
-  readonly baseRevision?: NovelRevision;
+  /** 乐观锁载体：必须来自一次读取，事务内与 current_revision 比对。Required lock. */
+  readonly baseRevision: NovelRevision;
 }
 
 export interface NovelCanonicalWriteResult {

@@ -178,6 +178,7 @@ try {
       }),
     ],
     conversationId: conversation,
+    baseRevision: await application.canonicalWrites.getCurrentRevision(),
   });
 
   const volumeWriteTool = registry.require("NovelVolumeWrite");
@@ -188,7 +189,10 @@ try {
 
   const volumeWrite = await volumeWriteTool.handler.execute(
     context(conversation, 1),
-    { values: [{ title: "Volume One" }] },
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ title: "Volume One" }],
+    },
     progress,
   );
   assert.equal(volumeWrite.details.items[0].status, "applied");
@@ -205,6 +209,7 @@ try {
   const chapterWrite = await chapterWriteTool.handler.execute(
     context(conversation, 3),
     {
+      baseRevision: volumeRead.details.revision.currentRevision,
       values: [
         {
           volumeId,
@@ -242,6 +247,7 @@ try {
   const chapterEdit = await chapterEditTool.handler.execute(
     context(conversation, 5),
     {
+      baseRevision: chapterRead.details.revision.currentRevision,
       values: [
         {
           id: chapterId,
@@ -255,6 +261,7 @@ try {
   const splitWrite = await chapterWriteTool.handler.execute(
     context(conversation, 6),
     {
+      baseRevision: chapterEdit.details.revision.currentRevision,
       values: [
         {
           volumeId,

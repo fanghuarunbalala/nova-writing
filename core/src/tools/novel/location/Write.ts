@@ -38,7 +38,7 @@ export function createLocationWriteTool(
           "Omit id to let the host generate one. Use the returned id for later NovelLocationEdit calls.",
         parameterGuidance:
           "name is required and aliases may be empty. summary/initialState/authorNotes are optional.",
-        safetyGuidance: "Writes are Draft-only until NovelDraftCommit.",
+        safetyGuidance: "baseRevision is required: pass revision.currentRevision from the most recent read; missing or stale revisions are rejected. Writes require approval and apply to canonical immediately after approval.",
       }),
     },
     handler: {

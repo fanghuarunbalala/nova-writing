@@ -102,6 +102,7 @@ try {
   const writeResult = await writeTool.handler.execute(
     context(conversation, 1),
     {
+      baseRevision: "revision_child_registry_base",
       values: [
         { id: "story_unit_child", title: "Child written unit" },
         {

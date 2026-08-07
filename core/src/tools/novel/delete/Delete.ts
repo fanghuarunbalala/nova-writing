@@ -38,7 +38,7 @@ export function createDeleteTool(
           "Resolve dependencies first: clear a story unit's plan/children before deleting it, and empty a volume before deleting it.",
         parameterGuidance:
           "kind selects the entity type; id is the entity's stable id.",
-        safetyGuidance: "Writes are Draft-only until NovelDraftCommit.",
+        safetyGuidance: "baseRevision is required: pass revision.currentRevision from the most recent read; missing or stale revisions are rejected. Writes require approval and apply to canonical immediately after approval.",
       }),
     },
     handler: {

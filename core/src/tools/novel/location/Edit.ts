@@ -38,7 +38,7 @@ export function createLocationEditTool(
           "Read first with NovelLocationRead, then Edit only the fields you need.",
         parameterGuidance:
           "Use null to clear summary/initialState/authorNotes; use [] to clear aliases.",
-        safetyGuidance: "Edits are Draft-only until NovelDraftCommit.",
+        safetyGuidance: "baseRevision is required: pass revision.currentRevision from the most recent read; missing or stale revisions are rejected. Edits require approval and apply to canonical immediately after approval.",
       }),
     },
     handler: {

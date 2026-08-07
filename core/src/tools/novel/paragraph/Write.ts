@@ -38,7 +38,7 @@ export function createParagraphWriteTool(
           "Omit id to let the host generate one. Use the returned id for NovelParagraphEdit.",
         parameterGuidance:
           "storyUnitId and text are required; orderKey appends when omitted.",
-        safetyGuidance: "Writes are Draft-only until NovelDraftCommit.",
+        safetyGuidance: "baseRevision is required: pass revision.currentRevision from the most recent read; missing or stale revisions are rejected. Writes require approval and apply to canonical immediately after approval.",
       }),
     },
     handler: {

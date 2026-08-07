@@ -56,7 +56,7 @@ export interface SqliteNovelCanonicalWriterOptions<TContext> {
 export interface ApplyNovelCanonicalOperationInput {
   readonly operation: NovelOperation;
   readonly conversationId: string;
-  readonly baseRevision?: NovelRevision;
+  readonly baseRevision: NovelRevision;
 }
 
 export interface ApplyNovelCanonicalOperationResult {
@@ -99,9 +99,7 @@ export class SqliteNovelCanonicalWriter<TContext>
     const result = await this.applyOperations({
       operations: [input.operation],
       conversationId: input.conversationId,
-      ...(input.baseRevision === undefined
-        ? {}
-        : { baseRevision: input.baseRevision }),
+      baseRevision: input.baseRevision,
     });
     return Object.freeze({
       status: "applied",
@@ -117,10 +115,7 @@ export class SqliteNovelCanonicalWriter<TContext>
   ): Promise<NovelCanonicalWriteResult> {
     const capturedOperations = input.operations.map(captureNovelOperation);
     const conversationId = captureNovelConversationId(input.conversationId);
-    const baseRevision =
-      input.baseRevision === undefined
-        ? undefined
-        : captureNovelRevision(input.baseRevision);
+    const baseRevision = captureNovelRevision(input.baseRevision);
     this.#logger.info("novel_canonical_write.transaction.started", {
       novelId: this.#novelId,
       operationCount: capturedOperations.length,
@@ -143,7 +138,7 @@ export class SqliteNovelCanonicalWriter<TContext>
         throw invariant(this.#novelId);
       }
       const actualRevision = captureNovelRevision(metadata.current_revision);
-      if (baseRevision !== undefined && baseRevision !== actualRevision) {
+      if (baseRevision !== actualRevision) {
         throw new NovelRevisionConflictError(
           this.#novelId,
           baseRevision,

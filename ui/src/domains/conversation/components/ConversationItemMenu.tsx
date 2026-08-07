@@ -47,7 +47,17 @@ export function ConversationItemMenu({
         ) : null}
         {onRename !== undefined || onPin !== undefined ? <DropdownSeparator /> : null}
         {onDelete !== undefined ? (
-          <DropdownItem label="删除" danger icon={<Trash2 size={14} />} onSelect={() => onDelete(conversationId)} />
+          <DropdownItem
+            label="删除"
+            danger
+            icon={<Trash2 size={14} />}
+            onSelect={() => {
+              // 硬删除不可恢复，删除前必须确认。
+              if (window.confirm("删除后会话及其记录将被永久移除，且不可恢复。确定删除？")) {
+                onDelete(conversationId);
+              }
+            }}
+          />
         ) : null}
       </Dropdown>
     </div>

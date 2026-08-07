@@ -60,7 +60,8 @@ export class NodeEnvironmentInfoProvider implements EnvironmentInfoProvider {
   }
 
   /** 取一次快照：模型解析失败时省略模型行。Returns one snapshot; model line omitted on resolution failure. */
-  async snapshot(): Promise<EnvironmentInfoSnapshot    const modelId = await this.#resolveModelIdSafe();
+  async snapshot(): Promise<EnvironmentInfoSnapshot> {
+    const modelId = await this.#resolveModelIdSafe();
     const timezone = resolveTimezone();
     const date = resolveLocalDate();
     const platform = PLATFORM_LABELS[process.platform] ?? process.platform;

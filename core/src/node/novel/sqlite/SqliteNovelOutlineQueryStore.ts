@@ -16,6 +16,7 @@ import {
   type StoryUnit,
   type StoryUnitId,
   type StoryUnitReadModel,
+  type NovelEntityVersion,
 } from "../../../novel/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
@@ -94,6 +95,16 @@ export class SqliteNovelOutlineQueryStore implements NovelOutlineQueryStore {
         orderDigest,
       });
     });
+  }
+
+  getStoryUnitVersion(
+    scope: NovelReadScope,
+    id: StoryUnitId,
+  ): Promise<NovelEntityVersion | undefined> {
+    const storyUnitId = captureStoryUnitId(id);
+    return this.read(scope, (repository) =>
+      repository.getStoryUnitVersion(storyUnitId),
+    );
   }
 
   getLeafStoryUnitPlan(

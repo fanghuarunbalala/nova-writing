@@ -202,6 +202,8 @@ export class NovelDeleteToolService {
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
+    const currentVersion =
+      await this.options.outlineQueries.getStoryUnitVersion(scope, storyUnitId);
     operations.push(
       createStoryUnitDeleteOperation({
         operationId: this.options.identityFactory.createOperationId(),
@@ -209,6 +211,9 @@ export class NovelDeleteToolService {
         expectedContentDigest: current.contentDigest,
         expectedParentDigest: current.parentDigest,
         expectedOrderDigest: current.orderDigest,
+        ...(currentVersion === undefined
+          ? {}
+          : { expectedEntityVersion: currentVersion }),
       }),
     );
   }

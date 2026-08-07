@@ -452,6 +452,8 @@ export class OutlineToolService {
       throw new NovelOutlineItemFailure(ITEM_REJECTION.notFound);
     }
     const unit = current.unit;
+    const currentVersion =
+      await this.options.outlineQueries.getStoryUnitVersion(input.scope, id);
     const mergedContent = mergeContent(unit, input.patch);
     if (
       canonicalStringifyJson(mergedContent as unknown as JsonValue) !==
@@ -463,6 +465,9 @@ export class OutlineToolService {
           storyUnitId: id,
           expectedContentDigest: current.contentDigest,
           content: mergedContent,
+          ...(currentVersion === undefined
+            ? {}
+            : { expectedEntityVersion: currentVersion }),
         }),
       );
     }
@@ -501,6 +506,9 @@ export class OutlineToolService {
             ? {}
             : { parentId: captureStoryUnitId(targetParent) }),
           orderKey,
+          ...(currentVersion === undefined
+            ? {}
+            : { expectedEntityVersion: currentVersion }),
         }),
       );
     }

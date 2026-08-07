@@ -11,6 +11,7 @@ import {
   captureStoryUnit,
   captureStoryUnitContent,
   captureStoryUnitId,
+  captureNovelEntityVersion,
   type CharacterId,
   type LeafStoryUnitPlan,
   type LocationId,
@@ -25,6 +26,7 @@ import {
   type StoryUnit,
   type StoryUnitDigestField,
   type StoryUnitId,
+  type NovelEntityVersion,
 } from "../../../novel/index.js";
 import { createSqliteNovelEntityMutationContext } from "./SqliteNovelEntityRepository.js";
 import { createSqliteNovelParagraphMutationContext } from "./SqliteNovelParagraphRepository.js";
@@ -45,6 +47,7 @@ interface StoryUnitRow {
   content_digest: string;
   parent_digest: string;
   order_digest: string;
+  entity_version: number;
 }
 
 interface LeafPlanRow {
@@ -54,7 +57,7 @@ interface LeafPlanRow {
 }
 
 const STORY_UNIT_SELECT = `SELECT id, outline_id, parent_id, order_key,
-  content_json, content_digest, parent_digest, order_digest`;
+  content_json, content_digest, parent_digest, order_digest, entity_version`;
 
 export function createSqliteNovelOutlineMutationContext(
   database: DatabaseSync,
@@ -188,6 +191,17 @@ export class SqliteNovelOutlineRepository
     return row?.digest;
   }
 
+  getStoryUnitVersion(id: StoryUnitId): ReturnType<
+    NovelMutableOutlineRepository["getStoryUnitVersion"]
+  > {
+    const row = this.database
+      .prepare("SELECT entity_version FROM novel_story_units WHERE id = ?")
+      .get(captureStoryUnitId(id)) as { entity_version: number } | undefined;
+    return row === undefined
+      ? undefined
+      : captureNovelEntityVersion(row.entity_version);
+  }
+
   insertStoryUnit(unit: StoryUnit): boolean {
     const encoded = encodeStoryUnit(unit);
     const result = this.database
@@ -201,32 +215,69 @@ export class SqliteNovelOutlineRepository
     return Number(result.changes) === 1;
   }
 
-  replaceStoryUnit(unit: StoryUnit): boolean {
+  replaceStoryUnit(
+    unit: StoryUnit,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean {
     const encoded = encodeStoryUnit(unit);
-    const result = this.database
-      .prepare(
-        `UPDATE novel_story_units
-         SET outline_id = ?, parent_id = ?, order_key = ?, content_json = ?,
-             content_digest = ?, parent_digest = ?, order_digest = ?
-         WHERE id = ?`,
-      )
-      .run(
-        encoded[1],
-        encoded[2],
-        encoded[3],
-        encoded[4],
-        encoded[5],
-        encoded[6],
-        encoded[7],
-        encoded[0],
-      );
+    const result =
+      expectedEntityVersion === undefined
+        ? this.database
+            .prepare(
+              `UPDATE novel_story_units
+               SET outline_id = ?, parent_id = ?, order_key = ?, content_json = ?,
+                   content_digest = ?, parent_digest = ?, order_digest = ?
+               WHERE id = ?`,
+            )
+            .run(
+              encoded[1],
+              encoded[2],
+              encoded[3],
+              encoded[4],
+              encoded[5],
+              encoded[6],
+              encoded[7],
+              encoded[0],
+            )
+        : this.database
+            .prepare(
+              `UPDATE novel_story_units
+               SET outline_id = ?, parent_id = ?, order_key = ?, content_json = ?,
+                   content_digest = ?, parent_digest = ?, order_digest = ?,
+                   entity_version = entity_version + 1
+               WHERE id = ? AND entity_version = ?`,
+            )
+            .run(
+              encoded[1],
+              encoded[2],
+              encoded[3],
+              encoded[4],
+              encoded[5],
+              encoded[6],
+              encoded[7],
+              encoded[0],
+              captureNovelEntityVersion(expectedEntityVersion),
+            );
     return Number(result.changes) === 1;
   }
 
-  deleteStoryUnit(id: StoryUnitId): boolean {
-    const result = this.database
-      .prepare("DELETE FROM novel_story_units WHERE id = ?")
-      .run(captureStoryUnitId(id));
+  deleteStoryUnit(
+    id: StoryUnitId,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean {
+    const result =
+      expectedEntityVersion === undefined
+        ? this.database
+            .prepare("DELETE FROM novel_story_units WHERE id = ?")
+            .run(captureStoryUnitId(id))
+        : this.database
+            .prepare(
+              "DELETE FROM novel_story_units WHERE id = ? AND entity_version = ?",
+            )
+            .run(
+              captureStoryUnitId(id),
+              captureNovelEntityVersion(expectedEntityVersion),
+            );
     return Number(result.changes) === 1;
   }
 

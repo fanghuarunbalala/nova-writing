@@ -219,6 +219,17 @@ const NOVEL_MIGRATIONS: readonly NovelSqliteMigration[] = [
       ${NOVEL_PARAGRAPH_PUBLICATION_SCHEMA_SQL}
     `,
   },
+  {
+    version: 12,
+    name: "per_entity_version",
+    sql: `
+      ALTER TABLE novel_story_outlines ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE novel_story_units ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE novel_paragraphs ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE novel_publication_volumes ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE novel_publication_chapters ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+    `,
+  },
 ];
 
 export const LATEST_NOVEL_SCHEMA_VERSION: NovelSchemaVersion =

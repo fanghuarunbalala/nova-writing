@@ -33,14 +33,12 @@ import {
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-  NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   novelCharacterToolRegistry,
   novelLocationToolRegistry,
   novelParagraphToolRegistry,
   novelPublicationToolRegistry,
   novelDeleteToolRegistry,
-  novelDraftToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -140,7 +138,6 @@ const toolRegistry = new ToolRegistry([
   ...novelParagraphToolRegistry.list(),
   ...novelPublicationToolRegistry.list(),
   ...novelDeleteToolRegistry.list(),
-  ...novelDraftToolRegistry.list(),
   ...createFileToolRegistry({ service: new FileToolService({ designRoot: "/unavailable/design" }) }).list(),
   ...createNovelComposeToolRegistry({ service: new ComposeToolService({ composeState: new ComposeModeStateProvider(), designRoot: "/unavailable/design" }) }).list(),
 ]);
@@ -158,7 +155,6 @@ tools: [TodoWrite]
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-  NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
   RUNTIME_FILES_TOOL_GROUP_MANIFEST,
   NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
 ]);

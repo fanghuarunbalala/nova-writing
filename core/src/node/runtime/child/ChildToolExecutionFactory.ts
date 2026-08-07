@@ -81,7 +81,6 @@ export const CHILD_TOOL_PERMISSION_RULES: readonly ToolPermissionRule[] =
           "NovelParagraphRead",
           "NovelVolumeRead",
           "NovelChapterRead",
-          "NovelDraftStatus",
           "TodoWrite",
         ]),
       }),
@@ -129,9 +128,6 @@ export const CHILD_TOOL_PERMISSION_RULES: readonly ToolPermissionRule[] =
           "NovelChapterWrite",
           "NovelChapterEdit",
           "NovelDelete",
-          "NovelDraftCommit",
-          "NovelDraftRollback",
-          "NovelDraftRebase",
         ]),
       }),
     }),
@@ -181,10 +177,6 @@ export function createChildToolExecutionComposition(
     { toolName: "NovelChapterWrite", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelChapterEdit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelDelete", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
-    { toolName: "NovelDraftStatus", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
-    { toolName: "NovelDraftCommit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
-    { toolName: "NovelDraftRollback", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
-    { toolName: "NovelDraftRebase", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
   ]);
   const permissionPolicy = new ComposeAwareToolPermissionPolicy(
     new LayeredToolPermissionPolicy([

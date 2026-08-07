@@ -30,9 +30,6 @@ const CANONICAL_NOVEL_WRITES: ReadonlySet<string> = new Set([
   "NovelChapterWrite",
   "NovelChapterEdit",
   "NovelDelete",
-  "NovelDraftCommit",
-  "NovelDraftRollback",
-  "NovelDraftRebase",
 ]);
 
 /** runtime.files 工具。File tools. */

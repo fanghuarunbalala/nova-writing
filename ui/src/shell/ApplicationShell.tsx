@@ -313,27 +313,21 @@ export function ApplicationShell({
     [],
   );
 
-  // 护栏：出现新的待审请求时自动打开审批面板（避免"有审批但看不到"）。
-  // Auto-open the approval panel when a new pending request appears.
-  const lastPendingCountRef = useRef(0);
+  // 审批全部处理完 → 自动收起面板，避免空占位；打开由用户显式触发
+  // （右上角审批按钮 / 消息流审批卡"前往审批 →"），不自动抢占右侧区域。
+  // Auto-collapse the panel when no approval remains; opening is explicit.
   useEffect(() => {
-    const previous = lastPendingCountRef.current;
-    lastPendingCountRef.current = approvalSnapshot.pendingCount;
     const route = inspectorRouter.getSnapshot().state;
-    // 审批全部处理完 → 自动收起面板，避免空占位。
+    console.info("[inspector] approval guard effect", {
+      pendingCount: approvalSnapshot.pendingCount,
+      route,
+    });
     if (
       approvalSnapshot.pendingCount === 0 &&
       route.kind === "approval"
     ) {
+      console.info("[inspector] approval guard closing empty panel");
       inspectorRouter.close();
-      return;
-    }
-    if (
-      approvalSnapshot.pendingCount > 0 &&
-      previous === 0 &&
-      route.kind === "closed"
-    ) {
-      inspectorRouter.transition({ kind: "approval", changeSetId: "" });
     }
   }, [approvalSnapshot.pendingCount, inspectorRouter]);
 
@@ -358,9 +352,15 @@ export function ApplicationShell({
         onOpenWorkspace={() => onOpenWorkspace?.()}
         onOpenSettings={() => onOpenSettings?.()}
         onOpenSchedule={() => mainViewRouter.transition("schedule")}
-        onOpenApproval={() =>
-          inspectorRouter.transition({ kind: "approval", changeSetId: "" })
-        }
+        onOpenApproval={() => {
+          console.info("[inspector] approval button clicked", {
+            route: inspectorRouter.getSnapshot().state,
+          });
+          inspectorRouter.transition({ kind: "approval", changeSetId: "" });
+          console.info("[inspector] approval route after click", {
+            route: inspectorRouter.getSnapshot().state,
+          });
+        }}
         extensions={extensions}
       />
       <div className={styles.body} data-sidebar-mode={sidebarMode}>

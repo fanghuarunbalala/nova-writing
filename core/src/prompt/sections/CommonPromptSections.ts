@@ -17,10 +17,7 @@ import {
   NovelIdentityPromptSection,
   NovelSystemPromptSection,
 } from "./novel/NovelBasePromptSections.js";
-import {
-  NovelDoingTasksPromptSection,
-  NovelWorkflowPromptSection,
-} from "./novel/NovelCraftPromptSections.js";
+import { NovelDoingTasksPromptSection } from "./novel/NovelCraftPromptSections.js";
 import { NovelActionsPromptSection } from "./novel/NovelExecutionPromptSections.js";
 
 export class CoreRuntimeProtocolPromptSection extends PromptSection {
@@ -191,7 +188,6 @@ export function createDefaultPromptSectionRegistry(): PromptSectionRegistry {
     .register(new CcbReferenceCommunicationStylePromptSection())
     .register(new NovelIdentityPromptSection())
     .register(new NovelSystemPromptSection({ interactsWithUser: true }))
-    .register(new NovelWorkflowPromptSection())
     .register(new NovelDoingTasksPromptSection())
     .register(new NovelActionsPromptSection())
     .freeze();

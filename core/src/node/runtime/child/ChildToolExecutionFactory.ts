@@ -18,6 +18,7 @@ import {
   type RuntimeEventSink,
 } from "../../../runtime/execution/event/index.js";
 import {
+  ComposeAwareToolPermissionPolicy,
   INITIAL_TOOL_PERMISSION_RULES,
   LayeredToolPermissionPolicy,
   StaticToolExecutionPolicyResolver,
@@ -25,6 +26,7 @@ import {
   ToolExecutionPipeline,
   TrustedProcessSandboxExecutor,
 } from "../../../runtime/tools/execution/index.js";
+import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
 import type {
   ToolRegistryView,
   ToolResultLimits,
@@ -34,6 +36,8 @@ import { NodeSha256ToolArgumentDigester } from "../../tools/index.js";
 export interface ChildToolExecutionCompositionOptions {
   readonly registryView: ToolRegistryView;
   readonly eventSink: RuntimeEventSink;
+  /** compose 状态源；缺省新建空 provider。Compose state source; defaults to a fresh provider. */
+  readonly composeStateProvider?: ComposeModeStateProvider;
   readonly logger?: Logger;
 }
 
@@ -153,10 +157,13 @@ export function createChildToolExecutionComposition(
     { toolName: "NovelDraftRollback", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelDraftRebase", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
   ]);
-  const permissionPolicy = new LayeredToolPermissionPolicy([
-    ...INITIAL_TOOL_PERMISSION_RULES,
-    ...CHILD_TOOL_PERMISSION_RULES,
-  ]);
+  const permissionPolicy = new ComposeAwareToolPermissionPolicy(
+    new LayeredToolPermissionPolicy([
+      ...INITIAL_TOOL_PERMISSION_RULES,
+      ...CHILD_TOOL_PERMISSION_RULES,
+    ]),
+    options.composeStateProvider ?? new ComposeModeStateProvider(),
+  );
   const dispatcher = new ToolDispatcher(
     new ToolExecutionPipeline({
       registryView: options.registryView,

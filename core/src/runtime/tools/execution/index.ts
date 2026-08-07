@@ -1,4 +1,5 @@
 export * from "./SandboxExecutor.js";
+export * from "./ComposeAwareToolPermissionPolicy.js";
 export * from "./ToolDispatcher.js";
 export * from "./ToolExecutionContracts.js";
 export * from "./ToolExecutionError.js";

@@ -5,6 +5,7 @@ import {
   INPUT_PRIORITY,
   RuntimeApprovalDecisionInputError,
   RuntimeApprovalDecisionInputHandler,
+  ComposeModeStateProvider,
   ToolError,
   ToolGroupCatalog,
   ToolRegistry,
@@ -93,9 +94,11 @@ const eventSink = {
   },
 };
 
+const composeState = new ComposeModeStateProvider();
 const composition = createChildToolExecutionComposition({
   registryView: view,
   eventSink,
+  composeStateProvider: composeState,
 });
 
 // Provider-facing tool schemas include the full manifest Tool View.
@@ -358,6 +361,145 @@ await assert.rejects(
   (error) =>
     error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
 );
+
+// Compose 激活：canonical 写 deny、文件工具限 design 目录/文件。
+// While compose is active: canonical writes are denied and file tools are scoped.
+const designFilePath = "/workspace/.novel/design/conv-tools.md";
+composeState.enter("conv-tools", { designFilePath });
+
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-compose-read",
+    toolName: "Read",
+    toolVersion: "1.0.0",
+    arguments: { file_path: "/workspace/.novel/design/chapter-1.md" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Read");
+
+await assert.rejects(
+  () =>
+    composition.dispatcher.execute(
+      {
+        conversationId: "conv-tools",
+        runId: "run-1",
+        toolCallId: "call-compose-read-outside",
+        toolName: "Read",
+        toolVersion: "1.0.0",
+        arguments: { file_path: "/workspace/outside.md" },
+      },
+      { signal },
+    ),
+  (error) =>
+    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+);
+
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-compose-write",
+    toolName: "Write",
+    toolVersion: "1.0.0",
+    arguments: { file_path: designFilePath, content: "x" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Write");
+
+await assert.rejects(
+  () =>
+    composition.dispatcher.execute(
+      {
+        conversationId: "conv-tools",
+        runId: "run-1",
+        toolCallId: "call-compose-write-other",
+        toolName: "Write",
+        toolVersion: "1.0.0",
+        arguments: { file_path: "/workspace/.novel/design/other.md", content: "x" },
+      },
+      { signal },
+    ),
+  (error) =>
+    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+);
+
+await assert.rejects(
+  () =>
+    composition.dispatcher.execute(
+      {
+        conversationId: "conv-tools",
+        runId: "run-1",
+        toolCallId: "call-compose-canonical",
+        toolName: "NovelOutlineWrite",
+        toolVersion: "1.0.0",
+        arguments: { values: [{ id: "s", title: "t" }] },
+      },
+      { signal },
+    ),
+  (error) =>
+    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+);
+
+// 批准（inactive）：恢复透传——Write 回到默认 deny，canonical 写回到 ask。
+// After approval the policy passes through: Write returns to default deny, canonical writes to ask.
+composeState.approve("conv-tools");
+await assert.rejects(
+  () =>
+    composition.dispatcher.execute(
+      {
+        conversationId: "conv-tools",
+        runId: "run-1",
+        toolCallId: "call-after-compose-write",
+        toolName: "Write",
+        toolVersion: "1.0.0",
+        arguments: { file_path: designFilePath, content: "x" },
+      },
+      { signal },
+    ),
+  (error) =>
+    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+);
+
+const composeCanonicalPromise = composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-after-compose-canonical",
+    toolName: "NovelOutlineWrite",
+    toolVersion: "1.0.0",
+    arguments: {
+      baseRevision: "revision_tool_execution_base",
+      values: [{ id: "s2", title: "t2" }],
+    },
+  },
+  { signal },
+);
+const composeCanonicalRequest = await waitForPending("NovelOutlineWrite");
+assert.ok(composeCanonicalRequest);
+await composition.coordinator.resolve(
+  {
+    id: "decision-compose",
+    conversationId: "conv-tools",
+    eventType: INPUT_EVENT_TYPE.approvalDecision,
+    direction: "input",
+    priority: INPUT_PRIORITY.command,
+    sequence: 5,
+    timestamp: "2026-08-05T00:00:05.000Z",
+    runId: composeCanonicalRequest.identity.runId,
+    payload: {
+      approvalRequestId: composeCanonicalRequest.approvalRequestId,
+      decision: "approved",
+      argumentDigest: composeCanonicalRequest.identity.argumentDigest,
+    },
+  },
+  { actorId: "smoke-user" },
+);
+await composeCanonicalPromise;
+assert.equal(executed.at(-1).name, "NovelOutlineWrite");
 
 assert.ok(CHILD_TOOL_PERMISSION_RULES.length >= 2);
 console.log("CORE_SMOKE_TEST_RESULT=pass child-tool-execution-wiring");

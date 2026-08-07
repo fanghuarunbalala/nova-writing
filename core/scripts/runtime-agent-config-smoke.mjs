@@ -10,7 +10,7 @@ import {
   AgentToolPolicy,
   InMemoryAgentManifestStore,
   PromptCapabilitySnapshot,
-  SystemPromptBuilder,
+  ManifestSystemPromptCompiler,
   ToolGroupCatalog,
   ToolRegistry,
   createDefaultPromptSectionRegistry,
@@ -51,7 +51,7 @@ const capabilities = new PromptCapabilitySnapshot([{
   label: "Todo Write",
   description: "Maintains the current execution plan.",
 }]);
-const builder = new SystemPromptBuilder({
+const builder = new ManifestSystemPromptCompiler({
   sections: createDefaultPromptSectionRegistry(),
   digester: new Sha256Digester(),
 });

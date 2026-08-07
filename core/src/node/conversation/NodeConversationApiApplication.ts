@@ -33,7 +33,7 @@ import {
   type WorkspaceStoreLocation,
 } from "../../storage/index.js";
 import { SqliteWorkspaceStore } from "../sqlite/index.js";
-import { CoreRuntimeMessageProjector } from "../../runtime/message/projection/index.js";
+import { CoreConversationRuntimeMessageProjector } from "../../runtime/message/projection/index.js";
 import type { DesktopRuntimeChildPersistence } from "../runtime/child/index.js";
 import { DefaultNovelAgentBindingConversationCatalog } from "./DefaultNovelAgentBindingConversationCatalog.js";
 
@@ -104,6 +104,7 @@ export class NodeConversationApiApplication {
           : {}),
       });
       const queries = new StorageConversationQueryService({
+        workspaceId: options.workspace.workspaceId,
         catalog: store.conversations,
         journal: store.journal,
         subscriptions,
@@ -218,7 +219,7 @@ export class NodeConversationApiApplication {
     _conversationId: string,
   ): Promise<DesktopRuntimeChildPersistence> {
     const context = this.store.createMessageProjectionContext({
-      projector: new CoreRuntimeMessageProjector(),
+      projector: new CoreConversationRuntimeMessageProjector(),
     });
     this.logger.debug("node_conversation_api.runtime_persistence_bound");
     return Object.freeze({

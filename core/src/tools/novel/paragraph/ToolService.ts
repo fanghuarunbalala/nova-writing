@@ -105,6 +105,7 @@ export class NovelParagraphToolService {
     const baseRevision = captureNovelRevision(arguments_.baseRevision);
     const operations: NovelOperation[] = [];
     const items: NovelParagraphItemDetails[] = [];
+    const batchOrderKeys = new Map<string, OrderKey>();
     this.logger.info("novel_paragraph_tool.write.started", {
       conversationId,
       requestedCount: arguments_.values.length,
@@ -119,6 +120,7 @@ export class NovelParagraphToolService {
           value,
           paragraphId,
           operations,
+          batchOrderKeys,
         });
         items.push({ id: paragraphId, status: "applied" });
       } catch (error) {
@@ -251,15 +253,21 @@ export class NovelParagraphToolService {
     readonly value: ParagraphWriteValue;
     readonly paragraphId: ParagraphId;
     readonly operations: NovelOperation[];
+    readonly batchOrderKeys: Map<string, OrderKey>;
   }): Promise<void> {
-    const { scope, value, paragraphId, operations } = input;
+    const { scope, value, paragraphId, operations, batchOrderKeys } = input;
     if ((await this.options.paragraphQueries.getParagraph(scope, paragraphId)) !== undefined) {
       throw new NovelParagraphItemFailure(ITEM_REJECTION.duplicateId);
     }
     const storyUnitId = captureStoryUnitId(value.storyUnitId);
-    const orderKey = value.orderKey === undefined
-      ? await this.appendOrderKey(scope, storyUnitId)
-      : captureOrderKey(value.orderKey);
+    const lastBatchOrderKey = batchOrderKeys.get(storyUnitId);
+    const orderKey =
+      value.orderKey !== undefined
+        ? captureOrderKey(value.orderKey)
+        : lastBatchOrderKey === undefined
+          ? await this.appendOrderKey(scope, storyUnitId)
+          : this.orderKeys.after(lastBatchOrderKey);
+    batchOrderKeys.set(storyUnitId, orderKey);
     const paragraph = captureParagraph({
       id: paragraphId,
       storyUnitId,
@@ -288,6 +296,8 @@ export class NovelParagraphToolService {
     if (current === undefined) {
       throw new NovelParagraphItemFailure(ITEM_REJECTION.notFound);
     }
+    const currentVersion =
+      await this.options.paragraphQueries.getParagraphVersion(input.scope, id);
     const storyUnitId = input.patch.storyUnitId === undefined
       ? current.paragraph.storyUnitId
       : captureStoryUnitId(input.patch.storyUnitId);
@@ -309,6 +319,9 @@ export class NovelParagraphToolService {
           paragraphId: id,
           expectedOrderDigest: current.orderDigest,
           orderKey,
+          ...(currentVersion === undefined
+            ? {}
+            : { expectedEntityVersion: currentVersion }),
         }),
       );
     }
@@ -319,6 +332,9 @@ export class NovelParagraphToolService {
           paragraphId: id,
           expectedStoryUnitDigest: current.storyUnitDigest,
           storyUnitId,
+          ...(currentVersion === undefined
+            ? {}
+            : { expectedEntityVersion: currentVersion }),
         }),
       );
     }
@@ -329,6 +345,9 @@ export class NovelParagraphToolService {
           paragraphId: id,
           expectedTextDigest: current.textDigest,
           text,
+          ...(currentVersion === undefined
+            ? {}
+            : { expectedEntityVersion: currentVersion }),
         }),
       );
     }

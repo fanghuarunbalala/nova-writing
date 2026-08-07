@@ -75,6 +75,8 @@ export interface OutlineToolServiceOptions {
 }
 import { ToolError } from "../../../runtime/tools/execution/index.js";
 
+const ROOT_PARENT_KEY = "__root__";
+
 const ITEM_REJECTION = {
   notFound: "not_found",
   duplicateId: "duplicate_id",
@@ -206,6 +208,7 @@ export class OutlineToolService {
     const tree = await this.options.outlineQueries.getTree(scope);
     const operations: NovelOperation[] = [];
     const createdIds = new Set<string>();
+    const batchOrderKeys = new Map<string, OrderKey>();
     const items: NovelOutlineItemDetails[] = [];
     const outlineId =
       outline === undefined ? this.appendOutlineCreate(operations) : outline.id;
@@ -225,6 +228,7 @@ export class OutlineToolService {
           storyUnitId,
           operations,
           createdIds,
+          batchOrderKeys,
         });
         createdIds.add(storyUnitId);
         items.push({ id: storyUnitId, status: "applied" });
@@ -363,8 +367,9 @@ export class OutlineToolService {
     readonly storyUnitId: StoryUnitId;
     readonly operations: NovelOperation[];
     readonly createdIds: Set<string>;
+    readonly batchOrderKeys: Map<string, OrderKey>;
   }): void {
-    const { outlineId, tree, value, storyUnitId, operations, createdIds } =
+    const { outlineId, tree, value, storyUnitId, operations, createdIds, batchOrderKeys } =
       input;
     if (
       tree !== undefined &&
@@ -384,7 +389,9 @@ export class OutlineToolService {
       tree,
       value.parentId,
       value.orderKey,
+      batchOrderKeys.get(value.parentId ?? ROOT_PARENT_KEY),
     );
+    batchOrderKeys.set(value.parentId ?? ROOT_PARENT_KEY, orderKey);
     const unit = captureStoryUnit({
       id: storyUnitId,
       outlineId,
@@ -452,6 +459,8 @@ export class OutlineToolService {
       throw new NovelOutlineItemFailure(ITEM_REJECTION.notFound);
     }
     const unit = current.unit;
+    const currentVersion =
+      await this.options.outlineQueries.getStoryUnitVersion(input.scope, id);
     const mergedContent = mergeContent(unit, input.patch);
     if (
       canonicalStringifyJson(mergedContent as unknown as JsonValue) !==
@@ -463,6 +472,9 @@ export class OutlineToolService {
           storyUnitId: id,
           expectedContentDigest: current.contentDigest,
           content: mergedContent,
+          ...(currentVersion === undefined
+            ? {}
+            : { expectedEntityVersion: currentVersion }),
         }),
       );
     }
@@ -501,6 +513,9 @@ export class OutlineToolService {
             ? {}
             : { parentId: captureStoryUnitId(targetParent) }),
           orderKey,
+          ...(currentVersion === undefined
+            ? {}
+            : { expectedEntityVersion: currentVersion }),
         }),
       );
     }
@@ -551,9 +566,13 @@ export class OutlineToolService {
     tree: StoryOutlineTree | undefined,
     parentId: string | undefined,
     provided: string | undefined,
+    lastBatchOrderKey: OrderKey | undefined,
   ): OrderKey {
     if (provided !== undefined) {
       return this.captureUnitOrderKey(provided);
+    }
+    if (lastBatchOrderKey !== undefined) {
+      return this.orderKeys.after(lastBatchOrderKey);
     }
     const siblings =
       tree === undefined

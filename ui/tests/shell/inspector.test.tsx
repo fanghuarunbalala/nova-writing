@@ -86,7 +86,7 @@ describe("InspectorHost", () => {
     router.transition({ kind: "approval", changeSetId: "CS-1" });
     render(<InspectorHost inspectorRouter={router} {...stores} />);
     expect(screen.getByRole("tab", { name: "审批" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "档案" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "档案" })).not.toBeInTheDocument();
     expect(screen.getByText("暂无审批请求")).toBeInTheDocument();
   });
 
@@ -101,6 +101,6 @@ describe("InspectorHost", () => {
     fireEvent.pointerMove(window, { clientX: 160, clientY: 0 });
     await new Promise((resolve) => requestAnimationFrame(() => resolve()));
     fireEvent.pointerUp(window);
-    expect(aside.style.width).toBe("444px");
+    expect(aside.style.width).toBe("740px");
   });
 });

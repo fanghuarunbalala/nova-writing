@@ -14,7 +14,7 @@ import {
   PromptCapabilitySnapshot,
   PromptRecipe,
   PromptSectionItem,
-  SystemPromptBuilder,
+  ManifestSystemPromptCompiler,
   ToolGroupCatalog,
   ToolRegistry,
   createDefaultAgentCapabilityProfileCatalog,
@@ -58,7 +58,7 @@ const capabilities = new PromptCapabilitySnapshot([{
   label: "Todo Write",
   description: "Maintains the current execution plan.",
 }]);
-const builder = new SystemPromptBuilder({
+const builder = new ManifestSystemPromptCompiler({
   sections: createDefaultPromptSectionRegistry(),
   digester: new Sha256Digester(),
 });
@@ -240,7 +240,7 @@ const missingSectionDefinition = new AgentDefinition({
   communication: new AgentCommunicationPolicy("standalone"),
   runtimePolicyId: "default",
 });
-// 必选段校验机制暂未启用（SystemPromptBuilder 默认 requiredSectionIds 为空），
+// 必选段校验机制暂未启用（ManifestSystemPromptCompiler 默认 requiredSectionIds 为空），
 // 缺段定义当前可正常解析；机制恢复后此处恢复 rejects 断言。
 const missingSectionManifest = await createResolver().resolve(missingSectionDefinition);
 assert.equal(missingSectionManifest.agentType, "invalid_agent");

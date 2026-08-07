@@ -413,6 +413,9 @@ function createTerminalEvent(options: TerminalEventOptions) {
         options.message.stopReason === "error"
           ? ASSISTANT_MESSAGE_FAILURE_CODE.providerError
           : ASSISTANT_MESSAGE_FAILURE_CODE.providerAborted,
+      ...(options.message.stopReason === "error"
+        ? { failureDetail: providerFailureDetail(options.message) }
+        : {}),
     });
   }
   return new AgentAssistantMessageCompletedOutputEvent({
@@ -422,6 +425,15 @@ function createTerminalEvent(options: TerminalEventOptions) {
     completionReason: mapCompletionReason(options.message.stopReason),
     hasToolCalls: options.message.content.some((item) => item.type === "toolCall"),
   });
+}
+
+/** 开发阶段：直接展示 provider 原始错误文本（截断）。Raw provider error text, truncated. */
+function providerFailureDetail(
+  message: { readonly errorMessage?: string },
+): string | undefined {
+  const text = message.errorMessage ?? "";
+  const trimmed = text.trim();
+  return trimmed.length === 0 ? undefined : trimmed.slice(0, 240);
 }
 
 function terminalBase(options: TerminalEventOptions, eventType: string) {

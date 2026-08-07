@@ -1,5 +1,6 @@
 /** Async explicit-scope reads for Story Outline state and optimistic digests. */
 import type { StoryUnitId } from "../identity/index.js";
+import type { NovelEntityVersion } from "../version/index.js";
 import type {
   LeafStoryUnitPlan,
   StoryOutline,
@@ -30,6 +31,11 @@ export interface NovelOutlineQueryStore {
     scope: NovelReadScope,
     id: StoryUnitId,
   ): Promise<StoryUnitReadModel | undefined>;
+  /** 读取实体当前版本（per-entity 乐观锁）。Current entity version. */
+  getStoryUnitVersion(
+    scope: NovelReadScope,
+    id: StoryUnitId,
+  ): Promise<NovelEntityVersion | undefined>;
   getLeafStoryUnitPlan(
     scope: NovelReadScope,
     id: StoryUnitId,

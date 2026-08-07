@@ -98,7 +98,11 @@ const toolCompleted = new AgentAssistantMessageCompletedOutputEvent({
   completionReason: "tool_use",
   hasToolCalls: true,
 });
-assert.deepEqual(assistantProjector.project(persistOutput(toolCompleted.getSnapshot(), 3)), []);
+// d2a2083 起：包含工具调用的 assistant 回复也投影进历史（含 tool preface）。
+assert.equal(
+  assistantProjector.project(persistOutput(toolCompleted.getSnapshot(), 3)).length,
+  1,
+);
 assert.throws(
   () =>
     assistantProjector.project({
@@ -110,7 +114,7 @@ assert.throws(
 
 const standardProjector = new CoreConversationRuntimeMessageProjector({ logger });
 assert.equal(standardProjector.id, "core.conversation-message");
-assert.equal(standardProjector.version, "1");
+assert.equal(standardProjector.version, "3");
 assert.deepEqual(standardProjector.project(persistedCompleted), projected);
 
 const model = createModel("smoke-model", "openai-completions", "openai");

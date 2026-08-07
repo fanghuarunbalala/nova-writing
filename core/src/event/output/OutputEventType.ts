@@ -28,6 +28,8 @@ export const OUTPUT_EVENT_TYPE = {
   toolApprovalRequested: "system.tool.approval.requested",
   toolApprovalResolved: "system.tool.approval.resolved",
   toolTraceRecorded: "system.tool.trace.recorded",
+  toolRequestRecorded: "system.tool.request.recorded",
+  toolResultRecorded: "system.tool.result.recorded",
   novelDraftStarted: "novel.draft.started",
   novelDraftStatusChanged: "novel.draft.status.changed",
   novelDraftRolledBack: "novel.draft.rolled.back",

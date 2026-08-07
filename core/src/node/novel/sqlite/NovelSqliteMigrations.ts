@@ -221,6 +221,17 @@ const NOVEL_MIGRATIONS: readonly NovelSqliteMigration[] = [
   },
   {
     version: 12,
+    name: "per_entity_version",
+    sql: `
+      ALTER TABLE novel_story_outlines ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE novel_story_units ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE novel_paragraphs ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE novel_publication_volumes ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE novel_publication_chapters ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+    `,
+  },
+  {
+    version: 13,
     name: "novel_compose_commits",
     sql: `
       CREATE TABLE novel_compose_commits (

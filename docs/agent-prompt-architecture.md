@@ -68,11 +68,32 @@ lists all live in the message layer instead of the System Prompt string.
 Messages remain Provider message records rather than being flattened into the
 System Prompt string.
 
+## Static and dynamic prompt sections
+
+Prompt Sections declare a `kind`: `"static"` (default) or `"dynamic"`.
+`ManifestSystemPromptCompiler.compile()` renders only static sections once at
+manifest provisioning and records that frozen base in the Agent Manifest
+(static sections must precede dynamic ones in a recipe). At runtime,
+`RuntimeSystemPromptBuilder.resolve()` composes the final System Prompt per
+call by appending each dynamic section's `renderDynamic()` output to the
+static base and recomputing the digest; the static prefix stays byte-identical
+so provider prefix caches remain effective.
+
+The environment block (`core.environment`, a dynamic section) is rendered per
+call: date/timezone are computed at render time, while workdir/platform/model
+id come from the runtime-injected input (`workdir` from the bootstrap,
+platform from the host, model id lazily resolved and omitted on failure). The
+block changes at most once per day (date rollover).
+
 ## Initial Novel Agent
 
-`novel_agent@1.0.0` is standalone:
+`novel_agent@1.2.0` is standalone:
 
-- Prompt uses only generic Sections plus one language Inline instruction.
-- Tool policy contains only `runtime.todo` and therefore `TodoWrite`.
+- Prompt Recipe: `core.runtime.protocol`, `novel.identity`, `novel.system`,
+  then the dynamic `core.environment` section (static-first, dynamic-last).
+  `novel.communication`, `novel.doing-tasks`, and `novel.actions` are
+  registered but not yet wired into the Recipe.
+- Tool policy: `runtime.todo` plus the novel groups
+  (outline/characters/locations/paragraph/publication/delete).
 - Delegation is disabled.
-- Novel-domain Tools and Subagent/Agent Team capabilities are not assembled.
+- Subagent/Agent Team capabilities are not assembled.

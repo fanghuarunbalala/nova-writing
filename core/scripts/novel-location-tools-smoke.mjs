@@ -228,21 +228,16 @@ try {
     ["rejected", "duplicate_id"],
   );
 
-  // Optimistic lock: stale baseRevision write is rejected.
-  await assert.rejects(
-    writeTool.handler.execute(
-      context(conversation, 8),
-      {
-        baseRevision: writeRevision,
-        values: [{ name: "Stale", aliases: [] }],
-      },
-      progress,
-    ),
-    (error) => {
-      assert.equal(error.code, "NOVEL_LOCATION_WRITE_FAILED");
-      return true;
+  // 全局 baseRevision 不再作冲突判定：旧 baseRevision 创建新地点仍成功。
+  const staleCreate = await writeTool.handler.execute(
+    context(conversation, 8),
+    {
+      baseRevision: writeRevision,
+      values: [{ name: "Stale", aliases: [] }],
     },
+    progress,
   );
+  assert.equal(staleCreate.details.items[0].status, "applied");
 
   // Redaction: no profile content in structured logs.
   const serialized = JSON.stringify(logs);

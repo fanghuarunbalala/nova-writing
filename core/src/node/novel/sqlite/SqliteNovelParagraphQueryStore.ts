@@ -16,6 +16,7 @@ import {
   type ParagraphId,
   type ParagraphReadModel,
   type StoryUnitId,
+  type NovelEntityVersion,
 } from "../../../novel/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
@@ -65,6 +66,16 @@ export class SqliteNovelParagraphQueryStore implements NovelParagraphQueryStore 
         ? undefined
         : Object.freeze({ paragraph, ...readDigests(repository, paragraphId) });
     });
+  }
+
+  getParagraphVersion(
+    scope: NovelReadScope,
+    id: ParagraphId,
+  ): Promise<NovelEntityVersion | undefined> {
+    const paragraphId = captureParagraphId(id);
+    return this.read(scope, (repository) =>
+      repository.getParagraphVersion(paragraphId),
+    );
   }
 
   listParagraphsByStoryUnit(

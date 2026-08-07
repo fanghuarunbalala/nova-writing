@@ -16,7 +16,7 @@ import {
   PromptCapabilitySnapshot,
   SUBAGENT_SCHEMA_VERSION,
   SUBAGENT_TOOL_POLICY_RELATION,
-  SystemPromptBuilder,
+  ManifestSystemPromptCompiler,
   ToolGroupCatalog,
   ToolRegistry,
   createCoreEventSchemaRegistry,
@@ -156,7 +156,7 @@ tools: [TodoWrite]
       NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
     ]),
     manifestResolver: new AgentManifestResolver({
-      promptBuilder: new SystemPromptBuilder({
+      promptBuilder: new ManifestSystemPromptCompiler({
         sections: createDefaultPromptSectionRegistry(),
         digester,
       }),

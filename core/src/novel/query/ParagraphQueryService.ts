@@ -5,6 +5,7 @@ import {
   type ParagraphId,
   type StoryUnitId,
 } from "../identity/index.js";
+import type { NovelEntityVersion } from "../version/index.js";
 import type {
   NovelParagraphQueryStore,
   ParagraphCatalogReadModel,
@@ -24,6 +25,16 @@ export class ParagraphQueryService {
     id: ParagraphId,
   ): Promise<ParagraphReadModel | undefined> {
     return this.store.getParagraph(captureNovelReadScope(scope), captureParagraphId(id));
+  }
+
+  getParagraphVersion(
+    scope: NovelReadScope,
+    id: ParagraphId,
+  ): Promise<NovelEntityVersion | undefined> {
+    return this.store.getParagraphVersion(
+      captureNovelReadScope(scope),
+      captureParagraphId(id),
+    );
   }
 
   listParagraphsByStoryUnit(

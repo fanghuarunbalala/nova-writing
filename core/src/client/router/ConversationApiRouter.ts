@@ -189,6 +189,10 @@ export class ConversationApiRouter implements ApiTransport {
       case CONVERSATION_API_OPERATION.delete:
         await this.catalog.delete(captureConversationId(payload.conversationId));
         return Object.freeze({ deleted: true });
+      case CONVERSATION_API_OPERATION.approvalsList:
+        return Object.freeze({
+          approvals: await this.queries.listApprovals(),
+        });
     }
     const conversationId = captureConversationId(payload.conversationId);
     switch (request.operation) {
@@ -416,6 +420,8 @@ function expectedPayloadKeys(operation: string): readonly string[] {
       return ["conversationId"];
     case CONVERSATION_API_OPERATION.inputEnqueue:
       return ["conversationId", "inputEvent"];
+    case CONVERSATION_API_OPERATION.approvalsList:
+      return [];
     case CONVERSATION_API_OPERATION.eventsList:
       return ["conversationId", "options"];
     case CONVERSATION_API_OPERATION.snapshotGet:

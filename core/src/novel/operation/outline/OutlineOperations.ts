@@ -30,7 +30,11 @@ import type {
   NovelOutlineMutationContext,
   StoryUnitDigestField,
 } from "../../port/index.js";
-import { captureNovelOperationVersion } from "../../version/index.js";
+import {
+  captureNovelEntityVersion,
+  captureNovelOperationVersion,
+  type NovelEntityVersion,
+} from "../../version/index.js";
 import {
   captureNovelOperation,
   type NovelOperation,
@@ -64,16 +68,19 @@ interface StoryUnitPayload extends JsonObject {
 interface StoryUnitReplacementPayload extends JsonObject {
   readonly id: string;
   readonly content: JsonObject;
+  readonly expectedEntityVersion: number | null;
 }
 
 interface StoryUnitMovePayload extends JsonObject {
   readonly id: string;
   readonly parentId: string | null;
   readonly orderKey: string;
+  readonly expectedEntityVersion: number | null;
 }
 
 interface StoryUnitDeletePayload extends JsonObject {
   readonly id: string;
+  readonly expectedEntityVersion: number | null;
 }
 
 interface LeafPlanPayload extends JsonObject {
@@ -129,12 +136,17 @@ export function createStoryUnitReplaceOperation(input: {
   readonly storyUnitId: StoryUnitId;
   readonly expectedContentDigest: string;
   readonly content: StoryUnitContent;
+  readonly expectedEntityVersion?: NovelEntityVersion;
 }): NovelOperation<
   typeof NOVEL_OUTLINE_OPERATION_TYPE.storyUnitReplace,
   StoryUnitReplacementPayload
 > {
   const storyUnitId = captureStoryUnitId(input.storyUnitId);
   const content = captureStoryUnitContent(input.content);
+  const expectedEntityVersion =
+    input.expectedEntityVersion === undefined
+      ? undefined
+      : captureNovelEntityVersion(input.expectedEntityVersion);
   return captureNovelOperation({
     operationId: input.operationId,
     operationVersion: OUTLINE_OPERATION_VERSION,
@@ -147,8 +159,15 @@ export function createStoryUnitReplaceOperation(input: {
         "content",
         input.expectedContentDigest,
       ),
+      ...(expectedEntityVersion === undefined
+        ? []
+        : [version(STORY_UNIT_ENTITY_TYPE, storyUnitId, expectedEntityVersion)]),
     ],
-    payload: { id: storyUnitId, content: toJsonObject(content) },
+    payload: {
+      id: storyUnitId,
+      content: toJsonObject(content),
+      expectedEntityVersion: expectedEntityVersion ?? null,
+    },
   });
 }
 
@@ -159,6 +178,7 @@ export function createStoryUnitMoveOperation(input: {
   readonly expectedOrderDigest: string;
   readonly parentId?: StoryUnitId;
   readonly orderKey: OrderKey;
+  readonly expectedEntityVersion?: NovelEntityVersion;
 }): NovelOperation<
   typeof NOVEL_OUTLINE_OPERATION_TYPE.storyUnitMove,
   StoryUnitMovePayload
@@ -168,6 +188,10 @@ export function createStoryUnitMoveOperation(input: {
     ? undefined
     : captureStoryUnitId(input.parentId);
   const orderKey = captureOrderKey(input.orderKey);
+  const expectedEntityVersion =
+    input.expectedEntityVersion === undefined
+      ? undefined
+      : captureNovelEntityVersion(input.expectedEntityVersion);
   return captureNovelOperation({
     operationId: input.operationId,
     operationVersion: OUTLINE_OPERATION_VERSION,
@@ -189,8 +213,16 @@ export function createStoryUnitMoveOperation(input: {
       ...(parentId === undefined
         ? []
         : [exists(STORY_UNIT_ENTITY_TYPE, parentId)]),
+      ...(expectedEntityVersion === undefined
+        ? []
+        : [version(STORY_UNIT_ENTITY_TYPE, storyUnitId, expectedEntityVersion)]),
     ],
-    payload: { id: storyUnitId, parentId: parentId ?? null, orderKey },
+    payload: {
+      id: storyUnitId,
+      parentId: parentId ?? null,
+      orderKey,
+      expectedEntityVersion: expectedEntityVersion ?? null,
+    },
   });
 }
 
@@ -200,11 +232,16 @@ export function createStoryUnitDeleteOperation(input: {
   readonly expectedContentDigest: string;
   readonly expectedParentDigest: string;
   readonly expectedOrderDigest: string;
+  readonly expectedEntityVersion?: NovelEntityVersion;
 }): NovelOperation<
   typeof NOVEL_OUTLINE_OPERATION_TYPE.storyUnitDelete,
   StoryUnitDeletePayload
 > {
   const storyUnitId = captureStoryUnitId(input.storyUnitId);
+  const expectedEntityVersion =
+    input.expectedEntityVersion === undefined
+      ? undefined
+      : captureNovelEntityVersion(input.expectedEntityVersion);
   return captureNovelOperation({
     operationId: input.operationId,
     operationVersion: OUTLINE_OPERATION_VERSION,
@@ -229,8 +266,14 @@ export function createStoryUnitDeleteOperation(input: {
         "orderKey",
         input.expectedOrderDigest,
       ),
+      ...(expectedEntityVersion === undefined
+        ? []
+        : [version(STORY_UNIT_ENTITY_TYPE, storyUnitId, expectedEntityVersion)]),
     ],
-    payload: { id: storyUnitId },
+    payload: {
+      id: storyUnitId,
+      expectedEntityVersion: expectedEntityVersion ?? null,
+    },
   });
 }
 
@@ -402,10 +445,15 @@ function applyStoryUnitReplace(
   store: NovelMutableOutlineRepository,
   operation: NovelOperation,
 ): void {
-  const payload = capturePayloadObject(operation.payload, ["content", "id"]);
+  const payload = capturePayloadObject(operation.payload, [
+    "content",
+    "id",
+    "expectedEntityVersion",
+  ]);
   const id = captureStoryUnitId(payload.id);
   const content = captureStoryUnitContent(payload.content);
-  assertUnitDigestExpected(operation, id, ["content"]);
+  const expectedVersion = optionalEntityVersion(payload.expectedEntityVersion);
+  assertUnitDigestExpected(operation, id, ["content"], undefined, expectedVersion);
   const existing = requireStoryUnit(store, operation, id);
   assertDigest(store, operation, id, "content");
   const replacement = captureStoryUnit({
@@ -415,7 +463,15 @@ function applyStoryUnitReplace(
     orderKey: existing.orderKey,
     ...content,
   });
-  if (!store.replaceStoryUnit(replacement)) {
+  if (!store.replaceStoryUnit(replacement, expectedVersion)) {
+    if (expectedVersion !== undefined) {
+      throw new NovelOperationPreconditionError(
+        "entity_version_mismatch",
+        STORY_UNIT_ENTITY_TYPE,
+        id,
+        operation.operationId,
+      );
+    }
     throw precondition(operation, "domain_invariant", STORY_UNIT_ENTITY_TYPE, id);
   }
 }
@@ -424,13 +480,25 @@ function applyStoryUnitMove(
   store: NovelMutableOutlineRepository,
   operation: NovelOperation,
 ): void {
-  const payload = capturePayloadObject(operation.payload, ["id", "orderKey", "parentId"]);
+  const payload = capturePayloadObject(operation.payload, [
+    "id",
+    "orderKey",
+    "parentId",
+    "expectedEntityVersion",
+  ]);
   const id = captureStoryUnitId(payload.id);
+  const expectedVersion = optionalEntityVersion(payload.expectedEntityVersion);
   const parentId = payload.parentId === null
     ? undefined
     : captureStoryUnitId(payload.parentId);
   const orderKey = captureOrderKey(payload.orderKey);
-  assertUnitDigestExpected(operation, id, ["parentId", "orderKey"], parentId);
+  assertUnitDigestExpected(
+    operation,
+    id,
+    ["parentId", "orderKey"],
+    parentId,
+    expectedVersion,
+  );
   const existing = requireStoryUnit(store, operation, id);
   assertDigest(store, operation, id, "parentId");
   assertDigest(store, operation, id, "orderKey");
@@ -449,7 +517,15 @@ function applyStoryUnitMove(
   }
   const replacement = captureStoryUnit({ ...existing, parentId, orderKey });
   assertPositionAvailable(store, replacement, operation, id);
-  if (!store.replaceStoryUnit(replacement)) {
+  if (!store.replaceStoryUnit(replacement, expectedVersion)) {
+    if (expectedVersion !== undefined) {
+      throw new NovelOperationPreconditionError(
+        "entity_version_mismatch",
+        STORY_UNIT_ENTITY_TYPE,
+        id,
+        operation.operationId,
+      );
+    }
     throw precondition(operation, "domain_invariant", STORY_UNIT_ENTITY_TYPE, id);
   }
 }
@@ -458,9 +534,19 @@ function applyStoryUnitDelete(
   store: NovelMutableOutlineRepository,
   operation: NovelOperation,
 ): void {
-  const payload = capturePayloadObject(operation.payload, ["id"]);
+  const payload = capturePayloadObject(operation.payload, [
+    "id",
+    "expectedEntityVersion",
+  ]);
   const id = captureStoryUnitId(payload.id);
-  assertUnitDigestExpected(operation, id, ["content", "parentId", "orderKey"]);
+  const expectedVersion = optionalEntityVersion(payload.expectedEntityVersion);
+  assertUnitDigestExpected(
+    operation,
+    id,
+    ["content", "parentId", "orderKey"],
+    undefined,
+    expectedVersion,
+  );
   requireStoryUnit(store, operation, id);
   assertDigest(store, operation, id, "content");
   assertDigest(store, operation, id, "parentId");
@@ -471,7 +557,15 @@ function applyStoryUnitDelete(
   ) {
     throw precondition(operation, "entity_referenced", STORY_UNIT_ENTITY_TYPE, id);
   }
-  if (!store.deleteStoryUnit(id)) {
+  if (!store.deleteStoryUnit(id, expectedVersion)) {
+    if (expectedVersion !== undefined) {
+      throw new NovelOperationPreconditionError(
+        "entity_version_mismatch",
+        STORY_UNIT_ENTITY_TYPE,
+        id,
+        operation.operationId,
+      );
+    }
     throw precondition(operation, "domain_invariant", STORY_UNIT_ENTITY_TYPE, id);
   }
 }
@@ -637,6 +731,7 @@ function assertUnitDigestExpected(
   id: StoryUnitId,
   fields: readonly StoryUnitDigestField[],
   destinationParentId?: StoryUnitId,
+  expectedEntityVersion?: NovelEntityVersion,
 ): void {
   assertExpected(operation, [
     exists(STORY_UNIT_ENTITY_TYPE, id),
@@ -650,6 +745,9 @@ function assertUnitDigestExpected(
     ...(destinationParentId === undefined
       ? []
       : [exists(STORY_UNIT_ENTITY_TYPE, destinationParentId)]),
+    ...(expectedEntityVersion === undefined
+      ? []
+      : [version(STORY_UNIT_ENTITY_TYPE, id, expectedEntityVersion)]),
   ]);
 }
 
@@ -758,6 +856,27 @@ function fieldDigest(
     fieldPath,
     expectedDigest: expectedDigestValue,
   };
+}
+
+function version(
+  entityType: string,
+  entityId: string,
+  expectedEntityVersion: NovelEntityVersion,
+): NovelOperationPrecondition {
+  return Object.freeze({
+    kind: "entity-version",
+    entityType,
+    entityId,
+    expectedEntityVersion,
+  });
+}
+
+function optionalEntityVersion(
+  value: unknown,
+): NovelEntityVersion | undefined {
+  return value === null || value === undefined
+    ? undefined
+    : captureNovelEntityVersion(value);
 }
 
 function capturePayloadObject(

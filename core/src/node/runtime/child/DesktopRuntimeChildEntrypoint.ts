@@ -11,10 +11,12 @@ import type {
   CredentialStore,
   DiagnosticLogLevel,
 } from "../../../config/index.js";
+import { EffectiveModelExecutionResolver } from "../../../config/index.js";
 import {
   NodeApplicationConfigurationStore,
   NodeConfigurationHomeResolver,
   NodePlaintextCredentialStore,
+  NodeSha256PromptDigester,
   NodeWorkspaceStoreLocator,
   SqliteWorkspaceStore,
   createNodeProviderRequestDebugRecorder,
@@ -35,6 +37,8 @@ import {
   type RuntimeRunPreparationSourceFactory,
 } from "./DesktopRuntimeChildCompositionFactory.js";
 import { PiRuntimeChildAdapterFactory } from "./PiRuntimeChildAdapterFactory.js";
+import { SUPPORTED_PI_EXECUTION_APIS } from "../../../runtime/agent/pi/index.js";
+import { createDefaultPromptSectionRegistry } from "../../../prompt/index.js";
 import {
   runNodeRuntimeChildEntrypoint,
   type RuntimeChildEntrypointResult,
@@ -93,6 +97,8 @@ export interface RunDesktopRuntimeChildEntrypointOptions {
   readonly profileResolver?: AgentRuntimeConfigurationProfileResolver;
   readonly application?: ApplicationConfigurationStore;
   readonly credentials?: CredentialStore;
+  /** 可选共享模型解析器；默认按 credentials 构建。Optional shared model resolver; defaults to a credentials-backed one. */
+  readonly modelResolver?: EffectiveModelExecutionResolver;
   readonly storageRoot?: string;
   readonly homeResolver?: NodeConfigurationHomeResolver;
   readonly readable?: Readable;
@@ -121,6 +127,13 @@ async function initializeDesktopRuntimeChildEntrypoint(
   const credentials =
     options.credentials ??
     new NodePlaintextCredentialStore({ homeResolver, logger: bootstrapLogger });
+  const modelResolver =
+    options.modelResolver ??
+    new EffectiveModelExecutionResolver({
+      credentials,
+      supportedApis: SUPPORTED_PI_EXECUTION_APIS,
+      logger: bootstrapLogger,
+    });
   const diagnostics = await application
     .load()
     .then((configuration) => configuration?.diagnostics)
@@ -152,9 +165,21 @@ async function initializeDesktopRuntimeChildEntrypoint(
     new PiRuntimeChildAdapterFactory({
       application,
       credentials,
+      resolver: modelResolver,
       logger,
       ...(debugRecorder === undefined ? {} : { debugRecorder }),
     });
+  const resolveModelId = async (): Promise<string | undefined> => {
+    try {
+      const descriptor = await modelResolver.resolve({ application });
+      return descriptor.modelId;
+    } catch (error) {
+      logger.debug("environment.model_resolution_failed", {
+        failure: error instanceof Error ? error.name : "unknown",
+      });
+      return undefined;
+    }
+  };
   const contextCompilerFactory =
     options.contextCompilerFactory ??
     Object.freeze({
@@ -164,7 +189,12 @@ async function initializeDesktopRuntimeChildEntrypoint(
     });
   const preparationSourceFactory =
     options.preparationSourceFactory ??
-    new DefaultRuntimeRunPreparationSourceFactory({ logger });
+    new DefaultRuntimeRunPreparationSourceFactory({
+      sections: createDefaultPromptSectionRegistry(),
+      digester: new NodeSha256PromptDigester(),
+      resolveModelId,
+      logger,
+    });
   const compositionFactory = new DesktopRuntimeChildCompositionFactory({
     manifestStoreProvider,
     adapterFactory,

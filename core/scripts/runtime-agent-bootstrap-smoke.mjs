@@ -13,7 +13,7 @@ import {
   InMemoryAgentManifestStore,
   InMemoryAgentRuntimeConfigurationProfileResolver,
   PromptCapabilitySnapshot,
-  SystemPromptBuilder,
+  ManifestSystemPromptCompiler,
   ToolGroupCatalog,
   ToolRegistry,
   createDefaultPromptSectionRegistry,
@@ -92,7 +92,7 @@ const registry = new ToolRegistry([
 ]);
 const manifestStore = new InMemoryAgentManifestStore();
 const resolver = new AgentManifestResolver({
-  promptBuilder: new SystemPromptBuilder({
+  promptBuilder: new ManifestSystemPromptCompiler({
     sections: createDefaultPromptSectionRegistry(),
     digester: new Sha256Digester(),
   }),

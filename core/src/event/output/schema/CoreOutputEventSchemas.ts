@@ -285,6 +285,7 @@ export const AgentAssistantMessageFailedPayloadSchema = Type.Object(
       Type.Literal("provider_error"),
       Type.Literal("provider_aborted"),
     ]),
+    failureDetail: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
   },
   { additionalProperties: false },
 );
@@ -505,6 +506,22 @@ export const ToolTraceRecordedPayloadSchema = Type.Object({
     Type.Literal("none"), Type.Literal("possible"),
     Type.Literal("partial"), Type.Literal("completed_unknown"),
   ])),
+}, { additionalProperties: false });
+export const ToolRequestRecordedPayloadSchema = Type.Object({
+  toolCallId: Type.String({ minLength: 1, maxLength: 256 }),
+  toolName: Type.String({ pattern: "^[A-Z][A-Za-z0-9]{0,63}$" }),
+  toolVersion: Type.String({ pattern: "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" }),
+  arguments: Type.Any(),
+  truncated: Type.Boolean(),
+}, { additionalProperties: false });
+export const ToolResultRecordedPayloadSchema = Type.Object({
+  toolCallId: Type.String({ minLength: 1, maxLength: 256 }),
+  toolName: Type.String({ pattern: "^[A-Z][A-Za-z0-9]{0,63}$" }),
+  toolVersion: Type.String({ pattern: "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" }),
+  outcome: Type.Union([Type.Literal("ok"), Type.Literal("failed")]),
+  result: Type.Optional(Type.Any()),
+  errorCode: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+  truncated: Type.Boolean(),
 }, { additionalProperties: false });
 
 const NudgeLifecycleSnapshotSchema = Type.Object(
@@ -756,6 +773,20 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
     eventType: OUTPUT_EVENT_TYPE.toolTraceRecorded,
     schemaVersion: EVENT_SCHEMA_VERSION,
     payloadSchema: ToolTraceRecordedPayloadSchema,
+    snapshotSchema: NudgeLifecycleSnapshotSchema,
+  });
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.toolRequestRecorded,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: ToolRequestRecordedPayloadSchema,
+    snapshotSchema: NudgeLifecycleSnapshotSchema,
+  });
+  registry.register({
+    kind: "output",
+    eventType: OUTPUT_EVENT_TYPE.toolResultRecorded,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    payloadSchema: ToolResultRecordedPayloadSchema,
     snapshotSchema: NudgeLifecycleSnapshotSchema,
   });
   registry.register({

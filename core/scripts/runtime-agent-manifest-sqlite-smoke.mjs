@@ -14,7 +14,7 @@ import {
   InMemoryAgentManifestStore,
   AgentManifestResolver,
   PromptCapabilitySnapshot,
-  SystemPromptBuilder,
+  ManifestSystemPromptCompiler,
   ToolGroupCatalog,
   ToolRegistry,
   createDefaultPromptSectionRegistry,
@@ -64,7 +64,7 @@ const tool = defineTool({
   handler: { async execute() { return { content: [] }; } },
 });
 const resolver = new AgentManifestResolver({
-  promptBuilder: new SystemPromptBuilder({
+  promptBuilder: new ManifestSystemPromptCompiler({
     sections: createDefaultPromptSectionRegistry(),
     digester: new Sha256Digester(),
   }),

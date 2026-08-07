@@ -49,6 +49,85 @@ interface SystemReminderMessagePayload {
   readonly order: number;
 }
 
+interface CoreToolRequestMessagePayload {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly arguments: unknown;
+}
+
+interface CoreToolResultMessagePayload {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly outcome: "ok" | "failed";
+  readonly result?: unknown;
+  readonly errorCode?: string;
+  readonly truncated: boolean;
+}
+
+function formatToolResult(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === undefined || value === null) return "(空结果)";
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * 把工具消息重排为 request/result 交替（OpenAI 要求每个 assistant tool_calls
+ * 紧跟对应 tool 响应）；保持消息总数不变，满足 context projection 的 1:1 校验。
+ * Reorder tool messages so each toolCall is immediately followed by its result.
+ */
+function reorderToolMessages(
+  messages: readonly RuntimeMessageSnapshot[],
+): readonly RuntimeMessageSnapshot[] {
+  const resultsByToolCallId = new Map<string, RuntimeMessageSnapshot>();
+  const pairedRequestIds = new Set<string>();
+  for (const message of messages) {
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolResult
+    ) {
+      const payload = message.payload as Record<string, unknown>;
+      const toolCallId =
+        typeof payload.toolCallId === "string" ? payload.toolCallId : "";
+      if (toolCallId !== "") resultsByToolCallId.set(toolCallId, message);
+    }
+  }
+  const output: RuntimeMessageSnapshot[] = [];
+  for (const message of messages) {
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolRequest
+    ) {
+      const payload = message.payload as Record<string, unknown>;
+      const toolCallId =
+        typeof payload.toolCallId === "string" ? payload.toolCallId : "";
+      output.push(message);
+      if (toolCallId !== "") {
+        const result = resultsByToolCallId.get(toolCallId);
+        if (result !== undefined) {
+          output.push(result);
+          pairedRequestIds.add(toolCallId);
+        }
+      }
+      continue;
+    }
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolResult
+    ) {
+      const payload = message.payload as Record<string, unknown>;
+      const toolCallId =
+        typeof payload.toolCallId === "string" ? payload.toolCallId : "";
+      if (toolCallId !== "" && pairedRequestIds.has(toolCallId)) continue;
+    }
+    output.push(message);
+  }
+  return output;
+}
+
 export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter {
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
   private readonly assistantMessageEnvelopeFactory?: PiAssistantMessageEnvelopeFactory;
@@ -85,7 +164,8 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
       messageCount: request.messages.length,
     });
     const seenIds = new Set<string>();
-    const converted = request.messages.map((message) => {
+    const reordered = reorderToolMessages(request.messages);
+    const converted = reordered.map((message) => {
       let validated: RuntimeMessageSnapshot;
       try {
         validated = this.messageSchemaRegistry.validateSnapshot(message);
@@ -146,6 +226,20 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
       message.schemaVersion === RUNTIME_MESSAGE_SCHEMA_VERSION
     ) {
       return this.convertSystemReminderMessage(message);
+    }
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolRequest &&
+      message.schemaVersion === RUNTIME_MESSAGE_SCHEMA_VERSION
+    ) {
+      return this.convertToolRequestMessage(message, identity);
+    }
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolResult &&
+      message.schemaVersion === RUNTIME_MESSAGE_SCHEMA_VERSION
+    ) {
+      return this.convertToolResultMessage(message);
     }
     throw this.fail(
       CORE_PI_MESSAGE_CONVERSION_FAILURE.unsupportedMessage,
@@ -224,6 +318,56 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
       content,
       timestamp: Date.parse(message.timestamp),
     });
+  }
+
+  /** 工具请求 → Pi assistant toolUse（历史 tool_call 块）。Tool request to assistant toolUse. */
+  private convertToolRequestMessage(
+    message: RuntimeMessageSnapshot,
+    identity: RuntimeIdentity,
+  ): AgentMessage {
+    if (this.assistantMessageEnvelopeFactory === undefined) {
+      throw this.fail(
+        CORE_PI_MESSAGE_CONVERSION_FAILURE.assistantEnvelopeUnavailable,
+        identity.conversationId,
+        identity.runId,
+      );
+    }
+    const envelope = this.assistantMessageEnvelopeFactory.create();
+    const payload = message.payload as unknown as CoreToolRequestMessagePayload;
+    return {
+      role: "assistant",
+      content: [
+        {
+          type: "toolCall",
+          id: payload.toolCallId,
+          name: payload.toolName,
+          arguments: payload.arguments as Record<string, unknown>,
+        },
+      ],
+      api: envelope.api,
+      provider: envelope.provider,
+      model: envelope.model,
+      usage: createEmptyUsage(),
+      stopReason: "toolUse",
+      timestamp: Date.parse(message.timestamp),
+    } as unknown as AgentMessage;
+  }
+
+  /** 工具结果 → Pi toolResult 消息。Tool result to Pi toolResult message. */
+  private convertToolResultMessage(message: RuntimeMessageSnapshot): AgentMessage {
+    const payload = message.payload as unknown as CoreToolResultMessagePayload;
+    const failed = payload.outcome === "failed";
+    const text = failed
+      ? `工具执行失败（${payload.errorCode ?? "unknown"}）`
+      : formatToolResult(payload.result);
+    return {
+      role: "toolResult",
+      toolCallId: payload.toolCallId,
+      toolName: payload.toolName,
+      content: [{ type: "text", text }],
+      isError: failed,
+      timestamp: Date.parse(message.timestamp),
+    } as unknown as AgentMessage;
   }
 
   private fail(

@@ -23,9 +23,9 @@ import { EntityInspectorPanel } from "./panels/EntityInspectorPanel.js";
 import { OutlineUnitInspectorPanel } from "./panels/OutlineUnitInspectorPanel.js";
 import styles from "./InspectorHost.module.css";
 
-const DEFAULT_WIDTH = 384;
-const MIN_WIDTH = 300;
-const MAX_WIDTH = 680;
+const DEFAULT_WIDTH = 680;
+const MIN_WIDTH = 480;
+const MAX_WIDTH = 960;
 
 const KICKER_BY_KIND: Record<string, string> = {
   entity: "档案 · 角色 / 地点",
@@ -100,15 +100,17 @@ export function InspectorHost({
               <span className={styles.countPill}>{approvalSnapshot.pendingCount} 待审</span>
             ) : null}
           </button>
-          <button
-            type="button"
-            className={[styles.tab, tab === "detail" ? styles.tabActive : ""].filter(Boolean).join(" ")}
-            onClick={() => setTab("detail")}
-            aria-selected={tab === "detail"}
-            role="tab"
-          >
-            档案
-          </button>
+          {route.state.kind !== "approval" ? (
+            <button
+              type="button"
+              className={[styles.tab, tab === "detail" ? styles.tabActive : ""].filter(Boolean).join(" ")}
+              onClick={() => setTab("detail")}
+              aria-selected={tab === "detail"}
+              role="tab"
+            >
+              档案
+            </button>
+          ) : null}
         </div>
         <span className={styles.kicker}>{tab === "approval" ? "审批参数 · 批准执行后才产出 Diff" : kicker}</span>
         <button
@@ -122,7 +124,17 @@ export function InspectorHost({
       </header>
       <div className={styles.body}>
         {tab === "approval" ? (
-          <ApprovalPanel store={approvalStore} />
+          <ApprovalPanel
+            store={approvalStore}
+            conversationLabels={new Map(
+              conversationCatalog
+                .getSnapshot()
+                .conversations.map((conversation) => [
+                  conversation.id,
+                  conversation.title ?? conversation.id,
+                ]),
+            )}
+          />
         ) : route.state.kind === "entity" ? (
           <EntityInspectorPanel
             workspaceId={workspaceId}

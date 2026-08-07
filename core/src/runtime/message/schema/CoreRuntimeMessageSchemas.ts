@@ -17,6 +17,8 @@ export const CORE_RUNTIME_MESSAGE_TYPE = {
   userMessage: "user.message",
   assistantMessage: "assistant.message",
   systemReminder: "system.reminder",
+  toolRequest: "tool.request",
+  toolResult: "tool.result",
 } as const;
 
 export const RuntimeTextContentSchema = Type.Object(
@@ -51,6 +53,29 @@ export const SystemReminderRuntimeMessagePayloadSchema = Type.Object(
   { additionalProperties: false },
 );
 
+/** 工具请求消息负载（参数原文）。Tool-request message payload. */
+export const CoreToolRequestRuntimeMessagePayloadSchema = Type.Object(
+  {
+    toolCallId: Type.String({ minLength: 1, maxLength: 256 }),
+    toolName: Type.String({ minLength: 1, maxLength: 64 }),
+    arguments: Type.Any(),
+  },
+  { additionalProperties: false },
+);
+
+/** 工具结果消息负载（响应原文）。Tool-result message payload. */
+export const CoreToolResultRuntimeMessagePayloadSchema = Type.Object(
+  {
+    toolCallId: Type.String({ minLength: 1, maxLength: 256 }),
+    toolName: Type.String({ minLength: 1, maxLength: 64 }),
+    outcome: Type.Union([Type.Literal("ok"), Type.Literal("failed")]),
+    result: Type.Optional(Type.Any()),
+    errorCode: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+    truncated: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
 export function registerCoreRuntimeMessageSchemas(
   registry: RuntimeMessageSchemaRegistry,
 ): void {
@@ -71,5 +96,17 @@ export function registerCoreRuntimeMessageSchemas(
     messageType: CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
     schemaVersion: RUNTIME_MESSAGE_SCHEMA_VERSION,
     payloadSchema: SystemReminderRuntimeMessagePayloadSchema,
+  });
+  registry.register({
+    role: "tool",
+    messageType: CORE_RUNTIME_MESSAGE_TYPE.toolRequest,
+    schemaVersion: RUNTIME_MESSAGE_SCHEMA_VERSION,
+    payloadSchema: CoreToolRequestRuntimeMessagePayloadSchema,
+  });
+  registry.register({
+    role: "tool",
+    messageType: CORE_RUNTIME_MESSAGE_TYPE.toolResult,
+    schemaVersion: RUNTIME_MESSAGE_SCHEMA_VERSION,
+    payloadSchema: CoreToolResultRuntimeMessagePayloadSchema,
   });
 }

@@ -13,6 +13,7 @@ import type {
   StoryOutline,
   StoryUnit,
 } from "../model/index.js";
+import type { NovelEntityVersion } from "../version/index.js";
 
 export type StoryUnitDigestField = "content" | "parentId" | "orderKey";
 
@@ -36,9 +37,17 @@ export interface NovelMutableOutlineRepository {
     id: StoryUnitId,
     field: StoryUnitDigestField,
   ): string | undefined;
+  /** 读取实体的当前版本（per-entity 乐观锁）。Current entity version. */
+  getStoryUnitVersion(id: StoryUnitId): NovelEntityVersion | undefined;
   insertStoryUnit(unit: StoryUnit): boolean;
-  replaceStoryUnit(unit: StoryUnit): boolean;
-  deleteStoryUnit(id: StoryUnitId): boolean;
+  replaceStoryUnit(
+    unit: StoryUnit,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean;
+  deleteStoryUnit(
+    id: StoryUnitId,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean;
   getLeafStoryUnitPlan(id: StoryUnitId): LeafStoryUnitPlan | undefined;
   getLeafStoryUnitPlanDigest(id: StoryUnitId): string | undefined;
   replaceLeafStoryUnitPlan(plan: LeafStoryUnitPlan): boolean;

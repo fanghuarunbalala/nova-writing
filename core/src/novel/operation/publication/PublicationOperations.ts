@@ -32,7 +32,11 @@ import type {
   NovelParagraphMutationContext,
   NovelPublicationMutationContext,
 } from "../../port/index.js";
-import { captureNovelOperationVersion } from "../../version/index.js";
+import {
+  captureNovelEntityVersion,
+  captureNovelOperationVersion,
+  type NovelEntityVersion,
+} from "../../version/index.js";
 import {
   captureNovelOperation,
   type NovelOperation,
@@ -108,13 +112,23 @@ export function createPublicationVolumeReplaceOperation(input: {
   readonly operationId: NovelOperationId;
   readonly expectedRecordDigest: string;
   readonly volume: PublicationVolume;
+  readonly expectedEntityVersion?: NovelEntityVersion;
 }): NovelOperation<typeof NOVEL_PUBLICATION_OPERATION_TYPE.volumeReplace, VolumePayload> {
   const volume = capturePublicationVolume(input.volume);
+  const expectedEntityVersion =
+    input.expectedEntityVersion === undefined
+      ? undefined
+      : captureNovelEntityVersion(input.expectedEntityVersion);
   return captureNovelOperation({
     operationId: input.operationId,
     operationVersion: PUBLICATION_OPERATION_VERSION,
     type: NOVEL_PUBLICATION_OPERATION_TYPE.volumeReplace,
-    expected: volumeExpected(volume, "replace", input.expectedRecordDigest),
+    expected: volumeExpected(
+      volume,
+      "replace",
+      input.expectedRecordDigest,
+      expectedEntityVersion,
+    ),
     payload: { volume: toJsonObject(volume) },
   });
 }
@@ -123,8 +137,13 @@ export function createPublicationVolumeDeleteOperation(input: {
   readonly operationId: NovelOperationId;
   readonly id: PublicationVolumeId;
   readonly expectedRecordDigest: string;
+  readonly expectedEntityVersion?: NovelEntityVersion;
 }): NovelOperation<typeof NOVEL_PUBLICATION_OPERATION_TYPE.volumeDelete, IdentityPayload> {
   const id = capturePublicationVolumeId(input.id);
+  const expectedEntityVersion =
+    input.expectedEntityVersion === undefined
+      ? undefined
+      : captureNovelEntityVersion(input.expectedEntityVersion);
   return captureNovelOperation({
     operationId: input.operationId,
     operationVersion: PUBLICATION_OPERATION_VERSION,
@@ -132,6 +151,9 @@ export function createPublicationVolumeDeleteOperation(input: {
     expected: [
       exists(VOLUME_ENTITY_TYPE, id),
       fieldDigest(VOLUME_ENTITY_TYPE, id, "record", input.expectedRecordDigest),
+      ...(expectedEntityVersion === undefined
+        ? []
+        : [version(VOLUME_ENTITY_TYPE, id, expectedEntityVersion)]),
     ],
     payload: { id },
   });
@@ -155,13 +177,23 @@ export function createPublicationChapterReplaceOperation(input: {
   readonly operationId: NovelOperationId;
   readonly expectedRecordDigest: string;
   readonly chapter: PublicationChapter;
+  readonly expectedEntityVersion?: NovelEntityVersion;
 }): NovelOperation<typeof NOVEL_PUBLICATION_OPERATION_TYPE.chapterReplace, ChapterPayload> {
   const chapter = capturePublicationChapter(input.chapter);
+  const expectedEntityVersion =
+    input.expectedEntityVersion === undefined
+      ? undefined
+      : captureNovelEntityVersion(input.expectedEntityVersion);
   return captureNovelOperation({
     operationId: input.operationId,
     operationVersion: PUBLICATION_OPERATION_VERSION,
     type: NOVEL_PUBLICATION_OPERATION_TYPE.chapterReplace,
-    expected: chapterExpected(chapter, "replace", input.expectedRecordDigest),
+    expected: chapterExpected(
+      chapter,
+      "replace",
+      input.expectedRecordDigest,
+      expectedEntityVersion,
+    ),
     payload: { chapter: toJsonObject(chapter) },
   });
 }
@@ -170,8 +202,13 @@ export function createPublicationChapterDeleteOperation(input: {
   readonly operationId: NovelOperationId;
   readonly id: PublicationChapterId;
   readonly expectedRecordDigest: string;
+  readonly expectedEntityVersion?: NovelEntityVersion;
 }): NovelOperation<typeof NOVEL_PUBLICATION_OPERATION_TYPE.chapterDelete, IdentityPayload> {
   const id = capturePublicationChapterId(input.id);
+  const expectedEntityVersion =
+    input.expectedEntityVersion === undefined
+      ? undefined
+      : captureNovelEntityVersion(input.expectedEntityVersion);
   return captureNovelOperation({
     operationId: input.operationId,
     operationVersion: PUBLICATION_OPERATION_VERSION,
@@ -179,6 +216,9 @@ export function createPublicationChapterDeleteOperation(input: {
     expected: [
       exists(CHAPTER_ENTITY_TYPE, id),
       fieldDigest(CHAPTER_ENTITY_TYPE, id, "record", input.expectedRecordDigest),
+      ...(expectedEntityVersion === undefined
+        ? []
+        : [version(CHAPTER_ENTITY_TYPE, id, expectedEntityVersion)]),
     ],
     payload: { id },
   });
@@ -274,7 +314,11 @@ function applyVolumeReplace(
   operation: NovelOperation,
 ): void {
   const volume = capturePublicationVolume(captureNestedPayload(operation.payload, "volume"));
-  assertExpected(operation, volumeExpected(volume, "replace", expectedDigest(operation, 2)));
+  const expectedVersion = expectedEntityVersionOf(operation);
+  assertExpected(
+    operation,
+    volumeExpected(volume, "replace", expectedDigest(operation, 2), expectedVersion),
+  );
   requirePublication(store, operation, volume.publicationId);
   const existing = requireVolume(store, operation, volume.id);
   assertRecordDigest(store.getVolumeDigest(volume.id), operation, VOLUME_ENTITY_TYPE, volume.id);
@@ -282,7 +326,15 @@ function applyVolumeReplace(
     throw precondition(operation, "domain_invariant", VOLUME_ENTITY_TYPE, volume.id);
   }
   assertVolumePosition(store, operation, volume, volume.id);
-  if (!store.replaceVolume(volume)) {
+  if (!store.replaceVolume(volume, expectedVersion)) {
+    if (expectedVersion !== undefined) {
+      throw new NovelOperationPreconditionError(
+        "entity_version_mismatch",
+        VOLUME_ENTITY_TYPE,
+        volume.id,
+        operation.operationId,
+      );
+    }
     throw precondition(operation, "domain_invariant", VOLUME_ENTITY_TYPE, volume.id);
   }
 }
@@ -292,16 +344,28 @@ function applyVolumeDelete(
   operation: NovelOperation,
 ): void {
   const id = capturePublicationVolumeId(captureIdentityPayload(operation.payload));
+  const expectedVersion = expectedEntityVersionOf(operation);
   assertExpected(operation, [
     exists(VOLUME_ENTITY_TYPE, id),
     fieldDigest(VOLUME_ENTITY_TYPE, id, "record", expectedDigest(operation, 1)),
+    ...(expectedVersion === undefined
+      ? []
+      : [version(VOLUME_ENTITY_TYPE, id, expectedVersion)]),
   ]);
   requireVolume(store, operation, id);
   assertRecordDigest(store.getVolumeDigest(id), operation, VOLUME_ENTITY_TYPE, id);
   if (store.listChapters(id).length > 0) {
     throw precondition(operation, "entity_referenced", VOLUME_ENTITY_TYPE, id);
   }
-  if (!store.deleteVolume(id)) {
+  if (!store.deleteVolume(id, expectedVersion)) {
+    if (expectedVersion !== undefined) {
+      throw new NovelOperationPreconditionError(
+        "entity_version_mismatch",
+        VOLUME_ENTITY_TYPE,
+        id,
+        operation.operationId,
+      );
+    }
     throw precondition(operation, "domain_invariant", VOLUME_ENTITY_TYPE, id);
   }
 }
@@ -334,7 +398,11 @@ function applyChapterReplace(
   operation: NovelOperation,
 ): void {
   const chapter = capturePublicationChapter(captureNestedPayload(operation.payload, "chapter"));
-  assertExpected(operation, chapterExpected(chapter, "replace", expectedDigest(operation, 3)));
+  const expectedVersion = expectedEntityVersionOf(operation);
+  assertExpected(
+    operation,
+    chapterExpected(chapter, "replace", expectedDigest(operation, 3), expectedVersion),
+  );
   requirePublication(store, operation, chapter.publicationId);
   requireOwningVolume(store, operation, chapter);
   const existing = requireChapter(store, operation, chapter.id);
@@ -344,7 +412,15 @@ function applyChapterReplace(
   }
   assertChapterPosition(store, operation, chapter, chapter.id);
   assertChapterSelection(store, paragraphs, operation, chapter, chapter.id);
-  if (!store.replaceChapter(chapter)) {
+  if (!store.replaceChapter(chapter, expectedVersion)) {
+    if (expectedVersion !== undefined) {
+      throw new NovelOperationPreconditionError(
+        "entity_version_mismatch",
+        CHAPTER_ENTITY_TYPE,
+        chapter.id,
+        operation.operationId,
+      );
+    }
     throw precondition(operation, "domain_invariant", CHAPTER_ENTITY_TYPE, chapter.id);
   }
   if (!store.setChapterParagraphIds(chapter.id, chapter.paragraphIds)) {
@@ -357,13 +433,25 @@ function applyChapterDelete(
   operation: NovelOperation,
 ): void {
   const id = capturePublicationChapterId(captureIdentityPayload(operation.payload));
+  const expectedVersion = expectedEntityVersionOf(operation);
   assertExpected(operation, [
     exists(CHAPTER_ENTITY_TYPE, id),
     fieldDigest(CHAPTER_ENTITY_TYPE, id, "record", expectedDigest(operation, 1)),
+    ...(expectedVersion === undefined
+      ? []
+      : [version(CHAPTER_ENTITY_TYPE, id, expectedVersion)]),
   ]);
   requireChapter(store, operation, id);
   assertRecordDigest(store.getChapterDigest(id), operation, CHAPTER_ENTITY_TYPE, id);
-  if (!store.deleteChapter(id)) {
+  if (!store.deleteChapter(id, expectedVersion)) {
+    if (expectedVersion !== undefined) {
+      throw new NovelOperationPreconditionError(
+        "entity_version_mismatch",
+        CHAPTER_ENTITY_TYPE,
+        id,
+        operation.operationId,
+      );
+    }
     throw precondition(operation, "domain_invariant", CHAPTER_ENTITY_TYPE, id);
   }
 }
@@ -372,6 +460,7 @@ function volumeExpected(
   volume: PublicationVolume,
   mode: "create" | "replace",
   expectedRecordDigest?: string,
+  expectedEntityVersion?: NovelEntityVersion,
 ): readonly NovelOperationPrecondition[] {
   return Object.freeze([
     exists(PUBLICATION_ENTITY_TYPE, volume.publicationId),
@@ -381,6 +470,9 @@ function volumeExpected(
     ...(mode === "replace"
       ? [fieldDigest(VOLUME_ENTITY_TYPE, volume.id, "record", expectedRecordDigest ?? "")]
       : []),
+    ...(expectedEntityVersion === undefined
+      ? []
+      : [version(VOLUME_ENTITY_TYPE, volume.id, expectedEntityVersion)]),
   ]);
 }
 
@@ -388,6 +480,7 @@ function chapterExpected(
   chapter: PublicationChapter,
   mode: "create" | "replace",
   expectedRecordDigest?: string,
+  expectedEntityVersion?: NovelEntityVersion,
 ): readonly NovelOperationPrecondition[] {
   return Object.freeze([
     exists(PUBLICATION_ENTITY_TYPE, chapter.publicationId),
@@ -398,6 +491,9 @@ function chapterExpected(
     ...(mode === "replace"
       ? [fieldDigest(CHAPTER_ENTITY_TYPE, chapter.id, "record", expectedRecordDigest ?? "")]
       : []),
+    ...(expectedEntityVersion === undefined
+      ? []
+      : [version(CHAPTER_ENTITY_TYPE, chapter.id, expectedEntityVersion)]),
     ...chapter.paragraphIds.map((paragraphId) => exists(PARAGRAPH_ENTITY_TYPE, paragraphId)),
   ]);
 }
@@ -616,6 +712,33 @@ function fieldDigest(
     fieldPath,
     expectedDigest: expectedDigestValue,
   };
+}
+
+function version(
+  entityType: string,
+  entityId: string,
+  expectedEntityVersion: NovelEntityVersion,
+): NovelOperationPrecondition {
+  return Object.freeze({
+    kind: "entity-version",
+    entityType,
+    entityId,
+    expectedEntityVersion,
+  });
+}
+
+function expectedEntityVersionOf(
+  operation: NovelOperation,
+): NovelEntityVersion | undefined {
+  const precondition = operation.expected.find(
+    (
+      candidate,
+    ): candidate is NovelOperationPrecondition & {
+      readonly kind: "entity-version";
+      readonly expectedEntityVersion: NovelEntityVersion;
+    } => candidate.kind === "entity-version",
+  );
+  return precondition?.expectedEntityVersion;
 }
 
 function capturePayloadObject(

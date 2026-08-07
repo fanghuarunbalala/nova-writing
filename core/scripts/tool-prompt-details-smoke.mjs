@@ -4,7 +4,7 @@ import { Type } from "typebox";
 import {
   AgentManifestResolver,
   PromptCapabilitySnapshot,
-  SystemPromptBuilder,
+  ManifestSystemPromptCompiler,
   ToolGroupCatalog,
   ToolPromptDetails,
   ToolRegistry,
@@ -98,7 +98,7 @@ assert.deepEqual(
   ["TodoWrite"],
 );
 
-const promptBuilder = new SystemPromptBuilder({
+const promptBuilder = new ManifestSystemPromptCompiler({
   sections: createDefaultPromptSectionRegistry(),
   digester,
 });
@@ -113,11 +113,11 @@ const capabilityOptions = (view) => view.listAllowed().map((tool) => ({
 }));
 const allCapabilities = new PromptCapabilitySnapshot(capabilityOptions(allowedView));
 const deniedCapabilities = new PromptCapabilitySnapshot(capabilityOptions(deniedView));
-const allPrompt = await promptBuilder.build({
+const allPrompt = await promptBuilder.compile({
   definition: novelAgentDefinition,
   capabilities: allCapabilities,
 });
-const deniedPrompt = await promptBuilder.build({
+const deniedPrompt = await promptBuilder.compile({
   definition: novelAgentDefinition,
   capabilities: deniedCapabilities,
 });

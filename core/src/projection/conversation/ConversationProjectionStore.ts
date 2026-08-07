@@ -73,6 +73,7 @@ interface MutableAssistantProjection {
   completionReason?: AssistantMessageCompletionReason;
   hasToolCalls?: boolean;
   failureCode?: AssistantMessageFailureCode;
+  failureDetail?: string;
 }
 
 export interface ConversationProjectionStoreOptions {
@@ -137,6 +138,13 @@ export class ConversationProjectionStore {
       );
     } catch {
       throw payloadError(event.eventType, "Persisted Event snapshot is invalid");
+    }
+    // 流式 delta：只叠加内容，不校验/不推进 journal sequence（delta 不落盘）。
+    if (validated.eventType === OUTPUT_EVENT_TYPE.agentAssistantMessageDelta) {
+      this.applyTypedProjection(validated);
+      this.snapshot = this.buildSnapshot();
+      this.notifyListeners();
+      return "applied";
     }
     const canonical = canonicalStringifyJson(validated as unknown as JsonValue);
     const appliedCanonical = this.eventCanonicalBySequence.get(validated.sequence);
@@ -490,6 +498,9 @@ export class ConversationProjectionStore {
         throw payloadError(event.eventType, "Assistant failure code is invalid");
       }
       assistant.failureCode = failureCode;
+      if (typeof payload.failureDetail === "string" && payload.failureDetail.length > 0) {
+        assistant.failureDetail = payload.failureDetail;
+      }
     }
     assistant.status = status;
     assistant.lastSequence = event.sequence;
@@ -698,6 +709,9 @@ function toAssistantProjection(
       : {}),
     ...(assistant.failureCode !== undefined
       ? { failureCode: assistant.failureCode }
+      : {}),
+    ...(assistant.failureDetail !== undefined
+      ? { failureDetail: assistant.failureDetail }
       : {}),
   });
 }

@@ -7,8 +7,8 @@
  * getUsingYourToolsSection / getOutputEfficiencySection）。
  *
  * 用途 / Purpose：作为研究参考，按 CCB 原文逐字复刻 CCB 主 agent 的静态 prompt 段，
- * 供本项目的 PromptRecipe/SystemPromptBuilder 对齐与对比。
- * Verbatim CCB main-agent prompt sections for PromptRecipe/SystemPromptBuilder alignment research.
+ * 供本项目的 PromptRecipe/ManifestSystemPromptCompiler 对齐与对比。
+ * Verbatim CCB main-agent prompt sections for PromptRecipe/ManifestSystemPromptCompiler alignment research.
  *
  * 约束 / Constraints：
  * - 文本与 CCB @ 2ccc216 逐字一致（含换行与缩进），render() 输出恒定。

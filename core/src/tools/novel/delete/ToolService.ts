@@ -202,6 +202,8 @@ export class NovelDeleteToolService {
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
+    const currentVersion =
+      await this.options.outlineQueries.getStoryUnitVersion(scope, storyUnitId);
     operations.push(
       createStoryUnitDeleteOperation({
         operationId: this.options.identityFactory.createOperationId(),
@@ -209,6 +211,9 @@ export class NovelDeleteToolService {
         expectedContentDigest: current.contentDigest,
         expectedParentDigest: current.parentDigest,
         expectedOrderDigest: current.orderDigest,
+        ...(currentVersion === undefined
+          ? {}
+          : { expectedEntityVersion: currentVersion }),
       }),
     );
   }
@@ -261,6 +266,8 @@ export class NovelDeleteToolService {
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
+    const currentVersion =
+      await this.options.paragraphQueries.getParagraphVersion(scope, paragraphId);
     operations.push(
       createParagraphDeleteOperation({
         operationId: this.options.identityFactory.createOperationId(),
@@ -268,6 +275,9 @@ export class NovelDeleteToolService {
         expectedTextDigest: current.textDigest,
         expectedOrderDigest: current.orderDigest,
         expectedStoryUnitDigest: current.storyUnitDigest,
+        ...(currentVersion === undefined
+          ? {}
+          : { expectedEntityVersion: currentVersion }),
       }),
     );
   }
@@ -282,11 +292,16 @@ export class NovelDeleteToolService {
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
+    const currentVersion =
+      await this.options.publicationQueries.getVolumeVersion(scope, volumeId);
     operations.push(
       createPublicationVolumeDeleteOperation({
         operationId: this.options.identityFactory.createOperationId(),
         id: volumeId,
         expectedRecordDigest: current.recordDigest,
+        ...(currentVersion === undefined
+          ? {}
+          : { expectedEntityVersion: currentVersion }),
       }),
     );
   }
@@ -301,11 +316,16 @@ export class NovelDeleteToolService {
     if (current === undefined) {
       throw new NovelDeleteItemFailure(ITEM_REJECTION.notFound);
     }
+    const currentVersion =
+      await this.options.publicationQueries.getChapterVersion(scope, chapterId);
     operations.push(
       createPublicationChapterDeleteOperation({
         operationId: this.options.identityFactory.createOperationId(),
         id: chapterId,
         expectedRecordDigest: current.recordDigest,
+        ...(currentVersion === undefined
+          ? {}
+          : { expectedEntityVersion: currentVersion }),
       }),
     );
   }

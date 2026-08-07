@@ -357,8 +357,8 @@ try {
     false,
   );
 
-  // Optimistic lock: stale baseRevision write is rejected as a ToolError.
-  const staleWrite = writeTool.handler.execute(
+  // 全局 baseRevision 不再作冲突判定：旧 baseRevision 写不同实体仍成功。
+  const staleWrite = await writeTool.handler.execute(
     context(conversation, 16),
     {
       baseRevision: writeRevision,
@@ -366,10 +366,7 @@ try {
     },
     progress,
   );
-  await assert.rejects(staleWrite, (error) => {
-    assert.equal(error.code, "NOVEL_OUTLINE_WRITE_FAILED");
-    return true;
-  });
+  assert.equal(staleWrite.details.items[0].status, "applied");
 
   // Write without an id: the host generates and returns the id.
   const generatedWrite = await writeTool.handler.execute(

@@ -1,9 +1,10 @@
 /**
  * 在 canonical 库上以单个自动短事务执行一次 domain operation 并推进 revision。
- * 乐观锁由调用方传入 baseRevision，事务内与 current_revision 比对。
+ * 乐观锁由 operation 内生的 per-entity 版本前置条件（entity-version）负责；
+ * 全局 current_revision 仅作数据版本标识与 outbox 快照，不再做整批比对。
  * Executes one domain operation on the canonical database in a single
- * automatic short transaction and advances the revision. The optimistic lock
- * compares the caller-provided baseRevision with current_revision in-transaction.
+ * automatic short transaction and advances the revision. Concurrency control
+ * is delegated to per-entity version preconditions inside each operation.
  */
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -138,13 +139,11 @@ export class SqliteNovelCanonicalWriter<TContext>
         throw invariant(this.#novelId);
       }
       const actualRevision = captureNovelRevision(metadata.current_revision);
-      if (baseRevision !== actualRevision) {
-        throw new NovelRevisionConflictError(
-          this.#novelId,
-          baseRevision,
-          actualRevision,
-        );
-      }
+      this.#logger.debug("novel_canonical_write.transaction.revision", {
+        novelId: this.#novelId,
+        baseRevision,
+        actualRevision,
+      });
       const resultRevision = this.#revisionFactory.createRevision();
       const context = this.#contextFactory(database);
       for (const operation of capturedOperations) {

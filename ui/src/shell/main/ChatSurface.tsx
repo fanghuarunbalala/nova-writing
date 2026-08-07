@@ -6,7 +6,6 @@
  * 生成状态（GenStatus）按原型置于 composer 输入框上方，live 时停止按钮 enqueue StopInputEvent。
  */
 import {
-  ApprovalDecisionInputEvent,
   StopInputEvent,
   UserMessageInputEvent,
   type Logger,
@@ -23,10 +22,7 @@ import { useConversationRuntimeStatus } from "../../domains/conversation/hooks/u
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
-import {
-  mapApprovalViews,
-  type ApprovalStore,
-} from "../../domains/approval/ApprovalStore.js";
+import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
 import { MainSubHead } from "./MainSubHead.js";
 import { mapProjectionTimeline } from "./chatSurfaceMapper.js";
 import styles from "./ChatSurface.module.css";
@@ -43,9 +39,7 @@ export interface ChatSurfaceProps {
     action: "approve" | "reject" | "view-diff",
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
-  /** 写操作落库后刷新 novel 数据 store。Refresh novel data after approved writes. */
- readonly approvalStore: ApprovalStore;
-  readonly onNovelDataChanged?: () => void;
+  readonly approvalStore: ApprovalStore;
 }
 
 export function ChatSurface({
@@ -58,7 +52,6 @@ export function ChatSurface({
   onProposalAction,
   onOpenApproval,
   approvalStore,
-  onNovelDataChanged,
 }: ChatSurfaceProps) {
   const catalog = useExternalStore(conversationCatalog);
   const activeId = catalog.activeConversationId;
@@ -77,7 +70,6 @@ export function ChatSurface({
       onProposalAction={onProposalAction}
       onOpenApproval={onOpenApproval}
       approvalStore={approvalStore}
-      onNovelDataChanged={onNovelDataChanged}
     />
   );
 }
@@ -95,7 +87,6 @@ interface ActiveChatSurfaceProps {
     action: "approve" | "reject" | "view-diff",
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
-  readonly onNovelDataChanged?: () => void;
   readonly approvalStore: ApprovalStore;
 }
 
@@ -110,33 +101,13 @@ function ActiveChatSurface({
   onProposalAction,
   onOpenApproval,
   approvalStore,
-  onNovelDataChanged,
 }: ActiveChatSurfaceProps) {
   const { snapshot, enqueue, resume } = useConversationProjection(conversationId, {
     api,
     logger,
   });
-  // 同步投影里的工具审批到 shell 级 ApprovalStore（InspectorHost/TopBar 订阅）。
-  useEffect(() => {
-    approvalStore.setApprovals(mapApprovalViews(snapshot.projection.approvals));
-  }, [approvalStore, snapshot.projection.approvals]);
-  // 决策回调：InspectorHost 的批准/拒绝最终走 binding enqueue 决策输入事件。
-  useEffect(() => {
-    approvalStore.setDecisionHandler(
-      (approvalRequestId, decision, argumentDigest) => {
-        if (decision === "approved") onNovelDataChanged?.();
-        return enqueue(
-          new ApprovalDecisionInputEvent({
-            conversationId,
-            approvalRequestId,
-            decision,
-            argumentDigest,
-          }),
-        );
-      },
-    );
-    return () => approvalStore.setDecisionHandler(undefined);
-  }, [approvalStore, conversationId, enqueue, onNovelDataChanged]);
+  // 审批数据与决策由 ApplicationShell 全局管理（跨会话）；此处仅保留
+  // 消息流审批卡的批准/请求修改入口（approvalStore.decide）。
   const timeline = mapProjectionTimeline(
     snapshot.projection,
     snapshot.cards.cards,

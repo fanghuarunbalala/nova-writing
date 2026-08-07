@@ -489,6 +489,8 @@ export class NovelPublicationToolService {
     if (current === undefined) {
       throw new NovelPublicationItemFailure(ITEM_REJECTION.notFound);
     }
+    const currentVersion =
+      await this.options.publicationQueries.getVolumeVersion(input.scope, id);
     const merged = capturePublicationVolume({
       id: current.volume.id,
       publicationId: current.volume.publicationId,
@@ -509,6 +511,9 @@ export class NovelPublicationToolService {
         operationId: this.options.identityFactory.createOperationId(),
         volume: merged,
         expectedRecordDigest: current.recordDigest,
+        ...(currentVersion === undefined
+          ? {}
+          : { expectedEntityVersion: currentVersion }),
       }),
     );
   }
@@ -562,6 +567,8 @@ export class NovelPublicationToolService {
     if (current === undefined) {
       throw new NovelPublicationItemFailure(ITEM_REJECTION.notFound);
     }
+    const currentVersion =
+      await this.options.publicationQueries.getChapterVersion(input.scope, id);
     const volumeId =
       input.patch.volumeId === undefined
         ? current.chapter.volumeId
@@ -605,6 +612,9 @@ export class NovelPublicationToolService {
         operationId: this.options.identityFactory.createOperationId(),
         chapter: merged,
         expectedRecordDigest: current.recordDigest,
+        ...(currentVersion === undefined
+          ? {}
+          : { expectedEntityVersion: currentVersion }),
       }),
     );
   }

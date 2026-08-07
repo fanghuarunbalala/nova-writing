@@ -16,8 +16,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { Logger, NovelApiClient } from "@novel/core";
+import {
+  ApprovalDecisionInputEvent,
+  type Logger,
+  type NovelApiClient,
+} from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
+import {
+  ApprovalStore,
+  mapApprovalViews,
+} from "../domains/approval/ApprovalStore.js";
 import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
 import {
   createDomainReferenceResolver,
@@ -43,7 +51,6 @@ import type { NovelUiExtensions } from "../extensions/NovelUiExtensions.js";
 import type { ConversationCardRendererRegistry } from "../domains/conversation/cards/ConversationCardRendererRegistry.js";
 import type { ConversationCardProjectorRegistry } from "../domains/conversation/cards/projection/ConversationCardProjectorRegistry.js";
 import type { InspectorRendererRegistry } from "./inspector/InspectorRendererRegistry.js";
-import { ApprovalStore } from "../domains/approval/ApprovalStore.js";
 import { InspectorHost } from "./inspector/InspectorHost.js";
 import { MainArea } from "./main/MainArea.js";
 import type { ContentTab } from "./main/contentTab.js";
@@ -118,6 +125,18 @@ export function ApplicationShell({
   const overview = useExternalStore(domainStores.novelOverview);
   const approvalStore = useMemo(() => new ApprovalStore(), []);
   const approvalSnapshot = useExternalStore(approvalStore);
+  // 全局审批队列：跨会话聚合（右上角 badge / 审批面板数据源）。
+  // Global approval queue across conversations.
+  const refreshApprovals = useCallback(() => {
+    void api.conversations
+      .listApprovals()
+      .then((approvals) =>
+        approvalStore.setApprovals(mapApprovalViews(approvals)),
+      )
+      .catch(() => {
+        // 查询失败静默：下次打开面板时再刷新。
+      });
+  }, [api, approvalStore]);
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
   const [locateReference, setLocateReference] = useState<
@@ -144,7 +163,8 @@ export function ApplicationShell({
     void manuscriptStructure.loadWorkspace(workspaceId);
     void character.loadWorkspace(workspaceId);
     void location.loadWorkspace(workspaceId);
-  }, [domainStores, workspaceId]);
+    refreshApprovals();
+  }, [domainStores, workspaceId, refreshApprovals]);
 
   const handleCreateConversation = useCallback(() => {
     void domainStores.conversationCatalog.createConversation();
@@ -265,13 +285,14 @@ export function ApplicationShell({
     [approvalStore, inspectorRouter],
   );
 
-  // 时间线"等待审批"行 → 打开审批面板并选中对应请求。
+  // 时间线"等待审批"行 / 消息流审批卡 → 打开审批面板并选中对应请求。
   const handleOpenApproval = useCallback(
     (approvalRequestId: string) => {
+      refreshApprovals();
       approvalStore.select(approvalRequestId);
       inspectorRouter.transition({ kind: "approval", changeSetId: approvalRequestId });
     },
-    [approvalStore, inspectorRouter],
+    [approvalStore, inspectorRouter, refreshApprovals],
   );
 
   // 写操作落库后刷新 novel 数据 store（大纲/人物/地点/正文/概览），
@@ -312,6 +333,34 @@ export function ApplicationShell({
     },
     [],
   );
+
+  // 全局决策：按审批所属会话投递决策输入事件，决策后刷新队列与 novel 数据。
+  // Global decision routing by owning conversation.
+  useEffect(() => {
+    approvalStore.setDecisionHandler(
+      (approvalRequestId, decision, argumentDigest) => {
+        const approval = approvalStore
+          .getSnapshot()
+          .approvals.find(
+            (item) => item.approvalRequestId === approvalRequestId,
+          );
+        if (approval === undefined) return undefined;
+        if (decision === "approved") handleNovelDataChanged();
+        const enqueuePromise = api.conversations.enqueueInput(
+          approval.conversationId,
+          new ApprovalDecisionInputEvent({
+            conversationId: approval.conversationId,
+            approvalRequestId,
+            decision,
+            argumentDigest,
+          }),
+        );
+        void enqueuePromise.then(refreshApprovals, refreshApprovals);
+        return enqueuePromise;
+      },
+    );
+    return () => approvalStore.setDecisionHandler(undefined);
+  }, [approvalStore, api, handleNovelDataChanged, refreshApprovals]);
 
   // 审批全部处理完 → 自动收起面板，避免空占位；打开由用户显式触发
   // （右上角审批按钮 / 消息流审批卡"前往审批 →"），不自动抢占右侧区域。
@@ -356,6 +405,7 @@ export function ApplicationShell({
           console.info("[inspector] approval button clicked", {
             route: inspectorRouter.getSnapshot().state,
           });
+          refreshApprovals();
           inspectorRouter.transition({ kind: "approval", changeSetId: "" });
           console.info("[inspector] approval route after click", {
             route: inspectorRouter.getSnapshot().state,
@@ -403,7 +453,6 @@ export function ApplicationShell({
           locateReference={locateReference}
           onProposalAction={handleProposalAction}
           onOpenApproval={handleOpenApproval}
-          onNovelDataChanged={handleNovelDataChanged}
           approvalStore={approvalStore}
         />
         <InspectorHost

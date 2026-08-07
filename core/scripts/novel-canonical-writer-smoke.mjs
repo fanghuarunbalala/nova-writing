@@ -189,31 +189,24 @@ async function main() {
     assert.equal(unitCreate.baseRevision, "revision_writer_1");
     assert.equal(unitCreate.resultRevision, "revision_writer_2");
 
-    // 乐观锁冲突：携带过期 baseRevision 的写入必须被拒绝。
-    await assert.rejects(
-      writer.applyOperation({
-        operation: createStoryUnitCreateOperation({
-          operationId: captureNovelOperationId("op_unit_stale"),
-          storyUnit: captureStoryUnit({
-            id: captureStoryUnitId("unit_canonical_writer_stale"),
-            outlineId,
-            orderKey: "80008000",
-            title: "Stale Write",
-            planningStatus: "idea",
-            realizationStatus: "pending",
-          }),
+    // 全局 baseRevision 不再作整批冲突判定：携带过期 baseRevision 写入
+    // 不同实体仍成功（冲突由 operation 的 per-entity 版本前置条件负责）。
+    const staleUnitCreate = await writer.applyOperation({
+      operation: createStoryUnitCreateOperation({
+        operationId: captureNovelOperationId("op_unit_stale"),
+        storyUnit: captureStoryUnit({
+          id: captureStoryUnitId("unit_canonical_writer_stale"),
+          outlineId,
+          orderKey: "80008000",
+          title: "Stale Write",
+          planningStatus: "idea",
+          realizationStatus: "pending",
         }),
-        conversationId: CONVERSATION_ID,
-        baseRevision: outlineCreate.resultRevision,
       }),
-      (error) => {
-        assert.equal(error instanceof NovelRevisionConflictError, true);
-        assert.equal(error.code, "NOVEL_REVISION_CONFLICT");
-        assert.equal(error.expectedRevision, "revision_writer_1");
-        assert.equal(error.actualRevision, "revision_writer_2");
-        return true;
-      },
-    );
+      conversationId: CONVERSATION_ID,
+      baseRevision: outlineCreate.resultRevision,
+    });
+    assert.equal(staleUnitCreate.status, "applied");
 
     // 数据已落 canonical，revision 已推进。
     const database = new DatabaseSync(location.canonicalDatabasePath);
@@ -223,7 +216,7 @@ async function main() {
           "SELECT current_revision FROM novel_metadata WHERE singleton = 1",
         )
         .get();
-      assert.equal(metadata.current_revision, "revision_writer_2");
+      assert.equal(metadata.current_revision, "revision_writer_3");
       const unitRow = database
         .prepare(
           "SELECT id, content_json FROM novel_story_units WHERE id = ?",
@@ -235,7 +228,7 @@ async function main() {
     }
 
     const outboxRows = readOutboxRows(location.canonicalDatabasePath);
-    assert.equal(outboxRows.length, 2);
+    assert.equal(outboxRows.length, 3);
     assert.ok(
       outboxRows.every(
         (row) =>

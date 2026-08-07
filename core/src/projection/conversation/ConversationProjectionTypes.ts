@@ -89,6 +89,8 @@ export interface AssistantMessageProjection {
   readonly completionReason?: AssistantMessageCompletionReason;
   readonly hasToolCalls?: boolean;
   readonly failureCode?: AssistantMessageFailureCode;
+  /** 脱敏失败详情（中文摘要）。Redacted failure detail. */
+  readonly failureDetail?: string;
 }
 
 export interface AgentRunProjection {

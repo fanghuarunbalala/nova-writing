@@ -123,7 +123,15 @@ export class PiProviderExecutionFactory {
         message: errorMessageOf(error),
         status: state.status,
       });
-      this.#logger.info("pi_provider_execution.failed", { failure });
+      this.#logger.info("pi_provider_execution.failed", {
+        failure,
+        errorName: getErrorName(error),
+        ...(captureProviderErrorMessage(error) === undefined
+          ? {}
+          : { message: captureProviderErrorMessage(error) }),
+        ...captureProviderErrorCode(error),
+        ...(state.status === undefined ? {} : { status: state.status }),
+      });
       return createFailureStream(failure, descriptor.api);
     }
     return this.#normalize(stream, state, hooks, descriptor.api);
@@ -247,7 +255,15 @@ export class PiProviderExecutionFactory {
                   message: event.error.errorMessage,
                   status: state.status,
                 });
-          this.#logger.info("pi_provider_execution.failed", { failure });
+          this.#logger.info("pi_provider_execution.failed", {
+            failure,
+            errorName: getErrorName(event.error),
+            ...(captureProviderErrorMessage(event.error) === undefined
+              ? {}
+              : { message: captureProviderErrorMessage(event.error) }),
+            ...captureProviderErrorCode(event.error),
+            ...(state.status === undefined ? {} : { status: state.status }),
+          });
           const normalized = normalizeErrorEvent(event, failure);
           output.push(normalized);
           output.end(normalized.error);
@@ -409,7 +425,96 @@ const EMPTY_USAGE: Usage = Object.freeze({
 
 function errorMessageOf(error: unknown): string | undefined {
   if (error instanceof Error) return error.message;
+  if (error !== null && typeof error === "object") {
+    const message = (error as Record<string, unknown>).message;
+    return typeof message === "string" && message.trim().length > 0
+      ? message
+      : undefined;
+  }
   return undefined;
+}
+
+/** 开发阶段记录原始错误消息（截断防刷屏）。Raw provider error message, truncated. */
+function captureProviderErrorMessage(error: unknown): string | undefined {
+  const found = findErrorMessage(error, 0);
+  if (found === undefined) {
+    const serialized = serializeErrorObject(error);
+    return serialized === undefined
+      ? undefined
+      : serialized.length <= 512
+        ? serialized
+        : `${serialized.slice(0, 512)}…`;
+  }
+  return found.length <= 512 ? found : `${found.slice(0, 512)}…`;
+}
+
+/** 递归查找错误消息（支持嵌套 error/cause）。Recursively find a provider error message. */
+function findErrorMessage(value: unknown, depth: number): string | undefined {
+  if (depth > 3 || value === null || value === undefined) return undefined;
+  if (typeof value === "string" && value.trim().length > 0) return value;
+  if (typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of ["message", "error", "cause", "reason"]) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate;
+    }
+    const nested = findErrorMessage(candidate, depth + 1);
+    if (nested !== undefined) return nested;
+  }
+  return undefined;
+}
+
+/** 开发阶段：序列化错误对象摘要（循环安全）。Serialize an error object safely. */
+function serializeErrorObject(error: unknown): string | undefined {
+  if (error === null || typeof error !== "object") return undefined;
+  try {
+    const seen = new WeakSet<object>();
+    return JSON.stringify(
+      error,
+      (_key, value) => {
+        if (typeof value === "object" && value !== null) {
+          if (seen.has(value)) return "[Circular]";
+          seen.add(value);
+        }
+        return value;
+      },
+      0,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function getErrorName(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error;
+}
+
+/** 提取错误对象的脱敏标识（code/status/type），不落原始消息。Redacted error code/status/type. */
+function captureProviderErrorCode(
+  error: unknown,
+): {
+  readonly errorCode?: string;
+  readonly errorStatus?: string;
+  readonly errorType?: string;
+} {
+  if (error === null || typeof error !== "object") return {};
+  const record = error as Record<string, unknown>;
+  const code =
+    typeof record.code === "string" && record.code.trim().length > 0
+      ? record.code.trim().slice(0, 64)
+      : undefined;
+  const status =
+    typeof record.status === "number" ? String(record.status) : undefined;
+  const type =
+    typeof record.type === "string" && record.type.trim().length > 0
+      ? record.type.trim().slice(0, 64)
+      : undefined;
+  return {
+    ...(code === undefined ? {} : { errorCode: code }),
+    ...(status === undefined ? {} : { errorStatus: status }),
+    ...(type === undefined ? {} : { errorType: type }),
+  };
 }
 
 /** Buffered Pi event stream satisfying the AssistantMessageEventStream surface. */

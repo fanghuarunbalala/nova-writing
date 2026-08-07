@@ -180,7 +180,7 @@ try {
 
   const versionTwoProjector = {
     id: coreProjector.id,
-    version: "2",
+    version: "4",
     project: (event) => coreProjector.project(event),
   };
   const versionTwoContext = reopenedStore.createMessageProjectionContext({

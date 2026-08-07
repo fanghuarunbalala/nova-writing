@@ -147,20 +147,32 @@ export class AgentAssistantMessageCompletedPayload extends OutputPayload {
 export class AgentAssistantMessageFailedPayload extends OutputPayload {
   readonly assistantMessageId: string;
   readonly failureCode: AssistantMessageFailureCode;
+  /** 脱敏失败详情（中文可读摘要，不暴露原始 provider 错误）。Failure detail. */
+  readonly failureDetail?: string;
 
-  constructor(assistantMessageId: string, failureCode: AssistantMessageFailureCode) {
+  constructor(
+    assistantMessageId: string,
+    failureCode: AssistantMessageFailureCode,
+    failureDetail?: string,
+  ) {
     super();
     this.assistantMessageId = captureNonBlank("Assistant Message ID", assistantMessageId);
     if (!Object.values(ASSISTANT_MESSAGE_FAILURE_CODE).includes(failureCode)) {
       throw new TypeError("Assistant Message failure code is invalid");
     }
     this.failureCode = failureCode;
+    this.failureDetail = failureDetail === undefined
+      ? undefined
+      : captureBoundedText("Assistant Message failure detail", failureDetail, 240);
   }
 
   toObject(): JsonObject {
     return {
       assistantMessageId: this.assistantMessageId,
       failureCode: this.failureCode,
+      ...(this.failureDetail === undefined
+        ? {}
+        : { failureDetail: this.failureDetail }),
     };
   }
 }
@@ -201,6 +213,23 @@ function captureNonBlank(label: string, value: string): string {
     throw new TypeError(`${label} must not be blank`);
   }
   return value;
+}
+
+function captureBoundedText(label: string, value: string, maximumBytes: number): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new TypeError(`${label} must not be blank`);
+  }
+  if (new TextEncoder().encode(value).byteLength <= maximumBytes) return value;
+  const characters = [...value];
+  let kept = "";
+  let used = 0;
+  for (const character of characters) {
+    const bytes = new TextEncoder().encode(character).byteLength;
+    if (used + bytes > maximumBytes) break;
+    kept += character;
+    used += bytes;
+  }
+  return kept;
 }
 
 function assertNonNegative(label: string, value: number): void {

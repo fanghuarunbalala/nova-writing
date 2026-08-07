@@ -15,6 +15,7 @@ import {
 } from "../../../runtime/index.js";
 import {
   RuntimeEventToolTraceSink,
+  RuntimeEventToolLifecycleSink,
   type RuntimeEventSink,
 } from "../../../runtime/execution/event/index.js";
 import {
@@ -204,6 +205,9 @@ export function createChildToolExecutionComposition(
       resultLimits: DEFAULT_TOOL_RESULT_LIMITS,
       traceSink: new RuntimeEventToolTraceSink({
         eventSink,
+      }),
+      lifecycleSink: new RuntimeEventToolLifecycleSink({
+        eventSink: options.eventSink,
       }),
       logger,
     }),

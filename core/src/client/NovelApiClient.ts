@@ -4,7 +4,9 @@ import type {
   ConversationCatalogResult,
   CreateConversationOptions,
   ListConversationsOptions,
+  GlobalApprovalProjection,
 } from "../conversation/index.js";
+import type { InputEvent, InputReceipt } from "../event/index.js";
 import type {
   CharacterId,
   LocationId,
@@ -36,6 +38,12 @@ export interface ConversationApi {
   delete(conversationId: string): Promise<void>;
 
   open(conversationId: string): Promise<Conversation>;
+
+  /** 聚合工作区内全部会话的审批。Aggregate approvals across conversations. */
+  listApprovals(): Promise<readonly GlobalApprovalProjection[]>;
+
+  /** 向指定会话投递输入事件（审批决策等）。Enqueue an input event to a conversation. */
+  enqueueInput(conversationId: string, event: InputEvent): Promise<InputReceipt>;
 }
 
 export interface NovelOverviewApi {

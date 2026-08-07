@@ -11,6 +11,9 @@ import { ConversationListItem } from "../../../src/domains/conversation/componen
 import { MessageReferenceChip } from "../../../src/domains/conversation/components/MessageReference.js";
 import { NewConversationButton } from "../../../src/domains/conversation/components/NewConversationButton.js";
 
+// jsdom 未实现 window.confirm，硬删除确认统一 stub 为通过。
+vi.spyOn(window, "confirm").mockReturnValue(true);
+
 const item = Object.freeze({
   id: "conversation_a",
   title: "对话 a",

@@ -11,6 +11,7 @@ import {
   captureStoryUnit,
   captureStoryUnitContent,
   captureStoryUnitId,
+  captureNovelEntityVersion,
   type CharacterId,
   type LeafStoryUnitPlan,
   type LocationId,
@@ -25,6 +26,7 @@ import {
   type StoryUnit,
   type StoryUnitDigestField,
   type StoryUnitId,
+  type NovelEntityVersion,
 } from "../../../novel/index.js";
 import { createSqliteNovelEntityMutationContext } from "./SqliteNovelEntityRepository.js";
 import { createSqliteNovelParagraphMutationContext } from "./SqliteNovelParagraphRepository.js";
@@ -45,6 +47,7 @@ interface StoryUnitRow {
   content_digest: string;
   parent_digest: string;
   order_digest: string;
+  entity_version: number;
 }
 
 interface LeafPlanRow {
@@ -54,7 +57,7 @@ interface LeafPlanRow {
 }
 
 const STORY_UNIT_SELECT = `SELECT id, outline_id, parent_id, order_key,
-  content_json, content_digest, parent_digest, order_digest`;
+  content_json, content_digest, parent_digest, order_digest, entity_version`;
 
 export function createSqliteNovelOutlineMutationContext(
   database: DatabaseSync,
@@ -79,6 +82,9 @@ export function createSqliteNovelMutationContext(
 export class SqliteNovelOutlineRepository
   implements NovelMutableOutlineRepository
 {
+  /** 本事务内已校验并推进过版本的实体（批内同实体多操作只校验一次）。 */
+  private readonly confirmedVersions = new Set<string>();
+
   constructor(private readonly database: DatabaseSync) {}
 
   getOutline(id: StoryOutlineId): StoryOutline | undefined {
@@ -188,6 +194,17 @@ export class SqliteNovelOutlineRepository
     return row?.digest;
   }
 
+  getStoryUnitVersion(id: StoryUnitId): ReturnType<
+    NovelMutableOutlineRepository["getStoryUnitVersion"]
+  > {
+    const row = this.database
+      .prepare("SELECT entity_version FROM novel_story_units WHERE id = ?")
+      .get(captureStoryUnitId(id)) as { entity_version: number } | undefined;
+    return row === undefined
+      ? undefined
+      : captureNovelEntityVersion(row.entity_version);
+  }
+
   insertStoryUnit(unit: StoryUnit): boolean {
     const encoded = encodeStoryUnit(unit);
     const result = this.database
@@ -201,14 +218,40 @@ export class SqliteNovelOutlineRepository
     return Number(result.changes) === 1;
   }
 
-  replaceStoryUnit(unit: StoryUnit): boolean {
+  replaceStoryUnit(
+    unit: StoryUnit,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean {
     const encoded = encodeStoryUnit(unit);
+    if (
+      expectedEntityVersion !== undefined &&
+      !this.confirmedVersions.has(unit.id)
+    ) {
+      const row = this.database
+        .prepare("SELECT entity_version FROM novel_story_units WHERE id = ?")
+        .get(captureStoryUnitId(unit.id)) as
+        | { entity_version: number }
+        | undefined;
+      if (
+        row === undefined ||
+        Number(row.entity_version) !== (expectedEntityVersion as number)
+      ) {
+        return false;
+      }
+      this.confirmedVersions.add(unit.id);
+    }
     const result = this.database
       .prepare(
-        `UPDATE novel_story_units
-         SET outline_id = ?, parent_id = ?, order_key = ?, content_json = ?,
-             content_digest = ?, parent_digest = ?, order_digest = ?
-         WHERE id = ?`,
+        expectedEntityVersion === undefined
+          ? `UPDATE novel_story_units
+             SET outline_id = ?, parent_id = ?, order_key = ?, content_json = ?,
+                 content_digest = ?, parent_digest = ?, order_digest = ?
+             WHERE id = ?`
+          : `UPDATE novel_story_units
+             SET outline_id = ?, parent_id = ?, order_key = ?, content_json = ?,
+                 content_digest = ?, parent_digest = ?, order_digest = ?,
+                 entity_version = entity_version + 1
+             WHERE id = ?`,
       )
       .run(
         encoded[1],
@@ -223,10 +266,29 @@ export class SqliteNovelOutlineRepository
     return Number(result.changes) === 1;
   }
 
-  deleteStoryUnit(id: StoryUnitId): boolean {
+  deleteStoryUnit(
+    id: StoryUnitId,
+    expectedEntityVersion?: NovelEntityVersion,
+  ): boolean {
+    const storyUnitId = captureStoryUnitId(id);
+    if (
+      expectedEntityVersion !== undefined &&
+      !this.confirmedVersions.has(storyUnitId)
+    ) {
+      const row = this.database
+        .prepare("SELECT entity_version FROM novel_story_units WHERE id = ?")
+        .get(storyUnitId) as { entity_version: number } | undefined;
+      if (
+        row === undefined ||
+        Number(row.entity_version) !== (expectedEntityVersion as number)
+      ) {
+        return false;
+      }
+      this.confirmedVersions.add(storyUnitId);
+    }
     const result = this.database
       .prepare("DELETE FROM novel_story_units WHERE id = ?")
-      .run(captureStoryUnitId(id));
+      .run(storyUnitId);
     return Number(result.changes) === 1;
   }
 

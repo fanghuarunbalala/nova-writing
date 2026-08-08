@@ -143,7 +143,20 @@ export class AgentRuntimeRunExecutor implements RuntimeRunExecutor {
 
     const context = await this.compileContext(preparation, request);
     if (await this.deferToCancellationIfOwned(request, "preparing")) return;
-    const result = await this.streamAgent(preparation.invocation, context, request);
+    let result: AgentRuntimeStreamResult;
+    try {
+      result = await this.streamAgent(preparation.invocation, context, request);
+    } catch (error) {
+      // Safety net: an adapter failure while the stop path owns the run
+      // (stopping/cancelled) is a shutdown artifact, not a real execution error —
+      // settle through the existing cancellation terminal wait instead of crashing.
+      const current = this.lifecycleController.getRunSnapshot();
+      if (isCancellationOwnedState(current, request.runId)) {
+        await this.waitForCancellationTerminal(request);
+        return;
+      }
+      throw error;
+    }
     this.logger.info("runtime.agent_run.adapter_settled", {
       ...toLogIdentity(request),
       outcome: result.outcome,

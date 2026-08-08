@@ -164,8 +164,11 @@ async function renderShell() {
 
 describe("ApplicationShell smoke", () => {
   it("renders the shell and loads the workspace into domains", async () => {
+    const user = userEvent.setup();
     const { api } = await renderShell();
     expect(screen.getAllByText("白昼计划").length).toBeGreaterThan(0);
+    // 待办仅存在于计划视图（侧栏已无待办组）。
+    await user.click(screen.getByRole("button", { name: "计划" }));
     expect(await screen.findByText("还没有对话")).toBeInTheDocument();
     expect(api.conversations.list).toHaveBeenCalledWith({ status: "active" });
     expect(api.novel.overview.get).toHaveBeenCalled();

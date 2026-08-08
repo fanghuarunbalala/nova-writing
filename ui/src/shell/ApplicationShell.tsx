@@ -422,8 +422,6 @@ export function ApplicationShell({
           novelOverview={domainStores.novelOverview}
           onCreateConversation={handleCreateConversation}
           onSelectConversation={handleSelectConversation}
-          schedule={domainStores.schedule}
-          scheduleTodo={domainStores.scheduleTodo}
           contentTab={contentTab}
           onSelectContentPane={handleSelectContentPane}
           workspaceId={workspaceId}
@@ -431,7 +429,6 @@ export function ApplicationShell({
           revision={overview.sourceRevision}
           pendingApprovalCount={approvalSnapshot.pendingCount}
           onOpenWorkspace={onOpenWorkspace}
-          onTodoAction={handleTodoAction}
         />
         <MainArea
           api={api}

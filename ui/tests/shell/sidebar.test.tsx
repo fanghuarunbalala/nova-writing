@@ -8,10 +8,7 @@ import { Sidebar } from "../../src/shell/sidebar/Sidebar.js";
 import { SidebarSection } from "../../src/shell/sidebar/SidebarSection.js";
 import { SidebarToggleButton } from "../../src/shell/sidebar/SidebarToggleButton.js";
 import { ConversationCatalogStore } from "../../src/domains/conversation/store/ConversationCatalogStore.js";
-import { ScheduleStore } from "../../src/domains/schedule/store/ScheduleStore.js";
-import { ScheduleTodoStore } from "../../src/domains/schedule/store/ScheduleTodoStore.js";
 import { NovelOverviewStore } from "../../src/domains/novel/overview/NovelOverviewStore.js";
-import { StoryOutlineTreeStore } from "../../src/domains/novel/outline/store/StoryOutlineTreeStore.js";
 
 function makeStores() {
   const api = {
@@ -53,15 +50,13 @@ function makeStores() {
   } as never;
   const conversationCatalog = new ConversationCatalogStore({ api });
   const novelOverview = new NovelOverviewStore({ api });
-  const outlineTree = new StoryOutlineTreeStore({ api });
-  const schedule = new ScheduleStore({ novelOverview, outlineTree, conversationCatalog });
-  return { conversationCatalog, schedule, novelOverview };
+  return { conversationCatalog, novelOverview };
 }
 
 describe("Sidebar", () => {
   it("renders sections, conversations and content panes", async () => {
     const user = userEvent.setup();
-    const { conversationCatalog, schedule, novelOverview } = makeStores();
+    const { conversationCatalog, novelOverview } = makeStores();
     await conversationCatalog.loadWorkspace("w1");
     await novelOverview.loadWorkspace("w1");
     const onCreateConversation = vi.fn();
@@ -72,8 +67,6 @@ describe("Sidebar", () => {
         conversationCatalog={conversationCatalog}
         novelOverview={novelOverview}
         onCreateConversation={onCreateConversation}
-        schedule={schedule}
-        scheduleTodo={new ScheduleTodoStore()}
         contentTab="outline"
         onSelectContentPane={onSelectContentPane}
         workspaceId="w1"

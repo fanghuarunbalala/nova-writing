@@ -5,8 +5,8 @@ import {
   ToolPromptDetails,
   defineTool,
   type RegisteredTool,
-  type ToolResult,
 } from "../../../tooling/protocol/index.js";
+import { formatReadToolResult } from "../readResult.js";
 import {
   NovelLocationReadParametersSchema,
   type NovelLocationReadArguments,
@@ -53,7 +53,7 @@ export function createLocationReadTool(
             conversationId: context.conversationId,
             locationCount: details.locations.length,
           });
-          return readResult(details);
+          return formatReadToolResult(details, "Locations read.");
         } catch (error) {
           if (error instanceof ToolError) throw error;
           throw new ToolError({
@@ -73,13 +73,3 @@ export function createLocationReadTool(
   });
 }
 
-function readResult(
-  details: NovelLocationReadDetails,
-): ToolResult<NovelLocationReadDetails> {
-  return Object.freeze({
-    content: Object.freeze([
-      Object.freeze({ type: "text" as const, text: "Locations read." }),
-    ]),
-    details,
-  });
-}

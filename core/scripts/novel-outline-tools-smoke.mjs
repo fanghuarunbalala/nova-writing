@@ -202,6 +202,9 @@ try {
   );
   assert.equal(readResult.details.outline.id, "outline_tool_auto");
   assert.equal(readResult.details.units.length, 2);
+  // content carries real data (provider serializes content only in the live turn).
+  assert.match(readResult.content[0].text, /^Outline read\.\n\{/);
+  assert.match(readResult.content[0].text, /"id": "outline_tool_auto"/);
   const rootUnit = readResult.details.units[0];
   const leafUnit = readResult.details.units[1];
   assert.equal(rootUnit.planningStatus, "idea");

@@ -205,6 +205,9 @@ try {
   );
   assert.equal(volumeRead.details.volumes.length, 1);
   assert.equal(volumeRead.details.volumes[0].id, volumeId);
+  // content carries real data (provider serializes content only in the live turn).
+  assert.match(volumeRead.content[0].text, /^Volumes read\.\n\{/);
+  assert.match(volumeRead.content[0].text, new RegExp(`"id": "${volumeId}"`));
 
   const chapterWrite = await chapterWriteTool.handler.execute(
     context(conversation, 3),
@@ -233,6 +236,9 @@ try {
     progress,
   );
   assert.equal(chapterRead.details.chapters.length, 1);
+  // content carries real data (provider serializes content only in the live turn).
+  assert.match(chapterRead.content[0].text, /^Chapters read\.\n\{/);
+  assert.match(chapterRead.content[0].text, new RegExp(`"${paragraphOneId}"`));
   assert.deepEqual(chapterRead.details.chapters[0].paragraphIds, [
     paragraphOneId,
     paragraphTwoId,

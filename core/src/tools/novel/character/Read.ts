@@ -5,8 +5,8 @@ import {
   ToolPromptDetails,
   defineTool,
   type RegisteredTool,
-  type ToolResult,
 } from "../../../tooling/protocol/index.js";
+import { formatReadToolResult } from "../readResult.js";
 import {
   NovelCharacterReadParametersSchema,
   type NovelCharacterReadArguments,
@@ -53,7 +53,7 @@ export function createCharacterReadTool(
             conversationId: context.conversationId,
             characterCount: details.characters.length,
           });
-          return readResult(details);
+          return formatReadToolResult(details, "Characters read.");
         } catch (error) {
           if (error instanceof ToolError) throw error;
           throw new ToolError({
@@ -73,13 +73,3 @@ export function createCharacterReadTool(
   });
 }
 
-function readResult(
-  details: NovelCharacterReadDetails,
-): ToolResult<NovelCharacterReadDetails> {
-  return Object.freeze({
-    content: Object.freeze([
-      Object.freeze({ type: "text" as const, text: "Characters read." }),
-    ]),
-    details,
-  });
-}

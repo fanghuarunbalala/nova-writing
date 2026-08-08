@@ -12,6 +12,7 @@ import { ManuscriptChapterList } from "../../domains/novel/manuscript/components
 import { StoryOutlineTree } from "../../domains/novel/outline/components/StoryOutlineTree.js";
 import type { CharacterStore } from "../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
+import { resolveChapterTitles } from "../../domains/novel/manuscript/projection/resolveChapterTitles.js";
 import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
@@ -78,7 +79,7 @@ export function ContentSurface({
         content = (
           <ManuscriptChapterList
             workspaceId={workspaceId ?? ""}
-            chapters={manuscriptSnapshot.chapters}
+            chapters={resolveChapterTitles(manuscriptSnapshot.chapters, outline.tree)}
             locate={
               locateReference == null
                 ? undefined

@@ -12,6 +12,7 @@ import type {
   NovelApiClient,
   NovelParagraphCatalogSnapshot,
 } from "@novel/core";
+import { resolveChapterTitles } from "../../../src/domains/novel/manuscript/projection/resolveChapterTitles.js";
 import { ManuscriptStructureStore } from "../../../src/domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import { ManuscriptChapterList } from "../../../src/domains/novel/manuscript/components/ManuscriptChapterList.js";
 import { ManuscriptBlock } from "../../../src/domains/novel/manuscript/components/ManuscriptBlock.js";
@@ -58,20 +59,73 @@ function buildApi(
 }
 
 describe("ManuscriptStructureStore", () => {
-  it("maps paragraphs into a single chapter view", async () => {
+  it("groups paragraphs by storyUnitId into ordered chapters", async () => {
     const api = buildApi();
     const store = new ManuscriptStructureStore({ api });
     await store.loadWorkspace("w1");
     const snapshot = store.getSnapshot();
     expect(snapshot.phase).toBe("ready");
     expect(snapshot.chapters).toHaveLength(1);
-    expect(snapshot.chapters[0].title).toBe("全部段落");
+    expect(snapshot.chapters[0].chapterId).toBe("su-1");
+    expect(snapshot.chapters[0].title).toBe("su-1"); // 占位，视图层用大纲标题覆盖
     expect(snapshot.chapters[0].blocks[0]).toMatchObject({
       blockId: "§3-01-04",
       digest: "8f3a70",
       text: "",
+      storyUnitId: "su-1",
     });
     expect(snapshot.chapters[0].blocks).toHaveLength(2);
+  });
+
+  it("splits paragraphs across story units and sorts chapters by first orderKey", async () => {
+    const api = buildApi({
+      getCatalog: vi.fn(async () => ({
+        schemaVersion: 1,
+        scope: { kind: "canonical" },
+        paragraphs: [
+          { id: "p-b", storyUnitId: "su-2", orderKey: "8000", textDigest: "22222222" },
+          { id: "p-a", storyUnitId: "su-1", orderKey: "4000", textDigest: "11111111" },
+          { id: "p-b2", storyUnitId: "su-2", orderKey: "6000", textDigest: "33333333" },
+        ],
+      })),
+    });
+    const store = new ManuscriptStructureStore({ api });
+    await store.loadWorkspace("w1");
+    const chapters = store.getSnapshot().chapters;
+    expect(chapters.map((chapter) => chapter.chapterId)).toEqual(["su-1", "su-2"]);
+    // 章节内 block 按 orderKey 排序（p-b2 在 p-b 之前）
+    expect(chapters[1].blocks.map((block) => block.blockId)).toEqual(["p-b2", "p-b"]);
+  });
+
+  it("falls back to a 全部段落 group for paragraphs without a story unit", async () => {
+    const api = buildApi({
+      getCatalog: vi.fn(async () => ({
+        schemaVersion: 1,
+        scope: { kind: "canonical" },
+        paragraphs: [
+          { id: "p-1", orderKey: "4000", textDigest: "11111111" },
+          { id: "p-2", storyUnitId: "su-1", orderKey: "8000", textDigest: "22222222" },
+        ],
+      })),
+    });
+    const store = new ManuscriptStructureStore({ api });
+    await store.loadWorkspace("w1");
+    const chapters = store.getSnapshot().chapters;
+    expect(chapters.map((chapter) => chapter.chapterId)).toEqual(["__all_paragraphs__", "su-1"]);
+    expect(chapters[0].title).toBe("全部段落");
+  });
+
+  it("returns no chapters for an empty catalog", async () => {
+    const api = buildApi({
+      getCatalog: vi.fn(async () => ({
+        schemaVersion: 1,
+        scope: { kind: "canonical" },
+        paragraphs: [],
+      })),
+    });
+    const store = new ManuscriptStructureStore({ api });
+    await store.loadWorkspace("w1");
+    expect(store.getSnapshot().chapters).toHaveLength(0);
   });
 
   it("records a retryable error on failure", async () => {
@@ -84,6 +138,72 @@ describe("ManuscriptStructureStore", () => {
     await store.loadWorkspace("w1");
     expect(store.getSnapshot().phase).toBe("error");
     expect(store.getSnapshot().error?.retryable).toBe(true);
+  });
+});
+
+describe("resolveChapterTitles", () => {
+  const chapters = [
+    Object.freeze({
+      chapterId: "su-1",
+      title: "su-1",
+      blocks: Object.freeze([{ blockId: "p-1", digest: "aaaaaa", text: "" }]),
+    }),
+    Object.freeze({
+      chapterId: "su-2",
+      title: "su-2",
+      blocks: Object.freeze([{ blockId: "p-2", digest: "bbbbbb", text: "" }]),
+    }),
+    Object.freeze({
+      chapterId: "__all_paragraphs__",
+      title: "全部段落",
+      blocks: Object.freeze([{ blockId: "p-3", digest: "cccccc", text: "" }]),
+    }),
+  ];
+
+  it("overrides chapter titles with story unit labels from the outline tree", () => {
+    const tree = [
+      Object.freeze({
+        unitId: "su-0",
+        label: "第一卷",
+        scope: "ARC" as const,
+        planM: 1 as const,
+        realNode: "pending" as const,
+        children: Object.freeze([
+          Object.freeze({
+            unitId: "su-1",
+            label: "第一章 序章",
+            scope: "SCENE" as const,
+            planM: 1 as const,
+            realNode: "pending" as const,
+            children: Object.freeze([]),
+          }),
+          Object.freeze({
+            unitId: "su-2",
+            label: "第二章 雨夜",
+            scope: "SCENE" as const,
+            planM: 1 as const,
+            realNode: "pending" as const,
+            children: Object.freeze([]),
+          }),
+        ]),
+      }),
+    ];
+    const resolved = resolveChapterTitles(chapters, tree);
+    expect(resolved.map((chapter) => chapter.title)).toEqual([
+      "第一章 序章",
+      "第二章 雨夜",
+      "全部段落",
+    ]);
+    // 未命中的章节对象原样返回
+    expect(resolved[2]).toBe(chapters[2]);
+    // 命中的章节其余字段保持不变
+    expect(resolved[0].blocks).toBe(chapters[0].blocks);
+  });
+
+  it("returns chapters unchanged when the outline has no matching units", () => {
+    const resolved = resolveChapterTitles(chapters, []);
+    expect(resolved).toEqual(chapters);
+    expect(resolved[0]).toBe(chapters[0]);
   });
 });
 

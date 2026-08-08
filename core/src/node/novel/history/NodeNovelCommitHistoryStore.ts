@@ -19,6 +19,7 @@ import {
   type PreparedNovelCommitPayload,
 } from "../../../novel/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
+import { syncDirectoryBestEffort } from "../../fs/syncDirectory.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
 
 export interface NodeNovelCommitHistoryStoreOptions {
@@ -193,8 +194,7 @@ async function exists(filePath: string): Promise<boolean> {
 }
 
 async function syncDirectory(directory: string): Promise<void> {
-  const handle = await open(directory, "r");
-  try { await handle.sync(); } finally { await handle.close(); }
+  await syncDirectoryBestEffort(directory);
 }
 
 function isTemporary(name: string): boolean {

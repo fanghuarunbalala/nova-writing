@@ -26,7 +26,7 @@
 
 ### G3. 结构化卡片未接入时间线
 
-- 状态：`open`
+- 状态：`done`（2026-08-08，前端）
 - 现状：`ui/src/shell/main/chatSurfaceMapper.ts:290-297` 的 `toTimelineCard()`
   对 generic 卡一律返回 `null`，无映射。六个卡片渲染器
   （`ui/src/domains/conversation/cards/`：text/proposal/diff/table/quote/plan）
@@ -36,6 +36,17 @@
   为已存在 kind 补 projector → rich 卡映射；移除 `toTimelineCard` 的
   `default: return null` 空洞。
 - 关联：对齐计划 T1。
+- 实现记录：调查确认 core 目前不输出任何结构化卡片事件、未注册任何
+  projector（`ConversationCardProjectionStore` 为空投影），因此无投机
+  注册 todo→task 等 projector（会偏离原型——原型的 plan-m 卡是大纲树状态
+  标记而非聊天卡）。范围收敛为：完成 `toTimelineCard()` 对全部 8 种 generic
+  kind（novel-reference→quote / outline·manuscript·character·location-proposal
+  + task + approval→proposal / publication→text）的确定性映射，按
+  status→proposal tag（in-progress→plan、accepted/completed→applied、
+  其余→proposal）；移除 `default: return null` 空洞，`messageCards` 不再过滤
+  null。rich 卡由 title/summary 派生、ops 保持空数组（不伪造变更结构）。
+  消息内 sequence 窗口过滤 + status→tag 映射均有 mapper 测试覆盖。
+  projector 注册待 core 输出卡片事件时补（与 G4/G5 同批）。
 
 ### G4. 正文视图没有按章节分组
 
@@ -60,11 +71,21 @@
 
 ### G8. 正文草稿卡没有"前往审批 →"入口
 
-- 状态：`open`
+- 状态：`done`（2026-08-08，前端）
 - 现状：`ui/src/domains/novel/manuscript/components/ManuscriptChapterList.tsx:15`
   的 `onOpenDraft` 是可选 prop 但未接线。原型 `vendor/index.html:1901`
   草稿章节卡底部有"前往审批 →"。
 - 方向：正文视图草稿卡接 `onOpenDraft` → 打开审批面板选中对应变更集。
+- 实现记录：链路接线
+  `ApplicationShell.handleOpenApproval → MainArea.onOpenDraft → ContentSurface
+  → ManuscriptChapterList → ManuscriptChapterCard`。草稿卡（`isDraft` +
+  `changeSetId` 齐备）底部渲染 `Button variant="link"`「前往审批 →」，点击以
+  changeSetId 打开审批面板。`ManuscriptChapterList` 补传 `isDraft={chapter.isDraft}`
+  使 draft 态可达。已知缺口：`ApprovalView` 无 changeSetId，选中变更集只能尽力
+  （`ApprovalStore.select(approvalRequestId)` + inspector transition 用同一 id）；
+  且 `ManuscriptStructureStore.captureChapters` 不产出 isDraft/changeSetId
+  （core 契约缺口，见 G4），入口在真实数据到来前不会渲染。组件测试覆盖
+  草稿卡显示入口/点击回调/非草稿无入口/未接线无入口。
 
 ### G9. TopBar 注释与实现矛盾
 

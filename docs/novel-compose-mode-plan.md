@@ -217,7 +217,7 @@ designing（写 design md）
 | ~~M3~~ ✅ | 落库收口：审计 commit 记录 + md 归档（依赖 canonical 基座） | 已实现：`novel_compose_commits` 表（迁移 v12）+ `SqliteNovelComposeCommitStore` + `ComposeToolService.exit` 归档与摘要；`novel-compose-commit-smoke` 覆盖；全量 smoke 228 全绿 |
 | ~~M4~~ ✅ | 提示词 `novel.compose` **动态段**（DynamicPromptSection）+ recipe 项 + 每调用 input 注入 compose 快照 | 已实现：`NovelComposeModePromptSection`（renderDynamic 按 compose 状态渲染、空串跳过）+ recipe 加入 `novel.compose` + `DefaultRuntimeRunPreparationSourceFactory` 注入 compose 快照；`prompt-compose-mode-smoke` 覆盖段级与 builder 级断言 |
 | ~~M5~~ ✅ | GUI：设计卡（渲染/编辑）、徽标、审批面板联调 | 已实现：Electron 设计文件端口（IPC/preload/resolver/port）+ `DesignCard`（读/渲染/编辑/保存/降级）+ timeline 设计卡 + ChatSurface 状态徽标 + ExitComposeMode 审批卡内嵌草稿；ui 207 tests 全过；剩余手动 Electron 验证 |
-| M6 | 删除旧 draft/commit/rebase 模块（`core/src/novel/draft` 等） | 全量 smoke |
+| M6 ⏸ 延后 | 删除旧 draft/commit/rebase/approval/conflict 生产模块（`core/src/novel/{draft,commit,conflict,approval}` + sqlite store/digester + 旧事件类型/schema + 相关 smoke） | 属 P4 级重构（生产装配 + 查询 API + GUI 历史提交迁移），作为独立主线推进；当前旧模块保持休眠（S9a 已移除 agent 暴露面） |
 
 ## 13. 与既有代码的关系
 
@@ -236,3 +236,4 @@ designing（写 design md）
 6. `runtime.files` v1 = `Read/Glob/Write/Edit`（**Grep 延后**）；schema 与行为对齐 CCB（参考 `docs/ccb-runtime-files-reference.md`，代码自研）；读∈design 目录、写==当前会话 design 文件；非 compose 时文件工具不可用；`EnterComposeMode` 不需用户批准（直接进入）；
 7. `AskUserQuestion` 后续讨论；
 8. subagent 预留 `Explore` / `Compose` 两种只读类型，v1 不接线。
+9. **M6/S9b 延后**（2026-08-08）：删除旧 draft/commit/rebase/approval/conflict 生产模块属 novel-write-approval P4 级重构——`NodeNovelApplication`/`EntityApplication`/`WorkspaceHost` 生产装配、`NovelQueryApiRouter` 的 draft 查询、GUI"历史提交"（需先切到 `novel_compose_commits`）。执行计划：S9b-0 GUI 历史迁移 → S9b-1 生产装配重接 → S9b-2 删除 domain/store/事件/smoke（表结构保留）→ S9b-3 文档与全量回归。旧模块当前休眠、S9a 已移除 agent 暴露。

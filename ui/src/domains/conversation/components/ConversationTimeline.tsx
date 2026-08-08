@@ -9,6 +9,7 @@ import type { ConversationTimelineItem as TimelineItem } from "../projection/Con
 import type { MessageReference } from "./MessageReference.js";
 import { AssistantMessage } from "./AssistantMessage.js";
 import { ApprovalCard } from "./ApprovalCard.js";
+import { DesignCard } from "./DesignCard.js";
 import { UserMessage } from "./UserMessage.js";
 import { computeTimelineWindow } from "./timelineWindow.js";
 import styles from "./ConversationTimeline.module.css";
@@ -210,6 +211,13 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
               ? undefined
               : (approvalRequestId) => onOpenApproval(approvalRequestId)
           }
+        />
+      );
+    case "design":
+      return (
+        <DesignCard
+          conversationId={item.design.conversationId}
+          phase={item.design.phase}
         />
       );
   }

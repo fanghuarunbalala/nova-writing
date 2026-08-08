@@ -114,7 +114,53 @@ export function mapProjectionTimeline(
       }
     }
   }
+  return Object.freeze(
+    [...items, ...designItemsOf(projection)].sort(
+      (left, right) => left.sequence - right.sequence,
+    ),
+  );
+}
+
+/** 从 novel.compose.* 输出事件派生设计卡条目。Derives design-card items from compose events. */
+function designItemsOf(
+  projection: ConversationProjectionSnapshot,
+): readonly ConversationTimelineItem[] {
+  const items: ConversationTimelineItem[] = [];
+  for (const event of projection.events) {
+    if (event.direction !== "output") continue;
+    const phase = composePhaseOf(event.eventType);
+    if (phase === undefined) continue;
+    items.push(
+      Object.freeze({
+        kind: "design" as const,
+        sequence: event.sequence,
+        timestamp: Date.parse(event.timestamp) || 0,
+        design: Object.freeze({
+          conversationId: projection.conversationId,
+          phase,
+        }),
+      }),
+    );
+  }
   return Object.freeze(items);
+}
+
+function composePhaseOf(eventType: string): string | undefined {
+  switch (eventType) {
+    case "novel.compose.begin":
+      return "designing";
+    case "novel.compose.submitted":
+      return "pending";
+    case "novel.compose.approved":
+    case "novel.compose.applied":
+      return "applied";
+    case "novel.compose.rejected":
+      return "designing";
+    case "novel.compose.discarded":
+      return "discarded";
+    default:
+      return undefined;
+  }
 }
 
 /** 同一 turn 的工具审批合并为一组（无 turnId 时各自成组）。Group by turn. */

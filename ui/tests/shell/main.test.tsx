@@ -5,7 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MainSubHead } from "../../src/shell/main/MainSubHead.js";
-import { mapProjectionTimeline } from "../../src/shell/main/chatSurfaceMapper.js";
+import {
+  composeStatusLabel,
+  mapProjectionTimeline,
+} from "../../src/shell/main/chatSurfaceMapper.js";
 import type { ConversationProjectionSnapshot } from "@novel/core";
 import type { ConversationTimelineItem } from "../../src/domains/conversation/projection/ConversationTimelineItem.js";
 
@@ -114,6 +117,30 @@ describe("chatSurfaceMapper", () => {
     expect(designItems[0].design.phase).toBe("designing");
     expect(designItems[1].design.phase).toBe("pending");
     expect(designItems[0].design.conversationId).toBe("c1");
+  });
+
+  it("computes the compose badge label from events", () => {
+    expect(
+      composeStatusLabel([
+        {
+          direction: "output",
+          eventType: "novel.compose.begin",
+        },
+      ]),
+    ).toBe("设计中");
+    expect(
+      composeStatusLabel([
+        { direction: "output", eventType: "novel.compose.begin" },
+        { direction: "output", eventType: "novel.compose.submitted" },
+      ]),
+    ).toBe("待审批");
+    expect(
+      composeStatusLabel([
+        { direction: "output", eventType: "novel.compose.begin" },
+        { direction: "output", eventType: "novel.compose.applied" },
+      ]),
+    ).toBeUndefined();
+    expect(composeStatusLabel([])).toBeUndefined();
   });
 
   it("inserts turn separators and attaches event flow and tool traces", () => {

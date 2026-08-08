@@ -24,7 +24,7 @@ import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
 import { MainSubHead } from "./MainSubHead.js";
-import { mapProjectionTimeline } from "./chatSurfaceMapper.js";
+import { composeStatusLabel, mapProjectionTimeline } from "./chatSurfaceMapper.js";
 import styles from "./ChatSurface.module.css";
 
 export interface ChatSurfaceProps {
@@ -129,9 +129,18 @@ function ActiveChatSurface({
           onRetry: failed ? () => { void resume(); } : undefined,
           onStop: !failed ? () => { void enqueue(new StopInputEvent({ conversationId })); } : undefined,
         };
+  const composeBadge = composeStatusLabel(snapshot.projection.events);
   return (
     <div className={styles.surface}>
-      <MainSubHead title={title} sub={agentLabel} />
+      <MainSubHead
+        title={title}
+        sub={agentLabel}
+        actions={
+          composeBadge === undefined ? undefined : (
+            <span className={styles.composeBadge}>{composeBadge}</span>
+          )
+        }
+      />
       <ConversationTimeline
         conversationId={conversationId}
         items={timeline}

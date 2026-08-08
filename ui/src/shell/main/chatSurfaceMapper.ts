@@ -163,6 +163,26 @@ function composePhaseOf(eventType: string): string | undefined {
   }
 }
 
+/** 由投影事件计算当前 compose 徽标文案（设计中/待审批）；无 compose 活动时 undefined。 */
+/** Computes the compose badge label from projected events; undefined when compose is idle. */
+export function composeStatusLabel(
+  events: readonly {
+    readonly direction?: "input" | "output";
+    readonly eventType: string;
+  }[],
+): string | undefined {
+  let phase: string | undefined;
+  for (const event of events) {
+    if (event.direction === "output") {
+      const candidate = composePhaseOf(event.eventType);
+      if (candidate !== undefined) phase = candidate;
+    }
+  }
+  if (phase === "designing") return "设计中";
+  if (phase === "pending") return "待审批";
+  return undefined;
+}
+
 /** 同一 turn 的工具审批合并为一组（无 turnId 时各自成组）。Group by turn. */
 function groupApprovalRequests(
   timeline: ConversationProjectionSnapshot["timeline"],

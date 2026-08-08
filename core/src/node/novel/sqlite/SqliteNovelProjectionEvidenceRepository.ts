@@ -191,6 +191,24 @@ export class SqliteNovelProjectionEvidenceRepository
     );
   }
 
+  deleteCharacterBindingsByStoryUnit(storyUnitId: StoryUnitId): void {
+    this.database.prepare(
+      "DELETE FROM novel_story_unit_character_bindings WHERE story_unit_id = ?",
+    ).run(captureStoryUnitId(storyUnitId));
+  }
+
+  deleteLocationBindingsByStoryUnit(storyUnitId: StoryUnitId): void {
+    this.database.prepare(
+      "DELETE FROM novel_story_unit_location_bindings WHERE story_unit_id = ?",
+    ).run(captureStoryUnitId(storyUnitId));
+  }
+
+  deleteEntityChangesByStoryUnit(storyUnitId: StoryUnitId): void {
+    this.database.prepare(
+      "DELETE FROM novel_story_unit_entity_changes WHERE story_unit_id = ?",
+    ).run(captureStoryUnitId(storyUnitId));
+  }
+
   hasStoryUnit(storyUnitId: StoryUnitId): boolean {
     return this.exists("novel_story_units", "id", captureStoryUnitId(storyUnitId));
   }

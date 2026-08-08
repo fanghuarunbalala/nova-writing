@@ -28,8 +28,10 @@ import {
 import type {
   NovelMutableOutlineRepository,
   NovelMutableParagraphRepository,
+  NovelMutableProjectionEvidenceRepository,
   NovelOutlineMutationContext,
   NovelParagraphMutationContext,
+  NovelProjectionEvidenceMutationContext,
   StoryUnitDigestField,
 } from "../../port/index.js";
 import {
@@ -335,7 +337,10 @@ export function createLeafStoryUnitPlanClearOperation(input: {
 }
 
 export function registerNovelOutlineOperationHandlers<
-  TContext extends NovelOutlineMutationContext & NovelParagraphMutationContext,
+  TContext extends
+    NovelOutlineMutationContext &
+      NovelParagraphMutationContext &
+      NovelProjectionEvidenceMutationContext,
 >(registry: NovelOperationRegistry<TContext>): void {
   registry.register({
     operationType: NOVEL_OUTLINE_OPERATION_TYPE.storyOutlineCreate,
@@ -369,7 +374,12 @@ export function registerNovelOutlineOperationHandlers<
     operationType: NOVEL_OUTLINE_OPERATION_TYPE.storyUnitDelete,
     operationVersion: OUTLINE_OPERATION_VERSION,
     apply(context, operation) {
-      applyStoryUnitDelete(context.outline, context.paragraph, operation);
+      applyStoryUnitDelete(
+        context.outline,
+        context.paragraph,
+        context.projectionEvidence,
+        operation,
+      );
     },
   });
   registry.register({
@@ -535,6 +545,7 @@ function applyStoryUnitMove(
 function applyStoryUnitDelete(
   store: NovelMutableOutlineRepository,
   paragraphStore: NovelMutableParagraphRepository,
+  evidence: NovelMutableProjectionEvidenceRepository,
   operation: NovelOperation,
 ): void {
   const payload = capturePayloadObject(operation.payload, [
@@ -554,18 +565,12 @@ function applyStoryUnitDelete(
   assertDigest(store, operation, id, "content");
   assertDigest(store, operation, id, "parentId");
   assertDigest(store, operation, id, "orderKey");
-  // 预检子引用：子 story unit、leaf plan、以及段落实体（novel_paragraphs.story_unit_id FK）。
-  // 已知边界：novel_story_unit_character_bindings / location_bindings / entity_changes 的 FK
-  // 也指向 novel_story_units（projection evidence schema），本期不处理。
-  // 泛型约束（NovelParagraphMutationContext）保证生产调用点必带 paragraph store；
-  // `?.` 仅为窄上下文（未建模段落的 .mjs 冒烟等）保留向后兼容，视同无段落子引用。
-  if (
-    store.listStoryUnitChildren(id).length > 0 ||
-    store.getLeafStoryUnitPlan(id) !== undefined ||
-    paragraphStore?.listParagraphsByStoryUnit(id).length > 0
-  ) {
-    throw precondition(operation, "entity_referenced", STORY_UNIT_ENTITY_TYPE, id);
-  }
+  // 级联删除（删父带子）：子树 story unit（递归）→ leaf plan → 段落（先解绑章节）→
+  // projection evidence 行。不再对子引用抛 entity_referenced；父级 digest/version
+  // 前置条件不变，作为整棵子树删除的乐观锁门槛。
+  // 证据表（novel_story_unit_character_bindings / _location_bindings / _entity_changes）
+  // FK 指向 novel_story_units，必须先清理本单元及递归子单元的证据行，否则 deleteStoryUnit 会 FK 失败。
+  cascadeDeleteStoryUnit(store, paragraphStore, evidence, id);
   if (!store.deleteStoryUnit(id, expectedVersion)) {
     if (expectedVersion !== undefined) {
       throw new NovelOperationPreconditionError(
@@ -577,6 +582,31 @@ function applyStoryUnitDelete(
     }
     throw precondition(operation, "domain_invariant", STORY_UNIT_ENTITY_TYPE, id);
   }
+}
+
+/** 递归删除一棵 story unit 子树：子单元、leaf plan、段落（解绑章节后）、证据行。 */
+function cascadeDeleteStoryUnit(
+  store: NovelMutableOutlineRepository,
+  paragraphStore: NovelMutableParagraphRepository,
+  evidence: NovelMutableProjectionEvidenceRepository,
+  id: StoryUnitId,
+): void {
+  for (const child of store.listStoryUnitChildren(id)) {
+    // 递归先清整棵子树，再删本子单元：novel_story_units.parent_id FK 指向父行，
+    // 必须先删后代再删父，否则 deleteStoryUnit 会 FK 失败。
+    cascadeDeleteStoryUnit(store, paragraphStore, evidence, child.id);
+    store.deleteStoryUnit(child.id);
+  }
+  if (store.getLeafStoryUnitPlan(id) !== undefined) {
+    store.clearLeafStoryUnitPlan(id);
+  }
+  for (const paragraph of paragraphStore.listParagraphsByStoryUnit(id)) {
+    paragraphStore.removeParagraphFromChapters(paragraph.id);
+    paragraphStore.deleteParagraph(paragraph.id);
+  }
+  evidence.deleteCharacterBindingsByStoryUnit(id);
+  evidence.deleteLocationBindingsByStoryUnit(id);
+  evidence.deleteEntityChangesByStoryUnit(id);
 }
 
 function applyLeafPlanReplace(

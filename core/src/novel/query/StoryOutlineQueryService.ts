@@ -1,7 +1,7 @@
 /** Explicit-scope Story Outline queries with immutable optimistic digest models. */
 import { captureStoryUnitId, type StoryUnitId } from "../identity/index.js";
 import type { NovelEntityVersion } from "../version/index.js";
-import { StoryOutlineTree, type StoryOutline } from "../model/index.js";
+import { StoryOutlineTree, type StoryOutline, type StoryUnit } from "../model/index.js";
 import type {
   LeafStoryUnitPlanReadModel,
   NovelOutlineQueryStore,
@@ -14,6 +14,16 @@ export class StoryOutlineQueryService {
 
   getOutline(scope: NovelReadScope): Promise<StoryOutline | undefined> {
     return this.store.getStoryOutline(captureNovelReadScope(scope));
+  }
+
+  listStoryUnitChildren(
+    scope: NovelReadScope,
+    id: StoryUnitId,
+  ): Promise<readonly StoryUnit[]> {
+    return this.store.listStoryUnitChildren(
+      captureNovelReadScope(scope),
+      captureStoryUnitId(id),
+    );
   }
 
   async getTree(scope: NovelReadScope): Promise<StoryOutlineTree | undefined> {

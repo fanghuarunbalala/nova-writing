@@ -70,6 +70,16 @@ export class SqliteNovelOutlineQueryStore implements NovelOutlineQueryStore {
     });
   }
 
+  listStoryUnitChildren(
+    scope: NovelReadScope,
+    id: StoryUnitId,
+  ): Promise<readonly StoryUnit[]> {
+    const storyUnitId = captureStoryUnitId(id);
+    return this.read(scope, (repository) =>
+      repository.listStoryUnitChildren(storyUnitId),
+    );
+  }
+
   getStoryUnit(
     scope: NovelReadScope,
     id: StoryUnitId,

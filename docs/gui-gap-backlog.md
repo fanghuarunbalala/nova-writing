@@ -50,13 +50,22 @@
 
 ### G4. 正文视图没有按章节分组
 
-- 状态：`open`
+- 状态：`done`（2026-08-08，前端）
 - 现状：`ui/src/domains/novel/manuscript/store/ManuscriptStructureStore.ts:142-149`
   把所有段落合成单一章节 `__all_paragraphs__`（"全部段落"），原型
   `vendor/index.html:1890-1903` 按章节卡片展示（卷·章 + §块 + revision +
   草稿块）。块级 digest/draft/changeSetId 字段 core 暂未提供
   （`ManuscriptStructureStore.ts:13` 注释）。
 - 方向：core 补齐章节/卷元数据契约；前端按章节分组渲染章节卡片。
+- 实现记录：核实 core 段落目录契约——`NovelParagraphSummary` 的
+  `storyUnitId`/`orderKey` 为必填字段（`NovelQuerySnapshots.ts:91-97`），
+  故**分组可在前端落地，core 零改动**。`captureChapters` 改为按 storyUnitId
+  分组为章节卡：章节与章节内 block 均按 orderKey 排序；storyUnitId 缺失的
+  段落归入回退组 `__all_paragraphs__`（"全部段落"）。标题用 storyUnitId 占位，
+  新增纯投影 `resolveChapterTitles()` 在 `ContentSurface`（已同时订阅
+  outline/manuscript 两 store）用大纲树 unit label 覆盖章节标题，大纲查不到
+  时保持原样。已知剩余缺口：原型"卷·章"层级与 revision/草稿块仍需 core
+  提供章节/卷元数据与块级 draft/changeSetId 字段（与 G5 同批待 core 契约）。
 
 ### G5. 实体字段缺失（relatedUnits / locState / role）
 

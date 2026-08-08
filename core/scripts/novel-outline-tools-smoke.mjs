@@ -93,6 +93,8 @@ const context = (conversationId, index) => ({
 
 const progress = { async emit() {} };
 
+let canonicalStore;
+
 try {
   const workspaceRoot = join(root, "workspace");
   await mkdir(workspaceRoot, { recursive: true });
@@ -100,7 +102,7 @@ try {
     storageRoot: join(root, "storage"),
   }).resolve(workspaceRoot);
   const location = await new NodeNovelStoreLocator().resolve(workspace);
-  const canonicalStore = await SqliteNovelCanonicalStore.open({
+  canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
     revisionFactory: new FixedRevisionFactory("revision_outline_tools_base"),
     logger,
@@ -391,5 +393,6 @@ try {
   ]);
   process.stdout.write("novel-outline-tools smoke passed\n");
 } finally {
+  await canonicalStore?.close().catch(() => undefined);
   await rm(root, { recursive: true, force: true });
 }

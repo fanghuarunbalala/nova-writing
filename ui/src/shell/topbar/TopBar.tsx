@@ -2,8 +2,9 @@
  * TopBar
  *
  * 顶栏（对齐原型）：侧栏切换 + wordmark + workspace 名/副标 + 右侧
- * Workspace/设置动作 + 修订号。计划/审批入口已移除：计划与内容视图大纲
- * 重叠（大纲进度 + 待办均在侧栏有入口）；审批域延后，占位按钮无意义。
+ * Workspace/设置动作 + 修订号。右侧 TopBarAction 渲染 计划/审批 动作，
+ * 审批带 approvalBadge（来自 ApplicationShell 的 ApprovalStore.pendingCount），
+ * 点击由 shell 路由到对应视图（计划视图 / 审批面板）。
  * TopBarMenuSlot 渲染 extensions.titleBar 注入的桌面专属内容（spec 4.2）。
  */
 import { FolderOpen, PanelLeft, Settings } from "lucide-react";

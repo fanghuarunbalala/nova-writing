@@ -18,6 +18,7 @@ import {
   type CredentialStore,
 } from "../../config/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
+import { syncDirectoryBestEffort } from "../fs/index.js";
 import {
   NODE_CONFIGURATION_STORE_FAILURE,
   NodeConfigurationStoreError,
@@ -230,13 +231,9 @@ export class NodePlaintextCredentialStore implements CredentialStore {
   }
 
   async #syncDirectory(directoryPath: string): Promise<void> {
-    let handle: Awaited<ReturnType<typeof open>> | undefined;
     try {
-      handle = await open(directoryPath, "r");
-      await handle.sync();
-      await handle.close();
+      await syncDirectoryBestEffort(directoryPath);
     } catch {
-      await handle?.close().catch(() => undefined);
       throw new NodeConfigurationStoreError(
         NODE_CONFIGURATION_STORE_FAILURE.credentialWriteFailed,
         true,

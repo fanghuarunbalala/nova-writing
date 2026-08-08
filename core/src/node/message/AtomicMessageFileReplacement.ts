@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, open, rename, unlink, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { syncDirectoryBestEffort } from "../fs/index.js";
 import {
   MessageProjectionFileOperationError,
   MessageProjectionReplacementDurabilityError,
@@ -84,12 +85,7 @@ export class AtomicMessageFileReplacement {
   }
 
   private async syncDirectory(directory: string): Promise<void> {
-    const directoryHandle = await open(directory, "r");
-    try {
-      await directoryHandle.sync();
-    } finally {
-      await directoryHandle.close();
-    }
+    await syncDirectoryBestEffort(directory);
   }
 
   private assertState(expected: AtomicReplacementState): void {

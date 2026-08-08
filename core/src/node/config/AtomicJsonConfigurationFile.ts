@@ -9,6 +9,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { syncDirectoryBestEffort } from "../fs/index.js";
 import {
   NODE_CONFIGURATION_STORE_FAILURE,
   NodeConfigurationStoreError,
@@ -132,12 +133,7 @@ export class AtomicJsonConfigurationFile<TConfiguration> {
       await handle.close();
       handle = undefined;
       await rename(temporaryPath, this.#filePath);
-      const directoryHandle = await open(directory, "r");
-      try {
-        await directoryHandle.sync();
-      } finally {
-        await directoryHandle.close();
-      }
+      await syncDirectoryBestEffort(directory);
     } catch {
       await handle?.close().catch(() => undefined);
       await unlink(temporaryPath).catch(() => undefined);

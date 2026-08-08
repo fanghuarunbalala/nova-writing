@@ -9,6 +9,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { syncDirectoryBestEffort } from "../fs/index.js";
 import {
   CredentialReference,
   type ConfigurationHomeResolver,
@@ -208,12 +209,7 @@ export class NodeEncryptedCredentialStore implements CredentialStore {
       await handle.close();
       handle = undefined;
       await rename(temporaryPath, filePath);
-      const directoryHandle = await open(home.credentialsDir, "r");
-      try {
-        await directoryHandle.sync();
-      } finally {
-        await directoryHandle.close();
-      }
+      await syncDirectoryBestEffort(home.credentialsDir);
     } catch {
       await handle?.close().catch(() => undefined);
       await unlink(temporaryPath).catch(() => undefined);

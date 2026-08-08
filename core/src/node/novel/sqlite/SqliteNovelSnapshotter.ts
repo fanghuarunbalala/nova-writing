@@ -30,6 +30,7 @@ import {
   type NovelSnapshotter,
 } from "../../../novel/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
+import { syncDirectoryBestEffort } from "../../fs/index.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
 import {
   NOVEL_DATABASE_FAILURE,
@@ -614,12 +615,7 @@ async function syncFile(path: string): Promise<void> {
 }
 
 async function syncDirectory(path: string): Promise<void> {
-  const handle = await open(path, "r");
-  try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
+  await syncDirectoryBestEffort(path);
 }
 
 async function readDirectories(path: string) {

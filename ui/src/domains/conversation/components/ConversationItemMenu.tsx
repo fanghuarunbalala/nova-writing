@@ -6,6 +6,9 @@
  *
  * conv-more 20x20 始终可见（faint 色），hover 时显示 surface-2 背景，
  * pinned 行默认 accent-ink；菜单用 Dropdown 组件渲染到 trigger 下方。
+ *
+ * 删除仅上报 onDelete；确认对话框由父级（ConversationListSection）渲染
+ * 自定义 Dialog（原生 window.confirm 在 Electron 中体验不一致）。
  */
 import { Dropdown, DropdownItem, DropdownSeparator } from "../../../shared/primitives/Dropdown.js";
 import { Pencil, Pin, Trash2 } from "lucide-react";
@@ -51,12 +54,7 @@ export function ConversationItemMenu({
             label="删除"
             danger
             icon={<Trash2 size={14} />}
-            onSelect={() => {
-              // 硬删除不可恢复，删除前必须确认。
-              if (window.confirm("删除后会话及其记录将被永久移除，且不可恢复。确定删除？")) {
-                onDelete(conversationId);
-              }
-            }}
+            onSelect={() => onDelete(conversationId)}
           />
         ) : null}
       </Dropdown>

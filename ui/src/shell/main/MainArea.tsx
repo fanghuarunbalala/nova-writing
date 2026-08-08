@@ -87,6 +87,7 @@ export function MainArea(props: MainAreaProps) {
         <ScheduleSurface
           schedule={props.schedule}
           scheduleTodo={props.scheduleTodo}
+          approvalStore={props.approvalStore}
           onTodoAction={props.onTodoAction}
           onBack={() => props.mainViewRouter.transition("chat")}
         />

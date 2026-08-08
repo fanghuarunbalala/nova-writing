@@ -119,28 +119,11 @@ describe("chatSurfaceMapper", () => {
     expect(designItems[0].design.conversationId).toBe("c1");
   });
 
-  it("computes the compose badge label from events", () => {
-    expect(
-      composeStatusLabel([
-        {
-          direction: "output",
-          eventType: "novel.compose.begin",
-        },
-      ]),
-    ).toBe("设计中");
-    expect(
-      composeStatusLabel([
-        { direction: "output", eventType: "novel.compose.begin" },
-        { direction: "output", eventType: "novel.compose.submitted" },
-      ]),
-    ).toBe("待审批");
-    expect(
-      composeStatusLabel([
-        { direction: "output", eventType: "novel.compose.begin" },
-        { direction: "output", eventType: "novel.compose.applied" },
-      ]),
-    ).toBeUndefined();
-    expect(composeStatusLabel([])).toBeUndefined();
+  it("computes the compose badge label from the projected compose phase", () => {
+    expect(composeStatusLabel({ composePhase: "designing" })).toBe("设计中");
+    expect(composeStatusLabel({ composePhase: "pending" })).toBe("待审批");
+    expect(composeStatusLabel({ composePhase: undefined })).toBeUndefined();
+    expect(composeStatusLabel({})).toBeUndefined();
   });
 
   it("inserts turn separators and attaches event flow and tool traces", () => {

@@ -38,6 +38,21 @@ const pending = section.renderDynamic({
 });
 assert.ok(pending.includes("等待作者审批"));
 
+// 按 base mode 渲染：bypass 有"直接执行"，review/compose 为空。
+assert.equal(
+  section.renderDynamic({ compose: { phase: "idle", active: false, mode: "review" } }),
+  "",
+);
+assert.equal(
+  section.renderDynamic({ compose: { phase: "idle", active: false, mode: "compose" } }),
+  "",
+);
+const bypass = section.renderDynamic({
+  compose: { phase: "idle", active: false, mode: "bypass" },
+});
+assert.ok(bypass.includes("直接执行模式"));
+assert.ok(bypass.includes("ExitComposeMode"));
+
 // RuntimeSystemPromptBuilder：活动时附加、非活动时跳过（base 不变）。
 const staticSource = {
   async resolve() {
@@ -69,5 +84,21 @@ const idleBuilder = new RuntimeSystemPromptBuilder({
 });
 const idle = await idleBuilder.resolve({ conversationId: "c", runId: "r" });
 assert.equal(idle.content, "BASE_PROMPT");
+
+// 动态输入携带 base mode=bypass 时附加 bypass 段。
+const bypassBuilder = new RuntimeSystemPromptBuilder({
+  staticSource,
+  dynamicSections: [section],
+  input: async () => ({
+    compose: { phase: "idle", active: false, mode: "bypass" },
+  }),
+  digester,
+});
+const bypassComposed = await bypassBuilder.resolve({
+  conversationId: "c",
+  runId: "r",
+});
+assert.ok(bypassComposed.content.includes("直接执行模式"));
+assert.ok(bypassComposed.content.startsWith("BASE_PROMPT"));
 
 console.log("prompt compose mode smoke passed");

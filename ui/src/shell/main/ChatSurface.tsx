@@ -6,6 +6,7 @@
  * 生成状态（GenStatus）按原型置于 composer 输入框上方，live 时停止按钮 enqueue StopInputEvent。
  */
 import {
+  ConversationModeSetInputEvent,
   StopInputEvent,
   UserMessageInputEvent,
   type Logger,
@@ -129,7 +130,9 @@ function ActiveChatSurface({
           onRetry: failed ? () => { void resume(); } : undefined,
           onStop: !failed ? () => { void enqueue(new StopInputEvent({ conversationId })); } : undefined,
         };
-  const composeBadge = composeStatusLabel(snapshot.projection.events);
+  // mode 徽标读投影 composePhase（connect 播种 + 事件实时覆盖，裁剪后仍正确）。
+  const composeBadge = composeStatusLabel(snapshot.projection);
+  const mode = snapshot.projection.conversationMode ?? "review";
   return (
     <div className={styles.surface}>
       <MainSubHead
@@ -159,6 +162,14 @@ function ActiveChatSurface({
         conversationId={conversationId}
         enabled={snapshot.state === "active" && !failed}
         status={genStatus}
+        mode={mode}
+        onModeChange={(next) => {
+          // 会话级 mode 切换走既有 inputEnqueue 单通道（control lane），
+          // core 持久化后以 novel.mode.changed 实时同步回投影。
+          void enqueue(
+            new ConversationModeSetInputEvent({ conversationId, mode: next }),
+          );
+        }}
         onSend={(input) => {
           void enqueue(new UserMessageInputEvent({ conversationId, text: input.text }));
         }}

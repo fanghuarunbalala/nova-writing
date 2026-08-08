@@ -6,8 +6,9 @@
  */
 import { ExternalStore } from "../../../shared/state/ExternalStore.js";
 
-/** 执行模式（对齐原型）：草案（只规划）/ 直接执行（跳过审批）/ 审批（提议后提交）。 */
-export type ComposerMode = "plan" | "bypass" | "review";
+/** 执行模式（对齐 core）：需审核（提议后审批提交）/ 直接执行（跳过审批）/ 设计（仅草稿可写）。 */
+/** Execution mode (aligned with core): review (ask) / bypass (direct) / compose (design-only). */
+export type ComposerMode = "review" | "bypass" | "compose";
 
 export interface ComposerReference {
   readonly kind: "character" | "location" | "outline";

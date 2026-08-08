@@ -18,6 +18,9 @@ export interface DynamicPromptSectionInput {
   readonly compose?: {
     readonly phase: string;
     readonly active: boolean;
+    /** 会话 base mode（review/bypass/compose）。Compose 激活时恒为 "compose"。 */
+    /** Per-conversation base mode (review/bypass/compose); always "compose" while active. */
+    readonly mode?: string;
   };
 }
 

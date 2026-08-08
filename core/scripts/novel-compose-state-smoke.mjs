@@ -14,10 +14,11 @@ const provider = new ComposeModeStateProvider();
 const conversationId = "conversation:compose-state";
 const designFilePath = "/workspace/.novel/design/conversation:compose-state.md";
 
-// idle -> designing（active）
+// idle -> designing（active）；idle 快照含默认 base mode review。
 assert.deepEqual(provider.snapshot(conversationId), {
   phase: "idle",
   active: false,
+  mode: "review",
 });
 const designing = provider.enter(conversationId, { designFilePath });
 assert.equal(designing.phase, "designing");
@@ -55,6 +56,7 @@ provider.clear(conversationId);
 assert.deepEqual(provider.snapshot(conversationId), {
   phase: "idle",
   active: false,
+  mode: "review",
 });
 
 // 非法迁移抛出 ComposeStateError

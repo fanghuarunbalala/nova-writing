@@ -23,6 +23,7 @@ import {
 } from "../../index.js";
 import type { AgentManifestStore } from "../../../agent/index.js";
 import type { ConversationRuntimeBootstrap } from "../../../conversation/index.js";
+import type { ConversationCatalogStore } from "../../../storage/index.js";
 import {
   noopLogger,
   type LogFields,
@@ -92,6 +93,11 @@ export interface RunDesktopRuntimeChildEntrypointOptions {
   readonly manifestStoreProvider?: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<AgentManifestStore>;
+  /** 会话目录 store 提供者(会话 mode 持久化 + hydrate)。可选;不传则 mode 仅内存。 */
+  /** Conversation catalog store provider (persistent mode + hydrate). Optional; mode stays in-memory otherwise. */
+  readonly conversationCatalogStoreProvider?: (
+    bootstrap: ConversationRuntimeBootstrap,
+  ) => Promise<ConversationCatalogStore>;
   readonly adapterFactory?: RuntimeChildAdapterFactory;
   readonly contextCompilerFactory?: AgentRuntimeContextCompilerFactory;
   readonly preparationSourceFactory?: RuntimeRunPreparationSourceFactory;
@@ -158,9 +164,16 @@ async function initializeDesktopRuntimeChildEntrypoint(
           path: childDebug.dumpPath,
           logger,
         });
+  const workspaceStoreProvider = createEnvWorkspaceStoreProvider(
+    options.storageRoot,
+    logger,
+  );
   const manifestStoreProvider =
     options.manifestStoreProvider ??
-    createEnvManifestStoreProvider(options.storageRoot, logger);
+    (async (bootstrap) => (await workspaceStoreProvider(bootstrap)).agentManifests);
+  const conversationCatalogStoreProvider =
+    options.conversationCatalogStoreProvider ??
+    (async (bootstrap) => (await workspaceStoreProvider(bootstrap)).conversations);
   const adapterFactory =
     options.adapterFactory ??
     new PiRuntimeChildAdapterFactory({
@@ -200,6 +213,7 @@ async function initializeDesktopRuntimeChildEntrypoint(
     });
   const compositionFactory = new DesktopRuntimeChildCompositionFactory({
     manifestStoreProvider,
+    conversationCatalogStoreProvider,
     adapterFactory,
     contextCompilerFactory,
     preparationSourceFactory,
@@ -277,24 +291,25 @@ function safeLogFields(fields: Readonly<Record<string, unknown>> | undefined): s
   return JSON.stringify(fields);
 }
 
-function createEnvManifestStoreProvider(
+/** 记忆化的 workspace store 提供者:manifest 与 conversation catalog 共享同一打开实例。 */
+/** Memoized workspace-store provider: manifest and conversation catalog share one open instance. */
+function createEnvWorkspaceStoreProvider(
   storageRoot: string | undefined,
   logger: Logger,
-): (bootstrap: ConversationRuntimeBootstrap) => Promise<AgentManifestStore> {
+): (bootstrap: ConversationRuntimeBootstrap) => Promise<SqliteWorkspaceStore> {
+  let storePromise: Promise<SqliteWorkspaceStore> | undefined;
   return async (bootstrap) => {
-    const root =
-      storageRoot ?? process.env[DESKTOP_CHILD_STORAGE_ROOT_ENV];
-    if (root === undefined || root.length === 0) {
-      throw new TypeError("Desktop child storage root is not configured");
+    if (storePromise === undefined) {
+      const root = storageRoot ?? process.env[DESKTOP_CHILD_STORAGE_ROOT_ENV];
+      if (root === undefined || root.length === 0) {
+        throw new TypeError("Desktop child storage root is not configured");
+      }
+      const location = await new NodeWorkspaceStoreLocator({
+        storageRoot: root,
+      }).resolve(bootstrap.workspace.workdir);
+      storePromise = SqliteWorkspaceStore.open({ workspace: location, logger });
+      logger.debug("runtime_child.workspace_store_opened");
     }
-    const location = await new NodeWorkspaceStoreLocator({
-      storageRoot: root,
-    }).resolve(bootstrap.workspace.workdir);
-    const store = await SqliteWorkspaceStore.open({
-      workspace: location,
-      logger,
-    });
-    logger.debug("runtime_child.manifest_store_opened");
-    return store.agentManifests;
+    return storePromise;
   };
 }

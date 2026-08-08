@@ -6,6 +6,7 @@ import { OUTPUT_EVENT_TYPE } from "../OutputEventType.js";
 import { REMINDER_KIND } from "../payload/SystemReminderAttachedPayload.js";
 import { registerNovelLifecycleOutputEventSchemas } from "./NovelLifecycleOutputEventSchemas.js";
 import { registerNovelComposeOutputEventSchemas } from "./NovelComposeOutputEventSchemas.js";
+import { registerNovelModeOutputEventSchemas } from "./NovelModeOutputEventSchemas.js";
 
 const RuntimePresenceStateSchema = Type.Union([
   Type.Literal("offline"),
@@ -834,4 +835,5 @@ export function registerCoreOutputEventSchemas(registry: EventSchemaRegistry): v
   ] as const) registry.register({ kind: "output", eventType, schemaVersion: EVENT_SCHEMA_VERSION, payloadSchema, snapshotSchema: ContextLifecycleSnapshotSchema });
   registerNovelLifecycleOutputEventSchemas(registry);
   registerNovelComposeOutputEventSchemas(registry);
+  registerNovelModeOutputEventSchemas(registry);
 }

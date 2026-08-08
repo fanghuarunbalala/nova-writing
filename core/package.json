@@ -191,6 +191,7 @@
     "smoke:mock-client-transports": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/mock-client-transports-typecheck.ts && node scripts/mock-client-transports-smoke.mjs",
     "smoke:conversation-projection-store": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/conversation-projection-store-typecheck.ts && node scripts/conversation-projection-store-smoke.mjs",
     "smoke:conversation-projection-controller": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/conversation-projection-controller-typecheck.ts && node scripts/conversation-projection-controller-smoke.mjs",
+    "smoke:conversation-mode-set-persistence": "pnpm build && node scripts/conversation-mode-set-persistence-smoke.mjs",
     "smoke:conversation-events": "pnpm build && node scripts/conversation-event-live-smoke.mjs && node scripts/conversation-event-follow-smoke.mjs && node scripts/conversation-event-publishing-smoke.mjs && node scripts/conversation-event-integration-smoke.mjs",
     "smoke:conversation-event-overflow-recovery": "pnpm build && node scripts/conversation-event-subscription-overflow-recovery-smoke.mjs",
     "smoke:child-tool-execution-wiring": "pnpm build && node scripts/child-tool-execution-wiring-smoke.mjs",

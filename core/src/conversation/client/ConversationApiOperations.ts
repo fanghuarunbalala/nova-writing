@@ -21,6 +21,7 @@ export const CONVERSATION_API_OPERATION = {
   eventsSubscribe: "conversation.events.subscribe",
   snapshotGet: "conversation.snapshot.get",
   runtimePresenceGet: "conversation.runtimePresence.get",
+  composeStateGet: "conversation.composeState.get",
 } as const;
 
 export type ConversationApiOperation =

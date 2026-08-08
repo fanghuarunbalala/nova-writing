@@ -73,7 +73,15 @@ function readString(value: unknown, key: string): string | undefined {
 }
 
 function isInside(root: string, candidate: string): boolean {
-  return candidate === root || candidate.startsWith(`${root}${path.sep}`);
+  // 先 resolve 两侧:Windows 下 dirname 的 POSIX 根与 resolve 后的盘符路径分隔符不一致。
+  // Resolve both sides first: on Windows the POSIX root from dirname and the
+  // drive-qualified resolve() result differ in separators.
+  const resolvedRoot = path.resolve(root);
+  const resolvedCandidate = path.resolve(candidate);
+  return (
+    resolvedCandidate === resolvedRoot ||
+    resolvedCandidate.startsWith(`${resolvedRoot}${path.sep}`)
+  );
 }
 
 function deny(ruleId: string): ToolPermissionDecision {
@@ -115,6 +123,12 @@ export class ComposeAwareToolPermissionPolicy implements ToolPermissionPolicy {
         return fileToolInScope(toolName, evaluation.invocation.arguments, snapshot)
           ? allow("compose.file_in_scope")
           : deny("compose.file_outside_design");
+      }
+    } else if (snapshot.mode === "bypass") {
+      // 直接执行模式:canonical 写跳过审批直接放行;其余工具(含读/进入)落 base,
+      // 不 shadow 基础规则。ExitComposeMode 不在 canonical 写集合,仍走 base → 硬审批门。
+      if (CANONICAL_NOVEL_WRITES.has(evaluation.invocation.toolName)) {
+        return allow("mode.bypass_canonical_write_allow");
       }
     }
     return this.#base.evaluate(evaluation);

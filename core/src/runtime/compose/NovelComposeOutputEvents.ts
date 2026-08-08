@@ -9,6 +9,7 @@ import {
   type JsonObject,
   type OutputEventOptions,
 } from "../../event/index.js";
+import type { ConversationMode } from "./ConversationMode.js";
 import type { ComposeModePhase } from "./ComposeModeState.js";
 
 export type NovelComposeEventName =
@@ -17,13 +18,16 @@ export type NovelComposeEventName =
   | "compose.approved"
   | "compose.rejected"
   | "compose.applied"
-  | "compose.discarded";
+  | "compose.discarded"
+  | "mode.changed";
 
 export interface NovelComposeOutputPayloadOptions {
-  readonly designFilePath: string;
-  readonly phase: ComposeModePhase;
+  readonly designFilePath?: string;
+  readonly phase?: ComposeModePhase;
   readonly approvalRequestId?: string;
-  readonly preComposeMode?: string;
+  readonly preComposeMode?: ConversationMode;
+  /** mode.changed 事件携带的新会话模式。Carried by the mode.changed event. */
+  readonly mode?: ConversationMode;
 }
 
 export class NovelComposeOutputPayload extends OutputPayload {
@@ -34,8 +38,11 @@ export class NovelComposeOutputPayload extends OutputPayload {
   toObject(): JsonObject {
     return {
       composeVersion: 1,
-      designFilePath: this.options.designFilePath,
-      phase: this.options.phase,
+      ...(this.options.designFilePath === undefined
+        ? {}
+        : { designFilePath: this.options.designFilePath }),
+      ...(this.options.phase === undefined ? {} : { phase: this.options.phase }),
+      ...(this.options.mode === undefined ? {} : { mode: this.options.mode }),
       ...(this.options.approvalRequestId === undefined
         ? {}
         : { approvalRequestId: this.options.approvalRequestId }),

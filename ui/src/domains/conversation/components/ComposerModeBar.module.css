@@ -3,7 +3,7 @@
  *
  * 置于 form 下方：max-width 1000px 靠左对齐（与输入框一致），border-top 分隔，
  * 左右 space-between（左侧切换按钮 + 右侧模式提示点）。三模式配色与原型一致：
- * 草案=蓝 / 直接执行=绿 / 审批=砖红，全部低饱和 + 半透明底。
+ * 设计=蓝 / 直接执行=绿 / 审批=砖红，全部低饱和 + 半透明底。
  */
 .bar {
   max-width: 1000px;
@@ -77,21 +77,21 @@
   opacity: 0.85;
 }
 
-/* 模式配色：草案=蓝 / 直接执行=绿 / 审批=砖红 */
-.plan {
+/* 模式配色：设计=蓝 / 直接执行=绿 / 审批=砖红 */
+.compose {
   border-color: color-mix(in oklab, var(--color-info) 26%, var(--color-border-strong));
   background: color-mix(in oklab, var(--color-info) 7%, transparent);
 }
 
-.plan .name {
+.compose .name {
   color: color-mix(in oklab, var(--color-info) 86%, var(--color-fg));
 }
 
-.plan .desc {
+.compose .desc {
   color: color-mix(in oklab, var(--color-info) 62%, var(--color-faint));
 }
 
-.plan:hover:not(:disabled) {
+.compose:hover:not(:disabled) {
   background: color-mix(in oklab, var(--color-info) 12%, transparent);
   border-color: color-mix(in oklab, var(--color-info) 42%, var(--color-border-strong));
 }
@@ -154,7 +154,7 @@
   border-radius: 50%;
 }
 
-.dot-plan {
+.dot-compose {
   background: color-mix(in oklab, var(--color-info) 55%, transparent);
 }
 

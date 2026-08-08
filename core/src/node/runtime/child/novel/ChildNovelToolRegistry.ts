@@ -73,6 +73,7 @@ import {
   NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
   ComposeToolService,
   createNovelComposeToolRegistry,
+  type ConversationModePersistencePort,
 } from "../../../../tools/novel/index.js";
 import {
   RUNTIME_FILES_TOOL_GROUP_MANIFEST,
@@ -109,6 +110,8 @@ export interface ChildNovelToolRegistryOptions {
   readonly todoWriter: ConversationTodoWriter;
   readonly composeState: ComposeModeStateProvider;
   readonly eventSink: RuntimeEventSink;
+  /** 会话 mode + compose 子状态持久化端口(可选;传了才能持久化/恢复 mode)。 */
+  readonly conversations?: ConversationModePersistencePort;
   readonly logger?: Logger;
 }
 
@@ -121,12 +124,16 @@ export interface CreateChildNovelToolRegistryOptions {
   /** 工作区 .novel/design 目录绝对路径（runtime.files 读作用域）。 */
   /** Absolute path to the workspace design directory (runtime.files read scope). */
   readonly designRoot: string;
+  /** 会话 mode + compose 子状态持久化端口(可选;传了才能持久化/恢复 mode)。 */
+  readonly conversations?: ConversationModePersistencePort;
   readonly logger?: Logger;
 }
 
 export interface ChildNovelToolRegistry {
   readonly registry: ToolRegistry;
   readonly groups: ToolGroupCatalog;
+  /** 与 Enter/ExitComposeMode 工具共享的统一 mode 服务(装配方调用 hydrate/setMode)。 */
+  readonly modeService: ComposeToolService;
 }
 
 /** 解析 workspace 并打开真实 novel 工具注册表。Resolves the workspace and opens the real registry. */
@@ -159,6 +166,7 @@ export async function openChildNovelToolRegistry(
     todoWriter: options.todoWriter,
     composeState: options.composeState,
     eventSink: options.eventSink,
+    conversations: options.conversations,
     logger,
   });
 }
@@ -214,16 +222,18 @@ export function createChildNovelToolRegistry(
   const paragraphQueries = new ParagraphQueryService(paragraphQueryStore);
   const publicationQueries = new PublicationQueryService(publicationQueryStore);
 
+  const modeService = new ComposeToolService({
+    composeState: options.composeState,
+    designRoot: options.designRoot,
+    eventSink: options.eventSink,
+    commitRecorder: composeCommitStore,
+    conversations: options.conversations,
+    logger,
+  });
   const registry = new ToolRegistry([
     ...createTodoToolRegistry({ writer: options.todoWriter }).list(),
     ...createNovelComposeToolRegistry({
-      service: new ComposeToolService({
-        composeState: options.composeState,
-        designRoot: options.designRoot,
-        eventSink: options.eventSink,
-        commitRecorder: composeCommitStore,
-        logger,
-      }),
+      service: modeService,
       logger,
     }).list(),
     ...createFileToolRegistry({
@@ -305,7 +315,7 @@ export function createChildNovelToolRegistry(
     NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
     NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   ]);
-  return Object.freeze({ registry, groups });
+  return Object.freeze({ registry, groups, modeService });
 }
 
 /** Child 组合身份工厂：真实随机 id 供工具创建实体。Combined child identity factory. */

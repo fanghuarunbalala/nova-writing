@@ -14,6 +14,7 @@ import type {
 } from "../../../conversation/index.js";
 import type { OutputEvent } from "../../../event/index.js";
 import type {
+  ConversationCatalogStore,
   ConversationEventPage,
   ConversationEventQuery,
   ConversationJournalReader,
@@ -48,6 +49,7 @@ import {
   InMemoryPendingNudgeStore,
   RuntimeApprovalDecisionInputHandler,
   RuntimeControlInputDispatcher,
+  RuntimeConversationModeSetInputHandler,
   type NudgeLifecycleEventIdFactory,
   type NudgeProviderCallCoordinator as NudgeProviderCallCoordinatorType,
   RuntimeStartupExecutor,
@@ -110,6 +112,11 @@ export interface DesktopRuntimeChildCompositionFactoryOptions {
   readonly manifestStoreProvider: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<AgentManifestStore>;
+  /** 会话目录 store 提供者(会话 mode 持久化 + hydrate)。可选;不传则 mode 仅内存。 */
+  /** Conversation catalog store provider (persistent mode + hydrate). Optional; mode stays in-memory otherwise. */
+  readonly conversationCatalogStoreProvider?: (
+    bootstrap: ConversationRuntimeBootstrap,
+  ) => Promise<ConversationCatalogStore>;
   readonly novelStorageRoot?: string;
   readonly adapterFactory: RuntimeChildAdapterFactory;
   readonly contextCompilerFactory: AgentRuntimeContextCompilerFactory;
@@ -129,6 +136,9 @@ export class DesktopRuntimeChildCompositionFactory
   readonly #manifestStoreProvider: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<AgentManifestStore>;
+  readonly #conversationCatalogStoreProvider?: (
+    bootstrap: ConversationRuntimeBootstrap,
+  ) => Promise<ConversationCatalogStore>;
   readonly #novelStorageRoot?: string;
   readonly #adapterFactory: RuntimeChildAdapterFactory;
   readonly #contextCompilerFactory: AgentRuntimeContextCompilerFactory;
@@ -146,6 +156,8 @@ export class DesktopRuntimeChildCompositionFactory
     });
     const composition = createNovelConversationManifestComposition();
     this.#manifestStoreProvider = options.manifestStoreProvider;
+    this.#conversationCatalogStoreProvider =
+      options.conversationCatalogStoreProvider;
     this.#novelStorageRoot = options.novelStorageRoot;
     this.#adapterFactory = options.adapterFactory;
     this.#contextCompilerFactory = options.contextCompilerFactory;
@@ -229,6 +241,10 @@ export class DesktopRuntimeChildCompositionFactory
       logger,
     });
     const composeState = this.#composeState;
+    const conversations =
+      this.#conversationCatalogStoreProvider === undefined
+        ? undefined
+        : await this.#conversationCatalogStoreProvider(bootstrap);
     const novelTools = await openChildNovelToolRegistry({
       storageRoot: requireNovelStorageRoot(
         this.#novelStorageRoot ?? process.env[DESKTOP_CHILD_STORAGE_ROOT_ENV],
@@ -237,8 +253,11 @@ export class DesktopRuntimeChildCompositionFactory
       todoWriter,
       composeState,
       eventSink,
+      ...(conversations === undefined ? {} : { conversations }),
       logger,
     });
+    // 从持久层还原会话 mode + compose 子状态(重启恢复;权威来源为 workspace DB)。
+    await novelTools.modeService.hydrate(conversationId);
     logger.info("runtime_child.composition.novel_registry_opened", {
       conversationId,
     });
@@ -348,6 +367,12 @@ export class DesktopRuntimeChildCompositionFactory
         coordinator: toolExecution.coordinator,
         runId: () => lifecycleController.getRunSnapshot()?.runId,
         turnId: () => lifecycleController.getTurnSnapshot()?.turnId,
+        outcomeRecorder,
+        logger,
+      }),
+      modeSetHandler: new RuntimeConversationModeSetInputHandler({
+        conversationId,
+        modeService: novelTools.modeService,
         outcomeRecorder,
         logger,
       }),

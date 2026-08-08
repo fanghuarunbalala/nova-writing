@@ -163,23 +163,18 @@ function composePhaseOf(eventType: string): string | undefined {
   }
 }
 
-/** 由投影事件计算当前 compose 徽标文案（设计中/待审批）；无 compose 活动时 undefined。 */
-/** Computes the compose badge label from projected events; undefined when compose is idle. */
+/**
+ * 由投影 composePhase 计算当前 compose 徽标文案（设计中/待审批）。
+ * Computes the compose badge label from the projected compose phase.
+ *
+ * composePhase 由 connect 时 DB 播种、compose 事件实时覆盖，裁剪后依然正确；
+ * 相比扫描事件描述，不依赖 journal 中仍保留的 novel.compose.* 事件。
+ */
 export function composeStatusLabel(
-  events: readonly {
-    readonly direction?: "input" | "output";
-    readonly eventType: string;
-  }[],
+  projection: { readonly composePhase?: "designing" | "pending" },
 ): string | undefined {
-  let phase: string | undefined;
-  for (const event of events) {
-    if (event.direction === "output") {
-      const candidate = composePhaseOf(event.eventType);
-      if (candidate !== undefined) phase = candidate;
-    }
-  }
-  if (phase === "designing") return "设计中";
-  if (phase === "pending") return "待审批";
+  if (projection.composePhase === "designing") return "设计中";
+  if (projection.composePhase === "pending") return "待审批";
   return undefined;
 }
 

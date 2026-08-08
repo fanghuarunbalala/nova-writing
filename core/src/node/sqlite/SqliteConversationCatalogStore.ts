@@ -8,10 +8,15 @@ import {
   ConversationParentNotFoundError,
   ConversationWorkspaceMismatchError,
 } from "../../storage/index.js";
+import {
+  isConversationMode,
+  type ConversationMode,
+} from "../../runtime/compose/index.js";
 import type {
   AgentBindingIdentity,
   ConversationAgentBinding,
   ConversationCatalogStore,
+  ConversationComposeState,
   ConversationListQuery,
   ConversationMetadata,
   ConversationStatus,
@@ -28,9 +33,18 @@ interface ConversationRow {
   status: ConversationStatus;
   title: string;
   pinned: number;
+  mode: string;
   created_at: string;
   updated_at: string;
   last_journal_sequence: number;
+}
+
+interface ConversationComposeStateRow {
+  conversation_id: string;
+  phase: "designing" | "pending";
+  design_file_path: string;
+  pre_mode: string;
+  updated_at: string;
 }
 
 interface AgentBindingRow {
@@ -144,6 +158,7 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
           status: "active",
           title: input.title ?? "新对话",
           pinned: input.pinned === true,
+          mode: "review",
           createdAt: timestamp,
           updatedAt: timestamp,
           lastJournalSequence: 0,
@@ -292,6 +307,78 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
     });
   }
 
+  async setConversationMode(
+    conversationId: string,
+    mode: ConversationMode,
+  ): Promise<ConversationMetadata> {
+    this.assertOpen();
+    if (!isConversationMode(mode)) {
+      throw new TypeError("Conversation mode is invalid");
+    }
+    const current = this.selectConversationRow(conversationId);
+    if (current === undefined) {
+      throw new Error("Conversation not found");
+    }
+    // mode 变化不改 updated_at:catalog 排序按会话活动时间,模式迁移不应置顶列表。
+    this.database
+      .prepare("UPDATE conversations SET mode = ? WHERE id = ?")
+      .run(mode, conversationId);
+    return this.mapConversationRow({ ...current, mode });
+  }
+
+  async getConversationComposeState(
+    conversationId: string,
+  ): Promise<ConversationComposeState | undefined> {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT * FROM conversation_compose_state WHERE conversation_id = ?`,
+      )
+      .get(conversationId) as ConversationComposeStateRow | undefined;
+    if (row === undefined) return undefined;
+    return {
+      phase: row.phase,
+      designFilePath: row.design_file_path,
+      preMode: isConversationMode(row.pre_mode)
+        ? row.pre_mode
+        : "review",
+      updatedAt: row.updated_at,
+    };
+  }
+
+  async setConversationComposeState(
+    conversationId: string,
+    state: ConversationComposeState | undefined,
+  ): Promise<void> {
+    this.assertOpen();
+    if (state === undefined) {
+      this.database
+        .prepare(
+          `DELETE FROM conversation_compose_state WHERE conversation_id = ?`,
+        )
+        .run(conversationId);
+      return;
+    }
+    this.database
+      .prepare(
+        `INSERT INTO conversation_compose_state(
+           conversation_id, phase, design_file_path, pre_mode, updated_at
+         ) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(conversation_id) DO UPDATE SET
+           phase = excluded.phase,
+           design_file_path = excluded.design_file_path,
+           pre_mode = excluded.pre_mode,
+           updated_at = excluded.updated_at`,
+      )
+      .run(
+        conversationId,
+        state.phase,
+        state.designFilePath,
+        state.preMode,
+        state.updatedAt,
+      );
+  }
+
   async deleteConversation(conversationId: string): Promise<void> {
     this.assertOpen();
     this.database.exec("BEGIN IMMEDIATE");
@@ -344,6 +431,9 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
       status: row.status,
       title: row.title,
       pinned: row.pinned === 1,
+      ...(isConversationMode(row.mode)
+        ? { mode: row.mode }
+        : {}),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       lastJournalSequence: row.last_journal_sequence,

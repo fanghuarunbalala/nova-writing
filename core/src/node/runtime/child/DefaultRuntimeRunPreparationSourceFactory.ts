@@ -90,6 +90,7 @@ export class DefaultRuntimeRunPreparationSourceFactory
                       compose: {
                         phase: composeSnapshot.phase,
                         active: composeSnapshot.active,
+                        mode: composeSnapshot.mode,
                       },
                     }),
               };

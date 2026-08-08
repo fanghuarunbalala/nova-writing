@@ -14,6 +14,7 @@ export {
   ComposeToolService,
   type ComposeEnterDetails,
   type ComposeExitDetails,
+  type ConversationModePersistencePort,
 } from "./ToolService.js";
 
 export const NOVEL_COMPOSE_TOOL_GROUP_MANIFEST: ToolGroupManifest =

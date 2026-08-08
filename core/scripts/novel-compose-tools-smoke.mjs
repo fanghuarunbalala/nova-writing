@@ -62,7 +62,10 @@ const enterResult = await enterTool.handler.execute(
 assert.equal(enterResult.details.phase, "designing");
 assert.equal(enterResult.details.designFilePath, designFilePath);
 assert.equal(await fs.readFile(designFilePath, "utf8"), "");
-assert.equal(events.at(-1).getEventType(), "novel.compose.begin");
+// 写序: compose.begin → mode.changed。
+assert.equal(events.at(-2).getEventType(), "novel.compose.begin");
+assert.equal(events.at(-1).getEventType(), "novel.mode.changed");
+assert.equal(composeState.snapshot(conversationId).mode, "compose");
 
 // 重复进入 → NOVEL_COMPOSE_STATE_INVALID
 await assert.rejects(
@@ -122,7 +125,10 @@ const exitResult = await exitTool.handler.execute(
 );
 assert.equal(exitResult.details.phase, "applied");
 assert.equal(composeState.snapshot(conversationId).active, false);
-assert.equal(events.at(-1).getEventType(), "novel.compose.applied");
+assert.equal(composeState.snapshot(conversationId).mode, "review");
+// 写序: compose.applied → mode.changed(恢复 preMode)。
+assert.equal(events.at(-2).getEventType(), "novel.compose.applied");
+assert.equal(events.at(-1).getEventType(), "novel.mode.changed");
 
 // 拒绝路径：重新进入 -> 提交 -> 拒绝 -> designing + rejected 事件
 await enterTool.handler.execute(context(conversationId, 5), {}, progress);

@@ -7,6 +7,7 @@ import {
 } from "../../event/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
 import type {
+  ConversationComposeState,
   ConversationEventPage,
   ConversationEventSubscription,
 } from "../../storage/index.js";
@@ -38,6 +39,10 @@ import {
   isRuntimePresenceState,
   type RuntimePresence,
 } from "../RuntimePresence.js";
+import {
+  isConversationMode,
+  type ConversationMode,
+} from "../../runtime/compose/index.js";
 import { ApiConversationEventSubscription } from "./ApiConversationEventSubscription.js";
 import {
   CONVERSATION_API_OPERATION,
@@ -183,6 +188,19 @@ export class ConversationClient {
       validatedConversationId,
     );
     return validateRuntimePresence(presence);
+  }
+
+  async getComposeState(
+    conversationId: string,
+  ): Promise<ConversationComposeState | undefined> {
+    const validatedConversationId = validateConversationId(conversationId);
+    const composeState = await this.request(
+      CONVERSATION_API_OPERATION.composeStateGet,
+      { conversationId: validatedConversationId },
+      validatedConversationId,
+    );
+    if (composeState === undefined || composeState === null) return undefined;
+    return validateConversationComposeState(composeState);
   }
 
   async listEvents(
@@ -403,6 +421,11 @@ function validateConversationSnapshot(
       ...(metadata.pinned !== undefined
         ? { pinned: assertBoolean(metadata.pinned, "Conversation pinned") }
         : {}),
+      ...(metadata.mode !== undefined
+        ? {
+            mode: assertConversationMode(metadata.mode, "Conversation mode"),
+          }
+        : {}),
       createdAt: assertNonEmptyString(metadata.createdAt, "Conversation createdAt"),
       updatedAt: assertNonEmptyString(metadata.updatedAt, "Conversation updatedAt"),
       lastJournalSequence: assertSafeInteger(
@@ -603,6 +626,36 @@ function validateRuntimePresence(value: unknown): RuntimePresence {
   });
 }
 
+function validateConversationComposeState(
+  value: unknown,
+): ConversationComposeState {
+  const state = assertRecord(value, "Conversation compose state");
+  const phase = state.phase;
+  if (phase !== "designing" && phase !== "pending") {
+    throw new ConversationClientProtocolError(
+      "Conversation compose phase is invalid",
+    );
+  }
+  const preMode = state.preMode;
+  if (!isConversationMode(preMode)) {
+    throw new ConversationClientProtocolError(
+      "Conversation compose preMode is invalid",
+    );
+  }
+  return Object.freeze({
+    phase,
+    designFilePath: assertNonEmptyString(
+      state.designFilePath,
+      "Conversation compose designFilePath",
+    ),
+    preMode,
+    updatedAt: assertNonEmptyString(
+      state.updatedAt,
+      "Conversation compose updatedAt",
+    ),
+  });
+}
+
 function validateConversationEventPage(
   value: unknown,
   expectedConversationId: string,
@@ -705,6 +758,15 @@ function validateConversationTitle(value: string): string {
 function assertBoolean(value: unknown, label: string): boolean {
   if (typeof value !== "boolean") {
     throw new ConversationClientProtocolError(`${label} must be a boolean`);
+  }
+  return value;
+}
+
+function assertConversationMode(value: unknown, label: string): ConversationMode {
+  if (!isConversationMode(value)) {
+    throw new ConversationClientProtocolError(
+      `${label} must be review, bypass, or compose`,
+    );
   }
   return value;
 }

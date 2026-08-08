@@ -1,12 +1,16 @@
 /**
- * 会话级 Compose 模式状态：阶段 + active + design 文件路径 + preComposeMode 扩展位。
- * Session-scoped Compose mode state: phase, active flag, design file path, and the
- * preComposeMode extension slot.
+ * 会话级 Compose 模式状态：mode + 阶段 + active + design 文件路径 + preMode。
+ * Session-scoped compose mode state: base mode, phase, active flag, design file path, preMode.
  *
+ * 不变量 / Invariant：`mode` 恒为 base mode；compose 会话激活期间 `mode === "compose"`。
  * 权限语义 / Permission semantics：`active=true` 时 ComposeAware 策略拒绝 canonical
- * 写入并限定文件工具作用域；批准后 `active=false`（恢复进入前的权限模式）。
+ * 写入并限定文件工具作用域；approve/discard 后 `active=false` 且 `mode` 恢复 preMode。
  */
 import { noopLogger, type Logger } from "../../observability/index.js";
+import {
+  DEFAULT_CONVERSATION_MODE,
+  type ConversationMode,
+} from "./ConversationMode.js";
 
 export type ComposeModePhase =
   | "idle"
@@ -19,16 +23,18 @@ export interface ComposeModeSnapshot {
   readonly phase: ComposeModePhase;
   /** compose 权限模式是否激活（激活期间 canonical 写被拒）。Whether compose permission mode is active. */
   readonly active: boolean;
+  /** 会话 base mode（非 compose 时为 review/bypass；compose 会话激活时为 "compose"）。 */
+  readonly mode: ConversationMode;
   /** 当前会话 design 文件绝对路径。Absolute path of the conversation design file. */
   readonly designFilePath?: string;
-  /** 进入 compose 前的权限模式（harness 尚无权限模式概念，作为扩展位）。 */
-  /** Permission mode before entering compose (extension slot; harness has no mode concept yet). */
-  readonly preComposeMode?: string;
+  /** 进入 compose 前的 base mode（approve/discard 时恢复）。Mode before entering compose. */
+  readonly preComposeMode?: ConversationMode;
 }
 
 export const IDLE_COMPOSE_MODE_SNAPSHOT: ComposeModeSnapshot = Object.freeze({
   phase: "idle",
   active: false,
+  mode: DEFAULT_CONVERSATION_MODE,
 });
 
 export class ComposeStateError extends Error {
@@ -67,7 +73,10 @@ export class ComposeModeStateProvider {
   /** 进入 compose：idle/discarded/applied -> designing。Enters compose from an inactive phase. */
   enter(
     conversationId: string,
-    options: { readonly designFilePath: string; readonly preComposeMode?: string },
+    options: {
+      readonly designFilePath: string;
+      readonly preComposeMode?: ConversationMode;
+    },
   ): ComposeModeSnapshot {
     const current = this.snapshot(conversationId);
     if (current.active) {
@@ -76,6 +85,7 @@ export class ComposeModeStateProvider {
     const next = Object.freeze({
       phase: "designing" as const,
       active: true,
+      mode: "compose" as const,
       designFilePath: options.designFilePath,
       ...(options.preComposeMode === undefined
         ? {}
@@ -83,6 +93,41 @@ export class ComposeModeStateProvider {
     });
     this.#states.set(conversationId, next);
     this.#logger.debug("compose.entered", { conversationId, phase: next.phase });
+    return next;
+  }
+
+  /** 设置 base mode（仅 compose 非激活时可用；激活时抛错，由服务先 discard/approve）。 */
+  /** Sets the base mode (only valid when no compose session is active). */
+  setMode(conversationId: string, mode: ConversationMode): ComposeModeSnapshot {
+    const current = this.snapshot(conversationId);
+    if (current.active) {
+      throw this.#invalid(
+        current.phase,
+        "setMode",
+        "setMode requires an inactive compose session",
+      );
+    }
+    const next = Object.freeze({
+      phase: "idle" as const,
+      active: false,
+      mode,
+    });
+    this.#states.set(conversationId, next);
+    this.#logger.debug("compose.mode_set", { conversationId, mode });
+    return next;
+  }
+
+  /** 归档后收口：清除 design 文件路径与 preMode（保留 phase 终态标记）。 */
+  /** Settles after archival: clears the design file path and preMode (keeps the terminal phase). */
+  settle(conversationId: string): ComposeModeSnapshot {
+    const current = this.snapshot(conversationId);
+    const next = Object.freeze({
+      phase: current.phase,
+      active: current.active,
+      mode: current.mode,
+    });
+    this.#states.set(conversationId, next);
+    this.#logger.debug("compose.settled", { conversationId, phase: next.phase });
     return next;
   }
 
@@ -98,8 +143,8 @@ export class ComposeModeStateProvider {
     return next;
   }
 
-  /** 批准：designing|pending -> applied，且 active=false（恢复进入前权限模式）。 */
-  /** Approves: designing|pending -> applied with active=false (mode restored). */
+  /** 批准：designing|pending -> applied，且 active=false、mode 恢复 preMode。 */
+  /** Approves: designing|pending -> applied with active=false and mode restored. */
   approve(conversationId: string): ComposeModeSnapshot {
     const current = this.snapshot(conversationId);
     if (current.phase !== "designing" && current.phase !== "pending") {
@@ -109,6 +154,7 @@ export class ComposeModeStateProvider {
       ...current,
       phase: "applied" as const,
       active: false,
+      mode: current.preComposeMode ?? DEFAULT_CONVERSATION_MODE,
     });
     this.#states.set(conversationId, next);
     this.#logger.debug("compose.approved", { conversationId });
@@ -127,7 +173,8 @@ export class ComposeModeStateProvider {
     return next;
   }
 
-  /** 放弃：designing|pending -> discarded，active=false。Discards an active design session. */
+  /** 放弃：designing|pending -> discarded，active=false、mode 恢复 preMode。 */
+  /** Discards: designing|pending -> discarded with active=false and mode restored. */
   discard(conversationId: string): ComposeModeSnapshot {
     const current = this.snapshot(conversationId);
     if (current.phase !== "designing" && current.phase !== "pending") {
@@ -137,6 +184,7 @@ export class ComposeModeStateProvider {
       ...current,
       phase: "discarded" as const,
       active: false,
+      mode: current.preComposeMode ?? DEFAULT_CONVERSATION_MODE,
     });
     this.#states.set(conversationId, next);
     this.#logger.debug("compose.discarded", { conversationId });

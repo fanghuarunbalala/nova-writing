@@ -163,6 +163,21 @@ const MIGRATIONS: Migration[] = [
       ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 7,
+    name: "conversation_mode",
+    sql: `
+      ALTER TABLE conversations ADD COLUMN mode TEXT NOT NULL DEFAULT 'review';
+      CREATE TABLE conversation_compose_state (
+        conversation_id   TEXT PRIMARY KEY,
+        phase             TEXT NOT NULL CHECK (phase IN ('designing', 'pending')),
+        design_file_path  TEXT NOT NULL,
+        pre_mode          TEXT NOT NULL,
+        updated_at        TEXT NOT NULL,
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      ) STRICT;
+    `,
+  },
 ];
 
 export function runCoreSqliteMigrations(database: DatabaseSync): void {

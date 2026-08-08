@@ -3,6 +3,7 @@ import {
   ConversationNotFoundError,
   type ConversationCatalogService,
   type ConversationCommandService,
+  type ConversationComposeStateReader,
   type ConversationQueryService,
   type ConversationRuntimePresenceReader,
 } from "../../conversation/index.js";
@@ -53,6 +54,9 @@ export interface ConversationApiRouterOptions {
   readonly commands: ConversationCommandService;
   readonly queries: ConversationQueryService;
   readonly runtimePresence: ConversationRuntimePresenceReader;
+  /** 可选 compose 会话子状态读取器；缺省时 composeStateGet 返回 undefined。 */
+  /** Optional compose session sub-state reader; composeStateGet returns undefined when absent. */
+  readonly composeStateReader?: ConversationComposeStateReader;
   readonly logger?: Logger;
 }
 
@@ -61,6 +65,7 @@ export class ConversationApiRouter implements ApiTransport {
   private readonly commands: ConversationCommandService;
   private readonly queries: ConversationQueryService;
   private readonly runtimePresence: ConversationRuntimePresenceReader;
+  private readonly composeStateReader?: ConversationComposeStateReader;
   private readonly logger: Logger;
   private readonly subscriptions = new Set<RoutedConversationApiSubscription>();
   private closed = false;
@@ -71,6 +76,7 @@ export class ConversationApiRouter implements ApiTransport {
     this.commands = options.commands;
     this.queries = options.queries;
     this.runtimePresence = options.runtimePresence;
+    this.composeStateReader = options.composeStateReader;
     this.logger = (options.logger ?? noopLogger).child({
       component: "conversation_api_router",
     });
@@ -200,6 +206,16 @@ export class ConversationApiRouter implements ApiTransport {
         return this.queries.getSnapshot(conversationId);
       case CONVERSATION_API_OPERATION.runtimePresenceGet:
         return this.runtimePresence.getRuntimePresence(conversationId);
+      case CONVERSATION_API_OPERATION.composeStateGet: {
+        // 无 compose 会话时返回 null（JSON 可表示"缺省"），客户端映射回 undefined。
+        const composeState =
+          this.composeStateReader === undefined
+            ? undefined
+            : await this.composeStateReader.getConversationComposeState(
+                conversationId,
+              );
+        return composeState ?? null;
+      }
       case CONVERSATION_API_OPERATION.inputEnqueue: {
         const snapshot = coreEventSchemaRegistry.validateInput(payload.inputEvent, {
           allowUnknownEventType: true,

@@ -33,6 +33,7 @@ import {
 import type { ConversationSnapshot } from "../../conversation/ConversationSnapshot.js";
 import type { RuntimePresence } from "../../conversation/RuntimePresence.js";
 import type { ConversationEventListOptions } from "../../conversation/ConversationEvents.js";
+import type { ConversationComposeState } from "../../storage/index.js";
 import {
   CONVERSATION_API_OPERATION,
   type SerializableConversationEventSubscriptionOptions,
@@ -46,11 +47,15 @@ import { InMemoryMockConversationJournal } from "./InMemoryMockConversationJourn
 interface MockConversationState {
   snapshot: ConversationSnapshot;
   runtimePresence: RuntimePresence;
+  composeState?: ConversationComposeState;
 }
 
 export interface RegisterMockConversationOptions {
   readonly snapshot: ConversationSnapshot;
   readonly runtimePresence?: RuntimePresence;
+  /** 可选的活跃 compose 会话子状态；缺省为无。 */
+  /** Optional active compose session sub-state; absent by default. */
+  readonly composeState?: ConversationComposeState;
 }
 
 export interface DeterministicMockNovelHostOptions {
@@ -110,6 +115,9 @@ export class DeterministicMockNovelHost {
     this.conversations.set(conversationId, {
       snapshot,
       runtimePresence,
+      ...(options.composeState === undefined
+        ? {}
+        : { composeState: cloneComposeState(options.composeState) }),
     });
     this.logger.info("mock_novel_host.conversation_registered", {
       conversationId,
@@ -275,6 +283,8 @@ export class DeterministicMockNovelHost {
         return state.snapshot;
       case CONVERSATION_API_OPERATION.runtimePresenceGet:
         return state.runtimePresence;
+      case CONVERSATION_API_OPERATION.composeStateGet:
+        return state.composeState ?? null;
       case CONVERSATION_API_OPERATION.inputEnqueue: {
         const inputEvent = coreEventSchemaRegistry.validateInput(
           payload.inputEvent,
@@ -417,6 +427,10 @@ function cloneConversationSnapshot(snapshot: ConversationSnapshot): Conversation
 
 function cloneRuntimePresence(presence: RuntimePresence): RuntimePresence {
   return Object.freeze({ ...presence });
+}
+
+function cloneComposeState(state: ConversationComposeState): ConversationComposeState {
+  return Object.freeze({ ...state });
 }
 
 function cloneSubscriptionOptions(

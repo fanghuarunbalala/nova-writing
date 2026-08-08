@@ -51,6 +51,7 @@ export const OUTPUT_EVENT_TYPE = {
   novelComposeRejected: "novel.compose.rejected",
   novelComposeApplied: "novel.compose.applied",
   novelComposeDiscarded: "novel.compose.discarded",
+  novelModeChanged: "novel.mode.changed",
 } as const;
 
 export type CoreOutputEventType =

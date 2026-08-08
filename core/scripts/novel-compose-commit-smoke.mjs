@@ -63,7 +63,11 @@ await service.exit(conversationId);
 
 assert.equal(composeState.snapshot(conversationId).phase, "applied");
 assert.equal(composeState.snapshot(conversationId).active, false);
-assert.equal(events.at(-1).getEventType(), "novel.compose.applied");
+// exit 写序:compose.applied → mode.changed。
+assert.deepEqual(
+  events.map((event) => event.getEventType()).slice(-2),
+  ["novel.compose.applied", "novel.mode.changed"],
+);
 
 // design 文件已归档
 const archivePath = path.join(designRoot, "archive", "conversation-compose-commit.md");

@@ -47,6 +47,7 @@ export interface MainAreaProps {
     action: "approve" | "reject" | "view-diff",
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
+  readonly onOpenDraft?: (changeSetId: string) => void;
   readonly approvalStore: ApprovalStore;
 }
 
@@ -81,6 +82,7 @@ export function MainArea(props: MainAreaProps) {
           onSelectCharacter={props.onSelectCharacter}
           onSelectLocation={props.onSelectLocation}
           locateReference={props.locateReference}
+          onOpenDraft={props.onOpenDraft}
           onBack={() => props.mainViewRouter.transition("chat")}
         />
       ) : (

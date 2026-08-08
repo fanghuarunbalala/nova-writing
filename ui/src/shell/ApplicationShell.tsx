@@ -452,6 +452,7 @@ export function ApplicationShell({
           locateReference={locateReference}
           onProposalAction={handleProposalAction}
           onOpenApproval={handleOpenApproval}
+          onOpenDraft={handleOpenApproval}
           approvalStore={approvalStore}
         />
         <InspectorHost

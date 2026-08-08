@@ -115,4 +115,64 @@ describe("manuscript components", () => {
     render(<ManuscriptDraftTag />);
     expect(screen.getByText("草稿")).toBeInTheDocument();
   });
+
+  it("shows a 前往审批 entry on draft chapters and invokes onOpenDraft", async () => {
+    const user = userEvent.setup();
+    const onOpenDraft = vi.fn();
+    render(
+      <ManuscriptChapterList
+        workspaceId="w1"
+        chapters={[
+          {
+            chapterId: "chapter-draft-1",
+            title: "第一节 夜景",
+            isDraft: true,
+            changeSetId: "CS-7",
+            blocks: [{ blockId: "§3-01-04", digest: "8f3a70", text: "雨落得密。" }],
+          },
+        ]}
+        onOpenDraft={onOpenDraft}
+      />,
+    );
+    const entry = screen.getByRole("button", { name: "前往审批 →" });
+    await user.click(entry);
+    expect(onOpenDraft).toHaveBeenCalledTimes(1);
+    expect(onOpenDraft).toHaveBeenCalledWith("CS-7");
+  });
+
+  it("omits the approval entry when the chapter is not a draft", () => {
+    render(
+      <ManuscriptChapterList
+        workspaceId="w1"
+        chapters={[
+          {
+            chapterId: "chapter-final-1",
+            title: "第七章 定稿",
+            blocks: [{ blockId: "§3-01-05", digest: "9e4b81ee", text: "定稿正文。" }],
+          },
+        ]}
+        onOpenDraft={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "前往审批 →" })).not.toBeInTheDocument();
+    expect(screen.getByText("第七章 定稿")).toBeInTheDocument();
+  });
+
+  it("omits the approval entry when no onOpenDraft handler is wired", () => {
+    render(
+      <ManuscriptChapterList
+        workspaceId="w1"
+        chapters={[
+          {
+            chapterId: "chapter-draft-2",
+            title: "第一节 夜景",
+            isDraft: true,
+            changeSetId: "CS-8",
+            blocks: [{ blockId: "§3-01-04", digest: "8f3a70", text: "" }],
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "前往审批 →" })).not.toBeInTheDocument();
+  });
 });

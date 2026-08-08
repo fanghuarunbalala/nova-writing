@@ -37,6 +37,7 @@ export interface ContentSurfaceProps {
   readonly onSelectCharacter?: (characterId: string) => void;
   readonly onSelectLocation?: (locationId: string) => void;
   readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
+  readonly onOpenDraft?: (changeSetId: string) => void;
   readonly onBack?: () => void;
 }
 
@@ -51,6 +52,7 @@ export function ContentSurface({
   onSelectCharacter,
   onSelectLocation,
   locateReference,
+  onOpenDraft,
   onBack,
 }: ContentSurfaceProps) {
   const outline = useExternalStore(outlineTree);
@@ -82,6 +84,7 @@ export function ContentSurface({
                 ? undefined
                 : { kind: locateReference.kind, id: locateReference.id, nonce: locateReference.nonce }
             }
+            onOpenDraft={onOpenDraft}
           />
         );
         break;

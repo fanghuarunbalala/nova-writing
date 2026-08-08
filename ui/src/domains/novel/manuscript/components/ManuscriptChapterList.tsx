@@ -28,6 +28,7 @@ export function ManuscriptChapterList({
         <ManuscriptChapterCard
           key={chapter.chapterId}
           chapter={chapter}
+          isDraft={chapter.isDraft}
           locate={locate}
           onSelectBlock={onSelectBlock}
           onOpenDraft={onOpenDraft}

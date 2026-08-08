@@ -7,6 +7,7 @@
  * header baseline 对齐；rev 用 mono/faint；draft 章节额外加 draft-tag。
  */
 import { useEffect, useRef } from "react";
+import { Button } from "../../../../shared/primitives/Button.js";
 import type { ManuscriptChapter } from "../store/ManuscriptStructureStore.js";
 import { ManuscriptBlock } from "./ManuscriptBlock.js";
 import { ManuscriptDraftTag } from "./ManuscriptDraftTag.js";
@@ -25,8 +26,10 @@ export function ManuscriptChapterCard({
   isDraft = false,
   locate,
   onSelectBlock,
+  onOpenDraft,
 }: ManuscriptChapterCardProps) {
   const cardRef = useRef<HTMLElement>(null);
+  const draftChangeSetId = isDraft ? chapter.changeSetId : undefined;
 
   // 定位：来自对话引用的章节/段落，滚动到可视区并闪烁高亮。
   useEffect(() => {
@@ -64,6 +67,13 @@ export function ManuscriptChapterCard({
           />
         ))}
       </div>
+      {draftChangeSetId !== undefined && onOpenDraft !== undefined ? (
+        <footer className={styles.draftActions}>
+          <Button size="sm" variant="link" onClick={() => onOpenDraft(draftChangeSetId)}>
+            前往审批 →
+          </Button>
+        </footer>
+      ) : null}
     </section>
   );
 }

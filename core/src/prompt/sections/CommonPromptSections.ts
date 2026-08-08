@@ -18,7 +18,6 @@ import {
   NovelIdentityPromptSection,
   NovelSystemPromptSection,
 } from "./novel/NovelBasePromptSections.js";
-import { NovelComposeModePromptSection } from "./novel/NovelComposePromptSections.js";
 import { NovelDoingTasksPromptSection } from "./novel/NovelCraftPromptSections.js";
 import { NovelActionsPromptSection } from "./novel/NovelExecutionPromptSections.js";
 import { CoreEnvironmentPromptSection } from "../environment/index.js";
@@ -191,7 +190,6 @@ export function createDefaultPromptSectionRegistry(): PromptSectionRegistry {
     .register(new CcbReferenceCommunicationStylePromptSection())
     .register(new NovelIdentityPromptSection())
     .register(new NovelSystemPromptSection({ interactsWithUser: true }))
-    .register(new NovelComposeModePromptSection())
     .register(new NovelCommunicationPromptSection())
     .register(new NovelDoingTasksPromptSection())
     .register(new NovelActionsPromptSection())

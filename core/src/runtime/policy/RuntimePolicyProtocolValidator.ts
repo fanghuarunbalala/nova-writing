@@ -17,8 +17,10 @@ import {
   type RuntimePolicyContext,
   type RuntimePolicyEffect,
   type RuntimeNudgeLifecycleEffect,
+  type RuntimePolicyRuntimeSignals,
   type RuntimePolicyState,
 } from "./RuntimePolicyProtocol.js";
+import type { ComposeModeSnapshot } from "../compose/ComposeModeState.js";
 import {
   RUNTIME_POLICY_PROTOCOL_FAILURE,
   RuntimePolicyProtocolError,
@@ -29,6 +31,13 @@ const PHASES = new Set(Object.values(RUNTIME_POLICY_PHASE));
 const COMPACTION_TRIGGERS = new Set(
   Object.values(CONTEXT_COMPACTION_EFFECT_TRIGGER),
 );
+const COMPOSE_PHASES = new Set<ComposeModeSnapshot["phase"]>([
+  "idle",
+  "designing",
+  "pending",
+  "applied",
+  "discarded",
+]);
 
 export function captureRuntimePolicyContext(
   value: unknown,
@@ -41,25 +50,82 @@ export function captureRuntimePolicyContext(
     const runId = requireNonBlank(record.runId);
     const providerCallId = requireNonBlank(record.providerCallId);
     const evaluatedAt = requireTimestamp(record.evaluatedAt);
-    const contextPressure = captureContextPressureSnapshot(record.contextPressure);
-    assertPressureIdentity(
-      contextPressure,
-      conversationId,
-      runId,
-      providerCallId,
-      evaluatedAt,
-    );
+    const contextPressure =
+      record.contextPressure === undefined
+        ? undefined
+        : captureContextPressureSnapshot(record.contextPressure);
+    if (contextPressure !== undefined) {
+      assertPressureIdentity(
+        contextPressure,
+        conversationId,
+        runId,
+        providerCallId,
+        evaluatedAt,
+      );
+    }
     return Object.freeze({
       phase: record.phase as RuntimePolicyContext["phase"],
       conversationId,
       runId,
       providerCallId,
       evaluatedAt,
-      contextPressure,
+      ...(contextPressure === undefined ? {} : { contextPressure }),
+      ...captureRuntimePolicyRuntimeSignals(record.runtimeSignals),
     });
   } catch {
     throw failure(RUNTIME_POLICY_PROTOCOL_FAILURE.invalidContext, identity);
   }
+}
+
+function captureRuntimePolicyRuntimeSignals(
+  value: unknown,
+): { readonly runtimeSignals: RuntimePolicyRuntimeSignals } | {} {
+  if (value === undefined) return {};
+  const record = requireRecord(value);
+  const providerCallCount = requireNonNegativeInteger(record.providerCallCount);
+  const signals: RuntimePolicyRuntimeSignals = Object.freeze({
+    providerCallCount,
+    ...(record.compose === undefined
+      ? {}
+      : { compose: captureComposeModeSnapshot(record.compose) }),
+    ...(record.todos === undefined
+      ? {}
+      : { todos: captureTodoSignals(record.todos) }),
+  });
+  return { runtimeSignals: signals };
+}
+
+function captureComposeModeSnapshot(value: unknown): ComposeModeSnapshot {
+  const record = requireRecord(value);
+  const phase = record.phase;
+  if (
+    !COMPOSE_PHASES.has(phase as never) ||
+    typeof record.active !== "boolean" ||
+    typeof record.mode !== "string" ||
+    record.mode.trim().length === 0
+  ) {
+    throw new Error();
+  }
+  return Object.freeze({
+    phase: phase as ComposeModeSnapshot["phase"],
+    active: record.active,
+    mode: record.mode as ComposeModeSnapshot["mode"],
+    ...(typeof record.designFilePath === "string"
+      ? { designFilePath: record.designFilePath }
+      : {}),
+    ...(typeof record.preComposeMode === "string"
+      ? { preComposeMode: record.preComposeMode as ComposeModeSnapshot["mode"] }
+      : {}),
+  });
+}
+
+function captureTodoSignals(
+  value: unknown,
+): { readonly inProgressCount: number } {
+  const record = requireRecord(value);
+  return Object.freeze({
+    inProgressCount: requireNonNegativeInteger(record.inProgressCount),
+  });
 }
 
 export function captureRuntimePolicyState(value: unknown): RuntimePolicyState {

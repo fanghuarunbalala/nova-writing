@@ -10,6 +10,7 @@ import {
   type AgentManifestStore,
 } from "../../../agent/manifest/index.js";
 import { novelAgentDefinition } from "../../../agent/definitions/index.js";
+import { canonicalStringifyJson, type JsonValue } from "../../../event/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { PromptCapabilitySnapshot } from "../../../prompt/index.js";
 import {
@@ -17,7 +18,7 @@ import {
   type NovelConversationManifestComposition,
 } from "./NovelConversationManifestComposition.js";
 
-export const DEFAULT_NOVEL_AGENT_MANIFEST_ID = "manifest:novel:1.2.0" as const;
+export const DEFAULT_NOVEL_AGENT_MANIFEST_ID = "manifest:novel:1.3.0" as const;
 
 export type DefaultNovelConversationManifestFailure = "conflict" | "mismatch";
 
@@ -75,6 +76,7 @@ export class DefaultNovelConversationManifestProvisioner
     const existing = await store.get(DEFAULT_NOVEL_AGENT_MANIFEST_ID);
     if (existing !== undefined) {
       assertDefaultNovelAgentIdentity(existing);
+      this.#warnOnDefinitionDrift(existing);
       this.#logger.debug("default_manifest.reused", {
         agentType: existing.agentType,
         definitionVersion: existing.definitionVersion,
@@ -112,6 +114,22 @@ export class DefaultNovelConversationManifestProvisioner
         throw new DefaultNovelConversationManifestError("conflict");
       }
       throw error;
+    }
+  }
+
+  /** 定义快照与当前定义不一致时告警（防"改了定义但忘了 bump 版本"的静默退化）。只 warn 不 throw，避免旧会话 bootstrap 崩溃。 */
+  #warnOnDefinitionDrift(manifest: AgentManifest): void {
+    const current = canonicalStringifyJson(
+      novelAgentDefinition.toSnapshot() as unknown as JsonValue,
+    );
+    const stored = canonicalStringifyJson(
+      manifest.definition as unknown as JsonValue,
+    );
+    if (current !== stored) {
+      this.#logger.warn("default_manifest.definition_drift", {
+        storedDefinitionVersion: manifest.definitionVersion,
+        currentDefinitionVersion: novelAgentDefinition.definitionVersion,
+      });
     }
   }
 }

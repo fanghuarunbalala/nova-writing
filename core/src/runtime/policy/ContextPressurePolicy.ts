@@ -24,6 +24,7 @@ export class ContextPressurePolicy implements RuntimePolicy {
     if (context.phase !== RUNTIME_POLICY_PHASE.beforeProviderCall) return [];
 
     const pressure = context.contextPressure;
+    if (pressure === undefined) return [];
     const boundaries = calculateContextPolicyTokenBoundaries(pressure);
     if (pressure.irreducibleFloor.totalTokens >= boundaries.hardAdmissionTokens) {
       return [];

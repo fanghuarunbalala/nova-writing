@@ -6,3 +6,7 @@ dist/
 target/
 .pnpm-store/
 vendor/claude-code/
+
+# Dev diagnostics — provider request dumps & verbose logs contain conversation content; never commit.
+debug-provider-requests*.jsonl*
+*-verbose.log

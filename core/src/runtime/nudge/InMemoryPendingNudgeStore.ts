@@ -11,6 +11,7 @@ import {
   type NudgeConditionResolutionRequest,
   type NudgeConsumptionRecord,
   type NudgeDeliveryAttemptRecord,
+  type NudgeDeliveryTurnRecord,
   type NudgeDispatchConfirmationRequest,
   type NudgeDispatchConfirmationResult,
   type NudgeExpiryRequest,
@@ -57,6 +58,7 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
   >();
   private readonly releasedCalls = new Map<string, NudgeLeaseReleaseResult>();
   private readonly consumptions = new Map<string, NudgeConsumptionRecord>();
+  private readonly deliveredTurns = new Map<string, NudgeDeliveryTurnRecord>();
   private readonly deliveryAttempts = new Map<
     string,
     readonly NudgeDeliveryAttemptRecord[]
@@ -153,24 +155,38 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
         string,
         { targetRunId: string; policyId: string; dedupeKey: string; turn: number }
       >();
+      const recordTurn = (record: {
+        targetRunId: string;
+        policyId: string;
+        dedupeKey: string;
+        targetTurnNumber?: number;
+      }) => {
+        if (record.targetTurnNumber === undefined) return;
+        const key = cooldownKey(
+          record.targetRunId,
+          record.policyId,
+          record.dedupeKey,
+        );
+        const previous = latest.get(key);
+        if (previous === undefined || record.targetTurnNumber > previous.turn) {
+          latest.set(key, {
+            targetRunId: record.targetRunId,
+            policyId: record.policyId,
+            dedupeKey: record.dedupeKey,
+            turn: record.targetTurnNumber,
+          });
+        }
+      };
       for (const consumption of this.consumptions.values()) {
         if (consumption.targetTurnNumber === undefined) continue;
         const nudge = this.nudges.get(consumption.nudgeId);
         if (!nudge || nudge.cooldownTurns === undefined) continue;
-        const key = cooldownKey(
-          consumption.targetRunId,
-          consumption.policyId,
-          consumption.dedupeKey,
-        );
-        const previous = latest.get(key);
-        if (previous === undefined || consumption.targetTurnNumber > previous.turn) {
-          latest.set(key, {
-            targetRunId: consumption.targetRunId,
-            policyId: consumption.policyId,
-            dedupeKey: consumption.dedupeKey,
-            turn: consumption.targetTurnNumber,
-          });
-        }
+        recordTurn(consumption);
+      }
+      for (const delivery of this.deliveredTurns.values()) {
+        const nudge = this.nudges.get(delivery.nudgeId);
+        if (!nudge || nudge.cooldownTurns === undefined) continue;
+        recordTurn(delivery);
       }
       return Object.freeze(
         [...latest.values()]
@@ -344,8 +360,12 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
         const completed = candidate.delivery === "once"
           ? this.stateMachine.transition(applied, NUDGE_STATE_ACTION.consume)
           : this.stateMachine.transition(applied, NUDGE_STATE_ACTION.activate);
-        this.nudges.set(nudgeId, completed);
-        return completed;
+        const delivered = capturePendingNudge({
+          ...completed,
+          deliveryCount: completed.deliveryCount + 1,
+        });
+        this.nudges.set(nudgeId, delivered);
+        return delivered;
       });
       const consumptions = Object.freeze(
         completedNudges
@@ -376,6 +396,19 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
       });
       for (const nudge of completedNudges) {
         this.updateDeliveryAttempt(nudge.id, providerCallId, "confirmed", dispatchedAt);
+        if (lease.targetTurnNumber !== undefined) {
+          this.deliveredTurns.set(
+            nudge.id,
+            Object.freeze({
+              nudgeId: nudge.id,
+              targetRunId: lease.targetRunId,
+              policyId: nudge.policyId,
+              dedupeKey: nudge.dedupeKey,
+              targetTurnNumber: lease.targetTurnNumber,
+              deliveredAt: dispatchedAt,
+            }),
+          );
+        }
       }
       this.activeLeases.delete(providerCallId);
       this.consumedCalls.set(providerCallId, result);
@@ -667,6 +700,11 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
             .flat()
             .sort(compareDeliveryAttempts),
         ),
+        deliveryTurns: Object.freeze(
+          [...this.deliveredTurns.values()].sort((left, right) =>
+            left.nudgeId.localeCompare(right.nudgeId),
+          ),
+        ),
       }),
     );
   }
@@ -728,6 +766,25 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
           ...attempts,
           attempt,
         ]));
+      }
+
+      const nextDeliveryTurns = new Map<string, NudgeDeliveryTurnRecord>();
+      for (const delivery of captured.deliveryTurns ?? []) {
+        const nudge = nextNudges.get(delivery.nudgeId);
+        if (
+          !nudge ||
+          nudge.targetRunId !== delivery.targetRunId ||
+          nudge.policyId !== delivery.policyId ||
+          nudge.dedupeKey !== delivery.dedupeKey ||
+          nextDeliveryTurns.has(delivery.nudgeId)
+        ) {
+          throw this.failure(
+            PENDING_NUDGE_STORE_FAILURE.invalidSnapshot,
+            delivery.nudgeId,
+            delivery.targetRunId,
+          );
+        }
+        nextDeliveryTurns.set(delivery.nudgeId, delivery);
       }
 
       const leasedNudgeIds = new Set<string>();
@@ -926,6 +983,10 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
       this.deliveryAttempts.clear();
       for (const [id, attempts] of nextDeliveryAttempts) {
         this.deliveryAttempts.set(id, attempts);
+      }
+      this.deliveredTurns.clear();
+      for (const [id, delivery] of nextDeliveryTurns) {
+        this.deliveredTurns.set(id, delivery);
       }
       this.logger.info("runtime.nudge.store_restored", {
         nudgeCount: this.nudges.size,
@@ -1169,7 +1230,16 @@ function sameScheduledIdentity(
   existing: PendingNudge,
   scheduled: PendingNudge,
 ): boolean {
-  return sameJson(withState(existing, PENDING_NUDGE_STATE.scheduled), scheduled);
+  // deliveryCount 是运行时累计计数器，不属于"计划身份"；重排期（unchanged 判定）
+  // 时两边归零再比较，否则已交付（deliveryCount>0）的 nudge 重排会误判为冲突。
+  return sameJson(
+    withState(withoutDeliveryCount(existing), PENDING_NUDGE_STATE.scheduled),
+    withoutDeliveryCount(scheduled),
+  );
+}
+
+function withoutDeliveryCount(nudge: PendingNudge): PendingNudge {
+  return Object.freeze({ ...nudge, deliveryCount: 0 });
 }
 
 function freezeScheduleResult(
@@ -1195,6 +1265,9 @@ function captureSnapshot(value: unknown): PendingNudgeStoreSnapshot {
   if (value.deliveryAttempts !== undefined && !Array.isArray(value.deliveryAttempts)) {
     throw new Error();
   }
+  if (value.deliveryTurns !== undefined && !Array.isArray(value.deliveryTurns)) {
+    throw new Error();
+  }
   return Object.freeze({
     schemaVersion: PENDING_NUDGE_STORE_SNAPSHOT_SCHEMA_VERSION,
     nudges: Object.freeze(value.nudges.map((nudge) => capturePendingNudge(nudge))),
@@ -1205,6 +1278,21 @@ function captureSnapshot(value: unknown): PendingNudgeStoreSnapshot {
     deliveryAttempts: Object.freeze(
       (value.deliveryAttempts ?? []).map((attempt) => captureDeliveryAttempt(attempt)),
     ),
+    deliveryTurns: Object.freeze(
+      (value.deliveryTurns ?? []).map((delivery) => captureDeliveryTurn(delivery)),
+    ),
+  });
+}
+
+function captureDeliveryTurn(value: unknown): NudgeDeliveryTurnRecord {
+  if (!isRecord(value)) throw new Error();
+  return Object.freeze({
+    nudgeId: requireNonBlank(value.nudgeId),
+    targetRunId: requireNonBlank(value.targetRunId),
+    policyId: requireNonBlank(value.policyId),
+    dedupeKey: requireNonBlank(value.dedupeKey),
+    targetTurnNumber: requirePositiveInteger(value.targetTurnNumber),
+    deliveredAt: requireTimestamp(value.deliveredAt),
   });
 }
 

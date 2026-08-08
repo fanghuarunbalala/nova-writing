@@ -9,6 +9,7 @@ import {
   type ToolResult,
 } from "../../../tooling/protocol/index.js";
 import { ComposeStateError } from "../../../runtime/compose/index.js";
+import { renderComposeModeExitText } from "../../../runtime/nudge/definitions/compose.js";
 import {
   ExitComposeModeParametersSchema,
   type ExitComposeModeArguments,
@@ -64,7 +65,11 @@ export function createExitComposeModeTool(
             content: Object.freeze([
               Object.freeze({
                 type: "text" as const,
-                text: "Design draft approved and applied.",
+                text: [
+                  "Compose mode exited. Design draft approved and applied.",
+                  "",
+                  renderComposeModeExitText(),
+                ].join("\n"),
               }),
             ]),
             details,

@@ -469,6 +469,9 @@ function createPendingNudge(
     exclusive: effect.exclusive ?? false,
     placement: NUDGE_PLACEMENT.systemPromptOverlay,
     delivery: effect.delivery ?? NUDGE_DELIVERY.once,
+    ...(effect.reminderKind === undefined
+      ? {}
+      : { reminderKind: effect.reminderKind }),
     ...(effect.acknowledgementRef === undefined
       ? {}
       : { acknowledgementRef: effect.acknowledgementRef }),
@@ -477,6 +480,7 @@ function createPendingNudge(
       : { conditionRef: effect.conditionRef }),
     state: PENDING_NUDGE_STATE.scheduled,
     targetRunId: effect.targetRunId,
+    deliveryCount: 0,
     ...(effect.targetTurnNumber === undefined
       ? {}
       : { targetTurnNumber: effect.targetTurnNumber }),

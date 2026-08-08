@@ -22,6 +22,7 @@ import type {
 } from "../../../storage/index.js";
 import {
   AgentAssemblyRestorer,
+  resolveAgentNudgeEnablements,
   type AgentManifestStore,
 } from "../../../agent/index.js";
 import {
@@ -50,6 +51,10 @@ import {
   RuntimeApprovalDecisionInputHandler,
   RuntimeControlInputDispatcher,
   RuntimeConversationModeSetInputHandler,
+  RuntimeEffectCoordinator,
+  RuntimeNudgePolicyEffectHandler,
+  RuntimePolicyEngine,
+  TODO_STATUS,
   type NudgeLifecycleEventIdFactory,
   type NudgeProviderCallCoordinator as NudgeProviderCallCoordinatorType,
   RuntimeStartupExecutor,
@@ -66,6 +71,8 @@ import {
   type RuntimeRunPreparationSource,
   type ToolDispatcher,
 } from "../../../runtime/index.js";
+import { NUDGE_DEFINITIONS } from "../../../runtime/nudge/definitions/index.js";
+import type { PiRuntimeSignalsProvider } from "../../../runtime/agent/pi/index.js";
 import { RuntimePromptAssembler } from "../../../runtime/context/index.js";
 import { PromptAssemblyBuilder } from "../../../prompt/assembly/index.js";
 import type { PromptDigester } from "../../../prompt/index.js";
@@ -102,6 +109,10 @@ export interface RuntimeChildAdapterFactory {
     readonly configuration: AgentRuntimeConfiguration;
     readonly lifecycleController: TurnController;
     readonly nudgeProviderCalls?: NudgeProviderCallCoordinatorType;
+    /** 域 runtime 信号源 + policy 引擎装配（nudge 瞬态注入用）。 */
+    readonly runtimeSignals?: PiRuntimeSignalsProvider;
+    readonly policyEngine?: RuntimePolicyEngine;
+    readonly effectCoordinator?: RuntimeEffectCoordinator;
     readonly eventSink: PublishingRuntimeEventSink;
     readonly eventIdFactory: RuntimeEventIdFactory;
     readonly toolDispatcher?: ToolDispatcher;
@@ -304,16 +315,75 @@ export class DesktopRuntimeChildCompositionFactory
       logger,
     });
     const router = new InputRouter({ conversationId, logger });
-    const nudgeProviderCalls = createChildNudgeCoordinator({
+    const nudgeAssembly = createChildNudgeAssembly({
       conversationId,
       eventSink,
       persistence,
       logger,
     });
+    const nudgeProviderCalls = nudgeAssembly.coordinator;
+    // nudge 定义装配：模板注册 + 生效集（agent enablesNudges ∩ 工具组守卫）→
+    // policy 引擎 + effect coordinator（nudge_schedule/acknowledge → manager）。
+    const manifestToolGroups = new Set(
+      configuration.assembly.manifest.definition.tools.groupIds,
+    );
+    const enabledNudges = resolveAgentNudgeEnablements(
+      configuration.assembly.agentType,
+    ).enabled;
+    const effectiveDefinitions = [];
+    for (const definition of NUDGE_DEFINITIONS) {
+      if (!enabledNudges.includes(definition.id)) continue;
+      if (!manifestToolGroups.has(definition.requiredToolGroup)) {
+        logger.warn("nudge.rule_skipped_group_guard", {
+          nudgeId: definition.id,
+          requiredToolGroup: definition.requiredToolGroup,
+        });
+        continue;
+      }
+      nudgeAssembly.templates.register(definition.template);
+      effectiveDefinitions.push(definition);
+    }
+    // 同一 policy 可能被多个 nudge 定义共享（如 compose_mode + compose_mode_exit
+    // 同属 ComposeModeNudgePolicy）；引擎按 policy.id 拒绝重复，需先按 id 去重。
+    const seenPolicyIds = new Set<string>();
+    const effectivePolicies = [];
+    for (const definition of effectiveDefinitions) {
+      const policy = definition.createPolicy();
+      if (seenPolicyIds.has(policy.id)) continue;
+      seenPolicyIds.add(policy.id);
+      effectivePolicies.push(policy);
+    }
+    const policyEngine = new RuntimePolicyEngine({
+      policies: effectivePolicies,
+      logger,
+    });
+    const effectCoordinator = new RuntimeEffectCoordinator({
+      conversationId,
+      nudgeLifecycleHandler: new RuntimeNudgePolicyEffectHandler(
+        nudgeAssembly.manager,
+      ),
+      logger,
+    });
+    const runtimeSignals: PiRuntimeSignalsProvider = Object.freeze({
+      compose: () => Promise.resolve(composeState.snapshot(conversationId)),
+      todos: () =>
+        todoStore.read(conversationId).then((snapshot) =>
+          snapshot === undefined
+            ? undefined
+            : {
+                inProgressCount: snapshot.todos.filter(
+                  (todo) => todo.status === TODO_STATUS.inProgress,
+                ).length,
+              },
+        ),
+    });
     const agentAdapter = await this.#adapterFactory.create({
       configuration,
       lifecycleController,
       nudgeProviderCalls,
+      runtimeSignals,
+      policyEngine,
+      effectCoordinator,
       eventSink,
       eventIdFactory,
       toolDispatcher: toolExecution.dispatcher,
@@ -539,12 +609,18 @@ function captureStableFailure(error: unknown): string {
   return "unknown";
 }
 
-function createChildNudgeCoordinator(options: {
+interface ChildNudgeAssembly {
+  readonly coordinator: NudgeProviderCallCoordinatorType;
+  readonly manager: NudgeManager;
+  readonly templates: NudgeTemplateRegistry;
+}
+
+function createChildNudgeAssembly(options: {
   readonly conversationId: string;
   readonly eventSink: PublishingRuntimeEventSink;
   readonly persistence: RuntimePersistencePorts;
   readonly logger: Logger;
-}): NudgeProviderCallCoordinatorType {
+}): ChildNudgeAssembly {
   const templates = new NudgeTemplateRegistry({ logger: options.logger });
   const manager = new NudgeManager({
     store: new InMemoryPendingNudgeStore({ logger: options.logger }),
@@ -561,10 +637,10 @@ function createChildNudgeCoordinator(options: {
     eventIdFactory: new ChildNudgeLifecycleEventIdFactory(),
     logger: options.logger,
   });
-  options.logger.debug("runtime_child.nudge_coordinator_created", {
+  options.logger.debug("runtime_child.nudge_assembly_created", {
     conversationId: options.conversationId,
   });
-  return coordinator;
+  return { coordinator, manager, templates };
 }
 
 class ChildNudgeLifecycleEventIdFactory implements NudgeLifecycleEventIdFactory {

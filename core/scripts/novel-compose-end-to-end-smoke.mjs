@@ -16,7 +16,6 @@ import {
   ComposeToolService,
   NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
   RUNTIME_FILES_TOOL_GROUP_MANIFEST,
-  RuntimeSystemPromptBuilder,
   ToolError,
   ToolGroupCatalog,
   ToolRegistry,
@@ -25,7 +24,6 @@ import {
   createNovelComposeToolRegistry,
   defineTool,
   FileToolService,
-  NovelComposeModePromptSection,
 } from "../dist/index.js";
 import {
   CHILD_TOOL_PERMISSION_RULES,
@@ -171,10 +169,8 @@ async function resolveApproval(request, decision, sequence, actorId = "smoke-use
   );
 }
 
-// 初始：idle，动态提示段为空。
+// 初始：idle。
 assert.equal(composeState.snapshot(conversationId).phase, "idle");
-const section = new NovelComposeModePromptSection();
-assert.equal(section.renderDynamic({}), "");
 
 // 1. EnterComposeMode -> designing + begin 事件 + design 文件创建
 await dispatch("EnterComposeMode", "call-enter", { purpose: "第三章" });
@@ -183,36 +179,15 @@ assert.ok(
   events.some((event) => event.getEventType() === "novel.compose.begin"),
 );
 
-// 2. 设计模式提示段有内容（真实 compose 状态 -> builder 注入）
-const builder = new RuntimeSystemPromptBuilder({
-  staticSource: {
-    async resolve() {
-      return { content: "BASE", digest: "base" };
-    },
-  },
-  dynamicSections: [section],
-  input: async () => ({
-    compose: {
-      phase: composeState.snapshot(conversationId).phase,
-      active: composeState.snapshot(conversationId).active,
-    },
-  }),
-  digester: { async digest(content) { return `d:${content.length}`; } },
-});
-assert.ok(
-  (await builder.resolve({ conversationId, runId: "run-e2e" })).content.includes(
-    "设计模式",
-  ),
-);
-
-// 3. 草稿写入 design 文件（仅 design 路径放行）
+// 2. 草稿写入 design 文件（仅 design 路径放行）
+// （设计模式约束已迁移为 nudge 瞬态 system.reminder，见 nudge-definitions-smoke。）
 await dispatch("Write", "call-write", {
   file_path: designFilePath,
   content: "第三章正文草稿\n",
 });
 assert.equal(await fs.readFile(designFilePath, "utf8"), "第三章正文草稿\n");
 
-// 4. compose 激活期间：越界 Read 拒绝、canonical 写拒绝
+// 3. compose 激活期间：越界 Read 拒绝、canonical 写拒绝
 await assert.rejects(
   dispatch("Read", "call-read-outside", {
     file_path: path.join(workspaceRoot, "outside.md"),
@@ -226,7 +201,7 @@ await assert.rejects(
   (error) => error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
 );
 
-// 5. ExitComposeMode -> ask -> submitted/pending
+// 4. ExitComposeMode -> ask -> submitted/pending
 const exitPromise = dispatch("ExitComposeMode", "call-exit", {});
 const exitRequest = await waitForPending("ExitComposeMode");
 assert.equal(exitRequest.summary.title, "提交设计草稿");
@@ -235,7 +210,7 @@ assert.ok(
   events.some((event) => event.getEventType() === "novel.compose.submitted"),
 );
 
-// 6. 批准 -> approved 事件 + Exit handler 落库（applied + 审计 + 归档）
+// 5. 批准 -> approved 事件 + Exit handler 落库（applied + 审计 + 归档）
 await resolveApproval(exitRequest, "approved", 1);
 await exitPromise;
 assert.equal(composeState.snapshot(conversationId).phase, "applied");
@@ -262,12 +237,7 @@ try {
 }
 assert.ok(auditRow);
 
-// 7. 批准后：模式恢复 -> 提示段空、Write 默认 deny、canonical 写回到 ask
-assert.equal(section.renderDynamic({ compose: { phase: "applied", active: false } }), "");
-assert.equal(
-  (await builder.resolve({ conversationId, runId: "run-e2e" })).content,
-  "BASE",
-);
+// 6. 批准后：模式恢复 -> Write 默认 deny、canonical 写回到 ask
 await assert.rejects(
   dispatch("Write", "call-after-write", {
     file_path: designFilePath,
@@ -284,7 +254,7 @@ await resolveApproval(canonicalRequest, "approved", 2);
 await canonicalPromise;
 assert.deepEqual(executed, ["NovelParagraphWrite"]);
 
-// 8. 拒绝路径：重新进入 -> 提交 -> 拒绝 -> 回到 designing + rejected 事件
+// 7. 拒绝路径：重新进入 -> 提交 -> 拒绝 -> 回到 designing + rejected 事件
 await dispatch("EnterComposeMode", "call-enter-2", {});
 const exitPromise2 = dispatch("ExitComposeMode", "call-exit-2", {});
 const exitRequest2 = await waitForPending("ExitComposeMode");

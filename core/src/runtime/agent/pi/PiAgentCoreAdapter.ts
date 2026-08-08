@@ -20,6 +20,15 @@ import type {
   ContextProjectionProviderCallResult,
 } from "../../context/index.js";
 import { isExecutionCancellationReason } from "../../execution/ExecutionCancellationReason.js";
+import type { ComposeModeSnapshot } from "../../compose/index.js";
+import {
+  RUNTIME_POLICY_PHASE,
+  type RuntimeEffectCoordinator,
+  type RuntimePolicyContext,
+  type RuntimePolicyEngine,
+  type RuntimePolicyRuntimeSignals,
+  type RuntimePolicyState,
+} from "../../policy/index.js";
 import type {
   NudgeProviderCallCoordinator,
   PreparedNudgeProviderCall,
@@ -60,6 +69,13 @@ import {
   type PiRuntimeMessageConverter,
 } from "./PiRuntimeMessageConverter.js";
 
+export interface PiRuntimeSignalsProvider {
+  readonly compose?: () => Promise<ComposeModeSnapshot>;
+  readonly todos?: () => Promise<
+    Readonly<{ inProgressCount: number }> | undefined
+  >;
+}
+
 export interface PiAgentCoreAdapterOptions {
   agent: PiAgentCoreClient;
   messageConverter: PiRuntimeMessageConverter;
@@ -69,6 +85,10 @@ export interface PiAgentCoreAdapterOptions {
   contextProjectionProviderCalls?: ContextProjectionProviderCallCoordinator;
   checkpointApplications?: ContextCheckpointApplicationCoordinator;
   dispatchAwareStreamFunction?: PiDispatchAwareStreamFunction;
+  /** 域 runtime 信号源（compose/todo），由装配侧注入；policy 引擎据此求值。 */
+  runtimeSignals?: PiRuntimeSignalsProvider;
+  policyEngine?: RuntimePolicyEngine;
+  effectCoordinator?: RuntimeEffectCoordinator;
   providerCallIdFactory?: PiProviderCallIdFactory;
   providerCallClock?: PiProviderCallClock;
   logger?: Logger;
@@ -119,6 +139,9 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
   private readonly contextProjectionProviderCalls?: ContextProjectionProviderCallCoordinator;
   private readonly checkpointApplications?: ContextCheckpointApplicationCoordinator;
   private readonly dispatchAwareStreamFunction?: PiDispatchAwareStreamFunction;
+  private readonly runtimeSignals?: PiRuntimeSignalsProvider;
+  private readonly policyEngine?: RuntimePolicyEngine;
+  private readonly effectCoordinator?: RuntimeEffectCoordinator;
   private readonly baseStreamFunction: StreamFn;
   private readonly providerCallIdFactory: PiProviderCallIdFactory;
   private readonly providerCallClock: PiProviderCallClock;
@@ -138,6 +161,9 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     this.contextProjectionProviderCalls = options.contextProjectionProviderCalls;
     this.checkpointApplications = options.checkpointApplications;
     this.dispatchAwareStreamFunction = options.dispatchAwareStreamFunction;
+    this.runtimeSignals = options.runtimeSignals;
+    this.policyEngine = options.policyEngine;
+    this.effectCoordinator = options.effectCoordinator;
     this.baseStreamFunction = this.agent.streamFunction;
     this.providerCallIdFactory =
       options.providerCallIdFactory ?? new RandomPiProviderCallIdFactory();
@@ -146,6 +172,12 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       this.nudgeProviderCalls !== undefined ||
       this.checkpointApplications !== undefined;
     if (requiresDispatchHooks !== (this.dispatchAwareStreamFunction !== undefined)) {
+      throw this.fail(PI_AGENT_CORE_ADAPTER_FAILURE.invalidRequest);
+    }
+    if (
+      (this.policyEngine === undefined) !==
+      (this.effectCoordinator === undefined)
+    ) {
       throw this.fail(PI_AGENT_CORE_ADAPTER_FAILURE.invalidRequest);
     }
     if (this.checkpointApplications && !this.contextProjectionProviderCalls) {
@@ -163,6 +195,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     }
     if (
       this.contextProjectionProviderCalls !== undefined ||
+      this.policyEngine !== undefined ||
       requiresDispatchHooks
     ) {
       this.agent.streamFunction = (model, context, streamOptions) =>
@@ -431,6 +464,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
    * to a Pi message for this provider call only (never persisted).
    */
   private async buildTransientReminderMessages(
+    kind: string,
     content: string,
     request: CapturedAgentRuntimeStreamRequest,
   ): Promise<readonly AgentMessage[]> {
@@ -448,7 +482,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       timestamp,
       runId: request.runId,
       payload: {
-        kind: "nudge",
+        kind,
         content,
         order,
       },
@@ -459,6 +493,39 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       purpose: PI_RUNTIME_MESSAGE_CONVERSION_PURPOSE.prompt,
       messages: [snapshot],
     });
+  }
+
+  /**
+   * 对本次 provider call 求值 runtime policies 并执行其效果。
+   * providerCallCount 取本 run 内 provider call 序号（与 cooldown 参考值同源）。
+   */
+  private async evaluateRuntimePolicies(
+    active: ActivePiRun,
+    providerCallId: string,
+    evaluatedAt: string,
+  ): Promise<void> {
+    const runtimeSignals: RuntimePolicyRuntimeSignals = {
+      providerCallCount: active.providerCallOrdinal,
+      ...(this.runtimeSignals?.compose
+        ? { compose: await this.runtimeSignals.compose() }
+        : {}),
+      ...(this.runtimeSignals?.todos
+        ? { todos: await this.runtimeSignals.todos() }
+        : {}),
+    };
+    const context: RuntimePolicyContext = {
+      phase: RUNTIME_POLICY_PHASE.beforeProviderCall,
+      conversationId: active.request.conversationId,
+      runId: active.request.runId,
+      providerCallId,
+      evaluatedAt,
+      runtimeSignals,
+    };
+    const state: RuntimePolicyState = {
+      conversationId: active.request.conversationId,
+    };
+    const effects = this.policyEngine!.evaluate(context, state);
+    await this.effectCoordinator!.execute({ context, effects });
   }
 
   private async transformProviderContext(
@@ -575,7 +642,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       !active ||
       active.phase !== "executing" ||
       active.turnNumber < 1 ||
-      (!nudgeCoordinator && !projectionCoordinator) ||
+      (!nudgeCoordinator && !projectionCoordinator && !this.policyEngine) ||
       ((nudgeCoordinator !== undefined || checkpointApplications !== undefined) &&
         dispatchDelegate === undefined)
     ) {
@@ -600,6 +667,15 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         providerCallOrdinal: active.providerCallOrdinal,
       });
     const requestedAt = this.providerCallClock.now();
+    // policy 引擎先行：求值 + 执行效果（nudge_schedule/nudge_acknowledge → manager），
+    // 再让 nudge coordinator 在本次 provider call 上租赁（schedule 后立即交付）。
+    if (this.policyEngine && this.effectCoordinator) {
+      try {
+        await this.evaluateRuntimePolicies(active, providerCallId, requestedAt);
+      } catch {
+        throw this.rememberProviderDispatchFailure(active);
+      }
+    }
     let prepared: PreparedNudgeProviderCall | undefined;
     if (nudgeCoordinator) {
       try {
@@ -607,7 +683,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
           conversationId: active.request.conversationId,
           runId: active.request.runId,
           providerCallId,
-          targetTurnNumber: active.turnNumber,
+          targetTurnNumber: active.providerCallOrdinal,
           requestedAt,
         });
       } catch {
@@ -671,6 +747,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     let transientReminderMessages: readonly AgentMessage[] = [];
     if (prepared) {
       transientReminderMessages = await this.buildTransientReminderMessages(
+        prepared.overlay.reminderKind ?? "nudge",
         prepared.overlay.content,
         active.request,
       );

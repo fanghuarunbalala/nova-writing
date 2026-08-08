@@ -81,7 +81,7 @@ const catalog = new AgentDefinitionCatalog([novelAgentDefinition]);
 assert.equal(catalog.resolve("novel").definitionVersion, novelAgentDefinition.definitionVersion);
 assert.equal(novelAgentDefinition.delegation.mode, "disabled");
 assert.deepEqual(novelAgentDefinition.delegation.allowedAgentTypes, []);
-assert.equal(novelAgentDefinition.toSnapshot().promptRecipe.items.length, 5);
+assert.equal(novelAgentDefinition.toSnapshot().promptRecipe.items.length, 4);
 
 const invalidDefinition = new AgentDefinition({
   agentType: "invalid_agent",

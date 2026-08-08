@@ -52,6 +52,8 @@ export interface NudgeEffect {
   readonly policyId: string;
   readonly templateId: string;
   readonly templateVersion: string;
+  /** 系统提醒的语义类别（如 "compose_mode"/"compose_mode_exit"；默认 "nudge"）。 */
+  readonly reminderKind?: string;
   readonly delivery?: NudgeDelivery;
   readonly acknowledgementRef?: NudgeAcknowledgementReference;
   readonly conditionRef?: NudgeConditionReference;
@@ -77,6 +79,10 @@ export interface PendingNudge {
   readonly exclusive: boolean;
   readonly placement: NudgePlacement;
   readonly delivery: NudgeDelivery;
+  /** 系统提醒的语义类别（如 "compose_mode"/"compose_mode_exit"；默认 "nudge"）。 */
+  readonly reminderKind?: string;
+  /** 已确认交付次数（0 = 尚未交付；render 时本次交付计数 = deliveryCount + 1）。 */
+  readonly deliveryCount: number;
   readonly acknowledgementRef?: NudgeAcknowledgementReference;
   readonly conditionRef?: NudgeConditionReference;
   readonly state: PendingNudgeState;
@@ -110,4 +116,6 @@ export interface SystemReminderOverlay {
   readonly placement: "system-prompt-overlay";
   readonly nudgeIds: readonly string[];
   readonly content: string;
+  /** 本次 overlay 对应提醒的语义类别（单 nudge；默认 "nudge"）。 */
+  readonly reminderKind?: string;
 }

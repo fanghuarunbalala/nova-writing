@@ -59,6 +59,7 @@ export function captureNudgeEffect(value: unknown): NudgeEffect {
       templateId: requireNonBlank(record.templateId),
       templateVersion: requireNonBlank(record.templateVersion),
       delivery,
+      ...captureOptionalReminderKind(record.reminderKind),
       ...acknowledgementRef,
       ...conditionRef,
       priority: requireSafeInteger(record.priority),
@@ -127,10 +128,15 @@ export function capturePendingNudge(value: unknown): PendingNudge {
       exclusive: requireBoolean(record.exclusive),
       placement: NUDGE_PLACEMENT.systemPromptOverlay,
       delivery,
+      ...captureOptionalReminderKind(record.reminderKind),
       ...acknowledgementRef,
       ...conditionRef,
       state: record.state as PendingNudge["state"],
       targetRunId,
+      deliveryCount:
+        record.deliveryCount === undefined
+          ? 0
+          : requireNonNegativeInteger(record.deliveryCount),
       scheduledSequence: requirePositiveInteger(record.scheduledSequence),
       scheduledAt: requireTimestamp(record.scheduledAt),
       ...captureOptionalTurnNumber(record.targetTurnNumber, "targetTurnNumber"),
@@ -216,6 +222,7 @@ export function captureSystemReminderOverlay(value: unknown): SystemReminderOver
       placement: NUDGE_PLACEMENT.systemPromptOverlay,
       nudgeIds: captureNudgeIds(record.nudgeIds),
       content: requireNonBlank(record.content),
+      ...captureOptionalReminderKind(record.reminderKind),
     };
     return deepFreeze(overlay);
   } catch {
@@ -277,6 +284,13 @@ function captureOptionalBoolean(
 ): { readonly exclusive?: boolean } {
   if (value === undefined) return {};
   return { [key]: requireBoolean(value) };
+}
+
+function captureOptionalReminderKind(
+  value: unknown,
+): { readonly reminderKind?: string } {
+  if (value === undefined) return {};
+  return { reminderKind: requireNonBlank(value) };
 }
 
 function captureDelivery(

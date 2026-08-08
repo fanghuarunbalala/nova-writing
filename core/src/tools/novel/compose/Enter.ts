@@ -9,6 +9,7 @@ import {
   type ToolResult,
 } from "../../../tooling/protocol/index.js";
 import { ComposeStateError } from "../../../runtime/compose/index.js";
+import { renderComposeModeFullText } from "../../../runtime/nudge/definitions/compose.js";
 import {
   EnterComposeModeParametersSchema,
   type EnterComposeModeArguments,
@@ -68,7 +69,11 @@ export function createEnterComposeModeTool(
             content: Object.freeze([
               Object.freeze({
                 type: "text" as const,
-                text: `Compose mode entered. Design file: ${details.designFilePath}`,
+                text: [
+                  `Compose mode entered. Design file: ${details.designFilePath}`,
+                  "",
+                  renderComposeModeFullText(details.designFilePath),
+                ].join("\n"),
               }),
             ]),
             details,

@@ -109,6 +109,68 @@ function groupApprovals(
   );
 }
 
+/** 操作摘要行的结构性类型（与 core ToolApprovalOperationSummary 一致）。 */
+interface OperationRow {
+  readonly op: string;
+  readonly kind: string;
+  readonly id?: string;
+  readonly title?: string;
+}
+
+/**
+ * DiffSection
+ *
+ * 一类变更的 diff 区（原型按 大纲/正文/实体字段 分组）：标题 + 该组操作行。
+ * core 目前只提供操作摘要（op/kind/id/title），无 before→after 内容 diff，
+ * 故此处如实展示变更行而非伪造新旧内容。
+ */
+function DiffSection({
+  title,
+  emptyText,
+  ops,
+}: {
+  readonly title: string;
+  readonly emptyText: string;
+  readonly ops: readonly OperationRow[];
+}) {
+  return (
+    <section className={styles.diffSec}>
+      <h3 className={styles.diffTitle}>
+        {title}
+        {ops.length > 0 ? (
+          <span className={styles.diffCount}>{ops.length} 条</span>
+        ) : null}
+      </h3>
+      {ops.length === 0 ? (
+        <p className={styles.diffPlaceholder}>{emptyText}</p>
+      ) : (
+        <ul className={styles.ops}>
+          {ops.map((operation, index) => (
+            <li
+              key={`${operation.op}-${operation.id ?? operation.title ?? index}`}
+              className={[styles.op, opClass(operation.op)]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              <span className={styles.opMark} aria-hidden="true">
+                {OP_SYMBOL[operation.op] ?? "•"}
+              </span>
+              <span className={styles.opText}>
+                {OP_LABEL[operation.op] ?? operation.op}
+                {KIND_LABEL[operation.kind] !== undefined
+                  ? KIND_LABEL[operation.kind]
+                  : ` ${operation.kind}`}
+                {operation.title !== undefined ? `：${operation.title}` : ""}
+              </span>
+              <span className={styles.opKind}>{operation.kind}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function ApprovalPanel({
   store,
   conversationLabels,
@@ -156,6 +218,19 @@ export function ApprovalPanel({
     approval.arguments === undefined
       ? []
       : [{ toolName: approval.toolName, arguments: approval.arguments }],
+  );
+  // 按 kind 归入三个 diff 区（与原型分组一致）；未识别 kind 兜底到实体字段。
+  const outlineOps = (operations ?? []).filter((op) => op.kind === "outline");
+  const manuscriptOps = (operations ?? []).filter(
+    (op) =>
+      op.kind === "paragraph" || op.kind === "chapter" || op.kind === "volume",
+  );
+  const entityOps = (operations ?? []).filter(
+    (op) =>
+      op.kind !== "outline" &&
+      op.kind !== "paragraph" &&
+      op.kind !== "chapter" &&
+      op.kind !== "volume",
   );
 
   return (
@@ -276,30 +351,6 @@ export function ApprovalPanel({
             <span className={styles.immutable}>◈ 不可变</span>
           </div>
           <h4 className={styles.title}>{selectedGroup.approvals[0].title}</h4>
-          {operations !== undefined && operations.length > 0 ? (
-            <ul className={styles.ops}>
-              {operations.map((operation, index) => (
-                <li
-                  key={`${operation.op}-${operation.id ?? operation.title ?? index}`}
-                  className={[styles.op, opClass(operation.op)]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  <span className={styles.opMark} aria-hidden="true">
-                    {OP_SYMBOL[operation.op] ?? "•"}
-                  </span>
-                  <span className={styles.opText}>
-                    {OP_LABEL[operation.op] ?? operation.op}
-                    {KIND_LABEL[operation.kind] !== undefined
-                      ? KIND_LABEL[operation.kind]
-                      : ` ${operation.kind}`}
-                    {operation.title !== undefined ? `：${operation.title}` : ""}
-                  </span>
-                  <span className={styles.opKind}>{operation.kind}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
           {argumentGroups !== undefined && argumentGroups.length > 0 ? (
             <div className={styles.args}>
               <span className={styles.argsTitle}>完整参数</span>
@@ -316,38 +367,24 @@ export function ApprovalPanel({
               ))}
             </div>
           ) : null}
-          <section className={styles.diffSec}>
-            <h3 className={styles.diffTitle}>
-              大纲 Diff
-              <span className={styles.diffCount}>待生成</span>
-            </h3>
-            <p className={styles.diffPlaceholder}>
-              批准执行后生成 before → after
-            </p>
-          </section>
-          <section className={styles.diffSec}>
-            <h3 className={styles.diffTitle}>
-              正文 Diff
-              <span className={styles.diffCount}>待生成</span>
-            </h3>
-            <p className={styles.diffPlaceholder}>
-              批准执行后生成 before → after
-            </p>
-          </section>
-          <section className={styles.diffSec}>
-            <h3 className={styles.diffTitle}>
-              实体字段 Diff
-              <span className={styles.diffCount}>待生成</span>
-            </h3>
-            <p className={styles.diffPlaceholder}>
-              批准执行后生成 before → after
-            </p>
-          </section>
+          <DiffSection title="大纲 Diff" emptyText="本次无大纲变更" ops={outlineOps} />
+          <DiffSection title="正文 Diff" emptyText="本次无正文变更" ops={manuscriptOps} />
+          <DiffSection title="实体字段 Diff" emptyText="本次无实体变更" ops={entityOps} />
           <section className={styles.diffSec}>
             <h3 className={styles.diffTitle}>执行结果</h3>
-            <p className={styles.diffPlaceholder}>
-              工具执行结果与变更摘要将在此展示
-            </p>
+            {selectedGroup.status === "pending" ? (
+              <p className={styles.diffPlaceholder}>等待批准后执行</p>
+            ) : (
+              <p className={styles.diffPlaceholder}>
+                {STATUS_LABEL[selectedGroup.status]}
+                {selectedGroup.approvals[0].resolvedAt !== undefined
+                  ? ` · ${formatTime(selectedGroup.approvals[0].resolvedAt)}`
+                  : ""}
+                {selectedGroup.approvals[0].actorId !== undefined
+                  ? ` · ${selectedGroup.approvals[0].actorId}`
+                  : ""}
+              </p>
+            )}
           </section>
           {(operations?.length ?? 0) === 0 &&
           (argumentGroups?.length ?? 0) === 0 ? (

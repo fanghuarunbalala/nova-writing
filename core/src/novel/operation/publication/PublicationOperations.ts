@@ -443,6 +443,10 @@ function applyChapterDelete(
   ]);
   requireChapter(store, operation, id);
   assertRecordDigest(store.getChapterDigest(id), operation, CHAPTER_ENTITY_TYPE, id);
+  // 预检章节-段落绑定（novel_chapter_paragraphs.chapter_id FK）：非空章节删除即拒绝。
+  if (store.listChapterParagraphIds(id).length > 0) {
+    throw precondition(operation, "entity_referenced", CHAPTER_ENTITY_TYPE, id);
+  }
   if (!store.deleteChapter(id, expectedVersion)) {
     if (expectedVersion !== undefined) {
       throw new NovelOperationPreconditionError(

@@ -27,7 +27,9 @@ import {
 } from "../../model/index.js";
 import type {
   NovelMutableOutlineRepository,
+  NovelMutableParagraphRepository,
   NovelOutlineMutationContext,
+  NovelParagraphMutationContext,
   StoryUnitDigestField,
 } from "../../port/index.js";
 import {
@@ -333,7 +335,7 @@ export function createLeafStoryUnitPlanClearOperation(input: {
 }
 
 export function registerNovelOutlineOperationHandlers<
-  TContext extends NovelOutlineMutationContext,
+  TContext extends NovelOutlineMutationContext & NovelParagraphMutationContext,
 >(registry: NovelOperationRegistry<TContext>): void {
   registry.register({
     operationType: NOVEL_OUTLINE_OPERATION_TYPE.storyOutlineCreate,
@@ -367,7 +369,7 @@ export function registerNovelOutlineOperationHandlers<
     operationType: NOVEL_OUTLINE_OPERATION_TYPE.storyUnitDelete,
     operationVersion: OUTLINE_OPERATION_VERSION,
     apply(context, operation) {
-      applyStoryUnitDelete(context.outline, operation);
+      applyStoryUnitDelete(context.outline, context.paragraph, operation);
     },
   });
   registry.register({
@@ -532,6 +534,7 @@ function applyStoryUnitMove(
 
 function applyStoryUnitDelete(
   store: NovelMutableOutlineRepository,
+  paragraphStore: NovelMutableParagraphRepository,
   operation: NovelOperation,
 ): void {
   const payload = capturePayloadObject(operation.payload, [
@@ -551,9 +554,15 @@ function applyStoryUnitDelete(
   assertDigest(store, operation, id, "content");
   assertDigest(store, operation, id, "parentId");
   assertDigest(store, operation, id, "orderKey");
+  // 预检子引用：子 story unit、leaf plan、以及段落实体（novel_paragraphs.story_unit_id FK）。
+  // 已知边界：novel_story_unit_character_bindings / location_bindings / entity_changes 的 FK
+  // 也指向 novel_story_units（projection evidence schema），本期不处理。
+  // 泛型约束（NovelParagraphMutationContext）保证生产调用点必带 paragraph store；
+  // `?.` 仅为窄上下文（未建模段落的 .mjs 冒烟等）保留向后兼容，视同无段落子引用。
   if (
     store.listStoryUnitChildren(id).length > 0 ||
-    store.getLeafStoryUnitPlan(id) !== undefined
+    store.getLeafStoryUnitPlan(id) !== undefined ||
+    paragraphStore?.listParagraphsByStoryUnit(id).length > 0
   ) {
     throw precondition(operation, "entity_referenced", STORY_UNIT_ENTITY_TYPE, id);
   }

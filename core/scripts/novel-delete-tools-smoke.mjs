@@ -85,6 +85,7 @@ const context = (conversationId, index) => ({
   signal: new AbortController().signal,
 });
 const progress = { async emit() {} };
+let canonicalStore;
 
 try {
   const workspaceRoot = join(root, "workspace");
@@ -93,7 +94,7 @@ try {
     storageRoot: join(root, "storage"),
   }).resolve(workspaceRoot);
   const location = await new NodeNovelStoreLocator().resolve(workspace);
-  const canonicalStore = await SqliteNovelCanonicalStore.open({
+  canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
     revisionFactory: new FixedRevisionFactory("revision_delete_tools_base"),
     logger,
@@ -137,6 +138,10 @@ try {
   const volumeId = capturePublicationVolumeId("volume_delete");
   const chapterId = capturePublicationChapterId("chapter_delete");
   const publicationId = capturePublicationStructureId("publication_delete");
+  const guardVolumeId = capturePublicationVolumeId("volume_guard");
+  const guardChapterId = capturePublicationChapterId("chapter_guard");
+  const guardedStoryUnitId = captureStoryUnitId("story_unit_guard_para");
+  const guardParagraphId = captureParagraphId("paragraph_guard");
 
   await application.canonicalWrites.applyOperations({
     operations: [
@@ -210,6 +215,46 @@ try {
           orderKey: "8000",
           title: "Delete Chapter",
           paragraphIds: [paragraphId],
+        }),
+      }),
+      createStoryUnitCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        storyUnit: captureStoryUnit({
+          id: guardedStoryUnitId,
+          outlineId,
+          orderKey: "8100",
+          title: "Guarded By Paragraph",
+          planningStatus: "outlined",
+          realizationStatus: "pending",
+        }),
+      }),
+      createParagraphCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        paragraph: captureParagraph({
+          id: guardParagraphId,
+          storyUnitId: guardedStoryUnitId,
+          orderKey: "8100",
+          text: "Guarding paragraph.",
+        }),
+      }),
+      createPublicationVolumeCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        volume: capturePublicationVolume({
+          id: guardVolumeId,
+          publicationId,
+          orderKey: "8100",
+          title: "Guard Volume",
+        }),
+      }),
+      createPublicationChapterCreateOperation({
+        operationId: captureNovelOperationId(`delete_setup_${++operationSequence}`),
+        chapter: capturePublicationChapter({
+          id: guardChapterId,
+          publicationId,
+          volumeId: guardVolumeId,
+          orderKey: "8100",
+          title: "Guard Chapter",
+          paragraphIds: [guardParagraphId],
         }),
       }),
     ],
@@ -311,6 +356,28 @@ try {
   assert.equal(missingResult.details.items[0].status, "rejected");
   assert.equal(missingResult.details.items[0].reason, "not_found");
 
+  // Precheck: story unit with paragraph children rejects (novel_paragraphs.story_unit_id FK).
+  const guardedStoryDelete = await deleteTool.handler.execute(
+    context(conversation, 10),
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ kind: "story_unit", id: guardedStoryUnitId }] },
+    progress,
+  );
+  assert.equal(guardedStoryDelete.details.items[0].status, "rejected");
+  assert.equal(guardedStoryDelete.details.items[0].reason, "referenced");
+
+  // Precheck: chapter with chapter-paragraph bindings rejects (novel_chapter_paragraphs FK).
+  const guardedChapterDelete = await deleteTool.handler.execute(
+    context(conversation, 11),
+    {
+      baseRevision: await application.canonicalWrites.getCurrentRevision(),
+      values: [{ kind: "chapter", id: guardChapterId }] },
+    progress,
+  );
+  assert.equal(guardedChapterDelete.details.items[0].status, "rejected");
+  assert.equal(guardedChapterDelete.details.items[0].reason, "referenced");
+
   // Redaction: no novel content in structured logs.
   const serialized = JSON.stringify(logs);
   for (const forbidden of [
@@ -325,5 +392,6 @@ try {
 
   console.log("novel delete tools smoke passed");
 } finally {
+  if (canonicalStore) await canonicalStore.close();
   await rm(root, { recursive: true, force: true });
 }

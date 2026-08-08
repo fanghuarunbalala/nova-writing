@@ -134,21 +134,17 @@ try {
   assert.equal(readResult.details.units[0].title, "Child written unit");
   assert.equal(readResult.details.revision.currentRevision, writeRevision);
 
-  // 乐观锁：过期 baseRevision 被拒绝（真实 writer 校验）。
-  await assert.rejects(
-    writeTool.handler.execute(
-      context(conversation, 3),
-      {
-        baseRevision: "revision_child_registry_base",
-        values: [{ id: "story_unit_stale", title: "Stale" }],
-      },
-      progress,
-    ),
-    (error) => {
-      assert.equal(error.code, "NOVEL_OUTLINE_WRITE_FAILED");
-      return true;
+  // 乐观锁：全局 baseRevision 不再作冲突判定（per-entity 版本前置条件负责）；
+  // 旧 baseRevision 写不同实体仍成功，与 outline-tools 冒烟语义一致。
+  const staleWrite = await writeTool.handler.execute(
+    context(conversation, 3),
+    {
+      baseRevision: "revision_child_registry_base",
+      values: [{ id: "story_unit_stale", title: "Stale" }],
     },
+    progress,
   );
+  assert.equal(staleWrite.details.items[0].status, "applied");
 
   // 日志脱敏：不暴露正文内容与路径。
   const serialized = JSON.stringify(logs);

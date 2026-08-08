@@ -130,9 +130,17 @@
   订阅 `ApprovalStore` 并把审批待办并入列表；`handleTodoAction` 路由
   `open-approval` → `handleOpenApproval`（打开审批面板并选中）。core 零改动。
 
-## 未列入本次修复（记录备查）
+### G7. 对话菜单用原生 prompt/confirm
 
-- G1 富文本方言（自定义 Novel Markup v1 vs 标准 Markdown）——对齐计划 D1
-  已决策保留标准 Markdown，不做完整白名单渲染器，故不列入。
-- G6 驳回备注输入框、G7 对话菜单原生 prompt/confirm、G12 文案
-  （wordmark/label）——本期不修。
+- 状态：`done`（2026-08-08，前端）
+- 现状：`ui/src/domains/conversation/components/ConversationItemMenu.tsx:56`
+  删除走 `window.confirm`；`ui/src/shell/sidebar/sections/ConversationListSection.tsx:36`
+  重命名走 `window.prompt`——后者在 Electron 渲染进程不可用（无对话框、
+  直接返回 null），重命名功能在桌面端实际是坏的；confirm 也是原生阻塞弹窗，
+  与设计系统不一致。
+- 方向：以自定义 Dialog 弹窗替代原生 prompt/confirm。
+- 实现记录：`ConversationItemMenu` 删除只上报 `onDelete`；`ConversationListSection`
+  本地持有重命名/删除确认 Dialog 状态，用共享 `Dialog` 原语渲染（重命名含
+  输入框、空名禁用保存、Enter 提交；删除确认含 danger 按钮）。原生
+  prompt/confirm 在对话列表链路中不再被调用。组件 + section 级测试覆盖
+  重命名、空名禁用、删除确认、取消，并断言未触发原生弹窗。

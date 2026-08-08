@@ -216,7 +216,7 @@ designing（写 design md）
 | ~~M2~~ ✅ | `ExitComposeMode` 接入 `system.tool.approval.requested/resolved`；批准→恢复模式；拒绝→留在 compose | 已实现：Exit 走 tool.approval（摘要"提交设计草稿"）、批准→`applied`、拒绝→回 `designing`；`novel-compose-tools-smoke` 覆盖 |
 | ~~M3~~ ✅ | 落库收口：审计 commit 记录 + md 归档（依赖 canonical 基座） | 已实现：`novel_compose_commits` 表（迁移 v12）+ `SqliteNovelComposeCommitStore` + `ComposeToolService.exit` 归档与摘要；`novel-compose-commit-smoke` 覆盖；全量 smoke 228 全绿 |
 | ~~M4~~ ✅ | 提示词 `novel.compose` **动态段**（DynamicPromptSection）+ recipe 项 + 每调用 input 注入 compose 快照 | 已实现：`NovelComposeModePromptSection`（renderDynamic 按 compose 状态渲染、空串跳过）+ recipe 加入 `novel.compose` + `DefaultRuntimeRunPreparationSourceFactory` 注入 compose 快照；`prompt-compose-mode-smoke` 覆盖段级与 builder 级断言 |
-| M5 | GUI：设计卡（渲染/编辑）、徽标、审批面板联调 | ui test + 手动 Electron 验证 |
+| ~~M5~~ ✅ | GUI：设计卡（渲染/编辑）、徽标、审批面板联调 | 已实现：Electron 设计文件端口（IPC/preload/resolver/port）+ `DesignCard`（读/渲染/编辑/保存/降级）+ timeline 设计卡 + ChatSurface 状态徽标 + ExitComposeMode 审批卡内嵌草稿；ui 207 tests 全过；剩余手动 Electron 验证 |
 | M6 | 删除旧 draft/commit/rebase 模块（`core/src/novel/draft` 等） | 全量 smoke |
 
 ## 13. 与既有代码的关系

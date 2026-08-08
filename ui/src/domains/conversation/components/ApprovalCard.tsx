@@ -13,6 +13,7 @@ import { useState } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import type { ApprovalCardView } from "../projection/ConversationTimelineItem.js";
 import styles from "./ApprovalCard.module.css";
+import { DesignCard } from "./DesignCard.js";
 
 const OP_SYMBOL: Record<string, string> = {
   add: "+",
@@ -64,6 +65,8 @@ function operationText(operation: ApprovalCardView["operations"][number]): strin
 
 export interface ApprovalCardProps {
   readonly approval: ApprovalCardView;
+  /** ExitComposeMode 审批：内嵌设计草稿卡。Embed the design draft for ExitComposeMode. */
+  readonly designDraft?: { readonly conversationId: string };
   readonly onApprove?: (approvalRequestIds: readonly string[]) => void;
   readonly onReject?: (approvalRequestIds: readonly string[]) => void;
   /** 打开右侧审批面板并选中该组。Open the approval panel for this group. */
@@ -72,6 +75,7 @@ export interface ApprovalCardProps {
 
 export function ApprovalCard({
   approval,
+  designDraft,
   onApprove,
   onReject,
   onOpenApproval,
@@ -102,6 +106,9 @@ export function ApprovalCard({
           {approval.toolNames.join(" · ")} · {formatTime(approval.requestedAt)}
         </span>
       </header>
+      {designDraft !== undefined ? (
+        <DesignCard conversationId={designDraft.conversationId} phase="pending" />
+      ) : null}
       {operations.length > 0 ? (
         <ul className={styles.ops}>
           {operations.map((operation, index) => (

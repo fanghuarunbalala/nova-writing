@@ -93,6 +93,7 @@ export function ConversationTimeline({
               style={{ animationDelay: `${Math.min(index * 0.03, 0.42)}s` }}
             >
               {renderItem(item, {
+                conversationId,
                 onMessageReferenceClick,
                 resolveReference,
                 onProposalAction,
@@ -114,6 +115,7 @@ export function ConversationTimeline({
 }
 
 interface RenderItemDeps {
+  readonly conversationId: string;
   readonly onMessageReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onProposalAction?: (
@@ -129,6 +131,7 @@ interface RenderItemDeps {
 
 function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
   const {
+    conversationId,
     onMessageReferenceClick,
     resolveReference,
     onProposalAction,
@@ -196,6 +199,11 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
       return (
         <ApprovalCard
           approval={item.approval}
+          designDraft={
+            item.approval.toolNames.includes("ExitComposeMode")
+              ? { conversationId }
+              : undefined
+          }
           onApprove={
             onApprovalDecision === undefined
               ? undefined

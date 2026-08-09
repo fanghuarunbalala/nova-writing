@@ -8,6 +8,7 @@
  */
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import type { NovelOverviewStore } from "../../domains/novel/overview/NovelOverviewStore.js";
+import type { ToastStore } from "../../shared/state/ToastStore.js";
 import type { ContentTab } from "../main/contentTab.js";
 import { ContentSection } from "./sections/ContentSection.js";
 import { ConversationListSection } from "./sections/ConversationListSection.js";
@@ -19,6 +20,7 @@ export interface SidebarProps {
   readonly mode: "expanded" | "collapsed";
   readonly conversationCatalog: ConversationCatalogStore;
   readonly novelOverview: NovelOverviewStore;
+  readonly toastStore: ToastStore;
   readonly onCreateConversation: () => void;
   /**
    * 选择对话时触发。宿主应在此同时调用 catalog.selectConversation(id)
@@ -42,6 +44,7 @@ export function Sidebar({
   mode,
   conversationCatalog,
   novelOverview,
+  toastStore,
   onCreateConversation,
   onSelectConversation,
   contentTab,
@@ -58,6 +61,7 @@ export function Sidebar({
       <SidebarSection label="对话" count={snapshot.conversations.length}>
         <ConversationListSection
           store={conversationCatalog}
+          toastStore={toastStore}
           onSelect={onSelectConversation}
         />
       </SidebarSection>

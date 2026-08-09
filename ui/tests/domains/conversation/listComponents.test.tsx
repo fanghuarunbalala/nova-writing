@@ -1,9 +1,11 @@
 /**
  * conversation 列表/菜单类组件测试。
  */
+import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ToastStore } from "../../../src/shared/state/ToastStore.js";
 import { ComposerModeBar } from "../../../src/domains/conversation/components/ComposerModeBar.js";
 import { ConversationDialogs } from "../../../src/domains/conversation/components/ConversationDialogs.js";
 import { ConversationItemMenu } from "../../../src/domains/conversation/components/ConversationItemMenu.js";
@@ -167,6 +169,27 @@ describe("ConversationDialogs", () => {
     expect(window.confirm).not.toHaveBeenCalled();
   });
 
+  it("busy deletes disable both buttons and mark the confirm button busy", () => {
+    const onDeleteConfirm = vi.fn();
+    render(
+      <ConversationDialogs
+        deleteTarget="conversation_a"
+        deleteBusy
+        renameValue=""
+        onRenameValueChange={() => {}}
+        onRenameConfirm={() => {}}
+        onDeleteConfirm={onDeleteConfirm}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "删除" })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "删除" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "取消" })).toBeDisabled();
+  });
+
   it("closes on cancel", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
@@ -222,14 +245,17 @@ describe("ConversationListSection dialogs", () => {
       },
     } as never;
     const store = new ConversationCatalogStore({ api });
-    return { store, rename, del };
+    const toastStore = new ToastStore();
+    return { store, rename, del, toastStore };
   }
 
   it("renames through the custom dialog without native prompt", async () => {
     const user = userEvent.setup();
-    const { store, rename } = buildSection();
+    const { store, rename, toastStore } = buildSection();
     await store.loadWorkspace("w1");
-    render(<ConversationListSection store={store} onSelect={vi.fn()} />);
+    render(
+      <ConversationListSection store={store} toastStore={toastStore} onSelect={vi.fn()} />,
+    );
     await user.click(screen.getByRole("button", { name: "对话操作" }));
     await user.click(screen.getByText("重命名"));
     const input = screen.getByRole("textbox", { name: "对话名称" }) as HTMLInputElement;
@@ -242,14 +268,146 @@ describe("ConversationListSection dialogs", () => {
 
   it("deletes through the custom dialog without native confirm", async () => {
     const user = userEvent.setup();
-    const { store, del } = buildSection();
+    const { store, del, toastStore } = buildSection();
     await store.loadWorkspace("w1");
-    render(<ConversationListSection store={store} onSelect={vi.fn()} />);
+    render(
+      <ConversationListSection store={store} toastStore={toastStore} onSelect={vi.fn()} />,
+    );
     await user.click(screen.getByRole("button", { name: "对话操作" }));
     await user.click(screen.getByText("删除"));
     await user.click(screen.getByRole("button", { name: "删除" }));
     expect(del).toHaveBeenCalledWith("conversation_a");
     expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  it("keeps the dialog busy while deletion is pending, then closes with a success toast", async () => {
+    const user = userEvent.setup();
+    let resolveDelete: (() => void) | undefined;
+    const del = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDelete = resolve;
+        }),
+    );
+    const api = {
+      conversations: {
+        list: vi.fn(async () => ({
+          conversations: [
+            {
+              metadata: {
+                id: "conversation_a",
+                workspaceId: "w1",
+                rootConversationId: "conversation_a",
+                status: "active",
+                createdAt: "2026-08-05T09:00:00.000Z",
+                updatedAt: "2026-08-05T09:00:00.000Z",
+                lastJournalSequence: 0,
+              },
+              activeAgentBinding: {
+                id: "b1",
+                conversationId: "conversation_a",
+                revision: 1,
+                status: "active",
+                createdAt: "2026-08-05T09:00:00.000Z",
+                agentType: "novel",
+                definitionVersion: "1.0.0",
+              },
+            },
+          ],
+        })),
+        create: vi.fn(),
+        open: vi.fn(),
+        rename: vi.fn(async () => undefined),
+        delete: del,
+      },
+    } as never;
+    const store = new ConversationCatalogStore({ api });
+    const toastStore = new ToastStore();
+    await store.loadWorkspace("w1");
+    render(
+      <ConversationListSection store={store} toastStore={toastStore} onSelect={vi.fn()} />,
+    );
+    const confirmText = "删除后会话及其记录将被永久移除，且不可恢复。确定删除？";
+    await user.click(screen.getByRole("button", { name: "对话操作" }));
+    await user.click(screen.getByText("删除"));
+    await user.click(screen.getByRole("button", { name: "删除" }));
+    expect(del).toHaveBeenCalledWith("conversation_a");
+    // 删除进行中：确认按钮 loading + 禁用、取消禁用、弹窗保持打开。
+    expect(screen.getByRole("button", { name: "删除" })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "删除" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "取消" })).toBeDisabled();
+    expect(screen.getByText(confirmText)).toBeInTheDocument();
+    // 完成：弹窗关闭 + 成功 toast。
+    expect(resolveDelete).toBeDefined();
+    await act(async () => {
+      resolveDelete?.();
+    });
+    await waitFor(() => {
+      expect(
+        toastStore.getSnapshot().toasts.some((toast) => toast.text === "会话已删除"),
+      ).toBe(true);
+    });
+    expect(screen.queryByText(confirmText)).not.toBeInTheDocument();
+  });
+
+  it("shows a danger toast when deletion fails", async () => {
+    const user = userEvent.setup();
+    const del = vi.fn(async () => {
+      throw new Error("boom");
+    });
+    const api = {
+      conversations: {
+        list: vi.fn(async () => ({
+          conversations: [
+            {
+              metadata: {
+                id: "conversation_a",
+                workspaceId: "w1",
+                rootConversationId: "conversation_a",
+                status: "active",
+                createdAt: "2026-08-05T09:00:00.000Z",
+                updatedAt: "2026-08-05T09:00:00.000Z",
+                lastJournalSequence: 0,
+              },
+              activeAgentBinding: {
+                id: "b1",
+                conversationId: "conversation_a",
+                revision: 1,
+                status: "active",
+                createdAt: "2026-08-05T09:00:00.000Z",
+                agentType: "novel",
+                definitionVersion: "1.0.0",
+              },
+            },
+          ],
+        })),
+        create: vi.fn(),
+        open: vi.fn(),
+        rename: vi.fn(async () => undefined),
+        delete: del,
+      },
+    } as never;
+    const store = new ConversationCatalogStore({ api });
+    const toastStore = new ToastStore();
+    await store.loadWorkspace("w1");
+    render(
+      <ConversationListSection store={store} toastStore={toastStore} onSelect={vi.fn()} />,
+    );
+    await user.click(screen.getByRole("button", { name: "对话操作" }));
+    await user.click(screen.getByText("删除"));
+    await user.click(screen.getByRole("button", { name: "删除" }));
+    await waitFor(() => {
+      expect(
+        toastStore.getSnapshot().toasts.some((toast) => toast.text === "删除失败，请重试"),
+      ).toBe(true);
+    });
+    // 失败也关闭弹窗（已用 danger toast 说明，可重新从菜单发起）。
+    expect(
+      screen.queryByText("删除后会话及其记录将被永久移除，且不可恢复。确定删除？"),
+    ).not.toBeInTheDocument();
   });
 });
 

@@ -428,6 +428,7 @@ export function ApplicationShell({
           mode={sidebarMode}
           conversationCatalog={domainStores.conversationCatalog}
           novelOverview={domainStores.novelOverview}
+          toastStore={toastStore}
           onCreateConversation={handleCreateConversation}
           onSelectConversation={handleSelectConversation}
           contentTab={contentTab}

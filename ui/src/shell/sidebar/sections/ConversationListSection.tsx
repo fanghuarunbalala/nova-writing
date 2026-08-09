@@ -12,24 +12,47 @@ import {
   type RenameTarget,
 } from "../../../domains/conversation/components/ConversationDialogs.js";
 import type { ConversationCatalogStore } from "../../../domains/conversation/store/ConversationCatalogStore.js";
+import type { ToastStore } from "../../../shared/state/ToastStore.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
 import styles from "./ConversationListSection.module.css";
 
 export interface ConversationListSectionProps {
   readonly store: ConversationCatalogStore;
+  readonly toastStore: ToastStore;
   readonly onSelect: (id: string) => void;
 }
 
-export function ConversationListSection({ store, onSelect }: ConversationListSectionProps) {
+export function ConversationListSection({
+  store,
+  toastStore,
+  onSelect,
+}: ConversationListSectionProps) {
   const snapshot = useExternalStore(store);
   const [renameTarget, setRenameTarget] = useState<RenameTarget | undefined>(undefined);
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<string | undefined>(undefined);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const closeDialogs = (): void => {
     setRenameTarget(undefined);
     setRenameValue("");
     setDeleteTarget(undefined);
+  };
+
+  // 执行删除：期间确认框保持打开并显示 loading，结束再关闭；成功/失败分别 toast。
+  const handleDeleteConfirm = async (): Promise<void> => {
+    if (deleteTarget === undefined) return;
+    const target = deleteTarget;
+    setDeleteBusy(true);
+    try {
+      await store.deleteConversation(target);
+      toastStore.push({ kind: "success", text: "会话已删除" });
+    } catch {
+      toastStore.push({ kind: "danger", text: "删除失败，请重试" });
+    } finally {
+      setDeleteBusy(false);
+      closeDialogs();
+    }
   };
 
   if (snapshot.conversations.length === 0) {
@@ -65,6 +88,7 @@ export function ConversationListSection({ store, onSelect }: ConversationListSec
         renameTarget={renameTarget}
         deleteTarget={deleteTarget}
         renameValue={renameValue}
+        deleteBusy={deleteBusy}
         onRenameValueChange={setRenameValue}
         onRenameConfirm={() => {
           if (renameTarget === undefined) return;
@@ -74,12 +98,7 @@ export function ConversationListSection({ store, onSelect }: ConversationListSec
           }
           closeDialogs();
         }}
-        onDeleteConfirm={() => {
-          if (deleteTarget !== undefined) {
-            void store.deleteConversation(deleteTarget);
-          }
-          closeDialogs();
-        }}
+        onDeleteConfirm={handleDeleteConfirm}
         onClose={closeDialogs}
       />
     </>

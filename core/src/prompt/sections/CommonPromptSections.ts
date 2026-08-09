@@ -18,6 +18,17 @@ import {
   NovelIdentityPromptSection,
   NovelSystemPromptSection,
 } from "./novel/NovelBasePromptSections.js";
+import {
+  NovelExploreIdentityPromptSection,
+  NovelExploreReportingPromptSection,
+  NovelExploreSystemPromptSection,
+} from "./novel/NovelExplorePromptSections.js";
+import {
+  NovelComposeIdentityPromptSection,
+  NovelComposeProcessPromptSection,
+  NovelComposeReportingPromptSection,
+  NovelComposeSystemPromptSection,
+} from "./novel/NovelComposePromptSections.js";
 import { NovelDoingTasksPromptSection } from "./novel/NovelCraftPromptSections.js";
 import { NovelActionsPromptSection } from "./novel/NovelExecutionPromptSections.js";
 import { CoreEnvironmentPromptSection } from "../environment/index.js";
@@ -191,6 +202,13 @@ export function createDefaultPromptSectionRegistry(): PromptSectionRegistry {
     .register(new NovelIdentityPromptSection())
     .register(new NovelSystemPromptSection({ interactsWithUser: true }))
     .register(new NovelCommunicationPromptSection())
+    .register(new NovelExploreIdentityPromptSection())
+    .register(new NovelExploreSystemPromptSection())
+    .register(new NovelExploreReportingPromptSection())
+    .register(new NovelComposeIdentityPromptSection())
+    .register(new NovelComposeSystemPromptSection())
+    .register(new NovelComposeProcessPromptSection())
+    .register(new NovelComposeReportingPromptSection())
     .register(new NovelDoingTasksPromptSection())
     .register(new NovelActionsPromptSection())
     .register(new CoreEnvironmentPromptSection())

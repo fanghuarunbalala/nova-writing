@@ -9,6 +9,7 @@ export * from "./SubagentProtocol.js";
 export * from "./SubagentProtocolErrors.js";
 export * from "./SubagentProtocolValidator.js";
 export * from "./SubagentDefinitionCatalog.js";
+export * from "./ProductionSubagentComposition.js";
 export * from "./SubagentTaskProtocol.js";
 export * from "./SubagentTaskProtocolErrors.js";
 export * from "./SubagentTaskProtocolValidator.js";

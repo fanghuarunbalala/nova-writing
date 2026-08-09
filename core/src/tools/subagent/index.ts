@@ -1,5 +1,6 @@
 /** Concrete Subagent Tools with colocated schemas, descriptors, and handlers. */
 import type { Logger } from "../../observability/index.js";
+import type { ToolGroupManifest } from "../../tooling/group/index.js";
 import { ToolRegistry } from "../../tooling/registry/index.js";
 import {
   createAgentTool,
@@ -17,6 +18,18 @@ import {
 export * from "./Agent.js";
 export * from "./TaskStop.js";
 export * from "./TaskOutput.js";
+
+/** 子代理执行工具组：Agent/TaskOutput/TaskStop。Subagent execution tool group. */
+export const SUBAGENT_TOOL_GROUP_MANIFEST: ToolGroupManifest =
+  Object.freeze({
+    schemaVersion: 1,
+    id: "runtime.subagent",
+    version: "1.0.0",
+    label: "Runtime Subagent Tools",
+    description:
+      "Spawn asynchronous Subagent Tasks and observe their status, output, and cancellation.",
+    tools: Object.freeze(["Agent", "TaskOutput", "TaskStop"]),
+  });
 
 export type AgentExecutionToolRegistryOptions =
   Omit<CreateAgentToolOptions, "logger"> &

@@ -1,11 +1,28 @@
 /**
- * ChatSurface 视觉。
+ * ChatSurface 视觉（原型 #view-chat + .chat-inner）。
+ *
+ * surface 为悬浮 composer 的定位基准（position: relative）；
+ * ::before 是底部渐变遮罩（120px），让滚动到底部的消息在接近悬浮
+ * 输入框前淡出，pointer-events none 不挡滚动。
  */
 .surface {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+
+.surface::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 120px;
+  background: linear-gradient(to top, var(--color-bg) 12%, transparent);
+  pointer-events: none;
+  z-index: 5;
 }
 
 .composeBadge {

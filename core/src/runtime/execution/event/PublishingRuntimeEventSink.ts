@@ -7,6 +7,7 @@ import {
 import type { ConversationOutputEventPublisher } from "../../../conversation/output/ConversationOutputEventPublisher.js";
 import type { OutputReceipt } from "../../../conversation/output/OutputReceipt.js";
 import type { OutputEvent } from "../../../event/output/OutputEvent.js";
+import { OUTPUT_EVENT_TYPE } from "../../../event/output/OutputEventType.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import {
   RUNTIME_EVENT_APPEND_FAILURE,
@@ -43,7 +44,11 @@ export class PublishingRuntimeEventSink implements RuntimeEventSink {
 
   async append(event: OutputEvent): Promise<RuntimeEventAppendReceipt> {
     const identity = captureEventIdentity(event);
-    this.logger.debug("runtime.event.append_started", { ...identity });
+    // 逐 delta 不记日志（FD/体积）；只在拼接成完整事件时记。Delta events are not
+    // logged per-chunk; only assembled events are.
+    if (identity.eventType !== OUTPUT_EVENT_TYPE.agentAssistantMessageDelta) {
+      this.logger.debug("runtime.event.append_started", { ...identity });
+    }
 
     let outputReceipt: OutputReceipt;
     try {
@@ -78,11 +83,14 @@ export class PublishingRuntimeEventSink implements RuntimeEventSink {
       );
     }
 
-    this.logger.info("runtime.event.append_completed", {
-      ...identity,
-      status: receipt.status,
-      sequence: receipt.sequence,
-    });
+    // 逐 delta 不记 INFO（生产环境按 delta 刷屏）；只在拼接成完整事件时记。
+    if (identity.eventType !== OUTPUT_EVENT_TYPE.agentAssistantMessageDelta) {
+      this.logger.info("runtime.event.append_completed", {
+        ...identity,
+        status: receipt.status,
+        sequence: receipt.sequence,
+      });
+    }
     return receipt;
   }
 }

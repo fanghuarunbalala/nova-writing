@@ -385,11 +385,14 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       active.phase = "settling";
     }
 
-    this.logger.debug("runtime.agent.event_received", {
-      conversationId: active.request.conversationId,
-      runId: active.request.runId,
-      eventType: event.type,
-    });
+    // 逐 delta（message_update）不记 DEBUG；只在结构性事件（turn/message/agent）记。
+    if (event.type !== "message_update") {
+      this.logger.debug("runtime.agent.event_received", {
+        conversationId: active.request.conversationId,
+        runId: active.request.runId,
+        eventType: event.type,
+      });
+    }
     try {
       await this.eventBridge.handle({
         conversationId: active.request.conversationId,

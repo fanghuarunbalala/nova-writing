@@ -1,6 +1,6 @@
 /** Desktop child stdio entrypoint composing the production Runtime. */
 import type { Readable, Writable } from "node:stream";
-import { appendFile } from "node:fs/promises";
+import { createWriteStream, type WriteStream } from "node:fs";
 import {
   BaseContextCompiler,
   type AgentRuntimeConfigurationProfileResolver,
@@ -250,12 +250,20 @@ function createEntrypointLogger(
     return noopLogger.child({ component: "desktop_runtime_child_entrypoint" });
   }
   const levelRank = LOG_LEVEL_RANK[logLevel];
+  // 持久写流：单个文件描述符，避免每行 appendFile 的 open/close FD 抖动在高频 delta
+  // 日志下耗尽句柄（EMFILE）导致进程崩溃。Persistent write stream: one FD instead of
+  // per-line open/close, so high-frequency delta logging cannot exhaust handles (EMFILE).
+  const logStream: WriteStream = createWriteStream(logPath, { flags: "a" });
+  logStream.on("error", () => { /* 写流错误不崩溃进程（脱敏）；日志丢弃。 */ });
+  process.on("exit", () => {
+    logStream.end();
+  });
   const writeLine = (
     level: string,
     event: string,
     fields: Readonly<Record<string, unknown>> | undefined,
   ): void => {
-    void appendFile(logPath, `${level} ${event} ${safeLogFields(fields)}\n`);
+    logStream.write(`${level} ${event} ${safeLogFields(fields)}\n`);
   };
   const fileLogger: Logger = {
     debug: (event, fields) => {

@@ -73,6 +73,11 @@ export class SubagentCompletionObserver {
         binding.childConversationId,
       );
       if (terminal === undefined) return;
+      this.#logger.info("runtime.subagent.completion.terminal_read", {
+        taskId: binding.subagentId,
+        childConversationId: binding.childConversationId,
+        status: terminal.status,
+      });
       // 细节字段（errorCode/cancellationReason）不在此透传：run-state 原因不满足子代理
       // 协议枚举格式，由 bridge 兜底（SUBAGENT_RUN_FAILED / explicit）并经
       // captureSubagentResult 校验。Detail fields are left to bridge defaults.

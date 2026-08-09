@@ -72,40 +72,72 @@ export function createTaskOutputTool(
       async execute(context, arguments_) {
         context.signal.throwIfAborted();
         const captured = captureSubagentTaskOutputArguments(arguments_);
+        logger.info("runtime.subagent.task_output_tool.invoked", {
+          parentConversationId: context.conversationId,
+          parentRunId: context.runId,
+          runIds: captured.runIds.join(","),
+          block: captured.block === true,
+          timeout: captured.timeout,
+        });
         if (!captured.block) {
           const runs = await queryAll(context, options.query, captured.runIds);
-          logger.debug("runtime.subagent.task_output_tool.snapshot", {
+          logger.info("runtime.subagent.task_output_tool.snapshot", {
             parentConversationId: context.conversationId,
             parentRunId: context.runId,
-            runCount: runs.length,
+            runStatuses: runs.map((run) => `${run.taskId}:${run.status}`).join(","),
+            hasResult: runs.some((run) => run.result !== undefined),
           });
           return snapshotResult(runs);
         }
         const deadline = timeSource.now() + captured.timeout;
-        while (true) {
-          context.signal.throwIfAborted();
-          const runs = await queryAll(context, options.query, captured.runIds);
-          const terminalIndex = runs.findIndex((run) =>
-            TERMINAL_STATUSES.has(run.status),
-          );
-          if (terminalIndex !== -1) {
-            logger.debug("runtime.subagent.task_output_tool.completed", {
+        let previous: string | undefined;
+        try {
+          while (true) {
+            context.signal.throwIfAborted();
+            const runs = await queryAll(context, options.query, captured.runIds);
+            const signature = runs
+              .map((run) => `${run.taskId}:${run.status}`)
+              .join(",");
+            if (signature !== previous) {
+              logger.info("runtime.subagent.task_output_tool.poll", {
+                parentConversationId: context.conversationId,
+                parentRunId: context.runId,
+                runStatuses: signature,
+              });
+              previous = signature;
+            }
+            const terminalIndex = runs.findIndex((run) =>
+              TERMINAL_STATUSES.has(run.status),
+            );
+            if (terminalIndex !== -1) {
+              logger.info("runtime.subagent.task_output_tool.returned", {
+                parentConversationId: context.conversationId,
+                parentRunId: context.runId,
+                retrieval: "completed",
+                runStatuses: signature,
+              });
+              return successResult(runs, terminalIndex);
+            }
+            if (timeSource.now() >= deadline) {
+              logger.info("runtime.subagent.task_output_tool.returned", {
+                parentConversationId: context.conversationId,
+                parentRunId: context.runId,
+                retrieval: "timeout",
+                runStatuses: signature,
+              });
+              return timeoutResult(runs);
+            }
+            await sleep(pollIntervalMs);
+          }
+        } catch (error) {
+          if (isAbortError(error)) {
+            logger.info("runtime.subagent.task_output_tool.returned", {
               parentConversationId: context.conversationId,
               parentRunId: context.runId,
-              taskId: runs[terminalIndex].taskId,
-              status: runs[terminalIndex].status,
+              retrieval: "aborted",
             });
-            return successResult(runs, terminalIndex);
           }
-          if (timeSource.now() >= deadline) {
-            logger.debug("runtime.subagent.task_output_tool.timeout", {
-              parentConversationId: context.conversationId,
-              parentRunId: context.runId,
-              runCount: runs.length,
-            });
-            return timeoutResult(runs);
-          }
-          await sleep(pollIntervalMs);
+          throw error;
         }
       },
     },
@@ -260,4 +292,12 @@ function taskOutputFailure(
 
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { name?: unknown }).name === "AbortError"
+  );
 }

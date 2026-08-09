@@ -132,13 +132,22 @@ export class ChildRuntimeSubagentClient {
     const rpcRequest = captureRuntimeSubagentReadChildRunTerminalRequest({
       conversationId,
     });
-    return captureRuntimeSubagentReadChildRunTerminalResponse(
+    this.#logger.info("runtime.subagent.client.read_child_run_terminal_started", {
+      conversationId,
+    });
+    const response = captureRuntimeSubagentReadChildRunTerminalResponse(
       await this.#request(
         RUNTIME_SUBAGENT_RPC_METHOD.readChildRunTerminal,
         rpcRequest,
         options,
       ),
     );
+    this.#logger.info("runtime.subagent.client.read_child_run_terminal_completed", {
+      conversationId,
+      found: response.found,
+      ...(response.found ? { status: response.status } : {}),
+    });
+    return response;
   }
 
   /**

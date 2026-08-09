@@ -67,7 +67,11 @@ import {
   createAgentExecutionToolRegistry,
   type SubagentTaskCancellationIntentPort,
 } from "../../../tools/subagent/index.js";
-import { ToolGroupCatalog, ToolRegistry } from "../../../tooling/index.js";
+import {
+  ToolGroupCatalog,
+  ToolGroupCatalogError,
+  ToolRegistry,
+} from "../../../tooling/index.js";
 import {
   ChildRuntimeSubagentClient,
   createChildSubagentScopeReaders,
@@ -276,6 +280,14 @@ export class DesktopRuntimeChildCompositionFactory
       this.#logger.error("runtime_child.composition_failed_detail", {
         errorName: error instanceof Error ? error.name : typeof error,
       });
+      // 诊断：ToolGroupCatalogError 的 failure（duplicate_group/unknown_group）与
+      // groupId 均为校验过的枚举/稳定 id，可安全记录，用于区分两条抛错路径。
+      if (error instanceof ToolGroupCatalogError) {
+        this.#logger.error("runtime_child.composition_failed_group_catalog", {
+          failure: error.failure,
+          ...(error.groupId === undefined ? {} : { groupId: error.groupId }),
+        });
+      }
       throw error;
     }
   }
@@ -728,12 +740,30 @@ function createChildSubagentComposition(
     cancellation,
     logger,
   });
-  return Object.freeze({
-    registry: new ToolRegistry([...registry.list(), ...subagentTools.list()]),
-    groups: new ToolGroupCatalog([
+  // 诊断：合并 base groups 与 subagent group 前记录实际 group id（脱敏稳定 id），
+  // 确认 base 是否被污染进 runtime.subagent。
+  logger.debug("runtime_child.composition.subagent_group_merge", {
+    baseGroupIds: groups.list().map((g) => g.id).join(","),
+    addedGroupId: SUBAGENT_TOOL_GROUP_MANIFEST.id,
+  });
+  let subagentGroups: ToolGroupCatalog;
+  try {
+    subagentGroups = new ToolGroupCatalog([
       ...groups.list(),
       SUBAGENT_TOOL_GROUP_MANIFEST,
-    ]),
+    ]);
+  } catch (error) {
+    if (error instanceof ToolGroupCatalogError) {
+      logger.error("runtime_child.composition.subagent_group_catalog_failed", {
+        failure: error.failure,
+        ...(error.groupId === undefined ? {} : { groupId: error.groupId }),
+      });
+    }
+    throw error;
+  }
+  return Object.freeze({
+    registry: new ToolRegistry([...registry.list(), ...subagentTools.list()]),
+    groups: subagentGroups,
   });
 }
 
@@ -956,10 +986,14 @@ class ChildRuntimeOutputPublisher implements ConversationOutputEventPublisher {
 
   publish(event: OutputEvent): Promise<OutputReceipt> {
     const snapshot = event.getSnapshot();
-    this.logger.debug("runtime_child.output_publish_started", {
-      conversationId: snapshot.conversationId,
-      outputEventId: snapshot.id,
-    });
+    // 逐 delta 不记日志（FD/体积）；只在拼接成完整事件时记。Delta events are not
+    // logged per-chunk; only assembled events are.
+    if (snapshot.eventType !== OUTPUT_EVENT_TYPE.agentAssistantMessageDelta) {
+      this.logger.debug("runtime_child.output_publish_started", {
+        conversationId: snapshot.conversationId,
+        outputEventId: snapshot.id,
+      });
+    }
     return this.persistence.journal
       .appendOutput(snapshot.conversationId, snapshot)
       .then((receipt) => ({

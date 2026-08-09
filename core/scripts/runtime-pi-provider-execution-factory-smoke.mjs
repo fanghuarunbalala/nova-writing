@@ -168,6 +168,34 @@ for (const [marker, expected] of statusCases) {
   assert.deepEqual(credentials.uses, ["credential:header"]);
 }
 
+// createPiExecutionModel：推荐模型能力派生（deepseek-v4-flash）+ 显式覆盖优先级。
+{
+  const source = sourceModel("openai-completions");
+  const recommended = createPiExecutionModel(
+    descriptor("openai-completions", { modelId: "deepseek-v4-flash" }),
+    source,
+  );
+  assert.equal(recommended.contextWindow, 700_000, "deepseek 压缩窗口 = 1M × 70%");
+  assert.equal(recommended.maxTokens, 230_400, "deepseek maxTokens = max(12k, 384K × 60%)");
+
+  const overridden = createPiExecutionModel(
+    descriptor("openai-completions", {
+      modelId: "deepseek-v4-flash",
+      capabilityOverrides: { contextWindowTokens: 500_000 },
+    }),
+    source,
+  );
+  assert.equal(overridden.contextWindow, 500_000, "显式 contextWindowTokens 优先于推荐值");
+  assert.equal(overridden.maxTokens, 230_400, "maxTokens 仍取推荐派生值");
+
+  const unknown = createPiExecutionModel(
+    descriptor("openai-completions"),
+    source,
+  );
+  assert.equal(unknown.contextWindow, 8192, "未知模型回落到 source contextWindow");
+  assert.equal(unknown.maxTokens, 1024, "未知模型回落到 source maxTokens");
+}
+
 assert.equal(records.some((record) => forbidden.some((value) => record.includes(value))), false);
 console.log("runtime Pi Provider execution factory smoke passed");
 

@@ -215,7 +215,7 @@ describe("GenStatus", () => {
       <GenStatus phase="thinking" stage="正在思考大纲…" onStop={onStop} />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("正在思考大纲…");
-    expect(screen.getByText(/已用时 0s/)).toBeInTheDocument();
+    expect(screen.getByText(/已用时 0 秒/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "停止" }));
     expect(onStop).toHaveBeenCalledTimes(1);
     rerender(<GenStatus phase="failed" error="连接中断" onRetry={onRetry} />);

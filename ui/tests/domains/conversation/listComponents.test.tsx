@@ -262,18 +262,44 @@ describe("NewConversationButton / ComposerModeBar / MessageReferenceChip", () =>
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it("ComposerModeBar cycles mode and renders hint", async () => {
+  it("ComposerModeBar opens a dropdown and selects a mode", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const { rerender } = render(<ComposerModeBar mode="review" onChange={onChange} />);
+    render(<ComposerModeBar mode="review" onChange={onChange} />);
+    // 触发按钮显示当前模式；选项面板初始不渲染。
+    const trigger = screen.getByRole("button", { name: "执行模式：需审核" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    // 打开面板 → 三模式选项 + 当前项选中。
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("menu", { name: "执行模式" })).toBeInTheDocument();
     expect(screen.getByText("提议后审批提交")).toBeInTheDocument();
-    expect(screen.getByText("直接执行")).toBeInTheDocument();
-    expect(screen.getByText("设计")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /执行模式：需审核/ }));
+    expect(screen.getByText("跳过审批 · 立即落地")).toBeInTheDocument();
+    expect(screen.getByText("仅草稿文件可写")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /需审核/ })).toHaveAttribute("aria-selected", "true");
+    // 选择「直接执行」→ onChange("bypass") + 面板收起。
+    await user.click(screen.getByRole("menuitem", { name: /直接执行/ }));
     expect(onChange).toHaveBeenCalledWith("bypass");
-    rerender(<ComposerModeBar mode="compose" onChange={onChange} />);
-    await user.click(screen.getByRole("button", { name: /执行模式：设计/ }));
-    expect(onChange).toHaveBeenLastCalledWith("review");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("ComposerModeBar closes on external click and Escape", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<ComposerModeBar mode="review" onChange={onChange} />);
+    const trigger = screen.getByRole("button", { name: "执行模式：需审核" });
+    await user.click(trigger);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    // Escape 关闭（焦点回到 trigger）。
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    // 再次打开后外部点击关闭。
+    await user.click(trigger);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    await user.click(document.body);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   it("MessageReferenceChip fires onClick with the reference", async () => {

@@ -29,6 +29,7 @@ import {
   captureNovelOverviewSnapshot,
   captureNovelParagraphCatalogSnapshot,
   captureNovelParagraphSnapshot,
+  captureNovelPublicationCatalogSnapshot,
   captureNovelStoryUnitSnapshot,
   type NovelCharacterSnapshot,
   type NovelCharactersSnapshot,
@@ -38,6 +39,7 @@ import {
   type NovelOverviewSnapshot,
   type NovelParagraphCatalogSnapshot,
   type NovelParagraphSnapshot,
+  type NovelPublicationCatalogSnapshot,
   type NovelStoryUnitSnapshot,
 } from "./NovelQuerySnapshots.js";
 import type {
@@ -139,6 +141,18 @@ export class NovelQueryClient {
     const request = captureNovelParagraphQueryRequest({ scope, paragraphId });
     return captureNovelParagraphSnapshot(
       await this.request(NOVEL_QUERY_API_OPERATION.paragraphGet, request),
+    );
+  }
+
+  async getPublicationCatalog(
+    scope: NovelQueryScope,
+  ): Promise<NovelPublicationCatalogSnapshot> {
+    const request = captureNovelScopedQueryRequest({ scope });
+    return captureNovelPublicationCatalogSnapshot(
+      await this.request(
+        NOVEL_QUERY_API_OPERATION.publicationCatalogGet,
+        request,
+      ),
     );
   }
 

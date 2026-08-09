@@ -6,13 +6,13 @@
  * 内容区用 .paneBody + .paneInner 包裹（原型 .pane-body + .pane-inner），
  * 提供 padding 与 max-width 1000 居中。
  */
+import { useEffect } from "react";
 import { CharacterGrid } from "../../domains/novel/character/components/CharacterGrid.js";
 import { LocationGrid } from "../../domains/novel/location/components/LocationGrid.js";
-import { ManuscriptChapterList } from "../../domains/novel/manuscript/components/ManuscriptChapterList.js";
+import { ManuscriptReader } from "../../domains/novel/manuscript/components/ManuscriptReader.js";
 import { StoryOutlineTree } from "../../domains/novel/outline/components/StoryOutlineTree.js";
 import type { CharacterStore } from "../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
-import { resolveChapterTitles } from "../../domains/novel/manuscript/projection/resolveChapterTitles.js";
 import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
@@ -60,7 +60,34 @@ export function ContentSurface({
   const manuscriptSnapshot = useExternalStore(manuscript);
   const characterSnapshot = useExternalStore(characters);
   const locationSnapshot = useExternalStore(locations);
+
+  // 定位：来自对话引用的章节/段落自动选中所属章节。
+  useEffect(() => {
+    if (locateReference == null) return;
+    if (locateReference.kind === "chapter") {
+      manuscript.selectChapter(locateReference.id);
+    } else {
+      const chapter = manuscript.getSnapshot().chapters.find((c) =>
+        c.paragraphIds.includes(locateReference.id),
+      );
+      if (chapter !== undefined) manuscript.selectChapter(chapter.chapterId);
+    }
+  }, [manuscript, locateReference]);
+
   const renderTab = (tab: ContentTab) => {
+    // 正文阅读器：双栏各自独立滚动，不走 1000px 居中列。
+    if (tab === "manuscript") {
+      const content = (
+        <ManuscriptReader
+          workspaceId={workspaceId ?? ""}
+          snapshot={manuscriptSnapshot}
+          onSelectChapter={(chapterId) => manuscript.selectChapter(chapterId)}
+          locate={locateReference}
+          onOpenDraft={onOpenDraft}
+        />
+      );
+      return <div className={styles.readerBody}>{content}</div>;
+    }
     let content;
     switch (tab) {
       case "outline":
@@ -72,20 +99,6 @@ export function ContentSurface({
             selectedUnitId={outline.selectedUnitId}
             onSelectUnit={onSelectOutlineUnit}
             onToggleExpand={(id) => outlineTree.toggleExpand(id)}
-          />
-        );
-        break;
-      case "manuscript":
-        content = (
-          <ManuscriptChapterList
-            workspaceId={workspaceId ?? ""}
-            chapters={resolveChapterTitles(manuscriptSnapshot.chapters, outline.tree)}
-            locate={
-              locateReference == null
-                ? undefined
-                : { kind: locateReference.kind, id: locateReference.id, nonce: locateReference.nonce }
-            }
-            onOpenDraft={onOpenDraft}
           />
         );
         break;

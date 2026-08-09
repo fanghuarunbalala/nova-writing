@@ -190,6 +190,14 @@ const paragraph = await request(
   { scope: canonicalScope, paragraphId: paragraphValue.id },
 );
 assert.equal(paragraph.readModel.paragraph.text, paragraphValue.text);
+const publicationCatalog = await request(
+  router,
+  "publication-catalog",
+  NOVEL_QUERY_API_OPERATION.publicationCatalogGet,
+  { scope: canonicalScope },
+);
+assert.equal(publicationCatalog.volumes[0].title, "第一卷");
+assert.equal(publicationCatalog.chapters[0].volumeId, "volume_one");
 
 const missingDraft = await router.request({
   protocolVersion: API_PROTOCOL_VERSION,

@@ -10,6 +10,8 @@ import {
   captureOrderKey,
   captureParagraph,
   captureParagraphId,
+  capturePublicationChapter,
+  capturePublicationVolume,
   captureStoryUnit,
   captureStoryUnitId,
   captureStoryUnitRealizationStatus,
@@ -21,6 +23,8 @@ import {
   type OrderKey,
   type Paragraph,
   type ParagraphId,
+  type PublicationChapter,
+  type PublicationVolume,
   type StoryUnitId,
   type StoryOutlineTreeSnapshot,
   type StoryUnit,
@@ -109,6 +113,12 @@ export interface NovelParagraphReadSnapshot {
 
 export interface NovelParagraphSnapshot extends NovelQuerySnapshotBase {
   readonly readModel?: NovelParagraphReadSnapshot;
+}
+
+export interface NovelPublicationCatalogSnapshot
+  extends NovelQuerySnapshotBase {
+  readonly volumes: readonly PublicationVolume[];
+  readonly chapters: readonly PublicationChapter[];
 }
 
 export function captureNovelOverviewSnapshot(
@@ -267,6 +277,35 @@ export function captureNovelParagraphSnapshot(
     schemaVersion: captureSnapshotVersion(record.schemaVersion),
     scope: captureNovelQueryScope(record.scope),
     ...(readModel === undefined ? {} : { readModel }),
+  });
+}
+
+export function captureNovelPublicationCatalogSnapshot(
+  value: unknown,
+): NovelPublicationCatalogSnapshot {
+  const record = captureRecord(value, [
+    "schemaVersion",
+    "scope",
+    "volumes",
+    "chapters",
+  ]);
+  const volumes = captureDenseArray(record.volumes).map((entry) =>
+    capturePublicationVolume(entry as PublicationVolume)
+  );
+  const chapters = captureDenseArray(record.chapters).map((entry) =>
+    capturePublicationChapter(entry as PublicationChapter)
+  );
+  assertUnique(volumes.map((volume) => volume.id));
+  assertUnique(chapters.map((chapter) => chapter.id));
+  const volumeIds = new Set(volumes.map((volume) => volume.id));
+  if (chapters.some((chapter) => !volumeIds.has(chapter.volumeId))) {
+    throw invalidSnapshot();
+  }
+  return Object.freeze({
+    schemaVersion: captureSnapshotVersion(record.schemaVersion),
+    scope: captureNovelQueryScope(record.scope),
+    volumes: Object.freeze(volumes),
+    chapters: Object.freeze(chapters),
   });
 }
 

@@ -145,6 +145,10 @@ function createDefaultNovelContentApi(client: NovelQueryClient): NovelContentApi
       get: (scope: NovelQueryScope, paragraphId: ParagraphId) =>
         client.getParagraph(scope, paragraphId),
     }),
+    publication: Object.freeze({
+      getCatalog: (scope: NovelQueryScope) =>
+        client.getPublicationCatalog(scope),
+    }),
   });
 }
 

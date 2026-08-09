@@ -28,7 +28,11 @@ export function ManuscriptBlock({ block, onSelect }: ManuscriptBlockProps) {
         {block.isDraft === true ? <span className={styles.draft}>草稿</span> : null}
         <span className={styles.digest}>{block.digest}</span>
       </div>
-      {block.text !== "" ? <p className={styles.text}>{block.text}</p> : null}
+      {block.text !== "" ? (
+        <p className={styles.text}>{block.text}</p>
+      ) : (
+        <p className={styles.placeholder}>（正文加载中…）</p>
+      )}
     </button>
   );
 }

@@ -53,5 +53,14 @@
   line-height: 1.85;
   color: var(--color-fg);
   text-wrap: pretty;
+  white-space: pre-wrap; /* 保留正文中的 \n 行分割 */
+  overflow-wrap: break-word; /* 长词/CJK 安全折行 */
+  margin: 0;
+}
+
+/* 正文未加载（懒加载中/拉取失败留空）时的淡色占位。 */
+.placeholder {
+  font-size: 13px;
+  color: var(--color-faint);
   margin: 0;
 }

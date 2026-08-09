@@ -4,7 +4,7 @@ import {
   canonicalNovelQueryScope,
   captureCharacterId,
   captureLocationId,
-  captureManuscriptBlockId,
+  captureParagraphId,
   captureStoryUnitId,
   type ApiTransport,
 } from "../src/index.js";
@@ -28,8 +28,9 @@ void api.novel.locations.get(
   canonicalNovelQueryScope,
   captureLocationId("location"),
 );
-void api.novel.manuscript.getStructure(canonicalNovelQueryScope);
-void api.novel.manuscript.getBlock(
+void api.novel.paragraphs.getCatalog(canonicalNovelQueryScope);
+void api.novel.paragraphs.get(
   canonicalNovelQueryScope,
-  captureManuscriptBlockId("block"),
+  captureParagraphId("paragraph"),
 );
+void api.novel.publication.getCatalog(canonicalNovelQueryScope);

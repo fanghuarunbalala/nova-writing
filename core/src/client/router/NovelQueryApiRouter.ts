@@ -46,6 +46,7 @@ import {
   captureNovelOverviewSnapshot,
   captureNovelParagraphCatalogSnapshot,
   captureNovelParagraphSnapshot,
+  captureNovelPublicationCatalogSnapshot,
   captureNovelStoryUnitSnapshot,
 } from "../novel/NovelQuerySnapshots.js";
 
@@ -162,6 +163,8 @@ export class NovelQueryApiRouter implements ApiTransport {
         return this.getParagraphCatalog(payload);
       case NOVEL_QUERY_API_OPERATION.paragraphGet:
         return this.getParagraph(payload);
+      case NOVEL_QUERY_API_OPERATION.publicationCatalogGet:
+        return this.getPublicationCatalog(payload);
     }
   }
 
@@ -307,6 +310,18 @@ export class NovelQueryApiRouter implements ApiTransport {
       schemaVersion: NOVEL_QUERY_SNAPSHOT_VERSION,
       scope: resolved.client,
       ...(readModel === undefined ? {} : { readModel }),
+    });
+  }
+
+  private async getPublicationCatalog(payload: unknown) {
+    const request = captureNovelScopedQueryRequest(payload);
+    const resolved = await this.resolveScope(request.scope);
+    const catalog = await this.options.publication.getCatalog(resolved.domain);
+    return captureNovelPublicationCatalogSnapshot({
+      schemaVersion: NOVEL_QUERY_SNAPSHOT_VERSION,
+      scope: resolved.client,
+      volumes: catalog?.snapshot.volumes ?? [],
+      chapters: catalog?.snapshot.chapters ?? [],
     });
   }
 

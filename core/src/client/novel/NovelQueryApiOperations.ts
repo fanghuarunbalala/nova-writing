@@ -20,6 +20,7 @@ export const NOVEL_QUERY_API_OPERATION = Object.freeze({
   locationGet: "novel.locations.get",
   paragraphCatalogGet: "novel.paragraph.catalog.get",
   paragraphGet: "novel.paragraph.get",
+  publicationCatalogGet: "novel.publication.catalog.get",
 } as const);
 
 export type NovelQueryApiOperation =

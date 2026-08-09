@@ -1,9 +1,10 @@
 /**
  * manuscript 子域测试。
  *
- * 适配说明：core manuscript -> paragraph 重命名后，store 改为读取
- * api.novel.paragraphs.getCatalog，UI 仍按 chapter -> blocks 视图渲染（单 chapter
- * "全部段落" 容纳所有段落）。测试用 paragraph catalog fixture 替代旧 structure。
+ * 正文视图以权威 publication 结构（卷 → 章）为目录，正文文本按章懒加载：
+ * store 并行读取 publication.getCatalog + paragraphs.getCatalog，按
+ * chapter.paragraphIds 关联目录摘要构建 Volume→Chapter 层级；选中章节后
+ * paragraphs.get 拉取全文（保留 \n 行分割，失败段落留空可重试）。
  */
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -11,14 +12,51 @@ import userEvent from "@testing-library/user-event";
 import type {
   NovelApiClient,
   NovelParagraphCatalogSnapshot,
+  NovelPublicationCatalogSnapshot,
 } from "@novel/core";
-import { resolveChapterTitles } from "../../../src/domains/novel/manuscript/projection/resolveChapterTitles.js";
 import { ManuscriptStructureStore } from "../../../src/domains/novel/manuscript/store/ManuscriptStructureStore.js";
-import { ManuscriptChapterList } from "../../../src/domains/novel/manuscript/components/ManuscriptChapterList.js";
+import type { ManuscriptStructureSnapshot } from "../../../src/domains/novel/manuscript/store/ManuscriptStructureStore.js";
+import { ManuscriptReader } from "../../../src/domains/novel/manuscript/components/ManuscriptReader.js";
+import { ManuscriptChapterContent } from "../../../src/domains/novel/manuscript/components/ManuscriptChapterContent.js";
 import { ManuscriptBlock } from "../../../src/domains/novel/manuscript/components/ManuscriptBlock.js";
 import { ManuscriptDraftTag } from "../../../src/domains/novel/manuscript/components/ManuscriptDraftTag.js";
 
-const catalog: NovelParagraphCatalogSnapshot = {
+const publicationCatalog: NovelPublicationCatalogSnapshot = {
+  schemaVersion: 1,
+  scope: { kind: "canonical" },
+  volumes: [
+    { id: "volume_one", publicationId: "publication_main", orderKey: "1000", title: "第一卷" },
+    { id: "volume_two", publicationId: "publication_main", orderKey: "2000", title: "第二卷" },
+  ],
+  chapters: [
+    {
+      id: "chapter_one",
+      publicationId: "publication_main",
+      volumeId: "volume_one",
+      orderKey: "1000",
+      title: "第一章 序章",
+      paragraphIds: ["§3-01-04", "§3-01-05"],
+    },
+    {
+      id: "chapter_two",
+      publicationId: "publication_main",
+      volumeId: "volume_one",
+      orderKey: "2000",
+      title: "第二章 雨夜",
+      paragraphIds: ["§3-01-06"],
+    },
+    {
+      id: "chapter_three",
+      publicationId: "publication_main",
+      volumeId: "volume_two",
+      orderKey: "1000",
+      title: "第三章 新篇",
+      paragraphIds: [],
+    },
+  ],
+};
+
+const paragraphCatalog: NovelParagraphCatalogSnapshot = {
   schemaVersion: 1,
   scope: { kind: "canonical" },
   paragraphs: [
@@ -36,12 +74,35 @@ const catalog: NovelParagraphCatalogSnapshot = {
       textLength: 80,
       textDigest: "9e4b81ee",
     },
+    {
+      id: "§3-01-06",
+      storyUnitId: "su-2",
+      orderKey: "0003",
+      textLength: 60,
+      textDigest: "1a2b3c4d",
+    },
   ],
 };
 
-function buildApi(
-  overrides: Partial<NovelApiClient["novel"]["paragraphs"]> = {},
-): NovelApiClient {
+function paragraphReadModel(id: string, text: string) {
+  return {
+    schemaVersion: 1,
+    scope: { kind: "canonical" },
+    readModel: {
+      paragraph: { id, storyUnitId: "su-1", orderKey: "0001", text },
+      textDigest: "a".repeat(64),
+      orderDigest: "b".repeat(64),
+      storyUnitDigest: "c".repeat(64),
+    },
+  };
+}
+
+interface ManuscriptApiOverrides {
+  readonly publication?: Partial<NovelApiClient["novel"]["publication"]>;
+  readonly paragraphs?: Partial<NovelApiClient["novel"]["paragraphs"]>;
+}
+
+function buildApi(overrides: ManuscriptApiOverrides = {}): NovelApiClient {
   return {
     conversations: {} as never,
     novel: {
@@ -50,207 +111,275 @@ function buildApi(
       characters: {} as never,
       locations: {} as never,
       paragraphs: {
-        getCatalog: vi.fn(async () => catalog),
-        get: vi.fn(),
-        ...overrides,
+        getCatalog: vi.fn(async () => paragraphCatalog),
+        get: vi.fn(async () => undefined),
+        ...overrides.paragraphs,
+      },
+      publication: {
+        getCatalog: vi.fn(async () => publicationCatalog),
+        ...overrides.publication,
       },
     },
   } as unknown as NovelApiClient;
 }
 
+function readerSnapshot(): ManuscriptStructureSnapshot {
+  return {
+    phase: "ready",
+    workspaceId: "w1",
+    volumes: [
+      Object.freeze({
+        volumeId: "volume_one",
+        title: "第一卷",
+        chapters: Object.freeze([
+          Object.freeze({
+            chapterId: "chapter_one",
+            volumeId: "volume_one",
+            title: "第一章 序章",
+            paragraphIds: ["p-1"],
+            blocks: Object.freeze([{ blockId: "p-1", digest: "aaaaaa", text: "" }]),
+          }),
+          Object.freeze({
+            chapterId: "chapter_two",
+            volumeId: "volume_one",
+            title: "第二章 雨夜",
+            paragraphIds: ["p-2"],
+            blocks: Object.freeze([{ blockId: "p-2", digest: "bbbbbb", text: "" }]),
+          }),
+        ]),
+      }),
+    ],
+    chapters: Object.freeze([
+      {
+        chapterId: "chapter_one",
+        volumeId: "volume_one",
+        title: "第一章 序章",
+        paragraphIds: ["p-1"],
+        blocks: [{ blockId: "p-1", digest: "aaaaaa", text: "" }],
+      },
+      {
+        chapterId: "chapter_two",
+        volumeId: "volume_one",
+        title: "第二章 雨夜",
+        paragraphIds: ["p-2"],
+        blocks: [{ blockId: "p-2", digest: "bbbbbb", text: "" }],
+      },
+    ]),
+    selectedChapterId: "chapter_two",
+    error: undefined,
+  };
+}
+
 describe("ManuscriptStructureStore", () => {
-  it("groups paragraphs by storyUnitId into ordered chapters", async () => {
+  it("builds the Volume → Chapter hierarchy and joins blocks from the paragraph catalog", async () => {
     const api = buildApi();
     const store = new ManuscriptStructureStore({ api });
     await store.loadWorkspace("w1");
     const snapshot = store.getSnapshot();
     expect(snapshot.phase).toBe("ready");
-    expect(snapshot.chapters).toHaveLength(1);
-    expect(snapshot.chapters[0].chapterId).toBe("su-1");
-    expect(snapshot.chapters[0].title).toBe("su-1"); // 占位，视图层用大纲标题覆盖
+    expect(snapshot.volumes.map((volume) => volume.title)).toEqual(["第一卷", "第二卷"]);
+    expect(snapshot.volumes[0].chapters.map((chapter) => chapter.chapterId)).toEqual([
+      "chapter_one",
+      "chapter_two",
+    ]);
+    expect(snapshot.volumes[1].chapters.map((chapter) => chapter.chapterId)).toEqual([
+      "chapter_three",
+    ]);
+    expect(snapshot.chapters).toHaveLength(3);
+    expect(snapshot.chapters[0].title).toBe("第一章 序章");
+    expect(snapshot.chapters[0].blocks.map((block) => block.blockId)).toEqual([
+      "§3-01-04",
+      "§3-01-05",
+    ]);
     expect(snapshot.chapters[0].blocks[0]).toMatchObject({
       blockId: "§3-01-04",
       digest: "8f3a70",
       text: "",
       storyUnitId: "su-1",
     });
-    expect(snapshot.chapters[0].blocks).toHaveLength(2);
+    expect(snapshot.chapters[2].blocks).toHaveLength(0);
+    expect(snapshot.selectedChapterId).toBe("chapter_one");
   });
 
-  it("splits paragraphs across story units and sorts chapters by first orderKey", async () => {
+  it("auto-selects the first chapter and lazily loads its text", async () => {
     const api = buildApi({
-      getCatalog: vi.fn(async () => ({
-        schemaVersion: 1,
-        scope: { kind: "canonical" },
-        paragraphs: [
-          { id: "p-b", storyUnitId: "su-2", orderKey: "8000", textDigest: "22222222" },
-          { id: "p-a", storyUnitId: "su-1", orderKey: "4000", textDigest: "11111111" },
-          { id: "p-b2", storyUnitId: "su-2", orderKey: "6000", textDigest: "33333333" },
-        ],
-      })),
+      paragraphs: {
+        get: vi.fn(async (_scope: unknown, id: unknown) =>
+          paragraphReadModel(
+            String(id),
+            id === "§3-01-04" ? "第一行\n第二行" : "第二段正文。",
+          ),
+        ),
+      },
     });
     const store = new ManuscriptStructureStore({ api });
     await store.loadWorkspace("w1");
-    const chapters = store.getSnapshot().chapters;
-    expect(chapters.map((chapter) => chapter.chapterId)).toEqual(["su-1", "su-2"]);
-    // 章节内 block 按 orderKey 排序（p-b2 在 p-b 之前）
-    expect(chapters[1].blocks.map((block) => block.blockId)).toEqual(["p-b2", "p-b"]);
+    expect(store.getSnapshot().selectedChapterId).toBe("chapter_one");
+    await vi.waitFor(() => {
+      const chapter = store.getSnapshot().chapters[0];
+      expect(chapter.blocks[0].text).toBe("第一行\n第二行");
+      expect(chapter.blocks[1].text).toBe("第二段正文。");
+    });
+    expect(api.novel.paragraphs.get).toHaveBeenCalledTimes(2);
   });
 
-  it("falls back to a 全部段落 group for paragraphs without a story unit", async () => {
+  it("switches the selected chapter via selectChapter and loads its text", async () => {
     const api = buildApi({
-      getCatalog: vi.fn(async () => ({
-        schemaVersion: 1,
-        scope: { kind: "canonical" },
-        paragraphs: [
-          { id: "p-1", orderKey: "4000", textDigest: "11111111" },
-          { id: "p-2", storyUnitId: "su-1", orderKey: "8000", textDigest: "22222222" },
-        ],
-      })),
+      paragraphs: {
+        get: vi.fn(async (_scope: unknown, id: unknown) =>
+          paragraphReadModel(String(id), id === "§3-01-06" ? "雨落得密。" : "段落"),
+        ),
+      },
     });
     const store = new ManuscriptStructureStore({ api });
     await store.loadWorkspace("w1");
-    const chapters = store.getSnapshot().chapters;
-    expect(chapters.map((chapter) => chapter.chapterId)).toEqual(["__all_paragraphs__", "su-1"]);
-    expect(chapters[0].title).toBe("全部段落");
+    expect(store.getSnapshot().selectedChapterId).toBe("chapter_one");
+    store.selectChapter("chapter_two");
+    expect(store.getSnapshot().selectedChapterId).toBe("chapter_two");
+    await vi.waitFor(() => {
+      expect(store.getSnapshot().chapters[1].blocks[0].text).toBe("雨落得密。");
+    });
   });
 
-  it("returns no chapters for an empty catalog", async () => {
+  it("reports an empty ready state when the publication has no volumes or chapters", async () => {
     const api = buildApi({
-      getCatalog: vi.fn(async () => ({
-        schemaVersion: 1,
-        scope: { kind: "canonical" },
-        paragraphs: [],
-      })),
+      publication: {
+        getCatalog: vi.fn(async () => ({
+          schemaVersion: 1,
+          scope: { kind: "canonical" },
+          volumes: [],
+          chapters: [],
+        })),
+      },
     });
     const store = new ManuscriptStructureStore({ api });
     await store.loadWorkspace("w1");
-    expect(store.getSnapshot().chapters).toHaveLength(0);
+    const snapshot = store.getSnapshot();
+    expect(snapshot.phase).toBe("ready");
+    expect(snapshot.volumes).toHaveLength(0);
+    expect(snapshot.chapters).toHaveLength(0);
+    expect(snapshot.selectedChapterId).toBeUndefined();
   });
 
-  it("records a retryable error on failure", async () => {
+  it("records a retryable error when the publication catalog fetch fails", async () => {
     const api = buildApi({
-      getCatalog: vi.fn(async () => {
-        throw new Error("down");
-      }),
+      publication: {
+        getCatalog: vi.fn(async () => {
+          throw new Error("down");
+        }),
+      },
     });
     const store = new ManuscriptStructureStore({ api });
     await store.loadWorkspace("w1");
     expect(store.getSnapshot().phase).toBe("error");
     expect(store.getSnapshot().error?.retryable).toBe(true);
   });
-});
 
-describe("resolveChapterTitles", () => {
-  const chapters = [
-    Object.freeze({
-      chapterId: "su-1",
-      title: "su-1",
-      blocks: Object.freeze([{ blockId: "p-1", digest: "aaaaaa", text: "" }]),
-    }),
-    Object.freeze({
-      chapterId: "su-2",
-      title: "su-2",
-      blocks: Object.freeze([{ blockId: "p-2", digest: "bbbbbb", text: "" }]),
-    }),
-    Object.freeze({
-      chapterId: "__all_paragraphs__",
-      title: "全部段落",
-      blocks: Object.freeze([{ blockId: "p-3", digest: "cccccc", text: "" }]),
-    }),
-  ];
-
-  it("overrides chapter titles with story unit labels from the outline tree", () => {
-    const tree = [
-      Object.freeze({
-        unitId: "su-0",
-        label: "第一卷",
-        scope: "ARC" as const,
-        planM: 1 as const,
-        realNode: "pending" as const,
-        children: Object.freeze([
-          Object.freeze({
-            unitId: "su-1",
-            label: "第一章 序章",
-            scope: "SCENE" as const,
-            planM: 1 as const,
-            realNode: "pending" as const,
-            children: Object.freeze([]),
-          }),
-          Object.freeze({
-            unitId: "su-2",
-            label: "第二章 雨夜",
-            scope: "SCENE" as const,
-            planM: 1 as const,
-            realNode: "pending" as const,
-            children: Object.freeze([]),
-          }),
-        ]),
-      }),
-    ];
-    const resolved = resolveChapterTitles(chapters, tree);
-    expect(resolved.map((chapter) => chapter.title)).toEqual([
-      "第一章 序章",
-      "第二章 雨夜",
-      "全部段落",
-    ]);
-    // 未命中的章节对象原样返回
-    expect(resolved[2]).toBe(chapters[2]);
-    // 命中的章节其余字段保持不变
-    expect(resolved[0].blocks).toBe(chapters[0].blocks);
-  });
-
-  it("returns chapters unchanged when the outline has no matching units", () => {
-    const resolved = resolveChapterTitles(chapters, []);
-    expect(resolved).toEqual(chapters);
-    expect(resolved[0]).toBe(chapters[0]);
+  it("fills successful paragraph texts and leaves failed blocks empty; reselect retries", async () => {
+    let failBlock = true;
+    const api = buildApi({
+      paragraphs: {
+        get: vi.fn(async (_scope: unknown, id: unknown) => {
+          if (id === "§3-01-05" && failBlock) throw new Error("boom");
+          return paragraphReadModel(
+            String(id),
+            id === "§3-01-04" ? "第一段" : "第二段",
+          );
+        }),
+      },
+    });
+    const store = new ManuscriptStructureStore({ api });
+    await store.loadWorkspace("w1");
+    await vi.waitFor(() => {
+      const blocks = store.getSnapshot().chapters[0].blocks;
+      expect(blocks[0].text).toBe("第一段");
+      expect(blocks[1].text).toBe("");
+    });
+    failBlock = false;
+    store.selectChapter("chapter_one");
+    await vi.waitFor(() => {
+      expect(store.getSnapshot().chapters[0].blocks[1].text).toBe("第二段");
+    });
   });
 });
 
-describe("manuscript components", () => {
-  it("renders chapters and block selection", async () => {
+describe("ManuscriptReader", () => {
+  it("renders volume and chapter titles in the TOC and selects a chapter on click", async () => {
     const user = userEvent.setup();
-    const onSelectBlock = vi.fn();
+    const onSelectChapter = vi.fn();
     render(
-      <ManuscriptChapterList
+      <ManuscriptReader
         workspaceId="w1"
-        chapters={[
-          {
-            chapterId: "chapter-301",
-            title: "Chapter 7",
-            blocks: [{ blockId: "§3-01-04", digest: "8f3a70", text: "雨落得密。" }],
-          },
-        ]}
-        onSelectBlock={onSelectBlock}
+        snapshot={readerSnapshot()}
+        onSelectChapter={onSelectChapter}
       />,
     );
-    expect(screen.getByText("Chapter 7")).toBeInTheDocument();
-    await user.click(screen.getByText("雨落得密。"));
-    expect(onSelectBlock).toHaveBeenCalledWith("§3-01-04");
+    expect(screen.getByRole("navigation", { name: "章节目录" })).toBeInTheDocument();
+    expect(screen.getByText("第一卷")).toBeInTheDocument();
+    // selectedChapterId=chapter_two → content pane shows it; 序章 appears only in TOC
+    expect(screen.getByText("第一章 序章")).toBeInTheDocument();
+    await user.click(screen.getByText("第一章 序章"));
+    expect(onSelectChapter).toHaveBeenCalledWith("chapter_one");
   });
 
-  it("renders block primitives", () => {
-    render(<ManuscriptBlock block={{ blockId: "§3-01-04", digest: "8f3a70", text: "" }} />);
-    expect(screen.getByText("§3-01-04")).toBeInTheDocument();
-    render(<ManuscriptDraftTag />);
-    expect(screen.getByText("草稿")).toBeInTheDocument();
+  it("shows an empty state when there are no chapters", () => {
+    render(
+      <ManuscriptReader
+        workspaceId="w1"
+        snapshot={{
+          phase: "ready",
+          workspaceId: "w1",
+          volumes: [],
+          chapters: [],
+          selectedChapterId: undefined,
+          error: undefined,
+        }}
+        onSelectChapter={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText("暂无卷章结构，请先在写作工具中创建卷章"),
+    ).toBeInTheDocument();
   });
 
-  it("shows a 前往审批 entry on draft chapters and invokes onOpenDraft", async () => {
+  it("shows the error message in the error phase", () => {
+    render(
+      <ManuscriptReader
+        workspaceId="w1"
+        snapshot={{
+          phase: "error",
+          workspaceId: "w1",
+          volumes: [],
+          chapters: [],
+          selectedChapterId: undefined,
+          error: {
+            code: "novel-load-failed",
+            message: "正文结构加载失败，请重试",
+            retryable: true,
+          },
+        }}
+        onSelectChapter={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("正文结构加载失败，请重试")).toBeInTheDocument();
+  });
+});
+
+describe("ManuscriptChapterContent", () => {
+  it("shows the 前往审批 entry on draft chapters and invokes onOpenDraft", async () => {
     const user = userEvent.setup();
     const onOpenDraft = vi.fn();
     render(
-      <ManuscriptChapterList
-        workspaceId="w1"
-        chapters={[
-          {
-            chapterId: "chapter-draft-1",
-            title: "第一节 夜景",
-            isDraft: true,
-            changeSetId: "CS-7",
-            blocks: [{ blockId: "§3-01-04", digest: "8f3a70", text: "雨落得密。" }],
-          },
-        ]}
+      <ManuscriptChapterContent
+        chapter={{
+          chapterId: "chapter-draft-1",
+          volumeId: "volume_one",
+          title: "第一节 夜景",
+          isDraft: true,
+          changeSetId: "CS-7",
+          paragraphIds: [],
+          blocks: [],
+        }}
         onOpenDraft={onOpenDraft}
       />,
     );
@@ -262,15 +391,14 @@ describe("manuscript components", () => {
 
   it("omits the approval entry when the chapter is not a draft", () => {
     render(
-      <ManuscriptChapterList
-        workspaceId="w1"
-        chapters={[
-          {
-            chapterId: "chapter-final-1",
-            title: "第七章 定稿",
-            blocks: [{ blockId: "§3-01-05", digest: "9e4b81ee", text: "定稿正文。" }],
-          },
-        ]}
+      <ManuscriptChapterContent
+        chapter={{
+          chapterId: "chapter-final-1",
+          volumeId: "volume_one",
+          title: "第七章 定稿",
+          paragraphIds: [],
+          blocks: [],
+        }}
         onOpenDraft={vi.fn()}
       />,
     );
@@ -280,19 +408,45 @@ describe("manuscript components", () => {
 
   it("omits the approval entry when no onOpenDraft handler is wired", () => {
     render(
-      <ManuscriptChapterList
-        workspaceId="w1"
-        chapters={[
-          {
-            chapterId: "chapter-draft-2",
-            title: "第一节 夜景",
-            isDraft: true,
-            changeSetId: "CS-8",
-            blocks: [{ blockId: "§3-01-04", digest: "8f3a70", text: "" }],
-          },
-        ]}
+      <ManuscriptChapterContent
+        chapter={{
+          chapterId: "chapter-draft-2",
+          volumeId: "volume_one",
+          title: "第一节 夜景",
+          isDraft: true,
+          changeSetId: "CS-8",
+          paragraphIds: [],
+          blocks: [],
+        }}
       />,
     );
     expect(screen.queryByRole("button", { name: "前往审批 →" })).not.toBeInTheDocument();
+  });
+});
+
+describe("manuscript block primitives", () => {
+  it("renders a paragraph text preserving internal line breaks", () => {
+    const { container } = render(
+      <ManuscriptBlock
+        block={{ blockId: "§3-01-04", digest: "8f3a70", text: "第一行\n第二行" }}
+      />,
+    );
+    const text = container.querySelector("p.text");
+    expect(text).not.toBeNull();
+    if (text === null) return;
+    // 未按 \n 拆分成多个元素：raw textContent 仍含换行 → 行分割由 CSS pre-wrap 呈现
+    expect(text.textContent).toBe("第一行\n第二行");
+    expect(text).toHaveStyle({ whiteSpace: "pre-wrap" });
+  });
+
+  it("renders a loading placeholder while text is empty", () => {
+    render(<ManuscriptBlock block={{ blockId: "§3-01-04", digest: "8f3a70", text: "" }} />);
+    expect(screen.getByText("§3-01-04")).toBeInTheDocument();
+    expect(screen.getByText("（正文加载中…）")).toBeInTheDocument();
+  });
+
+  it("renders the draft tag", () => {
+    render(<ManuscriptDraftTag />);
+    expect(screen.getByText("草稿")).toBeInTheDocument();
   });
 });

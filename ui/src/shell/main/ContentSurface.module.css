@@ -22,3 +22,10 @@
   max-width: 1000px;
   margin: 0 auto;
 }
+
+/* 正文阅读器容器：铺满剩余高度，不加 overflow（双栏各自滚动）。 */
+.readerBody {
+  flex: 1;
+  min-height: 0;
+  padding: 18px 22px 40px;
+}

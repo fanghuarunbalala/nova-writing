@@ -20,6 +20,7 @@ import {
 } from "./novel/NovelBasePromptSections.js";
 import { NovelDoingTasksPromptSection } from "./novel/NovelCraftPromptSections.js";
 import { NovelActionsPromptSection } from "./novel/NovelExecutionPromptSections.js";
+import { NovelGlobalConstraintsPromptSection } from "./novel/NovelGlobalConstraintsPromptSection.js";
 import { CoreEnvironmentPromptSection } from "../environment/index.js";
 
 export class CoreRuntimeProtocolPromptSection extends PromptSection {
@@ -194,5 +195,6 @@ export function createDefaultPromptSectionRegistry(): PromptSectionRegistry {
     .register(new NovelDoingTasksPromptSection())
     .register(new NovelActionsPromptSection())
     .register(new CoreEnvironmentPromptSection())
+    .register(new NovelGlobalConstraintsPromptSection())
     .freeze();
 }

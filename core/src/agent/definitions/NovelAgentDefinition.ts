@@ -25,6 +25,7 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.identity"),
     new PromptSectionItem("novel.system"),
     new PromptSectionItem("core.environment"),
+    new PromptSectionItem("novel.global_constraints"),
     // new PromptSectionItem("conversation.behavior"),
     // new PromptSectionItem("tool.guidance"),
     // new PromptSectionItem("todo.guidance"),

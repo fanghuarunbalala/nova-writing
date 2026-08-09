@@ -18,7 +18,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "smoke:prompt-ccb-main-reference": "pnpm build && node scripts/prompt-ccb-main-reference-smoke.mjs",
     "smoke:prompt-novel-sections": "pnpm build && node scripts/prompt-novel-sections-smoke.mjs",
     "smoke:runtime-system-reminder": "pnpm build && node scripts/runtime-system-reminder-smoke.mjs",
     "smoke:runtime-environment-overlay": "pnpm build && node scripts/runtime-environment-overlay-smoke.mjs",

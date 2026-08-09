@@ -8,7 +8,7 @@
  * workdir/platform/model id come from the dynamic section input (host-injected).
  * Compile time (no input) yields no content.
  */
-import { DynamicPromptSection, type DynamicPromptSectionInput } from "../section/DynamicPromptSection.js";
+import { DynamicPromptSection, type DynamicPromptSectionInput } from "../../section/DynamicPromptSection.js";
 import { renderEnvironmentOverlay } from "./EnvironmentPromptOverlay.js";
 
 function resolveTimezone(): string {

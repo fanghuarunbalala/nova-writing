@@ -110,6 +110,7 @@ export class DesktopRuntimeChildEndpointFactory
       const subagentHandler = new ParentRuntimeSubagentHandler({
         host: subagent.host,
         commandService: subagent.commandService,
+        journalReader: persistence.journalReader,
         logger: this.#logger,
       });
       requestHandler = compositeRequestHandler(handler, subagentHandler);

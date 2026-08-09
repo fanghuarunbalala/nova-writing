@@ -152,11 +152,21 @@ async function queryAll(
 function snapshotResult(
   runs: readonly SubagentTaskSnapshot[],
 ): ToolResult {
+  // 正文必须进 content：provider 当轮只序列化 content，details 仅供 journal
+  // 重建（readResult.formatReadToolResult 的同款约定）。runs 里每个有 result
+  // 的 run 都拼上状态+正文，让模型可见完整输出。
+  // The provider only serializes content in the live turn; details is reserved
+  // for journal rebuild (same convention as readResult.formatReadToolResult).
+  // Each run's status line plus its result body is joined into the content.
+  const lines: string[] = [`${runs.length} run(s).`];
+  for (const run of runs) {
+    lines.push(runText(run, /* listPrefix */ true));
+  }
   return Object.freeze({
     content: Object.freeze([
       Object.freeze({
         type: "text" as const,
-        text: `${runs.length} run(s).`,
+        text: lines.join("\n"),
       }),
     ]),
     details: Object.freeze({
@@ -172,11 +182,14 @@ function successResult(
 ): ToolResult {
   const run = runs[terminalIndex];
   const otherRuns = runs.filter((_, index) => index !== terminalIndex);
+  // 正文拼进 content（同 snapshotResult 的理由）；无 result 时退回纯状态行。
+  // The terminal run's body is appended to content; without a result the
+  // status line alone is kept.
   return Object.freeze({
     content: Object.freeze([
       Object.freeze({
         type: "text" as const,
-        text: `Run ${run.taskId} reached ${run.status}.`,
+        text: runText(run, /* listPrefix */ false),
       }),
     ]),
     details: Object.freeze({
@@ -185,6 +198,17 @@ function successResult(
       otherRuns: otherRuns.map(runToJson),
     }),
   });
+}
+
+// Model-visible text for a single run: status line, plus the result body when
+// present. listPrefix=true renders "- {taskId}: {status}" for snapshots.
+function runText(run: SubagentTaskSnapshot, listPrefix: boolean): string {
+  const statusLine = listPrefix
+    ? `- ${run.taskId}: ${run.status}`
+    : `Run ${run.taskId} reached ${run.status}.`;
+  return run.result === undefined
+    ? statusLine
+    : `${statusLine}\n\n${run.result.content}`;
 }
 
 function timeoutResult(

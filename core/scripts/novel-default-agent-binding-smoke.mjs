@@ -133,6 +133,32 @@ try {
     seeded.manifestDigest,
   );
 
+  // 版本漂移场景：renderer bundle 可能捆绑过期 definitionVersion（如 1.4.0）。
+  // 只要 agentType 是默认 novel 且未带 manifestId，就应补写 provisioned 默认
+  // manifest，并同步覆盖 definitionVersion，否则运行时 manifestMismatch。
+  // Version-drift case: a bundled stale version without a manifest identity must
+  // still complete to the provisioned default manifest (version overridden).
+  const drifted = await client.conversations.create({
+    conversationId: "conversation-version-drifted",
+    agent: {
+      agentType: "novel",
+      definitionVersion: "1.4.0",
+    },
+  });
+  const driftedSnapshot = await drifted.getSnapshot();
+  assert.equal(
+    driftedSnapshot.activeAgentBinding.manifestId,
+    DEFAULT_NOVEL_AGENT_MANIFEST_ID,
+  );
+  assert.equal(
+    driftedSnapshot.activeAgentBinding.manifestDigest,
+    seeded.manifestDigest,
+  );
+  assert.equal(
+    driftedSnapshot.activeAgentBinding.definitionVersion,
+    novelAgentDefinition.definitionVersion,
+  );
+
   const explicit = await client.conversations.create({
     conversationId: "conversation-explicit-binding",
     agent: {

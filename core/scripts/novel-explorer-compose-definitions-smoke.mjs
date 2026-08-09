@@ -30,8 +30,8 @@ const expectedReadOnly = Object.freeze([
   "NovelChapterRead",
 ]);
 
-// Novel 1.3.0 exposes the full tool set plus the three subagent execution tools.
-assert.equal(novelAgentDefinition.definitionVersion, "1.3.0");
+// Novel 1.4.0 exposes the full tool set plus the three subagent execution tools.
+assert.equal(novelAgentDefinition.definitionVersion, "1.4.0");
 assert.deepEqual(
   novelAgentDefinition.delegation.allowedAgentTypes,
   ["novel_explorer", "novel_compose"],

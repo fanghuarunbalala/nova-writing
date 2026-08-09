@@ -18,8 +18,13 @@ import {
 } from "./RuntimeSubagentErrors.js";
 import {
   RUNTIME_SUBAGENT_RPC_METHOD,
+  type RuntimeSubagentChildRunTerminalStatus,
   type RuntimeSubagentEnqueueRequest,
   type RuntimeSubagentEnsureActiveRequest,
+  type RuntimeSubagentReadChildFinalAssistantMessageRequest,
+  type RuntimeSubagentReadChildFinalAssistantMessageResponse,
+  type RuntimeSubagentReadChildRunTerminalRequest,
+  type RuntimeSubagentReadChildRunTerminalResponse,
   type RuntimeSubagentRpcMethod,
   type RuntimeSubagentShutdownRuntimeRequest,
 } from "./RuntimeSubagentProtocol.js";
@@ -140,6 +145,67 @@ export function captureRuntimeSubagentEnqueueResponse(
   });
 }
 
+export function captureRuntimeSubagentReadChildRunTerminalRequest(
+  value: unknown,
+): RuntimeSubagentReadChildRunTerminalRequest {
+  return protocolCapture(RUNTIME_SUBAGENT_RPC_METHOD.readChildRunTerminal, "invalid_request", () => {
+    const record = exactRecord(value, ["conversationId"]);
+    return Object.freeze({ conversationId: identity(record.conversationId) });
+  });
+}
+
+export function captureRuntimeSubagentReadChildRunTerminalResponse(
+  value: unknown,
+): RuntimeSubagentReadChildRunTerminalResponse {
+  return protocolCapture(RUNTIME_SUBAGENT_RPC_METHOD.readChildRunTerminal, "invalid_response", () => {
+    const record = plainRecord(value);
+    if (record.found === false) {
+      assertExactKeys(record, ["found"]);
+      return Object.freeze({ found: false });
+    }
+    if (record.found !== true) throw new Error();
+    assertExactKeys(
+      record,
+      ["found", "status", "completedAt", "cancellationReason", "errorCode"],
+      ["found", "status", "completedAt"],
+    );
+    const status = terminalRunStatus(record.status);
+    return Object.freeze({
+      found: true,
+      status,
+      completedAt: timestamp(record.completedAt),
+      ...(record.cancellationReason === undefined
+        ? {}
+        : { cancellationReason: nonBlank(record.cancellationReason) }),
+      ...(record.errorCode === undefined ? {} : { errorCode: nonBlank(record.errorCode) }),
+    });
+  });
+}
+
+export function captureRuntimeSubagentReadChildFinalAssistantMessageRequest(
+  value: unknown,
+): RuntimeSubagentReadChildFinalAssistantMessageRequest {
+  return protocolCapture(RUNTIME_SUBAGENT_RPC_METHOD.readChildFinalAssistantMessage, "invalid_request", () => {
+    const record = exactRecord(value, ["conversationId"]);
+    return Object.freeze({ conversationId: identity(record.conversationId) });
+  });
+}
+
+export function captureRuntimeSubagentReadChildFinalAssistantMessageResponse(
+  value: unknown,
+): RuntimeSubagentReadChildFinalAssistantMessageResponse {
+  return protocolCapture(RUNTIME_SUBAGENT_RPC_METHOD.readChildFinalAssistantMessage, "invalid_response", () => {
+    const record = plainRecord(value);
+    if (record.found === false) {
+      assertExactKeys(record, ["found"]);
+      return Object.freeze({ found: false });
+    }
+    if (record.found !== true) throw new Error();
+    assertExactKeys(record, ["found", "content"]);
+    return Object.freeze({ found: true, content: nonBlank(record.content) });
+  });
+}
+
 export function encodeRuntimeSubagentPayload(value: unknown): JsonValue {
   return captureJsonValue(value);
 }
@@ -188,6 +254,13 @@ function activationStatus(value: unknown): "activated" | "reused" {
 
 function shutdownStatus(value: unknown): "stopped" | "already_offline" {
   if (value !== "stopped" && value !== "already_offline") throw new Error();
+  return value;
+}
+
+function terminalRunStatus(value: unknown): RuntimeSubagentChildRunTerminalStatus {
+  if (value !== "completed" && value !== "failed" && value !== "cancelled") {
+    throw new Error();
+  }
   return value;
 }
 

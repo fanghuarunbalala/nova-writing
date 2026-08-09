@@ -14,6 +14,8 @@ import { ResolvedPromptSectionItem } from "../../../agent/manifest/index.js";
 import type { ConversationMessageFileStore } from "../../../storage/index.js";
 import type { ConversationMessageProjectionService } from "../../../storage/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
+import { promises as fs } from "node:fs";
+import { join } from "node:path";
 import {
   DynamicPromptSection,
   type PromptDigester,
@@ -32,8 +34,15 @@ export interface DefaultRuntimeRunPreparationSourceFactoryOptions {
   /** compose 状态源；提供时动态段输入携带 compose 快照。 */
   /** Compose state source; when provided, dynamic section input carries the compose snapshot. */
   readonly composeState?: ComposeModeStateProvider;
+  /** 小说全局约束文件名（workspace 根相对）；默认 "NOVEL.md"。 */
+  /** Novel global-constraints file name (relative to the workspace root); defaults to "NOVEL.md". */
+  readonly novelGlobalConstraintsFileName?: string;
   readonly logger?: Logger;
 }
+
+/** 小说全局约束文件单次读取上限（字节）。Per-call byte cap for the novel global-constraints file. */
+const NOVEL_GLOBAL_CONSTRAINTS_MAX_BYTES = 256 * 1024;
+const DEFAULT_NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME = "NOVEL.md";
 
 const PLATFORM_LABELS: Readonly<Record<string, string>> = Object.freeze({
   darwin: "macOS",
@@ -48,6 +57,7 @@ export class DefaultRuntimeRunPreparationSourceFactory
   readonly #digester?: PromptDigester;
   readonly #resolveModelId?: () => Promise<string | undefined>;
   readonly #composeState?: ComposeModeStateProvider;
+  readonly #novelGlobalConstraintsFileName: string;
   readonly #logger: Logger;
 
   constructor(options: DefaultRuntimeRunPreparationSourceFactoryOptions = {}) {
@@ -55,6 +65,9 @@ export class DefaultRuntimeRunPreparationSourceFactory
     this.#digester = options.digester;
     this.#resolveModelId = options.resolveModelId;
     this.#composeState = options.composeState;
+    this.#novelGlobalConstraintsFileName =
+      options.novelGlobalConstraintsFileName ??
+      DEFAULT_NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "default_runtime_run_preparation_source_factory",
     });
@@ -77,6 +90,10 @@ export class DefaultRuntimeRunPreparationSourceFactory
               const modelId = await this.#resolveModelIdSafe();
               const composeSnapshot =
                 this.#composeState?.snapshot(conversationId);
+              const constraintsContent =
+                await this.#readNovelGlobalConstraintsSafe(
+                  bootstrap.workspace.workdir,
+                );
               return {
                 environment: {
                   workdir: bootstrap.workspace.workdir,
@@ -93,6 +110,10 @@ export class DefaultRuntimeRunPreparationSourceFactory
                         mode: composeSnapshot.mode,
                       },
                     }),
+                novelGlobalConstraints: {
+                  fileName: this.#novelGlobalConstraintsFileName,
+                  content: constraintsContent ?? "",
+                },
               };
             },
             digester: this.#digester,
@@ -151,6 +172,35 @@ export class DefaultRuntimeRunPreparationSourceFactory
       this.#logger.debug("environment.model_resolution_failed", {
         failure: error instanceof Error ? error.name : "unknown",
       });
+      return undefined;
+    }
+  }
+
+  /** 读取工作区根的小说全局约束文件；缺失/超限/读取失败时安全降级为 undefined。 */
+  /** Reads the workspace-root novel global-constraints file; degrades to undefined on absence, oversize, or read failure. */
+  async #readNovelGlobalConstraintsSafe(
+    workdir: string,
+  ): Promise<string | undefined> {
+    const fileName = this.#novelGlobalConstraintsFileName;
+    const filePath = join(workdir, fileName);
+    try {
+      const content = await fs.readFile(filePath, "utf8");
+      if (
+        new TextEncoder().encode(content).byteLength >
+        NOVEL_GLOBAL_CONSTRAINTS_MAX_BYTES
+      ) {
+        this.#logger.debug("novel_global_constraints.oversized", { fileName });
+        return undefined;
+      }
+      return content;
+    } catch (error) {
+      // ENOENT（文件不存在）是常态，不记日志；其余失败仅 debug。
+      // ENOENT (missing file) is the expected case and is not logged; other failures log at debug.
+      if ((error as { code?: string }).code !== "ENOENT") {
+        this.#logger.debug("novel_global_constraints.read_failed", {
+          failure: error instanceof Error ? error.name : "unknown",
+        });
+      }
       return undefined;
     }
   }

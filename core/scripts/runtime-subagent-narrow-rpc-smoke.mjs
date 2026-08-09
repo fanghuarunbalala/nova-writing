@@ -10,6 +10,40 @@ import {
 } from "../dist/node/index.js";
 
 const timestamp = "2026-08-08T00:00:00.000Z";
+// 伪造子会话 journal：最新 run-state 输出事件页。真实 agent.run.state.changed
+// 事件 payload.current 为 RunStatus 字符串（非对象），按此形状伪造。
+// Fake child journals keyed by conversation; the handler reads the real
+// RunStatus string from payload.current onto the terminal observation.
+const TERMINAL_EVENT_PAGES = {
+  "conversation-child": [
+    { direction: "output", timestamp, payload: { current: "completed" } },
+  ],
+  "conversation-child-failed": [
+    { direction: "output", timestamp, payload: { current: "failed" } },
+  ],
+  "conversation-child-pending": [
+    { direction: "output", timestamp, payload: { current: "queued" } },
+  ],
+};
+// 伪造最终 assistant 消息完成事件页：payload.content 含 text 项。
+// Fake agent.assistant.message.completed pages with extractable text items.
+const FINAL_MESSAGE_EVENT_PAGES = {
+  "conversation-child": [
+    {
+      direction: "output",
+      timestamp,
+      payload: {
+        content: [
+          { type: "thinking", thinking: "private" },
+          { type: "text", text: "final assistant text" },
+        ],
+      },
+    },
+  ],
+  "conversation-child-failed": [
+    { direction: "output", timestamp, payload: { content: [] } },
+  ],
+};
 const hostCalls = [];
 const host = {
   async ensureActive(request) {
@@ -41,7 +75,23 @@ const commandService = {
   },
 };
 
-const handler = new ParentRuntimeSubagentHandler({ host, commandService });
+const journalReader = {
+  async list(query) {
+    const eventType = query.eventTypes?.[0];
+    const events =
+      eventType === "agent.run.state.changed"
+        ? (TERMINAL_EVENT_PAGES[query.conversationId] ?? [])
+        : eventType === "agent.assistant.message.completed"
+          ? (FINAL_MESSAGE_EVENT_PAGES[query.conversationId] ?? [])
+          : [];
+    return { events, highWatermark: events.length, hasPrevious: false, hasNext: false };
+  },
+};
+const handler = new ParentRuntimeSubagentHandler({
+  host,
+  commandService,
+  journalReader,
+});
 const requester = {
   async request(method, payload, options) {
     return handler.handle(method, payload, {
@@ -95,6 +145,25 @@ assert.equal(queuedPayload.taskId, "task-1");
 assert.equal(queuedPayload.requesterConversationId, "conversation-parent");
 assert.equal(queuedPayload.prompt, "Summarize the outline");
 assert.deepEqual(queuedPayload.artifactReferences, []);
+
+// 第 4 个只读方法：探测子会话 run 终态。readChildRunTerminal round-trip.
+const terminal = await client.readChildRunTerminal("conversation-child");
+assert.deepEqual(terminal, { found: true, status: "completed", completedAt: timestamp });
+const failedTerminal = await client.readChildRunTerminal("conversation-child-failed");
+assert.deepEqual(failedTerminal, { found: true, status: "failed", completedAt: timestamp });
+const pendingTerminal = await client.readChildRunTerminal("conversation-child-pending");
+assert.deepEqual(pendingTerminal, { found: false });
+const unknownTerminal = await client.readChildRunTerminal("conversation-child-unknown");
+assert.deepEqual(unknownTerminal, { found: false });
+
+// 第 5 个只读方法：读取子会话最终 assistant 消息正文（跨会话，不能走父绑定 persistence）。
+// Round-trip the child final assistant message read.
+const finalMessage = await client.readChildFinalAssistantMessage("conversation-child");
+assert.deepEqual(finalMessage, { found: true, content: "final assistant text" });
+const emptyFinalMessage = await client.readChildFinalAssistantMessage("conversation-child-failed");
+assert.deepEqual(emptyFinalMessage, { found: false });
+const missingFinalMessage = await client.readChildFinalAssistantMessage("conversation-child-unknown");
+assert.deepEqual(missingFinalMessage, { found: false });
 
 // Non-allowlisted RPC methods are rejected at the parent handler boundary.
 await assert.rejects(

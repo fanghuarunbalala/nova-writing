@@ -19,7 +19,7 @@ import {
 
 export const novelAgentDefinition = new AgentDefinition({
   agentType: "novel",
-  definitionVersion: "1.3.0",
+  definitionVersion: "1.5.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
@@ -30,6 +30,7 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.actions"),
     new PromptSectionItem("novel.communication"),
     new PromptSectionItem("core.environment"),
+    new PromptSectionItem("novel.global_constraints"),
     // new PromptSectionItem("conversation.behavior"),
     // new PromptSectionItem("tool.guidance"),
     // new PromptSectionItem("todo.guidance"),

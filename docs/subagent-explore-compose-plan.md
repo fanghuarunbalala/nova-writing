@@ -19,7 +19,7 @@ out of scope and are listed in §7.
 |---|---|
 | Wiring | Full production wiring: definitions + delegation + execution tools + child composition + narrow RPC |
 | Read-only expression | `groupIds` (5 read groups + `runtime.todo`) + `deny` (13 Write/Edit/Delete tools) |
-| Novel delegation | `novel` 1.3.0 allows `novel_explorer` / `novel_compose` via `delegation: { mode: "subagent" }` |
+| Novel delegation | `novel` 1.4.0 allows `novel_explorer` / `novel_compose` via `delegation: { mode: "subagent" }` |
 | Nested delegation | Disabled — subagents cannot spawn subagents (`mode: "disabled"`) |
 | Host reuse | Child process opens `core.sqlite` directly; reuses `SqliteWorkspaceStore` + `SqliteSubagentBindingStore` |
 | Narrow RPC | Only 3 methods added to the parent: `subagent.ensureActive` / `subagent.shutdownRuntime` / `subagent.enqueue` |
@@ -72,9 +72,9 @@ NovelParagraphRead, NovelVolumeRead, NovelChapterRead
 The `deny` list is only valid because every denied tool exists in the child's
 base registry — `ToolRegistryView` rejects a `deny` entry for an unknown tool.
 
-### 3.2 `novel` 1.3.0
+### 3.2 `novel` 1.4.0
 
-The parent agent definition was bumped from 1.2.x to 1.3.0 and:
+The parent agent definition was bumped from 1.3.0 to 1.4.0 and:
 
 - adds `runtime.subagent` to `groupIds` (exposes `Agent`, `TaskOutput`, `TaskStop`);
 - sets `delegation: { mode: "subagent", allowedAgentTypes: ["novel_explorer", "novel_compose"] }`.
@@ -95,7 +95,7 @@ The parent agent definition was bumped from 1.2.x to 1.3.0 and:
 The Agent / TaskOutput / TaskStop tools come from `createAgentExecutionToolRegistry`
 (`core/src/tools/subagent/index.ts`). The group `runtime.subagent`
 (`SUBAGENT_TOOL_GROUP_MANIFEST`) is registered alongside `runtime.todo` and the
-six novel groups so `ToolRegistryView` can resolve the novel 1.3.0 policy.
+six novel groups so `ToolRegistryView` can resolve the novel 1.4.0 policy.
 
 ## 5. Wiring Shape
 
@@ -154,7 +154,7 @@ ChildRuntimeSubagentClient({ requester })                 // 3-method host+comma
 ```
 
 `AgentAssemblyRestorer` uses the final registry/groups so a restored novel
-1.3.0 manifest (which includes the `runtime.subagent` group) can resolve the
+1.4.0 manifest (which includes the `runtime.subagent` group) can resolve the
 Agent/TaskOutput/TaskStop tools at runtime. The subagent child manifests never
 reference `runtime.subagent` (their delegation is disabled), so there is no
 cyclic dependency.
@@ -244,10 +244,10 @@ lines, raw error messages, stack traces, and causes are never logged.
 
 | Smoke | Scope |
 |---|---|
-| `smoke:novel-explorer-compose-definitions` | 3 definitions; novel 1.3.0 view includes Agent/TaskOutput/TaskStop + novel tools; explorer/compose view == exactly the 7 read-only tools |
+| `smoke:novel-explorer-compose-definitions` | 3 definitions; novel 1.4.0 view includes Agent/TaskOutput/TaskStop + novel tools; explorer/compose view == exactly the 7 read-only tools |
 | `smoke:runtime-subagent-narrow-rpc` | `ParentRuntimeSubagentHandler` + `ChildRuntimeSubagentClient` round-trip for all 3 methods; non-allowlisted method rejected |
 | `smoke:runtime-subagent-explore-compose-host-sqlite` | Spawn `novel_explorer` from a novel parent over SQLite; manifest id `manifest:subagent:novel_explorer:1.0.0`; binding completes |
-| `smoke:runtime-subagent-host-sqlite` | Existing — assembler updated to the production composition so the novel 1.3.0 `runtime.subagent` group resolves |
+| `smoke:runtime-subagent-host-sqlite` | Existing — assembler updated to the production composition so the novel 1.4.0 `runtime.subagent` group resolves |
 | `smoke:novel-conversation-manifest-composition` | Existing — registry count updated to include the 3 subagent tools |
 
 Core `pnpm check` (tsc --noEmit) and `pnpm build` are green; the GUI `pnpm

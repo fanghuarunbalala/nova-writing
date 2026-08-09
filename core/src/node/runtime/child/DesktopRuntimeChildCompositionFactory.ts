@@ -14,7 +14,7 @@ import type {
   OutputReceipt,
 } from "../../../conversation/index.js";
 import { CONVERSATION_RUNTIME_SHUTDOWN_REASON } from "../../../conversation/host/index.js";
-import type { JsonObject, OutputEvent } from "../../../event/index.js";
+import type { OutputEvent } from "../../../event/index.js";
 import type {
   ConversationCatalogStore,
   ConversationEventPage,
@@ -42,15 +42,24 @@ import {
 import {
   CatalogHostChildConversationAdapter,
   DefaultChildConversationManager,
+  DefaultSubagentLifecycleCoordinator,
   DurableChildConversationManager,
   NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY,
+  SUBAGENT_CANCELLATION_REASON,
+  SUBAGENT_SCHEMA_VERSION,
   SUBAGENT_TASK_CANCELLATION_STATUS,
+  SubagentCompletionBridge,
+  SubagentCompletionObserver,
   SubagentTaskQueryService,
   createProductionSubagentDefinitionCatalog,
   type ChildConversationIdFactory,
   type ChildConversationManagerClock,
+  type SubagentBinding,
   type SubagentBindingStore,
+  type SubagentChildRunTerminalReader,
   type SubagentFinalAssistantMessageReader,
+  type SubagentLifecycleEventIdFactory,
+  type SubagentResult,
 } from "../../../runtime/subagent/index.js";
 import {
   SUBAGENT_TOOL_GROUP_MANIFEST,
@@ -107,6 +116,7 @@ import {
   type AgentRuntimeConfigurationProfileResolver,
   type AgentRuntimeContextCompilerFactory,
   type RuntimeEventIdFactory,
+  type RuntimeEventSink,
   type RuntimeRunPreparationSource,
   type ToolDispatcher,
 } from "../../../runtime/index.js";
@@ -333,6 +343,7 @@ export class DesktopRuntimeChildCompositionFactory
             requester: context.requester,
             promptDigester: this.#promptDigester,
             persistence,
+            eventSink,
             clock,
             logger,
           });
@@ -587,6 +598,7 @@ interface CreateChildSubagentCompositionOptions {
   readonly requester: RuntimeSubagentRpcRequester;
   readonly promptDigester: PromptDigester;
   readonly persistence: RuntimePersistencePorts;
+  readonly eventSink: RuntimeEventSink;
   readonly clock: ChildConversationManagerClock;
   readonly logger: Logger;
 }
@@ -656,13 +668,43 @@ function createChildSubagentComposition(
     }),
     bindings,
   );
+  // 子会话消息经窄 RPC 读取：父绑定 persistence 对子会话 identity_mismatch，
+  // 必须走 workspace journalReader 服务的 subagent RPC 通道。
+  // Child final messages must go through the subagent narrow RPC (served by the
+  // workspace journal reader); the parent-bound persistence port rejects the
+  // child conversation identity.
+  const finalAssistantMessages = createChildFinalAssistantMessageReader(
+    subagentClient,
+  );
+  // 完成链路：子会话 run 终态 → bridge → lifecycle.deliverResult →
+  // 父会话终态事件 + binding 落库（running→completed/failed/cancelled）。
+  // Completion path: child Run terminal → bridge → lifecycle.deliverResult →
+  // parent terminal event + durable binding terminal transition.
+  const lifecycle = new DefaultSubagentLifecycleCoordinator({
+    manager,
+    eventSink: options.eventSink,
+    eventIdFactory: SUBAGENT_LIFECYCLE_EVENT_ID_FACTORY,
+    clock: options.clock,
+    logger,
+  });
+  const bridge = new SubagentCompletionBridge({
+    bindings,
+    finalAssistantMessages,
+    resultSink: lifecycle,
+    logger,
+  });
+  const completion = new SubagentCompletionObserver({
+    bindings,
+    bridge,
+    childRunTerminal: createChildRunTerminalReader(subagentClient),
+    logger,
+  });
   const query = new SubagentTaskQueryService({
     bindings,
     runtimePresence: createChildRuntimePresenceReader(bindings),
-    finalAssistantMessages: createChildFinalAssistantMessageReader(
-      options.persistence,
-    ),
+    finalAssistantMessages,
     limits: NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY.limits,
+    completion,
     logger,
   });
   const cancellation: SubagentTaskCancellationIntentPort = {
@@ -671,6 +713,13 @@ function createChildSubagentComposition(
         conversationId: binding.childConversationId,
         reason: CONVERSATION_RUNTIME_SHUTDOWN_REASON.explicitShutdown,
       });
+      // shutdown 会终止子进程，run 可能来不及落 cancelled 终态，TaskStop 直接交付
+      // cancelled 结果，立即把 binding 翻成 cancelled（deliverResult 幂等）。
+      // Shutdown kills the child process; the Run may not land a cancelled
+      // terminal, so TaskStop delivers the cancelled result directly.
+      await lifecycle.deliverResult(
+        cancelledSubagentResult(binding, options.clock.now()),
+      );
       return SUBAGENT_TASK_CANCELLATION_STATUS.cancellationRequested;
     },
   };
@@ -698,6 +747,61 @@ const CHILD_CONVERSATION_ID_FACTORY: ChildConversationIdFactory = {
   },
 };
 
+// 确定性生命周期事件 ID：重试/重启后重建同 ID 事件，journal 幂等去重。
+// Deterministic lifecycle event IDs so retried projections overwrite in place.
+const SUBAGENT_LIFECYCLE_EVENT_ID_FACTORY: SubagentLifecycleEventIdFactory = {
+  create(input): string {
+    return [
+      "subagent",
+      input.parentConversationId,
+      input.parentRunId,
+      input.subagentId,
+      input.eventType,
+      input.ordinal,
+    ].join(":");
+  },
+};
+
+// 把窄 RPC 的 readChildRunTerminal 响应适配为 observer 端口形状。
+// Adapts the narrow RPC readChildRunTerminal response to the observer port.
+function createChildRunTerminalReader(
+  client: ChildRuntimeSubagentClient,
+): SubagentChildRunTerminalReader {
+  return {
+    async readChildRunTerminal(conversationId) {
+      const response = await client.readChildRunTerminal(conversationId);
+      if (response.found === false) return undefined;
+      return Object.freeze({
+        status: response.status,
+        completedAt: response.completedAt,
+        ...(response.errorCode === undefined
+          ? {}
+          : { errorCode: response.errorCode }),
+        ...(response.cancellationReason === undefined
+          ? {}
+          : { cancellationReason: response.cancellationReason }),
+      });
+    },
+  };
+}
+
+function cancelledSubagentResult(
+  binding: SubagentBinding,
+  completedAt: string,
+): SubagentResult {
+  return Object.freeze({
+    schemaVersion: SUBAGENT_SCHEMA_VERSION,
+    subagentId: binding.subagentId,
+    parentConversationId: binding.parentConversationId,
+    parentRunId: binding.parentRunId,
+    childConversationId: binding.childConversationId,
+    status: "cancelled",
+    artifactReferences: Object.freeze([]),
+    cancellationReason: SUBAGENT_CANCELLATION_REASON.explicit,
+    completedAt,
+  });
+}
+
 function createChildRuntimePresenceReader(
   bindings: SubagentBindingStore,
 ): ConversationRuntimePresenceReader {
@@ -724,43 +828,18 @@ function createChildRuntimePresenceReader(
 }
 
 function createChildFinalAssistantMessageReader(
-  persistence: RuntimePersistencePorts,
+  client: ChildRuntimeSubagentClient,
 ): SubagentFinalAssistantMessageReader {
   return {
     async readFinalAssistantMessage(conversationId) {
-      const page = await persistence.messages.list({
-        conversationId,
-        limit: 1_000,
+      const response = await client.readChildFinalAssistantMessage(conversationId);
+      if (response.found === false) return undefined;
+      return Object.freeze({
+        content: response.content,
+        artifactReferences: Object.freeze([]),
       });
-      for (let index = page.items.length - 1; index >= 0; index -= 1) {
-        const record = page.items[index]!;
-        if (record.message.role !== "assistant") continue;
-        const content = extractAssistantText(record.message.payload);
-        if (content.length === 0) continue;
-        return Object.freeze({
-          content,
-          artifactReferences: Object.freeze([]),
-        });
-      }
-      return undefined;
     },
   };
-}
-
-function extractAssistantText(payload: JsonObject): string {
-  const content = payload["content"];
-  if (!Array.isArray(content)) return "";
-  const parts: string[] = [];
-  for (const item of content) {
-    if (typeof item !== "object" || item === null || Array.isArray(item)) {
-      continue;
-    }
-    const record = item as { type?: unknown; text?: unknown };
-    if (record.type === "text" && typeof record.text === "string") {
-      parts.push(record.text);
-    }
-  }
-  return parts.join("\n");
 }
 
 class ConversationRuntimeChild implements RuntimeChildRuntime {

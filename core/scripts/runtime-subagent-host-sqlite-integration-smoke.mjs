@@ -93,7 +93,7 @@ function createAgentAssembler(workspaceStore) {
   const digester = new Sha256Digester();
   // Reuse the production assembly so the registry carries the Agent /
   // TaskOutput / TaskStop tools and the runtime.subagent group that the
-  // novel 1.3.0 definition now references.
+  // novel 1.4.0 definition now references.
   const composition = createNovelConversationManifestComposition();
   return new AgentAssembler({
     registry: composition.registry,

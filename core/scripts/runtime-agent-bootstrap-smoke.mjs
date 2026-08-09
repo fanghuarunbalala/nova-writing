@@ -45,7 +45,7 @@ function todoTool(version = "1.0.0") {
 
 // Reuse the production assembly so the registry carries the Agent /
 // TaskOutput / TaskStop tools and the runtime.subagent group that the
-// novel 1.3.0 definition now references.
+// novel 1.4.0 definition now references.
 const composition = createNovelConversationManifestComposition();
 const groups = composition.groups;
 const registry = composition.registry;

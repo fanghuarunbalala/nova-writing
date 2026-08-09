@@ -14,6 +14,8 @@ export const RUNTIME_SUBAGENT_RPC_METHOD = Object.freeze({
   ensureActive: "subagent.ensureActive",
   shutdownRuntime: "subagent.shutdownRuntime",
   enqueue: "subagent.enqueue",
+  readChildRunTerminal: "subagent.readChildRunTerminal",
+  readChildFinalAssistantMessage: "subagent.readChildFinalAssistantMessage",
 } as const);
 
 export type RuntimeSubagentRpcMethod =
@@ -43,3 +45,37 @@ export interface RuntimeSubagentEnqueueRequest {
 }
 
 export type RuntimeSubagentEnqueueResponse = InputReceipt;
+
+export interface RuntimeSubagentReadChildRunTerminalRequest {
+  readonly conversationId: string;
+}
+
+/** 子会话 Run 的终态（completed/failed/cancelled），供父进程惰性终结子代理 binding。
+ *  Terminal state of a child conversation Run observed by the parent for lazy
+ *  subagent binding finalization. Mirrors `SubagentTerminalRunObservation`
+ *  minus the `subagentId` field. */
+export type RuntimeSubagentChildRunTerminalStatus =
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type RuntimeSubagentReadChildRunTerminalResponse =
+  | Readonly<{
+      found: true;
+      status: RuntimeSubagentChildRunTerminalStatus;
+      completedAt: string;
+      cancellationReason?: string;
+      errorCode?: string;
+    }>
+  | Readonly<{ found: false }>;
+
+export interface RuntimeSubagentReadChildFinalAssistantMessageRequest {
+  readonly conversationId: string;
+}
+
+/** 子会话最终 assistant 消息正文摘要，供父进程组装 completed 结果 summary。
+ *  Final assistant message text of a child conversation used by the parent to
+ *  build the completed subagent result summary. */
+export type RuntimeSubagentReadChildFinalAssistantMessageResponse =
+  | Readonly<{ found: true; content: string }>
+  | Readonly<{ found: false }>;

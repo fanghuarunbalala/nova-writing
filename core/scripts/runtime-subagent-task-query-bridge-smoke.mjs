@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   SUBAGENT_SCHEMA_VERSION,
   SubagentCompletionBridge,
+  SubagentCompletionObserver,
   SubagentTaskProtocolError,
   SubagentTaskQueryService,
 } from "../dist/index.js";
@@ -55,6 +56,7 @@ class MemoryBindings {
 const entries = [
   binding("queued", "creating"),
   binding("running", "running"),
+  binding("completing", "running"),
   binding("completed", "completed"),
   binding("failed", "failed"),
   binding("cancelled", "cancelled"),
@@ -64,6 +66,7 @@ const bindings = new MemoryBindings(entries);
 const presenceStates = new Map([
   ["conversation-child-queued", "offline"],
   ["conversation-child-running", "online"],
+  ["conversation-child-completing", "online"],
   ["conversation-child-completed", "offline"],
   ["conversation-child-failed", "crashed"],
   ["conversation-child-cancelled", "stopping"],
@@ -71,6 +74,7 @@ const presenceStates = new Map([
 ]);
 const messages = new Map([
   ["conversation-child-completed", { content: "completed result", artifactReferences: [] }],
+  ["conversation-child-completing", { content: "completing result", artifactReferences: [] }],
 ]);
 
 const query = new SubagentTaskQueryService({
@@ -182,5 +186,105 @@ await assert.rejects(
   bridge.reconcile({ subagentId: "missing", status: "completed", completedAt: timestamp }),
   (error) => error instanceof SubagentTaskProtocolError && error.failure === "task_not_found",
 );
+
+// Reconcile-on-read：query.get 读非终态 binding 时经 observer 探测子会话 run 终态，
+// 桥接交付后 binding 落库为 completed，随后的轮询立即看到结果与快照。
+const completionDelivered = [];
+const completionBridge = new SubagentCompletionBridge({
+  bindings,
+  finalAssistantMessages: {
+    async readFinalAssistantMessage(conversationId) {
+      return messages.get(conversationId);
+    },
+  },
+  resultSink: {
+    async deliverResult(result) {
+      completionDelivered.push(result);
+      const current = await bindings.get(result.subagentId);
+      if (current !== undefined) {
+        await bindings.put({
+          ...current,
+          status: result.status,
+          updatedAt: result.completedAt,
+        });
+      }
+      return result;
+    },
+  },
+});
+const completionObserver = new SubagentCompletionObserver({
+  bindings,
+  bridge: completionBridge,
+  childRunTerminal: {
+    async readChildRunTerminal(conversationId) {
+      if (conversationId === "conversation-child-completing") {
+        return { status: "completed", completedAt: timestamp };
+      }
+      return undefined;
+    },
+  },
+});
+const completionQuery = new SubagentTaskQueryService({
+  bindings,
+  runtimePresence: {
+    async getRuntimePresence(conversationId) {
+      return { state: presenceStates.get(conversationId) };
+    },
+  },
+  finalAssistantMessages: {
+    async readFinalAssistantMessage(conversationId) {
+      return messages.get(conversationId);
+    },
+  },
+  limits,
+  completion: completionObserver,
+});
+
+assert.equal((await bindings.get("completing")).status, "running");
+const completingSnapshot = await completionQuery.get({
+  parentConversationId: "conversation-parent",
+  parentRunId: "run-parent",
+  taskId: "completing",
+});
+assert.equal(completingSnapshot.status, "completed");
+assert.deepEqual(completingSnapshot.result, {
+  content: "completing result",
+  artifactReferences: [],
+});
+assert.equal(Object.isFrozen(completingSnapshot), true);
+assert.equal((await bindings.get("completing")).status, "completed");
+assert.equal(completionDelivered.length, 1);
+assert.equal(completionDelivered[0].status, "completed");
+
+// 子会话 run 尚未终态（reader 返回 undefined）时读路径不翻转 binding。
+const dormantQuery = new SubagentTaskQueryService({
+  bindings,
+  runtimePresence: {
+    async getRuntimePresence(conversationId) {
+      return { state: presenceStates.get(conversationId) };
+    },
+  },
+  finalAssistantMessages: {
+    async readFinalAssistantMessage(conversationId) {
+      return messages.get(conversationId);
+    },
+  },
+  limits,
+  completion: new SubagentCompletionObserver({
+    bindings,
+    bridge: completionBridge,
+    childRunTerminal: {
+      async readChildRunTerminal() {
+        return undefined;
+      },
+    },
+  }),
+});
+assert.equal((await dormantQuery.get({
+  parentConversationId: "conversation-parent",
+  parentRunId: "run-parent",
+  taskId: "running",
+})).status, "running");
+assert.equal((await bindings.get("running")).status, "running");
 
 console.log("Runtime Subagent Task query/bridge smoke passed");

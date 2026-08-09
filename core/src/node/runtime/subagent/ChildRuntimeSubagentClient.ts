@@ -20,10 +20,17 @@ import {
   captureRuntimeSubagentEnqueueResponse,
   captureRuntimeSubagentEnsureActiveRequest,
   captureRuntimeSubagentEnsureActiveResponse,
+  captureRuntimeSubagentReadChildFinalAssistantMessageRequest,
+  captureRuntimeSubagentReadChildFinalAssistantMessageResponse,
+  captureRuntimeSubagentReadChildRunTerminalRequest,
+  captureRuntimeSubagentReadChildRunTerminalResponse,
   captureRuntimeSubagentShutdownRuntimeRequest,
   captureRuntimeSubagentShutdownRuntimeResponse,
   encodeRuntimeSubagentPayload,
   type RuntimeIpcRequestOptions,
+  type RuntimeSubagentReadChildFinalAssistantMessageResponse,
+  type RuntimeSubagentReadChildRunTerminalRequest,
+  type RuntimeSubagentReadChildRunTerminalResponse,
   type RuntimeSubagentRpcMethod,
 } from "../../../runtime/ipc/index.js";
 
@@ -111,6 +118,49 @@ export class ChildRuntimeSubagentClient {
       },
     } satisfies ChildSubagentConversationCommandService);
     Object.freeze(this);
+  }
+
+  /**
+   * 经窄 RPC 读取子会话 Run 的最新终态；供 completion observer 惰性终结 binding。
+   * Reads the latest terminal state of a child conversation Run over the narrow
+   * RPC; consumed by the completion observer to lazily finalize a binding.
+   */
+  async readChildRunTerminal(
+    conversationId: string,
+    options?: RuntimeIpcRequestOptions,
+  ): Promise<RuntimeSubagentReadChildRunTerminalResponse> {
+    const rpcRequest = captureRuntimeSubagentReadChildRunTerminalRequest({
+      conversationId,
+    });
+    return captureRuntimeSubagentReadChildRunTerminalResponse(
+      await this.#request(
+        RUNTIME_SUBAGENT_RPC_METHOD.readChildRunTerminal,
+        rpcRequest,
+        options,
+      ),
+    );
+  }
+
+  /**
+   * 经窄 RPC 读取子会话最终 assistant 消息正文；供 completion bridge 组装
+   * completed 结果 summary（子会话消息跨会话不可经父绑定 persistence 读取）。
+   * Reads the child conversation final assistant message text over the narrow
+   * RPC; the parent-bound persistence port cannot read the child conversation.
+   */
+  async readChildFinalAssistantMessage(
+    conversationId: string,
+    options?: RuntimeIpcRequestOptions,
+  ): Promise<RuntimeSubagentReadChildFinalAssistantMessageResponse> {
+    const rpcRequest = captureRuntimeSubagentReadChildFinalAssistantMessageRequest({
+      conversationId,
+    });
+    return captureRuntimeSubagentReadChildFinalAssistantMessageResponse(
+      await this.#request(
+        RUNTIME_SUBAGENT_RPC_METHOD.readChildFinalAssistantMessage,
+        rpcRequest,
+        options,
+      ),
+    );
   }
 
   async #request(

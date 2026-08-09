@@ -18,6 +18,7 @@ import {
   NovelIdentityPromptSection,
   NovelSystemPromptSection,
 } from "./novel/NovelBasePromptSections.js";
+import { NovelGlobalConstraintsPromptSection } from "./novel/NovelGlobalConstraintsPromptSection.js";
 import {
   NovelExploreIdentityPromptSection,
   NovelExploreReportingPromptSection,
@@ -211,6 +212,7 @@ export function createDefaultPromptSectionRegistry(): PromptSectionRegistry {
     .register(new NovelComposeReportingPromptSection())
     .register(new NovelDoingTasksPromptSection())
     .register(new NovelActionsPromptSection())
+    .register(new NovelGlobalConstraintsPromptSection())
     .register(new CoreEnvironmentPromptSection())
     .freeze();
 }

@@ -21,3 +21,4 @@ export * from "./SubagentCancellationCoordinator.js";
 export * from "./ConversationTreeObserver.js";
 export * from "./SubagentTaskQueryService.js";
 export * from "./SubagentCompletionBridge.js";
+export * from "./SubagentCompletionObserver.js";

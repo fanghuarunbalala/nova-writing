@@ -5,8 +5,13 @@
  */
 import { CONVERSATION_RUNTIME_ACTIVATION_REASON } from "../../../conversation/host/index.js";
 import type { ConversationCommandService } from "../../../conversation/ConversationCommandService.js";
-import { TaskAssignedInputEvent } from "../../../event/index.js";
+import {
+  OUTPUT_EVENT_TYPE,
+  TaskAssignedInputEvent,
+} from "../../../event/index.js";
+import type { JsonValue } from "../../../event/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
+import { RUN_STATUS } from "../../../runtime/execution/index.js";
 import {
   RUNTIME_SUBAGENT_RPC_METHOD,
   RuntimeSubagentProtocolError,
@@ -14,6 +19,10 @@ import {
   captureRuntimeSubagentEnqueueResponse,
   captureRuntimeSubagentEnsureActiveRequest,
   captureRuntimeSubagentEnsureActiveResponse,
+  captureRuntimeSubagentReadChildFinalAssistantMessageRequest,
+  captureRuntimeSubagentReadChildFinalAssistantMessageResponse,
+  captureRuntimeSubagentReadChildRunTerminalRequest,
+  captureRuntimeSubagentReadChildRunTerminalResponse,
   captureRuntimeSubagentShutdownRuntimeRequest,
   captureRuntimeSubagentShutdownRuntimeResponse,
   encodeRuntimeSubagentPayload,
@@ -22,14 +31,22 @@ import {
   type RuntimeIpcRequestErrorMapper,
   type RuntimeIpcRequestHandler,
   type RuntimeIpcRequestHandlerContext,
+  type RuntimeSubagentChildRunTerminalStatus,
+  type RuntimeSubagentReadChildFinalAssistantMessageResponse,
+  type RuntimeSubagentReadChildRunTerminalResponse,
   type RuntimeSubagentRpcMethod,
 } from "../../../runtime/ipc/index.js";
-import type { JsonValue } from "../../../event/index.js";
+import type {
+  ConversationEventQuery,
+  ConversationJournalReader,
+  PersistedConversationEventSnapshot,
+} from "../../../storage/index.js";
 import type { ChildSubagentConversationHost } from "./ChildRuntimeSubagentClient.js";
 
 export interface ParentRuntimeSubagentHandlerOptions {
   readonly host: ChildSubagentConversationHost;
   readonly commandService: ConversationCommandService;
+  readonly journalReader: ConversationJournalReader;
   readonly logger?: Logger;
 }
 
@@ -38,11 +55,13 @@ export class ParentRuntimeSubagentHandler
 {
   readonly #host: ChildSubagentConversationHost;
   readonly #commandService: ConversationCommandService;
+  readonly #journalReader: ConversationJournalReader;
   readonly #logger: Logger;
 
   constructor(options: ParentRuntimeSubagentHandlerOptions) {
     this.#host = options.host;
     this.#commandService = options.commandService;
+    this.#journalReader = options.journalReader;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "parent_runtime_subagent_handler",
     });
@@ -108,6 +127,10 @@ export class ParentRuntimeSubagentHandler
         return this.#shutdownRuntime(payload, signal);
       case RUNTIME_SUBAGENT_RPC_METHOD.enqueue:
         return this.#enqueue(payload, signal);
+      case RUNTIME_SUBAGENT_RPC_METHOD.readChildRunTerminal:
+        return this.#readChildRunTerminal(payload, signal);
+      case RUNTIME_SUBAGENT_RPC_METHOD.readChildFinalAssistantMessage:
+        return this.#readChildFinalAssistantMessage(payload, signal);
     }
   }
 
@@ -165,6 +188,112 @@ export class ParentRuntimeSubagentHandler
     });
     return encodeRuntimeSubagentPayload(captured);
   }
+
+  async #readChildRunTerminal(
+    payload: JsonValue,
+    signal: AbortSignal,
+  ): Promise<JsonValue> {
+    const request = captureRuntimeSubagentReadChildRunTerminalRequest(payload);
+    const page = await abortable(
+      this.#journalReader.list(CHILD_RUN_TERMINAL_QUERY(request.conversationId)),
+      signal,
+    );
+    const response = toReadChildRunTerminalResponse(page.events[0]);
+    return encodeRuntimeSubagentPayload(
+      captureRuntimeSubagentReadChildRunTerminalResponse(response),
+    );
+  }
+
+  async #readChildFinalAssistantMessage(
+    payload: JsonValue,
+    signal: AbortSignal,
+  ): Promise<JsonValue> {
+    const request = captureRuntimeSubagentReadChildFinalAssistantMessageRequest(payload);
+    const page = await abortable(
+      this.#journalReader.list(CHILD_FINAL_MESSAGE_QUERY(request.conversationId)),
+      signal,
+    );
+    const response = toReadChildFinalAssistantMessageResponse(page.events[0]);
+    return encodeRuntimeSubagentPayload(
+      captureRuntimeSubagentReadChildFinalAssistantMessageResponse(response),
+    );
+  }
+}
+
+const CHILD_RUN_TERMINAL_QUERY = (
+  conversationId: string,
+): ConversationEventQuery => Object.freeze({
+  conversationId,
+  eventTypes: [OUTPUT_EVENT_TYPE.agentRunStateChanged],
+  anchor: { from: "end" } as const,
+  limit: 1,
+});
+
+const CHILD_FINAL_MESSAGE_QUERY = (
+  conversationId: string,
+): ConversationEventQuery => Object.freeze({
+  conversationId,
+  eventTypes: [OUTPUT_EVENT_TYPE.agentAssistantMessageCompleted],
+  anchor: { from: "end" } as const,
+  limit: 1,
+});
+
+function toReadChildRunTerminalResponse(
+  event: PersistedConversationEventSnapshot | undefined,
+): RuntimeSubagentReadChildRunTerminalResponse {
+  if (event === undefined || event.direction !== "output") {
+    return Object.freeze({ found: false });
+  }
+  // 已按 eventTypes 过滤为 agent.run.state.changed 输出事件；payload.current 为
+  // RunStatus 字符串（completed/failed/cancelled/queued/active…），仅终态可观察。
+  // The filtered event payload carries `current` as a RunStatus string; only
+  // terminal statuses are observable.
+  const status = currentStatus((event.payload as { current?: unknown }).current);
+  if (status === undefined) return Object.freeze({ found: false });
+  // failed/cancelled 的细节字段由 bridge 兜底（SUBAGENT_RUN_FAILED / explicit），
+  // run-state 的 reason 与取消原因不满足子代理协议枚举格式，不透传。
+  return Object.freeze({
+    found: true,
+    status,
+    completedAt: event.timestamp,
+  });
+}
+
+function currentStatus(
+  current: unknown,
+): RuntimeSubagentChildRunTerminalStatus | undefined {
+  if (typeof current !== "string") return undefined;
+  if (current === RUN_STATUS.completed) return "completed";
+  if (current === RUN_STATUS.failed) return "failed";
+  if (current === RUN_STATUS.cancelled) return "cancelled";
+  return undefined;
+}
+
+function toReadChildFinalAssistantMessageResponse(
+  event: PersistedConversationEventSnapshot | undefined,
+): RuntimeSubagentReadChildFinalAssistantMessageResponse {
+  if (event === undefined || event.direction !== "output") {
+    return Object.freeze({ found: false });
+  }
+  // 已按 eventTypes 过滤为 agent.assistant.message.completed 输出事件；从
+  // payload.content 提取 text 项拼装正文。无正文（纯思考）视为未找到。
+  // Extracts the final assistant text from the completed-message event payload.
+  const content = extractMessageText((event.payload as { content?: unknown }).content);
+  if (content.length === 0) return Object.freeze({ found: false });
+  return Object.freeze({ found: true, content });
+}
+
+function extractMessageText(value: unknown): string {
+  if (!Array.isArray(value)) return "";
+  const parts: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
+    const record = item as { type?: unknown; text?: unknown };
+    if (record.type === "text" && typeof record.text === "string") {
+      parts.push(record.text);
+    }
+  }
+  return parts.join("\n");
 }
 
 class RuntimeSubagentAbortError extends Error {

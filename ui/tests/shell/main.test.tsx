@@ -241,7 +241,10 @@ describe("chatSurfaceMapper", () => {
     );
     expect(items[0].kind).toBe("turn");
     if (items[0].kind === "turn") {
-      expect(items[0].label).toContain("第 1 轮");
+      // v2 原型：轮次分隔只显示纯时间（HH:MM），去掉「第 N 轮 ·」前缀；
+      // 本地时区不固定，故只断言格式与无前缀。
+      expect(items[0].label).toMatch(/^\d{2}:\d{2}$/);
+      expect(items[0].label).not.toContain("第");
     }
     const assistant = items.find((item) => item.kind === "assistant");
     if (assistant !== undefined && assistant.kind === "assistant") {

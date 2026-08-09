@@ -42,15 +42,17 @@
   border-color: color-mix(in oklab, var(--color-accent) 38%, var(--color-border));
 }
 
-/* 轮次分隔（原型 .turn-sep）：居中 mono faint，两侧细线。 */
+/* 轮次分隔（原型 .turn-sep）：居中 mono faint，两侧渐变细线。 */
 .turnSep {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 0 2px;
+  gap: 12px;
+  margin: 24px 0 2px;
   color: var(--color-faint);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
 }
 
 .turnSep::before,
@@ -59,6 +61,19 @@
   flex: 1;
   height: 1px;
   background: var(--color-border);
+}
+
+.turnSep::before {
+  background: linear-gradient(to right, transparent, var(--color-border-strong));
+}
+
+.turnSep::after {
+  background: linear-gradient(to left, transparent, var(--color-border-strong));
+}
+
+/* 首条轮次分隔收窄上边距（原型 .turn-sep:first-child；条目外层有 .enter 包裹） */
+.enter:first-child .turnSep {
+  margin-top: 10px;
 }
 
 /* 消息入场：切换对话时按序错峰（原型 .msg.conv-in）。 */

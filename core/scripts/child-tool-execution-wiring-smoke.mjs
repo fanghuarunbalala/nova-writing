@@ -296,8 +296,8 @@ await assert.rejects(
   RuntimeApprovalDecisionInputError,
 );
 
-// runtime.files 权限：Read/Glob 直接放行（child_files_read_allow）；Write/Edit 在 idle 默认 deny。
-// runtime.files permissions: Read/Glob pass through; Write/Edit are denied outside compose.
+// runtime.files 权限：Read/Glob/Write/Edit 全模式放行（child_files_allow）；作用域由 FileToolService 强制。
+// runtime.files permissions: Read/Glob/Write/Edit are allowed in all modes (child_files_allow); scope is enforced by FileToolService.
 await composition.dispatcher.execute(
   {
     conversationId: "conv-tools",
@@ -324,46 +324,38 @@ await composition.dispatcher.execute(
 );
 assert.equal(executed.at(-1).name, "Glob");
 
-await assert.rejects(
-  () =>
-    composition.dispatcher.execute(
-      {
-        conversationId: "conv-tools",
-        runId: "run-1",
-        toolCallId: "call-file-write",
-        toolName: "Write",
-        toolVersion: "1.0.0",
-        arguments: { file_path: "/design/chapter-1.md", content: "x" },
-      },
-      { signal },
-    ),
-  (error) =>
-    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-file-write",
+    toolName: "Write",
+    toolVersion: "1.0.0",
+    arguments: { file_path: "/design/chapter-1.md", content: "x" },
+  },
+  { signal },
 );
+assert.equal(executed.at(-1).name, "Write");
 
-await assert.rejects(
-  () =>
-    composition.dispatcher.execute(
-      {
-        conversationId: "conv-tools",
-        runId: "run-1",
-        toolCallId: "call-file-edit",
-        toolName: "Edit",
-        toolVersion: "1.0.0",
-        arguments: {
-          file_path: "/design/chapter-1.md",
-          old_string: "a",
-          new_string: "b",
-        },
-      },
-      { signal },
-    ),
-  (error) =>
-    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-file-edit",
+    toolName: "Edit",
+    toolVersion: "1.0.0",
+    arguments: {
+      file_path: "/design/chapter-1.md",
+      old_string: "a",
+      new_string: "b",
+    },
+  },
+  { signal },
 );
+assert.equal(executed.at(-1).name, "Edit");
 
-// Compose 激活：canonical 写 deny、文件工具限 design 目录/文件。
-// While compose is active: canonical writes are denied and file tools are scoped.
+// Compose 激活：canonical 写 deny；文件工具不再按 compose 门控（全模式可用，作用域由 FileToolService 强制）。
+// While compose is active: canonical writes are denied; file tools are not compose-gated (sandbox enforced by FileToolService).
 const designFilePath = "/workspace/.novel/design/conv-tools.md";
 composeState.enter("conv-tools", { designFilePath });
 
@@ -380,22 +372,19 @@ await composition.dispatcher.execute(
 );
 assert.equal(executed.at(-1).name, "Read");
 
-await assert.rejects(
-  () =>
-    composition.dispatcher.execute(
-      {
-        conversationId: "conv-tools",
-        runId: "run-1",
-        toolCallId: "call-compose-read-outside",
-        toolName: "Read",
-        toolVersion: "1.0.0",
-        arguments: { file_path: "/workspace/outside.md" },
-      },
-      { signal },
-    ),
-  (error) =>
-    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+// 文件工具全模式可用：compose 激活时不再限 design 作用域。
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-compose-read-outside",
+    toolName: "Read",
+    toolVersion: "1.0.0",
+    arguments: { file_path: "/workspace/outside.md" },
+  },
+  { signal },
 );
+assert.equal(executed.at(-1).name, "Read");
 
 await composition.dispatcher.execute(
   {
@@ -410,22 +399,18 @@ await composition.dispatcher.execute(
 );
 assert.equal(executed.at(-1).name, "Write");
 
-await assert.rejects(
-  () =>
-    composition.dispatcher.execute(
-      {
-        conversationId: "conv-tools",
-        runId: "run-1",
-        toolCallId: "call-compose-write-other",
-        toolName: "Write",
-        toolVersion: "1.0.0",
-        arguments: { file_path: "/workspace/.novel/design/other.md", content: "x" },
-      },
-      { signal },
-    ),
-  (error) =>
-    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-compose-write-other",
+    toolName: "Write",
+    toolVersion: "1.0.0",
+    arguments: { file_path: "/workspace/.novel/design/other.md", content: "x" },
+  },
+  { signal },
 );
+assert.equal(executed.at(-1).name, "Write");
 
 await assert.rejects(
   () =>
@@ -444,25 +429,21 @@ await assert.rejects(
     error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
 );
 
-// 批准（inactive）：恢复透传——Write 回到默认 deny，canonical 写回到 ask。
-// After approval the policy passes through: Write returns to default deny, canonical writes to ask.
+// 批准（inactive）：恢复透传——文件工具仍放行（child_files_allow），canonical 写回到 ask。
+// After approval the policy passes through: file tools remain allowed (child_files_allow), canonical writes return to ask.
 composeState.approve("conv-tools");
-await assert.rejects(
-  () =>
-    composition.dispatcher.execute(
-      {
-        conversationId: "conv-tools",
-        runId: "run-1",
-        toolCallId: "call-after-compose-write",
-        toolName: "Write",
-        toolVersion: "1.0.0",
-        arguments: { file_path: designFilePath, content: "x" },
-      },
-      { signal },
-    ),
-  (error) =>
-    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-after-compose-write",
+    toolName: "Write",
+    toolVersion: "1.0.0",
+    arguments: { file_path: designFilePath, content: "x" },
+  },
+  { signal },
 );
+assert.equal(executed.at(-1).name, "Write");
 
 const composeCanonicalPromise = composition.dispatcher.execute(
   {

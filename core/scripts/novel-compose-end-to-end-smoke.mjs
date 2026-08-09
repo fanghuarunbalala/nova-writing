@@ -23,6 +23,7 @@ import {
   createFileToolRegistry,
   createNovelComposeToolRegistry,
   defineTool,
+  FILE_TOOL_ERROR_CODE,
   FileToolService,
 } from "../dist/index.js";
 import {
@@ -72,8 +73,7 @@ const composeService = new ComposeToolService({
   commitRecorder: new SqliteNovelComposeCommitStore({ location, novelId }),
 });
 const fileService = new FileToolService({
-  designRoot,
-  designFilePath,
+  sandboxRoot: workspaceRoot,
 });
 
 const executed = [];
@@ -179,20 +179,21 @@ assert.ok(
   events.some((event) => event.getEventType() === "novel.compose.begin"),
 );
 
-// 2. 草稿写入 design 文件（仅 design 路径放行）
+// 2. 草稿写入 design 文件（workspace 相对路径）
 // （设计模式约束已迁移为 nudge 瞬态 system.reminder，见 nudge-definitions-smoke。）
 await dispatch("Write", "call-write", {
-  file_path: designFilePath,
+  file_path: ".novel/design/conversation-e2e.md",
   content: "第三章正文草稿\n",
 });
 assert.equal(await fs.readFile(designFilePath, "utf8"), "第三章正文草稿\n");
 
-// 3. compose 激活期间：越界 Read 拒绝、canonical 写拒绝
+// 3. compose 激活期间：越出沙盒（绝对/相对逃逸路径）被 FileToolService 拒绝、canonical 写拒绝
 await assert.rejects(
   dispatch("Read", "call-read-outside", {
     file_path: path.join(workspaceRoot, "outside.md"),
   }),
-  (error) => error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+  (error) =>
+    error instanceof ToolError && error.code === FILE_TOOL_ERROR_CODE.pathForbidden,
 );
 await assert.rejects(
   dispatch("NovelParagraphWrite", "call-canonical", {
@@ -237,13 +238,14 @@ try {
 }
 assert.ok(auditRow);
 
-// 6. 批准后：模式恢复 -> Write 默认 deny、canonical 写回到 ask
-await assert.rejects(
-  dispatch("Write", "call-after-write", {
-    file_path: designFilePath,
-    content: "x",
-  }),
-  (error) => error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+// 6. 批准后：模式恢复 -> 文件工具仍放行（沙盒内相对路径）、canonical 写回到 ask
+await dispatch("Write", "call-after-write", {
+  file_path: ".novel/design/recovered.md",
+  content: "x",
+});
+assert.equal(
+  await fs.readFile(path.join(designRoot, "recovered.md"), "utf8"),
+  "x",
 );
 const canonicalPromise = dispatch("NovelParagraphWrite", "call-after-canonical", {
   values: [{ id: "p2", text: "y" }],

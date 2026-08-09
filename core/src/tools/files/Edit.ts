@@ -1,5 +1,5 @@
-/** File Edit 工具：增量替换 design 文件（replace_all=false 替换第一个）。 */
-/** File Edit tool: incremental replacement in the design file (first match unless replace_all). */
+/** File Edit 工具：增量替换 workspace 沙盒内文件（replace_all=false 替换第一个）。 */
+/** File Edit tool: incremental replacement in a workspace file (first match unless replace_all). */
 import { noopLogger, type Logger } from "../../observability/index.js";
 import { ToolError } from "../../runtime/tools/execution/index.js";
 import {
@@ -37,13 +37,13 @@ export function createFileEditTool(
       version: "1.0.0",
       label: "File Edit",
       description:
-        "Replace an exact old_string in the current conversation's design file. replace_all=false replaces the first match; true replaces all. Legacy aliases old_str/new_str are accepted.",
+        "Replace an exact old_string in a file inside the workspace directory using a workspace-relative path. replace_all=false replaces the first match; true replaces all. Legacy aliases old_str/new_str are accepted.",
       parameters: FileEditParametersSchema,
       promptDetails: new ToolPromptDetails({
-        usage: "Use Edit for small incremental changes to the design draft.",
+        usage: "Use Edit for small incremental changes to a workspace file (e.g., the design draft).",
         parameterGuidance:
-          "old_string must appear in the file; provide enough context to match exactly once when replace_all=false.",
-        safetyGuidance: "Only the current design file is editable; other paths are rejected.",
+          "file_path must be a workspace-relative path; old_string must appear in the file; provide enough context to match exactly once when replace_all=false.",
+        safetyGuidance: "Edits outside the workspace sandbox are rejected.",
       }),
     },
     handler: {

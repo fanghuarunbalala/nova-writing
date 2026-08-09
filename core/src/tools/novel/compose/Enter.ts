@@ -9,7 +9,10 @@ import {
   type ToolResult,
 } from "../../../tooling/protocol/index.js";
 import { ComposeStateError } from "../../../runtime/compose/index.js";
-import { renderComposeModeFullText } from "../../../runtime/nudge/definitions/compose.js";
+import {
+  designFileWorkspaceRelativePath,
+  renderComposeModeFullText,
+} from "../../../runtime/nudge/definitions/compose.js";
 import {
   EnterComposeModeParametersSchema,
   type EnterComposeModeArguments,
@@ -44,11 +47,11 @@ export function createEnterComposeModeTool(
       parameters: EnterComposeModeParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage:
-          "Call EnterComposeMode before drafting content; then use Read/Edit/Write on the returned design file.",
+          "Call EnterComposeMode before drafting content; then use Read/Edit/Write on the returned design file using its workspace-relative path.",
         parameterGuidance:
           "purpose is optional and only recorded in the result.",
         safetyGuidance:
-          "While compose is active, canonical novel writes are denied; only the design file is writable.",
+          "While compose is active, canonical novel writes are denied; file tools (Read/Glob/Write/Edit) work across the workspace sandbox with workspace-relative paths.",
       }),
     },
     handler: {
@@ -65,14 +68,19 @@ export function createEnterComposeModeTool(
             toolCallId: context.toolCallId,
             designFilePath: details.designFilePath,
           });
+          // 结果只给 workspace 相对路径（绝对路径会被 FileToolService 拒绝）。
+          // Only the workspace-relative path is shown (absolute paths are rejected).
+          const designFilePathRelative = designFileWorkspaceRelativePath(
+            details.designFilePath,
+          );
           return Object.freeze({
             content: Object.freeze([
               Object.freeze({
                 type: "text" as const,
                 text: [
-                  `Compose mode entered. Design file: ${details.designFilePath}`,
+                  `Compose mode entered. Design file: ${designFilePathRelative}`,
                   "",
-                  renderComposeModeFullText(details.designFilePath),
+                  renderComposeModeFullText(designFilePathRelative),
                 ].join("\n"),
               }),
             ]),

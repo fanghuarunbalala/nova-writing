@@ -1,5 +1,5 @@
-/** File Glob 工具：在 design 目录内按模式找文件（绝对路径，mtime 降序）。 */
-/** File Glob tool: finds design-directory files by pattern (absolute paths, mtime descending). */
+/** File Glob 工具：在 workspace 沙盒内按模式找文件（相对路径，mtime 降序）。 */
+/** File Glob tool: finds workspace files by pattern (workspace-relative paths, mtime descending). */
 import { noopLogger, type Logger } from "../../observability/index.js";
 import { ToolError } from "../../runtime/tools/execution/index.js";
 import {
@@ -37,13 +37,13 @@ export function createFileGlobTool(
       version: "1.0.0",
       label: "File Glob",
       description:
-        "Find files inside the design directory by glob pattern (e.g. **/*.md). Returns absolute paths sorted by modification time, newest first.",
+        "Find files inside the workspace by glob pattern (e.g. **/*.md). Returns workspace-relative paths sorted by modification time, newest first.",
       parameters: FileGlobParametersSchema,
       promptDetails: new ToolPromptDetails({
-        usage: "Use Glob to discover design files before reading or editing them.",
+        usage: "Use Glob to discover workspace files before reading or editing them.",
         parameterGuidance:
-          "Patterns are resolved against the design directory; absolute patterns and parent traversal are rejected.",
-        safetyGuidance: "Read-only; confined to the design directory.",
+          "Patterns are resolved against the workspace root; absolute patterns and parent traversal are rejected.",
+        safetyGuidance: "Read-only; confined to the workspace sandbox.",
       }),
     },
     handler: {

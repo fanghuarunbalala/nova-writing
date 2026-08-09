@@ -86,11 +86,11 @@ export const CHILD_TOOL_PERMISSION_RULES: readonly ToolPermissionRule[] =
       }),
     }),
     Object.freeze({
-      ruleId: "child_files_read_allow",
+      ruleId: "child_files_allow",
       source: "built_in",
       effect: "allow",
       match: Object.freeze({
-        toolNames: Object.freeze(["Read", "Glob"]),
+        toolNames: Object.freeze(["Read", "Glob", "Write", "Edit"]),
       }),
     }),
     Object.freeze({

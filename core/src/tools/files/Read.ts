@@ -1,5 +1,5 @@
-/** File Read 工具：读取 design 目录内文件（可选行范围，cat -n 行号）。 */
-/** File Read tool: reads a design-directory file with an optional line window. */
+/** File Read 工具：读取 workspace 沙盒内文件（可选行范围，cat -n 行号）。 */
+/** File Read tool: reads a workspace file with an optional line window. */
 import { noopLogger, type Logger } from "../../observability/index.js";
 import { ToolError } from "../../runtime/tools/execution/index.js";
 import {
@@ -37,13 +37,13 @@ export function createFileReadTool(
       version: "1.0.0",
       label: "File Read",
       description:
-        "Read a file from the design directory. Results use cat -n format with line numbers starting at 1. Optionally provide a 0-indexed line offset and a positive limit.",
+        "Read a file from the workspace directory using a workspace-relative path (e.g. .novel/design/draft.md). Results use cat -n format with line numbers starting at 1. Optionally provide a 0-indexed line offset and a positive limit.",
       parameters: FileReadParametersSchema,
       promptDetails: new ToolPromptDetails({
-        usage: "Use Read to review the current design draft content.",
+        usage: "Use Read to review files inside the workspace (e.g., the current design draft).",
         parameterGuidance:
-          "file_path is required; pass offset/limit to read a slice of a long file.",
-        safetyGuidance: "Read-only; paths are confined to the design directory.",
+          "file_path is required and must be workspace-relative; pass offset/limit to read a slice of a long file.",
+        safetyGuidance: "Read-only; file_path must stay inside the workspace sandbox.",
       }),
     },
     handler: {

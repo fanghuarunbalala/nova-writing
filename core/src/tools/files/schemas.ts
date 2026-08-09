@@ -20,7 +20,7 @@ export const FileReadParametersSchema = Type.Object(
 );
 export type FileReadArguments = Static<typeof FileReadParametersSchema>;
 
-/** Glob 参数：设计目录内的匹配模式。Glob arguments: a pattern inside the design directory. */
+/** Glob 参数：workspace 沙盒内的匹配模式。Glob arguments: a pattern inside the workspace sandbox. */
 export const FileGlobParametersSchema = Type.Object(
   {
     pattern: Type.String({ minLength: 1, maxLength: PATH_MAX }),

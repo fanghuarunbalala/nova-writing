@@ -280,9 +280,9 @@ export function createNovelConversationManifestComposition(
     }).list(),
     ...createFileToolRegistry({
       service: new FileToolService({
-        // 仅 manifest 装配用桩：designRoot 指向不可用路径，工具不会真正执行。
-        // Stub for manifest assembly only: an unavailable designRoot that never executes.
-        designRoot: "/unavailable/design",
+        // 仅 manifest 装配用桩：sandboxRoot 指向不可用路径，工具不会真正执行。
+        // Stub for manifest assembly only: an unavailable sandboxRoot that never executes.
+        sandboxRoot: "/unavailable",
       }),
     }).list(),
     ...createNovelOutlineToolRegistry({

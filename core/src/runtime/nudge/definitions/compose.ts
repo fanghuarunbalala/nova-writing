@@ -7,6 +7,7 @@
  * （第 1/6/11… 次交付 full）；退出时 acknowledge compose_mode +
  * schedule 一次性 compose_mode_exit。
  */
+import * as path from "node:path";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import {
   RUNTIME_POLICY_PHASE,
@@ -50,7 +51,7 @@ export const COMPOSE_MODE_ACKNOWLEDGEMENT_REF: NudgeAcknowledgementReference =
   });
 
 const COMPOSE_MODE_SPARSE_TEXT =
-  "仍在设计模式：正式稿只读，仅设计草稿文件可写；完成后调用 **ExitComposeMode** 提交审批。";
+  "仍在设计模式：正式稿只读；请用 workspace 相对路径在 `.novel/design/` 维护草稿，完成后调用 **ExitComposeMode** 提交审批。";
 
 const COMPOSE_MODE_EXIT_TEXT = [
   "# 设计模式已结束",
@@ -169,7 +170,11 @@ function createComposeModeNudgeEffect(
       phase: compose.phase,
       ...(compose.designFilePath === undefined
         ? {}
-        : { designFilePath: compose.designFilePath }),
+        : {
+            // 给 agent 的路径一律 workspace 相对（绝对路径会被 FileToolService 拒绝）。
+            // Paths shown to the agent are workspace-relative (absolute paths are rejected).
+            designFilePath: designFileWorkspaceRelativePath(compose.designFilePath),
+          }),
     }),
     cooldownTurns: COMPOSE_MODE_COOLDOWN_TURNS,
     exclusive: true,
@@ -240,12 +245,18 @@ export const composeModeExitNudgeDefinition: NudgeDefinition = Object.freeze({
   template: composeModeExitNudgeTemplate,
 });
 
+/** 绝对 design 文件路径 → workspace 相对路径（`.novel/design/<id>.md`，正斜杠）。 */
+/** Absolute design file path -> workspace-relative (`.novel/design/<id>.md`, forward slashes). */
+export function designFileWorkspaceRelativePath(designFilePath: string): string {
+  return path.join(".novel", "design", path.basename(designFilePath)).split(path.sep).join("/");
+}
+
 /** EnterComposeMode tool_result 与模板共用的约束全文。 */
 export function renderComposeModeFullText(designFilePath?: string): string {
   return [
     "# 设计模式（Compose Mode）",
     "当前处于**设计模式**：",
-    "- 正式稿只读：canonical 写入工具会被拒绝，**唯一可写的是当前会话的设计草稿文件**（Read/Glob 可在草稿目录内调研，Write/Edit 仅限设计文件）。",
+    "- 正式稿只读：canonical 写入工具会被拒绝；文件工具（Read/Glob/Write/Edit）全模式可用，路径一律用 **workspace 相对路径**（越出 workspace 沙盒会报错），草稿请维护在 `.novel/design/` 设计目录。",
     "- 逐步写出你要创作的内容（大纲或正文），用 Write/Edit 增量完善草稿。",
     "- 草稿完成后调用 **ExitComposeMode** 提交审批；**不要用文本询问审批**。",
     "- 如果作者拒绝了草稿：按反馈修订草稿文件后重新提交，**不要原样重试**。",

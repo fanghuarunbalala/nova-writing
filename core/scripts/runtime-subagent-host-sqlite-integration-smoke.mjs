@@ -131,7 +131,7 @@ function createAgentAssembler(workspaceStore) {
       ...novelParagraphToolRegistry.list(),
       ...novelPublicationToolRegistry.list(),
       ...novelDeleteToolRegistry.list(),
-      ...createFileToolRegistry({ service: new FileToolService({ designRoot: "/unavailable/design" }) }).list(),
+      ...createFileToolRegistry({ service: new FileToolService({ sandboxRoot: "/unavailable" }) }).list(),
       ...createNovelComposeToolRegistry({ service: new ComposeToolService({ composeState: new ComposeModeStateProvider(), designRoot: "/unavailable/design" }) }).list(),
     ]),
     groups: new ToolGroupCatalog([

@@ -121,9 +121,12 @@ export interface CreateChildNovelToolRegistryOptions {
   readonly todoWriter: ConversationTodoWriter;
   readonly composeState: ComposeModeStateProvider;
   readonly eventSink: RuntimeEventSink;
-  /** 工作区 .novel/design 目录绝对路径（runtime.files 读作用域）。 */
-  /** Absolute path to the workspace design directory (runtime.files read scope). */
+  /** 工作区 .novel/design 目录绝对路径（design 草稿文件位置）。 */
+  /** Absolute path to the workspace design directory (design draft location). */
   readonly designRoot: string;
+  /** workspace 根目录绝对路径（runtime.files 沙盒根；file ops 用 workspace 相对路径）。 */
+  /** Absolute path to the workspace root (runtime.files sandbox root; file ops use relative paths). */
+  readonly sandboxRoot: string;
   /** 会话 mode + compose 子状态持久化端口(可选;传了才能持久化/恢复 mode)。 */
   readonly conversations?: ConversationModePersistencePort;
   readonly logger?: Logger;
@@ -147,6 +150,7 @@ export async function openChildNovelToolRegistry(
     storageRoot: options.storageRoot,
   }).resolve(options.workdir);
   const designRoot = path.join(workspace.workspaceRoot, ".novel", "design");
+  const sandboxRoot = workspace.workspaceRoot;
   const location = await new NodeNovelStoreLocator().resolve(workspace);
   const canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
@@ -163,6 +167,7 @@ export async function openChildNovelToolRegistry(
     location,
     novelId,
     designRoot,
+    sandboxRoot,
     todoWriter: options.todoWriter,
     composeState: options.composeState,
     eventSink: options.eventSink,
@@ -237,7 +242,7 @@ export function createChildNovelToolRegistry(
       logger,
     }).list(),
     ...createFileToolRegistry({
-      service: new FileToolService({ designRoot: options.designRoot }),
+      service: new FileToolService({ sandboxRoot: options.sandboxRoot }),
       logger,
     }).list(),
     ...createNovelOutlineToolRegistry({

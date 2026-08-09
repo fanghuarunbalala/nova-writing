@@ -1,6 +1,8 @@
 /**
  * runtime.files 注册表冒烟：工具注册、descriptor、handler 接线。
  * Registry smoke for runtime.files: registration, descriptors, handler wiring.
+ *
+ * 语义（2026-08 修正）：沙盒根 = workspace 根；file ops 用 workspace 相对路径。
  */
 import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
@@ -15,12 +17,12 @@ import {
 } from "../dist/tools/files/index.js";
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "file-registry-smoke-"));
-const design = path.join(root, "design");
+const design = path.join(root, ".novel", "design");
 await fs.mkdir(design, { recursive: true });
 const designFile = path.join(design, "chapter-1.md");
 await fs.writeFile(designFile, "第一行\n第二行\n", "utf8");
 
-const service = new FileToolService({ designRoot: design, designFilePath: designFile });
+const service = new FileToolService({ sandboxRoot: root });
 const registry = createFileToolRegistry({ service });
 
 assert.equal(registry.size, 4);
@@ -46,11 +48,11 @@ const context = {
   signal: new AbortController().signal,
 };
 
-// Read handler：正常读取 + 越界路径映射为 ToolError（permission 类）。
+// Read handler：正常读取（相对路径）+ 越界/绝对路径映射为 ToolError（permission 类）。
 const read = registry.require("Read");
 const result = await read.handler.execute(
   context,
-  { file_path: designFile },
+  { file_path: ".novel/design/chapter-1.md" },
   noopToolProgressSink,
 );
 assert.equal(result.details.totalLines, 3);
@@ -59,17 +61,25 @@ assert.match(result.content[0].text, /^1\t第一行/);
 await assert.rejects(
   read.handler.execute(
     context,
-    { file_path: path.join(root, "outside.md") },
+    { file_path: "../outside.md" },
+    noopToolProgressSink,
+  ),
+  (error) => error.code === FILE_TOOL_ERROR_CODE.pathForbidden,
+);
+await assert.rejects(
+  read.handler.execute(
+    context,
+    { file_path: designFile },
     noopToolProgressSink,
   ),
   (error) => error.code === FILE_TOOL_ERROR_CODE.pathForbidden,
 );
 
-// Write handler：写入后 Read 可见。
+// Write handler：写入（相对路径）后 Read 可见。
 const write = registry.require("Write");
 await write.handler.execute(
   context,
-  { file_path: designFile, content: "新正文\n" },
+  { file_path: ".novel/design/chapter-1.md", content: "新正文\n" },
   noopToolProgressSink,
 );
 assert.equal(await fs.readFile(designFile, "utf8"), "新正文\n");
@@ -78,7 +88,7 @@ assert.equal(await fs.readFile(designFile, "utf8"), "新正文\n");
 const edit = registry.require("Edit");
 await edit.handler.execute(
   context,
-  { file_path: designFile, old_string: "正文", new_string: "章节" },
+  { file_path: ".novel/design/chapter-1.md", old_string: "正文", new_string: "章节" },
   noopToolProgressSink,
 );
 assert.equal(await fs.readFile(designFile, "utf8"), "新章节\n");

@@ -1,5 +1,5 @@
-/** File Write 工具：整文件原子写入 design 文件。 */
-/** File Write tool: atomic full-file write to the design file. */
+/** File Write 工具：整文件原子写入 workspace 沙盒内文件。 */
+/** File Write tool: atomic full-file write to a file inside the workspace sandbox. */
 import { noopLogger, type Logger } from "../../observability/index.js";
 import { ToolError } from "../../runtime/tools/execution/index.js";
 import {
@@ -37,13 +37,13 @@ export function createFileWriteTool(
       version: "1.0.0",
       label: "File Write",
       description:
-        "Write full content to the current conversation's design file. Only the design file is writable during compose mode.",
+        "Write full content to a file inside the workspace directory using a workspace-relative path (e.g. .novel/design/draft.md). Any path within the workspace sandbox is writable.",
       parameters: FileWriteParametersSchema,
       promptDetails: new ToolPromptDetails({
-        usage: "Use Write to replace the whole design draft with new content.",
+        usage: "Use Write to replace a whole workspace file (e.g., the design draft) with new content.",
         parameterGuidance:
-          "file_path must be the current conversation's design file; content is written atomically.",
-        safetyGuidance: "Only the current design file is writable; other paths are rejected.",
+          "file_path must be a workspace-relative path inside the workspace sandbox; content is written atomically.",
+        safetyGuidance: "Writes outside the workspace sandbox are rejected.",
       }),
     },
     handler: {

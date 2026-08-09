@@ -1,11 +1,11 @@
 /**
- * Compose 感知的权限包装策略：compose 激活时拒绝 canonical 写入并限定文件工具作用域，
- * 非激活时透传基础策略（恢复进入前的权限行为）。
- * Compose-aware permission wrapper: while compose is active it denies canonical
- * writes and scopes file tools; otherwise it passes through to the base policy.
+ * Compose 感知的权限包装策略：compose 激活时拒绝 canonical 写入，否则透传基础策略
+ * （含 bypass 直接执行模式）。文件工具（Read/Glob/Write/Edit）**全模式可用**，不再
+ * 按 compose 状态门控——作用域由 FileToolService 以 workspace 沙盒强制（越界 pathForbidden）。
+ * Compose-aware permission wrapper: while compose is active it denies canonical writes;
+ * otherwise it passes through to the base policy (including bypass mode). File tools are
+ * available in all modes; scope is enforced by FileToolService via the workspace sandbox.
  */
-import * as path from "node:path";
-import type { ComposeModeSnapshot } from "../../compose/index.js";
 import { ComposeModeStateProvider } from "../../compose/index.js";
 import type {
   ToolPermissionDecision,
@@ -31,58 +31,6 @@ const CANONICAL_NOVEL_WRITES: ReadonlySet<string> = new Set([
   "NovelChapterEdit",
   "NovelDelete",
 ]);
-
-/** runtime.files 工具。File tools. */
-const FILE_TOOLS: ReadonlySet<string> = new Set(["Read", "Glob", "Write", "Edit"]);
-
-/** Compose 模式下文件工具作用域判定：读∈design 目录、写==design 文件、Glob 模式安全。 */
-/** File-tool scope check while compose is active. */
-function fileToolInScope(
-  toolName: string,
-  arguments_: unknown,
-  snapshot: ComposeModeSnapshot,
-): boolean {
-  if (snapshot.designFilePath === undefined) return false;
-  const designRoot = path.dirname(snapshot.designFilePath);
-  if (toolName === "Read") {
-    const filePath = readString(arguments_, "file_path");
-    return filePath !== undefined && isInside(designRoot, path.resolve(filePath));
-  }
-  if (toolName === "Write" || toolName === "Edit") {
-    const filePath = readString(arguments_, "file_path");
-    return (
-      filePath !== undefined &&
-      path.resolve(filePath) === path.resolve(snapshot.designFilePath)
-    );
-  }
-  if (toolName === "Glob") {
-    const pattern = readString(arguments_, "pattern");
-    return (
-      pattern !== undefined &&
-      !path.isAbsolute(pattern) &&
-      !pattern.split(/[\\/]/).includes("..")
-    );
-  }
-  return false;
-}
-
-function readString(value: unknown, key: string): string | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
-  const candidate = (value as Record<string, unknown>)[key];
-  return typeof candidate === "string" ? candidate : undefined;
-}
-
-function isInside(root: string, candidate: string): boolean {
-  // 先 resolve 两侧:Windows 下 dirname 的 POSIX 根与 resolve 后的盘符路径分隔符不一致。
-  // Resolve both sides first: on Windows the POSIX root from dirname and the
-  // drive-qualified resolve() result differ in separators.
-  const resolvedRoot = path.resolve(root);
-  const resolvedCandidate = path.resolve(candidate);
-  return (
-    resolvedCandidate === resolvedRoot ||
-    resolvedCandidate.startsWith(`${resolvedRoot}${path.sep}`)
-  );
-}
 
 function deny(ruleId: string): ToolPermissionDecision {
   return Object.freeze({
@@ -116,13 +64,6 @@ export class ComposeAwareToolPermissionPolicy implements ToolPermissionPolicy {
       const toolName = evaluation.invocation.toolName;
       if (CANONICAL_NOVEL_WRITES.has(toolName)) {
         return deny("compose.canonical_write_denied");
-      }
-      if (FILE_TOOLS.has(toolName)) {
-        // compose 激活时，作用域内文件工具直接放行；越界拒绝。
-        // While compose is active, in-scope file tools are allowed; out-of-scope denied.
-        return fileToolInScope(toolName, evaluation.invocation.arguments, snapshot)
-          ? allow("compose.file_in_scope")
-          : deny("compose.file_outside_design");
       }
     } else if (snapshot.mode === "bypass") {
       // 直接执行模式:canonical 写跳过审批直接放行;其余工具(含读/进入)落 base,

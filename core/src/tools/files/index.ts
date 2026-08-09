@@ -31,7 +31,7 @@ export const RUNTIME_FILES_TOOL_GROUP_MANIFEST: ToolGroupManifest =
     version: "1.0.0",
     label: "Runtime Files",
     description:
-      "Read, Glob, Write, and Edit design-directory files during compose mode.",
+      "Read, Glob, Write, and Edit workspace files (workspace-relative paths, sandboxed to the workspace root).",
     tools: Object.freeze(["Read", "Glob", "Write", "Edit"]),
   });
 

@@ -7,14 +7,15 @@
  * 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right 收起），
  * 开合切换 .open class 触发过渡（非条件渲染）。宽度由 --insp-w 决定——
  * 默认取 tokens 860px，响应式收窄由媒体查询覆盖；用户拖拽时写 inline
- * --insp-w（仅拖过才写，未拖交给 CSS）。面板内审批目录在窄宽度下
- * （@container ≤600px）折叠为左侧滑出抽屉（drawerOpen 状态）。
+ * --insp-w（仅拖过才写，未拖交给 CSS）。
  *
- * insp-head 的 kicker 按 panel 类型动态显示标签；close 触发 inspectorRouter.close()。
+ * insp-head（对齐原型）：标题（.insp-title，按面板类型显示「审批/档案/大纲单元/
+ * 对话元信息」）+ 审批模式下「目录 N」按钮（点击弹出覆盖抽屉，drawerOpen 状态）+
+ * kicker + close。面板内审批目录始终为左侧滑出覆盖抽屉（无常驻列），
+ * 选中条目自动收起。close 触发 inspectorRouter.close()。
  */
 import {
   useCallback,
-  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -44,6 +45,14 @@ const KICKER_BY_KIND: Record<string, string> = {
   approval: "审批参数 · 变更集不可变，批准执行后才产出差异",
 };
 
+/** 面板标题（原型 .insp-title，无 tab 切换，模式由入口决定）。 */
+const TITLE_BY_KIND: Record<string, string> = {
+  approval: "审批",
+  entity: "档案",
+  outlineUnit: "大纲单元",
+  conversation: "对话元信息",
+};
+
 export interface InspectorHostProps {
   readonly inspectorRouter: InspectorRouter;
   readonly conversationCatalog: ConversationCatalogStore;
@@ -67,28 +76,12 @@ export function InspectorHost({
   onJumpToConversation,
 }: InspectorHostProps) {
   const route = useInspectorRoute(inspectorRouter);
-  const [tab, setTab] = useState<"approval" | "detail">("approval");
   const [draggedW, setDraggedW] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const widthRef = useRef<number | null>(null);
   const approvalSnapshot = useExternalStore(approvalStore);
   // 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right 收起）。
   const open = route.state.kind !== "closed";
-  useEffect(() => {
-    console.info("[inspector] host route changed", {
-      kind: route.state.kind,
-      tab,
-    });
-    if (
-      route.state.kind === "entity" ||
-      route.state.kind === "outlineUnit" ||
-      route.state.kind === "conversation"
-    ) {
-      setTab("detail");
-    } else if (route.state.kind === "approval") {
-      setTab("approval");
-    }
-  }, [route.state.kind, tab]);
 
   // 拖拽调宽（对齐原型 JS）：≤860 不拖；minW 560/340、maxW min(1120, vw-520)。
   const handleResize = useCallback((delta: number) => {
@@ -108,6 +101,7 @@ export function InspectorHost({
     conversationCatalog.getSnapshot().workspaceId ??
     outlineTree.getSnapshot().workspaceId;
   const kicker = KICKER_BY_KIND[route.state.kind] ?? "详情";
+  const title = TITLE_BY_KIND[route.state.kind] ?? "详情";
   return (
     <aside
       className={[styles.host, open ? styles.open : ""].filter(Boolean).join(" ")}
@@ -129,34 +123,22 @@ export function InspectorHost({
       {open ? (
         <>
           <header className={styles.head}>
-            <div className={styles.tabs} role="tablist" aria-label="右侧面板">
+            <h3 className={styles.inspTitle}>{title}</h3>
+            {route.state.kind === "approval" ? (
               <button
                 type="button"
-                className={[styles.tab, tab === "approval" ? styles.tabActive : ""].filter(Boolean).join(" ")}
-                onClick={() => setTab("approval")}
-                aria-selected={tab === "approval"}
-                role="tab"
+                className={styles.listToggle}
+                onClick={() => setDrawerOpen((value) => !value)}
+                aria-expanded={drawerOpen}
+                aria-controls="approval-directory"
               >
-                审批
+                目录
                 {approvalSnapshot.pendingCount > 0 ? (
-                  <span className={styles.countPill}>{approvalSnapshot.pendingCount} 待审</span>
+                  <span className={styles.ltCnt}>{approvalSnapshot.pendingCount}</span>
                 ) : null}
               </button>
-              {route.state.kind !== "approval" ? (
-                <button
-                  type="button"
-                  className={[styles.tab, tab === "detail" ? styles.tabActive : ""].filter(Boolean).join(" ")}
-                  onClick={() => setTab("detail")}
-                  aria-selected={tab === "detail"}
-                  role="tab"
-                >
-                  档案
-                </button>
-              ) : null}
-            </div>
-            <span className={styles.kicker}>
-              {tab === "approval" ? KICKER_BY_KIND.approval : kicker}
-            </span>
+            ) : null}
+            <span className={styles.kicker}>{kicker}</span>
             <button
               type="button"
               className={styles.close}
@@ -167,7 +149,7 @@ export function InspectorHost({
             </button>
           </header>
           <div className={styles.body}>
-            {tab === "approval" ? (
+            {route.state.kind === "approval" ? (
               <ApprovalPanel
                 store={approvalStore}
                 conversationLabels={new Map(

@@ -32,8 +32,10 @@
   border-radius: 16px;
   background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
   color: var(--color-accent-ink);
+  /* 用户要求正文用黑体（--font-ui），配合 medium 字重提升可读性。 */
+  font-family: var(--font-ui);
   font-size: 15px;
-  font-weight: var(--fw-regular);
+  font-weight: var(--fw-medium);
   line-height: 1.75;
   text-align: left;
   text-wrap: pretty;

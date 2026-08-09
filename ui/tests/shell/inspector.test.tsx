@@ -105,13 +105,14 @@ describe("InspectorHost", () => {
     expect(screen.getByText("第一卷")).toBeInTheDocument();
   });
 
-  it("renders approval tabs and empty panel for approval route", async () => {
+  it("renders approval header title, directory toggle and empty panel for approval route", async () => {
     const stores = await makeStores();
     const router = new InspectorRouter();
     router.transition({ kind: "approval", changeSetId: "CS-1" });
     render(<InspectorHost inspectorRouter={router} {...stores} />);
-    expect(screen.getByRole("tab", { name: "审批" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "档案" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "审批" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /目录/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     expect(screen.getByText("暂无审批请求")).toBeInTheDocument();
   });
 
@@ -182,7 +183,7 @@ describe("InspectorHost", () => {
     render(<InspectorHost inspectorRouter={router} {...stores} />);
     const panel = document.querySelector(".panel") as HTMLElement;
     expect(panel.classList.contains("drawerOpen")).toBe(false);
-    await user.click(screen.getByRole("button", { name: /审批队列/ }));
+    await user.click(screen.getByRole("button", { name: /目录/ }));
     expect(panel.classList.contains("drawerOpen")).toBe(true);
     await user.click(screen.getByRole("button", { name: /新增第一章/ }));
     expect(panel.classList.contains("drawerOpen")).toBe(false);

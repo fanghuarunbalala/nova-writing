@@ -7,8 +7,8 @@
  *
  * v2 原型对齐：删除悬浮预览（.apprHover）与内部标识（.id/.csId/◈ 不可变），
  * 目录按对话分组（.apprGroup + .agJump「跳转」），diff 区标题与 op kind 中文化。
- * 窄面板（inspector ≤600px，@container）下目录折叠为左侧滑出抽屉：
- * 由宿主传入 drawerOpen/onToggleDrawer，选中条目自动收起。
+ * 目录始终为左侧滑出覆盖抽屉（无常驻列），触发按钮「目录 N」在 InspectorHost
+ * 头部；宿主传入 drawerOpen/onToggleDrawer，选中条目自动收起。
  *
  * Approval panel: per-turn grouped request list on top, group detail below
  * with merged op rows, full arguments, and approve/reject across the group.
@@ -25,7 +25,7 @@ export interface ApprovalPanelProps {
   readonly conversationLabels?: ReadonlyMap<string, string>;
   /** 目录「跳转」：切换主视图到该对话（应用层负责 select + transition）。 */
   readonly onJumpToConversation?: (conversationId: string) => void;
-  /** 窄面板抽屉是否展开（@container ≤600px 时使用）。 */
+  /** 目录覆盖抽屉是否展开。 */
   readonly drawerOpen?: boolean;
   readonly onToggleDrawer?: (open: boolean) => void;
 }
@@ -298,16 +298,6 @@ export function ApprovalPanel({
         .filter(Boolean)
         .join(" ")}
     >
-      <button
-        type="button"
-        className={styles.listToggle}
-        onClick={() => onToggleDrawer?.(true)}
-        aria-expanded={drawerOpen}
-        aria-controls="approval-directory"
-      >
-        审批队列
-        <span className={styles.cnt}>{groups.length}</span>
-      </button>
       <div
         className={styles.scrim}
         onClick={() => onToggleDrawer?.(false)}

@@ -2,7 +2,7 @@
  * AssistantMessage
  *
  * 助手消息（原型 .msg.assistant）：无头像，head 只保留 approval-state 状态
- * 标签；正文 + 思考块（ThinkBlock）+ 结构化卡片。
+ * 标签；正文 + 思考指示（ThinkingIndicator，流式思考期间显示）+ 结构化卡片。
  * 卡片通过 ConversationCardRendererRegistry 渲染。
  */
 import { createDefaultConversationCardRendererRegistry } from "../cards/defaultRenderers.js";
@@ -20,7 +20,7 @@ import { AssistantMarkdown } from "./assistantContent/AssistantMarkdown.js";
 import { RuntimeEventFlow } from "./RuntimeEventFlow.js";
 import { ToolStrip } from "./ToolStrip.js";
 import type { MessageReference } from "./MessageReference.js";
-import { ThinkBlock } from "./ThinkBlock.js";
+import { ThinkingIndicator } from "./ThinkingIndicator.js";
 import styles from "./AssistantMessage.module.css";
 
 export type AssistantApprovalState =
@@ -88,7 +88,7 @@ export function AssistantMessage({
             </span>
           </div>
         ) : null}
-        {thinkLines.length > 0 ? <ThinkBlock lines={thinkLines} expanded={streaming} streaming={streaming} onToggle={() => undefined} /> : null}
+        {streaming && thinkLines.length > 0 ? <ThinkingIndicator /> : null}
         <div className={styles.text}>
           <AssistantMarkdown
             text={text}

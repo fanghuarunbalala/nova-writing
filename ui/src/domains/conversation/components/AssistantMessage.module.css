@@ -38,7 +38,10 @@
 
 .text {
   margin-top: 7px;
+  /* 用户要求正文用黑体（--font-ui），配合 medium 字重提升可读性。 */
+  font-family: var(--font-ui);
   font-size: 15px;
+  font-weight: var(--fw-medium);
   line-height: 1.75;
   color: var(--color-fg);
   text-wrap: pretty;

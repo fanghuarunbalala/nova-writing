@@ -15,7 +15,6 @@ export * from "./NewConversationButton.js";
 export * from "./ProposalBlock.js";
 export * from "./ProposalOp.js";
 export * from "./RuntimeEventFlow.js";
-export * from "./ThinkBlock.js";
-export * from "./ThinkLine.js";
+export * from "./ThinkingIndicator.js";
 export * from "./ToolStrip.js";
 export * from "./UserMessage.js";

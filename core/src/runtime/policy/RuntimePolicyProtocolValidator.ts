@@ -121,10 +121,15 @@ function captureComposeModeSnapshot(value: unknown): ComposeModeSnapshot {
 
 function captureTodoSignals(
   value: unknown,
-): { readonly inProgressCount: number } {
+): { readonly inProgressCount: number; readonly lastUpdatedRunId?: string } {
   const record = requireRecord(value);
+  const lastUpdatedRunId =
+    record.lastUpdatedRunId === undefined
+      ? undefined
+      : requireNonBlank(record.lastUpdatedRunId);
   return Object.freeze({
     inProgressCount: requireNonNegativeInteger(record.inProgressCount),
+    ...(lastUpdatedRunId === undefined ? {} : { lastUpdatedRunId }),
   });
 }
 

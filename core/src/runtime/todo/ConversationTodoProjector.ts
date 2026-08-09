@@ -21,6 +21,7 @@ export class ConversationTodoProjector {
       revision: payload.revision,
       todos: captureTodoItems(payload.todos),
       updatedAt: payload.updatedAt,
+      ...(event.runId === undefined ? {} : { lastUpdatedRunId: event.runId }),
     });
     const current = await this.store.read(snapshot.conversationId);
     if (current !== undefined && current.revision >= snapshot.revision) {

@@ -72,7 +72,7 @@ import {
 export interface PiRuntimeSignalsProvider {
   readonly compose?: () => Promise<ComposeModeSnapshot>;
   readonly todos?: () => Promise<
-    Readonly<{ inProgressCount: number }> | undefined
+    Readonly<{ inProgressCount: number; lastUpdatedRunId?: string }> | undefined
   >;
 }
 
@@ -398,6 +398,16 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         signal,
       });
     } catch {
+      // 用户取消期间：provider 被 abort 后可能残留桥错误（如 stopping turn 上的
+      // message_start 竞态）。取消结局由 resolveOutcome 统一落为 cancelled，吞掉桥
+      // 错误即可避免 conversation 崩溃；debug 级、不含原始 error 内容（脱敏）。
+      if (active.cancelRequested) {
+        this.logger.debug("runtime.agent.event_barrier_deferred_cancellation", {
+          conversationId: active.request.conversationId,
+          runId: active.request.runId,
+        });
+        return;
+      }
       const failure = this.fail(
         PI_AGENT_CORE_ADAPTER_FAILURE.eventBarrier,
         active.request.conversationId,

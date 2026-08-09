@@ -56,6 +56,7 @@ import {
   RuntimePolicyEngine,
   TODO_STATUS,
   type NudgeLifecycleEventIdFactory,
+  type NudgeLifecycleEventIdInput,
   type NudgeProviderCallCoordinator as NudgeProviderCallCoordinatorType,
   RuntimeStartupExecutor,
   RuntimeStartupReconciler,
@@ -81,8 +82,10 @@ import type { RuntimePersistencePorts } from "../../../runtime/ipc/index.js";
 import { createNovelConversationManifestComposition } from "../../agent/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { createCoreEventSchemaRegistry } from "../../../event/index.js";
+import { OUTPUT_EVENT_TYPE } from "../../../event/output/OutputEventType.js";
 import {
   ConversationTodoCoordinator,
+  ConversationTodoProjector,
   InMemoryConversationTodoStore,
 } from "../../../runtime/todo/index.js";
 import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
@@ -245,6 +248,9 @@ export class DesktopRuntimeChildCompositionFactory
     });
     const clock = { now: () => new Date().toISOString() };
     const todoStore = new InMemoryConversationTodoStore();
+    // 从 journal 重放 todo 事件到进程内 store：跨进程重启后 todo_idle 仍能读到
+    // 最后一次 TodoWrite 的 runId（lastUpdatedRunId），继续跨 run 轮次计数。
+    await replayConversationTodos(journal, conversationId, todoStore);
     const todoWriter = new ConversationTodoCoordinator({
       store: todoStore,
       eventSink,
@@ -374,6 +380,9 @@ export class DesktopRuntimeChildCompositionFactory
                 inProgressCount: snapshot.todos.filter(
                   (todo) => todo.status === TODO_STATUS.inProgress,
                 ).length,
+                ...(snapshot.lastUpdatedRunId === undefined
+                  ? {}
+                  : { lastUpdatedRunId: snapshot.lastUpdatedRunId }),
               },
         ),
     });
@@ -576,6 +585,32 @@ class ChildRuntimeJournalReader implements ConversationJournalReader {
   }
 }
 
+/** 重放某 conversation 的全部 todo.updated 输出事件到进程内 store（跨进程恢复）。 */
+async function replayConversationTodos(
+  journal: ChildRuntimeJournalReader,
+  conversationId: string,
+  todoStore: InMemoryConversationTodoStore,
+): Promise<void> {
+  const projector = new ConversationTodoProjector(todoStore);
+  let cursor: number | undefined;
+  do {
+    const page = await journal.list({
+      conversationId,
+      anchor:
+        cursor === undefined ? { from: "start" } : { afterSequence: cursor },
+      direction: "output",
+      eventTypes: [OUTPUT_EVENT_TYPE.agentTodoUpdated],
+      limit: 500,
+    });
+    for (const event of page.events) {
+      if (event.direction !== "output") continue;
+      await projector.apply(event);
+    }
+    cursor = page.highWatermark;
+    if (!page.hasNext) break;
+  } while (true);
+}
+
 class ChildRuntimeOutputPublisher implements ConversationOutputEventPublisher {
   constructor(
     private readonly persistence: RuntimePersistencePorts,
@@ -643,16 +678,16 @@ function createChildNudgeAssembly(options: {
   return { coordinator, manager, templates };
 }
 
-class ChildNudgeLifecycleEventIdFactory implements NudgeLifecycleEventIdFactory {
-  #count = 0;
-
-  create(input: {
-    readonly conversationId: string;
-    readonly runId: string;
-    readonly eventType: string;
-    readonly nudgeId: string;
-  }): string {
-    this.#count += 1;
-    return `nudge_event_${input.nudgeId}_${this.#count}`;
+/**
+ * 生成 nudge 生命周期事件 id。基于 providerCallId（每次 provider call 唯一，跨进程
+ * 也唯一）而不是进程内计数器——计数重启归零曾导致同一 id 重复、journal append
+ * 冲突（JournalEventConflictError）拖垮整个 run。事件 payload 携带同一
+ * providerCallId，id↔payload 1:1，便于日志关联。
+ * Generates nudge lifecycle event ids keyed on providerCallId (unique per provider
+ * call, across process restarts) instead of a process-local counter.
+ */
+export class ChildNudgeLifecycleEventIdFactory implements NudgeLifecycleEventIdFactory {
+  create(input: NudgeLifecycleEventIdInput): string {
+    return `nudge_event_${input.nudgeId}_${input.providerCallId}`;
   }
 }

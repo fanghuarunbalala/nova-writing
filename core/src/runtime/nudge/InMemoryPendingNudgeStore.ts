@@ -78,14 +78,37 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
       const captured = this.captureScheduledNudge(nudge);
       const existingById = this.nudges.get(captured.id);
       if (existingById) {
-        if (!sameScheduledIdentity(existingById, captured)) {
+        if (existingById.targetRunId === captured.targetRunId) {
+          if (!sameScheduledIdentity(existingById, captured)) {
+            throw this.failure(
+              PENDING_NUDGE_STORE_FAILURE.nudgeConflict,
+              captured.id,
+              captured.targetRunId,
+            );
+          }
+          return freezeScheduleResult(NUDGE_SCHEDULE_OUTCOME.unchanged, existingById);
+        }
+        // 跨 run 重新激活：同一 nudgeId 在旧 run 调度过，现为新 run 重新调度。
+        // 在途（已 lease/已 applied）不覆盖，fail fast；其余（含 consumed 等终态）
+        // 清掉旧记录后整条替换——select 硬绑定 targetRunId，死 target 永不重选中。
+        if (
+          existingById.state === PENDING_NUDGE_STATE.leased ||
+          existingById.state === PENDING_NUDGE_STATE.applied
+        ) {
           throw this.failure(
             PENDING_NUDGE_STORE_FAILURE.nudgeConflict,
             captured.id,
             captured.targetRunId,
           );
         }
-        return freezeScheduleResult(NUDGE_SCHEDULE_OUTCOME.unchanged, existingById);
+        this.removeNudgeRecords(captured.id);
+        this.nudges.set(captured.id, captured);
+        this.logger.info("runtime.nudge.store_reactivated", {
+          nudgeId: captured.id,
+          targetRunId: captured.targetRunId,
+          scheduledSequence: captured.scheduledSequence,
+        });
+        return freezeScheduleResult(NUDGE_SCHEDULE_OUTCOME.scheduled, captured);
       }
 
       const existingByDedupe = [...this.nudges.values()].find(
@@ -1040,6 +1063,24 @@ export class InMemoryPendingNudgeStore implements PendingNudgeStore {
     const next = [...attempts];
     next[actualIndex] = updated;
     this.deliveryAttempts.set(nudgeId, Object.freeze(next));
+  }
+
+  /** 清理某 nudge 的全部关联记录（跨 run 重新激活前调用），保住 snapshot/restore 不变式：
+   *  consumption 的 nudge 必须 consumed、deliveryTurn/deliveryAttempt 的 targetRunId 必须匹配。 */
+  private removeNudgeRecords(nudgeId: string): void {
+    this.consumptions.delete(nudgeId);
+    this.deliveredTurns.delete(nudgeId);
+    this.deliveryAttempts.delete(nudgeId);
+    for (const [providerCallId, result] of this.consumedCalls) {
+      if (result.lease.nudgeIds.includes(nudgeId)) {
+        this.consumedCalls.delete(providerCallId);
+      }
+    }
+    for (const [providerCallId, result] of this.releasedCalls) {
+      if (result.nudgeIds.includes(nudgeId)) {
+        this.releasedCalls.delete(providerCallId);
+      }
+    }
   }
 
   private captureScheduledNudge(nudge: PendingNudge): PendingNudge {

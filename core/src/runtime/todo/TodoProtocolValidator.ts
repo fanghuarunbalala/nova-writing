@@ -40,11 +40,13 @@ export function captureConversationTodoSnapshot(
   const conversationId = captureIdentity(value.conversationId, "Conversation ID");
   const revision = captureRevision(value.revision);
   const updatedAt = captureIdentity(value.updatedAt, "Todo update time");
+  const lastUpdatedRunId = captureOptionalIdentity(value.lastUpdatedRunId);
   return Object.freeze({
     conversationId,
     revision,
     todos: captureTodoItems(value.todos),
     updatedAt,
+    ...(lastUpdatedRunId === undefined ? {} : { lastUpdatedRunId }),
   });
 }
 
@@ -95,6 +97,11 @@ function captureIdentity(value: unknown, label: string): string {
     throw new TypeError(`${label} is invalid`);
   }
   return value;
+}
+
+function captureOptionalIdentity(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return captureIdentity(value, "Todo last update run ID");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

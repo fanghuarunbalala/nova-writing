@@ -9,7 +9,9 @@
  * 3. compose_mode：enter → call#1 交付 full；call#2-5 无；call#6/#11/#16/#21 稀疏；
  *    call#26 第 6 次交付再次 full（deliveryCount % 5 === 1）；exit → 一次性
  *    compose_mode_exit（once）；随后无交付。compose_mode 转为 acknowledged。
- * 4. todo_idle：in_progress 首 call 记 latch 不 fire → call#3 交付；清空 → acknowledge 关闭。
+ * 4. todo_idle：连续 ≥3 次 provider call 未调用 TodoWrite → 每 run 注入一次；
+ *    跨轮清空；TodoWrite 一调用即重置（写后重新计数，写后 3 个未写 call 仍触发）；
+ *    once 交付 + 跨 run 重新激活（store 替换而非累积）。
  * 5. 真实 CorePiRuntimeMessageConverter 把 system.reminder（kind=compose_mode）转成
  *    Pi user 消息，内容含 <system-reminder kind="compose_mode">。
  * 6. 脱敏：nudge 内容/参数不得出现在日志或事件中。
@@ -51,7 +53,7 @@ import {
 const COMPOSE_FULL_MARK = "# 设计模式（Compose Mode）";
 const COMPOSE_SPARSE_MARK = "仍在设计模式";
 const COMPOSE_EXIT_MARK = "# 设计模式已结束";
-const TODO_IDLE_MARK = "进行中的任务提醒";
+const TODO_IDLE_MARK = "待办列表维护提醒";
 const DESIGN_FILE = "design/chapter-3.md";
 
 const logs = [];
@@ -212,6 +214,34 @@ async function providerCall(runtime, ordinal, signals) {
   return prepared;
 }
 
+// 单条 provider call（显式 run）：跨 run 场景用独立 runId，policy 实例跨 run 共享。
+async function providerCallInRun(runtime, runIdValue, ordinal, signals) {
+  const providerCallId = `provider-call-${runIdValue}-${ordinal}`;
+  const evaluatedAt = `2026-08-08T00:00:${String(ordinal).padStart(2, "0")}.000Z`;
+  const context = {
+    phase: RUNTIME_POLICY_PHASE.beforeProviderCall,
+    conversationId,
+    runId: runIdValue,
+    providerCallId,
+    evaluatedAt,
+    runtimeSignals: { providerCallCount: ordinal, ...signals },
+  };
+  const state = { conversationId };
+  const effects = runtime.policyEngine.evaluate(context, state);
+  await runtime.effectCoordinator.execute({ context, effects });
+  const prepared = await runtime.coordinator.prepare({
+    conversationId,
+    runId: runIdValue,
+    providerCallId,
+    targetTurnNumber: ordinal,
+    requestedAt: evaluatedAt,
+  });
+  if (prepared !== undefined) {
+    await runtime.coordinator.confirmDispatched(prepared, evaluatedAt);
+  }
+  return prepared;
+}
+
 const composeActive = {
   compose: {
     phase: "designing",
@@ -287,30 +317,92 @@ assert.equal(
 );
 
 // ---------------------------------------------------------------------------
-// 4. todo_idle：in_progress 持续 ≥3 条 provider call 触发；清空 → acknowledge。
+// 4. todo_idle：连续 ≥3 次 provider call 未调用 TodoWrite → 每 run 注入一次；
+//    跨轮清空；写即清空（写后重新计数，写后 3 个未写 call 仍触发）。
+//    信号滞后建模：TodoWrite 在写入 call 的下一个 call 才被观察到
+//    （lastUpdatedRunId 滞后一拍），故「写入 call 本身」显示上一写入 run。
 // ---------------------------------------------------------------------------
 const todoRuntime = createNudgeRuntime(fullEffective);
-const todoInProgress = (count) => ({ todos: { inProgressCount: count } });
+const todoSignal = (lastUpdatedRunId) => ({
+  todos: { inProgressCount: 1, lastUpdatedRunId },
+});
 
-// call#1：首个 in_progress → 记 latch，不 fire。
-assert.equal(await providerCall(todoRuntime, 1, todoInProgress(1)), undefined);
-// call#2：累计 2 条，未达 3。
-assert.equal(await providerCall(todoRuntime, 2, todoInProgress(1)), undefined);
-// call#3：累计 3 条 → schedule + 交付 todo_idle。
-const todoCall3 = await providerCall(todoRuntime, 3, todoInProgress(1));
-assert.ok(todoCall3, "call#3 应交付 todo_idle");
-assert.equal(todoCall3.overlay.reminderKind, "todo_idle");
-assert.ok(todoCall3.overlay.content.includes(TODO_IDLE_MARK));
-// 清空 in_progress → acknowledge 关闭 pending；随后无交付。
+// run:seed：首个 TodoWrite，建立 snapshot（lastUpdatedRunId=run:seed）。
 assert.equal(
-  await providerCall(todoRuntime, 4, todoInProgress(0)),
+  await providerCallInRun(todoRuntime, "run:seed", 1, todoSignal("run:seed")),
   undefined,
-  "清空后不应交付",
+  "seed 写入 call 不提醒",
 );
-const todoNudge = (await todoRuntime.store.list()).find(
+// run:W：call#1 执行 TodoWrite（滞后一拍）；call#2 观察到 → 写即清空，重新计数。
+assert.equal(
+  await providerCallInRun(todoRuntime, "run:W", 1, todoSignal("run:seed")),
+  undefined,
+  "run:W 写入 call（尚未观察到）不提醒",
+);
+assert.equal(
+  await providerCallInRun(todoRuntime, "run:W", 2, todoSignal("run:W")),
+  undefined,
+  "run:W 观察到写入后计数1，不提醒",
+);
+assert.equal(
+  await providerCallInRun(todoRuntime, "run:W", 3, todoSignal("run:W")),
+  undefined,
+  "run:W 计数2，不提醒",
+);
+const todoRunW = await providerCallInRun(todoRuntime, "run:W", 4, todoSignal("run:W"));
+assert.ok(todoRunW, "run:W 写后第 3 个未写 call（计数3）应注入");
+assert.equal(todoRunW.overlay.reminderKind, "todo_idle");
+assert.ok(todoRunW.overlay.content.includes(TODO_IDLE_MARK));
+// 同 run 后续 provider call 不重复（per-run 守卫）。
+assert.equal(
+  await providerCallInRun(todoRuntime, "run:W", 5, todoSignal("run:W")),
+  undefined,
+  "同 run 不重复提醒",
+);
+// run:X：新 run，跨轮清空 → 计数重新从 1 起，第 3 个未写 call 再次注入
+//（once 交付后跨 run 重新激活，store 替换而非累积）。
+assert.equal(
+  await providerCallInRun(todoRuntime, "run:X", 1, todoSignal("run:W")),
+  undefined,
+  "run:X call#1（跨轮清空计数1）不提醒",
+);
+assert.equal(
+  await providerCallInRun(todoRuntime, "run:X", 2, todoSignal("run:W")),
+  undefined,
+  "run:X call#2（计数2）不提醒",
+);
+const todoRunX = await providerCallInRun(todoRuntime, "run:X", 3, todoSignal("run:W"));
+assert.ok(todoRunX, "run:X 第 3 个未写 call 应再次提醒");
+assert.equal(todoRunX.overlay.reminderKind, "todo_idle");
+// run:Y：call#1 执行 TodoWrite（滞后一拍）；写后 3 个未写 call 仍触发。
+assert.equal(
+  await providerCallInRun(todoRuntime, "run:Y", 1, todoSignal("run:W")),
+  undefined,
+  "run:Y 写入 call（尚未观察到）不提醒",
+);
+assert.equal(
+  await providerCallInRun(todoRuntime, "run:Y", 2, todoSignal("run:Y")),
+  undefined,
+  "run:Y 观察到写入后计数1，不提醒",
+);
+assert.equal(
+  await providerCallInRun(todoRuntime, "run:Y", 3, todoSignal("run:Y")),
+  undefined,
+  "run:Y 计数2，不提醒",
+);
+const todoRunY = await providerCallInRun(todoRuntime, "run:Y", 4, todoSignal("run:Y"));
+assert.ok(todoRunY, "run:Y 写后第 3 个未写 call（计数3）应注入");
+assert.equal(todoRunY.overlay.reminderKind, "todo_idle");
+assert.ok(todoRunY.overlay.content.includes(TODO_IDLE_MARK));
+
+const todoNudges = (await todoRuntime.store.list()).filter(
   (nudge) => nudge.id === TODO_IDLE_NUDGE_ID,
 );
-assert.equal(todoNudge.state, PENDING_NUDGE_STATE.acknowledged);
+assert.equal(todoNudges.length, 1, "应恰有一条 todo_idle（被替换而非累积）");
+const todoNudge = todoNudges[0];
+assert.equal(todoNudge.state, PENDING_NUDGE_STATE.consumed);
+assert.equal(todoNudge.targetRunId, "run:Y");
+assert.equal(todoNudge.delivery, "once");
 
 // ---------------------------------------------------------------------------
 // 5. 真实转换器：system.reminder(kind=compose_mode) → Pi 消息含 <system-reminder>。

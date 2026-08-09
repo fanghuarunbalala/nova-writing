@@ -147,6 +147,7 @@
     "smoke:runtime-nudge-provider-call-receipt": "pnpm build && node scripts/runtime-nudge-provider-call-receipt-smoke.mjs",
     "smoke:runtime-nudge-event-bridge": "pnpm build && node scripts/runtime-nudge-event-bridge-smoke.mjs",
     "smoke:nudge-definitions": "pnpm build && node scripts/nudge-definitions-smoke.mjs",
+    "smoke:runtime-nudge-todo-idle-cross-run": "pnpm build && node scripts/runtime-nudge-todo-idle-cross-run-smoke.mjs",
     "smoke:runtime-projected-run-preparation": "pnpm build && node scripts/runtime-projected-run-preparation-smoke.mjs",
     "smoke:runtime-pi-adapter": "pnpm build && node scripts/runtime-pi-agent-core-adapter-smoke.mjs",
     "smoke:runtime-pi-provider-execution-factory": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/runtime-pi-provider-execution-factory-typecheck.ts && node scripts/runtime-pi-provider-execution-factory-smoke.mjs",

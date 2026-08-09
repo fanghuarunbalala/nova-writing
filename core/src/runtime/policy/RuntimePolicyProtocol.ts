@@ -28,8 +28,8 @@ export interface RuntimePolicyRuntimeSignals {
   readonly providerCallCount: number;
   /** compose 模式快照（novel.reminder.compose_mode/compose_mode_exit 输入）。 */
   readonly compose?: ComposeModeSnapshot;
-  /** todo 计数（novel.reminder.todo_idle 输入）。 */
-  readonly todos?: Readonly<{ inProgressCount: number }>;
+  /** todo 计数（novel.reminder.todo_idle 输入；lastUpdatedRunId = 最后一次 TodoWrite 所在 run）。 */
+  readonly todos?: Readonly<{ inProgressCount: number; lastUpdatedRunId?: string }>;
 }
 
 export interface RuntimePolicyContext {

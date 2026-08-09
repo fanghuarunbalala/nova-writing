@@ -258,6 +258,10 @@ decision actions`（决策 ①先二元、②删除 novel 投影）。core 零�
 按"每步一个聚焦提交"实施，共 6 个提交（C1–C5 + 本文档 C6）。每步验证
 `pnpm --dir ui test && pnpm --dir ui check` 全绿；C1 额外 `pnpm --dir gui build`。
 
+> **目检注意**：Electron 通过 `@novel/ui`（解析到 `ui/dist/`）消费 ui 产物，
+> `pnpm gui` 已改为先 `pnpm --dir ui build` 再构建渲染器。若从旧脚本/旧 CI 起应用，
+> 需先重建 ui，否则加载的是陈旧 dist——v2 对齐会整体缺失（曾因此排查过一次）。
+
 ### 7.1 已确认决策（旧待决策项终态）
 
 | 项 | 决策 | 说明 |

@@ -8,7 +8,7 @@
     "build": "pnpm --filter @novel/core build && pnpm --filter @novel/ui build && pnpm --filter @novel/gui build && pnpm --filter @novel/web build && pnpm --filter @novel/cli build",
     "check": "pnpm build && pnpm -r check",
     "dev": "pnpm --filter @novel/cli dev",
-    "gui": "pnpm --dir gui start:build",
+    "gui": "pnpm --dir ui build && pnpm --dir gui start:build",
     "smoke:client-shells": "pnpm --dir gui smoke:desktop-web-shell-parity",
     "validate:gui-web": "node scripts/gui-web-validation.mjs"
   },

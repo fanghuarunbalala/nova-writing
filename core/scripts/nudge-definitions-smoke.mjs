@@ -3,8 +3,9 @@
  * Nudge-definitions assembly smoke: centralized definitions + agent enablements ∩ tool-group guard.
  *
  * 验证 / Verifies:
- * 1. 生效集：NUDGE_DEFINITIONS + resolveAgentNudgeEnablements("novel").enabled ∩ 工具组
- *    守卫 → 恰为 [compose_mode, compose_mode_exit, todo_idle]；未登记 agent → 空；缺组 → 跳过。
+ * 1. 生效集：NUDGE_DEFINITIONS + novelAgentDefinition.nudgeEnablement.enabled ∩ 工具组
+ *    守卫 → 恰为 [compose_mode, compose_mode_exit, todo_idle]；未配置 nudgeEnablement 的
+ *    定义 → 空集；缺组 → 跳过。
  * 2. 共享 policy 去重：compose 两定义同属 ComposeModeNudgePolicy → 引擎只注册一个实例。
  * 3. compose_mode：enter → call#1 交付 full；call#2-5 无；call#6/#11/#16/#21 稀疏；
  *    call#26 第 6 次交付再次 full（deliveryCount % 5 === 1）；exit → 一次性
@@ -21,6 +22,10 @@
  */
 import assert from "node:assert/strict";
 import {
+  AgentCommunicationPolicy,
+  AgentDefinition,
+  AgentDelegationPolicy,
+  AgentToolPolicy,
   InMemoryPendingNudgeStore,
   NudgeManager,
   NudgeProviderCallCoordinator,
@@ -28,11 +33,13 @@ import {
   NudgeSelector,
   NudgeTemplateRegistry,
   PENDING_NUDGE_STATE,
+  PromptRecipe,
+  PromptSectionItem,
   RUNTIME_POLICY_PHASE,
   RuntimeEffectCoordinator,
   RuntimeNudgePolicyEffectHandler,
   RuntimePolicyEngine,
-  resolveAgentNudgeEnablements,
+  novelAgentDefinition,
 } from "../dist/index.js";
 import {
   CorePiRuntimeMessageConverter,
@@ -69,16 +76,35 @@ const conversationId = "conversation:definitions";
 const runId = "run:definitions";
 
 // ---------------------------------------------------------------------------
-// 1. 生效集：enablements ∩ 工具组守卫。
-// Effective set: enablements ∩ tool-group guard.
+// 1. 生效集：AgentDefinition.nudgeEnablement ∩ 工具组守卫。
+// Effective set: AgentDefinition.nudgeEnablement ∩ tool-group guard.
 // ---------------------------------------------------------------------------
-const enabledNudges = resolveAgentNudgeEnablements("novel").enabled;
+const enabledNudges = novelAgentDefinition.nudgeEnablement.enabled;
 assert.deepEqual(enabledNudges, [
   COMPOSE_MODE_NUDGE_ID,
   COMPOSE_MODE_EXIT_NUDGE_ID,
   TODO_IDLE_NUDGE_ID,
 ]);
-assert.deepEqual(resolveAgentNudgeEnablements("unknown").enabled, []);
+
+// 未配置 nudgeEnablement 的 AgentDefinition 默认空集（不再是按 agentType 查表）。
+// An AgentDefinition without nudgeEnablement defaults to the empty set (no more agentType lookup).
+const defaultDefinition = new AgentDefinition({
+  agentType: "smoke_default",
+  definitionVersion: "1.0.0",
+  label: "Default",
+  description: "Minimal definition with no nudge enablement.",
+  promptRecipe: new PromptRecipe([
+    new PromptSectionItem("core.runtime.protocol"),
+  ]),
+  tools: new AgentToolPolicy({ groupIds: ["runtime.todo"] }),
+  delegation: new AgentDelegationPolicy({
+    mode: "disabled",
+    allowedAgentTypes: [],
+  }),
+  communication: new AgentCommunicationPolicy("standalone"),
+  runtimePolicyId: "default",
+});
+assert.deepEqual(defaultDefinition.nudgeEnablement.enabled, []);
 
 function effectiveDefinitions(manifestToolGroups) {
   return NUDGE_DEFINITIONS.filter(

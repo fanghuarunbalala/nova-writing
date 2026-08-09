@@ -9,7 +9,6 @@ import {
   AgentDelegationPolicy,
   AgentToolPolicy,
 } from "../definition/AgentDefinition.js";
-import type { AgentNudgeEnablement } from "./AgentNudgeEnablement.js";
 import {
   PromptRecipe,
   PromptSectionItem,
@@ -51,13 +50,12 @@ export const novelAgentDefinition = new AgentDefinition({
   }),
   communication: new AgentCommunicationPolicy("standalone"),
   runtimePolicyId: "default",
-});
-
-/** Novel agent 显式启用的 nudge（nudgeId）；装配侧 ∩ 工具组守卫后注入。 */
-export const novelAgentNudgeEnablement: AgentNudgeEnablement = Object.freeze({
-  enabled: Object.freeze([
-    "novel.reminder.compose_mode",
-    "novel.reminder.compose_mode_exit",
-    "novel.reminder.todo_idle",
-  ]),
+  /** Novel agent 显式启用的 nudge（nudgeId）；装配侧 ∩ 工具组守卫后注入。 */
+  nudgeEnablement: Object.freeze({
+    enabled: Object.freeze([
+      "novel.reminder.compose_mode",
+      "novel.reminder.compose_mode_exit",
+      "novel.reminder.todo_idle",
+    ]),
+  }),
 });

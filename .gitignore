@@ -7,6 +7,10 @@ target/
 .pnpm-store/
 vendor/claude-code/
 
+# Local Claude Code session settings; not project source.
+.claude/
+
 # Dev diagnostics — provider request dumps & verbose logs contain conversation content; never commit.
 debug-provider-requests*.jsonl*
 *-verbose.log
+gui/electron-bg.log

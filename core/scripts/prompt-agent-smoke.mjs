@@ -81,7 +81,7 @@ const catalog = new AgentDefinitionCatalog([novelAgentDefinition]);
 assert.equal(catalog.resolve("novel").definitionVersion, novelAgentDefinition.definitionVersion);
 assert.equal(novelAgentDefinition.delegation.mode, "subagent");
 assert.deepEqual(novelAgentDefinition.delegation.allowedAgentTypes, ["novel_explorer", "novel_compose"]);
-assert.equal(novelAgentDefinition.toSnapshot().promptRecipe.items.length, 4);
+assert.equal(novelAgentDefinition.toSnapshot().promptRecipe.items.length, 7);
 
 const invalidDefinition = new AgentDefinition({
   agentType: "invalid_agent",

@@ -7,6 +7,7 @@ import { noopLogger, type Logger } from "../../../observability/index.js";
 import {
   DesktopRuntimeChildEndpointFactory,
   type DesktopRuntimeChildPersistenceProvider,
+  type DesktopRuntimeChildSubagentProvider,
 } from "../child/DesktopRuntimeChildEndpointFactory.js";
 import type { ParentRuntimeChildIdentityFactory } from "../child/index.js";
 import { NodeConversationProcessSupervisor } from "./NodeConversationProcessSupervisor.js";
@@ -17,6 +18,7 @@ export interface ChildProcessConversationRuntimePlacementOptions {
   readonly command: string;
   readonly args?: readonly string[];
   readonly persistenceProvider: DesktopRuntimeChildPersistenceProvider;
+  readonly subagentProvider?: DesktopRuntimeChildSubagentProvider;
   readonly sessionIdFactory?: ParentRuntimeChildIdentityFactory;
   readonly exitNormalizer?: RuntimeProcessExitNormalizer;
   readonly env?: Readonly<Record<string, string>>;
@@ -38,6 +40,9 @@ export function createChildProcessConversationRuntimePlacement(
     }),
     endpointFactory: new DesktopRuntimeChildEndpointFactory({
       persistenceProvider: options.persistenceProvider,
+      ...(options.subagentProvider === undefined
+        ? {}
+        : { subagentProvider: options.subagentProvider }),
       ...(options.sessionIdFactory === undefined
         ? {}
         : { sessionIdFactory: options.sessionIdFactory }),

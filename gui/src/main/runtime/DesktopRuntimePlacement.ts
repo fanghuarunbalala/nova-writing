@@ -9,10 +9,12 @@ import {
   NodeConversationProcessSupervisor,
   createChildProcessConversationRuntimePlacement,
   type DesktopRuntimeChildPersistence,
+  type DesktopRuntimeChildSubagent,
 } from "@novel/core/node";
 
 export interface DesktopRuntimeApplicationPersistenceProvider {
   getRuntimePersistence(conversationId: string): Promise<DesktopRuntimeChildPersistence>;
+  getRuntimeSubagent(conversationId: string): Promise<DesktopRuntimeChildSubagent>;
 }
 
 export interface CreateDesktopRuntimePlacementOptions {
@@ -57,6 +59,19 @@ export function createDesktopRuntimePlacement(
           );
         }
         return application.getRuntimePersistence(
+          bootstrap.conversation.metadata.id,
+        );
+      },
+    },
+    subagentProvider: {
+      provide: async (bootstrap) => {
+        const application = await options.applicationProvider();
+        if (application === undefined) {
+          throw new TypeError(
+            "Desktop Conversation application is not open",
+          );
+        }
+        return application.getRuntimeSubagent(
           bootstrap.conversation.metadata.id,
         );
       },

@@ -38,6 +38,7 @@ import {
   type RuntimeChildAdapterFactory,
   type RuntimeRunPreparationSourceFactory,
 } from "./DesktopRuntimeChildCompositionFactory.js";
+import type { ChildRuntimeWorkspaceStoreProvider } from "./RuntimeChildCompositionFactory.js";
 import { PiRuntimeChildAdapterFactory } from "./PiRuntimeChildAdapterFactory.js";
 import { SUPPORTED_PI_EXECUTION_APIS } from "../../../runtime/agent/pi/index.js";
 import { createDefaultPromptSectionRegistry } from "../../../prompt/index.js";
@@ -90,6 +91,9 @@ export function resolveChildDebugDiagnostics(
 }
 
 export interface RunDesktopRuntimeChildEntrypointOptions {
+  /** 完整 workspace store 提供者(含子代理绑定)。可选;传则 child 组装启用子代理工具。 */
+  /** Full workspace-store provider (with subagent bindings). Optional; enables subagent tool assembly. */
+  readonly workspaceStoreProvider?: ChildRuntimeWorkspaceStoreProvider;
   readonly manifestStoreProvider?: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<AgentManifestStore>;
@@ -164,10 +168,12 @@ async function initializeDesktopRuntimeChildEntrypoint(
           path: childDebug.dumpPath,
           logger,
         });
-  const workspaceStoreProvider = createEnvWorkspaceStoreProvider(
+  const envWorkspaceStoreProvider = createEnvWorkspaceStoreProvider(
     options.storageRoot,
     logger,
   );
+  const workspaceStoreProvider =
+    options.workspaceStoreProvider ?? envWorkspaceStoreProvider;
   const manifestStoreProvider =
     options.manifestStoreProvider ??
     (async (bootstrap) => (await workspaceStoreProvider(bootstrap)).agentManifests);
@@ -214,6 +220,7 @@ async function initializeDesktopRuntimeChildEntrypoint(
   const compositionFactory = new DesktopRuntimeChildCompositionFactory({
     manifestStoreProvider,
     conversationCatalogStoreProvider,
+    workspaceStoreProvider,
     adapterFactory,
     contextCompilerFactory,
     preparationSourceFactory,

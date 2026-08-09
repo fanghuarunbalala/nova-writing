@@ -41,6 +41,8 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "system.tool.approval.requested",
   "system.tool.approval.resolved",
   "system.tool.trace.recorded",
+  "system.tool.request.recorded",
+  "system.tool.result.recorded",
   "novel.draft.started",
   "novel.draft.status.changed",
   "novel.draft.rolled.back",
@@ -55,6 +57,14 @@ assert.deepEqual(Object.values(OUTPUT_EVENT_TYPE), [
   "novel.conflict.resolved",
   "novel.recovery.completed",
   "novel.approval.requested",
+  "novel.canonical.write.applied",
+  "novel.compose.begin",
+  "novel.compose.submitted",
+  "novel.compose.approved",
+  "novel.compose.rejected",
+  "novel.compose.applied",
+  "novel.compose.discarded",
+  "novel.mode.changed",
 ]);
 
 const previous = {

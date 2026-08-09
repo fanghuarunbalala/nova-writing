@@ -9,6 +9,7 @@ import {
   AgentDelegationPolicy,
   AgentToolPolicy,
 } from "../definition/AgentDefinition.js";
+import type { AgentNudgeEnablement } from "./AgentNudgeEnablement.js";
 import {
   PromptRecipe,
   PromptSectionItem,
@@ -16,7 +17,7 @@ import {
 
 export const novelAgentDefinition = new AgentDefinition({
   agentType: "novel",
-  definitionVersion: "1.2.0",
+  definitionVersion: "1.3.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
@@ -33,6 +34,8 @@ export const novelAgentDefinition = new AgentDefinition({
   tools: new AgentToolPolicy({
     groupIds: [
       "runtime.todo",
+      "runtime.files",
+      "novel.compose",
       "novel.outline",
       "novel.characters",
       "novel.locations",
@@ -47,4 +50,13 @@ export const novelAgentDefinition = new AgentDefinition({
   }),
   communication: new AgentCommunicationPolicy("standalone"),
   runtimePolicyId: "default",
+});
+
+/** Novel agent 显式启用的 nudge（nudgeId）；装配侧 ∩ 工具组守卫后注入。 */
+export const novelAgentNudgeEnablement: AgentNudgeEnablement = Object.freeze({
+  enabled: Object.freeze([
+    "novel.reminder.compose_mode",
+    "novel.reminder.compose_mode_exit",
+    "novel.reminder.todo_idle",
+  ]),
 });

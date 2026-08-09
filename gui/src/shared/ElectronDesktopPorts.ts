@@ -76,6 +76,13 @@ export interface DesktopNativeFilePort {
   previewFile(referenceId: string): Promise<void>;
 }
 
+/** 设计草稿文件端口：compose 模式下 GUI 直接读写 design 文件。 */
+/** Design-file port: direct GUI read/write of the design file in compose mode. */
+export interface DesktopDesignFilePort {
+  read(conversationId: string): Promise<string>;
+  write(conversationId: string, content: string): Promise<void>;
+}
+
 /**
  * DesktopPlatformApi：4 个桌面 port 的聚合接口，由 DesktopRendererBootstrap 一次性
  * 构造，经 extensions/features 注入桌面专属组件。所有字段可选——bridge 缺失某个
@@ -86,4 +93,5 @@ export interface DesktopPlatformApi {
   readonly updater?: DesktopUpdaterPort;
   readonly tray?: DesktopSystemTrayPort;
   readonly files?: DesktopNativeFilePort;
+  readonly design?: DesktopDesignFilePort;
 }

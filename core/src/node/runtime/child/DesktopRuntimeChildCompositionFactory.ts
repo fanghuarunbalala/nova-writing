@@ -14,6 +14,7 @@ import type {
 } from "../../../conversation/index.js";
 import type { OutputEvent } from "../../../event/index.js";
 import type {
+  ConversationCatalogStore,
   ConversationEventPage,
   ConversationEventQuery,
   ConversationJournalReader,
@@ -21,6 +22,7 @@ import type {
 } from "../../../storage/index.js";
 import {
   AgentAssemblyRestorer,
+  resolveAgentNudgeEnablements,
   type AgentManifestStore,
 } from "../../../agent/index.js";
 import {
@@ -48,7 +50,13 @@ import {
   InMemoryPendingNudgeStore,
   RuntimeApprovalDecisionInputHandler,
   RuntimeControlInputDispatcher,
+  RuntimeConversationModeSetInputHandler,
+  RuntimeEffectCoordinator,
+  RuntimeNudgePolicyEffectHandler,
+  RuntimePolicyEngine,
+  TODO_STATUS,
   type NudgeLifecycleEventIdFactory,
+  type NudgeLifecycleEventIdInput,
   type NudgeProviderCallCoordinator as NudgeProviderCallCoordinatorType,
   RuntimeStartupExecutor,
   RuntimeStartupReconciler,
@@ -64,6 +72,8 @@ import {
   type RuntimeRunPreparationSource,
   type ToolDispatcher,
 } from "../../../runtime/index.js";
+import { NUDGE_DEFINITIONS } from "../../../runtime/nudge/definitions/index.js";
+import type { PiRuntimeSignalsProvider } from "../../../runtime/agent/pi/index.js";
 import { RuntimePromptAssembler } from "../../../runtime/context/index.js";
 import { PromptAssemblyBuilder } from "../../../prompt/assembly/index.js";
 import type { PromptDigester } from "../../../prompt/index.js";
@@ -72,10 +82,13 @@ import type { RuntimePersistencePorts } from "../../../runtime/ipc/index.js";
 import { createNovelConversationManifestComposition } from "../../agent/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { createCoreEventSchemaRegistry } from "../../../event/index.js";
+import { OUTPUT_EVENT_TYPE } from "../../../event/output/OutputEventType.js";
 import {
   ConversationTodoCoordinator,
+  ConversationTodoProjector,
   InMemoryConversationTodoStore,
 } from "../../../runtime/todo/index.js";
+import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
 import { NodeSha256RuntimeEventIdHasher } from "../NodeSha256RuntimeEventIdHasher.js";
 import { openChildNovelToolRegistry } from "./novel/index.js";
 import type {
@@ -99,6 +112,10 @@ export interface RuntimeChildAdapterFactory {
     readonly configuration: AgentRuntimeConfiguration;
     readonly lifecycleController: TurnController;
     readonly nudgeProviderCalls?: NudgeProviderCallCoordinatorType;
+    /** 域 runtime 信号源 + policy 引擎装配（nudge 瞬态注入用）。 */
+    readonly runtimeSignals?: PiRuntimeSignalsProvider;
+    readonly policyEngine?: RuntimePolicyEngine;
+    readonly effectCoordinator?: RuntimeEffectCoordinator;
     readonly eventSink: PublishingRuntimeEventSink;
     readonly eventIdFactory: RuntimeEventIdFactory;
     readonly toolDispatcher?: ToolDispatcher;
@@ -109,6 +126,11 @@ export interface DesktopRuntimeChildCompositionFactoryOptions {
   readonly manifestStoreProvider: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<AgentManifestStore>;
+  /** 会话目录 store 提供者(会话 mode 持久化 + hydrate)。可选;不传则 mode 仅内存。 */
+  /** Conversation catalog store provider (persistent mode + hydrate). Optional; mode stays in-memory otherwise. */
+  readonly conversationCatalogStoreProvider?: (
+    bootstrap: ConversationRuntimeBootstrap,
+  ) => Promise<ConversationCatalogStore>;
   readonly novelStorageRoot?: string;
   readonly adapterFactory: RuntimeChildAdapterFactory;
   readonly contextCompilerFactory: AgentRuntimeContextCompilerFactory;
@@ -116,6 +138,9 @@ export interface DesktopRuntimeChildCompositionFactoryOptions {
   readonly profileResolver?: AgentRuntimeConfigurationProfileResolver;
   readonly eventSchemaRegistry?: ReturnType<typeof createCoreEventSchemaRegistry>;
   readonly eventIdFactory?: RuntimeEventIdFactory;
+  /** 外部共享的 compose 状态源（与 run preparation source 同一实例）。 */
+  /** Externally shared compose state source (same instance as the run preparation source). */
+  readonly composeState?: ComposeModeStateProvider;
   readonly logger?: Logger;
 }
 
@@ -125,6 +150,9 @@ export class DesktopRuntimeChildCompositionFactory
   readonly #manifestStoreProvider: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<AgentManifestStore>;
+  readonly #conversationCatalogStoreProvider?: (
+    bootstrap: ConversationRuntimeBootstrap,
+  ) => Promise<ConversationCatalogStore>;
   readonly #novelStorageRoot?: string;
   readonly #adapterFactory: RuntimeChildAdapterFactory;
   readonly #contextCompilerFactory: AgentRuntimeContextCompilerFactory;
@@ -132,6 +160,7 @@ export class DesktopRuntimeChildCompositionFactory
   readonly #profileResolver: AgentRuntimeConfigurationProfileResolver;
   readonly #eventSchemaRegistry: ReturnType<typeof createCoreEventSchemaRegistry>;
   readonly #eventIdFactory: RuntimeEventIdFactory;
+  readonly #composeState: ComposeModeStateProvider;
   readonly #promptDigester: PromptDigester;
   readonly #logger: Logger;
 
@@ -141,6 +170,8 @@ export class DesktopRuntimeChildCompositionFactory
     });
     const composition = createNovelConversationManifestComposition();
     this.#manifestStoreProvider = options.manifestStoreProvider;
+    this.#conversationCatalogStoreProvider =
+      options.conversationCatalogStoreProvider;
     this.#novelStorageRoot = options.novelStorageRoot;
     this.#adapterFactory = options.adapterFactory;
     this.#contextCompilerFactory = options.contextCompilerFactory;
@@ -171,6 +202,7 @@ export class DesktopRuntimeChildCompositionFactory
       new Sha256RuntimeEventIdFactory({
         hasher: new NodeSha256RuntimeEventIdHasher(),
       });
+    this.#composeState = options.composeState ?? new ComposeModeStateProvider();
     this.#logger = logger;
   }
 
@@ -216,20 +248,33 @@ export class DesktopRuntimeChildCompositionFactory
     });
     const clock = { now: () => new Date().toISOString() };
     const todoStore = new InMemoryConversationTodoStore();
+    // 从 journal 重放 todo 事件到进程内 store：跨进程重启后 todo_idle 仍能读到
+    // 最后一次 TodoWrite 的 runId（lastUpdatedRunId），继续跨 run 轮次计数。
+    await replayConversationTodos(journal, conversationId, todoStore);
     const todoWriter = new ConversationTodoCoordinator({
       store: todoStore,
       eventSink,
       clock,
       logger,
     });
+    const composeState = this.#composeState;
+    const conversations =
+      this.#conversationCatalogStoreProvider === undefined
+        ? undefined
+        : await this.#conversationCatalogStoreProvider(bootstrap);
     const novelTools = await openChildNovelToolRegistry({
       storageRoot: requireNovelStorageRoot(
         this.#novelStorageRoot ?? process.env[DESKTOP_CHILD_STORAGE_ROOT_ENV],
       ),
       workdir: bootstrap.workspace.workdir,
       todoWriter,
+      composeState,
+      eventSink,
+      ...(conversations === undefined ? {} : { conversations }),
       logger,
     });
+    // 从持久层还原会话 mode + compose 子状态(重启恢复;权威来源为 workspace DB)。
+    await novelTools.modeService.hydrate(conversationId);
     logger.info("runtime_child.composition.novel_registry_opened", {
       conversationId,
     });
@@ -254,6 +299,7 @@ export class DesktopRuntimeChildCompositionFactory
     const toolExecution = createChildToolExecutionComposition({
       registryView: configuration.assembly.toolView,
       eventSink,
+      composeStateProvider: composeState,
       logger,
     });
     logger.info("runtime_child.composition.tool_execution_created", {
@@ -275,16 +321,78 @@ export class DesktopRuntimeChildCompositionFactory
       logger,
     });
     const router = new InputRouter({ conversationId, logger });
-    const nudgeProviderCalls = createChildNudgeCoordinator({
+    const nudgeAssembly = createChildNudgeAssembly({
       conversationId,
       eventSink,
       persistence,
       logger,
     });
+    const nudgeProviderCalls = nudgeAssembly.coordinator;
+    // nudge 定义装配：模板注册 + 生效集（agent enablesNudges ∩ 工具组守卫）→
+    // policy 引擎 + effect coordinator（nudge_schedule/acknowledge → manager）。
+    const manifestToolGroups = new Set(
+      configuration.assembly.manifest.definition.tools.groupIds,
+    );
+    const enabledNudges = resolveAgentNudgeEnablements(
+      configuration.assembly.agentType,
+    ).enabled;
+    const effectiveDefinitions = [];
+    for (const definition of NUDGE_DEFINITIONS) {
+      if (!enabledNudges.includes(definition.id)) continue;
+      if (!manifestToolGroups.has(definition.requiredToolGroup)) {
+        logger.warn("nudge.rule_skipped_group_guard", {
+          nudgeId: definition.id,
+          requiredToolGroup: definition.requiredToolGroup,
+        });
+        continue;
+      }
+      nudgeAssembly.templates.register(definition.template);
+      effectiveDefinitions.push(definition);
+    }
+    // 同一 policy 可能被多个 nudge 定义共享（如 compose_mode + compose_mode_exit
+    // 同属 ComposeModeNudgePolicy）；引擎按 policy.id 拒绝重复，需先按 id 去重。
+    const seenPolicyIds = new Set<string>();
+    const effectivePolicies = [];
+    for (const definition of effectiveDefinitions) {
+      const policy = definition.createPolicy();
+      if (seenPolicyIds.has(policy.id)) continue;
+      seenPolicyIds.add(policy.id);
+      effectivePolicies.push(policy);
+    }
+    const policyEngine = new RuntimePolicyEngine({
+      policies: effectivePolicies,
+      logger,
+    });
+    const effectCoordinator = new RuntimeEffectCoordinator({
+      conversationId,
+      nudgeLifecycleHandler: new RuntimeNudgePolicyEffectHandler(
+        nudgeAssembly.manager,
+      ),
+      logger,
+    });
+    const runtimeSignals: PiRuntimeSignalsProvider = Object.freeze({
+      compose: () => Promise.resolve(composeState.snapshot(conversationId)),
+      todos: () =>
+        todoStore.read(conversationId).then((snapshot) =>
+          snapshot === undefined
+            ? undefined
+            : {
+                inProgressCount: snapshot.todos.filter(
+                  (todo) => todo.status === TODO_STATUS.inProgress,
+                ).length,
+                ...(snapshot.lastUpdatedRunId === undefined
+                  ? {}
+                  : { lastUpdatedRunId: snapshot.lastUpdatedRunId }),
+              },
+        ),
+    });
     const agentAdapter = await this.#adapterFactory.create({
       configuration,
       lifecycleController,
       nudgeProviderCalls,
+      runtimeSignals,
+      policyEngine,
+      effectCoordinator,
       eventSink,
       eventIdFactory,
       toolDispatcher: toolExecution.dispatcher,
@@ -338,6 +446,12 @@ export class DesktopRuntimeChildCompositionFactory
         coordinator: toolExecution.coordinator,
         runId: () => lifecycleController.getRunSnapshot()?.runId,
         turnId: () => lifecycleController.getTurnSnapshot()?.turnId,
+        outcomeRecorder,
+        logger,
+      }),
+      modeSetHandler: new RuntimeConversationModeSetInputHandler({
+        conversationId,
+        modeService: novelTools.modeService,
         outcomeRecorder,
         logger,
       }),
@@ -471,6 +585,32 @@ class ChildRuntimeJournalReader implements ConversationJournalReader {
   }
 }
 
+/** 重放某 conversation 的全部 todo.updated 输出事件到进程内 store（跨进程恢复）。 */
+async function replayConversationTodos(
+  journal: ChildRuntimeJournalReader,
+  conversationId: string,
+  todoStore: InMemoryConversationTodoStore,
+): Promise<void> {
+  const projector = new ConversationTodoProjector(todoStore);
+  let cursor: number | undefined;
+  do {
+    const page = await journal.list({
+      conversationId,
+      anchor:
+        cursor === undefined ? { from: "start" } : { afterSequence: cursor },
+      direction: "output",
+      eventTypes: [OUTPUT_EVENT_TYPE.agentTodoUpdated],
+      limit: 500,
+    });
+    for (const event of page.events) {
+      if (event.direction !== "output") continue;
+      await projector.apply(event);
+    }
+    cursor = page.highWatermark;
+    if (!page.hasNext) break;
+  } while (true);
+}
+
 class ChildRuntimeOutputPublisher implements ConversationOutputEventPublisher {
   constructor(
     private readonly persistence: RuntimePersistencePorts,
@@ -504,12 +644,18 @@ function captureStableFailure(error: unknown): string {
   return "unknown";
 }
 
-function createChildNudgeCoordinator(options: {
+interface ChildNudgeAssembly {
+  readonly coordinator: NudgeProviderCallCoordinatorType;
+  readonly manager: NudgeManager;
+  readonly templates: NudgeTemplateRegistry;
+}
+
+function createChildNudgeAssembly(options: {
   readonly conversationId: string;
   readonly eventSink: PublishingRuntimeEventSink;
   readonly persistence: RuntimePersistencePorts;
   readonly logger: Logger;
-}): NudgeProviderCallCoordinatorType {
+}): ChildNudgeAssembly {
   const templates = new NudgeTemplateRegistry({ logger: options.logger });
   const manager = new NudgeManager({
     store: new InMemoryPendingNudgeStore({ logger: options.logger }),
@@ -526,22 +672,22 @@ function createChildNudgeCoordinator(options: {
     eventIdFactory: new ChildNudgeLifecycleEventIdFactory(),
     logger: options.logger,
   });
-  options.logger.debug("runtime_child.nudge_coordinator_created", {
+  options.logger.debug("runtime_child.nudge_assembly_created", {
     conversationId: options.conversationId,
   });
-  return coordinator;
+  return { coordinator, manager, templates };
 }
 
-class ChildNudgeLifecycleEventIdFactory implements NudgeLifecycleEventIdFactory {
-  #count = 0;
-
-  create(input: {
-    readonly conversationId: string;
-    readonly runId: string;
-    readonly eventType: string;
-    readonly nudgeId: string;
-  }): string {
-    this.#count += 1;
-    return `nudge_event_${input.nudgeId}_${this.#count}`;
+/**
+ * 生成 nudge 生命周期事件 id。基于 providerCallId（每次 provider call 唯一，跨进程
+ * 也唯一）而不是进程内计数器——计数重启归零曾导致同一 id 重复、journal append
+ * 冲突（JournalEventConflictError）拖垮整个 run。事件 payload 携带同一
+ * providerCallId，id↔payload 1:1，便于日志关联。
+ * Generates nudge lifecycle event ids keyed on providerCallId (unique per provider
+ * call, across process restarts) instead of a process-local counter.
+ */
+export class ChildNudgeLifecycleEventIdFactory implements NudgeLifecycleEventIdFactory {
+  create(input: NudgeLifecycleEventIdInput): string {
+    return `nudge_event_${input.nudgeId}_${input.providerCallId}`;
   }
 }

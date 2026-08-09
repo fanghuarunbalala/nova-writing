@@ -176,6 +176,27 @@ export class ToolExecutionPipeline {
       active.tool = tool;
       const executionPolicy = this.#executionPolicyResolver.resolve(tool);
       const arguments_ = captureArguments(tool, invocation);
+      // 在权限/审批判定之前记录 tool.request：被拒/拒绝/取消的调用也必须落 request，
+      // 与 catch 分支的 tool.result 成对，避免历史里出现"只有 result 没有 request"的孤儿消息
+      // 使后续 provider 请求因 tool 消息缺少前置 tool_calls 而 400。
+      // Record the tool request before authorization so denied/rejected/cancelled calls
+      // still persist a request paired with their result; otherwise a lone result in
+      // history produces an orphaned tool message that the provider rejects.
+      if (this.#lifecycleSink !== undefined) {
+        const truncatedArguments = truncateJsonValue(arguments_, TOOL_RECORD_BYTE_LIMIT);
+        await this.#lifecycleSink.appendRequest({
+          conversationId: invocation.conversationId,
+          runId: invocation.runId,
+          ...(invocation.turnId === undefined
+            ? {}
+            : { turnId: invocation.turnId }),
+          toolCallId: invocation.toolCallId,
+          toolName: tool.descriptor.name,
+          toolVersion: tool.descriptor.version,
+          arguments: truncatedArguments.value as JsonValue,
+          truncated: truncatedArguments.truncated,
+        });
+      }
       await this.#trace(active, tool, "received", 1, {
         inputBytes: byteLength(invocation.arguments),
       });
@@ -193,21 +214,6 @@ export class ToolExecutionPipeline {
       await this.#authorize(active, tool, executionPolicy, permission);
       assertSandboxCapability(this.#sandboxExecutor, executionPolicy, invocation, tool);
       if (active.controller.signal.aborted) throw cancelledError(invocation, "none", tool);
-      if (this.#lifecycleSink !== undefined) {
-        const truncatedArguments = truncateJsonValue(arguments_, TOOL_RECORD_BYTE_LIMIT);
-        await this.#lifecycleSink.appendRequest({
-          conversationId: invocation.conversationId,
-          runId: invocation.runId,
-          ...(invocation.turnId === undefined
-            ? {}
-            : { turnId: invocation.turnId }),
-          toolCallId: invocation.toolCallId,
-          toolName: tool.descriptor.name,
-          toolVersion: tool.descriptor.version,
-          arguments: truncatedArguments.value as JsonValue,
-          truncated: truncatedArguments.truncated,
-        });
-      }
 
       const progress = createValidatedProgressSink(
         options.progress ?? noopToolProgressSink,

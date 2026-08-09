@@ -13,6 +13,7 @@ import {
   SqliteNovelCanonicalStore,
   openChildNovelToolRegistry,
 } from "../dist/node/index.js";
+import { ComposeModeStateProvider } from "../dist/index.js";
 
 class FixedRevisionFactory {
   createRevision() {
@@ -79,6 +80,19 @@ try {
     storageRoot: join(root, "storage"),
     workdir: workspaceRoot,
     todoWriter,
+    composeState: new ComposeModeStateProvider(),
+    eventSink: {
+      async append(event) {
+        logs.push({ level: "event", event: event.getEventType() });
+        return {
+          status: "recorded",
+          conversationId: event.conversationId,
+          eventId: `evt-${logs.length}`,
+          sequence: logs.length,
+          recordedAt: "2026-08-07T00:00:00.000Z",
+        };
+      },
+    },
     logger,
   });
 
@@ -88,7 +102,15 @@ try {
   assert.ok(names.includes("NovelCharacterWrite"));
   assert.ok(names.includes("NovelDelete"));
   assert.ok(names.includes("TodoWrite"));
+  assert.ok(names.includes("EnterComposeMode"));
+  assert.ok(names.includes("ExitComposeMode"));
+  assert.ok(names.includes("Read"));
+  assert.ok(names.includes("Glob"));
+  assert.ok(names.includes("Write"));
+  assert.ok(names.includes("Edit"));
   assert.equal(names.includes("NovelDraftStatus"), false);
+  assert.equal(novelTools.groups.has("runtime.files"), true);
+  assert.equal(novelTools.groups.has("novel.compose"), true);
   assert.deepEqual(NOVEL_OUTLINE_TOOL_GROUP_MANIFEST.tools, [
     "NovelOutlineRead",
     "NovelOutlineWrite",
@@ -134,9 +156,9 @@ try {
   assert.equal(readResult.details.units[0].title, "Child written unit");
   assert.equal(readResult.details.revision.currentRevision, writeRevision);
 
-  // 乐观锁：全局 baseRevision 不再作冲突判定（per-entity 版本前置条件负责）；
-  // 旧 baseRevision 写不同实体仍成功，与 outline-tools 冒烟语义一致。
-  const staleWrite = await writeTool.handler.execute(
+  // per-entity CAS（主干 80fff61）：新单元写入不再被过期全局 baseRevision 拒绝。
+  // Per-entity CAS: new-unit writes are no longer rejected by a stale global baseRevision.
+  const staleBaseWrite = await writeTool.handler.execute(
     context(conversation, 3),
     {
       baseRevision: "revision_child_registry_base",
@@ -144,7 +166,7 @@ try {
     },
     progress,
   );
-  assert.equal(staleWrite.details.items[0].status, "applied");
+  assert.equal(staleBaseWrite.details.items[0].status, "applied");
 
   // 日志脱敏：不暴露正文内容与路径。
   const serialized = JSON.stringify(logs);

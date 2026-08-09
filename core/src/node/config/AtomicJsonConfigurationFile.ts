@@ -9,7 +9,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { syncDirectoryBestEffort } from "../fs/index.js";
+import { syncDirectoryBestEffort } from "../fs/syncDirectory.js";
 import {
   NODE_CONFIGURATION_STORE_FAILURE,
   NodeConfigurationStoreError,

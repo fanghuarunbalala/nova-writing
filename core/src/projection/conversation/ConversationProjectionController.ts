@@ -154,12 +154,19 @@ export class ConversationProjectionController {
       lastAppliedSequence: this.store.getSnapshot().lastAppliedSequence,
     });
     try {
-      const [conversationSnapshot, runtimePresence] = await Promise.all([
-        this.conversation.getSnapshot(),
-        this.conversation.getRuntimePresence(),
-      ]);
+      const [conversationSnapshot, runtimePresence, composeState] =
+        await Promise.all([
+          this.conversation.getSnapshot(),
+          this.conversation.getRuntimePresence(),
+          this.conversation.getComposeState(),
+        ]);
       this.assertConnectionActive(generation, signal);
       this.runtimePresence = Object.freeze({ ...runtimePresence });
+      // 播种权威 mode(DB 元数据);裁剪/重连后回放缺失 mode.changed 事件时兜底。
+      this.store.seedConversationMode(conversationSnapshot.metadata.mode);
+      // 播种权威活跃 compose 阶段(DB compose_state 行);裁剪后回放缺失 compose
+      // 事件时,徽标/状态仍正确。
+      this.store.seedComposePhase(composeState?.phase);
       this.publishSnapshot();
 
       this.transition(CONVERSATION_PROJECTION_CONTROLLER_STATE.replaying);

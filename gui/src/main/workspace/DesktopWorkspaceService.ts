@@ -54,6 +54,9 @@ export interface DesktopWorkspaceServicePort {
     reference: ElectronWorkspaceReference,
   ): Promise<ElectronWorkspaceSession>;
   close(senderId: number): Promise<void>;
+  /** 返回 sender 当前打开的 workspace 根目录（无则 undefined）。 */
+  /** Returns the sender's current workspace root, or undefined. */
+  getCurrentWorkspaceRoot(senderId: number): string | undefined;
   releaseSender(senderId: number): Promise<void>;
 }
 
@@ -69,6 +72,7 @@ interface PendingSelection {
 
 interface ActiveWorkspace {
   readonly session: ElectronWorkspaceSession;
+  readonly workspaceRoot: string;
   readonly application?: DesktopWorkspaceApiApplication;
 }
 
@@ -144,6 +148,7 @@ export class DesktopWorkspaceService
     }
     this.currentBySender.set(senderId, {
       session,
+      workspaceRoot: location.workspaceRoot,
       ...(application !== undefined ? { application } : {}),
     });
     this.recent.delete(session.id);
@@ -153,6 +158,10 @@ export class DesktopWorkspaceService
     this.onOpened?.(senderId, session);
     this.logger.info("desktop_workspace.open_completed", { senderId });
     return session;
+  }
+
+  getCurrentWorkspaceRoot(senderId: number): string | undefined {
+    return this.currentBySender.get(senderId)?.workspaceRoot;
   }
 
   async close(senderId: number): Promise<void> {

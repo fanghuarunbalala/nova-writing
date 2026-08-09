@@ -1,5 +1,6 @@
 export * from "./ApprovalDecisionPayload.js";
 export * from "./ClearContextPayload.js";
+export * from "./ConversationModeSetPayload.js";
 export * from "./CompactContextPayload.js";
 export * from "./EventPayload.js";
 export * from "./EmptyPayload.js";

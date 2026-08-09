@@ -30,7 +30,7 @@ import {
   type NovelSnapshotter,
 } from "../../../novel/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
-import { syncDirectoryBestEffort } from "../../fs/index.js";
+import { syncDirectoryBestEffort } from "../../fs/syncDirectory.js";
 import type { NodeNovelStoreLocation } from "../workspace/index.js";
 import {
   NOVEL_DATABASE_FAILURE,

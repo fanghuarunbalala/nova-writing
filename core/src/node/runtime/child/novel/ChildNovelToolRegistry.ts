@@ -6,6 +6,7 @@
  * canonical writer for tool execution.
  */
 import { randomUUID } from "node:crypto";
+import * as path from "node:path";
 import { noopLogger, type Logger } from "../../../../observability/index.js";
 import {
   CharacterQueryService,
@@ -68,11 +69,25 @@ import {
   createNovelPublicationToolRegistry,
 } from "../../../../tools/novel/index.js";
 import { createTodoToolRegistry } from "../../../../tools/todo/index.js";
+import {
+  NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
+  ComposeToolService,
+  createNovelComposeToolRegistry,
+  type ConversationModePersistencePort,
+} from "../../../../tools/novel/index.js";
+import {
+  RUNTIME_FILES_TOOL_GROUP_MANIFEST,
+  createFileToolRegistry,
+} from "../../../../tools/files/index.js";
+import { FileToolService } from "../../../../tools/files/index.js";
+import { ComposeModeStateProvider } from "../../../../runtime/compose/index.js";
+import type { RuntimeEventSink } from "../../../../runtime/execution/event/index.js";
 import { NodeNovelStoreLocator } from "../../../novel/workspace/index.js";
 import type { NodeNovelStoreLocation } from "../../../novel/workspace/index.js";
 import {
   SqliteNovelCanonicalStore,
   SqliteNovelCanonicalWriter,
+  SqliteNovelComposeCommitStore,
   SqliteNovelEntityQueryStore,
   SqliteNovelOutlineQueryStore,
   SqliteNovelParagraphQueryStore,
@@ -93,12 +108,35 @@ export interface ChildNovelToolRegistryOptions {
   readonly storageRoot: string;
   readonly workdir: string;
   readonly todoWriter: ConversationTodoWriter;
+  readonly composeState: ComposeModeStateProvider;
+  readonly eventSink: RuntimeEventSink;
+  /** 会话 mode + compose 子状态持久化端口(可选;传了才能持久化/恢复 mode)。 */
+  readonly conversations?: ConversationModePersistencePort;
+  readonly logger?: Logger;
+}
+
+export interface CreateChildNovelToolRegistryOptions {
+  readonly location: NodeNovelStoreLocation;
+  readonly novelId: import("../../../../novel/index.js").NovelId;
+  readonly todoWriter: ConversationTodoWriter;
+  readonly composeState: ComposeModeStateProvider;
+  readonly eventSink: RuntimeEventSink;
+  /** 工作区 .novel/design 目录绝对路径（design 草稿文件位置）。 */
+  /** Absolute path to the workspace design directory (design draft location). */
+  readonly designRoot: string;
+  /** workspace 根目录绝对路径（runtime.files 沙盒根；file ops 用 workspace 相对路径）。 */
+  /** Absolute path to the workspace root (runtime.files sandbox root; file ops use relative paths). */
+  readonly sandboxRoot: string;
+  /** 会话 mode + compose 子状态持久化端口(可选;传了才能持久化/恢复 mode)。 */
+  readonly conversations?: ConversationModePersistencePort;
   readonly logger?: Logger;
 }
 
 export interface ChildNovelToolRegistry {
   readonly registry: ToolRegistry;
   readonly groups: ToolGroupCatalog;
+  /** 与 Enter/ExitComposeMode 工具共享的统一 mode 服务(装配方调用 hydrate/setMode)。 */
+  readonly modeService: ComposeToolService;
 }
 
 /** 解析 workspace 并打开真实 novel 工具注册表。Resolves the workspace and opens the real registry. */
@@ -111,6 +149,8 @@ export async function openChildNovelToolRegistry(
   const workspace = await new NodeWorkspaceStoreLocator({
     storageRoot: options.storageRoot,
   }).resolve(options.workdir);
+  const designRoot = path.join(workspace.workspaceRoot, ".novel", "design");
+  const sandboxRoot = workspace.workspaceRoot;
   const location = await new NodeNovelStoreLocator().resolve(workspace);
   const canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
@@ -126,16 +166,14 @@ export async function openChildNovelToolRegistry(
   return createChildNovelToolRegistry({
     location,
     novelId,
+    designRoot,
+    sandboxRoot,
     todoWriter: options.todoWriter,
+    composeState: options.composeState,
+    eventSink: options.eventSink,
+    conversations: options.conversations,
     logger,
   });
-}
-
-export interface CreateChildNovelToolRegistryOptions {
-  readonly location: NodeNovelStoreLocation;
-  readonly novelId: import("../../../../novel/index.js").NovelId;
-  readonly todoWriter: ConversationTodoWriter;
-  readonly logger?: Logger;
 }
 
 export function createChildNovelToolRegistry(
@@ -179,13 +217,34 @@ export function createChildNovelToolRegistry(
     logger,
   });
   const characterQueries = new CharacterQueryService(entityQueryStore);
+  const composeCommitStore = new SqliteNovelComposeCommitStore({
+    location: options.location,
+    novelId: options.novelId,
+    logger,
+  });
   const locationQueries = new LocationQueryService(entityQueryStore);
   const outlineQueries = new StoryOutlineQueryService(outlineQueryStore);
   const paragraphQueries = new ParagraphQueryService(paragraphQueryStore);
   const publicationQueries = new PublicationQueryService(publicationQueryStore);
 
+  const modeService = new ComposeToolService({
+    composeState: options.composeState,
+    designRoot: options.designRoot,
+    eventSink: options.eventSink,
+    commitRecorder: composeCommitStore,
+    conversations: options.conversations,
+    logger,
+  });
   const registry = new ToolRegistry([
     ...createTodoToolRegistry({ writer: options.todoWriter }).list(),
+    ...createNovelComposeToolRegistry({
+      service: modeService,
+      logger,
+    }).list(),
+    ...createFileToolRegistry({
+      service: new FileToolService({ sandboxRoot: options.sandboxRoot }),
+      logger,
+    }).list(),
     ...createNovelOutlineToolRegistry({
       service: new OutlineToolService({
         novelId: options.novelId,
@@ -252,6 +311,8 @@ export function createChildNovelToolRegistry(
   ]);
   const groups = new ToolGroupCatalog([
     loadToolGroupManifest(RUNTIME_TODO_TOOL_GROUP_MANIFEST),
+    NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
+    RUNTIME_FILES_TOOL_GROUP_MANIFEST,
     NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
     NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
     NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
@@ -259,7 +320,7 @@ export function createChildNovelToolRegistry(
     NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
     NOVEL_DELETE_TOOL_GROUP_MANIFEST,
   ]);
-  return Object.freeze({ registry, groups });
+  return Object.freeze({ registry, groups, modeService });
 }
 
 /** Child 组合身份工厂：真实随机 id 供工具创建实体。Combined child identity factory. */

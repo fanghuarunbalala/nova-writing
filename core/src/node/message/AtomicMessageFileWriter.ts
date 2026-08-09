@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readdir, rename, stat, unlink } from "node:fs/promises";
 import { dirname, basename, join } from "node:path";
-import { syncDirectoryBestEffort } from "../fs/index.js";
+import { syncDirectoryBestEffort } from "../fs/syncDirectory.js";
 import { AtomicMessageFileReplacement } from "./AtomicMessageFileReplacement.js";
 
 export class AtomicMessageFileWriter {

@@ -9,6 +9,7 @@ import type { ConversationTimelineItem as TimelineItem } from "../projection/Con
 import type { MessageReference } from "./MessageReference.js";
 import { AssistantMessage } from "./AssistantMessage.js";
 import { ApprovalCard } from "./ApprovalCard.js";
+import { DesignCard } from "./DesignCard.js";
 import { UserMessage } from "./UserMessage.js";
 import { computeTimelineWindow } from "./timelineWindow.js";
 import styles from "./ConversationTimeline.module.css";
@@ -92,6 +93,7 @@ export function ConversationTimeline({
               style={{ animationDelay: `${Math.min(index * 0.03, 0.42)}s` }}
             >
               {renderItem(item, {
+                conversationId,
                 onMessageReferenceClick,
                 resolveReference,
                 onProposalAction,
@@ -113,6 +115,7 @@ export function ConversationTimeline({
 }
 
 interface RenderItemDeps {
+  readonly conversationId: string;
   readonly onMessageReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onProposalAction?: (
@@ -128,6 +131,7 @@ interface RenderItemDeps {
 
 function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
   const {
+    conversationId,
     onMessageReferenceClick,
     resolveReference,
     onProposalAction,
@@ -195,6 +199,11 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
       return (
         <ApprovalCard
           approval={item.approval}
+          designDraft={
+            item.approval.toolNames.includes("ExitComposeMode")
+              ? { conversationId }
+              : undefined
+          }
           onApprove={
             onApprovalDecision === undefined
               ? undefined
@@ -210,6 +219,13 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
               ? undefined
               : (approvalRequestId) => onOpenApproval(approvalRequestId)
           }
+        />
+      );
+    case "design":
+      return (
+        <DesignCard
+          conversationId={item.design.conversationId}
+          phase={item.design.phase}
         />
       );
   }

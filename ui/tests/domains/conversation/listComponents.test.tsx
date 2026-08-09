@@ -265,15 +265,15 @@ describe("NewConversationButton / ComposerModeBar / MessageReferenceChip", () =>
   it("ComposerModeBar cycles mode and renders hint", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const { rerender } = render(<ComposerModeBar mode="plan" onChange={onChange} />);
-    expect(screen.getByText("只规划 · 不产生变更")).toBeInTheDocument();
+    const { rerender } = render(<ComposerModeBar mode="review" onChange={onChange} />);
+    expect(screen.getByText("提议后审批提交")).toBeInTheDocument();
     expect(screen.getByText("直接执行")).toBeInTheDocument();
-    expect(screen.getByText("需审核")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /执行模式：计划/ }));
-    expect(onChange).toHaveBeenCalledWith("bypass");
-    rerender(<ComposerModeBar mode="review" onChange={onChange} />);
+    expect(screen.getByText("设计")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /执行模式：需审核/ }));
-    expect(onChange).toHaveBeenLastCalledWith("plan");
+    expect(onChange).toHaveBeenCalledWith("bypass");
+    rerender(<ComposerModeBar mode="compose" onChange={onChange} />);
+    await user.click(screen.getByRole("button", { name: /执行模式：设计/ }));
+    expect(onChange).toHaveBeenLastCalledWith("review");
   });
 
   it("MessageReferenceChip fires onClick with the reference", async () => {

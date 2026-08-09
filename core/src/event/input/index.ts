@@ -1,5 +1,6 @@
 export * from "./ApprovalDecisionInputEvent.js";
 export * from "./CommandInputEvent.js";
+export * from "./ConversationModeSetInputEvent.js";
 export * from "./CompactContextInputEvent.js";
 export * from "./ClearContextInputEvent.js";
 export * from "./ContextInputEvent.js";

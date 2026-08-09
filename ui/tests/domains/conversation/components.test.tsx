@@ -206,7 +206,7 @@ describe("ConversationComposer", () => {
     const input = screen.getByRole("textbox", { name: "对话输入" });
     await user.type(input, "  改写雨景  ");
     await user.keyboard("{Enter}");
-    expect(onSend).toHaveBeenCalledWith({ text: "改写雨景", mode: "review", references: [] });
+    expect(onSend).toHaveBeenCalledWith({ text: "改写雨景", references: [] });
     expect(input).toHaveValue("");
   });
 

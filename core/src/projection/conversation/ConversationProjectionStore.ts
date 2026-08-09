@@ -18,6 +18,10 @@ import {
   isRuntimePresenceState,
   type RuntimePresence,
 } from "../../conversation/RuntimePresence.js";
+import {
+  isConversationMode,
+  type ConversationMode,
+} from "../../runtime/compose/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
 import {
   isExecutionCancellationReason,
@@ -96,6 +100,8 @@ export class ConversationProjectionStore {
   private readonly toolTraces: ToolTraceSummaryProjection[] = [];
   private readonly listeners = new Set<ConversationProjectionListener>();
   private runtimePresence?: RuntimePresence;
+  private conversationMode?: ConversationMode;
+  private composePhase?: "designing" | "pending";
   private revision = 0;
   private lastAppliedSequence = 0;
   private snapshot: ConversationProjectionSnapshot;
@@ -121,6 +127,39 @@ export class ConversationProjectionStore {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  /**
+   * 播种权威会话 mode（connect 时来自 DB 元数据）。
+   * Seed the authoritative conversation mode (from DB metadata at connect).
+   *
+   * 幂等、可重复调用；值不变时不发通知。裁剪/重连后回放缺失 `mode.changed`
+   * 事件时，靠本方法兜底，投影绝不静默回退到错误的默认 mode。
+   */
+  seedConversationMode(mode: ConversationMode | undefined): void {
+    if (mode !== undefined && !isConversationMode(mode)) {
+      throw new TypeError("Conversation mode is invalid");
+    }
+    if (this.conversationMode === mode) return;
+    this.conversationMode = mode;
+    this.snapshot = this.buildSnapshot();
+    this.notifyListeners();
+  }
+
+  /**
+   * 播种权威 compose 会话阶段（connect 时来自 DB compose_state 行）。
+   * Seed the authoritative compose session phase (from the DB compose_state row).
+   *
+   * 幂等、可重复调用；裁剪/重连后回放缺失 compose 事件时，靠本方法兜底。
+   */
+  seedComposePhase(phase: "designing" | "pending" | undefined): void {
+    if (phase !== undefined && phase !== "designing" && phase !== "pending") {
+      throw new TypeError("Conversation compose phase is invalid");
+    }
+    if (this.composePhase === phase) return;
+    this.composePhase = phase;
+    this.snapshot = this.buildSnapshot();
+    this.notifyListeners();
   }
 
   apply(event: PersistedConversationEventSnapshot): ConversationProjectionApplyResult {
@@ -206,6 +245,23 @@ export class ConversationProjectionStore {
     switch (event.eventType) {
       case OUTPUT_EVENT_TYPE.runtimePresenceChanged:
         this.applyRuntimePresence(event);
+        return;
+      case OUTPUT_EVENT_TYPE.novelModeChanged:
+        this.applyModeChanged(event);
+        return;
+      case OUTPUT_EVENT_TYPE.novelComposeBegin:
+        this.composePhase = "designing";
+        return;
+      case OUTPUT_EVENT_TYPE.novelComposeSubmitted:
+        this.composePhase = "pending";
+        return;
+      case OUTPUT_EVENT_TYPE.novelComposeRejected:
+        this.composePhase = "designing";
+        return;
+      case OUTPUT_EVENT_TYPE.novelComposeApplied:
+      case OUTPUT_EVENT_TYPE.novelComposeApproved:
+      case OUTPUT_EVENT_TYPE.novelComposeDiscarded:
+        this.composePhase = undefined;
         return;
       case OUTPUT_EVENT_TYPE.agentRunStateChanged:
         this.applyRunState(event);
@@ -302,6 +358,15 @@ export class ConversationProjectionStore {
         current.observedAt,
       ),
     });
+  }
+
+  private applyModeChanged(event: PersistedConversationEventSnapshot): void {
+    const payload = payloadRecord(event);
+    const mode = payload.mode;
+    if (!isConversationMode(mode)) {
+      throw payloadError(event.eventType, "mode is invalid");
+    }
+    this.conversationMode = mode;
   }
 
   private applyRunState(event: PersistedConversationEventSnapshot): void {
@@ -651,6 +716,12 @@ export class ConversationProjectionStore {
       ),
       ...(this.runtimePresence !== undefined
         ? { runtimePresence: this.runtimePresence }
+        : {}),
+      ...(this.conversationMode !== undefined
+        ? { conversationMode: this.conversationMode }
+        : {}),
+      ...(this.composePhase !== undefined
+        ? { composePhase: this.composePhase }
         : {}),
     });
   }

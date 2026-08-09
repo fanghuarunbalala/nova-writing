@@ -11,6 +11,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { syncDirectoryBestEffort } from "../fs/syncDirectory.js";
 import {
   CredentialReference,
   type ConfigurationHomeResolver,
@@ -18,7 +19,6 @@ import {
   type CredentialStore,
 } from "../../config/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
-import { syncDirectoryBestEffort } from "../fs/index.js";
 import {
   NODE_CONFIGURATION_STORE_FAILURE,
   NodeConfigurationStoreError,

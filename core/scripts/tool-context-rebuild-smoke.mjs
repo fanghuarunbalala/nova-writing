@@ -138,13 +138,21 @@ try {
   );
   const toolResults = piMessages.filter((message) => message.role === "toolResult");
   assert.ok(toolUse, "toolUse should be present in Pi context");
-  assert.equal(toolResults.length, 2, "two toolResult messages");
+  assert.equal(toolResults.length, 1, "only paired call-1 toolResult remains; orphan call-2 converts to user text");
   assert.equal(toolResults[0].toolCallId, "call-1");
   assert.equal(toolResults[0].isError, false);
   assert.ok(String(toolResults[0].content[0]?.text ?? "").includes("林晚"));
-  assert.equal(toolResults[1].toolCallId, "call-2");
-  assert.equal(toolResults[1].isError, true);
-  assert.ok(String(toolResults[1].content[0]?.text ?? "").includes("失败"));
+  // 孤儿 toolResult（call-2 无对应 toolRequest）必须降级为 user 文本消息，
+  // 不再产出裸 toolResult，保持 1:1 消息数（context projection 不变量）。
+  const orphanText = piMessages.find(
+    (message) =>
+      message.role === "user" &&
+      String(message.content?.[0]?.text ?? "").includes("失败"),
+  );
+  assert.ok(orphanText, "orphan call-2 result should become a user text message");
+  assert.ok(
+    String(orphanText.content[0].text).includes("NOVEL_OUTLINE_READ_FAILED"),
+  );
 
   // 重排验证：assistant toolCall(call-1) 后必须紧跟对应的 toolResult(call-1)。
   const call1Index = piMessages.findIndex(

@@ -29,6 +29,19 @@ export type ElectronWorkspaceIpcChannel =
 export const ELECTRON_WORKSPACE_IPC_CHANNELS: readonly ElectronWorkspaceIpcChannel[] =
   Object.freeze(Object.values(ELECTRON_WORKSPACE_IPC_CHANNEL));
 
+/** 设计草稿文件读写 IPC 通道（compose 模式 GUI 直接编辑）。 */
+/** Design-file read/write IPC channels (direct GUI editing in compose mode). */
+export const ELECTRON_DESIGN_IPC_CHANNEL = Object.freeze({
+  read: "novel.design.v1.read",
+  write: "novel.design.v1.write",
+} as const);
+
+export type ElectronDesignIpcChannel =
+  (typeof ELECTRON_DESIGN_IPC_CHANNEL)[keyof typeof ELECTRON_DESIGN_IPC_CHANNEL];
+
+export const ELECTRON_DESIGN_IPC_CHANNELS: readonly ElectronDesignIpcChannel[] =
+  Object.freeze(Object.values(ELECTRON_DESIGN_IPC_CHANNEL));
+
 export const ELECTRON_APPLICATION_COMMAND_CHANNEL =
   "novel.application.v1.command" as const;
 

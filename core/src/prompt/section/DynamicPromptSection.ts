@@ -13,6 +13,15 @@ import { PromptSection, type PromptSectionOptions } from "./PromptSection.js";
  */
 export interface DynamicPromptSectionInput {
   readonly environment?: PromptEnvironmentSnapshot;
+  /** Compose 模式状态快照（结构类型，避免 prompt 层依赖 runtime/compose）。 */
+  /** Compose mode state snapshot (structural type; the prompt layer stays decoupled). */
+  readonly compose?: {
+    readonly phase: string;
+    readonly active: boolean;
+    /** 会话 base mode（review/bypass/compose）。Compose 激活时恒为 "compose"。 */
+    /** Per-conversation base mode (review/bypass/compose); always "compose" while active. */
+    readonly mode?: string;
+  };
 }
 
 export abstract class DynamicPromptSection extends PromptSection {

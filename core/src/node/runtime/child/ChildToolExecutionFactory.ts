@@ -19,6 +19,7 @@ import {
   type RuntimeEventSink,
 } from "../../../runtime/execution/event/index.js";
 import {
+  ComposeAwareToolPermissionPolicy,
   INITIAL_TOOL_PERMISSION_RULES,
   LayeredToolPermissionPolicy,
   StaticToolExecutionPolicyResolver,
@@ -26,6 +27,10 @@ import {
   ToolExecutionPipeline,
   TrustedProcessSandboxExecutor,
 } from "../../../runtime/tools/execution/index.js";
+import {
+  ComposeApprovalLifecycleSink,
+  ComposeModeStateProvider,
+} from "../../../runtime/compose/index.js";
 import type {
   ToolRegistryView,
   ToolResultLimits,
@@ -35,6 +40,8 @@ import { NodeSha256ToolArgumentDigester } from "../../tools/index.js";
 export interface ChildToolExecutionCompositionOptions {
   readonly registryView: ToolRegistryView;
   readonly eventSink: RuntimeEventSink;
+  /** compose 状态源；缺省新建空 provider。Compose state source; defaults to a fresh provider. */
+  readonly composeStateProvider?: ComposeModeStateProvider;
   readonly logger?: Logger;
 }
 
@@ -74,9 +81,32 @@ export const CHILD_TOOL_PERMISSION_RULES: readonly ToolPermissionRule[] =
           "NovelParagraphRead",
           "NovelVolumeRead",
           "NovelChapterRead",
-          "NovelDraftStatus",
           "TodoWrite",
         ]),
+      }),
+    }),
+    Object.freeze({
+      ruleId: "child_files_allow",
+      source: "built_in",
+      effect: "allow",
+      match: Object.freeze({
+        toolNames: Object.freeze(["Read", "Glob", "Write", "Edit"]),
+      }),
+    }),
+    Object.freeze({
+      ruleId: "child_compose_enter_allow",
+      source: "built_in",
+      effect: "allow",
+      match: Object.freeze({
+        toolNames: Object.freeze(["EnterComposeMode"]),
+      }),
+    }),
+    Object.freeze({
+      ruleId: "child_compose_exit_ask",
+      source: "built_in",
+      effect: "ask",
+      match: Object.freeze({
+        toolNames: Object.freeze(["ExitComposeMode"]),
       }),
     }),
     Object.freeze({
@@ -98,9 +128,6 @@ export const CHILD_TOOL_PERMISSION_RULES: readonly ToolPermissionRule[] =
           "NovelChapterWrite",
           "NovelChapterEdit",
           "NovelDelete",
-          "NovelDraftCommit",
-          "NovelDraftRollback",
-          "NovelDraftRebase",
         ]),
       }),
     }),
@@ -112,12 +139,25 @@ export function createChildToolExecutionComposition(
   const logger = (options.logger ?? noopLogger).child({
     component: "child_tool_execution",
   });
+  const eventSink =
+    options.composeStateProvider === undefined
+      ? options.eventSink
+      : new ComposeApprovalLifecycleSink(
+          options.eventSink,
+          options.composeStateProvider,
+        );
   const coordinator = new InMemoryInteractionCoordinator({
-    eventSink: options.eventSink,
+    eventSink,
     logger,
   });
   const policyResolver = new StaticToolExecutionPolicyResolver([
     { toolName: "TodoWrite", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "Read", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "Glob", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "Write", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "Edit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "EnterComposeMode", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "ExitComposeMode", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelOutlineRead", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelOutlineWrite", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelOutlineEdit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
@@ -137,15 +177,14 @@ export function createChildToolExecutionComposition(
     { toolName: "NovelChapterWrite", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelChapterEdit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelDelete", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
-    { toolName: "NovelDraftStatus", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
-    { toolName: "NovelDraftCommit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
-    { toolName: "NovelDraftRollback", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
-    { toolName: "NovelDraftRebase", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
   ]);
-  const permissionPolicy = new LayeredToolPermissionPolicy([
-    ...INITIAL_TOOL_PERMISSION_RULES,
-    ...CHILD_TOOL_PERMISSION_RULES,
-  ]);
+  const permissionPolicy = new ComposeAwareToolPermissionPolicy(
+    new LayeredToolPermissionPolicy([
+      ...INITIAL_TOOL_PERMISSION_RULES,
+      ...CHILD_TOOL_PERMISSION_RULES,
+    ]),
+    options.composeStateProvider ?? new ComposeModeStateProvider(),
+  );
   const dispatcher = new ToolDispatcher(
     new ToolExecutionPipeline({
       registryView: options.registryView,
@@ -157,7 +196,7 @@ export function createChildToolExecutionComposition(
       sandboxExecutor: new TrustedProcessSandboxExecutor(),
       resultLimits: DEFAULT_TOOL_RESULT_LIMITS,
       traceSink: new RuntimeEventToolTraceSink({
-        eventSink: options.eventSink,
+        eventSink,
       }),
       lifecycleSink: new RuntimeEventToolLifecycleSink({
         eventSink: options.eventSink,
@@ -293,6 +332,12 @@ function buildApprovalSummary(
   input: Parameters<ToolApprovalRequestFactory["create"]>[0],
   operations: readonly ToolApprovalOperationSummary[],
 ): ToolApprovalRequest["summary"] {
+  if (input.identity.toolName === "ExitComposeMode") {
+    return Object.freeze({
+      title: "提交设计草稿",
+      description: "请确认设计草稿内容后批准；批准后按草稿内容落库。",
+    });
+  }
   const first = operations[0];
   const title =
     first === undefined

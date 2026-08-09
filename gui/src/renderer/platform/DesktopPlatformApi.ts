@@ -18,6 +18,7 @@ import type {
   ElectronPreloadBridge,
 } from "../../shared/index.js";
 import { createElectronNativeFilePort } from "./ElectronNativeFilePort.js";
+import { createElectronDesignFilePort } from "./ElectronDesignFilePort.js";
 import { createElectronSystemTrayPort } from "./ElectronSystemTrayPort.js";
 import { createElectronUpdaterPort } from "./ElectronUpdaterPort.js";
 import { createElectronWindowPort } from "./ElectronWindowPort.js";
@@ -32,5 +33,6 @@ export function createDesktopPlatformApi(
       : { updater: createElectronUpdaterPort(bridge) }),
     ...(bridge.tray === undefined ? {} : { tray: createElectronSystemTrayPort(bridge) }),
     ...(bridge.files === undefined ? {} : { files: createElectronNativeFilePort(bridge) }),
+    ...(bridge.design === undefined ? {} : { design: createElectronDesignFilePort(bridge) }),
   });
 }

@@ -146,6 +146,8 @@
     "smoke:runtime-nudge-selection-template": "pnpm build && node scripts/runtime-nudge-selection-template-smoke.mjs",
     "smoke:runtime-nudge-provider-call-receipt": "pnpm build && node scripts/runtime-nudge-provider-call-receipt-smoke.mjs",
     "smoke:runtime-nudge-event-bridge": "pnpm build && node scripts/runtime-nudge-event-bridge-smoke.mjs",
+    "smoke:nudge-definitions": "pnpm build && node scripts/nudge-definitions-smoke.mjs",
+    "smoke:runtime-nudge-todo-idle-cross-run": "pnpm build && node scripts/runtime-nudge-todo-idle-cross-run-smoke.mjs",
     "smoke:runtime-projected-run-preparation": "pnpm build && node scripts/runtime-projected-run-preparation-smoke.mjs",
     "smoke:runtime-pi-adapter": "pnpm build && node scripts/runtime-pi-agent-core-adapter-smoke.mjs",
     "smoke:runtime-pi-provider-execution-factory": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/runtime-pi-provider-execution-factory-typecheck.ts && node scripts/runtime-pi-provider-execution-factory-smoke.mjs",
@@ -191,6 +193,7 @@
     "smoke:mock-client-transports": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/mock-client-transports-typecheck.ts && node scripts/mock-client-transports-smoke.mjs",
     "smoke:conversation-projection-store": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/conversation-projection-store-typecheck.ts && node scripts/conversation-projection-store-smoke.mjs",
     "smoke:conversation-projection-controller": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/conversation-projection-controller-typecheck.ts && node scripts/conversation-projection-controller-smoke.mjs",
+    "smoke:conversation-mode-set-persistence": "pnpm build && node scripts/conversation-mode-set-persistence-smoke.mjs",
     "smoke:conversation-events": "pnpm build && node scripts/conversation-event-live-smoke.mjs && node scripts/conversation-event-follow-smoke.mjs && node scripts/conversation-event-publishing-smoke.mjs && node scripts/conversation-event-integration-smoke.mjs",
     "smoke:conversation-event-overflow-recovery": "pnpm build && node scripts/conversation-event-subscription-overflow-recovery-smoke.mjs",
     "smoke:child-tool-execution-wiring": "pnpm build && node scripts/child-tool-execution-wiring-smoke.mjs",
@@ -204,10 +207,12 @@
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.82.1",
     "@earendil-works/pi-ai": "0.82.1",
+    "picomatch": "^4",
     "typebox": "1.1.38",
     "yaml": "2.9.0"
   },
   "devDependencies": {
-    "@types/node": "26.1.2"
+    "@types/node": "26.1.2",
+    "@types/picomatch": "^4.0.3"
   }
 }

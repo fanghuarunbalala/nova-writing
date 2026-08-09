@@ -9,6 +9,7 @@ import type {
 import type { DesktopConfigurationServicePort } from "./config/index.js";
 import type { DesktopWorkspaceServicePort } from "./workspace/index.js";
 import type { DesktopNativeFileServicePort } from "./desktop/nativefile/index.js";
+import type { DesktopDesignFileServicePort } from "./desktop/design/index.js";
 import type { DesktopWindowServicePort } from "./desktop/window/index.js";
 import type { DesktopUpdaterServicePort } from "./desktop/updater/index.js";
 import type { DesktopSystemTrayServicePort } from "./desktop/tray/index.js";
@@ -26,6 +27,7 @@ export interface CreateElectronDesktopApplicationOptions {
   readonly updaterService?: DesktopUpdaterServicePort;
   readonly trayService?: DesktopSystemTrayServicePort;
   readonly nativeFileService?: DesktopNativeFileServicePort;
+  readonly designService?: DesktopDesignFileServicePort;
 }
 
 export function createElectronDesktopApplication(
@@ -77,6 +79,9 @@ export function createElectronDesktopApplication(
     ...(options.trayService !== undefined ? { trayService: options.trayService } : {}),
     ...(options.nativeFileService !== undefined
       ? { nativeFileService: options.nativeFileService }
+      : {}),
+    ...(options.designService !== undefined
+      ? { designService: options.designService }
       : {}),
   });
 }

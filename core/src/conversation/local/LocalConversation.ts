@@ -10,9 +10,11 @@ import {
   ConversationHandleClosingError,
 } from "../ConversationErrors.js";
 import type { ConversationQueryService } from "../ConversationQueryService.js";
+import type { ConversationComposeStateReader } from "../ConversationComposeStateReader.js";
 import type { ConversationRuntimePresenceReader } from "../ConversationRuntimePresenceReader.js";
 import type { ConversationSnapshot } from "../ConversationSnapshot.js";
 import type { RuntimePresence } from "../RuntimePresence.js";
+import type { ConversationComposeState } from "../../storage/index.js";
 import { LocalConversationEvents } from "./LocalConversationEvents.js";
 import { LocalConversationInput } from "./LocalConversationInput.js";
 
@@ -23,6 +25,9 @@ export interface LocalConversationOptions {
   queryService: ConversationQueryService;
   commandService: ConversationCommandService;
   runtimePresenceReader: ConversationRuntimePresenceReader;
+  /** 可选 compose 会话子状态读取器；缺省时 getComposeState 返回 undefined。 */
+  /** Optional compose session sub-state reader; getComposeState returns undefined when absent. */
+  composeStateReader?: ConversationComposeStateReader;
   logger?: Logger;
 }
 
@@ -34,6 +39,7 @@ export class LocalConversation implements Conversation {
 
   private readonly queryService: ConversationQueryService;
   private readonly runtimePresenceReader: ConversationRuntimePresenceReader;
+  private readonly composeStateReader?: ConversationComposeStateReader;
   private readonly logger: Logger;
   private handleState: LocalConversationState = "open";
   private closePromise?: Promise<void>;
@@ -43,6 +49,7 @@ export class LocalConversation implements Conversation {
     this.parentConversationId = options.snapshot.metadata.parentConversationId;
     this.queryService = options.queryService;
     this.runtimePresenceReader = options.runtimePresenceReader;
+    this.composeStateReader = options.composeStateReader;
     this.logger = (options.logger ?? noopLogger).child({
       component: "local_conversation",
       conversationId: this.id,
@@ -74,6 +81,14 @@ export class LocalConversation implements Conversation {
   getRuntimePresence(): Promise<RuntimePresence> {
     this.assertOpen();
     return this.runtimePresenceReader.getRuntimePresence(this.id);
+  }
+
+  getComposeState(): Promise<ConversationComposeState | undefined> {
+    this.assertOpen();
+    if (this.composeStateReader === undefined) {
+      return Promise.resolve(undefined);
+    }
+    return this.composeStateReader.getConversationComposeState(this.id);
   }
 
   close(): Promise<void> {

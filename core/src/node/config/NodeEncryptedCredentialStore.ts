@@ -9,7 +9,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { syncDirectoryBestEffort } from "../fs/index.js";
+import { syncDirectoryBestEffort } from "../fs/syncDirectory.js";
 import {
   CredentialReference,
   type ConfigurationHomeResolver,

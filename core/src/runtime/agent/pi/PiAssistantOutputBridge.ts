@@ -162,7 +162,7 @@ export class PiAssistantOutputBridge implements PiAgentEventBridge {
         this.activeDraft.assistantMessageId,
       );
     }
-    const turn = this.requireTurn(runId, true);
+    const turn = this.requireTurn(runId, true, undefined, true);
     const assistantMessageId = this.messageIdGenerator.generate();
     assertNonBlank("Assistant Message ID", assistantMessageId);
     const event = new AgentAssistantMessageStartedOutputEvent({
@@ -292,6 +292,7 @@ export class PiAssistantOutputBridge implements PiAgentEventBridge {
     runId: string,
     requireRunning: boolean,
     expectedTurnId?: string,
+    tolerateCancellationState = false,
   ): TurnStateSnapshot {
     const turn = this.turnStateReader.getTurnSnapshot();
     if (turn === undefined) {
@@ -308,11 +309,19 @@ export class PiAssistantOutputBridge implements PiAgentEventBridge {
       );
     }
     if (requireRunning && turn.status !== TURN_STATUS.running) {
-      throw this.fail(
-        PI_ASSISTANT_OUTPUT_BRIDGE_FAILURE.turnState,
-        runId,
-        turn.turnId,
-      );
+      // 取消期间：stop 处理器先转 turn→stopping 再 dispatch abort，provider 被 abort 后
+      // 的 message_start 到达时 turn 已非 running。startDraft 对 stopping/cancelled 容忍
+      // （endDraft 会把 aborted 消息落为 Cancelled 事件）；completed/failed 仍是真实协议
+      // 违规，继续抛 turnState。
+      const cancellationState =
+        turn.status === TURN_STATUS.stopping || turn.status === TURN_STATUS.cancelled;
+      if (!(tolerateCancellationState && cancellationState)) {
+        throw this.fail(
+          PI_ASSISTANT_OUTPUT_BRIDGE_FAILURE.turnState,
+          runId,
+          turn.turnId,
+        );
+      }
     }
     return turn;
   }

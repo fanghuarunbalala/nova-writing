@@ -23,6 +23,9 @@ export const REMINDER_KIND = [
   "deferred_tools_delta",
   "compact_summary",
   "nudge",
+  "compose_mode",
+  "compose_mode_exit",
+  "todo_idle",
 ] as const;
 
 export type ReminderKind = (typeof REMINDER_KIND)[number];

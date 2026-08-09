@@ -82,6 +82,16 @@ export interface NudgeDeliveryAttemptRecord {
   readonly completedAt?: string;
 }
 
+/** 每次确认交付的 turn 记录（含 until_acknowledged 重交付；供 cooldown 用）。 */
+export interface NudgeDeliveryTurnRecord {
+  readonly nudgeId: string;
+  readonly targetRunId: string;
+  readonly policyId: string;
+  readonly dedupeKey: string;
+  readonly targetTurnNumber: number;
+  readonly deliveredAt: string;
+}
+
 export interface NudgeLeaseReconciliationResult {
   readonly nudgeIds: readonly string[];
   readonly providerCallIds: readonly string[];
@@ -122,6 +132,7 @@ export interface PendingNudgeStoreSnapshot {
   readonly leases: readonly NudgeLease[];
   readonly consumptions: readonly NudgeConsumptionRecord[];
   readonly deliveryAttempts?: readonly NudgeDeliveryAttemptRecord[];
+  readonly deliveryTurns?: readonly NudgeDeliveryTurnRecord[];
 }
 
 export interface PendingNudgeStore {

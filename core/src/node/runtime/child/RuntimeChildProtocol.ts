@@ -8,6 +8,7 @@ import {
   type ConversationRuntimeInputReference,
 } from "../../../conversation/host/index.js";
 import { isEventType, type JsonValue } from "../../../event/protocol/index.js";
+import { isConversationMode } from "../../../runtime/compose/index.js";
 
 export const RUNTIME_CHILD_RPC_METHOD = {
   bootstrap: "runtime.bootstrap",
@@ -175,7 +176,10 @@ function captureConversation(value: unknown): ConversationRuntimeBootstrap["conv
     "createdAt",
     "updatedAt",
     "lastJournalSequence",
-  ], ["parentConversationId", "title", "pinned"]);
+  ], ["parentConversationId", "title", "pinned", "mode"]);
+  if (metadata.mode !== undefined && !isConversationMode(metadata.mode)) {
+    throw new RuntimeChildPayloadError("bootstrap");
+  }
   const id = captureNonBlank(metadata.id, "bootstrap");
   const status = metadata.status;
   if (status !== "active" && status !== "archived" && status !== "disposed") {
@@ -211,6 +215,7 @@ function captureConversation(value: unknown): ConversationRuntimeBootstrap["conv
       createdAt: captureTimestamp(metadata.createdAt, "bootstrap"),
       updatedAt: captureTimestamp(metadata.updatedAt, "bootstrap"),
       lastJournalSequence: captureInteger(metadata.lastJournalSequence, 0, "bootstrap"),
+      ...(metadata.mode !== undefined ? { mode: metadata.mode } : {}),
     }),
     activeAgentBinding: Object.freeze({
       id: captureNonBlank(binding.id, "bootstrap"),

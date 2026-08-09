@@ -26,6 +26,8 @@ export interface ConversationTodoSnapshot {
   readonly revision: number;
   readonly todos: readonly TodoItemSnapshot[];
   readonly updatedAt: string;
+  /** 最后一次 TodoWrite 所在 runId（供跨 run 检测"多久未维护 todo"）。 */
+  readonly lastUpdatedRunId?: string;
 }
 
 export interface ConversationTodoStore {

@@ -3,12 +3,13 @@
  *
  * 执行模式切换（对齐原型 .mode-bar + .mode-switch）：单个循环切换按钮
  * （模式名 + 描述 + chevron），右侧模式提示点。
- * 点击按 草案 → 直接执行 → 审批 → 草案 循环（原型 MODE_ORDER）。
+ * 点击按 需审核 → 直接执行 → 设计 → 需审核 循环；切换经 ChatSurface 发送
+ * conversation.mode.set 到 core（mode 为会话级权威持久状态，非本地摆设）。
  */
 import type { ComposerMode } from "../store/ComposerDraftStore.js";
 import styles from "./ComposerModeBar.module.css";
 
-export type ComposerModeTone = "plan" | "bypass" | "review";
+export type ComposerModeTone = "compose" | "bypass" | "review";
 
 export interface ComposerModeMeta {
   readonly value: ComposerMode;
@@ -18,9 +19,9 @@ export interface ComposerModeMeta {
 }
 
 export const COMPOSER_MODES: readonly ComposerModeMeta[] = Object.freeze([
-  { value: "plan", label: "计划", description: "只规划 · 不产生变更", tone: "plan" },
-  { value: "bypass", label: "直接执行", description: "跳过审批 · 立即落地", tone: "bypass" },
   { value: "review", label: "需审核", description: "提议后审批提交", tone: "review" },
+  { value: "bypass", label: "直接执行", description: "跳过审批 · 立即落地", tone: "bypass" },
+  { value: "compose", label: "设计", description: "仅草稿文件可写", tone: "compose" },
 ]);
 
 export interface ComposerModeBarProps {

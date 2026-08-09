@@ -74,6 +74,9 @@ export class NudgeRenderer {
         placement: NUDGE_PLACEMENT.systemPromptOverlay,
         nudgeIds: captured.map((nudge) => nudge.id),
         content,
+        ...(captured[0]!.reminderKind === undefined
+          ? {}
+          : { reminderKind: captured[0]!.reminderKind }),
       });
       this.logger.info("runtime.nudge.render_completed", {
         nudgeCount: overlay.nudgeIds.length,
@@ -98,7 +101,10 @@ export class NudgeRenderer {
     );
     let rendered: unknown;
     try {
-      rendered = template.render(nudge.parameters);
+      rendered = template.render({
+        ...nudge.parameters,
+        deliveryCount: nudge.deliveryCount + 1,
+      });
     } catch {
       throw new NudgeTemplateError(
         NUDGE_TEMPLATE_FAILURE.renderFailed,

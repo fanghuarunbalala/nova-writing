@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, open, rename, unlink, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { syncDirectoryBestEffort } from "../fs/index.js";
+import { syncDirectoryBestEffort } from "../fs/syncDirectory.js";
 import {
   MessageProjectionFileOperationError,
   MessageProjectionReplacementDurabilityError,

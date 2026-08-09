@@ -5,6 +5,7 @@ import type {
   NudgeEffect,
 } from "../nudge/index.js";
 import type { ContextPressureSnapshot } from "../context/index.js";
+import type { ComposeModeSnapshot } from "../compose/ComposeModeState.js";
 
 export const RUNTIME_POLICY_PHASE = {
   beforeProviderCall: "before_provider_call",
@@ -21,13 +22,26 @@ export const CONTEXT_COMPACTION_EFFECT_TRIGGER = {
 export type ContextCompactionEffectTrigger =
   (typeof CONTEXT_COMPACTION_EFFECT_TRIGGER)[keyof typeof CONTEXT_COMPACTION_EFFECT_TRIGGER];
 
+/** 域运行时信号：provider call 计数与可选快照，供 nudge 类 policy 输入。 */
+export interface RuntimePolicyRuntimeSignals {
+  /** 本 run 内已发出的 provider call 序号（1-based；对应 ActivePiRun.providerCallOrdinal）。 */
+  readonly providerCallCount: number;
+  /** compose 模式快照（novel.reminder.compose_mode/compose_mode_exit 输入）。 */
+  readonly compose?: ComposeModeSnapshot;
+  /** todo 计数（novel.reminder.todo_idle 输入；lastUpdatedRunId = 最后一次 TodoWrite 所在 run）。 */
+  readonly todos?: Readonly<{ inProgressCount: number; lastUpdatedRunId?: string }>;
+}
+
 export interface RuntimePolicyContext {
   readonly phase: RuntimePolicyPhase;
   readonly conversationId: string;
   readonly runId: string;
   readonly providerCallId: string;
   readonly evaluatedAt: string;
-  readonly contextPressure: ContextPressureSnapshot;
+  /** 上下文压力快照（ContextPressurePolicy 专用；其余 policy 可省略）。 */
+  readonly contextPressure?: ContextPressureSnapshot;
+  /** 域运行时信号（nudge 类 policy 输入）。 */
+  readonly runtimeSignals?: RuntimePolicyRuntimeSignals;
 }
 
 export interface ContextCompactionPolicyState {

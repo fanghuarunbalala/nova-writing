@@ -5,6 +5,7 @@
  * the Agent tool composition policy for novel_explorer / novel_compose.
  */
 import { SubagentDefinitionCatalog } from "./SubagentDefinitionCatalog.js";
+import { SUBAGENT_SUMMARY_MAX_BYTES } from "./SubagentProtocolValidator.js";
 import type {
   SubagentDefinition,
   SubagentToolCompositionPolicy,
@@ -21,11 +22,16 @@ export const NOVEL_EXPLORER_TOOL_POLICY_ID =
 export const NOVEL_COMPOSE_TOOL_POLICY_ID =
   "toolPolicy:novel_compose" as const;
 
-/** 子代理 Prompt/结果/引用的容量限制。Subagent payload capacity limits. */
+/** 子代理 Prompt/结果/引用的容量限制。Subagent payload capacity limits.
+ * 结果上限与 SubagentProtocolValidator.SUBAGENT_SUMMARY_MAX_BYTES 一致（compose 提案
+ * 常超旧 4KB）；prompt 上限保持 4096：超长 prompt 在 Agent 工具调用时被拒，不会卡 binding。
+ * The result cap shares SUBAGENT_SUMMARY_MAX_BYTES so a long compose proposal can
+ * reach TaskOutput; the prompt cap stays at 4096 (over-length prompts are rejected
+ * at Agent-tool call time, never stranding a binding). */
 const NOVEL_SUBAGENT_LIMITS = Object.freeze({
   maximumPromptBytes: 4096,
   maximumArtifactReferences: 4,
-  maximumResultBytes: 4096,
+  maximumResultBytes: SUBAGENT_SUMMARY_MAX_BYTES,
 } as const);
 
 /** 生产 novel_explorer / novel_compose 子代理定义。Production subagent definitions. */

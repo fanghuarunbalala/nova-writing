@@ -5,6 +5,7 @@ import {
   SubagentCompletionObserver,
   SubagentTaskProtocolError,
   SubagentTaskQueryService,
+  clampSubagentText,
 } from "../dist/index.js";
 
 const timestamp = "2026-08-03T00:00:00.000Z";
@@ -13,6 +14,12 @@ const limits = {
   maximumArtifactReferences: 4,
   maximumResultBytes: 4096,
 };
+
+// clampSubagentText：上限内原样返回；超限截断为 UTF-8 安全前缀 + 稳定标记，字节数不超限。
+assert.equal(clampSubagentText("short text", 4096), "short text");
+const clampedText = clampSubagentText("雨夜来客".repeat(2000), 4096);
+assert.ok(new TextEncoder().encode(clampedText).byteLength <= 4096);
+assert.match(clampedText, /\.\.\.truncated\(\d+ bytes\)$/);
 
 function binding(taskId, status, parentConversationId = "conversation-parent", parentRunId = "run-parent") {
   return {
@@ -58,6 +65,7 @@ const entries = [
   binding("running", "running"),
   binding("completing", "running"),
   binding("completed", "completed"),
+  binding("long", "completed"),
   binding("failed", "failed"),
   binding("cancelled", "cancelled"),
   binding("orphaned", "orphaned"),
@@ -146,6 +154,30 @@ const completedResult = await bridge.reconcile({
 assert.equal(completedResult.status, "completed");
 assert.equal(completedResult.summary, "completed result");
 assert.equal(delivered.length, 1);
+
+// 回归：超限结果不得使 reconcile/查询 throw。bridge 按 128KB 上限原样交付（compose 提案
+// 常超旧 4KB），查询按本地配置上限 4096 截断并带标记。Regression: an over-limit result
+// must not throw in reconcile or query — the bridge delivers it intact under the 128KB cap
+// and the query clamps at its configured 4096 limit with a truncation marker.
+const longProposal = `《雨夜来客》创作提案\n\n${"# 卷首语\n雨夜，长街，一把伞。\n\n".repeat(200)}`;
+const longBytes = new TextEncoder().encode(longProposal).byteLength;
+assert.ok(longBytes > 4096, `long proposal must exceed the query limit (${longBytes} bytes)`);
+messages.set("conversation-child-long", { content: longProposal, artifactReferences: [] });
+const longResult = await bridge.reconcile({
+  subagentId: "long",
+  status: "completed",
+  completedAt: timestamp,
+});
+assert.equal(longResult.status, "completed");
+assert.equal(longResult.summary, longProposal);
+const longSnapshot = await query.get({
+  parentConversationId: "conversation-parent",
+  parentRunId: "run-parent",
+  taskId: "long",
+});
+assert.equal(longSnapshot.status, "completed");
+assert.ok(new TextEncoder().encode(longSnapshot.result.content).byteLength <= 4096);
+assert.match(longSnapshot.result.content, /\.\.\.truncated\(\d+ bytes\)/);
 
 const failedResult = await bridge.reconcile({
   subagentId: "failed",

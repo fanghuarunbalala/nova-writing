@@ -16,6 +16,7 @@ import {
   type SubagentTaskResult,
   type SubagentTaskSnapshot,
 } from "./SubagentTaskProtocol.js";
+import { clampSubagentText } from "./SubagentProtocolValidator.js";
 import {
   captureSubagentTaskLimits,
   captureSubagentTaskSnapshot,
@@ -128,7 +129,10 @@ export class SubagentTaskQueryService {
     );
     if (message === undefined) return undefined;
     return Object.freeze({
-      content: message.content,
+      // 超长正文按配置上限截断而非交给 captureSubagentTaskSnapshot throw，保证
+      // TaskOutput 查询路径永不失败。Over-limit content is clamped at the configured
+      // limit so the snapshot capture never throws and TaskOutput always returns.
+      content: clampSubagentText(message.content, this.#limits.maximumResultBytes),
       artifactReferences: Object.freeze([...message.artifactReferences]),
     });
   }

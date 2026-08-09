@@ -32,7 +32,13 @@ export interface SubagentCompletionObserverOptions {
   readonly bridge: SubagentCompletionBridge;
   readonly childRunTerminal: SubagentChildRunTerminalReader;
   readonly logger?: Logger;
+  /** 墙钟毫秒（日志限频用）；默认 Date.now。Wall-clock ms for log throttling. */
+  readonly now?: () => number;
 }
+
+/** observe_failed 限频：同 binding 在此窗口内最多打一条，防 GUI 高频轮询洪泛日志。
+ * observe_failed throttle: at most one log per binding per window. */
+const OBSERVE_FAILED_COOLDOWN_MS = 5_000;
 
 /**
  * 观察子会话 Run 终态并在读路径上惰性终结 binding：仅当 binding 非终态时探测；
@@ -46,12 +52,15 @@ export class SubagentCompletionObserver {
   readonly #bindings: SubagentBindingStore;
   readonly #bridge: SubagentCompletionBridge;
   readonly #childRunTerminal: SubagentChildRunTerminalReader;
+  readonly #now: () => number;
+  readonly #lastFailureAt = new Map<string, number>();
   readonly #logger: Logger;
 
   constructor(options: SubagentCompletionObserverOptions) {
     this.#bindings = options.bindings;
     this.#bridge = options.bridge;
     this.#childRunTerminal = options.childRunTerminal;
+    this.#now = options.now ?? (() => Date.now());
     this.#logger = (options.logger ?? noopLogger).child({
       component: "subagent_completion_observer",
     });
@@ -73,10 +82,18 @@ export class SubagentCompletionObserver {
         completedAt: terminal.completedAt,
       });
     } catch (error) {
-      this.#logger.info("runtime.subagent.completion.observe_failed", {
-        taskId: binding.subagentId,
-        childConversationId: binding.childConversationId,
-      });
+      // reconcile 照常随下次读路径重试（自愈不变），仅限日志频率，避免 1Hz 轮询
+      // 在持久失败时刷屏。Reconcile still retries on the next read; only the log
+      // volume is throttled so a persistent failure cannot flood the child log.
+      const now = this.#now();
+      const last = this.#lastFailureAt.get(binding.subagentId) ?? 0;
+      if (now - last >= OBSERVE_FAILED_COOLDOWN_MS) {
+        this.#lastFailureAt.set(binding.subagentId, now);
+        this.#logger.info("runtime.subagent.completion.observe_failed", {
+          taskId: binding.subagentId,
+          childConversationId: binding.childConversationId,
+        });
+      }
     }
   }
 }

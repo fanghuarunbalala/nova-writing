@@ -2,7 +2,8 @@
  * Novel 设计令牌（design tokens）。
  *
  * 颜色/渐变/字体/阴影直接继承 `vendor/index.html` 原型的 :root 变量（OKLCH），
- * 布局尺寸按原型校准（inspector 默认 384px、范围 [300, 680]）。
+ * 布局尺寸按 v2 原型校准（inspector 默认 860px；宽度由 --insp-w 的
+ * 媒体查询 / 拖拽 inline 覆盖）。
  * V1 仅实现 light；dark 调色板在 V2 通过 [data-theme="dark"] 覆盖。
  */
 :root {
@@ -109,11 +110,9 @@
   --subhead-height:      58px;
   --sidebar-width:       292px;
   --sidebar-width-collapsed: 0;
-  --inspector-width-default: 384px;
-  --inspector-width-min: 300px;
-  --inspector-width-max: 680px;
-  --inspector-width-wide: 480px;
-  --inspector-width-narrow: 344px;
+  /* inspector 宽度：默认 860px。响应式收窄由 InspectorHost.module.css 的
+     媒体查询覆盖；用户拖拽时写入 inline --insp-w（未拖过则交给 CSS）。 */
+  --insp-w: 860px;
 }
 
 /* Dark mode 预留（V1 不实现，但结构支持） */

@@ -471,6 +471,7 @@ export function ApplicationShell({
           characters={domainStores.character}
           locations={domainStores.location}
           approvalStore={approvalStore}
+          onJumpToConversation={handleSelectConversation}
         />
       </div>
       <OverlaysHost toastStore={toastStore}>{overlays}</OverlaysHost>

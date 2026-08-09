@@ -29,6 +29,13 @@ import {
   captureStoryUnitId,
 } from "../../../novel/index.js";
 import type { ConversationTodoWriter } from "../../../runtime/todo/index.js";
+import {
+  NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY,
+  SubagentTaskQueryService,
+  createProductionSubagentDefinitionCatalog,
+  type ChildConversationManager,
+  type SubagentBindingStore,
+} from "../../../runtime/subagent/index.js";
 import { ToolGroupCatalog } from "../../../tooling/group/index.js";
 import { loadToolGroupManifest } from "../../../tooling/group/index.js";
 import {
@@ -43,6 +50,11 @@ import {
 } from "../../../tools/novel/index.js";
 import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
 import { ToolRegistry } from "../../../tooling/registry/index.js";
+import {
+  SUBAGENT_TOOL_GROUP_MANIFEST,
+  createAgentExecutionToolRegistry,
+  type SubagentTaskCancellationIntentPort,
+} from "../../../tools/subagent/index.js";
 import {
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   OutlineToolService,
@@ -126,6 +138,96 @@ const unavailableNovelService = () =>
       "Novel outline service is unavailable during manifest assembly",
     ),
   );
+
+const unavailableSubagentService = () =>
+  Promise.reject(
+    new TypeError(
+      "Subagent service is unavailable during manifest assembly",
+    ),
+  );
+
+/** 不可用子代理 manager 桩：清单组装期仅需描述符，运行期由 child 组合根替换。 */
+const unavailableSubagentManager: ChildConversationManager = Object.freeze({
+  spawn() {
+    throw new TypeError(
+      "Subagent manager is unavailable during manifest assembly",
+    );
+  },
+  recordTerminalStatus() {
+    throw new TypeError(
+      "Subagent manager is unavailable during manifest assembly",
+    );
+  },
+  getBinding() {
+    throw new TypeError(
+      "Subagent manager is unavailable during manifest assembly",
+    );
+  },
+  listBindings() {
+    throw new TypeError(
+      "Subagent manager is unavailable during manifest assembly",
+    );
+  },
+  getCapacity() {
+    throw new TypeError(
+      "Subagent manager is unavailable during manifest assembly",
+    );
+  },
+});
+
+/** 不可用子代理 binding store 桩。Unavailable binding store during assembly. */
+const unavailableSubagentBindings: SubagentBindingStore = Object.freeze({
+  put() {
+    throw new TypeError(
+      "Subagent binding store is unavailable during manifest assembly",
+    );
+  },
+  get() {
+    throw new TypeError(
+      "Subagent binding store is unavailable during manifest assembly",
+    );
+  },
+  list() {
+    throw new TypeError(
+      "Subagent binding store is unavailable during manifest assembly",
+    );
+  },
+  subscribe() {
+    throw new TypeError(
+      "Subagent binding store is unavailable during manifest assembly",
+    );
+  },
+});
+
+/** 不可用子代理取消端口桩。Unavailable cancellation port during assembly. */
+const unavailableSubagentCancellation: SubagentTaskCancellationIntentPort =
+  Object.freeze({
+    requestCancellation() {
+      throw new TypeError(
+        "Subagent cancellation is unavailable during manifest assembly",
+      );
+    },
+  });
+
+/** 不可用子代理 TaskOutput 查询桩。Unavailable TaskOutput query during assembly. */
+const unavailableSubagentQuery = new SubagentTaskQueryService({
+  bindings: unavailableSubagentBindings,
+  runtimePresence: {
+    getRuntimePresence() {
+      throw new TypeError(
+        "Runtime presence is unavailable during manifest assembly",
+      );
+    },
+  },
+  finalAssistantMessages: {
+    readFinalAssistantMessage() {
+      throw new TypeError(
+        "Final assistant messages are unavailable during manifest assembly",
+      );
+    },
+  },
+  limits: NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY.limits,
+});
 
 const unavailableStoryOutlineService = Object.freeze({
   createOutline: unavailableNovelService,
@@ -303,11 +405,20 @@ export function createNovelConversationManifestComposition(
     ...createNovelDeleteToolRegistry({
       service: unavailableDeleteToolService,
     }).list(),
+    ...createAgentExecutionToolRegistry({
+      definitions: createProductionSubagentDefinitionCatalog(),
+      policy: NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY,
+      manager: unavailableSubagentManager,
+      query: unavailableSubagentQuery,
+      bindings: unavailableSubagentBindings,
+      cancellation: unavailableSubagentCancellation,
+    }).list(),
   ]);
   const groups = new ToolGroupCatalog([
     loadToolGroupManifest(NOVEL_CONVERSATION_TOOL_GROUP_MANIFEST),
     NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
     RUNTIME_FILES_TOOL_GROUP_MANIFEST,
+    SUBAGENT_TOOL_GROUP_MANIFEST,
     NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
     NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
     NOVEL_LOCATION_TOOL_GROUP_MANIFEST,

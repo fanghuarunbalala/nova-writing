@@ -10,9 +10,11 @@ import type {
   ConversationRuntimeHandleShutdownRequest,
   ConversationRuntimeInputReference,
   ConversationOutputEventPublisher,
+  ConversationRuntimePresenceReader,
   OutputReceipt,
 } from "../../../conversation/index.js";
-import type { OutputEvent } from "../../../event/index.js";
+import { CONVERSATION_RUNTIME_SHUTDOWN_REASON } from "../../../conversation/host/index.js";
+import type { JsonObject, OutputEvent } from "../../../event/index.js";
 import type {
   ConversationCatalogStore,
   ConversationEventPage,
@@ -21,10 +23,46 @@ import type {
   PersistedConversationEventSnapshot,
 } from "../../../storage/index.js";
 import {
+  AgentAssembler,
   AgentAssemblyRestorer,
+  AgentDefinitionCatalog,
+  AgentManifestResolver,
+  novelAgentDefinition,
+  novelComposeAgentDefinition,
+  novelExplorerAgentDefinition,
   resolveAgentNudgeEnablements,
   type AgentManifestStore,
 } from "../../../agent/index.js";
+import {
+  ManifestSystemPromptCompiler,
+  PromptCapabilitySnapshot,
+  createDefaultPromptSectionRegistry,
+  type PromptDigester,
+} from "../../../prompt/index.js";
+import {
+  CatalogHostChildConversationAdapter,
+  DefaultChildConversationManager,
+  DurableChildConversationManager,
+  NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY,
+  SUBAGENT_TASK_CANCELLATION_STATUS,
+  SubagentTaskQueryService,
+  createProductionSubagentDefinitionCatalog,
+  type ChildConversationIdFactory,
+  type ChildConversationManagerClock,
+  type SubagentBindingStore,
+  type SubagentFinalAssistantMessageReader,
+} from "../../../runtime/subagent/index.js";
+import {
+  SUBAGENT_TOOL_GROUP_MANIFEST,
+  createAgentExecutionToolRegistry,
+  type SubagentTaskCancellationIntentPort,
+} from "../../../tools/subagent/index.js";
+import { ToolGroupCatalog, ToolRegistry } from "../../../tooling/index.js";
+import {
+  ChildRuntimeSubagentClient,
+  createChildSubagentScopeReaders,
+  type RuntimeSubagentRpcRequester,
+} from "../subagent/index.js";
 import {
   AgentRuntimeConfigurationFactory,
   AgentRuntimeExecutionLimits,
@@ -76,7 +114,6 @@ import { NUDGE_DEFINITIONS } from "../../../runtime/nudge/definitions/index.js";
 import type { PiRuntimeSignalsProvider } from "../../../runtime/agent/pi/index.js";
 import { RuntimePromptAssembler } from "../../../runtime/context/index.js";
 import { PromptAssemblyBuilder } from "../../../prompt/assembly/index.js";
-import type { PromptDigester } from "../../../prompt/index.js";
 import { createChildToolExecutionComposition } from "./ChildToolExecutionFactory.js";
 import type { RuntimePersistencePorts } from "../../../runtime/ipc/index.js";
 import { createNovelConversationManifestComposition } from "../../agent/index.js";
@@ -92,6 +129,8 @@ import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
 import { NodeSha256RuntimeEventIdHasher } from "../NodeSha256RuntimeEventIdHasher.js";
 import { openChildNovelToolRegistry } from "./novel/index.js";
 import type {
+  ChildRuntimeWorkspaceStore,
+  ChildRuntimeWorkspaceStoreProvider,
   RuntimeChildCompositionContext,
   RuntimeChildCompositionFactory,
   RuntimeChildRuntime,
@@ -131,6 +170,9 @@ export interface DesktopRuntimeChildCompositionFactoryOptions {
   readonly conversationCatalogStoreProvider?: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<ConversationCatalogStore>;
+  /** 完整 workspace store 提供者(含子代理绑定)。可选;传则组装真实子代理工具。 */
+  /** Full workspace-store provider (with subagent bindings). Optional; enables real subagent tool assembly. */
+  readonly workspaceStoreProvider?: ChildRuntimeWorkspaceStoreProvider;
   readonly novelStorageRoot?: string;
   readonly adapterFactory: RuntimeChildAdapterFactory;
   readonly contextCompilerFactory: AgentRuntimeContextCompilerFactory;
@@ -153,6 +195,7 @@ export class DesktopRuntimeChildCompositionFactory
   readonly #conversationCatalogStoreProvider?: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<ConversationCatalogStore>;
+  readonly #workspaceStoreProvider?: ChildRuntimeWorkspaceStoreProvider;
   readonly #novelStorageRoot?: string;
   readonly #adapterFactory: RuntimeChildAdapterFactory;
   readonly #contextCompilerFactory: AgentRuntimeContextCompilerFactory;
@@ -172,6 +215,7 @@ export class DesktopRuntimeChildCompositionFactory
     this.#manifestStoreProvider = options.manifestStoreProvider;
     this.#conversationCatalogStoreProvider =
       options.conversationCatalogStoreProvider;
+    this.#workspaceStoreProvider = options.workspaceStoreProvider;
     this.#novelStorageRoot = options.novelStorageRoot;
     this.#adapterFactory = options.adapterFactory;
     this.#contextCompilerFactory = options.contextCompilerFactory;
@@ -278,11 +322,28 @@ export class DesktopRuntimeChildCompositionFactory
     logger.info("runtime_child.composition.novel_registry_opened", {
       conversationId,
     });
+    const novelAndSubagentTools =
+      this.#workspaceStoreProvider === undefined
+        ? { registry: novelTools.registry, groups: novelTools.groups }
+        : createChildSubagentComposition({
+            bootstrap,
+            store: await this.#workspaceStoreProvider(bootstrap),
+            registry: novelTools.registry,
+            groups: novelTools.groups,
+            requester: context.requester,
+            promptDigester: this.#promptDigester,
+            persistence,
+            clock,
+            logger,
+          });
+    logger.info("runtime_child.composition.subagent_registry_created", {
+      conversationId,
+    });
     const configurationFactory = new AgentRuntimeConfigurationFactory({
       manifestStore,
       assemblyRestorer: new AgentAssemblyRestorer({
-        registry: novelTools.registry,
-        groups: novelTools.groups,
+        registry: novelAndSubagentTools.registry,
+        groups: novelAndSubagentTools.groups,
       }),
       profileResolver: this.#profileResolver,
       logger,
@@ -511,6 +572,195 @@ function requireNovelStorageRoot(value: string | undefined): string {
     throw new TypeError("Desktop child Novel storage root is not configured");
   }
   return value;
+}
+
+interface ChildSubagentToolComposition {
+  readonly registry: ToolRegistry;
+  readonly groups: ToolGroupCatalog;
+}
+
+interface CreateChildSubagentCompositionOptions {
+  readonly bootstrap: ConversationRuntimeBootstrap;
+  readonly store: ChildRuntimeWorkspaceStore;
+  readonly registry: ToolRegistry;
+  readonly groups: ToolGroupCatalog;
+  readonly requester: RuntimeSubagentRpcRequester;
+  readonly promptDigester: PromptDigester;
+  readonly persistence: RuntimePersistencePorts;
+  readonly clock: ChildConversationManagerClock;
+  readonly logger: Logger;
+}
+
+/**
+ * 组装子代理 manager/tools：窄 RPC client → 会话 adapter → durable manager →
+ * TaskGet 查询 → Agent/TaskOutput/TaskStop 工具，返回并入子代理工具后的最终
+ * registry/groups 供运行期 Manifest 还原。
+ * Composes the subagent manager/tools over the narrow RPC client, then returns
+ * the final registry/groups (base Novel tools + subagent tools) used for runtime
+ * Manifest restoration.
+ */
+function createChildSubagentComposition(
+  options: CreateChildSubagentCompositionOptions,
+): ChildSubagentToolComposition {
+  const { bootstrap, store, registry, groups, requester, logger } = options;
+  const subagentClient = new ChildRuntimeSubagentClient({ requester, logger });
+  const scopeReaders = createChildSubagentScopeReaders(bootstrap);
+  const bindings = store.createSubagentBindingStore();
+  const agentAssembler = new AgentAssembler({
+    registry,
+    groups,
+    manifestResolver: new AgentManifestResolver({
+      promptBuilder: new ManifestSystemPromptCompiler({
+        sections: createDefaultPromptSectionRegistry(),
+        digester: options.promptDigester,
+      }),
+      promptCapabilities: new PromptCapabilitySnapshot([]),
+      manifestIdFactory: Object.freeze({
+        create(input: {
+          readonly agentType: string;
+          readonly definitionVersion: string;
+        }): string {
+          return `manifest:subagent:${input.agentType}:${input.definitionVersion}`;
+        },
+      }),
+      clock: options.clock,
+      digester: options.promptDigester,
+      logger,
+    }),
+    manifestStore: store.agentManifests,
+    logger,
+  });
+  const adapter = new CatalogHostChildConversationAdapter({
+    catalog: store.conversations,
+    host: subagentClient.host,
+    agentDefinitions: new AgentDefinitionCatalog([
+      novelAgentDefinition,
+      novelExplorerAgentDefinition,
+      novelComposeAgentDefinition,
+    ]),
+    agentAssembler,
+    commandService: subagentClient.commandService,
+    idFactory: CHILD_CONVERSATION_ID_FACTORY,
+    logger,
+  });
+  const manager = new DurableChildConversationManager(
+    new DefaultChildConversationManager({
+      parentScopeReader: scopeReaders.parentScopeReader,
+      toolPolicyRelationReader: scopeReaders.toolPolicyRelationReader,
+      creationPort: adapter,
+      activationPort: adapter,
+      rollbackPort: adapter,
+      taskAssignmentPort: adapter,
+      clock: options.clock,
+      logger,
+    }),
+    bindings,
+  );
+  const query = new SubagentTaskQueryService({
+    bindings,
+    runtimePresence: createChildRuntimePresenceReader(bindings),
+    finalAssistantMessages: createChildFinalAssistantMessageReader(
+      options.persistence,
+    ),
+    limits: NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY.limits,
+    logger,
+  });
+  const cancellation: SubagentTaskCancellationIntentPort = {
+    async requestCancellation(binding) {
+      await subagentClient.host.shutdownRuntime({
+        conversationId: binding.childConversationId,
+        reason: CONVERSATION_RUNTIME_SHUTDOWN_REASON.explicitShutdown,
+      });
+      return SUBAGENT_TASK_CANCELLATION_STATUS.cancellationRequested;
+    },
+  };
+  const subagentTools = createAgentExecutionToolRegistry({
+    definitions: createProductionSubagentDefinitionCatalog(),
+    policy: NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY,
+    manager,
+    bindings,
+    query,
+    cancellation,
+    logger,
+  });
+  return Object.freeze({
+    registry: new ToolRegistry([...registry.list(), ...subagentTools.list()]),
+    groups: new ToolGroupCatalog([
+      ...groups.list(),
+      SUBAGENT_TOOL_GROUP_MANIFEST,
+    ]),
+  });
+}
+
+const CHILD_CONVERSATION_ID_FACTORY: ChildConversationIdFactory = {
+  create(input): string {
+    return `conversation-child-${input.subagentId}`;
+  },
+};
+
+function createChildRuntimePresenceReader(
+  bindings: SubagentBindingStore,
+): ConversationRuntimePresenceReader {
+  return {
+    async getRuntimePresence(conversationId) {
+      const active = (await bindings.list()).find(
+        (binding) => binding.childConversationId === conversationId,
+      );
+      if (active === undefined) {
+        return {
+          state: "offline",
+          observedAt: new Date().toISOString(),
+        };
+      }
+      return {
+        state:
+          active.status === "creating" || active.status === "running"
+            ? "online"
+            : "offline",
+        observedAt: active.updatedAt,
+      };
+    },
+  };
+}
+
+function createChildFinalAssistantMessageReader(
+  persistence: RuntimePersistencePorts,
+): SubagentFinalAssistantMessageReader {
+  return {
+    async readFinalAssistantMessage(conversationId) {
+      const page = await persistence.messages.list({
+        conversationId,
+        limit: 1_000,
+      });
+      for (let index = page.items.length - 1; index >= 0; index -= 1) {
+        const record = page.items[index]!;
+        if (record.message.role !== "assistant") continue;
+        const content = extractAssistantText(record.message.payload);
+        if (content.length === 0) continue;
+        return Object.freeze({
+          content,
+          artifactReferences: Object.freeze([]),
+        });
+      }
+      return undefined;
+    },
+  };
+}
+
+function extractAssistantText(payload: JsonObject): string {
+  const content = payload["content"];
+  if (!Array.isArray(content)) return "";
+  const parts: string[] = [];
+  for (const item of content) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      continue;
+    }
+    const record = item as { type?: unknown; text?: unknown };
+    if (record.type === "text" && typeof record.text === "string") {
+      parts.push(record.text);
+    }
+  }
+  return parts.join("\n");
 }
 
 class ConversationRuntimeChild implements RuntimeChildRuntime {

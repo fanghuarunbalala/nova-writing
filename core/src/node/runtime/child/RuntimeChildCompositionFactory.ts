@@ -11,7 +11,25 @@ import type {
   AgentRuntimeExecutionAssembler,
   AgentRuntimeConfigurationFactory,
 } from "../../../runtime/agent/index.js";
+import type { AgentManifestStore } from "../../../agent/index.js";
 import type { RuntimePersistencePorts } from "../../../runtime/ipc/index.js";
+import type { SubagentBindingStore } from "../../../runtime/subagent/index.js";
+import type { ConversationCatalogStore } from "../../../storage/index.js";
+import type { RuntimeSubagentRpcRequester } from "../subagent/index.js";
+
+/**
+ * Child 组合根可访问的 Workspace 存储视图：manifest、conversations 与子代理绑定。
+ * Child-composition-readable Workspace store view.
+ */
+export interface ChildRuntimeWorkspaceStore {
+  readonly agentManifests: AgentManifestStore;
+  readonly conversations: ConversationCatalogStore;
+  createSubagentBindingStore(): SubagentBindingStore;
+}
+
+export type ChildRuntimeWorkspaceStoreProvider = (
+  bootstrap: ConversationRuntimeBootstrap,
+) => Promise<ChildRuntimeWorkspaceStore>;
 
 export interface RuntimeChildRuntime {
   readonly conversationId: string;
@@ -35,6 +53,7 @@ export interface RuntimeChildCompositionFactory {
 
 export interface RuntimeChildCompositionContext {
   readonly persistence: RuntimePersistencePorts;
+  readonly requester: RuntimeSubagentRpcRequester;
   readonly executionAssembly?: AgentRuntimeExecutionAssembly;
 }
 

@@ -26,7 +26,7 @@ export interface ChildConversationIdFactory {
 
 export interface CatalogHostChildConversationAdapterOptions {
   readonly catalog: ConversationCatalogStore;
-  readonly host: ConversationHost;
+  readonly host: Pick<ConversationHost, "ensureActive" | "shutdownRuntime">;
   readonly agentDefinitions: AgentDefinitionCatalog;
   readonly agentAssembler: AgentAssembler;
   readonly commandService?: ConversationCommandService;

@@ -39,5 +39,8 @@ export function hydrateAgentDefinition(
     delegation: new AgentDelegationPolicy(snapshot.delegation),
     communication: new AgentCommunicationPolicy(snapshot.communication.role),
     runtimePolicyId: snapshot.runtimePolicyId,
+    // 旧持久化快照缺该字段 → undefined → 构造器回退空集（不 bump schemaVersion，非破坏）。
+    // Older persisted snapshots lack the field → undefined → constructor falls back to empty (no schemaVersion bump, non-breaking).
+    nudgeEnablement: snapshot.nudgeEnablement,
   });
 }

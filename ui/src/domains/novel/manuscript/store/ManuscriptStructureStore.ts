@@ -1,56 +1,71 @@
 /**
  * ManuscriptStructureStore
  *
- * 手稿结构域 store：从 core 加载段落目录（NovelParagraphCatalogSnapshot），
- * 映射成 UI 章节视图。
+ * 正文结构域 store：以权威 publication 结构（卷 → 章）为目录，
+ * 段落目录（NovelParagraphCatalogSnapshot）为摘要来源，正文文本按需懒加载。
  *
- * 适配说明（core manuscript -> paragraph 重命名后）：
- * - core client API 仅暴露 `api.novel.paragraphs.getCatalog(scope)`，返回扁平段落列表；
- *   不再暴露 publication.chapters / blocks 两级结构。
- * - 段落带必填 storyUnitId + orderKey，故按 storyUnitId 分组为章节卡（对应原型
- *   卷·章卡）；章节标题由视图层从大纲树解析（本 store 保持纯段落投影）。
- * - 段落正文文本由 `api.novel.paragraphs.get(scope, paragraphId)` 懒加载（Phase 3 inspector）。
- * - revision/isDraft/changeSetId core 暂无字段，保持 undefined。
+ * 数据流：
+ * - loadWorkspace 并行读取 `publication.getCatalog` 与 `paragraphs.getCatalog`，
+ *   按 chapter.paragraphIds 关联目录摘要构建 Volume→Chapter 层级视图；
+ * - 章节内正文（paragraphs.get）在选中章节时懒加载，失败段落留空可重试；
+ * - isDraft/changeSetId core 暂无逐章字段，保持 undefined（审批入口按 changeSetId 可选）。
  */
 import {
   canonicalNovelQueryScope,
   noopLogger,
   type Logger,
   type NovelApiClient,
+  type NovelParagraphSummary,
+  type ParagraphId,
+  type PublicationChapter,
+  type PublicationVolume,
 } from "@novel/core";
 import { ExternalStore } from "../../../../shared/state/ExternalStore.js";
 import type { NovelDomainError } from "../../outline/store/StoryOutlineTreeStore.js";
 
 export interface ManuscriptBlockData {
   readonly blockId: string; // 段落 id（ParagraphId）
-  readonly digest: string; // 短码 "8f3a70"，取 textDigest 前 6 位
+  readonly digest: string; // 短码 "8f3a70"，取 textDigest 前 6 位，未知为 ""
   readonly isDraft?: boolean;
-  readonly text: string; // 正文，结构快照中为空，由详情懒加载
+  readonly text: string; // 正文，未加载为 ""，由 loadChapterText 懒加载填充
   readonly storyUnitId?: string;
   readonly orderKey?: string;
   readonly textLength?: number;
 }
 
 export interface ManuscriptChapter {
-  readonly chapterId: string;
-  readonly title: string;
-  readonly revision?: string;
+  readonly chapterId: string; // PublicationChapterId
+  readonly volumeId: string;
+  readonly title: string; // 权威 publication 标题
+  readonly orderKey?: string;
+  readonly paragraphIds: readonly string[];
+  readonly blocks: readonly ManuscriptBlockData[]; // 按 chapter.paragraphIds 顺序
   readonly isDraft?: boolean;
   readonly changeSetId?: string;
-  readonly blocks: readonly ManuscriptBlockData[];
+}
+
+export interface ManuscriptVolume {
+  readonly volumeId: string;
+  readonly title: string;
+  readonly orderKey?: string;
+  readonly chapters: readonly ManuscriptChapter[];
 }
 
 export interface ManuscriptStructureSnapshot {
   readonly phase: "idle" | "loading" | "ready" | "error";
   readonly workspaceId: string | undefined;
-  readonly chapters: readonly ManuscriptChapter[];
+  readonly volumes: readonly ManuscriptVolume[];
+  readonly chapters: readonly ManuscriptChapter[]; // 平铺有序，供引用解析/查找
+  readonly selectedChapterId: string | undefined;
   readonly error: NovelDomainError | undefined;
 }
 
 const EMPTY_SNAPSHOT: ManuscriptStructureSnapshot = Object.freeze({
   phase: "idle",
   workspaceId: undefined,
+  volumes: Object.freeze([]),
   chapters: Object.freeze([]),
+  selectedChapterId: undefined,
   error: undefined,
 });
 
@@ -58,6 +73,8 @@ export class ManuscriptStructureStore extends ExternalStore<ManuscriptStructureS
   private readonly api: NovelApiClient;
   private readonly logger: Logger;
   private generation = 0;
+  private readonly loadedChapterText = new Set<string>();
+  private readonly pendingTextLoads = new Set<string>();
 
   constructor(deps: { readonly api: NovelApiClient; readonly logger?: Logger }) {
     super(EMPTY_SNAPSHOT);
@@ -70,24 +87,37 @@ export class ManuscriptStructureStore extends ExternalStore<ManuscriptStructureS
   async loadWorkspace(workspaceId: string): Promise<void> {
     const capturedId = requireNonBlank(workspaceId, "Workspace id");
     const generation = ++this.generation;
+    this.loadedChapterText.clear();
+    this.pendingTextLoads.clear();
     this.setSnapshot({
       ...EMPTY_SNAPSHOT,
       phase: "loading",
       workspaceId: capturedId,
     });
     try {
-      const catalog = await this.api.novel.paragraphs.getCatalog(canonicalNovelQueryScope);
+      const [publication, paragraphCatalog] = await Promise.all([
+        this.api.novel.publication.getCatalog(canonicalNovelQueryScope),
+        this.api.novel.paragraphs.getCatalog(canonicalNovelQueryScope),
+      ]);
       if (generation !== this.generation) return;
-      const chapters = captureChapters(catalog?.paragraphs ?? []);
+      const { volumes, chapters } = buildPublicationView(
+        publication?.volumes ?? [],
+        publication?.chapters ?? [],
+        paragraphCatalog?.paragraphs ?? [],
+      );
+      const firstChapterId = chapters[0]?.chapterId;
       this.setSnapshot({
         phase: "ready",
         workspaceId: capturedId,
+        volumes,
         chapters,
+        selectedChapterId: firstChapterId,
         error: undefined,
       });
+      if (firstChapterId !== undefined) void this.loadChapterText(firstChapterId);
       this.logger.info("manuscript_structure.load_completed", {
+        volumeCount: volumes.length,
         chapterCount: chapters.length,
-        paragraphCount: chapters.reduce((total, chapter) => total + chapter.blocks.length, 0),
       });
     } catch {
       if (generation !== this.generation) return;
@@ -97,7 +127,7 @@ export class ManuscriptStructureStore extends ExternalStore<ManuscriptStructureS
         workspaceId: capturedId,
         error: {
           code: "novel-load-failed",
-          message: "手稿结构加载失败，请重试",
+          message: "正文结构加载失败，请重试",
           retryable: true,
         },
       });
@@ -110,92 +140,163 @@ export class ManuscriptStructureStore extends ExternalStore<ManuscriptStructureS
     if (workspaceId === undefined) return Promise.resolve();
     return this.loadWorkspace(workspaceId);
   }
+
+  selectChapter(chapterId: string | undefined): void {
+    this.setSnapshot({ ...this.snapshot, selectedChapterId: chapterId });
+    if (chapterId !== undefined) void this.loadChapterText(chapterId);
+  }
+
+  /** 懒加载章节正文：并行拉取每段文本，失败段落留空（可重选重试）。 */
+  async loadChapterText(chapterId: string): Promise<void> {
+    if (this.loadedChapterText.has(chapterId)) return;
+    const chapter = this.snapshot.chapters.find((c) => c.chapterId === chapterId);
+    if (chapter === undefined || chapter.paragraphIds.length === 0) return;
+    if (this.pendingTextLoads.has(chapterId)) return;
+    this.pendingTextLoads.add(chapterId);
+    const generation = this.generation;
+    try {
+      const settled = await Promise.allSettled(
+        chapter.paragraphIds.map((paragraphId) =>
+          this.api.novel.paragraphs.get(
+            canonicalNovelQueryScope,
+            paragraphId as ParagraphId,
+          ),
+        ),
+      );
+      if (generation !== this.generation) return;
+      const texts = new Map<string, string>();
+      let complete = true;
+      for (const result of settled) {
+        const paragraph =
+          result.status === "fulfilled"
+            ? result.value?.readModel?.paragraph
+            : undefined;
+        if (paragraph === undefined) {
+          complete = false;
+          continue;
+        }
+        texts.set(paragraph.id, paragraph.text);
+      }
+      if (complete) this.loadedChapterText.add(chapterId);
+      this.setSnapshot(applyChapterTexts(this.snapshot, chapterId, texts));
+    } catch {
+      if (generation !== this.generation) return;
+      this.logger.warn("manuscript_structure.chapter_text_load_failed", {
+        chapterId,
+      });
+    } finally {
+      this.pendingTextLoads.delete(chapterId);
+    }
+  }
 }
 
-/** 未归属 storyUnit 的段落回退组 chapterId（"全部段落"）。 */
-const UNGROUPED_CHAPTER_ID = "__all_paragraphs__";
-
 /**
- * 把扁平段落列表按 storyUnitId 分组为章节卡。
- * 章节按首个 block 的 orderKey 排序；章节内 block 按 orderKey 排序。
- * storyUnitId 缺失的段落归入回退组（"全部段落"）；标题留 storyUnitId 占位，
- * 由视图层从大纲树解析真实标题。
+ * 用 publication 卷章结构与段落目录摘要构建 Volume→Chapter 视图。
+ * chapter 按 core 已排序的 chapters 顺序平铺；卷内章节按相同顺序过滤。
  */
-function captureChapters(
-  paragraphs: readonly {
-    readonly id: string;
-    readonly storyUnitId?: string;
-    readonly orderKey?: string;
-    readonly textLength?: number;
-    readonly textDigest: string;
-  }[],
-): readonly ManuscriptChapter[] {
-  if (paragraphs.length === 0) return Object.freeze([]);
-  const groups = new Map<string, ManuscriptBlockData[]>();
-  for (const paragraph of paragraphs) {
-    const chapterId = paragraph.storyUnitId ?? UNGROUPED_CHAPTER_ID;
-    const blocks = groups.get(chapterId) ?? [];
-    blocks.push(toBlockData(paragraph));
-    groups.set(chapterId, blocks);
+function buildPublicationView(
+  volumes: readonly PublicationVolume[],
+  chapters: readonly PublicationChapter[],
+  paragraphSummaries: readonly NovelParagraphSummary[],
+): {
+  readonly volumes: readonly ManuscriptVolume[];
+  readonly chapters: readonly ManuscriptChapter[];
+} {
+  const summaryById = new Map<string, NovelParagraphSummary>();
+  for (const summary of paragraphSummaries) {
+    summaryById.set(summary.id, summary);
   }
-  const chapters: ManuscriptChapter[] = [];
-  for (const [chapterId, blocks] of groups) {
-    const sortedBlocks = Object.freeze(
-      [...blocks].sort((left, right) => compareBlockOrder(left, right)),
+  const manuscriptChapters: ManuscriptChapter[] = chapters.map((chapter) => {
+    const blocks = Object.freeze(
+      chapter.paragraphIds.map((paragraphId) =>
+        toBlockData(paragraphId, summaryById.get(paragraphId)),
+      ),
     );
-    chapters.push(
+    return Object.freeze({
+      chapterId: chapter.id,
+      volumeId: chapter.volumeId,
+      title: chapter.title,
+      ...(chapter.orderKey === undefined ? {} : { orderKey: chapter.orderKey }),
+      paragraphIds: chapter.paragraphIds,
+      blocks,
+    });
+  });
+  const chapterById = new Map(manuscriptChapters.map((chapter) => [chapter.chapterId, chapter]));
+  const manuscriptVolumes = Object.freeze(
+    volumes.map((volume) =>
       Object.freeze({
-        chapterId,
-        title: chapterId === UNGROUPED_CHAPTER_ID ? "全部段落" : chapterId,
-        blocks: sortedBlocks,
+        volumeId: volume.id,
+        title: volume.title,
+        ...(volume.orderKey === undefined ? {} : { orderKey: volume.orderKey }),
+        chapters: Object.freeze(
+          chapters
+            .filter((chapter) => chapter.volumeId === volume.id)
+            .map((chapter) => chapterById.get(chapter.id))
+            .filter((chapter): chapter is ManuscriptChapter => chapter !== undefined),
+        ),
       }),
-    );
-  }
-  return Object.freeze(
-    chapters.sort((left, right) =>
-      compareBlockOrder(left.blocks[0], right.blocks[0]),
     ),
   );
+  return {
+    volumes: manuscriptVolumes,
+    chapters: Object.freeze(manuscriptChapters),
+  };
 }
 
 function toBlockData(
-  paragraph: {
-    readonly id: string;
-    readonly storyUnitId?: string;
-    readonly orderKey?: string;
-    readonly textLength?: number;
-    readonly textDigest: string;
-  },
+  paragraphId: string,
+  summary: NovelParagraphSummary | undefined,
 ): ManuscriptBlockData {
   return Object.freeze({
-    blockId: paragraph.id,
-    digest: paragraph.textDigest.slice(0, 6),
+    blockId: paragraphId,
+    digest: summary?.textDigest.slice(0, 6) ?? "",
     text: "",
-    ...(paragraph.storyUnitId !== undefined
-      ? { storyUnitId: paragraph.storyUnitId }
+    ...(summary?.storyUnitId !== undefined
+      ? { storyUnitId: summary.storyUnitId }
       : {}),
-    ...(paragraph.orderKey !== undefined ? { orderKey: paragraph.orderKey } : {}),
-    ...(paragraph.textLength !== undefined
-      ? { textLength: paragraph.textLength }
+    ...(summary?.orderKey !== undefined ? { orderKey: summary.orderKey } : {}),
+    ...(summary?.textLength !== undefined
+      ? { textLength: summary.textLength }
       : {}),
   });
 }
 
 /**
- * 按 orderKey 排序；缺失 orderKey 的 block 排在后面（保持原相对顺序）。
- * OrderKey 为固定宽度大写 hex 数字组，字典序即数值序（与 core compareOrderKeys
- * 语义一致），故直接字符串比较。
+ * 把懒加载到的段落文本不可变地写入指定章节的 blocks；
+ * 未变对象保持引用相等；无变化时原样返回（setSnapshot 会跳过通知）。
  */
-function compareBlockOrder(
-  left: ManuscriptBlockData,
-  right: ManuscriptBlockData,
-): number {
-  if (left.orderKey === undefined && right.orderKey === undefined) return 0;
-  if (left.orderKey === undefined) return 1;
-  if (right.orderKey === undefined) return -1;
-  if (left.orderKey < right.orderKey) return -1;
-  if (left.orderKey > right.orderKey) return 1;
-  return 0;
+function applyChapterTexts(
+  snapshot: ManuscriptStructureSnapshot,
+  chapterId: string,
+  texts: ReadonlyMap<string, string>,
+): ManuscriptStructureSnapshot {
+  if (texts.size === 0) return snapshot;
+  const chapter = snapshot.chapters.find((c) => c.chapterId === chapterId);
+  if (chapter === undefined) return snapshot;
+  let changed = false;
+  const blocks = chapter.blocks.map((block) => {
+    const text = texts.get(block.blockId);
+    if (text === undefined || text === block.text) return block;
+    changed = true;
+    return Object.freeze({ ...block, text });
+  });
+  if (!changed) return snapshot;
+  const updatedChapter = Object.freeze({ ...chapter, blocks: Object.freeze(blocks) });
+  const chapters = Object.freeze(
+    snapshot.chapters.map((c) => (c.chapterId === chapterId ? updatedChapter : c)),
+  );
+  const volumes = Object.freeze(
+    snapshot.volumes.map((volume) => {
+      const volumeChapters = volume.chapters.map((c) =>
+        c.chapterId === chapterId ? updatedChapter : c,
+      );
+      if (volumeChapters.every((c, index) => c === volume.chapters[index])) {
+        return volume;
+      }
+      return Object.freeze({ ...volume, chapters: Object.freeze(volumeChapters) });
+    }),
+  );
+  return Object.freeze({ ...snapshot, volumes, chapters });
 }
 
 function requireNonBlank(value: string, label: string): string {

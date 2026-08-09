@@ -30,16 +30,15 @@ export function mapProjectionTimeline(
   const items: ConversationTimelineItem[] = [];
   const approvalGroups = groupApprovalRequests(projection.timeline);
   const emittedApprovalGroups = new Set<string>();
-  let turnNumber = 0;
   for (const item of projection.timeline) {
     switch (item.kind) {
       case "user-message": {
-        turnNumber += 1;
         const timestamp = Date.parse(item.timestamp) || 0;
         items.push({
           kind: "turn",
           sequence: item.sequence - 0.5,
-          label: `第 ${turnNumber} 轮 · ${formatTime(timestamp)}`,
+          // v2 原型：轮次分隔只显示时间，去掉「第 N 轮 ·」前缀。
+          label: formatTime(timestamp),
           timestamp,
         });
         items.push({

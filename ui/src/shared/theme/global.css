@@ -15,7 +15,7 @@ body {
     var(--color-bg);
   background-attachment: fixed;
   color: var(--color-fg);
-  font-family: var(--font-body);
+  font-family: var(--font-ui);
   font-size: var(--fs-body);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;

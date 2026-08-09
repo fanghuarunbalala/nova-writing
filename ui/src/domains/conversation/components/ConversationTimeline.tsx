@@ -4,6 +4,7 @@
  * 按 sequence 排序渲染时间线；新消息到达自动滚到底（用户上滚除外）。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ConversationTimelineItem as TimelineItem } from "../projection/ConversationTimelineItem.js";
 import type { MessageReference } from "./MessageReference.js";
@@ -30,6 +31,8 @@ export interface ConversationTimelineProps {
     approvalRequestIds: readonly string[],
     decision: "approved" | "rejected",
   ) => void;
+  /** 消息内操作提示（如复制结果）；上行到 shell ToastHost。 */
+  readonly onNotify?: (kind: ToastKind, text: string) => void;
 }
 
 export function ConversationTimeline({
@@ -41,12 +44,15 @@ export function ConversationTimeline({
   onProposalAction,
   onOpenApproval,
   onApprovalDecision,
+  onNotify,
 }: ConversationTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const sorted = [...items].sort((left, right) => left.sequence - right.sequence);
+  // 首条用户消息：复制按钮收进气泡内边距带（原型 .msg-actions-inpad）。
+  const firstUserSequence = sorted.find((item) => item.kind === "user")?.sequence;
   const virtualized = sorted.length > VIRTUALIZE_THRESHOLD;
   const timelineWindow = virtualized
     ? computeTimelineWindow({
@@ -99,6 +105,8 @@ export function ConversationTimeline({
                 onProposalAction,
                 onOpenApproval,
                 onApprovalDecision,
+                onNotify,
+                firstUserSequence,
               })}
             </div>
           );
@@ -127,6 +135,10 @@ interface RenderItemDeps {
     approvalRequestIds: readonly string[],
     decision: "approved" | "rejected",
   ) => void;
+  /** 消息内操作提示（如复制结果）；上行到 shell ToastHost。 */
+  readonly onNotify?: (kind: ToastKind, text: string) => void;
+  /** 时间线中首条用户消息的 sequence（决定复制按钮 inPad 态）。 */
+  readonly firstUserSequence?: number;
 }
 
 function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
@@ -137,6 +149,8 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
     onProposalAction,
     onOpenApproval,
     onApprovalDecision,
+    onNotify,
+    firstUserSequence,
   } = deps;
   switch (item.kind) {
     case "turn":
@@ -151,8 +165,10 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
           sequence={item.sequence}
           text={item.text}
           timestamp={item.timestamp}
+          inPad={item.sequence === firstUserSequence}
           onReferenceClick={onMessageReferenceClick}
           resolveReference={resolveReference}
+          onNotify={onNotify}
         />
       );
     case "assistant":

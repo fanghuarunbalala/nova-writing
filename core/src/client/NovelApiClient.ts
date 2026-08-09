@@ -22,6 +22,7 @@ import type {
   NovelOverviewSnapshot,
   NovelParagraphCatalogSnapshot,
   NovelParagraphSnapshot,
+  NovelPublicationCatalogSnapshot,
   NovelQueryScope,
   NovelStoryUnitSnapshot,
 } from "./novel/index.js";
@@ -88,12 +89,19 @@ export interface NovelParagraphApi {
   ): Promise<NovelParagraphSnapshot>;
 }
 
+export interface NovelPublicationApi {
+  getCatalog(
+    scope: NovelQueryScope,
+  ): Promise<NovelPublicationCatalogSnapshot>;
+}
+
 export interface NovelContentApi {
   readonly overview: NovelOverviewApi;
   readonly outline: NovelOutlineApi;
   readonly characters: NovelCharacterApi;
   readonly locations: NovelLocationApi;
   readonly paragraphs: NovelParagraphApi;
+  readonly publication: NovelPublicationApi;
 }
 
 export interface NovelApiClient {

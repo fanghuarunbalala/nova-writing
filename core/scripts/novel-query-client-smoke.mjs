@@ -75,6 +75,11 @@ assert.equal(
   ).readModel.paragraph.text,
   "雨落在站台上。",
 );
+assert.equal(
+  (await api.novel.publication.getCatalog(canonicalNovelQueryScope)).volumes[0]
+    .title,
+  "第一卷",
+);
 
 assert.deepEqual(
   transport.requests.map((request) => request.operation),
@@ -273,6 +278,8 @@ function responseData(operation) {
           storyUnitDigest: "d".repeat(64),
         },
       };
+    case NOVEL_QUERY_API_OPERATION.publicationCatalogGet:
+      return { ...base, volumes: publication.volumes, chapters: publication.chapters };
     default:
       throw new Error("unexpected operation");
   }

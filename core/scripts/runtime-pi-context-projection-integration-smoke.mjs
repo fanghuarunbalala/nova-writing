@@ -20,7 +20,6 @@ import {
 const privateMarker = "PRIVATE_PI_PROJECTION_CONTENT_MUST_NOT_APPEAR";
 const baseSystemPrompt = "BASE_SYSTEM_PROMPT";
 const checkpointSummary = `${privateMarker}:checkpoint-summary`;
-const nudgeContent = `${privateMarker}:one-shot-nudge`;
 const logs = [];
 const logger = {
   debug: (event, fields = {}) => logs.push({ level: "debug", event, fields }),
@@ -207,40 +206,6 @@ const projectionCoordinator = new ContextProjectionProviderCallCoordinator({
   logger,
 });
 
-const nudgeRequests = [];
-const nudgeConfirmations = [];
-const nudgeCoordinator = {
-  async prepare(request) {
-    nudgeRequests.push(request);
-    if (request.providerCallId !== "provider-call-1") return undefined;
-    return {
-      conversationId: request.conversationId,
-      runId: request.runId,
-      providerCallId: request.providerCallId,
-      lease: {
-        leaseId: "lease-projection",
-        providerCallId: request.providerCallId,
-        targetRunId: request.runId,
-        targetTurnNumber: request.targetTurnNumber,
-        nudgeIds: ["nudge-projection"],
-        leasedAt: request.requestedAt,
-      },
-      overlay: {
-        placement: "system-prompt-overlay",
-        nudgeIds: ["nudge-projection"],
-        content: nudgeContent,
-      },
-    };
-  },
-  async confirmDispatched(prepared) {
-    nudgeConfirmations.push(prepared.providerCallId);
-    return { confirmation: { status: "consumed" }, eventReceipts: [] };
-  },
-  async releaseBeforeDispatch() {
-    throw new Error("release should not run in successful projection smoke");
-  },
-};
-
 const providerContexts = [];
 const checkpointApplications = [];
 let providerCallCount = 0;
@@ -261,7 +226,6 @@ const adapter = new PiAgentCoreAdapter({
       return { status: "recorded", conversationId: request.conversationId, eventId: `applied:${request.providerCallId}`, sequence: checkpointApplications.length, recordedAt: request.dispatchedAt };
     },
   },
-  nudgeProviderCalls: nudgeCoordinator,
   dispatchAwareStreamFunction: async (_model, context, _options, hooks) => {
     providerCallCount += 1;
     providerContexts.push(structuredClone(context));
@@ -338,14 +302,9 @@ assert.deepEqual(
   projectionRequests.map((request) => request.transientMessageCount),
   [0, 2],
 );
-assert.deepEqual(
-  nudgeRequests.map((request) => request.providerCallId),
-  ["provider-call-1", "provider-call-2"],
-);
-assert.deepEqual(nudgeConfirmations, ["provider-call-1"]);
 assert.deepEqual(checkpointApplications.map((request) => request.providerCallId), ["provider-call-1", "provider-call-2"]);
 
-// systemPrompt 恒为 base：checkpoint 摘要与 nudge 均以消息注入。
+// systemPrompt 恒为 base：checkpoint 摘要以消息注入。
 assert.equal(providerContexts[0].systemPrompt, baseSystemPrompt);
 assert.equal(providerContexts[1].systemPrompt, baseSystemPrompt);
 
@@ -354,14 +313,12 @@ assert.equal(firstProviderMessages.includes("CANONICAL_OLD_1"), false);
 assert.equal(firstProviderMessages.includes("CANONICAL_OLD_2"), true);
 assert.equal(firstProviderMessages.includes("CANONICAL_CURRENT_INPUT"), true);
 assert.equal(firstProviderMessages.includes(checkpointSummary), true);
-assert.equal(firstProviderMessages.includes(nudgeContent), true);
 const secondProviderMessages = JSON.stringify(providerContexts[1].messages);
 assert.equal(secondProviderMessages.includes("CANONICAL_OLD_1"), false);
 assert.equal(secondProviderMessages.includes("CANONICAL_OLD_2"), false);
 assert.equal(secondProviderMessages.includes("CANONICAL_CURRENT_INPUT"), true);
 assert.match(secondProviderMessages, /tool-call-projection/);
 assert.equal(secondProviderMessages.includes(checkpointSummary), true);
-assert.equal(secondProviderMessages.includes(nudgeContent), false);
 
 assert.equal(agent.state.systemPrompt, baseSystemPrompt);
 const canonicalState = JSON.stringify(agent.state.messages);
@@ -369,7 +326,6 @@ assert.match(canonicalState, /CANONICAL_OLD_1/);
 assert.match(canonicalState, /CANONICAL_OLD_2/);
 assert.match(canonicalState, /CANONICAL_CURRENT_INPUT/);
 assert.equal(canonicalState.includes(checkpointSummary), false);
-assert.equal(canonicalState.includes(nudgeContent), false);
 
 const projectionOnlyContexts = [];
 const projectionOnlyAgent = new Agent({
@@ -408,7 +364,6 @@ assert.equal(projectionOnlyResult.outcome, AGENT_RUNTIME_OUTCOME.completed);
 assert.equal(projectionOnlyContexts.length, 1);
 // systemPrompt 恒为 base；checkpoint 摘要以 compact_summary 消息注入。
 assert.equal(projectionOnlyContexts[0].systemPrompt, baseSystemPrompt);
-assert.equal(projectionOnlyContexts[0].systemPrompt.includes(nudgeContent), false);
 assert.equal(
   JSON.stringify(projectionOnlyContexts[0].messages).includes(checkpointSummary),
   true,

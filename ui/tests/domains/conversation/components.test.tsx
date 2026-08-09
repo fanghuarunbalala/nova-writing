@@ -1,5 +1,5 @@
 /**
- * conversation 域组件测试：timeline/user/assistant/think/proposal/gen/composer/empty。
+ * conversation 域组件测试：timeline/user/assistant/proposal/gen/composer/empty。
  */
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -10,17 +10,8 @@ import { ConversationTimeline } from "../../../src/domains/conversation/componen
 import { GenStatus } from "../../../src/domains/conversation/components/GenStatus.js";
 import { ProposalBlock } from "../../../src/domains/conversation/components/ProposalBlock.js";
 import { ProposalOp } from "../../../src/domains/conversation/components/ProposalOp.js";
-import { ThinkBlock } from "../../../src/domains/conversation/components/ThinkBlock.js";
-import { ThinkLine } from "../../../src/domains/conversation/components/ThinkLine.js";
 import { UserMessage } from "../../../src/domains/conversation/components/UserMessage.js";
 import type { ConversationTimelineItem } from "../../../src/domains/conversation/projection/ConversationTimelineItem.js";
-
-function makeLines(count: number) {
-  return Array.from({ length: count }, (_, index) => ({
-    id: `t${index}`,
-    text: `思考行 ${index}`,
-  }));
-}
 
 describe("ConversationTimeline", () => {
   it("renders items in sequence order", () => {
@@ -112,32 +103,32 @@ describe("UserMessage", () => {
       id: "loc-dock7",
     });
   });
-});
 
-describe("ThinkBlock / ThinkLine", () => {
-  it("shows the last three lines when collapsed and all when expanded", async () => {
+  it("copies text via clipboard and notifies on success", async () => {
     const user = userEvent.setup();
-    const lines = makeLines(5);
-    render(<ThinkBlock lines={lines} expanded={false} onToggle={() => undefined} />);
-    expect(screen.queryByText("思考行 0")).not.toBeInTheDocument();
-    expect(screen.getByText("思考行 4")).toBeInTheDocument();
-    const toggle = screen.getByRole("button", { name: /展开/ });
-    await user.click(toggle);
-    expect(screen.getByText("思考行 0")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /收起/ })).toBeInTheDocument();
+    const onNotify = vi.fn();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    render(
+      <UserMessage
+        sequence={3}
+        text="把货单交给林夏"
+        timestamp={1000}
+        onNotify={onNotify}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "复制消息" }));
+    expect(writeText).toHaveBeenCalledWith("把货单交给林夏");
+    expect(onNotify).toHaveBeenCalledWith("success", "已复制消息");
+    expect(screen.getByRole("button", { name: "已复制" })).toBeInTheDocument();
   });
 
-  it("shows all lines when fewer than three", () => {
-    render(<ThinkBlock lines={makeLines(2)} expanded={false} onToggle={() => undefined} />);
-    expect(screen.getByText("思考行 0")).toBeInTheDocument();
-    expect(screen.getByText("思考行 1")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /展开/ })).not.toBeInTheDocument();
-  });
-
-  it("renders a single think line with tag", () => {
-    render(<ThinkLine line={{ id: "t1", text: "节奏放缓", tag: "节奏" }} />);
-    expect(screen.getByText("节奏")).toBeInTheDocument();
-    expect(screen.getByText("节奏放缓")).toBeInTheDocument();
+  it("renders in-pad copy button on the first user message", () => {
+    render(<UserMessage sequence={1} text="开场" timestamp={1000} inPad />);
+    expect(screen.getByRole("button", { name: "复制消息" })).toBeInTheDocument();
   });
 });
 
@@ -188,7 +179,7 @@ describe("GenStatus", () => {
       <GenStatus phase="thinking" stage="正在思考大纲…" onStop={onStop} />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("正在思考大纲…");
-    expect(screen.getByText(/已用时 0s/)).toBeInTheDocument();
+    expect(screen.getByText(/已用时 0 秒/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "停止" }));
     expect(onStop).toHaveBeenCalledTimes(1);
     rerender(<GenStatus phase="failed" error="连接中断" onRetry={onRetry} />);

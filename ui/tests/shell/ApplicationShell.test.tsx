@@ -99,9 +99,12 @@ function buildApi() {
         list: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, locations: [] })),
         get: vi.fn(),
       },
-      manuscript: {
-        getStructure: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, blocks: [] })),
-        getBlock: vi.fn(),
+      paragraphs: {
+        getCatalog: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, paragraphs: [] })),
+        get: vi.fn(),
+      },
+      publication: {
+        getCatalog: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, volumes: [], chapters: [] })),
       },
     },
   } as never;

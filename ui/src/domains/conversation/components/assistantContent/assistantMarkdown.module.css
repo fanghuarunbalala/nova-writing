@@ -7,7 +7,11 @@
  * code 带边框底、正文 text-wrap: pretty。
  */
 .markdown {
+  /* 正文基座：黑体（--font-ui）+ medium 字重（用户要求，正文更清晰）；
+     标题/引用/代码等元素保留各自的 --font-display/--font-kai/--font-mono。 */
+  font-family: var(--font-ui);
   font-size: 15px;
+  font-weight: var(--fw-medium);
   line-height: 1.75;
   min-width: 0;
   text-wrap: pretty;

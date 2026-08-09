@@ -2,18 +2,29 @@ import assert from "node:assert/strict";
 import {
   CONTEXT_BUDGET_DEFAULTS,
   CONTEXT_PRESSURE_LEVEL,
-  InMemoryPendingNudgeStore,
-  NudgeManager,
-  NudgeRenderer,
-  NudgeSelector,
   NudgeTemplateRegistry,
-  PENDING_NUDGE_STATE,
   RUNTIME_EFFECT_COORDINATOR_FAILURE,
   RuntimeEffectCoordinator,
   RuntimeEffectCoordinatorError,
-  RuntimeNudgePolicyEffectHandler,
+  RuntimeSystemReminderAttachPolicyEffectHandler,
   RUNTIME_POLICY_PHASE,
+  SystemReminderAttachedOutputEvent,
+  createSystemReminderAttachEffect,
 } from "../dist/index.js";
+
+const events = [];
+const eventSink = {
+  async append(event) {
+    events.push(event);
+    return {
+      status: "recorded",
+      conversationId: event.conversationId,
+      eventId: event.id,
+      sequence: events.length,
+      recordedAt: "2026-08-03T00:00:01.000Z",
+    };
+  },
+};
 
 function policyContext(providerCallId = "provider-policy") {
   const evaluatedAt = "2026-08-03T00:00:00.000Z";
@@ -63,210 +74,100 @@ function policyContext(providerCallId = "provider-policy") {
   };
 }
 
-function createRuntime() {
-  const templates = new NudgeTemplateRegistry();
-  templates.register({
-    templateId: "policy.template",
-    templateVersion: "1",
-    render: () => "private policy reminder",
-  });
-  const store = new InMemoryPendingNudgeStore();
-  const manager = new NudgeManager({
-    store,
-    selector: new NudgeSelector(),
-    renderer: new NudgeRenderer({ templates }),
-    leaseIdFactory: {
-      create: (request) => `lease:${request.providerCallId}`,
-    },
+function createRuntime(templates) {
+  const handler = new RuntimeSystemReminderAttachPolicyEffectHandler({
+    eventSink,
+    templates,
   });
   const coordinator = new RuntimeEffectCoordinator({
     conversationId: "conversation-policy",
-    nudgeLifecycleHandler: new RuntimeNudgePolicyEffectHandler(manager),
+    systemReminderAttachHandler: handler,
   });
-  return { store, manager, coordinator };
+  return { coordinator, handler };
 }
 
-function scheduleEffect(
-  nudgeId,
-  targetRunId = "run-policy",
-  sequence = 1,
-  delivery,
+function attachEffect(
+  reminderId,
+  templateId = "policy.template",
+  overrides = {},
 ) {
-  return {
-    kind: "nudge_schedule",
-    policyId: "policy.nudge",
+  return createSystemReminderAttachEffect({
+    policyId: "policy.reminder",
     conversationId: "conversation-policy",
     runId: "run-policy",
-    nudgeId,
-    effect: {
-      kind: "nudge",
-      policyId: "policy.nudge",
-      templateId: "policy.template",
-      templateVersion: "1",
-      ...(delivery === "until_acknowledged"
-        ? {
-            delivery,
-            acknowledgementRef: { id: `ack.${nudgeId}`, version: "1" },
-          }
-        : delivery === "until_condition"
-          ? {
-              delivery,
-              conditionRef: { id: `condition.${nudgeId}`, version: "1" },
-            }
-          : {}),
-      priority: 10,
-      dedupeKey: nudgeId,
-      targetRunId,
-      parameters: {},
-    },
-    scheduledSequence: sequence,
-    scheduledAt: "2026-08-03T00:00:00.000Z",
-  };
+    reminderId,
+    reminderKind: "todo_idle",
+    templateId,
+    templateVersion: "1",
+    parameters: Object.freeze({}),
+    ...overrides,
+  });
 }
 
-const runtime = createRuntime();
+const templates = new NudgeTemplateRegistry();
+templates.register({
+  templateId: "policy.template",
+  templateVersion: "1",
+  render: (parameters) =>
+    `private policy reminder ${parameters.label ?? ""}`.trim(),
+});
+const runtime = createRuntime(templates);
 const firstContext = policyContext("provider-policy-1");
 const secondContext = policyContext("provider-policy-2");
 const [firstReceipt, secondReceipt] = await Promise.all([
   runtime.coordinator.execute({
     context: firstContext,
-    effects: [scheduleEffect("scheduled-one", "run-policy", 1)],
+    effects: [attachEffect("novel.reminder.one", "policy.template", { parameters: Object.freeze({ label: "one" }) })],
   }),
   runtime.coordinator.execute({
     context: secondContext,
-    effects: [scheduleEffect("scheduled-two", "run-policy", 2)],
+    effects: [attachEffect("novel.reminder.two", "policy.template", { parameters: Object.freeze({ label: "two" }) })],
   }),
 ]);
 assert.equal(firstReceipt.effectCount, 1);
 assert.equal(secondReceipt.effectCount, 1);
+assert.equal(firstReceipt.attachedReminders.length, 1);
+assert.equal(firstReceipt.attachedReminders[0].reminderId, "novel.reminder.one");
+assert.equal(firstReceipt.attachedReminders[0].content, "private policy reminder one");
+assert.equal(Object.isFrozen(firstReceipt.attachedReminders), true);
 assert.deepEqual(
-  (await runtime.store.list()).map((item) => item.id),
-  ["scheduled-one", "scheduled-two"],
+  events.map((event) => event.getEventType()),
+  ["system.reminder.attached", "system.reminder.attached"],
 );
-
-await runtime.coordinator.execute({
-  context: policyContext("provider-expire"),
-  effects: [{
-    kind: "nudge_expire",
-    policyId: "policy.nudge",
-    conversationId: "conversation-policy",
-    runId: "run-policy",
-    targetRunId: "run-policy",
-    evaluatedAt: "2026-08-03T00:00:03.000Z",
-    currentTurnNumber: 2,
-    runEnded: true,
-  }],
-});
 assert.deepEqual(
-  (await runtime.store.list()).map((item) => item.state),
-  [PENDING_NUDGE_STATE.expired, PENDING_NUDGE_STATE.expired],
+  events.map((event) => event.payload.kind),
+  ["todo_idle", "todo_idle"],
+);
+assert.ok(events[0] instanceof SystemReminderAttachedOutputEvent);
+assert.equal(events[0].payload.content, "private policy reminder one");
+assert.equal(events[0].payload.order, firstReceipt.attachedReminders[0].order);
+
+// 模板未注册 → 渲染失败 → systemReminderAttachFailed（不含原始错误）。
+const missingTemplateRuntime = createRuntime(new NudgeTemplateRegistry());
+await assert.rejects(
+  missingTemplateRuntime.coordinator.execute({
+    context: firstContext,
+    effects: [attachEffect("novel.reminder.missing")],
+  }),
+  (error) =>
+    error instanceof RuntimeEffectCoordinatorError &&
+    error.failure === RUNTIME_EFFECT_COORDINATOR_FAILURE.systemReminderAttachFailed,
 );
 
-const supersedeRuntime = createRuntime();
-await supersedeRuntime.coordinator.execute({
-  context: firstContext,
-  effects: [scheduleEffect("superseded", "run-policy", 1)],
-});
-await supersedeRuntime.coordinator.execute({
-  context: firstContext,
-  effects: [{
-    kind: "nudge_supersede",
-    policyId: "policy.nudge",
-    conversationId: "conversation-policy",
-    runId: "run-policy",
-    targetRunId: "run-policy",
-    nudgeId: "superseded",
-    supersededByNudgeId: "replacement",
-    supersededAt: "2026-08-03T00:00:04.000Z",
-  }],
-});
-assert.equal(
-  (await supersedeRuntime.store.list())[0].state,
-  PENDING_NUDGE_STATE.superseded,
-);
-
-const acknowledgementRuntime = createRuntime();
-await acknowledgementRuntime.coordinator.execute({
-  context: firstContext,
-    effects: [scheduleEffect("acknowledged", "run-policy", 1, "until_acknowledged")],
-});
-await acknowledgementRuntime.manager.leaseForProviderCall({
-  providerCallId: "provider-acknowledged",
-  targetRunId: "run-policy",
-  requestedAt: "2026-08-03T00:00:01.000Z",
-});
-await acknowledgementRuntime.manager.confirmDelivered(
-  "provider-acknowledged",
-  "2026-08-03T00:00:02.000Z",
-);
-const scheduledAcknowledgement = (await acknowledgementRuntime.store.list())[0];
-assert.equal(scheduledAcknowledgement.state, PENDING_NUDGE_STATE.active);
-await acknowledgementRuntime.coordinator.execute({
-  context: firstContext,
-  effects: [{
-    kind: "nudge_acknowledge",
-    policyId: "policy.nudge",
-    conversationId: "conversation-policy",
-    runId: "run-policy",
-    nudgeId: "acknowledged",
-    acknowledgementRef: { id: "ack.acknowledged", version: "1" },
-    acknowledgedAt: "2026-08-03T00:00:03.000Z",
-  }],
-});
-assert.equal(
-  (await acknowledgementRuntime.store.list())[0].state,
-  PENDING_NUDGE_STATE.acknowledged,
-);
-
-const conditionRuntime = createRuntime();
-await conditionRuntime.coordinator.execute({
-  context: firstContext,
-  effects: [scheduleEffect("resolved", "run-policy", 1, "until_condition")],
-});
-await conditionRuntime.manager.leaseForProviderCall({
-  providerCallId: "provider-resolved",
-  targetRunId: "run-policy",
-  requestedAt: "2026-08-03T00:00:01.000Z",
-});
-await conditionRuntime.manager.confirmDelivered(
-  "provider-resolved",
-  "2026-08-03T00:00:02.000Z",
-);
-await conditionRuntime.coordinator.execute({
-  context: firstContext,
-  effects: [{
-    kind: "nudge_resolve",
-    policyId: "policy.nudge",
-    conversationId: "conversation-policy",
-    runId: "run-policy",
-    nudgeId: "resolved",
-    conditionRef: { id: "condition.resolved", version: "1" },
-    resolvedAt: "2026-08-03T00:00:03.000Z",
-  }],
-});
-assert.equal(
-  (await conditionRuntime.store.list())[0].state,
-  PENDING_NUDGE_STATE.resolved,
-);
-
+// handler 缺失 → systemReminderAttachHandlerMissing。
 const missingHandler = new RuntimeEffectCoordinator({
   conversationId: "conversation-policy",
 });
 await assert.rejects(
-  () => missingHandler.execute({
-    context: firstContext,
-    effects: [{
-      kind: "nudge_expire",
-      policyId: "policy.nudge",
-      conversationId: "conversation-policy",
-      runId: "run-policy",
-      targetRunId: "run-policy",
-      evaluatedAt: "2026-08-03T00:00:03.000Z",
-    }],
-  }),
+  () =>
+    missingHandler.execute({
+      context: firstContext,
+      effects: [attachEffect("novel.reminder.nohandler")],
+    }),
   (error) =>
     error instanceof RuntimeEffectCoordinatorError &&
-    error.failure === RUNTIME_EFFECT_COORDINATOR_FAILURE.nudgeLifecycleHandlerMissing,
+    error.failure ===
+      RUNTIME_EFFECT_COORDINATOR_FAILURE.systemReminderAttachHandlerMissing,
 );
 
 console.log("runtime policy nudge effect execution smoke: passed");

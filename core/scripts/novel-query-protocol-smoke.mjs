@@ -12,6 +12,7 @@ import {
   captureNovelParagraphCatalogSnapshot,
   captureNovelParagraphQueryRequest,
   captureNovelParagraphSnapshot,
+  captureNovelPublicationCatalogSnapshot,
   captureNovelQueryScope,
   captureNovelScopedQueryRequest,
   captureNovelStoryUnitQueryRequest,
@@ -34,6 +35,7 @@ assert.deepEqual(Object.values(NOVEL_QUERY_API_OPERATION), [
   "novel.locations.get",
   "novel.paragraph.catalog.get",
   "novel.paragraph.get",
+  "novel.publication.catalog.get",
 ]);
 assert.equal(captureNovelQueryScope(canonicalScope), canonicalScope);
 assert.deepEqual(captureNovelScopedQueryRequest({ scope: draftScope }), {
@@ -211,6 +213,58 @@ const paragraphSnapshot = captureNovelParagraphSnapshot(jsonRoundTrip({
   },
 }));
 assert.equal(paragraphSnapshot.readModel.paragraph.text, "雨落在站台上。");
+
+const publicationCatalog = captureNovelPublicationCatalogSnapshot(jsonRoundTrip({
+  schemaVersion: NOVEL_QUERY_SNAPSHOT_VERSION,
+  scope: canonicalScope,
+  volumes: [
+    {
+      id: "volume_one",
+      publicationId: "publication_main",
+      orderKey: "8000",
+      title: "第一卷",
+    },
+  ],
+  chapters: [
+    {
+      id: "chapter_one",
+      publicationId: "publication_main",
+      volumeId: "volume_one",
+      orderKey: "8000",
+      title: "雨夜",
+      paragraphIds: ["paragraph_opening"],
+    },
+  ],
+}));
+assert.equal(publicationCatalog.volumes[0].title, "第一卷");
+assert.deepEqual(publicationCatalog.chapters[0].paragraphIds, [
+  "paragraph_opening",
+]);
+assert.throws(
+  () => captureNovelPublicationCatalogSnapshot({
+    schemaVersion: 1,
+    scope: canonicalScope,
+    volumes: [
+      {
+        id: "volume_one",
+        publicationId: "publication_main",
+        orderKey: "8000",
+        title: "第一卷",
+      },
+    ],
+    chapters: [
+      {
+        id: "chapter_one",
+        publicationId: "publication_main",
+        volumeId: "volume_unknown",
+        orderKey: "8000",
+        title: "雨夜",
+        paragraphIds: [],
+      },
+    ],
+  }),
+  /snapshot is invalid/u,
+);
 
 const overview = captureNovelOverviewSnapshot(jsonRoundTrip({
   schemaVersion: NOVEL_QUERY_SNAPSHOT_VERSION,

@@ -2,18 +2,17 @@
  * Sidebar
  *
  * 左侧栏容器（对齐原型 + spec 4.3 排序）：
- * 新建 -> 内容(auto-fill) -> 对话 -> footing。
+ * 新建 -> 内容(auto-fill) -> 对话。
  * 待办组已移除（待办只在计划视图，与原型一致）；待审批队列入口在右侧
- * 审批面板（inspector）。footing 始终贴底（margin-top: auto 由
- * WorkspaceFootingSection 提供）。
+ * 审批面板（inspector）。v2 原型已删 side-foot，故不再渲染 footer。
  */
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import type { NovelOverviewStore } from "../../domains/novel/overview/NovelOverviewStore.js";
+import type { ToastStore } from "../../shared/state/ToastStore.js";
 import type { ContentTab } from "../main/contentTab.js";
 import { ContentSection } from "./sections/ContentSection.js";
 import { ConversationListSection } from "./sections/ConversationListSection.js";
 import { NewConversationSection } from "./sections/NewConversationSection.js";
-import { WorkspaceFootingSection } from "./sections/WorkspaceFootingSection.js";
 import { SidebarSection } from "./SidebarSection.js";
 import styles from "./Sidebar.module.css";
 
@@ -21,6 +20,7 @@ export interface SidebarProps {
   readonly mode: "expanded" | "collapsed";
   readonly conversationCatalog: ConversationCatalogStore;
   readonly novelOverview: NovelOverviewStore;
+  readonly toastStore: ToastStore;
   readonly onCreateConversation: () => void;
   /**
    * 选择对话时触发。宿主应在此同时调用 catalog.selectConversation(id)
@@ -29,6 +29,10 @@ export interface SidebarProps {
   readonly onSelectConversation: (id: string) => void;
   readonly contentTab: ContentTab;
   readonly onSelectContentPane: (pane: ContentTab) => void;
+  /**
+   * 以下字段为 ApplicationShell 调用方兼容保留：v2 原型已删 side-foot，
+   * Sidebar 不再渲染 footer，这些值在此未使用。
+   */
   readonly workspaceId?: string;
   readonly workspaceLabel?: string;
   readonly revision?: string;
@@ -40,15 +44,11 @@ export function Sidebar({
   mode,
   conversationCatalog,
   novelOverview,
+  toastStore,
   onCreateConversation,
   onSelectConversation,
   contentTab,
   onSelectContentPane,
-  workspaceId,
-  workspaceLabel,
-  revision,
-  pendingApprovalCount = 0,
-  onOpenWorkspace,
 }: SidebarProps) {
   const snapshot = conversationCatalog.getSnapshot();
   return (
@@ -61,21 +61,10 @@ export function Sidebar({
       <SidebarSection label="对话" count={snapshot.conversations.length}>
         <ConversationListSection
           store={conversationCatalog}
+          toastStore={toastStore}
           onSelect={onSelectConversation}
         />
       </SidebarSection>
-      <WorkspaceFootingSection
-        workspaceId={workspaceId}
-        label={workspaceLabel}
-        meta={
-          revision !== undefined
-            ? `${revision} · ${pendingApprovalCount} 待审`
-            : workspaceId === undefined
-              ? ""
-              : workspaceId.slice(0, 12)
-        }
-        onClick={onOpenWorkspace}
-      />
     </aside>
   );
 }

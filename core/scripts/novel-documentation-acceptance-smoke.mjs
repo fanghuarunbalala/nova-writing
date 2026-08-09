@@ -64,7 +64,14 @@ for (const [name, value] of Object.entries({ implementationPlan, domain, archite
 console.log("novel documentation acceptance smoke passed");
 
 async function read(relativePath) {
-  return readFile(join(repositoryRoot, relativePath), "utf8");
+  // 行尾无关：`core.autocrlf` 在 Windows 检出会把 LF 文档转成 CRLF，导致
+  // 跨行 marker 的字面 `\n` 匹配失败。读入时统一归一化为 LF。
+  // Line-ending agnostic: autocrlf checks out LF docs as CRLF on Windows,
+  // which breaks literal `\n` markers. Normalize to LF on read.
+  return (await readFile(join(repositoryRoot, relativePath), "utf8")).replace(
+    /\r\n/g,
+    "\n",
+  );
 }
 
 function assertMermaidFences(name, value) {

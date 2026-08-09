@@ -1,43 +1,42 @@
 /**
- * ConversationComposer 视觉（原型 .composer + .composer form + .composer textarea）。
+ * ConversationComposer 视觉（原型 .composer + form + .composer-main）。
  *
- * composer 容器：border-top + 半透明 surface 底 + blur(16px)，padding 12/22/16。
- * form：max-width 1000px 靠左对齐（与 timeline 一致，右侧留白），
- *       border 1px strong，radius 14px，半透明 bg + blur(12px)，
- *       focus-within 时 border 变 accent 42% + 3px accent 7% 光晕。
+ * composer 容器：absolute 贴聊天视图底部，z-index 6 盖在 ::before 渐变之上，
+ *       透明无边框、pointer-events none（点击穿透到时间线可滚动），padding 0 22px 16px。
+ * form：居中卡片 max-width 880px，radius 16px + shadow-1 无边框，
+ *       pointer-events auto；内部纵向排 gen-status → .mainRow(textarea+send) → 模式下拉。
  * textarea：flex 1，14.5px/1.6，min-height 44 / max-height 140，caret-color accent-ink，
  *           placeholder faint 0.82 透明度。
- * mode-bar 区域由 ComposerModeBar.module.css 负责底部 border-top 分隔。
+ * 模式下拉区域由 ComposerModeBar.module.css 负责（触发按钮 + 向上浮出的选项面板）。
  */
 .composer {
-  display: flex;
-  flex-direction: column;
-  flex: none;
-  border-top: 1px solid var(--color-border);
-  background: color-mix(in oklab, var(--color-surface) 76%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  padding: 12px 22px 16px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  padding: 0 22px 16px;
+  background: transparent;
+  pointer-events: none;
 }
 
 .form {
+  position: relative;
+  max-width: 880px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  padding: 8px 8px 10px 15px;
+  pointer-events: auto;
+}
+
+.mainRow {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  max-width: 1000px;
-  margin: 0;
-  width: 100%;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 14px;
-  background: color-mix(in oklab, var(--color-bg) 76%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: 8px 8px 8px 15px;
-}
-
-.form:focus-within {
-  border-color: color-mix(in oklab, var(--color-accent) 42%, var(--color-border-strong));
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 7%, transparent);
 }
 
 .input {

@@ -31,7 +31,7 @@ import {
   createDomainReferenceResolver,
   type ReferenceResolver,
 } from "../domains/conversation/reference/ReferenceResolver.js";
-import type { ToastStore } from "../shared/state/ToastStore.js";
+import type { ToastKind, ToastStore } from "../shared/state/ToastStore.js";
 import type { MainViewRouter } from "../shared/routing/MainViewRouter.js";
 import type { InspectorRouter } from "../shared/routing/InspectorRouter.js";
 import type { ConversationCatalogStore } from "../domains/conversation/store/ConversationCatalogStore.js";
@@ -297,6 +297,14 @@ export function ApplicationShell({
     [approvalStore, inspectorRouter],
   );
 
+  // 消息内操作提示（复制结果等）→ 全局 ToastHost。
+  const handleNotify = useCallback(
+    (kind: ToastKind, text: string) => {
+      toastStore.push({ kind, text });
+    },
+    [toastStore],
+  );
+
   // 写操作落库后刷新 novel 数据 store（大纲/人物/地点/正文/概览），
   // 让 GUI 内容视图立即反映批准后的正式稿变更。
   // Reload novel data stores after an approved write so content views refresh.
@@ -420,6 +428,7 @@ export function ApplicationShell({
           mode={sidebarMode}
           conversationCatalog={domainStores.conversationCatalog}
           novelOverview={domainStores.novelOverview}
+          toastStore={toastStore}
           onCreateConversation={handleCreateConversation}
           onSelectConversation={handleSelectConversation}
           contentTab={contentTab}
@@ -453,6 +462,7 @@ export function ApplicationShell({
           onProposalAction={handleProposalAction}
           onOpenApproval={handleOpenApproval}
           onOpenDraft={handleOpenApproval}
+          onNotify={handleNotify}
           approvalStore={approvalStore}
         />
         <InspectorHost
@@ -462,6 +472,7 @@ export function ApplicationShell({
           characters={domainStores.character}
           locations={domainStores.location}
           approvalStore={approvalStore}
+          onJumpToConversation={handleSelectConversation}
         />
       </div>
       <OverlaysHost toastStore={toastStore}>{overlays}</OverlaysHost>

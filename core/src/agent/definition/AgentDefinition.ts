@@ -80,6 +80,24 @@ export class AgentCommunicationPolicy {
   }
 }
 
+/**
+ * 一个 agent 显式启用的 nudge 列表（nudgeId），随 AgentDefinition 持久化。
+ * 装配侧以 `definition.nudgeEnablement.enabled` ∩ 工具组守卫过滤生效集。
+ * Nudges an agent explicitly enables (nudgeIds), persisted with the
+ * AgentDefinition. The assembly side filters the effective set as
+ * `definition.nudgeEnablement.enabled` ∩ tool-group guard.
+ */
+export interface AgentNudgeEnablement {
+  /** 显式启用的 nudgeId；未启用的 nudge 在装配侧不注入。Enabled nudgeIds; unlisted nudges are not injected at assembly. */
+  readonly enabled: readonly string[];
+}
+
+/** 未配置 nudge 启用时的默认空集。Default empty set when no nudge enablement is configured. */
+export const EMPTY_AGENT_NUDGE_ENABLEMENT: AgentNudgeEnablement =
+  Object.freeze({
+    enabled: Object.freeze([]),
+  });
+
 export interface AgentDefinitionOptions {
   readonly agentType: string;
   readonly definitionVersion: string;
@@ -90,6 +108,8 @@ export interface AgentDefinitionOptions {
   readonly delegation: AgentDelegationPolicy;
   readonly communication: AgentCommunicationPolicy;
   readonly runtimePolicyId: string;
+  /** 显式启用的 nudge；缺省为空集。Explicitly enabled nudges; defaults to the empty set. */
+  readonly nudgeEnablement?: AgentNudgeEnablement;
 }
 
 export interface AgentDefinitionSnapshot {
@@ -103,6 +123,7 @@ export interface AgentDefinitionSnapshot {
   readonly delegation: AgentDelegationPolicySnapshot;
   readonly communication: { readonly role: AgentCommunicationRole };
   readonly runtimePolicyId: string;
+  readonly nudgeEnablement: AgentNudgeEnablement;
 }
 
 export class AgentDefinition {
@@ -116,6 +137,7 @@ export class AgentDefinition {
   readonly delegation: AgentDelegationPolicy;
   readonly communication: AgentCommunicationPolicy;
   readonly runtimePolicyId: string;
+  readonly nudgeEnablement: AgentNudgeEnablement;
 
   constructor(options: AgentDefinitionOptions) {
     this.agentType = captureAgentType(options.agentType);
@@ -142,6 +164,7 @@ export class AgentDefinition {
       options.runtimePolicyId,
       "Runtime policy ID",
     );
+    this.nudgeEnablement = captureNudgeEnablement(options.nudgeEnablement);
     Object.freeze(this);
   }
 
@@ -157,6 +180,7 @@ export class AgentDefinition {
       delegation: this.delegation.toSnapshot(),
       communication: Object.freeze({ role: this.communication.role }),
       runtimePolicyId: this.runtimePolicyId,
+      nudgeEnablement: this.nudgeEnablement,
     });
   }
 }
@@ -197,6 +221,32 @@ function captureOptionalUniqueIdentities(
   label: string,
 ): readonly string[] | undefined {
   return value === undefined ? undefined : captureUniqueIdentities(value, label);
+}
+
+/** 捕获 nudge 启用配置；缺省/空数组 → 空集，逐项校验唯一性。Captures nudge enablement; absent/empty → empty set, per-item uniqueness enforced. */
+function captureNudgeEnablement(value: unknown): AgentNudgeEnablement {
+  if (value === undefined) return EMPTY_AGENT_NUDGE_ENABLEMENT;
+  if (typeof value !== "object" || value === null) {
+    throw new TypeError("Agent Nudge enablement is invalid");
+  }
+  const enabled = (value as { enabled?: unknown }).enabled;
+  if (enabled === undefined) return EMPTY_AGENT_NUDGE_ENABLEMENT;
+  if (!Array.isArray(enabled)) {
+    throw new TypeError("Agent Nudge enablements are invalid");
+  }
+  const seen = new Set<string>();
+  return Object.freeze({
+    enabled: Object.freeze(
+      enabled.map((identity) => {
+        const captured = captureIdentity(identity, "Agent Nudge");
+        if (seen.has(captured)) {
+          throw new TypeError("Agent Nudge enablements must be unique");
+        }
+        seen.add(captured);
+        return captured;
+      }),
+    ),
+  });
 }
 
 function captureIdentity(value: unknown, label: string): string {

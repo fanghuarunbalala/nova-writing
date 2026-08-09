@@ -1,62 +1,86 @@
 /**
  * InspectorHost 视觉（原型 .inspector + .insp-head + .insp-close + .insp-body）。
  *
- * 半透明 surface 底 + backdrop blur，与原型一致。border-left 分隔主区。
- * 拖拽调宽由 DragHandle 提供；宽度由 inline style 注入。
- * insp-head 含 kicker（10px/0.1em letter-spacing）+ close 按钮（28x28 1px border）。
+ * 恒挂载面板：宽度由 --insp-w 决定（tokens 默认 860px / 媒体查询收窄 /
+ * 拖拽写 inline --insp-w），开合通过 margin-right 负值过渡（非条件渲染）。
+ * insp-head 对齐原型：标题（.insp-title 13px/700）+ 审批「目录 N」按钮
+ * （.appr-list-toggle，aria-expanded 高亮）+ kicker + close 按钮（28x28 1px border）。
  */
-.tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: 9px;
-  padding: 2px;
-}
-
-.tab {
-  border: 0;
-  background: transparent;
-  color: var(--color-muted);
-  font-size: 12px;
+.inspTitle {
+  margin: 0;
+  font-size: 13px;
   font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 7px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.tab:hover {
+  letter-spacing: 0.01em;
   color: var(--color-fg);
 }
 
-.tabActive {
+.listToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
   background: var(--color-surface);
-  color: var(--color-accent-ink);
-  box-shadow: 0 1px 3px rgba(20, 12, 6, 0.08);
+  color: var(--color-muted);
+  font: 700 11.5px/1 var(--font-ui);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
 }
 
-.countPill {
+.listToggle:hover {
+  color: var(--color-fg);
+  border-color: var(--color-border-strong);
+}
+
+.listToggle[aria-expanded="true"] {
+  color: var(--color-accent-ink);
+  border-color: color-mix(in oklab, var(--color-accent) 34%, var(--color-border));
+  background: color-mix(in oklab, var(--color-accent) 8%, var(--color-surface));
+}
+
+.ltCnt {
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 800;
-  background: var(--color-warn-bg);
-  color: var(--color-warn);
-  padding: 0 6px;
+  color: var(--color-faint);
+  background: color-mix(in oklab, var(--color-fg) 7%, transparent);
+  padding: 1px 6px;
   border-radius: 999px;
 }
+
 .host {
   position: relative;
   flex: none;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  width: var(--insp-w, 860px);
+  margin-right: calc(-1 * var(--insp-w, 860px));
+  transition: margin-right 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  container-type: inline-size;
   border-left: 1px solid var(--color-border);
   background: color-mix(in oklab, var(--color-surface) 78%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+}
+
+.host.open {
+  margin-right: 0;
+}
+
+.drag {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 5;
+  width: 6px;
 }
 
 .head {
@@ -109,4 +133,48 @@
   padding: 18px 14px;
   font-size: var(--fs-body);
   color: var(--color-faint);
+}
+
+/* ============ 响应式收窄（对齐原型媒体查询） ============ */
+@media (max-width: 1280px) {
+  .host {
+    --insp-w: 720px;
+  }
+}
+
+@media (max-width: 1080px) {
+  .host {
+    --insp-w: 640px;
+  }
+}
+
+/* 中等宽度：流式右列（原型 ≤1200 且 ≥861 clamp）。 */
+@media (min-width: 861px) and (max-width: 1200px) {
+  .host {
+    --insp-w: clamp(380px, 46vw, 560px);
+  }
+}
+
+/* ≤860：固定抽屉滑出（transform），拖拽手柄隐藏；移除旧 <640 纵向叠砌。 */
+@media (max-width: 860px) {
+  .host {
+    position: fixed;
+    top: 56px;
+    right: 0;
+    bottom: 0;
+    z-index: 42;
+    width: min(560px, 88vw);
+    margin-right: 0;
+    transform: translateX(102%);
+    transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: -18px 0 50px rgba(20, 12, 6, 0.18);
+  }
+
+  .host.open {
+    transform: none;
+  }
+
+  .drag {
+    display: none;
+  }
 }

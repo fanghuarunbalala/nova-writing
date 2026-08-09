@@ -1,95 +1,76 @@
 import assert from "node:assert/strict";
 import {
-  captureRuntimeNudgeLifecycleEffect,
   captureRuntimePolicyEffect,
+  captureSystemReminderAttachEffect,
 } from "../dist/index.js";
 
 const base = {
-  policyId: "policy.nudge",
+  policyId: "policy.reminder",
   conversationId: "conversation-policy",
   runId: "run-policy",
 };
 
-const schedule = captureRuntimeNudgeLifecycleEffect({
+const attach = captureSystemReminderAttachEffect({
   ...base,
-  kind: "nudge_schedule",
-  nudgeId: "nudge-schedule",
-  effect: {
-    kind: "nudge",
-    policyId: "policy.nudge",
-    templateId: "template.nudge",
-    templateVersion: "1",
-    priority: 10,
-    dedupeKey: "schedule",
-    targetRunId: "run-policy",
-    parameters: { private: "payload" },
-  },
-  scheduledSequence: 4,
-  scheduledAt: "2026-08-03T00:00:00.000Z",
+  kind: "system_reminder_attach",
+  reminderId: "novel.reminder.todo_idle",
+  reminderKind: "todo_idle",
+  templateId: "novel.reminder.todo_idle",
+  templateVersion: "1.0.0",
+  parameters: { private: "payload" },
+  order: 1,
 });
-assert.equal(schedule.kind, "nudge_schedule");
-assert.equal(Object.isFrozen(schedule), true);
-assert.equal(Object.isFrozen(schedule.effect), true);
+assert.equal(attach.kind, "system_reminder_attach");
+assert.equal(attach.reminderKind, "todo_idle");
+assert.equal(attach.order, 1);
+assert.equal(Object.isFrozen(attach), true);
+assert.equal(Object.isFrozen(attach.parameters), true);
 
-const acknowledge = captureRuntimePolicyEffect({
+// captureRuntimePolicyEffect 按 kind dispatch 到 system_reminder_attach。
+const viaDispatch = captureRuntimePolicyEffect({
   ...base,
-  kind: "nudge_acknowledge",
-  nudgeId: "nudge-ack",
-  acknowledgementRef: { id: "ack.policy", version: "1" },
-  acknowledgedAt: "2026-08-03T00:00:01.000Z",
+  kind: "system_reminder_attach",
+  reminderId: "novel.reminder.compose_mode",
+  reminderKind: "compose_mode",
+  templateId: "novel.reminder.compose_mode",
+  templateVersion: "1.0.0",
+  parameters: Object.freeze({}),
+  order: 2,
 });
-const resolve = captureRuntimePolicyEffect({
-  ...base,
-  kind: "nudge_resolve",
-  nudgeId: "nudge-condition",
-  conditionRef: { id: "condition.policy", version: "1" },
-  resolvedAt: "2026-08-03T00:00:02.000Z",
-});
-const expire = captureRuntimePolicyEffect({
-  ...base,
-  kind: "nudge_expire",
-  targetRunId: "run-policy",
-  evaluatedAt: "2026-08-03T00:00:03.000Z",
-  currentTurnNumber: 3,
-  runEnded: false,
-});
-const supersede = captureRuntimePolicyEffect({
-  ...base,
-  kind: "nudge_supersede",
-  nudgeId: "nudge-old",
-  targetRunId: "run-policy",
-  supersededByNudgeId: "nudge-new",
-  supersededAt: "2026-08-03T00:00:04.000Z",
-});
-assert.deepEqual(
-  [acknowledge.kind, resolve.kind, expire.kind, supersede.kind],
-  ["nudge_acknowledge", "nudge_resolve", "nudge_expire", "nudge_supersede"],
-);
+assert.equal(viaDispatch.kind, "system_reminder_attach");
+assert.equal(viaDispatch.reminderKind, "compose_mode");
+assert.equal(viaDispatch.order, 2);
 
-assert.throws(() => captureRuntimePolicyEffect({
+// 无效输入拒绝：非空字段缺失 / order 负数 / reminderKind 非法。
+assert.throws(() => captureSystemReminderAttachEffect({
   ...base,
-  kind: "nudge_schedule",
-  nudgeId: "nudge-invalid",
-  effect: {
-    kind: "nudge",
-    policyId: "policy.nudge",
-    templateId: "template.nudge",
-    templateVersion: "1",
-    priority: 10,
-    dedupeKey: "invalid",
-    targetRunId: "different-run",
-    parameters: {},
-  },
-  scheduledSequence: 1,
-  scheduledAt: "2026-08-03T00:00:00.000Z",
+  kind: "system_reminder_attach",
+  reminderId: "novel.reminder.bad",
+  reminderKind: "not-a-reminder-kind",
+  templateId: "template.reminder",
+  templateVersion: "1",
+  parameters: {},
+  order: 1,
 }));
-assert.throws(() => captureRuntimePolicyEffect({
+assert.throws(() => captureSystemReminderAttachEffect({
   ...base,
-  kind: "nudge_supersede",
-  nudgeId: "same-id",
-  targetRunId: "run-policy",
-  supersededByNudgeId: "same-id",
-  supersededAt: "2026-08-03T00:00:00.000Z",
+  kind: "system_reminder_attach",
+  reminderId: "",
+  reminderKind: "todo_idle",
+  templateId: "template.reminder",
+  templateVersion: "1",
+  parameters: {},
+  order: 1,
+}));
+assert.throws(() => captureSystemReminderAttachEffect({
+  ...base,
+  kind: "system_reminder_attach",
+  reminderId: "novel.reminder.bad",
+  reminderKind: "todo_idle",
+  templateId: "template.reminder",
+  templateVersion: "1",
+  parameters: {},
+  order: -1,
 }));
 
 console.log("runtime policy nudge effect protocol smoke: passed");

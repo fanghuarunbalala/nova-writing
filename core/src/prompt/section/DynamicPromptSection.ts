@@ -3,7 +3,7 @@
  * Dynamic Prompt Section base: content is rendered per call by the runtime and
  * never enters the manifest-compiled base prompt.
  */
-import type { PromptEnvironmentSnapshot } from "../environment/EnvironmentPromptOverlay.js";
+import type { PromptEnvironmentSnapshot } from "../sections/agent/EnvironmentPromptOverlay.js";
 import type { NovelGlobalConstraintsSnapshot } from "../sections/novel/NovelGlobalConstraintsPromptSection.js";
 import { PromptSection, type PromptSectionOptions } from "./PromptSection.js";
 

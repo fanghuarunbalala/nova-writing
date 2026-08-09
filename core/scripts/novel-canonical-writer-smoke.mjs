@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { removeTempDirectory } from "./fixtures/temp-directory.mjs";
 import { DatabaseSync } from "node:sqlite";
 import {
   NOVEL_LIFECYCLE_EVENT_TYPE,
@@ -134,9 +135,10 @@ function readOutboxRows(databasePath) {
 async function main() {
   const root = await mkdtemp(join(tmpdir(), "novel-canonical-writer-"));
   const logger = new CollectingLogger();
+  let canonicalStore;
   try {
     const location = createIsolatedLocation(root);
-    await SqliteNovelCanonicalStore.open({
+    canonicalStore = await SqliteNovelCanonicalStore.open({
       location,
       novelId: NOVEL_ID,
       identityFactory: new FixedIdentityFactory(),
@@ -241,7 +243,8 @@ async function main() {
     await assertLogsAreRedacted(logger.entries, [root]);
     process.stdout.write("novel-canonical-writer smoke passed\n");
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await canonicalStore.close();
+    await removeTempDirectory(root);
   }
 }
 

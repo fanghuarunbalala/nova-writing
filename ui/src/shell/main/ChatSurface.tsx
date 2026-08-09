@@ -13,6 +13,7 @@ import {
   type NovelApiClient,
 } from "@novel/core";
 import { useEffect, useMemo } from "react";
+import type { ToastKind } from "../../shared/state/ToastStore.js";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
 import { ConversationComposer } from "../../domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../domains/conversation/components/ConversationTimeline.js";
@@ -40,6 +41,7 @@ export interface ChatSurfaceProps {
     action: "approve" | "reject" | "view-diff",
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
+  readonly onNotify?: (kind: ToastKind, text: string) => void;
   readonly approvalStore: ApprovalStore;
 }
 
@@ -52,6 +54,7 @@ export function ChatSurface({
   resolveReference,
   onProposalAction,
   onOpenApproval,
+  onNotify,
   approvalStore,
 }: ChatSurfaceProps) {
   const catalog = useExternalStore(conversationCatalog);
@@ -70,6 +73,7 @@ export function ChatSurface({
       resolveReference={resolveReference}
       onProposalAction={onProposalAction}
       onOpenApproval={onOpenApproval}
+      onNotify={onNotify}
       approvalStore={approvalStore}
     />
   );
@@ -88,6 +92,7 @@ interface ActiveChatSurfaceProps {
     action: "approve" | "reject" | "view-diff",
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
+  readonly onNotify?: (kind: ToastKind, text: string) => void;
   readonly approvalStore: ApprovalStore;
 }
 
@@ -101,6 +106,7 @@ function ActiveChatSurface({
   resolveReference,
   onProposalAction,
   onOpenApproval,
+  onNotify,
   approvalStore,
 }: ActiveChatSurfaceProps) {
   const { snapshot, enqueue, resume } = useConversationProjection(conversationId, {
@@ -152,6 +158,7 @@ function ActiveChatSurface({
         resolveReference={resolveReference}
         onProposalAction={onProposalAction}
         onOpenApproval={onOpenApproval}
+        onNotify={onNotify}
         onApprovalDecision={(approvalRequestIds, decision) => {
           for (const approvalRequestId of approvalRequestIds) {
             void approvalStore.decide(approvalRequestId, decision);

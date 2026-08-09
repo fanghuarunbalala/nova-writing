@@ -1,13 +1,25 @@
 /**
  * InspectorHost
  *
- * 右侧 inspector（原型 .inspector）：拖拽调宽 + insp-head（kicker + close）
+ * 右侧 inspector（原型 .inspector）：恒挂载 + 拖拽调宽 + insp-head（kicker + close）
  * + insp-body（按路由渲染 panel）。
  *
- * insp-head 的 kicker 按 panel 类型动态显示标签；close 触发 inspectorRouter.close()。
- * 审批 tabs 待 approval 域落地后补充。
+ * 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right 收起），
+ * 开合切换 .open class 触发过渡（非条件渲染）。宽度由 --insp-w 决定——
+ * 默认取 tokens 860px，响应式收窄由媒体查询覆盖；用户拖拽时写 inline
+ * --insp-w（仅拖过才写，未拖交给 CSS）。
+ *
+ * insp-head（对齐原型）：标题（.insp-title，按面板类型显示「审批/档案/大纲单元/
+ * 对话元信息」）+ 审批模式下「目录 N」按钮（点击弹出覆盖抽屉，drawerOpen 状态）+
+ * kicker + close。面板内审批目录始终为左侧滑出覆盖抽屉（无常驻列），
+ * 选中条目自动收起。close 触发 inspectorRouter.close()。
  */
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { DragHandle } from "../../shared/primitives/DragHandle.js";
 import { useInspectorRoute } from "../../shared/routing/hooks.js";
 import type { InspectorRouter } from "../../shared/routing/InspectorRouter.js";
@@ -23,15 +35,22 @@ import { EntityInspectorPanel } from "./panels/EntityInspectorPanel.js";
 import { OutlineUnitInspectorPanel } from "./panels/OutlineUnitInspectorPanel.js";
 import styles from "./InspectorHost.module.css";
 
-const DEFAULT_WIDTH = 680;
-const MIN_WIDTH = 480;
-const MAX_WIDTH = 960;
+/** 未拖拽时的默认宽度（与 tokens --insp-w 一致）。 */
+const DEFAULT_WIDTH = 860;
 
 const KICKER_BY_KIND: Record<string, string> = {
   entity: "档案 · 角色 / 地点",
   outlineUnit: "大纲单元",
   conversation: "对话元信息",
-  approval: "审批 · Diff 审核",
+  approval: "审批参数 · 变更集不可变，批准执行后才产出差异",
+};
+
+/** 面板标题（原型 .insp-title，无 tab 切换，模式由入口决定）。 */
+const TITLE_BY_KIND: Record<string, string> = {
+  approval: "审批",
+  entity: "档案",
+  outlineUnit: "大纲单元",
+  conversation: "对话元信息",
 };
 
 export interface InspectorHostProps {
@@ -42,6 +61,8 @@ export interface InspectorHostProps {
   readonly locations: LocationStore;
   readonly approvalStore: ApprovalStore;
   readonly onLocateInContent?: (entityId: string) => void;
+  /** 审批目录「跳转」：切换主视图到对应对话（应用层负责 select + transition）。 */
+  readonly onJumpToConversation?: (conversationId: string) => void;
 }
 
 export function InspectorHost({
@@ -52,113 +73,125 @@ export function InspectorHost({
   locations,
   approvalStore,
   onLocateInContent,
+  onJumpToConversation,
 }: InspectorHostProps) {
   const route = useInspectorRoute(inspectorRouter);
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
-  const [tab, setTab] = useState<"approval" | "detail">("approval");
+  const [draggedW, setDraggedW] = useState<number | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const widthRef = useRef<number | null>(null);
   const approvalSnapshot = useExternalStore(approvalStore);
-  useEffect(() => {
-    console.info("[inspector] host route changed", {
-      kind: route.state.kind,
-      tab,
-    });
-    if (
-      route.state.kind === "entity" ||
-      route.state.kind === "outlineUnit" ||
-      route.state.kind === "conversation"
-    ) {
-      setTab("detail");
-    } else if (route.state.kind === "approval") {
-      setTab("approval");
-    }
-  }, [route.state.kind, tab]);
-  if (route.state.kind === "closed") return null;
+  // 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right 收起）。
+  const open = route.state.kind !== "closed";
+
+  // 拖拽调宽（对齐原型 JS）：≤860 不拖；minW 560/340、maxW min(1120, vw-520)。
+  const handleResize = useCallback((delta: number) => {
+    const vw = window.innerWidth;
+    if (vw <= 860) return;
+    const minW = vw > 860 && vw <= 1200 ? 340 : 560;
+    const maxW = Math.min(1120, vw - 520);
+    const next = Math.min(
+      maxW,
+      Math.max(minW, (widthRef.current ?? DEFAULT_WIDTH) + delta),
+    );
+    widthRef.current = next;
+    setDraggedW(next);
+  }, []);
+
   const workspaceId =
     conversationCatalog.getSnapshot().workspaceId ??
     outlineTree.getSnapshot().workspaceId;
   const kicker = KICKER_BY_KIND[route.state.kind] ?? "详情";
+  const title = TITLE_BY_KIND[route.state.kind] ?? "详情";
   return (
-    <aside className={styles.host} style={{ width }}>
-      <DragHandle
-        orientation="horizontal"
-        ariaLabel="调整面板宽度"
-        onResize={(delta) =>
-          setWidth((current) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, current + delta)))
-        }
-      />
-      <header className={styles.head}>
-        <div className={styles.tabs} role="tablist" aria-label="右侧面板">
-          <button
-            type="button"
-            className={[styles.tab, tab === "approval" ? styles.tabActive : ""].filter(Boolean).join(" ")}
-            onClick={() => setTab("approval")}
-            aria-selected={tab === "approval"}
-            role="tab"
-          >
-            审批
-            {approvalSnapshot.pendingCount > 0 ? (
-              <span className={styles.countPill}>{approvalSnapshot.pendingCount} 待审</span>
+    <aside
+      className={[styles.host, open ? styles.open : ""].filter(Boolean).join(" ")}
+      aria-hidden={!open}
+      inert={!open}
+      style={
+        draggedW !== null
+          ? ({ "--insp-w": `${draggedW}px` } as CSSProperties)
+          : undefined
+      }
+    >
+      <div className={styles.drag}>
+        <DragHandle
+          orientation="horizontal"
+          ariaLabel="调整面板宽度"
+          onResize={handleResize}
+        />
+      </div>
+      {open ? (
+        <>
+          <header className={styles.head}>
+            <h3 className={styles.inspTitle}>{title}</h3>
+            {route.state.kind === "approval" ? (
+              <button
+                type="button"
+                className={styles.listToggle}
+                onClick={() => setDrawerOpen((value) => !value)}
+                aria-expanded={drawerOpen}
+                aria-controls="approval-directory"
+              >
+                目录
+                {approvalSnapshot.pendingCount > 0 ? (
+                  <span className={styles.ltCnt}>{approvalSnapshot.pendingCount}</span>
+                ) : null}
+              </button>
             ) : null}
-          </button>
-          {route.state.kind !== "approval" ? (
+            <span className={styles.kicker}>{kicker}</span>
             <button
               type="button"
-              className={[styles.tab, tab === "detail" ? styles.tabActive : ""].filter(Boolean).join(" ")}
-              onClick={() => setTab("detail")}
-              aria-selected={tab === "detail"}
-              role="tab"
+              className={styles.close}
+              aria-label="收起面板"
+              onClick={() => inspectorRouter.close()}
             >
-              档案
+              ✕
             </button>
-          ) : null}
-        </div>
-        <span className={styles.kicker}>{tab === "approval" ? "审批参数 · 批准执行后才产出 Diff" : kicker}</span>
-        <button
-          type="button"
-          className={styles.close}
-          aria-label="收起面板"
-          onClick={() => inspectorRouter.close()}
-        >
-          ✕
-        </button>
-      </header>
-      <div className={styles.body}>
-        {tab === "approval" ? (
-          <ApprovalPanel
-            store={approvalStore}
-            conversationLabels={new Map(
-              conversationCatalog
-                .getSnapshot()
-                .conversations.map((conversation) => [
-                  conversation.id,
-                  conversation.title ?? conversation.id,
-                ]),
+          </header>
+          <div className={styles.body}>
+            {route.state.kind === "approval" ? (
+              <ApprovalPanel
+                store={approvalStore}
+                conversationLabels={new Map(
+                  conversationCatalog
+                    .getSnapshot()
+                    .conversations.map((conversation) => [
+                      conversation.id,
+                      conversation.title ?? conversation.id,
+                    ]),
+                )}
+                onJumpToConversation={onJumpToConversation}
+                drawerOpen={drawerOpen}
+                onToggleDrawer={setDrawerOpen}
+              />
+            ) : route.state.kind === "entity" ? (
+              <EntityInspectorPanel
+                workspaceId={workspaceId}
+                entityType={route.state.entityType}
+                entityId={route.state.entityId}
+                characters={characters}
+                locations={locations}
+                onLocateInContent={onLocateInContent}
+              />
+            ) : route.state.kind === "outlineUnit" ? (
+              <OutlineUnitInspectorPanel
+                workspaceId={workspaceId}
+                unitId={route.state.unitId}
+                outlineTree={outlineTree}
+              />
+            ) : route.state.kind === "conversation" ? (
+              <ConversationInspectorPanel
+                conversationId={route.state.conversationId}
+                conversationCatalog={conversationCatalog}
+              />
+            ) : (
+              <div className={styles.pending}>审批面板待定（approval 域延后）</div>
             )}
-          />
-        ) : route.state.kind === "entity" ? (
-          <EntityInspectorPanel
-            workspaceId={workspaceId}
-            entityType={route.state.entityType}
-            entityId={route.state.entityId}
-            characters={characters}
-            locations={locations}
-            onLocateInContent={onLocateInContent}
-          />
-        ) : route.state.kind === "outlineUnit" ? (
-          <OutlineUnitInspectorPanel
-            workspaceId={workspaceId}
-            unitId={route.state.unitId}
-            outlineTree={outlineTree}
-          />
-        ) : route.state.kind === "conversation" ? (
-          <ConversationInspectorPanel
-            conversationId={route.state.conversationId}
-            conversationCatalog={conversationCatalog}
-          />
-        ) : (
-          <div className={styles.pending}>审批面板待定（approval 域延后）</div>
-        )}
-      </div>
+          </div>
+        </>
+      ) : (
+        <div className={styles.body} />
+      )}
     </aside>
   );
 }

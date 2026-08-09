@@ -1,112 +1,86 @@
 /**
- * GenStatus 视觉（原型 .gen-status + .gen-dot + .gen-main）。
+ * GenStatus 视觉（原型 .gen-status + .gen-dots + .gen-main）。
  *
- * 胶囊容器：max-width 1000px 靠左对齐（与 composer form / timeline 一致），radius 999px，border accent 14%，半透明 surface
- * 底 + blur(12px)。live 状态：9x9 渐变 dot + ring 动画 + 渐变文字 flow 动画。
- * live 附带已用计时（等宽数字）与右侧"停止"按钮（margin-left auto）；
- * failed：红色文字 + 重试按钮（margin-left auto 右对齐）。
+ * 扁平行：无边框无底色，min-height 16px。live 状态用三点呼吸
+ * （.dots i，5px 圆、background:var(--grad-accent)、gen-blink 错峰 .22s/.44s）。
+ * 主文案纯 muted（无渐变），elapsed 无 mono 等宽数字；
+ * 停止按钮 margin-left auto 靠右、accent-ink 低透明度。
  */
 .status {
-  max-width: 1000px;
-  margin: 0 0 8px;
+  margin: 2px 2px 10px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 5px 6px 5px 12px;
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in oklab, var(--color-accent) 14%, var(--color-border));
-  background: color-mix(in oklab, var(--color-surface) 58%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  gap: 9px;
+  min-height: 16px;
+  border: 0;
+  background: transparent;
   font-size: var(--fs-xs);
   color: var(--color-muted);
 }
 
-.dot {
-  position: relative;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--color-accent);
+.dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dots i {
+  width: 5px;
+  height: 5px;
   flex: none;
-}
-
-.dot::after {
-  content: "";
-  position: absolute;
-  inset: -4px;
   border-radius: 50%;
-  border: 1px solid color-mix(in oklab, var(--color-accent) 22%, transparent);
-  opacity: 0.35;
-  animation: gen-ring 2s ease-in-out infinite;
-  will-change: transform, opacity;
+  background: var(--grad-accent);
+  opacity: 0.32;
+  animation: gen-blink 1.5s ease-in-out infinite;
 }
 
-@keyframes gen-ring {
+.dots i:nth-child(2) {
+  animation-delay: 0.22s;
+}
+
+.dots i:nth-child(3) {
+  animation-delay: 0.44s;
+}
+
+@keyframes gen-blink {
   0%, 100% {
-    transform: scale(0.88);
-    opacity: 0.2;
+    opacity: 0.22;
   }
   50% {
-    transform: scale(1.12);
-    opacity: 0.65;
+    opacity: 0.9;
+    transform: translateY(-1px);
   }
 }
 
 .main {
-  font-size: 13px;
-  font-weight: var(--fw-heavy);
-  letter-spacing: 0.01em;
-  color: var(--color-fg);
-  opacity: 0.82;
-}
-
-.status[data-live] .main {
-  background: linear-gradient(105deg, var(--color-accent-ink) 0%, color-mix(in oklab, var(--color-accent) 62%, var(--color-fg)) 50%, var(--color-accent-ink) 100%);
-  background-size: 220% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: gen-grad-flow 3.6s ease-in-out infinite;
+  font-size: 12.5px;
+  font-weight: var(--fw-medium);
+  color: var(--color-muted);
+  opacity: 0.92;
 }
 
 .elapsed {
-  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--color-faint);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  opacity: 0.86;
+  opacity: 0.8;
 }
 
 .stop {
   margin-left: auto;
-  padding: 2px 10px;
+  padding: 4px 2px;
   border: 0;
   background: none;
-  font-size: 12px;
-  font-weight: var(--fw-heavy);
+  font-size: 11.5px;
+  font-weight: var(--fw-semibold);
   color: var(--color-accent-ink);
-  opacity: 0.86;
+  opacity: 0.72;
   cursor: pointer;
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 .stop:hover {
   opacity: 1;
-}
-
-@keyframes gen-grad-flow {
-  0%, 100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
-.failed {
-  border-color: color-mix(in oklab, var(--color-danger) 22%, var(--color-border));
 }
 
 .failed .main {
@@ -122,17 +96,16 @@
 
 .retry {
   margin-left: auto;
-  padding: 2px 10px;
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in oklab, var(--color-danger) 32%, var(--color-border));
+  padding: 4px 2px;
+  border: 0;
   background: none;
   color: var(--color-danger);
   font-size: var(--fs-xs);
-  font-weight: var(--fw-heavy);
+  font-weight: var(--fw-semibold);
   cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-out);
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 .retry:hover {
-  background: color-mix(in oklab, var(--color-danger) 10%, transparent);
+  opacity: 1;
 }

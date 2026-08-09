@@ -6,9 +6,11 @@
  */
 import { ExternalStore } from "./ExternalStore.js";
 
+export type ToastKind = "info" | "success" | "warn" | "danger";
+
 export interface Toast {
   readonly id: string;
-  readonly kind: "info" | "success" | "warn" | "danger";
+  readonly kind: ToastKind;
   readonly text: string;
   readonly createdAt: number;
 }

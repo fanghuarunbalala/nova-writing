@@ -74,59 +74,27 @@ function formatToolResult(value: unknown): string {
   }
 }
 
-/**
- * 把工具消息重排为 request/result 交替（OpenAI 要求每个 assistant tool_calls
- * 紧跟对应 tool 响应）；保持消息总数不变，满足 context projection 的 1:1 校验。
- * Reorder tool messages so each toolCall is immediately followed by its result.
- */
-function reorderToolMessages(
-  messages: readonly RuntimeMessageSnapshot[],
-): readonly RuntimeMessageSnapshot[] {
-  const resultsByToolCallId = new Map<string, RuntimeMessageSnapshot>();
-  const pairedRequestIds = new Set<string>();
-  for (const message of messages) {
-    if (
-      message.role === "tool" &&
-      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolResult
-    ) {
-      const payload = message.payload as Record<string, unknown>;
-      const toolCallId =
-        typeof payload.toolCallId === "string" ? payload.toolCallId : "";
-      if (toolCallId !== "") resultsByToolCallId.set(toolCallId, message);
-    }
-  }
-  const output: RuntimeMessageSnapshot[] = [];
-  for (const message of messages) {
-    if (
-      message.role === "tool" &&
-      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolRequest
-    ) {
-      const payload = message.payload as Record<string, unknown>;
-      const toolCallId =
-        typeof payload.toolCallId === "string" ? payload.toolCallId : "";
-      output.push(message);
-      if (toolCallId !== "") {
-        const result = resultsByToolCallId.get(toolCallId);
-        if (result !== undefined) {
-          output.push(result);
-          pairedRequestIds.add(toolCallId);
-        }
-      }
-      continue;
-    }
-    if (
-      message.role === "tool" &&
-      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolResult
-    ) {
-      const payload = message.payload as Record<string, unknown>;
-      const toolCallId =
-        typeof payload.toolCallId === "string" ? payload.toolCallId : "";
-      if (toolCallId !== "" && pairedRequestIds.has(toolCallId)) continue;
-    }
-    output.push(message);
-  }
-  return output;
+/** 构造 Pi assistant 消息的 toolCall 内容项（用于把工具调用折叠进 assistant 消息）。 */
+function createToolCallContentItem(
+  id: string,
+  name: string,
+  args: unknown,
+): {
+  readonly type: "toolCall";
+  readonly id: string;
+  readonly name: string;
+  readonly arguments: Record<string, unknown>;
+} {
+  return Object.freeze({
+    type: "toolCall",
+    id,
+    name,
+    arguments: args as Record<string, unknown>,
+  });
 }
+
+/** Pi assistant 变体（其 content 可含 text / toolCall 等块）。 */
+type PiAssistantMessage = Extract<AgentMessage, { role: "assistant" }>;
 
 /** 收集输入中真实存在的 tool.request 的 toolCallId（用于识别孤儿 toolResult）。 */
 function captureRequestToolCallIds(
@@ -189,10 +157,21 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
       messageCount: request.messages.length,
     });
     const seenIds = new Set<string>();
-    const reordered = reorderToolMessages(request.messages);
     // 输入中真实存在的 toolRequest id 集合：孤儿 toolResult（无对应 request）据此识别。
     const requestToolCallIds = captureRequestToolCallIds(request.messages);
-    const converted = reordered.map((message) => {
+    // 按存储顺序折叠：`tool.request` 并入前一条 assistant 消息，使回放的 Pi 形状与
+    // live 轮次一致——一条 assistant 消息 content = [text, toolCall×N]，随后分组
+    // tool 结果。OpenAI-completions 要求一条 assistant 消息含全部 tool_calls、
+    // 随后分组 tool 响应；把同一轮次的工具调用拆成独立连续 assistant 消息会被
+    // provider 以 400 拒绝。存储顺序天然是 request 全组在 result 全组之前
+    // （请求在 dispatch 时落盘、结果在完成时落盘），因此折叠后结果自然分组。
+    // Fold each tool.request into the preceding assistant Pi message so replayed
+    // history matches the live shape (one assistant message with text + toolCalls,
+    // then grouped tool results). OpenAI-completions rejects consecutive assistant
+    // messages that split one turn's tool calls into separate messages.
+    const output: AgentMessage[] = [];
+    let lastAssistant: PiAssistantMessage | undefined;
+    for (const message of request.messages) {
       let validated: RuntimeMessageSnapshot;
       try {
         validated = this.messageSchemaRegistry.validateSnapshot(message);
@@ -224,11 +203,42 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
         validated.schemaVersion === RUNTIME_MESSAGE_SCHEMA_VERSION &&
         !requestToolCallIds.has(captureToolResultToolCallId(validated))
       ) {
-        return this.convertOrphanToolResultMessage(validated);
+        output.push(this.convertOrphanToolResultMessage(validated));
+        lastAssistant = undefined;
+        continue;
       }
-      return this.convertMessage(validated, identity);
-    });
-    const result = Object.freeze(converted);
+      if (
+        validated.role === "tool" &&
+        validated.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolRequest &&
+        validated.schemaVersion === RUNTIME_MESSAGE_SCHEMA_VERSION &&
+        lastAssistant !== undefined
+      ) {
+        // 折叠：把 toolCall 追加进前一条 assistant 消息的 content（Pi 消息不可变，
+        // 重建内容数组后替换 output 末尾元素）。
+        const payload = validated.payload as unknown as CoreToolRequestMessagePayload;
+        const toolCall = createToolCallContentItem(
+          payload.toolCallId,
+          payload.toolName,
+          payload.arguments,
+        );
+        const merged = {
+          ...lastAssistant,
+          content: Object.freeze([...lastAssistant.content, toolCall]),
+        } as unknown as PiAssistantMessage;
+        output[output.length - 1] = merged;
+        lastAssistant = merged;
+        continue;
+      }
+      const convertedMessage = this.convertMessage(validated, identity);
+      output.push(convertedMessage);
+      // 仅 assistant 角色可继续承接后续 toolCall 折叠；user / toolResult /
+      // system.reminder 之后清空。
+      lastAssistant =
+        convertedMessage.role === "assistant"
+          ? (convertedMessage as PiAssistantMessage)
+          : undefined;
+    }
+    const result = Object.freeze(output);
     this.logger.info("runtime.agent.message_conversion_completed", {
       ...identity,
       purpose: request.purpose,

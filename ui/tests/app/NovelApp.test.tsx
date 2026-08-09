@@ -105,13 +105,21 @@ function buildApi() {
         })),
         get: vi.fn(),
       },
-      manuscript: {
-        getStructure: vi.fn(async () => ({
+      paragraphs: {
+        getCatalog: vi.fn(async () => ({
           schemaVersion: 1,
           scope: { kind: "canonical" },
-          blocks: [],
+          paragraphs: [],
         })),
-        getBlock: vi.fn(),
+        get: vi.fn(),
+      },
+      publication: {
+        getCatalog: vi.fn(async () => ({
+          schemaVersion: 1,
+          scope: { kind: "canonical" },
+          volumes: [],
+          chapters: [],
+        })),
       },
     },
   } as never;

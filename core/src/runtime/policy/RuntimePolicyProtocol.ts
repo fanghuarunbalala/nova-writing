@@ -1,9 +1,6 @@
 /** Provider-neutral Runtime Policy contracts for deterministic evaluation. */
-import type {
-  NudgeAcknowledgementReference,
-  NudgeConditionReference,
-  NudgeEffect,
-} from "../nudge/index.js";
+import type { JsonValue } from "../../event/index.js";
+import type { ReminderKind } from "../../event/output/payload/SystemReminderAttachedPayload.js";
 import type { ContextPressureSnapshot } from "../context/index.js";
 import type { ComposeModeSnapshot } from "../compose/ComposeModeState.js";
 
@@ -22,7 +19,7 @@ export const CONTEXT_COMPACTION_EFFECT_TRIGGER = {
 export type ContextCompactionEffectTrigger =
   (typeof CONTEXT_COMPACTION_EFFECT_TRIGGER)[keyof typeof CONTEXT_COMPACTION_EFFECT_TRIGGER];
 
-/** 域运行时信号：provider call 计数与可选快照，供 nudge 类 policy 输入。 */
+/** 域运行时信号：provider call 计数与可选快照，供 reminder 类 policy 输入。 */
 export interface RuntimePolicyRuntimeSignals {
   /** 本 run 内已发出的 provider call 序号（1-based；对应 ActivePiRun.providerCallOrdinal）。 */
   readonly providerCallCount: number;
@@ -40,7 +37,7 @@ export interface RuntimePolicyContext {
   readonly evaluatedAt: string;
   /** 上下文压力快照（ContextPressurePolicy 专用；其余 policy 可省略）。 */
   readonly contextPressure?: ContextPressureSnapshot;
-  /** 域运行时信号（nudge 类 policy 输入）。 */
+  /** 域运行时信号（reminder 类 policy 输入）。 */
   readonly runtimeSignals?: RuntimePolicyRuntimeSignals;
 }
 
@@ -70,69 +67,24 @@ export interface ContextCompactionEffect {
   readonly automaticHysteresisTokens: number;
 }
 
-export interface NudgeSchedulePolicyEffect {
-  readonly kind: "nudge_schedule";
+export interface SystemReminderAttachEffect {
+  readonly kind: "system_reminder_attach";
   readonly policyId: string;
   readonly conversationId: string;
   readonly runId: string;
-  readonly nudgeId: string;
-  readonly effect: NudgeEffect;
-  readonly scheduledSequence: number;
-  readonly scheduledAt: string;
+  /** 提醒稳定标识（同一种类新状态 = 新 id，旧记录不覆盖）。Stable reminder identity; a new state appends a new id. */
+  readonly reminderId: string;
+  /** 提醒种类。Reminder kind. */
+  readonly reminderKind: ReminderKind;
+  readonly templateId: string;
+  readonly templateVersion: string;
+  readonly parameters: Readonly<Record<string, JsonValue>>;
+  /** 消息流内排序序号（同一 provider 调用内多个提醒的稳定顺序）。Stable order within one provider call. */
+  readonly order: number;
 }
-
-export interface NudgeAcknowledgePolicyEffect {
-  readonly kind: "nudge_acknowledge";
-  readonly policyId: string;
-  readonly conversationId: string;
-  readonly runId: string;
-  readonly nudgeId: string;
-  readonly acknowledgementRef: NudgeAcknowledgementReference;
-  readonly acknowledgedAt: string;
-}
-
-export interface NudgeResolvePolicyEffect {
-  readonly kind: "nudge_resolve";
-  readonly policyId: string;
-  readonly conversationId: string;
-  readonly runId: string;
-  readonly nudgeId: string;
-  readonly conditionRef: NudgeConditionReference;
-  readonly resolvedAt: string;
-}
-
-export interface NudgeExpirePolicyEffect {
-  readonly kind: "nudge_expire";
-  readonly policyId: string;
-  readonly conversationId: string;
-  readonly runId: string;
-  readonly targetRunId: string;
-  readonly evaluatedAt: string;
-  readonly currentTurnNumber?: number;
-  readonly runEnded?: boolean;
-}
-
-export interface NudgeSupersedePolicyEffect {
-  readonly kind: "nudge_supersede";
-  readonly policyId: string;
-  readonly conversationId: string;
-  readonly runId: string;
-  readonly nudgeId: string;
-  readonly targetRunId: string;
-  readonly supersededByNudgeId: string;
-  readonly supersededAt: string;
-}
-
-export type RuntimeNudgeLifecycleEffect =
-  | NudgeSchedulePolicyEffect
-  | NudgeAcknowledgePolicyEffect
-  | NudgeResolvePolicyEffect
-  | NudgeExpirePolicyEffect
-  | NudgeSupersedePolicyEffect;
 
 export type RuntimePolicyEffect =
-  | NudgeEffect
-  | RuntimeNudgeLifecycleEffect
+  | SystemReminderAttachEffect
   | ContextCompactionEffect;
 
 export interface RuntimePolicy {

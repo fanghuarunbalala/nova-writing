@@ -176,31 +176,26 @@ export class DefaultRuntimeRunPreparationSourceFactory
     }
   }
 
-  /** 读取工作区根的小说全局约束文件；缺失/超限/读取失败时安全降级为 undefined。 */
-  /** Reads the workspace-root novel global-constraints file; degrades to undefined on absence, oversize, or read failure. */
+  /** 每调用读取小说全局约束文件；缺失/超限/读取失败一律返回 undefined（不抛错、不记录路径/内容）。 */
+  /** Reads the novel global-constraints file per call; missing/oversized/read failures all return undefined (no throw, no path/content logged). */
   async #readNovelGlobalConstraintsSafe(
     workdir: string,
   ): Promise<string | undefined> {
-    const fileName = this.#novelGlobalConstraintsFileName;
-    const filePath = join(workdir, fileName);
+    const target = join(workdir, this.#novelGlobalConstraintsFileName);
     try {
-      const content = await fs.readFile(filePath, "utf8");
-      if (
-        new TextEncoder().encode(content).byteLength >
-        NOVEL_GLOBAL_CONSTRAINTS_MAX_BYTES
-      ) {
-        this.#logger.debug("novel_global_constraints.oversized", { fileName });
+      const stat = await fs.stat(target);
+      if (!stat.isFile()) {
         return undefined;
       }
-      return content;
-    } catch (error) {
-      // ENOENT（文件不存在）是常态，不记日志；其余失败仅 debug。
-      // ENOENT (missing file) is the expected case and is not logged; other failures log at debug.
-      if ((error as { code?: string }).code !== "ENOENT") {
-        this.#logger.debug("novel_global_constraints.read_failed", {
-          failure: error instanceof Error ? error.name : "unknown",
-        });
+      if (stat.size > NOVEL_GLOBAL_CONSTRAINTS_MAX_BYTES) {
+        this.#logger.debug("novel_global_constraints.too_large");
+        return undefined;
       }
+      return await fs.readFile(target, "utf8");
+    } catch (error) {
+      this.#logger.debug("novel_global_constraints.read_failed", {
+        failure: error instanceof Error ? error.name : "unknown",
+      });
       return undefined;
     }
   }

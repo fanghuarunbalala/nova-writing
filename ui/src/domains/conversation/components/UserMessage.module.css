@@ -1,49 +1,101 @@
 /**
- * UserMessage 视觉（原型 .msg.user + .msg-head + .msg-text）。
+ * UserMessage 视觉（原型 .msg.user + .msg-body + .msg-text + .msg-actions）。
  *
- * 用户消息文本带 accent 浅底气泡 + 非对称 border-radius（16px 4px 16px 16px），
- * 与原型 .msg.user .msg-text 一致。.who 用 fg + 750（区别于 .time 的 faint）。
+ * 用户消息：无头像/头部，气泡贴右。根 .message flex-direction:row-reverse，
+ * .body align-items:flex-end 让气泡收缩贴右；气泡统一 16px 圆角、text-align:left、
+ * 无边框（区别于旧版非对称圆角 + 边框）。
+ * .actions 复制按钮绝对定位于气泡右下（right:2px; bottom:-28px），默认 opacity 0
+ * 且 pointer-events:none，悬停消息行/按钮/focus-within 显形；::before 是 hover
+ * bridge（覆盖按钮与气泡之间 8px 过渡带，悬停此处也能保持显形）。
+ * .actionsInPad 首条消息态：收进气泡内边距带（right:8px; bottom:3px）。
  */
 .message {
   display: flex;
+  flex-direction: row-reverse;
   gap: 12px;
   padding: 18px 0 6px;
 }
 
 .body {
+  position: relative;
   min-width: 0;
   flex: 1;
-}
-
-.head {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.who {
-  font-size: 12px;
-  font-weight: 750;
-  color: var(--color-fg);
-}
-
-.time {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--color-faint);
+  flex-direction: column;
+  align-items: flex-end;
 }
 
 .text {
   display: inline-block;
   margin-top: 7px;
   padding: 10px 15px;
-  border-radius: 16px 4px 16px 16px;
-  border: 1px solid color-mix(in oklab, var(--color-accent) 15%, var(--color-border));
+  border-radius: 16px;
   background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
   color: var(--color-accent-ink);
+  /* 用户要求正文用黑体（--font-ui），配合 medium 字重提升可读性。 */
+  font-family: var(--font-ui);
   font-size: 15px;
-  font-weight: var(--fw-regular);
+  font-weight: var(--fw-medium);
   line-height: 1.75;
+  text-align: left;
   text-wrap: pretty;
   max-width: 100%;
+}
+
+.actions {
+  position: absolute;
+  right: 2px;
+  bottom: -28px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+/* hover bridge：覆盖按钮上方 8px 过渡带，悬停气泡底边到按钮之间也能显形 */
+.actions::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 8px;
+}
+
+.message:hover .actions,
+.actions:hover,
+.actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.actionsInPad .actions {
+  right: 8px;
+  bottom: 3px;
+}
+
+.action {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-faint);
+  cursor: pointer;
+}
+
+.action:hover,
+.action:focus-visible {
+  background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  color: var(--color-accent-ink);
+  outline: none;
+}
+
+.action svg {
+  width: 15px;
+  height: 15px;
 }

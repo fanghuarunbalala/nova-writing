@@ -53,6 +53,8 @@ try {
     host,
     agentDefinitions: new AgentDefinitionCatalog([novelAgentDefinition]),
     agentAssembler: createAgentAssembler(workspaceStore),
+    manifestStore: workspaceStore.agentManifests,
+    manifestIdFactory: { create() { return "manifest:subagent:novel_agent"; } },
     idFactory: { create(input) { return `conversation-child-${input.subagentId}`; } },
   });
   const baseManager = new DefaultChildConversationManager({

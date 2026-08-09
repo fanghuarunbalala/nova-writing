@@ -65,6 +65,8 @@ try {
       novelComposeAgentDefinition,
     ]),
     agentAssembler: createAgentAssembler(workspaceStore),
+    manifestStore: workspaceStore.agentManifests,
+    manifestIdFactory: { create(input) { return `manifest:subagent:${input.agentType}:${input.definitionVersion}`; } },
     idFactory: { create(input) { return `conversation-child-${input.subagentId}`; } },
   });
   const baseManager = new DefaultChildConversationManager({
@@ -91,6 +93,15 @@ try {
   assert.equal(hostCalls[0][0], "activate");
   await lifecycle.deliverResult({ schemaVersion: SUBAGENT_SCHEMA_VERSION, subagentId: "explorer", parentConversationId: "conversation-parent", parentRunId: "run-parent", childConversationId: handle.binding.childConversationId, status: "completed", summary: "bounded result", artifactReferences: [], completedAt: timestamp });
   assert.equal((await bindingStore.get("explorer")).status, "completed");
+  // 第二次 spawn（同 agentType/version）：manifest store 写一次语义，必须复用已存
+  // manifest，否则 createChild 的 assemble→save 会抛 manifest_conflict。
+  // A second spawn of the same agent must reuse the stored manifest: the store
+  // is write-once per stable id, and a fresh assemble+save would conflict.
+  const second = await lifecycle.start({ schemaVersion: SUBAGENT_SCHEMA_VERSION, subagentId: "explorer-2", parentConversationId: "conversation-parent", parentRunId: "run-parent", agentType: "novel_explorer", definitionVersion: novelExplorerAgentDefinition.definitionVersion, objective: "second spawn reuses manifest", toolPolicyId: NOVEL_EXPLORER_TOOL_POLICY_ID, requestedAt: timestamp });
+  const child2 = await workspaceStore.conversations.getConversation(second.binding.childConversationId);
+  assert.equal(child2.activeAgentBinding.manifestId, child.activeAgentBinding.manifestId);
+  assert.equal(child2.activeAgentBinding.manifestDigest, child.activeAgentBinding.manifestDigest);
+  await lifecycle.deliverResult({ schemaVersion: SUBAGENT_SCHEMA_VERSION, subagentId: "explorer-2", parentConversationId: "conversation-parent", parentRunId: "run-parent", childConversationId: second.binding.childConversationId, status: "completed", summary: "bounded result", artifactReferences: [], completedAt: timestamp });
   database.close();
   const reopened = new DatabaseSync(workspace.databasePath);
   assert.equal((await new SqliteSubagentBindingStore(reopened).get("explorer")).status, "completed");

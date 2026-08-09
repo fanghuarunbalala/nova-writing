@@ -31,6 +31,7 @@ import {
   novelComposeAgentDefinition,
   novelExplorerAgentDefinition,
   resolveAgentNudgeEnablements,
+  type AgentManifestIdFactory,
   type AgentManifestStore,
 } from "../../../agent/index.js";
 import {
@@ -627,14 +628,7 @@ function createChildSubagentComposition(
         digester: options.promptDigester,
       }),
       promptCapabilities: new PromptCapabilitySnapshot([]),
-      manifestIdFactory: Object.freeze({
-        create(input: {
-          readonly agentType: string;
-          readonly definitionVersion: string;
-        }): string {
-          return `manifest:subagent:${input.agentType}:${input.definitionVersion}`;
-        },
-      }),
+      manifestIdFactory: SUBAGENT_MANIFEST_ID_FACTORY,
       clock: options.clock,
       digester: options.promptDigester,
       logger,
@@ -651,6 +645,8 @@ function createChildSubagentComposition(
       novelComposeAgentDefinition,
     ]),
     agentAssembler,
+    manifestStore: store.agentManifests,
+    manifestIdFactory: SUBAGENT_MANIFEST_ID_FACTORY,
     commandService: subagentClient.commandService,
     idFactory: CHILD_CONVERSATION_ID_FACTORY,
     logger,
@@ -746,6 +742,18 @@ const CHILD_CONVERSATION_ID_FACTORY: ChildConversationIdFactory = {
     return `conversation-child-${input.subagentId}`;
   },
 };
+
+// 子代理 manifest 稳定 id（跨 spawn 复用；manifest store 写一次语义）。
+// Stable subagent manifest id shared by the resolver and the child adapter
+// (reused across spawns; the manifest store is write-once per id).
+const SUBAGENT_MANIFEST_ID_FACTORY: AgentManifestIdFactory = Object.freeze({
+  create(input: {
+    readonly agentType: string;
+    readonly definitionVersion: string;
+  }): string {
+    return `manifest:subagent:${input.agentType}:${input.definitionVersion}`;
+  },
+});
 
 // 确定性生命周期事件 ID：重试/重启后重建同 ID 事件，journal 幂等去重。
 // Deterministic lifecycle event IDs so retried projections overwrite in place.

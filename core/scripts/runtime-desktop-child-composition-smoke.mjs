@@ -77,6 +77,7 @@ try {
 
   const factory = new DesktopRuntimeChildCompositionFactory({
     novelStorageRoot: workspace.workspaceRoot,
+    manifestStoreProvider: async () => manifestStore.agentManifests,
     workspaceStoreProvider: async () => manifestStore,
     adapterFactory: {
       async create({ lifecycleController }) {
@@ -195,7 +196,7 @@ try {
   }
 
   const failingFactory = new DesktopRuntimeChildCompositionFactory({
-    workspaceStoreProvider: async () => {
+    manifestStoreProvider: async () => {
       throw new TypeError("FORBIDDEN_CHILD_MANIFEST");
     },
     adapterFactory: {

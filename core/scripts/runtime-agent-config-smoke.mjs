@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { Type } from "typebox";
 import {
   AgentAssembler,
   AgentManifestResolver,
@@ -11,29 +10,12 @@ import {
   InMemoryAgentManifestStore,
   PromptCapabilitySnapshot,
   ManifestSystemPromptCompiler,
-  ToolGroupCatalog,
-  ToolRegistry,
   createDefaultPromptSectionRegistry,
-  defineTool,
-  loadToolGroupManifest,
   novelAgentDefinition,
 } from "../dist/index.js";
-import { RUNTIME_FILES_TOOL_GROUP_MANIFEST, createFileToolRegistry, FileToolService } from "../dist/index.js";
-import { NOVEL_COMPOSE_TOOL_GROUP_MANIFEST, ComposeToolService, ComposeModeStateProvider, createNovelComposeToolRegistry } from "../dist/index.js";
 import {
-  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
-  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
-  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
-  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
-  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
-  novelCharacterToolRegistry,
-  novelLocationToolRegistry,
-  novelParagraphToolRegistry,
-  novelPublicationToolRegistry,
-  novelDeleteToolRegistry,
-  novelOutlineToolRegistry,
-} from "./fixtures/novel-outline-tools.mjs";
+  createNovelConversationManifestComposition,
+} from "../dist/node/index.js";
 
 class Sha256Digester {
   algorithm = "sha256";
@@ -60,45 +42,10 @@ const resolver = new AgentManifestResolver({
   clock: { now() { return "2026-08-03T00:00:00.000Z"; } },
   digester: new Sha256Digester(),
 });
-const todoTool = defineTool({
-  descriptor: {
-    name: "TodoWrite",
-    version: "1.0.0",
-    label: "Todo Write",
-    description: "Maintains the current execution plan.",
-    parameters: Type.Object({}),
-  },
-  handler: { async execute() { return { content: [] }; } },
-});
+const composition = createNovelConversationManifestComposition();
 const assembly = await new AgentAssembler({
-  registry: new ToolRegistry([
-    todoTool,
-    ...novelOutlineToolRegistry.list(),
-    ...novelCharacterToolRegistry.list(),
-    ...novelLocationToolRegistry.list(),
-    ...novelParagraphToolRegistry.list(),
-    ...novelPublicationToolRegistry.list(),
-    ...novelDeleteToolRegistry.list(),
-    ...createFileToolRegistry({ service: new FileToolService({ sandboxRoot: "/unavailable" }) }).list(),
-    ...createNovelComposeToolRegistry({ service: new ComposeToolService({ composeState: new ComposeModeStateProvider(), designRoot: "/unavailable/design" }) }).list(),
-  ]),
-  groups: new ToolGroupCatalog([
-    loadToolGroupManifest(`
-schemaVersion: 1
-id: runtime.todo
-version: 1.0.0
-label: Runtime todo tools
-tools: [TodoWrite]
-  `),
-    NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
-    NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
-    NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
-    NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-    RUNTIME_FILES_TOOL_GROUP_MANIFEST,
-    NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
-    NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
-    NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
-  ]),
+  registry: composition.registry,
+  groups: composition.groups,
   manifestResolver: resolver,
   manifestStore: new InMemoryAgentManifestStore(),
 }).assemble(novelAgentDefinition);

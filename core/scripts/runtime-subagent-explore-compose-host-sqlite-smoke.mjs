@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
-import { Type } from "typebox";
 import {
   AgentAssembler,
   AgentDefinitionCatalog,
@@ -19,33 +18,17 @@ import {
   SUBAGENT_SCHEMA_VERSION,
   SUBAGENT_TOOL_POLICY_RELATION,
   ManifestSystemPromptCompiler,
-  ToolGroupCatalog,
-  ToolRegistry,
   createCoreEventSchemaRegistry,
   createDefaultPromptSectionRegistry,
-  defineTool,
-  loadToolGroupManifest,
   novelAgentDefinition,
   novelComposeAgentDefinition,
   novelExplorerAgentDefinition,
 } from "../dist/index.js";
-import { SqliteSubagentBindingStore, SqliteWorkspaceStore } from "../dist/node/index.js";
 import {
-  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
-  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
-  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
-  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
-  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-  NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
-  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
-  novelCharacterToolRegistry,
-  novelLocationToolRegistry,
-  novelParagraphToolRegistry,
-  novelPublicationToolRegistry,
-  novelDeleteToolRegistry,
-  novelDraftToolRegistry,
-  novelOutlineToolRegistry,
-} from "./fixtures/novel-outline-tools.mjs";
+  SqliteSubagentBindingStore,
+  SqliteWorkspaceStore,
+  createNovelConversationManifestComposition,
+} from "../dist/node/index.js";
 
 class Sha256Digester {
   algorithm = "sha256";
@@ -120,43 +103,13 @@ try {
 
 function createAgentAssembler(workspaceStore) {
   const digester = new Sha256Digester();
-  const tool = defineTool({
-    descriptor: {
-      name: "TodoWrite",
-      version: "1.0.0",
-      label: "Todo Write",
-      description: "Maintains the current execution plan.",
-      parameters: Type.Object({}),
-    },
-    handler: { async execute() { return { content: [] }; } },
-  });
+  // Reuse the production assembly so the registry carries the Agent /
+  // TaskOutput / TaskStop tools and every novel.* / runtime.* group the
+  // novel 1.3.0 and read-only subagent definitions reference.
+  const composition = createNovelConversationManifestComposition();
   return new AgentAssembler({
-    registry: new ToolRegistry([
-      tool,
-      ...novelOutlineToolRegistry.list(),
-      ...novelCharacterToolRegistry.list(),
-      ...novelLocationToolRegistry.list(),
-      ...novelParagraphToolRegistry.list(),
-      ...novelPublicationToolRegistry.list(),
-      ...novelDeleteToolRegistry.list(),
-      ...novelDraftToolRegistry.list(),
-    ]),
-    groups: new ToolGroupCatalog([
-      loadToolGroupManifest(`
-schemaVersion: 1
-id: runtime.todo
-version: 1.0.0
-label: Runtime todo tools
-tools: [TodoWrite]
-  `),
-      NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
-      NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
-      NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
-      NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-      NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
-      NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
-      NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
-    ]),
+    registry: composition.registry,
+    groups: composition.groups,
     manifestResolver: new AgentManifestResolver({
       promptBuilder: new ManifestSystemPromptCompiler({
         sections: createDefaultPromptSectionRegistry(),

@@ -5,6 +5,7 @@
  */
 import { useMainView } from "../../shared/routing/hooks.js";
 import type { MainViewRouter } from "../../shared/routing/MainViewRouter.js";
+import type { ToastKind } from "../../shared/state/ToastStore.js";
 import type { Logger, NovelApiClient } from "@novel/core";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import type { CharacterStore } from "../../domains/novel/character/store/CharacterStore.js";
@@ -48,6 +49,7 @@ export interface MainAreaProps {
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
   readonly onOpenDraft?: (changeSetId: string) => void;
+  readonly onNotify?: (kind: ToastKind, text: string) => void;
   readonly approvalStore: ApprovalStore;
 }
 
@@ -68,6 +70,7 @@ export function MainArea(props: MainAreaProps) {
           resolveReference={props.resolveReference}
           onProposalAction={props.onProposalAction}
           onOpenApproval={props.onOpenApproval}
+          onNotify={props.onNotify}
           approvalStore={props.approvalStore}
         />
       ) : mainView.state === "content" ? (

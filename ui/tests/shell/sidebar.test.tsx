@@ -73,7 +73,8 @@ describe("Sidebar", () => {
         workspaceLabel="白昼计划"
       />,
     );
-    expect(screen.getByText("白昼计划")).toBeInTheDocument();
+    // v2 原型已删 side-foot：workspace 名不再显示在侧栏底部。
+    expect(screen.queryByText("白昼计划")).not.toBeInTheDocument();
     expect(screen.getByText(/对话 tion_a/)).toBeInTheDocument();
     expect(screen.getByText("大纲")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "创建对话" }));

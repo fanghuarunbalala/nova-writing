@@ -1,167 +1,173 @@
 /**
- * ComposerModeBar 视觉（原型 .mode-bar + .mode-switch）。
+ * ComposerModeBar 视觉（原型 .mode-panel + .mode-trigger + .mode-options）。
  *
- * 置于 form 下方：max-width 1000px 靠左对齐（与输入框一致），border-top 分隔，
- * 左右 space-between（左侧切换按钮 + 右侧模式提示点）。三模式配色与原型一致：
- * 设计=蓝 / 直接执行=绿 / 审批=砖红，全部低饱和 + 半透明底。
+ * 触发按钮：无边框透明，图标（m-ico 14px）+ 模式名 + chevron 倒三角；
+ * 图标按当前模式 tone 变色（设计=蓝 / 直接执行=绿 / 需审核=砖红）。
+ * options 面板从发送框上方浮出（bottom:calc(100%+4px)），min-width 254px，
+ * shadow-2 + border-strong + blur，选项含图标+名称+描述；选中项 .sel 按
+ * tone 染色（info 7% / success 7% / accent 8%）。
  */
-.bar {
-  max-width: 1000px;
-  width: 100%;
-  margin: 10px 0 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  border-top: 1px solid var(--color-border);
-  padding: 9px 0 0;
+.panel {
+  position: relative;
+  margin-top: 2px;
 }
 
-.switch {
+.trigger {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 13px 6px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border-strong);
-  background: color-mix(in oklab, var(--color-surface) 62%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  gap: 7px;
+  margin-left: -6px;
+  padding: 5px 6px 1px;
+  border: 0;
+  background: transparent;
   font-size: 12.5px;
-  font-weight: var(--fw-bold);
+  font-weight: var(--fw-medium);
+  color: var(--color-fg);
   cursor: pointer;
-  transition:
-    border-color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
 }
 
-.switch:hover:not(:disabled) {
-  background: var(--color-surface-2);
-  border-color: color-mix(in oklab, var(--color-accent) 32%, var(--color-border-strong));
-}
-
-.switch:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--color-accent) 45%, transparent);
-  outline-offset: 2px;
-}
-
-.switch:disabled {
+.trigger:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
-.name {
-  color: var(--color-accent-ink);
+.trigger:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-accent) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
-.desc {
-  font-size: 11px;
+.triggerIcon {
+  display: inline-flex;
+}
+
+.triggerIcon svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 当前模式图标着色 */
+.icon-compose {
+  color: color-mix(in oklab, var(--color-info) 66%, var(--color-fg));
+}
+
+.icon-bypass {
+  color: color-mix(in oklab, var(--color-success) 62%, var(--color-fg));
+}
+
+.icon-review {
+  color: color-mix(in oklab, var(--color-accent) 72%, var(--color-fg));
+}
+
+.triggerName {
   font-weight: 500;
-  color: var(--color-faint);
 }
 
+/* chevron：CSS 倒三角，open 时翻转 */
 .chev {
-  font-size: 11px;
+  display: inline-flex;
+  margin-top: 3px;
+  transition: transform 0.16s var(--ease-out);
+}
+
+.chev::after {
+  content: "";
+  width: 0;
+  height: 0;
+  border: 4px solid transparent;
+  border-top: 5.5px solid var(--color-faint);
+}
+
+.chevOpen {
+  transform: rotate(180deg);
+}
+
+.options {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 254px;
+  padding: 6px;
+  background: color-mix(in oklab, var(--color-surface) 97%, var(--color-bg));
+  border: 1px solid var(--color-border-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 30;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  color: var(--color-fg);
+  cursor: pointer;
+}
+
+.option:hover {
+  background: color-mix(in oklab, var(--color-fg) 6%, transparent);
+}
+
+.optionIcon {
+  display: inline-flex;
+  flex: none;
+}
+
+.optionIcon svg {
+  width: 15px;
+  height: 15px;
   color: var(--color-faint);
-  font-weight: 500;
-  opacity: 0.62;
-  transition:
-    transform var(--duration-fast) var(--ease-out),
-    opacity var(--duration-fast) var(--ease-out);
 }
 
-.switch:hover:not(:disabled) .chev {
-  transform: translateX(2px);
-  opacity: 0.85;
+.optionText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
-/* 模式配色：设计=蓝 / 直接执行=绿 / 审批=砖红 */
-.compose {
-  border-color: color-mix(in oklab, var(--color-info) 26%, var(--color-border-strong));
-  background: color-mix(in oklab, var(--color-info) 7%, transparent);
+.optionName {
+  font-weight: 600;
 }
 
-.compose .name {
-  color: color-mix(in oklab, var(--color-info) 86%, var(--color-fg));
+.optionDesc {
+  font-size: 11.5px;
+  color: var(--color-faint);
 }
 
-.compose .desc {
-  color: color-mix(in oklab, var(--color-info) 62%, var(--color-faint));
-}
-
-.compose:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--color-info) 12%, transparent);
-  border-color: color-mix(in oklab, var(--color-info) 42%, var(--color-border-strong));
-}
-
-.bypass {
-  border-color: color-mix(in oklab, var(--color-success) 28%, var(--color-border-strong));
-  background: color-mix(in oklab, var(--color-success) 7%, transparent);
-}
-
-.bypass .name {
-  color: color-mix(in oklab, var(--color-success) 82%, var(--color-fg));
-}
-
-.bypass .desc {
-  color: color-mix(in oklab, var(--color-success) 58%, var(--color-faint));
-}
-
-.bypass:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--color-success) 12%, transparent);
-  border-color: color-mix(in oklab, var(--color-success) 42%, var(--color-border-strong));
-}
-
-.review {
-  border-color: color-mix(in oklab, var(--color-accent) 28%, var(--color-border-strong));
+/* 选中项按模式染色（原型 .mode-opt.sel） */
+.option.selected {
   background: color-mix(in oklab, var(--color-accent) 8%, transparent);
 }
 
-.review .name {
+.option.selected.opt-compose {
+  background: color-mix(in oklab, var(--color-info) 7%, transparent);
+}
+
+.option.selected.opt-compose .optionName,
+.option.selected.opt-compose .optionIcon svg {
+  color: color-mix(in oklab, var(--color-info) 86%, var(--color-fg));
+}
+
+.option.selected.opt-bypass {
+  background: color-mix(in oklab, var(--color-success) 7%, transparent);
+}
+
+.option.selected.opt-bypass .optionName,
+.option.selected.opt-bypass .optionIcon svg {
+  color: color-mix(in oklab, var(--color-success) 82%, var(--color-fg));
+}
+
+.option.selected.opt-review .optionName,
+.option.selected.opt-review .optionIcon svg {
   color: var(--color-accent-ink);
-}
-
-.review .desc {
-  color: color-mix(in oklab, var(--color-accent) 58%, var(--color-faint));
-}
-
-.review:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--color-accent) 12%, transparent);
-  border-color: color-mix(in oklab, var(--color-accent) 42%, var(--color-border-strong));
-}
-
-.hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--color-faint);
-  letter-spacing: 0.01em;
-  opacity: 0.74;
-}
-
-.hintItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-
-.dot-compose {
-  background: color-mix(in oklab, var(--color-info) 55%, transparent);
-}
-
-.dot-bypass {
-  background: color-mix(in oklab, var(--color-success) 52%, transparent);
-}
-
-.dot-review {
-  background: color-mix(in oklab, var(--color-accent) 52%, transparent);
 }

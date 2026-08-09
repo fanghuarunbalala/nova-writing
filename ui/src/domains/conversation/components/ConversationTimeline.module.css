@@ -1,20 +1,20 @@
 /**
  * ConversationTimeline 视觉（原型 .timeline + .chat-inner）。
  *
- * timeline 提供滚动容器；inner 限制最大宽度 1000px 并靠左对齐（贴侧栏），
- * 右侧保留约 120px+ 呼吸留白，与左侧 sidebar 形成非对称但协调的布局。
- * padding 8px 22px 24px。
+ * timeline 提供滚动容器；inner 居中并限制最大宽度 880px（与悬浮 composer
+ * 的 form 对齐）。padding-bottom 132px 为悬浮 composer 留出空间，最后一条
+ * 消息可滚到输入框上方。
  */
 .timeline {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 22px 24px;
+  padding: 8px 22px 132px;
 }
 
 .inner {
-  max-width: 1000px;
-  margin: 0;
+  max-width: 880px;
+  margin: 0 auto;
 }
 
 .system {
@@ -42,15 +42,17 @@
   border-color: color-mix(in oklab, var(--color-accent) 38%, var(--color-border));
 }
 
-/* 轮次分隔（原型 .turn-sep）：居中 mono faint，两侧细线。 */
+/* 轮次分隔（原型 .turn-sep）：居中 mono faint，两侧渐变细线。 */
 .turnSep {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 0 2px;
+  gap: 12px;
+  margin: 24px 0 2px;
   color: var(--color-faint);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
 }
 
 .turnSep::before,
@@ -59,6 +61,19 @@
   flex: 1;
   height: 1px;
   background: var(--color-border);
+}
+
+.turnSep::before {
+  background: linear-gradient(to right, transparent, var(--color-border-strong));
+}
+
+.turnSep::after {
+  background: linear-gradient(to left, transparent, var(--color-border-strong));
+}
+
+/* 首条轮次分隔收窄上边距（原型 .turn-sep:first-child；条目外层有 .enter 包裹） */
+.enter:first-child .turnSep {
+  margin-top: 10px;
 }
 
 /* 消息入场：切换对话时按序错峰（原型 .msg.conv-in）。 */

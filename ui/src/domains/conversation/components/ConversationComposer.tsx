@@ -1,8 +1,10 @@
 /**
  * ConversationComposer
  *
- * 输入区（原型 .composer）：gen-status（生成状态胶囊）+ form(textarea + send) + mode-bar。
- * 生成状态胶囊位于输入框正上方（原型位置）；模式栏置于 form 下方，发送后清空本地输入。
+ * 悬浮输入区（原型 .composer，Codex 式贴底浮窗）：
+ *   form（居中卡片）内自上而下 = gen-status + .composer-main（textarea + send）+ 执行模式下拉。
+ * composer 容器绝对定位于聊天视图底部、透明、pointer-events none（点击穿透到时间线滚动），
+ * form 恢复 pointer-events auto。发送后清空本地输入。
  * 模式栏为受控组件：mode 来自投影的会话级权威状态，切换由上层 enqueue
  * ConversationModeSetInputEvent（mode 不再随 onSend 丢弃）。
  */
@@ -56,7 +58,6 @@ export function ConversationComposer({
 
   return (
     <div className={styles.composer}>
-      {status !== undefined ? <GenStatus {...status} /> : null}
       <form
         className={styles.form}
         onSubmit={(event) => {
@@ -64,26 +65,29 @@ export function ConversationComposer({
           submit();
         }}
       >
-        <label className={styles.srOnly} htmlFor={`composer-input-${conversationId}`}>
-          创作指令
-        </label>
-        <textarea
-          id={`composer-input-${conversationId}`}
-          className={styles.input}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="输入创作指令，例如：让林夏在旧船坞发现货单、起草白鹭旅馆场景"
-          disabled={!enabled}
-          rows={1}
-          aria-label="对话输入"
-          data-conversation={conversationId}
-        />
-        <Button variant="primary" onClick={submit} disabled={!enabled || text.trim() === ""}>
-          发送
-        </Button>
+        {status !== undefined ? <GenStatus {...status} /> : null}
+        <div className={styles.mainRow}>
+          <label className={styles.srOnly} htmlFor={`composer-input-${conversationId}`}>
+            创作指令
+          </label>
+          <textarea
+            id={`composer-input-${conversationId}`}
+            className={styles.input}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="输入创作指令，例如：让林夏在旧船坞发现货单、起草白鹭旅馆场景"
+            disabled={!enabled}
+            rows={1}
+            aria-label="对话输入"
+            data-conversation={conversationId}
+          />
+          <Button variant="primary" onClick={submit} disabled={!enabled || text.trim() === ""}>
+            发送
+          </Button>
+        </div>
+        <ComposerModeBar mode={mode} onChange={onModeChange} disabled={!enabled} />
       </form>
-      <ComposerModeBar mode={mode} onChange={onModeChange} disabled={!enabled} />
     </div>
   );
 }

@@ -233,13 +233,16 @@ decision actions`（决策 ①先二元、②删除 novel 投影）。core 零�
 - 前端：原型三断点（sidebar/inspector 抽屉化、窄屏隐藏 ws-name/rev-meta）；
   侧栏顺序对齐原型（待办组是否保留由 D3 定）；footer meta。
 
+**实现记录（2026-08-09）**：本步已由 v2 原型对齐分支完成（见 §7.3）——inspector
+三断点 + 审批抽屉化落地；侧栏顺序对齐；footer 因决策 3 删除。
+
 ## 5. 待决策项
 
 - **D1（已确认）**：方案 A 收敛——标准 Markdown + 五类引用（新增 chapter），不做完整
   白名单渲染器。
-- **D2**：会话 rename/delete/pin 是否本期做（Step 5，需要后端 API）？不做则隐藏菜单。
-- **D3**：侧栏"待办"组保留还是移除（原型侧栏无待办，待办在计划视图）。
-- **D4**：wordmark 最终文案（OpenYourMind 还是保留 Novel）。
+- **D2（已确认）**：会话 rename/delete/pin 本期做（Step 5，已实现）。
+- **D3（已确认）**：侧栏"待办"组移除（待办只在计划视图；v2 原型无侧栏待办）。
+- **D4（已确认）**：wordmark 保留 Novel（见 §7.1 决策 1）。
 
 ## 6. 不做范围（Out of scope）
 
@@ -247,3 +250,84 @@ decision actions`（决策 ①先二元、②删除 novel 投影）。core 零�
 - output-events-map.md 的全量 42 事件逐条 UI 化（以"能驱动关键状态与提示"为准，
   边缘事件仅保留日志/摘要）。
 - 服务端/多人协作、权限模式设置面板（非本原型范围）。
+
+## 7. v2 原型对齐（c7a7c29 视觉换代 · 2026-08-09，分支 `feat/ui-prototype-alignment`）
+
+`vendor/index.html` 在 commit `c7a7c29`（657+/541-）做了一次视觉精修换代
+（"OpenYourMind · 雾港回声｜创作工作台"）。本分支把 `ui/` React 实现对齐到新原型，
+按"每步一个聚焦提交"实施，共 6 个提交（C1–C5 + 本文档 C6）。每步验证
+`pnpm --dir ui test && pnpm --dir ui check` 全绿；C1 额外 `pnpm --dir gui build`。
+
+> **目检注意**：Electron 通过 `@novel/ui`（解析到 `ui/dist/`）消费 ui 产物，
+> `pnpm gui` 已改为先 `pnpm --dir ui build` 再构建渲染器。若从旧脚本/旧 CI 起应用，
+> 需先重建 ui，否则加载的是陈旧 dist——v2 对齐会整体缺失（曾因此排查过一次）。
+
+### 7.1 已确认决策（旧待决策项终态）
+
+| 项 | 决策 | 说明 |
+|---|---|---|
+| 决策 1 · wordmark | **保留 Novel**（旧 D4 终态） | 不动文本；可视情况对齐渐变流动动画 |
+| 决策 2 · 执行模式 | **保留 ui/ 三模式**（compose 设计·仅草稿文件可写 / bypass 直接执行 / review 需审核） | **不**改成原型的「计划」语义；仅做下拉面板结构 + 图标 |
+| 决策 3 · 侧栏 footer | **删除** WorkspaceFootingSection | 对齐原型（无 side-foot） |
+| 决策 4 · 正文排版 | **全面对齐** | `--font-body` 改衬线（Iowan Old Style + 宋体/思源宋体）、新增 `--font-ui`、`--font-display` 英文优先、全局基线 13.5px→15px |
+| 旧 D2 | 会话 rename/pin/delete 已实现（Step 5） | 终态：已做 |
+| 旧 D3 | 侧栏"待办"组 | 终态：移除（待办只在计划视图，v2 无侧栏待办） |
+
+### 7.2 提交范围（对齐点 → 文件）
+
+**C1 · 布局基础：Composer 悬浮化（`211367f`）**
+- `.composer` 绝对定位贴底、透明底 pointer-events none、form 内 auto；GenStatus 与
+  ComposerModeBar 移入 form 内（`padding:8px 8px 10px 15px`、radius 16px、shadow-1）。
+- ChatSurface `.surface{position:relative}` + `::before` 底部 120px 渐变遮罩；
+  `.timeline{padding:8px 22px 132px}`；`.inner{max-width:880px;margin:0 auto}`。
+- tokens：`--shadow-2` 改原型双层值；新增 `--font-ui`；`--font-body` 改衬线栈；
+  `--font-display` 英文优先。global.css：body font-family → `--font-ui`、基线 15px。
+
+**C2 · 消息视觉（`11942ec`）**
+- UserMessage：删 Avatar/head，`flex-direction:row-reverse` 贴右、气泡 `16px` 圆角
+  `text-align:left` 去边框；新增复制按钮（默认隐藏、hover 显形、`::before` hover bridge、
+  `inPad` 首条收进气泡带）+ toast「已复制消息」。
+- AssistantMessage：删 Avatar，head 只留 approval-state；补 `.stopped`/`.rejected` 状态色。
+- turn-sep：label 改纯时间（`chatSurfaceMapper` 去「第 N 轮」前缀）；渐变线 + 间距。
+
+**C3 · Composer 控件（`4a1f4b3`）**
+- ComposerModeBar 重构为下拉浮窗（trigger + options 从发送框上方浮出、外部点击/Escape
+  关闭、aria-expanded/role=menu、三枚 16×16 SVG 图标、`m-ico` 随当前模式变色）。
+- GenStatus 扁平化：去边框/底色，三点呼吸动画 `.gen-dots i`（错峰 .22s/.44s）。
+
+**C4 · 侧栏/顶栏（`f5c14a1`）**
+- ContentSection 内容项新增 20×20 stroke-1.7 内联 SVG 图标（大纲/正文/人物/地点）；
+  `.item` 视觉微调（gap 12px、padding 6.5px 10px、font-size 15px）。
+- 删除 WorkspaceFootingSection（决策 3）；Sidebar 界面字段保留兼容注释。
+
+**C5 · 审批面板 + Inspector 响应式（`c3cef4c`）**
+- InspectorHost 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right
+  收起过渡），内容 gate；宽度改 `--insp-w` 驱动（tokens 新增 `--insp-w:860px`，移除旧
+  `--inspector-width-*`），媒体查询 ≤1280/≤1080/861-1200(clamp)/≤860(fixed drawer)，
+  拖拽写 inline `--insp-w`（仅拖过才写，clamp 沿用原型 JS：minW 560/340、maxW
+  `min(1120,vw-520)`、≤860 不拖）。
+- ApprovalPanel：删悬浮预览（.apprHover）与内部标识（.id/.csId/◈ 不可变）；目录按对话
+  分组（.apprGroup + 对话名 + .agJump「跳转」）；diff 标题中文化（大纲变更/正文变更/
+  实体变更）、`.opKind` 中文（大纲/正文/人物）；新增 props
+  onJumpToConversation/drawerOpen/onToggleDrawer，窄面板（@container ≤600px）目录折叠
+  为左侧滑出抽屉，选中条目自动收起。
+- ApplicationShell 复用 `handleSelectConversation` 作 onJumpToConversation；kicker
+  「审批参数 · 变更集不可变，批准执行后才产出差异」。
+
+### 7.3 响应式断点实现记录（旧 Step 6 关闭）
+
+原型三断点已落地于 InspectorHost：
+- `≤1280`：`--insp-w:720px`；`≤1080`：`--insp-w:640px`。
+- `861–1200`：流式右列 `clamp(380px, 46vw, 560px)`（移除旧 `<640` 纵向叠砌）。
+- `≤860`：inspector 固定抽屉滑出（`position:fixed; transform:translateX(102%)`，
+  拖拽手柄隐藏），开合走 transform 过渡。
+- 审批面板内部：`@container (max-width:600px)` 目录折叠为左侧滑出抽屉
+  （`.listToggle` + `.scrim` + `.list` absolute）。
+侧栏顺序（创建→内容→对话）在 Step 1 已对齐；footer 因决策 3 删除，无 footer meta。
+
+### 7.4 术语中文化（本分支覆盖项）
+
+- ApprovalPanel diff 区标题（大纲变更/正文变更/实体变更）、`.opKind`（大纲/正文/人物）、
+  kicker（「审批参数 · 变更集不可变，批准执行后才产出差异」）。
+- 遗留（非本分支范围）：事件名逐一中文化、Diff「完整参数」字段级中文标签等，留待后续
+  迭代，不影响本期对齐验收。

@@ -1,12 +1,13 @@
 /**
  * GenStatus
  *
- * 生成状态行（原型 .gen-status）：胶囊容器 + 渐变动点 + 渐变文字，
- * 位于 composer 输入框正上方（原型位置）。live 时展示已用计时与停止按钮。
+ * 生成状态行（原型 .gen-status）：扁平行（无边框无底色）+ 三点呼吸
+ * （.gen-dots i，错峰延迟）+ 纯 muted 主文案，位于 composer 输入框正上方。
+ * live 时展示已用计时与停止按钮。
  * phase: idle/streaming/thinking/completed/failed；
  * 仅 streaming/thinking 有柔和动效，failed 用红色标识并可重试。
  *
- * 中文注释：elapsed 计时在 live 相位启动，离开 live 复位为 0s；
+ * 中文注释：elapsed 计时在 live 相位启动，离开 live 复位为 0 秒；
  * 停止按钮仅在 live 显示，触发 onStop（调用方 enqueue StopInputEvent）。
  */
 import { useEffect, useRef, useState } from "react";
@@ -58,9 +59,15 @@ export function GenStatus({ phase, stage, error, onRetry, onStop }: GenStatusPro
       role="status"
       data-live={live || undefined}
     >
-      {live ? <span className={styles.dot} aria-hidden="true" /> : null}
+      {live ? (
+        <span className={styles.dots} aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+      ) : null}
       <span className={styles.main}>{stage ?? PHASE_TEXT[phase]}</span>
-      {live ? <span className={styles.elapsed}>已用时 {elapsed}s</span> : null}
+      {live ? <span className={styles.elapsed}>已用时 {elapsed} 秒</span> : null}
       {live && onStop !== undefined ? (
         <button type="button" className={styles.stop} onClick={onStop}>
           停止

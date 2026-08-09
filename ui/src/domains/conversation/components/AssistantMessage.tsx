@@ -1,10 +1,10 @@
 /**
  * AssistantMessage
  *
- * 助手消息：agent 头像 + 思考块（ThinkBlock）+ 正文 + 结构化卡片。
+ * 助手消息（原型 .msg.assistant）：无头像，head 只保留 approval-state 状态
+ * 标签；正文 + 思考块（ThinkBlock）+ 结构化卡片。
  * 卡片通过 ConversationCardRendererRegistry 渲染。
  */
-import { Avatar } from "../../../shared/primitives/Avatar.js";
 import { createDefaultConversationCardRendererRegistry } from "../cards/defaultRenderers.js";
 import type { ConversationCardRendererRegistry } from "../cards/ConversationCardRendererRegistry.js";
 import type {
@@ -28,7 +28,8 @@ export type AssistantApprovalState =
   | "completed"
   | "submitted"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "rejected";
 
 /** 消息头状态中文标签（原型 .approval-state）。 */
 const APPROVAL_STATE_LABEL: Record<AssistantApprovalState, string> = {
@@ -37,13 +38,17 @@ const APPROVAL_STATE_LABEL: Record<AssistantApprovalState, string> = {
   submitted: "已提交",
   failed: "生成失败",
   cancelled: "已停止",
+  rejected: "已驳回",
 };
 
 export interface AssistantMessageProps {
   readonly sequence: number;
+  /** 保留兼容调用方；v2 原型 head 只显示 approval-state，不再渲染。 */
   readonly agentLabel: string;
+  /** 保留兼容调用方；v2 原型时间只在轮次分隔显示。 */
   readonly timestamp: number;
   readonly approvalState?: AssistantApprovalState;
+  /** 保留兼容调用方；v2 原型 head 不再显示 revision。 */
   readonly revision?: string;
   readonly failureDetail?: string;
   readonly thinkLines?: readonly ThinkLineData[];
@@ -58,18 +63,9 @@ export interface AssistantMessageProps {
   readonly onCardAction?: (cardId: string, action: string, payload?: unknown) => void;
 }
 
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 export function AssistantMessage({
   sequence,
-  agentLabel,
-  timestamp,
   approvalState,
-  revision,
   failureDetail,
   thinkLines = [],
   text,
@@ -84,18 +80,14 @@ export function AssistantMessage({
 }: AssistantMessageProps) {
   return (
     <div className={styles.message} data-sequence={sequence}>
-      <Avatar variant="agent" text={agentLabel.slice(0, 2)} size="md" />
       <div className={styles.body}>
-        <div className={styles.head}>
-          <span className={styles.who}>{agentLabel}</span>
-          <time className={styles.time}>{formatTime(timestamp)}</time>
-          {revision !== undefined ? <span className={styles.revision}>{revision}</span> : null}
-          {approvalState !== undefined ? (
+        {approvalState !== undefined ? (
+          <div className={styles.head}>
             <span className={[styles.state, styles[approvalState]].filter(Boolean).join(" ")}>
               {APPROVAL_STATE_LABEL[approvalState]}
             </span>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
         {thinkLines.length > 0 ? <ThinkBlock lines={thinkLines} expanded={streaming} streaming={streaming} onToggle={() => undefined} /> : null}
         <div className={styles.text}>
           <AssistantMarkdown

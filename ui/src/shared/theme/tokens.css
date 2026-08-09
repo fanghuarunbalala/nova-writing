@@ -2,7 +2,8 @@
  * Novel 设计令牌（design tokens）。
  *
  * 颜色/渐变/字体/阴影直接继承 `vendor/index.html` 原型的 :root 变量（OKLCH），
- * 布局尺寸按原型校准（inspector 默认 384px、范围 [300, 680]）。
+ * 布局尺寸按 v2 原型校准（inspector 默认 860px；宽度由 --insp-w 的
+ * 媒体查询 / 拖拽 inline 覆盖）。
  * V1 仅实现 light；dark 调色板在 V2 通过 [data-theme="dark"] 覆盖。
  */
 :root {
@@ -37,10 +38,19 @@
   );
 
   /* ============ 字体 ============ */
-  --font-display: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
-    "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-body:    "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
-    "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  /* 英文在前、中文兜底（对齐原型 :root）：每种文字都落到为它设计的字体
+     - --font-display / --font-ui：黑体（英文 SF Pro / Segoe UI，中文苹方）
+     - --font-body：宋体正文（英文 Iowan Old Style 衬线，中文宋体/思源宋体）
+     - --font-kai：楷体点缀（引用块 / 空态引导）
+     - --font-mono：等宽（事件名 / 时间 / ID / 代码） */
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Songti SC", "STSong",
+    "Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif;
   --font-mono:    "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
   --font-kai:     "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
 
@@ -48,7 +58,7 @@
   --fs-display: 19px;
   --fs-h1:      16px;
   --fs-h2:      14px;
-  --fs-body:    13.5px;
+  --fs-body:    15px;
   --fs-meta:    11.5px;
   --fs-mono:    11px;
   --fs-xs:      10.5px;
@@ -83,7 +93,8 @@
   /* ============ 阴影 ============ */
   --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04),
               0 8px 24px rgba(40, 22, 10, 0.045);
-  --shadow-2: 0 10px 28px rgba(40, 22, 10, 0.13);
+  --shadow-2: 0 2px 4px rgba(40, 22, 10, 0.05),
+              0 16px 40px rgba(40, 22, 10, 0.11);
 
   /* ============ 动画时长 ============ */
   --duration-fast: 0.15s;
@@ -99,11 +110,9 @@
   --subhead-height:      58px;
   --sidebar-width:       292px;
   --sidebar-width-collapsed: 0;
-  --inspector-width-default: 384px;
-  --inspector-width-min: 300px;
-  --inspector-width-max: 680px;
-  --inspector-width-wide: 480px;
-  --inspector-width-narrow: 344px;
+  /* inspector 宽度：默认 860px。响应式收窄由 InspectorHost.module.css 的
+     媒体查询覆盖；用户拖拽时写入 inline --insp-w（未拖过则交给 CSS）。 */
+  --insp-w: 860px;
 }
 
 /* Dark mode 预留（V1 不实现，但结构支持） */

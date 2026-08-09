@@ -112,6 +112,33 @@ describe("UserMessage", () => {
       id: "loc-dock7",
     });
   });
+
+  it("copies text via clipboard and notifies on success", async () => {
+    const user = userEvent.setup();
+    const onNotify = vi.fn();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    render(
+      <UserMessage
+        sequence={3}
+        text="把货单交给林夏"
+        timestamp={1000}
+        onNotify={onNotify}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "复制消息" }));
+    expect(writeText).toHaveBeenCalledWith("把货单交给林夏");
+    expect(onNotify).toHaveBeenCalledWith("success", "已复制消息");
+    expect(screen.getByRole("button", { name: "已复制" })).toBeInTheDocument();
+  });
+
+  it("renders in-pad copy button on the first user message", () => {
+    render(<UserMessage sequence={1} text="开场" timestamp={1000} inPad />);
+    expect(screen.getByRole("button", { name: "复制消息" })).toBeInTheDocument();
+  });
 });
 
 describe("ThinkBlock / ThinkLine", () => {
@@ -188,7 +215,7 @@ describe("GenStatus", () => {
       <GenStatus phase="thinking" stage="正在思考大纲…" onStop={onStop} />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("正在思考大纲…");
-    expect(screen.getByText(/已用时 0s/)).toBeInTheDocument();
+    expect(screen.getByText(/已用时 0 秒/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "停止" }));
     expect(onStop).toHaveBeenCalledTimes(1);
     rerender(<GenStatus phase="failed" error="连接中断" onRetry={onRetry} />);

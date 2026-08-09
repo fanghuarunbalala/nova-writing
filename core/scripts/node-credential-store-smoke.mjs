@@ -52,7 +52,9 @@ try {
   const persisted = await readFile(credentialPath, "utf8");
   assert.equal(persisted.includes("test-provider-secret"), false);
   assert.equal(persisted.includes("credential:primary"), false);
-  assert.equal((await stat(credentialPath)).mode & 0o777, 0o600);
+  if (process.platform !== "win32") {
+    assert.equal((await stat(credentialPath)).mode & 0o777, 0o600);
+  }
 
   const secretLength = await new NodeEncryptedCredentialStore({
     homeResolver,

@@ -27,6 +27,10 @@ export interface NovelOutlineQueryStore {
     scope: NovelReadScope,
   ): Promise<StoryOutlineTreeSnapshot | undefined>;
   listStoryUnits(scope: NovelReadScope): Promise<readonly StoryUnit[]>;
+  listStoryUnitChildren(
+    scope: NovelReadScope,
+    id: StoryUnitId,
+  ): Promise<readonly StoryUnit[]>;
   getStoryUnit(
     scope: NovelReadScope,
     id: StoryUnitId,

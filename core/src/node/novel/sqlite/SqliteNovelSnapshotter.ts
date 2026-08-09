@@ -9,7 +9,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import {
@@ -422,9 +422,14 @@ export class SqliteNovelSnapshotter implements NovelSnapshotter {
     paths: SnapshotPaths,
     draftSessionId: NovelDraftSessionId,
   ): SnapshotPaths {
+    // Keep the temporary directory name short: node:sqlite on Windows cannot
+    // open database files whose path exceeds ~250 characters, and the previous
+    // `.{draftId}.{uuid}.snapshot-tmp` name added enough depth to break deep
+    // workspaces (the manifest inside the directory still records the draft
+    // session for recovery/debugging).
     const draftDir = join(
       paths.ownerDir,
-      `.${captureNovelDraftSessionId(draftSessionId)}.${randomUUID()}.snapshot-tmp`,
+      `.snap-${randomBytes(8).toString("hex")}.tmp`,
     );
     return {
       ownerConversationId: paths.ownerConversationId,
@@ -600,13 +605,13 @@ function readDraftTimestamp(
 }
 
 function isSnapshotTemporaryDirectory(name: string): boolean {
-  return /^\.[A-Za-z0-9][A-Za-z0-9._:-]{0,159}\.[0-9a-f-]{36}\.snapshot-tmp$/u.test(
-    name,
-  );
+  return /^\.snap-[0-9a-f]{16}\.tmp$/u.test(name);
 }
 
 async function syncFile(path: string): Promise<void> {
-  const handle = await open(path, "r");
+  // Windows rejects fsync on read-only handles (EPERM); the file was just
+  // written by this process so a read-write handle is always available.
+  const handle = await open(path, "r+");
   try {
     await handle.sync();
   } finally {

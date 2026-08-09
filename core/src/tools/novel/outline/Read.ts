@@ -5,8 +5,8 @@ import {
   ToolPromptDetails,
   defineTool,
   type RegisteredTool,
-  type ToolResult,
 } from "../../../tooling/protocol/index.js";
+import { formatReadToolResult } from "../readResult.js";
 import {
   NovelOutlineReadParametersSchema,
   type NovelOutlineReadArguments,
@@ -56,7 +56,7 @@ export function createReadTool(
             toolCallId: context.toolCallId,
             unitCount: details.units.length,
           });
-          return readResult(details);
+          return formatReadToolResult(details, "Outline read.");
         } catch (error) {
           if (error instanceof ToolError) throw error;
           throw new ToolError({
@@ -76,13 +76,3 @@ export function createReadTool(
   });
 }
 
-function readResult(
-  details: NovelOutlineReadDetails,
-): ToolResult<NovelOutlineReadDetails> {
-  return Object.freeze({
-    content: Object.freeze([
-      Object.freeze({ type: "text" as const, text: "Outline read." }),
-    ]),
-    details,
-  });
-}

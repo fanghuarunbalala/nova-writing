@@ -10,7 +10,11 @@ import type {
   ToolApprovalProjection,
 } from "@novel/core";
 import type { ConversationCardDescriptor as GenericCardDescriptor } from "../../domains/conversation/cards/projection/index.js";
-import type { ConversationCardDescriptor } from "../../domains/conversation/projection/ConversationCardDescriptor.js";
+import type { ConversationCardStatus } from "../../domains/conversation/cards/projection/ConversationCardTypes.js";
+import type {
+  ConversationCardDescriptor,
+  ProposalCardContent,
+} from "../../domains/conversation/projection/ConversationCardDescriptor.js";
 import type {
   ConversationEventView,
   ConversationTimelineItem,
@@ -65,8 +69,7 @@ export function mapProjectionTimeline(
               card.sourceSequence >= item.startedSequence &&
               card.sourceSequence <= item.lastSequence,
           )
-          .map(toTimelineCard)
-          .filter((card): card is ConversationCardDescriptor => card !== null);
+          .map(toTimelineCard);
         // 工具调用常发生在消息 completed 之后、同一 turn 内（turn 边界由
         // turn.state.changed 的 lastSequence 界定），因此事件流/工具条范围取
         // 到 turn 结束，而不是消息自己的 lastSequence。
@@ -347,12 +350,65 @@ function formatTime(timestamp: number): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-/** generic 卡 → rich 渲染描述；暂不支持的 kind 返回 null。 */
+/**
+ * generic 卡 → rich 渲染描述（覆盖全部 ConversationCardKind）。
+ *
+ * generic 卡仅携带 title/summary/status（op 明细、changeSetId 等载荷由
+ * core 输出事件提供后才可投影），故 rich 形式全部由 title/summary 派生、
+ * ops 保持空数组，不伪造变更结构。
+ */
+const STATUS_TO_PROPOSAL_TAG: Record<
+  ConversationCardStatus,
+  ProposalCardContent["tag"]
+> = {
+  informational: "proposal",
+  pending: "proposal",
+  "in-progress": "plan",
+  accepted: "applied",
+  rejected: "proposal",
+  completed: "applied",
+  failed: "proposal",
+  stale: "proposal",
+};
+
 function toTimelineCard(
   card: GenericCardDescriptor,
-): ConversationCardDescriptor | null {
+): ConversationCardDescriptor {
   switch (card.kind) {
-    default:
-      return null;
+    case "novel-reference":
+      return Object.freeze({
+        kind: "quote",
+        id: card.cardId,
+        content: Object.freeze({
+          text: Object.freeze({ kind: "text", text: card.summary ?? card.title }),
+          ...(card.summary === undefined || card.summary === card.title
+            ? {}
+            : { attribution: card.title }),
+        }),
+      });
+    case "outline-proposal":
+    case "manuscript-proposal":
+    case "character-proposal":
+    case "location-proposal":
+    case "task":
+    case "approval":
+      return Object.freeze({
+        kind: "proposal",
+        id: card.cardId,
+        content: Object.freeze({
+          tag: STATUS_TO_PROPOSAL_TAG[card.status],
+          title: card.title,
+          ...(card.summary === undefined ? {} : { meta: card.summary }),
+          ops: Object.freeze([]),
+        }),
+      });
+    case "publication":
+      return Object.freeze({
+        kind: "text",
+        id: card.cardId,
+        content: Object.freeze({
+          richText: Object.freeze({ kind: "text", text: card.summary ?? card.title }),
+        }),
+      });
   }
 }

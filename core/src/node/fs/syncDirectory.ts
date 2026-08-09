@@ -1,36 +1,49 @@
-// 目录 fsync 在 Windows 上不受支持（fs.open(dir).fsync() 必抛 EPERM）。调用方在
-// rename 已落地之后才做目录 fsync，它只是崩溃持久化优化，不是数据落盘本身。
-// 因此这里"尽力而为"：吞掉平台不支持目录 fsync 类错误，其余真实 I/O 错误照常抛出。
+/**
+ * Best-effort 目录 fsync 共享工具（Shared best-effort directory fsync helper）。
+ *
+ * 原子写（临时文件 → rename）后对父目录做 fsync 是 POSIX 语义：确保 rename 后的目录项
+ * 落盘。但 Windows/NTFS 不支持对目录调用 fsync —— `open(dir, "r")` 成功而
+ * `handle.sync()` 抛 `EPERM: operation not permitted, fsync`（部分文件系统/平台也可能
+ * 抛 EINVAL / ENOTSUP / EBADF / EISDIR / ENOSYS）。
+ *
+ * 本 helper 只忽略上述"平台不支持目录 fsync"类错误，其余真实 I/O 错误照抛，从而：
+ * - Windows 上原子写可正常完成（NTFS 目录项随文件 fsync 一并刷新，跳过不损失正确性）；
+ * - POSIX 上保持原有持久化语义（fsync 失败仍会暴露给调用方）。
+ *
+ * On POSIX this preserves real durability semantics by re-throwing genuine I/O errors;
+ * on platforms where directory fsync is unsupported (e.g. Windows/NTFS) it skips the
+ * call so atomic writes complete normally, since directory entries are flushed
+ * alongside the file fsync anyway.
+ */
 import { open } from "node:fs/promises";
 
-const UNSUPPORTED_SYNC_CODES = new Set([
+/** Directory-fsync-unsupported error codes, matched by NodeJS `error.code`. */
+const DIRECTORY_FSYNC_UNSUPPORTED_CODES = new Set<string>([
   "EPERM",
-  "ENOTSUP",
   "EINVAL",
+  "ENOTSUP",
+  "EBADF",
   "EISDIR",
-  "ENOTTY",
+  "ENOSYS",
 ]);
 
-/** 对目录执行 fsync，忽略平台不支持的目录 fsync 错误（如 Windows 的 EPERM）。
- *  目录不可打开时静默跳过；真实 I/O 错误（EACCES/EIO 等）原样抛出。 */
-export async function syncDirectoryBestEffort(directory: string): Promise<void> {
-  let handle: Awaited<ReturnType<typeof open>> | undefined;
-  try {
-    handle = await open(directory, "r");
-  } catch {
-    return; // 目录不可打开（如已被移除）时跳过
-  }
+/**
+ * Best-effort fsync a directory, ignoring only platform-unsupported errors.
+ * @param directoryPath - directory to fsync（fsync 的目标目录）。
+ * @returns resolves when the directory was fsynced or the unsupported error was swallowed.
+ */
+export async function syncDirectoryBestEffort(directoryPath: string): Promise<void> {
+  const handle = await open(directoryPath, "r");
   try {
     await handle.sync();
   } catch (error) {
-    if (!isUnsupportedSyncError(error)) throw error;
+    if (!isDirectoryFsyncUnsupported(error)) throw error;
   } finally {
-    await handle?.close().catch(() => undefined);
+    await handle.close();
   }
 }
 
-function isUnsupportedSyncError(error: unknown): boolean {
-  if (!(error instanceof Error) || !("code" in error)) return false;
-  const code = typeof error.code === "string" ? error.code : undefined;
-  return code !== undefined && UNSUPPORTED_SYNC_CODES.has(code);
+function isDirectoryFsyncUnsupported(error: unknown): boolean {
+  return error instanceof Error && "code" in error &&
+    DIRECTORY_FSYNC_UNSUPPORTED_CODES.has((error as NodeJS.ErrnoException).code ?? "");
 }

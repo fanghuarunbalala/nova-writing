@@ -5,8 +5,8 @@ import {
   ToolPromptDetails,
   defineTool,
   type RegisteredTool,
-  type ToolResult,
 } from "../../../tooling/protocol/index.js";
+import { formatReadToolResult } from "../readResult.js";
 import {
   NovelParagraphReadParametersSchema,
   type NovelParagraphReadArguments,
@@ -55,7 +55,7 @@ export function createParagraphReadTool(
             toolCallId: context.toolCallId,
             paragraphCount: details.paragraphs.length,
           });
-          return readResult(details);
+          return formatReadToolResult(details, "Paragraphs read.");
         } catch (error) {
           if (error instanceof ToolError) throw error;
           throw new ToolError({
@@ -75,13 +75,3 @@ export function createParagraphReadTool(
   });
 }
 
-function readResult(
-  details: NovelParagraphReadDetails,
-): ToolResult<NovelParagraphReadDetails> {
-  return Object.freeze({
-    content: Object.freeze([
-      Object.freeze({ type: "text" as const, text: "Paragraphs read." }),
-    ]),
-    details,
-  });
-}

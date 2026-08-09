@@ -19,6 +19,7 @@ import {
   type CredentialStore,
 } from "../../config/index.js";
 import { noopLogger, type Logger } from "../../observability/index.js";
+import { syncDirectoryBestEffort } from "../fs/index.js";
 import {
   NODE_CONFIGURATION_STORE_FAILURE,
   NodeConfigurationStoreError,

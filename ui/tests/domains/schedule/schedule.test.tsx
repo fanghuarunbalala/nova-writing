@@ -99,6 +99,38 @@ describe("ScheduleProjection", () => {
     expect(todos.map((todo) => todo.tag)).toEqual(["profile", "profile", "writing"]);
   });
 
+  it("derives approval todos from pending approvals", () => {
+    const approvals = [
+      {
+        approvalRequestId: "ap-1",
+        title: "新增正文块",
+        toolName: "NovelParagraphWrite",
+        status: "pending",
+      },
+      {
+        approvalRequestId: "ap-2",
+        title: "修改大纲单元",
+        toolName: "NovelOutlineEdit",
+        status: "approved",
+      },
+    ] as never;
+    const todos = ScheduleProjection.deriveApprovalTodos(approvals);
+    expect(todos).toEqual([
+      {
+        id: "ap-1",
+        title: "新增正文块",
+        meta: "NovelParagraphWrite",
+        tag: "approval",
+        status: "open",
+        action: { label: "去审批", kind: "open-approval" },
+      },
+    ]);
+  });
+
+  it("derives no approval todos from an empty list", () => {
+    expect(ScheduleProjection.deriveApprovalTodos([])).toEqual([]);
+  });
+
   it("derives the progress tree with depth", () => {
     const tree = ScheduleProjection.deriveProgressTree(outlineReady as never);
     expect(tree.map((unit) => [unit.unitId, unit.depth])).toEqual([

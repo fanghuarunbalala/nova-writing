@@ -316,6 +316,271 @@ describe("chatSurfaceMapper", () => {
     }
   });
 
+  it("maps generic cards into rich conversation card descriptors", () => {
+    const items = mapProjectionTimeline(
+      projection({
+        timeline: [
+          {
+            kind: "user-message",
+            eventId: "e1",
+            sequence: 1,
+            timestamp: "2026-08-05T09:00:00.000Z",
+            text: "把雨景改成夜景",
+          },
+          {
+            kind: "assistant-message",
+            assistantMessageId: "a1",
+            runId: "r1",
+            turnId: "t1",
+            startedSequence: 2,
+            lastSequence: 8,
+            timestamp: "2026-08-05T09:00:01.000Z",
+            status: "completed",
+            content: [{ type: "text", text: "已按大纲调整。" }],
+          },
+        ],
+      }),
+      [
+        {
+          cardId: "CARD-REF",
+          kind: "novel-reference",
+          title: "§2 雨景",
+          summary: "雨落得密",
+          status: "informational",
+          conversationId: "c1",
+          sourceEventId: "e-ref",
+          sourceSequence: 3,
+          timestamp: "2026-08-05T09:00:01.000Z",
+        },
+        {
+          cardId: "CARD-OUTLINE",
+          kind: "outline-proposal",
+          title: "新增 第一章 序章",
+          summary: "拟新增一个故事单元",
+          status: "pending",
+          conversationId: "c1",
+          sourceEventId: "e-outline",
+          sourceSequence: 4,
+          timestamp: "2026-08-05T09:00:01.000Z",
+        },
+        {
+          cardId: "CARD-MANUSCRIPT",
+          kind: "manuscript-proposal",
+          title: "改写 第一节 夜景",
+          status: "in-progress",
+          conversationId: "c1",
+          sourceEventId: "e-manuscript",
+          sourceSequence: 5,
+          timestamp: "2026-08-05T09:00:01.000Z",
+        },
+        {
+          cardId: "CARD-CHAR",
+          kind: "character-proposal",
+          title: "角色 林晓 定稿",
+          status: "accepted",
+          conversationId: "c1",
+          sourceEventId: "e-char",
+          sourceSequence: 6,
+          timestamp: "2026-08-05T09:00:01.000Z",
+        },
+        {
+          cardId: "CARD-PUB",
+          kind: "publication",
+          title: "发布 v0.4",
+          summary: "正式发布版本 v0.4",
+          status: "completed",
+          conversationId: "c1",
+          sourceEventId: "e-pub",
+          sourceSequence: 8,
+          timestamp: "2026-08-05T09:00:01.000Z",
+        },
+      ],
+      "Novel Agent",
+    );
+    const assistant = items.find((item) => item.kind === "assistant");
+    expect(assistant).toBeDefined();
+    if (assistant === undefined || assistant.kind !== "assistant") return;
+    expect(assistant.cards).toHaveLength(5);
+    // novel-reference → quote，attribution 取 title（summary ≠ title 时）
+    expect(assistant.cards[0]).toEqual({
+      kind: "quote",
+      id: "CARD-REF",
+      content: {
+        text: { kind: "text", text: "雨落得密" },
+        attribution: "§2 雨景",
+      },
+    });
+    // outline-proposal pending → proposal tag=proposal，meta 取 summary
+    expect(assistant.cards[1]).toEqual({
+      kind: "proposal",
+      id: "CARD-OUTLINE",
+      content: {
+        tag: "proposal",
+        title: "新增 第一章 序章",
+        meta: "拟新增一个故事单元",
+        ops: [],
+      },
+    });
+    // manuscript-proposal in-progress → proposal tag=plan
+    expect(assistant.cards[2]).toEqual({
+      kind: "proposal",
+      id: "CARD-MANUSCRIPT",
+      content: {
+        tag: "plan",
+        title: "改写 第一节 夜景",
+        meta: undefined,
+        ops: [],
+      },
+    });
+    // character-proposal accepted → proposal tag=applied
+    expect(assistant.cards[3]).toEqual({
+      kind: "proposal",
+      id: "CARD-CHAR",
+      content: {
+        tag: "applied",
+        title: "角色 林晓 定稿",
+        ops: [],
+      },
+    });
+    // publication → text，richText 取 summary
+    expect(assistant.cards[4]).toEqual({
+      kind: "text",
+      id: "CARD-PUB",
+      content: {
+        richText: { kind: "text", text: "正式发布版本 v0.4" },
+      },
+    });
+  });
+
+  it("maps cards only when they fall inside the assistant message's sequence window", () => {
+    const items = mapProjectionTimeline(
+      projection({
+        timeline: [
+          {
+            kind: "user-message",
+            eventId: "e1",
+            sequence: 1,
+            timestamp: "2026-08-05T09:00:00.000Z",
+            text: "继续",
+          },
+          {
+            kind: "assistant-message",
+            assistantMessageId: "a1",
+            runId: "r1",
+            turnId: "t1",
+            startedSequence: 2,
+            lastSequence: 5,
+            timestamp: "2026-08-05T09:00:01.000Z",
+            status: "completed",
+            content: [{ type: "text", text: "好。" }],
+          },
+        ],
+      }),
+      [
+        {
+          cardId: "CARD-IN",
+          kind: "approval",
+          title: "同意提交正文草稿",
+          status: "pending",
+          conversationId: "c1",
+          sourceEventId: "e-in",
+          sourceSequence: 3,
+          timestamp: "2026-08-05T09:00:01.000Z",
+        },
+        {
+          cardId: "CARD-OUT-BEFORE",
+          kind: "task",
+          title: "早于本轮",
+          status: "completed",
+          conversationId: "c1",
+          sourceEventId: "e-out-before",
+          sourceSequence: 1,
+          timestamp: "2026-08-05T09:00:01.000Z",
+        },
+        {
+          cardId: "CARD-OUT-AFTER",
+          kind: "location-proposal",
+          title: "晚于本轮",
+          status: "rejected",
+          conversationId: "c1",
+          sourceEventId: "e-out-after",
+          sourceSequence: 9,
+          timestamp: "2026-08-05T09:00:01.000Z",
+        },
+      ],
+      "Novel Agent",
+    );
+    const assistant = items.find((item) => item.kind === "assistant");
+    expect(assistant).toBeDefined();
+    if (assistant === undefined || assistant.kind !== "assistant") return;
+    expect(assistant.cards).toHaveLength(1);
+    expect(assistant.cards[0]).toMatchObject({ id: "CARD-IN" });
+  });
+
+  it("maps proposal statuses onto tags and omits meta when summary is absent", () => {
+    const items = mapProjectionTimeline(
+      projection({
+        timeline: [
+          {
+            kind: "assistant-message",
+            assistantMessageId: "a1",
+            runId: "r1",
+            turnId: "t1",
+            startedSequence: 1,
+            lastSequence: 10,
+            timestamp: "2026-08-05T09:00:01.000Z",
+            status: "completed",
+            content: [{ type: "text", text: "已处理。" }],
+          },
+        ],
+      }),
+      [
+        {
+          cardId: "C-TASK",
+          kind: "task",
+          title: "回填角色关系",
+          status: "in-progress",
+          conversationId: "c1",
+          sourceEventId: "e1",
+          sourceSequence: 2,
+          timestamp: "2026-08-05T09:00:01.000Z",
+        },
+        {
+          cardId: "C-FAIL",
+          kind: "approval",
+          title: "提交失败",
+          status: "failed",
+          conversationId: "c1",
+          sourceEventId: "e2",
+          sourceSequence: 3,
+          timestamp: "2026-08-05T09:00:01.000Z",
+        },
+        {
+          cardId: "C-STALE",
+          kind: "location-proposal",
+          title: "过期方案",
+          status: "stale",
+          conversationId: "c1",
+          sourceEventId: "e3",
+          sourceSequence: 4,
+          timestamp: "2026-08-05T09:00:01.000Z",
+        },
+      ],
+      "Novel Agent",
+    );
+    const assistant = items.find((item) => item.kind === "assistant");
+    expect(assistant).toBeDefined();
+    if (assistant === undefined || assistant.kind !== "assistant") return;
+    // in-progress → plan；failed → proposal；stale → proposal
+    const proposalTags = assistant.cards.map((card) =>
+      card.kind === "proposal" ? card.content.tag : null,
+    );
+    expect(proposalTags).toEqual(["plan", "proposal", "proposal"]);
+    // 无 summary 时不带 meta 字段
+    expect(assistant.cards[0]).toMatchObject({ content: { tag: "plan", title: "回填角色关系" } });
+    expect("meta" in (assistant.cards[0] as { content: { meta?: string } }).content).toBe(false);
+  });
+
   it("groups tool approvals of the same turn into one card", () => {
     const digest = `sha256:${"0".repeat(64)}`;
     const base = {

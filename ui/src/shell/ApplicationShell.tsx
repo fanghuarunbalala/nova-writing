@@ -203,15 +203,27 @@ export function ApplicationShell({
     [domainStores, inspectorRouter],
   );
 
+  // 时间线"等待审批"行 / 消息流审批卡 / 计划视图审批待办 → 打开审批面板并选中。
+  const handleOpenApproval = useCallback(
+    (approvalRequestId: string) => {
+      refreshApprovals();
+      approvalStore.select(approvalRequestId);
+      inspectorRouter.transition({ kind: "approval", changeSetId: approvalRequestId });
+    },
+    [approvalStore, inspectorRouter, refreshApprovals],
+  );
+
   const handleTodoAction = useCallback(
-    (_id: string, action: string) => {
-      if (action === "open-character") {
+    (id: string, action: string) => {
+      if (action === "open-approval") {
+        handleOpenApproval(id);
+      } else if (action === "open-character") {
         mainViewRouter.transition("content");
       } else if (action === "open-location") {
         mainViewRouter.transition("content");
       }
     },
-    [mainViewRouter],
+    [handleOpenApproval, mainViewRouter],
   );
 
   // 引用解析器：从各域 store 当前快照读取档案名与是否已建档。
@@ -283,16 +295,6 @@ export function ApplicationShell({
       );
     },
     [approvalStore, inspectorRouter],
-  );
-
-  // 时间线"等待审批"行 / 消息流审批卡 → 打开审批面板并选中对应请求。
-  const handleOpenApproval = useCallback(
-    (approvalRequestId: string) => {
-      refreshApprovals();
-      approvalStore.select(approvalRequestId);
-      inspectorRouter.transition({ kind: "approval", changeSetId: approvalRequestId });
-    },
-    [approvalStore, inspectorRouter, refreshApprovals],
   );
 
   // 写操作落库后刷新 novel 数据 store（大纲/人物/地点/正文/概览），
@@ -420,8 +422,6 @@ export function ApplicationShell({
           novelOverview={domainStores.novelOverview}
           onCreateConversation={handleCreateConversation}
           onSelectConversation={handleSelectConversation}
-          schedule={domainStores.schedule}
-          scheduleTodo={domainStores.scheduleTodo}
           contentTab={contentTab}
           onSelectContentPane={handleSelectContentPane}
           workspaceId={workspaceId}
@@ -429,7 +429,6 @@ export function ApplicationShell({
           revision={overview.sourceRevision}
           pendingApprovalCount={approvalSnapshot.pendingCount}
           onOpenWorkspace={onOpenWorkspace}
-          onTodoAction={handleTodoAction}
         />
         <MainArea
           api={api}
@@ -453,6 +452,7 @@ export function ApplicationShell({
           locateReference={locateReference}
           onProposalAction={handleProposalAction}
           onOpenApproval={handleOpenApproval}
+          onOpenDraft={handleOpenApproval}
           approvalStore={approvalStore}
         />
         <InspectorHost

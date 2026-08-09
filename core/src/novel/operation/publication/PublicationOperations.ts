@@ -354,8 +354,11 @@ function applyVolumeDelete(
   ]);
   requireVolume(store, operation, id);
   assertRecordDigest(store.getVolumeDigest(id), operation, VOLUME_ENTITY_TYPE, id);
-  if (store.listChapters(id).length > 0) {
-    throw precondition(operation, "entity_referenced", VOLUME_ENTITY_TYPE, id);
+  // 级联删除（删卷带章）：先解绑并删除每个章节，再删卷。段落实体保留（归属 story unit）。
+  // setChapterParagraphIds(空) 对"段落已被本批先删"亦安全（先删绑定行、再插空）。
+  for (const chapter of store.listChapters(id)) {
+    store.setChapterParagraphIds(chapter.id, []);
+    store.deleteChapter(chapter.id);
   }
   if (!store.deleteVolume(id, expectedVersion)) {
     if (expectedVersion !== undefined) {
@@ -443,6 +446,9 @@ function applyChapterDelete(
   ]);
   requireChapter(store, operation, id);
   assertRecordDigest(store.getChapterDigest(id), operation, CHAPTER_ENTITY_TYPE, id);
+  // 级联解绑（novel_chapter_paragraphs.chapter_id FK）：先清空章节段落绑定再删章节；
+  // 段落实体保留（归属 story unit）。setChapterParagraphIds(空) 对"段落已被本批先删"亦安全。
+  store.setChapterParagraphIds(id, []);
   if (!store.deleteChapter(id, expectedVersion)) {
     if (expectedVersion !== undefined) {
       throw new NovelOperationPreconditionError(

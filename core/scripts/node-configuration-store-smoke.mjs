@@ -68,7 +68,9 @@ try {
   assert.equal(restoredApplication?.revision, 1);
   assert.equal(["en-US", "ja-JP"].includes(restoredApplication?.general.locale), true);
   const applicationFile = join(home.configDir, "application.json");
-  assert.equal((await stat(applicationFile)).mode & 0o777, 0o600);
+  if (process.platform !== "win32") {
+    assert.equal((await stat(applicationFile)).mode & 0o777, 0o600);
+  }
   const applicationJson = await readFile(applicationFile, "utf8");
   assert.equal(applicationJson.includes("apiKey"), false);
   assert.equal(applicationJson.includes("secret"), false);
@@ -99,10 +101,12 @@ try {
   assert.equal(restoredWorkspace?.workspaceId, location.workspaceId);
   assert.equal(restoredWorkspace?.revision, 0);
   assert.equal(restoredWorkspace?.prepareRuntimeHostOnOpen, true);
-  assert.equal(
-    (await stat(join(location.storeDir, "config", "workspace.json"))).mode & 0o777,
-    0o600,
-  );
+  if (process.platform !== "win32") {
+    assert.equal(
+      (await stat(join(location.storeDir, "config", "workspace.json"))).mode & 0o777,
+      0o600,
+    );
+  }
   console.log("Node Configuration Store smoke passed");
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });

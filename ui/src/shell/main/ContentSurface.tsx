@@ -12,6 +12,7 @@ import { ManuscriptChapterList } from "../../domains/novel/manuscript/components
 import { StoryOutlineTree } from "../../domains/novel/outline/components/StoryOutlineTree.js";
 import type { CharacterStore } from "../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
+import { resolveChapterTitles } from "../../domains/novel/manuscript/projection/resolveChapterTitles.js";
 import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
@@ -37,6 +38,7 @@ export interface ContentSurfaceProps {
   readonly onSelectCharacter?: (characterId: string) => void;
   readonly onSelectLocation?: (locationId: string) => void;
   readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
+  readonly onOpenDraft?: (changeSetId: string) => void;
   readonly onBack?: () => void;
 }
 
@@ -51,6 +53,7 @@ export function ContentSurface({
   onSelectCharacter,
   onSelectLocation,
   locateReference,
+  onOpenDraft,
   onBack,
 }: ContentSurfaceProps) {
   const outline = useExternalStore(outlineTree);
@@ -76,12 +79,13 @@ export function ContentSurface({
         content = (
           <ManuscriptChapterList
             workspaceId={workspaceId ?? ""}
-            chapters={manuscriptSnapshot.chapters}
+            chapters={resolveChapterTitles(manuscriptSnapshot.chapters, outline.tree)}
             locate={
               locateReference == null
                 ? undefined
                 : { kind: locateReference.kind, id: locateReference.id, nonce: locateReference.nonce }
             }
+            onOpenDraft={onOpenDraft}
           />
         );
         break;

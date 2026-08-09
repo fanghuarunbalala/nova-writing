@@ -73,7 +73,11 @@ export class PiTurnLifecycleBridge implements PiAgentEventBridge {
 
     switch (request.event.type) {
       case "agent_start":
-        this.requireRun(request.runId, true);
+        // Defensive: when the stop path already owns the run (stopping/cancelled),
+        // swallow the closing agent_start instead of failing on runNotRunning.
+        if (this.deferredRunStatus(request.runId) === undefined) {
+          this.requireRun(request.runId, true);
+        }
         return;
       case "turn_start":
         await this.beginTurn(request.runId);
@@ -90,6 +94,19 @@ export class PiTurnLifecycleBridge implements PiAgentEventBridge {
   }
 
   private async beginTurn(runId: string): Promise<void> {
+    // Stop race: run leaves `running` before the agent loop observes the abort
+    // signal (pi-agent-core reads the signal only at stream boundaries). A closing
+    // turn_start for the next tool-call turn then lands on a stopping/cancelled run;
+    // swallow it — the loop proceeds to the next stream boundary, hits the abort,
+    // and the run settles as cancelled through the existing cancellation settlement.
+    const deferred = this.deferredRunStatus(runId);
+    if (deferred !== undefined) {
+      this.logger.debug("runtime.agent.turn_start_deferred", {
+        runId,
+        runStatus: deferred,
+      });
+      return;
+    }
     this.requireRun(runId, true);
     try {
       const commit = await this.lifecycleController.beginTurn();
@@ -113,6 +130,20 @@ export class PiTurnLifecycleBridge implements PiAgentEventBridge {
   }
 
   private async endTurn(request: PiAgentEventBridgeRequest): Promise<void> {
+    // Extreme timing: stop lands between agent_start and the first turn_start, so no
+    // turn was ever created; a closing turn_end then has no turn to settle. Swallow
+    // it while the stop path owns the run.
+    const deferred = this.deferredRunStatus(request.runId);
+    if (
+      deferred !== undefined &&
+      this.lifecycleController.getTurnSnapshot() === undefined
+    ) {
+      this.logger.debug("runtime.agent.turn_end_without_turn_deferred", {
+        runId: request.runId,
+        runStatus: deferred,
+      });
+      return;
+    }
     const run = this.requireRun(request.runId, false);
     const turn = this.requireTurn(request.runId);
     if (turn.status === TURN_STATUS.stopping || turn.status === TURN_STATUS.cancelled) {
@@ -199,6 +230,18 @@ export class PiTurnLifecycleBridge implements PiAgentEventBridge {
         turn.turnId,
       );
     }
+  }
+
+  private deferredRunStatus(runId: string): RunStateSnapshot["status"] | undefined {
+    const run = this.lifecycleController.getRunSnapshot();
+    if (
+      run === undefined ||
+      run.runId !== runId ||
+      (run.status !== RUN_STATUS.stopping && run.status !== RUN_STATUS.cancelled)
+    ) {
+      return undefined;
+    }
+    return run.status;
   }
 
   private requireRun(runId: string, requireRunning: boolean): RunStateSnapshot {

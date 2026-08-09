@@ -35,6 +35,10 @@ export interface NovelMutableProjectionEvidenceRepository {
   getEntityChangeDigest(id: StoryUnitEntityChangeId): string | undefined;
   putEntityChange(change: StoryUnitEntityChange): void;
   deleteEntityChange(id: StoryUnitEntityChangeId): boolean;
+  /** 批量清理一个 story unit 的全部 evidence 行（级联删除 story unit 时先清，避免 FK 失败）。 */
+  deleteCharacterBindingsByStoryUnit(storyUnitId: StoryUnitId): void;
+  deleteLocationBindingsByStoryUnit(storyUnitId: StoryUnitId): void;
+  deleteEntityChangesByStoryUnit(storyUnitId: StoryUnitId): void;
   hasStoryUnit(storyUnitId: StoryUnitId): boolean;
   hasCharacter(characterId: CharacterId): boolean;
   hasLocation(locationId: LocationId): boolean;

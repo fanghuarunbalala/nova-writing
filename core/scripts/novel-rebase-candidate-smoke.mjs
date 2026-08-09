@@ -1153,8 +1153,7 @@ try {
     [keepCanonicalResolution],
   );
 
-  const interruptedName =
-    ".draft_interrupted.00000000-0000-4000-8000-000000000000.snapshot-tmp";
+  const interruptedName = ".snap-0123456789abcdef.tmp";
   const ownerDir = join(location.stagingDir, "conversation-rebase-b");
   const interruptedPath = join(ownerDir, interruptedName);
   const unknownPath = join(ownerDir, ".unknown-diagnostics");

@@ -2,8 +2,10 @@
  * ScheduleProjection
  *
  * 计划域的纯派生函数：stats / todos / progressTree。
- * 说明：approval 队列上游暂缺（approval 域延后），approval 类 todo 待其落地后补充。
+ * 说明：审批类待办由 deriveApprovalTodos 从 shell 级 ApprovalStore 快照
+ * （api.conversations.listApprovals()）派生。
  */
+import type { ApprovalView } from "../../approval/ApprovalStore.js";
 import type { ConversationCatalogSnapshot } from "../../conversation/store/ConversationCatalogStore.js";
 import type { NovelOverviewSnapshot } from "../../novel/overview/NovelOverviewStore.js";
 import type { StoryOutlineTreeNode } from "../../novel/outline/projection/StoryOutlineTreeProjection.js";
@@ -97,6 +99,28 @@ export const ScheduleProjection = {
         meta: "还没有对话",
         tag: "writing",
         status: "open",
+      });
+    }
+    return Object.freeze(todos);
+  },
+
+  /**
+   * 审批类待办：每个 pending 工具审批生成一条待办，动作打开右侧审批面板
+   * （ApplicationShell.handleTodoAction 路由 open-approval → handleOpenApproval）。
+   */
+  deriveApprovalTodos(
+    approvals: readonly ApprovalView[],
+  ): readonly ScheduleTodoData[] {
+    const todos: ScheduleTodoData[] = [];
+    for (const approval of approvals) {
+      if (approval.status !== "pending") continue;
+      todos.push({
+        id: approval.approvalRequestId,
+        title: approval.title,
+        meta: approval.toolName,
+        tag: "approval",
+        status: "open",
+        action: { label: "去审批", kind: "open-approval" },
       });
     }
     return Object.freeze(todos);

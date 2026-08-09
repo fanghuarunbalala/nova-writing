@@ -200,6 +200,7 @@
     "smoke:child-novel-tool-registry": "pnpm build && node scripts/child-novel-tool-registry-smoke.mjs",
     "smoke:novel-character-tools": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/novel-character-tools-typecheck.ts && node scripts/novel-character-tools-smoke.mjs",
     "smoke:novel-location-tools": "pnpm build && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck scripts/novel-location-tools-typecheck.ts && node scripts/novel-location-tools-smoke.mjs",
+    "smoke:novel-delete-tools": "pnpm build && node scripts/novel-delete-tools-smoke.mjs",
     "smoke:conversation-event-integration": "pnpm build && node scripts/conversation-event-integration-smoke.mjs",
     "smoke:message-projection-integration": "pnpm build && node scripts/message-projection-integration-smoke.mjs"
   },

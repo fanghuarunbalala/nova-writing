@@ -149,6 +149,9 @@ try {
     progress,
   );
   assert.equal(readResult.details.characters.length, 2);
+  // content carries real data (provider serializes content only in the live turn).
+  assert.match(readResult.content[0].text, /^Characters read\.\n\{/);
+  assert.match(readResult.content[0].text, /"character_hero"/);
   const hero = readResult.details.characters.find(
     (character) => character.id === "character_hero",
   );

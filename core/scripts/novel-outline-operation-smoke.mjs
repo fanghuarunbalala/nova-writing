@@ -119,10 +119,21 @@ function operationId(label) {
 
 const orderKeys = new FractionalOrderKeyFactory();
 const outlineStore = new MemoryOutlineRepository();
+// story_unit 级联删除会访问 paragraph / projectionEvidence（空实现；本 smoke 无段落与证据行）。
 const context = {
   characters: new MemoryEntityRepository(),
   locations: new MemoryEntityRepository(),
   outline: outlineStore,
+  paragraph: {
+    listParagraphsByStoryUnit() { return []; },
+    removeParagraphFromChapters() { return false; },
+    deleteParagraph() { return false; },
+  },
+  projectionEvidence: {
+    deleteCharacterBindingsByStoryUnit() {},
+    deleteLocationBindingsByStoryUnit() {},
+    deleteEntityChangesByStoryUnit() {},
+  },
 };
 const executor = new NovelOperationExecutor(createDefaultNovelOperationRegistry());
 const outlineId = captureStoryOutlineId("outline_operations");

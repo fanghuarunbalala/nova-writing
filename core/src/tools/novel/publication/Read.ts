@@ -1,12 +1,11 @@
 /** NovelVolumeRead and NovelChapterRead tools for one explicit scope. */
 import { noopLogger, type Logger } from "../../../observability/index.js";
-import type { JsonValue } from "../../../event/index.js";
 import { ToolError } from "../../../runtime/tools/execution/index.js";
+import { formatReadToolResult } from "../readResult.js";
 import {
   ToolPromptDetails,
   defineTool,
   type RegisteredTool,
-  type ToolResult,
 } from "../../../tooling/protocol/index.js";
 import {
   NovelChapterReadParametersSchema,
@@ -58,7 +57,7 @@ export function createVolumeReadTool(
             toolCallId: context.toolCallId,
             volumeCount: details.volumes.length,
           });
-          return readResult(details, "Volumes read.");
+          return formatReadToolResult(details, "Volumes read.");
         } catch (error) {
           if (error instanceof ToolError) throw error;
           throw new ToolError({
@@ -119,7 +118,7 @@ export function createChapterReadTool(
             toolCallId: context.toolCallId,
             chapterCount: details.chapters.length,
           });
-          return readResult(details, "Chapters read.");
+          return formatReadToolResult(details, "Chapters read.");
         } catch (error) {
           if (error instanceof ToolError) throw error;
           throw new ToolError({
@@ -139,14 +138,3 @@ export function createChapterReadTool(
   });
 }
 
-function readResult<T extends JsonValue>(
-  details: T,
-  message: string,
-): ToolResult<T> {
-  return Object.freeze({
-    content: Object.freeze([
-      Object.freeze({ type: "text" as const, text: message }),
-    ]),
-    details,
-  });
-}

@@ -392,6 +392,52 @@ await cancelController.transitionRun({
   cancellationReason: EXECUTION_CANCELLATION_REASON.stop,
 });
 
+// Stop race: a closing turn_start/agent_start/turn_end lands on a run the stop
+// path already owns (stopping) before any turn exists — the bridge swallows them
+// instead of failing, so the adapter settles the run as cancelled downstream.
+const deferredSink = new BarrierSink();
+const deferredController = await createRunningController(
+  "conversation-turn-deferred",
+  "run-turn-deferred",
+  "turn-turn-deferred",
+  deferredSink,
+  logger,
+);
+await deferredController.transitionRun({
+  current: RUN_STATUS.stopping,
+  reason: RUN_STATE_CHANGE_REASON.stopRequested,
+});
+const deferredBridge = new PiTurnLifecycleBridge({
+  conversationId: "conversation-turn-deferred",
+  lifecycleController: deferredController,
+  logger,
+});
+const deferredSignal = new AbortController().signal;
+await deferredBridge.handle({
+  conversationId: "conversation-turn-deferred",
+  runId: "run-turn-deferred",
+  event: { type: "turn_start" },
+  signal: deferredSignal,
+});
+await deferredBridge.handle({
+  conversationId: "conversation-turn-deferred",
+  runId: "run-turn-deferred",
+  event: { type: "agent_start" },
+  signal: deferredSignal,
+});
+await deferredBridge.handle({
+  conversationId: "conversation-turn-deferred",
+  runId: "run-turn-deferred",
+  event: { type: "turn_end", message: assistant("aborted") },
+  signal: deferredSignal,
+});
+assert.equal(deferredController.getRunSnapshot().status, RUN_STATUS.stopping);
+assert.equal(deferredController.getTurnSnapshot(), undefined);
+assert.equal(
+  logs.some((record) => record.event === "runtime.agent.turn_start_deferred"),
+  true,
+);
+
 const serializedLogs = JSON.stringify(logs);
 for (const token of forbidden) assert.equal(serializedLogs.includes(token), false);
 assert.equal(

@@ -5,14 +5,18 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ComposerModeBar } from "../../../src/domains/conversation/components/ComposerModeBar.js";
+import { ConversationDialogs } from "../../../src/domains/conversation/components/ConversationDialogs.js";
 import { ConversationItemMenu } from "../../../src/domains/conversation/components/ConversationItemMenu.js";
 import { ConversationList } from "../../../src/domains/conversation/components/ConversationList.js";
 import { ConversationListItem } from "../../../src/domains/conversation/components/ConversationListItem.js";
 import { MessageReferenceChip } from "../../../src/domains/conversation/components/MessageReference.js";
 import { NewConversationButton } from "../../../src/domains/conversation/components/NewConversationButton.js";
+import { ConversationCatalogStore } from "../../../src/domains/conversation/store/ConversationCatalogStore.js";
+import { ConversationListSection } from "../../../src/shell/sidebar/sections/ConversationListSection.js";
 
-// jsdom 未实现 window.confirm，硬删除确认统一 stub 为通过。
-vi.spyOn(window, "confirm").mockReturnValue(true);
+// G7 后不应再调用原生 prompt/confirm；spy 兜底并用于断言未触发。
+vi.spyOn(window, "prompt").mockReturnValue(null);
+vi.spyOn(window, "confirm").mockReturnValue(false);
 
 const item = Object.freeze({
   id: "conversation_a",
@@ -95,6 +99,157 @@ describe("ConversationItemMenu", () => {
     await user.click(screen.getByRole("button", { name: "对话操作" }));
     expect(screen.queryByText("重命名")).not.toBeInTheDocument();
     expect(screen.queryByText("删除")).not.toBeInTheDocument();
+  });
+});
+
+describe("ConversationDialogs", () => {
+  it("renames via the dialog without native prompt", async () => {
+    const user = userEvent.setup();
+    const onRenameValueChange = vi.fn();
+    const onRenameConfirm = vi.fn();
+    const onDeleteConfirm = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <ConversationDialogs
+        renameTarget={{ id: "conversation_a", title: "对话 a" }}
+        renameValue="对话 a"
+        onRenameValueChange={onRenameValueChange}
+        onRenameConfirm={onRenameConfirm}
+        onDeleteConfirm={onDeleteConfirm}
+        onClose={onClose}
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: "对话名称" }) as HTMLInputElement;
+    expect(input.value).toBe("对话 a");
+    await user.clear(input);
+    await user.type(input, "新名字");
+    expect(onRenameValueChange).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    expect(onRenameConfirm).toHaveBeenCalledTimes(1);
+    expect(onDeleteConfirm).not.toHaveBeenCalled();
+    expect(window.prompt).not.toHaveBeenCalled();
+  });
+
+  it("disables rename save for an empty name", async () => {
+    const user = userEvent.setup();
+    const onRenameConfirm = vi.fn();
+    render(
+      <ConversationDialogs
+        renameTarget={{ id: "conversation_a", title: "对话 a" }}
+        renameValue=""
+        onRenameValueChange={() => {}}
+        onRenameConfirm={onRenameConfirm}
+        onDeleteConfirm={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    expect(onRenameConfirm).not.toHaveBeenCalled();
+  });
+
+  it("confirms deletion via the dialog without native confirm", async () => {
+    const user = userEvent.setup();
+    const onDeleteConfirm = vi.fn();
+    const onRenameConfirm = vi.fn();
+    render(
+      <ConversationDialogs
+        deleteTarget="conversation_a"
+        renameValue=""
+        onRenameValueChange={() => {}}
+        onRenameConfirm={onRenameConfirm}
+        onDeleteConfirm={onDeleteConfirm}
+        onClose={() => {}}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "删除" }));
+    expect(onDeleteConfirm).toHaveBeenCalledTimes(1);
+    expect(onRenameConfirm).not.toHaveBeenCalled();
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  it("closes on cancel", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(
+      <ConversationDialogs
+        renameTarget={{ id: "conversation_a", title: "对话 a" }}
+        renameValue="对话 a"
+        onRenameValueChange={() => {}}
+        onRenameConfirm={() => {}}
+        onDeleteConfirm={() => {}}
+        onClose={onClose}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ConversationListSection dialogs", () => {
+  function buildSection() {
+    const rename = vi.fn(async () => undefined);
+    const del = vi.fn(async () => undefined);
+    const api = {
+      conversations: {
+        list: vi.fn(async () => ({
+          conversations: [
+            {
+              metadata: {
+                id: "conversation_a",
+                workspaceId: "w1",
+                rootConversationId: "conversation_a",
+                status: "active",
+                createdAt: "2026-08-05T09:00:00.000Z",
+                updatedAt: "2026-08-05T09:00:00.000Z",
+                lastJournalSequence: 0,
+              },
+              activeAgentBinding: {
+                id: "b1",
+                conversationId: "conversation_a",
+                revision: 1,
+                status: "active",
+                createdAt: "2026-08-05T09:00:00.000Z",
+                agentType: "novel",
+                definitionVersion: "1.0.0",
+              },
+            },
+          ],
+        })),
+        create: vi.fn(),
+        open: vi.fn(),
+        rename,
+        delete: del,
+      },
+    } as never;
+    const store = new ConversationCatalogStore({ api });
+    return { store, rename, del };
+  }
+
+  it("renames through the custom dialog without native prompt", async () => {
+    const user = userEvent.setup();
+    const { store, rename } = buildSection();
+    await store.loadWorkspace("w1");
+    render(<ConversationListSection store={store} onSelect={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "对话操作" }));
+    await user.click(screen.getByText("重命名"));
+    const input = screen.getByRole("textbox", { name: "对话名称" }) as HTMLInputElement;
+    await user.clear(input);
+    await user.type(input, "雨夜对话");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    expect(rename).toHaveBeenCalledWith("conversation_a", "雨夜对话");
+    expect(window.prompt).not.toHaveBeenCalled();
+  });
+
+  it("deletes through the custom dialog without native confirm", async () => {
+    const user = userEvent.setup();
+    const { store, del } = buildSection();
+    await store.loadWorkspace("w1");
+    render(<ConversationListSection store={store} onSelect={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "对话操作" }));
+    await user.click(screen.getByText("删除"));
+    await user.click(screen.getByRole("button", { name: "删除" }));
+    expect(del).toHaveBeenCalledWith("conversation_a");
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 });
 

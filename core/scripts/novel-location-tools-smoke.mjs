@@ -149,6 +149,9 @@ try {
     progress,
   );
   assert.equal(readResult.details.locations.length, 2);
+  // content carries real data (provider serializes content only in the live turn).
+  assert.match(readResult.content[0].text, /^Locations read\.\n\{/);
+  assert.match(readResult.content[0].text, /"location_city"/);
   const city = readResult.details.locations.find(
     (entry) => entry.id === "location_city",
   );

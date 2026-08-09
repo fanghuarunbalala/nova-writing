@@ -3,7 +3,6 @@ import { noopLogger, type Logger } from "../../../observability/index.js";
 import type {
   ContextCheckpointStore,
   InteractionCoordinator,
-  PendingNudgeStore,
 } from "../../../runtime/index.js";
 import {
   RUNTIME_PERSISTENCE_RPC_METHOD,
@@ -39,7 +38,6 @@ export interface ParentRuntimePersistenceHandlerOptions {
   readonly journalReader: ConversationJournalReader;
   readonly journalService: ConversationJournalService;
   readonly messageStore: Pick<ConversationMessageFileStore, "list">;
-  readonly pendingNudgeStore?: Pick<PendingNudgeStore, "snapshot">;
   readonly contextCheckpointStore?: Pick<ContextCheckpointStore, "getActive">;
   readonly interactionCoordinator?: Pick<InteractionCoordinator, "snapshot">;
   readonly logger?: Logger;
@@ -52,7 +50,6 @@ export class ParentRuntimePersistenceHandler
   readonly #journalReader: ConversationJournalReader;
   readonly #journalService: ConversationJournalService;
   readonly #messageStore: Pick<ConversationMessageFileStore, "list">;
-  readonly #pendingNudgeStore?: Pick<PendingNudgeStore, "snapshot">;
   readonly #contextCheckpointStore?: Pick<ContextCheckpointStore, "getActive">;
   readonly #interactionCoordinator?: Pick<InteractionCoordinator, "snapshot">;
   readonly #logger: Logger;
@@ -62,7 +59,6 @@ export class ParentRuntimePersistenceHandler
     this.#journalReader = options.journalReader;
     this.#journalService = options.journalService;
     this.#messageStore = options.messageStore;
-    this.#pendingNudgeStore = options.pendingNudgeStore;
     this.#contextCheckpointStore = options.contextCheckpointStore;
     this.#interactionCoordinator = options.interactionCoordinator;
     this.#logger = (options.logger ?? noopLogger).child({
@@ -203,9 +199,8 @@ export class ParentRuntimePersistenceHandler
       this.#journalReader.getHighWatermark(request.conversationId),
       signal,
     );
-    const [nudge, contextCheckpoint, interaction] = await abortable(
+    const [contextCheckpoint, interaction] = await abortable(
       Promise.all([
-        this.#pendingNudgeStore?.snapshot(),
         this.#contextCheckpointStore?.getActive(request.conversationId),
         this.#interactionCoordinator?.snapshot(),
       ]),
@@ -215,13 +210,11 @@ export class ParentRuntimePersistenceHandler
       schemaVersion: RUNTIME_RECOVERY_SNAPSHOT_SCHEMA_VERSION,
       conversationId: request.conversationId,
       capturedThroughSequence,
-      ...(nudge === undefined ? {} : { nudge }),
       ...(contextCheckpoint === undefined ? {} : { contextCheckpoint }),
       ...(interaction === undefined ? {} : { interaction }),
     }, request.conversationId);
     this.#logger.info("runtime.persistence.recovery_loaded", {
       capturedThroughSequence,
-      hasNudge: nudge !== undefined,
       hasContextCheckpoint: contextCheckpoint !== undefined,
       hasInteraction: interaction !== undefined,
     });

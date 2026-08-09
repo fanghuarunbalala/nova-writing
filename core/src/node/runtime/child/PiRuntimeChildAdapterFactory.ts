@@ -90,7 +90,6 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
   async create({
     configuration,
     lifecycleController,
-    nudgeProviderCalls,
     runtimeSignals,
     policyEngine,
     effectCoordinator,
@@ -102,7 +101,6 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
       return await this.#createOnce({
         configuration,
         lifecycleController,
-        nudgeProviderCalls,
         runtimeSignals,
         policyEngine,
         effectCoordinator,
@@ -122,7 +120,6 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
   async #createOnce({
     configuration,
     lifecycleController,
-    nudgeProviderCalls,
     runtimeSignals,
     policyEngine,
     effectCoordinator,
@@ -186,9 +183,6 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
       }),
       eventBridge,
       dispatchAwareStreamFunction,
-      ...(nudgeProviderCalls === undefined
-        ? {}
-        : { nudgeProviderCalls }),
       ...(runtimeSignals === undefined ? {} : { runtimeSignals }),
       ...(policyEngine === undefined ? {} : { policyEngine }),
       ...(effectCoordinator === undefined ? {} : { effectCoordinator }),

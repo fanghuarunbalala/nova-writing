@@ -8,7 +8,6 @@ import {
 import { captureContextCheckpoint } from "../../context/index.js";
 import type { ToolApprovalInteractionSnapshot } from "../../interaction/index.js";
 import { coreRuntimeMessageSchemaRegistry } from "../../message/index.js";
-import { captureNudgeLease, capturePendingNudge } from "../../nudge/index.js";
 import { captureToolApprovalIdentity } from "../../tools/execution/index.js";
 import {
   MESSAGE_PROJECTION_FORMAT_VERSION,
@@ -284,7 +283,7 @@ export function captureRuntimeRecoverySnapshot(
     const record = exactRecord(
       captureJsonValue(value),
       ["schemaVersion", "conversationId", "capturedThroughSequence"],
-      ["nudge", "contextCheckpoint", "interaction"],
+      ["contextCheckpoint", "interaction"],
     );
     if (record.schemaVersion !== RUNTIME_RECOVERY_SNAPSHOT_SCHEMA_VERSION) throw new Error();
     const conversationId = identity(record.conversationId);
@@ -295,9 +294,6 @@ export function captureRuntimeRecoverySnapshot(
       );
     }
     const capturedThroughSequence = nonNegativeInteger(record.capturedThroughSequence);
-    const nudge = record.nudge === undefined
-      ? undefined
-      : capturePendingNudgeStoreSnapshot(record.nudge, capturedThroughSequence);
     const contextCheckpoint = record.contextCheckpoint === undefined
       ? undefined
       : captureStrictContextCheckpoint(record.contextCheckpoint);
@@ -315,7 +311,6 @@ export function captureRuntimeRecoverySnapshot(
       schemaVersion: RUNTIME_RECOVERY_SNAPSHOT_SCHEMA_VERSION,
       conversationId,
       capturedThroughSequence,
-      ...(nudge === undefined ? {} : { nudge }),
       ...(contextCheckpoint === undefined ? {} : { contextCheckpoint }),
       ...(interaction === undefined ? {} : { interaction }),
     });
@@ -386,40 +381,6 @@ function captureMessageRecord(
   });
 }
 
-function capturePendingNudgeStoreSnapshot(value: unknown, throughSequence: number) {
-  const record = exactRecord(
-    value,
-    ["schemaVersion", "nudges", "leases", "consumptions"],
-    ["deliveryAttempts"],
-  );
-  if ((record.schemaVersion !== 1 && record.schemaVersion !== 2) || !Array.isArray(record.nudges) ||
-      !Array.isArray(record.leases) || !Array.isArray(record.consumptions) ||
-      (record.deliveryAttempts !== undefined && !Array.isArray(record.deliveryAttempts))) {
-    throw new Error();
-  }
-  const nudges = Object.freeze(record.nudges.map((entry) => {
-    assertPendingNudgeKeys(entry);
-    const nudge = capturePendingNudge(entry);
-    if (nudge.scheduledSequence > throughSequence) throw new Error();
-    return nudge;
-  }));
-  const leases = Object.freeze(record.leases.map((entry) => {
-    assertNudgeLeaseKeys(entry);
-    return captureNudgeLease(entry);
-  }));
-  const consumptions = Object.freeze(record.consumptions.map(captureNudgeConsumption));
-  const deliveryAttempts = record.deliveryAttempts === undefined
-    ? undefined
-    : Object.freeze(record.deliveryAttempts.map(captureNudgeDeliveryAttempt));
-  return deepFreeze({
-    schemaVersion: 2 as const,
-    nudges,
-    leases,
-    consumptions,
-    ...(deliveryAttempts === undefined ? {} : { deliveryAttempts }),
-  });
-}
-
 function captureStrictContextCheckpoint(value: unknown) {
   const record = exactRecord(
     value,
@@ -448,60 +409,6 @@ function captureStrictContextCheckpoint(value: unknown) {
     }
   }
   return captureContextCheckpoint(record);
-}
-
-function assertPendingNudgeKeys(value: unknown): void {
-  exactRecord(
-    value,
-    ["id", "policyId", "templateId", "templateVersion", "priority", "dedupeKey", "parameters",
-      "exclusive", "placement", "delivery", "state", "targetRunId", "scheduledSequence", "scheduledAt"],
-    ["targetTurnNumber", "cooldownTurns", "expiresAfterTurn", "expiresAt", "acknowledgementRef", "conditionRef",
-      "deliveryCount", "reminderKind"],
-  );
-}
-
-function captureNudgeDeliveryAttempt(value: unknown) {
-  const record = exactRecord(
-    value,
-    ["nudgeId", "leaseId", "providerCallId", "attemptNumber", "leasedAt"],
-    ["status", "completedAt"],
-  );
-  const status = record.status === undefined ? "leased" : record.status;
-  if (status !== "leased" && status !== "released" && status !== "confirmed") {
-    throw new Error();
-  }
-  return Object.freeze({
-    nudgeId: nonBlank(record.nudgeId),
-    leaseId: nonBlank(record.leaseId),
-    providerCallId: nonBlank(record.providerCallId),
-    attemptNumber: positiveInteger(record.attemptNumber),
-    leasedAt: timestamp(record.leasedAt),
-    status,
-    ...(record.completedAt === undefined ? {} : { completedAt: timestamp(record.completedAt) }),
-  });
-}
-
-function assertNudgeLeaseKeys(value: unknown): void {
-  exactRecord(value, ["leaseId", "providerCallId", "targetRunId", "nudgeIds", "leasedAt"], ["targetTurnNumber"]);
-}
-
-function captureNudgeConsumption(value: unknown) {
-  const record = exactRecord(
-    value,
-    ["nudgeId", "policyId", "dedupeKey", "leaseId", "providerCallId", "targetRunId", "leasedAt", "consumedAt"],
-    ["targetTurnNumber"],
-  );
-  return Object.freeze({
-    nudgeId: nonBlank(record.nudgeId),
-    policyId: nonBlank(record.policyId),
-    dedupeKey: nonBlank(record.dedupeKey),
-    leaseId: nonBlank(record.leaseId),
-    providerCallId: nonBlank(record.providerCallId),
-    targetRunId: nonBlank(record.targetRunId),
-    ...(record.targetTurnNumber === undefined ? {} : { targetTurnNumber: positiveInteger(record.targetTurnNumber) }),
-    leasedAt: timestamp(record.leasedAt),
-    consumedAt: timestamp(record.consumedAt),
-  });
 }
 
 function captureInteractionSnapshot(

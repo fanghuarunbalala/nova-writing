@@ -1,5 +1,14 @@
 /** Captures immutable Runtime Policy values and exact Context budget arithmetic. */
-import { captureNudgeEffect } from "../nudge/index.js";
+import {
+  canonicalStringifyJson,
+  isJsonValue,
+  type JsonObject,
+  type JsonValue,
+} from "../../event/index.js";
+import {
+  isReminderKind,
+  type ReminderKind,
+} from "../../event/output/payload/SystemReminderAttachedPayload.js";
 import {
   captureContextPressureSnapshot,
   type ContextPressureSnapshot,
@@ -9,16 +18,11 @@ import {
   RUNTIME_POLICY_PHASE,
   type ContextCompactionEffect,
   type ContextCompactionPolicyState,
-  type NudgeAcknowledgePolicyEffect,
-  type NudgeExpirePolicyEffect,
-  type NudgeResolvePolicyEffect,
-  type NudgeSchedulePolicyEffect,
-  type NudgeSupersedePolicyEffect,
   type RuntimePolicyContext,
   type RuntimePolicyEffect,
-  type RuntimeNudgeLifecycleEffect,
   type RuntimePolicyRuntimeSignals,
   type RuntimePolicyState,
+  type SystemReminderAttachEffect,
 } from "./RuntimePolicyProtocol.js";
 import type { ComposeModeSnapshot } from "../compose/ComposeModeState.js";
 import {
@@ -210,117 +214,38 @@ export function captureContextCompactionEffect(
 
 export function captureRuntimePolicyEffect(value: unknown): RuntimePolicyEffect {
   const record = requireRecordOrFailure(value);
-  if (record.kind === "nudge") {
-    try {
-      return captureNudgeEffect(value);
-    } catch {
-      throw failure(
-        RUNTIME_POLICY_PROTOCOL_FAILURE.invalidEffect,
-        captureIdentity(value),
-      );
-    }
-  }
-  if (
-    record.kind === "nudge_schedule" ||
-    record.kind === "nudge_acknowledge" ||
-    record.kind === "nudge_resolve" ||
-    record.kind === "nudge_expire" ||
-    record.kind === "nudge_supersede"
-  ) {
-    try {
-      return captureRuntimeNudgeLifecycleEffect(value);
-    } catch {
-      throw failure(
-        RUNTIME_POLICY_PROTOCOL_FAILURE.invalidEffect,
-        captureIdentity(value),
-      );
-    }
+  if (record.kind === "system_reminder_attach") {
+    return captureSystemReminderAttachEffect(value);
   }
   return captureContextCompactionEffect(value);
 }
 
-export function captureRuntimeNudgeLifecycleEffect(
+export function captureSystemReminderAttachEffect(
   value: unknown,
-): RuntimeNudgeLifecycleEffect {
-  const record = requireRecord(value);
-  const kind = record.kind;
-  const policyId = requireNonBlank(record.policyId);
-  const conversationId = requireNonBlank(record.conversationId);
-  const runId = requireNonBlank(record.runId);
-  if (kind === "nudge_schedule") {
-    const effect = captureNudgeEffect(record.effect);
-    const nudgeId = requireNonBlank(record.nudgeId);
-    const scheduledSequence = requirePositiveInteger(record.scheduledSequence);
-    const scheduledAt = requireTimestamp(record.scheduledAt);
-    if (
-      effect.policyId !== policyId ||
-      effect.targetRunId !== runId ||
-      !nudgeId
-    ) throw new Error();
+): SystemReminderAttachEffect {
+  const identity = captureIdentity(value);
+  try {
+    const record = requireRecord(value);
+    if (record.kind !== "system_reminder_attach") throw new Error();
+    const conversationId = requireNonBlank(record.conversationId);
+    const runId = requireNonBlank(record.runId);
+    const reminderKind = record.reminderKind;
+    if (!isReminderKind(reminderKind)) throw new Error();
     return Object.freeze({
-      kind,
-      policyId,
+      kind: "system_reminder_attach" as const,
+      policyId: requireNonBlank(record.policyId),
       conversationId,
       runId,
-      nudgeId,
-      effect,
-      scheduledSequence,
-      scheduledAt,
-    } satisfies NudgeSchedulePolicyEffect);
+      reminderId: requireNonBlank(record.reminderId),
+      reminderKind: reminderKind as ReminderKind,
+      templateId: requireNonBlank(record.templateId),
+      templateVersion: requireNonBlank(record.templateVersion),
+      parameters: captureParameters(record.parameters),
+      order: requireNonNegativeInteger(record.order),
+    });
+  } catch {
+    throw failure(RUNTIME_POLICY_PROTOCOL_FAILURE.invalidEffect, identity);
   }
-  if (kind === "nudge_acknowledge") {
-    return Object.freeze({
-      kind,
-      policyId,
-      conversationId,
-      runId,
-      nudgeId: requireNonBlank(record.nudgeId),
-      acknowledgementRef: captureReference(record.acknowledgementRef),
-      acknowledgedAt: requireTimestamp(record.acknowledgedAt),
-    } satisfies NudgeAcknowledgePolicyEffect);
-  }
-  if (kind === "nudge_resolve") {
-    return Object.freeze({
-      kind,
-      policyId,
-      conversationId,
-      runId,
-      nudgeId: requireNonBlank(record.nudgeId),
-      conditionRef: captureReference(record.conditionRef),
-      resolvedAt: requireTimestamp(record.resolvedAt),
-    } satisfies NudgeResolvePolicyEffect);
-  }
-  if (kind === "nudge_expire") {
-    const targetRunId = requireNonBlank(record.targetRunId);
-    if (targetRunId !== runId) throw new Error();
-    return Object.freeze({
-      kind,
-      policyId,
-      conversationId,
-      runId,
-      targetRunId,
-      evaluatedAt: requireTimestamp(record.evaluatedAt),
-      ...captureOptionalPositiveInteger(record.currentTurnNumber),
-      ...captureOptionalBoolean(record.runEnded),
-    } satisfies NudgeExpirePolicyEffect);
-  }
-  if (kind === "nudge_supersede") {
-    const nudgeId = requireNonBlank(record.nudgeId);
-    const targetRunId = requireNonBlank(record.targetRunId);
-    const supersededByNudgeId = requireNonBlank(record.supersededByNudgeId);
-    if (targetRunId !== runId || nudgeId === supersededByNudgeId) throw new Error();
-    return Object.freeze({
-      kind,
-      policyId,
-      conversationId,
-      runId,
-      nudgeId,
-      targetRunId,
-      supersededByNudgeId,
-      supersededAt: requireTimestamp(record.supersededAt),
-    } satisfies NudgeSupersedePolicyEffect);
-  }
-  throw new Error();
 }
 
 export function calculateContextPolicyTokenBoundaries(
@@ -410,14 +335,9 @@ function requireNonBlank(value: unknown): string {
   return value;
 }
 
-function captureReference(value: unknown): {
-  readonly id: string;
-  readonly version: string;
-} {
-  const record = requireRecord(value);
-  const id = requireNonBlank(record.id);
-  const version = requireNonBlank(record.version);
-  return Object.freeze({ id, version });
+function captureParameters(value: unknown): Readonly<Record<string, JsonValue>> {
+  if (!isPlainRecord(value) || !isJsonValue(value)) throw new Error();
+  return deepFreeze(JSON.parse(canonicalStringifyJson(value)) as JsonObject);
 }
 
 function requireTimestamp(value: unknown): string {
@@ -441,19 +361,20 @@ function requireNonNegativeInteger(value: unknown): number {
   return value as number;
 }
 
-function captureOptionalPositiveInteger(
-  value: unknown,
-): { readonly currentTurnNumber?: number } {
-  if (value === undefined) return {};
-  return { currentTurnNumber: requirePositiveInteger(value) };
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
-function captureOptionalBoolean(
-  value: unknown,
-): { readonly runEnded?: boolean } {
-  if (value === undefined) return {};
-  if (typeof value !== "boolean") throw new Error();
-  return { runEnded: value };
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const nested of Object.values(value)) deepFreeze(nested);
+    Object.freeze(value);
+  }
+  return value;
 }
 
 function captureIdentity(value: unknown): {

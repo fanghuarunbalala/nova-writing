@@ -29,10 +29,6 @@ import {
   type RuntimePolicyRuntimeSignals,
   type RuntimePolicyState,
 } from "../../policy/index.js";
-import type {
-  NudgeProviderCallCoordinator,
-  PreparedNudgeProviderCall,
-} from "../../nudge/index.js";
 import {
   coreRuntimeMessageSchemaRegistry,
   CORE_RUNTIME_MESSAGE_TYPE,
@@ -81,7 +77,6 @@ export interface PiAgentCoreAdapterOptions {
   messageConverter: PiRuntimeMessageConverter;
   eventBridge: PiAgentEventBridge;
   messageSchemaRegistry?: RuntimeMessageSchemaRegistry;
-  nudgeProviderCalls?: NudgeProviderCallCoordinator;
   contextProjectionProviderCalls?: ContextProjectionProviderCallCoordinator;
   checkpointApplications?: ContextCheckpointApplicationCoordinator;
   dispatchAwareStreamFunction?: PiDispatchAwareStreamFunction;
@@ -108,6 +103,8 @@ interface ActivePiRun {
   canonicalRuntimeMessages?: readonly RuntimeMessageSnapshot[];
   canonicalPiMessages?: readonly AgentMessage[];
   pendingContextProjection?: PreparedPiContextProjection;
+  /** 本 run 已附加的 reminder（按 reminderId 键、插序），作为瞬态 overlay 注入每次 provider call。 */
+  runReminders: Map<string, ActiveRunReminder>;
   turnNumber: number;
   providerCallOrdinal: number;
 }
@@ -118,6 +115,13 @@ type PiTerminalStopReason =
   | "toolUse"
   | "error"
   | "aborted";
+
+/** 本 run 已附加的 reminder（瞬态 overlay 回放凭据，不入 journal/canonical）。 */
+interface ActiveRunReminder {
+  readonly kind: string;
+  readonly content: string;
+  readonly order: number;
+}
 
 interface CapturedAgentRuntimeStreamRequest extends AgentRuntimeStreamRequest {
   readonly context: AgentRuntimeStreamRequest["context"] & {
@@ -135,7 +139,6 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
   private readonly messageConverter: PiRuntimeMessageConverter;
   private readonly eventBridge: PiAgentEventBridge;
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
-  private readonly nudgeProviderCalls?: NudgeProviderCallCoordinator;
   private readonly contextProjectionProviderCalls?: ContextProjectionProviderCallCoordinator;
   private readonly checkpointApplications?: ContextCheckpointApplicationCoordinator;
   private readonly dispatchAwareStreamFunction?: PiDispatchAwareStreamFunction;
@@ -157,7 +160,6 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     this.logger = (options.logger ?? noopLogger).child({
       component: "pi_agent_core_adapter",
     });
-    this.nudgeProviderCalls = options.nudgeProviderCalls;
     this.contextProjectionProviderCalls = options.contextProjectionProviderCalls;
     this.checkpointApplications = options.checkpointApplications;
     this.dispatchAwareStreamFunction = options.dispatchAwareStreamFunction;
@@ -168,10 +170,18 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     this.providerCallIdFactory =
       options.providerCallIdFactory ?? new RandomPiProviderCallIdFactory();
     this.providerCallClock = options.providerCallClock ?? systemPiProviderCallClock;
-    const requiresDispatchHooks =
-      this.nudgeProviderCalls !== undefined ||
-      this.checkpointApplications !== undefined;
-    if (requiresDispatchHooks !== (this.dispatchAwareStreamFunction !== undefined)) {
+    // checkpoint 上下文投影需要 dispatch hooks（confirmDispatched）。dispatchAwareStreamFunction
+    // 可独立于 checkpoint 存在——它是 Pi provider 的真实执行器（PiProviderExecutionFactory
+    // 装配），无 checkpoint 时其 hooks 为空操作。
+    // Checkpoint context projection requires dispatch hooks (confirmDispatched). The
+    // dispatch-aware stream function may exist on its own — it is the real Pi provider
+    // dispatcher; without checkpoint applications its hooks are no-ops.
+    const hasDispatchAwareStreamFunction =
+      this.dispatchAwareStreamFunction !== undefined;
+    if (
+      this.checkpointApplications !== undefined &&
+      !hasDispatchAwareStreamFunction
+    ) {
       throw this.fail(PI_AGENT_CORE_ADAPTER_FAILURE.invalidRequest);
     }
     if (
@@ -196,7 +206,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     if (
       this.contextProjectionProviderCalls !== undefined ||
       this.policyEngine !== undefined ||
-      requiresDispatchHooks
+      hasDispatchAwareStreamFunction
     ) {
       this.agent.streamFunction = (model, context, streamOptions) =>
         this.streamProviderCall(model, context, streamOptions);
@@ -232,6 +242,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       phase: "preparing",
       cancelRequested: false,
       sawAgentEnd: false,
+      runReminders: new Map(),
       turnNumber: 0,
       providerCallOrdinal: 0,
     };
@@ -469,39 +480,44 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
   }
 
   /**
-   * 把 nudge 构造成瞬态 system.reminder 消息并转换为 Pi 消息。
-   * Builds a transient system.reminder message from nudge content and converts it
-   * to a Pi message for this provider call only (never persisted).
+   * 把本 run 已附加的 reminders 构造成瞬态 system.reminder 消息并转换为 Pi 消息。
+   * Builds transient system.reminder messages from the run's attached reminders and
+   * converts them to Pi messages for this provider call only (never persisted).
    */
   private async buildTransientReminderMessages(
-    kind: string,
-    content: string,
+    reminders: ReadonlyMap<string, ActiveRunReminder>,
     request: CapturedAgentRuntimeStreamRequest,
   ): Promise<readonly AgentMessage[]> {
-    const order = request.context.messages.length + 1;
+    const baseOrder = request.context.messages.length + 1;
     const timestamp =
       request.context.messages.length > 0
         ? request.context.messages[request.context.messages.length - 1]!.timestamp
         : "1970-01-01T00:00:00.000Z";
-    const snapshot: RuntimeMessageSnapshot = {
-      id: `message:transient:${request.runId}:${order}`,
-      conversationId: request.conversationId,
-      role: "system",
-      messageType: CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
-      schemaVersion: RUNTIME_MESSAGE_SCHEMA_VERSION,
-      timestamp,
-      runId: request.runId,
-      payload: {
-        kind,
-        content,
-        order,
-      },
-    };
+    const snapshots: RuntimeMessageSnapshot[] = [];
+    let index = 0;
+    for (const reminder of reminders.values()) {
+      index += 1;
+      snapshots.push({
+        id: `message:transient:${request.runId}:${baseOrder + index}`,
+        conversationId: request.conversationId,
+        role: "system",
+        messageType: CORE_RUNTIME_MESSAGE_TYPE.systemReminder,
+        schemaVersion: RUNTIME_MESSAGE_SCHEMA_VERSION,
+        timestamp,
+        runId: request.runId,
+        payload: {
+          kind: reminder.kind,
+          content: reminder.content,
+          order: reminder.order,
+        },
+      });
+    }
+    if (snapshots.length === 0) return [];
     return this.messageConverter.convert({
       conversationId: request.conversationId,
       runId: request.runId,
       purpose: PI_RUNTIME_MESSAGE_CONVERSION_PURPOSE.prompt,
-      messages: [snapshot],
+      messages: snapshots,
     });
   }
 
@@ -535,7 +551,18 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       conversationId: active.request.conversationId,
     };
     const effects = this.policyEngine!.evaluate(context, state);
-    await this.effectCoordinator!.execute({ context, effects });
+    const receipt = await this.effectCoordinator!.execute({ context, effects });
+    // 同 run 注入：本次调用附加的 reminder 记入 runReminders，后续每次 provider call
+    // 尾部作为瞬态 system.reminder 回放（不入 journal/canonical/state.messages）。
+    // In-run injection: attach this call's reminders into runReminders so later
+    // provider calls replay them as transient system.reminder overlay.
+    for (const attachment of receipt.attachedReminders) {
+      active.runReminders.set(attachment.reminderId, {
+        kind: attachment.kind,
+        content: attachment.content,
+        order: attachment.order,
+      });
+    }
   }
 
   private async transformProviderContext(
@@ -644,7 +671,6 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
     options: Parameters<StreamFn>[2],
   ): Promise<Awaited<ReturnType<StreamFn>>> {
     const active = this.activeRun;
-    const nudgeCoordinator = this.nudgeProviderCalls;
     const projectionCoordinator = this.contextProjectionProviderCalls;
     const checkpointApplications = this.checkpointApplications;
     const dispatchDelegate = this.dispatchAwareStreamFunction;
@@ -652,9 +678,10 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       !active ||
       active.phase !== "executing" ||
       active.turnNumber < 1 ||
-      (!nudgeCoordinator && !projectionCoordinator && !this.policyEngine) ||
-      ((nudgeCoordinator !== undefined || checkpointApplications !== undefined) &&
-        dispatchDelegate === undefined)
+      (!projectionCoordinator &&
+        !this.policyEngine &&
+        !this.dispatchAwareStreamFunction) ||
+      (checkpointApplications !== undefined && dispatchDelegate === undefined)
     ) {
       throw active
         ? this.rememberProviderDispatchFailure(active)
@@ -677,8 +704,8 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         providerCallOrdinal: active.providerCallOrdinal,
       });
     const requestedAt = this.providerCallClock.now();
-    // policy 引擎先行：求值 + 执行效果（nudge_schedule/nudge_acknowledge → manager），
-    // 再让 nudge coordinator 在本次 provider call 上租赁（schedule 后立即交付）。
+    // policy 引擎先行：求值 + 执行效果（system_reminder_attach → 持久化事件 +
+    // runReminders 注入）。触发后的当次及后续 provider call 尾部都会带上瞬态 overlay。
     if (this.policyEngine && this.effectCoordinator) {
       try {
         await this.evaluateRuntimePolicies(active, providerCallId, requestedAt);
@@ -686,32 +713,13 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         throw this.rememberProviderDispatchFailure(active);
       }
     }
-    let prepared: PreparedNudgeProviderCall | undefined;
-    if (nudgeCoordinator) {
-      try {
-        prepared = await nudgeCoordinator.prepare({
-          conversationId: active.request.conversationId,
-          runId: active.request.runId,
-          providerCallId,
-          targetTurnNumber: active.providerCallOrdinal,
-          requestedAt,
-        });
-      } catch {
-        throw this.rememberProviderDispatchFailure(active);
-      }
-    }
 
-    const lifecycle = createDispatchLifecycle(prepared);
     const checkpointId = pendingProjection?.result.projection.checkpointId;
     let dispatchSettled = false;
     const hooks: PiProviderDispatchHooks = Object.freeze({
       onDispatched: async (dispatchedAt = this.providerCallClock.now()) => {
         if (dispatchSettled) return;
-        if (prepared && lifecycle.state !== "pending") {
-          throw this.rememberProviderDispatchFailure(active);
-        }
         dispatchSettled = true;
-        if (prepared) lifecycle.state = "dispatched";
         try {
           if (checkpointApplications && checkpointId) {
             await checkpointApplications.confirmDispatched({
@@ -722,43 +730,28 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
               dispatchedAt,
             });
           }
-          if (prepared) {
-            await nudgeCoordinator!.confirmDispatched(prepared, dispatchedAt);
-          }
         } catch {
           throw this.rememberProviderDispatchFailure(active);
         }
       },
-      onFailedBeforeDispatch: async (failedAt = this.providerCallClock.now()) => {
+      onFailedBeforeDispatch: async () => {
         if (dispatchSettled) return;
         dispatchSettled = true;
-        if (!prepared) return;
-        if (lifecycle.state === "released") return;
-        if (lifecycle.state !== "pending") {
-          throw this.rememberProviderDispatchFailure(active);
-        }
-        lifecycle.state = "released";
-        try {
-          await nudgeCoordinator!.releaseBeforeDispatch(prepared, failedAt);
-        } catch {
-          throw this.rememberProviderDispatchFailure(active);
-        }
       },
     });
 
-    // systemPrompt 恒为 base（投影与 nudge 均不再拼入 system prompt）；
-    // nudge 作为瞬态 system.reminder 消息注入本次 provider 调用的消息数组，
-    // 不进 canonical、不落 state.messages（保持敏感内容脱敏）。
-    // The system prompt always stays the base; nudges are injected as transient
-    // system.reminder messages into this provider call only, never persisted or
-    // written to agent.state.messages (keeping sensitive content redacted).
+    // systemPrompt 恒为 base（投影与 reminders 均不再拼入 system prompt）；
+    // reminders 作为瞬态 system.reminder 消息注入本次 provider 调用的消息数组尾部，
+    // 不进 canonical、不落 state.messages（保持敏感内容脱敏、prefill 前缀稳定）。
+    // The system prompt always stays the base; reminders are injected as transient
+    // system.reminder messages at the tail of this provider call only, never
+    // persisted or written to agent.state.messages (keeping prefill prefix stable).
     const projectedSystemPrompt =
       pendingProjection?.result.context.systemPrompt ?? context.systemPrompt ?? "";
     let transientReminderMessages: readonly AgentMessage[] = [];
-    if (prepared) {
+    if (active.runReminders.size > 0) {
       transientReminderMessages = await this.buildTransientReminderMessages(
-        prepared.overlay.reminderKind ?? "nudge",
-        prepared.overlay.content,
+        active.runReminders,
         active.request,
       );
     }
@@ -781,17 +774,6 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
         ? await dispatchDelegate!(model, providerContext, options, hooks)
         : await this.baseStreamFunction(model, providerContext, options);
     } catch (error) {
-      if (prepared && lifecycle.state === "pending") {
-        lifecycle.state = "released";
-        try {
-          await nudgeCoordinator!.releaseBeforeDispatch(
-            prepared,
-            this.providerCallClock.now(),
-          );
-        } catch {
-          throw this.rememberProviderDispatchFailure(active);
-        }
-      }
       throw error;
     } finally {
       if (active.pendingContextProjection === pendingProjection) {
@@ -799,20 +781,13 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       }
     }
 
-    if (prepared || (checkpointApplications && checkpointId)) {
+    if (checkpointApplications && checkpointId) {
       const originalResult = response.result.bind(response);
       let guardedResult: ReturnType<typeof originalResult> | undefined;
       response.result = () => {
         guardedResult ??= (async () => {
           const result = await originalResult();
           if (!dispatchSettled) {
-            if (prepared) {
-              lifecycle.state = "released";
-              await nudgeCoordinator!.releaseBeforeDispatch(
-                prepared,
-                this.providerCallClock.now(),
-              );
-            }
             throw this.rememberProviderDispatchFailure(active);
           }
           return result;
@@ -826,7 +801,7 @@ export class PiAgentCoreAdapter implements AgentRuntimeAdapter {
       providerCallId,
       turnNumber: active.turnNumber,
       providerCallOrdinal: active.providerCallOrdinal,
-      hasNudgeOverlay: prepared !== undefined,
+      hasReminderOverlay: active.runReminders.size > 0,
       hasCheckpointOverlay:
         pendingProjection?.result.checkpointOverlay !== undefined,
     });
@@ -1035,14 +1010,4 @@ function createSettlement(): {
     resolve = settle;
   });
   return Object.freeze({ promise, resolve });
-}
-
-interface DispatchLifecycle {
-  state: "inactive" | "pending" | "dispatched" | "released";
-}
-
-function createDispatchLifecycle(
-  prepared: PreparedNudgeProviderCall | undefined,
-): DispatchLifecycle {
-  return { state: prepared ? "pending" : "inactive" };
 }

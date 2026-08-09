@@ -7,7 +7,6 @@ import {
   AgentRuntimePolicyServices,
   AgentRuntimePolicyServicesError,
   InMemoryAgentRuntimePolicyServicesResolver,
-  NUDGE_SELECTION_LIMIT,
   PolicyBoundAgentRuntimeAdapterFactory,
   RuntimePolicyEngine,
 } from "../dist/index.js";
@@ -49,7 +48,6 @@ const policyServices = new AgentRuntimePolicyServices({
   runtimePolicyEngine: new RuntimePolicyEngine(),
   contextProjectionProviderCalls: { kind: "context" },
   checkpointApplications: { kind: "checkpoint" },
-  nudgeProviderCalls: { kind: "nudge" },
 });
 const resolver = new InMemoryAgentRuntimePolicyServicesResolver([{
   runtimePolicyId: "default",
@@ -72,7 +70,6 @@ const factory = new PolicyBoundAgentRuntimeAdapterFactory({
 assert.equal(await factory.create(configuration), adapter);
 assert.equal(created[0].receivedConfiguration, configuration);
 assert.equal(created[0].receivedServices, policyServices);
-assert.equal(NUDGE_SELECTION_LIMIT.maximum, 2);
 assert.equal(Object.isFrozen(policyServices), true);
 
 const missingConfiguration = new AgentRuntimeConfiguration({

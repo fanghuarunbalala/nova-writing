@@ -7,8 +7,8 @@
  * TodoWrite 调用即清空计数（写后重新计数，写后 TODO_IDLE_SUSTAINED_CALLS 个未写 call 仍触发）。
  * 计数在 policy 实例内 per-conversation latch 里跨 run 存活（child 进程内跨 run 共享；
  * 跨进程重启由 todo journal 重放恢复 lastUpdatedRunId，计数进程内分段、不跨进程续计）。
- * 交付：NUDGE_DELIVERY.once——每 run 至多调度一条，交付即 consumed，不粘着；
- * 下一 run 若仍未调用 TodoWrite 则重新调度（store 跨 run 重新激活）。
+ * 交付：持久化 `system_reminder_attach(kind: todo_idle)`——每 run 至多一条，latch
+ * `scheduledRunId` 守卫（下一 run 的 runId 不同自然重新触发）。
  */
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import {
@@ -18,11 +18,9 @@ import {
   type RuntimePolicyEffect,
   type RuntimePolicyState,
 } from "../../policy/index.js";
-import type { NudgeEffect } from "../index.js";
-import { NUDGE_DELIVERY } from "../NudgeProtocol.js";
 import type { NudgeTemplate } from "../NudgeTemplateRegistry.js";
 import type { NudgeDefinition } from "./NudgeDefinition.js";
-import { createNudgeScheduleEffect } from "./effectBuilders.js";
+import { createSystemReminderAttachEffect } from "./effectBuilders.js";
 
 /** RuntimePolicy.id；引擎断言 effect.policyId === policy.id。 */
 const TODO_IDLE_POLICY_ID = "todo_idle";
@@ -33,7 +31,6 @@ export const TODO_IDLE_NUDGE_VERSION = "1.0.0";
 export const TODO_IDLE_TOOL_GROUP = "runtime.todo";
 /** 连续多少次 provider call（turn）未调用 TodoWrite 后才提醒。 */
 export const TODO_IDLE_SUSTAINED_CALLS = 3;
-export const TODO_IDLE_NUDGE_PRIORITY = 30;
 /** 模板里的稳定断言标记（smoke 用；改动模板时须同步）。 */
 export const TODO_IDLE_MARK = "待办列表维护提醒";
 
@@ -97,7 +94,7 @@ export class TodoNudgePolicy implements RuntimePolicy {
     latch = { ...latch, callsSinceTodoWrite: latch.callsSinceTodoWrite + 1 };
     this.latches.set(conversationId, latch);
 
-    // 4. schedule 条件：有 snapshot、计数达阈值、且本 run 尚未调度过（每 run 至多一次）。
+    // 4. attach 条件：有 snapshot、计数达阈值、且本 run 尚未 attach 过（每 run 至多一次）。
     const effects: RuntimePolicyEffect[] = [];
     if (
       todos !== undefined &&
@@ -105,23 +102,25 @@ export class TodoNudgePolicy implements RuntimePolicy {
       latch.scheduledRunId !== context.runId
     ) {
       effects.push(
-        createNudgeScheduleEffect({
+        createSystemReminderAttachEffect({
           policyId: this.id,
           conversationId,
           runId: context.runId,
-          nudgeId: TODO_IDLE_NUDGE_ID,
-          effect: createTodoIdleNudgeEffect(context.runId),
-          evaluatedAt: context.evaluatedAt,
+          reminderId: TODO_IDLE_NUDGE_ID,
+          reminderKind: "todo_idle",
+          templateId: TODO_IDLE_NUDGE_ID,
+          templateVersion: TODO_IDLE_NUDGE_VERSION,
+          parameters: Object.freeze({}),
         }),
       );
       latch = { ...latch, scheduledRunId: context.runId };
       this.latches.set(conversationId, latch);
-      this.logger.debug("todo.nudge.scheduled", {
+      this.logger.debug("todo.reminder.attached", {
         conversationId,
         callsSinceTodoWrite: latch.callsSinceTodoWrite,
       });
     }
-    // scheduledRunId 不主动清：仅作 per-run 守卫，下一 run 的 runId 不同自然重新调度。
+    // scheduledRunId 不主动清：仅作 per-run 守卫，下一 run 的 runId 不同自然重新触发。
     return Object.freeze(effects);
   }
 }
@@ -133,21 +132,6 @@ interface TodoIdleLatch {
   /** 本 run 是否已观察到一次 TodoWrite；写清空每 run 只触发一次。 */
   readonly hadWriteThisRun: boolean;
   readonly scheduledRunId?: string;
-}
-
-function createTodoIdleNudgeEffect(runId: string): NudgeEffect {
-  return Object.freeze({
-    kind: "nudge",
-    policyId: TODO_IDLE_POLICY_ID,
-    templateId: TODO_IDLE_NUDGE_ID,
-    templateVersion: TODO_IDLE_NUDGE_VERSION,
-    reminderKind: "todo_idle",
-    delivery: NUDGE_DELIVERY.once,
-    priority: TODO_IDLE_NUDGE_PRIORITY,
-    dedupeKey: "todo_idle",
-    targetRunId: runId,
-    parameters: Object.freeze({}),
-  });
 }
 
 export const todoIdleNudgeTemplate: NudgeTemplate = {

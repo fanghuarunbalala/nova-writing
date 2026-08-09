@@ -11,10 +11,7 @@ import type { NudgeDefinition } from "./NudgeDefinition.js";
 
 export type { NudgeDefinition } from "./NudgeDefinition.js";
 
-export {
-  createNudgeAcknowledgeEffect,
-  createNudgeScheduleEffect,
-} from "./effectBuilders.js";
+export { createSystemReminderAttachEffect } from "./effectBuilders.js";
 
 export const NUDGE_DEFINITIONS: readonly NudgeDefinition[] = Object.freeze([
   composeModeNudgeDefinition,

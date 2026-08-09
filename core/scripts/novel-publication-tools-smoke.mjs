@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { removeTempDirectory } from "./fixtures/temp-directory.mjs";
 import {
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NovelPublicationToolService,
@@ -73,6 +74,7 @@ const context = (conversationId, index) => ({
 });
 const progress = { async emit() {} };
 
+let canonicalStore;
 try {
   const workspaceRoot = join(root, "workspace");
   await mkdir(workspaceRoot, { recursive: true });
@@ -80,7 +82,7 @@ try {
     storageRoot: join(root, "storage"),
   }).resolve(workspaceRoot);
   const location = await new NodeNovelStoreLocator().resolve(workspace);
-  const canonicalStore = await SqliteNovelCanonicalStore.open({
+  canonicalStore = await SqliteNovelCanonicalStore.open({
     location,
     revisionFactory: new FixedRevisionFactory("revision_publication_tools_base"),
     logger,
@@ -303,5 +305,6 @@ try {
 
   console.log("novel publication tools smoke passed");
 } finally {
-  await rm(root, { recursive: true, force: true });
+  await canonicalStore?.close();
+  await removeTempDirectory(root);
 }

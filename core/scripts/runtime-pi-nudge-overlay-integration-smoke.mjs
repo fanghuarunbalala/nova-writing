@@ -4,23 +4,20 @@ import {
   AGENT_RUNTIME_INVOCATION_KIND,
   AGENT_RUNTIME_OUTCOME,
   BaseContextCompiler,
-  InMemoryPendingNudgeStore,
-  NudgeManager,
-  NudgeProviderCallCoordinator,
-  NudgeRenderer,
-  NudgeSelector,
   NudgeTemplateRegistry,
-  PENDING_NUDGE_STATE,
+  RUNTIME_POLICY_PHASE,
+  RuntimeEffectCoordinator,
+  RuntimePolicyEngine,
+  RuntimeSystemReminderAttachPolicyEffectHandler,
+  SystemReminderAttachedOutputEvent,
+  createSystemReminderAttachEffect,
 } from "../dist/index.js";
 import {
-  PI_AGENT_CORE_ADAPTER_FAILURE,
   PiAgentCoreAdapter,
-  PiAgentCoreAdapterError,
 } from "../dist/runtime/agent/pi/index.js";
 
 const sensitiveParameter = "SENSITIVE_NUDGE_PARAMETER";
 const sensitiveReminder = "SENSITIVE_ONE_SHOT_REMINDER";
-const sensitiveEventFailure = "SENSITIVE_EVENT_APPEND_FAILURE";
 const baseSystemPrompt = "BASE_SYSTEM_PROMPT";
 
 const logs = [];
@@ -54,7 +51,7 @@ const emptyUsage = {
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
-function assistantMessage(content, stopReason = "stop", errorMessage) {
+function assistantMessage(content, stopReason = "stop") {
   return {
     role: "assistant",
     content,
@@ -63,7 +60,6 @@ function assistantMessage(content, stopReason = "stop", errorMessage) {
     model: model.id,
     usage: emptyUsage,
     stopReason,
-    ...(errorMessage === undefined ? {} : { errorMessage }),
     timestamp: Date.parse("2026-08-02T00:00:01.000Z"),
   };
 }
@@ -72,15 +68,11 @@ function completedStream(finalMessage) {
   return {
     async *[Symbol.asyncIterator]() {
       yield { type: "start", partial: finalMessage };
-      if (finalMessage.stopReason === "error") {
-        yield { type: "error", reason: "error", error: finalMessage };
-      } else {
-        yield {
-          type: "done",
-          reason: finalMessage.stopReason,
-          message: finalMessage,
-        };
-      }
+      yield {
+        type: "done",
+        reason: finalMessage.stopReason,
+        message: finalMessage,
+      };
     },
     result: async () => finalMessage,
   };
@@ -119,333 +111,235 @@ const messageConverter = {
     }),
 };
 
-function createNudgeRuntime(options = {}) {
+/**
+ * 持久化 + 同 run 注入装配（对齐 DesktopRuntimeChildCompositionFactory）：
+ * policy 引擎 → effect coordinator → RuntimeSystemReminderAttachPolicyEffectHandler
+ * 渲染并 append SystemReminderAttachedOutputEvent → 回执 attachedReminders 记入
+ * adapter 的 runReminders → 每次 provider call 尾部作为瞬态 system.reminder 注入。
+ */
+function createOverlayRuntime(conversationId) {
   const templates = new NudgeTemplateRegistry({ logger });
   templates.register({
     templateId: "runtime.one-shot",
     templateVersion: "1",
     render: (parameters) => `${sensitiveReminder}:${parameters.privateValue}`,
   });
-  const store = new InMemoryPendingNudgeStore({ logger });
-  const manager = new NudgeManager({
-    store,
-    selector: new NudgeSelector({ logger }),
-    renderer: new NudgeRenderer({ templates, logger }),
-    leaseIdFactory: {
-      create: (request) => `lease:${request.providerCallId}`,
+  const appendedEvents = [];
+  const eventSink = {
+    async append(event) {
+      appendedEvents.push(event);
+      return {
+        status: "recorded",
+        conversationId: event.conversationId,
+        eventId: event.id,
+        sequence: appendedEvents.length,
+        recordedAt: "2026-08-02T00:00:02.000Z",
+      };
     },
+  };
+  const handler = new RuntimeSystemReminderAttachPolicyEffectHandler({
+    eventSink,
+    templates,
     logger,
   });
-  const privateSnapshots = [];
-  const publicEvents = [];
-  const coordinator = new NudgeProviderCallCoordinator({
-    manager,
-    privateStateCommitter: {
-      commit: async (snapshot) => privateSnapshots.push(snapshot),
+  // 首次 provider call 附一条（全局 latch——真实装配中 compose/todo policy 实例
+  // 在 child 进程内跨 run 复用同一实例，效果不重复 emit）。
+  let attached = false;
+  const overlayPolicy = {
+    id: "policy.overlay",
+    phases: [RUNTIME_POLICY_PHASE.beforeProviderCall],
+    evaluate: (context) => {
+      if (attached) return [];
+      attached = true;
+      return [
+        createSystemReminderAttachEffect({
+          policyId: "policy.overlay",
+          conversationId: context.conversationId,
+          runId: context.runId,
+          reminderId: "novel.reminder.overlay",
+          reminderKind: "todo_idle",
+          templateId: "runtime.one-shot",
+          templateVersion: "1",
+          parameters: Object.freeze({ privateValue: sensitiveParameter }),
+        }),
+      ];
     },
-    eventSink: {
-      append: async (event) => {
-        if (options.failEventAppend === true) {
-          throw new Error(sensitiveEventFailure);
-        }
-        const snapshot = event.getSnapshot();
-        publicEvents.push(snapshot);
-        return {
-          status: "recorded",
-          conversationId: snapshot.conversationId,
-          eventId: snapshot.id,
-          sequence: publicEvents.length,
-          recordedAt: snapshot.timestamp,
-        };
-      },
-    },
-    eventIdFactory: {
-      create: (input) =>
-        `event:${input.providerCallId}:${input.nudgeId}:${input.eventType}`,
-    },
+  };
+  const policyEngine = new RuntimePolicyEngine({ policies: [overlayPolicy], logger });
+  const effectCoordinator = new RuntimeEffectCoordinator({
+    conversationId,
+    systemReminderAttachHandler: handler,
     logger,
   });
-  return { store, manager, coordinator, privateSnapshots, publicEvents };
+  return { appendedEvents, policyEngine, effectCoordinator };
 }
 
-async function scheduleOne(manager, nudgeId, runId, sequence) {
-  await manager.schedule({
-    nudgeId,
-    effect: {
-      kind: "nudge",
-      policyId: "policy.one-shot",
-      templateId: "runtime.one-shot",
-      templateVersion: "1",
-      priority: 100,
-      dedupeKey: "one-shot",
-      targetRunId: runId,
-      parameters: { privateValue: sensitiveParameter },
+/** 装配 adapter + 记录每次 provider call 的 systemPrompt 与消息数组。 */
+function createAdapter(runtime) {
+  const agent = new Agent({
+    initialState: { model, systemPrompt: "", messages: [], tools: [] },
+    streamFn: async () => {
+      throw new Error("adapter must replace the plain StreamFn");
     },
-    scheduledSequence: sequence,
-    scheduledAt: "2026-08-02T00:00:00.000Z",
   });
-}
-
-const compiler = new BaseContextCompiler();
-const runtime = createNudgeRuntime();
-await scheduleOne(runtime.manager, "nudge-overlay-1", "run-overlay", 10);
-const providerPrompts = [];
-const providerMessages = [];
-let providerCallCount = 0;
-const overlayAgent = new Agent({
-  initialState: { model, systemPrompt: "", messages: [], tools: [] },
-  streamFn: async () => {
-    throw new Error("adapter must replace the plain StreamFn");
-  },
-});
-const overlayAdapter = new PiAgentCoreAdapter({
-  agent: overlayAgent,
-  messageConverter,
-  eventBridge: { handle: async () => undefined },
-  nudgeProviderCalls: runtime.coordinator,
-  dispatchAwareStreamFunction: async (_model, context, _options, hooks) => {
-    providerCallCount += 1;
-    providerPrompts.push(context.systemPrompt);
-    providerMessages.push(context.messages);
-    if (providerCallCount === 1) {
-      await hooks.onDispatched("2026-08-02T00:00:02.000Z");
-      await hooks.onDispatched("2026-08-02T00:00:02.000Z");
+  const providerPrompts = [];
+  const providerMessages = [];
+  let providerCallCount = 0;
+  const adapter = new PiAgentCoreAdapter({
+    agent,
+    messageConverter,
+    eventBridge: { handle: async () => undefined },
+    policyEngine: runtime.policyEngine,
+    effectCoordinator: runtime.effectCoordinator,
+    dispatchAwareStreamFunction: async (_model, context, _options) => {
+      providerCallCount += 1;
+      providerPrompts.push(context.systemPrompt);
+      providerMessages.push(context.messages);
+      if (providerCallCount === 1) {
+        // call#1：返回 tool call → 驱动 agent 再来一次 provider call。
+        return completedStream(
+          assistantMessage(
+            [
+              {
+                type: "toolCall",
+                id: "tool-call-1",
+                name: "MissingTool",
+                arguments: {},
+              },
+            ],
+            "toolUse",
+          ),
+        );
+      }
       return completedStream(
-        assistantMessage(
-          [
-            {
-              type: "toolCall",
-              id: "tool-call-1",
-              name: "MissingTool",
-              arguments: {},
-            },
-          ],
-          "toolUse",
-        ),
+        assistantMessage([{ type: "text", text: "final answer" }]),
       );
-    }
-    return completedStream(
-      assistantMessage([{ type: "text", text: "final answer" }]),
-    );
-  },
-  providerCallIdFactory: {
-    create: ({ providerCallOrdinal }) => `provider-call-${providerCallOrdinal}`,
-  },
-  providerCallClock: {
-    now: () => "2026-08-02T00:00:01.000Z",
-  },
-  logger,
-});
+    },
+    providerCallIdFactory: {
+      create: ({ providerCallOrdinal }) => `provider-call-${providerCallOrdinal}`,
+    },
+    providerCallClock: {
+      now: () => "2026-08-02T00:00:01.000Z",
+    },
+    logger,
+  });
+  return { adapter, agent, providerPrompts, providerMessages };
+}
+
+function findOverlay(messageArray) {
+  return messageArray.find(
+    (message) =>
+      Array.isArray(message.content) &&
+      message.content.some(
+        (item) =>
+          item.text?.startsWith('<system-reminder kind="todo_idle">') &&
+          item.text.includes(sensitiveReminder),
+      ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 场景 1：首次 provider call 触发 → 恰好一条持久化事件；触发当次及后续 call 尾部
+// 都带瞬态 overlay；systemPrompt 恒为 base；state.messages 不含 reminder。
+// ---------------------------------------------------------------------------
+const runtime = createOverlayRuntime("conversation-overlay");
+const { adapter, agent, providerPrompts, providerMessages } = createAdapter(runtime);
+const compiler = new BaseContextCompiler();
 const overlayContext = await compiler.compile({
   conversationId: "conversation-overlay",
   runId: "run-overlay",
   systemPrompt: baseSystemPrompt,
   messages: [userMessage("message-overlay", "conversation-overlay")],
 });
-const overlayResult = await overlayAdapter.stream({
+const overlayResult = await adapter.stream({
   conversationId: overlayContext.conversationId,
   runId: overlayContext.runId,
   context: overlayContext,
   invocation: { kind: AGENT_RUNTIME_INVOCATION_KIND.continue },
 });
 assert.equal(overlayResult.outcome, AGENT_RUNTIME_OUTCOME.completed);
-assert.equal(providerCallCount, 2);
-// systemPrompt 恒为 base；nudge 以瞬态 system.reminder 消息注入本次调用。
+assert.equal(providerMessages.length, 2);
+
+// systemPrompt 恒为 base；overlay 以瞬态 system.reminder 追加在消息数组尾部。
 assert.equal(providerPrompts[0], baseSystemPrompt);
 assert.equal(providerPrompts[1], baseSystemPrompt);
-const nudgePiMessage = providerMessages[0].find((message) =>
-  Array.isArray(message.content) &&
-  message.content.some((item) => item.text?.includes(sensitiveReminder)),
-);
-assert.ok(nudgePiMessage, "nudge 应以瞬态消息出现在第一次 provider 调用");
-assert.ok(
-  nudgePiMessage.content.some((item) => item.text.includes(sensitiveParameter)),
-);
+for (const [callIndex, messages] of providerMessages.entries()) {
+  const overlayPiMessage = findOverlay(messages);
+  assert.ok(
+    overlayPiMessage,
+    `provider call #${callIndex + 1} 尾部应带瞬态 overlay`,
+  );
+  assert.ok(
+    overlayPiMessage.content.some((item) => item.text.includes(sensitiveParameter)),
+  );
+}
+// 触发当次即带（call#1 = 触发 call），后续 call#2 回放。
+assert.equal(JSON.stringify(providerMessages[0]).includes(sensitiveReminder), true);
+assert.equal(JSON.stringify(providerMessages[1]).includes(sensitiveReminder), true);
+
+// 持久化：恰好一条 SystemReminderAttachedOutputEvent，正文含敏感内容。
+assert.equal(runtime.appendedEvents.length, 1);
+const persistedEvent = runtime.appendedEvents[0];
+assert.ok(persistedEvent instanceof SystemReminderAttachedOutputEvent);
+assert.equal(persistedEvent.getEventType(), "system.reminder.attached");
+assert.equal(persistedEvent.runId, "run-overlay");
+assert.equal(persistedEvent.payload.kind, "todo_idle");
+assert.equal(persistedEvent.payload.reminderId, "novel.reminder.overlay");
 assert.equal(
-  JSON.stringify(providerMessages[1]).includes(sensitiveReminder),
-  false,
+  persistedEvent.payload.content,
+  `${sensitiveReminder}:${sensitiveParameter}`,
 );
-assert.equal(overlayAgent.state.systemPrompt, baseSystemPrompt);
+assert.equal(persistedEvent.payload.order >= 1, true);
+
+// reminder 不入 agent.state.messages（瞬态 overlay 只进本次 provider call）。
+assert.equal(agent.state.systemPrompt, baseSystemPrompt);
 assert.equal(overlayContext.systemPrompt, baseSystemPrompt);
 assert.equal(
-  JSON.stringify(overlayAgent.state.messages).includes(sensitiveReminder),
+  JSON.stringify(agent.state.messages).includes(sensitiveReminder),
   false,
 );
 assert.equal(
-  JSON.stringify(overlayAgent.state.messages).includes(sensitiveParameter),
+  JSON.stringify(agent.state.messages).includes(sensitiveParameter),
   false,
-);
-assert.equal(runtime.publicEvents.length, 1);
-assert.equal(runtime.publicEvents[0].eventType, "system.reminder.injected");
-assert.equal(runtime.publicEvents[0].payload.providerCallId, "provider-call-1");
-assert.equal(
-  JSON.stringify(runtime.publicEvents).includes(sensitiveReminder),
-  false,
-);
-assert.equal(
-  JSON.stringify(runtime.publicEvents).includes(sensitiveParameter),
-  false,
-);
-assert.equal(
-  (await runtime.store.list())[0].state,
-  PENDING_NUDGE_STATE.consumed,
-);
-assert.equal(
-  runtime.privateSnapshots.some((snapshot) => snapshot.leases.length === 1),
-  true,
-);
-assert.equal(
-  runtime.privateSnapshots.some(
-    (snapshot) =>
-      snapshot.nudges[0].state === PENDING_NUDGE_STATE.consumed &&
-      snapshot.leases.length === 0,
-  ),
-  true,
 );
 
-const preDispatch = createNudgeRuntime();
-await scheduleOne(
-  preDispatch.manager,
-  "nudge-before-dispatch",
-  "run-before-dispatch",
-  20,
-);
-const preDispatchAgent = new Agent({
-  initialState: { model, systemPrompt: "", messages: [], tools: [] },
-  streamFn: async () => {
-    throw new Error("adapter must replace the plain StreamFn");
-  },
-});
-const preDispatchAdapter = new PiAgentCoreAdapter({
-  agent: preDispatchAgent,
-  messageConverter,
-  eventBridge: { handle: async () => undefined },
-  nudgeProviderCalls: preDispatch.coordinator,
-  dispatchAwareStreamFunction: async (_model, _context, _options, hooks) => {
-    await hooks.onFailedBeforeDispatch("2026-08-02T00:10:02.000Z");
-    return completedStream(
-      assistantMessage(
-        [{ type: "text", text: "local failure" }],
-        "error",
-        "LOCAL_PRE_DISPATCH_FAILURE",
-      ),
-    );
-  },
-  providerCallIdFactory: { create: () => "provider-call-before-dispatch" },
-  providerCallClock: { now: () => "2026-08-02T00:10:01.000Z" },
-  logger,
-});
-const preDispatchContext = await compiler.compile({
-  conversationId: "conversation-before-dispatch",
-  runId: "run-before-dispatch",
+// ---------------------------------------------------------------------------
+// 场景 2：新 run → runReminders 随 run 起始清空（per-run 状态，不跨 run 泄漏）；
+// policy latch 不重发 → 无新事件、无 overlay。
+// ---------------------------------------------------------------------------
+const secondContext = await compiler.compile({
+  conversationId: "conversation-overlay",
+  runId: "run-overlay-2",
   systemPrompt: baseSystemPrompt,
-  messages: [
-    userMessage("message-before-dispatch", "conversation-before-dispatch"),
-  ],
+  messages: [userMessage("message-overlay-2", "conversation-overlay")],
 });
-const preDispatchResult = await preDispatchAdapter.stream({
-  conversationId: preDispatchContext.conversationId,
-  runId: preDispatchContext.runId,
-  context: preDispatchContext,
+const beforeSecondRunEvents = runtime.appendedEvents.length;
+const secondResult = await adapter.stream({
+  conversationId: secondContext.conversationId,
+  runId: secondContext.runId,
+  context: secondContext,
   invocation: { kind: AGENT_RUNTIME_INVOCATION_KIND.continue },
 });
-assert.equal(preDispatchResult.outcome, AGENT_RUNTIME_OUTCOME.failed);
-assert.equal(preDispatch.publicEvents.length, 0);
-assert.equal(
-  (await preDispatch.store.list())[0].state,
-  PENDING_NUDGE_STATE.scheduled,
-);
+assert.equal(secondResult.outcome, AGENT_RUNTIME_OUTCOME.completed);
+// 新 run 只有一个 provider call（dispatch 直接返回 final answer），其消息数组
+// 不含 overlay（runReminders 未从上一 run 泄漏）。
+const secondRunMessages = providerMessages.slice(2);
+assert.ok(secondRunMessages.length >= 1);
+for (const messages of secondRunMessages) {
+  assert.equal(
+    findOverlay(messages),
+    undefined,
+    "新 run 的 provider call 不应带上一 run 的 overlay",
+  );
+}
+// policy latch 不重发 → 无新持久化事件。
+assert.equal(runtime.appendedEvents.length, beforeSecondRunEvents);
 
-const missingHook = createNudgeRuntime();
-await scheduleOne(missingHook.manager, "nudge-missing-hook", "run-missing-hook", 30);
-const missingHookAgent = new Agent({
-  initialState: { model, systemPrompt: "", messages: [], tools: [] },
-  streamFn: async () => {
-    throw new Error("adapter must replace the plain StreamFn");
-  },
-});
-const missingHookAdapter = new PiAgentCoreAdapter({
-  agent: missingHookAgent,
-  messageConverter,
-  eventBridge: { handle: async () => undefined },
-  nudgeProviderCalls: missingHook.coordinator,
-  dispatchAwareStreamFunction: async () =>
-    completedStream(assistantMessage([{ type: "text", text: "unsafe" }])),
-  providerCallIdFactory: { create: () => "provider-call-missing-hook" },
-  providerCallClock: { now: () => "2026-08-02T00:20:01.000Z" },
-  logger,
-});
-const missingHookContext = await compiler.compile({
-  conversationId: "conversation-missing-hook",
-  runId: "run-missing-hook",
-  systemPrompt: baseSystemPrompt,
-  messages: [userMessage("message-missing-hook", "conversation-missing-hook")],
-});
-await assert.rejects(
-  () =>
-    missingHookAdapter.stream({
-      conversationId: missingHookContext.conversationId,
-      runId: missingHookContext.runId,
-      context: missingHookContext,
-      invocation: { kind: AGENT_RUNTIME_INVOCATION_KIND.continue },
-    }),
-  (error) =>
-    error instanceof PiAgentCoreAdapterError &&
-    error.failure === PI_AGENT_CORE_ADAPTER_FAILURE.providerDispatchProtocol,
-);
-assert.equal(missingHook.publicEvents.length, 0);
-assert.equal(
-  (await missingHook.store.list())[0].state,
-  PENDING_NUDGE_STATE.scheduled,
-);
-
-const eventFailure = createNudgeRuntime({ failEventAppend: true });
-await scheduleOne(eventFailure.manager, "nudge-event-failure", "run-event-failure", 40);
-const eventFailureAgent = new Agent({
-  initialState: { model, systemPrompt: "", messages: [], tools: [] },
-  streamFn: async () => {
-    throw new Error("adapter must replace the plain StreamFn");
-  },
-});
-const eventFailureAdapter = new PiAgentCoreAdapter({
-  agent: eventFailureAgent,
-  messageConverter,
-  eventBridge: { handle: async () => undefined },
-  nudgeProviderCalls: eventFailure.coordinator,
-  dispatchAwareStreamFunction: async (_model, _context, _options, hooks) => {
-    await hooks.onDispatched("2026-08-02T00:30:02.000Z");
-    return completedStream(assistantMessage([{ type: "text", text: "unused" }]));
-  },
-  providerCallIdFactory: { create: () => "provider-call-event-failure" },
-  providerCallClock: { now: () => "2026-08-02T00:30:01.000Z" },
-  logger,
-});
-const eventFailureContext = await compiler.compile({
-  conversationId: "conversation-event-failure",
-  runId: "run-event-failure",
-  systemPrompt: baseSystemPrompt,
-  messages: [userMessage("message-event-failure", "conversation-event-failure")],
-});
-await assert.rejects(
-  () =>
-    eventFailureAdapter.stream({
-      conversationId: eventFailureContext.conversationId,
-      runId: eventFailureContext.runId,
-      context: eventFailureContext,
-      invocation: { kind: AGENT_RUNTIME_INVOCATION_KIND.continue },
-    }),
-  (error) =>
-    error instanceof PiAgentCoreAdapterError &&
-    error.failure === PI_AGENT_CORE_ADAPTER_FAILURE.providerDispatchProtocol,
-);
-assert.equal(eventFailure.publicEvents.length, 0);
-assert.equal(
-  (await eventFailure.store.list())[0].state,
-  PENDING_NUDGE_STATE.consumed,
-);
-
+// ---------------------------------------------------------------------------
+// 脱敏：reminder 正文持久化进事件，但不得出现在日志里。
+// ---------------------------------------------------------------------------
 const serializedLogs = JSON.stringify(logs);
 assert.equal(serializedLogs.includes(sensitiveReminder), false);
 assert.equal(serializedLogs.includes(sensitiveParameter), false);
-assert.equal(serializedLogs.includes("LOCAL_PRE_DISPATCH_FAILURE"), false);
-assert.equal(serializedLogs.includes(sensitiveEventFailure), false);
+
+console.log("runtime pi nudge overlay integration smoke: passed");

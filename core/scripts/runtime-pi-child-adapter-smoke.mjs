@@ -8,12 +8,6 @@ import {
   ApplicationConfiguration,
   BaseContextCompiler,
   EffectiveModelExecutionResolver,
-  InMemoryPendingNudgeStore,
-  NudgeManager,
-  NudgeProviderCallCoordinator,
-  NudgeRenderer,
-  NudgeSelector,
-  NudgeTemplateRegistry,
   TURN_STATUS,
   TurnController,
   createDefaultApplicationConfiguration,
@@ -109,7 +103,6 @@ const factory = new PiRuntimeChildAdapterFactory({
 const adapter = await factory.create({
   configuration: createConfiguration(conversationId),
   lifecycleController,
-  nudgeProviderCalls: createNudgeCoordinator(),
   eventSink,
   eventIdFactory,
 });
@@ -259,24 +252,6 @@ function fakeCredentials() {
       return "configured";
     },
   };
-}
-
-function createNudgeCoordinator() {
-  const templates = new NudgeTemplateRegistry();
-  const manager = new NudgeManager({
-    store: new InMemoryPendingNudgeStore(),
-    selector: new NudgeSelector(),
-    renderer: new NudgeRenderer({ templates }),
-    leaseIdFactory: { create: () => "lease:pi-child-adapter" },
-  });
-  return new NudgeProviderCallCoordinator({
-    manager,
-    privateStateCommitter: { commit: async () => undefined },
-    eventSink,
-    eventIdFactory: {
-      create: (input) => `nudge-event:${input.nudgeId}`,
-    },
-  });
 }
 
 function userMessage(id, cid, text) {

@@ -1,14 +1,16 @@
 /**
  * compose_mode / compose_mode_exit 的集中定义：手写 Policy 类 + 模板同文件。
  *
- * 对齐 CCB plan mode 的 system-reminder 注入：进入时 schedule（首条 full），
- * 进行中按 cooldown 由 nudge 选择器重交付（交付后抑制 4 条、第 5 条重交付 →
- * 每 ≥5 条 provider call 一条），且 deliveryCount 驱动 full/sparse 交替
- * （第 1/6/11… 次交付 full）；退出时 acknowledge compose_mode +
- * schedule 一次性 compose_mode_exit。
+ * transition 驱动（相对旧 nudge 的 schedule/cooldown/ack）：每次 provider call 对比
+ * `runtimeSignals.compose` 与 latch `lastSeenActive`——false→true 发一条持久化
+ * `compose_mode`，true→false 发一条 `compose_mode_exit`；无 transition 不动作。
+ * latch 在 child 启动时由 `ComposeModeNudgePolicy.seed(conversationId, snapshot)` 用
+ * 已 hydrate 的 compose 状态种子（跨进程重启后仍 compose 中 → 不重发 compose_mode）。
+ * 持久化路径：effect → SystemReminderAttachedOutputEvent → canonical system.reminder。
  */
 import * as path from "node:path";
 import { noopLogger, type Logger } from "../../../observability/index.js";
+import type { ComposeModeSnapshot } from "../../compose/ComposeModeState.js";
 import {
   RUNTIME_POLICY_PHASE,
   type RuntimePolicy,
@@ -16,16 +18,11 @@ import {
   type RuntimePolicyEffect,
   type RuntimePolicyState,
 } from "../../policy/index.js";
-import type { NudgeAcknowledgementReference, NudgeEffect } from "../index.js";
-import { NUDGE_DELIVERY } from "../NudgeProtocol.js";
 import type { NudgeTemplate } from "../NudgeTemplateRegistry.js";
 import type { NudgeDefinition } from "./NudgeDefinition.js";
-import {
-  createNudgeAcknowledgeEffect,
-  createNudgeScheduleEffect,
-} from "./effectBuilders.js";
+import { createSystemReminderAttachEffect } from "./effectBuilders.js";
 
-/** RuntimePolicy.id；两 nudge 同属此 policy（引擎断言 effect.policyId === policy.id）。 */
+/** RuntimePolicy.id；引擎断言 effect.policyId === policy.id。 */
 export const COMPOSE_MODE_POLICY_ID = "compose_mode";
 
 export const COMPOSE_MODE_NUDGE_ID = "novel.reminder.compose_mode";
@@ -33,25 +30,6 @@ export const COMPOSE_MODE_EXIT_NUDGE_ID = "novel.reminder.compose_mode_exit";
 export const COMPOSE_MODE_NUDGE_VERSION = "1.0.0";
 /** 工具组守卫：必须 ∈ manifest tools.groupIds（compose 工具组）。 */
 export const COMPOSE_MODE_TOOL_GROUP = "novel.compose";
-/**
- * 进行中重交付的 cooldown（provider call 单位）。
- * 选择器为 strict > 语义：交付后抑制 N 条、第 N+1 条重交付（见 NudgeSelector）。
- * 故取 4 → 首条 #1 交付后，#6/#11/#16/#21/#26… 每 ~5 条 provider call 一条；
- * full 落在第 1/6 次交付（#1/#26），符合"第 1/6/11… 次交付 full"。
- */
-export const COMPOSE_MODE_COOLDOWN_TURNS = 4;
-/** 每第 N 次交付为 full（1/6/11… 为 full，其余 sparse）。 */
-export const COMPOSE_MODE_FULL_REMINDER_EVERY_N_REMINDERS = 5;
-export const COMPOSE_MODE_NUDGE_PRIORITY = 20;
-export const COMPOSE_MODE_EXIT_NUDGE_PRIORITY = 10;
-export const COMPOSE_MODE_ACKNOWLEDGEMENT_REF: NudgeAcknowledgementReference =
-  Object.freeze({
-    id: "novel.reminder.compose_mode.acknowledgement",
-    version: "1.0.0",
-  });
-
-const COMPOSE_MODE_SPARSE_TEXT =
-  "仍在设计模式：正式稿只读；请用 workspace 相对路径在 `.novel/design/` 维护草稿，完成后调用 **ExitComposeMode** 提交审批。";
 
 const COMPOSE_MODE_EXIT_TEXT = [
   "# 设计模式已结束",
@@ -72,6 +50,20 @@ export class ComposeModeNudgePolicy implements RuntimePolicy {
     });
   }
 
+  /**
+   * child 启动种子：用已 hydrate 的 compose 状态初始化每对话 latch，避免跨进程重启
+   * 后把「已在 compose 中」误判为上升沿而重发 compose_mode。若 latch 已存在不覆盖。
+   * Seeds the per-conversation latch with the hydrated compose state at child startup,
+   * so an already-active compose is not mistaken for a rising edge after restart.
+   */
+  seed(conversationId: string, compose: ComposeModeSnapshot): void {
+    if (this.latches.has(conversationId)) return;
+    this.latches.set(
+      conversationId,
+      Object.freeze({ lastSeenActive: compose.active }),
+    );
+  }
+
   evaluate(
     context: RuntimePolicyContext,
     _state: RuntimePolicyState,
@@ -81,59 +73,55 @@ export class ComposeModeNudgePolicy implements RuntimePolicy {
     if (compose === undefined) return [];
 
     const conversationId = context.conversationId;
-    const previous =
-      this.latches.get(conversationId) ??
-      Object.freeze({ active: false, composeScheduled: false });
+    const previous = this.latches.get(conversationId) ?? {
+      lastSeenActive: compose.active,
+    };
     const effects: RuntimePolicyEffect[] = [];
-    let next: ComposeModeLatch;
 
-    if (compose.active && !previous.composeScheduled) {
-      // 进入 compose → schedule compose_mode（首条交付 full）。
+    if (compose.active && !previous.lastSeenActive) {
+      // 进入 compose（false→true）→ 附加 compose_mode（持久化）。
       effects.push(
-        createNudgeScheduleEffect({
+        createSystemReminderAttachEffect({
           policyId: this.id,
           conversationId,
           runId: context.runId,
-          nudgeId: COMPOSE_MODE_NUDGE_ID,
-          effect: createComposeModeNudgeEffect(context.runId, compose),
-          evaluatedAt: context.evaluatedAt,
-        }),
-      );
-      next = Object.freeze({ active: true, composeScheduled: true });
-    } else if (!compose.active && previous.active) {
-      // 退出 compose（approve/discard）→ 关闭 compose_mode + 一次性 exit。
-      if (previous.composeScheduled) {
-        effects.push(
-          createNudgeAcknowledgeEffect({
-            policyId: this.id,
-            conversationId,
-            runId: context.runId,
-            nudgeId: COMPOSE_MODE_NUDGE_ID,
-            acknowledgementRef: COMPOSE_MODE_ACKNOWLEDGEMENT_REF,
-            acknowledgedAt: context.evaluatedAt,
+          reminderId: COMPOSE_MODE_NUDGE_ID,
+          reminderKind: "compose_mode",
+          templateId: COMPOSE_MODE_NUDGE_ID,
+          templateVersion: COMPOSE_MODE_NUDGE_VERSION,
+          parameters: Object.freeze({
+            phase: compose.phase,
+            ...(compose.designFilePath === undefined
+              ? {}
+              : {
+                  // 给 agent 的路径一律 workspace 相对（绝对路径会被 FileToolService 拒绝）。
+                  // Paths shown to the agent are workspace-relative (absolute paths are rejected).
+                  designFilePath: designFileWorkspaceRelativePath(
+                    compose.designFilePath,
+                  ),
+                }),
           }),
-        );
-      }
+        }),
+      );
+    } else if (!compose.active && previous.lastSeenActive) {
+      // 退出 compose（true→false，approve/discard）→ 附加一次性 compose_mode_exit。
       effects.push(
-        createNudgeScheduleEffect({
+        createSystemReminderAttachEffect({
           policyId: this.id,
           conversationId,
           runId: context.runId,
-          nudgeId: COMPOSE_MODE_EXIT_NUDGE_ID,
-          effect: createComposeModeExitNudgeEffect(context.runId),
-          evaluatedAt: context.evaluatedAt,
+          reminderId: COMPOSE_MODE_EXIT_NUDGE_ID,
+          reminderKind: "compose_mode_exit",
+          templateId: COMPOSE_MODE_EXIT_NUDGE_ID,
+          templateVersion: COMPOSE_MODE_NUDGE_VERSION,
+          parameters: Object.freeze({}),
         }),
       );
-      next = Object.freeze({ active: false, composeScheduled: false });
-    } else {
-      next = Object.freeze({
-        active: compose.active,
-        composeScheduled: previous.composeScheduled,
-      });
     }
 
+    const next = Object.freeze({ lastSeenActive: compose.active });
     this.latches.set(conversationId, next);
-    this.logger.debug("compose.nudge.evaluated", {
+    this.logger.debug("compose.reminder.evaluated", {
       conversationId,
       composeActive: compose.active,
       composePhase: compose.phase,
@@ -144,70 +132,13 @@ export class ComposeModeNudgePolicy implements RuntimePolicy {
 }
 
 interface ComposeModeLatch {
-  readonly active: boolean;
-  readonly composeScheduled: boolean;
-}
-
-function createComposeModeNudgeEffect(
-  runId: string,
-  compose: {
-    readonly phase: string;
-    readonly designFilePath?: string;
-  },
-): NudgeEffect {
-  return Object.freeze({
-    kind: "nudge",
-    policyId: COMPOSE_MODE_POLICY_ID,
-    templateId: COMPOSE_MODE_NUDGE_ID,
-    templateVersion: COMPOSE_MODE_NUDGE_VERSION,
-    reminderKind: "compose_mode",
-    delivery: NUDGE_DELIVERY.untilAcknowledged,
-    acknowledgementRef: COMPOSE_MODE_ACKNOWLEDGEMENT_REF,
-    priority: COMPOSE_MODE_NUDGE_PRIORITY,
-    dedupeKey: "compose_mode",
-    targetRunId: runId,
-    parameters: Object.freeze({
-      phase: compose.phase,
-      ...(compose.designFilePath === undefined
-        ? {}
-        : {
-            // 给 agent 的路径一律 workspace 相对（绝对路径会被 FileToolService 拒绝）。
-            // Paths shown to the agent are workspace-relative (absolute paths are rejected).
-            designFilePath: designFileWorkspaceRelativePath(compose.designFilePath),
-          }),
-    }),
-    cooldownTurns: COMPOSE_MODE_COOLDOWN_TURNS,
-    exclusive: true,
-  });
-}
-
-function createComposeModeExitNudgeEffect(runId: string): NudgeEffect {
-  return Object.freeze({
-    kind: "nudge",
-    policyId: COMPOSE_MODE_POLICY_ID,
-    templateId: COMPOSE_MODE_EXIT_NUDGE_ID,
-    templateVersion: COMPOSE_MODE_NUDGE_VERSION,
-    reminderKind: "compose_mode_exit",
-    delivery: NUDGE_DELIVERY.once,
-    priority: COMPOSE_MODE_EXIT_NUDGE_PRIORITY,
-    dedupeKey: "compose_mode_exit",
-    targetRunId: runId,
-    parameters: Object.freeze({}),
-    exclusive: true,
-  });
+  readonly lastSeenActive: boolean;
 }
 
 export const composeModeNudgeTemplate: NudgeTemplate = {
   templateId: COMPOSE_MODE_NUDGE_ID,
   templateVersion: COMPOSE_MODE_NUDGE_VERSION,
   render(parameters) {
-    const deliveryCount =
-      typeof parameters.deliveryCount === "number"
-        ? parameters.deliveryCount
-        : 1;
-    const isFull =
-      deliveryCount % COMPOSE_MODE_FULL_REMINDER_EVERY_N_REMINDERS === 1;
-    if (!isFull) return COMPOSE_MODE_SPARSE_TEXT;
     const designFilePath =
       typeof parameters.designFilePath === "string"
         ? parameters.designFilePath

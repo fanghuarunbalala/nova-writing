@@ -1,11 +1,9 @@
 /** Stable Effect coordination failures without Effect payloads or raw causes. */
 export const RUNTIME_EFFECT_COORDINATOR_FAILURE = {
   invalidRequest: "invalid_request",
-  nudgeHandlerMissing: "nudge_handler_missing",
-  nudgeLifecycleHandlerMissing: "nudge_lifecycle_handler_missing",
+  systemReminderAttachHandlerMissing: "system_reminder_attach_handler_missing",
   compactionHandlerMissing: "compaction_handler_missing",
-  nudgeFailed: "nudge_failed",
-  nudgeLifecycleFailed: "nudge_lifecycle_failed",
+  systemReminderAttachFailed: "system_reminder_attach_failed",
   compactionFailed: "compaction_failed",
 } as const;
 
@@ -22,14 +20,7 @@ export class RuntimeEffectCoordinatorError extends Error {
     public readonly runId?: string,
     public readonly providerCallId?: string,
     public readonly policyId?: string,
-    public readonly effectKind?:
-      | "nudge"
-      | "context_compaction"
-      | "nudge_schedule"
-      | "nudge_acknowledge"
-      | "nudge_resolve"
-      | "nudge_expire"
-      | "nudge_supersede",
+    public readonly effectKind?: "system_reminder_attach" | "context_compaction",
   ) {
     super("Runtime Effect coordination failed");
   }

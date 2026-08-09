@@ -116,27 +116,6 @@ const messageStore = {
   },
 };
 
-const nudgeSnapshot = Object.freeze({
-  schemaVersion: 1,
-  nudges: Object.freeze([Object.freeze({
-    id: "nudge-1",
-    policyId: "policy-1",
-    templateId: "template-1",
-    templateVersion: "1.0.0",
-    priority: 10,
-    dedupeKey: "run-1:max-turns",
-    parameters: Object.freeze({}),
-    exclusive: false,
-    placement: "system-prompt-overlay",
-    delivery: "once",
-    state: "scheduled",
-    targetRunId: "run-1",
-    scheduledSequence: 3,
-    scheduledAt: "2026-08-02T00:00:03.000Z",
-  })]),
-  leases: Object.freeze([]),
-  consumptions: Object.freeze([]),
-});
 const checkpoint = createCheckpoint();
 const interaction = createInteractionSnapshot();
 
@@ -145,7 +124,6 @@ const handler = new ParentRuntimePersistenceHandler({
   journalReader,
   journalService,
   messageStore,
-  pendingNudgeStore: { async snapshot() { return nudgeSnapshot; } },
   contextCheckpointStore: { async getActive() { return checkpoint; } },
   interactionCoordinator: { async snapshot() { return interaction; } },
   logger,
@@ -209,7 +187,6 @@ assert.equal(Object.isFrozen(messagePage.items[0].message), true);
 
 const recovery = await client.runtimeState.load(conversationId);
 assert.equal(recovery.capturedThroughSequence, 4);
-assert.equal(recovery.nudge.nudges[0].id, "nudge-1");
 assert.equal(recovery.contextCheckpoint.id, "checkpoint-1");
 assert.equal(recovery.interaction.pending[0].approvalRequestId, "approval-1");
 assert.equal(Object.isFrozen(recovery), true);
@@ -262,26 +239,6 @@ assert.throws(
     anchor: { from: "start" },
     eventTypes: ["system.some.other.event"],
     limit: 10,
-  }),
-  RuntimePersistenceProtocolError,
-);
-const accessorNudges = [];
-Object.defineProperty(accessorNudges, "0", {
-  enumerable: true,
-  get() { return nudgeSnapshot.nudges[0]; },
-});
-accessorNudges.length = 1;
-assert.throws(
-  () => captureRuntimeRecoverySnapshot({
-    schemaVersion: 1,
-    conversationId,
-    capturedThroughSequence: 4,
-    nudge: {
-      schemaVersion: 1,
-      nudges: accessorNudges,
-      leases: [],
-      consumptions: [],
-    },
   }),
   RuntimePersistenceProtocolError,
 );

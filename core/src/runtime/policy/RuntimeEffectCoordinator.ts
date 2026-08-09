@@ -1,11 +1,11 @@
 /** Serializes and routes accepted Runtime Policy effects for one Conversation. */
 import { noopLogger, type Logger } from "../../observability/index.js";
-import type { NudgeEffect } from "../nudge/index.js";
+import type { ReminderKind } from "../../event/output/payload/SystemReminderAttachedPayload.js";
 import type {
   ContextCompactionEffect,
-  RuntimeNudgeLifecycleEffect,
   RuntimePolicyContext,
   RuntimePolicyEffect,
+  SystemReminderAttachEffect,
 } from "./RuntimePolicyProtocol.js";
 import {
   captureRuntimePolicyContext,
@@ -17,15 +17,18 @@ import {
   type RuntimeEffectCoordinatorFailure,
 } from "./RuntimeEffectCoordinatorErrors.js";
 
-export interface RuntimeNudgeEffectHandler {
-  handle(context: RuntimePolicyContext, effect: NudgeEffect): Promise<void>;
+export interface RuntimeReminderAttachment {
+  readonly reminderId: string;
+  readonly kind: ReminderKind;
+  readonly content: string;
+  readonly order: number;
 }
 
-export interface RuntimeNudgeLifecycleEffectHandler {
+export interface RuntimeSystemReminderAttachEffectHandler {
   handle(
     context: RuntimePolicyContext,
-    effect: RuntimeNudgeLifecycleEffect,
-  ): Promise<void>;
+    effect: SystemReminderAttachEffect,
+  ): Promise<RuntimeReminderAttachment>;
 }
 
 export interface RuntimeContextCompactionEffectHandler {
@@ -46,20 +49,20 @@ export interface RuntimeEffectExecutionReceipt {
   readonly providerCallId: string;
   readonly phase: RuntimePolicyContext["phase"];
   readonly effectCount: number;
+  /** 本 provider 调用已附加的 reminder（同 run 注入凭据）。Attached reminders this provider call. */
+  readonly attachedReminders: readonly RuntimeReminderAttachment[];
 }
 
 export interface RuntimeEffectCoordinatorOptions {
   readonly conversationId: string;
-  readonly nudgeHandler?: RuntimeNudgeEffectHandler;
-  readonly nudgeLifecycleHandler?: RuntimeNudgeLifecycleEffectHandler;
+  readonly systemReminderAttachHandler?: RuntimeSystemReminderAttachEffectHandler;
   readonly contextCompactionHandler?: RuntimeContextCompactionEffectHandler;
   readonly logger?: Logger;
 }
 
 export class RuntimeEffectCoordinator {
   private readonly conversationId: string;
-  private readonly nudgeHandler?: RuntimeNudgeEffectHandler;
-  private readonly nudgeLifecycleHandler?: RuntimeNudgeLifecycleEffectHandler;
+  private readonly systemReminderAttachHandler?: RuntimeSystemReminderAttachEffectHandler;
   private readonly contextCompactionHandler?: RuntimeContextCompactionEffectHandler;
   private readonly logger: Logger;
   private tail: Promise<void> = Promise.resolve();
@@ -69,8 +72,7 @@ export class RuntimeEffectCoordinator {
       throw new TypeError("Runtime Effect Coordinator conversationId is invalid");
     }
     this.conversationId = options.conversationId;
-    this.nudgeHandler = options.nudgeHandler;
-    this.nudgeLifecycleHandler = options.nudgeLifecycleHandler;
+    this.systemReminderAttachHandler = options.systemReminderAttachHandler;
     this.contextCompactionHandler = options.contextCompactionHandler;
     this.logger = (options.logger ?? noopLogger).child({
       component: "runtime_effect_coordinator",
@@ -122,15 +124,27 @@ export class RuntimeEffectCoordinator {
           effectCount: effects.length,
         });
       }
-      for (const effect of effects) await this.executeOne(context, effect);
+      const attachedReminders: RuntimeReminderAttachment[] = [];
+      for (const effect of effects) {
+        const attachment = await this.executeOne(context, effect);
+        if (attachment !== undefined) attachedReminders.push(attachment);
+      }
       const receipt = Object.freeze({
         conversationId: context.conversationId,
         runId: context.runId,
         providerCallId: context.providerCallId,
         phase: context.phase,
         effectCount: effects.length,
+        attachedReminders: Object.freeze(attachedReminders),
       });
-      this.logger.info("runtime.effect.execution_completed", receipt);
+      this.logger.info("runtime.effect.execution_completed", {
+        conversationId: receipt.conversationId,
+        runId: receipt.runId,
+        providerCallId: receipt.providerCallId,
+        phase: receipt.phase,
+        effectCount: receipt.effectCount,
+        attachedReminderCount: receipt.attachedReminders.length,
+      });
       return receipt;
     });
   }
@@ -142,45 +156,24 @@ export class RuntimeEffectCoordinator {
   private async executeOne(
     context: RuntimePolicyContext,
     effect: RuntimePolicyEffect,
-  ): Promise<void> {
-    if (effect.kind === "nudge") {
-      if (!this.nudgeHandler) {
+  ): Promise<RuntimeReminderAttachment | undefined> {
+    if (effect.kind === "system_reminder_attach") {
+      if (!this.systemReminderAttachHandler) {
         throw this.failEffect(
-          RUNTIME_EFFECT_COORDINATOR_FAILURE.nudgeHandlerMissing,
+          RUNTIME_EFFECT_COORDINATOR_FAILURE.systemReminderAttachHandlerMissing,
           context,
           effect,
         );
       }
       try {
-        await this.nudgeHandler.handle(context, effect);
+        const attachment =
+          await this.systemReminderAttachHandler.handle(context, effect);
         this.logHandled(context, effect);
-        return;
+        return attachment;
       } catch (error) {
         if (error instanceof RuntimeEffectCoordinatorError) throw error;
         throw this.failEffect(
-          RUNTIME_EFFECT_COORDINATOR_FAILURE.nudgeFailed,
-          context,
-          effect,
-        );
-      }
-    }
-
-    if (effect.kind !== "context_compaction") {
-      if (!this.nudgeLifecycleHandler) {
-        throw this.failEffect(
-          RUNTIME_EFFECT_COORDINATOR_FAILURE.nudgeLifecycleHandlerMissing,
-          context,
-          effect,
-        );
-      }
-      try {
-        await this.nudgeLifecycleHandler.handle(context, effect);
-        this.logHandled(context, effect);
-        return;
-      } catch (error) {
-        if (error instanceof RuntimeEffectCoordinatorError) throw error;
-        throw this.failEffect(
-          RUNTIME_EFFECT_COORDINATOR_FAILURE.nudgeLifecycleFailed,
+          RUNTIME_EFFECT_COORDINATOR_FAILURE.systemReminderAttachFailed,
           context,
           effect,
         );
@@ -197,6 +190,7 @@ export class RuntimeEffectCoordinator {
     try {
       await this.contextCompactionHandler.handle(context, effect);
       this.logHandled(context, effect);
+      return undefined;
     } catch (error) {
       if (error instanceof RuntimeEffectCoordinatorError) throw error;
       throw this.failEffect(
@@ -228,13 +222,8 @@ export class RuntimeEffectCoordinator {
       captureNonBlank(context?.runId),
       captureNonBlank(context?.providerCallId),
       captureNonBlank(effect?.policyId),
-      effect?.kind === "nudge" ||
-      effect?.kind === "context_compaction" ||
-      effect?.kind === "nudge_schedule" ||
-      effect?.kind === "nudge_acknowledge" ||
-      effect?.kind === "nudge_resolve" ||
-      effect?.kind === "nudge_expire" ||
-      effect?.kind === "nudge_supersede"
+      effect?.kind === "system_reminder_attach" ||
+      effect?.kind === "context_compaction"
         ? effect.kind
         : undefined,
     );
@@ -279,11 +268,7 @@ function assertEffectContext(
   effect: RuntimePolicyEffect,
   context: RuntimePolicyContext,
 ): void {
-  if (effect.kind === "nudge") {
-    if (effect.targetRunId !== context.runId) throw new Error();
-    return;
-  }
-  if (effect.kind !== "context_compaction") {
+  if (effect.kind === "system_reminder_attach") {
     if (
       effect.conversationId !== context.conversationId ||
       effect.runId !== context.runId

@@ -42,22 +42,14 @@ import {
   RuntimeBootstrapStartupCoordinator,
   RuntimeInputOutcomeController,
   RuntimeInputPump,
-  NudgeManager,
-  NudgeProviderCallCoordinator,
-  NudgeRenderer,
-  NudgeSelector,
   NudgeTemplateRegistry,
-  InMemoryPendingNudgeStore,
   RuntimeApprovalDecisionInputHandler,
   RuntimeControlInputDispatcher,
   RuntimeConversationModeSetInputHandler,
   RuntimeEffectCoordinator,
-  RuntimeNudgePolicyEffectHandler,
   RuntimePolicyEngine,
+  RuntimeSystemReminderAttachPolicyEffectHandler,
   TODO_STATUS,
-  type NudgeLifecycleEventIdFactory,
-  type NudgeLifecycleEventIdInput,
-  type NudgeProviderCallCoordinator as NudgeProviderCallCoordinatorType,
   RuntimeStartupExecutor,
   RuntimeStartupReconciler,
   RuntimeStopInputHandler,
@@ -72,6 +64,9 @@ import {
   type RuntimeRunPreparationSource,
   type ToolDispatcher,
 } from "../../../runtime/index.js";
+import {
+  ComposeModeNudgePolicy,
+} from "../../../runtime/nudge/definitions/compose.js";
 import { NUDGE_DEFINITIONS } from "../../../runtime/nudge/definitions/index.js";
 import type { PiRuntimeSignalsProvider } from "../../../runtime/agent/pi/index.js";
 import { RuntimePromptAssembler } from "../../../runtime/context/index.js";
@@ -111,8 +106,7 @@ export interface RuntimeChildAdapterFactory {
   create(options: {
     readonly configuration: AgentRuntimeConfiguration;
     readonly lifecycleController: TurnController;
-    readonly nudgeProviderCalls?: NudgeProviderCallCoordinatorType;
-    /** 域 runtime 信号源 + policy 引擎装配（nudge 瞬态注入用）。 */
+    /** 域 runtime 信号源 + policy 引擎装配（reminder 注入用）。 */
     readonly runtimeSignals?: PiRuntimeSignalsProvider;
     readonly policyEngine?: RuntimePolicyEngine;
     readonly effectCoordinator?: RuntimeEffectCoordinator;
@@ -321,15 +315,14 @@ export class DesktopRuntimeChildCompositionFactory
       logger,
     });
     const router = new InputRouter({ conversationId, logger });
-    const nudgeAssembly = createChildNudgeAssembly({
+    const reminderAssembly = createChildReminderAssembly({
       conversationId,
       eventSink,
       persistence,
       logger,
     });
-    const nudgeProviderCalls = nudgeAssembly.coordinator;
-    // nudge 定义装配：模板注册 + 生效集（agent enablesNudges ∩ 工具组守卫）→
-    // policy 引擎 + effect coordinator（nudge_schedule/acknowledge → manager）。
+    // reminder 定义装配：模板注册 + 生效集（agent enablesNudges ∩ 工具组守卫）→
+    // policy 引擎 + effect coordinator（system_reminder_attach → 持久化 + 注入）。
     const manifestToolGroups = new Set(
       configuration.assembly.manifest.definition.tools.groupIds,
     );
@@ -346,10 +339,10 @@ export class DesktopRuntimeChildCompositionFactory
         });
         continue;
       }
-      nudgeAssembly.templates.register(definition.template);
+      reminderAssembly.templates.register(definition.template);
       effectiveDefinitions.push(definition);
     }
-    // 同一 policy 可能被多个 nudge 定义共享（如 compose_mode + compose_mode_exit
+    // 同一 policy 可能被多个 reminder 定义共享（如 compose_mode + compose_mode_exit
     // 同属 ComposeModeNudgePolicy）；引擎按 policy.id 拒绝重复，需先按 id 去重。
     const seenPolicyIds = new Set<string>();
     const effectivePolicies = [];
@@ -359,15 +352,28 @@ export class DesktopRuntimeChildCompositionFactory
       seenPolicyIds.add(policy.id);
       effectivePolicies.push(policy);
     }
+    // compose latch 种子：用已 hydrate 的 compose 状态初始化，避免跨进程重启后把
+    // 已在 compose 中误判为上升沿而重发 compose_mode。
+    // Seed the compose latch with the hydrated compose state so an already-active
+    // compose is not mistaken for a rising edge after a process restart.
+    const composeSnapshot = composeState.snapshot(conversationId);
+    for (const policy of effectivePolicies) {
+      if (policy instanceof ComposeModeNudgePolicy) {
+        policy.seed(conversationId, composeSnapshot);
+      }
+    }
     const policyEngine = new RuntimePolicyEngine({
       policies: effectivePolicies,
       logger,
     });
     const effectCoordinator = new RuntimeEffectCoordinator({
       conversationId,
-      nudgeLifecycleHandler: new RuntimeNudgePolicyEffectHandler(
-        nudgeAssembly.manager,
-      ),
+      systemReminderAttachHandler:
+        new RuntimeSystemReminderAttachPolicyEffectHandler({
+          eventSink,
+          templates: reminderAssembly.templates,
+          logger,
+        }),
       logger,
     });
     const runtimeSignals: PiRuntimeSignalsProvider = Object.freeze({
@@ -389,7 +395,6 @@ export class DesktopRuntimeChildCompositionFactory
     const agentAdapter = await this.#adapterFactory.create({
       configuration,
       lifecycleController,
-      nudgeProviderCalls,
       runtimeSignals,
       policyEngine,
       effectCoordinator,
@@ -644,50 +649,19 @@ function captureStableFailure(error: unknown): string {
   return "unknown";
 }
 
-interface ChildNudgeAssembly {
-  readonly coordinator: NudgeProviderCallCoordinatorType;
-  readonly manager: NudgeManager;
+interface ChildReminderAssembly {
   readonly templates: NudgeTemplateRegistry;
 }
 
-function createChildNudgeAssembly(options: {
+function createChildReminderAssembly(options: {
   readonly conversationId: string;
   readonly eventSink: PublishingRuntimeEventSink;
   readonly persistence: RuntimePersistencePorts;
   readonly logger: Logger;
-}): ChildNudgeAssembly {
+}): ChildReminderAssembly {
   const templates = new NudgeTemplateRegistry({ logger: options.logger });
-  const manager = new NudgeManager({
-    store: new InMemoryPendingNudgeStore({ logger: options.logger }),
-    selector: new NudgeSelector({ logger: options.logger }),
-    renderer: new NudgeRenderer({ templates, logger: options.logger }),
-    logger: options.logger,
-  });
-  const coordinator = new NudgeProviderCallCoordinator({
-    manager,
-    privateStateCommitter: {
-      commit: async () => undefined,
-    },
-    eventSink: options.eventSink,
-    eventIdFactory: new ChildNudgeLifecycleEventIdFactory(),
-    logger: options.logger,
-  });
-  options.logger.debug("runtime_child.nudge_assembly_created", {
+  options.logger.debug("runtime_child.reminder_assembly_created", {
     conversationId: options.conversationId,
   });
-  return { coordinator, manager, templates };
-}
-
-/**
- * 生成 nudge 生命周期事件 id。基于 providerCallId（每次 provider call 唯一，跨进程
- * 也唯一）而不是进程内计数器——计数重启归零曾导致同一 id 重复、journal append
- * 冲突（JournalEventConflictError）拖垮整个 run。事件 payload 携带同一
- * providerCallId，id↔payload 1:1，便于日志关联。
- * Generates nudge lifecycle event ids keyed on providerCallId (unique per provider
- * call, across process restarts) instead of a process-local counter.
- */
-export class ChildNudgeLifecycleEventIdFactory implements NudgeLifecycleEventIdFactory {
-  create(input: NudgeLifecycleEventIdInput): string {
-    return `nudge_event_${input.nudgeId}_${input.providerCallId}`;
-  }
+  return { templates };
 }

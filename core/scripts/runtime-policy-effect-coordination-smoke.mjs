@@ -12,6 +12,7 @@ import {
   RuntimePolicyEngine,
   RuntimePolicyEngineError,
   calculateContextPolicyTokenBoundaries,
+  createSystemReminderAttachEffect,
 } from "../dist/index.js";
 
 const privateMarker = "PRIVATE_CONTEXT_CONTENT_MUST_NOT_APPEAR";
@@ -101,17 +102,22 @@ function state(overrides = {}) {
   };
 }
 
-function nudge(policyId, priority, providerCallId = "provider-call-1") {
-  return {
-    kind: "nudge",
+function attach(
+  policyId,
+  providerCallId = "provider-call-1",
+  overrides = {},
+) {
+  return createSystemReminderAttachEffect({
     policyId,
-    templateId: "runtime.policy.test",
+    conversationId: "conversation-1",
+    runId: "run-1",
+    reminderId: `novel.reminder.${policyId}`,
+    reminderKind: "todo_idle",
+    templateId: `template.reminder.${policyId}`,
     templateVersion: "1",
-    priority,
-    dedupeKey: `${policyId}:${providerCallId}`,
-    targetRunId: "run-1",
-    parameters: { marker: privateMarker },
-  };
+    parameters: Object.freeze({ marker: privateMarker }),
+    ...overrides,
+  });
 }
 
 const policy = new ContextPressurePolicy();
@@ -174,12 +180,12 @@ assert.deepEqual(irreducible, []);
 const firstPolicy = {
   id: "first_policy",
   phases: [RUNTIME_POLICY_PHASE.beforeProviderCall],
-  evaluate: () => [nudge("first_policy", 1)],
+  evaluate: () => [attach("first_policy")],
 };
 const secondPolicy = {
   id: "second_policy",
   phases: [RUNTIME_POLICY_PHASE.beforeProviderCall],
-  evaluate: () => [nudge("second_policy", 100)],
+  evaluate: () => [attach("second_policy")],
 };
 const orderedEngine = new RuntimePolicyEngine({
   policies: [firstPolicy, secondPolicy],
@@ -207,10 +213,9 @@ const badEngine = new RuntimePolicyEngine({
       id: "bad_policy",
       phases: [RUNTIME_POLICY_PHASE.beforeProviderCall],
       evaluate: () => [
-        {
-          ...nudge("bad_policy", 1),
-          targetRunId: `${privateMarker}:wrong-run`,
-        },
+        attach("bad_policy", "provider-call-1", {
+          runId: `${privateMarker}:wrong-run`,
+        }),
       ],
     },
   ],
@@ -227,11 +232,17 @@ assert.throws(
 const routeOrder = [];
 const coordinator = new RuntimeEffectCoordinator({
   conversationId: "conversation-1",
-  nudgeHandler: {
+  systemReminderAttachHandler: {
     async handle(runtimeContext, effect) {
-      routeOrder.push(`start:nudge:${runtimeContext.providerCallId}:${effect.policyId}`);
+      routeOrder.push(`start:reminder:${runtimeContext.providerCallId}:${effect.policyId}`);
       await new Promise((resolve) => setTimeout(resolve, 5));
-      routeOrder.push(`end:nudge:${runtimeContext.providerCallId}:${effect.policyId}`);
+      routeOrder.push(`end:reminder:${runtimeContext.providerCallId}:${effect.policyId}`);
+      return {
+        reminderId: effect.reminderId,
+        kind: effect.reminderKind,
+        content: "rendered",
+        order: effect.order,
+      };
     },
   },
   contextCompactionHandler: {
@@ -245,7 +256,7 @@ const coordinator = new RuntimeEffectCoordinator({
 });
 
 const firstContext = context(pressure({ totalTokens: 85_000 }));
-const firstEffects = [nudge("first_policy", 1), ...engine.evaluate(firstContext, state())];
+const firstEffects = [attach("first_policy"), ...engine.evaluate(firstContext, state())];
 const secondContext = context(
   pressure({
     totalTokens: 85_000,
@@ -260,9 +271,12 @@ const [firstReceipt, secondReceipt] = await Promise.all([
 ]);
 assert.equal(firstReceipt.effectCount, 2);
 assert.equal(secondReceipt.effectCount, 1);
+assert.equal(firstReceipt.attachedReminders.length, 1);
+assert.equal(firstReceipt.attachedReminders[0].reminderId, "novel.reminder.first_policy");
+assert.equal(Object.isFrozen(firstReceipt.attachedReminders), true);
 assert.deepEqual(routeOrder, [
-  "start:nudge:provider-call-1:first_policy",
-  "end:nudge:provider-call-1:first_policy",
+  "start:reminder:provider-call-1:first_policy",
+  "end:reminder:provider-call-1:first_policy",
   "start:compact:provider-call-1:context_pressure",
   "end:compact:provider-call-1:context_pressure",
   "start:compact:provider-call-2:context_pressure",

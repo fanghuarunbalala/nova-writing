@@ -6,32 +6,22 @@
  * 1. 生效集：NUDGE_DEFINITIONS + resolveAgentNudgeEnablements("novel").enabled ∩ 工具组
  *    守卫 → 恰为 [compose_mode, compose_mode_exit, todo_idle]；未登记 agent → 空；缺组 → 跳过。
  * 2. 共享 policy 去重：compose 两定义同属 ComposeModeNudgePolicy → 引擎只注册一个实例。
- * 3. compose_mode：enter → call#1 交付 full；call#2-5 无；call#6/#11/#16/#21 稀疏；
- *    call#26 第 6 次交付再次 full（deliveryCount % 5 === 1）；exit → 一次性
- *    compose_mode_exit（once）；随后无交付。compose_mode 转为 acknowledged。
- * 4. todo_idle：连续 ≥3 次 provider call 未调用 TodoWrite → 每 run 注入一次；
- *    跨轮清空；TodoWrite 一调用即重置（写后重新计数，写后 3 个未写 call 仍触发）；
- *    once 交付 + 跨 run 重新激活（store 替换而非累积）。
+ * 3. compose_mode：transition 驱动——inactive→active 附一条持久化 compose_mode（含设计文件
+ *    workspace 相对路径）；持续 active 不重复；active→inactive 附一条 compose_mode_exit；
+ *    随后无附。seed(active) 后首 call 不重发 compose_mode。
+ * 4. todo_idle：连续 ≥3 次 provider call 未调用 TodoWrite → 每 run 附一条持久化 todo_idle；
+ *    跨轮清空；TodoWrite 一调用即重置（写后重新计数，写后 3 个未写 call 仍触发）。
  * 5. 真实 CorePiRuntimeMessageConverter 把 system.reminder（kind=compose_mode）转成
  *    Pi user 消息，内容含 <system-reminder kind="compose_mode">。
- * 6. 脱敏：nudge 内容/参数不得出现在日志或事件中。
- *
- * 注意（cooldown 语义）：NudgeSelector 为 strict > 语义（交付后抑制 N 条、第 N+1 条
- * 重交付），故 COMPOSE_MODE_COOLDOWN_TURNS=4 → 首条 #1 后每 ~5 条 provider call 一条。
+ * 6. 脱敏：reminder 正文持久化进事件（append-only，投影 canonical），但不得出现在日志里。
  */
 import assert from "node:assert/strict";
 import {
-  InMemoryPendingNudgeStore,
-  NudgeManager,
-  NudgeProviderCallCoordinator,
-  NudgeRenderer,
-  NudgeSelector,
   NudgeTemplateRegistry,
-  PENDING_NUDGE_STATE,
   RUNTIME_POLICY_PHASE,
   RuntimeEffectCoordinator,
-  RuntimeNudgePolicyEffectHandler,
   RuntimePolicyEngine,
+  RuntimeSystemReminderAttachPolicyEffectHandler,
   resolveAgentNudgeEnablements,
 } from "../dist/index.js";
 import {
@@ -40,10 +30,10 @@ import {
 } from "../dist/runtime/agent/pi/index.js";
 import { NUDGE_DEFINITIONS } from "../dist/runtime/nudge/definitions/index.js";
 import {
-  COMPOSE_MODE_COOLDOWN_TURNS,
   COMPOSE_MODE_EXIT_NUDGE_ID,
   COMPOSE_MODE_NUDGE_ID,
   COMPOSE_MODE_TOOL_GROUP,
+  ComposeModeNudgePolicy,
 } from "../dist/runtime/nudge/definitions/compose.js";
 import {
   TODO_IDLE_NUDGE_ID,
@@ -51,10 +41,11 @@ import {
 } from "../dist/runtime/nudge/definitions/todo.js";
 
 const COMPOSE_FULL_MARK = "# 设计模式（Compose Mode）";
-const COMPOSE_SPARSE_MARK = "仍在设计模式";
 const COMPOSE_EXIT_MARK = "# 设计模式已结束";
 const TODO_IDLE_MARK = "待办列表维护提醒";
-const DESIGN_FILE = "design/chapter-3.md";
+/** 绝对 design 路径（真实场景），渲染时转 workspace 相对。 */
+const DESIGN_FILE_ABSOLUTE = "D:\\workspace\\app\\.novel\\design\\chapter-3.md";
+const DESIGN_FILE_RELATIVE = ".novel/design/chapter-3.md";
 
 const logs = [];
 const logger = {
@@ -119,48 +110,31 @@ assert.deepEqual(
 );
 
 // ---------------------------------------------------------------------------
-// nudge 运行时装配（对齐 DesktopRuntimeChildCompositionFactory：模板注册 +
-// policy 引擎 + effect coordinator → NudgeManager）。
+// reminder 运行时装配（对齐 DesktopRuntimeChildCompositionFactory：模板注册 +
+// policy 引擎 + effect coordinator → RuntimeSystemReminderAttachPolicyEffectHandler
+// append SystemReminderAttachedOutputEvent → 投影 canonical system.reminder）。
 // ---------------------------------------------------------------------------
-function createNudgeRuntime(definitions) {
+function createReminderRuntime(definitions) {
   const templates = new NudgeTemplateRegistry({ logger });
-  const store = new InMemoryPendingNudgeStore({ logger });
-  const manager = new NudgeManager({
-    store,
-    selector: new NudgeSelector({ logger }),
-    renderer: new NudgeRenderer({ templates, logger }),
-    leaseIdFactory: {
-      create: (request) => `lease:${request.providerCallId}`,
-    },
-    logger,
-  });
-  const privateSnapshots = [];
-  const publicEvents = [];
-  const coordinator = new NudgeProviderCallCoordinator({
-    manager,
-    privateStateCommitter: {
-      commit: async (snapshot) => privateSnapshots.push(snapshot),
-    },
-    eventSink: {
-      append: async (event) => {
-        const snapshot = event.getSnapshot();
-        publicEvents.push(snapshot);
-        return {
-          status: "recorded",
-          conversationId: snapshot.conversationId,
-          eventId: snapshot.id,
-          sequence: publicEvents.length,
-          recordedAt: snapshot.timestamp,
-        };
-      },
-    },
-    eventIdFactory: {
-      create: (input) =>
-        `event:${input.providerCallId}:${input.nudgeId}:${input.eventType}`,
-    },
-    logger,
-  });
   for (const definition of definitions) templates.register(definition.template);
+  const appendedEvents = [];
+  const eventSink = {
+    async append(event) {
+      appendedEvents.push(event);
+      return {
+        status: "recorded",
+        conversationId: event.conversationId,
+        eventId: event.id,
+        sequence: appendedEvents.length,
+        recordedAt: "2026-08-08T00:00:01.000Z",
+      };
+    },
+  };
+  const handler = new RuntimeSystemReminderAttachPolicyEffectHandler({
+    eventSink,
+    templates,
+    logger,
+  });
   const deduped = [];
   const ids = new Set();
   for (const definition of definitions) {
@@ -172,21 +146,18 @@ function createNudgeRuntime(definitions) {
   const policyEngine = new RuntimePolicyEngine({ policies: deduped, logger });
   const effectCoordinator = new RuntimeEffectCoordinator({
     conversationId,
-    nudgeLifecycleHandler: new RuntimeNudgePolicyEffectHandler(manager),
+    systemReminderAttachHandler: handler,
     logger,
   });
   return {
-    store,
-    manager,
-    coordinator,
-    privateSnapshots,
-    publicEvents,
+    appendedEvents,
     policyEngine,
     effectCoordinator,
+    policies: deduped,
   };
 }
 
-// 单条 provider call：求值 policies → 执行效果 → 租赁 → 确认交付。
+// 单条 provider call：求值 policies → 执行效果 → 返回本调用附的 reminders。
 async function providerCall(runtime, ordinal, signals) {
   const providerCallId = `provider-call-${ordinal}`;
   const evaluatedAt = `2026-08-08T00:00:${String(ordinal).padStart(2, "0")}.000Z`;
@@ -200,18 +171,8 @@ async function providerCall(runtime, ordinal, signals) {
   };
   const state = { conversationId };
   const effects = runtime.policyEngine.evaluate(context, state);
-  await runtime.effectCoordinator.execute({ context, effects });
-  const prepared = await runtime.coordinator.prepare({
-    conversationId,
-    runId,
-    providerCallId,
-    targetTurnNumber: ordinal,
-    requestedAt: evaluatedAt,
-  });
-  if (prepared !== undefined) {
-    await runtime.coordinator.confirmDispatched(prepared, evaluatedAt);
-  }
-  return prepared;
+  const receipt = await runtime.effectCoordinator.execute({ context, effects });
+  return receipt.attachedReminders;
 }
 
 // 单条 provider call（显式 run）：跨 run 场景用独立 runId，policy 实例跨 run 共享。
@@ -228,18 +189,8 @@ async function providerCallInRun(runtime, runIdValue, ordinal, signals) {
   };
   const state = { conversationId };
   const effects = runtime.policyEngine.evaluate(context, state);
-  await runtime.effectCoordinator.execute({ context, effects });
-  const prepared = await runtime.coordinator.prepare({
-    conversationId,
-    runId: runIdValue,
-    providerCallId,
-    targetTurnNumber: ordinal,
-    requestedAt: evaluatedAt,
-  });
-  if (prepared !== undefined) {
-    await runtime.coordinator.confirmDispatched(prepared, evaluatedAt);
-  }
-  return prepared;
+  const receipt = await runtime.effectCoordinator.execute({ context, effects });
+  return receipt.attachedReminders;
 }
 
 const composeActive = {
@@ -247,162 +198,166 @@ const composeActive = {
     phase: "designing",
     active: true,
     mode: "compose",
-    designFilePath: DESIGN_FILE,
+    designFilePath: DESIGN_FILE_ABSOLUTE,
   },
 };
 const composeInactive = { compose: { phase: "idle", active: false, mode: "compose" } };
 
 // ---------------------------------------------------------------------------
-// 3. compose_mode 交付 trace。
+// 3. compose_mode transition 驱动。
 // ---------------------------------------------------------------------------
-const composeRuntime = createNudgeRuntime(fullEffective);
+const composeRuntime = createReminderRuntime(fullEffective);
 
-// call#1：enter → schedule + 首条 full（deliveryCount 1，1 % 5 === 1）。
-const call1 = await providerCall(composeRuntime, 1, composeActive);
-assert.ok(call1, "call#1 应交付");
-assert.equal(call1.overlay.reminderKind, "compose_mode");
-assert.ok(call1.overlay.content.includes(COMPOSE_FULL_MARK));
-assert.ok(call1.overlay.content.includes(DESIGN_FILE));
-assert.ok(
-  composeRuntime.publicEvents.some(
-    (event) =>
-      event.eventType === "system.reminder.injected" &&
-      event.payload.providerCallId === "provider-call-1",
-  ),
+// call#1：inactive → latch 初始 false，无 transition。
+assert.deepEqual(
+  await providerCall(composeRuntime, 1, composeInactive),
+  [],
+  "call#1 首次 inactive 不附",
 );
-
-// call#2-5：cooldown 抑制，无交付。
-for (let ordinal = 2; ordinal <= 5; ordinal += 1) {
-  assert.equal(
+// call#2：false→true 上升沿 → 附一条持久化 compose_mode（含 workspace 相对路径）。
+const composeEntered = await providerCall(composeRuntime, 2, composeActive);
+assert.equal(composeEntered.length, 1);
+assert.equal(composeEntered[0].kind, "compose_mode");
+assert.equal(composeEntered[0].reminderId, COMPOSE_MODE_NUDGE_ID);
+assert.ok(composeEntered[0].content.includes(COMPOSE_FULL_MARK));
+assert.ok(composeEntered[0].content.includes(DESIGN_FILE_RELATIVE));
+// call#3-10：持续 active，无 transition → 不重复附。
+for (let ordinal = 3; ordinal <= 10; ordinal += 1) {
+  assert.deepEqual(
     await providerCall(composeRuntime, ordinal, composeActive),
-    undefined,
-    `call#${ordinal} 不应交付`,
+    [],
+    `call#${ordinal} 持续 active 不应重复附`,
   );
 }
+// call#11：true→false 下降沿 → 附一条 compose_mode_exit。
+const composeExited = await providerCall(composeRuntime, 11, composeInactive);
+assert.equal(composeExited.length, 1);
+assert.equal(composeExited[0].kind, "compose_mode_exit");
+assert.equal(composeExited[0].reminderId, COMPOSE_MODE_EXIT_NUDGE_ID);
+assert.ok(composeExited[0].content.includes(COMPOSE_EXIT_MARK));
+// call#12+：持续 inactive → 无附。
+assert.deepEqual(
+  await providerCall(composeRuntime, 12, composeInactive),
+  [],
+  "call#12 持续 inactive 不附",
+);
+// 持久化事件：恰好 compose_mode + compose_mode_exit 各一条，顺序单调。
+const composeEvents = composeRuntime.appendedEvents;
+assert.equal(composeEvents.length, 2);
+assert.deepEqual(
+  composeEvents.map((event) => event.payload.kind),
+  ["compose_mode", "compose_mode_exit"],
+);
+assert.ok(composeEvents[0].payload.order < composeEvents[1].payload.order);
 
-// call#6：第 2 次交付 → 稀疏（cooldownTurns=4 严格 > 语义，首条后每 ~5 条）。
-for (const ordinal of [6, 11, 16, 21]) {
-  const delivered = await providerCall(composeRuntime, ordinal, composeActive);
-  assert.ok(delivered, `call#${ordinal} 应交付（稀疏）`);
-  assert.equal(delivered.overlay.reminderKind, "compose_mode");
-  assert.ok(delivered.overlay.content.includes(COMPOSE_SPARSE_MARK));
-  assert.ok(!delivered.overlay.content.includes(COMPOSE_FULL_MARK));
+// seed：已 active 的 latch 不应把首 call 误判为上升沿而重发 compose_mode。
+const seededRuntime = createReminderRuntime(fullEffective);
+for (const policy of seededRuntime.policies) {
+  if (policy instanceof ComposeModeNudgePolicy) {
+    policy.seed(conversationId, {
+      phase: "designing",
+      active: true,
+      mode: "compose",
+    });
+  }
 }
-
-// call#26：第 6 次交付 → 再次 full（6 % 5 === 1）。
-const call26 = await providerCall(composeRuntime, 26, composeActive);
-assert.ok(call26, "call#26 应交付（第 6 次，full）");
-assert.ok(call26.overlay.content.includes(COMPOSE_FULL_MARK));
-
-// call#27：exit → acknowledge compose_mode + 一次性 compose_mode_exit。
-const exitCall = await providerCall(composeRuntime, 27, composeInactive);
-assert.ok(exitCall, "call#27 应交付 exit");
-assert.equal(exitCall.overlay.reminderKind, "compose_mode_exit");
-assert.ok(exitCall.overlay.content.includes(COMPOSE_EXIT_MARK));
-
-// call#28+：不再交付；compose_mode 已 acknowledge、exit 已 consumed。
-assert.equal(
-  await providerCall(composeRuntime, 28, composeInactive),
-  undefined,
-  "call#28 不应交付",
+assert.deepEqual(
+  await providerCall(seededRuntime, 1, composeActive),
+  [],
+  "seed active 后首 call 不重发 compose_mode",
 );
-const composeNudges = await composeRuntime.store.list();
-assert.equal(
-  composeNudges.find((nudge) => nudge.id === COMPOSE_MODE_NUDGE_ID).state,
-  PENDING_NUDGE_STATE.acknowledged,
-);
-assert.equal(
-  composeNudges.find((nudge) => nudge.id === COMPOSE_MODE_EXIT_NUDGE_ID).state,
-  PENDING_NUDGE_STATE.consumed,
-);
+// 退出仍触发下降沿。
+const seededExit = await providerCall(seededRuntime, 2, composeInactive);
+assert.equal(seededExit.length, 1);
+assert.equal(seededExit[0].kind, "compose_mode_exit");
 
 // ---------------------------------------------------------------------------
-// 4. todo_idle：连续 ≥3 次 provider call 未调用 TodoWrite → 每 run 注入一次；
-//    跨轮清空；写即清空（写后重新计数，写后 3 个未写 call 仍触发）。
+// 4. todo_idle：连续 ≥3 次 provider call 未调用 TodoWrite → 每 run 附一条持久化
+//    todo_idle；跨轮清空；写即清空（写后重新计数，写后 3 个未写 call 仍触发）。
 //    信号滞后建模：TodoWrite 在写入 call 的下一个 call 才被观察到
 //    （lastUpdatedRunId 滞后一拍），故「写入 call 本身」显示上一写入 run。
 // ---------------------------------------------------------------------------
-const todoRuntime = createNudgeRuntime(fullEffective);
+const todoRuntime = createReminderRuntime(fullEffective);
 const todoSignal = (lastUpdatedRunId) => ({
   todos: { inProgressCount: 1, lastUpdatedRunId },
 });
 
 // run:seed：首个 TodoWrite，建立 snapshot（lastUpdatedRunId=run:seed）。
-assert.equal(
+assert.deepEqual(
   await providerCallInRun(todoRuntime, "run:seed", 1, todoSignal("run:seed")),
-  undefined,
+  [],
   "seed 写入 call 不提醒",
 );
 // run:W：call#1 执行 TodoWrite（滞后一拍）；call#2 观察到 → 写即清空，重新计数。
-assert.equal(
+assert.deepEqual(
   await providerCallInRun(todoRuntime, "run:W", 1, todoSignal("run:seed")),
-  undefined,
+  [],
   "run:W 写入 call（尚未观察到）不提醒",
 );
-assert.equal(
+assert.deepEqual(
   await providerCallInRun(todoRuntime, "run:W", 2, todoSignal("run:W")),
-  undefined,
+  [],
   "run:W 观察到写入后计数1，不提醒",
 );
-assert.equal(
+assert.deepEqual(
   await providerCallInRun(todoRuntime, "run:W", 3, todoSignal("run:W")),
-  undefined,
+  [],
   "run:W 计数2，不提醒",
 );
 const todoRunW = await providerCallInRun(todoRuntime, "run:W", 4, todoSignal("run:W"));
-assert.ok(todoRunW, "run:W 写后第 3 个未写 call（计数3）应注入");
-assert.equal(todoRunW.overlay.reminderKind, "todo_idle");
-assert.ok(todoRunW.overlay.content.includes(TODO_IDLE_MARK));
+assert.equal(todoRunW.length, 1);
+assert.equal(todoRunW[0].kind, "todo_idle");
+assert.equal(todoRunW[0].reminderId, TODO_IDLE_NUDGE_ID);
+assert.ok(todoRunW[0].content.includes(TODO_IDLE_MARK));
 // 同 run 后续 provider call 不重复（per-run 守卫）。
-assert.equal(
+assert.deepEqual(
   await providerCallInRun(todoRuntime, "run:W", 5, todoSignal("run:W")),
-  undefined,
+  [],
   "同 run 不重复提醒",
 );
-// run:X：新 run，跨轮清空 → 计数重新从 1 起，第 3 个未写 call 再次注入
-//（once 交付后跨 run 重新激活，store 替换而非累积）。
-assert.equal(
+// run:X：新 run，跨轮清空 → 计数重新从 1 起，第 3 个未写 call 再次附。
+assert.deepEqual(
   await providerCallInRun(todoRuntime, "run:X", 1, todoSignal("run:W")),
-  undefined,
+  [],
   "run:X call#1（跨轮清空计数1）不提醒",
 );
-assert.equal(
+assert.deepEqual(
   await providerCallInRun(todoRuntime, "run:X", 2, todoSignal("run:W")),
-  undefined,
+  [],
   "run:X call#2（计数2）不提醒",
 );
 const todoRunX = await providerCallInRun(todoRuntime, "run:X", 3, todoSignal("run:W"));
-assert.ok(todoRunX, "run:X 第 3 个未写 call 应再次提醒");
-assert.equal(todoRunX.overlay.reminderKind, "todo_idle");
+assert.equal(todoRunX.length, 1);
+assert.equal(todoRunX[0].kind, "todo_idle");
 // run:Y：call#1 执行 TodoWrite（滞后一拍）；写后 3 个未写 call 仍触发。
-assert.equal(
+assert.deepEqual(
   await providerCallInRun(todoRuntime, "run:Y", 1, todoSignal("run:W")),
-  undefined,
+  [],
   "run:Y 写入 call（尚未观察到）不提醒",
 );
-assert.equal(
+assert.deepEqual(
   await providerCallInRun(todoRuntime, "run:Y", 2, todoSignal("run:Y")),
-  undefined,
+  [],
   "run:Y 观察到写入后计数1，不提醒",
 );
-assert.equal(
+assert.deepEqual(
   await providerCallInRun(todoRuntime, "run:Y", 3, todoSignal("run:Y")),
-  undefined,
+  [],
   "run:Y 计数2，不提醒",
 );
 const todoRunY = await providerCallInRun(todoRuntime, "run:Y", 4, todoSignal("run:Y"));
-assert.ok(todoRunY, "run:Y 写后第 3 个未写 call（计数3）应注入");
-assert.equal(todoRunY.overlay.reminderKind, "todo_idle");
-assert.ok(todoRunY.overlay.content.includes(TODO_IDLE_MARK));
+assert.equal(todoRunY.length, 1);
+assert.equal(todoRunY[0].kind, "todo_idle");
+assert.ok(todoRunY[0].content.includes(TODO_IDLE_MARK));
 
-const todoNudges = (await todoRuntime.store.list()).filter(
-  (nudge) => nudge.id === TODO_IDLE_NUDGE_ID,
+// 持久化事件：每 run 至多一条 todo_idle（append-only 累积，不覆盖）。
+const todoEvents = todoRuntime.appendedEvents.filter(
+  (event) => event.payload.kind === "todo_idle",
 );
-assert.equal(todoNudges.length, 1, "应恰有一条 todo_idle（被替换而非累积）");
-const todoNudge = todoNudges[0];
-assert.equal(todoNudge.state, PENDING_NUDGE_STATE.consumed);
-assert.equal(todoNudge.targetRunId, "run:Y");
-assert.equal(todoNudge.delivery, "once");
+assert.deepEqual(
+  todoEvents.map((event) => event.runId),
+  ["run:W", "run:X", "run:Y"],
+);
 
 // ---------------------------------------------------------------------------
 // 5. 真实转换器：system.reminder(kind=compose_mode) → Pi 消息含 <system-reminder>。
@@ -422,8 +377,8 @@ const piMessages = await converter.convert({
       timestamp: "2026-08-08T00:00:01.000Z",
       payload: {
         kind: "compose_mode",
-        content: call1.overlay.content,
-        order: 1,
+        content: composeEvents[0].payload.content,
+        order: composeEvents[0].payload.order,
       },
     },
   ],
@@ -432,29 +387,22 @@ assert.equal(piMessages.length, 1);
 assert.equal(piMessages[0].role, "user");
 const reminderText = piMessages[0].content[0].text;
 assert.ok(reminderText.startsWith('<system-reminder kind="compose_mode">'));
-assert.ok(reminderText.includes(call1.overlay.content));
+assert.ok(reminderText.includes(composeEvents[0].payload.content));
 assert.ok(reminderText.endsWith("</system-reminder>"));
 
 // ---------------------------------------------------------------------------
-// 6. 脱敏：nudge 内容/参数不得出现在日志或事件中。
-// Sensitive content must stay out of logs and events.
+// 6. 脱敏：reminder 正文持久化进事件（投影 canonical），但不得出现在日志里。
+// Sensitive rendered content persists into events, but must stay out of logs.
 // ---------------------------------------------------------------------------
 const serializedLogs = JSON.stringify(logs);
-const sensitive = [
-  COMPOSE_FULL_MARK,
-  COMPOSE_SPARSE_MARK,
-  COMPOSE_EXIT_MARK,
-  TODO_IDLE_MARK,
-  DESIGN_FILE,
-];
-for (const snippet of sensitive) {
+for (const snippet of [COMPOSE_FULL_MARK, COMPOSE_EXIT_MARK, TODO_IDLE_MARK]) {
   assert.equal(serializedLogs.includes(snippet), false, `日志不得含 ${snippet}`);
 }
 const serializedEvents = JSON.stringify(
-  composeRuntime.publicEvents.concat(todoRuntime.publicEvents),
+  composeRuntime.appendedEvents.concat(todoRuntime.appendedEvents),
 );
-for (const snippet of sensitive) {
-  assert.equal(serializedEvents.includes(snippet), false, `事件不得含 ${snippet}`);
-}
+assert.ok(serializedEvents.includes(COMPOSE_FULL_MARK));
+assert.ok(serializedEvents.includes(COMPOSE_EXIT_MARK));
+assert.ok(serializedEvents.includes(TODO_IDLE_MARK));
 
 console.log("nudge definitions smoke passed");

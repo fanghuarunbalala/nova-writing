@@ -387,12 +387,23 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
         throw new Error("Conversation not found");
       }
       // 硬删除：物理移除会话及其全部关联记录（journal / bindings / 子代理）。
+      // 子代理表没有 conversation_id 列，按 parent/child 会话列关联；一个会话可能
+      // 同时作为父（派生子代理）或子（被派生），故两列都匹配后先清变更、再清绑定。
       this.database
-        .prepare("DELETE FROM subagent_binding_changes WHERE conversation_id = ?")
-        .run(conversationId);
+        .prepare(
+          `DELETE FROM subagent_binding_changes
+           WHERE subagent_id IN (
+             SELECT subagent_id FROM subagent_bindings
+             WHERE parent_conversation_id = ? OR child_conversation_id = ?
+           )`,
+        )
+        .run(conversationId, conversationId);
       this.database
-        .prepare("DELETE FROM subagent_bindings WHERE conversation_id = ?")
-        .run(conversationId);
+        .prepare(
+          `DELETE FROM subagent_bindings
+           WHERE parent_conversation_id = ? OR child_conversation_id = ?`,
+        )
+        .run(conversationId, conversationId);
       this.database
         .prepare("DELETE FROM conversation_agent_bindings WHERE conversation_id = ?")
         .run(conversationId);
@@ -407,11 +418,15 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
       this.database.exec("ROLLBACK");
       throw error;
     }
-    // 删除该会话的消息投影目录（硬删除后不可恢复）。
+    // 删除该会话的消息投影目录（硬删除后不可恢复）。best-effort：
+    // DB 是权威，磁盘清理失败不应让已删除成功的会话误报「删除失败」，
+    // 残留目录作为孤儿保留。Disk cleanup is best-effort after the DB commit.
     await rm(
       join(this.workspace.storeDir, "conversations", conversationId),
       { recursive: true, force: true },
-    );
+    ).catch(() => {
+      /* 静默：会话已在 DB 层删除，残留孤儿目录不阻塞删除成功语义。 */
+    });
   }
 
   private selectConversationRow(conversationId: string): ConversationRow | undefined {

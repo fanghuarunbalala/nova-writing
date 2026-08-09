@@ -5,9 +5,7 @@
  * 提供 create/select。所有 mutation 经 TaskSerializer 串行。
  *
  * 说明：
- * - rename/delete/pin 暂缓实现——core 会话契约（ConversationApiOperations）
- *   目前只有 create/list/open/events/snapshot/runtimePresence，无对应操作；
- *   待 core 契约定稿后补齐。
+ * - 提供 create/select/rename/pin/delete 全量变更操作，经 TaskSerializer 串行。
  * - loadWorkspace 只加载不自动创建（spec 1.5.1 语义；空态由 ChatEmptyState 引导）。
  */
 import {

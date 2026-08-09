@@ -18,6 +18,8 @@ export interface ConversationDialogsProps {
   readonly renameTarget?: RenameTarget;
   readonly deleteTarget?: string;
   readonly renameValue: string;
+  /** 删除进行中：确认按钮转 loading、两按钮禁用，防止重复提交。 */
+  readonly deleteBusy?: boolean;
   readonly onRenameValueChange: (value: string) => void;
   readonly onRenameConfirm: () => void;
   readonly onDeleteConfirm: () => void;
@@ -28,6 +30,7 @@ export function ConversationDialogs({
   renameTarget,
   deleteTarget,
   renameValue,
+  deleteBusy = false,
   onRenameValueChange,
   onRenameConfirm,
   onDeleteConfirm,
@@ -77,16 +80,22 @@ export function ConversationDialogs({
       <Dialog
         open={deleteTarget !== undefined}
         onOpenChange={(open) => {
-          if (!open) onClose();
+          // 删除进行中禁止 ESC/遮罩关闭，避免删除半途丢失反馈。
+          if (!open && !deleteBusy) onClose();
         }}
         title="删除对话"
         size="sm"
         footer={
           <>
-            <Button variant="ghost" size="sm" onClick={onClose}>
+            <Button variant="ghost" size="sm" disabled={deleteBusy} onClick={onClose}>
               取消
             </Button>
-            <Button variant="ghost-danger" size="sm" onClick={onDeleteConfirm}>
+            <Button
+              variant="ghost-danger"
+              size="sm"
+              loading={deleteBusy}
+              onClick={onDeleteConfirm}
+            >
               删除
             </Button>
           </>

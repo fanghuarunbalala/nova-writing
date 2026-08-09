@@ -20,6 +20,9 @@ const factory = new DesktopRuntimeChildCompositionFactory({
   manifestStoreProvider: async () => {
     throw new Error("unused");
   },
+  workspaceStoreProvider: async () => {
+    throw new Error("unused");
+  },
   adapterFactory,
   contextCompilerFactory: { async create() { throw new Error("unused"); } },
   preparationSourceFactory,

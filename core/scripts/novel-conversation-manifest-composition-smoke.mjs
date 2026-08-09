@@ -21,7 +21,7 @@ assert.equal(
 
 const composition = createNovelConversationManifestComposition();
 assert.ok(composition.registry instanceof ToolRegistry);
-assert.equal(composition.registry.size, 26);
+assert.equal(composition.registry.size, 29);
 assert.equal(composition.registry.has("TodoWrite"), true);
 assert.equal(composition.registry.has("EnterComposeMode"), true);
 assert.equal(composition.registry.has("ExitComposeMode"), true);
@@ -48,6 +48,9 @@ assert.equal(composition.registry.has("NovelChapterRead"), true);
 assert.equal(composition.registry.has("NovelChapterWrite"), true);
 assert.equal(composition.registry.has("NovelChapterEdit"), true);
 assert.equal(composition.registry.has("NovelDelete"), true);
+assert.equal(composition.registry.has("Agent"), true);
+assert.equal(composition.registry.has("TaskOutput"), true);
+assert.equal(composition.registry.has("TaskStop"), true);
 assert.equal(composition.registry.has("NovelDraftStatus"), false);
 assert.equal(composition.registry.has("NovelDraftCommit"), false);
 assert.equal(composition.registry.has("NovelDraftRollback"), false);

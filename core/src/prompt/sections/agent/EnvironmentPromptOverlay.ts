@@ -46,7 +46,7 @@ export function renderEnvironmentOverlay(snapshot: EnvironmentInfoSnapshot): str
     `- 当前日期：${snapshot.date}（${snapshot.timezone}）`,
     `- 平台：${snapshot.platform}`,
     ...(snapshot.modelId === undefined ? [] : [`- 模型：${snapshot.modelId}`]),
-    `- 工作目录：${snapshot.workdir}`,
+    // `- 工作目录：${snapshot.workdir}`,
   ].join("\n");
 }
 

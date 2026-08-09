@@ -9,7 +9,6 @@ import {
   AgentDelegationPolicy,
   AgentToolPolicy,
 } from "../definition/AgentDefinition.js";
-import type { AgentNudgeEnablement } from "./AgentNudgeEnablement.js";
 import {
   PromptRecipe,
   PromptSectionItem,
@@ -17,7 +16,7 @@ import {
 
 export const novelAgentDefinition = new AgentDefinition({
   agentType: "novel",
-  definitionVersion: "1.3.0",
+  definitionVersion: "1.5.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
@@ -25,6 +24,7 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.identity"),
     new PromptSectionItem("novel.system"),
     new PromptSectionItem("core.environment"),
+    new PromptSectionItem("novel.global_constraints"),
     // new PromptSectionItem("conversation.behavior"),
     // new PromptSectionItem("tool.guidance"),
     // new PromptSectionItem("todo.guidance"),
@@ -50,13 +50,12 @@ export const novelAgentDefinition = new AgentDefinition({
   }),
   communication: new AgentCommunicationPolicy("standalone"),
   runtimePolicyId: "default",
-});
-
-/** Novel agent 显式启用的 nudge（nudgeId）；装配侧 ∩ 工具组守卫后注入。 */
-export const novelAgentNudgeEnablement: AgentNudgeEnablement = Object.freeze({
-  enabled: Object.freeze([
-    "novel.reminder.compose_mode",
-    "novel.reminder.compose_mode_exit",
-    "novel.reminder.todo_idle",
-  ]),
+  /** Novel agent 显式启用的 nudge（nudgeId）；装配侧 ∩ 工具组守卫后注入。 */
+  nudgeEnablement: Object.freeze({
+    enabled: Object.freeze([
+      "novel.reminder.compose_mode",
+      "novel.reminder.compose_mode_exit",
+      "novel.reminder.todo_idle",
+    ]),
+  }),
 });

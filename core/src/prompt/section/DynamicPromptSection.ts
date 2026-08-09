@@ -3,7 +3,8 @@
  * Dynamic Prompt Section base: content is rendered per call by the runtime and
  * never enters the manifest-compiled base prompt.
  */
-import type { PromptEnvironmentSnapshot } from "../environment/EnvironmentPromptOverlay.js";
+import type { PromptEnvironmentSnapshot } from "../sections/agent/EnvironmentPromptOverlay.js";
+import type { NovelGlobalConstraintsSnapshot } from "../sections/novel/NovelGlobalConstraintsPromptSection.js";
 import { PromptSection, type PromptSectionOptions } from "./PromptSection.js";
 
 /**
@@ -22,6 +23,9 @@ export interface DynamicPromptSectionInput {
     /** Per-conversation base mode (review/bypass/compose); always "compose" while active. */
     readonly mode?: string;
   };
+  /** 小说全局约束快照（结构类型，避免 prompt 层依赖 node 层）。 */
+  /** Novel global-constraints snapshot (structural type; the prompt layer stays decoupled). */
+  readonly novelGlobalConstraints?: NovelGlobalConstraintsSnapshot;
 }
 
 export abstract class DynamicPromptSection extends PromptSection {

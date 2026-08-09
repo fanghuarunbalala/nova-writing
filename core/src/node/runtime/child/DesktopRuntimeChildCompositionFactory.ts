@@ -22,7 +22,6 @@ import type {
 } from "../../../storage/index.js";
 import {
   AgentAssemblyRestorer,
-  resolveAgentNudgeEnablements,
   type AgentManifestStore,
 } from "../../../agent/index.js";
 import {
@@ -333,9 +332,8 @@ export class DesktopRuntimeChildCompositionFactory
     const manifestToolGroups = new Set(
       configuration.assembly.manifest.definition.tools.groupIds,
     );
-    const enabledNudges = resolveAgentNudgeEnablements(
-      configuration.assembly.agentType,
-    ).enabled;
+    const enabledNudges =
+      configuration.assembly.manifest.definition.nudgeEnablement.enabled;
     const effectiveDefinitions = [];
     for (const definition of NUDGE_DEFINITIONS) {
       if (!enabledNudges.includes(definition.id)) continue;

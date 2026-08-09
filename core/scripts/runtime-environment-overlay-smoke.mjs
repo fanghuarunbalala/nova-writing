@@ -48,7 +48,8 @@ const rendered = environment.renderDynamic({
 assert.ok(rendered.startsWith("# 环境信息"));
 assert.ok(rendered.includes("- 平台：macOS"));
 assert.ok(rendered.includes("- 模型：gpt-test-model"));
-assert.ok(rendered.includes("- 工作目录：/tmp/novel-workspace"));
+// 工作目录行已按 4012d9f 有意移除（模型文件工具沙盒到 workspace 相对路径，绝对路径不可用）。
+assert.ok(!rendered.includes("- 工作目录"));
 assert.equal(environment.render(), "");
 assert.equal(
   environment.renderDynamic({ environment: undefined }),

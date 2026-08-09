@@ -390,6 +390,7 @@ function toTimelineCard(
     case "manuscript-proposal":
     case "character-proposal":
     case "location-proposal":
+    case "design":
     case "task":
     case "approval":
       return Object.freeze({

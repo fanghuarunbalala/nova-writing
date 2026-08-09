@@ -110,14 +110,10 @@ export class DefaultRuntimeRunPreparationSourceFactory
                         mode: composeSnapshot.mode,
                       },
                     }),
-                ...(constraintsContent === undefined
-                  ? {}
-                  : {
-                      novelGlobalConstraints: {
-                        fileName: this.#novelGlobalConstraintsFileName,
-                        content: constraintsContent,
-                      },
-                    }),
+                novelGlobalConstraints: {
+                  fileName: this.#novelGlobalConstraintsFileName,
+                  content: constraintsContent ?? "",
+                },
               };
             },
             digester: this.#digester,

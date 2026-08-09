@@ -56,6 +56,7 @@ export class ConversationTodoCoordinator
       revision: (previous?.revision ?? 0) + 1,
       todos,
       updatedAt: this.#clock.now(),
+      lastUpdatedRunId: runId,
     });
     const event = new AgentTodoUpdatedOutputEvent({
       conversationId,

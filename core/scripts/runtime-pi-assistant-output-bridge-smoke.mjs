@@ -207,6 +207,23 @@ function cancelStream(signal, onDelta) {
   };
 }
 
+// abort 先于 message_start：provider 在 abort 前不 yield 任何消息；stop 先把 turn 转
+// stopping 再 dispatch cancel，aborted 的 message_start 到达桥时 turn 已非 running。
+function abortBeforeStartStream(signal, onWaiting) {
+  const cancelled = assistant([], "aborted", "FORBIDDEN_PROVIDER_ERROR");
+  return {
+    async *[Symbol.asyncIterator]() {
+      onWaiting();
+      if (!signal.aborted) {
+        await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+      }
+      yield { type: "start", partial: assistant([]) };
+      yield { type: "error", reason: "aborted", error: cancelled };
+    },
+    result: async () => cancelled,
+  };
+}
+
 async function createRunningController(conversationId, runId, turnId, sink, logger) {
   const eventIdFactory = new FixedIdFactory();
   const controller = new TurnController({
@@ -480,6 +497,100 @@ await cancelledRuntime.controller.transitionTurn({
   cancellationReason: EXECUTION_CANCELLATION_REASON.stop,
 });
 await cancelledRuntime.controller.transitionRun({
+  current: RUN_STATUS.cancelled,
+  reason: RUN_STATE_CHANGE_REASON.cancellationCompleted,
+  cancellationReason: EXECUTION_CANCELLATION_REASON.stop,
+});
+
+// abort 先于 message_start 的取消：stop 已把 turn 转 stopping，aborted 的 message_start
+// 才到达桥。修复前 startDraft 抛 turnState（crash 链起点）；修复后容忍 stopping turn，
+// 落出 [Started, Cancelled]、outcome cancelled、无 throw。
+const abortBeforeStartSink = new RecordingSink();
+const abortBeforeStartRuntime = await createRunningController(
+  "conversation-assistant-abort-before-start",
+  "run-assistant-abort-before-start",
+  "turn-assistant-abort-before-start",
+  abortBeforeStartSink,
+  logger,
+);
+let markAbortWaiting;
+const abortWaiting = new Promise((resolve) => {
+  markAbortWaiting = resolve;
+});
+const abortBeforeStartAdapter = new PiAgentCoreAdapter({
+  agent: asPiAgentCoreClient(
+    new Agent({
+      initialState: { model, systemPrompt: "", messages: [], tools: [] },
+      streamFn: async (_model, _context, options) =>
+        abortBeforeStartStream(options.signal, markAbortWaiting),
+    }),
+  ),
+  messageConverter: converter,
+  eventBridge: createBridge({
+    conversationId: "conversation-assistant-abort-before-start",
+    controller: abortBeforeStartRuntime.controller,
+    eventIdFactory: abortBeforeStartRuntime.eventIdFactory,
+    sink: abortBeforeStartSink,
+    logger,
+    messageId: "assistant-message-abort-before-start",
+  }),
+  logger,
+});
+const abortBeforeStartContext = await compiler.compile({
+  conversationId: "conversation-assistant-abort-before-start",
+  runId: "run-assistant-abort-before-start",
+  systemPrompt: "abort before start",
+  messages: [
+    userMessage(
+      "message-assistant-abort-before-start",
+      "conversation-assistant-abort-before-start",
+      "abort before start",
+    ),
+  ],
+});
+const abortBeforeStartRun = abortBeforeStartAdapter.stream({
+  conversationId: abortBeforeStartContext.conversationId,
+  runId: abortBeforeStartContext.runId,
+  context: abortBeforeStartContext,
+  invocation: { kind: AGENT_RUNTIME_INVOCATION_KIND.continue },
+});
+await abortWaiting;
+await abortBeforeStartRuntime.controller.transitionTurn({
+  current: TURN_STATUS.stopping,
+  reason: TURN_STATE_CHANGE_REASON.stopRequested,
+});
+await abortBeforeStartRuntime.controller.transitionRun({
+  current: RUN_STATUS.stopping,
+  reason: RUN_STATE_CHANGE_REASON.stopRequested,
+});
+await abortBeforeStartAdapter.cancel({
+  conversationId: abortBeforeStartContext.conversationId,
+  runId: abortBeforeStartContext.runId,
+  turnId: abortBeforeStartRuntime.controller.getTurnSnapshot().turnId,
+  reason: EXECUTION_CANCELLATION_REASON.stop,
+});
+const abortBeforeStartResult = await abortBeforeStartRun;
+assert.equal(abortBeforeStartResult.outcome, AGENT_RUNTIME_OUTCOME.cancelled);
+assert.equal(
+  abortBeforeStartRuntime.controller.getTurnSnapshot().status,
+  TURN_STATUS.stopping,
+);
+const abortBeforeStartOutput = abortBeforeStartSink.events.filter((event) =>
+  event.getEventType().startsWith("agent.assistant.message."),
+);
+assert.deepEqual(
+  abortBeforeStartOutput.map((event) => event.getEventType()),
+  [
+    OUTPUT_EVENT_TYPE.agentAssistantMessageStarted,
+    OUTPUT_EVENT_TYPE.agentAssistantMessageCancelled,
+  ],
+);
+await abortBeforeStartRuntime.controller.transitionTurn({
+  current: TURN_STATUS.cancelled,
+  reason: TURN_STATE_CHANGE_REASON.cancellationCompleted,
+  cancellationReason: EXECUTION_CANCELLATION_REASON.stop,
+});
+await abortBeforeStartRuntime.controller.transitionRun({
   current: RUN_STATUS.cancelled,
   reason: RUN_STATE_CHANGE_REASON.cancellationCompleted,
   cancellationReason: EXECUTION_CANCELLATION_REASON.stop,

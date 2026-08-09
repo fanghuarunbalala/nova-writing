@@ -11,6 +11,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { syncDirectoryBestEffort } from "../fs/syncDirectory.js";
 import {
   CredentialReference,
   type ConfigurationHomeResolver,
@@ -202,13 +203,9 @@ export class NodeCredentialMigrationStateStore {
   }
 
   async #syncDirectory(directoryPath: string): Promise<void> {
-    let handle: Awaited<ReturnType<typeof open>> | undefined;
     try {
-      handle = await open(directoryPath, "r");
-      await handle.sync();
-      await handle.close();
+      await syncDirectoryBestEffort(directoryPath);
     } catch {
-      await handle?.close().catch(() => undefined);
       throw new NodeConfigurationStoreError(
         NODE_CONFIGURATION_STORE_FAILURE.credentialWriteFailed,
         true,

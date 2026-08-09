@@ -34,6 +34,32 @@ for (const [name, Transport] of transportCases) {
   await runProjectionContract(name, Transport);
 }
 
+// 裁剪模拟：播种路径断言——投影 store 仅构造 + seed、无任何
+// mode.changed / compose.* 事件时，快照仍持权威值（connect 播种兜底）。
+{
+  const trimmingStore = new ConversationProjectionStore({
+    conversationId: "conversation-trimming",
+  });
+  let trimmingNotifications = 0;
+  trimmingStore.subscribe(() => {
+    trimmingNotifications += 1;
+  });
+  trimmingStore.seedConversationMode("bypass");
+  trimmingStore.seedComposePhase("designing");
+  const trimmingSnapshot = trimmingStore.getSnapshot();
+  assert.equal(trimmingSnapshot.conversationMode, "bypass");
+  assert.equal(trimmingSnapshot.composePhase, "designing");
+  // 幂等：重复播种同值不通知、不重建快照。
+  const notificationsBeforeIdempotent = trimmingNotifications;
+  trimmingStore.seedConversationMode("bypass");
+  trimmingStore.seedComposePhase("designing");
+  assert.equal(trimmingNotifications, notificationsBeforeIdempotent);
+  // 清除 compose 阶段可重播种回 undefined（apply/discard 后 connect 复跑）。
+  trimmingStore.seedComposePhase(undefined);
+  assert.equal(trimmingStore.getSnapshot().composePhase, undefined);
+  assert.equal(trimmingStore.getSnapshot().conversationMode, "bypass");
+}
+
 console.log("conversation projection store smoke passed");
 
 async function runProjectionContract(name, Transport) {
@@ -322,6 +348,41 @@ async function runProjectionContract(name, Transport) {
   assert.deepEqual(rebuilt.applyMany(page.events), Array(10).fill("applied"));
   assert.deepEqual(rebuilt.getSnapshot(), projected);
   assertProjectionFailures(conversationId, page.events);
+
+  // mode 与 compose 阶段实时覆盖：novel.mode.changed / novel.compose.* 事件
+  // 更新投影 conversationMode / composePhase（与 connect 播种同一字段）。
+  await host.appendOutput({
+    id: `evt-${name}-mode-changed`,
+    conversationId,
+    eventType: "novel.mode.changed",
+    schemaVersion: 1,
+    timestamp: "2026-08-02T04:00:13.000Z",
+    payload: { composeVersion: 1, mode: "bypass" },
+  });
+  applyNext(store, await readEvent(subscription));
+  assert.equal(store.getSnapshot().conversationMode, "bypass");
+
+  await host.appendOutput({
+    id: `evt-${name}-compose-begin`,
+    conversationId,
+    eventType: "novel.compose.begin",
+    schemaVersion: 1,
+    timestamp: "2026-08-02T04:00:14.000Z",
+    payload: { composeVersion: 1, designFilePath: "/design.md", phase: "designing" },
+  });
+  applyNext(store, await readEvent(subscription));
+  assert.equal(store.getSnapshot().composePhase, "designing");
+
+  await host.appendOutput({
+    id: `evt-${name}-compose-applied`,
+    conversationId,
+    eventType: "novel.compose.applied",
+    schemaVersion: 1,
+    timestamp: "2026-08-02T04:00:15.000Z",
+    payload: { composeVersion: 1, designFilePath: "/design.md", phase: "applied" },
+  });
+  applyNext(store, await readEvent(subscription));
+  assert.equal(store.getSnapshot().composePhase, undefined);
 
   await conversation.close();
   await transport.close();

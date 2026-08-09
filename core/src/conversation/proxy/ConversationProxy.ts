@@ -7,6 +7,7 @@ import {
 } from "../ConversationErrors.js";
 import type { ConversationSnapshot } from "../ConversationSnapshot.js";
 import type { RuntimePresence } from "../RuntimePresence.js";
+import type { ConversationComposeState } from "../../storage/index.js";
 import type { ConversationClient } from "../client/index.js";
 import { ProxyConversationEvents } from "./ProxyConversationEvents.js";
 import { ProxyConversationInput } from "./ProxyConversationInput.js";
@@ -65,6 +66,11 @@ export class ConversationProxy implements Conversation {
   getRuntimePresence(): Promise<RuntimePresence> {
     this.assertOpen();
     return this.client.getRuntimePresence(this.id);
+  }
+
+  getComposeState(): Promise<ConversationComposeState | undefined> {
+    this.assertOpen();
+    return this.client.getComposeState(this.id);
   }
 
   close(): Promise<void> {

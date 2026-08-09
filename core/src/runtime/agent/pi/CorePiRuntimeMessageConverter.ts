@@ -128,6 +128,31 @@ function reorderToolMessages(
   return output;
 }
 
+/** 收集输入中真实存在的 tool.request 的 toolCallId（用于识别孤儿 toolResult）。 */
+function captureRequestToolCallIds(
+  messages: readonly RuntimeMessageSnapshot[],
+): Set<string> {
+  const ids = new Set<string>();
+  for (const message of messages) {
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolRequest
+    ) {
+      const payload = message.payload as Record<string, unknown>;
+      const toolCallId =
+        typeof payload.toolCallId === "string" ? payload.toolCallId : "";
+      if (toolCallId !== "") ids.add(toolCallId);
+    }
+  }
+  return ids;
+}
+
+/** 提取 toolResult 消息的 toolCallId（空 payload 时返回 ""）。 */
+function captureToolResultToolCallId(message: RuntimeMessageSnapshot): string {
+  const payload = message.payload as Record<string, unknown>;
+  return typeof payload.toolCallId === "string" ? payload.toolCallId : "";
+}
+
 export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter {
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
   private readonly assistantMessageEnvelopeFactory?: PiAssistantMessageEnvelopeFactory;
@@ -165,6 +190,8 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
     });
     const seenIds = new Set<string>();
     const reordered = reorderToolMessages(request.messages);
+    // 输入中真实存在的 toolRequest id 集合：孤儿 toolResult（无对应 request）据此识别。
+    const requestToolCallIds = captureRequestToolCallIds(request.messages);
     const converted = reordered.map((message) => {
       let validated: RuntimeMessageSnapshot;
       try {
@@ -191,6 +218,14 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
         );
       }
       seenIds.add(validated.id);
+      if (
+        validated.role === "tool" &&
+        validated.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolResult &&
+        validated.schemaVersion === RUNTIME_MESSAGE_SCHEMA_VERSION &&
+        !requestToolCallIds.has(captureToolResultToolCallId(validated))
+      ) {
+        return this.convertOrphanToolResultMessage(validated);
+      }
       return this.convertMessage(validated, identity);
     });
     const result = Object.freeze(converted);
@@ -368,6 +403,33 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
       isError: failed,
       timestamp: Date.parse(message.timestamp),
     } as unknown as AgentMessage;
+  }
+
+  /**
+   * 孤儿 toolResult（canonical 里没有对应 toolRequest）转为 Pi user 文本消息。
+   * 防御：历史里若残留"只有 result 没有 request"，保持消息总数 1:1（projection
+   * 不变量）的同时不再产出裸 toolResult——OpenAI 兼容 provider 会因 tool 消息
+   * 缺少前置 tool_calls 而 400。转换后文本保持工具失败的既有措辞。
+   * Convert an orphaned toolResult (no matching toolRequest in the input) to a
+   * Pi user text message: preserves the 1:1 projection count while never
+   * emitting a bare toolResult that OpenAI-compatible providers reject.
+   */
+  private convertOrphanToolResultMessage(
+    message: RuntimeMessageSnapshot,
+  ): AgentMessage {
+    const payload = message.payload as unknown as CoreToolResultMessagePayload;
+    const failed = payload.outcome === "failed";
+    const text = failed
+      ? `工具执行失败（${payload.errorCode ?? "unknown"}）`
+      : formatToolResult(payload.result);
+    const content: Array<{ type: "text"; text: string }> = [
+      { type: "text", text },
+    ];
+    return Object.freeze({
+      role: "user",
+      content,
+      timestamp: Date.parse(message.timestamp),
+    });
   }
 
   private fail(

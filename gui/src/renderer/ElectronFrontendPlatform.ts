@@ -10,16 +10,21 @@
  * - capabilities.fileSelection 跟随 files port 是否注入
  */
 import type { FileSelectionPort, FrontendPlatform, SelectFrontendFilesRequest } from "@novel/ui";
-import type { DesktopNativeFilePort } from "../shared/index.js";
+import type {
+  DesktopDesignFilePort,
+  DesktopNativeFilePort,
+} from "../shared/index.js";
 
 export interface ElectronFrontendPlatformOptions {
   readonly files?: DesktopNativeFilePort;
+  readonly design?: DesktopDesignFilePort;
 }
 
 export function createElectronFrontendPlatform(
   options: ElectronFrontendPlatformOptions = {},
 ): FrontendPlatform {
   const filesPort = options.files;
+  const designPort = options.design;
   const files: FileSelectionPort =
     filesPort === undefined
       ? Object.freeze({
@@ -51,5 +56,6 @@ export function createElectronFrontendPlatform(
     notifications: Object.freeze({
       show: async () => undefined,
     }),
+    ...(designPort === undefined ? {} : { designFile: designPort }),
   });
 }

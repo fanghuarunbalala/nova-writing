@@ -2,14 +2,12 @@
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-  NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   NovelCharacterToolService,
   NovelDeleteToolService,
-  NovelDraftToolService,
   NovelLocationToolService,
   NovelParagraphToolService,
   NovelPublicationToolService,
@@ -24,7 +22,6 @@ import {
   captureStoryUnitId,
   createNovelCharacterToolRegistry,
   createNovelDeleteToolRegistry,
-  createNovelDraftToolRegistry,
   createNovelLocationToolRegistry,
   createNovelOutlineToolRegistry,
   createNovelParagraphToolRegistry,
@@ -233,30 +230,9 @@ export const novelDeleteToolRegistry = createNovelDeleteToolRegistry({
   service: unavailableDeleteToolService,
 });
 
-const unavailableDraftToolService = new NovelDraftToolService({
-  drafts: {
-    startDraft: unavailable,
-    getActiveDraft: unavailable,
-    resetToMain: unavailable,
-    rollback: unavailable,
-  },
-  commits: {
-    commit: unavailable,
-  },
-  changeSets: {
-    build: unavailable,
-  },
-  prepareRebase: unavailable,
-});
-
-export const novelDraftToolRegistry = createNovelDraftToolRegistry({
-  service: unavailableDraftToolService,
-});
-
 export {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-  NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,

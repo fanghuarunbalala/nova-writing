@@ -44,6 +44,23 @@ export interface ElectronWorkspaceSession {
   readonly label: string;
 }
 
+/** 设计草稿文件快照。Design-file snapshot. */
+export interface ElectronDesignFileSnapshot {
+  readonly conversationId: string;
+  readonly content: string;
+  readonly sizeBytes: number;
+}
+
+export interface ElectronDesignBridge {
+  read(
+    conversationId: string,
+  ): Promise<ElectronBridgeResult<ElectronDesignFileSnapshot>>;
+  write(
+    conversationId: string,
+    content: string,
+  ): Promise<ElectronBridgeResult<ElectronBridgeAcknowledgement>>;
+}
+
 export interface ElectronWorkspaceBridge {
   select(): Promise<ElectronBridgeResult<ElectronWorkspaceReference | undefined>>;
   listRecent(): Promise<ElectronBridgeResult<readonly ElectronWorkspaceSession[]>>;
@@ -166,6 +183,7 @@ export type ElectronBridgeSubscriptionRead =
 export interface ElectronPreloadBridge {
   readonly commands?: ElectronApplicationCommandBridge;
   readonly workspaces?: ElectronWorkspaceBridge;
+  readonly design?: ElectronDesignBridge;
   readonly configuration?: ElectronConfigurationBridge;
   readonly window?: ElectronWindowBridge;
   readonly updater?: ElectronUpdaterBridge;

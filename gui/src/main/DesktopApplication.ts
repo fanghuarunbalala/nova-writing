@@ -16,6 +16,10 @@ import {
   type DesktopNativeFileServicePort,
 } from "./desktop/nativefile/index.js";
 import {
+  DesktopDesignIpcController,
+  type DesktopDesignFileServicePort,
+} from "./desktop/design/index.js";
+import {
   DesktopWindowIpcController,
   type DesktopWindowServicePort,
 } from "./desktop/window/index.js";
@@ -59,6 +63,7 @@ export interface DesktopApplicationOptions {
   readonly updaterService?: DesktopUpdaterServicePort;
   readonly trayService?: DesktopSystemTrayServicePort;
   readonly nativeFileService?: DesktopNativeFileServicePort;
+  readonly designService?: DesktopDesignFileServicePort;
 }
 
 export class DesktopApplication {
@@ -73,6 +78,7 @@ export class DesktopApplication {
   private readonly updaterController?: DesktopUpdaterIpcController;
   private readonly trayController?: DesktopSystemTrayIpcController;
   private readonly nativeFileController?: DesktopNativeFileIpcController;
+  private readonly designController?: DesktopDesignIpcController;
   private readonly platform: string;
   private readonly logger: Logger;
   private started = false;
@@ -139,6 +145,13 @@ export class DesktopApplication {
         authorizeSender,
         logger: this.logger,
       });
+    this.designController = options.designService === undefined
+      ? undefined
+      : new DesktopDesignIpcController({
+        service: options.designService,
+        authorizeSender,
+        logger: this.logger,
+      });
     windowManager = new DesktopWindowManager({
       preloadPath: options.preloadPath,
       rendererTarget: options.rendererTarget,
@@ -151,6 +164,7 @@ export class DesktopApplication {
           this.updaterController?.releaseSender(senderId),
           this.trayController?.releaseSender(senderId),
           this.nativeFileController?.releaseSender(senderId),
+          this.designController?.releaseSender(senderId),
         ]);
       },
       ...(options.isNavigationAllowed !== undefined
@@ -190,6 +204,7 @@ export class DesktopApplication {
     this.updaterController?.register(this.ipcMain);
     this.trayController?.register(this.ipcMain);
     this.nativeFileController?.register(this.ipcMain);
+    this.designController?.register(this.ipcMain);
     this.app.on("activate", this.handleActivate);
     this.app.on("window-all-closed", this.handleWindowAllClosed);
     this.logger.info("desktop_application.start_started");

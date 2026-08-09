@@ -31,6 +31,17 @@ import {
 import type { ConversationTodoWriter } from "../../../runtime/todo/index.js";
 import { ToolGroupCatalog } from "../../../tooling/group/index.js";
 import { loadToolGroupManifest } from "../../../tooling/group/index.js";
+import {
+  RUNTIME_FILES_TOOL_GROUP_MANIFEST,
+  createFileToolRegistry,
+} from "../../../tools/files/index.js";
+import { FileToolService } from "../../../tools/files/index.js";
+import {
+  NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
+  ComposeToolService,
+  createNovelComposeToolRegistry,
+} from "../../../tools/novel/index.js";
+import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
 import { ToolRegistry } from "../../../tooling/registry/index.js";
 import {
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
@@ -261,6 +272,19 @@ export function createNovelConversationManifestComposition(
     createTodoWriteTool({
       writer: options.todoWriter ?? unavailableTodoWriter,
     }),
+    ...createNovelComposeToolRegistry({
+      service: new ComposeToolService({
+        composeState: new ComposeModeStateProvider(),
+        designRoot: "/unavailable/design",
+      }),
+    }).list(),
+    ...createFileToolRegistry({
+      service: new FileToolService({
+        // 仅 manifest 装配用桩：sandboxRoot 指向不可用路径，工具不会真正执行。
+        // Stub for manifest assembly only: an unavailable sandboxRoot that never executes.
+        sandboxRoot: "/unavailable",
+      }),
+    }).list(),
     ...createNovelOutlineToolRegistry({
       service: unavailableOutlineToolService,
     }).list(),
@@ -282,6 +306,8 @@ export function createNovelConversationManifestComposition(
   ]);
   const groups = new ToolGroupCatalog([
     loadToolGroupManifest(NOVEL_CONVERSATION_TOOL_GROUP_MANIFEST),
+    NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
+    RUNTIME_FILES_TOOL_GROUP_MANIFEST,
     NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
     NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
     NOVEL_LOCATION_TOOL_GROUP_MANIFEST,

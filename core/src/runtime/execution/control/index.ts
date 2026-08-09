@@ -3,6 +3,7 @@ export * from "./RuntimeInputOutcomeController.js";
 export * from "./RuntimeApprovalDecisionInputHandler.js";
 export * from "./RuntimeApprovalDecisionInputHandlerErrors.js";
 export * from "./RuntimeControlInputDispatcher.js";
+export * from "./RuntimeConversationModeSetInputHandler.js";
 export * from "./RuntimeInputOutcomeControllerErrors.js";
 export * from "./RuntimeStopInputHandler.js";
 export * from "./RuntimeStopInputHandlerErrors.js";

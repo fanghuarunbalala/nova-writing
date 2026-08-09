@@ -6,6 +6,7 @@ export const INPUT_EVENT_TYPE = {
   clearContext: "context.clear",
   compactContext: "context.compact",
   approvalDecision: "command.tool.approval.decision",
+  conversationModeSet: "conversation.mode.set",
 } as const;
 
 export type CoreInputEventType = (typeof INPUT_EVENT_TYPE)[keyof typeof INPUT_EVENT_TYPE];

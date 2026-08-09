@@ -3,6 +3,8 @@
  *
  * 输入区（原型 .composer）：gen-status（生成状态胶囊）+ form(textarea + send) + mode-bar。
  * 生成状态胶囊位于输入框正上方（原型位置）；模式栏置于 form 下方，发送后清空本地输入。
+ * 模式栏为受控组件：mode 来自投影的会话级权威状态，切换由上层 enqueue
+ * ConversationModeSetInputEvent（mode 不再随 onSend 丢弃）。
  */
 import { useState, type KeyboardEvent } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
@@ -13,7 +15,6 @@ import styles from "./ConversationComposer.module.css";
 
 export interface ComposerInput {
   readonly text: string;
-  readonly mode: ComposerMode;
   readonly references: readonly { readonly kind: "character" | "location" | "outline"; readonly id: string; readonly label: string }[];
 }
 
@@ -23,6 +24,10 @@ export interface ConversationComposerProps {
   readonly onSend: (input: ComposerInput) => void;
   /** 生成状态（原型 .gen-status）；undefined 时不渲染。由 ChatSurface 注入运行时状态。 */
   readonly status?: GenStatusProps;
+  /** 会话级权威 mode（来自投影 conversationMode）；缺省回退 review。 */
+  readonly mode?: ComposerMode;
+  /** 切换 mode；由上层 enqueue ConversationModeSetInputEvent 到 core。 */
+  readonly onModeChange?: (mode: ComposerMode) => void;
 }
 
 export function ConversationComposer({
@@ -30,14 +35,15 @@ export function ConversationComposer({
   enabled,
   onSend,
   status,
+  mode = "review",
+  onModeChange = noopModeChange,
 }: ConversationComposerProps) {
-  const [mode, setMode] = useState<ComposerMode>("review");
   const [text, setText] = useState("");
 
   const submit = (): void => {
     const trimmed = text.trim();
     if (trimmed === "") return;
-    onSend({ text: trimmed, mode, references: [] });
+    onSend({ text: trimmed, references: [] });
     setText("");
   };
 
@@ -77,7 +83,11 @@ export function ConversationComposer({
           发送
         </Button>
       </form>
-      <ComposerModeBar mode={mode} onChange={setMode} disabled={!enabled} />
+      <ComposerModeBar mode={mode} onChange={onModeChange} disabled={!enabled} />
     </div>
   );
+}
+
+function noopModeChange(): void {
+  /* 未提供 onModeChange 时保持只读展示。 */
 }

@@ -7,3 +7,12 @@
   height: 100%;
   min-height: 0;
 }
+
+.composeBadge {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-strong, #555);
+  color: var(--color-muted, #aaa);
+  white-space: nowrap;
+}

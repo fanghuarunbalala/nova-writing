@@ -455,7 +455,8 @@ function assertPendingNudgeKeys(value: unknown): void {
     value,
     ["id", "policyId", "templateId", "templateVersion", "priority", "dedupeKey", "parameters",
       "exclusive", "placement", "delivery", "state", "targetRunId", "scheduledSequence", "scheduledAt"],
-    ["targetTurnNumber", "cooldownTurns", "expiresAfterTurn", "expiresAt", "acknowledgementRef", "conditionRef"],
+    ["targetTurnNumber", "cooldownTurns", "expiresAfterTurn", "expiresAt", "acknowledgementRef", "conditionRef",
+      "deliveryCount", "reminderKind"],
   );
 }
 

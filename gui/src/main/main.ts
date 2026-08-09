@@ -48,6 +48,7 @@ import {
   type ElectronTrayFactory,
   type ElectronTrayPort,
 } from "./desktop/index.js";
+import { DesktopDesignFileService } from "./desktop/design/index.js";
 
 const paths = resolveDesktopMainPaths(import.meta.url);
 const buildMode = await readBuildMode(import.meta.url);
@@ -160,6 +161,10 @@ const nativeFileService = new DesktopNativeFileService({
     openPath: async (path) => shell.openPath(path),
   },
 });
+const designService = new DesktopDesignFileService({
+  resolveWorkspaceRoot: (senderId) =>
+    workspaceService.getCurrentWorkspaceRoot(senderId),
+});
 const application = createElectronDesktopApplication({
   resolveTransport: (senderId) =>
     workspaceService.resolveTransport(senderId) ?? bootstrapTransport,
@@ -171,6 +176,7 @@ const application = createElectronDesktopApplication({
   updaterService,
   trayService,
   nativeFileService,
+  designService,
 });
 desktopApplicationRef = application;
 Menu.setApplicationMenu(

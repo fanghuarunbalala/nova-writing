@@ -65,6 +65,17 @@ export const ApprovalDecisionPayloadSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ConversationModeSetPayloadSchema = Type.Object(
+  {
+    mode: Type.Union([
+      Type.Literal("review"),
+      Type.Literal("bypass"),
+      Type.Literal("compose"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
 export function registerCoreInputEventSchemas(registry: EventSchemaRegistry): void {
   registry.register({
     kind: "input",
@@ -120,5 +131,13 @@ export function registerCoreInputEventSchemas(registry: EventSchemaRegistry): vo
     schemaVersion: EVENT_SCHEMA_VERSION,
     priority: INPUT_PRIORITY.command,
     payloadSchema: ApprovalDecisionPayloadSchema,
+  });
+
+  registry.register({
+    kind: "input",
+    eventType: INPUT_EVENT_TYPE.conversationModeSet,
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    priority: INPUT_PRIORITY.command,
+    payloadSchema: ConversationModeSetPayloadSchema,
   });
 }

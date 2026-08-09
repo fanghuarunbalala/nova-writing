@@ -80,6 +80,7 @@ class TestElectronBridge {
 
 await assertBridgeGuard();
 await assertRendererComposition();
+await assertDesignFileWiring();
 await assertRendererMount();
 await assertRendererBuildArtifacts();
 
@@ -130,6 +131,36 @@ async function assertRendererComposition() {
     notifications: false,
   });
   assert.deepEqual(await platform.files.selectFiles(), []);
+  await composition.transport.close();
+}
+
+async function assertDesignFileWiring() {
+  // 回归：默认平台组装必须把桥的 design 端口透传到 FrontendPlatform.designFile，
+  // 否则 DesignCard 降级为"设计草稿文件能力不可用"。
+  const reads = [];
+  const writes = [];
+  const bridge = new TestElectronBridge();
+  bridge.design = Object.freeze({
+    read: async (conversationId) => {
+      reads.push(conversationId);
+      return { ok: true, value: { content: `content-${conversationId}` } };
+    },
+    write: async (conversationId, content) => {
+      writes.push([conversationId, content]);
+      return { ok: true, value: { acknowledged: true } };
+    },
+  });
+  const composition = createDesktopRendererComposition({
+    window: { novelDesktop: bridge },
+  });
+  assert.equal(typeof composition.platform.designFile, "object");
+  assert.equal(
+    await composition.platform.designFile.read("conversation:design-wiring"),
+    "content-conversation:design-wiring",
+  );
+  assert.deepEqual(reads, ["conversation:design-wiring"]);
+  await composition.platform.designFile.write("conversation:design-wiring", "草稿");
+  assert.deepEqual(writes, [["conversation:design-wiring", "草稿"]]);
   await composition.transport.close();
 }
 

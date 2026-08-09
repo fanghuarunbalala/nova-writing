@@ -19,6 +19,7 @@ import {
   type PromptDigester,
   type PromptSectionRegistry,
 } from "../../../prompt/index.js";
+import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
 import type { RuntimeRunPreparationSourceFactory } from "./DesktopRuntimeChildCompositionFactory.js";
 
 export interface DefaultRuntimeRunPreparationSourceFactoryOptions {
@@ -28,6 +29,9 @@ export interface DefaultRuntimeRunPreparationSourceFactoryOptions {
   readonly digester?: PromptDigester;
   /** Lazy model id resolver; failure degrades to omitting the model line. */
   readonly resolveModelId?: () => Promise<string | undefined>;
+  /** compose 状态源；提供时动态段输入携带 compose 快照。 */
+  /** Compose state source; when provided, dynamic section input carries the compose snapshot. */
+  readonly composeState?: ComposeModeStateProvider;
   readonly logger?: Logger;
 }
 
@@ -43,12 +47,14 @@ export class DefaultRuntimeRunPreparationSourceFactory
   readonly #sections?: PromptSectionRegistry;
   readonly #digester?: PromptDigester;
   readonly #resolveModelId?: () => Promise<string | undefined>;
+  readonly #composeState?: ComposeModeStateProvider;
   readonly #logger: Logger;
 
   constructor(options: DefaultRuntimeRunPreparationSourceFactoryOptions = {}) {
     this.#sections = options.sections;
     this.#digester = options.digester;
     this.#resolveModelId = options.resolveModelId;
+    this.#composeState = options.composeState;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "default_runtime_run_preparation_source_factory",
     });
@@ -69,6 +75,8 @@ export class DefaultRuntimeRunPreparationSourceFactory
             dynamicSections,
             input: async () => {
               const modelId = await this.#resolveModelIdSafe();
+              const composeSnapshot =
+                this.#composeState?.snapshot(conversationId);
               return {
                 environment: {
                   workdir: bootstrap.workspace.workdir,
@@ -76,6 +84,15 @@ export class DefaultRuntimeRunPreparationSourceFactory
                     PLATFORM_LABELS[process.platform] ?? process.platform,
                   ...(modelId === undefined ? {} : { modelId }),
                 },
+                ...(composeSnapshot === undefined
+                  ? {}
+                  : {
+                      compose: {
+                        phase: composeSnapshot.phase,
+                        active: composeSnapshot.active,
+                        mode: composeSnapshot.mode,
+                      },
+                    }),
               };
             },
             digester: this.#digester,

@@ -112,4 +112,13 @@ export type ConversationTimelineItem =
       readonly sequence: number;
       readonly timestamp: number;
       readonly approval: ApprovalCardView;
+    }
+  | {
+      readonly kind: "design";
+      readonly sequence: number;
+      readonly timestamp: number;
+      readonly design: {
+        readonly conversationId: string;
+        readonly phase: string;
+      };
     };

@@ -165,6 +165,7 @@ export class NodeConversationApiApplication {
         commands,
         queries,
         runtimePresence: host,
+        composeStateReader: store.conversations,
         logger,
       });
       logger.info("node_conversation_api.opened");

@@ -91,6 +91,9 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
     configuration,
     lifecycleController,
     nudgeProviderCalls,
+    runtimeSignals,
+    policyEngine,
+    effectCoordinator,
     eventSink,
     eventIdFactory,
     toolDispatcher,
@@ -100,6 +103,9 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
         configuration,
         lifecycleController,
         nudgeProviderCalls,
+        runtimeSignals,
+        policyEngine,
+        effectCoordinator,
         eventSink,
         eventIdFactory,
         toolDispatcher,
@@ -117,6 +123,9 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
     configuration,
     lifecycleController,
     nudgeProviderCalls,
+    runtimeSignals,
+    policyEngine,
+    effectCoordinator,
     eventSink,
     eventIdFactory,
     toolDispatcher,
@@ -180,6 +189,9 @@ export class PiRuntimeChildAdapterFactory implements RuntimeChildAdapterFactory 
       ...(nudgeProviderCalls === undefined
         ? {}
         : { nudgeProviderCalls }),
+      ...(runtimeSignals === undefined ? {} : { runtimeSignals }),
+      ...(policyEngine === undefined ? {} : { policyEngine }),
+      ...(effectCoordinator === undefined ? {} : { effectCoordinator }),
       logger: this.#logger,
     });
     this.#logger.info("pi_runtime_child.adapter_created", {

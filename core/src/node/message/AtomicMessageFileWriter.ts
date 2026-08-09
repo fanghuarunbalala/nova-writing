@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readdir, rename, stat, unlink } from "node:fs/promises";
 import { dirname, basename, join } from "node:path";
+import { syncDirectoryBestEffort } from "../fs/syncDirectory.js";
 import { AtomicMessageFileReplacement } from "./AtomicMessageFileReplacement.js";
 
 export class AtomicMessageFileWriter {
@@ -102,12 +103,7 @@ export class AtomicMessageFileWriter {
   }
 
   private async syncDirectory(directory: string): Promise<void> {
-    const handle = await open(directory, "r");
-    try {
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
+    await syncDirectoryBestEffort(directory);
   }
 
   private isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {

@@ -30,6 +30,9 @@ importers:
       '@earendil-works/pi-ai':
         specifier: 0.82.1
         version: 0.82.1(ws@8.21.1)(zod@4.4.3)
+      picomatch:
+        specifier: ^4
+        version: 4.0.5
       typebox:
         specifier: 1.1.38
         version: 1.1.38
@@ -40,6 +43,9 @@ importers:
       '@types/node':
         specifier: 26.1.2
         version: 26.1.2
+      '@types/picomatch':
+        specifier: ^4.0.3
+        version: 4.0.3
 
   gui:
     dependencies:
@@ -1191,6 +1197,9 @@ packages:
 
   '@types/node@26.1.2':
     resolution: {integrity: sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==}
+
+  '@types/picomatch@4.0.3':
+    resolution: {integrity: sha512-iG0T6+nYJ9FAPmx9SsUlnwcq1ZVRuCXcVEvWnntoPlrOpwtSTKNDC9uVAxTsC3PUvJ+99n4RpAcNgBbHX3JSnQ==}
 
   '@types/react-dom@19.2.4':
     resolution: {integrity: sha512-Bsc+QHgp+P/F02XDzNCY9jnZNCUuLki36KT7VKrTXXLdHf+vHMNZnW1rVu5DNW/rCK+fya3DATySbLM4yhtKUw==}
@@ -3687,6 +3696,8 @@ snapshots:
   '@types/node@26.1.2':
     dependencies:
       undici-types: 8.3.0
+
+  '@types/picomatch@4.0.3': {}
 
   '@types/react-dom@19.2.4(@types/react@19.2.18)':
     dependencies:

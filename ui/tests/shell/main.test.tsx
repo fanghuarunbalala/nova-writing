@@ -5,8 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MainSubHead } from "../../src/shell/main/MainSubHead.js";
-import { mapProjectionTimeline } from "../../src/shell/main/chatSurfaceMapper.js";
+import {
+  composeStatusLabel,
+  mapProjectionTimeline,
+} from "../../src/shell/main/chatSurfaceMapper.js";
 import type { ConversationProjectionSnapshot } from "@novel/core";
+import type { ConversationTimelineItem } from "../../src/domains/conversation/projection/ConversationTimelineItem.js";
 
 function projection(overrides: Partial<ConversationProjectionSnapshot>): ConversationProjectionSnapshot {
   return {
@@ -76,6 +80,50 @@ describe("chatSurfaceMapper", () => {
       expect(items[2].text).toBe("已改为：雨落得密。");
       expect(items[2].approvalState).toBe("completed");
     }
+  });
+
+  it("maps novel.compose events to design items", () => {
+    const items = mapProjectionTimeline(
+      projection({
+        events: [
+          {
+            eventId: "compose-1",
+            sequence: 1,
+            direction: "output",
+            eventType: "novel.compose.begin",
+            timestamp: "2026-08-07T00:00:00.000Z",
+            recordedAt: "2026-08-07T00:00:00.000Z",
+          },
+          {
+            eventId: "compose-2",
+            sequence: 2,
+            direction: "output",
+            eventType: "novel.compose.submitted",
+            timestamp: "2026-08-07T00:00:01.000Z",
+            recordedAt: "2026-08-07T00:00:01.000Z",
+          },
+        ],
+      }),
+      [],
+      "Novel Agent",
+    );
+    const designItems = items.filter(
+      (
+        item,
+      ): item is Extract<ConversationTimelineItem, { readonly kind: "design" }> =>
+        item.kind === "design",
+    );
+    expect(designItems).toHaveLength(2);
+    expect(designItems[0].design.phase).toBe("designing");
+    expect(designItems[1].design.phase).toBe("pending");
+    expect(designItems[0].design.conversationId).toBe("c1");
+  });
+
+  it("computes the compose badge label from the projected compose phase", () => {
+    expect(composeStatusLabel({ composePhase: "designing" })).toBe("设计中");
+    expect(composeStatusLabel({ composePhase: "pending" })).toBe("待审批");
+    expect(composeStatusLabel({ composePhase: undefined })).toBeUndefined();
+    expect(composeStatusLabel({})).toBeUndefined();
   });
 
   it("inserts turn separators and attaches event flow and tool traces", () => {

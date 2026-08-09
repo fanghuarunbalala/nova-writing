@@ -2,6 +2,7 @@
 
 export type ConversationCardKind =
   | "novel-reference"
+  | "design"
   | "outline-proposal"
   | "manuscript-proposal"
   | "character-proposal"
@@ -37,6 +38,7 @@ export interface ConversationCardDescriptor extends ConversationCardProjection {
 
 const CARD_KINDS = new Set<ConversationCardKind>([
   "novel-reference",
+  "design",
   "outline-proposal",
   "manuscript-proposal",
   "character-proposal",

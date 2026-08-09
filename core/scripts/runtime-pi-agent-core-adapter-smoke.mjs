@@ -119,6 +119,22 @@ function abortableStream(signal) {
   };
 }
 
+// abort 后先 yield start（产生 message_start）再 yield error（terminal aborted）：
+// 保证取消期间桥会收到 message_start。
+function cancelWithMessageStartStream(signal) {
+  const finalMessage = assistantMessage("aborted", "FORBIDDEN_PROVIDER_ERROR");
+  return {
+    async *[Symbol.asyncIterator]() {
+      if (!signal.aborted) {
+        await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+      }
+      yield { type: "start", partial: assistantMessage() };
+      yield { type: "error", reason: "aborted", error: finalMessage };
+    },
+    result: async () => finalMessage,
+  };
+}
+
 const compiler = new BaseContextCompiler();
 const messageConverter = {
   convert: async ({ messages }) => messages.map(piUserMessage),
@@ -342,6 +358,59 @@ const cancelResult = await cancelStream;
 assert.equal(cancelResult.outcome, AGENT_RUNTIME_OUTCOME.cancelled);
 await cancelAdapter.cancel(cancelRequest);
 
+// 取消期间桥在 message_start 上抛错：Fix 2 应吞掉（event_barrier_deferred_cancellation）
+// 并让 outcome 落为 cancelled，而非 reject eventBarrier（修复前 reject）。
+const cancelBridgeLogs = [];
+const cancelBridgeAgent = new Agent({
+  initialState: { model, systemPrompt: "", messages: [], tools: [] },
+  streamFn: async (_model, _context, options) =>
+    cancelWithMessageStartStream(options.signal),
+});
+const cancelBridgeAdapter = new PiAgentCoreAdapter({
+  agent: cancelBridgeAgent,
+  messageConverter,
+  eventBridge: {
+    handle: async ({ event }) => {
+      if (event.type === "message_start") {
+        throw new Error("FORBIDDEN_EVENT_ERROR");
+      }
+    },
+  },
+  logger: createLogger(cancelBridgeLogs),
+});
+const cancelBridgeContext = await compiler.compile({
+  conversationId: "conversation-pi-cancel-bridge",
+  runId: "run-pi-cancel-bridge",
+  systemPrompt: "cancel bridge prompt",
+  messages: [
+    userMessage(
+      "message-pi-cancel-bridge",
+      "conversation-pi-cancel-bridge",
+      "cancel bridge",
+    ),
+  ],
+});
+const cancelBridgeStream = cancelBridgeAdapter.stream({
+  conversationId: cancelBridgeContext.conversationId,
+  runId: cancelBridgeContext.runId,
+  context: cancelBridgeContext,
+  invocation: { kind: AGENT_RUNTIME_INVOCATION_KIND.continue },
+});
+await new Promise((resolve) => setTimeout(resolve, 0));
+await cancelBridgeAdapter.cancel({
+  conversationId: cancelBridgeContext.conversationId,
+  runId: cancelBridgeContext.runId,
+  reason: EXECUTION_CANCELLATION_REASON.stop,
+});
+const cancelBridgeResult = await cancelBridgeStream;
+assert.equal(cancelBridgeResult.outcome, AGENT_RUNTIME_OUTCOME.cancelled);
+assert.equal(
+  cancelBridgeLogs.some(
+    (record) => record.event === "runtime.agent.event_barrier_deferred_cancellation",
+  ),
+  true,
+);
+
 const bridgeLogs = [];
 const bridgeAgent = new Agent({
   initialState: { model, systemPrompt: "", messages: [], tools: [] },
@@ -377,7 +446,12 @@ await assert.rejects(
     !error.message.includes("FORBIDDEN"),
 );
 
-const serializedLogs = JSON.stringify([...promptLogs, ...cancelLogs, ...bridgeLogs]);
+const serializedLogs = JSON.stringify([
+  ...promptLogs,
+  ...cancelLogs,
+  ...cancelBridgeLogs,
+  ...bridgeLogs,
+]);
 for (const token of forbidden) assert.equal(serializedLogs.includes(token), false);
 assert.equal(
   promptLogs.some((record) => record.event === "runtime.agent.stream_completed"),

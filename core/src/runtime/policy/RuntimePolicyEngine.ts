@@ -94,7 +94,9 @@ export class RuntimePolicyEngine {
       runId: capturedContext.runId,
       providerCallId: capturedContext.providerCallId,
       phase: capturedContext.phase,
-      pressureLevel: capturedContext.contextPressure.level,
+      ...(capturedContext.contextPressure
+        ? { pressureLevel: capturedContext.contextPressure.level }
+        : {}),
     });
     const effects: RuntimePolicyEffect[] = [];
     for (const policy of this.policies) {

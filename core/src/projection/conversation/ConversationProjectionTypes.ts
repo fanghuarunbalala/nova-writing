@@ -1,5 +1,6 @@
 /** Immutable, platform-neutral Conversation views consumed by graphical and terminal clients. */
 import type { RuntimePresence } from "../../conversation/RuntimePresence.js";
+import type { ConversationMode } from "../../runtime/compose/index.js";
 import type {
   AssistantMessageCompletionReason,
   AssistantMessageFailureCode,
@@ -157,6 +158,12 @@ export interface ConversationProjectionSnapshot {
   readonly runs: readonly AgentRunProjection[];
   readonly turns: readonly AgentTurnProjection[];
   readonly runtimePresence?: RuntimePresence;
+  /** 会话持久模式，connect 时由 DB 播种、`novel.mode.changed` 实时覆盖。 */
+  /** Persistent conversation mode: seeded from the DB at connect, overlaid by novel.mode.changed. */
+  readonly conversationMode?: ConversationMode;
+  /** 活跃 compose 会话阶段，connect 时由 DB compose_state 播种、compose 事件实时覆盖。 */
+  /** Active compose session phase: seeded from the DB at connect, overlaid by compose events. */
+  readonly composePhase?: "designing" | "pending";
 }
 
 export type ConversationProjectionListener = () => void;

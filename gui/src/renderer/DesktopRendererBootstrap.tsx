@@ -85,7 +85,12 @@ export function createDesktopRendererComposition(
       : new ElectronApplicationConfigurationClient(bridge.configuration);
   const frontendPlatform =
     options.platform ??
-    createElectronFrontendPlatform({ files: desktopPlatformApi.files });
+    createElectronFrontendPlatform({
+      files: desktopPlatformApi.files,
+      ...(desktopPlatformApi.design === undefined
+        ? {}
+        : { design: desktopPlatformApi.design }),
+    });
   return Object.freeze({
     transport,
     api: new DefaultNovelApiClient({ transport, logger }),

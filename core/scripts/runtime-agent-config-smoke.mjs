@@ -18,20 +18,20 @@ import {
   loadToolGroupManifest,
   novelAgentDefinition,
 } from "../dist/index.js";
+import { RUNTIME_FILES_TOOL_GROUP_MANIFEST, createFileToolRegistry, FileToolService } from "../dist/index.js";
+import { NOVEL_COMPOSE_TOOL_GROUP_MANIFEST, ComposeToolService, ComposeModeStateProvider, createNovelComposeToolRegistry } from "../dist/index.js";
 import {
   NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
   NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
   NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
   NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-  NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
   NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
   novelCharacterToolRegistry,
   novelLocationToolRegistry,
   novelParagraphToolRegistry,
   novelPublicationToolRegistry,
   novelDeleteToolRegistry,
-  novelDraftToolRegistry,
   novelOutlineToolRegistry,
 } from "./fixtures/novel-outline-tools.mjs";
 
@@ -79,7 +79,8 @@ const assembly = await new AgentAssembler({
     ...novelParagraphToolRegistry.list(),
     ...novelPublicationToolRegistry.list(),
     ...novelDeleteToolRegistry.list(),
-    ...novelDraftToolRegistry.list(),
+    ...createFileToolRegistry({ service: new FileToolService({ sandboxRoot: "/unavailable" }) }).list(),
+    ...createNovelComposeToolRegistry({ service: new ComposeToolService({ composeState: new ComposeModeStateProvider(), designRoot: "/unavailable/design" }) }).list(),
   ]),
   groups: new ToolGroupCatalog([
     loadToolGroupManifest(`
@@ -93,7 +94,8 @@ tools: [TodoWrite]
     NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
     NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
     NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-    NOVEL_DRAFT_TOOL_GROUP_MANIFEST,
+    RUNTIME_FILES_TOOL_GROUP_MANIFEST,
+    NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
     NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
     NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
   ]),

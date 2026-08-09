@@ -1,3 +1,4 @@
+import type { ConversationMode } from "../../runtime/compose/index.js";
 import type {
   AgentBindingIdentity,
   ConversationAgentBinding,
@@ -25,6 +26,15 @@ export interface ConversationListQuery {
   parentConversationId?: string;
   status?: ConversationStatus;
   limit?: number;
+}
+
+/** 活跃 compose 会话的持久子状态（仅 designing/pending 存行，终态由事件重建）。 */
+/** Persisted active compose session sub-state (rows exist only while designing/pending). */
+export interface ConversationComposeState {
+  phase: "designing" | "pending";
+  designFilePath: string;
+  preMode: ConversationMode;
+  updatedAt: string;
 }
 
 export interface ConversationMetadataStore {
@@ -56,6 +66,23 @@ export interface ConversationCatalogStore
     conversationId: string,
     pinned: boolean,
   ): Promise<ConversationMetadata>;
+
+  /** 设置会话持久模式。Sets the persistent conversation mode. */
+  setConversationMode(
+    conversationId: string,
+    mode: ConversationMode,
+  ): Promise<ConversationMetadata>;
+
+  /** 读取活跃 compose 会话子状态；无会话时返回 undefined。 */
+  getConversationComposeState(
+    conversationId: string,
+  ): Promise<ConversationComposeState | undefined>;
+
+  /** 写入/清除活跃 compose 会话子状态（传 undefined 删除行）。 */
+  setConversationComposeState(
+    conversationId: string,
+    state: ConversationComposeState | undefined,
+  ): Promise<void>;
 
   /** 硬删除对话（物理移除会话及其关联记录）。Hard-deletes a conversation. */
   deleteConversation(conversationId: string): Promise<void>;

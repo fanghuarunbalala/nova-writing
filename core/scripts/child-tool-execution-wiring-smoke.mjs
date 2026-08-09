@@ -5,6 +5,7 @@ import {
   INPUT_PRIORITY,
   RuntimeApprovalDecisionInputError,
   RuntimeApprovalDecisionInputHandler,
+  ComposeModeStateProvider,
   ToolError,
   ToolGroupCatalog,
   ToolRegistry,
@@ -44,6 +45,14 @@ const registry = new ToolRegistry([
   fakeTool("NovelOutlineRead", { scope: Type.Any() }),
   fakeTool("NovelOutlineWrite", { values: Type.Any() }),
   fakeTool("NovelOutlineEdit", { values: Type.Any() }),
+  fakeTool("Read", { file_path: Type.String() }),
+  fakeTool("Glob", { pattern: Type.String() }),
+  fakeTool("Write", { file_path: Type.String(), content: Type.String() }),
+  fakeTool("Edit", {
+    file_path: Type.String(),
+    old_string: Type.String(),
+    new_string: Type.String(),
+  }),
 ]);
 const groups = new ToolGroupCatalog([
   {
@@ -51,7 +60,16 @@ const groups = new ToolGroupCatalog([
     id: "child.smoke",
     version: "1.0.0",
     label: "Child Smoke",
-    tools: ["TodoWrite", "NovelOutlineRead", "NovelOutlineWrite", "NovelOutlineEdit"],
+    tools: [
+      "TodoWrite",
+      "NovelOutlineRead",
+      "NovelOutlineWrite",
+      "NovelOutlineEdit",
+      "Read",
+      "Glob",
+      "Write",
+      "Edit",
+    ],
   },
 ]);
 const view = new ToolRegistryView({
@@ -76,9 +94,11 @@ const eventSink = {
   },
 };
 
+const composeState = new ComposeModeStateProvider();
 const composition = createChildToolExecutionComposition({
   registryView: view,
   eventSink,
+  composeStateProvider: composeState,
 });
 
 // Provider-facing tool schemas include the full manifest Tool View.
@@ -91,7 +111,16 @@ const providerTools = new PiToolAdapter(
 ).toAgentTools(view.listAllowed());
 assert.deepEqual(
   providerTools.map((tool) => tool.name).sort(),
-  ["NovelOutlineEdit", "NovelOutlineRead", "NovelOutlineWrite", "TodoWrite"],
+  [
+    "Edit",
+    "Glob",
+    "NovelOutlineEdit",
+    "NovelOutlineRead",
+    "NovelOutlineWrite",
+    "Read",
+    "TodoWrite",
+    "Write",
+  ],
 );
 
 const signal = new AbortController().signal;
@@ -266,6 +295,192 @@ await assert.rejects(
     }),
   RuntimeApprovalDecisionInputError,
 );
+
+// runtime.files 权限：Read/Glob/Write/Edit 全模式放行（child_files_allow）；作用域由 FileToolService 强制。
+// runtime.files permissions: Read/Glob/Write/Edit are allowed in all modes (child_files_allow); scope is enforced by FileToolService.
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-file-read",
+    toolName: "Read",
+    toolVersion: "1.0.0",
+    arguments: { file_path: "/design/chapter-1.md" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Read");
+
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-file-glob",
+    toolName: "Glob",
+    toolVersion: "1.0.0",
+    arguments: { pattern: "**/*.md" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Glob");
+
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-file-write",
+    toolName: "Write",
+    toolVersion: "1.0.0",
+    arguments: { file_path: "/design/chapter-1.md", content: "x" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Write");
+
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-file-edit",
+    toolName: "Edit",
+    toolVersion: "1.0.0",
+    arguments: {
+      file_path: "/design/chapter-1.md",
+      old_string: "a",
+      new_string: "b",
+    },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Edit");
+
+// Compose 激活：canonical 写 deny；文件工具不再按 compose 门控（全模式可用，作用域由 FileToolService 强制）。
+// While compose is active: canonical writes are denied; file tools are not compose-gated (sandbox enforced by FileToolService).
+const designFilePath = "/workspace/.novel/design/conv-tools.md";
+composeState.enter("conv-tools", { designFilePath });
+
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-compose-read",
+    toolName: "Read",
+    toolVersion: "1.0.0",
+    arguments: { file_path: "/workspace/.novel/design/chapter-1.md" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Read");
+
+// 文件工具全模式可用：compose 激活时不再限 design 作用域。
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-compose-read-outside",
+    toolName: "Read",
+    toolVersion: "1.0.0",
+    arguments: { file_path: "/workspace/outside.md" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Read");
+
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-compose-write",
+    toolName: "Write",
+    toolVersion: "1.0.0",
+    arguments: { file_path: designFilePath, content: "x" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Write");
+
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-compose-write-other",
+    toolName: "Write",
+    toolVersion: "1.0.0",
+    arguments: { file_path: "/workspace/.novel/design/other.md", content: "x" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Write");
+
+await assert.rejects(
+  () =>
+    composition.dispatcher.execute(
+      {
+        conversationId: "conv-tools",
+        runId: "run-1",
+        toolCallId: "call-compose-canonical",
+        toolName: "NovelOutlineWrite",
+        toolVersion: "1.0.0",
+        arguments: { values: [{ id: "s", title: "t" }] },
+      },
+      { signal },
+    ),
+  (error) =>
+    error instanceof ToolError && error.code === "TOOL_PERMISSION_DENIED",
+);
+
+// 批准（inactive）：恢复透传——文件工具仍放行（child_files_allow），canonical 写回到 ask。
+// After approval the policy passes through: file tools remain allowed (child_files_allow), canonical writes return to ask.
+composeState.approve("conv-tools");
+await composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-after-compose-write",
+    toolName: "Write",
+    toolVersion: "1.0.0",
+    arguments: { file_path: designFilePath, content: "x" },
+  },
+  { signal },
+);
+assert.equal(executed.at(-1).name, "Write");
+
+const composeCanonicalPromise = composition.dispatcher.execute(
+  {
+    conversationId: "conv-tools",
+    runId: "run-1",
+    toolCallId: "call-after-compose-canonical",
+    toolName: "NovelOutlineWrite",
+    toolVersion: "1.0.0",
+    arguments: {
+      baseRevision: "revision_tool_execution_base",
+      values: [{ id: "s2", title: "t2" }],
+    },
+  },
+  { signal },
+);
+const composeCanonicalRequest = await waitForPending("NovelOutlineWrite");
+assert.ok(composeCanonicalRequest);
+await composition.coordinator.resolve(
+  {
+    id: "decision-compose",
+    conversationId: "conv-tools",
+    eventType: INPUT_EVENT_TYPE.approvalDecision,
+    direction: "input",
+    priority: INPUT_PRIORITY.command,
+    sequence: 5,
+    timestamp: "2026-08-05T00:00:05.000Z",
+    runId: composeCanonicalRequest.identity.runId,
+    payload: {
+      approvalRequestId: composeCanonicalRequest.approvalRequestId,
+      decision: "approved",
+      argumentDigest: composeCanonicalRequest.identity.argumentDigest,
+    },
+  },
+  { actorId: "smoke-user" },
+);
+await composeCanonicalPromise;
+assert.equal(executed.at(-1).name, "NovelOutlineWrite");
 
 assert.ok(CHILD_TOOL_PERMISSION_RULES.length >= 2);
 console.log("CORE_SMOKE_TEST_RESULT=pass child-tool-execution-wiring");

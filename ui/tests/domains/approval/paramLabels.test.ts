@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   inferOperation,
   isParamFieldHidden,
+  operationGlyph,
   operationLabel,
   paramFieldRank,
   paramKeyLabel,
@@ -59,5 +60,12 @@ describe("paramLabels", () => {
     expect(operationLabel("edit")).toBe("编辑");
     expect(operationLabel("delete")).toBe("删除");
     expect(operationLabel("unknown")).toBeUndefined();
+  });
+
+  it("maps operations to diff glyphs", () => {
+    expect(operationGlyph("add")).toBe("+");
+    expect(operationGlyph("edit")).toBe("~");
+    expect(operationGlyph("delete")).toBe("−");
+    expect(operationGlyph("unknown")).toBeUndefined();
   });
 });

@@ -175,6 +175,17 @@ export function operationLabel(op: string): string | undefined {
   return OPERATION_LABEL[op];
 }
 
+/** 变更类型 diff 符号（+ / ~ / −）。Operation diff glyphs. */
+export const OPERATION_GLYPH: Readonly<Record<string, string>> = {
+  add: "+",
+  edit: "~",
+  delete: "−",
+};
+
+export function operationGlyph(op: string): string | undefined {
+  return OPERATION_GLYPH[op];
+}
+
 /** 从操作摘要或工具名推断变更类型；无法推断返回 undefined。 */
 export function inferOperation(
   toolName: string,

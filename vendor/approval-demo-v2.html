@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>审批详情 · 新增/编辑/删除 样式对比 v2</title>
+<style>
+  :root {
+    --bg:            oklch(97.9% 0.003 85);
+    --surface:       oklch(99.8% 0.0015 85);
+    --surface-2:     oklch(96.2% 0.004 82);
+    --fg:            oklch(30% 0.009 46);
+    --muted:         oklch(52% 0.009 54);
+    --faint:         oklch(60% 0.009 58);
+    --border:        oklch(92.4% 0.003 82);
+    --border-strong: oklch(86.4% 0.006 72);
+    --accent:        oklch(55% 0.072 42);
+    --accent-ink:    oklch(47% 0.062 41);
+    --success:       oklch(52% 0.07 156);
+    --success-bg:    oklch(97.2% 0.011 156);
+    --warn:          oklch(59% 0.07 80);
+    --warn-bg:       oklch(97.1% 0.011 86);
+    --danger:        oklch(54% 0.068 32);
+    --danger-bg:     oklch(97.1% 0.009 33);
+    --info:          oklch(54% 0.05 235);
+    --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04), 0 8px 24px rgba(40, 22, 10, 0.045);
+    --font-ui: -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(1200px 780px at 14% -8%, color-mix(in oklab, var(--accent) 5%, transparent), transparent 62%), var(--bg);
+    color: var(--fg);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    padding: 32px 40px 80px;
+  }
+  .head { max-width: 1240px; margin: 0 auto 26px; }
+  .head h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+  .head .kicker { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--faint); margin-bottom: 6px; }
+  .head p { color: var(--muted); font-size: 13px; margin-top: 6px; max-width: 780px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 12px; color: var(--muted); }
+  .legend .box { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 5px; vertical-align: -2px; }
+  .box.g { background: color-mix(in oklab, var(--success) 16%, var(--surface)); border: 1px solid color-mix(in oklab, var(--success) 40%, transparent); }
+  .box.r { background: color-mix(in oklab, var(--danger) 14%, var(--surface)); border: 1px solid color-mix(in oklab, var(--danger) 40%, transparent); }
+  .box.n { background: var(--surface-2); border: 1px solid var(--border); }
+
+  .scheme { max-width: 1240px; margin: 34px auto 0; }
+  .scheme-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px; }
+  .scheme-head .name { font-size: 16px; font-weight: 800; }
+  .scheme-head .desc { font-size: 12.5px; color: var(--muted); }
+  .cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .col-label { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; color: var(--faint); margin-bottom: 8px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-1); overflow: hidden; display: flex; flex-direction: column; height: 100%; }
+  .btn { font: inherit; font-size: 12.5px; font-weight: 700; padding: 7px 14px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+  .btn.approve { background: var(--accent); color: oklch(99% 0 0); box-shadow: var(--shadow-1); }
+  .btn.reject { background: transparent; color: var(--danger); border-color: color-mix(in oklab, var(--danger) 32%, var(--border)); }
+  .status-pill { font-size: 9.5px; font-weight: 800; color: var(--warn); background: var(--warn-bg); border: 1px solid color-mix(in oklab, var(--warn) 26%, transparent); padding: 1px 8px; border-radius: 999px; margin-left: auto; }
+  .stale { font-size: 11.5px; font-weight: 750; color: var(--warn); background: var(--warn-bg); border: 1px solid color-mix(in oklab, var(--warn) 26%, transparent); padding: 6px 10px; border-radius: 8px; margin: 10px 12px 0; }
+
+  /* 通用 band */
+  .band { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-left: 3px solid; }
+  .band .glyph { font-family: var(--font-mono); font-weight: 800; width: 16px; }
+  .band .tool { font-family: var(--font-mono); font-size: 12px; font-weight: 800; }
+  .band.add { background: color-mix(in oklab, var(--success) 16%, var(--surface)); border-left-color: var(--success); }
+  .band.add .glyph, .band.add .tool { color: var(--success); }
+  .band.edit { background: color-mix(in oklab, var(--warn) 16%, var(--surface)); border-left-color: var(--warn); }
+  .band.edit .glyph, .band.edit .tool { color: var(--warn); }
+  .band.del { background: color-mix(in oklab, var(--danger) 16%, var(--surface)); border-left-color: var(--danger); }
+  .band.del .glyph, .band.del .tool { color: var(--danger); }
+  .title { padding: 10px 12px 0; font-size: 13.5px; font-weight: 800; display: flex; align-items: baseline; gap: 8px; }
+  .title .t-glyph { font-family: var(--font-mono); font-weight: 800; width: 16px; }
+  .title.add .t-glyph { color: var(--success); }
+  .title.edit .t-glyph { color: var(--warn); }
+  .title.del .t-glyph { color: var(--danger); }
+
+  /* ============ 方案 A：代码 diff 行 ============ */
+  .sA .body { padding: 8px 12px 0; border-top: 1px solid var(--border); }
+  .sA .row { display: flex; gap: 8px; align-items: baseline; font-size: 13px; line-height: 1.55; padding: 3px 8px; }
+  .sA .row .g { font-family: var(--font-mono); font-weight: 800; width: 14px; flex: none; text-align: center; }
+  .sA .row .tag { flex: none; width: 84px; font-size: 11px; color: var(--faint); }
+  .sA .row .val { flex: 1; min-width: 0; }
+  .sA .row.add { background: color-mix(in oklab, var(--success) 9%, var(--surface)); }
+  .sA .row.add .g, .sA .row.add .tag { color: var(--success); }
+  .sA .row.add .val { color: var(--fg); }
+  .sA .row.del { background: color-mix(in oklab, var(--danger) 8%, var(--surface)); }
+  .sA .row.del .g, .sA .row.del .tag { color: var(--danger); }
+  .sA .row.del .val { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--danger) 45%, transparent); }
+  .sA .row.ctx { background: transparent; }
+  .sA .row.ctx .g { color: var(--faint); }
+  .sA .row.ctx .val { color: var(--fg); }
+  .sA .diff-head { font-size: 11px; font-weight: 800; color: var(--faint); letter-spacing: 0.04em; margin: 8px 0 2px; padding-left: 8px; }
+  .sA .foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px; border-top: 1px solid var(--border); margin-top: 10px; }
+
+  /* ============ 方案 B：变更卡片 + 编辑 diff 块 ============ */
+  .sB .body { padding: 10px 12px 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+  .sB .card { border: 1px solid; border-radius: 10px; padding: 8px 10px; }
+  .sB .card.add { border-color: color-mix(in oklab, var(--success) 40%, var(--border)); background: color-mix(in oklab, var(--success) 6%, var(--surface)); }
+  .sB .card.del { border-color: color-mix(in oklab, var(--danger) 40%, var(--border)); background: color-mix(in oklab, var(--danger) 6%, var(--surface)); }
+  .sB .card.ctx { border-color: var(--border); background: var(--surface-2); }
+  .sB .card .c-name { font-size: 12px; font-weight: 800; margin-bottom: 4px; }
+  .sB .card.add .c-name { color: var(--success); }
+  .sB .card.del .c-name { color: var(--danger); }
+  .sB .card .f { display: flex; gap: 8px; font-size: 12.5px; line-height: 1.55; }
+  .sB .card .f .tag { flex: none; width: 80px; font-size: 11px; color: var(--faint); }
+  .sB .card.del .f .val { text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--danger) 45%, transparent); color: var(--muted); }
+  .sB .diff-box { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .sB .diff-box .d-title { font-size: 11px; font-weight: 800; color: var(--faint); letter-spacing: 0.04em; padding: 6px 10px; background: var(--surface-2); }
+  .sB .dline { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; padding: 6px 10px; }
+  .sB .dline .g { font-family: var(--font-mono); font-weight: 800; width: 14px; }
+  .sB .dline .tag { flex: none; width: 80px; font-size: 11px; color: var(--faint); }
+  .sB .dline.old { background: color-mix(in oklab, var(--danger) 9%, var(--surface)); }
+  .sB .dline.old .g, .sB .dline.old .tag { color: var(--danger); }
+  .sB .dline.old .val { text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--danger) 45%, transparent); color: var(--muted); }
+  .sB .dline.new { background: color-mix(in oklab, var(--success) 10%, var(--surface)); }
+  .sB .dline.new .g, .sB .dline.new .tag { color: var(--success); }
+  .sB .dline.new .val { color: var(--fg); }
+  .sB .foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px; border-top: 1px solid var(--border); margin-top: 10px; }
+
+  /* ============ 方案 C：状态侧条 + 内联新旧 ============ */
+  .sC .body { padding: 8px 12px 0; border-top: 1px solid var(--border); }
+  .sC .row { display: flex; gap: 8px; align-items: baseline; font-size: 13px; line-height: 1.55; padding: 4px 8px; border-left: 3px solid transparent; }
+  .sC .row.add { border-left-color: var(--success); background: color-mix(in oklab, var(--success) 7%, var(--surface)); }
+  .sC .row.del { border-left-color: var(--danger); background: color-mix(in oklab, var(--danger) 7%, var(--surface)); }
+  .sC .row.edit { border-left-color: var(--warn); background: color-mix(in oklab, var(--warn) 7%, var(--surface)); }
+  .sC .row .tag { flex: none; width: 84px; font-size: 11px; color: var(--faint); }
+  .sC .row .val { flex: 1; min-width: 0; }
+  .sC .old-chip, .sC .new-chip { display: inline-block; padding: 0 6px; border-radius: 5px; font-size: 12px; }
+  .sC .old-chip { color: var(--danger); background: color-mix(in oklab, var(--danger) 10%, var(--surface)); text-decoration: line-through; }
+  .sC .new-chip { color: var(--success); background: color-mix(in oklab, var(--success) 11%, var(--surface)); }
+  .sC .arrow { color: var(--faint); padding: 0 4px; }
+  .sC .foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px; border-top: 1px solid var(--border); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="kicker">Design Options v2 · 审批详情</div>
+  <h1>新增 / 编辑 / 删除 审批样式对比</h1>
+  <p>三个方案都把「红=旧/删除、绿=新/新增」作为统一语言，与代码 diff 一致。对比点：新增/删除的内容块怎么标色、编辑的改动项（旧→新）如何呈现、层级是否清晰。</p>
+  <div class="legend">
+    <span><i class="box g"></i>新增 / 新值</span>
+    <span><i class="box r"></i>删除 / 旧值</span>
+    <span><i class="box n"></i>上下文（未变）</span>
+  </div>
+</div>
+
+<!-- ============ 方案 A ============ -->
+<section class="scheme sA">
+  <div class="scheme-head"><span class="name">方案 A · 代码 diff 行</span><span class="desc">每行按操作标色：新增全绿(+) / 删除全红(−)删除线 / 编辑未变行中性 + 改动行红(−旧)绿(+新)</span></div>
+  <div class="cols">
+    <div class="col">
+      <div class="col-label">新增角色（写入）</div>
+      <div class="panel">
+        <div class="band add"><span class="glyph">＋</span><span class="tool">角色写入</span><span class="status-pill">待批准</span></div>
+        <div class="title add"><span class="t-glyph">＋</span>新增角色：林夏</div>
+        <div class="body">
+          <div class="row add"><span class="g">+</span><span class="tag">名称</span><span class="val">林夏</span></div>
+          <div class="row add"><span class="g">+</span><span class="tag">别名</span><span class="val">夏、夏夏</span></div>
+          <div class="row add"><span class="g">+</span><span class="tag">简介</span><span class="val">航运公司经理，货单上的铅笔批注与她有关。</span></div>
+          <div class="row add"><span class="g">+</span><span class="tag">初始状态</span><span class="val">出场时 18 岁，冷淡寡言。</span></div>
+          <div class="row add"><span class="g">+</span><span class="tag">作者注记</span><span class="val">第三卷起对旧船坞线索保持怀疑。</span></div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label">编辑角色（编辑）</div>
+      <div class="panel">
+        <div class="band edit"><span class="glyph">～</span><span class="tool">角色编辑</span><span class="status-pill">待批准</span></div>
+        <div class="title edit"><span class="t-glyph">～</span>编辑角色：林夏</div>
+        <div class="body">
+          <div class="diff-head">改动项</div>
+          <div class="row del"><span class="g">−</span><span class="tag">简介</span><span class="val">航运公司经理，货单上的铅笔批注与她有关。</span></div>
+          <div class="row add"><span class="g">+</span><span class="tag">简介</span><span class="val">航运公司经理，货单批注与她有关，暂不点破。</span></div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label">删除角色（删除）</div>
+      <div class="panel">
+        <div class="band del"><span class="glyph">−</span><span class="tool">删除</span><span class="status-pill">待批准</span></div>
+        <div class="title del"><span class="t-glyph">−</span>删除角色：林夏</div>
+        <div class="stale">版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败</div>
+        <div class="body">
+          <div class="row del"><span class="g">−</span><span class="tag">名称</span><span class="val">林夏</span></div>
+          <div class="row del"><span class="g">−</span><span class="tag">别名</span><span class="val">夏、夏夏</span></div>
+          <div class="row del"><span class="g">−</span><span class="tag">简介</span><span class="val">航运公司经理，货单上的铅笔批注与她有关。</span></div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 方案 B ============ -->
+<section class="scheme sB">
+  <div class="scheme-head"><span class="name">方案 B · 变更卡片 + 编辑 diff 块</span><span class="desc">每个实体一张色卡（新增绿/删除红/编辑中性）；编辑的「改动项」用独立 diff 框：红块(旧)上、绿块(新)下</span></div>
+  <div class="cols">
+    <div class="col">
+      <div class="col-label">新增角色（写入）</div>
+      <div class="panel">
+        <div class="band add"><span class="glyph">＋</span><span class="tool">角色写入</span><span class="status-pill">待批准</span></div>
+        <div class="title add"><span class="t-glyph">＋</span>新增角色：林夏</div>
+        <div class="body">
+          <div class="card add">
+            <div class="c-name">＋ 林夏</div>
+            <div class="f"><span class="tag">名称</span><span>林夏</span></div>
+            <div class="f"><span class="tag">别名</span><span>夏、夏夏</span></div>
+            <div class="f"><span class="tag">简介</span><span>航运公司经理，货单批注与她有关。</span></div>
+            <div class="f"><span class="tag">作者注记</span><span>第三卷起对旧船坞保持怀疑。</span></div>
+          </div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label">编辑角色（编辑）</div>
+      <div class="panel">
+        <div class="band edit"><span class="glyph">～</span><span class="tool">角色编辑</span><span class="status-pill">待批准</span></div>
+        <div class="title edit"><span class="t-glyph">～</span>编辑角色：林夏</div>
+        <div class="body">
+          <div class="card ctx">
+            <div class="c-name">林夏 · 当前</div>
+            <div class="f"><span class="tag">名称</span><span>林夏</span></div>
+            <div class="f"><span class="tag">别名</span><span>夏、夏夏</span></div>
+          </div>
+          <div class="diff-box">
+            <div class="d-title">改动项</div>
+            <div class="dline old"><span class="g">−</span><span class="tag">简介</span><span class="val">航运经理，货单批注与她有关。</span></div>
+            <div class="dline new"><span class="g">+</span><span class="tag">简介</span><span class="val">航运经理，货单批注与她有关，暂不点破。</span></div>
+          </div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label">删除角色（删除）</div>
+      <div class="panel">
+        <div class="band del"><span class="glyph">−</span><span class="tool">删除</span><span class="status-pill">待批准</span></div>
+        <div class="title del"><span class="t-glyph">−</span>删除角色：林夏</div>
+        <div class="stale">版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败</div>
+        <div class="body">
+          <div class="card del">
+            <div class="c-name">− 林夏 · 将删除</div>
+            <div class="f"><span class="tag">名称</span><span>林夏</span></div>
+            <div class="f"><span class="tag">别名</span><span>夏、夏夏</span></div>
+            <div class="f"><span class="tag">简介</span><span>航运经理，货单批注与她有关。</span></div>
+          </div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 方案 C ============ -->
+<section class="scheme sC">
+  <div class="scheme-head"><span class="name">方案 C · 状态侧条 + 内联新旧</span><span class="desc">行级左色条：新增绿/删除红/编辑橙；编辑改动字段行内用「红块旧 → 绿块新」</span></div>
+  <div class="cols">
+    <div class="col">
+      <div class="col-label">新增角色（写入）</div>
+      <div class="panel">
+        <div class="band add"><span class="glyph">＋</span><span class="tool">角色写入</span><span class="status-pill">待批准</span></div>
+        <div class="title add"><span class="t-glyph">＋</span>新增角色：林夏</div>
+        <div class="body">
+          <div class="row add"><span class="tag">名称</span><span class="val">林夏</span></div>
+          <div class="row add"><span class="tag">别名</span><span class="val">夏、夏夏</span></div>
+          <div class="row add"><span class="tag">简介</span><span class="val">航运公司经理，货单批注与她有关。</span></div>
+          <div class="row add"><span class="tag">作者注记</span><span class="val">第三卷起对旧船坞保持怀疑。</span></div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label">编辑角色（编辑）</div>
+      <div class="panel">
+        <div class="band edit"><span class="glyph">～</span><span class="tool">角色编辑</span><span class="status-pill">待批准</span></div>
+        <div class="title edit"><span class="t-glyph">～</span>编辑角色：林夏</div>
+        <div class="body">
+          <div class="row edit"><span class="tag">简介</span><span class="val"><span class="old-chip">航运经理，货单批注与她有关。</span><span class="arrow">→</span><span class="new-chip">航运经理，货单批注与她有关，暂不点破。</span></span></div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label">删除角色（删除）</div>
+      <div class="panel">
+        <div class="band del"><span class="glyph">−</span><span class="tool">删除</span><span class="status-pill">待批准</span></div>
+        <div class="title del"><span class="t-glyph">−</span>删除角色：林夏</div>
+        <div class="stale">版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败</div>
+        <div class="body">
+          <div class="row del"><span class="tag">名称</span><span class="val">林夏</span></div>
+          <div class="row del"><span class="tag">别名</span><span class="val">夏、夏夏</span></div>
+          <div class="row del"><span class="tag">简介</span><span class="val">航运经理，货单批注与她有关。</span></div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

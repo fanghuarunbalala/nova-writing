@@ -158,7 +158,7 @@ export function paramFieldRank(field: string): number {
 }
 
 /** 审批详情不展示的字段（内部标识，对审批决策无信息量）。Hidden param fields. */
-const PARAM_HIDDEN_FIELDS: ReadonlySet<string> = new Set(["baseRevision"]);
+const PARAM_HIDDEN_FIELDS: ReadonlySet<string> = new Set(["baseRevision", "id"]);
 
 export function isParamFieldHidden(field: string): boolean {
   return PARAM_HIDDEN_FIELDS.has(field);

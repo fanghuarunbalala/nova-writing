@@ -173,6 +173,10 @@ function FieldRow({
       </div>
     );
   }
+  // Edit 工具 `{ id, value }` 包装：展开 value 内层字段，去掉「变更值」包装。
+  if (field === "value" && isJsonObject(value)) {
+    return <ParamObject obj={value} tone={tone} />;
+  }
   return (
     <div className={styles.paramSubBlock}>
       <div className={styles.paramSub}>{label}</div>

@@ -43,9 +43,11 @@ describe("paramLabels", () => {
     expect(paramFieldRank("unknown-field")).toBe(50);
   });
 
-  it("hides baseRevision but keeps other fields", () => {
+  it("hides baseRevision and id but keeps other fields", () => {
     expect(isParamFieldHidden("baseRevision")).toBe(true);
+    expect(isParamFieldHidden("id")).toBe(true);
     expect(isParamFieldHidden("name")).toBe(false);
+    expect(isParamFieldHidden("characterId")).toBe(false);
   });
 
   it("infers operation from operations[0] and falls back to tool name", () => {

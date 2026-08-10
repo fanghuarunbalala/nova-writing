@@ -52,6 +52,27 @@ describe("ParameterView", () => {
     expect(labelRow?.textContent).toContain("空");
   });
 
+  it("hides id and unwraps the edit value wrapper", () => {
+    render(
+      <ParameterView
+        value={{
+          baseRevision: "rev-1",
+          values: [
+            { id: "C-1", value: { name: "林夏", aliases: ["夏"] } },
+            { id: "C-2", value: { name: "顾一舟" } },
+          ],
+        }}
+      />,
+    );
+    expect(screen.queryByText("ID")).not.toBeInTheDocument();
+    expect(screen.queryByText("C-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("变更值")).not.toBeInTheDocument();
+    expect(screen.queryByText("变更项")).not.toBeInTheDocument();
+    expect(screen.getAllByText("名称").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("林夏").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("顾一舟").length).toBeGreaterThan(0);
+  });
+
   it("renders null as 空 and booleans as 是/否", () => {
     render(<ParameterView value={{ cascade: true, note: null }} />);
     expect(screen.getByText("是")).toBeInTheDocument();

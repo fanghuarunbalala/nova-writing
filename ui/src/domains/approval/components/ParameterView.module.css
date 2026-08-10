@@ -16,6 +16,34 @@
   line-height: 1.6;
 }
 
+/* 方案 E diff 色块：行级左色条 + tinted 底色。Row-level diff-block tone. */
+.toneAdd {
+  border-left: 3px solid var(--color-success);
+  background: color-mix(in oklab, var(--color-success) 8%, var(--color-surface));
+}
+
+.toneEdit {
+  border-left: 3px solid var(--color-warn);
+  background: color-mix(in oklab, var(--color-warn) 8%, var(--color-surface));
+}
+
+.toneDel {
+  border-left: 3px solid var(--color-danger);
+  background: color-mix(in oklab, var(--color-danger) 8%, var(--color-surface));
+}
+
+.paramGutter {
+  flex: none;
+  width: 14px;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  text-align: center;
+}
+
+.toneAdd .paramGutter { color: var(--color-success); }
+.toneEdit .paramGutter { color: var(--color-warn); }
+.toneDel .paramGutter { color: var(--color-danger); }
+
 .paramTag {
   flex: none;
   width: 92px;

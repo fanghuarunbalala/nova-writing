@@ -74,4 +74,24 @@ describe("ParameterView", () => {
     expect(screen.queryByText("rev-1")).not.toBeInTheDocument();
     expect(screen.queryByText("基础修订版本")).not.toBeInTheDocument();
   });
+
+  it("renders diff gutter glyphs when tone is set", () => {
+    render(<ParameterView value={{ name: "林夏", aliases: ["夏"] }} tone="add" />);
+    expect(screen.getAllByText("+").length).toBeGreaterThan(0);
+  });
+
+  it("renders no gutter without tone", () => {
+    render(<ParameterView value={{ name: "林夏" }} />);
+    expect(screen.queryAllByText("+")).toHaveLength(0);
+  });
+
+  it("threads tone into nested object-array items", () => {
+    render(
+      <ParameterView
+        value={{ values: [{ name: "林夏" }, { name: "顾一舟" }] }}
+        tone="edit"
+      />,
+    );
+    expect(screen.getAllByText("~").length).toBeGreaterThan(0);
+  });
 });

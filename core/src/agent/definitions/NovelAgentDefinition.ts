@@ -22,12 +22,12 @@ export const novelAgentDefinition = new AgentDefinition({
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
-    new PromptSectionItem("core.runtime.protocol"),
     new PromptSectionItem("novel.identity"),
     new PromptSectionItem("novel.system"),
     new PromptSectionItem("novel.doing-tasks"),
     new PromptSectionItem("novel.actions"),
     new PromptSectionItem("novel.communication"),
+    new PromptSectionItem("core.runtime.protocol"),
     new PromptSectionItem("core.environment"),
     new PromptSectionItem("novel.global_constraints"),
     // new PromptSectionItem("conversation.behavior"),

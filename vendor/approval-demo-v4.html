@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>审批详情 · 方案 A · 对齐实际数据 v4</title>
+<style>
+  :root {
+    --bg:            oklch(97.9% 0.003 85);
+    --surface:       oklch(99.8% 0.0015 85);
+    --surface-2:     oklch(96.2% 0.004 82);
+    --fg:            oklch(30% 0.009 46);
+    --muted:         oklch(52% 0.009 54);
+    --faint:         oklch(60% 0.009 58);
+    --border:        oklch(92.4% 0.003 82);
+    --border-strong: oklch(84% 0.008 72);
+    --accent:        oklch(55% 0.072 42);
+    --accent-ink:    oklch(47% 0.062 41);
+    --success:       oklch(52% 0.07 156);
+    --warn:          oklch(59% 0.07 80);
+    --warn-bg:       oklch(97.1% 0.011 86);
+    --danger:        oklch(54% 0.068 32);
+    --info:          oklch(54% 0.05 235);
+    --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04), 0 8px 24px rgba(40, 22, 10, 0.045);
+    --font-ui: -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    --font-body: "Iowan Old Style", "Songti SC", "Noto Serif SC", Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(1200px 780px at 14% -8%, color-mix(in oklab, var(--accent) 5%, transparent), transparent 62%), var(--bg);
+    color: var(--fg); font-family: var(--font-ui); font-size: 14px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased; padding: 32px 40px 80px;
+  }
+  .head { max-width: 1280px; margin: 0 auto 26px; }
+  .head h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+  .head .kicker { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--faint); margin-bottom: 6px; }
+  .head p { color: var(--muted); font-size: 13px; margin-top: 6px; max-width: 860px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 12px; color: var(--muted); }
+  .legend .box { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 5px; vertical-align: -2px; }
+  .box.g { background: color-mix(in oklab, var(--success) 14%, var(--surface)); border: 1px solid color-mix(in oklab, var(--success) 40%, transparent); }
+  .box.r { background: color-mix(in oklab, var(--danger) 12%, var(--surface)); border: 1px solid color-mix(in oklab, var(--danger) 40%, transparent); }
+  .box.n { background: var(--surface-2); border: 1px solid var(--border); }
+
+  .esec { max-width: 1280px; margin: 26px auto 0; }
+  .esec-head { display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 12px; }
+  .esec-head .nm { font-size: 15px; font-weight: 800; }
+  .esec-head .sub { font-family: var(--font-mono); font-size: 11px; color: var(--faint); }
+  .cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .col-label { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; color: var(--faint); margin-bottom: 7px; }
+  .col-label b { color: var(--muted); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-1); overflow: hidden; display: flex; flex-direction: column; height: 100%; }
+  .btn { font: inherit; font-size: 12.5px; font-weight: 700; padding: 7px 14px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+  .btn.approve { background: var(--accent); color: oklch(99% 0 0); box-shadow: var(--shadow-1); }
+  .btn.reject { background: transparent; color: var(--danger); border-color: color-mix(in oklab, var(--danger) 32%, var(--border)); }
+  .status-pill { font-size: 9.5px; font-weight: 800; color: var(--warn); background: var(--warn-bg); border: 1px solid color-mix(in oklab, var(--warn) 26%, transparent); padding: 1px 8px; border-radius: 999px; margin-left: auto; }
+
+  .band { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-left: 3px solid; }
+  .band .glyph { font-family: var(--font-mono); font-weight: 800; width: 16px; }
+  .band .tool { font-family: var(--font-mono); font-size: 12px; font-weight: 800; }
+  .band.add { background: color-mix(in oklab, var(--success) 16%, var(--surface)); border-left-color: var(--success); }
+  .band.add .glyph, .band.add .tool { color: var(--success); }
+  .band.edit { background: color-mix(in oklab, var(--warn) 16%, var(--surface)); border-left-color: var(--warn); }
+  .band.edit .glyph, .band.edit .tool { color: var(--warn); }
+  .band.del { background: color-mix(in oklab, var(--danger) 16%, var(--surface)); border-left-color: var(--danger); }
+  .band.del .glyph, .band.del .tool { color: var(--danger); }
+  .title { padding: 9px 12px 0; font-size: 13px; font-weight: 800; display: flex; align-items: baseline; gap: 8px; }
+  .title .t-glyph { font-family: var(--font-mono); font-weight: 800; width: 16px; }
+  .title.add .t-glyph { color: var(--success); }
+  .title.edit .t-glyph { color: var(--warn); }
+  .title.del .t-glyph { color: var(--danger); }
+  .body { padding: 8px 12px 0; border-top: 1px solid var(--border); flex: 1; font-size: 13px; }
+  .foot { display: flex; justify-content: flex-end; gap: 8px; padding: 11px 12px; border-top: 1px solid var(--border); margin-top: 10px; }
+  .stale { font-size: 11px; font-weight: 750; color: var(--warn); background: var(--warn-bg); border: 1px solid color-mix(in oklab, var(--warn) 26%, transparent); padding: 5px 9px; border-radius: 8px; margin: 8px 12px 0; }
+
+  /* diff 行 */
+  .dl { display: flex; gap: 7px; align-items: baseline; line-height: 1.55; padding: 2px 8px; border-radius: 5px; }
+  .dl .g { font-family: var(--font-mono); font-weight: 800; width: 13px; flex: none; text-align: center; }
+  .dl .fld { flex: none; width: 72px; font-size: 11px; color: var(--faint); }
+  .dl .txt { flex: 1; min-width: 0; }
+  .dl.ctx { background: transparent; }
+  .dl.ctx .g { color: var(--border-strong); }
+  .dl.ctx .txt { color: var(--muted); }
+  .dl.add { background: color-mix(in oklab, var(--success) 9%, var(--surface)); }
+  .dl.add .g { color: var(--success); }
+  .dl.add .txt { color: var(--fg); }
+  .dl.del { background: color-mix(in oklab, var(--danger) 8%, var(--surface)); }
+  .dl.del .g { color: var(--danger); }
+  .dl.del .txt { text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--danger) 45%, transparent); color: var(--muted); }
+  .dl.old { background: color-mix(in oklab, var(--danger) 9%, var(--surface)); }
+  .dl.old .g { color: var(--danger); }
+  .dl.old .txt { text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--danger) 45%, transparent); color: var(--muted); }
+  .dl.new { background: color-mix(in oklab, var(--success) 10%, var(--surface)); }
+  .dl.new .g { color: var(--success); }
+  .dl.new .txt { color: var(--fg); }
+
+  /* 树/列表：嵌套容器 + 引导线 + 横向枝 */
+  .tree, .list { font-size: 12.5px; }
+  .node, .li { position: relative; display: flex; align-items: baseline; gap: 6px; padding: 3px 8px 3px 6px; border-radius: 6px; color: var(--muted); }
+  .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sc { font-family: var(--font-mono); font-size: 9px; font-weight: 700; color: var(--accent-ink); background: color-mix(in oklab, var(--accent) 8%, var(--surface)); border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--border)); border-radius: 4px; padding: 0 4px; }
+  .st { font-size: 10px; display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
+  .st i { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .st.pending i { border: 1.5px solid var(--border-strong); }
+  .st.inprogress i { background: var(--accent); }
+  .st.completed i { background: var(--success); }
+  .st.blocked i { background: var(--danger); }
+  .st.abandoned i { background: var(--faint); }
+  .children { margin-left: 7px; padding-left: 16px; border-left: 1.5px solid var(--border-strong); }
+  .children > .node::before, .children > .li::before {
+    content: ""; position: absolute; left: -16px; top: 50%; width: 12px; height: 1.5px; background: var(--border-strong);
+  }
+  .node.current, .li.current { background: color-mix(in oklab, var(--warn) 13%, var(--surface)); border-left: 3px solid var(--warn); color: var(--fg); }
+  .node.current .nm, .li.current .nm { font-weight: 800; }
+  .node.new, .li.new { background: color-mix(in oklab, var(--success) 13%, var(--surface)); border-left: 3px solid var(--success); color: var(--fg); }
+  .node.new .nm, .li.new .nm { font-weight: 800; }
+  .node.hot, .li.hot { background: color-mix(in oklab, var(--danger) 13%, var(--surface)); border-left: 3px solid var(--danger); color: var(--danger); }
+  .node.hot .nm, .li.hot .nm { font-weight: 800; text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--danger) 45%, transparent); }
+  .dblock { margin-left: 7px; padding-left: 16px; border-left: 1.5px solid color-mix(in oklab, var(--warn) 60%, var(--border-strong)); }
+  .dblock.g { border-left-color: color-mix(in oklab, var(--success) 60%, var(--border-strong)); }
+  .dblock.r { border-left-color: color-mix(in oklab, var(--danger) 60%, var(--border-strong)); }
+  .more { color: var(--faint); font-size: 12px; padding: 2px 8px; }
+  /* 叶子计划（leaf）子单元标签 */
+  .leafhead { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px 1px; font-size: 11px; font-weight: 800; letter-spacing: 0.05em; }
+  .leafhead.g { color: var(--success); }
+  .leafhead.w { color: var(--warn); }
+  .leafhead.r { color: var(--danger); }
+  .leafhead .sc { margin-left: auto; }
+
+  /* 正文上下文 */
+  .para { font-family: var(--font-body); font-size: 13px; }
+  .para .ctx { color: var(--muted); padding: 2px 8px; border-radius: 5px; }
+  .para .ellipsis { color: var(--faint); font-size: 12px; padding: 0 8px; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="kicker">方案 A · 对齐实际数据 v4</div>
+  <h1>审批详情：真实字段 / 真实树结构 / 真实状态</h1>
+  <p>按 core 真实数据：角色/地点字段 <code>name/aliases/summary/initialState/authorNotes</code>；大纲树投影只保留 <code>ARC/SCENE</code> 两级，节点带 <code>planM</code> 与 <code>realNode</code> 状态；正文为 <code>卷→章→段落</code> 结构。变更节点色块高亮 + diff 行挂在节点下。</p>
+  <div class="legend">
+    <span><i class="box g"></i>新值 / 新增</span>
+    <span><i class="box r"></i>旧值 / 删除</span>
+    <span><i class="box n"></i>上下文</span>
+  </div>
+</div>
+
+<!-- ===== 角色 ===== -->
+<section class="esec">
+  <div class="esec-head"><span class="nm">角色</span><span class="sub">CharacterProfile · name / aliases / summary / initialState / authorNotes</span></div>
+  <div class="cols">
+    <div class="col">
+      <div class="col-label"><b>新增</b> · NovelCharacterWrite</div>
+      <div class="panel">
+        <div class="band add"><span class="glyph">＋</span><span class="tool">角色写入</span><span class="status-pill">待批准</span></div>
+        <div class="title add"><span class="t-glyph">＋</span>新增角色：林夏</div>
+        <div class="body">
+          <div class="dl add"><span class="g">+</span><span class="fld">名称</span><span class="txt">林夏</span></div>
+          <div class="dl add"><span class="g">+</span><span class="fld">别名</span><span class="txt">夏、夏夏</span></div>
+          <div class="dl add"><span class="g">+</span><span class="fld">简介</span><span class="txt">航运公司经理，货单上的铅笔批注与她有关。</span></div>
+          <div class="dl add"><span class="g">+</span><span class="fld">初始状态</span><span class="txt">出场时 18 岁，冷淡寡言。</span></div>
+          <div class="dl add"><span class="g">+</span><span class="fld">作者注记</span><span class="txt">第三卷起对旧船坞线索保持怀疑，少说多做。</span></div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label"><b>编辑</b> · NovelCharacterEdit</div>
+      <div class="panel">
+        <div class="band edit"><span class="glyph">～</span><span class="tool">角色编辑</span><span class="status-pill">待批准</span></div>
+        <div class="title edit"><span class="t-glyph">～</span>编辑角色：林夏</div>
+        <div class="body">
+          <div class="dl ctx"><span class="g">·</span><span class="fld">名称</span><span class="txt">林夏</span></div>
+          <div class="dl ctx"><span class="g">·</span><span class="fld">别名</span><span class="txt">夏、夏夏</span></div>
+          <div class="dl old"><span class="g">−</span><span class="fld">简介</span><span class="txt">航运公司经理，货单上的铅笔批注与她有关。</span></div>
+          <div class="dl new"><span class="g">+</span><span class="fld">简介</span><span class="txt">航运公司经理，货单上的铅笔批注与她有关，暂不点破。</span></div>
+          <div class="dl new"><span class="g">+</span><span class="fld">作者注记</span><span class="txt">第三卷起对旧船坞线索保持怀疑，少说多做。</span></div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label"><b>删除</b> · NovelDelete</div>
+      <div class="panel">
+        <div class="band del"><span class="glyph">−</span><span class="tool">删除</span><span class="status-pill">待批准</span></div>
+        <div class="title del"><span class="t-glyph">−</span>删除角色：林夏</div>
+        <div class="stale">版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败</div>
+        <div class="body">
+          <div class="dl del"><span class="g">−</span><span class="fld">名称</span><span class="txt">林夏</span></div>
+          <div class="dl del"><span class="g">−</span><span class="fld">别名</span><span class="txt">夏、夏夏</span></div>
+          <div class="dl del"><span class="g">−</span><span class="fld">简介</span><span class="txt">航运公司经理，货单上的铅笔批注与她有关。</span></div>
+          <div class="dl del"><span class="g">−</span><span class="fld">作者注记</span><span class="txt">第三卷起对旧船坞线索保持怀疑。</span></div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 大纲单元 ===== -->
+<section class="esec">
+  <div class="esec-head"><span class="nm">大纲单元</span><span class="sub">StoryUnit · 树投影 ARC/SCENE + planM/realNode</span></div>
+  <div class="cols">
+    <div class="col">
+      <div class="col-label"><b>新增</b> · NovelOutlineWrite（挂到 ARC 下）</div>
+      <div class="panel">
+        <div class="band add"><span class="glyph">＋</span><span class="tool">大纲写入</span><span class="status-pill">待批准</span></div>
+        <div class="title add"><span class="t-glyph">＋</span>新增大纲：追踪错误目标</div>
+        <div class="body">
+          <div class="tree">
+            <div class="node"><span class="nm">灯塔调查线</span><span class="sc">ARC</span><span class="st inprogress"><i></i>进行中</span></div>
+            <div class="children">
+              <div class="node"><span class="nm">旧船坞七号</span><span class="sc">SCENE</span></div>
+              <div class="node new"><span class="nm">追踪错误目标</span><span class="sc">SCENE</span></div>
+              <div class="dblock g">
+                <div class="dl add"><span class="g">+</span><span class="fld">标题</span><span class="txt">追踪错误目标</span></div>
+                <div class="dl add"><span class="g">+</span><span class="fld">范围</span><span class="txt">场景</span></div>
+                <div class="dl add"><span class="g">+</span><span class="fld">规划状态</span><span class="txt">点子</span></div>
+                <div class="dl add"><span class="g">+</span><span class="fld">实现状态</span><span class="txt">未开始</span></div>
+              </div>
+              <div class="leafhead g">写作方案 <span class="sc">LEAF</span></div>
+              <div class="dblock g">
+                <div class="dl add"><span class="g">+</span><span class="fld">时间</span><span class="txt">傍晚，潮汐涨起</span></div>
+                <div class="dl add"><span class="g">+</span><span class="fld">地点</span><span class="txt">旧船坞七号（主要）</span></div>
+                <div class="dl add"><span class="g">+</span><span class="fld">出场角色</span><span class="txt">林夏（在场 · 视角）、顾一舟（在场 · 参与者）</span></div>
+                <div class="dl add"><span class="g">+</span><span class="fld">事件</span><span class="txt">① 发现货单　② 潮汐表出现</span></div>
+                <div class="dl add"><span class="g">+</span><span class="fld">情绪节奏</span><span class="txt">铺垫 → 上升（强度 2 → 3）</span></div>
+                <div class="dl add"><span class="g">+</span><span class="fld">状态变化</span><span class="txt">林夏 · 认知：知晓「青屿号」</span></div>
+              </div>
+              <div class="node"><span class="nm">白鹭旅馆（晨谈）</span><span class="sc">SCENE</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label"><b>编辑</b> · NovelOutlineEdit</div>
+      <div class="panel">
+        <div class="band edit"><span class="glyph">～</span><span class="tool">大纲编辑</span><span class="status-pill">待批准</span></div>
+        <div class="title edit"><span class="t-glyph">～</span>编辑大纲：追踪错误目标</div>
+        <div class="body">
+          <div class="tree">
+            <div class="node"><span class="nm">灯塔调查线</span><span class="sc">ARC</span><span class="st inprogress"><i></i>进行中</span></div>
+            <div class="children">
+              <div class="node"><span class="nm">旧船坞七号</span><span class="sc">SCENE</span><span class="st completed"><i></i>已完成</span></div>
+              <div class="node current"><span class="nm">追踪错误目标</span><span class="sc">SCENE</span><span class="st pending"><i></i>未开始</span></div>
+              <div class="dblock">
+                <div class="dl old"><span class="g">−</span><span class="fld">规划状态</span><span class="txt">点子</span></div>
+                <div class="dl new"><span class="g">+</span><span class="fld">规划状态</span><span class="txt">已列大纲</span></div>
+                <div class="dl new"><span class="g">+</span><span class="fld">阻塞原因</span><span class="txt">依赖「潮汐时刻表」</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label"><b>删除</b> · NovelDelete（级联子树）</div>
+      <div class="panel">
+        <div class="band del"><span class="glyph">−</span><span class="tool">删除</span><span class="status-pill">待批准</span></div>
+        <div class="title del"><span class="t-glyph">−</span>删除大纲：追踪错误目标</div>
+        <div class="body">
+          <div class="tree">
+            <div class="node"><span class="nm">灯塔调查线</span><span class="sc">ARC</span><span class="st inprogress"><i></i>进行中</span></div>
+            <div class="children">
+              <div class="node"><span class="nm">旧船坞七号</span><span class="sc">SCENE</span></div>
+              <div class="node hot"><span class="nm">追踪错误目标</span><span class="sc">SCENE</span></div>
+              <div class="children">
+                <div class="node hot"><span class="nm">发现货单</span><span class="sc">SCENE</span></div>
+                <div class="node hot"><span class="nm">锁定青屿号</span><span class="sc">SCENE</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 卷 / 章 ===== -->
+<section class="esec">
+  <div class="esec-head"><span class="nm">卷 / 章</span><span class="sub">PublicationVolume / Chapter · 卷 → 章</span></div>
+  <div class="cols">
+    <div class="col">
+      <div class="col-label"><b>编辑卷</b> · NovelVolumeEdit（卷名 + 子章标题）</div>
+      <div class="panel">
+        <div class="band edit"><span class="glyph">～</span><span class="tool">卷编辑</span><span class="status-pill">待批准</span></div>
+        <div class="title edit"><span class="t-glyph">～</span>编辑卷：第二卷</div>
+        <div class="body">
+          <div class="list">
+            <div class="li"><span class="nm">第一卷 · 雾港</span></div>
+            <div class="li current"><span class="nm">第二卷 · 潮汐</span></div>
+            <div class="dblock">
+              <div class="dl old"><span class="g">−</span><span class="fld">标题</span><span class="txt">第二卷 · 潮声</span></div>
+              <div class="dl new"><span class="g">+</span><span class="fld">标题</span><span class="txt">第二卷 · 潮汐</span></div>
+            </div>
+            <div class="children">
+              <div class="li"><span class="nm">第一章 · 白鹭旅馆（晨谈）</span></div>
+              <div class="li current"><span class="nm">第二章 · 对账</span></div>
+              <div class="dblock">
+                <div class="dl old"><span class="g">−</span><span class="fld">标题</span><span class="txt">第二章 · 查账</span></div>
+                <div class="dl new"><span class="g">+</span><span class="fld">标题</span><span class="txt">第二章 · 对账</span></div>
+              </div>
+              <div class="li"><span class="nm">第三章 · 旧船坞</span></div>
+              <div class="more">… 还有 12 章</div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label"><b>编辑章</b> · NovelChapterEdit（章标题 + 段落归属）</div>
+      <div class="panel">
+        <div class="band edit"><span class="glyph">～</span><span class="tool">章节编辑</span><span class="status-pill">待批准</span></div>
+        <div class="title edit"><span class="t-glyph">～</span>编辑章节：第二章</div>
+        <div class="body">
+          <div class="list">
+            <div class="li"><span class="nm">第二卷 · 潮汐</span><span class="sc">VOL</span></div>
+            <div class="children">
+              <div class="li"><span class="nm">第一章 · 白鹭旅馆（晨谈）</span></div>
+              <div class="li current"><span class="nm">第二章 · 对账</span></div>
+              <div class="dblock">
+                <div class="dl old"><span class="g">−</span><span class="fld">标题</span><span class="txt">第二章 · 查账</span></div>
+                <div class="dl new"><span class="g">+</span><span class="fld">标题</span><span class="txt">第二章 · 对账</span></div>
+              </div>
+              <div class="leafhead w">正文块</div>
+              <div class="dblock para" style="padding:0 8px">
+                <div class="dl ctx"><span class="g">·</span><span class="txt">老板娘端来两碗粥，先看了林夏一眼。</span></div>
+                <div class="dl new"><span class="g">+</span><span class="txt">才把潮汐时刻表压在碗底推过来，低声道：靠得住吗？</span></div>
+                <div class="dl ctx"><span class="g">·</span><span class="txt">林夏没有立刻回答。</span></div>
+              </div>
+              <div class="li"><span class="nm">第三章 · 旧船坞</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label"><b>删除卷</b> · NovelDelete（级联子章节）</div>
+      <div class="panel">
+        <div class="band del"><span class="glyph">−</span><span class="tool">删除</span><span class="status-pill">待批准</span></div>
+        <div class="title del"><span class="t-glyph">−</span>删除卷：第二卷</div>
+        <div class="body">
+          <div class="list">
+            <div class="li"><span class="nm">第一卷 · 雾港</span></div>
+            <div class="li hot"><span class="nm">第二卷 · 潮汐</span></div>
+            <div class="children">
+              <div class="li hot"><span class="nm">第一章 · 白鹭旅馆（晨谈）</span></div>
+              <div class="li hot"><span class="nm">第二章 · 对账</span></div>
+              <div class="li hot"><span class="nm">第三章 · 旧船坞</span></div>
+              <div class="more">… 该卷共 15 章将一并删除</div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 正文块 ===== -->
+<section class="esec">
+  <div class="esec-head"><span class="nm">正文块</span><span class="sub">Paragraph · 卷→章→段落上下文</span></div>
+  <div class="cols">
+    <div class="col">
+      <div class="col-label"><b>新增</b> · NovelParagraphWrite（插入段落）</div>
+      <div class="panel">
+        <div class="band add"><span class="glyph">＋</span><span class="tool">正文写入</span><span class="status-pill">待批准</span></div>
+        <div class="title add"><span class="t-glyph">＋</span>新增正文：白鹭旅馆（晨谈）</div>
+        <div class="body para">
+          <div class="ctx">老板娘端来两碗粥，先看了林夏一眼。</div>
+          <div class="ctx">顾一舟坐回桌边，袖口还沾着船坞的锈水。</div>
+          <div class="dl add"><span class="g">+</span><span class="txt">才把潮汐时刻表压在碗底推过来，低声道：靠得住吗？</span></div>
+          <div class="ctx">林夏没有立刻回答。</div>
+          <div class="ctx">她盯着碗沿，指尖轻轻叩了两下。</div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label"><b>编辑</b> · NovelParagraphEdit（前后段落）</div>
+      <div class="panel">
+        <div class="band edit"><span class="glyph">～</span><span class="tool">正文编辑</span><span class="status-pill">待批准</span></div>
+        <div class="title edit"><span class="t-glyph">～</span>编辑正文：白鹭旅馆（晨谈）</div>
+        <div class="body para">
+          <div class="ctx">老板娘端来两碗粥，先看了林夏一眼。</div>
+          <div class="ctx">顾一舟坐回桌边，袖口还沾着船坞的锈水。</div>
+          <div class="dl old"><span class="g">−</span><span class="txt">才把潮汐时刻表压在碗底推过来。</span></div>
+          <div class="dl new"><span class="g">+</span><span class="txt">才把潮汐时刻表压在碗底推过来，低声道：靠得住吗？</span></div>
+          <div class="ctx">林夏没有立刻回答。</div>
+          <div class="ctx">她盯着碗沿，指尖轻轻叩了两下。</div>
+          <div class="ellipsis">……</div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="col-label"><b>删除</b> · NovelDelete（前后段落）</div>
+      <div class="panel">
+        <div class="band del"><span class="glyph">−</span><span class="tool">删除</span><span class="status-pill">待批准</span></div>
+        <div class="title del"><span class="t-glyph">−</span>删除正文：白鹭旅馆（晨谈）</div>
+        <div class="body para">
+          <div class="ctx">老板娘端来两碗粥，先看了林夏一眼。</div>
+          <div class="ctx">顾一舟坐回桌边，袖口还沾着船坞的锈水。</div>
+          <div class="dl del"><span class="g">−</span><span class="txt">才把潮汐时刻表压在碗底推过来。</span></div>
+          <div class="ctx">林夏没有立刻回答。</div>
+          <div class="ctx">她盯着碗沿，指尖轻轻叩了两下。</div>
+        </div>
+        <div class="foot"><button class="btn approve">批准</button><button class="btn reject">驳回</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

@@ -30,6 +30,7 @@ import {
   PiAssistantOutputBridgeError,
   type PiAssistantOutputBridgeFailure,
 } from "./PiAssistantOutputBridgeErrors.js";
+import type { PiProviderExecutionFailure } from "./PiProviderExecutionErrors.js";
 
 export interface PiAssistantTurnStateReader {
   getTurnSnapshot(): TurnStateSnapshot | undefined;
@@ -436,13 +437,25 @@ function createTerminalEvent(options: TerminalEventOptions) {
   });
 }
 
-/** 开发阶段：直接展示 provider 原始错误文本（截断）。Raw provider error text, truncated. */
+/** 失败分类 → 中文说明，随失败消息展示在对话流。 */
+const PROVIDER_FAILURE_DETAIL_TEXT: Record<PiProviderExecutionFailure, string> = {
+  unsupported_api: "暂不支持的模型服务",
+  auth: "API 密钥无效或未授权，请检查配置",
+  billing: "账户余额不足，无法继续生成，请充值后再试",
+  rate_limit: "请求过于频繁，请稍后重试",
+  timeout: "模型响应超时，请稍后重试",
+  network: "网络异常，无法连接模型服务，请稍后重试",
+  response: "模型服务返回异常，请稍后重试",
+  cancellation: "已停止",
+};
+
 function providerFailureDetail(
   message: { readonly errorMessage?: string },
 ): string | undefined {
-  const text = message.errorMessage ?? "";
-  const trimmed = text.trim();
-  return trimmed.length === 0 ? undefined : trimmed.slice(0, 240);
+  const category = (message.errorMessage ?? "").trim();
+  if (category.length === 0) return undefined;
+  const detail = (PROVIDER_FAILURE_DETAIL_TEXT as Record<string, string>)[category];
+  return detail ?? category.slice(0, 240);
 }
 
 function terminalBase(options: TerminalEventOptions, eventType: string) {

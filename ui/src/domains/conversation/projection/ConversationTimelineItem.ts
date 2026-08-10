@@ -96,6 +96,8 @@ export type ConversationTimelineItem =
       readonly text: string;
       readonly cards: readonly ConversationCardDescriptor[];
       readonly streaming: boolean;
+      /** 流式中当前是否正在产出思考（activeChannel === "thinking"）。 */
+      readonly thinking?: boolean;
       readonly eventFlow?: readonly ConversationEventView[];
       readonly toolTraces?: readonly ToolTraceView[];
     }

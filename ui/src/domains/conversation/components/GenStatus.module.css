@@ -1,97 +1,33 @@
 /**
- * GenStatus 视觉（原型 .gen-status + .gen-dots + .gen-main）。
- *
- * 扁平行：无边框无底色，min-height 16px。live 状态用三点呼吸
- * （.dots i，5px 圆、background:var(--grad-accent)、gen-blink 错峰 .22s/.44s）。
- * 主文案纯 muted（无渐变），elapsed 无 mono 等宽数字；
- * 停止按钮 margin-left auto 靠右、accent-ink 低透明度。
+ * GenStatus 视觉（原型 .gen-status）：扁平行容器。
+ * live 文案/图标动效/渐变已移入 RuntimeStatusIndicator；
+ * 此处保留容器间距与 failed（红色错误 + 重试）样式。
  */
 .status {
   margin: 2px 2px 10px;
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 16px;
+  min-height: 20px;
   border: 0;
   background: transparent;
-  font-size: var(--fs-xs);
-  color: var(--color-muted);
 }
 
-.dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.dots i {
-  width: 5px;
-  height: 5px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--grad-accent);
-  opacity: 0.32;
-  animation: gen-blink 1.5s ease-in-out infinite;
-}
-
-.dots i:nth-child(2) {
-  animation-delay: 0.22s;
-}
-
-.dots i:nth-child(3) {
-  animation-delay: 0.44s;
-}
-
-@keyframes gen-blink {
-  0%, 100% {
-    opacity: 0.22;
-  }
-  50% {
-    opacity: 0.9;
-    transform: translateY(-1px);
-  }
-}
-
-.main {
-  font-size: 12.5px;
-  font-weight: var(--fw-medium);
-  color: var(--color-muted);
-  opacity: 0.92;
-}
-
-.elapsed {
-  font-size: 11.5px;
-  color: var(--color-faint);
-  font-variant-numeric: tabular-nums;
-  opacity: 0.8;
-}
-
-.stop {
-  margin-left: auto;
-  padding: 4px 2px;
-  border: 0;
-  background: none;
-  font-size: 11.5px;
-  font-weight: var(--fw-semibold);
-  color: var(--color-accent-ink);
-  opacity: 0.72;
-  cursor: pointer;
-  transition: opacity var(--duration-fast) var(--ease-out);
-}
-
-.stop:hover {
-  opacity: 1;
+.failed {
+  color: var(--color-danger);
 }
 
 .failed .main {
   color: var(--color-danger);
-  opacity: 1;
+  font-size: 12.5px;
+  font-weight: var(--fw-semibold);
 }
 
 .error {
   margin-left: 4px;
   color: var(--color-danger);
   opacity: 0.82;
+  font-size: 12px;
 }
 
 .retry {

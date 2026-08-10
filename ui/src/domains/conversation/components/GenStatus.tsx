@@ -1,40 +1,30 @@
 /**
  * GenStatus
  *
- * 生成状态行（原型 .gen-status）：扁平行（无边框无底色）+ 三点呼吸
- * （.gen-dots i，错峰延迟）+ 纯 muted 主文案，位于 composer 输入框正上方。
- * live 时展示已用计时与停止按钮。
- * phase: idle/streaming/thinking/completed/failed；
- * 仅 streaming/thinking 有柔和动效，failed 用红色标识并可重试。
- *
- * 中文注释：elapsed 计时在 live 相位启动，离开 live 复位为 0 秒；
- * 停止按钮仅在 live 显示，触发 onStop（调用方 enqueue StopInputEvent）。
+ * 生成状态行（原型 .gen-status）：扁平行，位于 composer 输入框正上方。
+ * phase: thinking / generating / waiting / failed。
+ * - thinking / generating（live）经 RuntimeStatusIndicator 展示三态统一语言
+ *   （图标动效 + 渐变流动文字 + 秒数），live 时展示已用秒数。
+ * - waiting（审批挂起）展示沙漏琥珀态，无秒数。
+ * - failed 显示红色错误标识并可重试。
+ * 已移除三点呼吸 dots 与停止按钮（对齐新三态语言）。
  */
 import { useEffect, useRef, useState } from "react";
+import { RuntimeStatusIndicator } from "./RuntimeStatusIndicator.js";
 import styles from "./GenStatus.module.css";
 
 export interface GenStatusProps {
-  readonly phase: "idle" | "streaming" | "thinking" | "completed" | "failed";
-  readonly stage?: string;
+  readonly phase: "thinking" | "generating" | "waiting" | "failed";
   readonly error?: string;
   readonly onRetry?: () => void;
-  readonly onStop?: () => void;
 }
 
-const PHASE_TEXT: Record<GenStatusProps["phase"], string> = {
-  idle: "",
-  streaming: "正在生成…",
-  thinking: "正在思考…",
-  completed: "已完成",
-  failed: "生成失败",
-};
-
-export function GenStatus({ phase, stage, error, onRetry, onStop }: GenStatusProps) {
-  const live = phase === "streaming" || phase === "thinking";
+export function GenStatus({ phase, error, onRetry }: GenStatusProps) {
+  const live = phase === "thinking" || phase === "generating";
   const startRef = useRef<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
 
-  // 计时：live 时每秒刷新"已用时"，离开 live 复位。
+  // 计时：live 时每秒刷新"秒数"，离开 live 复位为 0。
   useEffect(() => {
     if (!live) {
       startRef.current = null;
@@ -52,33 +42,23 @@ export function GenStatus({ phase, stage, error, onRetry, onStop }: GenStatusPro
     };
   }, [live]);
 
-  if (phase === "idle") return null;
+  if (phase === "failed") {
+    return (
+      <div className={[styles.status, styles.failed].join(" ")} role="status">
+        <span className={styles.main}>生成失败</span>
+        {error !== undefined ? <span className={styles.error}>{error}</span> : null}
+        {onRetry !== undefined ? (
+          <button type="button" className={styles.retry} onClick={onRetry}>
+            重试
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={[styles.status, styles[phase]].filter(Boolean).join(" ")}
-      role="status"
-      data-live={live || undefined}
-    >
-      {live ? (
-        <span className={styles.dots} aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-      ) : null}
-      <span className={styles.main}>{stage ?? PHASE_TEXT[phase]}</span>
-      {live ? <span className={styles.elapsed}>已用时 {elapsed} 秒</span> : null}
-      {live && onStop !== undefined ? (
-        <button type="button" className={styles.stop} onClick={onStop}>
-          停止
-        </button>
-      ) : null}
-      {phase === "failed" && error !== undefined ? <span className={styles.error}>{error}</span> : null}
-      {phase === "failed" && onRetry !== undefined ? (
-        <button type="button" className={styles.retry} onClick={onRetry}>
-          重试
-        </button>
-      ) : null}
+    <div className={styles.status} role="status">
+      <RuntimeStatusIndicator state={phase} seconds={live ? elapsed : undefined} />
     </div>
   );
 }

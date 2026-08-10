@@ -93,9 +93,6 @@ export function ConversationComposer({
             发送
           </Button>
         </div>
-        {sendDisabled ? (
-          <span className={styles.pendingHint}>等待审批</span>
-        ) : null}
         <ComposerModeBar mode={mode} onChange={onModeChange} disabled={!enabled} />
       </form>
     </div>

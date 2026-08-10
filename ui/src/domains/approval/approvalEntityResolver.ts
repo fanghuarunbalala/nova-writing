@@ -337,26 +337,83 @@ function outlineNode(
   };
 }
 
+/** 新增单元不在树中：按 parentId 定位父节点，插入新节点（add）到兄弟旁。 */
+function buildOutlineContextAdd(
+  outline: StoryOutlineTreeStore,
+  parentId: string,
+  newId: string,
+  newTitle: string,
+): ApprovalContext | undefined {
+  const tree = outline.getSnapshot().tree;
+  const findParent = (nodes: readonly StoryOutlineTreeNode[]): StoryOutlineTreeNode | undefined => {
+    for (const node of nodes) {
+      if (node.unitId === parentId) return node;
+      const sub = findParent(node.children);
+      if (sub !== undefined) return sub;
+    }
+    return undefined;
+  };
+  const parent = findParent(tree);
+  if (parent === undefined) return undefined;
+  const siblings = parent.children.map((child) => ({
+    id: child.unitId,
+    label: child.label,
+    scope: child.scope,
+    status: child.realNode,
+    state: "ctx" as const,
+  }));
+  return {
+    type: "tree",
+    nodes: [
+      {
+        id: parent.unitId,
+        label: parent.label,
+        scope: parent.scope,
+        status: parent.realNode,
+        state: "ctx",
+        children: [
+          ...siblings,
+          {
+            id: newId,
+            label: newTitle,
+            scope: parent.children[0]?.scope,
+            state: "add",
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /** 大纲树上下文：从根到目标的路径 + 兄弟 + 目标下一级子节点。 */
 function buildOutlineContext(
   outline: StoryOutlineTreeStore,
-  targetId: string,
-  op: "add" | "edit" | "delete",
+  target: ApprovalTarget,
 ): ApprovalContext | undefined {
+  if (target.op === "add") {
+    const parentId = asString(target.value?.parentId);
+    if (parentId === undefined) return undefined;
+    return buildOutlineContextAdd(
+      outline,
+      parentId,
+      target.id,
+      asString(target.value?.title) ?? target.id,
+    );
+  }
   const tree = outline.getSnapshot().tree;
   if (tree.length === 0) return undefined;
   const targetState: ApprovalContextNode["state"] =
-    op === "delete" ? "delete" : op === "add" ? "add" : "current";
+    target.op === "delete" ? "delete" : "current";
   const ctxState: ApprovalContextNode["state"] =
-    op === "delete" ? "delete" : "ctx";
+    target.op === "delete" ? "delete" : "ctx";
 
   const visit = (
     nodes: readonly StoryOutlineTreeNode[],
   ): { node?: ApprovalContextNode; found?: boolean } => {
     for (const node of nodes) {
-      if (node.unitId === targetId) {
+      if (node.unitId === target.id) {
         return {
-          node: outlineNode(node, targetState, op === "delete"),
+          node: outlineNode(node, targetState, target.op === "delete"),
           found: true,
         };
       }
@@ -725,7 +782,7 @@ async function resolveStoryUnit(
   locations: LocationStore,
   target: ApprovalTarget,
 ): Promise<ResolvedEntityContent | undefined> {
-  const context = buildOutlineContext(outline, target.id, target.op);
+  const context = buildOutlineContext(outline, target);
   if (target.op === "add") {
     const value = target.value ?? {};
     const leaf = isRecord(value.leaf) ? value.leaf : undefined;

@@ -21,7 +21,7 @@ function isJsonObject(value: JsonValue): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isPrimitive(value: JsonValue): boolean {
+function isPrimitive(value: JsonValue): value is string | number | boolean | null {
   return (
     value === null ||
     typeof value === "string" ||
@@ -146,6 +146,8 @@ function ParamFields({
             <div className={styles.paramItemHead}>第 {index + 1} 项</div>
             {isJsonObject(item) ? (
               <ParamObject obj={item} />
+            ) : Array.isArray(item) ? (
+              <ParamFields value={item} field={field} />
             ) : (
               <div className={styles.paramVal}>{primitiveText(item, field)}</div>
             )}

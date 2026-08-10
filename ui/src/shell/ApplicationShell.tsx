@@ -137,6 +137,7 @@ export function ApplicationShell({
     [api, domainStores],
   );
   const approvalSnapshot = useExternalStore(approvalStore);
+  const inspector = useExternalStore(inspectorRouter);
   // 全局审批队列：跨会话聚合（右上角 badge / 审批面板数据源）。
   // Global approval queue across conversations.
   const refreshApprovals = useCallback(() => {
@@ -414,8 +415,8 @@ export function ApplicationShell({
     <div className={styles.shell}>
       <TopBar
         workspaceName={workspace.current?.label}
-        revision={overview.sourceRevision}
         approvalBadge={approvalSnapshot.pendingCount}
+        approvalActive={inspector.state.kind === "approval"}
         sidebarMode={sidebarMode}
         onToggleSidebar={() =>
           setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded"))
@@ -424,14 +425,13 @@ export function ApplicationShell({
         onOpenSettings={() => onOpenSettings?.()}
         onOpenSchedule={() => mainViewRouter.transition("schedule")}
         onOpenApproval={() => {
-          console.info("[inspector] approval button clicked", {
-            route: inspectorRouter.getSnapshot().state,
-          });
+          // 审批按钮 toggle:已打开则收起,否则刷新并打开。
+          if (inspector.state.kind === "approval") {
+            inspectorRouter.close();
+            return;
+          }
           refreshApprovals();
           inspectorRouter.transition({ kind: "approval", changeSetId: "" });
-          console.info("[inspector] approval route after click", {
-            route: inspectorRouter.getSnapshot().state,
-          });
         }}
         extensions={extensions}
       />

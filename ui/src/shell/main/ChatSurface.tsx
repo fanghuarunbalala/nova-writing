@@ -72,7 +72,6 @@ export function ChatSurface({
       conversationId={activeId}
       onApprovalChange={onApprovalChange}
       title={catalog.conversations.find((item) => item.id === activeId)?.title ?? "对话"}
-      agentLabel={catalog.conversations.find((item) => item.id === activeId)?.agentLabel ?? ""}
       onReferenceClick={onReferenceClick}
       resolveReference={resolveReference}
       onProposalAction={onProposalAction}
@@ -88,7 +87,6 @@ interface ActiveChatSurfaceProps {
   readonly logger?: Logger;
   readonly conversationId: string;
   readonly title: string;
-  readonly agentLabel: string;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onProposalAction?: (
@@ -107,7 +105,6 @@ function ActiveChatSurface({
   logger,
   conversationId,
   title,
-  agentLabel,
   onReferenceClick,
   resolveReference,
   onProposalAction,
@@ -156,7 +153,6 @@ function ActiveChatSurface({
     <div className={styles.surface}>
       <MainSubHead
         title={title}
-        sub={agentLabel}
         actions={
           composeBadge === undefined ? undefined : (
             <span className={styles.composeBadge}>{composeBadge}</span>

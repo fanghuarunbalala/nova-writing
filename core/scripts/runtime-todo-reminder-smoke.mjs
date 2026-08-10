@@ -21,8 +21,8 @@ const snapshot = {
   conversationId,
   revision: 3,
   todos: [
-    { id: "t1", content: "outline ch1", status: TODO_STATUS.pending },
-    { id: "t2", content: "draft ch1", status: TODO_STATUS.inProgress },
+    { content: "outline ch1", status: TODO_STATUS.pending, activeForm: "outlining ch1" },
+    { content: "draft ch1", status: TODO_STATUS.inProgress, activeForm: "drafting ch1" },
   ],
   updatedAt: "2026-08-06T00:00:00.000Z",
 };
@@ -45,7 +45,7 @@ assert.equal(draft.messageType, "system.reminder");
 assert.equal(draft.payload.kind, "todo_reminder");
 assert.equal(draft.payload.order, 1);
 assert.ok(draft.payload.content.includes('<CURRENT_TODOS revision="3">'));
-assert.ok(draft.payload.content.includes("- [in_progress] t2: draft ch1"));
+assert.ok(draft.payload.content.includes("- [in_progress] draft ch1"));
 const validated = coreRuntimeMessageSchemaRegistry.validateDraft(draft);
 assert.equal(validated.messageType, "system.reminder");
 

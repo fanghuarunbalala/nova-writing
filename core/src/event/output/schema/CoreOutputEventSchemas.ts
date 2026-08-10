@@ -293,14 +293,13 @@ export const AgentAssistantMessageFailedPayloadSchema = Type.Object(
 
 const TodoItemSchema = Type.Object(
   {
-    id: Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }),
     content: Type.String({ minLength: 1, maxLength: 2_000 }),
     status: Type.Union([
       Type.Literal("pending"),
       Type.Literal("in_progress"),
       Type.Literal("completed"),
-      Type.Literal("cancelled"),
     ]),
+    activeForm: Type.String({ minLength: 1, maxLength: 2_000 }),
   },
   { additionalProperties: false },
 );

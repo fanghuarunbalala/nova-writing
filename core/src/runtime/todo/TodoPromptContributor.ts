@@ -90,7 +90,7 @@ function renderTodo(todo: TodoItemSnapshot): string {
   const status = todo.status === TODO_STATUS.inProgress
     ? "in_progress"
     : todo.status;
-  return `- [${status}] ${todo.id}: ${todo.content}`;
+  return `- [${status}] ${todo.content}`;
 }
 
 function escapeAttribute(value: string): string {

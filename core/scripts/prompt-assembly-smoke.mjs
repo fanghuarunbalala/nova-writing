@@ -66,7 +66,7 @@ const reminderMessage = {
   runId: "run:1",
   payload: {
     kind: "todo_reminder",
-    content: "<CURRENT_TODOS revision=\"2\">\n- [pending] t1: outline\n</CURRENT_TODOS>",
+    content: "<CURRENT_TODOS revision=\"2\">\n- [pending] outline\n</CURRENT_TODOS>",
     order: 1,
   },
 };

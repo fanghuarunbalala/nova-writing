@@ -43,36 +43,50 @@ const context = {
 assert.equal(Compile(TodoWriteParametersSchema).Check({ todos: [] }), true);
 assert.equal(
   Compile(TodoWriteParametersSchema).Check({
-    todos: [{ id: "one", content: "First", status: "pending" }],
+    todos: [
+      { content: "First", status: "pending", activeForm: "Firsting" },
+    ],
   }),
   true,
+);
+assert.equal(
+  Compile(TodoWriteParametersSchema).Check({
+    todos: [{ id: "one", content: "First", status: "pending" }],
+  }),
+  false,
+  "legacy id-only todo must be rejected",
 );
 
 const first = await tool.handler.execute(context, {
   todos: [
-    { id: "one", content: "First", status: "in_progress" },
-    { id: "two", content: "Second", status: "pending" },
+    { content: "First", status: "in_progress", activeForm: "Firsting" },
+    { content: "Second", status: "pending", activeForm: "Seconding" },
   ],
 }, { emit: async () => {} });
-assert.equal(first.details.revision, 1);
-assert.equal(first.details.inProgress, 1);
+assert.deepEqual(first.details.oldTodos, []);
+assert.equal(first.details.newTodos.length, 2);
 assert.equal(appended.length, 1);
 assert.equal(appended[0].eventType, "agent.todo.updated");
 assert.equal(appended[0].payload.revision, 1);
+assert.equal(appended[0].payload.todos[0].activeForm, "Firsting");
 
 const second = await tool.handler.execute(context, {
-  todos: [{ id: "one", content: "First", status: "completed" }],
+  todos: [
+    { content: "First", status: "completed", activeForm: "Firsting" },
+  ],
 }, { emit: async () => {} });
-assert.equal(second.details.revision, 2);
+assert.equal(second.details.oldTodos.length, 2);
+assert.equal(second.details.newTodos.length, 1);
+assert.equal(second.details.newTodos[0].status, "completed");
 assert.deepEqual((await store.read("conversation-todo")).todos, [
-  { id: "one", content: "First", status: "completed" },
+  { content: "First", status: "completed", activeForm: "Firsting" },
 ]);
 
 await assert.rejects(
   tool.handler.execute(context, {
     todos: [
-      { id: "one", content: "First", status: "in_progress" },
-      { id: "two", content: "Second", status: "in_progress" },
+      { content: "First", status: "in_progress", activeForm: "Firsting" },
+      { content: "Second", status: "in_progress", activeForm: "Seconding" },
     ],
   }, { emit: async () => {} }),
   (error) => error?.code === "TODO_WRITE_INVALID_ARGUMENTS",
@@ -90,6 +104,6 @@ const promptSource = new TodoAwareRuntimeSystemPromptSource(
 );
 const prompt = await promptSource.resolve({ conversationId: "conversation-todo" });
 assert.match(prompt, /<CURRENT_TODOS revision="2">/);
-assert.match(prompt, /\[completed\] one: First/);
+assert.match(prompt, /\[completed\] First/);
 
 console.log("TodoWrite runtime smoke passed");

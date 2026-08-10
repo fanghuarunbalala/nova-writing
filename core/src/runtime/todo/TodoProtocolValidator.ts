@@ -7,24 +7,19 @@ import {
   type TodoStatus,
 } from "./TodoProtocol.js";
 
-const TODO_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-
 export function captureTodoItems(value: unknown): readonly TodoItemSnapshot[] {
   if (!Array.isArray(value) || value.length > TODO_LIMITS.maximumItems) {
     throw new TypeError("Todo items are invalid");
   }
 
-  const ids = new Set<string>();
   let inProgressCount = 0;
   const captured = value.map((item) => {
     if (!isRecord(item)) throw new TypeError("Todo item is invalid");
-    const id = captureId(item.id);
     const content = captureContent(item.content);
     const status = captureStatus(item.status);
-    if (ids.has(id)) throw new TypeError("Todo item IDs must be unique");
-    ids.add(id);
+    const activeForm = captureActiveForm(item.activeForm);
     if (status === TODO_STATUS.inProgress) inProgressCount += 1;
-    return Object.freeze({ id, content, status });
+    return Object.freeze({ content, status, activeForm });
   });
 
   if (inProgressCount > 1) {
@@ -50,18 +45,6 @@ export function captureConversationTodoSnapshot(
   });
 }
 
-function captureId(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value.length > TODO_LIMITS.maximumIdLength ||
-    !TODO_ID_PATTERN.test(value)
-  ) {
-    throw new TypeError("Todo ID is invalid");
-  }
-  return value;
-}
-
 function captureContent(value: unknown): string {
   if (
     typeof value !== "string" ||
@@ -73,12 +56,22 @@ function captureContent(value: unknown): string {
   return value;
 }
 
+function captureActiveForm(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    value.length > TODO_LIMITS.maximumActiveFormLength
+  ) {
+    throw new TypeError("Todo activeForm is invalid");
+  }
+  return value;
+}
+
 function captureStatus(value: unknown): TodoStatus {
   if (
     value !== TODO_STATUS.pending &&
     value !== TODO_STATUS.inProgress &&
-    value !== TODO_STATUS.completed &&
-    value !== TODO_STATUS.cancelled
+    value !== TODO_STATUS.completed
   ) {
     throw new TypeError("Todo status is invalid");
   }

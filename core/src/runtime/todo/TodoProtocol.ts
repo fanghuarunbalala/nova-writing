@@ -4,21 +4,20 @@ export const TODO_STATUS = {
   pending: "pending",
   inProgress: "in_progress",
   completed: "completed",
-  cancelled: "cancelled",
 } as const;
 
 export type TodoStatus = (typeof TODO_STATUS)[keyof typeof TODO_STATUS];
 
 export const TODO_LIMITS = {
   maximumItems: 32,
-  maximumIdLength: 128,
   maximumContentLength: 2_000,
+  maximumActiveFormLength: 2_000,
 } as const;
 
 export interface TodoItemSnapshot {
-  readonly id: string;
   readonly content: string;
   readonly status: TodoStatus;
+  readonly activeForm: string;
 }
 
 export interface ConversationTodoSnapshot {
@@ -49,6 +48,7 @@ export interface ConversationTodoWriteRequest {
 
 export interface ConversationTodoWriteResult {
   readonly snapshot: ConversationTodoSnapshot;
+  readonly previousSnapshot?: ConversationTodoSnapshot;
   readonly eventSequence: number;
 }
 

@@ -77,7 +77,11 @@ export class ConversationTodoCoordinator
       todoCount: snapshot.todos.length,
       eventSequence: receipt.sequence,
     });
-    return Object.freeze({ snapshot, eventSequence: receipt.sequence });
+    return Object.freeze({
+      snapshot,
+      ...(previous === undefined ? {} : { previousSnapshot: previous }),
+      eventSequence: receipt.sequence,
+    });
   }
 }
 

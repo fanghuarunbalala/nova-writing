@@ -25,7 +25,7 @@ const conversationId = "conversation:reminder-smoke";
 const runId = "run:1";
 const turnId = "turn:1";
 const REMINDER_CONTENT =
-  "<CURRENT_TODOS revision=\"3\">\n- [pending] t1: outline ch1\n- [in_progress] t2: draft ch1\n</CURRENT_TODOS>";
+  "<CURRENT_TODOS revision=\"3\">\n- [pending] outline ch1\n- [in_progress] draft ch1\n</CURRENT_TODOS>";
 
 // 1. 事件可构造且类型稳定 / Event is constructible and type-stable.
 const event = new SystemReminderAttachedOutputEvent({

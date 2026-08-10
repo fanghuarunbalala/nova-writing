@@ -30,9 +30,9 @@ export class AgentTodoUpdatedPayload extends OutputPayload {
       toolCallId: this.toolCallId,
       revision: this.revision,
       todos: this.todos.map((todo) => ({
-        id: todo.id,
         content: todo.content,
         status: todo.status,
+        activeForm: todo.activeForm,
       })),
       updatedAt: this.updatedAt,
     };

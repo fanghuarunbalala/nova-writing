@@ -19,7 +19,37 @@ import {
 const IDENTITY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 const SAFE_CODE = /^[A-Z][A-Z0-9_]{0,127}$/;
 const MAX_OBJECTIVE_BYTES = 16 * 1024;
-const MAX_SUMMARY_BYTES = 4 * 1024;
+
+/** 子代理结果 summary 的最大字节数；超限文本由 clampSubagentText 截断，绝不 throw。
+ * Maximum bytes for a subagent result summary; over-limit text is clamped, never
+ * rejected, so a long final message cannot strand a binding in `running`.
+ * 与 SubagentLifecyclePayloads.MAX_SUMMARY_BYTES 及 NOVEL_SUBAGENT_LIMITS.maximumResultBytes
+ * 保持一致。Kept in sync with the event payload and task-limits caps. */
+export const SUBAGENT_SUMMARY_MAX_BYTES = 128 * 1024;
+const MAX_SUMMARY_BYTES = SUBAGENT_SUMMARY_MAX_BYTES;
+
+/**
+ * 超限文本的字节安全截断：上限内原样返回；超限时截取最长 UTF-8 安全前缀并追加稳定标记，
+ * 保证最终字节数 ≤ maximumBytes。Byte-safe clamp: returns in-limit text unchanged,
+ * otherwise keeps the longest UTF-8-safe prefix that fits `maximumBytes - markerBytes`
+ * and appends a stable truncation marker.
+ */
+export function clampSubagentText(value: string, maximumBytes: number): string {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(value).byteLength;
+  if (bytes <= maximumBytes) return value;
+  const marker = `\n...truncated(${bytes} bytes)`;
+  const budget = maximumBytes - encoder.encode(marker).byteLength;
+  if (budget <= 0) return value.slice(0, maximumBytes);
+  let low = 0;
+  let high = value.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (encoder.encode(value.slice(0, mid)).byteLength <= budget) low = mid;
+    else high = mid - 1;
+  }
+  return value.slice(0, low) + marker;
+}
 
 export function captureSubagentRequest(value: unknown): SubagentRequest {
   return captureProtocol(value, SUBAGENT_PROTOCOL_FAILURE.invalidRequest, (record) => {

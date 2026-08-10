@@ -1,7 +1,9 @@
 /**
- * 独立 Novel Agent：通用协议段 + novel.* 创作段 + TodoWrite 与大纲等工具。
+ * 独立 Novel Agent：通用协议段 + novel.* 创作段 + TodoWrite 与大纲等工具，
+ * 可委托 novel_explorer / novel_compose 只读子代理。
  * Standalone Novel Agent with generic protocol sections, novel.* creative
- * sections, TodoWrite, and outline tools.
+ * sections, TodoWrite, outline tools, and delegation to the read-only
+ * novel_explorer / novel_compose subagents.
  */
 import {
   AgentCommunicationPolicy,
@@ -23,6 +25,9 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("core.runtime.protocol"),
     new PromptSectionItem("novel.identity"),
     new PromptSectionItem("novel.system"),
+    new PromptSectionItem("novel.doing-tasks"),
+    new PromptSectionItem("novel.actions"),
+    new PromptSectionItem("novel.communication"),
     new PromptSectionItem("core.environment"),
     new PromptSectionItem("novel.global_constraints"),
     // new PromptSectionItem("conversation.behavior"),
@@ -36,6 +41,7 @@ export const novelAgentDefinition = new AgentDefinition({
       "runtime.todo",
       "runtime.files",
       "novel.compose",
+      "runtime.subagent",
       "novel.outline",
       "novel.characters",
       "novel.locations",
@@ -45,8 +51,8 @@ export const novelAgentDefinition = new AgentDefinition({
     ],
   }),
   delegation: new AgentDelegationPolicy({
-    mode: "disabled",
-    allowedAgentTypes: [],
+    mode: "subagent",
+    allowedAgentTypes: ["novel_explorer", "novel_compose"],
   }),
   communication: new AgentCommunicationPolicy("standalone"),
   runtimePolicyId: "default",

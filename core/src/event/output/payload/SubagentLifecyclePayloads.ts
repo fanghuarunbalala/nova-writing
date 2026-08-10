@@ -9,7 +9,12 @@ import { OutputPayload } from "../OutputPayload.js";
 const IDENTITY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 const SAFE_CODE = /^[A-Z][A-Z0-9_]{0,127}$/;
 const PROGRESS_CODE = /^[a-z][a-z0-9_.-]{0,127}$/;
-const MAX_SUMMARY_BYTES = 4 * 1024;
+// 必须与 SubagentProtocolValidator.SUBAGENT_SUMMARY_MAX_BYTES 一致：bridge 按该上限
+// 截断 summary，完成事件必须能容纳截断后的结果。事件层不反向依赖 runtime 层，故保留
+// 本地常量。Must match SubagentProtocolValidator.SUBAGENT_SUMMARY_MAX_BYTES so the
+// completed event accepts the bridge-clamped summary (event layer keeps its own
+// constant; it must not depend on the runtime layer).
+const MAX_SUMMARY_BYTES = 128 * 1024;
 const CANCELLATION_REASONS = Object.freeze([
   "parent_completed",
   "parent_failed",

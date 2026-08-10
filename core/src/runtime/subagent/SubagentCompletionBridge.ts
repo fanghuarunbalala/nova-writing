@@ -8,7 +8,11 @@ import {
   type SubagentResult,
   type SubagentBinding,
 } from "./SubagentProtocol.js";
-import { captureSubagentResult } from "./SubagentProtocolValidator.js";
+import {
+  SUBAGENT_SUMMARY_MAX_BYTES,
+  captureSubagentResult,
+  clampSubagentText,
+} from "./SubagentProtocolValidator.js";
 import type {
   SubagentFinalAssistantMessage,
   SubagentFinalAssistantMessageReader,
@@ -98,7 +102,10 @@ function createCompletedResult(
     parentRunId: binding.parentRunId,
     childConversationId: binding.childConversationId,
     status: "completed",
-    summary: message.content,
+    // 超长正文按 SUBAGENT_SUMMARY_MAX_BYTES 截断而非交给 captureSubagentResult throw，
+    // 否则 binding 卡在 running 且 observer 无限 observe_failed。Over-limit content is
+    // clamped here so captureSubagentResult never throws and the binding completes.
+    summary: clampSubagentText(message.content, SUBAGENT_SUMMARY_MAX_BYTES),
     artifactReferences: message.artifactReferences,
     completedAt: observation.completedAt,
   };

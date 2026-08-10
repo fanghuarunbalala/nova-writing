@@ -20,7 +20,14 @@ import {
 import {
   NovelActionsPromptSection,
   NovelCommunicationPromptSection,
+  NovelComposeIdentityPromptSection,
+  NovelComposeProcessPromptSection,
+  NovelComposeReportingPromptSection,
+  NovelComposeSystemPromptSection,
   NovelDoingTasksPromptSection,
+  NovelExploreIdentityPromptSection,
+  NovelExploreReportingPromptSection,
+  NovelExploreSystemPromptSection,
   NovelGlobalConstraintsPromptSection,
   NovelIdentityPromptSection,
   NovelSystemPromptSection,
@@ -38,6 +45,13 @@ export function createDefaultPromptSectionRegistry(): PromptSectionRegistry {
     .register(new NovelIdentityPromptSection())
     .register(new NovelSystemPromptSection({ interactsWithUser: true }))
     .register(new NovelCommunicationPromptSection())
+    .register(new NovelExploreIdentityPromptSection())
+    .register(new NovelExploreSystemPromptSection())
+    .register(new NovelExploreReportingPromptSection())
+    .register(new NovelComposeIdentityPromptSection())
+    .register(new NovelComposeSystemPromptSection())
+    .register(new NovelComposeProcessPromptSection())
+    .register(new NovelComposeReportingPromptSection())
     .register(new NovelDoingTasksPromptSection())
     .register(new NovelActionsPromptSection())
     .register(new CoreEnvironmentPromptSection())

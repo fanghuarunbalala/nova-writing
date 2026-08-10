@@ -19,6 +19,12 @@ import type {
   EffectiveModelExecutionDescriptor,
 } from "../../../config/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
+import {
+  COMPACTION_WINDOW_RATIO,
+  MINIMUM_RECOMMENDED_OUTPUT_TOKENS,
+  RECOMMENDED_MODEL_CAPABILITIES,
+  RECOMMENDED_OUTPUT_RATIO,
+} from "./PiRecommendedModelCapabilities.js";
 import type { PiDispatchAwareStreamFunction } from "./PiDispatchAwareStreamFunction.js";
 import {
   captureProviderRequestDebugSnapshot,
@@ -301,6 +307,7 @@ export function createPiExecutionModel(
     descriptor.providerKind === "custom"
       ? "openai"
       : descriptor.providerKind;
+  const recommended = RECOMMENDED_MODEL_CAPABILITIES.get(descriptor.modelId);
   return {
     ...source,
     id: descriptor.modelId,
@@ -309,6 +316,25 @@ export function createPiExecutionModel(
     provider,
     baseUrl: descriptor.baseUrl ?? source.baseUrl,
     headers: { ...source.headers, ...descriptor.publicHeaders },
+    // 压缩窗口 = 官方 contextWindow × 70%。model.contextWindow 即 pi 运行时的压缩窗口
+    //（shouldCompact = contextWindow - reserve），无独立字段，只能在此声明。
+    // Compaction window = official contextWindow × 70%; model.contextWindow is the
+    // runtime's compaction window, so the 70% rule is applied here.
+    contextWindow:
+      descriptor.capabilityOverrides.contextWindowTokens ??
+      (recommended === undefined
+        ? source.contextWindow
+        : Math.round(recommended.contextWindowTokens * COMPACTION_WINDOW_RATIO)),
+    // 每次输出 = max(12k, 官方 max_output × 60%)。profile 显式 maximumOutputTokens 仍在
+    // 请求层（#resolveExecutionOptions）优先。Per-call output = max(12k, official × 60%);
+    // an explicit profile maximumOutputTokens still wins at the request layer.
+    maxTokens:
+      recommended === undefined
+        ? source.maxTokens
+        : Math.max(
+            MINIMUM_RECOMMENDED_OUTPUT_TOKENS,
+            Math.round(recommended.maximumOutputTokens * RECOMMENDED_OUTPUT_RATIO),
+          ),
   };
 }
 

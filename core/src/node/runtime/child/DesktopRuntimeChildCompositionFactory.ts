@@ -10,8 +10,10 @@ import type {
   ConversationRuntimeHandleShutdownRequest,
   ConversationRuntimeInputReference,
   ConversationOutputEventPublisher,
+  ConversationRuntimePresenceReader,
   OutputReceipt,
 } from "../../../conversation/index.js";
+import { CONVERSATION_RUNTIME_SHUTDOWN_REASON } from "../../../conversation/host/index.js";
 import type { OutputEvent } from "../../../event/index.js";
 import type {
   ConversationCatalogStore,
@@ -21,9 +23,59 @@ import type {
   PersistedConversationEventSnapshot,
 } from "../../../storage/index.js";
 import {
+  AgentAssembler,
   AgentAssemblyRestorer,
+  AgentDefinitionCatalog,
+  AgentManifestResolver,
+  novelAgentDefinition,
+  novelComposeAgentDefinition,
+  novelExplorerAgentDefinition,
+  type AgentManifestIdFactory,
   type AgentManifestStore,
 } from "../../../agent/index.js";
+import {
+  ManifestSystemPromptCompiler,
+  PromptCapabilitySnapshot,
+  createDefaultPromptSectionRegistry,
+  type PromptDigester,
+} from "../../../prompt/index.js";
+import {
+  CatalogHostChildConversationAdapter,
+  DefaultChildConversationManager,
+  DefaultSubagentLifecycleCoordinator,
+  DurableChildConversationManager,
+  NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY,
+  SUBAGENT_CANCELLATION_REASON,
+  SUBAGENT_SCHEMA_VERSION,
+  SUBAGENT_TASK_CANCELLATION_STATUS,
+  SubagentCompletionBridge,
+  SubagentCompletionObserver,
+  SubagentTaskQueryService,
+  createProductionSubagentDefinitionCatalog,
+  type ChildConversationIdFactory,
+  type ChildConversationManagerClock,
+  type SubagentBinding,
+  type SubagentBindingStore,
+  type SubagentChildRunTerminalReader,
+  type SubagentFinalAssistantMessageReader,
+  type SubagentLifecycleEventIdFactory,
+  type SubagentResult,
+} from "../../../runtime/subagent/index.js";
+import {
+  SUBAGENT_TOOL_GROUP_MANIFEST,
+  createAgentExecutionToolRegistry,
+  type SubagentTaskCancellationIntentPort,
+} from "../../../tools/subagent/index.js";
+import {
+  ToolGroupCatalog,
+  ToolGroupCatalogError,
+  ToolRegistry,
+} from "../../../tooling/index.js";
+import {
+  ChildRuntimeSubagentClient,
+  createChildSubagentScopeReaders,
+  type RuntimeSubagentRpcRequester,
+} from "../subagent/index.js";
 import {
   AgentRuntimeConfigurationFactory,
   AgentRuntimeExecutionLimits,
@@ -60,6 +112,7 @@ import {
   type AgentRuntimeConfigurationProfileResolver,
   type AgentRuntimeContextCompilerFactory,
   type RuntimeEventIdFactory,
+  type RuntimeEventSink,
   type RuntimeRunPreparationSource,
   type ToolDispatcher,
 } from "../../../runtime/index.js";
@@ -70,7 +123,6 @@ import { NUDGE_DEFINITIONS } from "../../../runtime/nudge/definitions/index.js";
 import type { PiRuntimeSignalsProvider } from "../../../runtime/agent/pi/index.js";
 import { RuntimePromptAssembler } from "../../../runtime/context/index.js";
 import { PromptAssemblyBuilder } from "../../../prompt/assembly/index.js";
-import type { PromptDigester } from "../../../prompt/index.js";
 import { createChildToolExecutionComposition } from "./ChildToolExecutionFactory.js";
 import type { RuntimePersistencePorts } from "../../../runtime/ipc/index.js";
 import { createNovelConversationManifestComposition } from "../../agent/index.js";
@@ -86,6 +138,8 @@ import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
 import { NodeSha256RuntimeEventIdHasher } from "../NodeSha256RuntimeEventIdHasher.js";
 import { openChildNovelToolRegistry } from "./novel/index.js";
 import type {
+  ChildRuntimeWorkspaceStore,
+  ChildRuntimeWorkspaceStoreProvider,
   RuntimeChildCompositionContext,
   RuntimeChildCompositionFactory,
   RuntimeChildRuntime,
@@ -124,6 +178,9 @@ export interface DesktopRuntimeChildCompositionFactoryOptions {
   readonly conversationCatalogStoreProvider?: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<ConversationCatalogStore>;
+  /** 完整 workspace store 提供者(含子代理绑定)。可选;传则组装真实子代理工具。 */
+  /** Full workspace-store provider (with subagent bindings). Optional; enables real subagent tool assembly. */
+  readonly workspaceStoreProvider?: ChildRuntimeWorkspaceStoreProvider;
   readonly novelStorageRoot?: string;
   readonly adapterFactory: RuntimeChildAdapterFactory;
   readonly contextCompilerFactory: AgentRuntimeContextCompilerFactory;
@@ -146,6 +203,7 @@ export class DesktopRuntimeChildCompositionFactory
   readonly #conversationCatalogStoreProvider?: (
     bootstrap: ConversationRuntimeBootstrap,
   ) => Promise<ConversationCatalogStore>;
+  readonly #workspaceStoreProvider?: ChildRuntimeWorkspaceStoreProvider;
   readonly #novelStorageRoot?: string;
   readonly #adapterFactory: RuntimeChildAdapterFactory;
   readonly #contextCompilerFactory: AgentRuntimeContextCompilerFactory;
@@ -165,6 +223,7 @@ export class DesktopRuntimeChildCompositionFactory
     this.#manifestStoreProvider = options.manifestStoreProvider;
     this.#conversationCatalogStoreProvider =
       options.conversationCatalogStoreProvider;
+    this.#workspaceStoreProvider = options.workspaceStoreProvider;
     this.#novelStorageRoot = options.novelStorageRoot;
     this.#adapterFactory = options.adapterFactory;
     this.#contextCompilerFactory = options.contextCompilerFactory;
@@ -214,6 +273,14 @@ export class DesktopRuntimeChildCompositionFactory
       this.#logger.error("runtime_child.composition_failed_detail", {
         errorName: error instanceof Error ? error.name : typeof error,
       });
+      // 诊断：ToolGroupCatalogError 的 failure（duplicate_group/unknown_group）与
+      // groupId 均为校验过的枚举/稳定 id，可安全记录，用于区分两条抛错路径。
+      if (error instanceof ToolGroupCatalogError) {
+        this.#logger.error("runtime_child.composition_failed_group_catalog", {
+          failure: error.failure,
+          ...(error.groupId === undefined ? {} : { groupId: error.groupId }),
+        });
+      }
       throw error;
     }
   }
@@ -271,11 +338,29 @@ export class DesktopRuntimeChildCompositionFactory
     logger.info("runtime_child.composition.novel_registry_opened", {
       conversationId,
     });
+    const novelAndSubagentTools =
+      this.#workspaceStoreProvider === undefined
+        ? { registry: novelTools.registry, groups: novelTools.groups }
+        : createChildSubagentComposition({
+            bootstrap,
+            store: await this.#workspaceStoreProvider(bootstrap),
+            registry: novelTools.registry,
+            groups: novelTools.groups,
+            requester: context.requester,
+            promptDigester: this.#promptDigester,
+            persistence,
+            eventSink,
+            clock,
+            logger,
+          });
+    logger.info("runtime_child.composition.subagent_registry_created", {
+      conversationId,
+    });
     const configurationFactory = new AgentRuntimeConfigurationFactory({
       manifestStore,
       assemblyRestorer: new AgentAssemblyRestorer({
-        registry: novelTools.registry,
-        groups: novelTools.groups,
+        registry: novelAndSubagentTools.registry,
+        groups: novelAndSubagentTools.groups,
       }),
       profileResolver: this.#profileResolver,
       logger,
@@ -516,6 +601,288 @@ function requireNovelStorageRoot(value: string | undefined): string {
   return value;
 }
 
+interface ChildSubagentToolComposition {
+  readonly registry: ToolRegistry;
+  readonly groups: ToolGroupCatalog;
+}
+
+interface CreateChildSubagentCompositionOptions {
+  readonly bootstrap: ConversationRuntimeBootstrap;
+  readonly store: ChildRuntimeWorkspaceStore;
+  readonly registry: ToolRegistry;
+  readonly groups: ToolGroupCatalog;
+  readonly requester: RuntimeSubagentRpcRequester;
+  readonly promptDigester: PromptDigester;
+  readonly persistence: RuntimePersistencePorts;
+  readonly eventSink: RuntimeEventSink;
+  readonly clock: ChildConversationManagerClock;
+  readonly logger: Logger;
+}
+
+/**
+ * 组装子代理 manager/tools：窄 RPC client → 会话 adapter → durable manager →
+ * TaskGet 查询 → Agent/TaskOutput/TaskStop 工具，返回并入子代理工具后的最终
+ * registry/groups 供运行期 Manifest 还原。
+ * Composes the subagent manager/tools over the narrow RPC client, then returns
+ * the final registry/groups (base Novel tools + subagent tools) used for runtime
+ * Manifest restoration.
+ */
+function createChildSubagentComposition(
+  options: CreateChildSubagentCompositionOptions,
+): ChildSubagentToolComposition {
+  const { bootstrap, store, registry, groups, requester, logger } = options;
+  const subagentClient = new ChildRuntimeSubagentClient({ requester, logger });
+  const scopeReaders = createChildSubagentScopeReaders(bootstrap);
+  const bindings = store.createSubagentBindingStore();
+  const agentAssembler = new AgentAssembler({
+    registry,
+    groups,
+    manifestResolver: new AgentManifestResolver({
+      promptBuilder: new ManifestSystemPromptCompiler({
+        sections: createDefaultPromptSectionRegistry(),
+        digester: options.promptDigester,
+      }),
+      promptCapabilities: new PromptCapabilitySnapshot([]),
+      manifestIdFactory: SUBAGENT_MANIFEST_ID_FACTORY,
+      clock: options.clock,
+      digester: options.promptDigester,
+      logger,
+    }),
+    manifestStore: store.agentManifests,
+    logger,
+  });
+  const adapter = new CatalogHostChildConversationAdapter({
+    catalog: store.conversations,
+    host: subagentClient.host,
+    agentDefinitions: new AgentDefinitionCatalog([
+      novelAgentDefinition,
+      novelExplorerAgentDefinition,
+      novelComposeAgentDefinition,
+    ]),
+    agentAssembler,
+    manifestStore: store.agentManifests,
+    manifestIdFactory: SUBAGENT_MANIFEST_ID_FACTORY,
+    commandService: subagentClient.commandService,
+    idFactory: CHILD_CONVERSATION_ID_FACTORY,
+    logger,
+  });
+  const manager = new DurableChildConversationManager(
+    new DefaultChildConversationManager({
+      parentScopeReader: scopeReaders.parentScopeReader,
+      toolPolicyRelationReader: scopeReaders.toolPolicyRelationReader,
+      creationPort: adapter,
+      activationPort: adapter,
+      rollbackPort: adapter,
+      taskAssignmentPort: adapter,
+      clock: options.clock,
+      logger,
+    }),
+    bindings,
+  );
+  // 子会话消息经窄 RPC 读取：父绑定 persistence 对子会话 identity_mismatch，
+  // 必须走 workspace journalReader 服务的 subagent RPC 通道。
+  // Child final messages must go through the subagent narrow RPC (served by the
+  // workspace journal reader); the parent-bound persistence port rejects the
+  // child conversation identity.
+  const finalAssistantMessages = createChildFinalAssistantMessageReader(
+    subagentClient,
+  );
+  // 完成链路：子会话 run 终态 → bridge → lifecycle.deliverResult →
+  // 父会话终态事件 + binding 落库（running→completed/failed/cancelled）。
+  // Completion path: child Run terminal → bridge → lifecycle.deliverResult →
+  // parent terminal event + durable binding terminal transition.
+  const lifecycle = new DefaultSubagentLifecycleCoordinator({
+    manager,
+    eventSink: options.eventSink,
+    eventIdFactory: SUBAGENT_LIFECYCLE_EVENT_ID_FACTORY,
+    clock: options.clock,
+    logger,
+  });
+  const bridge = new SubagentCompletionBridge({
+    bindings,
+    finalAssistantMessages,
+    resultSink: lifecycle,
+    logger,
+  });
+  const completion = new SubagentCompletionObserver({
+    bindings,
+    bridge,
+    childRunTerminal: createChildRunTerminalReader(subagentClient),
+    logger,
+  });
+  const query = new SubagentTaskQueryService({
+    bindings,
+    runtimePresence: createChildRuntimePresenceReader(bindings),
+    finalAssistantMessages,
+    limits: NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY.limits,
+    completion,
+    logger,
+  });
+  const cancellation: SubagentTaskCancellationIntentPort = {
+    async requestCancellation(binding) {
+      await subagentClient.host.shutdownRuntime({
+        conversationId: binding.childConversationId,
+        reason: CONVERSATION_RUNTIME_SHUTDOWN_REASON.explicitShutdown,
+      });
+      // shutdown 会终止子进程，run 可能来不及落 cancelled 终态，TaskStop 直接交付
+      // cancelled 结果，立即把 binding 翻成 cancelled（deliverResult 幂等）。
+      // Shutdown kills the child process; the Run may not land a cancelled
+      // terminal, so TaskStop delivers the cancelled result directly.
+      await lifecycle.deliverResult(
+        cancelledSubagentResult(binding, options.clock.now()),
+      );
+      return SUBAGENT_TASK_CANCELLATION_STATUS.cancellationRequested;
+    },
+  };
+  const subagentTools = createAgentExecutionToolRegistry({
+    definitions: createProductionSubagentDefinitionCatalog(),
+    policy: NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY,
+    manager,
+    bindings,
+    query,
+    cancellation,
+    logger,
+  });
+  // 诊断：合并 base groups 与 subagent group 前记录实际 group id（脱敏稳定 id），
+  // 确认 base 是否被污染进 runtime.subagent。
+  logger.debug("runtime_child.composition.subagent_group_merge", {
+    baseGroupIds: groups.list().map((g) => g.id).join(","),
+    addedGroupId: SUBAGENT_TOOL_GROUP_MANIFEST.id,
+  });
+  let subagentGroups: ToolGroupCatalog;
+  try {
+    subagentGroups = new ToolGroupCatalog([
+      ...groups.list(),
+      SUBAGENT_TOOL_GROUP_MANIFEST,
+    ]);
+  } catch (error) {
+    if (error instanceof ToolGroupCatalogError) {
+      logger.error("runtime_child.composition.subagent_group_catalog_failed", {
+        failure: error.failure,
+        ...(error.groupId === undefined ? {} : { groupId: error.groupId }),
+      });
+    }
+    throw error;
+  }
+  return Object.freeze({
+    registry: new ToolRegistry([...registry.list(), ...subagentTools.list()]),
+    groups: subagentGroups,
+  });
+}
+
+const CHILD_CONVERSATION_ID_FACTORY: ChildConversationIdFactory = {
+  create(input): string {
+    return `conversation-child-${input.subagentId}`;
+  },
+};
+
+// 子代理 manifest 稳定 id（跨 spawn 复用；manifest store 写一次语义）。
+// Stable subagent manifest id shared by the resolver and the child adapter
+// (reused across spawns; the manifest store is write-once per id).
+const SUBAGENT_MANIFEST_ID_FACTORY: AgentManifestIdFactory = Object.freeze({
+  create(input: {
+    readonly agentType: string;
+    readonly definitionVersion: string;
+  }): string {
+    return `manifest:subagent:${input.agentType}:${input.definitionVersion}`;
+  },
+});
+
+// 确定性生命周期事件 ID：重试/重启后重建同 ID 事件，journal 幂等去重。
+// Deterministic lifecycle event IDs so retried projections overwrite in place.
+const SUBAGENT_LIFECYCLE_EVENT_ID_FACTORY: SubagentLifecycleEventIdFactory = {
+  create(input): string {
+    return [
+      "subagent",
+      input.parentConversationId,
+      input.parentRunId,
+      input.subagentId,
+      input.eventType,
+      input.ordinal,
+    ].join(":");
+  },
+};
+
+// 把窄 RPC 的 readChildRunTerminal 响应适配为 observer 端口形状。
+// Adapts the narrow RPC readChildRunTerminal response to the observer port.
+function createChildRunTerminalReader(
+  client: ChildRuntimeSubagentClient,
+): SubagentChildRunTerminalReader {
+  return {
+    async readChildRunTerminal(conversationId) {
+      const response = await client.readChildRunTerminal(conversationId);
+      if (response.found === false) return undefined;
+      return Object.freeze({
+        status: response.status,
+        completedAt: response.completedAt,
+        ...(response.errorCode === undefined
+          ? {}
+          : { errorCode: response.errorCode }),
+        ...(response.cancellationReason === undefined
+          ? {}
+          : { cancellationReason: response.cancellationReason }),
+      });
+    },
+  };
+}
+
+function cancelledSubagentResult(
+  binding: SubagentBinding,
+  completedAt: string,
+): SubagentResult {
+  return Object.freeze({
+    schemaVersion: SUBAGENT_SCHEMA_VERSION,
+    subagentId: binding.subagentId,
+    parentConversationId: binding.parentConversationId,
+    parentRunId: binding.parentRunId,
+    childConversationId: binding.childConversationId,
+    status: "cancelled",
+    artifactReferences: Object.freeze([]),
+    cancellationReason: SUBAGENT_CANCELLATION_REASON.explicit,
+    completedAt,
+  });
+}
+
+function createChildRuntimePresenceReader(
+  bindings: SubagentBindingStore,
+): ConversationRuntimePresenceReader {
+  return {
+    async getRuntimePresence(conversationId) {
+      const active = (await bindings.list()).find(
+        (binding) => binding.childConversationId === conversationId,
+      );
+      if (active === undefined) {
+        return {
+          state: "offline",
+          observedAt: new Date().toISOString(),
+        };
+      }
+      return {
+        state:
+          active.status === "creating" || active.status === "running"
+            ? "online"
+            : "offline",
+        observedAt: active.updatedAt,
+      };
+    },
+  };
+}
+
+function createChildFinalAssistantMessageReader(
+  client: ChildRuntimeSubagentClient,
+): SubagentFinalAssistantMessageReader {
+  return {
+    async readFinalAssistantMessage(conversationId) {
+      const response = await client.readChildFinalAssistantMessage(conversationId);
+      if (response.found === false) return undefined;
+      return Object.freeze({
+        content: response.content,
+        artifactReferences: Object.freeze([]),
+      });
+    },
+  };
+}
+
 class ConversationRuntimeChild implements RuntimeChildRuntime {
   constructor(
     private readonly runtime: ConversationRuntime,
@@ -622,10 +989,14 @@ class ChildRuntimeOutputPublisher implements ConversationOutputEventPublisher {
 
   publish(event: OutputEvent): Promise<OutputReceipt> {
     const snapshot = event.getSnapshot();
-    this.logger.debug("runtime_child.output_publish_started", {
-      conversationId: snapshot.conversationId,
-      outputEventId: snapshot.id,
-    });
+    // 逐 delta 不记日志（FD/体积）；只在拼接成完整事件时记。Delta events are not
+    // logged per-chunk; only assembled events are.
+    if (snapshot.eventType !== OUTPUT_EVENT_TYPE.agentAssistantMessageDelta) {
+      this.logger.debug("runtime_child.output_publish_started", {
+        conversationId: snapshot.conversationId,
+        outputEventId: snapshot.id,
+      });
+    }
     return this.persistence.journal
       .appendOutput(snapshot.conversationId, snapshot)
       .then((receipt) => ({

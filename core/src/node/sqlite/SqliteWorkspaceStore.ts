@@ -21,6 +21,7 @@ import {
 import { WorkspaceDatabaseMismatchError } from "./ConversationCatalogErrors.js";
 import { SqliteConversationCatalogStore } from "./SqliteConversationCatalogStore.js";
 import { SqliteConversationJournalStore } from "./SqliteConversationJournalStore.js";
+import { SqliteSubagentBindingStore } from "../runtime/subagent/index.js";
 import { SqliteAgentManifestStore } from "../agent/manifest/index.js";
 import { runCoreSqliteMigrations } from "./migrations.js";
 
@@ -93,6 +94,11 @@ export class SqliteWorkspaceStore {
       database.close();
       throw error;
     }
+  }
+
+  createSubagentBindingStore(): SqliteSubagentBindingStore {
+    this.assertOpen();
+    return new SqliteSubagentBindingStore(this.database);
   }
 
   createMessageProjectionContext(

@@ -78,6 +78,7 @@ try {
   const factory = new DesktopRuntimeChildCompositionFactory({
     novelStorageRoot: workspace.workspaceRoot,
     manifestStoreProvider: async () => manifestStore.agentManifests,
+    workspaceStoreProvider: async () => manifestStore,
     adapterFactory: {
       async create({ lifecycleController }) {
         return {
@@ -132,6 +133,7 @@ try {
 
   const child = await factory.create(bootstrap, {
     persistence: createPersistence(),
+    requester: createRequester(),
   });
   const startup = await child.start(bootstrap);
   assert.equal(startup.conversationId, conversationId);
@@ -215,7 +217,10 @@ try {
     logger,
   });
   await assert.rejects(
-    failingFactory.create(bootstrap, { persistence: createPersistence() }),
+    failingFactory.create(bootstrap, {
+      persistence: createPersistence(),
+      requester: createRequester(),
+    }),
   );
   assert.ok(
     records.some((record) =>
@@ -233,6 +238,14 @@ try {
 }
 
 console.log("Desktop Runtime child composition smoke passed");
+
+function createRequester() {
+  return {
+    async request(method) {
+      throw new Error(`unused subagent RPC: ${method}`);
+    },
+  };
+}
 
 function createPersistence() {
   return {

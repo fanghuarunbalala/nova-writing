@@ -131,6 +131,14 @@ export const CHILD_TOOL_PERMISSION_RULES: readonly ToolPermissionRule[] =
         ]),
       }),
     }),
+    Object.freeze({
+      ruleId: "child_subagent_allow",
+      source: "built_in",
+      effect: "allow",
+      match: Object.freeze({
+        toolNames: Object.freeze(["Agent", "TaskOutput", "TaskStop"]),
+      }),
+    }),
   ]);
 
 export function createChildToolExecutionComposition(
@@ -177,6 +185,9 @@ export function createChildToolExecutionComposition(
     { toolName: "NovelChapterWrite", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelChapterEdit", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
     { toolName: "NovelDelete", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "Agent", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "TaskOutput", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
+    { toolName: "TaskStop", toolVersion: "1.0.0", policy: DEFAULT_TOOL_EXECUTION_POLICY },
   ]);
   const permissionPolicy = new ComposeAwareToolPermissionPolicy(
     new LayeredToolPermissionPolicy([

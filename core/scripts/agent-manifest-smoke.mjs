@@ -15,32 +15,14 @@ import {
   PromptRecipe,
   PromptSectionItem,
   ManifestSystemPromptCompiler,
-  ToolGroupCatalog,
-  ToolRegistry,
   createDefaultAgentCapabilityProfileCatalog,
   createDefaultPromptSectionRegistry,
-  defineTool,
-  loadToolGroupManifest,
   novelAgentDefinition,
   hydrateAgentManifest,
 } from "../dist/index.js";
-import { RUNTIME_FILES_TOOL_GROUP_MANIFEST, createFileToolRegistry, FileToolService } from "../dist/index.js";
-import { NOVEL_COMPOSE_TOOL_GROUP_MANIFEST, ComposeToolService, ComposeModeStateProvider, createNovelComposeToolRegistry } from "../dist/index.js";
-import { Type } from "typebox";
 import {
-  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
-  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
-  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
-  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
-  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
-  novelCharacterToolRegistry,
-  novelLocationToolRegistry,
-  novelParagraphToolRegistry,
-  novelPublicationToolRegistry,
-  novelDeleteToolRegistry,
-  novelOutlineToolRegistry,
-} from "./fixtures/novel-outline-tools.mjs";
+  createNovelConversationManifestComposition,
+} from "../dist/node/index.js";
 
 class Sha256Digester {
   algorithm = "sha256";
@@ -120,63 +102,27 @@ assert.equal(hydratedLegacy.capabilityProfile.profileId, "communication.standalo
 const sameManifest = await createResolver().resolve(novelAgentDefinition);
 assert.equal(sameManifest.manifestDigest, manifest.manifestDigest);
 
-const todoTool = defineTool({
-  descriptor: {
-    name: "TodoWrite",
-    version: "1.0.0",
-    label: "Todo Write",
-    description: "Maintains the current execution plan.",
-    parameters: Type.Object({}),
-  },
-  handler: { async execute() { return { content: [] }; } },
-});
-const toolRegistry = new ToolRegistry([
-  todoTool,
-  ...novelOutlineToolRegistry.list(),
-  ...novelCharacterToolRegistry.list(),
-  ...novelLocationToolRegistry.list(),
-  ...novelParagraphToolRegistry.list(),
-  ...novelPublicationToolRegistry.list(),
-  ...novelDeleteToolRegistry.list(),
-  ...createFileToolRegistry({ service: new FileToolService({ sandboxRoot: "/unavailable" }) }).list(),
-  ...createNovelComposeToolRegistry({ service: new ComposeToolService({ composeState: new ComposeModeStateProvider(), designRoot: "/unavailable/design" }) }).list(),
-]);
-const toolGroups = new ToolGroupCatalog([
-  loadToolGroupManifest(`
-schemaVersion: 1
-id: runtime.todo
-version: 1.0.0
-label: Runtime todo tools
-tools: [TodoWrite]
-  `),
-  NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
-  NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
-  NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
-  NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
-  NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
-  NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-  RUNTIME_FILES_TOOL_GROUP_MANIFEST,
-  NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
-]);
+const composition = createNovelConversationManifestComposition();
 const assembledStore = new InMemoryAgentManifestStore();
 const assembled = await new AgentAssembler({
-  registry: toolRegistry,
-  groups: toolGroups,
+  registry: composition.registry,
+  groups: composition.groups,
   capabilityResolver: new AgentCapabilityProfileResolver({
     profiles: createDefaultAgentCapabilityProfileCatalog(),
     promptSections: createDefaultPromptSectionRegistry(),
-    toolGroups,
+    toolGroups: composition.groups,
   }),
   manifestResolver: createResolver(),
   manifestStore: assembledStore,
   logger,
 }).assemble(novelAgentDefinition);
 assert.equal(assembled.agentType, "novel");
-assert.equal(assembled.toolView.require("TodoWrite").descriptor.name, todoTool.descriptor.name);
-assert.equal(assembled.toolView.require("TodoWrite").descriptor.version, todoTool.descriptor.version);
+assert.equal(assembled.toolView.require("TodoWrite").descriptor.name, "TodoWrite");
+assert.equal(assembled.toolView.require("TodoWrite").descriptor.version, "1.0.0");
 assert.deepEqual(
   assembled.toSnapshot().tools.map((tool) => tool.name).sort(),
   [
+    "Agent",
     "Edit",
     "EnterComposeMode",
     "ExitComposeMode",
@@ -201,6 +147,8 @@ assert.deepEqual(
     "NovelVolumeRead",
     "NovelVolumeWrite",
     "Read",
+    "TaskOutput",
+    "TaskStop",
     "TodoWrite",
     "Write",
   ],

@@ -79,9 +79,9 @@ assert.match(compiled.digest, /^sha256:[0-9a-f]{64}$/);
 
 const catalog = new AgentDefinitionCatalog([novelAgentDefinition]);
 assert.equal(catalog.resolve("novel").definitionVersion, novelAgentDefinition.definitionVersion);
-assert.equal(novelAgentDefinition.delegation.mode, "disabled");
-assert.deepEqual(novelAgentDefinition.delegation.allowedAgentTypes, []);
-assert.equal(novelAgentDefinition.toSnapshot().promptRecipe.items.length, 5);
+assert.equal(novelAgentDefinition.delegation.mode, "subagent");
+assert.deepEqual(novelAgentDefinition.delegation.allowedAgentTypes, ["novel_explorer", "novel_compose"]);
+assert.equal(novelAgentDefinition.toSnapshot().promptRecipe.items.length, 8);
 
 const invalidDefinition = new AgentDefinition({
   agentType: "invalid_agent",

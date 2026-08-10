@@ -34,7 +34,10 @@ import {
 } from "../../storage/index.js";
 import { SqliteWorkspaceStore } from "../sqlite/index.js";
 import { CoreConversationRuntimeMessageProjector } from "../../runtime/message/projection/index.js";
-import type { DesktopRuntimeChildPersistence } from "../runtime/child/index.js";
+import type {
+  DesktopRuntimeChildPersistence,
+  DesktopRuntimeChildSubagent,
+} from "../runtime/child/index.js";
 import { DefaultNovelAgentBindingConversationCatalog } from "./DefaultNovelAgentBindingConversationCatalog.js";
 
 export interface NodeConversationApiApplicationOptions {
@@ -63,6 +66,7 @@ export class NodeConversationApiApplication {
     transport: ConversationApiRouter,
     outputPublisher: ConversationOutputEventPublisher,
     private readonly host: ManagedConversationHost,
+    private readonly commands: StorageConversationCommandService,
     private readonly subscriptions: JournalConversationEventSubscriptionService,
     private readonly journal: PublishingConversationJournalService,
     private readonly hub: InMemoryConversationEventHub,
@@ -175,6 +179,7 @@ export class NodeConversationApiApplication {
         transport,
         outputPublisher,
         host,
+        commands,
         subscriptions,
         journal,
         hub,
@@ -232,6 +237,16 @@ export class NodeConversationApiApplication {
           return context.messages.list(query);
         },
       }),
+    });
+  }
+
+  async getRuntimeSubagent(
+    _conversationId: string,
+  ): Promise<DesktopRuntimeChildSubagent> {
+    this.logger.debug("node_conversation_api.runtime_subagent_bound");
+    return Object.freeze({
+      host: this.host,
+      commandService: this.commands,
     });
   }
 }

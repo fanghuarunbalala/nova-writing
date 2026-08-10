@@ -72,40 +72,72 @@ export function createTaskOutputTool(
       async execute(context, arguments_) {
         context.signal.throwIfAborted();
         const captured = captureSubagentTaskOutputArguments(arguments_);
+        logger.info("runtime.subagent.task_output_tool.invoked", {
+          parentConversationId: context.conversationId,
+          parentRunId: context.runId,
+          runIds: captured.runIds.join(","),
+          block: captured.block === true,
+          timeout: captured.timeout,
+        });
         if (!captured.block) {
           const runs = await queryAll(context, options.query, captured.runIds);
-          logger.debug("runtime.subagent.task_output_tool.snapshot", {
+          logger.info("runtime.subagent.task_output_tool.snapshot", {
             parentConversationId: context.conversationId,
             parentRunId: context.runId,
-            runCount: runs.length,
+            runStatuses: runs.map((run) => `${run.taskId}:${run.status}`).join(","),
+            hasResult: runs.some((run) => run.result !== undefined),
           });
           return snapshotResult(runs);
         }
         const deadline = timeSource.now() + captured.timeout;
-        while (true) {
-          context.signal.throwIfAborted();
-          const runs = await queryAll(context, options.query, captured.runIds);
-          const terminalIndex = runs.findIndex((run) =>
-            TERMINAL_STATUSES.has(run.status),
-          );
-          if (terminalIndex !== -1) {
-            logger.debug("runtime.subagent.task_output_tool.completed", {
+        let previous: string | undefined;
+        try {
+          while (true) {
+            context.signal.throwIfAborted();
+            const runs = await queryAll(context, options.query, captured.runIds);
+            const signature = runs
+              .map((run) => `${run.taskId}:${run.status}`)
+              .join(",");
+            if (signature !== previous) {
+              logger.info("runtime.subagent.task_output_tool.poll", {
+                parentConversationId: context.conversationId,
+                parentRunId: context.runId,
+                runStatuses: signature,
+              });
+              previous = signature;
+            }
+            const terminalIndex = runs.findIndex((run) =>
+              TERMINAL_STATUSES.has(run.status),
+            );
+            if (terminalIndex !== -1) {
+              logger.info("runtime.subagent.task_output_tool.returned", {
+                parentConversationId: context.conversationId,
+                parentRunId: context.runId,
+                retrieval: "completed",
+                runStatuses: signature,
+              });
+              return successResult(runs, terminalIndex);
+            }
+            if (timeSource.now() >= deadline) {
+              logger.info("runtime.subagent.task_output_tool.returned", {
+                parentConversationId: context.conversationId,
+                parentRunId: context.runId,
+                retrieval: "timeout",
+                runStatuses: signature,
+              });
+              return timeoutResult(runs);
+            }
+            await sleep(pollIntervalMs);
+          }
+        } catch (error) {
+          if (isAbortError(error)) {
+            logger.info("runtime.subagent.task_output_tool.returned", {
               parentConversationId: context.conversationId,
               parentRunId: context.runId,
-              taskId: runs[terminalIndex].taskId,
-              status: runs[terminalIndex].status,
+              retrieval: "aborted",
             });
-            return successResult(runs, terminalIndex);
           }
-          if (timeSource.now() >= deadline) {
-            logger.debug("runtime.subagent.task_output_tool.timeout", {
-              parentConversationId: context.conversationId,
-              parentRunId: context.runId,
-              runCount: runs.length,
-            });
-            return timeoutResult(runs);
-          }
-          await sleep(pollIntervalMs);
+          throw error;
         }
       },
     },
@@ -152,11 +184,21 @@ async function queryAll(
 function snapshotResult(
   runs: readonly SubagentTaskSnapshot[],
 ): ToolResult {
+  // 正文必须进 content：provider 当轮只序列化 content，details 仅供 journal
+  // 重建（readResult.formatReadToolResult 的同款约定）。runs 里每个有 result
+  // 的 run 都拼上状态+正文，让模型可见完整输出。
+  // The provider only serializes content in the live turn; details is reserved
+  // for journal rebuild (same convention as readResult.formatReadToolResult).
+  // Each run's status line plus its result body is joined into the content.
+  const lines: string[] = [`${runs.length} run(s).`];
+  for (const run of runs) {
+    lines.push(runText(run, /* listPrefix */ true));
+  }
   return Object.freeze({
     content: Object.freeze([
       Object.freeze({
         type: "text" as const,
-        text: `${runs.length} run(s).`,
+        text: lines.join("\n"),
       }),
     ]),
     details: Object.freeze({
@@ -172,11 +214,14 @@ function successResult(
 ): ToolResult {
   const run = runs[terminalIndex];
   const otherRuns = runs.filter((_, index) => index !== terminalIndex);
+  // 正文拼进 content（同 snapshotResult 的理由）；无 result 时退回纯状态行。
+  // The terminal run's body is appended to content; without a result the
+  // status line alone is kept.
   return Object.freeze({
     content: Object.freeze([
       Object.freeze({
         type: "text" as const,
-        text: `Run ${run.taskId} reached ${run.status}.`,
+        text: runText(run, /* listPrefix */ false),
       }),
     ]),
     details: Object.freeze({
@@ -185,6 +230,17 @@ function successResult(
       otherRuns: otherRuns.map(runToJson),
     }),
   });
+}
+
+// Model-visible text for a single run: status line, plus the result body when
+// present. listPrefix=true renders "- {taskId}: {status}" for snapshots.
+function runText(run: SubagentTaskSnapshot, listPrefix: boolean): string {
+  const statusLine = listPrefix
+    ? `- ${run.taskId}: ${run.status}`
+    : `Run ${run.taskId} reached ${run.status}.`;
+  return run.result === undefined
+    ? statusLine
+    : `${statusLine}\n\n${run.result.content}`;
 }
 
 function timeoutResult(
@@ -236,4 +292,12 @@ function taskOutputFailure(
 
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { name?: unknown }).name === "AbortError"
+  );
 }

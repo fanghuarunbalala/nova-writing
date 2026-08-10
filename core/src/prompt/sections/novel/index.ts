@@ -2,4 +2,6 @@
 export * from "./NovelBasePromptSections.js";
 export * from "./NovelCraftPromptSections.js";
 export * from "./NovelExecutionPromptSections.js";
+export * from "./NovelExplorePromptSections.js";
+export * from "./NovelComposePromptSections.js";
 export * from "./NovelGlobalConstraintsPromptSection.js";

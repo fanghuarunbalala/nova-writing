@@ -79,6 +79,10 @@ const querySnapshots = new Map([
     childConversationId: "conversation-child-done",
     status: "completed",
     runtimePresence: "absent",
+    result: {
+      content: "The completed body text.",
+      artifactReferences: [],
+    },
   }],
 ]);
 const query = new SubagentTaskQueryService({
@@ -163,6 +167,21 @@ const snapshot = await taskOutput.handler.execute(
 assert.equal(snapshot.details.retrieval, "snapshot");
 assert.equal(snapshot.details.runs.length, 1);
 assert.equal(snapshot.details.runs[0].status, "running");
+// 无 result 的 run：content 只含状态行（保持原约定）。
+// A run without a result keeps a plain status line in content.
+assert.equal(snapshot.content[0].text, "1 run(s).\n- running: running");
+
+const doneSnapshot = await taskOutput.handler.execute(
+  context,
+  { runIds: ["done"] },
+  { emit: async () => {} },
+);
+assert.equal(doneSnapshot.details.retrieval, "snapshot");
+assert.equal(doneSnapshot.details.runs.length, 1);
+// 有 result 的 run：正文进 content，模型当轮可见完整输出。
+// A run with a result has its body in content for the live turn.
+assert.match(doneSnapshot.content[0].text, /^1 run\(s\)\.\n- done: completed\n\nThe completed body text\.$/);
+assert.equal(doneSnapshot.details.runs[0].result.content, "The completed body text.");
 
 const success = await taskOutput.handler.execute(
   context,
@@ -174,6 +193,10 @@ assert.equal(success.details.run.taskId, "done");
 assert.equal(success.details.run.status, "completed");
 assert.equal(success.details.otherRuns.length, 1);
 assert.equal(success.details.otherRuns[0].taskId, "running");
+// 终态 run 的正文拼进 content；details 通道不受影响。
+// The terminal run's body is appended to content; details is unchanged.
+assert.match(success.content[0].text, /^Run done reached completed\.\n\nThe completed body text\.$/);
+assert.equal(success.details.run.result.content, "The completed body text.");
 
 const timedOut = await taskOutput.handler.execute(
   context,

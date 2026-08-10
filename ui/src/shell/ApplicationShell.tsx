@@ -26,6 +26,7 @@ import {
   ApprovalStore,
   mapApprovalViews,
 } from "../domains/approval/ApprovalStore.js";
+import { createApprovalEntityResolver } from "../domains/approval/approvalEntityResolver.js";
 import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
 import {
   createDomainReferenceResolver,
@@ -124,6 +125,17 @@ export function ApplicationShell({
   const workspace = useExternalStore(workspaceAdapter);
   const overview = useExternalStore(domainStores.novelOverview);
   const approvalStore = useMemo(() => new ApprovalStore(), []);
+  const approvalEntityResolver = useMemo(
+    () =>
+      createApprovalEntityResolver({
+        api,
+        manuscript: domainStores.manuscriptStructure,
+        outline: domainStores.storyOutlineTree,
+        characters: domainStores.character,
+        locations: domainStores.location,
+      }),
+    [api, domainStores],
+  );
   const approvalSnapshot = useExternalStore(approvalStore);
   const inspector = useExternalStore(inspectorRouter);
   // 全局审批队列：跨会话聚合（右上角 badge / 审批面板数据源）。
@@ -464,6 +476,7 @@ export function ApplicationShell({
           onOpenDraft={handleOpenApproval}
           onNotify={handleNotify}
           approvalStore={approvalStore}
+          onApprovalChange={refreshApprovals}
         />
         <InspectorHost
           inspectorRouter={inspectorRouter}
@@ -472,6 +485,8 @@ export function ApplicationShell({
           characters={domainStores.character}
           locations={domainStores.location}
           approvalStore={approvalStore}
+          approvalEntityResolver={approvalEntityResolver}
+          sourceRevision={overview.sourceRevision}
           onJumpToConversation={handleSelectConversation}
         />
       </div>

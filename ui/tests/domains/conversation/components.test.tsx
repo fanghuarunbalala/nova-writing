@@ -211,6 +211,28 @@ describe("ConversationComposer", () => {
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
   });
 
+  it("disables send during pending approval but keeps typing and mode available", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(
+      <ConversationComposer
+        conversationId="c1"
+        enabled
+        sendDisabled
+        onSend={onSend}
+        onModeChange={vi.fn()}
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: "对话输入" });
+    await user.type(input, "hi");
+    // 发送按钮禁用，但打字区仍可用，显示「等待审批」。
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    expect(input).toBeEnabled();
+    expect(screen.getByText("等待审批")).toBeInTheDocument();
+    // 切 mode 的触发按钮仍可用。
+    expect(screen.getByRole("button", { name: /执行模式|模式|下拉/ })).toBeEnabled();
+  });
+
   it("renders the generation status pill above the input when status is provided", () => {
     const onSend = vi.fn();
     render(

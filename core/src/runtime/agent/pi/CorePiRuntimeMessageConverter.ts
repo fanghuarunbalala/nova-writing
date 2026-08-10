@@ -121,6 +121,23 @@ function captureToolResultToolCallId(message: RuntimeMessageSnapshot): string {
   return typeof payload.toolCallId === "string" ? payload.toolCallId : "";
 }
 
+/** 收集输入中真实存在的 tool.result 的 toolCallId（用于跳过无响应的 tool.request）。 */
+function captureResultToolCallIds(
+  messages: readonly RuntimeMessageSnapshot[],
+): Set<string> {
+  const ids = new Set<string>();
+  for (const message of messages) {
+    if (
+      message.role === "tool" &&
+      message.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolResult
+    ) {
+      const toolCallId = captureToolResultToolCallId(message);
+      if (toolCallId !== "") ids.add(toolCallId);
+    }
+  }
+  return ids;
+}
+
 export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter {
   private readonly messageSchemaRegistry: RuntimeMessageSchemaRegistry;
   private readonly assistantMessageEnvelopeFactory?: PiAssistantMessageEnvelopeFactory;
@@ -159,6 +176,9 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
     const seenIds = new Set<string>();
     // 输入中真实存在的 toolRequest id 集合：孤儿 toolResult（无对应 request）据此识别。
     const requestToolCallIds = captureRequestToolCallIds(request.messages);
+    // 输入中真实存在的 toolResult id 集合：孤立 tool.request（挂起审批/中断，无响应）
+    // 据此识别并跳过，避免发给模型后因 tool_calls 无响应被 provider 以 400 拒绝。
+    const resultToolCallIds = captureResultToolCallIds(request.messages);
     // 按存储顺序折叠：`tool.request` 并入前一条 assistant 消息，使回放的 Pi 形状与
     // live 轮次一致——一条 assistant 消息 content = [text, toolCall×N]，随后分组
     // tool 结果。OpenAI-completions 要求一条 assistant 消息含全部 tool_calls、
@@ -205,6 +225,33 @@ export class CorePiRuntimeMessageConverter implements PiRuntimeMessageConverter 
       ) {
         output.push(this.convertOrphanToolResultMessage(validated));
         lastAssistant = undefined;
+        continue;
+      }
+      if (
+        validated.role === "tool" &&
+        validated.messageType === CORE_RUNTIME_MESSAGE_TYPE.toolRequest &&
+        validated.schemaVersion === RUNTIME_MESSAGE_SCHEMA_VERSION &&
+        !resultToolCallIds.has(
+          (
+            validated.payload as unknown as CoreToolRequestMessagePayload
+          ).toolCallId,
+        )
+      ) {
+        // 孤立 tool.request（挂起审批或中断，无 tool.result）：跳过，避免孤立
+        // tool_call 被 provider 以 400 拒绝；打 warn 便于诊断残留请求。
+        lastAssistant = undefined;
+        this.logger.warn(
+          "runtime.agent.message_conversion_orphan_tool_request",
+          {
+            ...identity,
+            toolCallId: (
+              validated.payload as unknown as CoreToolRequestMessagePayload
+            ).toolCallId,
+            toolName: (
+              validated.payload as unknown as CoreToolRequestMessagePayload
+            ).toolName,
+          },
+        );
         continue;
       }
       if (

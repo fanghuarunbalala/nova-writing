@@ -77,11 +77,13 @@ function apiStub(): object {
       },
       paragraphs: {
         get: vi.fn(async () => ({
-          paragraph: {
-            id: "p-2",
-            storyUnitId: "u-1",
-            orderKey: "0001",
-            text: "正文（API 补）",
+          readModel: {
+            paragraph: {
+              id: "p-2",
+              storyUnitId: "u-1",
+              orderKey: "0001",
+              text: "正文（API 补）",
+            },
           },
         })),
       },
@@ -238,7 +240,7 @@ describe("createApprovalEntityResolver", () => {
   it("returns undefined when both block and API are missing", async () => {
     const api = {
       novel: {
-        paragraphs: { get: vi.fn(async () => ({ paragraph: undefined })) },
+        paragraphs: { get: vi.fn(async () => ({ readModel: undefined })) },
       },
     };
     const resolver = createApprovalEntityResolver({

@@ -476,6 +476,7 @@ export function ApplicationShell({
           onOpenDraft={handleOpenApproval}
           onNotify={handleNotify}
           approvalStore={approvalStore}
+          onApprovalChange={refreshApprovals}
         />
         <InspectorHost
           inspectorRouter={inspectorRouter}

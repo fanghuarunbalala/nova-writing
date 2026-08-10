@@ -43,6 +43,8 @@ export interface ChatSurfaceProps {
   readonly onOpenApproval?: (approvalRequestId: string) => void;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
   readonly approvalStore: ApprovalStore;
+  /** 本会话审批变化回调（事件驱动全局审批刷新）。 */
+  readonly onApprovalChange?: () => void;
 }
 
 export function ChatSurface({
@@ -56,6 +58,7 @@ export function ChatSurface({
   onOpenApproval,
   onNotify,
   approvalStore,
+  onApprovalChange,
 }: ChatSurfaceProps) {
   const catalog = useExternalStore(conversationCatalog);
   const activeId = catalog.activeConversationId;
@@ -67,6 +70,7 @@ export function ChatSurface({
       api={api}
       logger={logger}
       conversationId={activeId}
+      onApprovalChange={onApprovalChange}
       title={catalog.conversations.find((item) => item.id === activeId)?.title ?? "对话"}
       agentLabel={catalog.conversations.find((item) => item.id === activeId)?.agentLabel ?? ""}
       onReferenceClick={onReferenceClick}
@@ -94,6 +98,8 @@ interface ActiveChatSurfaceProps {
   readonly onOpenApproval?: (approvalRequestId: string) => void;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
   readonly approvalStore: ApprovalStore;
+  /** 本会话审批变化回调（事件驱动全局审批刷新）。 */
+  readonly onApprovalChange?: () => void;
 }
 
 function ActiveChatSurface({
@@ -108,10 +114,12 @@ function ActiveChatSurface({
   onOpenApproval,
   onNotify,
   approvalStore,
+  onApprovalChange,
 }: ActiveChatSurfaceProps) {
   const { snapshot, enqueue, resume } = useConversationProjection(conversationId, {
     api,
     logger,
+    onApprovalChange,
   });
   // 审批数据与决策由 ApplicationShell 全局管理（跨会话）；此处仅保留
   // 消息流审批卡的批准/请求修改入口（approvalStore.decide）。
@@ -122,14 +130,11 @@ function ActiveChatSurface({
   );
   const runtimeStatus = useConversationRuntimeStatus(snapshot.projection);
   const failed = runtimeStatus.state === "failed";
-  // 本会话是否有挂起审批（审核中）：仅禁用发送按钮，打字/切 mode 不受影响。
-  const pendingApproval = approvalStore
-    .getSnapshot()
-    .approvals.some(
-      (approval) =>
-        approval.conversationId === conversationId &&
-        approval.status === "pending",
-    );
+  // 本会话是否有挂起审批（审核中）：读本会话投影（双工，审批事件实时更新），
+  // 仅禁用发送按钮，打字/切 mode 不受影响。
+  const pendingApproval = (snapshot.projection.approvals ?? []).some(
+    (approval) => approval.status === "pending",
+  );
   const genPhase = failed
     ? "failed"
     : runtimeStatus.state === "live"

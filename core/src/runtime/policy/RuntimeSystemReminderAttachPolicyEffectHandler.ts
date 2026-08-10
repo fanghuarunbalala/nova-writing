@@ -64,16 +64,20 @@ export class RuntimeSystemReminderAttachPolicyEffectHandler
     if (typeof content !== "string" || content.trim().length === 0) {
       throw new Error("System reminder rendered content is invalid");
     }
-    await this.eventSink.append(
-      new SystemReminderAttachedOutputEvent({
-        conversationId: effect.conversationId,
-        reminderId: effect.reminderId,
-        kind: effect.reminderKind,
-        content,
-        order: effect.order,
-        runId: effect.runId,
-      }),
-    );
+    // 瞬态提醒（transient）只注入同 run overlay、不入 canonical（稀疏刷新用）。
+    // Transient reminders only feed the in-run overlay; they are never persisted.
+    if (effect.transient !== true) {
+      await this.eventSink.append(
+        new SystemReminderAttachedOutputEvent({
+          conversationId: effect.conversationId,
+          reminderId: effect.reminderId,
+          kind: effect.reminderKind,
+          content,
+          order: effect.order,
+          runId: effect.runId,
+        }),
+      );
+    }
     this.logger.info("runtime.system_reminder.attached", {
       conversationId: effect.conversationId,
       runId: effect.runId,

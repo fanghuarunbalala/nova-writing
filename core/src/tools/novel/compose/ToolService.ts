@@ -66,6 +66,8 @@ export interface ComposeToolServiceOptions {
   readonly commitRecorder?: NovelComposeCommitRecorder;
   /** 会话 mode + compose 子状态的持久化端口(可选,不传则仅内存 + 事件)。 */
   readonly conversations?: ConversationModePersistencePort;
+  /** 会话是否有挂起审批的探测(由装配注入;用于挂起审批时延迟 mode 切换)。 */
+  readonly pendingApprovalProbe?: (conversationId: string) => Promise<boolean>;
   readonly logger?: Logger;
 }
 
@@ -86,6 +88,8 @@ export type ComposeEnterDetails = {
   readonly designFilePath: string;
   readonly phase: ComposeModePhase;
   readonly purpose?: string;
+  /** 进入前已在 compose(幂等返回当前状态,未重复进入)。Whether compose was already active. */
+  readonly alreadyActive?: boolean;
 };
 
 export type ComposeExitDetails = {
@@ -103,6 +107,9 @@ export class ComposeToolService {
   readonly #commitRecorder: NovelComposeCommitRecorder | undefined;
   readonly #conversations: ConversationModePersistencePort | undefined;
   readonly #logger: Logger;
+  /** 审核(pending)中延迟的 mode 目标:下一次 provider call 晋升。Deferred mode targets promoted at the next provider call. */
+  readonly #pendingModeTargets = new Map<string, ConversationMode>();
+  #pendingApprovalProbe?: (conversationId: string) => Promise<boolean>;
 
   constructor(options: ComposeToolServiceOptions) {
     this.#composeState = options.composeState;
@@ -110,6 +117,7 @@ export class ComposeToolService {
     this.#eventSink = options.eventSink ?? NOOP_RUNTIME_EVENT_SINK;
     this.#commitRecorder = options.commitRecorder;
     this.#conversations = options.conversations;
+    this.#pendingApprovalProbe = options.pendingApprovalProbe;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "novel_compose_tool_service",
     });
@@ -127,10 +135,29 @@ export class ComposeToolService {
     conversationId: string,
     purpose?: string,
   ): Promise<ComposeEnterDetails> {
+    // 幂等:已处于 compose 时返回当前状态,不重复进入、不删草稿、不发重复事件。
+    // Idempotent: when compose is already active, return the current state without
+    // re-entering, touching the draft, or emitting duplicate events.
+    const existing = this.#composeState.snapshot(conversationId);
+    if (existing.active) {
+      const designFilePath =
+        existing.designFilePath ?? this.designFilePathFor(conversationId);
+      return Object.freeze({
+        designFilePath,
+        phase: existing.phase,
+        ...(purpose === undefined ? {} : { purpose }),
+        alreadyActive: true,
+      });
+    }
     const designFilePath = this.designFilePathFor(conversationId);
     await fs.mkdir(this.#designRoot, { recursive: true });
+    // 检测旧草稿：design 文件已存在 = 上次会话残留（discard 才删、exit 归档）。用于
+    // reentry 提醒。Draft exists when the design file already exists (only discard
+    // deletes it; exit archives it) — drives the reentry reminder.
+    let hasPriorDraft = false;
     try {
       await fs.access(designFilePath);
+      hasPriorDraft = true;
     } catch {
       await fs.writeFile(designFilePath, "", "utf8");
     }
@@ -138,6 +165,7 @@ export class ComposeToolService {
     const snapshot = this.#composeState.enter(conversationId, {
       designFilePath,
       preComposeMode: currentMode,
+      hasPriorDraft,
     });
     // 写序: ①内存 → ②DB(提交点) → ③事件。
     await this.#persistMode(conversationId, "compose");
@@ -166,6 +194,22 @@ export class ComposeToolService {
   /** 批准后的落库收口:状态到 applied、持久化恢复、删 compose 子状态、发 applied + mode.changed。 */
   /** Post-approval settlement: transitions to applied, restores mode, clears compose sub-state, emits applied + mode.changed. */
   async exit(conversationId: string): Promise<ComposeExitDetails> {
+    // 安全网:compose 已被放弃/结束(如审核中显式 discard),审批通过后不再抛错,返回 no-op。
+    // Safety net: if compose was already discarded/ended, the approval resolution is a no-op.
+    const current = this.#composeState.snapshot(conversationId);
+    if (!current.active) {
+      this.#logger.debug("novel_compose.exit_idempotent_noop", {
+        conversationId,
+        phase: current.phase,
+      });
+      return Object.freeze({
+        designFilePath: current.designFilePath ?? "",
+        phase: current.phase,
+        ...(current.preComposeMode === undefined
+          ? {}
+          : { preComposeMode: current.preComposeMode }),
+      });
+    }
     const snapshot = this.#composeState.approve(conversationId);
     const designFilePath = snapshot.designFilePath ?? "";
     let contentDigest = "";
@@ -222,11 +266,21 @@ export class ComposeToolService {
   /** 用户主动切换 mode 的统一入口(前端 IPC / 其余 tool 共用)。compose 目标走 begin;其余走 setMode。 */
   /** Unified mode-switch entry (frontend IPC / other tools). compose target begins; others setMode. */
   async setMode(conversationId: string, target: ConversationMode): Promise<void> {
+    const current = this.#composeState.snapshot(conversationId);
+    // 挂起审批时延迟 mode 切换(不动 active mode),下一次 provider call 晋升。
+    // While any approval is pending, defer the switch so tools keep checking the active mode.
+    if (await this.#shouldDefer(conversationId, current.phase)) {
+      this.#pendingModeTargets.set(conversationId, target);
+      this.#logger.info("novel_compose.mode_deferred_while_pending", {
+        conversationId,
+        target,
+      });
+      return;
+    }
     if (target === "compose") {
       await this.begin(conversationId);
       return;
     }
-    const current = this.#composeState.snapshot(conversationId);
     if (current.active) {
       // 用户主动退出 compose:discard 路径(不走审批门), 落最终 target。
       await this.#discardActive(conversationId, target);
@@ -241,6 +295,36 @@ export class ComposeToolService {
       conversationId,
       mode: snapshot.mode,
     });
+  }
+
+  /** 是否有挂起审批/处于 compose pending:是则延迟 mode 切换。 */
+  /** True while compose is pending or the injected probe reports a pending approval. */
+  async #shouldDefer(
+    conversationId: string,
+    phase: ComposeModePhase,
+  ): Promise<boolean> {
+    if (phase === "pending") return true;
+    return (await this.#pendingApprovalProbe?.(conversationId)) ?? false;
+  }
+
+  /** 装配注入挂起审批探测(coordinator 创建后调用)。Injects the pending-approval probe after assembly. */
+  setPendingApprovalProbe(
+    probe: (conversationId: string) => Promise<boolean>,
+  ): void {
+    this.#pendingApprovalProbe = probe;
+  }
+
+  /** 应用审核中延迟的 mode 目标(审批决议后调用)。compose 未激活 → 直接切;designing active → 走 discard 离开。 */
+  /** Applies a mode target deferred while an approval was pending. */
+  async applyPendingModeTarget(conversationId: string): Promise<void> {
+    const target = this.#pendingModeTargets.get(conversationId);
+    if (target === undefined) return;
+    this.#pendingModeTargets.delete(conversationId);
+    this.#logger.info("novel_compose.mode_deferred_applied", {
+      conversationId,
+      target,
+    });
+    await this.setMode(conversationId, target);
   }
 
   /** 主动放弃 compose 会话(不走审批门):恢复 preMode、删 design 文件、清 compose 子状态、发 discarded + mode.changed。 */

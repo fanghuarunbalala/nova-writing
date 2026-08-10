@@ -19,6 +19,8 @@ export interface CreateSystemReminderAttachEffectInput {
   readonly templateId: string;
   readonly templateVersion: string;
   readonly parameters: Readonly<Record<string, JsonValue>>;
+  /** 瞬态标志：true 时仅注入同 run overlay、不入 canonical。Transient: in-run overlay only. */
+  readonly transient?: boolean;
 }
 
 export function createSystemReminderAttachEffect(
@@ -36,5 +38,8 @@ export function createSystemReminderAttachEffect(
     templateVersion: input.templateVersion,
     parameters: input.parameters,
     order: nextOrder,
+    ...(input.transient === undefined
+      ? {}
+      : { transient: input.transient }),
   });
 }

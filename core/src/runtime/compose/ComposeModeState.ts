@@ -29,6 +29,8 @@ export interface ComposeModeSnapshot {
   readonly designFilePath?: string;
   /** 进入 compose 前的 base mode（approve/discard 时恢复）。Mode before entering compose. */
   readonly preComposeMode?: ConversationMode;
+  /** 进入时 design 文件已存在（上次会话残留草稿）。Whether the design file already existed on entry. */
+  readonly hasPriorDraft?: boolean;
 }
 
 export const IDLE_COMPOSE_MODE_SNAPSHOT: ComposeModeSnapshot = Object.freeze({
@@ -76,6 +78,7 @@ export class ComposeModeStateProvider {
     options: {
       readonly designFilePath: string;
       readonly preComposeMode?: ConversationMode;
+      readonly hasPriorDraft?: boolean;
     },
   ): ComposeModeSnapshot {
     const current = this.snapshot(conversationId);
@@ -90,6 +93,9 @@ export class ComposeModeStateProvider {
       ...(options.preComposeMode === undefined
         ? {}
         : { preComposeMode: options.preComposeMode }),
+      ...(options.hasPriorDraft === undefined
+        ? {}
+        : { hasPriorDraft: options.hasPriorDraft }),
     });
     this.#states.set(conversationId, next);
     this.#logger.debug("compose.entered", { conversationId, phase: next.phase });

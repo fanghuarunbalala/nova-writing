@@ -1,0 +1,96 @@
+/**
+ * ParameterView 视觉（对齐原型 .params 网格：行式标签 + 值）。
+ * Matches the prototype .params grid: label + value rows.
+ */
+.params {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.paramRow {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.paramTag {
+  flex: none;
+  width: 92px;
+  font-size: 10.5px;
+  color: var(--color-faint);
+}
+
+.paramVal {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-fg);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.paramValWrap {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.clamp.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+.toggle {
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-accent-ink);
+  cursor: pointer;
+}
+
+.paramSubBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.paramSub {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--color-accent-ink);
+}
+
+.paramItems {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.paramItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 10px;
+  border-left: 1px solid var(--color-border);
+}
+
+.paramItemHead {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--color-muted);
+}

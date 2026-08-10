@@ -42,9 +42,12 @@ function fakeTool(name, parameters) {
 
 const registry = new ToolRegistry([
   fakeTool("TodoWrite", { todos: Type.Any() }),
-  fakeTool("NovelOutlineRead", { scope: Type.Any() }),
-  fakeTool("NovelOutlineWrite", { values: Type.Any() }),
-  fakeTool("NovelOutlineEdit", { values: Type.Any() }),
+  fakeTool("NovelOutlineRead", {
+    storyUnitId: Type.Optional(Type.String()),
+    includePlans: Type.Optional(Type.Boolean()),
+  }),
+  fakeTool("NovelOutlineWrite", { baseRevision: Type.String(), values: Type.Any() }),
+  fakeTool("NovelOutlineEdit", { baseRevision: Type.String(), values: Type.Any() }),
   fakeTool("Read", { file_path: Type.String() }),
   fakeTool("Glob", { pattern: Type.String() }),
   fakeTool("Write", { file_path: Type.String(), content: Type.String() }),
@@ -133,7 +136,7 @@ await composition.dispatcher.execute(
     toolCallId: "call-read",
     toolName: "NovelOutlineRead",
     toolVersion: "1.0.0",
-    arguments: { scope: "draft" },
+    arguments: {},
   },
   { signal },
 );
@@ -421,7 +424,10 @@ await assert.rejects(
         toolCallId: "call-compose-canonical",
         toolName: "NovelOutlineWrite",
         toolVersion: "1.0.0",
-        arguments: { values: [{ id: "s", title: "t" }] },
+        arguments: {
+          baseRevision: "revision_compose_denied",
+          values: [{ id: "s", title: "t" }],
+        },
       },
       { signal },
     ),

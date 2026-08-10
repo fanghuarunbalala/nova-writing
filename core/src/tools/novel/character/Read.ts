@@ -1,4 +1,4 @@
-/** NovelCharacterRead tool: reads Character profiles for one explicit scope. */
+/** NovelCharacterRead tool: reads committed Character profiles. */
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { ToolError } from "../../../runtime/tools/execution/index.js";
 import {
@@ -31,11 +31,11 @@ export function createCharacterReadTool(
       version: "1.0.0",
       label: "Novel Character Read",
       description:
-        "Reads Character profiles for one explicit scope. Omit characterId to list all. The returned profile is the source for NovelCharacterWrite and NovelCharacterEdit values.",
+        "Reads committed Character profiles. Omit characterId to list all. The returned profile is the source for NovelCharacterWrite and NovelCharacterEdit values.",
       parameters: NovelCharacterReadParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage:
-          "Use scope=draft to preview uncommitted work or canonical for committed state.",
+          "Reads committed (canonical) state; only approved writes appear in results.",
         parameterGuidance:
           "Omit characterId for the whole list; provide it to read one profile.",
         safetyGuidance: "Read-only.",

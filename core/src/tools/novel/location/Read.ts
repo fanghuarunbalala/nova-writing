@@ -1,4 +1,4 @@
-/** NovelLocationRead tool: reads Location profiles for one explicit scope. */
+/** NovelLocationRead tool: reads committed Location profiles. */
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { ToolError } from "../../../runtime/tools/execution/index.js";
 import {
@@ -31,11 +31,11 @@ export function createLocationReadTool(
       version: "1.0.0",
       label: "Novel Location Read",
       description:
-        "Reads Location profiles for one explicit scope. Omit locationId to list all. The returned profile is the source for NovelLocationWrite and NovelLocationEdit values.",
+        "Reads committed Location profiles. Omit locationId to list all. The returned profile is the source for NovelLocationWrite and NovelLocationEdit values.",
       parameters: NovelLocationReadParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage:
-          "Use scope=draft to preview uncommitted work or canonical for committed state.",
+          "Reads committed (canonical) state; only approved writes appear in results.",
         parameterGuidance:
           "Omit locationId for the whole list; provide it to read one profile.",
         safetyGuidance: "Read-only.",

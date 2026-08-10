@@ -12,13 +12,6 @@ const StoryUnitScopeSchema = Type.Union([
   Type.Literal("custom"),
 ]);
 
-/** 暂存兼容导出：draft scope 已废弃，其余工具组切换完成后移除。 */
-export const ScopeSchema = Type.Union([
-  Type.Literal("canonical"),
-  Type.Literal("draft"),
-]);
-export type ToolScope = Static<typeof ScopeSchema>;
-
 const PlanningStatusSchema = Type.Union([
   Type.Literal("idea"),
   Type.Literal("outlined"),

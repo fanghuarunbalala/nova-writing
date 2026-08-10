@@ -32,4 +32,11 @@ export interface Logger {
   verbose?(event: string, fields?: LogFields): void;
 
   child(bindings: LogFields): Logger;
+
+  /**
+   * Optional flush hook for asynchronous backends (e.g. pino worker
+   * transports). Resolves once buffered records are written; absent on
+   * synchronous/background adapters and no-op loggers.
+   */
+  flush?(): Promise<void>;
 }

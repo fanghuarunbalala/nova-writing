@@ -1,22 +1,24 @@
 /** Composes Conversation and Novel hosts so one Electron Workspace becomes ready atomically. */
+import { join } from "node:path";
 import {
   ConversationNovelLifecycleOutputPublisher,
   NovelQueryApiRouter,
   WorkspaceApiRouter,
-  noopLogger,
   type ApiTransport,
   type ConversationRuntimePlacement,
   type AgentManifestProvisioner,
+  type DiagnosticLogLevel,
   type EntityProfileReadinessPolicy,
   type Logger,
   type WorkspaceStoreLocation,
 } from "@novel/core";
 import {
   DefaultNovelConversationManifestProvisioner,
-  type DesktopRuntimeChildPersistence,
   NodeConversationApiApplication,
   NodeNovelWorkspaceHost,
   NodeConversationProcessSupervisor,
+  createRotatingFileLogger,
+  type DesktopRuntimeChildPersistence,
 } from "@novel/core/node";
 import { createDesktopRuntimePlacement } from "../runtime/index.js";
 import type {
@@ -27,7 +29,8 @@ import type {
 export interface DesktopNovelWorkspaceApplicationFactoryOptions {
   readonly placement?: ConversationRuntimePlacement;
   readonly storageRoot?: string;
-  readonly childLogPath?: string;
+  /** per-workspace 旋转日志的最低级别；默认 "info"。 */
+  readonly logLevel?: DiagnosticLogLevel;
   readonly debugLogLevel?: "debug" | "verbose";
   readonly providerRequestDumpPath?: string;
   readonly agentManifestProvisioner?: AgentManifestProvisioner;
@@ -40,17 +43,16 @@ export class DesktopNovelWorkspaceApplicationFactory
 {
   private readonly placementOverride?: ConversationRuntimePlacement;
   private readonly storageRoot?: string;
-  private readonly childLogPath?: string;
+  private readonly logLevel?: DiagnosticLogLevel;
   private readonly debugLogLevel?: "debug" | "verbose";
   private readonly providerRequestDumpPath?: string;
   private readonly agentManifestProvisioner: AgentManifestProvisioner;
   private readonly readinessPolicy: EntityProfileReadinessPolicy;
-  private readonly logger: Logger;
 
   constructor(options: DesktopNovelWorkspaceApplicationFactoryOptions = {}) {
     this.placementOverride = options.placement;
     this.storageRoot = options.storageRoot;
-    this.childLogPath = options.childLogPath;
+    this.logLevel = options.logLevel;
     this.debugLogLevel = options.debugLogLevel;
     this.providerRequestDumpPath = options.providerRequestDumpPath;
     this.agentManifestProvisioner =
@@ -60,15 +62,21 @@ export class DesktopNovelWorkspaceApplicationFactory
       });
     this.readinessPolicy =
       options.readinessPolicy ?? DESKTOP_DEFAULT_READINESS_POLICY;
-    this.logger = (options.logger ?? noopLogger).child({
-      component: "desktop_novel_workspace_application_factory",
-    });
   }
 
   async open(
     location: WorkspaceStoreLocation,
   ): Promise<DesktopWorkspaceApiApplication> {
-    const logger = this.logger.child({ workspaceId: location.workspaceId });
+    // 每个 workspace 独立日志：父进程侧服务写 storeDir/logs/runtime-main.log，
+    // 子 agent 运行时写 storeDir/logs/runtime-child.log。目录即可读 name-id。
+    const workspaceLogger = createRotatingFileLogger({
+      file: join(location.storeDir, "logs", "runtime-main.log"),
+      level: this.logLevel,
+    });
+    const logger = workspaceLogger.child({
+      workspaceId: location.workspaceId,
+      workspaceName: location.storeDirName,
+    });
     let conversationApplication: NodeConversationApiApplication | undefined;
     let runtimePlacement: NodeConversationProcessSupervisor | undefined;
     logger.info("desktop_workspace_application.open_started");
@@ -77,9 +85,7 @@ export class DesktopNovelWorkspaceApplicationFactory
         this.placementOverride ??
         createDesktopRuntimePlacement({
           storageRoot: requireStorageRoot(this.storageRoot, location),
-          ...(this.childLogPath === undefined
-            ? {}
-            : { childLogPath: this.childLogPath }),
+          childLogPath: join(location.storeDir, "logs", "runtime-child.log"),
           ...(this.debugLogLevel === undefined
             ? {}
             : { debugLogLevel: this.debugLogLevel }),
@@ -119,7 +125,7 @@ export class DesktopNovelWorkspaceApplicationFactory
       );
     } catch (error) {
       // 记录失败类型便于诊断；不记录原始消息/堆栈/cause（脱敏）。
-      this.logger.error("desktop_workspace_application.open_failed_detail", {
+      logger.error("desktop_workspace_application.open_failed_detail", {
         errorName: error instanceof Error ? error.name : typeof error,
       });
       await conversationApplication?.close().catch(() => undefined);

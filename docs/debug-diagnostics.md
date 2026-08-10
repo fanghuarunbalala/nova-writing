@@ -68,9 +68,35 @@ The Node adapter `createNodeProviderRequestDebugRecorder` appends one JSONL
 line per request and never throws; a failed append is dropped with a debug log
 that contains no path or content.
 
+## File Loggers & Rotation
+
+File loggers are built on `pino` + `pino-roll` (see
+`core/src/node/observability/`). Records are pino JSON with the event name kept
+in the `event` key; the resolved `logLevel` gates what reaches disk (pino drops
+records below the configured level), and `pino-roll` rotates daily and prunes
+files older than the retention window (7 rotated files by default). The base
+file name gets a number appended (e.g. `runtime-main.1.log`); the log directory
+is auto-created.
+
+- **Main process** (`gui/src/main/main.ts`): `runtime-main.log` under the
+  Electron userData root. Minimum level = `DiagnosticSettings.logLevel`
+  (default `"info"`), overridden by `NOVEL_DEBUG` (`debug`/`verbose`) and debug
+  builds (`verbose`). The old main logger wrote every level unconditionally —
+  this gate is what keeps per-frame/per-request DEBUG traces off disk by
+  default.
+- **Per-workspace (parent side)**: `DesktopNovelWorkspaceApplicationFactory.open`
+  creates a rotating logger at `<storeDir>/logs/runtime-main.log`, and every
+  record carries `workspaceId` (uuid, for correlation) plus the readable
+  `workspaceName` (storeDirName).
+- **Per-workspace child runtime**: the desktop child writes
+  `<storeDir>/logs/runtime-child.log` via `NOVEL_DESKTOP_CHILD_LOG`, so each
+  workspace's agent logs live next to the parent-side log instead of all
+  workspaces sharing one app-level file.
+
 ## Wiring
 
 `runDesktopRuntimeChildEntrypoint` loads application diagnostics before
 composition: it creates the Node recorder when the dump is enabled and passes
-it into `PiRuntimeChildAdapterFactory`. The env file logger
-(`NOVEL_DESKTOP_CHILD_LOG`) writes `DEBUG` lines when `logLevel` is `"debug"`.
+it into `PiRuntimeChildAdapterFactory`. The child file logger
+(`NOVEL_DESKTOP_CHILD_LOG`) is the rotating pino logger at the resolved
+`logLevel`; `VERBOSE` (pino trace) lines only appear at the `"verbose"` level.

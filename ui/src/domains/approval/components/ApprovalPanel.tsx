@@ -333,18 +333,6 @@ export function ApprovalPanel({
                   ) : null}
                 </div>
                 {groupList.map((group) => {
-                  const toolNames = [
-                    ...new Set(
-                      group.approvals.map((approval) => approval.toolName),
-                    ),
-                  ];
-                  const conversationDisposed =
-                    group.approvals[0].conversationStatus !== "active";
-                  const legacy = group.approvals.every(
-                    (approval) =>
-                      (approval.operations?.length ?? 0) === 0 &&
-                      approval.arguments === undefined,
-                  );
                   const title = group.approvals[0].title;
                   const label =
                     group.approvals.length > 1
@@ -362,24 +350,15 @@ export function ApprovalPanel({
                         .join(" ")}
                       onClick={() => selectGroup(group.key)}
                     >
-                      <span className={styles.row1}>
-                        <span
-                          className={[styles.pill, styles[group.status]].join(" ")}
-                        >
-                          {group.status === "pending" &&
-                          group.approvals.length > 1
-                            ? `待批准 ${group.approvals.length} 项`
-                            : STATUS_LABEL[group.status]}
-                        </span>
+                      <span
+                        className={[styles.pill, styles[group.status]].join(" ")}
+                      >
+                        {group.status === "pending" &&
+                        group.approvals.length > 1
+                          ? `待批准 ${group.approvals.length} 项`
+                          : STATUS_LABEL[group.status]}
                       </span>
                       <span className={styles.title}>{label}</span>
-                      {legacy ? <span className={styles.legacy}>旧版</span> : null}
-                      {conversationDisposed ? (
-                        <span className={styles.legacy}>会话已删除</span>
-                      ) : null}
-                      <span className={styles.meta}>
-                        {toolNames.join(" · ")} · {formatTime(group.requestedAt)}
-                      </span>
                     </button>
                   );
                 })}

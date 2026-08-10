@@ -7,7 +7,9 @@
  *
  * v2 原型对齐：删除悬浮预览（.apprHover）与内部标识（.id/.csId/◈ 不可变），
  * 目录按对话分组（.apprGroup + .agJump「跳转」）；详情不再展示大纲/正文/实体
- * 变更 diff 区，参数以中文标签行呈现（ParameterView），工具名中文化。
+ * 变更 diff 区，参数以中文标签行呈现（ParameterView），工具名中文化，
+ * 写入/编辑/删除以色块标识（标题旁、工具组头、目录行）。待批准状态只保留
+ * identity 右上角 pill，操作按钮悬浮底端。
  * 目录始终为左侧滑出覆盖抽屉（无常驻列），触发按钮「目录 N」在 InspectorHost
  * 头部；宿主传入 drawerOpen/onToggleDrawer，选中条目自动收起。
  *
@@ -15,10 +17,10 @@
  * with Chinese-labelled parameters, execution result, and approve/reject
  * actions across the group. Diff sections for outline/entity changes are gone.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, type JSX } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
-import { toolNameLabel } from "../paramLabels.js";
+import { inferOperation, operationLabel, toolNameLabel } from "../paramLabels.js";
 import type { ApprovalStore, ApprovalView } from "../ApprovalStore.js";
 import styles from "./ApprovalPanel.module.css";
 import { ParameterView } from "./ParameterView.js";
@@ -54,6 +56,29 @@ const STATUS_LABEL: Record<ApprovalView["status"], string> = {
   cancelled: "已取消",
   expired: "已过期",
 };
+
+/** 变更类型色块 class（写入/编辑/删除）。Operation chip tone classes. */
+const OP_CLASS: Record<string, string> = {
+  add: styles.opAdd,
+  edit: styles.opEdit,
+  delete: styles.opDel,
+};
+
+/** 写入/编辑/删除 色块徽章；op 未知时不渲染。Colored operation chip. */
+function OpChip({
+  op,
+}: {
+  readonly op: "add" | "edit" | "delete" | undefined;
+}): JSX.Element | null {
+  if (op === undefined) return null;
+  const label = operationLabel(op);
+  if (label === undefined) return null;
+  return (
+    <span className={[styles.opChip, OP_CLASS[op]].filter(Boolean).join(" ")}>
+      {label}
+    </span>
+  );
+}
 
 function shortId(value: string): string {
   return value.length > 24 ? `…${value.slice(-12)}` : value;
@@ -175,7 +200,17 @@ export function ApprovalPanel({
   const argumentGroups = selectedGroup?.approvals.flatMap((approval) =>
     approval.arguments === undefined
       ? []
-      : [{ toolName: approval.toolName, arguments: approval.arguments }],
+      : [
+          {
+            toolName: approval.toolName,
+            arguments: approval.arguments,
+            op: inferOperation(approval.toolName, approval.operations),
+          },
+        ],
+  );
+  const selectedOp = inferOperation(
+    selectedGroup?.approvals[0].toolName ?? "",
+    selectedGroup?.approvals[0].operations,
   );
 
   return (
@@ -236,6 +271,10 @@ export function ApprovalPanel({
                     group.approvals.length > 1
                       ? `${title} 等 ${group.approvals.length} 项`
                       : title;
+                  const op = inferOperation(
+                    group.approvals[0].toolName,
+                    group.approvals[0].operations,
+                  );
                   return (
                     <button
                       key={group.key}
@@ -258,7 +297,10 @@ export function ApprovalPanel({
                             : STATUS_LABEL[group.status]}
                         </span>
                       </span>
-                      <span className={styles.title}>{label}</span>
+                      <span className={styles.title}>
+                        <OpChip op={op} />
+                        {label}
+                      </span>
                       {legacy ? <span className={styles.legacy}>旧版</span> : null}
                       {conversationDisposed ? (
                         <span className={styles.legacy}>会话已删除</span>
@@ -290,7 +332,10 @@ export function ApprovalPanel({
               {STATUS_LABEL[selectedGroup.status]}
             </span>
           </div>
-          <h4 className={styles.title}>{selectedGroup.approvals[0].title}</h4>
+          <h4 className={styles.title}>
+            <OpChip op={selectedOp} />
+            {selectedGroup.approvals[0].title}
+          </h4>
           {argumentGroups !== undefined && argumentGroups.length > 0 ? (
             <div className={styles.args}>
               <span className={styles.argsTitle}>审批参数</span>
@@ -300,6 +345,7 @@ export function ApprovalPanel({
                   className={styles.argsGroup}
                 >
                   <span className={styles.argsTool}>
+                    <OpChip op={group.op} />
                     {toolNameLabel(group.toolName)}
                   </span>
                   <ParameterView value={group.arguments} />
@@ -328,24 +374,8 @@ export function ApprovalPanel({
               旧版本审批 · 无参数详情（建议在新会话重新发起写入）
             </p>
           ) : null}
-          <div className={styles.statusLine}>
-            <span
-              className={[styles.pill, styles[selectedGroup.status]].join(" ")}
-            >
-              {STATUS_LABEL[selectedGroup.status]}
-            </span>
-            <span className={styles.meta}>
-              请求 {formatTime(selectedGroup.requestedAt)}
-            </span>
-          </div>
           {selectedGroup.status === "pending" ? (
             <div className={styles.actions}>
-              <span className={styles.count}>
-                {selectedGroup.approvals.filter(
-                  (approval) => approval.status === "pending",
-                ).length}{" "}
-                项待批准
-              </span>
               <Button
                 variant="primary"
                 size="sm"

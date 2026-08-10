@@ -66,6 +66,8 @@ export interface ComposeToolServiceOptions {
   readonly commitRecorder?: NovelComposeCommitRecorder;
   /** 会话 mode + compose 子状态的持久化端口(可选,不传则仅内存 + 事件)。 */
   readonly conversations?: ConversationModePersistencePort;
+  /** 会话是否有挂起审批的探测(由装配注入;用于挂起审批时延迟 mode 切换)。 */
+  readonly pendingApprovalProbe?: (conversationId: string) => Promise<boolean>;
   readonly logger?: Logger;
 }
 
@@ -105,8 +107,9 @@ export class ComposeToolService {
   readonly #commitRecorder: NovelComposeCommitRecorder | undefined;
   readonly #conversations: ConversationModePersistencePort | undefined;
   readonly #logger: Logger;
-  /** 审核(pending)中延迟的 mode 目标:审批决议后应用。Deferred mode targets set while an approval is pending. */
+  /** 审核(pending)中延迟的 mode 目标:下一次 provider call 晋升。Deferred mode targets promoted at the next provider call. */
   readonly #pendingModeTargets = new Map<string, ConversationMode>();
+  #pendingApprovalProbe?: (conversationId: string) => Promise<boolean>;
 
   constructor(options: ComposeToolServiceOptions) {
     this.#composeState = options.composeState;
@@ -114,6 +117,7 @@ export class ComposeToolService {
     this.#eventSink = options.eventSink ?? NOOP_RUNTIME_EVENT_SINK;
     this.#commitRecorder = options.commitRecorder;
     this.#conversations = options.conversations;
+    this.#pendingApprovalProbe = options.pendingApprovalProbe;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "novel_compose_tool_service",
     });
@@ -246,8 +250,6 @@ export class ComposeToolService {
     });
     await this.#emitModeChanged(conversationId, mode);
     this.#composeState.settle(conversationId);
-    // 审批通过后应用审核中延迟的 mode 目标(compose 已 inactive → setMode 直接切)。
-    await this.applyPendingModeTarget(conversationId);
     this.#logger.info("novel_compose.applied", {
       conversationId,
       phase: snapshot.phase,
@@ -264,22 +266,22 @@ export class ComposeToolService {
   /** 用户主动切换 mode 的统一入口(前端 IPC / 其余 tool 共用)。compose 目标走 begin;其余走 setMode。 */
   /** Unified mode-switch entry (frontend IPC / other tools). compose target begins; others setMode. */
   async setMode(conversationId: string, target: ConversationMode): Promise<void> {
+    const current = this.#composeState.snapshot(conversationId);
+    // 挂起审批时延迟 mode 切换(不动 active mode),下一次 provider call 晋升。
+    // While any approval is pending, defer the switch so tools keep checking the active mode.
+    if (await this.#shouldDefer(conversationId, current.phase)) {
+      this.#pendingModeTargets.set(conversationId, target);
+      this.#logger.info("novel_compose.mode_deferred_while_pending", {
+        conversationId,
+        target,
+      });
+      return;
+    }
     if (target === "compose") {
       await this.begin(conversationId);
       return;
     }
-    const current = this.#composeState.snapshot(conversationId);
     if (current.active) {
-      if (current.phase === "pending") {
-        // 审核中:延迟 mode 切换,不 discard、不删草稿,审批决议后应用。
-        // Approval pending: defer the mode switch so the approval result is honored first.
-        this.#pendingModeTargets.set(conversationId, target);
-        this.#logger.info("novel_compose.mode_deferred_while_pending", {
-          conversationId,
-          target,
-        });
-        return;
-      }
       // 用户主动退出 compose:discard 路径(不走审批门), 落最终 target。
       await this.#discardActive(conversationId, target);
       this.#composeState.setMode(conversationId, target);
@@ -293,6 +295,23 @@ export class ComposeToolService {
       conversationId,
       mode: snapshot.mode,
     });
+  }
+
+  /** 是否有挂起审批/处于 compose pending:是则延迟 mode 切换。 */
+  /** True while compose is pending or the injected probe reports a pending approval. */
+  async #shouldDefer(
+    conversationId: string,
+    phase: ComposeModePhase,
+  ): Promise<boolean> {
+    if (phase === "pending") return true;
+    return (await this.#pendingApprovalProbe?.(conversationId)) ?? false;
+  }
+
+  /** 装配注入挂起审批探测(coordinator 创建后调用)。Injects the pending-approval probe after assembly. */
+  setPendingApprovalProbe(
+    probe: (conversationId: string) => Promise<boolean>,
+  ): void {
+    this.#pendingApprovalProbe = probe;
   }
 
   /** 应用审核中延迟的 mode 目标(审批决议后调用)。compose 未激活 → 直接切;designing active → 走 discard 离开。 */

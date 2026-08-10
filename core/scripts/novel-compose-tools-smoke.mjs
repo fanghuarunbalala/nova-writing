@@ -96,12 +96,7 @@ const requested = new ToolApprovalRequestedOutputEvent({
   expiresAt: "2026-08-07T00:15:00.000Z",
   timestamp: requestedAt,
 });
-const sink = new ComposeApprovalLifecycleSink({
-  inner: eventSink,
-  state: composeState,
-  onExitRejected: (conversationId) =>
-    service.applyPendingModeTarget(conversationId),
-});
+const sink = new ComposeApprovalLifecycleSink(eventSink, composeState);
 await sink.append(requested);
 assert.equal(composeState.snapshot(conversationId).phase, "pending");
 assert.ok(
@@ -233,15 +228,23 @@ const exitDeferredApproved = await exitTool.handler.execute(
 );
 assert.equal(exitDeferredApproved.details.phase, "applied");
 assert.equal(composeState.snapshot(conversationId).active, false);
+// 下一 call 晋升语义:approved + service.exit 后,延迟的 bypass 尚未生效(mode 仍为 preMode)。
+assert.equal(
+  composeState.snapshot(conversationId).mode,
+  "review",
+  "approved 后延迟 mode 未即时应用(仍 preMode)",
+);
+// 模拟下一次 provider call 的晋升。
+await service.applyPendingModeTarget(conversationId);
 assert.equal(
   composeState.snapshot(conversationId).mode,
   "bypass",
-  "approved 后应应用延迟的 bypass",
+  "下一次 call 晋升后应用延迟的 bypass",
 );
 
 // ---------------------------------------------------------------------------
 // 审核中延迟 mode(rejected 路径):提交 -> pending 中 setMode(bypass) -> 拒绝
-// -> sink onExitRejected 应用延迟 mode -> discard 离开 compose + mode=bypass。
+// -> 延迟 bypass 仍 pending;下一次 call 晋升 → discard 离开 compose + mode=bypass。
 // ---------------------------------------------------------------------------
 await enterTool.handler.execute(context(conversationId, 10), {}, progress);
 const requested4 = new ToolApprovalRequestedOutputEvent({
@@ -277,16 +280,43 @@ const resolved4 = new ToolApprovalResolvedOutputEvent({
   timestamp: "2026-08-07T00:03:01.000Z",
 });
 await sink.append(resolved4);
-// reject → sink onExitRejected → applyPendingModeTarget → discard 离开 compose + mode=bypass。
+// reject → sink 仅回到 designing,延迟 bypass 尚未应用(active 仍 true)。
+assert.equal(composeState.snapshot(conversationId).phase, "designing");
+assert.equal(composeState.snapshot(conversationId).active, true);
+assert.equal(
+  events.some((event) => event.getEventType() === "novel.compose.discarded"),
+  false,
+  "reject 后延迟 mode 未即时 discard",
+);
+// 模拟下一次 provider call 晋升 → discard 离开 compose + mode=bypass。
+await service.applyPendingModeTarget(conversationId);
 assert.equal(composeState.snapshot(conversationId).active, false);
 assert.equal(
   composeState.snapshot(conversationId).mode,
   "bypass",
-  "rejected 后应应用延迟的 bypass(离开 compose)",
+  "下一次 call 晋升后应用延迟的 bypass(离开 compose)",
 );
 assert.ok(
   events.some((event) => event.getEventType() === "novel.compose.discarded"),
 );
+
+// ---------------------------------------------------------------------------
+// write 审批探测延迟:挂起审批时 setMode(compose) 也延迟(不立即 begin)。
+// ---------------------------------------------------------------------------
+let pendingApprovalFlag = false;
+service.setPendingApprovalProbe(async () => pendingApprovalFlag);
+await service.setMode(conversationId, "review");
+assert.equal(composeState.snapshot(conversationId).mode, "review");
+// probe=true:setMode(compose) 延迟,compose 未激活。
+pendingApprovalFlag = true;
+await service.setMode(conversationId, "compose");
+assert.equal(composeState.snapshot(conversationId).active, false);
+assert.equal(composeState.snapshot(conversationId).mode, "review");
+// probe=false + applyPendingModeTarget(下一 call 晋升) → begin,compose 激活。
+pendingApprovalFlag = false;
+await service.applyPendingModeTarget(conversationId);
+assert.equal(composeState.snapshot(conversationId).active, true);
+assert.equal(composeState.snapshot(conversationId).phase, "designing");
 
 // 事件类型检查
 assert.ok(

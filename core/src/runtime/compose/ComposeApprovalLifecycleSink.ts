@@ -20,24 +20,15 @@ import type {
 import { ComposeModeStateProvider } from "./ComposeModeState.js";
 import { NovelComposeOutputEvent } from "./NovelComposeOutputEvents.js";
 
-export interface ComposeApprovalLifecycleSinkOptions {
-  readonly inner: RuntimeEventSink;
-  readonly state: ComposeModeStateProvider;
-  /** 审批 rejected 决议后回调(应用审核中延迟的 mode 目标)。Called after a rejected ExitComposeMode resolution. */
-  readonly onExitRejected?: (conversationId: string) => Promise<void>;
-}
-
 /** 包装 eventSink：在 ExitComposeMode 审批请求/决议时同步 compose 状态并补发事件。 */
 /** Wraps an event sink: on ExitComposeMode approval requests/resolutions it syncs state and emits events. */
 export class ComposeApprovalLifecycleSink implements RuntimeEventSink {
   readonly #inner: RuntimeEventSink;
   readonly #state: ComposeModeStateProvider;
-  readonly #onExitRejected?: (conversationId: string) => Promise<void>;
 
-  constructor(options: ComposeApprovalLifecycleSinkOptions) {
-    this.#inner = options.inner;
-    this.#state = options.state;
-    this.#onExitRejected = options.onExitRejected;
+  constructor(inner: RuntimeEventSink, state: ComposeModeStateProvider) {
+    this.#inner = inner;
+    this.#state = state;
   }
 
   async append(event: OutputEvent): Promise<RuntimeEventAppendReceipt> {
@@ -106,8 +97,6 @@ export class ComposeApprovalLifecycleSink implements RuntimeEventSink {
             },
           }),
         );
-        // 审批拒绝后应用审核中延迟的 mode 目标(designing active → setMode 走 discard 离开)。
-        await this.#onExitRejected?.(event.conversationId);
       }
     }
   }

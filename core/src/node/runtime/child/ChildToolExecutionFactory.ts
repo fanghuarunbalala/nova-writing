@@ -42,8 +42,6 @@ export interface ChildToolExecutionCompositionOptions {
   readonly eventSink: RuntimeEventSink;
   /** compose 状态源；缺省新建空 provider。Compose state source; defaults to a fresh provider. */
   readonly composeStateProvider?: ComposeModeStateProvider;
-  /** ExitComposeMode 审批 rejected 后应用延迟 mode 目标的回调。Deferred-mode application on rejected ExitComposeMode. */
-  readonly onExitRejected?: (conversationId: string) => Promise<void>;
   readonly logger?: Logger;
 }
 
@@ -152,13 +150,10 @@ export function createChildToolExecutionComposition(
   const eventSink =
     options.composeStateProvider === undefined
       ? options.eventSink
-      : new ComposeApprovalLifecycleSink({
-          inner: options.eventSink,
-          state: options.composeStateProvider,
-          ...(options.onExitRejected === undefined
-            ? {}
-            : { onExitRejected: options.onExitRejected }),
-        });
+      : new ComposeApprovalLifecycleSink(
+          options.eventSink,
+          options.composeStateProvider,
+        );
   const coordinator = new InMemoryInteractionCoordinator({
     eventSink,
     logger,

@@ -133,13 +133,19 @@ function ActiveChatSurface({
   const pendingApproval = (snapshot.projection.approvals ?? []).some(
     (approval) => approval.status === "pending",
   );
-  // 三态判定：failed > waiting（审批挂起）> thinking（最后 delta 为 thinking channel）> generating。
+  // 三态判定：failed > waiting（审批挂起）> thinking（尚未产出正文）> generating。
   const live = runtimeStatus.state === "live";
   const latestStreaming = [...snapshot.projection.timeline]
     .reverse()
     .find(
       (item): item is AssistantMessageProjection =>
         item.kind === "assistant-message" && item.status === "streaming",
+    );
+  const latestFailed = [...snapshot.projection.timeline]
+    .reverse()
+    .find(
+      (item): item is AssistantMessageProjection =>
+        item.kind === "assistant-message" && item.status === "failed",
     );
   // 思考中：streaming 消息尚未产出任何正文（无论 thinking delta 分几块都持续到正文开始）。
   const thinking =
@@ -156,7 +162,10 @@ function ActiveChatSurface({
       ? undefined
       : {
           phase: genPhase,
-          error: failed ? "会话运行不可用，消息未送达。" : undefined,
+          // composer 失败原因用最近失败消息的具体 failureDetail（余额不足/网络等），回退通用文案。
+          error: failed
+            ? (latestFailed?.failureDetail ?? "会话运行不可用，消息未送达。")
+            : undefined,
           onRetry: failed ? () => { void resume(); } : undefined,
         };
   // mode 徽标读投影 composePhase（connect 播种 + 事件实时覆盖，裁剪后仍正确）。

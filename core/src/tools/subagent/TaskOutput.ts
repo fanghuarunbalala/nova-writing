@@ -65,7 +65,7 @@ export function createTaskOutputTool(
       version: "1.0.0",
       label: "Task Output",
       description:
-        "Reads asynchronous Subagent run status and results. With block:true, returns as soon as any requested run reaches a terminal state or the timeout elapses. Never activates a child Runtime.",
+        "读取异步子代理任务的运行状态与结果。\n\n用法：\n- runIds 指定要查询的一个或多个任务（至少 1 个）。\n- block=false（默认）：立即返回当前状态快照，不等待。\n- block=true：轮询直到任一任务到达终态（completed / failed / cancelled / orphaned）或 timeout 到期才返回。\n- 本工具不会激活任何子进程运行时。",
       parameters: SubagentTaskOutputParametersSchema,
     },
     handler: {

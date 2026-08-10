@@ -61,7 +61,8 @@ export function createTaskStopTool(
       name: "TaskStop",
       version: "1.0.0",
       label: "Task Stop",
-      description: "Requests cancellation of one owned asynchronous Subagent Task without waiting for child Runtime termination.",
+      description:
+        "请求取消一个本会话拥有的异步子代理任务（不等待子进程终止）。\n\n用法：\n- taskId 必填；仅能取消当前会话与 run 拥有的任务，否则返回 notFound。\n- 任务已到达终态时返回 alreadyTerminal，不做取消。\n- 取消成功返回 cancellation_requested。",
       parameters: SubagentTaskStopParametersSchema,
     },
     handler: {

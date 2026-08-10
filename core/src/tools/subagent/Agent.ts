@@ -159,12 +159,14 @@ function createAgentDescription(
 ): string {
   const lines = policy.allowedAgentTypes.map((agentType) => {
     const definition = definitions.require(agentType);
-    return `- ${definition.agentType} (${definition.label}): ${definition.description}`;
+    return `- ${definition.agentType}（${definition.label}）：${definition.description}`;
   });
   return [
-    "Starts one asynchronous ephemeral Subagent and returns after durable Task assignment and activation acceptance.",
-    "The prompt must be self-contained because parent context is not inherited.",
-    "Allowed agent types:",
+    "启动一个异步临时子代理，任务持久登记并确认激活后即返回。",
+    "用法：",
+    "- prompt 必须自包含：子代理不继承父会话上下文，请把目标与所需信息写全。",
+    "- agentType 从下方允许类型中选择；用返回的 taskId 通过 TaskOutput 轮询结果、TaskStop 取消。",
+    "允许的子代理类型：",
     ...lines,
   ].join("\n");
 }

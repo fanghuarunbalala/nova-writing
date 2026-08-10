@@ -40,17 +40,17 @@ export const NOVEL_SUBAGENT_DEFINITIONS: readonly SubagentDefinition[] =
     Object.freeze({
       agentType: "novel_explorer",
       definitionVersion: "1.0.0",
-      label: "Novel Explorer",
+      label: "只读探索",
       description:
-        "Reads the outline, characters, locations, paragraphs, volumes, and chapters to return concise textual findings.",
+        "只读子代理：读取大纲、人物、地点、段落、卷与章节，返回简洁的文本性发现。",
       toolPolicyId: NOVEL_EXPLORER_TOOL_POLICY_ID,
     }),
     Object.freeze({
       agentType: "novel_compose",
       definitionVersion: "1.0.0",
-      label: "Novel Compose",
+      label: "创作助手",
       description:
-        "Reads the current story state to draft outline and prose design proposals as text.",
+        "读取当前故事状态，以文本形式起草大纲与正文设计提案。",
       toolPolicyId: NOVEL_COMPOSE_TOOL_POLICY_ID,
     }),
   ]);

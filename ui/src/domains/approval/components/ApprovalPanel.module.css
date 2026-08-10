@@ -385,6 +385,44 @@
   border-top: 1px solid var(--color-border);
 }
 
+/* 审批已过期（revision 前移）：工具调用基于过期数据，执行必失败。 */
+.staleBanner {
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--color-warn-bg);
+  border: 1px solid color-mix(in oklab, var(--color-warn) 28%, transparent);
+  color: var(--color-warn);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+/* 解析出的变更对象：目标名 + 实体内容。 */
+.resolvedBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.resolvedLabel {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--color-muted);
+  margin-bottom: 2px;
+}
+
+.resolvedDivider {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--color-border);
+}
+
+.loadingHint {
+  font-size: 12px;
+  color: var(--color-faint);
+}
+
 /* 详情标题前缀 diff 符号。 */
 .titleGlyph {
   flex: none;

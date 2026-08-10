@@ -11,16 +11,21 @@
  * （写入绿/编辑橙/删除红 + diff 符号 + 工具名），参数行级左色条 + tinted
  * 底色 + gutter，对象数组直接平铺；目录行保留小色块。待批准状态只保留
  * identity 右上角 pill，操作按钮悬浮底端。
+ * 删除/编辑审批经 resolveEntity 解析目标实体当前内容替换原始参数展示，
+ * 编辑额外显示旧→新改动项；baseRevision 与当前 sourceRevision 不一致时
+ * 显示失效提示。
  * 目录始终为左侧滑出覆盖抽屉（无常驻列），触发按钮「目录 N」在 InspectorHost
  * 头部；宿主传入 drawerOpen/onToggleDrawer，选中条目自动收起。
  *
  * Approval panel: per-turn grouped request list on top, group detail below
- * with Chinese-labelled parameters, execution result, and approve/reject
- * actions across the group. Diff sections for outline/entity changes are gone.
+ * with Chinese-labelled parameters, approve/reject actions across the group.
+ * Delete/edit groups resolve the target entity's current content (with an
+ * old→new change list for edits) and flag stale approvals by revision.
  */
 import { useMemo, useState, type JSX } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
+import type { ApprovalEntityResolver } from "../approvalEntityResolver.js";
 import {
   inferOperation,
   operationGlyph,
@@ -29,12 +34,18 @@ import {
 } from "../paramLabels.js";
 import type { ApprovalStore, ApprovalView } from "../ApprovalStore.js";
 import styles from "./ApprovalPanel.module.css";
+import { ApprovalDiff } from "./ApprovalDiff.js";
 import { ParameterView } from "./ParameterView.js";
+import { useApprovalEntityResolution } from "./useApprovalEntityResolution.js";
 
 export interface ApprovalPanelProps {
   readonly store: ApprovalStore;
   /** 会话 id → 标题（用于全局审批归属展示）。Conversation title labels. */
   readonly conversationLabels?: ReadonlyMap<string, string>;
+  /** 删除/编辑目标实体内容解析器（宿主注入）。Entity content resolver. */
+  readonly resolveEntity?: ApprovalEntityResolver;
+  /** 当前 canonical 修订号（判断审批是否过期）。Current canonical revision. */
+  readonly sourceRevision?: string;
   /** 目录「跳转」：切换主视图到该对话（应用层负责 select + transition）。 */
   readonly onJumpToConversation?: (conversationId: string) => void;
   /** 目录覆盖抽屉是否展开。 */
@@ -170,6 +181,8 @@ function groupByConversation(
 export function ApprovalPanel({
   store,
   conversationLabels,
+  resolveEntity,
+  sourceRevision,
   onJumpToConversation,
   drawerOpen = false,
   onToggleDrawer,
@@ -217,20 +230,29 @@ export function ApprovalPanel({
     onToggleDrawer?.(false);
   };
 
-  const argumentGroups = selectedGroup?.approvals.flatMap((approval) =>
-    approval.arguments === undefined
-      ? []
-      : [
-          {
-            toolName: approval.toolName,
-            arguments: approval.arguments,
-            op: inferOperation(approval.toolName, approval.operations),
-          },
-        ],
+  const argumentGroups = useMemo(
+    () =>
+      selectedGroup?.approvals.flatMap((approval) =>
+        approval.arguments === undefined
+          ? []
+          : [
+              {
+                toolName: approval.toolName,
+                arguments: approval.arguments,
+                op: inferOperation(approval.toolName, approval.operations),
+              },
+            ],
+      ),
+    [selectedGroup],
   );
   const selectedOp = inferOperation(
     selectedGroup?.approvals[0].toolName ?? "",
     selectedGroup?.approvals[0].operations,
+  );
+  const resolutions = useApprovalEntityResolution(
+    argumentGroups,
+    resolveEntity,
+    sourceRevision,
   );
 
   return (
@@ -367,28 +389,84 @@ export function ApprovalPanel({
           {argumentGroups !== undefined && argumentGroups.length > 0 ? (
             <div className={styles.args}>
               <span className={styles.argsTitle}>审批参数</span>
-              {argumentGroups.map((group, index) => (
-                <div
-                  key={`${group.toolName}-${index}`}
-                  className={styles.argsGroup}
-                >
-                  <div
-                    className={[styles.band, OP_BAND_CLASS[group.op ?? ""]]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    <span className={styles.bandGlyph}>
-                      {operationGlyph(group.op ?? "")}
-                    </span>
-                    <span className={styles.bandTool}>
-                      {toolNameLabel(group.toolName)}
-                    </span>
-                  </div>
-                  <div className={styles.body}>
+              {argumentGroups.map((group, index) => {
+                const resolution = resolutions?.[index];
+                let body: JSX.Element;
+                if (
+                  resolution !== undefined &&
+                  resolution.status === "ready"
+                ) {
+                  body = (
+                    <>
+                      {resolution.stale ? (
+                        <div className={styles.staleBanner}>
+                          版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败
+                        </div>
+                      ) : null}
+                      {resolution.contents.map((content, contentIndex) => {
+                        const patch = resolution.patches.get(content.id);
+                        return (
+                          <div key={content.id}>
+                            {contentIndex > 0 ? (
+                              <div className={styles.resolvedDivider} />
+                            ) : null}
+                            <div className={styles.resolvedBlock}>
+                              <span className={styles.resolvedLabel}>
+                                {String(
+                                  content.fields.name ??
+                                    content.fields.title ??
+                                    shortId(content.id),
+                                )}
+                              </span>
+                              <ParameterView
+                                value={content.fields}
+                                tone={group.op}
+                              />
+                              {patch !== undefined ? (
+                                <ApprovalDiff
+                                  patch={patch}
+                                  current={content.fields}
+                                />
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </>
+                  );
+                } else if (
+                  resolution !== undefined &&
+                  resolution.status === "loading"
+                ) {
+                  body = (
+                    <span className={styles.loadingHint}>内容解析中…</span>
+                  );
+                } else {
+                  body = (
                     <ParameterView value={group.arguments} tone={group.op} />
+                  );
+                }
+                return (
+                  <div
+                    key={`${group.toolName}-${index}`}
+                    className={styles.argsGroup}
+                  >
+                    <div
+                      className={[styles.band, OP_BAND_CLASS[group.op ?? ""]]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      <span className={styles.bandGlyph}>
+                        {operationGlyph(group.op ?? "")}
+                      </span>
+                      <span className={styles.bandTool}>
+                        {toolNameLabel(group.toolName)}
+                      </span>
+                    </div>
+                    <div className={styles.body}>{body}</div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : null}
           {(argumentGroups?.length ?? 0) === 0 ? (

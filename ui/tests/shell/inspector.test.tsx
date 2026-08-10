@@ -169,9 +169,12 @@ describe("InspectorHost", () => {
     expect(onJump).toHaveBeenNthCalledWith(1, "conv-b");
     await user.click(jumpButtons[1]);
     expect(onJump).toHaveBeenNthCalledWith(2, "conv-a");
-    // 选中组详情：diff 标题与 op kind 中文化。
-    expect(screen.getByText("实体变更")).toBeInTheDocument();
-    expect(screen.getByText("人物")).toBeInTheDocument();
+    // 选中组详情：无 diff 区；无参数时展示旧版兜底提示。
+    expect(screen.queryByText("实体变更")).not.toBeInTheDocument();
+    expect(screen.queryByText("正文变更")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("旧版本审批 · 无参数详情（建议在新会话重新发起写入）"),
+    ).toBeInTheDocument();
   });
 
   it("toggles the approval drawer and auto-collapses on select", async () => {

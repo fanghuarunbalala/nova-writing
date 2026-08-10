@@ -168,6 +168,9 @@
 }
 
 .title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   font-size: 12.5px;
   font-weight: 750;
   line-height: 1.4;
@@ -213,6 +216,36 @@
 .pill.expired {
   background: var(--color-danger-bg);
   color: var(--color-danger);
+}
+
+/* 写入/编辑/删除 色块：低调底色 + 同色系描边，对比明显。 */
+.opChip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.opAdd {
+  color: var(--color-success);
+  background: color-mix(in oklab, var(--color-success) 12%, var(--color-surface));
+  border: 1px solid color-mix(in oklab, var(--color-success) 32%, transparent);
+}
+
+.opEdit {
+  color: var(--color-danger);
+  background: color-mix(in oklab, var(--color-danger) 12%, var(--color-surface));
+  border: 1px solid color-mix(in oklab, var(--color-danger) 32%, transparent);
+}
+
+.opDel {
+  color: var(--color-danger);
+  background: color-mix(in oklab, var(--color-danger) 12%, var(--color-surface));
+  border: 1px solid color-mix(in oklab, var(--color-danger) 32%, transparent);
 }
 
 .detail {
@@ -280,52 +313,6 @@
   color: var(--color-faint);
 }
 
-.ops {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 0;
-  margin: 10px 0 0;
-  list-style: none;
-}
-
-.op {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 7px 0;
-  border-top: 1px dashed var(--color-border);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-
-.opMark {
-  flex: none;
-  width: 14px;
-  font-family: var(--font-mono);
-  font-weight: 800;
-  text-align: center;
-}
-
-.add .opMark { color: var(--color-success); }
-.mod .opMark { color: var(--color-warn); }
-.del .opMark { color: var(--color-danger); }
-
-.opText {
-  flex: 1;
-  min-width: 0;
-  color: var(--color-fg);
-  overflow-wrap: anywhere;
-}
-
-.opKind {
-  flex: none;
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--color-faint);
-}
-
 .args {
   display: flex;
   flex-direction: column;
@@ -339,59 +326,134 @@
   color: var(--color-faint);
 }
 
-.argsBody {
-  max-height: 260px;
-  overflow: auto;
-  margin: 0;
-  padding: 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-surface-2);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  color: var(--color-fg);
-}
-
 .argsGroup {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
 }
 
-.argsTool {
+/* 方案 E：工具头整条色带（左色条 + tinted 底色 + diff 符号）。 */
+.band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-left: 3px solid transparent;
+}
+
+.bandAdd {
+  background: color-mix(in oklab, var(--color-success) 18%, var(--color-surface));
+  border-left-color: var(--color-success);
+}
+
+.bandEdit {
+  background: color-mix(in oklab, var(--color-danger) 18%, var(--color-surface));
+  border-left-color: var(--color-danger);
+}
+
+.bandDel {
+  background: color-mix(in oklab, var(--color-danger) 18%, var(--color-surface));
+  border-left-color: var(--color-danger);
+}
+
+.bandGlyph {
+  flex: none;
+  width: 16px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
   font-weight: 800;
-  color: var(--color-accent-ink);
+  text-align: center;
 }
 
-.statusLine {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
+.bandAdd .bandGlyph { color: var(--color-success); }
+.bandEdit .bandGlyph { color: var(--color-danger); }
+.bandDel .bandGlyph { color: var(--color-danger); }
+
+.bandTool {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--color-fg);
 }
 
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 14px;
-  padding-top: 12px;
+/* 参数区容器：band 下方带边框圆角体。 */
+.body {
+  padding: 8px 12px 10px;
   border-top: 1px solid var(--color-border);
 }
 
-.count {
-  margin-right: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
+/* 审批已过期（revision 前移）：工具调用基于过期数据，执行必失败。 */
+.staleBanner {
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--color-warn-bg);
+  border: 1px solid color-mix(in oklab, var(--color-warn) 28%, transparent);
+  color: var(--color-warn);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+/* 解析出的变更对象：目标名 + 实体内容。 */
+.resolvedBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.resolvedLabel {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--color-muted);
+  margin-bottom: 2px;
+}
+
+.resolvedDivider {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--color-border);
+}
+
+.loadingHint {
+  font-size: 12px;
   color: var(--color-faint);
 }
 
+/* 详情标题前缀 diff 符号。 */
+.titleGlyph {
+  flex: none;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  width: 16px;
+  text-align: center;
+}
+
+.titleGlyphAdd { color: var(--color-success); }
+.titleGlyphEdit { color: var(--color-danger); }
+.titleGlyphDel { color: var(--color-danger); }
+
+/* 操作按钮悬浮底端：参数滚动时仍可见。Sticky action bar at panel bottom. */
+.actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--color-border);
+  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 .banner {
+  position: sticky;
+  bottom: 0;
   margin-top: 14px;
   padding: 8px 11px;
   border-radius: 10px;

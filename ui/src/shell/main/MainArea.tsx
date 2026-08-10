@@ -51,6 +51,8 @@ export interface MainAreaProps {
   readonly onOpenDraft?: (changeSetId: string) => void;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
   readonly approvalStore: ApprovalStore;
+  /** 本会话审批变化回调（事件驱动全局审批刷新）。 */
+  readonly onApprovalChange?: () => void;
 }
 
 export function MainArea(props: MainAreaProps) {
@@ -72,6 +74,7 @@ export function MainArea(props: MainAreaProps) {
           onOpenApproval={props.onOpenApproval}
           onNotify={props.onNotify}
           approvalStore={props.approvalStore}
+          onApprovalChange={props.onApprovalChange}
         />
       ) : mainView.state === "content" ? (
         <ContentSurface

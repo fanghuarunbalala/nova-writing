@@ -294,4 +294,44 @@ describe("ApprovalPanel", () => {
     expect((await screen.findAllByText("林夏")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("旧船坞")).length).toBeGreaterThan(0);
   });
+
+  it("does not resolve or flag stale for a resolved approval", async () => {
+    const store = new ApprovalStore();
+    store.setApprovals([
+      {
+        conversationId: "C-1",
+        conversationStatus: "active",
+        approvalRequestId: "AR-9",
+        turnId: "T-9",
+        toolName: "NovelCharacterEdit",
+        title: "编辑角色",
+        argumentDigest: DIGEST,
+        status: "approved",
+        requestedAt: "2026-08-05T09:00:00.000Z",
+        arguments: {
+          baseRevision: "rev-1",
+          values: [{ id: "c-1", value: { summary: "新简介" } }],
+        },
+      },
+    ]);
+    const resolveEntity = vi.fn(async () => ({
+      kind: "character",
+      id: "c-1",
+      name: "林夏",
+      op: "edit",
+      fields: [{ field: "summary", label: "简介", old: "旧简介", new: "新简介", state: "edit" }],
+    }));
+    render(
+      <ApprovalPanel
+        store={store}
+        resolveEntity={resolveEntity}
+        sourceRevision="rev-2"
+      />,
+    );
+    // 已决审批不解析、不显示失效提示，原始参数作参考。
+    expect(resolveEntity).not.toHaveBeenCalled();
+    expect(screen.queryByText(/版本已过期/)).not.toBeInTheDocument();
+    expect(screen.getByText("审批参数")).toBeInTheDocument();
+    expect(screen.getByText("新简介")).toBeInTheDocument();
+  });
 });

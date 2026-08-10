@@ -249,8 +249,11 @@ export function ApprovalPanel({
     selectedGroup?.approvals[0].toolName ?? "",
     selectedGroup?.approvals[0].operations,
   );
+  // 已决审批不再解析实体内容（批准后 canonical 已变，取到的是新状态），
+  // 也不显示失效提示；仅待批准解析并判断 revision 是否过期。
+  const isPending = selectedGroup?.status === "pending";
   const resolutions = useApprovalEntityResolution(
-    argumentGroups,
+    isPending ? argumentGroups : undefined,
     resolveEntity,
     sourceRevision,
   );

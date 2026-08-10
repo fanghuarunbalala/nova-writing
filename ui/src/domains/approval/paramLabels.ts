@@ -140,6 +140,54 @@ export const TOOL_NAME_LABEL: Readonly<Record<string, string>> = {
   ExitComposeMode: "退出创作模式",
 };
 
+/**
+ * 参数字段渲染优先级（稳定排序）：name 开头、aliases 随后、authorNotes 收尾，
+ * 其余字段同 rank 保持原插入顺序。
+ *
+ * Field render rank (stable sort): name first, aliases next, authorNotes last;
+ * other fields keep their original insertion order at the default rank.
+ */
+export const PARAM_FIELD_RANK: Readonly<Record<string, number>> = {
+  name: 0,
+  aliases: 1,
+  authorNotes: 100,
+};
+
+export function paramFieldRank(field: string): number {
+  return PARAM_FIELD_RANK[field] ?? 50;
+}
+
+/** 审批详情不展示的字段（内部标识，对审批决策无信息量）。Hidden param fields. */
+const PARAM_HIDDEN_FIELDS: ReadonlySet<string> = new Set(["baseRevision"]);
+
+export function isParamFieldHidden(field: string): boolean {
+  return PARAM_HIDDEN_FIELDS.has(field);
+}
+
+/** 工具操作类型中文标签（写入/编辑/删除）。Operation type labels. */
+export const OPERATION_LABEL: Readonly<Record<string, string>> = {
+  add: "写入",
+  edit: "编辑",
+  delete: "删除",
+};
+
+export function operationLabel(op: string): string | undefined {
+  return OPERATION_LABEL[op];
+}
+
+/** 从操作摘要或工具名推断变更类型；无法推断返回 undefined。 */
+export function inferOperation(
+  toolName: string,
+  operations?: readonly { readonly op: string }[],
+): "add" | "edit" | "delete" | undefined {
+  const first = operations?.[0]?.op;
+  if (first === "add" || first === "edit" || first === "delete") return first;
+  if (/Write/.test(toolName)) return "add";
+  if (/Edit/.test(toolName)) return "edit";
+  if (/Delete/.test(toolName)) return "delete";
+  return undefined;
+}
+
 export function paramKeyLabel(key: string): string | undefined {
   return PARAM_KEY_LABEL[key];
 }

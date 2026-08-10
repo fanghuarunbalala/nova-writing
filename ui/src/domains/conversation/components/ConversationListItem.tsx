@@ -80,7 +80,6 @@ export function ConversationListItem({
           {item.pinned ? <span className={styles.pinTag}>置顶</span> : null}
         </span>
         <span className={styles.sub}>
-          <span className={styles.agent}>{item.agentLabel}</span>
           <time className={styles.time}>{formatTime(item.lastActivityAt)}</time>
         </span>
       </button>

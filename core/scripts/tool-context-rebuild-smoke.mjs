@@ -304,6 +304,63 @@ try {
   //（4 个 tool.request 被折叠进 assistant，不再各占一条）。
   assert.equal(mergedPi.length, 6, "4 toolRequests are folded away into the assistant");
 
+  // ── 孤立 tool.request（挂起审批/中断，无 tool.result）兜底：不得产出孤立
+  // tool_call，避免 provider 400 拒绝（network 失败根因）。跳过时打 warn。
+  const orphanRequestConversationId = "conversation-tool-context-orphan-request";
+  await store.conversations.createConversation({
+    id: orphanRequestConversationId,
+    workspaceId: location.workspaceId,
+    agent: { agentType: "novel.main", definitionVersion: "1" },
+  });
+  const orphanUser = (id, text, timestamp) =>
+    new UserMessageInputEvent({
+      id,
+      conversationId: orphanRequestConversationId,
+      text,
+      timestamp,
+    }).getSnapshot();
+  await appendInput(orphanUser("o-u1", "发起写入", "2026-08-07T03:00:00.000Z"));
+  await appendOutput(
+    new ToolRequestRecordedOutputEvent({
+      id: "o-tr-1",
+      record: {
+        conversationId: orphanRequestConversationId,
+        runId: "run-orphan",
+        turnId: "turn-orphan",
+        toolCallId: "call-orphan",
+        toolName: "NovelOutlineWrite",
+        toolVersion: "1.0.0",
+        arguments: { baseRevision: "r1" },
+        truncated: false,
+      },
+    }),
+  );
+  const orphanContext = store.createMessageProjectionContext({ projector });
+  await orphanContext.projections.synchronize(orphanRequestConversationId);
+  const orphanPage = await orphanContext.messages.list({
+    conversationId: orphanRequestConversationId,
+  });
+  const orphanPi = await converter.convert({
+    conversationId: orphanRequestConversationId,
+    runId: "run-latest",
+    purpose: "context",
+    messages: orphanPage.items.map((item) => item.message),
+  });
+  const orphanToolCall = orphanPi.find(
+    (message) =>
+      message.role === "assistant" &&
+      Array.isArray(message.content) &&
+      message.content.some(
+        (block) => block.type === "toolCall" && block.id === "call-orphan",
+      ),
+  );
+  assert.equal(
+    orphanToolCall,
+    undefined,
+    "orphan tool.request without tool.result must not produce a tool_call",
+  );
+  await orphanContext.close();
+
   await context.close();
   await store.close();
   console.log("tool context rebuild smoke passed");

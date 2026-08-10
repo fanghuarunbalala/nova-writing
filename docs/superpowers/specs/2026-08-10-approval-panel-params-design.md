@@ -290,3 +290,35 @@ leaf 子字段：
 - 不改 core 投影 / 事件结构。
 - 不做参数 diff（before→after）——core 目前只提供操作摘要，原型中的 old→new 对比不在此实现。
 - 不处理 `ExitComposeMode` 的参数（其入参为空对象，详情以设计草稿卡呈现，保持不变）。
+
+---
+
+## 二轮修订（2026-08-10，用户 GUI 实机反馈）
+
+基于实机预览的细节调整，全部仍在前端 `ui` 包内：
+
+1. **参数字段顺序 + 隐藏**
+   - `paramLabels.ts` 新增 `PARAM_FIELD_RANK`（稳定排序）：`name=0`、`aliases=1`、
+     `authorNotes=100`（收尾），其余字段默认 50，同 rank 保持插入序。
+   - 新增 `isParamFieldHidden(field)`，隐藏集含 `baseRevision`（乐观锁内部标识，审批无需展示）。
+   - `ParameterView` 渲染前按 rank 稳定排序，并跳过隐藏字段。
+
+2. **写入/编辑/删除 色块（OpChip）**
+   - `operationLabel(op)`：`add→写入`、`edit→编辑`、`delete→删除`。
+   - `inferOperation(toolName, operations)`：取 `operations[0].op`；缺失时按
+     toolName 含 `Write/Edit/Delete` 推断；否则 `undefined`（不显示色块）。
+   - 色块颜色：写入=成功绿、编辑=警示橙、删除=危险红。
+   - 出现位置（三处）：详情标题旁、参数工具组头、目录行。
+
+3. **标题**：保留工具返回的原 `title` 不变（不做派生改写）。
+
+4. **去重「待批准」**
+   - 删除详情区 `statusLine`（状态 pill + 请求时间）。
+   - 删除 `actions` 内「N 项待批准」计数。
+   - 状态只保留 identity 右上角 pill。
+
+5. **悬浮按钮**：`actions`（批准/驳回）与已处理 `banner` 改为 `position: sticky; bottom: 0`
+   + 背景 + 上边框，参数区滚动时操作按钮悬浮底端。
+
+6. **层次感**：`.argsGroup` 增加边框/背景容器（border + radius + surface 背景），
+   子区块「第 N 项」保留左线缩进。

@@ -52,6 +52,12 @@ export interface RuntimeBootstrapStartupCoordinatorOptions {
   replayPlanner: RuntimeReplayPlanner;
   startupReconciler: RuntimeStartupPlanReconciler;
   startupExecutor: RuntimeReadyStartupExecutor;
+  /**
+   * 启动完成后结算上一实例遗留挂起审批的挂钩（best-effort，失败仅记录）。
+   * Optional hook invoked after startup execution to settle approvals orphaned
+   * by a previous runtime instance; failures are logged, never fatal.
+   */
+  orphanedApprovalSettler?: (conversationId: string) => Promise<void>;
   logger?: Logger;
 }
 
@@ -61,6 +67,7 @@ export class RuntimeBootstrapStartupCoordinator {
   private readonly replayPlanner: RuntimeReplayPlanner;
   private readonly startupReconciler: RuntimeStartupPlanReconciler;
   private readonly startupExecutor: RuntimeReadyStartupExecutor;
+  private readonly orphanedApprovalSettler?: (conversationId: string) => Promise<void>;
   private readonly logger: Logger;
   private tail: Promise<void> = Promise.resolve();
   private started = false;
@@ -73,6 +80,7 @@ export class RuntimeBootstrapStartupCoordinator {
     this.replayPlanner = options.replayPlanner;
     this.startupReconciler = options.startupReconciler;
     this.startupExecutor = options.startupExecutor;
+    this.orphanedApprovalSettler = options.orphanedApprovalSettler;
     this.logger = (options.logger ?? noopLogger).child({
       component: "runtime_bootstrap_startup_coordinator",
       conversationId: this.conversationId,
@@ -147,6 +155,17 @@ export class RuntimeBootstrapStartupCoordinator {
         }
       } catch {
         throw this.fail(RUNTIME_BOOTSTRAP_STARTUP_FAILURE.executionFailed);
+      }
+
+      if (this.orphanedApprovalSettler !== undefined) {
+        try {
+          await this.orphanedApprovalSettler(this.conversationId);
+        } catch (error) {
+          // best-effort：结算失败不阻塞启动；遗留审批下次启动仍可补结。
+          this.logger.warn("runtime.bootstrap.orphaned_approval_settlement_failed", {
+            error: captureStableFailure(error),
+          });
+        }
       }
 
       const result = Object.freeze({
@@ -299,4 +318,13 @@ function assertNonBlank(value: string): void {
       RUNTIME_BOOTSTRAP_STARTUP_FAILURE.invalidBootstrap,
     );
   }
+}
+
+function captureStableFailure(error: unknown): string {
+  if (error instanceof Error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && code.length > 0) return code;
+    return error.name;
+  }
+  return "unknown";
 }

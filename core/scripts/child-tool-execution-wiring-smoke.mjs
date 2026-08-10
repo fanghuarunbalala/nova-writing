@@ -98,6 +98,7 @@ const composeState = new ComposeModeStateProvider();
 const composition = createChildToolExecutionComposition({
   registryView: view,
   eventSink,
+  runtimeInstanceId: "runtime-instance-smoke",
   composeStateProvider: composeState,
 });
 

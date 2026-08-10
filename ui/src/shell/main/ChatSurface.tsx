@@ -130,9 +130,12 @@ function ActiveChatSurface({
   );
   const runtimeStatus = useConversationRuntimeStatus(snapshot.projection);
   const failed = runtimeStatus.state === "failed";
+  const disconnected = runtimeStatus.state === "disconnected";
   // 本会话是否有挂起审批（审核中）：读本会话投影（双工，审批事件实时更新），
   // 仅禁用发送按钮，打字/切 mode 不受影响。
-  const pendingApproval = (snapshot.projection.approvals ?? []).some(
+  // 传输断开（进程死亡/重启）时审批不可等待：解锁 composer；权威终止状态由
+  // 重连后的双工投影推送更新（tool.approval.resolved expired + 合成 tool.result）。
+  const pendingApproval = !disconnected && (snapshot.projection.approvals ?? []).some(
     (approval) => approval.status === "pending",
   );
   const genPhase = failed
@@ -182,6 +185,7 @@ function ActiveChatSurface({
         conversationId={conversationId}
         enabled={snapshot.state === "active" && !failed}
         sendDisabled={pendingApproval}
+        disconnected={disconnected}
         status={genStatus}
         mode={mode}
         onModeChange={(next) => {

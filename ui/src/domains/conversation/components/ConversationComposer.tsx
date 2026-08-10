@@ -32,6 +32,8 @@ export interface ConversationComposerProps {
   readonly onModeChange?: (mode: ComposerMode) => void;
   /** 审批挂起时禁用发送（审核中）；打字与切 mode 不受影响。 */
   readonly sendDisabled?: boolean;
+  /** 运行时传输断开（进程死亡/重启中）：解锁审批阻塞并提示已断开。 */
+  readonly disconnected?: boolean;
 }
 
 export function ConversationComposer({
@@ -42,6 +44,7 @@ export function ConversationComposer({
   mode = "review",
   onModeChange = noopModeChange,
   sendDisabled = false,
+  disconnected = false,
 }: ConversationComposerProps) {
   const [text, setText] = useState("");
 
@@ -88,12 +91,14 @@ export function ConversationComposer({
           <Button
             variant="primary"
             onClick={submit}
-            disabled={!enabled || sendDisabled || text.trim() === ""}
+            disabled={!enabled || (disconnected ? false : sendDisabled) || text.trim() === ""}
           >
             发送
           </Button>
         </div>
-        {sendDisabled ? (
+        {disconnected ? (
+          <span className={styles.pendingHint}>进程已断开，审批已结束</span>
+        ) : sendDisabled ? (
           <span className={styles.pendingHint}>等待审批</span>
         ) : null}
         <ComposerModeBar mode={mode} onChange={onModeChange} disabled={!enabled} />

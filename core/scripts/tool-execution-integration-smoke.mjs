@@ -140,6 +140,7 @@ const interactionCoordinator = new InMemoryInteractionCoordinator({ eventSink })
 const argumentDigester = new NodeSha256ToolArgumentDigester();
 const dispatcher = new ToolDispatcher(new ToolExecutionPipeline({
   registryView,
+  runtimeInstanceId: "runtime-instance-smoke",
   argumentDigester,
   executionPolicyResolver,
   permissionPolicy,
@@ -149,6 +150,7 @@ const dispatcher = new ToolDispatcher(new ToolExecutionPipeline({
       return {
         approvalRequestId: `approval-${input.identity.toolCallId}`,
         identity: input.identity,
+        runtimeInstanceId: input.runtimeInstanceId,
         ...(input.turnId === undefined ? {} : { turnId: input.turnId }),
         summary: { title: input.toolLabel, description: input.toolDescription },
         requestedAt: "2026-08-02T04:00:00.000Z",

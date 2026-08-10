@@ -90,6 +90,7 @@ import {
   JournalRuntimeInputResolver,
   JournalRuntimeReplayPlanner,
   PublishingRuntimeEventSink,
+  ApprovalExpirySweeper,
   RuntimeBootstrapStartupCoordinator,
   RuntimeInputOutcomeController,
   RuntimeInputPump,
@@ -103,6 +104,7 @@ import {
   TODO_STATUS,
   RuntimeStartupExecutor,
   RuntimeStartupReconciler,
+  settleOrphanedApprovals,
   RuntimeStopInputHandler,
   RuntimeUserMessageInputHandler,
   Sha256RuntimeEventIdFactory,
@@ -377,6 +379,7 @@ export class DesktopRuntimeChildCompositionFactory
     const toolExecution = createChildToolExecutionComposition({
       registryView: configuration.assembly.toolView,
       eventSink,
+      runtimeInstanceId,
       composeStateProvider: composeState,
       logger,
     });
@@ -391,6 +394,14 @@ export class DesktopRuntimeChildCompositionFactory
     logger.info("runtime_child.composition.tool_execution_created", {
       conversationId,
     });
+    // 周期清扫过期审批：避免挂起审批超过 expiresAt 后永久占用内存/阻塞 run。
+    // Periodically settle expired approvals so an unanswered approval cannot
+    // block the run or leak memory past its expiresAt.
+    const approvalExpirySweeper = new ApprovalExpirySweeper({
+      coordinator: toolExecution.coordinator,
+      logger,
+    });
+    approvalExpirySweeper.start();
     const eventIdFactory = this.#eventIdFactory;
     const lifecycleController = new TurnController({
       conversationId,
@@ -587,6 +598,15 @@ export class DesktopRuntimeChildCompositionFactory
         inputRouter: router,
         logger,
       }),
+      orphanedApprovalSettler: async (settlementConversationId) => {
+        await settleOrphanedApprovals({
+          conversationId: settlementConversationId,
+          currentRuntimeInstanceId: runtimeInstanceId,
+          journal,
+          eventSink,
+          logger,
+        });
+      },
       logger,
     });
     const runtime = new ConversationRuntime({
@@ -603,7 +623,7 @@ export class DesktopRuntimeChildCompositionFactory
       agentType: configuration.assembly.agentType,
       definitionVersion: configuration.assembly.definitionVersion,
     });
-    return new ConversationRuntimeChild(runtime, logger);
+    return new ConversationRuntimeChild(runtime, approvalExpirySweeper, logger);
   }
 }
 
@@ -899,6 +919,7 @@ function createChildFinalAssistantMessageReader(
 class ConversationRuntimeChild implements RuntimeChildRuntime {
   constructor(
     private readonly runtime: ConversationRuntime,
+    private readonly approvalExpirySweeper: ApprovalExpirySweeper | undefined,
     private readonly logger: Logger,
   ) {}
 
@@ -919,6 +940,7 @@ class ConversationRuntimeChild implements RuntimeChildRuntime {
   }
 
   shutdown(request: ConversationRuntimeHandleShutdownRequest): Promise<void> {
+    this.approvalExpirySweeper?.stop();
     return this.runtime.shutdown(request);
   }
 

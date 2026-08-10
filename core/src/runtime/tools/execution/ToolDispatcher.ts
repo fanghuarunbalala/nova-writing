@@ -47,6 +47,7 @@ import type { ToolTraceSink } from "./ToolTraceSink.js";
 
 export interface ToolApprovalRequestFactoryInput {
   readonly identity: ToolApprovalIdentity;
+  readonly runtimeInstanceId: string;
   readonly turnId?: string;
   readonly toolLabel: string;
   readonly toolDescription: string;
@@ -95,6 +96,8 @@ export interface ToolExecutionPipelineOptions {
   readonly executionPolicyResolver: ToolExecutionPolicyResolver;
   readonly permissionPolicy: ToolPermissionPolicy;
   readonly interactionCoordinator: InteractionCoordinator;
+  /** 当前 child runtime 实例 id（审批归属，进程重启后判定失效）。 */
+  readonly runtimeInstanceId: string;
   readonly approvalRequestFactory: ToolApprovalRequestFactory;
   readonly sandboxExecutor: SandboxExecutor;
   readonly resultLimits: ToolResultLimits;
@@ -123,6 +126,7 @@ export class ToolExecutionPipeline {
   readonly #executionPolicyResolver: ToolExecutionPolicyResolver;
   readonly #permissionPolicy: ToolPermissionPolicy;
   readonly #interactionCoordinator: InteractionCoordinator;
+  readonly #runtimeInstanceId: string;
   readonly #approvalRequestFactory: ToolApprovalRequestFactory;
   readonly #sandboxExecutor: SandboxExecutor;
   readonly #resultLimits: ToolResultLimits;
@@ -140,6 +144,7 @@ export class ToolExecutionPipeline {
     this.#executionPolicyResolver = options.executionPolicyResolver;
     this.#permissionPolicy = options.permissionPolicy;
     this.#interactionCoordinator = options.interactionCoordinator;
+    this.#runtimeInstanceId = options.runtimeInstanceId;
     this.#approvalRequestFactory = options.approvalRequestFactory;
     this.#sandboxExecutor = options.sandboxExecutor;
     this.#resultLimits = captureResultLimits(options.resultLimits);
@@ -387,6 +392,7 @@ export class ToolExecutionPipeline {
     try {
       request = this.#approvalRequestFactory.create({
         identity,
+        runtimeInstanceId: this.#runtimeInstanceId,
         ...(invocation.turnId === undefined ? {} : { turnId: invocation.turnId }),
         toolLabel: tool.descriptor.label,
         toolDescription: tool.descriptor.description,

@@ -49,6 +49,7 @@ export function projectToolApprovalInteractionSnapshot(
             toolVersion: payload.toolVersion,
             argumentDigest: payload.argumentDigest,
           }),
+          runtimeInstanceId: payload.runtimeInstanceId,
           ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
           summary: payload.summary,
           requestedAt: payload.requestedAt,

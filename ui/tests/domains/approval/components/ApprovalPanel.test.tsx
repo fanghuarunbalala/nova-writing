@@ -1,8 +1,9 @@
 /**
- * ApprovalPanel 单测：详情区展示中文参数行、op 色块、无 diff 区、去重待批准。
+ * ApprovalPanel 单测：详情区展示中文参数行、op 色块、无 diff 区、去重待批准、
+ * 删除/编辑目标实体内容解析与改动项/失效提示。
  */
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import { ApprovalStore } from "../../../../src/domains/approval/ApprovalStore.js";
 import { ApprovalPanel } from "../../../../src/domains/approval/components/ApprovalPanel.js";
 
@@ -60,5 +61,212 @@ describe("ApprovalPanel", () => {
     expect(screen.getAllByText("待批准").length).toBeGreaterThan(0);
     expect(screen.queryByText(/项待批准/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^请求 /)).not.toBeInTheDocument();
+  });
+
+  it("renders resolved entity content for delete instead of raw values", async () => {
+    const store = new ApprovalStore();
+    store.setApprovals([
+      {
+        conversationId: "C-1",
+        conversationStatus: "active",
+        approvalRequestId: "AR-2",
+        turnId: "T-2",
+        toolName: "NovelDelete",
+        title: "删除角色",
+        argumentDigest: DIGEST,
+        status: "pending",
+        requestedAt: "2026-08-05T09:02:00.000Z",
+        arguments: {
+          baseRevision: "rev-1",
+          cascade: false,
+          values: [{ kind: "character", id: "c-1" }],
+        },
+      },
+    ]);
+    const resolveEntity = vi.fn(async () => ({
+      kind: "character",
+      id: "c-1",
+      fields: { id: "c-1", name: "林夏", aliases: ["夏"] },
+    }));
+    render(
+      <ApprovalPanel
+        store={store}
+        resolveEntity={resolveEntity}
+        sourceRevision="rev-1"
+      />,
+    );
+    expect((await screen.findAllByText("林夏")).length).toBeGreaterThan(0);
+    expect(screen.getByText("名称")).toBeInTheDocument();
+    // 原始参数未展示。
+    expect(screen.queryByText("级联删除")).not.toBeInTheDocument();
+  });
+
+  it("renders old→new changes for edit approvals", async () => {
+    const store = new ApprovalStore();
+    store.setApprovals([
+      {
+        conversationId: "C-1",
+        conversationStatus: "active",
+        approvalRequestId: "AR-3",
+        turnId: "T-3",
+        toolName: "NovelCharacterEdit",
+        title: "编辑角色",
+        argumentDigest: DIGEST,
+        status: "pending",
+        requestedAt: "2026-08-05T09:03:00.000Z",
+        arguments: {
+          baseRevision: "rev-1",
+          values: [{ id: "c-1", value: { summary: "新简介" } }],
+        },
+      },
+    ]);
+    const resolveEntity = vi.fn(async () => ({
+      kind: "character",
+      id: "c-1",
+      fields: { id: "c-1", name: "林夏", summary: "旧简介" },
+    }));
+    render(
+      <ApprovalPanel
+        store={store}
+        resolveEntity={resolveEntity}
+        sourceRevision="rev-1"
+      />,
+    );
+    expect(await screen.findByText("改动项")).toBeInTheDocument();
+    // 旧值同时出现在当前内容与改动项旧值列。
+    expect(screen.getAllByText("旧简介").length).toBeGreaterThan(0);
+    expect(screen.getByText("新简介")).toBeInTheDocument();
+  });
+
+  it("shows stale banner when revision differs and hides when equal", async () => {
+    const store = new ApprovalStore();
+    store.setApprovals([
+      {
+        conversationId: "C-1",
+        conversationStatus: "active",
+        approvalRequestId: "AR-4",
+        turnId: "T-4",
+        toolName: "NovelDelete",
+        title: "删除角色",
+        argumentDigest: DIGEST,
+        status: "pending",
+        requestedAt: "2026-08-05T09:04:00.000Z",
+        arguments: {
+          baseRevision: "rev-1",
+          values: [{ kind: "character", id: "c-1" }],
+        },
+      },
+    ]);
+    const resolveEntity = vi.fn(async () => ({
+      kind: "character",
+      id: "c-1",
+      fields: { id: "c-1", name: "林夏" },
+    }));
+    const { rerender } = render(
+      <ApprovalPanel
+        store={store}
+        resolveEntity={resolveEntity}
+        sourceRevision="rev-2"
+      />,
+    );
+    expect(await screen.findByText(/版本已过期/)).toBeInTheDocument();
+    rerender(
+      <ApprovalPanel
+        store={store}
+        resolveEntity={resolveEntity}
+        sourceRevision="rev-1"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.queryByText(/版本已过期/)).not.toBeInTheDocument(),
+    );
+  });
+
+  it("falls back to raw params when resolution fails", async () => {
+    const store = new ApprovalStore();
+    store.setApprovals([
+      {
+        conversationId: "C-1",
+        conversationStatus: "active",
+        approvalRequestId: "AR-5",
+        turnId: "T-5",
+        toolName: "NovelDelete",
+        title: "删除角色",
+        argumentDigest: DIGEST,
+        status: "pending",
+        requestedAt: "2026-08-05T09:05:00.000Z",
+        arguments: {
+          baseRevision: "rev-1",
+          cascade: false,
+          values: [{ kind: "character", id: "c-1" }],
+        },
+      },
+    ]);
+    const resolveEntity = vi.fn(async () => undefined);
+    render(
+      <ApprovalPanel
+        store={store}
+        resolveEntity={resolveEntity}
+        sourceRevision="rev-1"
+      />,
+    );
+    // 解析失败回退原始参数（级联删除 / 类型）。
+    expect(await screen.findByText("级联删除")).toBeInTheDocument();
+    expect(screen.getByText("类型")).toBeInTheDocument();
+  });
+
+  it("keeps raw params and does not resolve for add", async () => {
+    const resolveEntity = vi.fn(async () => ({
+      kind: "character",
+      id: "c-1",
+      fields: {},
+    }));
+    render(
+      <ApprovalPanel
+        store={makeStore()}
+        resolveEntity={resolveEntity}
+        sourceRevision="rev-1"
+      />,
+    );
+    expect(screen.getByText("名称")).toBeInTheDocument();
+    expect(resolveEntity).not.toHaveBeenCalled();
+  });
+
+  it("renders one resolved block per delete target", async () => {
+    const store = new ApprovalStore();
+    store.setApprovals([
+      {
+        conversationId: "C-1",
+        conversationStatus: "active",
+        approvalRequestId: "AR-6",
+        turnId: "T-6",
+        toolName: "NovelDelete",
+        title: "批量删除",
+        argumentDigest: DIGEST,
+        status: "pending",
+        requestedAt: "2026-08-05T09:06:00.000Z",
+        arguments: {
+          baseRevision: "rev-1",
+          values: [
+            { kind: "character", id: "c-1" },
+            { kind: "location", id: "l-1" },
+          ],
+        },
+      },
+    ]);
+    const resolveEntity = vi.fn(async (target) =>
+      target.id === "c-1"
+        ? { kind: "character", id: "c-1", fields: { id: "c-1", name: "林夏" } }
+        : { kind: "location", id: "l-1", fields: { id: "l-1", name: "旧船坞" } },
+    );
+    render(
+      <ApprovalPanel
+        store={store}
+        resolveEntity={resolveEntity}
+        sourceRevision="rev-1"
+      />,
+    );
+    expect((await screen.findAllByText("林夏")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("旧船坞")).length).toBeGreaterThan(0);
   });
 });

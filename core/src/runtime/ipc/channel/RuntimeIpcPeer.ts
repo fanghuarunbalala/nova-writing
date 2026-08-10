@@ -77,6 +77,15 @@ export interface RuntimeIpcPeerOptions {
 
 type RuntimeIpcPeerState = "created" | "running" | "closing" | "closed";
 
+/** peer 终止路径的归类，供诊断日志区分「谁关的、为什么关」。 */
+type RuntimeIpcPeerTerminateReason =
+  | "graceful_close"
+  | "connection_ended"
+  | "handler_error"
+  | "receive_loop_error"
+  | "send_failed"
+  | "request_conflict";
+
 interface PendingRequest {
   readonly requestId: string;
   readonly resolve: (value: JsonValue) => void;
@@ -127,6 +136,8 @@ export class RuntimeIpcPeer {
   #state: RuntimeIpcPeerState = "created";
   #draining = false;
   #closePromise?: Promise<void>;
+  /** 最近一次 terminate 的原因；供 request_state_invalid 定位为何 peer 已关闭。 */
+  #lastTerminateReason?: RuntimeIpcPeerTerminateReason;
 
   constructor(options: RuntimeIpcPeerOptions) {
     this.#sessionId = captureIdentity(options.sessionId, "Runtime IPC session ID");
@@ -187,6 +198,9 @@ export class RuntimeIpcPeer {
         ...(error instanceof Error && "code" in error
           ? { errorCode: String((error as { code: unknown }).code) }
           : {}),
+        ...(this.#lastTerminateReason === undefined
+          ? {}
+          : { lastTerminateReason: this.#lastTerminateReason }),
       });
       throw error;
     }
@@ -289,7 +303,7 @@ export class RuntimeIpcPeer {
     if (this.#state === "closed") return;
     this.#state = "closing";
     this.#logger.info("runtime.ipc.peer_close_started");
-    await this.#terminate(new RuntimeIpcPeerClosedError(), true);
+    await this.#terminate(new RuntimeIpcPeerClosedError(), true, "graceful_close");
     this.#logger.info("runtime.ipc.peer_close_completed");
   }
 
@@ -302,7 +316,7 @@ export class RuntimeIpcPeer {
         switch (frame.frameType) {
           case "request":
             void this.#handleRequest(frame).catch((error) =>
-              this.#terminate(normalizeCloseError(error), true)
+              this.#terminate(normalizeCloseError(error), true, "handler_error")
             );
             break;
           case "response":
@@ -310,7 +324,7 @@ export class RuntimeIpcPeer {
             break;
           case "notification":
             void this.#handleNotification(frame).catch((error) =>
-              this.#terminate(normalizeCloseError(error), true)
+              this.#terminate(normalizeCloseError(error), true, "handler_error")
             );
             break;
           default:
@@ -318,10 +332,10 @@ export class RuntimeIpcPeer {
         }
       }
       if (this.#state === "running") {
-        await this.#terminate(new RuntimeIpcPeerClosedError(), false);
+        await this.#terminate(new RuntimeIpcPeerClosedError(), false, "connection_ended");
       }
     } catch (error) {
-      await this.#terminate(normalizeCloseError(error), true);
+      await this.#terminate(normalizeCloseError(error), true, "receive_loop_error");
     }
   }
 
@@ -438,7 +452,7 @@ export class RuntimeIpcPeer {
       category: "conflict",
       retryable: false,
     }), "control");
-    await this.#terminate(new RuntimeIpcPeerClosedError(), true);
+    await this.#terminate(new RuntimeIpcPeerClosedError(), true, "request_conflict");
   }
 
   async #sendCancellation(requestId: string): Promise<void> {
@@ -526,7 +540,7 @@ export class RuntimeIpcPeer {
             errorName: error instanceof Error ? error.name : typeof error,
           });
           item.reject(normalizeCloseError(error));
-          await this.#terminate(normalizeCloseError(error), true);
+          await this.#terminate(normalizeCloseError(error), true, "send_failed");
           return;
         }
       }
@@ -550,9 +564,16 @@ export class RuntimeIpcPeer {
     if (this.#state !== "running") throw new RuntimeIpcPeerStateError(this.#state);
   }
 
-  async #terminate(error: Error, closeConnection: boolean): Promise<void> {
+  async #terminate(
+    error: Error,
+    closeConnection: boolean,
+    reason: RuntimeIpcPeerTerminateReason,
+  ): Promise<void> {
     if (this.#state === "closed") return;
+    this.#lastTerminateReason = reason;
     this.#logger.error("runtime.ipc.peer_terminated", {
+      reason,
+      closeConnection,
       errorName: error instanceof Error ? error.name : typeof error,
     });
     this.#state = "closing";

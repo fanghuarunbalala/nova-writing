@@ -22,6 +22,7 @@ import {
   type RuntimeIpcRequestHandler,
 } from "../../../runtime/ipc/index.js";
 import type {
+  RuntimeChildEndpointCloseReason,
   RuntimeChildProcessEndpoint,
 } from "../process/ChildProcessConversationRuntimeHandle.js";
 import type {
@@ -161,7 +162,7 @@ export class ParentRuntimeChildEndpointFactory
           ? { failure: error.failure }
           : {}),
       });
-      await endpoint.close();
+      await endpoint.close("bootstrap_failed");
       throw error;
     }
   }
@@ -271,13 +272,13 @@ export class ParentRuntimeChildEndpoint implements RuntimeChildProcessEndpoint {
     } catch {
       throw new ParentRuntimeChildEndpointError("shutdown", "invalid_response");
     }
-    await this.close();
+    await this.close("shutdown");
   }
 
-  close(): Promise<void> {
+  close(reason: RuntimeChildEndpointCloseReason): Promise<void> {
     this.#closePromise ??= Promise.resolve().then(async () => {
       this.#heartbeatMonitor.stop();
-      this.#logger.info("runtime.child.parent_endpoint_closed");
+      this.#logger.info("runtime.child.parent_endpoint_closed", { reason });
       await this.#peer.close();
     });
     return this.#closePromise;

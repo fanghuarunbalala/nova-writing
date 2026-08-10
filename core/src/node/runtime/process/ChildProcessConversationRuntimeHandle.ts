@@ -16,12 +16,19 @@ import {
 } from "./RuntimeChildProcessLauncher.js";
 import { RuntimeProcessExitNormalizer } from "./RuntimeProcessExitNormalizer.js";
 
+/** 主进程关闭 runtime child 连接的归类原因（诊断日志用）。 */
+export type RuntimeChildEndpointCloseReason =
+  | "supervisor_close"
+  | "runtime_handle_close"
+  | "shutdown"
+  | "bootstrap_failed";
+
 export interface RuntimeChildProcessEndpoint {
   dispatchInput(input: ConversationRuntimeInputReference): Promise<void>;
 
   shutdown(request: ConversationRuntimeHandleShutdownRequest): Promise<void>;
 
-  close(): Promise<void>;
+  close(reason: RuntimeChildEndpointCloseReason): Promise<void>;
 
   waitForUnhealthy?(): Promise<void>;
 }
@@ -195,7 +202,7 @@ export class ChildProcessConversationRuntimeHandle
 
   #closeTransport(): Promise<void> {
     this.#closeTransportPromise ??= Promise.allSettled([
-      this.#endpoint.close(),
+      this.#endpoint.close("runtime_handle_close"),
       this.#connection.close(),
     ]).then((results) => {
       const failureCount = results.filter(

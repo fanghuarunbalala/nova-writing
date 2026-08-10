@@ -329,22 +329,85 @@
 .argsGroup {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: 0;
+  overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-surface);
 }
 
-.argsTool {
+/* 方案 E：工具头整条色带（左色条 + tinted 底色 + diff 符号）。 */
+.band {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 800;
-  color: var(--color-accent-ink);
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-left: 3px solid transparent;
 }
+
+.bandAdd {
+  background: color-mix(in oklab, var(--color-success) 18%, var(--color-surface));
+  border-left-color: var(--color-success);
+}
+
+.bandEdit {
+  background: color-mix(in oklab, var(--color-warn) 18%, var(--color-surface));
+  border-left-color: var(--color-warn);
+}
+
+.bandDel {
+  background: color-mix(in oklab, var(--color-danger) 18%, var(--color-surface));
+  border-left-color: var(--color-danger);
+}
+
+.bandGlyph {
+  flex: none;
+  width: 16px;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  text-align: center;
+}
+
+.bandAdd .bandGlyph { color: var(--color-success); }
+.bandEdit .bandGlyph { color: var(--color-warn); }
+.bandDel .bandGlyph { color: var(--color-danger); }
+
+.bandLabel {
+  flex: none;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.bandAdd .bandLabel { color: var(--color-success); }
+.bandEdit .bandLabel { color: var(--color-warn); }
+.bandDel .bandLabel { color: var(--color-danger); }
+
+.bandTool {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+/* 参数区容器：band 下方带边框圆角体。 */
+.body {
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* 详情标题前缀 diff 符号。 */
+.titleGlyph {
+  flex: none;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  width: 16px;
+  text-align: center;
+}
+
+.titleGlyphAdd { color: var(--color-success); }
+.titleGlyphEdit { color: var(--color-warn); }
+.titleGlyphDel { color: var(--color-danger); }
 
 /* 操作按钮悬浮底端：参数滚动时仍可见。Sticky action bar at panel bottom. */
 .actions {

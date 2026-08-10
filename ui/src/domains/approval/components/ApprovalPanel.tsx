@@ -7,9 +7,9 @@
  *
  * v2 原型对齐：删除悬浮预览（.apprHover）与内部标识（.id/.csId/◈ 不可变），
  * 目录按对话分组（.apprGroup + .agJump「跳转」）；详情不再展示大纲/正文/实体
- * 变更 diff 区，参数以中文标签行呈现（ParameterView），工具名中文化，
- * 写入/编辑/删除以色块标识（标题旁、工具组头、目录行）。待批准状态只保留
- * identity 右上角 pill，操作按钮悬浮底端。
+ * 变更 diff 区。参数区采用方案 E diff 色块：工具头整条色带（写入绿/编辑橙/
+ * 删除红 + diff 符号），参数行级左色条 + tinted 底色 + gutter，目录行保留
+ * 小色块。待批准状态只保留 identity 右上角 pill，操作按钮悬浮底端。
  * 目录始终为左侧滑出覆盖抽屉（无常驻列），触发按钮「目录 N」在 InspectorHost
  * 头部；宿主传入 drawerOpen/onToggleDrawer，选中条目自动收起。
  *
@@ -20,7 +20,12 @@
 import { useMemo, useState, type JSX } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
-import { inferOperation, operationLabel, toolNameLabel } from "../paramLabels.js";
+import {
+  inferOperation,
+  operationGlyph,
+  operationLabel,
+  toolNameLabel,
+} from "../paramLabels.js";
 import type { ApprovalStore, ApprovalView } from "../ApprovalStore.js";
 import styles from "./ApprovalPanel.module.css";
 import { ParameterView } from "./ParameterView.js";
@@ -62,6 +67,20 @@ const OP_CLASS: Record<string, string> = {
   add: styles.opAdd,
   edit: styles.opEdit,
   delete: styles.opDel,
+};
+
+/** 方案 E：工具头整条色带 class。E band tone classes. */
+const OP_BAND_CLASS: Record<string, string> = {
+  add: styles.bandAdd,
+  edit: styles.bandEdit,
+  delete: styles.bandDel,
+};
+
+/** 方案 E：标题 diff 符号 class。E title glyph tone classes. */
+const OP_GLYPH_CLASS: Record<string, string> = {
+  add: styles.titleGlyphAdd,
+  edit: styles.titleGlyphEdit,
+  delete: styles.titleGlyphDel,
 };
 
 /** 写入/编辑/删除 色块徽章；op 未知时不渲染。Colored operation chip. */
@@ -333,7 +352,15 @@ export function ApprovalPanel({
             </span>
           </div>
           <h4 className={styles.title}>
-            <OpChip op={selectedOp} />
+            {selectedOp !== undefined ? (
+              <span
+                className={[styles.titleGlyph, OP_GLYPH_CLASS[selectedOp]]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                {operationGlyph(selectedOp)}
+              </span>
+            ) : null}
             {selectedGroup.approvals[0].title}
           </h4>
           {argumentGroups !== undefined && argumentGroups.length > 0 ? (
@@ -344,11 +371,24 @@ export function ApprovalPanel({
                   key={`${group.toolName}-${index}`}
                   className={styles.argsGroup}
                 >
-                  <span className={styles.argsTool}>
-                    <OpChip op={group.op} />
-                    {toolNameLabel(group.toolName)}
-                  </span>
-                  <ParameterView value={group.arguments} />
+                  <div
+                    className={[styles.band, OP_BAND_CLASS[group.op ?? ""]]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <span className={styles.bandGlyph}>
+                      {operationGlyph(group.op ?? "")}
+                    </span>
+                    <span className={styles.bandLabel}>
+                      {operationLabel(group.op ?? "")}
+                    </span>
+                    <span className={styles.bandTool}>
+                      {toolNameLabel(group.toolName)}
+                    </span>
+                  </div>
+                  <div className={styles.body}>
+                    <ParameterView value={group.arguments} tone={group.op} />
+                  </div>
                 </div>
               ))}
             </div>

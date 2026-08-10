@@ -181,6 +181,20 @@ function fieldLabel(field: string): string {
   return paramKeyLabel(field) ?? field;
 }
 
+/** blockState/abandonment 提取原因行，避免整对象 JSON。 */
+function formatFieldValue(field: string, value: JsonValue | undefined): string {
+  if ((field === "blockState" || field === "abandonment") && isRecord(value)) {
+    const reason =
+      paramValueLabel("reasonCode", asString(value.reasonCode) ?? "") ??
+      asString(value.reasonCode) ??
+      "";
+    const note = asString(value.note);
+    const summary = [reason, note].filter(Boolean).join(" · ");
+    return summary || (field === "blockState" ? "阻塞" : "废弃");
+  }
+  return formatValue(field, value);
+}
+
 function sortByRank(lines: readonly ApprovalFieldLine[]): ApprovalFieldLine[] {
   return [...lines].sort(
     (left, right) => paramFieldRank(left.field) - paramFieldRank(right.field),
@@ -198,7 +212,7 @@ function buildFields(
   if (op === "add") {
     for (const [field, value] of Object.entries(patch ?? {})) {
       if (SKIP_FIELDS.has(field)) continue;
-      lines.push({ field, label: fieldLabel(field), new: formatValue(field, value), state: "add" });
+      lines.push({ field, label: fieldLabel(field), new: formatFieldValue(field, value), state: "add" });
     }
     return sortByRank(lines);
   }
@@ -208,22 +222,22 @@ function buildFields(
       lines.push({
         field,
         label: fieldLabel(field),
-        old: formatValue(field, current?.[field]),
-        new: formatValue(field, newValue),
+        old: formatFieldValue(field, current?.[field]),
+        new: formatFieldValue(field, newValue),
         state: "edit",
       });
     }
     if (includeContext) {
       for (const [field, curValue] of Object.entries(current ?? {})) {
         if (SKIP_FIELDS.has(field) || patch?.[field] !== undefined) continue;
-        lines.push({ field, label: fieldLabel(field), new: formatValue(field, curValue), state: "ctx" });
+        lines.push({ field, label: fieldLabel(field), new: formatFieldValue(field, curValue), state: "ctx" });
       }
     }
     return sortByRank(lines);
   }
   for (const [field, value] of Object.entries(current ?? {})) {
     if (SKIP_FIELDS.has(field)) continue;
-    lines.push({ field, label: fieldLabel(field), old: formatValue(field, value), state: "delete" });
+    lines.push({ field, label: fieldLabel(field), old: formatFieldValue(field, value), state: "delete" });
   }
   return sortByRank(lines);
 }
@@ -820,12 +834,13 @@ async function resolveStoryUnit(
   };
   const name = unit.title;
   if (target.op === "delete") {
+    // 树上下文已红标整棵子树，无需重复字段红行。
     return {
       kind: "story_unit",
       id: target.id,
       name,
       op: "delete",
-      fields: buildFields(current, undefined, "delete"),
+      fields: [],
       context,
     };
   }
@@ -939,13 +954,28 @@ async function resolveParagraph(
 ): Promise<ResolvedEntityContent | undefined> {
   const patchText = asString(target.value?.text);
   if (target.op === "add") {
+    // 新增段落不在快照中：按 storyUnitId 找同场景已有段落作上下文，新段绿行。
+    const storyUnitId = asString(target.value?.storyUnitId);
+    const lines: ApprovalParagraphLine[] = [];
+    if (storyUnitId !== undefined) {
+      let count = 0;
+      for (const chapter of manuscript.getSnapshot().chapters) {
+        for (const block of chapter.blocks) {
+          if (block.storyUnitId === storyUnitId && count < 4) {
+            lines.push({ text: block.text || "", state: "ctx" });
+            count += 1;
+          }
+        }
+      }
+    }
+    lines.push({ text: patchText ?? "", state: "new" });
     return {
       kind: "paragraph",
       id: target.id,
       name: (patchText ?? "").slice(0, 16) || target.id,
       op: "add",
-      fields: buildFields(undefined, target.value, "add"),
-      paragraphs: buildParagraphLines(manuscript, target.id, "add", patchText),
+      fields: [],
+      paragraphs: lines,
     };
   }
   // 找当前块文本

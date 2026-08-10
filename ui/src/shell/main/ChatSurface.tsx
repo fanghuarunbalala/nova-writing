@@ -122,9 +122,14 @@ function ActiveChatSurface({
   );
   const runtimeStatus = useConversationRuntimeStatus(snapshot.projection);
   const failed = runtimeStatus.state === "failed";
-  // 运行中/等审批（live 含 waiting_tool）或断连时锁输入，避免审批挂起时触发新请求。
-  const busy =
-    runtimeStatus.state === "live" || runtimeStatus.state === "disconnected";
+  // 本会话是否有挂起审批（审核中）：仅禁用发送按钮，打字/切 mode 不受影响。
+  const pendingApproval = approvalStore
+    .getSnapshot()
+    .approvals.some(
+      (approval) =>
+        approval.conversationId === conversationId &&
+        approval.status === "pending",
+    );
   const genPhase = failed
     ? "failed"
     : runtimeStatus.state === "live"
@@ -170,7 +175,8 @@ function ActiveChatSurface({
       />
       <ConversationComposer
         conversationId={conversationId}
-        enabled={snapshot.state === "active" && !failed && !busy}
+        enabled={snapshot.state === "active" && !failed}
+        sendDisabled={pendingApproval}
         status={genStatus}
         mode={mode}
         onModeChange={(next) => {

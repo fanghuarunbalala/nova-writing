@@ -30,6 +30,8 @@ export interface ConversationComposerProps {
   readonly mode?: ComposerMode;
   /** 切换 mode；由上层 enqueue ConversationModeSetInputEvent 到 core。 */
   readonly onModeChange?: (mode: ComposerMode) => void;
+  /** 审批挂起时禁用发送（审核中）；打字与切 mode 不受影响。 */
+  readonly sendDisabled?: boolean;
 }
 
 export function ConversationComposer({
@@ -39,6 +41,7 @@ export function ConversationComposer({
   status,
   mode = "review",
   onModeChange = noopModeChange,
+  sendDisabled = false,
 }: ConversationComposerProps) {
   const [text, setText] = useState("");
 
@@ -82,10 +85,17 @@ export function ConversationComposer({
             aria-label="对话输入"
             data-conversation={conversationId}
           />
-          <Button variant="primary" onClick={submit} disabled={!enabled || text.trim() === ""}>
+          <Button
+            variant="primary"
+            onClick={submit}
+            disabled={!enabled || sendDisabled || text.trim() === ""}
+          >
             发送
           </Button>
         </div>
+        {sendDisabled ? (
+          <span className={styles.pendingHint}>等待审批</span>
+        ) : null}
         <ComposerModeBar mode={mode} onChange={onModeChange} disabled={!enabled} />
       </form>
     </div>

@@ -4,19 +4,27 @@
  *
  * 验证 / Verifies:
  * 1. 生效集：NUDGE_DEFINITIONS + novelAgentDefinition.nudgeEnablement.enabled ∩ 工具组
- *    守卫 → 恰为 [compose_mode, compose_mode_exit, todo_idle]；未配置 nudgeEnablement 的
+ *    守卫 → 恰为 [compose_mode, compose_mode_pending, compose_mode_reentry,
+ *    compose_mode_exit, compose_mode_sparse, todo_idle]；未配置 nudgeEnablement 的
  *    AgentDefinition → 空集；缺组 → 跳过。
- * 2. 共享 policy 去重：compose 两定义同属 ComposeModeNudgePolicy → 引擎只注册一个实例。
+ * 2. 共享 policy 去重：compose 全部定义同属 ComposeModeNudgePolicy → 引擎只注册一个实例。
  * 3. compose_mode：transition 驱动——inactive→active 附一条持久化 compose_mode（含设计文件
  *    workspace 相对路径）；持续 active 不重复；active→inactive 附一条 compose_mode_exit；
  *    随后无附。seed(active) 后首 call 不重发 compose_mode。
+ * 3b. compose_mode_pending：designing→pending 附一条持久化 pending；持续 pending 不重复。
+ * 3c. compose_mode_reentry：false→true 且 hasPriorDraft=true → 附 compose_mode + reentry；
+ *     无旧草稿只附 compose_mode。
+ * 3d. compose_mode_sparse：仍 compose 无 transition，跨 run 每 N 次 provider call 附一次
+ *     瞬态 sparse（入 attachedReminders，不入 canonical appendedEvents；每 run 至多一次）。
  * 4. todo_idle：连续 ≥3 次 provider call 未调用 TodoWrite → 每 run 附一条持久化 todo_idle；
  *    跨轮清空；TodoWrite 一调用即重置（写后重新计数，写后 3 个未写 call 仍触发）。
  * 5. 真实 CorePiRuntimeMessageConverter 把 system.reminder（kind=compose_mode）转成
  *    Pi user 消息，内容含 <system-reminder kind="compose_mode">。
- * 6. 脱敏：reminder 正文持久化进事件（append-only，投影 canonical），但不得出现在日志里。
+ * 6. 脱敏：reminder 正文持久化进事件（append-only，投影 canonical），但不得出现在日志里；
+ *    sparse 为瞬态，不得出现在任何 canonical 事件里。
  */
 import assert from "node:assert/strict";
+import path from "node:path";
 import {
   AgentCommunicationPolicy,
   AgentDefinition,
@@ -39,6 +47,10 @@ import { NUDGE_DEFINITIONS } from "../dist/runtime/nudge/definitions/index.js";
 import {
   COMPOSE_MODE_EXIT_NUDGE_ID,
   COMPOSE_MODE_NUDGE_ID,
+  COMPOSE_MODE_PENDING_NUDGE_ID,
+  COMPOSE_MODE_REENTRY_NUDGE_ID,
+  COMPOSE_MODE_SPARSE_EVERY_CALLS,
+  COMPOSE_MODE_SPARSE_NUDGE_ID,
   COMPOSE_MODE_TOOL_GROUP,
   ComposeModeNudgePolicy,
 } from "../dist/runtime/nudge/definitions/compose.js";
@@ -48,10 +60,13 @@ import {
 } from "../dist/runtime/nudge/definitions/todo.js";
 
 const COMPOSE_FULL_MARK = "# 设计模式（Compose Mode）";
+const COMPOSE_PENDING_MARK = "# 设计模式：等待审批";
+const COMPOSE_REENTRY_MARK = "# 设计模式：已有旧草稿";
+const COMPOSE_SPARSE_MARK = "# 设计模式（刷新）";
 const COMPOSE_EXIT_MARK = "# 设计模式已结束";
 const TODO_IDLE_MARK = "待办列表维护提醒";
-/** 绝对 design 路径（真实场景），渲染时转 workspace 相对。 */
-const DESIGN_FILE_ABSOLUTE = "D:\\workspace\\app\\.novel\\design\\chapter-3.md";
+/** 绝对 design 路径（真实场景），渲染时转 workspace 相对。原生分隔符保证跨平台 basename 生效。 */
+const DESIGN_FILE_ABSOLUTE = path.resolve(".novel", "design", "chapter-3.md");
 const DESIGN_FILE_RELATIVE = ".novel/design/chapter-3.md";
 
 const logs = [];
@@ -73,7 +88,10 @@ const runId = "run:definitions";
 const enabledNudges = novelAgentDefinition.nudgeEnablement.enabled;
 assert.deepEqual(enabledNudges, [
   COMPOSE_MODE_NUDGE_ID,
+  COMPOSE_MODE_PENDING_NUDGE_ID,
+  COMPOSE_MODE_REENTRY_NUDGE_ID,
   COMPOSE_MODE_EXIT_NUDGE_ID,
+  COMPOSE_MODE_SPARSE_NUDGE_ID,
   TODO_IDLE_NUDGE_ID,
 ]);
 
@@ -111,17 +129,30 @@ const fullEffective = effectiveDefinitions(
 );
 assert.deepEqual(
   fullEffective.map((definition) => definition.id),
-  [COMPOSE_MODE_NUDGE_ID, COMPOSE_MODE_EXIT_NUDGE_ID, TODO_IDLE_NUDGE_ID],
+  [
+    COMPOSE_MODE_NUDGE_ID,
+    COMPOSE_MODE_PENDING_NUDGE_ID,
+    COMPOSE_MODE_REENTRY_NUDGE_ID,
+    COMPOSE_MODE_EXIT_NUDGE_ID,
+    COMPOSE_MODE_SPARSE_NUDGE_ID,
+    TODO_IDLE_NUDGE_ID,
+  ],
 );
 
 // 缺 runtime.todo 组 → todo_idle 被守卫跳过。
 const composeOnly = effectiveDefinitions(new Set([COMPOSE_MODE_TOOL_GROUP]));
 assert.deepEqual(
   composeOnly.map((definition) => definition.id),
-  [COMPOSE_MODE_NUDGE_ID, COMPOSE_MODE_EXIT_NUDGE_ID],
+  [
+    COMPOSE_MODE_NUDGE_ID,
+    COMPOSE_MODE_PENDING_NUDGE_ID,
+    COMPOSE_MODE_REENTRY_NUDGE_ID,
+    COMPOSE_MODE_EXIT_NUDGE_ID,
+    COMPOSE_MODE_SPARSE_NUDGE_ID,
+  ],
 );
 
-// 2. 共享 policy 去重：compose 两定义 → 单个 ComposeModeNudgePolicy。
+// 2. 共享 policy 去重：compose 全部定义 → 单个 ComposeModeNudgePolicy。
 const seenPolicyIds = new Set();
 const policies = [];
 for (const definition of fullEffective) {
@@ -298,6 +329,145 @@ assert.equal(seededExit.length, 1);
 assert.equal(seededExit[0].kind, "compose_mode_exit");
 
 // ---------------------------------------------------------------------------
+// 3b. compose_mode_pending：designing→pending（ExitComposeMode 提交）→ 附一条持久化 pending。
+// ---------------------------------------------------------------------------
+const pendingRuntime = createReminderRuntime(fullEffective);
+// 先建立 inactive latch（真实流程总先观测到 inactive，再 EnterComposeMode）。
+assert.deepEqual(await providerCall(pendingRuntime, 1, composeInactive), []);
+const pendingEntered = await providerCall(pendingRuntime, 2, composeActive);
+assert.equal(pendingEntered.length, 1);
+assert.equal(pendingEntered[0].kind, "compose_mode");
+const pendingSubmitted = await providerCall(pendingRuntime, 3, {
+  compose: {
+    phase: "pending",
+    active: true,
+    mode: "compose",
+    designFilePath: DESIGN_FILE_ABSOLUTE,
+  },
+});
+assert.equal(pendingSubmitted.length, 1);
+assert.equal(pendingSubmitted[0].kind, "compose_mode_pending");
+assert.equal(pendingSubmitted[0].reminderId, COMPOSE_MODE_PENDING_NUDGE_ID);
+assert.ok(pendingSubmitted[0].content.includes(COMPOSE_PENDING_MARK));
+// 持续 pending 不重复。
+assert.deepEqual(
+  await providerCall(pendingRuntime, 4, {
+    compose: { phase: "pending", active: true, mode: "compose" },
+  }),
+  [],
+  "持续 pending 不重复附",
+);
+const pendingEvents = pendingRuntime.appendedEvents;
+assert.deepEqual(
+  pendingEvents.map((event) => event.payload.kind),
+  ["compose_mode", "compose_mode_pending"],
+);
+
+// 多切换间隔：inactive → (enter) → (submit) 都在两次 provider call 之间发生，
+// 采样落点为 pending → 应发 compose_mode_pending，而非误发 compose_mode(designing 指引)。
+const multiSwitchRuntime = createReminderRuntime(fullEffective);
+assert.deepEqual(await providerCall(multiSwitchRuntime, 1, composeInactive), []);
+const multiSwitchPending = await providerCall(multiSwitchRuntime, 2, {
+  compose: {
+    phase: "pending",
+    active: true,
+    mode: "compose",
+    designFilePath: DESIGN_FILE_ABSOLUTE,
+  },
+});
+assert.equal(multiSwitchPending.length, 1);
+assert.equal(multiSwitchPending[0].kind, "compose_mode_pending");
+assert.equal(multiSwitchPending[0].reminderId, COMPOSE_MODE_PENDING_NUDGE_ID);
+
+// ---------------------------------------------------------------------------
+// 3c. compose_mode_reentry：false→true 且 hasPriorDraft=true → 附 compose_mode + reentry。
+// ---------------------------------------------------------------------------
+const reentryRuntime = createReminderRuntime(fullEffective);
+assert.deepEqual(await providerCall(reentryRuntime, 1, composeInactive), []);
+const reentryEntered = await providerCall(reentryRuntime, 2, {
+  compose: {
+    phase: "designing",
+    active: true,
+    mode: "compose",
+    designFilePath: DESIGN_FILE_ABSOLUTE,
+    hasPriorDraft: true,
+  },
+});
+assert.equal(reentryEntered.length, 2);
+assert.deepEqual(
+  reentryEntered.map((reminder) => reminder.kind),
+  ["compose_mode", "compose_mode_reentry"],
+);
+assert.equal(reentryEntered[1].reminderId, COMPOSE_MODE_REENTRY_NUDGE_ID);
+assert.ok(reentryEntered[1].content.includes(COMPOSE_REENTRY_MARK));
+// 无旧草稿进入 → 只附 compose_mode。
+const freshRuntime = createReminderRuntime(fullEffective);
+assert.deepEqual(await providerCall(freshRuntime, 1, composeInactive), []);
+const freshEntered = await providerCall(freshRuntime, 2, composeActive);
+assert.equal(freshEntered.length, 1);
+assert.equal(freshEntered[0].kind, "compose_mode");
+assert.equal(
+  reentryRuntime.appendedEvents.length,
+  2,
+  "reentry 事件应为 compose_mode + compose_mode_reentry",
+);
+
+// ---------------------------------------------------------------------------
+// 3d. compose_mode_sparse：仍 compose 无 transition，跨 run 每 N 次 provider call 附
+//     一次瞬态 sparse（入 attachedReminders，不入 canonical appendedEvents）。
+// ---------------------------------------------------------------------------
+const sparseRuntime = createReminderRuntime(fullEffective);
+// run:seed：inactive 建立 latch。
+assert.deepEqual(
+  await providerCallInRun(sparseRuntime, "run:seed", 1, composeInactive),
+  [],
+);
+// run:enter：进入 → full compose_mode（持久化），lastSparseRunId=run:enter。
+const sparseEntered = await providerCallInRun(
+  sparseRuntime,
+  "run:enter",
+  1,
+  composeActive,
+);
+assert.equal(sparseEntered.length, 1);
+assert.equal(sparseEntered[0].kind, "compose_mode");
+// run:refresh：跨 run，前 N-1 次不附，第 N 次附一次瞬态 sparse。
+for (let call = 1; call < COMPOSE_MODE_SPARSE_EVERY_CALLS; call += 1) {
+  assert.deepEqual(
+    await providerCallInRun(sparseRuntime, "run:refresh", call, composeActive),
+    [],
+    `run:refresh call#${call} 不附 sparse`,
+  );
+}
+const sparseFired = await providerCallInRun(
+  sparseRuntime,
+  "run:refresh",
+  COMPOSE_MODE_SPARSE_EVERY_CALLS,
+  composeActive,
+);
+assert.equal(sparseFired.length, 1);
+assert.equal(sparseFired[0].kind, "compose_mode_sparse");
+assert.equal(sparseFired[0].reminderId, COMPOSE_MODE_SPARSE_NUDGE_ID);
+assert.ok(sparseFired[0].content.includes(COMPOSE_SPARSE_MARK));
+// 同 run 后续 call 不重复（per-run 守卫）。
+assert.deepEqual(
+  await providerCallInRun(
+    sparseRuntime,
+    "run:refresh",
+    COMPOSE_MODE_SPARSE_EVERY_CALLS + 1,
+    composeActive,
+  ),
+  [],
+  "run:refresh 同 run 不重复 sparse",
+);
+// sparse 瞬态：attachedReminders 有，但 canonical appendedEvents 只有 compose_mode。
+assert.deepEqual(
+  sparseRuntime.appendedEvents.map((event) => event.payload.kind),
+  ["compose_mode"],
+  "sparse 不入 canonical",
+);
+
+// ---------------------------------------------------------------------------
 // 4. todo_idle：连续 ≥3 次 provider call 未调用 TodoWrite → 每 run 附一条持久化
 //    todo_idle；跨轮清空；写即清空（写后重新计数，写后 3 个未写 call 仍触发）。
 //    信号滞后建模：TodoWrite 在写入 call 的下一个 call 才被观察到
@@ -421,14 +591,29 @@ assert.ok(reminderText.endsWith("</system-reminder>"));
 // Sensitive rendered content persists into events, but must stay out of logs.
 // ---------------------------------------------------------------------------
 const serializedLogs = JSON.stringify(logs);
-for (const snippet of [COMPOSE_FULL_MARK, COMPOSE_EXIT_MARK, TODO_IDLE_MARK]) {
+for (const snippet of [
+  COMPOSE_FULL_MARK,
+  COMPOSE_PENDING_MARK,
+  COMPOSE_REENTRY_MARK,
+  COMPOSE_SPARSE_MARK,
+  COMPOSE_EXIT_MARK,
+  TODO_IDLE_MARK,
+]) {
   assert.equal(serializedLogs.includes(snippet), false, `日志不得含 ${snippet}`);
 }
 const serializedEvents = JSON.stringify(
-  composeRuntime.appendedEvents.concat(todoRuntime.appendedEvents),
+  composeRuntime.appendedEvents.concat(
+    todoRuntime.appendedEvents,
+    pendingRuntime.appendedEvents,
+    reentryRuntime.appendedEvents,
+  ),
 );
 assert.ok(serializedEvents.includes(COMPOSE_FULL_MARK));
+assert.ok(serializedEvents.includes(COMPOSE_PENDING_MARK));
+assert.ok(serializedEvents.includes(COMPOSE_REENTRY_MARK));
 assert.ok(serializedEvents.includes(COMPOSE_EXIT_MARK));
 assert.ok(serializedEvents.includes(TODO_IDLE_MARK));
+// sparse 是瞬态，不得出现在任何 canonical 事件序列化里。
+assert.equal(serializedEvents.includes(COMPOSE_SPARSE_MARK), false);
 
 console.log("nudge definitions smoke passed");

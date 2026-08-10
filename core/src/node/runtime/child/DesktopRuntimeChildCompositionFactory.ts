@@ -380,6 +380,14 @@ export class DesktopRuntimeChildCompositionFactory
       composeStateProvider: composeState,
       logger,
     });
+    // 挂起审批探测:供 ComposeToolService.setMode 判断是否延迟 mode 切换。
+    // Pending-approval probe so setMode defers while an approval is in flight.
+    novelTools.modeService.setPendingApprovalProbe(async (conversationId) => {
+      const pending = await toolExecution.coordinator.listPending();
+      return pending.some(
+        (request) => request.identity.conversationId === conversationId,
+      );
+    });
     logger.info("runtime_child.composition.tool_execution_created", {
       conversationId,
     });
@@ -460,7 +468,12 @@ export class DesktopRuntimeChildCompositionFactory
       logger,
     });
     const runtimeSignals: PiRuntimeSignalsProvider = Object.freeze({
-      compose: () => Promise.resolve(composeState.snapshot(conversationId)),
+      // 每次 provider call 先晋升挂起审批时延迟的 mode,再返回当前快照(下一 call 生效)。
+      // Promote any deferred mode target before sampling, so it takes effect at the next call.
+      compose: async () => {
+        await novelTools.modeService.applyPendingModeTarget(conversationId);
+        return composeState.snapshot(conversationId);
+      },
       todos: () =>
         todoStore.read(conversationId).then((snapshot) =>
           snapshot === undefined

@@ -81,6 +81,9 @@ export interface SystemReminderAttachEffect {
   readonly parameters: Readonly<Record<string, JsonValue>>;
   /** 消息流内排序序号（同一 provider 调用内多个提醒的稳定顺序）。Stable order within one provider call. */
   readonly order: number;
+  /** 瞬态标志：true 时仅注入同 run overlay、不入 canonical（用于跨 run 刷新的稀疏提醒）。 */
+  /** Transient flag: when true, only injects into the in-run overlay, never persisted to canonical. */
+  readonly transient?: boolean;
 }
 
 export type RuntimePolicyEffect =

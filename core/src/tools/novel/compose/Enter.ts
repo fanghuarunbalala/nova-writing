@@ -73,12 +73,17 @@ export function createEnterComposeModeTool(
           const designFilePathRelative = designFileWorkspaceRelativePath(
             details.designFilePath,
           );
+          // 幂等返回:已处于 compose,告知已进入并复用当前草稿,不重复进入。
+          // Idempotent return: compose was already active; report it and reuse the draft.
+          const headline = details.alreadyActive
+            ? `Compose mode is already active. Design file: ${designFilePathRelative}`
+            : `Compose mode entered. Design file: ${designFilePathRelative}`;
           return Object.freeze({
             content: Object.freeze([
               Object.freeze({
                 type: "text" as const,
                 text: [
-                  `Compose mode entered. Design file: ${designFilePathRelative}`,
+                  headline,
                   "",
                   renderComposeModeFullText(designFilePathRelative),
                 ].join("\n"),

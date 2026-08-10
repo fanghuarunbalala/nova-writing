@@ -2,13 +2,14 @@
  * compose 系列提醒的集中定义：手写 Policy 类 + 模板同文件。
  *
  * 触发单位是 provider call（turn）。状态由 runtimeSignals.compose（ComposeModeSnapshot）
- * 驱动，按 transition 附加对应提醒：
- * - false→true（进入）：附加持久化 compose_mode（full 5-phase 工作流）；若
+ * 驱动，按「落点状态」附加对应提醒（状态键 = active ? phase : "inactive"，仅状态键
+ * 变化时发一条对应当前状态的提醒，多次切换间隔只认最终落点）：
+ * - 落点 designing（进入/重进）：附加持久化 compose_mode（full 5-phase 工作流）；若
  *   hasPriorDraft 则再附加持久化 compose_mode_reentry（已有旧草稿 → 继续/覆盖决策）。
- * - true→false（批准/放弃退出）：附加持久化 compose_mode_exit。
- * - designing→pending（ExitComposeMode 提交）：附加持久化 compose_mode_pending。
- * - 无 transition 且仍 compose：跨 run 每 COMPOSE_MODE_SPARSE_EVERY_CALLS 次 provider
- *   call 附加一次瞬态 compose_mode_sparse（仅同 run overlay，不入 canonical）。
+ * - 落点 pending（ExitComposeMode 提交）：附加持久化 compose_mode_pending。
+ * - 落点 inactive（批准/放弃退出）：附加持久化 compose_mode_exit（显式退出信号）。
+ * - 稳态（状态键不变）且仍 compose：跨 run 每 COMPOSE_MODE_SPARSE_EVERY_CALLS 次
+ *   provider call 附加一次瞬态 compose_mode_sparse（仅同 run overlay，不入 canonical）。
  * 持久化路径：effect → SystemReminderAttachedOutputEvent → canonical system.reminder。
  * 瞬态路径：effect(transient) → 仅同 run overlay（runReminders）。
  */
@@ -119,33 +120,34 @@ export class ComposeModeNudgePolicy implements RuntimePolicy {
     let callsSinceReminder = previous.callsSinceReminder;
     let lastSparseRunId = previous.lastSparseRunId;
 
-    if (compose.active && !previous.lastSeenActive) {
-      // 进入 compose（false→true）→ 附加 full compose_mode（持久化）；有旧草稿再附 reentry。
-      effects.push(this.composeModeEffect(context, compose.designFilePath));
-      if (compose.hasPriorDraft === true) {
-        effects.push(this.reentryEffect(context));
+    // 按落点状态发：状态键 = active ? phase : "inactive"。仅状态键变化时发一条
+    // 对应「当前（落点）状态」的提醒——多次切换间隔只认最终落点，不会误发中间态。
+    // Emit by destination state: only when the state key changes do we attach the
+    // reminder for the CURRENT (landing) state, so multi-switch gaps never mislabel.
+    const stateKey = compose.active ? compose.phase : "inactive";
+    const previousStateKey = previous.lastSeenActive
+      ? previous.lastSeenPhase
+      : "inactive";
+    if (stateKey !== previousStateKey) {
+      if (compose.active && compose.phase === "designing") {
+        // 落点 designing（进入/重进）→ full compose_mode（持久化）；有旧草稿再附 reentry。
+        effects.push(this.composeModeEffect(context, compose.designFilePath));
+        if (compose.hasPriorDraft === true) {
+          effects.push(this.reentryEffect(context));
+        }
+      } else if (compose.active && compose.phase === "pending") {
+        // 落点 pending（提交审批）→ compose_mode_pending。
+        effects.push(this.pendingEffect(context));
+      } else {
+        // 落点 inactive（approve/discard）→ 一次性 compose_mode_exit（显式退出信号）。
+        effects.push(this.exitEffect(context));
       }
       callsSinceReminder = 0;
       lastSparseRunId = context.runId;
-    } else if (!compose.active && previous.lastSeenActive) {
-      // 退出 compose（true→false，approve/discard）→ 附加一次性 compose_mode_exit。
-      effects.push(this.exitEffect(context));
-      callsSinceReminder = 0;
-      lastSparseRunId = context.runId;
-    } else if (
-      compose.active &&
-      compose.phase === "pending" &&
-      previous.lastSeenPhase !== "pending"
-    ) {
-      // 提交审批（designing→pending）→ 附加一次性 compose_mode_pending。
-      effects.push(this.pendingEffect(context));
-      callsSinceReminder = 0;
-      lastSparseRunId = context.runId;
-    } else {
-      // 无 transition：累积 provider call 计数，跨 run 每 N 次附加一次瞬态 sparse 刷新。
+    } else if (compose.active) {
+      // 稳态（无状态变化）：累积 provider call 计数，跨 run 每 N 次附加一次瞬态 sparse 刷新。
       callsSinceReminder += 1;
       if (
-        compose.active &&
         callsSinceReminder >= COMPOSE_MODE_SPARSE_EVERY_CALLS &&
         lastSparseRunId !== context.runId
       ) {

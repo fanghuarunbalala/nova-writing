@@ -363,6 +363,22 @@ assert.deepEqual(
   ["compose_mode", "compose_mode_pending"],
 );
 
+// 多切换间隔：inactive → (enter) → (submit) 都在两次 provider call 之间发生，
+// 采样落点为 pending → 应发 compose_mode_pending，而非误发 compose_mode(designing 指引)。
+const multiSwitchRuntime = createReminderRuntime(fullEffective);
+assert.deepEqual(await providerCall(multiSwitchRuntime, 1, composeInactive), []);
+const multiSwitchPending = await providerCall(multiSwitchRuntime, 2, {
+  compose: {
+    phase: "pending",
+    active: true,
+    mode: "compose",
+    designFilePath: DESIGN_FILE_ABSOLUTE,
+  },
+});
+assert.equal(multiSwitchPending.length, 1);
+assert.equal(multiSwitchPending[0].kind, "compose_mode_pending");
+assert.equal(multiSwitchPending[0].reminderId, COMPOSE_MODE_PENDING_NUDGE_ID);
+
 // ---------------------------------------------------------------------------
 // 3c. compose_mode_reentry：false→true 且 hasPriorDraft=true → 附 compose_mode + reentry。
 // ---------------------------------------------------------------------------

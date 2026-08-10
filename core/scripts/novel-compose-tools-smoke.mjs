@@ -67,11 +67,18 @@ assert.equal(events.at(-2).getEventType(), "novel.compose.begin");
 assert.equal(events.at(-1).getEventType(), "novel.mode.changed");
 assert.equal(composeState.snapshot(conversationId).mode, "compose");
 
-// 重复进入 → NOVEL_COMPOSE_STATE_INVALID
-await assert.rejects(
-  enterTool.handler.execute(context(conversationId, 2), {}, progress),
-  (error) => error instanceof ToolError && error.code === "NOVEL_COMPOSE_STATE_INVALID",
+// 重复进入 → 幂等成功:alreadyActive=true、复用当前 design 文件、不重复发事件。
+const reenterResult = await enterTool.handler.execute(
+  context(conversationId, 2),
+  {},
+  progress,
 );
+assert.equal(reenterResult.details.alreadyActive, true);
+assert.equal(reenterResult.details.phase, "designing");
+assert.equal(reenterResult.details.designFilePath, designFilePath);
+assert.equal(composeState.snapshot(conversationId).active, true);
+// 幂等不新增 begin/mode.changed 事件(仅 approval 挂钩后续事件在队列中)。
+assert.equal(events.at(-1).getEventType(), "novel.mode.changed");
 
 // 审批请求挂钩：designing -> pending + submitted 事件
 const requestedAt = "2026-08-07T00:00:01.000Z";

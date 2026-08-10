@@ -86,6 +86,8 @@ export type ComposeEnterDetails = {
   readonly designFilePath: string;
   readonly phase: ComposeModePhase;
   readonly purpose?: string;
+  /** 进入前已在 compose(幂等返回当前状态,未重复进入)。Whether compose was already active. */
+  readonly alreadyActive?: boolean;
 };
 
 export type ComposeExitDetails = {
@@ -127,6 +129,20 @@ export class ComposeToolService {
     conversationId: string,
     purpose?: string,
   ): Promise<ComposeEnterDetails> {
+    // 幂等:已处于 compose 时返回当前状态,不重复进入、不删草稿、不发重复事件。
+    // Idempotent: when compose is already active, return the current state without
+    // re-entering, touching the draft, or emitting duplicate events.
+    const existing = this.#composeState.snapshot(conversationId);
+    if (existing.active) {
+      const designFilePath =
+        existing.designFilePath ?? this.designFilePathFor(conversationId);
+      return Object.freeze({
+        designFilePath,
+        phase: existing.phase,
+        ...(purpose === undefined ? {} : { purpose }),
+        alreadyActive: true,
+      });
+    }
     const designFilePath = this.designFilePathFor(conversationId);
     await fs.mkdir(this.#designRoot, { recursive: true });
     // 检测旧草稿：design 文件已存在 = 上次会话残留（discard 才删、exit 归档）。用于

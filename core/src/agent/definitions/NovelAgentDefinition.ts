@@ -60,7 +60,10 @@ export const novelAgentDefinition = new AgentDefinition({
   nudgeEnablement: Object.freeze({
     enabled: Object.freeze([
       "novel.reminder.compose_mode",
+      "novel.reminder.compose_mode_pending",
+      "novel.reminder.compose_mode_reentry",
       "novel.reminder.compose_mode_exit",
+      "novel.reminder.compose_mode_sparse",
       "novel.reminder.todo_idle",
     ]),
   }),

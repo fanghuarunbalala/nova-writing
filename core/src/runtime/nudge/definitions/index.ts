@@ -5,6 +5,9 @@
 import {
   composeModeExitNudgeDefinition,
   composeModeNudgeDefinition,
+  composeModePendingNudgeDefinition,
+  composeModeReentryNudgeDefinition,
+  composeModeSparseNudgeDefinition,
 } from "./compose.js";
 import { todoIdleNudgeDefinition } from "./todo.js";
 import type { NudgeDefinition } from "./NudgeDefinition.js";
@@ -15,6 +18,9 @@ export { createSystemReminderAttachEffect } from "./effectBuilders.js";
 
 export const NUDGE_DEFINITIONS: readonly NudgeDefinition[] = Object.freeze([
   composeModeNudgeDefinition,
+  composeModePendingNudgeDefinition,
+  composeModeReentryNudgeDefinition,
   composeModeExitNudgeDefinition,
+  composeModeSparseNudgeDefinition,
   todoIdleNudgeDefinition,
 ]);

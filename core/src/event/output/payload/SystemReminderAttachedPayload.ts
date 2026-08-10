@@ -24,7 +24,10 @@ export const REMINDER_KIND = [
   "compact_summary",
   "nudge",
   "compose_mode",
+  "compose_mode_pending",
+  "compose_mode_reentry",
   "compose_mode_exit",
+  "compose_mode_sparse",
   "todo_idle",
 ] as const;
 

@@ -120,6 +120,9 @@ function captureComposeModeSnapshot(value: unknown): ComposeModeSnapshot {
     ...(typeof record.preComposeMode === "string"
       ? { preComposeMode: record.preComposeMode as ComposeModeSnapshot["mode"] }
       : {}),
+    ...(typeof record.hasPriorDraft === "boolean"
+      ? { hasPriorDraft: record.hasPriorDraft }
+      : {}),
   });
 }
 
@@ -242,6 +245,9 @@ export function captureSystemReminderAttachEffect(
       templateVersion: requireNonBlank(record.templateVersion),
       parameters: captureParameters(record.parameters),
       order: requireNonNegativeInteger(record.order),
+      ...(record.transient === undefined
+        ? {}
+        : { transient: requireBoolean(record.transient) }),
     });
   } catch {
     throw failure(RUNTIME_POLICY_PROTOCOL_FAILURE.invalidEffect, identity);
@@ -359,6 +365,11 @@ function requirePositiveInteger(value: unknown): number {
 function requireNonNegativeInteger(value: unknown): number {
   if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error();
   return value as number;
+}
+
+function requireBoolean(value: unknown): boolean {
+  if (typeof value !== "boolean") throw new Error();
+  return value;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

@@ -129,8 +129,13 @@ export class ComposeToolService {
   ): Promise<ComposeEnterDetails> {
     const designFilePath = this.designFilePathFor(conversationId);
     await fs.mkdir(this.#designRoot, { recursive: true });
+    // 检测旧草稿：design 文件已存在 = 上次会话残留（discard 才删、exit 归档）。用于
+    // reentry 提醒。Draft exists when the design file already exists (only discard
+    // deletes it; exit archives it) — drives the reentry reminder.
+    let hasPriorDraft = false;
     try {
       await fs.access(designFilePath);
+      hasPriorDraft = true;
     } catch {
       await fs.writeFile(designFilePath, "", "utf8");
     }
@@ -138,6 +143,7 @@ export class ComposeToolService {
     const snapshot = this.#composeState.enter(conversationId, {
       designFilePath,
       preComposeMode: currentMode,
+      hasPriorDraft,
     });
     // 写序: ①内存 → ②DB(提交点) → ③事件。
     await this.#persistMode(conversationId, "compose");

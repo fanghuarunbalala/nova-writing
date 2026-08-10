@@ -96,7 +96,12 @@ const requested = new ToolApprovalRequestedOutputEvent({
   expiresAt: "2026-08-07T00:15:00.000Z",
   timestamp: requestedAt,
 });
-const sink = new ComposeApprovalLifecycleSink(eventSink, composeState);
+const sink = new ComposeApprovalLifecycleSink({
+  inner: eventSink,
+  state: composeState,
+  onExitRejected: (conversationId) =>
+    service.applyPendingModeTarget(conversationId),
+});
 await sink.append(requested);
 assert.equal(composeState.snapshot(conversationId).phase, "pending");
 assert.ok(
@@ -174,6 +179,113 @@ assert.equal(composeState.snapshot(conversationId).phase, "designing");
 assert.equal(composeState.snapshot(conversationId).active, true);
 assert.ok(
   events.some((event) => event.getEventType() === "novel.compose.rejected"),
+);
+
+// ---------------------------------------------------------------------------
+// 审核中延迟 mode(approved 路径):提交 -> pending 中 setMode(bypass) 不 discard -> 批准
+// -> service.exit() applied 后应用延迟 mode,最终 mode=bypass。
+// ---------------------------------------------------------------------------
+await enterTool.handler.execute(context(conversationId, 7), {}, progress);
+const requested3 = new ToolApprovalRequestedOutputEvent({
+  id: "approval-request-3",
+  approvalRequestId: "approval-request-3",
+  conversationId,
+  runId: "run-8",
+  toolCallId: "call-8",
+  toolName: "ExitComposeMode",
+  toolVersion: "1.0.0",
+  argumentDigest: `sha256:${"c".repeat(64)}`,
+  summary: { title: "提交设计草稿" },
+  requestedAt: "2026-08-07T00:02:00.000Z",
+  expiresAt: "2026-08-07T00:17:00.000Z",
+  timestamp: "2026-08-07T00:02:00.000Z",
+});
+await sink.append(requested3);
+assert.equal(composeState.snapshot(conversationId).phase, "pending");
+// pending 中 setMode(bypass):延迟,不 discard、compose 保持 pending。
+await service.setMode(conversationId, "bypass");
+assert.equal(composeState.snapshot(conversationId).phase, "pending");
+assert.equal(composeState.snapshot(conversationId).active, true);
+assert.equal(
+  events.some((event) => event.getEventType() === "novel.compose.discarded"),
+  false,
+  "pending 中 setMode 不应 discard",
+);
+const resolved3 = new ToolApprovalResolvedOutputEvent({
+  id: "approval-resolved-3",
+  conversationId,
+  runId: "run-8",
+  toolCallId: "call-8",
+  toolName: "ExitComposeMode",
+  toolVersion: "1.0.0",
+  argumentDigest: `sha256:${"c".repeat(64)}`,
+  approvalRequestId: "approval-request-3",
+  decision: "approved",
+  actorId: "smoke-user",
+  resolvedAt: "2026-08-07T00:02:01.000Z",
+  timestamp: "2026-08-07T00:02:01.000Z",
+});
+await sink.append(resolved3);
+const exitDeferredApproved = await exitTool.handler.execute(
+  context(conversationId, 9),
+  {},
+  progress,
+);
+assert.equal(exitDeferredApproved.details.phase, "applied");
+assert.equal(composeState.snapshot(conversationId).active, false);
+assert.equal(
+  composeState.snapshot(conversationId).mode,
+  "bypass",
+  "approved 后应应用延迟的 bypass",
+);
+
+// ---------------------------------------------------------------------------
+// 审核中延迟 mode(rejected 路径):提交 -> pending 中 setMode(bypass) -> 拒绝
+// -> sink onExitRejected 应用延迟 mode -> discard 离开 compose + mode=bypass。
+// ---------------------------------------------------------------------------
+await enterTool.handler.execute(context(conversationId, 10), {}, progress);
+const requested4 = new ToolApprovalRequestedOutputEvent({
+  id: "approval-request-4",
+  approvalRequestId: "approval-request-4",
+  conversationId,
+  runId: "run-11",
+  toolCallId: "call-11",
+  toolName: "ExitComposeMode",
+  toolVersion: "1.0.0",
+  argumentDigest: `sha256:${"d".repeat(64)}`,
+  summary: { title: "提交设计草稿" },
+  requestedAt: "2026-08-07T00:03:00.000Z",
+  expiresAt: "2026-08-07T00:18:00.000Z",
+  timestamp: "2026-08-07T00:03:00.000Z",
+});
+await sink.append(requested4);
+assert.equal(composeState.snapshot(conversationId).phase, "pending");
+await service.setMode(conversationId, "bypass");
+assert.equal(composeState.snapshot(conversationId).phase, "pending");
+const resolved4 = new ToolApprovalResolvedOutputEvent({
+  id: "approval-resolved-4",
+  conversationId,
+  runId: "run-11",
+  toolCallId: "call-11",
+  toolName: "ExitComposeMode",
+  toolVersion: "1.0.0",
+  argumentDigest: `sha256:${"d".repeat(64)}`,
+  approvalRequestId: "approval-request-4",
+  decision: "rejected",
+  actorId: "smoke-user",
+  resolvedAt: "2026-08-07T00:03:01.000Z",
+  timestamp: "2026-08-07T00:03:01.000Z",
+});
+await sink.append(resolved4);
+// reject → sink onExitRejected → applyPendingModeTarget → discard 离开 compose + mode=bypass。
+assert.equal(composeState.snapshot(conversationId).active, false);
+assert.equal(
+  composeState.snapshot(conversationId).mode,
+  "bypass",
+  "rejected 后应应用延迟的 bypass(离开 compose)",
+);
+assert.ok(
+  events.some((event) => event.getEventType() === "novel.compose.discarded"),
 );
 
 // 事件类型检查

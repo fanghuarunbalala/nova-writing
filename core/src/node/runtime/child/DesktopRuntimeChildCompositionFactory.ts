@@ -378,6 +378,9 @@ export class DesktopRuntimeChildCompositionFactory
       registryView: configuration.assembly.toolView,
       eventSink,
       composeStateProvider: composeState,
+      // ExitComposeMode 审批 rejected 后应用审核中延迟的 mode 目标。
+      onExitRejected: (conversationId) =>
+        novelTools.modeService.applyPendingModeTarget(conversationId),
       logger,
     });
     logger.info("runtime_child.composition.tool_execution_created", {

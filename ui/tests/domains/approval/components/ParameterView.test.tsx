@@ -7,11 +7,10 @@ import { ParameterView } from "../../../../src/domains/approval/components/Param
 
 describe("ParameterView", () => {
   it("renders top-level keys as Chinese-labelled rows", () => {
-    render(<ParameterView value={{ baseRevision: "rev-1", name: "林夏", authorNotes: "作者注记内容" }} />);
-    expect(screen.getByText("基础修订版本")).toBeInTheDocument();
-    expect(screen.getByText("rev-1")).toBeInTheDocument();
+    render(<ParameterView value={{ name: "林夏", authorNotes: "作者注记内容" }} />);
     expect(screen.getByText("名称")).toBeInTheDocument();
     expect(screen.getByText("林夏")).toBeInTheDocument();
+    expect(screen.getByText("作者注记")).toBeInTheDocument();
   });
 
   it("renders values object array as 第 N 项 sub-blocks", () => {
@@ -54,5 +53,25 @@ describe("ParameterView", () => {
     expect(screen.queryByText("展开全文")).not.toBeInTheDocument();
     rerender(<ParameterView value={{ summary: "长".repeat(200) }} />);
     expect(screen.getByText("展开全文")).toBeInTheDocument();
+  });
+
+  it("orders fields name first and authorNotes last", () => {
+    const { container } = render(
+      <ParameterView
+        value={{ authorNotes: "尾注", summary: "中", name: "林夏", aliases: ["夏"] }}
+      />,
+    );
+    const text = container.textContent ?? "";
+    const order = ["名称", "别名", "简介", "作者注记"].map((label) =>
+      text.indexOf(label),
+    );
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it("hides baseRevision", () => {
+    render(<ParameterView value={{ baseRevision: "rev-1", name: "林夏" }} />);
+    expect(screen.queryByText("rev-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("基础修订版本")).not.toBeInTheDocument();
   });
 });

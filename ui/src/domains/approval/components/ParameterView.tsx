@@ -12,7 +12,12 @@
  */
 import { useState, type JSX } from "react";
 import type { JsonObject, JsonValue } from "@novel/core";
-import { paramKeyLabel, paramValueLabel } from "../paramLabels.js";
+import {
+  isParamFieldHidden,
+  paramFieldRank,
+  paramKeyLabel,
+  paramValueLabel,
+} from "../paramLabels.js";
 import styles from "./ParameterView.module.css";
 
 const LONG_TEXT_CHARS = 120;
@@ -103,11 +108,14 @@ function FieldRow({
   );
 }
 
-/** 对象逐字段渲染。Renders each object field as a row or sub-block. */
+/** 对象逐字段渲染（按 PARAM_FIELD_RANK 稳定排序、跳过隐藏字段）。 */
 function ParamObject({ obj }: { readonly obj: JsonObject }): JSX.Element {
+  const entries = Object.entries(obj)
+    .filter(([field]) => !isParamFieldHidden(field))
+    .sort(([left], [right]) => paramFieldRank(left) - paramFieldRank(right));
   return (
     <div className={styles.params}>
-      {Object.entries(obj).map(([field, fieldValue]) => (
+      {entries.map(([field, fieldValue]) => (
         <FieldRow key={field} field={field} value={fieldValue} />
       ))}
     </div>

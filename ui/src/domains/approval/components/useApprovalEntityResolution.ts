@@ -2,16 +2,16 @@
  * useApprovalEntityResolution
  *
  * 审批详情的实体内容异步解析 hook：对每个工具参数组（ArgumentGroup）判断
- * 是否为删除/编辑且有目标，是则异步解析目标实体内容；输出逐组状态
- * （unresolved / loading / ready / error）。effect 清理用 cancelled 守卫
+ * 是否有可解析目标（新增/编辑/删除），有则异步解析目标实体内容；输出逐组
+ * 状态（unresolved / loading / ready / error）。effect 清理用 cancelled 守卫
  * 丢弃过期结果，防止选中切换竞态。
  *
  * Asynchronously resolves each approval argument group's target entity content
- * (delete/edit only). Emits per-group status; a cancelled guard discards stale
+ * (add/edit/delete). Emits per-group status; a cancelled guard discards stale
  * results on selection change.
  */
 import { useEffect, useState } from "react";
-import type { JsonObject, JsonValue } from "@novel/core";
+import type { JsonValue } from "@novel/core";
 import {
   extractApprovalTargets,
   isApprovalStale,
@@ -32,7 +32,6 @@ export type GroupResolution =
       readonly status: "ready";
       readonly stale: boolean;
       readonly contents: readonly ResolvedEntityContent[];
-      readonly patches: ReadonlyMap<string, JsonObject>;
     }
   | { readonly status: "error"; readonly stale: boolean };
 
@@ -93,7 +92,6 @@ export function useApprovalEntityResolution(
                   (content): content is ResolvedEntityContent =>
                     content !== undefined,
                 ),
-                patches: entry.targets!.patches,
               }
             : { status: "error", stale: entry.stale };
           return updated;

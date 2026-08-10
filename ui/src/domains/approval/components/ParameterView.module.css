@@ -23,8 +23,8 @@
 }
 
 .toneEdit {
-  border-left: 3px solid var(--color-warn);
-  background: color-mix(in oklab, var(--color-warn) 8%, var(--color-surface));
+  border-left: 3px solid var(--color-danger);
+  background: color-mix(in oklab, var(--color-danger) 8%, var(--color-surface));
 }
 
 .toneDel {
@@ -41,7 +41,7 @@
 }
 
 .toneAdd .paramGutter { color: var(--color-success); }
-.toneEdit .paramGutter { color: var(--color-warn); }
+.toneEdit .paramGutter { color: var(--color-danger); }
 .toneDel .paramGutter { color: var(--color-danger); }
 
 .paramTag {

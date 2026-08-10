@@ -34,7 +34,7 @@ import {
 } from "../paramLabels.js";
 import type { ApprovalStore, ApprovalView } from "../ApprovalStore.js";
 import styles from "./ApprovalPanel.module.css";
-import { ApprovalDiff } from "./ApprovalDiff.js";
+import { ApprovalEntityView } from "./ApprovalEntityView.js";
 import { ParameterView } from "./ParameterView.js";
 import { useApprovalEntityResolution } from "./useApprovalEntityResolution.js";
 
@@ -403,35 +403,14 @@ export function ApprovalPanel({
                           版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败
                         </div>
                       ) : null}
-                      {resolution.contents.map((content, contentIndex) => {
-                        const patch = resolution.patches.get(content.id);
-                        return (
-                          <div key={content.id}>
-                            {contentIndex > 0 ? (
-                              <div className={styles.resolvedDivider} />
-                            ) : null}
-                            <div className={styles.resolvedBlock}>
-                              <span className={styles.resolvedLabel}>
-                                {String(
-                                  content.fields.name ??
-                                    content.fields.title ??
-                                    shortId(content.id),
-                                )}
-                              </span>
-                              <ParameterView
-                                value={content.fields}
-                                tone={group.op}
-                              />
-                              {patch !== undefined ? (
-                                <ApprovalDiff
-                                  patch={patch}
-                                  current={content.fields}
-                                />
-                              ) : null}
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {resolution.contents.map((content, contentIndex) => (
+                        <div key={content.id}>
+                          {contentIndex > 0 ? (
+                            <div className={styles.resolvedDivider} />
+                          ) : null}
+                          <ApprovalEntityView content={content} />
+                        </div>
+                      ))}
                     </>
                   );
                 } else if (

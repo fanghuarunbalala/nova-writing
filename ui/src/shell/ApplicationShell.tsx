@@ -130,6 +130,9 @@ export function ApplicationShell({
       createApprovalEntityResolver({
         api,
         manuscript: domainStores.manuscriptStructure,
+        outline: domainStores.storyOutlineTree,
+        characters: domainStores.character,
+        locations: domainStores.location,
       }),
     [api, domainStores],
   );

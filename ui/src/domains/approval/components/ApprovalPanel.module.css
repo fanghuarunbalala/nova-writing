@@ -237,9 +237,9 @@
 }
 
 .opEdit {
-  color: var(--color-warn);
-  background: color-mix(in oklab, var(--color-warn) 12%, var(--color-surface));
-  border: 1px solid color-mix(in oklab, var(--color-warn) 32%, transparent);
+  color: var(--color-danger);
+  background: color-mix(in oklab, var(--color-danger) 12%, var(--color-surface));
+  border: 1px solid color-mix(in oklab, var(--color-danger) 32%, transparent);
 }
 
 .opDel {
@@ -351,8 +351,8 @@
 }
 
 .bandEdit {
-  background: color-mix(in oklab, var(--color-warn) 18%, var(--color-surface));
-  border-left-color: var(--color-warn);
+  background: color-mix(in oklab, var(--color-danger) 18%, var(--color-surface));
+  border-left-color: var(--color-danger);
 }
 
 .bandDel {
@@ -369,7 +369,7 @@
 }
 
 .bandAdd .bandGlyph { color: var(--color-success); }
-.bandEdit .bandGlyph { color: var(--color-warn); }
+.bandEdit .bandGlyph { color: var(--color-danger); }
 .bandDel .bandGlyph { color: var(--color-danger); }
 
 .bandTool {
@@ -433,7 +433,7 @@
 }
 
 .titleGlyphAdd { color: var(--color-success); }
-.titleGlyphEdit { color: var(--color-warn); }
+.titleGlyphEdit { color: var(--color-danger); }
 .titleGlyphDel { color: var(--color-danger); }
 
 /* 操作按钮悬浮底端：参数滚动时仍可见。Sticky action bar at panel bottom. */

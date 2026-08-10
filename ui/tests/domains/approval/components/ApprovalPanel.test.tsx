@@ -86,7 +86,12 @@ describe("ApprovalPanel", () => {
     const resolveEntity = vi.fn(async () => ({
       kind: "character",
       id: "c-1",
-      fields: { id: "c-1", name: "林夏", aliases: ["夏"] },
+      name: "林夏",
+      op: "delete",
+      fields: [
+        { field: "name", label: "名称", old: "林夏", state: "delete" },
+        { field: "aliases", label: "别名", old: "夏、夏夏", state: "delete" },
+      ],
     }));
     render(
       <ApprovalPanel
@@ -123,7 +128,11 @@ describe("ApprovalPanel", () => {
     const resolveEntity = vi.fn(async () => ({
       kind: "character",
       id: "c-1",
-      fields: { id: "c-1", name: "林夏", summary: "旧简介" },
+      name: "林夏",
+      op: "edit",
+      fields: [
+        { field: "summary", label: "简介", old: "旧简介", new: "新简介", state: "edit" },
+      ],
     }));
     render(
       <ApprovalPanel
@@ -132,10 +141,10 @@ describe("ApprovalPanel", () => {
         sourceRevision="rev-1"
       />,
     );
-    expect(await screen.findByText("改动项")).toBeInTheDocument();
-    // 旧值同时出现在当前内容与改动项旧值列。
-    expect(screen.getAllByText("旧简介").length).toBeGreaterThan(0);
+    // 无「改动项」标题，红旧/绿新两行。
+    expect((await screen.findAllByText("旧简介")).length).toBeGreaterThan(0);
     expect(screen.getByText("新简介")).toBeInTheDocument();
+    expect(screen.queryByText("改动项")).not.toBeInTheDocument();
   });
 
   it("shows stale banner when revision differs and hides when equal", async () => {
@@ -160,7 +169,9 @@ describe("ApprovalPanel", () => {
     const resolveEntity = vi.fn(async () => ({
       kind: "character",
       id: "c-1",
-      fields: { id: "c-1", name: "林夏" },
+      name: "林夏",
+      op: "delete",
+      fields: [],
     }));
     const { rerender } = render(
       <ApprovalPanel
@@ -215,11 +226,13 @@ describe("ApprovalPanel", () => {
     expect(screen.getByText("类型")).toBeInTheDocument();
   });
 
-  it("keeps raw params and does not resolve for add", async () => {
+  it("resolves add approval and shows green content", async () => {
     const resolveEntity = vi.fn(async () => ({
       kind: "character",
-      id: "c-1",
-      fields: {},
+      id: "C-1",
+      name: "林夏",
+      op: "add",
+      fields: [{ field: "name", label: "名称", new: "林夏", state: "add" }],
     }));
     render(
       <ApprovalPanel
@@ -228,8 +241,8 @@ describe("ApprovalPanel", () => {
         sourceRevision="rev-1"
       />,
     );
-    expect(screen.getByText("名称")).toBeInTheDocument();
-    expect(resolveEntity).not.toHaveBeenCalled();
+    expect((await screen.findAllByText("林夏")).length).toBeGreaterThan(0);
+    expect(resolveEntity).toHaveBeenCalled();
   });
 
   it("renders one resolved block per delete target", async () => {
@@ -256,8 +269,20 @@ describe("ApprovalPanel", () => {
     ]);
     const resolveEntity = vi.fn(async (target) =>
       target.id === "c-1"
-        ? { kind: "character", id: "c-1", fields: { id: "c-1", name: "林夏" } }
-        : { kind: "location", id: "l-1", fields: { id: "l-1", name: "旧船坞" } },
+        ? {
+            kind: "character",
+            id: "c-1",
+            name: "林夏",
+            op: "delete",
+            fields: [{ field: "name", label: "名称", old: "林夏", state: "delete" }],
+          }
+        : {
+            kind: "location",
+            id: "l-1",
+            name: "旧船坞",
+            op: "delete",
+            fields: [{ field: "name", label: "名称", old: "旧船坞", state: "delete" }],
+          },
     );
     render(
       <ApprovalPanel

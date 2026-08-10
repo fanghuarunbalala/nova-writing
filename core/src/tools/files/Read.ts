@@ -37,7 +37,7 @@ export function createFileReadTool(
       version: "1.0.0",
       label: "File Read",
       description:
-        "Read a file from the workspace directory using a workspace-relative path (e.g. .novel/design/draft.md). Results use cat -n format with line numbers starting at 1. Optionally provide a 0-indexed line offset and a positive limit.",
+        "从 workspace 目录读取文件，使用 workspace 相对路径（如 .novel/design/draft.md）。\n\n用法：\n- file_path 必须是 workspace 相对路径，不能是绝对路径。\n- 结果按 cat -n 格式返回，行号从 1 开始。\n- 默认读取整个文件；可传 0 起始的 offset 行偏移和正的 limit 行数读取指定区间（长文件适用）。\n- 若读取内容超过 512 KiB 会报错，请用 offset 和 limit 分段读取。\n- 本工具只读文件，不读目录。\n- 路径限定在 workspace 沙盒内；绝对路径、父目录穿越、符号链接逃逸都会被拒绝。",
       parameters: FileReadParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage: "Use Read to review files inside the workspace (e.g., the current design draft).",

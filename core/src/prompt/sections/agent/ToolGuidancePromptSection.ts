@@ -29,7 +29,7 @@ export class ToolGuidancePromptSection extends PromptSection {
 }
 
 function renderToolGuidance(tool: PromptContext["capabilities"]["tools"][number]): string {
-  const lines = [`- ${tool.name}@${tool.version}: ${tool.description}`];
+  const lines = [`- ${tool.name}@${tool.version}`];
   if (tool.promptDetails?.usage !== undefined) {
     lines.push(`  Usage: ${tool.promptDetails.usage}`);
   }

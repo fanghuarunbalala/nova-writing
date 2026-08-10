@@ -37,7 +37,7 @@ export function createFileWriteTool(
       version: "1.0.0",
       label: "File Write",
       description:
-        "Write full content to a file inside the workspace directory using a workspace-relative path (e.g. .novel/design/draft.md). Any path within the workspace sandbox is writable.",
+        "将完整内容写入 workspace 目录内的文件，使用 workspace 相对路径（如 .novel/design/draft.md）。\n\n用法：\n- 若目标路径已有文件，本工具会整体覆盖。\n- 只用于新建文件或整体重写文件；对已有文件的小改动，优先用 Edit 工具（只发送差异）。\n- 写入是原子的（先写临时文件再重命名）；缺失的父目录会自动创建。\n- file_path 必须是 workspace 相对路径，不能是绝对路径。\n- 内容超过 512 KiB 会被拒绝。\n- 路径限定在 workspace 沙盒内；绝对路径、父目录穿越、符号链接逃逸都会被拒绝。",
       parameters: FileWriteParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage: "Use Write to replace a whole workspace file (e.g., the design draft) with new content.",

@@ -75,7 +75,7 @@
 }
 ```
 
-- 我们的 v1 实现：同参数 + 兼容别名；`file_path` 必须等于当前会话 designFilePath；未命中报
+- 我们的 v1 实现：同参数；`file_path` 必须等于当前会话 designFilePath；未命中报
   `NOVEL_DESIGN_EDIT_MISSING`；多处命中且 `replace_all=false` 时替换第一个（对齐 CCB 语义，不做歧义报错）。
 
 ## Glob

@@ -37,7 +37,7 @@ export function createFileGlobTool(
       version: "1.0.0",
       label: "File Glob",
       description:
-        "Find files inside the workspace by glob pattern (e.g. **/*.md). Returns workspace-relative paths sorted by modification time, newest first.",
+        "在 workspace 目录内按 glob 模式查找文件（如 **/*.md）。\n\n用法：\n- pattern 是 workspace 相对 glob（例如 \"**/*.md\" 或 \"src/**/*.ts\"）；绝对模式与父目录穿越会被拒绝。\n- 返回匹配文件路径（workspace 相对），按修改时间倒序（最新在前）。\n- 用 Glob 先发现文件，再用 Read 读取。\n- 需要多轮探索的开放式查找，考虑改用 Agent 工具。\n- 路径限定在 workspace 沙盒内。",
       parameters: FileGlobParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage: "Use Glob to discover workspace files before reading or editing them.",

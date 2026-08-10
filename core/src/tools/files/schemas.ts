@@ -39,8 +39,8 @@ export const FileWriteParametersSchema = Type.Object(
 );
 export type FileWriteArguments = Static<typeof FileWriteParametersSchema>;
 
-/** Edit 参数：文件路径 + 精确替换串（兼容别名 old_str/new_str 在 normalize 阶段转正）。 */
-/** Edit arguments: file path plus exact replacement strings; legacy old_str/new_str aliases are normalized. */
+/** Edit 参数：文件路径 + 精确替换串（replace_all=false 替换第一处，true 替换全部）。 */
+/** Edit arguments: file path plus exact replacement strings (first match unless replace_all). */
 export const FileEditParametersSchema = Type.Object(
   {
     file_path: Type.String({ minLength: 1, maxLength: PATH_MAX }),

@@ -37,7 +37,7 @@ export function createFileEditTool(
       version: "1.0.0",
       label: "File Edit",
       description:
-        "Replace an exact old_string in a file inside the workspace directory using a workspace-relative path. replace_all=false replaces the first match; true replaces all. Legacy aliases old_str/new_str are accepted.",
+        "在 workspace 目录内的文件中做精确字符串替换，使用 workspace 相对路径。\n\n用法：\n- file_path 必须指向 workspace 内的已有文件；文件不存在会被拒绝。\n- old_string 必须出现在文件中；未命中会报错并提示提供更多上下文。\n- replace_all=false（默认）只替换第一处；replace_all=true 替换全部。\n- 整体重写请用 Write 工具；编辑不熟悉的内容前建议先用 Read 查看。\n- 结果内容不得超过 512 KiB。\n- 路径限定在 workspace 沙盒内；绝对路径、父目录穿越、符号链接逃逸都会被拒绝。",
       parameters: FileEditParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage: "Use Edit for small incremental changes to a workspace file (e.g., the design draft).",

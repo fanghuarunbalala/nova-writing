@@ -97,6 +97,26 @@ function FieldRow({
   readonly tone: ParameterTone;
 }): JSX.Element {
   const label = paramKeyLabel(field) ?? field;
+  // 基本值数组（如 aliases）行内展示：标签 + 顿号连接，而非子区块。
+  if (Array.isArray(value) && value.every(isPrimitive)) {
+    const joined =
+      value.length === 0
+        ? "空"
+        : value.map((item) => primitiveText(item, field)).join("、");
+    return (
+      <div
+        className={[styles.paramRow, toneClass(tone)]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {tone === undefined ? null : (
+          <span className={styles.paramGutter}>{operationGlyph(tone)}</span>
+        )}
+        <span className={styles.paramTag}>{label}</span>
+        <span className={styles.paramVal}>{joined}</span>
+      </div>
+    );
+  }
   if (typeof value === "string") {
     return (
       <div

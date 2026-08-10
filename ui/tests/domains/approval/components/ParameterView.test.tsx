@@ -36,6 +36,21 @@ describe("ParameterView", () => {
     expect(screen.getByText("视角、参与者")).toBeInTheDocument();
   });
 
+  it("renders primitive arrays like aliases inline with the label", () => {
+    render(<ParameterView value={{ name: "林夏", aliases: ["夏", "夏夏"] }} />);
+    const labelRow = screen.getByText("别名").parentElement;
+    const valueNode = screen.getByText("夏、夏夏");
+    // 别名应为行内标签：与连接后的值在同一行，而非独立子区块标题。
+    expect(labelRow?.textContent).toContain("夏、夏夏");
+    expect(valueNode.parentElement).toBe(labelRow);
+  });
+
+  it("renders empty primitive arrays as 空 inline", () => {
+    render(<ParameterView value={{ aliases: [] }} />);
+    const labelRow = screen.getByText("别名").parentElement;
+    expect(labelRow?.textContent).toContain("空");
+  });
+
   it("renders null as 空 and booleans as 是/否", () => {
     render(<ParameterView value={{ cascade: true, note: null }} />);
     expect(screen.getByText("是")).toBeInTheDocument();

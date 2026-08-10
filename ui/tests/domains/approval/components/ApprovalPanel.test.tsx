@@ -43,14 +43,15 @@ describe("ApprovalPanel", () => {
     expect(screen.getByText("名称")).toBeInTheDocument();
     expect(screen.getByText("林夏")).toBeInTheDocument();
     expect(screen.getByText("作者注记")).toBeInTheDocument();
-    // op 色块（NovelCharacterWrite → 写入）：工具头色带 + 目录行。
+    // op 色块（NovelCharacterWrite → 写入）：目录行小色块。
     expect(screen.getAllByText("写入").length).toBeGreaterThan(0);
     // 方案 E：diff 符号（色带 + 参数行 gutter）。
     expect(screen.getAllByText("+").length).toBeGreaterThan(0);
-    // 无 diff 区。
+    // 无 diff 区与执行结果区。
     expect(screen.queryByText("大纲变更")).not.toBeInTheDocument();
     expect(screen.queryByText("正文变更")).not.toBeInTheDocument();
     expect(screen.queryByText("实体变更")).not.toBeInTheDocument();
+    expect(screen.queryByText("执行结果")).not.toBeInTheDocument();
   });
 
   it("dedupes pending status: no status line or item count", () => {

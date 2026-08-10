@@ -2,15 +2,17 @@
  * ParameterView
  *
  * 审批参数递归渲染（对齐原型 .params 网格）：对象逐字段「中文标签 + 值」，
- * 嵌套对象 / 对象数组递归为子区块，基本值数组顿号连接，null 显示「空」，
- * 已知枚举值翻译为中文。长文本默认 4 行截断，可「展开全文」。
+ * 基本值数组顿号连接，对象数组（values、leaf.characters 等）直接平铺字段
+ * 省略「变更项 / 第 N 项」包装，项间用细分割线；已知枚举值翻译为中文。
+ * 长文本默认 4 行截断，可「展开全文」。
  *
  * Recursively renders tool arguments as Chinese-labelled rows matching the
- * prototype .params grid; nested objects and object arrays recurse into
- * sub-blocks; primitive arrays join with 、; known enum values are translated.
- * Long text is clamped to 4 lines with an expand toggle.
+ * prototype .params grid; primitive arrays join with 、; object arrays flatten
+ * their fields directly (no 变更项 / 第 N 项 wrappers), separated by thin
+ * dividers; known enum values are translated. Long text is clamped to 4 lines
+ * with an expand toggle.
  */
-import { useState, type JSX } from "react";
+import { Fragment, useState, type JSX } from "react";
 import type { JsonObject, JsonValue } from "@novel/core";
 import {
   isParamFieldHidden,
@@ -86,7 +88,27 @@ function LongText({ text }: { readonly text: string }): JSX.Element {
   );
 }
 
-/** 单个字段：基本值渲染为行（带 tone 色块 + diff gutter），嵌套对象/数组渲染为子区块。 */
+/** 对象数组：直接平铺各项字段，省略「变更项 / 第 N 项」等无效包装，项间用细分割线。 */
+function ParamObjectArray({
+  items,
+  tone,
+}: {
+  readonly items: readonly JsonObject[];
+  readonly tone: ParameterTone;
+}): JSX.Element {
+  return (
+    <div className={styles.paramItems}>
+      {items.map((item, index) => (
+        <Fragment key={index}>
+          {index > 0 ? <div className={styles.paramItemDivider} /> : null}
+          <ParamObject obj={item} tone={tone} />
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+/** 单个字段：基本值渲染为行（带 tone 色块 + diff gutter），嵌套对象/数组递归。 */
 function FieldRow({
   field,
   value,
@@ -116,6 +138,10 @@ function FieldRow({
         <span className={styles.paramVal}>{joined}</span>
       </div>
     );
+  }
+  // 对象数组（如 values、leaf.characters）直接平铺，省略变更项/第 N 项包装。
+  if (Array.isArray(value) && value.length > 0 && value.every(isJsonObject)) {
+    return <ParamObjectArray items={value} tone={tone} />;
   }
   if (typeof value === "string") {
     return (
@@ -219,8 +245,8 @@ function ParamFields({
     return (
       <div className={styles.paramItems}>
         {value.map((item, index) => (
-          <div key={index} className={styles.paramItem}>
-            <div className={styles.paramItemHead}>第 {index + 1} 项</div>
+          <Fragment key={index}>
+            {index > 0 ? <div className={styles.paramItemDivider} /> : null}
             {isJsonObject(item) ? (
               <ParamObject obj={item} tone={tone} />
             ) : Array.isArray(item) ? (
@@ -228,7 +254,7 @@ function ParamFields({
             ) : (
               <div className={styles.paramVal}>{primitiveText(item, field)}</div>
             )}
-          </div>
+          </Fragment>
         ))}
       </div>
     );

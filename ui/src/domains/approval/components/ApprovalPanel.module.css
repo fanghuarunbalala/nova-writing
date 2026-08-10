@@ -372,22 +372,11 @@
 .bandEdit .bandGlyph { color: var(--color-warn); }
 .bandDel .bandGlyph { color: var(--color-danger); }
 
-.bandLabel {
-  flex: none;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-.bandAdd .bandLabel { color: var(--color-success); }
-.bandEdit .bandLabel { color: var(--color-warn); }
-.bandDel .bandLabel { color: var(--color-danger); }
-
 .bandTool {
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--color-fg);
 }
 
 /* 参数区容器：band 下方带边框圆角体。 */

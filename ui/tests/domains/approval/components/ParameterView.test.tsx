@@ -13,7 +13,7 @@ describe("ParameterView", () => {
     expect(screen.getByText("作者注记")).toBeInTheDocument();
   });
 
-  it("renders values object array as 第 N 项 sub-blocks", () => {
+  it("flattens object arrays without 变更项/第 N 项 wrappers", () => {
     render(
       <ParameterView
         value={{
@@ -25,10 +25,11 @@ describe("ParameterView", () => {
         }}
       />,
     );
-    expect(screen.getByText("变更项")).toBeInTheDocument();
-    expect(screen.getByText("第 1 项")).toBeInTheDocument();
-    expect(screen.getByText("第 2 项")).toBeInTheDocument();
+    expect(screen.queryByText("变更项")).not.toBeInTheDocument();
+    expect(screen.queryByText("第 1 项")).not.toBeInTheDocument();
+    expect(screen.queryByText("第 2 项")).not.toBeInTheDocument();
     expect(screen.getAllByText("林夏").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("顾一舟").length).toBeGreaterThan(0);
   });
 
   it("joins primitive arrays with 、", () => {

@@ -7,9 +7,10 @@
  *
  * v2 原型对齐：删除悬浮预览（.apprHover）与内部标识（.id/.csId/◈ 不可变），
  * 目录按对话分组（.apprGroup + .agJump「跳转」）；详情不再展示大纲/正文/实体
- * 变更 diff 区。参数区采用方案 E diff 色块：工具头整条色带（写入绿/编辑橙/
- * 删除红 + diff 符号），参数行级左色条 + tinted 底色 + gutter，目录行保留
- * 小色块。待批准状态只保留 identity 右上角 pill，操作按钮悬浮底端。
+ * 变更 diff 区与执行结果区。参数区采用方案 E diff 色块：工具头整条色带
+ * （写入绿/编辑橙/删除红 + diff 符号 + 工具名），参数行级左色条 + tinted
+ * 底色 + gutter，对象数组直接平铺；目录行保留小色块。待批准状态只保留
+ * identity 右上角 pill，操作按钮悬浮底端。
  * 目录始终为左侧滑出覆盖抽屉（无常驻列），触发按钮「目录 N」在 InspectorHost
  * 头部；宿主传入 drawerOpen/onToggleDrawer，选中条目自动收起。
  *
@@ -379,9 +380,6 @@ export function ApprovalPanel({
                     <span className={styles.bandGlyph}>
                       {operationGlyph(group.op ?? "")}
                     </span>
-                    <span className={styles.bandLabel}>
-                      {operationLabel(group.op ?? "")}
-                    </span>
                     <span className={styles.bandTool}>
                       {toolNameLabel(group.toolName)}
                     </span>
@@ -393,22 +391,6 @@ export function ApprovalPanel({
               ))}
             </div>
           ) : null}
-          <section className={styles.diffSec}>
-            <h3 className={styles.diffTitle}>执行结果</h3>
-            {selectedGroup.status === "pending" ? (
-              <p className={styles.diffPlaceholder}>等待批准后执行</p>
-            ) : (
-              <p className={styles.diffPlaceholder}>
-                {STATUS_LABEL[selectedGroup.status]}
-                {selectedGroup.approvals[0].resolvedAt !== undefined
-                  ? ` · ${formatTime(selectedGroup.approvals[0].resolvedAt)}`
-                  : ""}
-                {selectedGroup.approvals[0].actorId !== undefined
-                  ? ` · ${selectedGroup.approvals[0].actorId}`
-                  : ""}
-              </p>
-            )}
-          </section>
           {(argumentGroups?.length ?? 0) === 0 ? (
             <p className={styles.emptyDetail}>
               旧版本审批 · 无参数详情（建议在新会话重新发起写入）

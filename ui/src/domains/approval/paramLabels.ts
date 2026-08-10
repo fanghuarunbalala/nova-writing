@@ -141,14 +141,15 @@ export const TOOL_NAME_LABEL: Readonly<Record<string, string>> = {
 };
 
 /**
- * 参数字段渲染优先级（稳定排序）：name 开头、aliases 随后、authorNotes 收尾，
+ * 参数字段渲染优先级（稳定排序）：name/title 开头、aliases 随后、authorNotes 收尾，
  * 其余字段同 rank 保持原插入顺序。
  *
- * Field render rank (stable sort): name first, aliases next, authorNotes last;
- * other fields keep their original insertion order at the default rank.
+ * Field render rank (stable sort): name/title first, aliases next, authorNotes
+ * last; other fields keep their original insertion order at the default rank.
  */
 export const PARAM_FIELD_RANK: Readonly<Record<string, number>> = {
   name: 0,
+  title: 0,
   aliases: 1,
   authorNotes: 100,
 };

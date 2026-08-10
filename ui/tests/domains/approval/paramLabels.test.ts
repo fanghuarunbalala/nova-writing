@@ -35,8 +35,9 @@ describe("paramLabels", () => {
     expect(toolNameLabel("UnknownTool")).toBe("UnknownTool");
   });
 
-  it("ranks fields with name first, aliases next, authorNotes last", () => {
+  it("ranks fields with name/title first, aliases next, authorNotes last", () => {
     expect(paramFieldRank("name")).toBe(0);
+    expect(paramFieldRank("title")).toBe(0);
     expect(paramFieldRank("aliases")).toBe(1);
     expect(paramFieldRank("authorNotes")).toBe(100);
     expect(paramFieldRank("summary")).toBe(50);

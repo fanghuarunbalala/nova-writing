@@ -73,6 +73,20 @@ describe("ParameterView", () => {
     expect(screen.getAllByText("顾一舟").length).toBeGreaterThan(0);
   });
 
+  it("orders title first even when it is last in the source", () => {
+    const { container } = render(
+      <ParameterView
+        value={{
+          synopsis: "提要",
+          planningStatus: "outlined",
+          title: "追踪错误目标",
+        }}
+      />,
+    );
+    const text = container.textContent ?? "";
+    expect(text.indexOf("追踪错误目标")).toBeLessThan(text.indexOf("提要"));
+  });
+
   it("renders null as 空 and booleans as 是/否", () => {
     render(<ParameterView value={{ cascade: true, note: null }} />);
     expect(screen.getByText("是")).toBeInTheDocument();

@@ -477,6 +477,7 @@ export function ApplicationShell({
           onNotify={handleNotify}
           approvalStore={approvalStore}
           onApprovalChange={refreshApprovals}
+          resolveEntity={approvalEntityResolver}
         />
         <InspectorHost
           inspectorRouter={inspectorRouter}

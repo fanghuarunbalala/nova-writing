@@ -27,6 +27,7 @@ import type { ConversationCatalogStore } from "../../domains/conversation/store/
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
+import type { ApprovalEntityResolver } from "../../domains/approval/approvalEntityResolver.js";
 import { MainSubHead } from "./MainSubHead.js";
 import { composeStatusLabel, mapProjectionTimeline } from "./chatSurfaceMapper.js";
 import styles from "./ChatSurface.module.css";
@@ -47,6 +48,8 @@ export interface ChatSurfaceProps {
   readonly approvalStore: ApprovalStore;
   /** 本会话审批变化回调（事件驱动全局审批刷新）。 */
   readonly onApprovalChange?: () => void;
+  /** 审批实体解析器（ApprovalDock 删除/编辑显示标题）。 */
+  readonly resolveEntity?: ApprovalEntityResolver;
 }
 
 export function ChatSurface({
@@ -61,6 +64,7 @@ export function ChatSurface({
   onNotify,
   approvalStore,
   onApprovalChange,
+  resolveEntity,
 }: ChatSurfaceProps) {
   const catalog = useExternalStore(conversationCatalog);
   const activeId = catalog.activeConversationId;
@@ -80,6 +84,7 @@ export function ChatSurface({
       onOpenApproval={onOpenApproval}
       onNotify={onNotify}
       approvalStore={approvalStore}
+      resolveEntity={resolveEntity}
     />
   );
 }
@@ -100,6 +105,8 @@ interface ActiveChatSurfaceProps {
   readonly approvalStore: ApprovalStore;
   /** 本会话审批变化回调（事件驱动全局审批刷新）。 */
   readonly onApprovalChange?: () => void;
+  /** 审批实体解析器（ApprovalDock 删除/编辑显示标题）。 */
+  readonly resolveEntity?: ApprovalEntityResolver;
 }
 
 function ActiveChatSurface({
@@ -114,6 +121,7 @@ function ActiveChatSurface({
   onNotify,
   approvalStore,
   onApprovalChange,
+  resolveEntity,
 }: ActiveChatSurfaceProps) {
   const { snapshot, enqueue, resume } = useConversationProjection(conversationId, {
     api,
@@ -209,6 +217,7 @@ function ActiveChatSurface({
                 }
               }}
               onOpenApproval={onOpenApproval}
+              resolveEntity={resolveEntity}
             />
           ) : undefined
         }

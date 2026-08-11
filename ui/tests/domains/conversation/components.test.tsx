@@ -390,4 +390,54 @@ describe("ApprovalDock", () => {
     await user.click(screen.getByRole("button", { name: "审核详情" }));
     expect(onOpenApproval).toHaveBeenCalledWith("approval-a");
   });
+
+  it("resolves delete entity titles via resolveEntity", async () => {
+    const resolveEntity = vi.fn(async (target: {
+      kind: string;
+      id: string;
+      op: string;
+    }) => ({
+      kind: "volume",
+      id: target.id,
+      name: "第一卷·启程",
+      op: target.op,
+      fields: [],
+    }));
+    render(
+      <ApprovalDock
+        approvals={[pendingApproval({
+          approvalRequestId: "approval-del",
+          toolCallId: "call-del",
+          title: "删除卷",
+          operations: [{ op: "delete", kind: "volume", id: "vol-1", title: "vol-1" }],
+        })]}
+        onDecide={vi.fn()}
+        onOpenApproval={vi.fn()}
+        resolveEntity={resolveEntity}
+      />,
+    );
+    // 解析完成后显示实体标题（而非 id）。
+    expect(await screen.findByText("第一卷·启程")).toBeInTheDocument();
+    expect(resolveEntity).toHaveBeenCalledWith({
+      kind: "volume",
+      id: "vol-1",
+      op: "delete",
+    });
+  });
+
+  it("falls back to the id for delete when no resolver is provided", () => {
+    render(
+      <ApprovalDock
+        approvals={[pendingApproval({
+          approvalRequestId: "approval-del",
+          toolCallId: "call-del",
+          title: "删除卷",
+          operations: [{ op: "delete", kind: "volume", id: "vol-1", title: "vol-1" }],
+        })]}
+        onDecide={vi.fn()}
+        onOpenApproval={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("vol-1")).toBeInTheDocument();
+  });
 });

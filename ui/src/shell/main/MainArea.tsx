@@ -20,6 +20,7 @@ import type { ContentTab } from "./contentTab.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
 import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
+import type { ApprovalEntityResolver } from "../../domains/approval/approvalEntityResolver.js";
 import { ScheduleSurface } from "./ScheduleSurface.js";
 import styles from "./MainArea.module.css";
 
@@ -53,6 +54,8 @@ export interface MainAreaProps {
   readonly approvalStore: ApprovalStore;
   /** 本会话审批变化回调（事件驱动全局审批刷新）。 */
   readonly onApprovalChange?: () => void;
+  /** 审批实体解析器（ApprovalDock 删除/编辑显示标题）。 */
+  readonly resolveEntity?: ApprovalEntityResolver;
 }
 
 export function MainArea(props: MainAreaProps) {
@@ -75,6 +78,7 @@ export function MainArea(props: MainAreaProps) {
           onNotify={props.onNotify}
           approvalStore={props.approvalStore}
           onApprovalChange={props.onApprovalChange}
+          resolveEntity={props.resolveEntity}
         />
       ) : mainView.state === "content" ? (
         <ContentSurface

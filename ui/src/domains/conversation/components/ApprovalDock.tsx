@@ -7,8 +7,13 @@
  * 底部统一琥珀图标（通过 ✓ / 驳回 ✕ / 审核详情 ↖）。点通过/驳回由上层 decide，
  * 卡片随投影审批决议而消失（不留结果记录）。
  */
+import { useEffect, useState } from "react";
 import { ArrowUpRight, Check, Hourglass, X } from "lucide-react";
 import type { ToolApprovalProjection } from "@novel/core";
+import type {
+  ApprovalEntityResolver,
+  ApprovalTarget,
+} from "../../../domains/approval/approvalEntityResolver.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import styles from "./ApprovalDock.module.css";
 
@@ -35,6 +40,8 @@ export interface ApprovalDockProps {
     decision: "approved" | "rejected",
   ) => void;
   readonly onOpenApproval: (approvalRequestId: string) => void;
+  /** 实体解析器（删除/编辑操作解析真实标题；缺省时回退显示 id）。 */
+  readonly resolveEntity?: ApprovalEntityResolver;
 }
 
 interface ApprovalGroup {
@@ -54,6 +61,7 @@ export function ApprovalDock({
   approvals,
   onDecide,
   onOpenApproval,
+  resolveEntity,
 }: ApprovalDockProps) {
   if (approvals.length === 0) return null;
   const groups = groupPending(approvals);
@@ -65,6 +73,7 @@ export function ApprovalDock({
           group={group}
           onDecide={onDecide}
           onOpenApproval={onOpenApproval}
+          resolveEntity={resolveEntity}
         />
       ))}
     </div>
@@ -75,10 +84,12 @@ function ApprovalDockCard({
   group,
   onDecide,
   onOpenApproval,
+  resolveEntity,
 }: {
   readonly group: ApprovalGroup;
   readonly onDecide: ApprovalDockProps["onDecide"];
   readonly onOpenApproval: ApprovalDockProps["onOpenApproval"];
+  readonly resolveEntity?: ApprovalDockProps["resolveEntity"];
 }) {
   const requestIds = group.approvals.map(
     (approval) => approval.approvalRequestId,
@@ -102,6 +113,7 @@ function ApprovalDockCard({
             <OpChip
               key={`${operation.toolName}-${operation.id ?? operation.title ?? index}`}
               operation={operation}
+              resolveEntity={resolveEntity}
             />
           ))}
         </div>
@@ -147,12 +159,14 @@ function ApprovalDockCard({
 
 function OpChip({
   operation,
+  resolveEntity,
 }: {
   readonly operation: ApprovalOperationRow;
+  readonly resolveEntity?: ApprovalEntityResolver;
 }) {
   const opLabel = OP_LABEL[operation.op] ?? operation.op;
   const kindLabel = KIND_LABEL[operation.kind] ?? operation.kind;
-  const entity = operation.title ?? operation.id;
+  const entity = useResolvedEntityName(operation, resolveEntity);
   return (
     <span className={[styles.op, styles[operation.op]].filter(Boolean).join(" ")}>
       {opLabel}
@@ -164,6 +178,50 @@ function OpChip({
       ) : null}
     </span>
   );
+}
+
+/**
+ * 解析操作实体的显示标题：delete（及无真实标题的 edit）title===id，
+ * 用 resolveEntity 取实体 name；解析完成前/失败回退到 id。
+ */
+function useResolvedEntityName(
+  operation: ApprovalOperationRow,
+  resolveEntity?: ApprovalEntityResolver,
+): string | undefined {
+  const hasRealTitle =
+    operation.title !== undefined && operation.title !== operation.id;
+  const [name, setName] = useState<string | undefined>(
+    hasRealTitle ? operation.title : undefined,
+  );
+  useEffect(() => {
+    if (hasRealTitle) {
+      setName(operation.title);
+      return;
+    }
+    if (resolveEntity === undefined || operation.id === undefined) {
+      setName(operation.title);
+      return;
+    }
+    let cancelled = false;
+    const target: ApprovalTarget = {
+      kind: operation.kind,
+      id: operation.id,
+      op: operation.op as ApprovalTarget["op"],
+    };
+    void resolveEntity(target)
+      .then((content) => {
+        if (!cancelled && content !== undefined && content.name.length > 0) {
+          setName(content.name);
+        }
+      })
+      .catch(() => {
+        // 解析失败静默回退到 id。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasRealTitle, operation, resolveEntity]);
+  return name ?? operation.title ?? operation.id;
 }
 
 /** 按 turn 分组待审批项（无 turnId 时各自成组）。 */

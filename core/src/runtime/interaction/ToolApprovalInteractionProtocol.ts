@@ -10,6 +10,7 @@ import type {
 export interface ToolApprovalRequest {
   readonly approvalRequestId: string;
   readonly identity: ToolApprovalIdentity;
+  readonly runtimeInstanceId: string;
   readonly turnId?: string;
   readonly summary: ToolApprovalSummary;
   readonly requestedAt: string;

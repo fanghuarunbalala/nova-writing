@@ -87,6 +87,7 @@ try {
       toolName: "NovelCharacterWrite",
       toolVersion: "1.0.0",
       argumentDigest: digest,
+      runtimeInstanceId: "runtime-instance-smoke",
       summary: {
         title: "新增角色",
         operations: [{ op: "add", kind: "character", title: "张三" }],
@@ -125,6 +126,7 @@ try {
       toolName: "NovelLocationWrite",
       toolVersion: "1.0.0",
       argumentDigest: digest,
+      runtimeInstanceId: "runtime-instance-smoke",
       summary: {
         title: "新增地点",
         operations: [{ op: "add", kind: "location", title: "青云镇" }],

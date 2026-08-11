@@ -427,9 +427,10 @@ function captureInteractionSnapshot(
 }
 
 function captureApprovalRequest(value: unknown, conversationId: string) {
-  const record = exactRecord(value, ["approvalRequestId", "identity", "summary", "requestedAt", "expiresAt"], ["turnId"]);
+  const record = exactRecord(value, ["approvalRequestId", "identity", "runtimeInstanceId", "summary", "requestedAt", "expiresAt"], ["turnId"]);
   const approvalIdentity = captureApprovalIdentity(record.identity);
   if (approvalIdentity.conversationId !== conversationId) throw new Error();
+  const runtimeInstanceId = identity(record.runtimeInstanceId);
   const summary = exactRecord(record.summary, ["title"], ["description"]);
   const requestedAt = timestamp(record.requestedAt);
   const expiresAt = timestamp(record.expiresAt);
@@ -437,6 +438,7 @@ function captureApprovalRequest(value: unknown, conversationId: string) {
   return Object.freeze({
     approvalRequestId: identity(record.approvalRequestId),
     identity: approvalIdentity,
+    runtimeInstanceId,
     ...(record.turnId === undefined ? {} : { turnId: identity(record.turnId) }),
     summary: Object.freeze({
       title: boundedText(summary.title, 256),

@@ -34,6 +34,8 @@ export interface ToolApprovalPublicIdentityOptions {
 
 export interface ToolApprovalRequestedPayloadOptions
   extends ToolApprovalPublicIdentityOptions {
+  /** 所属 child runtime 实例（进程死亡/重启时用于判定审批失效）。Owning runtime instance. */
+  readonly runtimeInstanceId: string;
   readonly summary: ToolApprovalSummary;
   readonly requestedAt: string;
   readonly expiresAt: string;
@@ -80,12 +82,14 @@ abstract class ToolApprovalLifecyclePayload extends OutputPayload {
 }
 
 export class ToolApprovalRequestedPayload extends ToolApprovalLifecyclePayload {
+  readonly runtimeInstanceId: string;
   readonly summary: ToolApprovalSummary;
   readonly requestedAt: string;
   readonly expiresAt: string;
 
   constructor(options: ToolApprovalRequestedPayloadOptions) {
     super(options);
+    this.runtimeInstanceId = requireRuntimeInstanceId(options.runtimeInstanceId);
     this.summary = captureSummary(options.summary);
     this.requestedAt = requireTimestamp(options.requestedAt);
     this.expiresAt = requireTimestamp(options.expiresAt);
@@ -117,6 +121,7 @@ export class ToolApprovalRequestedPayload extends ToolApprovalLifecyclePayload {
     }
     return {
       ...this.identityObject(),
+      runtimeInstanceId: this.runtimeInstanceId,
       summary,
       requestedAt: this.requestedAt,
       expiresAt: this.expiresAt,
@@ -247,6 +252,13 @@ function requireBoundedText(label: string, value: unknown, maximumBytes: number)
     new TextEncoder().encode(value).byteLength > maximumBytes
   ) {
     throw new TypeError(`${label} is invalid`);
+  }
+  return value;
+}
+
+function requireRuntimeInstanceId(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new TypeError("Approval runtime instance id is invalid");
   }
   return value;
 }

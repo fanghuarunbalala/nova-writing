@@ -437,6 +437,7 @@ const ToolApprovalIdentityProperties = {
 };
 export const ToolApprovalRequestedPayloadSchema = Type.Object({
   ...ToolApprovalIdentityProperties,
+  runtimeInstanceId: Type.String({ minLength: 1, maxLength: 256 }),
   summary: Type.Object({
     title: Type.String({ minLength: 1, maxLength: 256 }),
     description: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),

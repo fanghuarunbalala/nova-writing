@@ -166,7 +166,7 @@ export class NodeJsonlIpcConnection implements RuntimeIpcConnection {
       for await (const chunk of this.#readable) {
         for (const frame of decoder.push(captureReadableChunk(chunk))) {
           await this.#frames.enqueue(frame);
-          this.#logger.debug("runtime.ipc.frame_received", frameLogIdentity(frame));
+          this.#logger.verbose?.("runtime.ipc.frame_received", frameLogIdentity(frame));
         }
       }
       decoder.finish();

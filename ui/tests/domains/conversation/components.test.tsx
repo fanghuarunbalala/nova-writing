@@ -233,6 +233,26 @@ describe("ConversationComposer", () => {
     expect(screen.getByRole("button", { name: /执行模式|模式|下拉/ })).toBeEnabled();
   });
 
+  it("unlocks send and shows the disconnected hint when the runtime is disconnected", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(
+      <ConversationComposer
+        conversationId="c1"
+        enabled
+        sendDisabled
+        disconnected
+        onSend={onSend}
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: "对话输入" });
+    await user.type(input, "hi");
+    // 断开时审批阻塞解除：发送可用、显示「进程已断开」，不显示「等待审批」。
+    expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
+    expect(screen.getByText("进程已断开，审批已结束")).toBeInTheDocument();
+    expect(screen.queryByText("等待审批")).not.toBeInTheDocument();
+  });
+
   it("renders the generation status pill above the input when status is provided", () => {
     const onSend = vi.fn();
     render(

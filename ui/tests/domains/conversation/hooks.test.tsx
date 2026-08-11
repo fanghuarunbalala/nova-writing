@@ -132,11 +132,23 @@ describe("useConversationRuntimeStatus", () => {
     expect(screen.getByRole("status")).toHaveTextContent("live");
   });
 
-  it("reports failed state for crashed presence", () => {
+  it("reports recoverable (disconnected) state for crashed presence", () => {
     function Probe() {
       const { state } = useConversationRuntimeStatus(
         projection({ runtimePresence: { state: "crashed", observedAt: "" } }),
         "runtime_crash",
+      );
+      return <output>{state}</output>;
+    }
+    render(<Probe />);
+    expect(screen.getByRole("status")).toHaveTextContent("disconnected");
+  });
+
+  it("reports failed state for hard configuration failures", () => {
+    function Probe() {
+      const { state } = useConversationRuntimeStatus(
+        projection({ runtimePresence: { state: "crashed", observedAt: "" } }),
+        "credential_missing",
       );
       return <output>{state}</output>;
     }

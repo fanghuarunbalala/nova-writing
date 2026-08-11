@@ -32,7 +32,10 @@ function mapToUiState(
     // online = 运行时在线但空闲（回合已完成/等待输入），不显示"生成中"。
     case CONVERSATION_RUNTIME_STATUS.online:
       return "idle";
+    // crashed 视为可恢复（发送触发 crashRecovery 重新激活并修复 orphaned run），
+    // 不禁用 composer，避免「crash 后无法发送 → 无法激活」死锁。
     case CONVERSATION_RUNTIME_STATUS.crashed:
+      return "disconnected";
     case CONVERSATION_RUNTIME_STATUS.missingManifest:
     case CONVERSATION_RUNTIME_STATUS.notConfigured:
     case CONVERSATION_RUNTIME_STATUS.invalidConfiguration:

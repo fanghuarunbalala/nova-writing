@@ -273,6 +273,40 @@ assert.equal(failureRouter.turnInbox.peek().sequence, 11);
 assert.throws(() => failurePump.wake(), RuntimeInputPumpStateError);
 await failurePump.stop();
 
+// stopping 期间 in-flight handler 失败（如 host_close 截断生成导致 append 失败）
+// → 优雅中止（stopped），而非 failed → runtime 不转 crashed（Fix A）。
+const abortLogs = [];
+const abortRouter = new InputRouter({
+  conversationId,
+  logger: new CollectingLogger(abortLogs),
+});
+abortRouter.route(userInput(20));
+const abortGate = deferred();
+let abortFailed = false;
+const abortPump = new RuntimeInputPump({
+  conversationId,
+  source: abortRouter,
+  controlHandler: Object.freeze({ handle: async () => undefined }),
+  turnHandler: Object.freeze({
+    handle: async () => {
+      await abortGate.promise;
+      abortFailed = true;
+      throw new Error("FORBIDDEN_PUMP_PROMPT");
+    },
+  }),
+  clock: Object.freeze({ now: () => timestamp }),
+  logger: new CollectingLogger(abortLogs),
+});
+abortPump.start();
+await waitFor(() => abortPump.getSnapshot().turnInFlight !== undefined);
+const abortStop = abortPump.stop();
+abortGate.resolve();
+await abortStop;
+const abortExit = await abortPump.waitForExit();
+assert.equal(abortFailed, true);
+assert.equal(abortPump.state, RUNTIME_INPUT_PUMP_STATE.stopped);
+assert.deepEqual(abortExit, { kind: "stopped", exitedAt: timestamp });
+
 const schedulerLogs = [];
 const schedulerPump = new RuntimeInputPump({
   conversationId,
@@ -299,12 +333,13 @@ assert.deepEqual(await schedulerPump.waitForExit(), {
   errorCode: "RUNTIME_INPUT_PUMP_FAILED",
 });
 
-const allLogs = [...lifecycleLogs, ...orderLogs, ...failureLogs, ...schedulerLogs];
+const allLogs = [...lifecycleLogs, ...orderLogs, ...failureLogs, ...schedulerLogs, ...abortLogs];
 const serializedLogs = JSON.stringify(allLogs);
 for (const token of forbidden) assert.equal(serializedLogs.includes(token), false);
 assert.equal(allLogs.some((record) => record.event === "runtime.input_pump.control_started"), true);
 assert.equal(allLogs.some((record) => record.event === "runtime.input_pump.turn_started"), true);
 assert.equal(allLogs.some((record) => record.event === "runtime.input_pump.stop_completed"), true);
 assert.equal(allLogs.some((record) => record.event === "runtime.input_pump.failed"), true);
+assert.equal(allLogs.some((record) => record.event === "runtime.input_pump.stop_aborted_inflight"), true);
 
 console.log("Runtime Input Pump smoke passed");

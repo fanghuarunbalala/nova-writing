@@ -284,6 +284,17 @@ export class RuntimeInputPump {
     } else if (scope === RUNTIME_INPUT_PUMP_FAILURE_SCOPE.turn) {
       this.turnInFlight = undefined;
     }
+    // host_close 截断进行中生成：stopping 期间的 handler 失败（如父进程关闭导致
+    // 事件 append 失败）视为优雅中止，转 stopped（exit.kind=stopped），而非 failed，
+    // 避免 runtime 误判为 crash 并持久化 crashed presence。
+    if (this.lifecycleState === RUNTIME_INPUT_PUMP_STATE.stopping) {
+      this.logger.info("runtime.input_pump.stop_aborted_inflight", {
+        scope,
+        ...(input !== undefined ? toLogIdentity(input) : {}),
+      });
+      this.completeStopIfIdle();
+      return;
+    }
     const failure = new RuntimeInputPumpFailureError(this.conversationId, scope);
     this.transitionTo(RUNTIME_INPUT_PUMP_STATE.failed, "handler_failed");
     const exit: RuntimeInputPumpExit = Object.freeze({

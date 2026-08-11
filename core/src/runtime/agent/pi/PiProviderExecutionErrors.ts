@@ -2,6 +2,7 @@
 export const PI_PROVIDER_EXECUTION_FAILURE = {
   unsupportedApi: "unsupported_api",
   auth: "auth",
+  billing: "billing",
   rateLimit: "rate_limit",
   timeout: "timeout",
   network: "network",

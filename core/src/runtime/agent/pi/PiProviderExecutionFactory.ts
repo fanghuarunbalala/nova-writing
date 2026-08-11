@@ -261,6 +261,9 @@ export class PiProviderExecutionFactory {
           this.#logger.info("pi_provider_execution.failed", {
             failure,
             errorName: getErrorName(event.error),
+            ...(event.error.errorMessage === undefined
+              ? {}
+              : { message: event.error.errorMessage }),
             ...captureProviderErrorCode(event.error),
             ...(state.status === undefined ? {} : { status: state.status }),
           });
@@ -284,7 +287,12 @@ export class PiProviderExecutionFactory {
         message: errorMessageOf(error),
         status: state.status,
       });
-      this.#logger.info("pi_provider_execution.failed", { failure });
+      this.#logger.info("pi_provider_execution.failed", {
+        failure,
+        ...(errorMessageOf(error) === undefined
+          ? {}
+          : { message: errorMessageOf(error) }),
+      });
       const message = createErrorAssistantMessage(failure, api);
       const event: AssistantMessageEvent = {
         type: "error",
@@ -344,6 +352,9 @@ export function classifyProviderFailure(input: {
 }): PiProviderExecutionFailure {
   const status = input.status;
   if (status !== undefined) {
+    if (status === 402) {
+      return PI_PROVIDER_EXECUTION_FAILURE.billing;
+    }
     if (status === 401 || status === 403) {
       return PI_PROVIDER_EXECUTION_FAILURE.auth;
     }
@@ -369,6 +380,13 @@ export function classifyProviderFailure(input: {
   }
   if (/unauthorized|authentication|invalid\s?api|401|403/i.test(message)) {
     return PI_PROVIDER_EXECUTION_FAILURE.auth;
+  }
+  if (
+    /insufficient.*(balance|fund|credit|quota)|billing|quota|no\s?credit|payment required|recharge|余额|充值/i.test(
+      message,
+    )
+  ) {
+    return PI_PROVIDER_EXECUTION_FAILURE.billing;
   }
   if (/HTTP\s+[45]\d{2}/i.test(message)) {
     return PI_PROVIDER_EXECUTION_FAILURE.response;

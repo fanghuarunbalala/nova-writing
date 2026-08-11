@@ -12,7 +12,6 @@ import type {
 } from "../projection/ConversationCardDescriptor.js";
 import type {
   ConversationEventView,
-  ThinkLineData,
   ToolTraceView,
 } from "../projection/ConversationTimelineItem.js";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
@@ -51,10 +50,11 @@ export interface AssistantMessageProps {
   /** 保留兼容调用方；v2 原型 head 不再显示 revision。 */
   readonly revision?: string;
   readonly failureDetail?: string;
-  readonly thinkLines?: readonly ThinkLineData[];
   readonly text: string;
   readonly cards?: readonly ConversationCardDescriptor[];
   readonly streaming?: boolean;
+  /** 流式中当前是否正在产出思考（驱动 ThinkingIndicator）。 */
+  readonly thinking?: boolean;
   readonly eventFlow?: readonly ConversationEventView[];
   readonly toolTraces?: readonly ToolTraceView[];
   readonly onReferenceClick?: (reference: MessageReference) => void;
@@ -67,10 +67,10 @@ export function AssistantMessage({
   sequence,
   approvalState,
   failureDetail,
-  thinkLines = [],
   text,
   cards = [],
   streaming = false,
+  thinking = false,
   eventFlow = [],
   toolTraces = [],
   onReferenceClick,
@@ -88,7 +88,7 @@ export function AssistantMessage({
             </span>
           </div>
         ) : null}
-        {streaming && thinkLines.length > 0 ? <ThinkingIndicator /> : null}
+        {streaming && thinking ? <ThinkingIndicator /> : null}
         <div className={styles.text}>
           <AssistantMarkdown
             text={text}

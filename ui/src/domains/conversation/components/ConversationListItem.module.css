@@ -4,7 +4,7 @@
  * conv-row 为 relative 容器；conv-item 主按钮 padding 8/30，左右 30px 留给
  * status + more；conv-status 左侧绝对定位，generating/failed 时显示；
  * conv-more 右侧绝对定位（始终可见，faint 色，见 ConversationItemMenu.module.css）。
- * title 13px/750，sub 11px/550。
+ * title 单行(宋体衬线 14px/600)，不再显示 agentLabel 与时间。
  */
 .row {
   position: relative;
@@ -42,34 +42,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
-  font-weight: 750;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
   color: var(--color-fg);
-}
-
-.sub {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: var(--fw-medium);
-  line-height: 1.35;
-  color: var(--color-faint);
-}
-
-.active .sub {
-  color: var(--color-accent-ink);
-  opacity: 0.72;
-}
-
-.agent {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.time {
-  font-family: var(--font-mono);
 }
 
 .pinTag {

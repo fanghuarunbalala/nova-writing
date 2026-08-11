@@ -1,34 +1,10 @@
 /**
- * ThinkingIndicator 视觉：旋转图表 + 渐变「思考中」文字。
- * 图表图标自带 aria-hidden，旋转动画外包在 span 上（Icon 不透传 className）。
- * 「思考中」渐变文字照抄 TopBar .wordmark：background-clip:text + grad-flow
- * 全局 keyframe 流动；margin-top 对齐原 ThinkBlock 的 11px。
+ * ThinkingIndicator 视觉：消息流内思考指示容器。
+ * 图标/渐变文字/动效来自 RuntimeStatusIndicator；此处只保留消息流内的
+ * 定位（margin-top 对齐原 ThinkBlock 的 11px）。
  */
 .indicator {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   margin-top: 11px;
-}
-
-.chart {
-  display: inline-flex;
-  color: var(--color-accent-ink);
-  animation: think-spin 1.6s linear infinite;
-}
-
-@keyframes think-spin {
-  to { transform: rotate(360deg); }
-}
-
-.label {
-  font-size: 12.5px;
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.04em;
-  background: var(--grad-accent);
-  background-size: 220% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: grad-flow 7s ease-in-out infinite;
 }

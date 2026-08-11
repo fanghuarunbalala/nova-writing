@@ -180,10 +180,10 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
           approvalState={item.approvalState}
           revision={item.revision}
           failureDetail={item.failureDetail}
-          thinkLines={item.thinkLines}
           text={item.text}
           cards={item.cards}
           streaming={item.streaming}
+          thinking={item.thinking}
           eventFlow={item.eventFlow}
           toolTraces={item.toolTraces}
           onResolveReference={resolveReference}

@@ -29,7 +29,6 @@ import type { ApprovalEntityResolver } from "../approvalEntityResolver.js";
 import {
   inferOperation,
   operationGlyph,
-  operationLabel,
   toolNameLabel,
 } from "../paramLabels.js";
 import type { ApprovalStore, ApprovalView } from "../ApprovalStore.js";
@@ -74,13 +73,6 @@ const STATUS_LABEL: Record<ApprovalView["status"], string> = {
   expired: "已过期",
 };
 
-/** 变更类型色块 class（写入/编辑/删除）。Operation chip tone classes. */
-const OP_CLASS: Record<string, string> = {
-  add: styles.opAdd,
-  edit: styles.opEdit,
-  delete: styles.opDel,
-};
-
 /** 方案 E：工具头整条色带 class。E band tone classes. */
 const OP_BAND_CLASS: Record<string, string> = {
   add: styles.bandAdd,
@@ -95,31 +87,8 @@ const OP_GLYPH_CLASS: Record<string, string> = {
   delete: styles.titleGlyphDel,
 };
 
-/** 写入/编辑/删除 色块徽章；op 未知时不渲染。Colored operation chip. */
-function OpChip({
-  op,
-}: {
-  readonly op: "add" | "edit" | "delete" | undefined;
-}): JSX.Element | null {
-  if (op === undefined) return null;
-  const label = operationLabel(op);
-  if (label === undefined) return null;
-  return (
-    <span className={[styles.opChip, OP_CLASS[op]].filter(Boolean).join(" ")}>
-      {label}
-    </span>
-  );
-}
-
 function shortId(value: string): string {
   return value.length > 24 ? `…${value.slice(-12)}` : value;
-}
-
-function formatTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function groupKeyOf(approval: ApprovalView): string {
@@ -299,27 +268,11 @@ export function ApprovalPanel({
                   ) : null}
                 </div>
                 {groupList.map((group) => {
-                  const toolNames = [
-                    ...new Set(
-                      group.approvals.map((approval) => approval.toolName),
-                    ),
-                  ];
-                  const conversationDisposed =
-                    group.approvals[0].conversationStatus !== "active";
-                  const legacy = group.approvals.every(
-                    (approval) =>
-                      (approval.operations?.length ?? 0) === 0 &&
-                      approval.arguments === undefined,
-                  );
                   const title = group.approvals[0].title;
                   const label =
                     group.approvals.length > 1
                       ? `${title} 等 ${group.approvals.length} 项`
                       : title;
-                  const op = inferOperation(
-                    group.approvals[0].toolName,
-                    group.approvals[0].operations,
-                  );
                   return (
                     <button
                       key={group.key}
@@ -332,28 +285,15 @@ export function ApprovalPanel({
                         .join(" ")}
                       onClick={() => selectGroup(group.key)}
                     >
-                      <span className={styles.row1}>
-                        <span
-                          className={[styles.pill, styles[group.status]].join(" ")}
-                        >
-                          {group.status === "pending" &&
-                          group.approvals.length > 1
-                            ? `待批准 ${group.approvals.length} 项`
-                            : STATUS_LABEL[group.status]}
-                        </span>
+                      <span
+                        className={[styles.pill, styles[group.status]].join(" ")}
+                      >
+                        {group.status === "pending" &&
+                        group.approvals.length > 1
+                          ? `待批准 ${group.approvals.length} 项`
+                          : STATUS_LABEL[group.status]}
                       </span>
-                      <span className={styles.title}>
-                        <OpChip op={op} />
-                        {label}
-                      </span>
-                      {legacy ? <span className={styles.legacy}>旧版</span> : null}
-                      {conversationDisposed ? (
-                        <span className={styles.legacy}>会话已删除</span>
-                      ) : null}
-                      <span className={styles.meta}>
-                        {toolNames.map(toolNameLabel).join(" · ")} ·{" "}
-                        {formatTime(group.requestedAt)}
-                      </span>
+                      <span className={styles.rowTitle}>{label}</span>
                     </button>
                   );
                 })}

@@ -228,8 +228,15 @@ export class DesktopApplication {
     this.started = false;
     this.app.off("activate", this.handleActivate);
     this.app.off("window-all-closed", this.handleWindowAllClosed);
-    const results = await Promise.allSettled([
+    // Close windows first so the renderer's beforeunload `closeSubscription`
+    // invoke is handled while the ipcMain handlers are still registered;
+    // disposing the controllers (which remove those handlers) must wait until
+    // the renderer is gone, otherwise the invoke hits a removed handler and
+    // Electron throws an uncaught exception that crashes the main process.
+    const windowResults = await Promise.allSettled([
       this.windowManager.closeAll(),
+    ]);
+    const results = await Promise.allSettled([
       this.controller.dispose(),
       this.workspaceController?.dispose() ?? Promise.resolve(),
       this.configurationController?.dispose() ?? Promise.resolve(),
@@ -238,7 +245,9 @@ export class DesktopApplication {
       this.trayController?.dispose() ?? Promise.resolve(),
       this.nativeFileController?.dispose() ?? Promise.resolve(),
     ]);
-    const failureCount = results.filter((result) => result.status === "rejected").length;
+    const failureCount =
+      windowResults.filter((result) => result.status === "rejected").length +
+      results.filter((result) => result.status === "rejected").length;
     this.logger.info("desktop_application.stop_completed", { failureCount });
     if (failureCount > 0) {
       throw new ApiTransportError(

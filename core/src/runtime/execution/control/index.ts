@@ -8,6 +8,7 @@ export * from "./RuntimeInputOutcomeControllerErrors.js";
 export * from "./RuntimeStopInputHandler.js";
 export * from "./RuntimeStopInputHandlerErrors.js";
 export * from "./RuntimeUserMessageInputHandler.js";
+export * from "./ConversationFirstMessageTitleDeriver.js";
 export * from "./RuntimeUserMessageInputHandlerErrors.js";
 export * from "./TurnController.js";
 export * from "./TurnControllerErrors.js";

@@ -1,36 +1,43 @@
-# Novel Agent Tool Surface (Working Draft)
+# Novel Agent Tool Surface
 
 ## 1. Status
 
-Working draft for the deferred "Agent-facing Novel Tools" item
+Record of the current "Agent-facing Novel Tools" surface
 (`docs/novel-domain.md` Open Question 13; `docs/novel-implementation-plan.md`
 Task N11-D deferral). Confirmed **group by group** with the user.
 
-**Confirmed and implemented:** outline, characters, locations, paragraph,
-publication, unified delete, and draft lifecycle groups —
-`NovelOutlineRead/Write/Edit`,
-`NovelCharacterRead/Write/Edit`, `NovelLocationRead/Write/Edit`,
-`NovelParagraphRead/Write/Edit`, `NovelVolumeRead/Write/Edit`,
-`NovelChapterRead/Write/Edit`, `NovelDelete`, `NovelDraftStatus/Commit/Rollback/Rebase`
-(see `core/src/tools/novel/{outline,character,location,paragraph,publication,delete,draft}/`).
+**Implemented:** outline, characters, locations, paragraph, publication,
+unified delete, and compose groups —
+`NovelOutlineRead/Write/Edit`, `NovelCharacterRead/Write/Edit`,
+`NovelLocationRead/Write/Edit`, `NovelParagraphRead/Write/Edit`,
+`NovelVolumeRead/Write/Edit`, `NovelChapterRead/Write/Edit`, `NovelDelete`,
+`EnterComposeMode`, `ExitComposeMode`
+(see `core/src/tools/novel/{outline,character,location,paragraph,publication,delete,compose}/`).
 
-All planned groups are now confirmed and implemented. The earlier 16-tool
-draft is superseded; the confirmed surface is 24 tools (including TodoWrite).
+The current surface is 22 tools (21 novel + `TodoWrite`). The draft lifecycle
+group (`NovelDraftStatus/Commit/Rollback/Rebase`) and the read `scope`
+parameter were removed by the write-approval migration
+(`docs/novel-write-approval-plan.md`): reads are canonical-only and writes
+apply to canonical after author approval.
 
-**Removed:** `NovelCompletionEvaluate` and the separate Manuscript object.
-Manuscript identity is implicit (one per Novel); a StoryUnit's realization is
-its own Paragraphs. Conformance and admission are internal host concerns and
-are hidden from the agent surface.
+**Removed:** `NovelCompletionEvaluate`, the separate Manuscript object, the
+draft lifecycle tools, and the read `scope` parameter. Manuscript identity is
+implicit (one per Novel); a StoryUnit's realization is its own Paragraphs.
+Conformance, admission, and draft staging are internal host concerns and are
+hidden from the agent surface.
 
 ## 2. Design Conventions (confirmed)
 
-1. **Explicit read scope.** Reads take `scope: "canonical" | "draft"`.
-2. **No optimistic-lock digests at the tool surface.** Draft writes are
-   serialized per conversation; digest/version preconditions remain inside core
-   and are resolved by the trusted host internally. Revisit only for parallel
-   subagent shared-Draft scenarios.
-3. **Draft-only writes.** Every mutation appends to the caller's Draft journal;
-   nothing becomes authoritative until `NovelDraftCommit`.
+1. **Canonical-only reads.** Reads return committed state; the former
+   `scope: "canonical" | "draft"` parameter was removed (canonical is the only
+   value, so a single-value parameter is noise).
+2. **Optimistic locking via `baseRevision`.** Writes carry a `baseRevision`
+   taken from the most recent read's `revision.currentRevision`; a missing or
+   stale `baseRevision` is rejected (`NOVEL_REVISION_CONFLICT`) to prevent
+   silent concurrent overwrites.
+3. **Approval-gated canonical writes.** Every mutation is a canonical write
+   applied after author approval; there is no draft staging at the tool
+   surface.
 4. **Outline identity is implicit.** The host auto-creates the outline when the
    first `story_unit` is written. Agents never manage outline identity.
 5. **orderKey is agent-visible.** It is an opaque sort key: fixed-width
@@ -40,17 +47,18 @@ are hidden from the agent surface.
    the last sibling.
 6. **New story unit defaults.** `planningStatus=idea`,
    `realizationStatus=pending`, `parentId=root`, `orderKey=append`.
-7. **Batch writes.** Write/Edit take arrays, applied in order; a failed item
-   stops the batch; earlier items remain applied; per-item results are
-   returned.
+7. **Atomic batches.** Write/Edit take arrays; the batch is applied as one
+   transaction — a rejected item aborts the whole batch with no partial
+   application, and per-item results are returned.
 8. **Write vs Edit.** `Write` creates (target must not exist); `Edit` performs
    field-level partial overwrite (PATCH): provided fields overwrite, omitted
    fields are untouched, and an explicit `null` clears an optional field or
    array. `leaf` follows the same rule, and `leaf: null` clears the whole plan.
 9. **Hidden internal types.** StoryUnitRealization, conformance/admission,
-   ChangeSet, conflicts, projections, operation IDs, digests, OrderKey
-   generation internals, and revision formats never appear in tool parameters
-   or results.
+   ChangeSet, conflicts, projections, operation IDs, digests, and OrderKey
+   generation internals never appear in tool parameters or results. The only
+   revision value exposed is `currentRevision` (in read results) and
+   `baseRevision` (in write parameters).
 10. **Completion.** Agents declare completion by setting
     `realizationStatus=completed` through `Edit`; authoritative admission is
     validated host-side.
@@ -90,12 +98,12 @@ version: 1.0.0
 label: Novel Delete
 tools: [NovelDelete]
 
-# novel.draft (confirmed)
+# novel.compose (implemented)
 schemaVersion: 1
-id: novel.draft
+id: novel.compose
 version: 1.0.0
-label: Novel Draft Lifecycle
-tools: [NovelDraftStatus, NovelDraftCommit, NovelDraftRollback, NovelDraftRebase]
+label: Novel Compose Mode
+tools: [EnterComposeMode, ExitComposeMode]
 ```
 
 ## 4. Shared Value Contracts
@@ -178,25 +186,28 @@ interface OutlineWriteResultItem {
 
 ### 5.4 NovelCharacterRead / Write / Edit (confirmed, implemented)
 
-- `NovelCharacterRead` reads Character profiles for one explicit scope;
-  `characterId` omitted lists all. `entityVersion` stays inside the host.
-- `NovelCharacterWrite` batch-creates profiles. `id` is optional; the host
-  generates and returns it (a provided id is used and must be unique).
-- `NovelCharacterEdit` batch field-level PATCH. `id` is required. Provided
-  fields overwrite, omitted fields stay, `null` clears `summary` /
-  `initialState` / `authorNotes`, and `aliases` replaces the whole array when
-  provided (`[]` clears it). `name` cannot be cleared.
+- `NovelCharacterRead` reads committed Character profiles; `characterId`
+  omitted lists all. Returns `revision.currentRevision`.
+- `NovelCharacterWrite` batch-creates profiles; `baseRevision` is required.
+  `id` is optional; the host generates and returns it (a provided id is used
+  and must be unique).
+- `NovelCharacterEdit` batch field-level PATCH; `baseRevision` is required.
+  `id` is required. Provided fields overwrite, omitted fields stay, `null`
+  clears `summary` / `initialState` / `authorNotes`, and `aliases` replaces
+  the whole array when provided (`[]` clears it). `name` cannot be cleared.
 - Group: `novel.characters`. Deletion is handled by the unified delete tool.
 
 ### 5.5 NovelLocationRead / Write / Edit (confirmed, implemented)
 
-- `NovelLocationRead` reads Location profiles for one explicit scope;
-  `locationId` omitted lists all.
-- `NovelLocationWrite` batch-creates profiles. `id` is optional; the host
-  generates and returns it (a provided id is used and must be unique).
-- `NovelLocationEdit` batch field-level PATCH. `id` is required. `null` clears
-  `summary` / `initialState` / `authorNotes`; `aliases` replaces the whole
-  array when provided (`[]` clears it); `name` cannot be cleared.
+- `NovelLocationRead` reads committed Location profiles; `locationId`
+  omitted lists all. Returns `revision.currentRevision`.
+- `NovelLocationWrite` batch-creates profiles; `baseRevision` is required.
+  `id` is optional; the host generates and returns it (a provided id is used
+  and must be unique).
+- `NovelLocationEdit` batch field-level PATCH; `baseRevision` is required.
+  `id` is required. `null` clears `summary` / `initialState` /
+  `authorNotes`; `aliases` replaces the whole array when provided (`[]` clears
+  it); `name` cannot be cleared.
 - Group: `novel.locations`. Deletion is handled by the unified delete tool.
 
 ## 5. Confirmed: Outline Tools
@@ -216,7 +227,6 @@ interface OutlineWriteResultItem {
 
 ```ts
 interface Params {
-  scope: Scope;
   storyUnitId?: string;
   includePlans?: boolean;   // default false
 }
@@ -233,6 +243,7 @@ interface Result {
       totalLeafCount: number;
     };
   }>;
+  revision: { currentRevision: string };
 }
 ```
 
@@ -251,6 +262,7 @@ interface Result {
 
 ```ts
 interface Params {
+  baseRevision: string;
   values: StoryUnitWrite[];
 }
 
@@ -277,6 +289,7 @@ interface Result {
 
 ```ts
 interface Params {
+  baseRevision: string;
   values: Array<{
     id: string;
     value: Partial<StoryUnitWrite> & {
@@ -300,18 +313,22 @@ interface Result {
 }
 ```
 
-## 6. Pending Groups
+## 6. Resolved Groups
 
-The following groups will be confirmed next, following the same conventions
-(batch, PATCH, hidden types, no tool-surface digests):
+All remaining groups were confirmed and implemented after this draft:
 
-- characters / locations
+- characters / locations (see 5.4 / 5.5)
+- publication, unified delete (see §3)
+- compose (EnterComposeMode / ExitComposeMode) — added with the compose-mode
+  workflow (`docs/novel-compose-workflow-prd.md`)
 
 ## 7. Resolved Decisions
 
 - `NovelCompletionEvaluate` removed; completion is declared via
   `realizationStatus` and validated host-side.
-- No `expectedDigest` at the tool surface; optimistic locking is deferred.
+- Optimistic locking uses `baseRevision` (write parameter) against
+  `revision.currentRevision` (read result); a stale revision rejects with
+  `NOVEL_REVISION_CONFLICT`.
 - Outline identity is auto-created; `target: "outline"` removed.
 - `orderKey` is managed by the agent (opaque string; append by default).
 - Write/Edit are batch and split by intent: create vs field-level patch.
@@ -331,9 +348,7 @@ The following groups will be confirmed next, following the same conventions
   leaf plan, non-empty Volume). Deleting a paragraph also removes it from every
   Chapter selection; deleting a Chapter keeps its Paragraphs under their
   StoryUnits.
-- Draft lifecycle is session-scoped (no `scope` parameter):
-  `NovelDraftStatus` reads the active Draft; `NovelDraftCommit` makes it
-  canonical (returning `rejected(approval_required)` when host approval is
-  missing); `NovelDraftRollback` discards it; `NovelDraftRebase` replays it
-  onto the latest canonical revision and reports `rebased`, `not_required`, or
-  `conflicted` summaries. Conflict resolution stays in the host.
+- Draft lifecycle tools were removed by the write-approval migration
+  (`docs/novel-write-approval-plan.md`). Reads take no `scope` and return
+  canonical state; writes carry `baseRevision` and apply to canonical after
+  author approval.

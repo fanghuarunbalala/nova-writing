@@ -1,8 +1,12 @@
 # Novel 直写 + Write 前审批 重构草案（Working Draft）
 
 > 状态：已确认（决策 1A/2A/3A/4A，见第 9 节）。实施按 P1→P6 进行。
+> **工具层已实现**（§4）：读工具 `scope` 参数移除、draft 工具组删除、
+> 写工具暴露 `baseRevision`、读返回 `currentRevision`、批处理原子化；
+> `docs/novel-agent-tools.md` 已同步为新契约。内部 draft/rebase 模块删除
+> （P4）仍待实施。
 > 本文件是对现有 draft/commit/rebase 机制的替代方案。
-> 相关文档：`docs/novel-agent-tools.md`（将被本次改造推翻的契约）、
+> 相关文档：`docs/novel-agent-tools.md`（已同步为本改造后的契约）、
 > `docs/novel-domain.md`、`docs/desktop-runtime-integration-plan.md`。
 
 ## 1. 背景与动机

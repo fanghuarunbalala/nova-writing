@@ -96,9 +96,10 @@ export function InspectorHost({
     if (vw <= 860) return;
     const minW = vw > 860 && vw <= 1200 ? 340 : 560;
     const maxW = Math.min(1120, vw - 520);
+    // 右侧面板左缘把手:向左拖变宽、向右拖变窄(原型 startW + (startX - clientX) = -delta)。
     const next = Math.min(
       maxW,
-      Math.max(minW, (widthRef.current ?? DEFAULT_WIDTH) + delta),
+      Math.max(minW, (widthRef.current ?? DEFAULT_WIDTH) - delta),
     );
     widthRef.current = next;
     setDraggedW(next);

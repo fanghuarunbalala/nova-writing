@@ -32,12 +32,6 @@ export interface ConversationListItemProps {
   readonly onDelete?: (id: string) => void;
 }
 
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 const STATUS_LABEL: Record<"generating" | "failed" | "unavailable", string> = {
   generating: "生成中",
   failed: "失败",
@@ -78,10 +72,6 @@ export function ConversationListItem({
         <span className={styles.title}>
           {item.title}
           {item.pinned ? <span className={styles.pinTag}>置顶</span> : null}
-        </span>
-        <span className={styles.sub}>
-          <span className={styles.agent}>{item.agentLabel}</span>
-          <time className={styles.time}>{formatTime(item.lastActivityAt)}</time>
         </span>
       </button>
       <ConversationItemMenu

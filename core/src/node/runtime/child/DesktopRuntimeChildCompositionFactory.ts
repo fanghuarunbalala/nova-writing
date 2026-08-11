@@ -107,6 +107,7 @@ import {
   settleOrphanedApprovals,
   RuntimeStopInputHandler,
   RuntimeUserMessageInputHandler,
+  createFirstMessageTitleDeriver,
   Sha256RuntimeEventIdFactory,
   TurnController,
   type AgentRuntimeAdapter,
@@ -537,6 +538,12 @@ export class DesktopRuntimeChildCompositionFactory
       lifecycleController,
       outcomeRecorder,
       runExecutor,
+      // 首条用户消息派生对话标题(仅当标题仍为默认时改名,手动改名保留)。
+      ...(conversations === undefined
+        ? {}
+        : {
+            firstMessageTitleDeriver: createFirstMessageTitleDeriver(conversations),
+          }),
       logger,
     });
     const cancellationPort = new AgentRuntimeStopCancellationPort({

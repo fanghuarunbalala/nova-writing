@@ -1,4 +1,4 @@
-/** NovelVolumeRead and NovelChapterRead tools for one explicit scope. */
+/** NovelVolumeRead and NovelChapterRead tools for committed state. */
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { ToolError } from "../../../runtime/tools/execution/index.js";
 import { formatReadToolResult } from "../readResult.js";
@@ -34,12 +34,12 @@ export function createVolumeReadTool(
       version: "1.0.0",
       label: "Novel Volume Read",
       description:
-        "Reads all Volumes in order for one explicit scope, returning each Volume's id, title, and orderKey only. Use NovelChapterRead to inspect Chapter contents and selections.",
+        "Reads all Volumes in order, returning each Volume's id, title, and orderKey only. Use NovelChapterRead to inspect Chapter contents and selections.",
       parameters: NovelVolumeReadParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage:
-          "Use scope=draft to preview uncommitted work or canonical for committed state.",
-        parameterGuidance: "No required parameters beyond scope.",
+          "Reads committed (canonical) state; only approved writes appear in results.",
+        parameterGuidance: "No required parameters.",
         safetyGuidance: "Read-only.",
       }),
     },
@@ -94,7 +94,7 @@ export function createChapterReadTool(
       version: "1.0.0",
       label: "Novel Chapter Read",
       description:
-        "Reads Chapters for one explicit scope, optionally filtered by chapterId or volumeId. Returns each Chapter's ordered paragraphIds. Set includeContent=true to also return the joined content and expanded paragraphs in Chapter order.",
+        "Reads Chapters, optionally filtered by chapterId or volumeId. Returns each Chapter's ordered paragraphIds. Set includeContent=true to also return the joined content and expanded paragraphs in Chapter order.",
       parameters: NovelChapterReadParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage:

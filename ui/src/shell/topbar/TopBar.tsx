@@ -13,14 +13,14 @@ import { IconButton } from "../../shared/primitives/IconButton.js";
 import type { NovelUiExtensions } from "../../extensions/NovelUiExtensions.js";
 import { TopBarAction } from "./TopBarAction.js";
 import { TopBarMenuSlot } from "./TopBarMenuSlot.js";
-import { TopBarRevisionMeta } from "./TopBarRevisionMeta.js";
 import styles from "./TopBar.module.css";
 
 export interface TopBarProps {
   readonly workspaceName?: string;
   readonly workspaceSub?: string;
-  readonly revision?: string;
   readonly approvalBadge?: number;
+  /** 审批视图是否打开（按钮选中态）。 */
+  readonly approvalActive?: boolean;
   readonly sidebarMode: "expanded" | "collapsed";
   readonly onToggleSidebar: () => void;
   readonly onOpenWorkspace: () => void;
@@ -34,8 +34,8 @@ export interface TopBarProps {
 export function TopBar({
   workspaceName,
   workspaceSub,
-  revision,
   approvalBadge,
+  approvalActive,
   sidebarMode,
   onToggleSidebar,
   onOpenWorkspace,
@@ -67,9 +67,13 @@ export function TopBar({
         <TopBarAction label="计划" onClick={onOpenSchedule} />
       ) : null}
       {onOpenApproval !== undefined ? (
-        <TopBarAction label="审批" badge={approvalBadge} onClick={onOpenApproval} />
+        <TopBarAction
+          label="审批"
+          badge={approvalBadge}
+          active={approvalActive}
+          onClick={onOpenApproval}
+        />
       ) : null}
-      <TopBarRevisionMeta revision={revision} />
       <span className={styles.spacer} />
       <TopBarAction label="Workspace" icon={<Icon icon={FolderOpen} size="sm" />} onClick={onOpenWorkspace} />
       <TopBarAction label="设置" icon={<Icon icon={Settings} size="sm" />} onClick={onOpenSettings} />

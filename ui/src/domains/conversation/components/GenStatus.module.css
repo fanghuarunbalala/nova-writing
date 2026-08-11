@@ -1,111 +1,95 @@
 /**
- * GenStatus 视觉（原型 .gen-status + .gen-dots + .gen-main）。
- *
- * 扁平行：无边框无底色，min-height 16px。live 状态用三点呼吸
- * （.dots i，5px 圆、background:var(--grad-accent)、gen-blink 错峰 .22s/.44s）。
- * 主文案纯 muted（无渐变），elapsed 无 mono 等宽数字；
- * 停止按钮 margin-left auto 靠右、accent-ink 低透明度。
+ * GenStatus 视觉（原型 .gen-status）：扁平行容器。
+ * live 文案/图标动效/渐变已移入 RuntimeStatusIndicator；
+ * failed 在此：alert 图标（一次性微抖动）+ 红色加粗标签 + 具体原因 + 图标重试钮。
+ * 终结态不做循环动效（避免误导「还在工作」）。
  */
 .status {
   margin: 2px 2px 10px;
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 16px;
+  min-height: 20px;
   border: 0;
   background: transparent;
-  font-size: var(--fs-xs);
-  color: var(--color-muted);
 }
 
-.dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.failed {
+  color: var(--color-danger);
 }
 
-.dots i {
-  width: 5px;
-  height: 5px;
+.failed .icon {
   flex: none;
-  border-radius: 50%;
-  background: var(--grad-accent);
-  opacity: 0.32;
-  animation: gen-blink 1.5s ease-in-out infinite;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--color-danger);
 }
 
-.dots i:nth-child(2) {
-  animation-delay: 0.22s;
-}
-
-.dots i:nth-child(3) {
-  animation-delay: 0.44s;
-}
-
-@keyframes gen-blink {
-  0%, 100% {
-    opacity: 0.22;
-  }
-  50% {
-    opacity: 0.9;
-    transform: translateY(-1px);
-  }
-}
-
-.main {
-  font-size: 12.5px;
-  font-weight: var(--fw-medium);
-  color: var(--color-muted);
-  opacity: 0.92;
-}
-
-.elapsed {
-  font-size: 11.5px;
-  color: var(--color-faint);
-  font-variant-numeric: tabular-nums;
-  opacity: 0.8;
-}
-
-.stop {
-  margin-left: auto;
-  padding: 4px 2px;
-  border: 0;
-  background: none;
-  font-size: 11.5px;
-  font-weight: var(--fw-semibold);
-  color: var(--color-accent-ink);
-  opacity: 0.72;
-  cursor: pointer;
-  transition: opacity var(--duration-fast) var(--ease-out);
-}
-
-.stop:hover {
-  opacity: 1;
+.failed .icon svg {
+  width: 15px;
+  height: 15px;
+  animation: failed-shake 0.45s ease-out both;
 }
 
 .failed .main {
+  flex: none;
   color: var(--color-danger);
-  opacity: 1;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.error {
-  margin-left: 4px;
-  color: var(--color-danger);
-  opacity: 0.82;
+.failed .error {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-faint);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.retry {
+/* 重试：图标按钮，danger 圆钮，hover 实心红 + 白图标 + 上浮。 */
+.failed .retry {
+  flex: none;
   margin-left: auto;
-  padding: 4px 2px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
   border: 0;
-  background: none;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
   color: var(--color-danger);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
+  background: color-mix(in oklab, var(--color-danger) 12%, transparent);
   cursor: pointer;
-  transition: opacity var(--duration-fast) var(--ease-out);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.retry:hover {
-  opacity: 1;
+.failed .retry:hover {
+  color: #fff;
+  background: var(--color-danger);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px color-mix(in oklab, var(--color-danger) 35%, transparent);
+}
+
+.failed .retry svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* 失败出现时的一次性微抖动（抓注意，然后静止）。 */
+@keyframes failed-shake {
+  0% { transform: translateX(0); }
+  20% { transform: translateX(-2px); }
+  40% { transform: translateX(2px); }
+  60% { transform: translateX(-1px); }
+  80% { transform: translateX(1px); }
+  100% { transform: translateX(0); }
 }

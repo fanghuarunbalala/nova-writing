@@ -1,4 +1,4 @@
-/** NovelParagraphRead tool: reads Paragraphs for one explicit scope. */
+/** NovelParagraphRead tool: reads committed Paragraphs. */
 import { noopLogger, type Logger } from "../../../observability/index.js";
 import { ToolError } from "../../../runtime/tools/execution/index.js";
 import {
@@ -31,11 +31,11 @@ export function createParagraphReadTool(
       version: "1.0.0",
       label: "Novel Paragraph Read",
       description:
-        "Reads Paragraphs in StoryUnit order for one explicit scope. Omit storyUnitId to read all Paragraphs. Use the returned ids and orderKey as the source for NovelParagraphWrite and NovelParagraphEdit.",
+        "Reads committed Paragraphs in StoryUnit order. Omit storyUnitId to read all Paragraphs. Use the returned ids and orderKey as the source for NovelParagraphWrite and NovelParagraphEdit.",
       parameters: NovelParagraphReadParametersSchema,
       promptDetails: new ToolPromptDetails({
         usage:
-          "Use scope=draft to preview uncommitted work or canonical for committed state.",
+          "Reads committed (canonical) state; only approved writes appear in results.",
         parameterGuidance:
           "Pass storyUnitId to read one StoryUnit's paragraphs in order.",
         safetyGuidance: "Read-only.",

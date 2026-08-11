@@ -170,7 +170,7 @@ export class NodeConversationProcessSupervisor
       return handle;
     } catch (error) {
       await Promise.allSettled([
-        ...(endpoint !== undefined ? [endpoint.close()] : []),
+        ...(endpoint !== undefined ? [endpoint.close("supervisor_close")] : []),
         ...(connection !== undefined ? [connection.close()] : []),
       ]);
       process?.terminate(RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL.terminate);

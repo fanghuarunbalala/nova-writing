@@ -93,6 +93,13 @@ export function mapProjectionTimeline(
           text: textParts.join(""),
           cards: Object.freeze(messageCards),
           streaming: item.status === "streaming",
+          ...(item.status === "streaming"
+            ? {
+                thinking: !item.content.some(
+                  (part) => part.type === "text",
+                ),
+              }
+            : {}),
           eventFlow: Object.freeze(eventFlow),
           toolTraces: Object.freeze(toolTraces),
           ...(item.status === "streaming" ? { approvalState: "generating" as const } : {}),

@@ -8,6 +8,7 @@ import {
   canonicalStringifyJson,
   captureDurableInputEventReference,
   isAgentTurnInputEventType,
+  INPUT_EVENT_TYPE,
   type DurableInputEventReference,
   type JsonValue,
 } from "../../../event/index.js";
@@ -69,6 +70,9 @@ export interface RuntimeUserMessageInputHandlerOptions {
   lifecycleController: RuntimeUserMessageLifecycleController;
   outcomeRecorder: RuntimeUserMessageOutcomeRecorder;
   runExecutor: RuntimeRunExecutor;
+  /** 首条用户消息派生对话标题的钩子（best-effort，失败不阻塞 run）。 */
+  /** Best-effort hook to derive the conversation title from the first user message. */
+  firstMessageTitleDeriver?: (conversationId: string, text: string) => Promise<void>;
   logger?: Logger;
 }
 
@@ -77,6 +81,8 @@ export class RuntimeUserMessageInputHandler implements RuntimeInputPumpHandler {
   private readonly lifecycleController: RuntimeUserMessageLifecycleController;
   private readonly outcomeRecorder: RuntimeUserMessageOutcomeRecorder;
   private readonly runExecutor: RuntimeRunExecutor;
+  private readonly firstMessageTitleDeriver?:
+    | ((conversationId: string, text: string) => Promise<void>);
   private readonly logger: Logger;
   private tail: Promise<void> = Promise.resolve();
 
@@ -86,6 +92,7 @@ export class RuntimeUserMessageInputHandler implements RuntimeInputPumpHandler {
     this.lifecycleController = options.lifecycleController;
     this.outcomeRecorder = options.outcomeRecorder;
     this.runExecutor = options.runExecutor;
+    this.firstMessageTitleDeriver = options.firstMessageTitleDeriver;
     this.logger = (options.logger ?? noopLogger).child({
       component: "runtime_user_message_input_handler",
       conversationId: this.conversationId,
@@ -133,6 +140,22 @@ export class RuntimeUserMessageInputHandler implements RuntimeInputPumpHandler {
       runId = captureQueuedRunId(queuedCommit, inputEvent);
     } catch {
       throw this.fail(RUNTIME_USER_MESSAGE_INPUT_FAILURE.beginRunFailed, input);
+    }
+
+    // 首条用户消息派生对话标题（best-effort，失败不阻塞 run）。
+    // Derive the conversation title from the first user message (best-effort).
+    if (this.firstMessageTitleDeriver !== undefined) {
+      const text = captureUserMessageText(input);
+      if (text.trim().length > 0) {
+        try {
+          await this.firstMessageTitleDeriver(this.conversationId, text);
+        } catch (error) {
+          this.logger.debug("runtime.user_message.title_derive_failed", {
+            conversationId: this.conversationId,
+            errorName: error instanceof Error ? error.name : "UnknownError",
+          });
+        }
+      }
     }
 
     let outcomeCommit: RuntimeInputOutcomeCommit;
@@ -224,6 +247,16 @@ export class RuntimeUserMessageInputHandler implements RuntimeInputPumpHandler {
     );
     return result;
   }
+}
+
+/** 提取 user.message 输入的文本；非 user.message 事件返回空串。 */
+/** Extracts text from a user.message input; returns "" for other event types. */
+function captureUserMessageText(input: PersistedInputEventSnapshot): string {
+  if (input.eventType !== INPUT_EVENT_TYPE.userMessage) return "";
+  const payload = (input as { payload?: unknown }).payload;
+  if (payload === null || typeof payload !== "object") return "";
+  const text = (payload as Record<string, unknown>).text;
+  return typeof text === "string" ? text : "";
 }
 
 function captureUserMessageInput(

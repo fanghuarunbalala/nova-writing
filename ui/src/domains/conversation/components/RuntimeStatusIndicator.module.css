@@ -1,0 +1,135 @@
+/**
+ * RuntimeStatusIndicator 视觉：三态统一语言（图标动效 + 渐变流动文字 + 秒数）。
+ * 紧凑尺寸（图标 18px / 文字 12.5px），颜色全部复用现有 token。
+ * 文字渐变用 background-clip:text + 全局 grad-flow keyframe（shared/theme/animations.css）。
+ */
+.row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.icon {
+  position: relative;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* 思考：大脑 + info 蓝 + 轻柔呼吸（无旋转/线框） */
+.thinking .icon {
+  color: var(--color-info);
+}
+
+.thinking .icon svg {
+  animation: status-breath 2.2s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* 生成：笔尖 + 品牌系 + 上下浮动 + 墨滴下落 */
+.generating .icon {
+  color: var(--color-accent-ink);
+}
+
+.generating .icon svg {
+  animation: status-bob 1.5s ease-in-out infinite;
+}
+
+.ink {
+  position: absolute;
+  right: -4px;
+  top: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: status-drop 1.2s ease-in infinite;
+  opacity: 0;
+}
+
+/* 审批：沙漏 + warn 琥珀 + 左右摇摆 */
+.waiting .icon {
+  color: var(--color-warn);
+}
+
+.waiting .icon svg {
+  animation: status-sway 2.8s ease-in-out infinite;
+}
+
+.label {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: grad-flow 4.5s ease-in-out infinite;
+  opacity: 0.92;
+  /* 浅色下划线：border-bottom 最干净（text-decoration 会跟随透明文字不好控色）。 */
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+}
+
+/* 文字渐变 + 下划线色：info 蓝 / 品牌 --grad-accent / warn 琥珀 */
+.thinking .label {
+  background-image: linear-gradient(
+    105deg,
+    oklch(79% 0.05 230),
+    oklch(54% 0.05 235) 55%,
+    oklch(60% 0.07 260)
+  );
+  border-bottom-color: color-mix(in oklab, var(--color-info) 40%, transparent);
+}
+
+.generating .label {
+  background-image: var(--grad-accent);
+  border-bottom-color: color-mix(in oklab, var(--color-accent) 40%, transparent);
+}
+
+.waiting .label {
+  background-image: linear-gradient(
+    105deg,
+    oklch(82% 0.055 85),
+    oklch(59% 0.07 80) 55%,
+    oklch(68% 0.07 75)
+  );
+  border-bottom-color: color-mix(in oklab, var(--color-warn) 40%, transparent);
+}
+
+.seconds {
+  font-size: 10.5px;
+  color: var(--color-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@keyframes status-breath {
+  0%, 100% { opacity: 0.55; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+@keyframes status-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes status-drop {
+  0% { transform: translateY(0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(9px); opacity: 0; }
+}
+
+@keyframes status-sway {
+  0%, 100% { transform: rotate(-7deg); }
+  50% { transform: rotate(7deg); }
+}

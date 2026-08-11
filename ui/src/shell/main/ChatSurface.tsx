@@ -3,12 +3,13 @@
  *
  * 组合对话域：timeline + composer；无对话时渲染空态。
  * 发送经 core UserMessageInputEvent enqueue（投影 binding）；
- * 生成状态（GenStatus）按原型置于 composer 输入框上方，live 时停止按钮 enqueue StopInputEvent。
+ * 生成状态（GenStatus）按原型置于 composer 输入框上方，三态（思考/生成/等待审批）
+ * 由最新 streaming 助手消息的 activeChannel 与挂起审批判定。
  */
 import {
   ConversationModeSetInputEvent,
-  StopInputEvent,
   UserMessageInputEvent,
+  type AssistantMessageProjection,
   type Logger,
   type NovelApiClient,
 } from "@novel/core";
@@ -72,7 +73,6 @@ export function ChatSurface({
       conversationId={activeId}
       onApprovalChange={onApprovalChange}
       title={catalog.conversations.find((item) => item.id === activeId)?.title ?? "对话"}
-      agentLabel={catalog.conversations.find((item) => item.id === activeId)?.agentLabel ?? ""}
       onReferenceClick={onReferenceClick}
       resolveReference={resolveReference}
       onProposalAction={onProposalAction}
@@ -88,7 +88,6 @@ interface ActiveChatSurfaceProps {
   readonly logger?: Logger;
   readonly conversationId: string;
   readonly title: string;
-  readonly agentLabel: string;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onProposalAction?: (
@@ -107,7 +106,6 @@ function ActiveChatSurface({
   logger,
   conversationId,
   title,
-  agentLabel,
   onReferenceClick,
   resolveReference,
   onProposalAction,
@@ -138,19 +136,40 @@ function ActiveChatSurface({
   const pendingApproval = !disconnected && (snapshot.projection.approvals ?? []).some(
     (approval) => approval.status === "pending",
   );
-  const genPhase = failed
-    ? "failed"
-    : runtimeStatus.state === "live"
-      ? "streaming"
-      : "idle";
+  // 三态判定：failed > waiting（审批挂起）> thinking（尚未产出正文）> generating。
+  const live = runtimeStatus.state === "live";
+  const latestStreaming = [...snapshot.projection.timeline]
+    .reverse()
+    .find(
+      (item): item is AssistantMessageProjection =>
+        item.kind === "assistant-message" && item.status === "streaming",
+    );
+  const latestFailed = [...snapshot.projection.timeline]
+    .reverse()
+    .find(
+      (item): item is AssistantMessageProjection =>
+        item.kind === "assistant-message" && item.status === "failed",
+    );
+  // 思考中：streaming 消息尚未产出任何正文（无论 thinking delta 分几块都持续到正文开始）。
+  const thinking =
+    live &&
+    latestStreaming !== undefined &&
+    !latestStreaming.content.some((part) => part.type === "text");
+  let genPhase: GenStatusProps["phase"] | "idle";
+  if (failed) genPhase = "failed";
+  else if (pendingApproval) genPhase = "waiting";
+  else if (live) genPhase = thinking ? "thinking" : "generating";
+  else genPhase = "idle";
   const genStatus: GenStatusProps | undefined =
     genPhase === "idle"
       ? undefined
       : {
           phase: genPhase,
-          error: failed ? "会话运行不可用，消息未送达。" : undefined,
+          // composer 失败原因用最近失败消息的具体 failureDetail（余额不足/网络等），回退通用文案。
+          error: failed
+            ? (latestFailed?.failureDetail ?? "会话运行不可用，消息未送达。")
+            : undefined,
           onRetry: failed ? () => { void resume(); } : undefined,
-          onStop: !failed ? () => { void enqueue(new StopInputEvent({ conversationId })); } : undefined,
         };
   // mode 徽标读投影 composePhase（connect 播种 + 事件实时覆盖，裁剪后仍正确）。
   const composeBadge = composeStatusLabel(snapshot.projection);
@@ -159,7 +178,6 @@ function ActiveChatSurface({
     <div className={styles.surface}>
       <MainSubHead
         title={title}
-        sub={agentLabel}
         actions={
           composeBadge === undefined ? undefined : (
             <span className={styles.composeBadge}>{composeBadge}</span>

@@ -49,7 +49,7 @@
   color: var(--color-warn);
 }
 
-.op.del {
+.op.delete {
   color: var(--color-danger);
 }
 

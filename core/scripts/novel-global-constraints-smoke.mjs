@@ -50,7 +50,7 @@ const compiled = await compiler.compile({
   definition: novelAgentDefinition,
   capabilities: new PromptCapabilitySnapshot([]),
 });
-assert.ok(!compiled.content.includes("小说全局约束"));
+assert.ok(!compiled.content.includes("<Novel-Constraints-Content>"));
 assert.equal(
   compiled.blocks.some((block) => block.sourceId === "novel.global_constraints"),
   false,

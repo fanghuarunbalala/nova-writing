@@ -64,7 +64,7 @@ export class NovelGlobalConstraintsPromptSection extends DynamicPromptSection {
       `# 小说全局约束（${fileName}）`,
       "",
       "- 读取：每次 Provider Call 都会重新读取该文件并注入此处，你用 Write/Edit 修改后即时生效。",
-      "- 内容约束：此文件仅记录小说 meta/全局约束（书名、类型、世界观、角色规则、基调、禁忌等），不写入对话、任务或实现细节。",
+      "- 内容约束：此文件仅记录小说 meta/全局约束（书名、类型、世界观、角色规则、基调、禁忌、作者偏好等），不写入对话、任务或实现细节。",
       "",
       `以下是 ${fileName} 的当前内容：`,
       "",

@@ -6,6 +6,7 @@
  * canonical writer for tool execution.
  */
 import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { noopLogger, type Logger } from "../../../../observability/index.js";
 import {
@@ -139,6 +140,19 @@ export interface ChildNovelToolRegistry {
   readonly modeService: ComposeToolService;
 }
 
+/** 小说全局约束文件名（workspace 根相对）。Novel global-constraints file name (relative to the workspace root). */
+const NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME = "NOVEL.md";
+
+/** 幂等创建空的全局约束文件；已存在则跳过。Idempotently creates the empty constraints file; skips when present. */
+async function ensureNovelGlobalConstraintsFile(workspaceRoot: string): Promise<void> {
+  const target = path.join(workspaceRoot, NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME);
+  try {
+    await fs.access(target);
+  } catch {
+    await fs.writeFile(target, "", "utf8");
+  }
+}
+
 /** 解析 workspace 并打开真实 novel 工具注册表。Resolves the workspace and opens the real registry. */
 export async function openChildNovelToolRegistry(
   options: ChildNovelToolRegistryOptions,
@@ -149,6 +163,7 @@ export async function openChildNovelToolRegistry(
   const workspace = await new NodeWorkspaceStoreLocator({
     storageRoot: options.storageRoot,
   }).resolve(options.workdir);
+  await ensureNovelGlobalConstraintsFile(workspace.workspaceRoot);
   const designRoot = path.join(workspace.workspaceRoot, ".novel", "design");
   const sandboxRoot = workspace.workspaceRoot;
   const location = await new NodeNovelStoreLocator().resolve(workspace);

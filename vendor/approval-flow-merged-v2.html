@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>审批挂接聊天框 v2 · 顶部动画 + 丰富配色</title>
+<style>
+  :root {
+    --bg:            oklch(97.9% 0.003 85);
+    --surface:       oklch(99.8% 0.0015 85);
+    --surface-2:     oklch(96.2% 0.004 82);
+    --fg:            oklch(30% 0.009 46);
+    --muted:         oklch(52% 0.009 54);
+    --faint:         oklch(60% 0.009 58);
+    --border:        oklch(92.4% 0.003 82);
+    --border-strong: oklch(84% 0.008 72);
+    --accent:        oklch(55% 0.072 42);
+    --accent-ink:    oklch(47% 0.062 41);
+    --success:       oklch(52% 0.07 156);
+    --warn:          oklch(59% 0.07 80);
+    --danger:        oklch(54% 0.068 32);
+    --info:          oklch(54% 0.05 235);
+    --color-warn:    oklch(59% 0.07 80);
+    --grad-warn: linear-gradient(105deg, oklch(82% 0.055 85), oklch(59% 0.07 80) 55%, oklch(68% 0.07 75));
+    --shadow-1: 0 1px 2px rgba(40,22,10,.04), 0 8px 24px rgba(40,22,10,.045);
+    --shadow-card: 0 2px 8px rgba(40,22,10,.08), 0 20px 48px rgba(40,22,10,.14);
+    --font-ui: -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(1100px 700px at 12% -6%, color-mix(in oklab, var(--accent) 7%, transparent), transparent 60%), var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; padding: 30px 36px 90px; }
+  .head { max-width: 860px; margin: 0 auto 20px; }
+  .head h1 { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
+  .head .kicker { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; color: var(--faint); margin-bottom: 6px; }
+  .head p { color: var(--muted); font-size: 13px; margin-top: 5px; }
+
+  .stage { max-width: 860px; margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 1px 2px rgba(40,22,10,.04); overflow: hidden; display: flex; flex-direction: column; height: 580px; }
+  .stage-top { flex: none; display: flex; align-items: baseline; gap: 9px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+  .stage-top .t { font-weight: 800; font-size: 14px; }
+  .stage-top .sub { font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+  .flow { flex: 1; overflow: hidden; padding: 22px 20px 8px; display: flex; flex-direction: column; gap: 16px; }
+  .mb { max-width: 78%; font-size: 13px; padding: 8px 12px; border-radius: 4px 12px 12px 12px; }
+  .mb.a { background: color-mix(in oklab, var(--accent) 5%, var(--surface)); border: 1px solid color-mix(in oklab, var(--accent) 14%, var(--border)); align-self: flex-start; }
+  .mb.u { background: color-mix(in oklab, var(--info) 7%, var(--surface)); border: 1px solid color-mix(in oklab, var(--info) 16%, var(--border)); align-self: flex-end; border-radius: 12px 4px 12px 12px; }
+
+  .composer-wrap { flex: none; padding: 12px 18px 18px; }
+  .cluster { border-radius: 16px; box-shadow: var(--shadow-card); overflow: hidden; background: var(--surface); }
+
+  /* —— 审批卡（顶部流动多色条 + 彩色操作标签） —— */
+  .approval { background: linear-gradient(160deg, color-mix(in oklab, var(--warn) 5%, var(--surface)), var(--surface) 42%); border: 1px solid var(--border); border-bottom: 0; border-radius: 16px 16px 0 0; padding: 0 14px 11px; }
+
+  /* 顶部动画条：多色流动渐变（在「等待审批」上方） */
+  .strip { height: 5px; border-radius: 16px 16px 0 0; background: linear-gradient(90deg,
+    oklch(82% 0.055 85), oklch(59% 0.07 80), oklch(72% 0.09 55),
+    oklch(68% 0.14 30), oklch(66% 0.15 300), oklch(60% 0.11 220),
+    oklch(82% 0.055 85)); background-size: 320% auto; animation: strip-flow 4s linear infinite; }
+
+  .a-head { display: flex; align-items: center; gap: 9px; padding-top: 11px; }
+  .hourglass { flex: none; width: 18px; height: 18px; display: grid; place-items: center; color: var(--color-warn); }
+  .hourglass svg { width: 15px; height: 15px; animation: status-sway 2.8s ease-in-out infinite; transform-origin: center; }
+  .waiting-label { font-size: 12.5px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; background-image: var(--grad-warn); background-size: 250% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: grad-flow 4.5s ease-in-out infinite; opacity: 0.92; border-bottom: 1px solid color-mix(in oklab, var(--color-warn) 40%, transparent); padding-bottom: 1px; }
+  .a-title { margin-left: 10px; font-size: 13px; font-weight: 800; color: var(--fg); }
+  .a-sec { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+
+  /* 彩色操作标签（新增绿 / 修改琥珀 / 删除红） */
+  .a-ops { display: flex; flex-wrap: wrap; gap: 6px; padding: 9px 0 10px; }
+  .op { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 9px 3px 6px; border-radius: 9px; border: 1px solid var(--border); background: color-mix(in oklab, var(--surface) 70%, transparent); }
+  .op .chip { flex: none; width: 15px; height: 15px; border-radius: 5px; display: grid; place-items: center; font-size: 9px; font-weight: 900; color: #fff; }
+  .op.add .chip { background: var(--success); }
+  .op.edit .chip { background: var(--warn); }
+  .op.del .chip { background: var(--danger); }
+  .op b { font-weight: 700; color: var(--fg); }
+  .op .k { font-family: var(--font-mono); font-size: 9px; color: var(--faint); }
+
+  .a-acts { display: flex; align-items: center; gap: 2px; padding-top: 9px; border-top: 1px solid var(--border); }
+  .jump { margin-right: auto; display: inline-flex; align-items: center; gap: 4px; font: inherit; font-size: 11.5px; font-weight: 700; color: var(--accent-ink); background: color-mix(in oklab, var(--accent) 7%, transparent); border: 1px solid color-mix(in oklab, var(--accent) 20%, transparent); padding: 5px 9px; border-radius: 8px; cursor: pointer; }
+  .jump svg { width: 11px; height: 11px; }
+  .icon-btn { width: 27px; height: 27px; border-radius: 8px; border: 1px solid transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; background: transparent; }
+  .icon-btn svg { width: 14px; height: 14px; }
+  .icon-btn.pass { color: var(--success); border-color: color-mix(in oklab, var(--success) 28%, var(--border)); background: color-mix(in oklab, var(--success) 8%, transparent); }
+  .icon-btn.reject { color: var(--danger); border-color: color-mix(in oklab, var(--danger) 28%, var(--border)); background: color-mix(in oklab, var(--danger) 8%, transparent); }
+
+  .composer { background: var(--surface); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 16px 16px; padding: 12px 14px; display: flex; align-items: flex-end; gap: 10px; }
+  .composer .ph { flex: 1; color: var(--faint); font-size: 13px; padding: 3px 2px; }
+  .composer .send { flex: none; font: inherit; font-size: 13px; font-weight: 700; padding: 8px 20px; border-radius: 10px; border: 1px solid transparent; background: var(--surface-2); color: var(--faint); cursor: default; }
+
+  .trace { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); background: color-mix(in oklab, var(--success) 4%, var(--surface)); }
+  .trace .st { font-weight: 800; color: var(--success); }
+  .trace .t { color: var(--fg); font-weight: 700; }
+  .trace .tm { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+
+  .controls { max-width: 860px; margin: 16px auto 0; display: flex; gap: 10px; align-items: center; }
+  .controls button { font: inherit; font-size: 12px; padding: 6px 13px; border-radius: 8px; cursor: pointer; border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted); }
+  .controls .note { font-size: 12px; color: var(--faint); }
+
+  @keyframes strip-flow { 0% { background-position: 0% 50%; } 100% { background-position: 320% 50%; } }
+  @keyframes status-sway { 0%,100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+  @keyframes grad-flow { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="kicker">审批挂接聊天框 v2</div>
+  <h1>顶部多色流动动画条 + 彩色操作标签</h1>
+  <p>在「等待审批」文字<b>上方</b>加了一条多色流动渐变条（琥珀→橙→玫红→紫→蓝，循环流动）；操作区恢复彩色标签（＋新增 绿 / ～修改 琥珀 / －删除 红），不再单一配色。沙漏摇摆 + 渐变文字保留。</p>
+</div>
+
+<div class="stage">
+  <div class="stage-top"><span class="t">白鹭旅馆 · 第三章</span><span class="sub">审批在聊天框上 · 独立于消息流</span></div>
+  <div class="flow">
+    <div class="mb a">需要新增角色「林夏」并挂一个大纲节点，确认后我落库。</div>
+    <div class="mb u">好，给我看下要改什么。</div>
+    <div class="mb a">新增角色 <b>林夏</b>（别名 夏、夏夏）；「灯塔调查线」下挂场景 <b>追踪错误目标</b>。</div>
+  </div>
+  <div class="composer-wrap">
+    <div class="cluster">
+      <div class="approval" id="approval">
+        <div class="strip"></div>
+        <div class="a-head">
+          <span class="hourglass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg></span>
+          <span class="waiting-label">等待审批</span>
+          <span class="a-title">新增角色：林夏</span>
+          <span class="a-sec">NovelCharacterWrite · 09:12</span>
+        </div>
+        <div class="a-ops">
+          <span class="op add"><span class="chip">＋</span><b>林夏</b><span class="k">角色</span></span>
+          <span class="op add"><span class="chip">＋</span>别名 夏、夏夏<span class="k">角色</span></span>
+          <span class="op add"><span class="chip">＋</span><b>追踪错误目标</b><span class="k">大纲</span></span>
+        </div>
+        <div class="a-acts">
+          <button class="jump" id="jump">审核详情 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+          <button class="icon-btn reject" id="reject" title="驳回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          <button class="icon-btn pass" id="pass" title="通过"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></button>
+        </div>
+      </div>
+      <div class="composer"><div class="ph">输入创作指令，例如：让林夏在旧船坞发现货单…</div><div class="send" id="send">等待审批…</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <button id="reset">重置为待审批</button>
+  <span class="note">点「通过 / 驳回」试：卡片收起为一行已处理记录，发送解锁。</span>
+</div>
+
+<script>
+  const approval = document.getElementById("approval");
+  const send = document.getElementById("send");
+  document.getElementById("pass").addEventListener("click", () => resolve("approved"));
+  document.getElementById("reject").addEventListener("click", () => resolve("rejected"));
+  document.getElementById("jump").addEventListener("click", () => alert("跳转到审核详细面板（右侧）：完整参数 / 变更 diff / 上下文"));
+  document.getElementById("reset").addEventListener("click", () => location.reload());
+
+  function resolve(decision) {
+    approval.innerHTML = `
+      <div class="trace">
+        <span class="st">${decision === "approved" ? "已通过" : "已驳回"}</span>
+        <span class="t">新增角色：林夏</span>
+        <span class="tm">09:13</span>
+      </div>`;
+    send.style.background = "var(--accent)";
+    send.style.color = "oklch(99% 0 0)";
+    send.textContent = "发送";
+  }
+</script>
+</body></html>

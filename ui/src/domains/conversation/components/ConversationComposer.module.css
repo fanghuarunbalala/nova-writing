@@ -33,6 +33,14 @@
   pointer-events: auto;
 }
 
+/* 审批挂接卡插槽：居中于聊天框上方，可交互。 */
+.dockSlot {
+  position: relative;
+  max-width: 880px;
+  margin: 0 auto 8px;
+  pointer-events: auto;
+}
+
 .mainRow {
   display: flex;
   align-items: flex-end;

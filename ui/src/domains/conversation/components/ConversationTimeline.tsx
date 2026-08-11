@@ -9,7 +9,6 @@ import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ConversationTimelineItem as TimelineItem } from "../projection/ConversationTimelineItem.js";
 import type { MessageReference } from "./MessageReference.js";
 import { AssistantMessage } from "./AssistantMessage.js";
-import { ApprovalCard } from "./ApprovalCard.js";
 import { DesignCard } from "./DesignCard.js";
 import { UserMessage } from "./UserMessage.js";
 import { computeTimelineWindow } from "./timelineWindow.js";
@@ -27,10 +26,6 @@ export interface ConversationTimelineProps {
   readonly resolveReference?: ReferenceResolver;
   readonly onProposalAction?: (changeSetId: string, action: "approve" | "reject" | "view-diff") => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
-  readonly onApprovalDecision?: (
-    approvalRequestIds: readonly string[],
-    decision: "approved" | "rejected",
-  ) => void;
   /** 消息内操作提示（如复制结果）；上行到 shell ToastHost。 */
   readonly onNotify?: (kind: ToastKind, text: string) => void;
 }
@@ -43,7 +38,6 @@ export function ConversationTimeline({
   resolveReference,
   onProposalAction,
   onOpenApproval,
-  onApprovalDecision,
   onNotify,
 }: ConversationTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -104,7 +98,6 @@ export function ConversationTimeline({
                 resolveReference,
                 onProposalAction,
                 onOpenApproval,
-                onApprovalDecision,
                 onNotify,
                 firstUserSequence,
               })}
@@ -131,10 +124,6 @@ interface RenderItemDeps {
     action: "approve" | "reject" | "view-diff",
   ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
-  readonly onApprovalDecision?: (
-    approvalRequestIds: readonly string[],
-    decision: "approved" | "rejected",
-  ) => void;
   /** 消息内操作提示（如复制结果）；上行到 shell ToastHost。 */
   readonly onNotify?: (kind: ToastKind, text: string) => void;
   /** 时间线中首条用户消息的 sequence（决定复制按钮 inPad 态）。 */
@@ -148,7 +137,6 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
     resolveReference,
     onProposalAction,
     onOpenApproval,
-    onApprovalDecision,
     onNotify,
     firstUserSequence,
   } = deps;
@@ -210,32 +198,6 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
         </button>
       ) : (
         <div className={styles.system}>{item.text}</div>
-      );
-    case "approval":
-      return (
-        <ApprovalCard
-          approval={item.approval}
-          designDraft={
-            item.approval.toolNames.includes("ExitComposeMode")
-              ? { conversationId }
-              : undefined
-          }
-          onApprove={
-            onApprovalDecision === undefined
-              ? undefined
-              : (approvalRequestIds) => onApprovalDecision(approvalRequestIds, "approved")
-          }
-          onReject={
-            onApprovalDecision === undefined
-              ? undefined
-              : (approvalRequestIds) => onApprovalDecision(approvalRequestIds, "rejected")
-          }
-          onOpenApproval={
-            onOpenApproval === undefined
-              ? undefined
-              : (approvalRequestId) => onOpenApproval(approvalRequestId)
-          }
-        />
       );
     case "design":
       return (

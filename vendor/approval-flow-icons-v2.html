@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>审批挂接聊天框 · 图标样式选型 v2</title>
+<style>
+  :root {
+    --bg:            oklch(97.9% 0.003 85);
+    --surface:       oklch(99.8% 0.0015 85);
+    --fg:            oklch(30% 0.009 46);
+    --muted:         oklch(52% 0.009 54);
+    --faint:         oklch(60% 0.009 58);
+    --border:        oklch(92.4% 0.003 82);
+    --accent:        oklch(55% 0.072 42);
+    --accent-ink:    oklch(47% 0.062 41);
+    --frame:         oklch(59% 0.07 80);
+    --frame-soft:    oklch(59% 0.07 80 / .5);
+    --c-add:         oklch(52% 0.07 156);
+    --c-del:         oklch(54% 0.068 32);
+    --wait-grad: linear-gradient(105deg, oklch(82% 0.055 85), oklch(59% 0.07 80) 55%, oklch(68% 0.07 75));
+    --strip-grad: linear-gradient(90deg, oklch(85% 0.05 90), oklch(62% 0.09 70), oklch(72% 0.09 55), oklch(85% 0.05 90));
+    --font-ui: -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(1100px 700px at 12% -6%, color-mix(in oklab, var(--accent) 7%, transparent), transparent 60%), var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; padding: 30px 36px 90px; }
+  .head { max-width: 1200px; margin: 0 auto 20px; }
+  .head h1 { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
+  .head .kicker { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; color: var(--faint); margin-bottom: 6px; }
+  .head p { color: var(--muted); font-size: 13px; max-width: 940px; margin-top: 5px; }
+
+  .grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  .frame { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 1px 2px rgba(40,22,10,.04); overflow: hidden; }
+  .frame-head { display: flex; align-items: baseline; gap: 9px; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  .frame-head .nm { font-weight: 800; font-size: 13px; }
+  .frame-head .sub { font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+  .viewport { height: 400px; display: flex; flex-direction: column; }
+  .mini-flow { flex: 1; overflow: hidden; padding: 16px 16px 4px; display: flex; flex-direction: column; gap: 12px; }
+  .mb { max-width: 78%; font-size: 12px; padding: 7px 11px; border-radius: 4px 11px 11px 11px; }
+  .mb.a { background: color-mix(in oklab, var(--accent) 5%, var(--surface)); border: 1px solid color-mix(in oklab, var(--accent) 14%, var(--border)); align-self: flex-start; }
+  .frame-note { padding: 9px 14px 12px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
+  .frame-note b { color: var(--fg); }
+
+  .composer-wrap { flex: none; padding: 10px 14px 16px; }
+  .cluster { border-radius: 16px; box-shadow: 0 2px 10px oklch(59% 0.07 80 / .14), 0 22px 50px rgba(40,22,10,.16); overflow: hidden; }
+  .approval { background: linear-gradient(160deg, oklch(97% 0.02 85 / .62), oklch(99% 0.001 85 / .42)); backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4); border: 1.5px solid var(--frame-soft); border-bottom: 0; border-radius: 16px 16px 0 0; padding: 0 13px 10px; }
+  .strip { height: 4px; border-radius: 16px 16px 0 0; background: var(--strip-grad); background-size: 320% auto; animation: strip-flow 4s linear infinite; }
+  .a-ops { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 10px; }
+  .op { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; padding: 3px 9px 3px 6px; border-radius: 8px; border: 1px solid var(--border); border-left: 3px solid var(--oc); background: var(--obg); }
+  .op .glyph { flex: none; font-size: 10px; font-weight: 900; color: var(--oc); }
+  .op.add { --oc: var(--c-add); --obg: color-mix(in oklab, var(--c-add) 15%, var(--surface)); }
+  .op.edit { --oc: var(--frame); --obg: color-mix(in oklab, var(--frame) 15%, var(--surface)); }
+  .op b { font-weight: 800; color: var(--fg); }
+  .a-wait-row { display: flex; align-items: center; gap: 9px; margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--frame-soft); }
+  .hourglass { flex: none; width: 16px; height: 16px; display: grid; place-items: center; color: var(--frame); }
+  .hourglass svg { width: 13px; height: 13px; animation: status-sway 2.8s ease-in-out infinite; transform-origin: center; }
+  .waiting-label { font-size: 12px; font-weight: 700; white-space: nowrap; background-image: var(--wait-grad); background-size: 250% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: grad-flow 4.5s ease-in-out infinite; opacity: .92; border-bottom: 1px solid var(--frame-soft); padding-bottom: 1px; }
+  .a-icons { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .composer { background: var(--surface); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 16px 16px; padding: 11px 13px; display: flex; align-items: flex-end; gap: 10px; }
+  .composer .ph { flex: 1; color: var(--faint); font-size: 12.5px; padding: 3px 2px; }
+  .composer .send { flex: none; font: inherit; font-size: 12.5px; font-weight: 700; padding: 7px 18px; border-radius: 9px; border: 1px solid transparent; background: var(--surface-2); color: var(--faint); cursor: default; }
+  .done { text-align: center; font-size: 11.5px; color: var(--c-add); padding: 2px 0 4px; }
+
+  /* ============ 图标样式 5 · 玻璃拟态按钮 ============ */
+  .s5 .icon-btn { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(150deg, rgb(255 255 255 / .72), rgb(255 255 255 / .3)); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid color-mix(in oklab, var(--oc) 30%, rgb(255 255 255 / .6)); box-shadow: 0 1px 4px rgb(0 0 0 / .08), inset 0 1px 1px rgb(255 255 255 / .7); color: var(--oc); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; transition: transform .14s; }
+  .s5 .icon-btn svg { width: 16px; height: 16px; stroke-width: 2.1; }
+  .s5 .icon-btn.pass { --oc: var(--c-add); }
+  .s5 .icon-btn.reject { --oc: var(--c-del); }
+  .s5 .icon-btn:hover { transform: translateY(-2px); box-shadow: 0 3px 8px rgb(0 0 0 / .12), inset 0 1px 1px rgb(255 255 255 / .7); }
+  .s5 .jump { display: inline-flex; align-items: center; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px 2px; font: inherit; font-size: 11px; font-weight: 700; }
+  .s5 .jump svg { width: 16px; height: 16px; stroke-width: 1.9; color: var(--frame); }
+  .s5 .jump .txt { color: var(--muted); }
+
+  /* ============ 图标样式 6 · 圆角方块描边 ============ */
+  .s6 .icon-btn { background: none; border: none; padding: 2px; cursor: pointer; display: inline-flex; }
+  .s6 .icon-btn svg { width: 26px; height: 26px; stroke-width: 1.8; transition: transform .14s; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .1)); }
+  .s6 .icon-btn.pass svg { color: var(--c-add); }
+  .s6 .icon-btn.reject svg { color: var(--c-del); }
+  .s6 .icon-btn:hover svg { transform: translateY(-1px); }
+  .s6 .jump { display: inline-flex; align-items: center; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px 2px; font: inherit; font-size: 11px; font-weight: 700; }
+  .s6 .jump svg { width: 20px; height: 20px; stroke-width: 1.8; color: var(--frame); }
+  .s6 .jump .txt { color: var(--muted); }
+
+  /* ============ 图标样式 7 · 渐变实心字形 ============ */
+  .s7 .icon-btn { background: none; border: none; padding: 2px; cursor: pointer; display: inline-flex; }
+  .s7 .icon-btn svg { width: 24px; height: 24px; stroke-width: 2.6; transition: transform .14s; }
+  .s7 .icon-btn.pass svg { stroke: url(#gradPass); }
+  .s7 .icon-btn.reject svg { stroke: url(#gradReject); }
+  .s7 .icon-btn:hover svg { transform: translateY(-1px); }
+  .s7 .jump { display: inline-flex; align-items: center; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px 2px; font: inherit; font-size: 11px; font-weight: 700; }
+  .s7 .jump svg { width: 19px; height: 19px; stroke-width: 2.6; stroke: url(#gradJump); }
+  .s7 .jump .txt { color: var(--muted); }
+
+  /* ============ 图标样式 8 · 动效自绘 ============ */
+  .s8 .icon-btn { background: none; border: none; padding: 2px; cursor: pointer; display: inline-flex; }
+  .s8 .icon-btn svg { width: 24px; height: 24px; stroke-width: 2.2; transition: transform .14s; }
+  .s8 .icon-btn.pass svg { color: var(--c-add); }
+  .s8 .icon-btn.reject svg { color: var(--c-del); }
+  .s8 .icon-btn:hover svg { transform: translateY(-1px); }
+  .s8 .draw { stroke-dasharray: 26; stroke-dashoffset: 26; animation: draw 1.3s ease forwards infinite; }
+  .s8 .draw2 { stroke-dasharray: 14; stroke-dashoffset: 14; animation: draw 1.3s ease .25s forwards infinite; }
+  .s8 .slide { animation: slide 1.3s ease-in-out infinite; }
+  .s8 .jump { display: inline-flex; align-items: center; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px 2px; font: inherit; font-size: 11px; font-weight: 700; }
+  .s8 .jump svg { width: 18px; height: 18px; stroke-width: 2.2; color: var(--frame); }
+  .s8 .jump .txt { color: var(--muted); }
+
+  @keyframes strip-flow { 0% { background-position: 0% 50%; } 100% { background-position: 320% 50%; } }
+  @keyframes status-sway { 0%,100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+  @keyframes grad-flow { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+  @keyframes draw { 0% { stroke-dashoffset: 26; } 60%,100% { stroke-dashoffset: 0; } }
+  @keyframes slide { 0%,100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+</style>
+</head>
+<body>
+<!-- 渐变 def（全局共享） -->
+<svg width="0" height="0" style="position:absolute"><defs>
+  <linearGradient id="gradPass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="oklch(60% 0.12 165)"/><stop offset="1" stop-color="oklch(48% 0.09 150)"/></linearGradient>
+  <linearGradient id="gradReject" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="oklch(62% 0.14 28)"/><stop offset="1" stop-color="oklch(50% 0.15 350)"/></linearGradient>
+  <linearGradient id="gradJump" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="oklch(72% 0.09 55)"/><stop offset="1" stop-color="oklch(52% 0.09 80)"/></linearGradient>
+</defs></svg>
+
+<div class="head">
+  <div class="kicker">图标样式选型 v2 · 方案A 琥珀暖调</div>
+  <h1>再四种图标样式 · 完全不同的方向</h1>
+  <p>玻璃拟态 / 圆角方块 / 渐变实心 / 动效自绘 —— 通过✓ 驳回✕ 跳转，同配色、不同风格。</p>
+</div>
+
+<div class="grid">
+
+  <!-- 5 玻璃拟态 -->
+  <div class="frame s5">
+    <div class="frame-head"><span class="nm">5 · 玻璃拟态按钮</span><span class="sub">glass · 磨砂浮起</span></div>
+    <div class="viewport">
+      <div class="mini-flow"><div class="mb a">新增角色/段落/大纲，确认后落库。</div></div>
+      <div class="composer-wrap"><div class="cluster">
+        <div class="approval">
+          <div class="strip"></div>
+          <div class="a-ops">
+            <span class="op add"><span class="glyph">＋</span>新增角色：<b>林夏</b></span>
+            <span class="op add"><span class="glyph">＋</span>新增大纲：<b>追踪错误目标</b></span>
+          </div>
+          <div class="a-wait-row">
+            <span class="hourglass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg></span>
+            <span class="waiting-label">等待审批</span>
+            <span class="a-icons">
+              <button class="jump"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg><span class="txt">审核详情</span></button>
+              <button class="icon-btn reject" title="驳回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+              <button class="icon-btn pass" title="通过"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5 9-10"/></svg></button>
+            </span>
+          </div>
+        </div>
+        <div class="composer"><div class="ph">输入创作指令…</div><div class="send">等待审批…</div></div>
+      </div></div>
+    </div>
+    <div class="frame-note"><b>磨砂玻璃圆形按钮</b>：半透明模糊底 + 内高光 + 悬浮投影，Apple 玻璃拟态质感。</div>
+  </div>
+
+  <!-- 6 圆角方块 -->
+  <div class="frame s6">
+    <div class="frame-head"><span class="nm">6 · 圆角方块描边</span><span class="sub">squircle · 几何</span></div>
+    <div class="viewport">
+      <div class="mini-flow"><div class="mb a">新增角色/段落/大纲，确认后落库。</div></div>
+      <div class="composer-wrap"><div class="cluster">
+        <div class="approval">
+          <div class="strip"></div>
+          <div class="a-ops">
+            <span class="op add"><span class="glyph">＋</span>新增角色：<b>林夏</b></span>
+            <span class="op add"><span class="glyph">＋</span>新增大纲：<b>追踪错误目标</b></span>
+          </div>
+          <div class="a-wait-row">
+            <span class="hourglass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg></span>
+            <span class="waiting-label">等待审批</span>
+            <span class="a-icons">
+              <button class="jump"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M11 9v6"/><path d="m9 12 2 2 2-2"/><path d="M9 15h4"/></svg><span class="txt">审核详情</span></button>
+              <button class="icon-btn reject" title="驳回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/></svg></button>
+              <button class="icon-btn pass" title="通过"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5"/><path d="m9 12 2.5 2.5 4-4.5"/></svg></button>
+            </span>
+          </div>
+        </div>
+        <div class="composer"><div class="ph">输入创作指令…</div><div class="send">等待审批…</div></div>
+      </div></div>
+    </div>
+    <div class="frame-note"><b>圆角方块描边容器</b> + 字形，几何感、现代，与圆形按钮形成对比。</div>
+  </div>
+
+  <!-- 7 渐变实心 -->
+  <div class="frame s7">
+    <div class="frame-head"><span class="nm">7 · 渐变实心字形</span><span class="sub">gradient · 鲜活</span></div>
+    <div class="viewport">
+      <div class="mini-flow"><div class="mb a">新增角色/段落/大纲，确认后落库。</div></div>
+      <div class="composer-wrap"><div class="cluster">
+        <div class="approval">
+          <div class="strip"></div>
+          <div class="a-ops">
+            <span class="op add"><span class="glyph">＋</span>新增角色：<b>林夏</b></span>
+            <span class="op add"><span class="glyph">＋</span>新增大纲：<b>追踪错误目标</b></span>
+          </div>
+          <div class="a-wait-row">
+            <span class="hourglass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg></span>
+            <span class="waiting-label">等待审批</span>
+            <span class="a-icons">
+              <button class="jump"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg><span class="txt">审核详情</span></button>
+              <button class="icon-btn reject" title="驳回"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+              <button class="icon-btn pass" title="通过"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5 9-10"/></svg></button>
+            </span>
+          </div>
+        </div>
+        <div class="composer"><div class="ph">输入创作指令…</div><div class="send">等待审批…</div></div>
+      </div></div>
+    </div>
+    <div class="frame-note"><b>渐变描边字形</b>：绿→青绿、红→玫红、琥珀→黄，粗 2.6，鲜活立体，无容器。</div>
+  </div>
+
+  <!-- 8 动效自绘 -->
+  <div class="frame s8">
+    <div class="frame-head"><span class="nm">8 · 动效自绘</span><span class="sub">motion · 会动</span></div>
+    <div class="viewport">
+      <div class="mini-flow"><div class="mb a">新增角色/段落/大纲，确认后落库。</div></div>
+      <div class="composer-wrap"><div class="cluster">
+        <div class="approval">
+          <div class="strip"></div>
+          <div class="a-ops">
+            <span class="op add"><span class="glyph">＋</span>新增角色：<b>林夏</b></span>
+            <span class="op add"><span class="glyph">＋</span>新增大纲：<b>追踪错误目标</b></span>
+          </div>
+          <div class="a-wait-row">
+            <span class="hourglass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg></span>
+            <span class="waiting-label">等待审批</span>
+            <span class="a-icons">
+              <button class="jump"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path class="slide" d="M7 17 17 7"/><path class="slide" d="M9 7h8v8"/></svg><span class="txt">审核详情</span></button>
+              <button class="icon-btn reject" title="驳回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path class="draw" d="M6 6l12 12M18 6L6 18"/></svg></button>
+              <button class="icon-btn pass" title="通过"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path class="draw" d="M5 12.5l5 5"/><path class="draw2" d="M10 17.5l9-10"/></svg></button>
+            </span>
+          </div>
+        </div>
+        <div class="composer"><div class="ph">输入创作指令…</div><div class="send">等待审批…</div></div>
+      </div></div>
+    </div>
+    <div class="frame-note"><b>图标自己会动</b>：通过/驳回用笔画自绘（描边流动），跳转箭头左右轻滑，持续呼吸感。</div>
+  </div>
+
+</div>
+
+<script>
+  document.querySelectorAll(".icon-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const frame = btn.closest(".frame");
+      if (frame.querySelector(".done")) return;
+      const approval = frame.querySelector(".approval");
+      approval.innerHTML = `<div class="done">● 已通过 · 新增角色：林夏 等 2 项 · 09:13</div>`;
+      const send = frame.querySelector(".send");
+      send.style.background = "var(--accent)"; send.style.color = "oklch(99% 0 0)"; send.textContent = "发送";
+    });
+  });
+  document.querySelectorAll(".jump").forEach((b) => b.addEventListener("click", () => alert("跳转到审核详细面板（右侧）")));
+</script>
+</body></html>

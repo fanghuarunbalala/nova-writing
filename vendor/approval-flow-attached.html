@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>审批挂接聊天框 · 四种方式</title>
+<style>
+  :root {
+    --bg:            oklch(97.9% 0.003 85);
+    --surface:       oklch(99.8% 0.0015 85);
+    --surface-2:     oklch(96.2% 0.004 82);
+    --fg:            oklch(30% 0.009 46);
+    --muted:         oklch(52% 0.009 54);
+    --faint:         oklch(60% 0.009 58);
+    --border:        oklch(92.4% 0.003 82);
+    --border-strong: oklch(84% 0.008 72);
+    --accent:        oklch(55% 0.072 42);
+    --accent-ink:    oklch(47% 0.062 41);
+    --success:       oklch(52% 0.07 156);
+    --warn:          oklch(59% 0.07 80);
+    --danger:        oklch(54% 0.068 32);
+    --info:          oklch(54% 0.05 235);
+    --shadow-1: 0 1px 2px rgba(40,22,10,.04), 0 8px 24px rgba(40,22,10,.045);
+    --shadow-card: 0 2px 8px rgba(40,22,10,.07), 0 18px 46px rgba(40,22,10,.12);
+    --font-ui: -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(1100px 700px at 12% -6%, color-mix(in oklab, var(--accent) 7%, transparent), transparent 60%), var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; padding: 30px 36px 90px; }
+  .head { max-width: 1200px; margin: 0 auto 20px; }
+  .head h1 { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
+  .head .kicker { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; color: var(--faint); margin-bottom: 6px; }
+  .head p { color: var(--muted); font-size: 13px; max-width: 920px; margin-top: 5px; }
+  .grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+
+  .frame { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 1px 2px rgba(40,22,10,.04); overflow: hidden; }
+  .frame-head { display: flex; align-items: baseline; gap: 9px; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  .frame-head .nm { font-weight: 800; font-size: 13px; }
+  .frame-head .sub { font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+  .viewport { position: relative; height: 380px; display: flex; flex-direction: column; }
+  .mini-flow { flex: 1; overflow: hidden; padding: 16px 16px 4px; display: flex; flex-direction: column; gap: 12px; }
+  .mb { max-width: 78%; font-size: 12px; padding: 7px 11px; border-radius: 4px 11px 11px 11px; }
+  .mb.a { background: color-mix(in oklab, var(--accent) 5%, var(--surface)); border: 1px solid color-mix(in oklab, var(--accent) 14%, var(--border)); align-self: flex-start; }
+  .mb.u { background: color-mix(in oklab, var(--info) 7%, var(--surface)); border: 1px solid color-mix(in oklab, var(--info) 16%, var(--border)); align-self: flex-end; border-radius: 11px 4px 11px 11px; }
+  .frame-note { padding: 9px 14px 12px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
+  .frame-note b { color: var(--fg); }
+
+  /* ---- 通用审批卡内容 ---- */
+  .row { display: flex; align-items: center; gap: 7px; padding: 9px 12px 3px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 3px oklch(59% 0.07 80 / .2); flex: none; }
+  .lbl { font-size: 9.5px; font-weight: 800; letter-spacing: .08em; color: oklch(50% 0.06 74); }
+  .title { font-size: 12.5px; font-weight: 800; }
+  .meta { margin-left: auto; font-family: var(--font-mono); font-size: 9px; color: var(--faint); }
+  .brief { padding: 1px 12px 7px; font-size: 12px; color: var(--muted); }
+  .brief b { color: var(--fg); font-weight: 700; }
+  .acts { display: flex; align-items: center; gap: 2px; padding: 4px 9px 9px; }
+  .jump { margin-right: auto; display: inline-flex; align-items: center; gap: 4px; font: inherit; font-size: 11px; font-weight: 700; color: var(--accent-ink); background: none; border: none; cursor: pointer; padding: 3px 4px; }
+  .jump svg { width: 10px; height: 10px; }
+  .icon-btn { width: 25px; height: 25px; border-radius: 7px; border: 1px solid transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; background: transparent; }
+  .icon-btn svg { width: 13px; height: 13px; }
+  .icon-btn.pass { color: var(--success); border-color: color-mix(in oklab, var(--success) 26%, var(--border)); background: color-mix(in oklab, var(--success) 7%, transparent); }
+  .icon-btn.reject { color: var(--danger); border-color: color-mix(in oklab, var(--danger) 26%, var(--border)); background: color-mix(in oklab, var(--danger) 7%, transparent); }
+
+  /* ---- 聊天框基础 ---- */
+  .composer-wrap { flex: none; padding: 10px 14px 16px; }
+  .composer { background: var(--surface); border: 1px solid var(--border); border-radius: 15px; box-shadow: var(--shadow-1); padding: 11px 13px; display: flex; align-items: flex-end; gap: 10px; }
+  .composer .ph { flex: 1; color: var(--faint); font-size: 12.5px; padding: 3px 2px; }
+  .composer .send { flex: none; font: inherit; font-size: 12.5px; font-weight: 700; padding: 7px 18px; border-radius: 9px; border: 1px solid transparent; background: var(--surface-2); color: var(--faint); cursor: default; }
+
+  /* ===== 方案 1 · 一体延伸（审批是聊天框的顶部一块） ===== */
+  .v1 .cluster { border-radius: 15px; box-shadow: var(--shadow-card); overflow: hidden; }
+  .v1 .approval { background: color-mix(in oklab, var(--surface) 96%, transparent); border: 1px solid var(--border); border-bottom: 0; border-radius: 15px 15px 0 0; padding-bottom: 6px; }
+  .v1 .composer { border-radius: 0 0 15px 15px; border-top: 0; box-shadow: none; }
+  .v1 .approval .acts { border-top: 1px solid var(--border); margin-top: 2px; padding-top: 6px; }
+
+  /* ===== 方案 2 · 呼出卡（caret 锚定到聊天框） ===== */
+  .v2 .approval { background: linear-gradient(150deg, oklch(99% 0.001 85 / .9), oklch(96% 0.004 82 / .7)); backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4); border: 1px solid var(--border-strong); border-radius: 13px; box-shadow: var(--shadow-card); position: relative; margin: 0 0 8px; }
+  .v2 .caret { position: absolute; bottom: -8px; left: 50%; margin-left: -8px; width: 16px; height: 16px; background: inherit; border-right: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); transform: rotate(45deg); border-radius: 0 0 4px 0; }
+
+  /* ===== 方案 3 · 挂签（挂在聊天框上沿的标签） ===== */
+  .v3 .approval { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--shadow-card); margin: 0 22px -9px; position: relative; z-index: 2; padding-bottom: 4px; }
+  .v3 .composer-wrap { padding-top: 0; }
+  .v3 .composer { box-shadow: var(--shadow-1); }
+
+  /* ===== 方案 4 · 顶嵌条（审批内嵌为聊天框顶条，同体） ===== */
+  .v4 .composer-wrap { padding-top: 0; }
+  .v4 .approval { background: color-mix(in oklab, var(--warn) 6%, var(--surface)); border: 1px solid var(--border); border-bottom: 0; border-radius: 15px 15px 0 0; border-left: 3px solid var(--warn); }
+  .v4 .approval .acts { border-top: 1px solid var(--border); margin-top: 2px; padding-top: 6px; }
+  .v4 .composer { border-radius: 0 0 15px 15px; border-top: 0; box-shadow: none; }
+
+  .done { text-align: center; font-size: 11.5px; color: var(--success); padding: 2px 0 4px; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="kicker">审批 · 挂接到聊天框</div>
+  <h1>四种挂接方式 · 视觉属于聊天框、与消息流区隔</h1>
+  <p>审批卡不再是悬浮在对话流之间的独立层，而是<b>挂在聊天框上</b>：与输入区同属一个簇，消息流保持干净。四种方式在「连接机制」上不同，交互相同（简述 + 图标通过/驳回 + 审核详情）。点图标可试。</p>
+</div>
+
+<div class="grid">
+
+  <!-- 方案 1 · 一体延伸 -->
+  <div class="frame v1">
+    <div class="frame-head"><span class="nm">1 · 一体延伸</span><span class="sub">审批 = 聊天框顶部一块</span></div>
+    <div class="viewport">
+      <div class="mini-flow">
+        <div class="mb a">需要新增角色「林夏」并挂一个大纲节点。</div>
+        <div class="mb u">确认后我落库。</div>
+      </div>
+      <div class="composer-wrap"><div class="cluster">
+        <div class="approval">
+          <div class="row"><span class="dot"></span><span class="lbl">待审批</span><span class="title">新增角色：林夏</span><span class="meta">09:12</span></div>
+          <div class="brief">新增角色 <b>林夏</b>，别名 夏、夏夏</div>
+          <div class="acts"><button class="jump">审核详情 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn reject"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><button class="icon-btn pass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></button></div>
+        </div>
+        <div class="composer"><div class="ph">输入创作指令…</div><div class="send">等待审批…</div></div>
+      </div></div>
+    </div>
+    <div class="frame-note"><b>审批是聊天框的顶部一块</b>，共用一张卡（圆角一体化），像输入区「长」出来的审核条；连接最紧密。</div>
+  </div>
+
+  <!-- 方案 2 · 呼出卡 -->
+  <div class="frame v2">
+    <div class="frame-head"><span class="nm">2 · 呼出卡</span><span class="sub">caret 锚定到聊天框</span></div>
+    <div class="viewport">
+      <div class="mini-flow">
+        <div class="mb a">需要新增角色「林夏」并挂一个大纲节点。</div>
+        <div class="mb u">确认后我落库。</div>
+      </div>
+      <div class="composer-wrap">
+        <div class="approval">
+          <div class="caret"></div>
+          <div class="row"><span class="dot"></span><span class="lbl">待审批</span><span class="title">新增角色：林夏</span><span class="meta">09:12</span></div>
+          <div class="brief">新增角色 <b>林夏</b>，别名 夏、夏夏</div>
+          <div class="acts"><button class="jump">审核详情 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn reject"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><button class="icon-btn pass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></button></div>
+        </div>
+      </div>
+      <div class="composer-wrap" style="padding-top:2px">
+        <div class="composer"><div class="ph">输入创作指令…</div><div class="send">等待审批…</div></div>
+      </div>
+    </div>
+    <div class="frame-note"><b>浮卡 + 底部 caret</b> 指向聊天框，像从输入区「呼出」的审批气泡；有间隙但被箭头锚定。</div>
+  </div>
+
+  <!-- 方案 3 · 挂签 -->
+  <div class="frame v3">
+    <div class="frame-head"><span class="nm">3 · 挂签</span><span class="sub">挂在聊天框上沿的标签</span></div>
+    <div class="viewport">
+      <div class="mini-flow">
+        <div class="mb a">需要新增角色「林夏」并挂一个大纲节点。</div>
+        <div class="mb u">确认后我落库。</div>
+      </div>
+      <div class="composer-wrap">
+        <div class="approval">
+          <div class="row"><span class="dot"></span><span class="lbl">待审批</span><span class="title">新增角色：林夏</span><span class="meta">09:12</span></div>
+          <div class="brief">新增角色 <b>林夏</b>，别名 夏、夏夏</div>
+          <div class="acts"><button class="jump">审核详情 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn reject"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><button class="icon-btn pass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></button></div>
+        </div>
+      </div>
+      <div class="composer"><div class="ph">输入创作指令…</div><div class="send">等待审批…</div></div>
+    </div>
+    <div class="frame-note"><b>标签叠在聊天框上沿</b>（略微压边、z-index 浮出），像夹在输入框边缘的通知签；聊天框本身保持单层。</div>
+  </div>
+
+  <!-- 方案 4 · 顶嵌条 -->
+  <div class="frame v4">
+    <div class="frame-head"><span class="nm">4 · 顶嵌条</span><span class="sub">审批 = 聊天框内嵌顶条</span></div>
+    <div class="viewport">
+      <div class="mini-flow">
+        <div class="mb a">需要新增角色「林夏」并挂一个大纲节点。</div>
+        <div class="mb u">确认后我落库。</div>
+      </div>
+      <div class="composer-wrap">
+        <div class="approval">
+          <div class="row"><span class="dot"></span><span class="lbl">待审批</span><span class="title">新增角色：林夏</span><span class="meta">09:12</span></div>
+          <div class="brief">新增角色 <b>林夏</b>，别名 夏、夏夏</div>
+          <div class="acts"><button class="jump">审核详情 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="icon-btn reject"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><button class="icon-btn pass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></button></div>
+        </div>
+      </div>
+      <div class="composer"><div class="ph">输入创作指令…</div><div class="send">等待审批…</div></div>
+    </div>
+    <div class="frame-note"><b>内嵌为聊天框顶条</b>（琥珀左竖线），与输入区同一张卡、零间隙；最像「输入区自带的审核行」。</div>
+  </div>
+
+</div>
+
+<script>
+  document.querySelectorAll(".icon-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const frame = btn.closest(".frame");
+      const done = frame.querySelector(".done");
+      const approval = frame.querySelector(".approval");
+      approval.style.display = "none";
+      const send = frame.querySelector(".send");
+      send.style.background = "var(--accent)"; send.style.color = "oklch(99% 0 0)"; send.textContent = "发送";
+      if (!done) {
+        const d = document.createElement("div");
+        d.className = "done";
+        d.textContent = "● 已通过 · 新增角色：林夏 · 09:13";
+        approval.insertAdjacentElement("afterend", d);
+      }
+    });
+  });
+  document.querySelectorAll(".jump").forEach((b) => {
+    b.addEventListener("click", () => alert("跳转到审核详细面板（右侧）"));
+  });
+</script>
+</body></html>

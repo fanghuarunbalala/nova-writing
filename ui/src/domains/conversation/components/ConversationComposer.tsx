@@ -8,7 +8,7 @@
  * 模式栏为受控组件：mode 来自投影的会话级权威状态，切换由上层 enqueue
  * ConversationModeSetInputEvent（mode 不再随 onSend 丢弃）。
  */
-import { useState, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { GenStatus, type GenStatusProps } from "./GenStatus.js";
 import type { ComposerMode } from "../store/ComposerDraftStore.js";
@@ -32,6 +32,8 @@ export interface ConversationComposerProps {
   readonly onModeChange?: (mode: ComposerMode) => void;
   /** 审批挂起时禁用发送（审核中）；打字与切 mode 不受影响。 */
   readonly sendDisabled?: boolean;
+  /** 挂接在聊天框上方的插槽（审批挂接卡）。Rendered above the input form. */
+  readonly header?: ReactNode;
 }
 
 export function ConversationComposer({
@@ -42,6 +44,7 @@ export function ConversationComposer({
   mode = "review",
   onModeChange = noopModeChange,
   sendDisabled = false,
+  header,
 }: ConversationComposerProps) {
   const [text, setText] = useState("");
 
@@ -61,6 +64,7 @@ export function ConversationComposer({
 
   return (
     <div className={styles.composer}>
+      {header !== undefined ? <div className={styles.dockSlot}>{header}</div> : null}
       <form
         className={styles.form}
         onSubmit={(event) => {

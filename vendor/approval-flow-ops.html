@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>审批卡 · 操作块样式选型</title>
+<style>
+  :root {
+    --bg:            oklch(97.9% 0.003 85);
+    --surface:       oklch(99.8% 0.0015 85);
+    --surface-2:     oklch(96.2% 0.004 82);
+    --fg:            oklch(28% 0.01 45);
+    --muted:         oklch(48% 0.01 52);
+    --faint:         oklch(60% 0.009 58);
+    --border:        oklch(91% 0.005 80);
+    --accent:        oklch(55% 0.072 42);
+    --amber:         oklch(55% 0.09 78);
+    --amber-soft:    oklch(55% 0.09 78 / .68);
+    --c-add:         oklch(44% 0.10 156);
+    --c-edit:        oklch(52% 0.10 76);
+    --c-del:         oklch(46% 0.13 28);
+    --amber-grad:   linear-gradient(105deg, oklch(84% 0.05 90), oklch(55% 0.09 78) 55%, oklch(66% 0.08 72));
+    --strip-grad:   linear-gradient(90deg, oklch(86% 0.05 90), oklch(60% 0.10 72), oklch(72% 0.09 55), oklch(86% 0.05 90));
+    --font-ui: -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(1100px 700px at 12% -6%, color-mix(in oklab, var(--amber) 8%, transparent), transparent 60%), var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; padding: 30px 36px 90px; }
+  .head { max-width: 900px; margin: 0 auto 20px; }
+  .head h1 { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
+  .head .kicker { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; color: var(--faint); margin-bottom: 6px; }
+  .head p { color: var(--muted); font-size: 13px; max-width: 860px; margin-top: 5px; }
+
+  .grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .frame { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 1px 2px rgba(40,22,10,.04); overflow: hidden; }
+  .frame-head { display: flex; align-items: baseline; gap: 9px; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  .frame-head .nm { font-weight: 800; font-size: 13px; }
+  .frame-head .sub { font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+
+  /* 卡内操作区预览（白底 + 琥珀外围） */
+  .ops-view { padding: 16px; min-height: 96px; display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .frame-note { padding: 10px 14px 12px; font-size: 12px; color: var(--muted); }
+
+  /* 通用操作项文案 */
+  .ops { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* ===== A · 轻白胶囊 + 彩色符号 ===== */
+  .a .op { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 4px 10px 4px 7px; border-radius: 999px; background: color-mix(in oklab, var(--surface-2) 55%, transparent); border: 1px solid oklch(88% 0.008 72 / .5); }
+  .a .glyph { font-size: 10.5px; font-weight: 900; }
+  .a .op.add .glyph { color: var(--c-add); }
+  .a .op.edit .glyph { color: var(--c-edit); }
+  .a .op.del .glyph { color: var(--c-del); }
+
+  /* ===== B · 彩色符号 + 纯文字（无框） ===== */
+  .b .op { display: inline-flex; align-items: baseline; gap: 4px; font-size: 12.5px; font-weight: 700; color: var(--fg); }
+  .b .glyph { font-size: 12px; font-weight: 900; }
+  .b .op.add .glyph { color: var(--c-add); }
+  .b .op.edit .glyph { color: var(--c-edit); }
+  .b .op.del .glyph { color: var(--c-del); }
+
+  /* ===== C · 彩色文字（无框无符号） ===== */
+  .c .op { font-size: 12.5px; font-weight: 700; }
+  .c .op.add { color: var(--c-add); }
+  .c .op.edit { color: var(--c-edit); }
+  .c .op.del { color: var(--c-del); }
+
+  /* ===== D · 轻白胶囊 + 彩色文字 ===== */
+  .d .op { display: inline-flex; align-items: center; font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 999px; background: color-mix(in oklab, var(--surface-2) 55%, transparent); border: 1px solid oklch(88% 0.008 72 / .5); }
+  .d .op.add { color: var(--c-add); }
+  .d .op.edit { color: var(--c-edit); }
+  .d .op.del { color: var(--c-del); }
+
+  .frame-note b { color: var(--fg); }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="kicker">审批卡 · 操作块样式选型</div>
+  <h1>「新增角色：林夏」操作块 · 四套更简单样式</h1>
+  <p>去掉左边框、统一透明清亮底；差异只在<b>彩色怎么表达</b>（彩色符号 / 彩色文字 / 彩色文字+胶囊）。白底卡 + 琥珀外围不变。</p>
+</div>
+
+<div class="grid">
+
+  <!-- A 轻白胶囊 + 彩色符号 -->
+  <div class="frame a">
+    <div class="frame-head"><span class="nm">A · 轻白胶囊 + 彩色符号</span><span class="sub">统一清亮底 · 符号分色</span></div>
+    <div class="ops-view">
+      <div class="ops">
+        <span class="op add"><span class="glyph">＋</span>新增角色：林夏</span>
+        <span class="op edit"><span class="glyph">～</span>编辑角色：林夏</span>
+        <span class="op del"><span class="glyph">−</span>删除大纲：旧船坞七号</span>
+        <span class="op add"><span class="glyph">＋</span>新增段落：旧船坞发现货单</span>
+      </div>
+    </div>
+    <div class="frame-note"><b>统一清亮胶囊底</b>（同一浅灰白半透明），＋/～/− 符号按 新增绿/编辑琥珀/删除红 分色，文字黑色。</div>
+  </div>
+
+  <!-- B 彩色符号 + 纯文字 -->
+  <div class="frame b">
+    <div class="frame-head"><span class="nm">B · 彩色符号 + 纯文字</span><span class="sub">无框最简</span></div>
+    <div class="ops-view">
+      <div class="ops">
+        <span class="op add"><span class="glyph">＋</span>新增角色：林夏</span>
+        <span class="op edit"><span class="glyph">～</span>编辑角色：林夏</span>
+        <span class="op del"><span class="glyph">−</span>删除大纲：旧船坞七号</span>
+        <span class="op add"><span class="glyph">＋</span>新增段落：旧船坞发现货单</span>
+      </div>
+    </div>
+    <div class="frame-note"><b>无任何框</b>，只有彩色符号 + 黑色文字，空格分隔，最极简通透。</div>
+  </div>
+
+  <!-- C 彩色文字 -->
+  <div class="frame c">
+    <div class="frame-head"><span class="nm">C · 彩色文字</span><span class="sub">纯色文字 · 无框无符号</span></div>
+    <div class="ops-view">
+      <div class="ops">
+        <span class="op add">新增角色：林夏</span>
+        <span class="op edit">编辑角色：林夏</span>
+        <span class="op del">删除大纲：旧船坞七号</span>
+        <span class="op add">新增段落：旧船坞发现货单</span>
+      </div>
+    </div>
+    <div class="frame-note"><b>整条文字直接分色</b>：新增绿 / 编辑琥珀 / 删除红，无框无符号，最干净。</div>
+  </div>
+
+  <!-- D 轻白胶囊 + 彩色文字 -->
+  <div class="frame d">
+    <div class="frame-head"><span class="nm">D · 轻白胶囊 + 彩色文字</span><span class="sub">统一清亮底 · 文字分色</span></div>
+    <div class="ops-view">
+      <div class="ops">
+        <span class="op add">新增角色：林夏</span>
+        <span class="op edit">编辑角色：林夏</span>
+        <span class="op del">删除大纲：旧船坞七号</span>
+        <span class="op add">新增段落：旧船坞发现货单</span>
+      </div>
+    </div>
+    <div class="frame-note"><b>统一清亮胶囊底</b> + 整条彩色文字，比 A 更轻（无符号），比 C 更有区块感。</div>
+  </div>
+
+</div>
+
+</body></html>

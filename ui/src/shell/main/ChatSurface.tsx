@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo } from "react";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
+import { ApprovalDock } from "../../domains/conversation/components/ApprovalDock.js";
 import { ConversationComposer } from "../../domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../domains/conversation/components/ConversationTimeline.js";
 import type { GenStatusProps } from "../../domains/conversation/components/GenStatus.js";
@@ -128,12 +129,14 @@ function ActiveChatSurface({
   );
   const runtimeStatus = useConversationRuntimeStatus(snapshot.projection);
   const failed = runtimeStatus.state === "failed";
-  // 本会话是否有挂起审批（审核中）：读本会话投影（双工，审批事件实时更新），
-  // 仅禁用发送按钮，打字/切 mode 不受影响。
-  const pendingApproval = (snapshot.projection.approvals ?? []).some(
+  // 本会话待审批（挂接聊天框的审批卡数据源）：读本会话投影（双工，实时更新）。
+  // pending 时由 ApprovalDock 承担「等待审批」态，GenStatus 不再显示 waiting。
+  const pendingApprovals = (snapshot.projection.approvals ?? []).filter(
     (approval) => approval.status === "pending",
   );
-  // 三态判定：failed > waiting（审批挂起）> thinking（尚未产出正文）> generating。
+  const pendingApproval = pendingApprovals.length > 0;
+  // 三态判定：failed > thinking（尚未产出正文）> generating。
+  // （审批挂起时 genStatus 置空，由 ApprovalDock 展示等待审批。）
   const live = runtimeStatus.state === "live";
   const latestStreaming = [...snapshot.projection.timeline]
     .reverse()
@@ -154,7 +157,7 @@ function ActiveChatSurface({
     !latestStreaming.content.some((part) => part.type === "text");
   let genPhase: GenStatusProps["phase"] | "idle";
   if (failed) genPhase = "failed";
-  else if (pendingApproval) genPhase = "waiting";
+  else if (pendingApproval) genPhase = "idle";
   else if (live) genPhase = thinking ? "thinking" : "generating";
   else genPhase = "idle";
   const genStatus: GenStatusProps | undefined =
@@ -190,17 +193,25 @@ function ActiveChatSurface({
         onProposalAction={onProposalAction}
         onOpenApproval={onOpenApproval}
         onNotify={onNotify}
-        onApprovalDecision={(approvalRequestIds, decision) => {
-          for (const approvalRequestId of approvalRequestIds) {
-            void approvalStore.decide(approvalRequestId, decision);
-          }
-        }}
       />
       <ConversationComposer
         conversationId={conversationId}
         enabled={snapshot.state === "active" && !failed}
         sendDisabled={pendingApproval}
         status={genStatus}
+        header={
+          pendingApproval && onOpenApproval !== undefined ? (
+            <ApprovalDock
+              approvals={pendingApprovals}
+              onDecide={(approvalRequestIds, decision) => {
+                for (const approvalRequestId of approvalRequestIds) {
+                  void approvalStore.decide(approvalRequestId, decision);
+                }
+              }}
+              onOpenApproval={onOpenApproval}
+            />
+          ) : undefined
+        }
         mode={mode}
         onModeChange={(next) => {
           // 会话级 mode 切换走既有 inputEnqueue 单通道（control lane），

@@ -4,38 +4,7 @@
  * 对话时间线的数据模型（纯数据，不含 React 依赖）。
  * thinkLines 与 cards 由 core 事件投影产生，组件负责渲染。
  */
-import type { ToolApprovalProjection } from "@novel/core";
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
-
-/** 审批操作行（携带所属工具名，供"查看"定位参数段）。Approval op row. */
-export type ApprovalOperationRow = NonNullable<
-  ToolApprovalProjection["operations"]
->[number] & {
-  readonly toolName: string;
-};
-
-/**
- * 消息流审批卡数据：同一轮（turn）的多个工具审批合并为一张卡。
- * Approval card view: tool-approval items of one turn are grouped into one card.
- */
-export interface ApprovalCardView {
-  /** 分组键（runId:turnId，无 turnId 时退回 approvalRequestId）。Group key. */
-  readonly groupKey: string;
-  /** 本卡涵盖的全部审批请求 id（批准/请求修改作用于全部）。All request ids. */
-  readonly approvalRequestIds: readonly string[];
-  readonly toolNames: readonly string[];
-  readonly title: string;
-  readonly description?: string;
-  /** 汇总后的操作行。Merged per-target operation rows. */
-  readonly operations: readonly ApprovalOperationRow[];
-  /** 各请求的完整参数（展开时按工具分段展示）。Full arguments per request. */
-  readonly argumentGroups: readonly {
-    readonly toolName: string;
-    readonly arguments?: ToolApprovalProjection["arguments"];
-  }[];
-  readonly status: ToolApprovalProjection["status"];
-  readonly requestedAt: string;
-}
 
 /** 运行时事件行（对话内"本轮时序"）。Runtime event row. */
 export interface ConversationEventView {
@@ -108,12 +77,6 @@ export type ConversationTimelineItem =
       readonly timestamp: number;
       /** 工具审批行：携带 approvalRequestId 时可点击打开审批面板。 */
       readonly approvalRequestId?: string;
-    }
-  | {
-      readonly kind: "approval";
-      readonly sequence: number;
-      readonly timestamp: number;
-      readonly approval: ApprovalCardView;
     }
   | {
       readonly kind: "design";

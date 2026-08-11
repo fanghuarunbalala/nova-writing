@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ApprovalDock } from "../../../src/domains/conversation/components/ApprovalDock.js";
 import { ChatEmptyState } from "../../../src/domains/conversation/components/ChatEmptyState.js";
 import { ConversationComposer } from "../../../src/domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../../src/domains/conversation/components/ConversationTimeline.js";
@@ -256,5 +257,102 @@ describe("ChatEmptyState", () => {
     expect(screen.getByText("新对话")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "新建对话" }));
     expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ApprovalDock", () => {
+  const pendingApproval = (overrides: Record<string, unknown> = {}) => ({
+    kind: "tool-approval" as const,
+    approvalRequestId: "approval-a",
+    toolCallId: "call-a",
+    toolName: "NovelCharacterWrite",
+    toolVersion: "1.0.0",
+    argumentDigest: `sha256:${"a".repeat(64)}` as const,
+    runId: "run-1",
+    turnId: "turn-1",
+    requestedSequence: 1,
+    lastSequence: 2,
+    title: "新增角色",
+    operations: [
+      { op: "add" as const, kind: "character", title: "林夏" },
+    ],
+    requestedAt: "2026-08-10T01:00:00.000Z",
+    expiresAt: "2026-08-10T01:15:00.000Z",
+    status: "pending" as const,
+    ...overrides,
+  });
+
+  it("renders nothing without approvals", () => {
+    const { container } = render(
+      <ApprovalDock approvals={[]} onDecide={vi.fn()} onOpenApproval={vi.fn()} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("renders ops, waiting label and icon actions for pending approvals", () => {
+    render(
+      <ApprovalDock
+        approvals={[pendingApproval()]}
+        onDecide={vi.fn()}
+        onOpenApproval={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("等待审批")).toBeInTheDocument();
+    // 操作块：新增角色：林夏（彩色文字胶囊）。
+    expect(screen.getByText(/新增角色/)).toBeInTheDocument();
+    expect(screen.getByText("林夏")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "通过" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "驳回" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "审核详情" })).toBeInTheDocument();
+  });
+
+  it("fires onDecide with the group's request ids on approve", async () => {
+    const user = userEvent.setup();
+    const onDecide = vi.fn();
+    render(
+      <ApprovalDock
+        approvals={[
+          pendingApproval(),
+          pendingApproval({
+            approvalRequestId: "approval-b",
+            toolCallId: "call-b",
+            title: "编辑角色",
+            operations: [{ op: "edit" as const, kind: "location", title: "青云镇" }],
+          }),
+        ]}
+        onDecide={onDecide}
+        onOpenApproval={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "通过" }));
+    expect(onDecide).toHaveBeenCalledWith(["approval-a", "approval-b"], "approved");
+  });
+
+  it("fires onDecide with rejected on reject", async () => {
+    const user = userEvent.setup();
+    const onDecide = vi.fn();
+    render(
+      <ApprovalDock
+        approvals={[pendingApproval()]}
+        onDecide={onDecide}
+        onOpenApproval={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "驳回" }));
+    expect(onDecide).toHaveBeenCalledWith(["approval-a"], "rejected");
+  });
+
+  it("fires onOpenApproval on the jump button", async () => {
+    const user = userEvent.setup();
+    const onOpenApproval = vi.fn();
+    render(
+      <ApprovalDock
+        approvals={[pendingApproval()]}
+        onDecide={vi.fn()}
+        onOpenApproval={onOpenApproval}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "审核详情" }));
+    expect(onOpenApproval).toHaveBeenCalledWith("approval-a");
   });
 });

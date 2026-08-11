@@ -159,15 +159,30 @@ function createAgentDescription(
 ): string {
   const lines = policy.allowedAgentTypes.map((agentType) => {
     const definition = definitions.require(agentType);
-    return `- ${definition.agentType}（${definition.label}）：${definition.description}`;
+    const toolList = definition.tools === undefined
+      ? ""
+      : `\n  （工具：${definition.tools.join("、")}）`;
+    return `- ${definition.agentType}（${definition.label}）：${definition.description}${toolList}`;
   });
   return [
-    "启动一个异步临时子代理，任务持久登记并确认激活后即返回。",
-    "用法：",
-    "- prompt 必须自包含：子代理不继承父会话上下文，请把目标与所需信息写全。",
-    "- agentType 从下方允许类型中选择；用返回的 taskId 通过 TaskOutput 轮询结果、TaskStop 取消。",
+    "启动一个异步临时子代理，任务持久登记并确认激活后即返回；子代理自主处理复杂多步任务。",
+    "",
     "允许的子代理类型：",
     ...lines,
+    "",
+    "用法：",
+    "- agentType 从上方选择；prompt 必须自包含——子代理不继承父会话上下文，请把目标、背景与已排除的选项写全，让它能自行判断。",
+    "- 返回的 taskId 用于 TaskOutput 轮询结果、TaskStop 取消；完成后子代理返回一条消息，结果用户不可见，请向用户转述要点。",
+    "",
+    "如何写 prompt（像对刚进门的同事交代：它没看过这段对话、不知道你试过什么、不明白为什么重要）：",
+    "- 说明要达成什么、为什么、已试过/排除过什么，给足上下文让子代理做判断。",
+    "- 需要简短回答就直接说（如\"200 字以内\"）。",
+    "- 具体查找给精确指令；开放式调查给问题——步骤写死反而碍事。",
+    "- 不要外包理解：不要写\"基于你的发现去改\"，要写出你已理解的（具体章节/段落/行号、改什么）。",
+    "",
+    "何时不用：",
+    "- 只想读取具体内容（某章节/人物/段落）时，直接用对应的 Novel 读工具或 Read/Glob，更快。",
+    "- 任务简单到可以直接自己完成时，不必另起子代理。",
   ].join("\n");
 }
 

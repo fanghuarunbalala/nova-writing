@@ -133,8 +133,8 @@ const registry = createAgentExecutionToolRegistry({
 
 assert.deepEqual(registry.list().map((tool) => tool.descriptor.name), ["Agent", "TaskOutput", "TaskStop"]);
 const agent = registry.require("Agent");
-assert.match(agent.descriptor.description, /explore \(Explorer\): Inspect bounded evidence\./);
-assert.match(agent.descriptor.description, /write \(Writer\): Draft bounded prose\./);
+assert.match(agent.descriptor.description, /explore（Explorer）：Inspect bounded evidence\./);
+assert.match(agent.descriptor.description, /write（Writer）：Draft bounded prose\./);
 assert.equal(Compile(agent.descriptor.parameters).Check({ agentType: "explore", prompt: "scan" }), true);
 assert.equal(Compile(agent.descriptor.parameters).Check({ agentType: "unknown", prompt: "scan" }), false);
 

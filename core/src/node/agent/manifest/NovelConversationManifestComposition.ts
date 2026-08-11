@@ -49,7 +49,11 @@ import {
   createNovelComposeToolRegistry,
 } from "../../../tools/novel/index.js";
 import { ComposeModeStateProvider } from "../../../runtime/compose/index.js";
-import { ToolRegistry } from "../../../tooling/registry/index.js";
+import {
+  ToolRegistry,
+  ToolRegistryAssembler,
+} from "../../../tooling/registry/index.js";
+import { createSubagentToolNameResolver } from "./resolveSubagentTools.js";
 import {
   SUBAGENT_TOOL_GROUP_MANIFEST,
   createAgentExecutionToolRegistry,
@@ -370,7 +374,22 @@ export function createNovelConversationManifestComposition(
   options: CreateNovelConversationManifestCompositionOptions = {},
 ): NovelConversationManifestComposition {
   const digester = new NodeSha256PromptDigester();
-  const registry = new ToolRegistry([
+  const groups = new ToolGroupCatalog([
+    loadToolGroupManifest(NOVEL_CONVERSATION_TOOL_GROUP_MANIFEST),
+    NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
+    RUNTIME_FILES_TOOL_GROUP_MANIFEST,
+    SUBAGENT_TOOL_GROUP_MANIFEST,
+    NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
+    NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
+    NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
+    NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
+    NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
+    NOVEL_DELETE_TOOL_GROUP_MANIFEST,
+  ]);
+  // 先建非 Agent 工具，再用 ToolRegistryView 解析子代理可用工具（Agent 描述需要）。
+  // Build the non-Agent tools first so subagent tool names can be resolved from
+  // the registry before the Agent tool is constructed.
+  const novelTools = new ToolRegistry([
     createTodoWriteTool({
       writer: options.todoWriter ?? unavailableTodoWriter,
     }),
@@ -405,27 +424,23 @@ export function createNovelConversationManifestComposition(
     ...createNovelDeleteToolRegistry({
       service: unavailableDeleteToolService,
     }).list(),
-    ...createAgentExecutionToolRegistry({
-      definitions: createProductionSubagentDefinitionCatalog(),
-      policy: NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY,
-      manager: unavailableSubagentManager,
-      query: unavailableSubagentQuery,
-      bindings: unavailableSubagentBindings,
-      cancellation: unavailableSubagentCancellation,
-    }).list(),
   ]);
-  const groups = new ToolGroupCatalog([
-    loadToolGroupManifest(NOVEL_CONVERSATION_TOOL_GROUP_MANIFEST),
-    NOVEL_COMPOSE_TOOL_GROUP_MANIFEST,
-    RUNTIME_FILES_TOOL_GROUP_MANIFEST,
-    SUBAGENT_TOOL_GROUP_MANIFEST,
-    NOVEL_OUTLINE_TOOL_GROUP_MANIFEST,
-    NOVEL_CHARACTER_TOOL_GROUP_MANIFEST,
-    NOVEL_LOCATION_TOOL_GROUP_MANIFEST,
-    NOVEL_PARAGRAPH_TOOL_GROUP_MANIFEST,
-    NOVEL_PUBLICATION_TOOL_GROUP_MANIFEST,
-    NOVEL_DELETE_TOOL_GROUP_MANIFEST,
-  ]);
+  const agentTools = createAgentExecutionToolRegistry({
+    definitions: createProductionSubagentDefinitionCatalog({
+      resolveTools: createSubagentToolNameResolver({
+        registry: novelTools,
+        groups,
+      }),
+    }),
+    policy: NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY,
+    manager: unavailableSubagentManager,
+    query: unavailableSubagentQuery,
+    bindings: unavailableSubagentBindings,
+    cancellation: unavailableSubagentCancellation,
+  }).list();
+  const assembler = new ToolRegistryAssembler().merge(novelTools);
+  for (const tool of agentTools) assembler.register(tool);
+  const registry = assembler.freeze();
   const promptBuilder = new ManifestSystemPromptCompiler({
     sections: createDefaultPromptSectionRegistry(),
     digester,

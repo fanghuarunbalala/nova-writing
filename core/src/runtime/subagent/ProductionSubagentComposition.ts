@@ -42,7 +42,7 @@ export const NOVEL_SUBAGENT_DEFINITIONS: readonly SubagentDefinition[] =
       definitionVersion: "1.0.0",
       label: "只读探索",
       description:
-        "只读子代理：读取大纲、人物、地点、段落、卷与章节，返回简洁的文本性发现。",
+        "读取大纲、人物、地点、段落、卷与章节，返回简洁的文本性发现。",
       toolPolicyId: NOVEL_EXPLORER_TOOL_POLICY_ID,
     }),
     Object.freeze({
@@ -65,7 +65,19 @@ export const NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY: SubagentToolCompositionPoli
     limits: NOVEL_SUBAGENT_LIMITS,
   });
 
-/** 生产 novel 子代理定义目录。Production novel subagent definition catalog. */
-export function createProductionSubagentDefinitionCatalog(): SubagentDefinitionCatalog {
-  return new SubagentDefinitionCatalog(NOVEL_SUBAGENT_DEFINITIONS);
+/** 生产 novel 子代理定义目录；可选 resolveTools 把每个子代理的可用工具注入定义。 */
+/** Production novel subagent catalog; optional resolveTools fills each subagent's available tools. */
+export function createProductionSubagentDefinitionCatalog(options?: {
+  readonly resolveTools?: (agentType: string) => readonly string[];
+}): SubagentDefinitionCatalog {
+  const definitions =
+    options?.resolveTools === undefined
+      ? NOVEL_SUBAGENT_DEFINITIONS
+      : NOVEL_SUBAGENT_DEFINITIONS.map((definition) =>
+          Object.freeze({
+            ...definition,
+            tools: Object.freeze(options.resolveTools!(definition.agentType)),
+          }),
+        );
+  return new SubagentDefinitionCatalog(definitions);
 }

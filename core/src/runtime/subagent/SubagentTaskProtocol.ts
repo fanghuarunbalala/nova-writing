@@ -45,6 +45,8 @@ export interface SubagentDefinition {
   readonly label: string;
   readonly description: string;
   readonly toolPolicyId: string;
+  /** 展示用可用工具名（字母序）；可选，注入 resolveTools 时填充。 */
+  readonly tools?: readonly string[];
 }
 
 export interface SubagentTaskArguments {

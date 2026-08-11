@@ -66,6 +66,7 @@ import {
   createAgentExecutionToolRegistry,
   type SubagentTaskCancellationIntentPort,
 } from "../../../tools/subagent/index.js";
+import { createSubagentToolNameResolver } from "../../agent/manifest/resolveSubagentTools.js";
 import {
   ToolGroupCatalog,
   ToolGroupCatalogError,
@@ -775,7 +776,9 @@ function createChildSubagentComposition(
     },
   };
   const subagentTools = createAgentExecutionToolRegistry({
-    definitions: createProductionSubagentDefinitionCatalog(),
+    definitions: createProductionSubagentDefinitionCatalog({
+      resolveTools: createSubagentToolNameResolver({ registry, groups }),
+    }),
     policy: NOVEL_SUBAGENT_TOOL_COMPOSITION_POLICY,
     manager,
     bindings,

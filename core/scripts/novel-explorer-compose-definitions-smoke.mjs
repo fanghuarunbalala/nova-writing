@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import {
   ToolRegistryView,
+  createProductionSubagentDefinitionCatalog,
   novelAgentDefinition,
   novelComposeAgentDefinition,
   novelExplorerAgentDefinition,
 } from "../dist/index.js";
-import { createNovelConversationManifestComposition } from "../dist/node/index.js";
+import {
+  createNovelConversationManifestComposition,
+  createSubagentToolNameResolver,
+} from "../dist/node/index.js";
 
 // Production assembly: full Novel tool registry + TodoWrite + subagent tools.
 const composition = createNovelConversationManifestComposition();
@@ -31,7 +35,7 @@ const expectedReadOnly = Object.freeze([
 ]);
 
 // Novel 1.4.0 exposes the full tool set plus the three subagent execution tools.
-assert.equal(novelAgentDefinition.definitionVersion, "1.4.0");
+assert.equal(novelAgentDefinition.definitionVersion, "1.5.0");
 assert.deepEqual(
   novelAgentDefinition.delegation.allowedAgentTypes,
   ["novel_explorer", "novel_compose"],
@@ -66,6 +70,14 @@ for (const definition of [
     allowed,
     [...expectedReadOnly].sort(),
     `${definition.agentType} must expose exactly the 7 read-only tools`,
+  );
+  const catalog = createProductionSubagentDefinitionCatalog({
+    resolveTools: createSubagentToolNameResolver({ registry, groups }),
+  });
+  assert.deepEqual(
+    catalog.require(definition.agentType).tools,
+    allowed,
+    `${definition.agentType} Agent-tool tools must match the resolved policy`,
   );
   assert.ok(!view.has("Agent"), `${definition.agentType} must not expose Agent`);
   assert.ok(

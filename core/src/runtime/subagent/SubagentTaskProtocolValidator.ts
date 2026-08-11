@@ -36,13 +36,16 @@ export function captureSubagentDefinition(value: unknown): SubagentDefinition {
       "label",
       "description",
       "toolPolicyId",
-    ]);
+    ], ["tools"]);
     return Object.freeze({
       agentType: boundedNonBlank(record.agentType, 128),
       definitionVersion: boundedNonBlank(record.definitionVersion, 128),
       label: boundedNonBlank(record.label, 256),
       description: boundedNonBlank(record.description, 4096),
       toolPolicyId: identity(record.toolPolicyId),
+      ...(record.tools === undefined
+        ? {}
+        : { tools: identityList(record.tools, 64) }),
     });
   });
 }

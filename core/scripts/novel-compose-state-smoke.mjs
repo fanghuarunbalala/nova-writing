@@ -20,10 +20,14 @@ assert.deepEqual(provider.snapshot(conversationId), {
   active: false,
   mode: "review",
 });
-const designing = provider.enter(conversationId, { designFilePath });
+const designing = provider.enter(conversationId, {
+  designFilePath,
+  purpose: "第三章",
+});
 assert.equal(designing.phase, "designing");
 assert.equal(designing.active, true);
 assert.equal(designing.designFilePath, designFilePath);
+assert.equal(designing.purpose, "第三章");
 
 // 激活中不可重复进入
 assert.throws(
@@ -73,7 +77,7 @@ const base = {
   timestamp: "2026-08-07T00:00:00.000Z",
 };
 const cases = [
-  ["compose.begin", "novel.compose.begin", { designFilePath, phase: "designing" }],
+  ["compose.begin", "novel.compose.begin", { designFilePath, phase: "designing", purpose: "第三章" }],
   ["compose.submitted", "novel.compose.submitted", { designFilePath, phase: "pending" }],
   ["compose.approved", "novel.compose.approved", { designFilePath, phase: "applied", preComposeMode: "default" }],
   ["compose.rejected", "novel.compose.rejected", { designFilePath, phase: "designing" }],

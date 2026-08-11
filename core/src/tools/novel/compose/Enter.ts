@@ -9,10 +9,7 @@ import {
   type ToolResult,
 } from "../../../tooling/protocol/index.js";
 import { ComposeStateError } from "../../../runtime/compose/index.js";
-import {
-  designFileWorkspaceRelativePath,
-  renderComposeModeFullText,
-} from "../../../runtime/nudge/definitions/compose.js";
+import { designFileWorkspaceRelativePath } from "../../../runtime/nudge/definitions/compose.js";
 import {
   EnterComposeModeParametersSchema,
   type EnterComposeModeArguments,
@@ -78,6 +75,10 @@ export function createEnterComposeModeTool(
           const headline = details.alreadyActive
             ? `Compose mode is already active. Design file: ${designFilePathRelative}`
             : `Compose mode entered. Design file: ${designFilePathRelative}`;
+          // 结果只回模式切换 + 文件路径：完整工作流指引由 nudge system.reminder
+          // （compose_mode）承担，避免把指引抄进 design 文件（文件只放草稿内容）。
+          // Minimal result: mode switch + path only. The full workflow guidance lives
+          // in the compose_mode nudge reminder, so it never pollutes the design file.
           return Object.freeze({
             content: Object.freeze([
               Object.freeze({
@@ -85,7 +86,7 @@ export function createEnterComposeModeTool(
                 text: [
                   headline,
                   "",
-                  renderComposeModeFullText(designFilePathRelative),
+                  "仅草稿文件可写；草稿完成后调用 ExitComposeMode 提交审批。",
                 ].join("\n"),
               }),
             ]),

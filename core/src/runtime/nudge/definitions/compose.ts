@@ -67,6 +67,14 @@ const COMPOSE_MODE_REENTRY_TEXT = [
   "3. 然后按设计模式创作流程继续。",
 ].join("\n");
 
+/** reentry 提醒中引用上次创作意图的可选行（无 purpose 时不出现）。 */
+/** Optional line in the reentry reminder referencing the prior creation purpose. */
+function renderPurposeLine(purpose: string | undefined): string {
+  return purpose === undefined || purpose.trim() === ""
+    ? ""
+    : `（上次创作意图：${purpose}）`;
+}
+
 const COMPOSE_MODE_SPARSE_TEXT = [
   "# 设计模式（刷新）",
   "设计模式仍激活：正式稿只读、草稿维护在 `.novel/design/`、完成后用 **ExitComposeMode** 提交审批。完整流程见前文。",
@@ -133,7 +141,7 @@ export class ComposeModeNudgePolicy implements RuntimePolicy {
         // 落点 designing（进入/重进）→ full compose_mode（持久化）；有旧草稿再附 reentry。
         effects.push(this.composeModeEffect(context, compose.designFilePath));
         if (compose.hasPriorDraft === true) {
-          effects.push(this.reentryEffect(context));
+          effects.push(this.reentryEffect(context, compose.purpose));
         }
       } else if (compose.active && compose.phase === "pending") {
         // 落点 pending（提交审批）→ compose_mode_pending。
@@ -211,7 +219,10 @@ export class ComposeModeNudgePolicy implements RuntimePolicy {
     });
   }
 
-  private reentryEffect(context: RuntimePolicyContext): RuntimePolicyEffect {
+  private reentryEffect(
+    context: RuntimePolicyContext,
+    purpose: string | undefined,
+  ): RuntimePolicyEffect {
     return createSystemReminderAttachEffect({
       policyId: this.id,
       conversationId: context.conversationId,
@@ -220,7 +231,9 @@ export class ComposeModeNudgePolicy implements RuntimePolicy {
       reminderKind: "compose_mode_reentry",
       templateId: COMPOSE_MODE_REENTRY_NUDGE_ID,
       templateVersion: COMPOSE_MODE_NUDGE_VERSION,
-      parameters: Object.freeze({}),
+      parameters: Object.freeze({
+        ...(purpose === undefined ? {} : { purpose }),
+      }),
     });
   }
 
@@ -284,8 +297,10 @@ export const composeModePendingNudgeTemplate: NudgeTemplate = {
 export const composeModeReentryNudgeTemplate: NudgeTemplate = {
   templateId: COMPOSE_MODE_REENTRY_NUDGE_ID,
   templateVersion: COMPOSE_MODE_NUDGE_VERSION,
-  render() {
-    return renderComposeModeReentryText();
+  render(parameters) {
+    const purpose =
+      typeof parameters?.purpose === "string" ? parameters.purpose : undefined;
+    return renderComposeModeReentryText(purpose);
   },
 };
 
@@ -313,6 +328,7 @@ export function renderComposeModeFullText(designFilePath?: string): string {
     "当前处于**设计模式**，以下约束优先于其他任何指令：",
     "- 正式稿只读：canonical 写入工具会被拒绝；文件工具（Read/Glob/Write/Edit）全模式可用，路径一律用 **workspace 相对路径**（越出 workspace 沙盒会报错）。",
     "- 草稿维护在 `.novel/design/` 设计目录。",
+    "- design 文件**只放创作草稿内容**，不要写入工作流说明、系统指引或本提醒的原文。",
     ...(designFilePath === undefined
       ? []
       : [`- 当前会话设计文件：\`${designFilePath}\``]),
@@ -347,9 +363,12 @@ export function renderComposeModePendingText(): string {
   return COMPOSE_MODE_PENDING_TEXT;
 }
 
-/** compose_mode_reentry 模板的已有旧草稿决策文案。 */
-export function renderComposeModeReentryText(): string {
-  return COMPOSE_MODE_REENTRY_TEXT;
+/** compose_mode_reentry 模板的已有旧草稿决策文案（有 purpose 时附加意图行）。 */
+export function renderComposeModeReentryText(purpose?: string): string {
+  const purposeLine = renderPurposeLine(purpose);
+  return purposeLine === ""
+    ? COMPOSE_MODE_REENTRY_TEXT
+    : [COMPOSE_MODE_REENTRY_TEXT, purposeLine].join("\n");
 }
 
 /** compose_mode_sparse 模板的瞬态刷新文案。 */

@@ -1,0 +1,159 @@
+/**
+ * ComposeDraftApprovalBody 视觉：审批卡内嵌设计草稿正文。
+ * 描述（含设计文件路径行）+ 提交说明 + 只读 Markdown 草稿内容。
+ */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.description {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--color-fg) 4%, transparent);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-fg);
+  white-space: pre-line;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.summaryLabel {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--color-faint);
+}
+
+.summaryText {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--color-fg);
+}
+
+.draft {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.draftHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.draftLabel {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--color-faint);
+}
+
+.edit {
+  padding: 2px 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 11.5px;
+  color: var(--color-fg);
+  cursor: pointer;
+}
+
+.edit:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 140px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-fg);
+  resize: vertical;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.save,
+.cancel {
+  padding: 4px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.save {
+  border: 1px solid var(--color-accent);
+  background: color-mix(in oklab, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
+}
+
+.save:hover {
+  background: color-mix(in oklab, var(--color-accent) 26%, transparent);
+}
+
+.save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cancel {
+  border: 1px solid var(--color-border-strong);
+  background: transparent;
+  color: var(--color-fg);
+}
+
+.cancel:hover {
+  border-color: var(--color-fg);
+}
+
+.content {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-faint);
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-danger, var(--color-err));
+}

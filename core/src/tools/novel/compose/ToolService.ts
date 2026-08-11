@@ -96,6 +96,9 @@ export type ComposeExitDetails = {
   readonly designFilePath: string;
   readonly phase: ComposeModePhase;
   readonly preComposeMode?: ConversationMode;
+  /** ExitComposeMode 提交时的说明（审批上下文辅助）。 */
+  /** Submission note supplied on ExitComposeMode (auxiliary approval context). */
+  readonly summary?: string;
 };
 
 /** 提供 Enter/ExitComposeMode + mode 迁移的 provider-neutral 服务。 */
@@ -166,6 +169,7 @@ export class ComposeToolService {
       designFilePath,
       preComposeMode: currentMode,
       hasPriorDraft,
+      ...(purpose === undefined ? {} : { purpose }),
     });
     // 写序: ①内存 → ②DB(提交点) → ③事件。
     await this.#persistMode(conversationId, "compose");
@@ -174,10 +178,12 @@ export class ComposeToolService {
       designFilePath,
       preMode: snapshot.preComposeMode ?? DEFAULT_CONVERSATION_MODE,
       updatedAt: new Date().toISOString(),
+      ...(purpose === undefined ? {} : { purpose }),
     });
     await this.#emit(conversationId, "compose.begin", {
       designFilePath,
       phase: snapshot.phase,
+      ...(purpose === undefined ? {} : { purpose }),
     });
     await this.#emitModeChanged(conversationId, "compose");
     this.#logger.info("novel_compose.begin", {
@@ -193,7 +199,10 @@ export class ComposeToolService {
 
   /** 批准后的落库收口:状态到 applied、持久化恢复、删 compose 子状态、发 applied + mode.changed。 */
   /** Post-approval settlement: transitions to applied, restores mode, clears compose sub-state, emits applied + mode.changed. */
-  async exit(conversationId: string): Promise<ComposeExitDetails> {
+  async exit(
+    conversationId: string,
+    summary?: string,
+  ): Promise<ComposeExitDetails> {
     // 安全网:compose 已被放弃/结束(如审核中显式 discard),审批通过后不再抛错,返回 no-op。
     // Safety net: if compose was already discarded/ended, the approval resolution is a no-op.
     const current = this.#composeState.snapshot(conversationId);
@@ -260,6 +269,7 @@ export class ComposeToolService {
       ...(snapshot.preComposeMode === undefined
         ? {}
         : { preComposeMode: snapshot.preComposeMode }),
+      ...(summary === undefined ? {} : { summary }),
     });
   }
 
@@ -356,6 +366,9 @@ export class ComposeToolService {
       this.#composeState.enter(conversationId, {
         designFilePath: composeState.designFilePath,
         preComposeMode: composeState.preMode,
+        ...(composeState.purpose === undefined
+          ? {}
+          : { purpose: composeState.purpose }),
       });
       if (composeState.phase === "pending") {
         this.#composeState.submit(conversationId);

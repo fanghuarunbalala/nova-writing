@@ -391,6 +391,7 @@ const reentryEntered = await providerCall(reentryRuntime, 2, {
     mode: "compose",
     designFilePath: DESIGN_FILE_ABSOLUTE,
     hasPriorDraft: true,
+    purpose: "第三章",
   },
 });
 assert.equal(reentryEntered.length, 2);
@@ -400,6 +401,10 @@ assert.deepEqual(
 );
 assert.equal(reentryEntered[1].reminderId, COMPOSE_MODE_REENTRY_NUDGE_ID);
 assert.ok(reentryEntered[1].content.includes(COMPOSE_REENTRY_MARK));
+assert.ok(
+  reentryEntered[1].content.includes("上次创作意图：第三章"),
+  "reentry 提醒引用上次创作意图",
+);
 // 无旧草稿进入 → 只附 compose_mode。
 const freshRuntime = createReminderRuntime(fullEffective);
 assert.deepEqual(await providerCall(freshRuntime, 1, composeInactive), []);

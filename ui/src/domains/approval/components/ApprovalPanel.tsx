@@ -36,6 +36,7 @@ import styles from "./ApprovalPanel.module.css";
 import { ApprovalEntityView } from "./ApprovalEntityView.js";
 import { ParameterView } from "./ParameterView.js";
 import { useApprovalEntityResolution } from "./useApprovalEntityResolution.js";
+import { ComposeDraftApprovalBody } from "./ComposeDraftApprovalBody.js";
 
 export interface ApprovalPanelProps {
   readonly store: ApprovalStore;
@@ -218,6 +219,23 @@ export function ApprovalPanel({
     selectedGroup?.approvals[0].toolName ?? "",
     selectedGroup?.approvals[0].operations,
   );
+  // ExitComposeMode 审批：以 design 草稿内容为确认对象（CCB 式），不走参数区。
+  // ExitComposeMode approval: the design draft content is the confirmation subject
+  // (CCB-style); it bypasses the generic parameter area.
+  const firstApproval = selectedGroup?.approvals[0];
+  const isComposeExit = firstApproval?.toolName === "ExitComposeMode";
+  const composeExitArgs =
+    firstApproval?.arguments !== undefined &&
+    firstApproval.arguments !== null &&
+    typeof firstApproval.arguments === "object" &&
+    !Array.isArray(firstApproval.arguments)
+      ? (firstApproval.arguments as Record<string, unknown>)
+      : undefined;
+  const composeExitSummary =
+    composeExitArgs === undefined ||
+    typeof composeExitArgs.summary !== "string"
+      ? undefined
+      : composeExitArgs.summary;
   // 已决审批不再解析实体内容（批准后 canonical 已变，取到的是新状态），
   // 也不显示失效提示；仅待批准解析并判断 revision 是否过期。
   const isPending = selectedGroup?.status === "pending";
@@ -329,73 +347,89 @@ export function ApprovalPanel({
             ) : null}
             {selectedGroup.approvals[0].title}
           </h4>
-          {argumentGroups !== undefined && argumentGroups.length > 0 ? (
-            <div className={styles.args}>
-              <span className={styles.argsTitle}>审批参数</span>
-              {argumentGroups.map((group, index) => {
-                const resolution = resolutions?.[index];
-                let body: JSX.Element;
-                if (
-                  resolution !== undefined &&
-                  resolution.status === "ready"
-                ) {
-                  body = (
-                    <>
-                      {resolution.stale ? (
-                        <div className={styles.staleBanner}>
-                          版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败
-                        </div>
-                      ) : null}
-                      {resolution.contents.map((content, contentIndex) => (
-                        <div key={content.id}>
-                          {contentIndex > 0 ? (
-                            <div className={styles.resolvedDivider} />
+          {isComposeExit ? (
+            <ComposeDraftApprovalBody
+              conversationId={selectedGroup.approvals[0].conversationId}
+              summary={composeExitSummary}
+              description={selectedGroup.approvals[0].description}
+            />
+          ) : (
+            <>
+              {argumentGroups !== undefined && argumentGroups.length > 0 ? (
+                <div className={styles.args}>
+                  <span className={styles.argsTitle}>审批参数</span>
+                  {argumentGroups.map((group, index) => {
+                    const resolution = resolutions?.[index];
+                    let body: JSX.Element;
+                    if (
+                      resolution !== undefined &&
+                      resolution.status === "ready"
+                    ) {
+                      body = (
+                        <>
+                          {resolution.stale ? (
+                            <div className={styles.staleBanner}>
+                              版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败
+                            </div>
                           ) : null}
-                          <ApprovalEntityView content={content} />
+                          {resolution.contents.map((content, contentIndex) => (
+                            <div key={content.id}>
+                              {contentIndex > 0 ? (
+                                <div className={styles.resolvedDivider} />
+                              ) : null}
+                              <ApprovalEntityView content={content} />
+                            </div>
+                          ))}
+                        </>
+                      );
+                    } else if (
+                      resolution !== undefined &&
+                      resolution.status === "loading"
+                    ) {
+                      body = (
+                        <span className={styles.loadingHint}>内容解析中…</span>
+                      );
+                    } else {
+                      body = (
+                        <ParameterView
+                          value={group.arguments}
+                          tone={group.op}
+                        />
+                      );
+                    }
+                    return (
+                      <div
+                        key={`${group.toolName}-${index}`}
+                        className={styles.argsGroup}
+                      >
+                        <div
+                          className={[
+                            styles.band,
+                            OP_BAND_CLASS[group.op ?? ""],
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                        >
+                          <span className={styles.bandGlyph}>
+                            {operationGlyph(group.op ?? "")}
+                          </span>
+                          <span className={styles.bandTool}>
+                            {toolNameLabel(group.toolName)}
+                          </span>
                         </div>
-                      ))}
-                    </>
-                  );
-                } else if (
-                  resolution !== undefined &&
-                  resolution.status === "loading"
-                ) {
-                  body = (
-                    <span className={styles.loadingHint}>内容解析中…</span>
-                  );
-                } else {
-                  body = (
-                    <ParameterView value={group.arguments} tone={group.op} />
-                  );
-                }
-                return (
-                  <div
-                    key={`${group.toolName}-${index}`}
-                    className={styles.argsGroup}
-                  >
-                    <div
-                      className={[styles.band, OP_BAND_CLASS[group.op ?? ""]]
-                        .filter(Boolean)
-                        .join(" ")}
-                    >
-                      <span className={styles.bandGlyph}>
-                        {operationGlyph(group.op ?? "")}
-                      </span>
-                      <span className={styles.bandTool}>
-                        {toolNameLabel(group.toolName)}
-                      </span>
-                    </div>
-                    <div className={styles.body}>{body}</div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-          {(argumentGroups?.length ?? 0) === 0 ? (
-            <p className={styles.emptyDetail}>
-              旧版本审批 · 无参数详情（建议在新会话重新发起写入）
-            </p>
-          ) : null}
+                        <div className={styles.body}>{body}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {(argumentGroups?.length ?? 0) === 0 ? (
+                <p className={styles.emptyDetail}>
+                  旧版本审批 · 无参数详情（建议在新会话重新发起写入）
+                </p>
+              ) : null}
+            </>
+          )}
           {selectedGroup.status === "pending" ? (
             <div className={styles.actions}>
               <Button

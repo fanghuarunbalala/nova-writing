@@ -28,6 +28,9 @@ export interface NovelComposeOutputPayloadOptions {
   readonly preComposeMode?: ConversationMode;
   /** mode.changed 事件携带的新会话模式。Carried by the mode.changed event. */
   readonly mode?: ConversationMode;
+  /** compose.begin 事件携带的创作目的（EnterComposeMode purpose）。 */
+  /** Creation purpose carried by the compose.begin event (EnterComposeMode purpose). */
+  readonly purpose?: string;
 }
 
 export class NovelComposeOutputPayload extends OutputPayload {
@@ -49,6 +52,9 @@ export class NovelComposeOutputPayload extends OutputPayload {
       ...(this.options.preComposeMode === undefined
         ? {}
         : { preComposeMode: this.options.preComposeMode }),
+      ...(this.options.purpose === undefined
+        ? {}
+        : { purpose: this.options.purpose }),
     };
   }
 }

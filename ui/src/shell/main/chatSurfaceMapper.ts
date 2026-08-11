@@ -116,28 +116,43 @@ export function mapProjectionTimeline(
   );
 }
 
-/** 从 novel.compose.* 输出事件派生设计卡条目。Derives design-card items from compose events. */
+/**
+ * 由实时 compose 状态派生设计卡条目：仅 designing/pending 时发一条，对齐徽标语义。
+ * 历史 novel.compose.* 事件不再重建卡片——批准/放弃（composePhase=undefined）后消失，
+ * 每次打开对话流不会残留。
+ * Derives a design-card item from the live compose phase: one card while designing/
+ * pending, mirroring the badge. Historical compose events no longer resurrect the
+ * card after compose ends.
+ */
 function designItemsOf(
   projection: ConversationProjectionSnapshot,
 ): readonly ConversationTimelineItem[] {
-  const items: ConversationTimelineItem[] = [];
+  const phase = projection.composePhase;
+  if (phase !== "designing" && phase !== "pending") {
+    return Object.freeze([]);
+  }
+  // 定位：最后一条 compose 相位事件；无（如重启 seed 无事件）回退 lastAppliedSequence。
+  let sequence = projection.lastAppliedSequence ?? 0;
+  let timestamp = 0;
   for (const event of projection.events) {
     if (event.direction !== "output") continue;
-    const phase = composePhaseOf(event.eventType);
-    if (phase === undefined) continue;
-    items.push(
-      Object.freeze({
-        kind: "design" as const,
-        sequence: event.sequence,
-        timestamp: Date.parse(event.timestamp) || 0,
-        design: Object.freeze({
-          conversationId: projection.conversationId,
-          phase,
-        }),
-      }),
-    );
+    if (composePhaseOf(event.eventType) === undefined) continue;
+    if (event.sequence > sequence) {
+      sequence = event.sequence;
+      timestamp = Date.parse(event.timestamp) || 0;
+    }
   }
-  return Object.freeze(items);
+  return Object.freeze([
+    Object.freeze({
+      kind: "design" as const,
+      sequence,
+      timestamp,
+      design: Object.freeze({
+        conversationId: projection.conversationId,
+        phase,
+      }),
+    }),
+  ]);
 }
 
 function composePhaseOf(eventType: string): string | undefined {

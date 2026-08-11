@@ -82,9 +82,10 @@ describe("chatSurfaceMapper", () => {
     }
   });
 
-  it("maps novel.compose events to design items", () => {
+  it("maps the live compose phase to a single design item", () => {
     const items = mapProjectionTimeline(
       projection({
+        composePhase: "pending",
         events: [
           {
             eventId: "compose-1",
@@ -113,10 +114,31 @@ describe("chatSurfaceMapper", () => {
       ): item is Extract<ConversationTimelineItem, { readonly kind: "design" }> =>
         item.kind === "design",
     );
-    expect(designItems).toHaveLength(2);
-    expect(designItems[0].design.phase).toBe("designing");
-    expect(designItems[1].design.phase).toBe("pending");
+    // 实时状态驱动：只发一条（当前相位），不按历史事件各建一条。
+    expect(designItems).toHaveLength(1);
+    expect(designItems[0].design.phase).toBe("pending");
     expect(designItems[0].design.conversationId).toBe("c1");
+    // compose 结束后（composePhase undefined）不再重现设计卡。
+    const endedItems = mapProjectionTimeline(
+      projection({
+        composePhase: undefined,
+        events: [
+          {
+            eventId: "compose-3",
+            sequence: 3,
+            direction: "output",
+            eventType: "novel.compose.applied",
+            timestamp: "2026-08-07T00:00:02.000Z",
+            recordedAt: "2026-08-07T00:00:02.000Z",
+          },
+        ],
+      }),
+      [],
+      "Novel Agent",
+    );
+    expect(
+      endedItems.filter((item) => item.kind === "design"),
+    ).toHaveLength(0);
   });
 
   it("computes the compose badge label from the projected compose phase", () => {

@@ -178,6 +178,13 @@ const MIGRATIONS: Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 8,
+    name: "conversation_compose_purpose",
+    sql: `
+      ALTER TABLE conversation_compose_state ADD COLUMN purpose TEXT;
+    `,
+  },
 ];
 
 export function runCoreSqliteMigrations(database: DatabaseSync): void {

@@ -35,6 +35,9 @@ export interface ConversationComposeState {
   designFilePath: string;
   preMode: ConversationMode;
   updatedAt: string;
+  /** 进入 compose 时的创作目的（EnterComposeMode 的 purpose），重启恢复用。 */
+  /** Creation purpose recorded on entry (EnterComposeMode purpose), restored on hydrate. */
+  purpose?: string;
 }
 
 export interface ConversationMetadataStore {

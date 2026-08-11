@@ -642,6 +642,10 @@ function validateConversationComposeState(
       "Conversation compose preMode is invalid",
     );
   }
+  const purpose =
+    state.purpose === undefined
+      ? undefined
+      : assertNonEmptyString(state.purpose, "Conversation compose purpose");
   return Object.freeze({
     phase,
     designFilePath: assertNonEmptyString(
@@ -653,6 +657,7 @@ function validateConversationComposeState(
       state.updatedAt,
       "Conversation compose updatedAt",
     ),
+    ...(purpose === undefined ? {} : { purpose }),
   });
 }
 

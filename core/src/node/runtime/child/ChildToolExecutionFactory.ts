@@ -36,6 +36,7 @@ import type {
   ToolResultLimits,
 } from "../../../tooling/index.js";
 import { NodeSha256ToolArgumentDigester } from "../../tools/index.js";
+import { designFileWorkspaceRelativePath } from "../../../runtime/nudge/definitions/compose.js";
 
 export interface ChildToolExecutionCompositionOptions {
   readonly registryView: ToolRegistryView;
@@ -206,7 +207,9 @@ export function createChildToolExecutionComposition(
       permissionPolicy,
       interactionCoordinator: coordinator,
       runtimeInstanceId: options.runtimeInstanceId,
-      approvalRequestFactory: createChildToolApprovalRequestFactory(),
+      approvalRequestFactory: createChildToolApprovalRequestFactory({
+        composeStateProvider: options.composeStateProvider,
+      }),
       sandboxExecutor: new TrustedProcessSandboxExecutor(),
       resultLimits: DEFAULT_TOOL_RESULT_LIMITS,
       traceSink: new RuntimeEventToolTraceSink({
@@ -221,14 +224,20 @@ export function createChildToolExecutionComposition(
   return Object.freeze({ dispatcher, coordinator });
 }
 
-function createChildToolApprovalRequestFactory(): ToolApprovalRequestFactory {
+function createChildToolApprovalRequestFactory(options: {
+  readonly composeStateProvider?: ComposeModeStateProvider;
+} = {}): ToolApprovalRequestFactory {
   return {
     create(input): ToolApprovalRequest {
       const approvalRequestId =
         `tool-approval:${input.identity.conversationId}:${input.identity.runId}:${input.identity.toolCallId}`;
       const requestedAt = new Date().toISOString();
       const operations = buildApprovalOperations(input);
-      const summary = buildApprovalSummary(input, operations);
+      const summary = buildApprovalSummary(
+        input,
+        operations,
+        options.composeStateProvider,
+      );
       return Object.freeze({
         approvalRequestId,
         identity: input.identity,
@@ -346,11 +355,38 @@ function buildApprovalOperations(
 function buildApprovalSummary(
   input: Parameters<ToolApprovalRequestFactory["create"]>[0],
   operations: readonly ToolApprovalOperationSummary[],
+  composeStateProvider?: ComposeModeStateProvider,
 ): ToolApprovalRequest["summary"] {
   if (input.identity.toolName === "ExitComposeMode") {
+    // 审批上下文：确认对象是 design 文件内容本身，这里附加文件路径（运行时解析、
+    // workspace 相对）+ 模型提交说明（可选）。compose 非激活时省略路径行。
+    // Approval context: the design file content is the confirmation subject; attach
+    // its path (resolved at runtime, workspace-relative) plus the model's optional
+    // submission note. The path line is omitted when compose is inactive.
+    const designFilePath = composeStateProvider
+      ?.snapshot(input.identity.conversationId)
+      .designFilePath;
+    const designFilePathRelative =
+      designFilePath === undefined
+        ? undefined
+        : designFileWorkspaceRelativePath(designFilePath);
+    const summaryText =
+      isRecord(input.arguments) && typeof input.arguments.summary === "string"
+        ? input.arguments.summary.trim()
+        : "";
+    const arguments_ =
+      summaryText === ""
+        ? undefined
+        : Object.freeze({ summary: summaryText });
     return Object.freeze({
       title: "提交设计草稿",
-      description: "请确认设计草稿内容后批准；批准后按草稿内容落库。",
+      description: [
+        "请确认设计草稿内容后批准；批准后按草稿内容落库。",
+        ...(designFilePathRelative === undefined
+          ? []
+          : [`设计文件：${designFilePathRelative}`]),
+      ].join("\n"),
+      ...(arguments_ === undefined ? {} : { arguments: arguments_ }),
     });
   }
   const first = operations[0];

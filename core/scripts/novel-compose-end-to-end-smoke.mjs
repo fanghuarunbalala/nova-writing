@@ -176,6 +176,7 @@ assert.equal(composeState.snapshot(conversationId).phase, "idle");
 // 1. EnterComposeMode -> designing + begin 事件 + design 文件创建
 await dispatch("EnterComposeMode", "call-enter", { purpose: "第三章" });
 assert.equal(composeState.snapshot(conversationId).phase, "designing");
+assert.equal(composeState.snapshot(conversationId).purpose, "第三章");
 assert.ok(
   events.some((event) => event.getEventType() === "novel.compose.begin"),
 );
@@ -204,9 +205,20 @@ await assert.rejects(
 );
 
 // 4. ExitComposeMode -> ask -> submitted/pending
-const exitPromise = dispatch("ExitComposeMode", "call-exit", {});
+const exitPromise = dispatch("ExitComposeMode", "call-exit", {
+  summary: "第三章正文草稿已完成",
+});
 const exitRequest = await waitForPending("ExitComposeMode");
 assert.equal(exitRequest.summary.title, "提交设计草稿");
+// 审批上下文：设计文件路径（workspace 相对，正斜杠）+ 模型提交说明。
+assert.ok(
+  exitRequest.summary.description.includes(
+    "设计文件：.novel/design/conversation-e2e.md",
+  ),
+);
+assert.deepEqual(exitRequest.summary.arguments, {
+  summary: "第三章正文草稿已完成",
+});
 assert.equal(composeState.snapshot(conversationId).phase, "pending");
 assert.ok(
   events.some((event) => event.getEventType() === "novel.compose.submitted"),
@@ -259,7 +271,9 @@ assert.deepEqual(executed, ["NovelParagraphWrite"]);
 
 // 7. 拒绝路径：重新进入 -> 提交 -> 拒绝 -> 回到 designing + rejected 事件
 await dispatch("EnterComposeMode", "call-enter-2", {});
-const exitPromise2 = dispatch("ExitComposeMode", "call-exit-2", {});
+const exitPromise2 = dispatch("ExitComposeMode", "call-exit-2", {
+  summary: "第二版草稿",
+});
 const exitRequest2 = await waitForPending("ExitComposeMode");
 await resolveApproval(exitRequest2, "rejected", 3);
 await assert.rejects(() => exitPromise2, (error) => error.code === "TOOL_APPROVAL_REJECTED");

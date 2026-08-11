@@ -45,16 +45,20 @@ export function createExitComposeModeTool(
       promptDetails: new ToolPromptDetails({
         usage:
           "Call ExitComposeMode only after the design draft is complete and ready for the author's approval.",
-        parameterGuidance: "No parameters are required.",
+        parameterGuidance:
+          "summary is optional: a short submission note shown on the approval card; the design file path is appended automatically.",
         safetyGuidance:
           "Requires author approval; rejection returns to composing for revision.",
       }),
     },
     handler: {
-      async execute(context, _arguments_) {
+      async execute(context, arguments_) {
         context.signal.throwIfAborted();
         try {
-          const details = await options.service.exit(context.conversationId);
+          const details = await options.service.exit(
+            context.conversationId,
+            arguments_.summary,
+          );
           logger.info("exit_compose_mode.completed", {
             conversationId: context.conversationId,
             runId: context.runId,

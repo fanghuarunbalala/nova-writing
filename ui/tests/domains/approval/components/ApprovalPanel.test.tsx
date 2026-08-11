@@ -4,8 +4,10 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ApprovalStore } from "../../../../src/domains/approval/ApprovalStore.js";
 import { ApprovalPanel } from "../../../../src/domains/approval/components/ApprovalPanel.js";
+import { FrontendPlatformProvider } from "../../../../src/platform/FrontendPlatformContext.js";
 
 const DIGEST = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
@@ -333,5 +335,71 @@ describe("ApprovalPanel", () => {
     expect(screen.queryByText(/版本已过期/)).not.toBeInTheDocument();
     expect(screen.getByText("审批参数")).toBeInTheDocument();
     expect(screen.getByText("新简介")).toBeInTheDocument();
+  });
+
+  it("renders the design draft content for ExitComposeMode approval (CCB-style)", async () => {
+    const store = new ApprovalStore();
+    store.setApprovals([
+      {
+        conversationId: "C-1",
+        conversationStatus: "active",
+        approvalRequestId: "AR-10",
+        turnId: "T-10",
+        toolName: "ExitComposeMode",
+        title: "提交设计草稿",
+        argumentDigest: DIGEST,
+        status: "pending",
+        requestedAt: "2026-08-05T09:00:00.000Z",
+        description:
+          "请确认设计草稿内容后批准；批准后按草稿内容落库。\n设计文件：.novel/design/c-1.md",
+        arguments: { summary: "第三章正文草稿已完成" },
+      },
+    ]);
+    const designFile = {
+      read: vi.fn(async () => "# 第三章\n\n正文草稿内容"),
+      write: vi.fn(async () => {}),
+    };
+    render(
+      <FrontendPlatformProvider
+        platform={{
+          capabilities: {
+            fileSelection: false,
+            clipboardRead: false,
+            clipboardWrite: false,
+            notifications: false,
+          },
+          files: { selectFiles: vi.fn(async () => []) },
+          clipboard: { readText: vi.fn(async () => ""), writeText: vi.fn(async () => {}) },
+          notifications: { show: vi.fn(async () => {}) },
+          designFile,
+        }}
+      >
+        <ApprovalPanel store={store} />
+      </FrontendPlatformProvider>,
+    );
+    // 设计文件路径 + 提交说明 + 草稿内容（经 designFile 端口读取渲染）。
+    expect(screen.getByText(/设计文件：\.novel\/design\/c-1\.md/)).toBeInTheDocument();
+    expect(screen.getByText("提交说明")).toBeInTheDocument();
+    expect(screen.getByText("第三章正文草稿已完成")).toBeInTheDocument();
+    expect(await screen.findByText("正文草稿内容")).toBeInTheDocument();
+    // 不走参数区与误导性「旧版本审批」空态。
+    expect(screen.queryByText("审批参数")).not.toBeInTheDocument();
+    expect(screen.queryByText(/旧版本审批/)).not.toBeInTheDocument();
+
+    // 审批卡内直接编辑：编辑 → 改草稿 → 保存写回 design 文件。
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "编辑" }));
+    const textarea = screen.getByRole("textbox");
+    await user.clear(textarea);
+    await user.type(textarea, "# 第三章（修订）\n\n修订后的正文");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(designFile.write).toHaveBeenCalledWith(
+        "C-1",
+        "# 第三章（修订）\n\n修订后的正文",
+      ),
+    );
+    expect(screen.getByText("修订后的正文")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 });

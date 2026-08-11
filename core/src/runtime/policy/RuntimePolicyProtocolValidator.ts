@@ -123,6 +123,9 @@ function captureComposeModeSnapshot(value: unknown): ComposeModeSnapshot {
     ...(typeof record.hasPriorDraft === "boolean"
       ? { hasPriorDraft: record.hasPriorDraft }
       : {}),
+    ...(typeof record.purpose === "string"
+      ? { purpose: record.purpose }
+      : {}),
   });
 }
 

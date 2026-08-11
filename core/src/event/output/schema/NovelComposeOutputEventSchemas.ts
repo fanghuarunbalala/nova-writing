@@ -20,6 +20,7 @@ const ComposePayload = Type.Object(
     phase: ComposePhase,
     approvalRequestId: Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
     preComposeMode: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+    purpose: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
   },
   { additionalProperties: false },
 );

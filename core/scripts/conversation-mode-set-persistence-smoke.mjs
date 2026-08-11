@@ -177,6 +177,7 @@ try {
   assert.equal(composeRow.phase, "designing");
   assert.equal(composeRow.preMode, "bypass");
   assert.equal(composeRow.designFilePath, service.designFilePathFor(conversationId));
+  assert.equal(composeRow.purpose, undefined, "setMode(compose) 无 purpose");
   assert.deepEqual(sinkEvents, ["novel.compose.begin", "novel.mode.changed"]);
   sinkEvents.length = 0;
   await access(service.designFilePathFor(conversationId));
@@ -239,6 +240,21 @@ try {
   assert.equal(pendingSnapshot.phase, "pending");
   assert.equal(pendingSnapshot.mode, "compose");
   assert.equal(pendingSnapshot.preComposeMode, "bypass");
+
+  // ⑧ purpose 持久化贯通：begin(purpose) → snapshot + DB 行 → 重启 hydrate 恢复。
+  sinkEvents.length = 0;
+  await service.discard(conversationId);
+  await service.begin(conversationId, "第三章大纲");
+  assert.equal(state.snapshot(conversationId).purpose, "第三章大纲");
+  const purposeRow =
+    await store.conversations.getConversationComposeState(conversationId);
+  assert.equal(purposeRow.purpose, "第三章大纲");
+  await store.close();
+  store = await openStore(location);
+  ({ state, service } = createService(store));
+  await service.hydrate(conversationId);
+  assert.equal(state.snapshot(conversationId).phase, "designing");
+  assert.equal(state.snapshot(conversationId).purpose, "第三章大纲");
 } finally {
   if (store) await store.close();
   await rm(temporaryRoot, { recursive: true, force: true });

@@ -45,6 +45,7 @@ interface ConversationComposeStateRow {
   design_file_path: string;
   pre_mode: string;
   updated_at: string;
+  purpose: string | null;
 }
 
 interface AgentBindingRow {
@@ -343,6 +344,9 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
         ? row.pre_mode
         : "review",
       updatedAt: row.updated_at,
+      ...(row.purpose === null || row.purpose === undefined
+        ? {}
+        : { purpose: row.purpose }),
     };
   }
 
@@ -362,13 +366,14 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
     this.database
       .prepare(
         `INSERT INTO conversation_compose_state(
-           conversation_id, phase, design_file_path, pre_mode, updated_at
-         ) VALUES (?, ?, ?, ?, ?)
+           conversation_id, phase, design_file_path, pre_mode, updated_at, purpose
+         ) VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(conversation_id) DO UPDATE SET
            phase = excluded.phase,
            design_file_path = excluded.design_file_path,
            pre_mode = excluded.pre_mode,
-           updated_at = excluded.updated_at`,
+           updated_at = excluded.updated_at,
+           purpose = excluded.purpose`,
       )
       .run(
         conversationId,
@@ -376,6 +381,7 @@ export class SqliteConversationCatalogStore implements ConversationCatalogStore 
         state.designFilePath,
         state.preMode,
         state.updatedAt,
+        state.purpose ?? null,
       );
   }
 

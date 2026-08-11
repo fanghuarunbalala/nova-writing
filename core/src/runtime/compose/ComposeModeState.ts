@@ -31,6 +31,9 @@ export interface ComposeModeSnapshot {
   readonly preComposeMode?: ConversationMode;
   /** 进入时 design 文件已存在（上次会话残留草稿）。Whether the design file already existed on entry. */
   readonly hasPriorDraft?: boolean;
+  /** 进入 compose 时的创作目的（EnterComposeMode purpose），reentry 提醒引用。 */
+  /** Creation purpose captured on entry (EnterComposeMode purpose), referenced by reentry nudge. */
+  readonly purpose?: string;
 }
 
 export const IDLE_COMPOSE_MODE_SNAPSHOT: ComposeModeSnapshot = Object.freeze({
@@ -79,6 +82,7 @@ export class ComposeModeStateProvider {
       readonly designFilePath: string;
       readonly preComposeMode?: ConversationMode;
       readonly hasPriorDraft?: boolean;
+      readonly purpose?: string;
     },
   ): ComposeModeSnapshot {
     const current = this.snapshot(conversationId);
@@ -96,6 +100,7 @@ export class ComposeModeStateProvider {
       ...(options.hasPriorDraft === undefined
         ? {}
         : { hasPriorDraft: options.hasPriorDraft }),
+      ...(options.purpose === undefined ? {} : { purpose: options.purpose }),
     });
     this.#states.set(conversationId, next);
     this.#logger.debug("compose.entered", { conversationId, phase: next.phase });

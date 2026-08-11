@@ -193,6 +193,25 @@ async function runSharedHostContract() {
     start: { from: "latest" },
   });
 
+  // compose 状态（含 purpose）经客户端 validator 键白名单往返。
+  const composeConversationId = "conversation-shared-compose";
+  host.registerConversation({
+    snapshot: createSnapshot(composeConversationId),
+    composeState: Object.freeze({
+      phase: "designing",
+      designFilePath: "/ws/.novel/design/conversation-shared-compose.md",
+      preMode: "review",
+      updatedAt: "2026-08-02T04:00:00.000Z",
+      purpose: "第三章大纲",
+    }),
+  });
+  const composeClient = await electronApi.conversations.open(
+    composeConversationId,
+  );
+  const composeState = await composeClient.getComposeState();
+  assert.equal(composeState.phase, "designing");
+  assert.equal(composeState.purpose, "第三章大纲");
+
   const input = new UserMessageInputEvent({
     id: "evt-shared-user",
     text: "shared clients",

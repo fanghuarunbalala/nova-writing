@@ -199,7 +199,7 @@ function ActiveChatSurface({
         enabled={snapshot.state === "active" && !failed}
         sendDisabled={pendingApproval}
         status={genStatus}
-        header={
+        approval={
           pendingApproval && onOpenApproval !== undefined ? (
             <ApprovalDock
               approvals={pendingApprovals}

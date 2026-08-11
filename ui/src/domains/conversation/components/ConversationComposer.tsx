@@ -32,8 +32,8 @@ export interface ConversationComposerProps {
   readonly onModeChange?: (mode: ComposerMode) => void;
   /** 审批挂起时禁用发送（审核中）；打字与切 mode 不受影响。 */
   readonly sendDisabled?: boolean;
-  /** 挂接在聊天框上方的插槽（审批挂接卡）。Rendered above the input form. */
-  readonly header?: ReactNode;
+  /** 审批挂起内容（与 GenStatus 同槽位，二选一）。Approval content in the status slot. */
+  readonly approval?: ReactNode;
 }
 
 export function ConversationComposer({
@@ -44,7 +44,7 @@ export function ConversationComposer({
   mode = "review",
   onModeChange = noopModeChange,
   sendDisabled = false,
-  header,
+  approval,
 }: ConversationComposerProps) {
   const [text, setText] = useState("");
 
@@ -64,7 +64,6 @@ export function ConversationComposer({
 
   return (
     <div className={styles.composer}>
-      {header !== undefined ? <div className={styles.dockSlot}>{header}</div> : null}
       <form
         className={styles.form}
         onSubmit={(event) => {
@@ -72,7 +71,7 @@ export function ConversationComposer({
           submit();
         }}
       >
-        {status !== undefined ? <GenStatus {...status} /> : null}
+        {approval !== undefined ? approval : status !== undefined ? <GenStatus {...status} /> : null}
         <div className={styles.mainRow}>
           <label className={styles.srOnly} htmlFor={`composer-input-${conversationId}`}>
             创作指令

@@ -247,6 +247,41 @@ describe("ConversationComposer", () => {
     expect(screen.getByText("正在生成…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "停止" })).toBeInTheDocument();
   });
+
+  it("renders approval content in the status slot when approval is provided", () => {
+    render(
+      <ConversationComposer
+        conversationId="c1"
+        enabled
+        onSend={vi.fn()}
+        approval={
+          <ApprovalDock
+            approvals={[{
+              kind: "tool-approval",
+              approvalRequestId: "approval-a",
+              toolCallId: "call-a",
+              toolName: "NovelCharacterWrite",
+              toolVersion: "1.0.0",
+              argumentDigest: `sha256:${"a".repeat(64)}`,
+              runId: "run-1",
+              turnId: "turn-1",
+              requestedSequence: 1,
+              lastSequence: 2,
+              title: "新增角色",
+              operations: [{ op: "add", kind: "character", title: "林夏" }],
+              requestedAt: "2026-08-11T01:00:00.000Z",
+              expiresAt: "2026-08-11T01:15:00.000Z",
+              status: "pending",
+            }]}
+            onDecide={vi.fn()}
+            onOpenApproval={vi.fn()}
+          />
+        }
+      />,
+    );
+    expect(screen.getByText("等待审批")).toBeInTheDocument();
+    expect(screen.getByText(/新增角色/)).toBeInTheDocument();
+  });
 });
 
 describe("ChatEmptyState", () => {

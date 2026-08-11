@@ -1,6 +1,8 @@
 /**
- * ApprovalDock 视觉：琥珀主题审批挂接卡。
- * 白底无边框 + 柔和投影；操作块 = 轻白胶囊 + 彩色文字（新增绿/编辑琥珀/删除红）；
+ * ApprovalDock 视觉：琥珀主题审批内容块，作为聊天框（composer）的一部分，
+ * 渲染在 gen-status 槽位（输入框正上方）。无独立卡壳——白底/圆角/投影由
+ * composer form 提供；此处只留操作胶囊 + 等待审批动效 + 图标，与输入行细分隔。
+ * 操作块 = 轻白胶囊 + 彩色文字（新增绿/编辑琥珀/删除红）；
  * 等待审批 = 沙漏摇摆 + 琥珀渐变流动文字（下划线只在「等待审批」下）；
  * 图标统一琥珀色（通过/驳回/审核详情），小尺寸 + 柔光悬浮。
  * 渐变流动文字复用全局 grad-flow keyframe（shared/theme/animations.css）。
@@ -9,16 +11,12 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 8px;
 }
 
 .card {
-  background: var(--color-surface);
-  border-radius: 16px;
-  box-shadow:
-    0 3px 12px color-mix(in oklab, var(--color-warn) 22%, transparent),
-    0 24px 54px rgba(90, 60, 30, 0.18);
-  padding: 11px 14px 11px;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 8px;
 }
 
 /* 操作块：轻白胶囊 + 彩色文字，每实体一条 */

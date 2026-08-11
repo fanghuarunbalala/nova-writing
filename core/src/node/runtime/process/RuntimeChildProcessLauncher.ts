@@ -11,6 +11,16 @@ export const RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL = {
 
 const DESKTOP_CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
 
+/**
+ * stderr 内容捕获上限：正常运行的 child 不应写 stderr；仅当 child 异常退出时
+ * （非零退出码或被信号杀死）才把缓冲的 stderr 原文写入日志用于崩溃诊断。
+ * 健康运行（exit 0）永不泄漏 stderr 内容——保持 supervisor smoke 的脱敏不变量。
+ * Capture cap for child stderr text. Healthy children write nothing to stderr;
+ * buffered content is only logged when the child exits abnormally (non-zero exit
+ * or signal), preserving the supervisor smoke's redaction invariant on clean runs.
+ */
+const STDERR_CAPTURE_LIMIT = 8 * 1024;
+
 export type RuntimeChildProcessTerminationSignal =
   (typeof RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL)[keyof typeof RUNTIME_CHILD_PROCESS_TERMINATION_SIGNAL];
 
@@ -113,7 +123,12 @@ export class NodeRuntimeChildProcessLauncher
       );
     }
 
-    const process = new SpawnedRuntimeChildProcess(child, this.#logger);
+    const process = new SpawnedRuntimeChildProcess(
+      child,
+      conversationId,
+      runtimeInstanceId,
+      this.#logger,
+    );
     try {
       await process.waitForStart();
       this.#logger.info("runtime.process.launch_completed", {
@@ -140,6 +155,8 @@ class SpawnedRuntimeChildProcess implements RuntimeChildProcess {
   readonly stdin: Writable;
   readonly stdout: Readable;
   readonly #child: ChildProcessWithoutNullStreams;
+  readonly #conversationId: string;
+  readonly #runtimeInstanceId: string;
   readonly #startPromise: Promise<void>;
   readonly #exitPromise: Promise<RuntimeChildProcessExitStatus>;
   readonly #logger: Logger;
@@ -150,9 +167,18 @@ class SpawnedRuntimeChildProcess implements RuntimeChildProcess {
   #settled = false;
   #stderrBytes = 0;
   #stderrLines = 0;
+  #stderrText = "";
+  #stderrTruncated = false;
 
-  constructor(child: ChildProcessWithoutNullStreams, logger: Logger) {
+  constructor(
+    child: ChildProcessWithoutNullStreams,
+    conversationId: string,
+    runtimeInstanceId: string,
+    logger: Logger,
+  ) {
     this.#child = child;
+    this.#conversationId = conversationId;
+    this.#runtimeInstanceId = runtimeInstanceId;
     this.#logger = logger.child({ component: "spawned_runtime_child_process" });
     this.stdin = child.stdin;
     this.stdout = child.stdout;
@@ -166,6 +192,16 @@ class SpawnedRuntimeChildProcess implements RuntimeChildProcess {
     child.stderr.on("data", (chunk: Buffer) => {
       this.#stderrBytes += chunk.length;
       this.#stderrLines += chunk.toString("utf8").split("\n").length - 1;
+      if (!this.#stderrTruncated) {
+        const text = chunk.toString("utf8");
+        const remaining = STDERR_CAPTURE_LIMIT - this.#stderrText.length;
+        if (text.length > remaining) {
+          this.#stderrText += text.slice(0, Math.max(0, remaining));
+          this.#stderrTruncated = true;
+        } else {
+          this.#stderrText += text;
+        }
+      }
     });
     child.once("spawn", () => {
       this.#started = true;
@@ -174,11 +210,27 @@ class SpawnedRuntimeChildProcess implements RuntimeChildProcess {
     child.on("error", (error) => this.#handleError(error));
     child.once("exit", (code, signal) => {
       this.#logger.info("runtime.process.child_stderr_stats", {
+        conversationId: this.#conversationId,
+        runtimeInstanceId: this.#runtimeInstanceId,
         code,
         signal: signal ?? null,
         bytes: this.#stderrBytes,
         lines: this.#stderrLines,
       });
+      // 崩溃诊断：仅当 child 异常退出（非零退出码或被信号杀死）时把 stderr 原文
+      // 写入日志；健康运行（exit 0）不泄漏内容，保持 supervisor smoke 脱敏不变量。
+      // Crash diagnosis: forward the stderr content only on abnormal exit. Healthy
+      // runs (exit 0) never leak it, preserving the supervisor smoke's redaction.
+      if (code !== 0 || signal !== null) {
+        this.#logger.error("runtime.process.child_stderr", {
+          conversationId: this.#conversationId,
+          runtimeInstanceId: this.#runtimeInstanceId,
+          code,
+          signal: signal ?? null,
+          ...(this.#stderrTruncated ? { truncated: true } : {}),
+          text: this.#stderrText,
+        });
+      }
       this.#settleExit(Object.freeze({
         kind: "exited",
         code,

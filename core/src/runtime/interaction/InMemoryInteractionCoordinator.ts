@@ -34,6 +34,12 @@ export interface ToolApprovalEventIdFactory {
   resolved(approvalRequestId: string): string;
 }
 
+/** 确定性审批事件 id（跨重启幂等：同 id 重复 append 被 journal 去重）。 */
+export const DEFAULT_APPROVAL_EVENT_ID_FACTORY: ToolApprovalEventIdFactory = Object.freeze({
+  requested: (requestId: string) => `evt_tool_approval_requested_${requestId}`,
+  resolved: (requestId: string) => `evt_tool_approval_resolved_${requestId}`,
+});
+
 export interface InMemoryInteractionCoordinatorOptions {
   readonly eventSink: RuntimeEventSink;
   readonly eventIdFactory?: ToolApprovalEventIdFactory;
@@ -364,6 +370,7 @@ export class InMemoryInteractionCoordinator implements InteractionCoordinator {
       conversationId: request.identity.conversationId,
       id: this.#eventIdFactory.requested(request.approvalRequestId),
       runId: request.identity.runId,
+      runtimeInstanceId: request.runtimeInstanceId,
       ...(request.turnId === undefined ? {} : { turnId: request.turnId }),
       approvalRequestId: request.approvalRequestId,
       toolCallId: request.identity.toolCallId,
@@ -423,11 +430,6 @@ export class InMemoryInteractionCoordinator implements InteractionCoordinator {
   }
 }
 
-const DEFAULT_APPROVAL_EVENT_ID_FACTORY: ToolApprovalEventIdFactory = Object.freeze({
-  requested: (requestId: string) => `evt_tool_approval_requested_${requestId}`,
-  resolved: (requestId: string) => `evt_tool_approval_resolved_${requestId}`,
-});
-
 function createPending(request: ToolApprovalRequest): PendingApproval {
   let resolve!: (resolution: ToolApprovalResolution) => void;
   const promise = new Promise<ToolApprovalResolution>((settle) => {
@@ -451,6 +453,7 @@ function captureRequest(value: ToolApprovalRequest): ToolApprovalRequest {
       toolName: identity.toolName,
       toolVersion: identity.toolVersion,
       argumentDigest: identity.argumentDigest,
+      runtimeInstanceId: requireRuntimeInstanceId(value.runtimeInstanceId),
       summary: value.summary,
       requestedAt: value.requestedAt,
       expiresAt: value.expiresAt,
@@ -459,6 +462,7 @@ function captureRequest(value: ToolApprovalRequest): ToolApprovalRequest {
     return Object.freeze({
       approvalRequestId: payload.approvalRequestId,
       identity,
+      runtimeInstanceId: payload.runtimeInstanceId,
       ...(turnId === undefined ? {} : { turnId }),
       summary: payload.summary,
       requestedAt: payload.requestedAt,
@@ -642,6 +646,13 @@ function captureApprovalRequestId(value: unknown): string {
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
   return value as Record<string, unknown>;
+}
+
+function requireRuntimeInstanceId(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error();
+  }
+  return value;
 }
 
 function requireIdentity(value: unknown): string {

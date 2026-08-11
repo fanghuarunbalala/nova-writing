@@ -1,6 +1,5 @@
 /** Desktop child stdio entrypoint composing the production Runtime. */
 import type { Readable, Writable } from "node:stream";
-import { createWriteStream, type WriteStream } from "node:fs";
 import {
   BaseContextCompiler,
   type AgentRuntimeConfigurationProfileResolver,
@@ -26,9 +25,9 @@ import type { ConversationRuntimeBootstrap } from "../../../conversation/index.j
 import type { ConversationCatalogStore } from "../../../storage/index.js";
 import {
   noopLogger,
-  type LogFields,
   type Logger,
 } from "../../../observability/index.js";
+import { createRotatingFileLogger } from "../../observability/index.js";
 import {
   DefaultRuntimeRunPreparationSourceFactory,
 } from "./DefaultRuntimeRunPreparationSourceFactory.js";
@@ -249,61 +248,7 @@ function createEntrypointLogger(
   if (logPath === undefined || logPath.length === 0) {
     return noopLogger.child({ component: "desktop_runtime_child_entrypoint" });
   }
-  const levelRank = LOG_LEVEL_RANK[logLevel];
-  // 持久写流：单个文件描述符，避免每行 appendFile 的 open/close FD 抖动在高频 delta
-  // 日志下耗尽句柄（EMFILE）导致进程崩溃。Persistent write stream: one FD instead of
-  // per-line open/close, so high-frequency delta logging cannot exhaust handles (EMFILE).
-  const logStream: WriteStream = createWriteStream(logPath, { flags: "a" });
-  logStream.on("error", () => { /* 写流错误不崩溃进程（脱敏）；日志丢弃。 */ });
-  process.on("exit", () => {
-    logStream.end();
-  });
-  const writeLine = (
-    level: string,
-    event: string,
-    fields: Readonly<Record<string, unknown>> | undefined,
-  ): void => {
-    logStream.write(`${level} ${event} ${safeLogFields(fields)}\n`);
-  };
-  const fileLogger: Logger = {
-    debug: (event, fields) => {
-      if (levelRank >= LOG_LEVEL_RANK.debug) {
-        writeLine("DEBUG", event, fields);
-      }
-    },
-    info: (event, fields) => {
-      if (levelRank >= LOG_LEVEL_RANK.info) writeLine("INFO", event, fields);
-    },
-    warn: (event, fields) => {
-      if (levelRank >= LOG_LEVEL_RANK.warn) writeLine("WARN", event, fields);
-    },
-    error: (event, fields) => {
-      writeLine("ERROR", event, fields);
-    },
-    ...(levelRank >= LOG_LEVEL_RANK.verbose
-      ? {
-          verbose: (event: string, fields?: LogFields) => {
-            writeLine("VERBOSE", event, fields);
-          },
-        }
-      : {}),
-    child: () => fileLogger,
-  };
-  return fileLogger;
-}
-
-const LOG_LEVEL_RANK: Readonly<Record<DiagnosticLogLevel, number>> =
-  Object.freeze({
-    error: 0,
-    warn: 1,
-    info: 2,
-    debug: 3,
-    verbose: 4,
-  });
-
-function safeLogFields(fields: Readonly<Record<string, unknown>> | undefined): string {
-  if (fields === undefined) return "{}";
-  return JSON.stringify(fields);
+  return createRotatingFileLogger({ file: logPath, level: logLevel });
 }
 
 /** 记忆化的 workspace store 提供者:manifest 与 conversation catalog 共享同一打开实例。 */

@@ -117,6 +117,7 @@ const view = new ToolRegistryView({
 const composition = createChildToolExecutionComposition({
   registryView: view,
   eventSink,
+  runtimeInstanceId: "runtime-instance-smoke",
   composeStateProvider: composeState,
 });
 const signal = new AbortController().signal;

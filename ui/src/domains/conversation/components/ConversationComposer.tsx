@@ -34,6 +34,8 @@ export interface ConversationComposerProps {
   readonly sendDisabled?: boolean;
   /** 审批挂起内容（与 GenStatus 同槽位，二选一）。Approval content in the status slot. */
   readonly approval?: ReactNode;
+  /** 运行时传输断开（进程死亡/重启中）：解锁审批阻塞并提示已断开。 */
+  readonly disconnected?: boolean;
 }
 
 export function ConversationComposer({
@@ -45,6 +47,7 @@ export function ConversationComposer({
   onModeChange = noopModeChange,
   sendDisabled = false,
   approval,
+  disconnected = false,
 }: ConversationComposerProps) {
   const [text, setText] = useState("");
 
@@ -91,11 +94,16 @@ export function ConversationComposer({
           <Button
             variant="primary"
             onClick={submit}
-            disabled={!enabled || sendDisabled || text.trim() === ""}
+            disabled={!enabled || (disconnected ? false : sendDisabled) || text.trim() === ""}
           >
             发送
           </Button>
         </div>
+        {disconnected ? (
+          <span className={styles.pendingHint}>进程已断开，审批已结束</span>
+        ) : sendDisabled ? (
+          <span className={styles.pendingHint}>等待审批</span>
+        ) : null}
         <ComposerModeBar mode={mode} onChange={onModeChange} disabled={!enabled} />
       </form>
     </div>

@@ -40,6 +40,8 @@ import { NodeSha256ToolArgumentDigester } from "../../tools/index.js";
 export interface ChildToolExecutionCompositionOptions {
   readonly registryView: ToolRegistryView;
   readonly eventSink: RuntimeEventSink;
+  /** 当前 child runtime 实例 id（审批归属）。Owning runtime instance id. */
+  readonly runtimeInstanceId: string;
   /** compose 状态源；缺省新建空 provider。Compose state source; defaults to a fresh provider. */
   readonly composeStateProvider?: ComposeModeStateProvider;
   readonly logger?: Logger;
@@ -203,6 +205,7 @@ export function createChildToolExecutionComposition(
       executionPolicyResolver: policyResolver,
       permissionPolicy,
       interactionCoordinator: coordinator,
+      runtimeInstanceId: options.runtimeInstanceId,
       approvalRequestFactory: createChildToolApprovalRequestFactory(),
       sandboxExecutor: new TrustedProcessSandboxExecutor(),
       resultLimits: DEFAULT_TOOL_RESULT_LIMITS,
@@ -229,6 +232,7 @@ function createChildToolApprovalRequestFactory(): ToolApprovalRequestFactory {
       return Object.freeze({
         approvalRequestId,
         identity: input.identity,
+        runtimeInstanceId: input.runtimeInstanceId,
         ...(input.turnId === undefined ? {} : { turnId: input.turnId }),
         summary,
         requestedAt,

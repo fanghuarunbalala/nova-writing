@@ -123,6 +123,7 @@ assert.deepEqual(sandbox.capabilities, {
 });
 const pipeline = new ToolExecutionPipeline({
   registryView,
+  runtimeInstanceId: "runtime-instance-smoke",
   argumentDigester: {
     async digest() { return `sha256:${"a".repeat(64)}`; },
   },
@@ -134,6 +135,7 @@ const pipeline = new ToolExecutionPipeline({
       return {
         approvalRequestId: `approval-${input.identity.toolCallId}`,
         identity: input.identity,
+        runtimeInstanceId: input.runtimeInstanceId,
         ...(input.turnId === undefined ? {} : { turnId: input.turnId }),
         summary: { title: input.toolLabel },
         requestedAt: "2026-08-02T02:00:00.000Z",

@@ -42,6 +42,7 @@ const requested = new ToolApprovalRequestedOutputEvent({
   toolName: "WriteFile",
   toolVersion: "1.0.0",
   argumentDigest: digest,
+  runtimeInstanceId: "runtime-instance-smoke",
   summary: {
     title: "Modify the current draft",
     description: "Writes a bounded redacted change.",

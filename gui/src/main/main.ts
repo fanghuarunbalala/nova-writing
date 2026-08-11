@@ -21,6 +21,7 @@ import {
   NodePlaintextCredentialStore,
   NodeWorkspaceStoreLocator,
 } from "@novel/core/node";
+import type { DiagnosticLogLevel } from "@novel/core";
 import { ELECTRON_WORKSPACE_IPC_CHANNEL } from "../shared/ElectronIpcProtocol.js";
 import { DesktopBootstrapApiTransport } from "./DesktopBootstrapApiTransport.js";
 import { createDesktopApplicationMenuTemplate } from "./DesktopApplicationMenu.js";
@@ -92,8 +93,23 @@ const configurationService = new DesktopConfigurationService({
   store: configurationStore,
   credentials: plaintextCredentialStore,
 });
+let configuredLogLevel: DiagnosticLogLevel = "info";
+try {
+  configuredLogLevel = (await configurationService.load()).diagnostics.logLevel;
+} catch {
+  // 配置读取失败时退回 info，不让启动崩溃。Fall back to info if config is unreadable.
+}
+const mainLogLevel =
+  manualDebug === "verbose"
+    ? "verbose"
+    : manualDebug === "1" || manualDebug === "debug"
+      ? "debug"
+      : buildMode === "debug"
+        ? "verbose"
+        : configuredLogLevel;
 const mainLogger = createMainProcessLogger(
   join(app.getPath("userData"), "runtime-main.log"),
+  mainLogLevel,
 );
 const workspaceService = new DesktopWorkspaceService({
   picker: {
@@ -110,7 +126,7 @@ const workspaceService = new DesktopWorkspaceService({
   }),
   applicationFactory: new DesktopNovelWorkspaceApplicationFactory({
     storageRoot: join(app.getPath("userData"), "novel-storage"),
-    childLogPath: join(app.getPath("userData"), "runtime-child.log"),
+    logLevel: mainLogLevel,
     logger: mainLogger,
     ...(debugLogLevel === undefined ? {} : { debugLogLevel }),
     ...(providerRequestDumpPath === undefined

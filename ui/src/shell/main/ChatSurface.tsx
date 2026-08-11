@@ -137,12 +137,14 @@ function ActiveChatSurface({
   );
   const runtimeStatus = useConversationRuntimeStatus(snapshot.projection);
   const failed = runtimeStatus.state === "failed";
+  const disconnected = runtimeStatus.state === "disconnected";
   // 本会话待审批（挂接聊天框的审批卡数据源）：读本会话投影（双工，实时更新）。
-  // pending 时由 ApprovalDock 承担「等待审批」态，GenStatus 不再显示 waiting。
+  // 传输断开（进程死亡/重启）时审批不可等待：解锁 composer；pending 时由
+  // ApprovalDock 承担等待态，GenStatus 不再显示 waiting。
   const pendingApprovals = (snapshot.projection.approvals ?? []).filter(
     (approval) => approval.status === "pending",
   );
-  const pendingApproval = pendingApprovals.length > 0;
+  const pendingApproval = !disconnected && pendingApprovals.length > 0;
   // 三态判定：failed > thinking（尚未产出正文）> generating。
   // （审批挂起时 genStatus 置空，由 ApprovalDock 展示等待审批。）
   const live = runtimeStatus.state === "live";
@@ -206,6 +208,7 @@ function ActiveChatSurface({
         conversationId={conversationId}
         enabled={snapshot.state === "active" && !failed}
         sendDisabled={pendingApproval}
+        disconnected={disconnected}
         status={genStatus}
         approval={
           pendingApproval && onOpenApproval !== undefined ? (

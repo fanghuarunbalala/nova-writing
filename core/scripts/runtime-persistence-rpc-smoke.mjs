@@ -384,6 +384,7 @@ function createInteractionSnapshot() {
         argumentDigest: `sha256:${"4".repeat(64)}`,
       }),
       summary: Object.freeze({ title: "Read one file" }),
+      runtimeInstanceId: "runtime-instance-smoke",
       requestedAt: "2026-08-02T00:00:03.000Z",
       expiresAt: "2026-08-02T00:01:03.000Z",
     })]),

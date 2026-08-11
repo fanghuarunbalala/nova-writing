@@ -230,6 +230,7 @@ async function runProjectionContract(name, Transport) {
       toolName: "WriteFile",
       toolVersion: "1.0.0",
       argumentDigest,
+      runtimeInstanceId: "runtime-instance-smoke",
       summary: {
         title: "修改角色",
         description: "目标：张三",

@@ -122,6 +122,7 @@ const coordinator = new InMemoryInteractionCoordinator({ eventSink });
 const traceSink = new RuntimeEventToolTraceSink({ eventSink });
 const dispatcher = new ToolDispatcher(new ToolExecutionPipeline({
   registryView,
+  runtimeInstanceId: "runtime-instance-smoke",
   argumentDigester: { async digest() { return `sha256:${"c".repeat(64)}`; } },
   executionPolicyResolver: policyResolver,
   permissionPolicy,
@@ -131,6 +132,7 @@ const dispatcher = new ToolDispatcher(new ToolExecutionPipeline({
       return {
         approvalRequestId: `approval-${input.identity.toolCallId}`,
         identity: input.identity,
+        runtimeInstanceId: input.runtimeInstanceId,
         ...(input.turnId === undefined ? {} : { turnId: input.turnId }),
         summary: { title: input.toolLabel },
         requestedAt: "2026-08-02T03:00:00.000Z",

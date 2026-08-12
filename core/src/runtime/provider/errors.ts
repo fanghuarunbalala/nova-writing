@@ -1,4 +1,4 @@
-/** Provider 错误分类 */
+/** Provider 错误分类（toProviderError 内部映射用，不暴露到错误实例） */
 export type ProviderErrorCode =
   /** 请求参数/格式错误（HTTP 400/422） */
   | "request-error"
@@ -19,18 +19,11 @@ export type ProviderErrorCode =
   /** 兜底：无法分类 */
   | "unknown";
 
-/** 错误分类是否可重试（限流/网络/超时/服务端可重试；请求/认证/费用/取消不可） */
-function isRetryable(code: ProviderErrorCode): boolean {
-  switch (code) {
-    case "rate-limit":
-    case "network-error":
-    case "timeout":
-    case "server-error":
-      return true;
-    default:
-      return false;
-  }
-}
+/** 具体错误类构造签名 */
+type ProviderErrorConstructor = new (
+  message: string,
+  options?: { status?: number; provider?: string; cause?: unknown },
+) => ProviderError;
 
 /** 从 HTTP 状态码推断错误分类 */
 function codeFromStatus(status: number): ProviderErrorCode {
@@ -43,12 +36,30 @@ function codeFromStatus(status: number): ProviderErrorCode {
   return "unknown";
 }
 
-/** 标准化后的 provider 错误（适配器在边界封装原始 SDK 错误后向上抛出） */
-export class ProviderError extends Error {
-  /** 错误分类 */
-  readonly code: ProviderErrorCode;
-  /** 是否可重试 */
-  readonly retryable: boolean;
+/** 状态码 → 具体错误类（toProviderError 分发用） */
+function errorClassFromStatus(status: number): ProviderErrorConstructor {
+  switch (codeFromStatus(status)) {
+    case "request-error":
+      return ProviderRequestError;
+    case "auth-error":
+      return ProviderAuthError;
+    case "insufficient-funds":
+      return ProviderInsufficientFundsError;
+    case "rate-limit":
+      return ProviderRateLimitedError;
+    case "timeout":
+      return ProviderTimeoutError;
+    case "server-error":
+      return ProviderServerError;
+    default:
+      return ProviderUnknownError;
+  }
+}
+
+/** provider 错误基类（抽象）：name 即具体类名，retryable 由子类固化 */
+export abstract class ProviderError extends Error {
+  /** 是否可重试（限流/网络/超时/服务端为 true，其余 false） */
+  abstract readonly retryable: boolean;
   /** HTTP 状态码（若有） */
   readonly status?: number;
   /** 来源 provider 名（如 "anthropic"） */
@@ -56,29 +67,67 @@ export class ProviderError extends Error {
 
   /**
    * 构造 ProviderError
-   * @param code 错误分类
    * @param message 人类可读信息（不含密钥等敏感内容）
    * @param options 附加信息（status / provider / cause）
    */
-  constructor(
-    code: ProviderErrorCode,
-    message: string,
-    options?: { status?: number; provider?: string; cause?: unknown },
-  ) {
+  constructor(message: string, options?: { status?: number; provider?: string; cause?: unknown }) {
     super(message, { cause: options?.cause });
-    this.name = "ProviderError";
-    this.code = code;
-    this.retryable = isRetryable(code);
+    this.name = new.target.name;
     this.status = options?.status;
     this.provider = options?.provider;
   }
 }
 
+/** 请求参数/格式错误（HTTP 400/422） */
+export class ProviderRequestError extends ProviderError {
+  readonly retryable = false;
+}
+
+/** 认证失败（HTTP 401/403，API key 无效） */
+export class ProviderAuthError extends ProviderError {
+  readonly retryable = false;
+}
+
+/** 费用不足（HTTP 402） */
+export class ProviderInsufficientFundsError extends ProviderError {
+  readonly retryable = false;
+}
+
+/** 限流（HTTP 429） */
+export class ProviderRateLimitedError extends ProviderError {
+  readonly retryable = true;
+}
+
+/** 请求超时（HTTP 408/504 或连接超时） */
+export class ProviderTimeoutError extends ProviderError {
+  readonly retryable = true;
+}
+
+/** 网络层失败（连不上，fetch 都失败） */
+export class ProviderNetworkError extends ProviderError {
+  readonly retryable = true;
+}
+
+/** 服务端错误（HTTP 5xx） */
+export class ProviderServerError extends ProviderError {
+  readonly retryable = true;
+}
+
+/** 请求被取消（signal.abort） */
+export class ProviderAbortedError extends ProviderError {
+  readonly retryable = false;
+}
+
+/** 兜底：无法分类 */
+export class ProviderUnknownError extends ProviderError {
+  readonly retryable = false;
+}
+
 /**
- * 将原始错误封装为标准化 ProviderError（SDK 原始错误 → 统一分类，向上抛出）
+ * 将原始错误封装为具体 ProviderError（SDK 原始错误 → 对应错误类，向上抛出）
  * @param raw 原始错误（SDK 错误对象 / HTTP 状态 / AbortError 等）
  * @param provider 来源 provider 名
- * @returns 标准化 ProviderError
+ * @returns 标准化后的具体 ProviderError
  */
 export function toProviderError(raw: unknown, provider?: string): ProviderError {
   // 已是标准化错误则原样返回
@@ -87,22 +136,29 @@ export function toProviderError(raw: unknown, provider?: string): ProviderError 
   }
   const status = (raw as { status?: number } | null)?.status;
   const err = raw instanceof Error ? raw : new Error(String(raw));
+  // SDK 错误类默认 name 为 "Error"（不设 this.name），需回退到 constructor.name 识别
+  const errorName = err.name !== "Error" ? err.name : (err.constructor?.name ?? err.name);
 
-  // 取消 / 超时（AbortSignal / AbortController 抛出的 DOMException）
-  if (err.name === "AbortError") {
-    return new ProviderError("aborted", "请求已被取消", { provider, cause: raw });
+  // 取消 / 超时（AbortSignal / AbortController 抛出的 DOMException，及 SDK 连接超时）
+  if (errorName === "AbortError") {
+    return new ProviderAbortedError("请求已被取消", { provider, cause: raw });
   }
-  if (err.name === "TimeoutError") {
-    return new ProviderError("timeout", "请求超时", { status, provider, cause: raw });
+  if (errorName === "TimeoutError" || errorName === "APIConnectionTimeoutError") {
+    return new ProviderTimeoutError("请求超时", { status, provider, cause: raw });
   }
-  // 带 HTTP 状态码的 SDK 错误 → 按状态码分类
+  // SDK 网络层失败（如 @anthropic-ai/sdk 的 APIConnectionError，status 为 undefined）
+  if (errorName === "APIConnectionError") {
+    return new ProviderNetworkError(`网络错误：${err.message}`, { provider, cause: raw });
+  }
+  // 带 HTTP 状态码的 SDK 错误 → 按状态码分发到具体错误类
   if (typeof status === "number") {
-    return new ProviderError(codeFromStatus(status), err.message, { status, provider, cause: raw });
+    const ErrorClass = errorClassFromStatus(status);
+    return new ErrorClass(err.message, { status, provider, cause: raw });
   }
   // fetch 网络层失败（TypeError: fetch failed / 连接拒绝）
   if (err instanceof TypeError) {
-    return new ProviderError("network-error", `网络错误：${err.message}`, { provider, cause: raw });
+    return new ProviderNetworkError(`网络错误：${err.message}`, { provider, cause: raw });
   }
   // 兜底
-  return new ProviderError("unknown", err.message, { provider, cause: raw });
+  return new ProviderUnknownError(err.message, { provider, cause: raw });
 }

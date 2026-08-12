@@ -8,7 +8,7 @@ import type {
   ToolScheme,
 } from "../types.js";
 import { BaseProvider } from "../BaseProvider.js";
-import { ProviderError } from "../errors.js";
+import { ProviderUnknownError } from "../errors.js";
 import type { ThinkingParam } from "../model-info.js";
 
 /** Anthropic 适配器实现（基于 @anthropic-ai/sdk，模板三钩子落地） */
@@ -76,7 +76,7 @@ export class AnthropicProvider extends BaseProvider {
       throw new Error("AnthropicProvider: 缺少最终消息（createStream 未完成）");
     }
     if (message.stop_reason === "refusal") {
-      throw new ProviderError("unknown", "模型拒绝请求（refusal）", { provider: "anthropic" });
+      throw new ProviderUnknownError("模型拒绝请求（refusal）", { provider: "anthropic" });
     }
     return {
       finishReason: toFinishReason(message.stop_reason),

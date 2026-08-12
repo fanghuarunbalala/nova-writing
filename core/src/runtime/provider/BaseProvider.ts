@@ -10,8 +10,9 @@ import type {
 } from "./types.js";
 import type { Provider } from "./Provider.js";
 import {
-  ProviderError,
+  ProviderAbortedError,
   toProviderError,
+  type ProviderError,
 } from "./errors.js";
 import {
   ModelInfoRegistry,
@@ -142,7 +143,7 @@ export abstract class BaseProvider implements Provider {
   /** 取消检查（私有默认） */
   private assertNotAborted(signal?: AbortSignal): void {
     if (signal?.aborted) {
-      throw new ProviderError("aborted", "请求已被取消");
+      throw new ProviderAbortedError("请求已被取消");
     }
   }
   /** 错误封装（私有默认） */

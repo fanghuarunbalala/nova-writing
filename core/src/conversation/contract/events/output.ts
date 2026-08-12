@@ -1,10 +1,10 @@
 /**
- * conversation 输出事件类型全集 + 事件流两端。
+ * 输出事件类型全集。
  * 输出事件是内存产物，默认瞬态；persist=true 才落 journal（可查/可恢复）。
  * 只建模消息流（user/assistant/delta/tool-call）；todo/run 状态等读 sqlite 读模型，不进事件。
  */
 
-import type { AgentId, ConversationId } from "./types.js";
+import type { AgentId, ConversationId } from "../types/index.js";
 
 /**
  * 输出事件（hub + journal 共用）：
@@ -64,18 +64,3 @@ export type OutputEvent =
 
 /** 可落盘事件：OutputEvent 中 persist=true 的子集（journal 只写这些） */
 export type PersistedOutputEvent = Extract<OutputEvent, { persist: true }>;
-
-/** 事件流写端（进程内生产方 push；单写者队列 + 单一 drainer） */
-export interface ConversationEventBusEnqueue {
-	/**
-	 * 推入一条输出事件
-	 * @param evt 输出事件（同步 O(1) push，不阻塞）
-	 */
-	enqueue(evt: OutputEvent): void;
-}
-
-/** 事件流读端（订阅方 pull） */
-export interface ConversationEventBusDequeue {
-	/** 异步迭代器：按序拉取输出事件 */
-	[Symbol.asyncIterator](): AsyncIterator<OutputEvent>;
-}

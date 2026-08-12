@@ -24,13 +24,16 @@ export class AgentLoop {
       agentType: config.agentType,
       agentVersion: config.agentVersion,
       registry: config.registry,
-      journal: config.journal,
       compactPolicy: config.compactPolicy,
     });
+    for (const listener of config.listeners ?? []) {
+      this.context.subscribe(listener);
+    }
   }
 
   /**
-   * 运行一轮对话：追加用户消息 → 循环调 provider，处理 tool_call，直至 stop / length / maxTurns
+   * 处理一次用户输入：appendTurnContext 开 turn → 循环 toProviderCall / provider.call，
+   * 结果与 tool 结果追加当前 turn，直至 assistant 无 tool_call（final）/ length / maxTurns
    * @param input 用户消息文本
    * @param runConfig 单次运行配置
    * @param onEvent 事件回调（delta / tool-call / tool-result / compacted）

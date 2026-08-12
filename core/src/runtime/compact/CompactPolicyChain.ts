@@ -1,4 +1,4 @@
-import type { RunContext } from "../loop/types.js";
+import type { TurnContext } from "../loop/types.js";
 import type { ContextCompactPolicy } from "./ContextCompactPolicy.js";
 
 /** 压缩策略链：多个策略按优先级注册，链式逐个执行 */
@@ -16,8 +16,8 @@ export interface CompactPolicyChain {
   unregister(policy: ContextCompactPolicy): void;
   /**
    * 链式检查并压缩（策略按优先级逐个 shouldCompact → compact）
-   * @param runContexts 当前回合序列
+   * @param turnContexts 当前 turn 序列
    * @returns 是否有策略执行了压缩
    */
-  compactIfNeeded(runContexts: RunContext[]): boolean;
+  compactIfNeeded(turnContexts: TurnContext[]): boolean;
 }

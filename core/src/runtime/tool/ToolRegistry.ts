@@ -1,14 +1,12 @@
-import type { ToolScheme } from "../provider/types.js";
-import type { ToolHandler } from "./ToolHandler.js";
+import type { ToolDef } from "./ToolDef.js";
 
-/** 工具注册表：注册工具（scheme 定义 + 实现） */
+/** 工具注册表：注册工具（整合定义：scheme + handler + prompt 细节） */
 export interface ToolRegistry {
   /**
    * 注册工具
-   * @param scheme 工具定义（scheme）
-   * @param handler 工具实现
+   * @param def 工具定义（scheme + handler + promptDetail）
    */
-  register(scheme: ToolScheme, handler: ToolHandler): void;
+  register(def: ToolDef): void;
   /** 列出已注册工具定义 */
-  list(): ToolScheme[];
+  list(): ToolDef[];
 }

@@ -1,9 +1,9 @@
 /**
- * 对端 handle 契约：调用方持有的远端/进程内视图。
+ * 远端 conversation 视图（UI 侧）。
  */
 
-import type { OutputEvent } from "./events.js";
-import type { ConversationInteraction } from "./interaction.js";
+import type { OutputEvent } from "../events/index.js";
+import type { ConversationInteraction } from "../interaction/index.js";
 
 /**
  * UI 侧对远端 conversation 的视图（createOrResume / spawnConversation 返回）。

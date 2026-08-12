@@ -218,7 +218,7 @@ interface WaitingInteractionRequest {
 - **wait 是延迟 RPC（阻塞）**：`await sendApprovalRequest(req)` 挂起该 turn，直到决策/回答产生才 resolve；**决策/回答就是 RPC 返回值**，requestId = RPC 关联 id，不走 sendSystemControl。
 - **wait RPC 实现约束**：**无/超长超时**（审批可等几分钟，`withCallOptions` 设无限超时）；**进程死亡解挂**——终端应答方进程死亡时，整条链的 pending wait RPC 需 resolve 成错误，解挂所有 await 的 turn 并走优雅中止（handle 层负责）。
 - **history 不经 manager**：UI 经 `ConversationJournalReadOnlyService` 直接查。
-- `sendSystemControl` 含审批决策注入 / 任务指派 / 停止；与 `sendUserCommand` 拆不拆：⏳。
+- **拆分已定**：`sendUserCommand`（turn lane，agent 可见）与 `sendSystemControl`（control lane，可抢占）分开；`sendSystemControl` = `stop` / `reload.config`。
 - subagent 的审批：进程内由主 loop 决定；teammate 的审批路径：**经 manager 转发到 parent**（已定）。
 
 ---
@@ -226,7 +226,6 @@ interface WaitingInteractionRequest {
 ## 8. 待定决策清单（⏳）
 
 1. **delta chunk 聚合**：暂缓——目前 delta 直走 kkrpc 背压，聚合 chunk 后续再评估。
-2. **`sendUserCommand` vs `sendSystemControl` 拆不拆**。
-3. **sqlite 驱动**：better-sqlite3（同步，短查询可接受）vs worker 封装（严格不阻塞）。
-4. **接口层最终形态**（见第 7 节）。
-5. **实现顺序**：wire 协议（kkrpc 接入）→ conversation 持久化核心（journal+sqlite+replay）→ mailbox + output bus → AgentLoop 跑在 provider 上 → manager / novel-db 进程 + socket → subagent / teammate 递归。
+2. **sqlite 驱动**：better-sqlite3（同步，短查询可接受）vs worker 封装（严格不阻塞）。
+3. **接口层最终形态**（见第 7 节）。
+4. **实现顺序**：wire 协议（kkrpc 接入）→ conversation 持久化核心（journal+sqlite+replay）→ mailbox + output bus → AgentLoop 跑在 provider 上 → manager / novel-db 进程 + socket → subagent / teammate 递归。

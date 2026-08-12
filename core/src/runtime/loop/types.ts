@@ -6,7 +6,6 @@ import type {
   ToolCall,
   AssistantMessage,
 } from "../provider/types.js";
-import type { ConversationJournalService } from "../../conversation/contract/journal.js";
 import type { AgentDefinitionRegistry } from "../agent/AgentRegistry.js";
 import type { CompactPolicyChain } from "../compact/CompactPolicyChain.js";
 
@@ -21,7 +20,11 @@ export type AgentLoopEvent =
   /** 工具执行结果 */
   | { type: "tool-result"; callId: string; text: string }
   /** 上下文压缩发生 */
-  | { type: "compacted" };
+  | { type: "compacted" }
+  /** 上下文清空 */
+  | { type: "clear" }
+  /** 重试请求 */
+  | { type: "retry-request" };
 
 /** AgentLoop 构造配置：进程生命周期稳定 */
 export interface AgentLoopConfig {
@@ -37,10 +40,10 @@ export interface AgentLoopConfig {
   agentId?: string;
   /** Agent 定义注册表（加载 system 分段 / 工具定义） */
   registry: AgentDefinitionRegistry;
-  /** 持久化服务（journal 写侧）；subagent 不持久化，缺省 */
-  journal?: ConversationJournalService;
   /** 上下文压缩策略链 */
   compactPolicy: CompactPolicyChain;
+  /** 状态变化监听器（AgentLoop 构造时注册到 LoopContext；可多个） */
+  listeners?: LoopContextListener[];
 }
 
 /** 单次运行配置：run 时传入 */
@@ -51,30 +54,45 @@ export interface AgentRunConfig {
   maxTurns?: number;
 }
 
-/** 一次 provider call（turn）：run 内最小单位 */
+/** 一次用户驱动的完整回复周期（turn）：user → 多次 provider call + tool → assistant 无 tool_call 结束 */
 export interface TurnContext {
-  /** 本次 call 的消息（末尾 assistant 即 final 来源） */
+  /** turn 序号（递增，唯一标识；上层持久化 / 重放 / 增量同步用） */
+  seq: number;
+  /** 本 turn 累积消息（user + assistant + tool 结果，自闭环） */
   messages: Message[];
-  /** 本次 call 用量 */
+  /** 本 turn 累计用量 */
   usage?: { inputTokens: number; outputTokens: number };
   /** 时间 */
   ts: string;
 }
 
-/** 一次 run（完整回合）：final / 总 usage 派生自 turns */
-export interface RunContext {
-  /** 本回合 turn 序列（每次 provider call 一个） */
-  turns: TurnContext[];
-  /** 时间 */
-  ts: string;
-}
-
-/** AgentLoop 运行结果 */
+/** AgentLoop 运行结果（完整消息序列从 LoopContext.turns 取） */
 export interface AgentLoopResult {
-  /** 本轮完整消息序列（含 tool 轮次） */
-  messages: Message[];
   /** 最终 assistant 消息 */
   final: AssistantMessage;
   /** 总 token 用量 */
   usage?: { inputTokens: number; outputTokens: number };
+}
+
+/** LoopContext 状态变化监听（上层订阅：持久化 / 通知；方法可选，按需实现，可注册多个监听器） */
+export interface LoopContextListener {
+  /**
+   * 新 turn 创建（用户消息开 turn）
+   * @param turn 新 turn
+   */
+  onTurnAppended?(turn: TurnContext): void;
+  /**
+   * turn 消息追加（assistant / tool 结果）
+   * @param turn 当前 turn
+   * @param messages 本次追加的消息
+   */
+  onTurnMessageAppend?(turn: TurnContext, messages: Message[]): void;
+  /**
+   * 上下文压缩发生
+   */
+  onCompacted?(): void;
+  /**
+   * 上下文清空 / 重置（如切换任务、子代理结束）
+   */
+  onClear?(): void;
 }

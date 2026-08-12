@@ -16,8 +16,8 @@
 进程间通道分三条，按内容选：
 
 1. **output hub（evt，实时，内存产物）**：事件内存产生、即时分发，**默认瞬态、按需落盘**（显式标记 persistent 才写 journal）；仅 ui handle 消费，每 conversation 一个 hub。**大部分实时事件只有订阅者可见，未落盘不重放**。
-2. **journal 沙盒（持久，落盘子集）**：完整消息/todo/审批请求等显式标记的事件落盘；任何 Node 进程本地可读（tail 到完整行），renderer 经 Main 代读。查询/历史/恢复只能覆盖落盘子集。
-3. **rpc（消息与控制）**：用户输入、控制指令、inter-conversation 消息（经 ConversationManagerServer 调度）、审批应答、novel 查询/变更。请求带 id，响应带 ok/result/error。novel.changed 为数据变更推送。
+2. **journal 沙盒（持久，落盘子集）**：消息流事件（user/assistant.message、tool-call-request/response）落盘；任何 Node 进程本地可读（tail 到完整行），renderer 经 Main 代读。查询/历史/恢复只能覆盖落盘子集。todo/run 状态在 sqlite 读模型，不进事件。
+3. **rpc（消息与控制）**：用户输入、控制指令、inter-conversation 消息（经 ConversationManagerServer 调度）、wait 请求（审批/提问/退出 compose，经 manager 路由到 parent）、审批/提问应答、novel 查询/变更。请求带 id，响应带 ok/result/error。novel.changed 为数据变更推送。
 
 约定：output 是内存产物、按需落盘，未落盘仅订阅者可见；进度走读不走推；manager 只管生命周期 + 消息调度。
 实现：rpc 半边基于 **kkrpc**（stdio / Electron transport）。

@@ -77,24 +77,25 @@
 ① output hub（evt，实时，**内存产物**）
    · 事件在内存中产生、即时分发；**默认瞬态**，仅订阅者可见
    · 仅 ui handle 消费；每 conversation 一个 hub，UI 聚焦哪个订阅哪个
-   · **按需落盘**：需持久/可查/可恢复的事件显式标记（完整消息/todo/审批请求等）
+   · **按需落盘**：需持久/可查/可恢复的事件显式标记（完整消息/todo 等）
 
 ② journal 沙盒（持久，**落盘子集**）
-   · 只记"按需落盘"的子集：完整消息 / todo / subagent 里程碑 / 审批请求
+   · 只记"按需落盘"的子集：user/assistant 消息 / tool-call-request / tool-call-response
    · 任何 Node 进程本地可读（tail 到完整行）；renderer 经 Main 代读
    · 已落盘内容的查询 / 历史 / 恢复的事实来源；**未落盘事件不存在于任何持久层**
 
 ③ rpc（消息与控制）
    · 用户输入、控制指令、inter-conversation 消息（经 manager 调度）
-   · 审批应答、novel 查询/变更
+   · wait 请求（审批/提问/退出 compose）经 manager 路由到 parent，由 parent 逻辑决定下一步
+   · 审批/提问应答（approval.decision / question.answer）、novel 查询/变更
    · 请求带 id，响应带 ok/result/error
 ```
 
 约定：
 - **output 是内存产物，按需落盘**：大部分实时事件只有订阅者能看到；未落盘即不可查、不重放；恢复只能恢复到落盘子集。
-- **落盘策略**：事件显式标记 persistent（完整消息/todo/审批请求等），默认瞬态。
+- **落盘策略**：事件显式标记 persistent（消息流四类），默认瞬态；todo/run 状态在 sqlite 读模型，不进事件。
 - **进度走读不走推**：parent 看 teammate 进度 = 读 teammate 沙盒（只能看到已落盘子集）；manager 不碰进度/事件。
-- **manager 只做生命周期 + 消息调度**（inter-conversation 控制消息排队/路由），不做 event hub。
+- **manager 只做生命周期 + 消息调度**（inter-conversation 控制消息 + wait 请求排队/路由），不做 event hub。
 - novel.changed 仍推送（数据变更通知，不属于 conversation 沙盒）。
 - 实现：rpc 半边基于 **kkrpc**（stdio / Electron / WS）。hub 候选形态：kkrpc async iterable streaming（UI 侧 `for await`，`break` 即取消）。
 
@@ -166,6 +167,7 @@ storedir/<conversationId>/
 
 - **ConversationPersistenceService**（每进程一个实例）统一管理本 conversation 的持久化。
 - **写者唯一**：每个 journal 只有拥有它的进程写。进程内对同一 journal 的写入**串行化**——单写者 journal writer 队列（同步 push + 单一 drainer 追加），保顺序与不交错。
+- **compaction**：journal 支持全量覆盖写 `write(evts)`，压缩后重写整表。
 - **多读者安全**：append-only + 每行一次原子写，任何 Node 进程可本地 tail（到最后一个完整行）；renderer 经 Main 代读。恢复/重放容忍末尾半行。
 - **崩溃恢复**：manager 用同一 storedir 重新派生 → 读 journal → 重放 → 重建 sqlite → 对账续跑。停止期生成失败一律按优雅中止处理（避开旧 host_close 死锁）。
 
@@ -177,10 +179,10 @@ storedir/<conversationId>/
 
 | handle | 持有方 | 内容 |
 |---|---|---|
-| **manager handle** | conversation | register/heartbeat/status、`sendTo(to, msg)`（inter-conversation 消息）、`spawnConversation`、terminate |
+| **manager handle** | conversation | register/heartbeat/status、`sendMessageTo`（投递 user/command/control）、wait 转发（`send*RequestTo`，阻塞到决策）、`spawnConversation`（agentType/version/extraPrompt）、terminate |
 | **ui handle** | conversation | 输入（sendUserMessage 等入）+ output hub（live stream 出） |
 | **novel handle** | conversation | `query` / `mutate`（单工，client-only） |
-| **conversation handle** | UI（经 Main） | 对某 conversation 的视图：输入 + hub 订阅 + 审批应答 |
+| **conversation handle** | UI（经 Main） | 对某 conversation 的视图：输入（含 `sendSystemControl` 应答审批）+ hub 订阅 |
 | **subagent handle** | 主 loop（进程内） | `send(指令)` / `events()` / `result()` / `stop()` |
 
 - handle 集合**全 conversation 统一**（无 parent 通道）；subagent 无跨进程 handle。
@@ -196,21 +198,26 @@ storedir/<conversationId>/
 ```ts
 // contract/interaction.ts
 interface ConversationInteraction {
-  sendUserMessage(msg: UserMessage): Promise<Receipt>
-  sendUserCommand(cmd: UserCommand): Promise<Receipt>
-  sendSystemControl(ctrl: SystemControl): Promise<Receipt>
+  sendUserMessage(msg: ConversationUserMessage): Promise<Receipt>
+  sendUserCommand(cmd: ConversationUserCommand): Promise<Receipt>
+  sendSystemControl(ctrl: ConversationSystemControl): Promise<Receipt>
 }
 
-/** 应答侧能力：能应答审批/提问的才实现（UI 终点、root 转发；teammate/subagent 不实现 → 冒泡） */
-interface WaitInteraction {
-  respondApproval(requestId: string, decision: ApprovalDecision): Promise<Receipt>
-  answerQuestion(requestId: string, text: string): Promise<Receipt>
+/** 等待交互接收接口：conversation 实现，接收经 manager 转发来的 wait 请求 */
+interface WaitingInteractionRequest {
+  sendApprovalRequest(req: ConversationApprovalRequest): Promise<Receipt>
+  sendAskingQuestionRequest(req: ConversationAskingRequest): Promise<Receipt>
+  sendExitComposeRequest(req: ConversationExitComposeRequest): Promise<Receipt>
 }
 ```
 
-- 请求侧（`approval.request` / `question`）是 journal 里的**消息级事件**（②），不是接口方法；应答才是 rpc（③）。
+- **两个接口有区分**：`ConversationManagerServer.send*RequestTo` 是**转发接口**（发送方经 cms 转发，cms 查图后调目标 conversation 的 `WaitingInteractionRequest` 投递）；`WaitingInteractionRequest` 是**会话侧接收接口**（conversation 实现它接收 wait 请求）。
+- **wait 请求是方法调用，不是 journal 事件**：`approval.request` / `question` 事件已从 OutputEvent 删除。
+- **wait 是延迟 RPC（阻塞）**：`await sendApprovalRequest(req)` 挂起该 turn，直到决策/回答产生才 resolve；**决策/回答就是 RPC 返回值**，requestId = RPC 关联 id，不走 sendSystemControl。
+- **wait RPC 实现约束**：**无/超长超时**（审批可等几分钟，`withCallOptions` 设无限超时）；**进程死亡解挂**——终端应答方进程死亡时，整条链的 pending wait RPC 需 resolve 成错误，解挂所有 await 的 turn 并走优雅中止（handle 层负责）。
+- **history 不经 manager**：UI 经 `ConversationJournalReadOnlyService` 直接查。
 - `sendSystemControl` 含审批决策注入 / 任务指派 / 停止；与 `sendUserCommand` 拆不拆：⏳。
-- subagent 的审批：进程内由主 loop 决定；teammate 的审批路径：⏳（直连 UI vs 经 manager 到 parent）。
+- subagent 的审批：进程内由主 loop 决定；teammate 的审批路径：**经 manager 转发到 parent**（已定）。
 
 ---
 
@@ -218,9 +225,8 @@ interface WaitInteraction {
 
 1. **manager 形态**：独立进程 vs 由 Electron Main 承担。
 2. **hub 承载**：kkrpc async iterable streaming vs 独立 push。
-3. **teammate 审批路径**：直连 UI vs 经 manager。
-4. **per-token 流式是否需要**：先消息级展示，需要时再加聚焦会话的 token 推送。
-5. **`sendUserCommand` vs `sendSystemControl` 拆不拆**。
-6. **sqlite 驱动**：better-sqlite3（同步，短查询可接受）vs worker 封装（严格不阻塞）。
-7. **接口层最终形态**（见第 7 节）。
-8. **实现顺序**：wire 协议（kkrpc 接入）→ conversation 持久化核心（journal+sqlite+replay）→ mailbox + output bus → AgentLoop 跑在 provider 上 → manager / novel-db 进程 + socket → subagent / teammate 递归。
+3. **per-token 流式是否需要**：先消息级展示，需要时再加聚焦会话的 token 推送。
+4. **`sendUserCommand` vs `sendSystemControl` 拆不拆**。
+5. **sqlite 驱动**：better-sqlite3（同步，短查询可接受）vs worker 封装（严格不阻塞）。
+6. **接口层最终形态**（见第 7 节）。
+7. **实现顺序**：wire 协议（kkrpc 接入）→ conversation 持久化核心（journal+sqlite+replay）→ mailbox + output bus → AgentLoop 跑在 provider 上 → manager / novel-db 进程 + socket → subagent / teammate 递归。

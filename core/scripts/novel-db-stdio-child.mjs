@@ -1,5 +1,6 @@
-// smoke 子进程：novel-db server over stdio（stdout 为协议通道，日志走 stderr）
+// smoke 子进程：novel-db over stdio（query/mutate RPC）+ ZeroMQ PUB（novel.changed）
 import { createStdioTransport } from "../dist/rpc/transport.js";
+import { EventPublisher } from "../dist/event/EventPublisher.js";
 import { NovelDbServer } from "../dist/novel/server/NovelDbServer.js";
 
 const store = {
@@ -23,11 +24,15 @@ const store = {
 	},
 };
 
+const pub = new EventPublisher("ipc://novel-events-smoke3");
+await pub.bind();
+console.error("[child] novel-events publisher bound");
+
 const transport = createStdioTransport({
 	readable: process.stdin,
 	writable: process.stdout,
 });
-const server = new NovelDbServer(store);
+const server = new NovelDbServer(store, pub);
 await server.start(transport);
 console.error("[child] novel-db server ready");
 process.stdin.on("end", () => process.exit(0));

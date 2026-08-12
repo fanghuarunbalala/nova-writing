@@ -24,7 +24,8 @@
     "@anthropic-ai/sdk": "^0.116.0",
     "kkrpc": "^2.1.0",
     "openai": "^7.4.0",
-    "pino": "^10.3.1"
+    "pino": "^10.3.1",
+    "zeromq": "^6.5.0"
   },
   "devDependencies": {
     "vitest": "^4.1.10"

@@ -2,5 +2,6 @@
 
 export * from "./types.js";
 export * from "./errors.js";
+export * from "./model-info.js";
 export * from "./Provider.js";
 export * from "./BaseProvider.js";

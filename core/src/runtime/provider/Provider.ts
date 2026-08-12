@@ -6,7 +6,6 @@ import type {
 } from "./types.js";
 import { AnthropicProvider } from "./adapters/AnthropicProvider.js";
 import { OpenAIProvider } from "./adapters/OpenAIProvider.js";
-import { OllamaProvider } from "./adapters/OllamaProvider.js";
 
 /** Provider 适配器实例 */
 export interface Provider {
@@ -31,7 +30,5 @@ export function createProvider(config: ProviderConfig): Provider {
       return new AnthropicProvider(config);
     case "openai":
       return new OpenAIProvider(config);
-    case "ollama":
-      return new OllamaProvider(config);
   }
 }

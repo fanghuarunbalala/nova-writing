@@ -1,5 +1,5 @@
 /** Provider 类型，决定使用哪个适配器实现 */
-export type ProviderType = "anthropic" | "openai" | "ollama";
+export type ProviderType = "anthropic" | "openai";
 
 /** Provider 实例配置（createProvider 时传入，实例内部持有；不锁模型，模型由每次请求的 SamplingConfig 决定） */
 export interface ProviderConfig {
@@ -15,16 +15,22 @@ export interface ProviderConfig {
   timeoutMs?: number;
 }
 
+/** effort 档位（映射目标） */
+export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
+
+/** 思考档位：off 关闭，low~max 逐级加深（适配层映射到各家 effort/budget） */
+export type ThinkingLevel = "off" | EffortLevel;
+
 /** 单次请求的采样参数（每次调用可变） */
 export interface SamplingConfig {
   /** 模型名（必填，ProviderConfig 不携带模型） */
   model: string;
-  /** 采样温度 0–2 */
+  /** 采样温度 0–2（适配器按各家能力映射；如 Anthropic 新模型已移除温度，则忽略） */
   temperature?: number;
   /** 最大生成 token 数 */
   maxTokens?: number;
-  /** 推理预算（token），对应 Anthropic extended thinking；不设则不开 */
-  thinkingBudget?: number;
+  /** 思考档位：缺省跟随模型默认；off 关闭；low~max 逐级加深 */
+  thinking?: ThinkingLevel;
 }
 
 /** 工具调用（assistant 消息携带） */

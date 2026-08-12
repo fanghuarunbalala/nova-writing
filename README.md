@@ -1,26 +1,22 @@
 # Novel Harness
 
-网络小说辅助创作 harness 项目。
+网络小说辅助创作 harness —— 从零重构的起点分支（`refactor/rewrite`）。
 
-目标是让每个人都能把想象力转化为可持续连载的网络小说，而不是把创作局限在传统写作技巧上。
+技术栈：TypeScript + pnpm monorepo。
 
-## 技术路线
+## 目录结构
 
-- `core` 是唯一共享核心包，内部暂时只涵盖 `runtime`、`tools`、`config`、`prompt`。
-- `runtime` 先按中性适配层设计，后续再决定接入具体 runtime 实现。
-- TypeScript 作为主要 core 实现，用于快速迭代创作流程、agent 编排、状态管理和产品逻辑。
-- Rust 作为 accelerator，用于后续重写性能关键路径，例如大文本处理、检索索引、diff、规则校验和批量解析。
-- pi agent 作为 runtime 约定，负责对话状态、任务编排和 tool 调度。
-- CLI、GUI、Web 共享同一套 `@novel/core` 接口。
-
-## 当前阶段
-
-Runtime、Novel Domain、共享 UI、Web 和 Electron 安全壳正在按架构文档逐步实现。
-
-## 启动桌面 GUI
-
-```bash
-pnpm gui
+```
+core/   @novel/core 核心包（业务逻辑逐层在此展开）
 ```
 
-该命令构建 Core、共享 UI、Electron Main/Preload/Renderer，并启动真实 Electron 窗口。桌面端已经支持通过原生目录选择器打开 Workspace，并在 Main 中建立本地 Workspace Store 映射；Conversation Host 和 Agent Runtime 仍按后续步骤接入。
+后续按层新增包（ui / cli / gui / web …）时，在 `pnpm-workspace.yaml` 中注册即可。
+
+## 常用命令
+
+```bash
+pnpm install      # 安装依赖
+pnpm build        # 构建所有包
+pnpm dev          # core 包监听编译
+pnpm typecheck    # 全包类型检查
+```

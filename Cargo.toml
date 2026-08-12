@@ -1,7 +1,0 @@
-[workspace]
-members = ["native/accelerator"]
-resolver = "2"
-
-[workspace.package]
-edition = "2021"
-license = "UNLICENSED"

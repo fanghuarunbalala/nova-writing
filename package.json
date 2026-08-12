@@ -1,18 +1,19 @@
 {
   "name": "novel-harness",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@9.15.4",
+  "packageManager": "pnpm@11.8.0",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "build": "pnpm --filter @novel/core build && pnpm --filter @novel/ui build && pnpm --filter @novel/gui build && pnpm --filter @novel/web build && pnpm --filter @novel/cli build",
-    "check": "pnpm build && pnpm -r check",
-    "dev": "pnpm --filter @novel/cli dev",
-    "gui": "pnpm --dir ui build && pnpm --dir gui start:build",
-    "smoke:client-shells": "pnpm --dir gui smoke:desktop-web-shell-parity",
-    "validate:gui-web": "node scripts/gui-web-validation.mjs"
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter @novel/core dev",
+    "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
+    "@types/node": "^24.0.0",
     "typescript": "^5.9.2"
   }
 }

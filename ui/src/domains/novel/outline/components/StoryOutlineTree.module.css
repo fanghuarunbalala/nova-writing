@@ -1,9 +1,0 @@
-/**
- * StoryOutlineTree 视觉。
- */
-.tree {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow-y: auto;
-}

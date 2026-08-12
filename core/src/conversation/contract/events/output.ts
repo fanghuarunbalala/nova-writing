@@ -60,6 +60,48 @@ export type OutputEvent =
 			conversationId: ConversationId;
 			agentId?: AgentId;
 			ts: string;
+	  }
+	| {
+			type: "turn-start";
+			persist: true;
+			seq: number;
+			turnSeq: number;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "turn-end";
+			persist: true;
+			seq: number;
+			turnSeq: number;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "compacted";
+			persist: true;
+			seq: number;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "clear";
+			persist: true;
+			seq: number;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "retry-request";
+			persist: true;
+			seq: number;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
 	  };
 
 /** 可落盘事件：OutputEvent 中 persist=true 的子集（journal 只写这些） */

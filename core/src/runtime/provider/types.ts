@@ -71,7 +71,7 @@ export interface ToolResultMessage {
 }
 
 /** 对话消息：按 role 分类的判别联合 */
-export type Message =
+export type LLMessage =
   | SystemMessage
   | UserMessage
   | AssistantMessage
@@ -94,7 +94,7 @@ export interface ProviderCall {
   /** 工具 schema 清单（provider 中立描述，适配器内部转译） */
   tools?: ToolScheme[];
   /** 对话消息序列（含 SystemMessage 作为动态 system reminder） */
-  messages: Message[];
+  messages: LLMessage[];
   /** 本次请求的采样配置 */
   sampling: SamplingConfig;
   /** 取消信号，供 parent 进程打断 */

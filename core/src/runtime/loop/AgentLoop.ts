@@ -1,15 +1,16 @@
 import type {
-  Message,
+  LLMessage,
   ProviderResult,
+  ProviderDelta,
 } from "../provider/types.js";
 import type {
   AgentLoopConfig,
   AgentLoopResult,
   AgentRunConfig,
-  AgentLoopEvent,
   RunContext,
   TurnContext,
 } from "./types.js";
+import type { OutputEvent } from "../../conversation/contract/events/index.js";
 import { LoopContext } from "./LoopContext.js";
 
 /** 缺省最大轮次（防死循环） */
@@ -26,7 +27,14 @@ function addUsage(
   };
 }
 
-/** AgentLoop：agent 主循环 */
+/** ProviderDelta → assistant.delta 事件 extra 字段 */
+function toDeltaExtra(d: ProviderDelta): Record<string, unknown> {
+  return d.type === "text-delta"
+    ? { persist: false, kind: "text", text: d.text }
+    : { persist: false, kind: "reasoning", text: d.text };
+}
+
+/** AgentLoop：agent 主循环，产出 OutputEvent（conversation 统一事件） */
 export class AgentLoop {
   /** 构造配置 */
   private readonly config: AgentLoopConfig;
@@ -53,16 +61,17 @@ export class AgentLoop {
 
   /**
    * 处理一次用户输入：appendTurnContext 开 turn → 循环 toProviderCall / provider.call，
-   * 结果与 tool 结果追加当前 turn，直至 assistant 无 tool_call（final）/ length / maxTurns
+   * 结果与 tool 结果追加当前 turn，直至 assistant 无 tool_call（final）/ length / maxTurns。
+   * 产出 OutputEvent 流（assistant.delta / tool-call-request / tool-call-response / turn-start / turn-end）。
    * @param input 用户消息文本
    * @param runConfig 单次运行配置
-   * @param onEvent 事件回调（delta / tool-call / tool-result）
+   * @param onEvent 输出事件回调（OutputEvent 流）
    * @returns 运行结果
    */
   async run(
     input: string,
     runConfig: AgentRunConfig,
-    onEvent?: (e: AgentLoopEvent) => void,
+    onEvent?: (e: OutputEvent) => void,
   ): Promise<AgentLoopResult> {
     const logger = this.config.logger;
     logger?.info("agent.loop.run.start", { inputLen: input.length });
@@ -75,7 +84,7 @@ export class AgentLoop {
     };
 
     // ② 开新 turn（input 组装）
-    const messages: Message[] = [{ role: "user", content: input }];
+    const messages: LLMessage[] = [{ role: "user", content: input }];
     const turn: TurnContext = {
       seq: 0, // 由 LoopContext 覆盖分配
       messages,
@@ -85,6 +94,7 @@ export class AgentLoop {
       },
     };
     this.context.appendTurnContext(turn);
+    this.emit(onEvent, "turn-start", { persist: true, turnSeq: turn.seq });
     logger?.debug("agent.turn.appended", { seq: turn.seq });
 
     // ③ 循环
@@ -98,7 +108,9 @@ export class AgentLoop {
       this.config.debugger?.record(call); // 记录每次请求（相邻差异在 html 展示）
       let result: ProviderResult;
       try {
-        result = await this.config.provider.call(call, (d) => onEvent?.(d));
+        result = await this.config.provider.call(call, (d) =>
+          this.emit(onEvent, "assistant.delta", toDeltaExtra(d)),
+        );
       } catch (err) {
         logger?.error("agent.call.error", {
           curTurn: runContext.curTurn,
@@ -117,10 +129,19 @@ export class AgentLoop {
       // tool_call → 执行工具，结果追加后继续下一轮
       if (result.finishReason === "tool_call" && result.message.toolCalls) {
         for (const tc of result.message.toolCalls) {
-          onEvent?.({ type: "tool-call", call: tc });
+          this.emit(onEvent, "tool-call-request", {
+            persist: true,
+            toolCallId: tc.id,
+            name: tc.name,
+            args: tc.args,
+          });
           logger?.debug("agent.tool.dispatch", { tool: tc.name });
           const text = await this.config.toolDispatcher.dispatch(this.context, tc);
-          onEvent?.({ type: "tool-result", callId: tc.id, text });
+          this.emit(onEvent, "tool-call-response", {
+            persist: true,
+            toolCallId: tc.id,
+            result: text,
+          });
           logger?.debug("agent.tool.result", { tool: tc.name });
           this.context.appendTurnMessages([{ role: "tool", content: text, id: tc.id }]);
           runContext.toolsLastTurn.set(tc.name, runContext.curTurn);
@@ -129,6 +150,7 @@ export class AgentLoop {
       }
 
       // final（assistant 无 tool_call）或 length
+      this.emit(onEvent, "turn-end", { persist: true, turnSeq: turn.seq });
       logger?.info("agent.loop.run.done", { finishReason: result.finishReason, usage });
       return { final: result.message, usage };
     }
@@ -140,5 +162,22 @@ export class AgentLoop {
    */
   cancel(): void {
     this.controller.abort();
+  }
+
+  /** 发出 OutputEvent（补 seq/conversationId/agentId/ts；持久化 seq 由 journal append 时分配） */
+  private emit(
+    onEvent: ((e: OutputEvent) => void) | undefined,
+    type: OutputEvent["type"],
+    extra: Record<string, unknown>,
+  ): void {
+    if (!onEvent) return;
+    onEvent({
+      type,
+      seq: 0,
+      conversationId: this.config.conversationId,
+      agentId: this.config.agentId,
+      ts: new Date().toISOString(),
+      ...extra,
+    } as OutputEvent);
   }
 }

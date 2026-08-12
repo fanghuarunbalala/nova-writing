@@ -63,8 +63,8 @@ describe("AgentLoop.run", () => {
     const events: string[] = [];
     const r = await loop.run("hi", { sampling: { model: "gpt-5" } }, (e) => events.push(e.type));
     expect(r.final.content).toBe("完成");
-    expect(events).toContain("tool-call");
-    expect(events).toContain("tool-result");
+    expect(events).toContain("tool-call-request");
+    expect(events).toContain("tool-call-response");
   });
 
   it("length 截断返回", async () => {

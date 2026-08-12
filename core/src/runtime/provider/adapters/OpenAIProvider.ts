@@ -3,7 +3,7 @@ import type {
   ProviderCall,
   ProviderResult,
   ProviderDelta,
-  Message,
+  LLMessage,
   ToolScheme,
 } from "../types.js";
 import { BaseProvider } from "../BaseProvider.js";

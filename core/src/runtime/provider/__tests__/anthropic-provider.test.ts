@@ -13,7 +13,7 @@ vi.mock("@anthropic-ai/sdk", async (importOriginal) => {
       messages = { stream: streamMock };
     },
   );
-  // 继承真实 default 的静态成员（RateLimitError / APIConnectionError / Message 等），供测试构造原生错误类
+  // 继承真实 default 的静态成员（RateLimitError / APIConnectionError / LLMessage 等），供测试构造原生错误类
   Object.setPrototypeOf(mockConstructor, actual.default);
   return { ...actual, default: mockConstructor };
 });
@@ -29,7 +29,7 @@ function makeCall(overrides: Partial<ProviderCall> = {}): ProviderCall {
   };
 }
 
-/** 原生 Message：thinking + text 两块，end_turn（结构对齐 SDK 类型） */
+/** 原生 LLMessage：thinking + text 两块，end_turn（结构对齐 SDK 类型） */
 const textFinal: Anthropic.Message = {
   id: "msg_01abc",
   type: "message",
@@ -64,7 +64,7 @@ const streamEvents: unknown[] = [
   { type: "message_stop" },
 ];
 
-/** 把假流挂到 mock：events 为原生事件序列，finalMessage 为原生 Message */
+/** 把假流挂到 mock：events 为原生事件序列，finalMessage 为原生 LLMessage */
 function mockStream(events: unknown[], finalMessage: object): void {
   streamMock.mockReturnValue({
     [Symbol.asyncIterator]() {

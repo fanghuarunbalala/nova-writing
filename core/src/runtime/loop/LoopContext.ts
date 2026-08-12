@@ -1,6 +1,6 @@
 import type {
   ProviderCall,
-  Message,
+  LLMessage,
   ToolScheme,
 } from "../provider/types.js";
 import type { AgentCapability } from "../agent/AgentCapability.js";
@@ -20,7 +20,7 @@ export interface ReadonlyLoopContext {
   /** 工作区路径（工具文件操作环境） */
   readonly workspace: string;
   /** 当前消息序列 */
-  readonly messages: Message[];
+  readonly messages: LLMessage[];
   /** 当前系统提示词（渲染后） */
   readonly systemPrompt: string;
   /** 当前工具 schemes */
@@ -54,7 +54,7 @@ export class LoopContext implements ReadonlyLoopContext {
   constructor(opts: {
     agentCapability: AgentCapability;
     workspace: string;
-    turnMessages?: Message[];
+    turnMessages?: LLMessage[];
   }) {
     this.agentCapability = opts.agentCapability;
     this.workspace = opts.workspace;
@@ -94,7 +94,7 @@ export class LoopContext implements ReadonlyLoopContext {
    * 追加消息到当前 turn（后续所有增量：assistant / tool 结果；触发 onTurnMessageAppend）
    * @param messages 本次追加的消息
    */
-  appendTurnMessages(messages: Message[]): void {
+  appendTurnMessages(messages: LLMessage[]): void {
     const turn = this.turnList.at(-1);
     if (!turn) return;
     turn.messages.push(...messages);
@@ -131,7 +131,7 @@ export class LoopContext implements ReadonlyLoopContext {
   }
 
   /** 汇总消息序列（所有 turn 的消息平铺，完整对话历史） */
-  get messages(): Message[] {
+  get messages(): LLMessage[] {
     return this.turnList.flatMap((t) => t.messages);
   }
   /** 当前系统提示词（静态分段缓存 + 动态渲染 + 工具 promptDetail） */
@@ -148,7 +148,7 @@ export class LoopContext implements ReadonlyLoopContext {
   }
 
   /** 创建 turn（绑定 appendTurnMessages 闭包） */
-  private createTurn(messages: Message[]): TurnContext {
+  private createTurn(messages: LLMessage[]): TurnContext {
     const msgs = [...messages];
     return {
       seq: ++this.seq,

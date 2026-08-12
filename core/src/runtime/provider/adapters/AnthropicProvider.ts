@@ -3,7 +3,7 @@ import type {
   ProviderCall,
   ProviderResult,
   ProviderDelta,
-  Message,
+  LLMessage,
   AssistantMessage,
   ToolScheme,
 } from "../types.js";
@@ -118,7 +118,7 @@ export class AnthropicProvider extends BaseProvider {
    * @param messages 中立消息序列
    * @returns Anthropic 消息序列
    */
-  private toAnthropicMessages(messages: Message[]): Anthropic.MessageParam[] {
+  private toAnthropicMessages(messages: LLMessage[]): Anthropic.MessageParam[] {
     const result: Anthropic.MessageParam[] = [];
     for (const m of messages) {
       if (m.role === "user" || m.role === "system") {
@@ -197,7 +197,7 @@ function toFinishReason(stopReason: string | null): ProviderResult["finishReason
   }
 }
 
-/** Anthropic Message → 中立 AssistantMessage（text 块拼接 + tool_use 转 ToolCall） */
+/** Anthropic LLMessage → 中立 AssistantMessage（text 块拼接 + tool_use 转 ToolCall） */
 function toAssistantMessage(message: Anthropic.Message): AssistantMessage {
   const textParts: string[] = [];
   const toolCalls: AssistantMessage["toolCalls"] = [];

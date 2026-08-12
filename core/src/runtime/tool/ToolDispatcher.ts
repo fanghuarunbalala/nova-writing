@@ -1,7 +1,7 @@
 import type { ToolCall } from "../provider/types.js";
 import type { ReadonlyLoopContext } from "../loop/LoopContext.js";
 
-/** 工具调度：按工具名分发到对应 handler 并执行（进程单例） */
+/** 工具调度：按工具名分发到对应 handler 并执行（由上层注入，非单例） */
 export interface ToolDispatcher {
   /**
    * 分发执行一次工具调用（接收 LoopContext 只读视图）
@@ -11,4 +11,3 @@ export interface ToolDispatcher {
    */
   dispatch(ctx: ReadonlyLoopContext, call: ToolCall): Promise<string>;
 }
-

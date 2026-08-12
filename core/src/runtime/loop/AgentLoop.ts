@@ -10,21 +10,19 @@ import { LoopContext } from "./LoopContext.js";
 export class AgentLoop {
   /** 构造配置 */
   private readonly config: AgentLoopConfig;
-  /** 会话上下文（构造时初始化） */
+  /** 会话上下文（构造时初始化，由 AgentCapability 组装） */
   private readonly context: LoopContext;
 
   /**
    * 构造 AgentLoop
-   * @param config 构造配置（workspace + Provider + agent 标识 + 注册表 + 压缩策略链）
+   * @param config 构造配置（workspace + Provider + agent 标识 + 注册表 + 恢复消息 + 监听器）
    */
   constructor(config: AgentLoopConfig) {
     this.config = config;
     this.context = new LoopContext({
-      agentId: config.agentId,
-      agentType: config.agentType,
-      agentVersion: config.agentVersion,
-      registry: config.registry,
-      compactPolicy: config.compactPolicy,
+      agentCapability: config.agentCapability,
+      workspace: config.workspace,
+      turnMessages: config.turnMessages,
     });
     for (const listener of config.listeners ?? []) {
       this.context.subscribe(listener);

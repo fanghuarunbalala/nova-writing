@@ -3,24 +3,19 @@ import type {
   Message,
   ToolScheme,
 } from "../provider/types.js";
-import type { AgentDefinitionRegistry } from "../agent/AgentRegistry.js";
 import type { AgentCapability } from "../agent/AgentCapability.js";
-import type { CompactPolicyChain } from "../compact/CompactPolicyChain.js";
 import type {
   AgentRunConfig,
   TurnContext,
   LoopContextListener,
+  RunContext,
 } from "./types.js";
 
 /** LoopContext 只读视图：工具执行 / system 渲染可访问，不可修改 */
 export interface ReadonlyLoopContext {
-  /** Agent 类型 */
-  readonly agentType: string;
-  /** Agent 版本 */
-  readonly agentVersion: string;
-  /** Agent 实例 id（main="main"；subagent 缺省） */
-  readonly agentId?: string;
-  /** 当前消息序列 */
+  /** 工作区路径（工具文件操作环境） */
+  readonly workspace: string;
+  /** 汇总消息序列 */
   readonly messages: Message[];
   /** 当前系统提示词（渲染后） */
   readonly systemPrompt: string;
@@ -30,36 +25,25 @@ export interface ReadonlyLoopContext {
   readonly turns: TurnContext[];
 }
 
-/** 会话上下文：turn 状态内部闭环，组合压缩策略链；持久化由上层订阅状态变化自行处理 */
+/** 会话上下文：由 AgentCapability 初始化；turn 状态闭环；压缩/提示在 toProviderCall 触发；持久化由上层订阅自行处理 */
 export class LoopContext implements ReadonlyLoopContext {
-  /** Agent 类型 */
-  readonly agentType: string;
-  /** Agent 版本 */
-  readonly agentVersion: string;
-  /** Agent 实例 id（main="main"；subagent 缺省） */
-  readonly agentId?: string;
-  /** 是否 main agent（agentId === "main"） */
-  readonly isMainAgent: boolean;
-  /** Agent 能力（注册表加载：system 分段 + 工具定义） */
+  /** 工作区路径 */
+  readonly workspace: string;
+  /** Agent 能力（初始化传入：system 分段 + 工具定义 + 策略） */
   readonly agentCapability: AgentCapability;
 
   /**
    * 构造 LoopContext
-   * @param opts agent 标识 + 注册表 + 压缩策略链
+   * @param opts Agent 能力 + 工作区 + 可恢复的 turn 消息
    */
   constructor(opts: {
-    agentId?: string;
-    agentType: string;
-    agentVersion: string;
-    registry: AgentDefinitionRegistry;
-    compactPolicy: CompactPolicyChain;
+    agentCapability: AgentCapability;
+    workspace: string;
+    turnMessages?: Message[];
   }) {
-    this.agentId = opts.agentId;
-    this.agentType = opts.agentType;
-    this.agentVersion = opts.agentVersion;
-    this.isMainAgent = opts.agentId === "main";
-    this.agentCapability = opts.registry.get(opts.agentType, opts.agentVersion);
-    void opts.compactPolicy;
+    this.agentCapability = opts.agentCapability;
+    this.workspace = opts.workspace;
+    void opts.turnMessages;
   }
 
   /**
@@ -73,8 +57,8 @@ export class LoopContext implements ReadonlyLoopContext {
   }
 
   /**
-   * 推入/更新当前 turn（用户消息开 turn，或 call / tool 结果追加；完成后存档最近 N）
-   * @param turn 当前 turn（含累积 messages / usage）
+   * 开新 turn（input 组装时：seq 递增，含用户消息；触发 onTurnAppended）
+   * @param turn 新 turn（含用户消息 / usage）
    */
   appendTurnContext(turn: TurnContext): void {
     void turn;
@@ -82,13 +66,25 @@ export class LoopContext implements ReadonlyLoopContext {
   }
 
   /**
-   * 组装下一次 ProviderCall：触发压缩判断（compactIfNeeded）+ 生成动态 system（含 reminder，基于 turns 上下文）
+   * 追加消息到当前 turn（后续所有增量：assistant / tool 结果；由 loop 实现并触发 onTurnMessageAppend）
+   * @param messages 本次追加的消息
+   */
+  appendTurnMessages(messages: Message[]): void {
+    void messages;
+    throw new Error("LoopContext.appendTurnMessages 尚未实现");
+  }
+
+  /**
+   * 组装下一次 ProviderCall：触发压缩（compactIfNeeded，影响 turns）+ 收集 nudge（append 进 turns / transient 本次）
+   * + 生成动态 system（systemSections 渲染）
    * @param run 单次运行配置
+   * @param runContext 当前 run 运行状态（nudge 判断依据）
    * @param signal 取消信号
    * @returns 组装好的 ProviderCall
    */
-  toProviderCall(run: AgentRunConfig, signal?: AbortSignal): ProviderCall {
+  toProviderCall(run: AgentRunConfig, runContext: RunContext, signal?: AbortSignal): ProviderCall {
     void run;
+    void runContext;
     void signal;
     throw new Error("LoopContext.toProviderCall 尚未实现");
   }

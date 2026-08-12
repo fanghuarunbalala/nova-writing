@@ -5,4 +5,5 @@ export * from "./runtime/tool/index.js";
 export * from "./runtime/prompt/index.js";
 export * from "./runtime/agent/index.js";
 export * from "./runtime/compact/index.js";
+export * from "./runtime/nudge/index.js";
 export * from "./runtime/loop/index.js";

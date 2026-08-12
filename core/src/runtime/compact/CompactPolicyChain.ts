@@ -1,7 +1,7 @@
-import type { TurnContext } from "../loop/types.js";
+import type { LoopContext } from "../loop/LoopContext.js";
 import type { ContextCompactPolicy } from "./ContextCompactPolicy.js";
 
-/** 压缩策略链：多个策略按优先级注册，链式逐个执行 */
+/** 压缩策略链：多个策略按优先级注册，链式逐个执行（compact 保留链，nudge 为数组遍历） */
 export interface CompactPolicyChain {
   /**
    * 注册压缩策略
@@ -16,8 +16,8 @@ export interface CompactPolicyChain {
   unregister(policy: ContextCompactPolicy): void;
   /**
    * 链式检查并压缩（策略按优先级逐个 shouldCompact → compact）
-   * @param turnContexts 当前 turn 序列
+   * @param loop LoopContext（策略直接操作上下文）
    * @returns 是否有策略执行了压缩
    */
-  compactIfNeeded(turnContexts: TurnContext[]): boolean;
+  compactIfNeeded(loop: LoopContext): boolean;
 }

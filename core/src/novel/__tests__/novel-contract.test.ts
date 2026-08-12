@@ -8,10 +8,19 @@ import type {
 	StoryUnitId,
 } from "../model/id.js";
 import type { OrderKey } from "../model/outline.js";
-import type { Character, Location, Paragraph, StoryUnit } from "../model/index.js";
+import type {
+	Character,
+	Location,
+	Paragraph,
+	PublicationChapter,
+	PublicationVolume,
+	StoryOutline,
+	StoryUnit,
+} from "../model/index.js";
 import type { NovelQuery } from "../contract/query.js";
 import type { NovelMutation } from "../contract/mutation.js";
 import type { NovelChangeEntity, NovelChangeEvent } from "../contract/event.js";
+import type { NovelOverview, PublicationSnapshot } from "../contract/snapshot.js";
 
 /** branded 身份构造辅助（测试用） */
 const brand = <T>(s: string): T => s as unknown as T;
@@ -215,5 +224,76 @@ describe("NovelChangeEvent", () => {
 		};
 		expect(evt.type).toBe("novel.changed");
 		expect(evt.entity).toBe("character");
+	});
+});
+
+describe("model 细节", () => {
+	it("StoryOutline 关联 novel", () => {
+		const outline: StoryOutline = { id: brand("out-1"), novelId: brand("n-1") };
+		expect(outline.novelId).toBe("n-1");
+	});
+
+	it("StoryUnit 带 blockState + abandonment", () => {
+		const unit: StoryUnit = {
+			id: su("su-1"),
+			outlineId: brand("out-1"),
+			orderKey: ok("0000"),
+			title: "卡住",
+			planningStatus: "ready",
+			realizationStatus: "in-progress",
+			blockState: { dependencyIds: [su("su-2")], reasonCode: "continuity-conflict" },
+			abandonment: { reasonCode: "replaced", note: "被新场景取代" },
+		};
+		expect(unit.blockState?.reasonCode).toBe("continuity-conflict");
+		expect(unit.blockState?.dependencyIds).toEqual(["su-2"]);
+		expect(unit.abandonment?.reasonCode).toBe("replaced");
+	});
+
+	it("Character aliases 数组", () => {
+		const c: Character = {
+			id: ci("c-1"),
+			name: "主角",
+			aliases: ["阿主", "主君"],
+			entityVersion: 1,
+			createdAt: "2026-08-12T00:00:00.000Z",
+			updatedAt: "2026-08-12T00:00:00.000Z",
+		};
+		expect(c.aliases).toHaveLength(2);
+		expect(c.aliases[1]).toBe("主君");
+	});
+
+	it("Publication Volume / Chapter", () => {
+		const v: PublicationVolume = { id: vi("v-1"), orderKey: ok("0000"), title: "第一卷" };
+		const ch: PublicationChapter = {
+			id: chi("ch-1"),
+			volumeId: vi("v-1"),
+			orderKey: ok("0001"),
+			title: "第一章",
+			storyUnitId: su("su-1"),
+		};
+		expect(v.title).toBe("第一卷");
+		expect(ch.volumeId).toBe("v-1");
+		expect(ch.storyUnitId).toBe("su-1");
+	});
+});
+
+describe("snapshot", () => {
+	it("NovelOverview 计数结构", () => {
+		const overview: NovelOverview = {
+			novelId: brand("n-1"),
+			title: "测试小说",
+			counts: { storyUnits: 1, characters: 2, locations: 0, paragraphs: 5 },
+		};
+		expect(overview.counts.characters).toBe(2);
+	});
+
+	it("PublicationSnapshot 卷章数组", () => {
+		const snap: PublicationSnapshot = {
+			structure: { id: brand("ps-1"), novelId: brand("n-1") },
+			volumes: [],
+			chapters: [],
+		};
+		expect(snap.volumes).toEqual([]);
+		expect(snap.chapters).toEqual([]);
 	});
 });

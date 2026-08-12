@@ -7,6 +7,9 @@ dist/
 # TS incremental build info
 *.tsbuildinfo
 
+# debug 生成物（ProviderCall jsonl/html）
+debug/
+
 # logs
 *.log
 npm-debug.log*

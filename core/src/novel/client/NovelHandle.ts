@@ -1,6 +1,6 @@
 /**
  * NovelHandle：conversation / UI 持有的 novel-db 客户端（wrap 侧）。
- * query/mutate 经 call 归一错误；events() 订阅 novel.changed。
+ * query/mutate 经 call 归一错误；subscribeChanges 订阅 novel.changed（callback）。
  */
 
 import { dispose, wrap } from "kkrpc";
@@ -15,7 +15,8 @@ import type { NovelMutateResult } from "../contract/snapshot.js";
 export interface NovelApi {
 	query(q: NovelQuery): Promise<unknown>;
 	mutate(m: NovelMutation): Promise<NovelMutateResult>;
-	events(): Promise<AsyncIterable<NovelChangeEvent>>;
+	subscribe(onEvent: (evt: NovelChangeEvent) => void): Promise<string>;
+	unsubscribe(id: string): Promise<void>;
 }
 
 /** novel-db 客户端 handle */
@@ -48,14 +49,23 @@ export class NovelHandle {
 	}
 
 	/**
-	 * 订阅 novel.changed 事件流（kkrpc 流式返回 Promise<AsyncIterable>，await 后 for-await；break 即取消）
-	 * @returns 解析后的事件异步迭代器
+	 * 订阅 novel.changed
+	 * @param onEvent 变更回调
+	 * @returns 订阅 id（传给 unsubscribeChanges）
 	 */
-	async events(): Promise<AsyncIterable<NovelChangeEvent>> {
-		return call(() => this.api.events(), { peer: "novel-db" });
+	async subscribeChanges(onEvent: (evt: NovelChangeEvent) => void): Promise<string> {
+		return call(() => this.api.subscribe(onEvent), { peer: "novel-db" });
 	}
 
-	/** 释放 handle（关闭通道） */
+	/**
+	 * 取消订阅
+	 * @param id 订阅 id
+	 */
+	async unsubscribeChanges(id: string): Promise<void> {
+		return call(() => this.api.unsubscribe(id), { peer: "novel-db" });
+	}
+
+	/** 释放 handle（关闭通道，隐含释放所有回调订阅） */
 	dispose(): void {
 		dispose(this.api);
 	}

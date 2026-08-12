@@ -1,8 +1,8 @@
 /**
  * NovelDbServer：novel-db 进程的 RPC server（expose 侧）。
- * expose { query, mutate, events }；mutate 成功广播 novel.changed。
+ * expose { query, mutate, subscribe, unsubscribe }；mutate 成功广播 novel.changed。
  * 存储经 NovelStore 注入，与 sqlite 解耦。
- * applyMutation / subscribeEvents 为 public，便于脱离 RPC 单测广播与订阅逻辑。
+ * 订阅用 kkrpc callback（stdio/序列化传输下可靠，async-iterable 流式在 kkrpc stdio 上有重建问题）。
  */
 
 import { expose, type ExposedController } from "kkrpc";
@@ -27,15 +27,25 @@ export interface NovelApi {
 	 * @returns 变更结果
 	 */
 	mutate(m: NovelMutation): Promise<NovelMutateResult>;
-	/** 订阅 novel.changed 事件流 */
-	events(): AsyncIterable<NovelChangeEvent>;
+	/**
+	 * 订阅 novel.changed（callback）
+	 * @param onEvent 变更回调
+	 * @returns 订阅 id（用于 unsubscribe）
+	 */
+	subscribe(onEvent: (evt: NovelChangeEvent) => void): Promise<string>;
+	/**
+	 * 取消订阅
+	 * @param id 订阅 id
+	 */
+	unsubscribe(id: string): Promise<void>;
 }
 
 /** novel-db RPC server */
 export class NovelDbServer {
 	private readonly store: NovelStore;
 	private controller?: ExposedController;
-	private readonly changeListeners = new Set<(evt: NovelChangeEvent) => void>();
+	private readonly changeListeners = new Map<string, (evt: NovelChangeEvent) => void>();
+	private nextSubId = 0;
 
 	/**
 	 * @param store 存储实现（内存先行，sqlite 下阶段）
@@ -46,13 +56,14 @@ export class NovelDbServer {
 
 	/**
 	 * 启动：expose API 到传输
-	 * @param transport 传输（WS：conversation/UI 连接；测试用内存）
+	 * @param transport 传输（WS：conversation/UI 连接；测试用内存/stdio）
 	 */
 	async start(transport: Transport<RPCMessage>): Promise<void> {
 		const api: NovelApi = {
 			query: (q) => this.query(q),
 			mutate: (m) => this.applyMutation(m),
-			events: () => this.subscribeEvents(),
+			subscribe: (onEvent) => this.subscribe(onEvent),
+			unsubscribe: (id) => this.unsubscribe(id),
 		};
 		this.controller = expose(api, transport);
 	}
@@ -84,6 +95,25 @@ export class NovelDbServer {
 		return result;
 	}
 
+	/**
+	 * 订阅 novel.changed
+	 * @param onEvent 变更回调
+	 * @returns 订阅 id
+	 */
+	async subscribe(onEvent: (evt: NovelChangeEvent) => void): Promise<string> {
+		const id = `sub-${++this.nextSubId}`;
+		this.changeListeners.set(id, onEvent);
+		return id;
+	}
+
+	/**
+	 * 取消订阅
+	 * @param id 订阅 id
+	 */
+	async unsubscribe(id: string): Promise<void> {
+		this.changeListeners.delete(id);
+	}
+
 	/** 关闭：停订阅 + dispose expose */
 	async close(): Promise<void> {
 		this.changeListeners.clear();
@@ -93,36 +123,6 @@ export class NovelDbServer {
 
 	/** 广播变更事件给所有订阅者 */
 	private broadcast(evt: NovelChangeEvent): void {
-		for (const listener of this.changeListeners) listener(evt);
-	}
-
-	/**
-	 * 订阅事件流：每个订阅一个独立 async iterable（队列 + waiter，无丢事件）
-	 * @returns 事件异步迭代器（return/break 即取消订阅）
-	 */
-	subscribeEvents(): AsyncIterable<NovelChangeEvent> {
-		const queue: NovelChangeEvent[] = [];
-		const waiters: Array<(evt: NovelChangeEvent) => void> = [];
-		const listener = (evt: NovelChangeEvent) => {
-			const waiter = waiters.shift();
-			if (waiter) waiter(evt);
-			else queue.push(evt);
-		};
-		this.changeListeners.add(listener);
-		return {
-			[Symbol.asyncIterator]: () => ({
-				next: async () => {
-					if (queue.length) return { done: false, value: queue.shift()! };
-					const evt = await new Promise<NovelChangeEvent>((res) =>
-						waiters.push(res),
-					);
-					return { done: false, value: evt };
-				},
-				return: async () => {
-					this.changeListeners.delete(listener);
-					return { done: true, value: undefined };
-				},
-			}),
-		};
+		for (const listener of this.changeListeners.values()) listener(evt);
 	}
 }

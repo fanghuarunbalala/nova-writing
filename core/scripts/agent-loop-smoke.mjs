@@ -4,6 +4,7 @@
 import {
   AgentLoop,
   InMemoryRegistry,
+  ProviderCallDebugger,
   createProvider,
 } from "../dist/index.js";
 
@@ -59,11 +60,17 @@ const provider = createProvider({
   baseUrl: "https://api.deepseek.com/v1",
   apiKey: process.env.ANTHROPIC_AUTH_TOKEN,
 });
+// debug 模式：记录 ProviderCall（jsonl + html），目录按 conversation/agent 区分
+const callDebugger = process.env.DEBUG
+  ? new ProviderCallDebugger({ enabled: true, dir: "debug/main/agent-writer" })
+  : undefined;
+
 const loop = new AgentLoop({
   workspace: ".",
   provider,
   agentCapability: capability,
   toolDispatcher: dispatcher,
+  debugger: callDebugger,
 });
 
 const sampling = { model: "deepseek-v4-flash", maxTokens: 512, thinking: "high" };
@@ -84,3 +91,6 @@ console.log("final:", r.final.content.slice(0, 60));
 console.log("\n=== 案例3: 多轮延续 ===");
 r = await loop.run("刚才记录的主角叫什么？", { sampling });
 console.log("final:", r.final.content.slice(0, 60));
+
+// 关闭 debugger（渲染 html）
+callDebugger?.close();

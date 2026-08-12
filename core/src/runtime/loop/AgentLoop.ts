@@ -94,12 +94,11 @@ export class AgentLoop {
         model: runConfig.sampling.model,
         curTurn: runContext.curTurn,
       });
+      const call = this.context.toProviderCall(runConfig, runContext, this.controller.signal);
+      this.config.debugger?.record(call); // 记录每次请求（相邻差异在 html 展示）
       let result: ProviderResult;
       try {
-        result = await this.config.provider.call(
-          this.context.toProviderCall(runConfig, runContext, this.controller.signal),
-          (d) => onEvent?.(d),
-        );
+        result = await this.config.provider.call(call, (d) => onEvent?.(d));
       } catch (err) {
         logger?.error("agent.call.error", {
           curTurn: runContext.curTurn,

@@ -7,4 +7,5 @@ export * from "./runtime/agent/index.js";
 export * from "./runtime/registry/index.js";
 export * from "./runtime/compact/index.js";
 export * from "./runtime/nudge/index.js";
+export * from "./runtime/debug/index.js";
 export * from "./runtime/loop/index.js";

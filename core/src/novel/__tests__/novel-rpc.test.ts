@@ -66,25 +66,23 @@ describe("novel-db 垂直切片（内存传输）", () => {
 		const handle = new NovelHandle(clientT);
 
 		const received: NovelChangeEvent[] = [];
-		const sub = (async () => {
-			for await (const evt of await handle.events()) {
-				received.push(evt);
-				break;
-			}
-		})();
-		// 等 kkrpc streaming 拉取握手建立，避免事件在订阅前到达
+		const subId = await handle.subscribeChanges((evt) => received.push(evt));
+		// 等 callback 注册送达，避免事件在订阅前到达
 		await new Promise((r) => setTimeout(r, 30));
 
 		const result = await handle.mutate({ op: "character.create", input: { name: "主角" } });
 		expect(result.entity).toBe("character");
 		expect(result.version).toBe(1);
 
-		await sub;
+		// 等 callback 推送送达
+		await new Promise((r) => setTimeout(r, 30));
 		expect(received).toHaveLength(1);
 		expect(received[0].op).toBe("character.create");
 		expect(received[0].entity).toBe("character");
 		expect(received[0].id).toBe("c-1");
 		expect(received[0].version).toBe(1);
+
+		await handle.unsubscribeChanges(subId);
 	});
 
 	it("远程查询错误 → RPCError(remote)", async () => {

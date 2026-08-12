@@ -9,6 +9,7 @@ import type {
 import type { AgentCapability } from "../agent/AgentCapability.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { Logger } from "../../log/Logger.js";
+import type { ProviderCallDebugger } from "../debug/ProviderCallDebugger.js";
 
 /** AgentLoop 事件（透给调用方；Conversation 据此转 OutputEvent） */
 export type AgentLoopEvent =
@@ -43,6 +44,8 @@ export interface AgentLoopConfig {
   listeners?: LoopContextListener[];
   /** 结构化日志（上层 createLogger 注入；缺省不打日志） */
   logger?: Logger;
+  /** ProviderCall 调试器（debug 模式注入；记录每次请求 + 相邻差异，jsonl + html） */
+  debugger?: ProviderCallDebugger;
 }
 
 /** 单次运行配置：run 时传入 */

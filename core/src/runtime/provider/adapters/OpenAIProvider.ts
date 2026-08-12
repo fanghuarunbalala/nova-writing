@@ -42,10 +42,11 @@ export class OpenAIProvider extends BaseProvider {
       apiKey: this.config.apiKey,
       baseURL: this.config.baseUrl,
     });
-    const stream = await client.chat.completions.create(this.buildRequest(call), {
-      signal: call.signal,
-      timeout: this.config.timeoutMs,
-    });
+    const options: { signal?: AbortSignal; timeout?: number } = { signal: call.signal };
+    if (this.config.timeoutMs !== undefined) {
+      options.timeout = this.config.timeoutMs; // 仅显式配置时传（openai SDK 要求正整数）
+    }
+    const stream = await client.chat.completions.create(this.buildRequest(call), options);
     for await (const chunk of stream) {
       this.accumulate(chunk);
       yield chunk;

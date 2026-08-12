@@ -130,9 +130,9 @@ export class LoopContext implements ReadonlyLoopContext {
     return call;
   }
 
-  /** 当前消息序列（最新 turn 的 messages，便捷访问） */
+  /** 汇总消息序列（所有 turn 的消息平铺，完整对话历史） */
   get messages(): Message[] {
-    return this.turnList.at(-1)?.messages ?? [];
+    return this.turnList.flatMap((t) => t.messages);
   }
   /** 当前系统提示词（静态分段缓存 + 动态渲染 + 工具 promptDetail） */
   get systemPrompt(): string {

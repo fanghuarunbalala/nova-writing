@@ -3,6 +3,7 @@
  */
 
 import type { NovelId } from "../model/id.js";
+import type { NovelChangeEntity } from "./event.js";
 import type {
 	Character,
 	Location,
@@ -43,6 +44,16 @@ export type LocationSnapshot = Location
 
 /** paragraph.get 返回 */
 export type ParagraphSnapshot = Paragraph
+
+/** mutate 结果（novel-db 返回，含变更事件所需字段） */
+export interface NovelMutateResult {
+	/** 变更后版本（乐观并发） */
+	version: number
+	/** 变更实体 id */
+	changeId: string
+	/** 实体类型 */
+	entity: NovelChangeEntity
+}
 
 /** publication.get 返回 */
 export interface PublicationSnapshot {

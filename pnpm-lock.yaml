@@ -20,6 +20,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.116.0
         version: 0.116.0
+      kkrpc:
+        specifier: ^2.1.0
+        version: 2.1.0(typescript@5.9.3)
       openai:
         specifier: ^7.4.0
         version: 7.4.0
@@ -210,6 +213,10 @@ packages:
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
 
+  copy-anything@4.0.5:
+    resolution: {integrity: sha512-7Vv6asjS4gMOuILabD3l739tsaxFQmC+a7pLZm02zyvs8p977bL3zEgq3yDk5rn9B0PbYgIv++jmHcuUab4RhA==}
+    engines: {node: '>=18'}
+
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
@@ -241,9 +248,49 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
+  is-what@5.5.0:
+    resolution: {integrity: sha512-oG7cgbmg5kLYae2N5IVd3jm2s+vldjxJzK1pcu9LfpGuQ93MQSzo0okvRna+7y5ifrD+20FE8FvjusyGaz14fw==}
+    engines: {node: '>=18'}
+
   json-schema-to-ts@3.1.1:
     resolution: {integrity: sha512-+DWg8jCJG2TEnpy7kOm/7/AxaYoaRbjVB4LFZLySZlWn8exGs3A4OLJR966cVvU26N7X9TWxl+Jsw7dzAqKT6g==}
     engines: {node: '>=16'}
+
+  kkrpc@2.1.0:
+    resolution: {integrity: sha512-ijiqw6g83paCFtwN9vjp093F4VUKuq5PT6C9VoCgRqlUGefCYR1LIVzC+4MNodB+sXfjO9z3cM4aeC2QDYIFGQ==}
+    peerDependencies:
+      '@nats-io/transport-node': ^3.3.0
+      '@tauri-apps/plugin-shell': ^2.2.0
+      amqplib: ^0.10.9
+      elysia: ^1.0.0
+      hono: ^4.10.4
+      ioredis: ^5.0.0
+      kafkajs: ^2.2.4
+      socket.io: ^4.0.0
+      socket.io-client: ^4.0.0
+      typescript: ^5.0.0 || ^6.0.0
+      ws: ^8.18.0
+    peerDependenciesMeta:
+      '@nats-io/transport-node':
+        optional: true
+      '@tauri-apps/plugin-shell':
+        optional: true
+      amqplib:
+        optional: true
+      elysia:
+        optional: true
+      hono:
+        optional: true
+      ioredis:
+        optional: true
+      kafkajs:
+        optional: true
+      socket.io:
+        optional: true
+      socket.io-client:
+        optional: true
+      ws:
+        optional: true
 
   lightningcss-android-arm64@1.33.0:
     resolution: {integrity: sha512-gEpRTalKdosp4Bb8qWtc2iOgE5SeIHlpS1up9bFq2wAyYhl1UdTObYiHe98zEM9SQvSoqQZ1IQD0JNpg3Ml5pg==}
@@ -424,6 +471,10 @@ packages:
 
   std-env@4.2.0:
     resolution: {integrity: sha512-oCUKSupKTHX53EyjDtuZQ64pjLJ6yYCtpmEw0goYxtjG9KpbRe8KAsl2tBUGU9DyMcJ0RwJ8GqJAFzMXcXW1Rw==}
+
+  superjson@2.2.6:
+    resolution: {integrity: sha512-H+ue8Zo4vJmV2nRjpx86P35lzwDT3nItnIsocgumgr0hHMQ+ZGq5vrERg9kJBo5AWGmxZDhzDo+WVIJqkB0cGA==}
+    engines: {node: '>=16'}
 
   thread-stream@4.2.0:
     resolution: {integrity: sha512-e2zZ96wSChazBsbENf/Pcm/4swHt2cEKQ92rhUjkL9GCKiTDJIaTBenjE/m9DXi0QBmTMDkFDdOomUy20A1tDQ==}
@@ -669,6 +720,10 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
+  copy-anything@4.0.5:
+    dependencies:
+      is-what: 5.5.0
+
   detect-libc@2.1.2: {}
 
   es-module-lexer@2.3.1: {}
@@ -688,10 +743,17 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
+  is-what@5.5.0: {}
+
   json-schema-to-ts@3.1.1:
     dependencies:
       '@babel/runtime': 7.29.7
       ts-algebra: 2.0.0
+
+  kkrpc@2.1.0(typescript@5.9.3):
+    dependencies:
+      superjson: 2.2.6
+      typescript: 5.9.3
 
   lightningcss-android-arm64@1.33.0:
     optional: true
@@ -834,6 +896,10 @@ snapshots:
       fast-sha256: 1.3.0
 
   std-env@4.2.0: {}
+
+  superjson@2.2.6:
+    dependencies:
+      copy-anything: 4.0.5
 
   thread-stream@4.2.0:
     dependencies:

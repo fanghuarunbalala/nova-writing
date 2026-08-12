@@ -14,7 +14,7 @@ import type {
 	ConversationId,
 	ConversationMessage,
 	Receipt,
-} from "../types/index.js";
+} from "../../conversation/contract/types/index.js";
 import type {
 	ConversationMeta,
 	ConversationRef,

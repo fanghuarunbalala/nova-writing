@@ -2,8 +2,8 @@
  * manager 契约的共享类型：状态 / 元数据 / 摘要 / 引用。
  */
 
-import type { AgentId, AgentType, ConversationId } from "../types/index.js";
-import type { ConversationHandle } from "../handle/index.js";
+import type { AgentId, AgentType, ConversationId } from "../../conversation/contract/types/index.js";
+import type { ConversationHandle } from "../../conversation/contract/handle/index.js";
 
 /** conversation 运行状态 */
 export type ConversationStatus = "active" | "stopped" | "crashed";

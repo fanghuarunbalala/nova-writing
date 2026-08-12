@@ -35,7 +35,7 @@
         │ Electron IPC              │ Main 代读沙盒
 ┌───────▼───────────────────────────▼───────────┐
 │  Electron Main = Zygote（编排/凭据/桥接）        │
-│  ·派生 novel-db / manager / conversation 进程    │
+│  ·派生 novel-db / manager 守护进程               │
 │  ·凭据持有（不进 child/renderer）                │
 └───┬─────────────────┬─────────────────────────┘
     │                 │
@@ -57,8 +57,8 @@
 
 各进程职责：
 - **novel-db 守护进程**：唯一 canonical 小说数据源。各进程经 WS 直连（全双工），变更广播（novel.changed）。
-- **ConversationManagerServer**：conversation 目录（id/name/storeDir/status）+ id 分配 + spawn/terminate/崩溃恢复 + **inter-conversation 消息调度**。不持有小说数据，不路由进度/事件。
-- **Zygote（Electron Main）**：派生上述守护进程与 conversation 进程；凭据持有；renderer 桥接；**为 renderer 代读沙盒**。
+- **ConversationManagerServer**：**conversation 的派生父进程（stdio 父子）**；conversation 目录（id/name/storeDir/status）+ id 分配 + spawn/terminate/崩溃恢复 + **消息调度**（sendMessageTo / send*RequestTo 转发）。不持有小说数据，不路由进度/事件。
+- **Zygote（Electron Main）**：派生 novel-db / manager 守护进程；凭据持有；renderer 桥接；**为 renderer 代读沙盒**。
 - **Conversation 进程**（root 或 teammate，同构）：统一 peer `{ manager, ui, novel }`；持久化沙盒自持；subagent 进程内派生。
 - **subagent**：进程内 loop，无 peer、无独立持久化。
 
@@ -86,8 +86,8 @@
 
 ③ rpc（消息与控制）
    · 用户输入、控制指令、inter-conversation 消息（经 manager 调度）
-   · wait 请求（审批/提问/退出 compose）经 manager 路由到 parent，由 parent 逻辑决定下一步
-   · 审批/提问应答（approval.decision / question.answer）、novel 查询/变更
+   · wait 请求（审批/提问/退出 compose）经 manager 转发到 parent，由 parent 逻辑决定下一步
+   · wait 决策 = 延迟 RPC 返回值（阻塞到答案）、novel 查询/变更
    · 请求带 id，响应带 ok/result/error
 ```
 
@@ -97,15 +97,17 @@
 - **进度走读不走推**：parent 看 teammate 进度 = 读 teammate 沙盒（只能看到已落盘子集）；manager 不碰进度/事件。
 - **manager 只做生命周期 + 消息调度**（inter-conversation 控制消息 + wait 请求排队/路由），不做 event hub。
 - novel.changed 仍推送（数据变更通知，不属于 conversation 沙盒）。
-- 实现：rpc 半边基于 **kkrpc**（stdio / Electron / WS）。hub 候选形态：kkrpc async iterable streaming（UI 侧 `for await`，`break` 即取消）。
+- 实现：rpc 半边基于 **kkrpc**（stdio / Electron / WS）。**hub 承载已定**：kkrpc async iterable streaming（`events(fromSeq)`，credit 背压，`break` 取消）；delta 直接走背压，**chunk 聚合暂缓**。
 
 各边 transport：
 
 | 边 | transport |
 |---|---|
-| zygote ↔ conversation / manager（父子派生） | stdio（`nodeStdioTransport`），**stdout 保持纯净**，日志走 stderr/文件 |
+| manager ↔ conversation（父子派生） | stdio（`nodeStdioTransport`），**stdout 保持纯净**，日志走 stderr/文件 |
+| zygote ↔ manager / novel-db（派生守护进程） | stdio（父子派生） |
+| conversation ↔ novel-db（非父子） | WebSocket（`kkrpc/ws`）+ token（kkrpc 无裸 TCP transport） |
+| conversation ↔ UI | 经 Main 桥接（Electron IPC） |
 | renderer ↔ Main | Electron IPC（`kkrpc/electron`） |
-| 各进程 ↔ novel-db / manager | WebSocket（`kkrpc/ws`）+ token（kkrpc 无裸 TCP transport） |
 
 rpc 语义补充：
 - **输入类 rpc 的响应是"持久化回执（journal seq）"，不是处理结果**：落 journal 即回 ack，处理异步进行，产物走 ②/①。禁止同步等完整结果。
@@ -223,10 +225,8 @@ interface WaitingInteractionRequest {
 
 ## 8. 待定决策清单（⏳）
 
-1. **manager 形态**：独立进程 vs 由 Electron Main 承担。
-2. **hub 承载**：kkrpc async iterable streaming vs 独立 push。
-3. **per-token 流式是否需要**：先消息级展示，需要时再加聚焦会话的 token 推送。
-4. **`sendUserCommand` vs `sendSystemControl` 拆不拆**。
-5. **sqlite 驱动**：better-sqlite3（同步，短查询可接受）vs worker 封装（严格不阻塞）。
-6. **接口层最终形态**（见第 7 节）。
-7. **实现顺序**：wire 协议（kkrpc 接入）→ conversation 持久化核心（journal+sqlite+replay）→ mailbox + output bus → AgentLoop 跑在 provider 上 → manager / novel-db 进程 + socket → subagent / teammate 递归。
+1. **delta chunk 聚合**：暂缓——目前 delta 直走 kkrpc 背压，聚合 chunk 后续再评估。
+2. **`sendUserCommand` vs `sendSystemControl` 拆不拆**。
+3. **sqlite 驱动**：better-sqlite3（同步，短查询可接受）vs worker 封装（严格不阻塞）。
+4. **接口层最终形态**（见第 7 节）。
+5. **实现顺序**：wire 协议（kkrpc 接入）→ conversation 持久化核心（journal+sqlite+replay）→ mailbox + output bus → AgentLoop 跑在 provider 上 → manager / novel-db 进程 + socket → subagent / teammate 递归。

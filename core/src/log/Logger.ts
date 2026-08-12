@@ -49,4 +49,6 @@ export interface Logger {
 	child(bindings: LogFields): Logger
 	/** 强制落盘（flush 写缓冲） */
 	flush(): Promise<void>
+	/** 关闭：flush + 关 transport worker / 文件流（进程退出或测试清理时调用） */
+	close(): Promise<void>
 }

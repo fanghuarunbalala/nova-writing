@@ -2,3 +2,4 @@
 
 export * from "./ContextCompactPolicy.js";
 export * from "./CompactPolicyChain.js";
+export * from "./CompactPolicyChainImpl.js";

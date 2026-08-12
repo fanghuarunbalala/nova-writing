@@ -9,8 +9,10 @@ export interface ToolPromptDetail {
   guidance?: string;
 }
 
-/** 工具定义：整合 scheme 定义 + 执行实现 + prompt 细节 */
+/** 工具定义：整合 scheme 定义 + 版本 + 执行实现 + prompt 细节 */
 export interface ToolDef extends ToolScheme {
+  /** 工具版本（def 指定，注册/获取 key 的一部分） */
+  version: string;
   /** 工具实现 */
   handler: ToolHandler;
   /** 工具 prompt 细节（经 PromptSection 渲染进 system） */

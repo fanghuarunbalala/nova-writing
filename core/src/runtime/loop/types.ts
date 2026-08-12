@@ -8,6 +8,7 @@ import type {
 } from "../provider/types.js";
 import type { AgentCapability } from "../agent/AgentCapability.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
+import type { Logger } from "../../log/Logger.js";
 
 /** AgentLoop 事件（透给调用方；Conversation 据此转 OutputEvent） */
 export type AgentLoopEvent =
@@ -40,6 +41,8 @@ export interface AgentLoopConfig {
   turnMessages?: Message[];
   /** 状态变化监听器（AgentLoop 构造时注册到 LoopContext；可多个） */
   listeners?: LoopContextListener[];
+  /** 结构化日志（上层 createLogger 注入；缺省不打日志） */
+  logger?: Logger;
 }
 
 /** 单次运行配置：run 时传入 */

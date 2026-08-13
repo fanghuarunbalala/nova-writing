@@ -17,6 +17,8 @@ export interface ActiveConversationSession {
   readonly sendUserMessage: (text: string) => Promise<Receipt>;
   /** 回传审批决策（无活动会话时 no-op） */
   readonly resolveApproval: (requestId: string, decision: ConversationApprovalDecision) => void;
+  /** 恢复（失败后重试：重放 journal 增量 + 重建订阅） */
+  readonly resume: () => Promise<void>;
 }
 
 /**
@@ -73,8 +75,9 @@ export function useActiveConversationSession(
     },
     [binding],
   );
+  const resume = useCallback(() => binding?.resume() ?? Promise.resolve(), [binding]);
   return useMemo(
-    () => Object.freeze({ snapshot, sendUserMessage, resolveApproval }),
-    [resolveApproval, sendUserMessage, snapshot],
+    () => Object.freeze({ snapshot, sendUserMessage, resolveApproval, resume }),
+    [resolveApproval, resume, sendUserMessage, snapshot],
   );
 }

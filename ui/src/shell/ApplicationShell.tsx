@@ -5,7 +5,7 @@
  * 并承担唯一允许的跨域副作用协调（workspace 切换触发各域 load）。
  * 审批域：活动会话投影 approvals → ApprovalStore；决策经 binding.resolveApproval 回传。
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
 import { useActiveConversationSession } from "../domains/conversation/hooks/useActiveConversationSession.js";
@@ -127,6 +127,28 @@ export function ApplicationShell({
     });
     return () => approvalStore.setDecisionHandler(undefined);
   }, [approvalStore, session]);
+
+  // 审批到达自动打开左侧审批面板：仅当 pending 集合出现「新 requestId」时 transition
+  // （同一请求持续 pending 不重复弹；approval.request 为 persist:false，journal 重放不误弹）。
+  const prevPendingIds = useRef<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    prevPendingIds.current = new Set();
+  }, [catalogSnapshot.activeConversationId]);
+  useEffect(() => {
+    const ids = new Set(
+      approvalSnapshot.approvals
+        .filter((approval) => approval.status === "pending")
+        .map((approval) => approval.requestId),
+    );
+    const hasNew = [...ids].some((id) => !prevPendingIds.current.has(id));
+    prevPendingIds.current = ids;
+    if (hasNew) {
+      inspectorRouter.transition({
+        kind: "approval",
+        changeSetId: catalogSnapshot.activeConversationId ?? "",
+      });
+    }
+  }, [approvalSnapshot, inspectorRouter, catalogSnapshot.activeConversationId]);
 
   // 跨域副作用协调：workspace 变化时并行触发各域 load（spec 1.5.1）
   useEffect(() => {

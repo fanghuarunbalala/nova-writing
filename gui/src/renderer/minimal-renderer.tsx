@@ -62,5 +62,5 @@ root.render(
   </StrictMode>,
 );
 
-// 自动打开默认项目（NovelApp 无 current workspace 时显示选择页）。
-void workspaceController.openRecent("default");
+// 自动打开默认项目（chooseAndOpen 走 picker，直接置 active；NovelApp 无 current 时显示选择页）。
+void workspaceController.chooseAndOpen();

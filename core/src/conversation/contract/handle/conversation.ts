@@ -4,12 +4,13 @@
 
 import type { OutputEvent } from "../events/index.js";
 import type { ConversationInteraction } from "../interaction/index.js";
+import type { WaitingInteractionRequest } from "../interaction/index.js";
 
 /**
  * UI 侧对远端 conversation 的视图（createOrResume / spawnConversation 返回）。
- * = 输入侧契约（含 sendSystemControl 应答审批）+ 事件流订阅 + 释放。
+ * = 输入侧契约 + 等待交互（审批/提问/退出 compose）+ 事件流订阅 + 释放。
  */
-export interface ConversationHandle extends ConversationInteraction {
+export interface ConversationHandle extends ConversationInteraction, WaitingInteractionRequest {
 	/**
 	 * 订阅该 conversation 的输出事件流（hub）
 	 * @param fromSeq 可选：从指定 journal 序列号开始（重放已落盘部分）

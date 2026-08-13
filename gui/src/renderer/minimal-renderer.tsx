@@ -6,10 +6,11 @@
 import "./renderer.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { wrap } from "kkrpc/remote-refs";
+import { expose, wrap } from "kkrpc/remote-refs";
 import { electronIpcTransport } from "kkrpc/electron";
 import type { NovelApiClient } from "@novel/core/client";
 import type { ConfigApi, ConfigMutation } from "@novel/core";
+import { emitApprovalsChanged } from "@novel/ui";
 import {
   NovelApp,
   WorkspaceController,
@@ -28,6 +29,12 @@ if (!bridge) {
 }
 const transport = electronIpcTransport({ endpoint: bridge as never, channel: "novel-rpc" });
 const api = wrap<NovelApiClient>(transport);
+
+// renderer 暴露面：main 直接 rpc 调用（审批队列变化通知 → 触发 UI 重拉）
+expose(
+  { onApprovalsChanged: async () => emitApprovalsChanged() },
+  electronIpcTransport({ endpoint: bridge as never, channel: "ui-rpc" }),
+);
 
 const configTransport = electronIpcTransport({ endpoint: bridge as never, channel: "config-rpc" });
 const configApi = wrap<ConfigApi>(configTransport);

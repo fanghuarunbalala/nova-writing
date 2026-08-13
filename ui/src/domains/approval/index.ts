@@ -1,5 +1,6 @@
-/** 审批域出口：store + 面板全家桶 + 实体解析器 + 参数中文标签。 */
+/** 审批域出口：store + 面板全家桶 + 实体解析器 + 参数中文标签 + 变化通知总线。 */
 export * from "./ApprovalStore.js";
+export * from "./approvalChangeBus.js";
 export * from "./jsonTypes.js";
 export * from "./paramLabels.js";
 export * from "./approvalEntityResolver.js";

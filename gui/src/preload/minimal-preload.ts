@@ -8,7 +8,7 @@ import { createSecureIpcBridge } from "kkrpc/electron";
 try {
   const bridge = createSecureIpcBridge({
     ipcRenderer,
-    allowedChannels: ["novel-rpc", "config-rpc", "workspace-rpc"],
+    allowedChannels: ["novel-rpc", "config-rpc", "workspace-rpc", "ui-rpc"],
   });
   contextBridge.exposeInMainWorld("novelApi", { bridge });
   console.error("[preload] novelApi exposed");

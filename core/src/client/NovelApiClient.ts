@@ -14,6 +14,8 @@ import type { OutputEvent } from "../conversation/contract/events/index.js";
 import type { ConversationJournalReadOnlyService } from "../conversation/contract/journal/index.js";
 import { FileConversationJournalReadOnlyService } from "../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { toRPCError } from "../rpc/call.js";
+import type { ApprovalQueueItem } from "../conversation/server/WaitRequestQueue.js";
+import type { ConversationApprovalDecision } from "../conversation/contract/types/index.js";
 import type { AgentType } from "../conversation/contract/types/index.js";
 import type { NovelMutation } from "../novel/contract/mutation.js";
 import type {
@@ -70,6 +72,22 @@ export interface ConversationApi {
 	): Promise<OutputEvent[]>;
 }
 
+/** 审批子 API（wait 队列：UI 拉取 + 决策；request/resolve 分离） */
+export interface ApprovalApi {
+	/**
+	 * 待 UI 决策的审批列表（decisioner="ui"；含近期已决条目）
+	 * @returns 队列条目（按提交时间倒序）
+	 */
+	list(): Promise<readonly ApprovalQueueItem[]>;
+	/**
+	 * 提交审批决策（CMS 记录并直推驻留 conversation；已退出则重启后经 takeDecisions 续跑）
+	 * @param requestId 请求 id
+	 * @param decision 决策（approve / reject / edit+意见）
+	 * @returns 是否命中待决条目
+	 */
+	resolve(requestId: string, decision: ConversationApprovalDecision): Promise<boolean>;
+}
+
 /** novel 查询子 API（按 op 包装 NovelHandle.query 的强类型面） */
 export interface NovelContentApi {
 	overview: {
@@ -112,10 +130,11 @@ export interface NovelContentApi {
 	mutate(m: NovelMutation): Promise<NovelMutateResult>;
 }
 
-/** 客户端门面：conversations + novel 两域 */
+/** 客户端门面：conversations + novel + approvals 三域 */
 export interface NovelApiClient {
 	readonly conversations: ConversationApi;
 	readonly novel: NovelContentApi;
+	readonly approvals: ApprovalApi;
 }
 
 /** 门面构造依赖（注入两域 handle） */
@@ -149,6 +168,11 @@ export function createNovelApiClient(options: NovelApiClientOptions): NovelApiCl
 			delete: (conversationId) => manager.delete(conversationId),
 			history: (conversationId, opts) =>
 				history !== undefined ? history(conversationId, opts) : Promise.resolve([]),
+		},
+		// 客户端构造不经 manager 的 wait 队列（renderer 经 wrap 直连服务端门面）——占位
+		approvals: {
+			list: () => Promise.resolve([]),
+			resolve: async () => false,
 		},
 		novel: {
 			overview: {
@@ -253,6 +277,11 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 			delete: (conversationId) => manager.delete(conversationId),
 			history: (conversationId, opts) =>
 				readOnly !== undefined ? readOnly.history(conversationId, opts ?? {}) : Promise.resolve([]),
+		},
+		// wait 队列唯一权威在 CMS：UI 拉取 + 决策（request/resolve 分离）
+		approvals: {
+			list: () => manager.listApprovals(),
+			resolve: (requestId, decision) => manager.resolveApproval(requestId, decision),
 		},
 		novel: {
 			overview: {

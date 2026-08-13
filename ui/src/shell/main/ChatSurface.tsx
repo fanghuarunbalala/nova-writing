@@ -25,6 +25,8 @@ export interface ChatSurfaceProps {
   readonly session: ActiveConversationSession;
   readonly conversationCatalog: ConversationCatalogStore;
   readonly onCreateConversation: () => void;
+  /** 本会话待审批数（CMS wait 队列派生；>0 时 composer 等待态） */
+  readonly pendingApprovalCount?: number;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
@@ -34,6 +36,7 @@ export function ChatSurface({
   session,
   conversationCatalog,
   onCreateConversation,
+  pendingApprovalCount = 0,
   onReferenceClick,
   resolveReference,
   onNotify,
@@ -48,6 +51,7 @@ export function ChatSurface({
       session={session}
       conversationId={activeId}
       title={catalog.conversations.find((item) => item.id === activeId)?.title ?? "对话"}
+      pendingApprovalCount={pendingApprovalCount}
       onReferenceClick={onReferenceClick}
       resolveReference={resolveReference}
       onNotify={onNotify}
@@ -59,6 +63,7 @@ interface ActiveChatSurfaceProps {
   readonly session: ActiveConversationSession;
   readonly conversationId: string;
   readonly title: string;
+  readonly pendingApprovalCount: number;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
@@ -67,6 +72,7 @@ interface ActiveChatSurfaceProps {
 function ActiveChatSurface({
   session,
   conversationId,
+  pendingApprovalCount,
   onReferenceClick,
   resolveReference,
   onNotify,
@@ -78,10 +84,8 @@ function ActiveChatSurface({
   const failed = projection?.state === "error";
   const runtime = useConversationRuntimeStatus(projection);
 
-  // 三态推导（对齐旧版优先级）：failed > waiting（待审批）> thinking > generating。
+  // 三态推导（对齐旧版优先级）：failed > waiting（待审批，CMS 队列派生）> thinking > generating。
   // waiting 态复用 GenStatus 沙漏+摇摆动画（审批面板由 ApplicationShell 自动弹出）。
-  const pendingCount =
-    projection?.approvals.filter((a) => a.status === "pending").length ?? 0;
   let status: GenStatusProps | undefined;
   if (failed) {
     status = {
@@ -89,7 +93,7 @@ function ActiveChatSurface({
       error: describeProjectionError(projection?.error),
       onRetry: () => void resume(),
     };
-  } else if (pendingCount > 0) {
+  } else if (pendingApprovalCount > 0) {
     status = { phase: "waiting" };
   } else if (projection?.liveState === "thinking") {
     status = { phase: "thinking" };
@@ -116,7 +120,7 @@ function ActiveChatSurface({
         conversationId={conversationId}
         enabled={snapshot?.state === "active" && !failed}
         status={status}
-        sendDisabled={pendingCount > 0}
+        sendDisabled={pendingApprovalCount > 0}
         disconnected={runtime.state === "disconnected"}
         onSend={(input) => {
           // 发送失败（会话进程崩溃/超时等）必须显性展示，不吞掉

@@ -4,7 +4,7 @@
  * - conversation：spawnConversation 走子进程（desktop-child.mjs，真实 provider）；createOrResume 回退内存回显 loop
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
-import { expose, proxy, type RPCMessage } from "kkrpc/remote-refs";
+import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
 import { basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
@@ -36,6 +36,7 @@ const childScript = join(__dirname, "..", "..", "..", "core", "scripts", "deskto
 const IPC_CHANNEL = "novel-rpc";
 const CONFIG_CHANNEL = "config-rpc";
 const WORKSPACE_CHANNEL = "workspace-rpc";
+const UI_CHANNEL = "ui-rpc";
 
 /**
  * 回显 AgentLoop：followup 即时开 turn 产 turn-start/user.message → assistant.delta×N →
@@ -290,6 +291,16 @@ async function main(): Promise<void> {
   };
   expose(serverApi, electronIpcTransport({ endpoint, channel: IPC_CHANNEL }));
   await configServer.start(electronIpcTransport({ endpoint, channel: CONFIG_CHANNEL }));
+
+  // renderer 暴露面（main 直接 rpc 调用：审批队列变化通知）
+  const uiApi = wrap<{ onApprovalsChanged(): Promise<void> }>(
+    electronIpcTransport({ endpoint, channel: UI_CHANNEL }),
+  );
+  uiNotifyHolder.notify = () => {
+    void uiApi.onApprovalsChanged().catch(() => {
+      // renderer 未就绪/已关窗时忽略
+    });
+  };
 
   // workspace：目录选择器 + 定位器 + 最近列表（内存）
   const locator = new NodeWorkspaceStoreLocator({

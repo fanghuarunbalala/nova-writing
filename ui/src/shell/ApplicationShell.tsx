@@ -16,6 +16,7 @@ import {
   type ReferenceResolver,
 } from "../domains/conversation/reference/ReferenceResolver.js";
 import { ApprovalStore } from "../domains/approval/ApprovalStore.js";
+import { onApprovalsChanged } from "../domains/approval/approvalChangeBus.js";
 import type { ToastKind, ToastStore } from "../shared/state/ToastStore.js";
 import type { MainViewRouter } from "../shared/routing/MainViewRouter.js";
 import type { InspectorRouter } from "../shared/routing/InspectorRouter.js";
@@ -96,7 +97,7 @@ export function ApplicationShell({
   const overview = useExternalStore(domainStores.novelOverview);
   const inspector = useExternalStore(inspectorRouter);
   const catalogSnapshot = useExternalStore(domainStores.conversationCatalog);
-  const approvalStore = useMemo(() => new ApprovalStore(), []);
+  const approvalStore = useMemo(() => new ApprovalStore({ api }), [api]);
   // 审批目标实体内容解析器（lite：api.novel.* 查询 + 乐观锁 stale 判定）
   const resolveEntity = useMemo(
     () => createApprovalEntityResolver({ api }),
@@ -113,20 +114,13 @@ export function ApplicationShell({
   const session = useActiveConversationSession(api, catalogSnapshot.activeConversationId, logger);
   const approvalSnapshot = useExternalStore(approvalStore);
 
-  // 投影 approvals → 审批面板数据源
+  // 审批面板数据源 = CMS wait 队列：初始拉取 + 变化通知触发重拉（拉取为准，推送仅触发）
   useEffect(() => {
-    approvalStore.setApprovals(session.snapshot?.projection.approvals ?? []);
-  }, [approvalStore, session.snapshot]);
-
-  // 审批决策回传通道（经 binding.resolveApproval → handle）
-  useEffect(() => {
-    approvalStore.setDecisionHandler((requestId, decision) => {
-      session.resolveApproval(requestId, {
-        kind: decision === "approved" ? "approve" : "reject",
-      });
+    void approvalStore.refresh();
+    return onApprovalsChanged(() => {
+      void approvalStore.refresh();
     });
-    return () => approvalStore.setDecisionHandler(undefined);
-  }, [approvalStore, session]);
+  }, [approvalStore]);
 
   // 审批到达自动打开左侧审批面板：仅当 pending 集合出现「新 requestId」时 transition
   // （同一请求持续 pending 不重复弹；approval.request 为 persist:false，journal 重放不误弹）。
@@ -322,6 +316,13 @@ export function ApplicationShell({
           api={api}
           logger={logger}
           session={session}
+          pendingApprovalCount={
+            approvalSnapshot.approvals.filter(
+              (item) =>
+                item.conversationId === catalogSnapshot.activeConversationId &&
+                item.status === "pending",
+            ).length
+          }
           mainViewRouter={mainViewRouter}
           conversationCatalog={domainStores.conversationCatalog}
           outlineTree={domainStores.storyOutlineTree}

@@ -29,6 +29,7 @@ export interface MainAreaProps {
   readonly api: NovelApiClient;
   readonly logger?: Logger;
   readonly session: ActiveConversationSession;
+  readonly pendingApprovalCount?: number;
   readonly mainViewRouter: MainViewRouter;
   readonly conversationCatalog: ConversationCatalogStore;
   readonly outlineTree: StoryOutlineTreeStore;
@@ -62,6 +63,7 @@ export function MainArea(props: MainAreaProps) {
           session={props.session}
           conversationCatalog={props.conversationCatalog}
           onCreateConversation={props.onCreateConversation}
+          pendingApprovalCount={props.pendingApprovalCount ?? 0}
           onReferenceClick={props.onReferenceClick}
           resolveReference={props.resolveReference}
           onNotify={props.onNotify}

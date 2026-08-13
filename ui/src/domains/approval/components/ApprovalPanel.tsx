@@ -15,7 +15,7 @@
 import { useMemo, useState, type JSX } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
-import type { ApprovalView } from "@novel/core";
+import type { ApprovalQueueItem } from "@novel/core";
 import type { ApprovalEntityResolver } from "../approvalEntityResolver.js";
 import type { JsonObject, JsonValue } from "../jsonTypes.js";
 import {
@@ -44,8 +44,8 @@ export interface ApprovalPanelProps {
 
 interface ApprovalGroup {
   readonly key: string;
-  readonly approvals: readonly ApprovalView[];
-  readonly status: ApprovalView["status"];
+  readonly approvals: readonly ApprovalQueueItem[];
+  readonly status: ApprovalQueueItem["status"];
   readonly requestedAt: string;
 }
 
@@ -55,11 +55,12 @@ interface ConversationApprovalGroup {
   readonly groups: readonly ApprovalGroup[];
 }
 
-const STATUS_LABEL: Record<ApprovalView["status"], string> = {
+const STATUS_LABEL: Record<ApprovalQueueItem["status"], string> = {
   pending: "待批准",
   approved: "已批准",
   rejected: "已拒绝",
   edited: "已修改",
+  expired: "已过期",
 };
 
 /** 方案 E：工具头整条色带 class。E band tone classes. */
@@ -118,20 +119,20 @@ function approvalTitleOf(toolName: string, args: string): string {
   return fallback;
 }
 
-function groupKeyOf(approval: ApprovalView): string {
+function groupKeyOf(approval: ApprovalQueueItem): string {
   return `${approval.conversationId}:${approval.requestId}`;
 }
 
-function groupStatus(approvals: readonly ApprovalView[]): ApprovalView["status"] {
+function groupStatus(approvals: readonly ApprovalQueueItem[]): ApprovalQueueItem["status"] {
   if (approvals.some((item) => item.status === "pending")) return "pending";
   if (approvals.some((item) => item.status === "rejected")) return "rejected";
   return approvals[approvals.length - 1]!.status;
 }
 
 function groupApprovals(
-  approvals: readonly ApprovalView[],
+  approvals: readonly ApprovalQueueItem[],
 ): readonly ApprovalGroup[] {
-  const raw = new Map<string, ApprovalView[]>();
+  const raw = new Map<string, ApprovalQueueItem[]>();
   for (const approval of approvals) {
     const key = groupKeyOf(approval);
     const list = raw.get(key) ?? [];

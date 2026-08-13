@@ -5,7 +5,7 @@
  * 说明：审批类待办由 deriveApprovalTodos 从 shell 级 ApprovalStore 快照
  * （api.conversations.listApprovals()）派生。
  */
-import type { ApprovalView } from "@novel/core";
+import type { ApprovalQueueItem } from "@novel/core";
 import type { ConversationCatalogSnapshot } from "../../conversation/store/ConversationCatalogStore.js";
 import type { NovelOverviewSnapshot } from "../../novel/overview/NovelOverviewStore.js";
 import type { StoryOutlineTreeNode } from "../../novel/outline/projection/StoryOutlineTreeProjection.js";
@@ -109,7 +109,7 @@ export const ScheduleProjection = {
    * （ApplicationShell.handleTodoAction 路由 open-approval → handleOpenApproval）。
    */
   deriveApprovalTodos(
-    approvals: readonly ApprovalView[],
+    approvals: readonly ApprovalQueueItem[],
   ): readonly ScheduleTodoData[] {
     const todos: ScheduleTodoData[] = [];
     for (const approval of approvals) {

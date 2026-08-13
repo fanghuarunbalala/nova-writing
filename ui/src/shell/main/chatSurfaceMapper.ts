@@ -1,339 +1,44 @@
 /**
  * chatSurfaceMapper
  *
- * 把 core 投影的 timeline 项映射为域 ConversationTimelineItem。
- * 结构化卡片：binding 快照的 generic 卡（ConversationCardProjectionStore 产出）
- * 按 sourceSequence 归属到对应 assistant 消息，并映射为 rich 描述供渲染器使用。
+ * 把精简投影的 timeline 项（core 的 {kind, text, streaming}）映射为域 ConversationTimelineItem。
+ * cards/thinkLines/eventFlow/toolTraces 延后，恒为空。
  */
-import type { ConversationProjectionSnapshot } from "@novel/core";
-import type { ConversationCardDescriptor as GenericCardDescriptor } from "../../domains/conversation/cards/projection/index.js";
-import type { ConversationCardStatus } from "../../domains/conversation/cards/projection/ConversationCardTypes.js";
-import type {
-  ConversationCardDescriptor,
-  ProposalCardContent,
-} from "../../domains/conversation/projection/ConversationCardDescriptor.js";
-import type {
-  ConversationEventView,
-  ConversationTimelineItem,
-  ThinkLineData,
-  ToolTraceView,
-} from "../../domains/conversation/projection/ConversationTimelineItem.js";
+import type { ConversationTimelineItem as CoreTimelineItem } from "@novel/core/client";
+import type { ConversationTimelineItem } from "../../domains/conversation/projection/ConversationTimelineItem.js";
 
 export function mapProjectionTimeline(
-  projection: ConversationProjectionSnapshot,
-  cards: readonly GenericCardDescriptor[],
+  timeline: readonly CoreTimelineItem[],
   agentLabel: string,
 ): readonly ConversationTimelineItem[] {
   const items: ConversationTimelineItem[] = [];
-  for (const item of projection.timeline) {
-    switch (item.kind) {
-      case "user-message": {
-        const timestamp = Date.parse(item.timestamp) || 0;
-        items.push({
-          kind: "turn",
-          sequence: item.sequence - 0.5,
-          // v2 原型：轮次分隔只显示时间，去掉「第 N 轮 ·」前缀。
-          label: formatTime(timestamp),
-          timestamp,
-        });
-        items.push({
+  for (const item of timeline) {
+    if (item.kind === "user") {
+      items.push(
+        Object.freeze({
           kind: "user",
           sequence: item.sequence,
           text: item.text,
-          timestamp,
-        });
-        break;
-      }
-      case "assistant-message": {
-        const timestamp = Date.parse(item.timestamp) || 0;
-        const textParts: string[] = [];
-        const thinkLines: ThinkLineData[] = [];
-        for (const part of item.content) {
-          if (part.type === "text") textParts.push(part.text);
-          else {
-            thinkLines.push({
-              id: `${item.assistantMessageId}-${thinkLines.length}`,
-              text: part.thinking,
-            });
-          }
-        }
-        const messageCards = cards
-          .filter(
-            (card) =>
-              card.sourceSequence >= item.startedSequence &&
-              card.sourceSequence <= item.lastSequence,
-          )
-          .map(toTimelineCard);
-        // 工具调用常发生在消息 completed 之后、同一 turn 内（turn 边界由
-        // turn.state.changed 的 lastSequence 界定），因此事件流/工具条范围取
-        // 到 turn 结束，而不是消息自己的 lastSequence。
-        const turnEnd =
-          projection.turns.find(
-            (turn) => turn.runId === item.runId && turn.turnId === item.turnId,
-          )?.lastSequence ?? item.lastSequence;
-        const eventFlow = eventFlowOf(projection, item.startedSequence, turnEnd);
-        const toolTraces = projection.toolTraces
-          .filter(
-            (trace) =>
-              trace.sequence >= item.startedSequence &&
-              trace.sequence <= turnEnd,
-          )
-          .map(toTraceView);
-        items.push({
+          timestamp: 0,
+        }),
+      );
+    } else {
+      items.push(
+        Object.freeze({
           kind: "assistant",
-          sequence: item.startedSequence,
+          sequence: item.sequence,
           agentLabel,
-          timestamp,
-          thinkLines,
-          text: textParts.join(""),
-          cards: Object.freeze(messageCards),
-          streaming: item.status === "streaming",
-          ...(item.status === "streaming"
-            ? {
-                thinking: !item.content.some(
-                  (part) => part.type === "text",
-                ),
-              }
-            : {}),
-          eventFlow: Object.freeze(eventFlow),
-          toolTraces: Object.freeze(toolTraces),
-          ...(item.status === "streaming" ? { approvalState: "generating" as const } : {}),
-          ...(item.status === "completed" ? { approvalState: "completed" as const } : {}),
-          ...(item.status === "failed" ? { approvalState: "failed" as const } : {}),
-          ...(item.failureDetail === undefined
-            ? {}
-            : { failureDetail: item.failureDetail }),
-          ...(item.status === "cancelled" ? { approvalState: "cancelled" as const } : {}),
-        });
-        break;
-      }
+          timestamp: 0,
+          thinkLines: Object.freeze([]),
+          text: item.text,
+          cards: Object.freeze([]),
+          streaming: item.streaming === true,
+          ...(item.streaming === true
+            ? { approvalState: "generating" as const }
+            : { approvalState: "completed" as const }),
+        }),
+      );
     }
   }
-  return Object.freeze(
-    [...items, ...designItemsOf(projection)].sort(
-      (left, right) => left.sequence - right.sequence,
-    ),
-  );
-}
-
-/** 从 novel.compose.* 输出事件派生设计卡条目。Derives design-card items from compose events. */
-function designItemsOf(
-  projection: ConversationProjectionSnapshot,
-): readonly ConversationTimelineItem[] {
-  const items: ConversationTimelineItem[] = [];
-  for (const event of projection.events) {
-    if (event.direction !== "output") continue;
-    const phase = composePhaseOf(event.eventType);
-    if (phase === undefined) continue;
-    items.push(
-      Object.freeze({
-        kind: "design" as const,
-        sequence: event.sequence,
-        timestamp: Date.parse(event.timestamp) || 0,
-        design: Object.freeze({
-          conversationId: projection.conversationId,
-          phase,
-        }),
-      }),
-    );
-  }
   return Object.freeze(items);
-}
-
-function composePhaseOf(eventType: string): string | undefined {
-  switch (eventType) {
-    case "novel.compose.begin":
-      return "designing";
-    case "novel.compose.submitted":
-      return "pending";
-    case "novel.compose.approved":
-    case "novel.compose.applied":
-      return "applied";
-    case "novel.compose.rejected":
-      return "designing";
-    case "novel.compose.discarded":
-      return "discarded";
-    default:
-      return undefined;
-  }
-}
-
-/**
- * 由投影 composePhase 计算当前 compose 徽标文案（设计中/待审批）。
- * Computes the compose badge label from the projected compose phase.
- *
- * composePhase 由 connect 时 DB 播种、compose 事件实时覆盖，裁剪后依然正确；
- * 相比扫描事件描述，不依赖 journal 中仍保留的 novel.compose.* 事件。
- */
-export function composeStatusLabel(
-  projection: { readonly composePhase?: "designing" | "pending" },
-): string | undefined {
-  if (projection.composePhase === "designing") return "设计中";
-  if (projection.composePhase === "pending") return "待审批";
-  return undefined;
-}
-
-const DELTA_EVENT_TYPE = "agent.assistant.message.delta";
-const TOOL_TRACE_EVENT_TYPE = "system.tool.trace.recorded";
-const TERMINAL_TRACE_STAGES = new Set([
-  "execution_completed",
-  "execution_failed",
-  "timed_out",
-  "cancelled",
-]);
-const TERMINAL_STAGE_LABEL: Record<string, string> = {
-  execution_completed: "完成",
-  execution_failed: "失败",
-  timed_out: "超时",
-  cancelled: "已取消",
-};
-
-function toEventView(
-  event: ConversationProjectionSnapshot["events"][number],
-): ConversationEventView {
-  return Object.freeze({
-    sequence: event.sequence,
-    timestamp: Date.parse(event.timestamp) || 0,
-    eventType: event.eventType,
-    family: familyOf(event.eventType),
-    ...(event.summary === undefined ? {} : { summary: event.summary }),
-  });
-}
-
-/** 事件流只保留终态工具 trace：delta 与中间阶段均不进事件流。 */
-function eventFlowOf(
-  projection: ConversationProjectionSnapshot,
-  startedSequence: number,
-  lastSequence: number,
-): readonly ConversationEventView[] {
-  const views = projection.events
-    .filter(
-      (event) =>
-        event.direction === "output" &&
-        event.sequence >= startedSequence &&
-        event.sequence <= lastSequence &&
-        event.eventType !== DELTA_EVENT_TYPE &&
-        event.eventType !== TOOL_TRACE_EVENT_TYPE,
-    )
-    .map(toEventView);
-  const terminalTraces = projection.toolTraces
-    .filter(
-      (trace) =>
-        trace.sequence >= startedSequence &&
-        trace.sequence <= lastSequence &&
-        trace.stage !== undefined &&
-        TERMINAL_TRACE_STAGES.has(trace.stage),
-    )
-    .map((trace) => toTerminalTraceView(trace));
-  return Object.freeze(
-    [...views, ...terminalTraces].sort((left, right) => left.sequence - right.sequence),
-  );
-}
-
-function toTerminalTraceView(
-  trace: ConversationProjectionSnapshot["toolTraces"][number],
-): ConversationEventView {
-  const failed =
-    trace.stage !== undefined &&
-    (trace.stage === "execution_failed" ||
-      trace.stage === "timed_out" ||
-      trace.stage === "cancelled");
-  const stageLabel = trace.stage === undefined ? "完成" : TERMINAL_STAGE_LABEL[trace.stage] ?? trace.stage;
-  return Object.freeze({
-    sequence: trace.sequence,
-    timestamp: Date.parse(trace.timestamp) || 0,
-    eventType: TOOL_TRACE_EVENT_TYPE,
-    family: "system",
-    summary: `工具 ${trace.toolName} · ${stageLabel}`,
-    outcome: failed ? "failed" : "ok",
-  });
-}
-
-function toTraceView(
-  trace: ConversationProjectionSnapshot["toolTraces"][number],
-): ToolTraceView {
-  return Object.freeze({
-    traceId: trace.traceId,
-    toolName: trace.toolName,
-    ...(trace.stage === undefined ? {} : { stage: trace.stage }),
-    outcome: trace.outcome,
-    ...(trace.durationMs === undefined ? {} : { durationMs: trace.durationMs }),
-  });
-}
-
-function familyOf(eventType: string): ConversationEventView["family"] {
-  if (eventType.startsWith("agent.")) return "agent";
-  if (eventType.startsWith("novel.")) return "novel";
-  if (eventType.startsWith("system.")) return "system";
-  return "other";
-}
-
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-/**
- * generic 卡 → rich 渲染描述（覆盖全部 ConversationCardKind）。
- *
- * generic 卡仅携带 title/summary/status（op 明细、changeSetId 等载荷由
- * core 输出事件提供后才可投影），故 rich 形式全部由 title/summary 派生、
- * ops 保持空数组，不伪造变更结构。
- */
-const STATUS_TO_PROPOSAL_TAG: Record<
-  ConversationCardStatus,
-  ProposalCardContent["tag"]
-> = {
-  informational: "proposal",
-  pending: "proposal",
-  "in-progress": "plan",
-  accepted: "applied",
-  rejected: "proposal",
-  completed: "applied",
-  failed: "proposal",
-  stale: "proposal",
-};
-
-function toTimelineCard(
-  card: GenericCardDescriptor,
-): ConversationCardDescriptor {
-  switch (card.kind) {
-    case "novel-reference":
-      return Object.freeze({
-        kind: "quote",
-        id: card.cardId,
-        content: Object.freeze({
-          text: Object.freeze({ kind: "text", text: card.summary ?? card.title }),
-          ...(card.summary === undefined || card.summary === card.title
-            ? {}
-            : { attribution: card.title }),
-        }),
-      });
-    case "outline-proposal":
-    case "manuscript-proposal":
-    case "character-proposal":
-    case "location-proposal":
-    case "design":
-    case "task":
-    case "approval":
-      return Object.freeze({
-        kind: "proposal",
-        id: card.cardId,
-        content: Object.freeze({
-          tag: STATUS_TO_PROPOSAL_TAG[card.status],
-          title: card.title,
-          ...(card.summary === undefined ? {} : { meta: card.summary }),
-          ops: Object.freeze([]),
-        }),
-      });
-    case "publication":
-      return Object.freeze({
-        kind: "text",
-        id: card.cardId,
-        content: Object.freeze({
-          richText: Object.freeze({ kind: "text", text: card.summary ?? card.title }),
-        }),
-      });
-  }
 }

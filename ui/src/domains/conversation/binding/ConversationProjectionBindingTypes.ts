@@ -1,10 +1,5 @@
 /** Immutable React-facing lifecycle around one Core Conversation projection. */
-import type {
-  ConversationProjectionControllerErrorSnapshot,
-  ConversationProjectionControllerSnapshot,
-  ConversationProjectionSnapshot,
-} from "@novel/core";
-import type { ConversationCardProjectionSnapshot } from "../cards/projection/index.js";
+import type { ConversationProjectionSnapshot } from "@novel/core/client";
 
 export const CONVERSATION_PROJECTION_BINDING_STATE = {
   idle: "idle",
@@ -20,12 +15,9 @@ export type ConversationProjectionBindingState =
 
 export interface ConversationProjectionBindingSnapshot {
   readonly conversationId: string;
-  readonly revision: number;
   readonly state: ConversationProjectionBindingState;
+  /** 精简投影快照（timeline / lastAppliedSequence / 状态 / error）。 */
   readonly projection: ConversationProjectionSnapshot;
-  readonly cards: ConversationCardProjectionSnapshot;
-  readonly controller?: ConversationProjectionControllerSnapshot;
-  readonly error?: ConversationProjectionControllerErrorSnapshot;
 }
 
 export type ConversationProjectionBindingListener = () => void;

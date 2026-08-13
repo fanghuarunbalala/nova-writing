@@ -1,21 +1,16 @@
-/** Owns an opened Conversation and Controller for one React projection consumer. */
-import {
-  ApiRemoteError,
-  ApiTransportError,
-  ConversationProjectionController,
-  ConversationProjectionControllerStateError,
-  noopLogger,
-  type Conversation,
-  type InputEvent,
-  type InputReceipt,
-  type ConversationProjectionControllerErrorSnapshot,
-  type Logger,
-  type NovelApiClient,
+/** Owns an opened Conversation and its minimal projection for one React consumer. */
+import type {
+  ConversationHandle,
+  ConversationSystemControl,
+  Logger,
+  NovelApiClient,
+  Receipt,
 } from "@novel/core";
 import {
-  ConversationCardProjectionStore,
-  type ConversationCardProjectorRegistry,
-} from "../cards/projection/index.js";
+  ConversationProjection,
+  noopLogger,
+  type ConversationProjectionSnapshot,
+} from "@novel/core/client";
 import {
   CONVERSATION_PROJECTION_BINDING_STATE,
   type ConversationProjectionBindingListener,
@@ -27,25 +22,21 @@ export interface ConversationProjectionBindingOptions {
   readonly api: NovelApiClient;
   readonly conversationId: string;
   readonly logger?: Logger;
-  readonly cardProjectors?: ConversationCardProjectorRegistry;
 }
 
 export class ConversationProjectionBinding {
   readonly conversationId: string;
 
   private readonly api: NovelApiClient;
-  private readonly store: ConversationCardProjectionStore;
   private readonly logger: Logger;
   private readonly listeners = new Set<ConversationProjectionBindingListener>();
   private state: ConversationProjectionBindingState =
     CONVERSATION_PROJECTION_BINDING_STATE.idle;
-  private error?: ConversationProjectionControllerErrorSnapshot;
-  private revision = 0;
   private snapshot: ConversationProjectionBindingSnapshot;
   private generation = 0;
-  private conversation?: Conversation;
-  private controller?: ConversationProjectionController;
-  private unsubscribeController?: () => void;
+  private handle?: ConversationHandle;
+  private projection?: ConversationProjection;
+  private unsubscribeProjection?: () => void;
   private startPromise?: Promise<void>;
   private stopPromise?: Promise<void>;
 
@@ -55,13 +46,6 @@ export class ConversationProjectionBinding {
     this.logger = (options.logger ?? noopLogger).child({
       component: "conversation_projection_binding",
       conversationId: this.conversationId,
-    });
-    this.store = new ConversationCardProjectionStore({
-      conversationId: this.conversationId,
-      logger: this.logger,
-      ...(options.cardProjectors !== undefined
-        ? { projectors: options.cardProjectors }
-        : {}),
     });
     this.snapshot = this.buildSnapshot();
   }
@@ -83,35 +67,28 @@ export class ConversationProjectionBinding {
     }
     if (this.startPromise !== undefined) return this.startPromise;
     if (this.state !== CONVERSATION_PROJECTION_BINDING_STATE.idle) {
-      throw new ConversationProjectionControllerStateError("bind", this.state);
+      return Promise.reject(new Error(`cannot start in state ${this.state}`));
     }
     const generation = ++this.generation;
-    const startPromise = this.startOnce(generation);
-    const trackedPromise = startPromise.finally(() => {
-      if (this.startPromise === trackedPromise) this.startPromise = undefined;
+    const tracked = this.startOnce(generation).finally(() => {
+      if (this.startPromise === tracked) this.startPromise = undefined;
     });
-    this.startPromise = trackedPromise;
-    return trackedPromise;
+    this.startPromise = tracked;
+    return tracked;
+  }
+
+  /** 发送用户消息（turn lane）。 */
+  sendUserMessage(text: string): Promise<Receipt> {
+    return this.requireHandle().sendUserMessage({ text });
+  }
+
+  /** 发送系统控制（control lane：mode.set / stop / reload.config）。 */
+  sendSystemControl(ctrl: ConversationSystemControl): Promise<Receipt> {
+    return this.requireHandle().sendSystemControl(ctrl);
   }
 
   resume(): Promise<void> {
-    if (
-      this.state !== CONVERSATION_PROJECTION_BINDING_STATE.active ||
-      this.controller === undefined
-    ) {
-      throw new ConversationProjectionControllerStateError("resume", this.state);
-    }
-    return this.controller.resume();
-  }
-
-  enqueue(event: InputEvent): Promise<InputReceipt> {
-    if (
-      this.state !== CONVERSATION_PROJECTION_BINDING_STATE.active ||
-      this.conversation === undefined
-    ) {
-      throw new ConversationProjectionControllerStateError("enqueue input", this.state);
-    }
-    return this.conversation.input.enqueue(event);
+    return this.projection?.resume() ?? Promise.resolve();
   }
 
   stop(): Promise<void> {
@@ -121,41 +98,25 @@ export class ConversationProjectionBinding {
 
   private async startOnce(generation: number): Promise<void> {
     this.transition(CONVERSATION_PROJECTION_BINDING_STATE.opening);
-    this.logger.info("novel_ui.conversation_projection.open_started", {
-      generation,
-    });
+    this.logger.info("novel_ui.conversation_projection.open_started", { generation });
     try {
-      const conversation = await this.api.conversations.open(this.conversationId);
+      const handle = await this.api.conversations.open(this.conversationId);
       if (this.isSuperseded(generation)) {
-        await conversation.close();
+        handle.dispose();
         return;
       }
-      this.conversation = conversation;
-      const controller = new ConversationProjectionController({
-        conversation,
-        store: this.store,
-        logger: this.logger,
-      });
-      this.controller = controller;
-      this.unsubscribeController = controller.subscribe(() => {
-        this.publishSnapshot();
-      });
+      this.handle = handle;
+      const projection = new ConversationProjection(handle, this.conversationId);
+      this.projection = projection;
+      this.unsubscribeProjection = projection.subscribe(() => this.publish());
       this.transition(CONVERSATION_PROJECTION_BINDING_STATE.active);
-      await controller.start();
-      this.logger.info("novel_ui.conversation_projection.open_completed", {
-        generation,
-        lastAppliedSequence: this.store.getSnapshot().lastAppliedSequence,
-      });
+      await projection.start();
     } catch (error) {
       if (this.isSuperseded(generation)) return;
-      if (this.controller === undefined) {
-        this.error = createBindingErrorSnapshot(error);
-        this.transition(CONVERSATION_PROJECTION_BINDING_STATE.failed, false);
-      }
+      this.transition(CONVERSATION_PROJECTION_BINDING_STATE.failed);
       this.logger.warn("novel_ui.conversation_projection.open_failed", {
         generation,
         errorName: getErrorName(error),
-        errorCode: createBindingErrorSnapshot(error).code,
       });
       throw error;
     }
@@ -164,28 +125,28 @@ export class ConversationProjectionBinding {
   private async stopOnce(): Promise<void> {
     if (this.state === CONVERSATION_PROJECTION_BINDING_STATE.stopped) return;
     this.transition(CONVERSATION_PROJECTION_BINDING_STATE.stopping);
-    const generation = ++this.generation;
-    const controller = this.controller;
+    this.generation += 1;
+    const controller = this.projection;
     const startPromise = this.startPromise;
-    const results = await Promise.allSettled([
+    await Promise.allSettled([
       ...(controller !== undefined ? [controller.stop()] : []),
       ...(startPromise !== undefined ? [startPromise] : []),
     ]);
-    this.unsubscribeController?.();
-    this.unsubscribeController = undefined;
-    const conversation = this.conversation;
-    this.conversation = undefined;
-    if (conversation !== undefined) {
-      results.push(...(await Promise.allSettled([conversation.close()])));
-    }
+    this.unsubscribeProjection?.();
+    this.unsubscribeProjection = undefined;
+    this.projection = undefined;
+    const handle = this.handle;
+    this.handle = undefined;
+    handle?.dispose();
     this.transition(CONVERSATION_PROJECTION_BINDING_STATE.stopped);
-    this.logger.info("novel_ui.conversation_projection.stopped", {
-      generation,
-      rejectedOperationCount: results.filter(
-        (result) => result.status === "rejected",
-      ).length,
-      lastAppliedSequence: this.store.getSnapshot().lastAppliedSequence,
-    });
+    this.logger.info("novel_ui.conversation_projection.stopped");
+  }
+
+  private requireHandle(): ConversationHandle {
+    if (this.state !== CONVERSATION_PROJECTION_BINDING_STATE.active || this.handle === undefined) {
+      throw new Error(`conversation not active (state ${this.state})`);
+    }
+    return this.handle;
   }
 
   private isSuperseded(generation: number): boolean {
@@ -196,21 +157,12 @@ export class ConversationProjectionBinding {
     );
   }
 
-  private transition(
-    state: ConversationProjectionBindingState,
-    clearError = true,
-  ): void {
+  private transition(state: ConversationProjectionBindingState): void {
     this.state = state;
-    if (clearError) this.error = undefined;
-    this.publishSnapshot();
-    this.logger.debug("novel_ui.conversation_projection.state_changed", {
-      state,
-      lastAppliedSequence: this.store.getSnapshot().lastAppliedSequence,
-    });
+    this.publish();
   }
 
-  private publishSnapshot(): void {
-    this.revision += 1;
+  private publish(): void {
     this.snapshot = this.buildSnapshot();
     for (const listener of [...this.listeners]) {
       try {
@@ -224,23 +176,22 @@ export class ConversationProjectionBinding {
   }
 
   private buildSnapshot(): ConversationProjectionBindingSnapshot {
-    const controllerSnapshot = this.controller?.getSnapshot();
     return Object.freeze({
       conversationId: this.conversationId,
-      revision: this.revision,
       state: this.state,
-      projection: this.store.getSnapshot(),
-      cards: this.store.getCardSnapshot(),
-      ...(controllerSnapshot !== undefined
-        ? { controller: controllerSnapshot }
-        : {}),
-      ...(this.error !== undefined
-        ? { error: this.error }
-        : controllerSnapshot?.error !== undefined
-          ? { error: controllerSnapshot.error }
-          : {}),
+      projection: this.projection?.getSnapshot() ?? emptyProjection(this.conversationId),
     });
   }
+}
+
+function emptyProjection(conversationId: string): ConversationProjectionSnapshot {
+  return Object.freeze({
+    conversationId,
+    revision: 0,
+    lastAppliedSequence: 0,
+    state: "idle",
+    timeline: Object.freeze([]),
+  });
 }
 
 function requireConversationId(value: string): string {
@@ -250,34 +201,8 @@ function requireConversationId(value: string): string {
   return value;
 }
 
-function createBindingErrorSnapshot(
-  error: unknown,
-): ConversationProjectionControllerErrorSnapshot {
-  if (error instanceof ApiTransportError) {
-    return Object.freeze({
-      code: error.code,
-      retryable: error.retryable,
-      category: "transport",
-    });
-  }
-  if (error instanceof ApiRemoteError) {
-    return Object.freeze({
-      code: error.code,
-      retryable: error.retryable,
-      category: "remote",
-    });
-  }
-  return Object.freeze({
-    code: "NOVEL_UI_CONVERSATION_OPEN_FAILED",
-    retryable: false,
-    category: "unknown",
-  });
-}
-
 function getErrorName(error: unknown): string {
   if (error === null || typeof error !== "object") return "UnknownError";
   const name = (error as { name?: unknown }).name;
-  return typeof name === "string" && name.trim().length > 0
-    ? name
-    : "UnknownError";
+  return typeof name === "string" && name.trim().length > 0 ? name : "UnknownError";
 }

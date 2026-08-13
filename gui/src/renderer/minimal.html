@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>Novel 最小对话</title>
+  <style>
+    body { font-family: sans-serif; margin: 16px; }
+    #messages { border: 1px solid #ccc; border-radius: 8px; padding: 12px; min-height: 300px; margin-bottom: 12px; overflow-y: auto; white-space: pre-wrap; }
+    .user { color: #0550ae; }
+    .assistant { color: #116329; }
+    #input { display: flex; gap: 8px; }
+    input { flex: 1; padding: 8px; font-size: 14px; }
+    button { padding: 8px 16px; }
+  </style>
+</head>
+<body>
+  <h2>Novel 对话（T12 最小验证）</h2>
+  <div id="messages"></div>
+  <div id="input">
+    <input id="text" placeholder="输入消息…" />
+    <button id="send">发送</button>
+  </div>
+  <script type="module">
+    import { electronIpcTransport } from "@novel/core";
+    import { wrap } from "kkrpc";
+
+    const bridge = window.novelApi.bridge;
+    const transport = electronIpcTransport({ endpoint: bridge, channel: "novel-rpc" });
+    const handle = wrap(transport);
+
+    const messages = document.getElementById("messages");
+    const input = document.getElementById("text");
+    const sendBtn = document.getElementById("send");
+
+    function append(cls, text) {
+      const div = document.createElement("div");
+      div.className = cls;
+      div.textContent = text;
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    // 订阅输出事件（流式 delta）
+    (async () => {
+      for await (const evt of handle.events()) {
+        if (evt.type === "user.message") append("user", "👤 " + evt.text);
+        else if (evt.type === "assistant.delta") append("assistant", evt.text);
+        else if (evt.type === "assistant.message") append("assistant", "\n\n");
+      }
+    })();
+
+    async function send() {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      await handle.sendUserMessage({ text });
+    }
+
+    sendBtn.addEventListener("click", send);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+  </script>
+</body>
+</html>

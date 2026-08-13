@@ -3,6 +3,7 @@
  * 只 import kkrpc（browser 版）+ @novel/core/client（browser-safe）+ @novel/ui。
  * workspace 用固定内存 stub（默认项目）；config 经 config-rpc 通道接 ConfigServer。
  */
+import "./renderer.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { wrap } from "kkrpc";

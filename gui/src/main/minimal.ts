@@ -10,7 +10,10 @@ import { wrap, expose } from "kkrpc";
 import { createStdioTransport, electronIpcTransport } from "@novel/core";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const childScript = join(__dirname, "..", "..", "..", "core", "scripts", "conversation-stdio-child.mjs");
+// 子进程脚本 / preload / renderer 相对 gui 根（dist/minimal 结构下，向上到 core/scripts 与 dist/minimal 内）
+const childScript = join(__dirname, "..", "..", "core", "scripts", "conversation-stdio-child.mjs");
+const preloadPath = join(__dirname, "preload.cjs");
+const rendererHtml = join(__dirname, "minimal.html");
 const IPC_CHANNEL = "novel-rpc";
 
 /** spawn conversation 进程，返回 stdio 包出的 ConversationHandle */
@@ -51,10 +54,10 @@ async function main() {
     width: 900,
     height: 640,
     webPreferences: {
-      preload: join(__dirname, "..", "preload", "minimal-preload.js"),
+      preload: preloadPath,
     },
   });
-  await win.loadFile(join(__dirname, "..", "renderer", "minimal.html"));
+  await win.loadFile(rendererHtml);
   console.error("[main] minimal electron ready");
 }
 

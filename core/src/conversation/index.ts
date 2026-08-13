@@ -5,3 +5,5 @@ export * from "./persistence/index.js";
 export * from "./server/index.js";
 export * from "./compose/index.js";
 export * from "./ConversationProjector.js";
+export * from "./ApprovalProjection.js";
+export * from "./CardProjection.js";

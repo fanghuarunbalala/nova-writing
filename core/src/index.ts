@@ -13,6 +13,8 @@ export * from "./runtime/loop/index.js";
 export * from "./novel/index.js";
 export * from "./conversation/index.js";
 export * from "./client/index.js";
+export * from "./config/index.js";
+export * from "./workspace/index.js";
 export * from "./rpc/index.js";
 export * from "./event/index.js";
 export * from "./log/index.js";

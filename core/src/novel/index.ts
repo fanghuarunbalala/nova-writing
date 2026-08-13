@@ -4,6 +4,7 @@ export * from "./model/index.js";
 export * from "./contract/index.js";
 export * from "./errors.js";
 export * from "./InMemoryNovelStore.js";
+export * from "./SqliteNovelStore.js";
 export * from "./store.js";
 export * from "./client/NovelHandle.js";
 export * from "./server/NovelDbServer.js";

@@ -121,6 +121,15 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		return new Promise<ConversationApprovalDecision>((resolve) => {
 			this.pendingApprovals.set(req.requestId, resolve);
 			for (const l of this.approvalListeners) l(req);
+			this.emit({
+				type: "approval.request",
+				persist: false,
+				requestId: req.requestId,
+				toolName: req.toolName,
+				args: req.args,
+				conversationId: this.conversationId,
+				ts: new Date().toISOString(),
+			});
 		});
 	}
 
@@ -181,6 +190,14 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		if (resolve) {
 			this.pendingApprovals.delete(requestId);
 			resolve(decision);
+			this.emit({
+				type: "approval.resolved",
+				persist: false,
+				requestId,
+				decision: decision.kind === "approve" ? "approved" : decision.kind === "reject" ? "rejected" : "edited",
+				conversationId: this.conversationId,
+				ts: new Date().toISOString(),
+			});
 		}
 	}
 

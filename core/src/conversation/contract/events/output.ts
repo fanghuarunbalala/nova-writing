@@ -102,6 +102,25 @@ export type OutputEvent =
 			conversationId: ConversationId;
 			agentId?: AgentId;
 			ts: string;
+	  }
+	| {
+			type: "approval.request";
+			persist: false;
+			requestId: string;
+			toolName: string;
+			args: string;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "approval.resolved";
+			persist: false;
+			requestId: string;
+			decision: "approved" | "rejected" | "edited";
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
 	  };
 
 /** 可落盘事件：OutputEvent 中 persist=true 的子集（journal 只写这些） */

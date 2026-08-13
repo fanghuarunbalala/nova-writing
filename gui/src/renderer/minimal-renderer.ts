@@ -1,24 +1,34 @@
 /**
  * 最小 renderer 脚本（browser 环境，esbuild bundle）：wrap → ConversationHandle → 对话。
- * 不 import @novel/core（node 依赖），直接 import kkrpc（browser 版）。
+ * 事件经 preload 的 onEvent 订阅（main 侧 webContents.send 推送），unary 方法经 kkrpc bridge。
  */
 import { wrap } from "kkrpc";
 import { electronIpcTransport } from "kkrpc/electron";
 
 declare global {
   interface Window {
-    novelApi: { bridge: unknown };
+    novelApi: {
+      bridge: unknown;
+      onEvent: (callback: (evt: { type: string; text?: string }) => void) => () => void;
+    };
   }
 }
 
-const bridge = window.novelApi.bridge;
+// 错误诊断：捕获 renderer 报错，显示在页面上
+window.addEventListener("error", (e) => {
+  const errDiv = document.createElement("div");
+  errDiv.style.color = "red";
+  errDiv.textContent = "[renderer error] " + e.message;
+  document.body.appendChild(errDiv);
+});
+
+const bridge = (window.novelApi as { bridge?: unknown } | undefined)?.bridge;
+if (!bridge) {
+  throw new Error("window.novelApi.bridge 未暴露（preload 未生效？）");
+}
 const transport = electronIpcTransport({ endpoint: bridge as never, channel: "novel-rpc" });
 const handle = wrap(transport) as {
   sendUserMessage(msg: { text: string }): Promise<unknown>;
-  events(): AsyncIterable<{
-    type: string;
-    text?: string;
-  }>;
 };
 
 const messages = document.getElementById("messages")!;
@@ -33,13 +43,11 @@ function append(cls: string, text: string): void {
   messages.scrollTop = messages.scrollHeight;
 }
 
-// 订阅输出事件（流式 delta）
-void (async () => {
-  for await (const evt of handle.events()) {
-    if (evt.type === "user.message" && evt.text) append("user", "👤 " + evt.text);
-    else if (evt.type === "assistant.delta" && evt.text) append("assistant", evt.text);
-  }
-})();
+// 订阅事件（main 侧推送）
+window.novelApi.onEvent((evt) => {
+  if (evt.type === "user.message" && evt.text) append("user", "👤 " + evt.text);
+  else if (evt.type === "assistant.delta" && evt.text) append("assistant", evt.text);
+});
 
 async function send(): Promise<void> {
   const text = input.value.trim();

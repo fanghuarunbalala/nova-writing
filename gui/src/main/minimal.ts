@@ -4,14 +4,13 @@
  */
 import { app, BrowserWindow, ipcMain } from "electron";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { wrap, expose } from "kkrpc";
 import { createStdioTransport, electronIpcTransport } from "@novel/core";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-// 子进程脚本 / preload / renderer 相对 gui 根（dist/minimal 结构下，向上到 core/scripts 与 dist/minimal 内）
-const childScript = join(__dirname, "..", "..", "core", "scripts", "conversation-stdio-child.mjs");
+// cjs 环境 __dirname 原生可用（esbuild cjs bundle 提供）
+// __dirname = gui/dist/minimal；上三级到项目根，再进 core/scripts
+const childScript = join(__dirname, "..", "..", "..", "core", "scripts", "conversation-stdio-child.mjs");
 const preloadPath = join(__dirname, "preload.cjs");
 const rendererHtml = join(__dirname, "minimal.html");
 const IPC_CHANNEL = "novel-rpc";
@@ -26,7 +25,7 @@ function spawnConversation() {
   return { child, handle: wrap(transport) };
 }
 
-/** 把 conversation handle 经 Electron IPC 暴露给 renderer */
+/** 把 conversation handle 经 Electron IPC 暴露给 renderer（unary 方法：sendUserMessage/sendSystemControl） */
 function bridgeToRenderer(handle: unknown) {
   const endpoint = {
     send: (channel: string, msg: unknown) => {
@@ -45,10 +44,22 @@ function bridgeToRenderer(handle: unknown) {
   expose(handle, transport);
 }
 
+/** 订阅 conversation 事件流（stdio streaming），主动推送到 renderer（绕开双重 streaming） */
+function pipeEvents(handle: { events(): AsyncIterable<unknown> }) {
+  void (async () => {
+    for await (const evt of handle.events()) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("conversation-event", evt);
+      }
+    }
+  })();
+}
+
 async function main() {
   await app.whenReady();
   const { handle } = spawnConversation();
   bridgeToRenderer(handle);
+  pipeEvents(handle as { events(): AsyncIterable<unknown> });
 
   const win = new BrowserWindow({
     width: 900,
@@ -56,6 +67,10 @@ async function main() {
     webPreferences: {
       preload: preloadPath,
     },
+  });
+  // 转发 renderer console 到主进程 stdout（诊断 renderer 报错）
+  win.webContents.on("console-message", (_e, level, message) => {
+    console.error(`[renderer:${level}] ${message}`);
   });
   await win.loadFile(rendererHtml);
   console.error("[main] minimal electron ready");

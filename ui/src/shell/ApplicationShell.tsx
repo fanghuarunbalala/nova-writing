@@ -34,7 +34,6 @@ import type { ApplicationSettingsStore } from "../settings/ApplicationSettingsSt
 import type { ApplicationCommandSource } from "../command/ApplicationCommandSource.js";
 import type { NovelUiExtensions } from "../extensions/NovelUiExtensions.js";
 import type { ConversationCardRendererRegistry } from "../domains/conversation/cards/ConversationCardRendererRegistry.js";
-import type { ConversationCardProjectorRegistry } from "../domains/conversation/cards/projection/ConversationCardProjectorRegistry.js";
 import type { InspectorRendererRegistry } from "./inspector/InspectorRendererRegistry.js";
 import { InspectorHost } from "./inspector/InspectorHost.js";
 import { MainArea } from "./main/MainArea.js";
@@ -69,7 +68,6 @@ export interface ApplicationShellProps {
   readonly extensions?: NovelUiExtensions;
   readonly inspectorRenderers?: InspectorRendererRegistry;
   readonly conversationCardRenderers?: ConversationCardRendererRegistry;
-  readonly conversationCardProjectors?: ConversationCardProjectorRegistry;
   readonly onOpenWorkspace?: () => void;
   readonly onOpenSettings?: () => void;
   readonly overlays?: ReactNode;

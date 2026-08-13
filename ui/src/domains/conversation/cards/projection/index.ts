@@ -1,6 +1,5 @@
 /**
- * 结构化卡片投影（从 core 输出事件派生卡片）。
+ * 结构化卡片投影（卡片由 core ConversationProjection 的 CardProjection 派生）。
+ * 此处仅保留卡片描述类型。
  */
-export * from "./ConversationCardProjectionStore.js";
-export * from "./ConversationCardProjectorRegistry.js";
 export * from "./ConversationCardTypes.js";

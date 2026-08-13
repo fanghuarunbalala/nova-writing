@@ -3,5 +3,10 @@ packages:
   - "ui"
   - "gui"
 
+allowBuilds:
+  esbuild: true
+  zeromq: true
+
 onlyBuiltDependencies:
   - zeromq
+  - esbuild

@@ -12,10 +12,18 @@ export interface ConversationUserCommand {
 	args?: Record<string, unknown>
 }
 
+/** 会话模式：review 需审批（默认）/ bypass 直接执行 / compose 设计模式 */
+export type ConversationMode = "review" | "bypass" | "compose"
+
+/** 默认会话模式 */
+export const DEFAULT_CONVERSATION_MODE: ConversationMode = "review"
+
 /** 系统控制（control lane，可抢占） */
 export type ConversationSystemControl =
 	| { type: "stop"; reason?: string }
 	| { type: "reload.config" }
+	/** 设置会话模式（经 manager 统一转发） */
+	| { type: "mode.set"; mode: ConversationMode }
 
 /** 可投递给 conversation 的消息（manager.sendMessageTo 的载荷） */
 export type ConversationMessage =

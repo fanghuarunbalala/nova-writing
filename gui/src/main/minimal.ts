@@ -51,19 +51,21 @@ function createEchoLoop(conversationId: string): AgentLoop {
   } as unknown as AgentLoop;
 }
 
-/** manager：spawnConversation 走子进程（真实 provider），createOrResume 回退内存回显 loop */
+/** manager：有 provider key 时 spawnConversation 走子进程（真实 provider）；否则回退内存回显 loop */
 function createManager(): ConversationManagerServer {
-  return new ConversationManagerServer(
-    {
-      create: (o) =>
-        new Conversation({
-          conversationId: o.conversationId,
-          loop: createEchoLoop(o.conversationId),
-          sampling: { model: "echo" },
-        }),
-    },
-    createProcessSpawner(childScript),
-  );
+  const factory = {
+    create: (o: { conversationId: string }) =>
+      new Conversation({
+        conversationId: o.conversationId,
+        loop: createEchoLoop(o.conversationId),
+        sampling: { model: "echo" },
+      }),
+  };
+  const spawner =
+    process.env.NOVEL_PROVIDER_API_KEY !== undefined
+      ? createProcessSpawner(childScript)
+      : undefined;
+  return new ConversationManagerServer(factory, spawner);
 }
 
 async function main(): Promise<void> {

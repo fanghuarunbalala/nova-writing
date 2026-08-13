@@ -1,5 +1,6 @@
 /** Coordinates Workspace selection and one active Workspace session for shared UI. */
-import { noopLogger, type Logger } from "@novel/core";
+import type { Logger } from "@novel/core";
+import { noopLogger } from "@novel/core/client";
 
 export type WorkspaceControllerPhase =
   | "idle"

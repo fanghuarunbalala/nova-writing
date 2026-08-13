@@ -9,7 +9,8 @@
  * 桌面专属扩展槽（titlebar/commands）在壳加扩展点后接入（Phase B）。
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { noopLogger, type Logger, type NovelApiClient } from "@novel/core";
+import type { Logger, NovelApiClient } from "@novel/core";
+import { noopLogger } from "@novel/core/client";
 import type { ApplicationCommandSource } from "../command/index.js";
 import {
   ApplicationSettingsStore,

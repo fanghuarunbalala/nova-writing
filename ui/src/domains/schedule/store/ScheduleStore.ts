@@ -5,7 +5,8 @@
  * 任何上游 notify 后重算 stats / todos / progressTree。
  * 说明：approval 队列上游暂缺（approval 域延后），依赖注入为可选。
  */
-import { noopLogger, type Logger } from "@novel/core";
+import type { Logger } from "@novel/core";
+import { noopLogger } from "@novel/core/client";
 import { ExternalStore } from "../../../shared/state/ExternalStore.js";
 import { ImmutableSnapshot } from "../../../shared/state/ImmutableSnapshot.js";
 import type { ConversationCatalogStore } from "../../conversation/store/ConversationCatalogStore.js";

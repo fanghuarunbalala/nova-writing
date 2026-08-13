@@ -15,7 +15,13 @@ import { journalListener } from "../dist/conversation/JournalBridge.js";
 
 // 能力（无工具，纯对话）
 const registry = new InMemoryRegistry();
-registry.registerAgent({ agentType: "writer", agentVersion: "1", promptIds: ["base"] });
+registry.registerAgent({
+  agentType: "writer",
+  agentVersion: "1",
+  label: "Writer",
+  description: "小说创作助手（smoke 用）",
+  promptIds: ["base"],
+});
 registry.registerPrompt({ kind: "static", render: () => "你是小说创作助手。" }, "base", "1");
 const capability = registry.buildCapability("writer", "1");
 

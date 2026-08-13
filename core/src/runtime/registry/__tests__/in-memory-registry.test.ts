@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { InMemoryRegistry } from "../InMemoryRegistry.js";
+import { ToolError } from "../../tool/errors.js";
 import type { PromptSection } from "../../prompt/PromptSection.js";
 import type { ToolDef } from "../../tool/ToolDef.js";
 import type { ContextNudgePolicy } from "../../nudge/ContextNudgePolicy.js";
@@ -19,7 +20,7 @@ const compact: ContextCompactPolicy = {
 describe("InMemoryRegistry", () => {
   it("注册/获取 agent，version 缺失报错", () => {
     const r = new InMemoryRegistry();
-    r.registerAgent({ agentType: "writer", agentVersion: "1" });
+    r.registerAgent({ agentType: "writer", agentVersion: "1", label: "Writer", description: "测试" });
     expect(r.getAgent("writer", "1").agentType).toBe("writer");
     expect(() => r.getAgent("writer", "2")).toThrow();
   });
@@ -37,12 +38,14 @@ describe("InMemoryRegistry", () => {
     expect(r.getCompact("c1", "1")).toBe(compact);
   });
 
-  it("buildCapability 按 agent 关联组装", () => {
+  it("buildCapability 按 agent 关联组装（tools.allow 过滤池）", () => {
     const r = new InMemoryRegistry();
     r.registerAgent({
       agentType: "writer",
       agentVersion: "1",
-      toolNames: ["read"],
+      label: "Writer",
+      description: "测试",
+      tools: { allow: ["read"] },
       promptIds: ["p1"],
       nudgeIds: ["n1"],
       compactIds: ["c1"],
@@ -58,10 +61,69 @@ describe("InMemoryRegistry", () => {
     expect(cap.compactPolicies).toHaveLength(1);
   });
 
-  it("buildCapability 未注册关联项跳过", () => {
+  it("buildCapability 无 tools 策略 → 收集全部版本匹配工具", () => {
     const r = new InMemoryRegistry();
-    r.registerAgent({ agentType: "writer", agentVersion: "1", toolNames: ["missing"] });
+    r.registerAgent({ agentType: "writer", agentVersion: "1", label: "Writer", description: "测试" });
+    r.registerTool(tool);
+    r.registerTool({ name: "glob", version: "1", handler: { execute: async () => "" } });
+    r.registerTool({ name: "glob", version: "2", handler: { execute: async () => "" } });
+    const cap = r.buildCapability("writer", "1");
+    expect(cap.toolDefs.map((t) => t.name)).toEqual(["read", "glob"]);
+  });
+
+  it("buildCapability 策略名单未注册 → 抛 TOOL_POLICY_INVALID", () => {
+    const r = new InMemoryRegistry();
+    r.registerAgent({
+      agentType: "writer",
+      agentVersion: "1",
+      label: "Writer",
+      description: "测试",
+      tools: { allow: ["missing"] },
+    });
+    try {
+      r.buildCapability("writer", "1");
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(ToolError);
+      expect((err as ToolError).code).toBe("TOOL_POLICY_INVALID");
+      expect((err as Error).message).toContain("白名单未注册: missing");
+    }
+  });
+
+  it("buildCapability 名单项已注册但 version 不匹配 → 池为空抛 TOOL_POLICY_INVALID", () => {
+    const r = new InMemoryRegistry();
+    r.registerAgent({
+      agentType: "writer",
+      agentVersion: "1",
+      label: "Writer",
+      description: "测试",
+      tools: { allow: ["read"] },
+    });
+    r.registerTool({ name: "read", version: "2", handler: { execute: async () => "" } });
+    try {
+      r.buildCapability("writer", "1");
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(ToolError);
+      expect((err as ToolError).code).toBe("TOOL_POLICY_INVALID");
+    }
+  });
+
+  it("buildCapability 未注册的 prompt/nudge/compact 关联项静默跳过", () => {
+    const r = new InMemoryRegistry();
+    r.registerAgent({
+      agentType: "writer",
+      agentVersion: "1",
+      label: "Writer",
+      description: "测试",
+      promptIds: ["missing-p"],
+      nudgeIds: ["missing-n"],
+      compactIds: ["missing-c"],
+    });
     const cap = r.buildCapability("writer", "1");
     expect(cap.toolDefs).toHaveLength(0);
+    expect(cap.systemSections).toHaveLength(0);
+    expect(cap.nudgePolicies).toHaveLength(0);
+    expect(cap.compactPolicies).toHaveLength(0);
   });
 });

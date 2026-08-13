@@ -13,7 +13,9 @@ const registry = new InMemoryRegistry();
 registry.registerAgent({
   agentType: "writer",
   agentVersion: "1",
-  toolNames: ["remember"],
+  label: "Writer",
+  description: "小说创作助手（smoke 用）",
+  tools: { allow: ["remember"] },
   promptIds: ["writer-base"],
 });
 registry.registerTool({

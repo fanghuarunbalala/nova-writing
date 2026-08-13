@@ -4,6 +4,7 @@ import type { ToolDef } from "../tool/ToolDef.js";
 import type { PromptSection } from "../prompt/PromptSection.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import type { ContextCompactPolicy } from "../compact/ContextCompactPolicy.js";
+import { applyToolPolicy } from "../tool/toolPolicy.js";
 import type { Registry } from "./Registry.js";
 
 /** key：`id/type + version` 组合 */
@@ -125,7 +126,11 @@ export class InMemoryRegistry implements Registry {
 
   /**
    * 组装统一能力：按 agent 关联的 tools / prompts / 策略 → AgentCapability
-   * 关联项 version 与 agent 同 version；未注册的关联项跳过
+   * 关联项 version 与 agent 同 version；未注册的关联项跳过（prompt/nudge/compact）。
+   * 工具收集走策略：池 = 注册表中 version === agentVersion 的全部工具（保注册序），
+   * 经 applyToolPolicy(def.tools) 过滤；allow/deny 名单项不在池 → 抛
+   * TOOL_POLICY_INVALID（对齐旧版 validateKnownTools 抛错，非静默跳过）。
+   * 注册约定：工具须以 version === 目标 agent 的 agentVersion 注册，否则不进池。
    * @param agentType agent 类型
    * @param agentVersion agent 版本
    * @returns 组装好的 AgentCapability
@@ -140,9 +145,10 @@ export class InMemoryRegistry implements Registry {
       }
       return result;
     };
+    const toolPool = [...this.tools.values()].filter((t) => t.version === agentVersion);
     return {
       systemSections: collect(def.promptIds ?? [], (id, v) => this.getPrompt(id, v)),
-      toolDefs: collect(def.toolNames ?? [], (name, v) => this.getTool(name, v)),
+      toolDefs: applyToolPolicy(toolPool, def.tools),
       nudgePolicies: collect(def.nudgeIds ?? [], (id, v) => this.getNudge(id, v)),
       compactPolicies: collect(def.compactIds ?? [], (id, v) => this.getCompact(id, v)),
     };

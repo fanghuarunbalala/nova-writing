@@ -45,12 +45,16 @@ export const NOVEL_EXPLORER_TOOL_NAMES: readonly string[] = [
 
 /**
  * novel_explorer 定义（数据常量，未来 Registry 注册用）。
+ * label/description 对齐旧 ProductionSubagentComposition 文案；tools.allow 钉死只读边界
+ * （策略为唯一事实源，装配经 applyToolPolicy 过滤全池）。
  * agentId 缺省：subagent 不持久化，事件 agentId 由 runtime 按 <agentType>:<taskId> 盖章。
  */
 export const NOVEL_EXPLORER_DEFINITION: AgentDefinition = {
   agentType: NOVEL_EXPLORER_AGENT_TYPE,
   agentVersion: "1.0.0",
-  toolNames: [...NOVEL_EXPLORER_TOOL_NAMES],
+  label: "只读探索",
+  description: "读取大纲、人物、地点、段落、卷与章节，返回简洁的文本性发现。",
+  tools: { allow: [...NOVEL_EXPLORER_TOOL_NAMES] },
 };
 
 /** novel_explorer 装配选项 */

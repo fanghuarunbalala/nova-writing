@@ -58,7 +58,7 @@ function createEchoLoop(conversationId: string): AgentLoop {
 }
 
 /** manager：有 provider key 时 spawnConversation 走子进程（真实 provider，经 fd 3 共享 novel store）；否则回退内存回显 loop */
-function createManager(store: NovelStore): ConversationManagerServer {
+function createManager(store: NovelStore, conversationsRoot: string): ConversationManagerServer {
   const factory = {
     create: (o: { conversationId: string }) =>
       new Conversation({
@@ -71,7 +71,7 @@ function createManager(store: NovelStore): ConversationManagerServer {
     process.env.NOVEL_PROVIDER_API_KEY !== undefined
       ? createProcessSpawner(childScript, store)
       : undefined;
-  return new ConversationManagerServer(factory, spawner);
+  return new ConversationManagerServer(factory, spawner, { storedirRoot: conversationsRoot });
 }
 
 async function main(): Promise<void> {
@@ -92,7 +92,8 @@ async function main(): Promise<void> {
   );
 
   const store = new SqliteNovelStore(join(app.getPath("userData"), "novel.db"));
-  const manager = createManager(store);
+  const conversationsRoot = join(app.getPath("userData"), "novel-storage", "conversations");
+  const manager = createManager(store, conversationsRoot);
   const serverApi = createNovelApiServer({ manager, novel: store, proxy });
 
   // config：JSON 文件持久化（凭据暂明文，safeStorage cipher 后续接）

@@ -4,6 +4,7 @@
  * 可注入 novelStore：经 fd 3 第二条 stdio 管道暴露 novel {query,mutate}，子进程经 NovelHandle 访问共享 canonical store。
  */
 import { spawn } from "node:child_process";
+import { mkdirSync } from "node:fs";
 import { expose, wrap } from "kkrpc";
 import { createStdioTransport } from "../rpc/transport.js";
 import type { ConversationProcessSpawner } from "../conversation/server/ConversationManagerServer.js";
@@ -22,9 +23,17 @@ export function createProcessSpawner(
 ): ConversationProcessSpawner {
 	return {
 		spawn(opts) {
+			// storedir 由 manager 分配：spawn 前确保目录存在，子进程在目录内建 journal
+			mkdirSync(opts.storedir, { recursive: true });
 			const child = spawn(process.execPath, [childScriptPath], {
 				stdio: ["pipe", "pipe", "inherit", novelStore ? "pipe" : "ignore"],
-				env: { ...process.env, CONVERSATION_ID: opts.conversationId, AGENT_ID: "main" },
+				env: {
+					...process.env,
+					CONVERSATION_ID: opts.conversationId,
+					AGENT_ID: "main",
+					NOVEL_CONVERSATION_STOREDIR: opts.storedir,
+					NOVEL_CONVERSATION_WORKSPACE: opts.workspace ?? ".",
+				},
 			});
 			const transport = createStdioTransport({ readable: child.stdout!, writable: child.stdin! });
 			const handle = wrap(transport) as ConversationHandle;

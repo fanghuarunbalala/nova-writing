@@ -5,8 +5,10 @@
  */
 
 import { createReadStream, createWriteStream, fstatSync } from "node:fs";
+import { join } from "node:path";
 import { createStdioTransport } from "../../rpc/transport.js";
 import { Conversation } from "../../conversation/server/Conversation.js";
+import { FileConversationJournalService } from "../../conversation/persistence/FileConversationJournalService.js";
 import { runConversation } from "../../init/ConversationInit.js";
 import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
@@ -30,6 +32,8 @@ function hasNovelFd(): boolean {
  */
 export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	const conversationId = process.env.CONVERSATION_ID ?? "main";
+	const storedir = process.env.NOVEL_CONVERSATION_STOREDIR;
+	const workspace = process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".";
 
 	let handle: NovelHandle;
 	if (hasNovelFd()) {
@@ -46,6 +50,17 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		} as unknown as NovelHandle;
 	}
 
+	// journal：storedir（manager 分配，经 env 传入）可用时建立 + open（恢复 seq）。
+	// 落盘接线（journalListener 注入 loop）在后续接入。
+	const journal =
+		storedir !== undefined && storedir.trim() !== ""
+			? new FileConversationJournalService({
+					conversationId,
+					filePath: join(storedir, "journal.jsonl"),
+				})
+			: undefined;
+	await journal?.open();
+
 	const provider = createProvider({
 		id: "default",
 		type: "openai",
@@ -53,7 +68,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		apiKey: process.env.NOVEL_PROVIDER_API_KEY,
 	});
 
-	const loop = buildNovelAgent({ workspace: ".", provider, handle });
+	const loop = buildNovelAgent({ workspace, provider, handle });
 	const conversation = new Conversation({
 		conversationId,
 		loop,

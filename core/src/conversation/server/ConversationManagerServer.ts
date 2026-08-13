@@ -11,6 +11,8 @@ import type {
 	ConversationExitComposeRequest,
 	Receipt,
 } from "../contract/types/index.js";
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import type {
 	ConversationMeta,
@@ -41,13 +43,30 @@ export interface ConversationFactory {
 export interface ConversationProcessSpawner {
 	/**
 	 * 派生 conversation 进程
-	 * @param opts conversationId + agent 类型 + parentId
+	 * @param opts conversationId + agent 类型 + parentId + storedir（manager 分配，journal 落盘目录）+ workspace
 	 * @returns 子进程 + 对端 handle
 	 */
-	spawn(opts: { conversationId: string; agentType: string; parentId?: string }): {
+	spawn(opts: {
+		conversationId: string;
+		agentType: string;
+		parentId?: string;
+		storedir: string;
+		workspace?: string;
+	}): {
 		child: ChildProcess;
 		handle: ConversationHandle;
 	};
+}
+
+/** manager 服务端构造选项 */
+export interface ConversationManagerServerOptions {
+	/**
+	 * 会话存储根目录（storedirRoot）。提供时：
+	 * - 每个 conversation 分配 storedirRoot/<conversationId>/（journal 落盘目录）；
+	 * - 构造时扫描目录种子 catalog（重启恢复）；
+	 * - 崩溃后 createOrResume 用同一 storedir 重派生（子进程 journal 重放续跑）。
+	 */
+	storedirRoot?: string;
 }
 
 /** manager 进程侧实现（内存 factory 测试 / 进程 spawn 生产） */
@@ -60,6 +79,10 @@ export class ConversationManagerServer implements Contract {
 	private readonly childProcesses = new Map<string, ChildProcess>();
 	/** conversationId → 摘要（目录） */
 	private readonly summaries = new Map<string, ConversationSummary>();
+	/** 主动终止的会话 id（exit 事件据此区分 crashed / stopped） */
+	private readonly terminatedIds = new Set<string>();
+	/** 会话存储根目录（undefined = 不落盘目录，storedir 为空串） */
+	private readonly storedirRoot?: string;
 	/** id 递增 */
 	private seq = 0;
 	/** conversation 工厂（内存模式） */
@@ -71,10 +94,54 @@ export class ConversationManagerServer implements Contract {
 	 * 构造 ManagerServer
 	 * @param factory conversation 工厂（内存模式，上层装配注入）
 	 * @param spawner 进程派生器（进程模式；缺省用 factory 内存）
+	 * @param opts 可选配置（storedirRoot：会话存储根目录，含目录扫描恢复）
 	 */
-	constructor(factory: ConversationFactory, spawner?: ConversationProcessSpawner) {
+	constructor(
+		factory: ConversationFactory,
+		spawner?: ConversationProcessSpawner,
+		opts?: ConversationManagerServerOptions,
+	) {
 		this.factory = factory;
 		this.spawner = spawner;
+		this.storedirRoot = opts?.storedirRoot;
+		if (this.storedirRoot !== undefined) this.scanCatalog();
+	}
+
+	/** 会话存储目录（storedirRoot 未提供时为空串；id 全局唯一，目录确定性可重派生复用） */
+	private allocStoredir(conversationId: string): string {
+		return this.storedirRoot !== undefined ? join(this.storedirRoot, conversationId) : "";
+	}
+
+	/** 扫描 storedirRoot 种子 catalog（重启恢复）：目录名 = conversationId，status:"stopped"，seq 取 conv_<n> 最大值防 id 撞车 */
+	private scanCatalog(): void {
+		if (this.storedirRoot === undefined || !existsSync(this.storedirRoot)) return;
+		for (const entry of readdirSync(this.storedirRoot, { withFileTypes: true })) {
+			if (!entry.isDirectory()) continue;
+			const conversationId = entry.name;
+			this.summaries.set(conversationId, {
+				conversationId,
+				name: conversationId,
+				storeDir: this.allocStoredir(conversationId),
+				status: "stopped",
+			});
+			const match = /^conv_(\d+)$/.exec(conversationId);
+			if (match) this.seq = Math.max(this.seq, Number(match[1]));
+		}
+	}
+
+	/** 挂子进程 exit 监听：主动终止（terminatedIds）→ 清记录置 stopped；否则标记 crashed（summary 保留供 createOrResume 重派生） */
+	private attachExit(conversationId: ConversationId, child: ChildProcess): void {
+		child.once("exit", () => {
+			const summary = this.summaries.get(conversationId);
+			if (this.terminatedIds.has(conversationId)) {
+				this.terminatedIds.delete(conversationId);
+				if (summary) summary.status = "stopped";
+			} else if (summary) {
+				summary.status = "crashed";
+			}
+			this.childProcesses.delete(conversationId);
+			this.handles.delete(conversationId);
+		});
 	}
 
 	/** conversation 启动报到 */
@@ -94,9 +161,13 @@ export class ConversationManagerServer implements Contract {
 		if (s) s.status = status;
 	}
 
-	/** 终止会话（进程模式 kill 子进程） */
+	/** 终止会话（进程模式 kill 子进程，保留目录；exit 事件置 stopped） */
 	async terminate(conversationId: ConversationId): Promise<void> {
-		this.childProcesses.get(conversationId)?.kill();
+		const child = this.childProcesses.get(conversationId);
+		if (child !== undefined) {
+			this.terminatedIds.add(conversationId);
+			child.kill();
+		}
 		this.childProcesses.delete(conversationId);
 		const conv = this.conversations.get(conversationId);
 		conv?.dispose();
@@ -114,22 +185,25 @@ export class ConversationManagerServer implements Contract {
 		parentId?: ConversationId;
 	}): Promise<ConversationRef> {
 		const conversationId = `conv_${++this.seq}`;
+		const storedir = this.allocStoredir(conversationId);
 		if (this.spawner) {
-			// 进程派生（生产）
+			// 进程派生（生产）：manager 分配 storedir，exit 监听登记
 			const { child, handle } = this.spawner.spawn({
 				conversationId,
 				agentType: opts.agentType,
 				parentId: opts.parentId,
+				storedir,
 			});
 			this.childProcesses.set(conversationId, child);
 			this.handles.set(conversationId, handle);
 			this.summaries.set(conversationId, {
 				conversationId,
 				name: conversationId,
-				storeDir: "",
+				storeDir: storedir,
 				status: "active",
 				parentId: opts.parentId,
 			});
+			this.attachExit(conversationId, child);
 			return { conversationId, handle };
 		}
 		// 内存（测试）
@@ -143,7 +217,7 @@ export class ConversationManagerServer implements Contract {
 		this.summaries.set(conversationId, {
 			conversationId,
 			name: conversationId,
-			storeDir: "",
+			storeDir: storedir,
 			status: "active",
 			parentId: opts.parentId,
 		});
@@ -159,16 +233,20 @@ export class ConversationManagerServer implements Contract {
 	async createOrResume(conversationId?: ConversationId): Promise<ConversationRef> {
 		const id = conversationId ?? `conv_${++this.seq}`;
 		if (this.spawner) {
-			// 进程模式：已派生则复用，否则 spawn 子进程
+			// 进程模式：子进程存活则复用；已死（crashed/未派生）用同一 storedir 重派生，子进程经 journal 重放续跑
 			let handle = this.handles.get(id);
-			if (handle === undefined) {
+			const existingChild = this.childProcesses.get(id);
+			if (handle === undefined || existingChild === undefined || existingChild.exitCode !== null) {
+				const storedir = this.allocStoredir(id);
 				const { child, handle: spawned } = this.spawner.spawn({
 					conversationId: id,
 					agentType: "novel",
+					storedir,
 				});
 				this.childProcesses.set(id, child);
 				this.handles.set(id, spawned);
-				this.summaries.set(id, { conversationId: id, name: id, storeDir: "", status: "active" });
+				this.summaries.set(id, { conversationId: id, name: id, storeDir: storedir, status: "active" });
+				this.attachExit(id, child);
 				handle = spawned;
 			}
 			return { conversationId: id, handle };
@@ -178,19 +256,35 @@ export class ConversationManagerServer implements Contract {
 			conversation = this.factory.create({ conversationId: id, agentType: "novel" });
 			this.conversations.set(id, conversation);
 			this.handles.set(id, conversation);
-			this.summaries.set(id, { conversationId: id, name: id, storeDir: "", status: "active" });
+			this.summaries.set(id, {
+				conversationId: id,
+				name: id,
+				storeDir: this.allocStoredir(id),
+				status: "active",
+			});
 		}
 		return { conversationId: id, handle: conversation };
 	}
 
-	/** 删除会话 */
+	/** 删除会话（kill 子进程 + 删目录；Windows 下刚 kill 的子进程句柄可能短暂占用目录，删除失败忽略） */
 	async delete(conversationId: ConversationId): Promise<void> {
-		this.childProcesses.get(conversationId)?.kill();
+		const child = this.childProcesses.get(conversationId);
+		if (child !== undefined) {
+			this.terminatedIds.add(conversationId);
+			child.kill();
+		}
 		this.childProcesses.delete(conversationId);
 		this.conversations.get(conversationId)?.dispose();
 		this.conversations.delete(conversationId);
 		this.handles.delete(conversationId);
 		this.summaries.delete(conversationId);
+		if (this.storedirRoot !== undefined) {
+			try {
+				rmSync(this.allocStoredir(conversationId), { recursive: true, force: true });
+			} catch {
+				// 目录暂被占用（Windows 子进程句柄），残留目录无副作用，忽略
+			}
+		}
 	}
 
 	/** 转发消息到目标 conversation（按消息类型分派） */

@@ -193,39 +193,73 @@ storedir/<conversationId>/
 
 ---
 
-## 7. 接口层（⏳ 待敲定 —— 当前阶段目标）
-
-从上层向下逐层敲定。目前定稿形状：
+## 7. 接口层（✅ 已落地）
 
 ```ts
-// contract/interaction.ts
+// contract/interaction/conversation.ts
 interface ConversationInteraction {
-  sendUserMessage(msg: ConversationUserMessage): Promise<Receipt>
-  sendUserCommand(cmd: ConversationUserCommand): Promise<Receipt>
-  sendSystemControl(ctrl: ConversationSystemControl): Promise<Receipt>
+  sendUserMessage(msg: ConversationUserMessage): Promise<Receipt>   // → loop.followup（入队）
+  sendUserCommand(cmd: ConversationUserCommand): Promise<Receipt>   // → loop.followup（转文本）
+  sendSystemControl(ctrl: ConversationSystemControl): Promise<Receipt>  // mode.set/stop/reload.config
 }
 
-/** 等待交互接收接口：conversation 实现，接收经 manager 转发来的 wait 请求 */
+// contract/interaction/waiting.ts —— 延迟 RPC（阻塞到决策）
 interface WaitingInteractionRequest {
-  sendApprovalRequest(req: ConversationApprovalRequest): Promise<Receipt>
-  sendAskingQuestionRequest(req: ConversationAskingRequest): Promise<Receipt>
-  sendExitComposeRequest(req: ConversationExitComposeRequest): Promise<Receipt>
+  sendApprovalRequest(req): Promise<ConversationApprovalDecision>   // 阻塞到 approve/reject/edit
+  sendAskingQuestionRequest(req): Promise<string>                   // 阻塞到回答
+  sendExitComposeRequest(req): Promise<void>                        // 阻塞到退出
 }
+
+// contract/types/message.ts —— 会话模式
+type ConversationMode = "review" | "bypass" | "compose"   // 默认 review
+type ConversationSystemControl =
+  | { type: "stop" } | { type: "reload.config" } | { type: "mode.set"; mode: ConversationMode }
 ```
 
-- **两个接口有区分**：`ConversationManagerServer.send*RequestTo` 是**转发接口**（发送方经 cms 转发，cms 查图后调目标 conversation 的 `WaitingInteractionRequest` 投递）；`WaitingInteractionRequest` 是**会话侧接收接口**（conversation 实现它接收 wait 请求）。
-- **wait 请求是方法调用，不是 journal 事件**：`approval.request` / `question` 事件已从 OutputEvent 删除。
-- **wait 是延迟 RPC（阻塞）**：`await sendApprovalRequest(req)` 挂起该 turn，直到决策/回答产生才 resolve；**决策/回答就是 RPC 返回值**，requestId = RPC 关联 id，不走 sendSystemControl。
-- **wait RPC 实现约束**：**无/超长超时**（审批可等几分钟，`withCallOptions` 设无限超时）；**进程死亡解挂**——终端应答方进程死亡时，整条链的 pending wait RPC 需 resolve 成错误，解挂所有 await 的 turn 并走优雅中止（handle 层负责）。
-- **history 不经 manager**：UI 经 `ConversationJournalReadOnlyService` 直接查。
-- **拆分已定**：`sendUserCommand`（turn lane，agent 可见）与 `sendSystemControl`（control lane，可抢占）分开；`sendSystemControl` = `stop` / `reload.config`。
+- **两个接口有区分**：`ConversationManagerServer.send*RequestTo` 是**转发接口**（经 cms 转发调目标 conversation）；`WaitingInteractionRequest` 是**会话侧接收接口**。
+- **wait 是延迟 RPC（阻塞）**：`await sendApprovalRequest(req)` 挂起直到决策；决策/回答 = RPC 返回值，requestId = RPC 关联 id。
+- **mode 时序**：`mode.set` 不立即生效——记 `pendingMode`，**下一次 turn 开始时**才切到 `activeMode`（避免影响进行中的 turn）。
+- **AgentLoop 输入队列**：`followup`（turn lane，FIFO 排队）/ `steer`（control lane，高优先级注入 system reminder）/ `stop`（取消 + 清队列）。
+- **事件统一**：`AgentLoop` 产出 `OutputEvent`（LLMessage 消息 + turn-start/end 边界 + delta 瞬态），`onOutputEvent` 持久订阅。
+- **journal 按 turn 存储**：写侧 `appendTurn`（LLMessage），读侧 `history` 返回 `OutputEvent`（无 delta），进程无关。
 - subagent 的审批：进程内由主 loop 决定；teammate 的审批路径：**经 manager 转发到 parent**（已定）。
 
 ---
 
-## 8. 待定决策清单（⏳）
+## 8. 落地状态（✅ 全量落地）
 
-1. **delta chunk 聚合**：暂缓——目前 delta 直走 kkrpc 背压，聚合 chunk 后续再评估。
-2. **sqlite 驱动**：better-sqlite3（同步，短查询可接受）vs worker 封装（严格不阻塞）。
-3. **接口层最终形态**（见第 7 节）。
-4. **实现顺序**：wire 协议（kkrpc 接入）→ conversation 持久化核心（journal+sqlite+replay）→ mailbox + output bus → AgentLoop 跑在 provider 上 → manager / novel-db 进程 + socket → subagent / teammate 递归。
+### 8.1 层结构（`core/src/`）
+
+```
+runtime/
+├── provider/      多模型（Anthropic/OpenAI/DeepSeek）+ 流式 + 错误分类 + 模型能力
+├── tool/          ToolDef/ToolHandler/ToolRegistry/ToolDispatcher + definitions（files/novel/todo）
+├── prompt/        PromptSection + sections（agent 6 段 + novel 4 段，静态/动态）
+├── agent/         AgentCapability/AgentDefinition + NovelAgent（buildNovelAgent 组装）
+├── registry/      InMemoryRegistry（buildCapability 组装能力）
+├── loop/          AgentLoop（输入队列 + round/turn）+ LoopContext
+├── nudge/         ContextNudgePolicy + definitions（todo_idle/compose_mode）
+├── compact/       ContextCompactPolicy + CompactPolicyChain
+├── todo/          TodoProtocol + InMemoryConversationTodoStore
+└── debug/         ProviderCallDebugger（jsonl + html diff）
+conversation/      contract + persistence（journal）+ server（Conversation/ManagerServer/Subagent）+ compose 状态机 + JournalBridge
+novel/             contract + model + InMemoryNovelStore（乐观锁）+ NovelDbServer + NovelHandle
+rpc/               kkrpc（call/RPCError/transport）
+event/             ZeroMQ（EventPublisher/Subscriber）
+log/               pino（进程独占）
+manager/           contract（ConversationManagerServer）
+init/              ConversationInit + ProcessSpawner（bootstrap）
+```
+
+### 8.2 关键机制落地
+
+- **乐观锁**：novel mutation `baseRevision` + 实体 `entityVersion`，stale 抛 `NovelStaleRevisionError`
+- **compose 状态机**：phase（idle/designing/pending/applied/discarded）+ active + preComposeMode
+- **进程化**：novel-db 进程、conversation 子进程 spawn、teammate 派生（ManagerServer 双模式）
+- **测试**：152 用例 / 28 文件全绿 + 真实 deepseek 多进程联调
+
+### 8.3 剩余待办
+
+1. **T12 ui/gui 接入**：恢复的 Electron/React（493 文件）对接新 core 接口。
+2. **sqlite 驱动**：当前 novel 用内存 store，sqlite 持久化待接（better-sqlite3 vs worker）。
+3. **delta chunk 聚合**：暂缓（delta 直走 kkrpc 背压）。

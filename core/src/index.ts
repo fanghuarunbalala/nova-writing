@@ -14,3 +14,4 @@ export * from "./novel/index.js";
 export * from "./conversation/index.js";
 export * from "./rpc/index.js";
 export * from "./log/index.js";
+export * from "./init/index.js";

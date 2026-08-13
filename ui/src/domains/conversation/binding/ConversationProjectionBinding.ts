@@ -106,7 +106,9 @@ export class ConversationProjectionBinding {
         return;
       }
       this.handle = handle;
-      const projection = new ConversationProjection(handle, this.conversationId);
+      const projection = new ConversationProjection(handle, this.conversationId, (opts) =>
+        this.api.conversations.history(this.conversationId, opts),
+      );
       this.projection = projection;
       this.unsubscribeProjection = projection.subscribe(() => this.publish());
       this.transition(CONVERSATION_PROJECTION_BINDING_STATE.active);

@@ -15,10 +15,15 @@ function makeTurn(seq: number, content: string): TurnContext {
   };
 }
 
+/** 嵌套布局：<root>/<conversationId>/journal.jsonl（写侧 storedir 布局） */
+function nestedFile(root: string, conversationId: string): string {
+  return join(root, conversationId, "journal.jsonl");
+}
+
 describe("FileConversationJournalService", () => {
   it("appendTurn 写 {seq, turn}（seq = turn.seq；同 seq 多写为快照更新；lastSeq 全行扫描恢复）", async () => {
     const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
-    const file = join(dir, "c1.jsonl");
+    const file = nestedFile(dir, "c1");
     const svc = new FileConversationJournalService({ conversationId: "c1", filePath: file });
     await svc.open();
     const r1 = await svc.appendTurn(makeTurn(1, "hi"));
@@ -38,7 +43,7 @@ describe("FileConversationJournalService", () => {
 
   it("open 自动创建缺失目录", async () => {
     const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
-    const file = join(dir, "missing", "c1.jsonl");
+    const file = join(dir, "missing", "c1", "journal.jsonl");
     const svc = new FileConversationJournalService({ conversationId: "c1", filePath: file });
     await svc.open();
     await svc.appendTurn(makeTurn(1, "hi"));
@@ -47,7 +52,7 @@ describe("FileConversationJournalService", () => {
 
   it("读侧 history 返回 OutputEvent（turn 边界 + 消息映射，无 delta）", async () => {
     const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
-    const file = join(dir, "c1.jsonl");
+    const file = nestedFile(dir, "c1");
     const svc = new FileConversationJournalService({ conversationId: "c1", filePath: file });
     await svc.open();
     await svc.appendTurn({
@@ -78,7 +83,7 @@ describe("FileConversationJournalService", () => {
 
   it("同 seq 多写，读侧取最新", async () => {
     const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
-    const file = join(dir, "c1.jsonl");
+    const file = nestedFile(dir, "c1");
     const svc = new FileConversationJournalService({ conversationId: "c1", filePath: file });
     await svc.open();
     await svc.appendTurn(makeTurn(1, "first"));
@@ -92,12 +97,27 @@ describe("FileConversationJournalService", () => {
 
   it("writeTurns 全量覆盖", async () => {
     const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
-    const file = join(dir, "c1.jsonl");
+    const file = nestedFile(dir, "c1");
     const svc = new FileConversationJournalService({ conversationId: "c1", filePath: file });
     await svc.open();
     await svc.appendTurn(makeTurn(1, "old"));
     await svc.writeTurns([makeTurn(2, "new")]);
     const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
     expect(lines).toHaveLength(1);
+  });
+
+  it("readTurns 返回去重后的持久化 turns（同 seq 取最新，无运行时闭包）", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
+    const file = nestedFile(dir, "c1");
+    const svc = new FileConversationJournalService({ conversationId: "c1", filePath: file });
+    await svc.open();
+    await svc.appendTurn(makeTurn(1, "first"));
+    await svc.appendTurn(makeTurn(1, "second"));
+    await svc.appendTurn(makeTurn(2, "third"));
+    const ro = new FileConversationJournalReadOnlyService({ journalDir: dir });
+    const turns = await ro.readTurns("c1");
+    expect(turns.map((t) => t.seq)).toEqual([1, 2]);
+    expect(turns[0]!.messages[0]!.content).toBe("second");
+    expect("appendTurnMessages" in turns[0]!).toBe(false);
   });
 });

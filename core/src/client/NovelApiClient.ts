@@ -10,6 +10,9 @@ import type { ConversationManagerServer } from "../conversation/server/Conversat
 import type { NovelStore } from "../novel/store.js";
 import type { ConversationRef, ConversationSummary } from "../manager/contract/types.js";
 import type { ConversationHandle, ConversationId } from "../conversation/contract/index.js";
+import type { OutputEvent } from "../conversation/contract/events/index.js";
+import type { ConversationJournalReadOnlyService } from "../conversation/contract/journal/index.js";
+import { FileConversationJournalReadOnlyService } from "../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import type { AgentType } from "../conversation/contract/types/index.js";
 import type { NovelMutation } from "../novel/contract/mutation.js";
 import type {
@@ -53,6 +56,17 @@ export interface ConversationApi {
 	 * @param conversationId 会话 id
 	 */
 	delete(conversationId: ConversationId): Promise<void>;
+	/**
+	 * 读取会话已落盘历史（journal 沙盒子集 → OutputEvent 序列，无 delta）。
+	 * renderer 无文件权限，经 Main 代读。
+	 * @param conversationId 会话 id
+	 * @param opts 可选分页（fromSeq / limit）
+	 * @returns 已落盘事件序列（turn-start/end 边界 + user/assistant.message + tool-call 事件）
+	 */
+	history(
+		conversationId: ConversationId,
+		opts?: { fromSeq?: number; limit?: number },
+	): Promise<OutputEvent[]>;
 }
 
 /** novel 查询子 API（按 op 包装 NovelHandle.query 的强类型面） */
@@ -109,21 +123,31 @@ export interface NovelApiClientOptions {
 	manager: ConversationManagerHandle;
 	/** novel 客户端（查询 / 变更） */
 	novel: NovelHandle;
+	/**
+	 * history 查询注入（内存测试/特殊装配用；renderer 经 wrap 不经此构造）。
+	 * 缺省返回空序列（纯实时流）。
+	 */
+	history?: (
+		conversationId: ConversationId,
+		opts?: { fromSeq?: number; limit?: number },
+	) => Promise<OutputEvent[]>;
 }
 
 /**
  * 创建客户端门面
- * @param options manager + novel handle
+ * @param options manager + novel handle + 可选 history 注入
  * @returns NovelApiClient
  */
 export function createNovelApiClient(options: NovelApiClientOptions): NovelApiClient {
-	const { manager, novel } = options;
+	const { manager, novel, history } = options;
 	return {
 		conversations: {
 			list: () => manager.list(),
 			create: (agentType = "novel") => manager.spawnConversation({ agentType }),
 			open: async (conversationId) => (await manager.createOrResume(conversationId)).handle,
 			delete: (conversationId) => manager.delete(conversationId),
+			history: (conversationId, opts) =>
+				history !== undefined ? history(conversationId, opts) : Promise.resolve([]),
 		},
 		novel: {
 			overview: {
@@ -166,6 +190,11 @@ export interface NovelApiServerOptions {
 	 * 须由 expose 侧同一构建注入，才能把返回的 handle 注册为 remote ref）
 	 */
 	proxy?: <T extends object>(value: T) => T;
+	/**
+	 * journal 根目录（conversation 存储根，`<dir>/<conversationId>/journal.jsonl`）。
+	 * 提供时 conversations.history 由 Main 侧代读实现；缺省返回空序列。
+	 */
+	journalDir?: string;
 }
 
 /**
@@ -177,6 +206,11 @@ export interface NovelApiServerOptions {
 export function createNovelApiServer(options: NovelApiServerOptions): NovelApiClient {
 	const { manager, novel } = options;
 	const mark = options.proxy ?? (<T extends object>(value: T): T => value);
+	// history 代读（renderer 无文件权限，Main 侧读 journal 沙盒）
+	const readOnly: ConversationJournalReadOnlyService | undefined =
+		options.journalDir !== undefined
+			? new FileConversationJournalReadOnlyService({ journalDir: options.journalDir })
+			: undefined;
 	return {
 		conversations: {
 			list: () => manager.list(),
@@ -188,6 +222,8 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 			open: async (conversationId) =>
 				mark((await manager.createOrResume(conversationId)).handle),
 			delete: (conversationId) => manager.delete(conversationId),
+			history: (conversationId, opts) =>
+				readOnly !== undefined ? readOnly.history(conversationId, opts ?? {}) : Promise.resolve([]),
 		},
 		novel: {
 			overview: {

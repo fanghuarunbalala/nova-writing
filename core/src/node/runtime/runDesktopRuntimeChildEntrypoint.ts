@@ -9,11 +9,14 @@ import { join } from "node:path";
 import { createStdioTransport } from "../../rpc/transport.js";
 import { Conversation } from "../../conversation/server/Conversation.js";
 import { FileConversationJournalService } from "../../conversation/persistence/FileConversationJournalService.js";
+import { FileConversationJournalReadOnlyService } from "../../conversation/persistence/FileConversationJournalReadOnlyService.js";
+import { journalListener } from "../../conversation/JournalBridge.js";
 import { runConversation } from "../../init/ConversationInit.js";
 import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
 import { createProvider } from "../../runtime/provider/Provider.js";
 import { buildNovelAgent } from "../../runtime/agent/NovelAgent.js";
+import type { LLMessage } from "../../runtime/provider/types.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 
@@ -50,8 +53,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		} as unknown as NovelHandle;
 	}
 
-	// journal：storedir（manager 分配，经 env 传入）可用时建立 + open（恢复 seq）。
-	// 落盘接线（journalListener 注入 loop）在后续接入。
+	// journal：storedir（manager 分配，经 env 传入）可用时建立 + open（恢复 seq）
 	const journal =
 		storedir !== undefined && storedir.trim() !== ""
 			? new FileConversationJournalService({
@@ -61,6 +63,16 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			: undefined;
 	await journal?.open();
 
+	// 恢复上下文：journal 已落盘 turns → 历史消息 + resumeSeq（崩溃重派生续跑）
+	let turnMessages: LLMessage[] | undefined;
+	let resumeSeq: number | undefined;
+	if (journal !== undefined && storedir !== undefined) {
+		const readOnly = new FileConversationJournalReadOnlyService({ journalDir: storedir });
+		const turns = await readOnly.readTurns(conversationId);
+		turnMessages = turns.flatMap((t) => t.messages);
+		resumeSeq = journal.lastSeq;
+	}
+
 	const provider = createProvider({
 		id: "default",
 		type: "openai",
@@ -68,7 +80,15 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		apiKey: process.env.NOVEL_PROVIDER_API_KEY,
 	});
 
-	const loop = buildNovelAgent({ workspace, provider, handle });
+	const loop = buildNovelAgent({
+		workspace,
+		provider,
+		handle,
+		conversationId,
+		listeners: journal !== undefined ? [journalListener(journal)] : undefined,
+		turnMessages,
+		resumeSeq,
+	});
 	const conversation = new Conversation({
 		conversationId,
 		loop,

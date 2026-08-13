@@ -53,10 +53,18 @@ export interface ConversationProjectionSnapshot {
 /** 订阅回调 */
 export type ConversationProjectionListener = () => void;
 
+/** history 查询注入（journal 已落盘事件重放；返回 OutputEvent 序列，无 delta） */
+export type ConversationProjectionHistory = (opts: {
+	fromSeq?: number;
+	limit?: number;
+}) => Promise<OutputEvent[]>;
+
 /** 精简投影器：累积 OutputEvent → timeline 列表 */
 export class ConversationProjection {
 	private readonly conversationId: ConversationId;
 	private readonly handle: ConversationHandle;
+	/** history 查询（缺省空序列：纯实时流，不重放） */
+	private readonly history: ConversationProjectionHistory;
 	private readonly listeners = new Set<ConversationProjectionListener>();
 	private timeline: ConversationTimelineItem[] = [];
 	/** assistant.delta 累积缓冲 */
@@ -75,12 +83,18 @@ export class ConversationProjection {
 	private stopRequested = false;
 
 	/**
-	 * @param handle 会话对端 handle（events 事件流来源）
+	 * @param handle 会话对端 handle（事件流来源）
 	 * @param conversationId 会话 id（快照归属）
+	 * @param history journal 已落盘历史查询（恢复重放用；缺省纯实时流）
 	 */
-	constructor(handle: ConversationHandle, conversationId: ConversationId) {
+	constructor(
+		handle: ConversationHandle,
+		conversationId: ConversationId,
+		history?: ConversationProjectionHistory,
+	) {
 		this.handle = handle;
 		this.conversationId = conversationId;
+		this.history = history ?? (async () => []);
 		this.snapshot = this.buildSnapshot();
 	}
 
@@ -101,22 +115,56 @@ export class ConversationProjection {
 		};
 	}
 
-	/** 开始消费事件流（幂等：running 时直接返回） */
+	/**
+	 * 开始消费事件流（幂等：running 时直接返回）。
+	 * 顺序：先订阅（缓冲）→ 拉 journal 历史应用 → 冲刷缓冲（persist 按 seq 去重、delta 由 live-turn 门控），
+	 * 订阅与重放之间无丢失窗口。
+	 */
 	async start(): Promise<void> {
 		if (this.state === "running") return;
 		this.stopRequested = false;
 		const generation = ++this.generation;
 		this.transition("running");
 		try {
-			// listener 经 proxy() 标记：kkrpc/remote-refs 的 codec 只编码 WeakSet 已标记的函数参数
-			// （未标记抛 RPCEncodeError）。内存/plain kkrpc 通道下标记是无害 no-op。
+			// ① 先订阅（进入缓冲模式）：listener 经 proxy() 标记——kkrpc/remote-refs 的 codec
+			// 只编码 WeakSet 已标记的函数参数（内存/plain kkrpc 通道下标记是无害 no-op）
+			const buffer: OutputEvent[] = [];
+			let replayed = false;
+			let historyMaxSeq = 0;
 			await this.handle.subscribeEvents(
 				proxy((event) => {
 					if (this.stopRequested || generation !== this.generation) return;
-					this.apply(event);
-					this.publish();
+					if (replayed) {
+						this.apply(event);
+						this.publish();
+					} else {
+						buffer.push(event);
+					}
 				}),
 			);
+			// ② 拉 journal 已落盘历史并应用（fromSeq 从当前进度之后开始）
+			const events = await this.history({ fromSeq: this.lastAppliedSequence + 1, limit: 256 });
+			if (this.stopRequested || generation !== this.generation) return;
+			for (const event of events) {
+				this.apply(event);
+				if ("seq" in event) historyMaxSeq = Math.max(historyMaxSeq, event.seq);
+			}
+			this.publish();
+			replayed = true;
+			// ③ 冲刷缓冲：persist 事件仅当 seq > historyMaxSeq 才应用（历史已覆盖的去重）；
+			// delta 仅当处于 live turn（seq > historyMaxSeq 的 turn-start/user.message 已开）才应用
+			let liveTurn = false;
+			for (const event of buffer) {
+				if ("seq" in event && event.persist) {
+					if (event.seq <= historyMaxSeq) continue;
+					this.apply(event);
+					if (event.type === "turn-start" || event.type === "user.message") liveTurn = true;
+					else if (event.type === "turn-end") liveTurn = false;
+				} else if (liveTurn) {
+					this.apply(event);
+				}
+			}
+			this.publish();
 		} catch (err) {
 			if (generation === this.generation && !this.stopRequested) {
 				this.error = toErrorSnapshot(err);
@@ -125,16 +173,20 @@ export class ConversationProjection {
 		}
 	}
 
-	/** 停止消费（取消事件循环） */
+	/** 停止消费（事件回调变 no-op；订阅由 handle.dispose 拆除） */
 	async stop(): Promise<void> {
 		this.stopRequested = true;
 		this.generation += 1;
 		if (this.state !== "stopped") this.transition("stopped");
 	}
 
-	/** 恢复（精简版：无 journal 重放，no-op，保留接口对齐） */
+	/**
+	 * 恢复：重放 journal 增量 + 重建实时订阅（fromSeq = lastAppliedSequence）。
+	 * 注意：旧订阅 listener 仍注册在 handle 上（变 no-op），由 dispose 统一拆除。
+	 */
 	async resume(): Promise<void> {
-		// 本期不重放历史，仅实时流；后续接 journal 时在此重放 fromSeq。
+		await this.stop();
+		await this.start();
 	}
 
 	/** 应用一条 OutputEvent */

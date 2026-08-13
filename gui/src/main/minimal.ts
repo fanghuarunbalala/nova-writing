@@ -128,7 +128,7 @@ async function main(): Promise<void> {
   const store = new SqliteNovelStore(join(app.getPath("userData"), "novel.db"));
   const conversationsRoot = join(app.getPath("userData"), "novel-storage", "conversations");
   const manager = createManager(store, conversationsRoot);
-  const serverApi = createNovelApiServer({ manager, novel: store, proxy });
+  const serverApi = createNovelApiServer({ manager, novel: store, proxy, journalDir: conversationsRoot });
 
   // config：JSON 文件持久化（凭据暂明文，safeStorage cipher 后续接）
   const configHome = new NodeConfigHomeResolver(app.getPath("userData"));

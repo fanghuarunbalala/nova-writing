@@ -29,7 +29,7 @@ const provider = createProvider({
 
 // journal（main 会话）
 const dir = mkdtempSync(join(tmpdir(), "journal-"));
-const journal = new FileConversationJournalService({ conversationId: "main", filePath: join(dir, "main.jsonl") });
+const journal = new FileConversationJournalService({ conversationId: "main", filePath: join(dir, "main", "journal.jsonl") });
 await journal.open();
 
 const loop = new AgentLoop({
@@ -57,4 +57,4 @@ console.log("history 事件类型序列：", events.map((e) => e.type).join(" �
 console.log("turn 数：", events.filter((e) => e.type === "turn-start").length);
 console.log("含 delta？", events.some((e) => e.type === "assistant.delta"));
 console.log("最后一条 user.message 文本：", events.filter((e) => e.type === "user.message").at(-1)?.text);
-console.log("journal 文件：", join(dir, "main.jsonl"));
+console.log("journal 文件：", join(dir, "main", "journal.jsonl"));

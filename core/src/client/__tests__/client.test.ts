@@ -1,7 +1,11 @@
 import { describe, expect, it, afterAll } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expose, wrap } from "kkrpc";
 import { createMemoryTransportPair } from "../../rpc/transport.js";
 import { Conversation } from "../../conversation/server/Conversation.js";
+import { FileConversationJournalService } from "../../conversation/persistence/FileConversationJournalService.js";
 import {
 	ConversationManagerServer,
 	type ConversationFactory,
@@ -108,6 +112,85 @@ describe("ConversationProjection（精简投影）", () => {
 	});
 });
 
+describe("ConversationProjection（恢复重放）", () => {
+	it("先订阅缓冲 → history 应用 → 冲刷（历史已覆盖去重 + delta live-turn 门控，无丢失/重复）", async () => {
+		// 订阅先行：start 挂在 history promise 上，期间事件进缓冲
+		let listener: ((e: OutputEvent) => void) | undefined;
+		const handle: ConversationHandle = {
+			...fakeHandle([]),
+			subscribeEvents: async (l: (e: OutputEvent) => void) => {
+				listener = l;
+			},
+		};
+		let resolveHistory!: (events: OutputEvent[]) => void;
+		const historyPromise = new Promise<OutputEvent[]>((r) => {
+			resolveHistory = r;
+		});
+		const historyEvents: OutputEvent[] = [
+			evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 }),
+			evt({ type: "user.message", persist: true, seq: 1, text: "历史问题" }),
+			evt({ type: "assistant.message", persist: true, seq: 1, text: "历史回复" }),
+			evt({ type: "turn-end", persist: true, seq: 1, turnSeq: 1 }),
+		];
+		const projection = new ConversationProjection(handle, "c1", () => historyPromise);
+		const startPromise = projection.start();
+		// 等 start 进入 history 阶段后向缓冲推事件（订阅与重放间隙）
+		await new Promise((r) => setTimeout(r, 0));
+		listener?.(evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 })); // 已被历史覆盖 → 丢弃
+		listener?.(evt({ type: "assistant.delta", text: "尾流" })); // live turn 未开 → 丢弃
+		listener?.(evt({ type: "turn-start", persist: true, seq: 2, turnSeq: 2 })); // 新 turn
+		listener?.(evt({ type: "user.message", persist: true, seq: 2, text: "新问题" }));
+		listener?.(evt({ type: "assistant.delta", text: "新" }));
+		listener?.(evt({ type: "assistant.delta", text: "答" }));
+		listener?.(evt({ type: "assistant.message", persist: true, seq: 2, text: "新答" })); // 替换活跃流式项
+		listener?.(evt({ type: "turn-end", persist: true, seq: 2, turnSeq: 2 }));
+		listener?.(evt({ type: "assistant.delta", text: "再尾" })); // turn 已收口 → 丢弃
+		resolveHistory(historyEvents);
+		await startPromise;
+
+		const snapshot = projection.getSnapshot();
+		expect(snapshot.timeline.map((t) => t.text)).toEqual(["历史问题", "历史回复", "新问题", "新答"]);
+		expect(snapshot.timeline[3]).toMatchObject({ kind: "assistant", streaming: false });
+		expect(snapshot.lastAppliedSequence).toBe(2);
+	});
+
+	it("replayed 之后实时事件直通", async () => {
+		let listener: ((e: OutputEvent) => void) | undefined;
+		const handle: ConversationHandle = {
+			...fakeHandle([]),
+			subscribeEvents: async (l: (e: OutputEvent) => void) => {
+				listener = l;
+			},
+		};
+		const projection = new ConversationProjection(handle, "c1", async () => []);
+		await projection.start();
+		listener?.(evt({ type: "user.message", persist: true, seq: 1, text: "直接" }));
+		expect(projection.getSnapshot().timeline.map((t) => t.text)).toEqual(["直接"]);
+	});
+
+	it("resume 重放增量（fromSeq = lastAppliedSequence）", async () => {
+		const historyCalls: Array<{ fromSeq?: number }> = [];
+		let listener: ((e: OutputEvent) => void) | undefined;
+		const handle: ConversationHandle = {
+			...fakeHandle([]),
+			subscribeEvents: async (l: (e: OutputEvent) => void) => {
+				listener = l;
+			},
+		};
+		const projection = new ConversationProjection(handle, "c1", async (opts) => {
+			historyCalls.push(opts);
+			if (opts.fromSeq === 1) return [];
+			return [evt({ type: "user.message", persist: true, seq: 2, text: "增量" })];
+		});
+		await projection.start();
+		expect(historyCalls[0]).toMatchObject({ fromSeq: 1 });
+		listener?.(evt({ type: "user.message", persist: true, seq: 1, text: "首条" }));
+		await projection.resume();
+		expect(historyCalls[1]).toMatchObject({ fromSeq: 2 }); // lastAppliedSequence=1 → from 2
+		expect(projection.getSnapshot().timeline.map((t) => t.text)).toEqual(["首条", "增量"]);
+	});
+});
+
 describe("createNovelApiClient（门面）", () => {
 	const publisher = new EventPublisher("inproc://client-test-events");
 
@@ -168,6 +251,42 @@ describe("createNovelApiClient（门面）", () => {
 		const receipt = await handle.sendUserMessage({ text: "hi" });
 		expect(receipt).toMatchObject({ seq: 1 });
 		handle.dispose();
+	});
+
+	it("conversations.history 经 journalDir 代读（嵌套布局 journal 沙盒）", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "facade-jrnl-"));
+		const journal = new FileConversationJournalService({
+			conversationId: "c1",
+			filePath: join(dir, "c1", "journal.jsonl"),
+		});
+		await journal.open();
+		await journal.appendTurn({
+			seq: 1,
+			messages: [
+				{ role: "user", content: "hi" },
+				{ role: "assistant", content: "hello" },
+			],
+			ts: "t",
+			appendTurnMessages: () => {},
+		});
+		const serverApi = createNovelApiServer({
+			manager: new ConversationManagerServer(conversationFactory()),
+			novel: new InMemoryNovelStore(),
+			journalDir: dir,
+		});
+		const events = await serverApi.conversations.history("c1", {});
+		expect(events.map((e) => e.type)).toEqual([
+			"turn-start",
+			"user.message",
+			"assistant.message",
+			"turn-end",
+		]);
+		// 无 journalDir 时返回空序列
+		const noJournalApi = createNovelApiServer({
+			manager: new ConversationManagerServer(conversationFactory()),
+			novel: new InMemoryNovelStore(),
+		});
+		expect(await noJournalApi.conversations.history("c1", {})).toEqual([]);
 	});
 
 	it("createNovelApiServer ↔ wrap 全程往返（服务端门面直连）", async () => {

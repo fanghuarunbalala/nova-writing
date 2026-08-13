@@ -5,16 +5,11 @@
 
 import { dispose, wrap } from "kkrpc";
 import type { RPCMessage, Transport } from "kkrpc";
-import { call } from "../../rpc/index.js";
+import { call } from "../../rpc/call.js";
+import type { NovelApi } from "../contract/api.js";
 import type { NovelQuery } from "../contract/query.js";
 import type { NovelMutation } from "../contract/mutation.js";
 import type { NovelMutateResult } from "../contract/snapshot.js";
-
-/** novel-db 对外 API（与 NovelDbServer 的 expose 类型一致） */
-export interface NovelApi {
-	query(q: NovelQuery): Promise<unknown>;
-	mutate(m: NovelMutation): Promise<NovelMutateResult>;
-}
 
 /** novel-db 客户端 handle */
 export class NovelHandle {

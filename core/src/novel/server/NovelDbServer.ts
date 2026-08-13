@@ -8,26 +8,11 @@ import { expose, type ExposedController } from "kkrpc";
 import type { RPCMessage, Transport } from "kkrpc";
 import { EventPublisher, NOVEL_CHANGED } from "../../event/index.js";
 import type { NovelStore } from "../store.js";
+import type { NovelApi } from "../contract/api.js";
 import type { NovelQuery } from "../contract/query.js";
 import type { NovelMutation } from "../contract/mutation.js";
 import type { NovelChangeEvent } from "../contract/event.js";
 import type { NovelMutateResult } from "../contract/snapshot.js";
-
-/** novel-db 对外 API（与 NovelHandle 的 wrap 类型一致） */
-export interface NovelApi {
-	/**
-	 * 查询
-	 * @param q 查询
-	 * @returns 对应 snapshot
-	 */
-	query(q: NovelQuery): Promise<unknown>;
-	/**
-	 * 变更（成功经 ZeroMQ 广播 novel.changed）
-	 * @param m 变更
-	 * @returns 变更结果
-	 */
-	mutate(m: NovelMutation): Promise<NovelMutateResult>;
-}
 
 /** novel-db RPC server */
 export class NovelDbServer {

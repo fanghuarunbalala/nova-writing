@@ -5,14 +5,8 @@
  * 说明：core Location 无 locState 字段，snapshot 暂统一 "filed"；
  * 草稿新增态等 core 契约落地后补充。role 取首个 alias，profile 取 authorNotes。
  */
-import {
-  canonicalNovelQueryScope,
-  noopLogger,
-  type Location,
-  type LocationId,
-  type Logger,
-  type NovelApiClient,
-} from "@novel/core";
+import type { Location, LocationId, Logger, NovelApiClient } from "@novel/core";
+import { noopLogger } from "@novel/core/client";
 import { ExternalStore } from "../../../../shared/state/ExternalStore.js";
 import type { NovelDomainError } from "../../outline/store/StoryOutlineTreeStore.js";
 
@@ -78,12 +72,12 @@ export class LocationStore extends ExternalStore<LocationSnapshot> {
       workspaceId: capturedId,
     });
     try {
-      const result = await this.api.novel.locations.list(canonicalNovelQueryScope);
+      const result = await this.api.novel.locations.list();
       if (generation !== this.generation) return;
       this.setSnapshot({
         phase: "ready",
         workspaceId: capturedId,
-        locations: Object.freeze(result.locations.map(captureSummary)),
+        locations: Object.freeze(result.map(captureSummary)),
         detailCache: new Map<string, LocationDetail>(),
         selectedId: undefined,
         error: undefined,
@@ -110,12 +104,9 @@ export class LocationStore extends ExternalStore<LocationSnapshot> {
     if (this.snapshot.detailCache.has(capturedId)) return;
     const generation = this.generation;
     try {
-      const result = await this.api.novel.locations.get(
-        canonicalNovelQueryScope,
-        capturedId as LocationId,
-      );
-      if (generation !== this.generation || result.location === undefined) return;
-      const detail = captureDetail(result.location);
+      const location = await this.api.novel.locations.get(capturedId as LocationId);
+      if (generation !== this.generation) return;
+      const detail = captureDetail(location);
       const detailCache = new Map(this.snapshot.detailCache);
       detailCache.set(capturedId, detail);
       this.setSnapshot({ ...this.snapshot, detailCache });

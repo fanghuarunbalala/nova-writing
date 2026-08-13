@@ -5,10 +5,7 @@
  * 映射说明：scope 仅保留 ARC/SCENE（saga/sequence/custom 归入 SCENE）；
  * pending + blockState -> blocked；blockedReason/abandonedReason 取 note 优先。
  */
-import type {
-  StoryUnit,
-  StoryUnitProgressProjection,
-} from "@novel/core";
+import type { StoryUnit } from "@novel/core";
 
 export interface StoryOutlineTreeNode {
   readonly unitId: string;
@@ -50,17 +47,12 @@ function mapRealNode(unit: StoryUnit): StoryOutlineTreeNode["realNode"] {
 }
 
 export const StoryOutlineTreeProjection = {
-  build(
-    units: readonly StoryUnit[],
-    progress: readonly StoryUnitProgressProjection[] = [],
-  ): readonly StoryOutlineTreeNode[] {
-    const progressByUnitId = new Map(progress.map((item) => [item.storyUnitId, item]));
+  build(units: readonly StoryUnit[]): readonly StoryOutlineTreeNode[] {
     interface MutableNode extends Omit<StoryOutlineTreeNode, "children"> {
       children: MutableNode[];
     }
     const nodes = new Map<string, MutableNode>();
     for (const unit of units) {
-      const unitProgress = progressByUnitId.get(unit.id);
       nodes.set(unit.id, {
         unitId: unit.id,
         label: unit.title,
@@ -72,9 +64,6 @@ export const StoryOutlineTreeProjection = {
           : {}),
         ...(unit.abandonment !== undefined
           ? { abandonedReason: unit.abandonment.note ?? unit.abandonment.reasonCode }
-          : {}),
-        ...(unitProgress !== undefined && unitProgress.totalLeafCount > 0
-          ? { progress: { completed: unitProgress.completedLeafCount, total: unitProgress.totalLeafCount } }
           : {}),
         children: [],
       });

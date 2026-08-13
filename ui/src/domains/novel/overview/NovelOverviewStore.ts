@@ -9,12 +9,8 @@
  * - core overview 无 label 字段，snapshot.label 暂取 novelId 占位；
  *   等 workspace metadata API（spec §11 范围外）落地后替换。
  */
-import {
-  canonicalNovelQueryScope,
-  noopLogger,
-  type Logger,
-  type NovelApiClient,
-} from "@novel/core";
+import type { Logger, NovelApiClient } from "@novel/core";
+import { noopLogger } from "@novel/core/client";
 import { ExternalStore } from "../../../shared/state/ExternalStore.js";
 
 export type NovelOverviewPhase = "idle" | "loading" | "ready" | "error";
@@ -85,20 +81,20 @@ export class NovelOverviewStore extends ExternalStore<NovelOverviewSnapshot> {
     });
     return this.run(generation, capturedId, async () => {
       this.logger.info("novel_overview.load_started");
-      const overview = await this.api.novel.overview.get(canonicalNovelQueryScope);
+      const overview = await this.api.novel.overview.get();
       return {
         phase: "ready" as const,
         workspaceId: capturedId,
         novelId: overview.novelId,
-        label: overview.novelId,
-        sourceRevision: overview.sourceRevision,
+        label: overview.title ?? overview.novelId,
+        sourceRevision: undefined,
         counts: {
-          storyUnitCount: overview.counts.storyUnitCount,
-          characterCount: overview.counts.characterCount,
-          locationCount: overview.counts.locationCount,
-          volumeCount: overview.counts.volumeCount,
-          chapterCount: overview.counts.chapterCount,
-          paragraphCount: overview.counts.paragraphCount,
+          storyUnitCount: overview.counts.storyUnits,
+          characterCount: overview.counts.characters,
+          locationCount: overview.counts.locations,
+          volumeCount: 0,
+          chapterCount: 0,
+          paragraphCount: overview.counts.paragraphs,
         },
         error: undefined,
       };

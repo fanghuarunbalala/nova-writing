@@ -3,12 +3,8 @@
  *
  * 大纲树域 store：加载 core outline、构建树、维护展开/选中本地视图状态。
  */
-import {
-  canonicalNovelQueryScope,
-  noopLogger,
-  type Logger,
-  type NovelApiClient,
-} from "@novel/core";
+import type { Logger, NovelApiClient } from "@novel/core";
+import { noopLogger } from "@novel/core/client";
 import { ExternalStore } from "../../../../shared/state/ExternalStore.js";
 import {
   StoryOutlineTreeProjection,
@@ -61,12 +57,9 @@ export class StoryOutlineTreeStore extends ExternalStore<StoryOutlineTreeSnapsho
       workspaceId: capturedId,
     });
     try {
-      const outline = await this.api.novel.outline.get(canonicalNovelQueryScope);
+      const outline = await this.api.novel.outline.get();
       if (generation !== this.generation) return;
-      const tree = StoryOutlineTreeProjection.build(
-        outline.tree?.units ?? [],
-        outline.progress,
-      );
+      const tree = StoryOutlineTreeProjection.build(outline.units);
       this.setSnapshot({
         phase: "ready",
         workspaceId: capturedId,

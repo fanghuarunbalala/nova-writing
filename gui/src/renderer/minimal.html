@@ -4,21 +4,34 @@
   <meta charset="utf-8" />
   <title>Novel 最小对话</title>
   <style>
-    body { font-family: sans-serif; margin: 16px; }
-    #messages { border: 1px solid #ccc; border-radius: 8px; padding: 12px; min-height: 300px; margin-bottom: 12px; overflow-y: auto; white-space: pre-wrap; }
+    body { font-family: sans-serif; margin: 16px; display: flex; gap: 16px; }
+    #sidebar { width: 200px; display: flex; flex-direction: column; gap: 8px; }
+    #conversations { display: flex; flex-direction: column; gap: 4px; }
+    #conversations button { text-align: left; padding: 6px 8px; }
+    #main { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+    #messages { border: 1px solid #ccc; border-radius: 8px; padding: 12px; min-height: 300px; overflow-y: auto; white-space: pre-wrap; }
     .user { color: #0550ae; }
     .assistant { color: #116329; }
+    #novel { color: #666; font-size: 13px; }
     #input { display: flex; gap: 8px; }
     input { flex: 1; padding: 8px; font-size: 14px; }
     button { padding: 8px 16px; }
   </style>
 </head>
 <body>
-  <h2>Novel 对话（T12 最小验证）</h2>
-  <div id="messages"></div>
-  <div id="input">
-    <input id="text" placeholder="输入消息…" />
-    <button id="send">发送</button>
+  <div id="sidebar">
+    <h3>会话</h3>
+    <button id="new">新建</button>
+    <div id="conversations"></div>
+    <div id="novel"></div>
+  </div>
+  <div id="main">
+    <h2>Novel 对话（T12 最小验证）</h2>
+    <div id="messages"></div>
+    <div id="input">
+      <input id="text" placeholder="输入消息…" />
+      <button id="send">发送</button>
+    </div>
   </div>
   <script type="module" src="./renderer.js"></script>
 </body>

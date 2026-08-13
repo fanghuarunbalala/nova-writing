@@ -1,62 +1,92 @@
 /**
- * 最小 renderer 脚本（browser 环境，esbuild bundle）：wrap → ConversationHandle → 对话。
- * 事件经 preload 的 onEvent 订阅（main 侧 webContents.send 推送），unary 方法经 kkrpc bridge。
+ * 最小 renderer 脚本（browser 环境）：wrap → NovelApiClient 门面 → 对话列表/时间线/novel 总览。
+ * 只 import kkrpc（browser 版）+ @novel/core/client（browser-safe，无 pino/zeromq）。
+ * 事件经 ConversationProjection 消费 handle.events()（kkrpc 流式 remote ref），不再走 webContents push。
  */
 import { wrap } from "kkrpc";
 import { electronIpcTransport } from "kkrpc/electron";
+import { ConversationProjection, type NovelApiClient } from "@novel/core/client";
 
 declare global {
   interface Window {
-    novelApi: {
-      bridge: unknown;
-      onEvent: (callback: (evt: { type: string; text?: string }) => void) => () => void;
-    };
+    novelApi: { bridge: unknown };
   }
 }
-
-// 错误诊断：捕获 renderer 报错，显示在页面上
-window.addEventListener("error", (e) => {
-  const errDiv = document.createElement("div");
-  errDiv.style.color = "red";
-  errDiv.textContent = "[renderer error] " + e.message;
-  document.body.appendChild(errDiv);
-});
 
 const bridge = (window.novelApi as { bridge?: unknown } | undefined)?.bridge;
 if (!bridge) {
   throw new Error("window.novelApi.bridge 未暴露（preload 未生效？）");
 }
 const transport = electronIpcTransport({ endpoint: bridge as never, channel: "novel-rpc" });
-const handle = wrap(transport) as {
-  sendUserMessage(msg: { text: string }): Promise<unknown>;
-};
+const api = wrap<NovelApiClient>(transport);
 
-const messages = document.getElementById("messages")!;
-const input = document.getElementById("text") as HTMLInputElement;
+type OpenedHandle = Awaited<ReturnType<NovelApiClient["conversations"]["open"]>>;
+let activeHandle: OpenedHandle | undefined;
+let activeProjection: ConversationProjection | undefined;
+
+const listEl = document.getElementById("conversations")!;
+const messagesEl = document.getElementById("messages")!;
+const novelEl = document.getElementById("novel")!;
+const inputEl = document.getElementById("text") as HTMLInputElement;
 const sendBtn = document.getElementById("send")!;
+const newBtn = document.getElementById("new")!;
 
-function append(cls: string, text: string): void {
+function appendMessage(cls: string, text: string): void {
   const div = document.createElement("div");
   div.className = cls;
   div.textContent = text;
-  messages.appendChild(div);
-  messages.scrollTop = messages.scrollHeight;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-// 订阅事件（main 侧推送）
-window.novelApi.onEvent((evt) => {
-  if (evt.type === "user.message" && evt.text) append("user", "👤 " + evt.text);
-  else if (evt.type === "assistant.delta" && evt.text) append("assistant", evt.text);
-});
+function renderTimeline(): void {
+  if (!activeProjection) return;
+  messagesEl.textContent = "";
+  for (const item of activeProjection.getSnapshot().timeline) {
+    appendMessage(item.kind, item.text + (item.streaming ? "…" : ""));
+  }
+}
+
+async function refreshList(): Promise<void> {
+  const list = await api.conversations.list();
+  listEl.textContent = "";
+  for (const s of list) {
+    const btn = document.createElement("button");
+    btn.textContent = s.name || s.conversationId;
+    btn.onclick = () => void openConversation(s.conversationId);
+    listEl.appendChild(btn);
+  }
+}
+
+async function openConversation(id: string): Promise<void> {
+  void activeProjection?.stop();
+  const handle = await api.conversations.open(id);
+  activeHandle = handle;
+  activeProjection = new ConversationProjection(handle, id);
+  activeProjection.subscribe(renderTimeline);
+  await activeProjection.start();
+  renderTimeline();
+}
+
+async function refreshNovel(): Promise<void> {
+  const overview = await api.novel.overview.get();
+  novelEl.textContent = `小说「${overview.title}」：角色 ${overview.counts.characters} · 地点 ${overview.counts.locations} · 段落 ${overview.counts.paragraphs}`;
+}
 
 async function send(): Promise<void> {
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = "";
-  await handle.sendUserMessage({ text });
+  const text = inputEl.value.trim();
+  if (!text || !activeHandle) return;
+  inputEl.value = "";
+  await activeHandle.sendUserMessage({ text });
 }
 
-sendBtn.addEventListener("click", () => void send());
-input.addEventListener("keydown", (e) => {
+newBtn.onclick = () => {
+  void api.conversations.create().then(() => refreshList());
+};
+sendBtn.onclick = () => void send();
+inputEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter") void send();
 });
+
+void refreshList();
+void refreshNovel();

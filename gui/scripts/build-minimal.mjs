@@ -9,13 +9,14 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 await mkdir(join(root, "dist/minimal"), { recursive: true });
 
 // 1. main（Electron 主进程，cjs——Electron main 默认 cjs，避免 ESM 下 pino 动态 require 失败）
+// zeromq 是原生模块（.node 预编译），external 避免 esbuild 打包原生绑定，运行时从 node_modules 解析
 await build({
   entryPoints: [join(root, "src/main/minimal.ts")],
   outfile: join(root, "dist/minimal/main.cjs"),
   bundle: true,
   platform: "node",
   format: "cjs",
-  external: ["electron"],
+  external: ["electron", "zeromq"],
   logLevel: "warning",
 });
 

@@ -16,6 +16,7 @@ import {
   electronIpcTransport,
   type AgentLoop,
   type CredentialCipher,
+  type NovelStore,
   type OutputEvent,
 } from "@novel/core";
 import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
@@ -56,8 +57,8 @@ function createEchoLoop(conversationId: string): AgentLoop {
   } as unknown as AgentLoop;
 }
 
-/** manager：有 provider key 时 spawnConversation 走子进程（真实 provider）；否则回退内存回显 loop */
-function createManager(): ConversationManagerServer {
+/** manager：有 provider key 时 spawnConversation 走子进程（真实 provider，经 fd 3 共享 novel store）；否则回退内存回显 loop */
+function createManager(store: NovelStore): ConversationManagerServer {
   const factory = {
     create: (o: { conversationId: string }) =>
       new Conversation({
@@ -68,7 +69,7 @@ function createManager(): ConversationManagerServer {
   };
   const spawner =
     process.env.NOVEL_PROVIDER_API_KEY !== undefined
-      ? createProcessSpawner(childScript)
+      ? createProcessSpawner(childScript, store)
       : undefined;
   return new ConversationManagerServer(factory, spawner);
 }
@@ -77,7 +78,7 @@ async function main(): Promise<void> {
   await app.whenReady();
 
   const store = new SqliteNovelStore(join(app.getPath("userData"), "novel.db"));
-  const manager = createManager();
+  const manager = createManager(store);
   const serverApi = createNovelApiServer({ manager, novel: store });
 
   // config：JSON 文件持久化（凭据暂明文，safeStorage cipher 后续接）

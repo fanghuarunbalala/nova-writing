@@ -4,7 +4,7 @@
  * 会话用回显 loop（无需 provider key）；生产换 createProcessSpawner + buildNovelAgent 子进程。
  */
 import { app, BrowserWindow, ipcMain } from "electron";
-import { expose } from "kkrpc";
+import { expose, type RPCMessage } from "kkrpc";
 import { join } from "node:path";
 import {
   Conversation,
@@ -70,13 +70,13 @@ async function main(): Promise<void> {
 
   // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）
   const endpoint = {
-    send: (channel: string, msg: unknown) => {
+    send: (channel: string, msg: RPCMessage) => {
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, msg);
     },
-    on: (channel: string, listener: (_event: unknown, msg: unknown) => void) => {
+    on: (channel: string, listener: (_event: unknown, msg: RPCMessage) => void) => {
       ipcMain.on(channel, (event, msg) => listener(event, msg));
     },
-    off: (channel: string, listener: (_event: unknown, msg: unknown) => void) => {
+    off: (channel: string, listener: (_event: unknown, msg: RPCMessage) => void) => {
       ipcMain.off(channel, listener);
     },
   };

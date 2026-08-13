@@ -22,6 +22,10 @@ import {
 import { createSubagentTools } from "../tool/definitions/subagent.js";
 import type { SubagentToolsOptions } from "../tool/definitions/subagent.js";
 import {
+  NOVEL_SUBAGENT_DEFINITIONS,
+  NOVEL_SUBAGENT_ALLOWED_TYPES,
+} from "./NovelExplorerAgent.js";
+import {
   coreRuntimeProtocolSection,
   toolGuidanceSection,
 } from "../prompt/sections/agent.js";
@@ -62,8 +66,8 @@ export interface NovelAgentOptions {
   resumePendingDecider?: (toolCallId: string) => Promise<"approve" | "reject" | "expired" | undefined>;
   /** 结构化日志（pino；provider 调用错误可见性） */
   logger?: Logger;
-  /** subagent 派发三工具装配（存在时追加 Agent/TaskOutput/TaskStop） */
-  subagent?: SubagentToolsOptions;
+  /** subagent 派发三工具装配（agents/allowedAgentTypes 由 builder 注入定义目录常量，调用方只传 spawner） */
+  subagent?: Omit<SubagentToolsOptions, "agents" | "allowedAgentTypes">;
 }
 
 /**
@@ -93,7 +97,13 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     ...createParagraphTools(opts.handle),
     ...createPublicationTools(opts.handle),
     ...createDeleteTool(opts.handle),
-    ...(opts.subagent ? createSubagentTools(opts.subagent) : []),
+    ...(opts.subagent
+      ? createSubagentTools({
+          ...opts.subagent,
+          agents: NOVEL_SUBAGENT_DEFINITIONS,
+          allowedAgentTypes: NOVEL_SUBAGENT_ALLOWED_TYPES,
+        })
+      : []),
   ];
   const toolDefs = applyToolPolicy(pool, NOVEL_AGENT_DEFINITION.tools);
   const registry = new InMemoryToolRegistry();

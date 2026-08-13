@@ -5,6 +5,7 @@
 import type { ToolDef } from "../ToolDef.js";
 import type { ToolCall } from "../../provider/types.js";
 import type { SubagentSpawner } from "../../../conversation/contract/task.js";
+import type { AgentDefinition } from "../../agent/AgentDefinition.js";
 import { ToolError } from "../errors.js";
 
 /** 解析 tool args JSON */
@@ -33,31 +34,85 @@ export const DEFAULT_TASK_OUTPUT_POLL_INTERVAL_MS = 250;
 export interface SubagentToolsOptions {
   /** subagent 派生端口（闭包捕获，由 SubagentRuntime 实现） */
   spawner: SubagentSpawner;
+  /** 可派生子代理定义目录（Agent 工具描述渲染来源） */
+  agents: readonly AgentDefinition[];
+  /** 可派生子代理类型白名单（旧 SubagentToolCompositionPolicy.allowedAgentTypes 等价物；Agent schema enum 推导来源） */
+  allowedAgentTypes: readonly string[];
   /** TaskOutput block 缺省超时（毫秒） */
   defaultTimeoutMs?: number;
   /** TaskOutput block 轮询间隔（毫秒） */
   pollIntervalMs?: number;
 }
 
-/** Agent 工具描述：何时用 / 工作流 / 非阻塞语义 */
-const AGENT_DESCRIPTION = [
-  "派生一个进程内子代理（subagent）执行独立任务。",
-  "",
-  "## 何时使用",
-  "1. 独立的只读探索/调研任务（如盘点角色、核对设定、检索伏笔）",
-  "2. 需要并行推进的多步工作（每个任务一个独立子代理）",
-  "3. 不想把探索过程占满主对话上下文时",
-  "",
-  "## 工作流",
-  "1. Agent：派生任务，立即返回 taskId（非阻塞，任务异步执行）",
-  "2. TaskOutput：查询任务快照；block=true 时阻塞等待任一目标任务进入终态",
-  "3. TaskStop：中途停止某个任务",
-  "",
-  "## 语义",
-  "- 派生立即受理（status: running），主对话不被任务阻塞",
-  "- taskId 由系统分配（task_<seq>），工具结果里原样回传",
-  "- prompt 是子代理任务的完整指令，写清楚要查什么、要返回什么",
-].join("\n");
+/**
+ * 校验子代理白名单（对齐旧 captureSubagentToolCompositionPolicy）：
+ * 非空、逐项须在定义目录中（否则 TOOL_POLICY_INVALID）、去重保序。
+ * @param agents 子代理定义目录
+ * @param allowedAgentTypes 白名单
+ * @returns 去重后的白名单（保序）
+ */
+function validateAgentWhitelist(
+  agents: readonly AgentDefinition[],
+  allowedAgentTypes: readonly string[],
+): string[] {
+  if (allowedAgentTypes.length === 0) {
+    throw new ToolError({ code: "TOOL_POLICY_INVALID", toolName: "Agent" }, "子代理白名单不能为空");
+  }
+  const byType = new Map(agents.map((a) => [a.agentType, a]));
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const agentType of allowedAgentTypes) {
+    if (!byType.has(agentType)) {
+      throw new ToolError(
+        { code: "TOOL_POLICY_INVALID", toolName: "Agent" },
+        `子代理白名单含未注册类型: ${agentType}`,
+      );
+    }
+    if (!seen.has(agentType)) {
+      seen.add(agentType);
+      result.push(agentType);
+    }
+  }
+  return result;
+}
+
+/**
+ * 渲染 Agent 工具描述（对齐旧 createAgentDescription 模板）：
+ * 何时用 / 工作流 / 非阻塞语义 + 允许的子代理类型逐项
+ * `- agentType（label）：description`，定义 tools.allow 存在时追加 `（工具：...）` 行。
+ * @param agents 子代理定义目录（白名单已校验）
+ * @param agentTypes 去重后的白名单（按序渲染）
+ * @returns Agent 工具描述文本
+ */
+function createAgentDescription(agents: readonly AgentDefinition[], agentTypes: readonly string[]): string {
+  const byType = new Map(agents.map((a) => [a.agentType, a]));
+  const lines = agentTypes.map((agentType) => {
+    const def = byType.get(agentType)!;
+    const toolList = def.tools?.allow === undefined ? "" : `\n  （工具：${def.tools.allow.join("、")}）`;
+    return `- ${def.agentType}（${def.label}）：${def.description}${toolList}`;
+  });
+  return [
+    "派生一个进程内子代理（subagent）执行独立任务。",
+    "",
+    "## 何时使用",
+    "1. 独立的只读探索/调研任务（如盘点角色、核对设定、检索伏笔）",
+    "2. 需要并行推进的多步工作（每个任务一个独立子代理）",
+    "3. 不想把探索过程占满主对话上下文时",
+    "",
+    "## 工作流",
+    "1. Agent：派生任务，立即返回 taskId（非阻塞，任务异步执行）",
+    "2. TaskOutput：查询任务快照；block=true 时阻塞等待任一目标任务进入终态",
+    "3. TaskStop：中途停止某个任务",
+    "",
+    "## 语义",
+    "- 派生立即受理（status: running），主对话不被任务阻塞",
+    "- taskId 由系统分配（task_<seq>），工具结果里原样回传",
+    "- prompt 是子代理任务的完整指令，写清楚要查什么、要返回什么",
+    "",
+    "## 允许的子代理类型",
+    ...lines,
+  ].join("\n");
+}
 
 /** TaskOutput 工具描述 */
 const TASK_OUTPUT_DESCRIPTION = [
@@ -75,24 +130,26 @@ const TASK_STOP_DESCRIPTION = [
 ].join("\n");
 
 /**
- * 创建 subagent 派发三工具（Agent / TaskOutput / TaskStop）
- * @param opts 装配选项（spawner 闭包捕获 + 轮询参数）
+ * 创建 subagent 派发三工具（Agent / TaskOutput / TaskStop）。
+ * Agent 的 schema enum 与描述由定义目录 + 白名单推导（旧 SubagentToolCompositionPolicy 语义）。
+ * @param opts 装配选项（spawner 闭包捕获 + 定义目录/白名单 + 轮询参数）
  * @returns 三个工具定义
  */
 export function createSubagentTools(opts: SubagentToolsOptions): ToolDef[] {
   const timeoutMs = opts.defaultTimeoutMs ?? DEFAULT_TASK_OUTPUT_TIMEOUT_MS;
   const intervalMs = opts.pollIntervalMs ?? DEFAULT_TASK_OUTPUT_POLL_INTERVAL_MS;
+  const agentTypes = validateAgentWhitelist(opts.agents, opts.allowedAgentTypes);
 
   const agentTool: ToolDef = {
     name: "Agent",
     version: "1.0.0",
-    description: AGENT_DESCRIPTION,
+    description: createAgentDescription(opts.agents, agentTypes),
     parameters: {
       type: "object",
       properties: {
         agentType: {
           type: "string",
-          enum: ["novel_explorer"],
+          enum: [...agentTypes],
           description: "要派生的子代理类型",
         },
         prompt: {

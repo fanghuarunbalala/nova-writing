@@ -4,6 +4,7 @@
  */
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
 import type { SamplingConfig } from "../../runtime/provider/types.js";
+import { ToolError } from "../../runtime/tool/errors.js";
 import type { OutputEvent } from "../contract/events/index.js";
 import type {
   SubagentSpawnAcceptance,
@@ -69,13 +70,18 @@ export class SubagentRuntime implements SubagentSpawner {
 
   /**
    * 派生 subagent 任务：同步受理（返回 acceptance），任务异步执行。
-   * 未知 agentType 抛错（builder 缺失，与主 dispatcher 未知工具行为一致）。
+   * 未知 agentType 抛 ToolError TOOL_NOT_AVAILABLE（对齐主 dispatcher 未知工具归一）。
    * @param req agentType + 任务 prompt
    * @returns 受理结果（taskId 唯一）
    */
   spawn(req: { agentType: string; prompt: string }): SubagentSpawnAcceptance {
     const builder = this.builders[req.agentType];
-    if (!builder) throw new Error(`未知 agent 类型: ${req.agentType}`);
+    if (!builder) {
+      throw new ToolError(
+        { code: "TOOL_NOT_AVAILABLE", toolName: "Agent" },
+        `未知 agent 类型: ${req.agentType}`,
+      );
+    }
     const taskId = `task_${++this.taskSeq}`;
     const agentId = `${req.agentType}:${taskId}`;
     const now = new Date().toISOString();

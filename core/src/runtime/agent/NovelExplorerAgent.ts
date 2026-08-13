@@ -59,6 +59,12 @@ export const NOVEL_EXPLORER_DEFINITION: AgentDefinition = {
   tools: { allow: [...NOVEL_EXPLORER_TOOL_NAMES] },
 };
 
+/** 可派生子代理定义目录（Agent 工具描述渲染来源；当前仅 novel_explorer） */
+export const NOVEL_SUBAGENT_DEFINITIONS: readonly AgentDefinition[] = [NOVEL_EXPLORER_DEFINITION];
+
+/** 可派生子代理类型白名单（旧 SubagentToolCompositionPolicy.allowedAgentTypes 等价物） */
+export const NOVEL_SUBAGENT_ALLOWED_TYPES: readonly string[] = [NOVEL_EXPLORER_AGENT_TYPE];
+
 /** novel_explorer 装配选项 */
 export interface NovelExplorerAgentOptions {
   /** 工作区路径（Read/Glob 沙盒） */

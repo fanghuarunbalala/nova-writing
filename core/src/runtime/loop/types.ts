@@ -10,6 +10,7 @@ import type { AgentCapability } from "../agent/AgentCapability.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { Logger } from "../../log/Logger.js";
 import type { ProviderCallDebugger } from "../debug/ProviderCallDebugger.js";
+import type { OutputEvent } from "../../conversation/contract/events/index.js";
 
 /** AgentLoop 构造配置：进程生命周期稳定（能力由上层组装好传入） */
 export interface AgentLoopConfig {
@@ -69,6 +70,25 @@ export interface RunContext {
   /** 各工具上次被调用的 turn 序号（name → turn） */
   toolsLastTurn: Map<string, number>;
 }
+
+/** AgentLoop 输入（inbox 队列元素）：turn 排队 / control 抢占 */
+export type LoopInput =
+  /** 追加用户消息（turn lane，FIFO 排队） */
+  | {
+      lane: "turn";
+      kind: "followup";
+      text: string;
+      /** 入队 run 的配置（run() 入队时带；直接 followup() 不带，用上次 config） */
+      config?: AgentRunConfig;
+      /** 入队 run 的事件回调 */
+      onEvent?: (e: OutputEvent) => void;
+      /** run() 入队时关联的结果 resolve id */
+      resolveId?: string;
+    }
+  /** 转向指令（control lane，高优先级，注入 system reminder） */
+  | { lane: "control"; kind: "steer"; text: string }
+  /** 停止（control lane，取消当前 + 清空 turn 队列） */
+  | { lane: "control"; kind: "stop" };
 
 /** AgentLoop 运行结果（完整消息序列从 LoopContext.turns 取） */
 export interface AgentLoopResult {

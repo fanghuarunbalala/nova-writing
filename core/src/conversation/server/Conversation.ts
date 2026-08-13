@@ -68,6 +68,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.conversationId = opts.conversationId;
 		this.loop = opts.loop;
 		this.sampling = opts.sampling;
+		// 订阅 loop 的输出事件（run/followup 均转发到本会话 hub）
+		this.loop.onOutputEvent((e) => this.emit(e));
 	}
 
 	/** 当前生效的会话模式 */
@@ -75,18 +77,18 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		return this.activeMode;
 	}
 
-	/** 发送用户消息（turn lane）：先应用待生效模式，再触发 agent 循环，事件经 hub 分发 */
+	/** 发送用户消息（turn lane）：先应用待生效模式，再入队 followup（不阻塞等待完成） */
 	async sendUserMessage(msg: ConversationUserMessage): Promise<Receipt> {
 		this.applyPendingMode();
-		await this.loop.run(msg.text, { sampling: this.sampling }, (e) => this.emit(e));
+		this.loop.followup(msg.text);
 		return this.receipt();
 	}
 
-	/** 发送用户命令（turn lane，agent 可见）：暂转为用户消息文本 */
+	/** 发送用户命令（turn lane，agent 可见）：转文本入队 */
 	async sendUserCommand(cmd: ConversationUserCommand): Promise<Receipt> {
 		this.applyPendingMode();
 		const text = cmd.args ? `${cmd.name} ${JSON.stringify(cmd.args)}` : cmd.name;
-		await this.loop.run(text, { sampling: this.sampling }, (e) => this.emit(e));
+		this.loop.followup(text);
 		return this.receipt();
 	}
 
@@ -98,7 +100,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 				this.pendingMode = ctrl.mode;
 				break;
 			case "stop":
-				this.loop.cancel();
+				this.loop.stop();
 				break;
 			case "reload.config":
 				break;

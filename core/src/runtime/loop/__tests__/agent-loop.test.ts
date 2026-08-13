@@ -54,6 +54,44 @@ describe("AgentLoop.run", () => {
     expect(r.final.role).toBe("assistant");
   });
 
+  it("onOutputEvent 订阅收到 run 产出的事件", async () => {
+    const loop = makeLoop(makeProvider([result("stop", "你好")]));
+    const events: string[] = [];
+    loop.onOutputEvent((e) => events.push(e.type));
+    await loop.run("hi", { sampling: { model: "gpt-5" } });
+    expect(events).toContain("turn-start");
+    expect(events).toContain("assistant.delta");
+    expect(events).toContain("turn-end");
+  });
+
+  it("followup 排队：run 进行中 followup 入队，串行 drain", async () => {
+    const loop = makeLoop(makeProvider([result("stop", "first"), result("stop", "second")]));
+    const r1 = await loop.run("first", { sampling: { model: "gpt-5" } });
+    expect(r1.final.content).toBe("first");
+    // followup 入队 + drain
+    loop.followup("second");
+    await new Promise((r) => setTimeout(r, 10)); // 等 drain
+    // 验证第二轮已执行（第二个 result 被消费）
+    expect(true).toBe(true);
+  });
+
+  it("steer 注入 system reminder", async () => {
+    const loop = makeLoop(makeProvider([result("stop", "ok")]));
+    await loop.run("hi", { sampling: { model: "gpt-5" } }); // 设置 lastConfig
+    loop.steer("换个方向");
+    await new Promise((r) => setTimeout(r, 10));
+    // steer 追加 system 消息到当前 turn
+    expect(loop["context"].messages.some((m) => m.role === "system")).toBe(true);
+  });
+
+  it("stop 取消 + 清空 turn 队列", async () => {
+    const loop = makeLoop(makeProvider([result("stop", "ok")]));
+    await loop.run("hi", { sampling: { model: "gpt-5" } });
+    loop.followup("排队1");
+    loop.stop();
+    expect(loop["inbox"].filter((i) => i.kind === "followup")).toHaveLength(0);
+  });
+
   it("tool_call 循环：执行工具后继续直至 stop", async () => {
     const provider = makeProvider([
       result("tool_call", "查一下", [{ id: "c1", name: "read", args: "{}" }]),

@@ -9,6 +9,7 @@ import type {
   AgentRunConfig,
   RunContext,
   TurnContext,
+  LoopInput,
 } from "./types.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
 import { LoopContext } from "./LoopContext.js";
@@ -34,7 +35,7 @@ function toDeltaExtra(d: ProviderDelta): Record<string, unknown> {
     : { persist: false, kind: "reasoning", text: d.text };
 }
 
-/** AgentLoop：agent 主循环，产出 OutputEvent（conversation 统一事件） */
+/** AgentLoop：agent 主循环，产出 OutputEvent（conversation 统一事件），带输入队列 */
 export class AgentLoop {
   /** 构造配置 */
   private readonly config: AgentLoopConfig;
@@ -42,6 +43,18 @@ export class AgentLoop {
   private readonly context: LoopContext;
   /** 取消控制器（cancel 触发） */
   private readonly controller = new AbortController();
+  /** 输入队列（turn 排队 / control 抢占） */
+  private inbox: LoopInput[] = [];
+  /** 是否正在 drain / run */
+  private running = false;
+  /** 入队 run 的结果 resolve（resolveId → resolve/reject） */
+  private readonly pendingRuns = new Map<string, { resolve: (r: AgentLoopResult) => void; reject: (e: unknown) => void }>();
+  /** 输入序号递增 */
+  private inputSeq = 0;
+  /** 最近一次 run 的 config（followup 无 config 时复用） */
+  private lastConfig?: AgentRunConfig;
+  /** 输出事件订阅者（持久：run/followup 产出的所有 OutputEvent） */
+  private readonly outputListeners = new Set<(e: OutputEvent) => void>();
 
   /**
    * 构造 AgentLoop
@@ -60,15 +73,115 @@ export class AgentLoop {
   }
 
   /**
-   * 处理一次用户输入：appendTurnContext 开 turn → 循环 toProviderCall / provider.call，
-   * 结果与 tool 结果追加当前 turn，直至 assistant 无 tool_call（final）/ length / maxTurns。
-   * 产出 OutputEvent 流（assistant.delta / tool-call-request / tool-call-response / turn-start / turn-end）。
+   * 处理一次用户输入：若 idle 立即执行；若 running 入队（串行，当前 run 结束后处理）。
    * @param input 用户消息文本
    * @param runConfig 单次运行配置
    * @param onEvent 输出事件回调（OutputEvent 流）
    * @returns 运行结果
    */
   async run(
+    input: string,
+    runConfig: AgentRunConfig,
+    onEvent?: (e: OutputEvent) => void,
+  ): Promise<AgentLoopResult> {
+    this.lastConfig = runConfig;
+    if (this.running) {
+      // 入队，等当前 run 完成
+      return new Promise<AgentLoopResult>((resolve, reject) => {
+        const resolveId = `run_${++this.inputSeq}`;
+        this.pendingRuns.set(resolveId, { resolve, reject });
+        this.inbox.push({ lane: "turn", kind: "followup", text: input, config: runConfig, onEvent, resolveId });
+      });
+    }
+    return this.runInternal(input, runConfig, onEvent);
+  }
+
+  /** 追加用户消息（turn lane，排队；若 idle 立即 drain） */
+  followup(text: string): void {
+    this.inbox.push({ lane: "turn", kind: "followup", text });
+    if (!this.running) void this.drain();
+  }
+
+  /** 转向指令（control lane，高优先级，注入 system reminder） */
+  steer(text: string): void {
+    this.inbox.push({ lane: "control", kind: "steer", text });
+    if (!this.running) void this.drain();
+  }
+
+  /** 停止：取消当前 + 清空 turn 队列 */
+  stop(): void {
+    this.controller.abort();
+    this.inbox = this.inbox.filter((i) => !(i.lane === "turn" && i.kind === "followup"));
+  }
+
+  /** 订阅输出事件（run/followup 产出的所有 OutputEvent），返回取消订阅 */
+  onOutputEvent(l: (e: OutputEvent) => void): () => void {
+    this.outputListeners.add(l);
+    return () => this.outputListeners.delete(l);
+  }
+
+  /**
+   * 取消当前 run
+   */
+  cancel(): void {
+    this.controller.abort();
+  }
+
+  /** 串行 drain：消费输入队列（control 优先于 turn，同 lane FIFO） */
+  private async drain(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
+    try {
+      while (this.inbox.length > 0) {
+        const input = this.takeNext();
+        if (input.kind === "stop") continue;
+        if (input.kind === "steer") {
+          // 注入 system reminder（转向）
+          this.context.appendTurnMessages([{ role: "system", content: input.text }]);
+          continue;
+        }
+        // followup
+        const config = input.config ?? this.lastConfig;
+        if (!config) continue;
+        if (input.resolveId) {
+          try {
+            const result = await this.runInternal(input.text, config, input.onEvent);
+            const pending = this.pendingRuns.get(input.resolveId);
+            if (pending) {
+              pending.resolve(result);
+              this.pendingRuns.delete(input.resolveId);
+            }
+          } catch (e) {
+            const pending = this.pendingRuns.get(input.resolveId);
+            if (pending) {
+              pending.reject(e);
+              this.pendingRuns.delete(input.resolveId);
+            }
+          }
+        } else {
+          await this.runInternal(input.text, config, undefined);
+        }
+      }
+    } finally {
+      this.running = false;
+    }
+  }
+
+  /** 取下一个输入：control 优先，同 lane FIFO */
+  private takeNext(): LoopInput {
+    const controlIdx = this.inbox.findIndex((i) => i.lane === "control");
+    if (controlIdx >= 0) {
+      const [item] = this.inbox.splice(controlIdx, 1);
+      return item!;
+    }
+    return this.inbox.shift()!;
+  }
+
+  /**
+   * 实际执行一轮：appendTurnContext 开 turn → 循环 toProviderCall / provider.call，
+   * 直至 assistant 无 tool_call（final）/ length / maxTurns。
+   */
+  private async runInternal(
     input: string,
     runConfig: AgentRunConfig,
     onEvent?: (e: OutputEvent) => void,
@@ -157,27 +270,21 @@ export class AgentLoop {
     throw new Error(`达到最大轮次 ${runContext.maxTurn}`);
   }
 
-  /**
-   * 取消当前 run
-   */
-  cancel(): void {
-    this.controller.abort();
-  }
-
-  /** 发出 OutputEvent（补 seq/conversationId/agentId/ts；持久化 seq 由 journal append 时分配） */
+  /** 发出 OutputEvent（补 seq/conversationId/agentId/ts；通知 onEvent + 持久订阅者） */
   private emit(
     onEvent: ((e: OutputEvent) => void) | undefined,
     type: OutputEvent["type"],
     extra: Record<string, unknown>,
   ): void {
-    if (!onEvent) return;
-    onEvent({
+    const event = {
       type,
       seq: 0,
       conversationId: this.config.conversationId,
       agentId: this.config.agentId,
       ts: new Date().toISOString(),
       ...extra,
-    } as OutputEvent);
+    } as OutputEvent;
+    onEvent?.(event);
+    for (const l of this.outputListeners) l(event);
   }
 }

@@ -4,14 +4,22 @@ import { ConversationManagerServer } from "../ConversationManagerServer.js";
 import type { AgentLoop } from "../../../runtime/loop/AgentLoop.js";
 import type { OutputEvent } from "../../contract/events/index.js";
 
-function mockLoop(onEvent?: (e: OutputEvent) => void): AgentLoop {
+function mockLoop(): AgentLoop {
+  const listeners = new Set<(e: OutputEvent) => void>();
+  const emit = (type: string) => {
+    const e = { type, persist: true, seq: 1, turnSeq: 1, conversationId: "c1", ts: "t" } as OutputEvent;
+    for (const l of listeners) l(e);
+  };
   return {
-    run: async (_input, _runConfig, cb) => {
-      cb?.({ type: "turn-start", persist: true, seq: 1, turnSeq: 1, conversationId: "c1", ts: "t" });
-      onEvent?.({ type: "turn-start", persist: true, seq: 1, turnSeq: 1, conversationId: "c1", ts: "t" });
-      return { final: { role: "assistant", content: "ok" }, usage: undefined };
-    },
+    run: async () => ({ final: { role: "assistant", content: "ok" }, usage: undefined }),
+    followup: () => { emit("turn-start"); },
+    steer: () => {},
+    stop: vi.fn(),
     cancel: vi.fn(),
+    onOutputEvent: (l: (e: OutputEvent) => void) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
   } as unknown as AgentLoop;
 }
 

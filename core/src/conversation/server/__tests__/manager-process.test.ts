@@ -73,6 +73,9 @@ function fakeHandle(): ConversationHandle {
 		sendAskingQuestionRequest: async () => "",
 		sendExitComposeRequest: async () => {},
 		subscribeEvents: async () => {},
+		resolveApproval: () => {},
+		resolveQuestion: () => {},
+		resolveExitCompose: () => {},
 		dispose: () => {},
 	};
 }

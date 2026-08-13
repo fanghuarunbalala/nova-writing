@@ -218,6 +218,9 @@ function toRemoteHandle(handle: ConversationHandle): ConversationHandle {
 		sendAskingQuestionRequest: (r) => remote.sendAskingQuestionRequest(r),
 		sendExitComposeRequest: (r) => remote.sendExitComposeRequest(r),
 		subscribeEvents: (l) => remote.subscribeEvents(l),
+		resolveApproval: (id, d) => remote.resolveApproval(id, d),
+		resolveQuestion: (id, a) => remote.resolveQuestion(id, a),
+		resolveExitCompose: (id) => remote.resolveExitCompose(id),
 		dispose: () => remote.dispose(),
 	};
 }

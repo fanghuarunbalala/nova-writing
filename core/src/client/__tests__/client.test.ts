@@ -74,6 +74,9 @@ function fakeHandle(events: OutputEvent[]): ConversationHandle {
 		subscribeEvents: async (listener) => {
 			for (const e of events) listener(e);
 		},
+		resolveApproval: () => {},
+		resolveQuestion: () => {},
+		resolveExitCompose: () => {},
 		dispose: () => {},
 	};
 }
@@ -267,6 +270,9 @@ describe("createNovelApiClient（门面）", () => {
 			sendAskingQuestionRequest: async () => "",
 			sendExitComposeRequest: async () => {},
 			subscribeEvents: async () => {},
+			resolveApproval: () => {},
+			resolveQuestion: () => {},
+			resolveExitCompose: () => {},
 			dispose: () => {},
 		}) as unknown as ConversationHandle;
 		const fakeSpawner: ConversationProcessSpawner = {

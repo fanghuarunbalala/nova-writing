@@ -5,6 +5,7 @@ import type { AgentLoop } from "../../../runtime/loop/AgentLoop.js";
 import type { TurnContext } from "../../../runtime/loop/types.js";
 import type { OutputEvent } from "../../contract/events/index.js";
 import type { ConversationJournalService } from "../../contract/journal/index.js";
+import type { ConversationHandle } from "../../contract/handle/index.js";
 
 function mockLoop(): AgentLoop {
   const listeners = new Set<(e: OutputEvent) => void>();
@@ -105,8 +106,9 @@ describe("Conversation", () => {
     const pending = conv.sendApprovalRequest({ requestId: "r1", toolName: "Write", args: "{}" });
     // 通知已发出
     expect(received).toEqual(["Write"]);
-    // 回传决策
-    conv.resolveApproval("r1", { kind: "approve" });
+    // 回传决策（经 ConversationHandle 契约方法）
+    const handle = conv as unknown as ConversationHandle;
+    handle.resolveApproval("r1", { kind: "approve" });
     expect(await pending).toEqual({ kind: "approve" });
   });
 

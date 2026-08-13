@@ -5,10 +5,11 @@
 import type { OutputEvent } from "../events/index.js";
 import type { ConversationInteraction } from "../interaction/index.js";
 import type { WaitingInteractionRequest } from "../interaction/index.js";
+import type { ConversationApprovalDecision } from "../types/index.js";
 
 /**
  * UI 侧对远端 conversation 的视图（createOrResume / spawnConversation 返回）。
- * = 输入侧契约 + 等待交互（审批/提问/退出 compose）+ 事件流订阅 + 释放。
+ * = 输入侧契约 + 等待交互（审批/提问/退出 compose）+ 决策回传 + 事件流订阅 + 释放。
  */
 export interface ConversationHandle extends ConversationInteraction, WaitingInteractionRequest {
 	/**
@@ -19,6 +20,23 @@ export interface ConversationHandle extends ConversationInteraction, WaitingInte
 	 * @returns 订阅完成（立即返回）；取消订阅经 dispose()
 	 */
 	subscribeEvents(listener: (e: OutputEvent) => void): Promise<void>;
+	/**
+	 * 回传审批决策（解除 sendApprovalRequest 的阻塞等待）
+	 * @param requestId 审批请求 id（approval.request 事件携带）
+	 * @param decision 决策（approve / reject / edit）
+	 */
+	resolveApproval(requestId: string, decision: ConversationApprovalDecision): void;
+	/**
+	 * 回传提问回答（解除 sendAskingQuestionRequest 的阻塞等待）
+	 * @param requestId 提问请求 id
+	 * @param answer 回答文本
+	 */
+	resolveQuestion(requestId: string, answer: string): void;
+	/**
+	 * 回传退出 compose 完成（解除 sendExitComposeRequest 的阻塞等待）
+	 * @param requestId 退出请求 id
+	 */
+	resolveExitCompose(requestId: string): void;
 	/** 释放 handle（取消全部订阅 / 断开通道） */
 	dispose(): void;
 }

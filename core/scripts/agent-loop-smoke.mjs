@@ -4,9 +4,12 @@
 import {
   AgentLoop,
   InMemoryRegistry,
-  ProviderCallDebugger,
+  InMemoryToolRegistry,
   createProvider,
+  createToolDispatcher,
 } from "../dist/index.js";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
 // ── Registry 组装能力 ──
 const registry = new InMemoryRegistry();
@@ -46,14 +49,10 @@ registry.registerPrompt(
 );
 const capability = registry.buildCapability("writer", "1");
 
-// ── ToolDispatcher（按 name 分发到 handler）──
-const dispatcher = {
-  dispatch: async (ctx, call) => {
-    const tool = capability.toolDefs.find((t) => t.name === call.name);
-    if (!tool) return `未找到工具 ${call.name}`;
-    return tool.handler.execute(call);
-  },
-};
+// ── ToolDispatcher（统一：capability.toolDefs 注册 → createToolDispatcher）──
+const toolRegistry = new InMemoryToolRegistry();
+for (const def of capability.toolDefs) toolRegistry.register(def);
+const dispatcher = createToolDispatcher(toolRegistry);
 
 // ── Provider + AgentLoop（同一个 loop 实例，多轮共享 LoopContext）──
 const provider = createProvider({
@@ -62,9 +61,16 @@ const provider = createProvider({
   baseUrl: "https://api.deepseek.com/v1",
   apiKey: process.env.ANTHROPIC_AUTH_TOKEN,
 });
-// debug 模式：记录 ProviderCall（jsonl + html），目录按 conversation/agent 区分
+// debug 模式：记录 ProviderCall（jsonl 追加；html diff 渲染器待恢复——runtime/debug 仅接口占位）
 const callDebugger = process.env.DEBUG
-  ? new ProviderCallDebugger({ enabled: true, dir: "debug/main/agent-writer" })
+  ? {
+      dir: "debug/main/agent-writer",
+      record: (call) => {
+        mkdirSync("debug/main/agent-writer", { recursive: true });
+        appendFileSync(join("debug/main/agent-writer", "requests.jsonl"), JSON.stringify(call) + "\n");
+      },
+      close: () => {},
+    }
   : undefined;
 
 const loop = new AgentLoop({

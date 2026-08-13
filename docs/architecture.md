@@ -263,3 +263,11 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
 1. **T12 ui/gui 接入**：恢复的 Electron/React（493 文件）对接新 core 接口。
 2. **sqlite 驱动**：当前 novel 用内存 store，sqlite 持久化待接（better-sqlite3 vs worker）。
 3. **delta chunk 聚合**：暂缓（delta 直走 kkrpc 背压）。
+
+### 8.4 偏离旧版（NovelAI）清单
+
+工具策略与调度层对齐旧版语义，但有如下刻意偏离：
+
+1. **无 groupIds**：旧版 `AgentToolPolicy{groupIds, allow?, deny?}` 依赖工具分组机制；新线无分组，策略 = `allow`/`deny` 直接工具名名单。池的来源二选一：builder 装配池（NovelAgent/NovelExplorerAgent）或 `InMemoryRegistry.buildCapability` 的版本匹配集（注册约定：工具 `version` 须等于目标 agent 的 `agentVersion`）。名单项不在池内抛 `TOOL_POLICY_INVALID`（非静默跳过）；`allow: []` = 空集（旧版拒空数组）。
+2. **loop 工具错误回填模型（行为变更）**：`run` 不因工具错误 reject；catch 后 tool 消息内容 = `工具执行失败(${code}): ${message}`，**仍 append tool 消息**（否则下一轮 provider 缺 tool result 报 400），tool-call-response 事件只填 `error` 不填 `result`（激活卡片投影 failed 分支）；模型收到失败文本自纠，`maxTurns` 兜底。
+3. **ToolError 单类 + code union**：codes = `TOOL_NOT_AVAILABLE` / `TOOL_DUPLICATE` / `TOOL_POLICY_INVALID` / `TOOL_ARGUMENTS_INVALID` / `TOOL_HANDLER_FAILED`；无 `TOOL_VERSION_MISMATCH`（新线 ToolCall 无 version，模型不传）；**保留 cause 与原始 message**（错误文本回填模型自纠需要；旧版不保留）。

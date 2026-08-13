@@ -1,12 +1,15 @@
-// 多步骤复杂任务 smoke：链式调用多工具（remember → list_notes → write_scene），生成 ProviderCall debug（jsonl + html）
+// 多步骤复杂任务 smoke：链式调用多工具（remember → list_notes → write_scene），生成 ProviderCall debug（jsonl）
 // 运行：node core/scripts/agent-loop-multistep.mjs（需 build，且设置 ANTHROPIC_AUTH_TOKEN）
 
 import {
   AgentLoop,
   InMemoryRegistry,
-  ProviderCallDebugger,
+  InMemoryToolRegistry,
   createProvider,
+  createToolDispatcher,
 } from "../dist/index.js";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
 const registry = new InMemoryRegistry();
 registry.registerAgent({
@@ -72,12 +75,9 @@ registry.registerPrompt(
 );
 const capability = registry.buildCapability("writer", "1");
 
-const dispatcher = {
-  dispatch: async (ctx, call) => {
-    const t = capability.toolDefs.find((x) => x.name === call.name);
-    return t ? t.handler.execute(call) : `未知工具 ${call.name}`;
-  },
-};
+const toolRegistry = new InMemoryToolRegistry();
+for (const def of capability.toolDefs) toolRegistry.register(def);
+const dispatcher = createToolDispatcher(toolRegistry);
 
 const provider = createProvider({
   id: "deepseek",
@@ -85,10 +85,15 @@ const provider = createProvider({
   baseUrl: "https://api.deepseek.com/v1",
   apiKey: process.env.ANTHROPIC_AUTH_TOKEN,
 });
-const callDebugger = new ProviderCallDebugger({
-  enabled: true,
+// jsonl 记录器（html diff 渲染器待恢复——runtime/debug 仅接口占位）
+const callDebugger = {
   dir: "debug/main/agent-writer",
-});
+  record: (call) => {
+    mkdirSync("debug/main/agent-writer", { recursive: true });
+    appendFileSync(join("debug/main/agent-writer", "requests.jsonl"), JSON.stringify(call) + "\n");
+  },
+  close: () => {},
+};
 const loop = new AgentLoop({
   workspace: ".",
   provider,

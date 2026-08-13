@@ -7,7 +7,9 @@ import { join } from "node:path";
 import {
   AgentLoop,
   InMemoryRegistry,
+  InMemoryToolRegistry,
   createProvider,
+  createToolDispatcher,
 } from "../dist/index.js";
 import { FileConversationJournalService } from "../dist/conversation/persistence/index.js";
 import { FileConversationJournalReadOnlyService } from "../dist/conversation/persistence/index.js";
@@ -42,7 +44,7 @@ const loop = new AgentLoop({
   workspace: ".",
   provider,
   agentCapability: capability,
-  toolDispatcher: { dispatch: async () => "noop" },
+  toolDispatcher: createToolDispatcher(new InMemoryToolRegistry()),
   conversationId: "main",
   agentId: "main",
   listeners: [journalListener(journal)],

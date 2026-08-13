@@ -1,3 +1,2 @@
-/** 审批域出口。Approval domain exports. */
+/** 审批域出口（精简：仅 ApprovalStore）。 */
 export * from "./ApprovalStore.js";
-export * from "./approvalEntityResolver.js";

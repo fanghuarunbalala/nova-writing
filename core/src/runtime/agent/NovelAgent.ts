@@ -1,0 +1,83 @@
+/**
+ * Novel Agent 装配：组装完整 main agent（system 分节 + 全部工具 + 工具调度）。
+ * 对齐旧 NovelAgentDefinition（agentType="novel"）；compose nudge 由 Conversation 层注入（依赖 ConversationContext）。
+ */
+import type { Provider } from "../provider/Provider.js";
+import type { AgentCapability } from "./AgentCapability.js";
+import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
+import type { ToolDef } from "../tool/ToolDef.js";
+import { AgentLoop } from "../loop/AgentLoop.js";
+import { createFileTools } from "../tool/definitions/files.js";
+import {
+  createCharacterTools,
+  createLocationTools,
+  createOutlineTools,
+  createParagraphTools,
+  createPublicationTools,
+  createDeleteTool,
+} from "../tool/definitions/novel.js";
+import {
+  coreRuntimeProtocolSection,
+  toolGuidanceSection,
+} from "../prompt/sections/agent.js";
+import {
+  novelIdentitySection,
+  novelSystemSection,
+  novelCraftSection,
+  novelExecutionSection,
+} from "../prompt/sections/novel.js";
+import type { NovelHandle } from "../../novel/client/NovelHandle.js";
+
+/** Novel Agent 装配选项 */
+export interface NovelAgentOptions {
+  /** 工作区路径（工具文件操作环境） */
+  workspace: string;
+  /** Provider 实例 */
+  provider: Provider;
+  /** novel 客户端（工具 query/mutate 对接） */
+  handle: NovelHandle;
+}
+
+/**
+ * 装配完整 Novel Agent（main agent）
+ * @param opts 装配选项
+ * @returns AgentLoop（含完整 AgentCapability + 工具调度）
+ */
+export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
+  const toolDefs: ToolDef[] = [
+    ...createFileTools(opts.workspace),
+    ...createCharacterTools(opts.handle),
+    ...createLocationTools(opts.handle),
+    ...createOutlineTools(opts.handle),
+    ...createParagraphTools(opts.handle),
+    ...createPublicationTools(opts.handle),
+    ...createDeleteTool(opts.handle),
+  ];
+  const capability: AgentCapability = {
+    systemSections: [
+      coreRuntimeProtocolSection,
+      novelIdentitySection,
+      novelSystemSection,
+      novelCraftSection,
+      novelExecutionSection,
+      toolGuidanceSection,
+    ],
+    toolDefs,
+    nudgePolicies: [], // compose nudge 由 Conversation 层注入（依赖 ConversationContext）
+    compactPolicies: [],
+  };
+  const dispatcher: ToolDispatcher = {
+    dispatch: async (_ctx, call) => {
+      const tool = toolDefs.find((t) => t.name === call.name);
+      if (!tool) throw new Error(`未知工具: ${call.name}`);
+      return tool.handler.execute(call);
+    },
+  };
+  return new AgentLoop({
+    workspace: opts.workspace,
+    provider: opts.provider,
+    agentCapability: capability,
+    toolDispatcher: dispatcher,
+    agentId: "main",
+  });
+}

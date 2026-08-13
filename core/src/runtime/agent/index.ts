@@ -3,3 +3,4 @@
 export * from "./AgentDefinition.js";
 export * from "./AgentCapability.js";
 export * from "./AgentRegistry.js";
+export * from "./NovelAgent.js";

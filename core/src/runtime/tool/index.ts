@@ -4,3 +4,4 @@ export * from "./ToolHandler.js";
 export * from "./ToolDef.js";
 export * from "./ToolRegistry.js";
 export * from "./ToolDispatcher.js";
+export * from "./definitions/index.js";

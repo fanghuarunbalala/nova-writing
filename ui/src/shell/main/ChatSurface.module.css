@@ -33,3 +33,14 @@
   color: var(--color-muted, #aaa);
   white-space: nowrap;
 }
+
+/* 发送失败横幅：会话进程崩溃等错误显性展示（不吞消息） */
+.sendError {
+  margin: 0 12px 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--color-danger-border, #b3554d);
+  background: var(--color-danger-bg, #3a2422);
+  color: var(--color-danger, #e8a19c);
+  font-size: 13px;
+}

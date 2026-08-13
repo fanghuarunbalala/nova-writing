@@ -5,6 +5,7 @@
 import type { ToolDef } from "../ToolDef.js";
 import type { ToolCall } from "../../provider/types.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
+import type { OrderKey } from "../../../novel/model/outline.js";
 
 /** 解析 tool args JSON */
 function parseArgs(call: ToolCall): Record<string, unknown> {
@@ -13,6 +14,12 @@ function parseArgs(call: ToolCall): Record<string, unknown> {
   } catch {
     throw new Error(`无效的 JSON 参数: ${call.args}`);
   }
+}
+
+/** 排序键缺省：agent 未给 orderKey 时用时间戳兜底（契约必填，sqlite 绑定不接 undefined） */
+function orderKeyOf(args: Record<string, unknown>): OrderKey {
+  const v = args.orderKey;
+  return (typeof v === "string" && v.trim() !== "" ? v : String(Date.now())) as OrderKey;
 }
 
 /** 实体档案输入（name + 别名 + 摘要 + 初始状态 + 作者备注） */
@@ -338,7 +345,7 @@ export function createParagraphTools(handle: NovelHandle): ToolDef[] {
       handler: {
         execute: async (call) => {
           const args = parseArgs(call);
-          const r = await handle.mutate({ op: "paragraph.insert", storyUnitId: args.storyUnitId as never, orderKey: args.orderKey as never, text: String(args.text) });
+          const r = await handle.mutate({ op: "paragraph.insert", storyUnitId: args.storyUnitId as never, orderKey: orderKeyOf(args), text: String(args.text) });
           return JSON.stringify(r, null, 2);
         },
       },
@@ -404,8 +411,8 @@ export function createPublicationTools(handle: NovelHandle): ToolDef[] {
           const args = parseArgs(call);
           const r =
             args.kind === "chapter"
-              ? await handle.mutate({ op: "publication.chapter.create", title: String(args.title), volumeId: args.volumeId as never, orderKey: args.orderKey as never, storyUnitId: args.storyUnitId as never })
-              : await handle.mutate({ op: "publication.volume.create", title: String(args.title), orderKey: args.orderKey as never });
+              ? await handle.mutate({ op: "publication.chapter.create", title: String(args.title), volumeId: args.volumeId as never, orderKey: orderKeyOf(args), storyUnitId: args.storyUnitId as never })
+              : await handle.mutate({ op: "publication.volume.create", title: String(args.title), orderKey: orderKeyOf(args) });
           return JSON.stringify(r, null, 2);
         },
       },
@@ -546,7 +553,7 @@ export function createOutlineTools(handle: NovelHandle): ToolDef[] {
           const r = await handle.mutate({
             op: "outline.storyUnit.create",
             parentId: args.parentId as never,
-            orderKey: args.orderKey as never,
+            orderKey: orderKeyOf(args),
             title: String(args.title),
             intent: args.intent as string | undefined,
             synopsis: args.synopsis as string | undefined,

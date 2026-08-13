@@ -6,7 +6,6 @@ import type { Provider } from "../../provider/Provider.js";
 import type { ProviderCall, ProviderResult } from "../../provider/types.js";
 import type { AgentCapability } from "../../agent/AgentCapability.js";
 import type { ToolDispatcher } from "../../tool/ToolDispatcher.js";
-import type { OutputEvent } from "../../../conversation/contract/events/index.js";
 
 const capability: AgentCapability = {
   systemSections: [{ kind: "static", render: () => "你是助手" }],

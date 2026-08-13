@@ -116,6 +116,7 @@ export class ConversationProjectionBinding {
     } catch (error) {
       if (this.isSuperseded(generation)) return;
       this.transition(CONVERSATION_PROJECTION_BINDING_STATE.failed);
+      console.error("[binding.open_failed]", error);
       this.logger.warn("novel_ui.conversation_projection.open_failed", {
         generation,
         errorName: getErrorName(error),

@@ -167,6 +167,7 @@ export class ConversationProjection {
 			this.publish();
 		} catch (err) {
 			if (generation === this.generation && !this.stopRequested) {
+				console.error("[projection.start_failed]", err);
 				this.error = toErrorSnapshot(err);
 				this.transition("error");
 			}

@@ -198,6 +198,31 @@ export interface NovelApiServerOptions {
 }
 
 /**
+ * 把对端 handle 适配为可跨 remote-refs 的对象形态。
+ * plain kkrpc wrap 的代理以函数为目标（typeof === "function"），remote-refs 按其 typeof
+ * 编码为 function-kind ref，解码侧只可调用、无属性转发（handle.method 访问丢失）。
+ * 函数型 handle 在此包装成普通对象（typeof "object" → object-kind ref，属性/方法可转发）。
+ * @param handle 对端 handle（内存类实例 / kkrpc wrap 代理）
+ * @returns 可标记的对象形态 handle
+ */
+function toRemoteHandle(handle: ConversationHandle): ConversationHandle {
+	// typeof 窄化需经 unknown（ConversationHandle 无函数签名，直接判断会窄化成 never）
+	const maybeCallable = handle as unknown;
+	if (typeof maybeCallable !== "function") return handle;
+	const remote = maybeCallable as unknown as ConversationHandle;
+	return {
+		sendUserMessage: (m) => remote.sendUserMessage(m),
+		sendUserCommand: (c) => remote.sendUserCommand(c),
+		sendSystemControl: (c) => remote.sendSystemControl(c),
+		sendApprovalRequest: (r) => remote.sendApprovalRequest(r),
+		sendAskingQuestionRequest: (r) => remote.sendAskingQuestionRequest(r),
+		sendExitComposeRequest: (r) => remote.sendExitComposeRequest(r),
+		subscribeEvents: (l) => remote.subscribeEvents(l),
+		dispose: () => remote.dispose(),
+	};
+}
+
+/**
  * 创建服务端门面（expose 侧，与 createNovelApiClient 对称）。
  * 供宿主进程（Electron main / novel-db 守护）直接 expose 给 UI。
  * @param options manager 服务端 + novel 存储
@@ -217,10 +242,10 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 			// handle 经注入的 proxy 注册 remote ref：Electron IPC 结构化克隆无法序列化类实例
 			create: async (agentType = "novel") => {
 				const ref = await manager.spawnConversation({ agentType });
-				return { conversationId: ref.conversationId, handle: mark(ref.handle) };
+				return { conversationId: ref.conversationId, handle: mark(toRemoteHandle(ref.handle)) };
 			},
 			open: async (conversationId) =>
-				mark((await manager.createOrResume(conversationId)).handle),
+				mark(toRemoteHandle((await manager.createOrResume(conversationId)).handle)),
 			delete: (conversationId) => manager.delete(conversationId),
 			history: (conversationId, opts) =>
 				readOnly !== undefined ? readOnly.history(conversationId, opts ?? {}) : Promise.resolve([]),

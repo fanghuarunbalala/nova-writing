@@ -6,6 +6,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import { expose, proxy, type RPCMessage } from "kkrpc/remote-refs";
 import { basename, join } from "node:path";
+import { randomUUID } from "node:crypto";
 import {
   Conversation,
   ConversationManagerServer,
@@ -15,11 +16,11 @@ import {
   createNovelApiServer,
   createProcessSpawner,
   electronIpcTransport,
+  startNovelDbWsServer,
   type AgentLoop,
   type ConversationJournalService,
   type CredentialCipher,
   type LLMessage,
-  type NovelStore,
   type OutputEvent,
   type TurnContext,
 } from "@novel/core";
@@ -101,11 +102,11 @@ async function applyDefaultProviderEnv(configStore: NodeApplicationConfigStore):
   console.error(`[main] provider resolved from config: ${profile.provider}/${profile.model}`);
 }
 
-/** manager：有 provider key 时 spawnConversation 走子进程（真实 provider，经 fd 3 共享 novel store）；否则回退内存回显 loop */
+/** manager：有 provider key 时 spawnConversation 走子进程（真实 provider，novel-db 经 kkrpc/ws）；否则回退内存回显 loop */
 function createManager(
-  store: NovelStore,
   conversationsRoot: string,
   workspaceProvider: () => string | undefined,
+  novelWs: { url: string; token: string },
 ): ConversationManagerServer {
   const factory = {
     create: (o: { conversationId: string }) => {
@@ -125,7 +126,7 @@ function createManager(
   };
   const spawner =
     process.env.NOVEL_PROVIDER_API_KEY !== undefined
-      ? createProcessSpawner(childScript, store)
+      ? createProcessSpawner(childScript, novelWs)
       : undefined;
   return new ConversationManagerServer(factory, spawner, {
     storedirRoot: conversationsRoot,
@@ -170,9 +171,18 @@ async function main(): Promise<void> {
   // 设置页保存后重启生效（conversation 模式在启动时决定）。
   await applyDefaultProviderEnv(configStore);
 
+  // novel-db WS：conversation 子进程经 kkrpc/ws + token 访问 canonical store（协议定稿 transport）
+  const novelWs = await startNovelDbWsServer({ store, token: randomUUID() });
+  app.on("will-quit", () => {
+    void novelWs.close();
+  });
+
   // 当前工作区根路径（spawn 时经 env 注入子进程，agent 文件工具落点）
   let currentWorkspaceRoot: string | undefined;
-  const manager = createManager(store, conversationsRoot, () => currentWorkspaceRoot);
+  const manager = createManager(conversationsRoot, () => currentWorkspaceRoot, {
+    url: novelWs.url,
+    token: novelWs.token,
+  });
   const serverApi = createNovelApiServer({ manager, novel: store, proxy, journalDir: conversationsRoot });
 
   // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）

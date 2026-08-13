@@ -2,6 +2,8 @@ import { describe, expect, it, afterAll } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EventEmitter } from "node:events";
+import type { ChildProcess } from "node:child_process";
 import { expose, wrap } from "kkrpc";
 import { createMemoryTransportPair } from "../../rpc/transport.js";
 import { Conversation } from "../../conversation/server/Conversation.js";
@@ -9,6 +11,7 @@ import { FileConversationJournalService } from "../../conversation/persistence/F
 import {
 	ConversationManagerServer,
 	type ConversationFactory,
+	type ConversationProcessSpawner,
 } from "../../conversation/server/ConversationManagerServer.js";
 import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelDbServer } from "../../novel/server/NovelDbServer.js";
@@ -251,6 +254,33 @@ describe("createNovelApiClient（门面）", () => {
 		const receipt = await handle.sendUserMessage({ text: "hi" });
 		expect(receipt).toMatchObject({ seq: 1 });
 		handle.dispose();
+	});
+
+	it("函数型对端 handle（plain kkrpc wrap 形态）经适配后对象形态可属性转发", async () => {
+		// plain kkrpc wrap 的代理以函数为目标（typeof === "function"），
+		// 不经适配会被 remote-refs 编成 function-kind ref（属性访问丢失）
+		const handleLike = Object.assign(function () {}, {
+			sendUserMessage: async () => ({ seq: 1, recordedAt: "" }),
+			sendUserCommand: async () => ({ seq: 0, recordedAt: "" }),
+			sendSystemControl: async () => ({ seq: 0, recordedAt: "" }),
+			sendApprovalRequest: async () => ({ kind: "approve" }),
+			sendAskingQuestionRequest: async () => "",
+			sendExitComposeRequest: async () => {},
+			subscribeEvents: async () => {},
+			dispose: () => {},
+		}) as unknown as ConversationHandle;
+		const fakeSpawner: ConversationProcessSpawner = {
+			spawn: () => ({
+				child: new EventEmitter() as unknown as ChildProcess,
+				handle: handleLike,
+			}),
+		};
+		const server = new ConversationManagerServer(conversationFactory(), fakeSpawner);
+		const api = createNovelApiServer({ manager: server, novel: new InMemoryNovelStore() });
+		const created = await api.conversations.create();
+		expect(typeof created.handle).toBe("object");
+		expect(typeof created.handle.subscribeEvents).toBe("function");
+		await expect(created.handle.sendUserMessage({ text: "hi" })).resolves.toMatchObject({ seq: 1 });
 	});
 
 	it("conversations.history 经 journalDir 代读（嵌套布局 journal 沙盒）", async () => {

@@ -3,6 +3,12 @@
  *
  * auto-fill minmax(300px, 1fr) + gap 13 + margin-top 14。
  */
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

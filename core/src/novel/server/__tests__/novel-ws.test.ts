@@ -42,7 +42,7 @@ describe("NovelDbWsServer（kkrpc/ws）", () => {
 		handle.dispose();
 	});
 
-	it("mutate 乐观锁 stale 错误经 WS 传播（RPCError.remote + cause.name 可判）", async () => {
+	it("mutate 乐观锁 stale 经 WS 传播并归一为 RPCError code=stale", async () => {
 		const server = await makeServer();
 		const transport = webSocketClientTransport({ url: server.url, protocols: [server.token] });
 		const handle = new NovelHandle(transport);
@@ -60,9 +60,7 @@ describe("NovelDbWsServer（kkrpc/ws）", () => {
 			}),
 		).rejects.toMatchObject({
 			name: "RPCError",
-			code: "remote",
-			// Error.name 跨 RPC 序列化丢失（非可枚举）；stale 以自有 errorCode 字段判
-			cause: { errorCode: "novel-stale" },
+			code: "stale",
 		});
 
 		handle.dispose();

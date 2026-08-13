@@ -6,11 +6,12 @@
  * 内容区用 .paneBody + .paneInner 包裹（原型 .pane-body + .pane-inner），
  * 提供 padding 与 max-width 1000 居中。
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { CharacterGrid } from "../../domains/novel/character/components/CharacterGrid.js";
 import { LocationGrid } from "../../domains/novel/location/components/LocationGrid.js";
 import { ManuscriptReader } from "../../domains/novel/manuscript/components/ManuscriptReader.js";
 import { StoryOutlineTree } from "../../domains/novel/outline/components/StoryOutlineTree.js";
+import { EntityEditDialog } from "../../domains/novel/components/EntityEditDialog.js";
 import type { CharacterStore } from "../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
 import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
@@ -60,6 +61,8 @@ export function ContentSurface({
   const manuscriptSnapshot = useExternalStore(manuscript);
   const characterSnapshot = useExternalStore(characters);
   const locationSnapshot = useExternalStore(locations);
+  const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
+  const [locationDialogOpen, setLocationDialogOpen] = useState(false);
 
   // 定位：来自对话引用的章节/段落自动选中所属章节。
   useEffect(() => {
@@ -108,6 +111,7 @@ export function ContentSurface({
             workspaceId={workspaceId ?? ""}
             characters={characterSnapshot.characters}
             onSelect={onSelectCharacter}
+            onNewCharacter={() => setCharacterDialogOpen(true)}
           />
         );
         break;
@@ -117,6 +121,7 @@ export function ContentSurface({
             workspaceId={workspaceId ?? ""}
             locations={locationSnapshot.locations}
             onSelect={onSelectLocation}
+            onNewLocation={() => setLocationDialogOpen(true)}
           />
         );
         break;
@@ -127,6 +132,20 @@ export function ContentSurface({
     <div className={styles.surface}>
       <MainSubHead title={PANE_META[value].title} sub={PANE_META[value].kicker} onBack={onBack} />
       {renderTab(value)}
+      <EntityEditDialog
+        open={characterDialogOpen}
+        onOpenChange={setCharacterDialogOpen}
+        entityLabel="角色"
+        error={characterSnapshot.error?.message}
+        onSubmit={(input) => characters.createCharacter(input)}
+      />
+      <EntityEditDialog
+        open={locationDialogOpen}
+        onOpenChange={setLocationDialogOpen}
+        entityLabel="地点"
+        error={locationSnapshot.error?.message}
+        onSubmit={(input) => locations.createLocation(input)}
+      />
     </div>
   );
 }

@@ -7,6 +7,7 @@ export type RPCErrorCode =
 	| "timeout"
 	| "peer-closed"
 	| "remote"
+	| "stale"
 	| "invalid-request"
 	| "cancelled"
 	| "unknown"

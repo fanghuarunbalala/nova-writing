@@ -14,6 +14,10 @@ export interface CharacterDetailPanelProps {
   readonly characterId: string;
   readonly detail?: CharacterDetail;
   readonly onLocateInContent?: (characterId: string) => void;
+  /** 编辑入口（宿主打开编辑对话框） */
+  readonly onEdit?: () => void;
+  /** 删除入口（宿主确认后删除） */
+  readonly onDelete?: () => void;
 }
 
 export function CharacterDetailPanel({
@@ -21,6 +25,8 @@ export function CharacterDetailPanel({
   characterId,
   detail,
   onLocateInContent,
+  onEdit,
+  onDelete,
 }: CharacterDetailPanelProps) {
   if (detail === undefined) {
     return <div className={styles.panel}>加载角色详情…</div>;
@@ -36,8 +42,18 @@ export function CharacterDetailPanel({
       </div>
       <div className={styles.dMeta}>v{detail.version}</div>
       {detail.profile !== "" ? <p className={styles.note}>{detail.profile}</p> : null}
-      {onLocateInContent !== undefined ? (
-        <div className={styles.dFoot}>
+      <div className={styles.dFoot}>
+        {onEdit !== undefined ? (
+          <button type="button" className={styles.locate} onClick={onEdit}>
+            编辑
+          </button>
+        ) : null}
+        {onDelete !== undefined ? (
+          <button type="button" className={styles.locate} onClick={onDelete}>
+            删除
+          </button>
+        ) : null}
+        {onLocateInContent !== undefined ? (
           <button
             type="button"
             className={styles.locate}
@@ -45,8 +61,8 @@ export function CharacterDetailPanel({
           >
             在内容中定位 -&gt;
           </button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }

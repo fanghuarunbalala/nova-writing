@@ -13,6 +13,7 @@ import type { ConversationHandle, ConversationId } from "../conversation/contrac
 import type { OutputEvent } from "../conversation/contract/events/index.js";
 import type { ConversationJournalReadOnlyService } from "../conversation/contract/journal/index.js";
 import { FileConversationJournalReadOnlyService } from "../conversation/persistence/FileConversationJournalReadOnlyService.js";
+import { toRPCError } from "../rpc/call.js";
 import type { AgentType } from "../conversation/contract/types/index.js";
 import type { NovelMutation } from "../novel/contract/mutation.js";
 import type {
@@ -281,7 +282,14 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 			publication: {
 				get: () => novel.query({ op: "publication.get" }) as Promise<PublicationSnapshot>,
 			},
-			mutate: (m) => novel.mutate(m),
+			// stale 归一：乐观锁冲突经 toRPCError 映射 code:"stale"（renderer 结构判断，跨模块 instanceof 不成立）
+			mutate: async (m) => {
+				try {
+					return await novel.mutate(m);
+				} catch (err) {
+					throw toRPCError(err, "novel-db");
+				}
+			},
 		},
 	};
 }

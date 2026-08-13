@@ -35,12 +35,17 @@ export async function call<T>(fn: () => Promise<T>, ctx: CallContext = {}): Prom
  */
 export function toRPCError(err: unknown, peer?: string): RPCError {
 	if (err instanceof RPCError) return err
-	const name = (err as { name?: string })?.name
-	if (name === "RPCTransportClosedError") {
+	const record = err as { name?: string; errorCode?: string }
+	if (record.name === "RPCTransportClosedError") {
 		return new RPCError({ code: "peer-closed", peer, cause: err })
 	}
-	if (name === "AbortError") {
+	if (record.name === "AbortError") {
 		return new RPCError({ code: "cancelled", peer, cause: err })
+	}
+	// 乐观锁冲突：Error.name 跨 RPC 序列化会丢，NovelStaleRevisionError 以自有
+	// 可枚举 errorCode 字段标识（本地/远端实例都能判）
+	if (record.errorCode === "novel-stale") {
+		return new RPCError({ code: "stale", peer, cause: err })
 	}
 	// 远程方法抛错（kkrpc 保留 name/message/stack）与本地抛错都归 remote——
 	// call 无法区分，统一按"远程调用失败"处理

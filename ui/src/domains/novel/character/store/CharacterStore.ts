@@ -1,13 +1,16 @@
 /**
  * CharacterStore
  *
- * 角色域 store：列表 + 详情缓存 + 本地选中。
+ * 角色域 store：列表 + 详情缓存 + 本地选中 + 写路径（create/update/delete，乐观锁）。
  * 映射说明：core Character 无 role/relatedUnits 字段，role 取首个 alias，
  * profile 取 authorNotes，relatedUnits 留空（等 binding 查询落地）。
+ * stale：NovelStaleRevisionError 经门面归一为 RPCError code:"stale"——自动重拉
+ * 并置 error 提示（数据已被更新）。
  */
-import type { Character, CharacterId, Logger, NovelApiClient } from "@novel/core";
+import type { Character, CharacterId, CharacterInput, Logger, NovelApiClient } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
 import { ExternalStore } from "../../../../shared/state/ExternalStore.js";
+import { TaskSerializer } from "../../../../shared/state/TaskSerializer.js";
 import type { NovelDomainError } from "../../outline/store/StoryOutlineTreeStore.js";
 
 export interface CharacterSummary {
@@ -50,6 +53,8 @@ const EMPTY_SNAPSHOT: CharacterSnapshot = Object.freeze({
 export class CharacterStore extends ExternalStore<CharacterSnapshot> {
   private readonly api: NovelApiClient;
   private readonly logger: Logger;
+  /** 变更串行（乐观锁操作不并发） */
+  private readonly serializer = new TaskSerializer();
   private generation = 0;
 
   constructor(deps: { readonly api: NovelApiClient; readonly logger?: Logger }) {
@@ -121,6 +126,96 @@ export class CharacterStore extends ExternalStore<CharacterSnapshot> {
     const workspaceId = this.snapshot.workspaceId;
     if (workspaceId === undefined) return Promise.resolve();
     return this.loadWorkspace(workspaceId);
+  }
+
+  /**
+   * 新建角色（成功后刷新列表并选中新角色）
+   * @param input 角色档案输入
+   */
+  createCharacter(input: CharacterInput): Promise<void> {
+    const workspaceId = this.snapshot.workspaceId;
+    if (workspaceId === undefined) return Promise.resolve();
+    return this.serializer.run(async () => {
+      const result = await this.api.novel.mutate({ op: "character.create", input });
+      await this.loadWorkspace(workspaceId);
+      this.setSnapshot({ ...this.snapshot, selectedId: result.changeId });
+    });
+  }
+
+  /**
+   * 更新角色（乐观锁；stale 时自动重拉并置提示）
+   * @param characterId 角色 id
+   * @param patch 变更字段
+   * @param baseRevision 最近读到的版本（entityVersion）
+   */
+  updateCharacter(characterId: string, patch: Partial<CharacterInput>, baseRevision: number): Promise<void> {
+    return this.serializer.run(async () => {
+      await this.runGuarded(
+        () =>
+          this.api.novel.mutate({
+            op: "character.update",
+            characterId: characterId as CharacterId,
+            baseRevision,
+            patch,
+          }),
+        "角色",
+      );
+    });
+  }
+
+  /**
+   * 删除角色（乐观锁；成功后清选中并刷新）
+   * @param characterId 角色 id
+   * @param baseRevision 最近读到的版本（entityVersion）
+   */
+  deleteCharacter(characterId: string, baseRevision: number): Promise<void> {
+    return this.serializer.run(async () => {
+      await this.runGuarded(
+        () =>
+          this.api.novel.mutate({
+            op: "character.delete",
+            characterId: characterId as CharacterId,
+            baseRevision,
+          }),
+        "角色",
+      );
+      const workspaceId = this.snapshot.workspaceId;
+      this.setSnapshot({ ...this.snapshot, selectedId: undefined });
+      if (workspaceId !== undefined) await this.loadWorkspace(workspaceId);
+    });
+  }
+
+  /** 变更执行 + stale/通用错误处理（stale → 自动重拉 + 置错误提示） */
+  private async runGuarded(mutate: () => Promise<unknown>, label: string): Promise<void> {
+    try {
+      await mutate();
+      this.setSnapshot({ ...this.snapshot, error: undefined });
+      const workspaceId = this.snapshot.workspaceId;
+      if (workspaceId !== undefined) await this.loadWorkspace(workspaceId);
+    } catch (err) {
+      if ((err as { code?: unknown } | null)?.code === "stale") {
+        this.setSnapshot({
+          ...this.snapshot,
+          error: {
+            code: "novel-stale",
+            message: `${label}数据已被更新，已刷新为最新版本，请重试`,
+            retryable: true,
+          },
+        });
+        const workspaceId = this.snapshot.workspaceId;
+        if (workspaceId !== undefined) await this.loadWorkspace(workspaceId);
+        return;
+      }
+      this.setSnapshot({
+        ...this.snapshot,
+        error: {
+          code: "novel-mutate-failed",
+          message: `${label}保存失败，请重试`,
+          retryable: true,
+        },
+      });
+      this.logger.warn("character_store.mutate_failed");
+    }
   }
 }
 

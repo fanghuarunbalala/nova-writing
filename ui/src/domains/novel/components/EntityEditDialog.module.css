@@ -1,0 +1,43 @@
+/** EntityEditDialog 表单视觉 */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--color-muted, #aaa);
+}
+
+.input,
+.textarea {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-strong, #555);
+  background: var(--color-bg-elevated, #1e1e24);
+  color: var(--color-text, #ddd);
+  font-size: 13px;
+  resize: vertical;
+}
+
+.input:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-accent, #7aa2f7);
+}
+
+.error {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--color-danger-border, #b3554d);
+  background: var(--color-danger-bg, #3a2422);
+  color: var(--color-danger, #e8a19c);
+  font-size: 13px;
+}

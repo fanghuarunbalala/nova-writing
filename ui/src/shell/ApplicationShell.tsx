@@ -3,13 +3,12 @@
  *
  * Phase 3 组合根：把 5 个域拼成 topbar/sidebar/main/inspector/overlays，
  * 并承担唯一允许的跨域副作用协调（workspace 切换触发各域 load）。
- *
- * 精简版：审批域整体延后（listApprovals/enqueueInput/ApprovalStore 未接），
- * 相关 wiring 与 UI 插槽移除。
+ * 审批域：活动会话投影 approvals → ApprovalStore；决策经 binding.resolveApproval 回传。
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
+import { useActiveConversationSession } from "../domains/conversation/hooks/useActiveConversationSession.js";
 import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
 import {
   createDomainReferenceResolver,
@@ -95,7 +94,7 @@ export function ApplicationShell({
   const workspace = useExternalStore(workspaceAdapter);
   const overview = useExternalStore(domainStores.novelOverview);
   const inspector = useExternalStore(inspectorRouter);
-  // 审批域延后：空 store 占位（TopBar/Sidebar 徽标已移除，InspectorHost/ScheduleSurface 仍持空源）。
+  const catalogSnapshot = useExternalStore(domainStores.conversationCatalog);
   const approvalStore = useMemo(() => new ApprovalStore(), []);
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
@@ -103,6 +102,25 @@ export function ApplicationShell({
     { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null
   >(null);
   const workspaceId = workspace.current?.id;
+
+  // 活动会话：shell 级单订阅（ChatSurface 与审批域共用同一投影 binding）
+  const session = useActiveConversationSession(api, catalogSnapshot.activeConversationId, logger);
+  const approvalSnapshot = useExternalStore(approvalStore);
+
+  // 投影 approvals → 审批面板数据源
+  useEffect(() => {
+    approvalStore.setApprovals(session.snapshot?.projection.approvals ?? []);
+  }, [approvalStore, session.snapshot]);
+
+  // 审批决策回传通道（经 binding.resolveApproval → handle）
+  useEffect(() => {
+    approvalStore.setDecisionHandler((requestId, decision) => {
+      session.resolveApproval(requestId, {
+        kind: decision === "approved" ? "approve" : "reject",
+      });
+    });
+    return () => approvalStore.setDecisionHandler(undefined);
+  }, [approvalStore, session]);
 
   // 跨域副作用协调：workspace 变化时并行触发各域 load（spec 1.5.1）
   useEffect(() => {
@@ -247,6 +265,14 @@ export function ApplicationShell({
         onOpenWorkspace={() => onOpenWorkspace?.()}
         onOpenSettings={() => onOpenSettings?.()}
         onOpenSchedule={() => mainViewRouter.transition("schedule")}
+        approvalBadge={approvalSnapshot.pendingCount}
+        approvalActive={inspector.state.kind === "approval"}
+        onOpenApproval={() =>
+          inspectorRouter.transition({
+            kind: "approval",
+            changeSetId: catalogSnapshot.activeConversationId ?? "",
+          })
+        }
         extensions={extensions}
       />
       <div className={styles.body} data-sidebar-mode={sidebarMode}>
@@ -267,6 +293,7 @@ export function ApplicationShell({
         <MainArea
           api={api}
           logger={logger}
+          session={session}
           mainViewRouter={mainViewRouter}
           conversationCatalog={domainStores.conversationCatalog}
           outlineTree={domainStores.storyOutlineTree}

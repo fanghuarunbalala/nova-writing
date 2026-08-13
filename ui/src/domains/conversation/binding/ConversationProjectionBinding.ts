@@ -1,5 +1,6 @@
 /** Owns an opened Conversation and its minimal projection for one React consumer. */
 import type {
+  ConversationApprovalDecision,
   ConversationHandle,
   ConversationSystemControl,
   Logger,
@@ -85,6 +86,11 @@ export class ConversationProjectionBinding {
   /** 发送系统控制（control lane：mode.set / stop / reload.config）。 */
   sendSystemControl(ctrl: ConversationSystemControl): Promise<Receipt> {
     return this.requireHandle().sendSystemControl(ctrl);
+  }
+
+  /** 回传审批决策（解除 sendApprovalRequest 阻塞；decision: approve/reject/edit）。 */
+  resolveApproval(requestId: string, decision: ConversationApprovalDecision): void {
+    this.requireHandle().resolveApproval(requestId, decision);
   }
 
   resume(): Promise<void> {

@@ -36,11 +36,17 @@ const WORKSPACE_CHANNEL = "workspace-rpc";
 
 /**
  * 回显 AgentLoop：followup 即时开 turn 产 turn-start/user.message → assistant.delta×N →
- * assistant.message/turn-end → journal 快照落盘（验证流式链路 + journal 语义，无需真实 provider）
+ * assistant.message/turn-end → journal 快照落盘（验证流式链路 + journal 语义，无需真实 provider）。
+ * 文本含「审批」时经 requestApproval 阻塞等 UI 决策（验证审批域端到端）。
  */
 function createEchoLoop(
   conversationId: string,
   journal?: ConversationJournalService,
+  requestApproval?: (req: {
+    requestId: string;
+    toolName: string;
+    args: string;
+  }) => Promise<{ kind: "approve" | "reject" | "edit" }>,
 ): AgentLoop {
   let seq = 0;
   const listeners = new Set<(e: OutputEvent) => void>();
@@ -63,6 +69,33 @@ function createEchoLoop(
       };
       emit({ type: "turn-start", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
       emit({ type: "user.message", persist: true, seq: turn.seq, text, conversationId, ts: now() });
+
+      if (text.includes("审批") && requestApproval !== undefined) {
+        // 审批路径：阻塞等 UI 决策（sendApprovalRequest 会发 approval.request 事件），
+        // 决策回传后按结果收口（approval.resolved 事件由 Conversation 发出）
+        void requestApproval({
+          requestId: `approval_${conversationId}_${turn.seq}`,
+          toolName: "NovelWrite",
+          args: JSON.stringify({ text }),
+        })
+          .then((decision) => {
+            const reply = decision.kind === "approve" ? "（回声）已批准" : "（回声）已拒绝";
+            messages.push({ role: "assistant", content: reply });
+            emit({ type: "assistant.message", persist: true, seq: turn.seq, text: reply, conversationId, ts: now() });
+            emit({ type: "turn-end", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
+            void journal?.appendTurn(turn);
+          })
+          .catch(() => {
+            // 决策通道异常：收口失败回复，避免 turn 悬挂
+            const reply = "（回声）审批决策通道异常";
+            messages.push({ role: "assistant", content: reply });
+            emit({ type: "assistant.message", persist: true, seq: turn.seq, text: reply, conversationId, ts: now() });
+            emit({ type: "turn-end", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
+            void journal?.appendTurn(turn);
+          });
+        return turn;
+      }
+
       const reply = `（回声）${text}`;
       for (const ch of reply) {
         emit({ type: "assistant.delta", persist: false, kind: "text", text: ch, conversationId, ts: now() });
@@ -110,18 +143,24 @@ function createManager(
 ): ConversationManagerServer {
   const factory = {
     create: (o: { conversationId: string }) => {
-      // 回显模式同样落盘：与子进程 journal 语义一致（history/回执互认）
+      // 回显模式同样落盘：与子进程 journal 语义一致（history/回执互认）。
+      // 审批触发经 conv 自引用：requestApproval → conv.sendApprovalRequest（阻塞等 UI 决策）
       const journal = new FileConversationJournalService({
         conversationId: o.conversationId,
         filePath: join(conversationsRoot, o.conversationId, "journal.jsonl"),
       });
       void journal.open();
-      return new Conversation({
+      let conv: Conversation | undefined;
+      const loop = createEchoLoop(o.conversationId, journal, (req) =>
+        conv!.sendApprovalRequest(req),
+      );
+      conv = new Conversation({
         conversationId: o.conversationId,
-        loop: createEchoLoop(o.conversationId, journal),
+        loop,
         sampling: { model: "echo" },
         journal,
       });
+      return conv;
     },
   };
   const spawner =

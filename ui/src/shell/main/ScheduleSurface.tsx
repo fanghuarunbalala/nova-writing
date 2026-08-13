@@ -24,7 +24,7 @@ import styles from "./ScheduleSurface.module.css";
 export interface ScheduleSurfaceProps {
   readonly schedule: ScheduleStore;
   readonly scheduleTodo: ScheduleTodoStore;
-  /** 审批待办数据源（shell 级 ApprovalStore，api.conversations.listApprovals()）。 */
+  /** 审批待办数据源（shell 级 ApprovalStore，由活动会话投影 approvals 驱动）。 */
   readonly approvalStore: ApprovalStore;
   readonly onTodoAction?: (id: string, action: string) => void;
   readonly onBack?: () => void;

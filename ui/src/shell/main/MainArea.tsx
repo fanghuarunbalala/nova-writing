@@ -21,12 +21,14 @@ import type { ContentTab } from "./contentTab.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
 import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
+import type { ActiveConversationSession } from "../../domains/conversation/hooks/useActiveConversationSession.js";
 import { ScheduleSurface } from "./ScheduleSurface.js";
 import styles from "./MainArea.module.css";
 
 export interface MainAreaProps {
   readonly api: NovelApiClient;
   readonly logger?: Logger;
+  readonly session: ActiveConversationSession;
   readonly mainViewRouter: MainViewRouter;
   readonly conversationCatalog: ConversationCatalogStore;
   readonly outlineTree: StoryOutlineTreeStore;
@@ -57,8 +59,7 @@ export function MainArea(props: MainAreaProps) {
     <main className={styles.main}>
       {mainView.state === "chat" ? (
         <ChatSurface
-          api={props.api}
-          logger={props.logger}
+          session={props.session}
           conversationCatalog={props.conversationCatalog}
           onCreateConversation={props.onCreateConversation}
           onReferenceClick={props.onReferenceClick}

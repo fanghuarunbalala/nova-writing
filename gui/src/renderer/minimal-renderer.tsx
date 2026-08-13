@@ -35,6 +35,15 @@ const configurationClient = {
   mutate: (m: ConfigMutation) => configApi.mutate(m),
 };
 
+interface WorkspaceApi {
+  pickWorkspace(): Promise<{ referenceId: string; label: string } | undefined>;
+  listRecent(): Promise<readonly { id: string; label: string }[]>;
+  open(reference: { referenceId: string; label: string }): Promise<{ id: string; label: string }>;
+  close(): Promise<void>;
+}
+const workspaceTransport = electronIpcTransport({ endpoint: bridge as never, channel: "workspace-rpc" });
+const workspaceApi = wrap<WorkspaceApi>(workspaceTransport);
+
 const platform: FrontendPlatform = {
   capabilities: {
     fileSelection: false,
@@ -47,15 +56,15 @@ const platform: FrontendPlatform = {
   notifications: { show: async () => {} },
 };
 
-// 固定内存 workspace（默认项目）；生产换 ElectronWorkspaceController + bridge.workspaces。
+// workspace 控制器：桥 main 侧目录选择器 + 定位器（经 workspace-rpc）。
 const workspaceController = new WorkspaceController({
   sessions: {
-    listRecent: async () => Object.freeze([Object.freeze({ id: "default", label: "默认项目" })]),
-    open: async (reference) => ({ id: reference.referenceId, label: reference.label }),
-    close: async () => {},
+    listRecent: () => workspaceApi.listRecent(),
+    open: (reference) => workspaceApi.open(reference),
+    close: () => workspaceApi.close(),
   },
   picker: {
-    pickWorkspace: async () => ({ referenceId: "default", label: "默认项目" }),
+    pickWorkspace: () => workspaceApi.pickWorkspace(),
   },
 });
 
@@ -75,5 +84,4 @@ root.render(
   </StrictMode>,
 );
 
-// 自动打开默认项目（chooseAndOpen 走 picker，直接置 active；NovelApp 无 current 时显示选择页）。
-void workspaceController.chooseAndOpen();
+// 不自动打开：NovelApp 无 current 时显示项目选择页，由用户 chooseAndOpen（走目录选择器）。

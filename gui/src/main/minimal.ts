@@ -3,9 +3,9 @@
  * - novel：SqliteNovelStore 落盘（userData/novel.db）
  * - conversation：spawnConversation 走子进程（desktop-child.mjs，真实 provider）；createOrResume 回退内存回显 loop
  */
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { expose, type RPCMessage } from "kkrpc";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   Conversation,
   ConversationManagerServer,
@@ -18,7 +18,7 @@ import {
   type CredentialCipher,
   type OutputEvent,
 } from "@novel/core";
-import { NodeApplicationConfigStore, NodeConfigHomeResolver } from "@novel/core/node";
+import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
 
 // __dirname = gui/dist/minimal；上三级到项目根，再进 core/scripts
 const preloadPath = join(__dirname, "preload.cjs");
@@ -26,6 +26,7 @@ const rendererHtml = join(__dirname, "minimal.html");
 const childScript = join(__dirname, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
 const IPC_CHANNEL = "novel-rpc";
 const CONFIG_CHANNEL = "config-rpc";
+const WORKSPACE_CHANNEL = "workspace-rpc";
 
 /** 回显 AgentLoop：followup 产 user.message → assistant.delta×N → turn-end（验证流式链路，无需真实 provider） */
 function createEchoLoop(conversationId: string): AgentLoop {
@@ -106,6 +107,32 @@ async function main(): Promise<void> {
   };
   expose(serverApi, electronIpcTransport({ endpoint, channel: IPC_CHANNEL }));
   await configServer.start(electronIpcTransport({ endpoint, channel: CONFIG_CHANNEL }));
+
+  // workspace：目录选择器 + 定位器 + 最近列表（内存）
+  const locator = new NodeWorkspaceStoreLocator({
+    storageRoot: join(app.getPath("userData"), "novel-storage"),
+  });
+  const recentWorkspaces: { id: string; label: string }[] = [];
+  const workspaceApi = {
+    pickWorkspace: async (): Promise<{ referenceId: string; label: string } | undefined> => {
+      const result = await dialog.showOpenDialog({
+        title: "打开小说项目",
+        properties: ["openDirectory", "createDirectory"],
+      });
+      if (result.canceled || result.filePaths.length === 0) return undefined;
+      const root = result.filePaths[0]!;
+      return { referenceId: root, label: basename(root) };
+    },
+    listRecent: async () => Object.freeze([...recentWorkspaces]),
+    open: async (reference: { referenceId: string; label: string }) => {
+      const location = await locator.resolve(reference.referenceId);
+      const session = { id: location.workspaceId, label: reference.label };
+      recentWorkspaces.unshift(session);
+      return session;
+    },
+    close: async () => {},
+  };
+  expose(workspaceApi, electronIpcTransport({ endpoint, channel: WORKSPACE_CHANNEL }));
 
   const win = new BrowserWindow({
     width: 900,

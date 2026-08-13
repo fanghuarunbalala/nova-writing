@@ -53,6 +53,7 @@ function createEchoLoop(
     for (const l of listeners) l(e);
   };
   const now = () => new Date().toISOString();
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
   return {
     run: async () => ({ final: { role: "assistant" as const, content: "" }, usage: undefined }),
     followup: (text: string) => {
@@ -69,9 +70,9 @@ function createEchoLoop(
       emit({ type: "turn-start", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
       emit({ type: "user.message", persist: true, seq: turn.seq, text, conversationId, ts: now() });
 
+      // 审批路径：阻塞等 UI 决策（sendApprovalRequest 会发 approval.request 事件），
+      // 决策回传后按结果收口（approval.resolved 事件由 Conversation 发出）
       if (text.includes("审批") && requestApproval !== undefined) {
-        // 审批路径：阻塞等 UI 决策（sendApprovalRequest 会发 approval.request 事件），
-        // 决策回传后按结果收口（approval.resolved 事件由 Conversation 发出）
         void requestApproval({
           requestId: `approval_${conversationId}_${turn.seq}_echo`,
           toolName: "CharacterWrite",
@@ -95,20 +96,27 @@ function createEchoLoop(
         return turn;
       }
 
-      // 文本含「思考」时先发 reasoning delta（验证 thinking 呼吸动画；内容默认丢弃不进正文）
-      if (text.includes("思考")) {
-        emit({ type: "assistant.delta", persist: false, kind: "reasoning", text: "让我想想…", conversationId, ts: now() });
-        emit({ type: "assistant.delta", persist: false, kind: "reasoning", text: "分析文本结构…", conversationId, ts: now() });
-      }
-      const reply = `（回声）${text}`;
-      for (const ch of reply) {
-        emit({ type: "assistant.delta", persist: false, kind: "text", text: ch, conversationId, ts: now() });
-      }
-      messages.push({ role: "assistant", content: reply });
-      emit({ type: "assistant.message", persist: true, seq: turn.seq, text: reply, conversationId, ts: now() });
-      emit({ type: "turn-end", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
-      // 同 seq 重写：assistant 完整快照（与真实 loop 的 journalListener 语义一致）
-      void journal?.appendTurn(turn);
+      // 异步排程发射（避免同步批量发完导致 thinking/generating 状态对 UI 不可见：
+      // React 批量渲染只呈现最终快照；真实 provider 是秒级流不受影响，echo 演示需人工间隔）
+      void (async () => {
+        // 文本含「思考」时先发 reasoning delta（验证 thinking 呼吸动画；内容默认丢弃不进正文）
+        if (text.includes("思考")) {
+          emit({ type: "assistant.delta", persist: false, kind: "reasoning", text: "让我想想…", conversationId, ts: now() });
+          await sleep(700);
+          emit({ type: "assistant.delta", persist: false, kind: "reasoning", text: "分析文本结构…", conversationId, ts: now() });
+          await sleep(700);
+        }
+        const reply = `（回声）${text}`;
+        for (const ch of reply) {
+          emit({ type: "assistant.delta", persist: false, kind: "text", text: ch, conversationId, ts: now() });
+          await sleep(24);
+        }
+        messages.push({ role: "assistant", content: reply });
+        emit({ type: "assistant.message", persist: true, seq: turn.seq, text: reply, conversationId, ts: now() });
+        emit({ type: "turn-end", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
+        // 同 seq 重写：assistant 完整快照（与真实 loop 的 journalListener 语义一致）
+        void journal?.appendTurn(turn);
+      })();
       return turn;
     },
     steer: () => {},

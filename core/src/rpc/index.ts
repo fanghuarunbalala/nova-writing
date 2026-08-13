@@ -3,3 +3,4 @@
 export * from "./RPCError.js";
 export * from "./call.js";
 export * from "./transport.js";
+export * from "./electron.js";

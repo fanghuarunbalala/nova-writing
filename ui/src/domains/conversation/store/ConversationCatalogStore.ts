@@ -5,24 +5,14 @@
  * 提供 create/select。所有 mutation 经 TaskSerializer 串行。
  *
  * 说明：
- * - 提供 create/select/rename/pin/delete 全量变更操作，经 TaskSerializer 串行。
+ * - 提供 create/select/delete；rename/pin 延后（新 core 无此契约，方法 reject）。
  * - loadWorkspace 只加载不自动创建（spec 1.5.1 语义；空态由 ChatEmptyState 引导）。
+ * - ConversationSummary 无 title/updatedAt/pinned，title 取 name、lastActivityAt 置 0。
  */
-import {
-  noopLogger,
-  novelAgentDefinition,
-  type ConversationSnapshot,
-  type Logger,
-  type NovelApiClient,
-} from "@novel/core";
+import type { ConversationSummary, Logger, NovelApiClient } from "@novel/core";
+import { noopLogger } from "@novel/core/client";
 import { ExternalStore } from "../../../shared/state/ExternalStore.js";
 import { TaskSerializer } from "../../../shared/state/TaskSerializer.js";
-
-// 与 core novelAgentDefinition 同源，避免版本漂移导致 manifest 绑定注入失败。
-export const DEFAULT_NOVEL_AGENT_BINDING = Object.freeze({
-  agentType: novelAgentDefinition.agentType,
-  definitionVersion: novelAgentDefinition.definitionVersion,
-});
 
 export type ConversationCatalogPhase = "idle" | "loading" | "ready" | "error";
 
@@ -75,7 +65,7 @@ export class ConversationCatalogStore extends ExternalStore<ConversationCatalogS
     });
   }
 
-  /** 加载指定 workspace 的活跃对话列表；完成后 active 指向最近更新的一条。 */
+  /** 加载指定 workspace 的活跃对话列表；完成后 active 指向第一条。 */
   loadWorkspace(workspaceId: string): Promise<void> {
     const capturedId = requireNonBlank(workspaceId, "Workspace id");
     const generation = ++this.generation;
@@ -89,8 +79,8 @@ export class ConversationCatalogStore extends ExternalStore<ConversationCatalogS
     return this.serializer.run(async () => {
       this.logger.info("conversation_catalog.load_started");
       try {
-        const listed = await this.api.conversations.list({ status: "active" });
-        const items = captureCatalogItems(capturedId, listed.conversations);
+        const listed = await this.api.conversations.list();
+        const items = captureCatalogItems(listed);
         if (generation !== this.generation) return;
         this.setSnapshot({
           phase: "ready",
@@ -136,17 +126,9 @@ export class ConversationCatalogStore extends ExternalStore<ConversationCatalogS
     return this.serializer.run(async () => {
       this.logger.info("conversation_catalog.create_started");
       try {
-        const conversation = await this.api.conversations.create({
-          agent: DEFAULT_NOVEL_AGENT_BINDING,
-        });
-        let createdSnapshot: ConversationSnapshot;
-        try {
-          createdSnapshot = await conversation.getSnapshot();
-        } finally {
-          await conversation.close();
-        }
+        const ref = await this.api.conversations.create("novel");
         if (generation !== this.generation) return "";
-        const item = captureCatalogItem(workspaceId, createdSnapshot);
+        const item = captureCatalogItem(ref.conversationId);
         this.setSnapshot({
           phase: "ready",
           workspaceId,
@@ -191,49 +173,14 @@ export class ConversationCatalogStore extends ExternalStore<ConversationCatalogS
     return this.loadWorkspace(workspaceId);
   }
 
-  /** 重命名对话。Renames a conversation. */
-  renameConversation(id: string, title: string): Promise<void> {
-    const capturedId = requireNonBlank(id, "Conversation id");
-    const capturedTitle = requireNonBlank(title, "Conversation title");
-    return this.serializer.run(async () => {
-      this.logger.info("conversation_catalog.rename_started");
-      try {
-        await this.api.conversations.rename(capturedId, capturedTitle);
-        this.setSnapshot({
-          ...this.snapshot,
-          conversations: Object.freeze(
-            this.snapshot.conversations.map((item) =>
-              item.id === capturedId ? { ...item, title: capturedTitle } : item,
-            ),
-          ),
-        });
-      } catch {
-        this.logger.warn("conversation_catalog.rename_failed");
-        throw new Error("rename-failed");
-      }
-    });
+  /** 重命名对话（新 core 无契约，延后）。 */
+  renameConversation(_id: string, _title: string): Promise<void> {
+    return Promise.reject(new Error("rename-not-implemented"));
   }
 
-  /** 置顶/取消置顶。Pins or unpins a conversation. */
-  pinConversation(id: string, pinned: boolean): Promise<void> {
-    const capturedId = requireNonBlank(id, "Conversation id");
-    return this.serializer.run(async () => {
-      this.logger.info("conversation_catalog.pin_started", { pinned });
-      try {
-        await this.api.conversations.pin(capturedId, pinned);
-        this.setSnapshot({
-          ...this.snapshot,
-          conversations: Object.freeze(
-            this.snapshot.conversations.map((item) =>
-              item.id === capturedId ? { ...item, pinned } : item,
-            ),
-          ),
-        });
-      } catch {
-        this.logger.warn("conversation_catalog.pin_failed");
-        throw new Error("pin-failed");
-      }
-    });
+  /** 置顶/取消置顶（新 core 无契约，延后）。 */
+  pinConversation(_id: string, _pinned: boolean): Promise<void> {
+    return Promise.reject(new Error("pin-not-implemented"));
   }
 
   /** 删除对话（软删除）。Deletes a conversation (soft). */
@@ -263,43 +210,19 @@ export class ConversationCatalogStore extends ExternalStore<ConversationCatalogS
 }
 
 function captureCatalogItems(
-  workspaceId: string,
-  snapshots: readonly ConversationSnapshot[],
+  summaries: readonly ConversationSummary[],
 ): readonly ConversationCatalogItem[] {
-  return Object.freeze(
-    [...snapshots]
-      .sort((left, right) => {
-        const leftPinned = left.metadata.pinned === true ? 0 : 1;
-        const rightPinned = right.metadata.pinned === true ? 0 : 1;
-        return (
-          leftPinned - rightPinned ||
-          right.metadata.updatedAt.localeCompare(left.metadata.updatedAt)
-        );
-      })
-      .map((snapshot) => captureCatalogItem(workspaceId, snapshot)),
-  );
+  return Object.freeze(summaries.map((summary) => captureCatalogItem(summary.conversationId)));
 }
 
-function captureCatalogItem(
-  workspaceId: string,
-  snapshot: ConversationSnapshot,
-): ConversationCatalogItem {
-  if (snapshot.metadata.workspaceId !== workspaceId) {
-    throw new TypeError("Conversation Workspace identity is invalid");
-  }
-  const id = requireNonBlank(snapshot.metadata.id, "Conversation id");
-  const agentType = requireNonBlank(snapshot.activeAgentBinding.agentType, "Agent type");
-  // 后端暂未返回 status；字段先铺路，API 提供后直接透传。
-  const status = (snapshot as { status?: ConversationCatalogStatus }).status;
-  const title = snapshot.metadata.title ?? `对话 ${id.slice(-6)}`;
+function captureCatalogItem(conversationId: string): ConversationCatalogItem {
+  const id = requireNonBlank(conversationId, "Conversation id");
   return Object.freeze({
     id,
-    title,
-    agentType,
-    agentLabel: agentType === "novel" ? "Novel Agent" : agentType,
-    lastActivityAt: Date.parse(snapshot.metadata.updatedAt) || 0,
-    ...(snapshot.metadata.pinned === true ? { pinned: true } : {}),
-    ...(status === undefined ? {} : { status }),
+    title: `对话 ${id.slice(-6)}`,
+    agentType: "novel",
+    agentLabel: "Novel Agent",
+    lastActivityAt: 0,
   });
 }
 

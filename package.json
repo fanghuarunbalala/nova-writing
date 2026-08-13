@@ -11,7 +11,7 @@
     "build": "pnpm -r build",
     "dev": "pnpm --filter @novel/core dev",
     "typecheck": "pnpm -r typecheck",
-    "gui:minimal": "pnpm --filter @novel/core build && node gui/scripts/build-minimal.mjs && electron gui/dist/minimal/main.cjs"
+    "gui:minimal": "pnpm --filter @novel/core build && pnpm --filter @novel/ui build && node gui/scripts/build-minimal.mjs && electron gui/dist/minimal/main.cjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

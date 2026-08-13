@@ -31,13 +31,14 @@ await build({
   logLevel: "warning",
 });
 
-// 3. renderer（browser 环境，ESM；kkrpc 走 browser 版）
+// 3. renderer（browser 环境，ESM + React JSX；kkrpc 走 browser 版，@novel/ui 由前置 build 产出 dist）
 await build({
-  entryPoints: [join(root, "src/renderer/minimal-renderer.ts")],
+  entryPoints: [join(root, "src/renderer/minimal-renderer.tsx")],
   outfile: join(root, "dist/minimal/renderer.js"),
   bundle: true,
   platform: "browser",
   format: "esm",
+  jsx: "automatic",
   logLevel: "warning",
 });
 

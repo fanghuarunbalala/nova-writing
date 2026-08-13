@@ -5,13 +5,17 @@
 import type { ToolDef } from "../ToolDef.js";
 import type { ToolCall } from "../../provider/types.js";
 import type { SubagentSpawner } from "../../../conversation/contract/task.js";
+import { ToolError } from "../errors.js";
 
 /** 解析 tool args JSON */
 function parseArgs<T>(call: ToolCall): T {
   try {
     return JSON.parse(call.args) as T;
   } catch {
-    throw new Error(`无效的 JSON 参数: ${call.args}`);
+    throw new ToolError(
+      { code: "TOOL_ARGUMENTS_INVALID", toolName: call.name },
+      `无效的 JSON 参数: ${call.args}`,
+    );
   }
 }
 

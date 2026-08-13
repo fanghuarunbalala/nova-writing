@@ -6,6 +6,7 @@ import { readFile, writeFile, mkdir, readdir, stat } from "node:fs/promises";
 import { join, resolve, relative, sep, dirname } from "node:path";
 import type { ToolDef } from "../ToolDef.js";
 import type { ToolCall } from "../../provider/types.js";
+import { ToolError } from "../errors.js";
 
 const PATH_MAX = 1024;
 const CONTENT_MAX = 512 * 1024;
@@ -29,7 +30,10 @@ function parseArgs(call: ToolCall): Record<string, unknown> {
   try {
     return JSON.parse(call.args) as Record<string, unknown>;
   } catch {
-    throw new Error(`无效的 JSON 参数: ${call.args}`);
+    throw new ToolError(
+      { code: "TOOL_ARGUMENTS_INVALID", toolName: call.name },
+      `无效的 JSON 参数: ${call.args}`,
+    );
   }
 }
 

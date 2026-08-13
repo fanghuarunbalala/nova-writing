@@ -1,7 +1,7 @@
 /**
- * 最小 Electron 入口（T12 验证）：内存 manager + novel 存储 + 门面，经 kkrpc/electron 暴露给 renderer。
- * 绕开旧 DesktopApplication 的 config/workspace/node 栈，验证「Electron + 新 core 客户端栈 + 对话/novel」核心链路。
- * 会话用回显 loop（无需 provider key）；生产换 createProcessSpawner + buildNovelAgent 子进程。
+ * 最小 Electron 入口：node 宿主装配（sqlite novel + 子进程 conversation + 门面），经 kkrpc/electron 暴露给 renderer。
+ * - novel：SqliteNovelStore 落盘（userData/novel.db）
+ * - conversation：spawnConversation 走子进程（desktop-child.mjs，真实 provider）；createOrResume 回退内存回显 loop
  */
 import { app, BrowserWindow, ipcMain } from "electron";
 import { expose, type RPCMessage } from "kkrpc";
@@ -9,16 +9,18 @@ import { join } from "node:path";
 import {
   Conversation,
   ConversationManagerServer,
-  InMemoryNovelStore,
+  SqliteNovelStore,
   createNovelApiServer,
+  createProcessSpawner,
   electronIpcTransport,
   type AgentLoop,
   type OutputEvent,
 } from "@novel/core";
 
-// __dirname = gui/dist/minimal；上三级到项目根，再进 core/scripts（生产子进程用，当前内存模式未用）
+// __dirname = gui/dist/minimal；上三级到项目根，再进 core/scripts
 const preloadPath = join(__dirname, "preload.cjs");
 const rendererHtml = join(__dirname, "minimal.html");
+const childScript = join(__dirname, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
 const IPC_CHANNEL = "novel-rpc";
 
 /** 回显 AgentLoop：followup 产 user.message → assistant.delta×N → turn-end（验证流式链路，无需真实 provider） */
@@ -49,22 +51,25 @@ function createEchoLoop(conversationId: string): AgentLoop {
   } as unknown as AgentLoop;
 }
 
-/** 内存 manager（factory 产回显 conversation） */
+/** manager：spawnConversation 走子进程（真实 provider），createOrResume 回退内存回显 loop */
 function createManager(): ConversationManagerServer {
-  return new ConversationManagerServer({
-    create: (o) =>
-      new Conversation({
-        conversationId: o.conversationId,
-        loop: createEchoLoop(o.conversationId),
-        sampling: { model: "echo" },
-      }),
-  });
+  return new ConversationManagerServer(
+    {
+      create: (o) =>
+        new Conversation({
+          conversationId: o.conversationId,
+          loop: createEchoLoop(o.conversationId),
+          sampling: { model: "echo" },
+        }),
+    },
+    createProcessSpawner(childScript),
+  );
 }
 
 async function main(): Promise<void> {
   await app.whenReady();
 
-  const store = new InMemoryNovelStore();
+  const store = new SqliteNovelStore(join(app.getPath("userData"), "novel.db"));
   const manager = createManager();
   const serverApi = createNovelApiServer({ manager, novel: store });
 

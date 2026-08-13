@@ -4,34 +4,18 @@
  * Phase 3 组合根：把 5 个域拼成 topbar/sidebar/main/inspector/overlays，
  * 并承担唯一允许的跨域副作用协调（workspace 切换触发各域 load）。
  *
- * 契约见 spec 4.1。宿主注入 workspaceController（Port 接口），shell 内部用
- * WorkspaceControllerAdapter 包成 ExternalStore 订阅快照。extensions 走默认
- * emptyNovelUiExtensions，桌面端由 Phase B 注入 createDesktopUiExtensions。
+ * 精简版：审批域整体延后（listApprovals/enqueueInput/ApprovalStore 未接），
+ * 相关 wiring 与 UI 插槽移除。
  */
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import {
-  ApprovalDecisionInputEvent,
-  type Logger,
-  type NovelApiClient,
-} from "@novel/core";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { Logger, NovelApiClient } from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
-import {
-  ApprovalStore,
-  mapApprovalViews,
-} from "../domains/approval/ApprovalStore.js";
-import { createApprovalEntityResolver } from "../domains/approval/approvalEntityResolver.js";
 import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
 import {
   createDomainReferenceResolver,
   type ReferenceResolver,
 } from "../domains/conversation/reference/ReferenceResolver.js";
+import { ApprovalStore } from "../domains/approval/ApprovalStore.js";
 import type { ToastKind, ToastStore } from "../shared/state/ToastStore.js";
 import type { MainViewRouter } from "../shared/routing/MainViewRouter.js";
 import type { InspectorRouter } from "../shared/routing/InspectorRouter.js";
@@ -60,11 +44,6 @@ import { Sidebar } from "./sidebar/Sidebar.js";
 import { TopBar } from "./topbar/TopBar.js";
 import styles from "./ApplicationShell.module.css";
 
-/**
- * 域 store 集合。approval 域三个 store 与 workspaceMetadata 在 Phase 2 轨道 C 延后
- * （见 spec 3.3 状态说明与 11 后续工作）；当前接口不含这些字段，Phase 2 轨道 C
- * 落地后追加为可选，再后续转必填。
- */
 export interface ApplicationShellDomainStores {
   readonly conversationCatalog: ConversationCatalogStore;
   readonly novelOverview: NovelOverviewStore;
@@ -81,19 +60,13 @@ export interface ApplicationShellProps {
   readonly logger?: Logger;
   readonly mainViewRouter: MainViewRouter;
   readonly inspectorRouter: InspectorRouter;
-  /**
-   * Workspace 控制器（宿主注入）。ApplicationShell 内部用 WorkspaceControllerAdapter
-   * 包成 ExternalStore 订阅快照；不要求调用方预先包装。
-   */
   readonly workspaceController: WorkspaceControllerPort;
   readonly domainStores: ApplicationShellDomainStores;
   readonly toastStore: ToastStore;
   readonly settingsStore?: ApplicationSettingsStore;
   readonly configurationClient?: ApplicationConfigurationClient;
   readonly commandSource?: ApplicationCommandSource;
-  /** 第一方扩展点；不传时用 emptyNovelUiExtensions（spec 4.0.1） */
   readonly extensions?: NovelUiExtensions;
-  /** Inspector panel 注册表（Phase 3 引入；当前 InspectorHost 用硬编码 switch） */
   readonly inspectorRenderers?: InspectorRendererRegistry;
   readonly conversationCardRenderers?: ConversationCardRendererRegistry;
   readonly conversationCardProjectors?: ConversationCardProjectorRegistry;
@@ -115,7 +88,6 @@ export function ApplicationShell({
   onOpenSettings,
   overlays,
 }: ApplicationShellProps) {
-  // 内部把 controller port 包成 ExternalStore；卸载时解除订阅（spec 4.1）
   const workspaceAdapter = useMemo(
     () => new WorkspaceControllerAdapter(workspaceController),
     [workspaceController],
@@ -124,40 +96,15 @@ export function ApplicationShell({
 
   const workspace = useExternalStore(workspaceAdapter);
   const overview = useExternalStore(domainStores.novelOverview);
-  const approvalStore = useMemo(() => new ApprovalStore(), []);
-  const approvalEntityResolver = useMemo(
-    () =>
-      createApprovalEntityResolver({
-        api,
-        manuscript: domainStores.manuscriptStructure,
-        outline: domainStores.storyOutlineTree,
-        characters: domainStores.character,
-        locations: domainStores.location,
-      }),
-    [api, domainStores],
-  );
-  const approvalSnapshot = useExternalStore(approvalStore);
   const inspector = useExternalStore(inspectorRouter);
-  // 全局审批队列：跨会话聚合（右上角 badge / 审批面板数据源）。
-  // Global approval queue across conversations.
-  const refreshApprovals = useCallback(() => {
-    void api.conversations
-      .listApprovals()
-      .then((approvals) =>
-        approvalStore.setApprovals(mapApprovalViews(approvals)),
-      )
-      .catch(() => {
-        // 查询失败静默：下次打开面板时再刷新。
-      });
-  }, [api, approvalStore]);
+  // 审批域延后：空 store 占位（TopBar/Sidebar 徽标已移除，InspectorHost/ScheduleSurface 仍持空源）。
+  const approvalStore = useMemo(() => new ApprovalStore(), []);
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
   const [locateReference, setLocateReference] = useState<
     { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null
   >(null);
   const workspaceId = workspace.current?.id;
-  // extensions 当前由 NovelApp 在 NovelAppProvider 内提供；shell 内 TopBar/Sidebar
-  // 的扩展 slot（TopBarMenuSlot / sidebarPanels）在 Phase B 落地后从此处取用。
 
   // 跨域副作用协调：workspace 变化时并行触发各域 load（spec 1.5.1）
   useEffect(() => {
@@ -176,14 +123,12 @@ export function ApplicationShell({
     void manuscriptStructure.loadWorkspace(workspaceId);
     void character.loadWorkspace(workspaceId);
     void location.loadWorkspace(workspaceId);
-    refreshApprovals();
-  }, [domainStores, workspaceId, refreshApprovals]);
+  }, [domainStores, workspaceId]);
 
   const handleCreateConversation = useCallback(() => {
     void domainStores.conversationCatalog.createConversation();
   }, [domainStores]);
 
-  // 选择对话时同步切换主视图到 chat，确保 ChatSurface 渲染对应会话
   const handleSelectConversation = useCallback(
     (id: string) => {
       domainStores.conversationCatalog.selectConversation(id);
@@ -216,30 +161,15 @@ export function ApplicationShell({
     [domainStores, inspectorRouter],
   );
 
-  // 时间线"等待审批"行 / 消息流审批卡 / 计划视图审批待办 → 打开审批面板并选中。
-  const handleOpenApproval = useCallback(
-    (approvalRequestId: string) => {
-      refreshApprovals();
-      approvalStore.select(approvalRequestId);
-      inspectorRouter.transition({ kind: "approval", changeSetId: approvalRequestId });
-    },
-    [approvalStore, inspectorRouter, refreshApprovals],
-  );
-
   const handleTodoAction = useCallback(
-    (id: string, action: string) => {
-      if (action === "open-approval") {
-        handleOpenApproval(id);
-      } else if (action === "open-character") {
-        mainViewRouter.transition("content");
-      } else if (action === "open-location") {
+    (_id: string, action: string) => {
+      if (action === "open-character" || action === "open-location") {
         mainViewRouter.transition("content");
       }
     },
-    [handleOpenApproval, mainViewRouter],
+    [mainViewRouter],
   );
 
-  // 引用解析器：从各域 store 当前快照读取档案名与是否已建档。
   const resolveReference: ReferenceResolver = useCallback(
     createDomainReferenceResolver({
       characters: domainStores.character,
@@ -250,8 +180,6 @@ export function ApplicationShell({
     [domainStores],
   );
 
-  // 消息内引用点击：角色/地点/大纲 → inspector 档案；章节/段落 → 正文 pane 定位；
-  // 未建档 → toast 提示。
   const handleReferenceClick = useCallback(
     (reference: MessageReference) => {
       const resolved = resolveReference(reference);
@@ -295,113 +223,12 @@ export function ApplicationShell({
     ],
   );
 
-  // proposal 卡操作：查看 Diff → 右侧审批占位面板；批准/修改待 Step 4 审批域接入。
-  const handleProposalAction = useCallback(
-    (changeSetId: string, action: "approve" | "reject" | "view-diff") => {
-      if (action === "view-diff") {
-        inspectorRouter.transition({ kind: "approval", changeSetId });
-        return;
-      }
-      void approvalStore.decide(
-        changeSetId,
-        action === "approve" ? "approved" : "rejected",
-      );
-    },
-    [approvalStore, inspectorRouter],
-  );
-
-  // 消息内操作提示（复制结果等）→ 全局 ToastHost。
   const handleNotify = useCallback(
     (kind: ToastKind, text: string) => {
       toastStore.push({ kind, text });
     },
     [toastStore],
   );
-
-  // 写操作落库后刷新 novel 数据 store（大纲/人物/地点/正文/概览），
-  // 让 GUI 内容视图立即反映批准后的正式稿变更。
-  // Reload novel data stores after an approved write so content views refresh.
-  const refreshNovelData = useCallback(() => {
-    if (workspaceId === undefined) return;
-    const {
-      novelOverview,
-      storyOutlineTree,
-      manuscriptStructure,
-      character,
-      location,
-    } = domainStores;
-    void novelOverview.loadWorkspace(workspaceId);
-    void storyOutlineTree.loadWorkspace(workspaceId);
-    void manuscriptStructure.loadWorkspace(workspaceId);
-    void character.loadWorkspace(workspaceId);
-    void location.loadWorkspace(workspaceId);
-  }, [domainStores, workspaceId]);
-
-  // 同一轮多个审批连续批准时合并刷新（防抖）。
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const handleNovelDataChanged = useCallback(() => {
-    if (refreshTimerRef.current !== undefined) {
-      clearTimeout(refreshTimerRef.current);
-    }
-    refreshTimerRef.current = setTimeout(() => {
-      refreshTimerRef.current = undefined;
-      refreshNovelData();
-    }, 400);
-  }, [refreshNovelData]);
-  useEffect(
-    () => () => {
-      if (refreshTimerRef.current !== undefined) {
-        clearTimeout(refreshTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  // 全局决策：按审批所属会话投递决策输入事件，决策后刷新队列与 novel 数据。
-  // Global decision routing by owning conversation.
-  useEffect(() => {
-    approvalStore.setDecisionHandler(
-      (approvalRequestId, decision, argumentDigest) => {
-        const approval = approvalStore
-          .getSnapshot()
-          .approvals.find(
-            (item) => item.approvalRequestId === approvalRequestId,
-          );
-        if (approval === undefined) return undefined;
-        if (decision === "approved") handleNovelDataChanged();
-        const enqueuePromise = api.conversations.enqueueInput(
-          approval.conversationId,
-          new ApprovalDecisionInputEvent({
-            conversationId: approval.conversationId,
-            approvalRequestId,
-            decision,
-            argumentDigest,
-          }),
-        );
-        void enqueuePromise.then(refreshApprovals, refreshApprovals);
-        return enqueuePromise;
-      },
-    );
-    return () => approvalStore.setDecisionHandler(undefined);
-  }, [approvalStore, api, handleNovelDataChanged, refreshApprovals]);
-
-  // 审批全部处理完 → 自动收起面板，避免空占位；打开由用户显式触发
-  // （右上角审批按钮 / 消息流审批卡"前往审批 →"），不自动抢占右侧区域。
-  // Auto-collapse the panel when no approval remains; opening is explicit.
-  useEffect(() => {
-    const route = inspectorRouter.getSnapshot().state;
-    console.info("[inspector] approval guard effect", {
-      pendingCount: approvalSnapshot.pendingCount,
-      route,
-    });
-    if (
-      approvalSnapshot.pendingCount === 0 &&
-      route.kind === "approval"
-    ) {
-      console.info("[inspector] approval guard closing empty panel");
-      inspectorRouter.close();
-    }
-  }, [approvalSnapshot.pendingCount, inspectorRouter]);
 
   const handleSelectContentPane = useCallback(
     (pane: ContentTab) => {
@@ -415,8 +242,6 @@ export function ApplicationShell({
     <div className={styles.shell}>
       <TopBar
         workspaceName={workspace.current?.label}
-        approvalBadge={approvalSnapshot.pendingCount}
-        approvalActive={inspector.state.kind === "approval"}
         sidebarMode={sidebarMode}
         onToggleSidebar={() =>
           setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded"))
@@ -424,15 +249,6 @@ export function ApplicationShell({
         onOpenWorkspace={() => onOpenWorkspace?.()}
         onOpenSettings={() => onOpenSettings?.()}
         onOpenSchedule={() => mainViewRouter.transition("schedule")}
-        onOpenApproval={() => {
-          // 审批按钮 toggle:已打开则收起,否则刷新并打开。
-          if (inspector.state.kind === "approval") {
-            inspectorRouter.close();
-            return;
-          }
-          refreshApprovals();
-          inspectorRouter.transition({ kind: "approval", changeSetId: "" });
-        }}
         extensions={extensions}
       />
       <div className={styles.body} data-sidebar-mode={sidebarMode}>
@@ -448,7 +264,6 @@ export function ApplicationShell({
           workspaceId={workspaceId}
           workspaceLabel={workspace.current?.label}
           revision={overview.sourceRevision}
-          pendingApprovalCount={approvalSnapshot.pendingCount}
           onOpenWorkspace={onOpenWorkspace}
         />
         <MainArea
@@ -471,13 +286,8 @@ export function ApplicationShell({
           onReferenceClick={handleReferenceClick}
           resolveReference={resolveReference}
           locateReference={locateReference}
-          onProposalAction={handleProposalAction}
-          onOpenApproval={handleOpenApproval}
-          onOpenDraft={handleOpenApproval}
           onNotify={handleNotify}
           approvalStore={approvalStore}
-          onApprovalChange={refreshApprovals}
-          resolveEntity={approvalEntityResolver}
         />
         <InspectorHost
           inspectorRouter={inspectorRouter}
@@ -486,7 +296,6 @@ export function ApplicationShell({
           characters={domainStores.character}
           locations={domainStores.location}
           approvalStore={approvalStore}
-          approvalEntityResolver={approvalEntityResolver}
           sourceRevision={overview.sourceRevision}
           onJumpToConversation={handleSelectConversation}
         />

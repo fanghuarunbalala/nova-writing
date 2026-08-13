@@ -2,6 +2,7 @@
  * MainArea
  *
  * 主区路由 host：按 MainViewRouter 状态渲染 chat/content/schedule。
+ * 精简版：去掉审批相关 props（延后）。
  */
 import { useMainView } from "../../shared/routing/hooks.js";
 import type { MainViewRouter } from "../../shared/routing/MainViewRouter.js";
@@ -20,7 +21,6 @@ import type { ContentTab } from "./contentTab.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
 import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
-import type { ApprovalEntityResolver } from "../../domains/approval/approvalEntityResolver.js";
 import { ScheduleSurface } from "./ScheduleSurface.js";
 import styles from "./MainArea.module.css";
 
@@ -44,18 +44,8 @@ export interface MainAreaProps {
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
-  readonly onProposalAction?: (
-    changeSetId: string,
-    action: "approve" | "reject" | "view-diff",
-  ) => void;
-  readonly onOpenApproval?: (approvalRequestId: string) => void;
-  readonly onOpenDraft?: (changeSetId: string) => void;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
   readonly approvalStore: ApprovalStore;
-  /** 本会话审批变化回调（事件驱动全局审批刷新）。 */
-  readonly onApprovalChange?: () => void;
-  /** 审批实体解析器（ApprovalDock 删除/编辑显示标题）。 */
-  readonly resolveEntity?: ApprovalEntityResolver;
 }
 
 export function MainArea(props: MainAreaProps) {
@@ -73,12 +63,7 @@ export function MainArea(props: MainAreaProps) {
           onCreateConversation={props.onCreateConversation}
           onReferenceClick={props.onReferenceClick}
           resolveReference={props.resolveReference}
-          onProposalAction={props.onProposalAction}
-          onOpenApproval={props.onOpenApproval}
           onNotify={props.onNotify}
-          approvalStore={props.approvalStore}
-          onApprovalChange={props.onApprovalChange}
-          resolveEntity={props.resolveEntity}
         />
       ) : mainView.state === "content" ? (
         <ContentSurface
@@ -92,7 +77,6 @@ export function MainArea(props: MainAreaProps) {
           onSelectCharacter={props.onSelectCharacter}
           onSelectLocation={props.onSelectLocation}
           locateReference={props.locateReference}
-          onOpenDraft={props.onOpenDraft}
           onBack={() => props.mainViewRouter.transition("chat")}
         />
       ) : (

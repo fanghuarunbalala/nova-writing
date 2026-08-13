@@ -36,6 +36,21 @@ function mockLoop(): AgentLoop {
   } as unknown as AgentLoop;
 }
 
+/** fake subagentRuntime：可手动 emit 事件、断言 stopAll */
+function mockRuntime() {
+  const listeners = new Set<(e: OutputEvent) => void>();
+  return {
+    onEvent: (l: (e: OutputEvent) => void) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    stopAll: vi.fn(),
+    emit: (e: OutputEvent) => {
+      for (const l of listeners) l(e);
+    },
+  };
+}
+
 describe("Conversation", () => {
   it("mode.set 不立即生效，下次 sendUserMessage 才生效（pendingMode → activeMode）", async () => {
     const conv = new Conversation({
@@ -122,6 +137,47 @@ describe("Conversation", () => {
     const handle = conv as unknown as ConversationHandle;
     handle.resolveApproval("r1", { kind: "approve" });
     expect(await pending).toEqual({ kind: "approve" });
+  });
+
+  it("subagentRuntime 事件转发进 hub（live-only）", async () => {
+    const rt = mockRuntime();
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      subagentRuntime: rt as never,
+    });
+    const received: OutputEvent[] = [];
+    await conv.subscribeEvents((e) => received.push(e));
+    rt.emit({ type: "turn-start", seq: 0, persist: true, turnSeq: 0, conversationId: "c1", agentId: "novel_explorer:task_1", ts: "t" } as OutputEvent);
+    expect(received).toHaveLength(1);
+    expect(received[0]?.agentId).toBe("novel_explorer:task_1");
+  });
+
+  it("sendSystemControl stop 级联 stopAll", async () => {
+    const rt = mockRuntime();
+    const loop = mockLoop();
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop,
+      sampling: { model: "gpt-5" },
+      subagentRuntime: rt as never,
+    });
+    await conv.sendSystemControl({ type: "stop" });
+    expect(loop.stop).toHaveBeenCalled();
+    expect(rt.stopAll).toHaveBeenCalled();
+  });
+
+  it("dispose 级联 stopAll", () => {
+    const rt = mockRuntime();
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      subagentRuntime: rt as never,
+    });
+    conv.dispose();
+    expect(rt.stopAll).toHaveBeenCalled();
   });
 
   it("wait 超时按拒绝解除（waitTimeoutMs 可缩短测试）", async () => {

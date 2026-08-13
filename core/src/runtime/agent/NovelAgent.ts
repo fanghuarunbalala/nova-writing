@@ -16,6 +16,8 @@ import {
   createPublicationTools,
   createDeleteTool,
 } from "../tool/definitions/novel.js";
+import { createSubagentTools } from "../tool/definitions/subagent.js";
+import type { SubagentToolsOptions } from "../tool/definitions/subagent.js";
 import {
   coreRuntimeProtocolSection,
   toolGuidanceSection,
@@ -57,6 +59,8 @@ export interface NovelAgentOptions {
   resumePendingDecider?: (toolCallId: string) => Promise<"approve" | "reject" | "expired" | undefined>;
   /** 结构化日志（pino；provider 调用错误可见性） */
   logger?: Logger;
+  /** subagent 派发三工具装配（存在时追加 Agent/TaskOutput/TaskStop） */
+  subagent?: SubagentToolsOptions;
 }
 
 /**
@@ -73,6 +77,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     ...createParagraphTools(opts.handle),
     ...createPublicationTools(opts.handle),
     ...createDeleteTool(opts.handle),
+    ...(opts.subagent ? createSubagentTools(opts.subagent) : []),
   ];
   const capability: AgentCapability = {
     systemSections: [

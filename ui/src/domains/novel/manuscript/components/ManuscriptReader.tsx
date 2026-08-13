@@ -21,6 +21,12 @@ export interface ManuscriptReaderProps {
     readonly nonce: number;
   } | null;
   readonly onOpenDraft?: (changeSetId: string) => void;
+  /** 新增段落（宿主按章 storyUnitId 插入） */
+  readonly onInsertParagraph?: (storyUnitId: string) => void;
+  /** 保存段落编辑（宿主带乐观锁） */
+  readonly onSaveParagraph?: (paragraphId: string, text: string) => Promise<void> | void;
+  /** 删除段落（宿主确认后执行） */
+  readonly onDeleteParagraph?: (paragraphId: string) => void;
 }
 
 export function ManuscriptReader({
@@ -29,6 +35,9 @@ export function ManuscriptReader({
   onSelectChapter,
   locate,
   onOpenDraft,
+  onInsertParagraph,
+  onSaveParagraph,
+  onDeleteParagraph,
 }: ManuscriptReaderProps) {
   if (snapshot.phase === "error") {
     return (
@@ -57,6 +66,13 @@ export function ManuscriptReader({
         chapter={selectedChapter}
         locate={locate}
         onOpenDraft={onOpenDraft}
+        onInsertParagraph={
+          onInsertParagraph !== undefined && selectedChapter?.storyUnitId !== undefined
+            ? () => onInsertParagraph(selectedChapter!.storyUnitId!)
+            : undefined
+        }
+        onSaveParagraph={onSaveParagraph}
+        onDeleteParagraph={onDeleteParagraph}
       />
     </div>
   );

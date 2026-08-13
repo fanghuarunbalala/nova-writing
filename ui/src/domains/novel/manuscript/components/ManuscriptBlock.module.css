@@ -64,3 +64,49 @@
   color: var(--color-faint);
   margin: 0;
 }
+
+/* 块操作（编辑/删除）：hover 显现，不触发块选中 */
+.actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.actionButton {
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-faint);
+  cursor: pointer;
+}
+
+.actionButton:hover {
+  border-color: var(--color-border-strong, #555);
+  color: var(--color-fg);
+}
+
+/* inline 编辑 */
+.editor {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-strong, #555);
+  background: var(--color-bg-elevated, #1e1e24);
+  color: var(--color-text, #ddd);
+  font-size: 13px;
+  resize: vertical;
+}
+
+.editor:focus {
+  outline: none;
+  border-color: var(--color-accent, #7aa2f7);
+}
+
+.editActions {
+  display: flex;
+  gap: 8px;
+  align-self: flex-end;
+}

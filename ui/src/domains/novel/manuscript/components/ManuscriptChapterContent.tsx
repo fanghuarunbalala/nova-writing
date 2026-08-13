@@ -21,12 +21,21 @@ export interface ManuscriptChapterContentProps {
     readonly nonce: number;
   } | null;
   readonly onOpenDraft?: (changeSetId: string) => void;
+  /** 新增段落（宿主按 chapter.storyUnitId 调 store.insertParagraph） */
+  readonly onInsertParagraph?: () => void;
+  /** 保存段落编辑（宿主带乐观锁） */
+  readonly onSaveParagraph?: (paragraphId: string, text: string) => Promise<void> | void;
+  /** 删除段落（宿主确认后执行） */
+  readonly onDeleteParagraph?: (paragraphId: string) => void;
 }
 
 export function ManuscriptChapterContent({
   chapter,
   locate,
   onOpenDraft,
+  onInsertParagraph,
+  onSaveParagraph,
+  onDeleteParagraph,
 }: ManuscriptChapterContentProps) {
   const paneRef = useRef<HTMLDivElement>(null);
 
@@ -62,8 +71,28 @@ export function ManuscriptChapterContent({
       </header>
       <div className={styles.blocks}>
         {chapter.blocks.map((block) => (
-          <ManuscriptBlock key={block.blockId} block={block} />
+          <ManuscriptBlock
+            key={block.blockId}
+            block={block}
+            onSave={
+              onSaveParagraph !== undefined
+                ? (text) => onSaveParagraph(block.blockId, text)
+                : undefined
+            }
+            onDelete={
+              onDeleteParagraph !== undefined
+                ? () => onDeleteParagraph(block.blockId)
+                : undefined
+            }
+          />
         ))}
+        {onInsertParagraph !== undefined ? (
+          <div className={styles.insertActions}>
+            <Button size="sm" variant="secondary" onClick={onInsertParagraph}>
+              ＋ 新增段落
+            </Button>
+          </div>
+        ) : null}
       </div>
       {draftChangeSetId !== undefined && onOpenDraft !== undefined ? (
         <footer className={styles.draftActions}>

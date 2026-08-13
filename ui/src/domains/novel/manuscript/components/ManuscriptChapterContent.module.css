@@ -63,3 +63,10 @@
   padding-top: 6px;
   border-top: 1px solid var(--color-border);
 }
+
+/* 新增段落入口 */
+.insertActions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+}

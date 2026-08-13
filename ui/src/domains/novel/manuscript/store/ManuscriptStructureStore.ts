@@ -3,6 +3,7 @@
  *
  * 正文结构域 store：以权威 publication 结构（卷 → 章）为目录，
  * 段落按 chapter.storyUnitId 关联（paragraphs.list 返回全文，无需懒加载）。
+ * 写路径：paragraph insert/update/delete（乐观锁，baseRevision = entityVersion）。
  *
  * 数据流（新 core）：
  * - loadWorkspace 读 publication.get → 卷/章；按章 storyUnitId 读 paragraphs.list，
@@ -11,13 +12,16 @@
 import type {
   Logger,
   NovelApiClient,
+  OrderKey,
   Paragraph,
+  ParagraphId,
   PublicationChapter,
   PublicationVolume,
   StoryUnitId,
 } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
 import { ExternalStore } from "../../../../shared/state/ExternalStore.js";
+import { TaskSerializer } from "../../../../shared/state/TaskSerializer.js";
 import type { NovelDomainError } from "../../outline/store/StoryOutlineTreeStore.js";
 
 export interface ManuscriptBlockData {
@@ -27,6 +31,8 @@ export interface ManuscriptBlockData {
   readonly storyUnitId?: string;
   readonly orderKey?: string;
   readonly textLength?: number;
+  /** 实体版本（乐观锁 baseRevision） */
+  readonly entityVersion: number;
   /** 草稿态（新 publication 模型无草稿，恒 undefined） */
   readonly isDraft?: boolean;
 }
@@ -36,6 +42,8 @@ export interface ManuscriptChapter {
   readonly volumeId: string;
   readonly title: string; // 权威 publication 标题
   readonly orderKey?: string;
+  /** 关联的 story unit（段落挂靠点；未关联章节无法新增段落） */
+  readonly storyUnitId?: string;
   readonly paragraphIds: readonly string[];
   readonly blocks: readonly ManuscriptBlockData[]; // 按段落 orderKey 顺序
   /** 草稿态（新 publication 模型无草稿，恒 undefined） */
@@ -72,6 +80,10 @@ const EMPTY_SNAPSHOT: ManuscriptStructureSnapshot = Object.freeze({
 export class ManuscriptStructureStore extends ExternalStore<ManuscriptStructureSnapshot> {
   private readonly api: NovelApiClient;
   private readonly logger: Logger;
+  /** 变更串行（乐观锁操作不并发） */
+  private readonly serializer = new TaskSerializer();
+  /** 段落版本缓存（id → entityVersion，乐观锁 baseRevision 来源） */
+  private versionsById: ReadonlyMap<string, number> = new Map();
   private generation = 0;
 
   constructor(deps: { readonly api: NovelApiClient; readonly logger?: Logger }) {
@@ -103,6 +115,11 @@ export class ManuscriptStructureStore extends ExternalStore<ManuscriptStructureS
         publication.chapters,
         paragraphsByStoryUnit,
       );
+      const versionsById = new Map<string, number>();
+      for (const paragraphs of paragraphsByStoryUnit.values()) {
+        for (const paragraph of paragraphs) versionsById.set(paragraph.id, paragraph.entityVersion);
+      }
+      this.versionsById = versionsById;
       this.setSnapshot({
         phase: "ready",
         workspaceId: capturedId,
@@ -139,6 +156,104 @@ export class ManuscriptStructureStore extends ExternalStore<ManuscriptStructureS
 
   selectChapter(chapterId: string | undefined): void {
     this.setSnapshot({ ...this.snapshot, selectedChapterId: chapterId });
+  }
+
+  /** 段落版本（乐观锁 baseRevision）；未加载/不存在返回 undefined */
+  getParagraphVersion(paragraphId: string): number | undefined {
+    return this.versionsById.get(paragraphId);
+  }
+
+  /**
+   * 新增段落（追加到 story unit；orderKey 时间戳兜底）
+   * @param storyUnitId 章节关联的 story unit
+   * @param text 段落文本
+   */
+  insertParagraph(storyUnitId: string, text: string): Promise<void> {
+    return this.serializer.run(async () => {
+      await this.runGuarded(
+        () =>
+          this.api.novel.mutate({
+            op: "paragraph.insert",
+            storyUnitId: storyUnitId as StoryUnitId,
+            orderKey: String(Date.now()) as OrderKey,
+            text,
+          }),
+        "段落",
+      );
+    });
+  }
+
+  /**
+   * 更新段落文本（乐观锁；stale 自动重拉 + 提示）
+   * @param paragraphId 段落 id
+   * @param text 新文本
+   * @param baseRevision 最近读到的版本（entityVersion）
+   */
+  updateParagraph(paragraphId: string, text: string, baseRevision: number): Promise<void> {
+    return this.serializer.run(async () => {
+      await this.runGuarded(
+        () =>
+          this.api.novel.mutate({
+            op: "paragraph.update",
+            paragraphId: paragraphId as ParagraphId,
+            baseRevision,
+            text,
+          }),
+        "段落",
+      );
+    });
+  }
+
+  /**
+   * 删除段落（乐观锁；成功后刷新）
+   * @param paragraphId 段落 id
+   * @param baseRevision 最近读到的版本（entityVersion）
+   */
+  deleteParagraph(paragraphId: string, baseRevision: number): Promise<void> {
+    return this.serializer.run(async () => {
+      await this.runGuarded(
+        () =>
+          this.api.novel.mutate({
+            op: "paragraph.delete",
+            paragraphId: paragraphId as ParagraphId,
+            baseRevision,
+          }),
+        "段落",
+      );
+    });
+  }
+
+  /** 变更执行 + stale/通用错误处理（stale → 自动重拉 + 置错误提示） */
+  private async runGuarded(mutate: () => Promise<unknown>, label: string): Promise<void> {
+    try {
+      await mutate();
+      this.setSnapshot({ ...this.snapshot, error: undefined });
+      const workspaceId = this.snapshot.workspaceId;
+      if (workspaceId !== undefined) await this.loadWorkspace(workspaceId);
+    } catch (err) {
+      if ((err as { code?: unknown } | null)?.code === "stale") {
+        this.setSnapshot({
+          ...this.snapshot,
+          error: {
+            code: "novel-stale",
+            message: `${label}数据已被更新，已刷新为最新版本，请重试`,
+            retryable: true,
+          },
+        });
+        const workspaceId = this.snapshot.workspaceId;
+        if (workspaceId !== undefined) await this.loadWorkspace(workspaceId);
+        return;
+      }
+      this.setSnapshot({
+        ...this.snapshot,
+        error: {
+          code: "novel-mutate-failed",
+          message: `${label}保存失败，请重试`,
+          retryable: true,
+        },
+      });
+      this.logger.warn("manuscript_structure.mutate_failed");
+    }
   }
 }
 
@@ -182,6 +297,7 @@ function buildPublicationView(
       volumeId: chapter.volumeId ?? "",
       title: chapter.title,
       ...(chapter.orderKey === undefined ? {} : { orderKey: chapter.orderKey }),
+      ...(chapter.storyUnitId === undefined ? {} : { storyUnitId: chapter.storyUnitId }),
       paragraphIds: Object.freeze(paragraphs.map((p) => p.id)),
       blocks,
     });
@@ -216,6 +332,7 @@ function toBlockData(paragraph: Paragraph): ManuscriptBlockData {
     storyUnitId: paragraph.storyUnitId,
     orderKey: paragraph.orderKey,
     textLength: paragraph.text.length,
+    entityVersion: paragraph.entityVersion,
   });
 }
 

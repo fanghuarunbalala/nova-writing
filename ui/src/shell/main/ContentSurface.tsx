@@ -87,6 +87,21 @@ export function ContentSurface({
           onSelectChapter={(chapterId) => manuscript.selectChapter(chapterId)}
           locate={locateReference}
           onOpenDraft={onOpenDraft}
+          onInsertParagraph={(storyUnitId) =>
+            void manuscript.insertParagraph(storyUnitId, "")
+          }
+          onSaveParagraph={(paragraphId, text) => {
+            const version = manuscript.getParagraphVersion(paragraphId);
+            if (version === undefined) return;
+            return manuscript.updateParagraph(paragraphId, text, version);
+          }}
+          onDeleteParagraph={(paragraphId) => {
+            const version = manuscript.getParagraphVersion(paragraphId);
+            if (version === undefined) return;
+            // eslint-disable-next-line no-alert
+            if (!window.confirm("确定删除该段落？此操作不可撤销。")) return;
+            void manuscript.deleteParagraph(paragraphId, version);
+          }}
         />
       );
       return <div className={styles.readerBody}>{content}</div>;

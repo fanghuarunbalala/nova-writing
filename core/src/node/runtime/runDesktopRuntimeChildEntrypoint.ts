@@ -7,6 +7,7 @@
  * - wait 请求无阻塞：经 managerWait 提交 CMS 队列；决策经 resolveApproval 回传
  *   （驻留直推）；120s 超时 → process.exit（CMS 决策后重启续跑）
  * - 重启恢复：journal 重放 + CMS takeDecisions 查询待决 → 暂停点续跑（resumePendingTurn）
+ * - subagent：SubagentRuntime 进程内编排（main 经 Agent/TaskOutput/TaskStop 派发）
  */
 import { join } from "node:path";
 import { RPCChannel } from "kkrpc";
@@ -17,6 +18,7 @@ import { FileConversationJournalReadOnlyService } from "../../conversation/persi
 import { journalListener } from "../../conversation/JournalBridge.js";
 import { debugLog } from "../../log/debug.js";
 import { createLogger } from "../../log/pino.js";
+import { SubagentRuntime } from "../../conversation/server/SubagentRuntime.js";
 import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
 import { createProvider } from "../../runtime/provider/Provider.js";
@@ -24,6 +26,8 @@ import { buildNovelAgent } from "../../runtime/agent/NovelAgent.js";
 import type { LLMessage } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
+import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
+import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
@@ -166,11 +170,31 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		};
 	}
 
-	const provider = createProvider({
-		id: "default",
+	// provider 配置（main 与 explorer 共享；type 从 env，缺省 openai）
+	const providerConfig = {
 		type: (process.env.NOVEL_PROVIDER_TYPE as "openai" | "anthropic" | undefined) ?? "openai",
 		baseUrl: process.env.NOVEL_PROVIDER_BASE_URL ?? "https://api.deepseek.com/v1",
 		apiKey: process.env.NOVEL_PROVIDER_API_KEY,
+	} as const;
+	const provider = createProvider({ id: "default", ...providerConfig });
+
+	// 会话级 todo 存储（explorer TodoWrite 工具闭包）
+	const todoStore = new InMemoryConversationTodoStore();
+
+	// subagent 任务编排：builder 每任务新建 provider（流式累积状态不可跨 loop 共享）
+	const subagentRuntime = new SubagentRuntime({
+		sampling,
+		builders: {
+			novel_explorer: (agentId) =>
+				buildNovelExplorerAgent({
+					workspace,
+					provider: createProvider({ id: "explorer", ...providerConfig }),
+					handle: novelHandle,
+					todoStore,
+					conversationId,
+					agentId,
+				}),
+		},
 	});
 
 	// 进程结构化日志：pino（storedir/logs 下每进程独占文件 + stderr 彩色行）。
@@ -196,6 +220,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
 		resumePendingDecider,
 		logger,
+		subagent: { spawner: subagentRuntime },
 	});
 
 	const managerWait: ManagerWaitChannel | undefined =
@@ -213,6 +238,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		sampling,
 		journal,
 		managerWait,
+		subagentRuntime,
 		// 120s 无决策：退出进程（不占资源）；CMS 在 UI 决策后重启续跑
 		onWaitTimeout: cmsApi !== undefined ? () => process.exit(0) : undefined,
 	});

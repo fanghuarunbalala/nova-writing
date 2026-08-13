@@ -145,7 +145,7 @@ export async function run(peers: ConversationPeers, env: ConversationEnv): Promi
 ```
 
 - **所有 conversation 构造一致**：root 与 teammate 同构，peer 集统一 `{ manager, ui, novel }`，无角色分支。角色差异（root/teammate、parentId）只进 catalog，不进通道。
-- **subagent 无 peers**：进程内派生，`loop.spawnSubagent({ agentType, task })`。
+- **subagent 无 peers**：进程内派生。派生入口为 `SubagentRuntime.spawn`（经 Agent 工具 handler 闭包捕获 spawner；loop 保持无 subagent 概念——偏离原 `loop.spawnSubagent` 规划，因 ToolHandler 只收 ToolCall，spawner 须在装配期注入）；subagent 事件 live 进 hub 按 agentId 盖章、不落 journal（PRD §4.4）。
 - bootstrap 只接线：manager/ui/novel 的 transport 从 env 构造（token 随 spawn 注入）；测试注入 memory transport 即可单测。
 
 ---

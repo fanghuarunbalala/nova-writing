@@ -28,6 +28,7 @@ import type { CharacterStore } from "../../domains/novel/character/store/Charact
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
+import type { ApprovalEntityResolver } from "../../domains/approval/approvalEntityResolver.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import { ApprovalPanel } from "../../domains/approval/components/ApprovalPanel.js";
 import { ConversationInspectorPanel } from "./panels/ConversationInspectorPanel.js";
@@ -60,8 +61,8 @@ export interface InspectorHostProps {
   readonly characters: CharacterStore;
   readonly locations: LocationStore;
   readonly approvalStore: ApprovalStore;
-  /** 当前 canonical 修订号。Current revision. */
-  readonly sourceRevision?: string;
+  /** 审批目标实体内容解析器（lite：经 api.novel.* 查询 + 乐观锁 stale 判定）。 */
+  readonly resolveEntity?: ApprovalEntityResolver;
   readonly onLocateInContent?: (entityId: string) => void;
   /** 审批目录「跳转」：切换主视图到对应对话（应用层负责 select + transition）。 */
   readonly onJumpToConversation?: (conversationId: string) => void;
@@ -74,7 +75,7 @@ export function InspectorHost({
   characters,
   locations,
   approvalStore,
-  sourceRevision,
+  resolveEntity,
   onLocateInContent,
   onJumpToConversation,
 }: InspectorHostProps) {
@@ -156,6 +157,8 @@ export function InspectorHost({
             {route.state.kind === "approval" ? (
               <ApprovalPanel
                 store={approvalStore}
+                resolveEntity={resolveEntity}
+                onJumpToConversation={onJumpToConversation}
                 drawerOpen={drawerOpen}
                 onToggleDrawer={setDrawerOpen}
               />

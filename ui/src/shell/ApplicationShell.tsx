@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import type { Logger, NovelApiClient } from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
 import { useActiveConversationSession } from "../domains/conversation/hooks/useActiveConversationSession.js";
+import { createApprovalEntityResolver } from "../domains/approval/approvalEntityResolver.js";
 import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
 import {
   createDomainReferenceResolver,
@@ -96,6 +97,11 @@ export function ApplicationShell({
   const inspector = useExternalStore(inspectorRouter);
   const catalogSnapshot = useExternalStore(domainStores.conversationCatalog);
   const approvalStore = useMemo(() => new ApprovalStore(), []);
+  // 审批目标实体内容解析器（lite：api.novel.* 查询 + 乐观锁 stale 判定）
+  const resolveEntity = useMemo(
+    () => createApprovalEntityResolver({ api }),
+    [api],
+  );
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
   const [locateReference, setLocateReference] = useState<
@@ -321,7 +327,7 @@ export function ApplicationShell({
           characters={domainStores.character}
           locations={domainStores.location}
           approvalStore={approvalStore}
-          sourceRevision={overview.sourceRevision}
+          resolveEntity={resolveEntity}
           onJumpToConversation={handleSelectConversation}
         />
       </div>

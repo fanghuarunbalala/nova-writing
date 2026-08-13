@@ -108,4 +108,11 @@ export class NodeApplicationConfigStore implements ConfigStore {
 		};
 		await writeFile(this.filePath, JSON.stringify(payload, null, 2), "utf8");
 	}
+
+	/** 解析凭据明文（经 cipher 解密；缺失时 undefined）。仅供宿主进程本地使用，勿经 RPC 暴露。 */
+	async resolveSecret(ref: CredentialRef): Promise<string | undefined> {
+		const encrypted = this.credentials.get(ref);
+		if (encrypted === undefined) return undefined;
+		return this.cipher.decrypt(encrypted);
+	}
 }

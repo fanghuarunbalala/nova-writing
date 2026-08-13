@@ -67,6 +67,11 @@ export interface ConversationManagerServerOptions {
 	 * - 崩溃后 createOrResume 用同一 storedir 重派生（子进程 journal 重放续跑）。
 	 */
 	storedirRoot?: string;
+	/**
+	 * 当前工作区根路径提供器（spawn 时求值，经 env NOVEL_CONVERSATION_WORKSPACE 注入子进程；
+	 * 缺省子进程用 "."）。
+	 */
+	workspaceProvider?: () => string | undefined;
 }
 
 /** manager 进程侧实现（内存 factory 测试 / 进程 spawn 生产） */
@@ -83,6 +88,8 @@ export class ConversationManagerServer implements Contract {
 	private readonly terminatedIds = new Set<string>();
 	/** 会话存储根目录（undefined = 不落盘目录，storedir 为空串） */
 	private readonly storedirRoot?: string;
+	/** 当前工作区根路径提供器（spawn 时求值） */
+	private readonly workspaceProvider?: () => string | undefined;
 	/** id 递增 */
 	private seq = 0;
 	/** conversation 工厂（内存模式） */
@@ -104,6 +111,7 @@ export class ConversationManagerServer implements Contract {
 		this.factory = factory;
 		this.spawner = spawner;
 		this.storedirRoot = opts?.storedirRoot;
+		this.workspaceProvider = opts?.workspaceProvider;
 		if (this.storedirRoot !== undefined) this.scanCatalog();
 	}
 
@@ -193,6 +201,7 @@ export class ConversationManagerServer implements Contract {
 				agentType: opts.agentType,
 				parentId: opts.parentId,
 				storedir,
+				workspace: this.workspaceProvider?.(),
 			});
 			this.childProcesses.set(conversationId, child);
 			this.handles.set(conversationId, handle);
@@ -242,6 +251,7 @@ export class ConversationManagerServer implements Contract {
 					conversationId: id,
 					agentType: "novel",
 					storedir,
+					workspace: this.workspaceProvider?.(),
 				});
 				this.childProcesses.set(id, child);
 				this.handles.set(id, spawned);

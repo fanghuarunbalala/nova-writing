@@ -58,4 +58,9 @@ export class InMemoryConfigStore implements ConfigStore {
 			}
 		}
 	}
+
+	/** 解析凭据明文（内存版直接返回存储值；缺失时 undefined） */
+	async resolveSecret(ref: CredentialRef): Promise<string | undefined> {
+		return this.credentials.get(ref);
+	}
 }

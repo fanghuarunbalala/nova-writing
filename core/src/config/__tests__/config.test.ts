@@ -37,4 +37,19 @@ describe("config 域", () => {
 		handle.dispose();
 		await server.close();
 	});
+
+	it("resolveSecret 宿主侧解析凭据明文（存储层专用，不经 ConfigApi）", async () => {
+		const store = new InMemoryConfigStore();
+		await store.mutate({
+			op: "model.upsert",
+			profileId: "p1",
+			profile: { provider: "openai", model: "m", credentialRef: "deepseek" },
+		});
+		await store.mutate({ op: "credential.save", ref: "deepseek", secret: "sk-xxx" });
+
+		expect(await store.resolveSecret("deepseek")).toBe("sk-xxx");
+		expect(await store.resolveSecret("missing")).toBeUndefined();
+		await store.mutate({ op: "credential.delete", ref: "deepseek" });
+		expect(await store.resolveSecret("deepseek")).toBeUndefined();
+	});
 });

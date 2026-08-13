@@ -75,7 +75,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 
 	const provider = createProvider({
 		id: "default",
-		type: "openai",
+		type: (process.env.NOVEL_PROVIDER_TYPE as "openai" | "anthropic" | undefined) ?? "openai",
 		baseUrl: process.env.NOVEL_PROVIDER_BASE_URL ?? "https://api.deepseek.com/v1",
 		apiKey: process.env.NOVEL_PROVIDER_API_KEY,
 	});

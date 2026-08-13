@@ -83,8 +83,30 @@ function createEchoLoop(
   } as unknown as AgentLoop;
 }
 
+/**
+ * 从 config 默认 model profile 解析 provider 连接并写入 process.env（子进程 spawn 经 env 继承）。
+ * 设置页保存 key 后重启生效（conversation 模式在启动时决定）。
+ */
+async function applyDefaultProviderEnv(configStore: NodeApplicationConfigStore): Promise<void> {
+  const snapshot = await configStore.get();
+  const profile =
+    snapshot.profiles.find((p) => p.id === snapshot.defaultProfileId) ?? snapshot.profiles[0];
+  if (profile === undefined) return;
+  const apiKey = await configStore.resolveSecret(profile.credentialRef);
+  if (apiKey === undefined) return;
+  process.env.NOVEL_PROVIDER_API_KEY = apiKey;
+  process.env.NOVEL_PROVIDER_TYPE = profile.provider;
+  process.env.NOVEL_PROVIDER_MODEL = profile.model;
+  if (profile.baseUrl !== undefined) process.env.NOVEL_PROVIDER_BASE_URL = profile.baseUrl;
+  console.error(`[main] provider resolved from config: ${profile.provider}/${profile.model}`);
+}
+
 /** manager：有 provider key 时 spawnConversation 走子进程（真实 provider，经 fd 3 共享 novel store）；否则回退内存回显 loop */
-function createManager(store: NovelStore, conversationsRoot: string): ConversationManagerServer {
+function createManager(
+  store: NovelStore,
+  conversationsRoot: string,
+  workspaceProvider: () => string | undefined,
+): ConversationManagerServer {
   const factory = {
     create: (o: { conversationId: string }) => {
       // 回显模式同样落盘：与子进程 journal 语义一致（history/回执互认）
@@ -105,7 +127,10 @@ function createManager(store: NovelStore, conversationsRoot: string): Conversati
     process.env.NOVEL_PROVIDER_API_KEY !== undefined
       ? createProcessSpawner(childScript, store)
       : undefined;
-  return new ConversationManagerServer(factory, spawner, { storedirRoot: conversationsRoot });
+  return new ConversationManagerServer(factory, spawner, {
+    storedirRoot: conversationsRoot,
+    workspaceProvider,
+  });
 }
 
 async function main(): Promise<void> {
@@ -127,8 +152,6 @@ async function main(): Promise<void> {
 
   const store = new SqliteNovelStore(join(app.getPath("userData"), "novel.db"));
   const conversationsRoot = join(app.getPath("userData"), "novel-storage", "conversations");
-  const manager = createManager(store, conversationsRoot);
-  const serverApi = createNovelApiServer({ manager, novel: store, proxy, journalDir: conversationsRoot });
 
   // config：JSON 文件持久化（凭据暂明文，safeStorage cipher 后续接）
   const configHome = new NodeConfigHomeResolver(app.getPath("userData"));
@@ -142,6 +165,15 @@ async function main(): Promise<void> {
   });
   await configStore.load();
   const configServer = new ConfigServer(configStore);
+
+  // provider 配置：默认 model profile 的凭据解析为子进程 env（NOVEL_PROVIDER_*）。
+  // 设置页保存后重启生效（conversation 模式在启动时决定）。
+  await applyDefaultProviderEnv(configStore);
+
+  // 当前工作区根路径（spawn 时经 env 注入子进程，agent 文件工具落点）
+  let currentWorkspaceRoot: string | undefined;
+  const manager = createManager(store, conversationsRoot, () => currentWorkspaceRoot);
+  const serverApi = createNovelApiServer({ manager, novel: store, proxy, journalDir: conversationsRoot });
 
   // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）
   const endpoint = {
@@ -178,9 +210,12 @@ async function main(): Promise<void> {
       const location = await locator.resolve(reference.referenceId);
       const session = { id: location.workspaceId, label: reference.label };
       recentWorkspaces.unshift(session);
+      currentWorkspaceRoot = location.workspaceRoot;
       return session;
     },
-    close: async () => {},
+    close: async () => {
+      currentWorkspaceRoot = undefined;
+    },
   };
   expose(workspaceApi, electronIpcTransport({ endpoint, channel: WORKSPACE_CHANNEL }));
 

@@ -6,7 +6,7 @@
 import "./renderer.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { wrap } from "kkrpc";
+import { wrap } from "kkrpc/remote-refs";
 import { electronIpcTransport } from "kkrpc/electron";
 import type { NovelApiClient } from "@novel/core/client";
 import type { ConfigApi, ConfigMutation } from "@novel/core";

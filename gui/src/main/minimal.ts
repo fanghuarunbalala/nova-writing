@@ -4,7 +4,7 @@
  * - conversation：spawnConversation 走子进程（desktop-child.mjs，真实 provider）；createOrResume 回退内存回显 loop
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
-import { expose, type RPCMessage } from "kkrpc";
+import { expose, proxy, type RPCMessage } from "kkrpc/remote-refs";
 import { basename, join } from "node:path";
 import {
   Conversation,
@@ -93,7 +93,7 @@ async function main(): Promise<void> {
 
   const store = new SqliteNovelStore(join(app.getPath("userData"), "novel.db"));
   const manager = createManager(store);
-  const serverApi = createNovelApiServer({ manager, novel: store });
+  const serverApi = createNovelApiServer({ manager, novel: store, proxy });
 
   // config：JSON 文件持久化（凭据暂明文，safeStorage cipher 后续接）
   const configHome = new NodeConfigHomeResolver(app.getPath("userData"));

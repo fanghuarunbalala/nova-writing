@@ -161,6 +161,11 @@ export interface NovelApiServerOptions {
 	manager: ConversationManagerServer;
 	/** novel 存储（query / mutate） */
 	novel: NovelStore;
+	/**
+	 * proxy 函数注入（kkrpc/remote-refs 的 ESM/CJS 双构建各有独立 WeakSet，
+	 * 须由 expose 侧同一构建注入，才能把返回的 handle 注册为 remote ref）
+	 */
+	proxy?: <T extends object>(value: T) => T;
 }
 
 /**
@@ -171,11 +176,17 @@ export interface NovelApiServerOptions {
  */
 export function createNovelApiServer(options: NovelApiServerOptions): NovelApiClient {
 	const { manager, novel } = options;
+	const mark = options.proxy ?? (<T extends object>(value: T): T => value);
 	return {
 		conversations: {
 			list: () => manager.list(),
-			create: (agentType = "novel") => manager.spawnConversation({ agentType }),
-			open: async (conversationId) => (await manager.createOrResume(conversationId)).handle,
+			// handle 经注入的 proxy 注册 remote ref：Electron IPC 结构化克隆无法序列化类实例
+			create: async (agentType = "novel") => {
+				const ref = await manager.spawnConversation({ agentType });
+				return { conversationId: ref.conversationId, handle: mark(ref.handle) };
+			},
+			open: async (conversationId) =>
+				mark((await manager.createOrResume(conversationId)).handle),
 			delete: (conversationId) => manager.delete(conversationId),
 		},
 		novel: {

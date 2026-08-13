@@ -54,8 +54,8 @@ export interface ConversationProcessSpawner {
 export class ConversationManagerServer implements Contract {
 	/** conversationId → Conversation 实例（内存模式） */
 	private readonly conversations = new Map<string, Conversation>();
-	/** conversationId → 操作目标（内存 Conversation / 进程 handle 统一） */
-	private readonly handles = new Map<string, ConversationTarget>();
+	/** conversationId → 操作目标（内存 Conversation / 进程 handle 统一，均为 ConversationHandle） */
+	private readonly handles = new Map<string, ConversationHandle>();
 	/** conversationId → 子进程（进程模式） */
 	private readonly childProcesses = new Map<string, ChildProcess>();
 	/** conversationId → 摘要（目录） */
@@ -155,9 +155,24 @@ export class ConversationManagerServer implements Contract {
 		return [...this.summaries.values()];
 	}
 
-	/** 创建或恢复会话（内存版：无则新建） */
+	/** 创建或恢复会话（spawner 可用时派生/复用子进程，否则内存新建） */
 	async createOrResume(conversationId?: ConversationId): Promise<ConversationRef> {
 		const id = conversationId ?? `conv_${++this.seq}`;
+		if (this.spawner) {
+			// 进程模式：已派生则复用，否则 spawn 子进程
+			let handle = this.handles.get(id);
+			if (handle === undefined) {
+				const { child, handle: spawned } = this.spawner.spawn({
+					conversationId: id,
+					agentType: "novel",
+				});
+				this.childProcesses.set(id, child);
+				this.handles.set(id, spawned);
+				this.summaries.set(id, { conversationId: id, name: id, storeDir: "", status: "active" });
+				handle = spawned;
+			}
+			return { conversationId: id, handle };
+		}
 		let conversation = this.conversations.get(id);
 		if (!conversation) {
 			conversation = this.factory.create({ conversationId: id, agentType: "novel" });

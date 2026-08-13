@@ -191,6 +191,8 @@ function emptyProjection(conversationId: string): ConversationProjectionSnapshot
     lastAppliedSequence: 0,
     state: "idle",
     timeline: Object.freeze([]),
+    cards: Object.freeze([]),
+    approvals: Object.freeze([]),
   });
 }
 

@@ -7,8 +7,8 @@ dist/
 # TS incremental build info
 *.tsbuildinfo
 
-# debug 生成物（ProviderCall jsonl/html）
-debug/
+# debug 生成物（ProviderCall jsonl/html，仅仓库根目录；core/src/runtime/debug 是源码）
+/debug/
 
 # logs
 *.log

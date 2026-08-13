@@ -5,3 +5,4 @@ export * from "./interaction/index.js";
 export * from "./events/index.js";
 export * from "./handle/index.js";
 export * from "./journal/index.js";
+export * from "./task.js";

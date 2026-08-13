@@ -1,0 +1,20 @@
+/* Novel design tokens + global baseline (spec 2.1) */
+@import "@novel/ui/shared/theme/tokens.css";
+@import "@novel/ui/shared/theme/global.css";
+@import "@novel/ui/shared/theme/settings.css";
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}

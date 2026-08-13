@@ -1,0 +1,24 @@
+/**
+ * ScheduleProgressCard 视觉（原型 .progress-card）。
+ *
+ * 单一描边卡片 + 标题 h3；标题与原型一致 14px/heavy/-0.01em。
+ */
+.card {
+  margin-top: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: 15px 17px;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.title {
+  font-size: 14px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.01em;
+  color: var(--color-fg);
+}

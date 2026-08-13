@@ -1,0 +1,95 @@
+/**
+ * GenStatus 视觉（原型 .gen-status）：扁平行容器。
+ * live 文案/图标动效/渐变已移入 RuntimeStatusIndicator；
+ * failed 在此：alert 图标（一次性微抖动）+ 红色加粗标签 + 具体原因 + 图标重试钮。
+ * 终结态不做循环动效（避免误导「还在工作」）。
+ */
+.status {
+  margin: 2px 2px 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 20px;
+  border: 0;
+  background: transparent;
+}
+
+.failed {
+  color: var(--color-danger);
+}
+
+.failed .icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--color-danger);
+}
+
+.failed .icon svg {
+  width: 15px;
+  height: 15px;
+  animation: failed-shake 0.45s ease-out both;
+}
+
+.failed .main {
+  flex: none;
+  color: var(--color-danger);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.failed .error {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-faint);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 重试：图标按钮，danger 圆钮，hover 实心红 + 白图标 + 上浮。 */
+.failed .retry {
+  flex: none;
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  color: var(--color-danger);
+  background: color-mix(in oklab, var(--color-danger) 12%, transparent);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.failed .retry:hover {
+  color: #fff;
+  background: var(--color-danger);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px color-mix(in oklab, var(--color-danger) 35%, transparent);
+}
+
+.failed .retry svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* 失败出现时的一次性微抖动（抓注意，然后静止）。 */
+@keyframes failed-shake {
+  0% { transform: translateX(0); }
+  20% { transform: translateX(-2px); }
+  40% { transform: translateX(2px); }
+  60% { transform: translateX(-1px); }
+  80% { transform: translateX(1px); }
+  100% { transform: translateX(0); }
+}

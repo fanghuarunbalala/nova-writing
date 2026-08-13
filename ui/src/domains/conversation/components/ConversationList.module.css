@@ -1,0 +1,9 @@
+/**
+ * ConversationList 视觉。
+ */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px;
+}

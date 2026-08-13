@@ -1,0 +1,9 @@
+/**
+ * SidebarToggleButton 视觉。
+ */
+.wrapper {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 10px;
+  border-top: 1px solid var(--color-border);
+}

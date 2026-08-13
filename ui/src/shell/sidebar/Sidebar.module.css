@@ -1,0 +1,19 @@
+/**
+ * Sidebar 视觉（原型 .sidebar）。
+ *
+ * 折叠动画用 margin-left 负偏移（原型做法），比 width 过渡更平滑——
+ * sidebar 内部布局不重排，仅整体滑出视野。过渡时长走 --duration-base。
+ */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-width);
+  flex: none;
+  min-height: 0;
+  background: color-mix(in oklab, var(--color-surface) 82%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  transition: margin-left var(--duration-base) var(--ease-in-out);
+}

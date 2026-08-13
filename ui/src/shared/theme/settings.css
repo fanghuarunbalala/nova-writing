@@ -1,0 +1,347 @@
+/**
+ * 模型设置面板样式（`.novel-*` 全局类）。
+ *
+ * PersistentModelConnectionSettingsPanel（桌面）与
+ * LocalModelProviderSettingsPanel（web）共享同一套全局类名，
+ * 故以全局样式表形式随设计系统一并下发（gui renderer.css 引入）。
+ * 视觉语言与 SettingsDialog.module.css / vendor 原型一致：surface 卡片、
+ * accent 强调、渐变主按钮、info/success/danger 状态提示。
+ */
+/* ============ 根容器 ============ */
+.novel-model-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* ============ 面板头部 ============ */
+.novel-model-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0 var(--space-1);
+}
+
+.novel-model-settings-header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.novel-model-settings-header > div > span,
+.novel-provider-editor > header > div > span {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+
+.novel-model-settings-header h3 {
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-heavy);
+  color: var(--color-fg);
+  letter-spacing: -0.01em;
+}
+
+.novel-model-settings-header p {
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--color-muted);
+}
+
+/* ============ 次级按钮（幽灵/描边） ============ */
+.novel-model-settings-header > button,
+.novel-provider-editor > header > button,
+.novel-provider-row > button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  color: var(--color-muted);
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.novel-model-settings-header > button:hover:not(:disabled),
+.novel-provider-editor > header > button:hover:not(:disabled),
+.novel-provider-row > button:hover:not(:disabled) {
+  color: var(--color-accent-ink);
+  border-color: var(--color-accent);
+  background: color-mix(in oklab, var(--color-accent) 6%, var(--color-surface));
+}
+
+.novel-model-settings-header > button:disabled,
+.novel-provider-editor > header > button:disabled,
+.novel-provider-row > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ============ 默认模型 / 当前生效字段 ============ */
+.novel-active-provider-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.novel-active-provider-field > span {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.novel-active-provider-field select {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--color-fg);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+/* ============ 连接/Provider 列表 ============ */
+.novel-provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.novel-provider-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-8) var(--space-4);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.novel-provider-empty strong {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-muted);
+}
+
+.novel-provider-empty span {
+  font-size: var(--fs-body);
+  color: var(--color-faint);
+}
+
+.novel-provider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.novel-provider-row:hover {
+  border-color: var(--color-border-strong);
+}
+
+.novel-provider-row[data-active="true"] {
+  border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-border-strong));
+  background: color-mix(in oklab, var(--color-accent) 4%, var(--color-surface));
+}
+
+.novel-provider-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.novel-provider-row strong {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.novel-provider-row > div > span {
+  font-size: var(--fs-meta);
+  color: var(--color-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.novel-provider-row small {
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.novel-provider-active-badge {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--color-accent) 12%, var(--color-surface));
+  color: var(--color-accent-ink);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* ============ 编辑表单 ============ */
+.novel-provider-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.novel-provider-editor > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.novel-provider-editor > header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.novel-provider-editor > header h4 {
+  margin: 0;
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-heavy);
+  color: var(--color-fg);
+}
+
+.novel-provider-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.novel-provider-fields > label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.novel-provider-fields > label > span {
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-medium);
+  color: var(--color-muted);
+}
+
+.novel-provider-fields input,
+.novel-provider-fields select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.novel-provider-fields input:focus,
+.novel-provider-fields select:focus {
+  outline: 2px solid color-mix(in oklab, var(--color-accent) 42%, transparent);
+  outline-offset: 1px;
+  border-color: var(--color-accent);
+}
+
+.novel-provider-fields input:disabled,
+.novel-provider-fields select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.novel-provider-editor > footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 主按钮（accent 渐变，对应 vendor 原型） */
+.novel-provider-editor > footer button {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--grad-accent);
+  color: var(--color-surface);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  box-shadow: var(--shadow-1);
+  transition:
+    filter var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.novel-provider-editor > footer button:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.novel-provider-editor > footer button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.novel-provider-editor > footer button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ============ 状态/安全提示 ============ */
+.novel-provider-security-note {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-info-bg);
+  color: var(--color-info);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+
+.novel-provider-security-note[data-ok="true"] {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.novel-provider-security-note[data-ok="false"] {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}

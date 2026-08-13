@@ -1,0 +1,80 @@
+/**
+ * ConversationComposer 视觉（原型 .composer + form + .composer-main）。
+ *
+ * composer 容器：absolute 贴聊天视图底部，z-index 6 盖在 ::before 渐变之上，
+ *       透明无边框、pointer-events none（点击穿透到时间线可滚动），padding 0 22px 16px。
+ * form：居中卡片 max-width 880px，radius 16px + shadow-1 无边框，
+ *       pointer-events auto；内部纵向排 gen-status → .mainRow(textarea+send) → 模式下拉。
+ * textarea：flex 1，14.5px/1.6，min-height 44 / max-height 140，caret-color accent-ink，
+ *           placeholder faint 0.82 透明度。
+ * 模式下拉区域由 ComposerModeBar.module.css 负责（触发按钮 + 向上浮出的选项面板）。
+ */
+.composer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  padding: 0 22px 16px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.form {
+  position: relative;
+  max-width: 880px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  padding: 8px 8px 10px 15px;
+  pointer-events: auto;
+}
+
+.mainRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.input {
+  flex: 1;
+  min-height: 44px;
+  max-height: 140px;
+  resize: none;
+  padding: 9px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  font-size: 14.5px;
+  line-height: 1.6;
+  caret-color: var(--color-accent-ink);
+}
+
+.input::placeholder {
+  color: var(--color-faint);
+  opacity: 0.82;
+}
+
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* sr-only：仅屏幕阅读器可见的 label */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+

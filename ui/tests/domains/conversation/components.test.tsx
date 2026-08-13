@@ -1,0 +1,463 @@
+/**
+ * conversation 域组件测试：timeline/user/assistant/proposal/gen/composer/empty。
+ */
+import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { ApprovalDock } from "../../../src/domains/conversation/components/ApprovalDock.js";
+import { ChatEmptyState } from "../../../src/domains/conversation/components/ChatEmptyState.js";
+import { ConversationComposer } from "../../../src/domains/conversation/components/ConversationComposer.js";
+import { ConversationTimeline } from "../../../src/domains/conversation/components/ConversationTimeline.js";
+import { GenStatus } from "../../../src/domains/conversation/components/GenStatus.js";
+import { ProposalBlock } from "../../../src/domains/conversation/components/ProposalBlock.js";
+import { ProposalOp } from "../../../src/domains/conversation/components/ProposalOp.js";
+import { UserMessage } from "../../../src/domains/conversation/components/UserMessage.js";
+import type { ConversationTimelineItem } from "../../../src/domains/conversation/projection/ConversationTimelineItem.js";
+
+describe("ConversationTimeline", () => {
+  it("renders items in sequence order", () => {
+    const items: ConversationTimelineItem[] = [
+      { kind: "user", sequence: 2, text: "第二条", timestamp: 200 },
+      { kind: "assistant", sequence: 1, agentLabel: "Novel Agent", timestamp: 100, thinkLines: [], text: "第一条", cards: [], streaming: false },
+      { kind: "system", sequence: 3, text: "已提交 r042", timestamp: 300 },
+    ];
+    render(<ConversationTimeline conversationId="c1" items={items} />);
+    const textNodes = screen.getAllByText(/第.条|已提交/);
+    expect(textNodes.map((node) => node.textContent)).toEqual(["第一条", "第二条", "已提交 r042"]);
+  });
+
+  it("forwards proposal view-diff actions", async () => {
+    const user = userEvent.setup();
+    const onProposalAction = vi.fn();
+    const items: ConversationTimelineItem[] = [
+      {
+        kind: "assistant",
+        sequence: 1,
+        agentLabel: "Novel Agent",
+        timestamp: 100,
+        thinkLines: [],
+        text: "",
+        streaming: false,
+        cards: [
+          {
+            kind: "proposal",
+            id: "card-1",
+            content: {
+              tag: "proposal",
+              title: "调整雨景",
+              changeSetId: "CS-1",
+              ops: [],
+            },
+          },
+        ],
+      },
+    ];
+    render(<ConversationTimeline conversationId="c1" items={items} onProposalAction={onProposalAction} />);
+    await user.click(screen.getByRole("button", { name: "前往审批 Diff" }));
+    expect(onProposalAction).toHaveBeenCalledWith("CS-1", "view-diff");
+  });
+});
+
+describe("UserMessage", () => {
+  it("renders text and inline reference chips", async () => {
+    const user = userEvent.setup();
+    const onReferenceClick = vi.fn();
+    render(
+      <UserMessage
+        sequence={1}
+        text={'把<character id="char-linxia">林夏</character>的伞拿走'}
+        timestamp={1000}
+        onReferenceClick={onReferenceClick}
+      />,
+    );
+    expect(screen.getByText(/把/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "林夏" }));
+    expect(onReferenceClick).toHaveBeenCalledWith({
+      refKind: "character",
+      id: "char-linxia",
+      label: "林夏",
+    });
+  });
+
+  it("renders chapter and self-closing reference chips", async () => {
+    const user = userEvent.setup();
+    const onReferenceClick = vi.fn();
+    const resolveReference = () => ({ label: "第一章 · 旧船坞", known: true });
+    render(
+      <UserMessage
+        sequence={2}
+        text={'翻到<chapter id="chapter-301">第一章</chapter>和<location id="loc-dock7"/>。'}
+        timestamp={1000}
+        onReferenceClick={onReferenceClick}
+        resolveReference={resolveReference}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "第一章" }));
+    expect(onReferenceClick).toHaveBeenCalledWith({
+      refKind: "chapter",
+      id: "chapter-301",
+      label: "第一章",
+    });
+    await user.click(screen.getByRole("button", { name: "第一章 · 旧船坞" }));
+    expect(onReferenceClick).toHaveBeenCalledWith({
+      refKind: "location",
+      id: "loc-dock7",
+    });
+  });
+
+  it("copies text via clipboard and notifies on success", async () => {
+    const user = userEvent.setup();
+    const onNotify = vi.fn();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    render(
+      <UserMessage
+        sequence={3}
+        text="把货单交给林夏"
+        timestamp={1000}
+        onNotify={onNotify}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "复制消息" }));
+    expect(writeText).toHaveBeenCalledWith("把货单交给林夏");
+    expect(onNotify).toHaveBeenCalledWith("success", "已复制消息");
+    expect(screen.getByRole("button", { name: "已复制" })).toBeInTheDocument();
+  });
+
+  it("renders in-pad copy button on the first user message", () => {
+    render(<UserMessage sequence={1} text="开场" timestamp={1000} inPad />);
+    expect(screen.getByRole("button", { name: "复制消息" })).toBeInTheDocument();
+  });
+});
+
+describe("ProposalBlock / ProposalOp", () => {
+  it("renders tag, title, meta and ops, and fires view-diff", async () => {
+    const user = userEvent.setup();
+    const onViewDiff = vi.fn();
+    render(
+      <ProposalBlock
+        tag="proposal"
+        title="调整雨景描写"
+        meta="r041 -> r042"
+        changeSetId="CS-1"
+        onViewDiff={onViewDiff}
+        ops={[{ id: "op-1", mark: "mod", kind: "manuscript", description: { kind: "text", text: "把'雨很大'改为'雨落得密'" } }]}
+      />,
+    );
+    expect(screen.getByText("调整雨景描写")).toBeInTheDocument();
+    expect(screen.getByText("r041 -> r042")).toBeInTheDocument();
+    expect(screen.getByText("~")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "前往审批 Diff" }));
+    expect(onViewDiff).toHaveBeenCalledWith("CS-1");
+  });
+
+  it("ProposalOp renders mark, description and kind", () => {
+    render(
+      <ProposalOp
+        op={{ id: "op-2", mark: "add", kind: "character", description: { kind: "text", text: "新增角色 林夏" } }}
+      />,
+    );
+    expect(screen.getByText("+")).toBeInTheDocument();
+    expect(screen.getByText("新增角色 林夏")).toBeInTheDocument();
+    expect(screen.getByText("角色")).toBeInTheDocument();
+  });
+});
+
+describe("GenStatus", () => {
+  it("renders nothing when idle", () => {
+    render(<GenStatus phase="idle" />);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows stage, elapsed clock and stop while live, then retry on failure", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    const onStop = vi.fn();
+    const { rerender } = render(
+      <GenStatus phase="thinking" stage="正在思考大纲…" onStop={onStop} />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("正在思考大纲…");
+    expect(screen.getByText(/已用时 0 秒/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "停止" }));
+    expect(onStop).toHaveBeenCalledTimes(1);
+    rerender(<GenStatus phase="failed" error="连接中断" onRetry={onRetry} />);
+    expect(screen.getByText("生成失败")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ConversationComposer", () => {
+  it("submits trimmed text on Enter and clears the input", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(<ConversationComposer conversationId="c1" enabled onSend={onSend} />);
+    const input = screen.getByRole("textbox", { name: "对话输入" });
+    await user.type(input, "  改写雨景  ");
+    await user.keyboard("{Enter}");
+    expect(onSend).toHaveBeenCalledWith({ text: "改写雨景", references: [] });
+    expect(input).toHaveValue("");
+  });
+
+  it("disables send when empty or disabled", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    const { rerender } = render(<ConversationComposer conversationId="c1" enabled onSend={onSend} />);
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    rerender(<ConversationComposer conversationId="c1" enabled={false} onSend={onSend} />);
+    await user.type(screen.getByRole("textbox"), "hi");
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+  });
+
+  it("disables send during pending approval but keeps typing and mode available", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(
+      <ConversationComposer
+        conversationId="c1"
+        enabled
+        sendDisabled
+        onSend={onSend}
+        onModeChange={vi.fn()}
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: "对话输入" });
+    await user.type(input, "hi");
+    // 发送按钮禁用，但打字区仍可用，显示「等待审批」。
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    expect(input).toBeEnabled();
+    expect(screen.getByText("等待审批")).toBeInTheDocument();
+    // 切 mode 的触发按钮仍可用。
+    expect(screen.getByRole("button", { name: /执行模式|模式|下拉/ })).toBeEnabled();
+  });
+
+  it("unlocks send and shows the disconnected hint when the runtime is disconnected", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(
+      <ConversationComposer
+        conversationId="c1"
+        enabled
+        sendDisabled
+        disconnected
+        onSend={onSend}
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: "对话输入" });
+    await user.type(input, "hi");
+    // 断开时审批阻塞解除：发送可用、显示「进程已断开」，不显示「等待审批」。
+    expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
+    expect(screen.getByText("进程已断开，审批已结束")).toBeInTheDocument();
+    expect(screen.queryByText("等待审批")).not.toBeInTheDocument();
+  });
+
+  it("renders the generation status pill above the input when status is provided", () => {
+    const onSend = vi.fn();
+    render(
+      <ConversationComposer
+        conversationId="c1"
+        enabled
+        onSend={onSend}
+        status={{ phase: "streaming", onStop: () => undefined }}
+      />,
+    );
+    expect(screen.getByText("正在生成…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "停止" })).toBeInTheDocument();
+  });
+
+  it("renders approval content in the status slot when approval is provided", () => {
+    render(
+      <ConversationComposer
+        conversationId="c1"
+        enabled
+        onSend={vi.fn()}
+        approval={
+          <ApprovalDock
+            approvals={[{
+              kind: "tool-approval",
+              approvalRequestId: "approval-a",
+              toolCallId: "call-a",
+              toolName: "NovelCharacterWrite",
+              toolVersion: "1.0.0",
+              argumentDigest: `sha256:${"a".repeat(64)}`,
+              runId: "run-1",
+              turnId: "turn-1",
+              requestedSequence: 1,
+              lastSequence: 2,
+              title: "新增角色",
+              operations: [{ op: "add", kind: "character", title: "林夏" }],
+              requestedAt: "2026-08-11T01:00:00.000Z",
+              expiresAt: "2026-08-11T01:15:00.000Z",
+              status: "pending",
+            }]}
+            onDecide={vi.fn()}
+            onOpenApproval={vi.fn()}
+          />
+        }
+      />,
+    );
+    expect(screen.getByText("等待审批")).toBeInTheDocument();
+    expect(screen.getByText(/新增角色/)).toBeInTheDocument();
+  });
+});
+
+describe("ChatEmptyState", () => {
+  it("prompts creation and fires onCreate", async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn();
+    render(<ChatEmptyState onCreate={onCreate} />);
+    expect(screen.getByText("新对话")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "新建对话" }));
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ApprovalDock", () => {
+  const pendingApproval = (overrides: Record<string, unknown> = {}) => ({
+    kind: "tool-approval" as const,
+    approvalRequestId: "approval-a",
+    toolCallId: "call-a",
+    toolName: "NovelCharacterWrite",
+    toolVersion: "1.0.0",
+    argumentDigest: `sha256:${"a".repeat(64)}` as const,
+    runId: "run-1",
+    turnId: "turn-1",
+    requestedSequence: 1,
+    lastSequence: 2,
+    title: "新增角色",
+    operations: [
+      { op: "add" as const, kind: "character", title: "林夏" },
+    ],
+    requestedAt: "2026-08-10T01:00:00.000Z",
+    expiresAt: "2026-08-10T01:15:00.000Z",
+    status: "pending" as const,
+    ...overrides,
+  });
+
+  it("renders nothing without approvals", () => {
+    const { container } = render(
+      <ApprovalDock approvals={[]} onDecide={vi.fn()} onOpenApproval={vi.fn()} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("renders ops, waiting label and icon actions for pending approvals", () => {
+    render(
+      <ApprovalDock
+        approvals={[pendingApproval()]}
+        onDecide={vi.fn()}
+        onOpenApproval={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("等待审批")).toBeInTheDocument();
+    // 操作块：新增角色：林夏（彩色文字胶囊）。
+    expect(screen.getByText(/新增角色/)).toBeInTheDocument();
+    expect(screen.getByText("林夏")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "通过" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "驳回" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "审核详情" })).toBeInTheDocument();
+  });
+
+  it("fires onDecide with the group's request ids on approve", async () => {
+    const user = userEvent.setup();
+    const onDecide = vi.fn();
+    render(
+      <ApprovalDock
+        approvals={[
+          pendingApproval(),
+          pendingApproval({
+            approvalRequestId: "approval-b",
+            toolCallId: "call-b",
+            title: "编辑角色",
+            operations: [{ op: "edit" as const, kind: "location", title: "青云镇" }],
+          }),
+        ]}
+        onDecide={onDecide}
+        onOpenApproval={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "通过" }));
+    expect(onDecide).toHaveBeenCalledWith(["approval-a", "approval-b"], "approved");
+  });
+
+  it("fires onDecide with rejected on reject", async () => {
+    const user = userEvent.setup();
+    const onDecide = vi.fn();
+    render(
+      <ApprovalDock
+        approvals={[pendingApproval()]}
+        onDecide={onDecide}
+        onOpenApproval={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "驳回" }));
+    expect(onDecide).toHaveBeenCalledWith(["approval-a"], "rejected");
+  });
+
+  it("fires onOpenApproval on the jump button", async () => {
+    const user = userEvent.setup();
+    const onOpenApproval = vi.fn();
+    render(
+      <ApprovalDock
+        approvals={[pendingApproval()]}
+        onDecide={vi.fn()}
+        onOpenApproval={onOpenApproval}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "审核详情" }));
+    expect(onOpenApproval).toHaveBeenCalledWith("approval-a");
+  });
+
+  it("resolves delete entity titles via resolveEntity", async () => {
+    const resolveEntity = vi.fn(async (target: {
+      kind: string;
+      id: string;
+      op: string;
+    }) => ({
+      kind: "volume",
+      id: target.id,
+      name: "第一卷·启程",
+      op: target.op,
+      fields: [],
+    }));
+    render(
+      <ApprovalDock
+        approvals={[pendingApproval({
+          approvalRequestId: "approval-del",
+          toolCallId: "call-del",
+          title: "删除卷",
+          operations: [{ op: "delete", kind: "volume", id: "vol-1", title: "vol-1" }],
+        })]}
+        onDecide={vi.fn()}
+        onOpenApproval={vi.fn()}
+        resolveEntity={resolveEntity}
+      />,
+    );
+    // 解析完成后显示实体标题（而非 id）。
+    expect(await screen.findByText("第一卷·启程")).toBeInTheDocument();
+    expect(resolveEntity).toHaveBeenCalledWith({
+      kind: "volume",
+      id: "vol-1",
+      op: "delete",
+    });
+  });
+
+  it("falls back to the id for delete when no resolver is provided", () => {
+    render(
+      <ApprovalDock
+        approvals={[pendingApproval({
+          approvalRequestId: "approval-del",
+          toolCallId: "call-del",
+          title: "删除卷",
+          operations: [{ op: "delete", kind: "volume", id: "vol-1", title: "vol-1" }],
+        })]}
+        onDecide={vi.fn()}
+        onOpenApproval={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("vol-1")).toBeInTheDocument();
+  });
+});

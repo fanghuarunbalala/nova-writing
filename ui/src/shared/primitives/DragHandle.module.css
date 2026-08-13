@@ -1,0 +1,52 @@
+/**
+ * DragHandle 视觉：细窄热区 + hover/dragging 高亮引导线。
+ */
+.handle {
+  position: static;
+  flex: none;
+  touch-action: none;
+  z-index: 5;
+}
+
+.handle::before {
+  content: "";
+  position: absolute;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.handle:hover::before,
+.dragging::before {
+  background: color-mix(in oklab, var(--color-accent) 45%, transparent);
+}
+
+.horizontal {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  cursor: col-resize;
+}
+
+.horizontal::before {
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+}
+
+.vertical {
+  width: 100%;
+  height: 6px;
+  margin-top: -3px;
+  cursor: row-resize;
+}
+
+.vertical::before {
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 2px;
+}

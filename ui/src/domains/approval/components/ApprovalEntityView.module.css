@@ -1,0 +1,207 @@
+/**
+ * ApprovalEntityView 视觉（v4）：diff 行 + 真树形层级 + 段落 + 写作方案。
+ * v4 diff-row + tree hierarchy + paragraphs + writing-plan visuals.
+ */
+.entity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--color-muted);
+  margin-bottom: 2px;
+}
+
+/* ---------- diff 行 ---------- */
+.dl {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+
+.dl .g {
+  flex: none;
+  width: 13px;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  text-align: center;
+}
+
+.fld {
+  flex: none;
+  width: 72px;
+  font-size: 11px;
+  color: var(--color-faint);
+}
+
+.txt {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dl.ctx { background: transparent; }
+.dl.ctx .g { color: var(--color-border-strong); }
+.dl.ctx .txt { color: var(--color-muted); }
+
+.dl.add { background: color-mix(in oklab, var(--color-success) 9%, var(--color-surface)); }
+.dl.add .g { color: var(--color-success); }
+.dl.add .txt { color: var(--color-fg); }
+
+.dl.del { background: color-mix(in oklab, var(--color-danger) 8%, var(--color-surface)); }
+.dl.del .g { color: var(--color-danger); }
+.dl.del .txt {
+  color: var(--color-muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklab, var(--color-danger) 45%, transparent);
+}
+
+.dl.old { background: color-mix(in oklab, var(--color-danger) 9%, var(--color-surface)); }
+.dl.old .g { color: var(--color-danger); }
+.dl.old .txt {
+  color: var(--color-muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklab, var(--color-danger) 45%, transparent);
+}
+
+.dl.new { background: color-mix(in oklab, var(--color-success) 10%, var(--color-surface)); }
+.dl.new .g { color: var(--color-success); }
+.dl.new .txt { color: var(--color-fg); }
+
+/* ---------- 树 / 列表（嵌套容器 + 引导线 + 横向枝） ---------- */
+.tree {
+  font-size: 12.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.parent {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--color-faint);
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+}
+
+.node {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 6px;
+  color: var(--color-muted);
+}
+
+.nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--color-accent-ink);
+  background: color-mix(in oklab, var(--color-accent) 8%, var(--color-surface));
+  border: 1px solid color-mix(in oklab, var(--color-accent) 22%, var(--color-border));
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.st {
+  margin-left: auto;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--color-muted);
+  flex: none;
+}
+
+.st i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-border-strong);
+}
+
+.children {
+  margin-left: 7px;
+  padding-left: 16px;
+  border-left: 1.5px solid var(--color-border-strong);
+}
+
+.children > .node::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  width: 12px;
+  height: 1.5px;
+  background: var(--color-border-strong);
+}
+
+.node.current {
+  background: color-mix(in oklab, var(--color-warn) 13%, var(--color-surface));
+  border-left: 3px solid var(--color-warn);
+  color: var(--color-fg);
+}
+.node.current .nm { font-weight: 800; }
+
+.node.add {
+  background: color-mix(in oklab, var(--color-success) 13%, var(--color-surface));
+  border-left: 3px solid var(--color-success);
+  color: var(--color-fg);
+}
+.node.add .nm { font-weight: 800; }
+
+.node.del {
+  background: color-mix(in oklab, var(--color-danger) 13%, var(--color-surface));
+  border-left: 3px solid var(--color-danger);
+  color: var(--color-danger);
+}
+.node.del .nm {
+  font-weight: 800;
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklab, var(--color-danger) 45%, transparent);
+}
+
+/* ---------- 写作方案（leaf） ---------- */
+.leaf {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 4px;
+}
+
+.leafhead {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 8px 1px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--color-success);
+}
+
+/* ---------- 段落 ---------- */
+.para {
+  font-size: 13px;
+  font-family: var(--font-body);
+}
+
+.para .dl .txt {
+  font-family: var(--font-body);
+}

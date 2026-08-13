@@ -1,0 +1,48 @@
+/**
+ * ConversationItemMenu 视觉（原型 .conv-more + .conv-menu）。
+ *
+ * 原型中 conv-more 始终可见（faint 色），hover 时显示 surface-2 背景，
+ * aria-expanded=true 时高亮 accent-ink；pinned 行默认 accent-ink。
+ * ⋯ 字符 15px；20x20 圆角 6px；菜单由 Dropdown 组件渲染到 trigger 下方。
+ *
+ * 注意：.conv-row / .pinned 定义在 ConversationListItem 上（全局类名），
+ * 此处通过 :global() 引用以实现跨文件样式定位。
+ */
+.wrap {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+}
+
+.more {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-faint);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.more:hover {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+}
+
+.more[aria-expanded="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-accent-ink);
+}
+
+/* 原型 .conv-row.pinned .conv-more：置顶行的 ⋯ 按钮默认使用 accent-ink */
+:global(.conv-row.pinned) .more {
+  color: var(--color-accent-ink);
+}

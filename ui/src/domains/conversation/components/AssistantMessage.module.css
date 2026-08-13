@@ -1,0 +1,70 @@
+/**
+ * AssistantMessage 视觉（原型 .msg.assistant + .msg-head + .msg-text）。
+ *
+ * v2 原型：无 avatar、head 只保留 approval-state（中文标签）；消息文本
+ * 无气泡、font-size 15 / line-height 1.75、margin-top 7px。
+ * 状态色对齐原型：pending=warn / approved=success / rejected=danger /
+ * stopped=muted / failed=danger 82%。
+ */
+.message {
+  display: flex;
+  gap: 12px;
+  padding: 18px 0 6px;
+}
+
+.body {
+  min-width: 0;
+  flex: 1;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.state {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+
+.state.generating { color: var(--color-warn); }
+.state.completed { color: var(--color-success); }
+.state.submitted { color: var(--color-success); }
+.state.failed { color: color-mix(in oklab, var(--color-danger) 82%, var(--color-muted)); }
+.state.cancelled { color: var(--color-muted); }
+.state.rejected { color: var(--color-danger); }
+
+.text {
+  margin-top: 7px;
+  /* 用户要求正文用黑体（--font-ui），配合 medium 字重提升可读性。 */
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: var(--fw-medium);
+  line-height: 1.75;
+  color: var(--color-fg);
+  text-wrap: pretty;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.card {
+  min-width: 0;
+}
+
+.failureDetail {
+  margin: 8px 0 0;
+  padding: 8px 11px;
+  border: 1px solid color-mix(in oklab, var(--color-danger) 30%, var(--color-border));
+  border-radius: 9px;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: 12.5px;
+  line-height: 1.55;
+}

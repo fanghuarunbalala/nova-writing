@@ -1,0 +1,18 @@
+/**
+ * DiffCardRenderer 视觉。
+ */
+.card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.summary {
+  font-size: var(--fs-body);
+  color: var(--color-fg);
+}

@@ -1,0 +1,65 @@
+/**
+ * ManuscriptChapterContent 视觉（原型 .reader-right 右栏）。
+ *
+ * 独立滚动（flex:1 + overflow-y:auto）；章头 h2 16px/heavy + draft-tag；
+ * 正文块列表复用 ManuscriptBlock；草稿底部「前往审批 →」入口。
+ */
+@keyframes block-flash {
+  0%, 100% {
+    background: transparent;
+  }
+  25% {
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  }
+}
+
+.flash {
+  animation: block-flash 1.8s ease;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 0 2px 24px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.01em;
+  color: var(--color-fg);
+}
+
+.blocks {
+  display: flex;
+  flex-direction: column;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-faint);
+  font-size: 13px;
+}
+
+/* 草稿章底部「前往审批 →」入口（原型 .proposal-foot 的 link 按钮）。 */
+.draftActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border);
+}

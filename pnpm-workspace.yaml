@@ -1,5 +1,7 @@
 packages:
   - "core"
+  - "ui"
+  - "gui"
 
 onlyBuiltDependencies:
   - zeromq

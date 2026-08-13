@@ -1,0 +1,76 @@
+/**
+ * DesktopTitleBar 视觉：紧凑徽章 + 版本号 + 窗口控制按钮。
+ * 控制按钮使用 SVG 图标，hover 时高亮；close 按钮 hover 红色（与 macOS traffic light 视觉一致但不复制）。
+ */
+.titleBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in oklab, var(--color-accent, oklch(55% 0.072 42)) 8%, transparent);
+  color: var(--color-accent-ink, oklch(47% 0.062 41));
+  font-family: var(--font-mono, ui-monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.badge {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+.version {
+  opacity: 0.85;
+}
+
+.controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  /* 桌面窗口控制按钮在 TopBar drag 区域内，需 no-drag 才可点击 */
+  -webkit-app-region: no-drag;
+}
+
+.controlButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-xs, 5px);
+  background: transparent;
+  color: var(--color-accent-ink, oklch(47% 0.062 41));
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.controlButton:hover {
+  background: color-mix(in oklab, var(--color-accent, oklch(55% 0.072 42)) 18%, transparent);
+  color: var(--color-accent-ink, oklch(47% 0.062 41));
+}
+
+.controlButton:active {
+  background: color-mix(in oklab, var(--color-accent, oklch(55% 0.072 42)) 28%, transparent);
+}
+
+.controlButton:focus-visible {
+  outline: 1.5px solid var(--color-accent, oklch(55% 0.072 42));
+  outline-offset: 1px;
+}
+
+.closeButton:hover {
+  background: oklch(62% 0.22 25);
+  color: oklch(98% 0.01 25);
+}
+
+.closeButton:active {
+  background: oklch(52% 0.22 25);
+  color: oklch(98% 0.01 25);
+}

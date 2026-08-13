@@ -4,9 +4,12 @@
  */
 import type { Provider } from "../provider/Provider.js";
 import type { AgentCapability } from "./AgentCapability.js";
-import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
+import type { AgentDefinition } from "./AgentDefinition.js";
 import type { ToolDef } from "../tool/ToolDef.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
+import { InMemoryToolRegistry } from "../tool/InMemoryToolRegistry.js";
+import { createToolDispatcher } from "../tool/createToolDispatcher.js";
+import { applyToolPolicy } from "../tool/toolPolicy.js";
 import { createFileTools } from "../tool/definitions/files.js";
 import {
   createCharacterTools,
@@ -64,12 +67,25 @@ export interface NovelAgentOptions {
 }
 
 /**
+ * novel main agent 定义（数据常量，未来 Registry 注册用）。
+ * 无 tools 策略 = 全池（main 需全部工具；偏离旧版 groupIds 机制，见 architecture.md）。
+ * label/description 对齐旧 NovelAgentDefinition。
+ */
+export const NOVEL_AGENT_DEFINITION: AgentDefinition = {
+  agentType: "novel",
+  agentVersion: "1.0.0",
+  agentId: "main",
+  label: "Novel Agent",
+  description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
+};
+
+/**
  * 装配完整 Novel Agent（main agent）
  * @param opts 装配选项
- * @returns AgentLoop（含完整 AgentCapability + 工具调度）
+ * @returns AgentLoop（含完整 AgentCapability + 统一工具调度）
  */
 export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
-  const toolDefs: ToolDef[] = [
+  const pool: ToolDef[] = [
     ...createFileTools(opts.workspace),
     ...createCharacterTools(opts.handle),
     ...createLocationTools(opts.handle),
@@ -79,6 +95,9 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     ...createDeleteTool(opts.handle),
     ...(opts.subagent ? createSubagentTools(opts.subagent) : []),
   ];
+  const toolDefs = applyToolPolicy(pool, NOVEL_AGENT_DEFINITION.tools);
+  const registry = new InMemoryToolRegistry();
+  for (const def of toolDefs) registry.register(def);
   const capability: AgentCapability = {
     systemSections: [
       coreRuntimeProtocolSection,
@@ -92,19 +111,12 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     nudgePolicies: [], // compose nudge 由 Conversation 层注入（依赖 ConversationContext）
     compactPolicies: [],
   };
-  const dispatcher: ToolDispatcher = {
-    dispatch: async (_ctx, call) => {
-      const tool = toolDefs.find((t) => t.name === call.name);
-      if (!tool) throw new Error(`未知工具: ${call.name}`);
-      return tool.handler.execute(call);
-    },
-  };
   return new AgentLoop({
     workspace: opts.workspace,
     provider: opts.provider,
     agentCapability: capability,
-    toolDispatcher: dispatcher,
-    agentId: "main",
+    toolDispatcher: createToolDispatcher(registry),
+    agentId: NOVEL_AGENT_DEFINITION.agentId ?? "main",
     conversationId: opts.conversationId,
     listeners: opts.listeners,
     turnMessages: opts.turnMessages,

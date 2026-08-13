@@ -5,9 +5,11 @@
 import type { Provider } from "../provider/Provider.js";
 import type { AgentCapability } from "./AgentCapability.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
-import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { ToolDef } from "../tool/ToolDef.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
+import { InMemoryToolRegistry } from "../tool/InMemoryToolRegistry.js";
+import { createToolDispatcher } from "../tool/createToolDispatcher.js";
+import { applyToolPolicy } from "../tool/toolPolicy.js";
 import { createFileTools } from "../tool/definitions/files.js";
 import {
   createCharacterTools,
@@ -79,21 +81,19 @@ export interface NovelExplorerAgentOptions {
  * @returns AgentLoop（config 带 conversationId + agentId，无 listeners——live-only）
  */
 export function buildNovelExplorerAgent(opts: NovelExplorerAgentOptions): AgentLoop {
-  const readFileTools = createFileTools(opts.workspace).filter(
-    (t) => t.name === "Read" || t.name === "Glob",
-  );
-  const readNovelTools = [
+  // 全池装配（含写工具）→ NOVEL_EXPLORER_DEFINITION.tools 策略过滤钉死只读边界
+  const pool: ToolDef[] = [
+    ...createFileTools(opts.workspace),
     ...createCharacterTools(opts.handle),
     ...createLocationTools(opts.handle),
     ...createOutlineTools(opts.handle),
     ...createParagraphTools(opts.handle),
     ...createPublicationTools(opts.handle),
-  ].filter((t) => t.name.endsWith("Read"));
-  const toolDefs: ToolDef[] = [
-    ...readFileTools,
-    ...readNovelTools,
     createTodoWriteTool(opts.todoStore, opts.conversationId),
   ];
+  const toolDefs = applyToolPolicy(pool, NOVEL_EXPLORER_DEFINITION.tools);
+  const registry = new InMemoryToolRegistry();
+  for (const def of toolDefs) registry.register(def);
   const capability: AgentCapability = {
     systemSections: [
       coreRuntimeProtocolSection,
@@ -107,19 +107,12 @@ export function buildNovelExplorerAgent(opts: NovelExplorerAgentOptions): AgentL
     nudgePolicies: [],
     compactPolicies: [],
   };
-  const dispatcher: ToolDispatcher = {
-    dispatch: async (_ctx, call) => {
-      const tool = toolDefs.find((t) => t.name === call.name);
-      if (!tool) throw new Error(`未知工具: ${call.name}`);
-      return tool.handler.execute(call);
-    },
-  };
   // live-only：不传 listeners（subagent 事件只进 hub，不落 journal）
   return new AgentLoop({
     workspace: opts.workspace,
     provider: opts.provider,
     agentCapability: capability,
-    toolDispatcher: dispatcher,
+    toolDispatcher: createToolDispatcher(registry),
     conversationId: opts.conversationId,
     agentId: opts.agentId,
   });

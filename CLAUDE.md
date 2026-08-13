@@ -21,3 +21,8 @@
 
 约定：output 是内存产物、按需落盘，未落盘仅订阅者可见；进度走读不走推；manager 只管生命周期 + 消息调度。
 实现：rpc 半边基于 **kkrpc**（stdio / Electron transport）。
+
+**transport 约束（踩坑记录）**：
+- **stdio 仅限父子派生主通道**（manager ↔ conversation 的 stdin/stdout 对话通道，kkrpc stdio transport 已验证可靠）。
+- **禁止用附加 fd（fd>2 的 pipe）承载 rpc**：Windows 下该管道的子进程→父进程写方向在进程启动数秒后失效（fs.WriteStream / net.Socket 均复现：写入返回成功但数据永不到达，rpc 30s 超时）。conversation ↔ novel-db 这类非父子通道按 architecture.md 走 **kkrpc/ws（localhost WebSocket + token）**。
+- 跨进程不存在通用流式通道：provider stream 是进程内 provider→loop 的流；output hub 实时分发经 rpc 回调推送；novel.changed 走 ZeroMQ PUB/SUB。novel 查询/变更就是普通 rpc 请求/响应。

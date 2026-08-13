@@ -8,3 +8,4 @@ export * from "./SqliteNovelStore.js";
 export * from "./store.js";
 export * from "./client/NovelHandle.js";
 export * from "./server/NovelDbServer.js";
+export * from "./server/NovelDbWsServer.js";

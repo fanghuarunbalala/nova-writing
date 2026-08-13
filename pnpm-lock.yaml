@@ -22,17 +22,23 @@ importers:
         version: 0.116.0
       kkrpc:
         specifier: ^2.1.0
-        version: 2.1.0(typescript@5.9.3)
+        version: 2.1.0(typescript@5.9.3)(ws@8.21.3)
       openai:
         specifier: ^7.4.0
-        version: 7.4.0
+        version: 7.4.0(ws@8.21.3)
       pino:
         specifier: ^10.3.1
         version: 10.3.1
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
       zeromq:
         specifier: ^6.5.0
         version: 6.5.0
     devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1))
@@ -47,7 +53,7 @@ importers:
         version: link:../ui
       kkrpc:
         specifier: ^2.1.0
-        version: 2.1.0(typescript@5.9.3)
+        version: 2.1.0(typescript@5.9.3)(ws@8.21.3)
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -965,6 +971,9 @@ packages:
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@typescript-eslint/eslint-plugin@8.67.0':
     resolution: {integrity: sha512-Un7Heoyj65NREbKAyIrFxeM143NZpExWmy1Nep4DLeQOeLlTeumPjoNKnBrU5D5moWXbPJgRa5Uwcdu0faVNGQ==}
@@ -2408,6 +2417,18 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   xml-name-validator@5.0.0:
     resolution: {integrity: sha512-EvGK8EJ3DhaHfbRlETOWAS5pO9MZITeauHKJyb8wyajUfQUenkIg2MvLDTZ4T/TgIcm3HU0TFBgWWboAZ30UHg==}
     engines: {node: '>=18'}
@@ -3102,6 +3123,10 @@ snapshots:
 
   '@types/unist@3.0.3': {}
 
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 24.13.3
+
   '@typescript-eslint/eslint-plugin@8.67.0(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.2
@@ -3704,10 +3729,12 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
-  kkrpc@2.1.0(typescript@5.9.3):
+  kkrpc@2.1.0(typescript@5.9.3)(ws@8.21.3):
     dependencies:
       superjson: 2.2.6
       typescript: 5.9.3
+    optionalDependencies:
+      ws: 8.21.3
 
   levn@0.4.1:
     dependencies:
@@ -4157,7 +4184,9 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  openai@7.4.0: {}
+  openai@7.4.0(ws@8.21.3):
+    optionalDependencies:
+      ws: 8.21.3
 
   optionator@0.9.4:
     dependencies:
@@ -4669,6 +4698,8 @@ snapshots:
   word-wrap@1.2.5: {}
 
   wrappy@1.0.2: {}
+
+  ws@8.21.3: {}
 
   xml-name-validator@5.0.0: {}
 

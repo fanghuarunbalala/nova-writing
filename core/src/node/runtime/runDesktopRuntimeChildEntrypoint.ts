@@ -4,9 +4,9 @@
  * novel 访问：fd 3 可用时经 NovelHandle RPC 到 main 的共享 store；否则回退内存 store。
  */
 
-import { createReadStream, createWriteStream, fstatSync } from "node:fs";
 import { join } from "node:path";
 import { createStdioTransport } from "../../rpc/transport.js";
+import { webSocketClientTransport } from "kkrpc/ws";
 import { Conversation } from "../../conversation/server/Conversation.js";
 import { FileConversationJournalService } from "../../conversation/persistence/FileConversationJournalService.js";
 import { FileConversationJournalReadOnlyService } from "../../conversation/persistence/FileConversationJournalReadOnlyService.js";
@@ -20,16 +20,6 @@ import type { LLMessage } from "../../runtime/provider/types.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 
-/** fd 3 是否可用（main 经第二条 stdio 管道暴露 novel） */
-function hasNovelFd(): boolean {
-	try {
-		fstatSync(3);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
 /**
  * 启动 conversation 子进程（stdio）
  */
@@ -38,13 +28,17 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	const storedir = process.env.NOVEL_CONVERSATION_STOREDIR;
 	const workspace = process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".";
 
+	// novel-db：经 kkrpc/ws 连接 main 的 NovelDbWsServer（协议定稿 transport；token 走 subprotocol）。
+	// 无 NOVEL_DB_WS_URL（独立脚本/开发）回退进程内内存 store。
 	let handle: NovelHandle;
-	if (hasNovelFd()) {
-		const novelTransport = createStdioTransport({
-			readable: createReadStream("", { fd: 3, autoClose: false }),
-			writable: createWriteStream("", { fd: 3, autoClose: false }),
+	const wsUrl = process.env.NOVEL_DB_WS_URL;
+	if (wsUrl !== undefined && wsUrl.trim() !== "") {
+		const wsToken = process.env.NOVEL_DB_WS_TOKEN;
+		const wsTransport = webSocketClientTransport({
+			url: wsUrl,
+			protocols: wsToken !== undefined && wsToken !== "" ? [wsToken] : undefined,
 		});
-		handle = new NovelHandle(novelTransport);
+		handle = new NovelHandle(wsTransport);
 	} else {
 		const store = new InMemoryNovelStore();
 		handle = {

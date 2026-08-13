@@ -4,6 +4,8 @@
 
 /** 乐观锁冲突：baseRevision 与实体当前 entityVersion 不符（stale） */
 export class NovelStaleRevisionError extends Error {
+	/** 错误标识（自有可枚举字段，可跨 RPC 序列化保留；调用方按此判 stale——Error.name 跨 RPC 会丢） */
+	readonly errorCode = "novel-stale";
 	/** 实体当前版本 */
 	readonly current: number;
 	/** 请求携带的 baseRevision */

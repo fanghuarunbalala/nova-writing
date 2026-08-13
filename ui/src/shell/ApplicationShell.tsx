@@ -403,6 +403,23 @@ export function ApplicationShell({
     }
   }, [approvalSnapshot.pendingCount, inspectorRouter]);
 
+  // 出现审批（pendingCount 0→>0）→ 自动弹出右侧审批面板；用户手动关闭后
+  // 不反复重开（仅新审批出现时触发一次）。Auto-open the approval panel on
+  // the 0→>0 transition; a manual close stays closed until the next approval.
+  const prevApprovalPendingCount = useRef(0);
+  useEffect(() => {
+    const count = approvalSnapshot.pendingCount;
+    const wasZero = prevApprovalPendingCount.current === 0;
+    prevApprovalPendingCount.current = count;
+    if (count > 0 && wasZero) {
+      const route = inspectorRouter.getSnapshot().state;
+      if (route.kind !== "approval") {
+        refreshApprovals();
+        inspectorRouter.transition({ kind: "approval", changeSetId: "" });
+      }
+    }
+  }, [approvalSnapshot.pendingCount, inspectorRouter, refreshApprovals]);
+
   const handleSelectContentPane = useCallback(
     (pane: ContentTab) => {
       setContentTab(pane);
@@ -477,7 +494,6 @@ export function ApplicationShell({
           onNotify={handleNotify}
           approvalStore={approvalStore}
           onApprovalChange={refreshApprovals}
-          resolveEntity={approvalEntityResolver}
         />
         <InspectorHost
           inspectorRouter={inspectorRouter}

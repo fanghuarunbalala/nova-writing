@@ -16,7 +16,6 @@ import {
 import { useEffect, useMemo } from "react";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
-import { ApprovalDock } from "../../domains/conversation/components/ApprovalDock.js";
 import { ConversationComposer } from "../../domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../domains/conversation/components/ConversationTimeline.js";
 import type { GenStatusProps } from "../../domains/conversation/components/GenStatus.js";
@@ -27,7 +26,6 @@ import type { ConversationCatalogStore } from "../../domains/conversation/store/
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
-import type { ApprovalEntityResolver } from "../../domains/approval/approvalEntityResolver.js";
 import { MainSubHead } from "./MainSubHead.js";
 import { composeStatusLabel, mapProjectionTimeline } from "./chatSurfaceMapper.js";
 import styles from "./ChatSurface.module.css";
@@ -48,8 +46,6 @@ export interface ChatSurfaceProps {
   readonly approvalStore: ApprovalStore;
   /** 本会话审批变化回调（事件驱动全局审批刷新）。 */
   readonly onApprovalChange?: () => void;
-  /** 审批实体解析器（ApprovalDock 删除/编辑显示标题）。 */
-  readonly resolveEntity?: ApprovalEntityResolver;
 }
 
 export function ChatSurface({
@@ -64,7 +60,6 @@ export function ChatSurface({
   onNotify,
   approvalStore,
   onApprovalChange,
-  resolveEntity,
 }: ChatSurfaceProps) {
   const catalog = useExternalStore(conversationCatalog);
   const activeId = catalog.activeConversationId;
@@ -84,7 +79,6 @@ export function ChatSurface({
       onOpenApproval={onOpenApproval}
       onNotify={onNotify}
       approvalStore={approvalStore}
-      resolveEntity={resolveEntity}
     />
   );
 }
@@ -105,8 +99,6 @@ interface ActiveChatSurfaceProps {
   readonly approvalStore: ApprovalStore;
   /** 本会话审批变化回调（事件驱动全局审批刷新）。 */
   readonly onApprovalChange?: () => void;
-  /** 审批实体解析器（ApprovalDock 删除/编辑显示标题）。 */
-  readonly resolveEntity?: ApprovalEntityResolver;
 }
 
 function ActiveChatSurface({
@@ -121,7 +113,6 @@ function ActiveChatSurface({
   onNotify,
   approvalStore,
   onApprovalChange,
-  resolveEntity,
 }: ActiveChatSurfaceProps) {
   const { snapshot, enqueue, resume } = useConversationProjection(conversationId, {
     api,
@@ -138,15 +129,15 @@ function ActiveChatSurface({
   const runtimeStatus = useConversationRuntimeStatus(snapshot.projection);
   const failed = runtimeStatus.state === "failed";
   const disconnected = runtimeStatus.state === "disconnected";
-  // 本会话待审批（挂接聊天框的审批卡数据源）：读本会话投影（双工，实时更新）。
-  // 传输断开（进程死亡/重启）时审批不可等待：解锁 composer；pending 时由
-  // ApprovalDock 承担等待态，GenStatus 不再显示 waiting。
-  const pendingApprovals = (snapshot.projection.approvals ?? []).filter(
-    (approval) => approval.status === "pending",
-  );
-  const pendingApproval = !disconnected && pendingApprovals.length > 0;
-  // 三态判定：failed > thinking（尚未产出正文）> generating。
-  // （审批挂起时 genStatus 置空，由 ApprovalDock 展示等待审批。）
+  // 本会话待审批（读本会话投影，双工实时更新）。传输断开（进程死亡/重启）时
+  // 审批不可等待：解锁 composer。挂起时 GenStatus 显示「等待审批」；审批操作
+  // 全部在右侧审批面板（InspectorHost）进行，对话流不再内嵌审批卡。
+  const pendingApproval =
+    !disconnected &&
+    (snapshot.projection.approvals ?? []).some(
+      (approval) => approval.status === "pending",
+    );
+  // 三态判定：failed > pending(等待审批) > thinking（尚未产出正文）> generating。
   const live = runtimeStatus.state === "live";
   const latestStreaming = [...snapshot.projection.timeline]
     .reverse()
@@ -167,7 +158,7 @@ function ActiveChatSurface({
     !latestStreaming.content.some((part) => part.type === "text");
   let genPhase: GenStatusProps["phase"] | "idle";
   if (failed) genPhase = "failed";
-  else if (pendingApproval) genPhase = "idle";
+  else if (pendingApproval) genPhase = "waiting";
   else if (live) genPhase = thinking ? "thinking" : "generating";
   else genPhase = "idle";
   const genStatus: GenStatusProps | undefined =
@@ -210,20 +201,6 @@ function ActiveChatSurface({
         sendDisabled={pendingApproval}
         disconnected={disconnected}
         status={genStatus}
-        approval={
-          pendingApproval && onOpenApproval !== undefined ? (
-            <ApprovalDock
-              approvals={pendingApprovals}
-              onDecide={(approvalRequestIds, decision) => {
-                for (const approvalRequestId of approvalRequestIds) {
-                  void approvalStore.decide(approvalRequestId, decision);
-                }
-              }}
-              onOpenApproval={onOpenApproval}
-              resolveEntity={resolveEntity}
-            />
-          ) : undefined
-        }
         mode={mode}
         onModeChange={(next) => {
           // 会话级 mode 切换走既有 inputEnqueue 单通道（control lane），

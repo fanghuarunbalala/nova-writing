@@ -68,6 +68,8 @@ export interface ComposeToolServiceOptions {
   readonly conversations?: ConversationModePersistencePort;
   /** 会话是否有挂起审批的探测(由装配注入;用于挂起审批时延迟 mode 切换)。 */
   readonly pendingApprovalProbe?: (conversationId: string) => Promise<boolean>;
+  /** 句柄采样回调(node 层注入 logActiveResources;诊断 EMFILE)。 */
+  readonly sampleHandleUsage?: (label: string) => void;
   readonly logger?: Logger;
 }
 
@@ -113,6 +115,7 @@ export class ComposeToolService {
   /** 审核(pending)中延迟的 mode 目标:下一次 provider call 晋升。Deferred mode targets promoted at the next provider call. */
   readonly #pendingModeTargets = new Map<string, ConversationMode>();
   #pendingApprovalProbe?: (conversationId: string) => Promise<boolean>;
+  #sampleHandleUsage?: (label: string) => void;
 
   constructor(options: ComposeToolServiceOptions) {
     this.#composeState = options.composeState;
@@ -121,6 +124,7 @@ export class ComposeToolService {
     this.#commitRecorder = options.commitRecorder;
     this.#conversations = options.conversations;
     this.#pendingApprovalProbe = options.pendingApprovalProbe;
+    this.#sampleHandleUsage = options.sampleHandleUsage;
     this.#logger = (options.logger ?? noopLogger).child({
       component: "novel_compose_tool_service",
     });
@@ -221,6 +225,12 @@ export class ComposeToolService {
     }
     const snapshot = this.#composeState.approve(conversationId);
     const designFilePath = snapshot.designFilePath ?? "";
+    this.#logger.info("novel_compose.exit_started", {
+      conversationId,
+      ...(summary === undefined ? {} : { summary }),
+      designFilePath,
+      phase: snapshot.phase,
+    });
     let contentDigest = "";
     let archivePath = "";
     if (designFilePath !== "") {
@@ -232,32 +242,85 @@ export class ComposeToolService {
         archivePath = path.join(archiveDir, path.basename(designFilePath));
         await fs.rename(designFilePath, archivePath);
       } catch (error) {
-        this.#logger.debug("novel_compose.archive_skipped", {
+        // 归档 best-effort：失败不阻断批准，但记录真实错误便于诊断（Windows rename 锁/EPERM）。
+        this.#logger.warn("novel_compose.archive_skipped", {
           conversationId,
+          designFilePath,
+          ...(error instanceof Error
+            ? { errorName: error.name, errorMessage: error.message }
+            : { error: String(error) }),
         });
       }
     }
+    // 审计记录：每 commit 开一次 DatabaseSync。仅诊断日志，不改语义——失败仍 rethrow。
+    this.#sampleHandleUsage?.("exit_before_audit");
     if (this.#commitRecorder !== undefined && contentDigest !== "") {
-      await this.#commitRecorder.record({
-        designId: path.basename(designFilePath, ".md"),
+      const designId = path.basename(designFilePath, ".md");
+      this.#logger.info("novel_compose.exit_commit_before", {
         conversationId,
-        approvedAt: new Date().toISOString(),
+        designId,
         contentDigest,
         archivePath,
+      });
+      try {
+        await this.#commitRecorder.record({
+          designId,
+          conversationId,
+          approvedAt: new Date().toISOString(),
+          contentDigest,
+          archivePath,
+        });
+      } catch (error) {
+        this.#logger.error("novel_compose.exit_commit_failed", {
+          conversationId,
+          designId,
+          ...(error instanceof Error
+            ? {
+                errorName: error.name,
+                errorMessage: error.message,
+                ...(error.stack === undefined
+                  ? {}
+                  : { errorStack: error.stack }),
+              }
+            : { error: String(error) }),
+        });
+        throw error;
+      }
+      this.#logger.info("novel_compose.exit_commit_after", {
+        conversationId,
+        designId,
       });
     }
     const mode = snapshot.preComposeMode ?? DEFAULT_CONVERSATION_MODE;
     // 写序: ①内存 → ②DB(提交点) → ③事件。
-    await this.#persistMode(conversationId, mode);
-    await this.#persistComposeState(conversationId, undefined);
-    await this.#emit(conversationId, "compose.applied", {
-      designFilePath,
-      phase: snapshot.phase,
-      ...(snapshot.preComposeMode === undefined
-        ? {}
-        : { preComposeMode: snapshot.preComposeMode }),
-    });
-    await this.#emitModeChanged(conversationId, mode);
+    try {
+      await this.#persistMode(conversationId, mode);
+      await this.#persistComposeState(conversationId, undefined);
+      await this.#emit(conversationId, "compose.applied", {
+        designFilePath,
+        phase: snapshot.phase,
+        ...(snapshot.preComposeMode === undefined
+          ? {}
+          : { preComposeMode: snapshot.preComposeMode }),
+      });
+      await this.#emitModeChanged(conversationId, mode);
+    } catch (error) {
+      this.#logger.error("novel_compose.exit_failed", {
+        conversationId,
+        step: "persist_or_emit",
+        ...(error instanceof Error
+          ? {
+              errorName: error.name,
+              errorMessage: error.message,
+              ...(error.stack === undefined
+                ? {}
+                : { errorStack: error.stack }),
+            }
+          : { error: String(error) }),
+      });
+      throw error;
+    }
+    this.#sampleHandleUsage?.("exit_after_persist");
     this.#composeState.settle(conversationId);
     this.#logger.info("novel_compose.applied", {
       conversationId,

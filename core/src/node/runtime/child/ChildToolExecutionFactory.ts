@@ -3,6 +3,7 @@
  * Approval coordinator from the restored Manifest Tool View.
  */
 import { noopLogger, type Logger } from "../../../observability/index.js";
+import { logActiveResources } from "../../observability/index.js";
 import type { ToolApprovalOperationSummary } from "../../../event/output/payload/ToolApprovalLifecyclePayloads.js";
 import type { JsonValue } from "../../../event/protocol/index.js";
 import {
@@ -156,6 +157,7 @@ export function createChildToolExecutionComposition(
       : new ComposeApprovalLifecycleSink(
           options.eventSink,
           options.composeStateProvider,
+          (label) => logActiveResources(logger, label),
         );
   const coordinator = new InMemoryInteractionCoordinator({
     eventSink,

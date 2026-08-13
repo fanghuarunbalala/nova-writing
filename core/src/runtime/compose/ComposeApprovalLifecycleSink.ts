@@ -25,10 +25,17 @@ import { NovelComposeOutputEvent } from "./NovelComposeOutputEvents.js";
 export class ComposeApprovalLifecycleSink implements RuntimeEventSink {
   readonly #inner: RuntimeEventSink;
   readonly #state: ComposeModeStateProvider;
+  /** 句柄采样回调（node 层注入 logActiveResources；诊断 EMFILE）。 */
+  readonly #sampleHandleUsage?: (label: string) => void;
 
-  constructor(inner: RuntimeEventSink, state: ComposeModeStateProvider) {
+  constructor(
+    inner: RuntimeEventSink,
+    state: ComposeModeStateProvider,
+    sampleHandleUsage?: (label: string) => void,
+  ) {
     this.#inner = inner;
     this.#state = state;
+    this.#sampleHandleUsage = sampleHandleUsage;
   }
 
   async append(event: OutputEvent): Promise<RuntimeEventAppendReceipt> {
@@ -49,6 +56,7 @@ export class ComposeApprovalLifecycleSink implements RuntimeEventSink {
     ) {
       const payload = event.getPayload() as ToolApprovalRequestedPayload;
       if (payload.toolName === "ExitComposeMode") {
+        this.#sampleHandleUsage?.("approval_requested");
         const snapshot = this.#state.submit(event.conversationId);
         await this.#inner.append(
           new NovelComposeOutputEvent({
@@ -71,6 +79,7 @@ export class ComposeApprovalLifecycleSink implements RuntimeEventSink {
     ) {
       const payload = event.getPayload() as ToolApprovalResolvedPayload;
       if (payload.toolName !== "ExitComposeMode") return;
+      this.#sampleHandleUsage?.("approval_resolved");
       const before = this.#state.snapshot(event.conversationId);
       if (payload.decision === "approved") {
         await this.#inner.append(

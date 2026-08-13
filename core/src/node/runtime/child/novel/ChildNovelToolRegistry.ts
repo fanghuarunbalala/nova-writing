@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { noopLogger, type Logger } from "../../../../observability/index.js";
+import { logActiveResources } from "../../../observability/index.js";
 import {
   CharacterQueryService,
   LocationQueryService,
@@ -248,6 +249,7 @@ export function createChildNovelToolRegistry(
     eventSink: options.eventSink,
     commitRecorder: composeCommitStore,
     conversations: options.conversations,
+    sampleHandleUsage: (label) => logActiveResources(logger, label),
     logger,
   });
   const registry = new ToolRegistry([

@@ -131,6 +131,7 @@ import { createChildToolExecutionComposition } from "./ChildToolExecutionFactory
 import type { RuntimePersistencePorts } from "../../../runtime/ipc/index.js";
 import { createNovelConversationManifestComposition } from "../../agent/index.js";
 import { noopLogger, type Logger } from "../../../observability/index.js";
+import { logActiveResources } from "../../observability/index.js";
 import { createCoreEventSchemaRegistry } from "../../../event/index.js";
 import { OUTPUT_EVENT_TYPE } from "../../../event/output/OutputEventType.js";
 import {
@@ -631,6 +632,13 @@ export class DesktopRuntimeChildCompositionFactory
       agentType: configuration.assembly.agentType,
       definitionVersion: configuration.assembly.definitionVersion,
     });
+    // 句柄采样：每 30s 记录活跃资源画像（EMFILE 诊断）。unref 不阻止进程退出，
+    // 进程死亡即消失，无需显式 clear。Sampling only; diagnostic for EMFILE.
+    const activeResourcesTimer = setInterval(
+      () => logActiveResources(logger, "interval"),
+      30_000,
+    );
+    activeResourcesTimer.unref();
     return new ConversationRuntimeChild(runtime, approvalExpirySweeper, logger);
   }
 }

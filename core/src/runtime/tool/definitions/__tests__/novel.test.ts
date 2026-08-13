@@ -36,12 +36,17 @@ describe("createCharacterTools", () => {
     expect(mutate).toHaveBeenCalledWith({ op: "character.create", input: { name: "林默" } });
   });
 
-  it("Edit → character.update（patch 透传）", async () => {
+  it("Edit → character.update（baseRevision + patch 透传）", async () => {
     const { handle, mutate } = mockHandle();
     const edit = createCharacterTools(handle).find((t) => t.name === "CharacterEdit")!;
     await edit.handler.execute(
-      call("CharacterEdit", { values: [{ characterId: "c1", patch: { summary: "剑客" } }] }),
+      call("CharacterEdit", { values: [{ characterId: "c1", baseRevision: 3, patch: { summary: "剑客" } }] }),
     );
-    expect(mutate).toHaveBeenCalledWith({ op: "character.update", characterId: "c1", patch: { summary: "剑客" } });
+    expect(mutate).toHaveBeenCalledWith({
+      op: "character.update",
+      characterId: "c1",
+      baseRevision: 3,
+      patch: { summary: "剑客" },
+    });
   });
 });

@@ -10,6 +10,8 @@ import type { OrderKey } from "./outline.js";
 export interface Paragraph {
 	/** 段落 id */
 	id: ParagraphId
+	/** 乐观并发版本 */
+	entityVersion: number
 	/** 所属 story unit */
 	storyUnitId: StoryUnitId
 	/** 段落内排序键 */

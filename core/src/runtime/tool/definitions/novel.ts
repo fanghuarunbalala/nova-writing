@@ -112,7 +112,7 @@ function characterEdit(handle: NovelHandle): ToolDef {
     name: "CharacterEdit",
     version: "1.0.0",
     description:
-      "批量字段级局部更新（PATCH）已有角色档案。characterId 必填；提供的字段覆盖，未提供保留；null 清除 summary/initialState/authorNotes；[] 清除 aliases。",
+      "批量字段级局部更新（PATCH）已有角色档案。characterId 必填；baseRevision 为最近读到的 entityVersion（乐观锁）；提供的字段覆盖，未提供保留；null 清除 summary/initialState/authorNotes；[] 清除 aliases。",
     parameters: {
       type: "object",
       properties: {
@@ -122,6 +122,7 @@ function characterEdit(handle: NovelHandle): ToolDef {
             type: "object",
             properties: {
               characterId: { type: "string" },
+              baseRevision: { type: "integer" },
               patch: {
                 type: "object",
                 properties: {
@@ -134,7 +135,7 @@ function characterEdit(handle: NovelHandle): ToolDef {
                 additionalProperties: false,
               },
             },
-            required: ["characterId", "patch"],
+            required: ["characterId", "baseRevision", "patch"],
             additionalProperties: false,
           },
         },
@@ -144,15 +145,15 @@ function characterEdit(handle: NovelHandle): ToolDef {
     },
     promptDetail: {
       policy: "Batch field-level partial updates (PATCH) of existing Character profiles.",
-      guidance: "Read first with CharacterRead, then Edit only the fields you need. Use null to clear; [] to clear aliases.",
+      guidance: "Read first with CharacterRead, then Edit only the fields you need. baseRevision = entityVersion from the most recent read; stale revisions are rejected.",
     },
     handler: {
       execute: async (call) => {
         const args = parseArgs(call);
-        const values = (args.values as Array<{ characterId: string; patch: Partial<EntityInput> }>) ?? [];
+        const values = (args.values as Array<{ characterId: string; baseRevision: number; patch: Partial<EntityInput> }>) ?? [];
         const results: unknown[] = [];
         for (const v of values) {
-          results.push(await handle.mutate({ op: "character.update", characterId: v.characterId as never, patch: v.patch }));
+          results.push(await handle.mutate({ op: "character.update", characterId: v.characterId as never, baseRevision: v.baseRevision, patch: v.patch }));
         }
         return JSON.stringify(results, null, 2);
       },
@@ -243,7 +244,7 @@ function locationEdit(handle: NovelHandle): ToolDef {
   return {
     name: "LocationEdit",
     version: "1.0.0",
-    description: "批量字段级局部更新（PATCH）已有地点档案。locationId 必填；字段覆盖/保留，null 清除。",
+    description: "批量字段级局部更新（PATCH）已有地点档案。locationId 必填；baseRevision 为最近读到的 entityVersion；字段覆盖/保留，null 清除。",
     parameters: {
       type: "object",
       properties: {
@@ -253,6 +254,7 @@ function locationEdit(handle: NovelHandle): ToolDef {
             type: "object",
             properties: {
               locationId: { type: "string" },
+              baseRevision: { type: "integer" },
               patch: {
                 type: "object",
                 properties: {
@@ -265,7 +267,7 @@ function locationEdit(handle: NovelHandle): ToolDef {
                 additionalProperties: false,
               },
             },
-            required: ["locationId", "patch"],
+            required: ["locationId", "baseRevision", "patch"],
             additionalProperties: false,
           },
         },
@@ -275,15 +277,15 @@ function locationEdit(handle: NovelHandle): ToolDef {
     },
     promptDetail: {
       policy: "Batch field-level partial updates (PATCH) of existing Location profiles.",
-      guidance: "Read first, then Edit only the fields you need. Use null to clear; [] to clear aliases.",
+      guidance: "Read first, then Edit only the fields you need. baseRevision = entityVersion from the most recent read.",
     },
     handler: {
       execute: async (call) => {
         const args = parseArgs(call);
-        const values = (args.values as Array<{ locationId: string; patch: Partial<EntityInput> }>) ?? [];
+        const values = (args.values as Array<{ locationId: string; baseRevision: number; patch: Partial<EntityInput> }>) ?? [];
         const results: unknown[] = [];
         for (const v of values) {
-          results.push(await handle.mutate({ op: "location.update", locationId: v.locationId as never, patch: v.patch }));
+          results.push(await handle.mutate({ op: "location.update", locationId: v.locationId as never, baseRevision: v.baseRevision, patch: v.patch }));
         }
         return JSON.stringify(results, null, 2);
       },
@@ -344,21 +346,273 @@ export function createParagraphTools(handle: NovelHandle): ToolDef[] {
     {
       name: "ParagraphEdit",
       version: "1.0.0",
-      description: "替换段落文本（不可变段落：update 整体替换）。paragraphId 必填。",
+      description: "替换段落文本（不可变段落：update 整体替换）。paragraphId 必填；baseRevision 为最近读到的 entityVersion。",
       parameters: {
         type: "object",
-        properties: { paragraphId: { type: "string" }, text: { type: "string" } },
-        required: ["paragraphId", "text"],
+        properties: { paragraphId: { type: "string" }, baseRevision: { type: "integer" }, text: { type: "string" } },
+        required: ["paragraphId", "baseRevision", "text"],
         additionalProperties: false,
       },
-      promptDetail: { policy: "Replaces Paragraph text.", guidance: "paragraphId required; text replaces the whole paragraph." },
+      promptDetail: { policy: "Replaces Paragraph text.", guidance: "paragraphId + baseRevision required; text replaces the whole paragraph." },
       handler: {
         execute: async (call) => {
           const args = parseArgs(call);
-          const r = await handle.mutate({ op: "paragraph.update", paragraphId: args.paragraphId as never, text: String(args.text) });
+          const r = await handle.mutate({ op: "paragraph.update", paragraphId: args.paragraphId as never, baseRevision: args.baseRevision as number, text: String(args.text) });
           return JSON.stringify(r, null, 2);
         },
       },
     },
   ];
+}
+
+/**
+ * 创建 publication 工具（Read/Write/Edit），卷章节发布结构
+ * @param handle novel 客户端
+ * @returns 发布工具定义
+ */
+export function createPublicationTools(handle: NovelHandle): ToolDef[] {
+  return [
+    {
+      name: "PublicationRead",
+      version: "1.0.0",
+      description: "读取发布结构（卷/章）。返回完整卷章树。",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      promptDetail: { policy: "Reads the publication structure (volumes/chapters).", guidance: "Returns the full volume/chapter tree." },
+      handler: {
+        execute: async () => JSON.stringify(await handle.query({ op: "publication.get" }), null, 2),
+      },
+    },
+    {
+      name: "PublicationWrite",
+      version: "1.0.0",
+      description: "创建卷或章。kind=volume 传 title；kind=chapter 传 volumeId/title/storyUnitId。",
+      parameters: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["volume", "chapter"] },
+          title: { type: "string" },
+          orderKey: { type: "string" },
+          volumeId: { type: "string" },
+          storyUnitId: { type: "string" },
+        },
+        required: ["kind", "title"],
+        additionalProperties: false,
+      },
+      promptDetail: { policy: "Creates a volume or chapter.", guidance: "kind=volume: title; kind=chapter: title + optional volumeId/storyUnitId." },
+      handler: {
+        execute: async (call) => {
+          const args = parseArgs(call);
+          const r =
+            args.kind === "chapter"
+              ? await handle.mutate({ op: "publication.chapter.create", title: String(args.title), volumeId: args.volumeId as never, orderKey: args.orderKey as never, storyUnitId: args.storyUnitId as never })
+              : await handle.mutate({ op: "publication.volume.create", title: String(args.title), orderKey: args.orderKey as never });
+          return JSON.stringify(r, null, 2);
+        },
+      },
+    },
+    {
+      name: "PublicationEdit",
+      version: "1.0.0",
+      description: "更新卷或章。kind=volume 传 volumeId；kind=chapter 传 chapterId；baseRevision 为最近读到的 entityVersion。",
+      parameters: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["volume", "chapter"] },
+          volumeId: { type: "string" },
+          chapterId: { type: "string" },
+          baseRevision: { type: "integer" },
+          patch: { type: "object", additionalProperties: true },
+        },
+        required: ["kind", "baseRevision", "patch"],
+        additionalProperties: false,
+      },
+      promptDetail: { policy: "Updates a volume or chapter.", guidance: "kind=volume: volumeId; kind=chapter: chapterId; baseRevision required." },
+      handler: {
+        execute: async (call) => {
+          const args = parseArgs(call);
+          const patch = (args.patch ?? {}) as Record<string, unknown>;
+          const r =
+            args.kind === "chapter"
+              ? await handle.mutate({ op: "publication.chapter.update", chapterId: args.chapterId as never, baseRevision: args.baseRevision as number, patch })
+              : await handle.mutate({ op: "publication.volume.update", volumeId: args.volumeId as never, baseRevision: args.baseRevision as number, patch });
+          return JSON.stringify(r, null, 2);
+        },
+      },
+    },
+  ];
+}
+
+/**
+ * 创建 delete 工具（按实体 kind 分发删除）
+ * @param handle novel 客户端
+ * @returns 删除工具定义
+ */
+export function createDeleteTool(handle: NovelHandle): ToolDef[] {
+  return [
+    {
+      name: "NovelDelete",
+      version: "1.0.0",
+      description:
+        "删除小说实体。values 数组每项 { kind, id, baseRevision }；kind ∈ story_unit/character/location/paragraph/volume/chapter。删除类操作需先确认（谨慎行动）。",
+      parameters: {
+        type: "object",
+        properties: {
+          values: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                kind: { type: "string", enum: ["story_unit", "character", "location", "paragraph", "volume", "chapter"] },
+                id: { type: "string" },
+                baseRevision: { type: "integer" },
+              },
+              required: ["kind", "id", "baseRevision"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["values"],
+        additionalProperties: false,
+      },
+      promptDetail: {
+        policy: "Deletes novel entities by kind.",
+        guidance: "High-risk action: confirm with the author first. baseRevision required for optimistic concurrency.",
+      },
+      handler: {
+        execute: async (call) => {
+          const args = parseArgs(call);
+          const values = (args.values as Array<{ kind: string; id: string; baseRevision: number }>) ?? [];
+          const results: unknown[] = [];
+          for (const v of values) {
+            const op = `${kindToOp(v.kind)}.delete` as const;
+            const r = await handle.mutate({ op, baseRevision: v.baseRevision, ...({ [kindToIdField(v.kind)]: v.id } as Record<string, unknown>) } as never);
+            results.push(r);
+          }
+          return JSON.stringify(results, null, 2);
+        },
+      },
+    },
+  ];
+}
+
+/**
+ * 创建 outline 工具（Read/Write/Edit），故事单元树
+ * @param handle novel 客户端
+ * @returns 大纲工具定义
+ */
+export function createOutlineTools(handle: NovelHandle): ToolDef[] {
+  return [
+    {
+      name: "OutlineRead",
+      version: "1.0.0",
+      description: "读取大纲（含全部 story unit 树）。可传 storyUnitId 读单个单元。",
+      parameters: {
+        type: "object",
+        properties: { storyUnitId: { type: "string" } },
+        additionalProperties: false,
+      },
+      promptDetail: { policy: "Reads the story outline.", guidance: "Omit storyUnitId to read the whole tree." },
+      handler: {
+        execute: async (call) => {
+          const args = parseArgs(call);
+          const r = args.storyUnitId
+            ? await handle.query({ op: "outline.storyUnit.get", storyUnitId: args.storyUnitId as never })
+            : await handle.query({ op: "outline.get" });
+          return JSON.stringify(r, null, 2);
+        },
+      },
+    },
+    {
+      name: "OutlineWrite",
+      version: "1.0.0",
+      description: "创建 story unit（大纲单元）。title 必填；parentId 挂父节点；orderKey 排序；intent/synopsis/scope 可选。",
+      parameters: {
+        type: "object",
+        properties: {
+          parentId: { type: "string" },
+          orderKey: { type: "string" },
+          title: { type: "string" },
+          intent: { type: "string" },
+          synopsis: { type: "string" },
+          scope: { type: "string", enum: ["saga", "arc", "sequence", "scene", "custom"] },
+        },
+        required: ["title"],
+        additionalProperties: false,
+      },
+      promptDetail: { policy: "Creates a story unit.", guidance: "title required; parentId/orderKey for hierarchy and ordering." },
+      handler: {
+        execute: async (call) => {
+          const args = parseArgs(call);
+          const r = await handle.mutate({
+            op: "outline.storyUnit.create",
+            parentId: args.parentId as never,
+            orderKey: args.orderKey as never,
+            title: String(args.title),
+            intent: args.intent as string | undefined,
+            synopsis: args.synopsis as string | undefined,
+            scope: args.scope as never,
+          });
+          return JSON.stringify(r, null, 2);
+        },
+      },
+    },
+    {
+      name: "OutlineEdit",
+      version: "1.0.0",
+      description: "更新 story unit。storyUnitId 必填；baseRevision 为最近读到的 entityVersion；patch 覆盖 title/intent/synopsis/scope/planningStatus/realizationStatus。",
+      parameters: {
+        type: "object",
+        properties: {
+          storyUnitId: { type: "string" },
+          baseRevision: { type: "integer" },
+          patch: { type: "object", additionalProperties: true },
+        },
+        required: ["storyUnitId", "baseRevision", "patch"],
+        additionalProperties: false,
+      },
+      promptDetail: { policy: "Updates a story unit.", guidance: "storyUnitId + baseRevision required; patch partial fields." },
+      handler: {
+        execute: async (call) => {
+          const args = parseArgs(call);
+          const r = await handle.mutate({
+            op: "outline.storyUnit.update",
+            storyUnitId: args.storyUnitId as never,
+            baseRevision: args.baseRevision as number,
+            patch: (args.patch ?? {}) as Record<string, unknown>,
+          });
+          return JSON.stringify(r, null, 2);
+        },
+      },
+    },
+  ];
+}
+
+/** delete kind → mutation op 前缀 */
+function kindToOp(kind: string): string {
+  switch (kind) {
+    case "story_unit":
+      return "outline.storyUnit";
+    case "paragraph":
+      return "paragraph";
+    case "volume":
+      return "publication.volume";
+    case "chapter":
+      return "publication.chapter";
+    default:
+      return kind; // character / location
+  }
+}
+
+/** delete kind → id 字段名 */
+function kindToIdField(kind: string): string {
+  switch (kind) {
+    case "story_unit":
+      return "storyUnitId";
+    case "volume":
+      return "volumeId";
+    case "chapter":
+      return "chapterId";
+    default:
+      return `${kind}Id`; // characterId / locationId / paragraphId
+  }
 }

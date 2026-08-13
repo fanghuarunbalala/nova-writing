@@ -70,6 +70,8 @@ export interface StoryOutline {
 export interface StoryUnit {
 	/** story unit id */
 	id: StoryUnitId
+	/** 乐观并发版本 */
+	entityVersion: number
 	/** 所属 outline */
 	outlineId: StoryOutlineId
 	/** 父节点（root 缺省） */

@@ -24,6 +24,8 @@ export interface PublicationStructure {
 export interface PublicationVolume {
 	/** 卷 id */
 	id: PublicationVolumeId
+	/** 乐观并发版本 */
+	entityVersion: number
 	/** 排序键 */
 	orderKey: OrderKey
 	/** 卷标题 */
@@ -34,6 +36,8 @@ export interface PublicationVolume {
 export interface PublicationChapter {
 	/** 章 id */
 	id: PublicationChapterId
+	/** 乐观并发版本 */
+	entityVersion: number
 	/** 所属卷（缺省 = 未归卷） */
 	volumeId?: PublicationVolumeId
 	/** 排序键 */

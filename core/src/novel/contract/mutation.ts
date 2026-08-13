@@ -35,7 +35,10 @@ export interface CharacterInput {
 /** 地点输入（与角色同构） */
 export type LocationInput = CharacterInput
 
-/** 变更：novel-db 写操作 */
+/** 乐观并发版本（= 实体 entityVersion；update/delete 需传最近读到的版本，stale 拒绝） */
+export type NovelRevision = number
+
+/** 变更：novel-db 写操作（create/insert 新建不需 revision；update/delete 需 baseRevision 乐观锁） */
 export type NovelMutation =
 	// ── 大纲 ──
 	| {
@@ -50,6 +53,7 @@ export type NovelMutation =
 	| {
 			op: "outline.storyUnit.update"
 			storyUnitId: StoryUnitId
+			baseRevision: NovelRevision
 			patch: {
 				title?: string
 				intent?: string
@@ -62,29 +66,31 @@ export type NovelMutation =
 	| {
 			op: "outline.storyUnit.move"
 			storyUnitId: StoryUnitId
+			baseRevision: NovelRevision
 			parentId?: StoryUnitId
 			orderKey: OrderKey
 	  }
-	| { op: "outline.storyUnit.delete"; storyUnitId: StoryUnitId }
+	| { op: "outline.storyUnit.delete"; storyUnitId: StoryUnitId; baseRevision: NovelRevision }
 	// ── 实体 ──
 	| { op: "character.create"; input: CharacterInput }
-	| { op: "character.update"; characterId: CharacterId; patch: Partial<CharacterInput> }
-	| { op: "character.delete"; characterId: CharacterId }
+	| { op: "character.update"; characterId: CharacterId; baseRevision: NovelRevision; patch: Partial<CharacterInput> }
+	| { op: "character.delete"; characterId: CharacterId; baseRevision: NovelRevision }
 	| { op: "location.create"; input: LocationInput }
-	| { op: "location.update"; locationId: LocationId; patch: Partial<LocationInput> }
-	| { op: "location.delete"; locationId: LocationId }
+	| { op: "location.update"; locationId: LocationId; baseRevision: NovelRevision; patch: Partial<LocationInput> }
+	| { op: "location.delete"; locationId: LocationId; baseRevision: NovelRevision }
 	// ── 草稿段落（不可变：insert 追加 / update 替换） ──
 	| { op: "paragraph.insert"; storyUnitId: StoryUnitId; orderKey: OrderKey; text: string }
-	| { op: "paragraph.update"; paragraphId: ParagraphId; text: string }
-	| { op: "paragraph.delete"; paragraphId: ParagraphId }
+	| { op: "paragraph.update"; paragraphId: ParagraphId; baseRevision: NovelRevision; text: string }
+	| { op: "paragraph.delete"; paragraphId: ParagraphId; baseRevision: NovelRevision }
 	// ── 发布 ──
 	| { op: "publication.volume.create"; orderKey: OrderKey; title: string }
 	| {
 			op: "publication.volume.update"
 			volumeId: PublicationVolumeId
+			baseRevision: NovelRevision
 			patch: { title?: string; orderKey?: OrderKey }
 	  }
-	| { op: "publication.volume.delete"; volumeId: PublicationVolumeId }
+	| { op: "publication.volume.delete"; volumeId: PublicationVolumeId; baseRevision: NovelRevision }
 	| {
 			op: "publication.chapter.create"
 			volumeId?: PublicationVolumeId
@@ -95,10 +101,11 @@ export type NovelMutation =
 	| {
 			op: "publication.chapter.update"
 			chapterId: PublicationChapterId
+			baseRevision: NovelRevision
 			patch: {
 				title?: string
 				volumeId?: PublicationVolumeId
 				orderKey?: OrderKey
 			}
 	  }
-	| { op: "publication.chapter.delete"; chapterId: PublicationChapterId }
+	| { op: "publication.chapter.delete"; chapterId: PublicationChapterId; baseRevision: NovelRevision }

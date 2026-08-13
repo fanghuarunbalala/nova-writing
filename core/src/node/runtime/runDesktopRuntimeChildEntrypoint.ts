@@ -74,6 +74,9 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		apiKey: process.env.NOVEL_PROVIDER_API_KEY,
 	});
 
+	// 审批通道 late-bound self-reference：loop 的 requestApproval 闭包调 conv.sendApprovalRequest
+	// （阻塞到 UI 决策；conv 在 loop 之后构造，故用 holder）
+	let conv: Conversation | undefined;
 	const loop = buildNovelAgent({
 		workspace,
 		provider,
@@ -82,8 +85,9 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		listeners: journal !== undefined ? [journalListener(journal)] : undefined,
 		turnMessages,
 		resumeSeq,
+		requestApproval: (req) => conv!.sendApprovalRequest(req),
 	});
-	const conversation = new Conversation({
+	conv = new Conversation({
 		conversationId,
 		loop,
 		sampling: {
@@ -91,9 +95,10 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			maxTokens: 512,
 			thinking: "high",
 		},
+		journal,
 	});
 
 	const transport = createStdioTransport({ readable: process.stdin, writable: process.stdout });
-	await runConversation(conversation, transport);
+	await runConversation(conv!, transport);
 	process.stdin.on("end", () => process.exit(0));
 }

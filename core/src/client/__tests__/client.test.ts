@@ -174,6 +174,66 @@ describe("ConversationProjection（恢复重放）", () => {
 		expect(projection.getSnapshot().timeline.map((t) => t.text)).toEqual(["直接"]);
 	});
 
+describe("ConversationProjection（liveState）", () => {
+	function makeLiveProjection(): {
+		projection: ConversationProjection;
+		emit: (e: OutputEvent) => void;
+	} {
+		let listener: ((e: OutputEvent) => void) | undefined;
+		const handle: ConversationHandle = {
+			...fakeHandle([]),
+			subscribeEvents: async (l: (e: OutputEvent) => void) => {
+				listener = l;
+			},
+		};
+		const projection = new ConversationProjection(handle, "c1", async () => []);
+		return { projection, emit: (e) => listener?.(e) };
+	}
+
+	it("reasoning delta → liveState=thinking 且 timeline 无新项（思考内容丢弃）", async () => {
+		const { projection, emit } = makeLiveProjection();
+		await projection.start();
+		emit(evt({ type: "assistant.delta", kind: "reasoning", text: "让我想想" }));
+		expect(projection.getSnapshot().liveState).toBe("thinking");
+		expect(projection.getSnapshot().timeline).toHaveLength(0);
+	});
+
+	it("text delta → liveState=generating + streaming 项仅含正文", async () => {
+		const { projection, emit } = makeLiveProjection();
+		await projection.start();
+		emit(evt({ type: "assistant.delta", kind: "reasoning", text: "想" }));
+		emit(evt({ type: "assistant.delta", kind: "text", text: "正文" }));
+		const snapshot = projection.getSnapshot();
+		expect(snapshot.liveState).toBe("generating");
+		expect(snapshot.timeline).toHaveLength(1);
+		expect(snapshot.timeline[0]).toMatchObject({ text: "正文", streaming: true });
+	});
+
+	it("assistant.message / turn-end 收口 → liveState 清除；reasoning 文本不混入正文", async () => {
+		const { projection, emit } = makeLiveProjection();
+		await projection.start();
+		emit(evt({ type: "assistant.delta", kind: "reasoning", text: "思考内容" }));
+		emit(evt({ type: "assistant.delta", kind: "text", text: "秋夜。" }));
+		emit(evt({ type: "assistant.message", persist: true, seq: 1, text: "秋夜。" }));
+		const snapshot = projection.getSnapshot();
+		expect(snapshot.liveState).toBeUndefined();
+		expect(snapshot.timeline.map((t) => t.text)).toEqual(["秋夜。"]);
+	});
+
+	it("history 失败 → state=error 且 liveState 不残留", async () => {
+		const handle: ConversationHandle = {
+			...fakeHandle([]),
+			subscribeEvents: async () => {},
+		};
+		const projection = new ConversationProjection(handle, "c1", async () => {
+			throw new Error("boom");
+		});
+		await projection.start();
+		expect(projection.getSnapshot().state).toBe("error");
+		expect(projection.getSnapshot().liveState).toBeUndefined();
+	});
+});
+
 	it("resume 重放增量（fromSeq = lastAppliedSequence）", async () => {
 		const historyCalls: Array<{ fromSeq?: number }> = [];
 		let listener: ((e: OutputEvent) => void) | undefined;

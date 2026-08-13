@@ -29,6 +29,10 @@ import {
 import type { NovelHandle } from "../../novel/client/NovelHandle.js";
 import type { LoopContextListener } from "../loop/types.js";
 import type { LLMessage } from "../provider/types.js";
+import type {
+  ConversationApprovalDecision,
+  ConversationApprovalRequest,
+} from "../../conversation/contract/types/index.js";
 
 /** Novel Agent 装配选项 */
 export interface NovelAgentOptions {
@@ -46,6 +50,8 @@ export interface NovelAgentOptions {
   turnMessages?: LLMessage[];
   /** turn seq 起始值（journal 恢复：resumeSeq = journal.lastSeq） */
   resumeSeq?: number;
+  /** 审批通道（mutation 工具执行前征询；子进程内闭包 → conv.sendApprovalRequest） */
+  requestApproval?: (req: ConversationApprovalRequest) => Promise<ConversationApprovalDecision>;
 }
 
 /**
@@ -93,5 +99,6 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     listeners: opts.listeners,
     turnMessages: opts.turnMessages,
     startSeq: opts.resumeSeq,
+    requestApproval: opts.requestApproval,
   });
 }

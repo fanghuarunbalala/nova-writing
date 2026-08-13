@@ -34,4 +34,37 @@ describe("ApprovalProjection", () => {
 		expect(p.getPending()).toHaveLength(0);
 		expect(p.getAll()[0].status).toBe("approved");
 	});
+
+	it("会话/时间字段来自事件（conversationId/requestedAt/resolvedAt）", () => {
+		const p = new ApprovalProjection();
+		p.apply(
+			evt({
+				type: "approval.request",
+				persist: false,
+				requestId: "r1",
+				toolName: "CharacterWrite",
+				args: "{}",
+				conversationId: "conv_7",
+				ts: "2026-08-13T10:00:00.000Z",
+			}),
+		);
+		expect(p.getAll()[0]).toMatchObject({
+			conversationId: "conv_7",
+			requestedAt: "2026-08-13T10:00:00.000Z",
+			status: "pending",
+		});
+		p.apply(
+			evt({
+				type: "approval.resolved",
+				persist: false,
+				requestId: "r1",
+				decision: "rejected",
+				ts: "2026-08-13T10:01:00.000Z",
+			}),
+		);
+		expect(p.getAll()[0]).toMatchObject({
+			status: "rejected",
+			resolvedAt: "2026-08-13T10:01:00.000Z",
+		});
+	});
 });

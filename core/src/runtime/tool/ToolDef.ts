@@ -17,4 +17,6 @@ export interface ToolDef extends ToolScheme {
   handler: ToolHandler;
   /** 工具 prompt 细节（经 PromptSection 渲染进 system） */
   promptDetail?: ToolPromptDetail;
+  /** 执行前需用户审批（AgentLoop 经 requestApproval 通道征询；未装配通道时按拒绝处理） */
+  requireApproval?: boolean;
 }

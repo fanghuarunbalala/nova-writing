@@ -12,12 +12,18 @@ export type ApprovalStatus = "pending" | "approved" | "rejected" | "edited";
 export interface ApprovalView {
 	/** 审批请求 id */
 	requestId: string;
+	/** 会话 id（面板分组目录键） */
+	conversationId: string;
 	/** 工具名 */
 	toolName: string;
 	/** 参数 */
 	args: string;
 	/** 状态 */
 	status: ApprovalStatus;
+	/** 请求时间（approval.request 事件 ts） */
+	requestedAt: string;
+	/** 决策时间（approval.resolved 事件 ts） */
+	resolvedAt?: string;
 }
 
 /** 审批事件 → 审批视图投影器 */
@@ -32,14 +38,20 @@ export class ApprovalProjection {
 		if (event.type === "approval.request") {
 			this.approvals.set(event.requestId, {
 				requestId: event.requestId,
+				conversationId: event.conversationId,
 				toolName: event.toolName,
 				args: event.args,
 				status: "pending",
+				requestedAt: event.ts,
 			});
 		} else if (event.type === "approval.resolved") {
 			const approval = this.approvals.get(event.requestId);
 			if (approval) {
-				this.approvals.set(event.requestId, { ...approval, status: event.decision });
+				this.approvals.set(event.requestId, {
+					...approval,
+					status: event.decision,
+					resolvedAt: event.ts,
+				});
 			}
 		}
 	}

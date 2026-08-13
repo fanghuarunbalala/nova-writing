@@ -42,6 +42,8 @@ export interface ConversationProjectionSnapshot {
 	/** 最后应用的 journal 序列号（实时 delta 无 seq，取最近 persist 事件） */
 	lastAppliedSequence: number;
 	state: ConversationProjectionState;
+	/** 实时生成状态：reasoning delta → thinking、text delta → generating、turn 收口 → undefined */
+	liveState?: "thinking" | "generating";
 	timeline: readonly ConversationTimelineItem[];
 	/** 工具调用卡片（CardProjection 派生） */
 	cards: readonly CardDescriptor[];
@@ -71,6 +73,8 @@ export class ConversationProjection {
 	private assistantBuffer = "";
 	/** 当前流式 assistant 项的 sequence（无则未开始） */
 	private activeAssistantSeq: number | undefined;
+	/** 实时生成状态（thinking/generating；turn 收口清除） */
+	private liveState: "thinking" | "generating" | undefined;
 	private nextSeq = 1;
 	private readonly cardProjection = new CardProjection();
 	private readonly approvalProjection = new ApprovalProjection();
@@ -210,8 +214,15 @@ export class ConversationProjection {
 				} else {
 					this.timeline.push({ kind: "assistant", sequence: this.nextSeq++, text: event.text });
 				}
+				this.liveState = undefined;
 				break;
 			case "assistant.delta":
+				if (event.kind === "reasoning") {
+					// 思考内容默认丢弃：不进正文、不进 timeline，仅驱动「思考中」状态
+					this.liveState = "thinking";
+					break;
+				}
+				this.liveState = "generating";
 				if (this.activeAssistantSeq === undefined) {
 					this.activeAssistantSeq = this.nextSeq++;
 					this.timeline.push({
@@ -242,6 +253,7 @@ export class ConversationProjection {
 
 	/** 收口流式 assistant：streaming=false，清缓冲 */
 	private finalizeAssistant(): void {
+		this.liveState = undefined;
 		if (this.activeAssistantSeq === undefined) return;
 		this.replaceActiveAssistant({ streaming: false });
 		this.activeAssistantSeq = undefined;
@@ -250,6 +262,8 @@ export class ConversationProjection {
 
 	private transition(state: ConversationProjectionState): void {
 		this.state = state;
+		// 错误态清空 liveState，防失败后残留 thinking/generating
+		if (state === "error") this.liveState = undefined;
 		this.publish();
 	}
 
@@ -271,6 +285,7 @@ export class ConversationProjection {
 			revision: this.revision,
 			lastAppliedSequence: this.lastAppliedSequence,
 			state: this.state,
+			...(this.liveState !== undefined ? { liveState: this.liveState } : {}),
 			timeline: Object.freeze([...this.timeline]),
 			cards: Object.freeze(this.cardProjection.getCards()),
 			approvals: Object.freeze(this.approvalProjection.getAll()),

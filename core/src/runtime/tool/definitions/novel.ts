@@ -72,6 +72,8 @@ function characterWrite(handle: NovelHandle): ToolDef {
   return {
     name: "CharacterWrite",
     version: "1.0.0",
+    // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
+    requireApproval: true,
     description:
       "批量创建角色档案。name 必填；aliases/summary/initialState/authorNotes 可选。创建直接写入正式稿。",
     parameters: {
@@ -118,6 +120,8 @@ function characterEdit(handle: NovelHandle): ToolDef {
   return {
     name: "CharacterEdit",
     version: "1.0.0",
+    // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
+    requireApproval: true,
     description:
       "批量字段级局部更新（PATCH）已有角色档案。characterId 必填；baseRevision 为最近读到的 entityVersion（乐观锁）；提供的字段覆盖，未提供保留；null 清除 summary/initialState/authorNotes；[] 清除 aliases。",
     parameters: {
@@ -208,6 +212,8 @@ function locationWrite(handle: NovelHandle): ToolDef {
   return {
     name: "LocationWrite",
     version: "1.0.0",
+    // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
+    requireApproval: true,
     description: "批量创建地点档案。name 必填；aliases/summary/initialState/authorNotes 可选。直接写入正式稿。",
     parameters: {
       type: "object",
@@ -251,6 +257,8 @@ function locationEdit(handle: NovelHandle): ToolDef {
   return {
     name: "LocationEdit",
     version: "1.0.0",
+    // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
+    requireApproval: true,
     description: "批量字段级局部更新（PATCH）已有地点档案。locationId 必填；baseRevision 为最近读到的 entityVersion；字段覆盖/保留，null 清除。",
     parameters: {
       type: "object",
@@ -330,6 +338,8 @@ export function createParagraphTools(handle: NovelHandle): ToolDef[] {
     {
       name: "ParagraphWrite",
       version: "1.0.0",
+      // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
+      requireApproval: true,
       description: "在指定 story unit 下插入新段落。storyUnitId 必填；orderKey 控制排序；text 为段落正文。",
       parameters: {
         type: "object",
@@ -353,6 +363,8 @@ export function createParagraphTools(handle: NovelHandle): ToolDef[] {
     {
       name: "ParagraphEdit",
       version: "1.0.0",
+      // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
+      requireApproval: true,
       description: "替换段落文本（不可变段落：update 整体替换）。paragraphId 必填；baseRevision 为最近读到的 entityVersion。",
       parameters: {
         type: "object",
@@ -392,6 +404,8 @@ export function createPublicationTools(handle: NovelHandle): ToolDef[] {
     {
       name: "PublicationWrite",
       version: "1.0.0",
+      // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
+      requireApproval: true,
       description: "创建卷或章。kind=volume 传 title；kind=chapter 传 volumeId/title/storyUnitId。",
       parameters: {
         type: "object",
@@ -420,6 +434,8 @@ export function createPublicationTools(handle: NovelHandle): ToolDef[] {
     {
       name: "PublicationEdit",
       version: "1.0.0",
+      // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
+      requireApproval: true,
       description: "更新卷或章。kind=volume 传 volumeId；kind=chapter 传 chapterId；baseRevision 为最近读到的 entityVersion。",
       parameters: {
         type: "object",
@@ -459,6 +475,8 @@ export function createDeleteTool(handle: NovelHandle): ToolDef[] {
     {
       name: "NovelDelete",
       version: "1.0.0",
+      // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
+      requireApproval: true,
       description:
         "删除小说实体。values 数组每项 { kind, id, baseRevision }；kind ∈ story_unit/character/location/paragraph/volume/chapter。删除类操作需先确认（谨慎行动）。",
       parameters: {
@@ -532,6 +550,8 @@ export function createOutlineTools(handle: NovelHandle): ToolDef[] {
     {
       name: "OutlineWrite",
       version: "1.0.0",
+      // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
+      requireApproval: true,
       description: "创建 story unit（大纲单元）。title 必填；parentId 挂父节点；orderKey 排序；intent/synopsis/scope 可选。",
       parameters: {
         type: "object",
@@ -566,6 +586,8 @@ export function createOutlineTools(handle: NovelHandle): ToolDef[] {
     {
       name: "OutlineEdit",
       version: "1.0.0",
+      // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
+      requireApproval: true,
       description: "更新 story unit。storyUnitId 必填；baseRevision 为最近读到的 entityVersion；patch 覆盖 title/intent/synopsis/scope/planningStatus/realizationStatus。",
       parameters: {
         type: "object",

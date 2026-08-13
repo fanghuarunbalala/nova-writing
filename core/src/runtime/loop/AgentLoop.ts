@@ -2,6 +2,7 @@ import type {
   LLMessage,
   ProviderResult,
   ProviderDelta,
+  ToolCall,
 } from "../provider/types.js";
 import type {
   AgentLoopConfig,
@@ -251,7 +252,10 @@ export class AgentLoop {
             args: tc.args,
           });
           logger?.debug("agent.tool.dispatch", { tool: tc.name });
-          const text = await this.config.toolDispatcher.dispatch(this.context, tc);
+          // 审批门控：拒绝/未装配时以文本结果进 turn（agent 可见，可自我调整）
+          const gate = await this.gateTool(tc, turn.seq);
+          const text =
+            gate ?? (await this.config.toolDispatcher.dispatch(this.context, tc));
           this.emit(onEvent, "tool-call-response", {
             persist: true,
             seq: turn.seq,
@@ -276,6 +280,26 @@ export class AgentLoop {
       return { final: result.message, usage };
     }
     throw new Error(`达到最大轮次 ${runContext.maxTurn}`);
+  }
+
+  /**
+   * 审批门控：requireApproval 工具执行前经 requestApproval 征询。
+   * @param tc 工具调用
+   * @param turnSeq 当前 turn 序号（requestId 归组用）
+   * @returns undefined = 放行执行；字符串 = 拒绝结果文本（作为 tool-call-response 进 turn 继续）
+   */
+  private async gateTool(tc: ToolCall, turnSeq: number): Promise<string | undefined> {
+    const toolDef = this.config.agentCapability.toolDefs.find((t) => t.name === tc.name);
+    if (toolDef?.requireApproval !== true) return undefined;
+    if (this.config.requestApproval === undefined) return "已拒绝（审批通道未装配）";
+    const decision = await this.config.requestApproval({
+      requestId: `approval_${this.config.conversationId ?? "conv"}_${turnSeq}_${tc.id}`,
+      toolName: tc.name,
+      args: tc.args,
+    });
+    if (decision.kind === "approve") return undefined;
+    if (decision.kind === "reject") return "已拒绝";
+    return `已拒绝（用户意见：${decision.text}）`;
   }
 
   /**

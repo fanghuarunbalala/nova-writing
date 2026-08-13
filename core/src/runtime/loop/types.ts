@@ -11,6 +11,10 @@ import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { Logger } from "../../log/Logger.js";
 import type { ProviderCallDebugger } from "../debug/ProviderCallDebugger.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
+import type {
+  ConversationApprovalDecision,
+  ConversationApprovalRequest,
+} from "../../conversation/contract/types/index.js";
 
 /** AgentLoop 构造配置：进程生命周期稳定（能力由上层组装好传入） */
 export interface AgentLoopConfig {
@@ -32,6 +36,12 @@ export interface AgentLoopConfig {
   startSeq?: number;
   /** 状态变化监听器（AgentLoop 构造时注册到 LoopContext；可多个） */
   listeners?: LoopContextListener[];
+  /**
+   * 审批通道：requireApproval 工具执行前征询（子进程内闭包，不跨 RPC）。
+   * 未注入时 requireApproval 工具按拒绝处理（返回「已拒绝（审批通道未装配）」），
+   * 保证无 UI / 测试环境可用。
+   */
+  requestApproval?: (req: ConversationApprovalRequest) => Promise<ConversationApprovalDecision>;
   /** 结构化日志（上层 createLogger 注入；缺省不打日志） */
   logger?: Logger;
   /** ProviderCall 调试器（debug 模式注入；记录每次请求 + 相邻差异，jsonl + html） */

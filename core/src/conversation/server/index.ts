@@ -2,3 +2,4 @@
 
 export * from "./ConversationManagerServer.js";
 export * from "./Conversation.js";
+export * from "./Subagent.js";

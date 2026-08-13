@@ -63,9 +63,19 @@ export class LoopContext implements ReadonlyLoopContext {
     for (const policy of opts.agentCapability.compactPolicies) {
       this.compactChain.register(policy, 0);
     }
-    // 恢复上次会话（不触发 onTurnAppended；合成 turn 消耗一个 seq 号但不落盘）
+    // 恢复上次会话（不触发 onTurnAppended）；恢复 turn 沿用 journal 最后 seq
+    // （= startSeq，不消耗新号）——暂停点续跑时补完消息同 seq 重写原快照，
+    // 后续新 turn 从 startSeq+1 起
     if (opts.turnMessages && opts.turnMessages.length > 0) {
-      this.turnList.push(this.createTurn(opts.turnMessages));
+      const restored = [...opts.turnMessages];
+      this.turnList.push({
+        seq: this.seq,
+        messages: restored,
+        ts: new Date().toISOString(),
+        appendTurnMessages: (m) => {
+          restored.push(...m);
+        },
+      });
     }
   }
 

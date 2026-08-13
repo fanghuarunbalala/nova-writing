@@ -42,6 +42,12 @@ export interface AgentLoopConfig {
    * 保证无 UI / 测试环境可用。
    */
   requestApproval?: (req: ConversationApprovalRequest) => Promise<ConversationApprovalDecision>;
+  /**
+   * 暂停点续跑决策器：恢复 turn 中缺 tool 结果的 toolCall 经此查询决策
+   * （approve 执行 / reject 已拒绝 / expired 审批超时 / undefined 通道未装配）。
+   * 由子进程启动时经 CMS takeDecisions 装配（重启补完路径）。
+   */
+  resumePendingDecider?: (toolCallId: string) => Promise<"approve" | "reject" | "expired" | undefined>;
   /** 结构化日志（上层 createLogger 注入；缺省不打日志） */
   logger?: Logger;
   /** ProviderCall 调试器（debug 模式注入；记录每次请求 + 相邻差异，jsonl + html） */

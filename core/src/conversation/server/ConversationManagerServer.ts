@@ -21,6 +21,7 @@ import type {
 	ConversationSummary,
 } from "../../manager/contract/types.js";
 import type { ConversationManagerServer as Contract } from "../../manager/contract/server.js";
+import { WaitRequestQueue, type ApprovalQueueItem } from "./WaitRequestQueue.js";
 import type { Conversation } from "./Conversation.js";
 import type { ConversationHandle } from "../contract/handle/index.js";
 import type { ConversationInteraction } from "../contract/interaction/index.js";
@@ -39,12 +40,12 @@ export interface ConversationFactory {
 	create(opts: { conversationId: string; agentType: string; parentId?: string }): Conversation;
 }
 
-/** 进程派生器：spawn conversation 子进程（stdio），返回子进程 + wrap 的 handle */
+/** 进程派生器：spawn conversation 子进程（manager WS 握手），返回子进程 + handle（连接报到后 resolve） */
 export interface ConversationProcessSpawner {
 	/**
 	 * 派生 conversation 进程
 	 * @param opts conversationId + agent 类型 + parentId + storedir（manager 分配，journal 落盘目录）+ workspace
-	 * @returns 子进程 + 对端 handle
+	 * @returns 子进程 + 对端 handle（Promise：子进程经 manager WS register 连回后 resolve）
 	 */
 	spawn(opts: {
 		conversationId: string;
@@ -54,7 +55,7 @@ export interface ConversationProcessSpawner {
 		workspace?: string;
 	}): {
 		child: ChildProcess;
-		handle: ConversationHandle;
+		handle: Promise<ConversationHandle>;
 	};
 }
 
@@ -86,6 +87,8 @@ export class ConversationManagerServer implements Contract {
 	private readonly summaries = new Map<string, ConversationSummary>();
 	/** 主动终止的会话 id（exit 事件据此区分 crashed / stopped） */
 	private readonly terminatedIds = new Set<string>();
+	/** wait 请求队列（request/resolve 分离的缓冲层） */
+	private readonly waitQueue = new WaitRequestQueue();
 	/** 会话存储根目录（undefined = 不落盘目录，storedir 为空串） */
 	private readonly storedirRoot?: string;
 	/** 当前工作区根路径提供器（spawn 时求值） */
@@ -147,6 +150,8 @@ export class ConversationManagerServer implements Contract {
 			} else if (summary) {
 				summary.status = "crashed";
 			}
+			// 进程退出：pending wait 条目标记过期（重启补完按超时拒绝处理）
+			this.waitQueue.expireConversation(conversationId, new Date().toISOString());
 			this.childProcesses.delete(conversationId);
 			this.handles.delete(conversationId);
 		});
@@ -169,7 +174,7 @@ export class ConversationManagerServer implements Contract {
 		if (s) s.status = status;
 	}
 
-	/** 终止会话（进程模式 kill 子进程，保留目录；exit 事件置 stopped） */
+	/** 终止会话（进程模式 kill 子进程，保留目录；exit 事件置 stopped；pending wait 标记过期） */
 	async terminate(conversationId: ConversationId): Promise<void> {
 		const child = this.childProcesses.get(conversationId);
 		if (child !== undefined) {
@@ -181,6 +186,8 @@ export class ConversationManagerServer implements Contract {
 		conv?.dispose();
 		this.conversations.delete(conversationId);
 		this.handles.delete(conversationId);
+		// pending wait 条目标记过期（重启补完按超时拒绝处理）
+		this.waitQueue.expireConversation(conversationId, new Date().toISOString());
 		const s = this.summaries.get(conversationId);
 		if (s) s.status = "stopped";
 	}
@@ -195,8 +202,8 @@ export class ConversationManagerServer implements Contract {
 		const conversationId = `conv_${++this.seq}`;
 		const storedir = this.allocStoredir(conversationId);
 		if (this.spawner) {
-			// 进程派生（生产）：manager 分配 storedir，exit 监听登记
-			const { child, handle } = this.spawner.spawn({
+			// 进程派生（生产）：manager 分配 storedir，等子进程 manager WS 报到后登记 handle
+			const { child, handle: handlePromise } = this.spawner.spawn({
 				conversationId,
 				agentType: opts.agentType,
 				parentId: opts.parentId,
@@ -204,7 +211,6 @@ export class ConversationManagerServer implements Contract {
 				workspace: this.workspaceProvider?.(),
 			});
 			this.childProcesses.set(conversationId, child);
-			this.handles.set(conversationId, handle);
 			this.summaries.set(conversationId, {
 				conversationId,
 				name: conversationId,
@@ -213,6 +219,8 @@ export class ConversationManagerServer implements Contract {
 				parentId: opts.parentId,
 			});
 			this.attachExit(conversationId, child);
+			const handle = await handlePromise;
+			this.handles.set(conversationId, handle);
 			return { conversationId, handle };
 		}
 		// 内存（测试）
@@ -247,17 +255,17 @@ export class ConversationManagerServer implements Contract {
 			const existingChild = this.childProcesses.get(id);
 			if (handle === undefined || existingChild === undefined || existingChild.exitCode !== null) {
 				const storedir = this.allocStoredir(id);
-				const { child, handle: spawned } = this.spawner.spawn({
+				const { child, handle: spawnedPromise } = this.spawner.spawn({
 					conversationId: id,
 					agentType: "novel",
 					storedir,
 					workspace: this.workspaceProvider?.(),
 				});
 				this.childProcesses.set(id, child);
-				this.handles.set(id, spawned);
 				this.summaries.set(id, { conversationId: id, name: id, storeDir: storedir, status: "active" });
 				this.attachExit(id, child);
-				handle = spawned;
+				handle = await spawnedPromise;
+				this.handles.set(id, handle);
 			}
 			return { conversationId: id, handle };
 		}
@@ -288,6 +296,7 @@ export class ConversationManagerServer implements Contract {
 		this.conversations.delete(conversationId);
 		this.handles.delete(conversationId);
 		this.summaries.delete(conversationId);
+		this.waitQueue.clearConversation(conversationId);
 		if (this.storedirRoot !== undefined) {
 			try {
 				rmSync(this.allocStoredir(conversationId), { recursive: true, force: true });
@@ -305,28 +314,67 @@ export class ConversationManagerServer implements Contract {
 		return conv.sendSystemControl(msg);
 	}
 
-	/** 转发审批请求（阻塞到决策） */
-	async sendApprovalRequestTo(
+	/** 提交审批请求（非阻塞）：入队 + decisioner 派生（parentId → parent 冒泡预留；否则 ui） */
+	async submitApprovalRequest(
 		conversationId: ConversationId,
 		req: ConversationApprovalRequest,
-	): Promise<ConversationApprovalDecision> {
-		return this.require(conversationId).sendApprovalRequest(req);
-	}
-
-	/** 转发提问请求（阻塞到回答） */
-	async sendAskingRequestTo(
-		conversationId: ConversationId,
-		req: ConversationAskingRequest,
-	): Promise<string> {
-		return this.require(conversationId).sendAskingQuestionRequest(req);
-	}
-
-	/** 转发退出 compose 请求（阻塞到退出） */
-	async sendExitComposeRequestTo(
-		conversationId: ConversationId,
-		req: ConversationExitComposeRequest,
 	): Promise<void> {
-		return this.require(conversationId).sendExitComposeRequest(req);
+		const parentId = this.summaries.get(conversationId)?.parentId;
+		this.waitQueue.submit({
+			conversationId,
+			requestId: req.requestId,
+			toolName: req.toolName,
+			args: req.args,
+			decisioner: parentId !== undefined ? "parent" : "ui",
+			status: "pending",
+			requestedAt: new Date().toISOString(),
+		});
+	}
+
+	/** 提交提问请求（非阻塞；路由同审批，UI 展示延后——本期内入队仅登记） */
+	async submitAskingRequest(
+		_conversationId: ConversationId,
+		_req: ConversationAskingRequest,
+	): Promise<void> {
+		// 提问/退出 compose 与审批同一路由；UI 面板延后，队列登记后续接入
+	}
+
+	/** 提交退出 compose 请求（非阻塞；路由同审批） */
+	async submitExitComposeRequest(
+		_conversationId: ConversationId,
+		_req: ConversationExitComposeRequest,
+	): Promise<void> {
+		// 见 submitAskingRequest
+	}
+
+	/** 待 UI 决策的审批列表（decisioner="ui"） */
+	async listApprovals(): Promise<readonly ApprovalQueueItem[]> {
+		return this.waitQueue.list();
+	}
+
+	/** 记录 UI 决策：驻留会话直推 resolveApproval，已退出留待重启查询 */
+	async resolveApproval(requestId: string, decision: ConversationApprovalDecision): Promise<boolean> {
+		const resolved = this.waitQueue.resolve(requestId, decision, new Date().toISOString());
+		if (!resolved) return false;
+		// 驻留直推：会话存活则经 handle 调 conversation 的 resolveApproval（阻塞解除）
+		const item = this.waitQueue.takeByRequestId(requestId);
+		if (item !== undefined) {
+			const handle = this.handles.get(item.conversationId);
+			if (handle !== undefined) {
+				handle.resolveApproval(requestId, decision);
+			}
+		}
+		return true;
+	}
+
+	/** 子进程重启查询：该会话的待决/已决条目（暂停点续跑） */
+	async takeDecisions(conversationId: ConversationId): Promise<readonly ApprovalQueueItem[]> {
+		return this.waitQueue.take(conversationId);
+	}
+
+	/** 订阅队列变化（main 侧转发 UI 通知） */
+	onWaitChange(listener: () => void): () => void {
+		return this.waitQueue.onChange(listener);
 	}
 
 	/** 取 conversation 操作目标，缺省抛错 */

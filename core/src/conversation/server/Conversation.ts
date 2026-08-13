@@ -21,6 +21,28 @@ import type {
 } from "../contract/types/index.js";
 import { DEFAULT_CONVERSATION_MODE } from "../contract/types/index.js";
 
+/** manager wait 通道：conversation → CMS 的 wait 提交面（子进程经 manager WS；内存模式直连 managerServer） */
+export interface ManagerWaitChannel {
+	/**
+	 * 提交审批请求（非阻塞 rpc；决策经 resolveApproval 回传——驻留直推或重启查询）
+	 * @param conversationId 发起会话 id
+	 * @param req 审批请求
+	 */
+	submitApproval(conversationId: string, req: ConversationApprovalRequest): Promise<void>;
+	/**
+	 * 提交提问请求（非阻塞；路由同审批）
+	 * @param conversationId 发起会话 id
+	 * @param req 提问请求
+	 */
+	submitAsking(conversationId: string, req: ConversationAskingRequest): Promise<void>;
+	/**
+	 * 提交退出 compose 请求（非阻塞；路由同审批）
+	 * @param conversationId 发起会话 id
+	 * @param req 退出请求
+	 */
+	submitExitCompose(conversationId: string, req: ConversationExitComposeRequest): Promise<void>;
+}
+
 /** Conversation 构造选项 */
 export interface ConversationOptions {
 	/** 会话 id */
@@ -31,10 +53,19 @@ export interface ConversationOptions {
 	sampling: SamplingConfig;
 	/** journal 写侧（注入时输入 rpc 落盘即回持久化回执；缺省回 turn seq） */
 	journal?: ConversationJournalService;
+	/** manager wait 通道（wait 请求经 CMS 队列路由；缺省仅进程内挂起等待） */
+	managerWait?: ManagerWaitChannel;
+	/** wait 超时毫秒（缺省 120000） */
+	waitTimeoutMs?: number;
+	/** wait 超时回调（子进程注入 process.exit 等退出行为；内存模式仅解除等待） */
+	onWaitTimeout?: (requestId: string) => void;
 }
 
 /** 输出事件订阅回调 */
 type OutputEventListener = (e: OutputEvent) => void;
+
+/** wait 缺省超时：120s（驻留等待决策；超时按拒绝处理 + onWaitTimeout 退出行为） */
+const DEFAULT_WAIT_TIMEOUT_MS = 120_000;
 
 /** conversation 进程侧实现（mode 状态 + 消息编排 + 事件分发 + 等待交互） */
 export class Conversation implements ConversationInteraction, WaitingInteractionRequest {
@@ -52,28 +83,34 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly eventListeners = new Set<OutputEventListener>();
 	/** journal 写侧（缺省 undefined = 不落盘） */
 	private readonly journal?: ConversationJournalService;
-	/** 待决审批（requestId → resolve），阻塞等待决策 */
-	private readonly pendingApprovals = new Map<string, (d: ConversationApprovalDecision) => void>();
+	/** manager wait 通道（wait 请求经 CMS 队列路由） */
+	private readonly managerWait?: ManagerWaitChannel;
+	/** wait 超时毫秒 */
+	private readonly waitTimeoutMs: number;
+	/** wait 超时回调（子进程注入退出行为） */
+	private readonly onWaitTimeout?: (requestId: string) => void;
+	/** 待决审批（requestId → {resolve, timer}），无阻塞驻留等待决策 */
+	private readonly pendingApprovals = new Map<
+		string,
+		{ resolve: (d: ConversationApprovalDecision) => void; timer: NodeJS.Timeout }
+	>();
 	/** 待决提问（requestId → resolve） */
 	private readonly pendingQuestions = new Map<string, (answer: string) => void>();
 	/** 待决退出 compose（requestId → resolve） */
 	private readonly pendingExitCompose = new Map<string, () => void>();
-	/** 审批请求通知订阅者（UI 订阅，收到请求后决策） */
-	private readonly approvalListeners = new Set<(req: ConversationApprovalRequest) => void>();
-	/** 提问请求通知订阅者 */
-	private readonly questionListeners = new Set<(req: ConversationAskingRequest) => void>();
-	/** 退出 compose 通知订阅者 */
-	private readonly exitComposeListeners = new Set<(req: ConversationExitComposeRequest) => void>();
 
 	/**
 	 * 构造 Conversation
-	 * @param opts 会话 id + agent 循环 + 采样 + 可选 journal 写侧
+	 * @param opts 会话 id + agent 循环 + 采样 + 可选 journal 写侧 + manager wait 通道
 	 */
 	constructor(opts: ConversationOptions) {
 		this.conversationId = opts.conversationId;
 		this.loop = opts.loop;
 		this.sampling = opts.sampling;
 		this.journal = opts.journal;
+		this.managerWait = opts.managerWait;
+		this.waitTimeoutMs = opts.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+		this.onWaitTimeout = opts.onWaitTimeout;
 		// 订阅 loop 的输出事件（run/followup 均转发到本会话 hub）
 		this.loop.onOutputEvent((e) => this.emit(e));
 	}
@@ -126,36 +163,59 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		}
 	}
 
-	/** 请求审批（阻塞直到决策经 resolveApproval 回传） */
+	/**
+	 * 请求审批（无阻塞）：经 manager wait 通道提交 CMS 队列（request/resolve 分离），
+	 * 返回决策 promise 供 gateTool 驻留等待；决策经 resolveApproval 回传解除；
+	 * 超时（waitTimeoutMs）按拒绝解除并触发 onWaitTimeout（子进程退出行为）。
+	 * 不再经 output hub 发 approval 事件——wait 状态唯一权威是 CMS 队列。
+	 */
 	async sendApprovalRequest(req: ConversationApprovalRequest): Promise<ConversationApprovalDecision> {
 		return new Promise<ConversationApprovalDecision>((resolve) => {
-			this.pendingApprovals.set(req.requestId, resolve);
-			for (const l of this.approvalListeners) l(req);
-			this.emit({
-				type: "approval.request",
-				persist: false,
-				requestId: req.requestId,
-				toolName: req.toolName,
-				args: req.args,
-				conversationId: this.conversationId,
-				ts: new Date().toISOString(),
-			});
+			const timer = setTimeout(() => {
+				this.pendingApprovals.delete(req.requestId);
+				this.onWaitTimeout?.(req.requestId);
+				resolve({ kind: "reject" });
+			}, this.waitTimeoutMs);
+			this.pendingApprovals.set(req.requestId, { resolve, timer });
+			if (this.managerWait !== undefined) {
+				void this.managerWait
+					.submitApproval(this.conversationId, req)
+					.catch(() => {
+						// 提交失败：立即按拒绝解除，避免悬挂
+						const pending = this.pendingApprovals.get(req.requestId);
+						if (pending === undefined) return;
+						clearTimeout(pending.timer);
+						this.pendingApprovals.delete(req.requestId);
+						resolve({ kind: "reject" });
+					});
+			}
 		});
 	}
 
-	/** 请求提问（阻塞直到回答经 resolveQuestion 回传） */
+	/** 请求提问（无阻塞；路由同审批，UI 展示延后） */
 	async sendAskingQuestionRequest(req: ConversationAskingRequest): Promise<string> {
 		return new Promise<string>((resolve) => {
 			this.pendingQuestions.set(req.requestId, resolve);
-			for (const l of this.questionListeners) l(req);
+			if (this.managerWait !== undefined) {
+				void this.managerWait.submitAsking(this.conversationId, req).catch(() => {
+					// 提交失败：解除避免悬挂
+					this.pendingQuestions.delete(req.requestId);
+					resolve("");
+				});
+			}
 		});
 	}
 
-	/** 请求退出 compose（阻塞直到 resolveExitCompose 回传） */
+	/** 请求退出 compose（无阻塞；路由同审批） */
 	async sendExitComposeRequest(req: ConversationExitComposeRequest): Promise<void> {
 		return new Promise<void>((resolve) => {
 			this.pendingExitCompose.set(req.requestId, resolve);
-			for (const l of this.exitComposeListeners) l(req);
+			if (this.managerWait !== undefined) {
+				void this.managerWait.submitExitCompose(this.conversationId, req).catch(() => {
+					this.pendingExitCompose.delete(req.requestId);
+					resolve();
+				});
+			}
 		});
 	}
 
@@ -169,20 +229,13 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.eventListeners.clear();
 	}
 
-	/** 解析待决审批（决策回传，供 manager / UI 应答调用） */
+	/** 解析待决审批（决策回传：CMS 经 rpc 调用；解除 gateTool 的驻留等待） */
 	resolveApproval(requestId: string, decision: ConversationApprovalDecision): void {
-		const resolve = this.pendingApprovals.get(requestId);
-		if (resolve) {
+		const pending = this.pendingApprovals.get(requestId);
+		if (pending) {
+			clearTimeout(pending.timer);
 			this.pendingApprovals.delete(requestId);
-			resolve(decision);
-			this.emit({
-				type: "approval.resolved",
-				persist: false,
-				requestId,
-				decision: decision.kind === "approve" ? "approved" : decision.kind === "reject" ? "rejected" : "edited",
-				conversationId: this.conversationId,
-				ts: new Date().toISOString(),
-			});
+			pending.resolve(decision);
 		}
 	}
 
@@ -202,24 +255,6 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 			this.pendingExitCompose.delete(requestId);
 			resolve();
 		}
-	}
-
-	/** 订阅审批请求（UI 收到请求后决策并经 resolveApproval 回传） */
-	onApprovalRequest(l: (req: ConversationApprovalRequest) => void): () => void {
-		this.approvalListeners.add(l);
-		return () => this.approvalListeners.delete(l);
-	}
-
-	/** 订阅提问请求 */
-	onQuestionRequest(l: (req: ConversationAskingRequest) => void): () => void {
-		this.questionListeners.add(l);
-		return () => this.questionListeners.delete(l);
-	}
-
-	/** 订阅退出 compose 请求 */
-	onExitComposeRequest(l: (req: ConversationExitComposeRequest) => void): () => void {
-		this.exitComposeListeners.add(l);
-		return () => this.exitComposeListeners.delete(l);
 	}
 
 	/** 分发输出事件给所有订阅者 */

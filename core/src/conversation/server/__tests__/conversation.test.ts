@@ -99,17 +99,62 @@ describe("Conversation", () => {
     expect(receipt.seq).toBe(1);
   });
 
-  it("sendApprovalRequest 阻塞 + onApprovalRequest 通知 + resolveApproval 回传", async () => {
-    const conv = new Conversation({ conversationId: "c1", loop: mockLoop(), sampling: { model: "gpt-5" } });
-    const received: string[] = [];
-    conv.onApprovalRequest((req) => received.push(req.toolName));
+  it("sendApprovalRequest 无阻塞驻留 + 经 managerWait 提交 + resolveApproval 回传解除", async () => {
+    const submitted: Array<{ id: string; req: { requestId: string; toolName: string } }> = [];
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      managerWait: {
+        submitApproval: async (id, req) => {
+          submitted.push({ id, req });
+        },
+        submitAsking: async () => {},
+        submitExitCompose: async () => {},
+      },
+    });
     const pending = conv.sendApprovalRequest({ requestId: "r1", toolName: "Write", args: "{}" });
-    // 通知已发出
-    expect(received).toEqual(["Write"]);
-    // 回传决策（经 ConversationHandle 契约方法）
+    // 非阻塞提交：立即入 CMS 队列（进程内直连）
+    expect(submitted).toHaveLength(1);
+    expect(submitted[0]!.id).toBe("c1");
+    expect(submitted[0]!.req.toolName).toBe("Write");
+    // 决策回传（经 ConversationHandle 契约方法）
     const handle = conv as unknown as ConversationHandle;
     handle.resolveApproval("r1", { kind: "approve" });
     expect(await pending).toEqual({ kind: "approve" });
+  });
+
+  it("wait 超时按拒绝解除（waitTimeoutMs 可缩短测试）", async () => {
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      waitTimeoutMs: 30,
+      managerWait: {
+        submitApproval: async () => {},
+        submitAsking: async () => {},
+        submitExitCompose: async () => {},
+      },
+    });
+    const decision = await conv.sendApprovalRequest({ requestId: "r1", toolName: "Write", args: "{}" });
+    expect(decision).toEqual({ kind: "reject" });
+  });
+
+  it("managerWait 提交失败立即按拒绝解除", async () => {
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      managerWait: {
+        submitApproval: async () => {
+          throw new Error("cms down");
+        },
+        submitAsking: async () => {},
+        submitExitCompose: async () => {},
+      },
+    });
+    const decision = await conv.sendApprovalRequest({ requestId: "r1", toolName: "Write", args: "{}" });
+    expect(decision).toEqual({ kind: "reject" });
   });
 
   it("sendAskingQuestionRequest 阻塞 + resolveQuestion 回传", async () => {
@@ -153,14 +198,20 @@ describe("ConversationManagerServer", () => {
     expect((ref.handle as unknown as { conversationMode: string }).conversationMode).toBe("compose");
   });
 
-  it("sendApprovalRequestTo 转发 wait 请求（阻塞到决策）", async () => {
+  it("submitApprovalRequest 入队 + listApprovals 可见 + resolveApproval 直推驻留会话", async () => {
     const conv = new Conversation({ conversationId: "c1", loop: mockLoop(), sampling: { model: "gpt-5" } });
     const server = new ConversationManagerServer({ create: () => conv });
     const ref = await server.createOrResume("c1");
-    const pending = server.sendApprovalRequestTo(ref.conversationId, { requestId: "r1", toolName: "Write", args: "{}" });
-    // 决策回传（经 resolveApproval）
-    conv.resolveApproval("r1", { kind: "reject" });
+    await server.submitApprovalRequest(ref.conversationId, { requestId: "r1", toolName: "CharacterWrite", args: "{}" });
+    const list = await server.listApprovals();
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ decisioner: "ui", status: "pending", toolName: "CharacterWrite" });
+    // 决策：记录 + 直推驻留会话（conversation 的 resolveApproval 解除等待）
+    const pending = conv.sendApprovalRequest({ requestId: "r2", toolName: "Write", args: "{}" });
+    await server.submitApprovalRequest(ref.conversationId, { requestId: "r2", toolName: "Write", args: "{}" });
+    expect(await server.resolveApproval("r2", { kind: "reject" })).toBe(true);
     expect(await pending).toEqual({ kind: "reject" });
+    expect(await server.takeDecisions("c1")).toHaveLength(2);
   });
 
   it("terminate 清理会话", async () => {

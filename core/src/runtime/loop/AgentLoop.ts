@@ -1,4 +1,5 @@
 import type {
+  AssistantMessage,
   LLMessage,
   ProviderResult,
   ProviderDelta,
@@ -212,7 +213,66 @@ export class AgentLoop {
       toolsLastTurn: new Map(),
     };
 
-    // ③ 循环
+    return this.runTurnLoop(turn, runConfig, onEvent, runContext);
+  }
+
+  /**
+   * 暂停点续跑：恢复 turn 中缺 tool 结果的 toolCall 按决策补完（approve 执行 handler /
+   * reject「已拒绝」/ expired「审批超时，按拒绝处理」/ 未装配「已拒绝」），
+   * 随后继续 provider 循环到 turn 收口（事件与 journal 同 seq 重写经 listener 走）。
+   * @param runConfig 采样配置
+   * @returns 运行结果（最终 assistant 消息）
+   */
+  async resumePendingTurn(runConfig: AgentRunConfig): Promise<AgentLoopResult> {
+    const turn = this.context.turns.at(-1);
+    if (turn === undefined) throw new Error("无可恢复的 turn（journal 为空）");
+    // 补完缺 tool 结果的 toolCall（恢复快照里 assistant.toolCalls 无对应 tool 消息的）
+    const assistantMessages = turn.messages.filter(
+      (m) => m.role === "assistant" && m.toolCalls !== undefined && m.toolCalls.length > 0,
+    ) as AssistantMessage[];
+    const pendingToolIds = assistantMessages
+      .flatMap((m) => m.toolCalls!.map((tc) => tc.id))
+      .filter((id) => !turn.messages.some((m) => m.role === "tool" && m.id === id));
+    for (const toolCallId of pendingToolIds) {
+      const toolCall = assistantMessages
+        .flatMap((m) => m.toolCalls!)
+        .find((tc) => tc.id === toolCallId)!;
+      if (toolCall === undefined) continue;
+      const decision = await this.config.resumePendingDecider?.(toolCallId);
+      let text: string;
+      if (decision === "approve") {
+        text = await this.config.toolDispatcher.dispatch(this.context, toolCall);
+      } else if (decision === "reject") {
+        text = "已拒绝";
+      } else if (decision === "expired") {
+        text = "审批超时，按拒绝处理";
+      } else {
+        text = "已拒绝（审批通道未装配）";
+      }
+      this.emit(undefined, "tool-call-response", {
+        persist: true,
+        seq: turn.seq,
+        toolCallId,
+        result: text,
+      });
+      this.context.appendTurnMessages([{ role: "tool", content: text, id: toolCallId }]);
+    }
+    const runContext: RunContext = {
+      curTurn: 0,
+      maxTurn: runConfig.maxTurns ?? DEFAULT_MAX_TURNS,
+      toolsLastTurn: new Map(),
+    };
+    return this.runTurnLoop(turn, runConfig, undefined, runContext);
+  }
+
+  /** 单 turn 的 provider 循环：toProviderCall → call → tool 执行/收口，直到 final 或 maxTurns */
+  private async runTurnLoop(
+    turn: TurnContext,
+    runConfig: AgentRunConfig,
+    onEvent: ((e: OutputEvent) => void) | undefined,
+    runContext: RunContext,
+  ): Promise<AgentLoopResult> {
+    const logger = this.config.logger;
     let usage: { inputTokens: number; outputTokens: number } | undefined;
     for (runContext.curTurn = 0; runContext.curTurn < runContext.maxTurn; runContext.curTurn++) {
       logger?.debug("agent.call.request", {

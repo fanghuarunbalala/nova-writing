@@ -33,19 +33,19 @@ describe("LoopContext", () => {
     expect(onAppended).toHaveBeenCalledOnce();
   });
 
-  it("startSeq 恢复：journal 重放后新 turn 从 resumeSeq+1 开始（合成恢复 turn 消耗一号）", () => {
+  it("startSeq 恢复：恢复 turn 沿用 journal 最后 seq（暂停点续跑同 seq 重写），新 turn 从 +1 起", () => {
     const ctx = new LoopContext({
       agentCapability: capability,
       workspace: "/ws",
       turnMessages: [{ role: "user", content: "历史" }, { role: "assistant", content: "回复" }],
       startSeq: 5,
     });
-    // 合成恢复 turn 占 seq 6
+    // 恢复 turn 沿用 seq 5（不消耗新号：补完消息同 seq 重写原快照）
     expect(ctx.turns).toHaveLength(1);
-    expect(ctx.turns[0].seq).toBe(6);
-    // 新 turn 从 7 起
+    expect(ctx.turns[0].seq).toBe(5);
+    // 新 turn 从 6 起
     ctx.appendTurnContext(makeTurn());
-    expect(ctx.turns.at(-1)!.seq).toBe(7);
+    expect(ctx.turns.at(-1)!.seq).toBe(6);
   });
 
   it("appendTurnMessages 追加当前 turn + onTurnMessageAppend", () => {

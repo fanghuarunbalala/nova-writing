@@ -1,8 +1,10 @@
 /**
  * ConversationManagerServer 契约：统一管理 conversation 的进程。
- * 只做：生命周期 + 目录 + 消息调度。进度 / 事件 / 流式不经过它。
- * 调用方：conversation 用生命周期 + 消息调度（sendMessageTo / send*RequestTo）；UI / zygote 用目录。
- * wait 请求经 send*RequestTo 路由到 parent，由 parent 逻辑决定下一步。
+ * 只做：生命周期 + 目录 + 消息调度 + wait 队列路由。进度 / 事件 / 流式不经过它。
+ * wait 语义（request/resolve 分离，无阻塞）：conversation 非阻塞提交 → 队列记录 →
+ * UI（root 的决策者）拉取列表并 resolve → CMS 记录决策并直推驻留 conversation 的
+ * resolveApproval（或已退出则留待重启后 takeDecisions 查询续跑）；teammate 的请求
+ * 决策者 = parent（冒泡路由，接口预留）。
  */
 
 import type {
@@ -15,6 +17,7 @@ import type {
 	ConversationMessage,
 	Receipt,
 } from "../../conversation/contract/types/index.js";
+import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import type {
 	ConversationMeta,
 	ConversationRef,
@@ -81,36 +84,47 @@ export interface ConversationManagerServer {
 		msgs: ConversationMessage
 	): Promise<Receipt>;
 	/**
-	 * 转发审批请求：查图后调用目标 conversation 的 WaitingInteractionRequest.sendApprovalRequest 投递，
-	 * 阻塞到决策返回
-	 * @param conversationId 目标会话 id
+	 * 提交审批请求（非阻塞）：入队等待决策；decisioner 按会话 parentId 派生
+	 * （teammate → parent 冒泡预留；root → ui）。
+	 * @param conversationId 发起会话 id
 	 * @param req 审批请求
-	 * @returns 审批决策（延迟 RPC 的返回值）
 	 */
-	sendApprovalRequestTo(
-		conversationId: ConversationId,
-		req: ConversationApprovalRequest
-	): Promise<ConversationApprovalDecision>;
+	submitApprovalRequest(conversationId: ConversationId, req: ConversationApprovalRequest): Promise<void>;
 	/**
-	 * 转发提问请求：调用目标 conversation 的 WaitingInteractionRequest.sendAskingQuestionRequest 投递，
-	 * 阻塞到回答返回
-	 * @param conversationId 目标会话 id
+	 * 提交提问请求（非阻塞；路由同审批，UI 展示延后）
+	 * @param conversationId 发起会话 id
 	 * @param req 提问请求
-	 * @returns 用户回答文本
 	 */
-	sendAskingRequestTo(
-		conversationId: ConversationId,
-		req: ConversationAskingRequest
-	): Promise<string>;
+	submitAskingRequest(conversationId: ConversationId, req: ConversationAskingRequest): Promise<void>;
 	/**
-	 * 转发退出 compose 请求：调用目标 conversation 的 WaitingInteractionRequest.sendExitComposeRequest 投递，
-	 * 阻塞到退出完成
-	 * @param conversationId 目标会话 id
+	 * 提交退出 compose 请求（非阻塞；路由同审批）
+	 * @param conversationId 发起会话 id
 	 * @param req 退出请求
-	 * @returns 完成
 	 */
-	sendExitComposeRequestTo(
-		conversationId: ConversationId,
-		req: ConversationExitComposeRequest
-	): Promise<void>;
+	submitExitComposeRequest(conversationId: ConversationId, req: ConversationExitComposeRequest): Promise<void>;
+	/**
+	 * 待 UI 决策的审批列表（decisioner="ui"；含近期已决条目供面板展示）
+	 * @returns 队列条目（按提交时间倒序）
+	 */
+	listApprovals(): Promise<readonly ApprovalQueueItem[]>;
+	/**
+	 * 记录 UI 决策：驻留中的会话直推其 resolveApproval（rpc 调用），
+	 * 已退出的会话留待重启后经 takeDecisions 查询续跑。
+	 * @param requestId 请求 id
+	 * @param decision 决策（approve / reject / edit+意见）
+	 * @returns 是否命中待决条目
+	 */
+	resolveApproval(requestId: string, decision: ConversationApprovalDecision): Promise<boolean>;
+	/**
+	 * 子进程重启查询：该会话的待决/已决条目（暂停点续跑用）
+	 * @param conversationId 会话 id
+	 * @returns 队列条目
+	 */
+	takeDecisions(conversationId: ConversationId): Promise<readonly ApprovalQueueItem[]>;
+	/**
+	 * 订阅队列变化（main 侧注册：转发 UI 的 onApprovalsChanged 通知）
+	 * @param listener 变化回调
+	 * @returns 取消订阅函数
+	 */
+	onWaitChange(listener: () => void): () => void;
 }

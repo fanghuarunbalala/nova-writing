@@ -52,6 +52,8 @@ export interface NovelAgentOptions {
   resumeSeq?: number;
   /** 审批通道（mutation 工具执行前征询；子进程内闭包 → conv.sendApprovalRequest） */
   requestApproval?: (req: ConversationApprovalRequest) => Promise<ConversationApprovalDecision>;
+  /** 暂停点续跑决策器（重启补完路径：CMS takeDecisions 装配） */
+  resumePendingDecider?: (toolCallId: string) => Promise<"approve" | "reject" | "expired" | undefined>;
 }
 
 /**
@@ -100,5 +102,6 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     turnMessages: opts.turnMessages,
     startSeq: opts.resumeSeq,
     requestApproval: opts.requestApproval,
+    resumePendingDecider: opts.resumePendingDecider,
   });
 }

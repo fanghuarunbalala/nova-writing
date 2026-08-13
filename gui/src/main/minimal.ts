@@ -16,6 +16,7 @@ import {
   createNovelApiServer,
   createProcessSpawner,
   electronIpcTransport,
+  startConversationManagerWsServer,
   startNovelDbWsServer,
   type AgentLoop,
   type ConversationApprovalDecision,
@@ -151,12 +152,17 @@ async function applyDefaultProviderEnv(configStore: NodeApplicationConfigStore):
 function createManager(
   conversationsRoot: string,
   workspaceProvider: () => string | undefined,
-  novelWs: { url: string; token: string },
+  transports: {
+    managerWs: { url: string; token: string; onConnected: Parameters<typeof createProcessSpawner>[1]["managerWs"]["onConnected"] };
+    novelWs: { url: string; token: string };
+  },
 ): ConversationManagerServer {
+  // server 先声明：内存模式 factory 的 managerWait 需闭包引用（进程内直连同一队列）
+  let server: ConversationManagerServer | undefined;
   const factory = {
     create: (o: { conversationId: string }) => {
       // 回显模式同样落盘：与子进程 journal 语义一致（history/回执互认）。
-      // 审批触发经 conv 自引用：requestApproval → conv.sendApprovalRequest（阻塞等 UI 决策）
+      // 审批触发经 conv 自引用：requestApproval → conv.sendApprovalRequest（无阻塞提交 + 驻留等待）
       const journal = new FileConversationJournalService({
         conversationId: o.conversationId,
         filePath: join(conversationsRoot, o.conversationId, "journal.jsonl"),
@@ -171,18 +177,32 @@ function createManager(
         loop,
         sampling: { model: "echo" },
         journal,
+        // 内存模式：wait 提交走进程内 CMS 队列（与子进程同路由）；超时仅解除等待不退出
+        managerWait: {
+          submitApproval: (id, req) => server!.submitApprovalRequest(id, req),
+          submitAsking: (id, req) => server!.submitAskingRequest(id, req),
+          submitExitCompose: (id, req) => server!.submitExitComposeRequest(id, req),
+        },
       });
       return conv;
     },
   };
   const spawner =
     process.env.NOVEL_PROVIDER_API_KEY !== undefined
-      ? createProcessSpawner(childScript, novelWs)
+      ? createProcessSpawner(childScript, {
+          managerWs: {
+            url: transports.managerWs.url,
+            token: transports.managerWs.token,
+            onConnected: transports.managerWs.onConnected,
+          },
+          novelWs: transports.novelWs,
+        })
       : undefined;
-  return new ConversationManagerServer(factory, spawner, {
+  server = new ConversationManagerServer(factory, spawner, {
     storedirRoot: conversationsRoot,
     workspaceProvider,
   });
+  return server;
 }
 
 async function main(): Promise<void> {
@@ -228,11 +248,31 @@ async function main(): Promise<void> {
     void novelWs.close();
   });
 
+  // manager WS（conversation ↔ CMS 单连接双工；manager 与服务端互依 → holder）
+  const managerHolder: { manager?: ConversationManagerServer } = {};
+  const managerWs = await startConversationManagerWsServer({
+    manager: () => managerHolder.manager!,
+    token: randomUUID(),
+  });
+  app.on("will-quit", () => {
+    void managerWs.close();
+  });
+
   // 当前工作区根路径（spawn 时经 env 注入子进程，agent 文件工具落点）
   let currentWorkspaceRoot: string | undefined;
   const manager = createManager(conversationsRoot, () => currentWorkspaceRoot, {
-    url: novelWs.url,
-    token: novelWs.token,
+    managerWs: {
+      url: managerWs.url,
+      token: managerWs.token,
+      onConnected: managerWs.onConversationConnected,
+    },
+    novelWs: { url: novelWs.url, token: novelWs.token },
+  });
+  managerHolder.manager = manager;
+  // wait 队列变化 → 通知 renderer（Phase B 接线 onApprovalsChanged；此处留 hook）
+  const uiNotifyHolder: { notify?: () => void } = {};
+  manager.onWaitChange(() => {
+    uiNotifyHolder.notify?.();
   });
   const serverApi = createNovelApiServer({ manager, novel: store, proxy, journalDir: conversationsRoot });
 

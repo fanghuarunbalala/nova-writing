@@ -1,88 +1,41 @@
-/** Persists Model Connections, Model Profiles, credentials, and the default model. */
-import type {
-  ApplicationConfigurationSnapshot,
-  ModelApi,
-  ModelConnectionSnapshot,
-  ModelConnectionProbeResult,
-  ModelProfileSnapshot,
-  ProviderKind,
-} from "@novel/core";
-import {
-  MODEL_CONFIGURATION_COMMAND_SCHEMA_VERSION,
-  MODEL_CREDENTIAL_MUTATION_KIND,
-  inferDefaultModelApi,
-} from "@novel/core";
+/** Persists Model Profiles (provider/model/baseUrl/credential) and the default model. */
 import { useEffect, useState, type FormEvent } from "react";
+import type { ConfigSnapshot, ModelProfile, ProviderType } from "@novel/core";
 import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
 
 export interface PersistentModelConnectionSettingsPanelProps {
   readonly configuration: ApplicationConfigurationClient;
 }
 
-interface ModelConnectionDraft {
-  readonly connectionId?: string;
-  readonly modelProfileId?: string;
-  readonly credentialRef?: string;
-  readonly credentialConfigured: boolean;
-  readonly displayName: string;
-  readonly providerKind: ProviderKind;
-  readonly api: ModelApi;
-  readonly modelId: string;
+interface ProfileDraft {
+  readonly profileId?: string;
+  readonly label: string;
+  readonly provider: ProviderType;
+  readonly model: string;
   readonly baseUrl: string;
+  readonly credentialRef: string;
   readonly apiKey: string;
 }
 
-const PROVIDER_OPTIONS: readonly {
-  readonly value: ProviderKind;
-  readonly label: string;
-}[] = Object.freeze([
-  Object.freeze({ value: "openai", label: "OpenAI" }),
-  Object.freeze({ value: "anthropic", label: "Anthropic" }),
-  Object.freeze({ value: "google", label: "Google" }),
-  Object.freeze({ value: "openrouter", label: "OpenRouter" }),
-  Object.freeze({ value: "openai_compatible", label: "OpenAI Compatible" }),
-  Object.freeze({ value: "custom", label: "自定义" }),
-]);
-
-const API_OPTIONS: readonly {
-  readonly value: ModelApi;
-  readonly label: string;
-}[] = Object.freeze([
-  Object.freeze({ value: "openai-responses", label: "OpenAI Responses" }),
-  Object.freeze({ value: "openai-completions", label: "OpenAI Chat Completions" }),
-  Object.freeze({ value: "anthropic-messages", label: "Anthropic Messages" }),
-  Object.freeze({ value: "google-generative-ai", label: "Google Generative AI" }),
-  Object.freeze({ value: "google-vertex", label: "Google Vertex" }),
-  Object.freeze({ value: "azure-openai-responses", label: "Azure OpenAI Responses" }),
-  Object.freeze({ value: "openai-codex-responses", label: "OpenAI Codex Responses" }),
-  Object.freeze({ value: "bedrock-converse-stream", label: "Amazon Bedrock Converse" }),
-  Object.freeze({ value: "mistral-conversations", label: "Mistral Conversations" }),
-  Object.freeze({ value: "pi-messages", label: "Pi Messages" }),
-]);
-
-const NEW_CONNECTION_DRAFT: ModelConnectionDraft = Object.freeze({
-  credentialConfigured: false,
-  displayName: "OpenAI 主力模型",
-  providerKind: "openai",
-  api: "openai-responses",
-  modelId: "gpt-5",
+const NEW_DRAFT: ProfileDraft = Object.freeze({
+  label: "默认模型",
+  provider: "openai",
+  model: "deepseek-v4-flash",
   baseUrl: "",
+  credentialRef: "default",
   apiKey: "",
 });
 
 export function PersistentModelConnectionSettingsPanel({
   configuration,
 }: PersistentModelConnectionSettingsPanelProps) {
-  const [snapshot, setSnapshot] = useState<ApplicationConfigurationSnapshot>();
-  const [draft, setDraft] = useState<ModelConnectionDraft>();
+  const [snapshot, setSnapshot] = useState<ConfigSnapshot>();
+  const [draft, setDraft] = useState<ProfileDraft>();
   const [status, setStatus] = useState("正在读取配置…");
   const [saving, setSaving] = useState(false);
-  const [probing, setProbing] = useState(false);
-  const [probe, setProbe] = useState<ModelConnectionProbeResult>();
 
   useEffect(() => {
     let active = true;
-    setStatus("正在读取配置…");
     void configuration.load().then(
       (loaded) => {
         if (!active) return;
@@ -99,83 +52,31 @@ export function PersistentModelConnectionSettingsPanel({
     };
   }, [configuration]);
 
-  const entries = snapshot === undefined ? [] : createEntries(snapshot);
-
-  async function saveConnection(
-    event: FormEvent<HTMLFormElement>,
-  ): Promise<void> {
+  async function saveProfile(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (snapshot === undefined || draft === undefined || !isDraftValid(draft)) {
-      return;
-    }
+    if (draft === undefined || !isDraftValid(draft)) return;
     setSaving(true);
-    setStatus("正在保存模型连接…");
-    const existingConnection = snapshot.modelConnections.find(
-      (connection) => connection.id === draft.connectionId,
-    );
-    const existingProfile = snapshot.modelProfiles.find(
-      (profile) => profile.id === draft.modelProfileId,
-    );
-
+    setStatus("正在保存…");
+    const profileId = draft.profileId ?? `profile_${Date.now()}`;
     try {
-      const result = await configuration.upsertModelConfiguration({
-        schemaVersion: MODEL_CONFIGURATION_COMMAND_SCHEMA_VERSION,
-        expectedRevision: snapshot.revision,
-        connection: {
-          ...(draft.connectionId === undefined ? {} : { id: draft.connectionId }),
-          displayName: draft.displayName.trim(),
-          providerKind: draft.providerKind,
-          ...(requiresBaseUrl(draft.providerKind)
-            ? { baseUrl: draft.baseUrl.trim() }
-            : {}),
-          ...(existingConnection?.organizationId === undefined
-            ? {}
-            : { organizationId: existingConnection.organizationId }),
-          ...(existingConnection?.projectId === undefined
-            ? {}
-            : { projectId: existingConnection.projectId }),
-          ...(existingConnection?.apiVersion === undefined
-            ? {}
-            : { apiVersion: existingConnection.apiVersion }),
-          ...(existingConnection?.region === undefined
-            ? {}
-            : { region: existingConnection.region }),
-          enabled: true,
-          publicHeaders: existingConnection?.publicHeaders ?? Object.freeze({}),
-          secretHeaderCredentialRefs:
-            existingConnection?.secretHeaderCredentialRefs ?? Object.freeze({}),
-        },
+      await configuration.mutate({
+        op: "model.upsert",
+        profileId,
         profile: {
-          ...(draft.modelProfileId === undefined
-            ? {}
-            : { id: draft.modelProfileId }),
-          displayName: `${draft.displayName.trim()} · ${draft.modelId.trim()}`,
-          api: draft.api,
-          modelId: draft.modelId.trim(),
-          parameters:
-            existingProfile?.parameters ??
-            Object.freeze({
-              reasoningEffort: "medium",
-              stopSequences: Object.freeze([]),
-              providerOptions: Object.freeze({}),
-            }),
-          capabilityOverrides:
-            existingProfile?.capabilityOverrides ??
-            Object.freeze({ toolCalling: true }),
-          fallbackProfileIds:
-            existingProfile?.fallbackProfileIds ?? Object.freeze([]),
+          provider: draft.provider,
+          model: draft.model.trim(),
+          ...(draft.baseUrl.trim() === "" ? {} : { baseUrl: draft.baseUrl.trim() }),
+          credentialRef: draft.credentialRef,
+          label: draft.label.trim(),
         },
-        credential: draft.apiKey.length === 0
-          ? { kind: MODEL_CREDENTIAL_MUTATION_KIND.keep }
-          : {
-              kind: MODEL_CREDENTIAL_MUTATION_KIND.replace,
-              secret: draft.apiKey,
-            },
-        setAsDefault: true,
       });
-      setSnapshot(result.configuration);
+      if (draft.apiKey.length > 0) {
+        await configuration.mutate({ op: "credential.save", ref: draft.credentialRef, secret: draft.apiKey });
+      }
+      await configuration.mutate({ op: "model.setDefault", profileId });
       setDraft(undefined);
-      setStatus("模型连接保存成功，并已设为默认模型");
+      setSnapshot(await configuration.load());
+      setStatus("已保存并设为默认");
     } catch (error) {
       setStatus(`保存失败：${getErrorCode(error)}`);
     } finally {
@@ -183,44 +84,33 @@ export function PersistentModelConnectionSettingsPanel({
     }
   }
 
-  async function setDefaultModel(modelProfileId: string): Promise<void> {
-    if (snapshot === undefined || saving) return;
+  async function setDefault(profileId: string): Promise<void> {
     setSaving(true);
-    setStatus("正在更新默认模型…");
     try {
-      const result = await configuration.setDefaultModelProfile({
-        schemaVersion: MODEL_CONFIGURATION_COMMAND_SCHEMA_VERSION,
-        expectedRevision: snapshot.revision,
-        modelProfileId,
-      });
-      setSnapshot(result.configuration);
+      await configuration.mutate({ op: "model.setDefault", profileId });
+      setSnapshot(await configuration.load());
       setStatus("默认模型已更新");
     } catch (error) {
-      setStatus(`默认模型更新失败：${getErrorCode(error)}`);
+      setStatus(`更新失败：${getErrorCode(error)}`);
     } finally {
       setSaving(false);
     }
   }
 
-  async function probeConnection(): Promise<void> {
-    if (probing) return;
-    setProbing(true);
-    setProbe(undefined);
-    setStatus("正在测试连接…");
+  async function remove(profileId: string): Promise<void> {
+    setSaving(true);
     try {
-      const result = await configuration.probeModelConnection();
-      setProbe(result);
-      setStatus(
-        result.ok
-          ? `连接成功（${result.latencyMs}ms）`
-          : `连接失败：${result.failure}`,
-      );
+      await configuration.mutate({ op: "model.remove", profileId });
+      setSnapshot(await configuration.load());
+      setStatus("已删除");
     } catch (error) {
-      setStatus(`连接测试失败：${getErrorCode(error)}`);
+      setStatus(`删除失败：${getErrorCode(error)}`);
     } finally {
-      setProbing(false);
+      setSaving(false);
     }
   }
+
+  const profiles = snapshot?.profiles ?? [];
 
   return (
     <section className="novel-model-settings" aria-label="模型设置">
@@ -231,80 +121,57 @@ export function PersistentModelConnectionSettingsPanel({
           <p>模型配置持久化到 Config；API Key 由 Host 凭据存储保存。</p>
         </div>
         <button
-          disabled={snapshot === undefined || saving || probing}
-          onClick={() => void probeConnection()}
-          type="button"
-        >
-          测试连接
-        </button>
-        <button
           disabled={snapshot === undefined || saving}
-          onClick={() => setDraft(NEW_CONNECTION_DRAFT)}
+          onClick={() => setDraft(NEW_DRAFT)}
           type="button"
         >
-          新增模型连接
+          新增模型
         </button>
       </header>
 
-      {probe !== undefined ? (
-        <p className="novel-provider-security-note" data-ok={probe.ok} role="status">
-          {probe.ok
-            ? `连接成功 · ${probe.latencyMs}ms`
-            : `连接失败 · ${probe.failure}`}
-        </p>
-      ) : null}
-
-      <label className="novel-active-provider-field">
-        <span>默认模型</span>
-        <select
-          aria-label="默认模型"
-          disabled={snapshot === undefined || entries.length === 0 || saving}
-          onChange={(event) => void setDefaultModel(event.currentTarget.value)}
-          value={snapshot?.defaultModelProfileId ?? ""}
-        >
-          {entries.length === 0 ? <option value="">尚未配置</option> : null}
-          {entries.map(({ profile }) => (
-            <option key={profile.id} value={profile.id}>
-              {profile.displayName}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <div className="novel-provider-list" aria-label="模型连接列表">
-        {entries.length === 0 ? (
+      <div className="novel-provider-list" aria-label="模型列表">
+        {profiles.length === 0 ? (
           <div className="novel-provider-empty">
-            <strong>还没有模型连接</strong>
-            <span>新增连接后，模型与加密凭据会持久化保存。</span>
+            <strong>还没有模型配置</strong>
+            <span>新增后，模型与加密凭据会持久化保存。</span>
           </div>
         ) : (
-          entries.map(({ connection, profile }) => (
+          profiles.map((profile) => (
             <article
               className="novel-provider-row"
-              data-active={profile.id === snapshot?.defaultModelProfileId}
+              data-active={profile.id === snapshot?.defaultProfileId}
               key={profile.id}
             >
               <div>
-                <strong>{connection.displayName}</strong>
+                <strong>{profile.label ?? profile.model}</strong>
                 <span>
-                  {providerLabel(connection.providerKind)} · {apiLabel(profile.api)} ·{" "}
-                  {profile.modelId}
+                  {profile.provider} · {profile.model}
                 </span>
                 <small>
-                  {connection.credentialConfigured
+                  {snapshot?.credentials[profile.credentialRef] === "present"
                     ? "API Key 已配置"
                     : "API Key 未配置"}
                 </small>
               </div>
-              {profile.id === snapshot?.defaultModelProfileId ? (
+              {profile.id === snapshot?.defaultProfileId ? (
                 <span className="novel-provider-active-badge">默认</span>
               ) : null}
               <button
+                disabled={saving || profile.id === snapshot?.defaultProfileId}
+                onClick={() => void setDefault(profile.id)}
+                type="button"
+              >
+                设为默认
+              </button>
+              <button
                 disabled={saving}
-                onClick={() => setDraft(createDraft(connection, profile))}
+                onClick={() => setDraft(toDraft(profile))}
                 type="button"
               >
                 编辑
+              </button>
+              <button disabled={saving} onClick={() => void remove(profile.id)} type="button">
+                删除
               </button>
             </article>
           ))
@@ -312,19 +179,9 @@ export function PersistentModelConnectionSettingsPanel({
       </div>
 
       {draft !== undefined ? (
-        <form
-          className="novel-provider-editor"
-          onSubmit={(event) => void saveConnection(event)}
-        >
+        <form className="novel-provider-editor" onSubmit={(event) => void saveProfile(event)}>
           <header>
-            <div>
-              <span>{draft.connectionId === undefined ? "New" : "Edit"}</span>
-              <h4>
-                {draft.connectionId === undefined
-                  ? "新增模型连接"
-                  : "编辑模型连接"}
-              </h4>
-            </div>
+            <h4>{draft.profileId === undefined ? "新增模型" : "编辑模型"}</h4>
             <button disabled={saving} onClick={() => setDraft(undefined)} type="button">
               取消
             </button>
@@ -336,91 +193,33 @@ export function PersistentModelConnectionSettingsPanel({
                 aria-label="服务商"
                 disabled={saving}
                 onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    providerKind: event.currentTarget.value as ProviderKind,
-                    api: inferDefaultModelApi(
-                      event.currentTarget.value as ProviderKind,
-                    ),
-                  })
+                  setDraft({ ...draft, provider: event.currentTarget.value as ProviderType })
                 }
-                value={draft.providerKind}
+                value={draft.provider}
               >
-                {PROVIDER_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
               </select>
             </label>
-            <label>
-              <span>API 协议</span>
-              <select
-                aria-label="API 协议"
-                disabled={saving}
-                onChange={(event) =>
-                  setDraft({ ...draft, api: event.currentTarget.value as ModelApi })
-                }
-                value={draft.api}
-              >
-                {isKnownApiOption(draft.api) ? null : (
-                  <option value={draft.api}>{draft.api}</option>
-                )}
-                {API_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <ConnectionTextField
-              disabled={saving}
-              label="显示名称"
-              onChange={(displayName) => setDraft({ ...draft, displayName })}
-              placeholder="例如：OpenAI 主力模型"
-              value={draft.displayName}
-            />
-            <ConnectionTextField
-              disabled={saving}
-              label="模型"
-              onChange={(modelId) => setDraft({ ...draft, modelId })}
-              placeholder="例如：gpt-5"
-              value={draft.modelId}
-            />
-            {requiresBaseUrl(draft.providerKind) ? (
-              <ConnectionTextField
-                disabled={saving}
-                label="Base URL"
-                onChange={(baseUrl) => setDraft({ ...draft, baseUrl })}
-                placeholder="https://api.example.com/v1"
-                value={draft.baseUrl}
-              />
-            ) : null}
+            <TextField disabled={saving} label="显示名称" onChange={(label) => setDraft({ ...draft, label })} value={draft.label} />
+            <TextField disabled={saving} label="模型" onChange={(model) => setDraft({ ...draft, model })} value={draft.model} />
+            <TextField disabled={saving} label="Base URL（可空）" onChange={(baseUrl) => setDraft({ ...draft, baseUrl })} value={draft.baseUrl} />
             <label>
               <span>API Key</span>
               <input
                 aria-label="API Key"
                 autoComplete="new-password"
                 disabled={saving}
-                onChange={(event) =>
-                  setDraft({ ...draft, apiKey: event.currentTarget.value })
-                }
-                placeholder={
-                  draft.credentialConfigured
-                    ? "留空表示保持现有 API Key"
-                    : "输入 API Key"
-                }
+                onChange={(event) => setDraft({ ...draft, apiKey: event.currentTarget.value })}
+                placeholder="留空表示保持现有 API Key"
                 type="password"
                 value={draft.apiKey}
               />
             </label>
           </div>
-          <p className="novel-provider-security-note">
-            API Key 不会写入 Application Configuration，也不会返回到界面。
-          </p>
           <footer>
             <button disabled={saving || !isDraftValid(draft)} type="submit">
-              {saving ? "保存中…" : "保存并设为默认模型"}
+              {saving ? "保存中…" : "保存并设为默认"}
             </button>
           </footer>
         </form>
@@ -433,16 +232,14 @@ export function PersistentModelConnectionSettingsPanel({
   );
 }
 
-function ConnectionTextField({
+function TextField({
   label,
   value,
-  placeholder,
   disabled,
   onChange,
 }: {
   readonly label: string;
   readonly value: string;
-  readonly placeholder: string;
   readonly disabled: boolean;
   readonly onChange: (value: string) => void;
 }) {
@@ -453,68 +250,26 @@ function ConnectionTextField({
         aria-label={label}
         disabled={disabled}
         onChange={(event) => onChange(event.currentTarget.value)}
-        placeholder={placeholder}
         value={value}
       />
     </label>
   );
 }
 
-function createEntries(snapshot: ApplicationConfigurationSnapshot) {
-  return snapshot.modelProfiles.flatMap((profile) => {
-    const connection = snapshot.modelConnections.find(
-      (candidate) => candidate.id === profile.connectionId,
-    );
-    return connection === undefined ? [] : [{ connection, profile }];
-  });
-}
-
-function createDraft(
-  connection: ModelConnectionSnapshot,
-  profile: ModelProfileSnapshot,
-): ModelConnectionDraft {
+function toDraft(profile: ModelProfile): ProfileDraft {
   return Object.freeze({
-    connectionId: connection.id,
-    modelProfileId: profile.id,
-    credentialRef: connection.credentialRef,
-    credentialConfigured: connection.credentialConfigured,
-    displayName: connection.displayName,
-    providerKind: connection.providerKind,
-    api: profile.api ?? inferDefaultModelApi(connection.providerKind),
-    modelId: profile.modelId,
-    baseUrl: connection.baseUrl ?? "",
+    profileId: profile.id,
+    label: profile.label ?? "",
+    provider: profile.provider,
+    model: profile.model,
+    baseUrl: profile.baseUrl ?? "",
+    credentialRef: profile.credentialRef,
     apiKey: "",
   });
 }
 
-function isDraftValid(draft: ModelConnectionDraft): boolean {
-  return (
-    draft.displayName.trim().length > 0 &&
-    draft.api.trim().length > 0 &&
-    draft.modelId.trim().length > 0 &&
-    (!requiresBaseUrl(draft.providerKind) || draft.baseUrl.trim().length > 0) &&
-    (draft.credentialConfigured || draft.apiKey.length > 0)
-  );
-}
-
-function requiresBaseUrl(providerKind: ProviderKind): boolean {
-  return providerKind === "openai_compatible" || providerKind === "custom";
-}
-
-function providerLabel(providerKind: ProviderKind): string {
-  return (
-    PROVIDER_OPTIONS.find((option) => option.value === providerKind)?.label ??
-    providerKind
-  );
-}
-
-function apiLabel(api: ModelApi | undefined): string {
-  if (api === undefined) return "未指定协议";
-  return API_OPTIONS.find((option) => option.value === api)?.label ?? api;
-}
-
-function isKnownApiOption(api: ModelApi): boolean {
-  return API_OPTIONS.some((option) => option.value === api);
+function isDraftValid(draft: ProfileDraft): boolean {
+  return draft.model.trim().length > 0 && draft.credentialRef.trim().length > 0;
 }
 
 function getErrorCode(error: unknown): string {

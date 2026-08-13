@@ -27,6 +27,8 @@ export interface ManuscriptBlockData {
   readonly storyUnitId?: string;
   readonly orderKey?: string;
   readonly textLength?: number;
+  /** 草稿态（新 publication 模型无草稿，恒 undefined） */
+  readonly isDraft?: boolean;
 }
 
 export interface ManuscriptChapter {
@@ -36,6 +38,10 @@ export interface ManuscriptChapter {
   readonly orderKey?: string;
   readonly paragraphIds: readonly string[];
   readonly blocks: readonly ManuscriptBlockData[]; // 按段落 orderKey 顺序
+  /** 草稿态（新 publication 模型无草稿，恒 undefined） */
+  readonly isDraft?: boolean;
+  /** 变更集 id（延后，恒 undefined） */
+  readonly changeSetId?: string;
 }
 
 export interface ManuscriptVolume {

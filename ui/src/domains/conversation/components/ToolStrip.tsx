@@ -50,7 +50,7 @@ function groupTraces(traces: readonly ToolTraceView[]): readonly ToolGroup[] {
     const calls: ToolCallRow[] = [...byTraceId.values()].map((rows) => {
       const terminal =
         rows.find((row) => row.stage !== undefined && TERMINAL_STAGES.has(row.stage)) ??
-        rows[rows.length - 1];
+        rows[rows.length - 1]!;
       return {
         traceId: terminal.traceId,
         outcome: terminal.outcome,

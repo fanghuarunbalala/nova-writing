@@ -79,7 +79,7 @@ export class CharacterStore extends ExternalStore<CharacterSnapshot> {
         selectedId: undefined,
         error: undefined,
       });
-      this.logger.info("character_store.load_completed", { characterCount: result.characters.length });
+      this.logger.info("character_store.load_completed", { characterCount: result.length });
     } catch {
       if (generation !== this.generation) return;
       this.setSnapshot({

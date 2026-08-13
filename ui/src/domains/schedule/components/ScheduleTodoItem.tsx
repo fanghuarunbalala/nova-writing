@@ -23,10 +23,10 @@ const TAG_LABEL: Record<ScheduleTodoData["tag"], string> = {
 };
 
 const TAG_CLASS: Record<ScheduleTodoData["tag"], string> = {
-  decision: styles.tagDecision,
-  approval: styles.tagApproval,
-  profile: styles.tagProfile,
-  writing: styles.tagWriting,
+  decision: styles.tagDecision!,
+  approval: styles.tagApproval!,
+  profile: styles.tagProfile!,
+  writing: styles.tagWriting!,
 };
 
 export function ScheduleTodoItem({ todo, onToggle, onAction }: ScheduleTodoItemProps) {

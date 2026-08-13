@@ -39,7 +39,7 @@ export function parseMessageText(
     const label = name !== undefined && name !== "" ? name : (inner ?? "");
     const reference: MessageReference = {
       refKind,
-      id: match[2],
+      id: match[2]!,
       ...(label !== "" ? { label } : {}),
     };
     nodes.push(

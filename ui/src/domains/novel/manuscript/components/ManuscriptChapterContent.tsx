@@ -40,9 +40,9 @@ export function ManuscriptChapterContent({
           : null;
     if (target instanceof HTMLElement) {
       target.scrollIntoView({ block: "center", behavior: "smooth" });
-      target.classList.add(styles.flash);
+      target.classList.add(styles.flash!);
       const timer = window.setTimeout(() => {
-        target.classList.remove(styles.flash);
+        target.classList.remove(styles.flash!);
       }, 2600);
       return () => window.clearTimeout(timer);
     }

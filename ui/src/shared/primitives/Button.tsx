@@ -36,7 +36,7 @@ export function Button({
   const classes = [
     styles.button,
     styles[variant],
-    styles[`size${size[0].toUpperCase()}${size.slice(1)}`],
+    styles[`size${size[0]!.toUpperCase()}${size.slice(1)}`],
     fullWidth ? styles.fullWidth : "",
     loading ? styles.loading : "",
     className ?? "",

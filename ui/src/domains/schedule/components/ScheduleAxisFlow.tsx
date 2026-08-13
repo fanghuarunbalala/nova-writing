@@ -16,9 +16,9 @@ const PLAN_LABEL: Record<string, string> = { idea: "规划轴" };
 const REAL_LABEL: Record<string, string> = { pending: "实现轴" };
 
 const CHIP_CLASS: Record<string, string> = {
-  idea: styles.chipOld,
-  ready: styles.chipNew,
-  abandoned: styles.lgAbandoned,
+  idea: styles.chipOld!,
+  ready: styles.chipNew!,
+  abandoned: styles.lgAbandoned!,
 };
 
 export function ScheduleAxisFlow({ planAxis, realAxis }: ScheduleAxisFlowProps) {

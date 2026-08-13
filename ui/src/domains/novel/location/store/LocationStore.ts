@@ -82,7 +82,7 @@ export class LocationStore extends ExternalStore<LocationSnapshot> {
         selectedId: undefined,
         error: undefined,
       });
-      this.logger.info("location_store.load_completed", { locationCount: result.locations.length });
+      this.logger.info("location_store.load_completed", { locationCount: result.length });
     } catch {
       if (generation !== this.generation) return;
       this.setSnapshot({

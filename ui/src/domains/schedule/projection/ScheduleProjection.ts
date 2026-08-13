@@ -5,7 +5,7 @@
  * 说明：审批类待办由 deriveApprovalTodos 从 shell 级 ApprovalStore 快照
  * （api.conversations.listApprovals()）派生。
  */
-import type { ApprovalView } from "../../approval/ApprovalStore.js";
+import type { ApprovalView } from "@novel/core";
 import type { ConversationCatalogSnapshot } from "../../conversation/store/ConversationCatalogStore.js";
 import type { NovelOverviewSnapshot } from "../../novel/overview/NovelOverviewStore.js";
 import type { StoryOutlineTreeNode } from "../../novel/outline/projection/StoryOutlineTreeProjection.js";
@@ -115,8 +115,8 @@ export const ScheduleProjection = {
     for (const approval of approvals) {
       if (approval.status !== "pending") continue;
       todos.push({
-        id: approval.approvalRequestId,
-        title: approval.title,
+        id: approval.requestId,
+        title: approval.toolName,
         meta: approval.toolName,
         tag: "approval",
         status: "open",

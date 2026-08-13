@@ -67,7 +67,7 @@ export function ComposerModeBar({ mode, onChange, disabled = false }: ComposerMo
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const current =
-    COMPOSER_MODES.find((item) => item.value === mode) ?? COMPOSER_MODES[0];
+    COMPOSER_MODES.find((item) => item.value === mode) ?? COMPOSER_MODES[0]!;
 
   // 打开期间：外部 pointerdown 关闭；Escape 关闭并把焦点还给 trigger。
   useEffect(() => {

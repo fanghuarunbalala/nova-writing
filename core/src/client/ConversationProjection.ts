@@ -7,6 +7,8 @@
 import type { ConversationHandle } from "../conversation/contract/handle/index.js";
 import type { OutputEvent } from "../conversation/contract/events/index.js";
 import type { ConversationId } from "../conversation/contract/types/index.js";
+import { CardProjection, type CardDescriptor } from "../conversation/CardProjection.js";
+import { ApprovalProjection, type ApprovalView } from "../conversation/ApprovalProjection.js";
 import { RPCError } from "../rpc/RPCError.js";
 
 /** 投影状态（精简：无 replay/following 阶段） */
@@ -40,6 +42,10 @@ export interface ConversationProjectionSnapshot {
 	lastAppliedSequence: number;
 	state: ConversationProjectionState;
 	timeline: readonly ConversationTimelineItem[];
+	/** 工具调用卡片（CardProjection 派生） */
+	cards: readonly CardDescriptor[];
+	/** 审批视图（ApprovalProjection 派生） */
+	approvals: readonly ApprovalView[];
 	error?: ConversationProjectionErrorSnapshot;
 }
 
@@ -57,6 +63,8 @@ export class ConversationProjection {
 	/** 当前流式 assistant 项的 sequence（无则未开始） */
 	private activeAssistantSeq: number | undefined;
 	private nextSeq = 1;
+	private readonly cardProjection = new CardProjection();
+	private readonly approvalProjection = new ApprovalProjection();
 	private revision = 0;
 	private lastAppliedSequence = 0;
 	private state: ConversationProjectionState = "idle";
@@ -127,6 +135,8 @@ export class ConversationProjection {
 	/** 应用一条 OutputEvent */
 	private apply(event: OutputEvent): void {
 		if ("seq" in event) this.lastAppliedSequence = event.seq;
+		this.cardProjection.apply(event);
+		this.approvalProjection.apply(event);
 		switch (event.type) {
 			case "user.message":
 				this.finalizeAssistant();
@@ -198,6 +208,8 @@ export class ConversationProjection {
 			lastAppliedSequence: this.lastAppliedSequence,
 			state: this.state,
 			timeline: Object.freeze([...this.timeline]),
+			cards: Object.freeze(this.cardProjection.getCards()),
+			approvals: Object.freeze(this.approvalProjection.getAll()),
 			...(this.error !== undefined ? { error: this.error } : {}),
 		});
 	}

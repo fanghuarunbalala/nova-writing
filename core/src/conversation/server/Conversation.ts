@@ -149,34 +149,9 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		});
 	}
 
-	/** 订阅输出事件流（push-based hub；break/return 即取消订阅） */
-	events(): AsyncIterable<OutputEvent> {
-		const queue: OutputEvent[] = [];
-		const waiters: Array<() => void> = [];
-		const onEvent: OutputEventListener = (e) => {
-			queue.push(e);
-			const wake = waiters.shift();
-			if (wake) wake();
-		};
-		const unsubscribe = this.subscribe(onEvent);
-		return {
-			[Symbol.asyncIterator]() {
-				return {
-					next: () =>
-						new Promise<IteratorResult<OutputEvent>>((resolve) => {
-							if (queue.length > 0) {
-								resolve({ value: queue.shift()!, done: false });
-							} else {
-								waiters.push(() => resolve({ value: queue.shift()!, done: false }));
-							}
-						}),
-					return: () => {
-						unsubscribe();
-						return Promise.resolve({ value: undefined as unknown as OutputEvent, done: true });
-					},
-				};
-			},
-		};
+	/** 订阅输出事件流（hub 实时推送；dispose 清空全部订阅者） */
+	async subscribeEvents(listener: OutputEventListener): Promise<void> {
+		this.eventListeners.add(listener);
 	}
 
 	/** 释放（清空订阅者） */

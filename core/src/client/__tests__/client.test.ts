@@ -45,7 +45,7 @@ function conversationFactory(): ConversationFactory {
 	};
 }
 
-/** 构造假的 ConversationHandle（events 直接产出给定事件序列） */
+/** 构造假的 ConversationHandle（subscribeEvents 同步回放给定事件序列） */
 function fakeHandle(events: OutputEvent[]): ConversationHandle {
 	return {
 		sendUserMessage: async () => ({ seq: 0, recordedAt: "" }),
@@ -54,8 +54,8 @@ function fakeHandle(events: OutputEvent[]): ConversationHandle {
 		sendApprovalRequest: async () => ({ kind: "approve" }),
 		sendAskingQuestionRequest: async () => "",
 		sendExitComposeRequest: async () => {},
-		events: async function* () {
-			for (const e of events) yield e;
+		subscribeEvents: async (listener) => {
+			for (const e of events) listener(e);
 		},
 		dispose: () => {},
 	};

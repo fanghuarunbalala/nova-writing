@@ -12,13 +12,9 @@ class ConversationClient {
     this.handle = handle;
   }
 
-  /** 订阅事件流（投影累积），返回取消订阅 */
+  /** 订阅事件流（投影累积） */
   async start(): Promise<void> {
-    void (async () => {
-      for await (const evt of this.handle.events()) {
-        this.projector.apply(evt);
-      }
-    })();
+    await this.handle.subscribeEvents((evt) => this.projector.apply(evt));
   }
 
   /** 发消息（经 handle） */
@@ -38,7 +34,7 @@ function makeHandle(): { handle: ConversationHandle; sendUserMessage: ReturnType
     sendUserMessage,
     sendUserCommand: async () => ({ seq: 0, recordedAt: "t" }),
     sendSystemControl: async () => ({ seq: 0, recordedAt: "t" }),
-    events: () => ({ [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }) }),
+    subscribeEvents: async () => {},
     dispose: () => {},
     sendApprovalRequest: async () => ({ kind: "approve" }),
     sendAskingQuestionRequest: async () => "",

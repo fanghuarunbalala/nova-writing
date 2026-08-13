@@ -4,6 +4,7 @@
  * 替代旧 ConversationProjectionController 的复杂状态机；本期只做实时流（无 journal 重放）。
  */
 
+import { proxy } from "kkrpc/remote-refs";
 import type { ConversationHandle } from "../conversation/contract/handle/index.js";
 import type { OutputEvent } from "../conversation/contract/events/index.js";
 import type { ConversationId } from "../conversation/contract/types/index.js";
@@ -107,11 +108,15 @@ export class ConversationProjection {
 		const generation = ++this.generation;
 		this.transition("running");
 		try {
-			for await (const event of this.handle.events()) {
-				if (this.stopRequested || generation !== this.generation) break;
-				this.apply(event);
-				this.publish();
-			}
+			// listener 经 proxy() 标记：kkrpc/remote-refs 的 codec 只编码 WeakSet 已标记的函数参数
+			// （未标记抛 RPCEncodeError）。内存/plain kkrpc 通道下标记是无害 no-op。
+			await this.handle.subscribeEvents(
+				proxy((event) => {
+					if (this.stopRequested || generation !== this.generation) return;
+					this.apply(event);
+					this.publish();
+				}),
+			);
 		} catch (err) {
 			if (generation === this.generation && !this.stopRequested) {
 				this.error = toErrorSnapshot(err);

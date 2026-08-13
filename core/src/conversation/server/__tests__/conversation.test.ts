@@ -39,17 +39,16 @@ describe("Conversation", () => {
     expect(conv.conversationMode).toBe("bypass");
   });
 
-  it("events() 订阅收到事件", async () => {
+  it("subscribeEvents 订阅收到事件", async () => {
     const conv = new Conversation({
       conversationId: "c1",
       loop: mockLoop(),
       sampling: { model: "gpt-5" },
     });
-    const iter = conv.events()[Symbol.asyncIterator]();
-    const msgPromise = conv.sendUserMessage({ text: "hi" });
-    const first = await iter.next();
-    expect(first.value.type).toBe("turn-start");
-    await msgPromise;
+    const received: OutputEvent[] = [];
+    await conv.subscribeEvents((e) => received.push(e));
+    await conv.sendUserMessage({ text: "hi" });
+    expect(received[0]?.type).toBe("turn-start");
   });
 
   it("sendApprovalRequest 阻塞 + onApprovalRequest 通知 + resolveApproval 回传", async () => {

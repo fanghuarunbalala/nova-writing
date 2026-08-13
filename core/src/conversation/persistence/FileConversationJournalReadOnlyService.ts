@@ -8,7 +8,7 @@ import type { OutputEvent } from "../contract/events/index.js";
 import type { ConversationJournalReadOnlyService as Contract } from "../contract/journal/index.js";
 
 /** journal 读侧实现（跨进程读 history） */
-export class ConversationJournalReadOnlyService implements Contract {
+export class FileConversationJournalReadOnlyService implements Contract {
 	/** journal 目录（按 conversationId 定位 `<id>.jsonl`） */
 	private readonly journalDir: string;
 

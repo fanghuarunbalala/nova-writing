@@ -43,6 +43,25 @@ describe("Conversation", () => {
     expect(first.value.type).toBe("turn-start");
     await msgPromise;
   });
+
+  it("sendApprovalRequest 阻塞 + onApprovalRequest 通知 + resolveApproval 回传", async () => {
+    const conv = new Conversation({ conversationId: "c1", loop: mockLoop(), sampling: { model: "gpt-5" } });
+    const received: string[] = [];
+    conv.onApprovalRequest((req) => received.push(req.toolName));
+    const pending = conv.sendApprovalRequest({ requestId: "r1", toolName: "Write", args: "{}" });
+    // 通知已发出
+    expect(received).toEqual(["Write"]);
+    // 回传决策
+    conv.resolveApproval("r1", { kind: "approve" });
+    expect(await pending).toEqual({ kind: "approve" });
+  });
+
+  it("sendAskingQuestionRequest 阻塞 + resolveQuestion 回传", async () => {
+    const conv = new Conversation({ conversationId: "c1", loop: mockLoop(), sampling: { model: "gpt-5" } });
+    const pending = conv.sendAskingQuestionRequest({ requestId: "q1", questions: ["怎么写？"] });
+    conv.resolveQuestion("q1", "就这样写");
+    expect(await pending).toBe("就这样写");
+  });
 });
 
 describe("ConversationManagerServer", () => {

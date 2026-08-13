@@ -7,7 +7,7 @@ import type { Receipt } from "../contract/types/index.js";
 import type { ConversationJournalService as Contract } from "../contract/journal/index.js";
 
 /** journal 写侧实现（单写者：append 同步串行落盘） */
-export class ConversationJournalService implements Contract {
+export class FileConversationJournalService implements Contract {
 	/** conversation id */
 	private readonly conversationId: string;
 	/** journal 文件路径（<journalDir>/<conversationId>.jsonl） */

@@ -9,8 +9,8 @@ import {
   InMemoryRegistry,
   createProvider,
 } from "../dist/index.js";
-import { ConversationJournalService } from "../dist/conversation/persistence/index.js";
-import { ConversationJournalReadOnlyService } from "../dist/conversation/persistence/index.js";
+import { FileConversationJournalService } from "../dist/conversation/persistence/index.js";
+import { FileConversationJournalReadOnlyService } from "../dist/conversation/persistence/index.js";
 import { journalListener } from "../dist/conversation/JournalBridge.js";
 
 // 能力（无工具，纯对话）
@@ -29,7 +29,7 @@ const provider = createProvider({
 
 // journal（main 会话）
 const dir = mkdtempSync(join(tmpdir(), "journal-"));
-const journal = new ConversationJournalService({ conversationId: "main", filePath: join(dir, "main.jsonl") });
+const journal = new FileConversationJournalService({ conversationId: "main", filePath: join(dir, "main.jsonl") });
 await journal.open();
 
 const loop = new AgentLoop({
@@ -49,7 +49,7 @@ await loop.run("第一句：秋夜。", { sampling });
 await loop.run("继续写第二句。", { sampling });
 
 // 读侧（进程无关：新建实例读文件）
-const ro = new ConversationJournalReadOnlyService({ journalDir: dir });
+const ro = new FileConversationJournalReadOnlyService({ journalDir: dir });
 const events = await ro.history("main", {});
 
 console.log("=== journal.jsonl 已落盘 turns ===");

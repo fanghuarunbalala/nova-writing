@@ -49,6 +49,16 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly eventListeners = new Set<OutputEventListener>();
 	/** 待决审批（requestId → resolve），阻塞等待决策 */
 	private readonly pendingApprovals = new Map<string, (d: ConversationApprovalDecision) => void>();
+	/** 待决提问（requestId → resolve） */
+	private readonly pendingQuestions = new Map<string, (answer: string) => void>();
+	/** 待决退出 compose（requestId → resolve） */
+	private readonly pendingExitCompose = new Map<string, () => void>();
+	/** 审批请求通知订阅者（UI 订阅，收到请求后决策） */
+	private readonly approvalListeners = new Set<(req: ConversationApprovalRequest) => void>();
+	/** 提问请求通知订阅者 */
+	private readonly questionListeners = new Set<(req: ConversationAskingRequest) => void>();
+	/** 退出 compose 通知订阅者 */
+	private readonly exitComposeListeners = new Set<(req: ConversationExitComposeRequest) => void>();
 
 	/**
 	 * 构造 Conversation
@@ -108,18 +118,24 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	async sendApprovalRequest(req: ConversationApprovalRequest): Promise<ConversationApprovalDecision> {
 		return new Promise<ConversationApprovalDecision>((resolve) => {
 			this.pendingApprovals.set(req.requestId, resolve);
-			// TODO: 发射审批请求事件给 UI / 经 manager 路由到 parent
+			for (const l of this.approvalListeners) l(req);
 		});
 	}
 
-	/** 请求提问（阻塞直到回答） */
-	async sendAskingQuestionRequest(_req: ConversationAskingRequest): Promise<string> {
-		throw new Error("sendAskingQuestionRequest 尚未实现");
+	/** 请求提问（阻塞直到回答经 resolveQuestion 回传） */
+	async sendAskingQuestionRequest(req: ConversationAskingRequest): Promise<string> {
+		return new Promise<string>((resolve) => {
+			this.pendingQuestions.set(req.requestId, resolve);
+			for (const l of this.questionListeners) l(req);
+		});
 	}
 
-	/** 请求退出 compose（阻塞直到退出） */
-	async sendExitComposeRequest(_req: ConversationExitComposeRequest): Promise<void> {
-		throw new Error("sendExitComposeRequest 尚未实现");
+	/** 请求退出 compose（阻塞直到 resolveExitCompose 回传） */
+	async sendExitComposeRequest(req: ConversationExitComposeRequest): Promise<void> {
+		return new Promise<void>((resolve) => {
+			this.pendingExitCompose.set(req.requestId, resolve);
+			for (const l of this.exitComposeListeners) l(req);
+		});
 	}
 
 	/** 订阅输出事件流（push-based hub；break/return 即取消订阅） */
@@ -164,6 +180,42 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 			this.pendingApprovals.delete(requestId);
 			resolve(decision);
 		}
+	}
+
+	/** 解析待决提问（回答回传） */
+	resolveQuestion(requestId: string, answer: string): void {
+		const resolve = this.pendingQuestions.get(requestId);
+		if (resolve) {
+			this.pendingQuestions.delete(requestId);
+			resolve(answer);
+		}
+	}
+
+	/** 解析待决退出 compose（完成回传） */
+	resolveExitCompose(requestId: string): void {
+		const resolve = this.pendingExitCompose.get(requestId);
+		if (resolve) {
+			this.pendingExitCompose.delete(requestId);
+			resolve();
+		}
+	}
+
+	/** 订阅审批请求（UI 收到请求后决策并经 resolveApproval 回传） */
+	onApprovalRequest(l: (req: ConversationApprovalRequest) => void): () => void {
+		this.approvalListeners.add(l);
+		return () => this.approvalListeners.delete(l);
+	}
+
+	/** 订阅提问请求 */
+	onQuestionRequest(l: (req: ConversationAskingRequest) => void): () => void {
+		this.questionListeners.add(l);
+		return () => this.questionListeners.delete(l);
+	}
+
+	/** 订阅退出 compose 请求 */
+	onExitComposeRequest(l: (req: ConversationExitComposeRequest) => void): () => void {
+		this.exitComposeListeners.add(l);
+		return () => this.exitComposeListeners.delete(l);
 	}
 
 	/** 分发输出事件给所有订阅者 */

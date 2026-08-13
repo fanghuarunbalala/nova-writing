@@ -9,15 +9,19 @@ import { basename, join } from "node:path";
 import {
   Conversation,
   ConversationManagerServer,
+  FileConversationJournalService,
   SqliteNovelStore,
   ConfigServer,
   createNovelApiServer,
   createProcessSpawner,
   electronIpcTransport,
   type AgentLoop,
+  type ConversationJournalService,
   type CredentialCipher,
+  type LLMessage,
   type NovelStore,
   type OutputEvent,
+  type TurnContext,
 } from "@novel/core";
 import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
 
@@ -29,23 +33,45 @@ const IPC_CHANNEL = "novel-rpc";
 const CONFIG_CHANNEL = "config-rpc";
 const WORKSPACE_CHANNEL = "workspace-rpc";
 
-/** 回显 AgentLoop：followup 产 user.message → assistant.delta×N → turn-end（验证流式链路，无需真实 provider） */
-function createEchoLoop(conversationId: string): AgentLoop {
+/**
+ * 回显 AgentLoop：followup 即时开 turn 产 turn-start/user.message → assistant.delta×N →
+ * assistant.message/turn-end → journal 快照落盘（验证流式链路 + journal 语义，无需真实 provider）
+ */
+function createEchoLoop(
+  conversationId: string,
+  journal?: ConversationJournalService,
+): AgentLoop {
   let seq = 0;
   const listeners = new Set<(e: OutputEvent) => void>();
   const emit = (e: OutputEvent): void => {
     for (const l of listeners) l(e);
   };
+  const now = () => new Date().toISOString();
   return {
     run: async () => ({ final: { role: "assistant" as const, content: "" }, usage: undefined }),
     followup: (text: string) => {
-      const now = () => new Date().toISOString();
-      emit({ type: "user.message", persist: true, seq: ++seq, text, conversationId, ts: now() });
+      // 即时开 turn（seq 按输入时序）+ user 消息快照落盘 = 输入 rpc 的持久化回执
+      const messages: LLMessage[] = [{ role: "user", content: text }];
+      const turn: TurnContext = {
+        seq: ++seq,
+        messages,
+        ts: now(),
+        appendTurnMessages: (m) => {
+          messages.push(...m);
+        },
+      };
+      emit({ type: "turn-start", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
+      emit({ type: "user.message", persist: true, seq: turn.seq, text, conversationId, ts: now() });
       const reply = `（回声）${text}`;
       for (const ch of reply) {
-        emit({ type: "assistant.delta", persist: false, text: ch, conversationId, ts: now() });
+        emit({ type: "assistant.delta", persist: false, kind: "text", text: ch, conversationId, ts: now() });
       }
-      emit({ type: "turn-end", persist: true, seq: ++seq, turnSeq: 1, conversationId, ts: now() });
+      messages.push({ role: "assistant", content: reply });
+      emit({ type: "assistant.message", persist: true, seq: turn.seq, text: reply, conversationId, ts: now() });
+      emit({ type: "turn-end", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
+      // 同 seq 重写：assistant 完整快照（与真实 loop 的 journalListener 语义一致）
+      void journal?.appendTurn(turn);
+      return turn;
     },
     steer: () => {},
     stop: () => {},
@@ -60,12 +86,20 @@ function createEchoLoop(conversationId: string): AgentLoop {
 /** manager：有 provider key 时 spawnConversation 走子进程（真实 provider，经 fd 3 共享 novel store）；否则回退内存回显 loop */
 function createManager(store: NovelStore, conversationsRoot: string): ConversationManagerServer {
   const factory = {
-    create: (o: { conversationId: string }) =>
-      new Conversation({
+    create: (o: { conversationId: string }) => {
+      // 回显模式同样落盘：与子进程 journal 语义一致（history/回执互认）
+      const journal = new FileConversationJournalService({
         conversationId: o.conversationId,
-        loop: createEchoLoop(o.conversationId),
+        filePath: join(conversationsRoot, o.conversationId, "journal.jsonl"),
+      });
+      void journal.open();
+      return new Conversation({
+        conversationId: o.conversationId,
+        loop: createEchoLoop(o.conversationId, journal),
         sampling: { model: "echo" },
-      }),
+        journal,
+      });
+    },
   };
   const spawner =
     process.env.NOVEL_PROVIDER_API_KEY !== undefined

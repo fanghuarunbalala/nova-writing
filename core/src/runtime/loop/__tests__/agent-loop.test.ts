@@ -4,6 +4,7 @@ import type { Provider } from "../../provider/Provider.js";
 import type { ProviderCall, ProviderResult } from "../../provider/types.js";
 import type { AgentCapability } from "../../agent/AgentCapability.js";
 import type { ToolDispatcher } from "../../tool/ToolDispatcher.js";
+import type { OutputEvent } from "../../../conversation/contract/events/index.js";
 
 const capability: AgentCapability = {
   systemSections: [{ kind: "static", render: () => "你是助手" }],
@@ -73,6 +74,30 @@ describe("AgentLoop.run", () => {
     await new Promise((r) => setTimeout(r, 10)); // 等 drain
     // 验证第二轮已执行（第二个 result 被消费）
     expect(true).toBe(true);
+  });
+
+  it("followup 即时开 turn 返回 TurnContext（seq 已分配，turn-start/user.message 已发；执行后同 seq 收口）", async () => {
+    const loop = makeLoop(makeProvider([result("stop", "回声")]));
+    // 先 run 设置 lastConfig（followup 不带 config 时复用）
+    await loop.run("warm", { sampling: { model: "gpt-5" } });
+    const events: OutputEvent[] = [];
+    loop.onOutputEvent((e) => events.push(e));
+    const turn = loop.followup("你好");
+    expect(turn.seq).toBe(2); // warm 消耗 seq 1
+    // 前两个事件由 followup 同步发出（drain 异步，后续事件可能已插入）
+    expect(events.slice(0, 2).map((e) => e.type)).toEqual(["turn-start", "user.message"]);
+    await new Promise((r) => setTimeout(r, 10)); // 等 drain
+    const types = events.map((e) => e.type);
+    expect(types).toContain("assistant.message");
+    expect(types).toContain("turn-end");
+    // user.message 内容为输入文本
+    const userMsg = events.find((e) => e.type === "user.message");
+    expect(userMsg && "text" in userMsg && userMsg.text).toBe("你好");
+    // 本轮所有 persist 事件 seq 统一为 turn.seq（delta 瞬态无 seq 语义）
+    const persistSeqs = events
+      .filter((e) => "persist" in e && e.persist)
+      .map((e) => (e as { seq: number }).seq);
+    expect(persistSeqs.every((s) => s === turn.seq)).toBe(true);
   });
 
   it("steer 注入 system reminder", async () => {

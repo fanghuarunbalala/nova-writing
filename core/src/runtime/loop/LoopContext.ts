@@ -49,19 +49,21 @@ export class LoopContext implements ReadonlyLoopContext {
 
   /**
    * 构造 LoopContext
-   * @param opts Agent 能力 + 工作区 + 可恢复的 turn 消息
+   * @param opts Agent 能力 + 工作区 + 可恢复的 turn 消息 + seq 起始值（journal 恢复用）
    */
   constructor(opts: {
     agentCapability: AgentCapability;
     workspace: string;
     turnMessages?: LLMessage[];
+    startSeq?: number;
   }) {
     this.agentCapability = opts.agentCapability;
     this.workspace = opts.workspace;
+    this.seq = opts.startSeq ?? 0;
     for (const policy of opts.agentCapability.compactPolicies) {
       this.compactChain.register(policy, 0);
     }
-    // 恢复上次会话（不触发 onTurnAppended）
+    // 恢复上次会话（不触发 onTurnAppended；合成 turn 消耗一个 seq 号但不落盘）
     if (opts.turnMessages && opts.turnMessages.length > 0) {
       this.turnList.push(this.createTurn(opts.turnMessages));
     }

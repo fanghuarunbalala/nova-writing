@@ -5,6 +5,7 @@
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
 import type { SamplingConfig } from "../../runtime/provider/types.js";
 import type { OutputEvent } from "../contract/events/index.js";
+import type { ConversationJournalService } from "../contract/journal/index.js";
 import type { ConversationInteraction } from "../contract/interaction/index.js";
 import type { WaitingInteractionRequest } from "../contract/interaction/index.js";
 import type {
@@ -28,6 +29,8 @@ export interface ConversationOptions {
 	loop: AgentLoop;
 	/** 默认采样配置（sendUserMessage 用） */
 	sampling: SamplingConfig;
+	/** journal 写侧（注入时输入 rpc 落盘即回持久化回执；缺省回 turn seq） */
+	journal?: ConversationJournalService;
 }
 
 /** 输出事件订阅回调 */
@@ -47,6 +50,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly sampling: SamplingConfig;
 	/** 输出事件订阅者（hub） */
 	private readonly eventListeners = new Set<OutputEventListener>();
+	/** journal 写侧（缺省 undefined = 不落盘） */
+	private readonly journal?: ConversationJournalService;
 	/** 待决审批（requestId → resolve），阻塞等待决策 */
 	private readonly pendingApprovals = new Map<string, (d: ConversationApprovalDecision) => void>();
 	/** 待决提问（requestId → resolve） */
@@ -62,12 +67,13 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 
 	/**
 	 * 构造 Conversation
-	 * @param opts 会话 id + agent 循环 + 采样
+	 * @param opts 会话 id + agent 循环 + 采样 + 可选 journal 写侧
 	 */
 	constructor(opts: ConversationOptions) {
 		this.conversationId = opts.conversationId;
 		this.loop = opts.loop;
 		this.sampling = opts.sampling;
+		this.journal = opts.journal;
 		// 订阅 loop 的输出事件（run/followup 均转发到本会话 hub）
 		this.loop.onOutputEvent((e) => this.emit(e));
 	}
@@ -77,19 +83,22 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		return this.activeMode;
 	}
 
-	/** 发送用户消息（turn lane）：先应用待生效模式，再入队 followup（不阻塞等待完成） */
+	/**
+	 * 发送用户消息（turn lane）：先应用待生效模式，再入队 followup（不阻塞等待完成）。
+	 * turn 在 followup 时即时创建；有 journal 时同步落盘 user 消息快照后返回持久化回执。
+	 */
 	async sendUserMessage(msg: ConversationUserMessage): Promise<Receipt> {
 		this.applyPendingMode();
-		this.loop.followup(msg.text);
-		return this.receipt();
+		const turn = this.loop.followup(msg.text, { sampling: this.sampling });
+		return this.journal !== undefined ? await this.journal.appendTurn(turn) : this.receipt(turn.seq);
 	}
 
 	/** 发送用户命令（turn lane，agent 可见）：转文本入队 */
 	async sendUserCommand(cmd: ConversationUserCommand): Promise<Receipt> {
 		this.applyPendingMode();
 		const text = cmd.args ? `${cmd.name} ${JSON.stringify(cmd.args)}` : cmd.name;
-		this.loop.followup(text);
-		return this.receipt();
+		const turn = this.loop.followup(text, { sampling: this.sampling });
+		return this.journal !== undefined ? await this.journal.appendTurn(turn) : this.receipt(turn.seq);
 	}
 
 	/** 发送系统控制（control lane，可抢占）：mode.set（待下次 turn 生效）/ stop / reload.config */
@@ -105,7 +114,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 			case "reload.config":
 				break;
 		}
-		return this.receipt();
+		// 控制不入 journal：回执用最近落盘的 turn seq
+		return this.receipt(this.journal?.lastSeq ?? 0);
 	}
 
 	/** 应用待生效模式：pendingMode → activeMode（下一次 turn 开始时调用） */
@@ -225,8 +235,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		};
 	}
 
-	/** 构造持久化回执 */
-	private receipt(): Receipt {
-		return { seq: 0, recordedAt: new Date().toISOString() };
+	/** 构造持久化回执（seq = turn seq / journal lastSeq） */
+	private receipt(seq: number): Receipt {
+		return { seq, recordedAt: new Date().toISOString() };
 	}
 }

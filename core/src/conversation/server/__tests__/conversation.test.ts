@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { Conversation } from "../Conversation.js";
 import { ConversationManagerServer } from "../ConversationManagerServer.js";
 import type { AgentLoop } from "../../../runtime/loop/AgentLoop.js";
+import type { TurnContext } from "../../../runtime/loop/types.js";
 import type { OutputEvent } from "../../contract/events/index.js";
+import type { ConversationJournalService } from "../../contract/journal/index.js";
 
 function mockLoop(): AgentLoop {
   const listeners = new Set<(e: OutputEvent) => void>();
@@ -10,9 +12,19 @@ function mockLoop(): AgentLoop {
     const e = { type, persist: true, seq: 1, turnSeq: 1, conversationId: "c1", ts: "t" } as OutputEvent;
     for (const l of listeners) l(e);
   };
+  let seq = 0;
   return {
     run: async () => ({ final: { role: "assistant", content: "ok" }, usage: undefined }),
-    followup: () => { emit("turn-start"); },
+    followup: (text: string) => {
+      const turn: TurnContext = {
+        seq: ++seq,
+        messages: [{ role: "user", content: text }],
+        ts: "t",
+        appendTurnMessages: () => {},
+      };
+      emit("turn-start");
+      return turn;
+    },
     steer: () => {},
     stop: vi.fn(),
     cancel: vi.fn(),
@@ -49,6 +61,41 @@ describe("Conversation", () => {
     await conv.subscribeEvents((e) => received.push(e));
     await conv.sendUserMessage({ text: "hi" });
     expect(received[0]?.type).toBe("turn-start");
+  });
+
+  it("有 journal 时输入 rpc 回持久化回执（followup 即时开 turn → appendTurn 同步落盘）", async () => {
+    const appended: TurnContext[] = [];
+    const journal: ConversationJournalService = {
+      open: async () => {},
+      lastSeq: 0,
+      appendTurn: async (turn) => {
+        appended.push(turn);
+        return { seq: turn.seq, recordedAt: "t" };
+      },
+      writeTurns: async () => {},
+      flush: async () => {},
+      close: async () => {},
+      reconcile: async () => {},
+    };
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      journal,
+    });
+    const receipt = await conv.sendUserMessage({ text: "hi" });
+    expect(receipt.seq).toBe(1);
+    expect(appended).toHaveLength(1);
+    expect(appended[0]!.messages[0]).toMatchObject({ role: "user", content: "hi" });
+    // 控制类回执：用 journal.lastSeq
+    const control = await conv.sendSystemControl({ type: "stop" });
+    expect(control.seq).toBe(0);
+  });
+
+  it("无 journal 时输入 rpc 回 turn seq（内存回退）", async () => {
+    const conv = new Conversation({ conversationId: "c1", loop: mockLoop(), sampling: { model: "gpt-5" } });
+    const receipt = await conv.sendUserMessage({ text: "hi" });
+    expect(receipt.seq).toBe(1);
   });
 
   it("sendApprovalRequest 阻塞 + onApprovalRequest 通知 + resolveApproval 回传", async () => {

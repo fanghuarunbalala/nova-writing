@@ -9,6 +9,8 @@ import type { TurnContext } from "../../../runtime/loop/types.js";
 export interface ConversationJournalService {
 	/** 打开 journal（进程启动时） */
 	open(): Promise<void>;
+	/** 最近落盘的 turn seq（open 恢复 / appendTurn/writeTurns 更新；无落盘为 0） */
+	readonly lastSeq: number;
 	/**
 	 * 追加一个 turn 快照（一行一个完整 TurnContext；同 seq 可多写，读侧取最新）
 	 * @param turn 当前 turn（含 messages）

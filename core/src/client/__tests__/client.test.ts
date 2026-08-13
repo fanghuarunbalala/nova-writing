@@ -14,15 +14,25 @@ import { NovelHandle } from "../../novel/client/NovelHandle.js";
 import { createNovelApiClient, createNovelApiServer } from "../NovelApiClient.js";
 import { ConversationProjection } from "../ConversationProjection.js";
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
+import type { TurnContext } from "../../runtime/loop/types.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
 import type { ConversationHandle } from "../../conversation/contract/handle/index.js";
 
 /** 模拟 AgentLoop（只触发事件，不发真实 provider 调用） */
 function mockLoop(): AgentLoop {
 	const listeners = new Set<(e: OutputEvent) => void>();
+	let seq = 0;
 	return {
 		run: async () => ({ final: { role: "assistant" as const, content: "ok" }, usage: undefined }),
-		followup: () => {},
+		followup: () => {
+			seq += 1;
+			return {
+				seq,
+				messages: [{ role: "user", content: "" }],
+				ts: "t",
+				appendTurnMessages: () => {},
+			} as TurnContext;
+		},
 		steer: () => {},
 		stop: () => {},
 		cancel: () => {},
@@ -156,7 +166,7 @@ describe("createNovelApiClient（门面）", () => {
 
 		const handle = await facade.conversations.open("c2");
 		const receipt = await handle.sendUserMessage({ text: "hi" });
-		expect(receipt).toMatchObject({ seq: 0 });
+		expect(receipt).toMatchObject({ seq: 1 });
 		handle.dispose();
 	});
 
@@ -175,7 +185,7 @@ describe("createNovelApiClient（门面）", () => {
 		expect(list).toHaveLength(1);
 		expect(list[0].conversationId).toBe(created.conversationId);
 		const opened = await api.conversations.open(created.conversationId);
-		expect((await opened.sendUserMessage({ text: "hi" })).seq).toBe(0);
+		expect((await opened.sendUserMessage({ text: "hi" })).seq).toBe(1);
 		await api.conversations.delete(created.conversationId);
 
 		// novel 域

@@ -139,7 +139,8 @@ export class ConversationProjection {
 
 	/** 应用一条 OutputEvent */
 	private apply(event: OutputEvent): void {
-		if ("seq" in event) this.lastAppliedSequence = event.seq;
+		// 仅 persist 事件推进 lastAppliedSequence（delta 瞬态不带 seq，部分实现会给 0 占位）
+		if ("seq" in event && event.persist) this.lastAppliedSequence = event.seq;
 		this.cardProjection.apply(event);
 		this.approvalProjection.apply(event);
 		switch (event.type) {
@@ -148,9 +149,14 @@ export class ConversationProjection {
 				this.timeline.push({ kind: "user", sequence: this.nextSeq++, text: event.text });
 				break;
 			case "assistant.message":
-				// journal 历史完整消息（实时流里一般不会出现）
-				this.finalizeAssistant();
-				this.timeline.push({ kind: "assistant", sequence: this.nextSeq++, text: event.text });
+				// 幂等：有活跃流式项（delta 已建）→ 替换文本收口；无（journal 历史重放）→ 新推
+				if (this.activeAssistantSeq !== undefined) {
+					this.replaceActiveAssistant({ text: event.text, streaming: false });
+					this.activeAssistantSeq = undefined;
+					this.assistantBuffer = "";
+				} else {
+					this.timeline.push({ kind: "assistant", sequence: this.nextSeq++, text: event.text });
+				}
 				break;
 			case "assistant.delta":
 				if (this.activeAssistantSeq === undefined) {

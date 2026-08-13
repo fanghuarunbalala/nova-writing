@@ -27,6 +27,8 @@ import {
   novelExecutionSection,
 } from "../prompt/sections/novel.js";
 import type { NovelHandle } from "../../novel/client/NovelHandle.js";
+import type { LoopContextListener } from "../loop/types.js";
+import type { LLMessage } from "../provider/types.js";
 
 /** Novel Agent 装配选项 */
 export interface NovelAgentOptions {
@@ -36,6 +38,14 @@ export interface NovelAgentOptions {
   provider: Provider;
   /** novel 客户端（工具 query/mutate 对接） */
   handle: NovelHandle;
+  /** conversation id（产出 OutputEvent 用；缺省 undefined） */
+  conversationId?: string;
+  /** 状态变化监听器（journal 落盘由上层注入 journalListener） */
+  listeners?: LoopContextListener[];
+  /** 可恢复的 turn 消息（journal 重放；缺省从空开始） */
+  turnMessages?: LLMessage[];
+  /** turn seq 起始值（journal 恢复：resumeSeq = journal.lastSeq） */
+  resumeSeq?: number;
 }
 
 /**
@@ -79,5 +89,9 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     agentCapability: capability,
     toolDispatcher: dispatcher,
     agentId: "main",
+    conversationId: opts.conversationId,
+    listeners: opts.listeners,
+    turnMessages: opts.turnMessages,
+    startSeq: opts.resumeSeq,
   });
 }

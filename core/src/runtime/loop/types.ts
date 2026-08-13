@@ -28,6 +28,8 @@ export interface AgentLoopConfig {
   agentId?: string;
   /** 可恢复的 turn 消息（上次会话；缺省从空开始） */
   turnMessages?: LLMessage[];
+  /** turn seq 起始值（journal 恢复：重放后的下个 turn 从 resumeSeq+1 开始） */
+  startSeq?: number;
   /** 状态变化监听器（AgentLoop 构造时注册到 LoopContext；可多个） */
   listeners?: LoopContextListener[];
   /** 结构化日志（上层 createLogger 注入；缺省不打日志） */
@@ -78,6 +80,8 @@ export type LoopInput =
       lane: "turn";
       kind: "followup";
       text: string;
+      /** 入队时已预开的 turn（seq 按输入时序分配；执行时复用，不再开新 turn） */
+      turn: TurnContext;
       /** 入队 run 的配置（run() 入队时带；直接 followup() 不带，用上次 config） */
       config?: AgentRunConfig;
       /** 入队 run 的事件回调 */

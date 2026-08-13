@@ -66,6 +66,7 @@ export class AgentLoop {
       agentCapability: config.agentCapability,
       workspace: config.workspace,
       turnMessages: config.turnMessages,
+      startSeq: config.startSeq,
     });
     for (const listener of config.listeners ?? []) {
       this.context.subscribe(listener);
@@ -85,21 +86,30 @@ export class AgentLoop {
     onEvent?: (e: OutputEvent) => void,
   ): Promise<AgentLoopResult> {
     this.lastConfig = runConfig;
+    const turn = this.startTurn(input, onEvent);
     if (this.running) {
-      // 入队，等当前 run 完成
+      // 入队，等当前 run 完成（turn 已开，执行时复用）
       return new Promise<AgentLoopResult>((resolve, reject) => {
         const resolveId = `run_${++this.inputSeq}`;
         this.pendingRuns.set(resolveId, { resolve, reject });
-        this.inbox.push({ lane: "turn", kind: "followup", text: input, config: runConfig, onEvent, resolveId });
+        this.inbox.push({ lane: "turn", kind: "followup", text: input, turn, config: runConfig, onEvent, resolveId });
       });
     }
-    return this.runInternal(input, runConfig, onEvent);
+    return this.runInternal(input, runConfig, onEvent, turn);
   }
 
-  /** 追加用户消息（turn lane，排队；若 idle 立即 drain） */
-  followup(text: string): void {
-    this.inbox.push({ lane: "turn", kind: "followup", text });
+  /**
+   * 追加用户消息（turn lane，排队；若 idle 立即 drain）。
+   * turn 在入队时即时创建（seq 按输入时序分配），执行时复用——上层可同步落盘拿到持久化回执。
+   * @param text 用户消息文本
+   * @param runConfig 单次运行配置（缺省复用上次 run 的 config）
+   * @returns 新开 turn（seq 已分配；turn-start / user.message 已发出）
+   */
+  followup(text: string, runConfig?: AgentRunConfig): TurnContext {
+    const turn = this.startTurn(text, undefined);
+    this.inbox.push({ lane: "turn", kind: "followup", text, turn, config: runConfig });
     if (!this.running) void this.drain();
+    return turn;
   }
 
   /** 转向指令（control lane，高优先级，注入 system reminder） */
@@ -140,12 +150,12 @@ export class AgentLoop {
           this.context.appendTurnMessages([{ role: "system", content: input.text }]);
           continue;
         }
-        // followup
+        // followup（turn 已在入队时预开，执行时复用）
         const config = input.config ?? this.lastConfig;
         if (!config) continue;
         if (input.resolveId) {
           try {
-            const result = await this.runInternal(input.text, config, input.onEvent);
+            const result = await this.runInternal(input.text, config, input.onEvent, input.turn);
             const pending = this.pendingRuns.get(input.resolveId);
             if (pending) {
               pending.resolve(result);
@@ -159,7 +169,7 @@ export class AgentLoop {
             }
           }
         } else {
-          await this.runInternal(input.text, config, undefined);
+          await this.runInternal(input.text, config, undefined, input.turn);
         }
       }
     } finally {
@@ -178,13 +188,18 @@ export class AgentLoop {
   }
 
   /**
-   * 实际执行一轮：appendTurnContext 开 turn → 循环 toProviderCall / provider.call，
+   * 实际执行一轮：循环 toProviderCall / provider.call，
    * 直至 assistant 无 tool_call（final）/ length / maxTurns。
+   * @param input 用户消息文本
+   * @param runConfig 单次运行配置
+   * @param onEvent 输出事件回调
+   * @param turn 入队时预开的 turn（turn-start / user.message 已发出）
    */
   private async runInternal(
     input: string,
     runConfig: AgentRunConfig,
-    onEvent?: (e: OutputEvent) => void,
+    onEvent: ((e: OutputEvent) => void) | undefined,
+    turn: TurnContext,
   ): Promise<AgentLoopResult> {
     const logger = this.config.logger;
     logger?.info("agent.loop.run.start", { inputLen: input.length });
@@ -195,20 +210,6 @@ export class AgentLoop {
       maxTurn: runConfig.maxTurns ?? DEFAULT_MAX_TURNS,
       toolsLastTurn: new Map(),
     };
-
-    // ② 开新 turn（input 组装）
-    const messages: LLMessage[] = [{ role: "user", content: input }];
-    const turn: TurnContext = {
-      seq: 0, // 由 LoopContext 覆盖分配
-      messages,
-      ts: new Date().toISOString(),
-      appendTurnMessages: (m) => {
-        messages.push(...m);
-      },
-    };
-    this.context.appendTurnContext(turn);
-    this.emit(onEvent, "turn-start", { persist: true, turnSeq: turn.seq });
-    logger?.debug("agent.turn.appended", { seq: turn.seq });
 
     // ③ 循环
     let usage: { inputTokens: number; outputTokens: number } | undefined;
@@ -244,6 +245,7 @@ export class AgentLoop {
         for (const tc of result.message.toolCalls) {
           this.emit(onEvent, "tool-call-request", {
             persist: true,
+            seq: turn.seq,
             toolCallId: tc.id,
             name: tc.name,
             args: tc.args,
@@ -252,6 +254,7 @@ export class AgentLoop {
           const text = await this.config.toolDispatcher.dispatch(this.context, tc);
           this.emit(onEvent, "tool-call-response", {
             persist: true,
+            seq: turn.seq,
             toolCallId: tc.id,
             result: text,
           });
@@ -262,12 +265,40 @@ export class AgentLoop {
         continue;
       }
 
-      // final（assistant 无 tool_call）或 length
-      this.emit(onEvent, "turn-end", { persist: true, turnSeq: turn.seq });
+      // final（assistant 无 tool_call）或 length：完整 assistant 消息落盘事件 + turn 收口
+      this.emit(onEvent, "assistant.message", {
+        persist: true,
+        seq: turn.seq,
+        text: result.message.content,
+      });
+      this.emit(onEvent, "turn-end", { persist: true, seq: turn.seq, turnSeq: turn.seq });
       logger?.info("agent.loop.run.done", { finishReason: result.finishReason, usage });
       return { final: result.message, usage };
     }
     throw new Error(`达到最大轮次 ${runContext.maxTurn}`);
+  }
+
+  /**
+   * 开新 turn（输入时序即时分配 seq）：appendTurnContext + 发 turn-start / user.message。
+   * @param text 用户消息文本
+   * @param onEvent 事件回调（run() 路径传其 onEvent；followup() 路径仅 hub 订阅者）
+   * @returns 新 turn（seq 已分配）
+   */
+  private startTurn(text: string, onEvent?: (e: OutputEvent) => void): TurnContext {
+    const messages: LLMessage[] = [{ role: "user", content: text }];
+    const turn: TurnContext = {
+      seq: 0, // 由 LoopContext 覆盖分配
+      messages,
+      ts: new Date().toISOString(),
+      appendTurnMessages: (m) => {
+        messages.push(...m);
+      },
+    };
+    this.context.appendTurnContext(turn);
+    this.emit(onEvent, "turn-start", { persist: true, seq: turn.seq, turnSeq: turn.seq });
+    this.emit(onEvent, "user.message", { persist: true, seq: turn.seq, text });
+    this.config.logger?.debug("agent.turn.appended", { seq: turn.seq });
+    return turn;
   }
 
   /** 发出 OutputEvent（补 seq/conversationId/agentId/ts；通知 onEvent + 持久订阅者） */

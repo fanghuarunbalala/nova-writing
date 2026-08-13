@@ -16,17 +16,33 @@ function makeTurn(seq: number, content: string): TurnContext {
 }
 
 describe("FileConversationJournalService", () => {
-  it("appendTurn 写文件 + seq 递增", async () => {
+  it("appendTurn 写 {seq, turn}（seq = turn.seq；同 seq 多写为快照更新；lastSeq 全行扫描恢复）", async () => {
     const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
     const file = join(dir, "c1.jsonl");
     const svc = new FileConversationJournalService({ conversationId: "c1", filePath: file });
     await svc.open();
     const r1 = await svc.appendTurn(makeTurn(1, "hi"));
     const r2 = await svc.appendTurn(makeTurn(1, "hi again"));
+    const r3 = await svc.appendTurn(makeTurn(3, "next"));
     expect(r1.seq).toBe(1);
-    expect(r2.seq).toBe(2);
+    expect(r2.seq).toBe(1); // 同 seq 重写
+    expect(r3.seq).toBe(3);
+    expect(svc.lastSeq).toBe(3);
     const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(3);
+    // open 恢复：全行扫描取 max seq（非仅末行）
+    const reopened = new FileConversationJournalService({ conversationId: "c1", filePath: file });
+    await reopened.open();
+    expect(reopened.lastSeq).toBe(3);
+  });
+
+  it("open 自动创建缺失目录", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
+    const file = join(dir, "missing", "c1.jsonl");
+    const svc = new FileConversationJournalService({ conversationId: "c1", filePath: file });
+    await svc.open();
+    await svc.appendTurn(makeTurn(1, "hi"));
+    expect(readFileSync(file, "utf8")).toContain("hi");
   });
 
   it("读侧 history 返回 OutputEvent（turn 边界 + 消息映射，无 delta）", async () => {

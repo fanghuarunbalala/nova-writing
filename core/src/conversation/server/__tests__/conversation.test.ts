@@ -104,4 +104,24 @@ describe("ConversationManagerServer", () => {
     await server.sendMessageTo(ref.conversationId, { text: "hi" });
     expect((ref.handle as unknown as { conversationMode: string }).conversationMode).toBe("compose");
   });
+
+  it("sendApprovalRequestTo 转发 wait 请求（阻塞到决策）", async () => {
+    const conv = new Conversation({ conversationId: "c1", loop: mockLoop(), sampling: { model: "gpt-5" } });
+    const server = new ConversationManagerServer({ create: () => conv });
+    const ref = await server.createOrResume("c1");
+    const pending = server.sendApprovalRequestTo(ref.conversationId, { requestId: "r1", toolName: "Write", args: "{}" });
+    // 决策回传（经 resolveApproval）
+    conv.resolveApproval("r1", { kind: "reject" });
+    expect(await pending).toEqual({ kind: "reject" });
+  });
+
+  it("terminate 清理会话", async () => {
+    const server = new ConversationManagerServer({
+      create: (opts) =>
+        new Conversation({ conversationId: opts.conversationId, loop: mockLoop(), sampling: { model: "gpt-5" } }),
+    });
+    const ref = await server.createOrResume();
+    await server.terminate(ref.conversationId);
+    expect((await server.list())[0].status).toBe("stopped");
+  });
 });

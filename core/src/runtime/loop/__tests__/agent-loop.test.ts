@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { AgentLoop } from "../AgentLoop.js";
+import { ToolError } from "../../tool/errors.js";
+import type { OutputEvent } from "../../../conversation/contract/events/index.js";
 import type { Provider } from "../../provider/Provider.js";
 import type { ProviderCall, ProviderResult } from "../../provider/types.js";
 import type { AgentCapability } from "../../agent/AgentCapability.js";
@@ -134,6 +136,78 @@ describe("AgentLoop.run", () => {
     const loop = makeLoop(makeProvider([result("length", "被截断")]));
     const r = await loop.run("hi", { sampling: { model: "gpt-5" } });
     expect(r.final.content).toBe("被截断");
+  });
+
+  it("dispatcher 抛 ToolError → 错误回填 tool 消息与 error 字段，run 继续直至 stop", async () => {
+    const provider = makeProvider([
+      result("tool_call", "查一下", [{ id: "c1", name: "read", args: "{}" }]),
+      result("stop", "完成"),
+    ]);
+    const failing: ToolDispatcher = {
+      dispatch: async () => {
+        throw new ToolError({ code: "TOOL_NOT_AVAILABLE", toolName: "read" }, "未知工具: read");
+      },
+    };
+    const loop = new AgentLoop({
+      workspace: "/ws",
+      provider,
+      agentCapability: capability,
+      toolDispatcher: failing,
+    });
+    const events: OutputEvent[] = [];
+    const r = await loop.run("hi", { sampling: { model: "gpt-5" } }, (e) => events.push(e));
+    expect(r.final.content).toBe("完成");
+    const resp = events.find((e) => e.type === "tool-call-response");
+    expect(resp?.type === "tool-call-response" && resp.error).toBe("未知工具: read");
+    expect(resp?.type === "tool-call-response" && resp.result).toBeUndefined();
+    const toolMsg = loop["context"].messages.find((m) => m.role === "tool");
+    expect(toolMsg?.content).toContain("工具执行失败(TOOL_NOT_AVAILABLE): 未知工具: read");
+  });
+
+  it("dispatcher 抛普通 Error → 兜底 TOOL_HANDLER_FAILED 归一", async () => {
+    const provider = makeProvider([
+      result("tool_call", "查一下", [{ id: "c1", name: "read", args: "{}" }]),
+      result("stop", "完成"),
+    ]);
+    const failing: ToolDispatcher = {
+      dispatch: async () => {
+        throw new Error("磁盘已满");
+      },
+    };
+    const loop = new AgentLoop({
+      workspace: "/ws",
+      provider,
+      agentCapability: capability,
+      toolDispatcher: failing,
+    });
+    await loop.run("hi", { sampling: { model: "gpt-5" } });
+    const toolMsg = loop["context"].messages.find((m) => m.role === "tool");
+    expect(toolMsg?.content).toContain("工具执行失败(TOOL_HANDLER_FAILED): 磁盘已满");
+  });
+
+  it("工具错误后模型继续调用直至 stop（continue 语义）", async () => {
+    let calls = 0;
+    const flaky: ToolDispatcher = {
+      dispatch: async (_ctx, call) => {
+        calls += 1;
+        if (calls === 1) throw new Error("第一次失败");
+        return `result:${call.name}`;
+      },
+    };
+    const provider = makeProvider([
+      result("tool_call", "查一下", [{ id: "c1", name: "read", args: "{}" }]),
+      result("tool_call", "再试", [{ id: "c2", name: "read", args: "{}" }]),
+      result("stop", "最终完成"),
+    ]);
+    const loop = new AgentLoop({
+      workspace: "/ws",
+      provider,
+      agentCapability: capability,
+      toolDispatcher: flaky,
+    });
+    const r = await loop.run("hi", { sampling: { model: "gpt-5" } });
+    expect(r.final.content).toBe("最终完成");
+    expect(calls).toBe(2);
   });
 
   it("达到 maxTurn 抛错", async () => {

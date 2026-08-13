@@ -3,7 +3,7 @@
  * - novel：SqliteNovelStore 落盘（userData/novel.db）
  * - conversation：spawnConversation 走子进程（desktop-child.mjs，真实 provider）；createOrResume 回退内存回显 loop
  */
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import { expose, type RPCMessage } from "kkrpc";
 import { basename, join } from "node:path";
 import {
@@ -76,6 +76,20 @@ function createManager(store: NovelStore): ConversationManagerServer {
 
 async function main(): Promise<void> {
   await app.whenReady();
+
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      { label: "文件", submenu: [{ role: "quit", label: "退出" }] },
+      {
+        label: "编辑",
+        submenu: [{ role: "copy" }, { role: "paste" }, { role: "selectAll" }],
+      },
+      {
+        label: "视图",
+        submenu: [{ role: "reload" }, { role: "toggleDevTools" }],
+      },
+    ]),
+  );
 
   const store = new SqliteNovelStore(join(app.getPath("userData"), "novel.db"));
   const manager = createManager(store);

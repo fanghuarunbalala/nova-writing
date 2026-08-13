@@ -10,18 +10,22 @@ import {
   Conversation,
   ConversationManagerServer,
   SqliteNovelStore,
+  ConfigServer,
   createNovelApiServer,
   createProcessSpawner,
   electronIpcTransport,
   type AgentLoop,
+  type CredentialCipher,
   type OutputEvent,
 } from "@novel/core";
+import { NodeApplicationConfigStore, NodeConfigHomeResolver } from "@novel/core/node";
 
 // __dirname = gui/dist/minimal；上三级到项目根，再进 core/scripts
 const preloadPath = join(__dirname, "preload.cjs");
 const rendererHtml = join(__dirname, "minimal.html");
 const childScript = join(__dirname, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
 const IPC_CHANNEL = "novel-rpc";
+const CONFIG_CHANNEL = "config-rpc";
 
 /** 回显 AgentLoop：followup 产 user.message → assistant.delta×N → turn-end（验证流式链路，无需真实 provider） */
 function createEchoLoop(conversationId: string): AgentLoop {
@@ -75,6 +79,19 @@ async function main(): Promise<void> {
   const manager = createManager();
   const serverApi = createNovelApiServer({ manager, novel: store });
 
+  // config：JSON 文件持久化（凭据暂明文，safeStorage cipher 后续接）
+  const configHome = new NodeConfigHomeResolver(app.getPath("userData"));
+  const plaintextCipher: CredentialCipher = {
+    encrypt: async (secret) => secret,
+    decrypt: async (ciphertext) => ciphertext,
+  };
+  const configStore = new NodeApplicationConfigStore({
+    filePath: join(configHome.resolve(), "config.json"),
+    cipher: plaintextCipher,
+  });
+  await configStore.load();
+  const configServer = new ConfigServer(configStore);
+
   // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）
   const endpoint = {
     send: (channel: string, msg: RPCMessage) => {
@@ -88,6 +105,7 @@ async function main(): Promise<void> {
     },
   };
   expose(serverApi, electronIpcTransport({ endpoint, channel: IPC_CHANNEL }));
+  await configServer.start(electronIpcTransport({ endpoint, channel: CONFIG_CHANNEL }));
 
   const win = new BrowserWindow({
     width: 900,

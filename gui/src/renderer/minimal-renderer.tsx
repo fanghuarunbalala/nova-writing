@@ -1,13 +1,14 @@
 /**
  * 最小 renderer（React 版）：wrap → NovelApiClient 门面 → 渲染完整 NovelApp。
  * 只 import kkrpc（browser 版）+ @novel/core/client（browser-safe）+ @novel/ui。
- * workspace 用固定内存 stub（默认项目），config 客户端暂缺省。
+ * workspace 用固定内存 stub（默认项目）；config 经 config-rpc 通道接 ConfigServer。
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { wrap } from "kkrpc";
 import { electronIpcTransport } from "kkrpc/electron";
 import type { NovelApiClient } from "@novel/core/client";
+import type { ConfigApi, ConfigMutation } from "@novel/core";
 import {
   NovelApp,
   WorkspaceController,
@@ -26,6 +27,13 @@ if (!bridge) {
 }
 const transport = electronIpcTransport({ endpoint: bridge as never, channel: "novel-rpc" });
 const api = wrap<NovelApiClient>(transport);
+
+const configTransport = electronIpcTransport({ endpoint: bridge as never, channel: "config-rpc" });
+const configApi = wrap<ConfigApi>(configTransport);
+const configurationClient = {
+  load: () => configApi.get(),
+  mutate: (m: ConfigMutation) => configApi.mutate(m),
+};
 
 const platform: FrontendPlatform = {
   capabilities: {
@@ -58,7 +66,12 @@ if (rootElement === null) {
 const root = createRoot(rootElement);
 root.render(
   <StrictMode>
-    <NovelApp api={api} platform={platform} workspaceController={workspaceController} />
+    <NovelApp
+      api={api}
+      platform={platform}
+      workspaceController={workspaceController}
+      configurationClient={configurationClient}
+    />
   </StrictMode>,
 );
 

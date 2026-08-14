@@ -9,6 +9,7 @@ import { createRoot } from "react-dom/client";
 import { expose, wrap } from "kkrpc/remote-refs";
 import { electronIpcTransport } from "kkrpc/electron";
 import type { NovelApiClient } from "@novel/core/client";
+import type { ProjectedEvent } from "@novel/core";
 import type { ConfigApi, ConfigMutation } from "@novel/core";
 import { emitApprovalsChanged, emitNovelChanged } from "@novel/ui";
 import {
@@ -20,6 +21,9 @@ import {
 declare global {
   interface Window {
     novelApi: { bridge: unknown };
+    novelEvents?: {
+      onConversationEvent: (callback: (payload: unknown) => void) => () => void;
+    };
   }
 }
 
@@ -65,6 +69,24 @@ const platform: FrontendPlatform = {
   files: { selectFiles: async () => Object.freeze([]) },
   clipboard: { readText: async () => "", writeText: async () => {} },
   notifications: { show: async () => {} },
+  // 会话事件火线（gui-performance-2 功能点八）：preload 裸推通道 → 投影平台事件源
+  // （payload = {conversationId, event}；按会话过滤后交付）。缺失时投影回退 kkrpc。
+  ...(window.novelEvents !== undefined
+    ? {
+        conversationEvents: {
+          subscribe: (
+            conversationId: string,
+            listener: (event: ProjectedEvent) => void,
+          ): (() => void) =>
+            window.novelEvents!.onConversationEvent((payload) => {
+              const envelope = payload as { conversationId?: string; event?: ProjectedEvent } | null;
+              if (envelope?.conversationId === conversationId && envelope.event !== undefined) {
+                listener(envelope.event);
+              }
+            }),
+        },
+      }
+    : {}),
 };
 
 // workspace 控制器：桥 main 侧目录选择器 + 定位器（经 workspace-rpc）。

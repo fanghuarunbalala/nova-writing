@@ -12,11 +12,12 @@ import type { ConversationJournalService } from "./contract/journal/index.js";
  */
 export function journalListener(journal: ConversationJournalService): LoopContextListener {
 	return {
-		// 每次消息追加 → appendRun（当前 run 快照，同 seq 多写）
+		// 每次消息追加 → 增量行（只写本次追加的消息；读侧折叠到快照基线，
+		// 写盘 O(增量) 而非 O(run 全量)，gui-performance-2 功能点二）
 		// 落盘失败只告警不抛出：journal 是持久化副产物，失败不能反向打断 agent run
-		onRunMessageAppend: (run) => {
-			void journal.appendRun(run).catch((e) => {
-				console.error("[journal] appendRun failed:", e);
+		onRunMessageAppend: (run, messages) => {
+			void journal.appendRunMessages(run.seq, messages).catch((e) => {
+				console.error("[journal] appendRunMessages failed:", e);
 			});
 		},
 		// 压缩后 → 全量覆盖（去重）

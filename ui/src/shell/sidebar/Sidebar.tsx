@@ -6,6 +6,7 @@
  * 待办组已移除（待办只在计划视图，与原型一致）；待审批队列入口在右侧
  * 审批面板（inspector）。v2 原型已删 side-foot，故不再渲染 footer。
  */
+import { memo } from "react";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import type { NovelOverviewStore } from "../../domains/novel/overview/NovelOverviewStore.js";
 import type { ToastStore } from "../../shared/state/ToastStore.js";
@@ -40,7 +41,8 @@ export interface SidebarProps {
   readonly onOpenWorkspace?: () => void;
 }
 
-export function Sidebar({
+/** 左侧栏容器（memo：流式发布期间跳过，gui-performance-2 功能点五） */
+export const Sidebar = memo(function Sidebar({
   mode,
   conversationCatalog,
   novelOverview,
@@ -67,4 +69,4 @@ export function Sidebar({
       </SidebarSection>
     </aside>
   );
-}
+});

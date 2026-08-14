@@ -5,6 +5,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RunContext } from "../../runtime/loop/types.js";
+import type { LLMessage } from "../../runtime/provider/types.js";
 import type { OutputEvent, ProjectedEvent } from "../contract/events/index.js";
 import type { ToolPreviewResolver } from "../../runtime/tool/previews.js";
 import { resolveToolPreview } from "../../runtime/tool/previews.js";
@@ -77,25 +78,48 @@ export class FileConversationJournalReadOnlyService implements Contract {
 		return this.readLatestRuns(conversationId);
 	}
 
-	/** 读文件并按 run.seq 去重取最新（同步：文件小、单次解析）；只认 run key，旧 turn 行忽略 */
+	/**
+	 * 读文件并按文件序折叠为每 seq 的最终 run（快照定基 + 增量顺序回放）。
+	 * 行协议：`kind:"append"` 行把 messages 折叠到同 seq 基线上；snapshot 行（含无 kind 的
+	 * 旧格式行）重置基线。孤儿增量（无快照基线）合成空基线，保证 run 边界事件完整。
+	 */
 	private readLatestRuns(conversationId: string): PersistedRun[] {
 		const file = join(this.journalDir, conversationId, "journal.jsonl");
 		if (!existsSync(file)) return [];
 		const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
 		// 末尾半行/损坏行容忍（append-only 多读者安全）；JSON 反序列化已剥离运行时闭包
-		const latest = new Map<number, PersistedRun>();
+		const bySeq = new Map<number, PersistedRun>();
 		for (const line of lines) {
 			try {
-				const parsed = JSON.parse(line) as { seq?: number; run?: RunContext };
-				const run = parsed.run;
-				if (parsed.seq !== undefined && run) {
-					latest.set(run.seq, run);
+				const parsed = JSON.parse(line) as {
+					seq?: number;
+					kind?: "snapshot" | "append";
+					run?: RunContext;
+					messages?: LLMessage[];
+					ts?: string;
+				};
+				if (parsed.seq === undefined) continue;
+				if (parsed.kind === "append") {
+					const base = bySeq.get(parsed.seq);
+					if (base === undefined) {
+						bySeq.set(parsed.seq, {
+							seq: parsed.seq,
+							messages: [...(parsed.messages ?? [])],
+							ts: parsed.ts ?? new Date().toISOString(),
+						});
+					} else {
+						base.messages.push(...(parsed.messages ?? []));
+					}
+				} else {
+					// snapshot（新格式 kind:"snapshot"；旧格式无 kind）→ 重置该 seq 基线
+					const run = parsed.run;
+					if (run) bySeq.set(run.seq, run);
 				}
 			} catch {
 				// 忽略损坏行
 			}
 		}
-		return [...latest.values()];
+		return [...bySeq.values()];
 	}
 }
 

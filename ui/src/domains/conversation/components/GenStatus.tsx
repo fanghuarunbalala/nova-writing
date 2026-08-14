@@ -36,9 +36,10 @@ export function GenStatus({ phase, error, onRetry }: GenStatusProps) {
     }
     startRef.current = Date.now();
     setElapsed(0);
+    // 显示为整秒粒度，1s 周期足够（gui-performance-2 功能点七：250ms→1s 降载 75%）
     const timer = window.setInterval(() => {
       setElapsed(Math.max(0, Math.floor((Date.now() - (startRef.current ?? Date.now())) / 1000)));
-    }, 250);
+    }, 1000);
     return () => {
       window.clearInterval(timer);
       startRef.current = null;

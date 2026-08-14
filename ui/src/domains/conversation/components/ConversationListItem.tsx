@@ -11,6 +11,7 @@
  * 跨文件定位 .more 的 pinned 高亮（CSS Modules 默认按文件作用域隔离，跨文件
  * 选择器需借助 :global）。
  */
+import { memo } from "react";
 import { ConversationItemMenu } from "./ConversationItemMenu.js";
 import styles from "./ConversationListItem.module.css";
 
@@ -38,7 +39,8 @@ const STATUS_LABEL: Record<"generating" | "failed" | "unavailable", string> = {
   unavailable: "不可用",
 };
 
-export function ConversationListItem({
+/** 侧栏对话行（memo：item 身份稳定 + 回调 useCallback → 列表刷新只渲染变更行） */
+export const ConversationListItem = memo(function ConversationListItem({
   item,
   active,
   onSelect,
@@ -83,4 +85,4 @@ export function ConversationListItem({
       />
     </div>
   );
-}
+});

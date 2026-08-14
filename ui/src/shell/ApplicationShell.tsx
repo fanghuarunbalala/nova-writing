@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
-import { useActiveConversationSession } from "../domains/conversation/hooks/useActiveConversationSession.js";
+import type { FrontendPlatform } from "../platform/FrontendPlatform.js";
+import { useActiveConversationBinding, useFirstUserMessage } from "../domains/conversation/hooks/useActiveConversationSession.js";
 import { createApprovalEntityResolver } from "../domains/approval/approvalEntityResolver.js";
 import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
 import {
@@ -45,6 +46,9 @@ import { Sidebar } from "./sidebar/Sidebar.js";
 import { TopBar } from "./topbar/TopBar.js";
 import styles from "./ApplicationShell.module.css";
 
+/** novel.changed 尾随去抖窗口（ms）：突发连续写实体合并为每实体一次刷新 */
+const NOVEL_CHANGE_DEBOUNCE_MS = 150;
+
 export interface ApplicationShellDomainStores {
   readonly conversationCatalog: ConversationCatalogStore;
   readonly novelOverview: NovelOverviewStore;
@@ -73,6 +77,8 @@ export interface ApplicationShellProps {
   readonly onOpenWorkspace?: () => void;
   readonly onOpenSettings?: () => void;
   readonly overlays?: ReactNode;
+  /** 平台能力（可选：会话事件 ZMQ 火线等；缺省投影回退 kkrpc 通道） */
+  readonly platform?: FrontendPlatform;
 }
 
 export function ApplicationShell({
@@ -87,6 +93,7 @@ export function ApplicationShell({
   onOpenWorkspace,
   onOpenSettings,
   overlays,
+  platform,
 }: ApplicationShellProps) {
   const workspaceAdapter = useMemo(
     () => new WorkspaceControllerAdapter(workspaceController),
@@ -110,8 +117,16 @@ export function ApplicationShell({
   >(null);
   const workspaceId = workspace.current?.id;
 
-  // 活动会话：shell 级单订阅（ChatSurface 与审批域共用同一投影 binding）
-  const session = useActiveConversationSession(api, catalogSnapshot.activeConversationId, logger);
+  // 活动会话 binding：shell 只持生命周期（gui-performance-2 功能点五——流式发布
+  // 不再重渲染整壳）；快照订阅下沉 ChatSurface，标题派生走首用户消息选择器。
+  // 事件源走平台 ZMQ 火线（功能点八；缺省回退 kkrpc）
+  const conversationBinding = useActiveConversationBinding(
+    api,
+    catalogSnapshot.activeConversationId,
+    logger,
+    platform?.conversationEvents,
+  );
+  const firstUserMessage = useFirstUserMessage(conversationBinding);
   const approvalSnapshot = useExternalStore(approvalStore);
 
   // 审批面板数据源 = CMS wait 队列：初始拉取 + 变化通知触发重拉（拉取为准，推送仅触发）
@@ -122,9 +137,14 @@ export function ApplicationShell({
     });
   }, [approvalStore]);
 
-  // novel 数据变更（agent 经工具写入）→ 按实体类型刷新对应 store（overview 全刷）
+  // novel 数据变更（agent 经工具写入）→ 按实体类型刷新对应 store（overview 全刷）。
+  // 150ms 尾随去抖（gui-performance-2 功能点七）：agent 突发连续写实体时合并为
+  // 每实体至多一次 invalidate（+overview 一次），避免 N 次并行全量 refetch 挤占流式渲染。
   useEffect(() => {
-    return onNovelChanged((entity) => {
+    const pendingEntities = new Set<string>();
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    const flush = (): void => {
+      flushTimer = undefined;
       const { character, location, storyOutlineTree, manuscriptStructure, novelOverview } =
         domainStores;
       // 实体类型 → 域 store 映射（各 store 均实现统一 invalidate）
@@ -134,10 +154,23 @@ export function ApplicationShell({
         outline: storyOutlineTree,
         paragraph: manuscriptStructure,
       };
-      const store = storeByEntity[entity];
-      if (store !== undefined) void store.invalidate();
+      for (const entity of pendingEntities) {
+        const store = storeByEntity[entity];
+        if (store !== undefined) void store.invalidate();
+      }
+      pendingEntities.clear();
+      // overview 原语义：任意 novel.changed 都全刷（窗口内合并为一次）
       void novelOverview.invalidate();
+    };
+    const unsubscribe = onNovelChanged((entity) => {
+      pendingEntities.add(entity);
+      if (flushTimer !== undefined) return;
+      flushTimer = setTimeout(flush, NOVEL_CHANGE_DEBOUNCE_MS);
     });
+    return () => {
+      unsubscribe();
+      if (flushTimer !== undefined) clearTimeout(flushTimer);
+    };
   }, [domainStores]);
 
   // 审批到达自动打开右侧审批面板（面板已会话化，只认活动会话）：
@@ -197,9 +230,6 @@ export function ApplicationShell({
 
   // 会话首句派生标题：活动会话首条用户消息到达且目录项仍为自动标题时，
   // 更新侧栏/标题栏显示（显式改名不覆盖；重启恢复由 core scanCatalog 兜底）。
-  const firstUserMessage = session.snapshot?.projection.timeline.find(
-    (item) => item.kind === "user",
-  );
   useEffect(() => {
     if (
       catalogSnapshot.activeConversationId === undefined ||
@@ -345,17 +375,27 @@ export function ApplicationShell({
     [mainViewRouter],
   );
 
+  // 稳定回调（memo 边界生效前提：shell 重渲染时子组件 props 引用不变）
+  const handleToggleSidebar = useCallback(
+    () => setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded")),
+    [],
+  );
+  const handleOpenSchedule = useCallback(
+    () => mainViewRouter.transition("schedule"),
+    [mainViewRouter],
+  );
+  const handleShellOpenWorkspace = useCallback(() => onOpenWorkspace?.(), [onOpenWorkspace]);
+  const handleShellOpenSettings = useCallback(() => onOpenSettings?.(), [onOpenSettings]);
+
   return (
     <div className={styles.shell}>
       <TopBar
         workspaceName={workspace.current?.label}
         sidebarMode={sidebarMode}
-        onToggleSidebar={() =>
-          setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded"))
-        }
-        onOpenWorkspace={() => onOpenWorkspace?.()}
-        onOpenSettings={() => onOpenSettings?.()}
-        onOpenSchedule={() => mainViewRouter.transition("schedule")}
+        onToggleSidebar={handleToggleSidebar}
+        onOpenWorkspace={handleShellOpenWorkspace}
+        onOpenSettings={handleShellOpenSettings}
+        onOpenSchedule={handleOpenSchedule}
         extensions={extensions}
       />
       <div className={styles.body} data-sidebar-mode={sidebarMode}>
@@ -376,7 +416,7 @@ export function ApplicationShell({
         <MainArea
           api={api}
           logger={logger}
-          session={session}
+          conversationBinding={conversationBinding}
           pendingApprovalCount={
             approvalSnapshot.approvals.filter(
               (item) =>

@@ -58,4 +58,34 @@ describe("AssistantMarkdown", () => {
       "暂未建立「失踪的船员」的档案",
     );
   });
+
+  it("流式封存：跨段落边界增长时已封段文本保留、引用 chip 正常渲染", () => {
+    // 三段文本 + 跨段的引用标签整体在首段（封存不拆标签）
+    const longText =
+      "第一段开头，介绍<character id=\"ch-1\">阿七</character>的来历，" +
+      "文字略长以形成段落。\n\n第二段继续，流式追加中的尾段。";
+    const { rerender } = render(<AssistantMarkdown text={longText} streaming />);
+    expect(screen.getByText("阿七")).toBeTruthy();
+    expect(screen.getByText("第二段继续，流式追加中的尾段。")).toBeTruthy();
+
+    // 尾段继续增长：前缀不变（memo 命中），新内容照常渲染
+    rerender(
+      <AssistantMarkdown
+        text={`${longText}又写了一句话。`}
+        streaming
+      />,
+    );
+    expect(screen.getByText("第二段继续，流式追加中的尾段。又写了一句话。")).toBeTruthy();
+    expect(screen.getByText("阿七")).toBeTruthy();
+  });
+
+  it("流式封存边界避开未闭合引用标签：标签跨候选边界时不拆分", () => {
+    // 引用标签的内部文本跨过段落边界 → 封存点应回退到标签之前（chip 完整渲染）
+    const text = "第一段。<character id=\"ch-2\">跨段\n\n名字</character>尾段。";
+    render(<AssistantMarkdown text={text} streaming />);
+    // chip 未被拆开：按钮内是完整标签内部文本（跨段 + 名字）
+    const chip = screen.getByRole("button");
+    expect(chip.textContent).toContain("跨段");
+    expect(chip.textContent).toContain("名字");
+  });
 });

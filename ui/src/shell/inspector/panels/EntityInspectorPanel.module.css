@@ -1,0 +1,6 @@
+/**
+ * EntityInspectorPanel 视觉：实体已删除时的占位提示（原 TSX inline style 迁入）。
+ */
+.deletedNotice {
+  padding: var(--space-3);
+}

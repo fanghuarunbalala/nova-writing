@@ -4,7 +4,7 @@
 .highlight {
   background: color-mix(in oklab, var(--color-warn) 16%, transparent);
   color: inherit;
-  border-radius: 2px;
+  border-radius: var(--radius-2px);
   padding: 0 1px;
 }
 
@@ -14,13 +14,13 @@
   background: var(--color-surface-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
-  padding: 0 4px;
+  padding: 0 var(--space-1);
 }
 
 .reference {
   display: inline-flex;
   align-items: center;
-  padding: 1px 7px;
+  padding: 1px var(--space-7px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
   background: var(--color-surface-2);
@@ -35,5 +35,5 @@
 
 .reference:hover {
   border-color: var(--color-border-strong);
-  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+  background: var(--color-accent-9);
 }

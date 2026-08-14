@@ -7,7 +7,7 @@
   display: flex;
   height: 100%;
   min-height: 0;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .empty {
@@ -16,5 +16,5 @@
   justify-content: center;
   height: 100%;
   color: var(--color-faint);
-  font-size: 13px;
+  font-size: var(--fs-13);
 }

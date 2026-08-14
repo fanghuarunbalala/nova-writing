@@ -6,12 +6,12 @@
 .item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   width: 100%;
-  padding: 6.5px 10px;
-  border-radius: 9px;
-  font-size: 15px;
-  font-weight: 600;
+  padding: var(--space-5px) var(--space-10px);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-600);
   color: var(--color-fg);
   text-align: left;
   cursor: pointer;
@@ -36,7 +36,7 @@
 }
 
 .item.active {
-  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+  background: var(--color-accent-9);
   color: var(--color-accent-ink);
 }
 
@@ -47,7 +47,7 @@
 .count {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--color-faint);
 }
 

@@ -132,7 +132,6 @@ interface RenderItemDeps {
 
 function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
   const {
-    conversationId,
     onMessageReferenceClick,
     resolveReference,
     onProposalAction,

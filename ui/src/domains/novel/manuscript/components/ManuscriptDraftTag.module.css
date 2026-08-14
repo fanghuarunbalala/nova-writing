@@ -6,10 +6,10 @@
 .tag {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: var(--space-2px) var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--color-warn-bg);
   color: var(--color-warn);
-  font-size: 10.5px;
-  font-weight: 750;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-750);
 }

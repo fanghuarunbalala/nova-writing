@@ -7,7 +7,7 @@
   justify-content: center;
   min-width: 16px;
   height: 16px;
-  padding: 0 5px;
+  padding: 0 var(--space-5px);
   border-radius: var(--radius-pill);
   font-size: var(--fs-xs);
   font-weight: var(--fw-bold);

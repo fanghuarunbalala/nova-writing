@@ -4,8 +4,11 @@
 
 ## 目录
 
-- `theme/` — design tokens（`tokens.css`，数值对齐 `vendor/index.html` 原型 `:root`）、
-  `global.css`、`animations.css`、`ThemeProvider`/`useTheme`
+- `theme/` — 三层 token 模型（`tokens.css`：L1 结构常量 / L2 设计语言 / L3 语义色+阴影，
+  dark 主题只允许覆盖 L3）、`global.css`、`animations.css`（全仓唯一允许定义
+  @keyframes 的文件；模块 css 经 `var(--anim-*)` 间接引用动画名）、
+  `ThemeProvider`/`useTheme`。样式纪律由 `tests/theme/cssDiscipline.test.ts`
+  （规则 a-d）+ stylelint（`pnpm --dir ui lint:css`）执法
 - `state/` — `ExternalStore` 基类、`ImmutableSnapshot`、`useExternalStore`、
   `TaskSerializer`、`ToastStore`
 - `routing/` — `MainViewRouter`、`InspectorRouter`、`MainViewHistory`、hooks

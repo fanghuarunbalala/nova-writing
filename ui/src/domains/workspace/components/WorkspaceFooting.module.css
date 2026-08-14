@@ -4,9 +4,9 @@
 .footing {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10px);
   width: 100%;
-  padding: 14px 16px 16px;
+  padding: var(--space-14px) var(--space-4) var(--space-4);
   border-top: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-fg);
@@ -23,12 +23,12 @@
   width: 36px;
   height: 36px;
   flex: none;
-  border-radius: 10px;
-  background: color-mix(in oklab, var(--color-accent) 12%, var(--color-surface-2));
-  border: 1px solid color-mix(in oklab, var(--color-accent) 18%, var(--color-border-strong));
+  border-radius: var(--radius-10px);
+  background: var(--color-accent-12);
+  border: 1px solid var(--color-accent-18);
   color: var(--color-accent-ink);
   font-weight: var(--fw-heavy);
-  font-size: 15px;
+  font-size: var(--fs-body);
   display: grid;
   place-items: center;
 }
@@ -36,13 +36,13 @@
 .text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2px);
   min-width: 0;
 }
 
 .label {
-  font-size: 13px;
-  font-weight: 750;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-750);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -50,7 +50,7 @@
 
 .meta {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--color-faint);
   white-space: nowrap;
   overflow: hidden;

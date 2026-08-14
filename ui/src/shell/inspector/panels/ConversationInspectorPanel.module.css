@@ -7,12 +7,12 @@
 .panel {
   display: flex;
   flex-direction: column;
-  padding: 14px 16px 30px;
-  gap: 10px;
+  padding: var(--space-14px) var(--space-4) var(--space-30px);
+  gap: var(--space-10px);
 }
 
 .title {
-  font-size: 14.5px;
+  font-size: var(--fs-14-5);
   font-weight: var(--fw-heavy);
   letter-spacing: -0.01em;
   color: var(--color-fg);
@@ -21,7 +21,7 @@
 
 .dMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--color-faint);
   letter-spacing: 0.02em;
   word-break: break-all;
@@ -30,13 +30,13 @@
 .meta {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6px);
   margin: 0;
 }
 
 .meta div {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .meta dt {

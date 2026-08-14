@@ -6,7 +6,7 @@
 .row {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -30,7 +30,7 @@
 }
 
 .thinking .icon svg {
-  animation: status-breath 2.2s ease-in-out infinite;
+  animation: var(--anim-status-breath) 2.2s ease-in-out infinite;
   transform-origin: center;
 }
 
@@ -40,18 +40,18 @@
 }
 
 .generating .icon svg {
-  animation: status-bob 1.5s ease-in-out infinite;
+  animation: var(--anim-status-bob) 1.5s ease-in-out infinite;
 }
 
 .ink {
   position: absolute;
-  right: -4px;
-  top: 4px;
+  right: -var(--space-1);
+  top: var(--space-1);
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: currentColor;
-  animation: status-drop 1.2s ease-in infinite;
+  animation: var(--anim-status-drop) 1.2s ease-in infinite;
   opacity: 0;
 }
 
@@ -61,19 +61,19 @@
 }
 
 .waiting .icon svg {
-  animation: status-sway 2.8s ease-in-out infinite;
+  animation: var(--anim-status-sway) 2.8s ease-in-out infinite;
 }
 
 .label {
-  font-size: 12.5px;
-  font-weight: 700;
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-bold);
   letter-spacing: 0.02em;
   white-space: nowrap;
   background-size: 250% auto;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: grad-flow 4.5s ease-in-out infinite;
+  animation: var(--anim-grad-flow) 4.5s ease-in-out infinite;
   opacity: 0.92;
   /* 浅色下划线：border-bottom 最干净（text-decoration 会跟随透明文字不好控色）。 */
   border-bottom: 1px solid transparent;
@@ -82,12 +82,7 @@
 
 /* 文字渐变 + 下划线色：info 蓝 / 品牌 --grad-accent / warn 琥珀 */
 .thinking .label {
-  background-image: linear-gradient(
-    105deg,
-    oklch(79% 0.05 230),
-    oklch(54% 0.05 235) 55%,
-    oklch(60% 0.07 260)
-  );
+  background-image: var(--grad-info-text);
   border-bottom-color: color-mix(in oklab, var(--color-info) 40%, transparent);
 }
 
@@ -97,39 +92,17 @@
 }
 
 .waiting .label {
-  background-image: linear-gradient(
-    105deg,
-    oklch(82% 0.055 85),
-    oklch(59% 0.07 80) 55%,
-    oklch(68% 0.07 75)
-  );
-  border-bottom-color: color-mix(in oklab, var(--color-warn) 40%, transparent);
+  background-image: var(--grad-warn-text);
+  border-bottom-color: var(--color-warn-40);
 }
 
 .seconds {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--color-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-@keyframes status-breath {
-  0%, 100% { opacity: 0.55; transform: scale(0.94); }
-  50% { opacity: 1; transform: scale(1.04); }
-}
 
-@keyframes status-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
-}
 
-@keyframes status-drop {
-  0% { transform: translateY(0); opacity: 0; }
-  20% { opacity: 1; }
-  100% { transform: translateY(9px); opacity: 0; }
-}
 
-@keyframes status-sway {
-  0%, 100% { transform: rotate(-7deg); }
-  50% { transform: rotate(7deg); }
-}

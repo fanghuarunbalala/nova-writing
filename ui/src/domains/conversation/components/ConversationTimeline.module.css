@@ -9,7 +9,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 22px 132px;
+  padding: var(--space-2) var(--space-22px) var(--space-132px);
 }
 
 .inner {
@@ -18,7 +18,7 @@
 }
 
 .system {
-  padding: 4px 0;
+  padding: var(--space-1) 0;
   text-align: center;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
@@ -27,10 +27,10 @@
 
 .systemAction {
   display: block;
-  margin: 4px auto;
-  padding: 3px 12px;
+  margin: var(--space-1) auto;
+  padding: var(--space-3px) var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-surface);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
@@ -46,12 +46,12 @@
 .turnSep {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 24px 0 2px;
+  gap: var(--space-3);
+  margin: var(--space-6) 0 var(--space-2px);
   color: var(--color-faint);
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--fs-10);
+  font-weight: var(--fw-600);
   letter-spacing: 0.16em;
 }
 
@@ -73,21 +73,11 @@
 
 /* 首条轮次分隔收窄上边距（原型 .turn-sep:first-child；条目外层有 .enter 包裹） */
 .enter:first-child .turnSep {
-  margin-top: 10px;
+  margin-top: var(--space-10px);
 }
 
 /* 消息入场：切换对话时按序错峰（原型 .msg.conv-in）。 */
-@keyframes conv-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
 
 .enter {
-  animation: conv-in 0.28s ease both;
+  animation: var(--anim-conv-in) 0.28s ease both;
 }

@@ -1,0 +1,6 @@
+/**
+ * NewConversationSection 视觉：新建按钮容器内边距（原 TSX inline style 迁入）。
+ */
+.section {
+  padding: var(--space-3) var(--space-3) var(--space-6px);
+}

@@ -7,7 +7,8 @@ import type { LoopEvent } from "../../runtime/loop/types.js";
 import type { SamplingConfig } from "../../runtime/provider/types.js";
 import type { ProjectedEvent, StateEvent } from "../contract/events/index.js";
 import { ProjectionLayer } from "../projection/ProjectionLayer.js";
-import { debugLog } from "../../log/debug.js";
+import type { Logger } from "../../log/Logger.js";
+import { noopLogger } from "../../log/noop.js";
 import type { ConversationJournalService, ConversationStateJournalService } from "../contract/journal/index.js";
 import type { ComposeModeStateProvider } from "../compose/ComposeModeState.js";
 import type { ComposeModeService } from "../compose/ComposeModeService.js";
@@ -79,6 +80,8 @@ export interface ConversationOptions {
 	initialMode?: ConversationMode;
 	/** 模式变更持久化回调（模式生效时调用；写失败由回调自行忽略） */
 	onModeChanged?: (mode: ConversationMode) => void;
+	/** 结构化日志（缺省 noop；审批入队/决议、mode 晋升、状态落盘失败等关键链路埋点） */
+	logger?: Logger;
 }
 
 /** 输出事件订阅回调（hub 广播投影事件 + compose/mode 状态事件） */
@@ -127,6 +130,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly stateJournal?: ConversationStateJournalService;
 	/** 模式变更持久化回调（可选：子进程注入 meta.json 落盘） */
 	private readonly onModeChanged?: (mode: ConversationMode) => void;
+	/** 结构化日志（审批/mode/状态事件关键链路埋点；缺省 noop） */
+	private readonly logger: Logger;
 	/** 待决审批（requestId → {resolve, timer}），无阻塞驻留等待决策 */
 	private readonly pendingApprovals = new Map<
 		string,
@@ -158,6 +163,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.activeMode = opts.initialMode ?? DEFAULT_CONVERSATION_MODE;
 		this.lastPersistedMode = opts.initialMode;
 		this.onModeChanged = opts.onModeChanged;
+		this.logger = (opts.logger ?? noopLogger).child({ component: "conversation" });
 		// 投影层：缺省经 loop.toolDispatcher 取 ToolDef.preview（live 与 replay 同实现）
 		this.projection = opts.projection ?? this.createProjection();
 		// 订阅 loop 的输出事件：经投影层映射后转发到本会话 hub（hub 只广播 ProjectedEvent）
@@ -212,10 +218,12 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 
 	/**
 	 * 发送用户消息（run lane）：先晋升待生效模式，再入队 followup（不阻塞等待完成）。
+	 * 晋升失败不阻断发消息（mode.promote_failed 已记日志、pendingMode 保留）——
+	 * run 内 beforeProviderCall 仍会重试晋升；消息丢弃比 mode 延后生效伤害更大。
 	 * run 在 followup 时即时创建；有 journal 时同步落盘 user 消息快照后返回持久化回执。
 	 */
 	async sendUserMessage(msg: ConversationUserMessage): Promise<Receipt> {
-		await this.promotePendingMode();
+		await this.promotePendingMode().catch(() => undefined);
 		const run = this.loop.followup(msg.text, { sampling: this.sampling });
 		return this.journal !== undefined ? await this.journal.appendRun(run) : this.receipt(run.seq);
 	}
@@ -237,6 +245,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 			case "mode.set":
 				// 双态模型：只记 pendingMode，下一次 provider call 发起时才晋升 active（F1）
 				this.pendingMode = ctrl.mode;
+				this.logger.info("mode.set_recorded", { mode: ctrl.mode });
 				this.emitState({
 					type: "mode.pending",
 					persist: false,
@@ -261,19 +270,34 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	 * 晋升待生效模式：pendingMode → active（每次 provider call 发起时由
 	 * beforeProviderCall 注入调用；sendUserMessage 开 run 时兜底调用）。先应用 compose
 	 * 服务中审核期延迟的 mode 目标，再落 pendingMode；无服务时走 activeMode 字段回退
-	 * （测试/未装配路径）。实际生效的模式经 persistModeIfChanged 去重写 meta.json。
+	 * （测试/gui 回显模式），同样广播 mode.changed（清 UI「待生效」chip）。
+	 * 失败语义：setMode 抛错时 pendingMode 保留（下次 provider call 重试）并记
+	 * mode.promote_failed 后向上抛——调用方（sendUserMessage 吞掉续发 / loop 侧失败 run）。
+	 * 实际生效的模式经 persistModeIfChanged 去重写 meta.json。
 	 */
 	async promotePendingMode(): Promise<void> {
 		await this.composeService?.applyPendingModeTarget(this.conversationId);
 		const target = this.pendingMode;
 		if (target === undefined) return;
-		this.pendingMode = undefined;
 		if (this.composeService !== undefined) {
-			await this.composeService.setMode(this.conversationId, target);
+			try {
+				await this.composeService.setMode(this.conversationId, target);
+			} catch (error) {
+				this.logger.error("mode.promote_failed", { target, error: String(error) });
+				throw error;
+			}
+			this.pendingMode = undefined;
 			return;
 		}
 		this.activeMode = target;
-		this.persistModeIfChanged(this.activeMode);
+		this.pendingMode = undefined;
+		this.emitState({
+			type: "mode.changed",
+			persist: true,
+			mode: target,
+			conversationId: this.conversationId,
+			ts: new Date().toISOString(),
+		});
 	}
 
 	/** 模式去重持久化（onModeChanged 回调；失败忽略，重启回退已落盘值） */
@@ -302,25 +326,48 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	 */
 	async sendApprovalRequest(req: ConversationApprovalRequest): Promise<ConversationApprovalDecision> {
 		// ExitComposeMode：提交前 submit（designing→pending）。submit 内部全同步
-		//（状态迁移 + 事件），先于队列注册完成，保证写序且不引入微任务竞态
+		//（状态迁移 + 事件），先于队列注册完成，保证写序且不引入微任务竞态；
+		// 异常兜底防 unhandledRejection（状态停在 designing，审批仍可进行）
 		if (this.isExitComposeRequest(req) && this.composeService !== undefined) {
-			void this.composeService.submit(this.conversationId, req.requestId);
+			void this.composeService.submit(this.conversationId, req.requestId).catch((error) => {
+				this.logger.error("compose.submit_failed", {
+					requestId: req.requestId,
+					error: String(error),
+				});
+			});
 		}
 		// bypass 模式：用户已显式免审，直接放行（不进队列、不驻留等待）。
 		// compose 激活期间 conversationMode === "compose" 不触发短路，Exit 走审批门；
 		// 若 Exit 在 bypass 下触发（理论不在 compose 激活期），仍先驱动 compose 迁移再放行
 		if (this.conversationMode === "bypass") {
+			this.logger.info("approval.bypass_short_circuit", {
+				requestId: req.requestId,
+				toolNames: req.toolCalls.map((tc) => tc.toolName),
+			});
 			if (this.isExitComposeRequest(req) && this.composeService !== undefined) {
 				await this.driveExitComposeDecision(req, { kind: "approve" });
 			}
 			return { kind: "approve" };
 		}
+		this.logger.info("approval.submitted", {
+			requestId: req.requestId,
+			toolNames: req.toolCalls.map((tc) => tc.toolName),
+			mode: this.conversationMode,
+		});
 		return new Promise<ConversationApprovalDecision>((resolve) => {
-			// 决议包装：先驱动 compose 状态迁移（写序），再解除 gateBatch 驻留
+			// 决议包装：先驱动 compose 状态迁移（写序），再解除 gateBatch 驻留；
+			// 迁移失败不拦截决议送达（gateTool 等待方必须解除），错误现场落日志
 			const settle = (decision: ConversationApprovalDecision): void => {
 				void this.driveExitComposeDecision(req, decision).then(
 					() => resolve(decision),
-					() => resolve(decision),
+					(error) => {
+						this.logger.error("approval.exit_drive_failed", {
+							requestId: req.requestId,
+							decision: decision.kind,
+							error: String(error),
+						});
+						resolve(decision);
+					},
 				);
 			};
 			// 超时未启用（生产子进程）：不设定时器，驻留等待直到决策回传——
@@ -396,7 +443,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 
 	/** 订阅输出事件流（hub 实时推送；dispose 清空全部订阅者） */
 	async subscribeEvents(listener: ProjectedEventListener): Promise<void> {
-		debugLog("[child] subscribeEvents listener type:", typeof listener, "===", String(listener).slice(0, 60));
+		this.logger.debug("hub.subscribed", { listeners: this.eventListeners.size + 1 });
 		this.eventListeners.add(listener);
 	}
 
@@ -434,19 +481,34 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		}
 	}
 
-	/** 分发输出事件给所有订阅者 */
+	/** 分发输出事件给所有订阅者（逐个保护：单个订阅者异常不阻断广播与其余订阅者） */
 	private emit(e: ProjectedEvent): void {
-		for (const l of this.eventListeners) l(e);
+		for (const l of this.eventListeners) {
+			try {
+				l(e);
+			} catch (error) {
+				this.logger.warn("hub.listener_failed", { type: e.type, error: String(error) });
+			}
+		}
 	}
 
 	/**
 	 * 状态事件出口（compose 服务 eventSink 装配目标）：写序 = ②persist 先落
 	 * state.jsonl（appendFileSync 同步落盘）→ ③hub 广播；瞬态事件仅广播。
+	 * append 无内部 await → void 调用同步完成、广播时序仍在其后；落盘失败经
+	 * catch 记 state.persist_failed（广播照发，防 unhandledRejection 崩进程）。
 	 * mode.changed 到达时同步去重写 meta.json（state.jsonl 是权威，meta.json 为镜像缓存）。
 	 * @param e 状态事件（compose.* / mode.*）
 	 */
 	emitState(e: StateEvent): void {
-		if ("persist" in e && e.persist) void this.stateJournal?.append(e);
+		if ("persist" in e && e.persist) {
+			void this.stateJournal?.append(e).catch((error) => {
+				this.logger.error("state.persist_failed", {
+					type: e.type,
+					error: String(error),
+				});
+			});
+		}
 		if (e.type === "mode.changed") this.persistModeIfChanged(e.mode);
 		this.emit(e);
 	}

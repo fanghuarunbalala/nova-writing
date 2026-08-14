@@ -24,6 +24,8 @@ import {
 } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import type { ChildProcess } from "node:child_process";
+import type { Logger } from "../../log/Logger.js";
+import { noopLogger } from "../../log/noop.js";
 import { isCanonicalNovelWrite } from "../compose/canonicalTools.js";
 import type {
 	ConversationMeta,
@@ -84,6 +86,8 @@ export interface ConversationManagerServerOptions {
 	 * 缺省子进程用 "."）。
 	 */
 	workspaceProvider?: () => string | undefined;
+	/** 结构化日志（缺省 noop；审批入队/决议、根 bypass 自动批准等关键链路埋点） */
+	logger?: Logger;
 }
 
 /** manager 进程侧实现（内存 factory 测试 / 进程 spawn 生产） */
@@ -110,6 +114,8 @@ export class ConversationManagerServer implements Contract {
 	private readonly factory: ConversationFactory;
 	/** 进程派生器（进程模式；缺省用内存 factory） */
 	private readonly spawner?: ConversationProcessSpawner;
+	/** 结构化日志（审批链路埋点；缺省 noop） */
+	private readonly logger: Logger;
 
 	/**
 	 * 构造 ManagerServer
@@ -126,6 +132,7 @@ export class ConversationManagerServer implements Contract {
 		this.spawner = spawner;
 		this.storedirRoot = opts?.storedirRoot;
 		this.workspaceProvider = opts?.workspaceProvider;
+		this.logger = (opts?.logger ?? noopLogger).child({ component: "conversation_manager" });
 		if (this.storedirRoot !== undefined) this.scanCatalog();
 	}
 
@@ -467,6 +474,11 @@ export class ConversationManagerServer implements Contract {
 			const handle = this.handles.get(conversationId);
 			const mode = await this.readConversationMode(handle);
 			if (mode === "bypass") {
+				this.logger.info("approval.root_bypass_autoapproved", {
+					conversationId,
+					requestId: req.requestId,
+					toolNames: req.toolCalls.map((tc) => tc.toolName),
+				});
 				this.waitQueue.submit({
 					conversationId,
 					requestId: req.requestId,
@@ -495,6 +507,12 @@ export class ConversationManagerServer implements Contract {
 			decisioner: parentId !== undefined ? "parent" : "ui",
 			status: "pending",
 			requestedAt: new Date().toISOString(),
+		});
+		this.logger.info("approval.enqueued", {
+			conversationId,
+			requestId: req.requestId,
+			decisioner: parentId !== undefined ? "parent" : "ui",
+			toolCallCount: req.toolCalls.length,
 		});
 	}
 
@@ -554,6 +572,7 @@ export class ConversationManagerServer implements Contract {
 	async resolveApproval(requestId: string, decision: ConversationApprovalDecision): Promise<boolean> {
 		const resolved = this.waitQueue.resolve(requestId, decision, new Date().toISOString());
 		if (!resolved) return false;
+		this.logger.info("approval.resolved", { requestId, decision: decision.kind });
 		// 驻留直推：会话存活则经 handle 调 conversation 的 resolveApproval（阻塞解除）
 		const item = this.waitQueue.takeByRequestId(requestId);
 		if (item !== undefined) {

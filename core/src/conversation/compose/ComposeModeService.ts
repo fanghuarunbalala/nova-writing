@@ -263,7 +263,12 @@ export class ComposeModeService {
 				await fs.rm(archivePath, { force: true });
 				await fs.rename(designFilePath, archivePath);
 			} catch (error) {
-				this.#logger.debug("compose.archive_skipped", { conversationId, error: String(error) });
+				// 批准已生效但归档缺失 = 审计链路断点（sha256/归档路径缺席），升 warn 留痕
+				this.#logger.warn("compose.archive_failed", {
+					conversationId,
+					designFilePath,
+					error: String(error),
+				});
 			}
 		}
 		if (this.#commitRecorder !== undefined && contentDigest !== "") {
@@ -329,7 +334,12 @@ export class ComposeModeService {
 			await this.#discardActive(conversationId, target);
 			return;
 		}
-		if (current.mode === target) return;
+		if (current.mode === target) {
+			// 同值 no-op 仍发 mode.changed（幂等）：mode.pending 已广播，缺这一条
+			// 客户端「待生效」chip 将挂到下次真实变更才清除
+			this.#emitModeChanged(conversationId, target);
+			return;
+		}
 		this.#composeState.setMode(conversationId, target);
 		this.#emitModeChanged(conversationId, target);
 		this.#logger.info("compose.mode_set", { conversationId, mode: target });

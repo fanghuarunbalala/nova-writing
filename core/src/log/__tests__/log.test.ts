@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "../pino.js";
+import { createConsoleLogger } from "../consoleLogger.js";
 
 const tempDirs: string[] = [];
 
@@ -114,5 +115,36 @@ describe("createLogger", () => {
 		const stdoutOutput = spy.mock.calls.map((c) => String(c[0])).join("");
 		expect(stdoutOutput).not.toContain("conversation.spawned");
 		spy.mockRestore();
+	});
+});
+
+describe("createConsoleLogger", () => {
+	it("JSON 单行输出 + child 追加 component 字段", () => {
+		const log = vi.spyOn(console, "log").mockImplementation(() => {});
+		const info = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			const logger = createConsoleLogger().child({ component: "conversation_manager" });
+			logger.info("approval.enqueued", { requestId: "r1" });
+			logger.warn("approval.stale");
+			expect(log).toHaveBeenCalledOnce();
+			const line = JSON.parse(log.mock.calls[0]![0] as string) as Record<string, unknown>;
+			expect(line).toMatchObject({ level: "info", event: "approval.enqueued", component: "conversation_manager", requestId: "r1" });
+			expect(info).toHaveBeenCalledOnce();
+		} finally {
+			log.mockRestore();
+			info.mockRestore();
+		}
+	});
+
+	it("info 级起步：debug 默认不输出", () => {
+		const log = vi.spyOn(console, "log").mockImplementation(() => {});
+		try {
+			const logger = createConsoleLogger("info");
+			logger.debug("noise");
+			logger.error("boom");
+			expect(log).not.toHaveBeenCalled();
+		} finally {
+			log.mockRestore();
+		}
 	});
 });

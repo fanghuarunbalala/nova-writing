@@ -273,7 +273,10 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
   nudge 五件套（compose_mode/reentry/pending/exit/sparse，落点状态分发 + sparse 可配置缺省 5）；
   状态事件 sidecar `state.jsonl`（persist 子集）重启 hydrate 重放，孤儿 compose 回退 review；
   UI：审批面板 ExitComposeMode 特化（design 文件全文展示）+ 模式栏「待生效」chip +
-  desktop design 文件 IPC（novel.design.v1.*，gui shared/main/renderer 三件套）
+  desktop design 文件 IPC（novel.design.v1.*，gui shared/main/renderer 三件套）；
+  链路加固与埋点——审批入队/决议/bypass 短路（conversation + CMS 双侧 pino/console 埋点）、
+  mode 晋升失败可重试（pendingMode 保留）且不丢用户消息、hub/loop 广播逐订阅者保护、
+  state.jsonl 落盘失败兜底不崩、同值 mode.set 补发 mode.changed（chip 不悬挂）
 - **进程化**：novel-db 进程、conversation 子进程 spawn、teammate 派生（ManagerServer 双模式）
 - **agent 装配**：声明式 `novelAgentDefinition`（9 段 recipe / 9 工具组 23 工具 / 2 nudge）经 `AgentAssembler` 解析为 `AgentCapability`；段 `id@version` 注册表解析；nudge 生效集 = `nudgeEnablement.enabled` ∩ 实现目录
 - **system prompt 渲染**：static 段一次渲染进 base 缓存，dynamic 段每 provider call 渲染（`core.environment` 环境块 / `novel.global_constraints` NOVEL.md 注入 / `tool.guidance` 工具清单）；动态输入由 LoopContext 自组装（workdir/modelId）+ 宿主注入（platform 常量 / NOVEL.md 每调用 fs 读）
@@ -281,7 +284,7 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
   dark 主题只覆盖 L3）+ 纪律测试（`ui/tests/theme/cssDiscipline.test.ts` 规则 a-d）+
   stylelint；keyframes 集中于 `shared/theme/animations.css`，模块 css 经
   `var(--anim-*)` 间接引用动画名。详见 `docs/development/ui-样式架构.md`
-- **测试**：core 420 用例 / 59 文件全绿 + ui 296 用例全绿 + 真实 deepseek 多进程联调（ui 纪律测试见上）
+- **测试**：core 428 用例全绿 + ui 296 用例全绿 + 真实 deepseek 多进程联调（ui 纪律测试见上）
 
 ### 8.3 剩余待办
 

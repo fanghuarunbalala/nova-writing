@@ -7,7 +7,10 @@ import { ConversationManagerServer } from "../ConversationManagerServer.js";
 import type { AgentLoop } from "../../../runtime/loop/AgentLoop.js";
 import type { RunContext } from "../../../runtime/loop/types.js";
 import type { ProjectedEvent } from "../../contract/events/index.js";
-import type { ConversationJournalService } from "../../contract/journal/index.js";
+import type {
+  ConversationJournalService,
+  ConversationStateJournalService,
+} from "../../contract/journal/index.js";
 import type { ConversationHandle } from "../../contract/handle/index.js";
 import { ComposeModeService, ComposeModeStateProvider } from "../../compose/index.js";
 
@@ -530,5 +533,137 @@ describe("Conversation subagent 投影层隔离", () => {
     );
     expect(mainRecorded).toBeDefined();
     expect(mainRecorded?.name).toBe("MainTool");
+  });
+});
+
+describe("Conversation 稳定性加固", () => {
+  /** 桩 compose 服务：setMode 可编程失败（promote 重试语义验证） */
+  function stubComposeService(behavior: {
+    setMode?: (id: string, target: string) => Promise<void>;
+    submit?: () => Promise<void>;
+  } = {}) {
+    return {
+      setMode: behavior.setMode ?? (async () => {}),
+      submit: behavior.submit ?? (async () => {}),
+      applyPendingModeTarget: async () => {},
+      approveOnDecision: async () => {},
+      rejectOnDecision: async () => {},
+    } as unknown as ComposeModeService;
+  }
+
+  it("晋升失败：sendUserMessage 照常入队不丢消息，pendingMode 保留待重试", async () => {
+    const calls: string[] = [];
+    let fail = true;
+    const composeService = stubComposeService({
+      setMode: async (_id, target) => {
+        calls.push(target);
+        if (fail) throw new Error("fs broken");
+      },
+    });
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      composeService,
+    });
+    await conv.sendSystemControl({ type: "mode.set", mode: "bypass" });
+    // 晋升失败：消息仍入队（拿到回执），mode 目标未丢
+    const receipt = await conv.sendUserMessage({ text: "hi" });
+    expect(receipt.seq).toBeGreaterThan(0);
+    expect(calls).toEqual(["bypass"]);
+    // 下一次晋升（beforeProviderCall 注入点）重试成功 → 清 pendingMode
+    fail = false;
+    await conv.promotePendingMode();
+    expect(calls).toEqual(["bypass", "bypass"]);
+    await conv.promotePendingMode();
+    expect(calls).toHaveLength(2);
+  });
+
+  it("无服务回退路径：mode.set 同值晋升也广播 mode.changed（清「待生效」chip）", async () => {
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+    });
+    const events: string[] = [];
+    await conv.subscribeEvents((e) => events.push(e.type));
+    await conv.sendSystemControl({ type: "mode.set", mode: "bypass" });
+    await conv.promotePendingMode();
+    expect(conv.conversationMode).toBe("bypass");
+    expect(events).toContain("mode.changed");
+    // 同值再设：mode.pending 发出后晋升仍发 mode.changed（chip 不悬挂）
+    await conv.sendSystemControl({ type: "mode.set", mode: "bypass" });
+    await conv.promotePendingMode();
+    expect(events.filter((t) => t === "mode.pending")).toHaveLength(2);
+    expect(events.filter((t) => t === "mode.changed")).toHaveLength(2);
+  });
+
+  it("hub listener 抛错：不阻断广播与其余订阅者", async () => {
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+    });
+    const received: string[] = [];
+    await conv.subscribeEvents(() => {
+      throw new Error("bad subscriber");
+    });
+    await conv.subscribeEvents((e) => received.push(e.type));
+    expect(() =>
+      conv.emitState({
+        type: "mode.pending",
+        persist: false,
+        mode: "bypass",
+        conversationId: "c1",
+        ts: "t",
+      }),
+    ).not.toThrow();
+    expect(received).toContain("mode.pending");
+  });
+
+  it("state.jsonl 落盘失败：不抛错、不崩（广播照发）", async () => {
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      stateJournal: {
+        append: async () => {
+          throw new Error("disk full");
+        },
+      } as unknown as ConversationStateJournalService,
+    });
+    const received: string[] = [];
+    await conv.subscribeEvents((e) => received.push(e.type));
+    await expect(
+      conv.emitState({
+        type: "mode.changed",
+        persist: true,
+        mode: "bypass",
+        conversationId: "c1",
+        ts: "t",
+      }),
+    ).toBeUndefined();
+    expect(received).toContain("mode.changed");
+  });
+
+  it("ExitComposeMode submit 抛错：兜底不产生 unhandledRejection，审批照常入队", async () => {
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      composeService: stubComposeService({
+        submit: async () => {
+          throw new Error("state transition failed");
+        },
+      }),
+      managerWait: { submitApproval: async () => {}, submitAsking: async () => {}, submitExitCompose: async () => {} },
+    });
+    const pending = conv.sendApprovalRequest({
+      requestId: "r1",
+      toolCalls: [{ toolCallId: "t1", toolName: "ExitComposeMode", args: "{}" }],
+    });
+    // 驻留等待由决议解除（不因 submit 失败悬挂/崩溃）
+    conv.resolveApproval("r1", { kind: "approve" });
+    await expect(pending).resolves.toEqual({ kind: "approve" });
   });
 });

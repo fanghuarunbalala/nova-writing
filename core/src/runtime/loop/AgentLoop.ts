@@ -499,6 +499,16 @@ export class AgentLoop {
       ...extra,
     } as LoopEvent;
     onEvent?.(event);
-    for (const l of this.outputListeners) l(event);
+    // 逐订阅者保护：单个订阅者（hub 转发/持久化 listener）异常不阻断其余订阅者与 run
+    for (const l of this.outputListeners) {
+      try {
+        l(event);
+      } catch (error) {
+        this.config.logger?.warn("loop.output_listener_failed", {
+          type: event.type,
+          error: String(error),
+        });
+      }
+    }
   }
 }

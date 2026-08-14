@@ -147,6 +147,18 @@ describe("ComposeModeService", () => {
 		expect(state.snapshot("c1").active).toBe(false);
 	});
 
+	it("setMode 同值（非激活）：仍发 mode.changed（清 UI「待生效」chip；mode.pending 缺配对将永挂）", async () => {
+		const { events, sink } = makeSink();
+		const service = makeService({ eventSink: sink });
+		expect(state.snapshot("c1").mode).toBe("review");
+		await service.setMode("c1", "review");
+		// 状态不变但事件照发：客户端 mode.pending → mode.changed 配对闭环
+		expect(state.snapshot("c1").mode).toBe("review");
+		const changed = events.filter((e) => e.type === "mode.changed");
+		expect(changed).toHaveLength(1);
+		expect((changed[0] as { mode: string }).mode).toBe("review");
+	});
+
 	it("setMode compose 目标走 begin；同 mode no-op 不发事件", async () => {
 		const { events, sink } = makeSink();
 		const service = makeService({ eventSink: sink });

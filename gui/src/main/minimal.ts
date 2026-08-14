@@ -29,6 +29,7 @@ import {
   type ConversationApprovalRequest,
   type ConversationJournalService,
   type CredentialCipher,
+  createConsoleLogger,
   infoLog,
   type LLMessage,
   type NovelStore,
@@ -193,6 +194,8 @@ function createManager(
 ): ConversationManagerServer {
   // server 先声明：内存模式 factory 的 managerWait 需闭包引用（进程内直连同一队列）
   let server: ConversationManagerServer | undefined;
+  // gui main 无 pino 落盘：console Logger 接审批/mode 关键链路埋点（JSON 行，与 pino 同构）
+  const logger = createConsoleLogger();
   const factory = {
     create: (o: { conversationId: string }) => {
       // 回显模式同样落盘：与子进程 journal 语义一致（history/回执互认）。
@@ -211,6 +214,7 @@ function createManager(
         loop,
         sampling: { model: "echo" },
         journal,
+        logger,
         // 内存模式：wait 提交走进程内 CMS 队列（与子进程同路由）；超时仅解除等待不退出
         managerWait: {
           submitApproval: (id, req) => server!.submitApprovalRequest(id, req),
@@ -235,6 +239,7 @@ function createManager(
   server = new ConversationManagerServer(factory, spawner, {
     storedirRoot: conversationsRoot,
     workspaceProvider,
+    logger,
   });
   return server;
 }

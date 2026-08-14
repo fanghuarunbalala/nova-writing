@@ -384,6 +384,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		subagentRuntime,
 		initialMode: readPersistedMode(storedir),
 		onModeChanged: (mode) => persistMode(storedir, mode),
+		logger,
 	// 审批等待不设超时：进程驻留，UI 决策随时经 resolveApproval 直推解除
 	//（提前 exit 会丢内存态 subagent/todo，且决策无法送达；Exit 审批驻留同理）
 	});
@@ -408,7 +409,13 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	// 暂停点续跑：仅当恢复消息中存在缺 tool 结果的 toolCall 才补完收口——
 	// 已收口的 run（工具结果齐全）不得重跑，否则重复 provider 调用/重复落盘
 	if (runMessages !== undefined && findPendingToolIds(runMessages).length > 0) {
+		logger?.info("child.resume_pending", {
+			conversationId,
+			pendingToolCalls: findPendingToolIds(runMessages).length,
+			recoveredDecisions: byToolCallId.size,
+		});
 		await loop.resumePendingRun({ sampling, maxTurns: 8 }).catch((err) => {
+			logger?.error("child.resume_failed", { conversationId, error: String(err) });
 			debugLog("[child] resumePendingRun failed:", err);
 		});
 	}

@@ -233,15 +233,15 @@ type ConversationSystemControl =
 ```
 runtime/
 ├── provider/      多模型（Anthropic/OpenAI/DeepSeek）+ 流式 + 错误分类 + 模型能力
-├── tool/          ToolDef/ToolHandler/ToolGroupManifest/ToolDispatcher/MapToolDispatcher + definitions（files/novel/todo）+ groups（NovelToolGroups）
+├── tool/          ToolDef/ToolHandler/ToolGroupManifest/ToolDispatcher/MapToolDispatcher + definitions（files/novel/todo/compose）+ groups（NovelToolGroups）
 ├── prompt/        PromptSection 判别联合（static/dynamic）+ PromptRecipe/PromptSectionRegistry + sections（9 段）
 ├── agent/         AgentDefinition（值对象）/AgentAssembler/NovelAgent（buildNovelAgent）+ definitions（NovelAgentDefinition）
-├── loop/          AgentLoop（输入队列 + round/turn）+ LoopContext（static base 缓存 + 动态输入通道）
-├── nudge/         ContextNudgePolicy + definitions（todo_idle/compose_mode）
+├── loop/          AgentLoop（输入队列 + round/turn）+ LoopContext（static base 缓存 + 动态输入通道 + beforeProviderCall 步骤⓪）
+├── nudge/         ContextNudgePolicy + definitions（todo_idle/compose_mode 五件套）
 ├── compact/       ContextCompactPolicy + CompactPolicyChain
 ├── todo/          TodoProtocol + InMemoryConversationTodoStore
 └── debug/         ProviderCallDebugger（jsonl + html diff）
-conversation/      contract + persistence（journal）+ server（Conversation/ManagerServer/Subagent）+ compose 状态机 + JournalBridge
+conversation/      contract + persistence（journal + state.jsonl sidecar）+ server（Conversation/ManagerServer/Subagent/WaitRequestQueue）+ compose（状态机/服务/文案/canonical 名单）+ JournalBridge
 novel/             contract + model + InMemoryNovelStore（乐观锁）+ NovelDbServer + NovelHandle
 rpc/               kkrpc（call/RPCError/transport）
 event/             ZeroMQ（EventPublisher/Subscriber）
@@ -253,18 +253,32 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
 ### 8.2 关键机制落地
 
 - **乐观锁**：novel mutation `baseRevision` + 实体 `entityVersion`，stale 抛 `NovelStaleRevisionError`
-- **compose 状态机**：phase（idle/designing/pending/applied/discarded）+ active + preComposeMode
+- **compose mode**（✅ 落地，PRD `docs/PRD/compose-审批流.md`）：会话级三模式
+  review/bypass/compose 双态（mode.set 记 pending + `mode.pending` 瞬态事件；每次 provider
+  call 发起时经 `beforeProviderCall` 晋升 active + `mode.changed` 权威事件）；5 相位状态机
+  （idle/designing/pending/applied/discarded）+ `ComposeModeService`（begin 幂等/旧草稿探测、
+  submit/rejectOnDecision/exit 归档 archive/+sha256 审计/discard/setMode 延迟/hydrateFromEvents）；
+  compose 激活时 gateTool 硬拒绝 11 个 canonical 写（`canonicalTools.ts`），Read/文件工具全可用，
+  bypass 模式 canonical 写免审（ExitComposeMode 不在名单恒走审批）；Exit 审批走通用审批通道
+  （requireApproval + WaitRequestQueue，decisioner 派生 ui/parent，根会话 bypass 直接批准）；
+  nudge 五件套（compose_mode/reentry/pending/exit/sparse，落点状态分发 + sparse 可配置缺省 5）；
+  状态事件 sidecar `state.jsonl`（persist 子集）重启 hydrate 重放，孤儿 compose 回退 review；
+  UI：审批面板 ExitComposeMode 特化（design 文件全文展示）+ 模式栏「待生效」chip +
+  desktop design 文件 IPC（novel.design.v1.*，gui shared/main/renderer 三件套）
 - **进程化**：novel-db 进程、conversation 子进程 spawn、teammate 派生（ManagerServer 双模式）
-- **agent 装配**：声明式 `novelAgentDefinition`（9 段 recipe / 8 工具组 21 工具 / 2 nudge）经 `AgentAssembler` 解析为 `AgentCapability`；段 `id@version` 注册表解析；nudge 生效集 = `nudgeEnablement.enabled` ∩ 实现目录
+- **agent 装配**：声明式 `novelAgentDefinition`（9 段 recipe / 9 工具组 23 工具 / 2 nudge）经 `AgentAssembler` 解析为 `AgentCapability`；段 `id@version` 注册表解析；nudge 生效集 = `nudgeEnablement.enabled` ∩ 实现目录
 - **system prompt 渲染**：static 段一次渲染进 base 缓存，dynamic 段每 provider call 渲染（`core.environment` 环境块 / `novel.global_constraints` NOVEL.md 注入 / `tool.guidance` 工具清单）；动态输入由 LoopContext 自组装（workdir/modelId）+ 宿主注入（platform 常量 / NOVEL.md 每调用 fs 读）
 - **样式架构**（ui 包）：三层 token 模型（L1 结构常量 / L2 设计语言 / L3 语义色+阴影，
   dark 主题只覆盖 L3）+ 纪律测试（`ui/tests/theme/cssDiscipline.test.ts` 规则 a-d）+
   stylelint；keyframes 集中于 `shared/theme/animations.css`，模块 css 经
   `var(--anim-*)` 间接引用动画名。详见 `docs/development/ui-样式架构.md`
-- **测试**：core 258 用例 / 47 文件全绿 + 真实 deepseek 多进程联调（ui 纪律测试见上）
+- **测试**：core 314 用例 / 50 文件全绿 + 真实 deepseek 多进程联调（ui 纪律测试见上）
 
 ### 8.3 剩余待办
 
-1. **T12 ui/gui 接入**：恢复的 Electron/React（493 文件）对接新 core 接口。
+1. **ui/gui 既有测试债**：main 侧 ui 套件存在 61 个既有失败（approval/novel/schedule/shell
+   域，ApprovalStore 等源码重构后测试未同步）——与 compose mode 无关，需单独 baseline-fix。
 2. **sqlite 驱动**：当前 novel 用内存 store，sqlite 持久化待接（better-sqlite3 vs worker）。
 3. **delta chunk 聚合**：暂缓（delta 直走 kkrpc 背压）。
+4. **compose 后续**：根会话 compose 期间 teammate canon 写审批的细节（PRD §7.1）；
+   teammate 审批的父会话侧主动裁决（本期仅 decisioner=parent 冒泡条目）。

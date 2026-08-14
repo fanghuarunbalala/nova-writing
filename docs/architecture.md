@@ -23,6 +23,13 @@
 - 持久化沙盒 = 状态的事实来源：**进度读沙盒、流式走 hub、消息走 rpc**（见第 3 节）。
 - 1 conversation = 1 进程 = 主 agent loop + 任意个 subagent loop；teammate 之间无直接通道，交互经 manager 调度。
 
+术语约定（全库统一，见 PRD `conversation-run-turn-术语统一`）：
+
+| 术语 | 定义 |
+|---|---|
+| **run（用户轮）** | 一次用户消息驱动的完整回复周期：user → N × turn → final assistant。journal 落盘单位（一行一个 run 快照，`seq` = runSeq）；事件 `run-start` / `run-end` |
+| **turn（请求轮）** | run 内一次 provider API 请求及其工具执行收口。无显式边界事件，由投影层从 tool-recorded 对推断；`curTurn` / `maxTurns`（每 run 最大 turn 数） |
+
 ---
 
 ## 2. 进程拓扑（✅）
@@ -78,11 +85,13 @@
    · 事件在内存中产生、即时分发；**默认瞬态**，仅订阅者可见
    · 仅 ui handle 消费；每 conversation 一个 hub，UI 聚焦哪个订阅哪个
    · **按需落盘**：需持久/可查/可恢复的事件显式标记（完整消息/todo 等）
+   · 广播形态为 **ProjectedEvent**（投影事件流，见 PRD `output-投影层`）：工具调用以 `tool-recorded.started/recorded` 替代完整 request/response；完整 OutputEvent 只进 journal（重建源）
 
 ② journal 沙盒（持久，**落盘子集**）
    · 只记"按需落盘"的子集：user/assistant 消息 / tool-call-request / tool-call-response
    · 任何 Node 进程本地可读（tail 到完整行）；renderer 经 Main 代读
    · 已落盘内容的查询 / 历史 / 恢复的事实来源；**未落盘事件不存在于任何持久层**
+   · 读取接口两个：`history`（完整 OutputEvent，重建用）/ `projectedHistory`（读 journal 后过投影层，返回 ProjectedEvent，与 hub 实时流同形态）
 
 ③ rpc（消息与控制）
    · 用户输入、控制指令、inter-conversation 消息（经 manager 调度）
@@ -145,7 +154,7 @@ export async function run(peers: ConversationPeers, env: ConversationEnv): Promi
 ```
 
 - **所有 conversation 构造一致**：root 与 teammate 同构，peer 集统一 `{ manager, ui, novel }`，无角色分支。角色差异（root/teammate、parentId）只进 catalog，不进通道。
-- **subagent 无 peers**：进程内派生，`loop.spawnSubagent({ agentType, task })`。
+- **subagent 无 peers**：进程内派生。派生入口为 `SubagentRuntime.spawn`（经 Agent 工具 handler 闭包捕获 spawner；loop 保持无 subagent 概念——偏离原 `loop.spawnSubagent` 规划，因 ToolHandler 只收 ToolCall，spawner 须在装配期注入）；subagent 事件 live 进 hub 按 agentId 盖章、不落 journal（PRD §4.4）。
 - bootstrap 只接线：manager/ui/novel 的 transport 从 env 构造（token 随 spawn 注入）；测试注入 memory transport 即可单测。
 
 ---
@@ -220,8 +229,8 @@ type ConversationSystemControl =
 - **wait 是延迟 RPC（阻塞）**：`await sendApprovalRequest(req)` 挂起直到决策；决策/回答 = RPC 返回值，requestId = RPC 关联 id。
 - **mode 时序**：`mode.set` 不立即生效——记 `pendingMode`，**下一次 turn 开始时**才切到 `activeMode`（避免影响进行中的 turn）。
 - **AgentLoop 输入队列**：`followup`（turn lane，FIFO 排队）/ `steer`（control lane，高优先级注入 system reminder）/ `stop`（取消 + 清队列）。
-- **事件统一**：`AgentLoop` 产出 `OutputEvent`（LLMessage 消息 + turn-start/end 边界 + delta 瞬态），`onOutputEvent` 持久订阅。
-- **journal 按 turn 存储**：写侧 `appendTurn`（LLMessage），读侧 `history` 返回 `OutputEvent`（无 delta），进程无关。
+- **事件域拆分**：`AgentLoop` 产出 `OutputEvent`（持久化域：LLMessage 消息 + run-start/end 边界，journal 事实源）与 delta（流域专属）；`Conversation` 分发处经 **ProjectionLayer** 映射出 `ProjectedEvent`（流域：消息/run 边界/delta + `tool-recorded.started/recorded` 投影），hub 广播与 `projectedHistory` 读取共用同一投影实现；工具可经 `ToolDef.preview` 定制投影内容（详见 PRD `output-投影层`）。
+- **journal 按 run 存储**：写侧 `appendRun`（LLMessage），读侧 `history` 返回 `OutputEvent`（无 delta），进程无关。
 - subagent 的审批：进程内由主 loop 决定；teammate 的审批路径：**经 manager 转发到 parent**（已定）。
 
 ---
@@ -241,7 +250,7 @@ runtime/
 ├── compact/       ContextCompactPolicy + CompactPolicyChain
 ├── todo/          TodoProtocol + InMemoryConversationTodoStore
 └── debug/         ProviderCallDebugger（jsonl + html diff）
-conversation/      contract + persistence（journal + state.jsonl sidecar）+ server（Conversation/ManagerServer/Subagent/WaitRequestQueue）+ compose（状态机/服务/文案/canonical 名单）+ JournalBridge
+conversation/      contract + persistence（journal + state.jsonl sidecar）+ server（Conversation/ManagerServer/Subagent/WaitRequestQueue）+ compose（状态机/服务/文案/canonical 名单）+ JournalBridge + projection（ProjectionLayer/CardProjection）
 novel/             contract + model + InMemoryNovelStore（乐观锁）+ NovelDbServer + NovelHandle
 rpc/               kkrpc（call/RPCError/transport）
 event/             ZeroMQ（EventPublisher/Subscriber）
@@ -258,7 +267,7 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
   call 发起时经 `beforeProviderCall` 晋升 active + `mode.changed` 权威事件）；5 相位状态机
   （idle/designing/pending/applied/discarded）+ `ComposeModeService`（begin 幂等/旧草稿探测、
   submit/rejectOnDecision/exit 归档 archive/+sha256 审计/discard/setMode 延迟/hydrateFromEvents）；
-  compose 激活时 gateTool 硬拒绝 11 个 canonical 写（`canonicalTools.ts`），Read/文件工具全可用，
+  compose 激活时 gateBatch 硬拒绝 11 个 canonical 写（`canonicalTools.ts`，与按 turn 批量审批同一门），Read/文件工具全可用，
   bypass 模式 canonical 写免审（ExitComposeMode 不在名单恒走审批）；Exit 审批走通用审批通道
   （requireApproval + WaitRequestQueue，decisioner 派生 ui/parent，根会话 bypass 直接批准）；
   nudge 五件套（compose_mode/reentry/pending/exit/sparse，落点状态分发 + sparse 可配置缺省 5）；
@@ -272,13 +281,24 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
   dark 主题只覆盖 L3）+ 纪律测试（`ui/tests/theme/cssDiscipline.test.ts` 规则 a-d）+
   stylelint；keyframes 集中于 `shared/theme/animations.css`，模块 css 经
   `var(--anim-*)` 间接引用动画名。详见 `docs/development/ui-样式架构.md`
-- **测试**：core 314 用例 / 50 文件全绿 + 真实 deepseek 多进程联调（ui 纪律测试见上）
+- **测试**：core 420 用例 / 59 文件全绿 + ui 296 用例全绿 + 真实 deepseek 多进程联调（ui 纪律测试见上）
 
 ### 8.3 剩余待办
 
-1. **ui/gui 既有测试债**：main 侧 ui 套件存在 61 个既有失败（approval/novel/schedule/shell
-   域，ApprovalStore 等源码重构后测试未同步）——与 compose mode 无关，需单独 baseline-fix。
-2. **sqlite 驱动**：当前 novel 用内存 store，sqlite 持久化待接（better-sqlite3 vs worker）。
-3. **delta chunk 聚合**：暂缓（delta 直走 kkrpc 背压）。
+1. **sqlite 驱动**：当前 novel 用内存 store，sqlite 持久化待接（better-sqlite3 vs worker）。
+2. **delta chunk 聚合**：暂缓（delta 直走 kkrpc 背压）。
+3. **subagent 事件交织修复**（根因已定位，修复前记录）：
+   - 现象：subagent 合入后，真实 app 中 main turn 的工具调用展示消失（单测全绿但线上事件流与单测假设不同）。
+   - 根因链：① subagent loop 无 startSeq → seq 从 1 重起（`NovelExplorerAgent.ts` 不传 startSeq）；② subagent 边界事件（run-start/user.message/delta/assistant.message/run-end）经 `Conversation.subagentRuntime.onEvent` 进共享 hub（live-only）；③ 客户端 `ConversationProjection` 单槽时间线被交织——subagent 的 user.message 提前 `finalizeAssistant()` 且不设 runEndSequence；④ 运行时 `assistant.delta` 实际携带 `seq: 0`（`AgentLoop.emit` 基底对象）→ 客户端 `"seq" in event` 判定把 lastAppliedSequence 打回 0 → main 流式项 `sourceSequence=0`；⑤ 归属范围坍缩为 [0,0] → `chatSurfaceMapper` 的 seq 范围过滤把 main 全部 toolTraces 滤光（模拟复现：main 大消息 traces=0、final 消息被挤 39 行）。
+   - 次生：ProjectionLayer 的 pending 被 subagent 的 run-end 清空（长任务 tool-recorded 退化为 unknown）；mapper MAPPED_ITEM_CACHE 在流式停顿时冻结旧 toolTraces。
+   - 修法（✅ 已实施，PRD `conversation-run-turn-术语统一`）：客户端按 agentId 隔离 subagent 事件（盖章即 subagent，非 main 不进时间线）；hub 内 ProjectionLayer 按 agentId 分实例（pending 互不可见）；排队 run 边界事件延迟到实际执行时发射（事件流顺序 = 执行顺序）。
 4. **compose 后续**：根会话 compose 期间 teammate canon 写审批的细节（PRD §7.1）；
    teammate 审批的父会话侧主动裁决（本期仅 decisioner=parent 冒泡条目）。
+
+### 8.4 偏离旧版（NovelAI）清单
+
+工具策略与调度层对齐旧版语义，但有如下刻意偏离：
+
+1. **无 groupIds**：旧版 `AgentToolPolicy{groupIds, allow?, deny?}` 依赖工具分组机制；新线无分组，策略 = `allow`/`deny` 直接工具名名单。池的来源二选一：builder 装配池（NovelAgent/NovelExplorerAgent）或 `InMemoryRegistry.buildCapability` 的版本匹配集（注册约定：工具 `version` 须等于目标 agent 的 `agentVersion`）。名单项不在池内抛 `TOOL_POLICY_INVALID`（非静默跳过）；`allow: []` = 空集（旧版拒空数组）。
+2. **loop 工具错误回填模型（行为变更）**：`run` 不因工具错误 reject；catch 后 tool 消息内容 = `工具执行失败(${code}): ${message}`，**仍 append tool 消息**（否则下一轮 provider 缺 tool result 报 400），tool-call-response 事件只填 `error` 不填 `result`（激活卡片投影 failed 分支）；模型收到失败文本自纠，`maxTurns` 兜底。
+3. **ToolError 单类 + code union**：codes = `TOOL_NOT_AVAILABLE` / `TOOL_DUPLICATE` / `TOOL_POLICY_INVALID` / `TOOL_ARGUMENTS_INVALID` / `TOOL_HANDLER_FAILED`；无 `TOOL_VERSION_MISMATCH`（新线 ToolCall 无 version，模型不传）；**保留 cause 与原始 message**（错误文本回填模型自纠需要；旧版不保留）。

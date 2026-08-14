@@ -6,13 +6,15 @@
 
 1. **output hub（evt，实时，内存产物）**
    - 事件内存产生、即时分发；**默认瞬态、按需落盘**（显式标记 persist 才写 journal）；未落盘仅订阅者可见、不重放。
+   - **事件域区分**（见 PRD `output-投影层`）：`OutputEvent` = 持久化事件（journal 重建事实源，含完整 tool-call args/result）；`ProjectedEvent` = 事件流投影（hub 广播形态，工具调用以 `tool-recorded.started/recorded` 替代完整 request/response）。`OutputEvent` 可映射到 `ProjectedEvent`（投影层，工具可经 `ToolDef.preview` 定制投影内容），反向不可逆。
    - 仅 ui handle 消费；每 conversation 一个 hub，UI 聚焦哪个订阅哪个。
    - 承载：**ZeroMQ PUB/SUB**——每 conversation 一个地址 `ipc://conversation-<conversationId>-events`（topic `conversation.output`，约定见 `core/src/event/topics.ts`）；main 订阅后经 rpc 通知 renderer（同 novel.changed 模式）。
    - slow joiner 注意：SUB 连接/订阅完成前 PUB 发的消息会错过，消费端需重查兜底。
    - ⏳ 接线：topic/地址契约已定稿；Conversation 现役 `subscribeEvents` 仍走 kkrpc 回调（remote-refs proxy），待迁移 ZeroMQ。
 2. **journal 沙盒（持久，落盘子集）**
-   - 落盘事件（persist=true 子集）：user/assistant.message、tool-call-request/response，及 turn-start/end、compacted、clear、retry-request 等边界事件。
+   - 落盘事件（persist=true 子集）：user/assistant.message、tool-call-request/response，及 run-start/end、compacted、clear、retry-request 等边界事件。
    - 任何 Node 进程本地可读（tail 到完整行）；renderer 经 Main 代读。查询/历史/恢复只能覆盖落盘子集。
+   - **读取接口两个**：`history` 返回完整 `OutputEvent`（重建/内部用）；`projectedHistory` 返回 `ProjectedEvent`（读 journal 后过投影层重建，与 hub 实时流同形态）。
    - todo/run 状态读模型、不进事件（⏳ 现 todo 为 InMemoryConversationTodoStore，sqlite 读模型待接）。
 3. **rpc（消息与控制）**
    - 用户输入、控制指令、inter-conversation 消息（经 ConversationManagerServer 调度）、wait 请求（审批/提问/退出 compose，经 CMS 队列路由；desktop 通知 renderer 决策，teammate 场景转发 parent）、审批/提问应答、novel 查询/变更。

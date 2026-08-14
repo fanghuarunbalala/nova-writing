@@ -16,9 +16,6 @@ function projection(overrides: Partial<ConversationProjectionSnapshot>): Convers
     state: "running",
     timeline: [],
     cards: [],
-    approvals: [],
-    toolTraces: [],
-    eventFlow: [],
     ...overrides,
   };
 }
@@ -52,7 +49,7 @@ describe("chatSurfaceMapper", () => {
             text: "已改为：雨落得密。",
             streaming: false,
             sourceSequence: 2,
-            turnEndSequence: 2,
+            runEndSequence: 2,
             timestamp: "2026-08-05T09:00:01.000Z",
           },
         ],
@@ -60,7 +57,7 @@ describe("chatSurfaceMapper", () => {
       "Novel Agent",
     );
     expect(items).toHaveLength(3);
-    expect(items[0].kind).toBe("turn");
+    expect(items[0].kind).toBe("run");
     // v2 原型：轮次分隔只显示纯时间（HH:MM）；本地时区不固定，故只断言格式与无前缀。
     expect(items[0].label).toMatch(/^\d{2}:\d{2}$/);
     expect(items[0].label).not.toContain("第");
@@ -73,7 +70,7 @@ describe("chatSurfaceMapper", () => {
     if (assistant.kind === "assistant") {
       expect(assistant.text).toBe("已改为：雨落得密。");
       expect(assistant.streaming).toBe(false);
-      expect(assistant.approvalState).toBe("completed");
+      expect(assistant.approvalState).toBeUndefined();
       expect(assistant.cards).toHaveLength(0);
     }
   });
@@ -90,72 +87,13 @@ describe("chatSurfaceMapper", () => {
     expect(items).toHaveLength(1);
     if (items[0].kind === "assistant") {
       expect(items[0].streaming).toBe(true);
-      expect(items[0].approvalState).toBe("generating");
+      expect(items[0].approvalState).toBeUndefined();
     }
   });
 
-  it("attaches event flow and tool traces inside the sequence window", () => {
+  it("passes assistant segments through verbatim（工具行随 turn 分段透传，无 seq 过滤）", () => {
     const items = mapProjectionTimeline(
       projection({
-        eventFlow: [
-          {
-            sequence: 1,
-            timestamp: 1,
-            eventType: "user.message",
-            family: "agent",
-          },
-          {
-            sequence: 2,
-            timestamp: 2,
-            eventType: "agent.run.state.changed",
-            summary: "— → running · provider_started",
-            family: "agent",
-          },
-          {
-            sequence: 3,
-            timestamp: 3,
-            eventType: "novel.draft.started",
-            summary: "草稿会话 DS-1 启动 · base r041",
-            family: "novel",
-          },
-          {
-            sequence: 5,
-            timestamp: 5,
-            eventType: "system.tool.trace.recorded",
-            summary: "工具 CharacterList",
-            family: "system",
-            outcome: "failed",
-          },
-          {
-            sequence: 9,
-            timestamp: 9,
-            eventType: "agent.assistant.message.delta",
-            family: "agent",
-          },
-        ],
-        toolTraces: [
-          {
-            traceId: "trace-1",
-            toolName: "CharacterList",
-            outcome: "ok",
-            durationMs: 42,
-            sequence: 3,
-          },
-          {
-            traceId: "trace-2",
-            toolName: "NovelOutlineRead",
-            stage: "execution_failed",
-            outcome: "failed",
-            durationMs: 1500,
-            sequence: 5,
-          },
-          {
-            traceId: "trace-3",
-            toolName: "NovelVolumeRead",
-            outcome: "failed",
-            sequence: 7,
-          },
-        ],
         timeline: [
           {
             kind: "user",
@@ -169,7 +107,20 @@ describe("chatSurfaceMapper", () => {
             text: "好。",
             streaming: false,
             sourceSequence: 2,
-            turnEndSequence: 7,
+            runEndSequence: 7,
+            segments: [
+              {
+                text: "好。",
+                tools: [{ traceId: "trace-1", toolName: "CharacterList", outcome: "ok", durationMs: 42, sequence: 3 }],
+              },
+              {
+                text: "",
+                tools: [
+                  { traceId: "trace-2", toolName: "NovelOutlineRead", outcome: "failed", durationMs: 1500, sequence: 5 },
+                  { traceId: "trace-3", toolName: "NovelVolumeRead", outcome: "failed", sequence: 7 },
+                ],
+              },
+            ],
             timestamp: "2026-08-05T09:00:01.000Z",
           },
         ],
@@ -179,15 +130,10 @@ describe("chatSurfaceMapper", () => {
     const assistant = items.find((item) => item.kind === "assistant");
     expect(assistant).toBeDefined();
     if (assistant === undefined || assistant.kind !== "assistant") return;
-    // 归属范围 [sourceSequence, turnEndSequence] = [2, 7]：seq 1/9 的事件排除
-    expect(assistant.eventFlow).toHaveLength(3);
-    expect(assistant.eventFlow[0].summary).toContain("running");
-    expect(assistant.eventFlow[1].eventType).toBe("novel.draft.started");
-    expect(assistant.eventFlow[2].outcome).toBe("failed");
-    expect(assistant.eventFlow.some((event) => event.eventType === "agent.assistant.message.delta")).toBe(false);
-    expect(assistant.toolTraces).toHaveLength(3);
-    expect(assistant.toolTraces[0].toolName).toBe("CharacterList");
-    expect(assistant.toolTraces[2].toolName).toBe("NovelVolumeRead");
+    expect(assistant.segments).toHaveLength(2);
+    expect(assistant.segments?.[0]).toMatchObject({ text: "好。" });
+    expect(assistant.segments?.[0].tools[0].toolName).toBe("CharacterList");
+    expect(assistant.segments?.[1].tools.map((t) => t.toolName)).toEqual(["NovelOutlineRead", "NovelVolumeRead"]);
   });
 
   it("maps proposal and text cards into rich descriptors by sequence window", () => {
@@ -255,7 +201,7 @@ describe("chatSurfaceMapper", () => {
             text: "已按大纲调整。",
             streaming: false,
             sourceSequence: 2,
-            turnEndSequence: 8,
+            runEndSequence: 8,
             timestamp: "2026-08-05T09:00:01.000Z",
           },
         ],
@@ -330,7 +276,7 @@ describe("chatSurfaceMapper", () => {
       "Novel Agent",
     );
     expect(items[0].kind).toBe("assistant");
-    expect(items[1].kind).toBe("turn");
+    expect(items[1].kind).toBe("run");
     expect(items[2].kind).toBe("user");
   });
 

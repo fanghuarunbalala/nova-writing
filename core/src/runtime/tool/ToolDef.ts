@@ -1,5 +1,6 @@
 import type { ToolScheme } from "../provider/types.js";
 import type { ToolHandler } from "./ToolHandler.js";
+import type { ToolPreviewFn } from "./previews.js";
 
 /** 工具 prompt 细节：渲染进 system prompt */
 export interface ToolPromptDetail {
@@ -19,4 +20,10 @@ export interface ToolDef extends ToolScheme {
   promptDetail?: ToolPromptDetail;
   /** 执行前需用户审批（AgentLoop 经 requestApproval 通道征询；未装配通道时按拒绝处理） */
   requireApproval?: boolean;
+  /**
+   * 投影预览定制（tool-recorded 事件的 title/summary 来源）。
+   * 只影响投影流、不影响 journal 完整数据与重建；必须纯函数（同输入同输出，
+   * replay 确定性前提），未声明走 defaultToolPreview 回退。见 PRD `output-投影层` §4.3。
+   */
+  preview?: ToolPreviewFn;
 }

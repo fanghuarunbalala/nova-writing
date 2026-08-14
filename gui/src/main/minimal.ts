@@ -29,12 +29,11 @@ import {
   type ConversationApprovalRequest,
   type ConversationJournalService,
   type CredentialCipher,
-  debugLog,
   infoLog,
   type LLMessage,
   type NovelStore,
-  type OutputEvent,
-  type TurnContext,
+  type LoopEvent,
+  type RunContext,
 } from "@novel/core";
 import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
 import {
@@ -69,8 +68,8 @@ const WORKSPACE_CHANNEL = "workspace-rpc";
 const UI_CHANNEL = "ui-rpc";
 
 /**
- * 回显 AgentLoop：followup 即时开 turn 产 turn-start/user.message → assistant.delta×N →
- * assistant.message/turn-end → journal 快照落盘（验证流式链路 + journal 语义，无需真实 provider）。
+ * 回显 AgentLoop：followup 即时开 run 产 run-start/user.message → assistant.delta×N →
+ * assistant.message/run-end → journal 快照落盘（验证流式链路 + journal 语义，无需真实 provider）。
  * 文本含「审批」时经 requestApproval 阻塞等 UI 决策（验证审批域端到端）。
  * 不发 reasoning delta（loop 层已丢弃，见 docs/PRD/gui-performance.md）。
  */
@@ -80,8 +79,8 @@ function createEchoLoop(
   requestApproval?: (req: ConversationApprovalRequest) => Promise<ConversationApprovalDecision>,
 ): AgentLoop {
   let seq = 0;
-  const listeners = new Set<(e: OutputEvent) => void>();
-  const emit = (e: OutputEvent): void => {
+  const listeners = new Set<(e: LoopEvent) => void>();
+  const emit = (e: LoopEvent): void => {
     for (const l of listeners) l(e);
   };
   const now = () => new Date().toISOString();
@@ -89,43 +88,48 @@ function createEchoLoop(
   return {
     run: async () => ({ final: { role: "assistant" as const, content: "" }, usage: undefined }),
     followup: (text: string) => {
-      // 即时开 turn（seq 按输入时序）+ user 消息快照落盘 = 输入 rpc 的持久化回执
+      // 即时开 run（seq 按输入时序）+ user 消息快照落盘 = 输入 rpc 的持久化回执
       const messages: LLMessage[] = [{ role: "user", content: text }];
-      const turn: TurnContext = {
+      const run: RunContext = {
         seq: ++seq,
         messages,
         ts: now(),
-        appendTurnMessages: (m) => {
+        appendRunMessages: (m) => {
           messages.push(...m);
         },
       };
-      emit({ type: "turn-start", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
-      emit({ type: "user.message", persist: true, seq: turn.seq, text, conversationId, ts: now() });
+      emit({ type: "run-start", persist: true, seq: run.seq, runSeq: run.seq, conversationId, ts: now() });
+      emit({ type: "user.message", persist: true, seq: run.seq, text, conversationId, ts: now() });
 
       // 审批路径：阻塞等 UI 决策（sendApprovalRequest 会发 approval.request 事件），
       // 决策回传后按结果收口（approval.resolved 事件由 Conversation 发出）
       if (text.includes("审批") && requestApproval !== undefined) {
         void requestApproval({
-          requestId: `approval_${conversationId}_${turn.seq}_echo`,
-          toolName: "CharacterWrite",
-          args: JSON.stringify({ values: [{ name: text.replace("审批", "苏眉").trim() || "苏眉" }] }),
+          requestId: `approval:${conversationId}:${run.seq}:b1`,
+          toolCalls: [
+            {
+              toolCallId: `echo_${run.seq}`,
+              toolName: "CharacterWrite",
+              args: JSON.stringify({ values: [{ name: text.replace("审批", "苏眉").trim() || "苏眉" }] }),
+            },
+          ],
         })
           .then((decision) => {
             const reply = decision.kind === "approve" ? "（回声）已批准" : "（回声）已拒绝";
             messages.push({ role: "assistant", content: reply });
-            emit({ type: "assistant.message", persist: true, seq: turn.seq, text: reply, conversationId, ts: now() });
-            emit({ type: "turn-end", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
-            void journal?.appendTurn(turn);
+            emit({ type: "assistant.message", persist: true, seq: run.seq, text: reply, conversationId, ts: now() });
+            emit({ type: "run-end", persist: true, seq: run.seq, runSeq: run.seq, conversationId, ts: now() });
+            void journal?.appendRun(run);
           })
           .catch(() => {
-            // 决策通道异常：收口失败回复，避免 turn 悬挂
+            // 决策通道异常：收口失败回复，避免 run 悬挂
             const reply = "（回声）审批决策通道异常";
             messages.push({ role: "assistant", content: reply });
-            emit({ type: "assistant.message", persist: true, seq: turn.seq, text: reply, conversationId, ts: now() });
-            emit({ type: "turn-end", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
-            void journal?.appendTurn(turn);
+            emit({ type: "assistant.message", persist: true, seq: run.seq, text: reply, conversationId, ts: now() });
+            emit({ type: "run-end", persist: true, seq: run.seq, runSeq: run.seq, conversationId, ts: now() });
+            void journal?.appendRun(run);
           });
-        return turn;
+        return run;
       }
 
       // 异步排程发射（避免同步批量发完导致 generating 状态对 UI 不可见：
@@ -139,21 +143,21 @@ function createEchoLoop(
           : "";
         const reply = `（回声）${text}${demoNovel}`;
         for (const ch of reply) {
-          emit({ type: "assistant.delta", persist: false, kind: "text", text: ch, conversationId, ts: now() });
+          emit({ type: "assistant.delta", kind: "text", text: ch, conversationId, ts: now() });
           await sleep(24);
         }
         messages.push({ role: "assistant", content: reply });
-        emit({ type: "assistant.message", persist: true, seq: turn.seq, text: reply, conversationId, ts: now() });
-        emit({ type: "turn-end", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
+        emit({ type: "assistant.message", persist: true, seq: run.seq, text: reply, conversationId, ts: now() });
+        emit({ type: "run-end", persist: true, seq: run.seq, runSeq: run.seq, conversationId, ts: now() });
         // 同 seq 重写：assistant 完整快照（与真实 loop 的 journalListener 语义一致）
-        void journal?.appendTurn(turn);
+        void journal?.appendRun(run);
       })();
-      return turn;
+      return run;
     },
     steer: () => {},
     stop: () => {},
     cancel: () => {},
-    onOutputEvent: (l: (e: OutputEvent) => void) => {
+    onOutputEvent: (l: (e: LoopEvent) => void) => {
       listeners.add(l);
       return () => listeners.delete(l);
     },
@@ -318,29 +322,7 @@ async function main(): Promise<void> {
     managerWs: {
       url: managerWs.url,
       token: managerWs.token,
-      onConnected: (listener) => {
-        // 临时诊断：连接报到 + main 转发调用点日志
-        return managerWs.onConversationConnected((connected) => {
-          debugLog("[main] conversation connected:", connected.conversationId);
-          const raw = connected.handle;
-          connected.handle = new Proxy(raw, {
-            get(target, prop, receiver) {
-              const value = Reflect.get(target, prop, receiver);
-              if (typeof value !== "function") return value;
-              return (...args: unknown[]) => {
-                const head =
-                  typeof args[0] === "function"
-                    ? `<fn>`
-                    : String(args[0] === undefined ? "" : JSON.stringify(args[0])).slice(0, 120);
-                debugLog("[main] handle call:", String(prop), head);
-                // 注意：不可用 value.apply(...)——.apply 属性访问会被 RPC path 代理捕获成路径段
-                return Reflect.apply(value, target, args);
-              };
-            },
-          });
-          listener(connected);
-        });
-      },
+      onConnected: (listener) => managerWs.onConversationConnected(listener),
     },
     novelWs: { url: novelWs.url, token: novelWs.token },
   });
@@ -352,13 +334,22 @@ async function main(): Promise<void> {
   });
   const serverApi = createNovelApiServer({ manager, novel: publishingStore, proxy, journalDir: conversationsRoot });
 
-  // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）
+  // 主窗口引用（IPC sender 校验 + 定向发送；窗口创建晚于端点注册）
+  let mainWindow: BrowserWindow | undefined;
+
+  // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）。
+  // 安全：入站消息仅接受主窗口 sender（防注入 frame/webview 冒名调用）；
+  // 出站定向主窗口（不广播所有窗口，防串窗）
   const endpoint = {
     send: (channel: string, msg: RPCMessage) => {
-      for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, msg);
+      const win = mainWindow;
+      if (win !== undefined && !win.isDestroyed()) win.webContents.send(channel, msg);
     },
     on: (channel: string, listener: (_event: unknown, msg: RPCMessage) => void) => {
-      ipcMain.on(channel, (event, msg) => listener(event, msg));
+      ipcMain.on(channel, (event, msg) => {
+        if (mainWindow === undefined || event.sender !== mainWindow.webContents) return;
+        listener(event, msg);
+      });
     },
     off: (channel: string, listener: (_event: unknown, msg: RPCMessage) => void) => {
       ipcMain.off(channel, listener);
@@ -421,6 +412,9 @@ async function main(): Promise<void> {
     storageRoot: join(app.getPath("userData"), "novel-storage"),
   });
   const recentWorkspaces: { id: string; label: string }[] = [];
+  // 允许 open 的 referenceId 白名单：仅 pickWorkspace（原生目录对话框）返回的路径可设为工作区，
+  // 渲染进程直传任意路径会被拒绝（防渲染端被污染后把 agent 文件工具指向任意目录）
+  const allowedWorkspaceReferences = new Set<string>();
   const workspaceApi = {
     pickWorkspace: async (): Promise<{ referenceId: string; label: string } | undefined> => {
       const result = await dialog.showOpenDialog({
@@ -429,10 +423,14 @@ async function main(): Promise<void> {
       });
       if (result.canceled || result.filePaths.length === 0) return undefined;
       const root = result.filePaths[0]!;
+      allowedWorkspaceReferences.add(root);
       return { referenceId: root, label: basename(root) };
     },
     listRecent: async () => Object.freeze([...recentWorkspaces]),
     open: async (reference: { referenceId: string; label: string }) => {
+      if (!allowedWorkspaceReferences.has(reference.referenceId)) {
+        throw new Error(`未授权的 workspace 引用（请先经目录选择器打开）: ${reference.referenceId}`);
+      }
       const location = await locator.resolve(reference.referenceId);
       const session = { id: location.workspaceId, label: reference.label };
       recentWorkspaces.unshift(session);
@@ -448,8 +446,14 @@ async function main(): Promise<void> {
   const win = new BrowserWindow({
     width: 900,
     height: 640,
-    webPreferences: { preload: preloadPath },
+    webPreferences: {
+      preload: preloadPath,
+      // 显式安全声明（Electron 当前默认即此值；显式化防升级/配置漂移后静默回退）
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
   });
+  mainWindow = win;
   // compose 设计草稿文件 IPC（novel.design.v1.*）：仅主窗口 webContents 授权，
   // workspace 根随当前打开项目切换；renderer 经 preload novelDesign.invoke 调用
   const designController = new DesktopDesignIpcController({
@@ -474,7 +478,9 @@ async function main(): Promise<void> {
       typeof first === "object" && first !== null && "message" in first
         ? (first as { message: unknown }).message
         : args[1];
-    console.error(`[renderer:${String(level)}] ${String(message)}`);
+    // 按级别分流：error/warning 进 stderr，info 级不再污染错误输出
+    if (level === 3 || level === "error") console.error(`[renderer] ${String(message)}`);
+    else if (level === 2 || level === "warning") console.warn(`[renderer] ${String(message)}`);
   });
   await win.loadFile(rendererHtml);
   infoLog("[main] minimal electron ready");

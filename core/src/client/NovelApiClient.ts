@@ -10,7 +10,7 @@ import type { ConversationManagerServer } from "../conversation/server/Conversat
 import type { NovelStore } from "../novel/store.js";
 import type { ConversationRef, ConversationSummary } from "../manager/contract/types.js";
 import type { ConversationHandle, ConversationId } from "../conversation/contract/index.js";
-import type { OutputEvent } from "../conversation/contract/events/index.js";
+import type { OutputEvent, ProjectedEvent } from "../conversation/contract/events/index.js";
 import type { ConversationJournalReadOnlyService } from "../conversation/contract/journal/index.js";
 import { FileConversationJournalReadOnlyService } from "../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { toRPCError } from "../rpc/call.js";
@@ -36,7 +36,7 @@ import type {
 	StoryUnitId,
 } from "../novel/model/index.js";
 
-/** 会话子 API（目录 + 生命周期；rename/pin 延后） */
+/** 会话子 API（目录 + 生命周期；pin 延后） */
 export interface ConversationApi {
 	/**
 	 * 列出所有会话摘要
@@ -61,18 +61,37 @@ export interface ConversationApi {
 	 */
 	delete(conversationId: ConversationId): Promise<void>;
 	/**
+	 * 重命名会话（持久化到会话存储，重启后恢复；显式名优先于 journal 首句派生）
+	 * @param conversationId 会话 id
+	 * @param name 新名字（trim 后非空）
+	 * @returns 是否命中会话（false = 会话不存在或名字为空）
+	 */
+	rename(conversationId: ConversationId, name: string): Promise<boolean>;
+	/**
 	 * 读取会话已落盘历史（journal 沙盒子集 → OutputEvent 序列，无 delta）。
 	 * renderer 无文件权限，经 Main 代读。
 	 * @param conversationId 会话 id
 	 * @param opts 可选分页（fromSeq / limit）
-	 * @returns 已落盘事件序列（turn-start/end 边界 + user/assistant.message + tool-call 事件）
+	 * @returns 已落盘事件序列（run-start/end 边界 + user/assistant.message + tool-call 事件）
 	 */
 	history(
 		conversationId: ConversationId,
 		opts?: { fromSeq?: number; limit?: number },
 	): Promise<OutputEvent[]>;
 	/**
-	 * 查询会话当前生效模式（review/bypass/compose；mode.set 待下次 turn 生效）。
+	 * 投影读取历史（journal 完整事件 → 投影层 → ProjectedEvent 序列）。
+	 * 与 hub 实时订阅同形态；工具调用以 tool-recorded.started/recorded 出现。
+	 * renderer 无文件权限，经 Main 代读。见 PRD `output-投影层` §4.5。
+	 * @param conversationId 会话 id
+	 * @param opts 可选分页（fromSeq / limit，与 history 相同语义）
+	 * @returns 投影事件序列
+	 */
+	projectedHistory(
+		conversationId: ConversationId,
+		opts?: { fromSeq?: number; limit?: number },
+	): Promise<ProjectedEvent[]>;
+	/**
+	 * 查询会话当前生效模式（review/bypass/compose；mode.set 待下次 run 生效）。
 	 * 读走查：经 manager 定位会话后调 handle.getConversationMode。
 	 * @param conversationId 会话 id
 	 * @returns 当前生效模式
@@ -168,6 +187,14 @@ export interface NovelApiClientOptions {
 		conversationId: ConversationId,
 		opts?: { fromSeq?: number; limit?: number },
 	) => Promise<OutputEvent[]>;
+	/**
+	 * projectedHistory 查询注入（同 history 的内存测试/特殊装配面）。
+	 * 缺省回退 history（投影形态由调用方决定时可用）。
+	 */
+	projectedHistory?: (
+		conversationId: ConversationId,
+		opts?: { fromSeq?: number; limit?: number },
+	) => Promise<ProjectedEvent[]>;
 }
 
 /**
@@ -176,15 +203,20 @@ export interface NovelApiClientOptions {
  * @returns NovelApiClient
  */
 export function createNovelApiClient(options: NovelApiClientOptions): NovelApiClient {
-	const { manager, novel, history } = options;
+	const { manager, novel, history, projectedHistory } = options;
 	return {
 		conversations: {
 			list: () => manager.list(),
 			create: (agentType = "novel") => manager.spawnConversation({ agentType }),
 			open: async (conversationId) => (await manager.createOrResume(conversationId)).handle,
 			delete: (conversationId) => manager.delete(conversationId),
+			rename: (conversationId, name) => manager.rename(conversationId, name),
 			history: (conversationId, opts) =>
 				history !== undefined ? history(conversationId, opts) : Promise.resolve([]),
+			projectedHistory: (conversationId, opts) =>
+				projectedHistory !== undefined
+					? projectedHistory(conversationId, opts)
+					: Promise.resolve([]),
 			getMode: async (conversationId) => {
 				const handle = (await manager.createOrResume(conversationId)).handle;
 				return handle.getConversationMode();
@@ -304,8 +336,13 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 			open: async (conversationId) =>
 				mark(toRemoteHandle((await manager.createOrResume(conversationId)).handle)),
 			delete: (conversationId) => manager.delete(conversationId),
+			rename: (conversationId, name) => manager.rename(conversationId, name),
 			history: (conversationId, opts) =>
 				readOnly !== undefined ? readOnly.history(conversationId, opts ?? {}) : Promise.resolve([]),
+			projectedHistory: (conversationId, opts) =>
+				readOnly !== undefined
+					? readOnly.projectedHistory(conversationId, opts ?? {})
+					: Promise.resolve([]),
 			getMode: async (conversationId) => {
 				const handle = (await manager.createOrResume(conversationId)).handle;
 				return handle.getConversationMode();

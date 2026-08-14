@@ -6,8 +6,10 @@
  * - novel-db 走 kkrpc/ws（无 URL 时回退进程内内存 store，开发用）
  * - wait 请求无阻塞：经 managerWait 提交 CMS 队列；决策经 resolveApproval 回传
  *   （驻留直推）；120s 超时 → process.exit（CMS 决策后重启续跑）
- * - 重启恢复：journal 重放 + CMS takeDecisions 查询待决 → 暂停点续跑（resumePendingTurn）
+ * - 重启恢复：journal 重放 + CMS takeDecisions 查询待决 → 暂停点续跑（resumePendingRun）
+ * - subagent：SubagentRuntime 进程内编排（main 经 Agent/TaskOutput/TaskStop 派发）
  */
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { RPCChannel } from "kkrpc";
 import { webSocketClientTransport } from "kkrpc/ws";
@@ -18,6 +20,7 @@ import { FileConversationStateJournalService } from "../../conversation/persiste
 import { journalListener } from "../../conversation/JournalBridge.js";
 import { debugLog } from "../../log/debug.js";
 import { createLogger } from "../../log/pino.js";
+import { SubagentRuntime } from "../../conversation/server/SubagentRuntime.js";
 import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
 import { createProvider } from "../../runtime/provider/Provider.js";
@@ -33,10 +36,13 @@ import {
 import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
 import type { LLMessage } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
+import { findPendingToolIds } from "../../runtime/loop/AgentLoop.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
+import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
-import type { OutputEvent } from "../../conversation/contract/events/index.js";
+import type { ProjectedEvent } from "../../conversation/contract/events/index.js";
+import type { ConversationMode } from "../../conversation/contract/types/index.js";
 
 /** 平台显示名（动态段 core.environment 用） */
 const PLATFORM_LABELS: Readonly<Record<string, string>> = Object.freeze({
@@ -72,7 +78,7 @@ function conversationExposeOf(holder: { conv?: Conversation }): Record<string, u
 		sendExitComposeRequest: (...args: unknown[]) => requireConv().sendExitComposeRequest(args[0] as never),
 		subscribeEvents: (...args: unknown[]) => {
 			debugLog("[child] subscribeEvents 到达");
-			return requireConv().subscribeEvents(args[0] as (e: OutputEvent) => void);
+			return requireConv().subscribeEvents(args[0] as (e: ProjectedEvent) => void);
 		},
 		resolveApproval: (...args: unknown[]) =>
 			requireConv().resolveApproval(args[0] as string, args[1] as never),
@@ -85,27 +91,82 @@ function conversationExposeOf(holder: { conv?: Conversation }): Record<string, u
 	};
 }
 
-/** 由 requestId 尾段解析 toolCallId（requestId = approval_{convId}_{turnSeq}_{toolCallId}） */
-function toolCallIdOf(requestId: string): string | undefined {
-	const parts = requestId.split("_");
-	return parts.length >= 4 ? parts.slice(3).join("_") : undefined;
+/** child 崩溃自曝日志路径 env（ProcessSpawner 注入） */
+const CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
+
+/** 合法会话模式集合（meta.json 恢复校验用） */
+const KNOWN_MODES = new Set(["review", "bypass", "compose"]);
+
+/** 读 storedir/meta.json 的持久化模式（无文件/损坏/非法值 → undefined 回退默认） */
+export function readPersistedMode(storedir: string | undefined): ConversationMode | undefined {
+	if (storedir === undefined || storedir.trim() === "") return undefined;
+	try {
+		const parsed = JSON.parse(readFileSync(join(storedir, "meta.json"), "utf8")) as { mode?: unknown };
+		return typeof parsed.mode === "string" && KNOWN_MODES.has(parsed.mode)
+			? (parsed.mode as ConversationMode)
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** 合并写 storedir/meta.json 的 mode 字段（保留 name 等其他字段；失败忽略：内存态仍生效） */
+export function persistMode(storedir: string | undefined, mode: ConversationMode): void {
+	if (storedir === undefined || storedir.trim() === "") return;
+	const path = join(storedir, "meta.json");
+	try {
+		let existing: Record<string, unknown> = {};
+		try {
+			existing = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+		} catch {
+			// 无文件/损坏：从空对象起步
+		}
+		writeFileSync(path, JSON.stringify({ ...existing, mode }), "utf8");
+	} catch {
+		// 落盘失败忽略（重启回退默认模式）
+	}
+}
+
+/** 崩溃自曝：同步写堆栈到 runtime-child.log + 回写 stderr（父进程捕获缓冲），再按原语义退出。 */
+function writeCrashTrace(line: string): void {
+	// 父进程 stderr 捕获埋点（runtime.process.child_stderr）也会收到这份内容。
+	console.error(line);
+	const childLogPath = process.env[CHILD_LOG_ENV];
+	if (childLogPath === undefined || childLogPath.length === 0) return;
+	try {
+		appendFileSync(childLogPath, `${line}\n`);
+	} catch {
+		// console.error 已兜底；日志路径不可写不应掩盖崩溃本身。
+	}
+}
+
+/** 崩溃原因 → 堆栈文本（非 Error 兜底 String） */
+function describeCrash(reason: unknown): string {
+	if (reason instanceof Error) {
+		return reason.stack ?? `${reason.name}: ${reason.message}`;
+	}
+	return `unknown crash reason: ${String(reason)}`;
+}
+
+/** 注册崩溃自曝（在任何其他逻辑之前）：未捕获异常/拒绝写盘后 exit(1)。 */
+function registerCrashHandlers(): void {
+	process.on("uncaughtException", (error) => {
+		writeCrashTrace(`CRASH uncaughtException\n${describeCrash(error)}`);
+		process.exit(1);
+	});
+	process.on("unhandledRejection", (reason) => {
+		writeCrashTrace(`CRASH unhandledRejection\n${describeCrash(reason)}`);
+		process.exit(1);
+	});
 }
 
 /**
  * 启动 conversation 子进程（manager WS 双工）
  */
 export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
-	// 崩溃兜底：子进程任何未捕获异常/未处理 rejection 先留完整痕迹再退出
-	//（stderr 经 spawner inherit 汇入 main 输出；此前崩溃只剩一行裸 undefined，无法定位）
-	process.on("uncaughtException", (e) => {
-		console.error("[child] uncaught exception:", e);
-		process.exit(1);
-	});
-	process.on("unhandledRejection", (reason) => {
-		console.error("[child] unhandled rejection:", reason);
-		process.exit(1);
-	});
-
+	// 崩溃诊断：一切逻辑之前注册（stderr 回写 + runtime-child.log 落盘，根因因此可见；
+	// 覆盖 be1868d 的内联兜底——writeCrashTrace 先 console.error 再落盘，是其超集）
+	registerCrashHandlers();
 	const conversationId = process.env.CONVERSATION_ID ?? "main";
 	const storedir = process.env.NOVEL_CONVERSATION_STOREDIR;
 	const workspace = process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".";
@@ -145,13 +206,13 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			: undefined;
 	await journal?.open();
 
-	// 恢复上下文：journal 已落盘 turns → 历史消息 + resumeSeq（崩溃重派生续跑）
-	let turnMessages: LLMessage[] | undefined;
+	// 恢复上下文：journal 已落盘 runs → 历史消息 + resumeSeq（崩溃重派生续跑）
+	let runMessages: LLMessage[] | undefined;
 	let resumeSeq: number | undefined;
 	if (journal !== undefined && storedir !== undefined) {
 		const readOnly = new FileConversationJournalReadOnlyService({ journalDir: storedir });
-		const turns = await readOnly.readTurns(conversationId);
-		turnMessages = turns.flatMap((t) => t.messages);
+		const runs = await readOnly.readRuns(conversationId);
+		runMessages = runs.flatMap((r) => r.messages);
 		resumeSeq = journal.lastSeq;
 	}
 
@@ -173,10 +234,10 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		);
 		cmsApi = channel.getAPI() as unknown as CmsApi;
 		// 重启补完路径：查询 CMS 待决决策 → 暂停点续跑决策器
+		//（审批按 turn 批量：条目的每个 toolCalls 成员都映射到该批决策）
 		const decisions = await cmsApi.takeDecisions(conversationId).catch(() => []);
 		for (const item of decisions) {
-			const toolCallId = toolCallIdOf(item.requestId);
-			if (toolCallId !== undefined) byToolCallId.set(toolCallId, item);
+			for (const tc of item.toolCalls) byToolCallId.set(tc.toolCallId, item);
 		}
 		resumePendingDecider = async (toolCallId) => {
 			const item = byToolCallId.get(toolCallId);
@@ -195,11 +256,32 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		};
 	}
 
-	const provider = createProvider({
-		id: "default",
+	// provider 配置（main 与 explorer 共享；type 从 env，缺省 openai）
+	const providerConfig = {
 		type: (process.env.NOVEL_PROVIDER_TYPE as "openai" | "anthropic" | undefined) ?? "openai",
 		baseUrl: process.env.NOVEL_PROVIDER_BASE_URL ?? "https://api.deepseek.com/v1",
 		apiKey: process.env.NOVEL_PROVIDER_API_KEY,
+	} as const;
+	const provider = createProvider({ id: "default", ...providerConfig });
+
+	// explorer 专用 todo 存储（与 main 计划分离：TodoWrite 整体替换语义，
+	// 扫描进度草稿不覆盖 main 的执行计划；两者同为进程内内存级）
+	const todoStore = new InMemoryConversationTodoStore();
+
+	// subagent 任务编排：builder 每任务新建 provider（流式累积状态不可跨 loop 共享）
+	const subagentRuntime = new SubagentRuntime({
+		sampling,
+		builders: {
+			novel_explorer: (agentId) =>
+				buildNovelExplorerAgent({
+					workspace,
+					provider: createProvider({ id: "explorer", ...providerConfig }),
+					handle: novelHandle,
+					todoStore,
+					conversationId,
+					agentId,
+				}),
+		},
 	});
 
 	// 进程结构化日志：pino（storedir/logs 下每进程独占文件 + stderr 彩色行）。
@@ -234,13 +316,16 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		await composeService.hydrateFromEvents(conversationId, stateEvents);
 	}
 	// 重启补完的 ExitComposeMode 决议包装：reject/expired 驱动状态回 designing + 晋升延迟目标
-	// （approve 决议由 resumePendingTurn dispatch 执行 ExitComposeMode handler → service.exit 收口）
+	// （approve 决议由 resumePendingRun dispatch 执行 ExitComposeMode handler → service.exit 收口）
 	if (resumePendingDecider !== undefined) {
 		const baseDecider = resumePendingDecider;
 		resumePendingDecider = async (toolCallId) => {
 			const decision = await baseDecider(toolCallId);
 			const item = byToolCallId.get(toolCallId);
-			if (item?.toolName === "ExitComposeMode" && (decision === "reject" || decision === "expired")) {
+			if (
+				item?.toolCalls.some((tc) => tc.toolName === "ExitComposeMode") === true &&
+				(decision === "reject" || decision === "expired")
+			) {
 				await composeService.rejectOnDecision(conversationId);
 				await composeService.applyPendingModeTarget(conversationId);
 			}
@@ -254,11 +339,12 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		handle: novelHandle,
 		conversationId,
 		listeners: journal !== undefined ? [journalListener(journal)] : undefined,
-		turnMessages,
+		runMessages,
 		resumeSeq,
 		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
 		resumePendingDecider,
 		logger,
+		subagent: { spawner: subagentRuntime },
 		// 动态段输入：workdir/modelId 由 LoopContext 自组装（workspace /
 		// run.sampling.model）；宿主只注入平台常量 + 每调用读 NOVEL.md
 		//（失败返回 undefined → 动态段渲染占位）
@@ -292,29 +378,22 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		sampling,
 		journal,
 		managerWait,
-		// 120s 无决策：退出进程（不占资源）；CMS 在 UI 决策后重启续跑
-		onWaitTimeout: cmsApi !== undefined ? () => process.exit(0) : undefined,
 		composeState,
 		composeService,
 		stateJournal,
+		subagentRuntime,
+		initialMode: readPersistedMode(storedir),
+		onModeChanged: (mode) => persistMode(storedir, mode),
+	// 审批等待不设超时：进程驻留，UI 决策随时经 resolveApproval 直推解除
+	//（提前 exit 会丢内存态 subagent/todo，且决策无法送达；Exit 审批驻留同理）
 	});
 	holder.conv = conv;
 	// 状态事件出口：先落 state.jsonl 再 hub 广播（写序 ②→③）
 	composeService.setEventSink((e) => conv.emitState(e));
 
-	// 暂停点续跑：恢复 turn 存在缺 tool 结果的 toolCall 时补完并收口
-	if (turnMessages !== undefined && turnMessages.length > 0) {
-		const hasPendingTool = turnMessages.some(
-			(m) => m.role === "assistant" && (m.toolCalls ?? []).length > 0,
-		);
-		if (hasPendingTool) {
-			await loop.resumePendingTurn({ sampling, maxTurns: 8 }).catch((err) => {
-				debugLog("[child] resumePendingTurn failed:", err);
-			});
-		}
-	}
-
-	// 报到 CMS（spawner 等待点；此后 manager 侧拿到 conversation handle）
+	// 报到 CMS（spawner 等待点；此后 manager 侧拿到 conversation handle）。
+	// 必须先于 resumePendingRun：恢复可能耗时多轮 provider 调用，晚报到会撞
+	// spawner 15s 握手超时被 kill，产生孤儿进程
 	if (cmsApi !== undefined) {
 		await cmsApi.register({
 			conversationId,
@@ -324,6 +403,14 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	} else {
 		// 无 manager WS（独立脚本/dev）：stdin end 退出兜底
 		process.stdin.on("end", () => process.exit(0));
+	}
+
+	// 暂停点续跑：仅当恢复消息中存在缺 tool 结果的 toolCall 才补完收口——
+	// 已收口的 run（工具结果齐全）不得重跑，否则重复 provider 调用/重复落盘
+	if (runMessages !== undefined && findPendingToolIds(runMessages).length > 0) {
+		await loop.resumePendingRun({ sampling, maxTurns: 8 }).catch((err) => {
+			debugLog("[child] resumePendingRun failed:", err);
+		});
 	}
 	// 子进程驻留：事件循环由 WS 连接与定时器维持
 }

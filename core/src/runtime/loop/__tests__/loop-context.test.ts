@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { LoopContext } from "../LoopContext.js";
 import type { AgentCapability } from "../../agent/AgentCapability.js";
-import type { TurnContext } from "../types.js";
+import type { RunContext } from "../types.js";
 
 const capability: AgentCapability = {
   systemSections: [
@@ -32,26 +32,26 @@ const multiSectionCapability: AgentCapability = {
   nudgePolicies: [],
 };
 
-function makeTurn(messages: Array<{ role: string; content: string }> = []): TurnContext {
-  const msgs = messages as TurnContext["messages"];
+function makeRun(messages: Array<{ role: string; content: string }> = []): RunContext {
+  const msgs = messages as RunContext["messages"];
   return {
     seq: 0,
     messages: msgs,
     ts: "t",
-    appendTurnMessages: (m) => {
+    appendRunMessages: (m) => {
       msgs.push(...m);
     },
   };
 }
 
 describe("LoopContext", () => {
-  it("appendTurnContext 开 turn：seq 分配 + onTurnAppended", () => {
+  it("appendRun 开 turn：seq 分配 + onRunAppended", () => {
     const ctx = new LoopContext({ agentCapability: capability, workspace: "/ws" });
     const onAppended = vi.fn();
-    ctx.subscribe({ onTurnAppended: onAppended });
-    ctx.appendTurnContext(makeTurn());
-    expect(ctx.turns).toHaveLength(1);
-    expect(ctx.turns[0].seq).toBe(1);
+    ctx.subscribe({ onRunAppended: onAppended });
+    ctx.appendRun(makeRun());
+    expect(ctx.runs).toHaveLength(1);
+    expect(ctx.runs[0].seq).toBe(1);
     expect(onAppended).toHaveBeenCalledOnce();
   });
 
@@ -59,23 +59,23 @@ describe("LoopContext", () => {
     const ctx = new LoopContext({
       agentCapability: capability,
       workspace: "/ws",
-      turnMessages: [{ role: "user", content: "历史" }, { role: "assistant", content: "回复" }],
+      runMessages: [{ role: "user", content: "历史" }, { role: "assistant", content: "回复" }],
       startSeq: 5,
     });
     // 恢复 turn 沿用 seq 5（不消耗新号：补完消息同 seq 重写原快照）
-    expect(ctx.turns).toHaveLength(1);
-    expect(ctx.turns[0].seq).toBe(5);
+    expect(ctx.runs).toHaveLength(1);
+    expect(ctx.runs[0].seq).toBe(5);
     // 新 turn 从 6 起
-    ctx.appendTurnContext(makeTurn());
-    expect(ctx.turns.at(-1)!.seq).toBe(6);
+    ctx.appendRun(makeRun());
+    expect(ctx.runs.at(-1)!.seq).toBe(6);
   });
 
-  it("appendTurnMessages 追加当前 turn + onTurnMessageAppend", () => {
+  it("appendRunMessages 追加当前 turn + onRunMessageAppend", () => {
     const ctx = new LoopContext({ agentCapability: capability, workspace: "/ws" });
     const onAppend = vi.fn();
-    ctx.subscribe({ onTurnMessageAppend: onAppend });
-    ctx.appendTurnContext(makeTurn([{ role: "user", content: "hi" }]));
-    ctx.appendTurnMessages([{ role: "assistant", content: "ok" }]);
+    ctx.subscribe({ onRunMessageAppend: onAppend });
+    ctx.appendRun(makeRun([{ role: "user", content: "hi" }]));
+    ctx.appendRunMessages([{ role: "assistant", content: "ok" }]);
     expect(ctx.messages).toHaveLength(2);
     expect(ctx.messages[1].content).toBe("ok");
     expect(onAppend).toHaveBeenCalledOnce();
@@ -85,9 +85,9 @@ describe("LoopContext", () => {
     const ctx = new LoopContext({ agentCapability: capability, workspace: "/ws" });
     const a = vi.fn();
     const b = vi.fn();
-    ctx.subscribe({ onTurnAppended: a });
-    ctx.subscribe({ onTurnAppended: b });
-    ctx.appendTurnContext(makeTurn());
+    ctx.subscribe({ onRunAppended: a });
+    ctx.subscribe({ onRunAppended: b });
+    ctx.appendRun(makeRun());
     expect(a).toHaveBeenCalledOnce();
     expect(b).toHaveBeenCalledOnce();
   });
@@ -101,7 +101,7 @@ describe("LoopContext", () => {
 
   it("toProviderCall 组装基础请求", async () => {
     const ctx = new LoopContext({ agentCapability: capability, workspace: "/ws" });
-    ctx.appendTurnContext(makeTurn([{ role: "user", content: "hi" }]));
+    ctx.appendRun(makeRun([{ role: "user", content: "hi" }]));
     const call = await ctx.toProviderCall(
       { sampling: { model: "gpt-5" } },
       { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },

@@ -5,7 +5,7 @@ import type { RunContext } from "../../../loop/types.js";
 
 function mockLoop() {
   return {
-    appendTurnMessages: vi.fn(),
+    appendRunMessages: vi.fn(),
   } as unknown as LoopContext;
 }
 
@@ -21,8 +21,8 @@ describe("TodoIdleNudgePolicy", () => {
     const loop = mockLoop();
     const injected = policy.persistentNudgeIfNeeded(loop, run(5, 1));
     expect(injected).toBe(true);
-    expect(loop.appendTurnMessages).toHaveBeenCalledOnce();
-    const msg = (loop.appendTurnMessages as ReturnType<typeof vi.fn>).mock.calls[0][0][0];
+    expect(loop.appendRunMessages).toHaveBeenCalledOnce();
+    const msg = (loop.appendRunMessages as ReturnType<typeof vi.fn>).mock.calls[0][0][0];
     expect(msg.content).toContain(TODO_IDLE_MARK);
   });
 
@@ -30,7 +30,7 @@ describe("TodoIdleNudgePolicy", () => {
     const policy = new TodoIdleNudgePolicy();
     const loop = mockLoop();
     expect(policy.persistentNudgeIfNeeded(loop, run(3, 2))).toBe(false);
-    expect(loop.appendTurnMessages).not.toHaveBeenCalled();
+    expect(loop.appendRunMessages).not.toHaveBeenCalled();
   });
 
   it("同 run 只注入一次", () => {
@@ -38,6 +38,6 @@ describe("TodoIdleNudgePolicy", () => {
     const loop = mockLoop();
     policy.persistentNudgeIfNeeded(loop, run(5));
     policy.persistentNudgeIfNeeded(loop, run(5));
-    expect(loop.appendTurnMessages).toHaveBeenCalledOnce();
+    expect(loop.appendRunMessages).toHaveBeenCalledOnce();
   });
 });

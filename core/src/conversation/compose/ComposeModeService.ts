@@ -9,7 +9,7 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import type { Logger } from "../../log/Logger.js";
 import { noopLogger } from "../../log/noop.js";
-import type { OutputEvent, PersistedOutputEvent } from "../contract/events/index.js";
+import type { PersistedOutputEvent, StateEvent } from "../contract/events/index.js";
 import {
 	DEFAULT_CONVERSATION_MODE,
 	type ComposeModePhase,
@@ -18,13 +18,13 @@ import {
 import { ComposeModeStateProvider, type ComposeModeSnapshot } from "./ComposeModeState.js";
 
 /** 事件出口：状态迁移事件（compose.* 与 mode.* 家族）；sink 由 Conversation 装配（先落盘后广播） */
-export type ComposeEventSink = (event: OutputEvent) => void;
+export type ComposeEventSink = (event: StateEvent) => void;
 
 /** 分布式 Omit：对 union 逐成员剔除 K（保留判别联合，避免塌缩成公共键） */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 /** 缺 ts 的事件（#emit 统一补时间戳） */
-type EmitEvent = DistributiveOmit<OutputEvent, "ts">;
+type EmitEvent = DistributiveOmit<StateEvent, "ts">;
 
 /** 批准后写入审计记录（可选） */
 export interface ComposeCommitRecord {
@@ -476,6 +476,6 @@ export class ComposeModeService {
 
 	/** 补 ts 后经 sink 出口 */
 	#emit(event: EmitEvent): void {
-		this.#eventSink({ ...event, ts: new Date().toISOString() } as OutputEvent);
+		this.#eventSink({ ...event, ts: new Date().toISOString() } as StateEvent);
 	}
 }

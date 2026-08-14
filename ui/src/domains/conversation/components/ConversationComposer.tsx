@@ -8,7 +8,7 @@
  * 模式栏为受控组件：mode 来自投影的会话级权威状态，切换由上层 enqueue
  * ConversationModeSetInputEvent（mode 不再随 onSend 丢弃）。
  */
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { GenStatus, type GenStatusProps } from "./GenStatus.js";
 import type { ComposerMode } from "../store/ComposerDraftStore.js";
@@ -34,8 +34,6 @@ export interface ConversationComposerProps {
   readonly onModeChange?: (mode: ComposerMode) => void;
   /** 审批挂起时禁用发送（审核中）；打字与切 mode 不受影响。 */
   readonly sendDisabled?: boolean;
-  /** 审批挂起内容（与 GenStatus 同槽位，二选一）。Approval content in the status slot. */
-  readonly approval?: ReactNode;
   /** 运行时传输断开（进程死亡/重启中）：解锁审批阻塞并提示已断开。 */
   readonly disconnected?: boolean;
 }
@@ -49,7 +47,6 @@ export function ConversationComposer({
   pendingMode,
   onModeChange = noopModeChange,
   sendDisabled = false,
-  approval,
   disconnected = false,
 }: ConversationComposerProps) {
   const [text, setText] = useState("");
@@ -77,7 +74,7 @@ export function ConversationComposer({
           submit();
         }}
       >
-        {approval !== undefined ? approval : status !== undefined ? <GenStatus {...status} /> : null}
+        {status !== undefined ? <GenStatus {...status} /> : null}
         <div className={styles.mainRow}>
           <label className={styles.srOnly} htmlFor={`composer-input-${conversationId}`}>
             创作指令

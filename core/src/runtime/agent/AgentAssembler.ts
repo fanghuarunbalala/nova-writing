@@ -15,6 +15,7 @@ import type {
   InlinePromptItem,
 } from "../prompt/PromptRecipe.js";
 import type { ToolDef } from "../tool/ToolDef.js";
+import { applyToolPolicy } from "../tool/toolPolicy.js";
 import type { ToolGroupManifest } from "../tool/ToolGroupManifest.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import type { ContextCompactPolicy } from "../compact/ContextCompactPolicy.js";
@@ -100,6 +101,7 @@ export class AgentAssembler {
 
   /**
    * 解析工具：按 groupIds 序展开组工具 + allow/deny 过滤。
+   * 过滤统一走 applyToolPolicy（名单项不在池内抛 TOOL_POLICY_INVALID，不静默过滤）。
    * @returns 工具定义列表
    */
   resolveTools(): ToolDef[] {
@@ -112,13 +114,10 @@ export class AgentAssembler {
       }
       defs.push(...this.resolveToolGroup(manifest));
     }
-    const allow = toolPolicy.allow === undefined ? undefined : new Set(toolPolicy.allow);
-    const deny = toolPolicy.deny === undefined ? undefined : new Set(toolPolicy.deny);
-    return defs.filter(
-      (tool) =>
-        (allow === undefined || allow.has(tool.name)) &&
-        (deny === undefined || !deny.has(tool.name)),
-    );
+    return applyToolPolicy(defs, {
+      allow: toolPolicy.allow,
+      deny: toolPolicy.deny,
+    });
   }
 
   /**

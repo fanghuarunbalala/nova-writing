@@ -6,3 +6,4 @@ export * from "./ImmutableSnapshot.js";
 export * from "./TaskSerializer.js";
 export * from "./ToastStore.js";
 export * from "./useExternalStore.js";
+export * from "./WorkspaceDomainStore.js";

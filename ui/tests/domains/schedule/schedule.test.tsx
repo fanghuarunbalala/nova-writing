@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ApprovalQueueItem } from "@novel/core";
 import { ConversationCatalogStore } from "../../../src/domains/conversation/store/ConversationCatalogStore.js";
 import { NovelOverviewStore } from "../../../src/domains/novel/overview/NovelOverviewStore.js";
 import { StoryOutlineTreeStore } from "../../../src/domains/novel/outline/store/StoryOutlineTreeStore.js";
@@ -24,8 +25,9 @@ const overview = {
     storyUnitCount: 12,
     characterCount: 3,
     locationCount: 2,
+    volumeCount: 1,
     chapterCount: 5,
-    manuscriptBlockCount: 9,
+    paragraphCount: 9,
   },
   error: undefined,
 };
@@ -67,11 +69,20 @@ const conversationReady = {
 
 function makeUpstreamStores() {
   const api = {
-    conversations: { list: vi.fn(async () => ({ conversations: [] })), create: vi.fn(), open: vi.fn() },
+    conversations: { list: vi.fn(async () => []), create: vi.fn(), open: vi.fn() },
     novel: {
-      overview: { get: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, workspaceId: "w1", novelId: "novel_1", novelSchemaVersion: 1, sourceRevision: "r1", counts: { storyUnitCount: 12, characterCount: 3, locationCount: 2, volumeCount: 1, chapterCount: 5, manuscriptBlockCount: 9 }, roots: {} })) },
-      outline: { get: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, tree: undefined, progress: [] })), getStoryUnit: vi.fn() },
-      characters: {}, locations: {}, manuscript: {},
+      overview: {
+        get: vi.fn(async () => ({
+          novelId: "novel_1",
+          title: "novel_1",
+          counts: { storyUnits: 12, characters: 3, locations: 2, paragraphs: 9 },
+        })),
+      },
+      outline: {
+        get: vi.fn(async () => ({ outline: { id: "o1", novelId: "novel_1" }, units: [] })),
+        getStoryUnit: vi.fn(),
+      },
+      characters: {}, locations: {},
     },
   } as never;
   const novelOverview = new NovelOverviewStore({ api });
@@ -100,25 +111,29 @@ describe("ScheduleProjection", () => {
   });
 
   it("derives approval todos from pending approvals", () => {
-    const approvals = [
+    const approvals: readonly ApprovalQueueItem[] = [
       {
-        approvalRequestId: "ap-1",
-        title: "新增正文块",
-        toolName: "NovelParagraphWrite",
+        conversationId: "c1",
+        requestId: "ap-1",
+        toolCalls: [{ toolCallId: "t1", toolName: "NovelParagraphWrite", args: "{}" }],
+        decisioner: "ui",
         status: "pending",
+        requestedAt: "2026-08-05T09:00:00.000Z",
       },
       {
-        approvalRequestId: "ap-2",
-        title: "修改大纲单元",
-        toolName: "NovelOutlineEdit",
+        conversationId: "c1",
+        requestId: "ap-2",
+        toolCalls: [{ toolCallId: "t1", toolName: "NovelOutlineEdit", args: "{}" }],
+        decisioner: "ui",
         status: "approved",
+        requestedAt: "2026-08-05T09:10:00.000Z",
       },
-    ] as never;
+    ];
     const todos = ScheduleProjection.deriveApprovalTodos(approvals);
     expect(todos).toEqual([
       {
         id: "ap-1",
-        title: "新增正文块",
+        title: "NovelParagraphWrite",
         meta: "NovelParagraphWrite",
         tag: "approval",
         status: "open",

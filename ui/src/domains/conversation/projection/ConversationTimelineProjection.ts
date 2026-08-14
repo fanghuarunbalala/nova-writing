@@ -34,11 +34,6 @@ export const ConversationTimelineProjection = {
       text: assistantDraftText(projection),
       cards,
       streaming: projection.phase === "streaming",
-      ...(projection.phase === "completed"
-        ? { approvalState: "completed" as const }
-        : projection.phase === "failed"
-          ? { approvalState: "failed" as const }
-          : {}),
     });
   },
 

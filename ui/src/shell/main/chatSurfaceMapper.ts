@@ -2,13 +2,13 @@
  * chatSurfaceMapper
  *
  * 把 core 投影快照映射为域 ConversationTimelineItem：
- * - turn 分隔（user 消息前插时间标签）
- * - assistant 项的 cards / eventFlow / toolTraces 按事件 seq 范围归属
- *   （[sourceSequence, turnEndSequence]，工具调用常落在消息收口前）
+ * - run 分隔（user 消息前插时间标签）
+ * - assistant 项的 cards / toolTraces 按事件 seq 范围归属
+ *   （[sourceSequence, runEndSequence]，工具调用常落在消息收口前）
  * - cards：core CardDescriptor（proposal/text）→ UI rich ConversationCardDescriptor
  *
  * 不变量（渲染层依赖）：
- * - 输出保持 core timeline 追加序（turn 分隔插在对应 user 项之前），
+ * - 输出保持 core timeline 追加序（run 分隔插在对应 user 项之前），
  *   ConversationTimeline 不再重排（去 O(T log T) sort）；
  * - 历史 core 项引用稳定（投影仅重建变更项），mapper 按 core 项缓存映射结果，
  *   历史消息的 UI 项/子数组引用跨快照恒定 → React.memo 浅比较命中、零重渲染。
@@ -88,11 +88,11 @@ export function mapProjectionTimeline(
     const mapped: ConversationTimelineItem[] = [];
     if (item.kind === "user") {
       const timestamp = Date.parse(item.timestamp ?? "");
-      // turn 分隔：user 消息前插时间标签（时间解析失败用 item sequence 兜底不展示）
+      // run 分隔：user 消息前插时间标签（时间解析失败用 item sequence 兜底不展示）
       if (!Number.isNaN(timestamp)) {
         mapped.push(
           Object.freeze({
-            kind: "turn",
+            kind: "run",
             sequence: item.sequence - 0.5,
             label: formatTime(timestamp),
             timestamp,
@@ -109,7 +109,7 @@ export function mapProjectionTimeline(
       );
     } else {
       const from = item.sourceSequence ?? item.sequence;
-      const to = item.turnEndSequence ?? from;
+      const to = item.runEndSequence ?? from;
       const timestamp = Date.parse(item.timestamp ?? "");
       mapped.push(
         Object.freeze({
@@ -120,15 +120,8 @@ export function mapProjectionTimeline(
           text: item.text,
           cards: cardsInRange(projection.cards, from, to),
           streaming: item.streaming === true,
-          approvalState: (item.streaming === true ? "generating" : "completed") as
-            | "generating"
-            | "completed",
-          eventFlow: Object.freeze(
-            projection.eventFlow.filter((e) => e.sequence >= from && e.sequence <= to),
-          ),
-          toolTraces: Object.freeze(
-            projection.toolTraces.filter((t) => t.sequence >= from && t.sequence <= to),
-          ),
+          // 工具行随 core 项的分段结构直接透传（每段 = 内容 + 单行工具，无 seq 过滤）
+          segments: item.segments ?? Object.freeze([]),
         }),
       );
     }

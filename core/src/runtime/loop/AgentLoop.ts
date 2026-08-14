@@ -9,14 +9,17 @@ import type {
   AgentLoopResult,
   AgentRunConfig,
   RunContext,
-  TurnContext,
+  RunProgress,
   LoopInput,
+  LoopEvent,
 } from "./types.js";
+import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
 import { isCanonicalNovelWrite } from "../../conversation/compose/canonicalTools.js";
+import { ToolError } from "../tool/errors.js";
 import { LoopContext } from "./LoopContext.js";
 
-/** 缺省最大轮次（防死循环） */
+/** 缺省最大轮次（每 run 最大 turn 数，防死循环） */
 const DEFAULT_MAX_TURNS = 100;
 
 /** 累积两段 token 用量 */
@@ -30,7 +33,18 @@ function addUsage(
   };
 }
 
-/** AgentLoop：agent 主循环，产出 OutputEvent（conversation 统一事件），带输入队列 */
+/**
+ * 找出消息序列中缺 tool 结果的 toolCall id（恢复判定：非空才需要 resumePendingRun）。
+ * 已收口的 run（每个 toolCall 都有对应 tool 消息）返回空数组——重启后不得重跑。
+ */
+export function findPendingToolIds(messages: readonly LLMessage[]): string[] {
+  const toolCallIds = messages.flatMap((m) =>
+    m.role === "assistant" ? (m.toolCalls ?? []).map((tc) => tc.id) : [],
+  );
+  return toolCallIds.filter((id) => !messages.some((m) => m.role === "tool" && m.id === id));
+}
+
+/** AgentLoop：agent 主循环，产出 LoopEvent（持久化域 + 流域单流），带输入队列 */
 export class AgentLoop {
   /** 构造配置 */
   private readonly config: AgentLoopConfig;
@@ -38,7 +52,9 @@ export class AgentLoop {
   private readonly context: LoopContext;
   /** 取消控制器（cancel 触发） */
   private readonly controller = new AbortController();
-  /** 输入队列（turn 排队 / control 抢占） */
+  /** 审批批次序号（requestId 尾段 b{n}：同 run 多轮工具批次不撞队列幂等） */
+  private batchSeq = 0;
+  /** 输入队列（run 排队 / control 抢占） */
   private inbox: LoopInput[] = [];
   /** 是否正在 drain / run */
   private running = false;
@@ -48,8 +64,8 @@ export class AgentLoop {
   private inputSeq = 0;
   /** 最近一次 run 的 config（followup 无 config 时复用） */
   private lastConfig?: AgentRunConfig;
-  /** 输出事件订阅者（持久：run/followup 产出的所有 OutputEvent） */
-  private readonly outputListeners = new Set<(e: OutputEvent) => void>();
+  /** 输出事件订阅者（持久：run/followup 产出的所有 LoopEvent） */
+  private readonly outputListeners = new Set<(e: LoopEvent) => void>();
 
   /**
    * 构造 AgentLoop
@@ -60,7 +76,7 @@ export class AgentLoop {
     this.context = new LoopContext({
       agentCapability: config.agentCapability,
       workspace: config.workspace,
-      turnMessages: config.turnMessages,
+      runMessages: config.runMessages,
       startSeq: config.startSeq,
       platform: config.platform,
       novelConstraintsProvider: config.novelConstraintsProvider,
@@ -75,39 +91,40 @@ export class AgentLoop {
    * 处理一次用户输入：若 idle 立即执行；若 running 入队（串行，当前 run 结束后处理）。
    * @param input 用户消息文本
    * @param runConfig 单次运行配置
-   * @param onEvent 输出事件回调（OutputEvent 流）
+   * @param onEvent 输出事件回调（LoopEvent 流）
    * @returns 运行结果
    */
   async run(
     input: string,
     runConfig: AgentRunConfig,
-    onEvent?: (e: OutputEvent) => void,
+    onEvent?: (e: LoopEvent) => void,
   ): Promise<AgentLoopResult> {
     this.lastConfig = runConfig;
-    const turn = this.startTurn(input, onEvent);
+    const run = this.createRun(input);
     if (this.running) {
-      // 入队，等当前 run 完成（turn 已开，执行时复用）
+      // 入队，等当前 run 完成（run 已开，执行时复用）
       return new Promise<AgentLoopResult>((resolve, reject) => {
         const resolveId = `run_${++this.inputSeq}`;
         this.pendingRuns.set(resolveId, { resolve, reject });
-        this.inbox.push({ lane: "turn", kind: "followup", text: input, turn, config: runConfig, onEvent, resolveId });
+        this.inbox.push({ lane: "run", kind: "followup", text: input, run, config: runConfig, onEvent, resolveId });
       });
     }
-    return this.runInternal(input, runConfig, onEvent, turn);
+    return this.runInternal(input, runConfig, onEvent, run);
   }
 
   /**
-   * 追加用户消息（turn lane，排队；若 idle 立即 drain）。
-   * turn 在入队时即时创建（seq 按输入时序分配），执行时复用——上层可同步落盘拿到持久化回执。
+   * 追加用户消息（run lane，排队；若 idle 立即 drain）。
+   * run 在入队时即时创建（seq 按输入时序分配），执行时复用——上层可同步落盘拿到持久化回执；
+   * run-start / user.message 事件延迟到实际执行时发射（不插进正在流式的 run）。
    * @param text 用户消息文本
    * @param runConfig 单次运行配置（缺省复用上次 run 的 config）
-   * @returns 新开 turn（seq 已分配；turn-start / user.message 已发出）
+   * @returns 新开 run（seq 已分配）
    */
-  followup(text: string, runConfig?: AgentRunConfig): TurnContext {
-    const turn = this.startTurn(text, undefined);
-    this.inbox.push({ lane: "turn", kind: "followup", text, turn, config: runConfig });
+  followup(text: string, runConfig?: AgentRunConfig): RunContext {
+    const run = this.createRun(text);
+    this.inbox.push({ lane: "run", kind: "followup", text, run, config: runConfig });
     if (!this.running) void this.drain();
-    return turn;
+    return run;
   }
 
   /** 转向指令（control lane，高优先级，注入 system reminder） */
@@ -116,16 +133,21 @@ export class AgentLoop {
     if (!this.running) void this.drain();
   }
 
-  /** 停止：取消当前 + 清空 turn 队列 */
+  /** 停止：取消当前 + 清空 run 队列 */
   stop(): void {
     this.controller.abort();
-    this.inbox = this.inbox.filter((i) => !(i.lane === "turn" && i.kind === "followup"));
+    this.inbox = this.inbox.filter((i) => !(i.lane === "run" && i.kind === "followup"));
   }
 
-  /** 订阅输出事件（run/followup 产出的所有 OutputEvent），返回取消订阅 */
-  onOutputEvent(l: (e: OutputEvent) => void): () => void {
+  /** 订阅输出事件（run/followup 产出的所有 LoopEvent），返回取消订阅 */
+  onOutputEvent(l: (e: LoopEvent) => void): () => void {
     this.outputListeners.add(l);
     return () => this.outputListeners.delete(l);
+  }
+
+  /** 工具调度器（投影层缺省 preview resolver 经 resolve(name)?.preview 取用） */
+  get toolDispatcher(): ToolDispatcher {
+    return this.config.toolDispatcher;
   }
 
   /**
@@ -135,7 +157,7 @@ export class AgentLoop {
     this.controller.abort();
   }
 
-  /** 串行 drain：消费输入队列（control 优先于 turn，同 lane FIFO） */
+  /** 串行 drain：消费输入队列（control 优先于 run，同 lane FIFO） */
   private async drain(): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -145,15 +167,15 @@ export class AgentLoop {
         if (input.kind === "stop") continue;
         if (input.kind === "steer") {
           // 注入 system reminder（转向）
-          this.context.appendTurnMessages([{ role: "system", content: input.text }]);
+          this.context.appendRunMessages([{ role: "system", content: input.text }]);
           continue;
         }
-        // followup（turn 已在入队时预开，执行时复用）
+        // followup（run 已在入队时预开，执行时复用）
         const config = input.config ?? this.lastConfig;
         if (!config) continue;
         if (input.resolveId) {
           try {
-            const result = await this.runInternal(input.text, config, input.onEvent, input.turn);
+            const result = await this.runInternal(input.text, config, input.onEvent, input.run);
             const pending = this.pendingRuns.get(input.resolveId);
             if (pending) {
               pending.resolve(result);
@@ -168,23 +190,23 @@ export class AgentLoop {
           }
         } else {
           try {
-            await this.runInternal(input.text, config, undefined, input.turn);
+            await this.runInternal(input.text, config, undefined, input.run);
           } catch (e) {
-            const turn = input.turn;
+            const run = input.run;
             if (this.controller.signal.aborted) {
               // 用户 stop/cancel：abort 是正常路径，静默收口（不发错误文案）
-              this.config.logger?.debug("agent.loop.run.aborted", { seq: turn.seq });
-              this.emit(undefined, "turn-end", { persist: true, seq: turn.seq, turnSeq: turn.seq });
+              this.config.logger?.debug("agent.loop.run.aborted", { seq: run.seq });
+              this.emit(undefined, "run-end", { persist: true, seq: run.seq, runSeq: run.seq });
               continue;
             }
-            // turn 管线异常（provider / 工具 / 监听器）：收口为可见错误，进程继续服务后续消息
+            // run 管线异常（provider / 工具 / 监听器）：收口为可见错误，进程继续服务后续消息
             this.config.logger?.error("agent.loop.run.error", {
-              seq: turn.seq,
+              seq: run.seq,
               error: e instanceof Error ? e.constructor.name : String(e),
             });
             const text = `（生成失败：${e instanceof Error ? e.message : String(e)}）`;
-            this.emit(undefined, "assistant.message", { persist: true, seq: turn.seq, text });
-            this.emit(undefined, "turn-end", { persist: true, seq: turn.seq, turnSeq: turn.seq });
+            this.emit(undefined, "assistant.message", { persist: true, seq: run.seq, text });
+            this.emit(undefined, "run-end", { persist: true, seq: run.seq, runSeq: run.seq });
           }
         }
       }
@@ -204,49 +226,50 @@ export class AgentLoop {
   }
 
   /**
-   * 实际执行一轮：循环 toProviderCall / provider.call，
+   * 实际执行一个 run：先发 run-start / user.message（排队 run 的边界事件在此发射，
+   * 保证事件流顺序 = 执行顺序），再循环 toProviderCall / provider.call，
    * 直至 assistant 无 tool_call（final）/ length / maxTurns。
    * @param input 用户消息文本
    * @param runConfig 单次运行配置
    * @param onEvent 输出事件回调
-   * @param turn 入队时预开的 turn（turn-start / user.message 已发出）
+   * @param run 入队时预开的 run（run-start / user.message 在本方法入口发射）
    */
   private async runInternal(
     input: string,
     runConfig: AgentRunConfig,
-    onEvent: ((e: OutputEvent) => void) | undefined,
-    turn: TurnContext,
+    onEvent: ((e: LoopEvent) => void) | undefined,
+    run: RunContext,
   ): Promise<AgentLoopResult> {
     const logger = this.config.logger;
     logger?.info("agent.loop.run.start", { inputLen: input.length });
+    this.emitRunOpen(run, input, onEvent);
 
-    // ① 由 runConfig 初始化运行状态
-    const runContext: RunContext = {
+    // ① 由 runConfig 初始化运行进度
+    const runProgress: RunProgress = {
       curTurn: 0,
       maxTurn: runConfig.maxTurns ?? DEFAULT_MAX_TURNS,
       toolsLastTurn: new Map(),
     };
 
-    return this.runTurnLoop(turn, runConfig, onEvent, runContext);
+    return this.runTurnLoop(run, runConfig, onEvent, runProgress);
   }
 
   /**
-   * 暂停点续跑：恢复 turn 中缺 tool 结果的 toolCall 按决策补完（approve 执行 handler /
+   * 暂停点续跑：恢复 run 中缺 tool 结果的 toolCall 按决策补完（approve 执行 handler /
    * reject「已拒绝」/ expired「审批超时，按拒绝处理」/ 未装配「已拒绝」），
-   * 随后继续 provider 循环到 turn 收口（事件与 journal 同 seq 重写经 listener 走）。
+   * 随后继续 provider 循环到 run 收口（事件与 journal 同 seq 重写经 listener 走）。
+   * 不发 run-start / user.message（重放已提供边界事件）。
    * @param runConfig 采样配置
    * @returns 运行结果（最终 assistant 消息）
    */
-  async resumePendingTurn(runConfig: AgentRunConfig): Promise<AgentLoopResult> {
-    const turn = this.context.turns.at(-1);
-    if (turn === undefined) throw new Error("无可恢复的 turn（journal 为空）");
+  async resumePendingRun(runConfig: AgentRunConfig): Promise<AgentLoopResult> {
+    const run = this.context.runs.at(-1);
+    if (run === undefined) throw new Error("无可恢复的 run（journal 为空）");
     // 补完缺 tool 结果的 toolCall（恢复快照里 assistant.toolCalls 无对应 tool 消息的）
-    const assistantMessages = turn.messages.filter(
+    const assistantMessages = run.messages.filter(
       (m) => m.role === "assistant" && m.toolCalls !== undefined && m.toolCalls.length > 0,
     ) as AssistantMessage[];
-    const pendingToolIds = assistantMessages
-      .flatMap((m) => m.toolCalls!.map((tc) => tc.id))
-      .filter((id) => !turn.messages.some((m) => m.role === "tool" && m.id === id));
+    const pendingToolIds = findPendingToolIds(run.messages);
     for (const toolCallId of pendingToolIds) {
       const toolCall = assistantMessages
         .flatMap((m) => m.toolCalls!)
@@ -271,35 +294,35 @@ export class AgentLoop {
       }
       this.emit(undefined, "tool-call-response", {
         persist: true,
-        seq: turn.seq,
+        seq: run.seq,
         toolCallId,
         result: text,
       });
-      this.context.appendTurnMessages([{ role: "tool", content: text, id: toolCallId }]);
+      this.context.appendRunMessages([{ role: "tool", content: text, id: toolCallId }]);
     }
-    const runContext: RunContext = {
+    const runProgress: RunProgress = {
       curTurn: 0,
       maxTurn: runConfig.maxTurns ?? DEFAULT_MAX_TURNS,
       toolsLastTurn: new Map(),
     };
-    return this.runTurnLoop(turn, runConfig, undefined, runContext);
+    return this.runTurnLoop(run, runConfig, undefined, runProgress);
   }
 
-  /** 单 turn 的 provider 循环：toProviderCall → call → tool 执行/收口，直到 final 或 maxTurns */
+  /** 单 run 的 provider 循环（每轮迭代 = 一次 API 请求 = 一个 turn）：toProviderCall → call → tool 执行/收口，直到 final 或 maxTurns */
   private async runTurnLoop(
-    turn: TurnContext,
+    run: RunContext,
     runConfig: AgentRunConfig,
-    onEvent: ((e: OutputEvent) => void) | undefined,
-    runContext: RunContext,
+    onEvent: ((e: LoopEvent) => void) | undefined,
+    runProgress: RunProgress,
   ): Promise<AgentLoopResult> {
     const logger = this.config.logger;
     let usage: { inputTokens: number; outputTokens: number } | undefined;
-    for (runContext.curTurn = 0; runContext.curTurn < runContext.maxTurn; runContext.curTurn++) {
+    for (runProgress.curTurn = 0; runProgress.curTurn < runProgress.maxTurn; runProgress.curTurn++) {
       logger?.debug("agent.call.request", {
         model: runConfig.sampling.model,
-        curTurn: runContext.curTurn,
+        curTurn: runProgress.curTurn,
       });
-      const call = await this.context.toProviderCall(runConfig, runContext, this.controller.signal);
+      const call = await this.context.toProviderCall(runConfig, runProgress, this.controller.signal);
       this.config.debugger?.record(call); // 记录每次请求（相邻差异在 html 展示）
       let result: ProviderResult;
       try {
@@ -307,123 +330,164 @@ export class AgentLoop {
           // reasoning delta 在 loop 层直接丢弃（思考内容不上链、UI 不展示思考中态）：
           // 不 emit 任何事件，省去 hub/WS/IPC 全链传输成本。见 docs/PRD/gui-performance.md。
           if (d.type !== "text-delta") return;
-          this.emit(onEvent, "assistant.delta", { persist: false, kind: "text", text: d.text });
+          this.emit(onEvent, "assistant.delta", { kind: "text", text: d.text });
         });
       } catch (err) {
         logger?.error("agent.call.error", {
-          curTurn: runContext.curTurn,
+          curTurn: runProgress.curTurn,
           error: err instanceof Error ? err.constructor.name : String(err),
         });
         throw err;
       }
-      this.context.appendTurnMessages([result.message]);
-      logger?.debug("agent.turn.messageAppended", { seq: turn.seq, appended: 1 });
+      this.context.appendRunMessages([result.message]);
+      logger?.debug("agent.turn.messageAppended", { seq: run.seq, appended: 1 });
       if (result.usage) usage = addUsage(usage, result.usage);
       logger?.debug("agent.call.result", {
         finishReason: result.finishReason,
-        curTurn: runContext.curTurn,
+        curTurn: runProgress.curTurn,
       });
 
-      // tool_call → 执行工具，结果追加后继续下一轮
+      // tool_call → 执行工具，结果追加后继续下一轮（turn）
       if (result.finishReason === "tool_call" && result.message.toolCalls) {
+        // 审批门控（按 turn 批量）：本轮全部待审调用合并一次征询，决策作用于整批，
+        // 且先于任何工具执行——拒绝/未装配时以文本结果进 turn（agent 可见，可自我调整）
+        const gate = await this.gateBatch(result.message.toolCalls, run.seq);
         for (const tc of result.message.toolCalls) {
           this.emit(onEvent, "tool-call-request", {
             persist: true,
-            seq: turn.seq,
+            seq: run.seq,
             toolCallId: tc.id,
             name: tc.name,
             args: tc.args,
           });
           logger?.debug("agent.tool.dispatch", { tool: tc.name });
-          // 审批门控：拒绝/未装配时以文本结果进 turn（agent 可见，可自我调整）
-          const gate = await this.gateTool(tc, turn.seq);
-          const text =
-            gate ?? (await this.config.toolDispatcher.dispatch(this.context, tc));
-          this.emit(onEvent, "tool-call-response", {
-            persist: true,
-            seq: turn.seq,
-            toolCallId: tc.id,
-            result: text,
-          });
+          let text: string;
+          try {
+            text = gate.get(tc.id) ?? (await this.config.toolDispatcher.dispatch(this.context, tc));
+            this.emit(onEvent, "tool-call-response", {
+              persist: true,
+              seq: run.seq,
+              toolCallId: tc.id,
+              result: text,
+            });
+          } catch (err) {
+            // 统一错误回填：run 不因工具错误 reject——错误文本进 tool 消息供模型自纠
+            // （tool 消息必须照常 append，否则下一轮 provider call 缺 tool result 400）
+            const code = err instanceof ToolError ? err.code : "TOOL_HANDLER_FAILED";
+            const message = err instanceof Error ? err.message : String(err);
+            logger?.error("agent.tool.error", { tool: tc.name, code });
+            text = `工具执行失败(${code}): ${message}`;
+            this.emit(onEvent, "tool-call-response", {
+              persist: true,
+              seq: run.seq,
+              toolCallId: tc.id,
+              error: message,
+            });
+          }
           logger?.debug("agent.tool.result", { tool: tc.name });
-          this.context.appendTurnMessages([{ role: "tool", content: text, id: tc.id }]);
-          runContext.toolsLastTurn.set(tc.name, runContext.curTurn);
+          this.context.appendRunMessages([{ role: "tool", content: text, id: tc.id }]);
+          runProgress.toolsLastTurn.set(tc.name, runProgress.curTurn);
         }
         continue;
       }
 
-      // final（assistant 无 tool_call）或 length：完整 assistant 消息落盘事件 + turn 收口
+      // final（assistant 无 tool_call）或 length：完整 assistant 消息落盘事件 + run 收口
       this.emit(onEvent, "assistant.message", {
         persist: true,
-        seq: turn.seq,
+        seq: run.seq,
         text: result.message.content,
       });
-      this.emit(onEvent, "turn-end", { persist: true, seq: turn.seq, turnSeq: turn.seq });
+      this.emit(onEvent, "run-end", { persist: true, seq: run.seq, runSeq: run.seq });
       logger?.info("agent.loop.run.done", { finishReason: result.finishReason, usage });
       return { final: result.message, usage };
     }
-    throw new Error(`达到最大轮次 ${runContext.maxTurn}`);
+    throw new Error(`达到最大轮次 ${runProgress.maxTurn}`);
   }
 
   /**
-   * 审批门控：compose 权限（激活 deny canonical 写 / bypass 放行）→ requireApproval
-   * 工具执行前经 requestApproval 征询。
-   * @param tc 工具调用
-   * @param turnSeq 当前 turn 序号（requestId 归组用）
-   * @returns undefined = 放行执行；字符串 = 拒绝结果文本（作为 tool-call-response 进 turn 继续）
+   * 审批门控（按 turn 批量）：本轮返回中 requireApproval 的调用合并为一次征询，
+   * 决策作用于整批（approve 全放行 / reject 全拒绝 / edit 全拒绝附意见），
+   * 且先于任何工具执行发起。compose 权限先行：激活期 canonical 写硬拒绝（无审批通道）、
+   * bypass 模式 canonical 写跳过审批直接放行（ExitComposeMode 不在名单，恒走审批门）。
+   * @param toolCalls 本轮全部工具调用（含免审项）
+   * @param runSeq 当前 run 序号（requestId 归组用）
+   * @returns toolCallId → 拒绝结果文本（放行项不在 map 中）
    */
-  private async gateTool(tc: ToolCall, turnSeq: number): Promise<string | undefined> {
+  private async gateBatch(toolCalls: readonly ToolCall[], runSeq: number): Promise<Map<string, string>> {
     const compose = this.config.composeState?.snapshot(this.config.conversationId ?? "");
-    // compose 激活：canonical 写硬拒绝（无审批通道），Read/文件工具不受影响
-    if (compose?.active === true && isCanonicalNovelWrite(tc.name)) {
-      return `已拒绝（设计模式激活：正式稿只读，请将草稿写入 design 文件，不要调用 ${tc.name}）`;
+    const denied = new Map<string, string>();
+    const pending: ToolCall[] = [];
+    for (const tc of toolCalls) {
+      // compose 激活：canonical 写硬拒绝（无审批通道），Read/文件工具不受影响
+      if (compose?.active === true && isCanonicalNovelWrite(tc.name)) {
+        denied.set(
+          tc.id,
+          `已拒绝（设计模式激活：正式稿只读，请将草稿写入 design 文件，不要调用 ${tc.name}）`,
+        );
+        continue;
+      }
+      if (this.config.toolDispatcher.resolve(tc.name)?.requireApproval !== true) continue;
+      // bypass 模式：canonical 写跳过审批直接放行
+      if (compose?.mode === "bypass" && isCanonicalNovelWrite(tc.name)) continue;
+      pending.push(tc);
     }
-    const toolDef = this.config.toolDispatcher.resolve(tc.name);
-    if (toolDef?.requireApproval !== true) return undefined;
-    // bypass 模式：canonical 写跳过审批直接放行（ExitComposeMode 不在名单，恒走审批门）
-    if (compose?.mode === "bypass" && isCanonicalNovelWrite(tc.name)) return undefined;
-    if (this.config.requestApproval === undefined) return "已拒绝（审批通道未装配）";
+    if (pending.length === 0) return denied;
+    if (this.config.requestApproval === undefined) {
+      for (const tc of pending) denied.set(tc.id, "已拒绝（审批通道未装配）");
+      return denied;
+    }
     const decision = await this.config.requestApproval({
-      requestId: `approval_${this.config.conversationId ?? "conv"}_${turnSeq}_${tc.id}`,
-      toolName: tc.name,
-      args: tc.args,
+      requestId: `approval:${this.config.conversationId ?? "conv"}:${runSeq}:b${++this.batchSeq}`,
+      toolCalls: pending.map((tc) => ({ toolCallId: tc.id, toolName: tc.name, args: tc.args })),
     });
-    if (decision.kind === "approve") return undefined;
-    if (tc.name === "ExitComposeMode") {
-      // 退出 compose 的驳回：意见随决策回传（PRD F5/D9）
-      return decision.kind === "reject" ? "用户驳回了" : `用户驳回了：${decision.text}`;
+    if (decision.kind === "approve") return denied;
+    for (const tc of pending) {
+      if (tc.name === "ExitComposeMode") {
+        // 退出 compose 的驳回：意见随决策回传（PRD F5/D9）
+        denied.set(tc.id, decision.kind === "reject" ? "用户驳回了" : `用户驳回了：${decision.text}`);
+        continue;
+      }
+      denied.set(
+        tc.id,
+        decision.kind === "reject" ? "已拒绝" : `已拒绝（用户意见：${decision.text}）`,
+      );
     }
-    if (decision.kind === "reject") return "已拒绝";
-    return `已拒绝（用户意见：${decision.text}）`;
+    return denied;
   }
 
   /**
-   * 开新 turn（输入时序即时分配 seq）：appendTurnContext + 发 turn-start / user.message。
+   * 开新 run（输入时序即时分配 seq）：appendRun 进上下文。
+   * 不发事件——run-start / user.message 由 emitRunOpen 在实际执行时发射，
+   * 排队 run 的边界事件不插进正在流式的前一个 run（上层持久化回执经
+   * journal.appendRun 直调 run 对象，不依赖事件时机）。
    * @param text 用户消息文本
-   * @param onEvent 事件回调（run() 路径传其 onEvent；followup() 路径仅 hub 订阅者）
-   * @returns 新 turn（seq 已分配）
+   * @returns 新开 run（seq 已分配）
    */
-  private startTurn(text: string, onEvent?: (e: OutputEvent) => void): TurnContext {
+  private createRun(text: string): RunContext {
     const messages: LLMessage[] = [{ role: "user", content: text }];
-    const turn: TurnContext = {
+    const run: RunContext = {
       seq: 0, // 由 LoopContext 覆盖分配
       messages,
       ts: new Date().toISOString(),
-      appendTurnMessages: (m) => {
+      appendRunMessages: (m) => {
         messages.push(...m);
       },
     };
-    this.context.appendTurnContext(turn);
-    this.emit(onEvent, "turn-start", { persist: true, seq: turn.seq, turnSeq: turn.seq });
-    this.emit(onEvent, "user.message", { persist: true, seq: turn.seq, text });
-    this.config.logger?.debug("agent.turn.appended", { seq: turn.seq });
-    return turn;
+    this.context.appendRun(run);
+    this.config.logger?.debug("agent.run.appended", { seq: run.seq });
+    return run;
   }
 
-  /** 发出 OutputEvent（补 seq/conversationId/agentId/ts；通知 onEvent + 持久订阅者） */
+  /** 发射 run 开场边界（run-start + user.message；drain 实际执行该 run 时调用） */
+  private emitRunOpen(run: RunContext, text: string, onEvent?: (e: LoopEvent) => void): void {
+    this.emit(onEvent, "run-start", { persist: true, seq: run.seq, runSeq: run.seq });
+    this.emit(onEvent, "user.message", { persist: true, seq: run.seq, text });
+  }
+
+  /** 发出 LoopEvent（补 seq/conversationId/agentId/ts；通知 onEvent + 持久订阅者） */
   private emit(
-    onEvent: ((e: OutputEvent) => void) | undefined,
-    type: OutputEvent["type"],
+    onEvent: ((e: LoopEvent) => void) | undefined,
+    type: LoopEvent["type"],
     extra: Record<string, unknown>,
   ): void {
     const event = {
@@ -433,7 +497,7 @@ export class AgentLoop {
       agentId: this.config.agentId,
       ts: new Date().toISOString(),
       ...extra,
-    } as OutputEvent;
+    } as LoopEvent;
     onEvent?.(event);
     for (const l of this.outputListeners) l(event);
   }

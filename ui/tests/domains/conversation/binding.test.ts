@@ -2,19 +2,19 @@
  * ConversationProjectionBinding 测试：发布节流（32ms 尾沿合并）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConversationHandle, NovelApiClient, OutputEvent } from "@novel/core";
+import type { ConversationHandle, NovelApiClient, ProjectedEvent } from "@novel/core";
 import { ConversationProjectionBinding } from "../../../src/domains/conversation/binding/ConversationProjectionBinding.js";
 
-/** 捕获 subscribeEvents 监听器的假 handle（start 后由测试驱动推送事件） */
-function fakeHandle(): { handle: ConversationHandle; push: (event: OutputEvent) => void } {
-  let listener: ((event: OutputEvent) => void) | undefined;
+/** 捕获 subscribeEvents 监听器的假 handle（start 后由测试驱动推送投影事件） */
+function fakeHandle(): { handle: ConversationHandle; push: (event: ProjectedEvent) => void } {
+  let listener: ((event: ProjectedEvent) => void) | undefined;
   const handle = {
     sendUserMessage: async () => ({ seq: 0, recordedAt: "" }),
     sendSystemControl: async () => ({ seq: 0, recordedAt: "" }),
     resolveApproval: () => {},
     getConversationMode: async () => "review",
     dispose: () => {},
-    subscribeEvents: async (l: (event: OutputEvent) => void) => {
+    subscribeEvents: async (l: (event: ProjectedEvent) => void) => {
       listener = l;
     },
   } as unknown as ConversationHandle;
@@ -27,26 +27,25 @@ function fakeHandle(): { handle: ConversationHandle; push: (event: OutputEvent) 
   };
 }
 
-/** 最小 NovelApiClient 假体（open 返回给定 handle；history 空序列） */
+/** 最小 NovelApiClient 假体（open 返回给定 handle；projectedHistory 空序列） */
 function fakeApi(handle: ConversationHandle): NovelApiClient {
   return {
     conversations: {
       open: async () => handle,
-      history: async () => [],
+      projectedHistory: async () => [],
     },
   } as unknown as NovelApiClient;
 }
 
-/** 一条 text delta 事件（loop 层已丢弃 reasoning delta，仅 text 上链） */
-function delta(text: string): OutputEvent {
+/** 一条 text delta 投影事件（loop 层已丢弃 reasoning delta，仅 text 上链） */
+function delta(text: string): ProjectedEvent {
   return {
     type: "assistant.delta",
-    persist: false,
     kind: "text",
     text,
     conversationId: "c1",
     ts: new Date().toISOString(),
-  } as OutputEvent;
+  } as ProjectedEvent;
 }
 
 describe("ConversationProjectionBinding 发布节流", () => {

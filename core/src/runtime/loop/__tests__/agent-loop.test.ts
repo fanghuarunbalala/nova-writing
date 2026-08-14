@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { AgentLoop } from "../AgentLoop.js";
+import { ToolError } from "../../tool/errors.js";
 import type { Provider } from "../../provider/Provider.js";
 import type { ProviderCall, ProviderResult } from "../../provider/types.js";
 import type { AgentCapability } from "../../agent/AgentCapability.js";
 import type { ToolDispatcher } from "../../tool/ToolDispatcher.js";
-import type { OutputEvent } from "../../../conversation/contract/events/index.js";
+import type { LoopEvent } from "../types.js";
 import { ComposeModeStateProvider } from "../../../conversation/compose/index.js";
 
 const capability: AgentCapability = {
@@ -64,9 +65,9 @@ describe("AgentLoop.run", () => {
     const events: string[] = [];
     loop.onOutputEvent((e) => events.push(e.type));
     await loop.run("hi", { sampling: { model: "gpt-5" } });
-    expect(events).toContain("turn-start");
+    expect(events).toContain("run-start");
     expect(events).toContain("assistant.delta");
-    expect(events).toContain("turn-end");
+    expect(events).toContain("run-end");
   });
 
   it("reasoning delta 在 loop 层丢弃：不产出任何 assistant.delta 事件（thinking=high 双流只过 text）", async () => {
@@ -78,7 +79,7 @@ describe("AgentLoop.run", () => {
       },
     };
     const loop = makeLoop(provider);
-    const events: OutputEvent[] = [];
+    const events: LoopEvent[] = [];
     loop.onOutputEvent((e) => events.push(e));
     await loop.run("hi", { sampling: { model: "gpt-5" } });
     const deltas = events.filter((e) => e.type === "assistant.delta");
@@ -97,20 +98,20 @@ describe("AgentLoop.run", () => {
     expect(true).toBe(true);
   });
 
-  it("followup 即时开 turn 返回 TurnContext（seq 已分配，turn-start/user.message 已发；执行后同 seq 收口）", async () => {
+  it("followup 即时开 turn 返回 RunContext（seq 已分配，run-start/user.message 已发；执行后同 seq 收口）", async () => {
     const loop = makeLoop(makeProvider([result("stop", "回声")]));
     // 先 run 设置 lastConfig（followup 不带 config 时复用）
     await loop.run("warm", { sampling: { model: "gpt-5" } });
-    const events: OutputEvent[] = [];
+    const events: LoopEvent[] = [];
     loop.onOutputEvent((e) => events.push(e));
     const turn = loop.followup("你好");
     expect(turn.seq).toBe(2); // warm 消耗 seq 1
     // 前两个事件由 followup 同步发出（drain 异步，后续事件可能已插入）
-    expect(events.slice(0, 2).map((e) => e.type)).toEqual(["turn-start", "user.message"]);
+    expect(events.slice(0, 2).map((e) => e.type)).toEqual(["run-start", "user.message"]);
     await new Promise((r) => setTimeout(r, 10)); // 等 drain
     const types = events.map((e) => e.type);
     expect(types).toContain("assistant.message");
-    expect(types).toContain("turn-end");
+    expect(types).toContain("run-end");
     // user.message 内容为输入文本
     const userMsg = events.find((e) => e.type === "user.message");
     expect(userMsg && "text" in userMsg && userMsg.text).toBe("你好");
@@ -157,6 +158,81 @@ describe("AgentLoop.run", () => {
     expect(r.final.content).toBe("被截断");
   });
 
+  it("dispatcher 抛 ToolError → 错误回填 tool 消息与 error 字段，run 继续直至 stop", async () => {
+    const provider = makeProvider([
+      result("tool_call", "查一下", [{ id: "c1", name: "read", args: "{}" }]),
+      result("stop", "完成"),
+    ]);
+    const failing: ToolDispatcher = {
+      dispatch: async () => {
+        throw new ToolError({ code: "TOOL_NOT_AVAILABLE", toolName: "read" }, "未知工具: read");
+      },
+      resolve: () => undefined,
+    };
+    const loop = new AgentLoop({
+      workspace: "/ws",
+      provider,
+      agentCapability: capability,
+      toolDispatcher: failing,
+    });
+    const events: LoopEvent[] = [];
+    const r = await loop.run("hi", { sampling: { model: "gpt-5" } }, (e) => events.push(e));
+    expect(r.final.content).toBe("完成");
+    const resp = events.find((e) => e.type === "tool-call-response");
+    expect(resp?.type === "tool-call-response" && resp.error).toBe("未知工具: read");
+    expect(resp?.type === "tool-call-response" && resp.result).toBeUndefined();
+    const toolMsg = loop["context"].messages.find((m) => m.role === "tool");
+    expect(toolMsg?.content).toContain("工具执行失败(TOOL_NOT_AVAILABLE): 未知工具: read");
+  });
+
+  it("dispatcher 抛普通 Error → 兜底 TOOL_HANDLER_FAILED 归一", async () => {
+    const provider = makeProvider([
+      result("tool_call", "查一下", [{ id: "c1", name: "read", args: "{}" }]),
+      result("stop", "完成"),
+    ]);
+    const failing: ToolDispatcher = {
+      dispatch: async () => {
+        throw new Error("磁盘已满");
+      },
+      resolve: () => undefined,
+    };
+    const loop = new AgentLoop({
+      workspace: "/ws",
+      provider,
+      agentCapability: capability,
+      toolDispatcher: failing,
+    });
+    await loop.run("hi", { sampling: { model: "gpt-5" } });
+    const toolMsg = loop["context"].messages.find((m) => m.role === "tool");
+    expect(toolMsg?.content).toContain("工具执行失败(TOOL_HANDLER_FAILED): 磁盘已满");
+  });
+
+  it("工具错误后模型继续调用直至 stop（continue 语义）", async () => {
+    let calls = 0;
+    const flaky: ToolDispatcher = {
+      dispatch: async (_ctx, call) => {
+        calls += 1;
+        if (calls === 1) throw new Error("第一次失败");
+        return `result:${call.name}`;
+      },
+      resolve: () => undefined,
+    };
+    const provider = makeProvider([
+      result("tool_call", "查一下", [{ id: "c1", name: "read", args: "{}" }]),
+      result("tool_call", "再试", [{ id: "c2", name: "read", args: "{}" }]),
+      result("stop", "最终完成"),
+    ]);
+    const loop = new AgentLoop({
+      workspace: "/ws",
+      provider,
+      agentCapability: capability,
+      toolDispatcher: flaky,
+    });
+    const r = await loop.run("hi", { sampling: { model: "gpt-5" } });
+    expect(r.final.content).toBe("最终完成");
+    expect(calls).toBe(2);
+  });
+
   it("达到 maxTurn 抛错", async () => {
     const provider: Provider = {
       call: async () => result("tool_call", "x", [{ id: "c1", name: "read", args: "{}" }]),
@@ -180,7 +256,7 @@ describe("AgentLoop.run", () => {
   });
 });
 
-describe("AgentLoop.resumePendingTurn 补完", () => {
+describe("AgentLoop.resumePendingRun 补完", () => {
   /** 恢复快照：assistant 带一个未补 tool 结果的 toolCall（ParagraphWrite） */
   function makeResumeLoop(overrides: {
     composeState?: ComposeModeStateProvider;
@@ -205,7 +281,7 @@ describe("AgentLoop.resumePendingTurn 补完", () => {
       toolDispatcher: dispatcher,
       conversationId: "c1",
       resumePendingDecider: async () => "approve",
-      turnMessages: [
+      runMessages: [
         {
           role: "assistant",
           content: "",
@@ -223,13 +299,13 @@ describe("AgentLoop.resumePendingTurn 补完", () => {
     loop.onOutputEvent((e) => {
       if (e.type === "tool-call-response" && "result" in e) responses.push(e.result ?? "");
     });
-    const r = await loop.resumePendingTurn({ sampling: { model: "gpt-5" } });
+    const r = await loop.resumePendingRun({ sampling: { model: "gpt-5" } });
     expect(r.final.content).toBe("done");
     expect(dispatched).toEqual(["ParagraphWrite"]);
     expect(responses[0]).toBe("written");
   });
 
-  it("compose 激活时 approve 决议的 canonical 写被 deny（绕过 gateTool 的防护）", async () => {
+  it("compose 激活时 approve 决议的 canonical 写被 deny（绕过 gateBatch 的防护）", async () => {
     const composeState = new ComposeModeStateProvider();
     composeState.enter("c1", { designFilePath: "/ws/.novel/design/c1.md" });
     const { loop, dispatched } = makeResumeLoop({ composeState });
@@ -237,8 +313,46 @@ describe("AgentLoop.resumePendingTurn 补完", () => {
     loop.onOutputEvent((e) => {
       if (e.type === "tool-call-response" && "result" in e) responses.push(e.result ?? "");
     });
-    await loop.resumePendingTurn({ sampling: { model: "gpt-5" } });
+    await loop.resumePendingRun({ sampling: { model: "gpt-5" } });
     expect(dispatched).toEqual([]);
     expect(responses[0]).toContain("设计模式激活");
+  });
+});
+
+describe("AgentLoop 排队 run 边界事件延迟发射", () => {
+  it("A 流式中 followup B：B 的 run-start/user.message 在 A 的 run-end 之后（事件流顺序 = 执行顺序）", async () => {
+    const provider: Provider = {
+      call: async (_call: ProviderCall, onDelta?) => {
+        await new Promise((r) => setTimeout(r, 5));
+        onDelta?.({ type: "text-delta", text: "t" });
+        return result("stop", "回复");
+      },
+    };
+    const loop = makeLoop(provider);
+    const events: string[] = [];
+    loop.onOutputEvent((e) =>
+      events.push(e.type === "user.message" ? `user:${(e as { text: string }).text}` : e.type),
+    );
+    const finished = new Promise<void>((resolve) => {
+      const id = setInterval(() => {
+        if (events.filter((t) => t === "run-end").length >= 2) {
+          clearInterval(id);
+          resolve();
+        }
+      }, 2);
+    });
+    loop.followup("A", { sampling: { model: "m" } });
+    await new Promise((r) => setTimeout(r, 1)); // A 进入 provider call 流式中
+    loop.followup("B", { sampling: { model: "m" } });
+    await finished;
+
+    // A 全程在前：run-start → user:A → delta → assistant.message → run-end
+    expect(events.indexOf("user:A")).toBeGreaterThan(events.indexOf("run-start"));
+    expect(events.indexOf("user:A")).toBeLessThan(events.indexOf("assistant.delta"));
+    // B 的边界事件在 A 的 run-end 之后，且 run-start(B) 紧贴 user:B 之前
+    const firstRunEnd = events.indexOf("run-end");
+    const userB = events.indexOf("user:B");
+    expect(userB).toBeGreaterThan(firstRunEnd);
+    expect(events[userB - 1]).toBe("run-start");
   });
 });

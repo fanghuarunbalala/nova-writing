@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Location, NovelApiClient, NovelLocationsSnapshot } from "@novel/core";
+import type { Location, NovelApiClient } from "@novel/core";
 import { LocationStore } from "../../../src/domains/novel/location/store/LocationStore.js";
 import { LocationGrid } from "../../../src/domains/novel/location/components/LocationGrid.js";
 import { LocationDetailPanel } from "../../../src/domains/novel/location/components/LocationDetailPanel.js";
@@ -20,29 +20,19 @@ const location: Location = {
   authorNotes: "灯塔与船坞的距离是 200 米",
 };
 
-function listSnapshot(): NovelLocationsSnapshot {
-  return {
-    schemaVersion: 1,
-    scope: { kind: "canonical" },
-    locations: [location],
-  };
-}
-
 function buildApi(overrides: Partial<NovelApiClient["novel"]["locations"]> = {}): NovelApiClient {
   return {
     conversations: {} as never,
     novel: {
       overview: {} as never,
       outline: {} as never,
-      manuscript: {} as never,
       characters: {} as never,
+      paragraphs: {} as never,
+      publication: {} as never,
+      // 新 core 契约：list/get 直接返回实体数组/实体（无 schemaVersion/scope 包装）
       locations: {
-        list: vi.fn(async () => listSnapshot()),
-        get: vi.fn(async () => ({
-          schemaVersion: 1,
-          scope: { kind: "canonical" },
-          location,
-        })),
+        list: vi.fn(async () => [location]),
+        get: vi.fn(async () => location),
         ...overrides,
       },
     },

@@ -84,12 +84,12 @@
   }
 
   /* ============ 轮次分隔 ============ */
-  .turnSep {
+  .runSep {
     display: flex; align-items: center; gap: 12px; margin: 12px 0 4px;
     color: var(--color-faint); font-size: 10px; font-weight: 600;
     letter-spacing: 0.16em; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
-  .turnSep::before, .turnSep::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
+  .runSep::before, .runSep::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
 
   /* ============ 用户消息 ============ */
   .msg-user { display: flex; flex-direction: row-reverse; padding: 18px 0 6px; }
@@ -263,7 +263,7 @@
     <div class="col-tag">现状</div>
     <div class="panel">
 
-      <div class="turnSep">第 2 轮</div>
+      <div class="runSep">第 2 轮</div>
 
       <div class="msg-user">
         <div class="user-bubble-now">请写第三章开头，主角在旧宅地下室发现密室。</div>
@@ -285,7 +285,7 @@
           <span class="chip"><b>OutlineRead</b> vol-1</span>
           <span class="chip"><b>ParagraphWrite</b> ch-3</span>
         </div>
-        <div class="evtflow-now">runtime 事件流：<span>turn-start · thinking · tool-call ×3 · generating · turn-end</span></div>
+        <div class="evtflow-now">runtime 事件流：<span>run-start · tool-call ×3 · generating · run-end</span></div>
       </div>
 
       <p class="note">问题：正文与注释同为 15px 黑体、无容器区分；三种字号/颜色并存（15 / 13.5 / 11 / 10.5）但层级感弱；工具芯片与事件流占据视觉焦点。</p>
@@ -297,7 +297,7 @@
     <div class="col-tag">提案</div>
     <div class="panel">
 
-      <div class="turnSep">第 2 轮</div>
+      <div class="runSep">第 2 轮</div>
 
       <div class="msg-user">
         <div class="user-bubble-new">请写第三章开头，主角在旧宅地下室发现密室。</div>

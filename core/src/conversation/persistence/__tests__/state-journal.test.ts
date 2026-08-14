@@ -74,15 +74,15 @@ describe("state journal sidecar", () => {
 		expect(events).toHaveLength(1);
 	});
 
-	it("与 journal.jsonl 同目录并存互不干扰（readTurns 不受影响）", async () => {
-		// journal.jsonl 放一条 turn 快照，state.jsonl 放一条状态事件
+	it("与 journal.jsonl 同目录并存互不干扰（readRuns 不受影响）", async () => {
+		// journal.jsonl 放一条 run 快照，state.jsonl 放一条状态事件
 		mkdirSync(join(dir, "c1"), { recursive: true });
-		const turn = { seq: 1, messages: [{ role: "user", content: "hi" }], ts: "2026-08-14T00:00:00.000Z" };
-		appendFileSync(join(dir, "c1", "journal.jsonl"), `${JSON.stringify({ seq: 1, turn })}\n`);
+		const run = { seq: 1, messages: [{ role: "user", content: "hi" }], ts: "2026-08-14T00:00:00.000Z" };
+		appendFileSync(join(dir, "c1", "journal.jsonl"), `${JSON.stringify({ seq: 1, run })}\n`);
 		await writeService.append(modeChangedEvent("c1", "bypass"));
-		const turns = await readService.readTurns("c1");
-		expect(turns).toHaveLength(1);
-		expect(turns[0]?.messages).toHaveLength(1);
+		const runs = await readService.readRuns("c1");
+		expect(runs).toHaveLength(1);
+		expect(runs[0]?.messages).toHaveLength(1);
 		const events = await readService.readStateEvents("c1");
 		expect(events).toHaveLength(1);
 	});

@@ -12,8 +12,17 @@ import type {
 	ConversationMode,
 	Receipt,
 } from "../contract/types/index.js";
-import { existsSync, readdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import {
+	closeSync,
+	existsSync,
+	openSync,
+	readFileSync,
+	readSync,
+	readdirSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { join, resolve, sep } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import { isCanonicalNovelWrite } from "../compose/canonicalTools.js";
 import type {
@@ -120,12 +129,35 @@ export class ConversationManagerServer implements Contract {
 		if (this.storedirRoot !== undefined) this.scanCatalog();
 	}
 
-	/** 会话存储目录（storedirRoot 未提供时为空串；id 全局唯一，目录确定性可重派生复用） */
+	/** 会话存储目录（storedirRoot 未提供时为空串；id 全局唯一，目录确定性可重派生复用）。
+	 *  二次防御：resolve 后必须仍位于 storedirRoot 内（入口校验之外的兜底） */
 	private allocStoredir(conversationId: string): string {
-		return this.storedirRoot !== undefined ? join(this.storedirRoot, conversationId) : "";
+		if (this.storedirRoot === undefined) return "";
+		const dir = join(this.storedirRoot, conversationId);
+		const rootAbs = resolve(this.storedirRoot);
+		const dirAbs = resolve(dir);
+		if (dirAbs !== rootAbs && !dirAbs.startsWith(rootAbs + sep)) {
+			throw new Error(`非法 conversationId（路径逃逸 storedirRoot）: ${conversationId}`);
+		}
+		return dir;
 	}
 
-	/** 扫描 storedirRoot 种子 catalog（重启恢复）：目录名 = conversationId，status:"stopped"，seq 取 conv_<n> 最大值防 id 撞车 */
+	/**
+	 * conversationId 合法性校验：拒绝路径穿越/分隔符/Windows 保留字符。
+	 * id 来自渲染进程 RPC（不可信输入），直接用于文件路径拼接；自定义 id（如测试用 c1）
+	 * 合法，但不得含 / \ 及 : * ? " < > | 等会逃逸 storedirRoot 的字符。
+	 */
+	private isKnownConversationId(conversationId: string): boolean {
+		return (
+			conversationId !== "." &&
+			conversationId !== ".." &&
+			!conversationId.startsWith(".") && // 隐藏目录/相对路径前缀
+			!/[\\/:*?"<>|\0]/.test(conversationId)
+		);
+	}
+
+	/** 扫描 storedirRoot 种子 catalog（重启恢复）：目录名 = conversationId，status:"stopped"，seq 取 conv_<n> 最大值防 id 撞车；
+	 *  名字恢复优先级：meta.json 显式名 → journal 首句用户消息（截断）→ conversationId */
 	private scanCatalog(): void {
 		if (this.storedirRoot === undefined || !existsSync(this.storedirRoot)) return;
 		for (const entry of readdirSync(this.storedirRoot, { withFileTypes: true })) {
@@ -133,7 +165,7 @@ export class ConversationManagerServer implements Contract {
 			const conversationId = entry.name;
 			this.summaries.set(conversationId, {
 				conversationId,
-				name: conversationId,
+				name: this.readMetaName(conversationId) ?? this.deriveFirstName(conversationId) ?? conversationId,
 				storeDir: this.allocStoredir(conversationId),
 				status: "stopped",
 			});
@@ -142,15 +174,69 @@ export class ConversationManagerServer implements Contract {
 		}
 	}
 
-	/** 挂子进程 exit 监听：主动终止（terminatedIds）→ 清记录置 stopped；否则标记 crashed（summary 保留供 createOrResume 重派生） */
+	/** 会话 meta 文件路径（storedirRoot 未提供时 undefined → 不落盘） */
+	private metaPath(conversationId: string): string | undefined {
+		if (this.storedirRoot === undefined) return undefined;
+		return join(this.storedirRoot, conversationId, "meta.json");
+	}
+
+	/** 读 meta.json 显式名（无文件/损坏/空名 → undefined） */
+	private readMetaName(conversationId: string): string | undefined {
+		const path = this.metaPath(conversationId);
+		if (path === undefined) return undefined;
+		try {
+			const parsed = JSON.parse(readFileSync(path, "utf8")) as { name?: unknown };
+			return typeof parsed.name === "string" && parsed.name.trim() !== "" ? parsed.name : undefined;
+		} catch {
+			return undefined;
+		}
+	}
+
+	/** 写 meta.json 显式名（合并保留 mode 等其他字段；落盘失败忽略：内存态仍生效，重启回退首句派生） */
+	private writeMetaName(conversationId: string, name: string): void {
+		const path = this.metaPath(conversationId);
+		if (path === undefined) return;
+		try {
+			let existing: Record<string, unknown> = {};
+			try {
+				existing = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+			} catch {
+				// 无文件/损坏：从空对象起步
+			}
+			writeFileSync(path, JSON.stringify({ ...existing, name }), "utf8");
+		} catch {
+			// 见方法注释
+		}
+	}
+
+	/** 读 journal.jsonl 首行派生默认名（首条 user 消息，截断 30 字；读不到 → undefined） */
+	private deriveFirstName(conversationId: string): string | undefined {
+		if (this.storedirRoot === undefined) return undefined;
+		const line = readJournalFirstLine(join(this.storedirRoot, conversationId, "journal.jsonl"));
+		if (line === undefined) return undefined;
+		try {
+			const parsed = JSON.parse(line) as {
+				run?: { messages?: Array<{ role?: string; content?: unknown }> };
+			};
+			const messages = parsed.run?.messages;
+			if (!Array.isArray(messages)) return undefined;
+			const first = messages.find((m) => m.role === "user");
+			if (first?.content === undefined) return undefined;
+			return truncateConversationName(typeof first.content === "string" ? first.content : String(first.content));
+		} catch {
+			return undefined;
+		}
+	}
+
+	/** 挂子进程 exit 监听：主动终止（terminatedIds）→ 清记录置 stopped；异常退出（非零码/信号）标 crashed；exit 0 置 stopped */
 	private attachExit(conversationId: ConversationId, child: ChildProcess): void {
-		child.once("exit", () => {
+		child.once("exit", (code, signal) => {
 			const summary = this.summaries.get(conversationId);
 			if (this.terminatedIds.has(conversationId)) {
 				this.terminatedIds.delete(conversationId);
 				if (summary) summary.status = "stopped";
 			} else if (summary) {
-				summary.status = "crashed";
+				summary.status = code === 0 && signal === null ? "stopped" : "crashed";
 			}
 			// 进程退出：pending wait 条目标记过期（重启补完按超时拒绝处理）
 			this.waitQueue.expireConversation(conversationId, new Date().toISOString());
@@ -159,11 +245,18 @@ export class ConversationManagerServer implements Contract {
 		});
 	}
 
-	/** conversation 启动报到 */
+	/** conversation 启动报到（不冲刷显式名：子进程恒报 conversationId，已有名字时保留） */
 	async register(meta: ConversationMeta): Promise<void> {
+		const existing = this.summaries.get(meta.conversationId);
+		const name =
+			existing !== undefined &&
+			existing.name !== existing.conversationId &&
+			meta.name === meta.conversationId
+				? existing.name
+				: meta.name;
 		this.summaries.set(meta.conversationId, {
 			conversationId: meta.conversationId,
-			name: meta.name,
+			name,
 			storeDir: meta.storeDir,
 			status: "active",
 			parentId: meta.parentId,
@@ -221,7 +314,15 @@ export class ConversationManagerServer implements Contract {
 				parentId: opts.parentId,
 			});
 			this.attachExit(conversationId, child);
-			const handle = await handlePromise;
+			let handle: ConversationHandle;
+			try {
+				handle = await handlePromise;
+			} catch (err) {
+				// 报到超时等失败：回滚登记（子进程已由 spawner kill，目录保留供重试）
+				this.childProcesses.delete(conversationId);
+				this.summaries.delete(conversationId);
+				throw err;
+			}
 			this.handles.set(conversationId, handle);
 			return { conversationId, handle };
 		}
@@ -251,6 +352,9 @@ export class ConversationManagerServer implements Contract {
 	/** 创建或恢复会话（spawner 可用时派生/复用子进程，否则内存新建） */
 	async createOrResume(conversationId?: ConversationId): Promise<ConversationRef> {
 		const id = conversationId ?? `conv_${++this.seq}`;
+		if (conversationId !== undefined && !this.isKnownConversationId(conversationId)) {
+			throw new Error(`未知 conversationId: ${conversationId}`);
+		}
 		if (this.spawner) {
 			// 进程模式：子进程存活则复用；已死（crashed/未派生）用同一 storedir 重派生，子进程经 journal 重放续跑
 			let handle = this.handles.get(id);
@@ -263,6 +367,7 @@ export class ConversationManagerServer implements Contract {
 					storedir,
 					workspace: this.workspaceProvider?.(),
 				});
+				const prevSummary = this.summaries.get(id);
 				this.childProcesses.set(id, child);
 				// 重派生保留既有 parentId（F6 teammate 冒泡依赖；崩溃重启不得丢）
 				const existing = this.summaries.get(id);
@@ -274,7 +379,15 @@ export class ConversationManagerServer implements Contract {
 					...(existing?.parentId === undefined ? {} : { parentId: existing.parentId }),
 				});
 				this.attachExit(id, child);
-				handle = await spawnedPromise;
+				try {
+					handle = await spawnedPromise;
+				} catch (err) {
+					// 报到超时等失败：回滚登记（恢复原 summary；目录保留供重试）
+					this.childProcesses.delete(id);
+					if (prevSummary !== undefined) this.summaries.set(id, prevSummary);
+					else this.summaries.delete(id);
+					throw err;
+				}
 				this.handles.set(id, handle);
 			}
 			return { conversationId: id, handle };
@@ -294,8 +407,21 @@ export class ConversationManagerServer implements Contract {
 		return { conversationId: id, handle: conversation };
 	}
 
+	/** 重命名会话：更新目录摘要 + 写 meta.json 持久化（重启扫描恢复；显式名优先于 journal 首句派生） */
+	async rename(conversationId: ConversationId, name: string): Promise<boolean> {
+		if (!this.isKnownConversationId(conversationId)) return false;
+		const summary = this.summaries.get(conversationId);
+		const trimmed = name.trim();
+		if (summary === undefined || trimmed === "") return false;
+		summary.name = trimmed;
+		this.writeMetaName(conversationId, trimmed);
+		return true;
+	}
+
 	/** 删除会话（kill 子进程 + 删目录；Windows 下刚 kill 的子进程句柄可能短暂占用目录，删除失败忽略） */
 	async delete(conversationId: ConversationId): Promise<void> {
+		// id 不可信（渲染进程 RPC）：非法 id 直接拒绝，避免 rmSync 逃逸 storedirRoot
+		if (!this.isKnownConversationId(conversationId)) return;
 		const child = this.childProcesses.get(conversationId);
 		if (child !== undefined) {
 			this.terminatedIds.add(conversationId);
@@ -326,24 +452,29 @@ export class ConversationManagerServer implements Contract {
 
 	/**
 	 * 提交审批请求（非阻塞）：入队 + decisioner 派生（parentId → parent 冒泡；否则 ui）。
-	 * 根会话（无 parentId）按自身 activeMode 裁决：bypass 模式下 canonical 写工具
-	 * 跳过 UI 直接批准（根完全自主决策，F6）；ExitComposeMode 非 canonical，恒走 UI。
+	 * 根会话（无 parentId）按自身 activeMode 裁决：bypass 模式下整批均为 canonical 写时
+	 * 跳过 UI 直接批准（根完全自主决策，F6；先入队再决议——队列保留记录供重启补完查询）。
+	 * 批内含非 canonical（如 ExitComposeMode）时不短路，整批走 UI。
 	 */
 	async submitApprovalRequest(
 		conversationId: ConversationId,
 		req: ConversationApprovalRequest,
 	): Promise<void> {
 		const parentId = this.summaries.get(conversationId)?.parentId;
-		// 根会话 bypass：canonical 写直接批准（先入队再决议——队列保留记录供重启补完查询）
-		if (parentId === undefined && isCanonicalNovelWrite(req.toolName)) {
+		// 根会话 bypass：整批 canonical 写直接批准（防御纵深——conversation 侧短路通常先命中）
+		const allCanonical = req.toolCalls.every((tc) => isCanonicalNovelWrite(tc.toolName));
+		if (parentId === undefined && allCanonical) {
 			const handle = this.handles.get(conversationId);
 			const mode = await this.readConversationMode(handle);
 			if (mode === "bypass") {
 				this.waitQueue.submit({
 					conversationId,
 					requestId: req.requestId,
-					toolName: req.toolName,
-					args: req.args,
+					toolCalls: req.toolCalls.map((tc) => ({
+						toolCallId: tc.toolCallId,
+						toolName: tc.toolName,
+						args: tc.args,
+					})),
 					decisioner: "ui",
 					status: "pending",
 					requestedAt: new Date().toISOString(),
@@ -356,8 +487,11 @@ export class ConversationManagerServer implements Contract {
 		this.waitQueue.submit({
 			conversationId,
 			requestId: req.requestId,
-			toolName: req.toolName,
-			args: req.args,
+			toolCalls: req.toolCalls.map((tc) => ({
+				toolCallId: tc.toolCallId,
+				toolName: tc.toolName,
+				args: tc.args,
+			})),
 			decisioner: parentId !== undefined ? "parent" : "ui",
 			status: "pending",
 			requestedAt: new Date().toISOString(),
@@ -444,4 +578,51 @@ export class ConversationManagerServer implements Contract {
 		if (!target) throw new Error(`未找到 conversation: ${id}`);
 		return target;
 	}
+}
+
+/** journal 首行读取上限（首行即首个 run，含完整 user 消息；超限视为损坏） */
+const JOURNAL_FIRST_LINE_MAX_BYTES = 256 * 1024;
+
+/**
+ * 有界读 journal.jsonl 首行（找到首个 \n 即返回，不整文件读；超上限/打开失败 → undefined）。
+ * @param filePath journal 文件路径
+ * @returns 首行内容（不含换行）
+ */
+function readJournalFirstLine(filePath: string): string | undefined {
+	let fd: number;
+	try {
+		fd = openSync(filePath, "r");
+	} catch {
+		return undefined;
+	}
+	try {
+		const chunks: Buffer[] = [];
+		let total = 0;
+		const buffer = Buffer.alloc(64 * 1024);
+		while (total < JOURNAL_FIRST_LINE_MAX_BYTES) {
+			const read = readSync(fd, buffer, 0, buffer.length, total);
+			if (read <= 0) break;
+			chunks.push(Buffer.from(buffer.subarray(0, read)));
+			total += read;
+			const joined = Buffer.concat(chunks).toString("utf8");
+			const newline = joined.indexOf("\n");
+			if (newline >= 0) return joined.slice(0, newline);
+		}
+		return Buffer.concat(chunks).toString("utf8");
+	} catch {
+		return undefined;
+	} finally {
+		try {
+			closeSync(fd);
+		} catch {
+			// 关闭失败忽略
+		}
+	}
+}
+
+/** 会话名截断：折叠空白、上限 30 字 + 省略号（首句派生默认名用） */
+function truncateConversationName(text: string): string {
+	const collapsed = text.replace(/\s+/g, " ").trim();
+	if (collapsed === "") return "";
+	return collapsed.length > 30 ? `${collapsed.slice(0, 30)}…` : collapsed;
 }

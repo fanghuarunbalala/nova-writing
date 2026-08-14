@@ -6,13 +6,33 @@ import type { ToolDef } from "../ToolDef.js";
 import type { ToolCall } from "../../provider/types.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
 import type { OrderKey } from "../../../novel/model/outline.js";
-
-/** 解析 tool args JSON */
+import {
+  characterReadPreview,
+  characterWritePreview,
+  characterEditPreview,
+  locationReadPreview,
+  locationWritePreview,
+  locationEditPreview,
+  paragraphReadPreview,
+  paragraphWritePreview,
+  paragraphEditPreview,
+  publicationReadPreview,
+  publicationWritePreview,
+  publicationEditPreview,
+  novelDeletePreview,
+  outlineReadPreview,
+  outlineWritePreview,
+  outlineEditPreview,
+} from "../previews.js";
+import { ToolError } from "../errors.js";
 function parseArgs(call: ToolCall): Record<string, unknown> {
   try {
     return JSON.parse(call.args) as Record<string, unknown>;
   } catch {
-    throw new Error(`无效的 JSON 参数: ${call.args}`);
+    throw new ToolError(
+      { code: "TOOL_ARGUMENTS_INVALID", toolName: call.name },
+      `无效的 JSON 参数: ${call.args}`,
+    );
   }
 }
 
@@ -44,6 +64,7 @@ function characterRead(handle: NovelHandle): ToolDef {
   return {
     name: "CharacterRead",
     version: "1.0.0",
+    preview: characterReadPreview,
     description:
       "读取角色档案。省略 characterId 列出全部角色；传入则读取单个角色。返回的是已提交（正式稿）状态。",
     parameters: {
@@ -74,6 +95,8 @@ function characterWrite(handle: NovelHandle): ToolDef {
     version: "1.0.0",
     // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
     requireApproval: true,
+    // 投影预览：tool-recorded 展示「角色：<名>」而非原始 JSON（PRD `output-投影层` §4.3）
+    preview: characterWritePreview,
     description:
       "批量创建角色档案。name 必填；aliases/summary/initialState/authorNotes 可选。创建直接写入正式稿。",
     parameters: {
@@ -120,6 +143,7 @@ function characterEdit(handle: NovelHandle): ToolDef {
   return {
     name: "CharacterEdit",
     version: "1.0.0",
+    preview: characterEditPreview,
     // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
     requireApproval: true,
     description:
@@ -185,6 +209,7 @@ function locationRead(handle: NovelHandle): ToolDef {
   return {
     name: "LocationRead",
     version: "1.0.0",
+    preview: locationReadPreview,
     description: "读取地点档案。省略 locationId 列出全部地点；传入则读取单个。返回已提交（正式稿）状态。",
     parameters: {
       type: "object",
@@ -212,6 +237,7 @@ function locationWrite(handle: NovelHandle): ToolDef {
   return {
     name: "LocationWrite",
     version: "1.0.0",
+    preview: locationWritePreview,
     // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
     requireApproval: true,
     description: "批量创建地点档案。name 必填；aliases/summary/initialState/authorNotes 可选。直接写入正式稿。",
@@ -257,6 +283,7 @@ function locationEdit(handle: NovelHandle): ToolDef {
   return {
     name: "LocationEdit",
     version: "1.0.0",
+    preview: locationEditPreview,
     // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
     requireApproval: true,
     description: "批量字段级局部更新（PATCH）已有地点档案。locationId 必填；baseRevision 为最近读到的 entityVersion；字段覆盖/保留，null 清除。",
@@ -318,6 +345,7 @@ export function createParagraphTools(handle: NovelHandle): ToolDef[] {
     {
       name: "ParagraphRead",
       version: "1.0.0",
+      preview: paragraphReadPreview,
       description: "读取段落。省略 paragraphId 时按 storyUnitId 列出该单元的全部段落（按 orderKey 排序）；传入 paragraphId 读取单个。",
       parameters: {
         type: "object",
@@ -340,6 +368,8 @@ export function createParagraphTools(handle: NovelHandle): ToolDef[] {
       version: "1.0.0",
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
+      // 投影预览：tool-recorded 展示「正文：<章节>」而非原始 JSON（PRD `output-投影层` §4.3）
+      preview: paragraphWritePreview,
       description: "在指定 story unit 下插入新段落。storyUnitId 必填；orderKey 控制排序；text 为段落正文。",
       parameters: {
         type: "object",
@@ -363,6 +393,7 @@ export function createParagraphTools(handle: NovelHandle): ToolDef[] {
     {
       name: "ParagraphEdit",
       version: "1.0.0",
+      preview: paragraphEditPreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description: "替换段落文本（不可变段落：update 整体替换）。paragraphId 必填；baseRevision 为最近读到的 entityVersion。",
@@ -394,6 +425,7 @@ export function createPublicationTools(handle: NovelHandle): ToolDef[] {
     {
       name: "PublicationRead",
       version: "1.0.0",
+      preview: publicationReadPreview,
       description: "读取发布结构（卷/章）。返回完整卷章树。",
       parameters: { type: "object", properties: {}, additionalProperties: false },
       promptDetail: { policy: "Reads the publication structure (volumes/chapters).", guidance: "Returns the full volume/chapter tree." },
@@ -404,6 +436,7 @@ export function createPublicationTools(handle: NovelHandle): ToolDef[] {
     {
       name: "PublicationWrite",
       version: "1.0.0",
+      preview: publicationWritePreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description: "创建卷或章。kind=volume 传 title；kind=chapter 传 volumeId/title/storyUnitId。",
@@ -434,6 +467,7 @@ export function createPublicationTools(handle: NovelHandle): ToolDef[] {
     {
       name: "PublicationEdit",
       version: "1.0.0",
+      preview: publicationEditPreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description: "更新卷或章。kind=volume 传 volumeId；kind=chapter 传 chapterId；baseRevision 为最近读到的 entityVersion。",
@@ -475,6 +509,7 @@ export function createDeleteTool(handle: NovelHandle): ToolDef[] {
     {
       name: "NovelDelete",
       version: "1.0.0",
+      preview: novelDeletePreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description:
@@ -530,6 +565,7 @@ export function createOutlineTools(handle: NovelHandle): ToolDef[] {
     {
       name: "OutlineRead",
       version: "1.0.0",
+      preview: outlineReadPreview,
       description: "读取大纲（含全部 story unit 树）。可传 storyUnitId 读单个单元。",
       parameters: {
         type: "object",
@@ -550,6 +586,7 @@ export function createOutlineTools(handle: NovelHandle): ToolDef[] {
     {
       name: "OutlineWrite",
       version: "1.0.0",
+      preview: outlineWritePreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description: "创建 story unit（大纲单元）。title 必填；parentId 挂父节点；orderKey 排序；intent/synopsis/scope 可选。",
@@ -586,6 +623,7 @@ export function createOutlineTools(handle: NovelHandle): ToolDef[] {
     {
       name: "OutlineEdit",
       version: "1.0.0",
+      preview: outlineEditPreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description: "更新 story unit。storyUnitId 必填；baseRevision 为最近读到的 entityVersion；patch 覆盖 title/intent/synopsis/scope/planningStatus/realizationStatus。",

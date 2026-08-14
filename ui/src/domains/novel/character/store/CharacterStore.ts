@@ -9,8 +9,8 @@
  */
 import type { Character, CharacterId, CharacterInput, Logger, NovelApiClient } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
-import { ExternalStore } from "../../../../shared/state/ExternalStore.js";
 import { TaskSerializer } from "../../../../shared/state/TaskSerializer.js";
+import { WorkspaceDomainStore, type ReadyWorkspaceDomainSnapshot } from "../../../../shared/state/WorkspaceDomainStore.js";
 import type { NovelDomainError } from "../../outline/store/StoryOutlineTreeStore.js";
 
 export interface CharacterSummary {
@@ -50,64 +50,59 @@ const EMPTY_SNAPSHOT: CharacterSnapshot = Object.freeze({
   error: undefined,
 });
 
-export class CharacterStore extends ExternalStore<CharacterSnapshot> {
+export class CharacterStore extends WorkspaceDomainStore<CharacterSnapshot> {
   private readonly api: NovelApiClient;
   private readonly logger: Logger;
   /** 变更串行（乐观锁操作不并发） */
   private readonly serializer = new TaskSerializer();
-  private generation = 0;
 
   constructor(deps: { readonly api: NovelApiClient; readonly logger?: Logger }) {
-    super(EMPTY_SNAPSHOT);
+    super(
+      EMPTY_SNAPSHOT,
+      Object.freeze({
+        code: "novel-load-failed",
+        message: "角色列表加载失败，请重试",
+        retryable: true,
+      }),
+    );
     this.api = deps.api;
     this.logger = (deps.logger ?? noopLogger).child({
       component: "character_store",
     });
   }
 
-  async loadWorkspace(workspaceId: string): Promise<void> {
-    const capturedId = requireNonBlank(workspaceId, "Workspace id");
-    const generation = ++this.generation;
-    this.setSnapshot({
-      ...EMPTY_SNAPSHOT,
-      phase: "loading",
-      workspaceId: capturedId,
-    });
-    try {
-      const result = await this.api.novel.characters.list();
-      if (generation !== this.generation) return;
-      this.setSnapshot({
-        phase: "ready",
-        workspaceId: capturedId,
-        characters: Object.freeze(result.map(captureSummary)),
-        detailCache: new Map<string, CharacterDetail>(),
-        selectedId: undefined,
-        error: undefined,
-      });
-      this.logger.info("character_store.load_completed", { characterCount: result.length });
-    } catch {
-      if (generation !== this.generation) return;
-      this.setSnapshot({
-        ...EMPTY_SNAPSHOT,
-        phase: "error",
-        workspaceId: capturedId,
-        error: {
-          code: "novel-load-failed",
-          message: "角色列表加载失败，请重试",
-          retryable: true,
-        },
-      });
-      this.logger.warn("character_store.load_failed");
-    }
+  protected async fetchReadySnapshot(
+    workspaceId: string,
+    generation: number,
+  ): Promise<ReadyWorkspaceDomainSnapshot<CharacterSnapshot> | undefined> {
+    const result = await this.api.novel.characters.list();
+    if (this.isStaleGeneration(generation)) return undefined;
+    return {
+      phase: "ready",
+      workspaceId,
+      characters: Object.freeze(result.map(captureSummary)),
+      detailCache: new Map<string, CharacterDetail>(),
+      selectedId: undefined,
+      error: undefined,
+    };
   }
 
-  async loadDetail(characterId: string): Promise<void> {
-    const capturedId = requireNonBlank(characterId, "Character id");
+  protected override onLoadSucceeded(snapshot: CharacterSnapshot): void {
+    this.logger.info("character_store.load_completed", {
+      characterCount: snapshot.characters.length,
+    });
+  }
+
+  protected override onLoadFailed(): void {
+    this.logger.warn("character_store.load_failed");
+  }
+
+  async loadDetail(characterId: string): Promise<void> {    const capturedId = requireNonBlank(characterId, "Character id");
     if (this.snapshot.detailCache.has(capturedId)) return;
-    const generation = this.generation;
+    const generation = this.currentGeneration;
     try {
       const character = await this.api.novel.characters.get(capturedId as CharacterId);
-      if (generation !== this.generation) return;
+      if (this.isStaleGeneration(generation)) return;
       const detail = captureDetail(character);
       const detailCache = new Map(this.snapshot.detailCache);
       detailCache.set(capturedId, detail);
@@ -120,12 +115,6 @@ export class CharacterStore extends ExternalStore<CharacterSnapshot> {
 
   selectCharacter(id: string | undefined): void {
     this.setSnapshot({ ...this.snapshot, selectedId: id });
-  }
-
-  invalidate(): Promise<void> {
-    const workspaceId = this.snapshot.workspaceId;
-    if (workspaceId === undefined) return Promise.resolve();
-    return this.loadWorkspace(workspaceId);
   }
 
   /**

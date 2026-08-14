@@ -84,7 +84,7 @@ export class ConversationProjectionBinding {
     return tracked;
   }
 
-  /** 发送用户消息（turn lane）。 */
+  /** 发送用户消息（run lane）。 */
   sendUserMessage(text: string): Promise<Receipt> {
     return this.requireHandle().sendUserMessage({ text });
   }
@@ -127,7 +127,7 @@ export class ConversationProjectionBinding {
       }
       this.handle = handle;
       const projection = new ConversationProjection(handle, this.conversationId, (opts) =>
-        this.api.conversations.history(this.conversationId, opts),
+        this.api.conversations.projectedHistory(this.conversationId, opts),
       );
       this.projection = projection;
       this.unsubscribeProjection = projection.subscribe(() => this.publish());
@@ -241,9 +241,6 @@ function emptyProjection(conversationId: string): ConversationProjectionSnapshot
     state: "idle",
     timeline: Object.freeze([]),
     cards: Object.freeze([]),
-    approvals: Object.freeze([]),
-    toolTraces: Object.freeze([]),
-    eventFlow: Object.freeze([]),
   });
 }
 

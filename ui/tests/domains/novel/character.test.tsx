@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Character, NovelApiClient, NovelCharactersSnapshot } from "@novel/core";
+import type { Character, NovelApiClient } from "@novel/core";
 import { CharacterStore } from "../../../src/domains/novel/character/store/CharacterStore.js";
 import { CharacterGrid } from "../../../src/domains/novel/character/components/CharacterGrid.js";
 import { CharacterDetailPanel } from "../../../src/domains/novel/character/components/CharacterDetailPanel.js";
@@ -20,29 +20,19 @@ const character: Character = {
   authorNotes: "核心弧光：学会告别",
 };
 
-function listSnapshot(): NovelCharactersSnapshot {
-  return {
-    schemaVersion: 1,
-    scope: { kind: "canonical" },
-    characters: [character],
-  };
-}
-
 function buildApi(overrides: Partial<NovelApiClient["novel"]["characters"]> = {}): NovelApiClient {
   return {
     conversations: {} as never,
     novel: {
       overview: {} as never,
       outline: {} as never,
-      manuscript: {} as never,
       locations: {} as never,
+      paragraphs: {} as never,
+      publication: {} as never,
+      // 新 core 契约：list/get 直接返回实体数组/实体（无 schemaVersion/scope 包装）
       characters: {
-        list: vi.fn(async () => listSnapshot()),
-        get: vi.fn(async () => ({
-          schemaVersion: 1,
-          scope: { kind: "canonical" },
-          character,
-        })),
+        list: vi.fn(async () => [character]),
+        get: vi.fn(async () => character),
         ...overrides,
       },
     },

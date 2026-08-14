@@ -153,9 +153,9 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
     onCardAction,
   } = deps;
   switch (item.kind) {
-    case "turn":
+    case "run":
       return (
-        <div className={styles.turnSep}>
+        <div className={styles.runSep}>
           <span>{item.label}</span>
         </div>
       );
@@ -177,14 +177,12 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
           sequence={item.sequence}
           agentLabel={item.agentLabel}
           timestamp={item.timestamp}
-          approvalState={item.approvalState}
           revision={item.revision}
           failureDetail={item.failureDetail}
           text={item.text}
           cards={item.cards}
           streaming={item.streaming}
-          eventFlow={item.eventFlow}
-          toolTraces={item.toolTraces}
+          segments={item.segments}
           onResolveReference={resolveReference}
           onNotify={onNotify}
           onCardAction={onCardAction}

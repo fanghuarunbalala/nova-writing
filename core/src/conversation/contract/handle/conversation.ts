@@ -2,7 +2,7 @@
  * 远端 conversation 视图（UI 侧）。
  */
 
-import type { OutputEvent } from "../events/index.js";
+import type { ProjectedEvent } from "../events/index.js";
 import type { ConversationInteraction } from "../interaction/index.js";
 import type { WaitingInteractionRequest } from "../interaction/index.js";
 import type { ConversationApprovalDecision, ConversationMode } from "../types/index.js";
@@ -19,10 +19,10 @@ export interface ConversationHandle extends ConversationInteraction, WaitingInte
 	 * @param listener 输出事件回调（事件产生即推送）
 	 * @returns 订阅完成（立即返回）；取消订阅经 dispose()
 	 */
-	subscribeEvents(listener: (e: OutputEvent) => void): Promise<void>;
+	subscribeEvents(listener: (e: ProjectedEvent) => void): Promise<void>;
 	/**
 	 * 回传审批决策（解除 sendApprovalRequest 的阻塞等待）
-	 * @param requestId 审批请求 id（approval.request 事件携带）
+	 * @param requestId 审批请求 id（CMS wait 队列条目）
 	 * @param decision 决策（approve / reject / edit）
 	 */
 	resolveApproval(requestId: string, decision: ConversationApprovalDecision): void;
@@ -38,7 +38,7 @@ export interface ConversationHandle extends ConversationInteraction, WaitingInte
 	 */
 	resolveExitCompose(requestId: string): void;
 	/**
-	 * 查询当前生效的会话模式（review/bypass/compose；mode.set 待下次 turn 生效）。
+	 * 查询当前生效的会话模式（review/bypass/compose；mode.set 待下次 run 生效）。
 	 * 读走查（进度走读不走推同理，mode 是会话状态非进度）
 	 * @returns 当前生效模式
 	 */

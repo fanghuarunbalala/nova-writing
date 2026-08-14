@@ -14,3 +14,4 @@
 
 - `docs/architecture.md` — 架构工作文档（进程拓扑 / 通道 / 落地状态）
 - `docs/PRD/产品总览.md` — 整体产品 PRD
+- `docs/PRD/output-投影层.md` — 输出事件投影层（OutputEvent / ProjectedEvent 事件域拆分）

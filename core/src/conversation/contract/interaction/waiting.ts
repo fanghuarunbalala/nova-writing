@@ -1,6 +1,6 @@
 /**
  * 等待交互接收接口：conversation 实现它，接收经 manager 转发来的 wait 请求。
- * 这是**延迟 RPC**：实现方挂起该 turn，直到决策/回答产生才 resolve（wait 的意义 = 阻塞到答案）。
+ * 这是**延迟 RPC**：实现方挂起该 run，直到决策/回答产生才 resolve（wait 的意义 = 阻塞到答案）。
  * 发送方经 ConversationManagerServer 的 send*RequestTo 转发，manager 查图后调目标 conversation 的对应方法；
  * 决策/回答作为该 RPC 的返回值沿原链返回。
  */

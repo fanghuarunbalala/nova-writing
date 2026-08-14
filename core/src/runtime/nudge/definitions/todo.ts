@@ -3,7 +3,7 @@
  * 连续 ≥3 轮未调用 TodoWrite → 每 run 注入一次持久 system reminder。
  */
 import type { LoopContext } from "../../loop/LoopContext.js";
-import type { RunContext } from "../../loop/types.js";
+import type { RunProgress } from "../../loop/types.js";
 import type { ContextNudgePolicy } from "../ContextNudgePolicy.js";
 
 /** 连续多少轮未调用 TodoWrite 后才提醒 */
@@ -24,12 +24,12 @@ export class TodoIdleNudgePolicy implements ContextNudgePolicy {
 	private lastNudgedRun = -1;
 
 	/** 持久提示注入：连续 ≥3 轮未调用 TodoWrite 时追加 reminder */
-	persistentNudgeIfNeeded(loop: LoopContext, run: RunContext): boolean {
+	persistentNudgeIfNeeded(loop: LoopContext, run: RunProgress): boolean {
 		const lastTodoWrite = run.toolsLastTurn.get("TodoWrite");
 		const idleCalls = lastTodoWrite === undefined ? run.curTurn : run.curTurn - lastTodoWrite;
 		if (idleCalls >= TODO_IDLE_SUSTAINED_CALLS && run.curTurn !== this.lastNudgedRun) {
 			this.lastNudgedRun = run.curTurn;
-			loop.appendTurnMessages([{ role: "system", content: TODO_IDLE_TEXT }]);
+			loop.appendRunMessages([{ role: "system", content: TODO_IDLE_TEXT }]);
 			return true;
 		}
 		return false;

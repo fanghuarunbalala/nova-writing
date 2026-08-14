@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>对话流 × 工具使用 · 最终方案（气泡流 · 每 turn 单行工具 · 全工具命名总览）</title>
+<style>
+  /* Demo 专用：token 值对齐 ui/src/shared/theme/tokens.css（demo 内联，不受纪律约束） */
+  :root {
+    --bg: oklch(96.8% 0.004 85);
+    --surface: oklch(99.6% 0.0015 85);
+    --surface-2: oklch(95.4% 0.004 82);
+    --fg: oklch(28% 0.012 46);
+    --muted: oklch(50% 0.01 54);
+    --faint: oklch(62% 0.008 58);
+    --hairline: oklch(91.5% 0.004 82);
+    --hairline-2: oklch(85% 0.008 72);
+    --accent: oklch(56% 0.078 42);
+    --accent-ink: oklch(44% 0.065 41);
+    --accent-wash: color-mix(in oklab, var(--accent) 12%, var(--surface-2));
+    --success: oklch(50% 0.075 156);
+    --danger: oklch(52% 0.14 27);
+    --warn: oklch(58% 0.085 75);
+    --warn-soft: color-mix(in oklab, var(--warn) 10%, var(--surface));
+    --shadow: 0 1px 2px color-mix(in oklab, var(--fg) 5%, transparent), 0 4px 16px color-mix(in oklab, var(--fg) 4%, transparent);
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC",
+      "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC",
+      "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+    --font-body: "Iowan Old Style", "Palatino Linotype", "Source Han Serif SC",
+      "Noto Serif SC", "Songti SC", "STSong", "SimSun", Georgia, serif;
+    --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+    --r-lg: 16px; --r-md: 12px; --r-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); padding: 32px 24px 64px; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .sub { color: var(--faint); font-size: 13px; line-height: 1.7; margin-bottom: 34px; max-width: 820px; }
+  section { margin-bottom: 40px; }
+  h2 { font-size: 15px; font-weight: 650; color: var(--accent-ink); margin-bottom: 4px; }
+  .desc { color: var(--faint); font-size: 12px; margin-bottom: 14px; line-height: 1.6; }
+  .stage { max-width: 560px; margin: 0 auto; }
+  .t-label { text-align: center; color: var(--faint); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; margin: 22px 0 12px; user-select: none; }
+  .spinner { display: inline-block; width: 10px; height: 10px; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .cursor { display: inline-block; width: 7px; height: 14px; background: var(--accent); vertical-align: -2px; margin-left: 3px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes pulse { 50% { opacity: 0.45; } }
+  .tick { font-family: var(--font-mono); font-size: 11px; color: var(--warn); animation: pulse 1s ease-in-out infinite; margin-left: 4px; }
+  .sec { font-family: var(--font-mono); font-size: 11px; color: var(--faint); margin-left: 4px; }
+
+  /* ============ 主方案：气泡流（每 turn 内容 + 单行工具） ============ */
+  .a-user { display: flex; justify-content: flex-end; margin: 8px 0; }
+  .a-user .bubble { max-width: 78%; background: var(--accent-wash); color: var(--accent-ink); border-radius: var(--r-lg) var(--r-lg) 4px var(--r-lg); padding: 9px 14px; font-size: 14px; line-height: 1.65; }
+  .a-ai { display: flex; gap: 10px; margin: 8px 0; }
+  .a-ai .avatar { flex: none; width: 28px; height: 28px; border-radius: 9px; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+  .a-ai .card { flex: 1; max-width: 84%; background: var(--surface); border: 1px solid var(--hairline); border-radius: 4px var(--r-lg) var(--r-lg) var(--r-lg); padding: 12px 14px; box-shadow: var(--shadow); }
+  .a-seg { margin: 0 0 8px; }
+  .a-seg:last-child { margin-bottom: 0; }
+  .a-seg .content { font-family: var(--font-body); font-size: 15px; line-height: 1.75; }
+  /* 单行工具：每 turn 一行，多工具 · 分隔 */
+  .a-tline { margin-top: 5px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 12px; }
+  .a-t { display: inline-flex; align-items: baseline; gap: 3px; }
+  .a-t.ok { color: var(--success); }
+  .a-t.bad { color: var(--danger); }
+  .a-t.on { color: var(--warn); }
+  .a-t .txt { color: var(--muted); }
+  .a-t.on .txt { color: var(--warn); }
+  .a-dot { color: var(--hairline-2); }
+
+  /* ============ 全工具命名总览 ============ */
+  .catalog { display: flex; flex-direction: column; gap: 14px; max-width: 820px; }
+  .cat-group h3 { font-size: 13px; color: var(--accent-ink); margin-bottom: 6px; }
+  .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 8px; }
+  .cat-item { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-sm); padding: 8px 12px; font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+  .cat-item .name { font-family: var(--font-mono); font-size: 10.5px; color: var(--faint); }
+  .cat-item .forms { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+  .f-run { color: var(--warn); }
+  .f-done { color: var(--success); }
+  .f-fail { color: var(--danger); }
+</style>
+</head>
+<body>
+  <h1>对话流 × 工具使用 —— 最终方案</h1>
+  <p class="sub">
+    <b>样式</b>：气泡流（用户右气泡 / AI 左卡片）。<b>结构</b>：一个 turn（一次 API 请求）= 内容片段 + <b>单行工具</b>（该请求调用的所有工具拼在一行，<code>·</code> 分隔）。
+    <b>命名</b>：进行中 <code>动作+对象+中：内容</code>（如 编辑角色中：张三）· 完成 <code>对象+动作+已完成：内容</code>（如 角色编辑已完成：张三）· 失败 <code>对象+动作+失败：内容</code>；
+    进行中带 spinner + 秒数脉动，完成/失败带定格耗时。
+  </p>
+
+  <section>
+    <h2>主对话流</h2>
+    <p class="desc">3 轮对话；第 1 轮 3 个 turn（含并行工具 turn）；第 3 轮为 live 轮。</p>
+    <div class="stage">
+      <div class="t-label">── 14:02 ──</div>
+      <div class="a-user"><div class="bubble">创建角色张三，然后给第三章写一段正文</div></div>
+      <div class="a-ai">
+        <div class="avatar">AI</div>
+        <div class="card">
+          <div class="a-seg">
+            <div class="content">好的，我先创建角色——</div>
+            <div class="a-tline"><span class="a-t ok"><span>✓</span><span class="txt">角色创建已完成：张三</span><span class="sec">1.2s</span></span></div>
+          </div>
+          <div class="a-seg">
+            <div class="content">接着写正文，同时补上地点设定——</div>
+            <div class="a-tline">
+              <span class="a-t ok"><span>✓</span><span class="txt">正文插入已完成：ch3</span><span class="sec">3.4s</span></span><span class="a-dot">·</span><span class="a-t ok"><span>✓</span><span class="txt">地点创建已完成：青云山</span><span class="sec">2.2s</span></span>
+            </div>
+          </div>
+          <div class="a-seg">
+            <div class="content">秋夜的风穿过旧船坞，林夏紧了紧披肩。</div>
+            <div class="a-tline"><span class="a-t ok"><span>✓</span><span class="txt">子任务执行已完成：explore</span><span class="sec">28.6s</span></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="t-label">── 14:05 ──</div>
+      <div class="a-user"><div class="bubble">把大纲第一卷的标题改一下</div></div>
+      <div class="a-ai">
+        <div class="avatar">AI</div>
+        <div class="card">
+          <div class="a-seg">
+            <div class="content">已更新标题为「第一卷：风起」。</div>
+            <div class="a-tline"><span class="a-t ok"><span>✓</span><span class="txt">大纲编辑已完成：第一卷</span><span class="sec">0.8s</span></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="t-label">── 14:07 ──</div>
+      <div class="a-user"><div class="bubble">现在看看旧船坞的场景，补充细节</div></div>
+      <div class="a-ai">
+        <div class="avatar">AI</div>
+        <div class="card">
+          <div class="a-seg">
+            <div class="content">好的，我先读取旧船坞的场景设定——</div>
+            <div class="a-tline"><span class="a-t ok"><span>✓</span><span class="txt">地点读取已完成：旧船坞</span><span class="sec">0.3s</span></span></div>
+          </div>
+          <div class="a-seg">
+            <div class="content">场景在手，我让子任务去梳理细节<span class="cursor"></span></div>
+            <div class="a-tline"><span class="a-t on"><span class="spinner"></span><span class="txt">子任务执行中：explore</span><span class="tick">12.4s</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>全部工具命名总览（24 个）</h2>
+    <p class="desc">三态展示：<span class="f-run">进行中</span> / <span class="f-done">已完成</span> / <span class="f-fail">失败</span>（内容示例取典型值）。</p>
+    <div class="catalog">
+      <div class="cat-group"><h3>角色域</h3><div class="cat-grid">
+        <div class="cat-item"><span class="name">CharacterRead</span><span class="forms"><span class="f-run">⟳ 读取角色中：c1</span><span class="f-done">✓ 角色读取已完成：c1</span><span class="f-fail">✗ 角色读取失败：c1</span></span></div>
+        <div class="cat-item"><span class="name">CharacterWrite</span><span class="forms"><span class="f-run">⟳ 创建角色中：张三</span><span class="f-done">✓ 角色创建已完成：张三</span><span class="f-fail">✗ 角色创建失败：张三</span></span></div>
+        <div class="cat-item"><span class="name">CharacterEdit</span><span class="forms"><span class="f-run">⟳ 编辑角色中：张三</span><span class="f-done">✓ 角色编辑已完成：张三</span><span class="f-fail">✗ 角色编辑失败：张三</span></span></div>
+      </div></div>
+      <div class="cat-group"><h3>地点域</h3><div class="cat-grid">
+        <div class="cat-item"><span class="name">LocationRead</span><span class="forms"><span class="f-run">⟳ 读取地点中：l1</span><span class="f-done">✓ 地点读取已完成：l1</span><span class="f-fail">✗ 地点读取失败：l1</span></span></div>
+        <div class="cat-item"><span class="name">LocationWrite</span><span class="forms"><span class="f-run">⟳ 创建地点中：青云山</span><span class="f-done">✓ 地点创建已完成：青云山</span><span class="f-fail">✗ 地点创建失败：青云山</span></span></div>
+        <div class="cat-item"><span class="name">LocationEdit</span><span class="forms"><span class="f-run">⟳ 编辑地点中：青云山</span><span class="f-done">✓ 地点编辑已完成：青云山</span><span class="f-fail">✗ 地点编辑失败：青云山</span></span></div>
+      </div></div>
+      <div class="cat-group"><h3>正文域</h3><div class="cat-grid">
+        <div class="cat-item"><span class="name">ParagraphRead</span><span class="forms"><span class="f-run">⟳ 读取正文中：ch3</span><span class="f-done">✓ 正文读取已完成：ch3</span><span class="f-fail">✗ 正文读取失败：ch3</span></span></div>
+        <div class="cat-item"><span class="name">ParagraphWrite</span><span class="forms"><span class="f-run">⟳ 插入正文中：ch3</span><span class="f-done">✓ 正文插入已完成：ch3</span><span class="f-fail">✗ 正文插入失败：ch3</span></span></div>
+        <div class="cat-item"><span class="name">ParagraphEdit</span><span class="forms"><span class="f-run">⟳ 编辑正文中：p1</span><span class="f-done">✓ 正文编辑已完成：p1</span><span class="f-fail">✗ 正文编辑失败：p1</span></span></div>
+      </div></div>
+      <div class="cat-group"><h3>大纲域</h3><div class="cat-grid">
+        <div class="cat-item"><span class="name">OutlineRead</span><span class="forms"><span class="f-run">⟳ 读取大纲中</span><span class="f-done">✓ 大纲读取已完成</span><span class="f-fail">✗ 大纲读取失败</span></span></div>
+        <div class="cat-item"><span class="name">OutlineWrite</span><span class="forms"><span class="f-run">⟳ 创建大纲中：第一卷</span><span class="f-done">✓ 大纲创建已完成：第一卷</span><span class="f-fail">✗ 大纲创建失败：第一卷</span></span></div>
+        <div class="cat-item"><span class="name">OutlineEdit</span><span class="forms"><span class="f-run">⟳ 编辑大纲中：第一卷</span><span class="f-done">✓ 大纲编辑已完成：第一卷</span><span class="f-fail">✗ 大纲编辑失败：第一卷</span></span></div>
+      </div></div>
+      <div class="cat-group"><h3>发布域</h3><div class="cat-grid">
+        <div class="cat-item"><span class="name">PublicationRead</span><span class="forms"><span class="f-run">⟳ 读取发布中</span><span class="f-done">✓ 发布读取已完成</span><span class="f-fail">✗ 发布读取失败</span></span></div>
+        <div class="cat-item"><span class="name">PublicationWrite</span><span class="forms"><span class="f-run">⟳ 创建发布中：章「第一章」</span><span class="f-done">✓ 发布创建已完成：章「第一章」</span><span class="f-fail">✗ 发布创建失败：章「第一章」</span></span></div>
+        <div class="cat-item"><span class="name">PublicationEdit</span><span class="forms"><span class="f-run">⟳ 编辑发布中：章「第一章」</span><span class="f-done">✓ 发布编辑已完成：章「第一章」</span><span class="f-fail">✗ 发布编辑失败：章「第一章」</span></span></div>
+        <div class="cat-item"><span class="name">NovelDelete</span><span class="forms"><span class="f-run">⟳ 删除实体中：角色、段落（2 项）</span><span class="f-done">✓ 实体删除已完成</span><span class="f-fail">✗ 实体删除失败</span></span></div>
+      </div></div>
+      <div class="cat-group"><h3>文件域</h3><div class="cat-grid">
+        <div class="cat-item"><span class="name">Read</span><span class="forms"><span class="f-run">⟳ 读取文件中：设计.md</span><span class="f-done">✓ 文件读取已完成：设计.md</span><span class="f-fail">✗ 文件读取失败：设计.md</span></span></div>
+        <div class="cat-item"><span class="name">Glob</span><span class="forms"><span class="f-run">⟳ 查找文件中：**/*.md</span><span class="f-done">✓ 文件查找已完成：**/*.md</span><span class="f-fail">✗ 文件查找失败：**/*.md</span></span></div>
+        <div class="cat-item"><span class="name">Write</span><span class="forms"><span class="f-run">⟳ 写入文件中：设定.md</span><span class="f-done">✓ 文件写入已完成：设定.md</span><span class="f-fail">✗ 文件写入失败：设定.md</span></span></div>
+        <div class="cat-item"><span class="name">Edit</span><span class="forms"><span class="f-run">⟳ 编辑文件中：设定.md</span><span class="f-done">✓ 文件编辑已完成：设定.md</span><span class="f-fail">✗ 文件编辑失败：设定.md</span></span></div>
+      </div></div>
+      <div class="cat-group"><h3>待办 / 子任务域</h3><div class="cat-grid">
+        <div class="cat-item"><span class="name">TodoWrite</span><span class="forms"><span class="f-run">⟳ 更新待办中：4 项</span><span class="f-done">✓ 待办更新已完成：4 项</span><span class="f-fail">✗ 待办更新失败</span></span></div>
+        <div class="cat-item"><span class="name">Agent</span><span class="forms"><span class="f-run">⟳ 执行子任务中：explore</span><span class="f-done">✓ 子任务执行已完成：explore</span><span class="f-fail">✗ 子任务执行失败：explore</span></span></div>
+        <div class="cat-item"><span class="name">TaskOutput</span><span class="forms"><span class="f-run">⟳ 读取任务输出中</span><span class="f-done">✓ 任务输出读取已完成</span><span class="f-fail">✗ 任务输出读取失败</span></span></div>
+        <div class="cat-item"><span class="name">TaskStop</span><span class="forms"><span class="f-run">⟳ 停止子任务中：task_1</span><span class="f-done">✓ 子任务停止已完成：task_1</span><span class="f-fail">✗ 子任务停止失败：task_1</span></span></div>
+      </div></div>
+    </div>
+  </section>
+</body>
+</html>

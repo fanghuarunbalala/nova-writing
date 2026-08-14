@@ -16,7 +16,7 @@
  * compose_mode（入口顺序保证：hydrate → buildNovelAgent → 策略构造）。
  */
 import type { LoopContext } from "../../loop/LoopContext.js";
-import type { RunContext } from "../../loop/types.js";
+import type { RunProgress } from "../../loop/types.js";
 import type { ProviderCall, LLMessage } from "../../provider/types.js";
 import type { ContextNudgePolicy } from "../ContextNudgePolicy.js";
 import type { ComposeModeStateProvider, ComposeModePhase } from "../../../conversation/compose/ComposeModeState.js";
@@ -86,12 +86,12 @@ export class ComposeModeNudgePolicy implements ContextNudgePolicy {
 	}
 
 	/**
-	 * 持久提示注入：状态键变化时按落点状态追加 system reminder（appendTurnMessages → 落盘）
+	 * 持久提示注入：状态键变化时按落点状态追加 system reminder（appendRunMessages → 落盘）
 	 * @param loop LoopContext
 	 * @param _run 当前 run 运行状态
 	 * @returns 是否注入了
 	 */
-	persistentNudgeIfNeeded(loop: LoopContext, _run: RunContext): boolean {
+	persistentNudgeIfNeeded(loop: LoopContext, _run: RunProgress): boolean {
 		const snap = this.composeState.snapshot(this.conversationId);
 		const key = stateKeyOf(snap.active, snap.phase);
 		if (key === this.latch.lastKey) {
@@ -100,7 +100,7 @@ export class ComposeModeNudgePolicy implements ContextNudgePolicy {
 		let injected = false;
 		if (snap.active && snap.phase === "designing") {
 			// 落点 designing（进入/重进）→ full compose_mode；有旧草稿再附 reentry
-			loop.appendTurnMessages([
+			loop.appendRunMessages([
 				{
 					role: "system",
 					content: renderComposeModeFullText(
@@ -112,15 +112,15 @@ export class ComposeModeNudgePolicy implements ContextNudgePolicy {
 			]);
 			injected = true;
 			if (snap.hasPriorDraft === true) {
-				loop.appendTurnMessages([{ role: "system", content: renderComposeModeReentryText() }]);
+				loop.appendRunMessages([{ role: "system", content: renderComposeModeReentryText() }]);
 			}
 		} else if (snap.active && snap.phase === "pending") {
 			// 落点 pending（提交审批）→ compose_mode_pending
-			loop.appendTurnMessages([{ role: "system", content: renderComposeModePendingText() }]);
+			loop.appendRunMessages([{ role: "system", content: renderComposeModePendingText() }]);
 			injected = true;
 		} else {
 			// 落点 inactive（批准/放弃退出）→ compose_mode_exit
-			loop.appendTurnMessages([{ role: "system", content: renderComposeModeExitText() }]);
+			loop.appendRunMessages([{ role: "system", content: renderComposeModeExitText() }]);
 			injected = true;
 		}
 		this.latch = Object.freeze({ lastKey: key, callsSinceReminder: 0 });
@@ -135,7 +135,7 @@ export class ComposeModeNudgePolicy implements ContextNudgePolicy {
 	 * @param call ProviderCall（原地修改：messages 尾插 system）
 	 * @returns 是否注入了
 	 */
-	transientNudgeIfNeeded(_loop: LoopContext, run: RunContext, call: ProviderCall): boolean {
+	transientNudgeIfNeeded(_loop: LoopContext, run: RunProgress, call: ProviderCall): boolean {
 		const snap = this.composeState.snapshot(this.conversationId);
 		if (!snap.active) {
 			return false;

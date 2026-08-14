@@ -114,10 +114,14 @@ export const ScheduleProjection = {
     const todos: ScheduleTodoData[] = [];
     for (const approval of approvals) {
       if (approval.status !== "pending") continue;
+      const label =
+        approval.toolCalls.length > 1
+          ? `${approval.toolCalls[0]!.toolName} 等 ${approval.toolCalls.length} 项`
+          : approval.toolCalls[0]!.toolName;
       todos.push({
         id: approval.requestId,
-        title: approval.toolName,
-        meta: approval.toolName,
+        title: label,
+        meta: label,
         tag: "approval",
         status: "open",
         action: { label: "去审批", kind: "open-approval" },

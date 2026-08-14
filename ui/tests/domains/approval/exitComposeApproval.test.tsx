@@ -31,13 +31,12 @@ function makePlatform(designFile?: DesignFilePort): FrontendPlatform {
   };
 }
 
-/** 一条 pending 的 ExitComposeMode 审批条目（当前 CMS 队列形状） */
+/** 一条 pending 的 ExitComposeMode 审批条目（批量形态：toolCalls 数组） */
 function exitComposeItem() {
   return {
     conversationId: "c1",
     requestId: "approval_c1_1_tc-1",
-    toolName: "ExitComposeMode",
-    args: "{}",
+    toolCalls: [{ toolCallId: "tc-1", toolName: "ExitComposeMode", args: "{}" }],
     decisioner: "ui",
     status: "pending",
     requestedAt: "2026-08-14T09:00:00.000Z",

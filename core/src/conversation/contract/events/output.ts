@@ -1,217 +1,90 @@
 /**
- * 输出事件类型全集。
- * 输出事件是内存产物，默认瞬态；persist=true 才落 journal（可查/可恢复）。
- * 建模消息流（user/assistant/delta/tool-call）+ 会话边界事件（compose.* / mode.*）；
- * todo/run 状态等读 sqlite 读模型，不进事件。
- * compose/mode 事件 payload 脱敏：只带路径与相位等元信息，永不携带 design 文件内容。
+ * 输出事件（持久化域）全集：journal 落盘与重建的事实源。
+ * 与流域共享的字面（消息/run 边界等）复用 shared.ts 并附加 persist: true；
+ * tool-call-request/response 为持久化域专属（完整 args/result，重建必需）；
+ * assistant.delta 已移入流域、approval 事件已删除（wait 权威在 CMS 队列，PRD `output-投影层`）。
+ * 只建模消息流（user/assistant/tool-call/边界）；todo/run 状态等读 sqlite 读模型，不进事件。
+ * compose/mode 边界事件（PRD `compose-mode`）持久化在 state.jsonl sidecar（非主 journal）：
+ * 此处进 union 仅为复用 PersistedOutputEvent 类型（sidecar 写侧/读侧共用），主 journal 不写这些。
  */
 
+import type { AgentId, ConversationId } from "../types/index.js";
 import type {
-	AgentId,
-	ComposeModePhase,
-	ConversationId,
-	ConversationMode,
-} from "../types/index.js";
+	AssistantMessageEvent,
+	ClearEvent,
+	CompactedEvent,
+	ComposeApprovedEvent,
+	ComposeAppliedEvent,
+	ComposeBeginEvent,
+	ComposeDiscardedEvent,
+	ComposeRejectedEvent,
+	ComposeSubmittedEvent,
+	ModeChangedEvent,
+	ModePendingEvent,
+	Persisted,
+	RetryRequestEvent,
+	RunEndEvent,
+	RunStartEvent,
+	UserMessageEvent,
+} from "./shared.js";
+
+/** 工具调用请求（完整 args，重建必需，不广播给 UI） */
+interface ToolCallRequestEvent {
+	type: "tool-call-request";
+	persist: true;
+	seq: number;
+	toolCallId: string;
+	name: string;
+	args: string;
+	conversationId: ConversationId;
+	agentId?: AgentId;
+	ts: string;
+}
+
+/** 工具调用响应（完整 result/error，重建必需，不广播给 UI） */
+interface ToolCallResponseEvent {
+	type: "tool-call-response";
+	persist: true;
+	seq: number;
+	toolCallId: string;
+	result?: string;
+	error?: string;
+	conversationId: ConversationId;
+	agentId?: AgentId;
+	ts: string;
+}
+
+/** 输出事件全集（持久化域：全部 persist=true；主 journal 只写前九类，compose/mode 走 sidecar） */
+export type OutputEvent =
+	| Persisted<RunStartEvent>
+	| Persisted<RunEndEvent>
+	| Persisted<UserMessageEvent>
+	| Persisted<AssistantMessageEvent>
+	| Persisted<CompactedEvent>
+	| Persisted<ClearEvent>
+	| Persisted<RetryRequestEvent>
+	| ToolCallRequestEvent
+	| ToolCallResponseEvent
+	| Persisted<ComposeBeginEvent>
+	| Persisted<ComposeSubmittedEvent>
+	| Persisted<ComposeAppliedEvent>
+	| Persisted<ComposeDiscardedEvent>
+	| Persisted<ModeChangedEvent>;
+
+/** 可落盘事件：OutputEvent 中 persist=true 的子集（主 journal 与 state sidecar 共用） */
+export type PersistedOutputEvent = Extract<OutputEvent, { persist: true }>;
 
 /**
- * 输出事件（hub + journal 共用）：
- * - persist=true：落 journal（带 seq），可查 / 可恢复；
- * - persist=false（assistant.delta）：瞬态，仅订阅者可见，事后不可查。
+ * 状态事件全集（state sidecar 域，PRD `compose-mode`）：persist 成员落 state.jsonl +
+ * hub 广播；瞬态成员（mode.pending / compose.approved / compose.rejected）仅广播。
+ * emitState / ComposeEventSink 的参数类型。
  */
-export type OutputEvent =
-	| {
-			type: "user.message";
-			persist: true;
-			seq: number;
-			text: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "assistant.message";
-			persist: true;
-			seq: number;
-			text: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "assistant.delta";
-			persist: false;
-			kind?: "text" | "reasoning";
-			text: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "tool-call-request";
-			persist: true;
-			seq: number;
-			toolCallId: string;
-			name: string;
-			args: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "tool-call-response";
-			persist: true;
-			seq: number;
-			toolCallId: string;
-			result?: string;
-			error?: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "turn-start";
-			persist: true;
-			seq: number;
-			turnSeq: number;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "turn-end";
-			persist: true;
-			seq: number;
-			turnSeq: number;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "compacted";
-			persist: true;
-			seq: number;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "clear";
-			persist: true;
-			seq: number;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "retry-request";
-			persist: true;
-			seq: number;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "approval.request";
-			persist: false;
-			requestId: string;
-			toolName: string;
-			args: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "approval.resolved";
-			persist: false;
-			requestId: string;
-			decision: "approved" | "rejected" | "edited";
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "compose.begin";
-			persist: true;
-			seq?: number;
-			phase: ComposeModePhase;
-			designFilePath: string;
-			preComposeMode?: ConversationMode;
-			hasPriorDraft?: boolean;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "compose.submitted";
-			persist: true;
-			seq?: number;
-			phase: ComposeModePhase;
-			designFilePath?: string;
-			approvalRequestId?: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "compose.applied";
-			persist: true;
-			seq?: number;
-			phase: ComposeModePhase;
-			designFilePath?: string;
-			preComposeMode?: ConversationMode;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "compose.discarded";
-			persist: true;
-			seq?: number;
-			phase: ComposeModePhase;
-			designFilePath?: string;
-			preComposeMode?: ConversationMode;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "compose.approved";
-			persist: false;
-			phase: ComposeModePhase;
-			designFilePath?: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "compose.rejected";
-			persist: false;
-			phase: ComposeModePhase;
-			designFilePath?: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "mode.pending";
-			persist: false;
-			mode: ConversationMode;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "mode.changed";
-			persist: true;
-			seq?: number;
-			mode: ConversationMode;
-			designFilePath?: string;
-			phase?: ComposeModePhase;
-			preComposeMode?: ConversationMode;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  };
-
-/** 可落盘事件：OutputEvent 中 persist=true 的子集（journal 只写这些） */
-export type PersistedOutputEvent = Extract<OutputEvent, { persist: true }>;
+export type StateEvent =
+	| Persisted<ComposeBeginEvent>
+	| Persisted<ComposeSubmittedEvent>
+	| Persisted<ComposeAppliedEvent>
+	| Persisted<ComposeDiscardedEvent>
+	| Persisted<ModeChangedEvent>
+	| ComposeApprovedEvent
+	| ComposeRejectedEvent
+	| ModePendingEvent;

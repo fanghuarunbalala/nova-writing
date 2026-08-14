@@ -1,70 +1,65 @@
 import { describe, expect, it } from "vitest";
 import { CardProjection } from "../CardProjection.js";
-import { ApprovalProjection } from "../ApprovalProjection.js";
-import type { OutputEvent } from "../contract/events/index.js";
+import type { ProjectedEvent } from "../contract/events/index.js";
 
-function evt(e: Partial<OutputEvent> & { type: OutputEvent["type"] }): OutputEvent {
-	return { conversationId: "c1", ts: "t", ...e } as OutputEvent;
+function evt(e: Partial<ProjectedEvent> & { type: ProjectedEvent["type"] }): ProjectedEvent {
+	return { conversationId: "c1", ts: "t", ...e } as ProjectedEvent;
 }
 
 describe("CardProjection", () => {
-	it("tool-call-request → proposal 卡，response → completed", () => {
+	it("tool-recorded.started → proposal 卡（preview 标题/摘要），recorded → completed", () => {
 		const p = new CardProjection();
-		p.apply(evt({ type: "tool-call-request", persist: true, seq: 1, toolCallId: "t1", name: "CharacterWrite", args: '{"name":"张三"}' }));
+		p.apply(
+			evt({
+				type: "tool-recorded.started",
+				seq: 1,
+				toolCallId: "t1",
+				name: "CharacterWrite",
+				preview: { action: "创建", object: "角色", title: "张三" },
+			}),
+		);
 		expect(p.getCards()).toHaveLength(1);
-		expect(p.getCards()[0].kind).toBe("proposal");
-		expect(p.getCards()[0].status).toBe("in-progress");
-		p.apply(evt({ type: "tool-call-response", persist: true, seq: 2, toolCallId: "t1", result: "ok" }));
-		expect(p.getCards()[0].status).toBe("completed");
+		expect(p.getCards()[0]).toMatchObject({
+			kind: "proposal",
+			status: "in-progress",
+			title: "角色：张三",
+		});
+		p.apply(
+			evt({
+				type: "tool-recorded.recorded",
+				seq: 2,
+				toolCallId: "t1",
+				name: "CharacterWrite",
+				outcome: "ok",
+				preview: { action: "创建", object: "角色", title: "张三", summary: "角色已写入" },
+			}),
+		);
+		expect(p.getCards()[0]).toMatchObject({ status: "completed", summary: "角色已写入" });
 	});
 
-	it("读类工具不产卡", () => {
+	it("recorded outcome=failed → 卡片 failed", () => {
 		const p = new CardProjection();
-		p.apply(evt({ type: "tool-call-request", persist: true, seq: 1, toolCallId: "t1", name: "CharacterRead", args: "{}" }));
+		p.apply(evt({ type: "tool-recorded.started", seq: 1, toolCallId: "t1", name: "CharacterWrite" }));
+		p.apply(
+			evt({ type: "tool-recorded.recorded", seq: 2, toolCallId: "t1", name: "CharacterWrite", outcome: "failed" }),
+		);
+		expect(p.getCards()[0].status).toBe("failed");
+	});
+
+	it("读类工具不产卡（started 无 preview.title 时兜底 titleOf）", () => {
+		const p = new CardProjection();
+		p.apply(evt({ type: "tool-recorded.started", seq: 1, toolCallId: "t1", name: "CharacterRead" }));
 		expect(p.getCards()).toHaveLength(0);
-	});
-});
-
-describe("ApprovalProjection", () => {
-	it("approval.request → pending，resolved → 对应状态", () => {
-		const p = new ApprovalProjection();
-		p.apply(evt({ type: "approval.request", persist: false, requestId: "r1", toolName: "CharacterWrite", args: "{}" }));
-		expect(p.getPending()).toHaveLength(1);
-		p.apply(evt({ type: "approval.resolved", persist: false, requestId: "r1", decision: "approved" }));
-		expect(p.getPending()).toHaveLength(0);
-		expect(p.getAll()[0].status).toBe("approved");
+		// 变更类工具无 preview.title → 域标题兜底
+		p.apply(evt({ type: "tool-recorded.started", seq: 2, toolCallId: "t2", name: "ParagraphWrite" }));
+		expect(p.getCards()[0]).toMatchObject({ title: "正文" });
 	});
 
-	it("会话/时间字段来自事件（conversationId/requestedAt/resolvedAt）", () => {
-		const p = new ApprovalProjection();
+	it("recorded 无 started（重放范围截断）→ 不产卡也不抛错", () => {
+		const p = new CardProjection();
 		p.apply(
-			evt({
-				type: "approval.request",
-				persist: false,
-				requestId: "r1",
-				toolName: "CharacterWrite",
-				args: "{}",
-				conversationId: "conv_7",
-				ts: "2026-08-13T10:00:00.000Z",
-			}),
+			evt({ type: "tool-recorded.recorded", seq: 9, toolCallId: "orphan", name: "CharacterWrite", outcome: "ok" }),
 		);
-		expect(p.getAll()[0]).toMatchObject({
-			conversationId: "conv_7",
-			requestedAt: "2026-08-13T10:00:00.000Z",
-			status: "pending",
-		});
-		p.apply(
-			evt({
-				type: "approval.resolved",
-				persist: false,
-				requestId: "r1",
-				decision: "rejected",
-				ts: "2026-08-13T10:01:00.000Z",
-			}),
-		);
-		expect(p.getAll()[0]).toMatchObject({
-			status: "rejected",
-			resolvedAt: "2026-08-13T10:01:00.000Z",
-		});
+		expect(p.getCards()).toHaveLength(0);
 	});
 });

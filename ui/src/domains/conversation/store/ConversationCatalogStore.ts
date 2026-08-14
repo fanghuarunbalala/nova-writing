@@ -5,9 +5,11 @@
  * 提供 create/select。所有 mutation 经 TaskSerializer 串行。
  *
  * 说明：
- * - 提供 create/select/delete；rename/pin 延后（新 core 无此契约，方法 reject）。
+ * - 提供 create/select/delete/rename；pin 延后（新 core 无此契约，方法 reject）。
  * - loadWorkspace 只加载不自动创建（spec 1.5.1 语义；空态由 ChatEmptyState 引导）。
- * - ConversationSummary 无 title/updatedAt/pinned，title 取 name、lastActivityAt 置 0。
+ * - 标题来源：summary.name（core 侧为显式名或 journal 首句派生名）；
+ *   未命名（name === conversationId）时展示自动格式「对话 + id 尾号」，
+ *   活动会话首句到达后经 applyDerivedTitle 即时更新（显式改名不覆盖）。
  */
 import type { ConversationSummary, Logger, NovelApiClient } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
@@ -128,7 +130,13 @@ export class ConversationCatalogStore extends ExternalStore<ConversationCatalogS
       try {
         const ref = await this.api.conversations.create("novel");
         if (generation !== this.generation) return "";
-        const item = captureCatalogItem(ref.conversationId);
+        // 新会话未命名（summary.name = conversationId）→ 自动标题，首句到达后派生
+        const item = captureCatalogItem({
+          conversationId: ref.conversationId,
+          name: ref.conversationId,
+          storeDir: "",
+          status: "active",
+        });
         this.setSnapshot({
           phase: "ready",
           workspaceId,
@@ -173,9 +181,47 @@ export class ConversationCatalogStore extends ExternalStore<ConversationCatalogS
     return this.loadWorkspace(workspaceId);
   }
 
-  /** 重命名对话（新 core 无契约，延后）。 */
-  renameConversation(_id: string, _title: string): Promise<void> {
-    return Promise.reject(new Error("rename-not-implemented"));
+  /**
+   * 重命名对话：经 api.conversations.rename 持久化（storedir/meta.json），
+   * 成功后本地 patch 标题；失败向上抛（调用方 toast）。
+   * @param id 会话 id
+   * @param title 新标题（trim 后非空）
+   */
+  renameConversation(id: string, title: string): Promise<void> {
+    const capturedId = requireNonBlank(id, "Conversation id");
+    const next = title.trim();
+    if (next === "") return Promise.reject(new Error("rename-title-blank"));
+    return this.serializer.run(async () => {
+      this.logger.info("conversation_catalog.rename_started");
+      const hit = await this.api.conversations.rename(capturedId, next);
+      if (!hit) throw new Error("rename-not-found");
+      const conversations = Object.freeze(
+        this.snapshot.conversations.map((item) =>
+          item.id === capturedId ? Object.freeze({ ...item, title: next }) : item,
+        ),
+      );
+      this.setSnapshot({ ...this.snapshot, conversations });
+      this.logger.info("conversation_catalog.rename_completed");
+    });
+  }
+
+  /**
+   * 首句派生标题：仅当当前标题仍为自动格式时更新（显式改名不覆盖）。
+   * @param conversationId 会话 id
+   * @param text 首句用户消息（截断 30 字）
+   */
+  applyDerivedTitle(conversationId: string, text: string): void {
+    const capturedId = requireNonBlank(conversationId, "Conversation id");
+    const current = this.snapshot.conversations.find((item) => item.id === capturedId);
+    if (current === undefined || current.title !== autoTitle(capturedId)) return;
+    const derived = truncateConversationTitle(text);
+    if (derived === "") return;
+    const conversations = Object.freeze(
+      this.snapshot.conversations.map((item) =>
+        item.id === capturedId ? Object.freeze({ ...item, title: derived }) : item,
+      ),
+    );
+    this.setSnapshot({ ...this.snapshot, conversations });
   }
 
   /** 置顶/取消置顶（新 core 无契约，延后）。 */
@@ -209,17 +255,28 @@ export class ConversationCatalogStore extends ExternalStore<ConversationCatalogS
   }
 }
 
+/** 未命名会话的自动标题（name === conversationId 时的展示格式） */
+function autoTitle(id: string): string {
+  return `对话 ${id.slice(-6)}`;
+}
+
+/** 首句派生标题截断：折叠空白、上限 30 字 + 省略号（与 core scanCatalog 派生一致） */
+function truncateConversationTitle(text: string): string {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  return collapsed.length > 30 ? `${collapsed.slice(0, 30)}…` : collapsed;
+}
+
 function captureCatalogItems(
   summaries: readonly ConversationSummary[],
 ): readonly ConversationCatalogItem[] {
-  return Object.freeze(summaries.map((summary) => captureCatalogItem(summary.conversationId)));
+  return Object.freeze(summaries.map((summary) => captureCatalogItem(summary)));
 }
 
-function captureCatalogItem(conversationId: string): ConversationCatalogItem {
-  const id = requireNonBlank(conversationId, "Conversation id");
+function captureCatalogItem(summary: ConversationSummary): ConversationCatalogItem {
+  const id = requireNonBlank(summary.conversationId, "Conversation id");
   return Object.freeze({
     id,
-    title: `对话 ${id.slice(-6)}`,
+    title: summary.name !== id ? summary.name : autoTitle(id),
     agentType: "novel",
     agentLabel: "Novel Agent",
     lastActivityAt: 0,

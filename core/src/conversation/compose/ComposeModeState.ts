@@ -26,6 +26,8 @@ export interface ComposeModeSnapshot {
 	readonly preComposeMode?: ConversationMode;
 	/** 进入时 design 文件已存在（上次会话残留草稿；discard 才删、exit 归档） */
 	readonly hasPriorDraft?: boolean;
+	/** 进入 compose 时的创作目的（EnterComposeMode purpose），reentry 提醒引用。 */
+	readonly purpose?: string;
 }
 
 /** 空闲快照（默认） */
@@ -75,6 +77,7 @@ export class ComposeModeStateProvider {
 			readonly designFilePath: string;
 			readonly preComposeMode?: ConversationMode;
 			readonly hasPriorDraft?: boolean;
+			readonly purpose?: string;
 		},
 	): ComposeModeSnapshot {
 		const current = this.snapshot(conversationId);
@@ -88,6 +91,7 @@ export class ComposeModeStateProvider {
 			designFilePath: options.designFilePath,
 			preComposeMode: options.preComposeMode ?? current.mode,
 			...(options.hasPriorDraft === undefined ? {} : { hasPriorDraft: options.hasPriorDraft }),
+			...(options.purpose === undefined ? {} : { purpose: options.purpose }),
 		});
 		this.states.set(conversationId, next);
 		return next;

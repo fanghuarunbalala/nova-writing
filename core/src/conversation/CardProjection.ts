@@ -1,9 +1,10 @@
 /**
- * CardProjection：把工具调用事件（tool-call-request/response）投影成卡片描述。
+ * CardProjection：把工具调用投影事件（tool-recorded.started/recorded）投影成卡片描述。
  * 变更类工具（*Write/*Edit/NovelDelete）→ proposal 卡；读类工具 → text 卡。
+ * 标题/摘要由投影层的 preview 提供（PRD `output-投影层` §4.7），客户端不再做 args 截断。
  */
 
-import type { OutputEvent } from "./contract/events/index.js";
+import type { ProjectedEvent } from "./contract/events/index.js";
 
 /** 卡片状态 */
 export type CardStatus = "in-progress" | "completed" | "failed";
@@ -25,7 +26,7 @@ export interface CardDescriptor {
 	toolName: string;
 	/** 标题 */
 	title: string;
-	/** 摘要（工具参数摘要） */
+	/** 摘要（投影层 preview 提供） */
 	summary?: string;
 	/** 状态 */
 	status: CardStatus;
@@ -34,7 +35,7 @@ export interface CardDescriptor {
 /** 变更类工具后缀 */
 const MUTATION_SUFFIXES = ["Write", "Edit"];
 
-/** 工具名 → 卡片标题（域） */
+/** 工具名 → 卡片标题（域，preview 无 title 时的兜底） */
 function titleOf(toolName: string): string {
 	if (toolName === "NovelDelete") return "删除";
 	if (toolName.startsWith("Character")) return "角色";
@@ -51,22 +52,16 @@ function isMutation(toolName: string): boolean {
 	return MUTATION_SUFFIXES.some((suffix) => toolName.endsWith(suffix));
 }
 
-/** 工具参数摘要（截断） */
-function summaryOf(args: string): string | undefined {
-	if (args === undefined || args === "") return undefined;
-	return args.length > 120 ? `${args.slice(0, 120)}…` : args;
-}
-
-/** 工具调用 → 卡片投影器 */
+/** 工具调用投影 → 卡片投影器 */
 export class CardProjection {
 	private readonly cards = new Map<string, CardDescriptor>();
 
 	/**
-	 * 应用一条 OutputEvent（tool-call-request / tool-call-response）
-	 * @param event 输出事件
+	 * 应用一条 ProjectedEvent（tool-recorded.started / tool-recorded.recorded）
+	 * @param event 投影事件
 	 */
-	apply(event: OutputEvent): void {
-		if (event.type === "tool-call-request") {
+	apply(event: ProjectedEvent): void {
+		if (event.type === "tool-recorded.started") {
 			if (!isMutation(event.name)) return;
 			this.cards.set(event.toolCallId, {
 				cardId: event.toolCallId,
@@ -74,16 +69,21 @@ export class CardProjection {
 				sourceSequence: event.seq,
 				sourceEventId: event.toolCallId,
 				toolName: event.name,
-				title: titleOf(event.name),
-				...(summaryOf(event.args) !== undefined ? { summary: summaryOf(event.args) } : {}),
+				// preview.title 为纯内容（张三）→ 卡片标题补域标识（角色：张三）
+				title:
+					event.preview?.title !== undefined
+						? `${titleOf(event.name)}：${event.preview.title}`
+						: titleOf(event.name),
+				...(event.preview?.summary !== undefined ? { summary: event.preview.summary } : {}),
 				status: "in-progress",
 			});
-		} else if (event.type === "tool-call-response") {
+		} else if (event.type === "tool-recorded.recorded") {
 			const card = this.cards.get(event.toolCallId);
 			if (card) {
 				this.cards.set(event.toolCallId, {
 					...card,
-					status: event.error !== undefined ? "failed" : "completed",
+					...(event.preview?.summary !== undefined ? { summary: event.preview.summary } : {}),
+					status: event.outcome === "failed" ? "failed" : "completed",
 				});
 			}
 		}

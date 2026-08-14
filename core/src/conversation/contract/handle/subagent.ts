@@ -2,7 +2,7 @@
  * 进程内 subagent 句柄。
  */
 
-import type { OutputEvent } from "../events/index.js";
+import type { LoopEvent } from "../../../runtime/loop/types.js";
 
 /** 主 loop → 进程内 subagent 的句柄 */
 export interface SubagentHandle {
@@ -15,7 +15,7 @@ export interface SubagentHandle {
 	 * 订阅 subagent 输出事件
 	 * @returns 输出事件异步迭代器
 	 */
-	events(): AsyncIterable<OutputEvent>;
+	events(): AsyncIterable<LoopEvent>;
 	/**
 	 * 取 subagent 最终结果
 	 * @returns 结果

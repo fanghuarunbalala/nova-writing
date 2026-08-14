@@ -1,8 +1,9 @@
 /**
  * ConversationTimeline 视觉（原型 .timeline + .chat-inner）。
  *
- * timeline 提供滚动容器；inner 居中并限制最大宽度 880px（与悬浮 composer
- * 的 form 对齐）。padding-bottom 132px 为悬浮 composer 留出空间，最后一条
+ * timeline 提供滚动容器；inner 居中并限制最大宽度 var(--max-w-composer)
+ * （clamp(880px, 62%, 1600px) 随容器自适应，与悬浮 composer 的 form 对齐）。
+ * padding-bottom 132px 为悬浮 composer 留出空间，最后一条
  * 消息可滚到输入框上方。
  */
 .timeline {
@@ -13,7 +14,7 @@
 }
 
 .inner {
-  max-width: 880px;
+  max-width: var(--max-w-composer);
   margin: 0 auto;
 }
 
@@ -43,7 +44,7 @@
 }
 
 /* 轮次分隔（原型 .turn-sep）：居中 mono faint，两侧渐变细线。 */
-.turnSep {
+.runSep {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -55,24 +56,24 @@
   letter-spacing: 0.16em;
 }
 
-.turnSep::before,
-.turnSep::after {
+.runSep::before,
+.runSep::after {
   content: "";
   flex: 1;
   height: 1px;
   background: var(--color-border);
 }
 
-.turnSep::before {
+.runSep::before {
   background: linear-gradient(to right, transparent, var(--color-border-strong));
 }
 
-.turnSep::after {
+.runSep::after {
   background: linear-gradient(to left, transparent, var(--color-border-strong));
 }
 
 /* 首条轮次分隔收窄上边距（原型 .turn-sep:first-child；条目外层有 .enter 包裹） */
-.enter:first-child .turnSep {
+.enter:first-child .runSep {
   margin-top: var(--space-10px);
 }
 

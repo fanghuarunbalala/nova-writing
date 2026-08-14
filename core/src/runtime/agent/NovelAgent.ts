@@ -2,6 +2,8 @@
  * Novel Agent 装配：声明式定义（novelAgentDefinition）经 AgentAssembler 解析为
  * 完整 main agent（system 分节 + 全部工具 + 工具调度）。
  * 对齐旧 NovelAgentDefinition（agentType="novel"）；compose nudge 由 Conversation 层注入（依赖 ConversationContext）。
+ * subagent 派发三工具在 opts.subagent 提供时组外追加（subagent 组不在本期
+ * groupIds 契约，见 tool/definitions/subagent.ts 说明）。
  */
 import type { Provider } from "../provider/Provider.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
@@ -14,6 +16,12 @@ import {
   novelAgentDefinition,
   novelSectionRegistry,
 } from "./definitions/NovelAgentDefinition.js";
+import { createSubagentTools } from "../tool/definitions/subagent.js";
+import type { SubagentToolsOptions } from "../tool/definitions/subagent.js";
+import {
+  NOVEL_SUBAGENT_DEFINITIONS,
+  NOVEL_SUBAGENT_ALLOWED_TYPES,
+} from "./NovelExplorerAgent.js";
 import {
   NOVEL_TOOL_GROUP_CATALOG,
   createNovelToolGroupResolver,
@@ -46,13 +54,13 @@ export interface NovelAgentOptions {
   provider: Provider;
   /** novel 客户端（工具 query/mutate 对接） */
   handle: NovelHandle;
-  /** conversation id（产出 OutputEvent 用；缺省 undefined） */
+  /** conversation id（产出 LoopEvent 用；缺省 undefined） */
   conversationId?: string;
   /** 状态变化监听器（journal 落盘由上层注入 journalListener） */
   listeners?: LoopContextListener[];
-  /** 可恢复的 turn 消息（journal 重放；缺省从空开始） */
-  turnMessages?: LLMessage[];
-  /** turn seq 起始值（journal 恢复：resumeSeq = journal.lastSeq） */
+  /** 可恢复的 run 消息（journal 重放；缺省从空开始） */
+  runMessages?: LLMessage[];
+  /** run seq 起始值（journal 恢复：resumeSeq = journal.lastSeq） */
   resumeSeq?: number;
   /** 审批通道（mutation 工具执行前征询；子进程内闭包 → conv.sendApprovalRequest） */
   requestApproval?: (req: ConversationApprovalRequest) => Promise<ConversationApprovalDecision>;
@@ -74,6 +82,8 @@ export interface NovelAgentOptions {
   composeSparseEveryCalls?: number;
   /** Todo 存储（runtime.todo 组 TodoWrite 装配；缺省 InMemoryConversationTodoStore） */
   todoStore?: ConversationTodoStore;
+  /** subagent 派发三工具装配（agents/allowedAgentTypes 由 builder 注入定义目录常量，调用方只传 spawner） */
+  subagent?: Omit<SubagentToolsOptions, "agents" | "allowedAgentTypes">;
 }
 
 /**
@@ -130,6 +140,18 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     nudgeCatalog,
   });
   const capability = assembler.assemble();
+  // subagent 派发三工具（Agent/TaskOutput/TaskStop）：组系统外追加——
+  // 本期 groupIds 契约不含 subagent 组；定义 tools 策略只过滤组内工具，
+  // 追加工具不受 allow/deny 影响（main agent 全量策略本就不过滤）。
+  if (opts.subagent !== undefined) {
+    capability.toolDefs.push(
+      ...createSubagentTools({
+        ...opts.subagent,
+        agents: NOVEL_SUBAGENT_DEFINITIONS,
+        allowedAgentTypes: NOVEL_SUBAGENT_ALLOWED_TYPES,
+      }),
+    );
+  }
   const dispatcher = new MapToolDispatcher(capability.toolDefs);
   return new AgentLoop({
     workspace: opts.workspace,
@@ -139,7 +161,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     agentId: "main",
     conversationId: opts.conversationId,
     listeners: opts.listeners,
-    turnMessages: opts.turnMessages,
+    runMessages: opts.runMessages,
     startSeq: opts.resumeSeq,
     requestApproval: opts.requestApproval,
     resumePendingDecider: opts.resumePendingDecider,

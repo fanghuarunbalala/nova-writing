@@ -2,14 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import { ComposeModeNudgePolicy } from "../compose.js";
 import { ComposeModeStateProvider } from "../../../../conversation/compose/ComposeModeState.js";
 import type { LoopContext } from "../../../loop/LoopContext.js";
-import type { RunContext } from "../../../loop/types.js";
+import type { RunProgress } from "../../../loop/types.js";
 import type { ProviderCall } from "../../../provider/types.js";
 
 function mockLoop() {
-	return { appendTurnMessages: vi.fn() } as unknown as LoopContext;
+	return { appendRunMessages: vi.fn() } as unknown as LoopContext;
 }
 
-function run(curTurn = 0): RunContext {
+function run(curTurn = 0): RunProgress {
 	return { curTurn, maxTurn: 100, toolsLastTurn: new Map() };
 }
 
@@ -22,9 +22,9 @@ function makeCall(): ProviderCall {
 	};
 }
 
-/** 取 appendTurnMessages 最近一条 system 内容 */
+/** 取 appendRunMessages 最近一条 system 内容 */
 function lastAppended(loop: ReturnType<typeof mockLoop>): string {
-	const calls = (loop.appendTurnMessages as ReturnType<typeof vi.fn>).mock.calls;
+	const calls = (loop.appendRunMessages as ReturnType<typeof vi.fn>).mock.calls;
 	return (calls.at(-1)![0] as Array<{ content: string }>)[0]!.content;
 }
 
@@ -48,7 +48,7 @@ describe("ComposeModeNudgePolicy", () => {
 		state.enter("main", { designFilePath: "/d.md", hasPriorDraft: true });
 		const loop = mockLoop();
 		expect(policy.persistentNudgeIfNeeded(loop, run())).toBe(true);
-		const appended = (loop.appendTurnMessages as ReturnType<typeof vi.fn>).mock.calls.map(
+		const appended = (loop.appendRunMessages as ReturnType<typeof vi.fn>).mock.calls.map(
 			(c) => (c[0] as Array<{ content: string }>)[0]!.content,
 		);
 		expect(appended).toHaveLength(2);
@@ -96,7 +96,7 @@ describe("ComposeModeNudgePolicy", () => {
 		const policy = new ComposeModeNudgePolicy(state, "main");
 		const loop = mockLoop();
 		expect(policy.persistentNudgeIfNeeded(loop, run())).toBe(false);
-		expect(loop.appendTurnMessages).not.toHaveBeenCalled();
+		expect(loop.appendRunMessages).not.toHaveBeenCalled();
 	});
 
 	it("稳态仍 compose：每 sparseEveryCalls 次 call 发一次 transient sparse（不落盘）", () => {
@@ -114,7 +114,7 @@ describe("ComposeModeNudgePolicy", () => {
 		expect(emitted).toBe(true);
 		expect(call.messages).toHaveLength(before + 1);
 		expect((call.messages.at(-1) as { content: string }).content).toContain("# 设计模式（刷新）");
-		expect(loop.appendTurnMessages).not.toHaveBeenCalled(); // transient 不落盘
+		expect(loop.appendRunMessages).not.toHaveBeenCalled(); // transient 不落盘
 	});
 
 	it("sparse 同 turn 至多一次：第 6 次 call（同 curTurn）不发，新 turn 再发", () => {

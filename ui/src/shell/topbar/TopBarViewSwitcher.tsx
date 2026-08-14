@@ -1,10 +1,12 @@
 /**
  * TopBarViewSwitcher
  *
- * 主区视图三段切换：对话 / 内容 / 计划。
+ * 主区视图三段切换：对话 / 内容 / 计划（lucide 图标 + 文字）。
+ * 激活态为滑块（.thumb）——translateX 按列索引位移，等宽三列 grid 保证槽位精确。
  */
+import { BookOpen, CalendarDays, MessageSquare, type LucideIcon } from "lucide-react";
 import type { MainViewState } from "../../shared/routing/MainViewRouter.js";
-import { TopBarAction } from "./TopBarAction.js";
+import { Icon } from "../../shared/primitives/Icon.js";
 import styles from "./TopBarViewSwitcher.module.css";
 
 export interface TopBarViewSwitcherProps {
@@ -12,25 +14,41 @@ export interface TopBarViewSwitcherProps {
   readonly onChange: (state: MainViewState) => void;
 }
 
-const VIEWS: ReadonlyArray<{ readonly value: MainViewState; readonly label: string }> = [
-  { value: "chat", label: "对话" },
-  { value: "content", label: "内容" },
-  { value: "schedule", label: "计划" },
+const VIEWS: ReadonlyArray<{
+  readonly value: MainViewState;
+  readonly label: string;
+  readonly icon: LucideIcon;
+}> = [
+  { value: "chat", label: "对话", icon: MessageSquare },
+  { value: "content", label: "内容", icon: BookOpen },
+  { value: "schedule", label: "计划", icon: CalendarDays },
 ];
 
 export function TopBarViewSwitcher({ state, onChange }: TopBarViewSwitcherProps) {
+  const activeIndex = Math.max(
+    0,
+    VIEWS.findIndex((view) => view.value === state),
+  );
   return (
     <div className={styles.switcher} role="tablist" aria-label="主视图">
+      <span
+        className={styles.thumb}
+        style={{ transform: `translateX(calc(${activeIndex} * 100%))` }}
+        aria-hidden="true"
+      />
       {VIEWS.map((view) => (
         <button
           key={view.value}
           type="button"
           role="tab"
           aria-selected={state === view.value}
-          className={[styles.seg, state === view.value ? styles.active : ""].filter(Boolean).join(" ")}
+          className={[styles.seg, state === view.value ? styles.active : ""]
+            .filter(Boolean)
+            .join(" ")}
           onClick={() => onChange(view.value)}
         >
-          {view.label}
+          <Icon icon={view.icon} size="sm" />
+          <span>{view.label}</span>
         </button>
       ))}
     </div>

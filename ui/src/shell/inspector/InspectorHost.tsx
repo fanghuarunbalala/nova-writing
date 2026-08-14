@@ -21,7 +21,9 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { X } from "lucide-react";
 import { DragHandle } from "../../shared/primitives/DragHandle.js";
+import { Icon } from "../../shared/primitives/Icon.js";
 import { useInspectorRoute } from "../../shared/routing/hooks.js";
 import type { InspectorRouter } from "../../shared/routing/InspectorRouter.js";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
@@ -159,7 +161,7 @@ export function InspectorHost({
               aria-label="收起面板"
               onClick={() => inspectorRouter.close()}
             >
-              ✕
+              <Icon icon={X} size="sm" />
             </button>
           </header>
           <div className={styles.body}>

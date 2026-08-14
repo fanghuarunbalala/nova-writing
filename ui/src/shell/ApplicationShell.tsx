@@ -5,9 +5,10 @@
  * 并承担唯一允许的跨域副作用协调（workspace 切换触发各域 load）。
  * 审批域：活动会话投影 approvals → ApprovalStore；决策经 binding.resolveApproval 回传。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
+import { useMainView } from "../shared/routing/hooks.js";
 import { useActiveConversationSession } from "../domains/conversation/hooks/useActiveConversationSession.js";
 import { createApprovalEntityResolver } from "../domains/approval/approvalEntityResolver.js";
 import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
@@ -104,6 +105,10 @@ export function ApplicationShell({
     [api],
   );
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
+  // 侧栏宽度：未拖拽时 undefined（交给 tokens --sidebar-width），拖过才写 inline 值
+  const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
+  const sidebarWidthRef = useRef<number | null>(null);
+  const mainView = useMainView(mainViewRouter);
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
   const [locateReference, setLocateReference] = useState<
     { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null
@@ -236,6 +241,17 @@ export function ApplicationShell({
     void domainStores.conversationCatalog.createConversation();
   }, [domainStores]);
 
+  // 侧栏拖拽调宽：232–420px（未拖时缺省 tokens 292px）
+  const SIDEBAR_DEFAULT_WIDTH = 292;
+  const handleSidebarResize = useCallback((delta: number) => {
+    const next = Math.min(
+      420,
+      Math.max(232, (sidebarWidthRef.current ?? SIDEBAR_DEFAULT_WIDTH) + delta),
+    );
+    sidebarWidthRef.current = next;
+    setSidebarWidth(next);
+  }, []);
+
   const handleSelectConversation = useCallback(
     (id: string) => {
       domainStores.conversationCatalog.selectConversation(id);
@@ -353,14 +369,17 @@ export function ApplicationShell({
         onToggleSidebar={() =>
           setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded"))
         }
+        view={mainView.state}
+        onViewChange={(next) => mainViewRouter.transition(next)}
         onOpenWorkspace={() => onOpenWorkspace?.()}
         onOpenSettings={() => onOpenSettings?.()}
-        onOpenSchedule={() => mainViewRouter.transition("schedule")}
         extensions={extensions}
       />
-      <div className={styles.body} data-sidebar-mode={sidebarMode}>
+      <div className={styles.body}>
         <Sidebar
           mode={sidebarMode}
+          widthPx={sidebarWidth ?? undefined}
+          onResizeWidth={handleSidebarResize}
           conversationCatalog={domainStores.conversationCatalog}
           novelOverview={domainStores.novelOverview}
           toastStore={toastStore}

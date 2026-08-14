@@ -22,6 +22,9 @@
   --topbar-height:       56px;
   --subhead-height:      58px;
   --sidebar-width:       292px;
+  /* 侧栏当前宽度：与 --insp-w 同一先例——tokens 持默认值，
+     用户拖拽调宽时宿主写 inline 覆盖（宽度与折叠偏移同源）。 */
+  --sidebar-current-w:   292px;
   --sidebar-width-collapsed: 0;
   /* inspector 宽度：默认 860px。响应式收窄由 InspectorHost.module.css 的
      媒体查询覆盖；用户拖拽时写入 inline --insp-w（未拖过则交给 CSS）。

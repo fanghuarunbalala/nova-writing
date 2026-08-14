@@ -141,8 +141,8 @@ describe("ApplicationShell smoke", () => {
     const user = userEvent.setup();
     const { api } = await renderShell();
     expect(screen.getAllByText("白昼计划").length).toBeGreaterThan(0);
-    // 待办仅存在于计划视图（侧栏已无待办组）。
-    await user.click(screen.getByRole("button", { name: "计划" }));
+    // 待办仅存在于计划视图（侧栏已无待办组；顶栏中央分段切换器进入）。
+    await user.click(screen.getByRole("tab", { name: "计划" }));
     expect(await screen.findByText("还没有对话")).toBeInTheDocument();
     expect(api.conversations.list).toHaveBeenCalledWith();
     expect(api.novel.overview.get).toHaveBeenCalled();

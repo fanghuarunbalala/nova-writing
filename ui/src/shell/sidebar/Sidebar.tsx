@@ -5,10 +5,13 @@
  * 新建 -> 内容(auto-fill) -> 对话。
  * 待办组已移除（待办只在计划视图，与原型一致）；待审批队列入口在右侧
  * 审批面板（inspector）。v2 原型已删 side-foot，故不再渲染 footer。
+ * 右缘 DragHandle 拖拽调宽（widthPx 未拖时缺省 tokens --sidebar-width）。
  */
+import type { CSSProperties } from "react";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import type { NovelOverviewStore } from "../../domains/novel/overview/NovelOverviewStore.js";
 import type { ToastStore } from "../../shared/state/ToastStore.js";
+import { DragHandle } from "../../shared/primitives/DragHandle.js";
 import type { ContentTab } from "../main/contentTab.js";
 import { ContentSection } from "./sections/ContentSection.js";
 import { ConversationListSection } from "./sections/ConversationListSection.js";
@@ -18,6 +21,10 @@ import styles from "./Sidebar.module.css";
 
 export interface SidebarProps {
   readonly mode: "expanded" | "collapsed";
+  /** 用户拖拽后的宽度（px）；未拖时 undefined 走 tokens 缺省宽 */
+  readonly widthPx?: number;
+  /** 右缘拖拽调宽（delta 累计位移；collapsed 时手柄不渲染） */
+  readonly onResizeWidth?: (delta: number) => void;
   readonly conversationCatalog: ConversationCatalogStore;
   readonly novelOverview: NovelOverviewStore;
   readonly toastStore: ToastStore;
@@ -42,6 +49,8 @@ export interface SidebarProps {
 
 export function Sidebar({
   mode,
+  widthPx,
+  onResizeWidth,
   conversationCatalog,
   novelOverview,
   toastStore,
@@ -51,8 +60,18 @@ export function Sidebar({
   onSelectContentPane,
 }: SidebarProps) {
   const snapshot = conversationCatalog.getSnapshot();
+  const style =
+    widthPx !== undefined
+      ? ({ width: widthPx, "--sidebar-current-w": `${widthPx}px` } as CSSProperties)
+      : undefined;
   return (
-    <aside className={styles.sidebar} data-mode={mode} role="navigation" aria-label="侧栏">
+    <aside
+      className={styles.sidebar}
+      data-mode={mode}
+      role="navigation"
+      aria-label="侧栏"
+      style={style}
+    >
       <NewConversationSection
         onCreate={onCreateConversation}
         disabled={snapshot.workspaceId === undefined}
@@ -65,6 +84,15 @@ export function Sidebar({
           onSelect={onSelectConversation}
         />
       </SidebarSection>
+      {mode === "expanded" && onResizeWidth !== undefined ? (
+        <div className={styles.dragAnchor}>
+          <DragHandle
+            orientation="horizontal"
+            ariaLabel="调整侧栏宽度"
+            onResize={onResizeWidth}
+          />
+        </div>
+      ) : null}
     </aside>
   );
 }

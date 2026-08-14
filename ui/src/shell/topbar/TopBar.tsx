@@ -1,18 +1,19 @@
 /**
  * TopBar
  *
- * 顶栏（对齐原型）：侧栏切换 + wordmark + workspace 名/副标 + 右侧
- * Workspace/设置动作 + 修订号。右侧 TopBarAction 渲染 计划 动作，
- * 点击由 shell 路由到计划视图；审批入口已移除（待审批时右侧面板自动展开，
- * 见 ApplicationShell 的自动展开 effect）。
+ * 顶栏（对齐原型）：侧栏切换 + wordmark + workspace 名/副标 + 中央主视图
+ * 分段切换器（对话/内容/计划，滑块指示）+ 右侧 Workspace/设置动作。
+ * 审批入口已移除（待审批时右侧面板自动展开，见 ApplicationShell 的自动展开 effect）。
  * TopBarMenuSlot 渲染 extensions.titleBar 注入的桌面专属内容（spec 4.2）。
  */
 import { FolderOpen, PanelLeft, Settings } from "lucide-react";
 import { Icon } from "../../shared/primitives/Icon.js";
 import { IconButton } from "../../shared/primitives/IconButton.js";
+import type { MainViewState } from "../../shared/routing/MainViewRouter.js";
 import type { NovelUiExtensions } from "../../extensions/NovelUiExtensions.js";
 import { TopBarAction } from "./TopBarAction.js";
 import { TopBarMenuSlot } from "./TopBarMenuSlot.js";
+import { TopBarViewSwitcher } from "./TopBarViewSwitcher.js";
 import styles from "./TopBar.module.css";
 
 export interface TopBarProps {
@@ -20,9 +21,11 @@ export interface TopBarProps {
   readonly workspaceSub?: string;
   readonly sidebarMode: "expanded" | "collapsed";
   readonly onToggleSidebar: () => void;
+  /** 当前主视图（驱动中央分段切换器） */
+  readonly view: MainViewState;
+  readonly onViewChange: (state: MainViewState) => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenSettings: () => void;
-  readonly onOpenSchedule?: () => void;
   /** 第一方扩展点；titleBar 渲染到 TopBarMenuSlot（spec 4.2） */
   readonly extensions?: NovelUiExtensions;
 }
@@ -32,9 +35,10 @@ export function TopBar({
   workspaceSub,
   sidebarMode,
   onToggleSidebar,
+  view,
+  onViewChange,
   onOpenWorkspace,
   onOpenSettings,
-  onOpenSchedule,
   extensions,
 }: TopBarProps) {
   const TitleBar = extensions?.titleBar;
@@ -56,9 +60,7 @@ export function TopBar({
         </TopBarMenuSlot>
       ) : null}
       <span className={styles.spacer} />
-      {onOpenSchedule !== undefined ? (
-        <TopBarAction label="计划" onClick={onOpenSchedule} />
-      ) : null}
+      <TopBarViewSwitcher state={view} onChange={onViewChange} />
       <span className={styles.spacer} />
       <TopBarAction label="Workspace" icon={<Icon icon={FolderOpen} size="sm" />} onClick={onOpenWorkspace} />
       <TopBarAction label="设置" icon={<Icon icon={Settings} size="sm" />} onClick={onOpenSettings} />

@@ -41,10 +41,11 @@ const capability = {
   nudgePolicies: [],
 };
 
-// ── ToolDispatcher（按 name 分发到 handler）──
+// ── ToolDispatcher（Map 查表：resolve + dispatch）──
 const dispatcher = {
+  resolve: (name) => capability.toolDefs.find((t) => t.name === name),
   dispatch: async (ctx, call) => {
-    const tool = capability.toolDefs.find((t) => t.name === call.name);
+    const tool = dispatcher.resolve(call.name);
     if (!tool) return `未找到工具 ${call.name}`;
     return tool.handler.execute(call);
   },

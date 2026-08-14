@@ -350,7 +350,7 @@ export class AgentLoop {
    * @returns undefined = 放行执行；字符串 = 拒绝结果文本（作为 tool-call-response 进 turn 继续）
    */
   private async gateTool(tc: ToolCall, turnSeq: number): Promise<string | undefined> {
-    const toolDef = this.config.agentCapability.toolDefs.find((t) => t.name === tc.name);
+    const toolDef = this.config.toolDispatcher.resolve(tc.name);
     if (toolDef?.requireApproval !== true) return undefined;
     if (this.config.requestApproval === undefined) return "已拒绝（审批通道未装配）";
     const decision = await this.config.requestApproval({

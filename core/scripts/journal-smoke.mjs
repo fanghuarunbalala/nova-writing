@@ -45,7 +45,7 @@ const loop = new AgentLoop({
   workspace: ".",
   provider,
   agentCapability: capability,
-  toolDispatcher: { dispatch: async () => "noop" },
+  toolDispatcher: { dispatch: async () => "noop", resolve: () => undefined },
   conversationId: "main",
   agentId: "main",
   listeners: [journalListener(journal)],

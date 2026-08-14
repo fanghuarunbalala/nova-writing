@@ -70,8 +70,9 @@ const capability = {
 };
 
 const dispatcher = {
+  resolve: (name) => capability.toolDefs.find((x) => x.name === name),
   dispatch: async (ctx, call) => {
-    const t = capability.toolDefs.find((x) => x.name === call.name);
+    const t = dispatcher.resolve(call.name);
     return t ? t.handler.execute(call) : `未知工具 ${call.name}`;
   },
 };

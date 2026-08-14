@@ -38,6 +38,7 @@ function makeProvider(results: ProviderResult[]): Provider {
 
 const dispatcher: ToolDispatcher = {
   dispatch: async (_ctx, call) => `result:${call.name}`,
+  resolve: () => undefined,
 };
 
 function makeLoop(provider: Provider): AgentLoop {

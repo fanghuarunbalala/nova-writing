@@ -5,7 +5,7 @@
  */
 import type { Provider } from "../provider/Provider.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
-import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
+import { MapToolDispatcher } from "../tool/MapToolDispatcher.js";
 import type { DynamicInputProvider } from "../prompt/PromptSection.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
@@ -106,13 +106,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     nudgeCatalog,
   });
   const capability = assembler.assemble();
-  const dispatcher: ToolDispatcher = {
-    dispatch: async (_ctx, call) => {
-      const tool = capability.toolDefs.find((t) => t.name === call.name);
-      if (!tool) throw new Error(`未知工具: ${call.name}`);
-      return tool.handler.execute(call);
-    },
-  };
+  const dispatcher = new MapToolDispatcher(capability.toolDefs);
   return new AgentLoop({
     workspace: opts.workspace,
     provider: opts.provider,

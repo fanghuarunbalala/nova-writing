@@ -2,6 +2,7 @@
 @import "@novel/ui/shared/theme/tokens.css";
 @import "@novel/ui/shared/theme/global.css";
 @import "@novel/ui/shared/theme/settings.css";
+@import "@novel/ui/shared/theme/animations.css";
 
 html,
 body,

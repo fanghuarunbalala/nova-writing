@@ -78,6 +78,15 @@ export interface ConversationApi {
 	 * @returns 当前生效模式
 	 */
 	getMode(conversationId: ConversationId): Promise<ConversationMode>;
+	/**
+	 * 设置会话模式：经 manager 定位会话后以 control lane 下发 mode.set
+	 * （记 pending + mode.pending 事件；下一次 provider call 发起时晋升 active，
+	 * 权威回显以 mode.changed 事件为准）。
+	 * @param conversationId 会话 id
+	 * @param mode 目标模式（review/bypass/compose）
+	 * @returns 控制回执（不入 journal）
+	 */
+	setMode(conversationId: ConversationId, mode: ConversationMode): Promise<{ seq: number; recordedAt: string }>;
 }
 
 /** 审批子 API（wait 队列：UI 拉取 + 决策；request/resolve 分离） */
@@ -179,6 +188,10 @@ export function createNovelApiClient(options: NovelApiClientOptions): NovelApiCl
 			getMode: async (conversationId) => {
 				const handle = (await manager.createOrResume(conversationId)).handle;
 				return handle.getConversationMode();
+			},
+			setMode: async (conversationId, mode) => {
+				const handle = (await manager.createOrResume(conversationId)).handle;
+				return handle.sendSystemControl({ type: "mode.set", mode });
 			},
 		},
 		// 客户端构造不经 manager 的 wait 队列（renderer 经 wrap 直连服务端门面）——占位
@@ -296,6 +309,10 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 			getMode: async (conversationId) => {
 				const handle = (await manager.createOrResume(conversationId)).handle;
 				return handle.getConversationMode();
+			},
+			setMode: async (conversationId, mode) => {
+				const handle = (await manager.createOrResume(conversationId)).handle;
+				return handle.sendSystemControl({ type: "mode.set", mode });
 			},
 		},
 		// wait 队列唯一权威在 CMS：UI 拉取 + 决策（request/resolve 分离）

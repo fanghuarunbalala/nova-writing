@@ -4,20 +4,20 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 12px 4px;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-3) var(--space-1);
 }
 
 .head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px 7px;
+  padding: 0 var(--space-2) var(--space-7px);
 }
 
 .label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-11);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-faint);
@@ -29,7 +29,7 @@
   justify-content: center;
   min-width: 16px;
   height: 16px;
-  padding: 1px 7px;
+  padding: 1px var(--space-7px);
   border-radius: var(--radius-pill);
   background: var(--color-warn-bg);
   color: var(--color-warn);

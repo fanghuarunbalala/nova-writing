@@ -2,9 +2,9 @@
  * RuntimeEventFlow 视觉（原型 .evt-flow + .evt-timeline + .evt-row）。
  */
 .flow {
-  margin-top: 12px;
+  margin-top: var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: var(--radius-10px);
   background: var(--color-surface);
   overflow: hidden;
 }
@@ -12,23 +12,23 @@
 .head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
   color: var(--color-muted);
 }
 
 .title {
-  font-size: 12px;
-  font-weight: 750;
+  font-size: var(--fs-12);
+  font-weight: var(--fw-750);
   color: var(--color-fg);
 }
 
 .count {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--color-faint);
 }
 
@@ -37,7 +37,7 @@
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--color-border);
-  padding: 4px 0;
+  padding: var(--space-1) 0;
   max-height: 260px;
   overflow-y: auto;
 }
@@ -45,15 +45,15 @@
 .row {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px;
+  gap: var(--space-2);
   align-items: baseline;
-  padding: 5px 12px;
-  font-size: 12px;
-  border-left: 2px solid transparent;
+  padding: var(--space-5px) var(--space-3);
+  font-size: var(--fs-12);
+  border-left: var(--space-2px) solid transparent;
 }
 
 .row.agent {
-  border-left-color: color-mix(in oklab, var(--color-accent) 55%, transparent);
+  border-left-color: var(--color-accent-55);
 }
 
 .row.system {
@@ -70,14 +70,14 @@
 
 .time {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--color-faint);
   font-variant-numeric: tabular-nums;
 }
 
 .name {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--color-fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -93,10 +93,10 @@
 
 .failed {
   flex: none;
-  font-size: 10px;
-  font-weight: 800;
+  font-size: var(--fs-10);
+  font-weight: var(--fw-heavy);
   color: var(--color-danger);
-  background: color-mix(in oklab, var(--color-danger) 12%, transparent);
-  border-radius: 999px;
-  padding: 1px 7px;
+  background: var(--color-danger-12-transparent);
+  border-radius: var(--radius-pill);
+  padding: 1px var(--space-7px);
 }

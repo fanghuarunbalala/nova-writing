@@ -6,13 +6,13 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-2);
   max-width: 560px;
   margin: 8vh auto 0;
-  padding: 34px 26px;
+  padding: var(--space-34px) var(--space-26px);
   text-align: center;
   border: 1px dashed var(--color-border-strong);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   color: var(--color-muted);
 }
 
@@ -28,11 +28,11 @@
   font-size: var(--fs-h1);
   font-weight: var(--fw-heavy);
   color: var(--color-fg);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .empty p {
   max-width: 360px;
-  font-size: 13px;
+  font-size: var(--fs-13);
   line-height: 1.6;
 }

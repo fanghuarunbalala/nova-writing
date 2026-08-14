@@ -7,14 +7,14 @@
 .status {
   margin-left: auto;
   display: inline-flex;
-  gap: 4px;
+  gap: var(--space-1);
   align-items: center;
   flex: none;
 }
 
 .planM {
   display: inline-flex;
-  gap: 2px;
+  gap: var(--space-2px);
   align-items: center;
   flex: none;
 }
@@ -22,8 +22,8 @@
 .seg {
   width: 5px;
   height: 3px;
-  border-radius: 2px;
-  background: color-mix(in oklab, var(--color-border-strong) 72%, transparent);
+  border-radius: var(--radius-2px);
+  background: var(--color-border-strong-72);
 }
 
 .planM[data-value="1"] .seg:nth-child(-n + 1) {
@@ -54,16 +54,16 @@
 }
 
 .real-in-progress {
-  border: 1.5px solid color-mix(in oklab, var(--color-accent) 55%, transparent);
+  border: 1.5px solid var(--color-accent-55);
 }
 
 .real-in-progress::after {
   content: "";
   position: absolute;
-  inset: 2px;
+  inset: var(--space-2px);
   border-radius: 50%;
   background: var(--color-accent);
-  animation: nodePulse 1.8s ease-in-out infinite;
+  animation: var(--anim-node-pulse) 1.8s ease-in-out infinite;
 }
 
 .real-completed {
@@ -73,19 +73,19 @@
 .real-completed::after {
   content: "";
   position: absolute;
-  left: 2px;
-  top: 3.4px;
+  left: var(--space-2px);
+  top: var(--space-1);
   width: 4px;
   height: 2px;
-  border-left: 1.5px solid var(--color-bg);
-  border-bottom: 1.5px solid var(--color-bg);
+  border-left: var(--space-5px) solid var(--color-bg);
+  border-bottom: var(--space-5px) solid var(--color-bg);
   transform: rotate(-45deg);
 }
 
 .real-blocked {
   width: 8px;
   height: 8px;
-  border-radius: 2px;
+  border-radius: var(--radius-2px);
   background: var(--color-danger);
   transform: rotate(45deg);
 }
@@ -99,14 +99,10 @@
   content: "";
   position: absolute;
   left: -1px;
-  top: 2.8px;
+  top: var(--space-2);
   width: 10px;
   height: 1.5px;
   background: var(--color-muted);
   border-radius: 1px;
 }
 
-@keyframes nodePulse {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 1; }
-}

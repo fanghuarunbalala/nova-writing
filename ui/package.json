@@ -14,8 +14,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-css.mjs",
-    "check": "tsc -p tsconfig.json --noEmit && eslint --no-error-on-unmatched-pattern \"src/shared/**/*.{ts,tsx}\" \"src/domains/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
+    "check": "tsc -p tsconfig.json --noEmit && eslint --no-error-on-unmatched-pattern \"src/shared/**/*.{ts,tsx}\" \"src/domains/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" && stylelint \"src/**/*.css\"",
     "lint": "eslint --no-error-on-unmatched-pattern \"src/shared/**/*.{ts,tsx}\" \"src/domains/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
+    "lint:css": "stylelint \"src/**/*.css\"",
     "test": "vitest run"
   },
   "dependencies": {
@@ -45,6 +46,8 @@
     "jsdom": "30.0.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "stylelint": "^16.26.1",
+    "stylelint-config-standard": "^37.0.0",
     "vitest": "^4.1.10"
   }
 }

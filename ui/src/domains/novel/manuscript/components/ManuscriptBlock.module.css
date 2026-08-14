@@ -8,9 +8,9 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: var(--space-1);
   width: 100%;
-  padding: 10px 0;
+  padding: var(--space-10px) 0;
   border: 0;
   border-top: 1px dashed var(--color-border);
   background: none;
@@ -27,10 +27,10 @@
 
 .head {
   display: flex;
-  gap: 9px;
+  gap: var(--space-9px);
   align-items: center;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--color-faint);
 }
 
@@ -45,11 +45,11 @@
 
 .draft {
   color: var(--color-warn);
-  font-weight: 750;
+  font-weight: var(--fw-750);
 }
 
 .text {
-  font-size: 14.5px;
+  font-size: var(--fs-14-5);
   line-height: 1.85;
   color: var(--color-fg);
   text-wrap: pretty;
@@ -60,7 +60,7 @@
 
 /* 正文未加载（懒加载中/拉取失败留空）时的淡色占位。 */
 .placeholder {
-  font-size: 13px;
+  font-size: var(--fs-13);
   color: var(--color-faint);
   margin: 0;
 }
@@ -68,45 +68,45 @@
 /* 块操作（编辑/删除）：hover 显现，不触发块选中 */
 .actions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-6px);
   margin-left: auto;
 }
 
 .actionButton {
-  padding: 1px 6px;
-  font-size: 10.5px;
+  padding: 1px var(--space-6px);
+  font-size: var(--fs-xs);
   font-family: var(--font-mono);
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-4px);
   background: none;
   color: var(--color-faint);
   cursor: pointer;
 }
 
 .actionButton:hover {
-  border-color: var(--color-border-strong, #555);
+  border-color: var(--color-border-strong);
   color: var(--color-fg);
 }
 
 /* inline 编辑 */
 .editor {
   width: 100%;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--color-border-strong, #555);
-  background: var(--color-surface);
-  color: var(--color-fg);
-  font-size: 13px;
+  padding: var(--space-2) var(--space-10px);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  font-size: var(--fs-13);
   resize: vertical;
 }
 
 .editor:focus {
   outline: none;
-  border-color: var(--color-accent, #7aa2f7);
+  border-color: var(--color-accent);
 }
 
 .editActions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-self: flex-end;
 }

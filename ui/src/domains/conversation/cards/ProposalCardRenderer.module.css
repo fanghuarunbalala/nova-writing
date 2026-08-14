@@ -7,11 +7,11 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  margin-top: 13px;
-  padding: 14px 16px 13px;
+  gap: var(--space-7px);
+  margin-top: var(--space-13px);
+  padding: var(--space-14px) var(--space-4) var(--space-13px);
   border: 1px solid var(--color-border-strong);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-1);
   transition:
@@ -22,12 +22,12 @@
 .head {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--space-10px);
   flex-wrap: wrap;
 }
 
 .title {
-  font-size: 15px;
+  font-size: var(--fs-body);
   font-weight: var(--fw-heavy);
   letter-spacing: -0.01em;
   color: var(--color-fg);
@@ -51,15 +51,15 @@
 .op {
   display: flex;
   align-items: baseline;
-  gap: 9px;
-  padding: 9px 0;
+  gap: var(--space-9px);
+  padding: var(--space-9px) 0;
   border-top: 1px dashed var(--color-border);
-  font-size: 13px;
+  font-size: var(--fs-13);
   line-height: 1.55;
 }
 
 .op:first-of-type {
-  margin-top: 10px;
+  margin-top: var(--space-10px);
 }
 
 .opMark {
@@ -94,9 +94,9 @@
 .foot {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: var(--space-10px);
   flex-wrap: wrap;
   border-top: 1px solid var(--color-border);
-  padding-top: 11px;
-  margin-top: 3px;
+  padding-top: var(--space-11px);
+  margin-top: var(--space-3px);
 }

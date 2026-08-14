@@ -5,11 +5,11 @@
  * 用 arr（->）连接 chip，chip-old/chip-new/lg.real-abandoned 着色。
  */
 .card {
-  margin-top: 14px;
+  margin-top: var(--space-14px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
-  padding: 15px 17px;
+  padding: var(--space-15px) var(--space-17px);
   transition: border-color var(--duration-fast) var(--ease-out);
 }
 
@@ -18,31 +18,31 @@
 }
 
 .title {
-  font-size: 14px;
+  font-size: var(--fs-h2);
   font-weight: var(--fw-heavy);
   letter-spacing: -0.01em;
   color: var(--color-fg);
 }
 
 .desc {
-  font-size: 12.5px;
+  font-size: var(--fs-12-5);
   color: var(--color-muted);
-  margin-top: 4px;
+  margin-top: var(--space-1);
   line-height: 1.6;
 }
 
 .flow {
   display: flex;
-  gap: 10px;
+  gap: var(--space-10px);
   flex-wrap: wrap;
-  margin-top: 10px;
+  margin-top: var(--space-10px);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   align-items: center;
 }
 
 .axisLabel {
-  margin-left: 14px;
+  margin-left: var(--space-14px);
   color: var(--color-faint);
 }
 
@@ -51,27 +51,27 @@
 }
 
 .chip {
-  font-weight: 750;
+  font-weight: var(--fw-750);
   color: var(--color-fg);
 }
 
 .chipOld {
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--color-danger);
 }
 
 .chipNew {
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--color-success);
 }
 
 .lgAbandoned {
-  font-size: 9.5px;
-  font-weight: 750;
+  font-size: var(--fs-9-5);
+  font-weight: var(--fw-750);
   font-family: var(--font-mono);
   letter-spacing: 0.03em;
-  padding: 1.5px 6px;
-  border-radius: 5px;
+  padding: var(--space-5px) var(--space-6px);
+  border-radius: var(--radius-xs);
   background: var(--color-danger-bg);
   color: var(--color-danger);
 }

@@ -5,8 +5,8 @@
 .avatar {
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  font-size: 12px;
+  border-radius: var(--radius-10px);
+  font-size: var(--fs-12);
   font-weight: var(--fw-bold);
   line-height: 1;
   flex: none;

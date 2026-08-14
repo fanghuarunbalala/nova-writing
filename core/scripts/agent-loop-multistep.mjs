@@ -85,7 +85,7 @@ const provider = createProvider({
   baseUrl: "https://api.deepseek.com/v1",
   apiKey: process.env.ANTHROPIC_AUTH_TOKEN,
 });
-// jsonl 记录器（html diff 渲染器待恢复——runtime/debug 仅接口占位）
+// jsonl 记录器（html diff 见 runtime/debug 的 ProviderCallDebugger）
 const callDebugger = {
   dir: "debug/main/agent-writer",
   record: (call) => {

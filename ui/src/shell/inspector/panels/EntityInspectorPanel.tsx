@@ -14,6 +14,7 @@ import { EntityEditDialog } from "../../../domains/novel/components/EntityEditDi
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
 import type { CharacterStore } from "../../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../../domains/novel/location/store/LocationStore.js";
+import styles from "./EntityInspectorPanel.module.css";
 
 export interface EntityInspectorPanelProps {
   readonly workspaceId: string | undefined;
@@ -39,7 +40,7 @@ export function EntityInspectorPanel({
       charSnapshot.phase === "ready" &&
       !charSnapshot.characters.some((c) => c.characterId === entityId)
     ) {
-      return <div style={{ padding: 12 }}>该角色已被删除</div>;
+      return <div className={styles.deletedNotice}>该角色已被删除</div>;
     }
     const { detail } = useCharacterDetail(characters, entityId);
     return (
@@ -83,7 +84,7 @@ export function EntityInspectorPanel({
     locSnapshot.phase === "ready" &&
     !locSnapshot.locations.some((l) => l.locationId === entityId)
   ) {
-    return <div style={{ padding: 12 }}>该地点已被删除</div>;
+    return <div className={styles.deletedNotice}>该地点已被删除</div>;
   }
   const { detail } = useLocationDetail(locations, entityId);
   return (

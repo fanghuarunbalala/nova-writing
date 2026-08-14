@@ -9,35 +9,35 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 0;
-  font-size: 13px;
+  gap: var(--space-6px);
+  padding: var(--space-5px) 0;
+  font-size: var(--fs-13);
   color: var(--color-fg);
 }
 
 .unit[data-depth="0"] {
-  font-weight: 750;
-  margin-top: 10px;
-  font-size: 13.5px;
+  font-weight: var(--fw-750);
+  margin-top: var(--space-10px);
+  font-size: var(--fs-13-5);
 }
 
 .unit[data-depth="1"] {
-  padding-left: 18px;
-  font-weight: 600;
+  padding-left: var(--space-18px);
+  font-weight: var(--fw-600);
 }
 
 .unit[data-depth="2"] {
-  padding-left: 38px;
-  font-weight: 500;
+  padding-left: var(--space-38px);
+  font-weight: var(--fw-500);
   color: var(--color-muted);
 }
 
 .unit[data-depth="1"]::before {
   content: "";
   position: absolute;
-  left: 9px;
-  top: -4px;
-  bottom: -4px;
+  left: var(--space-9px);
+  top: -var(--space-1);
+  bottom: -var(--space-1);
   width: 1px;
   background: var(--color-border-strong);
   opacity: 0.45;
@@ -47,7 +47,7 @@
 .unit[data-depth="1"]::after {
   content: "";
   position: absolute;
-  left: 9px;
+  left: var(--space-9px);
   top: 50%;
   width: 9px;
   height: 1px;
@@ -59,9 +59,9 @@
 .unit[data-depth="2"]::before {
   content: "";
   position: absolute;
-  left: 29px;
-  top: -4px;
-  bottom: -4px;
+  left: var(--space-29px);
+  top: -var(--space-1);
+  bottom: -var(--space-1);
   width: 1px;
   background: var(--color-border-strong);
   opacity: 0.45;
@@ -71,7 +71,7 @@
 .unit[data-depth="2"]::after {
   content: "";
   position: absolute;
-  left: 29px;
+  left: var(--space-29px);
   top: 50%;
   width: 9px;
   height: 1px;
@@ -91,7 +91,7 @@
 .uStatus {
   margin-left: auto;
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   align-items: center;
   flex: none;
 }
@@ -99,7 +99,7 @@
 /* 规划成熟度：三格递增 */
 .planM {
   display: inline-flex;
-  gap: 2px;
+  gap: var(--space-2px);
   align-items: center;
   flex: none;
 }
@@ -107,8 +107,8 @@
 .seg {
   width: 5px;
   height: 3px;
-  border-radius: 2px;
-  background: color-mix(in oklab, var(--color-border-strong) 72%, transparent);
+  border-radius: var(--radius-2px);
+  background: var(--color-border-strong-72);
 }
 
 .planM[data-value="1"] .seg:nth-child(-n + 1) {
@@ -140,16 +140,16 @@
 }
 
 .real-in-progress {
-  border: 1.5px solid color-mix(in oklab, var(--color-accent) 55%, transparent);
+  border: 1.5px solid var(--color-accent-55);
 }
 
 .real-in-progress::after {
   content: "";
   position: absolute;
-  inset: 2px;
+  inset: var(--space-2px);
   border-radius: 50%;
   background: var(--color-accent);
-  animation: nodePulse 1.8s ease-in-out infinite;
+  animation: var(--anim-node-pulse) 1.8s ease-in-out infinite;
 }
 
 .real-completed {
@@ -159,19 +159,19 @@
 .real-completed::after {
   content: "";
   position: absolute;
-  left: 2px;
-  top: 3.4px;
+  left: var(--space-2px);
+  top: var(--space-1);
   width: 4px;
   height: 2px;
-  border-left: 1.5px solid var(--color-bg);
-  border-bottom: 1.5px solid var(--color-bg);
+  border-left: var(--space-5px) solid var(--color-bg);
+  border-bottom: var(--space-5px) solid var(--color-bg);
   transform: rotate(-45deg);
 }
 
 .real-blocked {
   width: 8px;
   height: 8px;
-  border-radius: 2px;
+  border-radius: var(--radius-2px);
   background: var(--color-danger);
   transform: rotate(45deg);
 }
@@ -185,20 +185,16 @@
   content: "";
   position: absolute;
   left: -1px;
-  top: 2.8px;
+  top: var(--space-2);
   width: 10px;
   height: 1.5px;
   background: var(--color-muted);
   border-radius: 1px;
 }
 
-@keyframes nodePulse {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 1; }
-}
 
 .uProg {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--color-faint);
 }

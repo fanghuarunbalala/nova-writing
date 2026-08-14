@@ -6,19 +6,19 @@
 .panel {
   display: flex;
   flex-direction: column;
-  padding: 14px 16px 30px;
-  gap: 10px;
+  padding: var(--space-14px) var(--space-4) var(--space-30px);
+  gap: var(--space-10px);
 }
 
 .head {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-9px);
   flex-wrap: wrap;
 }
 
 .title {
-  font-size: 14.5px;
+  font-size: var(--fs-14-5);
   font-weight: var(--fw-heavy);
   letter-spacing: -0.01em;
   color: var(--color-fg);
@@ -27,18 +27,18 @@
 
 .scope {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--fs-9-5);
   letter-spacing: 0.08em;
   color: var(--color-faint);
   border: 1px solid var(--color-border);
-  border-radius: 4px;
-  padding: 0 4px;
+  border-radius: var(--radius-4px);
+  padding: 0 var(--space-1);
   font-weight: var(--fw-medium);
 }
 
 .dMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--color-faint);
   letter-spacing: 0.02em;
   word-break: break-all;
@@ -46,22 +46,22 @@
 
 .dFoot {
   display: flex;
-  gap: 8px;
-  margin-top: 6px;
+  gap: var(--space-2);
+  margin-top: var(--space-6px);
   flex-wrap: wrap;
 }
 
 .action {
-  padding: 4px 10px;
-  font-size: 12px;
-  border-radius: 6px;
-  border: 1px solid var(--color-border-strong, #555);
+  padding: var(--space-1) var(--space-10px);
+  font-size: var(--fs-12);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
   background: transparent;
-  color: var(--color-muted, #aaa);
+  color: var(--color-muted);
   cursor: pointer;
 }
 
 .action:hover {
-  border-color: var(--color-accent, #7aa2f7);
-  color: var(--color-accent, #7aa2f7);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }

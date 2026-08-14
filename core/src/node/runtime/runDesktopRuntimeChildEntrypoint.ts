@@ -9,7 +9,7 @@
  * - 重启恢复：journal 重放 + CMS takeDecisions 查询待决 → 暂停点续跑（resumePendingRun）
  * - subagent：SubagentRuntime 进程内编排（main 经 Agent/TaskOutput/TaskStop 派发）
  */
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { RPCChannel } from "kkrpc";
 import { webSocketClientTransport } from "kkrpc/ws";
@@ -32,11 +32,13 @@ import { ComposeModeStateProvider } from "../../conversation/compose/ComposeMode
 import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
 import type { LLMessage } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
+import { findPendingToolIds } from "../../runtime/loop/AgentLoop.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 import type { ProjectedEvent } from "../../conversation/contract/events/index.js";
+import type { ConversationMode } from "../../conversation/contract/types/index.js";
 
 /** 平台显示名（动态段 core.environment 用） */
 const PLATFORM_LABELS: Readonly<Record<string, string>> = Object.freeze({
@@ -85,14 +87,41 @@ function conversationExposeOf(holder: { conv?: Conversation }): Record<string, u
 	};
 }
 
-/** 由 requestId 尾段解析 toolCallId（requestId = approval_{convId}_{runSeq}_{toolCallId}） */
-function toolCallIdOf(requestId: string): string | undefined {
-	const parts = requestId.split("_");
-	return parts.length >= 4 ? parts.slice(3).join("_") : undefined;
-}
-
 /** child 崩溃自曝日志路径 env（ProcessSpawner 注入） */
 const CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
+
+/** 合法会话模式集合（meta.json 恢复校验用） */
+const KNOWN_MODES = new Set(["review", "bypass", "compose"]);
+
+/** 读 storedir/meta.json 的持久化模式（无文件/损坏/非法值 → undefined 回退默认） */
+export function readPersistedMode(storedir: string | undefined): ConversationMode | undefined {
+	if (storedir === undefined || storedir.trim() === "") return undefined;
+	try {
+		const parsed = JSON.parse(readFileSync(join(storedir, "meta.json"), "utf8")) as { mode?: unknown };
+		return typeof parsed.mode === "string" && KNOWN_MODES.has(parsed.mode)
+			? (parsed.mode as ConversationMode)
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** 合并写 storedir/meta.json 的 mode 字段（保留 name 等其他字段；失败忽略：内存态仍生效） */
+export function persistMode(storedir: string | undefined, mode: ConversationMode): void {
+	if (storedir === undefined || storedir.trim() === "") return;
+	const path = join(storedir, "meta.json");
+	try {
+		let existing: Record<string, unknown> = {};
+		try {
+			existing = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+		} catch {
+			// 无文件/损坏：从空对象起步
+		}
+		writeFileSync(path, JSON.stringify({ ...existing, mode }), "utf8");
+	} catch {
+		// 落盘失败忽略（重启回退默认模式）
+	}
+}
 
 /** 崩溃自曝：同步写堆栈到 runtime-child.log + 回写 stderr（父进程捕获缓冲），再按原语义退出。 */
 function writeCrashTrace(line: string): void {
@@ -199,11 +228,11 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		);
 		cmsApi = channel.getAPI() as unknown as CmsApi;
 		// 重启补完路径：查询 CMS 待决决策 → 暂停点续跑决策器
+		//（审批按 turn 批量：条目的每个 toolCalls 成员都映射到该批决策）
 		const decisions = await cmsApi.takeDecisions(conversationId).catch(() => []);
 		const byToolCallId = new Map<string, ApprovalQueueItem>();
 		for (const item of decisions) {
-			const toolCallId = toolCallIdOf(item.requestId);
-			if (toolCallId !== undefined) byToolCallId.set(toolCallId, item);
+			for (const tc of item.toolCalls) byToolCallId.set(tc.toolCallId, item);
 		}
 		resumePendingDecider = async (toolCallId) => {
 			const item = byToolCallId.get(toolCallId);
@@ -306,24 +335,16 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		journal,
 		managerWait,
 		subagentRuntime,
-		// 120s 无决策：退出进程（不占资源）；CMS 在 UI 决策后重启续跑
-		onWaitTimeout: cmsApi !== undefined ? () => process.exit(0) : undefined,
+		initialMode: readPersistedMode(storedir),
+		onModeChanged: (mode) => persistMode(storedir, mode),
+	// 审批等待不设超时：进程驻留，UI 决策随时经 resolveApproval 直推解除
+	//（提前 exit 会丢内存态 subagent/todo，且决策无法送达）
 	});
 	holder.conv = conv;
 
-	// 暂停点续跑：恢复 run 存在缺 tool 结果的 toolCall 时补完并收口
-	if (runMessages !== undefined && runMessages.length > 0) {
-		const hasPendingTool = runMessages.some(
-			(m) => m.role === "assistant" && (m.toolCalls ?? []).length > 0,
-		);
-		if (hasPendingTool) {
-			await loop.resumePendingRun({ sampling, maxTurns: 8 }).catch((err) => {
-				debugLog("[child] resumePendingRun failed:", err);
-			});
-		}
-	}
-
-	// 报到 CMS（spawner 等待点；此后 manager 侧拿到 conversation handle）
+	// 报到 CMS（spawner 等待点；此后 manager 侧拿到 conversation handle）。
+	// 必须先于 resumePendingRun：恢复可能耗时多轮 provider 调用，晚报到会撞
+	// spawner 15s 握手超时被 kill，产生孤儿进程
 	if (cmsApi !== undefined) {
 		await cmsApi.register({
 			conversationId,
@@ -333,6 +354,14 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	} else {
 		// 无 manager WS（独立脚本/dev）：stdin end 退出兜底
 		process.stdin.on("end", () => process.exit(0));
+	}
+
+	// 暂停点续跑：仅当恢复消息中存在缺 tool 结果的 toolCall 才补完收口——
+	// 已收口的 run（工具结果齐全）不得重跑，否则重复 provider 调用/重复落盘
+	if (runMessages !== undefined && findPendingToolIds(runMessages).length > 0) {
+		await loop.resumePendingRun({ sampling, maxTurns: 8 }).catch((err) => {
+			debugLog("[child] resumePendingRun failed:", err);
+		});
 	}
 	// 子进程驻留：事件循环由 WS 连接与定时器维持
 }

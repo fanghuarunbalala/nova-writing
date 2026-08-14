@@ -10,8 +10,13 @@ function queueItem(overrides: Partial<ApprovalQueueItem> = {}): ApprovalQueueIte
   return {
     conversationId: "C-1",
     requestId: "AR-1",
-    toolName: "CharacterWrite",
-    args: JSON.stringify({ values: [{ name: "林夏" }] }),
+    toolCalls: [
+      {
+        toolCallId: "t1",
+        toolName: "CharacterWrite",
+        args: JSON.stringify({ values: [{ name: "林夏" }] }),
+      },
+    ],
     decisioner: "ui",
     status: "pending",
     requestedAt: "2026-08-05T09:00:00.000Z",

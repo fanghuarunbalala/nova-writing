@@ -32,6 +32,17 @@ function addUsage(
   };
 }
 
+/**
+ * 找出消息序列中缺 tool 结果的 toolCall id（恢复判定：非空才需要 resumePendingRun）。
+ * 已收口的 run（每个 toolCall 都有对应 tool 消息）返回空数组——重启后不得重跑。
+ */
+export function findPendingToolIds(messages: readonly LLMessage[]): string[] {
+  const toolCallIds = messages.flatMap((m) =>
+    m.role === "assistant" ? (m.toolCalls ?? []).map((tc) => tc.id) : [],
+  );
+  return toolCallIds.filter((id) => !messages.some((m) => m.role === "tool" && m.id === id));
+}
+
 /** AgentLoop：agent 主循环，产出 LoopEvent（持久化域 + 流域单流），带输入队列 */
 export class AgentLoop {
   /** 构造配置 */
@@ -40,6 +51,8 @@ export class AgentLoop {
   private readonly context: LoopContext;
   /** 取消控制器（cancel 触发） */
   private readonly controller = new AbortController();
+  /** 审批批次序号（requestId 尾段 b{n}：同 run 多轮工具批次不撞队列幂等） */
+  private batchSeq = 0;
   /** 输入队列（run 排队 / control 抢占） */
   private inbox: LoopInput[] = [];
   /** 是否正在 drain / run */
@@ -254,9 +267,7 @@ export class AgentLoop {
     const assistantMessages = run.messages.filter(
       (m) => m.role === "assistant" && m.toolCalls !== undefined && m.toolCalls.length > 0,
     ) as AssistantMessage[];
-    const pendingToolIds = assistantMessages
-      .flatMap((m) => m.toolCalls!.map((tc) => tc.id))
-      .filter((id) => !run.messages.some((m) => m.role === "tool" && m.id === id));
+    const pendingToolIds = findPendingToolIds(run.messages);
     for (const toolCallId of pendingToolIds) {
       const toolCall = assistantMessages
         .flatMap((m) => m.toolCalls!)
@@ -330,6 +341,9 @@ export class AgentLoop {
 
       // tool_call → 执行工具，结果追加后继续下一轮（turn）
       if (result.finishReason === "tool_call" && result.message.toolCalls) {
+        // 审批门控（按 turn 批量）：本轮全部待审调用合并一次征询，决策作用于整批，
+        // 且先于任何工具执行——拒绝/未装配时以文本结果进 turn（agent 可见，可自我调整）
+        const gate = await this.gateBatch(result.message.toolCalls, run.seq);
         for (const tc of result.message.toolCalls) {
           this.emit(onEvent, "tool-call-request", {
             persist: true,
@@ -339,11 +353,9 @@ export class AgentLoop {
             args: tc.args,
           });
           logger?.debug("agent.tool.dispatch", { tool: tc.name });
-          // 审批门控：拒绝/未装配时以文本结果进 run（agent 可见，可自我调整）
-          const gate = await this.gateTool(tc, run.seq);
           let text: string;
           try {
-            text = gate ?? (await this.config.toolDispatcher.dispatch(this.context, tc));
+            text = gate.get(tc.id) ?? (await this.config.toolDispatcher.dispatch(this.context, tc));
             this.emit(onEvent, "tool-call-response", {
               persist: true,
               seq: run.seq,
@@ -385,23 +397,28 @@ export class AgentLoop {
   }
 
   /**
-   * 审批门控：requireApproval 工具执行前经 requestApproval 征询。
-   * @param tc 工具调用
+   * 审批门控（按 turn 批量）：本轮返回中 requireApproval 的调用合并为一次征询，
+   * 决策作用于整批（approve 全放行 / reject 全拒绝 / edit 全拒绝附意见），
+   * 且先于任何工具执行发起。
+   * @param toolCalls 本轮全部工具调用（含免审项）
    * @param runSeq 当前 run 序号（requestId 归组用）
-   * @returns undefined = 放行执行；字符串 = 拒绝结果文本（作为 tool-call-response 进 run 继续）
+   * @returns toolCallId → 拒绝结果文本（放行项不在 map 中）
    */
-  private async gateTool(tc: ToolCall, runSeq: number): Promise<string | undefined> {
-    const toolDef = this.config.toolDispatcher.resolve(tc.name);
-    if (toolDef?.requireApproval !== true) return undefined;
-    if (this.config.requestApproval === undefined) return "已拒绝（审批通道未装配）";
+  private async gateBatch(toolCalls: readonly ToolCall[], runSeq: number): Promise<Map<string, string>> {
+    const pending = toolCalls.filter(
+      (tc) => this.config.toolDispatcher.resolve(tc.name)?.requireApproval === true,
+    );
+    if (pending.length === 0) return new Map();
+    if (this.config.requestApproval === undefined) {
+      return new Map(pending.map((tc) => [tc.id, "已拒绝（审批通道未装配）"] as const));
+    }
     const decision = await this.config.requestApproval({
-      requestId: `approval_${this.config.conversationId ?? "conv"}_${runSeq}_${tc.id}`,
-      toolName: tc.name,
-      args: tc.args,
+      requestId: `approval:${this.config.conversationId ?? "conv"}:${runSeq}:b${++this.batchSeq}`,
+      toolCalls: pending.map((tc) => ({ toolCallId: tc.id, toolName: tc.name, args: tc.args })),
     });
-    if (decision.kind === "approve") return undefined;
-    if (decision.kind === "reject") return "已拒绝";
-    return `已拒绝（用户意见：${decision.text}）`;
+    if (decision.kind === "approve") return new Map();
+    const text = decision.kind === "reject" ? "已拒绝" : `已拒绝（用户意见：${decision.text}）`;
+    return new Map(pending.map((tc) => [tc.id, text] as const));
   }
 
   /**

@@ -21,8 +21,9 @@ function pendingApproval(conversationId: string, requestId: string, name: string
   return {
     conversationId,
     requestId,
-    toolName: "CharacterWrite",
-    args: JSON.stringify({ values: [{ name }] }),
+    toolCalls: [
+      { toolCallId: "t1", toolName: "CharacterWrite", args: JSON.stringify({ values: [{ name }] }) },
+    ],
     decisioner: "ui",
     status: "pending",
     requestedAt: "2026-08-05T09:00:00.000Z",

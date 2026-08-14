@@ -29,7 +29,6 @@ import {
   type ConversationApprovalRequest,
   type ConversationJournalService,
   type CredentialCipher,
-  debugLog,
   infoLog,
   type LLMessage,
   type NovelStore,
@@ -101,9 +100,14 @@ function createEchoLoop(
       // 决策回传后按结果收口（approval.resolved 事件由 Conversation 发出）
       if (text.includes("审批") && requestApproval !== undefined) {
         void requestApproval({
-          requestId: `approval_${conversationId}_${run.seq}_echo`,
-          toolName: "CharacterWrite",
-          args: JSON.stringify({ values: [{ name: text.replace("审批", "苏眉").trim() || "苏眉" }] }),
+          requestId: `approval:${conversationId}:${run.seq}:b1`,
+          toolCalls: [
+            {
+              toolCallId: `echo_${run.seq}`,
+              toolName: "CharacterWrite",
+              args: JSON.stringify({ values: [{ name: text.replace("审批", "苏眉").trim() || "苏眉" }] }),
+            },
+          ],
         })
           .then((decision) => {
             const reply = decision.kind === "approve" ? "（回声）已批准" : "（回声）已拒绝";
@@ -313,29 +317,7 @@ async function main(): Promise<void> {
     managerWs: {
       url: managerWs.url,
       token: managerWs.token,
-      onConnected: (listener) => {
-        // 临时诊断：连接报到 + main 转发调用点日志
-        return managerWs.onConversationConnected((connected) => {
-          debugLog("[main] conversation connected:", connected.conversationId);
-          const raw = connected.handle;
-          connected.handle = new Proxy(raw, {
-            get(target, prop, receiver) {
-              const value = Reflect.get(target, prop, receiver);
-              if (typeof value !== "function") return value;
-              return (...args: unknown[]) => {
-                const head =
-                  typeof args[0] === "function"
-                    ? `<fn>`
-                    : String(args[0] === undefined ? "" : JSON.stringify(args[0])).slice(0, 120);
-                debugLog("[main] handle call:", String(prop), head);
-                // 注意：不可用 value.apply(...)——.apply 属性访问会被 RPC path 代理捕获成路径段
-                return Reflect.apply(value, target, args);
-              };
-            },
-          });
-          listener(connected);
-        });
-      },
+      onConnected: (listener) => managerWs.onConversationConnected(listener),
     },
     novelWs: { url: novelWs.url, token: novelWs.token },
   });
@@ -347,13 +329,22 @@ async function main(): Promise<void> {
   });
   const serverApi = createNovelApiServer({ manager, novel: publishingStore, proxy, journalDir: conversationsRoot });
 
-  // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）
+  // 主窗口引用（IPC sender 校验 + 定向发送；窗口创建晚于端点注册）
+  let mainWindow: BrowserWindow | undefined;
+
+  // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）。
+  // 安全：入站消息仅接受主窗口 sender（防注入 frame/webview 冒名调用）；
+  // 出站定向主窗口（不广播所有窗口，防串窗）
   const endpoint = {
     send: (channel: string, msg: RPCMessage) => {
-      for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, msg);
+      const win = mainWindow;
+      if (win !== undefined && !win.isDestroyed()) win.webContents.send(channel, msg);
     },
     on: (channel: string, listener: (_event: unknown, msg: RPCMessage) => void) => {
-      ipcMain.on(channel, (event, msg) => listener(event, msg));
+      ipcMain.on(channel, (event, msg) => {
+        if (mainWindow === undefined || event.sender !== mainWindow.webContents) return;
+        listener(event, msg);
+      });
     },
     off: (channel: string, listener: (_event: unknown, msg: RPCMessage) => void) => {
       ipcMain.off(channel, listener);
@@ -416,6 +407,9 @@ async function main(): Promise<void> {
     storageRoot: join(app.getPath("userData"), "novel-storage"),
   });
   const recentWorkspaces: { id: string; label: string }[] = [];
+  // 允许 open 的 referenceId 白名单：仅 pickWorkspace（原生目录对话框）返回的路径可设为工作区，
+  // 渲染进程直传任意路径会被拒绝（防渲染端被污染后把 agent 文件工具指向任意目录）
+  const allowedWorkspaceReferences = new Set<string>();
   const workspaceApi = {
     pickWorkspace: async (): Promise<{ referenceId: string; label: string } | undefined> => {
       const result = await dialog.showOpenDialog({
@@ -424,10 +418,14 @@ async function main(): Promise<void> {
       });
       if (result.canceled || result.filePaths.length === 0) return undefined;
       const root = result.filePaths[0]!;
+      allowedWorkspaceReferences.add(root);
       return { referenceId: root, label: basename(root) };
     },
     listRecent: async () => Object.freeze([...recentWorkspaces]),
     open: async (reference: { referenceId: string; label: string }) => {
+      if (!allowedWorkspaceReferences.has(reference.referenceId)) {
+        throw new Error(`未授权的 workspace 引用（请先经目录选择器打开）: ${reference.referenceId}`);
+      }
       const location = await locator.resolve(reference.referenceId);
       const session = { id: location.workspaceId, label: reference.label };
       recentWorkspaces.unshift(session);
@@ -443,8 +441,14 @@ async function main(): Promise<void> {
   const win = new BrowserWindow({
     width: 900,
     height: 640,
-    webPreferences: { preload: preloadPath },
+    webPreferences: {
+      preload: preloadPath,
+      // 显式安全声明（Electron 当前默认即此值；显式化防升级/配置漂移后静默回退）
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
   });
+  mainWindow = win;
   win.webContents.on("console-message", (_e, ...args: unknown[]) => {
     // Electron 43 新旧签名兼容：旧 (event, level, message, ...) / 新 (event, details)
     const first = args[0];
@@ -456,7 +460,9 @@ async function main(): Promise<void> {
       typeof first === "object" && first !== null && "message" in first
         ? (first as { message: unknown }).message
         : args[1];
-    console.error(`[renderer:${String(level)}] ${String(message)}`);
+    // 按级别分流：error/warning 进 stderr，info 级不再污染错误输出
+    if (level === 3 || level === "error") console.error(`[renderer] ${String(message)}`);
+    else if (level === 2 || level === "warning") console.warn(`[renderer] ${String(message)}`);
   });
   await win.loadFile(rendererHtml);
   infoLog("[main] minimal electron ready");

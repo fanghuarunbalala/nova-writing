@@ -96,7 +96,10 @@ describe("ConversationManagerWsServer（manager WS 双工 + wait 路由）", () 
 		const receipt = await connected.handle.sendUserMessage({ text: "hi" });
 		expect(receipt).toMatchObject({ seq: 1 });
 		// 子进程 → CMS 方向：提交审批 + 重启查询
-		await cms.submitApproval("conv_1", { requestId: "approval_conv_1_1_t1", toolName: "CharacterWrite", args: "{}" });
+		await cms.submitApproval("conv_1", {
+				requestId: "approval:conv_1:1:b1",
+				toolCalls: [{ toolCallId: "t1", toolName: "CharacterWrite", args: "{}" }],
+			});
 		expect(await manager.listApprovals()).toHaveLength(1);
 		expect(await cms.takeDecisions("conv_1")).toHaveLength(1);
 	});
@@ -107,25 +110,22 @@ describe("ConversationManagerWsServer（manager WS 双工 + wait 路由）", () 
 		const conv = (ref.handle as unknown) as Conversation;
 
 		await manager.submitApprovalRequest(ref.conversationId, {
-			requestId: "approval_x_1_t1",
-			toolName: "CharacterWrite",
-			args: "{}",
+			requestId: "approval:x:1:b1",
+			toolCalls: [{ toolCallId: "t1", toolName: "CharacterWrite", args: "{}" }],
 		});
 		const list = await manager.listApprovals();
 		expect(list[0]).toMatchObject({ decisioner: "ui", status: "pending" });
 
 		// 驻留等待 + 决策直推
 		const pending = conv.sendApprovalRequest({
-			requestId: "approval_x_1_t2",
-			toolName: "CharacterWrite",
-			args: "{}",
+			requestId: "approval:x:1:b2",
+			toolCalls: [{ toolCallId: "t2", toolName: "CharacterWrite", args: "{}" }],
 		});
 		await manager.submitApprovalRequest(ref.conversationId, {
-			requestId: "approval_x_1_t2",
-			toolName: "CharacterWrite",
-			args: "{}",
+			requestId: "approval:x:1:b2",
+			toolCalls: [{ toolCallId: "t2", toolName: "CharacterWrite", args: "{}" }],
 		});
-		expect(await manager.resolveApproval("approval_x_1_t2", { kind: "approve" })).toBe(true);
+		expect(await manager.resolveApproval("approval:x:1:b2", { kind: "approve" })).toBe(true);
 		expect(await pending).toEqual({ kind: "approve" });
 	});
 
@@ -133,9 +133,8 @@ describe("ConversationManagerWsServer（manager WS 双工 + wait 路由）", () 
 		const manager = new ConversationManagerServer(conversationFactory());
 		const ref = await manager.spawnConversation({ agentType: "novel" });
 		await manager.submitApprovalRequest(ref.conversationId, {
-			requestId: "approval_x_1_t1",
-			toolName: "CharacterWrite",
-			args: "{}",
+			requestId: "approval:x:1:b1",
+			toolCalls: [{ toolCallId: "t1", toolName: "CharacterWrite", args: "{}" }],
 		});
 		await manager.terminate(ref.conversationId);
 		const decisions = await manager.takeDecisions(ref.conversationId);

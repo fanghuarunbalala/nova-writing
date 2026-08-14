@@ -69,6 +69,45 @@ describe("Conversation", () => {
     expect(conv.conversationMode).toBe("bypass");
   });
 
+  it("bypass 模式下 sendApprovalRequest 直接放行（不提交队列、不驻留等待）", async () => {
+    const submitted: unknown[] = [];
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      managerWait: {
+        submitApproval: async (_id, _req) => {
+          submitted.push(1);
+        },
+        submitAsking: async () => {},
+        submitExitCompose: async () => {},
+      },
+    });
+    await conv.sendSystemControl({ type: "mode.set", mode: "bypass" });
+    await conv.sendUserMessage({ text: "hi" });
+    const decision = await conv.sendApprovalRequest({ requestId: "r1", toolCalls: [{ toolCallId: "t1", toolName: "Write", args: "{}" }] });
+    expect(decision).toEqual({ kind: "approve" });
+    expect(submitted).toHaveLength(0);
+  });
+
+  it("initialMode 恢复 + 模式生效时回调 onModeChanged（同值不重复回调）", async () => {
+    const persisted: string[] = [];
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      initialMode: "bypass",
+      onModeChanged: (mode) => persisted.push(mode),
+    });
+    expect(conv.conversationMode).toBe("bypass");
+    // 初始值不重复持久化
+    await conv.sendUserMessage({ text: "hi" });
+    expect(persisted).toHaveLength(0);
+    await conv.sendSystemControl({ type: "mode.set", mode: "review" });
+    await conv.sendUserMessage({ text: "again" });
+    expect(persisted).toEqual(["review"]);
+  });
+
   it("subscribeEvents 订阅收到事件", async () => {
     const conv = new Conversation({
       conversationId: "c1",
@@ -138,7 +177,7 @@ describe("Conversation", () => {
   });
 
   it("sendApprovalRequest 无阻塞驻留 + 经 managerWait 提交 + resolveApproval 回传解除", async () => {
-    const submitted: Array<{ id: string; req: { requestId: string; toolName: string } }> = [];
+    const submitted: Array<{ id: string; req: { requestId: string; toolCalls: readonly { toolName: string }[] } }> = [];
     const conv = new Conversation({
       conversationId: "c1",
       loop: mockLoop(),
@@ -151,11 +190,11 @@ describe("Conversation", () => {
         submitExitCompose: async () => {},
       },
     });
-    const pending = conv.sendApprovalRequest({ requestId: "r1", toolName: "Write", args: "{}" });
+    const pending = conv.sendApprovalRequest({ requestId: "r1", toolCalls: [{ toolCallId: "t1", toolName: "Write", args: "{}" }] });
     // 非阻塞提交：立即入 CMS 队列（进程内直连）
     expect(submitted).toHaveLength(1);
     expect(submitted[0]!.id).toBe("c1");
-    expect(submitted[0]!.req.toolName).toBe("Write");
+    expect(submitted[0]!.req.toolCalls[0]!.toolName).toBe("Write");
     // 决策回传（经 ConversationHandle 契约方法）
     const handle = conv as unknown as ConversationHandle;
     handle.resolveApproval("r1", { kind: "approve" });
@@ -215,7 +254,7 @@ describe("Conversation", () => {
         submitExitCompose: async () => {},
       },
     });
-    const decision = await conv.sendApprovalRequest({ requestId: "r1", toolName: "Write", args: "{}" });
+    const decision = await conv.sendApprovalRequest({ requestId: "r1", toolCalls: [{ toolCallId: "t1", toolName: "Write", args: "{}" }] });
     expect(decision).toEqual({ kind: "reject" });
   });
 
@@ -232,7 +271,7 @@ describe("Conversation", () => {
         submitExitCompose: async () => {},
       },
     });
-    const decision = await conv.sendApprovalRequest({ requestId: "r1", toolName: "Write", args: "{}" });
+    const decision = await conv.sendApprovalRequest({ requestId: "r1", toolCalls: [{ toolCallId: "t1", toolName: "Write", args: "{}" }] });
     expect(decision).toEqual({ kind: "reject" });
   });
 
@@ -281,13 +320,26 @@ describe("ConversationManagerServer", () => {
     const conv = new Conversation({ conversationId: "c1", loop: mockLoop(), sampling: { model: "gpt-5" } });
     const server = new ConversationManagerServer({ create: () => conv });
     const ref = await server.createOrResume("c1");
-    await server.submitApprovalRequest(ref.conversationId, { requestId: "r1", toolName: "CharacterWrite", args: "{}" });
+    await server.submitApprovalRequest(ref.conversationId, {
+      requestId: "r1",
+      toolCalls: [{ toolCallId: "t1", toolName: "CharacterWrite", args: "{}" }],
+    });
     const list = await server.listApprovals();
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ decisioner: "ui", status: "pending", toolName: "CharacterWrite" });
+    expect(list[0]).toMatchObject({
+      decisioner: "ui",
+      status: "pending",
+      toolCalls: [{ toolCallId: "t1", toolName: "CharacterWrite", args: "{}" }],
+    });
     // 决策：记录 + 直推驻留会话（conversation 的 resolveApproval 解除等待）
-    const pending = conv.sendApprovalRequest({ requestId: "r2", toolName: "Write", args: "{}" });
-    await server.submitApprovalRequest(ref.conversationId, { requestId: "r2", toolName: "Write", args: "{}" });
+    const pending = conv.sendApprovalRequest({
+      requestId: "r2",
+      toolCalls: [{ toolCallId: "t2", toolName: "Write", args: "{}" }],
+    });
+    await server.submitApprovalRequest(ref.conversationId, {
+      requestId: "r2",
+      toolCalls: [{ toolCallId: "t2", toolName: "Write", args: "{}" }],
+    });
     expect(await server.resolveApproval("r2", { kind: "reject" })).toBe(true);
     expect(await pending).toEqual({ kind: "reject" });
     expect(await server.takeDecisions("c1")).toHaveLength(2);

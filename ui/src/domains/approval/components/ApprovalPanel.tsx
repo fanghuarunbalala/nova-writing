@@ -154,12 +154,17 @@ function groupApprovals(
           approvals: Object.freeze(list),
           status: groupStatus(list),
           requestedAt: list[0]!.requestedAt,
-          title: approvalTitleOf(list[0]!.toolName, list[0]!.args),
+          title: approvalTitleOf(list[0]!.toolCalls[0]!.toolName, list[0]!.toolCalls[0]!.args),
         }),
       )
       // 最新审批在前，打开面板时默认看到最新的待审组。
       .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)),
   );
+}
+
+/** 组内待审工具调用总数（一个批次条目可含多个 toolCall） */
+function groupToolCallCount(group: ApprovalGroup): number {
+  return group.approvals.reduce((sum, approval) => sum + approval.toolCalls.length, 0);
 }
 
 export function ApprovalPanel({
@@ -214,27 +219,31 @@ export function ApprovalPanel({
     onToggleDrawer?.(false);
   };
 
+  // 参数区按 toolCall 平铺：一个批次条目（一次模型返回的待审调用）展开为多项
   const argumentGroups = useMemo(
     () =>
-      selectedGroup?.approvals.map((approval) => ({
-        toolName: approval.toolName,
-        arguments: parseApprovalArgs(approval.args),
-        op: inferOperation(approval.toolName),
-      })),
+      selectedGroup?.approvals.flatMap((approval) =>
+        approval.toolCalls.map((tc) => ({
+          toolName: tc.toolName,
+          arguments: parseApprovalArgs(tc.args),
+          op: inferOperation(tc.toolName),
+        })),
+      ),
     [selectedGroup],
   );
   const selectedOp = inferOperation(
-    selectedGroup?.approvals[0]!.toolName ?? "",
+    selectedGroup?.approvals[0]!.toolCalls[0]!.toolName ?? "",
   );
   // ExitComposeMode 审批：以 design 草稿内容为确认对象（CCB 式），不走参数区。
   // ExitComposeMode approval: the design draft content is the confirmation subject
   // (CCB-style); it bypasses the generic parameter area.
   const firstApproval = selectedGroup?.approvals[0];
-  const isComposeExit = firstApproval?.toolName === "ExitComposeMode";
+  const firstToolCall = firstApproval?.toolCalls[0];
+  const isComposeExit = firstToolCall?.toolName === "ExitComposeMode";
   const composeExitSummary =
-    !isComposeExit || firstApproval === undefined
+    !isComposeExit || firstToolCall === undefined
       ? undefined
-      : composeExitSummaryOf(firstApproval.args);
+      : composeExitSummaryOf(firstToolCall.args);
   // 已决审批不再解析实体内容（批准后 canonical 已变，取到的是新状态）；
   // 仅待批准解析并判断 revision 是否过期。
   const isPending = selectedGroup?.status === "pending";
@@ -263,10 +272,9 @@ export function ApprovalPanel({
           <div className={styles.empty}>暂无审批请求</div>
         ) : (
           groups.map((group) => {
+            const toolCallCount = groupToolCallCount(group);
             const label =
-              group.approvals.length > 1
-                ? `${group.title} 等 ${group.approvals.length} 项`
-                : group.title;
+              toolCallCount > 1 ? `${group.title} 等 ${toolCallCount} 项` : group.title;
             return (
               <button
                 key={group.key}
@@ -282,9 +290,8 @@ export function ApprovalPanel({
                 <span
                   className={[styles.pill, styles[group.status]].join(" ")}
                 >
-                  {group.status === "pending" &&
-                  group.approvals.length > 1
-                    ? `待批准 ${group.approvals.length} 项`
+                  {group.status === "pending" && toolCallCount > 1
+                    ? `待批准 ${toolCallCount} 项`
                     : STATUS_LABEL[group.status]}
                 </span>
                 <span className={styles.rowTitle}>{label}</span>
@@ -298,7 +305,9 @@ export function ApprovalPanel({
           <div className={styles.identity}>
             <span className={styles.meta}>
               {selectedGroup.approvals
-                .map((approval) => toolNameLabel(approval.toolName))
+                .flatMap((approval) =>
+                  approval.toolCalls.map((tc) => toolNameLabel(tc.toolName)),
+                )
                 .join(" · ")}
             </span>
             <span

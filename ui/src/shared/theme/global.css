@@ -1,6 +1,7 @@
 /**
  * 全局基础样式：盒模型、根背景、排版基线、reduced-motion 降级。
- * 由应用入口（NovelApp）作为副作用引入一次。
+ * 由宿主入口 CSS 经 `@import` 引入一次（gui：`src/renderer/renderer.css`；
+ * 其他宿主同理），不在 TSX 中副作用引入。
  */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; }

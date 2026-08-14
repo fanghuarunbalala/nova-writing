@@ -29,6 +29,12 @@
   --color-info:          oklch(54% 0.05 235);
   --color-info-bg:       oklch(97.2% 0.007 236);
 
+  /* legacy dark 快照（原 var() fallback 固化，值为当前实际渲染值；dark 落地时清理）。
+     这些 hex 不参与 dark 覆盖，仅保证引用不落空。 */
+  --color-danger-border: #b3554d;
+  --color-bg-elevated:   #1e1e24;
+  --color-text:          #ddd;
+
   /* ============ 渐变 ============ */
   --grad-accent: linear-gradient(
     105deg,

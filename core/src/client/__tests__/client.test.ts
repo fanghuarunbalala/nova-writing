@@ -22,12 +22,12 @@ import { createNovelApiClient, createNovelApiServer } from "../NovelApiClient.js
 import { ConversationProjection } from "../ConversationProjection.js";
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
 import type { TurnContext } from "../../runtime/loop/types.js";
-import type { OutputEvent } from "../../conversation/contract/events/index.js";
+import type { LoopEvent } from "../../runtime/loop/types.js";
 import type { ConversationHandle } from "../../conversation/contract/handle/index.js";
 
 /** 模拟 AgentLoop（只触发事件，不发真实 provider 调用） */
 function mockLoop(): AgentLoop {
-	const listeners = new Set<(e: OutputEvent) => void>();
+	const listeners = new Set<(e: LoopEvent) => void>();
 	let seq = 0;
 	return {
 		run: async () => ({ final: { role: "assistant" as const, content: "ok" }, usage: undefined }),
@@ -43,7 +43,7 @@ function mockLoop(): AgentLoop {
 		steer: () => {},
 		stop: () => {},
 		cancel: () => {},
-		onOutputEvent: (l: (e: OutputEvent) => void) => {
+		onOutputEvent: (l: (e: LoopEvent) => void) => {
 			listeners.add(l);
 			return () => listeners.delete(l);
 		},
@@ -63,7 +63,7 @@ function conversationFactory(): ConversationFactory {
 }
 
 /** 构造假的 ConversationHandle（subscribeEvents 同步回放给定事件序列） */
-function fakeHandle(events: OutputEvent[]): ConversationHandle {
+function fakeHandle(events: LoopEvent[]): ConversationHandle {
 	return {
 		sendUserMessage: async () => ({ seq: 0, recordedAt: "" }),
 		sendUserCommand: async () => ({ seq: 0, recordedAt: "" }),
@@ -83,8 +83,8 @@ function fakeHandle(events: OutputEvent[]): ConversationHandle {
 }
 
 /** 构造一条 OutputEvent（缺省 conversationId/ts） */
-function evt(e: Partial<OutputEvent> & { type: OutputEvent["type"] }): OutputEvent {
-	return { conversationId: "c1", ts: "t", ...e } as OutputEvent;
+function evt(e: Partial<LoopEvent> & { type: LoopEvent["type"] }): LoopEvent {
+	return { conversationId: "c1", ts: "t", ...e } as LoopEvent;
 }
 
 describe("ConversationProjection（精简投影）", () => {
@@ -122,18 +122,18 @@ describe("ConversationProjection（精简投影）", () => {
 describe("ConversationProjection（恢复重放）", () => {
 	it("先订阅缓冲 → history 应用 → 冲刷（历史已覆盖去重 + delta live-turn 门控，无丢失/重复）", async () => {
 		// 订阅先行：start 挂在 history promise 上，期间事件进缓冲
-		let listener: ((e: OutputEvent) => void) | undefined;
+		let listener: ((e: LoopEvent) => void) | undefined;
 		const handle: ConversationHandle = {
 			...fakeHandle([]),
-			subscribeEvents: async (l: (e: OutputEvent) => void) => {
+			subscribeEvents: async (l: (e: LoopEvent) => void) => {
 				listener = l;
 			},
 		};
-		let resolveHistory!: (events: OutputEvent[]) => void;
-		const historyPromise = new Promise<OutputEvent[]>((r) => {
+		let resolveHistory!: (events: LoopEvent[]) => void;
+		const historyPromise = new Promise<LoopEvent[]>((r) => {
 			resolveHistory = r;
 		});
-		const historyEvents: OutputEvent[] = [
+		const historyEvents: LoopEvent[] = [
 			evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 }),
 			evt({ type: "user.message", persist: true, seq: 1, text: "历史问题" }),
 			evt({ type: "assistant.message", persist: true, seq: 1, text: "历史回复" }),
@@ -162,10 +162,10 @@ describe("ConversationProjection（恢复重放）", () => {
 	});
 
 	it("replayed 之后实时事件直通", async () => {
-		let listener: ((e: OutputEvent) => void) | undefined;
+		let listener: ((e: LoopEvent) => void) | undefined;
 		const handle: ConversationHandle = {
 			...fakeHandle([]),
-			subscribeEvents: async (l: (e: OutputEvent) => void) => {
+			subscribeEvents: async (l: (e: LoopEvent) => void) => {
 				listener = l;
 			},
 		};
@@ -178,12 +178,12 @@ describe("ConversationProjection（恢复重放）", () => {
 describe("ConversationProjection（liveState）", () => {
 	function makeLiveProjection(): {
 		projection: ConversationProjection;
-		emit: (e: OutputEvent) => void;
+		emit: (e: LoopEvent) => void;
 	} {
-		let listener: ((e: OutputEvent) => void) | undefined;
+		let listener: ((e: LoopEvent) => void) | undefined;
 		const handle: ConversationHandle = {
 			...fakeHandle([]),
-			subscribeEvents: async (l: (e: OutputEvent) => void) => {
+			subscribeEvents: async (l: (e: LoopEvent) => void) => {
 				listener = l;
 			},
 		};
@@ -263,10 +263,10 @@ describe("ConversationProjection（liveState）", () => {
 
 	it("resume 重放增量（fromSeq = lastAppliedSequence）", async () => {
 		const historyCalls: Array<{ fromSeq?: number }> = [];
-		let listener: ((e: OutputEvent) => void) | undefined;
+		let listener: ((e: LoopEvent) => void) | undefined;
 		const handle: ConversationHandle = {
 			...fakeHandle([]),
-			subscribeEvents: async (l: (e: OutputEvent) => void) => {
+			subscribeEvents: async (l: (e: LoopEvent) => void) => {
 				listener = l;
 			},
 		};

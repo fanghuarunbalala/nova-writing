@@ -1,127 +1,60 @@
 /**
- * 输出事件类型全集。
- * 输出事件是内存产物，默认瞬态；persist=true 才落 journal（可查/可恢复）。
- * 只建模消息流（user/assistant/delta/tool-call）；todo/run 状态等读 sqlite 读模型，不进事件。
+ * 输出事件（持久化域）全集：journal 落盘与重建的事实源。
+ * 与流域共享的字面（消息/turn 边界等）复用 shared.ts 并附加 persist: true；
+ * tool-call-request/response 为持久化域专属（完整 args/result，重建必需）；
+ * assistant.delta 已移入流域、approval 事件已删除（wait 权威在 CMS 队列，PRD `output-投影层`）。
+ * 只建模消息流（user/assistant/tool-call/边界）；todo/run 状态等读 sqlite 读模型，不进事件。
  */
 
 import type { AgentId, ConversationId } from "../types/index.js";
+import type {
+	AssistantMessageEvent,
+	ClearEvent,
+	CompactedEvent,
+	Persisted,
+	RetryRequestEvent,
+	TurnEndEvent,
+	TurnStartEvent,
+	UserMessageEvent,
+} from "./shared.js";
 
-/**
- * 输出事件（hub + journal 共用）：
- * - persist=true：落 journal（带 seq），可查 / 可恢复；
- * - persist=false（assistant.delta）：瞬态，仅订阅者可见，事后不可查。
- */
+/** 工具调用请求（完整 args，重建必需，不广播给 UI） */
+interface ToolCallRequestEvent {
+	type: "tool-call-request";
+	persist: true;
+	seq: number;
+	toolCallId: string;
+	name: string;
+	args: string;
+	conversationId: ConversationId;
+	agentId?: AgentId;
+	ts: string;
+}
+
+/** 工具调用响应（完整 result/error，重建必需，不广播给 UI） */
+interface ToolCallResponseEvent {
+	type: "tool-call-response";
+	persist: true;
+	seq: number;
+	toolCallId: string;
+	result?: string;
+	error?: string;
+	conversationId: ConversationId;
+	agentId?: AgentId;
+	ts: string;
+}
+
+/** 输出事件全集（持久化域：全部 persist=true，journal 只写这些） */
 export type OutputEvent =
-	| {
-			type: "user.message";
-			persist: true;
-			seq: number;
-			text: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "assistant.message";
-			persist: true;
-			seq: number;
-			text: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "assistant.delta";
-			persist: false;
-			kind?: "text" | "reasoning";
-			text: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "tool-call-request";
-			persist: true;
-			seq: number;
-			toolCallId: string;
-			name: string;
-			args: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "tool-call-response";
-			persist: true;
-			seq: number;
-			toolCallId: string;
-			result?: string;
-			error?: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "turn-start";
-			persist: true;
-			seq: number;
-			turnSeq: number;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "turn-end";
-			persist: true;
-			seq: number;
-			turnSeq: number;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "compacted";
-			persist: true;
-			seq: number;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "clear";
-			persist: true;
-			seq: number;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "retry-request";
-			persist: true;
-			seq: number;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "approval.request";
-			persist: false;
-			requestId: string;
-			toolName: string;
-			args: string;
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  }
-	| {
-			type: "approval.resolved";
-			persist: false;
-			requestId: string;
-			decision: "approved" | "rejected" | "edited";
-			conversationId: ConversationId;
-			agentId?: AgentId;
-			ts: string;
-	  };
+	| Persisted<TurnStartEvent>
+	| Persisted<TurnEndEvent>
+	| Persisted<UserMessageEvent>
+	| Persisted<AssistantMessageEvent>
+	| Persisted<CompactedEvent>
+	| Persisted<ClearEvent>
+	| Persisted<RetryRequestEvent>
+	| ToolCallRequestEvent
+	| ToolCallResponseEvent;
 
-/** 可落盘事件：OutputEvent 中 persist=true 的子集（journal 只写这些） */
+/** 可落盘事件：OutputEvent 中 persist=true 的子集（全部成员，保留兼容） */
 export type PersistedOutputEvent = Extract<OutputEvent, { persist: true }>;

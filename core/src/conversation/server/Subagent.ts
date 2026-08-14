@@ -4,7 +4,7 @@
  */
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
 import type { SamplingConfig } from "../../runtime/provider/types.js";
-import type { OutputEvent } from "../contract/events/index.js";
+import type { LoopEvent } from "../../runtime/loop/types.js";
 import type { SubagentHandle } from "../contract/handle/subagent.js";
 
 /** Subagent 构造选项 */
@@ -24,7 +24,7 @@ export class Subagent implements SubagentHandle {
 	/** 最终结果 */
 	private lastResult?: unknown;
 	/** 输出事件订阅者 */
-	private readonly eventListeners = new Set<(e: OutputEvent) => void>();
+	private readonly eventListeners = new Set<(e: LoopEvent) => void>();
 
 	/**
 	 * 构造 Subagent
@@ -52,11 +52,11 @@ export class Subagent implements SubagentHandle {
 	}
 
 	/** 订阅输出事件流 */
-	events(): AsyncIterable<OutputEvent> {
+	events(): AsyncIterable<LoopEvent> {
 		const listeners = this.eventListeners;
-		const queue: OutputEvent[] = [];
+		const queue: LoopEvent[] = [];
 		const waiters: Array<() => void> = [];
-		const onEvent = (e: OutputEvent) => {
+		const onEvent = (e: LoopEvent) => {
 			queue.push(e);
 			const wake = waiters.shift();
 			if (wake) wake();
@@ -66,13 +66,13 @@ export class Subagent implements SubagentHandle {
 			[Symbol.asyncIterator]() {
 				return {
 					next: () =>
-						new Promise<IteratorResult<OutputEvent>>((resolve) => {
+						new Promise<IteratorResult<LoopEvent>>((resolve) => {
 							if (queue.length > 0) resolve({ value: queue.shift()!, done: false });
 							else waiters.push(() => resolve({ value: queue.shift()!, done: false }));
 						}),
 					return: () => {
 						listeners.delete(onEvent);
-						return Promise.resolve({ value: undefined as unknown as OutputEvent, done: true });
+						return Promise.resolve({ value: undefined as unknown as LoopEvent, done: true });
 					},
 				};
 			},
@@ -80,7 +80,7 @@ export class Subagent implements SubagentHandle {
 	}
 
 	/** 分发输出事件 */
-	private emit(e: OutputEvent): void {
+	private emit(e: LoopEvent): void {
 		for (const l of this.eventListeners) l(e);
 	}
 }

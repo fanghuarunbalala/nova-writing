@@ -4,7 +4,7 @@ import type { Provider } from "../../provider/Provider.js";
 import type { ProviderCall, ProviderResult } from "../../provider/types.js";
 import type { AgentCapability } from "../../agent/AgentCapability.js";
 import type { ToolDispatcher } from "../../tool/ToolDispatcher.js";
-import type { OutputEvent } from "../../../conversation/contract/events/index.js";
+import type { LoopEvent } from "../types.js";
 
 const capability: AgentCapability = {
   systemSections: [
@@ -77,7 +77,7 @@ describe("AgentLoop.run", () => {
       },
     };
     const loop = makeLoop(provider);
-    const events: OutputEvent[] = [];
+    const events: LoopEvent[] = [];
     loop.onOutputEvent((e) => events.push(e));
     await loop.run("hi", { sampling: { model: "gpt-5" } });
     const deltas = events.filter((e) => e.type === "assistant.delta");
@@ -100,7 +100,7 @@ describe("AgentLoop.run", () => {
     const loop = makeLoop(makeProvider([result("stop", "回声")]));
     // 先 run 设置 lastConfig（followup 不带 config 时复用）
     await loop.run("warm", { sampling: { model: "gpt-5" } });
-    const events: OutputEvent[] = [];
+    const events: LoopEvent[] = [];
     loop.onOutputEvent((e) => events.push(e));
     const turn = loop.followup("你好");
     expect(turn.seq).toBe(2); // warm 消耗 seq 1

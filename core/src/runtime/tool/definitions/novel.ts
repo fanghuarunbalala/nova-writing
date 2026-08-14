@@ -6,6 +6,7 @@ import type { ToolDef } from "../ToolDef.js";
 import type { ToolCall } from "../../provider/types.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
 import type { OrderKey } from "../../../novel/model/outline.js";
+import { characterWritePreview, paragraphWritePreview } from "../previews.js";
 
 /** 解析 tool args JSON */
 function parseArgs(call: ToolCall): Record<string, unknown> {
@@ -74,6 +75,8 @@ function characterWrite(handle: NovelHandle): ToolDef {
     version: "1.0.0",
     // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
     requireApproval: true,
+    // 投影预览：tool-recorded 展示「角色：<名>」而非原始 JSON（PRD `output-投影层` §4.3）
+    preview: characterWritePreview,
     description:
       "批量创建角色档案。name 必填；aliases/summary/initialState/authorNotes 可选。创建直接写入正式稿。",
     parameters: {
@@ -340,6 +343,8 @@ export function createParagraphTools(handle: NovelHandle): ToolDef[] {
       version: "1.0.0",
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
+      // 投影预览：tool-recorded 展示「正文：<章节>」而非原始 JSON（PRD `output-投影层` §4.3）
+      preview: paragraphWritePreview,
       description: "在指定 story unit 下插入新段落。storyUnitId 必填；orderKey 控制排序；text 为段落正文。",
       parameters: {
         type: "object",

@@ -1,5 +1,6 @@
 // runtime/tool 层对外统一出口
 
+export * from "./previews.js";
 export * from "./ToolHandler.js";
 export * from "./ToolDef.js";
 export * from "./ToolGroupManifest.js";

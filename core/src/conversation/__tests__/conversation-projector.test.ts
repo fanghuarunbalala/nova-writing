@@ -6,7 +6,7 @@ function userMsg(text: string): OutputEvent {
   return { type: "user.message", persist: true, seq: 1, text, conversationId: "c1", ts: "t" };
 }
 function delta(text: string): OutputEvent {
-  return { type: "assistant.delta", persist: false, kind: "text", text, conversationId: "c1", ts: "t" };
+  return { type: "assistant.delta", kind: "text", text, conversationId: "c1", ts: "t" };
 }
 function assistantMsg(text: string): OutputEvent {
   return { type: "assistant.message", persist: true, seq: 1, text, conversationId: "c1", ts: "t" };

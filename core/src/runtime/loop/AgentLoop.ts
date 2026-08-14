@@ -11,8 +11,9 @@ import type {
   RunContext,
   TurnContext,
   LoopInput,
+  LoopEvent,
 } from "./types.js";
-import type { OutputEvent } from "../../conversation/contract/events/index.js";
+import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import { LoopContext } from "./LoopContext.js";
 
 /** 缺省最大轮次（防死循环） */
@@ -29,7 +30,7 @@ function addUsage(
   };
 }
 
-/** AgentLoop：agent 主循环，产出 OutputEvent（conversation 统一事件），带输入队列 */
+/** AgentLoop：agent 主循环，产出 LoopEvent（持久化域 + 流域单流），带输入队列 */
 export class AgentLoop {
   /** 构造配置 */
   private readonly config: AgentLoopConfig;
@@ -47,8 +48,8 @@ export class AgentLoop {
   private inputSeq = 0;
   /** 最近一次 run 的 config（followup 无 config 时复用） */
   private lastConfig?: AgentRunConfig;
-  /** 输出事件订阅者（持久：run/followup 产出的所有 OutputEvent） */
-  private readonly outputListeners = new Set<(e: OutputEvent) => void>();
+  /** 输出事件订阅者（持久：run/followup 产出的所有 LoopEvent） */
+  private readonly outputListeners = new Set<(e: LoopEvent) => void>();
 
   /**
    * 构造 AgentLoop
@@ -73,13 +74,13 @@ export class AgentLoop {
    * 处理一次用户输入：若 idle 立即执行；若 running 入队（串行，当前 run 结束后处理）。
    * @param input 用户消息文本
    * @param runConfig 单次运行配置
-   * @param onEvent 输出事件回调（OutputEvent 流）
+   * @param onEvent 输出事件回调（LoopEvent 流）
    * @returns 运行结果
    */
   async run(
     input: string,
     runConfig: AgentRunConfig,
-    onEvent?: (e: OutputEvent) => void,
+    onEvent?: (e: LoopEvent) => void,
   ): Promise<AgentLoopResult> {
     this.lastConfig = runConfig;
     const turn = this.startTurn(input, onEvent);
@@ -120,10 +121,15 @@ export class AgentLoop {
     this.inbox = this.inbox.filter((i) => !(i.lane === "turn" && i.kind === "followup"));
   }
 
-  /** 订阅输出事件（run/followup 产出的所有 OutputEvent），返回取消订阅 */
-  onOutputEvent(l: (e: OutputEvent) => void): () => void {
+  /** 订阅输出事件（run/followup 产出的所有 LoopEvent），返回取消订阅 */
+  onOutputEvent(l: (e: LoopEvent) => void): () => void {
     this.outputListeners.add(l);
     return () => this.outputListeners.delete(l);
+  }
+
+  /** 工具调度器（投影层缺省 preview resolver 经 resolve(name)?.preview 取用） */
+  get toolDispatcher(): ToolDispatcher {
+    return this.config.toolDispatcher;
   }
 
   /**
@@ -212,7 +218,7 @@ export class AgentLoop {
   private async runInternal(
     input: string,
     runConfig: AgentRunConfig,
-    onEvent: ((e: OutputEvent) => void) | undefined,
+    onEvent: ((e: LoopEvent) => void) | undefined,
     turn: TurnContext,
   ): Promise<AgentLoopResult> {
     const logger = this.config.logger;
@@ -281,7 +287,7 @@ export class AgentLoop {
   private async runTurnLoop(
     turn: TurnContext,
     runConfig: AgentRunConfig,
-    onEvent: ((e: OutputEvent) => void) | undefined,
+    onEvent: ((e: LoopEvent) => void) | undefined,
     runContext: RunContext,
   ): Promise<AgentLoopResult> {
     const logger = this.config.logger;
@@ -299,7 +305,7 @@ export class AgentLoop {
           // reasoning delta 在 loop 层直接丢弃（思考内容不上链、UI 不展示思考中态）：
           // 不 emit 任何事件，省去 hub/WS/IPC 全链传输成本。见 docs/PRD/gui-performance.md。
           if (d.type !== "text-delta") return;
-          this.emit(onEvent, "assistant.delta", { persist: false, kind: "text", text: d.text });
+          this.emit(onEvent, "assistant.delta", { kind: "text", text: d.text });
         });
       } catch (err) {
         logger?.error("agent.call.error", {
@@ -383,7 +389,7 @@ export class AgentLoop {
    * @param onEvent 事件回调（run() 路径传其 onEvent；followup() 路径仅 hub 订阅者）
    * @returns 新 turn（seq 已分配）
    */
-  private startTurn(text: string, onEvent?: (e: OutputEvent) => void): TurnContext {
+  private startTurn(text: string, onEvent?: (e: LoopEvent) => void): TurnContext {
     const messages: LLMessage[] = [{ role: "user", content: text }];
     const turn: TurnContext = {
       seq: 0, // 由 LoopContext 覆盖分配
@@ -400,10 +406,10 @@ export class AgentLoop {
     return turn;
   }
 
-  /** 发出 OutputEvent（补 seq/conversationId/agentId/ts；通知 onEvent + 持久订阅者） */
+  /** 发出 LoopEvent（补 seq/conversationId/agentId/ts；通知 onEvent + 持久订阅者） */
   private emit(
-    onEvent: ((e: OutputEvent) => void) | undefined,
-    type: OutputEvent["type"],
+    onEvent: ((e: LoopEvent) => void) | undefined,
+    type: LoopEvent["type"],
     extra: Record<string, unknown>,
   ): void {
     const event = {
@@ -413,7 +419,7 @@ export class AgentLoop {
       agentId: this.config.agentId,
       ts: new Date().toISOString(),
       ...extra,
-    } as OutputEvent;
+    } as LoopEvent;
     onEvent?.(event);
     for (const l of this.outputListeners) l(event);
   }

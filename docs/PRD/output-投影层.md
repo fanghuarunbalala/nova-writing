@@ -97,8 +97,8 @@ stateDiagram-v2
   - **`ProjectedEvent`（流域，hub 广播与投影读取形态）**：
     - 原样复用：`turn-start` / `turn-end` / `user.message` / `assistant.message` / `assistant.delta` / `compacted` / `clear` / `retry-request`。
     - 投影替代（取代 `tool-call-request/response`）：
-      - `tool-recorded.started`：`{ type, toolCallId, name, preview?, conversationId, agentId?, ts }`——工具开始执行时发出；`preview` 为 preview(args) 输出的开始预览。
-      - `tool-recorded.recorded`：`{ type, toolCallId, name, outcome: "ok" | "failed", preview?, error?, durationMs?, conversationId, agentId?, ts }`——工具完成时发出；`preview` 为 preview(args, response) 输出的完成预览；`error` 为失败短信息（截断，非完整 error）；`durationMs` 为 request→response 耗时。
+      - `tool-recorded.started`：`{ type, seq, toolCallId, name, preview?, conversationId, agentId?, ts }`——工具开始执行时发出；`preview` 为 preview(args) 输出的开始预览；`seq` 为源 turn seq（UI 归属/去重/分页必需）。
+      - `tool-recorded.recorded`：`{ type, seq, toolCallId, name, outcome: "ok" | "failed", preview?, error?, durationMs?, conversationId, agentId?, ts }`——工具完成时发出；`preview` 为 preview(args, response) 输出的完成预览；`error` 为失败短信息（截断，非完整 error）；`durationMs` 为 request→response 耗时；`seq` 同 started。
     - **不含** `tool-call-request` / `tool-call-response` / approval 事件。
   - **映射关系**：`OutputEvent` → `ProjectedEvent` 由投影层实现，确定、可重放；反向不可逆（投影是摘要，丢失完整 args/result）。
 - 输出：两个独立类型集 + 导出；`OutputEvent` 只被 journal/重建/内部消费，`ProjectedEvent` 只被 hub/UI 消费。
@@ -192,7 +192,7 @@ stateDiagram-v2
 - [ ] 声明了 `preview` 的工具：started/recorded 携带其定制预览内容；未声明的工具按默认截断回退；preview 抛错不影响 loop。
 - [ ] UI 工具条：started 显示「进行中」，recorded 显示 outcome / 耗时 / 预览；卡片渲染信息量不减。
 - [ ] approval 事件类型、`ApprovalProjection` 与相关测试清理完毕，wait 通道（CMS 队列）回归通过。
-- [ ] 核心现有 152 用例回归通过（涉及事件形态断言的用例同步更新）。
+- [ ] core 259 用例（47 文件）+ ui 全量回归通过（涉及事件形态断言的用例同步更新）。
 
 ---
 

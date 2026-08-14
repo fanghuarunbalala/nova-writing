@@ -1,8 +1,8 @@
 /**
- * 对话投影器：把 OutputEvent 流（实时 delta + journal 历史）投影成消息列表视图。
+ * 对话投影器：把 LoopEvent 流（实时 delta + journal 历史）投影成消息列表视图。
  * 纯逻辑、可测；供 UI 对话界面消费（T12 投影层核心）。
  */
-import type { OutputEvent } from "./contract/events/index.js";
+import type { LoopEvent } from "../runtime/loop/types.js";
 
 /** 对话消息视图（UI 消费） */
 export interface ConversationMessageView {
@@ -20,10 +20,10 @@ export class ConversationProjector {
   private assistantBuffer = "";
 
   /**
-   * 应用一条 OutputEvent（实时 delta 或 journal 历史）
+   * 应用一条 LoopEvent（实时 delta 或 journal 历史）
    * @param event 输出事件
    */
-  apply(event: OutputEvent): void {
+  apply(event: LoopEvent): void {
     switch (event.type) {
       case "user.message":
         this.messages.push({ role: "user", text: event.text });
@@ -48,7 +48,7 @@ export class ConversationProjector {
   }
 
   /** 批量应用（journal history 重放） */
-  applyAll(events: Iterable<OutputEvent>): void {
+  applyAll(events: Iterable<LoopEvent>): void {
     for (const e of events) this.apply(e);
   }
 

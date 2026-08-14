@@ -42,7 +42,7 @@ export interface NovelAgentOptions {
   provider: Provider;
   /** novel 客户端（工具 query/mutate 对接） */
   handle: NovelHandle;
-  /** conversation id（产出 OutputEvent 用；缺省 undefined） */
+  /** conversation id（产出 LoopEvent 用；缺省 undefined） */
   conversationId?: string;
   /** 状态变化监听器（journal 落盘由上层注入 journalListener） */
   listeners?: LoopContextListener[];

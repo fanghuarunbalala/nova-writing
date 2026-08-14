@@ -3,7 +3,7 @@
  * 变更类工具（*Write/*Edit/NovelDelete）→ proposal 卡；读类工具 → text 卡。
  */
 
-import type { OutputEvent } from "./contract/events/index.js";
+import type { LoopEvent } from "../runtime/loop/types.js";
 
 /** 卡片状态 */
 export type CardStatus = "in-progress" | "completed" | "failed";
@@ -62,10 +62,10 @@ export class CardProjection {
 	private readonly cards = new Map<string, CardDescriptor>();
 
 	/**
-	 * 应用一条 OutputEvent（tool-call-request / tool-call-response）
+	 * 应用一条 LoopEvent（tool-call-request / tool-call-response）
 	 * @param event 输出事件
 	 */
-	apply(event: OutputEvent): void {
+	apply(event: LoopEvent): void {
 		if (event.type === "tool-call-request") {
 			if (!isMutation(event.name)) return;
 			this.cards.set(event.toolCallId, {

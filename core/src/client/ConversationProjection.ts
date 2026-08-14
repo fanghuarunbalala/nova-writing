@@ -1,15 +1,14 @@
 /**
  * ConversationProjection：精简投影（客户端侧）。
- * 消费 ConversationHandle.events() 的 OutputEvent 流 → 累积 timeline 快照。
+ * 消费 ConversationHandle.subscribeEvents 的 LoopEvent 流 → 累积 timeline 快照。
  * 替代旧 ConversationProjectionController 的复杂状态机；本期只做实时流（无 journal 重放）。
  */
 
 import { proxy } from "kkrpc/remote-refs";
 import type { ConversationHandle } from "../conversation/contract/handle/index.js";
-import type { OutputEvent } from "../conversation/contract/events/index.js";
+import type { LoopEvent } from "../runtime/loop/types.js";
 import type { ConversationId } from "../conversation/contract/types/index.js";
 import { CardProjection, type CardDescriptor } from "../conversation/CardProjection.js";
-import { ApprovalProjection, type ApprovalView } from "../conversation/ApprovalProjection.js";
 import { RPCError } from "../rpc/RPCError.js";
 
 /** 投影状态（精简：无 replay/following 阶段） */
@@ -85,8 +84,6 @@ export interface ConversationProjectionSnapshot {
 	timeline: readonly ConversationTimelineItem[];
 	/** 工具调用卡片（CardProjection 派生） */
 	cards: readonly CardDescriptor[];
-	/** 审批视图（ApprovalProjection 派生；wait 状态唯一权威为 CMS 队列，此处保留兼容） */
-	approvals: readonly ApprovalView[];
 	/** 工具调用行（tool-call request/response 派生，消息内工具条） */
 	toolTraces: readonly ToolTraceView[];
 	/** 运行时事件行（消息内「本轮时序」） */
@@ -97,11 +94,11 @@ export interface ConversationProjectionSnapshot {
 /** 订阅回调 */
 export type ConversationProjectionListener = () => void;
 
-/** history 查询注入（journal 已落盘事件重放；返回 OutputEvent 序列，无 delta） */
+/** history 查询注入（journal 已落盘事件重放；返回 LoopEvent 序列） */
 export type ConversationProjectionHistory = (opts: {
 	fromSeq?: number;
 	limit?: number;
-}) => Promise<OutputEvent[]>;
+}) => Promise<LoopEvent[]>;
 
 /** 精简投影器：累积 OutputEvent → timeline 列表 */
 export class ConversationProjection {
@@ -119,7 +116,6 @@ export class ConversationProjection {
 	private liveState: "generating" | undefined;
 	private nextSeq = 1;
 	private readonly cardProjection = new CardProjection();
-	private readonly approvalProjection = new ApprovalProjection();
 	/** 工具调用行 */
 	private toolTraces: ToolTraceView[] = [];
 	/** 运行时事件行 */
@@ -135,12 +131,10 @@ export class ConversationProjection {
 	private stopRequested = false;
 	/** 快照子数组置脏标记（apply 置脏 → publish 时才重建冻结数组，稳定引用供 UI memo） */
 	private cardsDirty = true;
-	private approvalsDirty = true;
 	private toolTracesDirty = true;
 	private eventFlowDirty = true;
 	/** 快照子数组缓存（与置脏标记成对维护） */
 	private cachedCards: readonly CardDescriptor[] = [];
-	private cachedApprovals: readonly ApprovalView[] = [];
 	private cachedToolTraces: readonly ToolTraceView[] = [];
 	private cachedEventFlow: readonly ConversationEventView[] = [];
 
@@ -190,7 +184,7 @@ export class ConversationProjection {
 		try {
 			// ① 先订阅（进入缓冲模式）：listener 经 proxy() 标记——kkrpc/remote-refs 的 codec
 			// 只编码 WeakSet 已标记的函数参数（内存/plain kkrpc 通道下标记是无害 no-op）
-			const buffer: OutputEvent[] = [];
+			const buffer: LoopEvent[] = [];
 			let replayed = false;
 			let historyMaxSeq = 0;
 			await this.handle.subscribeEvents(
@@ -213,11 +207,11 @@ export class ConversationProjection {
 			}
 			this.publish();
 			replayed = true;
-			// ③ 冲刷缓冲：persist 事件仅当 seq > historyMaxSeq 才应用（历史已覆盖的去重）；
-			// delta 仅当处于 live turn（seq > historyMaxSeq 的 turn-start/user.message 已开）才应用
+			// ③ 冲刷缓冲：带 seq 事件仅当 seq > historyMaxSeq 才应用（历史已覆盖的去重）；
+			// delta（无 seq）仅当处于 live turn（seq > historyMaxSeq 的 turn-start/user.message 已开）才应用
 			let liveTurn = false;
 			for (const event of buffer) {
-				if ("seq" in event && event.persist) {
+				if ("seq" in event) {
 					if (event.seq <= historyMaxSeq) continue;
 					this.apply(event);
 					if (event.type === "turn-start" || event.type === "user.message") liveTurn = true;
@@ -252,12 +246,11 @@ export class ConversationProjection {
 		await this.start();
 	}
 
-	/** 应用一条 OutputEvent */
-	private apply(event: OutputEvent): void {
-		// 仅 persist 事件推进 lastAppliedSequence（delta 瞬态不带 seq，部分实现会给 0 占位）
-		if ("seq" in event && event.persist) this.lastAppliedSequence = event.seq;
+	/** 应用一条 LoopEvent */
+	private apply(event: LoopEvent): void {
+		// 仅带 seq 事件推进 lastAppliedSequence（delta 瞬态不带 seq）
+		if ("seq" in event) this.lastAppliedSequence = event.seq;
 		this.cardProjection.apply(event);
-		this.approvalProjection.apply(event);
 		switch (event.type) {
 			case "user.message":
 				this.finalizeAssistant();
@@ -352,11 +345,6 @@ export class ConversationProjection {
 				});
 				break;
 			}
-			case "approval.request":
-			case "approval.resolved":
-				// ApprovalProjection 已消费；仅置脏，快照按需重建
-				this.approvalsDirty = true;
-				break;
 			// turn-start / compacted / clear / retry-request 无影响
 		}
 	}
@@ -412,10 +400,6 @@ export class ConversationProjection {
 			this.cachedCards = Object.freeze(this.cardProjection.getCards());
 			this.cardsDirty = false;
 		}
-		if (this.approvalsDirty) {
-			this.cachedApprovals = Object.freeze(this.approvalProjection.getAll());
-			this.approvalsDirty = false;
-		}
 		if (this.toolTracesDirty) {
 			this.cachedToolTraces = Object.freeze([...this.toolTraces]);
 			this.toolTracesDirty = false;
@@ -432,7 +416,6 @@ export class ConversationProjection {
 			...(this.liveState !== undefined ? { liveState: this.liveState } : {}),
 			timeline: Object.freeze([...this.timeline]),
 			cards: this.cachedCards,
-			approvals: this.cachedApprovals,
 			toolTraces: this.cachedToolTraces,
 			eventFlow: this.cachedEventFlow,
 			...(this.error !== undefined ? { error: this.error } : {}),

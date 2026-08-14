@@ -1,10 +1,10 @@
 /**
  * Conversation 实现：conversation 进程侧编排。
- * 组织 AgentLoop + OutputEvent 事件流 + mode 状态；实现 ConversationInteraction + WaitingInteractionRequest。
+ * 组织 AgentLoop + LoopEvent 事件流 + mode 状态；实现 ConversationInteraction + WaitingInteractionRequest。
  */
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
 import type { SamplingConfig } from "../../runtime/provider/types.js";
-import type { OutputEvent } from "../contract/events/index.js";
+import type { LoopEvent } from "../../runtime/loop/types.js";
 import { debugLog } from "../../log/debug.js";
 import type { ConversationJournalService } from "../contract/journal/index.js";
 import type { ConversationInteraction } from "../contract/interaction/index.js";
@@ -63,7 +63,7 @@ export interface ConversationOptions {
 }
 
 /** 输出事件订阅回调 */
-type OutputEventListener = (e: OutputEvent) => void;
+type LoopEventListener = (e: LoopEvent) => void;
 
 /** wait 缺省超时：120s（驻留等待决策；超时按拒绝处理 + onWaitTimeout 退出行为） */
 const DEFAULT_WAIT_TIMEOUT_MS = 120_000;
@@ -81,7 +81,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	/** 默认采样 */
 	private readonly sampling: SamplingConfig;
 	/** 输出事件订阅者（hub） */
-	private readonly eventListeners = new Set<OutputEventListener>();
+	private readonly eventListeners = new Set<LoopEventListener>();
 	/** journal 写侧（缺省 undefined = 不落盘） */
 	private readonly journal?: ConversationJournalService;
 	/** manager wait 通道（wait 请求经 CMS 队列路由） */
@@ -226,7 +226,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	}
 
 	/** 订阅输出事件流（hub 实时推送；dispose 清空全部订阅者） */
-	async subscribeEvents(listener: OutputEventListener): Promise<void> {
+	async subscribeEvents(listener: LoopEventListener): Promise<void> {
 		debugLog("[child] subscribeEvents listener type:", typeof listener, "===", String(listener).slice(0, 60));
 		this.eventListeners.add(listener);
 	}
@@ -265,12 +265,12 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	}
 
 	/** 分发输出事件给所有订阅者 */
-	private emit(e: OutputEvent): void {
+	private emit(e: LoopEvent): void {
 		for (const l of this.eventListeners) l(e);
 	}
 
 	/** 订阅事件（内部：外部经 events() 订阅时注册 listener），返回取消订阅函数 */
-	private subscribe(l: OutputEventListener): () => void {
+	private subscribe(l: LoopEventListener): () => void {
 		this.eventListeners.add(l);
 		return () => {
 			this.eventListeners.delete(l);

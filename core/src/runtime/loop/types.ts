@@ -11,11 +11,17 @@ import type { NovelConstraintsProvider } from "../prompt/PromptSection.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { Logger } from "../../log/Logger.js";
 import type { ProviderCallDebugger } from "../debug/ProviderCallDebugger.js";
-import type { OutputEvent } from "../../conversation/contract/events/index.js";
+import type { AssistantDeltaEvent, OutputEvent } from "../../conversation/contract/events/index.js";
 import type {
   ConversationApprovalDecision,
   ConversationApprovalRequest,
 } from "../../conversation/contract/types/index.js";
+
+/**
+ * AgentLoop 产出全集：持久化域 OutputEvent + 流域瞬态 delta（单流保序）。
+ * 域分流（持久化域 → journal、流域 → 投影）由上层 ProjectionLayer 承担，loop 不区分。
+ */
+export type LoopEvent = OutputEvent | AssistantDeltaEvent;
 
 /** AgentLoop 构造配置：进程生命周期稳定（能力由上层组装好传入） */
 export interface AgentLoopConfig {
@@ -113,7 +119,7 @@ export type LoopInput =
       /** 入队 run 的配置（run() 入队时带；直接 followup() 不带，用上次 config） */
       config?: AgentRunConfig;
       /** 入队 run 的事件回调 */
-      onEvent?: (e: OutputEvent) => void;
+      onEvent?: (e: LoopEvent) => void;
       /** run() 入队时关联的结果 resolve id */
       resolveId?: string;
     }

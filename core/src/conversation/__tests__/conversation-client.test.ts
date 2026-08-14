@@ -58,8 +58,8 @@ describe("ConversationClient（renderer 对话逻辑头测）", () => {
   it("投影器处理事件流（delta 累积 + turn-end 收口）", () => {
     const projector = new ConversationProjector();
     const events: OutputEvent[] = [
-      { type: "assistant.delta", persist: false, kind: "text", text: "深", conversationId: "c1", ts: "t" },
-      { type: "assistant.delta", persist: false, kind: "text", text: "秋", conversationId: "c1", ts: "t" },
+      { type: "assistant.delta", kind: "text", text: "深", conversationId: "c1", ts: "t" },
+      { type: "assistant.delta", kind: "text", text: "秋", conversationId: "c1", ts: "t" },
       { type: "turn-end", persist: true, seq: 1, turnSeq: 1, conversationId: "c1", ts: "t" },
     ];
     projector.applyAll(events);

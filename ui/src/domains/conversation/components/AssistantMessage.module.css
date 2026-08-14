@@ -17,6 +17,15 @@
   flex: 1;
 }
 
+.segment {
+  min-width: 0;
+}
+
+/* live 分段：turn 之间换行分隔（清晰边界），间距紧凑 */
+.segment + .segment {
+  margin-top: var(--space-2);
+}
+
 .text {
   margin-top: 0;
   /* 用户要求正文用黑体（--font-ui）；400 原生字重——YaHei/Segoe UI 无原生

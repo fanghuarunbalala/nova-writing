@@ -61,7 +61,7 @@ describe("AssistantMessage 一轮只显示最后一 turn", () => {
     expect(screen.queryByText(/角色创建已完成：张三/)).not.toBeInTheDocument();
   });
 
-  it("live 流式（streaming=true）：正文显示完整累积文本，turn 切换不跳变", () => {
+  it("live 流式（streaming=true）：逐 turn 分段渲染，每段内容 + 工具行换行分隔", () => {
     render(
       <AssistantMessage
         sequence={1}
@@ -96,12 +96,11 @@ describe("AssistantMessage 一轮只显示最后一 turn", () => {
         ]}
       />,
     );
-    // 流式期间：完整累积文本（历史段内容仍可见，正文连续增长无跳变）
+    // 流式期间：每个 turn 的内容与工具行都渲染（换行分隔，边界清晰，正文无跳变）
     expect(screen.getByText(/我先创建角色/)).toBeInTheDocument();
+    expect(screen.getByText(/角色创建已完成：张三/)).toBeInTheDocument();
     expect(screen.getByText(/接着写正文/)).toBeInTheDocument();
-    // 工具行只取最后一段（当前请求）
     expect(screen.getByText(/插入正文中：ch3/)).toBeInTheDocument();
-    expect(screen.queryByText(/角色创建已完成：张三/)).not.toBeInTheDocument();
   });
 
   it("重放形态：段文本为空 → 完整文本 + 最后一段工具行", () => {

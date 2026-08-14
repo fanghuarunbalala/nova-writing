@@ -9,7 +9,7 @@
  * - 重启恢复：journal 重放 + CMS takeDecisions 查询待决 → 暂停点续跑（resumePendingTurn）
  * - subagent：SubagentRuntime 进程内编排（main 经 Agent/TaskOutput/TaskStop 派发）
  */
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { RPCChannel } from "kkrpc";
 import { webSocketClientTransport } from "kkrpc/ws";
@@ -38,6 +38,7 @@ import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
+import type { ConversationMode } from "../../conversation/contract/types/index.js";
 
 /** 平台显示名（动态段 core.environment 用） */
 const PLATFORM_LABELS: Readonly<Record<string, string>> = Object.freeze({
@@ -95,6 +96,39 @@ export function toolCallIdOf(requestId: string): string | undefined {
 
 /** child 崩溃自曝日志路径 env（ProcessSpawner 注入） */
 const CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
+
+/** 合法会话模式集合（meta.json 恢复校验用） */
+const KNOWN_MODES = new Set(["review", "bypass", "compose"]);
+
+/** 读 storedir/meta.json 的持久化模式（无文件/损坏/非法值 → undefined 回退默认） */
+export function readPersistedMode(storedir: string | undefined): ConversationMode | undefined {
+	if (storedir === undefined || storedir.trim() === "") return undefined;
+	try {
+		const parsed = JSON.parse(readFileSync(join(storedir, "meta.json"), "utf8")) as { mode?: unknown };
+		return typeof parsed.mode === "string" && KNOWN_MODES.has(parsed.mode)
+			? (parsed.mode as ConversationMode)
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** 合并写 storedir/meta.json 的 mode 字段（保留 name 等其他字段；失败忽略：内存态仍生效） */
+export function persistMode(storedir: string | undefined, mode: ConversationMode): void {
+	if (storedir === undefined || storedir.trim() === "") return;
+	const path = join(storedir, "meta.json");
+	try {
+		let existing: Record<string, unknown> = {};
+		try {
+			existing = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+		} catch {
+			// 无文件/损坏：从空对象起步
+		}
+		writeFileSync(path, JSON.stringify({ ...existing, mode }), "utf8");
+	} catch {
+		// 落盘失败忽略（重启回退默认模式）
+	}
+}
 
 /** 崩溃自曝：同步写堆栈到 runtime-child.log + 回写 stderr（父进程捕获缓冲），再按原语义退出。 */
 function writeCrashTrace(line: string): void {
@@ -308,6 +342,8 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		journal,
 		managerWait,
 		subagentRuntime,
+		initialMode: readPersistedMode(storedir),
+		onModeChanged: (mode) => persistMode(storedir, mode),
 	// 审批等待不设超时：进程驻留，UI 决策随时经 resolveApproval 直推解除
 	//（提前 exit 会丢内存态 subagent/todo，且决策无法送达）
 	});

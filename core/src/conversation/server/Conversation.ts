@@ -62,6 +62,10 @@ export interface ConversationOptions {
 	onWaitTimeout?: (requestId: string) => void;
 	/** subagent 任务编排（存在时：事件转发进 hub + stop/dispose 级联 stopAll） */
 	subagentRuntime?: SubagentRuntime;
+	/** 初始模式（storedir 恢复；缺省 DEFAULT_CONVERSATION_MODE） */
+	initialMode?: ConversationMode;
+	/** 模式变更持久化回调（applyPendingMode 生效时调用；写失败由回调自行忽略） */
+	onModeChanged?: (mode: ConversationMode) => void;
 }
 
 /** 输出事件订阅回调 */
@@ -78,6 +82,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private activeMode: ConversationMode = DEFAULT_CONVERSATION_MODE;
 	/** 待生效模式（mode.set 设置，下一次 turn 才生效） */
 	private pendingMode?: ConversationMode;
+	/** 最近已持久化的模式（去重：同值不重复写盘） */
+	private lastPersistedMode: ConversationMode | undefined;
 	/** agent 主循环 */
 	private readonly loop: AgentLoop;
 	/** 默认采样 */
@@ -96,6 +102,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly waitTimeoutEnabled: boolean;
 	/** wait 超时回调（测试/内存模式注入；生产子进程不注入） */
 	private readonly onWaitTimeout?: (requestId: string) => void;
+	/** 模式变更持久化回调（可选：子进程注入 meta.json 落盘） */
+	private readonly onModeChanged?: (mode: ConversationMode) => void;
 	/** 待决审批（requestId → {resolve, timer}），无阻塞驻留等待决策 */
 	private readonly pendingApprovals = new Map<
 		string,
@@ -120,6 +128,9 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.waitTimeoutEnabled = opts.waitTimeoutMs !== undefined || opts.onWaitTimeout !== undefined;
 		this.onWaitTimeout = opts.onWaitTimeout;
 		this.subagentRuntime = opts.subagentRuntime;
+		this.activeMode = opts.initialMode ?? DEFAULT_CONVERSATION_MODE;
+		this.lastPersistedMode = opts.initialMode;
+		this.onModeChanged = opts.onModeChanged;
 		// 订阅 loop 的输出事件（run/followup 均转发到本会话 hub）
 		this.loop.onOutputEvent((e) => this.emit(e));
 		// subagent loop 事件同样进 hub（live-only，不落 journal）
@@ -178,6 +189,14 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		if (this.pendingMode !== undefined) {
 			this.activeMode = this.pendingMode;
 			this.pendingMode = undefined;
+			if (this.activeMode !== this.lastPersistedMode) {
+				this.lastPersistedMode = this.activeMode;
+				try {
+					this.onModeChanged?.(this.activeMode);
+				} catch {
+					// 持久化失败不影响内存态（重启回退默认模式）
+				}
+			}
 		}
 	}
 
@@ -188,6 +207,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	 * 不再经 output hub 发 approval 事件——wait 状态唯一权威是 CMS 队列。
 	 */
 	async sendApprovalRequest(req: ConversationApprovalRequest): Promise<ConversationApprovalDecision> {
+		// bypass 模式：用户已显式免审，直接放行（不进队列、不驻留等待）
+		if (this.activeMode === "bypass") return { kind: "approve" };
 		return new Promise<ConversationApprovalDecision>((resolve) => {
 			// 超时未启用（生产子进程）：不设定时器，驻留等待直到决策回传——
 			// 提前超时会丢内存态（subagent/todo）且 UI 决策无法送达

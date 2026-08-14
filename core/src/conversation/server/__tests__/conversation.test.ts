@@ -67,6 +67,45 @@ describe("Conversation", () => {
     expect(conv.conversationMode).toBe("bypass");
   });
 
+  it("bypass 模式下 sendApprovalRequest 直接放行（不提交队列、不驻留等待）", async () => {
+    const submitted: unknown[] = [];
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      managerWait: {
+        submitApproval: async (_id, _req) => {
+          submitted.push(1);
+        },
+        submitAsking: async () => {},
+        submitExitCompose: async () => {},
+      },
+    });
+    await conv.sendSystemControl({ type: "mode.set", mode: "bypass" });
+    await conv.sendUserMessage({ text: "hi" });
+    const decision = await conv.sendApprovalRequest({ requestId: "r1", toolName: "Write", args: "{}" });
+    expect(decision).toEqual({ kind: "approve" });
+    expect(submitted).toHaveLength(0);
+  });
+
+  it("initialMode 恢复 + 模式生效时回调 onModeChanged（同值不重复回调）", async () => {
+    const persisted: string[] = [];
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      initialMode: "bypass",
+      onModeChanged: (mode) => persisted.push(mode),
+    });
+    expect(conv.conversationMode).toBe("bypass");
+    // 初始值不重复持久化
+    await conv.sendUserMessage({ text: "hi" });
+    expect(persisted).toHaveLength(0);
+    await conv.sendSystemControl({ type: "mode.set", mode: "review" });
+    await conv.sendUserMessage({ text: "again" });
+    expect(persisted).toEqual(["review"]);
+  });
+
   it("subscribeEvents 订阅收到事件", async () => {
     const conv = new Conversation({
       conversationId: "c1",

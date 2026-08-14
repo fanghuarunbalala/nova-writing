@@ -11,7 +11,7 @@
 }
 
 .empty {
-  padding: 18px 12px;
+  padding: var(--space-18px) var(--space-3);
   text-align: center;
   font-size: var(--fs-body);
   color: var(--color-faint);

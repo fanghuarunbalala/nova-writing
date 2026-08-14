@@ -4,11 +4,11 @@
  * 单一描边卡片 + 标题 h3；标题与原型一致 14px/heavy/-0.01em。
  */
 .card {
-  margin-top: 14px;
+  margin-top: var(--space-14px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
-  padding: 15px 17px;
+  padding: var(--space-15px) var(--space-17px);
   transition: border-color var(--duration-fast) var(--ease-out);
 }
 
@@ -17,7 +17,7 @@
 }
 
 .title {
-  font-size: 14px;
+  font-size: var(--fs-h2);
   font-weight: var(--fw-heavy);
   letter-spacing: -0.01em;
   color: var(--color-fg);

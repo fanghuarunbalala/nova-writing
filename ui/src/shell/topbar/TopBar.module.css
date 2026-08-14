@@ -4,15 +4,15 @@
 .topbar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-14px);
   height: var(--topbar-height);
   flex: none;
-  padding: 0 16px;
-  background: color-mix(in oklab, var(--color-surface) 82%, transparent);
+  padding: 0 var(--space-4);
+  background: var(--color-chrome-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--color-border);
-  z-index: 20;
+  z-index: var(--z-topbar);
   /* 无边框窗口下，TopBar 整体作为拖拽区域（spec 5.4 DesktopWindowPort）。
      交互元素（按钮、输入）需单独标记 -webkit-app-region: no-drag。 */
   -webkit-app-region: drag;
@@ -24,7 +24,7 @@
 
 .wordmark {
   font-family: var(--font-display);
-  font-size: 19px;
+  font-size: var(--fs-display);
   font-weight: var(--fw-heavy);
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -33,19 +33,19 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: grad-flow 7s ease-in-out infinite;
+  animation: var(--anim-grad-flow) 7s ease-in-out infinite;
 }
 
 .wsName {
-  font-size: 14px;
-  font-weight: 750;
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-750);
   letter-spacing: 0.01em;
   white-space: nowrap;
   color: var(--color-fg);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  padding: 2px 6px;
-  margin: -2px -6px;
+  padding: var(--space-2px) var(--space-6px);
+  margin: -var(--space-2px) -var(--space-6px);
   transition: background var(--duration-fast) var(--ease-out);
   -webkit-app-region: no-drag;
 }
@@ -55,7 +55,7 @@
 }
 
 .wsSub {
-  font-size: 11.5px;
+  font-size: var(--fs-meta);
   color: var(--color-faint);
   font-family: var(--font-mono);
   white-space: nowrap;

@@ -4,6 +4,7 @@
  * 新建对话 section。
  */
 import { NewConversationButton } from "../../../domains/conversation/components/NewConversationButton.js";
+import styles from "./NewConversationSection.module.css";
 
 export interface NewConversationSectionProps {
   readonly onCreate: () => void;
@@ -12,7 +13,7 @@ export interface NewConversationSectionProps {
 
 export function NewConversationSection({ onCreate, disabled = false }: NewConversationSectionProps) {
   return (
-    <div style={{ padding: "12px 12px 6px" }}>
+    <div className={styles.section}>
       <NewConversationButton onClick={onCreate} disabled={disabled} />
     </div>
   );

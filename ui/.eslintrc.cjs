@@ -20,6 +20,10 @@ module.exports = {
     ecmaFeatures: { jsx: true },
   },
   ignorePatterns: ["dist/", "node_modules/", "scripts/"],
+  rules: {
+    // 代码库惯例以 _ 前缀标记"有意未使用"的参数（如延后实现的桩方法）
+    "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+  },
   overrides: [
     {
       files: ["src/domains/**/*.{ts,tsx}"],

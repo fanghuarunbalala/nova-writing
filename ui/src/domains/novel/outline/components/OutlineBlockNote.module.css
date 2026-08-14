@@ -5,11 +5,11 @@
  * margin-left 由 inline style 注入（按 depth 缩进对齐父单元）。
  */
 .note {
-  font-size: 11.5px;
+  font-size: var(--fs-meta);
   color: var(--color-muted);
-  border-radius: 8px;
-  padding: 5px 9px;
-  margin: 4px 0;
+  border-radius: var(--radius-8px);
+  padding: var(--space-5px) var(--space-9px);
+  margin: var(--space-1) 0;
   display: inline-flex;
   max-width: max-content;
 }

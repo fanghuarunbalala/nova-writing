@@ -2,28 +2,28 @@
  * ToolStrip 视觉（原型 .tool-strip + .tool-chip + .tool-rows）。
  */
 .strip {
-  margin-top: 10px;
+  margin-top: var(--space-10px);
 }
 
 .title {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  font-size: 11px;
+  gap: var(--space-2);
+  font-size: var(--fs-11);
   color: var(--color-muted);
 }
 
 .meta {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-10);
   color: var(--color-faint);
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  gap: var(--space-6px);
+  margin-top: var(--space-6px);
 }
 
 .group {
@@ -34,12 +34,12 @@
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
+  gap: var(--space-5px);
+  padding: var(--space-3px) var(--space-9px);
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-surface-2);
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--color-fg);
   cursor: pointer;
 }
@@ -50,26 +50,26 @@
 
 .chip b {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-10);
   color: var(--color-accent-ink);
 }
 
 .bad {
   color: var(--color-danger);
-  font-weight: 750;
+  font-weight: var(--fw-750);
 }
 
 .chev {
   color: var(--color-faint);
-  font-size: 10px;
+  font-size: var(--fs-10);
 }
 
 .rows {
-  margin-top: 4px;
+  margin-top: var(--space-1);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-8px);
   background: var(--color-surface);
-  padding: 4px 8px;
+  padding: var(--space-1) var(--space-2);
   display: flex;
   flex-direction: column;
 }
@@ -77,17 +77,17 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-  font-size: 11.5px;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  font-size: var(--fs-meta);
 }
 
 .outcome {
   flex: none;
   width: 42px;
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
+  font-size: var(--fs-10);
+  font-weight: var(--fw-heavy);
 }
 
 .ok {
@@ -110,6 +110,6 @@
 .time {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--color-faint);
 }

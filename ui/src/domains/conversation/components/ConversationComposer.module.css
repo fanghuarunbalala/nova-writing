@@ -14,8 +14,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 6;
-  padding: 0 22px 16px;
+  z-index: var(--z-composer);
+  padding: 0 var(--space-22px) var(--space-4);
   background: transparent;
   pointer-events: none;
 }
@@ -26,17 +26,17 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  border-radius: 16px;
+  border-radius: var(--radius-16px);
   background: var(--color-surface);
   box-shadow: var(--shadow-1);
-  padding: 8px 8px 10px 15px;
+  padding: var(--space-2) var(--space-2) var(--space-10px) var(--space-15px);
   pointer-events: auto;
 }
 
 .mainRow {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
+  gap: var(--space-10px);
 }
 
 .input {
@@ -44,13 +44,13 @@
   min-height: 44px;
   max-height: 140px;
   resize: none;
-  padding: 9px 0;
+  padding: var(--space-9px) 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--color-fg);
   font: inherit;
-  font-size: 14.5px;
+  font-size: var(--fs-14-5);
   line-height: 1.6;
   caret-color: var(--color-accent-ink);
 }
@@ -81,8 +81,8 @@
 
 /* 发送禁用提示（等待审批 / 进程断开） */
 .pendingHint {
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.4;
-  color: var(--color-warn, #d9a441);
-  margin-top: 6px;
+  color: var(--color-warn);
+  margin-top: var(--space-6px);
 }

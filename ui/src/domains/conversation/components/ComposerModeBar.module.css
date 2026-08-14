@@ -9,18 +9,18 @@
  */
 .panel {
   position: relative;
-  margin-top: 2px;
+  margin-top: var(--space-2px);
 }
 
 .trigger {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  margin-left: -6px;
-  padding: 5px 6px 1px;
+  gap: var(--space-7px);
+  margin-left: -var(--space-6px);
+  padding: var(--space-5px) var(--space-6px) 1px;
   border: 0;
   background: transparent;
-  font-size: 12.5px;
+  font-size: var(--fs-12-5);
   font-weight: var(--fw-medium);
   color: var(--color-fg);
   cursor: pointer;
@@ -32,9 +32,9 @@
 }
 
 .trigger:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--color-accent) 45%, transparent);
-  outline-offset: 2px;
-  border-radius: 6px;
+  outline: 2px solid var(--color-accent-45);
+  outline-offset: var(--space-2px);
+  border-radius: var(--radius-sm);
 }
 
 .triggerIcon {
@@ -60,13 +60,13 @@
 }
 
 .triggerName {
-  font-weight: 500;
+  font-weight: var(--fw-500);
 }
 
 /* chevron：CSS 倒三角，open 时翻转 */
 .chev {
   display: inline-flex;
-  margin-top: 3px;
+  margin-top: var(--space-3px);
   transition: transform 0.16s var(--ease-out);
 }
 
@@ -75,7 +75,7 @@
   width: 0;
   height: 0;
   border: 4px solid transparent;
-  border-top: 5.5px solid var(--color-faint);
+  border-top: var(--space-5px) solid var(--color-faint);
 }
 
 .chevOpen {
@@ -84,32 +84,32 @@
 
 .options {
   position: absolute;
-  bottom: calc(100% + 4px);
-  left: 9px;
+  bottom: calc(100% + var(--space-1));
+  left: var(--space-9px);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2px);
   min-width: 254px;
-  padding: 6px;
+  padding: var(--space-6px);
   background: color-mix(in oklab, var(--color-surface) 97%, var(--color-bg));
   border: 1px solid var(--color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--radius-12px);
   box-shadow: var(--shadow-2);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  z-index: 30;
+  z-index: var(--z-mode-options);
 }
 
 .option {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
+  gap: var(--space-2);
+  padding: var(--space-7px) var(--space-10px);
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: transparent;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--fs-13);
   color: var(--color-fg);
   cursor: pointer;
 }
@@ -136,17 +136,17 @@
 }
 
 .optionName {
-  font-weight: 600;
+  font-weight: var(--fw-600);
 }
 
 .optionDesc {
-  font-size: 11.5px;
+  font-size: var(--fs-meta);
   color: var(--color-faint);
 }
 
 /* 选中项按模式染色（原型 .mode-opt.sel） */
 .option.selected {
-  background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  background: var(--color-accent-8-transparent);
 }
 
 .option.selected.opt-compose {

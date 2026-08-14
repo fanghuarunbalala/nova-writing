@@ -9,7 +9,7 @@
   min-height: 0;
   display: grid;
   place-items: center;
-  padding: 32px;
+  padding: var(--space-8);
   overflow: auto;
 }
 
@@ -17,8 +17,8 @@
   width: min(400px, 100%);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 26px 24px 22px;
+  gap: var(--space-3);
+  padding: var(--space-26px) var(--space-6) var(--space-22px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: color-mix(in oklab, var(--color-surface) 88%, transparent);
@@ -37,7 +37,7 @@
 
 .title {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--fs-22);
   font-weight: var(--fw-heavy);
   letter-spacing: -0.02em;
   color: var(--color-fg);
@@ -45,19 +45,19 @@
 
 .description {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-13);
   color: var(--color-muted);
   line-height: 1.6;
 }
 
 .choose {
   width: 100%;
-  margin-top: 2px;
-  padding: 9px 18px;
+  margin-top: var(--space-2px);
+  padding: var(--space-9px) var(--space-18px);
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-accent);
   font-size: var(--fs-body);
   font-weight: var(--fw-heavy);
   cursor: pointer;
@@ -65,7 +65,7 @@
 }
 
 .choose:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--color-accent) 88%, var(--color-fg));
+  background: var(--color-accent-88);
 }
 
 .choose:disabled {
@@ -75,9 +75,9 @@
 
 .error {
   margin: 0;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: color-mix(in oklab, var(--color-danger) 10%, transparent);
+  background: var(--color-danger-10);
   color: var(--color-danger);
   font-size: var(--fs-meta);
 }
@@ -85,8 +85,8 @@
 .recent {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 .recentTitle {
@@ -100,7 +100,7 @@
 
 .recentEmpty {
   margin: 0;
-  padding: 14px 16px;
+  padding: var(--space-14px) var(--space-4);
   text-align: center;
   color: var(--color-faint);
   font-size: var(--fs-meta);
@@ -114,7 +114,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .recentItem {
@@ -123,7 +123,7 @@
   align-items: flex-start;
   gap: 1px;
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-10px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);

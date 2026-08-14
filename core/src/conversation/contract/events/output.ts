@@ -1,10 +1,17 @@
 /**
  * 输出事件类型全集。
  * 输出事件是内存产物，默认瞬态；persist=true 才落 journal（可查/可恢复）。
- * 只建模消息流（user/assistant/delta/tool-call）；todo/run 状态等读 sqlite 读模型，不进事件。
+ * 建模消息流（user/assistant/delta/tool-call）+ 会话边界事件（compose.* / mode.*）；
+ * todo/run 状态等读 sqlite 读模型，不进事件。
+ * compose/mode 事件 payload 脱敏：只带路径与相位等元信息，永不携带 design 文件内容。
  */
 
-import type { AgentId, ConversationId } from "../types/index.js";
+import type {
+	AgentId,
+	ComposeModePhase,
+	ConversationId,
+	ConversationMode,
+} from "../types/index.js";
 
 /**
  * 输出事件（hub + journal 共用）：
@@ -118,6 +125,89 @@ export type OutputEvent =
 			persist: false;
 			requestId: string;
 			decision: "approved" | "rejected" | "edited";
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "compose.begin";
+			persist: true;
+			seq: number;
+			phase: ComposeModePhase;
+			designFilePath: string;
+			preComposeMode?: ConversationMode;
+			hasPriorDraft?: boolean;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "compose.submitted";
+			persist: true;
+			seq: number;
+			phase: ComposeModePhase;
+			designFilePath?: string;
+			approvalRequestId?: string;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "compose.applied";
+			persist: true;
+			seq: number;
+			phase: ComposeModePhase;
+			designFilePath?: string;
+			preComposeMode?: ConversationMode;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "compose.discarded";
+			persist: true;
+			seq: number;
+			phase: ComposeModePhase;
+			designFilePath?: string;
+			preComposeMode?: ConversationMode;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "compose.approved";
+			persist: false;
+			phase: ComposeModePhase;
+			designFilePath?: string;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "compose.rejected";
+			persist: false;
+			phase: ComposeModePhase;
+			designFilePath?: string;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "mode.pending";
+			persist: false;
+			mode: ConversationMode;
+			conversationId: ConversationId;
+			agentId?: AgentId;
+			ts: string;
+	  }
+	| {
+			type: "mode.changed";
+			persist: true;
+			seq: number;
+			mode: ConversationMode;
+			designFilePath?: string;
+			phase?: ComposeModePhase;
+			preComposeMode?: ConversationMode;
 			conversationId: ConversationId;
 			agentId?: AgentId;
 			ts: string;

@@ -3,10 +3,14 @@
  * 会话级：mode（base mode）+ phase + active + design 文件路径 + preComposeMode。
  * 不变量：compose 会话激活期间 mode === "compose"；approve/discard 后 active=false 且 mode 恢复 preComposeMode。
  */
-import { DEFAULT_CONVERSATION_MODE, type ConversationMode } from "../contract/types/index.js";
+import {
+	DEFAULT_CONVERSATION_MODE,
+	type ComposeModePhase,
+	type ConversationMode,
+} from "../contract/types/index.js";
 
-/** compose 阶段 */
-export type ComposeModePhase = "idle" | "designing" | "pending" | "applied" | "discarded";
+/** 保持原出口面：ComposeModePhase 已上收 contract/types，此处兼容 re-export */
+export type { ComposeModePhase };
 
 /** compose 状态快照 */
 export interface ComposeModeSnapshot {

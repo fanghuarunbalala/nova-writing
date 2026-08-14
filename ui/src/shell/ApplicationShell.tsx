@@ -127,20 +127,15 @@ export function ApplicationShell({
     return onNovelChanged((entity) => {
       const { character, location, storyOutlineTree, manuscriptStructure, novelOverview } =
         domainStores;
-      switch (entity) {
-        case "character":
-          void character.invalidate();
-          break;
-        case "location":
-          void location.invalidate();
-          break;
-        case "outline":
-          void storyOutlineTree.invalidate();
-          break;
-        case "paragraph":
-          void manuscriptStructure.invalidate();
-          break;
-      }
+      // 实体类型 → 域 store 映射（各 store 均实现统一 invalidate）
+      const storeByEntity: Readonly<Record<string, { invalidate(): Promise<void> }>> = {
+        character,
+        location,
+        outline: storyOutlineTree,
+        paragraph: manuscriptStructure,
+      };
+      const store = storeByEntity[entity];
+      if (store !== undefined) void store.invalidate();
       void novelOverview.invalidate();
     });
   }, [domainStores]);

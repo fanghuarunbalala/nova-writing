@@ -21,7 +21,7 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import type {
 	ConversationMeta,
@@ -127,9 +127,31 @@ export class ConversationManagerServer implements Contract {
 		if (this.storedirRoot !== undefined) this.scanCatalog();
 	}
 
-	/** 会话存储目录（storedirRoot 未提供时为空串；id 全局唯一，目录确定性可重派生复用） */
+	/** 会话存储目录（storedirRoot 未提供时为空串；id 全局唯一，目录确定性可重派生复用）。
+	 *  二次防御：resolve 后必须仍位于 storedirRoot 内（入口校验之外的兜底） */
 	private allocStoredir(conversationId: string): string {
-		return this.storedirRoot !== undefined ? join(this.storedirRoot, conversationId) : "";
+		if (this.storedirRoot === undefined) return "";
+		const dir = join(this.storedirRoot, conversationId);
+		const rootAbs = resolve(this.storedirRoot);
+		const dirAbs = resolve(dir);
+		if (dirAbs !== rootAbs && !dirAbs.startsWith(rootAbs + sep)) {
+			throw new Error(`非法 conversationId（路径逃逸 storedirRoot）: ${conversationId}`);
+		}
+		return dir;
+	}
+
+	/**
+	 * conversationId 合法性校验：拒绝路径穿越/分隔符/Windows 保留字符。
+	 * id 来自渲染进程 RPC（不可信输入），直接用于文件路径拼接；自定义 id（如测试用 c1）
+	 * 合法，但不得含 / \ 及 : * ? " < > | 等会逃逸 storedirRoot 的字符。
+	 */
+	private isKnownConversationId(conversationId: string): boolean {
+		return (
+			conversationId !== "." &&
+			conversationId !== ".." &&
+			!conversationId.startsWith(".") && // 隐藏目录/相对路径前缀
+			!/[\\/:*?"<>|\0]/.test(conversationId)
+		);
 	}
 
 	/** 扫描 storedirRoot 种子 catalog（重启恢复）：目录名 = conversationId，status:"stopped"，seq 取 conv_<n> 最大值防 id 撞车；
@@ -198,15 +220,15 @@ export class ConversationManagerServer implements Contract {
 		}
 	}
 
-	/** 挂子进程 exit 监听：主动终止（terminatedIds）→ 清记录置 stopped；否则标记 crashed（summary 保留供 createOrResume 重派生） */
+	/** 挂子进程 exit 监听：主动终止（terminatedIds）→ 清记录置 stopped；异常退出（非零码/信号）标 crashed；exit 0 置 stopped */
 	private attachExit(conversationId: ConversationId, child: ChildProcess): void {
-		child.once("exit", () => {
+		child.once("exit", (code, signal) => {
 			const summary = this.summaries.get(conversationId);
 			if (this.terminatedIds.has(conversationId)) {
 				this.terminatedIds.delete(conversationId);
 				if (summary) summary.status = "stopped";
 			} else if (summary) {
-				summary.status = "crashed";
+				summary.status = code === 0 && signal === null ? "stopped" : "crashed";
 			}
 			// 进程退出：pending wait 条目标记过期（重启补完按超时拒绝处理）
 			this.waitQueue.expireConversation(conversationId, new Date().toISOString());
@@ -284,7 +306,15 @@ export class ConversationManagerServer implements Contract {
 				parentId: opts.parentId,
 			});
 			this.attachExit(conversationId, child);
-			const handle = await handlePromise;
+			let handle: ConversationHandle;
+			try {
+				handle = await handlePromise;
+			} catch (err) {
+				// 报到超时等失败：回滚登记（子进程已由 spawner kill，目录保留供重试）
+				this.childProcesses.delete(conversationId);
+				this.summaries.delete(conversationId);
+				throw err;
+			}
 			this.handles.set(conversationId, handle);
 			return { conversationId, handle };
 		}
@@ -314,6 +344,9 @@ export class ConversationManagerServer implements Contract {
 	/** 创建或恢复会话（spawner 可用时派生/复用子进程，否则内存新建） */
 	async createOrResume(conversationId?: ConversationId): Promise<ConversationRef> {
 		const id = conversationId ?? `conv_${++this.seq}`;
+		if (conversationId !== undefined && !this.isKnownConversationId(conversationId)) {
+			throw new Error(`未知 conversationId: ${conversationId}`);
+		}
 		if (this.spawner) {
 			// 进程模式：子进程存活则复用；已死（crashed/未派生）用同一 storedir 重派生，子进程经 journal 重放续跑
 			let handle = this.handles.get(id);
@@ -326,10 +359,19 @@ export class ConversationManagerServer implements Contract {
 					storedir,
 					workspace: this.workspaceProvider?.(),
 				});
+				const prevSummary = this.summaries.get(id);
 				this.childProcesses.set(id, child);
 				this.summaries.set(id, { conversationId: id, name: id, storeDir: storedir, status: "active" });
 				this.attachExit(id, child);
-				handle = await spawnedPromise;
+				try {
+					handle = await spawnedPromise;
+				} catch (err) {
+					// 报到超时等失败：回滚登记（恢复原 summary；目录保留供重试）
+					this.childProcesses.delete(id);
+					if (prevSummary !== undefined) this.summaries.set(id, prevSummary);
+					else this.summaries.delete(id);
+					throw err;
+				}
 				this.handles.set(id, handle);
 			}
 			return { conversationId: id, handle };
@@ -351,6 +393,7 @@ export class ConversationManagerServer implements Contract {
 
 	/** 重命名会话：更新目录摘要 + 写 meta.json 持久化（重启扫描恢复；显式名优先于 journal 首句派生） */
 	async rename(conversationId: ConversationId, name: string): Promise<boolean> {
+		if (!this.isKnownConversationId(conversationId)) return false;
 		const summary = this.summaries.get(conversationId);
 		const trimmed = name.trim();
 		if (summary === undefined || trimmed === "") return false;
@@ -361,6 +404,8 @@ export class ConversationManagerServer implements Contract {
 
 	/** 删除会话（kill 子进程 + 删目录；Windows 下刚 kill 的子进程句柄可能短暂占用目录，删除失败忽略） */
 	async delete(conversationId: ConversationId): Promise<void> {
+		// id 不可信（渲染进程 RPC）：非法 id 直接拒绝，避免 rmSync 逃逸 storedirRoot
+		if (!this.isKnownConversationId(conversationId)) return;
 		const child = this.childProcesses.get(conversationId);
 		if (child !== undefined) {
 			this.terminatedIds.add(conversationId);

@@ -11,7 +11,7 @@
  */
 import type { Logger, NovelApiClient } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
-import { ExternalStore } from "../../../shared/state/ExternalStore.js";
+import { WorkspaceDomainStore, type ReadyWorkspaceDomainSnapshot } from "../../../shared/state/WorkspaceDomainStore.js";
 
 export type NovelOverviewPhase = "idle" | "loading" | "ready" | "error";
 
@@ -58,90 +58,58 @@ const EMPTY_SNAPSHOT: NovelOverviewSnapshot = Object.freeze({
   error: undefined,
 });
 
-export class NovelOverviewStore extends ExternalStore<NovelOverviewSnapshot> {
+export class NovelOverviewStore extends WorkspaceDomainStore<NovelOverviewSnapshot> {
   private readonly api: NovelApiClient;
   private readonly logger: Logger;
-  private generation = 0;
 
   constructor(deps: { readonly api: NovelApiClient; readonly logger?: Logger }) {
-    super(EMPTY_SNAPSHOT);
+    super(
+      EMPTY_SNAPSHOT,
+      Object.freeze({
+        code: "novel-load-failed",
+        message: "小说概览加载失败，请重试",
+        retryable: true,
+      }),
+    );
     this.api = deps.api;
     this.logger = (deps.logger ?? noopLogger).child({
       component: "novel_overview_store",
     });
   }
 
-  loadWorkspace(workspaceId: string): Promise<void> {
-    const capturedId = requireNonBlank(workspaceId, "Workspace id");
-    const generation = ++this.generation;
-    this.setSnapshot({
-      ...EMPTY_SNAPSHOT,
-      phase: "loading",
-      workspaceId: capturedId,
-    });
-    return this.run(generation, capturedId, async () => {
-      this.logger.info("novel_overview.load_started");
-      const overview = await this.api.novel.overview.get();
-      return {
-        phase: "ready" as const,
-        workspaceId: capturedId,
-        novelId: overview.novelId,
-        label: overview.title ?? overview.novelId,
-        sourceRevision: undefined,
-        counts: {
-          storyUnitCount: overview.counts.storyUnits,
-          characterCount: overview.counts.characters,
-          locationCount: overview.counts.locations,
-          volumeCount: 0,
-          chapterCount: 0,
-          paragraphCount: overview.counts.paragraphs,
-        },
-        error: undefined,
-      };
-    });
+  protected async fetchReadySnapshot(
+    workspaceId: string,
+    _generation: number,
+  ): Promise<ReadyWorkspaceDomainSnapshot<NovelOverviewSnapshot>> {
+    this.logger.info("novel_overview.load_started");
+    const overview = await this.api.novel.overview.get();
+    return {
+      phase: "ready",
+      workspaceId,
+      novelId: overview.novelId,
+      label: overview.title ?? overview.novelId,
+      sourceRevision: undefined,
+      counts: {
+        storyUnitCount: overview.counts.storyUnits,
+        characterCount: overview.counts.characters,
+        locationCount: overview.counts.locations,
+        volumeCount: 0,
+        chapterCount: 0,
+        paragraphCount: overview.counts.paragraphs,
+      },
+      error: undefined,
+    };
   }
 
-  /** 重新加载当前 workspace（审批通过等场景由 shell 协调触发）。 */
-  invalidate(): Promise<void> {
-    const workspaceId = this.snapshot.workspaceId;
-    if (workspaceId === undefined) return Promise.resolve();
-    return this.loadWorkspace(workspaceId);
+  protected override onLoadSucceeded(_snapshot: NovelOverviewSnapshot): void {
+    this.logger.info("novel_overview.load_completed");
+  }
+
+  protected override onLoadFailed(): void {
+    this.logger.warn("novel_overview.load_failed");
   }
 
   retry(): Promise<void> {
     return this.invalidate();
   }
-
-  private async run(
-    generation: number,
-    workspaceId: string,
-    task: () => Promise<Omit<NovelOverviewSnapshot, "phase" | "workspaceId"> & { phase: "ready" }>,
-  ): Promise<void> {
-    try {
-      const next = await task();
-      if (generation !== this.generation) return;
-      this.setSnapshot({ ...next, workspaceId });
-      this.logger.info("novel_overview.load_completed");
-    } catch {
-      if (generation !== this.generation) return;
-      this.setSnapshot({
-        ...EMPTY_SNAPSHOT,
-        phase: "error",
-        workspaceId,
-        error: {
-          code: "novel-load-failed",
-          message: "小说概览加载失败，请重试",
-          retryable: true,
-        },
-      });
-      this.logger.warn("novel_overview.load_failed");
-    }
-  }
-}
-
-function requireNonBlank(value: string, label: string): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new TypeError(`${label} is required`);
-  }
-  return value;
 }

@@ -132,6 +132,8 @@ export function createProcessSpawner(
 			const handle = new Promise<ConversationHandle>((resolve, reject) => {
 				const timer = setTimeout(() => {
 					unsubscribe();
+					// 报到超时：kill 子进程避免孤儿（不 kill 会留下驻留进程 + manager 侧状态不一致）
+					child.kill();
 					reject(new Error(`conversation ${opts.conversationId} 连接报到超时`));
 				}, CONNECT_TIMEOUT_MS);
 				const unsubscribe = transports.managerWs.onConnected((connected) => {

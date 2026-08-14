@@ -80,7 +80,7 @@ describe("AgentLoop 审批门控", () => {
     expect(requestApproval).toHaveBeenCalledOnce();
     const req = requestApproval.mock.calls[0]![0]!;
     expect(req.toolName).toBe("NovelWrite");
-    expect(req.requestId).toContain("approval_c1_");
+    expect(req.requestId).toContain("approval:c1:");
     expect(events).toContain("tool-call-request");
     expect(events).toContain("tool-call-response");
   });

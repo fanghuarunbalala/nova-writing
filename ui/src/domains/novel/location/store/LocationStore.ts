@@ -9,8 +9,8 @@
  */
 import type { Location, LocationId, LocationInput, Logger, NovelApiClient } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
-import { ExternalStore } from "../../../../shared/state/ExternalStore.js";
 import { TaskSerializer } from "../../../../shared/state/TaskSerializer.js";
+import { WorkspaceDomainStore, type ReadyWorkspaceDomainSnapshot } from "../../../../shared/state/WorkspaceDomainStore.js";
 import type { NovelDomainError } from "../../outline/store/StoryOutlineTreeStore.js";
 
 export type LocationState = "filed" | "draft-new";
@@ -55,64 +55,60 @@ const EMPTY_SNAPSHOT: LocationSnapshot = Object.freeze({
   error: undefined,
 });
 
-export class LocationStore extends ExternalStore<LocationSnapshot> {
+export class LocationStore extends WorkspaceDomainStore<LocationSnapshot> {
   private readonly api: NovelApiClient;
   private readonly logger: Logger;
   /** 变更串行（乐观锁操作不并发） */
   private readonly serializer = new TaskSerializer();
-  private generation = 0;
 
   constructor(deps: { readonly api: NovelApiClient; readonly logger?: Logger }) {
-    super(EMPTY_SNAPSHOT);
+    super(
+      EMPTY_SNAPSHOT,
+      Object.freeze({
+        code: "novel-load-failed",
+        message: "地点列表加载失败，请重试",
+        retryable: true,
+      }),
+    );
     this.api = deps.api;
     this.logger = (deps.logger ?? noopLogger).child({
       component: "location_store",
     });
   }
 
-  async loadWorkspace(workspaceId: string): Promise<void> {
-    const capturedId = requireNonBlank(workspaceId, "Workspace id");
-    const generation = ++this.generation;
-    this.setSnapshot({
-      ...EMPTY_SNAPSHOT,
-      phase: "loading",
-      workspaceId: capturedId,
+  protected async fetchReadySnapshot(
+    workspaceId: string,
+    generation: number,
+  ): Promise<ReadyWorkspaceDomainSnapshot<LocationSnapshot> | undefined> {
+    const result = await this.api.novel.locations.list();
+    if (this.isStaleGeneration(generation)) return undefined;
+    return {
+      phase: "ready",
+      workspaceId,
+      locations: Object.freeze(result.map(captureSummary)),
+      detailCache: new Map<string, LocationDetail>(),
+      selectedId: undefined,
+      error: undefined,
+    };
+  }
+
+  protected override onLoadSucceeded(snapshot: LocationSnapshot): void {
+    this.logger.info("location_store.load_completed", {
+      locationCount: snapshot.locations.length,
     });
-    try {
-      const result = await this.api.novel.locations.list();
-      if (generation !== this.generation) return;
-      this.setSnapshot({
-        phase: "ready",
-        workspaceId: capturedId,
-        locations: Object.freeze(result.map(captureSummary)),
-        detailCache: new Map<string, LocationDetail>(),
-        selectedId: undefined,
-        error: undefined,
-      });
-      this.logger.info("location_store.load_completed", { locationCount: result.length });
-    } catch {
-      if (generation !== this.generation) return;
-      this.setSnapshot({
-        ...EMPTY_SNAPSHOT,
-        phase: "error",
-        workspaceId: capturedId,
-        error: {
-          code: "novel-load-failed",
-          message: "地点列表加载失败，请重试",
-          retryable: true,
-        },
-      });
-      this.logger.warn("location_store.load_failed");
-    }
+  }
+
+  protected override onLoadFailed(): void {
+    this.logger.warn("location_store.load_failed");
   }
 
   async loadDetail(locationId: string): Promise<void> {
     const capturedId = requireNonBlank(locationId, "Location id");
     if (this.snapshot.detailCache.has(capturedId)) return;
-    const generation = this.generation;
+    const generation = this.currentGeneration;
     try {
       const location = await this.api.novel.locations.get(capturedId as LocationId);
-      if (generation !== this.generation) return;
+      if (this.isStaleGeneration(generation)) return;
       const detail = captureDetail(location);
       const detailCache = new Map(this.snapshot.detailCache);
       detailCache.set(capturedId, detail);
@@ -125,12 +121,6 @@ export class LocationStore extends ExternalStore<LocationSnapshot> {
 
   selectLocation(id: string | undefined): void {
     this.setSnapshot({ ...this.snapshot, selectedId: id });
-  }
-
-  invalidate(): Promise<void> {
-    const workspaceId = this.snapshot.workspaceId;
-    if (workspaceId === undefined) return Promise.resolve();
-    return this.loadWorkspace(workspaceId);
   }
 
   /**

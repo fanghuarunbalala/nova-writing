@@ -8,7 +8,9 @@ import type { AgentCapability } from "../../agent/AgentCapability.js";
 import type { ToolDispatcher } from "../../tool/ToolDispatcher.js";
 
 const capability: AgentCapability = {
-  systemSections: [{ kind: "static", render: () => "你是助手" }],
+  systemSections: [
+    { kind: "static", id: "base.one", version: "1.0.0", label: "Base One", render: () => "你是助手" },
+  ],
   toolDefs: [],
   compactPolicies: [],
   nudgePolicies: [],
@@ -37,6 +39,7 @@ function makeProvider(results: ProviderResult[]): Provider {
 
 const dispatcher: ToolDispatcher = {
   dispatch: async (_ctx, call) => `result:${call.name}`,
+  resolve: () => undefined,
 };
 
 function makeLoop(provider: Provider): AgentLoop {
@@ -163,6 +166,7 @@ describe("AgentLoop.run", () => {
       dispatch: async () => {
         throw new ToolError({ code: "TOOL_NOT_AVAILABLE", toolName: "read" }, "未知工具: read");
       },
+      resolve: () => undefined,
     };
     const loop = new AgentLoop({
       workspace: "/ws",
@@ -189,6 +193,7 @@ describe("AgentLoop.run", () => {
       dispatch: async () => {
         throw new Error("磁盘已满");
       },
+      resolve: () => undefined,
     };
     const loop = new AgentLoop({
       workspace: "/ws",
@@ -209,6 +214,7 @@ describe("AgentLoop.run", () => {
         if (calls === 1) throw new Error("第一次失败");
         return `result:${call.name}`;
       },
+      resolve: () => undefined,
     };
     const provider = makeProvider([
       result("tool_call", "查一下", [{ id: "c1", name: "read", args: "{}" }]),

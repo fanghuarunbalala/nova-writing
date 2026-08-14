@@ -24,14 +24,26 @@ import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
 import { createProvider } from "../../runtime/provider/Provider.js";
 import { buildNovelAgent } from "../../runtime/agent/NovelAgent.js";
+import {
+  readNovelGlobalConstraintsSafe,
+  NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME,
+} from "../workspace/readNovelGlobalConstraints.js";
+import { ComposeModeStateProvider } from "../../conversation/compose/ComposeModeState.js";
+import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
 import type { LLMessage } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
-import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
+
+/** 平台显示名（动态段 core.environment 用） */
+const PLATFORM_LABELS: Readonly<Record<string, string>> = Object.freeze({
+	darwin: "macOS",
+	linux: "Linux",
+	win32: "Windows",
+});
 
 /** CMS 调用面（子进程 getAPI 视图） */
 interface CmsApi {
@@ -217,7 +229,8 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	} as const;
 	const provider = createProvider({ id: "default", ...providerConfig });
 
-	// 会话级 todo 存储（explorer TodoWrite 工具闭包）
+	// explorer 专用 todo 存储（与 main 计划分离：TodoWrite 整体替换语义，
+	// 扫描进度草稿不覆盖 main 的执行计划；两者同为进程内内存级）
 	const todoStore = new InMemoryConversationTodoStore();
 
 	// subagent 任务编排：builder 每任务新建 provider（流式累积状态不可跨 loop 共享）
@@ -260,6 +273,20 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		resumePendingDecider,
 		logger,
 		subagent: { spawner: subagentRuntime },
+		// 动态段输入：workdir/modelId 由 LoopContext 自组装（workspace /
+		// run.sampling.model）；宿主只注入平台常量 + 每调用读 NOVEL.md
+		//（失败返回 undefined → 动态段渲染占位）
+		platform: PLATFORM_LABELS[process.platform] ?? process.platform,
+		novelConstraintsProvider: async () => {
+			const content = await readNovelGlobalConstraintsSafe(workspace, logger);
+			return content === undefined
+				? undefined
+				: { fileName: NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME, content };
+		},
+		// compose_mode nudge 状态提供者（compose 状态机接线不在本期，进入/退出
+		// 由后续 conversation 层驱动该实例）；todo_idle/TodoWrite 的内存存储
+		composeState: new ComposeModeStateProvider(),
+		todoStore: new InMemoryConversationTodoStore(),
 	});
 
 	const managerWait: ManagerWaitChannel | undefined =

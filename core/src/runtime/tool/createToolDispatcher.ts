@@ -15,6 +15,7 @@ import { ToolError } from "./errors.js";
  */
 export function createToolDispatcher(registry: ToolRegistry): ToolDispatcher {
   return {
+    resolve: (name) => registry.get(name),
     dispatch: async (_ctx, call) => {
       const tool = registry.require(call.name);
       try {

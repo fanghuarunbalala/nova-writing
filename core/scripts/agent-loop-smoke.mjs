@@ -3,25 +3,12 @@
 
 import {
   AgentLoop,
-  InMemoryRegistry,
-  InMemoryToolRegistry,
+  ProviderCallDebugger,
   createProvider,
-  createToolDispatcher,
 } from "../dist/index.js";
-import { appendFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
 
-// ── Registry 组装能力 ──
-const registry = new InMemoryRegistry();
-registry.registerAgent({
-  agentType: "writer",
-  agentVersion: "1",
-  label: "Writer",
-  description: "小说创作助手（smoke 用）",
-  tools: { allow: ["remember"] },
-  promptIds: ["writer-base"],
-});
-registry.registerTool({
+// ── 能力直构（AgentCapability：system 分段 + 工具定义）──
+const rememberTool = {
   name: "remember",
   version: "1",
   description: "记录一条创作笔记（人物设定/情节要点），供后续引用",
@@ -37,22 +24,32 @@ registry.registerTool({
       return `已记录笔记：${args.note}`;
     },
   },
-});
-registry.registerPrompt(
-  {
-    kind: "static",
-    render: () =>
-      "你是小说创作助手。当用户要求你记住某个设定/笔记时，务必调用 remember 工具记录。",
-  },
-  "writer-base",
-  "1",
-);
-const capability = registry.buildCapability("writer", "1");
+};
+const capability = {
+  systemSections: [
+    {
+      kind: "static",
+      id: "writer.base",
+      version: "1.0.0",
+      label: "Writer Base",
+      render: () =>
+        "你是小说创作助手。当用户要求你记住某个设定/笔记时，务必调用 remember 工具记录。",
+    },
+  ],
+  toolDefs: [rememberTool],
+  compactPolicies: [],
+  nudgePolicies: [],
+};
 
-// ── ToolDispatcher（统一：capability.toolDefs 注册 → createToolDispatcher）──
-const toolRegistry = new InMemoryToolRegistry();
-for (const def of capability.toolDefs) toolRegistry.register(def);
-const dispatcher = createToolDispatcher(toolRegistry);
+// ── ToolDispatcher（Map 查表：resolve + dispatch）──
+const dispatcher = {
+  resolve: (name) => capability.toolDefs.find((t) => t.name === name),
+  dispatch: async (ctx, call) => {
+    const tool = dispatcher.resolve(call.name);
+    if (!tool) return `未找到工具 ${call.name}`;
+    return tool.handler.execute(call);
+  },
+};
 
 // ── Provider + AgentLoop（同一个 loop 实例，多轮共享 LoopContext）──
 const provider = createProvider({
@@ -61,16 +58,9 @@ const provider = createProvider({
   baseUrl: "https://api.deepseek.com/v1",
   apiKey: process.env.ANTHROPIC_AUTH_TOKEN,
 });
-// debug 模式：记录 ProviderCall（jsonl 追加；html diff 见 runtime/debug 的 ProviderCallDebugger）
+// debug 模式：记录 ProviderCall（jsonl + html），目录按 conversation/agent 区分
 const callDebugger = process.env.DEBUG
-  ? {
-      dir: "debug/main/agent-writer",
-      record: (call) => {
-        mkdirSync("debug/main/agent-writer", { recursive: true });
-        appendFileSync(join("debug/main/agent-writer", "requests.jsonl"), JSON.stringify(call) + "\n");
-      },
-      close: () => {},
-    }
+  ? new ProviderCallDebugger({ enabled: true, dir: "debug/main/agent-writer" })
   : undefined;
 
 const loop = new AgentLoop({

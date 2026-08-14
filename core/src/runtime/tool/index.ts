@@ -8,4 +8,7 @@ export * from "./toolPolicy.js";
 export * from "./ToolDispatcher.js";
 export * from "./createToolDispatcher.js";
 export * from "./errors.js";
+export * from "./ToolGroupManifest.js";
+export * from "./MapToolDispatcher.js";
 export * from "./definitions/index.js";
+export * from "./groups/index.js";

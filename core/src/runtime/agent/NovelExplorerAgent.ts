@@ -4,8 +4,8 @@
  */
 import type { Provider } from "../provider/Provider.js";
 import type { AgentCapability } from "./AgentCapability.js";
-import type { AgentDefinition } from "./AgentDefinition.js";
 import type { ToolDef } from "../tool/ToolDef.js";
+import type { SubagentCatalogEntry } from "../tool/definitions/subagent.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
 import { InMemoryToolRegistry } from "../tool/InMemoryToolRegistry.js";
 import { createToolDispatcher } from "../tool/createToolDispatcher.js";
@@ -46,21 +46,21 @@ export const NOVEL_EXPLORER_TOOL_NAMES: readonly string[] = [
 ];
 
 /**
- * novel_explorer 定义（数据常量，未来 Registry 注册用）。
+ * novel_explorer 目录条目（SubagentCatalogEntry：Agent 工具描述渲染所需展示字段）。
  * label/description 对齐旧 ProductionSubagentComposition 文案；tools.allow 钉死只读边界
  * （策略为唯一事实源，装配经 applyToolPolicy 过滤全池）。
- * agentId 缺省：subagent 不持久化，事件 agentId 由 runtime 按 <agentType>:<taskId> 盖章。
+ * 与 AgentDefinition 值对象解耦：subagent 装配不在本期 AgentAssembler 范围
+ * （详见 tool/definitions/subagent.ts 的 SubagentCatalogEntry 说明）。
  */
-export const NOVEL_EXPLORER_DEFINITION: AgentDefinition = {
+export const NOVEL_EXPLORER_DEFINITION: SubagentCatalogEntry = {
   agentType: NOVEL_EXPLORER_AGENT_TYPE,
-  agentVersion: "1.0.0",
   label: "只读探索",
   description: "读取大纲、人物、地点、段落、卷与章节，返回简洁的文本性发现。",
   tools: { allow: [...NOVEL_EXPLORER_TOOL_NAMES] },
 };
 
 /** 可派生子代理定义目录（Agent 工具描述渲染来源；当前仅 novel_explorer） */
-export const NOVEL_SUBAGENT_DEFINITIONS: readonly AgentDefinition[] = [NOVEL_EXPLORER_DEFINITION];
+export const NOVEL_SUBAGENT_DEFINITIONS: readonly SubagentCatalogEntry[] = [NOVEL_EXPLORER_DEFINITION];
 
 /** 可派生子代理类型白名单（旧 SubagentToolCompositionPolicy.allowedAgentTypes 等价物） */
 export const NOVEL_SUBAGENT_ALLOWED_TYPES: readonly string[] = [NOVEL_EXPLORER_AGENT_TYPE];

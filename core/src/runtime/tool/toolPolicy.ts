@@ -8,8 +8,12 @@
 import type { ToolDef } from "./ToolDef.js";
 import { ToolError } from "./errors.js";
 
-/** 工具策略（allow/deny 按工具名过滤） */
-export interface AgentToolPolicy {
+/**
+ * 工具过滤名单（allow/deny 按工具名过滤）。
+ * 与 AgentDefinition.AgentToolPolicy（组清单 + allow/deny 值对象）结构兼容：
+ * 装配侧 applyToolPolicy 只消费过滤字段，组清单由 AgentAssembler 消费。
+ */
+export interface ToolPolicyFilter {
   /** 白名单：存在时与池取交集（未命中的池项静默跳过；空数组 = 空工具集） */
   allow?: readonly string[];
   /** 黑名单：从结果差集移除 */
@@ -24,7 +28,7 @@ export interface AgentToolPolicy {
  */
 export function applyToolPolicy(
   toolDefs: readonly ToolDef[],
-  policy?: AgentToolPolicy,
+  policy?: ToolPolicyFilter,
 ): ToolDef[] {
   if (!policy) return [...toolDefs];
   const byName = new Map(toolDefs.map((t) => [t.name, t]));

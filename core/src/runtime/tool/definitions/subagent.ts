@@ -5,8 +5,23 @@
 import type { ToolDef } from "../ToolDef.js";
 import type { ToolCall } from "../../provider/types.js";
 import type { SubagentSpawner } from "../../../conversation/contract/task.js";
-import type { AgentDefinition } from "../../agent/AgentDefinition.js";
 import { ToolError } from "../errors.js";
+
+/**
+ * 子代理目录条目：Agent 工具描述渲染所需的最小字段集。
+ * 与 AgentDefinition 值对象解耦——subagent 装配不在本期 AgentAssembler 范围，
+ * 目录只需展示字段（agentType/label/description/allow 名单）。
+ */
+export interface SubagentCatalogEntry {
+  /** Agent 类型 */
+  readonly agentType: string;
+  /** 展示名 */
+  readonly label: string;
+  /** 描述（Agent 工具描述渲染来源） */
+  readonly description: string;
+  /** 工具策略（仅渲染用：allow 名单追加「（工具：...）」行） */
+  readonly tools?: { readonly allow?: readonly string[] };
+}
 
 /** 解析 tool args JSON */
 function parseArgs<T>(call: ToolCall): T {
@@ -35,7 +50,7 @@ export interface SubagentToolsOptions {
   /** subagent 派生端口（闭包捕获，由 SubagentRuntime 实现） */
   spawner: SubagentSpawner;
   /** 可派生子代理定义目录（Agent 工具描述渲染来源） */
-  agents: readonly AgentDefinition[];
+  agents: readonly SubagentCatalogEntry[];
   /** 可派生子代理类型白名单（旧 SubagentToolCompositionPolicy.allowedAgentTypes 等价物；Agent schema enum 推导来源） */
   allowedAgentTypes: readonly string[];
   /** TaskOutput block 缺省超时（毫秒） */
@@ -52,7 +67,7 @@ export interface SubagentToolsOptions {
  * @returns 去重后的白名单（保序）
  */
 function validateAgentWhitelist(
-  agents: readonly AgentDefinition[],
+  agents: readonly SubagentCatalogEntry[],
   allowedAgentTypes: readonly string[],
 ): string[] {
   if (allowedAgentTypes.length === 0) {
@@ -84,7 +99,7 @@ function validateAgentWhitelist(
  * @param agentTypes 去重后的白名单（按序渲染）
  * @returns Agent 工具描述文本
  */
-function createAgentDescription(agents: readonly AgentDefinition[], agentTypes: readonly string[]): string {
+function createAgentDescription(agents: readonly SubagentCatalogEntry[], agentTypes: readonly string[]): string {
   const byType = new Map(agents.map((a) => [a.agentType, a]));
   const lines = agentTypes.map((agentType) => {
     const def = byType.get(agentType)!;

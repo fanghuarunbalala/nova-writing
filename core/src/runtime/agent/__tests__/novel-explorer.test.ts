@@ -84,12 +84,10 @@ describe("buildNovelExplorerAgent 装配", () => {
     expect(snapshot?.todos[0]).toMatchObject({ content: "盘点角色", status: "in_progress" });
   });
 
-  it("NOVEL_EXPLORER_DEFINITION 数据常量对齐（label/description/tools 策略，agentId 缺省）", () => {
+  it("NOVEL_EXPLORER_DEFINITION 数据常量对齐（label/description/tools 策略，目录条目形态）", () => {
     expect(NOVEL_EXPLORER_DEFINITION.agentType).toBe("novel_explorer");
-    expect(NOVEL_EXPLORER_DEFINITION.agentVersion).toBe("1.0.0");
     expect(NOVEL_EXPLORER_DEFINITION.label).toBe("只读探索");
     expect(NOVEL_EXPLORER_DEFINITION.description).toBeTruthy();
     expect(NOVEL_EXPLORER_DEFINITION.tools?.allow).toEqual([...NOVEL_EXPLORER_TOOL_NAMES]);
-    expect(NOVEL_EXPLORER_DEFINITION.agentId).toBeUndefined();
   });
 });

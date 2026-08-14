@@ -359,7 +359,7 @@ describe("ApprovalPanel", () => {
     expect(screen.getByText("新简介")).toBeInTheDocument();
   });
 
-  it("renders the design draft content for ExitComposeMode approval (CCB-style)", async () => {
+  it("renders the design draft full text for ExitComposeMode approval (md 全文 + 卡内编辑)", async () => {
     const store = await makeStore([
       item({
         conversationId: "C-1",
@@ -390,10 +390,10 @@ describe("ApprovalPanel", () => {
         <ApprovalPanel store={store} conversationId="C-1" drawerOpen />
       </FrontendPlatformProvider>,
     );
-    // 提交说明 + 草稿内容（经 designFile 端口读取渲染），不走参数区与「旧版本审批」空态。
-    expect(screen.getByText("提交说明")).toBeInTheDocument();
-    expect(screen.getByText("第三章正文草稿已完成")).toBeInTheDocument();
+    // 草稿 md 全文（经 designFile 端口读取渲染），不走参数区与「旧版本审批」空态；
+    // CCB 式提交说明已由定稿的全文展示取代（PRD compose-审批流）。
     expect(await screen.findByText("正文草稿内容")).toBeInTheDocument();
+    expect(screen.queryByText("提交说明")).not.toBeInTheDocument();
     expect(screen.queryByText("审批参数")).not.toBeInTheDocument();
     expect(screen.queryByText(/旧版本审批/)).not.toBeInTheDocument();
 

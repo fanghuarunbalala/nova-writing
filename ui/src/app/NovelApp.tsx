@@ -126,6 +126,7 @@ function NovelAppReady({
         <ApplicationShell
           api={api}
           logger={logger}
+          platform={platform}
           mainViewRouter={mainViewRouter}
           inspectorRouter={inspectorRouter}
           workspaceController={workspaceController}

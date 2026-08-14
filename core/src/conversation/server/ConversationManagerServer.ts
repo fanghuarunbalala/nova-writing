@@ -9,6 +9,7 @@ import type {
 	ConversationApprovalRequest,
 	ConversationAskingRequest,
 	ConversationExitComposeRequest,
+	ConversationMode,
 	Receipt,
 } from "../contract/types/index.js";
 import {
@@ -23,6 +24,9 @@ import {
 } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import type { ChildProcess } from "node:child_process";
+import type { Logger } from "../../log/Logger.js";
+import { noopLogger } from "../../log/noop.js";
+import { isCanonicalNovelWrite } from "../compose/canonicalTools.js";
 import type {
 	ConversationMeta,
 	ConversationRef,
@@ -82,6 +86,8 @@ export interface ConversationManagerServerOptions {
 	 * 缺省子进程用 "."）。
 	 */
 	workspaceProvider?: () => string | undefined;
+	/** 结构化日志（缺省 noop；审批入队/决议、根 bypass 自动批准等关键链路埋点） */
+	logger?: Logger;
 }
 
 /** manager 进程侧实现（内存 factory 测试 / 进程 spawn 生产） */
@@ -96,6 +102,10 @@ export class ConversationManagerServer implements Contract {
 	private readonly summaries = new Map<string, ConversationSummary>();
 	/** 主动终止的会话 id（exit 事件据此区分 crashed / stopped） */
 	private readonly terminatedIds = new Set<string>();
+	/** register 监听器（main 侧：会话事件 SUB 接线） */
+	private readonly registeredListeners = new Set<(conversationId: ConversationId) => void>();
+	/** 会话进程退出监听器（main 侧：会话事件 SUB 拆除） */
+	private readonly conversationExitListeners = new Set<(conversationId: ConversationId) => void>();
 	/** wait 请求队列（request/resolve 分离的缓冲层） */
 	private readonly waitQueue = new WaitRequestQueue();
 	/** 会话存储根目录（undefined = 不落盘目录，storedir 为空串） */
@@ -108,6 +118,8 @@ export class ConversationManagerServer implements Contract {
 	private readonly factory: ConversationFactory;
 	/** 进程派生器（进程模式；缺省用内存 factory） */
 	private readonly spawner?: ConversationProcessSpawner;
+	/** 结构化日志（审批链路埋点；缺省 noop） */
+	private readonly logger: Logger;
 
 	/**
 	 * 构造 ManagerServer
@@ -124,6 +136,7 @@ export class ConversationManagerServer implements Contract {
 		this.spawner = spawner;
 		this.storedirRoot = opts?.storedirRoot;
 		this.workspaceProvider = opts?.workspaceProvider;
+		this.logger = (opts?.logger ?? noopLogger).child({ component: "conversation_manager" });
 		if (this.storedirRoot !== undefined) this.scanCatalog();
 	}
 
@@ -240,7 +253,20 @@ export class ConversationManagerServer implements Contract {
 			this.waitQueue.expireConversation(conversationId, new Date().toISOString());
 			this.childProcesses.delete(conversationId);
 			this.handles.delete(conversationId);
+			// main 侧拆除通知（gui-performance-2 功能点八：会话事件 SUB 关闭点）
+			this.notifyConversationExited(conversationId);
 		});
+	}
+
+	/** 会话进程退出通知（registeredListeners 对称拆除；监听器异常忽略） */
+	private notifyConversationExited(conversationId: ConversationId): void {
+		for (const l of [...this.conversationExitListeners]) {
+			try {
+				l(conversationId);
+			} catch {
+				// 监听器异常不影响清理
+			}
+		}
 	}
 
 	/** conversation 启动报到（不冲刷显式名：子进程恒报 conversationId，已有名字时保留） */
@@ -259,6 +285,14 @@ export class ConversationManagerServer implements Contract {
 			status: "active",
 			parentId: meta.parentId,
 		});
+		// main 侧接线通知（gui-performance-2 功能点八：会话事件 SUB 接入点）
+		for (const l of [...this.registeredListeners]) {
+			try {
+				l(meta.conversationId);
+			} catch {
+				// 监听器异常不影响登记
+			}
+		}
 	}
 
 	/** 心跳上报状态 */
@@ -283,6 +317,8 @@ export class ConversationManagerServer implements Contract {
 		this.waitQueue.expireConversation(conversationId, new Date().toISOString());
 		const s = this.summaries.get(conversationId);
 		if (s) s.status = "stopped";
+		// 内存模式无 attachExit：终止即通知拆除（进程模式 attachExit 亦会通知，关闭幂等）
+		this.notifyConversationExited(conversationId);
 	}
 
 	/** 派生 conversation（进程 spawn 优先，缺省内存 factory） */
@@ -367,7 +403,15 @@ export class ConversationManagerServer implements Contract {
 				});
 				const prevSummary = this.summaries.get(id);
 				this.childProcesses.set(id, child);
-				this.summaries.set(id, { conversationId: id, name: id, storeDir: storedir, status: "active" });
+				// 重派生保留既有 parentId（F6 teammate 冒泡依赖；崩溃重启不得丢）
+				const existing = this.summaries.get(id);
+				this.summaries.set(id, {
+					conversationId: id,
+					name: id,
+					storeDir: storedir,
+					status: "active",
+					...(existing?.parentId === undefined ? {} : { parentId: existing.parentId }),
+				});
 				this.attachExit(id, child);
 				try {
 					handle = await spawnedPromise;
@@ -440,12 +484,45 @@ export class ConversationManagerServer implements Contract {
 		return conv.sendSystemControl(msg);
 	}
 
-	/** 提交审批请求（非阻塞）：入队 + decisioner 派生（parentId → parent 冒泡预留；否则 ui） */
+	/**
+	 * 提交审批请求（非阻塞）：入队 + decisioner 派生（parentId → parent 冒泡；否则 ui）。
+	 * 根会话（无 parentId）按自身 activeMode 裁决：bypass 模式下整批均为 canonical 写时
+	 * 跳过 UI 直接批准（根完全自主决策，F6；先入队再决议——队列保留记录供重启补完查询）。
+	 * 批内含非 canonical（如 ExitComposeMode）时不短路，整批走 UI。
+	 */
 	async submitApprovalRequest(
 		conversationId: ConversationId,
 		req: ConversationApprovalRequest,
 	): Promise<void> {
 		const parentId = this.summaries.get(conversationId)?.parentId;
+		// 根会话 bypass：整批 canonical 写直接批准（防御纵深——conversation 侧短路通常先命中）
+		const allCanonical = req.toolCalls.every((tc) => isCanonicalNovelWrite(tc.toolName));
+		if (parentId === undefined && allCanonical) {
+			const handle = this.handles.get(conversationId);
+			const mode = await this.readConversationMode(handle);
+			if (mode === "bypass") {
+				this.logger.info("approval.root_bypass_autoapproved", {
+					conversationId,
+					requestId: req.requestId,
+					toolNames: req.toolCalls.map((tc) => tc.toolName),
+				});
+				this.waitQueue.submit({
+					conversationId,
+					requestId: req.requestId,
+					toolCalls: req.toolCalls.map((tc) => ({
+						toolCallId: tc.toolCallId,
+						toolName: tc.toolName,
+						args: tc.args,
+					})),
+					decisioner: "ui",
+					status: "pending",
+					requestedAt: new Date().toISOString(),
+				});
+				this.waitQueue.resolve(req.requestId, { kind: "approve" }, new Date().toISOString());
+				this.pushDecision(conversationId, req.requestId, { kind: "approve" });
+				return;
+			}
+		}
 		this.waitQueue.submit({
 			conversationId,
 			requestId: req.requestId,
@@ -458,6 +535,43 @@ export class ConversationManagerServer implements Contract {
 			status: "pending",
 			requestedAt: new Date().toISOString(),
 		});
+		this.logger.info("approval.enqueued", {
+			conversationId,
+			requestId: req.requestId,
+			decisioner: parentId !== undefined ? "parent" : "ui",
+			toolCallCount: req.toolCalls.length,
+		});
+	}
+
+	/** 读会话当前生效模式（缺省 review；远程代理失败按 review 保守处理） */
+	private async readConversationMode(
+		handle: ConversationHandle | undefined,
+	): Promise<ConversationMode> {
+		if (handle === undefined) return "review";
+		try {
+			return await Promise.resolve(
+				handle.getConversationMode() as unknown as Promise<ConversationMode>,
+			);
+		} catch {
+			return "review";
+		}
+	}
+
+	/** 驻留直推决策（进程存活则解除 conversation 阻塞；已退出留待重启查询） */
+	private pushDecision(
+		conversationId: ConversationId,
+		requestId: string,
+		decision: ConversationApprovalDecision,
+	): void {
+		const handle = this.handles.get(conversationId);
+		if (handle === undefined) return;
+		try {
+			void Promise.resolve(
+				handle.resolveApproval(requestId, decision) as unknown,
+			).catch(() => {});
+		} catch {
+			// 代理同步抛错（通道已关）属预期，忽略
+		}
 	}
 
 	/** 提交提问请求（非阻塞；路由同审批，UI 展示延后——本期内入队仅登记） */
@@ -485,20 +599,11 @@ export class ConversationManagerServer implements Contract {
 	async resolveApproval(requestId: string, decision: ConversationApprovalDecision): Promise<boolean> {
 		const resolved = this.waitQueue.resolve(requestId, decision, new Date().toISOString());
 		if (!resolved) return false;
+		this.logger.info("approval.resolved", { requestId, decision: decision.kind });
 		// 驻留直推：会话存活则经 handle 调 conversation 的 resolveApproval（阻塞解除）
 		const item = this.waitQueue.takeByRequestId(requestId);
 		if (item !== undefined) {
-			const handle = this.handles.get(item.conversationId);
-			if (handle !== undefined) {
-				// fire-and-forget：进程内实现返回 void，远程代理返回 Promise（契约类型为 void）。
-				// child 已退出时通道拒绝属预期（决策已入 waitQueue，重启经 takeDecisions 续跑），
-				// 吞掉避免 main 进程 unhandled rejection
-				try {
-					void Promise.resolve(handle.resolveApproval(requestId, decision) as unknown).catch(() => {});
-				} catch {
-					// 代理同步抛错（通道已关）同属预期，忽略
-				}
-			}
+			this.pushDecision(item.conversationId, requestId, decision);
 		}
 		return true;
 	}
@@ -511,6 +616,22 @@ export class ConversationManagerServer implements Contract {
 	/** 订阅队列变化（main 侧转发 UI 通知） */
 	onWaitChange(listener: () => void): () => void {
 		return this.waitQueue.onChange(listener);
+	}
+
+	/** 订阅 conversation 报到（main 侧：会话事件 SUB 接线，gui-performance-2 功能点八） */
+	onRegistered(listener: (conversationId: ConversationId) => void): () => void {
+		this.registeredListeners.add(listener);
+		return () => {
+			this.registeredListeners.delete(listener);
+		};
+	}
+
+	/** 订阅 conversation 进程退出（main 侧：会话事件 SUB 拆除） */
+	onConversationExited(listener: (conversationId: ConversationId) => void): () => void {
+		this.conversationExitListeners.add(listener);
+		return () => {
+			this.conversationExitListeners.delete(listener);
+		};
 	}
 
 	/** 取 conversation 操作目标，缺省抛错 */

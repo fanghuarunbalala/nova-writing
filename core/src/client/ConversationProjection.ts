@@ -8,9 +8,12 @@
 import { proxy } from "kkrpc/remote-refs";
 import type { ConversationHandle } from "../conversation/contract/handle/index.js";
 import type { ProjectedEvent, ToolPreview } from "../conversation/contract/events/index.js";
-import type { ConversationId } from "../conversation/contract/types/index.js";
+import type { ConversationId, ConversationMode } from "../conversation/contract/types/index.js";
 import { CardProjection, type CardDescriptor } from "../conversation/CardProjection.js";
 import { RPCError } from "../rpc/RPCError.js";
+
+/** delta 高发路径的合并发布窗口（ms）：置脏 → 32ms 尾沿才 join/拷贝/发布（gui-performance-2 功能点三） */
+const DIRTY_PUBLISH_MS = 32;
 
 /** 投影状态（精简：无 replay/following 阶段） */
 export type ConversationProjectionState = "idle" | "running" | "stopped" | "error";
@@ -81,6 +84,10 @@ export interface ConversationProjectionSnapshot {
 	timeline: readonly ConversationTimelineItem[];
 	/** 工具调用卡片（CardProjection 派生） */
 	cards: readonly CardDescriptor[];
+	/** 当前生效模式（mode.changed 权威事件派生；未收到前 undefined → UI 查询兜底） */
+	mode?: ConversationMode;
+	/** 待生效模式（mode.pending 瞬态事件派生；mode.changed 到达后清除） */
+	modePending?: ConversationMode;
 	error?: ConversationProjectionErrorSnapshot;
 }
 
@@ -92,6 +99,16 @@ export type ConversationProjectionHistory = (opts: {
 	fromSeq?: number;
 	limit?: number;
 }) => Promise<ProjectedEvent[]>;
+
+/**
+ * 平台事件源（gui-performance-2 功能点八）：Electron ZMQ 推送通道的 renderer 侧
+ * 形态（main 裸 IPC 转发，无 kkrpc 往返）。注入时优先于 handle.subscribeEvents
+ * （fire-and-forget，丢包由 eseq 断档 + history 重放自愈）；缺省回退 kkrpc 订阅。
+ */
+export interface ConversationPlatformEventSource {
+	/** 订阅指定会话的实时事件；返回取消订阅函数 */
+	subscribe(conversationId: string, listener: (event: ProjectedEvent) => void): () => void;
+}
 
 /** 精简投影器：累积 ProjectedEvent → timeline 列表 */
 export class ConversationProjection {
@@ -111,6 +128,10 @@ export class ConversationProjection {
 	private liveState: "generating" | undefined;
 	private nextSeq = 1;
 	private readonly cardProjection = new CardProjection();
+	/** 当前生效模式（mode.changed 派生） */
+	private mode?: ConversationMode;
+	/** 待生效模式（mode.pending 派生；mode.changed 清除） */
+	private modePending?: ConversationMode;
 	private revision = 0;
 	private lastAppliedSequence = 0;
 	private state: ConversationProjectionState = "idle";
@@ -122,25 +143,48 @@ export class ConversationProjection {
 	private cardsDirty = true;
 	/** 快照子数组缓存（与置脏标记成对维护） */
 	private cachedCards: readonly CardDescriptor[] = [];
+	/** 活跃 assistant 项脏标记（delta 置脏 → publish 前才 join/重建项对象） */
+	private activeItemDirty = false;
+	/** 活跃 assistant 项的 timeline 索引缓存（push 后为尾项；校验失配才回退线性查找） */
+	private activeIndex = -1;
+	/** 合并发布定时器（32ms 尾沿；窗口内重复 delta 幂等并入） */
+	private publishTimer: ReturnType<typeof setTimeout> | undefined;
+	/** 平台事件源（ZMQ 推送通道；缺省回退 handle.subscribeEvents） */
+	private readonly eventSource?: ConversationPlatformEventSource;
+	/** 平台事件源取消订阅（stop 时拆除，避免 resume 叠加监听） */
+	private unsubscribePlatformEvents?: () => void;
+	/** 最近收到的实时事件 eseq（断档检测基线；history 重放事件无 eseq 不参与） */
+	private lastEseq: number | undefined;
+	/** eseq 断档补拉在途标记（并发断档只触发一次 catch-up） */
+	private catchUpInFlight = false;
 
 	/**
 	 * @param handle 会话对端 handle（事件流来源）
 	 * @param conversationId 会话 id（快照归属）
 	 * @param history journal 已落盘历史查询（恢复重放用；缺省纯实时流）
+	 * @param eventSource 平台事件源（ZMQ 推送；缺省回退 kkrpc subscribeEvents）
 	 */
 	constructor(
 		handle: ConversationHandle,
 		conversationId: ConversationId,
 		history?: ConversationProjectionHistory,
+		eventSource?: ConversationPlatformEventSource,
 	) {
 		this.handle = handle;
 		this.conversationId = conversationId;
 		this.history = history ?? (async () => []);
+		this.eventSource = eventSource;
 		this.snapshot = this.buildSnapshot();
 	}
 
-	/** 当前快照（不可变） */
+	/** 当前快照（不可变；读到脏文本时先冲刷——读取方永远看到含最新 delta 的视图） */
 	getSnapshot(): ConversationProjectionSnapshot {
+		if (this.activeItemDirty) {
+			this.activeItemDirty = false;
+			this.syncActiveItem();
+			this.revision += 1;
+			this.snapshot = this.buildSnapshot();
+		}
 		return this.snapshot;
 	}
 
@@ -167,28 +211,37 @@ export class ConversationProjection {
 		const generation = ++this.generation;
 		this.transition("running");
 		try {
-			// ① 先订阅（进入缓冲模式）：listener 经 proxy() 标记——kkrpc/remote-refs 的 codec
-			// 只编码 WeakSet 已标记的函数参数（内存/plain kkrpc 通道下标记是无害 no-op）
+			// ① 先订阅（进入缓冲模式）：平台事件源（ZMQ 推送，同步订阅）或
+			// kkrpc subscribeEvents（listener 经 proxy() 标记——kkrpc/remote-refs 的 codec
+			// 只编码 WeakSet 已标记的函数参数；内存/plain kkrpc 通道下标记是无害 no-op）
 			const buffer: ProjectedEvent[] = [];
 			let replayed = false;
 			let historyMaxSeq = 0;
-			await this.handle.subscribeEvents(
-				proxy((event) => {
-					if (this.stopRequested || generation !== this.generation) return;
-					if (replayed) {
-						this.apply(event);
-						this.publish();
-					} else {
-						buffer.push(event);
-					}
-				}),
-			);
+			const onEvent = (event: ProjectedEvent): void => {
+				if (this.stopRequested || generation !== this.generation) return;
+				if (replayed) {
+					this.apply(event);
+					// delta 经 32ms 合并窗口发布（apply 置脏）；其余事件立即发布
+					// （publish 前会冲刷脏文本，保证顺序一致）
+					if (event.type !== "assistant.delta") this.publish();
+				} else {
+					buffer.push(event);
+				}
+			};
+			if (this.eventSource !== undefined) {
+				this.unsubscribePlatformEvents = this.eventSource.subscribe(this.conversationId, onEvent);
+			} else {
+				await this.handle.subscribeEvents(proxy(onEvent));
+			}
 			// ② 拉 journal 已落盘历史并应用（fromSeq 从当前进度之后开始）
 			const events = await this.history({ fromSeq: this.lastAppliedSequence + 1, limit: 256 });
 			if (this.stopRequested || generation !== this.generation) return;
 			for (const event of events) {
 				this.apply(event);
-				if ("seq" in event) historyMaxSeq = Math.max(historyMaxSeq, event.seq);
+				// 状态事件（compose/mode）无 turn seq：不参与 historyMaxSeq 推进
+				if ("seq" in event && typeof event.seq === "number") {
+					historyMaxSeq = Math.max(historyMaxSeq, event.seq);
+				}
 			}
 			this.publish();
 			replayed = true;
@@ -196,7 +249,12 @@ export class ConversationProjection {
 			// delta（无 seq）仅当处于 live run（seq > historyMaxSeq 的 run-start/user.message 已开）才应用
 			let liveRun = false;
 			for (const event of buffer) {
-				if ("seq" in event) {
+				// 状态事件（mode.pending/mode.changed）不受 liveRun 门控：模式切换可发生在 run 间隙
+				if (event.type === "mode.pending" || event.type === "mode.changed") {
+					this.apply(event);
+					continue;
+				}
+				if ("seq" in event && typeof event.seq === "number") {
 					if (event.seq <= historyMaxSeq) continue;
 					this.apply(event);
 					if (event.type === "run-start" || event.type === "user.message") liveRun = true;
@@ -215,10 +273,16 @@ export class ConversationProjection {
 		}
 	}
 
-	/** 停止消费（事件回调变 no-op；订阅由 handle.dispose 拆除） */
+	/** 停止消费（事件回调变 no-op；平台事件源订阅拆除，kkrpc 订阅由 handle.dispose 拆除） */
 	async stop(): Promise<void> {
 		this.stopRequested = true;
 		this.generation += 1;
+		if (this.publishTimer !== undefined) {
+			clearTimeout(this.publishTimer);
+			this.publishTimer = undefined;
+		}
+		this.unsubscribePlatformEvents?.();
+		this.unsubscribePlatformEvents = undefined;
 		if (this.state !== "stopped") this.transition("stopped");
 	}
 
@@ -236,8 +300,17 @@ export class ConversationProjection {
 		// subagent 隔离：盖章即 subagent（agentId = "<agentType>:<taskId>"），
 		// 非 main 事件不进主流时间线（未盖章与 "main" 视为主流；任务快照走 queryTasks）
 		if (event.agentId !== undefined && event.agentId !== "main") return;
-		// 仅带 seq 事件推进 lastAppliedSequence（delta 瞬态不带 seq）
-		if ("seq" in event) this.lastAppliedSequence = event.seq;
+		// eseq 断档检测（ZMQ fire-and-forget 丢包自愈：触发 history 补拉；
+		// history 重放事件无 eseq，不参与基线——首个实时事件建立基线）
+		const eseq = (event as { eseq?: number }).eseq;
+		if (typeof eseq === "number") {
+			if (this.lastEseq !== undefined && eseq > this.lastEseq + 1) this.scheduleCatchUp();
+			this.lastEseq = Math.max(this.lastEseq ?? 0, eseq);
+		}
+		// 仅带 seq 事件推进 lastAppliedSequence（delta 瞬态不带 seq；compose/mode 状态事件 seq 可选）
+		if ("seq" in event && typeof event.seq === "number") {
+			this.lastAppliedSequence = event.seq;
+		}
 		this.cardProjection.apply(event);
 		switch (event.type) {
 			case "user.message":
@@ -278,7 +351,10 @@ export class ConversationProjection {
 				// 上一段已有收口工具行 → 新请求的内容 → 开新段
 				if (this.segmentIsClosed()) this.openSegment();
 				this.activeSegmentText += event.text;
-				this.syncActiveItem();
+				// 置脏 + 合并发布（gui-performance-2 功能点三）：单条 delta 成本 = 一次追加 + 置位，
+				// 全文 join / segments 重建 / timeline 拷贝挪到 32ms 发布窗口（或下一次立即 publish 前）
+				this.activeItemDirty = true;
+				this.scheduleDirtyPublish();
 				break;
 			}
 			case "tool-recorded.started":
@@ -309,7 +385,16 @@ export class ConversationProjection {
 				this.finalizeAssistant();
 				this.setRunEndOnLast(event.seq, event.ts);
 				break;
-			// run-start / compacted / clear / retry-request 无影响
+			case "mode.changed":
+				// active 实际切换（权威）：落 mode + 清除待生效标记
+				this.mode = event.mode;
+				this.modePending = undefined;
+				break;
+			case "mode.pending":
+				// mode.set 已记录（瞬态）：UI 回显「待生效」
+				this.modePending = event.mode;
+				break;
+			// run-start / compacted / clear / retry-request / compose.* 无影响
 		}
 	}
 
@@ -329,12 +414,13 @@ export class ConversationProjection {
 			sourceSequence: this.lastAppliedSequence,
 			...(typeof event.ts === "string" ? { timestamp: event.ts } : {}),
 		});
+		this.activeIndex = this.timeline.length - 1;
 	}
 
-	/** 把工作区（已封段 + 当前缓冲）同步进 timeline 项对象（流式期间 text/segments 实时可见） */
+	/** 把工作区（已封段 + 当前缓冲）同步进 timeline 项对象（publish 前调用：脏文本落快照） */
 	private syncActiveItem(): void {
 		if (this.activeAssistantSeq === undefined) return;
-		const idx = this.timeline.findIndex((i) => i.sequence === this.activeAssistantSeq);
+		const idx = this.activeIndexResolved();
 		if (idx < 0) return;
 		const item = this.timeline[idx]!;
 		const segments = Object.freeze(
@@ -345,6 +431,13 @@ export class ConversationProjection {
 			text: this.activeSegments.map((s) => s.text).join("") + this.activeSegmentText,
 			segments,
 		};
+	}
+
+	/** 活跃项 timeline 索引（缓存命中免逐次线性扫描；失配回退 findIndex） */
+	private activeIndexResolved(): number {
+		if (this.timeline[this.activeIndex]?.sequence === this.activeAssistantSeq) return this.activeIndex;
+		this.activeIndex = this.timeline.findIndex((i) => i.sequence === this.activeAssistantSeq);
+		return this.activeIndex;
 	}
 
 	/** 当前段是否已收口（存在完成/失败工具行）→ 后续内容/工具属于新请求段 */
@@ -406,7 +499,7 @@ export class ConversationProjection {
 	private finalizeAssistant(fullText?: string): void {
 		this.liveState = undefined;
 		if (this.activeAssistantSeq === undefined) return;
-		const idx = this.timeline.findIndex((i) => i.sequence === this.activeAssistantSeq);
+		const idx = this.activeIndexResolved();
 		const item = this.timeline[idx];
 		if (item === undefined) {
 			this.resetActiveAssistant();
@@ -437,6 +530,8 @@ export class ConversationProjection {
 		this.activeAssistantSeq = undefined;
 		this.activeSegments = [];
 		this.activeSegmentText = "";
+		this.activeIndex = -1;
+		this.activeItemDirty = false;
 	}
 
 	/** run 收口：给最后一条 timeline 项补 runEndSequence/timestamp（工具归属范围终点） */
@@ -454,6 +549,12 @@ export class ConversationProjection {
 	}
 
 	private publish(): void {
+		// 发布前冲刷脏文本（保序不变量：任何立即发布路径——状态迁移 / 非 delta 事件 /
+		// 窗口到期——看到的都是含最新 delta 的完整快照）
+		if (this.activeItemDirty) {
+			this.activeItemDirty = false;
+			this.syncActiveItem();
+		}
 		this.revision += 1;
 		this.snapshot = this.buildSnapshot();
 		for (const listener of [...this.listeners]) {
@@ -463,6 +564,38 @@ export class ConversationProjection {
 				// 订阅方异常不影响投影
 			}
 		}
+	}
+
+	/** 排程合并发布（32ms 尾沿；窗口内重复调用幂等并入） */
+	private scheduleDirtyPublish(): void {
+		if (this.publishTimer !== undefined) return;
+		this.publishTimer = setTimeout(() => {
+			this.publishTimer = undefined;
+			this.publish();
+		}, DIRTY_PUBLISH_MS);
+	}
+
+	/**
+	 * eseq 断档补拉（ZMQ 丢包自愈）：重放 lastAppliedSequence 之后的 journal 历史。
+	 * 纯 delta 断档（无 persist 缺口）补拉不到新事件——由下一个 persist 事件
+	 * （assistant.message 携 fullText）在 turn 边界自愈。
+	 */
+	private scheduleCatchUp(): void {
+		if (this.catchUpInFlight || this.state !== "running") return;
+		this.catchUpInFlight = true;
+		void (async () => {
+			try {
+				const events = await this.history({ fromSeq: this.lastAppliedSequence + 1, limit: 256 });
+				if (!this.stopRequested) {
+					for (const event of events) this.apply(event);
+					this.publish();
+				}
+			} catch {
+				// 补拉失败：下一次断档/事件再试
+			} finally {
+				this.catchUpInFlight = false;
+			}
+		})();
 	}
 
 	private buildSnapshot(): ConversationProjectionSnapshot {
@@ -480,6 +613,8 @@ export class ConversationProjection {
 			...(this.liveState !== undefined ? { liveState: this.liveState } : {}),
 			timeline: Object.freeze([...this.timeline]),
 			cards: this.cachedCards,
+			...(this.mode !== undefined ? { mode: this.mode } : {}),
+			...(this.modePending !== undefined ? { modePending: this.modePending } : {}),
 			...(this.error !== undefined ? { error: this.error } : {}),
 		});
 	}

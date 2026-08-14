@@ -7,7 +7,7 @@
  * 审批面板（inspector）。v2 原型已删 side-foot，故不再渲染 footer。
  * 右缘 DragHandle 拖拽调宽（widthPx 未拖时缺省 tokens --sidebar-width）。
  */
-import type { CSSProperties } from "react";
+import { memo, type CSSProperties } from "react";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import type { NovelOverviewStore } from "../../domains/novel/overview/NovelOverviewStore.js";
 import type { ToastStore } from "../../shared/state/ToastStore.js";
@@ -47,7 +47,8 @@ export interface SidebarProps {
   readonly onOpenWorkspace?: () => void;
 }
 
-export function Sidebar({
+/** 左侧栏容器（memo：流式发布期间跳过，gui-performance-2 功能点五） */
+export const Sidebar = memo(function Sidebar({
   mode,
   widthPx,
   onResizeWidth,
@@ -95,4 +96,4 @@ export function Sidebar({
       ) : null}
     </aside>
   );
-}
+});

@@ -6,6 +6,7 @@
  * 审批入口已移除（待审批时右侧面板自动展开，见 ApplicationShell 的自动展开 effect）。
  * TopBarMenuSlot 渲染 extensions.titleBar 注入的桌面专属内容（spec 4.2）。
  */
+import { memo } from "react";
 import { FolderOpen, PanelLeft, Settings } from "lucide-react";
 import { Icon } from "../../shared/primitives/Icon.js";
 import { IconButton } from "../../shared/primitives/IconButton.js";
@@ -30,7 +31,8 @@ export interface TopBarProps {
   readonly extensions?: NovelUiExtensions;
 }
 
-export function TopBar({
+/** 顶栏（memo：流式发布期间跳过，gui-performance-2 功能点五） */
+export const TopBar = memo(function TopBar({
   workspaceName,
   workspaceSub,
   sidebarMode,
@@ -66,4 +68,4 @@ export function TopBar({
       <TopBarAction label="设置" icon={<Icon icon={Settings} size="sm" />} onClick={onOpenSettings} />
     </header>
   );
-}
+});

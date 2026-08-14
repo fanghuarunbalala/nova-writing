@@ -15,6 +15,9 @@ export interface ConversationUserCommand {
 /** 会话模式：review 需审批（默认）/ bypass 直接执行 / compose 设计模式 */
 export type ConversationMode = "review" | "bypass" | "compose"
 
+/** compose 模式相位：idle 空闲 / designing 设计中 / pending 待审批 / applied 已批准 / discarded 已放弃 */
+export type ComposeModePhase = "idle" | "designing" | "pending" | "applied" | "discarded"
+
 /** 默认会话模式 */
 export const DEFAULT_CONVERSATION_MODE: ConversationMode = "review"
 

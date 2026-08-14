@@ -29,7 +29,7 @@ import styles from "./ApprovalPanel.module.css";
 import { ApprovalEntityView } from "./ApprovalEntityView.js";
 import { ParameterView } from "./ParameterView.js";
 import { useApprovalEntityResolution } from "./useApprovalEntityResolution.js";
-import { ComposeDraftApprovalBody } from "./ComposeDraftApprovalBody.js";
+import { ExitComposeApprovalView } from "./ExitComposeApprovalView.js";
 
 export interface ApprovalPanelProps {
   readonly store: ApprovalStore;
@@ -111,21 +111,6 @@ function approvalTitleOf(toolName: string, args: string): string {
   return fallback;
 }
 
-/** ExitComposeMode args（JSON 字符串）→ 提交说明（summary 参数；解析失败/缺省 undefined） */
-function composeExitSummaryOf(args: string): string | undefined {
-  const parsed = parseApprovalArgs(args);
-  if (
-    parsed === undefined ||
-    typeof parsed !== "object" ||
-    parsed === null ||
-    Array.isArray(parsed)
-  ) {
-    return undefined;
-  }
-  const summary = (parsed as JsonObject).summary;
-  return typeof summary === "string" ? summary : undefined;
-}
-
 function groupKeyOf(approval: ApprovalQueueItem): string {
   return `${approval.conversationId}:${approval.requestId}`;
 }
@@ -154,7 +139,11 @@ function groupApprovals(
           approvals: Object.freeze(list),
           status: groupStatus(list),
           requestedAt: list[0]!.requestedAt,
-          title: approvalTitleOf(list[0]!.toolCalls[0]!.toolName, list[0]!.toolCalls[0]!.args),
+          // ExitComposeMode：固定标题「提交设计草稿」（设计内容经 designFile 读取展示）
+          title:
+            list[0]!.toolCalls[0]!.toolName === "ExitComposeMode"
+              ? "提交设计草稿"
+              : approvalTitleOf(list[0]!.toolCalls[0]!.toolName, list[0]!.toolCalls[0]!.args),
         }),
       )
       // 最新审批在前，打开面板时默认看到最新的待审组。
@@ -234,21 +223,14 @@ export function ApprovalPanel({
   const selectedOp = inferOperation(
     selectedGroup?.approvals[0]!.toolCalls[0]!.toolName ?? "",
   );
-  // ExitComposeMode 审批：以 design 草稿内容为确认对象（CCB 式），不走参数区。
-  // ExitComposeMode approval: the design draft content is the confirmation subject
-  // (CCB-style); it bypasses the generic parameter area.
-  const firstApproval = selectedGroup?.approvals[0];
-  const firstToolCall = firstApproval?.toolCalls[0];
-  const isComposeExit = firstToolCall?.toolName === "ExitComposeMode";
-  const composeExitSummary =
-    !isComposeExit || firstToolCall === undefined
-      ? undefined
-      : composeExitSummaryOf(firstToolCall.args);
+  // ExitComposeMode：设计草稿审批（无实体参数，详情区改渲染 design 文件全文）
+  const isExitCompose =
+    selectedGroup?.approvals[0]?.toolCalls[0]?.toolName === "ExitComposeMode";
   // 已决审批不再解析实体内容（批准后 canonical 已变，取到的是新状态）；
-  // 仅待批准解析并判断 revision 是否过期。
+  // 仅待批准解析并判断 revision 是否过期。ExitComposeMode 无实体参数，不解析。
   const isPending = selectedGroup?.status === "pending";
   const resolutions = useApprovalEntityResolution(
-    isPending ? argumentGroups : undefined,
+    isPending && !isExitCompose ? argumentGroups : undefined,
     resolveEntity,
   );
 
@@ -328,10 +310,10 @@ export function ApprovalPanel({
             ) : null}
             {selectedGroup.title}
           </h4>
-          {isComposeExit && firstApproval !== undefined ? (
-            <ComposeDraftApprovalBody
-              conversationId={firstApproval.conversationId}
-              summary={composeExitSummary}
+          {isExitCompose ? (
+            // 设计草稿审批：md 全文展示（内容经 designFile 按会话读取，不经审批 payload）
+            <ExitComposeApprovalView
+              conversationId={selectedGroup.approvals[0]!.conversationId}
             />
           ) : (
             <>
@@ -385,10 +367,7 @@ export function ApprovalPanel({
                         className={styles.argsGroup}
                       >
                         <div
-                          className={[
-                            styles.band,
-                            OP_BAND_CLASS[group.op ?? ""],
-                          ]
+                          className={[styles.band, OP_BAND_CLASS[group.op ?? ""]]
                             .filter(Boolean)
                             .join(" ")}
                         >

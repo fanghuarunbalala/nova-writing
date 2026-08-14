@@ -1,6 +1,7 @@
-// log 域统一出口：Logger 契约 + pino 实现 + noop
+// log 域统一出口：Logger 契约 + pino 实现 + noop + console 实现
 
 export * from "./Logger.js";
 export * from "./pino.js";
 export * from "./noop.js";
+export * from "./consoleLogger.js";
 export * from "./debug.js";

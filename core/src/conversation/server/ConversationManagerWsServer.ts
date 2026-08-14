@@ -105,7 +105,14 @@ export function startConversationManagerWsServer(
 						return () => closeListeners.delete(listener);
 					},
 				};
-				for (const l of connectedListeners) l(connected);
+				// 逐监听者保护：单个监听者异常不打穿 register 握手（spawner 等待点）
+				for (const l of connectedListeners) {
+					try {
+						l(connected);
+					} catch {
+						// 监听者异常吞掉（register 流与其余监听者优先）
+					}
+				}
 			};
 			// 单通道双工：expose CMS 面 + getAPI 得 conversation 面（探针已验证）
 			const channel = new RPCChannel(
@@ -136,7 +143,14 @@ export function startConversationManagerWsServer(
 			});
 			const handle = channel.getAPI() as unknown as ConversationHandle;
 			socket.on("close", () => {
-				for (const l of closeListeners) l();
+				// 逐监听者保护：异常不逃逸到 WS 事件循环（未捕获会崩 manager 进程）
+				for (const l of closeListeners) {
+					try {
+						l();
+					} catch {
+						// 监听者异常吞掉
+					}
+				}
 			});
 		});
 		wss.on("error", reject);

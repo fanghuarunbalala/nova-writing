@@ -13,12 +13,16 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { RPCChannel } from "kkrpc";
 import { webSocketClientTransport } from "kkrpc/ws";
-import { Conversation, type ManagerWaitChannel } from "../../conversation/server/Conversation.js";
+import { Conversation, type ConversationEventPublisher, type ManagerWaitChannel } from "../../conversation/server/Conversation.js";
+import { EventPublisher } from "../../event/EventPublisher.js";
+import { conversationEventsAddr } from "../../event/topics.js";
 import { FileConversationJournalService } from "../../conversation/persistence/FileConversationJournalService.js";
 import { FileConversationJournalReadOnlyService } from "../../conversation/persistence/FileConversationJournalReadOnlyService.js";
+import { FileConversationStateJournalService } from "../../conversation/persistence/FileConversationStateJournalService.js";
 import { journalListener } from "../../conversation/JournalBridge.js";
 import { debugLog } from "../../log/debug.js";
 import { createLogger } from "../../log/pino.js";
+import type { Logger } from "../../log/Logger.js";
 import { SubagentRuntime } from "../../conversation/server/SubagentRuntime.js";
 import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
@@ -28,7 +32,10 @@ import {
   readNovelGlobalConstraintsSafe,
   NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME,
 } from "../workspace/readNovelGlobalConstraints.js";
-import { ComposeModeStateProvider } from "../../conversation/compose/ComposeModeState.js";
+import {
+  ComposeModeService,
+  ComposeModeStateProvider,
+} from "../../conversation/compose/index.js";
 import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
 import type { LLMessage } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
@@ -93,6 +100,27 @@ const CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
 
 /** 合法会话模式集合（meta.json 恢复校验用） */
 const KNOWN_MODES = new Set(["review", "bypass", "compose"]);
+
+/**
+ * 绑定会话事件 PUB（每会话一个 ipc:// 命名管道地址；main 侧 register 后 SUB 接入）。
+ * bind 失败（地址占用等）→ 告警并返回 undefined（内存 hub 照常分发）。
+ */
+async function bindConversationEventPublisher(
+	conversationId: string,
+	logger?: Logger,
+): Promise<ConversationEventPublisher | undefined> {
+	const publisher = new EventPublisher(conversationEventsAddr(conversationId));
+	try {
+		await publisher.bind();
+		return publisher;
+	} catch (err) {
+		logger?.error("conversation_events.bind_failed", {
+			conversationId,
+			error: err instanceof Error ? err.message : String(err),
+		});
+		return undefined;
+	}
+}
 
 /** 读 storedir/meta.json 的持久化模式（无文件/损坏/非法值 → undefined 回退默认） */
 export function readPersistedMode(storedir: string | undefined): ConversationMode | undefined {
@@ -218,6 +246,8 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	const holder: { conv?: Conversation } = {};
 	let cmsApi: CmsApi | undefined;
 	let resumePendingDecider: ((toolCallId: string) => Promise<"approve" | "reject" | "expired" | undefined>) | undefined;
+	/** CMS 待决条目（toolCallId → 条目；重启补完 + ExitComposeMode 决议包装共用） */
+	const byToolCallId = new Map<string, ApprovalQueueItem>();
 	if (managerWsUrl !== undefined && managerWsUrl.trim() !== "") {
 		const wsToken = process.env.NOVEL_MANAGER_WS_TOKEN;
 		const channel = new RPCChannel(
@@ -231,7 +261,6 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		// 重启补完路径：查询 CMS 待决决策 → 暂停点续跑决策器
 		//（审批按 turn 批量：条目的每个 toolCalls 成员都映射到该批决策）
 		const decisions = await cmsApi.takeDecisions(conversationId).catch(() => []);
-		const byToolCallId = new Map<string, ApprovalQueueItem>();
 		for (const item of decisions) {
 			for (const tc of item.toolCalls) byToolCallId.set(tc.toolCallId, item);
 		}
@@ -301,6 +330,43 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 				})
 			: undefined;
 
+	// ① compose 状态与服务：状态实例先 hydrate（state.jsonl 重放）再装配——
+	// 顺序保证：nudge 策略构造（buildNovelAgent 内）时 latch 已 seed（重启不误发上升沿）
+	const composeState = new ComposeModeStateProvider();
+	const composeService = new ComposeModeService({
+		composeState,
+		designRoot: join(workspace, ".novel", "design"),
+		// 挂起审批探测：mode 切换延迟判定（holder 闭包，conv 构造后可用）
+		pendingApprovalProbe: () => Promise.resolve(holder.conv?.hasPendingApproval() ?? false),
+		logger,
+	});
+	const stateJournal =
+		storedir !== undefined && storedir.trim() !== ""
+			? new FileConversationStateJournalService({ filePath: join(storedir, "state.jsonl") })
+			: undefined;
+	if (storedir !== undefined && storedir.trim() !== "") {
+		const readOnly = new FileConversationJournalReadOnlyService({ journalDir: storedir });
+		const stateEvents = await readOnly.readStateEvents(conversationId);
+		await composeService.hydrateFromEvents(conversationId, stateEvents);
+	}
+	// 重启补完的 ExitComposeMode 决议包装：reject/expired 驱动状态回 designing + 晋升延迟目标
+	// （approve 决议由 resumePendingRun dispatch 执行 ExitComposeMode handler → service.exit 收口）
+	if (resumePendingDecider !== undefined) {
+		const baseDecider = resumePendingDecider;
+		resumePendingDecider = async (toolCallId) => {
+			const decision = await baseDecider(toolCallId);
+			const item = byToolCallId.get(toolCallId);
+			if (
+				item?.toolCalls.some((tc) => tc.toolName === "ExitComposeMode") === true &&
+				(decision === "reject" || decision === "expired")
+			) {
+				await composeService.rejectOnDecision(conversationId);
+				await composeService.applyPendingModeTarget(conversationId);
+			}
+			return decision;
+		};
+	}
+
 	const loop = buildNovelAgent({
 		workspace,
 		provider,
@@ -323,9 +389,11 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 				? undefined
 				: { fileName: NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME, content };
 		},
-		// compose_mode nudge 状态提供者（compose 状态机接线不在本期，进入/退出
-		// 由后续 conversation 层驱动该实例）；todo_idle/TodoWrite 的内存存储
-		composeState: new ComposeModeStateProvider(),
+		// compose 状态（nudge/权限门共享）+ 工具服务（novel.compose 组）+ 每次 provider
+		// call 发起时晋升 pendingMode（mode.set 记录后由本钩子生效，PRD F1 双态）
+		composeState,
+		composeService,
+		beforeProviderCall: () => holder.conv?.promotePendingMode() ?? Promise.resolve(),
 		todoStore: new InMemoryConversationTodoStore(),
 	});
 
@@ -344,13 +412,24 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		sampling,
 		journal,
 		managerWait,
+		composeState,
+		composeService,
+		stateJournal,
 		subagentRuntime,
 		initialMode: readPersistedMode(storedir),
 		onModeChanged: (mode) => persistMode(storedir, mode),
+		logger,
+		// 事件火线 ZeroMQ 广播（gui-performance-2 功能点八）：每会话一个 PUB，
+		// main 侧 register 后 SUB 接入转发 renderer（裸 IPC，无 kkrpc 往返）。
+		// bind 失败仅告警降级（内存 hub 照常，renderer 走 kkrpc subscribeEvents 兜底不可用，
+		// 表现为投影错误可重试——地址冲突仅在同名会话双开时发生，属配置错误）。
+		eventPublisher: await bindConversationEventPublisher(conversationId, logger),
 	// 审批等待不设超时：进程驻留，UI 决策随时经 resolveApproval 直推解除
-	//（提前 exit 会丢内存态 subagent/todo，且决策无法送达）
+	//（提前 exit 会丢内存态 subagent/todo，且决策无法送达；Exit 审批驻留同理）
 	});
 	holder.conv = conv;
+	// 状态事件出口：先落 state.jsonl 再 hub 广播（写序 ②→③）
+	composeService.setEventSink((e) => conv.emitState(e));
 
 	// 报到 CMS（spawner 等待点；此后 manager 侧拿到 conversation handle）。
 	// 必须先于 resumePendingRun：恢复可能耗时多轮 provider 调用，晚报到会撞
@@ -369,7 +448,13 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	// 暂停点续跑：仅当恢复消息中存在缺 tool 结果的 toolCall 才补完收口——
 	// 已收口的 run（工具结果齐全）不得重跑，否则重复 provider 调用/重复落盘
 	if (runMessages !== undefined && findPendingToolIds(runMessages).length > 0) {
+		logger?.info("child.resume_pending", {
+			conversationId,
+			pendingToolCalls: findPendingToolIds(runMessages).length,
+			recoveredDecisions: byToolCallId.size,
+		});
 		await loop.resumePendingRun({ sampling, maxTurns: 8 }).catch((err) => {
+			logger?.error("child.resume_failed", { conversationId, error: String(err) });
 			debugLog("[child] resumePendingRun failed:", err);
 		});
 	}

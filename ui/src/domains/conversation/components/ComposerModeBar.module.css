@@ -63,6 +63,14 @@
   font-weight: var(--fw-500);
 }
 
+/* 待生效 chip：mode.pending 已记录、mode.changed 未到（下一次 provider call 晋升） */
+.pendingChip {
+  font-size: var(--fs-12);
+  font-weight: var(--fw-regular);
+  color: var(--color-muted);
+  margin-left: var(--space-2);
+}
+
 /* chevron：CSS 倒三角，open 时翻转 */
 .chev {
   display: inline-flex;

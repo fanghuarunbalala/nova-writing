@@ -4,6 +4,7 @@
  * 主区路由 host：按 MainViewRouter 状态渲染 chat/content/schedule。
  * 精简版：去掉审批相关 props（延后）。
  */
+import { memo } from "react";
 import { useMainView } from "../../shared/routing/hooks.js";
 import type { MainViewRouter } from "../../shared/routing/MainViewRouter.js";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
@@ -15,20 +16,21 @@ import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/st
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import type { ScheduleStore } from "../../domains/schedule/store/ScheduleStore.js";
 import type { ScheduleTodoStore } from "../../domains/schedule/store/ScheduleTodoStore.js";
+import type { ConversationProjectionBinding } from "../../domains/conversation/binding/ConversationProjectionBinding.js";
 import { ChatSurface } from "./ChatSurface.js";
 import { ContentSurface } from "./ContentSurface.js";
 import type { ContentTab } from "./contentTab.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
 import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
-import type { ActiveConversationSession } from "../../domains/conversation/hooks/useActiveConversationSession.js";
 import { ScheduleSurface } from "./ScheduleSurface.js";
 import styles from "./MainArea.module.css";
 
 export interface MainAreaProps {
   readonly api: NovelApiClient;
   readonly logger?: Logger;
-  readonly session: ActiveConversationSession;
+  /** 活动会话投影 binding（shell 持有；快照订阅在 ChatSurface 内——流式发布不重渲染本组件） */
+  readonly conversationBinding: ConversationProjectionBinding | undefined;
   readonly pendingApprovalCount?: number;
   readonly mainViewRouter: MainViewRouter;
   readonly conversationCatalog: ConversationCatalogStore;
@@ -51,7 +53,8 @@ export interface MainAreaProps {
   readonly approvalStore: ApprovalStore;
 }
 
-export function MainArea(props: MainAreaProps) {
+/** 主区路由 host（memo：流式发布期间 props 全稳定，跳过 reconciliation） */
+export const MainArea = memo(function MainArea(props: MainAreaProps) {
   const mainView = useMainView(props.mainViewRouter);
   const workspaceId =
     props.conversationCatalog.getSnapshot().workspaceId ??
@@ -60,7 +63,7 @@ export function MainArea(props: MainAreaProps) {
     <main className={styles.main}>
       {mainView.state === "chat" ? (
         <ChatSurface
-          session={props.session}
+          conversationBinding={props.conversationBinding}
           conversationCatalog={props.conversationCatalog}
           onCreateConversation={props.onCreateConversation}
           pendingApprovalCount={props.pendingApprovalCount ?? 0}
@@ -95,4 +98,4 @@ export function MainArea(props: MainAreaProps) {
       )}
     </main>
   );
-}
+});

@@ -13,7 +13,7 @@ const handle = {
 } as unknown;
 
 describe("buildNovelAgent 组装", () => {
-  it("systemSections 齐全（9 段 recipe 序）+ toolDefs 齐全（20 工具）", () => {
+  it("systemSections 齐全（9 段 recipe 序）+ toolDefs 齐全（23 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { systemSections: Array<{ id: string; kind: string }>; toolDefs: unknown[] } } }).config.agentCapability;
     expect(cap.systemSections).toHaveLength(9);
@@ -30,10 +30,10 @@ describe("buildNovelAgent 组装", () => {
     ]);
     expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(6);
     expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(3);
-    expect(cap.toolDefs).toHaveLength(21);
+    expect(cap.toolDefs).toHaveLength(23);
   });
 
-  it("工具名覆盖 todo + files + novel 各域（8 组 21 工具）", () => {
+  it("工具名覆盖 todo + files + compose + novel 各域（9 组 23 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { toolDefs: Array<{ name: string }> } } }).config.agentCapability;
     const names = cap.toolDefs.map((t) => t.name);
@@ -42,6 +42,8 @@ describe("buildNovelAgent 组装", () => {
     expect(names).toContain("Glob");
     expect(names).toContain("Write");
     expect(names).toContain("Edit");
+    expect(names).toContain("EnterComposeMode");
+    expect(names).toContain("ExitComposeMode");
     expect(names).toContain("CharacterRead");
     expect(names).toContain("LocationWrite");
     expect(names).toContain("OutlineEdit");
@@ -84,8 +86,8 @@ describe("buildNovelAgent 组装", () => {
         };
       }
     ).config.agentCapability;
-    // 21（8 组） + 3（subagent 派发三工具）
-    expect(cap.toolDefs).toHaveLength(24);
+    // 23（9 组，含 novel.compose 两工具） + 3（subagent 派发三工具）
+    expect(cap.toolDefs).toHaveLength(26);
     const names = cap.toolDefs.map((t) => t.name);
     expect(names).toContain("Agent");
     expect(names).toContain("TaskOutput");

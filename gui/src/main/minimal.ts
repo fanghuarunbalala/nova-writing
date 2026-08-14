@@ -15,6 +15,8 @@ import {
   EventPublisher,
   EventSubscriber,
   FileConversationJournalService,
+  CONVERSATION_OUTPUT,
+  conversationEventsAddr,
   NOVEL_CHANGED,
   NOVEL_EVENTS_ADDR,
   SqliteNovelStore,
@@ -29,6 +31,7 @@ import {
   type ConversationApprovalRequest,
   type ConversationJournalService,
   type CredentialCipher,
+  createConsoleLogger,
   infoLog,
   type LLMessage,
   type NovelStore,
@@ -36,6 +39,11 @@ import {
   type RunContext,
 } from "@novel/core";
 import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
+import {
+  DesktopDesignFileService,
+  DesktopDesignIpcController,
+  type DesignIpcMain,
+} from "./desktop/design/index.js";
 
 // 双构建流程布局兼容（两条流程都受现役启动命令使用）：
 // - build-minimal.mjs（根 gui:release / gui:debug）：esbuild CJS 打包到
@@ -61,6 +69,8 @@ const IPC_CHANNEL = "novel-rpc";
 const CONFIG_CHANNEL = "config-rpc";
 const WORKSPACE_CHANNEL = "workspace-rpc";
 const UI_CHANNEL = "ui-rpc";
+/** 会话事件火线裸推通道（main → renderer 单向 webContents.send；preload 同名白名单） */
+const CONVERSATION_EVENTS_CHANNEL = "conversation-events";
 
 /**
  * 回显 AgentLoop：followup 即时开 run 产 run-start/user.message → assistant.delta×N →
@@ -188,6 +198,8 @@ function createManager(
 ): ConversationManagerServer {
   // server 先声明：内存模式 factory 的 managerWait 需闭包引用（进程内直连同一队列）
   let server: ConversationManagerServer | undefined;
+  // gui main 无 pino 落盘：console Logger 接审批/mode 关键链路埋点（JSON 行，与 pino 同构）
+  const logger = createConsoleLogger();
   const factory = {
     create: (o: { conversationId: string }) => {
       // 回显模式同样落盘：与子进程 journal 语义一致（history/回执互认）。
@@ -206,6 +218,7 @@ function createManager(
         loop,
         sampling: { model: "echo" },
         journal,
+        logger,
         // 内存模式：wait 提交走进程内 CMS 队列（与子进程同路由）；超时仅解除等待不退出
         managerWait: {
           submitApproval: (id, req) => server!.submitApprovalRequest(id, req),
@@ -230,6 +243,7 @@ function createManager(
   server = new ConversationManagerServer(factory, spawner, {
     storedirRoot: conversationsRoot,
     workspaceProvider,
+    logger,
   });
   return server;
 }
@@ -382,6 +396,33 @@ async function main(): Promise<void> {
     }
   })();
 
+  // 会话事件火线（gui-performance-2 功能点八）：child 侧每会话一个 ZMQ PUB
+  // （ipc://conversation-{id}-events，register 时已 bind）；main 在 register 报到后
+  // SUB 接入，逐帧裸转发 renderer（无 kkrpc 远端回调往返）。会话进程退出拆除 SUB。
+  const conversationSubscribers = new Map<string, EventSubscriber>();
+  manager.onRegistered((conversationId) => {
+    if (conversationSubscribers.has(conversationId)) return;
+    const subscriber = new EventSubscriber(conversationEventsAddr(conversationId), [CONVERSATION_OUTPUT]);
+    conversationSubscribers.set(conversationId, subscriber);
+    void (async () => {
+      try {
+        await subscriber.connect();
+        for await (const message of subscriber) {
+          const win = mainWindow;
+          if (win === undefined || win.isDestroyed()) continue;
+          win.webContents.send(CONVERSATION_EVENTS_CHANNEL, message.payload);
+        }
+      } catch (e) {
+        console.error(`[main] conversation subscriber stopped (${conversationId}):`, e);
+      }
+    })();
+  });
+  manager.onConversationExited((conversationId) => {
+    const subscriber = conversationSubscribers.get(conversationId);
+    conversationSubscribers.delete(conversationId);
+    if (subscriber !== undefined) void subscriber.close().catch(() => {});
+  });
+
   // 退出前有序关闭：zeromq 原生插件（addon.node）在进程退出时若 socket 未干净拆除会
   // fail-fast（0xC0000409，Event Log 已确认）。will-quit 先 preventDefault，等全部
   // close（含 SUB socket，其关闭令上方 for-await 自然结束）完成后再真正 quit；
@@ -446,9 +487,26 @@ async function main(): Promise<void> {
       // 显式安全声明（Electron 当前默认即此值；显式化防升级/配置漂移后静默回退）
       contextIsolation: true,
       nodeIntegration: false,
+      // 失焦/最小化时不节流 renderer 定时器（gui-performance-2 功能点七）：
+      // 32ms 流式发布节流依赖 setTimeout，系统级节流会导致后台流式冻结、
+      // 恢复焦点时跳变追帧
+      backgroundThrottling: false,
     },
   });
   mainWindow = win;
+  // compose 设计草稿文件 IPC（novel.design.v1.*）：仅主窗口 webContents 授权，
+  // workspace 根随当前打开项目切换；renderer 经 preload novelDesign.invoke 调用
+  const designController = new DesktopDesignIpcController({
+    service: new DesktopDesignFileService({
+      resolveWorkspaceRoot: (senderId) =>
+        senderId === win.webContents.id ? currentWorkspaceRoot : undefined,
+    }),
+    authorizeSender: (senderId) => senderId === win.webContents.id,
+  });
+  designController.register(ipcMain as unknown as DesignIpcMain);
+  win.on("closed", () => {
+    void designController.dispose();
+  });
   win.webContents.on("console-message", (_e, ...args: unknown[]) => {
     // Electron 43 新旧签名兼容：旧 (event, level, message, ...) / 新 (event, details)
     const first = args[0];

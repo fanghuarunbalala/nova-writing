@@ -7,6 +7,7 @@ import { AgentLoop } from "../AgentLoop.js";
 import type { AgentCapability } from "../../agent/AgentCapability.js";
 import type { ToolDef } from "../../tool/ToolDef.js";
 import type { Provider, ProviderCall, ProviderResult } from "../../provider/types.js";
+import { ComposeModeStateProvider } from "../../../conversation/compose/index.js";
 import type { ConversationApprovalRequest } from "../../../conversation/contract/types/index.js";
 
 /** tool_call 结果（一次返回多个工具调用） */
@@ -41,6 +42,7 @@ function makeLoop(
   opts: {
     toolDefs: ToolDef[];
     requestApproval?: (req: ConversationApprovalRequest) => Promise<{ kind: "approve" | "reject" | "edit"; text?: string }>;
+    composeState?: ComposeModeStateProvider;
   },
 ): AgentLoop {
   const provider: Provider = {
@@ -65,6 +67,7 @@ function makeLoop(
     },
     conversationId: "c1",
     ...(opts.requestApproval !== undefined ? { requestApproval: opts.requestApproval as never } : {}),
+    ...(opts.composeState !== undefined ? { composeState: opts.composeState } : {}),
   });
 }
 
@@ -187,5 +190,98 @@ describe("AgentLoop 审批门控（按 turn 批量）", () => {
     const r = await loop.run("hi", { sampling: { model: "gpt-5" } });
     expect(r.final.content).toBe("done");
     expect(requestApproval).not.toHaveBeenCalled();
+  });
+
+  describe("compose 权限门（gateBatch）", () => {
+    it("compose 激活：canonical 写被硬拒绝（handler 不执行、不经审批通道）", async () => {
+      const execute = vi.fn().mockResolvedValue("written");
+      const tool: ToolDef = { ...writeTool("ParagraphWrite", true), handler: { execute } };
+      const composeState = new ComposeModeStateProvider();
+      composeState.enter("c1", { designFilePath: "/ws/.novel/design/c1.md" });
+      const requestApproval = vi.fn();
+      const loop = makeLoop([toolCallResult([{ toolName: "ParagraphWrite", id: "t1" }]), stopResult("ok")], {
+        toolDefs: [tool],
+        composeState,
+        requestApproval,
+      });
+      const responses: string[] = [];
+      await loop.run("hi", { sampling: { model: "gpt-5" } }, (e) => {
+        if (e.type === "tool-call-response" && "result" in e) responses.push(e.result ?? "");
+      });
+      expect(execute).not.toHaveBeenCalled();
+      expect(requestApproval).not.toHaveBeenCalled();
+      expect(responses[0]).toContain("设计模式激活");
+    });
+
+    it("compose 激活：读工具与文件工具不受影响（免审执行）", async () => {
+      const composeState = new ComposeModeStateProvider();
+      composeState.enter("c1", { designFilePath: "/ws/.novel/design/c1.md" });
+      const loop = makeLoop([toolCallResult([{ toolName: "CharacterRead", id: "t1" }]), stopResult("done")], {
+        toolDefs: [writeTool("CharacterRead", false)],
+        composeState,
+      });
+      const r = await loop.run("hi", { sampling: { model: "gpt-5" } });
+      expect(r.final.content).toBe("done");
+    });
+
+    it("bypass 模式：canonical 写跳过审批直接放行", async () => {
+      const tool = writeTool("ParagraphWrite", true);
+      const composeState = new ComposeModeStateProvider();
+      composeState.setMode("c1", "bypass");
+      const requestApproval = vi.fn();
+      const loop = makeLoop([toolCallResult([{ toolName: "ParagraphWrite", id: "t1" }]), stopResult("ok")], {
+        toolDefs: [tool],
+        composeState,
+        requestApproval,
+      });
+      const responses: string[] = [];
+      const r = await loop.run("hi", { sampling: { model: "gpt-5" } }, (e) => {
+        if (e.type === "tool-call-response" && "result" in e) responses.push(e.result ?? "");
+      });
+      expect(r.final.content).toBe("ok");
+      // 直达 dispatch（无拒绝文本）、审批通道未被询问
+      expect(responses[0]).toBe("result:ParagraphWrite");
+      expect(requestApproval).not.toHaveBeenCalled();
+    });
+
+    it("bypass 模式：ExitComposeMode 不在 canonical 名单，仍走审批门", async () => {
+      const composeState = new ComposeModeStateProvider();
+      composeState.setMode("c1", "bypass");
+      const requestApproval = vi.fn().mockResolvedValue({ kind: "approve" });
+      const loop = makeLoop([toolCallResult([{ toolName: "ExitComposeMode", id: "t1" }]), stopResult("ok")], {
+        toolDefs: [writeTool("ExitComposeMode", true)],
+        composeState,
+        requestApproval,
+      });
+      await loop.run("hi", { sampling: { model: "gpt-5" } });
+      expect(requestApproval).toHaveBeenCalledOnce();
+    });
+
+    it("ExitComposeMode 驳回：reject →「用户驳回了」，edit → 意见随回传", async () => {
+      const tool = writeTool("ExitComposeMode", true);
+      const run = async (decision: { kind: "reject" | "edit"; text?: string }) => {
+        const loop = makeLoop([toolCallResult([{ toolName: "ExitComposeMode", id: "t1" }]), stopResult("ok")], {
+          toolDefs: [tool],
+          requestApproval: vi.fn().mockResolvedValue(decision),
+        });
+        const responses: string[] = [];
+        await loop.run("hi", { sampling: { model: "gpt-5" } }, (e) => {
+          if (e.type === "tool-call-response" && "result" in e) responses.push(e.result ?? "");
+        });
+        return responses[0];
+      };
+      expect(await run({ kind: "reject" })).toBe("用户驳回了");
+      expect(await run({ kind: "edit", text: "节奏太慢" })).toBe("用户驳回了：节奏太慢");
+    });
+
+    it("未注入 composeState：fail-open 走基础策略（原审批行为不变）", async () => {
+      const requestApproval = vi.fn().mockResolvedValue({ kind: "approve" });
+      const loop = makeLoop([toolCallResult([{ toolName: "ParagraphWrite", id: "t1" }]), stopResult("ok")], {
+        toolDefs: [writeTool("ParagraphWrite", true)],
+        requestApproval,
+      });
+      await loop.run("hi", { sampling: { model: "gpt-5" } });
+      expect(requestApproval).toHaveBeenCalledOnce();
+    });
   });
 });

@@ -23,30 +23,13 @@ import { AssistantMarkdown } from "./assistantContent/AssistantMarkdown.js";
 import type { MessageReference } from "./MessageReference.js";
 import styles from "./AssistantMessage.module.css";
 
-export type AssistantApprovalState =
-  | "generating"
-  | "completed"
-  | "submitted"
-  | "failed"
-  | "cancelled"
-  | "rejected";
-
-/** 消息头状态中文标签（原型 .approval-state）。 */
-const APPROVAL_STATE_LABEL: Record<AssistantApprovalState, string> = {
-  generating: "生成中",
-  completed: "已完成",
-  submitted: "已提交",
-  failed: "生成失败",
-  cancelled: "已停止",
-  rejected: "已驳回",
-};
-
 /** 缺省卡片渲染注册表（模块级单例：避免每 render 重建 registry） */
 const DEFAULT_CARD_RENDERERS = createDefaultConversationCardRendererRegistry();
 
 /** 缺省空数组（冻结单例：memo 浅比较稳定引用） */
 const EMPTY_CARDS: readonly ConversationCardDescriptor[] = Object.freeze([]);
 const EMPTY_SEGMENTS: readonly AssistantSegment[] = Object.freeze([]);
+const EMPTY_TOOLS: readonly ToolTraceView[] = Object.freeze([]);
 
 export interface AssistantMessageProps {
   readonly sequence: number;
@@ -54,7 +37,6 @@ export interface AssistantMessageProps {
   readonly agentLabel: string;
   /** 保留兼容调用方；v2 原型时间只在轮次分隔显示。 */
   readonly timestamp: number;
-  readonly approvalState?: AssistantApprovalState;
   /** 保留兼容调用方；v2 原型 head 不再显示 revision。 */
   readonly revision?: string;
   readonly failureDetail?: string;
@@ -73,7 +55,6 @@ export interface AssistantMessageProps {
 
 export const AssistantMessage = memo(function AssistantMessage({
   sequence,
-  approvalState,
   failureDetail,
   text,
   cards = EMPTY_CARDS,
@@ -85,55 +66,26 @@ export const AssistantMessage = memo(function AssistantMessage({
   onCardAction,
   onNotify,
 }: AssistantMessageProps) {
-  // live 分段渲染：每段 = 内容片段 + 该请求的工具单行
-  const segmented = segments.some((s) => s.text.length > 0);
+  // 一轮只显示最后一 turn：正文 = 最后一段的内容片段；工具行 = 最后一次请求的工具
+  const lastSegment = segments.length > 0 ? segments[segments.length - 1] : undefined;
+  const lastText = lastSegment?.text ?? "";
+  // 最后一段无内容（重放形态段文本为空）时回退完整文本
+  const bodyText = lastText.length > 0 ? lastText : text;
+  const lastTools = lastSegment?.tools ?? EMPTY_TOOLS;
   return (
     <div className={styles.message} data-sequence={sequence}>
       <div className={styles.body}>
-        {approvalState !== undefined ? (
-          <div className={styles.head}>
-            <span className={[styles.state, styles[approvalState]].filter(Boolean).join(" ")}>
-              {APPROVAL_STATE_LABEL[approvalState]}
-            </span>
-          </div>
-        ) : null}
-        {segmented ? (
-          segments.map((seg, i) => (
-            <div key={i} className={styles.segment}>
-              {seg.text !== "" ? (
-                <div className={styles.text}>
-                  <AssistantMarkdown
-                    text={seg.text}
-                    onReferenceClick={onReferenceClick}
-                    resolveReference={onResolveReference}
-                    streaming={streaming && i === segments.length - 1}
-                    onNotify={onNotify}
-                  />
-                </div>
-              ) : null}
-              {seg.tools.length > 0 ? <ToolLine tools={seg.tools} /> : null}
-            </div>
-          ))
-        ) : (
-          <>
-            <div className={styles.text}>
-              <AssistantMarkdown
-                text={text}
-                onReferenceClick={onReferenceClick}
-                resolveReference={onResolveReference}
-                streaming={streaming}
-                onNotify={onNotify}
-              />
-            </div>
-            {/* 重放形态：完整文本 + 各请求的工具行 */}
-            {segments
-              .filter((s) => s.tools.length > 0)
-              .map((seg, i) => (
-                <ToolLine key={i} tools={seg.tools} />
-              ))}
-          </>
-        )}
-        {approvalState === "failed" && failureDetail !== undefined ? (
+        <div className={styles.text}>
+          <AssistantMarkdown
+            text={bodyText}
+            onReferenceClick={onReferenceClick}
+            resolveReference={onResolveReference}
+            streaming={streaming}
+            onNotify={onNotify}
+          />
+        </div>
+        {lastTools.length > 0 ? <ToolLine tools={lastTools} /> : null}
+        {failureDetail !== undefined ? (
           <p className={styles.failureDetail}>{failureDetail}</p>
         ) : null}
         {cards.length > 0 ? (

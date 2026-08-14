@@ -31,7 +31,6 @@ export type ConversationTimelineItem =
       readonly sequence: number;
       readonly agentLabel: string;
       readonly timestamp: number;
-      readonly approvalState?: "generating" | "completed" | "submitted" | "failed" | "cancelled";
       readonly revision?: string;
       /** 脱敏失败详情（provider 错误摘要）。Redacted failure detail. */
       readonly failureDetail?: string;

@@ -70,7 +70,7 @@ describe("chatSurfaceMapper", () => {
     if (assistant.kind === "assistant") {
       expect(assistant.text).toBe("已改为：雨落得密。");
       expect(assistant.streaming).toBe(false);
-      expect(assistant.approvalState).toBe("completed");
+      expect(assistant.approvalState).toBeUndefined();
       expect(assistant.cards).toHaveLength(0);
     }
   });
@@ -87,7 +87,7 @@ describe("chatSurfaceMapper", () => {
     expect(items).toHaveLength(1);
     if (items[0].kind === "assistant") {
       expect(items[0].streaming).toBe(true);
-      expect(items[0].approvalState).toBe("generating");
+      expect(items[0].approvalState).toBeUndefined();
     }
   });
 

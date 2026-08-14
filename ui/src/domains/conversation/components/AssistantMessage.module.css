@@ -1,15 +1,15 @@
 /**
- * AssistantMessage 视觉（原型 .msg.assistant + .msg-head + .msg-text）。
+ * AssistantMessage 视觉（原型 .msg.assistant + .msg-text）。
  *
- * v2 原型：无 avatar、head 只保留 approval-state（中文标签）；消息文本
- * 无气泡、font-size 15 / line-height 1.75、margin-top 7px。
- * 状态色对齐原型：pending=warn / approved=success / rejected=danger /
- * stopped=muted / failed=danger 82%。
+ * v2 原型：无 avatar、无状态 head（approval-state 标签已移除）；消息文本
+ * 无气泡、font-size 15.5 / line-height 1.8。turn 分段渲染：内容片段紧凑
+ * 续排（分段间无间距，段落内 0.6em 段距由 markdown p 规则保留），
+ * 工具行承担视觉分隔（docs/design/tool-call-embed-demo.html）。
  */
 .message {
   display: flex;
   gap: var(--space-3);
-  padding: var(--space-18px) 0 var(--space-6px);
+  padding: var(--space-6px) 0;
 }
 
 .body {
@@ -17,28 +17,8 @@
   flex: 1;
 }
 
-.head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.state {
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
-}
-
-.state.generating { color: var(--color-warn); }
-/* 常态标签弱化为 muted（三级元信息不抢正文焦点）；异常态保留语义色 */
-.state.completed { color: var(--color-muted); }
-.state.submitted { color: var(--color-muted); }
-.state.failed { color: color-mix(in oklab, var(--color-danger) 82%, var(--color-muted)); }
-.state.cancelled { color: var(--color-muted); }
-.state.rejected { color: var(--color-danger); }
-
 .text {
-  margin-top: var(--space-7px);
+  margin-top: 0;
   /* 用户要求正文用黑体（--font-ui）；400 原生字重——YaHei/Segoe UI 无原生
      550，合成加粗会发糊发重。15.5px + 0.01em 字距（Windows 15px 发虚）。 */
   font-family: var(--font-ui);
@@ -72,14 +52,9 @@
   line-height: 1.55;
 }
 
-/* ============ turn 分段工具行（每请求一行：内容片段 + 单行工具） ============ */
 
-.segment {
-  min-width: 0;
-}
-
-.segment + .segment {
-  margin-top: var(--space-3);
+.segment:first-child .text {
+  margin-top: 0;
 }
 
 .toolLine {
@@ -87,7 +62,7 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-6px) var(--space-2);
-  margin-top: var(--space-6px);
+  margin-top: var(--space-2px);
   font-size: var(--fs-12);
   line-height: 1.6;
 }

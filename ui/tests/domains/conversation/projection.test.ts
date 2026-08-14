@@ -53,7 +53,7 @@ describe("ConversationTimelineProjection", () => {
     if (assistant.kind === "assistant") {
       expect(assistant.text).toBe("雨落得密");
       expect(assistant.streaming).toBe(false);
-      expect(assistant.approvalState).toBe("completed");
+      expect(assistant.approvalState).toBeUndefined();
     }
   });
 

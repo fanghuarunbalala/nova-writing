@@ -120,9 +120,6 @@ export function mapProjectionTimeline(
           text: item.text,
           cards: cardsInRange(projection.cards, from, to),
           streaming: item.streaming === true,
-          approvalState: (item.streaming === true ? "generating" : "completed") as
-            | "generating"
-            | "completed",
           // 工具行随 core 项的分段结构直接透传（每段 = 内容 + 单行工具，无 seq 过滤）
           segments: item.segments ?? Object.freeze([]),
         }),

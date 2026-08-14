@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { findPendingToolIds } from "../AgentLoop.js";
 import type { LLMessage } from "../../provider/types.js";
-import { toolCallIdOf, readPersistedMode, persistMode } from "../../../node/runtime/runDesktopRuntimeChildEntrypoint.js";
+import { readPersistedMode, persistMode } from "../../../node/runtime/runDesktopRuntimeChildEntrypoint.js";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,18 +30,26 @@ describe("findPendingToolIds（resume 触发判定）", () => {
   });
 });
 
-describe("审批 requestId 编解码往返（冒号分隔）", () => {
-  it("conv id 含下划线 + toolCallId 含下划线均可还原", () => {
-    // 生成端（AgentLoop.gateTool）格式：approval:{convId}:{turnSeq}:{toolCallId}
-    const convId = "conv_5";
-    const toolCallId = "call_abc_123";
-    const requestId = `approval:${convId}:3:${toolCallId}`;
-    expect(toolCallIdOf(requestId)).toBe(toolCallId);
-  });
-
-  it("未知格式返回 undefined", () => {
-    expect(toolCallIdOf("approval_conv_1_1_t1")).toBeUndefined();
-    expect(toolCallIdOf("short")).toBeUndefined();
+describe("审批批次恢复映射（toolCalls 成员 → 批决策）", () => {
+  it("批次条目的每个 toolCallId 都映射到同一条目（整批共享决策）", () => {
+    // 模拟 child 入口的 byToolCallId 构建（审批按 turn 批量：
+    // 一条 ApprovalQueueItem 展开出 M 个成员映射）
+    const decisions = [
+      {
+        requestId: "approval:conv_5:3:b1",
+        toolCalls: [
+          { toolCallId: "call_abc_123", toolName: "NovelWrite", args: "{}" },
+          { toolCallId: "call_def_456", toolName: "OutlineWrite", args: "{}" },
+        ],
+        status: "approved",
+      },
+    ];
+    const byToolCallId = new Map<string, { status: string }>();
+    for (const item of decisions) {
+      for (const tc of item.toolCalls) byToolCallId.set(tc.toolCallId, item);
+    }
+    expect(byToolCallId.get("call_abc_123")?.status).toBe("approved");
+    expect(byToolCallId.get("call_def_456")?.status).toBe("approved");
   });
 });
 

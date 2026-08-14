@@ -15,16 +15,24 @@ export type ApprovalQueueStatus = "pending" | "approved" | "rejected" | "edited"
 /** 决策者：ui（root conversation）/ parent（teammate 冒泡） */
 export type ApprovalDecisioner = "ui" | "parent";
 
-/** 审批队列条目 */
-export interface ApprovalQueueItem {
-	/** 发起会话 */
-	conversationId: ConversationId;
-	/** 审批请求 id（approval:{conversationId}:{turnSeq}:{toolCallId}） */
-	requestId: string;
+/** 审批队列条目中的待审工具调用（一批 = 同一次模型返回的全部待审调用） */
+export interface ApprovalToolCall {
+	/** 工具调用 id（恢复时按此匹配暂停点） */
+	toolCallId: string;
 	/** 工具名 */
 	toolName: string;
 	/** 工具参数（JSON 字符串） */
 	args: string;
+}
+
+/** 审批队列条目 */
+export interface ApprovalQueueItem {
+	/** 发起会话 */
+	conversationId: ConversationId;
+	/** 审批请求 id（approval:{conversationId}:{turnSeq}:b{batchSeq}） */
+	requestId: string;
+	/** 待审批的工具调用（≥1 项；决策作用于整批） */
+	toolCalls: readonly ApprovalToolCall[];
 	/** 决策者 */
 	decisioner: ApprovalDecisioner;
 	/** 状态 */
@@ -103,7 +111,7 @@ export class WaitRequestQueue {
 	}
 
 	/**
-	 * 子进程重启查询：该会话的待决/已决条目（按 requestId 尾段 toolCallId 匹配暂停点）
+	 * 子进程重启查询：该会话的待决/已决条目（按条目 toolCalls 成员 toolCallId 匹配暂停点）
 	 * @param conversationId 会话 id
 	 * @returns 条目列表
 	 */

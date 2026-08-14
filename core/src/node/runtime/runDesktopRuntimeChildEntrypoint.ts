@@ -87,13 +87,6 @@ function conversationExposeOf(holder: { conv?: Conversation }): Record<string, u
 	};
 }
 
-/** 由 requestId 尾段解析 toolCallId（requestId = approval:{convId}:{turnSeq}:{toolCallId}，
- *  冒号分隔——convId/toolCallId 自身可含下划线，不可用 "_" split） */
-export function toolCallIdOf(requestId: string): string | undefined {
-	const parts = requestId.split(":");
-	return parts.length >= 4 ? parts.slice(3).join(":") : undefined;
-}
-
 /** child 崩溃自曝日志路径 env（ProcessSpawner 注入） */
 const CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
 
@@ -235,11 +228,11 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		);
 		cmsApi = channel.getAPI() as unknown as CmsApi;
 		// 重启补完路径：查询 CMS 待决决策 → 暂停点续跑决策器
+		//（审批按 turn 批量：条目的每个 toolCalls 成员都映射到该批决策）
 		const decisions = await cmsApi.takeDecisions(conversationId).catch(() => []);
 		const byToolCallId = new Map<string, ApprovalQueueItem>();
 		for (const item of decisions) {
-			const toolCallId = toolCallIdOf(item.requestId);
-			if (toolCallId !== undefined) byToolCallId.set(toolCallId, item);
+			for (const tc of item.toolCalls) byToolCallId.set(tc.toolCallId, item);
 		}
 		resumePendingDecider = async (toolCallId) => {
 			const item = byToolCallId.get(toolCallId);

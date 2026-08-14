@@ -115,8 +115,7 @@ describe("ScheduleProjection", () => {
       {
         conversationId: "c1",
         requestId: "ap-1",
-        toolName: "NovelParagraphWrite",
-        args: "{}",
+        toolCalls: [{ toolCallId: "t1", toolName: "NovelParagraphWrite", args: "{}" }],
         decisioner: "ui",
         status: "pending",
         requestedAt: "2026-08-05T09:00:00.000Z",
@@ -124,8 +123,7 @@ describe("ScheduleProjection", () => {
       {
         conversationId: "c1",
         requestId: "ap-2",
-        toolName: "NovelOutlineEdit",
-        args: "{}",
+        toolCalls: [{ toolCallId: "t1", toolName: "NovelOutlineEdit", args: "{}" }],
         decisioner: "ui",
         status: "approved",
         requestedAt: "2026-08-05T09:10:00.000Z",

@@ -449,8 +449,11 @@ export class ConversationManagerServer implements Contract {
 		this.waitQueue.submit({
 			conversationId,
 			requestId: req.requestId,
-			toolName: req.toolName,
-			args: req.args,
+			toolCalls: req.toolCalls.map((tc) => ({
+				toolCallId: tc.toolCallId,
+				toolName: tc.toolName,
+				args: tc.args,
+			})),
 			decisioner: parentId !== undefined ? "parent" : "ui",
 			status: "pending",
 			requestedAt: new Date().toISOString(),

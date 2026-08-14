@@ -25,8 +25,13 @@ function item(opts: {
   return {
     conversationId: opts.conversationId,
     requestId: opts.requestId,
-    toolName: opts.toolName ?? "CharacterWrite",
-    args: opts.args ?? JSON.stringify({ values: [{ name: "林夏" }] }),
+    toolCalls: [
+      {
+        toolCallId: "t1",
+        toolName: opts.toolName ?? "CharacterWrite",
+        args: opts.args ?? JSON.stringify({ values: [{ name: "林夏" }] }),
+      },
+    ],
     decisioner: "ui",
     status: opts.status ?? "pending",
     requestedAt: opts.requestedAt ?? "2026-08-05T09:00:00.000Z",

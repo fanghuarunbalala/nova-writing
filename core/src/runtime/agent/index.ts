@@ -2,4 +2,6 @@
 
 export * from "./AgentDefinition.js";
 export * from "./AgentCapability.js";
+export * from "./AgentAssembler.js";
 export * from "./NovelAgent.js";
+export * from "./definitions/index.js";

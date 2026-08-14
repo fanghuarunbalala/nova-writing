@@ -1,35 +1,29 @@
 /**
- * Novel Agent 装配：组装完整 main agent（system 分节 + 全部工具 + 工具调度）。
+ * Novel Agent 装配：声明式定义（novelAgentDefinition）经 AgentAssembler 解析为
+ * 完整 main agent（system 分节 + 全部工具 + 工具调度）。
  * 对齐旧 NovelAgentDefinition（agentType="novel"）；compose nudge 由 Conversation 层注入（依赖 ConversationContext）。
  */
 import type { Provider } from "../provider/Provider.js";
-import type { AgentCapability } from "./AgentCapability.js";
+import type { AgentDefinition } from "./AgentDefinition.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { ToolDef } from "../tool/ToolDef.js";
+import type { DynamicInputProvider } from "../prompt/PromptSection.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
-import { createFileTools } from "../tool/definitions/files.js";
+import { AgentAssembler } from "./AgentAssembler.js";
 import {
-  createCharacterTools,
-  createLocationTools,
-  createOutlineTools,
-  createParagraphTools,
-  createPublicationTools,
-  createDeleteTool,
-} from "../tool/definitions/novel.js";
+  novelAgentDefinition,
+  novelSectionRegistry,
+} from "./definitions/NovelAgentDefinition.js";
 import {
-  coreRuntimeProtocolSection,
-  toolGuidanceSection,
-} from "../prompt/sections/agent.js";
-import {
-  novelIdentitySection,
-  novelSystemSection,
-  novelCraftSection,
-  novelExecutionSection,
-} from "../prompt/sections/novel.js";
+  NOVEL_TOOL_GROUP_CATALOG,
+  createNovelToolGroupResolver,
+} from "./definitions/NovelToolGroups.js";
 import type { NovelHandle } from "../../novel/client/NovelHandle.js";
 import type { Logger } from "../../log/Logger.js";
 import type { LoopContextListener } from "../loop/types.js";
 import type { LLMessage } from "../provider/types.js";
+import type { ComposeModeStateProvider } from "../../conversation/compose/ComposeModeState.js";
+import type { ConversationTodoStore } from "../todo/TodoProtocol.js";
 import type {
   ConversationApprovalDecision,
   ConversationApprovalRequest,
@@ -37,6 +31,8 @@ import type {
 
 /** Novel Agent 装配选项 */
 export interface NovelAgentOptions {
+  /** Agent 定义（声明式配置；缺省 novelAgentDefinition） */
+  definition?: AgentDefinition;
   /** 工作区路径（工具文件操作环境） */
   workspace: string;
   /** Provider 实例 */
@@ -57,39 +53,34 @@ export interface NovelAgentOptions {
   resumePendingDecider?: (toolCallId: string) => Promise<"approve" | "reject" | "expired" | undefined>;
   /** 结构化日志（pino；provider 调用错误可见性） */
   logger?: Logger;
+  /** 动态段输入提供者（node 层注入 workdir/platform/NOVEL.md；缺省空输入） */
+  dynamicInput?: DynamicInputProvider;
+  /** compose 模式状态提供者（compose_mode nudge 装配；缺省不注入该 nudge） */
+  composeState?: ComposeModeStateProvider;
+  /** Todo 存储（runtime.todo 组 TodoWrite 装配；缺省 InMemoryConversationTodoStore） */
+  todoStore?: ConversationTodoStore;
 }
 
 /**
  * 装配完整 Novel Agent（main agent）
- * @param opts 装配选项
+ * @param opts 装配选项（声明式定义 + 运行时依赖）
  * @returns AgentLoop（含完整 AgentCapability + 工具调度）
  */
 export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
-  const toolDefs: ToolDef[] = [
-    ...createFileTools(opts.workspace),
-    ...createCharacterTools(opts.handle),
-    ...createLocationTools(opts.handle),
-    ...createOutlineTools(opts.handle),
-    ...createParagraphTools(opts.handle),
-    ...createPublicationTools(opts.handle),
-    ...createDeleteTool(opts.handle),
-  ];
-  const capability: AgentCapability = {
-    systemSections: [
-      coreRuntimeProtocolSection,
-      novelIdentitySection,
-      novelSystemSection,
-      novelCraftSection,
-      novelExecutionSection,
-      toolGuidanceSection,
-    ],
-    toolDefs,
-    nudgePolicies: [], // compose nudge 由 Conversation 层注入（依赖 ConversationContext）
-    compactPolicies: [],
-  };
+  const definition = opts.definition ?? novelAgentDefinition;
+  const assembler = new AgentAssembler({
+    definition,
+    sectionRegistry: novelSectionRegistry,
+    toolGroupCatalog: NOVEL_TOOL_GROUP_CATALOG,
+    resolveToolGroup: createNovelToolGroupResolver({
+      workspace: opts.workspace,
+      handle: opts.handle,
+    }),
+  });
+  const capability = assembler.assemble();
   const dispatcher: ToolDispatcher = {
     dispatch: async (_ctx, call) => {
-      const tool = toolDefs.find((t) => t.name === call.name);
+      const tool = capability.toolDefs.find((t) => t.name === call.name);
       if (!tool) throw new Error(`未知工具: ${call.name}`);
       return tool.handler.execute(call);
     },
@@ -107,5 +98,6 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     requestApproval: opts.requestApproval,
     resumePendingDecider: opts.resumePendingDecider,
     logger: opts.logger,
+    dynamicInput: opts.dynamicInput,
   });
 }

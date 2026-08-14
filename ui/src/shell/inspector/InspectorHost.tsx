@@ -10,12 +10,13 @@
  * --insp-w（仅拖过才写，未拖交给 CSS）。
  *
  * insp-head（对齐原型）：标题（.insp-title，按面板类型显示「审批/档案/大纲单元/
- * 对话元信息」）+ 审批模式下「目录 N」按钮（点击弹出覆盖抽屉，drawerOpen 状态）+
- * kicker + close。面板内审批目录始终为左侧滑出覆盖抽屉（无常驻列），
- * 选中条目自动收起。close 触发 inspectorRouter.close()。
+ * 对话元信息」）+ 审批模式下「目录 N」按钮（点击弹出覆盖抽屉，drawerOpen 状态，
+ * N = 当前活动会话的待审批数）+ kicker + close。面板内审批目录始终为
+ * 左侧滑出覆盖抽屉（无常驻列），选中条目自动收起。close 触发 inspectorRouter.close()。
  */
 import {
   useCallback,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -64,8 +65,6 @@ export interface InspectorHostProps {
   /** 审批目标实体内容解析器（lite：经 api.novel.* 查询 + 乐观锁 stale 判定）。 */
   readonly resolveEntity?: ApprovalEntityResolver;
   readonly onLocateInContent?: (entityId: string) => void;
-  /** 审批目录「跳转」：切换主视图到对应对话（应用层负责 select + transition）。 */
-  readonly onJumpToConversation?: (conversationId: string) => void;
 }
 
 export function InspectorHost({
@@ -77,13 +76,23 @@ export function InspectorHost({
   approvalStore,
   resolveEntity,
   onLocateInContent,
-  onJumpToConversation,
 }: InspectorHostProps) {
   const route = useInspectorRoute(inspectorRouter);
   const [draggedW, setDraggedW] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const widthRef = useRef<number | null>(null);
   const approvalSnapshot = useExternalStore(approvalStore);
+  const activeConversationId = conversationCatalog.getSnapshot().activeConversationId;
+  // 「目录 N」徽标：当前活动会话的待审批数（面板已会话化，不再展示全局计数）
+  const pendingCount = useMemo(
+    () =>
+      approvalSnapshot.approvals.filter(
+        (approval) =>
+          approval.conversationId === activeConversationId &&
+          approval.status === "pending",
+      ).length,
+    [approvalSnapshot.approvals, activeConversationId],
+  );
   // 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right 收起）。
   const open = route.state.kind !== "closed";
 
@@ -138,8 +147,8 @@ export function InspectorHost({
                 aria-controls="approval-directory"
               >
                 目录
-                {approvalSnapshot.pendingCount > 0 ? (
-                  <span className={styles.ltCnt}>{approvalSnapshot.pendingCount}</span>
+                {pendingCount > 0 ? (
+                  <span className={styles.ltCnt}>{pendingCount}</span>
                 ) : null}
               </button>
             ) : null}
@@ -157,8 +166,8 @@ export function InspectorHost({
             {route.state.kind === "approval" ? (
               <ApprovalPanel
                 store={approvalStore}
+                conversationId={activeConversationId}
                 resolveEntity={resolveEntity}
-                onJumpToConversation={onJumpToConversation}
                 drawerOpen={drawerOpen}
                 onToggleDrawer={setDrawerOpen}
               />

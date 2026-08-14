@@ -1,59 +1,100 @@
 /**
- * ApprovalPanel 单测：详情区展示中文参数行、op diff 符号、删除/编辑目标实体内容解析、
- * 乐观锁失效提示、解析失败回退原始参数、已决审批不解析。
+ * ApprovalPanel 单测（现行 API：ApprovalStore({api}) + ApprovalQueueItem）：
+ * 目录按 conversationId 会话化过滤、平铺审批组（无跨会话分组/跳转）、
+ * 详情区中文参数与 op 色块、待审决策按钮、实体内容解析与 stale 提示、
+ * ExitComposeMode 审批的 design 草稿确认体（CCB 式，不走参数区）。
  */
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import type { ApprovalQueueItem, NovelApiClient } from "@novel/core";
 import userEvent from "@testing-library/user-event";
+import type { ApprovalQueueItem } from "@novel/core";
 import { ApprovalStore } from "../../../../src/domains/approval/ApprovalStore.js";
 import { ApprovalPanel } from "../../../../src/domains/approval/components/ApprovalPanel.js";
 import type { ResolvedEntityContent } from "../../../../src/domains/approval/approvalEntityResolver.js";
 import { FrontendPlatformProvider } from "../../../../src/platform/FrontendPlatformContext.js";
 
-function queueItem(overrides: Partial<ApprovalQueueItem> = {}): ApprovalQueueItem {
+/** 审批队列条目夹具（args 为 JSON 字符串，与 CMS wait 队列一致） */
+function item(opts: {
+  conversationId: string;
+  requestId: string;
+  toolName?: string;
+  args?: string;
+  status?: ApprovalQueueItem["status"];
+  requestedAt?: string;
+}): ApprovalQueueItem {
   return {
-    conversationId: "C-1",
-    requestId: "AR-1",
-    toolName: "CharacterWrite",
-    args: JSON.stringify({
-      values: [{ name: "林夏", aliases: ["夏"], authorNotes: "航运经理" }],
-    }),
+    conversationId: opts.conversationId,
+    requestId: opts.requestId,
+    toolName: opts.toolName ?? "CharacterWrite",
+    args: opts.args ?? JSON.stringify({ values: [{ name: "林夏" }] }),
     decisioner: "ui",
-    status: "pending",
-    requestedAt: "2026-08-05T09:00:00.000Z",
-    ...overrides,
+    status: opts.status ?? "pending",
+    requestedAt: opts.requestedAt ?? "2026-08-05T09:00:00.000Z",
   };
 }
 
-async function makeStore(items: readonly ApprovalQueueItem[]): Promise<ApprovalStore> {
-  const api = {
-    conversations: {} as never,
-    novel: {} as never,
-    approvals: {
-      list: vi.fn(async () => items),
-      resolve: vi.fn(async () => true),
-    },
-  } as unknown as NovelApiClient;
-  const store = new ApprovalStore({ api });
+/** 用给定条目构造已拉取完毕的 store */
+async function makeStore(approvals: readonly ApprovalQueueItem[]): Promise<ApprovalStore> {
+  const store = new ApprovalStore({
+    api: {
+      approvals: {
+        list: vi.fn(async () => approvals),
+        resolve: vi.fn(async () => true),
+      },
+    } as never,
+  });
   await store.refresh();
   return store;
 }
 
 describe("ApprovalPanel", () => {
-  it("shows Chinese params and op diff glyphs", async () => {
-    const store = await makeStore([queueItem()]);
-    render(<ApprovalPanel store={store} />);
-    // 工具名中文化（identity + 参数组色带）。
-    expect(screen.getAllByText("角色写入").length).toBeGreaterThan(0);
-    expect(screen.getByText("审批参数")).toBeInTheDocument();
-    expect(screen.getByText("名称")).toBeInTheDocument();
-    // 目录行标题 + 参数值两处出现。
+  it("filters the directory to the given conversation (no cross-conversation groups)", async () => {
+    const store = await makeStore([
+      item({ conversationId: "conv-a", requestId: "r1", args: JSON.stringify({ values: [{ name: "林夏" }] }) }),
+      item({ conversationId: "conv-b", requestId: "r2", args: JSON.stringify({ values: [{ name: "苏眉" }] }) }),
+    ]);
+    render(<ApprovalPanel store={store} conversationId="conv-a" drawerOpen />);
+    // 目录只有当前会话的条目；跨会话分组与「跳转」按钮已移除。
     expect(screen.getAllByText("林夏").length).toBeGreaterThan(0);
-    expect(screen.getByText("作者注记")).toBeInTheDocument();
-    // 方案 E：diff 符号（标题 + 参数行 gutter）。
+    expect(screen.queryByText("苏眉")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "跳转" })).not.toBeInTheDocument();
+  });
+
+  it("shows all approvals when conversationId is omitted (host fallback)", async () => {
+    const store = await makeStore([
+      item({ conversationId: "conv-a", requestId: "r1", args: JSON.stringify({ values: [{ name: "林夏" }] }) }),
+      item({ conversationId: "conv-b", requestId: "r2", args: JSON.stringify({ values: [{ name: "苏眉" }] }) }),
+    ]);
+    render(<ApprovalPanel store={store} drawerOpen />);
+    expect(screen.getAllByText("林夏").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("苏眉").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty state when the conversation has no approvals", async () => {
+    const store = await makeStore([
+      item({ conversationId: "conv-b", requestId: "r1" }),
+    ]);
+    render(<ApprovalPanel store={store} conversationId="conv-a" drawerOpen />);
+    expect(screen.getByText("暂无审批请求")).toBeInTheDocument();
+  });
+
+  it("shows Chinese tool label, op chip and decision buttons for a pending group", async () => {
+    const store = await makeStore([
+      item({ conversationId: "conv-a", requestId: "r1" }),
+    ]);
+    render(<ApprovalPanel store={store} conversationId="conv-a" drawerOpen />);
+    // 工具名中文化（identity meta + 详情色带）。
+    expect(screen.getAllByText("角色写入").length).toBeGreaterThan(0);
+    // op 色块（CharacterWrite → add）：标题 diff 符号。
     expect(screen.getAllByText("+").length).toBeGreaterThan(0);
-    // 无旧版 diff 区与执行结果区。
+    // 参数区（无 resolver → 平铺原始参数）。
+    expect(screen.getByText("审批参数")).toBeInTheDocument();
+    // 待审批 → 决策按钮可用；已处理横幅不出现。
+    expect(screen.getByRole("button", { name: "批准" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "拒绝" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "请求修改" })).toBeInTheDocument();
+    expect(screen.queryByText(/已处理/)).not.toBeInTheDocument();
+    // 无旧版 diff 区与执行结果区（方案 E 已移除）。
     expect(screen.queryByText("大纲变更")).not.toBeInTheDocument();
     expect(screen.queryByText("正文变更")).not.toBeInTheDocument();
     expect(screen.queryByText("实体变更")).not.toBeInTheDocument();
@@ -61,17 +102,49 @@ describe("ApprovalPanel", () => {
   });
 
   it("shows the pending pill without an item count for a single request", async () => {
-    const store = await makeStore([queueItem()]);
-    render(<ApprovalPanel store={store} />);
+    const store = await makeStore([
+      item({ conversationId: "conv-a", requestId: "r1" }),
+    ]);
+    render(<ApprovalPanel store={store} conversationId="conv-a" drawerOpen />);
     // 目录行 pill 保留（待批准），单请求无「N 项」计数。
     expect(screen.getAllByText("待批准").length).toBeGreaterThan(0);
     expect(screen.queryByText(/项待批准/)).not.toBeInTheDocument();
   });
 
+  it("renders resolved entity content for edit instead of raw values", async () => {
+    const store = await makeStore([
+      item({
+        conversationId: "conv-a",
+        requestId: "r2",
+        toolName: "CharacterEdit",
+        args: JSON.stringify({
+          values: [{ characterId: "c-1", baseRevision: 1, patch: { summary: "新简介" } }],
+        }),
+      }),
+    ]);
+    const resolveEntity = vi.fn(async () => ({
+      kind: "character",
+      id: "c-1",
+      name: "林夏",
+      op: "edit",
+      fields: [
+        { field: "summary", label: "简介", old: "旧简介", new: "新简介", state: "edit" },
+      ],
+      stale: false,
+    }));
+    render(
+      <ApprovalPanel store={store} conversationId="conv-a" drawerOpen resolveEntity={resolveEntity} />,
+    );
+    expect((await screen.findAllByText("林夏")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("简介").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("新简介").length).toBeGreaterThan(0);
+  });
+
   it("renders resolved entity content for delete instead of raw values", async () => {
     const store = await makeStore([
-      queueItem({
-        requestId: "AR-2",
+      item({
+        conversationId: "conv-a",
+        requestId: "r2b",
         toolName: "NovelDelete",
         args: JSON.stringify({
           cascade: false,
@@ -90,7 +163,9 @@ describe("ApprovalPanel", () => {
       ],
       stale: false,
     }));
-    render(<ApprovalPanel store={store} resolveEntity={resolveEntity} />);
+    render(
+      <ApprovalPanel store={store} conversationId="conv-a" drawerOpen resolveEntity={resolveEntity} />,
+    );
     expect(await screen.findByText("夏、夏夏")).toBeInTheDocument();
     expect(screen.getByText("名称")).toBeInTheDocument();
     // 原始参数未展示。
@@ -99,8 +174,9 @@ describe("ApprovalPanel", () => {
 
   it("renders old→new changes for edit approvals", async () => {
     const store = await makeStore([
-      queueItem({
-        requestId: "AR-3",
+      item({
+        conversationId: "conv-a",
+        requestId: "r3",
         toolName: "CharacterEdit",
         args: JSON.stringify({
           values: [{ characterId: "c-1", baseRevision: 1, patch: { summary: "新简介" } }],
@@ -117,42 +193,49 @@ describe("ApprovalPanel", () => {
       ],
       stale: false,
     }));
-    render(<ApprovalPanel store={store} resolveEntity={resolveEntity} />);
+    render(
+      <ApprovalPanel store={store} conversationId="conv-a" drawerOpen resolveEntity={resolveEntity} />,
+    );
     // 红旧/绿新两行，无「改动项」标题。
     expect((await screen.findAllByText("旧简介")).length).toBeGreaterThan(0);
     expect(screen.getByText("新简介")).toBeInTheDocument();
     expect(screen.queryByText("改动项")).not.toBeInTheDocument();
   });
 
-  it("shows the stale banner when the resolver flags stale and hides otherwise", async () => {
+  it("shows stale banner when the resolver reports a stale target and hides when fresh", async () => {
     const store = await makeStore([
-      queueItem({
-        requestId: "AR-4",
-        toolName: "NovelDelete",
-        args: JSON.stringify({ values: [{ kind: "character", id: "c-1" }] }),
+      item({
+        conversationId: "conv-a",
+        requestId: "r4",
+        toolName: "CharacterEdit",
+        args: JSON.stringify({
+          values: [{ characterId: "c-1", baseRevision: 1, patch: { summary: "新简介" } }],
+        }),
       }),
     ]);
-    const staleResolver = vi.fn(async (): Promise<ResolvedEntityContent> => ({
+    const staleResolver = vi.fn(async () => ({
       kind: "character",
       id: "c-1",
       name: "林夏",
-      op: "delete",
-      fields: [],
+      op: "edit",
+      fields: [{ field: "summary", label: "简介", old: "旧简介", new: "新简介", state: "edit" }],
       stale: true,
     }));
-    const freshResolver = vi.fn(async (): Promise<ResolvedEntityContent> => ({
+    const freshResolver = vi.fn(async () => ({
       kind: "character",
       id: "c-1",
       name: "林夏",
-      op: "delete",
-      fields: [],
+      op: "edit",
+      fields: [{ field: "summary", label: "简介", old: "旧简介", new: "新简介", state: "edit" }],
       stale: false,
     }));
     const { rerender } = render(
-      <ApprovalPanel store={store} resolveEntity={staleResolver} />,
+      <ApprovalPanel store={store} conversationId="conv-a" drawerOpen resolveEntity={staleResolver} />,
     );
     expect(await screen.findByText(/版本已过期/)).toBeInTheDocument();
-    rerender(<ApprovalPanel store={store} resolveEntity={freshResolver} />);
+    rerender(
+      <ApprovalPanel store={store} conversationId="conv-a" drawerOpen resolveEntity={freshResolver} />,
+    );
     await waitFor(() =>
       expect(screen.queryByText(/版本已过期/)).not.toBeInTheDocument(),
     );
@@ -160,8 +243,9 @@ describe("ApprovalPanel", () => {
 
   it("falls back to raw params when resolution fails", async () => {
     const store = await makeStore([
-      queueItem({
-        requestId: "AR-5",
+      item({
+        conversationId: "conv-a",
+        requestId: "r5",
         toolName: "NovelDelete",
         args: JSON.stringify({
           cascade: false,
@@ -170,14 +254,18 @@ describe("ApprovalPanel", () => {
       }),
     ]);
     const resolveEntity = vi.fn(async () => undefined);
-    render(<ApprovalPanel store={store} resolveEntity={resolveEntity} />);
-    // 解析失败回退原始参数（级联删除 / 类型）。
+    render(
+      <ApprovalPanel store={store} conversationId="conv-a" drawerOpen resolveEntity={resolveEntity} />,
+    );
+    // 解析失败 → 平铺原始参数（级联删除 / 类型）。
     expect(await screen.findByText("级联删除")).toBeInTheDocument();
     expect(screen.getByText("类型")).toBeInTheDocument();
   });
 
   it("resolves add approval and shows green content", async () => {
-    const store = await makeStore([queueItem()]);
+    const store = await makeStore([
+      item({ conversationId: "conv-a", requestId: "r6" }),
+    ]);
     const resolveEntity = vi.fn(async (): Promise<ResolvedEntityContent> => ({
       kind: "character",
       id: "add-character-0",
@@ -186,15 +274,18 @@ describe("ApprovalPanel", () => {
       fields: [{ field: "name", label: "名称", new: "林夏", state: "add" }],
       stale: false,
     }));
-    render(<ApprovalPanel store={store} resolveEntity={resolveEntity} />);
+    render(
+      <ApprovalPanel store={store} conversationId="conv-a" drawerOpen resolveEntity={resolveEntity} />,
+    );
     expect((await screen.findAllByText("林夏")).length).toBeGreaterThan(0);
     expect(resolveEntity).toHaveBeenCalled();
   });
 
   it("renders one resolved block per delete target", async () => {
     const store = await makeStore([
-      queueItem({
-        requestId: "AR-6",
+      item({
+        conversationId: "conv-a",
+        requestId: "r7",
         toolName: "NovelDelete",
         args: JSON.stringify({
           values: [
@@ -224,15 +315,27 @@ describe("ApprovalPanel", () => {
               stale: false,
             },
     );
-    render(<ApprovalPanel store={store} resolveEntity={resolveEntity} />);
+    render(
+      <ApprovalPanel store={store} conversationId="conv-a" drawerOpen resolveEntity={resolveEntity} />,
+    );
     expect((await screen.findAllByText("林夏")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("旧船坞")).length).toBeGreaterThan(0);
   });
 
+  it("shows processed banner and no decision buttons for a resolved approval", async () => {
+    const store = await makeStore([
+      item({ conversationId: "conv-a", requestId: "r8", status: "approved" }),
+    ]);
+    render(<ApprovalPanel store={store} conversationId="conv-a" drawerOpen />);
+    expect(screen.getByText(/已处理/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "批准" })).not.toBeInTheDocument();
+  });
+
   it("does not resolve or flag stale for a resolved approval", async () => {
     const store = await makeStore([
-      queueItem({
-        requestId: "AR-9",
+      item({
+        conversationId: "conv-a",
+        requestId: "r9",
         toolName: "CharacterEdit",
         status: "approved",
         args: JSON.stringify({
@@ -241,7 +344,9 @@ describe("ApprovalPanel", () => {
       }),
     ]);
     const resolveEntity = vi.fn();
-    render(<ApprovalPanel store={store} resolveEntity={resolveEntity} />);
+    render(
+      <ApprovalPanel store={store} conversationId="conv-a" drawerOpen resolveEntity={resolveEntity} />,
+    );
     // 已决审批不解析、不显示失效提示，原始参数作参考。
     expect(resolveEntity).not.toHaveBeenCalled();
     expect(screen.queryByText(/版本已过期/)).not.toBeInTheDocument();
@@ -251,8 +356,9 @@ describe("ApprovalPanel", () => {
 
   it("renders the design draft content for ExitComposeMode approval (CCB-style)", async () => {
     const store = await makeStore([
-      queueItem({
-        requestId: "AR-10",
+      item({
+        conversationId: "C-1",
+        requestId: "r10",
         toolName: "ExitComposeMode",
         args: JSON.stringify({ summary: "第三章正文草稿已完成" }),
       }),
@@ -276,7 +382,7 @@ describe("ApprovalPanel", () => {
           designFile,
         }}
       >
-        <ApprovalPanel store={store} />
+        <ApprovalPanel store={store} conversationId="C-1" drawerOpen />
       </FrontendPlatformProvider>,
     );
     // 提交说明 + 草稿内容（经 designFile 端口读取渲染），不走参数区与「旧版本审批」空态。

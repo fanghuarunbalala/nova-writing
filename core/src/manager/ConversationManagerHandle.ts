@@ -66,6 +66,16 @@ export class ConversationManagerHandle {
 	}
 
 	/**
+	 * 重命名会话（持久化到 storedir/meta.json，重启扫描恢复）
+	 * @param conversationId 会话 id
+	 * @param name 新名字（trim 后非空）
+	 * @returns 是否命中会话
+	 */
+	async rename(conversationId: ConversationId, name: string): Promise<boolean> {
+		return call(() => this.api.rename(conversationId, name), { peer: "manager" });
+	}
+
+	/**
 	 * 转发消息到目标会话（投递 user / command / control）
 	 * @param conversationId 目标会话 id
 	 * @param msg 会话消息

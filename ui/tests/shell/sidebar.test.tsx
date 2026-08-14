@@ -15,7 +15,8 @@ function makeStores() {
   const api = {
     conversations: {
       list: vi.fn(async () => [
-        { conversationId: "conversation_a", name: "a", storeDir: "", status: "active" },
+        // 未命名会话（name === conversationId）→ 列表走 autoTitle「对话 <id 尾 6 位>」
+        { conversationId: "conversation_a", name: "conversation_a", storeDir: "", status: "active" },
       ]),
       create: vi.fn(),
       open: vi.fn(),

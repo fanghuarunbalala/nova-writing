@@ -183,7 +183,6 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
           text={item.text}
           cards={item.cards}
           streaming={item.streaming}
-          eventFlow={item.eventFlow}
           toolTraces={item.toolTraces}
           onResolveReference={resolveReference}
           onNotify={onNotify}

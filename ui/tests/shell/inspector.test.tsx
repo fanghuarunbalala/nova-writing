@@ -1,11 +1,11 @@
 /**
- * inspector 组件测试：恒挂载开合 + 路由渲染 + 拖拽调宽（--insp-w）+ 审批目录分组。
+ * inspector 组件测试：恒挂载开合 + 路由渲染 + 拖拽调宽（--insp-w）+ 审批目录会话化。
  *
  * jsdom 不评估媒体查询 / @container / 布局，因此只断言 inline style / class / aria；
  * 抽屉与响应式宽度只验证状态与 inline 变量（--insp-w）。
  */
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ApprovalQueueItem } from "@novel/core";
 import { InspectorRouter } from "../../src/shared/routing/InspectorRouter.js";
@@ -16,22 +16,44 @@ import { CharacterStore } from "../../src/domains/novel/character/store/Characte
 import { LocationStore } from "../../src/domains/novel/location/store/LocationStore.js";
 import { ApprovalStore } from "../../src/domains/approval/ApprovalStore.js";
 
-function buildApi(items: readonly ApprovalQueueItem[] = []) {
+/** 审批队列条目夹具（args 为 JSON 字符串，与 CMS wait 队列一致） */
+function pendingApproval(conversationId: string, requestId: string, name: string): ApprovalQueueItem {
   return {
-    conversations: { list: vi.fn(async () => ({ conversations: [] })), create: vi.fn(), open: vi.fn() },
+    conversationId,
+    requestId,
+    toolName: "CharacterWrite",
+    args: JSON.stringify({ values: [{ name }] }),
+    decisioner: "ui",
+    status: "pending",
+    requestedAt: "2026-08-05T09:00:00.000Z",
+  };
+}
+
+/** 审批队列的可变后备数据（测试内改列表后 refresh） */
+let approvalsBacking: ApprovalQueueItem[] = [];
+
+function buildApi() {
+  return {
+    conversations: {
+      list: vi.fn(async () => [
+        { conversationId: "conv-a", name: "conv-a", storeDir: "", status: "active" as const },
+      ]),
+      create: vi.fn(),
+      open: vi.fn(),
+    },
     approvals: {
-      list: vi.fn(async () => items),
+      list: vi.fn(async () => approvalsBacking),
       resolve: vi.fn(async () => true),
     },
     novel: {
       overview: { get: vi.fn() },
       outline: {
         get: vi.fn(async () => ({
-          outline: { id: "o1", novelId: "n1" },
+          schemaVersion: 1,
+          scope: { kind: "canonical" },
           units: [
             {
               id: "arc-v1",
-              outlineId: "o1",
               orderKey: "0001",
               title: "第一卷",
               scope: "arc",
@@ -43,21 +65,21 @@ function buildApi(items: readonly ApprovalQueueItem[] = []) {
         getStoryUnit: vi.fn(),
       },
       characters: {
-        list: vi.fn(async () => []),
+        list: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, characters: [] })),
         get: vi.fn(),
       },
       locations: {
-        list: vi.fn(async () => []),
+        list: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, locations: [] })),
         get: vi.fn(),
       },
-      paragraphs: { list: vi.fn(), get: vi.fn() },
-      publication: { get: vi.fn() },
+      manuscript: {},
     },
   } as never;
 }
 
-async function makeStores(approvals: readonly ApprovalQueueItem[] = []) {
-  const api = buildApi(approvals);
+async function makeStores() {
+  approvalsBacking = [];
+  const api = buildApi();
   const conversationCatalog = new ConversationCatalogStore({ api });
   const outlineTree = new StoryOutlineTreeStore({ api });
   const characters = new CharacterStore({ api });
@@ -69,19 +91,6 @@ async function makeStores(approvals: readonly ApprovalQueueItem[] = []) {
   await locations.loadWorkspace("w1");
   await approvalStore.refresh();
   return { conversationCatalog, outlineTree, characters, locations, approvalStore };
-}
-
-/** 待审审批（组标题由 args 派生：values[0].title）。 */
-function pendingApproval(conversationId: string, title: string, requestedAt: string): ApprovalQueueItem {
-  return {
-    conversationId,
-    requestId: `r_${conversationId}`,
-    toolName: "ParagraphWrite",
-    args: JSON.stringify({ values: [{ title }] }),
-    decisioner: "ui",
-    status: "pending",
-    requestedAt,
-  };
 }
 
 describe("InspectorHost", () => {
@@ -119,7 +128,7 @@ describe("InspectorHost", () => {
     const stores = await makeStores();
     const router = new InspectorRouter();
     router.transition({ kind: "conversation", conversationId: "c1" });
-    // 大视口：minW 560、maxW min(1120, 1400-520)=880；860+60 → clamp 到 880。
+    // 大视口：minW 560、maxW min(1120, 1400-520)=880；向右拖 60 → 收窄 60（860 → 800）。
     Object.defineProperty(window, "innerWidth", {
       value: 1400,
       configurable: true,
@@ -128,59 +137,46 @@ describe("InspectorHost", () => {
     render(<InspectorHost inspectorRouter={router} {...stores} />);
     const aside = document.querySelector("aside") as HTMLElement;
     const handle = aside.querySelector('[role="separator"]') as Element;
-    // 左缘把手向左拖变宽（InspectorHost.handleResize 语义）：860+60 → clamp 到 880。
-    fireEvent.pointerDown(handle, { button: 0, clientX: 160, clientY: 0 });
-    fireEvent.pointerMove(window, { clientX: 100, clientY: 0 });
+    fireEvent.pointerDown(handle, { button: 0, clientX: 100, clientY: 0 });
+    fireEvent.pointerMove(window, { clientX: 160, clientY: 0 });
     await new Promise((resolve) => requestAnimationFrame(() => resolve()));
     fireEvent.pointerUp(window);
-    expect(aside.style.getPropertyValue("--insp-w")).toBe("880px");
+    expect(aside.style.getPropertyValue("--insp-w")).toBe("800px");
   });
 
-  it("groups approval directory by conversation and jumps", async () => {
-    const user = userEvent.setup();
-    const stores = await makeStores([
-      pendingApproval("conv-a", "新增第一章", "2026-08-05T09:00:00.000Z"),
-      pendingApproval("conv-b", "新增角色", "2026-08-05T09:10:00.000Z"),
-    ]);
+  it("shows only the active conversation's approvals with a per-conversation badge", async () => {
+    const stores = await makeStores();
     const router = new InspectorRouter();
     router.transition({ kind: "approval", changeSetId: "CS-1" });
-    const onJump = vi.fn();
-    render(
-      <InspectorHost
-        inspectorRouter={router}
-        {...stores}
-        onJumpToConversation={onJump}
-      />,
-    );
-    // 目录按对话分组：两段对话名 + 两个「跳转」按钮。
-    expect(screen.getByText("conv-a")).toBeInTheDocument();
-    expect(screen.getByText("conv-b")).toBeInTheDocument();
-    const jumpButtons = screen.getAllByRole("button", { name: "跳转" });
-    expect(jumpButtons).toHaveLength(2);
-    // 组按最近审批降序：conv-b（09:10）在前。
-    await user.click(jumpButtons[0]);
-    expect(onJump).toHaveBeenNthCalledWith(1, "conv-b");
-    await user.click(jumpButtons[1]);
-    expect(onJump).toHaveBeenNthCalledWith(2, "conv-a");
-    // 选中组详情：无 diff 区；解析器未注入时按参数平铺展示。
-    expect(screen.queryByText("实体变更")).not.toBeInTheDocument();
-    expect(screen.queryByText("正文变更")).not.toBeInTheDocument();
-    expect(screen.getByText("标题")).toBeInTheDocument();
+    approvalsBacking = [
+      pendingApproval("conv-a", "r1", "林夏"),
+      pendingApproval("conv-b", "r2", "苏眉"),
+    ];
+    await stores.approvalStore.refresh();
+    render(<InspectorHost inspectorRouter={router} {...stores} />);
+    // 活动会话 = conv-a（catalog 列表第一条）：目录只列它的审批记录。
+    expect(screen.getAllByText("林夏").length).toBeGreaterThan(0);
+    expect(screen.queryByText("苏眉")).not.toBeInTheDocument();
+    // 「目录」徽标 = 当前会话待审批数（1，而非全局 2）。
+    const dirButton = screen.getByRole("button", { name: /目录/ });
+    expect(within(dirButton).getByText("1")).toBeInTheDocument();
+    // 跨会话「跳转」按钮已移除。
+    expect(screen.queryByRole("button", { name: "跳转" })).not.toBeInTheDocument();
   });
 
   it("toggles the approval drawer and auto-collapses on select", async () => {
     const user = userEvent.setup();
-    const stores = await makeStores([
-      pendingApproval("conv-a", "新增第一章", "2026-08-05T09:00:00.000Z"),
-    ]);
+    const stores = await makeStores();
     const router = new InspectorRouter();
     router.transition({ kind: "approval", changeSetId: "CS-1" });
+    approvalsBacking = [pendingApproval("conv-a", "r1", "林夏")];
+    await stores.approvalStore.refresh();
     render(<InspectorHost inspectorRouter={router} {...stores} />);
     const panel = document.querySelector(".panel") as HTMLElement;
     expect(panel.classList.contains("drawerOpen")).toBe(false);
     await user.click(screen.getByRole("button", { name: /目录/ }));
     expect(panel.classList.contains("drawerOpen")).toBe(true);
-    await user.click(screen.getByRole("button", { name: /新增第一章/ }));
+    await user.click(screen.getByRole("button", { name: /林夏/ }));
     expect(panel.classList.contains("drawerOpen")).toBe(false);
   });
 });

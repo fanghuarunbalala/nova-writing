@@ -163,8 +163,9 @@ describe("ApplicationShell smoke", () => {
     const user = userEvent.setup();
     const api = buildApi();
     api.conversations.list = vi.fn(async () => [
-      { conversationId: "conversation_000001", name: "c1", storeDir: "", status: "active" },
-      { conversationId: "conversation_000002", name: "c2", storeDir: "", status: "active" },
+      // 未命名会话（name === conversationId）→ 列表走 autoTitle「对话 <id 尾 6 位>」
+      { conversationId: "conversation_000001", name: "conversation_000001", storeDir: "", status: "active" },
+      { conversationId: "conversation_000002", name: "conversation_000002", storeDir: "", status: "active" },
     ]);
     const conversationCatalog = new ConversationCatalogStore({ api });
     const novelOverview = new NovelOverviewStore({ api });

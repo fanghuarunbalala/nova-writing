@@ -8,7 +8,7 @@
  * - 模块 css 经动画名 token 间接引用（animation 属性引用 --anim-*，
  *   定义于 tokens.css L2），绕过重命名。
  * - 同名且帧体相同的关键帧合并一份（conv-spin / toast-in / status-sway /
- *   nodePulse 均为多文件逐字重复后合并）；近似不同（view-in 家族）各自保留。
+ *   node-pulse 均为多文件逐字重复后合并）；近似不同（view-in 家族）各自保留。
  * - 动画参数（时长/缓动/iteration）留在组件侧，集中不改变参数。
  */
 @keyframes grad-flow {
@@ -61,7 +61,7 @@
   to { opacity: 1; transform: none; }
 }
 
-@keyframes nodePulse {
+@keyframes node-pulse {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
 }

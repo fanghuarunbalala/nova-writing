@@ -195,7 +195,7 @@
   --anim-dropdown-in:     dropdown-in;
   --anim-spinner-rotate:  spinner-rotate;
   --anim-tooltip-in:      tooltip-in;
-  --anim-node-pulse:      nodePulse;
+  --anim-node-pulse:      node-pulse;
   --anim-status-sway:     status-sway;
   --anim-status-breath:   status-breath;
   --anim-status-bob:      status-bob;
@@ -288,6 +288,7 @@
 
 /* Dark mode 预留（V1 不实现，但结构支持；V2 落地时只覆盖 L3 的
    --color-* / --shadow-*，纪律测试执法） */
+/* stylelint-disable-next-line block-no-empty */
 [data-theme="dark"] {
   /* color tokens 重写为 dark 调色板；V2 实现 */
 }

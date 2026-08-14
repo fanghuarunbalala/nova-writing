@@ -82,6 +82,14 @@
   --fs-13:      13px;
   --fs-12-5:    12.5px;
   --fs-13-5:    13.5px;
+  --fs-9:       9px;
+  --fs-9-5:     9.5px;
+  --fs-10:      10px;
+  --fs-11:      11px;
+  --fs-14-5:    14.5px;
+  --fs-16-5:    16.5px;
+  --fs-22:      22px;
+  --fs-30:      30px;
 
   /* 字重 */
   --fw-regular: 400;
@@ -90,6 +98,8 @@
   --fw-bold:    700;
   --fw-heavy:   800;
   --fw-750:     750; /* 精确值快照：Button.new-conv-btn */
+  --fw-500:     500; /* 精确值快照：非刻度字重 */
+  --fw-600:     600; /* 精确值快照：非刻度字重 */
 
   /* 间距：4px scale 为刻度主干；px 后缀为原型遗留精确快照（区别于 --space-10=40px） */
   --space-0:  0;
@@ -118,6 +128,19 @@
   --space-18px: 18px;
   --space-22px: 22px;
   --space-34px: 34px;
+  --space-15px: 15px;
+  --space-17px: 17px;
+  --space-26px: 26px;
+  --space-28px: 28px;
+  --space-29px: 29px;
+  --space-30px: 30px;
+  --space-38px: 38px;
+  --space-56px: 56px;
+  --space-132px: 132px;
+  --space-2-8px: 2.8px;
+  --space-3-4px: 3.4px;
+  --space-5-5px: 5.5px;
+  --space-6-5px: 6.5px;
 
   /* 圆角 */
   --radius-xs:    5px;
@@ -126,6 +149,11 @@
   --radius-lg:    14px;
   --radius-pill:  999px;
   --radius-10px:  10px; /* 精确值快照：Button.new-conv-btn */
+  --radius-2px:    2px; /* 精确值快照：非刻度圆角 */
+  --radius-4px:    4px; /* 精确值快照：非刻度圆角 */
+  --radius-8px:    8px; /* 精确值快照：非刻度圆角 */
+  --radius-12px:  12px; /* 精确值快照：非刻度圆角 */
+  --radius-16px:  16px; /* 精确值快照：非刻度圆角 */
 
   /* 品牌渐变（美术资产，非角色色；dark 沿用不改） */
   --grad-accent: linear-gradient(
@@ -190,6 +218,8 @@
   --color-danger-border: #b3554d;
   --color-bg-elevated:   #1e1e24;
   --color-text:          #ddd;
+  /* legacy 裸字面量固化：DesignCard.error 的 dark 红（组件内裸 hex，按精确值快照） */
+  --color-design-error:  #e5484d;
 
   /* 阴影 */
   --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04),

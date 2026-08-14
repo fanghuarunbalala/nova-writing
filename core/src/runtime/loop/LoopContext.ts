@@ -56,11 +56,14 @@ export class LoopContext implements ReadonlyLoopContext {
   readonly platform?: string;
   /** 小说全局约束提供者（每 provider call 前调用；缺省空——动态段渲染占位） */
   private readonly novelConstraintsProvider: NovelConstraintsProvider;
+  /** 每次 provider call 发起前回调（mode pending→active 晋升；缺省 no-op） */
+  private readonly beforeProviderCall: () => void | Promise<void>;
 
   /**
    * 构造 LoopContext
    * @param opts Agent 能力 + 工作区 + 可恢复的 turn 消息 + seq 起始值（journal 恢复用）
    * + 平台显示名（环境块，进程常量）+ NOVEL.md 提供者（每调用 fs 读，node 层注入）
+   * + beforeProviderCall（每次 provider call 发起前执行）
    */
   constructor(opts: {
     agentCapability: AgentCapability;
@@ -69,12 +72,14 @@ export class LoopContext implements ReadonlyLoopContext {
     startSeq?: number;
     platform?: string;
     novelConstraintsProvider?: NovelConstraintsProvider;
+    beforeProviderCall?: () => void | Promise<void>;
   }) {
     this.agentCapability = opts.agentCapability;
     this.workspace = opts.workspace;
     this.seq = opts.startSeq ?? 0;
     this.platform = opts.platform;
     this.novelConstraintsProvider = opts.novelConstraintsProvider ?? (async () => undefined);
+    this.beforeProviderCall = opts.beforeProviderCall ?? (async () => {});
     for (const policy of opts.agentCapability.compactPolicies) {
       this.compactChain.register(policy, 0);
     }
@@ -139,6 +144,8 @@ export class LoopContext implements ReadonlyLoopContext {
    * @returns 组装好的 ProviderCall
    */
   async toProviderCall(run: AgentRunConfig, runContext: RunContext, signal?: AbortSignal): Promise<ProviderCall> {
+    // ⓪ provider call 发起前回调（mode pending→active 晋升等；在一切渲染/门控之前）
+    await this.beforeProviderCall();
     // ① 压缩（链式，影响 turns）
     if (this.compactChain.compactIfNeeded(this)) {
       this.notify((l) => l.onCompacted?.(this.turnList));

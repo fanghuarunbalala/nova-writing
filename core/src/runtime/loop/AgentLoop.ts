@@ -13,6 +13,7 @@ import type {
   LoopInput,
 } from "./types.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
+import { isCanonicalNovelWrite } from "../../conversation/compose/canonicalTools.js";
 import { LoopContext } from "./LoopContext.js";
 
 /** 缺省最大轮次（防死循环） */
@@ -63,6 +64,7 @@ export class AgentLoop {
       startSeq: config.startSeq,
       platform: config.platform,
       novelConstraintsProvider: config.novelConstraintsProvider,
+      beforeProviderCall: config.beforeProviderCall,
     });
     for (const listener of config.listeners ?? []) {
       this.context.subscribe(listener);
@@ -253,7 +255,13 @@ export class AgentLoop {
       const decision = await this.config.resumePendingDecider?.(toolCallId);
       let text: string;
       if (decision === "approve") {
-        text = await this.config.toolDispatcher.dispatch(this.context, toolCall);
+        // 重启补完同样执行 compose 权限检查（approve 分支绕过 gateTool）
+        const compose = this.config.composeState?.snapshot(this.config.conversationId ?? "");
+        if (compose?.active === true && isCanonicalNovelWrite(toolCall.name)) {
+          text = `已拒绝（设计模式激活：正式稿只读，请将草稿写入 design 文件，不要调用 ${toolCall.name}）`;
+        } else {
+          text = await this.config.toolDispatcher.dispatch(this.context, toolCall);
+        }
       } else if (decision === "reject") {
         text = "已拒绝";
       } else if (decision === "expired") {
@@ -358,14 +366,22 @@ export class AgentLoop {
   }
 
   /**
-   * 审批门控：requireApproval 工具执行前经 requestApproval 征询。
+   * 审批门控：compose 权限（激活 deny canonical 写 / bypass 放行）→ requireApproval
+   * 工具执行前经 requestApproval 征询。
    * @param tc 工具调用
    * @param turnSeq 当前 turn 序号（requestId 归组用）
    * @returns undefined = 放行执行；字符串 = 拒绝结果文本（作为 tool-call-response 进 turn 继续）
    */
   private async gateTool(tc: ToolCall, turnSeq: number): Promise<string | undefined> {
+    const compose = this.config.composeState?.snapshot(this.config.conversationId ?? "");
+    // compose 激活：canonical 写硬拒绝（无审批通道），Read/文件工具不受影响
+    if (compose?.active === true && isCanonicalNovelWrite(tc.name)) {
+      return `已拒绝（设计模式激活：正式稿只读，请将草稿写入 design 文件，不要调用 ${tc.name}）`;
+    }
     const toolDef = this.config.toolDispatcher.resolve(tc.name);
     if (toolDef?.requireApproval !== true) return undefined;
+    // bypass 模式：canonical 写跳过审批直接放行（ExitComposeMode 不在名单，恒走审批门）
+    if (compose?.mode === "bypass" && isCanonicalNovelWrite(tc.name)) return undefined;
     if (this.config.requestApproval === undefined) return "已拒绝（审批通道未装配）";
     const decision = await this.config.requestApproval({
       requestId: `approval_${this.config.conversationId ?? "conv"}_${turnSeq}_${tc.id}`,
@@ -373,6 +389,10 @@ export class AgentLoop {
       args: tc.args,
     });
     if (decision.kind === "approve") return undefined;
+    if (tc.name === "ExitComposeMode") {
+      // 退出 compose 的驳回：意见随决策回传（PRD F5/D9）
+      return decision.kind === "reject" ? "用户驳回了" : `用户驳回了：${decision.text}`;
+    }
     if (decision.kind === "reject") return "已拒绝";
     return `已拒绝（用户意见：${decision.text}）`;
   }

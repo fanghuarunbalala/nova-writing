@@ -68,6 +68,8 @@ export interface NovelAgentOptions {
   composeState?: ComposeModeStateProvider;
   /** compose 工具服务（novel.compose 组 Enter/ExitComposeMode；缺省用 composeState 自建兜底） */
   composeService?: ComposeModeService;
+  /** 每次 provider call 发起前回调（mode pending→active 晋升；经 LoopContext.toProviderCall 步骤⓪ await） */
+  beforeProviderCall?: () => void | Promise<void>;
   /** Todo 存储（runtime.todo 组 TodoWrite 装配；缺省 InMemoryConversationTodoStore） */
   todoStore?: ConversationTodoStore;
 }
@@ -139,5 +141,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     logger: opts.logger,
     platform: opts.platform,
     novelConstraintsProvider: opts.novelConstraintsProvider,
+    composeState,
+    beforeProviderCall: opts.beforeProviderCall,
   });
 }

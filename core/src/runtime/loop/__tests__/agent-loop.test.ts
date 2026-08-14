@@ -5,6 +5,7 @@ import type { ProviderCall, ProviderResult } from "../../provider/types.js";
 import type { AgentCapability } from "../../agent/AgentCapability.js";
 import type { ToolDispatcher } from "../../tool/ToolDispatcher.js";
 import type { OutputEvent } from "../../../conversation/contract/events/index.js";
+import { ComposeModeStateProvider } from "../../../conversation/compose/index.js";
 
 const capability: AgentCapability = {
   systemSections: [
@@ -176,5 +177,68 @@ describe("AgentLoop.run", () => {
     const loop = makeLoop(provider);
     loop.cancel();
     await expect(loop.run("hi", { sampling: { model: "gpt-5" } })).rejects.toThrow();
+  });
+});
+
+describe("AgentLoop.resumePendingTurn 补完", () => {
+  /** 恢复快照：assistant 带一个未补 tool 结果的 toolCall（ParagraphWrite） */
+  function makeResumeLoop(overrides: {
+    composeState?: ComposeModeStateProvider;
+  } = {}) {
+    const dispatched: string[] = [];
+    const dispatcher: ToolDispatcher = {
+      dispatch: async (_ctx, call) => {
+        dispatched.push(call.name);
+        return "written";
+      },
+      resolve: () => ({
+        name: "ParagraphWrite",
+        version: "1.0.0",
+        requireApproval: true,
+        handler: { execute: async () => "written" },
+      }),
+    };
+    const loop = new AgentLoop({
+      workspace: "/ws",
+      provider: makeProvider([result("stop", "done")]),
+      agentCapability: capability,
+      toolDispatcher: dispatcher,
+      conversationId: "c1",
+      resumePendingDecider: async () => "approve",
+      turnMessages: [
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id: "t1", name: "ParagraphWrite", args: "{}" }],
+        },
+      ],
+      ...(overrides.composeState !== undefined ? { composeState: overrides.composeState } : {}),
+    });
+    return { loop, dispatched };
+  }
+
+  it("approve 决议：handler 正常执行补完", async () => {
+    const { loop, dispatched } = makeResumeLoop();
+    const responses: string[] = [];
+    loop.onOutputEvent((e) => {
+      if (e.type === "tool-call-response" && "result" in e) responses.push(e.result ?? "");
+    });
+    const r = await loop.resumePendingTurn({ sampling: { model: "gpt-5" } });
+    expect(r.final.content).toBe("done");
+    expect(dispatched).toEqual(["ParagraphWrite"]);
+    expect(responses[0]).toBe("written");
+  });
+
+  it("compose 激活时 approve 决议的 canonical 写被 deny（绕过 gateTool 的防护）", async () => {
+    const composeState = new ComposeModeStateProvider();
+    composeState.enter("c1", { designFilePath: "/ws/.novel/design/c1.md" });
+    const { loop, dispatched } = makeResumeLoop({ composeState });
+    const responses: string[] = [];
+    loop.onOutputEvent((e) => {
+      if (e.type === "tool-call-response" && "result" in e) responses.push(e.result ?? "");
+    });
+    await loop.resumePendingTurn({ sampling: { model: "gpt-5" } });
+    expect(dispatched).toEqual([]);
+    expect(responses[0]).toContain("设计模式激活");
   });
 });

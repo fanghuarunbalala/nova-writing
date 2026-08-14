@@ -361,7 +361,14 @@ export class ConversationManagerServer implements Contract {
 		if (item !== undefined) {
 			const handle = this.handles.get(item.conversationId);
 			if (handle !== undefined) {
-				handle.resolveApproval(requestId, decision);
+				// fire-and-forget：进程内实现返回 void，远程代理返回 Promise（契约类型为 void）。
+				// child 已退出时通道拒绝属预期（决策已入 waitQueue，重启经 takeDecisions 续跑），
+				// 吞掉避免 main 进程 unhandled rejection
+				try {
+					void Promise.resolve(handle.resolveApproval(requestId, decision) as unknown).catch(() => {});
+				} catch {
+					// 代理同步抛错（通道已关）同属预期，忽略
+				}
 			}
 		}
 		return true;

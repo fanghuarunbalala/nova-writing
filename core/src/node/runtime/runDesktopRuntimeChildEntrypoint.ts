@@ -131,7 +131,8 @@ function registerCrashHandlers(): void {
  * 启动 conversation 子进程（manager WS 双工）
  */
 export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
-	// 崩溃诊断：一切逻辑之前注册（父进程捕获 stderr 原文落盘，根因因此可见）
+	// 崩溃诊断：一切逻辑之前注册（stderr 回写 + runtime-child.log 落盘，根因因此可见；
+	// 覆盖 be1868d 的内联兜底——writeCrashTrace 先 console.error 再落盘，是其超集）
 	registerCrashHandlers();
 	const conversationId = process.env.CONVERSATION_ID ?? "main";
 	const storedir = process.env.NOVEL_CONVERSATION_STOREDIR;

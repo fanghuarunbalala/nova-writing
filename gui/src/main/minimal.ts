@@ -230,6 +230,17 @@ function createManager(
   return server;
 }
 
+// 崩溃兜底：main 进程任何未捕获异常/未处理 rejection 先留完整痕迹再退出
+// （此前无此 handler 时崩溃只剩 exit 1 + 一行裸 undefined，无法定位）
+process.on("uncaughtException", (e) => {
+  console.error("[main] uncaught exception:", e);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[main] unhandled rejection:", reason);
+  process.exit(1);
+});
+
 async function main(): Promise<void> {
   await app.whenReady();
 
@@ -267,9 +278,6 @@ async function main(): Promise<void> {
       return result;
     },
   };
-  app.on("will-quit", () => {
-    void novelPublisher.close();
-  });
   const conversationsRoot = join(app.getPath("userData"), "novel-storage", "conversations");
 
   // config：JSON 文件持久化（凭据暂明文，safeStorage cipher 后续接）
@@ -291,18 +299,12 @@ async function main(): Promise<void> {
 
   // novel-db WS：conversation 子进程经 kkrpc/ws + token 访问 canonical store（协议定稿 transport）
   const novelWs = await startNovelDbWsServer({ store: publishingStore, token: randomUUID() });
-  app.on("will-quit", () => {
-    void novelWs.close();
-  });
 
   // manager WS（conversation ↔ CMS 单连接双工；manager 与服务端互依 → holder）
   const managerHolder: { manager?: ConversationManagerServer } = {};
   const managerWs = await startConversationManagerWsServer({
     manager: () => managerHolder.manager!,
     token: randomUUID(),
-  });
-  app.on("will-quit", () => {
-    void managerWs.close();
   });
 
   // 当前工作区根路径（spawn 时经 env 注入子进程，agent 文件工具落点）
@@ -376,14 +378,38 @@ async function main(): Promise<void> {
   const novelSubscriber = new EventSubscriber(NOVEL_EVENTS_ADDR, [NOVEL_CHANGED]);
   await novelSubscriber.connect();
   void (async () => {
-    for await (const message of novelSubscriber) {
-      const entity = (message.payload as { entity?: unknown } | null)?.entity;
-      if (typeof entity !== "string") continue;
-      void uiApi.onNovelChanged({ entity }).catch(() => {
-        // renderer 未就绪时忽略（store 下次 loadWorkspace 兜底）
-      });
+    try {
+      for await (const message of novelSubscriber) {
+        const entity = (message.payload as { entity?: unknown } | null)?.entity;
+        if (typeof entity !== "string") continue;
+        void uiApi.onNovelChanged({ entity }).catch(() => {
+          // renderer 未就绪时忽略（store 下次 loadWorkspace 兜底）
+        });
+      }
+    } catch (e) {
+      console.error("[main] novel subscriber stopped:", e);
     }
   })();
+
+  // 退出前有序关闭：zeromq 原生插件（addon.node）在进程退出时若 socket 未干净拆除会
+  // fail-fast（0xC0000409，Event Log 已确认）。will-quit 先 preventDefault，等全部
+  // close（含 SUB socket，其关闭令上方 for-await 自然结束）完成后再真正 quit；
+  // 2s 兜底超时防 close 悬挂导致应用退不掉。
+  let shutdownReady = false;
+  app.on("will-quit", (e) => {
+    if (shutdownReady) return;
+    e.preventDefault();
+    shutdownReady = true;
+    void Promise.race([
+      Promise.allSettled([
+        novelPublisher.close(),
+        novelSubscriber.close(),
+        novelWs.close(),
+        managerWs.close(),
+      ]),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]).finally(() => app.quit());
+  });
 
   // workspace：目录选择器 + 定位器 + 最近列表（内存）
   const locator = new NodeWorkspaceStoreLocator({
@@ -419,8 +445,18 @@ async function main(): Promise<void> {
     height: 640,
     webPreferences: { preload: preloadPath },
   });
-  win.webContents.on("console-message", (_e, level, message) => {
-    console.error(`[renderer:${level}] ${message}`);
+  win.webContents.on("console-message", (_e, ...args: unknown[]) => {
+    // Electron 43 新旧签名兼容：旧 (event, level, message, ...) / 新 (event, details)
+    const first = args[0];
+    const level =
+      typeof first === "object" && first !== null && "level" in first
+        ? (first as { level: unknown }).level
+        : first;
+    const message =
+      typeof first === "object" && first !== null && "message" in first
+        ? (first as { message: unknown }).message
+        : args[1];
+    console.error(`[renderer:${String(level)}] ${String(message)}`);
   });
   await win.loadFile(rendererHtml);
   infoLog("[main] minimal electron ready");

@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Conversation } from "../Conversation.js";
 import { ConversationManagerServer } from "../ConversationManagerServer.js";
 import type { AgentLoop } from "../../../runtime/loop/AgentLoop.js";
@@ -6,6 +9,7 @@ import type { TurnContext } from "../../../runtime/loop/types.js";
 import type { OutputEvent } from "../../contract/events/index.js";
 import type { ConversationJournalService } from "../../contract/journal/index.js";
 import type { ConversationHandle } from "../../contract/handle/index.js";
+import { ComposeModeService, ComposeModeStateProvider } from "../../compose/index.js";
 
 function mockLoop(): AgentLoop {
   const listeners = new Set<(e: OutputEvent) => void>();
@@ -37,18 +41,24 @@ function mockLoop(): AgentLoop {
 }
 
 describe("Conversation", () => {
-  it("mode.set 不立即生效，下次 sendUserMessage 才生效（pendingMode → activeMode）", async () => {
+  it("mode.set 记 pending + 发 mode.pending 事件，promotePendingMode 晋升 active（发 mode.changed 由服务承担）", async () => {
     const conv = new Conversation({
       conversationId: "c1",
       loop: mockLoop(),
       sampling: { model: "gpt-5" },
     });
+    const events: string[] = [];
+    await conv.subscribeEvents((e) => events.push(e.type));
     expect(conv.conversationMode).toBe("review");
     await conv.sendSystemControl({ type: "mode.set", mode: "bypass" });
-    // 尚未生效
+    // 尚未生效（pending 态）
     expect(conv.conversationMode).toBe("review");
-    await conv.sendUserMessage({ text: "hi" });
-    // 下次 turn 生效
+    expect(events).toContain("mode.pending");
+    // 每次 provider call 发起时晋升（入口经 beforeProviderCall 注入本方法）
+    await conv.promotePendingMode();
+    expect(conv.conversationMode).toBe("bypass");
+    // 晋升后 pendingMode 清空，重复调用 no-op
+    await conv.promotePendingMode();
     expect(conv.conversationMode).toBe("bypass");
   });
 
@@ -186,16 +196,20 @@ describe("ConversationManagerServer", () => {
     await server.sendMessageTo(ref.conversationId, { text: "hi" });
   });
 
-  it("sendMessageTo mode.set 经 control 转发，下次生效", async () => {
+  it("sendMessageTo mode.set 经 control 转发（pending 记录），promotePendingMode 后生效", async () => {
     const server = new ConversationManagerServer({
       create: (opts) =>
         new Conversation({ conversationId: opts.conversationId, loop: mockLoop(), sampling: { model: "gpt-5" } }),
     });
     const ref = await server.createOrResume();
+    const handle = ref.handle as unknown as {
+      conversationMode: string;
+      promotePendingMode: () => Promise<void>;
+    };
     await server.sendMessageTo(ref.conversationId, { type: "mode.set", mode: "compose" });
-    expect((ref.handle as unknown as { conversationMode: string }).conversationMode).toBe("review");
-    await server.sendMessageTo(ref.conversationId, { text: "hi" });
-    expect((ref.handle as unknown as { conversationMode: string }).conversationMode).toBe("compose");
+    expect(handle.conversationMode).toBe("review");
+    await handle.promotePendingMode();
+    expect(handle.conversationMode).toBe("compose");
   });
 
   it("submitApprovalRequest 入队 + listApprovals 可见 + resolveApproval 直推驻留会话", async () => {
@@ -222,5 +236,76 @@ describe("ConversationManagerServer", () => {
     const ref = await server.createOrResume();
     await server.terminate(ref.conversationId);
     expect((await server.list())[0].status).toBe("stopped");
+  });
+});
+
+describe("Conversation + compose 服务集成", () => {
+  /** 组装：真实状态机 + 服务（tmpdir designRoot）+ 状态 journal 桩 + hub 事件收集 */
+  function makeComposeConv() {
+    const dir = mkdtempSync(join(tmpdir(), "novel-conv-compose-"));
+    const state = new ComposeModeStateProvider();
+    const service = new ComposeModeService({
+      composeState: state,
+      designRoot: join(dir, "ws", ".novel", "design"),
+    });
+    const stateJournal = { append: vi.fn(async () => {}) };
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop(),
+      sampling: { model: "gpt-5" },
+      composeState: state,
+      composeService: service,
+      stateJournal: stateJournal as never,
+    });
+    service.setEventSink((e) => conv.emitState(e));
+    const hubEvents: OutputEvent[] = [];
+    void conv.subscribeEvents((e) => hubEvents.push(e));
+    return { dir, state, service, stateJournal, conv, hubEvents };
+  }
+
+  /** 进入 compose：mode.set compose → promote（服务 setMode → begin） */
+  async function enterCompose(conv: Conversation) {
+    await conv.sendSystemControl({ type: "mode.set", mode: "compose" });
+    await conv.promotePendingMode();
+  }
+
+  it("ExitComposeMode 审批：提交前 submit（pending + compose.submitted 落 state.jsonl），驳回回 designing", async () => {
+    const { dir, state, stateJournal, conv, hubEvents } = makeComposeConv();
+    await enterCompose(conv);
+    expect(state.snapshot("c1").phase).toBe("designing");
+    const decision = conv.sendApprovalRequest({ requestId: "r1", toolName: "ExitComposeMode", args: "{}" });
+    expect(state.snapshot("c1").phase).toBe("pending");
+    expect(hubEvents.some((e) => e.type === "compose.submitted")).toBe(true);
+    const appended = stateJournal.append.mock.calls.map((c) => (c[0] as OutputEvent).type);
+    expect(appended).toContain("compose.submitted"); // persist 落盘
+    // 驳回（附意见）：回 designing + compose.rejected
+    conv.resolveApproval("r1", { kind: "edit", text: "节奏太慢" });
+    expect(await decision).toEqual({ kind: "edit", text: "节奏太慢" });
+    expect(state.snapshot("c1").phase).toBe("designing");
+    expect(hubEvents.some((e) => e.type === "compose.rejected")).toBe(true);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("批准决议 → compose.approved 瞬态事件（不落盘）", async () => {
+    const { dir, state, stateJournal, conv, hubEvents } = makeComposeConv();
+    await enterCompose(conv);
+    const decision = conv.sendApprovalRequest({ requestId: "r1", toolName: "ExitComposeMode", args: "{}" });
+    conv.resolveApproval("r1", { kind: "approve" });
+    expect(await decision).toEqual({ kind: "approve" });
+    expect(hubEvents.some((e) => e.type === "compose.approved")).toBe(true);
+    const appended = stateJournal.append.mock.calls.map((c) => (c[0] as OutputEvent).type);
+    expect(appended).not.toContain("compose.approved"); // 瞬态不落盘
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("非 ExitComposeMode 审批不驱动 compose 状态", async () => {
+    const { dir, state, conv, hubEvents } = makeComposeConv();
+    await enterCompose(conv);
+    const decision = conv.sendApprovalRequest({ requestId: "r1", toolName: "CharacterWrite", args: "{}" });
+    expect(state.snapshot("c1").phase).toBe("designing"); // 不 submit
+    conv.resolveApproval("r1", { kind: "reject" });
+    expect(await decision).toEqual({ kind: "reject" });
+    expect(hubEvents.some((e) => e.type === "compose.submitted")).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
   });
 });

@@ -6,7 +6,9 @@ import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
 import type { SamplingConfig } from "../../runtime/provider/types.js";
 import type { OutputEvent } from "../contract/events/index.js";
 import { debugLog } from "../../log/debug.js";
-import type { ConversationJournalService } from "../contract/journal/index.js";
+import type { ConversationJournalService, ConversationStateJournalService } from "../contract/journal/index.js";
+import type { ComposeModeStateProvider } from "../compose/ComposeModeState.js";
+import type { ComposeModeService } from "../compose/ComposeModeService.js";
 import type { ConversationInteraction } from "../contract/interaction/index.js";
 import type { WaitingInteractionRequest } from "../contract/interaction/index.js";
 import type {
@@ -60,6 +62,12 @@ export interface ConversationOptions {
 	waitTimeoutMs?: number;
 	/** wait 超时回调（子进程注入 process.exit 等退出行为；内存模式仅解除等待） */
 	onWaitTimeout?: (requestId: string) => void;
+	/** compose 状态提供者（getConversationMode 权威；缺省走 activeMode 字段回退） */
+	composeState?: ComposeModeStateProvider;
+	/** compose 工具服务（mode.set 语义 + ExitComposeMode 审批状态驱动；缺省纯字段语义） */
+	composeService?: ComposeModeService;
+	/** 状态事件 sidecar 写侧（persist 状态事件落盘，重启 hydrate 重放用） */
+	stateJournal?: ConversationStateJournalService;
 }
 
 /** 输出事件订阅回调 */
@@ -90,6 +98,12 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly waitTimeoutMs: number;
 	/** wait 超时回调（子进程注入退出行为） */
 	private readonly onWaitTimeout?: (requestId: string) => void;
+	/** compose 状态提供者（getConversationMode 权威；缺省字段回退） */
+	private readonly composeState?: ComposeModeStateProvider;
+	/** compose 工具服务（mode.set 语义 + Exit 审批状态驱动） */
+	private readonly composeService?: ComposeModeService;
+	/** 状态事件 sidecar 写侧（persist 状态事件落盘） */
+	private readonly stateJournal?: ConversationStateJournalService;
 	/** 待决审批（requestId → {resolve, timer}），无阻塞驻留等待决策 */
 	private readonly pendingApprovals = new Map<
 		string,
@@ -103,6 +117,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	/**
 	 * 构造 Conversation
 	 * @param opts 会话 id + agent 循环 + 采样 + 可选 journal 写侧 + manager wait 通道
+	 * + compose 状态/服务（mode 双态与 Exit 审批驱动）
 	 */
 	constructor(opts: ConversationOptions) {
 		this.conversationId = opts.conversationId;
@@ -112,44 +127,55 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.managerWait = opts.managerWait;
 		this.waitTimeoutMs = opts.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
 		this.onWaitTimeout = opts.onWaitTimeout;
+		this.composeState = opts.composeState;
+		this.composeService = opts.composeService;
+		this.stateJournal = opts.stateJournal;
 		// 订阅 loop 的输出事件（run/followup 均转发到本会话 hub）
 		this.loop.onOutputEvent((e) => this.emit(e));
 	}
 
-	/** 当前生效的会话模式 */
+	/** 当前生效的会话模式（注入 composeState 时以快照为准） */
 	get conversationMode(): ConversationMode {
-		return this.activeMode;
+		return this.composeState?.snapshot(this.conversationId).mode ?? this.activeMode;
 	}
 
 	/** 查询当前生效模式（ConversationHandle 契约；跨 RPC 可调） */
 	async getConversationMode(): Promise<ConversationMode> {
-		return this.activeMode;
+		return this.conversationMode;
 	}
 
 	/**
-	 * 发送用户消息（turn lane）：先应用待生效模式，再入队 followup（不阻塞等待完成）。
+	 * 发送用户消息（turn lane）：入队 followup（不阻塞等待完成）。
 	 * turn 在 followup 时即时创建；有 journal 时同步落盘 user 消息快照后返回持久化回执。
 	 */
 	async sendUserMessage(msg: ConversationUserMessage): Promise<Receipt> {
-		this.applyPendingMode();
 		const turn = this.loop.followup(msg.text, { sampling: this.sampling });
 		return this.journal !== undefined ? await this.journal.appendTurn(turn) : this.receipt(turn.seq);
 	}
 
 	/** 发送用户命令（turn lane，agent 可见）：转文本入队 */
 	async sendUserCommand(cmd: ConversationUserCommand): Promise<Receipt> {
-		this.applyPendingMode();
 		const text = cmd.args ? `${cmd.name} ${JSON.stringify(cmd.args)}` : cmd.name;
 		const turn = this.loop.followup(text, { sampling: this.sampling });
 		return this.journal !== undefined ? await this.journal.appendTurn(turn) : this.receipt(turn.seq);
 	}
 
-	/** 发送系统控制（control lane，可抢占）：mode.set（待下次 turn 生效）/ stop / reload.config */
+	/**
+	 * 发送系统控制（control lane，可抢占）：mode.set（记 pendingMode + 发 mode.pending 瞬态事件；
+	 * active 实际切换在每次 provider call 发起时经 promotePendingMode 晋升）/ stop / reload.config
+	 */
 	async sendSystemControl(ctrl: ConversationSystemControl): Promise<Receipt> {
 		switch (ctrl.type) {
 			case "mode.set":
-				// 不立即生效：仅记录 pendingMode，下一次 turn 开始时才切换
+				// 双态模型：只记 pendingMode，下一次 provider call 发起时才晋升 active（F1）
 				this.pendingMode = ctrl.mode;
+				this.emitState({
+					type: "mode.pending",
+					persist: false,
+					mode: ctrl.mode,
+					conversationId: this.conversationId,
+					ts: new Date().toISOString(),
+				});
 				break;
 			case "stop":
 				this.loop.stop();
@@ -161,12 +187,21 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		return this.receipt(this.journal?.lastSeq ?? 0);
 	}
 
-	/** 应用待生效模式：pendingMode → activeMode（下一次 turn 开始时调用） */
-	private applyPendingMode(): void {
-		if (this.pendingMode !== undefined) {
-			this.activeMode = this.pendingMode;
-			this.pendingMode = undefined;
+	/**
+	 * 晋升待生效模式：pendingMode → active（每次 provider call 发起时由
+	 * beforeProviderCall 注入调用）。先应用 compose 服务中审核期延迟的 mode 目标，
+	 * 再落 pendingMode；无服务时走 activeMode 字段回退（测试/未装配路径）。
+	 */
+	async promotePendingMode(): Promise<void> {
+		await this.composeService?.applyPendingModeTarget(this.conversationId);
+		const target = this.pendingMode;
+		if (target === undefined) return;
+		this.pendingMode = undefined;
+		if (this.composeService !== undefined) {
+			await this.composeService.setMode(this.conversationId, target);
+			return;
 		}
+		this.activeMode = target;
 	}
 
 	/**
@@ -174,15 +209,29 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	 * 返回决策 promise 供 gateTool 驻留等待；决策经 resolveApproval 回传解除；
 	 * 超时（waitTimeoutMs）按拒绝解除并触发 onWaitTimeout（子进程退出行为）。
 	 * 不再经 output hub 发 approval 事件——wait 状态唯一权威是 CMS 队列。
+	 * ExitComposeMode 包装：提交前 service.submit（designing→pending）；决议 approve →
+	 * compose.approved 瞬态事件；reject/edit → designing + 晋升延迟 mode 目标。
 	 */
 	async sendApprovalRequest(req: ConversationApprovalRequest): Promise<ConversationApprovalDecision> {
+		// ExitComposeMode：提交前 submit（designing→pending）。submit 内部全同步
+		//（状态迁移 + 事件），先于队列注册完成，保证写序且不引入微任务竞态
+		if (req.toolName === "ExitComposeMode" && this.composeService !== undefined) {
+			void this.composeService.submit(this.conversationId, req.requestId);
+		}
 		return new Promise<ConversationApprovalDecision>((resolve) => {
+			// 决议包装：先驱动 compose 状态迁移（写序），再解除 gateTool 驻留
+			const settle = (decision: ConversationApprovalDecision): void => {
+				void this.driveExitComposeDecision(req, decision).then(
+					() => resolve(decision),
+					() => resolve(decision),
+				);
+			};
 			const timer = setTimeout(() => {
 				this.pendingApprovals.delete(req.requestId);
 				this.onWaitTimeout?.(req.requestId);
-				resolve({ kind: "reject" });
+				settle({ kind: "reject" });
 			}, this.waitTimeoutMs);
-			this.pendingApprovals.set(req.requestId, { resolve, timer });
+			this.pendingApprovals.set(req.requestId, { resolve: settle, timer });
 			if (this.managerWait !== undefined) {
 				void this.managerWait
 					.submitApproval(this.conversationId, req)
@@ -192,10 +241,24 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 						if (pending === undefined) return;
 						clearTimeout(pending.timer);
 						this.pendingApprovals.delete(req.requestId);
-						resolve({ kind: "reject" });
+						settle({ kind: "reject" });
 					});
 			}
 		});
+	}
+
+	/** ExitComposeMode 决议驱动：approve → compose.approved；reject/edit → designing + 晋升延迟目标 */
+	private async driveExitComposeDecision(
+		req: ConversationApprovalRequest,
+		decision: ConversationApprovalDecision,
+	): Promise<void> {
+		if (req.toolName !== "ExitComposeMode" || this.composeService === undefined) return;
+		if (decision.kind === "approve") {
+			await this.composeService.approveOnDecision(this.conversationId);
+			return;
+		}
+		await this.composeService.rejectOnDecision(this.conversationId);
+		await this.composeService.applyPendingModeTarget(this.conversationId);
 	}
 
 	/** 请求提问（无阻塞；路由同审批，UI 展示延后） */
@@ -267,6 +330,16 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	/** 分发输出事件给所有订阅者 */
 	private emit(e: OutputEvent): void {
 		for (const l of this.eventListeners) l(e);
+	}
+
+	/**
+	 * 状态事件出口（compose 服务 eventSink 装配目标）：写序 = ②persist 先落
+	 * state.jsonl（appendFileSync 同步落盘）→ ③hub 广播；瞬态事件仅广播。
+	 * @param e 状态事件（compose.* / mode.*）
+	 */
+	emitState(e: OutputEvent): void {
+		if (e.persist) void this.stateJournal?.append(e);
+		this.emit(e);
 	}
 
 	/** 订阅事件（内部：外部经 events() 订阅时注册 listener），返回取消订阅函数 */

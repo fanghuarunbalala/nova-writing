@@ -94,9 +94,12 @@ export class ConversationProjectionBinding {
     this.requireHandle().resolveApproval(requestId, decision);
   }
 
-  /** 查询当前生效的会话模式（review/bypass/compose）。 */
+  /** 查询当前生效的会话模式（review/bypass/compose）；绑定未 active 时回退默认 review（启动时序无关） */
   getConversationMode(): Promise<ConversationMode> {
-    return this.requireHandle().getConversationMode();
+    if (this.state !== CONVERSATION_PROJECTION_BINDING_STATE.active || this.handle === undefined) {
+      return Promise.resolve("review");
+    }
+    return this.handle.getConversationMode();
   }
 
   resume(): Promise<void> {

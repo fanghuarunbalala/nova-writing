@@ -80,7 +80,7 @@ function ActiveChatSurface({
 }: ActiveChatSurfaceProps) {
   const { snapshot, sendUserMessage, sendSystemControl, getConversationMode, resume } = session;
   const [sendError, setSendError] = useState<string | undefined>(undefined);
-  // 会话模式：启动时查询（mode.set 待下次 turn 生效；切换后本地即时显示）
+  // 会话模式：binding active 后查询（mode.set 待下次 turn 生效；切换后本地即时显示）
   const [mode, setMode] = useState<ConversationMode>("review");
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +92,7 @@ function ActiveChatSurface({
     return () => {
       cancelled = true;
     };
-  }, [conversationId, getConversationMode]);
+  }, [conversationId, getConversationMode, snapshot?.state]);
   const projection = snapshot?.projection;
   const timeline =
     projection !== undefined ? mapProjectionTimeline(projection, "Novel Agent") : [];

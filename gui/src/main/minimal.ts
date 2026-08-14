@@ -48,8 +48,8 @@ const UI_CHANNEL = "ui-rpc";
 /**
  * 回显 AgentLoop：followup 即时开 turn 产 turn-start/user.message → assistant.delta×N →
  * assistant.message/turn-end → journal 快照落盘（验证流式链路 + journal 语义，无需真实 provider）。
- * 文本含「思考」时先发 reasoning delta（验证 thinking 态）；含「审批」时经 requestApproval
- * 阻塞等 UI 决策（验证审批域端到端）。
+ * 文本含「审批」时经 requestApproval 阻塞等 UI 决策（验证审批域端到端）。
+ * 不发 reasoning delta（loop 层已丢弃，见 docs/PRD/gui-performance.md）。
  */
 function createEchoLoop(
   conversationId: string,
@@ -105,16 +105,9 @@ function createEchoLoop(
         return turn;
       }
 
-      // 异步排程发射（避免同步批量发完导致 thinking/generating 状态对 UI 不可见：
+      // 异步排程发射（避免同步批量发完导致 generating 状态对 UI 不可见：
       // React 批量渲染只呈现最终快照；真实 provider 是秒级流不受影响，echo 演示需人工间隔）
       void (async () => {
-        // 文本含「思考」时先发 reasoning delta（验证 thinking 呼吸动画；内容默认丢弃不进正文）
-        if (text.includes("思考")) {
-          emit({ type: "assistant.delta", persist: false, kind: "reasoning", text: "让我想想…", conversationId, ts: now() });
-          await sleep(700);
-          emit({ type: "assistant.delta", persist: false, kind: "reasoning", text: "分析文本结构…", conversationId, ts: now() });
-          await sleep(700);
-        }
         const reply = `（回声）${text}`;
         for (const ch of reply) {
           emit({ type: "assistant.delta", persist: false, kind: "text", text: ch, conversationId, ts: now() });

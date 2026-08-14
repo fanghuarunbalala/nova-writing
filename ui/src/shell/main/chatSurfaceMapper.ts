@@ -6,7 +6,12 @@
  * - assistant 项的 cards / eventFlow / toolTraces 按事件 seq 范围归属
  *   （[sourceSequence, turnEndSequence]，工具调用常落在消息收口前）
  * - cards：core CardDescriptor（proposal/text）→ UI rich ConversationCardDescriptor
- * thinkLines 恒空（reasoning 默认丢弃，只驱动「思考中」状态）。
+ *
+ * 不变量（渲染层依赖）：
+ * - 输出保持 core timeline 追加序（turn 分隔插在对应 user 项之前），
+ *   ConversationTimeline 不再重排（去 O(T log T) sort）；
+ * - 历史 core 项引用稳定（投影仅重建变更项），mapper 按 core 项缓存映射结果，
+ *   历史消息的 UI 项/子数组引用跨快照恒定 → React.memo 浅比较命中、零重渲染。
  */
 import type {
   CardDescriptor,
@@ -66,17 +71,26 @@ function formatTime(timestamp: number): string {
   return `${hours}:${minutes}`;
 }
 
+/** core 时间线项 → 已映射 UI 项缓存（core 项引用稳定即命中；流式项重建即失效） */
+const MAPPED_ITEM_CACHE = new WeakMap<object, readonly ConversationTimelineItem[]>();
+
 export function mapProjectionTimeline(
   projection: ConversationProjectionSnapshot,
   agentLabel: string,
 ): readonly ConversationTimelineItem[] {
   const items: ConversationTimelineItem[] = [];
   for (const item of projection.timeline) {
+    const cached = MAPPED_ITEM_CACHE.get(item);
+    if (cached !== undefined) {
+      items.push(...cached);
+      continue;
+    }
+    const mapped: ConversationTimelineItem[] = [];
     if (item.kind === "user") {
       const timestamp = Date.parse(item.timestamp ?? "");
       // turn 分隔：user 消息前插时间标签（时间解析失败用 item sequence 兜底不展示）
       if (!Number.isNaN(timestamp)) {
-        items.push(
+        mapped.push(
           Object.freeze({
             kind: "turn",
             sequence: item.sequence - 0.5,
@@ -85,7 +99,7 @@ export function mapProjectionTimeline(
           }),
         );
       }
-      items.push(
+      mapped.push(
         Object.freeze({
           kind: "user",
           sequence: item.sequence,
@@ -97,13 +111,12 @@ export function mapProjectionTimeline(
       const from = item.sourceSequence ?? item.sequence;
       const to = item.turnEndSequence ?? from;
       const timestamp = Date.parse(item.timestamp ?? "");
-      items.push(
+      mapped.push(
         Object.freeze({
           kind: "assistant",
           sequence: item.sequence,
           agentLabel,
           timestamp: Number.isNaN(timestamp) ? 0 : timestamp,
-          thinkLines: Object.freeze([]),
           text: item.text,
           cards: cardsInRange(projection.cards, from, to),
           streaming: item.streaming === true,
@@ -119,6 +132,9 @@ export function mapProjectionTimeline(
         }),
       );
     }
+    const frozen = Object.freeze(mapped);
+    MAPPED_ITEM_CACHE.set(item, frozen);
+    items.push(...frozen);
   }
   return Object.freeze(items);
 }

@@ -1,7 +1,8 @@
 /**
- * RuntimeStatusIndicator 视觉：三态统一语言（图标动效 + 渐变流动文字 + 秒数）。
+ * RuntimeStatusIndicator 视觉：两态统一语言（图标动效 + 渐变流动文字 + 秒数）。
  * 紧凑尺寸（图标 18px / 文字 12.5px），颜色全部复用现有 token。
  * 文字渐变用 background-clip:text + 全局 grad-flow keyframe（shared/theme/animations.css）。
+ * thinking 态已随 loop 层丢弃 reasoning delta 移除（呼吸动效一并减载）。
  */
 .row {
   display: inline-flex;
@@ -22,16 +23,6 @@
 .icon svg {
   width: 15px;
   height: 15px;
-}
-
-/* 思考：大脑 + info 蓝 + 轻柔呼吸（无旋转/线框） */
-.thinking .icon {
-  color: var(--color-info);
-}
-
-.thinking .icon svg {
-  animation: var(--anim-status-breath) 2.2s ease-in-out infinite;
-  transform-origin: center;
 }
 
 /* 生成：笔尖 + 品牌系 + 上下浮动 + 墨滴下落 */
@@ -80,12 +71,7 @@
   padding-bottom: 1px;
 }
 
-/* 文字渐变 + 下划线色：info 蓝 / 品牌 --grad-accent / warn 琥珀 */
-.thinking .label {
-  background-image: var(--grad-info-text);
-  border-bottom-color: color-mix(in oklab, var(--color-info) 40%, transparent);
-}
-
+/* 文字渐变 + 下划线色：品牌 --grad-accent / warn 琥珀 */
 .generating .label {
   background-image: var(--grad-accent);
   border-bottom-color: color-mix(in oklab, var(--color-accent) 40%, transparent);
@@ -103,6 +89,6 @@
   white-space: nowrap;
 }
 
-
+/* 状态动效 keyframes 统一在 shared/theme/animations.css，经 --anim-status-* token 引用 */
 
 

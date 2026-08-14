@@ -5,7 +5,7 @@
  * 重命名/删除弹窗状态本地持有（G7：以自定义 Dialog 替代原生 prompt/confirm，
  * 后者在 Electron 渲染进程不可用或不一致）。
  */
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { ConversationList } from "../../../domains/conversation/components/ConversationList.js";
 import {
   ConversationDialogs,
@@ -39,6 +39,25 @@ export function ConversationListSection({
     setDeleteTarget(undefined);
   };
 
+  // 稳定回调（列表行 memo 生效前提，gui-performance-2 功能点五）
+  const handleRename = useCallback(
+    (id: string) => {
+      const current = store.getSnapshot().conversations.find((item) => item.id === id)?.title ?? "";
+      setRenameValue(current);
+      setRenameTarget({ id, title: current });
+    },
+    [store],
+  );
+  const handlePin = useCallback(
+    (id: string, pinned: boolean) => {
+      void store.pinConversation(id, pinned);
+    },
+    [store],
+  );
+  const handleDelete = useCallback((id: string) => {
+    setDeleteTarget(id);
+  }, []);
+
   // 执行删除：期间确认框保持打开并显示 loading，结束再关闭；成功/失败分别 toast。
   const handleDeleteConfirm = async (): Promise<void> => {
     if (deleteTarget === undefined) return;
@@ -61,28 +80,12 @@ export function ConversationListSection({
   return (
     <>
       <ConversationList
-        conversations={snapshot.conversations.map((item) => ({
-          id: item.id,
-          title: item.title,
-          agentLabel: item.agentLabel,
-          lastActivityAt: item.lastActivityAt,
-          ...(item.pinned === undefined ? {} : { pinned: item.pinned }),
-          ...(item.status === undefined ? {} : { status: item.status }),
-        }))}
+        conversations={snapshot.conversations}
         activeId={snapshot.activeConversationId}
         onSelect={onSelect}
-        onRename={(id) => {
-          const current =
-            snapshot.conversations.find((item) => item.id === id)?.title ?? "";
-          setRenameValue(current);
-          setRenameTarget({ id, title: current });
-        }}
-        onPin={(id, pinned) => {
-          void store.pinConversation(id, pinned);
-        }}
-        onDelete={(id) => {
-          setDeleteTarget(id);
-        }}
+        onRename={handleRename}
+        onPin={handlePin}
+        onDelete={handleDelete}
       />
       <ConversationDialogs
         renameTarget={renameTarget}

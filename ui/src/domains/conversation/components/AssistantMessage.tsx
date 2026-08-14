@@ -171,14 +171,16 @@ function ToolLine({ tools }: { readonly tools: readonly ToolTraceView[] }) {
   );
 }
 
-/** 进行中工具实时秒数（1s 粒度跳动；startedAt 缺失时不渲染） */
+/** 进行中工具实时秒数（1s 粒度跳动；startedAt 缺失时不渲染也不挂定时器） */
 function LiveSeconds({ startedAt }: { readonly startedAt?: number }) {
+  const active = startedAt !== undefined && !Number.isNaN(startedAt);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!active) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, []);
-  if (startedAt === undefined || Number.isNaN(startedAt)) return null;
-  const secs = Math.max(0, (now - startedAt) / 1000);
+  }, [active]);
+  if (!active) return null;
+  const secs = Math.max(0, (now - startedAt!) / 1000);
   return <span className={styles.toolSec}>{secs.toFixed(1)}s</span>;
 }

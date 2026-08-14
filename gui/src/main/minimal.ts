@@ -446,6 +446,10 @@ async function main(): Promise<void> {
       // 显式安全声明（Electron 当前默认即此值；显式化防升级/配置漂移后静默回退）
       contextIsolation: true,
       nodeIntegration: false,
+      // 失焦/最小化时不节流 renderer 定时器（gui-performance-2 功能点七）：
+      // 32ms 流式发布节流依赖 setTimeout，系统级节流会导致后台流式冻结、
+      // 恢复焦点时跳变追帧
+      backgroundThrottling: false,
     },
   });
   mainWindow = win;

@@ -15,6 +15,7 @@
  * 左侧滑出覆盖抽屉（无常驻列），选中条目自动收起。close 触发 inspectorRouter.close()。
  */
 import {
+  memo,
   useCallback,
   useMemo,
   useRef,
@@ -67,7 +68,8 @@ export interface InspectorHostProps {
   readonly onLocateInContent?: (entityId: string) => void;
 }
 
-export function InspectorHost({
+/** 右侧审批/档案面板宿主（memo：流式发布期间跳过，gui-performance-2 功能点五） */
+export const InspectorHost = memo(function InspectorHost({
   inspectorRouter,
   conversationCatalog,
   outlineTree,
@@ -201,4 +203,4 @@ export function InspectorHost({
       )}
     </aside>
   );
-}
+});

@@ -26,9 +26,6 @@ export interface ConversationProjectionBindingOptions {
   readonly logger?: Logger;
 }
 
-/** 投影事件发布节流窗口（尾沿合并：50–100Hz 的 delta 压到 ~30Hz） */
-const PUBLISH_THROTTLE_MS = 32;
-
 export class ConversationProjectionBinding {
   readonly conversationId: string;
 
@@ -44,8 +41,6 @@ export class ConversationProjectionBinding {
   private unsubscribeProjection?: () => void;
   private startPromise?: Promise<void>;
   private stopPromise?: Promise<void>;
-  /** 节流尾沿定时器（非 undefined = 已排程一次 publish，窗口内事件并入） */
-  private publishTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: ConversationProjectionBindingOptions) {
     this.api = options.api;
@@ -149,10 +144,6 @@ export class ConversationProjectionBinding {
     if (this.state === CONVERSATION_PROJECTION_BINDING_STATE.stopped) return;
     this.transition(CONVERSATION_PROJECTION_BINDING_STATE.stopping);
     this.generation += 1;
-    if (this.publishTimer !== undefined) {
-      clearTimeout(this.publishTimer);
-      this.publishTimer = undefined;
-    }
     const controller = this.projection;
     const startPromise = this.startPromise;
     await Promise.allSettled([
@@ -186,28 +177,15 @@ export class ConversationProjectionBinding {
 
   private transition(state: ConversationProjectionBindingState): void {
     this.state = state;
-    // 状态迁移立即发布（不等节流窗口）：opening/active/failed/stopped 必须即时可见
-    this.publish(true);
+    this.publish();
   }
 
   /**
-   * 发布快照：immediate=false 走 32ms 尾沿节流（投影事件高发路径合并发布）；
-   * 窗口内重复调用幂等并入已排程的 publish，deliver 时读取最新投影快照。
-   * @param immediate 立即发布（状态迁移用，取消排程中的节流定时器）
+   * 发布快照（直通转发：投影侧已做 32ms 合并窗口——delta 高发路径在
+   * ConversationProjection 内压到 ~30Hz、状态迁移立即——本层不再叠加节流，
+   * 避免双层窗口叠加延迟。见 gui-performance-2 功能点三。）
    */
-  private publish(immediate = false): void {
-    if (this.publishTimer !== undefined) {
-      if (!immediate) return;
-      clearTimeout(this.publishTimer);
-      this.publishTimer = undefined;
-    }
-    if (!immediate) {
-      this.publishTimer = setTimeout(() => {
-        this.publishTimer = undefined;
-        this.deliver();
-      }, PUBLISH_THROTTLE_MS);
-      return;
-    }
+  private publish(): void {
     this.deliver();
   }
 

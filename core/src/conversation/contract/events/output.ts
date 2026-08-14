@@ -132,7 +132,7 @@ export type OutputEvent =
 	| {
 			type: "compose.begin";
 			persist: true;
-			seq: number;
+			seq?: number;
 			phase: ComposeModePhase;
 			designFilePath: string;
 			preComposeMode?: ConversationMode;
@@ -144,7 +144,7 @@ export type OutputEvent =
 	| {
 			type: "compose.submitted";
 			persist: true;
-			seq: number;
+			seq?: number;
 			phase: ComposeModePhase;
 			designFilePath?: string;
 			approvalRequestId?: string;
@@ -155,7 +155,7 @@ export type OutputEvent =
 	| {
 			type: "compose.applied";
 			persist: true;
-			seq: number;
+			seq?: number;
 			phase: ComposeModePhase;
 			designFilePath?: string;
 			preComposeMode?: ConversationMode;
@@ -166,7 +166,7 @@ export type OutputEvent =
 	| {
 			type: "compose.discarded";
 			persist: true;
-			seq: number;
+			seq?: number;
 			phase: ComposeModePhase;
 			designFilePath?: string;
 			preComposeMode?: ConversationMode;
@@ -203,7 +203,7 @@ export type OutputEvent =
 	| {
 			type: "mode.changed";
 			persist: true;
-			seq: number;
+			seq?: number;
 			mode: ConversationMode;
 			designFilePath?: string;
 			phase?: ComposeModePhase;

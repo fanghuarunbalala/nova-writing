@@ -209,7 +209,10 @@ export class ConversationProjection {
 			if (this.stopRequested || generation !== this.generation) return;
 			for (const event of events) {
 				this.apply(event);
-				if ("seq" in event) historyMaxSeq = Math.max(historyMaxSeq, event.seq);
+				// 状态事件（compose/mode）无 turn seq：不参与 historyMaxSeq 推进
+				if ("seq" in event && typeof event.seq === "number") {
+					historyMaxSeq = Math.max(historyMaxSeq, event.seq);
+				}
 			}
 			this.publish();
 			replayed = true;
@@ -218,7 +221,8 @@ export class ConversationProjection {
 			let liveTurn = false;
 			for (const event of buffer) {
 				if ("seq" in event && event.persist) {
-					if (event.seq <= historyMaxSeq) continue;
+					// 状态事件（compose/mode）无 turn seq：不做历史去重，直接应用
+					if (typeof event.seq === "number" && event.seq <= historyMaxSeq) continue;
 					this.apply(event);
 					if (event.type === "turn-start" || event.type === "user.message") liveTurn = true;
 					else if (event.type === "turn-end") liveTurn = false;
@@ -254,8 +258,11 @@ export class ConversationProjection {
 
 	/** 应用一条 OutputEvent */
 	private apply(event: OutputEvent): void {
-		// 仅 persist 事件推进 lastAppliedSequence（delta 瞬态不带 seq，部分实现会给 0 占位）
-		if ("seq" in event && event.persist) this.lastAppliedSequence = event.seq;
+		// 仅 persist 且带 seq 的事件推进 lastAppliedSequence（delta 瞬态无 seq；
+		// compose/mode 状态事件不属 turn，seq 可选）
+		if ("seq" in event && event.persist && typeof event.seq === "number") {
+			this.lastAppliedSequence = event.seq;
+		}
 		this.cardProjection.apply(event);
 		this.approvalProjection.apply(event);
 		switch (event.type) {

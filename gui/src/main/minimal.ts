@@ -5,6 +5,7 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
+import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -37,12 +38,26 @@ import {
 } from "@novel/core";
 import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
 
-// ESM 下无 __dirname：以 import.meta.url 推导（= gui/dist/main）；
-// preload 在 dist/preload、renderer 在 dist/minimal；childScript 上三级到项目根再进 core/scripts
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const preloadPath = join(__dirname, "..", "preload", "preload.cjs");
-const rendererHtml = join(__dirname, "..", "minimal", "minimal.html");
-const childScript = join(__dirname, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
+// 双构建流程布局兼容（两条流程都受现役启动命令使用）：
+// - build-minimal.mjs（根 gui:release / gui:debug）：esbuild CJS 打包到
+//   dist/minimal/main.cjs，preload/renderer 同目录；CJS 下 __dirname 原生
+//   可用、import.meta 被垫为空对象（fileURLToPath(import.meta.url) 必崩；
+//   esbuild 的 import.meta 警告属预期——运行时被 typeof 短路不执行）；
+// - gui pnpm build（tsc NodeNext ESM）：main 在 dist/main/、preload 在
+//   dist/preload/、renderer 在 dist/minimal/；ESM 下无 __dirname。
+// 按「文件实际存在」探测布局，两流程通用；childScript 两种布局同表达式
+// （上三级到项目根再进 core/scripts），不变。
+const baseDir =
+  typeof __dirname !== "undefined"
+    ? __dirname
+    : dirname(fileURLToPath(import.meta.url));
+const preloadPath = existsSync(join(baseDir, "preload.cjs"))
+  ? join(baseDir, "preload.cjs")
+  : join(baseDir, "..", "preload", "preload.cjs");
+const rendererHtml = existsSync(join(baseDir, "minimal.html"))
+  ? join(baseDir, "minimal.html")
+  : join(baseDir, "..", "minimal", "minimal.html");
+const childScript = join(baseDir, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
 const IPC_CHANNEL = "novel-rpc";
 const CONFIG_CHANNEL = "config-rpc";
 const WORKSPACE_CHANNEL = "workspace-rpc";

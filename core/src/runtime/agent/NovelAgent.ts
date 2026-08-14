@@ -70,6 +70,8 @@ export interface NovelAgentOptions {
   composeService?: ComposeModeService;
   /** 每次 provider call 发起前回调（mode pending→active 晋升；经 LoopContext.toProviderCall 步骤⓪ await） */
   beforeProviderCall?: () => void | Promise<void>;
+  /** compose_mode sparse 刷新节奏（每多少次 provider call；缺省 5） */
+  composeSparseEveryCalls?: number;
   /** Todo 存储（runtime.todo 组 TodoWrite 装配；缺省 InMemoryConversationTodoStore） */
   todoStore?: ConversationTodoStore;
 }
@@ -107,6 +109,9 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
               new ComposeModeNudgePolicy(
                 composeState,
                 opts.conversationId ?? "",
+                opts.composeSparseEveryCalls === undefined
+                  ? {}
+                  : { sparseEveryCalls: opts.composeSparseEveryCalls },
               ),
           ],
         ] as [string, () => ContextNudgePolicy][])),

@@ -5,22 +5,31 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TurnContext } from "../../runtime/loop/types.js";
-import type { OutputEvent } from "../contract/events/index.js";
+import type { OutputEvent, ProjectedEvent } from "../contract/events/index.js";
+import type { ToolPreviewResolver } from "../../runtime/tool/previews.js";
+import { resolveToolPreview } from "../../runtime/tool/previews.js";
+import { ProjectionLayer } from "../projection/ProjectionLayer.js";
 import type {
 	ConversationJournalReadOnlyService as Contract,
 	PersistedTurn,
 } from "../contract/journal/index.js";
 
-/** journal 读侧实现（跨进程读 history） */
+/** 缺省 preview 查询器：纯目录（Main 代读无 ToolDef 运行时实例，保证 live/replay 一致） */
+const defaultResolver: ToolPreviewResolver = { resolvePreview: resolveToolPreview };
+
+/** journal 读侧实现（跨进程读 history + projectedHistory 投影读取） */
 export class FileConversationJournalReadOnlyService implements Contract {
 	/** journal 根目录（按 `<dir>/<conversationId>/journal.jsonl` 定位） */
 	private readonly journalDir: string;
+	/** 投影层（projectedHistory 用；与 live 流同一实现） */
+	private readonly projection: ProjectionLayer;
 
 	/**
-	 * @param opts journal 根目录（conversation 存储根）
+	 * @param opts journal 根目录 + 可选 preview 查询器（缺省纯目录 resolveToolPreview）
 	 */
-	constructor(opts: { journalDir: string }) {
+	constructor(opts: { journalDir: string; resolvePreview?: ToolPreviewResolver }) {
 		this.journalDir = opts.journalDir;
+		this.projection = new ProjectionLayer({ resolvePreview: opts.resolvePreview ?? defaultResolver });
 	}
 
 	/**
@@ -38,6 +47,25 @@ export class FileConversationJournalReadOnlyService implements Contract {
 		if (opts.fromSeq !== undefined) sorted = sorted.filter((t) => t.seq >= opts.fromSeq!);
 		if (opts.limit !== undefined) sorted = sorted.slice(0, opts.limit);
 		return toOutputEvents(sorted, conversationId);
+	}
+
+	/**
+	 * 投影读取：history 完整事件 → 过 ProjectionLayer → ProjectedEvent 流（与 hub 实时订阅同形态）
+	 * @param conversationId 会话 id
+	 * @param opts 分页/游标（与 history 相同语义）
+	 * @returns ProjectedEvent 序列（工具调用为 tool-recorded 对；无完整 tool-call）
+	 */
+	async projectedHistory(
+		conversationId: string,
+		opts: { fromSeq?: number; limit?: number },
+	): Promise<ProjectedEvent[]> {
+		const complete = await this.history(conversationId, opts);
+		const projected: ProjectedEvent[] = [];
+		for (const event of complete) {
+			const out = this.projection.project(event);
+			if (out !== undefined) projected.push(out);
+		}
+		return projected;
 	}
 
 	/**

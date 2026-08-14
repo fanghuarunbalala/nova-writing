@@ -2,7 +2,7 @@
  * 远端 conversation 视图（UI 侧）。
  */
 
-import type { LoopEvent } from "../../../runtime/loop/types.js";
+import type { ProjectedEvent } from "../events/index.js";
 import type { ConversationInteraction } from "../interaction/index.js";
 import type { WaitingInteractionRequest } from "../interaction/index.js";
 import type { ConversationApprovalDecision, ConversationMode } from "../types/index.js";
@@ -19,7 +19,7 @@ export interface ConversationHandle extends ConversationInteraction, WaitingInte
 	 * @param listener 输出事件回调（事件产生即推送）
 	 * @returns 订阅完成（立即返回）；取消订阅经 dispose()
 	 */
-	subscribeEvents(listener: (e: LoopEvent) => void): Promise<void>;
+	subscribeEvents(listener: (e: ProjectedEvent) => void): Promise<void>;
 	/**
 	 * 回传审批决策（解除 sendApprovalRequest 的阻塞等待）
 	 * @param requestId 审批请求 id（approval.request 事件携带）

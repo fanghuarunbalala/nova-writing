@@ -3,14 +3,14 @@ import { Conversation } from "../Conversation.js";
 import { ConversationManagerServer } from "../ConversationManagerServer.js";
 import type { AgentLoop } from "../../../runtime/loop/AgentLoop.js";
 import type { TurnContext } from "../../../runtime/loop/types.js";
-import type { LoopEvent } from "../../../runtime/loop/types.js";
+import type { ProjectedEvent } from "../../contract/events/index.js";
 import type { ConversationJournalService } from "../../contract/journal/index.js";
 import type { ConversationHandle } from "../../contract/handle/index.js";
 
 function mockLoop(): AgentLoop {
-  const listeners = new Set<(e: LoopEvent) => void>();
+  const listeners = new Set<(e: ProjectedEvent) => void>();
   const emit = (type: string) => {
-    const e = { type, persist: true, seq: 1, turnSeq: 1, conversationId: "c1", ts: "t" } as LoopEvent;
+    const e = { type, persist: true, seq: 1, turnSeq: 1, conversationId: "c1", ts: "t" } as ProjectedEvent;
     for (const l of listeners) l(e);
   };
   let seq = 0;
@@ -29,7 +29,7 @@ function mockLoop(): AgentLoop {
     steer: () => {},
     stop: vi.fn(),
     cancel: vi.fn(),
-    onOutputEvent: (l: (e: LoopEvent) => void) => {
+    onOutputEvent: (l: (e: ProjectedEvent) => void) => {
       listeners.add(l);
       return () => listeners.delete(l);
     },
@@ -58,7 +58,7 @@ describe("Conversation", () => {
       loop: mockLoop(),
       sampling: { model: "gpt-5" },
     });
-    const received: LoopEvent[] = [];
+    const received: ProjectedEvent[] = [];
     await conv.subscribeEvents((e) => received.push(e));
     await conv.sendUserMessage({ text: "hi" });
     expect(received[0]?.type).toBe("turn-start");

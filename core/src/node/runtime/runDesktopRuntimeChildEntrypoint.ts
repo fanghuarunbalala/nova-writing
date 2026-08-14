@@ -32,7 +32,7 @@ import type { AgentRunConfig } from "../../runtime/loop/types.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
-import type { LoopEvent } from "../../runtime/loop/types.js";
+import type { ProjectedEvent } from "../../conversation/contract/events/index.js";
 
 /** 平台显示名（动态段 core.environment 用） */
 const PLATFORM_LABELS: Readonly<Record<string, string>> = Object.freeze({
@@ -68,7 +68,7 @@ function conversationExposeOf(holder: { conv?: Conversation }): Record<string, u
 		sendExitComposeRequest: (...args: unknown[]) => requireConv().sendExitComposeRequest(args[0] as never),
 		subscribeEvents: (...args: unknown[]) => {
 			debugLog("[child] subscribeEvents 到达");
-			return requireConv().subscribeEvents(args[0] as (e: LoopEvent) => void);
+			return requireConv().subscribeEvents(args[0] as (e: ProjectedEvent) => void);
 		},
 		resolveApproval: (...args: unknown[]) =>
 			requireConv().resolveApproval(args[0] as string, args[1] as never),

@@ -22,12 +22,12 @@ import { createNovelApiClient, createNovelApiServer } from "../NovelApiClient.js
 import { ConversationProjection } from "../ConversationProjection.js";
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
 import type { TurnContext } from "../../runtime/loop/types.js";
-import type { LoopEvent } from "../../runtime/loop/types.js";
+import type { ProjectedEvent } from "../../conversation/contract/events/index.js";
 import type { ConversationHandle } from "../../conversation/contract/handle/index.js";
 
 /** 模拟 AgentLoop（只触发事件，不发真实 provider 调用） */
 function mockLoop(): AgentLoop {
-	const listeners = new Set<(e: LoopEvent) => void>();
+	const listeners = new Set<(e: ProjectedEvent) => void>();
 	let seq = 0;
 	return {
 		run: async () => ({ final: { role: "assistant" as const, content: "ok" }, usage: undefined }),
@@ -43,7 +43,7 @@ function mockLoop(): AgentLoop {
 		steer: () => {},
 		stop: () => {},
 		cancel: () => {},
-		onOutputEvent: (l: (e: LoopEvent) => void) => {
+		onOutputEvent: (l: (e: ProjectedEvent) => void) => {
 			listeners.add(l);
 			return () => listeners.delete(l);
 		},
@@ -63,7 +63,7 @@ function conversationFactory(): ConversationFactory {
 }
 
 /** 构造假的 ConversationHandle（subscribeEvents 同步回放给定事件序列） */
-function fakeHandle(events: LoopEvent[]): ConversationHandle {
+function fakeHandle(events: ProjectedEvent[]): ConversationHandle {
 	return {
 		sendUserMessage: async () => ({ seq: 0, recordedAt: "" }),
 		sendUserCommand: async () => ({ seq: 0, recordedAt: "" }),
@@ -83,8 +83,8 @@ function fakeHandle(events: LoopEvent[]): ConversationHandle {
 }
 
 /** 构造一条 OutputEvent（缺省 conversationId/ts） */
-function evt(e: Partial<LoopEvent> & { type: LoopEvent["type"] }): LoopEvent {
-	return { conversationId: "c1", ts: "t", ...e } as LoopEvent;
+function evt(e: Partial<ProjectedEvent> & { type: ProjectedEvent["type"] }): ProjectedEvent {
+	return { conversationId: "c1", ts: "t", ...e } as ProjectedEvent;
 }
 
 describe("ConversationProjection（精简投影）", () => {
@@ -122,18 +122,18 @@ describe("ConversationProjection（精简投影）", () => {
 describe("ConversationProjection（恢复重放）", () => {
 	it("先订阅缓冲 → history 应用 → 冲刷（历史已覆盖去重 + delta live-turn 门控，无丢失/重复）", async () => {
 		// 订阅先行：start 挂在 history promise 上，期间事件进缓冲
-		let listener: ((e: LoopEvent) => void) | undefined;
+		let listener: ((e: ProjectedEvent) => void) | undefined;
 		const handle: ConversationHandle = {
 			...fakeHandle([]),
-			subscribeEvents: async (l: (e: LoopEvent) => void) => {
+			subscribeEvents: async (l: (e: ProjectedEvent) => void) => {
 				listener = l;
 			},
 		};
-		let resolveHistory!: (events: LoopEvent[]) => void;
-		const historyPromise = new Promise<LoopEvent[]>((r) => {
+		let resolveHistory!: (events: ProjectedEvent[]) => void;
+		const historyPromise = new Promise<ProjectedEvent[]>((r) => {
 			resolveHistory = r;
 		});
-		const historyEvents: LoopEvent[] = [
+		const historyEvents: ProjectedEvent[] = [
 			evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 }),
 			evt({ type: "user.message", persist: true, seq: 1, text: "历史问题" }),
 			evt({ type: "assistant.message", persist: true, seq: 1, text: "历史回复" }),
@@ -162,10 +162,10 @@ describe("ConversationProjection（恢复重放）", () => {
 	});
 
 	it("replayed 之后实时事件直通", async () => {
-		let listener: ((e: LoopEvent) => void) | undefined;
+		let listener: ((e: ProjectedEvent) => void) | undefined;
 		const handle: ConversationHandle = {
 			...fakeHandle([]),
-			subscribeEvents: async (l: (e: LoopEvent) => void) => {
+			subscribeEvents: async (l: (e: ProjectedEvent) => void) => {
 				listener = l;
 			},
 		};
@@ -178,12 +178,12 @@ describe("ConversationProjection（恢复重放）", () => {
 describe("ConversationProjection（liveState）", () => {
 	function makeLiveProjection(): {
 		projection: ConversationProjection;
-		emit: (e: LoopEvent) => void;
+		emit: (e: ProjectedEvent) => void;
 	} {
-		let listener: ((e: LoopEvent) => void) | undefined;
+		let listener: ((e: ProjectedEvent) => void) | undefined;
 		const handle: ConversationHandle = {
 			...fakeHandle([]),
-			subscribeEvents: async (l: (e: LoopEvent) => void) => {
+			subscribeEvents: async (l: (e: ProjectedEvent) => void) => {
 				listener = l;
 			},
 		};
@@ -219,14 +219,14 @@ describe("ConversationProjection（liveState）", () => {
 		expect(snapshot.timeline.map((t) => t.text)).toEqual(["秋夜。"]);
 	});
 
-	it("tool-call 事件派生 toolTraces/eventFlow + timeline 项带 seq 归属范围", async () => {
+	it("tool-recorded 对派生 toolTraces/eventFlow + timeline 项带 seq 归属范围", async () => {
 		const { projection, emit } = makeLiveProjection();
 		await projection.start();
 		emit(evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 }));
 		emit(evt({ type: "user.message", persist: true, seq: 1, text: "写角色" }));
 		emit(evt({ type: "assistant.delta", kind: "text", text: "好" }));
-		emit(evt({ type: "tool-call-request", persist: true, seq: 2, toolCallId: "t1", name: "CharacterWrite", args: "{}", ts: "2026-08-14T10:00:00.000Z" }));
-		emit(evt({ type: "tool-call-response", persist: true, seq: 3, toolCallId: "t1", result: "ok", ts: "2026-08-14T10:00:01.500Z" }));
+		emit(evt({ type: "tool-recorded.started", seq: 2, toolCallId: "t1", name: "CharacterWrite", preview: { title: "角色：张三" }, ts: "2026-08-14T10:00:00.000Z" }));
+		emit(evt({ type: "tool-recorded.recorded", seq: 3, toolCallId: "t1", name: "CharacterWrite", outcome: "ok", durationMs: 1500, preview: { summary: "角色已写入" }, ts: "2026-08-14T10:00:01.500Z" }));
 		emit(evt({ type: "assistant.message", persist: true, seq: 4, text: "好的" }));
 		emit(evt({ type: "turn-end", persist: true, seq: 4, turnSeq: 1 }));
 
@@ -239,8 +239,8 @@ describe("ConversationProjection（liveState）", () => {
 			durationMs: 1500,
 		});
 		expect(snapshot.eventFlow.map((e) => e.eventType)).toEqual(["CharacterWrite", "CharacterWrite"]);
-		expect(snapshot.eventFlow[0]).toMatchObject({ family: "novel", summary: "工具调用" });
-		expect(snapshot.eventFlow[1]).toMatchObject({ family: "novel", outcome: "ok" });
+		expect(snapshot.eventFlow[0]).toMatchObject({ family: "novel", summary: "进行中" });
+		expect(snapshot.eventFlow[1]).toMatchObject({ family: "novel", summary: "角色已写入", outcome: "ok" });
 		// assistant 项归属范围覆盖工具调用（sourceSequence=1 → turnEnd=4）
 		const assistant = snapshot.timeline.find((item) => item.kind === "assistant");
 		expect(assistant).toMatchObject({ sourceSequence: 1, turnEndSequence: 4 });
@@ -263,10 +263,10 @@ describe("ConversationProjection（liveState）", () => {
 
 	it("resume 重放增量（fromSeq = lastAppliedSequence）", async () => {
 		const historyCalls: Array<{ fromSeq?: number }> = [];
-		let listener: ((e: LoopEvent) => void) | undefined;
+		let listener: ((e: ProjectedEvent) => void) | undefined;
 		const handle: ConversationHandle = {
 			...fakeHandle([]),
-			subscribeEvents: async (l: (e: LoopEvent) => void) => {
+			subscribeEvents: async (l: (e: ProjectedEvent) => void) => {
 				listener = l;
 			},
 		};

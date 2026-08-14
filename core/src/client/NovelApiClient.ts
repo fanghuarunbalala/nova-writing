@@ -10,7 +10,7 @@ import type { ConversationManagerServer } from "../conversation/server/Conversat
 import type { NovelStore } from "../novel/store.js";
 import type { ConversationRef, ConversationSummary } from "../manager/contract/types.js";
 import type { ConversationHandle, ConversationId } from "../conversation/contract/index.js";
-import type { OutputEvent } from "../conversation/contract/events/index.js";
+import type { OutputEvent, ProjectedEvent } from "../conversation/contract/events/index.js";
 import type { ConversationJournalReadOnlyService } from "../conversation/contract/journal/index.js";
 import { FileConversationJournalReadOnlyService } from "../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { toRPCError } from "../rpc/call.js";
@@ -71,6 +71,18 @@ export interface ConversationApi {
 		conversationId: ConversationId,
 		opts?: { fromSeq?: number; limit?: number },
 	): Promise<OutputEvent[]>;
+	/**
+	 * 投影读取历史（journal 完整事件 → 投影层 → ProjectedEvent 序列）。
+	 * 与 hub 实时订阅同形态；工具调用以 tool-recorded.started/recorded 出现。
+	 * renderer 无文件权限，经 Main 代读。见 PRD `output-投影层` §4.5。
+	 * @param conversationId 会话 id
+	 * @param opts 可选分页（fromSeq / limit，与 history 相同语义）
+	 * @returns 投影事件序列
+	 */
+	projectedHistory(
+		conversationId: ConversationId,
+		opts?: { fromSeq?: number; limit?: number },
+	): Promise<ProjectedEvent[]>;
 	/**
 	 * 查询会话当前生效模式（review/bypass/compose；mode.set 待下次 turn 生效）。
 	 * 读走查：经 manager 定位会话后调 handle.getConversationMode。
@@ -159,6 +171,14 @@ export interface NovelApiClientOptions {
 		conversationId: ConversationId,
 		opts?: { fromSeq?: number; limit?: number },
 	) => Promise<OutputEvent[]>;
+	/**
+	 * projectedHistory 查询注入（同 history 的内存测试/特殊装配面）。
+	 * 缺省回退 history（投影形态由调用方决定时可用）。
+	 */
+	projectedHistory?: (
+		conversationId: ConversationId,
+		opts?: { fromSeq?: number; limit?: number },
+	) => Promise<ProjectedEvent[]>;
 }
 
 /**
@@ -167,7 +187,7 @@ export interface NovelApiClientOptions {
  * @returns NovelApiClient
  */
 export function createNovelApiClient(options: NovelApiClientOptions): NovelApiClient {
-	const { manager, novel, history } = options;
+	const { manager, novel, history, projectedHistory } = options;
 	return {
 		conversations: {
 			list: () => manager.list(),
@@ -176,6 +196,10 @@ export function createNovelApiClient(options: NovelApiClientOptions): NovelApiCl
 			delete: (conversationId) => manager.delete(conversationId),
 			history: (conversationId, opts) =>
 				history !== undefined ? history(conversationId, opts) : Promise.resolve([]),
+			projectedHistory: (conversationId, opts) =>
+				projectedHistory !== undefined
+					? projectedHistory(conversationId, opts)
+					: Promise.resolve([]),
 			getMode: async (conversationId) => {
 				const handle = (await manager.createOrResume(conversationId)).handle;
 				return handle.getConversationMode();
@@ -293,6 +317,10 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 			delete: (conversationId) => manager.delete(conversationId),
 			history: (conversationId, opts) =>
 				readOnly !== undefined ? readOnly.history(conversationId, opts ?? {}) : Promise.resolve([]),
+			projectedHistory: (conversationId, opts) =>
+				readOnly !== undefined
+					? readOnly.projectedHistory(conversationId, opts ?? {})
+					: Promise.resolve([]),
 			getMode: async (conversationId) => {
 				const handle = (await manager.createOrResume(conversationId)).handle;
 				return handle.getConversationMode();

@@ -1,12 +1,12 @@
 /**
  * ConversationProjection：精简投影（客户端侧）。
- * 消费 ConversationHandle.subscribeEvents 的 LoopEvent 流 → 累积 timeline 快照。
+ * 消费 ConversationHandle.subscribeEvents 的 ProjectedEvent 流 → 累积 timeline 快照。
  * 替代旧 ConversationProjectionController 的复杂状态机；本期只做实时流（无 journal 重放）。
  */
 
 import { proxy } from "kkrpc/remote-refs";
 import type { ConversationHandle } from "../conversation/contract/handle/index.js";
-import type { LoopEvent } from "../runtime/loop/types.js";
+import type { ProjectedEvent } from "../conversation/contract/events/index.js";
 import type { ConversationId } from "../conversation/contract/types/index.js";
 import { CardProjection, type CardDescriptor } from "../conversation/CardProjection.js";
 import { RPCError } from "../rpc/RPCError.js";
@@ -40,8 +40,8 @@ export interface ToolTraceView {
 	toolName: string;
 	/** 阶段（终态阶段占位；core 无 stage 事件，保留兼容） */
 	stage?: string;
-	/** 结果 */
-	outcome: "ok" | "failed";
+	/** 结果（tool-recorded.recorded 恒带值；可选以支持进行中语义） */
+	outcome?: "ok" | "failed";
 	/** 耗时毫秒 */
 	durationMs?: number;
 	/** 事件 seq（归属） */
@@ -94,11 +94,11 @@ export interface ConversationProjectionSnapshot {
 /** 订阅回调 */
 export type ConversationProjectionListener = () => void;
 
-/** history 查询注入（journal 已落盘事件重放；返回 LoopEvent 序列） */
+/** history 查询注入（journal 投影读取重放；返回 ProjectedEvent 序列，与实时订阅同形态） */
 export type ConversationProjectionHistory = (opts: {
 	fromSeq?: number;
 	limit?: number;
-}) => Promise<LoopEvent[]>;
+}) => Promise<ProjectedEvent[]>;
 
 /** 精简投影器：累积 OutputEvent → timeline 列表 */
 export class ConversationProjection {
@@ -120,8 +120,6 @@ export class ConversationProjection {
 	private toolTraces: ToolTraceView[] = [];
 	/** 运行时事件行 */
 	private eventFlow: ConversationEventView[] = [];
-	/** 待完成的工具调用（toolCallId → 请求时间） */
-	private readonly pendingTraces = new Map<string, { toolName: string; requestedAt: string; seq: number }>();
 	private revision = 0;
 	private lastAppliedSequence = 0;
 	private state: ConversationProjectionState = "idle";
@@ -184,7 +182,7 @@ export class ConversationProjection {
 		try {
 			// ① 先订阅（进入缓冲模式）：listener 经 proxy() 标记——kkrpc/remote-refs 的 codec
 			// 只编码 WeakSet 已标记的函数参数（内存/plain kkrpc 通道下标记是无害 no-op）
-			const buffer: LoopEvent[] = [];
+			const buffer: ProjectedEvent[] = [];
 			let replayed = false;
 			let historyMaxSeq = 0;
 			await this.handle.subscribeEvents(
@@ -246,8 +244,8 @@ export class ConversationProjection {
 		await this.start();
 	}
 
-	/** 应用一条 LoopEvent */
-	private apply(event: LoopEvent): void {
+	/** 应用一条 ProjectedEvent */
+	private apply(event: ProjectedEvent): void {
 		// 仅带 seq 事件推进 lastAppliedSequence（delta 瞬态不带 seq）
 		if ("seq" in event) this.lastAppliedSequence = event.seq;
 		this.cardProjection.apply(event);
@@ -303,48 +301,38 @@ export class ConversationProjection {
 				this.finalizeAssistant();
 				this.setTurnEndOnLast(event.seq, event.ts);
 				break;
-			case "tool-call-request":
-				this.cardsDirty = true;
+			case "tool-recorded.started":
+				// 进行中行（工具条收口行由 recorded 产出）
 				this.eventFlowDirty = true;
-				this.pendingTraces.set(event.toolCallId, {
+				this.eventFlow.push({
+					sequence: event.seq,
+					timestamp: Date.parse(event.ts),
+					eventType: event.name,
+					family: familyOf(event.name),
+					summary: event.preview?.summary ?? "进行中",
+				});
+				break;
+			case "tool-recorded.recorded":
+				this.cardsDirty = true;
+				this.toolTracesDirty = true;
+				this.eventFlowDirty = true;
+				this.toolTraces.push({
+					traceId: event.toolCallId,
 					toolName: event.name,
-					requestedAt: event.ts,
-					seq: event.seq,
+					outcome: event.outcome,
+					...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+					sequence: event.seq,
 				});
 				this.eventFlow.push({
 					sequence: event.seq,
 					timestamp: Date.parse(event.ts),
 					eventType: event.name,
 					family: familyOf(event.name),
-					summary: "工具调用",
+					summary:
+						event.preview?.summary ?? (event.outcome === "ok" ? "执行完成" : "执行失败"),
+					outcome: event.outcome,
 				});
 				break;
-			case "tool-call-response": {
-				this.cardsDirty = true;
-				this.toolTracesDirty = true;
-				this.eventFlowDirty = true;
-				const pending = this.pendingTraces.get(event.toolCallId);
-				this.pendingTraces.delete(event.toolCallId);
-				const failed = event.error !== undefined;
-				this.toolTraces.push({
-					traceId: event.toolCallId,
-					toolName: pending?.toolName ?? "unknown",
-					outcome: failed ? "failed" : "ok",
-					...(pending !== undefined
-						? { durationMs: durationBetween(pending.requestedAt, event.ts) }
-						: {}),
-					sequence: event.seq,
-				});
-				this.eventFlow.push({
-					sequence: event.seq,
-					timestamp: Date.parse(event.ts),
-					eventType: pending?.toolName ?? "unknown",
-					family: familyOf(pending?.toolName ?? ""),
-					summary: failed ? "执行失败" : "执行完成",
-					outcome: failed ? "failed" : "ok",
-				});
-				break;
-			}
 			// turn-start / compacted / clear / retry-request 无影响
 		}
 	}
@@ -430,14 +418,6 @@ function familyOf(toolName: string): "agent" | "system" | "novel" | "other" {
 	}
 	if (/^(Read|Glob|Write|Edit)$/.test(toolName)) return "agent";
 	return "other";
-}
-
-/** ISO 时间差（毫秒；解析失败返回 undefined） */
-function durationBetween(from: string, to: string): number | undefined {
-	const start = Date.parse(from);
-	const end = Date.parse(to);
-	if (Number.isNaN(start) || Number.isNaN(end) || end < start) return undefined;
-	return end - start;
 }
 
 /** 把任意错误归一成投影错误快照 */

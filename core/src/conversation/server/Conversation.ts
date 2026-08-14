@@ -4,7 +4,8 @@
  */
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
 import type { SamplingConfig } from "../../runtime/provider/types.js";
-import type { LoopEvent } from "../../runtime/loop/types.js";
+import type { ProjectedEvent } from "../contract/events/index.js";
+import { ProjectionLayer } from "../projection/ProjectionLayer.js";
 import { debugLog } from "../../log/debug.js";
 import type { ConversationJournalService } from "../contract/journal/index.js";
 import type { ConversationInteraction } from "../contract/interaction/index.js";
@@ -60,10 +61,12 @@ export interface ConversationOptions {
 	waitTimeoutMs?: number;
 	/** wait 超时回调（子进程注入 process.exit 等退出行为；内存模式仅解除等待） */
 	onWaitTimeout?: (requestId: string) => void;
+	/** 投影层（缺省内建；preview resolver 经 loop.toolDispatcher 取 ToolDef.preview） */
+	projection?: ProjectionLayer;
 }
 
-/** 输出事件订阅回调 */
-type LoopEventListener = (e: LoopEvent) => void;
+/** 输出事件订阅回调（hub 广播投影事件） */
+type ProjectedEventListener = (e: ProjectedEvent) => void;
 
 /** wait 缺省超时：120s（驻留等待决策；超时按拒绝处理 + onWaitTimeout 退出行为） */
 const DEFAULT_WAIT_TIMEOUT_MS = 120_000;
@@ -80,8 +83,10 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly loop: AgentLoop;
 	/** 默认采样 */
 	private readonly sampling: SamplingConfig;
-	/** 输出事件订阅者（hub） */
-	private readonly eventListeners = new Set<LoopEventListener>();
+	/** 投影层（完整 LoopEvent → ProjectedEvent；live 流唯一出口） */
+	private readonly projection: ProjectionLayer;
+	/** 输出事件订阅者（hub，只收投影事件） */
+	private readonly eventListeners = new Set<ProjectedEventListener>();
 	/** journal 写侧（缺省 undefined = 不落盘） */
 	private readonly journal?: ConversationJournalService;
 	/** manager wait 通道（wait 请求经 CMS 队列路由） */
@@ -112,8 +117,19 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.managerWait = opts.managerWait;
 		this.waitTimeoutMs = opts.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
 		this.onWaitTimeout = opts.onWaitTimeout;
-		// 订阅 loop 的输出事件（run/followup 均转发到本会话 hub）
-		this.loop.onOutputEvent((e) => this.emit(e));
+		// 投影层：缺省经 loop.toolDispatcher 取 ToolDef.preview（live 与 replay 同实现）
+		this.projection =
+			opts.projection ??
+			new ProjectionLayer({
+				resolvePreview: {
+					resolvePreview: (name) => this.loop.toolDispatcher.resolve(name)?.preview,
+				},
+			});
+		// 订阅 loop 的输出事件：经投影层映射后转发到本会话 hub（hub 只广播 ProjectedEvent）
+		this.loop.onOutputEvent((e) => {
+			const projected = this.projection.project(e);
+			if (projected !== undefined) this.emit(projected);
+		});
 	}
 
 	/** 当前生效的会话模式 */
@@ -226,7 +242,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	}
 
 	/** 订阅输出事件流（hub 实时推送；dispose 清空全部订阅者） */
-	async subscribeEvents(listener: LoopEventListener): Promise<void> {
+	async subscribeEvents(listener: ProjectedEventListener): Promise<void> {
 		debugLog("[child] subscribeEvents listener type:", typeof listener, "===", String(listener).slice(0, 60));
 		this.eventListeners.add(listener);
 	}
@@ -265,12 +281,12 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	}
 
 	/** 分发输出事件给所有订阅者 */
-	private emit(e: LoopEvent): void {
+	private emit(e: ProjectedEvent): void {
 		for (const l of this.eventListeners) l(e);
 	}
 
 	/** 订阅事件（内部：外部经 events() 订阅时注册 listener），返回取消订阅函数 */
-	private subscribe(l: LoopEventListener): () => void {
+	private subscribe(l: ProjectedEventListener): () => void {
 		this.eventListeners.add(l);
 		return () => {
 			this.eventListeners.delete(l);

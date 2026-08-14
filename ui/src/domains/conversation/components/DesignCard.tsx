@@ -3,8 +3,9 @@
  *
  * compose 设计草稿卡：读取 design 文件并以 Markdown 渲染，支持编辑/保存写回。
  * designFile 能力缺失时降级为只读提示（web 等非桌面场景）。
+ * memo 包裹：conversationId/phase 稳定即零重渲染（内部含 markdown 渲染）。
  */
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { useFrontendPlatform } from "../../../platform/index.js";
 import { AssistantMarkdown } from "./assistantContent/index.js";
 import styles from "./DesignCard.module.css";
@@ -21,7 +22,7 @@ const PHASE_LABEL: Record<string, string> = {
   discarded: "已放弃",
 };
 
-export function DesignCard({ conversationId, phase }: DesignCardProps) {
+export const DesignCard = memo(function DesignCard({ conversationId, phase }: DesignCardProps) {
   const platform = useFrontendPlatform();
   const designFile = platform.designFile;
   const [content, setContent] = useState("");
@@ -124,4 +125,4 @@ export function DesignCard({ conversationId, phase }: DesignCardProps) {
       )}
     </div>
   );
-}
+});

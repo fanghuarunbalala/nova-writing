@@ -2,7 +2,6 @@ import type {
   AssistantMessage,
   LLMessage,
   ProviderResult,
-  ProviderDelta,
   ToolCall,
 } from "../provider/types.js";
 import type {
@@ -28,13 +27,6 @@ function addUsage(
     inputTokens: (acc?.inputTokens ?? 0) + next.inputTokens,
     outputTokens: (acc?.outputTokens ?? 0) + next.outputTokens,
   };
-}
-
-/** ProviderDelta → assistant.delta 事件 extra 字段 */
-function toDeltaExtra(d: ProviderDelta): Record<string, unknown> {
-  return d.type === "text-delta"
-    ? { persist: false, kind: "text", text: d.text }
-    : { persist: false, kind: "reasoning", text: d.text };
 }
 
 /** AgentLoop：agent 主循环，产出 OutputEvent（conversation 统一事件），带输入队列 */
@@ -303,9 +295,12 @@ export class AgentLoop {
       this.config.debugger?.record(call); // 记录每次请求（相邻差异在 html 展示）
       let result: ProviderResult;
       try {
-        result = await this.config.provider.call(call, (d) =>
-          this.emit(onEvent, "assistant.delta", toDeltaExtra(d)),
-        );
+        result = await this.config.provider.call(call, (d) => {
+          // reasoning delta 在 loop 层直接丢弃（思考内容不上链、UI 不展示思考中态）：
+          // 不 emit 任何事件，省去 hub/WS/IPC 全链传输成本。见 docs/PRD/gui-performance.md。
+          if (d.type !== "text-delta") return;
+          this.emit(onEvent, "assistant.delta", { persist: false, kind: "text", text: d.text });
+        });
       } catch (err) {
         logger?.error("agent.call.error", {
           curTurn: runContext.curTurn,

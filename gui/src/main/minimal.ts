@@ -5,7 +5,9 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
-import { basename, join } from "node:path";
+import { existsSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import {
   Conversation,
@@ -36,12 +38,26 @@ import {
 } from "@novel/core";
 import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
 
-// 入口经 esbuild 打包为 CJS（build-minimal.mjs → dist/minimal/main.cjs）：
-// CJS 下 import.meta.url 为空（曾崩 fileURLToPath），原生 __dirname 可用。
-// preload/renderer 与 main 同在 dist/minimal；childScript 上三级到 monorepo 根再进 core/scripts
-const preloadPath = join(__dirname, "preload.cjs");
-const rendererHtml = join(__dirname, "minimal.html");
-const childScript = join(__dirname, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
+// 双构建流程布局兼容（两条流程都受现役启动命令使用）：
+// - build-minimal.mjs（根 gui:release / gui:debug）：esbuild CJS 打包到
+//   dist/minimal/main.cjs，preload/renderer 同目录；CJS 下 __dirname 原生
+//   可用、import.meta 被垫为空对象（fileURLToPath(import.meta.url) 必崩；
+//   esbuild 的 import.meta 警告属预期——运行时被 typeof 短路不执行）；
+// - gui pnpm build（tsc NodeNext ESM）：main 在 dist/main/、preload 在
+//   dist/preload/、renderer 在 dist/minimal/；ESM 下无 __dirname。
+// 按「文件实际存在」探测布局，两流程通用；childScript 两种布局同表达式
+// （上三级到项目根再进 core/scripts），不变。
+const baseDir =
+  typeof __dirname !== "undefined"
+    ? __dirname
+    : dirname(fileURLToPath(import.meta.url));
+const preloadPath = existsSync(join(baseDir, "preload.cjs"))
+  ? join(baseDir, "preload.cjs")
+  : join(baseDir, "..", "preload", "preload.cjs");
+const rendererHtml = existsSync(join(baseDir, "minimal.html"))
+  ? join(baseDir, "minimal.html")
+  : join(baseDir, "..", "minimal", "minimal.html");
+const childScript = join(baseDir, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
 const IPC_CHANNEL = "novel-rpc";
 const CONFIG_CHANNEL = "config-rpc";
 const WORKSPACE_CHANNEL = "workspace-rpc";
@@ -50,8 +66,8 @@ const UI_CHANNEL = "ui-rpc";
 /**
  * 回显 AgentLoop：followup 即时开 turn 产 turn-start/user.message → assistant.delta×N →
  * assistant.message/turn-end → journal 快照落盘（验证流式链路 + journal 语义，无需真实 provider）。
- * 文本含「思考」时先发 reasoning delta（验证 thinking 态）；含「审批」时经 requestApproval
- * 阻塞等 UI 决策（验证审批域端到端）。
+ * 文本含「审批」时经 requestApproval 阻塞等 UI 决策（验证审批域端到端）。
+ * 不发 reasoning delta（loop 层已丢弃，见 docs/PRD/gui-performance.md）。
  */
 function createEchoLoop(
   conversationId: string,
@@ -107,18 +123,12 @@ function createEchoLoop(
         return turn;
       }
 
-      // 异步排程发射（避免同步批量发完导致 thinking/generating 状态对 UI 不可见：
+      // 异步排程发射（避免同步批量发完导致 generating 状态对 UI 不可见：
       // React 批量渲染只呈现最终快照；真实 provider 是秒级流不受影响，echo 演示需人工间隔）
       void (async () => {
-        // 文本含「思考」时先发 reasoning delta（验证 thinking 呼吸动画；内容默认丢弃不进正文）
-        if (text.includes("思考")) {
-          emit({ type: "assistant.delta", persist: false, kind: "reasoning", text: "让我想想…", conversationId, ts: now() });
-          await sleep(700);
-          emit({ type: "assistant.delta", persist: false, kind: "reasoning", text: "分析文本结构…", conversationId, ts: now() });
-          await sleep(700);
-        }
         // 文本含「正文」时追加示例小说正文（```novel 块），验证正文草稿面板：
         // fence 打开即出现面板 + 闪烁光标，流式填充，完成后显示「复制正文」
+        // （思考态已在 C2 移除，不再发 reasoning delta）
         const demoNovel = text.includes("正文")
           ? "\n\n```novel\n沈砚站在地下室的台阶上，手里的手电筒光柱晃了晃。他听见风从墙缝里钻进来的声音，像是什么人在远处叹气。\n\n他数着自己的脚步。七级台阶。墙面是青灰色的砖，砖缝里生着苔藓。但右手边的墙壁上，有一块砖的颜色比周围的都要浅。他伸出手，指腹贴上去，凉的。\n```"
           : "";

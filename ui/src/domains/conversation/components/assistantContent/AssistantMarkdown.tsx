@@ -6,7 +6,9 @@
  * cc:// 引用链接（extractReferenceTags 生成）拦截为可点击的 MessageReferenceChip。
  * ```novel fenced code block 切出交给 NovelDraftPanel（正文草稿面板），
  * 与聊天注释视觉分离；流式期间最后一个正文块末尾显示闪烁光标。
+ * memo 包裹：text 原值比较，历史消息零重解析（markdown 全管道是最大单项成本）。
  */
+import { memo } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ToastKind } from "../../../../shared/state/ToastStore.js";
@@ -58,7 +60,7 @@ function splitNovelSegments(text: string): MarkdownSegment[] {
   return segments;
 }
 
-export function AssistantMarkdown({
+export const AssistantMarkdown = memo(function AssistantMarkdown({
   text,
   onReferenceClick,
   resolveReference,
@@ -121,7 +123,7 @@ export function AssistantMarkdown({
       })}
     </div>
   );
-}
+});
 
 function parseReferenceHref(href: string): MessageReference | null {
   const rest = href.slice(REFERENCE_PREFIX.length);

@@ -13,16 +13,23 @@ import type { ConversationJournalService } from "./contract/journal/index.js";
 export function journalListener(journal: ConversationJournalService): LoopContextListener {
 	return {
 		// 每次消息追加 → appendTurn（当前 turn 快照，同 seq 多写）
+		// 落盘失败只告警不抛出：journal 是持久化副产物，失败不能反向打断 agent turn
 		onTurnMessageAppend: (turn) => {
-			void journal.appendTurn(turn);
+			void journal.appendTurn(turn).catch((e) => {
+				console.error("[journal] appendTurn failed:", e);
+			});
 		},
 		// 压缩后 → 全量覆盖（去重）
 		onCompacted: (turns) => {
-			void journal.writeTurns(turns);
+			void journal.writeTurns(turns).catch((e) => {
+				console.error("[journal] writeTurns failed:", e);
+			});
 		},
 		// 清空 → 覆盖为空
 		onClear: () => {
-			void journal.writeTurns([]);
+			void journal.writeTurns([]).catch((e) => {
+				console.error("[journal] writeTurns failed:", e);
+			});
 		},
 	};
 }

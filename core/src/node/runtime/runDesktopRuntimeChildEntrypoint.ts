@@ -91,6 +91,17 @@ function toolCallIdOf(requestId: string): string | undefined {
  * 启动 conversation 子进程（manager WS 双工）
  */
 export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
+	// 崩溃兜底：子进程任何未捕获异常/未处理 rejection 先留完整痕迹再退出
+	//（stderr 经 spawner inherit 汇入 main 输出；此前崩溃只剩一行裸 undefined，无法定位）
+	process.on("uncaughtException", (e) => {
+		console.error("[child] uncaught exception:", e);
+		process.exit(1);
+	});
+	process.on("unhandledRejection", (reason) => {
+		console.error("[child] unhandled rejection:", reason);
+		process.exit(1);
+	});
+
 	const conversationId = process.env.CONVERSATION_ID ?? "main";
 	const storedir = process.env.NOVEL_CONVERSATION_STOREDIR;
 	const workspace = process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".";

@@ -26,6 +26,8 @@ export interface NovelOverview {
 		storyUnits: number
 		characters: number
 		locations: number
+		volumes: number
+		chapters: number
 		paragraphs: number
 	}
 }

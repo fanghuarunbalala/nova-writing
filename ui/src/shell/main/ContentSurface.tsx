@@ -17,6 +17,7 @@ import type { LocationStore } from "../../domains/novel/location/store/LocationS
 import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
+import { ConfirmDialog } from "../../shared/primitives/ConfirmDialog.js";
 import type { ContentTab } from "./contentTab.js";
 import { MainSubHead } from "./MainSubHead.js";
 import styles from "./ContentSurface.module.css";
@@ -63,6 +64,7 @@ export function ContentSurface({
   const locationSnapshot = useExternalStore(locations);
   const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
+  const [deleteParagraphId, setDeleteParagraphId] = useState<string | undefined>(undefined);
 
   // 定位：来自对话引用的章节/段落自动选中所属章节。
   useEffect(() => {
@@ -98,9 +100,7 @@ export function ContentSurface({
           onDeleteParagraph={(paragraphId) => {
             const version = manuscript.getParagraphVersion(paragraphId);
             if (version === undefined) return;
-            // eslint-disable-next-line no-alert
-            if (!window.confirm("确定删除该段落？此操作不可撤销。")) return;
-            void manuscript.deleteParagraph(paragraphId, version);
+            setDeleteParagraphId(paragraphId);
           }}
         />
       );
@@ -160,6 +160,22 @@ export function ContentSurface({
         entityLabel="地点"
         error={locationSnapshot.error?.message}
         onSubmit={(input) => locations.createLocation(input)}
+      />
+      <ConfirmDialog
+        open={deleteParagraphId !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setDeleteParagraphId(undefined);
+        }}
+        title="删除段落"
+        description="确定删除该段落？此操作不可撤销。"
+        onConfirm={() => {
+          const paragraphId = deleteParagraphId;
+          setDeleteParagraphId(undefined);
+          if (paragraphId === undefined) return;
+          const version = manuscript.getParagraphVersion(paragraphId);
+          if (version === undefined) return;
+          void manuscript.deleteParagraph(paragraphId, version);
+        }}
       />
     </div>
   );

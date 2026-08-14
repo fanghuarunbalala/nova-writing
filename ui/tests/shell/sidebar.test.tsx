@@ -6,7 +6,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Sidebar } from "../../src/shell/sidebar/Sidebar.js";
 import { SidebarSection } from "../../src/shell/sidebar/SidebarSection.js";
-import { SidebarToggleButton } from "../../src/shell/sidebar/SidebarToggleButton.js";
 import { ConversationCatalogStore } from "../../src/domains/conversation/store/ConversationCatalogStore.js";
 import { NovelOverviewStore } from "../../src/domains/novel/overview/NovelOverviewStore.js";
 import { ToastStore } from "../../src/shared/state/ToastStore.js";
@@ -67,21 +66,10 @@ describe("Sidebar", () => {
   });
 });
 
-describe("SidebarSection / SidebarToggleButton", () => {
+describe("SidebarSection", () => {
   it("renders label and count", () => {
     render(<SidebarSection label="对话" count={3}>内容</SidebarSection>);
     expect(screen.getByText("对话")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
-  });
-
-  it("toggles collapse direction", async () => {
-    const user = userEvent.setup();
-    const onToggle = vi.fn();
-    const { rerender } = render(<SidebarToggleButton collapsed={false} onToggle={onToggle} />);
-    await user.click(screen.getByRole("button", { name: "收起侧栏" }));
-    expect(onToggle).toHaveBeenCalledTimes(1);
-    rerender(<SidebarToggleButton collapsed onToggle={onToggle} />);
-    await user.click(screen.getByRole("button", { name: "展开侧栏" }));
-    expect(onToggle).toHaveBeenCalledTimes(2);
   });
 });

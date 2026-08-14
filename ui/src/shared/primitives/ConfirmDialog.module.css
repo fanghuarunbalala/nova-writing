@@ -1,0 +1,32 @@
+/**
+ * ConfirmDialog 视觉：警示图标 + 正文横排。
+ */
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.iconWrap {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.iconWrap[data-tone="primary"] {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+
+.text {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  text-wrap: pretty;
+}

@@ -62,6 +62,23 @@ export function ConversationTimeline({
   // 卡片动作回调稳定引用（AssistantMessage memo 浅比较依赖）
   const handleCardAction = useCallback(
     (cardId: string, action: string, payload?: unknown) => {
+      // 卡片富文本引用（RichTextRenderer）：payload 为 {refKind,id,label} 对象，
+      // 转 MessageReference 复用正文 cc:// 引用的跳转链路（Inspector/正文定位）。
+      if (action === "reference") {
+        if (payload === null || typeof payload !== "object") return;
+        const { refKind, id, label } = payload as {
+          refKind: "character" | "location" | "outline";
+          id: string;
+          label?: string;
+        };
+        if (typeof id !== "string") return;
+        onMessageReferenceClick?.({
+          refKind,
+          id,
+          ...(label === undefined ? {} : { label }),
+        });
+        return;
+      }
       if (typeof payload !== "string") return;
       if (action === "view-diff") {
         onProposalAction?.(payload, "view-diff");
@@ -71,7 +88,7 @@ export function ConversationTimeline({
         onProposalAction?.(payload, "reject");
       }
     },
-    [onProposalAction],
+    [onProposalAction, onMessageReferenceClick],
   );
 
   useEffect(() => {

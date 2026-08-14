@@ -27,6 +27,8 @@ export interface CharacterDetail {
   readonly avatarText: string;
   readonly name: string;
   readonly role: string;
+  readonly summary: string;
+  readonly initialState: string;
   readonly profile: string;
   readonly version: number;
   readonly relatedUnits: readonly { readonly unitId: string; readonly label: string }[];
@@ -225,6 +227,8 @@ function captureDetail(character: Character): CharacterDetail {
     avatarText: character.name.slice(0, 1),
     name: character.name,
     role: character.aliases[0] ?? "角色",
+    summary: character.summary ?? "",
+    initialState: character.initialState ?? "",
     profile: character.authorNotes ?? "",
     version: character.entityVersion,
     relatedUnits: Object.freeze([]),

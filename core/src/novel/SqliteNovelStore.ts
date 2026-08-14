@@ -88,12 +88,14 @@ export class SqliteNovelStore implements NovelStore {
 				return {
 					novelId: this.outline.novelId,
 					title: "未命名小说",
-					counts: {
-						storyUnits: count("story_units"),
-						characters: count("characters"),
-						locations: count("locations"),
-						paragraphs: count("paragraphs"),
-					},
+				counts: {
+					storyUnits: count("story_units"),
+					characters: count("characters"),
+					locations: count("locations"),
+					volumes: count("volumes"),
+					chapters: count("chapters"),
+					paragraphs: count("paragraphs"),
+				},
 				};
 			}
 			case "outline.get":

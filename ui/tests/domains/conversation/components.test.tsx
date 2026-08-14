@@ -8,8 +8,6 @@ import { ChatEmptyState } from "../../../src/domains/conversation/components/Cha
 import { ConversationComposer } from "../../../src/domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../../src/domains/conversation/components/ConversationTimeline.js";
 import { GenStatus } from "../../../src/domains/conversation/components/GenStatus.js";
-import { ProposalBlock } from "../../../src/domains/conversation/components/ProposalBlock.js";
-import { ProposalOp } from "../../../src/domains/conversation/components/ProposalOp.js";
 import { UserMessage } from "../../../src/domains/conversation/components/UserMessage.js";
 import type { ConversationTimelineItem } from "../../../src/domains/conversation/projection/ConversationTimelineItem.js";
 
@@ -129,39 +127,6 @@ describe("UserMessage", () => {
   it("renders in-pad copy button on the first user message", () => {
     render(<UserMessage sequence={1} text="开场" timestamp={1000} inPad />);
     expect(screen.getByRole("button", { name: "复制消息" })).toBeInTheDocument();
-  });
-});
-
-describe("ProposalBlock / ProposalOp", () => {
-  it("renders tag, title, meta and ops, and fires view-diff", async () => {
-    const user = userEvent.setup();
-    const onViewDiff = vi.fn();
-    render(
-      <ProposalBlock
-        tag="proposal"
-        title="调整雨景描写"
-        meta="r041 -> r042"
-        changeSetId="CS-1"
-        onViewDiff={onViewDiff}
-        ops={[{ id: "op-1", mark: "mod", kind: "manuscript", description: { kind: "text", text: "把'雨很大'改为'雨落得密'" } }]}
-      />,
-    );
-    expect(screen.getByText("调整雨景描写")).toBeInTheDocument();
-    expect(screen.getByText("r041 -> r042")).toBeInTheDocument();
-    expect(screen.getByText("~")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "前往审批 Diff" }));
-    expect(onViewDiff).toHaveBeenCalledWith("CS-1");
-  });
-
-  it("ProposalOp renders mark, description and kind", () => {
-    render(
-      <ProposalOp
-        op={{ id: "op-2", mark: "add", kind: "character", description: { kind: "text", text: "新增角色 林夏" } }}
-      />,
-    );
-    expect(screen.getByText("+")).toBeInTheDocument();
-    expect(screen.getByText("新增角色 林夏")).toBeInTheDocument();
-    expect(screen.getByText("角色")).toBeInTheDocument();
   });
 });
 

@@ -1,9 +1,8 @@
 /**
  * NovelOverviewStore 契约测试。
  *
- * 适配说明：core overview 精简为 { novelId, title, counts(storyUnits/characters/
- * locations/paragraphs) }，无 scope/sourceRevision；store 中 volumeCount/
- * chapterCount 恒 0（等 publication 计数落地）。
+ * 适配说明：core overview 为 { novelId, title, counts(storyUnits/characters/
+ * locations/volumes/chapters/paragraphs) }，无 scope/sourceRevision。
  */
 import { describe, expect, it, vi } from "vitest";
 import type { NovelApiClient, NovelOverview } from "@novel/core";
@@ -12,7 +11,7 @@ import { NovelOverviewStore } from "../../../src/domains/novel/overview/NovelOve
 const overview: NovelOverview = {
   novelId: "novel_1",
   title: "雾港",
-  counts: { storyUnits: 12, characters: 3, locations: 2, paragraphs: 9 },
+  counts: { storyUnits: 12, characters: 3, locations: 2, volumes: 2, chapters: 9, paragraphs: 9 },
 };
 
 function buildApi(overrides: Partial<NovelApiClient["novel"]["overview"]> = {}): NovelApiClient {
@@ -51,8 +50,8 @@ describe("NovelOverviewStore", () => {
       storyUnitCount: 12,
       characterCount: 3,
       locationCount: 2,
-      volumeCount: 0,
-      chapterCount: 0,
+      volumeCount: 2,
+      chapterCount: 9,
       paragraphCount: 9,
     });
   });

@@ -4,6 +4,7 @@
 export * from "./Avatar.js";
 export * from "./Badge.js";
 export * from "./Button.js";
+export * from "./ConfirmDialog.js";
 export * from "./Dialog.js";
 export * from "./DragHandle.js";
 export * from "./Dropdown.js";

@@ -21,7 +21,3 @@
   flex: 1;
   min-height: 0;
 }
-
-.body[data-sidebar-mode="collapsed"] .sidebar {
-  margin-left: calc(-1 * var(--sidebar-width));
-}

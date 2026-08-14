@@ -31,6 +31,8 @@ export interface LocationDetail {
   readonly name: string;
   readonly role: string;
   readonly locState: LocationState;
+  readonly summary: string;
+  readonly initialState: string;
   readonly profile: string;
   /** 实体版本（乐观锁 baseRevision） */
   readonly version: number;
@@ -233,6 +235,8 @@ function captureDetail(location: Location): LocationDetail {
     name: location.name,
     role: location.aliases[0] ?? "地点",
     locState: "filed" as const,
+    summary: location.summary ?? "",
+    initialState: location.initialState ?? "",
     profile: location.authorNotes ?? "",
     version: location.entityVersion,
     relatedUnits: Object.freeze([]),

@@ -282,7 +282,7 @@ describe("snapshot", () => {
 		const overview: NovelOverview = {
 			novelId: brand("n-1"),
 			title: "测试小说",
-			counts: { storyUnits: 1, characters: 2, locations: 0, paragraphs: 5 },
+			counts: { storyUnits: 1, characters: 2, locations: 0, volumes: 1, chapters: 4, paragraphs: 5 },
 		};
 		expect(overview.counts.characters).toBe(2);
 	});

@@ -14,6 +14,7 @@ import { StoryUnitEditDialog } from "../../../domains/novel/outline/components/S
 import type { StoryOutlineTreeNode } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
 import type { StoryOutlineTreeStore } from "../../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
+import { ConfirmDialog } from "../../../shared/primitives/ConfirmDialog.js";
 import styles from "./OutlineUnitInspectorPanel.module.css";
 
 function findNode(
@@ -44,6 +45,7 @@ export function OutlineUnitInspectorPanel({
   const coreUnit = outlineTree.getUnit(unitId);
   const [editOpen, setEditOpen] = useState(false);
   const [childOpen, setChildOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (unit === undefined) {
     return <div className={styles.panel}>未找到大纲单元</div>;
@@ -78,10 +80,7 @@ export function OutlineUnitInspectorPanel({
           type="button"
           className={styles.action}
           onClick={() => {
-            if (coreUnit === undefined) return;
-            // eslint-disable-next-line no-alert
-            if (!window.confirm(`确定删除大纲单元「${unit.label}」？其子单元将一并删除。`)) return;
-            void outlineTree.deleteStoryUnit(unitId, coreUnit.entityVersion);
+            if (coreUnit !== undefined) setDeleteOpen(true);
           }}
         >
           删除
@@ -118,6 +117,16 @@ export function OutlineUnitInspectorPanel({
         onSubmit={(input) =>
           outlineTree.createStoryUnit({ parentId: unitId as never, ...input })
         }
+      />
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="删除大纲单元"
+        description={`确定删除大纲单元「${unit.label}」？其子单元将一并删除。`}
+        onConfirm={() => {
+          setDeleteOpen(false);
+          if (coreUnit !== undefined) void outlineTree.deleteStoryUnit(unitId, coreUnit.entityVersion);
+        }}
       />
     </div>
   );

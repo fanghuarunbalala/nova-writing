@@ -1,0 +1,12 @@
+/**
+ * TextCardRenderer 视觉：富文本卡片容器（surface 底 + 细边框，与引用卡同族）。
+ */
+.card {
+  padding: var(--space-9px) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-size: var(--fs-body);
+  line-height: 1.75;
+}

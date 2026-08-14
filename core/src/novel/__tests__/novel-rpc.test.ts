@@ -19,12 +19,14 @@ function createMemoryStore(): NovelStore {
 					return {
 						novelId: "n1",
 						title: "测试小说",
-						counts: {
-							storyUnits: 0,
-							characters: Object.keys(characters).length,
-							locations: 0,
-							paragraphs: 0,
-						},
+					counts: {
+						storyUnits: 0,
+						characters: Object.keys(characters).length,
+						locations: 0,
+						volumes: 0,
+						chapters: 0,
+						paragraphs: 0,
+					},
 					};
 				case "characters.list":
 					return Object.values(characters);

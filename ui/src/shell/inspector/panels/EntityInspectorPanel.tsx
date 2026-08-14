@@ -12,6 +12,7 @@ import { LocationDetailPanel } from "../../../domains/novel/location/components/
 import { useLocationDetail } from "../../../domains/novel/location/hooks/useLocationDetail.js";
 import { EntityEditDialog } from "../../../domains/novel/components/EntityEditDialog.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
+import { ConfirmDialog } from "../../../shared/primitives/ConfirmDialog.js";
 import type { CharacterStore } from "../../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../../domains/novel/location/store/LocationStore.js";
 import styles from "./EntityInspectorPanel.module.css";
@@ -34,6 +35,7 @@ export function EntityInspectorPanel({
   onLocateInContent,
 }: EntityInspectorPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   if (entityType === "character") {
     const charSnapshot = useExternalStore(characters);
     if (
@@ -52,10 +54,7 @@ export function EntityInspectorPanel({
           onLocateInContent={onLocateInContent}
           onEdit={() => setEditOpen(true)}
           onDelete={() => {
-            if (detail === undefined) return;
-            // eslint-disable-next-line no-alert
-            if (!window.confirm(`确定删除角色「${detail.name}」？此操作不可撤销。`)) return;
-            void characters.deleteCharacter(entityId, detail.version);
+            if (detail !== undefined) setDeleteOpen(true);
           }}
         />
         <EntityEditDialog
@@ -68,13 +67,23 @@ export function EntityInspectorPanel({
               ? {
                   name: detail.name,
                   aliases: detail.role === "角色" ? [] : [detail.role],
-                  summary: "",
-                  initialState: "",
+                  summary: detail.summary ?? "",
+                  initialState: detail.initialState ?? "",
                   authorNotes: detail.profile,
                 }
               : undefined
           }
           onSubmit={(input) => characters.updateCharacter(entityId, input, detail!.version)}
+        />
+        <ConfirmDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          title="删除角色"
+          description={`确定删除角色「${detail?.name ?? entityId}」？此操作不可撤销。`}
+          onConfirm={() => {
+            setDeleteOpen(false);
+            if (detail !== undefined) void characters.deleteCharacter(entityId, detail.version);
+          }}
         />
       </>
     );
@@ -96,10 +105,7 @@ export function EntityInspectorPanel({
         onLocateInContent={onLocateInContent}
         onEdit={() => setEditOpen(true)}
         onDelete={() => {
-          if (detail === undefined) return;
-          // eslint-disable-next-line no-alert
-          if (!window.confirm(`确定删除地点「${detail.name}」？此操作不可撤销。`)) return;
-          void locations.deleteLocation(entityId, detail.version);
+          if (detail !== undefined) setDeleteOpen(true);
         }}
       />
       <EntityEditDialog
@@ -112,13 +118,23 @@ export function EntityInspectorPanel({
             ? {
                 name: detail.name,
                 aliases: detail.role === "地点" ? [] : [detail.role],
-                summary: "",
-                initialState: "",
+                summary: detail.summary,
+                initialState: detail.initialState,
                 authorNotes: detail.profile,
               }
             : undefined
         }
         onSubmit={(input) => locations.updateLocation(entityId, input, detail!.version)}
+      />
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="删除地点"
+        description={`确定删除地点「${detail?.name ?? entityId}」？此操作不可撤销。`}
+        onConfirm={() => {
+          setDeleteOpen(false);
+          if (detail !== undefined) void locations.deleteLocation(entityId, detail.version);
+        }}
       />
     </>
   );

@@ -48,6 +48,8 @@ export class InMemoryNovelStore implements NovelStore {
 						storyUnits: this.storyUnits.size,
 						characters: this.characters.size,
 						locations: this.locations.size,
+						volumes: this.volumes.size,
+						chapters: this.chapters.size,
 						paragraphs: this.paragraphs.size,
 					},
 				};

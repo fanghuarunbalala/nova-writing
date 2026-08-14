@@ -17,3 +17,8 @@
   overflow-y: auto;
   transition: margin-left var(--duration-base) var(--ease-in-out);
 }
+
+/* 折叠规则必须在本地模块内匹配（跨模块类名会被 CSS Modules 哈希化，永远失效） */
+.sidebar[data-mode="collapsed"] {
+  margin-left: calc(-1 * var(--sidebar-width));
+}

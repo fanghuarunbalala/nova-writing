@@ -18,7 +18,8 @@ export interface ToolStripProps {
 
 interface ToolCallRow {
   readonly traceId: string;
-  readonly outcome: "ok" | "failed";
+  /** 终态结果（undefined = 进行中：tool-recorded.started 尚未收口） */
+  readonly outcome?: "ok" | "failed";
   readonly durationMs?: number;
 }
 
@@ -54,7 +55,7 @@ function groupTraces(traces: readonly ToolTraceView[]): readonly ToolGroup[] {
         rows[rows.length - 1]!;
       return {
         traceId: terminal.traceId,
-        outcome: terminal.outcome,
+        ...(terminal.outcome !== undefined ? { outcome: terminal.outcome } : {}),
         ...(terminal.durationMs === undefined
           ? {}
           : { durationMs: terminal.durationMs }),
@@ -62,6 +63,17 @@ function groupTraces(traces: readonly ToolTraceView[]): readonly ToolGroup[] {
     });
     return { toolName, calls };
   });
+}
+
+/** 进行中的调用数（outcome 未收口） */
+function runningCount(calls: readonly ToolCallRow[]): number {
+  return calls.filter((call) => call.outcome === undefined).length;
+}
+
+/** outcome 行样式：undefined 用 muted 占位，终态按 ok/failed 上色 */
+function outcomeClass(outcome: "ok" | "failed" | undefined): string | undefined {
+  if (outcome === undefined) return styles.outcome;
+  return [styles.outcome, outcome === "ok" ? styles.ok : styles.failed].join(" ");
 }
 
 export const ToolStrip = memo(function ToolStrip({ traces }: ToolStripProps) {
@@ -91,16 +103,22 @@ export const ToolStrip = memo(function ToolStrip({ traces }: ToolStripProps) {
                 <span>{group.toolName}</span>
                 <b>×{group.calls.length}</b>
                 {failedCount > 0 ? <span className={styles.bad}>失败 {failedCount}</span> : null}
+                {runningCount(group.calls) > 0 ? (
+                  <span className={styles.running}>进行中 {runningCount(group.calls)}</span>
+                ) : null}
                 <span className={styles.chev}>{open ? "▾" : "›"}</span>
               </button>
               {open ? (
                 <div className={styles.rows}>
                   {group.calls.map((call) => (
                     <div key={call.traceId} className={styles.row}>
-                      <span className={[styles.outcome, call.outcome === "ok" ? styles.ok : styles.failed].join(" ")}>
-                        {call.outcome === "ok" ? "ok" : "failed"}
+                      <span className={outcomeClass(call.outcome)}>
+                        {call.outcome === undefined ? "…" : call.outcome === "ok" ? "ok" : "failed"}
                       </span>
                       <span className={styles.txt}>{group.toolName}</span>
+                      {call.outcome === undefined ? (
+                        <span className={styles.running}>进行中</span>
+                      ) : null}
                       {call.durationMs !== undefined ? (
                         <span className={styles.time}>{(call.durationMs / 1000).toFixed(1)}s</span>
                       ) : null}

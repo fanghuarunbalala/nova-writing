@@ -100,6 +100,12 @@
   color: var(--color-danger);
 }
 
+/* 进行中（tool-recorded.started 尚未收口） */
+.running {
+  color: var(--color-accent-9);
+  font-size: var(--fs-9-5);
+}
+
 .txt {
   flex: 1;
   min-width: 0;

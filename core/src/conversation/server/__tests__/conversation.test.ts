@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../Conversation.js";
@@ -346,6 +346,24 @@ describe("Conversation + compose 服务集成", () => {
     conv.resolveApproval("r1", { kind: "reject" });
     expect(await decision).toEqual({ kind: "reject" });
     expect(hubEvents.some((e) => e.type === "compose.submitted")).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("端到端：mode.set compose → begin 建文件 → Exit 审批 approve → exit 归档 + mode.changed(review)", async () => {
+    const { dir, state, service, stateJournal, conv, hubEvents } = makeComposeConv();
+    await enterCompose(conv);
+    const designPath = join(dir, "ws", ".novel", "design", "c1.md");
+    expect(existsSync(designPath)).toBe(true);
+    // ExitComposeMode 审批：批准决议（gateTool 放行后 handler 调 service.exit 收口）
+    const decision = conv.sendApprovalRequest({ requestId: "r1", toolName: "ExitComposeMode", args: "{}" });
+    conv.resolveApproval("r1", { kind: "approve" });
+    expect(await decision).toEqual({ kind: "approve" });
+    await service.exit("c1");
+    expect(state.snapshot("c1")).toMatchObject({ mode: "review", active: false, phase: "applied" });
+    expect(existsSync(join(dir, "ws", ".novel", "design", "archive", "c1.md"))).toBe(true);
+    const appended = stateJournal.append.mock.calls.map((c) => (c[0] as OutputEvent).type);
+    expect(appended).toContain("mode.changed"); // persist 落盘（重启 hydrate 依据）
+    expect(hubEvents.some((e) => e.type === "compose.applied")).toBe(true);
     rmSync(dir, { recursive: true, force: true });
   });
 });

@@ -14,6 +14,7 @@ import { webSocketClientTransport } from "kkrpc/ws";
 import { Conversation, type ManagerWaitChannel } from "../../conversation/server/Conversation.js";
 import { FileConversationJournalService } from "../../conversation/persistence/FileConversationJournalService.js";
 import { FileConversationJournalReadOnlyService } from "../../conversation/persistence/FileConversationJournalReadOnlyService.js";
+import { FileConversationStateJournalService } from "../../conversation/persistence/FileConversationStateJournalService.js";
 import { journalListener } from "../../conversation/JournalBridge.js";
 import { debugLog } from "../../log/debug.js";
 import { createLogger } from "../../log/pino.js";
@@ -25,7 +26,10 @@ import {
   readNovelGlobalConstraintsSafe,
   NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME,
 } from "../workspace/readNovelGlobalConstraints.js";
-import { ComposeModeStateProvider } from "../../conversation/compose/ComposeModeState.js";
+import {
+  ComposeModeService,
+  ComposeModeStateProvider,
+} from "../../conversation/compose/index.js";
 import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
 import type { LLMessage } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
@@ -156,6 +160,8 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	const holder: { conv?: Conversation } = {};
 	let cmsApi: CmsApi | undefined;
 	let resumePendingDecider: ((toolCallId: string) => Promise<"approve" | "reject" | "expired" | undefined>) | undefined;
+	/** CMS 待决条目（toolCallId → 条目；重启补完 + ExitComposeMode 决议包装共用） */
+	const byToolCallId = new Map<string, ApprovalQueueItem>();
 	if (managerWsUrl !== undefined && managerWsUrl.trim() !== "") {
 		const wsToken = process.env.NOVEL_MANAGER_WS_TOKEN;
 		const channel = new RPCChannel(
@@ -168,7 +174,6 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		cmsApi = channel.getAPI() as unknown as CmsApi;
 		// 重启补完路径：查询 CMS 待决决策 → 暂停点续跑决策器
 		const decisions = await cmsApi.takeDecisions(conversationId).catch(() => []);
-		const byToolCallId = new Map<string, ApprovalQueueItem>();
 		for (const item of decisions) {
 			const toolCallId = toolCallIdOf(item.requestId);
 			if (toolCallId !== undefined) byToolCallId.set(toolCallId, item);
@@ -209,6 +214,40 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 				})
 			: undefined;
 
+	// ① compose 状态与服务：状态实例先 hydrate（state.jsonl 重放）再装配——
+	// 顺序保证：nudge 策略构造（buildNovelAgent 内）时 latch 已 seed（重启不误发上升沿）
+	const composeState = new ComposeModeStateProvider();
+	const composeService = new ComposeModeService({
+		composeState,
+		designRoot: join(workspace, ".novel", "design"),
+		// 挂起审批探测：mode 切换延迟判定（holder 闭包，conv 构造后可用）
+		pendingApprovalProbe: () => Promise.resolve(holder.conv?.hasPendingApproval() ?? false),
+		logger,
+	});
+	const stateJournal =
+		storedir !== undefined && storedir.trim() !== ""
+			? new FileConversationStateJournalService({ filePath: join(storedir, "state.jsonl") })
+			: undefined;
+	if (storedir !== undefined && storedir.trim() !== "") {
+		const readOnly = new FileConversationJournalReadOnlyService({ journalDir: storedir });
+		const stateEvents = await readOnly.readStateEvents(conversationId);
+		await composeService.hydrateFromEvents(conversationId, stateEvents);
+	}
+	// 重启补完的 ExitComposeMode 决议包装：reject/expired 驱动状态回 designing + 晋升延迟目标
+	// （approve 决议由 resumePendingTurn dispatch 执行 ExitComposeMode handler → service.exit 收口）
+	if (resumePendingDecider !== undefined) {
+		const baseDecider = resumePendingDecider;
+		resumePendingDecider = async (toolCallId) => {
+			const decision = await baseDecider(toolCallId);
+			const item = byToolCallId.get(toolCallId);
+			if (item?.toolName === "ExitComposeMode" && (decision === "reject" || decision === "expired")) {
+				await composeService.rejectOnDecision(conversationId);
+				await composeService.applyPendingModeTarget(conversationId);
+			}
+			return decision;
+		};
+	}
+
 	const loop = buildNovelAgent({
 		workspace,
 		provider,
@@ -230,9 +269,11 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 				? undefined
 				: { fileName: NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME, content };
 		},
-		// compose_mode nudge 状态提供者（compose 状态机接线不在本期，进入/退出
-		// 由后续 conversation 层驱动该实例）；todo_idle/TodoWrite 的内存存储
-		composeState: new ComposeModeStateProvider(),
+		// compose 状态（nudge/权限门共享）+ 工具服务（novel.compose 组）+ 每次 provider
+		// call 发起时晋升 pendingMode（mode.set 记录后由本钩子生效，PRD F1 双态）
+		composeState,
+		composeService,
+		beforeProviderCall: () => holder.conv?.promotePendingMode() ?? Promise.resolve(),
 		todoStore: new InMemoryConversationTodoStore(),
 	});
 
@@ -253,8 +294,13 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		managerWait,
 		// 120s 无决策：退出进程（不占资源）；CMS 在 UI 决策后重启续跑
 		onWaitTimeout: cmsApi !== undefined ? () => process.exit(0) : undefined,
+		composeState,
+		composeService,
+		stateJournal,
 	});
 	holder.conv = conv;
+	// 状态事件出口：先落 state.jsonl 再 hub 广播（写序 ②→③）
+	composeService.setEventSink((e) => conv.emitState(e));
 
 	// 暂停点续跑：恢复 turn 存在缺 tool 结果的 toolCall 时补完并收口
 	if (turnMessages !== undefined && turnMessages.length > 0) {

@@ -204,6 +204,11 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.activeMode = target;
 	}
 
+	/** 是否存在挂起审批（compose 服务 setMode 延迟判定的探测面） */
+	hasPendingApproval(): boolean {
+		return this.pendingApprovals.size > 0;
+	}
+
 	/**
 	 * 请求审批（无阻塞）：经 manager wait 通道提交 CMS 队列（request/resolve 分离），
 	 * 返回决策 promise 供 gateTool 驻留等待；决策经 resolveApproval 回传解除；

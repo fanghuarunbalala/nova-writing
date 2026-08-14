@@ -19,3 +19,4 @@ npm-debug.log*
 .idea/
 .vscode/
 novel-events-*
+novel-events

@@ -23,6 +23,7 @@ import type {
 	Receipt,
 } from "../contract/types/index.js";
 import { DEFAULT_CONVERSATION_MODE } from "../contract/types/index.js";
+import { CONVERSATION_OUTPUT } from "../../event/topics.js";
 import type { SubagentRuntime } from "./SubagentRuntime.js";
 
 /** manager wait 通道：conversation → CMS 的 wait 提交面（子进程经 manager WS；内存模式直连 managerServer） */
@@ -71,6 +72,16 @@ export interface ConversationOptions {
 	initialMode?: ConversationMode;
 	/** 模式变更持久化回调（applyPendingMode 生效时调用；写失败由回调自行忽略） */
 	onModeChanged?: (mode: ConversationMode) => void;
+	/**
+	 * 事件发布器（ZeroMQ PUB 形态；gui-performance-2 功能点八——事件火线
+	 * fire-and-forget 广播，与 kkrpc 控制通道分离）。缺省仅内存 hub。
+	 */
+	eventPublisher?: ConversationEventPublisher;
+}
+
+/** 事件发布器（结构化接口：child 注入 EventPublisher；测试/内存模式缺省） */
+export interface ConversationEventPublisher {
+	publish(topic: string, payload: unknown): void;
 }
 
 /** 输出事件订阅回调（hub 广播投影事件） */
@@ -113,6 +124,10 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly onWaitTimeout?: (requestId: string) => void;
 	/** 模式变更持久化回调（可选：子进程注入 meta.json 落盘） */
 	private readonly onModeChanged?: (mode: ConversationMode) => void;
+	/** 事件发布器（可选：child 侧 ZeroMQ PUB 广播；缺省仅内存 hub） */
+	private readonly eventPublisher?: ConversationEventPublisher;
+	/** 事件流序号（逐会话单调递增；消费方 eseq 断档检测重放用） */
+	private eventSeq = 0;
 	/** 待决审批（requestId → {resolve, timer}），无阻塞驻留等待决策 */
 	private readonly pendingApprovals = new Map<
 		string,
@@ -140,6 +155,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.activeMode = opts.initialMode ?? DEFAULT_CONVERSATION_MODE;
 		this.lastPersistedMode = opts.initialMode;
 		this.onModeChanged = opts.onModeChanged;
+		this.eventPublisher = opts.eventPublisher;
 		// 投影层：缺省经 loop.toolDispatcher 取 ToolDef.preview（live 与 replay 同实现）
 		this.projection = opts.projection ?? this.createProjection();
 		// 订阅 loop 的输出事件：经投影层映射后转发到本会话 hub（hub 只广播 ProjectedEvent）
@@ -347,9 +363,14 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		}
 	}
 
-	/** 分发输出事件给所有订阅者 */
+	/** 分发输出事件给所有订阅者（内存 hub + ZeroMQ 广播；事件盖 eseq 单调序号） */
 	private emit(e: ProjectedEvent): void {
-		for (const l of this.eventListeners) l(e);
+		const stamped = { ...e, eseq: ++this.eventSeq } as ProjectedEvent;
+		for (const l of this.eventListeners) l(stamped);
+		this.eventPublisher?.publish(CONVERSATION_OUTPUT, {
+			conversationId: this.conversationId,
+			event: stamped,
+		});
 	}
 
 	/** 订阅事件（内部：外部经 events() 订阅时注册 listener），返回取消订阅函数 */

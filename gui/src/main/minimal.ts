@@ -15,6 +15,8 @@ import {
   EventPublisher,
   EventSubscriber,
   FileConversationJournalService,
+  CONVERSATION_OUTPUT,
+  conversationEventsAddr,
   NOVEL_CHANGED,
   NOVEL_EVENTS_ADDR,
   SqliteNovelStore,
@@ -61,6 +63,8 @@ const IPC_CHANNEL = "novel-rpc";
 const CONFIG_CHANNEL = "config-rpc";
 const WORKSPACE_CHANNEL = "workspace-rpc";
 const UI_CHANNEL = "ui-rpc";
+/** 会话事件火线裸推通道（main → renderer 单向 webContents.send；preload 同名白名单） */
+const CONVERSATION_EVENTS_CHANNEL = "conversation-events";
 
 /**
  * 回显 AgentLoop：followup 即时开 run 产 run-start/user.message → assistant.delta×N →
@@ -381,6 +385,33 @@ async function main(): Promise<void> {
       console.error("[main] novel subscriber stopped:", e);
     }
   })();
+
+  // 会话事件火线（gui-performance-2 功能点八）：child 侧每会话一个 ZMQ PUB
+  // （ipc://conversation-{id}-events，register 时已 bind）；main 在 register 报到后
+  // SUB 接入，逐帧裸转发 renderer（无 kkrpc 远端回调往返）。会话进程退出拆除 SUB。
+  const conversationSubscribers = new Map<string, EventSubscriber>();
+  manager.onRegistered((conversationId) => {
+    if (conversationSubscribers.has(conversationId)) return;
+    const subscriber = new EventSubscriber(conversationEventsAddr(conversationId), [CONVERSATION_OUTPUT]);
+    conversationSubscribers.set(conversationId, subscriber);
+    void (async () => {
+      try {
+        await subscriber.connect();
+        for await (const message of subscriber) {
+          const win = mainWindow;
+          if (win === undefined || win.isDestroyed()) continue;
+          win.webContents.send(CONVERSATION_EVENTS_CHANNEL, message.payload);
+        }
+      } catch (e) {
+        console.error(`[main] conversation subscriber stopped (${conversationId}):`, e);
+      }
+    })();
+  });
+  manager.onConversationExited((conversationId) => {
+    const subscriber = conversationSubscribers.get(conversationId);
+    conversationSubscribers.delete(conversationId);
+    if (subscriber !== undefined) void subscriber.close().catch(() => {});
+  });
 
   // 退出前有序关闭：zeromq 原生插件（addon.node）在进程退出时若 socket 未干净拆除会
   // fail-fast（0xC0000409，Event Log 已确认）。will-quit 先 preventDefault，等全部

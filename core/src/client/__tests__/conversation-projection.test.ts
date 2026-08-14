@@ -199,3 +199,94 @@ describe("ConversationProjection delta 置脏与合并发布（gui-performance-2
     expect(snapshot.liveState).toBeUndefined();
   });
 });
+
+describe("ConversationProjection 平台事件源与 eseq 断档（gui-performance-2 功能点八）", () => {
+  /** kkrpc subscribeEvents 抛错（断言平台源路径完全旁路）+ 可推送的平台源 */
+  function platformSourceHarness(): {
+    handle: ConversationHandle;
+    source: { subscribe: (id: string, l: (e: ProjectedEvent) => void) => () => void };
+    push: (event: ProjectedEvent) => void;
+    unsubscribed: boolean;
+  } {
+    const handle = {
+      sendUserMessage: async () => ({ seq: 0, recordedAt: "" }),
+      sendSystemControl: async () => ({ seq: 0, recordedAt: "" }),
+      resolveApproval: () => {},
+      getConversationMode: async () => "review",
+      dispose: () => {},
+      subscribeEvents: async () => {
+        throw new Error("kkrpc subscribeEvents 不应被调用（平台源已注入）");
+      },
+    } as unknown as ConversationHandle;
+    let listener: ((e: ProjectedEvent) => void) | undefined;
+    const harness = {
+      handle,
+      source: {
+        subscribe: (_id: string, l: (e: ProjectedEvent) => void) => {
+          listener = l;
+          return () => {
+            unsubscribedFlag = true;
+            listener = undefined;
+          };
+        },
+      },
+      push: (event: ProjectedEvent) => {
+        if (listener === undefined) throw new Error("平台源尚未订阅");
+        listener(event);
+      },
+      unsubscribed: false,
+    };
+    let unsubscribedFlag = false;
+    Object.defineProperty(harness, "unsubscribed", { get: () => unsubscribedFlag });
+    return harness;
+  }
+
+  it("平台事件源路径：事件经 source 交付（kkrpc subscribeEvents 旁路），stop 拆除订阅", async () => {
+    const harness = platformSourceHarness();
+    const proj = new ConversationProjection(harness.handle, "c1", async () => [], harness.source);
+    await proj.start();
+    harness.push(userMessage("hi"));
+    harness.push(delta("流式"));
+    const snapshot = proj.getSnapshot();
+    expect(snapshot.timeline.map((i) => i.kind)).toEqual(["user", "assistant"]);
+    expect(snapshot.timeline.at(-1)).toMatchObject({ text: "流式" });
+    await proj.stop();
+    expect(harness.unsubscribed).toBe(true);
+  });
+
+  it("eseq 断档 → 触发 history 补拉（ZMQ 丢包自愈）；连续断档不叠加补拉", async () => {
+    const harness = platformSourceHarness();
+    let historyCalls = 0;
+    const history = async (): Promise<ProjectedEvent[]> => {
+      historyCalls += 1;
+      return [];
+    };
+    const proj = new ConversationProjection(harness.handle, "c1", history, harness.source);
+    await proj.start();
+    expect(historyCalls).toBe(1); // 初始重放
+    harness.push({ ...userMessage("hi"), eseq: 1 });
+    harness.push({ ...delta("a"), eseq: 2 });
+    // 断档：跳过 eseq 3、4
+    harness.push({ ...delta("c"), eseq: 5 });
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 catch-up 微任务
+    expect(historyCalls).toBe(2);
+    // 后续连续事件（无新断档）不再补拉
+    harness.push({ ...delta("d"), eseq: 6 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(historyCalls).toBe(2);
+  });
+
+  it("重放事件无 eseq（journal 域）不建立基线：首个实时事件不误报断档", async () => {
+    const harness = platformSourceHarness();
+    const history = async (): Promise<ProjectedEvent[]> => [
+      userMessage("历史消息") as ProjectedEvent,
+    ];
+    const proj = new ConversationProjection(harness.handle, "c1", history, harness.source);
+    await proj.start();
+    // 首个实时事件 eseq=100（重放不建立基线）→ 不触发补拉
+    harness.push({ ...delta("live"), eseq: 100 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const snapshot = proj.getSnapshot();
+    expect(snapshot.timeline.at(-1)).toMatchObject({ text: "live" });
+  });
+});

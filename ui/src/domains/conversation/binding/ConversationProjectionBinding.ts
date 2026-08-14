@@ -11,6 +11,7 @@ import type {
 import {
   ConversationProjection,
   noopLogger,
+  type ConversationPlatformEventSource,
   type ConversationProjectionSnapshot,
 } from "@novel/core/client";
 import {
@@ -24,6 +25,8 @@ export interface ConversationProjectionBindingOptions {
   readonly api: NovelApiClient;
   readonly conversationId: string;
   readonly logger?: Logger;
+  /** 平台事件源（ZMQ 推送通道；缺省回退 kkrpc subscribeEvents） */
+  readonly eventSource?: ConversationPlatformEventSource;
 }
 
 export class ConversationProjectionBinding {
@@ -31,6 +34,8 @@ export class ConversationProjectionBinding {
 
   private readonly api: NovelApiClient;
   private readonly logger: Logger;
+  /** 平台事件源（可选：ZMQ 推送通道；缺省投影走 kkrpc subscribeEvents） */
+  private readonly eventSource?: ConversationPlatformEventSource;
   private readonly listeners = new Set<ConversationProjectionBindingListener>();
   private state: ConversationProjectionBindingState =
     CONVERSATION_PROJECTION_BINDING_STATE.idle;
@@ -45,6 +50,7 @@ export class ConversationProjectionBinding {
   constructor(options: ConversationProjectionBindingOptions) {
     this.api = options.api;
     this.conversationId = requireConversationId(options.conversationId);
+    this.eventSource = options.eventSource;
     this.logger = (options.logger ?? noopLogger).child({
       component: "conversation_projection_binding",
       conversationId: this.conversationId,
@@ -121,8 +127,11 @@ export class ConversationProjectionBinding {
         return;
       }
       this.handle = handle;
-      const projection = new ConversationProjection(handle, this.conversationId, (opts) =>
-        this.api.conversations.projectedHistory(this.conversationId, opts),
+      const projection = new ConversationProjection(
+        handle,
+        this.conversationId,
+        (opts) => this.api.conversations.projectedHistory(this.conversationId, opts),
+        this.eventSource,
       );
       this.projection = projection;
       this.unsubscribeProjection = projection.subscribe(() => this.publish());

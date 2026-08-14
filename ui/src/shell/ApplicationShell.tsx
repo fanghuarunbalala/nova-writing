@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
+import type { FrontendPlatform } from "../platform/FrontendPlatform.js";
 import { useActiveConversationBinding, useFirstUserMessage } from "../domains/conversation/hooks/useActiveConversationSession.js";
 import { createApprovalEntityResolver } from "../domains/approval/approvalEntityResolver.js";
 import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
@@ -76,6 +77,8 @@ export interface ApplicationShellProps {
   readonly onOpenWorkspace?: () => void;
   readonly onOpenSettings?: () => void;
   readonly overlays?: ReactNode;
+  /** 平台能力（可选：会话事件 ZMQ 火线等；缺省投影回退 kkrpc 通道） */
+  readonly platform?: FrontendPlatform;
 }
 
 export function ApplicationShell({
@@ -90,6 +93,7 @@ export function ApplicationShell({
   onOpenWorkspace,
   onOpenSettings,
   overlays,
+  platform,
 }: ApplicationShellProps) {
   const workspaceAdapter = useMemo(
     () => new WorkspaceControllerAdapter(workspaceController),
@@ -114,11 +118,13 @@ export function ApplicationShell({
   const workspaceId = workspace.current?.id;
 
   // 活动会话 binding：shell 只持生命周期（gui-performance-2 功能点五——流式发布
-  // 不再重渲染整壳）；快照订阅下沉 ChatSurface，标题派生走首用户消息选择器
+  // 不再重渲染整壳）；快照订阅下沉 ChatSurface，标题派生走首用户消息选择器。
+  // 事件源走平台 ZMQ 火线（功能点八；缺省回退 kkrpc）
   const conversationBinding = useActiveConversationBinding(
     api,
     catalogSnapshot.activeConversationId,
     logger,
+    platform?.conversationEvents,
   );
   const firstUserMessage = useFirstUserMessage(conversationBinding);
   const approvalSnapshot = useExternalStore(approvalStore);

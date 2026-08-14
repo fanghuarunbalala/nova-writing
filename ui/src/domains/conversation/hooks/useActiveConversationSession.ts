@@ -17,7 +17,10 @@ import type {
   NovelApiClient,
   Receipt,
 } from "@novel/core";
-import type { ConversationTimelineItem } from "@novel/core/client";
+import type {
+  ConversationPlatformEventSource,
+  ConversationTimelineItem,
+} from "@novel/core/client";
 import { ConversationProjectionBinding } from "../binding/ConversationProjectionBinding.js";
 import type { ConversationProjectionBindingSnapshot } from "../binding/ConversationProjectionBindingTypes.js";
 
@@ -41,12 +44,14 @@ export interface ActiveConversationSession {
  * @param api 客户端门面
  * @param conversationId 活动会话 id（undefined = 无活动会话）
  * @param logger 可选日志
+ * @param eventSource 平台事件源（ZMQ 推送；缺省投影走 kkrpc subscribeEvents）
  * @returns 投影 binding（无活动会话为 undefined）
  */
 export function useActiveConversationBinding(
   api: NovelApiClient,
   conversationId: string | undefined,
   logger?: Logger,
+  eventSource?: ConversationPlatformEventSource,
 ): ConversationProjectionBinding | undefined {
   const binding = useMemo(
     () =>
@@ -55,9 +60,10 @@ export function useActiveConversationBinding(
             api,
             conversationId,
             ...(logger !== undefined ? { logger } : {}),
+            ...(eventSource !== undefined ? { eventSource } : {}),
           })
         : undefined,
-    [api, conversationId, logger],
+    [api, conversationId, logger, eventSource],
   );
 
   useEffect(() => {

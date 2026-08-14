@@ -96,6 +96,10 @@ export class ConversationManagerServer implements Contract {
 	private readonly summaries = new Map<string, ConversationSummary>();
 	/** 主动终止的会话 id（exit 事件据此区分 crashed / stopped） */
 	private readonly terminatedIds = new Set<string>();
+	/** register 监听器（main 侧：会话事件 SUB 接线） */
+	private readonly registeredListeners = new Set<(conversationId: ConversationId) => void>();
+	/** 会话进程退出监听器（main 侧：会话事件 SUB 拆除） */
+	private readonly conversationExitListeners = new Set<(conversationId: ConversationId) => void>();
 	/** wait 请求队列（request/resolve 分离的缓冲层） */
 	private readonly waitQueue = new WaitRequestQueue();
 	/** 会话存储根目录（undefined = 不落盘目录，storedir 为空串） */
@@ -240,7 +244,20 @@ export class ConversationManagerServer implements Contract {
 			this.waitQueue.expireConversation(conversationId, new Date().toISOString());
 			this.childProcesses.delete(conversationId);
 			this.handles.delete(conversationId);
+			// main 侧拆除通知（gui-performance-2 功能点八：会话事件 SUB 关闭点）
+			this.notifyConversationExited(conversationId);
 		});
+	}
+
+	/** 会话进程退出通知（registeredListeners 对称拆除；监听器异常忽略） */
+	private notifyConversationExited(conversationId: ConversationId): void {
+		for (const l of [...this.conversationExitListeners]) {
+			try {
+				l(conversationId);
+			} catch {
+				// 监听器异常不影响清理
+			}
+		}
 	}
 
 	/** conversation 启动报到（不冲刷显式名：子进程恒报 conversationId，已有名字时保留） */
@@ -259,6 +276,14 @@ export class ConversationManagerServer implements Contract {
 			status: "active",
 			parentId: meta.parentId,
 		});
+		// main 侧接线通知（gui-performance-2 功能点八：会话事件 SUB 接入点）
+		for (const l of [...this.registeredListeners]) {
+			try {
+				l(meta.conversationId);
+			} catch {
+				// 监听器异常不影响登记
+			}
+		}
 	}
 
 	/** 心跳上报状态 */
@@ -283,6 +308,8 @@ export class ConversationManagerServer implements Contract {
 		this.waitQueue.expireConversation(conversationId, new Date().toISOString());
 		const s = this.summaries.get(conversationId);
 		if (s) s.status = "stopped";
+		// 内存模式无 attachExit：终止即通知拆除（进程模式 attachExit 亦会通知，关闭幂等）
+		this.notifyConversationExited(conversationId);
 	}
 
 	/** 派生 conversation（进程 spawn 优先，缺省内存 factory） */
@@ -511,6 +538,22 @@ export class ConversationManagerServer implements Contract {
 	/** 订阅队列变化（main 侧转发 UI 通知） */
 	onWaitChange(listener: () => void): () => void {
 		return this.waitQueue.onChange(listener);
+	}
+
+	/** 订阅 conversation 报到（main 侧：会话事件 SUB 接线，gui-performance-2 功能点八） */
+	onRegistered(listener: (conversationId: ConversationId) => void): () => void {
+		this.registeredListeners.add(listener);
+		return () => {
+			this.registeredListeners.delete(listener);
+		};
+	}
+
+	/** 订阅 conversation 进程退出（main 侧：会话事件 SUB 拆除） */
+	onConversationExited(listener: (conversationId: ConversationId) => void): () => void {
+		this.conversationExitListeners.add(listener);
+		return () => {
+			this.conversationExitListeners.delete(listener);
+		};
 	}
 
 	/** 取 conversation 操作目标，缺省抛错 */

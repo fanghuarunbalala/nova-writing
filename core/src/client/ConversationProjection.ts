@@ -96,6 +96,16 @@ export type ConversationProjectionHistory = (opts: {
 	limit?: number;
 }) => Promise<ProjectedEvent[]>;
 
+/**
+ * 平台事件源（gui-performance-2 功能点八）：Electron ZMQ 推送通道的 renderer 侧
+ * 形态（main 裸 IPC 转发，无 kkrpc 往返）。注入时优先于 handle.subscribeEvents
+ * （fire-and-forget，丢包由 eseq 断档 + history 重放自愈）；缺省回退 kkrpc 订阅。
+ */
+export interface ConversationPlatformEventSource {
+	/** 订阅指定会话的实时事件；返回取消订阅函数 */
+	subscribe(conversationId: string, listener: (event: ProjectedEvent) => void): () => void;
+}
+
 /** 精简投影器：累积 ProjectedEvent → timeline 列表 */
 export class ConversationProjection {
 	private readonly conversationId: ConversationId;
@@ -131,20 +141,31 @@ export class ConversationProjection {
 	private activeIndex = -1;
 	/** 合并发布定时器（32ms 尾沿；窗口内重复 delta 幂等并入） */
 	private publishTimer: ReturnType<typeof setTimeout> | undefined;
+	/** 平台事件源（ZMQ 推送通道；缺省回退 handle.subscribeEvents） */
+	private readonly eventSource?: ConversationPlatformEventSource;
+	/** 平台事件源取消订阅（stop 时拆除，避免 resume 叠加监听） */
+	private unsubscribePlatformEvents?: () => void;
+	/** 最近收到的实时事件 eseq（断档检测基线；history 重放事件无 eseq 不参与） */
+	private lastEseq: number | undefined;
+	/** eseq 断档补拉在途标记（并发断档只触发一次 catch-up） */
+	private catchUpInFlight = false;
 
 	/**
 	 * @param handle 会话对端 handle（事件流来源）
 	 * @param conversationId 会话 id（快照归属）
 	 * @param history journal 已落盘历史查询（恢复重放用；缺省纯实时流）
+	 * @param eventSource 平台事件源（ZMQ 推送；缺省回退 kkrpc subscribeEvents）
 	 */
 	constructor(
 		handle: ConversationHandle,
 		conversationId: ConversationId,
 		history?: ConversationProjectionHistory,
+		eventSource?: ConversationPlatformEventSource,
 	) {
 		this.handle = handle;
 		this.conversationId = conversationId;
 		this.history = history ?? (async () => []);
+		this.eventSource = eventSource;
 		this.snapshot = this.buildSnapshot();
 	}
 
@@ -182,24 +203,28 @@ export class ConversationProjection {
 		const generation = ++this.generation;
 		this.transition("running");
 		try {
-			// ① 先订阅（进入缓冲模式）：listener 经 proxy() 标记——kkrpc/remote-refs 的 codec
-			// 只编码 WeakSet 已标记的函数参数（内存/plain kkrpc 通道下标记是无害 no-op）
+			// ① 先订阅（进入缓冲模式）：平台事件源（ZMQ 推送，同步订阅）或
+			// kkrpc subscribeEvents（listener 经 proxy() 标记——kkrpc/remote-refs 的 codec
+			// 只编码 WeakSet 已标记的函数参数；内存/plain kkrpc 通道下标记是无害 no-op）
 			const buffer: ProjectedEvent[] = [];
 			let replayed = false;
 			let historyMaxSeq = 0;
-			await this.handle.subscribeEvents(
-				proxy((event) => {
-					if (this.stopRequested || generation !== this.generation) return;
-					if (replayed) {
-						this.apply(event);
-						// delta 经 32ms 合并窗口发布（apply 置脏）；其余事件立即发布
-						// （publish 前会冲刷脏文本，保证顺序一致）
-						if (event.type !== "assistant.delta") this.publish();
-					} else {
-						buffer.push(event);
-					}
-				}),
-			);
+			const onEvent = (event: ProjectedEvent): void => {
+				if (this.stopRequested || generation !== this.generation) return;
+				if (replayed) {
+					this.apply(event);
+					// delta 经 32ms 合并窗口发布（apply 置脏）；其余事件立即发布
+					// （publish 前会冲刷脏文本，保证顺序一致）
+					if (event.type !== "assistant.delta") this.publish();
+				} else {
+					buffer.push(event);
+				}
+			};
+			if (this.eventSource !== undefined) {
+				this.unsubscribePlatformEvents = this.eventSource.subscribe(this.conversationId, onEvent);
+			} else {
+				await this.handle.subscribeEvents(proxy(onEvent));
+			}
 			// ② 拉 journal 已落盘历史并应用（fromSeq 从当前进度之后开始）
 			const events = await this.history({ fromSeq: this.lastAppliedSequence + 1, limit: 256 });
 			if (this.stopRequested || generation !== this.generation) return;
@@ -232,7 +257,7 @@ export class ConversationProjection {
 		}
 	}
 
-	/** 停止消费（事件回调变 no-op；订阅由 handle.dispose 拆除） */
+	/** 停止消费（事件回调变 no-op；平台事件源订阅拆除，kkrpc 订阅由 handle.dispose 拆除） */
 	async stop(): Promise<void> {
 		this.stopRequested = true;
 		this.generation += 1;
@@ -240,6 +265,8 @@ export class ConversationProjection {
 			clearTimeout(this.publishTimer);
 			this.publishTimer = undefined;
 		}
+		this.unsubscribePlatformEvents?.();
+		this.unsubscribePlatformEvents = undefined;
 		if (this.state !== "stopped") this.transition("stopped");
 	}
 
@@ -257,6 +284,13 @@ export class ConversationProjection {
 		// subagent 隔离：盖章即 subagent（agentId = "<agentType>:<taskId>"），
 		// 非 main 事件不进主流时间线（未盖章与 "main" 视为主流；任务快照走 queryTasks）
 		if (event.agentId !== undefined && event.agentId !== "main") return;
+		// eseq 断档检测（ZMQ fire-and-forget 丢包自愈：触发 history 补拉；
+		// history 重放事件无 eseq，不参与基线——首个实时事件建立基线）
+		const eseq = (event as { eseq?: number }).eseq;
+		if (typeof eseq === "number") {
+			if (this.lastEseq !== undefined && eseq > this.lastEseq + 1) this.scheduleCatchUp();
+			this.lastEseq = Math.max(this.lastEseq ?? 0, eseq);
+		}
 		// 仅带 seq 事件推进 lastAppliedSequence（delta 瞬态不带 seq）
 		if ("seq" in event) this.lastAppliedSequence = event.seq;
 		this.cardProjection.apply(event);
@@ -512,6 +546,29 @@ export class ConversationProjection {
 			this.publishTimer = undefined;
 			this.publish();
 		}, DIRTY_PUBLISH_MS);
+	}
+
+	/**
+	 * eseq 断档补拉（ZMQ 丢包自愈）：重放 lastAppliedSequence 之后的 journal 历史。
+	 * 纯 delta 断档（无 persist 缺口）补拉不到新事件——由下一个 persist 事件
+	 * （assistant.message 携 fullText）在 turn 边界自愈。
+	 */
+	private scheduleCatchUp(): void {
+		if (this.catchUpInFlight || this.state !== "running") return;
+		this.catchUpInFlight = true;
+		void (async () => {
+			try {
+				const events = await this.history({ fromSeq: this.lastAppliedSequence + 1, limit: 256 });
+				if (!this.stopRequested) {
+					for (const event of events) this.apply(event);
+					this.publish();
+				}
+			} catch {
+				// 补拉失败：下一次断档/事件再试
+			} finally {
+				this.catchUpInFlight = false;
+			}
+		})();
 	}
 
 	private buildSnapshot(): ConversationProjectionSnapshot {

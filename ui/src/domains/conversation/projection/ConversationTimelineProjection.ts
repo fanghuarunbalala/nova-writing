@@ -5,10 +5,7 @@
  */
 import type { AssistantDraftProjection } from "./AssistantDraftProjection.js";
 import { assistantDraftText } from "./AssistantDraftProjection.js";
-import type {
-  ConversationTimelineItem,
-  ThinkLineData,
-} from "./ConversationTimelineItem.js";
+import type { ConversationTimelineItem } from "./ConversationTimelineItem.js";
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
 
 export const ConversationTimelineProjection = {
@@ -25,18 +22,15 @@ export const ConversationTimelineProjection = {
     options: {
       readonly agentLabel: string;
       readonly timestamp: number;
-      readonly thinkLines?: readonly ThinkLineData[];
       readonly cards?: readonly ConversationCardDescriptor[];
     },
   ): ConversationTimelineItem {
-    const thinkLines = options.thinkLines ?? Object.freeze([]);
     const cards = options.cards ?? Object.freeze([]);
     return Object.freeze({
       kind: "assistant",
       sequence: projection.sequence,
       agentLabel: options.agentLabel,
       timestamp: options.timestamp,
-      thinkLines,
       text: assistantDraftText(projection),
       cards,
       streaming: projection.phase === "streaming",

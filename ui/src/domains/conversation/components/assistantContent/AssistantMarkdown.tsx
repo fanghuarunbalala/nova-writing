@@ -4,7 +4,9 @@
  *
  * 标准 Markdown（粗体/列表/标题/GFM 表格）由 react-markdown + remark-gfm 渲染；
  * cc:// 引用链接（extractReferenceTags 生成）拦截为可点击的 MessageReferenceChip。
+ * memo 包裹：text 原值比较，历史消息零重解析（markdown 全管道是最大单项成本）。
  */
+import { memo } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -24,7 +26,7 @@ export interface AssistantMarkdownProps {
 
 const REFERENCE_PREFIX = "cc://";
 
-export function AssistantMarkdown({
+export const AssistantMarkdown = memo(function AssistantMarkdown({
   text,
   onReferenceClick,
   resolveReference,
@@ -60,7 +62,7 @@ export function AssistantMarkdown({
       </ReactMarkdown>
     </div>
   );
-}
+});
 
 function parseReferenceHref(href: string): MessageReference | null {
   const rest = href.slice(REFERENCE_PREFIX.length);

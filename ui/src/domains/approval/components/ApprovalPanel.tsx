@@ -47,6 +47,8 @@ interface ApprovalGroup {
   readonly approvals: readonly ApprovalQueueItem[];
   readonly status: ApprovalQueueItem["status"];
   readonly requestedAt: string;
+  /** 组标题（由首条审批 args 解析，group 级一次计算，避免渲染期 JSON.parse）。 */
+  readonly title: string;
 }
 
 /** 按对话聚合后的目录节。 */
@@ -147,6 +149,7 @@ function groupApprovals(
           approvals: Object.freeze(list),
           status: groupStatus(list),
           requestedAt: list[0]!.requestedAt,
+          title: approvalTitleOf(list[0]!.toolName, list[0]!.args),
         }),
       )
       // 最新审批在前，打开面板时默认看到最新的待审组。
@@ -290,14 +293,10 @@ export function ApprovalPanel({
                   ) : null}
                 </div>
                 {groupList.map((group) => {
-                  const title = approvalTitleOf(
-                    group.approvals[0]!.toolName,
-                    group.approvals[0]!.args,
-                  );
                   const label =
                     group.approvals.length > 1
-                      ? `${title} 等 ${group.approvals.length} 项`
-                      : title;
+                      ? `${group.title} 等 ${group.approvals.length} 项`
+                      : group.title;
                   return (
                     <button
                       key={group.key}
@@ -352,10 +351,7 @@ export function ApprovalPanel({
                 {operationGlyph(selectedOp)}
               </span>
             ) : null}
-            {approvalTitleOf(
-              selectedGroup.approvals[0]!.toolName,
-              selectedGroup.approvals[0]!.args,
-            )}
+            {selectedGroup.title}
           </h4>
           {argumentGroups !== undefined && argumentGroups.length > 0 ? (
             <div className={styles.args}>

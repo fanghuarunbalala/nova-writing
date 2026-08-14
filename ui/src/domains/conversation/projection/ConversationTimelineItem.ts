@@ -2,26 +2,14 @@
  * ConversationTimelineItem
  *
  * 对话时间线的数据模型（纯数据，不含 React 依赖）。
- * thinkLines 与 cards 由 core 事件投影产生，组件负责渲染。
+ * 卡片/事件/工具痕迹由 core 事件投影产生，组件负责渲染；
+ * 思考内容已随 loop 层丢弃 reasoning delta 移除（无 thinkLines 数据链）。
  * ConversationEventView / ToolTraceView 由 core 投影直接产出（re-export，单一来源）。
  */
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
 import type { ConversationEventView, ToolTraceView } from "@novel/core/client";
 
 export type { ConversationEventView, ToolTraceView };
-
-export interface ThinkLineData {
-  readonly id: string;
-  readonly text: string;
-  readonly tag?:
-    | "伏笔"
-    | "视角"
-    | "地点"
-    | "变更"
-    | "语言"
-    | "节奏"
-    | "一致性";
-}
 
 export type ConversationTimelineItem =
   | {
@@ -45,12 +33,9 @@ export type ConversationTimelineItem =
       readonly revision?: string;
       /** 脱敏失败详情（provider 错误摘要）。Redacted failure detail. */
       readonly failureDetail?: string;
-      readonly thinkLines: readonly ThinkLineData[];
       readonly text: string;
       readonly cards: readonly ConversationCardDescriptor[];
       readonly streaming: boolean;
-      /** 流式中当前是否正在产出思考（activeChannel === "thinking"）。 */
-      readonly thinking?: boolean;
       readonly eventFlow?: readonly ConversationEventView[];
       readonly toolTraces?: readonly ToolTraceView[];
     }

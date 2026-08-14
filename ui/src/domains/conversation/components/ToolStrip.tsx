@@ -6,8 +6,9 @@
  *
  * Tool-call strip: aggregates traces by tool name; clicking a chip expands the
  * per-call result rows (outcome + stage + duration).
+ * memo 包裹 + groupTraces useMemo：traces 引用稳定即零重渲染。
  */
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 import type { ToolTraceView } from "../projection/ConversationTimelineItem.js";
 import styles from "./ToolStrip.module.css";
 
@@ -63,10 +64,10 @@ function groupTraces(traces: readonly ToolTraceView[]): readonly ToolGroup[] {
   });
 }
 
-export function ToolStrip({ traces }: ToolStripProps) {
+export const ToolStrip = memo(function ToolStrip({ traces }: ToolStripProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const groups = useMemo(() => groupTraces(traces), [traces]);
   if (traces.length === 0) return null;
-  const groups = groupTraces(traces);
   return (
     <section className={styles.strip}>
       <span className={styles.title}>
@@ -113,4 +114,4 @@ export function ToolStrip({ traces }: ToolStripProps) {
       </div>
     </section>
   );
-}
+});

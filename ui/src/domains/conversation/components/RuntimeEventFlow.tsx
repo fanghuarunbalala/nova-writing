@@ -7,8 +7,9 @@
  * In-chat runtime event flow (prototype .evt-flow): family-colored event rows,
  * collapsed by default. Data comes from redacted event summaries in the core
  * projection.
+ * memo 包裹：events 引用稳定即零重渲染。
  */
-import { useState } from "react";
+import { memo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import type { ConversationEventView } from "../projection/ConversationTimelineItem.js";
@@ -24,7 +25,7 @@ function formatTime(timestamp: number): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-export function RuntimeEventFlow({ events }: RuntimeEventFlowProps) {
+export const RuntimeEventFlow = memo(function RuntimeEventFlow({ events }: RuntimeEventFlowProps) {
   const [expanded, setExpanded] = useState(false);
   if (events.length === 0) return null;
   return (
@@ -58,4 +59,4 @@ export function RuntimeEventFlow({ events }: RuntimeEventFlowProps) {
       ) : null}
     </section>
   );
-}
+});

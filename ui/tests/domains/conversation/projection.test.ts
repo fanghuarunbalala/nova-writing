@@ -48,14 +48,12 @@ describe("ConversationTimelineProjection", () => {
     const assistant = ConversationTimelineProjection.buildAssistantItem(draft, {
       agentLabel: "Novel Agent",
       timestamp: 300,
-      thinkLines: [{ id: "t1", text: "把'雨很大'改为'雨落得密'" }],
     });
     expect(assistant.kind).toBe("assistant");
     if (assistant.kind === "assistant") {
       expect(assistant.text).toBe("雨落得密");
       expect(assistant.streaming).toBe(false);
       expect(assistant.approvalState).toBe("completed");
-      expect(assistant.thinkLines).toHaveLength(1);
     }
   });
 

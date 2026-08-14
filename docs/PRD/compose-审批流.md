@@ -169,7 +169,7 @@ flowchart TD
     其决议类型无法携带驳回意见），**提交前 submit：designing → pending**。
   - 批准 → approve：**applied**，active=false，mode 恢复 preComposeMode，归档草稿，发 `compose.applied` + `mode.changed(preMode)`；agent 收到结果后按草稿继续创作正式稿（不自动执行落库——落库由 agent 用恢复的 canon 写工具完成）。
   - 驳回（附意见）→ reject：**pending → designing**，active 保持 true，发 `compose.rejected`；**意见文本作为额外参数随决策回传**（如「用户驳回了：<意见>」），经工具结果/系统提醒注入 agent，agent 按意见修订草稿后重新提交。
-  - 超时（120s，waitTimeoutMs）按拒绝处理（现状 Conversation 已实现）。
+  - 超时（120s，waitTimeoutMs）按拒绝处理（机制 Conversation 已实现；合并 main 驻留等待方案后，生产子进程不启用超时——UI 决策随时直推解除，提前超时会丢 subagent/todo 内存态）。
   - **安全网**：审批决议到达时 compose 已被放弃/结束（如 pending 期间显式 discard）→ no-op 幂等返回，不抛错。
 - 输出：工具结果文本（`renderComposeModeExitText`）。
 - 异常：状态非法归一 `ToolError(NOVEL_COMPOSE_EXIT_FAILED)`；审批通道提交失败立即按拒绝解除（现状已实现），避免悬挂。

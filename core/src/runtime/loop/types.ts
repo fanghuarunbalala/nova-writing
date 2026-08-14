@@ -72,7 +72,7 @@ export interface AgentLoopConfig {
   /** ProviderCall 调试器（debug 模式注入；记录每次请求 + 相邻差异，jsonl + html） */
   debugger?: ProviderCallDebugger;
   /**
-   * compose 状态提供者（gateTool 权限门：compose 激活 deny canonical 写、
+   * compose 状态提供者（gateBatch 权限门：compose 激活 deny canonical 写、
    * bypass 放行；缺省 fail-open 走基础策略——未注入 = 按未激活处理）
    */
   composeState?: ComposeModeStateProvider;

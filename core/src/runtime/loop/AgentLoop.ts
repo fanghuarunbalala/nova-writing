@@ -278,7 +278,7 @@ export class AgentLoop {
       const decision = await this.config.resumePendingDecider?.(toolCallId);
       let text: string;
       if (decision === "approve") {
-        // 重启补完同样执行 compose 权限检查（approve 分支绕过 gateTool）
+        // 重启补完同样执行 compose 权限检查（approve 分支绕过 gateBatch）
         const compose = this.config.composeState?.snapshot(this.config.conversationId ?? "");
         if (compose?.active === true && isCanonicalNovelWrite(toolCall.name)) {
           text = `已拒绝（设计模式激活：正式稿只读，请将草稿写入 design 文件，不要调用 ${toolCall.name}）`;

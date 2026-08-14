@@ -5,7 +5,13 @@ import type { ToolDef } from "../../tool/ToolDef.js";
 import type { ContextNudgePolicy } from "../../nudge/ContextNudgePolicy.js";
 import type { ContextCompactPolicy } from "../../compact/ContextCompactPolicy.js";
 
-const section: PromptSection = { kind: "static", render: () => "system" };
+const section: PromptSection = {
+  kind: "static",
+  id: "p1",
+  version: "1.0.0",
+  label: "P1",
+  render: () => "system",
+};
 const tool: ToolDef = { name: "read", version: "1", handler: { execute: async () => "" } };
 const nudge: ContextNudgePolicy = {
   persistentNudgeIfNeeded: () => false,

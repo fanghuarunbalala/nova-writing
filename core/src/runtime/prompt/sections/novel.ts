@@ -8,6 +8,9 @@ import type { PromptSection } from "../PromptSection.js";
 /** 身份与创作定位段（novel.identity） */
 export const novelIdentitySection: PromptSection = {
   kind: "static",
+  id: "novel.identity",
+  version: "1.0.0",
+  label: "Novel Identity",
   render: () =>
     [
       "# 身份与创作定位",
@@ -26,6 +29,9 @@ export const novelIdentitySection: PromptSection = {
 /** 系统与运行规则段（novel.system） */
 export const novelSystemSection: PromptSection = {
   kind: "static",
+  id: "novel.system",
+  version: "1.0.0",
+  label: "Novel System",
   render: () =>
     [
       "# 系统与运行规则",
@@ -39,9 +45,12 @@ export const novelSystemSection: PromptSection = {
     ].join("\n"),
 };
 
-/** 创作任务段（novel.craft） */
+/** 创作任务段（novel.doing-tasks） */
 export const novelCraftSection: PromptSection = {
   kind: "static",
+  id: "novel.doing-tasks",
+  version: "1.0.0",
+  label: "Novel Doing Tasks",
   render: () =>
     [
       "# 创作任务",
@@ -72,9 +81,12 @@ export const novelCraftSection: PromptSection = {
     ].join("\n"),
 };
 
-/** 谨慎行动段（novel.execution） */
+/** 谨慎行动段（novel.actions） */
 export const novelExecutionSection: PromptSection = {
   kind: "static",
+  id: "novel.actions",
+  version: "1.0.0",
+  label: "Novel Actions",
   render: () =>
     [
       "# 谨慎行动",

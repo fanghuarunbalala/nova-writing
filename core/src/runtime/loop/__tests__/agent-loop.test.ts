@@ -7,7 +7,9 @@ import type { ToolDispatcher } from "../../tool/ToolDispatcher.js";
 import type { OutputEvent } from "../../../conversation/contract/events/index.js";
 
 const capability: AgentCapability = {
-  systemSections: [{ kind: "static", render: () => "你是助手" }],
+  systemSections: [
+    { kind: "static", id: "base.one", version: "1.0.0", label: "Base One", render: () => "你是助手" },
+  ],
   toolDefs: [],
   compactPolicies: [],
   nudgePolicies: [],

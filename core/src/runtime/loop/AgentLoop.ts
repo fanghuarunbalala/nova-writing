@@ -69,6 +69,7 @@ export class AgentLoop {
       workspace: config.workspace,
       turnMessages: config.turnMessages,
       startSeq: config.startSeq,
+      dynamicInput: config.dynamicInput,
     });
     for (const listener of config.listeners ?? []) {
       this.context.subscribe(listener);
@@ -279,7 +280,7 @@ export class AgentLoop {
         model: runConfig.sampling.model,
         curTurn: runContext.curTurn,
       });
-      const call = this.context.toProviderCall(runConfig, runContext, this.controller.signal);
+      const call = await this.context.toProviderCall(runConfig, runContext, this.controller.signal);
       this.config.debugger?.record(call); // 记录每次请求（相邻差异在 html 展示）
       let result: ProviderResult;
       try {

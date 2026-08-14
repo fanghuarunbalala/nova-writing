@@ -10,6 +10,9 @@ import type { ReadonlyLoopContext } from "../../loop/LoopContext.js";
 /** 运行时协议段（core.runtime.protocol） */
 export const coreRuntimeProtocolSection: PromptSection = {
   kind: "static",
+  id: "core.runtime.protocol",
+  version: "1.0.0",
+  label: "Core Runtime Protocol",
   render: () =>
     [
       "Operate through the provided Conversation input, event, context, and Tool protocols.",
@@ -21,6 +24,9 @@ export const coreRuntimeProtocolSection: PromptSection = {
 /** 完成契约段（completion.contract） */
 export const completionContractSection: PromptSection = {
   kind: "static",
+  id: "completion.contract",
+  version: "1.0.0",
+  label: "Completion Contract",
   render: () =>
     [
       "Complete the current objective before declaring success.",
@@ -32,6 +38,9 @@ export const completionContractSection: PromptSection = {
 /** 上下文可靠性段（context.reliability） */
 export const contextReliabilitySection: PromptSection = {
   kind: "static",
+  id: "context.reliability",
+  version: "1.0.0",
+  label: "Context Reliability",
   render: () =>
     [
       "Treat current Runtime state and Tool results as more authoritative than remembered earlier text.",
@@ -43,6 +52,9 @@ export const contextReliabilitySection: PromptSection = {
 /** 对话行为段（conversation.behavior） */
 export const conversationBehaviorSection: PromptSection = {
   kind: "static",
+  id: "conversation.behavior",
+  version: "1.0.0",
+  label: "Conversation Behavior",
   render: () =>
     [
       "Collaborate with the user, preserve their intent, and make reasonable progress without unnecessary questions.",
@@ -54,6 +66,9 @@ export const conversationBehaviorSection: PromptSection = {
 /** Todo 指导段（todo.guidance） */
 export const todoGuidanceSection: PromptSection = {
   kind: "static",
+  id: "todo.guidance",
+  version: "1.0.0",
+  label: "Todo Guidance",
   render: () =>
     [
       "Use TodoWrite for non-trivial multi-step work, not for simple questions.",
@@ -62,10 +77,13 @@ export const todoGuidanceSection: PromptSection = {
     ].join("\n"),
 };
 
-/** 工具指导段（tool.guidance）：动态列出可用工具 */
+/** 工具指导段（tool.guidance）：动态列出可用工具（只消费 ctx，忽略动态输入） */
 export const toolGuidanceSection: PromptSection = {
   kind: "dynamic",
-  render: (ctx: ReadonlyLoopContext) => {
+  id: "tool.guidance",
+  version: "1.0.0",
+  label: "Tool Guidance",
+  renderDynamic: (_input, ctx: ReadonlyLoopContext) => {
     if (ctx.toolSchemes.length === 0) {
       return "No Tools are available in this Agent Manifest. Do not simulate Tool execution.";
     }

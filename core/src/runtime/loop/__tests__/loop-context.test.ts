@@ -4,8 +4,30 @@ import type { AgentCapability } from "../../agent/AgentCapability.js";
 import type { TurnContext } from "../types.js";
 
 const capability: AgentCapability = {
-  systemSections: [{ kind: "static", render: () => "你是助手" }],
+  systemSections: [
+    { kind: "static", id: "base.one", version: "1.0.0", label: "Base One", render: () => "你是助手" },
+  ],
   toolDefs: [{ name: "read", version: "1", handler: { execute: async () => "" } }],
+  compactPolicies: [],
+  nudgePolicies: [],
+};
+
+/** 多 static 段 + dynamic 段能力（缓存短路 bug 回归用） */
+const multiSectionCapability: AgentCapability = {
+  systemSections: [
+    { kind: "static", id: "a.one", version: "1.0.0", label: "A", render: () => "段A" },
+    { kind: "static", id: "b.two", version: "1.0.0", label: "B", render: () => "段B" },
+    { kind: "static", id: "c.three", version: "1.0.0", label: "C", render: () => "段C" },
+    {
+      kind: "dynamic",
+      id: "d.env",
+      version: "1.0.0",
+      label: "D",
+      renderDynamic: (input) =>
+        input.environment === undefined ? "" : `环境:${input.environment.workdir}:${input.environment.modelId ?? ""}`,
+    },
+  ],
+  toolDefs: [],
   compactPolicies: [],
   nudgePolicies: [],
 };
@@ -77,15 +99,71 @@ describe("LoopContext", () => {
     expect(ctx.workspace).toBe("/ws");
   });
 
-  it("toProviderCall 组装基础请求", () => {
+  it("toProviderCall 组装基础请求", async () => {
     const ctx = new LoopContext({ agentCapability: capability, workspace: "/ws" });
     ctx.appendTurnContext(makeTurn([{ role: "user", content: "hi" }]));
-    const call = ctx.toProviderCall(
+    const call = await ctx.toProviderCall(
       { sampling: { model: "gpt-5" } },
       { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
     );
     expect(call.system).toContain("你是助手");
     expect(call.messages).toHaveLength(1);
     expect(call.sampling.model).toBe("gpt-5");
+  });
+
+  it("缓存回归：多 static 段各自渲染一次按序进入 prompt（不短路为首段内容）", async () => {
+    const ctx = new LoopContext({ agentCapability: multiSectionCapability, workspace: "/ws" });
+    const call = await ctx.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    // 三段各出现一次（旧实现：段B/段C 被段A 内容替换，不会出现）
+    expect(call.system).toContain("段A");
+    expect(call.system).toContain("段B");
+    expect(call.system).toContain("段C");
+    // 块序保持能力声明顺序
+    const idxA = call.system.indexOf("段A");
+    const idxB = call.system.indexOf("段B");
+    const idxC = call.system.indexOf("段C");
+    expect(idxA).toBeGreaterThanOrEqual(0);
+    expect(idxA).toBeLessThan(idxB);
+    expect(idxB).toBeLessThan(idxC);
+  });
+
+  it("dynamic 段每调用渲染：dynamicInput 注入 + modelId 补齐；空输入整段省略", async () => {
+    const ctx = new LoopContext({
+      agentCapability: multiSectionCapability,
+      workspace: "/ws",
+      dynamicInput: async () => ({ environment: { workdir: "/ws", platform: "win32" } }),
+    });
+    const call = await ctx.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(call.system).toContain("环境:/ws:gpt-5");
+    // 缺省 dynamicInput（空输入）：dynamic 段渲染空串 → 整段省略
+    const bare = new LoopContext({ agentCapability: multiSectionCapability, workspace: "/ws" });
+    const bareCall = await bare.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(bareCall.system).not.toContain("环境:");
+  });
+
+  it("systemPrompt getter：返回最近一次渲染值；未渲染时以空输入渲染", async () => {
+    const ctx = new LoopContext({
+      agentCapability: multiSectionCapability,
+      workspace: "/ws",
+      dynamicInput: async () => ({ environment: { workdir: "/ws", platform: "win32" } }),
+    });
+    // 未渲染：空输入 → 只有 static 段，无环境块
+    expect(ctx.systemPrompt).toContain("段A");
+    expect(ctx.systemPrompt).not.toContain("环境:");
+    // 渲染后：最近一次渲染值（含环境块）
+    await ctx.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(ctx.systemPrompt).toContain("环境:/ws:gpt-5");
   });
 });

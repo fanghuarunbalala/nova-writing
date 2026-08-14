@@ -79,8 +79,14 @@ export class Subagent implements SubagentHandle {
 		};
 	}
 
-	/** 分发输出事件 */
+	/** 分发输出事件（逐订阅者保护：单个订阅者异常不阻断其余订阅者与任务流） */
 	private emit(e: LoopEvent): void {
-		for (const l of this.eventListeners) l(e);
+		for (const l of this.eventListeners) {
+			try {
+				l(e);
+			} catch {
+				// 订阅者异常吞掉（无 logger 装配；任务流与其余订阅者优先）
+			}
+		}
 	}
 }

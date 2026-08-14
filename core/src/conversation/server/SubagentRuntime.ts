@@ -211,8 +211,14 @@ export class SubagentRuntime implements SubagentSpawner {
 		}
 	}
 
-  /** 分发输出事件给所有订阅者 */
+  /** 分发输出事件给所有订阅者（逐订阅者保护：单个订阅者异常不阻断其余订阅者与任务流） */
   private dispatch(e: LoopEvent): void {
-    for (const l of this.eventListeners) l(e);
+    for (const l of this.eventListeners) {
+      try {
+        l(e);
+      } catch {
+        // 订阅者异常吞掉（无 logger 装配；任务编排与其余订阅者优先）
+      }
+    }
   }
 }

@@ -1,6 +1,6 @@
 # gui-performance-2 PRD —— 流畅度二期：链路批量 + 渲染收口 + 事件通道 ZMQ 化
 
-> 状态：✅ 已定稿（2026-08-14：三批交付；journal 压缩触发 = loop 上下文压缩/clear 回调）
+> 状态：✅ 已实施（2026-08-14：三批全部落地——批次一 ①~④、批次二 ⑤~⑦、批次三 ⑧；实施偏差：binding 层 32ms 节流因投影侧合并窗口就位而移除（双层窗口只叠加延迟）；journal 压缩触发 = loop 上下文压缩/clear 回调）
 > 关联：一期 [`gui-performance.md`](./gui-performance.md)（已实施：think-delta 源头丢弃、32ms 发布节流、历史消息 memo、投影子数组脏重建）；整体产品 PRD [`产品总览.md`](./产品总览.md)；技术设计 `docs/architecture.md`
 > 分支：perf/gui-smoothness
 

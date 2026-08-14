@@ -319,7 +319,7 @@ describe("ManuscriptChapterContent", () => {
         onOpenDraft={onOpenDraft}
       />,
     );
-    const entry = screen.getByRole("button", { name: "前往审批 →" });
+    const entry = screen.getByRole("button", { name: "前往审批" });
     await user.click(entry);
     expect(onOpenDraft).toHaveBeenCalledTimes(1);
     expect(onOpenDraft).toHaveBeenCalledWith("CS-7");
@@ -338,7 +338,7 @@ describe("ManuscriptChapterContent", () => {
         onOpenDraft={vi.fn()}
       />,
     );
-    expect(screen.queryByRole("button", { name: "前往审批 →" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "前往审批" })).not.toBeInTheDocument();
     expect(screen.getByText("第七章 定稿")).toBeInTheDocument();
   });
 
@@ -356,7 +356,7 @@ describe("ManuscriptChapterContent", () => {
         }}
       />,
     );
-    expect(screen.queryByRole("button", { name: "前往审批 →" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "前往审批" })).not.toBeInTheDocument();
   });
 });
 

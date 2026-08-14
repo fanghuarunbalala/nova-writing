@@ -7,7 +7,9 @@
  * 定位（locate）：来自对话引用的章节/段落滚动到可视区并闪烁高亮。
  */
 import { useEffect, useRef } from "react";
+import { ArrowRight, Plus } from "lucide-react";
 import { Button } from "../../../../shared/primitives/Button.js";
+import { Icon } from "../../../../shared/primitives/Icon.js";
 import type { ManuscriptChapter } from "../store/ManuscriptStructureStore.js";
 import { ManuscriptBlock } from "./ManuscriptBlock.js";
 import { ManuscriptDraftTag } from "./ManuscriptDraftTag.js";
@@ -88,16 +90,21 @@ export function ManuscriptChapterContent({
         ))}
         {onInsertParagraph !== undefined ? (
           <div className={styles.insertActions}>
-            <Button size="sm" variant="secondary" onClick={onInsertParagraph}>
-              ＋ 新增段落
+            <Button size="sm" variant="secondary" leadingIcon={<Icon icon={Plus} size="sm" />} onClick={onInsertParagraph}>
+              新增段落
             </Button>
           </div>
         ) : null}
       </div>
       {draftChangeSetId !== undefined && onOpenDraft !== undefined ? (
         <footer className={styles.draftActions}>
-          <Button size="sm" variant="link" onClick={() => onOpenDraft(draftChangeSetId)}>
-            前往审批 →
+          <Button
+            size="sm"
+            variant="link"
+            trailingIcon={<Icon icon={ArrowRight} size="sm" />}
+            onClick={() => onOpenDraft(draftChangeSetId)}
+          >
+            前往审批
           </Button>
         </footer>
       ) : null}

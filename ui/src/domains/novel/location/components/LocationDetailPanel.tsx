@@ -6,7 +6,9 @@
  * 结构：e-head（e-av + e-name + e-role + loc-state）+ d-meta + e-note（profile）
  * + d-foot（"在内容中定位 ->" link 按钮）。
  */
+import { LocateFixed, Pencil, Trash2 } from "lucide-react";
 import type { LocationDetail } from "../store/LocationStore.js";
+import { Icon } from "../../../../shared/primitives/Icon.js";
 import styles from "./LocationDetailPanel.module.css";
 
 export interface LocationDetailPanelProps {
@@ -54,11 +56,13 @@ export function LocationDetailPanel({
       <div className={styles.dFoot}>
         {onEdit !== undefined ? (
           <button type="button" className={styles.locate} onClick={onEdit}>
+            <Icon icon={Pencil} size="xs" />
             编辑
           </button>
         ) : null}
         {onDelete !== undefined ? (
           <button type="button" className={styles.locate} onClick={onDelete}>
+            <Icon icon={Trash2} size="xs" />
             删除
           </button>
         ) : null}
@@ -68,7 +72,8 @@ export function LocationDetailPanel({
             className={styles.locate}
             onClick={() => onLocateInContent(locationId)}
           >
-            在内容中定位 -&gt;
+            <Icon icon={LocateFixed} size="xs" />
+            在内容中定位
           </button>
         ) : null}
       </div>

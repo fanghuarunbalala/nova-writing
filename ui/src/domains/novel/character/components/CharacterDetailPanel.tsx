@@ -6,7 +6,9 @@
  * 结构：e-head（e-av + e-name + e-role）+ d-meta（版本号）+ e-note（profile）
  * + d-foot（"在内容中定位 ->" link 按钮）。
  */
+import { LocateFixed, Pencil, Trash2 } from "lucide-react";
 import type { CharacterDetail } from "../store/CharacterStore.js";
+import { Icon } from "../../../../shared/primitives/Icon.js";
 import styles from "./CharacterDetailPanel.module.css";
 
 export interface CharacterDetailPanelProps {
@@ -45,11 +47,13 @@ export function CharacterDetailPanel({
       <div className={styles.dFoot}>
         {onEdit !== undefined ? (
           <button type="button" className={styles.locate} onClick={onEdit}>
+            <Icon icon={Pencil} size="xs" />
             编辑
           </button>
         ) : null}
         {onDelete !== undefined ? (
           <button type="button" className={styles.locate} onClick={onDelete}>
+            <Icon icon={Trash2} size="xs" />
             删除
           </button>
         ) : null}
@@ -59,7 +63,8 @@ export function CharacterDetailPanel({
             className={styles.locate}
             onClick={() => onLocateInContent(characterId)}
           >
-            在内容中定位 -&gt;
+            <Icon icon={LocateFixed} size="xs" />
+            在内容中定位
           </button>
         ) : null}
       </div>

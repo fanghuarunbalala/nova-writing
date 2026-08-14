@@ -9,7 +9,9 @@
  * ConversationModeSetInputEvent（mode 不再随 onSend 丢弃）。
  */
 import { useState, type KeyboardEvent } from "react";
+import { Send } from "lucide-react";
 import { Button } from "../../../shared/primitives/Button.js";
+import { Icon } from "../../../shared/primitives/Icon.js";
 import { GenStatus, type GenStatusProps } from "./GenStatus.js";
 import type { ComposerMode } from "../store/ComposerDraftStore.js";
 import { ComposerModeBar } from "./ComposerModeBar.js";
@@ -90,6 +92,7 @@ export function ConversationComposer({
           />
           <Button
             variant="primary"
+            leadingIcon={<Icon icon={Send} size="sm" />}
             onClick={submit}
             disabled={!enabled || (disconnected ? false : sendDisabled) || text.trim() === ""}
           >

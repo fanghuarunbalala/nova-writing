@@ -5,6 +5,8 @@
  * 流程线把「规划轴」与「实现轴」串成一条，用 arr（->）连接，
  * idea/ready/abandoned 用 chip-old/chip-new/lg.real-abandoned 着色。
  */
+import { ArrowRight } from "lucide-react";
+import { Icon } from "../../../shared/primitives/Icon.js";
 import styles from "./ScheduleAxisFlow.module.css";
 
 export interface ScheduleAxisFlowProps {
@@ -59,7 +61,15 @@ function FlowItem({ step, label, first = false, sep = "->" }: FlowItemProps) {
   return (
     <>
       {label !== undefined ? <span className={styles.axisLabel}>{label}</span> : null}
-      {!first ? <span className={styles.arr}>{sep}</span> : null}
+      {!first ? (
+        sep === "->" ? (
+          <span className={styles.arr} aria-hidden="true">
+            <Icon icon={ArrowRight} size="xs" />
+          </span>
+        ) : (
+          <span className={styles.arr}>{sep}</span>
+        )
+      ) : null}
       <b className={chipClass ?? styles.chip}>{step}</b>
     </>
   );

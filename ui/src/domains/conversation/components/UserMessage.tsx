@@ -11,7 +11,9 @@
  * memo 包裹：历史消息（text 原值稳定）零重渲染。
  */
 import { memo, useState } from "react";
+import { Check, Copy } from "lucide-react";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
+import { Icon } from "../../../shared/primitives/Icon.js";
 import { parseMessageText } from "./parseMessageText.js";
 import type { MessageReference, ResolvedReference } from "./MessageReference.js";
 import styles from "./UserMessage.module.css";
@@ -99,30 +101,9 @@ export const UserMessage = memo(function UserMessage({
             title={copied ? "已复制" : "复制消息"}
           >
             {copied ? (
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M3.5 8.5l3 3 6-6" />
-              </svg>
+              <Icon icon={Check} size="sm" strokeWidth={2} />
             ) : (
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="6" y="6" width="7.5" height="7.5" rx="1.5" />
-                <path d="M10 6V4.5A1.5 1.5 0 0 0 8.5 3H4.5A1.5 1.5 0 0 0 3 4.5v4A1.5 1.5 0 0 0 4.5 10H6" />
-              </svg>
+              <Icon icon={Copy} size="sm" strokeWidth={1.4} />
             )}
           </button>
         </div>

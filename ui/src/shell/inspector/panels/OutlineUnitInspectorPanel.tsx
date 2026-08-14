@@ -8,6 +8,7 @@
  * head（title + scope + status）+ dMeta（progress）+ note（block/abandoned）。
  */
 import { useState } from "react";
+import { ListPlus, Pencil, Trash2 } from "lucide-react";
 import { OutlineBlockNote } from "../../../domains/novel/outline/components/OutlineBlockNote.js";
 import { StoryOutlineTreeStatus } from "../../../domains/novel/outline/components/StoryOutlineTreeStatus.js";
 import { StoryUnitEditDialog } from "../../../domains/novel/outline/components/StoryUnitEditDialog.js";
@@ -15,6 +16,7 @@ import type { StoryOutlineTreeNode } from "../../../domains/novel/outline/projec
 import type { StoryOutlineTreeStore } from "../../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
 import { ConfirmDialog } from "../../../shared/primitives/ConfirmDialog.js";
+import { Icon } from "../../../shared/primitives/Icon.js";
 import styles from "./OutlineUnitInspectorPanel.module.css";
 
 function findNode(
@@ -71,9 +73,11 @@ export function OutlineUnitInspectorPanel({
       ) : null}
       <div className={styles.dFoot}>
         <button type="button" className={styles.action} onClick={() => setEditOpen(true)}>
+          <Icon icon={Pencil} size="xs" />
           编辑
         </button>
         <button type="button" className={styles.action} onClick={() => setChildOpen(true)}>
+          <Icon icon={ListPlus} size="xs" />
           新建子单元
         </button>
         <button
@@ -83,6 +87,7 @@ export function OutlineUnitInspectorPanel({
             if (coreUnit !== undefined) setDeleteOpen(true);
           }}
         >
+          <Icon icon={Trash2} size="xs" />
           删除
         </button>
       </div>

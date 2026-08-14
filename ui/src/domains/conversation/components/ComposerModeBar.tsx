@@ -10,7 +10,9 @@
  *   enqueue ConversationModeSetInputEvent 到 core（决策 2：沿用 ui/ 三模式语义，
  *   仅做面板结构 + 图标改造）。
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import { PenLine, ShieldCheck, Zap, type LucideIcon } from "lucide-react";
+import { Icon } from "../../../shared/primitives/Icon.js";
 import type { ComposerMode } from "../store/ComposerDraftStore.js";
 import styles from "./ComposerModeBar.module.css";
 
@@ -35,32 +37,12 @@ export interface ComposerModeBarProps {
   readonly disabled?: boolean;
 }
 
-/** 模式图标（原型 m-ico / o-ico，16×16 stroke-width 1.6）。 */
-function ModeIcon({ tone }: { readonly tone: ComposerModeTone }): ReactNode {
-  switch (tone) {
-    case "compose":
-      return (
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M4.5 2h4.5L12 4.5V13a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
-          <path d="M8.5 2v3h3" />
-          <path d="M5.5 9h5M5.5 11h3" />
-        </svg>
-      );
-    case "bypass":
-      return (
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M9.5 1.5L3 9h4l-1 5.5L13 7H8.5l1-5.5z" />
-        </svg>
-      );
-    case "review":
-      return (
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M8 1.5l5 2v3.5c0 3.3-2.2 5.6-5 7.5-2.8-1.9-5-4.2-5-7.5V3.5l5-2z" />
-          <path d="M5.5 8l2 2 3-3.5" />
-        </svg>
-      );
-  }
-}
+/** 模式图标（原型 m-ico / o-ico 语义，统一 lucide：审核=盾、直执=闪电、设计=笔）。 */
+const MODE_ICONS: Record<ComposerModeTone, LucideIcon> = {
+  review: ShieldCheck,
+  bypass: Zap,
+  compose: PenLine,
+};
 
 export function ComposerModeBar({ mode, onChange, disabled = false }: ComposerModeBarProps) {
   const [open, setOpen] = useState(false);
@@ -110,7 +92,7 @@ export function ComposerModeBar({ mode, onChange, disabled = false }: ComposerMo
         aria-label={`执行模式：${current.label}`}
       >
         <span className={`${styles.triggerIcon} ${styles[`icon-${current.tone}`]}`} aria-hidden="true">
-          <ModeIcon tone={current.tone} />
+          <Icon icon={MODE_ICONS[current.tone]} size="md" />
         </span>
         <span className={styles.triggerName}>{current.label}</span>
         <span className={[styles.chev, open ? styles.chevOpen : ""].filter(Boolean).join(" ")} aria-hidden="true" />
@@ -133,7 +115,7 @@ export function ComposerModeBar({ mode, onChange, disabled = false }: ComposerMo
                 onClick={() => handleSelect(item)}
               >
                 <span className={styles.optionIcon} aria-hidden="true">
-                  <ModeIcon tone={item.tone} />
+                  <Icon icon={MODE_ICONS[item.tone]} size="md" />
                 </span>
                 <span className={styles.optionText}>
                   <span className={styles.optionName}>{item.label}</span>

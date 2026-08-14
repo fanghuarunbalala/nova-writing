@@ -8,7 +8,8 @@
  * 写路径：编辑（inline textarea 保存/取消）、删除（确认由宿主执行）。
  */
 import { useState } from "react";
-import { Button } from "../../../../shared/primitives/index.js";
+import { Pencil, Trash2 } from "lucide-react";
+import { Button, Icon } from "../../../../shared/primitives/index.js";
 import type { ManuscriptBlockData } from "../store/ManuscriptStructureStore.js";
 import styles from "./ManuscriptBlock.module.css";
 
@@ -78,17 +79,25 @@ export function ManuscriptBlock({ block, onSelect, onSave, onDelete }: Manuscrip
               <button
                 type="button"
                 className={styles.actionButton}
+                aria-label="编辑段落"
+                title="编辑段落"
                 onClick={() => {
                   setDraftText(block.text);
                   setEditing(true);
                 }}
               >
-                编辑
+                <Icon icon={Pencil} size="xs" />
               </button>
             ) : null}
             {onDelete !== undefined ? (
-              <button type="button" className={styles.actionButton} onClick={onDelete}>
-                删除
+              <button
+                type="button"
+                className={styles.actionButton}
+                aria-label="删除段落"
+                title="删除段落"
+                onClick={onDelete}
+              >
+                <Icon icon={Trash2} size="xs" />
               </button>
             ) : null}
           </span>

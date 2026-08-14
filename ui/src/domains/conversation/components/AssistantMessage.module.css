@@ -88,6 +88,13 @@
   color: var(--color-warn);
 }
 
+/* 状态图标（lucide）与文字的基线间距 */
+.toolDone svg,
+.toolFailed svg {
+  margin-right: var(--space-3px);
+  vertical-align: -2px;
+}
+
 .spinner {
   display: inline-block;
   width: 10px;

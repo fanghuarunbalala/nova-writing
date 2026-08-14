@@ -4,7 +4,9 @@
  * 全局 toast 堆叠（右下角）；auto-dismiss 4s。
  */
 import { useEffect } from "react";
+import { X } from "lucide-react";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
+import { Icon } from "../../shared/primitives/Icon.js";
 import type { ToastStore } from "../../shared/state/ToastStore.js";
 import styles from "./ToastHost.module.css";
 
@@ -36,7 +38,7 @@ export function ToastHost({ store }: ToastHostProps) {
             aria-label="关闭通知"
             onClick={() => store.dismiss(toast.id)}
           >
-            ×
+            <Icon icon={X} size="xs" />
           </button>
         </div>
       ))}

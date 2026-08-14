@@ -3,8 +3,9 @@
  *
  * 角色网格容器 + 新建入口。
  */
+import { Plus } from "lucide-react";
 import type { CharacterSummary } from "../store/CharacterStore.js";
-import { Button } from "../../../../shared/primitives/index.js";
+import { Button, Icon } from "../../../../shared/primitives/index.js";
 import { CharacterCard } from "./CharacterCard.js";
 import styles from "./CharacterGrid.module.css";
 
@@ -21,8 +22,8 @@ export function CharacterGrid({ workspaceId, characters, onSelect, onNewCharacte
     <div data-workspace={workspaceId}>
       {onNewCharacter !== undefined ? (
         <div className={styles.toolbar}>
-          <Button variant="secondary" size="sm" onClick={onNewCharacter}>
-            ＋ 新建角色
+          <Button variant="secondary" size="sm" leadingIcon={<Icon icon={Plus} size="sm" />} onClick={onNewCharacter}>
+            新建角色
           </Button>
         </div>
       ) : null}

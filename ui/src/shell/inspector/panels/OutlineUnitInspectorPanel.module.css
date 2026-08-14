@@ -52,6 +52,9 @@
 }
 
 .action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5px);
   padding: var(--space-1) var(--space-10px);
   font-size: var(--fs-12);
   border-radius: var(--radius-sm);
@@ -59,6 +62,9 @@
   background: transparent;
   color: var(--color-muted);
   cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
 }
 
 .action:hover {

@@ -88,6 +88,9 @@
 }
 
 .locate {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5px);
   border: 0;
   background: none;
   color: var(--color-accent-ink);

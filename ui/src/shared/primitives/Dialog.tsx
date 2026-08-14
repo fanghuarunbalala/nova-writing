@@ -5,7 +5,9 @@
  * 含焦点陷阱、ESC 关闭、点击遮罩关闭；size 控制最大宽度。
  */
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
 import type { ReactNode } from "react";
+import { Icon } from "./Icon.js";
 import styles from "./Dialog.module.css";
 
 export type DialogSize = "sm" | "md" | "lg" | "xl";
@@ -48,7 +50,7 @@ export function Dialog({
           <div className={styles.body}>{children}</div>
           {footer !== undefined ? <div className={styles.footer}>{footer}</div> : null}
           <DialogPrimitive.Close className={styles.close} aria-label="关闭">
-            ×
+            <Icon icon={X} size="sm" />
           </DialogPrimitive.Close>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>

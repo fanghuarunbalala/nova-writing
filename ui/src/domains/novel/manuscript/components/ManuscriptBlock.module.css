@@ -73,6 +73,9 @@
 }
 
 .actionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3px);
   padding: 1px var(--space-6px);
   font-size: var(--fs-xs);
   font-family: var(--font-mono);

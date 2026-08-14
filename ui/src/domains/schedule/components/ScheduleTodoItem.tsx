@@ -6,6 +6,8 @@
  * check 用 appearance:none 的 checkbox，未选 1.5px 描边方框，选中后 success 底
  * + bg 色 ✓。ttag 按 decision/approval/profile/writing 四色映射。
  */
+import { Check } from "lucide-react";
+import { Icon } from "../../../shared/primitives/Icon.js";
 import type { ScheduleTodoData } from "../projection/ScheduleProjection.js";
 import styles from "./ScheduleTodoItem.module.css";
 
@@ -40,7 +42,9 @@ export function ScheduleTodoItem({ todo, onToggle, onAction }: ScheduleTodoItemP
           onChange={() => onToggle?.()}
           aria-label={todo.title}
         />
-        <span className={styles.checkMark} aria-hidden="true">✓</span>
+        <span className={styles.checkMark} aria-hidden="true">
+          <Icon icon={Check} size="xs" strokeWidth={2.6} />
+        </span>
       </label>
       <div className={styles.body}>
         <div className={styles.title}>{todo.title}</div>

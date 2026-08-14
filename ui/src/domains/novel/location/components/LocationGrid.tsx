@@ -3,8 +3,9 @@
  *
  * 地点网格容器 + 新建入口。
  */
+import { Plus } from "lucide-react";
 import type { LocationSummary } from "../store/LocationStore.js";
-import { Button } from "../../../../shared/primitives/index.js";
+import { Button, Icon } from "../../../../shared/primitives/index.js";
 import { LocationCard } from "./LocationCard.js";
 import styles from "./LocationGrid.module.css";
 
@@ -21,8 +22,8 @@ export function LocationGrid({ workspaceId, locations, onSelect, onNewLocation }
     <div data-workspace={workspaceId}>
       {onNewLocation !== undefined ? (
         <div className={styles.toolbar}>
-          <Button variant="secondary" size="sm" onClick={onNewLocation}>
-            ＋ 新建地点
+          <Button variant="secondary" size="sm" leadingIcon={<Icon icon={Plus} size="sm" />} onClick={onNewLocation}>
+            新建地点
           </Button>
         </div>
       ) : null}

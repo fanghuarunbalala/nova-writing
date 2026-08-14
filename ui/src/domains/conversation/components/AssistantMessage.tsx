@@ -8,8 +8,10 @@
  * memo 包裹：历史消息（text/cards/segments 引用稳定）零重渲染、markdown 零重解析。
  */
 import { memo, useEffect, useState } from "react";
+import { Check, X } from "lucide-react";
 import { createDefaultConversationCardRendererRegistry } from "../cards/defaultRenderers.js";
 import type { ConversationCardRendererRegistry } from "../cards/ConversationCardRendererRegistry.js";
+import { Icon } from "../../../shared/primitives/Icon.js";
 import type {
   ConversationCardDescriptor,
 } from "../projection/ConversationCardDescriptor.js";
@@ -131,7 +133,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   );
 });
 
-/** 工具单行：一次请求的工具调用拼成一行（⏳ 动作+对象+中：内容 / ✓ 对象+动作+已完成：内容） */
+/** 工具单行：一次请求的工具调用拼成一行（spinner 动作+对象+中：内容 / ✓ 对象+动作+已完成：内容） */
 function ToolLine({ tools }: { readonly tools: readonly ToolTraceView[] }) {
   return (
     <div className={styles.toolLine}>
@@ -153,7 +155,8 @@ function ToolLine({ tools }: { readonly tools: readonly ToolTraceView[] }) {
         if (t.outcome === "failed") {
           return (
             <span key={t.traceId} className={styles.toolFailed}>
-              ✗ {object}
+              <Icon icon={X} size="xs" strokeWidth={2.2} />
+              {object}
               {action}失败{content}
               {dur}
             </span>
@@ -161,7 +164,8 @@ function ToolLine({ tools }: { readonly tools: readonly ToolTraceView[] }) {
         }
         return (
           <span key={t.traceId} className={styles.toolDone}>
-            ✓ {object}
+            <Icon icon={Check} size="xs" strokeWidth={2.2} />
+            {object}
             {action}已完成{content}
             {dur}
           </span>

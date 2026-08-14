@@ -83,6 +83,7 @@
 }
 
 .options {
+  animation: var(--anim-dropdown-in) var(--duration-fast) var(--ease-out);
   position: absolute;
   bottom: calc(100% + var(--space-1));
   left: var(--space-9px);

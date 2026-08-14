@@ -34,6 +34,22 @@
   pointer-events: auto;
 }
 
+/* 状态行开合：grid-template-rows 0fr↔1fr 过渡（GenStatus 挂载/卸载平滑展开收起） */
+.statusWrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--duration-base) var(--ease-out);
+}
+
+.statusWrap[data-open] {
+  grid-template-rows: 1fr;
+}
+
+.statusInner {
+  overflow: hidden;
+  min-height: 0;
+}
+
 .mainRow {
   display: flex;
   align-items: flex-end;

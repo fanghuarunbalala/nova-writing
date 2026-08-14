@@ -11,6 +11,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  animation: var(--anim-view-in) var(--duration-base) var(--ease-out);
 }
 
 .surface::before {

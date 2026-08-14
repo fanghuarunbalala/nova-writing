@@ -91,34 +91,40 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           );
         }
         if (segment.content.trim() === "") return null;
+        // 流式期间的最后一个 md 段末尾挂闪烁光标（与 novel 草稿面板同一动效语言）
+        const streamingTail = streaming && index === segments.length - 1;
         return (
-          <ReactMarkdown
-            key={index}
-            remarkPlugins={[remarkGfm]}
-            urlTransform={(url) =>
-              url.startsWith(REFERENCE_PREFIX) ? url : defaultUrlTransform(url)
-            }
-            components={{
-              a: ({ href, children }) => {
-                if (typeof href === "string" && href.startsWith(REFERENCE_PREFIX)) {
-                  const reference = parseReferenceHref(href);
-                  if (reference !== null) {
-                    const resolved = resolveReference?.(reference);
-                    return (
-                      <MessageReferenceChip
-                        reference={reference}
-                        onClick={onReferenceClick}
-                        resolved={resolved}
-                      />
-                    );
+          <div key={index}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              urlTransform={(url) =>
+                url.startsWith(REFERENCE_PREFIX) ? url : defaultUrlTransform(url)
+              }
+              components={{
+                a: ({ href, children }) => {
+                  if (typeof href === "string" && href.startsWith(REFERENCE_PREFIX)) {
+                    const reference = parseReferenceHref(href);
+                    if (reference !== null) {
+                      const resolved = resolveReference?.(reference);
+                      return (
+                        <MessageReferenceChip
+                          reference={reference}
+                          onClick={onReferenceClick}
+                          resolved={resolved}
+                        />
+                      );
+                    }
                   }
-                }
-                return <a href={href}>{children}</a>;
-              },
-            }}
-          >
-            {segment.content}
-          </ReactMarkdown>
+                  return <a href={href}>{children}</a>;
+                },
+              }}
+            >
+              {segment.content}
+            </ReactMarkdown>
+            {streamingTail ? (
+              <span className={styles.streamingCursor} aria-hidden="true" />
+            ) : null}
+          </div>
         );
       })}
     </div>

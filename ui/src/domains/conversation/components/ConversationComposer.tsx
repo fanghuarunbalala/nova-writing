@@ -73,7 +73,12 @@ export function ConversationComposer({
           submit();
         }}
       >
-        {status !== undefined ? <GenStatus {...status} /> : null}
+        {/* 状态行恒占位（grid 0fr↔1fr）：GenStatus 挂载/卸载不再引发输入区高度跳变 */}
+        <div className={styles.statusWrap} data-open={status !== undefined || undefined}>
+          <div className={styles.statusInner}>
+            {status !== undefined ? <GenStatus {...status} /> : null}
+          </div>
+        </div>
         <div className={styles.mainRow}>
           <label className={styles.srOnly} htmlFor={`composer-input-${conversationId}`}>
             创作指令

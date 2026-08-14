@@ -69,7 +69,9 @@ export function MainArea(props: MainAreaProps) {
           onNotify={props.onNotify}
         />
       ) : mainView.state === "content" ? (
+        // key=contentTab：tab 切换也重挂载触发 view-in 过渡
         <ContentSurface
+          key={props.contentTab}
           workspaceId={workspaceId}
           value={props.contentTab}
           outlineTree={props.outlineTree}

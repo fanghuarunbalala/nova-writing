@@ -6,7 +6,7 @@ import type {
 import type { AgentCapability } from "../agent/AgentCapability.js";
 import type {
   DynamicPromptSectionInput,
-  DynamicInputProvider,
+  NovelConstraintsProvider,
 } from "../prompt/PromptSection.js";
 import { CompactPolicyChainImpl } from "../compact/CompactPolicyChainImpl.js";
 import type {
@@ -52,25 +52,29 @@ export class LoopContext implements ReadonlyLoopContext {
   private staticBase?: string;
   /** 最近一次渲染的完整 system prompt（systemPrompt getter 语义） */
   private lastSystemPrompt?: string;
-  /** 动态段输入提供者（每 provider call 前调用；缺省空输入） */
-  private readonly dynamicInputProvider: DynamicInputProvider;
+  /** 宿主平台显示名（构造注入一次；缺省不渲染环境块） */
+  readonly platform?: string;
+  /** 小说全局约束提供者（每 provider call 前调用；缺省空——动态段渲染占位） */
+  private readonly novelConstraintsProvider: NovelConstraintsProvider;
 
   /**
    * 构造 LoopContext
    * @param opts Agent 能力 + 工作区 + 可恢复的 turn 消息 + seq 起始值（journal 恢复用）
-   * + 动态段输入提供者（node 层注入 workdir/platform/NOVEL.md；缺省空输入）
+   * + 平台显示名（环境块，进程常量）+ NOVEL.md 提供者（每调用 fs 读，node 层注入）
    */
   constructor(opts: {
     agentCapability: AgentCapability;
     workspace: string;
     turnMessages?: LLMessage[];
     startSeq?: number;
-    dynamicInput?: DynamicInputProvider;
+    platform?: string;
+    novelConstraintsProvider?: NovelConstraintsProvider;
   }) {
     this.agentCapability = opts.agentCapability;
     this.workspace = opts.workspace;
     this.seq = opts.startSeq ?? 0;
-    this.dynamicInputProvider = opts.dynamicInput ?? (async () => ({}));
+    this.platform = opts.platform;
+    this.novelConstraintsProvider = opts.novelConstraintsProvider ?? (async () => undefined);
     for (const policy of opts.agentCapability.compactPolicies) {
       this.compactChain.register(policy, 0);
     }
@@ -125,9 +129,10 @@ export class LoopContext implements ReadonlyLoopContext {
   }
 
   /**
-   * 组装下一次 ProviderCall：触发压缩（compactIfNeeded，影响 turns）+ 注入动态段输入
-   * （每调用经 DynamicInputProvider 取宿主输入 + modelId 补齐）+ 收集 nudge
-   * （persistent 追加 / transient 改 call）+ 生成 system（static base 缓存 + dynamic 每调用渲染 + 工具 promptDetail）
+   * 组装下一次 ProviderCall：触发压缩（compactIfNeeded，影响 turns）+ 组装动态段输入
+   * （workdir=this.workspace、platform=构造注入常量、modelId=run.sampling.model；
+   * NOVEL.md 内容经宿主 provider 每调用读取）+ 收集 nudge（persistent 追加 /
+   * transient 改 call）+ 生成 system（static base 缓存 + dynamic 每调用渲染 + 工具 promptDetail）
    * @param run 单次运行配置
    * @param runContext 当前 run 运行状态（nudge 判断依据）
    * @param signal 取消信号
@@ -138,14 +143,18 @@ export class LoopContext implements ReadonlyLoopContext {
     if (this.compactChain.compactIfNeeded(this)) {
       this.notify((l) => l.onCompacted?.(this.turnList));
     }
-    // ② 动态段输入：宿主注入 + modelId 补齐（run.sampling.model）
-    const hostInput = await this.dynamicInputProvider();
+    // ② 动态段输入：LoopContext 自组装 + 宿主注入约束内容（每调用重读）
+    const constraints = await this.novelConstraintsProvider();
     const dynamicInput: DynamicPromptSectionInput = {
-      ...hostInput,
       environment:
-        hostInput.environment === undefined
+        this.platform === undefined || this.platform.trim().length === 0
           ? undefined
-          : { ...hostInput.environment, modelId: hostInput.environment.modelId ?? run.sampling.model },
+          : {
+              workdir: this.workspace,
+              platform: this.platform,
+              modelId: run.sampling.model,
+            },
+      ...(constraints === undefined ? {} : { novelGlobalConstraints: constraints }),
     };
     // ③ 组装基础请求（system / tools / messages / sampling）
     const call: ProviderCall = {

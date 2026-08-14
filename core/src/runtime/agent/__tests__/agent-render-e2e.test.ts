@@ -31,9 +31,10 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
       provider,
       handle: handle as NovelHandle,
       conversationId: "conv-1",
-      dynamicInput: async () => ({
-        environment: { workdir: "/ws", platform: "Windows" },
-        novelGlobalConstraints: { fileName: "NOVEL.md", content: "# 世界观\n- 基调热血" },
+      platform: "Windows",
+      novelConstraintsProvider: async () => ({
+        fileName: "NOVEL.md",
+        content: "# 世界观\n- 基调热血",
       }),
     });
     await loop.run("hi", { sampling: { model: "gpt-5" } });
@@ -61,9 +62,10 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
       provider,
       handle: handle as NovelHandle,
       conversationId: "conv-1",
-      dynamicInput: async () => ({
-        environment: { workdir: "/ws", platform: "Windows" },
-        novelGlobalConstraints: { fileName: "NOVEL.md", content: "# 世界观\n- 基调热血" },
+      platform: "Windows",
+      novelConstraintsProvider: async () => ({
+        fileName: "NOVEL.md",
+        content: "# 世界观\n- 基调热血",
       }),
     });
     await loop.run("hi", { sampling: { model: "gpt-5" } });
@@ -79,7 +81,7 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     expect(prompt.slice(wrapStart, wrapEnd)).toContain("基调热血");
   });
 
-  it("无 dynamicInput：环境块省略 + 约束占位 + 工具清单（21 工具）+ ToolPolicy 追加", async () => {
+  it("无 platform/provider：环境块省略 + 约束占位 + 工具清单（21 工具）+ ToolPolicy 追加", async () => {
     const loop = buildNovelAgent({
       workspace: "/ws",
       provider,

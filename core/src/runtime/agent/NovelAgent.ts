@@ -6,7 +6,7 @@
 import type { Provider } from "../provider/Provider.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
 import { MapToolDispatcher } from "../tool/MapToolDispatcher.js";
-import type { DynamicInputProvider } from "../prompt/PromptSection.js";
+import type { NovelConstraintsProvider } from "../prompt/PromptSection.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
 import { AgentAssembler } from "./AgentAssembler.js";
@@ -56,8 +56,10 @@ export interface NovelAgentOptions {
   resumePendingDecider?: (toolCallId: string) => Promise<"approve" | "reject" | "expired" | undefined>;
   /** 结构化日志（pino；provider 调用错误可见性） */
   logger?: Logger;
-  /** 动态段输入提供者（node 层注入 workdir/platform/NOVEL.md；缺省空输入） */
-  dynamicInput?: DynamicInputProvider;
+  /** 宿主平台显示名（core.environment 动态段；缺省不渲染环境块） */
+  platform?: string;
+  /** 小说全局约束提供者（node 层每调用读 NOVEL.md；失败返回 undefined → 动态段占位） */
+  novelConstraintsProvider?: NovelConstraintsProvider;
   /** compose 模式状态提供者（compose_mode nudge 装配；缺省不注入该 nudge） */
   composeState?: ComposeModeStateProvider;
   /** Todo 存储（runtime.todo 组 TodoWrite 装配；缺省 InMemoryConversationTodoStore） */
@@ -120,6 +122,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     requestApproval: opts.requestApproval,
     resumePendingDecider: opts.resumePendingDecider,
     logger: opts.logger,
-    dynamicInput: opts.dynamicInput,
+    platform: opts.platform,
+    novelConstraintsProvider: opts.novelConstraintsProvider,
   });
 }

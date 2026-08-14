@@ -130,18 +130,18 @@ describe("LoopContext", () => {
     expect(idxB).toBeLessThan(idxC);
   });
 
-  it("dynamic 段每调用渲染：dynamicInput 注入 + modelId 补齐；空输入整段省略", async () => {
+  it("dynamic 段每调用渲染：workdir 取 workspace / modelId 取 sampling.model / platform 构造注入", async () => {
     const ctx = new LoopContext({
       agentCapability: multiSectionCapability,
       workspace: "/ws",
-      dynamicInput: async () => ({ environment: { workdir: "/ws", platform: "win32" } }),
+      platform: "win32",
     });
     const call = await ctx.toProviderCall(
       { sampling: { model: "gpt-5" } },
       { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
     );
     expect(call.system).toContain("环境:/ws:gpt-5");
-    // 缺省 dynamicInput（空输入）：dynamic 段渲染空串 → 整段省略
+    // 未注入 platform：环境块整段省略
     const bare = new LoopContext({ agentCapability: multiSectionCapability, workspace: "/ws" });
     const bareCall = await bare.toProviderCall(
       { sampling: { model: "gpt-5" } },
@@ -150,13 +150,57 @@ describe("LoopContext", () => {
     expect(bareCall.system).not.toContain("环境:");
   });
 
+  it("novelConstraintsProvider 每调用注入：约束内容进 dynamic 段；未注入省略", async () => {
+    const constraintsCapability: AgentCapability = {
+      systemSections: [
+        {
+          kind: "dynamic",
+          id: "g.con",
+          version: "1.0.0",
+          label: "G",
+          renderDynamic: (input) =>
+            input.novelGlobalConstraints === undefined
+              ? ""
+              : `约束:${input.novelGlobalConstraints.content}`,
+        },
+      ],
+      toolDefs: [],
+      compactPolicies: [],
+      nudgePolicies: [],
+    };
+    let reads = 0;
+    const ctx = new LoopContext({
+      agentCapability: constraintsCapability,
+      workspace: "/ws",
+      novelConstraintsProvider: async () => ({ fileName: "NOVEL.md", content: `v${++reads}` }),
+    });
+    const call1 = await ctx.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(call1.system).toContain("约束:v1");
+    // 每 provider call 重新读取（NOVEL.md 改动即时生效）
+    const call2 = await ctx.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(call2.system).toContain("约束:v2");
+    // 未注入 provider（返回 undefined）：dynamic 段省略
+    const bare = new LoopContext({ agentCapability: constraintsCapability, workspace: "/ws" });
+    const bareCall = await bare.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(bareCall.system).not.toContain("约束:");
+  });
+
   it("systemPrompt getter：返回最近一次渲染值；未渲染时以空输入渲染", async () => {
     const ctx = new LoopContext({
       agentCapability: multiSectionCapability,
       workspace: "/ws",
-      dynamicInput: async () => ({ environment: { workdir: "/ws", platform: "win32" } }),
+      platform: "win32",
     });
-    // 未渲染：空输入 → 只有 static 段，无环境块
+    // 未渲染：以空输入渲染 → 只有 static 段，无环境块
     expect(ctx.systemPrompt).toContain("段A");
     expect(ctx.systemPrompt).not.toContain("环境:");
     // 渲染后：最近一次渲染值（含环境块）

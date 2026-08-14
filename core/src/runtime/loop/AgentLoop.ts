@@ -69,7 +69,8 @@ export class AgentLoop {
       workspace: config.workspace,
       turnMessages: config.turnMessages,
       startSeq: config.startSeq,
-      dynamicInput: config.dynamicInput,
+      platform: config.platform,
+      novelConstraintsProvider: config.novelConstraintsProvider,
     });
     for (const listener of config.listeners ?? []) {
       this.context.subscribe(listener);

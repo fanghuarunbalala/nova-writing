@@ -7,7 +7,7 @@ import type {
   AssistantMessage,
 } from "../provider/types.js";
 import type { AgentCapability } from "../agent/AgentCapability.js";
-import type { DynamicInputProvider } from "../prompt/PromptSection.js";
+import type { NovelConstraintsProvider } from "../prompt/PromptSection.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { Logger } from "../../log/Logger.js";
 import type { ProviderCallDebugger } from "../debug/ProviderCallDebugger.js";
@@ -38,10 +38,16 @@ export interface AgentLoopConfig {
   /** 状态变化监听器（AgentLoop 构造时注册到 LoopContext；可多个） */
   listeners?: LoopContextListener[];
   /**
-   * 动态段输入提供者：每 provider call 前调用（node 层注入 workdir/platform/NOVEL.md）。
-   * 缺省空输入（dynamic 段不渲染内容）。
+   * 宿主平台显示名（core.environment 动态段；进程常量，构造注入一次）。
+   * 缺省不渲染环境块。
    */
-  dynamicInput?: DynamicInputProvider;
+  platform?: string;
+  /**
+   * 小说全局约束提供者：每 provider call 前调用（node 层 fs 读取 NOVEL.md）。
+   * 读取失败返回 undefined → 动态段渲染占位。workdir/modelId 不注入——
+   * LoopContext 以 workspace / run.sampling.model 自行组装。
+   */
+  novelConstraintsProvider?: NovelConstraintsProvider;
   /**
    * 审批通道：requireApproval 工具执行前征询（子进程内闭包，不跨 RPC）。
    * 未注入时 requireApproval 工具按拒绝处理（返回「已拒绝（审批通道未装配）」），

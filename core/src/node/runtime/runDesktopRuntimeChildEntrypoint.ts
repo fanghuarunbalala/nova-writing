@@ -209,18 +209,16 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
 		resumePendingDecider,
 		logger,
-		// 动态段输入：每 provider call 经 DynamicInputProvider 注入（modelId 由
-		// LoopContext 以 run.sampling.model 补齐）；NOVEL.md 读取失败静默（占位渲染）
-		dynamicInput: async () => ({
-			environment: {
-				workdir: workspace,
-				platform: PLATFORM_LABELS[process.platform] ?? process.platform,
-			},
-			novelGlobalConstraints: {
-				fileName: NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME,
-				content: (await readNovelGlobalConstraintsSafe(workspace, logger)) ?? "",
-			},
-		}),
+		// 动态段输入：workdir/modelId 由 LoopContext 自组装（workspace /
+		// run.sampling.model）；宿主只注入平台常量 + 每调用读 NOVEL.md
+		//（失败返回 undefined → 动态段渲染占位）
+		platform: PLATFORM_LABELS[process.platform] ?? process.platform,
+		novelConstraintsProvider: async () => {
+			const content = await readNovelGlobalConstraintsSafe(workspace, logger);
+			return content === undefined
+				? undefined
+				: { fileName: NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME, content };
+		},
 		// compose_mode nudge 状态提供者（compose 状态机接线不在本期，进入/退出
 		// 由后续 conversation 层驱动该实例）；todo_idle/TodoWrite 的内存存储
 		composeState: new ComposeModeStateProvider(),

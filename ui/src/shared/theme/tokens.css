@@ -182,6 +182,28 @@
   --duration-base: 0.22s;
   --duration-slow: 0.4s;
 
+  /* 动画名 token：keyframes 集中于 shared/theme/animations.css。
+     模块 css 经动画名 token 间接引用（CSS Modules 会对模块内 animation 引用
+     无条件 hash 重命名，直接写名会指向不存在的 hash 名——grad-flow 曾因此失效） */
+  --anim-grad-flow:       grad-flow;
+  --anim-view-in:         view-in;
+  --anim-conv-spin:       conv-spin;
+  --anim-msg-enter:       msg-enter;
+  --anim-toast-in:        toast-in;
+  --anim-dialog-fade:     dialog-fade;
+  --anim-dialog-in:       dialog-in;
+  --anim-dropdown-in:     dropdown-in;
+  --anim-spinner-rotate:  spinner-rotate;
+  --anim-tooltip-in:      tooltip-in;
+  --anim-node-pulse:      nodePulse;
+  --anim-status-sway:     status-sway;
+  --anim-status-breath:   status-breath;
+  --anim-status-bob:      status-bob;
+  --anim-status-drop:     status-drop;
+  --anim-conv-in:         conv-in;
+  --anim-failed-shake:    failed-shake;
+  --anim-block-flash:     block-flash;
+
   /* 缓动 */
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
@@ -212,6 +234,38 @@
   /* 强调底/渐变底上的前景（恒白，dark 不变）：Button.primary、GenStatus、
      ProjectSelectionPage、WorkspaceSelectionDialog 渐变底白字 */
   --color-on-accent: #fff;
+
+  /* 语义混合 token（两次晋升制：完全相同 (基色,百分比,target) 组合 ≥2 次即晋升；
+     频次 1 的组合留在组件内）。同名 (基色,%) 多 target 时全部带 target 后缀。
+     dark 落地时只覆盖本层定义，组件零改动。 */
+  --color-accent-9:        color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+  --color-accent-55:       color-mix(in oklab, var(--color-accent) 55%, transparent);
+  --color-accent-18:       color-mix(in oklab, var(--color-accent) 18%, var(--color-border-strong));
+  --color-accent-12:       color-mix(in oklab, var(--color-accent) 12%, var(--color-surface-2));
+  --color-accent-8-surface: color-mix(in oklab, var(--color-accent) 8%, var(--color-surface));
+  --color-accent-8-transparent: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  --color-accent-45:       color-mix(in oklab, var(--color-accent) 45%, transparent);
+  --color-accent-10:       color-mix(in oklab, var(--color-accent) 10%, transparent);
+  --color-accent-11:       color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+  --color-accent-6:        color-mix(in oklab, var(--color-accent) 6%, transparent);
+  --color-accent-88:       color-mix(in oklab, var(--color-accent) 88%, var(--color-fg));
+  --color-warn-40:         color-mix(in oklab, var(--color-warn) 40%, transparent);
+  --color-danger-8:        color-mix(in oklab, var(--color-danger) 8%, var(--color-surface));
+  --color-danger-45:       color-mix(in oklab, var(--color-danger) 45%, transparent);
+  --color-danger-32:       color-mix(in oklab, var(--color-danger) 32%, transparent);
+  --color-danger-18:       color-mix(in oklab, var(--color-danger) 18%, var(--color-surface));
+  --color-danger-12-surface: color-mix(in oklab, var(--color-danger) 12%, var(--color-surface));
+  --color-danger-12-transparent: color-mix(in oklab, var(--color-danger) 12%, transparent);
+  --color-danger-10:       color-mix(in oklab, var(--color-danger) 10%, transparent);
+  --color-border-strong-72: color-mix(in oklab, var(--color-border-strong) 72%, transparent);
+  /* 角色 token（角色唯一且跨主题语义明确，不受两次晋升制约束） */
+  --color-chrome-bg:       color-mix(in oklab, var(--color-surface) 82%, transparent); /* 顶栏/侧栏/副标题栏 */
+  --color-focus-ring:      color-mix(in oklab, var(--color-accent) 42%, transparent);
+  --color-focus-ring-strong: color-mix(in oklab, var(--color-accent) 50%, transparent);
+  --color-selection:       color-mix(in oklab, var(--color-accent) 16%, transparent);
+  --color-scrollbar-base:  color-mix(in oklab, var(--color-fg) 16%, transparent);
+  --color-scrollbar-thumb: color-mix(in oklab, var(--color-fg) 15%, transparent);
+  --color-scrollbar-thumb-hover: color-mix(in oklab, var(--color-fg) 26%, transparent);
 
   /* legacy dark 快照（原 var() fallback 固化，值为当前实际渲染值；dark 落地时清理）。
      这些 hex 不参与 dark 覆盖，仅保证引用不落空。 */

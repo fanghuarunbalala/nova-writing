@@ -45,7 +45,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* 细节打磨（原型）：细滚动条、accent 选区、focus-visible 描边。 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklab, var(--color-fg) 16%, transparent) transparent;
+  scrollbar-color: var(--color-scrollbar-base) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -58,22 +58,22 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in oklab, var(--color-fg) 15%, transparent);
+  background: var(--color-scrollbar-thumb);
   background-clip: content-box;
   border: 3px solid transparent;
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklab, var(--color-fg) 26%, transparent);
+  background: var(--color-scrollbar-thumb-hover);
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--color-accent) 16%, transparent);
+  background: var(--color-selection);
 }
 
 :focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--color-accent) 42%, transparent);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 

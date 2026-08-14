@@ -190,12 +190,18 @@ export class ConversationManagerServer implements Contract {
 		}
 	}
 
-	/** 写 meta.json 显式名（落盘失败忽略：内存态仍生效，重启回退首句派生） */
+	/** 写 meta.json 显式名（合并保留 mode 等其他字段；落盘失败忽略：内存态仍生效，重启回退首句派生） */
 	private writeMetaName(conversationId: string, name: string): void {
 		const path = this.metaPath(conversationId);
 		if (path === undefined) return;
 		try {
-			writeFileSync(path, JSON.stringify({ name }), "utf8");
+			let existing: Record<string, unknown> = {};
+			try {
+				existing = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+			} catch {
+				// 无文件/损坏：从空对象起步
+			}
+			writeFileSync(path, JSON.stringify({ ...existing, name }), "utf8");
 		} catch {
 			// 见方法注释
 		}

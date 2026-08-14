@@ -20,7 +20,7 @@ import type {
   StoryUnitId,
 } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
-import { ExternalStore } from "../../../../shared/state/ExternalStore.js";
+import { WorkspaceDomainStore, type ReadyWorkspaceDomainSnapshot } from "../../../../shared/state/WorkspaceDomainStore.js";
 import { TaskSerializer } from "../../../../shared/state/TaskSerializer.js";
 import type { NovelDomainError } from "../../outline/store/StoryOutlineTreeStore.js";
 
@@ -77,81 +77,69 @@ const EMPTY_SNAPSHOT: ManuscriptStructureSnapshot = Object.freeze({
   error: undefined,
 });
 
-export class ManuscriptStructureStore extends ExternalStore<ManuscriptStructureSnapshot> {
+export class ManuscriptStructureStore extends WorkspaceDomainStore<ManuscriptStructureSnapshot> {
   private readonly api: NovelApiClient;
   private readonly logger: Logger;
   /** 变更串行（乐观锁操作不并发） */
   private readonly serializer = new TaskSerializer();
   /** 段落版本缓存（id → entityVersion，乐观锁 baseRevision 来源） */
   private versionsById: ReadonlyMap<string, number> = new Map();
-  private generation = 0;
 
   constructor(deps: { readonly api: NovelApiClient; readonly logger?: Logger }) {
-    super(EMPTY_SNAPSHOT);
+    super(
+      EMPTY_SNAPSHOT,
+      Object.freeze({
+        code: "novel-load-failed",
+        message: "正文结构加载失败，请重试",
+        retryable: true,
+      }),
+    );
     this.api = deps.api;
     this.logger = (deps.logger ?? noopLogger).child({
       component: "manuscript_structure_store",
     });
   }
 
-  async loadWorkspace(workspaceId: string): Promise<void> {
-    const capturedId = requireNonBlank(workspaceId, "Workspace id");
-    const generation = ++this.generation;
-    this.setSnapshot({
-      ...EMPTY_SNAPSHOT,
-      phase: "loading",
-      workspaceId: capturedId,
-    });
-    try {
-      const publication = await this.api.novel.publication.get();
-      if (generation !== this.generation) return;
-      const paragraphsByStoryUnit = await loadParagraphsByStoryUnit(
-        this.api,
-        publication.chapters,
-      );
-      if (generation !== this.generation) return;
-      const { volumes, chapters } = buildPublicationView(
-        publication.volumes,
-        publication.chapters,
-        paragraphsByStoryUnit,
-      );
-      const versionsById = new Map<string, number>();
-      for (const paragraphs of paragraphsByStoryUnit.values()) {
-        for (const paragraph of paragraphs) versionsById.set(paragraph.id, paragraph.entityVersion);
-      }
-      this.versionsById = versionsById;
-      this.setSnapshot({
-        phase: "ready",
-        workspaceId: capturedId,
-        volumes,
-        chapters,
-        selectedChapterId: chapters[0]?.chapterId,
-        error: undefined,
-      });
-      this.logger.info("manuscript_structure.load_completed", {
-        volumeCount: volumes.length,
-        chapterCount: chapters.length,
-      });
-    } catch {
-      if (generation !== this.generation) return;
-      this.setSnapshot({
-        ...EMPTY_SNAPSHOT,
-        phase: "error",
-        workspaceId: capturedId,
-        error: {
-          code: "novel-load-failed",
-          message: "正文结构加载失败，请重试",
-          retryable: true,
-        },
-      });
-      this.logger.warn("manuscript_structure.load_failed");
+  protected async fetchReadySnapshot(
+    workspaceId: string,
+    generation: number,
+  ): Promise<ReadyWorkspaceDomainSnapshot<ManuscriptStructureSnapshot> | undefined> {
+    const publication = await this.api.novel.publication.get();
+    if (this.isStaleGeneration(generation)) return undefined;
+    const paragraphsByStoryUnit = await loadParagraphsByStoryUnit(
+      this.api,
+      publication.chapters,
+    );
+    if (this.isStaleGeneration(generation)) return undefined;
+    const { volumes, chapters } = buildPublicationView(
+      publication.volumes,
+      publication.chapters,
+      paragraphsByStoryUnit,
+    );
+    const versionsById = new Map<string, number>();
+    for (const paragraphs of paragraphsByStoryUnit.values()) {
+      for (const paragraph of paragraphs) versionsById.set(paragraph.id, paragraph.entityVersion);
     }
+    this.versionsById = versionsById;
+    return {
+      phase: "ready",
+      workspaceId,
+      volumes,
+      chapters,
+      selectedChapterId: chapters[0]?.chapterId,
+      error: undefined,
+    };
   }
 
-  invalidate(): Promise<void> {
-    const workspaceId = this.snapshot.workspaceId;
-    if (workspaceId === undefined) return Promise.resolve();
-    return this.loadWorkspace(workspaceId);
+  protected override onLoadSucceeded(snapshot: ManuscriptStructureSnapshot): void {
+    this.logger.info("manuscript_structure.load_completed", {
+      volumeCount: snapshot.volumes.length,
+      chapterCount: snapshot.chapters.length,
+    });
+  }
+
+  protected override onLoadFailed(): void {
+    this.logger.warn("manuscript_structure.load_failed");
   }
 
   selectChapter(chapterId: string | undefined): void {
@@ -334,11 +322,4 @@ function toBlockData(paragraph: Paragraph): ManuscriptBlockData {
     textLength: paragraph.text.length,
     entityVersion: paragraph.entityVersion,
   });
-}
-
-function requireNonBlank(value: string, label: string): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new TypeError(`${label} is required`);
-  }
-  return value;
 }

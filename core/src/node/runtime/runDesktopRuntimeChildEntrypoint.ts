@@ -32,6 +32,7 @@ import { ComposeModeStateProvider } from "../../conversation/compose/ComposeMode
 import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
 import type { LLMessage } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
+import { findPendingToolIds } from "../../runtime/loop/AgentLoop.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
@@ -85,10 +86,11 @@ function conversationExposeOf(holder: { conv?: Conversation }): Record<string, u
 	};
 }
 
-/** 由 requestId 尾段解析 toolCallId（requestId = approval_{convId}_{turnSeq}_{toolCallId}） */
-function toolCallIdOf(requestId: string): string | undefined {
-	const parts = requestId.split("_");
-	return parts.length >= 4 ? parts.slice(3).join("_") : undefined;
+/** 由 requestId 尾段解析 toolCallId（requestId = approval:{convId}:{turnSeq}:{toolCallId}，
+ *  冒号分隔——convId/toolCallId 自身可含下划线，不可用 "_" split） */
+export function toolCallIdOf(requestId: string): string | undefined {
+	const parts = requestId.split(":");
+	return parts.length >= 4 ? parts.slice(3).join(":") : undefined;
 }
 
 /** child 崩溃自曝日志路径 env（ProcessSpawner 注入） */
@@ -306,24 +308,14 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		journal,
 		managerWait,
 		subagentRuntime,
-		// 120s 无决策：退出进程（不占资源）；CMS 在 UI 决策后重启续跑
-		onWaitTimeout: cmsApi !== undefined ? () => process.exit(0) : undefined,
+	// 审批等待不设超时：进程驻留，UI 决策随时经 resolveApproval 直推解除
+	//（提前 exit 会丢内存态 subagent/todo，且决策无法送达）
 	});
 	holder.conv = conv;
 
-	// 暂停点续跑：恢复 turn 存在缺 tool 结果的 toolCall 时补完并收口
-	if (turnMessages !== undefined && turnMessages.length > 0) {
-		const hasPendingTool = turnMessages.some(
-			(m) => m.role === "assistant" && (m.toolCalls ?? []).length > 0,
-		);
-		if (hasPendingTool) {
-			await loop.resumePendingTurn({ sampling, maxTurns: 8 }).catch((err) => {
-				debugLog("[child] resumePendingTurn failed:", err);
-			});
-		}
-	}
-
-	// 报到 CMS（spawner 等待点；此后 manager 侧拿到 conversation handle）
+	// 报到 CMS（spawner 等待点；此后 manager 侧拿到 conversation handle）。
+	// 必须先于 resumePendingTurn：恢复可能耗时多轮 provider 调用，晚报到会撞
+	// spawner 15s 握手超时被 kill，产生孤儿进程
 	if (cmsApi !== undefined) {
 		await cmsApi.register({
 			conversationId,
@@ -333,6 +325,14 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	} else {
 		// 无 manager WS（独立脚本/dev）：stdin end 退出兜底
 		process.stdin.on("end", () => process.exit(0));
+	}
+
+	// 暂停点续跑：仅当恢复消息中存在缺 tool 结果的 toolCall 才补完收口——
+	// 已收口的 turn（工具结果齐全）不得重跑，否则重复 provider 调用/重复落盘
+	if (turnMessages !== undefined && findPendingToolIds(turnMessages).length > 0) {
+		await loop.resumePendingTurn({ sampling, maxTurns: 8 }).catch((err) => {
+			debugLog("[child] resumePendingTurn failed:", err);
+		});
 	}
 	// 子进程驻留：事件循环由 WS 连接与定时器维持
 }

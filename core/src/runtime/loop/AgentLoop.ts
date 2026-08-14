@@ -30,6 +30,17 @@ function addUsage(
   };
 }
 
+/**
+ * 找出消息序列中缺 tool 结果的 toolCall id（恢复判定：非空才需要 resumePendingTurn）。
+ * 已收口的 turn（每个 toolCall 都有对应 tool 消息）返回空数组——重启后不得重跑。
+ */
+export function findPendingToolIds(messages: readonly LLMessage[]): string[] {
+  const toolCallIds = messages.flatMap((m) =>
+    m.role === "assistant" ? (m.toolCalls ?? []).map((tc) => tc.id) : [],
+  );
+  return toolCallIds.filter((id) => !messages.some((m) => m.role === "tool" && m.id === id));
+}
+
 /** AgentLoop：agent 主循环，产出 OutputEvent（conversation 统一事件），带输入队列 */
 export class AgentLoop {
   /** 构造配置 */
@@ -243,9 +254,7 @@ export class AgentLoop {
     const assistantMessages = turn.messages.filter(
       (m) => m.role === "assistant" && m.toolCalls !== undefined && m.toolCalls.length > 0,
     ) as AssistantMessage[];
-    const pendingToolIds = assistantMessages
-      .flatMap((m) => m.toolCalls!.map((tc) => tc.id))
-      .filter((id) => !turn.messages.some((m) => m.role === "tool" && m.id === id));
+    const pendingToolIds = findPendingToolIds(turn.messages);
     for (const toolCallId of pendingToolIds) {
       const toolCall = assistantMessages
         .flatMap((m) => m.toolCalls!)
@@ -384,7 +393,7 @@ export class AgentLoop {
     if (toolDef?.requireApproval !== true) return undefined;
     if (this.config.requestApproval === undefined) return "已拒绝（审批通道未装配）";
     const decision = await this.config.requestApproval({
-      requestId: `approval_${this.config.conversationId ?? "conv"}_${turnSeq}_${tc.id}`,
+      requestId: `approval:${this.config.conversationId ?? "conv"}:${turnSeq}:${tc.id}`,
       toolName: tc.name,
       args: tc.args,
     });

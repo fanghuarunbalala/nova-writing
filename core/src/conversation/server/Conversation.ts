@@ -5,7 +5,6 @@
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
 import type { SamplingConfig } from "../../runtime/provider/types.js";
 import type { OutputEvent } from "../contract/events/index.js";
-import { debugLog } from "../../log/debug.js";
 import type { ConversationJournalService } from "../contract/journal/index.js";
 import type { ConversationInteraction } from "../contract/interaction/index.js";
 import type { WaitingInteractionRequest } from "../contract/interaction/index.js";
@@ -93,12 +92,14 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly managerWait?: ManagerWaitChannel;
 	/** wait 超时毫秒 */
 	private readonly waitTimeoutMs: number;
-	/** wait 超时回调（子进程注入退出行为） */
+	/** 超时是否启用（显式配置 waitTimeoutMs 或 onWaitTimeout 才启用；生产子进程驻留等待不超时） */
+	private readonly waitTimeoutEnabled: boolean;
+	/** wait 超时回调（测试/内存模式注入；生产子进程不注入） */
 	private readonly onWaitTimeout?: (requestId: string) => void;
 	/** 待决审批（requestId → {resolve, timer}），无阻塞驻留等待决策 */
 	private readonly pendingApprovals = new Map<
 		string,
-		{ resolve: (d: ConversationApprovalDecision) => void; timer: NodeJS.Timeout }
+		{ resolve: (d: ConversationApprovalDecision) => void; timer: NodeJS.Timeout | undefined }
 	>();
 	/** 待决提问（requestId → resolve） */
 	private readonly pendingQuestions = new Map<string, (answer: string) => void>();
@@ -116,6 +117,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.journal = opts.journal;
 		this.managerWait = opts.managerWait;
 		this.waitTimeoutMs = opts.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+		this.waitTimeoutEnabled = opts.waitTimeoutMs !== undefined || opts.onWaitTimeout !== undefined;
 		this.onWaitTimeout = opts.onWaitTimeout;
 		this.subagentRuntime = opts.subagentRuntime;
 		// 订阅 loop 的输出事件（run/followup 均转发到本会话 hub）
@@ -187,11 +189,15 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	 */
 	async sendApprovalRequest(req: ConversationApprovalRequest): Promise<ConversationApprovalDecision> {
 		return new Promise<ConversationApprovalDecision>((resolve) => {
-			const timer = setTimeout(() => {
-				this.pendingApprovals.delete(req.requestId);
-				this.onWaitTimeout?.(req.requestId);
-				resolve({ kind: "reject" });
-			}, this.waitTimeoutMs);
+			// 超时未启用（生产子进程）：不设定时器，驻留等待直到决策回传——
+			// 提前超时会丢内存态（subagent/todo）且 UI 决策无法送达
+			const timer = this.waitTimeoutEnabled
+				? setTimeout(() => {
+						this.pendingApprovals.delete(req.requestId);
+						this.onWaitTimeout?.(req.requestId);
+						resolve({ kind: "reject" });
+					}, this.waitTimeoutMs)
+				: undefined;
 			this.pendingApprovals.set(req.requestId, { resolve, timer });
 			if (this.managerWait !== undefined) {
 				void this.managerWait
@@ -200,7 +206,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 						// 提交失败：立即按拒绝解除，避免悬挂
 						const pending = this.pendingApprovals.get(req.requestId);
 						if (pending === undefined) return;
-						clearTimeout(pending.timer);
+						if (pending.timer !== undefined) clearTimeout(pending.timer);
 						this.pendingApprovals.delete(req.requestId);
 						resolve({ kind: "reject" });
 					});
@@ -237,7 +243,6 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 
 	/** 订阅输出事件流（hub 实时推送；dispose 清空全部订阅者） */
 	async subscribeEvents(listener: OutputEventListener): Promise<void> {
-		debugLog("[child] subscribeEvents listener type:", typeof listener, "===", String(listener).slice(0, 60));
 		this.eventListeners.add(listener);
 	}
 
@@ -251,7 +256,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	resolveApproval(requestId: string, decision: ConversationApprovalDecision): void {
 		const pending = this.pendingApprovals.get(requestId);
 		if (pending) {
-			clearTimeout(pending.timer);
+			if (pending.timer !== undefined) clearTimeout(pending.timer);
 			this.pendingApprovals.delete(requestId);
 			pending.resolve(decision);
 		}

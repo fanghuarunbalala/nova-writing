@@ -7,6 +7,7 @@ import type { ToolCall } from "../provider/types.js";
 import type { ReadonlyLoopContext } from "../loop/LoopContext.js";
 import type { ToolDef } from "./ToolDef.js";
 import type { ToolDispatcher } from "./ToolDispatcher.js";
+import { ToolError } from "./errors.js";
 
 /**
  * Map 工具调度器：注册/解析/列表 + 按名分发（未知工具抛错）。
@@ -52,14 +53,29 @@ export class MapToolDispatcher implements ToolDispatcher {
   }
 
   /**
-   * 分发执行一次工具调用
+   * 分发执行一次工具调用（错误契约与 createToolDispatcher 对齐：
+   * 未知工具抛 ToolError TOOL_NOT_AVAILABLE；handler 异常 wrap 为 TOOL_HANDLER_FAILED）
    * @param _ctx LoopContext 只读视图（Map 分发不消费，由 handler 自行接收）
    * @param call 工具调用
    * @returns 执行结果文本
    */
   async dispatch(_ctx: ReadonlyLoopContext, call: ToolCall): Promise<string> {
     const tool = this.resolve(call.name);
-    if (tool === undefined) throw new Error(`未知工具: ${call.name}`);
-    return tool.handler.execute(call);
+    if (tool === undefined) {
+      throw new ToolError(
+        { code: "TOOL_NOT_AVAILABLE", toolName: call.name, toolCallId: call.id },
+        `未知工具: ${call.name}`,
+      );
+    }
+    try {
+      return await tool.handler.execute(call);
+    } catch (err) {
+      if (err instanceof ToolError) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      throw new ToolError(
+        { code: "TOOL_HANDLER_FAILED", toolName: call.name, toolCallId: call.id, cause: err },
+        `工具执行失败: ${message}`,
+      );
+    }
   }
 }

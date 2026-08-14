@@ -16,7 +16,7 @@ import type {
   StoryUnitScope,
 } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
-import { ExternalStore } from "../../../../shared/state/ExternalStore.js";
+import { WorkspaceDomainStore, type ReadyWorkspaceDomainSnapshot } from "../../../../shared/state/WorkspaceDomainStore.js";
 import { TaskSerializer } from "../../../../shared/state/TaskSerializer.js";
 import {
   StoryOutlineTreeProjection,
@@ -47,59 +47,55 @@ const EMPTY_SNAPSHOT: StoryOutlineTreeSnapshot = Object.freeze({
   error: undefined,
 });
 
-export class StoryOutlineTreeStore extends ExternalStore<StoryOutlineTreeSnapshot> {
+export class StoryOutlineTreeStore extends WorkspaceDomainStore<StoryOutlineTreeSnapshot> {
   private readonly api: NovelApiClient;
   private readonly logger: Logger;
   /** 变更串行（乐观锁操作不并发） */
   private readonly serializer = new TaskSerializer();
   /** 单元版本缓存（id → core StoryUnit，乐观锁 baseRevision 来源） */
   private unitsById: ReadonlyMap<string, StoryUnit> = new Map();
-  private generation = 0;
 
   constructor(deps: { readonly api: NovelApiClient; readonly logger?: Logger }) {
-    super(EMPTY_SNAPSHOT);
+    super(
+      EMPTY_SNAPSHOT,
+      Object.freeze({
+        code: "novel-load-failed",
+        message: "大纲加载失败，请重试",
+        retryable: true,
+      }),
+    );
     this.api = deps.api;
     this.logger = (deps.logger ?? noopLogger).child({
       component: "story_outline_tree_store",
     });
   }
 
-  async loadWorkspace(workspaceId: string): Promise<void> {
-    const capturedId = requireNonBlank(workspaceId, "Workspace id");
-    const generation = ++this.generation;
-    this.setSnapshot({
-      ...EMPTY_SNAPSHOT,
-      phase: "loading",
-      workspaceId: capturedId,
+  protected async fetchReadySnapshot(
+    workspaceId: string,
+    generation: number,
+  ): Promise<ReadyWorkspaceDomainSnapshot<StoryOutlineTreeSnapshot> | undefined> {
+    const outline = await this.api.novel.outline.get();
+    if (this.isStaleGeneration(generation)) return undefined;
+    const tree = StoryOutlineTreeProjection.build(outline.units);
+    this.unitsById = new Map(outline.units.map((unit) => [unit.id, unit]));
+    return {
+      phase: "ready",
+      workspaceId,
+      tree,
+      expansionState: new Map<string, boolean>(),
+      selectedUnitId: undefined,
+      error: undefined,
+    };
+  }
+
+  protected override onLoadSucceeded(snapshot: StoryOutlineTreeSnapshot): void {
+    this.logger.info("story_outline_tree.load_completed", {
+      unitCount: snapshot.tree.length,
     });
-    try {
-      const outline = await this.api.novel.outline.get();
-      if (generation !== this.generation) return;
-      const tree = StoryOutlineTreeProjection.build(outline.units);
-      this.unitsById = new Map(outline.units.map((unit) => [unit.id, unit]));
-      this.setSnapshot({
-        phase: "ready",
-        workspaceId: capturedId,
-        tree,
-        expansionState: new Map<string, boolean>(),
-        selectedUnitId: undefined,
-        error: undefined,
-      });
-      this.logger.info("story_outline_tree.load_completed", { unitCount: tree.length });
-    } catch {
-      if (generation !== this.generation) return;
-      this.setSnapshot({
-        ...EMPTY_SNAPSHOT,
-        phase: "error",
-        workspaceId: capturedId,
-        error: {
-          code: "novel-load-failed",
-          message: "大纲加载失败，请重试",
-          retryable: true,
-        },
-      });
-      this.logger.warn("story_outline_tree.load_failed");
-    }
+  }
+
+  protected override onLoadFailed(): void {
+    this.logger.warn("story_outline_tree.load_failed");
   }
 
   /** 单元版本（乐观锁 baseRevision）；未加载/不存在返回 undefined */
@@ -133,12 +129,6 @@ export class StoryOutlineTreeStore extends ExternalStore<StoryOutlineTreeSnapsho
     }
     for (const key of next.keys()) next.set(key, false);
     this.setSnapshot({ ...this.snapshot, expansionState: next });
-  }
-
-  invalidate(): Promise<void> {
-    const workspaceId = this.snapshot.workspaceId;
-    if (workspaceId === undefined) return Promise.resolve();
-    return this.loadWorkspace(workspaceId);
   }
 
   /**
@@ -281,11 +271,4 @@ function collectUnitIds(node: StoryOutlineTreeNode, into: Map<string, boolean>):
   for (const child of node.children) {
     collectUnitIds(child, into);
   }
-}
-
-function requireNonBlank(value: string, label: string): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new TypeError(`${label} is required`);
-  }
-  return value;
 }

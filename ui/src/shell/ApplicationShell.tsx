@@ -168,6 +168,14 @@ export function ApplicationShell({
     }
   }, [approvalSnapshot, inspectorRouter, catalogSnapshot.activeConversationId]);
 
+  // 审批全部处理完 → 自动收起审批面板，避免空占位（对齐 creation 线「面板收拢」语义）。
+  useEffect(() => {
+    const route = inspectorRouter.getSnapshot().state;
+    if (approvalSnapshot.pendingCount === 0 && route.kind === "approval") {
+      inspectorRouter.close();
+    }
+  }, [approvalSnapshot.pendingCount, inspectorRouter]);
+
   // 跨域副作用协调：workspace 变化时并行触发各域 load（spec 1.5.1）
   useEffect(() => {
     if (workspaceId === undefined) return;

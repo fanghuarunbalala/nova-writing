@@ -9,6 +9,7 @@
  * - 重启恢复：journal 重放 + CMS takeDecisions 查询待决 → 暂停点续跑（resumePendingTurn）
  * - subagent：SubagentRuntime 进程内编排（main 经 Agent/TaskOutput/TaskStop 派发）
  */
+import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { RPCChannel } from "kkrpc";
 import { webSocketClientTransport } from "kkrpc/ws";
@@ -78,10 +79,48 @@ function toolCallIdOf(requestId: string): string | undefined {
 	return parts.length >= 4 ? parts.slice(3).join("_") : undefined;
 }
 
+/** child 崩溃自曝日志路径 env（ProcessSpawner 注入） */
+const CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
+
+/** 崩溃自曝：同步写堆栈到 runtime-child.log + 回写 stderr（父进程捕获缓冲），再按原语义退出。 */
+function writeCrashTrace(line: string): void {
+	// 父进程 stderr 捕获埋点（runtime.process.child_stderr）也会收到这份内容。
+	console.error(line);
+	const childLogPath = process.env[CHILD_LOG_ENV];
+	if (childLogPath === undefined || childLogPath.length === 0) return;
+	try {
+		appendFileSync(childLogPath, `${line}\n`);
+	} catch {
+		// console.error 已兜底；日志路径不可写不应掩盖崩溃本身。
+	}
+}
+
+/** 崩溃原因 → 堆栈文本（非 Error 兜底 String） */
+function describeCrash(reason: unknown): string {
+	if (reason instanceof Error) {
+		return reason.stack ?? `${reason.name}: ${reason.message}`;
+	}
+	return `unknown crash reason: ${String(reason)}`;
+}
+
+/** 注册崩溃自曝（在任何其他逻辑之前）：未捕获异常/拒绝写盘后 exit(1)。 */
+function registerCrashHandlers(): void {
+	process.on("uncaughtException", (error) => {
+		writeCrashTrace(`CRASH uncaughtException\n${describeCrash(error)}`);
+		process.exit(1);
+	});
+	process.on("unhandledRejection", (reason) => {
+		writeCrashTrace(`CRASH unhandledRejection\n${describeCrash(reason)}`);
+		process.exit(1);
+	});
+}
+
 /**
  * 启动 conversation 子进程（manager WS 双工）
  */
 export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
+	// 崩溃诊断：一切逻辑之前注册（父进程捕获 stderr 原文落盘，根因因此可见）
+	registerCrashHandlers();
 	const conversationId = process.env.CONVERSATION_ID ?? "main";
 	const storedir = process.env.NOVEL_CONVERSATION_STOREDIR;
 	const workspace = process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".";

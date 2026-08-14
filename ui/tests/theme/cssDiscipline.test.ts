@@ -1,11 +1,14 @@
 /**
- * css 纪律静态检查（规则 a/d；b/c 在 keyframes 集中与 dark 预留执法后上线）。
+ * css 纪律静态检查（规则 a-d）。
  *
  * 每规则收集全部违规为字符串数组（`路径:行号 规则说明`），
  * expect(violations).toEqual([]) —— vitest 失败 diff 即人类可读违规清单。
  *
  * a) 模块 css 禁止颜色字面量（#hex / rgb(a) / hsl(a) / oklch）。
  *    行内 `/* @allow-color 理由 *\/` 豁免（同行为准，多行字面量必须提 token）。
+ * b) [data-theme] 覆盖块只允许 --color-* / --shadow-*（三层模型执法）。
+ * c) @keyframes 只允许定义在 shared/theme/animations.css，且名不重复
+ *    （CSS Modules 会对模块内 animation 引用无条件 hash 重命名）。
  * d) 模块 css 的设计语言属性只允许 0/1px 字面量，其余必须走 var(--token)；
  *    font-weight 纯数字违规（必须 var(--fw-*)）。
  */
@@ -45,6 +48,73 @@ function stripInlineComment(line: string): string {
 }
 
 describe("css discipline", () => {
+  it("b) [data-theme] 覆盖块只允许 --color-* / --shadow-*", async () => {
+    const files = await collectCss(root, /\.css$/);
+    const violations: string[] = [];
+    for (const file of files) {
+      const content = await readFile(file, "utf8");
+      const rel = relative(root, file).replaceAll("\\", "/");
+      let i = 0;
+      while ((i = content.indexOf("[data-theme", i)) !== -1) {
+        // 注释内的 [data-theme 提及（头注释说明）跳过
+        const lineStart = content.lastIndexOf("\n", i) + 1;
+        if (/^\s*(\/\*|\*)/.test(content.slice(lineStart, i))) {
+          i += "[data-theme".length;
+          continue;
+        }
+        // 找到包含 [data-theme 的 { ... } 块
+        const brace = content.indexOf("{", i);
+        let depth = 0;
+        let k = brace;
+        for (; k < content.length; k++) {
+          if (content[k] === "{") depth++;
+          else if (content[k] === "}") {
+            depth--;
+            if (depth === 0) break;
+          }
+        }
+        const block = content.slice(brace + 1, k);
+        const baseLine = content.slice(0, i).split("\n").length;
+        for (const line of block.split("\n")) {
+          const t = line.trim();
+          if (t.length === 0 || t.startsWith("/*") || t.startsWith("*")) continue; // 空行/注释合法
+          if (/^--(color|shadow)-[a-z0-9-]*\s*:/.test(t)) continue; // 色层/阴影 token 合法
+          violations.push(
+            `${rel}:${baseLine} [data-theme] 块内 "${t.slice(0, 40)}" 违规（仅允许 --color-* / --shadow-*）`,
+          );
+        }
+        i = k + 1;
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("c) @keyframes 只允许定义在 animations.css 且名不重复", async () => {
+    const files = await collectCss(root, /\.css$/);
+    const violations: string[] = [];
+    for (const file of files) {
+      const content = await readFile(file, "utf8");
+      const rel = relative(root, file).replaceAll("\\", "/");
+      const isAnimations = rel === "shared/theme/animations.css";
+      const names: string[] = [];
+      for (const m of content.matchAll(/@keyframes\s+([a-zA-Z0-9-]+)/g)) {
+        names.push(m[1]);
+      }
+      if (!isAnimations && names.length > 0) {
+        violations.push(
+          `${rel} 本地 @keyframes ${names.join("/")} 应集中到 shared/theme/animations.css`,
+        );
+      }
+      if (isAnimations) {
+        const dupes = names.filter((n, j) => names.indexOf(n) !== j);
+        for (const d of new Set(dupes)) {
+          violations.push(`${rel} @keyframes ${d} 重复定义`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
   it("a) module.css 禁止颜色字面量（@allow-color 行内豁免）", async () => {
     const files = await collectCss(root, /\.module\.css$/);
     const violations: string[] = [];

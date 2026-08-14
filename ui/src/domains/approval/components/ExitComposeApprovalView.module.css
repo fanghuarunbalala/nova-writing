@@ -1,0 +1,4 @@
+/* ExitComposeMode 审批详情容器：紧跟标题下方，与参数区同宽 */
+.view {
+  margin-top: var(--space-4);
+}

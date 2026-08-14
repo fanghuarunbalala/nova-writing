@@ -28,6 +28,7 @@ import styles from "./ApprovalPanel.module.css";
 import { ApprovalEntityView } from "./ApprovalEntityView.js";
 import { ParameterView } from "./ParameterView.js";
 import { useApprovalEntityResolution } from "./useApprovalEntityResolution.js";
+import { ExitComposeApprovalView } from "./ExitComposeApprovalView.js";
 
 export interface ApprovalPanelProps {
   readonly store: ApprovalStore;
@@ -149,7 +150,11 @@ function groupApprovals(
           approvals: Object.freeze(list),
           status: groupStatus(list),
           requestedAt: list[0]!.requestedAt,
-          title: approvalTitleOf(list[0]!.toolName, list[0]!.args),
+          // ExitComposeMode：固定标题「提交设计草稿」（设计内容经 designFile 读取展示）
+          title:
+            list[0]!.toolName === "ExitComposeMode"
+              ? "提交设计草稿"
+              : approvalTitleOf(list[0]!.toolName, list[0]!.args),
         }),
       )
       // 最新审批在前，打开面板时默认看到最新的待审组。
@@ -244,11 +249,14 @@ export function ApprovalPanel({
   const selectedOp = inferOperation(
     selectedGroup?.approvals[0]!.toolName ?? "",
   );
+  // ExitComposeMode：设计草稿审批（无实体参数，详情区改渲染 design 文件全文）
+  const isExitCompose =
+    selectedGroup?.approvals[0]?.toolName === "ExitComposeMode";
   // 已决审批不再解析实体内容（批准后 canonical 已变，取到的是新状态）；
-  // 仅待批准解析并判断 revision 是否过期。
+  // 仅待批准解析并判断 revision 是否过期。ExitComposeMode 无实体参数，不解析。
   const isPending = selectedGroup?.status === "pending";
   const resolutions = useApprovalEntityResolution(
-    isPending ? argumentGroups : undefined,
+    isPending && !isExitCompose ? argumentGroups : undefined,
     resolveEntity,
   );
 
@@ -353,78 +361,87 @@ export function ApprovalPanel({
             ) : null}
             {selectedGroup.title}
           </h4>
-          {argumentGroups !== undefined && argumentGroups.length > 0 ? (
-            <div className={styles.args}>
-              <span className={styles.argsTitle}>审批参数</span>
-              {argumentGroups.map((group, index) => {
-                const resolution = resolutions?.[index];
-                let body: JSX.Element;
-                if (
-                  resolution !== undefined &&
-                  resolution.status === "ready"
-                ) {
-                  body = (
-                    <>
-                      {resolution.stale ? (
-                        <div className={styles.staleBanner}>
-                          版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败
-                        </div>
-                      ) : null}
-                      {resolution.contents.map((content, contentIndex) => (
-                        <div key={content.id}>
-                          {contentIndex > 0 ? (
-                            <div className={styles.resolvedDivider} />
+          {isExitCompose ? (
+            // 设计草稿审批：md 全文展示（内容经 designFile 按会话读取，不经审批 payload）
+            <ExitComposeApprovalView
+              conversationId={selectedGroup.approvals[0]!.conversationId}
+            />
+          ) : (
+            <>
+              {argumentGroups !== undefined && argumentGroups.length > 0 ? (
+                <div className={styles.args}>
+                  <span className={styles.argsTitle}>审批参数</span>
+                  {argumentGroups.map((group, index) => {
+                    const resolution = resolutions?.[index];
+                    let body: JSX.Element;
+                    if (
+                      resolution !== undefined &&
+                      resolution.status === "ready"
+                    ) {
+                      body = (
+                        <>
+                          {resolution.stale ? (
+                            <div className={styles.staleBanner}>
+                              版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败
+                            </div>
                           ) : null}
-                          <ApprovalEntityView content={content} />
+                          {resolution.contents.map((content, contentIndex) => (
+                            <div key={content.id}>
+                              {contentIndex > 0 ? (
+                                <div className={styles.resolvedDivider} />
+                              ) : null}
+                              <ApprovalEntityView content={content} />
+                            </div>
+                          ))}
+                        </>
+                      );
+                    } else if (
+                      resolution !== undefined &&
+                      resolution.status === "loading"
+                    ) {
+                      body = (
+                        <span className={styles.loadingHint}>内容解析中…</span>
+                      );
+                    } else {
+                      body =
+                        group.arguments !== undefined ? (
+                          <ParameterView value={group.arguments} tone={group.op} />
+                        ) : (
+                          <span className={styles.loadingHint}>
+                            旧版本审批 · 无参数详情
+                          </span>
+                        );
+                    }
+                    return (
+                      <div
+                        key={`${group.toolName}-${index}`}
+                        className={styles.argsGroup}
+                      >
+                        <div
+                          className={[styles.band, OP_BAND_CLASS[group.op ?? ""]]
+                            .filter(Boolean)
+                            .join(" ")}
+                        >
+                          <span className={styles.bandGlyph}>
+                            {operationGlyph(group.op ?? "")}
+                          </span>
+                          <span className={styles.bandTool}>
+                            {toolNameLabel(group.toolName)}
+                          </span>
                         </div>
-                      ))}
-                    </>
-                  );
-                } else if (
-                  resolution !== undefined &&
-                  resolution.status === "loading"
-                ) {
-                  body = (
-                    <span className={styles.loadingHint}>内容解析中…</span>
-                  );
-                } else {
-                  body =
-                    group.arguments !== undefined ? (
-                      <ParameterView value={group.arguments} tone={group.op} />
-                    ) : (
-                      <span className={styles.loadingHint}>
-                        旧版本审批 · 无参数详情
-                      </span>
+                        <div className={styles.body}>{body}</div>
+                      </div>
                     );
-                }
-                return (
-                  <div
-                    key={`${group.toolName}-${index}`}
-                    className={styles.argsGroup}
-                  >
-                    <div
-                      className={[styles.band, OP_BAND_CLASS[group.op ?? ""]]
-                        .filter(Boolean)
-                        .join(" ")}
-                    >
-                      <span className={styles.bandGlyph}>
-                        {operationGlyph(group.op ?? "")}
-                      </span>
-                      <span className={styles.bandTool}>
-                        {toolNameLabel(group.toolName)}
-                      </span>
-                    </div>
-                    <div className={styles.body}>{body}</div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-          {(argumentGroups?.length ?? 0) === 0 ? (
-            <p className={styles.emptyDetail}>
-              旧版本审批 · 无参数详情（建议在新会话重新发起写入）
-            </p>
-          ) : null}
+                  })}
+                </div>
+              ) : null}
+              {(argumentGroups?.length ?? 0) === 0 ? (
+                <p className={styles.emptyDetail}>
+                  旧版本审批 · 无参数详情（建议在新会话重新发起写入）
+                </p>
+              ) : null}
+            </>
+          )}
           {selectedGroup.status === "pending" ? (
             <>
               <div className={styles.actions}>

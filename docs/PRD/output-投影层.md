@@ -161,10 +161,10 @@ stateDiagram-v2
 - 触发：UI 订阅会话输出 / 渲染 timeline。
 - 输入：`ProjectedEvent` 流（实时 + 投影读取）。
 - 处理：
-  - `ConversationProjection` 简化为消费投影事件：删除 `tool-call-request/response` 分支与 `pendingTraces` 派生，`toolTraces` / `eventFlow` 直接由 `tool-recorded.started/recorded` 驱动（started → 进行中行；recorded → outcome/耗时/预览行）。
+  - `ConversationProjection` 简化为消费投影事件：assistant 项按 turn（一次 API 请求）分段（segments：每段 = 内容片段 + 本请求工具行）；`tool-recorded.started` → running 行（startedAt 供实时秒数）、`tool-recorded.recorded` 按 traceId 替换；`eventFlow` 与顶层 `toolTraces` 随「本轮时序」删除（展示形态见 `docs/design/tool-call-embed-demo.html`）。
   - `CardProjection` 摘要改用 `tool-recorded.recorded.preview`，删除客户端 args 截断逻辑。
   - `ApprovalProjection` 删除（事件类型已删；审批面板由 CMS 队列驱动，`ui/src/domains/approval` 已有独立 store）。
-- 输出：UI 渲染形态与现状一致（工具条进行中 → 完成/失败、卡片、timeline），信息量不减、摘要更语义化。
+- 输出：UI 按分段渲染（每段 = 内容 + 单行工具：`⏳ 动作+对象+中：内容` 实时秒数 / `✓ 对象+动作+已完成：内容` 耗时 / `✗ 失败`），ToolStrip 删除；重放形态 = 完整文本 + 各请求工具行；卡片摘要更语义化。
 - 异常：投影事件缺字段（如 recorded 缺 preview）按可选字段降级渲染。
 
 ---
@@ -190,7 +190,7 @@ stateDiagram-v2
 - [ ] 同一段 journal 完整事件重投影两次，产出投影序列一致（确定性）。
 - [ ] `turn-start` / `turn-end` / `user.message` / `assistant.message` / `assistant.delta` 在投影流中照旧出现。
 - [ ] 声明了 `preview` 的工具：started/recorded 携带其定制预览内容；未声明的工具按默认截断回退；preview 抛错不影响 loop。
-- [ ] UI 工具条：started 显示「进行中」，recorded 显示 outcome / 耗时 / 预览；卡片渲染信息量不减。
+- [ ] UI 分段工具行：每请求一行内嵌正文（进行中带实时秒数、完成带耗时、失败红字）；重放形态与实时收口一致；卡片渲染信息量不减。
 - [ ] approval 事件类型、`ApprovalProjection` 与相关测试清理完毕，wait 通道（CMS 队列）回归通过。
 - [ ] core 259 用例（47 文件）+ ui 全量回归通过（涉及事件形态断言的用例同步更新）。
 

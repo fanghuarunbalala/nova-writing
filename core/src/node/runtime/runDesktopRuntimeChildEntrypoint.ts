@@ -25,6 +25,8 @@ import {
   readNovelGlobalConstraintsSafe,
   NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME,
 } from "../workspace/readNovelGlobalConstraints.js";
+import { ComposeModeStateProvider } from "../../conversation/compose/ComposeModeState.js";
+import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
 import type { LLMessage } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
@@ -219,6 +221,10 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 				content: (await readNovelGlobalConstraintsSafe(workspace, logger)) ?? "",
 			},
 		}),
+		// compose_mode nudge 状态提供者（compose 状态机接线不在本期，进入/退出
+		// 由后续 conversation 层驱动该实例）；todo_idle/TodoWrite 的内存存储
+		composeState: new ComposeModeStateProvider(),
+		todoStore: new InMemoryConversationTodoStore(),
 	});
 
 	const managerWait: ManagerWaitChannel | undefined =

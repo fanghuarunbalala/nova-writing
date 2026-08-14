@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildNovelAgent } from "../NovelAgent.js";
+import { ComposeModeStateProvider } from "../../../conversation/compose/ComposeModeState.js";
 import type { Provider } from "../../provider/Provider.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
 
@@ -29,13 +30,14 @@ describe("buildNovelAgent 组装", () => {
     ]);
     expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(6);
     expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(3);
-    expect(cap.toolDefs).toHaveLength(20);
+    expect(cap.toolDefs).toHaveLength(21);
   });
 
-  it("工具名覆盖 files + novel 各域", () => {
+  it("工具名覆盖 todo + files + novel 各域（8 组 21 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { toolDefs: Array<{ name: string }> } } }).config.agentCapability;
     const names = cap.toolDefs.map((t) => t.name);
+    expect(names[0]).toBe("TodoWrite"); // runtime.todo 组在组序首位
     expect(names).toContain("Read");
     expect(names).toContain("Glob");
     expect(names).toContain("Write");
@@ -54,5 +56,47 @@ describe("buildNovelAgent 组装", () => {
     // CharacterRead 会调 handle.query（characters.list）
     const result = await dispatcher.dispatch({} as never, { name: "CharacterRead", args: "{}" } as never);
     expect(result).toContain("[]");
+  });
+
+  it("TodoWrite 装配：执行写读（缺省 InMemoryConversationTodoStore）", async () => {
+    const loop = buildNovelAgent({
+      workspace: "/ws",
+      provider,
+      handle: handle as NovelHandle,
+      conversationId: "conv-1",
+    });
+    const dispatcher = (loop as unknown as { config: { toolDispatcher: { dispatch: (ctx: unknown, call: { name: string; args: string }) => Promise<string> } } }).config.toolDispatcher;
+    const result = await dispatcher.dispatch({} as never, {
+      name: "TodoWrite",
+      args: JSON.stringify({
+        todos: [{ content: "写第一章", status: "in_progress", activeForm: "写第一章中" }],
+      }),
+    } as never);
+    expect(result).toContain("写第一章");
+  });
+
+  it("nudge 接线：todo_idle 恒注入；compose_mode 需 composeState（enabled ∩ 目录）", () => {
+    const withoutCompose = buildNovelAgent({
+      workspace: "/ws",
+      provider,
+      handle: handle as NovelHandle,
+    });
+    const capNoCompose = (withoutCompose as unknown as { config: { agentCapability: { nudgePolicies: Array<{ constructor: { name: string } }> } } }).config.agentCapability;
+    expect(capNoCompose.nudgePolicies.map((n) => n.constructor.name)).toEqual([
+      "TodoIdleNudgePolicy",
+    ]);
+    const withCompose = buildNovelAgent({
+      workspace: "/ws",
+      provider,
+      handle: handle as NovelHandle,
+      conversationId: "conv-1",
+      composeState: new ComposeModeStateProvider(),
+    });
+    const capCompose = (withCompose as unknown as { config: { agentCapability: { nudgePolicies: Array<{ constructor: { name: string } }> } } }).config.agentCapability;
+    // enabled 声明序：compose_mode 在前
+    expect(capCompose.nudgePolicies.map((n) => n.constructor.name)).toEqual([
+      "ComposeModeNudgePolicy",
+      "TodoIdleNudgePolicy",
+    ]);
   });
 });

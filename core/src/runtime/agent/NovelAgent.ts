@@ -6,8 +6,8 @@
 import type { Provider } from "../provider/Provider.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
-import type { ToolDef } from "../tool/ToolDef.js";
 import type { DynamicInputProvider } from "../prompt/PromptSection.js";
+import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
 import { AgentAssembler } from "./AgentAssembler.js";
 import {
@@ -24,6 +24,9 @@ import type { LoopContextListener } from "../loop/types.js";
 import type { LLMessage } from "../provider/types.js";
 import type { ComposeModeStateProvider } from "../../conversation/compose/ComposeModeState.js";
 import type { ConversationTodoStore } from "../todo/TodoProtocol.js";
+import { InMemoryConversationTodoStore } from "../todo/InMemoryConversationTodoStore.js";
+import { TodoIdleNudgePolicy } from "../nudge/definitions/todo.js";
+import { ComposeModeNudgePolicy } from "../nudge/definitions/compose.js";
 import type {
   ConversationApprovalDecision,
   ConversationApprovalRequest,
@@ -68,6 +71,28 @@ export interface NovelAgentOptions {
  */
 export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
   const definition = opts.definition ?? novelAgentDefinition;
+  const todoStore = opts.todoStore ?? new InMemoryConversationTodoStore();
+  // nudge 实现目录：definition.nudgeEnablement.enabled ∩ 本目录 → 注入。
+  // todo_idle 恒可注入；compose_mode 依赖 composeState（compose 状态机接线
+  // 不在本期，未传 composeState 时该 nudge 不生效）。
+  const nudgeCatalog: ReadonlyMap<string, () => ContextNudgePolicy> = new Map<
+    string,
+    () => ContextNudgePolicy
+  >([
+    ["todo_idle", () => new TodoIdleNudgePolicy()],
+    ...(opts.composeState === undefined
+      ? []
+      : ([
+          [
+            "compose_mode",
+            () =>
+              new ComposeModeNudgePolicy(
+                opts.composeState!,
+                opts.conversationId ?? "",
+              ),
+          ],
+        ] as [string, () => ContextNudgePolicy][])),
+  ]);
   const assembler = new AgentAssembler({
     definition,
     sectionRegistry: novelSectionRegistry,
@@ -75,7 +100,10 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     resolveToolGroup: createNovelToolGroupResolver({
       workspace: opts.workspace,
       handle: opts.handle,
+      todoStore,
+      todoConversationId: opts.conversationId ?? "",
     }),
+    nudgeCatalog,
   });
   const capability = assembler.assemble();
   const dispatcher: ToolDispatcher = {

@@ -4,12 +4,14 @@
  * factory resolver (manifest → ToolDef[]).
  *
  * 组声明与工具工厂分离：manifest 是配置展示层，工厂按 manifest.tools 名称
- * 解析实际工具定义（缺工具报错）。runtime.todo 组在 TodoWrite 装配步骤加入。
+ * 解析实际工具定义（缺工具报错）。
  */
 import { ToolGroupManifest } from "../../tool/ToolGroupManifest.js";
 import type { ToolDef } from "../../tool/ToolDef.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
+import type { ConversationTodoStore } from "../../todo/TodoProtocol.js";
 import { createFileTools } from "../../tool/definitions/files.js";
+import { createTodoWriteTool } from "../../tool/definitions/todo.js";
 import {
   createCharacterTools,
   createLocationTools,
@@ -18,6 +20,15 @@ import {
   createPublicationTools,
   createDeleteTool,
 } from "../../tool/definitions/novel.js";
+
+/** runtime.todo：会话执行计划（TodoWrite） */
+export const NOVEL_TOOL_GROUP_TODO = new ToolGroupManifest({
+  id: "runtime.todo",
+  version: "1.0.0",
+  label: "Runtime Todo",
+  description: "会话执行计划（TodoWrite 全量替换）",
+  tools: ["TodoWrite"],
+});
 
 /** runtime.files：workspace 文件工具 */
 export const NOVEL_TOOL_GROUP_FILES = new ToolGroupManifest({
@@ -84,6 +95,7 @@ export const NOVEL_TOOL_GROUP_DELETE = new ToolGroupManifest({
 
 /** Novel Agent 工具组目录：groupId → manifest（有序插入，与 definition.tools.groupIds 对齐） */
 export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = new Map([
+  [NOVEL_TOOL_GROUP_TODO.id, NOVEL_TOOL_GROUP_TODO],
   [NOVEL_TOOL_GROUP_FILES.id, NOVEL_TOOL_GROUP_FILES],
   [NOVEL_TOOL_GROUP_CHARACTERS.id, NOVEL_TOOL_GROUP_CHARACTERS],
   [NOVEL_TOOL_GROUP_LOCATIONS.id, NOVEL_TOOL_GROUP_LOCATIONS],
@@ -93,23 +105,31 @@ export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = 
   [NOVEL_TOOL_GROUP_DELETE.id, NOVEL_TOOL_GROUP_DELETE],
 ]);
 
-/** 工具组工厂选项（workspace / novel handle 闭包） */
+/** 工具组工厂选项（workspace / novel handle / todo 闭包） */
 export interface NovelToolGroupResolverOptions {
   /** 工作区路径（文件工具） */
   workspace: string;
   /** novel 客户端（novel 域工具 query/mutate 对接） */
   handle: NovelHandle;
+  /** Todo 存储（runtime.todo 组 TodoWrite；由 buildNovelAgent 注入缺省实例） */
+  todoStore: ConversationTodoStore;
+  /** 会话 id（TodoWrite 状态键；缺省空串——仅测试/直构路径，生产恒传真实 id） */
+  todoConversationId: string;
 }
 
 /**
  * 创建工具组解析器：manifest → ToolDef[]（按 manifest.tools 名称解析，缺工具报错）。
- * @param options workspace + novel handle
+ * @param options workspace + novel handle + todo 存储/会话
  * @returns 组解析函数
  */
 export function createNovelToolGroupResolver(
   options: NovelToolGroupResolverOptions,
 ): (manifest: ToolGroupManifest) => ToolDef[] {
   const factories: ReadonlyMap<string, () => ToolDef[]> = new Map([
+    [
+      "runtime.todo",
+      () => [createTodoWriteTool(options.todoStore, options.todoConversationId)],
+    ],
     ["runtime.files", () => createFileTools(options.workspace)],
     ["novel.characters", () => createCharacterTools(options.handle)],
     ["novel.locations", () => createLocationTools(options.handle)],

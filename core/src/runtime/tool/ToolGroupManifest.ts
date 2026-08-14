@@ -1,6 +1,6 @@
 /**
  * 不可变工具组清单：有序工具名（id/version/label 为展示层元数据；
- * 工具本体由组工厂按 tools 名解析，见 definitions/NovelToolGroups.ts）。
+ * 工具本体由组工厂按 tools 名解析，见 groups/NovelToolGroups.ts）。
  * Immutable Tool Group manifest: ordered tool names (id/version/label are display
  * metadata; tool bodies are resolved by the group factory from the tool names).
  */

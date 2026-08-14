@@ -6,12 +6,12 @@
  * 组声明与工具工厂分离：manifest 是配置展示层，工厂按 manifest.tools 名称
  * 解析实际工具定义（缺工具报错）。
  */
-import { ToolGroupManifest } from "../../tool/ToolGroupManifest.js";
-import type { ToolDef } from "../../tool/ToolDef.js";
+import { ToolGroupManifest } from "../ToolGroupManifest.js";
+import type { ToolDef } from "../ToolDef.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
 import type { ConversationTodoStore } from "../../todo/TodoProtocol.js";
-import { createFileTools } from "../../tool/definitions/files.js";
-import { createTodoWriteTool } from "../../tool/definitions/todo.js";
+import { createFileTools } from "../definitions/files.js";
+import { createTodoWriteTool } from "../definitions/todo.js";
 import {
   createCharacterTools,
   createLocationTools,
@@ -19,7 +19,7 @@ import {
   createParagraphTools,
   createPublicationTools,
   createDeleteTool,
-} from "../../tool/definitions/novel.js";
+} from "../definitions/novel.js";
 
 /** runtime.todo：会话执行计划（TodoWrite） */
 export const NOVEL_TOOL_GROUP_TODO = new ToolGroupManifest({

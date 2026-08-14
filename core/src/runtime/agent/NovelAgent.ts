@@ -17,7 +17,7 @@ import {
 import {
   NOVEL_TOOL_GROUP_CATALOG,
   createNovelToolGroupResolver,
-} from "./definitions/NovelToolGroups.js";
+} from "../tool/groups/NovelToolGroups.js";
 import type { NovelHandle } from "../../novel/client/NovelHandle.js";
 import type { Logger } from "../../log/Logger.js";
 import type { LoopContextListener } from "../loop/types.js";

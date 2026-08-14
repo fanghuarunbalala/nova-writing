@@ -233,9 +233,9 @@ type ConversationSystemControl =
 ```
 runtime/
 ├── provider/      多模型（Anthropic/OpenAI/DeepSeek）+ 流式 + 错误分类 + 模型能力
-├── tool/          ToolDef/ToolHandler/ToolGroupManifest/ToolDispatcher/MapToolDispatcher + definitions（files/novel/todo）
+├── tool/          ToolDef/ToolHandler/ToolGroupManifest/ToolDispatcher/MapToolDispatcher + definitions（files/novel/todo）+ groups（NovelToolGroups）
 ├── prompt/        PromptSection 判别联合（static/dynamic）+ PromptRecipe/PromptSectionRegistry + sections（9 段）
-├── agent/         AgentDefinition（值对象）/AgentAssembler/NovelAgent（buildNovelAgent）+ definitions（NovelAgentDefinition/NovelToolGroups）
+├── agent/         AgentDefinition（值对象）/AgentAssembler/NovelAgent（buildNovelAgent）+ definitions（NovelAgentDefinition）
 ├── loop/          AgentLoop（输入队列 + round/turn）+ LoopContext（static base 缓存 + 动态输入通道）
 ├── nudge/         ContextNudgePolicy + definitions（todo_idle/compose_mode）
 ├── compact/       ContextCompactPolicy + CompactPolicyChain

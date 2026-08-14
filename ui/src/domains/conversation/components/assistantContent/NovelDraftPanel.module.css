@@ -1,0 +1,107 @@
+/**
+ * NovelDraftPanel 视觉：正文草稿面板。
+ *
+ * 容器：左 3px accent 竖线 + 暖底（accent 6% 微光 + orange 3% 渐变顶光，频次 1
+ * 留在组件内）+ 右侧圆角，与引用块（楷体细线）视觉错开。
+ * 文字：衬线 --font-body、--fs-16-5、行高 1.95、首行缩进 2em、两端对齐——
+ * 小说出版排版惯例。
+ * 光标：2px accent 竖线，draft-cursor 闪烁（keyframes 在 animations.css，
+ * 经 --anim-draft-cursor 间接引用）。
+ */
+.draft {
+  margin-top: var(--space-2);
+  border-left: var(--space-3px) solid var(--color-accent-45);
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-orange) 3%, transparent),
+      transparent 60%
+    ),
+    var(--color-accent-6);
+  border-radius: 0 var(--radius-8px) var(--radius-8px) 0;
+  padding: var(--space-14px) var(--space-18px);
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-10);
+  font-weight: var(--fw-600);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-accent-ink);
+  margin-bottom: var(--space-10px);
+}
+
+.dot {
+  width: var(--space-5px);
+  height: var(--space-5px);
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+.badge {
+  font-size: var(--fs-9-5);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  color: var(--color-warn);
+  border: 1px solid var(--color-warn-40);
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-6px);
+}
+
+.text {
+  font-family: var(--font-body);
+  font-size: var(--fs-16-5);
+  font-weight: var(--fw-regular);
+  line-height: 1.95;
+  letter-spacing: 0.015em;
+  text-align: justify;
+  color: var(--color-fg);
+}
+
+.text p {
+  margin: 0 0 0.9em;
+  text-indent: 2em;
+  white-space: pre-line;
+  text-wrap: pretty;
+}
+
+.text p:last-child {
+  margin-bottom: 0;
+}
+
+.cursor {
+  display: inline-block;
+  width: var(--space-2px);
+  height: 1.1em;
+  margin-left: var(--space-2px);
+  vertical-align: -0.15em;
+  background: var(--color-accent);
+  animation: var(--anim-draft-cursor) 1s steps(2, start) infinite;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+.copy {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-faint);
+  border-radius: var(--radius-pill);
+  padding: var(--space-2px) var(--space-2);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.copy:hover,
+.copy:focus-visible {
+  color: var(--color-accent-ink);
+  background: var(--color-accent-10);
+}

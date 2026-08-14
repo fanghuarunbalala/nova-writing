@@ -15,7 +15,6 @@ describe("TopBar", () => {
       <TopBar
         workspaceName="白昼计划"
         workspaceSub="第三卷 · 回声"
-        revision="r042"
         sidebarMode="expanded"
         onToggleSidebar={vi.fn()}
         onOpenWorkspace={vi.fn()}
@@ -27,7 +26,6 @@ describe("TopBar", () => {
     expect(screen.getByText("Novel")).toBeInTheDocument();
     expect(screen.getByText("白昼计划")).toBeInTheDocument();
     expect(screen.getByText("第三卷 · 回声")).toBeInTheDocument();
-    expect(screen.getByText("r042")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "计划" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "审批" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Workspace" })).toBeInTheDocument();

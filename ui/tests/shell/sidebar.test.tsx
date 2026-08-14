@@ -9,34 +9,14 @@ import { SidebarSection } from "../../src/shell/sidebar/SidebarSection.js";
 import { SidebarToggleButton } from "../../src/shell/sidebar/SidebarToggleButton.js";
 import { ConversationCatalogStore } from "../../src/domains/conversation/store/ConversationCatalogStore.js";
 import { NovelOverviewStore } from "../../src/domains/novel/overview/NovelOverviewStore.js";
+import { ToastStore } from "../../src/shared/state/ToastStore.js";
 
 function makeStores() {
   const api = {
     conversations: {
-      list: vi.fn(async () => ({
-        conversations: [
-          {
-            metadata: {
-              id: "conversation_a",
-              workspaceId: "w1",
-              rootConversationId: "conversation_a",
-              status: "active",
-              createdAt: "2026-08-05T09:00:00.000Z",
-              updatedAt: "2026-08-05T09:00:00.000Z",
-              lastJournalSequence: 0,
-            },
-            activeAgentBinding: {
-              id: "b1",
-              conversationId: "conversation_a",
-              revision: 1,
-              status: "active",
-              createdAt: "2026-08-05T09:00:00.000Z",
-              agentType: "novel",
-              definitionVersion: "1.0.0",
-            },
-          },
-        ],
-      })),
+      list: vi.fn(async () => [
+        { conversationId: "conversation_a", name: "a", storeDir: "", status: "active" },
+      ]),
       create: vi.fn(),
       open: vi.fn(),
     },
@@ -66,7 +46,9 @@ describe("Sidebar", () => {
         mode="expanded"
         conversationCatalog={conversationCatalog}
         novelOverview={novelOverview}
+        toastStore={new ToastStore()}
         onCreateConversation={onCreateConversation}
+        onSelectConversation={vi.fn()}
         contentTab="outline"
         onSelectContentPane={onSelectContentPane}
         workspaceId="w1"

@@ -16,30 +16,8 @@ describe("useConversationCatalog", () => {
     const user = userEvent.setup();
     const api = {
       conversations: {
-        list: vi.fn(async () => ({ conversations: [] })),
-        create: vi.fn(async () => ({
-          getSnapshot: async () => ({
-            metadata: {
-              id: "conversation_new",
-              workspaceId: "w1",
-              rootConversationId: "conversation_new",
-              status: "active",
-              createdAt: "2026-08-05T09:00:00.000Z",
-              updatedAt: "2026-08-05T09:00:00.000Z",
-              lastJournalSequence: 0,
-            },
-            activeAgentBinding: {
-              id: "b1",
-              conversationId: "conversation_new",
-              revision: 1,
-              status: "active",
-              createdAt: "2026-08-05T09:00:00.000Z",
-              agentType: "novel",
-              definitionVersion: "1.0.0",
-            },
-          }),
-          close: async () => undefined,
-        })),
+        list: vi.fn(async () => []),
+        create: vi.fn(async () => ({ conversationId: "conversation_new", handle: {} })),
         open: vi.fn(),
       },
     } as never;
@@ -102,42 +80,30 @@ describe("useConversationRuntimeStatus", () => {
       conversationId: "c1",
       revision: 1,
       lastAppliedSequence: 0,
-      events: [],
+      state: "idle",
       timeline: [],
-      userMessages: [],
-      assistantMessages: [],
+      cards: [],
       approvals: [],
-      runs: [],
-      turns: [],
+      toolTraces: [],
+      eventFlow: [],
       ...overrides,
     };
   }
 
-  it("is idle without presence and live while generating", () => {
+  it("is idle without projection and live while running", () => {
     function Probe({ snapshot }: { readonly snapshot: ConversationProjectionSnapshot | undefined }) {
       const { state } = useConversationRuntimeStatus(snapshot);
       return <output>{state}</output>;
     }
     const { rerender } = render(<Probe snapshot={undefined} />);
     expect(screen.getByRole("status")).toHaveTextContent("idle");
-    rerender(
-      <Probe
-        snapshot={projection({
-          runtimePresence: { state: "online", observedAt: "" },
-          runs: [{ runId: "r1", inputEventId: "e1", inputEventType: "user.text", inputEventSequence: 1, previous: null, current: "running", reason: "started", lastSequence: 1 }],
-          turns: [{ runId: "r1", turnId: "t1", previous: null, current: "running", reason: "started", lastSequence: 1 }],
-        })}
-      />,
-    );
+    rerender(<Probe snapshot={projection({ state: "running" })} />);
     expect(screen.getByRole("status")).toHaveTextContent("live");
   });
 
-  it("reports recoverable (disconnected) state for crashed presence", () => {
+  it("reports recoverable (disconnected) state for stopped projection", () => {
     function Probe() {
-      const { state } = useConversationRuntimeStatus(
-        projection({ runtimePresence: { state: "crashed", observedAt: "" } }),
-        "runtime_crash",
-      );
+      const { state } = useConversationRuntimeStatus(projection({ state: "stopped" }));
       return <output>{state}</output>;
     }
     render(<Probe />);
@@ -146,28 +112,10 @@ describe("useConversationRuntimeStatus", () => {
 
   it("reports failed state for hard configuration failures", () => {
     function Probe() {
-      const { state } = useConversationRuntimeStatus(
-        projection({ runtimePresence: { state: "crashed", observedAt: "" } }),
-        "credential_missing",
-      );
+      const { state } = useConversationRuntimeStatus(projection({ state: "error" }));
       return <output>{state}</output>;
     }
     render(<Probe />);
     expect(screen.getByRole("status")).toHaveTextContent("failed");
-  });
-
-  it("derives currentRun from the latest run and turn", () => {
-    function Probe() {
-      const { currentRun } = useConversationRuntimeStatus(
-        projection({
-          runtimePresence: { state: "online", observedAt: "" },
-          runs: [{ runId: "r9", inputEventId: "e1", inputEventType: "user.text", inputEventSequence: 1, previous: null, current: "completed", reason: "completed", lastSequence: 2 }],
-          turns: [{ runId: "r9", turnId: "t9", previous: null, current: "completed", reason: "completed", lastSequence: 2 }],
-        }),
-      );
-      return <output>{currentRun?.runId}:{currentRun?.turnId}</output>;
-    }
-    render(<Probe />);
-    expect(screen.getByRole("status")).toHaveTextContent("r9:t9");
   });
 });

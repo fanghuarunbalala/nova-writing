@@ -209,62 +209,27 @@ describe("ConversationDialogs", () => {
 });
 
 describe("ConversationListSection dialogs", () => {
+  const conversationSummary = {
+    conversationId: "conversation_a",
+    name: "a",
+    storeDir: "",
+    status: "active",
+  };
+
   function buildSection() {
-    const rename = vi.fn(async () => undefined);
     const del = vi.fn(async () => undefined);
     const api = {
       conversations: {
-        list: vi.fn(async () => ({
-          conversations: [
-            {
-              metadata: {
-                id: "conversation_a",
-                workspaceId: "w1",
-                rootConversationId: "conversation_a",
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                updatedAt: "2026-08-05T09:00:00.000Z",
-                lastJournalSequence: 0,
-              },
-              activeAgentBinding: {
-                id: "b1",
-                conversationId: "conversation_a",
-                revision: 1,
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                agentType: "novel",
-                definitionVersion: "1.0.0",
-              },
-            },
-          ],
-        })),
+        list: vi.fn(async () => [conversationSummary]),
         create: vi.fn(),
         open: vi.fn(),
-        rename,
         delete: del,
       },
     } as never;
     const store = new ConversationCatalogStore({ api });
     const toastStore = new ToastStore();
-    return { store, rename, del, toastStore };
+    return { store, del, toastStore };
   }
-
-  it("renames through the custom dialog without native prompt", async () => {
-    const user = userEvent.setup();
-    const { store, rename, toastStore } = buildSection();
-    await store.loadWorkspace("w1");
-    render(
-      <ConversationListSection store={store} toastStore={toastStore} onSelect={vi.fn()} />,
-    );
-    await user.click(screen.getByRole("button", { name: "对话操作" }));
-    await user.click(screen.getByText("重命名"));
-    const input = screen.getByRole("textbox", { name: "对话名称" }) as HTMLInputElement;
-    await user.clear(input);
-    await user.type(input, "雨夜对话");
-    await user.click(screen.getByRole("button", { name: "保存" }));
-    expect(rename).toHaveBeenCalledWith("conversation_a", "雨夜对话");
-    expect(window.prompt).not.toHaveBeenCalled();
-  });
 
   it("deletes through the custom dialog without native confirm", async () => {
     const user = userEvent.setup();
@@ -291,33 +256,9 @@ describe("ConversationListSection dialogs", () => {
     );
     const api = {
       conversations: {
-        list: vi.fn(async () => ({
-          conversations: [
-            {
-              metadata: {
-                id: "conversation_a",
-                workspaceId: "w1",
-                rootConversationId: "conversation_a",
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                updatedAt: "2026-08-05T09:00:00.000Z",
-                lastJournalSequence: 0,
-              },
-              activeAgentBinding: {
-                id: "b1",
-                conversationId: "conversation_a",
-                revision: 1,
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                agentType: "novel",
-                definitionVersion: "1.0.0",
-              },
-            },
-          ],
-        })),
+        list: vi.fn(async () => [conversationSummary]),
         create: vi.fn(),
         open: vi.fn(),
-        rename: vi.fn(async () => undefined),
         delete: del,
       },
     } as never;
@@ -360,33 +301,9 @@ describe("ConversationListSection dialogs", () => {
     });
     const api = {
       conversations: {
-        list: vi.fn(async () => ({
-          conversations: [
-            {
-              metadata: {
-                id: "conversation_a",
-                workspaceId: "w1",
-                rootConversationId: "conversation_a",
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                updatedAt: "2026-08-05T09:00:00.000Z",
-                lastJournalSequence: 0,
-              },
-              activeAgentBinding: {
-                id: "b1",
-                conversationId: "conversation_a",
-                revision: 1,
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                agentType: "novel",
-                definitionVersion: "1.0.0",
-              },
-            },
-          ],
-        })),
+        list: vi.fn(async () => [conversationSummary]),
         create: vi.fn(),
         open: vi.fn(),
-        rename: vi.fn(async () => undefined),
         delete: del,
       },
     } as never;

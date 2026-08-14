@@ -22,89 +22,60 @@ import type { WorkspaceControllerSnapshot } from "../../src/domains/workspace/co
 function buildApi() {
   return {
     conversations: {
-      list: vi.fn(async () => ({ conversations: [] })),
-      listApprovals: vi.fn(async () => []),
-      enqueueInput: vi.fn(async () => ({
-        status: "accepted",
-        conversationId: "conversation_x",
-        inputEventId: "input_x",
-        sequence: 1,
-        acceptedAt: "2026-08-05T09:00:00.000Z",
-      })),
-      create: vi.fn(async () => ({
-        getSnapshot: async () => ({
-          metadata: {
-            id: "conversation_new",
-            workspaceId: "w1",
-            rootConversationId: "conversation_new",
-            status: "active",
-            createdAt: "2026-08-05T09:00:00.000Z",
-            updatedAt: "2026-08-05T09:00:00.000Z",
-            lastJournalSequence: 0,
-          },
-          activeAgentBinding: {
-            id: "b1",
-            conversationId: "conversation_new",
-            revision: 1,
-            status: "active",
-            createdAt: "2026-08-05T09:00:00.000Z",
-            agentType: "novel",
-            definitionVersion: "1.0.0",
-          },
-        }),
-        close: async () => undefined,
-      })),
+      list: vi.fn(async () => []),
+      create: vi.fn(async () => ({ conversationId: "conversation_new", handle: {} })),
       open: vi.fn(),
+      history: vi.fn(async () => []),
+      getMode: vi.fn(async () => "review"),
+    },
+    approvals: {
+      list: vi.fn(async () => []),
+      resolve: vi.fn(async () => true),
     },
     novel: {
       overview: {
         get: vi.fn(async () => ({
-          schemaVersion: 1,
-          scope: { kind: "canonical" },
-          workspaceId: "w1",
           novelId: "novel_1",
-          novelSchemaVersion: 1,
-          sourceRevision: "r041",
-          counts: { storyUnitCount: 1, characterCount: 0, locationCount: 0, volumeCount: 1, chapterCount: 0, manuscriptBlockCount: 0 },
-          roots: {},
+          title: "novel_1",
+          counts: { storyUnits: 1, characters: 0, locations: 0, paragraphs: 0 },
         })),
       },
       outline: {
         get: vi.fn(async () => ({
-          schemaVersion: 1,
-          scope: { kind: "canonical" },
-          tree: {
-            outline: { id: "o1", novelId: "novel_1" },
-            units: [
-              {
-                id: "arc-v1",
-                outlineId: "o1",
-                orderKey: "0001",
-                title: "第一卷：旧船坞",
-                scope: "arc",
-                planningStatus: "ready",
-                realizationStatus: "in-progress",
-              },
-            ],
-          },
-          progress: [],
+          outline: { id: "o1", novelId: "novel_1" },
+          units: [
+            {
+              id: "arc-v1",
+              entityVersion: 1,
+              outlineId: "o1",
+              orderKey: "0001",
+              title: "第一卷：旧船坞",
+              scope: "arc",
+              planningStatus: "ready",
+              realizationStatus: "in-progress",
+            },
+          ],
         })),
         getStoryUnit: vi.fn(),
       },
       characters: {
-        list: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, characters: [] })),
+        list: vi.fn(async () => []),
         get: vi.fn(),
       },
       locations: {
-        list: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, locations: [] })),
+        list: vi.fn(async () => []),
         get: vi.fn(),
       },
       paragraphs: {
-        getCatalog: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, paragraphs: [] })),
+        list: vi.fn(async () => []),
         get: vi.fn(),
       },
       publication: {
-        getCatalog: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, volumes: [], chapters: [] })),
+        get: vi.fn(async () => ({
+          structure: { id: "publication_main", novelId: "novel_1" },
+          volumes: [],
+          chapters: [],
+        })),
       },
     },
   } as never;
@@ -173,7 +144,7 @@ describe("ApplicationShell smoke", () => {
     // 待办仅存在于计划视图（侧栏已无待办组）。
     await user.click(screen.getByRole("button", { name: "计划" }));
     expect(await screen.findByText("还没有对话")).toBeInTheDocument();
-    expect(api.conversations.list).toHaveBeenCalledWith({ status: "active" });
+    expect(api.conversations.list).toHaveBeenCalledWith();
     expect(api.novel.overview.get).toHaveBeenCalled();
     expect(api.novel.outline.get).toHaveBeenCalled();
   });
@@ -191,50 +162,10 @@ describe("ApplicationShell smoke", () => {
   it("switches to the selected conversation when a sidebar conversation is clicked", async () => {
     const user = userEvent.setup();
     const api = buildApi();
-    api.conversations.list = vi.fn(async () => ({
-      conversations: [
-        {
-          metadata: {
-            id: "conversation_000001",
-            workspaceId: "w1",
-            rootConversationId: "conversation_000001",
-            status: "active",
-            createdAt: "2026-08-05T09:00:00.000Z",
-            updatedAt: "2026-08-05T09:00:00.000Z",
-            lastJournalSequence: 0,
-          },
-          activeAgentBinding: {
-            id: "b1",
-            conversationId: "conversation_000001",
-            revision: 1,
-            status: "active",
-            createdAt: "2026-08-05T09:00:00.000Z",
-            agentType: "novel",
-            definitionVersion: "1.0.0",
-          },
-        },
-        {
-          metadata: {
-            id: "conversation_000002",
-            workspaceId: "w1",
-            rootConversationId: "conversation_000002",
-            status: "active",
-            createdAt: "2026-08-05T09:01:00.000Z",
-            updatedAt: "2026-08-05T09:01:00.000Z",
-            lastJournalSequence: 0,
-          },
-          activeAgentBinding: {
-            id: "b2",
-            conversationId: "conversation_000002",
-            revision: 1,
-            status: "active",
-            createdAt: "2026-08-05T09:01:00.000Z",
-            agentType: "novel",
-            definitionVersion: "1.0.0",
-          },
-        },
-      ],
-    }));
+    api.conversations.list = vi.fn(async () => [
+      { conversationId: "conversation_000001", name: "c1", storeDir: "", status: "active" },
+      { conversationId: "conversation_000002", name: "c2", storeDir: "", status: "active" },
+    ]);
     const conversationCatalog = new ConversationCatalogStore({ api });
     const novelOverview = new NovelOverviewStore({ api });
     const storyOutlineTree = new StoryOutlineTreeStore({ api });
@@ -272,8 +203,9 @@ describe("ApplicationShell smoke", () => {
     await user.click(screen.getByText("大纲"));
     expect(await screen.findByText("第一卷：旧船坞")).toBeInTheDocument();
     await user.click(screen.getAllByText("对话 000001")[0]);
+    // chat 视图不再渲染会话标题 heading，改为断言对话输入框出现（切回聊天）。
     expect(
-      await screen.findByRole("heading", { level: 2, name: "对话 000001" }),
+      await screen.findByRole("textbox", { name: "对话输入" }),
     ).toBeInTheDocument();
   });
 });

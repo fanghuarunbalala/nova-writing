@@ -94,8 +94,8 @@
   padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid var(--color-border-strong, #555);
-  background: var(--color-bg-elevated, #1e1e24);
-  color: var(--color-text, #ddd);
+  background: var(--color-surface);
+  color: var(--color-fg);
   font-size: 13px;
   resize: vertical;
 }

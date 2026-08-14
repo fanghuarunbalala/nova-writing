@@ -5,6 +5,7 @@
 import { readFile, writeFile, mkdir, readdir, stat } from "node:fs/promises";
 import { join, resolve, relative, sep, dirname } from "node:path";
 import type { ToolDef } from "../ToolDef.js";
+import { fileReadPreview, fileGlobPreview, fileWritePreview, fileEditPreview } from "../previews.js";
 import type { ToolCall } from "../../provider/types.js";
 
 const PATH_MAX = 1024;
@@ -46,6 +47,7 @@ function readTool(workspace: string): ToolDef {
   return {
     name: "Read",
     version: "1.0.0",
+    preview: fileReadPreview,
     description:
       "从 workspace 目录读取文件，使用 workspace 相对路径。\n\n用法：\n- file_path 必须是 workspace 相对路径，不能是绝对路径。\n- 结果按 cat -n 格式返回，行号从 1 开始。\n- 默认读取整个文件；可传 offset 行偏移和 limit 行数读取指定区间。\n- 超过 512 KiB 会报错，请分段读取。\n- 只读文件，不读目录；路径限定在 workspace 沙盒内。",
     parameters: {
@@ -82,6 +84,7 @@ function globTool(workspace: string): ToolDef {
   return {
     name: "Glob",
     version: "1.0.0",
+    preview: fileGlobPreview,
     description:
       "在 workspace 目录内按 glob 模式查找文件（如 **/*.md）。\n\n用法：\n- pattern 是 workspace 相对 glob；绝对模式与父目录穿越会被拒绝。\n- 返回匹配文件路径（workspace 相对），按修改时间倒序。\n- 用 Glob 先发现文件，再用 Read 读取。\n- 路径限定在 workspace 沙盒内。",
     parameters: {
@@ -112,6 +115,7 @@ function writeTool(workspace: string): ToolDef {
   return {
     name: "Write",
     version: "1.0.0",
+    preview: fileWritePreview,
     // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
     requireApproval: true,
     description:
@@ -147,6 +151,7 @@ function editTool(workspace: string): ToolDef {
   return {
     name: "Edit",
     version: "1.0.0",
+    preview: fileEditPreview,
     // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
     requireApproval: true,
     description:

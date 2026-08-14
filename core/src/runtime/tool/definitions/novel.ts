@@ -6,7 +6,24 @@ import type { ToolDef } from "../ToolDef.js";
 import type { ToolCall } from "../../provider/types.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
 import type { OrderKey } from "../../../novel/model/outline.js";
-import { characterWritePreview, paragraphWritePreview } from "../previews.js";
+import {
+  characterReadPreview,
+  characterWritePreview,
+  characterEditPreview,
+  locationReadPreview,
+  locationWritePreview,
+  locationEditPreview,
+  paragraphReadPreview,
+  paragraphWritePreview,
+  paragraphEditPreview,
+  publicationReadPreview,
+  publicationWritePreview,
+  publicationEditPreview,
+  novelDeletePreview,
+  outlineReadPreview,
+  outlineWritePreview,
+  outlineEditPreview,
+} from "../previews.js";
 
 /** 解析 tool args JSON */
 function parseArgs(call: ToolCall): Record<string, unknown> {
@@ -45,6 +62,7 @@ function characterRead(handle: NovelHandle): ToolDef {
   return {
     name: "CharacterRead",
     version: "1.0.0",
+    preview: characterReadPreview,
     description:
       "读取角色档案。省略 characterId 列出全部角色；传入则读取单个角色。返回的是已提交（正式稿）状态。",
     parameters: {
@@ -123,6 +141,7 @@ function characterEdit(handle: NovelHandle): ToolDef {
   return {
     name: "CharacterEdit",
     version: "1.0.0",
+    preview: characterEditPreview,
     // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
     requireApproval: true,
     description:
@@ -188,6 +207,7 @@ function locationRead(handle: NovelHandle): ToolDef {
   return {
     name: "LocationRead",
     version: "1.0.0",
+    preview: locationReadPreview,
     description: "读取地点档案。省略 locationId 列出全部地点；传入则读取单个。返回已提交（正式稿）状态。",
     parameters: {
       type: "object",
@@ -215,6 +235,7 @@ function locationWrite(handle: NovelHandle): ToolDef {
   return {
     name: "LocationWrite",
     version: "1.0.0",
+    preview: locationWritePreview,
     // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
     requireApproval: true,
     description: "批量创建地点档案。name 必填；aliases/summary/initialState/authorNotes 可选。直接写入正式稿。",
@@ -260,6 +281,7 @@ function locationEdit(handle: NovelHandle): ToolDef {
   return {
     name: "LocationEdit",
     version: "1.0.0",
+    preview: locationEditPreview,
     // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
     requireApproval: true,
     description: "批量字段级局部更新（PATCH）已有地点档案。locationId 必填；baseRevision 为最近读到的 entityVersion；字段覆盖/保留，null 清除。",
@@ -321,6 +343,7 @@ export function createParagraphTools(handle: NovelHandle): ToolDef[] {
     {
       name: "ParagraphRead",
       version: "1.0.0",
+      preview: paragraphReadPreview,
       description: "读取段落。省略 paragraphId 时按 storyUnitId 列出该单元的全部段落（按 orderKey 排序）；传入 paragraphId 读取单个。",
       parameters: {
         type: "object",
@@ -368,6 +391,7 @@ export function createParagraphTools(handle: NovelHandle): ToolDef[] {
     {
       name: "ParagraphEdit",
       version: "1.0.0",
+      preview: paragraphEditPreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description: "替换段落文本（不可变段落：update 整体替换）。paragraphId 必填；baseRevision 为最近读到的 entityVersion。",
@@ -399,6 +423,7 @@ export function createPublicationTools(handle: NovelHandle): ToolDef[] {
     {
       name: "PublicationRead",
       version: "1.0.0",
+      preview: publicationReadPreview,
       description: "读取发布结构（卷/章）。返回完整卷章树。",
       parameters: { type: "object", properties: {}, additionalProperties: false },
       promptDetail: { policy: "Reads the publication structure (volumes/chapters).", guidance: "Returns the full volume/chapter tree." },
@@ -409,6 +434,7 @@ export function createPublicationTools(handle: NovelHandle): ToolDef[] {
     {
       name: "PublicationWrite",
       version: "1.0.0",
+      preview: publicationWritePreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description: "创建卷或章。kind=volume 传 title；kind=chapter 传 volumeId/title/storyUnitId。",
@@ -439,6 +465,7 @@ export function createPublicationTools(handle: NovelHandle): ToolDef[] {
     {
       name: "PublicationEdit",
       version: "1.0.0",
+      preview: publicationEditPreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description: "更新卷或章。kind=volume 传 volumeId；kind=chapter 传 chapterId；baseRevision 为最近读到的 entityVersion。",
@@ -480,6 +507,7 @@ export function createDeleteTool(handle: NovelHandle): ToolDef[] {
     {
       name: "NovelDelete",
       version: "1.0.0",
+      preview: novelDeletePreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description:
@@ -535,6 +563,7 @@ export function createOutlineTools(handle: NovelHandle): ToolDef[] {
     {
       name: "OutlineRead",
       version: "1.0.0",
+      preview: outlineReadPreview,
       description: "读取大纲（含全部 story unit 树）。可传 storyUnitId 读单个单元。",
       parameters: {
         type: "object",
@@ -555,6 +584,7 @@ export function createOutlineTools(handle: NovelHandle): ToolDef[] {
     {
       name: "OutlineWrite",
       version: "1.0.0",
+      preview: outlineWritePreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description: "创建 story unit（大纲单元）。title 必填；parentId 挂父节点；orderKey 排序；intent/synopsis/scope 可选。",
@@ -591,6 +621,7 @@ export function createOutlineTools(handle: NovelHandle): ToolDef[] {
     {
       name: "OutlineEdit",
       version: "1.0.0",
+      preview: outlineEditPreview,
       // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询）
       requireApproval: true,
       description: "更新 story unit。storyUnitId 必填；baseRevision 为最近读到的 entityVersion；patch 覆盖 title/intent/synopsis/scope/planningStatus/realizationStatus。",

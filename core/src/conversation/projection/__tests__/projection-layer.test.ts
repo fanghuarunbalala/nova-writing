@@ -14,7 +14,7 @@ function toolPair(overrides?: { name?: string; args?: string; result?: string; e
 		persist: true,
 		seq: 1,
 		toolCallId: "t1",
-		name: overrides?.name ?? "CharacterRead",
+		name: overrides?.name ?? "UnregisteredTool",
 		args: overrides?.args ?? '{"a":1}',
 		ts: "2026-08-14T10:00:00.000Z",
 	});
@@ -39,7 +39,7 @@ describe("ProjectionLayer", () => {
 			type: "tool-recorded.started",
 			seq: 1,
 			toolCallId: "t1",
-			name: "CharacterRead",
+			name: "UnregisteredTool",
 			preview: { summary: '{"a":1}' },
 		});
 		const recorded = layer.project(response);
@@ -47,7 +47,7 @@ describe("ProjectionLayer", () => {
 			type: "tool-recorded.recorded",
 			seq: 2,
 			toolCallId: "t1",
-			name: "CharacterRead",
+			name: "UnregisteredTool",
 			outcome: "ok",
 			durationMs: 150,
 			preview: { summary: '{"a":1}（执行完成）' },

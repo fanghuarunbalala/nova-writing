@@ -3,6 +3,7 @@
  * 用完整 todo 列表替换当前会话执行计划。
  */
 import type { ToolDef } from "../ToolDef.js";
+import { todoWritePreview } from "../previews.js";
 import type { ToolCall } from "../../provider/types.js";
 import type { ConversationTodoStore, TodoItemSnapshot } from "../../todo/TodoProtocol.js";
 
@@ -58,6 +59,7 @@ export function createTodoWriteTool(todoStore: ConversationTodoStore, conversati
   return {
     name: "TodoWrite",
     version: "1.0.0",
+    preview: todoWritePreview,
     description: TODO_WRITE_DESCRIPTION,
     parameters: {
       type: "object",

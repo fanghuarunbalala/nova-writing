@@ -11,9 +11,8 @@
     "build": "pnpm -r build",
     "dev": "pnpm --filter @novel/core dev",
     "typecheck": "pnpm -r typecheck",
-    "gui:minimal": "pnpm --filter @novel/core build && pnpm --filter @novel/ui build && node gui/scripts/build-minimal.mjs && pnpm --filter @novel/gui exec electron dist/minimal/main.cjs",
-    "gui:minimal:debug": "set NOVEL_LOG_LEVEL=verbose&& pnpm gui:minimal",
-    "gui:minimal:release": "set NOVEL_LOG_LEVEL=info&& pnpm gui:minimal"
+    "gui:release": "pnpm --filter @novel/core build && pnpm --filter @novel/ui build && node gui/scripts/build-minimal.mjs && pnpm --filter @novel/gui exec electron dist/minimal/main.cjs",
+    "gui:debug": "set NOVEL_LOG_LEVEL=verbose&& pnpm gui:release"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

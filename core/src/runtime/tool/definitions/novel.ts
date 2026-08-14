@@ -6,13 +6,17 @@ import type { ToolDef } from "../ToolDef.js";
 import type { ToolCall } from "../../provider/types.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
 import type { OrderKey } from "../../../novel/model/outline.js";
+import { ToolError } from "../errors.js";
 
 /** 解析 tool args JSON */
 function parseArgs(call: ToolCall): Record<string, unknown> {
   try {
     return JSON.parse(call.args) as Record<string, unknown>;
   } catch {
-    throw new Error(`无效的 JSON 参数: ${call.args}`);
+    throw new ToolError(
+      { code: "TOOL_ARGUMENTS_INVALID", toolName: call.name },
+      `无效的 JSON 参数: ${call.args}`,
+    );
   }
 }
 

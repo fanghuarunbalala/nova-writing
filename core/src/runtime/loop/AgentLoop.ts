@@ -13,6 +13,7 @@ import type {
   LoopInput,
 } from "./types.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
+import { ToolError } from "../tool/errors.js";
 import { LoopContext } from "./LoopContext.js";
 
 /** 缺省最大轮次（防死循环） */
@@ -329,14 +330,29 @@ export class AgentLoop {
           logger?.debug("agent.tool.dispatch", { tool: tc.name });
           // 审批门控：拒绝/未装配时以文本结果进 turn（agent 可见，可自我调整）
           const gate = await this.gateTool(tc, turn.seq);
-          const text =
-            gate ?? (await this.config.toolDispatcher.dispatch(this.context, tc));
-          this.emit(onEvent, "tool-call-response", {
-            persist: true,
-            seq: turn.seq,
-            toolCallId: tc.id,
-            result: text,
-          });
+          let text: string;
+          try {
+            text = gate ?? (await this.config.toolDispatcher.dispatch(this.context, tc));
+            this.emit(onEvent, "tool-call-response", {
+              persist: true,
+              seq: turn.seq,
+              toolCallId: tc.id,
+              result: text,
+            });
+          } catch (err) {
+            // 统一错误回填：run 不因工具错误 reject——错误文本进 tool 消息供模型自纠
+            // （tool 消息必须照常 append，否则下一轮 provider call 缺 tool result 400）
+            const code = err instanceof ToolError ? err.code : "TOOL_HANDLER_FAILED";
+            const message = err instanceof Error ? err.message : String(err);
+            logger?.error("agent.tool.error", { tool: tc.name, code });
+            text = `工具执行失败(${code}): ${message}`;
+            this.emit(onEvent, "tool-call-response", {
+              persist: true,
+              seq: turn.seq,
+              toolCallId: tc.id,
+              error: message,
+            });
+          }
           logger?.debug("agent.tool.result", { tool: tc.name });
           this.context.appendTurnMessages([{ role: "tool", content: text, id: tc.id }]);
           runContext.toolsLastTurn.set(tc.name, runContext.curTurn);

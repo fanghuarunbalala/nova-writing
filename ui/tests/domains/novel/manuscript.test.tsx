@@ -1,19 +1,14 @@
 /**
  * manuscript 子域测试。
  *
- * 正文视图以权威 publication 结构（卷 → 章）为目录，正文文本按章懒加载：
- * store 并行读取 publication.getCatalog + paragraphs.getCatalog，按
- * chapter.paragraphIds 关联目录摘要构建 Volume→Chapter 层级；选中章节后
- * paragraphs.get 拉取全文（保留 \n 行分割，失败段落留空可重试）。
+ * 正文视图以权威 publication 结构（卷 → 章）为目录，正文文本随加载一次到位：
+ * store 读 publication.get（卷/章），按章 storyUnitId 批量读 paragraphs.list
+ * （全文返回）组装 Volume→Chapter 层级（blocks 直接带全文，digest 短码置空）。
  */
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type {
-  NovelApiClient,
-  NovelParagraphCatalogSnapshot,
-  NovelPublicationCatalogSnapshot,
-} from "@novel/core";
+import type { NovelApiClient, Paragraph, PublicationSnapshot } from "@novel/core";
 import { ManuscriptStructureStore } from "../../../src/domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { ManuscriptStructureSnapshot } from "../../../src/domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import { ManuscriptReader } from "../../../src/domains/novel/manuscript/components/ManuscriptReader.js";
@@ -21,81 +16,47 @@ import { ManuscriptChapterContent } from "../../../src/domains/novel/manuscript/
 import { ManuscriptBlock } from "../../../src/domains/novel/manuscript/components/ManuscriptBlock.js";
 import { ManuscriptDraftTag } from "../../../src/domains/novel/manuscript/components/ManuscriptDraftTag.js";
 
-const publicationCatalog: NovelPublicationCatalogSnapshot = {
-  schemaVersion: 1,
-  scope: { kind: "canonical" },
+const publication: PublicationSnapshot = {
+  structure: { id: "publication_main", novelId: "novel_1" },
   volumes: [
-    { id: "volume_one", publicationId: "publication_main", orderKey: "1000", title: "第一卷" },
-    { id: "volume_two", publicationId: "publication_main", orderKey: "2000", title: "第二卷" },
+    { id: "volume_one", entityVersion: 1, orderKey: "1000", title: "第一卷" },
+    { id: "volume_two", entityVersion: 1, orderKey: "2000", title: "第二卷" },
   ],
   chapters: [
     {
       id: "chapter_one",
-      publicationId: "publication_main",
+      entityVersion: 1,
       volumeId: "volume_one",
       orderKey: "1000",
       title: "第一章 序章",
-      paragraphIds: ["§3-01-04", "§3-01-05"],
+      storyUnitId: "su-1",
     },
     {
       id: "chapter_two",
-      publicationId: "publication_main",
+      entityVersion: 1,
       volumeId: "volume_one",
       orderKey: "2000",
       title: "第二章 雨夜",
-      paragraphIds: ["§3-01-06"],
+      storyUnitId: "su-2",
     },
     {
       id: "chapter_three",
-      publicationId: "publication_main",
+      entityVersion: 1,
       volumeId: "volume_two",
       orderKey: "1000",
       title: "第三章 新篇",
-      paragraphIds: [],
     },
   ],
 };
 
-const paragraphCatalog: NovelParagraphCatalogSnapshot = {
-  schemaVersion: 1,
-  scope: { kind: "canonical" },
-  paragraphs: [
-    {
-      id: "§3-01-04",
-      storyUnitId: "su-1",
-      orderKey: "0001",
-      textLength: 120,
-      textDigest: "8f3a70ff",
-    },
-    {
-      id: "§3-01-05",
-      storyUnitId: "su-1",
-      orderKey: "0002",
-      textLength: 80,
-      textDigest: "9e4b81ee",
-    },
-    {
-      id: "§3-01-06",
-      storyUnitId: "su-2",
-      orderKey: "0003",
-      textLength: 60,
-      textDigest: "1a2b3c4d",
-    },
-  ],
-};
-
-function paragraphReadModel(id: string, text: string) {
-  return {
-    schemaVersion: 1,
-    scope: { kind: "canonical" },
-    readModel: {
-      paragraph: { id, storyUnitId: "su-1", orderKey: "0001", text },
-      textDigest: "a".repeat(64),
-      orderDigest: "b".repeat(64),
-      storyUnitDigest: "c".repeat(64),
-    },
-  };
+function paragraph(id: string, storyUnitId: string, orderKey: string, text = ""): Paragraph {
+  return { id, entityVersion: 1, storyUnitId, orderKey, text };
 }
+
+const paragraphsByUnit: Readonly<Record<string, readonly Paragraph[]>> = {
+  "su-1": [paragraph("§3-01-04", "su-1", "0001"), paragraph("§3-01-05", "su-1", "0002")],
+  "su-2": [paragraph("§3-01-06", "su-2", "0003")],
+};
 
 interface ManuscriptApiOverrides {
   readonly publication?: Partial<NovelApiClient["novel"]["publication"]>;
@@ -111,12 +72,14 @@ function buildApi(overrides: ManuscriptApiOverrides = {}): NovelApiClient {
       characters: {} as never,
       locations: {} as never,
       paragraphs: {
-        getCatalog: vi.fn(async () => paragraphCatalog),
+        list: vi.fn(async (storyUnitId: unknown) => [
+          ...(paragraphsByUnit[String(storyUnitId)] ?? []),
+        ]),
         get: vi.fn(async () => undefined),
         ...overrides.paragraphs,
       },
       publication: {
-        getCatalog: vi.fn(async () => publicationCatalog),
+        get: vi.fn(async () => publication),
         ...overrides.publication,
       },
     },
@@ -193,7 +156,7 @@ describe("ManuscriptStructureStore", () => {
     ]);
     expect(snapshot.chapters[0].blocks[0]).toMatchObject({
       blockId: "§3-01-04",
-      digest: "8f3a70",
+      digest: "",
       text: "",
       storyUnitId: "su-1",
     });
@@ -201,33 +164,36 @@ describe("ManuscriptStructureStore", () => {
     expect(snapshot.selectedChapterId).toBe("chapter_one");
   });
 
-  it("auto-selects the first chapter and lazily loads its text", async () => {
+  it("auto-selects the first chapter and joins paragraph texts by story unit", async () => {
     const api = buildApi({
       paragraphs: {
-        get: vi.fn(async (_scope: unknown, id: unknown) =>
-          paragraphReadModel(
-            String(id),
-            id === "§3-01-04" ? "第一行\n第二行" : "第二段正文。",
-          ),
-        ),
+        list: vi.fn(async (storyUnitId: unknown) => {
+          if (storyUnitId === "su-1") {
+            return [
+              paragraph("§3-01-04", "su-1", "0001", "第一行\n第二行"),
+              paragraph("§3-01-05", "su-1", "0002", "第二段正文。"),
+            ];
+          }
+          return [paragraph("§3-01-06", "su-2", "0003", "")];
+        }),
       },
     });
     const store = new ManuscriptStructureStore({ api });
     await store.loadWorkspace("w1");
     expect(store.getSnapshot().selectedChapterId).toBe("chapter_one");
-    await vi.waitFor(() => {
-      const chapter = store.getSnapshot().chapters[0];
-      expect(chapter.blocks[0].text).toBe("第一行\n第二行");
-      expect(chapter.blocks[1].text).toBe("第二段正文。");
-    });
-    expect(api.novel.paragraphs.get).toHaveBeenCalledTimes(2);
+    const chapter = store.getSnapshot().chapters[0];
+    expect(chapter.blocks[0].text).toBe("第一行\n第二行");
+    expect(chapter.blocks[1].text).toBe("第二段正文。");
+    expect(api.novel.paragraphs.list).toHaveBeenCalledTimes(2);
   });
 
-  it("switches the selected chapter via selectChapter and loads its text", async () => {
+  it("switches the selected chapter via selectChapter", async () => {
     const api = buildApi({
       paragraphs: {
-        get: vi.fn(async (_scope: unknown, id: unknown) =>
-          paragraphReadModel(String(id), id === "§3-01-06" ? "雨落得密。" : "段落"),
+        list: vi.fn(async (storyUnitId: unknown) =>
+          storyUnitId === "su-2"
+            ? [paragraph("§3-01-06", "su-2", "0003", "雨落得密。")]
+            : [paragraph("§3-01-04", "su-1", "0001", "段落"), paragraph("§3-01-05", "su-1", "0002", "段落")],
         ),
       },
     });
@@ -236,17 +202,14 @@ describe("ManuscriptStructureStore", () => {
     expect(store.getSnapshot().selectedChapterId).toBe("chapter_one");
     store.selectChapter("chapter_two");
     expect(store.getSnapshot().selectedChapterId).toBe("chapter_two");
-    await vi.waitFor(() => {
-      expect(store.getSnapshot().chapters[1].blocks[0].text).toBe("雨落得密。");
-    });
+    expect(store.getSnapshot().chapters[1].blocks[0].text).toBe("雨落得密。");
   });
 
   it("reports an empty ready state when the publication has no volumes or chapters", async () => {
     const api = buildApi({
       publication: {
-        getCatalog: vi.fn(async () => ({
-          schemaVersion: 1,
-          scope: { kind: "canonical" },
+        get: vi.fn(async () => ({
+          structure: { id: "publication_main", novelId: "novel_1" },
           volumes: [],
           chapters: [],
         })),
@@ -261,10 +224,10 @@ describe("ManuscriptStructureStore", () => {
     expect(snapshot.selectedChapterId).toBeUndefined();
   });
 
-  it("records a retryable error when the publication catalog fetch fails", async () => {
+  it("records a retryable error when the publication fetch fails", async () => {
     const api = buildApi({
       publication: {
-        getCatalog: vi.fn(async () => {
+        get: vi.fn(async () => {
           throw new Error("down");
         }),
       },
@@ -273,33 +236,6 @@ describe("ManuscriptStructureStore", () => {
     await store.loadWorkspace("w1");
     expect(store.getSnapshot().phase).toBe("error");
     expect(store.getSnapshot().error?.retryable).toBe(true);
-  });
-
-  it("fills successful paragraph texts and leaves failed blocks empty; reselect retries", async () => {
-    let failBlock = true;
-    const api = buildApi({
-      paragraphs: {
-        get: vi.fn(async (_scope: unknown, id: unknown) => {
-          if (id === "§3-01-05" && failBlock) throw new Error("boom");
-          return paragraphReadModel(
-            String(id),
-            id === "§3-01-04" ? "第一段" : "第二段",
-          );
-        }),
-      },
-    });
-    const store = new ManuscriptStructureStore({ api });
-    await store.loadWorkspace("w1");
-    await vi.waitFor(() => {
-      const blocks = store.getSnapshot().chapters[0].blocks;
-      expect(blocks[0].text).toBe("第一段");
-      expect(blocks[1].text).toBe("");
-    });
-    failBlock = false;
-    store.selectChapter("chapter_one");
-    await vi.waitFor(() => {
-      expect(store.getSnapshot().chapters[0].blocks[1].text).toBe("第二段");
-    });
   });
 });
 

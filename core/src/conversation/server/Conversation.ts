@@ -21,6 +21,7 @@ import type {
 	Receipt,
 } from "../contract/types/index.js";
 import { DEFAULT_CONVERSATION_MODE } from "../contract/types/index.js";
+import type { SubagentRuntime } from "./SubagentRuntime.js";
 
 /** manager wait 通道：conversation → CMS 的 wait 提交面（子进程经 manager WS；内存模式直连 managerServer） */
 export interface ManagerWaitChannel {
@@ -60,6 +61,8 @@ export interface ConversationOptions {
 	waitTimeoutMs?: number;
 	/** wait 超时回调（子进程注入 process.exit 等退出行为；内存模式仅解除等待） */
 	onWaitTimeout?: (requestId: string) => void;
+	/** subagent 任务编排（存在时：事件转发进 hub + stop/dispose 级联 stopAll） */
+	subagentRuntime?: SubagentRuntime;
 }
 
 /** 输出事件订阅回调 */
@@ -80,6 +83,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly loop: AgentLoop;
 	/** 默认采样 */
 	private readonly sampling: SamplingConfig;
+	/** subagent 任务编排（可选） */
+	private readonly subagentRuntime?: SubagentRuntime;
 	/** 输出事件订阅者（hub） */
 	private readonly eventListeners = new Set<OutputEventListener>();
 	/** journal 写侧（缺省 undefined = 不落盘） */
@@ -112,8 +117,11 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.managerWait = opts.managerWait;
 		this.waitTimeoutMs = opts.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
 		this.onWaitTimeout = opts.onWaitTimeout;
+		this.subagentRuntime = opts.subagentRuntime;
 		// 订阅 loop 的输出事件（run/followup 均转发到本会话 hub）
 		this.loop.onOutputEvent((e) => this.emit(e));
+		// subagent loop 事件同样进 hub（live-only，不落 journal）
+		this.subagentRuntime?.onEvent((e) => this.emit(e));
 	}
 
 	/** 当前生效的会话模式 */
@@ -153,6 +161,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 				break;
 			case "stop":
 				this.loop.stop();
+				// 级联停止全部 subagent 任务
+				this.subagentRuntime?.stopAll();
 				break;
 			case "reload.config":
 				break;
@@ -231,8 +241,9 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.eventListeners.add(listener);
 	}
 
-	/** 释放（清空订阅者） */
+	/** 释放（清空订阅者 + 停止 subagent 任务） */
 	dispose(): void {
+		this.subagentRuntime?.stopAll();
 		this.eventListeners.clear();
 	}
 

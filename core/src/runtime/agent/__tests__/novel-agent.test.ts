@@ -58,6 +58,43 @@ describe("buildNovelAgent 组装", () => {
     expect(result).toContain("[]");
   });
 
+  it("subagent 选项存在时追加 Agent/TaskOutput/TaskStop（24 工具），Agent 返回 acceptance", async () => {
+    const spawner = {
+      spawn: () => ({ taskId: "task_1", status: "running" as const }),
+      queryTasks: async () => [],
+      stopTask: async () => "not_found" as const,
+    };
+    const loop = buildNovelAgent({
+      workspace: "/ws",
+      provider,
+      handle: handle as NovelHandle,
+      subagent: { spawner },
+    });
+    const cap = (
+      loop as unknown as {
+        config: {
+          agentCapability: {
+            toolDefs: Array<{ name: string; handler: { execute: (c: { id: string; name: string; args: string }) => Promise<string> } }>;
+          };
+        };
+      }
+    ).config.agentCapability;
+    // 21（8 组） + 3（subagent 派发三工具）
+    expect(cap.toolDefs).toHaveLength(24);
+    const names = cap.toolDefs.map((t) => t.name);
+    expect(names).toContain("Agent");
+    expect(names).toContain("TaskOutput");
+    expect(names).toContain("TaskStop");
+    const agent = cap.toolDefs.find((t) => t.name === "Agent");
+    expect(agent).toBeDefined();
+    const out = await agent!.handler.execute({
+      id: "c1",
+      name: "Agent",
+      args: JSON.stringify({ agentType: "novel_explorer", prompt: "列出角色" }),
+    });
+    expect(JSON.parse(out)).toEqual({ taskId: "task_1", status: "running" });
+  });
+
   it("TodoWrite 装配：执行写读（缺省 InMemoryConversationTodoStore）", async () => {
     const loop = buildNovelAgent({
       workspace: "/ws",

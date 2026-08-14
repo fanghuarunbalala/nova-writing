@@ -20,6 +20,8 @@ export interface ComposeModeSnapshot {
 	readonly designFilePath?: string;
 	/** 进入 compose 前的 base mode（approve/discard 时恢复） */
 	readonly preComposeMode?: ConversationMode;
+	/** 进入 compose 时的创作目的（EnterComposeMode purpose），reentry 提醒引用。 */
+	readonly purpose?: string;
 }
 
 /** 空闲快照（默认） */
@@ -60,7 +62,11 @@ export class ComposeModeStateProvider {
 	/** 进入 compose：idle/discarded/applied → designing（active=true，mode=compose） */
 	enter(
 		conversationId: string,
-		options: { readonly designFilePath: string; readonly preComposeMode?: ConversationMode },
+		options: {
+			readonly designFilePath: string;
+			readonly preComposeMode?: ConversationMode;
+			readonly purpose?: string;
+		},
 	): ComposeModeSnapshot {
 		const current = this.snapshot(conversationId);
 		if (current.active) {
@@ -72,6 +78,7 @@ export class ComposeModeStateProvider {
 			mode: "compose",
 			designFilePath: options.designFilePath,
 			preComposeMode: options.preComposeMode ?? current.mode,
+			...(options.purpose === undefined ? {} : { purpose: options.purpose }),
 		});
 		this.states.set(conversationId, next);
 		return next;

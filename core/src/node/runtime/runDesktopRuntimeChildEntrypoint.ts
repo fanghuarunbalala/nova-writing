@@ -7,7 +7,9 @@
  * - wait 请求无阻塞：经 managerWait 提交 CMS 队列；决策经 resolveApproval 回传
  *   （驻留直推）；120s 超时 → process.exit（CMS 决策后重启续跑）
  * - 重启恢复：journal 重放 + CMS takeDecisions 查询待决 → 暂停点续跑（resumePendingTurn）
+ * - subagent：SubagentRuntime 进程内编排（main 经 Agent/TaskOutput/TaskStop 派发）
  */
+import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { RPCChannel } from "kkrpc";
 import { webSocketClientTransport } from "kkrpc/ws";
@@ -17,6 +19,7 @@ import { FileConversationJournalReadOnlyService } from "../../conversation/persi
 import { journalListener } from "../../conversation/JournalBridge.js";
 import { debugLog } from "../../log/debug.js";
 import { createLogger } from "../../log/pino.js";
+import { SubagentRuntime } from "../../conversation/server/SubagentRuntime.js";
 import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
 import { createProvider } from "../../runtime/provider/Provider.js";
@@ -30,6 +33,7 @@ import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConver
 import type { LLMessage } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
+import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
@@ -87,21 +91,49 @@ function toolCallIdOf(requestId: string): string | undefined {
 	return parts.length >= 4 ? parts.slice(3).join("_") : undefined;
 }
 
+/** child 崩溃自曝日志路径 env（ProcessSpawner 注入） */
+const CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
+
+/** 崩溃自曝：同步写堆栈到 runtime-child.log + 回写 stderr（父进程捕获缓冲），再按原语义退出。 */
+function writeCrashTrace(line: string): void {
+	// 父进程 stderr 捕获埋点（runtime.process.child_stderr）也会收到这份内容。
+	console.error(line);
+	const childLogPath = process.env[CHILD_LOG_ENV];
+	if (childLogPath === undefined || childLogPath.length === 0) return;
+	try {
+		appendFileSync(childLogPath, `${line}\n`);
+	} catch {
+		// console.error 已兜底；日志路径不可写不应掩盖崩溃本身。
+	}
+}
+
+/** 崩溃原因 → 堆栈文本（非 Error 兜底 String） */
+function describeCrash(reason: unknown): string {
+	if (reason instanceof Error) {
+		return reason.stack ?? `${reason.name}: ${reason.message}`;
+	}
+	return `unknown crash reason: ${String(reason)}`;
+}
+
+/** 注册崩溃自曝（在任何其他逻辑之前）：未捕获异常/拒绝写盘后 exit(1)。 */
+function registerCrashHandlers(): void {
+	process.on("uncaughtException", (error) => {
+		writeCrashTrace(`CRASH uncaughtException\n${describeCrash(error)}`);
+		process.exit(1);
+	});
+	process.on("unhandledRejection", (reason) => {
+		writeCrashTrace(`CRASH unhandledRejection\n${describeCrash(reason)}`);
+		process.exit(1);
+	});
+}
+
 /**
  * 启动 conversation 子进程（manager WS 双工）
  */
 export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
-	// 崩溃兜底：子进程任何未捕获异常/未处理 rejection 先留完整痕迹再退出
-	//（stderr 经 spawner inherit 汇入 main 输出；此前崩溃只剩一行裸 undefined，无法定位）
-	process.on("uncaughtException", (e) => {
-		console.error("[child] uncaught exception:", e);
-		process.exit(1);
-	});
-	process.on("unhandledRejection", (reason) => {
-		console.error("[child] unhandled rejection:", reason);
-		process.exit(1);
-	});
-
+	// 崩溃诊断：一切逻辑之前注册（stderr 回写 + runtime-child.log 落盘，根因因此可见；
+	// 覆盖 be1868d 的内联兜底——writeCrashTrace 先 console.error 再落盘，是其超集）
+	registerCrashHandlers();
 	const conversationId = process.env.CONVERSATION_ID ?? "main";
 	const storedir = process.env.NOVEL_CONVERSATION_STOREDIR;
 	const workspace = process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".";
@@ -190,11 +222,32 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		};
 	}
 
-	const provider = createProvider({
-		id: "default",
+	// provider 配置（main 与 explorer 共享；type 从 env，缺省 openai）
+	const providerConfig = {
 		type: (process.env.NOVEL_PROVIDER_TYPE as "openai" | "anthropic" | undefined) ?? "openai",
 		baseUrl: process.env.NOVEL_PROVIDER_BASE_URL ?? "https://api.deepseek.com/v1",
 		apiKey: process.env.NOVEL_PROVIDER_API_KEY,
+	} as const;
+	const provider = createProvider({ id: "default", ...providerConfig });
+
+	// explorer 专用 todo 存储（与 main 计划分离：TodoWrite 整体替换语义，
+	// 扫描进度草稿不覆盖 main 的执行计划；两者同为进程内内存级）
+	const todoStore = new InMemoryConversationTodoStore();
+
+	// subagent 任务编排：builder 每任务新建 provider（流式累积状态不可跨 loop 共享）
+	const subagentRuntime = new SubagentRuntime({
+		sampling,
+		builders: {
+			novel_explorer: (agentId) =>
+				buildNovelExplorerAgent({
+					workspace,
+					provider: createProvider({ id: "explorer", ...providerConfig }),
+					handle: novelHandle,
+					todoStore,
+					conversationId,
+					agentId,
+				}),
+		},
 	});
 
 	// 进程结构化日志：pino（storedir/logs 下每进程独占文件 + stderr 彩色行）。
@@ -220,6 +273,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
 		resumePendingDecider,
 		logger,
+		subagent: { spawner: subagentRuntime },
 		// 动态段输入：workdir/modelId 由 LoopContext 自组装（workspace /
 		// run.sampling.model）；宿主只注入平台常量 + 每调用读 NOVEL.md
 		//（失败返回 undefined → 动态段渲染占位）
@@ -251,6 +305,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		sampling,
 		journal,
 		managerWait,
+		subagentRuntime,
 		// 120s 无决策：退出进程（不占资源）；CMS 在 UI 决策后重启续跑
 		onWaitTimeout: cmsApi !== undefined ? () => process.exit(0) : undefined,
 	});

@@ -444,6 +444,7 @@ export function ApprovalPanel({
                     rows={3}
                     placeholder="填写修改意见（将随决策回传会话）"
                     value={commentText}
+                    autoFocus
                     onChange={(event) => setCommentText(event.target.value)}
                   />
                   <div className={styles.actions}>

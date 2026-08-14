@@ -113,10 +113,13 @@ export function ContentSurface({
           <StoryOutlineTree
             workspaceId={workspaceId ?? ""}
             tree={outline.tree}
+            phase={outline.phase}
             expansionState={outline.expansionState}
             selectedUnitId={outline.selectedUnitId}
             onSelectUnit={onSelectOutlineUnit}
             onToggleExpand={(id) => outlineTree.toggleExpand(id)}
+            onExpandAll={() => outlineTree.expandAll()}
+            onCollapseAll={() => outlineTree.collapseAll()}
           />
         );
         break;
@@ -125,6 +128,7 @@ export function ContentSurface({
           <CharacterGrid
             workspaceId={workspaceId ?? ""}
             characters={characterSnapshot.characters}
+            phase={characterSnapshot.phase}
             onSelect={onSelectCharacter}
             onNewCharacter={() => setCharacterDialogOpen(true)}
           />
@@ -135,6 +139,7 @@ export function ContentSurface({
           <LocationGrid
             workspaceId={workspaceId ?? ""}
             locations={locationSnapshot.locations}
+            phase={locationSnapshot.phase}
             onSelect={onSelectLocation}
             onNewLocation={() => setLocationDialogOpen(true)}
           />

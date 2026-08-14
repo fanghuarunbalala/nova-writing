@@ -3,7 +3,9 @@
  *
  * proposal 卡片：tag/标题/meta + 变更操作列表 + 前往审批 Diff。
  * op mark 用符号（+/~/−/->/○）对齐原型 .op-mark；kind 用中文标签。
+ * 批准/请求修改为一次性动作：点击后本卡禁用防重复提交（结果经审批态回流重渲）。
  */
+import { useState } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { Pill } from "../../../shared/primitives/Pill.js";
 import type {
@@ -44,6 +46,7 @@ export interface ProposalCardRendererProps {
 }
 
 export function ProposalCardRenderer({ card, onAction }: ProposalCardRendererProps) {
+  const [decided, setDecided] = useState(false);
   return (
     <section className={styles.card}>
       <header className={styles.head}>
@@ -80,14 +83,22 @@ export function ProposalCardRenderer({ card, onAction }: ProposalCardRendererPro
               <Button
                 size="sm"
                 variant="primary"
-                onClick={() => onAction?.("approve", card.content.changeSetId)}
+                disabled={decided}
+                onClick={() => {
+                  setDecided(true);
+                  onAction?.("approve", card.content.changeSetId);
+                }}
               >
                 批准
               </Button>
               <Button
                 size="sm"
                 variant="ghost-danger"
-                onClick={() => onAction?.("reject", card.content.changeSetId)}
+                disabled={decided}
+                onClick={() => {
+                  setDecided(true);
+                  onAction?.("reject", card.content.changeSetId);
+                }}
               >
                 请求修改
               </Button>

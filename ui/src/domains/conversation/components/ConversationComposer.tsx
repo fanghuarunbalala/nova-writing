@@ -8,7 +8,7 @@
  * 模式栏为受控组件：mode 来自投影的会话级权威状态，切换由上层 enqueue
  * ConversationModeSetInputEvent（mode 不再随 onSend 丢弃）。
  */
-import { useState, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Send } from "lucide-react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
@@ -49,6 +49,15 @@ export function ConversationComposer({
   disconnected = false,
 }: ConversationComposerProps) {
   const [text, setText] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // 自动长高：随内容撑到 scrollHeight（CSS max-height 140px 封顶后内部滚动）
+  useLayoutEffect(() => {
+    const node = inputRef.current;
+    if (node === null) return;
+    node.style.height = "auto";
+    node.style.height = `${Math.min(node.scrollHeight, 140)}px`;
+  }, [text]);
 
   const submit = (): void => {
     const trimmed = text.trim();
@@ -85,6 +94,7 @@ export function ConversationComposer({
           </label>
           <textarea
             id={`composer-input-${conversationId}`}
+            ref={inputRef}
             className={styles.input}
             value={text}
             onChange={(event) => setText(event.target.value)}

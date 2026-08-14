@@ -1,0 +1,43 @@
+/**
+ * EmptyState 视觉：居中列布局 + accent 圆托图标。
+ */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-16) var(--space-6);
+  text-align: center;
+  color: var(--color-muted);
+  animation: var(--anim-view-in) var(--duration-base) var(--ease-out);
+}
+
+.iconWrap {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-9);
+  color: var(--color-accent-ink);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-750);
+  color: var(--color-fg);
+}
+
+.description {
+  margin: 0;
+  max-width: 320px;
+  font-family: var(--font-kai);
+  font-size: var(--fs-13);
+  line-height: 1.65;
+}
+
+.action {
+  margin-top: var(--space-2);
+}

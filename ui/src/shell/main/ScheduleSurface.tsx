@@ -6,6 +6,7 @@
  */
 import { useMemo } from "react";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
+import { LoadingState } from "../../shared/primitives/LoadingState.js";
 import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
 import { ScheduleProjection } from "../../domains/schedule/projection/ScheduleProjection.js";
 import { ScheduleAxisFlow } from "../../domains/schedule/components/ScheduleAxisFlow.js";
@@ -55,16 +56,22 @@ export function ScheduleSurface({
       <MainSubHead title="创作计划" sub="待办 + 大纲进度 · 规划 / 实现双状态轴" onBack={onBack} />
       <div className={styles.paneBody}>
         <div className={styles.paneInner}>
-          <ScheduleStatRow stats={overview.stats} />
-          <ScheduleAxisFlow planAxis={overview.axisFlow.planAxis} realAxis={overview.axisFlow.realAxis} />
-          <ScheduleProgressCard title="大纲进度">
-            <ScheduleProgressTree tree={progress.tree} />
-          </ScheduleProgressCard>
-          <ScheduleTodoList
-            todos={mergedTodos}
-            onToggle={todos.onToggle}
-            onAction={onTodoAction}
-          />
+          {overview.phase === "loading" ? (
+            <LoadingState label="正在汇总创作计划…" />
+          ) : (
+            <>
+              <ScheduleStatRow stats={overview.stats} />
+              <ScheduleAxisFlow planAxis={overview.axisFlow.planAxis} realAxis={overview.axisFlow.realAxis} />
+              <ScheduleProgressCard title="大纲进度">
+                <ScheduleProgressTree tree={progress.tree} />
+              </ScheduleProgressCard>
+              <ScheduleTodoList
+                todos={mergedTodos}
+                onToggle={todos.onToggle}
+                onAction={onTodoAction}
+              />
+            </>
+          )}
         </div>
       </div>
     </div>

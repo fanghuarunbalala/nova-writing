@@ -7,3 +7,10 @@
   min-height: 0;
   overflow-y: auto;
 }
+
+.tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+}

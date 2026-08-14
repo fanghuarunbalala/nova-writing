@@ -1,5 +1,5 @@
 /**
- * ChatEmptyState 视觉。
+ * ChatEmptyState 视觉：虚线卡片 + accent 圆托图标 + 示例指令 chips。
  */
 .empty {
   display: flex;
@@ -14,6 +14,7 @@
   border: 1px dashed var(--color-border-strong);
   border-radius: var(--radius-lg);
   color: var(--color-muted);
+  animation: var(--anim-view-in) var(--duration-slow) var(--ease-out);
 }
 
 .kicker {
@@ -24,6 +25,16 @@
   color: var(--color-faint);
 }
 
+.iconWrap {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-9);
+  color: var(--color-accent-ink);
+}
+
 .empty h3 {
   font-size: var(--fs-h1);
   font-weight: var(--fw-heavy);
@@ -32,7 +43,34 @@
 }
 
 .empty p {
-  max-width: 360px;
+  max-width: 380px;
+  font-family: var(--font-kai);
   font-size: var(--fs-13);
-  line-height: 1.6;
+  line-height: 1.7;
+}
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.example {
+  padding: var(--space-5px) var(--space-10px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-kai);
+  font-size: var(--fs-12);
+  color: var(--color-muted);
+  background: var(--color-surface);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.example:hover {
+  border-color: var(--color-accent-45);
+  color: var(--color-fg);
 }

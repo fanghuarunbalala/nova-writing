@@ -1,0 +1,15 @@
+/**
+ * LoadingState 视觉：居中行。
+ */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-16) var(--space-6);
+  color: var(--color-muted);
+}
+
+.label {
+  font-size: var(--fs-13);
+}

@@ -20,6 +20,8 @@ export interface ComposeModeSnapshot {
 	readonly designFilePath?: string;
 	/** 进入 compose 前的 base mode（approve/discard 时恢复） */
 	readonly preComposeMode?: ConversationMode;
+	/** 进入时 design 文件已存在（上次会话残留草稿；discard 才删、exit 归档） */
+	readonly hasPriorDraft?: boolean;
 }
 
 /** 空闲快照（默认） */
@@ -57,10 +59,19 @@ export class ComposeModeStateProvider {
 		return this.states.get(conversationId) ?? IDLE_COMPOSE_MODE_SNAPSHOT;
 	}
 
-	/** 进入 compose：idle/discarded/applied → designing（active=true，mode=compose） */
+	/**
+	 * 进入 compose：idle/discarded/applied → designing（active=true，mode=compose）
+	 * @param conversationId 会话 id
+	 * @param options design 文件路径 + 可选 preComposeMode（缺省当前 mode）/ hasPriorDraft（旧草稿标记）
+	 * @returns 新快照
+	 */
 	enter(
 		conversationId: string,
-		options: { readonly designFilePath: string; readonly preComposeMode?: ConversationMode },
+		options: {
+			readonly designFilePath: string;
+			readonly preComposeMode?: ConversationMode;
+			readonly hasPriorDraft?: boolean;
+		},
 	): ComposeModeSnapshot {
 		const current = this.snapshot(conversationId);
 		if (current.active) {
@@ -72,6 +83,7 @@ export class ComposeModeStateProvider {
 			mode: "compose",
 			designFilePath: options.designFilePath,
 			preComposeMode: options.preComposeMode ?? current.mode,
+			...(options.hasPriorDraft === undefined ? {} : { hasPriorDraft: options.hasPriorDraft }),
 		});
 		this.states.set(conversationId, next);
 		return next;
@@ -137,6 +149,22 @@ export class ComposeModeStateProvider {
 			phase: "discarded",
 			active: false,
 			mode: current.preComposeMode ?? DEFAULT_CONVERSATION_MODE,
+		});
+		this.states.set(conversationId, next);
+		return next;
+	}
+
+	/**
+	 * 归档后收口：清除 design 文件路径与 preMode（保留 phase 终态标记，如 applied/discarded）
+	 * @param conversationId 会话 id
+	 * @returns 收口后快照
+	 */
+	settle(conversationId: string): ComposeModeSnapshot {
+		const current = this.snapshot(conversationId);
+		const next: ComposeModeSnapshot = Object.freeze({
+			phase: current.phase,
+			active: current.active,
+			mode: current.mode,
 		});
 		this.states.set(conversationId, next);
 		return next;

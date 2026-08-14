@@ -2,3 +2,4 @@
 
 export * from "./service.js";
 export * from "./readonly.js";
+export * from "./stateService.js";

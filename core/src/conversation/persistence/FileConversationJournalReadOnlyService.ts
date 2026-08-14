@@ -5,11 +5,20 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TurnContext } from "../../runtime/loop/types.js";
-import type { OutputEvent } from "../contract/events/index.js";
+import type { OutputEvent, PersistedOutputEvent } from "../contract/events/index.js";
 import type {
 	ConversationJournalReadOnlyService as Contract,
 	PersistedTurn,
 } from "../contract/journal/index.js";
+
+/** 状态事件类型名白名单（state.jsonl 只落 compose/mode 边界事件） */
+const STATE_EVENT_TYPES: ReadonlySet<string> = new Set([
+	"compose.begin",
+	"compose.submitted",
+	"compose.applied",
+	"compose.discarded",
+	"mode.changed",
+]);
 
 /** journal 读侧实现（跨进程读 history） */
 export class FileConversationJournalReadOnlyService implements Contract {
@@ -49,6 +58,27 @@ export class FileConversationJournalReadOnlyService implements Contract {
 		return this.readLatestTurns(conversationId);
 	}
 
+	/**
+	 * 读取会话状态事件（state.jsonl，落盘顺序；坏行/半行容忍跳过）
+	 * @param conversationId 会话 id
+	 * @returns 状态事件序列（compose/mode 边界事件）
+	 */
+	async readStateEvents(conversationId: string): Promise<PersistedOutputEvent[]> {
+		const file = join(this.journalDir, conversationId, "state.jsonl");
+		if (!existsSync(file)) return [];
+		const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
+		const events: PersistedOutputEvent[] = [];
+		for (const line of lines) {
+			try {
+				const parsed = JSON.parse(line) as { event?: unknown };
+				if (isStateEvent(parsed.event)) events.push(parsed.event);
+			} catch {
+				// 末尾半行/损坏行忽略（append-only 容忍）
+			}
+		}
+		return events;
+	}
+
 	/** 读文件并按 turn.seq 去重取最新（同步：文件小、单次解析） */
 	private readLatestTurns(conversationId: string): PersistedTurn[] {
 		const file = join(this.journalDir, conversationId, "journal.jsonl");
@@ -69,6 +99,18 @@ export class FileConversationJournalReadOnlyService implements Contract {
 		}
 		return [...latest.values()];
 	}
+}
+
+/** 形状守卫：只放行 state.jsonl 白名单内的事件变体 */
+function isStateEvent(value: unknown): value is PersistedOutputEvent {
+	if (value === null || typeof value !== "object") return false;
+	const record = value as Record<string, unknown>;
+	return (
+		typeof record.type === "string" &&
+		STATE_EVENT_TYPES.has(record.type) &&
+		record.persist === true &&
+		typeof record.conversationId === "string"
+	);
 }
 
 /** turn 序列 → OutputEvent 序列（turn-start/end 边界 + 消息/工具事件映射） */

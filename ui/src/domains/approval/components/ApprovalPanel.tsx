@@ -1,7 +1,8 @@
 /**
  * ApprovalPanel
  *
- * 审批面板（对齐旧版结构）：目录按对话分组展示（新版单会话场景下每组=单请求），
+ * 审批面板（会话化）：只展示当前会话（conversationId）的审批记录，
+ * 目录为平铺的审批组列表（每组=一次审批请求及其重试），
  * 下方为选中组详情（审批参数 + 批准/拒绝，作用于组内全部请求）。
  * 删除/编辑审批经 resolveEntity（lite 解析器）解析目标实体当前内容替换原始
  * 参数展示；目标 baseRevision 与实体 entityVersion 不一致时显示失效提示。
@@ -31,12 +32,10 @@ import { useApprovalEntityResolution } from "./useApprovalEntityResolution.js";
 
 export interface ApprovalPanelProps {
   readonly store: ApprovalStore;
-  /** 会话 id → 标题（用于审批归属展示）。Conversation title labels. */
-  readonly conversationLabels?: ReadonlyMap<string, string>;
+  /** 展示的会话 id；缺省展示全部（向后兼容宿主未传的用法）。 */
+  readonly conversationId?: string;
   /** 删除/编辑目标实体内容解析器（宿主注入）。Entity content resolver. */
   readonly resolveEntity?: ApprovalEntityResolver;
-  /** 目录「跳转」：切换主视图到该对话（应用层负责 select + transition）。 */
-  readonly onJumpToConversation?: (conversationId: string) => void;
   /** 目录覆盖抽屉是否展开。 */
   readonly drawerOpen?: boolean;
   readonly onToggleDrawer?: (open: boolean) => void;
@@ -49,12 +48,6 @@ interface ApprovalGroup {
   readonly requestedAt: string;
   /** 组标题（由首条审批 args 解析，group 级一次计算，避免渲染期 JSON.parse）。 */
   readonly title: string;
-}
-
-/** 按对话聚合后的目录节。 */
-interface ConversationApprovalGroup {
-  readonly conversationId: string;
-  readonly groups: readonly ApprovalGroup[];
 }
 
 const STATUS_LABEL: Record<ApprovalQueueItem["status"], string> = {
@@ -78,10 +71,6 @@ const OP_GLYPH_CLASS: Record<string, string | undefined> = {
   edit: styles.titleGlyphEdit,
   delete: styles.titleGlyphDel,
 };
-
-function shortId(value: string): string {
-  return value.length > 24 ? `…${value.slice(-12)}` : value;
-}
 
 /** args JSON 字符串 → JsonValue（解析失败 undefined → 面板走「无参数详情」降级） */
 function parseApprovalArgs(args: string): JsonValue | undefined {
@@ -157,32 +146,10 @@ function groupApprovals(
   );
 }
 
-/** 把已排序的审批组按对话聚合（组间保持最近审批降序，目录头展示会话）。 */
-function groupByConversation(
-  groups: readonly ApprovalGroup[],
-): readonly ConversationApprovalGroup[] {
-  const raw = new Map<string, ApprovalGroup[]>();
-  for (const group of groups) {
-    const conversationId = group.approvals[0]!.conversationId;
-    const list = raw.get(conversationId) ?? [];
-    list.push(group);
-    raw.set(conversationId, list);
-  }
-  return Object.freeze(
-    [...raw.entries()].map(([conversationId, list]) =>
-      Object.freeze({
-        conversationId,
-        groups: Object.freeze(list),
-      }),
-    ),
-  );
-}
-
 export function ApprovalPanel({
   store,
-  conversationLabels,
+  conversationId,
   resolveEntity,
-  onJumpToConversation,
   drawerOpen = false,
   onToggleDrawer,
 }: ApprovalPanelProps) {
@@ -191,14 +158,17 @@ export function ApprovalPanel({
   // 「请求修改」意见输入
   const [editingComment, setEditingComment] = useState(false);
   const [commentText, setCommentText] = useState("");
-  const groups = useMemo(
-    () => groupApprovals(snapshot.approvals),
-    [snapshot.approvals],
+  // 会话化：只展示当前会话的审批记录（宿主未传 conversationId 时退化为全量）
+  const approvals = useMemo(
+    () =>
+      conversationId === undefined
+        ? snapshot.approvals
+        : snapshot.approvals.filter(
+            (approval) => approval.conversationId === conversationId,
+          ),
+    [snapshot.approvals, conversationId],
   );
-  const conversationGroups = useMemo(
-    () => groupByConversation(groups),
-    [groups],
-  );
+  const groups = useMemo(() => groupApprovals(approvals), [approvals]);
   const selectedGroup =
     groups.find((group) => group.key === selectedKey) ??
     (snapshot.selectedId === undefined
@@ -220,10 +190,6 @@ export function ApprovalPanel({
         void store.decide(approval.requestId, decision);
       }
     }
-  };
-
-  const conversationLabel = (conversationId: string): string => {
-    return conversationLabels?.get(conversationId) ?? shortId(conversationId);
   };
 
   // 选中目录条目：记录选中 key 并自动收起抽屉（窄面板模式）。
@@ -271,57 +237,33 @@ export function ApprovalPanel({
         {groups.length === 0 ? (
           <div className={styles.empty}>暂无审批请求</div>
         ) : (
-          conversationGroups.map((conversationGroup) => {
-            const { conversationId, groups: groupList } = conversationGroup;
+          groups.map((group) => {
+            const label =
+              group.approvals.length > 1
+                ? `${group.title} 等 ${group.approvals.length} 项`
+                : group.title;
             return (
-              <div key={conversationId} className={styles.apprGroup}>
-                <div className={styles.apprGroupHead}>
-                  <span className={styles.agMain}>
-                    <span className={styles.agName}>
-                      {conversationLabel(conversationId)}
-                    </span>
-                    <span className={styles.agSub}>{groupList.length} 项</span>
-                  </span>
-                  {onJumpToConversation !== undefined ? (
-                    <button
-                      type="button"
-                      className={styles.agJump}
-                      onClick={() => onJumpToConversation(conversationId)}
-                    >
-                      跳转
-                    </button>
-                  ) : null}
-                </div>
-                {groupList.map((group) => {
-                  const label =
-                    group.approvals.length > 1
-                      ? `${group.title} 等 ${group.approvals.length} 项`
-                      : group.title;
-                  return (
-                    <button
-                      key={group.key}
-                      type="button"
-                      className={[
-                        styles.row,
-                        selectedGroup?.key === group.key ? styles.active : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onClick={() => selectGroup(group.key)}
-                    >
-                      <span
-                        className={[styles.pill, styles[group.status]].join(" ")}
-                      >
-                        {group.status === "pending" &&
-                        group.approvals.length > 1
-                          ? `待批准 ${group.approvals.length} 项`
-                          : STATUS_LABEL[group.status]}
-                      </span>
-                      <span className={styles.rowTitle}>{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <button
+                key={group.key}
+                type="button"
+                className={[
+                  styles.row,
+                  selectedGroup?.key === group.key ? styles.active : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => selectGroup(group.key)}
+              >
+                <span
+                  className={[styles.pill, styles[group.status]].join(" ")}
+                >
+                  {group.status === "pending" &&
+                  group.approvals.length > 1
+                    ? `待批准 ${group.approvals.length} 项`
+                    : STATUS_LABEL[group.status]}
+                </span>
+                <span className={styles.rowTitle}>{label}</span>
+              </button>
             );
           })
         )}
@@ -330,7 +272,6 @@ export function ApprovalPanel({
         <div className={styles.detail}>
           <div className={styles.identity}>
             <span className={styles.meta}>
-              {conversationLabel(selectedGroup.approvals[0]!.conversationId)} ·{" "}
               {selectedGroup.approvals
                 .map((approval) => toolNameLabel(approval.toolName))
                 .join(" · ")}

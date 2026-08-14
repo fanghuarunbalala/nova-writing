@@ -2,8 +2,8 @@
  * AssistantMessage
  *
  * 助手消息（原型 .msg.assistant）：无头像，head 只保留 approval-state 状态
- * 标签；正文（markdown 渲染）+ 结构化卡片。卡片通过 ConversationCardRendererRegistry 渲染。
- * memo 包裹：历史消息（text/cards/eventFlow/toolTraces 引用稳定）零重渲染、markdown 零重解析。
+ * 标签；正文（markdown 渲染）+ 工具调用条 + 结构化卡片。卡片通过 ConversationCardRendererRegistry 渲染。
+ * memo 包裹：历史消息（text/cards/toolTraces 引用稳定）零重渲染、markdown 零重解析。
  */
 import { memo } from "react";
 import { createDefaultConversationCardRendererRegistry } from "../cards/defaultRenderers.js";
@@ -12,13 +12,11 @@ import type {
   ConversationCardDescriptor,
 } from "../projection/ConversationCardDescriptor.js";
 import type {
-  ConversationEventView,
   ToolTraceView,
 } from "../projection/ConversationTimelineItem.js";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import { AssistantMarkdown } from "./assistantContent/AssistantMarkdown.js";
-import { RuntimeEventFlow } from "./RuntimeEventFlow.js";
 import { ToolStrip } from "./ToolStrip.js";
 import type { MessageReference } from "./MessageReference.js";
 import styles from "./AssistantMessage.module.css";
@@ -46,7 +44,6 @@ const DEFAULT_CARD_RENDERERS = createDefaultConversationCardRendererRegistry();
 
 /** 缺省空数组（冻结单例：memo 浅比较稳定引用） */
 const EMPTY_CARDS: readonly ConversationCardDescriptor[] = Object.freeze([]);
-const EMPTY_EVENT_FLOW: readonly ConversationEventView[] = Object.freeze([]);
 const EMPTY_TOOL_TRACES: readonly ToolTraceView[] = Object.freeze([]);
 
 export interface AssistantMessageProps {
@@ -62,7 +59,6 @@ export interface AssistantMessageProps {
   readonly text: string;
   readonly cards?: readonly ConversationCardDescriptor[];
   readonly streaming?: boolean;
-  readonly eventFlow?: readonly ConversationEventView[];
   readonly toolTraces?: readonly ToolTraceView[];
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly onResolveReference?: ReferenceResolver;
@@ -79,7 +75,6 @@ export const AssistantMessage = memo(function AssistantMessage({
   text,
   cards = EMPTY_CARDS,
   streaming = false,
-  eventFlow = EMPTY_EVENT_FLOW,
   toolTraces = EMPTY_TOOL_TRACES,
   onReferenceClick,
   onResolveReference,
@@ -109,7 +104,6 @@ export const AssistantMessage = memo(function AssistantMessage({
         {approvalState === "failed" && failureDetail !== undefined ? (
           <p className={styles.failureDetail}>{failureDetail}</p>
         ) : null}
-        {eventFlow.length > 0 ? <RuntimeEventFlow events={eventFlow} /> : null}
         {toolTraces.length > 0 ? <ToolStrip traces={toolTraces} /> : null}
         {cards.length > 0 ? (
           <div className={styles.cards}>

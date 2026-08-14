@@ -1,54 +1,10 @@
 /**
- * RuntimeEventFlow / ToolStrip 渲染测试。
+ * ToolStrip 渲染测试。
+ * （RuntimeEventFlow「本轮时序」面板已移除，工具调用条内联在助手消息正文后。）
  */
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { RuntimeEventFlow } from "../../../src/domains/conversation/components/RuntimeEventFlow.js";
 import { ToolStrip } from "../../../src/domains/conversation/components/ToolStrip.js";
-
-describe("RuntimeEventFlow", () => {
-  it("renders nothing without events and collapses rows by default", () => {
-    const { rerender } = render(<RuntimeEventFlow events={[]} />);
-    expect(screen.queryByText("本轮时序")).not.toBeInTheDocument();
-    rerender(
-      <RuntimeEventFlow
-        events={[
-          {
-            sequence: 2,
-            timestamp: Date.parse("2026-08-05T09:00:01.000Z"),
-            eventType: "agent.run.state.changed",
-            family: "agent",
-            summary: "— → running",
-          },
-        ]}
-      />,
-    );
-    expect(screen.getByText("本轮时序")).toBeInTheDocument();
-    expect(screen.queryByText("agent.run.state.changed")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "展开本轮时序" }));
-    expect(screen.getByText("agent.run.state.changed")).toBeInTheDocument();
-    expect(screen.getByText("— → running")).toBeInTheDocument();
-  });
-
-  it("marks failed terminal tool calls with a failure badge", () => {
-    render(
-      <RuntimeEventFlow
-        events={[
-          {
-            sequence: 5,
-            timestamp: Date.parse("2026-08-05T09:00:04.000Z"),
-            eventType: "system.tool.trace.recorded",
-            family: "system",
-            summary: "工具 NovelOutlineRead · 失败",
-            outcome: "failed",
-          },
-        ]}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "展开本轮时序" }));
-    expect(screen.getByText("失败")).toBeInTheDocument();
-  });
-});
 
 describe("ToolStrip", () => {
   it("aggregates chips and expands result rows", () => {

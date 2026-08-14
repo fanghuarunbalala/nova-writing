@@ -6,6 +6,7 @@
 
 @docs/development/编码规范.md
 @docs/development/ipc-协议.md
+@docs/development/agent-配置规范.md
 @docs/development/ui-样式架构.md
 @docs/PRD/规范.md
 

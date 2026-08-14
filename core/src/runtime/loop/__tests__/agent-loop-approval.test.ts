@@ -60,6 +60,7 @@ function makeLoop(
     agentCapability: capability,
     toolDispatcher: {
       dispatch: async (_ctx, call) => `result:${call.name}`,
+      resolve: (name) => opts.toolDefs.find((t) => t.name === name),
     },
     conversationId: "c1",
     ...(opts.requestApproval !== undefined ? { requestApproval: opts.requestApproval as never } : {}),

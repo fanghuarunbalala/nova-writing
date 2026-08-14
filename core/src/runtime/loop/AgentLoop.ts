@@ -69,6 +69,8 @@ export class AgentLoop {
       workspace: config.workspace,
       turnMessages: config.turnMessages,
       startSeq: config.startSeq,
+      platform: config.platform,
+      novelConstraintsProvider: config.novelConstraintsProvider,
     });
     for (const listener of config.listeners ?? []) {
       this.context.subscribe(listener);
@@ -279,7 +281,7 @@ export class AgentLoop {
         model: runConfig.sampling.model,
         curTurn: runContext.curTurn,
       });
-      const call = this.context.toProviderCall(runConfig, runContext, this.controller.signal);
+      const call = await this.context.toProviderCall(runConfig, runContext, this.controller.signal);
       this.config.debugger?.record(call); // 记录每次请求（相邻差异在 html 展示）
       let result: ProviderResult;
       try {
@@ -349,7 +351,7 @@ export class AgentLoop {
    * @returns undefined = 放行执行；字符串 = 拒绝结果文本（作为 tool-call-response 进 turn 继续）
    */
   private async gateTool(tc: ToolCall, turnSeq: number): Promise<string | undefined> {
-    const toolDef = this.config.agentCapability.toolDefs.find((t) => t.name === tc.name);
+    const toolDef = this.config.toolDispatcher.resolve(tc.name);
     if (toolDef?.requireApproval !== true) return undefined;
     if (this.config.requestApproval === undefined) return "已拒绝（审批通道未装配）";
     const decision = await this.config.requestApproval({

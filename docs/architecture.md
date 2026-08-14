@@ -259,7 +259,7 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
 - **样式架构**（ui 包）：三层 token 模型（L1 结构常量 / L2 设计语言 / L3 语义色+阴影，
   dark 主题只覆盖 L3）+ 纪律测试（`ui/tests/theme/cssDiscipline.test.ts` 规则 a-d）+
   stylelint；keyframes 集中于 `shared/theme/animations.css`，模块 css 经
-  `var(--anim-*)` 间接引用动画名。详见 `ui/src/shared/README.md`
+  `var(--anim-*)` 间接引用动画名。详见 `docs/development/ui-样式架构.md`
 - **测试**：152 用例 / 28 文件全绿 + 真实 deepseek 多进程联调
 
 ### 8.3 剩余待办

@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { Dialog } from "../shared/primitives/Dialog.js";
+import { Button } from "../shared/primitives/Button.js";
 import type { NovelSettingsSection } from "../extensions/index.js";
 import type { ApplicationSettingsStore } from "./ApplicationSettingsStore.js";
 import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
@@ -44,9 +45,9 @@ export function SettingsDialog({
       title="设置"
       size="xl"
       footer={
-        <button type="button" onClick={onDismiss}>
+        <Button variant="secondary" onClick={onDismiss}>
           完成
-        </button>
+        </Button>
       }
     >
       <div className={styles.layout}>

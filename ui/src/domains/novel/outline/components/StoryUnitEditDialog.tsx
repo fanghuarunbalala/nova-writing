@@ -7,7 +7,7 @@
  */
 import { useState } from "react";
 import type { StoryUnitScope } from "@novel/core";
-import { Button, Dialog } from "../../../../shared/primitives/index.js";
+import { Button, Dialog, Input, Select, Textarea } from "../../../../shared/primitives/index.js";
 import styles from "../../components/EntityEditDialog.module.css";
 
 export interface StoryUnitEditInitial {
@@ -112,8 +112,7 @@ export function StoryUnitEditDialog({
       <div className={styles.form}>
         <label className={styles.field}>
           <span className={styles.label}>标题 *</span>
-          <input
-            className={styles.input}
+          <Input
             value={unitTitle}
             placeholder="如：第一章 金陵秋"
             onChange={(event) => setUnitTitle(event.target.value)}
@@ -121,8 +120,7 @@ export function StoryUnitEditDialog({
         </label>
         <label className={styles.field}>
           <span className={styles.label}>层级（scope）</span>
-          <select
-            className={styles.input}
+          <Select
             value={scope}
             onChange={(event) => setScope(event.target.value as StoryUnitScope)}
           >
@@ -131,12 +129,11 @@ export function StoryUnitEditDialog({
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className={styles.field}>
           <span className={styles.label}>意图（intent）</span>
-          <textarea
-            className={styles.textarea}
+          <Textarea
             rows={3}
             value={intent}
             placeholder="本单元想达成的叙事目的"
@@ -145,8 +142,7 @@ export function StoryUnitEditDialog({
         </label>
         <label className={styles.field}>
           <span className={styles.label}>梗概（synopsis）</span>
-          <textarea
-            className={styles.textarea}
+          <Textarea
             rows={4}
             value={synopsis}
             placeholder="情节梗概"

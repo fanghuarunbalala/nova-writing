@@ -1,0 +1,22 @@
+/**
+ * 表单控件统一视觉（Input / Textarea / Select 共用）。
+ */
+.control {
+  padding: var(--space-6px) var(--space-10px);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  font-size: var(--fs-13);
+  font-family: inherit;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.control:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+textarea.control {
+  resize: vertical;
+}

@@ -7,7 +7,7 @@
  */
 import { useState } from "react";
 import type { CharacterInput } from "@novel/core";
-import { Button, Dialog } from "../../../shared/primitives/index.js";
+import { Button, Dialog, Input, Textarea } from "../../../shared/primitives/index.js";
 import styles from "./EntityEditDialog.module.css";
 
 export interface EntityEditInitial {
@@ -112,8 +112,7 @@ export function EntityEditDialog({
       <div className={styles.form}>
         <label className={styles.field}>
           <span className={styles.label}>名字 *</span>
-          <input
-            className={styles.input}
+          <Input
             value={name}
             placeholder="如：苏眉"
             onChange={(event) => setName(event.target.value)}
@@ -121,8 +120,7 @@ export function EntityEditDialog({
         </label>
         <label className={styles.field}>
           <span className={styles.label}>别名（逗号分隔）</span>
-          <input
-            className={styles.input}
+          <Input
             value={aliases}
             placeholder="如：苏姑娘，眉娘"
             onChange={(event) => setAliases(event.target.value)}
@@ -130,8 +128,7 @@ export function EntityEditDialog({
         </label>
         <label className={styles.field}>
           <span className={styles.label}>摘要</span>
-          <textarea
-            className={styles.textarea}
+          <Textarea
             rows={3}
             value={summary}
             placeholder="一句话档案摘要"
@@ -140,8 +137,7 @@ export function EntityEditDialog({
         </label>
         <label className={styles.field}>
           <span className={styles.label}>初始状态</span>
-          <textarea
-            className={styles.textarea}
+          <Textarea
             rows={3}
             value={initialState}
             placeholder="故事开始时的状态"
@@ -150,8 +146,7 @@ export function EntityEditDialog({
         </label>
         <label className={styles.field}>
           <span className={styles.label}>作者备注</span>
-          <textarea
-            className={styles.textarea}
+          <Textarea
             rows={3}
             value={authorNotes}
             placeholder="设定细节备忘"

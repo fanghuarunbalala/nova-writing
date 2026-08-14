@@ -5,7 +5,10 @@
  * 提供原生目录选择、最近项目列表与错误提示。选中打开成功后由 NovelApp
  * 切换到 ApplicationShell 工作台；关闭当前 Workspace 时回到本页。
  */
+import { FolderOpen } from "lucide-react";
 import type { WorkspaceControllerSnapshot } from "../controller/WorkspaceController.js";
+import { Button } from "../../../shared/primitives/Button.js";
+import { Icon } from "../../../shared/primitives/Icon.js";
 import styles from "./ProjectSelectionPage.module.css";
 
 export interface ProjectSelectionPageProps {
@@ -36,14 +39,17 @@ export function ProjectSelectionPage({
         <span className={styles.kicker}>Novel · 创作工作台</span>
         <h1 className={styles.title}>开始创作</h1>
         <p className={styles.description}>选择或新建一个小说项目文件夹，打开后进入创作工作台。</p>
-        <button
-          type="button"
-          className={styles.choose}
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={opening}
           disabled={busy}
+          leadingIcon={<Icon icon={FolderOpen} size="sm" />}
           onClick={onChoose}
         >
           {chooseLabel}
-        </button>
+        </Button>
         {snapshot.error !== undefined ? (
           <p className={styles.error} role="status">
             {snapshot.error.message}
@@ -63,8 +69,13 @@ export function ProjectSelectionPage({
                     disabled={busy}
                     onClick={() => onOpenRecent(workspace.id)}
                   >
-                    <strong className={styles.recentLabel}>{workspace.label}</strong>
-                    <span className={styles.recentId}>{workspace.id}</span>
+                    <span className={styles.recentIcon} aria-hidden="true">
+                      <Icon icon={FolderOpen} size="sm" />
+                    </span>
+                    <span className={styles.recentText}>
+                      <strong className={styles.recentLabel}>{workspace.label}</strong>
+                      <span className={styles.recentId}>{workspace.id}</span>
+                    </span>
                   </button>
                 </li>
               ))}

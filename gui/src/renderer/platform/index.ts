@@ -2,7 +2,10 @@
  * renderer 侧设计文件端口：unwrap IPC 响应（{ ok:true } → value；{ ok:false } → ApiTransportError）。
  * 注入的 design transport 为「响应信封」函数（IPC invoke 或测试替身）。
  */
-import { ApiTransportError } from "@novel/core";
+// 值导入必须走 browser-safe 的 client 出口：根入口会连带 re-export
+// event/EventPublisher → zeromq 原生 addon（模块顶层 resolve(__dirname)），
+// 在 renderer（浏览器环境）抛 __dirname is not defined → 白屏
+import { ApiTransportError } from "@novel/core/client";
 import type { DesignReadResult, DesignWriteResult } from "../../shared/index.js";
 import type { DesignFilePort } from "@novel/ui";
 

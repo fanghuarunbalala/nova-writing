@@ -12,6 +12,9 @@ import type { ConversationId } from "../conversation/contract/types/index.js";
 import { CardProjection, type CardDescriptor } from "../conversation/CardProjection.js";
 import { RPCError } from "../rpc/RPCError.js";
 
+/** delta 高发路径的合并发布窗口（ms）：置脏 → 32ms 尾沿才 join/拷贝/发布（gui-performance-2 功能点三） */
+const DIRTY_PUBLISH_MS = 32;
+
 /** 投影状态（精简：无 replay/following 阶段） */
 export type ConversationProjectionState = "idle" | "running" | "stopped" | "error";
 
@@ -122,6 +125,12 @@ export class ConversationProjection {
 	private cardsDirty = true;
 	/** 快照子数组缓存（与置脏标记成对维护） */
 	private cachedCards: readonly CardDescriptor[] = [];
+	/** 活跃 assistant 项脏标记（delta 置脏 → publish 前才 join/重建项对象） */
+	private activeItemDirty = false;
+	/** 活跃 assistant 项的 timeline 索引缓存（push 后为尾项；校验失配才回退线性查找） */
+	private activeIndex = -1;
+	/** 合并发布定时器（32ms 尾沿；窗口内重复 delta 幂等并入） */
+	private publishTimer: ReturnType<typeof setTimeout> | undefined;
 
 	/**
 	 * @param handle 会话对端 handle（事件流来源）
@@ -139,8 +148,14 @@ export class ConversationProjection {
 		this.snapshot = this.buildSnapshot();
 	}
 
-	/** 当前快照（不可变） */
+	/** 当前快照（不可变；读到脏文本时先冲刷——读取方永远看到含最新 delta 的视图） */
 	getSnapshot(): ConversationProjectionSnapshot {
+		if (this.activeItemDirty) {
+			this.activeItemDirty = false;
+			this.syncActiveItem();
+			this.revision += 1;
+			this.snapshot = this.buildSnapshot();
+		}
 		return this.snapshot;
 	}
 
@@ -177,7 +192,9 @@ export class ConversationProjection {
 					if (this.stopRequested || generation !== this.generation) return;
 					if (replayed) {
 						this.apply(event);
-						this.publish();
+						// delta 经 32ms 合并窗口发布（apply 置脏）；其余事件立即发布
+						// （publish 前会冲刷脏文本，保证顺序一致）
+						if (event.type !== "assistant.delta") this.publish();
 					} else {
 						buffer.push(event);
 					}
@@ -219,6 +236,10 @@ export class ConversationProjection {
 	async stop(): Promise<void> {
 		this.stopRequested = true;
 		this.generation += 1;
+		if (this.publishTimer !== undefined) {
+			clearTimeout(this.publishTimer);
+			this.publishTimer = undefined;
+		}
 		if (this.state !== "stopped") this.transition("stopped");
 	}
 
@@ -278,7 +299,10 @@ export class ConversationProjection {
 				// 上一段已有收口工具行 → 新请求的内容 → 开新段
 				if (this.segmentIsClosed()) this.openSegment();
 				this.activeSegmentText += event.text;
-				this.syncActiveItem();
+				// 置脏 + 合并发布（gui-performance-2 功能点三）：单条 delta 成本 = 一次追加 + 置位，
+				// 全文 join / segments 重建 / timeline 拷贝挪到 32ms 发布窗口（或下一次立即 publish 前）
+				this.activeItemDirty = true;
+				this.scheduleDirtyPublish();
 				break;
 			}
 			case "tool-recorded.started":
@@ -329,12 +353,13 @@ export class ConversationProjection {
 			sourceSequence: this.lastAppliedSequence,
 			...(typeof event.ts === "string" ? { timestamp: event.ts } : {}),
 		});
+		this.activeIndex = this.timeline.length - 1;
 	}
 
-	/** 把工作区（已封段 + 当前缓冲）同步进 timeline 项对象（流式期间 text/segments 实时可见） */
+	/** 把工作区（已封段 + 当前缓冲）同步进 timeline 项对象（publish 前调用：脏文本落快照） */
 	private syncActiveItem(): void {
 		if (this.activeAssistantSeq === undefined) return;
-		const idx = this.timeline.findIndex((i) => i.sequence === this.activeAssistantSeq);
+		const idx = this.activeIndexResolved();
 		if (idx < 0) return;
 		const item = this.timeline[idx]!;
 		const segments = Object.freeze(
@@ -345,6 +370,13 @@ export class ConversationProjection {
 			text: this.activeSegments.map((s) => s.text).join("") + this.activeSegmentText,
 			segments,
 		};
+	}
+
+	/** 活跃项 timeline 索引（缓存命中免逐次线性扫描；失配回退 findIndex） */
+	private activeIndexResolved(): number {
+		if (this.timeline[this.activeIndex]?.sequence === this.activeAssistantSeq) return this.activeIndex;
+		this.activeIndex = this.timeline.findIndex((i) => i.sequence === this.activeAssistantSeq);
+		return this.activeIndex;
 	}
 
 	/** 当前段是否已收口（存在完成/失败工具行）→ 后续内容/工具属于新请求段 */
@@ -406,7 +438,7 @@ export class ConversationProjection {
 	private finalizeAssistant(fullText?: string): void {
 		this.liveState = undefined;
 		if (this.activeAssistantSeq === undefined) return;
-		const idx = this.timeline.findIndex((i) => i.sequence === this.activeAssistantSeq);
+		const idx = this.activeIndexResolved();
 		const item = this.timeline[idx];
 		if (item === undefined) {
 			this.resetActiveAssistant();
@@ -437,6 +469,8 @@ export class ConversationProjection {
 		this.activeAssistantSeq = undefined;
 		this.activeSegments = [];
 		this.activeSegmentText = "";
+		this.activeIndex = -1;
+		this.activeItemDirty = false;
 	}
 
 	/** run 收口：给最后一条 timeline 项补 runEndSequence/timestamp（工具归属范围终点） */
@@ -454,6 +488,12 @@ export class ConversationProjection {
 	}
 
 	private publish(): void {
+		// 发布前冲刷脏文本（保序不变量：任何立即发布路径——状态迁移 / 非 delta 事件 /
+		// 窗口到期——看到的都是含最新 delta 的完整快照）
+		if (this.activeItemDirty) {
+			this.activeItemDirty = false;
+			this.syncActiveItem();
+		}
 		this.revision += 1;
 		this.snapshot = this.buildSnapshot();
 		for (const listener of [...this.listeners]) {
@@ -463,6 +503,15 @@ export class ConversationProjection {
 				// 订阅方异常不影响投影
 			}
 		}
+	}
+
+	/** 排程合并发布（32ms 尾沿；窗口内重复调用幂等并入） */
+	private scheduleDirtyPublish(): void {
+		if (this.publishTimer !== undefined) return;
+		this.publishTimer = setTimeout(() => {
+			this.publishTimer = undefined;
+			this.publish();
+		}, DIRTY_PUBLISH_MS);
 	}
 
 	private buildSnapshot(): ConversationProjectionSnapshot {

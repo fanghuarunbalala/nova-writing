@@ -3,7 +3,7 @@
  * - subagent 隔离：盖章（agentId ≠ main）事件不进主流时间线
  * - 连续工具批次：两次请求的工具行分段（每请求一段）
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ConversationProjection } from "../ConversationProjection.js";
 import type { ConversationHandle } from "../../conversation/contract/handle/index.js";
 import type { ProjectedEvent } from "../../conversation/contract/events/index.js";
@@ -119,5 +119,83 @@ describe("ConversationProjection 连续工具批次分段（每请求一段）",
     expect(segments[0]!.text).toBe("先查");
     expect(segments[0]!.tools.map((t) => t.traceId)).toEqual(["t1"]);
     expect(segments[1]!.tools.map((t) => t.traceId)).toEqual(["t2"]);
+  });
+});
+
+describe("ConversationProjection delta 置脏与合并发布（gui-performance-2 功能点三）", () => {
+  it("窗口内 N 条 delta → 监听器至多 1 次通知（32ms 尾沿合并）", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = fakeHandle();
+      const proj = new ConversationProjection(fake.handle, "c1");
+      await proj.start();
+      let notifications = 0;
+      proj.subscribe(() => {
+        notifications += 1;
+      });
+      const baseline = notifications;
+
+      fake.push(delta("a"));
+      fake.push(delta("b"));
+      fake.push(delta("c"));
+      fake.push(delta("d"));
+      // 窗口内：delta 不触发发布（置脏 + 排程）
+      expect(notifications).toBe(baseline);
+
+      await vi.advanceTimersByTimeAsync(32);
+      expect(notifications).toBe(baseline + 1);
+      const snapshot = proj.getSnapshot();
+      expect(snapshot.timeline.at(-1)).toMatchObject({ text: "abcd", streaming: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("getSnapshot 惰性冲刷：窗口未到期直接读取也能看到最新 delta 文本", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+    fake.push(delta("写到"));
+    fake.push(delta("一半"));
+    // 未 advance 定时器：读取方仍能看到合并后的脏文本
+    const snapshot = proj.getSnapshot();
+    expect(snapshot.timeline.at(-1)).toMatchObject({ text: "写到一半", streaming: true });
+    expect(snapshot.liveState).toBe("generating");
+  });
+
+  it("非 delta 事件立即发布且先冲刷脏文本（保序）", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+    let notifications = 0;
+    proj.subscribe(() => {
+      notifications += 1;
+    });
+    const baseline = notifications;
+
+    fake.push(delta("先想"));
+    fake.push(toolStarted("t1")); // 非 delta → 立即 publish（冲刷脏文本先行）
+    expect(notifications).toBe(baseline + 1);
+    const item = proj.getSnapshot().timeline.at(-1)!;
+    expect(item.text).toBe("先想");
+    expect(item.segments!.at(-1)!.tools.map((t) => t.traceId)).toEqual(["t1"]);
+  });
+
+  it("run-end 收口：脏文本经立即发布路径进入最终快照", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+    fake.push(delta("最终"));
+    fake.push({
+      type: "run-end",
+      persist: true,
+      seq: 1,
+      runSeq: 1,
+      ...base,
+      ts: new Date().toISOString(),
+    } as unknown as ProjectedEvent);
+    const snapshot = proj.getSnapshot();
+    expect(snapshot.timeline.at(-1)).toMatchObject({ text: "最终", streaming: false });
+    expect(snapshot.liveState).toBeUndefined();
   });
 });

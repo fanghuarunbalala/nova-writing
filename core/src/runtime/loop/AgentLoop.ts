@@ -21,6 +21,9 @@ import { LoopContext } from "./LoopContext.js";
 /** 缺省最大轮次（每 run 最大 turn 数，防死循环） */
 const DEFAULT_MAX_TURNS = 100;
 
+/** text-delta 合并窗口（ms）：相邻 delta 合并为一条事件，压低跨进程传输频率（gui-performance-2 功能点一） */
+const DELTA_COALESCE_MS = 32;
+
 /** 累积两段 token 用量 */
 function addUsage(
   acc: { inputTokens: number; outputTokens: number } | undefined,
@@ -53,6 +56,10 @@ export class AgentLoop {
   private readonly controller = new AbortController();
   /** 审批批次序号（requestId 尾段 b{n}：同 run 多轮工具批次不撞队列幂等） */
   private batchSeq = 0;
+  /** delta 合并缓冲（pending 文本 + 所属回调）：任何其他事件发射前先冲刷保序 */
+  private pendingDeltaText = "";
+  private pendingDeltaOnEvent?: (e: LoopEvent) => void;
+  private deltaFlushTimer: ReturnType<typeof setTimeout> | undefined;
   /** 输入队列（run 排队 / control 抢占） */
   private inbox: LoopInput[] = [];
   /** 是否正在 drain / run */
@@ -322,7 +329,9 @@ export class AgentLoop {
           // reasoning delta 在 loop 层直接丢弃（思考内容不上链、UI 不展示思考中态）：
           // 不 emit 任何事件，省去 hub/WS/IPC 全链传输成本。见 docs/PRD/gui-performance.md。
           if (d.type !== "text-delta") return;
-          this.emit(onEvent, "assistant.delta", { kind: "text", text: d.text });
+          // text-delta 进合并缓冲（32ms 尾窗冲刷；任何其他事件发射前强制冲刷保序）：
+          // 每 SSE chunk 一条 RPC → ≤~30Hz 合并事件，见 docs/PRD/gui-performance-2.md 功能点一。
+          this.bufferDelta(onEvent, d.text);
         });
       } catch (err) {
         logger?.error("agent.call.error", {
@@ -450,12 +459,41 @@ export class AgentLoop {
     this.emit(onEvent, "user.message", { persist: true, seq: run.seq, text });
   }
 
+  /** 缓冲 text-delta（32ms 尾窗合并成一条事件；窗口内幂等排程） */
+  private bufferDelta(onEvent: ((e: LoopEvent) => void) | undefined, text: string): void {
+    this.pendingDeltaText += text;
+    this.pendingDeltaOnEvent = onEvent;
+    if (this.deltaFlushTimer === undefined) {
+      this.deltaFlushTimer = setTimeout(() => {
+        this.deltaFlushTimer = undefined;
+        this.flushPendingDelta();
+      }, DELTA_COALESCE_MS);
+    }
+  }
+
+  /** 冲刷 delta 缓冲（空缓冲 no-op；emit 非 delta 类型前必经，保证流文本先于后续事件） */
+  private flushPendingDelta(): void {
+    if (this.deltaFlushTimer !== undefined) {
+      clearTimeout(this.deltaFlushTimer);
+      this.deltaFlushTimer = undefined;
+    }
+    if (this.pendingDeltaText === "") return;
+    const text = this.pendingDeltaText;
+    const onEvent = this.pendingDeltaOnEvent;
+    this.pendingDeltaText = "";
+    this.pendingDeltaOnEvent = undefined;
+    this.emit(onEvent, "assistant.delta", { kind: "text", text });
+  }
+
   /** 发出 LoopEvent（补 seq/conversationId/agentId/ts；通知 onEvent + 持久订阅者） */
   private emit(
     onEvent: ((e: LoopEvent) => void) | undefined,
     type: LoopEvent["type"],
     extra: Record<string, unknown>,
   ): void {
+    // 保序不变量：非 delta 事件发射前先冲刷缓冲中的流文本（本 turn 全部文本
+    // 先于 assistant.message / 工具事件到达消费端）
+    if (type !== "assistant.delta") this.flushPendingDelta();
     const event = {
       type,
       seq: 0,

@@ -3,20 +3,12 @@
 
 import {
   AgentLoop,
-  InMemoryRegistry,
   ProviderCallDebugger,
   createProvider,
 } from "../dist/index.js";
 
-// ── Registry 组装能力 ──
-const registry = new InMemoryRegistry();
-registry.registerAgent({
-  agentType: "writer",
-  agentVersion: "1",
-  toolNames: ["remember"],
-  promptIds: ["writer-base"],
-});
-registry.registerTool({
+// ── 能力直构（AgentCapability：system 分段 + 工具定义）──
+const rememberTool = {
   name: "remember",
   version: "1",
   description: "记录一条创作笔记（人物设定/情节要点），供后续引用",
@@ -32,17 +24,22 @@ registry.registerTool({
       return `已记录笔记：${args.note}`;
     },
   },
-});
-registry.registerPrompt(
-  {
-    kind: "static",
-    render: () =>
-      "你是小说创作助手。当用户要求你记住某个设定/笔记时，务必调用 remember 工具记录。",
-  },
-  "writer-base",
-  "1",
-);
-const capability = registry.buildCapability("writer", "1");
+};
+const capability = {
+  systemSections: [
+    {
+      kind: "static",
+      id: "writer.base",
+      version: "1.0.0",
+      label: "Writer Base",
+      render: () =>
+        "你是小说创作助手。当用户要求你记住某个设定/笔记时，务必调用 remember 工具记录。",
+    },
+  ],
+  toolDefs: [rememberTool],
+  compactPolicies: [],
+  nudgePolicies: [],
+};
 
 // ── ToolDispatcher（按 name 分发到 handler）──
 const dispatcher = {

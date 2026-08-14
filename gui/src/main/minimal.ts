@@ -37,6 +37,11 @@ import {
   type TurnContext,
 } from "@novel/core";
 import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
+import {
+  DesktopDesignFileService,
+  DesktopDesignIpcController,
+  type DesignIpcMain,
+} from "./desktop/design/index.js";
 
 // 双构建流程布局兼容（两条流程都受现役启动命令使用）：
 // - build-minimal.mjs（根 gui:release / gui:debug）：esbuild CJS 打包到
@@ -444,6 +449,19 @@ async function main(): Promise<void> {
     width: 900,
     height: 640,
     webPreferences: { preload: preloadPath },
+  });
+  // compose 设计草稿文件 IPC（novel.design.v1.*）：仅主窗口 webContents 授权，
+  // workspace 根随当前打开项目切换；renderer 经 preload novelDesign.invoke 调用
+  const designController = new DesktopDesignIpcController({
+    service: new DesktopDesignFileService({
+      resolveWorkspaceRoot: (senderId) =>
+        senderId === win.webContents.id ? currentWorkspaceRoot : undefined,
+    }),
+    authorizeSender: (senderId) => senderId === win.webContents.id,
+  });
+  designController.register(ipcMain as unknown as DesignIpcMain);
+  win.on("closed", () => {
+    void designController.dispose();
   });
   win.webContents.on("console-message", (_e, ...args: unknown[]) => {
     // Electron 43 新旧签名兼容：旧 (event, level, message, ...) / 新 (event, details)

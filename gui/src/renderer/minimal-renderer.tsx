@@ -16,10 +16,15 @@ import {
   WorkspaceController,
   type FrontendPlatform,
 } from "@novel/ui";
+import { createElectronDesignFilePort } from "./platform/index.js";
 
 declare global {
   interface Window {
     novelApi: { bridge: unknown };
+    novelDesign?: {
+      read(conversationId: string): Promise<unknown>;
+      write(conversationId: string, content: string): Promise<unknown>;
+    };
   }
 }
 
@@ -65,6 +70,10 @@ const platform: FrontendPlatform = {
   files: { selectFiles: async () => Object.freeze([]) },
   clipboard: { readText: async () => "", writeText: async () => {} },
   notifications: { show: async () => {} },
+  // 设计草稿文件端口：preload novelDesign 桥存在时装配（旧 preload 缺省降级——DesignCard 只读提示）
+  ...(window.novelDesign === undefined
+    ? {}
+    : { designFile: createElectronDesignFilePort({ design: window.novelDesign as never }) }),
 };
 
 // workspace 控制器：桥 main 侧目录选择器 + 定位器（经 workspace-rpc）。

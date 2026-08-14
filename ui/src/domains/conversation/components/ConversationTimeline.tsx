@@ -174,6 +174,7 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
           eventFlow={item.eventFlow}
           toolTraces={item.toolTraces}
           onResolveReference={resolveReference}
+          onNotify={onNotify}
           onCardAction={(cardId, action, payload) => {
             if (typeof payload !== "string") return;
             if (action === "view-diff") {

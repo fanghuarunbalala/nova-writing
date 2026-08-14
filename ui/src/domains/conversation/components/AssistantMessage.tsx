@@ -15,6 +15,7 @@ import type {
   ToolTraceView,
 } from "../projection/ConversationTimelineItem.js";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
+import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import { AssistantMarkdown } from "./assistantContent/AssistantMarkdown.js";
 import { RuntimeEventFlow } from "./RuntimeEventFlow.js";
 import { ToolStrip } from "./ToolStrip.js";
@@ -61,6 +62,8 @@ export interface AssistantMessageProps {
   readonly onResolveReference?: ReferenceResolver;
   readonly cardRenderers?: ConversationCardRendererRegistry;
   readonly onCardAction?: (cardId: string, action: string, payload?: unknown) => void;
+  /** 消息内操作提示（如正文复制结果）；上行到 shell ToastHost。 */
+  readonly onNotify?: (kind: ToastKind, text: string) => void;
 }
 
 export function AssistantMessage({
@@ -77,6 +80,7 @@ export function AssistantMessage({
   onResolveReference,
   cardRenderers = createDefaultConversationCardRendererRegistry(),
   onCardAction,
+  onNotify,
 }: AssistantMessageProps) {
   return (
     <div className={styles.message} data-sequence={sequence}>
@@ -94,6 +98,8 @@ export function AssistantMessage({
             text={text}
             onReferenceClick={onReferenceClick}
             resolveReference={onResolveReference}
+            streaming={streaming}
+            onNotify={onNotify}
           />
         </div>
         {approvalState === "failed" && failureDetail !== undefined ? (

@@ -7,12 +7,14 @@
  * code 带边框底、正文 text-wrap: pretty。
  */
 .markdown {
-  /* 正文基座：黑体（--font-ui）+ medium 字重（用户要求，正文更清晰）；
+  /* 正文基座：黑体（--font-ui）400 原生字重（YaHei/Segoe UI 无原生 550，
+     合成加粗发糊发重）；15.5px + 0.01em 字距（Windows 15px 发虚）。
      标题/引用/代码等元素保留各自的 --font-display/--font-kai/--font-mono。 */
   font-family: var(--font-ui);
-  font-size: var(--fs-body);
-  font-weight: var(--fw-medium);
-  line-height: 1.75;
+  font-size: var(--fs-chat);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0.01em;
+  line-height: 1.8;
   min-width: 0;
   text-wrap: pretty;
 }
@@ -110,7 +112,8 @@
 }
 
 .markdown strong {
-  font-weight: var(--fw-heavy);
+  /* 原生 700（YaHei 粗体）；800 会触发合成加粗发糊 */
+  font-weight: var(--fw-bold);
 }
 
 .markdown blockquote {

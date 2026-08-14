@@ -5,7 +5,8 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import {
   Conversation,
@@ -36,9 +37,11 @@ import {
 } from "@novel/core";
 import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
 
-// __dirname = gui/dist/minimal；上三级到项目根，再进 core/scripts
-const preloadPath = join(__dirname, "preload.cjs");
-const rendererHtml = join(__dirname, "minimal.html");
+// ESM 下无 __dirname：以 import.meta.url 推导（= gui/dist/main）；
+// preload 在 dist/preload、renderer 在 dist/minimal；childScript 上三级到项目根再进 core/scripts
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const preloadPath = join(__dirname, "..", "preload", "preload.cjs");
+const rendererHtml = join(__dirname, "..", "minimal", "minimal.html");
 const childScript = join(__dirname, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
 const IPC_CHANNEL = "novel-rpc";
 const CONFIG_CHANNEL = "config-rpc";
@@ -115,7 +118,12 @@ function createEchoLoop(
           emit({ type: "assistant.delta", persist: false, kind: "reasoning", text: "分析文本结构…", conversationId, ts: now() });
           await sleep(700);
         }
-        const reply = `（回声）${text}`;
+        // 文本含「正文」时追加示例小说正文（```novel 块），验证正文草稿面板：
+        // fence 打开即出现面板 + 闪烁光标，流式填充，完成后显示「复制正文」
+        const demoNovel = text.includes("正文")
+          ? "\n\n```novel\n沈砚站在地下室的台阶上，手里的手电筒光柱晃了晃。他听见风从墙缝里钻进来的声音，像是什么人在远处叹气。\n\n他数着自己的脚步。七级台阶。墙面是青灰色的砖，砖缝里生着苔藓。但右手边的墙壁上，有一块砖的颜色比周围的都要浅。他伸出手，指腹贴上去，凉的。\n```"
+          : "";
+        const reply = `（回声）${text}${demoNovel}`;
         for (const ch of reply) {
           emit({ type: "assistant.delta", persist: false, kind: "text", text: ch, conversationId, ts: now() });
           await sleep(24);

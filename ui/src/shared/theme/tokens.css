@@ -54,20 +54,24 @@
 
   /* ============ L2 设计语言（theme 不可覆盖；改版/密度才变） ============ */
   /* 字体：英文在前、中文兜底（对齐原型 :root）：每种文字都落到为它设计的字体
-     - --font-display / --font-ui：黑体（英文 SF Pro / Segoe UI，中文苹方）
-     - --font-body：宋体正文（英文 Iowan Old Style 衬线，中文宋体/思源宋体）
-     - --font-kai：楷体点缀（引用块 / 空态引导）
+     - --font-display / --font-ui：黑体（英文 SF Pro / Segoe UI，中文苹方；
+       Windows 增补 HarmonyOS Sans SC / MiSans / YaHei UI——15px 级 UI 文本更清晰）
+     - --font-body：宋体正文（英文 Iowan Old Style 衬线；中文思源宋体/华文宋体/中易宋体）
+     - --font-kai：楷体点缀（引用块 / 空态引导；LXGW WenKai 霞鹜文楷前置）
      - --font-mono：等宽（事件名 / 时间 / ID / 代码） */
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
-    "Microsoft YaHei", system-ui, sans-serif;
+    "PingFang SC", "Hiragino Sans GB", "HarmonyOS Sans SC", "MiSans",
+    "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Microsoft YaHei",
+    system-ui, sans-serif;
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
-    "Microsoft YaHei", system-ui, sans-serif;
-  --font-body: "Iowan Old Style", "Palatino Linotype", "Songti SC", "STSong",
-    "Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif;
+    "PingFang SC", "Hiragino Sans GB", "HarmonyOS Sans SC", "MiSans",
+    "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --font-body: "Iowan Old Style", "Palatino Linotype",
+    "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong",
+    "SimSun", Georgia, serif;
   --font-mono:    "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
-  --font-kai:     "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
+  --font-kai:     "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
 
   /* 字号：语义型为刻度主干；数值型（--fs-12 等）为原型遗留精确快照 */
   --fs-display: 19px;
@@ -77,6 +81,9 @@
   --fs-meta:    11.5px;
   --fs-mono:    11px;
   --fs-xs:      10.5px;
+  /* 对话流消息正文（用户气泡/助手消息/正文注释）：15.5px——
+     Windows 下 15px 中文黑体发虚，15.5px 渲染更清晰 */
+  --fs-chat:    15.5px;
   /* 精确值快照：Button 尺寸表 / 状态标签等原型遗留字号 */
   --fs-12:      12px;
   --fs-13:      13px;
@@ -203,6 +210,7 @@
   --anim-conv-in:         conv-in;
   --anim-failed-shake:    failed-shake;
   --anim-block-flash:     block-flash;
+  --anim-draft-cursor:    draft-cursor;
 
   /* 缓动 */
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);

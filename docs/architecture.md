@@ -243,7 +243,7 @@ runtime/
 ├── compact/       ContextCompactPolicy + CompactPolicyChain
 ├── todo/          TodoProtocol + InMemoryConversationTodoStore
 └── debug/         ProviderCallDebugger（jsonl + html diff）
-conversation/      contract + persistence（journal）+ server（Conversation/ManagerServer/Subagent）+ compose 状态机 + JournalBridge
+conversation/      contract + persistence（journal）+ server（Conversation/ManagerServer/Subagent）+ compose 状态机 + JournalBridge + projection（ProjectionLayer/CardProjection）
 novel/             contract + model + InMemoryNovelStore（乐观锁）+ NovelDbServer + NovelHandle
 rpc/               kkrpc（call/RPCError/transport）
 event/             ZeroMQ（EventPublisher/Subscriber）
@@ -263,11 +263,10 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
   dark 主题只覆盖 L3）+ 纪律测试（`ui/tests/theme/cssDiscipline.test.ts` 规则 a-d）+
   stylelint；keyframes 集中于 `shared/theme/animations.css`，模块 css 经
   `var(--anim-*)` 间接引用动画名。详见 `docs/development/ui-样式架构.md`
-- **测试**：core 258 用例 / 47 文件全绿 + 真实 deepseek 多进程联调（ui 纪律测试见上）
+- **测试**：core 281 用例 / 49 文件全绿 + 真实 deepseek 多进程联调（ui 纪律测试见上；ui 全套 229 通过，61 失败为合并基线既有测试腐化，与本变更无关）
 
 ### 8.3 剩余待办
 
 1. **T12 ui/gui 接入**：恢复的 Electron/React（493 文件）对接新 core 接口。
-2. **output 投影层落地**（PRD `output-投影层`，✅ 已定稿）：`ProjectedEvent` 独立类型集 / ProjectionLayer（tool-recorded + `ToolDef.preview`）/ journal `projectedHistory` 读取接口 / approval 事件删除；与 T12 ui 接入同步落地。
-3. **sqlite 驱动**：当前 novel 用内存 store，sqlite 持久化待接（better-sqlite3 vs worker）。
-4. **delta chunk 聚合**：暂缓（delta 直走 kkrpc 背压）。
+2. **sqlite 驱动**：当前 novel 用内存 store，sqlite 持久化待接（better-sqlite3 vs worker）。
+3. **delta chunk 聚合**：暂缓（delta 直走 kkrpc 背压）。

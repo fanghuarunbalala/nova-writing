@@ -126,6 +126,9 @@ describe("ProjectionLayer", () => {
 			evt({ type: "assistant.delta", text: "你" }),
 			evt({ type: "assistant.message", persist: true, seq: 4, text: "你好" }),
 			evt({ type: "turn-end", persist: true, seq: 5, turnSeq: 1 }),
+			evt({ type: "compacted", persist: true, seq: 6 }),
+			evt({ type: "clear", persist: true, seq: 7 }),
+			evt({ type: "retry-request", persist: true, seq: 8 }),
 		];
 		const projected = events.map((e) => layer.project(e));
 		expect(projected).toEqual(events);

@@ -22,7 +22,7 @@ export interface ConversationHandle extends ConversationInteraction, WaitingInte
 	subscribeEvents(listener: (e: ProjectedEvent) => void): Promise<void>;
 	/**
 	 * 回传审批决策（解除 sendApprovalRequest 的阻塞等待）
-	 * @param requestId 审批请求 id（approval.request 事件携带）
+	 * @param requestId 审批请求 id（CMS wait 队列条目）
 	 * @param decision 决策（approve / reject / edit）
 	 */
 	resolveApproval(requestId: string, decision: ConversationApprovalDecision): void;

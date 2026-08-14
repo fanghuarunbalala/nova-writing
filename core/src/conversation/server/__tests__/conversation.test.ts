@@ -7,10 +7,10 @@ import type { ProjectedEvent } from "../../contract/events/index.js";
 import type { ConversationJournalService } from "../../contract/journal/index.js";
 import type { ConversationHandle } from "../../contract/handle/index.js";
 
-function mockLoop(): AgentLoop {
+function mockLoop(extraEmit?: (emit: (type: string, extra?: Record<string, unknown>) => void) => void): AgentLoop {
   const listeners = new Set<(e: ProjectedEvent) => void>();
-  const emit = (type: string) => {
-    const e = { type, persist: true, seq: 1, turnSeq: 1, conversationId: "c1", ts: "t" } as ProjectedEvent;
+  const emit = (type: string, extra?: Record<string, unknown>) => {
+    const e = { type, persist: true, seq: 1, turnSeq: 1, conversationId: "c1", ts: "t", ...extra } as ProjectedEvent;
     for (const l of listeners) l(e);
   };
   let seq = 0;
@@ -24,6 +24,7 @@ function mockLoop(): AgentLoop {
         appendTurnMessages: () => {},
       };
       emit("turn-start");
+      extraEmit?.(emit);
       return turn;
     },
     steer: () => {},
@@ -33,6 +34,7 @@ function mockLoop(): AgentLoop {
       listeners.add(l);
       return () => listeners.delete(l);
     },
+    toolDispatcher: { resolve: () => undefined },
   } as unknown as AgentLoop;
 }
 
@@ -62,6 +64,27 @@ describe("Conversation", () => {
     await conv.subscribeEvents((e) => received.push(e));
     await conv.sendUserMessage({ text: "hi" });
     expect(received[0]?.type).toBe("turn-start");
+  });
+
+  it("hub 只广播投影事件：tool-call 以 tool-recorded 成对出现，无完整 request/response", async () => {
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop((emit) => {
+        emit("tool-call-request", { toolCallId: "t1", name: "CharacterWrite", args: '{"values":[]}' });
+        emit("tool-call-response", { toolCallId: "t1", result: "ok" });
+      }),
+      sampling: { model: "gpt-5" },
+    });
+    const received: ProjectedEvent[] = [];
+    await conv.subscribeEvents((e) => received.push(e));
+    await conv.sendUserMessage({ text: "hi" });
+    const types = received.map((e) => e.type);
+    expect(types).toContain("tool-recorded.started");
+    expect(types).toContain("tool-recorded.recorded");
+    expect(types).not.toContain("tool-call-request");
+    expect(types).not.toContain("tool-call-response");
+    expect(types).not.toContain("approval.request");
+    expect(types).not.toContain("approval.resolved");
   });
 
   it("有 journal 时输入 rpc 回持久化回执（followup 即时开 turn → appendTurn 同步落盘）", async () => {

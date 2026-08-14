@@ -22,6 +22,7 @@ import type {
 	Receipt,
 } from "../contract/types/index.js";
 import { DEFAULT_CONVERSATION_MODE } from "../contract/types/index.js";
+import type { SubagentRuntime } from "./SubagentRuntime.js";
 
 /** manager wait 通道：conversation → CMS 的 wait 提交面（子进程经 manager WS；内存模式直连 managerServer） */
 export interface ManagerWaitChannel {
@@ -63,6 +64,8 @@ export interface ConversationOptions {
 	onWaitTimeout?: (requestId: string) => void;
 	/** 投影层（缺省内建；preview resolver 经 loop.toolDispatcher 取 ToolDef.preview） */
 	projection?: ProjectionLayer;
+	/** subagent 任务编排（存在时：事件转发进 hub + stop/dispose 级联 stopAll） */
+	subagentRuntime?: SubagentRuntime;
 }
 
 /** 输出事件订阅回调（hub 广播投影事件） */
@@ -85,6 +88,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly sampling: SamplingConfig;
 	/** 投影层（完整 LoopEvent → ProjectedEvent；live 流唯一出口） */
 	private readonly projection: ProjectionLayer;
+	/** subagent 任务编排（可选；事件经同一投影层进 hub） */
+	private readonly subagentRuntime?: SubagentRuntime;
 	/** 输出事件订阅者（hub，只收投影事件） */
 	private readonly eventListeners = new Set<ProjectedEventListener>();
 	/** journal 写侧（缺省 undefined = 不落盘） */
@@ -117,6 +122,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.managerWait = opts.managerWait;
 		this.waitTimeoutMs = opts.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
 		this.onWaitTimeout = opts.onWaitTimeout;
+		this.subagentRuntime = opts.subagentRuntime;
 		// 投影层：缺省经 loop.toolDispatcher 取 ToolDef.preview（live 与 replay 同实现）
 		this.projection =
 			opts.projection ??
@@ -127,6 +133,11 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 			});
 		// 订阅 loop 的输出事件：经投影层映射后转发到本会话 hub（hub 只广播 ProjectedEvent）
 		this.loop.onOutputEvent((e) => {
+			const projected = this.projection.project(e);
+			if (projected !== undefined) this.emit(projected);
+		});
+		// subagent loop 事件同样进 hub（live-only，不落 journal；经同一投影层）
+		this.subagentRuntime?.onEvent((e) => {
 			const projected = this.projection.project(e);
 			if (projected !== undefined) this.emit(projected);
 		});
@@ -169,6 +180,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 				break;
 			case "stop":
 				this.loop.stop();
+				// 级联停止全部 subagent 任务
+				this.subagentRuntime?.stopAll();
 				break;
 			case "reload.config":
 				break;
@@ -247,8 +260,9 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.eventListeners.add(listener);
 	}
 
-	/** 释放（清空订阅者） */
+	/** 释放（清空订阅者 + 停止 subagent 任务） */
 	dispose(): void {
+		this.subagentRuntime?.stopAll();
 		this.eventListeners.clear();
 	}
 

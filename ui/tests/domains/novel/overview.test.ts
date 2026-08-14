@@ -1,30 +1,18 @@
 /**
  * NovelOverviewStore 契约测试。
  *
- * 适配说明：core manuscript -> paragraph 重命名后，counts 字段从
- * manuscriptBlockCount 改为 paragraphCount，roots 从 manuscriptAvailable 改为
- * paragraphsAvailable。测试 fixture 同步更新。
+ * 适配说明：core overview 精简为 { novelId, title, counts(storyUnits/characters/
+ * locations/paragraphs) }，无 scope/sourceRevision；store 中 volumeCount/
+ * chapterCount 恒 0（等 publication 计数落地）。
  */
 import { describe, expect, it, vi } from "vitest";
-import { canonicalNovelQueryScope, type NovelApiClient, type NovelOverviewSnapshot } from "@novel/core";
+import type { NovelApiClient, NovelOverview } from "@novel/core";
 import { NovelOverviewStore } from "../../../src/domains/novel/overview/NovelOverviewStore.js";
 
-const overview: NovelOverviewSnapshot = {
-  schemaVersion: 1,
-  scope: canonicalNovelQueryScope,
-  workspaceId: "w1",
+const overview: NovelOverview = {
   novelId: "novel_1",
-  novelSchemaVersion: 1,
-  sourceRevision: "r041",
-  counts: {
-    storyUnitCount: 12,
-    characterCount: 3,
-    locationCount: 2,
-    volumeCount: 1,
-    chapterCount: 5,
-    paragraphCount: 9,
-  },
-  roots: { outlineAvailable: true, publicationAvailable: true, paragraphsAvailable: true },
+  title: "雾港",
+  counts: { storyUnits: 12, characters: 3, locations: 2, paragraphs: 9 },
 };
 
 function buildApi(overrides: Partial<NovelApiClient["novel"]["overview"]> = {}): NovelApiClient {
@@ -54,16 +42,17 @@ describe("NovelOverviewStore", () => {
     const store = new NovelOverviewStore({ api });
     await store.loadWorkspace("w1");
     const snapshot = store.getSnapshot();
-    expect(api.novel.overview.get).toHaveBeenCalledWith(canonicalNovelQueryScope);
+    expect(api.novel.overview.get).toHaveBeenCalled();
     expect(snapshot.phase).toBe("ready");
     expect(snapshot.workspaceId).toBe("w1");
     expect(snapshot.novelId).toBe("novel_1");
+    expect(snapshot.label).toBe("雾港");
     expect(snapshot.counts).toEqual({
       storyUnitCount: 12,
       characterCount: 3,
       locationCount: 2,
-      volumeCount: 1,
-      chapterCount: 5,
+      volumeCount: 0,
+      chapterCount: 0,
       paragraphCount: 9,
     });
   });

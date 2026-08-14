@@ -5,3 +5,4 @@ export * from "./Conversation.js";
 export * from "./Subagent.js";
 export * from "./WaitRequestQueue.js";
 export * from "./ConversationManagerWsServer.js";
+export * from "./SubagentRuntime.js";

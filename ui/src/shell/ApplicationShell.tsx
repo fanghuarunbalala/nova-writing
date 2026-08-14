@@ -191,6 +191,15 @@ export function ApplicationShell({
     }
   }, [catalogSnapshot.activeConversationId, pendingForActive, inspectorRouter]);
 
+  // 审批全部处理完 → 自动收起审批面板（creation 线「面板收拢」语义；
+  // 与上方的会话化展开共存：全局清零才收起，其他会话仍有待审批时不打断）。
+  useEffect(() => {
+    const route = inspectorRouter.getSnapshot().state;
+    if (approvalSnapshot.pendingCount === 0 && route.kind === "approval") {
+      inspectorRouter.close();
+    }
+  }, [approvalSnapshot.pendingCount, inspectorRouter]);
+
   // 会话首句派生标题：活动会话首条用户消息到达且目录项仍为自动标题时，
   // 更新侧栏/标题栏显示（显式改名不覆盖；重启恢复由 core scanCatalog 兜底）。
   const firstUserMessage = session.snapshot?.projection.timeline.find(

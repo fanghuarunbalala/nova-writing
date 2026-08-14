@@ -6,6 +6,7 @@ import type { ToolDef } from "../ToolDef.js";
 import { todoWritePreview } from "../previews.js";
 import type { ToolCall } from "../../provider/types.js";
 import type { ConversationTodoStore, TodoItemSnapshot } from "../../todo/TodoProtocol.js";
+import { ToolError } from "../errors.js";
 
 /** 解析 tool args JSON */
 function parseArgs(call: ToolCall): { todos: TodoItemSnapshot[] } {
@@ -13,7 +14,10 @@ function parseArgs(call: ToolCall): { todos: TodoItemSnapshot[] } {
     const args = JSON.parse(call.args) as { todos: TodoItemSnapshot[] };
     return args;
   } catch {
-    throw new Error(`无效的 JSON 参数: ${call.args}`);
+    throw new ToolError(
+      { code: "TOOL_ARGUMENTS_INVALID", toolName: call.name },
+      `无效的 JSON 参数: ${call.args}`,
+    );
   }
 }
 

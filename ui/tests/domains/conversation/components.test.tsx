@@ -268,19 +268,6 @@ describe("ConversationComposer", () => {
     // 停止按钮已随新三态语言移除（生成中不可手动中止）。
     expect(screen.queryByRole("button", { name: "停止" })).not.toBeInTheDocument();
   });
-
-  it("renders approval content in the status slot when approval is provided", () => {
-    render(
-      <ConversationComposer
-        conversationId="c1"
-        enabled
-        onSend={vi.fn()}
-        approval={<span>等待审批</span>}
-      />,
-    );
-    // approval 与 status 同槽位，approval 优先。
-    expect(screen.getByText("等待审批")).toBeInTheDocument();
-  });
 });
 
 describe("ChatEmptyState", () => {

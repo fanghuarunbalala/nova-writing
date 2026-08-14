@@ -24,13 +24,15 @@ import {
   outlineWritePreview,
   outlineEditPreview,
 } from "../previews.js";
-
-/** 解析 tool args JSON */
+import { ToolError } from "../errors.js";
 function parseArgs(call: ToolCall): Record<string, unknown> {
   try {
     return JSON.parse(call.args) as Record<string, unknown>;
   } catch {
-    throw new Error(`无效的 JSON 参数: ${call.args}`);
+    throw new ToolError(
+      { code: "TOOL_ARGUMENTS_INVALID", toolName: call.name },
+      `无效的 JSON 参数: ${call.args}`,
+    );
   }
 }
 

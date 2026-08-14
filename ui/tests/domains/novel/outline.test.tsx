@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { NovelApiClient, NovelOutlineSnapshot, StoryUnit } from "@novel/core";
+import type { NovelApiClient, StoryOutlineSnapshot, StoryUnit } from "@novel/core";
 import { StoryOutlineTreeProjection } from "../../../src/domains/novel/outline/projection/StoryOutlineTreeProjection.js";
 import { StoryOutlineTreeStore } from "../../../src/domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { StoryOutlineTree } from "../../../src/domains/novel/outline/components/StoryOutlineTree.js";
@@ -27,12 +27,10 @@ const units: readonly StoryUnit[] = [
   unit({ id: "scene-2", title: "灯塔", parentId: "arc-v1", scope: "scene", planningStatus: "idea", realizationStatus: "pending", blockState: { reasonCode: "decision-required", note: "需要确认追踪目标", dependencyIds: [], blockedAt: "2026-08-05T00:00:00.000Z" } }),
 ];
 
-function outlineSnapshot(): NovelOutlineSnapshot {
+function outlineSnapshot(): StoryOutlineSnapshot {
   return {
-    schemaVersion: 1,
-    scope: { kind: "canonical" },
-    tree: { outline: { id: "outline_1", novelId: "novel_1" }, units },
-    progress: [],
+    outline: { id: "outline_1", novelId: "novel_1" },
+    units,
   };
 }
 

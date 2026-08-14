@@ -14,5 +14,4 @@ export * from "./MessageReference.js";
 export * from "./NewConversationButton.js";
 export * from "./ProposalBlock.js";
 export * from "./ProposalOp.js";
-export * from "./ToolStrip.js";
 export * from "./UserMessage.js";

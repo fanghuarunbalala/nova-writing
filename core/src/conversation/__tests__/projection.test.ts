@@ -15,7 +15,7 @@ describe("CardProjection", () => {
 				seq: 1,
 				toolCallId: "t1",
 				name: "CharacterWrite",
-				preview: { title: "角色：张三" },
+				preview: { action: "创建", object: "角色", title: "张三" },
 			}),
 		);
 		expect(p.getCards()).toHaveLength(1);
@@ -31,7 +31,7 @@ describe("CardProjection", () => {
 				toolCallId: "t1",
 				name: "CharacterWrite",
 				outcome: "ok",
-				preview: { title: "角色：张三", summary: "角色已写入" },
+				preview: { action: "创建", object: "角色", title: "张三", summary: "角色已写入" },
 			}),
 		);
 		expect(p.getCards()[0]).toMatchObject({ status: "completed", summary: "角色已写入" });

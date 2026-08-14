@@ -2,7 +2,11 @@
  * tool preview 纯函数目录（ToolDef.preview 的内置实现 + 默认回退 + 查询器）。
  * **纯性约束**：严禁 import NovelHandle/fs/runtime 状态——Main 进程代读路径必须静态装配，
  * 同一 preview 函数在 live 投影与 journal 重投影下产出逐字节一致（PRD `output-投影层` §4.3）。
- * 语义约定：started（无 response）给出「意图」标题/摘要；recorded（有 response）给出「结果」摘要。
+ *
+ * 语义约定（配合 UI 的 turn 工具行，见 docs/design/tool-call-embed-demo.html）：
+ * - `action` + `object`：动作标识（编辑/角色 → 进行中「编辑角色中」、完成「角色编辑已完成」）；
+ * - `title`：纯内容（张三 / ch3 / 设定.md），工具行与卡片共用；
+ * - `summary`：结果短语（卡片摘要 / 详情 tooltip 用）。
  */
 
 /** preview 输入：工具调用参数（JSON 字符串） */
@@ -16,9 +20,15 @@ export interface ToolPreviewResponse {
 	error?: string;
 }
 
-/** preview 输出：title 标题 / summary 摘要（均可选，UI 按可选字段降级渲染） */
+/** preview 输出：动作标识 + 内容 + 摘要（均可选，UI 按可选字段降级渲染） */
 export interface ToolPreviewOutput {
+	/** 动作词（编辑/创建/插入/读取…；与 object 组合成「动作+对象」标识） */
+	action?: string;
+	/** 对象词（角色/正文/文件…） */
+	object?: string;
+	/** 内容（张三 / ch3 / 设定.md；无内容场景缺省） */
 	title?: string;
+	/** 结果摘要（卡片摘要 / 详情 tooltip） */
 	summary?: string;
 }
 
@@ -74,65 +84,67 @@ function joinList(values: unknown[], pick: (v: Record<string, unknown>) => strin
 	return truncate(labels.join("、"));
 }
 
-/** 响应结果短语（error → 失败动词；成功 → 成功动词） */
-function outcomePhrase(response: ToolPreviewResponse | undefined, verbDone: string, verbFailed: string): string {
-	if (response === undefined) return verbDone;
+/** 响应结果短语（error → 失败动词；成功 → 成功动词；started 无摘要语义） */
+function outcomePhrase(response: ToolPreviewResponse | undefined, verbDone: string, verbFailed: string): string | undefined {
+	if (response === undefined) return undefined;
 	return response.error !== undefined ? verbFailed : verbDone;
 }
 
-/** 单实体预览（Read/Edit 通用）：title + recorded 结果短语 */
-function entityPreview(
-	title: string,
+/** 组装动作标识输出（started 无 summary；recorded 带结果短语） */
+function withIdentity(
+	action: string,
+	object: string,
+	title: string | undefined,
 	verbDone: string,
 	verbFailed: string,
-	call: ToolPreviewInput,
 	response?: ToolPreviewResponse,
 ): ToolPreviewOutput {
-	if (response === undefined) return { title };
-	return { title, summary: outcomePhrase(response, verbDone, verbFailed) };
+	return {
+		action,
+		object,
+		...(title !== undefined ? { title } : {}),
+		...(outcomePhrase(response, verbDone, verbFailed) !== undefined
+			? { summary: outcomePhrase(response, verbDone, verbFailed) }
+			: {}),
+	};
 }
 
 /**
  * 默认 preview 回退（未声明 preview 的工具）：
- * started（无 response）→ args 截断摘要；recorded（有 response）→ 摘要 + 完成/失败结果。
+ * action=执行、object=工具名、title=args 截断；recorded 给完成/失败短语。
  * @param call 工具调用输入
  * @param response 执行响应（可选）
+ * @param name 工具名（object 兜底；未注册工具经 ProjectionLayer 传入）
  * @returns 默认预览内容
  */
 export function defaultToolPreview(
 	call: ToolPreviewInput,
 	response?: ToolPreviewResponse,
+	name?: string,
 ): ToolPreviewOutput {
-	const summary = truncate(call.args);
-	if (response === undefined) return summary === undefined ? {} : { summary };
-	const outcome = response.error !== undefined ? "执行失败" : "执行完成";
-	return { summary: summary !== undefined ? `${summary}（${outcome}）` : outcome };
+	const title = truncate(call.args);
+	return withIdentity("执行", name ?? "工具", title, "执行完成", "执行失败", response);
 }
 
 /* ============ character 域 ============ */
 
-/** CharacterRead preview：单读 → 「角色：<id>」；列表 → 「角色列表」 */
+/** CharacterRead preview：单读 → title=id；列表无 title */
 export function characterReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const id = parseArgsJson(call.args)?.characterId;
-	const title = typeof id === "string" && id.length > 0 ? `角色：${id}` : "角色列表";
-	return entityPreview(title, "已读取", "读取失败", call, response);
+	const title = typeof id === "string" && id.length > 0 ? id : undefined;
+	return withIdentity("读取", "角色", title, "已读取", "读取失败", response);
 }
 
-/** CharacterWrite preview：解析 values[].name 列表 → 角色名标题 */
-export function characterWritePreview(
-	call: ToolPreviewInput,
-	response?: ToolPreviewResponse,
-): ToolPreviewOutput {
+/** CharacterWrite preview：解析 values[].name 列表 → title */
+export function characterWritePreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const names = Array.isArray(parsed?.values)
 		? joinList(parsed.values as unknown[], (v) => (typeof v.name === "string" ? v.name : undefined))
 		: undefined;
-	const title = names !== undefined ? `角色：${names}` : "角色";
-	if (response === undefined) return { title };
-	return { title, summary: outcomePhrase(response, "角色已写入", "角色写入失败") };
+	return withIdentity("创建", "角色", names, "角色已写入", "角色写入失败", response);
 }
 
-/** CharacterEdit preview：解析 values[] 的 patch.name/characterId → 标题 */
+/** CharacterEdit preview：patch.name 优先于 characterId */
 export function characterEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const values = Array.isArray(parsed?.values) ? (parsed.values as unknown[]) : [];
@@ -142,30 +154,28 @@ export function characterEditPreview(call: ToolPreviewInput, response?: ToolPrev
 		const id = typeof v.characterId === "string" ? v.characterId : undefined;
 		return name ?? id;
 	});
-	return entityPreview(names !== undefined ? `角色：${names}` : "角色", "角色已更新", "角色更新失败", call, response);
+	return withIdentity("编辑", "角色", names, "角色已更新", "角色更新失败", response);
 }
 
 /* ============ location 域 ============ */
 
-/** LocationRead preview：单读 → 「地点：<id>」；列表 → 「地点列表」 */
+/** LocationRead preview：单读 → title=id */
 export function locationReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const id = parseArgsJson(call.args)?.locationId;
-	const title = typeof id === "string" && id.length > 0 ? `地点：${id}` : "地点列表";
-	return entityPreview(title, "已读取", "读取失败", call, response);
+	const title = typeof id === "string" && id.length > 0 ? id : undefined;
+	return withIdentity("读取", "地点", title, "已读取", "读取失败", response);
 }
 
-/** LocationWrite preview：解析 values[].name 列表 → 地点名标题 */
+/** LocationWrite preview：解析 values[].name 列表 → title */
 export function locationWritePreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const names = Array.isArray(parsed?.values)
 		? joinList(parsed.values as unknown[], (v) => (typeof v.name === "string" ? v.name : undefined))
 		: undefined;
-	const title = names !== undefined ? `地点：${names}` : "地点";
-	if (response === undefined) return { title };
-	return { title, summary: outcomePhrase(response, "地点已写入", "地点写入失败") };
+	return withIdentity("创建", "地点", names, "地点已写入", "地点写入失败", response);
 }
 
-/** LocationEdit preview：解析 values[] 的 patch.name/locationId → 标题 */
+/** LocationEdit preview：patch.name 优先于 locationId */
 export function locationEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const values = Array.isArray(parsed?.values) ? (parsed.values as unknown[]) : [];
@@ -175,12 +185,12 @@ export function locationEditPreview(call: ToolPreviewInput, response?: ToolPrevi
 		const id = typeof v.locationId === "string" ? v.locationId : undefined;
 		return name ?? id;
 	});
-	return entityPreview(names !== undefined ? `地点：${names}` : "地点", "地点已更新", "地点更新失败", call, response);
+	return withIdentity("编辑", "地点", names, "地点已更新", "地点更新失败", response);
 }
 
 /* ============ paragraph 域 ============ */
 
-/** ParagraphRead preview：按 paragraphId/storyUnitId 给出目标标题 */
+/** ParagraphRead preview：按 paragraphId/storyUnitId 给出内容 */
 export function paragraphReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const target =
@@ -189,50 +199,60 @@ export function paragraphReadPreview(call: ToolPreviewInput, response?: ToolPrev
 			: typeof parsed?.storyUnitId === "string" && parsed.storyUnitId.length > 0
 			  ? parsed.storyUnitId
 			  : undefined;
-	return entityPreview(target !== undefined ? `正文：${target}` : "正文", "已读取", "读取失败", call, response);
+	return withIdentity("读取", "正文", target, "已读取", "读取失败", response);
 }
 
-/** ParagraphWrite preview：解析 storyUnitId → 章节标题 + 正文开头摘要 */
-export function paragraphWritePreview(
-	call: ToolPreviewInput,
-	response?: ToolPreviewResponse,
-): ToolPreviewOutput {
+/** ParagraphWrite preview：storyUnitId → 内容 + 正文开头摘要（started detail 用） */
+export function paragraphWritePreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
-	const storyUnitId = typeof parsed?.storyUnitId === "string" ? parsed.storyUnitId : undefined;
+	const storyUnitId = typeof parsed?.storyUnitId === "string" && parsed.storyUnitId.length > 0 ? parsed.storyUnitId : undefined;
 	const text = typeof parsed?.text === "string" ? truncate(parsed.text) : undefined;
-	const title = storyUnitId !== undefined && storyUnitId.length > 0 ? `正文：${storyUnitId}` : "正文";
-	if (response === undefined) return { title, ...(text !== undefined ? { summary: text } : {}) };
-	return { title, summary: outcomePhrase(response, "正文已插入", "正文插入失败") };
+	return {
+		action: "插入",
+		object: "正文",
+		...(storyUnitId !== undefined ? { title: storyUnitId } : {}),
+		...(response === undefined
+			? text !== undefined
+				? { summary: text }
+				: {}
+			: { summary: response.error !== undefined ? "正文插入失败" : "正文已插入" }),
+	};
 }
 
-/** ParagraphEdit preview：段落替换 → 「正文：<paragraphId>」+ 新文本摘要 */
+/** ParagraphEdit preview：段落替换 → paragraphId + 新文本摘要 */
 export function paragraphEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
-	const id = typeof parsed?.paragraphId === "string" ? parsed.paragraphId : undefined;
+	const id = typeof parsed?.paragraphId === "string" && parsed.paragraphId.length > 0 ? parsed.paragraphId : undefined;
 	const text = typeof parsed?.text === "string" ? truncate(parsed.text) : undefined;
-	const title = id !== undefined && id.length > 0 ? `正文：${id}` : "正文";
-	if (response === undefined) return { title, ...(text !== undefined ? { summary: text } : {}) };
-	return { title, summary: outcomePhrase(response, "正文已更新", "正文更新失败") };
+	return {
+		action: "编辑",
+		object: "正文",
+		...(id !== undefined ? { title: id } : {}),
+		...(response === undefined
+			? text !== undefined
+				? { summary: text }
+				: {}
+			: { summary: response.error !== undefined ? "正文更新失败" : "正文已更新" }),
+	};
 }
 
 /* ============ publication 域 ============ */
 
 /** PublicationRead preview：发布结构读取 */
 export function publicationReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
-	return entityPreview("发布结构", "已读取", "读取失败", call, response);
+	return withIdentity("读取", "发布", undefined, "已读取", "读取失败", response);
 }
 
-/** PublicationWrite preview：创建卷/章 → 「发布：<卷/章>「<title>」」 */
+/** PublicationWrite preview：创建卷/章 → 内容 = 章「title」/ 卷「title」 */
 export function publicationWritePreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const kind = parsed?.kind === "chapter" ? "章" : "卷";
-	const title = typeof parsed?.title === "string" && parsed.title.length > 0 ? parsed.title : undefined;
-	const heading = title !== undefined ? `发布：${kind}「${title}」` : `发布：${kind}`;
-	if (response === undefined) return { title: heading };
-	return { title: heading, summary: outcomePhrase(response, "已创建", "创建失败") };
+	const raw = typeof parsed?.title === "string" && parsed.title.length > 0 ? parsed.title : undefined;
+	const title = raw !== undefined ? `${kind}「${raw}」` : kind;
+	return withIdentity("创建", "发布", title, "已创建", "创建失败", response);
 }
 
-/** PublicationEdit preview：更新卷/章 → 「发布：<patch.title 或 id>」 */
+/** PublicationEdit preview：patch.title 优先，其次 chapterId/volumeId */
 export function publicationEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const patch = typeof parsed?.patch === "object" && parsed.patch !== null ? (parsed.patch as Record<string, unknown>) : {};
@@ -243,7 +263,7 @@ export function publicationEditPreview(call: ToolPreviewInput, response?: ToolPr
 			: typeof parsed?.volumeId === "string" && parsed.volumeId.length > 0
 			  ? parsed.volumeId
 			  : undefined;
-	return entityPreview(`发布：${patchTitle ?? id ?? (parsed?.kind === "chapter" ? "章" : "卷")}`, "已更新", "更新失败", call, response);
+	return withIdentity("编辑", "发布", patchTitle ?? id, "已更新", "更新失败", response);
 }
 
 /** 删除 kind → 领域标签 */
@@ -273,94 +293,144 @@ export function novelDeletePreview(call: ToolPreviewInput, response?: ToolPrevie
 	const labels = values.map((v) =>
 		typeof v === "object" && v !== null ? deleteKindLabel(String((v as Record<string, unknown>).kind ?? "")) : "实体",
 	);
-	const title = labels.length > 0 ? `删除：${truncate(labels.join("、"))}（${labels.length} 项）` : "删除";
-	if (response === undefined) return { title };
-	return { title, summary: outcomePhrase(response, "已删除", "删除失败") };
+	const title = labels.length > 0 ? `${truncate(labels.join("、"))}（${labels.length} 项）` : undefined;
+	return withIdentity("删除", "实体", title, "已删除", "删除失败", response);
 }
 
 /* ============ outline 域 ============ */
 
-/** OutlineRead preview：单读 → 「大纲：<storyUnitId>」；全树 → 「大纲」 */
+/** OutlineRead preview：单读 → storyUnitId */
 export function outlineReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const id = parseArgsJson(call.args)?.storyUnitId;
-	const title = typeof id === "string" && id.length > 0 ? `大纲：${id}` : "大纲";
-	return entityPreview(title, "已读取", "读取失败", call, response);
+	const title = typeof id === "string" && id.length > 0 ? id : undefined;
+	return withIdentity("读取", "大纲", title, "已读取", "读取失败", response);
 }
 
-/** OutlineWrite preview：创建 story unit → 「大纲：<title>」 */
+/** OutlineWrite preview：创建 story unit → title */
 export function outlineWritePreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const title = typeof parsed?.title === "string" && parsed.title.length > 0 ? parsed.title : undefined;
-	const heading = title !== undefined ? `大纲：${title}` : "大纲";
-	if (response === undefined) return { title: heading };
-	return { title: heading, summary: outcomePhrase(response, "已创建", "创建失败") };
+	return withIdentity("创建", "大纲", title, "已创建", "创建失败", response);
 }
 
-/** OutlineEdit preview：更新 story unit → 「大纲：<patch.title 或 storyUnitId>」 */
+/** OutlineEdit preview：patch.title 优先于 storyUnitId */
 export function outlineEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const patch = typeof parsed?.patch === "object" && parsed.patch !== null ? (parsed.patch as Record<string, unknown>) : {};
 	const patchTitle = typeof patch.title === "string" && patch.title.length > 0 ? patch.title : undefined;
-	const id = typeof parsed?.storyUnitId === "string" ? parsed.storyUnitId : undefined;
-	return entityPreview(`大纲：${patchTitle ?? id ?? "单元"}`, "已更新", "更新失败", call, response);
+	const id = typeof parsed?.storyUnitId === "string" && parsed.storyUnitId.length > 0 ? parsed.storyUnitId : undefined;
+	return withIdentity("编辑", "大纲", patchTitle ?? id, "已更新", "更新失败", response);
 }
 
 /* ============ files 域 ============ */
 
-/** Read preview：文件读取 → 「读取：<basename>」 */
+/** Read preview：文件读取 → basename */
 export function fileReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
-	const path = typeof parsed?.file_path === "string" ? parsed.file_path : undefined;
-	const title = path !== undefined && path.length > 0 ? `读取：${basenameOf(path)}` : "读取文件";
-	return entityPreview(title, "已读取", "读取失败", call, response);
+	const path = typeof parsed?.file_path === "string" && parsed.file_path.length > 0 ? parsed.file_path : undefined;
+	return withIdentity("读取", "文件", path !== undefined ? basenameOf(path) : undefined, "已读取", "读取失败", response);
 }
 
-/** Glob preview：模式查找 → 「查找：<pattern>」 */
+/** Glob preview：模式查找 → pattern */
 export function fileGlobPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
-	const pattern = typeof parsed?.pattern === "string" && parsed.pattern.length > 0 ? parsed.pattern : undefined;
-	const title = pattern !== undefined ? `查找：${truncate(pattern)}` : "查找文件";
-	return entityPreview(title, "已查找", "查找失败", call, response);
+	const pattern = typeof parsed?.pattern === "string" && parsed.pattern.length > 0 ? truncate(parsed.pattern) : undefined;
+	return withIdentity("查找", "文件", pattern, "已查找", "查找失败", response);
 }
 
-/** Write preview：文件写入 → 「写入：<basename>」+ 内容开头摘要 */
+/** Write preview：文件写入 → basename + 内容开头摘要 */
 export function fileWritePreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
-	const path = typeof parsed?.file_path === "string" ? parsed.file_path : undefined;
+	const path = typeof parsed?.file_path === "string" && parsed.file_path.length > 0 ? parsed.file_path : undefined;
 	const content = typeof parsed?.content === "string" ? truncate(parsed.content) : undefined;
-	const title = path !== undefined && path.length > 0 ? `写入：${basenameOf(path)}` : "写入文件";
-	if (response === undefined) return { title, ...(content !== undefined ? { summary: content } : {}) };
-	return { title, summary: outcomePhrase(response, "已写入", "写入失败") };
+	return {
+		action: "写入",
+		object: "文件",
+		...(path !== undefined ? { title: basenameOf(path) } : {}),
+		...(response === undefined
+			? content !== undefined
+				? { summary: content }
+				: {}
+			: { summary: response.error !== undefined ? "写入失败" : "已写入" }),
+	};
 }
 
-/** Edit preview：文件编辑 → 「编辑：<basename>」+ old_string 摘要 */
+/** Edit preview：文件编辑 → basename + old_string 摘要 */
 export function fileEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
-	const path = typeof parsed?.file_path === "string" ? parsed.file_path : undefined;
+	const path = typeof parsed?.file_path === "string" && parsed.file_path.length > 0 ? parsed.file_path : undefined;
 	const oldText = typeof parsed?.old_string === "string" ? truncate(parsed.old_string) : undefined;
-	const title = path !== undefined && path.length > 0 ? `编辑：${basenameOf(path)}` : "编辑文件";
-	if (response === undefined) return { title, ...(oldText !== undefined ? { summary: oldText } : {}) };
-	return { title, summary: outcomePhrase(response, "已替换", "替换失败") };
+	return {
+		action: "编辑",
+		object: "文件",
+		...(path !== undefined ? { title: basenameOf(path) } : {}),
+		...(response === undefined
+			? oldText !== undefined
+				? { summary: oldText }
+				: {}
+			: { summary: response.error !== undefined ? "替换失败" : "已替换" }),
+	};
 }
 
 /* ============ todo 域 ============ */
 
-/** TodoWrite preview：待办替换 → 「待办：<count> 项」+ 进行中项摘要 */
+/** TodoWrite preview：待办替换 → N 项 + 进行中项摘要 */
 export function todoWritePreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const todos = Array.isArray(parsed?.todos) ? (parsed.todos as unknown[]) : [];
-	const title = `待办：${todos.length} 项`;
+	const title = `${todos.length} 项`;
 	if (response === undefined) {
 		const inProgress = todos
-			.map((t) =>
-				typeof t === "object" && t !== null ? (t as Record<string, unknown>) : {},
-			)
+			.map((t) => (typeof t === "object" && t !== null ? (t as Record<string, unknown>) : {}))
 			.find((t) => t.status === "in_progress");
 		const first = todos.length > 0 ? (todos[0] as Record<string, unknown>) : undefined;
 		const label = (inProgress?.activeForm ?? inProgress?.content ?? first?.content) as string | undefined;
-		return { title, ...(typeof label === "string" && label.length > 0 ? { summary: truncate(label) } : {}) };
+		return {
+			action: "更新",
+			object: "待办",
+			title,
+			...(typeof label === "string" && label.length > 0 ? { summary: truncate(label) } : {}),
+		};
 	}
-	return { title, summary: outcomePhrase(response, "已更新", "更新失败") };
+	return withIdentity("更新", "待办", title, "已更新", "更新失败", response);
+}
+
+/* ============ subagent 域（Agent / TaskOutput / TaskStop） ============ */
+
+/** Agent preview：子任务执行 → title=agentType + prompt 摘要 */
+export function agentTaskPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
+	const parsed = parseArgsJson(call.args);
+	const agentType = typeof parsed?.agentType === "string" && parsed.agentType.length > 0 ? parsed.agentType : undefined;
+	const prompt = typeof parsed?.prompt === "string" ? truncate(parsed.prompt) : undefined;
+	return {
+		action: "执行",
+		object: "子任务",
+		...(agentType !== undefined ? { title: agentType } : {}),
+		...(response === undefined
+			? prompt !== undefined
+				? { summary: prompt }
+				: {}
+			: { summary: response.error !== undefined ? "子任务执行失败" : "子任务执行完成" }),
+	};
+}
+
+/** TaskOutput preview：任务输出读取 → taskIds */
+export function taskOutputPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
+	const parsed = parseArgsJson(call.args);
+	const ids = Array.isArray(parsed?.taskIds)
+		? (parsed.taskIds as unknown[])
+				.map((v) => (typeof v === "string" ? v : undefined))
+				.filter((s): s is string => s !== undefined)
+		: [];
+	const title = ids.length > 0 ? truncate(ids.join("、")) : undefined;
+	return withIdentity("读取", "任务输出", title, "已读取", "读取失败", response);
+}
+
+/** TaskStop preview：子任务停止 → taskId */
+export function taskStopPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
+	const parsed = parseArgsJson(call.args);
+	const taskId = typeof parsed?.taskId === "string" && parsed.taskId.length > 0 ? parsed.taskId : undefined;
+	return withIdentity("停止", "子任务", taskId, "已停止", "停止失败", response);
 }
 
 /** 内置 preview 目录（工具名 → preview 函数；全部现有工具已注册） */
@@ -386,6 +456,9 @@ export const TOOL_PREVIEWS: ReadonlyMap<string, ToolPreviewFn> = new Map<string,
 	["Write", fileWritePreview],
 	["Edit", fileEditPreview],
 	["TodoWrite", todoWritePreview],
+	["Agent", agentTaskPreview],
+	["TaskOutput", taskOutputPreview],
+	["TaskStop", taskStopPreview],
 ]);
 
 /**

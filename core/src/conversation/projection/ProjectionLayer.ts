@@ -123,17 +123,18 @@ export class ProjectionLayer {
 		name: string,
 		call: { args: string },
 		response?: { result?: string; error?: string },
-	): { title?: string; summary?: string } {
-		const fn: ToolPreviewFn = this.resolvePreview.resolvePreview(name) ?? defaultToolPreview;
+	): { title?: string; summary?: string; action?: string; object?: string } {
+		const fallback = (): ReturnType<typeof defaultToolPreview> => defaultToolPreview(call, response, name);
+		const fn: ToolPreviewFn = this.resolvePreview.resolvePreview(name) ?? fallback;
 		try {
 			const out = fn(call, response);
 			// 非法值（非对象/数组/null）同样回退默认，保证预览内容可用
 			if (typeof out !== "object" || out === null || Array.isArray(out)) {
-				return defaultToolPreview(call, response);
+				return fallback();
 			}
 			return out;
 		} catch {
-			return defaultToolPreview(call, response);
+			return fallback();
 		}
 	}
 }

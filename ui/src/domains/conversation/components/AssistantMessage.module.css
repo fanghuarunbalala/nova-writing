@@ -71,3 +71,56 @@
   font-size: var(--fs-12-5);
   line-height: 1.55;
 }
+
+/* ============ turn 分段工具行（每请求一行：内容片段 + 单行工具） ============ */
+
+.segment {
+  min-width: 0;
+}
+
+.segment + .segment {
+  margin-top: var(--space-3);
+}
+
+.toolLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-6px) var(--space-2);
+  margin-top: var(--space-6px);
+  font-size: var(--fs-12);
+  line-height: 1.6;
+}
+
+.toolDone {
+  color: var(--color-success);
+}
+
+.toolFailed {
+  color: var(--color-danger);
+}
+
+.toolRunning {
+  color: var(--color-warn);
+}
+
+.spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: var(--space-5px);
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: var(--anim-spinner-rotate);
+}
+
+
+.toolSec {
+  margin-left: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  animation: var(--anim-node-pulse);
+}
+

@@ -2,22 +2,24 @@
  * AssistantMessage
  *
  * 助手消息（原型 .msg.assistant）：无头像，head 只保留 approval-state 状态
- * 标签；正文（markdown 渲染）+ 工具调用条 + 结构化卡片。卡片通过 ConversationCardRendererRegistry 渲染。
- * memo 包裹：历史消息（text/cards/toolTraces 引用稳定）零重渲染、markdown 零重解析。
+ * 标签；正文 + 按 turn 分段的工具单行（每段 = 内容片段 + 工具行，
+ * 见 docs/design/tool-call-embed-demo.html）+ 结构化卡片。
+ * 卡片通过 ConversationCardRendererRegistry 渲染。
+ * memo 包裹：历史消息（text/cards/segments 引用稳定）零重渲染、markdown 零重解析。
  */
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { createDefaultConversationCardRendererRegistry } from "../cards/defaultRenderers.js";
 import type { ConversationCardRendererRegistry } from "../cards/ConversationCardRendererRegistry.js";
 import type {
   ConversationCardDescriptor,
 } from "../projection/ConversationCardDescriptor.js";
 import type {
+  AssistantSegment,
   ToolTraceView,
 } from "../projection/ConversationTimelineItem.js";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import { AssistantMarkdown } from "./assistantContent/AssistantMarkdown.js";
-import { ToolStrip } from "./ToolStrip.js";
 import type { MessageReference } from "./MessageReference.js";
 import styles from "./AssistantMessage.module.css";
 
@@ -44,7 +46,7 @@ const DEFAULT_CARD_RENDERERS = createDefaultConversationCardRendererRegistry();
 
 /** 缺省空数组（冻结单例：memo 浅比较稳定引用） */
 const EMPTY_CARDS: readonly ConversationCardDescriptor[] = Object.freeze([]);
-const EMPTY_TOOL_TRACES: readonly ToolTraceView[] = Object.freeze([]);
+const EMPTY_SEGMENTS: readonly AssistantSegment[] = Object.freeze([]);
 
 export interface AssistantMessageProps {
   readonly sequence: number;
@@ -59,7 +61,8 @@ export interface AssistantMessageProps {
   readonly text: string;
   readonly cards?: readonly ConversationCardDescriptor[];
   readonly streaming?: boolean;
-  readonly toolTraces?: readonly ToolTraceView[];
+  /** turn 分段：每段 = 内容片段 + 该请求的工具行（缺省空数组） */
+  readonly segments?: readonly AssistantSegment[];
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly onResolveReference?: ReferenceResolver;
   readonly cardRenderers?: ConversationCardRendererRegistry;
@@ -75,13 +78,15 @@ export const AssistantMessage = memo(function AssistantMessage({
   text,
   cards = EMPTY_CARDS,
   streaming = false,
-  toolTraces = EMPTY_TOOL_TRACES,
+  segments = EMPTY_SEGMENTS,
   onReferenceClick,
   onResolveReference,
   cardRenderers = DEFAULT_CARD_RENDERERS,
   onCardAction,
   onNotify,
 }: AssistantMessageProps) {
+  // live 分段渲染：每段 = 内容片段 + 该请求的工具单行
+  const segmented = segments.some((s) => s.text.length > 0);
   return (
     <div className={styles.message} data-sequence={sequence}>
       <div className={styles.body}>
@@ -92,19 +97,45 @@ export const AssistantMessage = memo(function AssistantMessage({
             </span>
           </div>
         ) : null}
-        <div className={styles.text}>
-          <AssistantMarkdown
-            text={text}
-            onReferenceClick={onReferenceClick}
-            resolveReference={onResolveReference}
-            streaming={streaming}
-            onNotify={onNotify}
-          />
-        </div>
+        {segmented ? (
+          segments.map((seg, i) => (
+            <div key={i} className={styles.segment}>
+              {seg.text !== "" ? (
+                <div className={styles.text}>
+                  <AssistantMarkdown
+                    text={seg.text}
+                    onReferenceClick={onReferenceClick}
+                    resolveReference={onResolveReference}
+                    streaming={streaming && i === segments.length - 1}
+                    onNotify={onNotify}
+                  />
+                </div>
+              ) : null}
+              {seg.tools.length > 0 ? <ToolLine tools={seg.tools} /> : null}
+            </div>
+          ))
+        ) : (
+          <>
+            <div className={styles.text}>
+              <AssistantMarkdown
+                text={text}
+                onReferenceClick={onReferenceClick}
+                resolveReference={onResolveReference}
+                streaming={streaming}
+                onNotify={onNotify}
+              />
+            </div>
+            {/* 重放形态：完整文本 + 各请求的工具行 */}
+            {segments
+              .filter((s) => s.tools.length > 0)
+              .map((seg, i) => (
+                <ToolLine key={i} tools={seg.tools} />
+              ))}
+          </>
+        )}
         {approvalState === "failed" && failureDetail !== undefined ? (
           <p className={styles.failureDetail}>{failureDetail}</p>
         ) : null}
-        {toolTraces.length > 0 ? <ToolStrip traces={toolTraces} /> : null}
         {cards.length > 0 ? (
           <div className={styles.cards}>
             {cards.map((card) => {
@@ -125,3 +156,55 @@ export const AssistantMessage = memo(function AssistantMessage({
     </div>
   );
 });
+
+/** 工具单行：一次请求的工具调用拼成一行（⏳ 动作+对象+中：内容 / ✓ 对象+动作+已完成：内容） */
+function ToolLine({ tools }: { readonly tools: readonly ToolTraceView[] }) {
+  return (
+    <div className={styles.toolLine}>
+      {tools.map((t) => {
+        const action = t.preview?.action ?? "执行";
+        const object = t.preview?.object ?? "工具";
+        const content = t.preview?.title !== undefined ? `：${t.preview.title}` : "";
+        if (t.outcome === undefined) {
+          return (
+            <span key={t.traceId} className={styles.toolRunning}>
+              <span className={styles.spinner} />
+              {action}
+              {object}中{content}
+              <LiveSeconds startedAt={t.startedAt} />
+            </span>
+          );
+        }
+        const dur = t.durationMs !== undefined ? ` ${(t.durationMs / 1000).toFixed(1)}s` : "";
+        if (t.outcome === "failed") {
+          return (
+            <span key={t.traceId} className={styles.toolFailed}>
+              ✗ {object}
+              {action}失败{content}
+              {dur}
+            </span>
+          );
+        }
+        return (
+          <span key={t.traceId} className={styles.toolDone}>
+            ✓ {object}
+            {action}已完成{content}
+            {dur}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 进行中工具实时秒数（1s 粒度跳动；startedAt 缺失时不渲染） */
+function LiveSeconds({ startedAt }: { readonly startedAt?: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (startedAt === undefined || Number.isNaN(startedAt)) return null;
+  const secs = Math.max(0, (now - startedAt) / 1000);
+  return <span className={styles.toolSec}>{secs.toFixed(1)}s</span>;
+}

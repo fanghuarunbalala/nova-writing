@@ -6,6 +6,7 @@ import type { ToolDef } from "../ToolDef.js";
 import type { ToolCall } from "../../provider/types.js";
 import type { SubagentSpawner } from "../../../conversation/contract/task.js";
 import { ToolError } from "../errors.js";
+import { agentTaskPreview, taskOutputPreview, taskStopPreview } from "../previews.js";
 
 /**
  * 子代理目录条目：Agent 工具描述渲染所需的最小字段集。
@@ -158,6 +159,7 @@ export function createSubagentTools(opts: SubagentToolsOptions): ToolDef[] {
   const agentTool: ToolDef = {
     name: "Agent",
     version: "1.0.0",
+    preview: agentTaskPreview,
     description: createAgentDescription(opts.agents, agentTypes),
     parameters: {
       type: "object",
@@ -192,6 +194,7 @@ export function createSubagentTools(opts: SubagentToolsOptions): ToolDef[] {
   const taskOutputTool: ToolDef = {
     name: "TaskOutput",
     version: "1.0.0",
+    preview: taskOutputPreview,
     description: TASK_OUTPUT_DESCRIPTION,
     parameters: {
       type: "object",
@@ -247,6 +250,7 @@ export function createSubagentTools(opts: SubagentToolsOptions): ToolDef[] {
   const taskStopTool: ToolDef = {
     name: "TaskStop",
     version: "1.0.0",
+    preview: taskStopPreview,
     description: TASK_STOP_DESCRIPTION,
     parameters: {
       type: "object",

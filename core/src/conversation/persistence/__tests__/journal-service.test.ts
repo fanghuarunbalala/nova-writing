@@ -114,12 +114,15 @@ describe("projectedHistory（投影读取）", () => {
     expect(types).not.toContain("tool-call-request");
     expect(types).not.toContain("tool-call-response");
     const started = events.find((e) => e.type === "tool-recorded.started");
-    expect(started).toMatchObject({ name: "CharacterWrite", preview: { title: "角色：张三" } });
+    expect(started).toMatchObject({
+      name: "CharacterWrite",
+      preview: { action: "创建", object: "角色", title: "张三" },
+    });
     const recorded = events.find((e) => e.type === "tool-recorded.recorded");
     expect(recorded).toMatchObject({
       name: "CharacterWrite",
       outcome: "ok",
-      preview: { title: "角色：张三", summary: "角色已写入" },
+      preview: { action: "创建", object: "角色", title: "张三", summary: "角色已写入" },
     });
   });
 

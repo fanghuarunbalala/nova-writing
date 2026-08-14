@@ -8,9 +8,15 @@
 
 import type { ConversationEventBase, SharedConversationEvent } from "./shared.js";
 
-/** 工具投影预览内容（ToolDef.preview 产出：title 标题 / summary 摘要） */
+/** 工具投影预览内容（ToolDef.preview 产出：动作标识 + 内容 + 摘要） */
 export interface ToolPreview {
+	/** 动作词（编辑/创建/插入…；与 object 组合成「动作+对象」标识） */
+	action?: string;
+	/** 对象词（角色/正文/文件…） */
+	object?: string;
+	/** 内容（张三 / ch3 / 设定.md） */
 	title?: string;
+	/** 结果摘要（卡片摘要 / 详情 tooltip） */
 	summary?: string;
 }
 

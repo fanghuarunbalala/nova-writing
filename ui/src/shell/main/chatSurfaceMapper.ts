@@ -123,9 +123,8 @@ export function mapProjectionTimeline(
           approvalState: (item.streaming === true ? "generating" : "completed") as
             | "generating"
             | "completed",
-          toolTraces: Object.freeze(
-            projection.toolTraces.filter((t) => t.sequence >= from && t.sequence <= to),
-          ),
+          // 工具行随 core 项的分段结构直接透传（每段 = 内容 + 单行工具，无 seq 过滤）
+          segments: item.segments ?? Object.freeze([]),
         }),
       );
     }

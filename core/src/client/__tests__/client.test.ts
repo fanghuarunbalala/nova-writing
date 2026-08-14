@@ -219,31 +219,47 @@ describe("ConversationProjection（liveState）", () => {
 		expect(snapshot.timeline.map((t) => t.text)).toEqual(["秋夜。"]);
 	});
 
-	it("tool-recorded 对派生 toolTraces/eventFlow + timeline 项带 seq 归属范围", async () => {
+	it("tool-recorded 对按 turn 切段：每段 = 内容片段 + 单行工具（进行中→完成替换）", async () => {
 		const { projection, emit } = makeLiveProjection();
 		await projection.start();
 		emit(evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 }));
 		emit(evt({ type: "user.message", persist: true, seq: 1, text: "写角色" }));
 		emit(evt({ type: "assistant.delta", kind: "text", text: "好" }));
-		emit(evt({ type: "tool-recorded.started", seq: 2, toolCallId: "t1", name: "CharacterWrite", preview: { title: "角色：张三" }, ts: "2026-08-14T10:00:00.000Z" }));
-		emit(evt({ type: "tool-recorded.recorded", seq: 3, toolCallId: "t1", name: "CharacterWrite", outcome: "ok", durationMs: 1500, preview: { summary: "角色已写入" }, ts: "2026-08-14T10:00:01.500Z" }));
-		emit(evt({ type: "assistant.message", persist: true, seq: 4, text: "好的" }));
-		emit(evt({ type: "turn-end", persist: true, seq: 4, turnSeq: 1 }));
-
-		const snapshot = projection.getSnapshot();
-		expect(snapshot.toolTraces).toHaveLength(1);
-		expect(snapshot.toolTraces[0]).toMatchObject({
+		emit(evt({ type: "tool-recorded.started", seq: 1, toolCallId: "t1", name: "CharacterWrite", preview: { action: "创建", object: "角色", title: "张三" }, ts: "2026-08-14T10:00:00.000Z" }));
+		// 进行中：段 1 内已有 running 行（outcome 未定义）
+		const running = projection.getSnapshot().timeline.find((i) => i.kind === "assistant");
+		expect(running?.segments?.[0]).toMatchObject({
+			text: "好",
+			tools: [{ traceId: "t1", toolName: "CharacterWrite" }],
+		});
+		expect(running?.segments?.[0]?.tools[0]?.outcome).toBeUndefined();
+		emit(evt({ type: "tool-recorded.recorded", seq: 1, toolCallId: "t1", name: "CharacterWrite", outcome: "ok", durationMs: 1500, preview: { action: "创建", object: "角色", title: "张三", summary: "角色已写入" }, ts: "2026-08-14T10:00:01.500Z" }));
+		// 收口行替换 running 行（不追加重复）
+		const done = projection.getSnapshot().timeline.find((i) => i.kind === "assistant");
+		expect(done?.segments?.[0]?.tools).toHaveLength(1);
+		expect(done?.segments?.[0]?.tools[0]).toMatchObject({
 			traceId: "t1",
 			toolName: "CharacterWrite",
 			outcome: "ok",
 			durationMs: 1500,
+			preview: { action: "创建", object: "角色", title: "张三" },
 		});
-		expect(snapshot.eventFlow.map((e) => e.eventType)).toEqual(["CharacterWrite", "CharacterWrite"]);
-		expect(snapshot.eventFlow[0]).toMatchObject({ family: "novel", summary: "进行中" });
-		expect(snapshot.eventFlow[1]).toMatchObject({ family: "novel", summary: "角色已写入", outcome: "ok" });
-		// assistant 项归属范围覆盖工具调用（sourceSequence=1 → turnEnd=4）
+		// 完成工具行之后的新 delta → 开新段
+		emit(evt({ type: "assistant.delta", kind: "text", text: "接着写正文" }));
+		emit(evt({ type: "assistant.message", persist: true, seq: 1, text: "好的，接着写正文" }));
+		emit(evt({ type: "turn-end", persist: true, seq: 1, turnSeq: 1 }));
+
+		const snapshot = projection.getSnapshot();
 		const assistant = snapshot.timeline.find((item) => item.kind === "assistant");
-		expect(assistant).toMatchObject({ sourceSequence: 1, turnEndSequence: 4 });
+		expect(assistant).toMatchObject({ sourceSequence: 1, turnEndSequence: 1, streaming: false });
+		expect(assistant?.text).toBe("好的，接着写正文");
+		expect(assistant?.segments).toHaveLength(2);
+		expect(assistant?.segments?.[0]).toMatchObject({ text: "好" });
+		expect(assistant?.segments?.[0]?.tools).toHaveLength(1);
+		expect(assistant?.segments?.[1]).toMatchObject({ text: "接着写正文", tools: [] });
+		// eventFlow 已随本轮时序删除
+		expect(snapshot).not.toHaveProperty("eventFlow");
+		expect(snapshot).not.toHaveProperty("toolTraces");
 	});
 
 	it("history 失败 → state=error 且 liveState 不残留", async () => {

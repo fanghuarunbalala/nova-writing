@@ -270,6 +270,11 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
 1. **T12 ui/gui 接入**：恢复的 Electron/React（493 文件）对接新 core 接口。
 2. **sqlite 驱动**：当前 novel 用内存 store，sqlite 持久化待接（better-sqlite3 vs worker）。
 3. **delta chunk 聚合**：暂缓（delta 直走 kkrpc 背压）。
+4. **subagent 事件交织修复**（根因已定位，修复前记录）：
+   - 现象：subagent 合入后，真实 app 中 main turn 的工具调用展示消失（单测全绿但线上事件流与单测假设不同）。
+   - 根因链：① subagent loop 无 startSeq → seq 从 1 重起（`NovelExplorerAgent.ts` 不传 startSeq）；② subagent 边界事件（turn-start/user.message/delta/assistant.message/turn-end）经 `Conversation.subagentRuntime.onEvent` 进共享 hub（live-only）；③ 客户端 `ConversationProjection` 单槽时间线被交织——subagent 的 user.message 提前 `finalizeAssistant()` 且不设 turnEndSequence；④ 运行时 `assistant.delta` 实际携带 `seq: 0`（`AgentLoop.emit` 基底对象）→ 客户端 `"seq" in event` 判定把 lastAppliedSequence 打回 0 → main 流式项 `sourceSequence=0`；⑤ 归属范围坍缩为 [0,0] → `chatSurfaceMapper` 的 seq 范围过滤把 main 全部 toolTraces 滤光（模拟复现：main 大消息 traces=0、final 消息被挤 39 行）。
+   - 次生：ProjectionLayer 的 pending 被 subagent 的 turn-end 清空（长任务 tool-recorded 退化为 unknown）；mapper MAPPED_ITEM_CACHE 在流式停顿时冻结旧 toolTraces。
+   - 修法（待实施）：客户端按 agentId 隔离 subagent 边界事件（tool-recorded 行归入 live main turn）；ProjectionLayer pending 按 agentId 分桶；`AgentLoop.emit` 基底去 `seq: 0`（delta 不带 seq）；finalizeAssistant 防御性补 turnEndSequence；mapper 缓存命中时重算动态切片。
 
 ### 8.4 偏离旧版（NovelAI）清单
 

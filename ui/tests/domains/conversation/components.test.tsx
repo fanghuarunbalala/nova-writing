@@ -10,7 +10,6 @@ import { ConversationTimeline } from "../../../src/domains/conversation/componen
 import { GenStatus } from "../../../src/domains/conversation/components/GenStatus.js";
 import { ProposalBlock } from "../../../src/domains/conversation/components/ProposalBlock.js";
 import { ProposalOp } from "../../../src/domains/conversation/components/ProposalOp.js";
-import { ToolStrip } from "../../../src/domains/conversation/components/ToolStrip.js";
 import { UserMessage } from "../../../src/domains/conversation/components/UserMessage.js";
 import type { ConversationTimelineItem } from "../../../src/domains/conversation/projection/ConversationTimelineItem.js";
 
@@ -281,29 +280,3 @@ describe("ChatEmptyState", () => {
   });
 });
 
-describe("ToolStrip", () => {
-  it("终态 trace 显示 ok/failed + 耗时；无 outcome 的 trace 显示进行中", async () => {
-    const user = userEvent.setup();
-    render(
-      <ToolStrip
-        traces={[
-          { traceId: "t1", toolName: "CharacterWrite", outcome: "ok", durationMs: 1500, sequence: 2 },
-          { traceId: "t2", toolName: "CharacterWrite", outcome: "failed", sequence: 3 },
-          { traceId: "t3", toolName: "ParagraphRead", sequence: 4 },
-        ]}
-      />,
-    );
-    expect(screen.getByText("工具调用")).toBeInTheDocument();
-    // chip 聚合：同 toolName 计数 + 失败/进行中徽标
-    expect(screen.getByText("×2")).toBeInTheDocument();
-    expect(screen.getByText("失败 1")).toBeInTheDocument();
-    expect(screen.getByText("进行中 1")).toBeInTheDocument();
-    // 展开查看结果行
-    await user.click(screen.getByRole("button", { name: /CharacterWrite/ }));
-    expect(screen.getByText("ok")).toBeInTheDocument();
-    expect(screen.getByText("failed")).toBeInTheDocument();
-    expect(screen.getByText("1.5s")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /ParagraphRead/ }));
-    expect(screen.getByText("进行中")).toBeInTheDocument();
-  });
-});

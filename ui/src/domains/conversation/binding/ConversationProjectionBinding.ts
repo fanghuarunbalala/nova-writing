@@ -241,8 +241,6 @@ function emptyProjection(conversationId: string): ConversationProjectionSnapshot
     state: "idle",
     timeline: Object.freeze([]),
     cards: Object.freeze([]),
-    toolTraces: Object.freeze([]),
-    eventFlow: Object.freeze([]),
   });
 }
 

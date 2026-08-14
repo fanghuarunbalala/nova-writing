@@ -69,7 +69,11 @@ export class CardProjection {
 				sourceSequence: event.seq,
 				sourceEventId: event.toolCallId,
 				toolName: event.name,
-				title: event.preview?.title ?? titleOf(event.name),
+				// preview.title 为纯内容（张三）→ 卡片标题补域标识（角色：张三）
+				title:
+					event.preview?.title !== undefined
+						? `${titleOf(event.name)}：${event.preview.title}`
+						: titleOf(event.name),
 				...(event.preview?.summary !== undefined ? { summary: event.preview.summary } : {}),
 				status: "in-progress",
 			});

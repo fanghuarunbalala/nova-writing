@@ -16,9 +16,6 @@ function projection(overrides: Partial<ConversationProjectionSnapshot>): Convers
     state: "running",
     timeline: [],
     cards: [],
-    approvals: [],
-    toolTraces: [],
-    eventFlow: [],
     ...overrides,
   };
 }
@@ -94,32 +91,9 @@ describe("chatSurfaceMapper", () => {
     }
   });
 
-  it("attaches tool traces inside the sequence window", () => {
+  it("passes assistant segments through verbatim（工具行随 turn 分段透传，无 seq 过滤）", () => {
     const items = mapProjectionTimeline(
       projection({
-        toolTraces: [
-          {
-            traceId: "trace-1",
-            toolName: "CharacterList",
-            outcome: "ok",
-            durationMs: 42,
-            sequence: 3,
-          },
-          {
-            traceId: "trace-2",
-            toolName: "NovelOutlineRead",
-            stage: "execution_failed",
-            outcome: "failed",
-            durationMs: 1500,
-            sequence: 5,
-          },
-          {
-            traceId: "trace-3",
-            toolName: "NovelVolumeRead",
-            outcome: "failed",
-            sequence: 7,
-          },
-        ],
         timeline: [
           {
             kind: "user",
@@ -134,6 +108,19 @@ describe("chatSurfaceMapper", () => {
             streaming: false,
             sourceSequence: 2,
             turnEndSequence: 7,
+            segments: [
+              {
+                text: "好。",
+                tools: [{ traceId: "trace-1", toolName: "CharacterList", outcome: "ok", durationMs: 42, sequence: 3 }],
+              },
+              {
+                text: "",
+                tools: [
+                  { traceId: "trace-2", toolName: "NovelOutlineRead", outcome: "failed", durationMs: 1500, sequence: 5 },
+                  { traceId: "trace-3", toolName: "NovelVolumeRead", outcome: "failed", sequence: 7 },
+                ],
+              },
+            ],
             timestamp: "2026-08-05T09:00:01.000Z",
           },
         ],
@@ -143,10 +130,10 @@ describe("chatSurfaceMapper", () => {
     const assistant = items.find((item) => item.kind === "assistant");
     expect(assistant).toBeDefined();
     if (assistant === undefined || assistant.kind !== "assistant") return;
-    // 归属范围 [sourceSequence, turnEndSequence] = [2, 7]
-    expect(assistant.toolTraces).toHaveLength(3);
-    expect(assistant.toolTraces[0].toolName).toBe("CharacterList");
-    expect(assistant.toolTraces[2].toolName).toBe("NovelVolumeRead");
+    expect(assistant.segments).toHaveLength(2);
+    expect(assistant.segments?.[0]).toMatchObject({ text: "好。" });
+    expect(assistant.segments?.[0].tools[0].toolName).toBe("CharacterList");
+    expect(assistant.segments?.[1].tools.map((t) => t.toolName)).toEqual(["NovelOutlineRead", "NovelVolumeRead"]);
   });
 
   it("maps proposal and text cards into rich descriptors by sequence window", () => {

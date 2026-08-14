@@ -40,7 +40,7 @@ describe("ProjectionLayer", () => {
 			seq: 1,
 			toolCallId: "t1",
 			name: "UnregisteredTool",
-			preview: { summary: '{"a":1}' },
+			preview: { action: "执行", object: "UnregisteredTool", title: '{"a":1}' },
 		});
 		const recorded = layer.project(response);
 		expect(recorded).toMatchObject({
@@ -50,7 +50,7 @@ describe("ProjectionLayer", () => {
 			name: "UnregisteredTool",
 			outcome: "ok",
 			durationMs: 150,
-			preview: { summary: '{"a":1}（执行完成）' },
+			preview: { action: "执行", object: "UnregisteredTool", title: '{"a":1}', summary: "执行完成" },
 		});
 	});
 
@@ -62,7 +62,7 @@ describe("ProjectionLayer", () => {
 		expect(recorded).toMatchObject({
 			type: "tool-recorded.recorded",
 			outcome: "failed",
-			preview: { summary: '{"a":1}（执行失败）' },
+			preview: { action: "执行", object: "UnregisteredTool", title: '{"a":1}', summary: "执行失败" },
 		});
 		expect((recorded as { error?: string }).error).toHaveLength(201);
 	});
@@ -102,9 +102,12 @@ describe("ProjectionLayer", () => {
 		});
 		const { request, response } = toolPair({ args: "x" });
 		const started = layer.project(request);
-		expect(started).toMatchObject({ type: "tool-recorded.started", preview: { summary: "x" } });
+		expect(started).toMatchObject({
+			type: "tool-recorded.started",
+			preview: { action: "执行", object: "UnregisteredTool", title: "x" },
+		});
 		const recorded = layer.project(response);
-		expect(recorded).toMatchObject({ preview: { summary: "x（执行完成）" } });
+		expect(recorded).toMatchObject({ preview: { action: "执行", object: "UnregisteredTool", title: "x", summary: "执行完成" } });
 	});
 
 	it("preview 返回非法值 → 回退默认预览", () => {
@@ -115,7 +118,9 @@ describe("ProjectionLayer", () => {
 			},
 		});
 		const { request } = toolPair({ args: "x" });
-		expect(layer.project(request)).toMatchObject({ preview: { summary: "x" } });
+		expect(layer.project(request)).toMatchObject({
+			preview: { action: "执行", object: "UnregisteredTool", title: "x" },
+		});
 	});
 
 	it("其余事件原样透传且保序", () => {

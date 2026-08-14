@@ -78,11 +78,13 @@
    · 事件在内存中产生、即时分发；**默认瞬态**，仅订阅者可见
    · 仅 ui handle 消费；每 conversation 一个 hub，UI 聚焦哪个订阅哪个
    · **按需落盘**：需持久/可查/可恢复的事件显式标记（完整消息/todo 等）
+   · 广播形态为 **ProjectedEvent**（投影事件流，见 PRD `output-投影层`）：工具调用以 `tool-recorded.started/recorded` 替代完整 request/response；完整 OutputEvent 只进 journal（重建源）
 
 ② journal 沙盒（持久，**落盘子集**）
    · 只记"按需落盘"的子集：user/assistant 消息 / tool-call-request / tool-call-response
    · 任何 Node 进程本地可读（tail 到完整行）；renderer 经 Main 代读
    · 已落盘内容的查询 / 历史 / 恢复的事实来源；**未落盘事件不存在于任何持久层**
+   · 读取接口两个：`history`（完整 OutputEvent，重建用）/ `projectedHistory`（读 journal 后过投影层，返回 ProjectedEvent，与 hub 实时流同形态）
 
 ③ rpc（消息与控制）
    · 用户输入、控制指令、inter-conversation 消息（经 manager 调度）
@@ -220,7 +222,7 @@ type ConversationSystemControl =
 - **wait 是延迟 RPC（阻塞）**：`await sendApprovalRequest(req)` 挂起直到决策；决策/回答 = RPC 返回值，requestId = RPC 关联 id。
 - **mode 时序**：`mode.set` 不立即生效——记 `pendingMode`，**下一次 turn 开始时**才切到 `activeMode`（避免影响进行中的 turn）。
 - **AgentLoop 输入队列**：`followup`（turn lane，FIFO 排队）/ `steer`（control lane，高优先级注入 system reminder）/ `stop`（取消 + 清队列）。
-- **事件统一**：`AgentLoop` 产出 `OutputEvent`（LLMessage 消息 + turn-start/end 边界 + delta 瞬态），`onOutputEvent` 持久订阅。
+- **事件域拆分**：`AgentLoop` 产出 `OutputEvent`（持久化域：LLMessage 消息 + turn-start/end 边界，journal 事实源）与 delta（流域专属）；`Conversation` 分发处经 **ProjectionLayer** 映射出 `ProjectedEvent`（流域：消息/turn 边界/delta + `tool-recorded.started/recorded` 投影），hub 广播与 `projectedHistory` 读取共用同一投影实现；工具可经 `ToolDef.preview` 定制投影内容（详见 PRD `output-投影层`）。
 - **journal 按 turn 存储**：写侧 `appendTurn`（LLMessage），读侧 `history` 返回 `OutputEvent`（无 delta），进程无关。
 - subagent 的审批：进程内由主 loop 决定；teammate 的审批路径：**经 manager 转发到 parent**（已定）。
 
@@ -265,5 +267,6 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
 ### 8.3 剩余待办
 
 1. **T12 ui/gui 接入**：恢复的 Electron/React（493 文件）对接新 core 接口。
-2. **sqlite 驱动**：当前 novel 用内存 store，sqlite 持久化待接（better-sqlite3 vs worker）。
-3. **delta chunk 聚合**：暂缓（delta 直走 kkrpc 背压）。
+2. **output 投影层落地**（PRD `output-投影层`，✅ 已定稿）：`ProjectedEvent` 独立类型集 / ProjectionLayer（tool-recorded + `ToolDef.preview`）/ journal `projectedHistory` 读取接口 / approval 事件删除；与 T12 ui 接入同步落地。
+3. **sqlite 驱动**：当前 novel 用内存 store，sqlite 持久化待接（better-sqlite3 vs worker）。
+4. **delta chunk 聚合**：暂缓（delta 直走 kkrpc 背压）。

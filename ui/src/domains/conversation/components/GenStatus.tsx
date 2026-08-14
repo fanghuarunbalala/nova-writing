@@ -2,8 +2,8 @@
  * GenStatus
  *
  * 生成状态行（原型 .gen-status）：扁平行，位于 composer 输入框正上方。
- * phase: thinking / generating / waiting / failed。
- * - thinking / generating（live）经 RuntimeStatusIndicator 展示三态统一语言
+ * phase: generating / waiting / failed（thinking 已随 loop 层丢弃 reasoning delta 移除）。
+ * - generating（live）经 RuntimeStatusIndicator 展示统一语言
  *   （图标动效 + 渐变流动文字 + 秒数），live 时展示已用秒数。
  * - waiting（审批挂起）展示沙漏琥珀态，无秒数。
  * - failed：alert 图标（出现时一次性微抖动）+ 红色加粗「生成失败」+ 具体原因 + 图标重试
@@ -17,13 +17,13 @@ import { RuntimeStatusIndicator } from "./RuntimeStatusIndicator.js";
 import styles from "./GenStatus.module.css";
 
 export interface GenStatusProps {
-  readonly phase: "thinking" | "generating" | "waiting" | "failed";
+  readonly phase: "generating" | "waiting" | "failed";
   readonly error?: string;
   readonly onRetry?: () => void;
 }
 
 export function GenStatus({ phase, error, onRetry }: GenStatusProps) {
-  const live = phase === "thinking" || phase === "generating";
+  const live = phase === "generating";
   const startRef = useRef<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
 

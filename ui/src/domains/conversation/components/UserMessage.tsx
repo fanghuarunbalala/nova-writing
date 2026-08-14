@@ -8,8 +8,9 @@
  *   首条消息用 inPad 态收进气泡内边距带（原型 .msg-actions-inpad）。
  *   复制走 navigator.clipboard.writeText，缺失时降级 execCommand；
  *   成功提示经 onNotify 上行到 shell ToastHost。
+ * memo 包裹：历史消息（text 原值稳定）零重渲染。
  */
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import { parseMessageText } from "./parseMessageText.js";
 import type { MessageReference, ResolvedReference } from "./MessageReference.js";
@@ -47,7 +48,7 @@ function fallbackCopy(text: string): boolean {
   }
 }
 
-export function UserMessage({
+export const UserMessage = memo(function UserMessage({
   sequence,
   text,
   inPad = false,
@@ -128,4 +129,4 @@ export function UserMessage({
       </div>
     </div>
   );
-}
+});

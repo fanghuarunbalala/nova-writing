@@ -2,10 +2,10 @@
  * ChatSurface
  *
  * 组合对话域：timeline + composer；无对话时渲染空态。
- * 精简版：session 由 shell 级 hook（useActiveConversationSession）单订阅注入，
- * 发送经 sendUserMessage，时间线由精简投影映射；thinking/runtime-status/cards 延后。
+ * session 由 shell 级 hook（useActiveConversationSession）单订阅注入，
+ * 发送经 sendUserMessage，时间线由 chatSurfaceMapper 映射（逐项缓存 + useMemo）。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ConversationMode } from "@novel/core";
 import { debugLog, type ConversationProjectionErrorSnapshot } from "@novel/core/client";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
@@ -94,13 +94,16 @@ function ActiveChatSurface({
     };
   }, [conversationId, getConversationMode, snapshot?.state]);
   const projection = snapshot?.projection;
-  const timeline =
-    projection !== undefined ? mapProjectionTimeline(projection, "Novel Agent") : [];
+  // mapper 按 core 项缓存：历史项跨快照引用稳定（memo 浅比较基础）；随 projection 快照重建
+  const timeline = useMemo(
+    () => (projection !== undefined ? mapProjectionTimeline(projection, "Novel Agent") : []),
+    [projection],
+  );
   const failed = projection?.state === "error";
   const runtime = useConversationRuntimeStatus(projection);
 
-  // 三态推导（对齐旧版优先级）：failed > waiting（待审批，CMS 队列派生）> thinking > generating。
-  // waiting 态复用 GenStatus 沙漏+摇摆动画（审批面板由 ApplicationShell 自动弹出）。
+  // 三态推导（对齐旧版优先级）：failed > waiting（待审批，CMS 队列派生）> generating。
+  // thinking 态已随 loop 层丢弃 reasoning delta 移除；waiting 复用 GenStatus 沙漏+摇摆动画。
   let status: GenStatusProps | undefined;
   if (failed) {
     status = {
@@ -110,8 +113,6 @@ function ActiveChatSurface({
     };
   } else if (pendingApprovalCount > 0) {
     status = { phase: "waiting" };
-  } else if (projection?.liveState === "thinking") {
-    status = { phase: "thinking" };
   } else if (projection?.liveState === "generating") {
     status = { phase: "generating" };
   }

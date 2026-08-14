@@ -2,9 +2,10 @@
  * AssistantMessage
  *
  * 助手消息（原型 .msg.assistant）：无头像，head 只保留 approval-state 状态
- * 标签；正文 + 思考指示（ThinkingIndicator，流式思考期间显示）+ 结构化卡片。
- * 卡片通过 ConversationCardRendererRegistry 渲染。
+ * 标签；正文（markdown 渲染）+ 结构化卡片。卡片通过 ConversationCardRendererRegistry 渲染。
+ * memo 包裹：历史消息（text/cards/eventFlow/toolTraces 引用稳定）零重渲染、markdown 零重解析。
  */
+import { memo } from "react";
 import { createDefaultConversationCardRendererRegistry } from "../cards/defaultRenderers.js";
 import type { ConversationCardRendererRegistry } from "../cards/ConversationCardRendererRegistry.js";
 import type {
@@ -20,7 +21,6 @@ import { AssistantMarkdown } from "./assistantContent/AssistantMarkdown.js";
 import { RuntimeEventFlow } from "./RuntimeEventFlow.js";
 import { ToolStrip } from "./ToolStrip.js";
 import type { MessageReference } from "./MessageReference.js";
-import { ThinkingIndicator } from "./ThinkingIndicator.js";
 import styles from "./AssistantMessage.module.css";
 
 export type AssistantApprovalState =
@@ -41,6 +41,14 @@ const APPROVAL_STATE_LABEL: Record<AssistantApprovalState, string> = {
   rejected: "已驳回",
 };
 
+/** 缺省卡片渲染注册表（模块级单例：避免每 render 重建 registry） */
+const DEFAULT_CARD_RENDERERS = createDefaultConversationCardRendererRegistry();
+
+/** 缺省空数组（冻结单例：memo 浅比较稳定引用） */
+const EMPTY_CARDS: readonly ConversationCardDescriptor[] = Object.freeze([]);
+const EMPTY_EVENT_FLOW: readonly ConversationEventView[] = Object.freeze([]);
+const EMPTY_TOOL_TRACES: readonly ToolTraceView[] = Object.freeze([]);
+
 export interface AssistantMessageProps {
   readonly sequence: number;
   /** 保留兼容调用方；v2 原型 head 只显示 approval-state，不再渲染。 */
@@ -54,8 +62,6 @@ export interface AssistantMessageProps {
   readonly text: string;
   readonly cards?: readonly ConversationCardDescriptor[];
   readonly streaming?: boolean;
-  /** 流式中当前是否正在产出思考（驱动 ThinkingIndicator）。 */
-  readonly thinking?: boolean;
   readonly eventFlow?: readonly ConversationEventView[];
   readonly toolTraces?: readonly ToolTraceView[];
   readonly onReferenceClick?: (reference: MessageReference) => void;
@@ -66,19 +72,18 @@ export interface AssistantMessageProps {
   readonly onNotify?: (kind: ToastKind, text: string) => void;
 }
 
-export function AssistantMessage({
+export const AssistantMessage = memo(function AssistantMessage({
   sequence,
   approvalState,
   failureDetail,
   text,
-  cards = [],
+  cards = EMPTY_CARDS,
   streaming = false,
-  thinking = false,
-  eventFlow = [],
-  toolTraces = [],
+  eventFlow = EMPTY_EVENT_FLOW,
+  toolTraces = EMPTY_TOOL_TRACES,
   onReferenceClick,
   onResolveReference,
-  cardRenderers = createDefaultConversationCardRendererRegistry(),
+  cardRenderers = DEFAULT_CARD_RENDERERS,
   onCardAction,
   onNotify,
 }: AssistantMessageProps) {
@@ -92,7 +97,6 @@ export function AssistantMessage({
             </span>
           </div>
         ) : null}
-        {streaming && thinking ? <ThinkingIndicator /> : null}
         <div className={styles.text}>
           <AssistantMarkdown
             text={text}
@@ -126,4 +130,4 @@ export function AssistantMessage({
       </div>
     </div>
   );
-}
+});

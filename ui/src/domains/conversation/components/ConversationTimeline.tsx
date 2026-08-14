@@ -1,9 +1,10 @@
 /**
  * ConversationTimeline
  *
- * 按 sequence 排序渲染时间线；新消息到达自动滚到底（用户上滚除外）。
+ * 按 mapper 输出追加序渲染时间线（chatSurfaceMapper 保证序不变量，不重排）；
+ * 新消息到达自动滚到底（用户上滚除外）。
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ConversationTimelineItem as TimelineItem } from "../projection/ConversationTimelineItem.js";
@@ -44,26 +45,40 @@ export function ConversationTimeline({
   const stickToBottom = useRef(true);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
-  const sorted = [...items].sort((left, right) => left.sequence - right.sequence);
   // 首条用户消息：复制按钮收进气泡内边距带（原型 .msg-actions-inpad）。
-  const firstUserSequence = sorted.find((item) => item.kind === "user")?.sequence;
-  const virtualized = sorted.length > VIRTUALIZE_THRESHOLD;
+  const firstUserSequence = items.find((item) => item.kind === "user")?.sequence;
+  const virtualized = items.length > VIRTUALIZE_THRESHOLD;
   const timelineWindow = virtualized
     ? computeTimelineWindow({
-        itemCount: sorted.length,
+        itemCount: items.length,
         scrollTop,
         viewportHeight,
         rowHeight: ROW_HEIGHT,
         overscan: OVERSCAN,
       })
-    : { startIndex: 0, endIndex: sorted.length };
-  const visibleItems = sorted.slice(timelineWindow.startIndex, timelineWindow.endIndex);
+    : { startIndex: 0, endIndex: items.length };
+  const visibleItems = items.slice(timelineWindow.startIndex, timelineWindow.endIndex);
+
+  // 卡片动作回调稳定引用（AssistantMessage memo 浅比较依赖）
+  const handleCardAction = useCallback(
+    (cardId: string, action: string, payload?: unknown) => {
+      if (typeof payload !== "string") return;
+      if (action === "view-diff") {
+        onProposalAction?.(payload, "view-diff");
+      } else if (action === "approve") {
+        onProposalAction?.(payload, "approve");
+      } else if (action === "reject") {
+        onProposalAction?.(payload, "reject");
+      }
+    },
+    [onProposalAction],
+  );
 
   useEffect(() => {
     const node = scrollRef.current;
     if (node === null || !stickToBottom.current) return;
     node.scrollTop = node.scrollHeight;
-  }, [sorted.length, streamingSequence]);
+  }, [items.length, streamingSequence]);
 
   return (
     <div
@@ -96,17 +111,17 @@ export function ConversationTimeline({
                 conversationId,
                 onMessageReferenceClick,
                 resolveReference,
-                onProposalAction,
                 onOpenApproval,
                 onNotify,
                 firstUserSequence,
+                onCardAction: handleCardAction,
               })}
             </div>
           );
         })}
         {virtualized ? (
           <div
-            style={{ height: (sorted.length - timelineWindow.endIndex) * ROW_HEIGHT }}
+            style={{ height: (items.length - timelineWindow.endIndex) * ROW_HEIGHT }}
             aria-hidden="true"
           />
         ) : null}
@@ -119,25 +134,23 @@ interface RenderItemDeps {
   readonly conversationId: string;
   readonly onMessageReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
-  readonly onProposalAction?: (
-    changeSetId: string,
-    action: "approve" | "reject" | "view-diff",
-  ) => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
   /** 消息内操作提示（如复制结果）；上行到 shell ToastHost。 */
   readonly onNotify?: (kind: ToastKind, text: string) => void;
   /** 时间线中首条用户消息的 sequence（决定复制按钮 inPad 态）。 */
   readonly firstUserSequence?: number;
+  /** 卡片动作回调（useCallback 稳定引用）。 */
+  readonly onCardAction: (cardId: string, action: string, payload?: unknown) => void;
 }
 
 function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
   const {
     onMessageReferenceClick,
     resolveReference,
-    onProposalAction,
     onOpenApproval,
     onNotify,
     firstUserSequence,
+    onCardAction,
   } = deps;
   switch (item.kind) {
     case "turn":
@@ -170,21 +183,11 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
           text={item.text}
           cards={item.cards}
           streaming={item.streaming}
-          thinking={item.thinking}
           eventFlow={item.eventFlow}
           toolTraces={item.toolTraces}
           onResolveReference={resolveReference}
           onNotify={onNotify}
-          onCardAction={(cardId, action, payload) => {
-            if (typeof payload !== "string") return;
-            if (action === "view-diff") {
-              onProposalAction?.(payload, "view-diff");
-            } else if (action === "approve") {
-              onProposalAction?.(payload, "approve");
-            } else if (action === "reject") {
-              onProposalAction?.(payload, "reject");
-            }
-          }}
+          onCardAction={onCardAction}
         />
       );
     case "system":

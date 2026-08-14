@@ -4,7 +4,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ApprovalDock } from "../../../src/domains/conversation/components/ApprovalDock.js";
 import { ChatEmptyState } from "../../../src/domains/conversation/components/ChatEmptyState.js";
 import { ConversationComposer } from "../../../src/domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../../src/domains/conversation/components/ConversationTimeline.js";
@@ -15,15 +14,16 @@ import { UserMessage } from "../../../src/domains/conversation/components/UserMe
 import type { ConversationTimelineItem } from "../../../src/domains/conversation/projection/ConversationTimelineItem.js";
 
 describe("ConversationTimeline", () => {
-  it("renders items in sequence order", () => {
+  it("renders items in the provided order (mapper append-order invariant, no re-sort)", () => {
+    // 故意乱序输入：时间线不再 sort，渲染顺序 = 输入顺序（chatSurfaceMapper 保证追加序）
     const items: ConversationTimelineItem[] = [
-      { kind: "user", sequence: 2, text: "第二条", timestamp: 200 },
-      { kind: "assistant", sequence: 1, agentLabel: "Novel Agent", timestamp: 100, thinkLines: [], text: "第一条", cards: [], streaming: false },
+      { kind: "assistant", sequence: 2, agentLabel: "Novel Agent", timestamp: 200, text: "第二条", cards: [], streaming: false },
+      { kind: "user", sequence: 1, text: "第一条", timestamp: 100 },
       { kind: "system", sequence: 3, text: "已提交 r042", timestamp: 300 },
     ];
     render(<ConversationTimeline conversationId="c1" items={items} />);
     const textNodes = screen.getAllByText(/第.条|已提交/);
-    expect(textNodes.map((node) => node.textContent)).toEqual(["第一条", "第二条", "已提交 r042"]);
+    expect(textNodes.map((node) => node.textContent)).toEqual(["第二条", "第一条", "已提交 r042"]);
   });
 
   it("forwards proposal view-diff actions", async () => {
@@ -35,7 +35,6 @@ describe("ConversationTimeline", () => {
         sequence: 1,
         agentLabel: "Novel Agent",
         timestamp: 100,
-        thinkLines: [],
         text: "",
         streaming: false,
         cards: [
@@ -167,24 +166,24 @@ describe("ProposalBlock / ProposalOp", () => {
 });
 
 describe("GenStatus", () => {
-  it("renders nothing when idle", () => {
-    render(<GenStatus phase="idle" />);
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  it("shows the generating indicator with elapsed seconds", () => {
+    render(<GenStatus phase="generating" />);
+    expect(screen.getByRole("status")).toHaveTextContent("正在生成");
+    expect(screen.getByRole("status")).toHaveTextContent(/0s/);
   });
 
-  it("shows stage, elapsed clock and stop while live, then retry on failure", async () => {
+  it("shows the waiting indicator without seconds", () => {
+    render(<GenStatus phase="waiting" />);
+    expect(screen.getByRole("status")).toHaveTextContent("等待审批");
+    expect(screen.getByRole("status")).not.toHaveTextContent(/s$/);
+  });
+
+  it("renders failure detail with retry", async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();
-    const onStop = vi.fn();
-    const { rerender } = render(
-      <GenStatus phase="thinking" stage="正在思考大纲…" onStop={onStop} />,
-    );
-    expect(screen.getByRole("status")).toHaveTextContent("正在思考大纲…");
-    expect(screen.getByText(/已用时 0 秒/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "停止" }));
-    expect(onStop).toHaveBeenCalledTimes(1);
-    rerender(<GenStatus phase="failed" error="连接中断" onRetry={onRetry} />);
+    render(<GenStatus phase="failed" error="连接中断" onRetry={onRetry} />);
     expect(screen.getByText("生成失败")).toBeInTheDocument();
+    expect(screen.getByText("连接中断")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重试" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
@@ -261,11 +260,12 @@ describe("ConversationComposer", () => {
         conversationId="c1"
         enabled
         onSend={onSend}
-        status={{ phase: "streaming", onStop: () => undefined }}
+        status={{ phase: "generating" }}
       />,
     );
-    expect(screen.getByText("正在生成…")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "停止" })).toBeInTheDocument();
+    expect(screen.getByText("正在生成")).toBeInTheDocument();
+    // 停止按钮已随新三态语言移除（生成中不可手动中止）。
+    expect(screen.queryByRole("button", { name: "停止" })).not.toBeInTheDocument();
   });
 
   it("renders approval content in the status slot when approval is provided", () => {
@@ -274,33 +274,11 @@ describe("ConversationComposer", () => {
         conversationId="c1"
         enabled
         onSend={vi.fn()}
-        approval={
-          <ApprovalDock
-            approvals={[{
-              kind: "tool-approval",
-              approvalRequestId: "approval-a",
-              toolCallId: "call-a",
-              toolName: "NovelCharacterWrite",
-              toolVersion: "1.0.0",
-              argumentDigest: `sha256:${"a".repeat(64)}`,
-              runId: "run-1",
-              turnId: "turn-1",
-              requestedSequence: 1,
-              lastSequence: 2,
-              title: "新增角色",
-              operations: [{ op: "add", kind: "character", title: "林夏" }],
-              requestedAt: "2026-08-11T01:00:00.000Z",
-              expiresAt: "2026-08-11T01:15:00.000Z",
-              status: "pending",
-            }]}
-            onDecide={vi.fn()}
-            onOpenApproval={vi.fn()}
-          />
-        }
+        approval={<span>等待审批</span>}
       />,
     );
+    // approval 与 status 同槽位，approval 优先。
     expect(screen.getByText("等待审批")).toBeInTheDocument();
-    expect(screen.getByText(/新增角色/)).toBeInTheDocument();
   });
 });
 
@@ -312,152 +290,5 @@ describe("ChatEmptyState", () => {
     expect(screen.getByText("新对话")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "新建对话" }));
     expect(onCreate).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("ApprovalDock", () => {
-  const pendingApproval = (overrides: Record<string, unknown> = {}) => ({
-    kind: "tool-approval" as const,
-    approvalRequestId: "approval-a",
-    toolCallId: "call-a",
-    toolName: "NovelCharacterWrite",
-    toolVersion: "1.0.0",
-    argumentDigest: `sha256:${"a".repeat(64)}` as const,
-    runId: "run-1",
-    turnId: "turn-1",
-    requestedSequence: 1,
-    lastSequence: 2,
-    title: "新增角色",
-    operations: [
-      { op: "add" as const, kind: "character", title: "林夏" },
-    ],
-    requestedAt: "2026-08-10T01:00:00.000Z",
-    expiresAt: "2026-08-10T01:15:00.000Z",
-    status: "pending" as const,
-    ...overrides,
-  });
-
-  it("renders nothing without approvals", () => {
-    const { container } = render(
-      <ApprovalDock approvals={[]} onDecide={vi.fn()} onOpenApproval={vi.fn()} />,
-    );
-    expect(container.firstChild).toBeNull();
-  });
-
-  it("renders ops, waiting label and icon actions for pending approvals", () => {
-    render(
-      <ApprovalDock
-        approvals={[pendingApproval()]}
-        onDecide={vi.fn()}
-        onOpenApproval={vi.fn()}
-      />,
-    );
-    expect(screen.getByText("等待审批")).toBeInTheDocument();
-    // 操作块：新增角色：林夏（彩色文字胶囊）。
-    expect(screen.getByText(/新增角色/)).toBeInTheDocument();
-    expect(screen.getByText("林夏")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "通过" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "驳回" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "审核详情" })).toBeInTheDocument();
-  });
-
-  it("fires onDecide with the group's request ids on approve", async () => {
-    const user = userEvent.setup();
-    const onDecide = vi.fn();
-    render(
-      <ApprovalDock
-        approvals={[
-          pendingApproval(),
-          pendingApproval({
-            approvalRequestId: "approval-b",
-            toolCallId: "call-b",
-            title: "编辑角色",
-            operations: [{ op: "edit" as const, kind: "location", title: "青云镇" }],
-          }),
-        ]}
-        onDecide={onDecide}
-        onOpenApproval={vi.fn()}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: "通过" }));
-    expect(onDecide).toHaveBeenCalledWith(["approval-a", "approval-b"], "approved");
-  });
-
-  it("fires onDecide with rejected on reject", async () => {
-    const user = userEvent.setup();
-    const onDecide = vi.fn();
-    render(
-      <ApprovalDock
-        approvals={[pendingApproval()]}
-        onDecide={onDecide}
-        onOpenApproval={vi.fn()}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: "驳回" }));
-    expect(onDecide).toHaveBeenCalledWith(["approval-a"], "rejected");
-  });
-
-  it("fires onOpenApproval on the jump button", async () => {
-    const user = userEvent.setup();
-    const onOpenApproval = vi.fn();
-    render(
-      <ApprovalDock
-        approvals={[pendingApproval()]}
-        onDecide={vi.fn()}
-        onOpenApproval={onOpenApproval}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: "审核详情" }));
-    expect(onOpenApproval).toHaveBeenCalledWith("approval-a");
-  });
-
-  it("resolves delete entity titles via resolveEntity", async () => {
-    const resolveEntity = vi.fn(async (target: {
-      kind: string;
-      id: string;
-      op: string;
-    }) => ({
-      kind: "volume",
-      id: target.id,
-      name: "第一卷·启程",
-      op: target.op,
-      fields: [],
-    }));
-    render(
-      <ApprovalDock
-        approvals={[pendingApproval({
-          approvalRequestId: "approval-del",
-          toolCallId: "call-del",
-          title: "删除卷",
-          operations: [{ op: "delete", kind: "volume", id: "vol-1", title: "vol-1" }],
-        })]}
-        onDecide={vi.fn()}
-        onOpenApproval={vi.fn()}
-        resolveEntity={resolveEntity}
-      />,
-    );
-    // 解析完成后显示实体标题（而非 id）。
-    expect(await screen.findByText("第一卷·启程")).toBeInTheDocument();
-    expect(resolveEntity).toHaveBeenCalledWith({
-      kind: "volume",
-      id: "vol-1",
-      op: "delete",
-    });
-  });
-
-  it("falls back to the id for delete when no resolver is provided", () => {
-    render(
-      <ApprovalDock
-        approvals={[pendingApproval({
-          approvalRequestId: "approval-del",
-          toolCallId: "call-del",
-          title: "删除卷",
-          operations: [{ op: "delete", kind: "volume", id: "vol-1", title: "vol-1" }],
-        })]}
-        onDecide={vi.fn()}
-        onOpenApproval={vi.fn()}
-      />,
-    );
-    expect(screen.getByText("vol-1")).toBeInTheDocument();
   });
 });

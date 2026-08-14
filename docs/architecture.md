@@ -256,12 +256,12 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
 - **compose 状态机**：phase（idle/designing/pending/applied/discarded）+ active + preComposeMode
 - **进程化**：novel-db 进程、conversation 子进程 spawn、teammate 派生（ManagerServer 双模式）
 - **agent 装配**：声明式 `novelAgentDefinition`（9 段 recipe / 8 工具组 21 工具 / 2 nudge）经 `AgentAssembler` 解析为 `AgentCapability`；段 `id@version` 注册表解析；nudge 生效集 = `nudgeEnablement.enabled` ∩ 实现目录
-- **system prompt 渲染**：static 段一次渲染进 base 缓存，dynamic 段每 provider call 渲染（`core.environment` 环境块 / `novel.global_constraints` NOVEL.md 注入 / `tool.guidance` 工具清单）；动态输入由 node 层 `DynamicInputProvider` 注入（workdir/platform/NOVEL.md），modelId 以 `run.sampling.model` 补齐
+- **system prompt 渲染**：static 段一次渲染进 base 缓存，dynamic 段每 provider call 渲染（`core.environment` 环境块 / `novel.global_constraints` NOVEL.md 注入 / `tool.guidance` 工具清单）；动态输入由 LoopContext 自组装（workdir/modelId）+ 宿主注入（platform 常量 / NOVEL.md 每调用 fs 读）
 - **样式架构**（ui 包）：三层 token 模型（L1 结构常量 / L2 设计语言 / L3 语义色+阴影，
   dark 主题只覆盖 L3）+ 纪律测试（`ui/tests/theme/cssDiscipline.test.ts` 规则 a-d）+
   stylelint；keyframes 集中于 `shared/theme/animations.css`，模块 css 经
-  `var(--anim-*)` 间接引用动画名。详见 `ui/src/shared/README.md`
-- **测试**：core 257 用例 / 47 文件全绿 + 真实 deepseek 多进程联调（ui 纪律测试见上）
+  `var(--anim-*)` 间接引用动画名。详见 `docs/development/ui-样式架构.md`
+- **测试**：core 258 用例 / 47 文件全绿 + 真实 deepseek 多进程联调（ui 纪律测试见上）
 
 ### 8.3 剩余待办
 

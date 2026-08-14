@@ -30,19 +30,22 @@
 }
 
 .state.generating { color: var(--color-warn); }
-.state.completed { color: var(--color-success); }
-.state.submitted { color: var(--color-success); }
+/* 常态标签弱化为 muted（三级元信息不抢正文焦点）；异常态保留语义色 */
+.state.completed { color: var(--color-muted); }
+.state.submitted { color: var(--color-muted); }
 .state.failed { color: color-mix(in oklab, var(--color-danger) 82%, var(--color-muted)); }
 .state.cancelled { color: var(--color-muted); }
 .state.rejected { color: var(--color-danger); }
 
 .text {
   margin-top: var(--space-7px);
-  /* 用户要求正文用黑体（--font-ui），配合 medium 字重提升可读性。 */
+  /* 用户要求正文用黑体（--font-ui）；400 原生字重——YaHei/Segoe UI 无原生
+     550，合成加粗会发糊发重。15.5px + 0.01em 字距（Windows 15px 发虚）。 */
   font-family: var(--font-ui);
-  font-size: var(--fs-body);
-  font-weight: var(--fw-medium);
-  line-height: 1.75;
+  font-size: var(--fs-chat);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0.01em;
+  line-height: 1.8;
   color: var(--color-fg);
   text-wrap: pretty;
 }

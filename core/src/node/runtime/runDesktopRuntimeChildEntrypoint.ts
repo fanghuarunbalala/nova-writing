@@ -21,12 +21,25 @@ import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
 import { createProvider } from "../../runtime/provider/Provider.js";
 import { buildNovelAgent } from "../../runtime/agent/NovelAgent.js";
+import {
+  readNovelGlobalConstraintsSafe,
+  NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME,
+} from "../workspace/readNovelGlobalConstraints.js";
+import { ComposeModeStateProvider } from "../../conversation/compose/ComposeModeState.js";
+import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
 import type { LLMessage } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
+
+/** 平台显示名（动态段 core.environment 用） */
+const PLATFORM_LABELS: Readonly<Record<string, string>> = Object.freeze({
+	darwin: "macOS",
+	linux: "Linux",
+	win32: "Windows",
+});
 
 /** CMS 调用面（子进程 getAPI 视图） */
 interface CmsApi {
@@ -78,6 +91,17 @@ function toolCallIdOf(requestId: string): string | undefined {
  * 启动 conversation 子进程（manager WS 双工）
  */
 export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
+	// 崩溃兜底：子进程任何未捕获异常/未处理 rejection 先留完整痕迹再退出
+	//（stderr 经 spawner inherit 汇入 main 输出；此前崩溃只剩一行裸 undefined，无法定位）
+	process.on("uncaughtException", (e) => {
+		console.error("[child] uncaught exception:", e);
+		process.exit(1);
+	});
+	process.on("unhandledRejection", (reason) => {
+		console.error("[child] unhandled rejection:", reason);
+		process.exit(1);
+	});
+
 	const conversationId = process.env.CONVERSATION_ID ?? "main";
 	const storedir = process.env.NOVEL_CONVERSATION_STOREDIR;
 	const workspace = process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".";
@@ -196,6 +220,20 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
 		resumePendingDecider,
 		logger,
+		// 动态段输入：workdir/modelId 由 LoopContext 自组装（workspace /
+		// run.sampling.model）；宿主只注入平台常量 + 每调用读 NOVEL.md
+		//（失败返回 undefined → 动态段渲染占位）
+		platform: PLATFORM_LABELS[process.platform] ?? process.platform,
+		novelConstraintsProvider: async () => {
+			const content = await readNovelGlobalConstraintsSafe(workspace, logger);
+			return content === undefined
+				? undefined
+				: { fileName: NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME, content };
+		},
+		// compose_mode nudge 状态提供者（compose 状态机接线不在本期，进入/退出
+		// 由后续 conversation 层驱动该实例）；todo_idle/TodoWrite 的内存存储
+		composeState: new ComposeModeStateProvider(),
+		todoStore: new InMemoryConversationTodoStore(),
 	});
 
 	const managerWait: ManagerWaitChannel | undefined =

@@ -4,6 +4,10 @@ import type {
   ToolScheme,
 } from "../provider/types.js";
 import type { AgentCapability } from "../agent/AgentCapability.js";
+import type {
+  DynamicPromptSectionInput,
+  NovelConstraintsProvider,
+} from "../prompt/PromptSection.js";
 import { CompactPolicyChainImpl } from "../compact/CompactPolicyChainImpl.js";
 import type {
   AgentRunConfig,
@@ -44,22 +48,33 @@ export class LoopContext implements ReadonlyLoopContext {
   private seq = 0;
   /** 压缩策略链（注册 agentCapability.compactPolicies） */
   private compactChain = new CompactPolicyChainImpl();
-  /** 静态 system 分段渲染缓存 */
-  private staticSystemCache?: string;
+  /** 静态 system 分段 base 缓存（全部 static 段一次渲染；dynamic 段不进 base） */
+  private staticBase?: string;
+  /** 最近一次渲染的完整 system prompt（systemPrompt getter 语义） */
+  private lastSystemPrompt?: string;
+  /** 宿主平台显示名（构造注入一次；缺省不渲染环境块） */
+  readonly platform?: string;
+  /** 小说全局约束提供者（每 provider call 前调用；缺省空——动态段渲染占位） */
+  private readonly novelConstraintsProvider: NovelConstraintsProvider;
 
   /**
    * 构造 LoopContext
    * @param opts Agent 能力 + 工作区 + 可恢复的 turn 消息 + seq 起始值（journal 恢复用）
+   * + 平台显示名（环境块，进程常量）+ NOVEL.md 提供者（每调用 fs 读，node 层注入）
    */
   constructor(opts: {
     agentCapability: AgentCapability;
     workspace: string;
     turnMessages?: LLMessage[];
     startSeq?: number;
+    platform?: string;
+    novelConstraintsProvider?: NovelConstraintsProvider;
   }) {
     this.agentCapability = opts.agentCapability;
     this.workspace = opts.workspace;
     this.seq = opts.startSeq ?? 0;
+    this.platform = opts.platform;
+    this.novelConstraintsProvider = opts.novelConstraintsProvider ?? (async () => undefined);
     for (const policy of opts.agentCapability.compactPolicies) {
       this.compactChain.register(policy, 0);
     }
@@ -114,27 +129,42 @@ export class LoopContext implements ReadonlyLoopContext {
   }
 
   /**
-   * 组装下一次 ProviderCall：触发压缩（compactIfNeeded，影响 turns）+ 收集 nudge（persistent 追加 / transient 改 call）
-   * + 生成动态 system（systemSections 渲染 + toolDefs promptDetail）
+   * 组装下一次 ProviderCall：触发压缩（compactIfNeeded，影响 turns）+ 组装动态段输入
+   * （workdir=this.workspace、platform=构造注入常量、modelId=run.sampling.model；
+   * NOVEL.md 内容经宿主 provider 每调用读取）+ 收集 nudge（persistent 追加 /
+   * transient 改 call）+ 生成 system（static base 缓存 + dynamic 每调用渲染 + 工具 promptDetail）
    * @param run 单次运行配置
    * @param runContext 当前 run 运行状态（nudge 判断依据）
    * @param signal 取消信号
    * @returns 组装好的 ProviderCall
    */
-  toProviderCall(run: AgentRunConfig, runContext: RunContext, signal?: AbortSignal): ProviderCall {
+  async toProviderCall(run: AgentRunConfig, runContext: RunContext, signal?: AbortSignal): Promise<ProviderCall> {
     // ① 压缩（链式，影响 turns）
     if (this.compactChain.compactIfNeeded(this)) {
       this.notify((l) => l.onCompacted?.(this.turnList));
     }
-    // ② 组装基础请求（system / tools / messages / sampling）
+    // ② 动态段输入：LoopContext 自组装 + 宿主注入约束内容（每调用重读）
+    const constraints = await this.novelConstraintsProvider();
+    const dynamicInput: DynamicPromptSectionInput = {
+      environment:
+        this.platform === undefined || this.platform.trim().length === 0
+          ? undefined
+          : {
+              workdir: this.workspace,
+              platform: this.platform,
+              modelId: run.sampling.model,
+            },
+      ...(constraints === undefined ? {} : { novelGlobalConstraints: constraints }),
+    };
+    // ③ 组装基础请求（system / tools / messages / sampling）
     const call: ProviderCall = {
-      system: this.renderSystem(),
+      system: this.renderSystem(dynamicInput),
       tools: this.toolSchemes,
       messages: this.messages,
       sampling: run.sampling,
       signal,
     };
-    // ③ nudge：persistent（内部 append → onTurnMessageAppend）/ transient（原地改 call）
+    // ④ nudge：persistent（内部 append → onTurnMessageAppend）/ transient（原地改 call）
     for (const policy of this.agentCapability.nudgePolicies) {
       policy.persistentNudgeIfNeeded(this, runContext);
       policy.transientNudgeIfNeeded(this, runContext, call);
@@ -146,9 +176,9 @@ export class LoopContext implements ReadonlyLoopContext {
   get messages(): LLMessage[] {
     return this.turnList.flatMap((t) => t.messages);
   }
-  /** 当前系统提示词（静态分段缓存 + 动态渲染 + 工具 promptDetail） */
+  /** 当前系统提示词：最近一次渲染值（未渲染过时以空动态输入渲染一次，供工具/静态段读取） */
   get systemPrompt(): string {
-    return this.renderSystem();
+    return this.lastSystemPrompt ?? this.renderSystem({});
   }
   /** 当前工具 schemes（agentCapability.toolDefs） */
   get toolSchemes(): ToolScheme[] {
@@ -172,17 +202,37 @@ export class LoopContext implements ReadonlyLoopContext {
     };
   }
 
-  /** 渲染 system：静态分段（缓存）+ 动态分段（每次）+ 工具 promptDetail */
-  private renderSystem(): string {
+  /**
+   * 渲染静态 base：全部 static 段各渲染一次拼接缓存。
+   * （修复：旧实现以单字符串缓存首段，后续 static 段全部被首段内容替换，从未进入 prompt）
+   * @returns 静态 base 文本
+   */
+  private renderStaticBase(): string {
     const parts: string[] = [];
     for (const section of this.agentCapability.systemSections) {
       if (section.kind === "static") {
-        if (this.staticSystemCache === undefined) {
-          this.staticSystemCache = section.render(this);
-        }
-        parts.push(this.staticSystemCache);
-      } else {
         parts.push(section.render(this));
+      }
+    }
+    return parts.join("\n");
+  }
+
+  /**
+   * 渲染完整 system：静态 base（一次缓存）+ 动态分段（每调用）+ 工具 promptDetail。
+   * 渲染结果记为最近一次渲染值（systemPrompt getter）。
+   * @param input 动态段输入（宿主注入 + modelId 补齐）
+   * @returns 完整 system prompt
+   */
+  private renderSystem(input: DynamicPromptSectionInput): string {
+    if (this.staticBase === undefined) {
+      this.staticBase = this.renderStaticBase();
+    }
+    const parts: string[] = [];
+    if (this.staticBase.length > 0) parts.push(this.staticBase);
+    for (const section of this.agentCapability.systemSections) {
+      if (section.kind === "dynamic") {
+        const rendered = section.renderDynamic(input, this);
+        if (rendered.length > 0) parts.push(rendered);
       }
     }
     for (const tool of this.agentCapability.toolDefs) {
@@ -193,7 +243,8 @@ export class LoopContext implements ReadonlyLoopContext {
         parts.push(tool.promptDetail.guidance);
       }
     }
-    return parts.join("\n");
+    this.lastSystemPrompt = parts.join("\n");
+    return this.lastSystemPrompt;
   }
 
   /** 通知所有监听器 */

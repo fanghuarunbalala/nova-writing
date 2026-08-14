@@ -80,8 +80,8 @@ export interface ConversationProjectionSnapshot {
 	/** 最后应用的 journal 序列号（实时 delta 无 seq，取最近 persist 事件） */
 	lastAppliedSequence: number;
 	state: ConversationProjectionState;
-	/** 实时生成状态：reasoning delta → thinking、text delta → generating、turn 收口 → undefined */
-	liveState?: "thinking" | "generating";
+	/** 实时生成状态：text delta → generating、turn 收口 → undefined（thinking 态随 loop 层丢弃 reasoning delta 移除） */
+	liveState?: "generating";
 	timeline: readonly ConversationTimelineItem[];
 	/** 工具调用卡片（CardProjection 派生） */
 	cards: readonly CardDescriptor[];
@@ -115,8 +115,8 @@ export class ConversationProjection {
 	private assistantBuffer = "";
 	/** 当前流式 assistant 项的 sequence（无则未开始） */
 	private activeAssistantSeq: number | undefined;
-	/** 实时生成状态（thinking/generating；turn 收口清除） */
-	private liveState: "thinking" | "generating" | undefined;
+	/** 实时生成状态（generating；turn 收口清除） */
+	private liveState: "generating" | undefined;
 	private nextSeq = 1;
 	private readonly cardProjection = new CardProjection();
 	private readonly approvalProjection = new ApprovalProjection();
@@ -133,6 +133,16 @@ export class ConversationProjection {
 	private snapshot: ConversationProjectionSnapshot;
 	private generation = 0;
 	private stopRequested = false;
+	/** 快照子数组置脏标记（apply 置脏 → publish 时才重建冻结数组，稳定引用供 UI memo） */
+	private cardsDirty = true;
+	private approvalsDirty = true;
+	private toolTracesDirty = true;
+	private eventFlowDirty = true;
+	/** 快照子数组缓存（与置脏标记成对维护） */
+	private cachedCards: readonly CardDescriptor[] = [];
+	private cachedApprovals: readonly ApprovalView[] = [];
+	private cachedToolTraces: readonly ToolTraceView[] = [];
+	private cachedEventFlow: readonly ConversationEventView[] = [];
 
 	/**
 	 * @param handle 会话对端 handle（事件流来源）
@@ -279,11 +289,8 @@ export class ConversationProjection {
 				this.liveState = undefined;
 				break;
 			case "assistant.delta":
-				if (event.kind === "reasoning") {
-					// 思考内容默认丢弃：不进正文、不进 timeline，仅驱动「思考中」状态
-					this.liveState = "thinking";
-					break;
-				}
+				// loop 层已丢弃 reasoning delta 不发送；防御旧端/异常来源：忽略不进正文
+				if (event.kind === "reasoning") break;
 				this.liveState = "generating";
 				if (this.activeAssistantSeq === undefined) {
 					this.activeAssistantSeq = this.nextSeq++;
@@ -304,6 +311,8 @@ export class ConversationProjection {
 				this.setTurnEndOnLast(event.seq, event.ts);
 				break;
 			case "tool-call-request":
+				this.cardsDirty = true;
+				this.eventFlowDirty = true;
 				this.pendingTraces.set(event.toolCallId, {
 					toolName: event.name,
 					requestedAt: event.ts,
@@ -318,6 +327,9 @@ export class ConversationProjection {
 				});
 				break;
 			case "tool-call-response": {
+				this.cardsDirty = true;
+				this.toolTracesDirty = true;
+				this.eventFlowDirty = true;
 				const pending = this.pendingTraces.get(event.toolCallId);
 				this.pendingTraces.delete(event.toolCallId);
 				const failed = event.error !== undefined;
@@ -340,7 +352,12 @@ export class ConversationProjection {
 				});
 				break;
 			}
-			// turn-start / compacted / clear / retry-request / approval.* 无影响
+			case "approval.request":
+			case "approval.resolved":
+				// ApprovalProjection 已消费；仅置脏，快照按需重建
+				this.approvalsDirty = true;
+				break;
+			// turn-start / compacted / clear / retry-request 无影响
 		}
 	}
 
@@ -371,7 +388,7 @@ export class ConversationProjection {
 
 	private transition(state: ConversationProjectionState): void {
 		this.state = state;
-		// 错误态清空 liveState，防失败后残留 thinking/generating
+		// 错误态清空 liveState，防失败后残留 generating
 		if (state === "error") this.liveState = undefined;
 		this.publish();
 	}
@@ -389,6 +406,24 @@ export class ConversationProjection {
 	}
 
 	private buildSnapshot(): ConversationProjectionSnapshot {
+		// 子数组「置脏才重建」：delta 高发路径（timeline 仅尾项变更）下其余数组保持冻结引用稳定，
+		// 为 UI 层 memo 提供浅比较基础（见 docs/PRD/gui-performance.md §4.1）。
+		if (this.cardsDirty) {
+			this.cachedCards = Object.freeze(this.cardProjection.getCards());
+			this.cardsDirty = false;
+		}
+		if (this.approvalsDirty) {
+			this.cachedApprovals = Object.freeze(this.approvalProjection.getAll());
+			this.approvalsDirty = false;
+		}
+		if (this.toolTracesDirty) {
+			this.cachedToolTraces = Object.freeze([...this.toolTraces]);
+			this.toolTracesDirty = false;
+		}
+		if (this.eventFlowDirty) {
+			this.cachedEventFlow = Object.freeze([...this.eventFlow]);
+			this.eventFlowDirty = false;
+		}
 		return Object.freeze({
 			conversationId: this.conversationId,
 			revision: this.revision,
@@ -396,10 +431,10 @@ export class ConversationProjection {
 			state: this.state,
 			...(this.liveState !== undefined ? { liveState: this.liveState } : {}),
 			timeline: Object.freeze([...this.timeline]),
-			cards: Object.freeze(this.cardProjection.getCards()),
-			approvals: Object.freeze(this.approvalProjection.getAll()),
-			toolTraces: Object.freeze([...this.toolTraces]),
-			eventFlow: Object.freeze([...this.eventFlow]),
+			cards: this.cachedCards,
+			approvals: this.cachedApprovals,
+			toolTraces: this.cachedToolTraces,
+			eventFlow: this.cachedEventFlow,
 			...(this.error !== undefined ? { error: this.error } : {}),
 		});
 	}

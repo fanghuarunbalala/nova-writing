@@ -7,7 +7,9 @@ import type { ToolDispatcher } from "../../tool/ToolDispatcher.js";
 import type { OutputEvent } from "../../../conversation/contract/events/index.js";
 
 const capability: AgentCapability = {
-  systemSections: [{ kind: "static", render: () => "你是助手" }],
+  systemSections: [
+    { kind: "static", id: "base.one", version: "1.0.0", label: "Base One", render: () => "你是助手" },
+  ],
   toolDefs: [],
   compactPolicies: [],
   nudgePolicies: [],
@@ -36,6 +38,7 @@ function makeProvider(results: ProviderResult[]): Provider {
 
 const dispatcher: ToolDispatcher = {
   dispatch: async (_ctx, call) => `result:${call.name}`,
+  resolve: () => undefined,
 };
 
 function makeLoop(provider: Provider): AgentLoop {
@@ -63,6 +66,23 @@ describe("AgentLoop.run", () => {
     expect(events).toContain("turn-start");
     expect(events).toContain("assistant.delta");
     expect(events).toContain("turn-end");
+  });
+
+  it("reasoning delta 在 loop 层丢弃：不产出任何 assistant.delta 事件（thinking=high 双流只过 text）", async () => {
+    const provider: Provider = {
+      call: async (_call: ProviderCall, onDelta?) => {
+        onDelta?.({ type: "reasoning-delta", text: "思考中" });
+        onDelta?.({ type: "text-delta", text: "正文" });
+        return result("stop", "正文");
+      },
+    };
+    const loop = makeLoop(provider);
+    const events: OutputEvent[] = [];
+    loop.onOutputEvent((e) => events.push(e));
+    await loop.run("hi", { sampling: { model: "gpt-5" } });
+    const deltas = events.filter((e) => e.type === "assistant.delta");
+    expect(deltas).toHaveLength(1);
+    expect(deltas[0]).toMatchObject({ kind: "text", text: "正文" });
   });
 
   it("followup 排队：run 进行中 followup 入队，串行 drain", async () => {

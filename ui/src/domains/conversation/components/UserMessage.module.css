@@ -29,14 +29,17 @@
   display: inline-block;
   margin-top: var(--space-7px);
   padding: var(--space-10px) var(--space-15px);
+  border: 1px solid var(--color-accent-18);
   border-radius: var(--radius-16px);
-  background: var(--color-accent-9);
+  background: var(--color-accent-12);
   color: var(--color-accent-ink);
-  /* 用户要求正文用黑体（--font-ui），配合 medium 字重提升可读性。 */
+  /* 用户要求正文用黑体（--font-ui）；400 原生字重——YaHei/Segoe UI 无原生
+     550，合成加粗会发糊发重。15.5px + 0.01em 字距（Windows 15px 发虚）。 */
   font-family: var(--font-ui);
-  font-size: var(--fs-body);
-  font-weight: var(--fw-medium);
-  line-height: 1.75;
+  font-size: var(--fs-chat);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0.01em;
+  line-height: 1.8;
   text-align: left;
   text-wrap: pretty;
   max-width: 100%;

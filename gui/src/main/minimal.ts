@@ -5,7 +5,9 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
-import { basename, join } from "node:path";
+import { existsSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import {
   Conversation,
@@ -36,10 +38,26 @@ import {
 } from "@novel/core";
 import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
 
-// __dirname = gui/dist/minimal；上三级到项目根，再进 core/scripts
-const preloadPath = join(__dirname, "preload.cjs");
-const rendererHtml = join(__dirname, "minimal.html");
-const childScript = join(__dirname, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
+// 双构建流程布局兼容（两条流程都受现役启动命令使用）：
+// - build-minimal.mjs（根 gui:release / gui:debug）：esbuild CJS 打包到
+//   dist/minimal/main.cjs，preload/renderer 同目录；CJS 下 __dirname 原生
+//   可用、import.meta 被垫为空对象（fileURLToPath(import.meta.url) 必崩；
+//   esbuild 的 import.meta 警告属预期——运行时被 typeof 短路不执行）；
+// - gui pnpm build（tsc NodeNext ESM）：main 在 dist/main/、preload 在
+//   dist/preload/、renderer 在 dist/minimal/；ESM 下无 __dirname。
+// 按「文件实际存在」探测布局，两流程通用；childScript 两种布局同表达式
+// （上三级到项目根再进 core/scripts），不变。
+const baseDir =
+  typeof __dirname !== "undefined"
+    ? __dirname
+    : dirname(fileURLToPath(import.meta.url));
+const preloadPath = existsSync(join(baseDir, "preload.cjs"))
+  ? join(baseDir, "preload.cjs")
+  : join(baseDir, "..", "preload", "preload.cjs");
+const rendererHtml = existsSync(join(baseDir, "minimal.html"))
+  ? join(baseDir, "minimal.html")
+  : join(baseDir, "..", "minimal", "minimal.html");
+const childScript = join(baseDir, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
 const IPC_CHANNEL = "novel-rpc";
 const CONFIG_CHANNEL = "config-rpc";
 const WORKSPACE_CHANNEL = "workspace-rpc";
@@ -48,8 +66,8 @@ const UI_CHANNEL = "ui-rpc";
 /**
  * 回显 AgentLoop：followup 即时开 turn 产 turn-start/user.message → assistant.delta×N →
  * assistant.message/turn-end → journal 快照落盘（验证流式链路 + journal 语义，无需真实 provider）。
- * 文本含「思考」时先发 reasoning delta（验证 thinking 态）；含「审批」时经 requestApproval
- * 阻塞等 UI 决策（验证审批域端到端）。
+ * 文本含「审批」时经 requestApproval 阻塞等 UI 决策（验证审批域端到端）。
+ * 不发 reasoning delta（loop 层已丢弃，见 docs/PRD/gui-performance.md）。
  */
 function createEchoLoop(
   conversationId: string,
@@ -105,17 +123,16 @@ function createEchoLoop(
         return turn;
       }
 
-      // 异步排程发射（避免同步批量发完导致 thinking/generating 状态对 UI 不可见：
+      // 异步排程发射（避免同步批量发完导致 generating 状态对 UI 不可见：
       // React 批量渲染只呈现最终快照；真实 provider 是秒级流不受影响，echo 演示需人工间隔）
       void (async () => {
-        // 文本含「思考」时先发 reasoning delta（验证 thinking 呼吸动画；内容默认丢弃不进正文）
-        if (text.includes("思考")) {
-          emit({ type: "assistant.delta", persist: false, kind: "reasoning", text: "让我想想…", conversationId, ts: now() });
-          await sleep(700);
-          emit({ type: "assistant.delta", persist: false, kind: "reasoning", text: "分析文本结构…", conversationId, ts: now() });
-          await sleep(700);
-        }
-        const reply = `（回声）${text}`;
+        // 文本含「正文」时追加示例小说正文（```novel 块），验证正文草稿面板：
+        // fence 打开即出现面板 + 闪烁光标，流式填充，完成后显示「复制正文」
+        // （思考态已在 C2 移除，不再发 reasoning delta）
+        const demoNovel = text.includes("正文")
+          ? "\n\n```novel\n沈砚站在地下室的台阶上，手里的手电筒光柱晃了晃。他听见风从墙缝里钻进来的声音，像是什么人在远处叹气。\n\n他数着自己的脚步。七级台阶。墙面是青灰色的砖，砖缝里生着苔藓。但右手边的墙壁上，有一块砖的颜色比周围的都要浅。他伸出手，指腹贴上去，凉的。\n```"
+          : "";
+        const reply = `（回声）${text}${demoNovel}`;
         for (const ch of reply) {
           emit({ type: "assistant.delta", persist: false, kind: "text", text: ch, conversationId, ts: now() });
           await sleep(24);
@@ -213,6 +230,17 @@ function createManager(
   return server;
 }
 
+// 崩溃兜底：main 进程任何未捕获异常/未处理 rejection 先留完整痕迹再退出
+// （此前无此 handler 时崩溃只剩 exit 1 + 一行裸 undefined，无法定位）
+process.on("uncaughtException", (e) => {
+  console.error("[main] uncaught exception:", e);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[main] unhandled rejection:", reason);
+  process.exit(1);
+});
+
 async function main(): Promise<void> {
   await app.whenReady();
 
@@ -250,9 +278,6 @@ async function main(): Promise<void> {
       return result;
     },
   };
-  app.on("will-quit", () => {
-    void novelPublisher.close();
-  });
   const conversationsRoot = join(app.getPath("userData"), "novel-storage", "conversations");
 
   // config：JSON 文件持久化（凭据暂明文，safeStorage cipher 后续接）
@@ -274,18 +299,12 @@ async function main(): Promise<void> {
 
   // novel-db WS：conversation 子进程经 kkrpc/ws + token 访问 canonical store（协议定稿 transport）
   const novelWs = await startNovelDbWsServer({ store: publishingStore, token: randomUUID() });
-  app.on("will-quit", () => {
-    void novelWs.close();
-  });
 
   // manager WS（conversation ↔ CMS 单连接双工；manager 与服务端互依 → holder）
   const managerHolder: { manager?: ConversationManagerServer } = {};
   const managerWs = await startConversationManagerWsServer({
     manager: () => managerHolder.manager!,
     token: randomUUID(),
-  });
-  app.on("will-quit", () => {
-    void managerWs.close();
   });
 
   // 当前工作区根路径（spawn 时经 env 注入子进程，agent 文件工具落点）
@@ -359,14 +378,38 @@ async function main(): Promise<void> {
   const novelSubscriber = new EventSubscriber(NOVEL_EVENTS_ADDR, [NOVEL_CHANGED]);
   await novelSubscriber.connect();
   void (async () => {
-    for await (const message of novelSubscriber) {
-      const entity = (message.payload as { entity?: unknown } | null)?.entity;
-      if (typeof entity !== "string") continue;
-      void uiApi.onNovelChanged({ entity }).catch(() => {
-        // renderer 未就绪时忽略（store 下次 loadWorkspace 兜底）
-      });
+    try {
+      for await (const message of novelSubscriber) {
+        const entity = (message.payload as { entity?: unknown } | null)?.entity;
+        if (typeof entity !== "string") continue;
+        void uiApi.onNovelChanged({ entity }).catch(() => {
+          // renderer 未就绪时忽略（store 下次 loadWorkspace 兜底）
+        });
+      }
+    } catch (e) {
+      console.error("[main] novel subscriber stopped:", e);
     }
   })();
+
+  // 退出前有序关闭：zeromq 原生插件（addon.node）在进程退出时若 socket 未干净拆除会
+  // fail-fast（0xC0000409，Event Log 已确认）。will-quit 先 preventDefault，等全部
+  // close（含 SUB socket，其关闭令上方 for-await 自然结束）完成后再真正 quit；
+  // 2s 兜底超时防 close 悬挂导致应用退不掉。
+  let shutdownReady = false;
+  app.on("will-quit", (e) => {
+    if (shutdownReady) return;
+    e.preventDefault();
+    shutdownReady = true;
+    void Promise.race([
+      Promise.allSettled([
+        novelPublisher.close(),
+        novelSubscriber.close(),
+        novelWs.close(),
+        managerWs.close(),
+      ]),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]).finally(() => app.quit());
+  });
 
   // workspace：目录选择器 + 定位器 + 最近列表（内存）
   const locator = new NodeWorkspaceStoreLocator({
@@ -402,8 +445,18 @@ async function main(): Promise<void> {
     height: 640,
     webPreferences: { preload: preloadPath },
   });
-  win.webContents.on("console-message", (_e, level, message) => {
-    console.error(`[renderer:${level}] ${message}`);
+  win.webContents.on("console-message", (_e, ...args: unknown[]) => {
+    // Electron 43 新旧签名兼容：旧 (event, level, message, ...) / 新 (event, details)
+    const first = args[0];
+    const level =
+      typeof first === "object" && first !== null && "level" in first
+        ? (first as { level: unknown }).level
+        : first;
+    const message =
+      typeof first === "object" && first !== null && "message" in first
+        ? (first as { message: unknown }).message
+        : args[1];
+    console.error(`[renderer:${String(level)}] ${String(message)}`);
   });
   await win.loadFile(rendererHtml);
   infoLog("[main] minimal electron ready");

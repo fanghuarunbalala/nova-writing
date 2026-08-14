@@ -2,7 +2,6 @@ import type {
   AssistantMessage,
   LLMessage,
   ProviderResult,
-  ProviderDelta,
   ToolCall,
 } from "../provider/types.js";
 import type {
@@ -28,13 +27,6 @@ function addUsage(
     inputTokens: (acc?.inputTokens ?? 0) + next.inputTokens,
     outputTokens: (acc?.outputTokens ?? 0) + next.outputTokens,
   };
-}
-
-/** ProviderDelta → assistant.delta 事件 extra 字段 */
-function toDeltaExtra(d: ProviderDelta): Record<string, unknown> {
-  return d.type === "text-delta"
-    ? { persist: false, kind: "text", text: d.text }
-    : { persist: false, kind: "reasoning", text: d.text };
 }
 
 /** AgentLoop：agent 主循环，产出 OutputEvent（conversation 统一事件），带输入队列 */
@@ -69,6 +61,8 @@ export class AgentLoop {
       workspace: config.workspace,
       turnMessages: config.turnMessages,
       startSeq: config.startSeq,
+      platform: config.platform,
+      novelConstraintsProvider: config.novelConstraintsProvider,
     });
     for (const listener of config.listeners ?? []) {
       this.context.subscribe(listener);
@@ -171,7 +165,25 @@ export class AgentLoop {
             }
           }
         } else {
-          await this.runInternal(input.text, config, undefined, input.turn);
+          try {
+            await this.runInternal(input.text, config, undefined, input.turn);
+          } catch (e) {
+            const turn = input.turn;
+            if (this.controller.signal.aborted) {
+              // 用户 stop/cancel：abort 是正常路径，静默收口（不发错误文案）
+              this.config.logger?.debug("agent.loop.run.aborted", { seq: turn.seq });
+              this.emit(undefined, "turn-end", { persist: true, seq: turn.seq, turnSeq: turn.seq });
+              continue;
+            }
+            // turn 管线异常（provider / 工具 / 监听器）：收口为可见错误，进程继续服务后续消息
+            this.config.logger?.error("agent.loop.run.error", {
+              seq: turn.seq,
+              error: e instanceof Error ? e.constructor.name : String(e),
+            });
+            const text = `（生成失败：${e instanceof Error ? e.message : String(e)}）`;
+            this.emit(undefined, "assistant.message", { persist: true, seq: turn.seq, text });
+            this.emit(undefined, "turn-end", { persist: true, seq: turn.seq, turnSeq: turn.seq });
+          }
         }
       }
     } finally {
@@ -279,13 +291,16 @@ export class AgentLoop {
         model: runConfig.sampling.model,
         curTurn: runContext.curTurn,
       });
-      const call = this.context.toProviderCall(runConfig, runContext, this.controller.signal);
+      const call = await this.context.toProviderCall(runConfig, runContext, this.controller.signal);
       this.config.debugger?.record(call); // 记录每次请求（相邻差异在 html 展示）
       let result: ProviderResult;
       try {
-        result = await this.config.provider.call(call, (d) =>
-          this.emit(onEvent, "assistant.delta", toDeltaExtra(d)),
-        );
+        result = await this.config.provider.call(call, (d) => {
+          // reasoning delta 在 loop 层直接丢弃（思考内容不上链、UI 不展示思考中态）：
+          // 不 emit 任何事件，省去 hub/WS/IPC 全链传输成本。见 docs/PRD/gui-performance.md。
+          if (d.type !== "text-delta") return;
+          this.emit(onEvent, "assistant.delta", { persist: false, kind: "text", text: d.text });
+        });
       } catch (err) {
         logger?.error("agent.call.error", {
           curTurn: runContext.curTurn,
@@ -349,7 +364,7 @@ export class AgentLoop {
    * @returns undefined = 放行执行；字符串 = 拒绝结果文本（作为 tool-call-response 进 turn 继续）
    */
   private async gateTool(tc: ToolCall, turnSeq: number): Promise<string | undefined> {
-    const toolDef = this.config.agentCapability.toolDefs.find((t) => t.name === tc.name);
+    const toolDef = this.config.toolDispatcher.resolve(tc.name);
     if (toolDef?.requireApproval !== true) return undefined;
     if (this.config.requestApproval === undefined) return "已拒绝（审批通道未装配）";
     const decision = await this.config.requestApproval({

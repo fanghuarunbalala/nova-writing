@@ -8,10 +8,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "pnpm -r build",
-    "dev": "pnpm --filter @novel/core dev",
-    "typecheck": "pnpm -r typecheck",
-    "gui:release": "pnpm --filter @novel/core build && pnpm --filter @novel/ui build && node gui/scripts/build-minimal.mjs && pnpm --filter @novel/gui exec electron dist/minimal/main.cjs",
+    "build": "pnpm --filter @novel/core build && pnpm --filter @novel/ui build && node gui/scripts/build-minimal.mjs",
+    "gui:release": "pnpm --filter @novel/gui exec electron dist/minimal/main.cjs",
     "gui:debug": "set NOVEL_LOG_LEVEL=verbose&& pnpm gui:release"
   },
   "devDependencies": {

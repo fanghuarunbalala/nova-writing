@@ -6,18 +6,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AgentLoop,
-  InMemoryRegistry,
   createProvider,
 } from "../dist/index.js";
 import { FileConversationJournalService } from "../dist/conversation/persistence/index.js";
 import { FileConversationJournalReadOnlyService } from "../dist/conversation/persistence/index.js";
 import { journalListener } from "../dist/conversation/JournalBridge.js";
 
-// 能力（无工具，纯对话）
-const registry = new InMemoryRegistry();
-registry.registerAgent({ agentType: "writer", agentVersion: "1", promptIds: ["base"] });
-registry.registerPrompt({ kind: "static", render: () => "你是小说创作助手。" }, "base", "1");
-const capability = registry.buildCapability("writer", "1");
+// 能力直构（无工具，纯对话）
+const capability = {
+  systemSections: [
+    {
+      kind: "static",
+      id: "writer.base",
+      version: "1.0.0",
+      label: "Writer Base",
+      render: () => "你是小说创作助手。",
+    },
+  ],
+  toolDefs: [],
+  compactPolicies: [],
+  nudgePolicies: [],
+};
 
 // provider
 const provider = createProvider({
@@ -36,7 +45,7 @@ const loop = new AgentLoop({
   workspace: ".",
   provider,
   agentCapability: capability,
-  toolDispatcher: { dispatch: async () => "noop" },
+  toolDispatcher: { dispatch: async () => "noop", resolve: () => undefined },
   conversationId: "main",
   agentId: "main",
   listeners: [journalListener(journal)],

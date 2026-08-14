@@ -116,6 +116,11 @@
   }
 }
 
+@keyframes draft-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 /* 通用动画 utility class（全局类；TSX 可直接挂 class 使用） */
 .anim-grad-flow { animation: grad-flow 7s ease-in-out infinite; }
 .anim-view-in   { animation: view-in var(--duration-base) var(--ease-out); }

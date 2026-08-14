@@ -4,15 +4,21 @@
  *
  * 标准 Markdown（粗体/列表/标题/GFM 表格）由 react-markdown + remark-gfm 渲染；
  * cc:// 引用链接（extractReferenceTags 生成）拦截为可点击的 MessageReferenceChip。
+ * ```novel fenced code block 切出交给 NovelDraftPanel（正文草稿面板），
+ * 与聊天注释视觉分离；流式期间最后一个正文块末尾显示闪烁光标。
+ * memo 包裹：text 原值比较，历史消息零重解析（markdown 全管道是最大单项成本）。
  */
+import { memo } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { ToastKind } from "../../../../shared/state/ToastStore.js";
 import {
   MessageReferenceChip,
   type MessageReference,
   type ResolvedReference,
 } from "../MessageReference.js";
 import { extractReferenceTags } from "./extractReferenceTags.js";
+import { NovelDraftPanel } from "./NovelDraftPanel.js";
 import styles from "./assistantMarkdown.module.css";
 
 export interface AssistantMarkdownProps {
@@ -20,47 +26,104 @@ export interface AssistantMarkdownProps {
   readonly onReferenceClick?: (reference: MessageReference) => void;
   /** 解析引用档案（名字/是否已建档）；自闭合引用与 missing 态依赖它。 */
   readonly resolveReference?: (reference: MessageReference) => ResolvedReference | undefined;
+  /** 流式进行中：最后一个 ```novel 正文块末尾显示闪烁光标。 */
+  readonly streaming?: boolean;
+  /** 正文复制结果提示（shell 层 ToastHost）。 */
+  readonly onNotify?: (kind: ToastKind, text: string) => void;
 }
 
 const REFERENCE_PREFIX = "cc://";
 
-export function AssistantMarkdown({
+/** ```novel fenced block（小说正文草稿）；正文按空行分段、段内换行保留。 */
+const NOVEL_FENCE_RE = /```novel\s*\n?([\s\S]*?)```/g;
+
+interface MarkdownSegment {
+  readonly kind: "md" | "novel";
+  readonly content: string;
+}
+
+/** 把 ```novel 块切出为独立段：块间与首尾的普通 Markdown 归入 md 段。 */
+function splitNovelSegments(text: string): MarkdownSegment[] {
+  const segments: MarkdownSegment[] = [];
+  let last = 0;
+  for (const match of text.matchAll(NOVEL_FENCE_RE)) {
+    const index = match.index ?? 0;
+    if (index > last) {
+      segments.push({ kind: "md", content: text.slice(last, index) });
+    }
+    segments.push({ kind: "novel", content: match[1] ?? "" });
+    last = index + match[0].length;
+  }
+  if (last < text.length) {
+    segments.push({ kind: "md", content: text.slice(last) });
+  }
+  return segments;
+}
+
+export const AssistantMarkdown = memo(function AssistantMarkdown({
   text,
   onReferenceClick,
   resolveReference,
+  streaming = false,
+  onNotify,
 }: AssistantMarkdownProps) {
   const content = extractReferenceTags(text);
+  const segments = splitNovelSegments(content);
+  const lastNovelIndex = segments.reduce(
+    (last, segment, index) => (segment.kind === "novel" ? index : last),
+    -1,
+  );
+
   return (
     <div className={styles.markdown}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        urlTransform={(url) =>
-          url.startsWith(REFERENCE_PREFIX) ? url : defaultUrlTransform(url)
+      {segments.map((segment, index) => {
+        if (segment.kind === "novel") {
+          // 流式初期 ```novel 刚打开、正文为空时也渲染（kicker + 光标即时反馈）；
+          // 完成后空块直接丢弃。
+          if (segment.content.trim() === "" && !streaming) return null;
+          return (
+            <NovelDraftPanel
+              key={index}
+              content={segment.content}
+              streaming={streaming && index === lastNovelIndex}
+              onNotify={onNotify}
+            />
+          );
         }
-        components={{
-          a: ({ href, children }) => {
-            if (typeof href === "string" && href.startsWith(REFERENCE_PREFIX)) {
-              const reference = parseReferenceHref(href);
-              if (reference !== null) {
-                const resolved = resolveReference?.(reference);
-                return (
-                  <MessageReferenceChip
-                    reference={reference}
-                    onClick={onReferenceClick}
-                    resolved={resolved}
-                  />
-                );
-              }
+        if (segment.content.trim() === "") return null;
+        return (
+          <ReactMarkdown
+            key={index}
+            remarkPlugins={[remarkGfm]}
+            urlTransform={(url) =>
+              url.startsWith(REFERENCE_PREFIX) ? url : defaultUrlTransform(url)
             }
-            return <a href={href}>{children}</a>;
-          },
-        }}
-      >
-        {content}
-      </ReactMarkdown>
+            components={{
+              a: ({ href, children }) => {
+                if (typeof href === "string" && href.startsWith(REFERENCE_PREFIX)) {
+                  const reference = parseReferenceHref(href);
+                  if (reference !== null) {
+                    const resolved = resolveReference?.(reference);
+                    return (
+                      <MessageReferenceChip
+                        reference={reference}
+                        onClick={onReferenceClick}
+                        resolved={resolved}
+                      />
+                    );
+                  }
+                }
+                return <a href={href}>{children}</a>;
+              },
+            }}
+          >
+            {segment.content}
+          </ReactMarkdown>
+        );
+      })}
     </div>
   );
-}
+});
 
 function parseReferenceHref(href: string): MessageReference | null {
   const rest = href.slice(REFERENCE_PREFIX.length);

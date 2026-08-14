@@ -21,12 +21,23 @@ import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
 import { createProvider } from "../../runtime/provider/Provider.js";
 import { buildNovelAgent } from "../../runtime/agent/NovelAgent.js";
+import {
+  readNovelGlobalConstraintsSafe,
+  NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME,
+} from "../workspace/readNovelGlobalConstraints.js";
 import type { LLMessage } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
+
+/** 平台显示名（动态段 core.environment 用） */
+const PLATFORM_LABELS: Readonly<Record<string, string>> = Object.freeze({
+	darwin: "macOS",
+	linux: "Linux",
+	win32: "Windows",
+});
 
 /** CMS 调用面（子进程 getAPI 视图） */
 interface CmsApi {
@@ -196,6 +207,18 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
 		resumePendingDecider,
 		logger,
+		// 动态段输入：每 provider call 经 DynamicInputProvider 注入（modelId 由
+		// LoopContext 以 run.sampling.model 补齐）；NOVEL.md 读取失败静默（占位渲染）
+		dynamicInput: async () => ({
+			environment: {
+				workdir: workspace,
+				platform: PLATFORM_LABELS[process.platform] ?? process.platform,
+			},
+			novelGlobalConstraints: {
+				fileName: NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME,
+				content: (await readNovelGlobalConstraintsSafe(workspace, logger)) ?? "",
+			},
+		}),
 	});
 
 	const managerWait: ManagerWaitChannel | undefined =

@@ -6,10 +6,10 @@
  * read-only novel_explorer / novel_compose subagents (declared only; no runtime
  * effect — subagent assembly is out of scope this phase).
  *
- * recipe 序（static 全前、dynamic 后；后续步骤补齐 communication / environment /
- * global_constraints 至 9 项）：
+ * recipe 序（static 全前、dynamic 后）：
  * novel.identity → novel.system → novel.doing-tasks → novel.actions →
- * core.runtime.protocol → tool.guidance(dynamic)
+ * novel.communication → core.runtime.protocol → core.environment(dynamic) →
+ * novel.global_constraints(dynamic) → tool.guidance(dynamic)
  */
 import {
   AgentCommunicationPolicy,
@@ -23,6 +23,7 @@ import {
 } from "../../prompt/PromptRecipe.js";
 import { PromptSectionRegistry } from "../../prompt/PromptSectionRegistry.js";
 import {
+  coreEnvironmentSection,
   coreRuntimeProtocolSection,
   toolGuidanceSection,
 } from "../../prompt/sections/agent.js";
@@ -31,15 +32,20 @@ import {
   novelSystemSection,
   novelCraftSection,
   novelExecutionSection,
+  novelCommunicationSection,
+  novelGlobalConstraintsSection,
 } from "../../prompt/sections/novel.js";
 
-/** Novel Agent 段注册表（id@version；本期 6 段，后续步骤补齐 3 段） */
+/** Novel Agent 段注册表（id@version；9 段） */
 export const novelSectionRegistry = new PromptSectionRegistry([
   novelIdentitySection,
   novelSystemSection,
   novelCraftSection,
   novelExecutionSection,
+  novelCommunicationSection,
   coreRuntimeProtocolSection,
+  coreEnvironmentSection,
+  novelGlobalConstraintsSection,
   toolGuidanceSection,
 ]);
 
@@ -54,7 +60,10 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.system"),
     new PromptSectionItem("novel.doing-tasks"),
     new PromptSectionItem("novel.actions"),
+    new PromptSectionItem("novel.communication"),
     new PromptSectionItem("core.runtime.protocol"),
+    new PromptSectionItem("core.environment"),
+    new PromptSectionItem("novel.global_constraints"),
     new PromptSectionItem("tool.guidance"),
   ]),
   tools: new AgentToolPolicy({

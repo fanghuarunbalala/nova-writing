@@ -6,7 +6,7 @@
  * - novel-db 走 kkrpc/ws（无 URL 时回退进程内内存 store，开发用）
  * - wait 请求无阻塞：经 managerWait 提交 CMS 队列；决策经 resolveApproval 回传
  *   （驻留直推）；120s 超时 → process.exit（CMS 决策后重启续跑）
- * - 重启恢复：journal 重放 + CMS takeDecisions 查询待决 → 暂停点续跑（resumePendingTurn）
+ * - 重启恢复：journal 重放 + CMS takeDecisions 查询待决 → 暂停点续跑（resumePendingRun）
  * - subagent：SubagentRuntime 进程内编排（main 经 Agent/TaskOutput/TaskStop 派发）
  */
 import { appendFileSync } from "node:fs";
@@ -85,7 +85,7 @@ function conversationExposeOf(holder: { conv?: Conversation }): Record<string, u
 	};
 }
 
-/** 由 requestId 尾段解析 toolCallId（requestId = approval_{convId}_{turnSeq}_{toolCallId}） */
+/** 由 requestId 尾段解析 toolCallId（requestId = approval_{convId}_{runSeq}_{toolCallId}） */
 function toolCallIdOf(requestId: string): string | undefined {
 	const parts = requestId.split("_");
 	return parts.length >= 4 ? parts.slice(3).join("_") : undefined;
@@ -173,13 +173,13 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			: undefined;
 	await journal?.open();
 
-	// 恢复上下文：journal 已落盘 turns → 历史消息 + resumeSeq（崩溃重派生续跑）
-	let turnMessages: LLMessage[] | undefined;
+	// 恢复上下文：journal 已落盘 runs → 历史消息 + resumeSeq（崩溃重派生续跑）
+	let runMessages: LLMessage[] | undefined;
 	let resumeSeq: number | undefined;
 	if (journal !== undefined && storedir !== undefined) {
 		const readOnly = new FileConversationJournalReadOnlyService({ journalDir: storedir });
-		const turns = await readOnly.readTurns(conversationId);
-		turnMessages = turns.flatMap((t) => t.messages);
+		const runs = await readOnly.readRuns(conversationId);
+		runMessages = runs.flatMap((r) => r.messages);
 		resumeSeq = journal.lastSeq;
 	}
 
@@ -268,7 +268,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		handle: novelHandle,
 		conversationId,
 		listeners: journal !== undefined ? [journalListener(journal)] : undefined,
-		turnMessages,
+		runMessages,
 		resumeSeq,
 		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
 		resumePendingDecider,
@@ -311,14 +311,14 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	});
 	holder.conv = conv;
 
-	// 暂停点续跑：恢复 turn 存在缺 tool 结果的 toolCall 时补完并收口
-	if (turnMessages !== undefined && turnMessages.length > 0) {
-		const hasPendingTool = turnMessages.some(
+	// 暂停点续跑：恢复 run 存在缺 tool 结果的 toolCall 时补完并收口
+	if (runMessages !== undefined && runMessages.length > 0) {
+		const hasPendingTool = runMessages.some(
 			(m) => m.role === "assistant" && (m.toolCalls ?? []).length > 0,
 		);
 		if (hasPendingTool) {
-			await loop.resumePendingTurn({ sampling, maxTurns: 8 }).catch((err) => {
-				debugLog("[child] resumePendingTurn failed:", err);
+			await loop.resumePendingRun({ sampling, maxTurns: 8 }).catch((err) => {
+				debugLog("[child] resumePendingRun failed:", err);
 			});
 		}
 	}

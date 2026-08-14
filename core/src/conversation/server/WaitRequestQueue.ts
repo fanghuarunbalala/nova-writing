@@ -19,7 +19,7 @@ export type ApprovalDecisioner = "ui" | "parent";
 export interface ApprovalQueueItem {
 	/** 发起会话 */
 	conversationId: ConversationId;
-	/** 审批请求 id（approval_{conversationId}_{turnSeq}_{toolCallId}） */
+	/** 审批请求 id（approval_{conversationId}_{runSeq}_{toolCallId}） */
 	requestId: string;
 	/** 工具名 */
 	toolName: string;

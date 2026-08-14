@@ -22,7 +22,7 @@ function mockLoop(): AgentLoop {
 			seq: 1,
 			messages: [{ role: "user", content: "hi" }],
 			ts: "t",
-			appendTurnMessages: () => {},
+			appendRunMessages: () => {},
 		}),
 		steer: () => {},
 		stop: () => {},

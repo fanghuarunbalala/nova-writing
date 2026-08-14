@@ -15,7 +15,7 @@ export type { ToolTraceView, AssistantSegment };
 
 export type ConversationTimelineItem =
   | {
-      readonly kind: "turn";
+      readonly kind: "run";
       readonly sequence: number;
       readonly label: string;
       readonly timestamp: number;

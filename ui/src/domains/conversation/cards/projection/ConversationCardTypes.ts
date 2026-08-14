@@ -1,4 +1,4 @@
-/** Safe view-neutral card descriptors derived from structured OutputEvents. */
+/** Safe view-neutral card descriptors derived from structured ProjectedEvents（CardProjection 派生）. */
 
 export type ConversationCardKind =
   | "novel-reference"

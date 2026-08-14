@@ -1,6 +1,6 @@
 /**
  * 输出事件（持久化域）全集：journal 落盘与重建的事实源。
- * 与流域共享的字面（消息/turn 边界等）复用 shared.ts 并附加 persist: true；
+ * 与流域共享的字面（消息/run 边界等）复用 shared.ts 并附加 persist: true；
  * tool-call-request/response 为持久化域专属（完整 args/result，重建必需）；
  * assistant.delta 已移入流域、approval 事件已删除（wait 权威在 CMS 队列，PRD `output-投影层`）。
  * 只建模消息流（user/assistant/tool-call/边界）；todo/run 状态等读 sqlite 读模型，不进事件。
@@ -13,8 +13,8 @@ import type {
 	CompactedEvent,
 	Persisted,
 	RetryRequestEvent,
-	TurnEndEvent,
-	TurnStartEvent,
+	RunEndEvent,
+	RunStartEvent,
 	UserMessageEvent,
 } from "./shared.js";
 
@@ -46,8 +46,8 @@ interface ToolCallResponseEvent {
 
 /** 输出事件全集（持久化域：全部 persist=true，journal 只写这些） */
 export type OutputEvent =
-	| Persisted<TurnStartEvent>
-	| Persisted<TurnEndEvent>
+	| Persisted<RunStartEvent>
+	| Persisted<RunEndEvent>
 	| Persisted<UserMessageEvent>
 	| Persisted<AssistantMessageEvent>
 	| Persisted<CompactedEvent>

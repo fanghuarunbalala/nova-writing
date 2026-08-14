@@ -51,13 +51,13 @@ export interface ConversationTimelineItem {
 	text: string;
 	/** assistant 专用：turn 分段（每段 = 内容 + 工具行；无工具调用时为空数组） */
 	segments?: readonly AssistantSegment[];
-	/** 流式中（assistant.delta 累积期间为 true，turn-end 收口） */
+	/** 流式中（assistant.delta 累积期间为 true，run-end 收口） */
 	streaming?: boolean;
 	/** 首事件 journal seq（cards 归属范围起点） */
 	sourceSequence?: number;
-	/** turn 收口 seq（工具调用常落在消息收口前；归属范围终点） */
-	turnEndSequence?: number;
-	/** 事件时间（turn 分隔条展示） */
+	/** run 收口 seq（工具调用常落在消息收口前；归属范围终点） */
+	runEndSequence?: number;
+	/** 事件时间（run 分隔条展示） */
 	timestamp?: string;
 }
 
@@ -76,7 +76,7 @@ export interface ConversationProjectionSnapshot {
 	/** 最后应用的 journal 序列号（实时 delta 无 seq，取最近 persist 事件） */
 	lastAppliedSequence: number;
 	state: ConversationProjectionState;
-	/** 实时生成状态：text delta → generating、turn 收口 → undefined（thinking 态随 loop 层丢弃 reasoning delta 移除） */
+	/** 实时生成状态：text delta → generating、run 收口 → undefined（thinking 态随 loop 层丢弃 reasoning delta 移除） */
 	liveState?: "generating";
 	timeline: readonly ConversationTimelineItem[];
 	/** 工具调用卡片（CardProjection 派生） */
@@ -107,7 +107,7 @@ export class ConversationProjection {
 	private activeSegments: AssistantSegment[] = [];
 	/** 当前段 delta 累积缓冲（assistant.delta 追加） */
 	private activeSegmentText = "";
-	/** 实时生成状态（generating；turn 收口清除） */
+	/** 实时生成状态（generating；run 收口清除） */
 	private liveState: "generating" | undefined;
 	private nextSeq = 1;
 	private readonly cardProjection = new CardProjection();
@@ -158,7 +158,7 @@ export class ConversationProjection {
 
 	/**
 	 * 开始消费事件流（幂等：running 时直接返回）。
-	 * 顺序：先订阅（缓冲）→ 拉 journal 历史应用 → 冲刷缓冲（带 seq 按 seq 去重、delta 由 live-turn 门控），
+	 * 顺序：先订阅（缓冲）→ 拉 journal 历史应用 → 冲刷缓冲（带 seq 按 seq 去重、delta 由 live-run 门控），
 	 * 订阅与重放之间无丢失窗口。
 	 */
 	async start(): Promise<void> {
@@ -193,15 +193,15 @@ export class ConversationProjection {
 			this.publish();
 			replayed = true;
 			// ③ 冲刷缓冲：带 seq 事件仅当 seq > historyMaxSeq 才应用（历史已覆盖的去重）；
-			// delta（无 seq）仅当处于 live turn（seq > historyMaxSeq 的 turn-start/user.message 已开）才应用
-			let liveTurn = false;
+			// delta（无 seq）仅当处于 live run（seq > historyMaxSeq 的 run-start/user.message 已开）才应用
+			let liveRun = false;
 			for (const event of buffer) {
 				if ("seq" in event) {
 					if (event.seq <= historyMaxSeq) continue;
 					this.apply(event);
-					if (event.type === "turn-start" || event.type === "user.message") liveTurn = true;
-					else if (event.type === "turn-end") liveTurn = false;
-				} else if (liveTurn) {
+					if (event.type === "run-start" || event.type === "user.message") liveRun = true;
+					else if (event.type === "run-end") liveRun = false;
+				} else if (liveRun) {
 					this.apply(event);
 				}
 			}
@@ -233,6 +233,9 @@ export class ConversationProjection {
 
 	/** 应用一条 ProjectedEvent */
 	private apply(event: ProjectedEvent): void {
+		// subagent 隔离：盖章即 subagent（agentId = "<agentType>:<taskId>"），
+		// 非 main 事件不进主流时间线（未盖章与 "main" 视为主流；任务快照走 queryTasks）
+		if (event.agentId !== undefined && event.agentId !== "main") return;
 		// 仅带 seq 事件推进 lastAppliedSequence（delta 瞬态不带 seq）
 		if ("seq" in event) this.lastAppliedSequence = event.seq;
 		this.cardProjection.apply(event);
@@ -252,7 +255,7 @@ export class ConversationProjection {
 				// 无（纯历史重放无工具）→ 新推
 				if (this.activeAssistantSeq !== undefined) {
 					this.finalizeAssistant(event.text);
-					this.setTurnEndOnLast(event.seq, event.ts);
+					this.setRunEndOnLast(event.seq, event.ts);
 				} else {
 					this.timeline.push({
 						kind: "assistant",
@@ -260,7 +263,7 @@ export class ConversationProjection {
 						text: event.text,
 						segments: Object.freeze([]),
 						sourceSequence: event.seq,
-						turnEndSequence: event.seq,
+						runEndSequence: event.seq,
 						timestamp: event.ts,
 					});
 				}
@@ -302,11 +305,11 @@ export class ConversationProjection {
 				});
 				this.syncActiveItem();
 				break;
-			case "turn-end":
+			case "run-end":
 				this.finalizeAssistant();
-				this.setTurnEndOnLast(event.seq, event.ts);
+				this.setRunEndOnLast(event.seq, event.ts);
 				break;
-			// turn-start / compacted / clear / retry-request 无影响
+			// run-start / compacted / clear / retry-request 无影响
 		}
 	}
 
@@ -322,7 +325,7 @@ export class ConversationProjection {
 			text: "",
 			segments: [],
 			streaming: true,
-			// 归属起点 = 当前 turn 的首个 persist seq（turn-start/user.message 已推进 lastAppliedSequence）
+			// 归属起点 = 当前 run 的首个 persist seq（run-start/user.message 已推进 lastAppliedSequence）
 			sourceSequence: this.lastAppliedSequence,
 			...(typeof event.ts === "string" ? { timestamp: event.ts } : {}),
 		});
@@ -370,6 +373,12 @@ export class ConversationProjection {
 		this.activeSegmentText = "";
 		const last = this.activeSegments.at(-1);
 		if (last === undefined) {
+			this.activeSegments.push({ text: "", tools: [row] });
+			return;
+		}
+		// 上一段已收口（上一请求的工具批次完成）→ 本次调用属于新请求：开新段（每请求一段）。
+		// 无显式请求边界事件，同一请求内顺序多工具与此场景不可区分，一并按新段处理。
+		if (this.segmentIsClosed()) {
 			this.activeSegments.push({ text: "", tools: [row] });
 			return;
 		}
@@ -430,11 +439,11 @@ export class ConversationProjection {
 		this.activeSegmentText = "";
 	}
 
-	/** turn 收口：给最后一条 timeline 项补 turnEndSequence/timestamp（工具归属范围终点） */
-	private setTurnEndOnLast(seq: number, ts: string): void {
+	/** run 收口：给最后一条 timeline 项补 runEndSequence/timestamp（工具归属范围终点） */
+	private setRunEndOnLast(seq: number, ts: string): void {
 		const last = this.timeline.at(-1);
 		if (last === undefined) return;
-		this.timeline[this.timeline.length - 1] = { ...last, turnEndSequence: seq, timestamp: last.timestamp ?? ts };
+		this.timeline[this.timeline.length - 1] = { ...last, runEndSequence: seq, timestamp: last.timestamp ?? ts };
 	}
 
 	private transition(state: ConversationProjectionState): void {

@@ -186,9 +186,9 @@ export class ConversationManagerServer implements Contract {
 		if (line === undefined) return undefined;
 		try {
 			const parsed = JSON.parse(line) as {
-				turn?: { messages?: Array<{ role?: string; content?: unknown }> };
+				run?: { messages?: Array<{ role?: string; content?: unknown }> };
 			};
-			const messages = parsed.turn?.messages;
+			const messages = parsed.run?.messages;
 			if (!Array.isArray(messages)) return undefined;
 			const first = messages.find((m) => m.role === "user");
 			if (first?.content === undefined) return undefined;
@@ -467,7 +467,7 @@ export class ConversationManagerServer implements Contract {
 	}
 }
 
-/** journal 首行读取上限（首行即首个 turn，含完整 user 消息；超限视为损坏） */
+/** journal 首行读取上限（首行即首个 run，含完整 user 消息；超限视为损坏） */
 const JOURNAL_FIRST_LINE_MAX_BYTES = 256 * 1024;
 
 /**

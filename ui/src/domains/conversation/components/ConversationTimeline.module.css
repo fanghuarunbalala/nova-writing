@@ -44,7 +44,7 @@
 }
 
 /* 轮次分隔（原型 .turn-sep）：居中 mono faint，两侧渐变细线。 */
-.turnSep {
+.runSep {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -56,24 +56,24 @@
   letter-spacing: 0.16em;
 }
 
-.turnSep::before,
-.turnSep::after {
+.runSep::before,
+.runSep::after {
   content: "";
   flex: 1;
   height: 1px;
   background: var(--color-border);
 }
 
-.turnSep::before {
+.runSep::before {
   background: linear-gradient(to right, transparent, var(--color-border-strong));
 }
 
-.turnSep::after {
+.runSep::after {
   background: linear-gradient(to left, transparent, var(--color-border-strong));
 }
 
 /* 首条轮次分隔收窄上边距（原型 .turn-sep:first-child；条目外层有 .enter 包裹） */
-.enter:first-child .turnSep {
+.enter:first-child .runSep {
   margin-top: var(--space-10px);
 }
 

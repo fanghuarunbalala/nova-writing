@@ -65,9 +65,9 @@ describe("AgentLoop.run", () => {
     const events: string[] = [];
     loop.onOutputEvent((e) => events.push(e.type));
     await loop.run("hi", { sampling: { model: "gpt-5" } });
-    expect(events).toContain("turn-start");
+    expect(events).toContain("run-start");
     expect(events).toContain("assistant.delta");
-    expect(events).toContain("turn-end");
+    expect(events).toContain("run-end");
   });
 
   it("reasoning delta 在 loop 层丢弃：不产出任何 assistant.delta 事件（thinking=high 双流只过 text）", async () => {
@@ -98,7 +98,7 @@ describe("AgentLoop.run", () => {
     expect(true).toBe(true);
   });
 
-  it("followup 即时开 turn 返回 TurnContext（seq 已分配，turn-start/user.message 已发；执行后同 seq 收口）", async () => {
+  it("followup 即时开 turn 返回 RunContext（seq 已分配，run-start/user.message 已发；执行后同 seq 收口）", async () => {
     const loop = makeLoop(makeProvider([result("stop", "回声")]));
     // 先 run 设置 lastConfig（followup 不带 config 时复用）
     await loop.run("warm", { sampling: { model: "gpt-5" } });
@@ -107,11 +107,11 @@ describe("AgentLoop.run", () => {
     const turn = loop.followup("你好");
     expect(turn.seq).toBe(2); // warm 消耗 seq 1
     // 前两个事件由 followup 同步发出（drain 异步，后续事件可能已插入）
-    expect(events.slice(0, 2).map((e) => e.type)).toEqual(["turn-start", "user.message"]);
+    expect(events.slice(0, 2).map((e) => e.type)).toEqual(["run-start", "user.message"]);
     await new Promise((r) => setTimeout(r, 10)); // 等 drain
     const types = events.map((e) => e.type);
     expect(types).toContain("assistant.message");
-    expect(types).toContain("turn-end");
+    expect(types).toContain("run-end");
     // user.message 内容为输入文本
     const userMsg = events.find((e) => e.type === "user.message");
     expect(userMsg && "text" in userMsg && userMsg.text).toBe("你好");
@@ -253,5 +253,43 @@ describe("AgentLoop.run", () => {
     const loop = makeLoop(provider);
     loop.cancel();
     await expect(loop.run("hi", { sampling: { model: "gpt-5" } })).rejects.toThrow();
+  });
+});
+
+describe("AgentLoop 排队 run 边界事件延迟发射", () => {
+  it("A 流式中 followup B：B 的 run-start/user.message 在 A 的 run-end 之后（事件流顺序 = 执行顺序）", async () => {
+    const provider: Provider = {
+      call: async (_call: ProviderCall, onDelta?) => {
+        await new Promise((r) => setTimeout(r, 5));
+        onDelta?.({ type: "text-delta", text: "t" });
+        return result("stop", "回复");
+      },
+    };
+    const loop = makeLoop(provider);
+    const events: string[] = [];
+    loop.onOutputEvent((e) =>
+      events.push(e.type === "user.message" ? `user:${(e as { text: string }).text}` : e.type),
+    );
+    const finished = new Promise<void>((resolve) => {
+      const id = setInterval(() => {
+        if (events.filter((t) => t === "run-end").length >= 2) {
+          clearInterval(id);
+          resolve();
+        }
+      }, 2);
+    });
+    loop.followup("A", { sampling: { model: "m" } });
+    await new Promise((r) => setTimeout(r, 1)); // A 进入 provider call 流式中
+    loop.followup("B", { sampling: { model: "m" } });
+    await finished;
+
+    // A 全程在前：run-start → user:A → delta → assistant.message → run-end
+    expect(events.indexOf("user:A")).toBeGreaterThan(events.indexOf("run-start"));
+    expect(events.indexOf("user:A")).toBeLessThan(events.indexOf("assistant.delta"));
+    // B 的边界事件在 A 的 run-end 之后，且 run-start(B) 紧贴 user:B 之前
+    const firstRunEnd = events.indexOf("run-end");
+    const userB = events.indexOf("user:B");
+    expect(userB).toBeGreaterThan(firstRunEnd);
+    expect(events[userB - 1]).toBe("run-start");
   });
 });

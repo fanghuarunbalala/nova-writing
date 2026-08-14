@@ -54,9 +54,9 @@ export interface NovelAgentOptions {
   conversationId?: string;
   /** 状态变化监听器（journal 落盘由上层注入 journalListener） */
   listeners?: LoopContextListener[];
-  /** 可恢复的 turn 消息（journal 重放；缺省从空开始） */
-  turnMessages?: LLMessage[];
-  /** turn seq 起始值（journal 恢复：resumeSeq = journal.lastSeq） */
+  /** 可恢复的 run 消息（journal 重放；缺省从空开始） */
+  runMessages?: LLMessage[];
+  /** run seq 起始值（journal 恢复：resumeSeq = journal.lastSeq） */
   resumeSeq?: number;
   /** 审批通道（mutation 工具执行前征询；子进程内闭包 → conv.sendApprovalRequest） */
   requestApproval?: (req: ConversationApprovalRequest) => Promise<ConversationApprovalDecision>;
@@ -139,7 +139,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     agentId: "main",
     conversationId: opts.conversationId,
     listeners: opts.listeners,
-    turnMessages: opts.turnMessages,
+    runMessages: opts.runMessages,
     startSeq: opts.resumeSeq,
     requestApproval: opts.requestApproval,
     resumePendingDecider: opts.resumePendingDecider,

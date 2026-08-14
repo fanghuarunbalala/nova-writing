@@ -23,6 +23,13 @@
 - 持久化沙盒 = 状态的事实来源：**进度读沙盒、流式走 hub、消息走 rpc**（见第 3 节）。
 - 1 conversation = 1 进程 = 主 agent loop + 任意个 subagent loop；teammate 之间无直接通道，交互经 manager 调度。
 
+术语约定（全库统一，见 PRD `conversation-run-turn-术语统一`）：
+
+| 术语 | 定义 |
+|---|---|
+| **run（用户轮）** | 一次用户消息驱动的完整回复周期：user → N × turn → final assistant。journal 落盘单位（一行一个 run 快照，`seq` = runSeq）；事件 `run-start` / `run-end` |
+| **turn（请求轮）** | run 内一次 provider API 请求及其工具执行收口。无显式边界事件，由投影层从 tool-recorded 对推断；`curTurn` / `maxTurns`（每 run 最大 turn 数） |
+
 ---
 
 ## 2. 进程拓扑（✅）
@@ -222,8 +229,8 @@ type ConversationSystemControl =
 - **wait 是延迟 RPC（阻塞）**：`await sendApprovalRequest(req)` 挂起直到决策；决策/回答 = RPC 返回值，requestId = RPC 关联 id。
 - **mode 时序**：`mode.set` 不立即生效——记 `pendingMode`，**下一次 turn 开始时**才切到 `activeMode`（避免影响进行中的 turn）。
 - **AgentLoop 输入队列**：`followup`（turn lane，FIFO 排队）/ `steer`（control lane，高优先级注入 system reminder）/ `stop`（取消 + 清队列）。
-- **事件域拆分**：`AgentLoop` 产出 `OutputEvent`（持久化域：LLMessage 消息 + turn-start/end 边界，journal 事实源）与 delta（流域专属）；`Conversation` 分发处经 **ProjectionLayer** 映射出 `ProjectedEvent`（流域：消息/turn 边界/delta + `tool-recorded.started/recorded` 投影），hub 广播与 `projectedHistory` 读取共用同一投影实现；工具可经 `ToolDef.preview` 定制投影内容（详见 PRD `output-投影层`）。
-- **journal 按 turn 存储**：写侧 `appendTurn`（LLMessage），读侧 `history` 返回 `OutputEvent`（无 delta），进程无关。
+- **事件域拆分**：`AgentLoop` 产出 `OutputEvent`（持久化域：LLMessage 消息 + run-start/end 边界，journal 事实源）与 delta（流域专属）；`Conversation` 分发处经 **ProjectionLayer** 映射出 `ProjectedEvent`（流域：消息/run 边界/delta + `tool-recorded.started/recorded` 投影），hub 广播与 `projectedHistory` 读取共用同一投影实现；工具可经 `ToolDef.preview` 定制投影内容（详见 PRD `output-投影层`）。
+- **journal 按 run 存储**：写侧 `appendRun`（LLMessage），读侧 `history` 返回 `OutputEvent`（无 delta），进程无关。
 - subagent 的审批：进程内由主 loop 决定；teammate 的审批路径：**经 manager 转发到 parent**（已定）。
 
 ---
@@ -272,9 +279,9 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
 3. **delta chunk 聚合**：暂缓（delta 直走 kkrpc 背压）。
 4. **subagent 事件交织修复**（根因已定位，修复前记录）：
    - 现象：subagent 合入后，真实 app 中 main turn 的工具调用展示消失（单测全绿但线上事件流与单测假设不同）。
-   - 根因链：① subagent loop 无 startSeq → seq 从 1 重起（`NovelExplorerAgent.ts` 不传 startSeq）；② subagent 边界事件（turn-start/user.message/delta/assistant.message/turn-end）经 `Conversation.subagentRuntime.onEvent` 进共享 hub（live-only）；③ 客户端 `ConversationProjection` 单槽时间线被交织——subagent 的 user.message 提前 `finalizeAssistant()` 且不设 turnEndSequence；④ 运行时 `assistant.delta` 实际携带 `seq: 0`（`AgentLoop.emit` 基底对象）→ 客户端 `"seq" in event` 判定把 lastAppliedSequence 打回 0 → main 流式项 `sourceSequence=0`；⑤ 归属范围坍缩为 [0,0] → `chatSurfaceMapper` 的 seq 范围过滤把 main 全部 toolTraces 滤光（模拟复现：main 大消息 traces=0、final 消息被挤 39 行）。
-   - 次生：ProjectionLayer 的 pending 被 subagent 的 turn-end 清空（长任务 tool-recorded 退化为 unknown）；mapper MAPPED_ITEM_CACHE 在流式停顿时冻结旧 toolTraces。
-   - 修法（待实施）：客户端按 agentId 隔离 subagent 边界事件（tool-recorded 行归入 live main turn）；ProjectionLayer pending 按 agentId 分桶；`AgentLoop.emit` 基底去 `seq: 0`（delta 不带 seq）；finalizeAssistant 防御性补 turnEndSequence；mapper 缓存命中时重算动态切片。
+   - 根因链：① subagent loop 无 startSeq → seq 从 1 重起（`NovelExplorerAgent.ts` 不传 startSeq）；② subagent 边界事件（run-start/user.message/delta/assistant.message/run-end）经 `Conversation.subagentRuntime.onEvent` 进共享 hub（live-only）；③ 客户端 `ConversationProjection` 单槽时间线被交织——subagent 的 user.message 提前 `finalizeAssistant()` 且不设 runEndSequence；④ 运行时 `assistant.delta` 实际携带 `seq: 0`（`AgentLoop.emit` 基底对象）→ 客户端 `"seq" in event` 判定把 lastAppliedSequence 打回 0 → main 流式项 `sourceSequence=0`；⑤ 归属范围坍缩为 [0,0] → `chatSurfaceMapper` 的 seq 范围过滤把 main 全部 toolTraces 滤光（模拟复现：main 大消息 traces=0、final 消息被挤 39 行）。
+   - 次生：ProjectionLayer 的 pending 被 subagent 的 run-end 清空（长任务 tool-recorded 退化为 unknown）；mapper MAPPED_ITEM_CACHE 在流式停顿时冻结旧 toolTraces。
+   - 修法（✅ 已实施，PRD `conversation-run-turn-术语统一`）：客户端按 agentId 隔离 subagent 事件（盖章即 subagent，非 main 不进时间线）；hub 内 ProjectionLayer 按 agentId 分实例（pending 互不可见）；排队 run 边界事件延迟到实际执行时发射（事件流顺序 = 执行顺序）。
 
 ### 8.4 偏离旧版（NovelAI）清单
 

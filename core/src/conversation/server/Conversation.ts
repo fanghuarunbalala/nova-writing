@@ -3,6 +3,7 @@
  * 组织 AgentLoop + LoopEvent 事件流 + mode 状态；实现 ConversationInteraction + WaitingInteractionRequest。
  */
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
+import type { LoopEvent } from "../../runtime/loop/types.js";
 import type { SamplingConfig } from "../../runtime/provider/types.js";
 import type { ProjectedEvent } from "../contract/events/index.js";
 import { ProjectionLayer } from "../projection/ProjectionLayer.js";
@@ -54,7 +55,7 @@ export interface ConversationOptions {
 	loop: AgentLoop;
 	/** 默认采样配置（sendUserMessage 用） */
 	sampling: SamplingConfig;
-	/** journal 写侧（注入时输入 rpc 落盘即回持久化回执；缺省回 turn seq） */
+	/** journal 写侧（注入时输入 rpc 落盘即回持久化回执；缺省回 run seq） */
 	journal?: ConversationJournalService;
 	/** manager wait 通道（wait 请求经 CMS 队列路由；缺省仅进程内挂起等待） */
 	managerWait?: ManagerWaitChannel;
@@ -78,17 +79,19 @@ const DEFAULT_WAIT_TIMEOUT_MS = 120_000;
 export class Conversation implements ConversationInteraction, WaitingInteractionRequest {
 	/** 会话 id */
 	readonly conversationId: string;
-	/** 当前生效的会话模式（当前 turn 使用） */
+	/** 当前生效的会话模式（当前 run 使用） */
 	private activeMode: ConversationMode = DEFAULT_CONVERSATION_MODE;
-	/** 待生效模式（mode.set 设置，下一次 turn 才生效） */
+	/** 待生效模式（mode.set 设置，下一次 run 才生效） */
 	private pendingMode?: ConversationMode;
 	/** agent 主循环 */
 	private readonly loop: AgentLoop;
 	/** 默认采样 */
 	private readonly sampling: SamplingConfig;
-	/** 投影层（完整 LoopEvent → ProjectedEvent；live 流唯一出口） */
+	/** 投影层（main loop 事件用；完整 LoopEvent → ProjectedEvent，live 流唯一出口） */
 	private readonly projection: ProjectionLayer;
-	/** subagent 任务编排（可选；事件经同一投影层进 hub） */
+	/** subagent 投影层（agentId → 实例；一任务一实例，pending 配对互不可见，run-end 后清理） */
+	private readonly subagentProjections = new Map<string, ProjectionLayer>();
+	/** subagent 任务编排（可选；事件经独立投影层进 hub，客户端按 agentId 过滤） */
 	private readonly subagentRuntime?: SubagentRuntime;
 	/** 输出事件订阅者（hub，只收投影事件） */
 	private readonly eventListeners = new Set<ProjectedEventListener>();
@@ -124,21 +127,17 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.onWaitTimeout = opts.onWaitTimeout;
 		this.subagentRuntime = opts.subagentRuntime;
 		// 投影层：缺省经 loop.toolDispatcher 取 ToolDef.preview（live 与 replay 同实现）
-		this.projection =
-			opts.projection ??
-			new ProjectionLayer({
-				resolvePreview: {
-					resolvePreview: (name) => this.loop.toolDispatcher.resolve(name)?.preview,
-				},
-			});
+		this.projection = opts.projection ?? this.createProjection();
 		// 订阅 loop 的输出事件：经投影层映射后转发到本会话 hub（hub 只广播 ProjectedEvent）
 		this.loop.onOutputEvent((e) => {
 			const projected = this.projection.project(e);
 			if (projected !== undefined) this.emit(projected);
 		});
-		// subagent loop 事件同样进 hub（live-only，不落 journal；经同一投影层）
+		// subagent loop 事件同样进 hub（live-only，不落 journal；经按 agentId 独立的投影层，
+		// subagent 的 run-end 只清自己的 pending 配对，不触碰 main 的——
+		// PRD `conversation-run-turn-术语统一` §4.6）
 		this.subagentRuntime?.onEvent((e) => {
-			const projected = this.projection.project(e);
+			const projected = this.projectSubagentEvent(e);
 			if (projected !== undefined) this.emit(projected);
 		});
 	}
@@ -148,6 +147,32 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		return this.activeMode;
 	}
 
+	/** 新建投影层（preview 经 loop.toolDispatcher 取 ToolDef.preview，live 与 replay 同实现） */
+	private createProjection(): ProjectionLayer {
+		return new ProjectionLayer({
+			resolvePreview: {
+				resolvePreview: (name) => this.loop.toolDispatcher.resolve(name)?.preview,
+			},
+		});
+	}
+
+	/**
+	 * subagent 事件过独立投影层（agentId 一任务一实例）：pending 配对状态与 main、
+	 * 与其他任务互不可见。run-end 后清理实例（agentId 含唯一 taskId 不复用；
+	 * 异常未收口任务的残留实例只含小 Map，无增长上限风险）。
+	 */
+	private projectSubagentEvent(e: LoopEvent): ProjectedEvent | undefined {
+		const key = e.agentId ?? "";
+		let projection = this.subagentProjections.get(key);
+		if (projection === undefined) {
+			projection = this.createProjection();
+			this.subagentProjections.set(key, projection);
+		}
+		const projected = projection.project(e);
+		if (e.type === "run-end") this.subagentProjections.delete(key);
+		return projected;
+	}
+
 	/** 查询当前生效模式（ConversationHandle 契约；跨 RPC 可调） */
 	async getConversationMode(): Promise<ConversationMode> {
 		return this.activeMode;
@@ -155,27 +180,27 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 
 	/**
 	 * 发送用户消息（turn lane）：先应用待生效模式，再入队 followup（不阻塞等待完成）。
-	 * turn 在 followup 时即时创建；有 journal 时同步落盘 user 消息快照后返回持久化回执。
+	 * run 在 followup 时即时创建；有 journal 时同步落盘 user 消息快照后返回持久化回执。
 	 */
 	async sendUserMessage(msg: ConversationUserMessage): Promise<Receipt> {
 		this.applyPendingMode();
-		const turn = this.loop.followup(msg.text, { sampling: this.sampling });
-		return this.journal !== undefined ? await this.journal.appendTurn(turn) : this.receipt(turn.seq);
+		const run = this.loop.followup(msg.text, { sampling: this.sampling });
+		return this.journal !== undefined ? await this.journal.appendRun(run) : this.receipt(run.seq);
 	}
 
 	/** 发送用户命令（turn lane，agent 可见）：转文本入队 */
 	async sendUserCommand(cmd: ConversationUserCommand): Promise<Receipt> {
 		this.applyPendingMode();
 		const text = cmd.args ? `${cmd.name} ${JSON.stringify(cmd.args)}` : cmd.name;
-		const turn = this.loop.followup(text, { sampling: this.sampling });
-		return this.journal !== undefined ? await this.journal.appendTurn(turn) : this.receipt(turn.seq);
+		const run = this.loop.followup(text);
+		return this.journal !== undefined ? await this.journal.appendRun(run) : this.receipt(run.seq);
 	}
 
-	/** 发送系统控制（control lane，可抢占）：mode.set（待下次 turn 生效）/ stop / reload.config */
+	/** 发送系统控制（control lane，可抢占）：mode.set（待下次 run 生效）/ stop / reload.config */
 	async sendSystemControl(ctrl: ConversationSystemControl): Promise<Receipt> {
 		switch (ctrl.type) {
 			case "mode.set":
-				// 不立即生效：仅记录 pendingMode，下一次 turn 开始时才切换
+				// 不立即生效：仅记录 pendingMode，下一次 run 开始时才切换
 				this.pendingMode = ctrl.mode;
 				break;
 			case "stop":
@@ -186,11 +211,11 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 			case "reload.config":
 				break;
 		}
-		// 控制不入 journal：回执用最近落盘的 turn seq
+		// 控制不入 journal：回执用最近落盘的 run seq
 		return this.receipt(this.journal?.lastSeq ?? 0);
 	}
 
-	/** 应用待生效模式：pendingMode → activeMode（下一次 turn 开始时调用） */
+	/** 应用待生效模式：pendingMode → activeMode（下一次 run 开始时调用） */
 	private applyPendingMode(): void {
 		if (this.pendingMode !== undefined) {
 			this.activeMode = this.pendingMode;
@@ -307,7 +332,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		};
 	}
 
-	/** 构造持久化回执（seq = turn seq / journal lastSeq） */
+	/** 构造持久化回执（seq = run seq / journal lastSeq） */
 	private receipt(seq: number): Receipt {
 		return { seq, recordedAt: new Date().toISOString() };
 	}

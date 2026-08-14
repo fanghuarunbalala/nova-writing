@@ -196,7 +196,7 @@ describe("ConversationManagerServer（会话命名）", () => {
 		rmSync(root, { recursive: true, force: true });
 	});
 
-	/** 写 journal.jsonl（首行 = 首个 turn，与 FileConversationJournalService 行格式一致） */
+	/** 写 journal.jsonl（首行 = 首个 run，与 FileConversationJournalService 行格式一致） */
 	function writeJournal(conversationId: string, firstUserText: string): void {
 		const dir = join(root, conversationId);
 		mkdirSync(dir, { recursive: true });
@@ -204,7 +204,7 @@ describe("ConversationManagerServer（会话命名）", () => {
 			join(dir, "journal.jsonl"),
 			JSON.stringify({
 				seq: 1,
-				turn: { seq: 1, messages: [{ role: "user", content: firstUserText }], ts: "2026-08-05T09:00:00.000Z" },
+				run: { seq: 1, messages: [{ role: "user", content: firstUserText }], ts: "2026-08-05T09:00:00.000Z" },
 			}) + "\n",
 			"utf8",
 		);
@@ -242,7 +242,7 @@ describe("ConversationManagerServer（会话命名）", () => {
 			join(root, "conv_3", "journal.jsonl"),
 			JSON.stringify({
 				seq: 1,
-				turn: {
+				run: {
 					seq: 1,
 					messages: [
 						{ role: "system", content: "转向指令" },

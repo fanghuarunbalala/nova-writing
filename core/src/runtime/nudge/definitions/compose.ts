@@ -4,7 +4,7 @@
  * main agent 专属（依赖 ComposeModeStateProvider + conversationId）。
  */
 import type { LoopContext } from "../../loop/LoopContext.js";
-import type { RunContext } from "../../loop/types.js";
+import type { RunProgress } from "../../loop/types.js";
 import type { ContextNudgePolicy } from "../ContextNudgePolicy.js";
 import type { ComposeModeStateProvider } from "../../../conversation/compose/ComposeModeState.js";
 
@@ -49,19 +49,19 @@ export class ComposeModeNudgePolicy implements ContextNudgePolicy {
 	}
 
 	/** 持久提示注入：compose 状态 transition 时发 reminder */
-	persistentNudgeIfNeeded(loop: LoopContext, _run: RunContext): boolean {
+	persistentNudgeIfNeeded(loop: LoopContext, _run: RunProgress): boolean {
 		const snap = this.composeState.snapshot(this.conversationId);
 		const active = snap.active;
 		if (active && !this.lastActive) {
 			// false → true：进入设计模式
 			this.lastActive = active;
-			loop.appendTurnMessages([{ role: "system", content: renderComposeModeFullText(snap.designFilePath) }]);
+			loop.appendRunMessages([{ role: "system", content: renderComposeModeFullText(snap.designFilePath) }]);
 			return true;
 		}
 		if (!active && this.lastActive) {
 			// true → false：退出设计模式
 			this.lastActive = active;
-			loop.appendTurnMessages([{ role: "system", content: COMPOSE_MODE_EXIT_TEXT }]);
+			loop.appendRunMessages([{ role: "system", content: COMPOSE_MODE_EXIT_TEXT }]);
 			return true;
 		}
 		this.lastActive = active;

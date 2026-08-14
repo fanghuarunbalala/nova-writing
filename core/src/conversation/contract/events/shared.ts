@@ -13,18 +13,18 @@ export interface ConversationEventBase {
 	ts: string;
 }
 
-/** turn 开始边界事件（turnSeq = 本轮 turn 序号） */
-export interface TurnStartEvent extends ConversationEventBase {
-	type: "turn-start";
+/** run 开始边界事件（runSeq = 本轮 run 序号） */
+export interface RunStartEvent extends ConversationEventBase {
+	type: "run-start";
 	seq: number;
-	turnSeq: number;
+	runSeq: number;
 }
 
-/** turn 结束边界事件 */
-export interface TurnEndEvent extends ConversationEventBase {
-	type: "turn-end";
+/** run 结束边界事件 */
+export interface RunEndEvent extends ConversationEventBase {
+	type: "run-end";
 	seq: number;
-	turnSeq: number;
+	runSeq: number;
 }
 
 /** 用户消息事件 */
@@ -68,8 +68,8 @@ export interface RetryRequestEvent extends ConversationEventBase {
 
 /** 两域共享事件联合（无 persist/落盘语义） */
 export type SharedConversationEvent =
-	| TurnStartEvent
-	| TurnEndEvent
+	| RunStartEvent
+	| RunEndEvent
 	| UserMessageEvent
 	| AssistantMessageEvent
 	| AssistantDeltaEvent

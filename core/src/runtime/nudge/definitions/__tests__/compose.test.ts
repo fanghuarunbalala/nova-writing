@@ -5,7 +5,7 @@ import type { LoopContext } from "../../../loop/LoopContext.js";
 import type { RunContext } from "../../../loop/types.js";
 
 function mockLoop() {
-  return { appendTurnMessages: vi.fn() } as unknown as LoopContext;
+  return { appendRunMessages: vi.fn() } as unknown as LoopContext;
 }
 const run: RunContext = { curTurn: 0, maxTurn: 100, toolsLastTurn: new Map() };
 
@@ -16,7 +16,7 @@ describe("ComposeModeNudgePolicy", () => {
     state.enter("main", { designFilePath: "/d.md", preComposeMode: "review" });
     const loop = mockLoop();
     expect(policy.persistentNudgeIfNeeded(loop, run)).toBe(true);
-    const msg = (loop.appendTurnMessages as ReturnType<typeof vi.fn>).mock.calls[0][0][0];
+    const msg = (loop.appendRunMessages as ReturnType<typeof vi.fn>).mock.calls[0][0][0];
     expect(msg.content).toContain("设计模式");
   });
 
@@ -28,7 +28,7 @@ describe("ComposeModeNudgePolicy", () => {
     state.discard("main");
     const loop = mockLoop();
     expect(policy.persistentNudgeIfNeeded(loop, run)).toBe(true);
-    const msg = (loop.appendTurnMessages as ReturnType<typeof vi.fn>).mock.calls[0][0][0];
+    const msg = (loop.appendRunMessages as ReturnType<typeof vi.fn>).mock.calls[0][0][0];
     expect(msg.content).toContain("设计模式已结束");
   });
 
@@ -37,6 +37,6 @@ describe("ComposeModeNudgePolicy", () => {
     const policy = new ComposeModeNudgePolicy(state, "main");
     const loop = mockLoop();
     expect(policy.persistentNudgeIfNeeded(loop, run)).toBe(false);
-    expect(loop.appendTurnMessages).not.toHaveBeenCalled();
+    expect(loop.appendRunMessages).not.toHaveBeenCalled();
   });
 });

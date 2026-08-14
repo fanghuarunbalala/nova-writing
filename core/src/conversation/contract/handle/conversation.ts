@@ -38,7 +38,7 @@ export interface ConversationHandle extends ConversationInteraction, WaitingInte
 	 */
 	resolveExitCompose(requestId: string): void;
 	/**
-	 * 查询当前生效的会话模式（review/bypass/compose；mode.set 待下次 turn 生效）。
+	 * 查询当前生效的会话模式（review/bypass/compose；mode.set 待下次 run 生效）。
 	 * 读走查（进度走读不走推同理，mode 是会话状态非进度）
 	 * @returns 当前生效模式
 	 */

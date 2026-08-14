@@ -23,7 +23,7 @@ export interface ToolPreview {
 /** 工具调用投影：开始事件（tool-call-request 的投影，preview 为 preview(args) 输出） */
 export interface ToolRecordedStartedEvent extends ConversationEventBase {
 	type: "tool-recorded.started";
-	/** 源 turn seq（UI 归属/去重/分页必需） */
+	/** 源 run seq（UI 归属/去重/分页必需） */
 	seq: number;
 	toolCallId: string;
 	name: string;
@@ -33,7 +33,7 @@ export interface ToolRecordedStartedEvent extends ConversationEventBase {
 /** 工具调用投影：完成事件（tool-call-response 的投影，preview 为 preview(args, response) 输出） */
 export interface ToolRecordedRecordedEvent extends ConversationEventBase {
 	type: "tool-recorded.recorded";
-	/** 源 turn seq（同 started） */
+	/** 源 run seq（同 started） */
 	seq: number;
 	toolCallId: string;
 	name: string;

@@ -72,7 +72,7 @@ export interface ConversationApi {
 	 * renderer 无文件权限，经 Main 代读。
 	 * @param conversationId 会话 id
 	 * @param opts 可选分页（fromSeq / limit）
-	 * @returns 已落盘事件序列（turn-start/end 边界 + user/assistant.message + tool-call 事件）
+	 * @returns 已落盘事件序列（run-start/end 边界 + user/assistant.message + tool-call 事件）
 	 */
 	history(
 		conversationId: ConversationId,
@@ -91,7 +91,7 @@ export interface ConversationApi {
 		opts?: { fromSeq?: number; limit?: number },
 	): Promise<ProjectedEvent[]>;
 	/**
-	 * 查询会话当前生效模式（review/bypass/compose；mode.set 待下次 turn 生效）。
+	 * 查询会话当前生效模式（review/bypass/compose；mode.set 待下次 run 生效）。
 	 * 读走查：经 manager 定位会话后调 handle.getConversationMode。
 	 * @param conversationId 会话 id
 	 * @returns 当前生效模式

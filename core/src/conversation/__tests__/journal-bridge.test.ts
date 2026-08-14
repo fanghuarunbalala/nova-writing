@@ -1,39 +1,39 @@
 import { describe, it, expect, vi } from "vitest";
 import { journalListener } from "../JournalBridge.js";
 import type { ConversationJournalService } from "../contract/journal/index.js";
-import type { TurnContext } from "../../runtime/loop/types.js";
+import type { RunContext } from "../../runtime/loop/types.js";
 
 function mockJournal() {
   return {
-    appendTurn: vi.fn().mockResolvedValue({ seq: 1, recordedAt: "t" }),
-    writeTurns: vi.fn().mockResolvedValue(undefined),
+    appendRun: vi.fn().mockResolvedValue({ seq: 1, recordedAt: "t" }),
+    writeRuns: vi.fn().mockResolvedValue(undefined),
   } as unknown as ConversationJournalService;
 }
 
-function makeTurn(): TurnContext {
-  return { seq: 1, messages: [{ role: "user", content: "hi" }], ts: "t", appendTurnMessages: () => {} };
+function makeTurn(): RunContext {
+  return { seq: 1, messages: [{ role: "user", content: "hi" }], ts: "t", appendRunMessages: () => {} };
 }
 
 describe("journalListener（LoopContext → journal 映射）", () => {
-  it("onTurnMessageAppend → appendTurn", async () => {
+  it("onRunMessageAppend → appendRun", async () => {
     const journal = mockJournal();
     const l = journalListener(journal);
     const turn = makeTurn();
-    l.onTurnMessageAppend?.(turn, [{ role: "assistant", content: "ok" }]);
-    expect((journal.appendTurn as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(turn);
+    l.onRunMessageAppend?.(turn, [{ role: "assistant", content: "ok" }]);
+    expect((journal.appendRun as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(turn);
   });
 
-  it("onCompacted → writeTurns", async () => {
+  it("onCompacted → writeRuns", async () => {
     const journal = mockJournal();
     const l = journalListener(journal);
     l.onCompacted?.([makeTurn()]);
-    expect((journal.writeTurns as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(1);
+    expect((journal.writeRuns as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(1);
   });
 
-  it("onClear → writeTurns([])", async () => {
+  it("onClear → writeRuns([])", async () => {
     const journal = mockJournal();
     const l = journalListener(journal);
     l.onClear?.();
-    expect((journal.writeTurns as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith([]);
+    expect((journal.writeRuns as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith([]);
   });
 });

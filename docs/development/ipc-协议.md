@@ -12,7 +12,7 @@
    - slow joiner 注意：SUB 连接/订阅完成前 PUB 发的消息会错过，消费端需重查兜底。
    - ⏳ 接线：topic/地址契约已定稿；Conversation 现役 `subscribeEvents` 仍走 kkrpc 回调（remote-refs proxy），待迁移 ZeroMQ。
 2. **journal 沙盒（持久，落盘子集）**
-   - 落盘事件（persist=true 子集）：user/assistant.message、tool-call-request/response，及 turn-start/end、compacted、clear、retry-request 等边界事件。
+   - 落盘事件（persist=true 子集）：user/assistant.message、tool-call-request/response，及 run-start/end、compacted、clear、retry-request 等边界事件。
    - 任何 Node 进程本地可读（tail 到完整行）；renderer 经 Main 代读。查询/历史/恢复只能覆盖落盘子集。
    - **读取接口两个**：`history` 返回完整 `OutputEvent`（重建/内部用）；`projectedHistory` 返回 `ProjectedEvent`（读 journal 后过投影层重建，与 hub 实时流同形态）。
    - todo/run 状态读模型、不进事件（⏳ 现 todo 为 InMemoryConversationTodoStore，sqlite 读模型待接）。

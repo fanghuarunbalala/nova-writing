@@ -84,7 +84,7 @@ export class ConversationProjectionBinding {
     return tracked;
   }
 
-  /** 发送用户消息（turn lane）。 */
+  /** 发送用户消息（run lane）。 */
   sendUserMessage(text: string): Promise<Receipt> {
     return this.requireHandle().sendUserMessage({ text });
   }

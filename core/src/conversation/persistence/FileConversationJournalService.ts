@@ -1,10 +1,12 @@
 /**
- * journal 写侧实现：以 turn 为单位落盘（每行一个完整 TurnContext 快照，带 {seq, turn}）。
- * seq 空间 = turn seq（由 LoopContext 分配）：同 seq 可多写（assistant/tool 增量快照更新，读侧取最新）。
+ * journal 写侧实现：以 run 为单位落盘（每行一个完整 RunContext 快照，带 {seq, run}）。
+ * seq 空间 = run seq（由 LoopContext 分配）：同 seq 可多写（assistant/tool 增量快照更新，读侧取最新）。
+ * 不兼容旧格式（{seq, turn} 行）：读侧只认 run key，旧行按损坏行忽略（开发期决策，
+ * 见 PRD `conversation-run-turn-术语统一` §4.4）。
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { TurnContext } from "../../runtime/loop/types.js";
+import type { RunContext } from "../../runtime/loop/types.js";
 import type { Receipt } from "../contract/types/index.js";
 import type { ConversationJournalService as Contract } from "../contract/journal/index.js";
 
@@ -14,7 +16,7 @@ export class FileConversationJournalService implements Contract {
 	private readonly conversationId: string;
 	/** journal 文件路径（<storedir>/journal.jsonl） */
 	private readonly filePath: string;
-	/** 最近落盘的 turn seq（open 时全行扫描恢复；appendTurn 用 max 更新） */
+	/** 最近落盘的 run seq（open 时全行扫描恢复；appendRun 用 max 更新） */
 	private lastPersistedSeq = 0;
 
 	/**
@@ -42,23 +44,23 @@ export class FileConversationJournalService implements Contract {
 	}
 
 	/**
-	 * 追加一个 turn 快照（一行 {seq, turn}；同 seq 多写 = 快照更新，读侧取最新）
-	 * @param turn 当前 turn（seq 由 LoopContext 分配）
-	 * @returns 持久化回执（seq = turn.seq）
+	 * 追加一个 run 快照（一行 {seq, run}；同 seq 多写 = 快照更新，读侧取最新）
+	 * @param run 当前 run（seq 由 LoopContext 分配）
+	 * @returns 持久化回执（seq = run.seq）
 	 */
-	async appendTurn(turn: TurnContext): Promise<Receipt> {
-		this.lastPersistedSeq = Math.max(this.lastPersistedSeq, turn.seq);
-		appendFileSync(this.filePath, `${JSON.stringify({ seq: turn.seq, turn })}\n`);
-		return { seq: turn.seq, recordedAt: new Date().toISOString() };
+	async appendRun(run: RunContext): Promise<Receipt> {
+		this.lastPersistedSeq = Math.max(this.lastPersistedSeq, run.seq);
+		appendFileSync(this.filePath, `${JSON.stringify({ seq: run.seq, run })}\n`);
+		return { seq: run.seq, recordedAt: new Date().toISOString() };
 	}
 
 	/**
-	 * 全量覆盖写（compaction 后去重的 turns）
-	 * @param turns 压缩后的 turn 序列
+	 * 全量覆盖写（compaction 后去重的 runs）
+	 * @param runs 压缩后的 run 序列
 	 */
-	async writeTurns(turns: TurnContext[]): Promise<void> {
-		this.lastPersistedSeq = turns.reduce((max, t) => Math.max(max, t.seq), 0);
-		const lines = turns.map((t) => JSON.stringify({ seq: t.seq, turn: t })).join("\n");
+	async writeRuns(runs: RunContext[]): Promise<void> {
+		this.lastPersistedSeq = runs.reduce((max, r) => Math.max(max, r.seq), 0);
+		const lines = runs.map((r) => JSON.stringify({ seq: r.seq, run: r })).join("\n");
 		writeFileSync(this.filePath, lines ? `${lines}\n` : "");
 	}
 
@@ -71,7 +73,7 @@ export class FileConversationJournalService implements Contract {
 	/** 崩溃恢复：lastSeq 已在 open 恢复；读模型重建由上层 reconcile 接入 */
 	async reconcile(): Promise<void> {}
 
-	/** 最近落盘的 turn seq（无落盘为 0；控制类回执用） */
+	/** 最近落盘的 run seq（无落盘为 0；控制类回执用） */
 	get lastSeq(): number {
 		return this.lastPersistedSeq;
 	}

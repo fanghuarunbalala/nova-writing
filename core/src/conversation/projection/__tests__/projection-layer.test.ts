@@ -82,12 +82,12 @@ describe("ProjectionLayer", () => {
 		expect(recorded).not.toHaveProperty("durationMs");
 	});
 
-	it("turn-end 丢弃未配对 pending（其后 response 按 unknown 处理）", () => {
+	it("run-end 丢弃未配对 pending（其后 response 按 unknown 处理）", () => {
 		const layer = new ProjectionLayer();
 		const { request, response } = toolPair();
 		layer.project(request);
-		const turnEnd = layer.project(evt({ type: "turn-end", persist: true, seq: 3, turnSeq: 1 }));
-		expect(turnEnd).toMatchObject({ type: "turn-end" });
+		const turnEnd = layer.project(evt({ type: "run-end", persist: true, seq: 3, runSeq: 1 }));
+		expect(turnEnd).toMatchObject({ type: "run-end" });
 		const recorded = layer.project(response);
 		expect(recorded).toMatchObject({ type: "tool-recorded.recorded", name: "unknown" });
 	});
@@ -126,11 +126,11 @@ describe("ProjectionLayer", () => {
 	it("其余事件原样透传且保序", () => {
 		const layer = new ProjectionLayer();
 		const events = [
-			evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 }),
+			evt({ type: "run-start", persist: true, seq: 1, runSeq: 1 }),
 			evt({ type: "user.message", persist: true, seq: 2, text: "hi" }),
 			evt({ type: "assistant.delta", text: "你" }),
 			evt({ type: "assistant.message", persist: true, seq: 4, text: "你好" }),
-			evt({ type: "turn-end", persist: true, seq: 5, turnSeq: 1 }),
+			evt({ type: "run-end", persist: true, seq: 5, runSeq: 1 }),
 			evt({ type: "compacted", persist: true, seq: 6 }),
 			evt({ type: "clear", persist: true, seq: 7 }),
 			evt({ type: "retry-request", persist: true, seq: 8 }),
@@ -141,13 +141,13 @@ describe("ProjectionLayer", () => {
 
 	it("确定性：同一序列重投影两次深等", () => {
 		const seq = [
-			evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 }),
+			evt({ type: "run-start", persist: true, seq: 1, runSeq: 1 }),
 			evt({ type: "user.message", persist: true, seq: 1, text: "hi" }),
 			evt({ type: "tool-call-request", persist: true, seq: 1, toolCallId: "t1", name: "ParagraphWrite", args: '{"storyUnitId":"ch1"}' }),
 			evt({ type: "tool-call-response", persist: true, seq: 2, toolCallId: "t1", result: "ok" }),
 			evt({ type: "assistant.delta", text: "正文" }),
 			evt({ type: "assistant.message", persist: true, seq: 3, text: "正文" }),
-			evt({ type: "turn-end", persist: true, seq: 3, turnSeq: 1 }),
+			evt({ type: "run-end", persist: true, seq: 3, runSeq: 1 }),
 		];
 		const layer1 = new ProjectionLayer();
 		const layer2 = new ProjectionLayer();

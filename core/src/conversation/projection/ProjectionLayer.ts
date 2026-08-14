@@ -40,7 +40,7 @@ interface PendingToolCall {
 /** 投影层：完整事件流 → 投影事件流（0..1 映射、保序） */
 export class ProjectionLayer {
 	private readonly resolvePreview: ToolPreviewResolver;
-	/** 待完成的工具调用（toolCallId → request 字段；turn-end 清空） */
+	/** 待完成的工具调用（toolCallId → request 字段；run-end 清空） */
 	private readonly pending = new Map<string, PendingToolCall>();
 
 	/**
@@ -66,8 +66,8 @@ export class ProjectionLayer {
 				this.pending.delete(event.toolCallId);
 				return this.buildRecorded(event, pending);
 			}
-			case "turn-end":
-				// turn 异常收口：丢弃未配对 pending（PRD §3.3 状态机）
+			case "run-end":
+				// run 异常收口：丢弃未配对 pending（PRD §3.3 状态机）
 				this.pending.clear();
 				return event;
 			default:

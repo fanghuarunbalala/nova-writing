@@ -49,7 +49,7 @@ describe("chatSurfaceMapper", () => {
             text: "已改为：雨落得密。",
             streaming: false,
             sourceSequence: 2,
-            turnEndSequence: 2,
+            runEndSequence: 2,
             timestamp: "2026-08-05T09:00:01.000Z",
           },
         ],
@@ -57,7 +57,7 @@ describe("chatSurfaceMapper", () => {
       "Novel Agent",
     );
     expect(items).toHaveLength(3);
-    expect(items[0].kind).toBe("turn");
+    expect(items[0].kind).toBe("run");
     // v2 原型：轮次分隔只显示纯时间（HH:MM）；本地时区不固定，故只断言格式与无前缀。
     expect(items[0].label).toMatch(/^\d{2}:\d{2}$/);
     expect(items[0].label).not.toContain("第");
@@ -107,7 +107,7 @@ describe("chatSurfaceMapper", () => {
             text: "好。",
             streaming: false,
             sourceSequence: 2,
-            turnEndSequence: 7,
+            runEndSequence: 7,
             segments: [
               {
                 text: "好。",
@@ -201,7 +201,7 @@ describe("chatSurfaceMapper", () => {
             text: "已按大纲调整。",
             streaming: false,
             sourceSequence: 2,
-            turnEndSequence: 8,
+            runEndSequence: 8,
             timestamp: "2026-08-05T09:00:01.000Z",
           },
         ],
@@ -276,7 +276,7 @@ describe("chatSurfaceMapper", () => {
       "Novel Agent",
     );
     expect(items[0].kind).toBe("assistant");
-    expect(items[1].kind).toBe("turn");
+    expect(items[1].kind).toBe("run");
     expect(items[2].kind).toBe("user");
   });
 

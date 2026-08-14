@@ -115,13 +115,13 @@ describe("SubagentRuntime", () => {
     rt.onEvent((e) => seen.push(e));
     rt.spawn({ agentType: "novel_explorer", prompt: "p" });
     loop.emit({
-      type: "turn-start",
+      type: "run-start",
       seq: 0,
       conversationId: "c1",
       agentId: "novel_explorer:task_1",
       ts: "2026-08-13T00:00:00.000Z",
       persist: true,
-      turnSeq: 0,
+      runSeq: 0,
     } as OutputEvent);
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ agentId: "novel_explorer:task_1", conversationId: "c1" });

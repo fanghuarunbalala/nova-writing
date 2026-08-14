@@ -33,8 +33,8 @@ import {
   infoLog,
   type LLMessage,
   type NovelStore,
-  type OutputEvent,
-  type TurnContext,
+  type LoopEvent,
+  type RunContext,
 } from "@novel/core";
 import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
 
@@ -64,8 +64,8 @@ const WORKSPACE_CHANNEL = "workspace-rpc";
 const UI_CHANNEL = "ui-rpc";
 
 /**
- * 回显 AgentLoop：followup 即时开 turn 产 turn-start/user.message → assistant.delta×N →
- * assistant.message/turn-end → journal 快照落盘（验证流式链路 + journal 语义，无需真实 provider）。
+ * 回显 AgentLoop：followup 即时开 run 产 run-start/user.message → assistant.delta×N →
+ * assistant.message/run-end → journal 快照落盘（验证流式链路 + journal 语义，无需真实 provider）。
  * 文本含「审批」时经 requestApproval 阻塞等 UI 决策（验证审批域端到端）。
  * 不发 reasoning delta（loop 层已丢弃，见 docs/PRD/gui-performance.md）。
  */
@@ -75,8 +75,8 @@ function createEchoLoop(
   requestApproval?: (req: ConversationApprovalRequest) => Promise<ConversationApprovalDecision>,
 ): AgentLoop {
   let seq = 0;
-  const listeners = new Set<(e: OutputEvent) => void>();
-  const emit = (e: OutputEvent): void => {
+  const listeners = new Set<(e: LoopEvent) => void>();
+  const emit = (e: LoopEvent): void => {
     for (const l of listeners) l(e);
   };
   const now = () => new Date().toISOString();
@@ -84,43 +84,43 @@ function createEchoLoop(
   return {
     run: async () => ({ final: { role: "assistant" as const, content: "" }, usage: undefined }),
     followup: (text: string) => {
-      // 即时开 turn（seq 按输入时序）+ user 消息快照落盘 = 输入 rpc 的持久化回执
+      // 即时开 run（seq 按输入时序）+ user 消息快照落盘 = 输入 rpc 的持久化回执
       const messages: LLMessage[] = [{ role: "user", content: text }];
-      const turn: TurnContext = {
+      const run: RunContext = {
         seq: ++seq,
         messages,
         ts: now(),
-        appendTurnMessages: (m) => {
+        appendRunMessages: (m) => {
           messages.push(...m);
         },
       };
-      emit({ type: "turn-start", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
-      emit({ type: "user.message", persist: true, seq: turn.seq, text, conversationId, ts: now() });
+      emit({ type: "run-start", persist: true, seq: run.seq, runSeq: run.seq, conversationId, ts: now() });
+      emit({ type: "user.message", persist: true, seq: run.seq, text, conversationId, ts: now() });
 
       // 审批路径：阻塞等 UI 决策（sendApprovalRequest 会发 approval.request 事件），
       // 决策回传后按结果收口（approval.resolved 事件由 Conversation 发出）
       if (text.includes("审批") && requestApproval !== undefined) {
         void requestApproval({
-          requestId: `approval_${conversationId}_${turn.seq}_echo`,
+          requestId: `approval_${conversationId}_${run.seq}_echo`,
           toolName: "CharacterWrite",
           args: JSON.stringify({ values: [{ name: text.replace("审批", "苏眉").trim() || "苏眉" }] }),
         })
           .then((decision) => {
             const reply = decision.kind === "approve" ? "（回声）已批准" : "（回声）已拒绝";
             messages.push({ role: "assistant", content: reply });
-            emit({ type: "assistant.message", persist: true, seq: turn.seq, text: reply, conversationId, ts: now() });
-            emit({ type: "turn-end", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
-            void journal?.appendTurn(turn);
+            emit({ type: "assistant.message", persist: true, seq: run.seq, text: reply, conversationId, ts: now() });
+            emit({ type: "run-end", persist: true, seq: run.seq, runSeq: run.seq, conversationId, ts: now() });
+            void journal?.appendRun(run);
           })
           .catch(() => {
-            // 决策通道异常：收口失败回复，避免 turn 悬挂
+            // 决策通道异常：收口失败回复，避免 run 悬挂
             const reply = "（回声）审批决策通道异常";
             messages.push({ role: "assistant", content: reply });
-            emit({ type: "assistant.message", persist: true, seq: turn.seq, text: reply, conversationId, ts: now() });
-            emit({ type: "turn-end", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
-            void journal?.appendTurn(turn);
+            emit({ type: "assistant.message", persist: true, seq: run.seq, text: reply, conversationId, ts: now() });
+            emit({ type: "run-end", persist: true, seq: run.seq, runSeq: run.seq, conversationId, ts: now() });
+            void journal?.appendRun(run);
           });
-        return turn;
+        return run;
       }
 
       // 异步排程发射（避免同步批量发完导致 generating 状态对 UI 不可见：
@@ -134,21 +134,21 @@ function createEchoLoop(
           : "";
         const reply = `（回声）${text}${demoNovel}`;
         for (const ch of reply) {
-          emit({ type: "assistant.delta", persist: false, kind: "text", text: ch, conversationId, ts: now() });
+          emit({ type: "assistant.delta", kind: "text", text: ch, conversationId, ts: now() });
           await sleep(24);
         }
         messages.push({ role: "assistant", content: reply });
-        emit({ type: "assistant.message", persist: true, seq: turn.seq, text: reply, conversationId, ts: now() });
-        emit({ type: "turn-end", persist: true, seq: turn.seq, turnSeq: turn.seq, conversationId, ts: now() });
+        emit({ type: "assistant.message", persist: true, seq: run.seq, text: reply, conversationId, ts: now() });
+        emit({ type: "run-end", persist: true, seq: run.seq, runSeq: run.seq, conversationId, ts: now() });
         // 同 seq 重写：assistant 完整快照（与真实 loop 的 journalListener 语义一致）
-        void journal?.appendTurn(turn);
+        void journal?.appendRun(run);
       })();
-      return turn;
+      return run;
     },
     steer: () => {},
     stop: () => {},
     cancel: () => {},
-    onOutputEvent: (l: (e: OutputEvent) => void) => {
+    onOutputEvent: (l: (e: LoopEvent) => void) => {
       listeners.add(l);
       return () => listeners.delete(l);
     },

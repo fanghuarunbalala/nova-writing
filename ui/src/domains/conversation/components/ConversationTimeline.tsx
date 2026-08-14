@@ -153,9 +153,9 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
     onCardAction,
   } = deps;
   switch (item.kind) {
-    case "turn":
+    case "run":
       return (
-        <div className={styles.turnSep}>
+        <div className={styles.runSep}>
           <span>{item.label}</span>
         </div>
       );

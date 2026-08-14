@@ -21,7 +21,7 @@ import { NovelHandle } from "../../novel/client/NovelHandle.js";
 import { createNovelApiClient, createNovelApiServer } from "../NovelApiClient.js";
 import { ConversationProjection } from "../ConversationProjection.js";
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
-import type { TurnContext } from "../../runtime/loop/types.js";
+import type { RunContext } from "../../runtime/loop/types.js";
 import type { ProjectedEvent } from "../../conversation/contract/events/index.js";
 import type { ConversationHandle } from "../../conversation/contract/handle/index.js";
 
@@ -37,8 +37,8 @@ function mockLoop(): AgentLoop {
 				seq,
 				messages: [{ role: "user", content: "" }],
 				ts: "t",
-				appendTurnMessages: () => {},
-			} as TurnContext;
+				appendRunMessages: () => {},
+			} as RunContext;
 		},
 		steer: () => {},
 		stop: () => {},
@@ -88,12 +88,12 @@ function evt(e: Partial<ProjectedEvent> & { type: ProjectedEvent["type"] }): Pro
 }
 
 describe("ConversationProjection（精简投影）", () => {
-	it("user.message → assistant.delta×N → turn-end 收口成 timeline", async () => {
+	it("user.message → assistant.delta×N → run-end 收口成 timeline", async () => {
 		const handle = fakeHandle([
 			evt({ type: "user.message", persist: true, seq: 1, text: "你好" }),
 			evt({ type: "assistant.delta", text: "你好" }),
 			evt({ type: "assistant.delta", text: "，世界" }),
-			evt({ type: "turn-end", persist: true, seq: 2, turnSeq: 1 }),
+			evt({ type: "run-end", persist: true, seq: 2, runSeq: 1 }),
 		]);
 		const projection = new ConversationProjection(handle, "c1");
 		await projection.start();
@@ -134,23 +134,23 @@ describe("ConversationProjection（恢复重放）", () => {
 			resolveHistory = r;
 		});
 		const historyEvents: ProjectedEvent[] = [
-			evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 }),
+			evt({ type: "run-start", persist: true, seq: 1, runSeq: 1 }),
 			evt({ type: "user.message", persist: true, seq: 1, text: "历史问题" }),
 			evt({ type: "assistant.message", persist: true, seq: 1, text: "历史回复" }),
-			evt({ type: "turn-end", persist: true, seq: 1, turnSeq: 1 }),
+			evt({ type: "run-end", persist: true, seq: 1, runSeq: 1 }),
 		];
 		const projection = new ConversationProjection(handle, "c1", () => historyPromise);
 		const startPromise = projection.start();
 		// 等 start 进入 history 阶段后向缓冲推事件（订阅与重放间隙）
 		await new Promise((r) => setTimeout(r, 0));
-		listener?.(evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 })); // 已被历史覆盖 → 丢弃
+		listener?.(evt({ type: "run-start", persist: true, seq: 1, runSeq: 1 })); // 已被历史覆盖 → 丢弃
 		listener?.(evt({ type: "assistant.delta", text: "尾流" })); // live turn 未开 → 丢弃
-		listener?.(evt({ type: "turn-start", persist: true, seq: 2, turnSeq: 2 })); // 新 turn
+		listener?.(evt({ type: "run-start", persist: true, seq: 2, runSeq: 2 })); // 新 turn
 		listener?.(evt({ type: "user.message", persist: true, seq: 2, text: "新问题" }));
 		listener?.(evt({ type: "assistant.delta", text: "新" }));
 		listener?.(evt({ type: "assistant.delta", text: "答" }));
 		listener?.(evt({ type: "assistant.message", persist: true, seq: 2, text: "新答" })); // 替换活跃流式项
-		listener?.(evt({ type: "turn-end", persist: true, seq: 2, turnSeq: 2 }));
+		listener?.(evt({ type: "run-end", persist: true, seq: 2, runSeq: 2 }));
 		listener?.(evt({ type: "assistant.delta", text: "再尾" })); // turn 已收口 → 丢弃
 		resolveHistory(historyEvents);
 		await startPromise;
@@ -209,7 +209,7 @@ describe("ConversationProjection（liveState）", () => {
 		expect(snapshot.timeline[0]).toMatchObject({ text: "正文", streaming: true });
 	});
 
-	it("assistant.message / turn-end 收口 → liveState 清除；正文不含思考文本", async () => {
+	it("assistant.message / run-end 收口 → liveState 清除；正文不含思考文本", async () => {
 		const { projection, emit } = makeLiveProjection();
 		await projection.start();
 		emit(evt({ type: "assistant.delta", kind: "text", text: "秋夜。" }));
@@ -222,7 +222,7 @@ describe("ConversationProjection（liveState）", () => {
 	it("tool-recorded 对按 turn 切段：每段 = 内容片段 + 单行工具（进行中→完成替换）", async () => {
 		const { projection, emit } = makeLiveProjection();
 		await projection.start();
-		emit(evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 }));
+		emit(evt({ type: "run-start", persist: true, seq: 1, runSeq: 1 }));
 		emit(evt({ type: "user.message", persist: true, seq: 1, text: "写角色" }));
 		emit(evt({ type: "assistant.delta", kind: "text", text: "好" }));
 		emit(evt({ type: "tool-recorded.started", seq: 1, toolCallId: "t1", name: "CharacterWrite", preview: { action: "创建", object: "角色", title: "张三" }, ts: "2026-08-14T10:00:00.000Z" }));
@@ -247,11 +247,11 @@ describe("ConversationProjection（liveState）", () => {
 		// 完成工具行之后的新 delta → 开新段
 		emit(evt({ type: "assistant.delta", kind: "text", text: "接着写正文" }));
 		emit(evt({ type: "assistant.message", persist: true, seq: 1, text: "好的，接着写正文" }));
-		emit(evt({ type: "turn-end", persist: true, seq: 1, turnSeq: 1 }));
+		emit(evt({ type: "run-end", persist: true, seq: 1, runSeq: 1 }));
 
 		const snapshot = projection.getSnapshot();
 		const assistant = snapshot.timeline.find((item) => item.kind === "assistant");
-		expect(assistant).toMatchObject({ sourceSequence: 1, turnEndSequence: 1, streaming: false });
+		expect(assistant).toMatchObject({ sourceSequence: 1, runEndSequence: 1, streaming: false });
 		expect(assistant?.text).toBe("好的，接着写正文");
 		expect(assistant?.segments).toHaveLength(2);
 		expect(assistant?.segments?.[0]).toMatchObject({ text: "好" });
@@ -400,14 +400,14 @@ describe("createNovelApiClient（门面）", () => {
 			filePath: join(dir, "c1", "journal.jsonl"),
 		});
 		await journal.open();
-		await journal.appendTurn({
+		await journal.appendRun({
 			seq: 1,
 			messages: [
 				{ role: "user", content: "hi" },
 				{ role: "assistant", content: "hello" },
 			],
 			ts: "t",
-			appendTurnMessages: () => {},
+			appendRunMessages: () => {},
 		});
 		const serverApi = createNovelApiServer({
 			manager: new ConversationManagerServer(conversationFactory()),
@@ -416,10 +416,10 @@ describe("createNovelApiClient（门面）", () => {
 		});
 		const events = await serverApi.conversations.history("c1", {});
 		expect(events.map((e) => e.type)).toEqual([
-			"turn-start",
+			"run-start",
 			"user.message",
 			"assistant.message",
-			"turn-end",
+			"run-end",
 		]);
 		// 无 journalDir 时返回空序列
 		const noJournalApi = createNovelApiServer({

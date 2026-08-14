@@ -59,7 +59,7 @@ sequenceDiagram
     participant H as Hub（ZeroMQ PUB）
     participant U as UI
 
-    L->>J: appendTurn：完整 OutputEvent 落盘（含完整 tool-call）
+    L->>J: appendRun：完整 OutputEvent 落盘（含完整 tool-call）
     L->>P: 完整事件（进程内流）
     P->>H: ProjectedEvent（tool-recorded 替代完整 tool-call）
     H-->>U: 实时广播 conversation.output
@@ -91,11 +91,11 @@ stateDiagram-v2
 - 触发：定义两个独立事件类型集（core/src/conversation/contract/events/ 下新增 `projected.ts`；`output.ts` 收敛为持久化域）。
 - 输入：无。
 - 处理：
-  - **`OutputEvent`（持久化域，默认持久化事件）**：`user.message` / `assistant.message` / `tool-call-request`（完整 args）/ `tool-call-response`（完整 result/error）/ `turn-start` / `turn-end` / `compacted` / `clear` / `retry-request`。
+  - **`OutputEvent`（持久化域，默认持久化事件）**：`user.message` / `assistant.message` / `tool-call-request`（完整 args）/ `tool-call-response`（完整 result/error）/ `run-start` / `run-end` / `compacted` / `clear` / `retry-request`。
     - **删除** `approval.request` / `approval.resolved`（wait 状态唯一权威是 CMS 队列；现无产出点，仅剩类型定义、`ApprovalProjection` 与测试，一并清理）。
     - **移出** `assistant.delta`（流式增量是流域专属，不参与重建；AgentLoop 产出侧分流）。
   - **`ProjectedEvent`（流域，hub 广播与投影读取形态）**：
-    - 原样复用：`turn-start` / `turn-end` / `user.message` / `assistant.message` / `assistant.delta` / `compacted` / `clear` / `retry-request`。
+    - 原样复用：`run-start` / `run-end` / `user.message` / `assistant.message` / `assistant.delta` / `compacted` / `clear` / `retry-request`。
     - 投影替代（取代 `tool-call-request/response`）：
       - `tool-recorded.started`：`{ type, seq, toolCallId, name, preview?, conversationId, agentId?, ts }`——工具开始执行时发出；`preview` 为 preview(args) 输出的开始预览；`seq` 为源 turn seq（UI 归属/去重/分页必需）。
       - `tool-recorded.recorded`：`{ type, seq, toolCallId, name, outcome: "ok" | "failed", preview?, error?, durationMs?, conversationId, agentId?, ts }`——工具完成时发出；`preview` 为 preview(args, response) 输出的完成预览；`error` 为失败短信息（截断，非完整 error）；`durationMs` 为 request→response 耗时；`seq` 同 started。
@@ -188,7 +188,7 @@ stateDiagram-v2
 - [ ] journal 读取侧两个接口区分：`history` 返回完整 `OutputEvent`；`projectedHistory` 返回 `ProjectedEvent`，且与实时订阅形态一致。
 - [ ] journal 中 `tool-call-request/response` 完整字段（args/result/error）不变，既有 journal 测试全绿。
 - [ ] 同一段 journal 完整事件重投影两次，产出投影序列一致（确定性）。
-- [ ] `turn-start` / `turn-end` / `user.message` / `assistant.message` / `assistant.delta` 在投影流中照旧出现。
+- [ ] `run-start` / `run-end` / `user.message` / `assistant.message` / `assistant.delta` 在投影流中照旧出现。
 - [ ] 声明了 `preview` 的工具：started/recorded 携带其定制预览内容；未声明的工具按默认截断回退；preview 抛错不影响 loop。
 - [ ] UI 分段工具行：每请求一行内嵌正文（进行中带实时秒数、完成带耗时、失败红字）；重放形态与实时收口一致；卡片渲染信息量不减。
 - [ ] approval 事件类型、`ApprovalProjection` 与相关测试清理完毕，wait 通道（CMS 队列）回归通过。

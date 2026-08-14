@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { Conversation } from "../Conversation.js";
 import { ConversationManagerServer } from "../ConversationManagerServer.js";
 import type { AgentLoop } from "../../../runtime/loop/AgentLoop.js";
-import type { TurnContext } from "../../../runtime/loop/types.js";
+import type { RunContext } from "../../../runtime/loop/types.js";
 import type { ProjectedEvent } from "../../contract/events/index.js";
 import type { ConversationJournalService } from "../../contract/journal/index.js";
 import type { ConversationHandle } from "../../contract/handle/index.js";
@@ -10,20 +10,20 @@ import type { ConversationHandle } from "../../contract/handle/index.js";
 function mockLoop(extraEmit?: (emit: (type: string, extra?: Record<string, unknown>) => void) => void): AgentLoop {
   const listeners = new Set<(e: ProjectedEvent) => void>();
   const emit = (type: string, extra?: Record<string, unknown>) => {
-    const e = { type, persist: true, seq: 1, turnSeq: 1, conversationId: "c1", ts: "t", ...extra } as ProjectedEvent;
+    const e = { type, persist: true, seq: 1, runSeq: 1, conversationId: "c1", ts: "t", ...extra } as ProjectedEvent;
     for (const l of listeners) l(e);
   };
   let seq = 0;
   return {
     run: async () => ({ final: { role: "assistant", content: "ok" }, usage: undefined }),
     followup: (text: string) => {
-      const turn: TurnContext = {
+      const turn: RunContext = {
         seq: ++seq,
         messages: [{ role: "user", content: text }],
         ts: "t",
-        appendTurnMessages: () => {},
+        appendRunMessages: () => {},
       };
-      emit("turn-start");
+      emit("run-start");
       extraEmit?.(emit);
       return turn;
     },
@@ -78,7 +78,7 @@ describe("Conversation", () => {
     const received: ProjectedEvent[] = [];
     await conv.subscribeEvents((e) => received.push(e));
     await conv.sendUserMessage({ text: "hi" });
-    expect(received[0]?.type).toBe("turn-start");
+    expect(received[0]?.type).toBe("run-start");
   });
 
   it("hub 只广播投影事件：tool-call 以 tool-recorded 成对出现，无完整 request/response", async () => {
@@ -102,16 +102,16 @@ describe("Conversation", () => {
     expect(types).not.toContain("approval.resolved");
   });
 
-  it("有 journal 时输入 rpc 回持久化回执（followup 即时开 turn → appendTurn 同步落盘）", async () => {
-    const appended: TurnContext[] = [];
+  it("有 journal 时输入 rpc 回持久化回执（followup 即时开 turn → appendRun 同步落盘）", async () => {
+    const appended: RunContext[] = [];
     const journal: ConversationJournalService = {
       open: async () => {},
       lastSeq: 0,
-      appendTurn: async (turn) => {
+      appendRun: async (turn) => {
         appended.push(turn);
         return { seq: turn.seq, recordedAt: "t" };
       },
-      writeTurns: async () => {},
+      writeRuns: async () => {},
       flush: async () => {},
       close: async () => {},
       reconcile: async () => {},
@@ -172,7 +172,7 @@ describe("Conversation", () => {
     });
     const received: OutputEvent[] = [];
     await conv.subscribeEvents((e) => received.push(e));
-    rt.emit({ type: "turn-start", seq: 0, persist: true, turnSeq: 0, conversationId: "c1", agentId: "novel_explorer:task_1", ts: "t" } as OutputEvent);
+    rt.emit({ type: "run-start", seq: 0, persist: true, runSeq: 0, conversationId: "c1", agentId: "novel_explorer:task_1", ts: "t" } as OutputEvent);
     expect(received).toHaveLength(1);
     expect(received[0]?.agentId).toBe("novel_explorer:task_1");
   });
@@ -301,5 +301,39 @@ describe("ConversationManagerServer", () => {
     const ref = await server.createOrResume();
     await server.terminate(ref.conversationId);
     expect((await server.list())[0].status).toBe("stopped");
+  });
+});
+
+describe("Conversation subagent 投影层隔离", () => {
+  it("subagent run-end 只清自己的 pending：main 未配对 tool-call 不退化为 unknown", async () => {
+    // main 脚本：run1 发出 m1 request（不配对）；run2（subagent 结束后）补 m1 response
+    const script: Array<(emit: (type: string, extra?: Record<string, unknown>) => void) => void> = [
+      (emit) => emit("tool-call-request", { toolCallId: "m1", name: "MainTool", args: "{}" }),
+    ];
+    const rt = mockRuntime();
+    const conv = new Conversation({
+      conversationId: "c1",
+      loop: mockLoop((emit) => script.shift()?.(emit)),
+      sampling: { model: "gpt-5" },
+      subagentRuntime: rt as never,
+    });
+    const received: ProjectedEvent[] = [];
+    await conv.subscribeEvents((e) => received.push(e));
+
+    // run1：main 发出 m1 request（pending 挂起）
+    await conv.sendUserMessage({ text: "a" });
+    // subagent 任务事件插入（含未配对 s1 + run-end；旧实现会顺带清掉 main 的 m1）
+    rt.emit({ type: "tool-call-request", persist: true, seq: 9, toolCallId: "s1", name: "SubTool", args: "{}", conversationId: "c1", agentId: "novel_explorer:task_1", ts: "t" } as OutputEvent);
+    rt.emit({ type: "run-end", persist: true, seq: 9, runSeq: 9, conversationId: "c1", agentId: "novel_explorer:task_1", ts: "t" } as OutputEvent);
+    // run2：main 配对 m1 —— pending 未被 subagent 清掉则 name 正确（否则 unknown）
+    script.push((emit) => emit("tool-call-response", { toolCallId: "m1", result: "ok" }));
+    await conv.sendUserMessage({ text: "b" });
+
+    const mainRecorded = received.find(
+      (e): e is Extract<ProjectedEvent, { type: "tool-recorded.recorded" }> =>
+        e.type === "tool-recorded.recorded" && e.toolCallId === "m1",
+    );
+    expect(mainRecorded).toBeDefined();
+    expect(mainRecorded?.name).toBe("MainTool");
   });
 });

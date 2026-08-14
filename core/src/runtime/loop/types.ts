@@ -37,9 +37,9 @@ export interface AgentLoopConfig {
   conversationId?: string;
   /** agent id（产出 OutputEvent 用；main="main"） */
   agentId?: string;
-  /** 可恢复的 turn 消息（上次会话；缺省从空开始） */
-  turnMessages?: LLMessage[];
-  /** turn seq 起始值（journal 恢复：重放后的下个 turn 从 resumeSeq+1 开始） */
+  /** 可恢复的 run 消息（上次会话；缺省从空开始） */
+  runMessages?: LLMessage[];
+  /** run seq 起始值（journal 恢复：重放后的下个 run 从 resumeSeq+1 开始） */
   startSeq?: number;
   /** 状态变化监听器（AgentLoop 构造时注册到 LoopContext；可多个） */
   listeners?: LoopContextListener[];
@@ -61,7 +61,7 @@ export interface AgentLoopConfig {
    */
   requestApproval?: (req: ConversationApprovalRequest) => Promise<ConversationApprovalDecision>;
   /**
-   * 暂停点续跑决策器：恢复 turn 中缺 tool 结果的 toolCall 经此查询决策
+   * 暂停点续跑决策器：恢复 run 中缺 tool 结果的 toolCall 经此查询决策
    * （approve 执行 / reject 已拒绝 / expired 审批超时 / undefined 通道未装配）。
    * 由子进程启动时经 CMS takeDecisions 装配（重启补完路径）。
    */
@@ -80,42 +80,42 @@ export interface AgentRunConfig {
   maxTurns?: number;
 }
 
-/** 一次用户驱动的完整回复周期（turn）：user → 多次 provider call + tool → assistant 无 tool_call 结束 */
-export interface TurnContext {
-  /** turn 序号（递增，唯一标识；上层持久化 / 重放 / 增量同步用） */
+/** 一次用户消息驱动的完整回复周期（run）：user → 多次 provider call（turn）+ tool → assistant 无 tool_call 结束 */
+export interface RunContext {
+  /** run 序号（递增，唯一标识；上层持久化 / 重放 / 增量同步用） */
   seq: number;
-  /** 本 turn 累积消息（user + assistant + tool 结果，自闭环） */
+  /** 本 run 累积消息（user + assistant + tool 结果，自闭环） */
   messages: LLMessage[];
-  /** 本 turn 累计用量 */
+  /** 本 run 累计用量 */
   usage?: { inputTokens: number; outputTokens: number };
   /** 时间 */
   ts: string;
   /**
-   * 追加消息到本 turn（触发上层 onTurnMessageAppend）
+   * 追加消息到本 run（触发上层 onRunMessageAppend）
    * @param messages 本次追加的消息
    */
-  appendTurnMessages(messages: LLMessage[]): void;
+  appendRunMessages(messages: LLMessage[]): void;
 }
 
-/** 当前 run 的运行状态：由 AgentRunConfig 初始化，nudge 策略判断依据（进度 + 工具使用记录） */
-export interface RunContext {
-  /** 当前 turn 序号 */
+/** 当前 run 的运行进度：由 AgentRunConfig 初始化，nudge 策略判断依据（进度 + 工具使用记录） */
+export interface RunProgress {
+  /** 当前请求轮（turn = 一次 API 请求）序号 */
   curTurn: number;
-  /** 最大轮次（来源于 AgentRunConfig.maxTurns，防死循环） */
+  /** 最大轮次（来源于 AgentRunConfig.maxTurns = 每 run 最大 turn 数，防死循环） */
   maxTurn: number;
-  /** 各工具上次被调用的 turn 序号（name → turn） */
+  /** 各工具上次被调用的 turn（请求轮）序号（name → turn） */
   toolsLastTurn: Map<string, number>;
 }
 
-/** AgentLoop 输入（inbox 队列元素）：turn 排队 / control 抢占 */
+/** AgentLoop 输入（inbox 队列元素）：run 排队 / control 抢占 */
 export type LoopInput =
-  /** 追加用户消息（turn lane，FIFO 排队） */
+  /** 追加用户消息（run lane，FIFO 排队） */
   | {
-      lane: "turn";
+      lane: "run";
       kind: "followup";
       text: string;
-      /** 入队时已预开的 turn（seq 按输入时序分配；执行时复用，不再开新 turn） */
-      turn: TurnContext;
+      /** 入队时已预开的 run（seq 按输入时序分配；执行时复用，不再开新 run） */
+      run: RunContext;
       /** 入队 run 的配置（run() 入队时带；直接 followup() 不带，用上次 config） */
       config?: AgentRunConfig;
       /** 入队 run 的事件回调 */
@@ -125,10 +125,10 @@ export type LoopInput =
     }
   /** 转向指令（control lane，高优先级，注入 system reminder） */
   | { lane: "control"; kind: "steer"; text: string }
-  /** 停止（control lane，取消当前 + 清空 turn 队列） */
+  /** 停止（control lane，取消当前 + 清空 run 队列） */
   | { lane: "control"; kind: "stop" };
 
-/** AgentLoop 运行结果（完整消息序列从 LoopContext.turns 取） */
+/** AgentLoop 运行结果（完整消息序列从 LoopContext.runs 取） */
 export interface AgentLoopResult {
   /** 最终 assistant 消息 */
   final: AssistantMessage;
@@ -139,21 +139,21 @@ export interface AgentLoopResult {
 /** LoopContext 状态变化监听（上层订阅：持久化同步；方法可选，按需实现，可注册多个监听器） */
 export interface LoopContextListener {
   /**
-   * 新 turn 创建（用户消息开 turn，input 组装时触发）
-   * @param turn 新 turn
+   * 新 run 创建（用户消息开 run，input 组装时触发）
+   * @param run 新 run
    */
-  onTurnAppended?(turn: TurnContext): void;
+  onRunAppended?(run: RunContext): void;
   /**
-   * turn 消息追加（assistant / tool 结果；持久化增量追加）
-   * @param turn 当前 turn
+   * run 消息追加（assistant / tool 结果；持久化增量追加）
+   * @param run 当前 run
    * @param messages 本次追加的消息
    */
-  onTurnMessageAppend?(turn: TurnContext, messages: LLMessage[]): void;
+  onRunMessageAppend?(run: RunContext, messages: LLMessage[]): void;
   /**
    * 上下文压缩后触发（持久化需全量重写）
-   * @param turns 压缩后的 turn 序列（journal.write 覆盖）
+   * @param runs 压缩后的 run 序列（journal.write 覆盖）
    */
-  onCompacted?(turns: TurnContext[]): void;
+  onCompacted?(runs: RunContext[]): void;
   /**
    * 上下文清空后触发（持久化需清空）
    */

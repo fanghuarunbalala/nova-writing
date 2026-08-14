@@ -11,7 +11,16 @@ import type {
 	ConversationExitComposeRequest,
 	Receipt,
 } from "../contract/types/index.js";
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import {
+	closeSync,
+	existsSync,
+	openSync,
+	readFileSync,
+	readSync,
+	readdirSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import type {
@@ -123,7 +132,8 @@ export class ConversationManagerServer implements Contract {
 		return this.storedirRoot !== undefined ? join(this.storedirRoot, conversationId) : "";
 	}
 
-	/** 扫描 storedirRoot 种子 catalog（重启恢复）：目录名 = conversationId，status:"stopped"，seq 取 conv_<n> 最大值防 id 撞车 */
+	/** 扫描 storedirRoot 种子 catalog（重启恢复）：目录名 = conversationId，status:"stopped"，seq 取 conv_<n> 最大值防 id 撞车；
+	 *  名字恢复优先级：meta.json 显式名 → journal 首句用户消息（截断）→ conversationId */
 	private scanCatalog(): void {
 		if (this.storedirRoot === undefined || !existsSync(this.storedirRoot)) return;
 		for (const entry of readdirSync(this.storedirRoot, { withFileTypes: true })) {
@@ -131,12 +141,60 @@ export class ConversationManagerServer implements Contract {
 			const conversationId = entry.name;
 			this.summaries.set(conversationId, {
 				conversationId,
-				name: conversationId,
+				name: this.readMetaName(conversationId) ?? this.deriveFirstName(conversationId) ?? conversationId,
 				storeDir: this.allocStoredir(conversationId),
 				status: "stopped",
 			});
 			const match = /^conv_(\d+)$/.exec(conversationId);
 			if (match) this.seq = Math.max(this.seq, Number(match[1]));
+		}
+	}
+
+	/** 会话 meta 文件路径（storedirRoot 未提供时 undefined → 不落盘） */
+	private metaPath(conversationId: string): string | undefined {
+		if (this.storedirRoot === undefined) return undefined;
+		return join(this.storedirRoot, conversationId, "meta.json");
+	}
+
+	/** 读 meta.json 显式名（无文件/损坏/空名 → undefined） */
+	private readMetaName(conversationId: string): string | undefined {
+		const path = this.metaPath(conversationId);
+		if (path === undefined) return undefined;
+		try {
+			const parsed = JSON.parse(readFileSync(path, "utf8")) as { name?: unknown };
+			return typeof parsed.name === "string" && parsed.name.trim() !== "" ? parsed.name : undefined;
+		} catch {
+			return undefined;
+		}
+	}
+
+	/** 写 meta.json 显式名（落盘失败忽略：内存态仍生效，重启回退首句派生） */
+	private writeMetaName(conversationId: string, name: string): void {
+		const path = this.metaPath(conversationId);
+		if (path === undefined) return;
+		try {
+			writeFileSync(path, JSON.stringify({ name }), "utf8");
+		} catch {
+			// 见方法注释
+		}
+	}
+
+	/** 读 journal.jsonl 首行派生默认名（首条 user 消息，截断 30 字；读不到 → undefined） */
+	private deriveFirstName(conversationId: string): string | undefined {
+		if (this.storedirRoot === undefined) return undefined;
+		const line = readJournalFirstLine(join(this.storedirRoot, conversationId, "journal.jsonl"));
+		if (line === undefined) return undefined;
+		try {
+			const parsed = JSON.parse(line) as {
+				turn?: { messages?: Array<{ role?: string; content?: unknown }> };
+			};
+			const messages = parsed.turn?.messages;
+			if (!Array.isArray(messages)) return undefined;
+			const first = messages.find((m) => m.role === "user");
+			if (first?.content === undefined) return undefined;
+			return truncateConversationName(typeof first.content === "string" ? first.content : String(first.content));
+		} catch {
+			return undefined;
 		}
 	}
 
@@ -157,11 +215,18 @@ export class ConversationManagerServer implements Contract {
 		});
 	}
 
-	/** conversation 启动报到 */
+	/** conversation 启动报到（不冲刷显式名：子进程恒报 conversationId，已有名字时保留） */
 	async register(meta: ConversationMeta): Promise<void> {
+		const existing = this.summaries.get(meta.conversationId);
+		const name =
+			existing !== undefined &&
+			existing.name !== existing.conversationId &&
+			meta.name === meta.conversationId
+				? existing.name
+				: meta.name;
 		this.summaries.set(meta.conversationId, {
 			conversationId: meta.conversationId,
-			name: meta.name,
+			name,
 			storeDir: meta.storeDir,
 			status: "active",
 			parentId: meta.parentId,
@@ -284,6 +349,16 @@ export class ConversationManagerServer implements Contract {
 		return { conversationId: id, handle: conversation };
 	}
 
+	/** 重命名会话：更新目录摘要 + 写 meta.json 持久化（重启扫描恢复；显式名优先于 journal 首句派生） */
+	async rename(conversationId: ConversationId, name: string): Promise<boolean> {
+		const summary = this.summaries.get(conversationId);
+		const trimmed = name.trim();
+		if (summary === undefined || trimmed === "") return false;
+		summary.name = trimmed;
+		this.writeMetaName(conversationId, trimmed);
+		return true;
+	}
+
 	/** 删除会话（kill 子进程 + 删目录；Windows 下刚 kill 的子进程句柄可能短暂占用目录，删除失败忽略） */
 	async delete(conversationId: ConversationId): Promise<void> {
 		const child = this.childProcesses.get(conversationId);
@@ -390,4 +465,51 @@ export class ConversationManagerServer implements Contract {
 		if (!target) throw new Error(`未找到 conversation: ${id}`);
 		return target;
 	}
+}
+
+/** journal 首行读取上限（首行即首个 turn，含完整 user 消息；超限视为损坏） */
+const JOURNAL_FIRST_LINE_MAX_BYTES = 256 * 1024;
+
+/**
+ * 有界读 journal.jsonl 首行（找到首个 \n 即返回，不整文件读；超上限/打开失败 → undefined）。
+ * @param filePath journal 文件路径
+ * @returns 首行内容（不含换行）
+ */
+function readJournalFirstLine(filePath: string): string | undefined {
+	let fd: number;
+	try {
+		fd = openSync(filePath, "r");
+	} catch {
+		return undefined;
+	}
+	try {
+		const chunks: Buffer[] = [];
+		let total = 0;
+		const buffer = Buffer.alloc(64 * 1024);
+		while (total < JOURNAL_FIRST_LINE_MAX_BYTES) {
+			const read = readSync(fd, buffer, 0, buffer.length, total);
+			if (read <= 0) break;
+			chunks.push(Buffer.from(buffer.subarray(0, read)));
+			total += read;
+			const joined = Buffer.concat(chunks).toString("utf8");
+			const newline = joined.indexOf("\n");
+			if (newline >= 0) return joined.slice(0, newline);
+		}
+		return Buffer.concat(chunks).toString("utf8");
+	} catch {
+		return undefined;
+	} finally {
+		try {
+			closeSync(fd);
+		} catch {
+			// 关闭失败忽略
+		}
+	}
+}
+
+/** 会话名截断：折叠空白、上限 30 字 + 省略号（首句派生默认名用） */
+function truncateConversationName(text: string): string {
+	const collapsed = text.replace(/\s+/g, " ").trim();
+	if (collapsed === "") return "";
+	return collapsed.length > 30 ? `${collapsed.slice(0, 30)}…` : collapsed;
 }

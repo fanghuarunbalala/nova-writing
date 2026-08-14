@@ -74,6 +74,13 @@ export interface ConversationManagerServer {
 	 */
 	delete(conversationId: ConversationId): Promise<void>;
 	/**
+	 * 重命名会话：更新目录摘要并持久化（storedir/meta.json；重启扫描恢复）。
+	 * @param conversationId 会话 id
+	 * @param name 新名字（trim 后非空；显式名优先于 journal 首句派生）
+	 * @returns 是否命中会话（false = 会话不存在或名字为空）
+	 */
+	rename(conversationId: ConversationId, name: string): Promise<boolean>;
+	/**
 	 * 转发消息到目标会话（调用其 ConversationInteraction 投递）
 	 * @param conversationId 目标会话 id
 	 * @param msgs 会话消息（user / command / control）

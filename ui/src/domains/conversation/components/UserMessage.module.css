@@ -12,8 +12,8 @@
 .message {
   display: flex;
   flex-direction: row-reverse;
-  gap: 12px;
-  padding: 18px 0 6px;
+  gap: var(--space-3);
+  padding: var(--space-18px) 0 var(--space-6px);
 }
 
 .body {
@@ -27,14 +27,14 @@
 
 .text {
   display: inline-block;
-  margin-top: 7px;
-  padding: 10px 15px;
-  border-radius: 16px;
+  margin-top: var(--space-7px);
+  padding: var(--space-10px) var(--space-15px);
+  border-radius: var(--radius-16px);
   background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
   color: var(--color-accent-ink);
   /* 用户要求正文用黑体（--font-ui），配合 medium 字重提升可读性。 */
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: var(--fs-body);
   font-weight: var(--fw-medium);
   line-height: 1.75;
   text-align: left;
@@ -44,10 +44,10 @@
 
 .actions {
   position: absolute;
-  right: 2px;
-  bottom: -28px;
+  right: var(--space-2px);
+  bottom: -var(--space-28px);
   display: flex;
-  gap: 2px;
+  gap: var(--space-2px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.16s ease;
@@ -71,8 +71,8 @@
 }
 
 .actionsInPad .actions {
-  right: 8px;
-  bottom: 3px;
+  right: var(--space-2);
+  bottom: var(--space-3px);
 }
 
 .action {
@@ -82,7 +82,7 @@
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-8px);
   background: transparent;
   color: var(--color-faint);
   cursor: pointer;

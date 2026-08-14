@@ -13,7 +13,7 @@
   text-decoration-color: color-mix(in oklab, var(--color-accent) 55%, transparent);
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
-  border-radius: 2px;
+  border-radius: var(--radius-2px);
   cursor: pointer;
   transition:
     background var(--duration-fast) var(--ease-out),

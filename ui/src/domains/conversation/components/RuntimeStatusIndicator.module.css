@@ -6,7 +6,7 @@
 .row {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -45,8 +45,8 @@
 
 .ink {
   position: absolute;
-  right: -4px;
-  top: 4px;
+  right: -var(--space-1);
+  top: var(--space-1);
   width: 5px;
   height: 5px;
   border-radius: 50%;
@@ -65,8 +65,8 @@
 }
 
 .label {
-  font-size: 12.5px;
-  font-weight: 700;
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-bold);
   letter-spacing: 0.02em;
   white-space: nowrap;
   background-size: 250% auto;
@@ -82,12 +82,7 @@
 
 /* 文字渐变 + 下划线色：info 蓝 / 品牌 --grad-accent / warn 琥珀 */
 .thinking .label {
-  background-image: linear-gradient(
-    105deg,
-    oklch(79% 0.05 230),
-    oklch(54% 0.05 235) 55%,
-    oklch(60% 0.07 260)
-  );
+  background-image: var(--grad-info-text);
   border-bottom-color: color-mix(in oklab, var(--color-info) 40%, transparent);
 }
 
@@ -97,17 +92,12 @@
 }
 
 .waiting .label {
-  background-image: linear-gradient(
-    105deg,
-    oklch(82% 0.055 85),
-    oklch(59% 0.07 80) 55%,
-    oklch(68% 0.07 75)
-  );
+  background-image: var(--grad-warn-text);
   border-bottom-color: color-mix(in oklab, var(--color-warn) 40%, transparent);
 }
 
 .seconds {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--color-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

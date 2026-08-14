@@ -2,9 +2,9 @@
  * Dropdown 视觉：surface 浮层、item hover/danger、分隔线。
  */
 .content {
-  z-index: 60;
+  z-index: var(--z-dropdown);
   min-width: 160px;
-  padding: 4px;
+  padding: var(--space-1);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -15,8 +15,8 @@
 .item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
+  gap: var(--space-2);
+  padding: var(--space-7px) var(--space-10px);
   border-radius: var(--radius-sm);
   font-size: var(--fs-body);
   color: var(--color-fg);
@@ -43,7 +43,7 @@
 
 .separator {
   height: 1px;
-  margin: 4px 6px;
+  margin: var(--space-1) var(--space-6px);
   background: var(--color-border);
 }
 

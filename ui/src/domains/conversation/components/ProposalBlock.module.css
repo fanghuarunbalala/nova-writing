@@ -6,11 +6,11 @@
 .block {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  margin-top: 13px;
-  padding: 14px 16px 13px;
+  gap: var(--space-7px);
+  margin-top: var(--space-13px);
+  padding: var(--space-14px) var(--space-4) var(--space-13px);
   border: 1px solid var(--color-border-strong);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-1);
   transition:
@@ -26,12 +26,12 @@
 .head {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--space-10px);
   flex-wrap: wrap;
 }
 
 .title {
-  font-size: 15px;
+  font-size: var(--fs-body);
   font-weight: var(--fw-heavy);
   letter-spacing: -0.01em;
   color: var(--color-fg);
@@ -55,15 +55,15 @@
 .foot {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10px);
   flex-wrap: wrap;
   border-top: 1px solid var(--color-border);
-  padding-top: 11px;
-  margin-top: 3px;
+  padding-top: var(--space-11px);
+  margin-top: var(--space-3px);
 }
 
 .diffButton {
-  padding: 5px 10px;
+  padding: var(--space-5px) var(--space-10px);
   border-radius: var(--radius-sm);
   background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
   color: var(--color-accent-ink);

@@ -5,23 +5,23 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6px);
 }
 
 .label {
-  font-size: 13px;
+  font-size: var(--fs-13);
   font-weight: var(--fw-medium);
   color: var(--color-muted);
 }
 
 .input {
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-10px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface-2);
   color: var(--color-fg);
-  font-size: 14px;
+  font-size: var(--fs-h2);
   outline: none;
   transition: border-color var(--duration-fast) var(--ease-out);
 }
@@ -32,7 +32,7 @@
 
 .deleteText {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fs-h2);
   line-height: 1.6;
   color: var(--color-fg);
 }

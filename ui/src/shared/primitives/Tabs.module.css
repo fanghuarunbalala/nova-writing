@@ -9,17 +9,17 @@
 
 .list {
   display: flex;
-  gap: 2px;
+  gap: var(--space-2px);
   flex: none;
 }
 
 .tab {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: var(--space-6px);
+  padding: var(--space-6px) var(--space-3);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-weight: var(--fw-bold);
   color: var(--color-muted);
   cursor: pointer;
@@ -43,7 +43,7 @@
 
 .line .tab {
   border-radius: 0;
-  border-bottom: 2px solid transparent;
+  border-bottom: var(--space-2px) solid transparent;
   margin-bottom: -1px;
 }
 
@@ -54,7 +54,7 @@
 
 .pill {
   display: inline-flex;
-  padding: 2px;
+  padding: var(--space-2px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-2);
@@ -63,22 +63,22 @@
 .tabPill[data-state="active"] {
   background: var(--color-surface);
   color: var(--color-accent-ink);
-  box-shadow: 0 1px 3px rgba(20, 12, 6, 0.08);
+  box-shadow: var(--shadow-xs);
 }
 
 /* fill: 原型 .pane-tabs + .pane-tab。容器带 padding + surface 底 + 下边框；
    tab 用 accent 浅底激活态（非下划线）。 */
 .fill {
-  gap: 4px;
-  padding: 9px 20px;
+  gap: var(--space-1);
+  padding: var(--space-9px) var(--space-5);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
 
 .tabFill {
-  padding: 7px 13px;
-  border-radius: 8px;
-  font-size: 13px;
+  padding: var(--space-7px) var(--space-13px);
+  border-radius: var(--radius-8px);
+  font-size: var(--fs-13);
   font-weight: var(--fw-semibold);
 }
 

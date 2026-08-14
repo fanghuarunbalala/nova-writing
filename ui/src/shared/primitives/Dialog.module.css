@@ -4,7 +4,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: var(--z-overlay);
   background: color-mix(in oklab, var(--color-fg) 26%, transparent);
   animation: dialog-fade var(--duration-fast) var(--ease-out);
 }
@@ -13,7 +13,7 @@
   position: fixed;
   top: 50%;
   left: 50%;
-  z-index: 51;
+  z-index: var(--z-dialog);
   transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
@@ -32,42 +32,42 @@
 .xl { max-width: 960px; }
 
 .title {
-  padding: 16px 20px 0;
+  padding: var(--space-4) var(--space-5) 0;
   font-size: var(--fs-h1);
   font-weight: var(--fw-bold);
   color: var(--color-fg);
 }
 
 .description {
-  padding: 4px 20px 0;
+  padding: var(--space-1) var(--space-5) 0;
   font-size: var(--fs-body);
   color: var(--color-muted);
 }
 
 .body {
-  padding: 16px 20px;
+  padding: var(--space-4) var(--space-5);
   overflow-y: auto;
 }
 
 .footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px 16px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5) var(--space-4);
   border-top: 1px solid var(--color-border);
 }
 
 .close {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: var(--space-3);
+  right: var(--space-3);
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
   color: var(--color-muted);
-  font-size: 16px;
+  font-size: var(--fs-h1);
   cursor: pointer;
   transition:
     color var(--duration-fast) var(--ease-out),

@@ -5,7 +5,7 @@
   position: static;
   flex: none;
   touch-action: none;
-  z-index: 5;
+  z-index: var(--z-drag-handle);
 }
 
 .handle::before {
@@ -33,20 +33,20 @@
 .horizontal::before {
   top: 0;
   bottom: 0;
-  left: 2px;
+  left: var(--space-2px);
   width: 2px;
 }
 
 .vertical {
   width: 100%;
   height: 6px;
-  margin-top: -3px;
+  margin-top: -var(--space-3px);
   cursor: row-resize;
 }
 
 .vertical::before {
   left: 0;
   right: 0;
-  top: 2px;
+  top: var(--space-2px);
   height: 2px;
 }

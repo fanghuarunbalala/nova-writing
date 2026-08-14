@@ -2,9 +2,9 @@
  * Tooltip 视觉：深色浮层 + 小圆角。
  */
 .content {
-  z-index: 70;
+  z-index: var(--z-tooltip);
   max-width: 260px;
-  padding: 5px 9px;
+  padding: var(--space-5px) var(--space-9px);
   border-radius: var(--radius-sm);
   background: var(--color-fg);
   color: var(--color-surface);

@@ -3,8 +3,8 @@
  */
 .quote {
   margin: 0;
-  padding: 9px 12px;
-  border-left: 2px solid color-mix(in oklab, var(--color-accent) 45%, transparent);
+  padding: var(--space-9px) var(--space-3);
+  border-left: var(--space-2px) solid color-mix(in oklab, var(--color-accent) 45%, transparent);
   background: color-mix(in oklab, var(--color-accent) 6%, transparent);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   color: var(--color-muted);
@@ -13,7 +13,7 @@
 
 .attribution {
   display: block;
-  margin-top: 4px;
+  margin-top: var(--space-1);
   font-size: var(--fs-xs);
   color: var(--color-faint);
   font-style: normal;

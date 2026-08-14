@@ -4,10 +4,10 @@
 .subhead {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10px);
   min-height: var(--subhead-height);
   flex: none;
-  padding: 13px 20px;
+  padding: var(--space-13px) var(--space-5);
   background: color-mix(in oklab, var(--color-surface) 82%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -17,7 +17,7 @@
 .text {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--space-10px);
   min-width: 0;
 }
 
@@ -42,5 +42,5 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6px);
 }

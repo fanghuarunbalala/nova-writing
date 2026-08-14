@@ -4,11 +4,11 @@
 .action {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 12px;
-  border-radius: 8px;
+  gap: var(--space-7px);
+  padding: var(--space-7px) var(--space-3);
+  border-radius: var(--radius-8px);
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--fs-13);
   font-weight: var(--fw-bold);
   white-space: nowrap;
   cursor: pointer;
@@ -33,7 +33,7 @@
   justify-content: center;
   min-width: 16px;
   height: 16px;
-  padding: 1px 7px;
+  padding: 1px var(--space-7px);
   border-radius: var(--radius-pill);
   background: var(--color-warn-bg);
   color: var(--color-warn);

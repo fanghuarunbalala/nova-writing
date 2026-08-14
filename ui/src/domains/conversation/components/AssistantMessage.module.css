@@ -8,8 +8,8 @@
  */
 .message {
   display: flex;
-  gap: 12px;
-  padding: 18px 0 6px;
+  gap: var(--space-3);
+  padding: var(--space-18px) 0 var(--space-6px);
 }
 
 .body {
@@ -20,7 +20,7 @@
 .head {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
@@ -37,10 +37,10 @@
 .state.rejected { color: var(--color-danger); }
 
 .text {
-  margin-top: 7px;
+  margin-top: var(--space-7px);
   /* 用户要求正文用黑体（--font-ui），配合 medium 字重提升可读性。 */
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: var(--fs-body);
   font-weight: var(--fw-medium);
   line-height: 1.75;
   color: var(--color-fg);
@@ -50,8 +50,8 @@
 .cards {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
+  gap: var(--space-6px);
+  margin-top: var(--space-2);
 }
 
 .card {
@@ -59,12 +59,12 @@
 }
 
 .failureDetail {
-  margin: 8px 0 0;
-  padding: 8px 11px;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-11px);
   border: 1px solid color-mix(in oklab, var(--color-danger) 30%, var(--color-border));
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--color-danger-bg);
   color: var(--color-danger);
-  font-size: 12.5px;
+  font-size: var(--fs-12-5);
   line-height: 1.55;
 }

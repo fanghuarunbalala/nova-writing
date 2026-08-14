@@ -8,8 +8,8 @@
  */
 .inspTitle {
   margin: 0;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
   letter-spacing: 0.01em;
   color: var(--color-fg);
 }
@@ -17,11 +17,11 @@
 .listToggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6px);
   height: 28px;
-  padding: 0 10px;
+  padding: 0 var(--space-10px);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-8px);
   background: var(--color-surface);
   color: var(--color-muted);
   font: 700 11.5px/1 var(--font-ui);
@@ -46,12 +46,12 @@
 
 .ltCnt {
   font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 800;
+  font-size: var(--fs-9-5);
+  font-weight: var(--fw-heavy);
   color: var(--color-faint);
   background: color-mix(in oklab, var(--color-fg) 7%, transparent);
-  padding: 1px 6px;
-  border-radius: 999px;
+  padding: 1px var(--space-6px);
+  border-radius: var(--radius-pill);
 }
 
 .host {
@@ -60,8 +60,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  width: var(--insp-w, 860px);
-  margin-right: calc(-1 * var(--insp-w, 860px));
+  width: var(--insp-w);
+  margin-right: calc(-1 * var(--insp-w));
   transition: margin-right 0.24s cubic-bezier(0.22, 1, 0.36, 1);
   container-type: inline-size;
   border-left: 1px solid var(--color-border);
@@ -79,7 +79,7 @@
   top: 0;
   bottom: 0;
   left: 0;
-  z-index: 5;
+  z-index: var(--z-drag-handle);
   width: 6px;
 }
 
@@ -87,15 +87,15 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 8px 10px;
+  gap: var(--space-2) var(--space-10px);
   flex-wrap: wrap;
-  padding: 11px 14px 10px;
+  padding: var(--space-11px) var(--space-14px) var(--space-10px);
   border-bottom: 1px solid var(--color-border);
 }
 
 .kicker {
   flex: 1;
-  font-size: 10px;
+  font-size: var(--fs-10);
   letter-spacing: 0.1em;
   color: var(--color-faint);
   text-transform: none;
@@ -109,9 +109,9 @@
   display: grid;
   place-items: center;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-8px);
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--fs-12);
   background: var(--color-surface);
   cursor: pointer;
   transition: border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
@@ -130,7 +130,7 @@
 }
 
 .pending {
-  padding: 18px 14px;
+  padding: var(--space-18px) var(--space-14px);
   font-size: var(--fs-body);
   color: var(--color-faint);
 }
@@ -159,15 +159,15 @@
 @media (max-width: 860px) {
   .host {
     position: fixed;
-    top: 56px;
+    top: var(--space-56px);
     right: 0;
     bottom: 0;
-    z-index: 42;
+    z-index: var(--z-inspector);
     width: min(560px, 88vw);
     margin-right: 0;
     transform: translateX(102%);
     transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
-    box-shadow: -18px 0 50px rgba(20, 12, 6, 0.18);
+    box-shadow: var(--shadow-drawer);
   }
 
   .host.open {

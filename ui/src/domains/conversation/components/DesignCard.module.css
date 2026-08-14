@@ -1,41 +1,41 @@
 .card {
-  border: 1px solid var(--color-border, #333);
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin: 6px 0;
-  background: var(--color-surface, #1c1c1c);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-8px);
+  padding: var(--space-10px) var(--space-3);
+  margin: var(--space-6px) 0;
+  background: var(--color-surface);
 }
 
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .title {
-  font-weight: 600;
+  font-weight: var(--fw-600);
 }
 
 .phase {
-  font-size: 12px;
+  font-size: var(--fs-12);
   opacity: 0.7;
 }
 
 .note {
   opacity: 0.7;
-  font-size: 13px;
+  font-size: var(--fs-13);
 }
 
 .error {
-  color: #e5484d;
-  font-size: 13px;
+  color: var(--color-design-error);
+  font-size: var(--fs-13);
 }
 
 .editor {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .textarea {
@@ -43,18 +43,18 @@
   min-height: 220px;
   resize: vertical;
   font: inherit;
-  padding: 8px;
+  padding: var(--space-2);
   box-sizing: border-box;
-  background: var(--color-surface, #111);
+  background: var(--color-surface);
   color: inherit;
-  border: 1px solid var(--color-border, #333);
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
 }
 
 .actions,
 .preview {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
 }
 
@@ -62,9 +62,9 @@
 .cancel,
 .edit {
   font: inherit;
-  padding: 4px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--color-border, #333);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
   background: transparent;
   color: inherit;
   cursor: pointer;

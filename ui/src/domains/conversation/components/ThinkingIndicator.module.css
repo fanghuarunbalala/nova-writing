@@ -6,5 +6,5 @@
 .indicator {
   display: inline-flex;
   align-items: center;
-  margin-top: 11px;
+  margin-top: var(--space-11px);
 }

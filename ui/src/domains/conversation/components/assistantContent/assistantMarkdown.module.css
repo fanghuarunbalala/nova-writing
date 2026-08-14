@@ -10,7 +10,7 @@
   /* 正文基座：黑体（--font-ui）+ medium 字重（用户要求，正文更清晰）；
      标题/引用/代码等元素保留各自的 --font-display/--font-kai/--font-mono。 */
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: var(--fs-body);
   font-weight: var(--fw-medium);
   line-height: 1.75;
   min-width: 0;
@@ -31,54 +31,54 @@
   display: block;
   font-family: var(--font-display);
   color: var(--color-fg);
-  font-weight: 800;
+  font-weight: var(--fw-heavy);
   letter-spacing: -0.01em;
   line-height: 1.35;
-  margin: 14px 0 6px;
+  margin: var(--space-14px) 0 var(--space-6px);
   text-wrap: balance;
 }
 
 .markdown h1 {
-  font-size: 19px;
-  padding-bottom: 6px;
+  font-size: var(--fs-display);
+  padding-bottom: var(--space-6px);
   border-bottom: 1px solid var(--color-border);
 }
 
 .markdown h2 {
-  font-size: 16.5px;
+  font-size: var(--fs-16-5);
 }
 
 .markdown h3 {
-  font-size: 15px;
+  font-size: var(--fs-body);
   color: var(--color-muted);
 }
 
 .markdown h1:first-child,
 .markdown h2:first-child,
 .markdown h3:first-child {
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .markdown table {
   width: 100%;
   border-collapse: collapse;
-  margin: 10px 0 4px;
+  margin: var(--space-10px) 0 var(--space-1);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: var(--radius-10px);
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: var(--fs-12-5);
   line-height: 1.55;
 }
 
 .markdown th,
 .markdown td {
-  padding: 7px 10px;
+  padding: var(--space-7px) var(--space-10px);
   text-align: left;
 }
 
 .markdown th {
-  font-size: 10.5px;
-  font-weight: 800;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-heavy);
   color: var(--color-muted);
   background: var(--color-surface-2);
   letter-spacing: 0.04em;
@@ -92,7 +92,7 @@
 
 .markdown th:first-child,
 .markdown td:first-child {
-  padding-left: 12px;
+  padding-left: var(--space-3);
 }
 
 .markdown tr:hover td {
@@ -104,35 +104,35 @@
   font-size: 0.92em;
   background: var(--color-surface-2);
   border: 1px solid var(--color-border);
-  border-radius: 5px;
-  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  padding: 1px var(--space-5px);
   color: var(--color-fg);
 }
 
 .markdown strong {
-  font-weight: 800;
+  font-weight: var(--fw-heavy);
 }
 
 .markdown blockquote {
-  margin: 10px 0 4px;
-  padding: 10px 14px;
-  border-left: 2px solid color-mix(in oklab, var(--color-accent) 45%, transparent);
+  margin: var(--space-10px) 0 var(--space-1);
+  padding: var(--space-10px) var(--space-14px);
+  border-left: var(--space-2px) solid color-mix(in oklab, var(--color-accent) 45%, transparent);
   background: color-mix(in oklab, var(--color-accent) 6%, transparent);
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--radius-8px) var(--radius-8px) 0;
   color: var(--color-muted);
-  font-size: 13.5px;
+  font-size: var(--fs-13-5);
   font-family: var(--font-kai);
 }
 
 .markdown ul,
 .markdown ol {
-  margin: 8px 0 4px;
-  padding-left: 20px;
+  margin: var(--space-2) 0 var(--space-1);
+  padding-left: var(--space-5);
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .markdown li {
-  font-size: 13.5px;
+  font-size: var(--fs-13-5);
   line-height: 1.6;
 }

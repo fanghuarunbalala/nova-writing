@@ -9,11 +9,13 @@ import type {
 	ConversationApprovalRequest,
 	ConversationAskingRequest,
 	ConversationExitComposeRequest,
+	ConversationMode,
 	Receipt,
 } from "../contract/types/index.js";
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
+import { isCanonicalNovelWrite } from "../compose/canonicalTools.js";
 import type {
 	ConversationMeta,
 	ConversationRef,
@@ -262,7 +264,15 @@ export class ConversationManagerServer implements Contract {
 					workspace: this.workspaceProvider?.(),
 				});
 				this.childProcesses.set(id, child);
-				this.summaries.set(id, { conversationId: id, name: id, storeDir: storedir, status: "active" });
+				// 重派生保留既有 parentId（F6 teammate 冒泡依赖；崩溃重启不得丢）
+				const existing = this.summaries.get(id);
+				this.summaries.set(id, {
+					conversationId: id,
+					name: id,
+					storeDir: storedir,
+					status: "active",
+					...(existing?.parentId === undefined ? {} : { parentId: existing.parentId }),
+				});
 				this.attachExit(id, child);
 				handle = await spawnedPromise;
 				this.handles.set(id, handle);
@@ -314,12 +324,35 @@ export class ConversationManagerServer implements Contract {
 		return conv.sendSystemControl(msg);
 	}
 
-	/** 提交审批请求（非阻塞）：入队 + decisioner 派生（parentId → parent 冒泡预留；否则 ui） */
+	/**
+	 * 提交审批请求（非阻塞）：入队 + decisioner 派生（parentId → parent 冒泡；否则 ui）。
+	 * 根会话（无 parentId）按自身 activeMode 裁决：bypass 模式下 canonical 写工具
+	 * 跳过 UI 直接批准（根完全自主决策，F6）；ExitComposeMode 非 canonical，恒走 UI。
+	 */
 	async submitApprovalRequest(
 		conversationId: ConversationId,
 		req: ConversationApprovalRequest,
 	): Promise<void> {
 		const parentId = this.summaries.get(conversationId)?.parentId;
+		// 根会话 bypass：canonical 写直接批准（先入队再决议——队列保留记录供重启补完查询）
+		if (parentId === undefined && isCanonicalNovelWrite(req.toolName)) {
+			const handle = this.handles.get(conversationId);
+			const mode = await this.readConversationMode(handle);
+			if (mode === "bypass") {
+				this.waitQueue.submit({
+					conversationId,
+					requestId: req.requestId,
+					toolName: req.toolName,
+					args: req.args,
+					decisioner: "ui",
+					status: "pending",
+					requestedAt: new Date().toISOString(),
+				});
+				this.waitQueue.resolve(req.requestId, { kind: "approve" }, new Date().toISOString());
+				this.pushDecision(conversationId, req.requestId, { kind: "approve" });
+				return;
+			}
+		}
 		this.waitQueue.submit({
 			conversationId,
 			requestId: req.requestId,
@@ -329,6 +362,37 @@ export class ConversationManagerServer implements Contract {
 			status: "pending",
 			requestedAt: new Date().toISOString(),
 		});
+	}
+
+	/** 读会话当前生效模式（缺省 review；远程代理失败按 review 保守处理） */
+	private async readConversationMode(
+		handle: ConversationHandle | undefined,
+	): Promise<ConversationMode> {
+		if (handle === undefined) return "review";
+		try {
+			return await Promise.resolve(
+				handle.getConversationMode() as unknown as Promise<ConversationMode>,
+			);
+		} catch {
+			return "review";
+		}
+	}
+
+	/** 驻留直推决策（进程存活则解除 conversation 阻塞；已退出留待重启查询） */
+	private pushDecision(
+		conversationId: ConversationId,
+		requestId: string,
+		decision: ConversationApprovalDecision,
+	): void {
+		const handle = this.handles.get(conversationId);
+		if (handle === undefined) return;
+		try {
+			void Promise.resolve(
+				handle.resolveApproval(requestId, decision) as unknown,
+			).catch(() => {});
+		} catch {
+			// 代理同步抛错（通道已关）属预期，忽略
+		}
 	}
 
 	/** 提交提问请求（非阻塞；路由同审批，UI 展示延后——本期内入队仅登记） */
@@ -359,17 +423,7 @@ export class ConversationManagerServer implements Contract {
 		// 驻留直推：会话存活则经 handle 调 conversation 的 resolveApproval（阻塞解除）
 		const item = this.waitQueue.takeByRequestId(requestId);
 		if (item !== undefined) {
-			const handle = this.handles.get(item.conversationId);
-			if (handle !== undefined) {
-				// fire-and-forget：进程内实现返回 void，远程代理返回 Promise（契约类型为 void）。
-				// child 已退出时通道拒绝属预期（决策已入 waitQueue，重启经 takeDecisions 续跑），
-				// 吞掉避免 main 进程 unhandled rejection
-				try {
-					void Promise.resolve(handle.resolveApproval(requestId, decision) as unknown).catch(() => {});
-				} catch {
-					// 代理同步抛错（通道已关）同属预期，忽略
-				}
-			}
+			this.pushDecision(item.conversationId, requestId, decision);
 		}
 		return true;
 	}

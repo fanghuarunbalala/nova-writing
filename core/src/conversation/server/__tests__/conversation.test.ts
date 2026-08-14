@@ -237,6 +237,46 @@ describe("ConversationManagerServer", () => {
     await server.terminate(ref.conversationId);
     expect((await server.list())[0].status).toBe("stopped");
   });
+
+  it("根会话 bypass：canonical 写直接批准（入队即决议 + 直推回传，根完全自主）", async () => {
+    const conv = new Conversation({ conversationId: "c1", loop: mockLoop(), sampling: { model: "gpt-5" } });
+    const server = new ConversationManagerServer({ create: () => conv });
+    const ref = await server.createOrResume("c1");
+    await conv.sendSystemControl({ type: "mode.set", mode: "bypass" });
+    await conv.promotePendingMode();
+    const pending = conv.sendApprovalRequest({ requestId: "r1", toolName: "ParagraphWrite", args: "{}" });
+    await server.submitApprovalRequest(ref.conversationId, { requestId: "r1", toolName: "ParagraphWrite", args: "{}" });
+    expect(await pending).toEqual({ kind: "approve" });
+    // 队列保留记录（重启补完可查）；listApprovals 含已决历史但不出现 pending 条目
+    const items = await server.takeDecisions("c1");
+    expect(items[0]).toMatchObject({ requestId: "r1", status: "approved" });
+    const list = await server.listApprovals();
+    expect(list.filter((i) => i.status === "pending")).toHaveLength(0);
+  });
+
+  it("根会话 bypass：ExitComposeMode 非 canonical，恒入队 pending（ui 决策）", async () => {
+    const conv = new Conversation({ conversationId: "c1", loop: mockLoop(), sampling: { model: "gpt-5" } });
+    const server = new ConversationManagerServer({ create: () => conv });
+    const ref = await server.createOrResume("c1");
+    await conv.sendSystemControl({ type: "mode.set", mode: "bypass" });
+    await conv.promotePendingMode();
+    await server.submitApprovalRequest(ref.conversationId, { requestId: "r1", toolName: "ExitComposeMode", args: "{}" });
+    const list = await server.listApprovals();
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ decisioner: "ui", status: "pending", toolName: "ExitComposeMode" });
+  });
+
+  it("teammate 会话（parentId）→ decisioner=parent 冒泡（不进 ui 队列）", async () => {
+    const server = new ConversationManagerServer({
+      create: (opts) =>
+        new Conversation({ conversationId: opts.conversationId, loop: mockLoop(), sampling: { model: "gpt-5" } }),
+    });
+    const ref = await server.spawnConversation({ agentType: "novel", parentId: "root-1" });
+    await server.submitApprovalRequest(ref.conversationId, { requestId: "r1", toolName: "CharacterWrite", args: "{}" });
+    expect(await server.listApprovals()).toHaveLength(0);
+    const items = await server.takeDecisions(ref.conversationId);
+    expect(items[0]).toMatchObject({ decisioner: "parent", status: "pending" });
+  });
 });
 
 describe("Conversation + compose 服务集成", () => {

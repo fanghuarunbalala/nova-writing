@@ -28,6 +28,8 @@ export interface ConversationComposerProps {
   readonly status?: GenStatusProps;
   /** 会话级权威 mode（来自投影 conversationMode）；缺省回退 review。 */
   readonly mode?: ComposerMode;
+  /** 待生效模式（mode.pending 事件派生）：非 undefined 时模式栏显示「待生效」提示。 */
+  readonly pendingMode?: ComposerMode;
   /** 切换 mode；由上层 enqueue ConversationModeSetInputEvent 到 core。 */
   readonly onModeChange?: (mode: ComposerMode) => void;
   /** 审批挂起时禁用发送（审核中）；打字与切 mode 不受影响。 */
@@ -42,6 +44,7 @@ export function ConversationComposer({
   onSend,
   status,
   mode = "review",
+  pendingMode,
   onModeChange = noopModeChange,
   sendDisabled = false,
   disconnected = false,
@@ -101,7 +104,7 @@ export function ConversationComposer({
         ) : sendDisabled ? (
           <span className={styles.pendingHint}>等待审批</span>
         ) : null}
-        <ComposerModeBar mode={mode} onChange={onModeChange} disabled={!enabled} />
+        <ComposerModeBar mode={mode} pendingMode={pendingMode} onChange={onModeChange} disabled={!enabled} />
       </form>
     </div>
   );

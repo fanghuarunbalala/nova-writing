@@ -3,10 +3,14 @@
  * 会话级：mode（base mode）+ phase + active + design 文件路径 + preComposeMode。
  * 不变量：compose 会话激活期间 mode === "compose"；approve/discard 后 active=false 且 mode 恢复 preComposeMode。
  */
-import { DEFAULT_CONVERSATION_MODE, type ConversationMode } from "../contract/types/index.js";
+import {
+	DEFAULT_CONVERSATION_MODE,
+	type ComposeModePhase,
+	type ConversationMode,
+} from "../contract/types/index.js";
 
-/** compose 阶段 */
-export type ComposeModePhase = "idle" | "designing" | "pending" | "applied" | "discarded";
+/** 保持原出口面：ComposeModePhase 已上收 contract/types，此处兼容 re-export */
+export type { ComposeModePhase };
 
 /** compose 状态快照 */
 export interface ComposeModeSnapshot {
@@ -20,6 +24,8 @@ export interface ComposeModeSnapshot {
 	readonly designFilePath?: string;
 	/** 进入 compose 前的 base mode（approve/discard 时恢复） */
 	readonly preComposeMode?: ConversationMode;
+	/** 进入时 design 文件已存在（上次会话残留草稿；discard 才删、exit 归档） */
+	readonly hasPriorDraft?: boolean;
 	/** 进入 compose 时的创作目的（EnterComposeMode purpose），reentry 提醒引用。 */
 	readonly purpose?: string;
 }
@@ -59,12 +65,18 @@ export class ComposeModeStateProvider {
 		return this.states.get(conversationId) ?? IDLE_COMPOSE_MODE_SNAPSHOT;
 	}
 
-	/** 进入 compose：idle/discarded/applied → designing（active=true，mode=compose） */
+	/**
+	 * 进入 compose：idle/discarded/applied → designing（active=true，mode=compose）
+	 * @param conversationId 会话 id
+	 * @param options design 文件路径 + 可选 preComposeMode（缺省当前 mode）/ hasPriorDraft（旧草稿标记）
+	 * @returns 新快照
+	 */
 	enter(
 		conversationId: string,
 		options: {
 			readonly designFilePath: string;
 			readonly preComposeMode?: ConversationMode;
+			readonly hasPriorDraft?: boolean;
 			readonly purpose?: string;
 		},
 	): ComposeModeSnapshot {
@@ -78,6 +90,7 @@ export class ComposeModeStateProvider {
 			mode: "compose",
 			designFilePath: options.designFilePath,
 			preComposeMode: options.preComposeMode ?? current.mode,
+			...(options.hasPriorDraft === undefined ? {} : { hasPriorDraft: options.hasPriorDraft }),
 			...(options.purpose === undefined ? {} : { purpose: options.purpose }),
 		});
 		this.states.set(conversationId, next);
@@ -144,6 +157,22 @@ export class ComposeModeStateProvider {
 			phase: "discarded",
 			active: false,
 			mode: current.preComposeMode ?? DEFAULT_CONVERSATION_MODE,
+		});
+		this.states.set(conversationId, next);
+		return next;
+	}
+
+	/**
+	 * 归档后收口：清除 design 文件路径与 preMode（保留 phase 终态标记，如 applied/discarded）
+	 * @param conversationId 会话 id
+	 * @returns 收口后快照
+	 */
+	settle(conversationId: string): ComposeModeSnapshot {
+		const current = this.snapshot(conversationId);
+		const next: ComposeModeSnapshot = Object.freeze({
+			phase: current.phase,
+			active: current.active,
+			mode: current.mode,
 		});
 		this.states.set(conversationId, next);
 		return next;

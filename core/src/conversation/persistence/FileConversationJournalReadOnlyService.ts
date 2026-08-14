@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RunContext } from "../../runtime/loop/types.js";
 import type { LLMessage } from "../../runtime/provider/types.js";
-import type { OutputEvent, ProjectedEvent } from "../contract/events/index.js";
+import type { OutputEvent, PersistedOutputEvent, ProjectedEvent } from "../contract/events/index.js";
 import type { ToolPreviewResolver } from "../../runtime/tool/previews.js";
 import { resolveToolPreview } from "../../runtime/tool/previews.js";
 import { ProjectionLayer } from "../projection/ProjectionLayer.js";
@@ -15,10 +15,19 @@ import type {
 	PersistedRun,
 } from "../contract/journal/index.js";
 
+/** 状态事件类型名白名单（state.jsonl 只落 compose/mode 边界事件） */
+const STATE_EVENT_TYPES: ReadonlySet<string> = new Set([
+	"compose.begin",
+	"compose.submitted",
+	"compose.applied",
+	"compose.discarded",
+	"mode.changed",
+]);
+
 /** 缺省 preview 查询器：纯目录（Main 代读无 ToolDef 运行时实例，保证 live/replay 一致） */
 const defaultResolver: ToolPreviewResolver = { resolvePreview: resolveToolPreview };
 
-/** journal 读侧实现（跨进程读 history + projectedHistory 投影读取） */
+/** journal 读侧实现（跨进程读 history + projectedHistory 投影读取 + state.jsonl 状态事件） */
 export class FileConversationJournalReadOnlyService implements Contract {
 	/** journal 根目录（按 `<dir>/<conversationId>/journal.jsonl` 定位） */
 	private readonly journalDir: string;
@@ -79,6 +88,27 @@ export class FileConversationJournalReadOnlyService implements Contract {
 	}
 
 	/**
+	 * 读取会话状态事件（state.jsonl，落盘顺序；坏行/半行容忍跳过）
+	 * @param conversationId 会话 id
+	 * @returns 状态事件序列（compose/mode 边界事件）
+	 */
+	async readStateEvents(conversationId: string): Promise<PersistedOutputEvent[]> {
+		const file = join(this.journalDir, conversationId, "state.jsonl");
+		if (!existsSync(file)) return [];
+		const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
+		const events: PersistedOutputEvent[] = [];
+		for (const line of lines) {
+			try {
+				const parsed = JSON.parse(line) as { event?: unknown };
+				if (isStateEvent(parsed.event)) events.push(parsed.event);
+			} catch {
+				// 末尾半行/损坏行忽略（append-only 容忍）
+			}
+		}
+		return events;
+	}
+
+	/**
 	 * 读文件并按文件序折叠为每 seq 的最终 run（快照定基 + 增量顺序回放）。
 	 * 行协议：`kind:"append"` 行把 messages 折叠到同 seq 基线上；snapshot 行（含无 kind 的
 	 * 旧格式行）重置基线。孤儿增量（无快照基线）合成空基线，保证 run 边界事件完整。
@@ -121,6 +151,18 @@ export class FileConversationJournalReadOnlyService implements Contract {
 		}
 		return [...bySeq.values()];
 	}
+}
+
+/** 形状守卫：只放行 state.jsonl 白名单内的事件变体 */
+function isStateEvent(value: unknown): value is PersistedOutputEvent {
+	if (value === null || typeof value !== "object") return false;
+	const record = value as Record<string, unknown>;
+	return (
+		typeof record.type === "string" &&
+		STATE_EVENT_TYPES.has(record.type) &&
+		record.persist === true &&
+		typeof record.conversationId === "string"
+	);
 }
 
 /** run 序列 → OutputEvent 序列（run-start/end 边界 + 消息/工具事件映射） */

@@ -210,4 +210,48 @@ describe("LoopContext", () => {
     );
     expect(ctx.systemPrompt).toContain("环境:/ws:gpt-5");
   });
+
+  it("beforeProviderCall：toProviderCall 步骤⓪ 先于 nudge 执行（async 支持）", async () => {
+    const order: string[] = [];
+    const nudgeCapability: AgentCapability = {
+      ...capability,
+      nudgePolicies: [
+        {
+          persistentNudgeIfNeeded: () => {
+            order.push("persistent");
+            return false;
+          },
+          transientNudgeIfNeeded: () => {
+            order.push("transient");
+            return false;
+          },
+        },
+      ],
+    };
+    let resolved = false;
+    const ctx = new LoopContext({
+      agentCapability: nudgeCapability,
+      workspace: "/ws",
+      beforeProviderCall: async () => {
+        await Promise.resolve();
+        resolved = true;
+        order.push("before");
+      },
+    });
+    await ctx.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(resolved).toBe(true);
+    expect(order).toEqual(["before", "persistent", "transient"]);
+  });
+
+  it("beforeProviderCall 未注入：toProviderCall 照常工作（no-op）", async () => {
+    const ctx = new LoopContext({ agentCapability: capability, workspace: "/ws" });
+    const call = await ctx.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(call.sampling.model).toBe("gpt-5");
+  });
 });

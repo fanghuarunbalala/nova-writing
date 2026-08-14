@@ -183,6 +183,19 @@ describe("ConversationManagerServer（进程模式生产路径）", () => {
 		expect((await server.list())[0]!.status).toBe("stopped");
 		expect(existsSync(dir)).toBe(true);
 	});
+
+	it("崩溃重派生保留 parentId（F6 teammate 冒泡决策依赖）", async () => {
+		const { spawner, spawned } = makeFakeSpawner();
+		const server = new ConversationManagerServer(noopFactory(), spawner, { storedirRoot: root });
+
+		const ref = await server.spawnConversation({ agentType: "novel", parentId: "root-1" });
+		// 模拟崩溃 → 重派生
+		spawned[0]!.child.exitCrashed();
+		await server.createOrResume(ref.conversationId);
+		expect(spawned).toHaveLength(2);
+		const summary = (await server.list()).find((s) => s.conversationId === ref.conversationId);
+		expect(summary?.parentId).toBe("root-1");
+	});
 });
 
 describe("ConversationManagerServer（会话命名）", () => {

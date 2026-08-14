@@ -37,4 +37,31 @@ describe("ComposeModeStateProvider", () => {
     p.enter("c1", { designFilePath: "/d.md" });
     expect(() => p.enter("c1", { designFilePath: "/e.md" })).toThrow(ComposeStateError);
   });
+
+  it("enter 透传 hasPriorDraft 标记（旧草稿探测）", () => {
+    const p = new ComposeModeStateProvider();
+    const entered = p.enter("c1", { designFilePath: "/d.md", hasPriorDraft: true });
+    expect(entered.hasPriorDraft).toBe(true);
+    const fresh = new ComposeModeStateProvider();
+    const clean = fresh.enter("c2", { designFilePath: "/e.md" });
+    expect(clean.hasPriorDraft).toBeUndefined();
+  });
+
+  it("settle：清除 designFilePath/preComposeMode，保留终态（applied）", () => {
+    const p = new ComposeModeStateProvider();
+    p.enter("c1", { designFilePath: "/d.md", preComposeMode: "bypass", hasPriorDraft: false });
+    p.approve("c1");
+    const settled = p.settle("c1");
+    expect(settled).toEqual({ phase: "applied", active: false, mode: "bypass" });
+    expect(settled.designFilePath).toBeUndefined();
+    expect(settled.preComposeMode).toBeUndefined();
+  });
+
+  it("settle：discard 后同样收口", () => {
+    const p = new ComposeModeStateProvider();
+    p.enter("c1", { designFilePath: "/d.md", preComposeMode: "review" });
+    p.discard("c1");
+    const settled = p.settle("c1");
+    expect(settled).toEqual({ phase: "discarded", active: false, mode: "review" });
+  });
 });

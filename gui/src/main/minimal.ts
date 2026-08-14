@@ -31,6 +31,7 @@ import {
   type ConversationApprovalRequest,
   type ConversationJournalService,
   type CredentialCipher,
+  createConsoleLogger,
   infoLog,
   type LLMessage,
   type NovelStore,
@@ -38,6 +39,11 @@ import {
   type RunContext,
 } from "@novel/core";
 import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
+import {
+  DesktopDesignFileService,
+  DesktopDesignIpcController,
+  type DesignIpcMain,
+} from "./desktop/design/index.js";
 
 // 双构建流程布局兼容（两条流程都受现役启动命令使用）：
 // - build-minimal.mjs（根 gui:release / gui:debug）：esbuild CJS 打包到
@@ -192,6 +198,8 @@ function createManager(
 ): ConversationManagerServer {
   // server 先声明：内存模式 factory 的 managerWait 需闭包引用（进程内直连同一队列）
   let server: ConversationManagerServer | undefined;
+  // gui main 无 pino 落盘：console Logger 接审批/mode 关键链路埋点（JSON 行，与 pino 同构）
+  const logger = createConsoleLogger();
   const factory = {
     create: (o: { conversationId: string }) => {
       // 回显模式同样落盘：与子进程 journal 语义一致（history/回执互认）。
@@ -210,6 +218,7 @@ function createManager(
         loop,
         sampling: { model: "echo" },
         journal,
+        logger,
         // 内存模式：wait 提交走进程内 CMS 队列（与子进程同路由）；超时仅解除等待不退出
         managerWait: {
           submitApproval: (id, req) => server!.submitApprovalRequest(id, req),
@@ -234,6 +243,7 @@ function createManager(
   server = new ConversationManagerServer(factory, spawner, {
     storedirRoot: conversationsRoot,
     workspaceProvider,
+    logger,
   });
   return server;
 }
@@ -484,6 +494,19 @@ async function main(): Promise<void> {
     },
   });
   mainWindow = win;
+  // compose 设计草稿文件 IPC（novel.design.v1.*）：仅主窗口 webContents 授权，
+  // workspace 根随当前打开项目切换；renderer 经 preload novelDesign.invoke 调用
+  const designController = new DesktopDesignIpcController({
+    service: new DesktopDesignFileService({
+      resolveWorkspaceRoot: (senderId) =>
+        senderId === win.webContents.id ? currentWorkspaceRoot : undefined,
+    }),
+    authorizeSender: (senderId) => senderId === win.webContents.id,
+  });
+  designController.register(ipcMain as unknown as DesignIpcMain);
+  win.on("closed", () => {
+    void designController.dispose();
+  });
   win.webContents.on("console-message", (_e, ...args: unknown[]) => {
     // Electron 43 新旧签名兼容：旧 (event, level, message, ...) / 新 (event, details)
     const first = args[0];

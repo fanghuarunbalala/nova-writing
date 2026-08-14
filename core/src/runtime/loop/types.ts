@@ -6,6 +6,7 @@ import type {
   ToolCall,
   AssistantMessage,
 } from "../provider/types.js";
+import type { ComposeModeStateProvider } from "../../conversation/compose/index.js";
 import type { AgentCapability } from "../agent/AgentCapability.js";
 import type { NovelConstraintsProvider } from "../prompt/PromptSection.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
@@ -70,6 +71,16 @@ export interface AgentLoopConfig {
   logger?: Logger;
   /** ProviderCall 调试器（debug 模式注入；记录每次请求 + 相邻差异，jsonl + html） */
   debugger?: ProviderCallDebugger;
+  /**
+   * compose 状态提供者（gateBatch 权限门：compose 激活 deny canonical 写、
+   * bypass 放行；缺省 fail-open 走基础策略——未注入 = 按未激活处理）
+   */
+  composeState?: ComposeModeStateProvider;
+  /**
+   * 每次 provider call 发起前回调（toProviderCall 步骤⓪ await：mode pending→active 晋升等；
+   * 在压缩/动态段渲染/nudge/权限门控之前执行）
+   */
+  beforeProviderCall?: () => void | Promise<void>;
 }
 
 /** 单次运行配置：run 时传入 */

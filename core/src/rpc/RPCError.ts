@@ -43,3 +43,23 @@ export class RPCError extends Error {
 		this.cause = opts.cause
 	}
 }
+
+/** API 传输错误：renderer 端口 unwrap（{ ok:false } 响应）时抛出（如 design 文件端口） */
+export class ApiTransportError extends RPCError {
+	/** 业务错误码（如 design_file_not_found / unauthorized） */
+	readonly codeName: string
+	/** 是否可重试 */
+	readonly retryable: boolean
+
+	/**
+	 * @param codeName 业务错误码
+	 * @param retryable 是否可重试
+	 * @param message 错误消息（缺省按 codeName 生成）
+	 */
+	constructor(codeName: string, retryable: boolean, message?: string) {
+		super({ code: "remote" }, message ?? `api.transport.${codeName}`)
+		this.name = "ApiTransportError"
+		this.codeName = codeName
+		this.retryable = retryable
+	}
+}

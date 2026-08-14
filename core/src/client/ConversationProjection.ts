@@ -8,7 +8,7 @@
 import { proxy } from "kkrpc/remote-refs";
 import type { ConversationHandle } from "../conversation/contract/handle/index.js";
 import type { ProjectedEvent, ToolPreview } from "../conversation/contract/events/index.js";
-import type { ConversationId } from "../conversation/contract/types/index.js";
+import type { ConversationId, ConversationMode } from "../conversation/contract/types/index.js";
 import { CardProjection, type CardDescriptor } from "../conversation/CardProjection.js";
 import { RPCError } from "../rpc/RPCError.js";
 
@@ -84,6 +84,10 @@ export interface ConversationProjectionSnapshot {
 	timeline: readonly ConversationTimelineItem[];
 	/** 工具调用卡片（CardProjection 派生） */
 	cards: readonly CardDescriptor[];
+	/** 当前生效模式（mode.changed 权威事件派生；未收到前 undefined → UI 查询兜底） */
+	mode?: ConversationMode;
+	/** 待生效模式（mode.pending 瞬态事件派生；mode.changed 到达后清除） */
+	modePending?: ConversationMode;
 	error?: ConversationProjectionErrorSnapshot;
 }
 
@@ -124,6 +128,10 @@ export class ConversationProjection {
 	private liveState: "generating" | undefined;
 	private nextSeq = 1;
 	private readonly cardProjection = new CardProjection();
+	/** 当前生效模式（mode.changed 派生） */
+	private mode?: ConversationMode;
+	/** 待生效模式（mode.pending 派生；mode.changed 清除） */
+	private modePending?: ConversationMode;
 	private revision = 0;
 	private lastAppliedSequence = 0;
 	private state: ConversationProjectionState = "idle";
@@ -230,7 +238,10 @@ export class ConversationProjection {
 			if (this.stopRequested || generation !== this.generation) return;
 			for (const event of events) {
 				this.apply(event);
-				if ("seq" in event) historyMaxSeq = Math.max(historyMaxSeq, event.seq);
+				// 状态事件（compose/mode）无 turn seq：不参与 historyMaxSeq 推进
+				if ("seq" in event && typeof event.seq === "number") {
+					historyMaxSeq = Math.max(historyMaxSeq, event.seq);
+				}
 			}
 			this.publish();
 			replayed = true;
@@ -238,7 +249,12 @@ export class ConversationProjection {
 			// delta（无 seq）仅当处于 live run（seq > historyMaxSeq 的 run-start/user.message 已开）才应用
 			let liveRun = false;
 			for (const event of buffer) {
-				if ("seq" in event) {
+				// 状态事件（mode.pending/mode.changed）不受 liveRun 门控：模式切换可发生在 run 间隙
+				if (event.type === "mode.pending" || event.type === "mode.changed") {
+					this.apply(event);
+					continue;
+				}
+				if ("seq" in event && typeof event.seq === "number") {
 					if (event.seq <= historyMaxSeq) continue;
 					this.apply(event);
 					if (event.type === "run-start" || event.type === "user.message") liveRun = true;
@@ -291,8 +307,10 @@ export class ConversationProjection {
 			if (this.lastEseq !== undefined && eseq > this.lastEseq + 1) this.scheduleCatchUp();
 			this.lastEseq = Math.max(this.lastEseq ?? 0, eseq);
 		}
-		// 仅带 seq 事件推进 lastAppliedSequence（delta 瞬态不带 seq）
-		if ("seq" in event) this.lastAppliedSequence = event.seq;
+		// 仅带 seq 事件推进 lastAppliedSequence（delta 瞬态不带 seq；compose/mode 状态事件 seq 可选）
+		if ("seq" in event && typeof event.seq === "number") {
+			this.lastAppliedSequence = event.seq;
+		}
 		this.cardProjection.apply(event);
 		switch (event.type) {
 			case "user.message":
@@ -367,7 +385,16 @@ export class ConversationProjection {
 				this.finalizeAssistant();
 				this.setRunEndOnLast(event.seq, event.ts);
 				break;
-			// run-start / compacted / clear / retry-request 无影响
+			case "mode.changed":
+				// active 实际切换（权威）：落 mode + 清除待生效标记
+				this.mode = event.mode;
+				this.modePending = undefined;
+				break;
+			case "mode.pending":
+				// mode.set 已记录（瞬态）：UI 回显「待生效」
+				this.modePending = event.mode;
+				break;
+			// run-start / compacted / clear / retry-request / compose.* 无影响
 		}
 	}
 
@@ -586,6 +613,8 @@ export class ConversationProjection {
 			...(this.liveState !== undefined ? { liveState: this.liveState } : {}),
 			timeline: Object.freeze([...this.timeline]),
 			cards: this.cachedCards,
+			...(this.mode !== undefined ? { mode: this.mode } : {}),
+			...(this.modePending !== undefined ? { modePending: this.modePending } : {}),
 			...(this.error !== undefined ? { error: this.error } : {}),
 		});
 	}

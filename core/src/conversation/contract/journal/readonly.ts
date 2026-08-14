@@ -3,7 +3,7 @@
  */
 
 import type { ConversationId } from "../types/index.js";
-import type { OutputEvent, ProjectedEvent } from "../events/index.js";
+import type { OutputEvent, PersistedOutputEvent, ProjectedEvent } from "../events/index.js";
 import type { RunContext } from "../../../runtime/loop/types.js";
 
 /** 已落盘 run（RunContext 去掉运行时闭包方法的持久化形态） */
@@ -40,4 +40,10 @@ export interface ConversationJournalReadOnlyService {
 	 * @returns 已落盘 run 列表
 	 */
 	readRuns(conversationId: ConversationId): Promise<PersistedRun[]>;
+	/**
+	 * 读取会话状态事件 sidecar（state.jsonl；重启 hydrate 重放恢复 mode + compose 子状态）
+	 * @param conversationId 会话 id
+	 * @returns 状态事件序列（落盘顺序；坏行/半行容忍跳过）
+	 */
+	readStateEvents(conversationId: ConversationId): Promise<PersistedOutputEvent[]>;
 }

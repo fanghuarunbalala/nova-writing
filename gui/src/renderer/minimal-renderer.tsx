@@ -17,10 +17,15 @@ import {
   WorkspaceController,
   type FrontendPlatform,
 } from "@novel/ui";
+import { createElectronDesignFilePort } from "./platform/index.js";
 
 declare global {
   interface Window {
     novelApi: { bridge: unknown };
+    novelDesign?: {
+      read(conversationId: string): Promise<unknown>;
+      write(conversationId: string, content: string): Promise<unknown>;
+    };
     novelEvents?: {
       onConversationEvent: (callback: (payload: unknown) => void) => () => void;
     };
@@ -69,6 +74,10 @@ const platform: FrontendPlatform = {
   files: { selectFiles: async () => Object.freeze([]) },
   clipboard: { readText: async () => "", writeText: async () => {} },
   notifications: { show: async () => {} },
+  // 设计草稿文件端口：preload novelDesign 桥存在时装配（旧 preload 缺省降级——DesignCard 只读提示）
+  ...(window.novelDesign === undefined
+    ? {}
+    : { designFile: createElectronDesignFilePort({ design: window.novelDesign as never }) }),
   // 会话事件火线（gui-performance-2 功能点八）：preload 裸推通道 → 投影平台事件源
   // （payload = {conversationId, event}；按会话过滤后交付）。缺失时投影回退 kkrpc。
   ...(window.novelEvents !== undefined

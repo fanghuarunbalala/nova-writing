@@ -15,6 +15,7 @@ import type {
 } from "./types.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
+import { isCanonicalNovelWrite } from "../../conversation/compose/canonicalTools.js";
 import { ToolError } from "../tool/errors.js";
 import { LoopContext } from "./LoopContext.js";
 
@@ -86,6 +87,7 @@ export class AgentLoop {
       startSeq: config.startSeq,
       platform: config.platform,
       novelConstraintsProvider: config.novelConstraintsProvider,
+      beforeProviderCall: config.beforeProviderCall,
     });
     for (const listener of config.listeners ?? []) {
       this.context.subscribe(listener);
@@ -283,7 +285,13 @@ export class AgentLoop {
       const decision = await this.config.resumePendingDecider?.(toolCallId);
       let text: string;
       if (decision === "approve") {
-        text = await this.config.toolDispatcher.dispatch(this.context, toolCall);
+        // 重启补完同样执行 compose 权限检查（approve 分支绕过 gateBatch）
+        const compose = this.config.composeState?.snapshot(this.config.conversationId ?? "");
+        if (compose?.active === true && isCanonicalNovelWrite(toolCall.name)) {
+          text = `已拒绝（设计模式激活：正式稿只读，请将草稿写入 design 文件，不要调用 ${toolCall.name}）`;
+        } else {
+          text = await this.config.toolDispatcher.dispatch(this.context, toolCall);
+        }
       } else if (decision === "reject") {
         text = "已拒绝";
       } else if (decision === "expired") {
@@ -408,26 +416,52 @@ export class AgentLoop {
   /**
    * 审批门控（按 turn 批量）：本轮返回中 requireApproval 的调用合并为一次征询，
    * 决策作用于整批（approve 全放行 / reject 全拒绝 / edit 全拒绝附意见），
-   * 且先于任何工具执行发起。
+   * 且先于任何工具执行发起。compose 权限先行：激活期 canonical 写硬拒绝（无审批通道）、
+   * bypass 模式 canonical 写跳过审批直接放行（ExitComposeMode 不在名单，恒走审批门）。
    * @param toolCalls 本轮全部工具调用（含免审项）
    * @param runSeq 当前 run 序号（requestId 归组用）
    * @returns toolCallId → 拒绝结果文本（放行项不在 map 中）
    */
   private async gateBatch(toolCalls: readonly ToolCall[], runSeq: number): Promise<Map<string, string>> {
-    const pending = toolCalls.filter(
-      (tc) => this.config.toolDispatcher.resolve(tc.name)?.requireApproval === true,
-    );
-    if (pending.length === 0) return new Map();
+    const compose = this.config.composeState?.snapshot(this.config.conversationId ?? "");
+    const denied = new Map<string, string>();
+    const pending: ToolCall[] = [];
+    for (const tc of toolCalls) {
+      // compose 激活：canonical 写硬拒绝（无审批通道），Read/文件工具不受影响
+      if (compose?.active === true && isCanonicalNovelWrite(tc.name)) {
+        denied.set(
+          tc.id,
+          `已拒绝（设计模式激活：正式稿只读，请将草稿写入 design 文件，不要调用 ${tc.name}）`,
+        );
+        continue;
+      }
+      if (this.config.toolDispatcher.resolve(tc.name)?.requireApproval !== true) continue;
+      // bypass 模式：canonical 写跳过审批直接放行
+      if (compose?.mode === "bypass" && isCanonicalNovelWrite(tc.name)) continue;
+      pending.push(tc);
+    }
+    if (pending.length === 0) return denied;
     if (this.config.requestApproval === undefined) {
-      return new Map(pending.map((tc) => [tc.id, "已拒绝（审批通道未装配）"] as const));
+      for (const tc of pending) denied.set(tc.id, "已拒绝（审批通道未装配）");
+      return denied;
     }
     const decision = await this.config.requestApproval({
       requestId: `approval:${this.config.conversationId ?? "conv"}:${runSeq}:b${++this.batchSeq}`,
       toolCalls: pending.map((tc) => ({ toolCallId: tc.id, toolName: tc.name, args: tc.args })),
     });
-    if (decision.kind === "approve") return new Map();
-    const text = decision.kind === "reject" ? "已拒绝" : `已拒绝（用户意见：${decision.text}）`;
-    return new Map(pending.map((tc) => [tc.id, text] as const));
+    if (decision.kind === "approve") return denied;
+    for (const tc of pending) {
+      if (tc.name === "ExitComposeMode") {
+        // 退出 compose 的驳回：意见随决策回传（PRD F5/D9）
+        denied.set(tc.id, decision.kind === "reject" ? "用户驳回了" : `用户驳回了：${decision.text}`);
+        continue;
+      }
+      denied.set(
+        tc.id,
+        decision.kind === "reject" ? "已拒绝" : `已拒绝（用户意见：${decision.text}）`,
+      );
+    }
+    return denied;
   }
 
   /**
@@ -503,6 +537,16 @@ export class AgentLoop {
       ...extra,
     } as LoopEvent;
     onEvent?.(event);
-    for (const l of this.outputListeners) l(event);
+    // 逐订阅者保护：单个订阅者（hub 转发/持久化 listener）异常不阻断其余订阅者与 run
+    for (const l of this.outputListeners) {
+      try {
+        l(event);
+      } catch (error) {
+        this.config.logger?.warn("loop.output_listener_failed", {
+          type: event.type,
+          error: String(error),
+        });
+      }
+    }
   }
 }

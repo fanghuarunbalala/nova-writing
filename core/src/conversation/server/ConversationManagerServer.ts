@@ -9,6 +9,7 @@ import type {
 	ConversationApprovalRequest,
 	ConversationAskingRequest,
 	ConversationExitComposeRequest,
+	ConversationMode,
 	Receipt,
 } from "../contract/types/index.js";
 import {
@@ -23,6 +24,9 @@ import {
 } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import type { ChildProcess } from "node:child_process";
+import type { Logger } from "../../log/Logger.js";
+import { noopLogger } from "../../log/noop.js";
+import { isCanonicalNovelWrite } from "../compose/canonicalTools.js";
 import type {
 	ConversationMeta,
 	ConversationRef,
@@ -82,6 +86,8 @@ export interface ConversationManagerServerOptions {
 	 * 缺省子进程用 "."）。
 	 */
 	workspaceProvider?: () => string | undefined;
+	/** 结构化日志（缺省 noop；审批入队/决议、根 bypass 自动批准等关键链路埋点） */
+	logger?: Logger;
 }
 
 /** manager 进程侧实现（内存 factory 测试 / 进程 spawn 生产） */
@@ -112,6 +118,8 @@ export class ConversationManagerServer implements Contract {
 	private readonly factory: ConversationFactory;
 	/** 进程派生器（进程模式；缺省用内存 factory） */
 	private readonly spawner?: ConversationProcessSpawner;
+	/** 结构化日志（审批链路埋点；缺省 noop） */
+	private readonly logger: Logger;
 
 	/**
 	 * 构造 ManagerServer
@@ -128,6 +136,7 @@ export class ConversationManagerServer implements Contract {
 		this.spawner = spawner;
 		this.storedirRoot = opts?.storedirRoot;
 		this.workspaceProvider = opts?.workspaceProvider;
+		this.logger = (opts?.logger ?? noopLogger).child({ component: "conversation_manager" });
 		if (this.storedirRoot !== undefined) this.scanCatalog();
 	}
 
@@ -394,7 +403,15 @@ export class ConversationManagerServer implements Contract {
 				});
 				const prevSummary = this.summaries.get(id);
 				this.childProcesses.set(id, child);
-				this.summaries.set(id, { conversationId: id, name: id, storeDir: storedir, status: "active" });
+				// 重派生保留既有 parentId（F6 teammate 冒泡依赖；崩溃重启不得丢）
+				const existing = this.summaries.get(id);
+				this.summaries.set(id, {
+					conversationId: id,
+					name: id,
+					storeDir: storedir,
+					status: "active",
+					...(existing?.parentId === undefined ? {} : { parentId: existing.parentId }),
+				});
 				this.attachExit(id, child);
 				try {
 					handle = await spawnedPromise;
@@ -467,12 +484,45 @@ export class ConversationManagerServer implements Contract {
 		return conv.sendSystemControl(msg);
 	}
 
-	/** 提交审批请求（非阻塞）：入队 + decisioner 派生（parentId → parent 冒泡预留；否则 ui） */
+	/**
+	 * 提交审批请求（非阻塞）：入队 + decisioner 派生（parentId → parent 冒泡；否则 ui）。
+	 * 根会话（无 parentId）按自身 activeMode 裁决：bypass 模式下整批均为 canonical 写时
+	 * 跳过 UI 直接批准（根完全自主决策，F6；先入队再决议——队列保留记录供重启补完查询）。
+	 * 批内含非 canonical（如 ExitComposeMode）时不短路，整批走 UI。
+	 */
 	async submitApprovalRequest(
 		conversationId: ConversationId,
 		req: ConversationApprovalRequest,
 	): Promise<void> {
 		const parentId = this.summaries.get(conversationId)?.parentId;
+		// 根会话 bypass：整批 canonical 写直接批准（防御纵深——conversation 侧短路通常先命中）
+		const allCanonical = req.toolCalls.every((tc) => isCanonicalNovelWrite(tc.toolName));
+		if (parentId === undefined && allCanonical) {
+			const handle = this.handles.get(conversationId);
+			const mode = await this.readConversationMode(handle);
+			if (mode === "bypass") {
+				this.logger.info("approval.root_bypass_autoapproved", {
+					conversationId,
+					requestId: req.requestId,
+					toolNames: req.toolCalls.map((tc) => tc.toolName),
+				});
+				this.waitQueue.submit({
+					conversationId,
+					requestId: req.requestId,
+					toolCalls: req.toolCalls.map((tc) => ({
+						toolCallId: tc.toolCallId,
+						toolName: tc.toolName,
+						args: tc.args,
+					})),
+					decisioner: "ui",
+					status: "pending",
+					requestedAt: new Date().toISOString(),
+				});
+				this.waitQueue.resolve(req.requestId, { kind: "approve" }, new Date().toISOString());
+				this.pushDecision(conversationId, req.requestId, { kind: "approve" });
+				return;
+			}
+		}
 		this.waitQueue.submit({
 			conversationId,
 			requestId: req.requestId,
@@ -485,6 +535,43 @@ export class ConversationManagerServer implements Contract {
 			status: "pending",
 			requestedAt: new Date().toISOString(),
 		});
+		this.logger.info("approval.enqueued", {
+			conversationId,
+			requestId: req.requestId,
+			decisioner: parentId !== undefined ? "parent" : "ui",
+			toolCallCount: req.toolCalls.length,
+		});
+	}
+
+	/** 读会话当前生效模式（缺省 review；远程代理失败按 review 保守处理） */
+	private async readConversationMode(
+		handle: ConversationHandle | undefined,
+	): Promise<ConversationMode> {
+		if (handle === undefined) return "review";
+		try {
+			return await Promise.resolve(
+				handle.getConversationMode() as unknown as Promise<ConversationMode>,
+			);
+		} catch {
+			return "review";
+		}
+	}
+
+	/** 驻留直推决策（进程存活则解除 conversation 阻塞；已退出留待重启查询） */
+	private pushDecision(
+		conversationId: ConversationId,
+		requestId: string,
+		decision: ConversationApprovalDecision,
+	): void {
+		const handle = this.handles.get(conversationId);
+		if (handle === undefined) return;
+		try {
+			void Promise.resolve(
+				handle.resolveApproval(requestId, decision) as unknown,
+			).catch(() => {});
+		} catch {
+			// 代理同步抛错（通道已关）属预期，忽略
+		}
 	}
 
 	/** 提交提问请求（非阻塞；路由同审批，UI 展示延后——本期内入队仅登记） */
@@ -512,20 +599,11 @@ export class ConversationManagerServer implements Contract {
 	async resolveApproval(requestId: string, decision: ConversationApprovalDecision): Promise<boolean> {
 		const resolved = this.waitQueue.resolve(requestId, decision, new Date().toISOString());
 		if (!resolved) return false;
+		this.logger.info("approval.resolved", { requestId, decision: decision.kind });
 		// 驻留直推：会话存活则经 handle 调 conversation 的 resolveApproval（阻塞解除）
 		const item = this.waitQueue.takeByRequestId(requestId);
 		if (item !== undefined) {
-			const handle = this.handles.get(item.conversationId);
-			if (handle !== undefined) {
-				// fire-and-forget：进程内实现返回 void，远程代理返回 Promise（契约类型为 void）。
-				// child 已退出时通道拒绝属预期（决策已入 waitQueue，重启经 takeDecisions 续跑），
-				// 吞掉避免 main 进程 unhandled rejection
-				try {
-					void Promise.resolve(handle.resolveApproval(requestId, decision) as unknown).catch(() => {});
-				} catch {
-					// 代理同步抛错（通道已关）同属预期，忽略
-				}
-			}
+			this.pushDecision(item.conversationId, requestId, decision);
 		}
 		return true;
 	}

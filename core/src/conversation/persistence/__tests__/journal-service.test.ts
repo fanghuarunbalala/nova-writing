@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { FileConversationJournalService } from "../FileConversationJournalService.js";
 import { FileConversationJournalReadOnlyService } from "../FileConversationJournalReadOnlyService.js";
 import type { RunContext } from "../../../runtime/loop/types.js";
@@ -185,6 +185,73 @@ describe("projectedHistory（投影读取）", () => {
     await svc.writeRuns([makeTurn(2, "new")]);
     const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
     expect(lines).toHaveLength(1);
+  });
+
+  it("增量行协议：snapshot + append 折叠 = 全量快照语义（读侧等价）", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
+    const file = nestedFile(dir, "inc");
+    const svc = new FileConversationJournalService({ conversationId: "inc", filePath: file });
+    await svc.open();
+    await svc.appendRun({ seq: 1, messages: [{ role: "user", content: "hi" }], ts: "t1", appendRunMessages: () => {} });
+    await svc.appendRunMessages(1, [{ role: "assistant", content: "hello" }]);
+    await svc.appendRunMessages(1, [{ role: "tool", content: "ok", id: "t9" }]);
+    const ro = new FileConversationJournalReadOnlyService({ journalDir: dir });
+    const runs = await ro.readRuns("inc");
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.messages.map((m) => m.role)).toEqual(["user", "assistant", "tool"]);
+    // 行数 = 快照 1 + 增量 2（每追加一行，而非全量重写）
+    const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
+    expect(lines).toHaveLength(3);
+    expect(svc.lastSeq).toBe(1);
+  });
+
+  it("旧格式兼容：无 kind 的 {seq, run} 行按 snapshot 解释", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
+    const file = nestedFile(dir, "legacy");
+    mkdirSync(dirname(file), { recursive: true });
+    // 手写旧格式行（上一代 journal 产物）
+    writeFileSync(file, `${JSON.stringify({ seq: 1, run: { seq: 1, messages: [{ role: "user", content: "旧" }], ts: "t" } })}\n`);
+    const svc = new FileConversationJournalService({ conversationId: "legacy", filePath: file });
+    await svc.open();
+    expect(svc.lastSeq).toBe(1);
+    await svc.appendRunMessages(1, [{ role: "assistant", content: "新" }]);
+    const ro = new FileConversationJournalReadOnlyService({ journalDir: dir });
+    const runs = await ro.readRuns("legacy");
+    expect(runs[0]!.messages.map((m) => m.content)).toEqual(["旧", "新"]);
+  });
+
+  it("孤儿增量（无快照基线）合成空基线，事件边界完整", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
+    const file = nestedFile(dir, "orphan");
+    const svc = new FileConversationJournalService({ conversationId: "orphan", filePath: file });
+    await svc.open();
+    await svc.appendRunMessages(2, [{ role: "user", content: "hi" }]);
+    const ro = new FileConversationJournalReadOnlyService({ journalDir: dir });
+    const events = await ro.history("orphan", {});
+    const types = events.map((e) => e.type);
+    expect(types[0]).toBe("run-start");
+    expect(types).toContain("user.message");
+    expect(types.at(-1)).toBe("run-end");
+    expect(svc.lastSeq).toBe(2);
+  });
+
+  it("异步写队列：调用序 = 落盘序，flush 排空", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jrnl-"));
+    const file = nestedFile(dir, "order");
+    const svc = new FileConversationJournalService({ conversationId: "order", filePath: file });
+    await svc.open();
+    // 不逐个 await：并发入队，顺序仍须保证
+    const p1 = svc.appendRun({ seq: 1, messages: [{ role: "user", content: "a" }], ts: "t", appendRunMessages: () => {} });
+    const p2 = svc.appendRunMessages(1, [{ role: "assistant", content: "b" }]);
+    const p3 = svc.appendRunMessages(1, [{ role: "assistant", content: "c" }]);
+    await svc.flush();
+    await Promise.all([p1, p2, p3]);
+    const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
+    const kinds = lines.map((l) => (JSON.parse(l) as { kind?: string }).kind);
+    expect(kinds).toEqual(["snapshot", "append", "append"]);
+    const ro = new FileConversationJournalReadOnlyService({ journalDir: dir });
+    const runs = await ro.readRuns("order");
+    expect(runs[0]!.messages.map((m) => m.content)).toEqual(["a", "b", "c"]);
   });
 
   it("readRuns 返回去重后的持久化 turns（同 seq 取最新，无运行时闭包）", async () => {

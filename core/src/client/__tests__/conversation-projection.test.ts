@@ -3,7 +3,7 @@
  * - subagent 隔离：盖章（agentId ≠ main）事件不进主流时间线
  * - 连续工具批次：两次请求的工具行分段（每请求一段）
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ConversationProjection } from "../ConversationProjection.js";
 import type { ConversationHandle } from "../../conversation/contract/handle/index.js";
 import type { ProjectedEvent } from "../../conversation/contract/events/index.js";
@@ -119,5 +119,174 @@ describe("ConversationProjection 连续工具批次分段（每请求一段）",
     expect(segments[0]!.text).toBe("先查");
     expect(segments[0]!.tools.map((t) => t.traceId)).toEqual(["t1"]);
     expect(segments[1]!.tools.map((t) => t.traceId)).toEqual(["t2"]);
+  });
+});
+
+describe("ConversationProjection delta 置脏与合并发布（gui-performance-2 功能点三）", () => {
+  it("窗口内 N 条 delta → 监听器至多 1 次通知（32ms 尾沿合并）", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = fakeHandle();
+      const proj = new ConversationProjection(fake.handle, "c1");
+      await proj.start();
+      let notifications = 0;
+      proj.subscribe(() => {
+        notifications += 1;
+      });
+      const baseline = notifications;
+
+      fake.push(delta("a"));
+      fake.push(delta("b"));
+      fake.push(delta("c"));
+      fake.push(delta("d"));
+      // 窗口内：delta 不触发发布（置脏 + 排程）
+      expect(notifications).toBe(baseline);
+
+      await vi.advanceTimersByTimeAsync(32);
+      expect(notifications).toBe(baseline + 1);
+      const snapshot = proj.getSnapshot();
+      expect(snapshot.timeline.at(-1)).toMatchObject({ text: "abcd", streaming: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("getSnapshot 惰性冲刷：窗口未到期直接读取也能看到最新 delta 文本", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+    fake.push(delta("写到"));
+    fake.push(delta("一半"));
+    // 未 advance 定时器：读取方仍能看到合并后的脏文本
+    const snapshot = proj.getSnapshot();
+    expect(snapshot.timeline.at(-1)).toMatchObject({ text: "写到一半", streaming: true });
+    expect(snapshot.liveState).toBe("generating");
+  });
+
+  it("非 delta 事件立即发布且先冲刷脏文本（保序）", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+    let notifications = 0;
+    proj.subscribe(() => {
+      notifications += 1;
+    });
+    const baseline = notifications;
+
+    fake.push(delta("先想"));
+    fake.push(toolStarted("t1")); // 非 delta → 立即 publish（冲刷脏文本先行）
+    expect(notifications).toBe(baseline + 1);
+    const item = proj.getSnapshot().timeline.at(-1)!;
+    expect(item.text).toBe("先想");
+    expect(item.segments!.at(-1)!.tools.map((t) => t.traceId)).toEqual(["t1"]);
+  });
+
+  it("run-end 收口：脏文本经立即发布路径进入最终快照", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+    fake.push(delta("最终"));
+    fake.push({
+      type: "run-end",
+      persist: true,
+      seq: 1,
+      runSeq: 1,
+      ...base,
+      ts: new Date().toISOString(),
+    } as unknown as ProjectedEvent);
+    const snapshot = proj.getSnapshot();
+    expect(snapshot.timeline.at(-1)).toMatchObject({ text: "最终", streaming: false });
+    expect(snapshot.liveState).toBeUndefined();
+  });
+});
+
+describe("ConversationProjection 平台事件源与 eseq 断档（gui-performance-2 功能点八）", () => {
+  /** kkrpc subscribeEvents 抛错（断言平台源路径完全旁路）+ 可推送的平台源 */
+  function platformSourceHarness(): {
+    handle: ConversationHandle;
+    source: { subscribe: (id: string, l: (e: ProjectedEvent) => void) => () => void };
+    push: (event: ProjectedEvent) => void;
+    unsubscribed: boolean;
+  } {
+    const handle = {
+      sendUserMessage: async () => ({ seq: 0, recordedAt: "" }),
+      sendSystemControl: async () => ({ seq: 0, recordedAt: "" }),
+      resolveApproval: () => {},
+      getConversationMode: async () => "review",
+      dispose: () => {},
+      subscribeEvents: async () => {
+        throw new Error("kkrpc subscribeEvents 不应被调用（平台源已注入）");
+      },
+    } as unknown as ConversationHandle;
+    let listener: ((e: ProjectedEvent) => void) | undefined;
+    const harness = {
+      handle,
+      source: {
+        subscribe: (_id: string, l: (e: ProjectedEvent) => void) => {
+          listener = l;
+          return () => {
+            unsubscribedFlag = true;
+            listener = undefined;
+          };
+        },
+      },
+      push: (event: ProjectedEvent) => {
+        if (listener === undefined) throw new Error("平台源尚未订阅");
+        listener(event);
+      },
+      unsubscribed: false,
+    };
+    let unsubscribedFlag = false;
+    Object.defineProperty(harness, "unsubscribed", { get: () => unsubscribedFlag });
+    return harness;
+  }
+
+  it("平台事件源路径：事件经 source 交付（kkrpc subscribeEvents 旁路），stop 拆除订阅", async () => {
+    const harness = platformSourceHarness();
+    const proj = new ConversationProjection(harness.handle, "c1", async () => [], harness.source);
+    await proj.start();
+    harness.push(userMessage("hi"));
+    harness.push(delta("流式"));
+    const snapshot = proj.getSnapshot();
+    expect(snapshot.timeline.map((i) => i.kind)).toEqual(["user", "assistant"]);
+    expect(snapshot.timeline.at(-1)).toMatchObject({ text: "流式" });
+    await proj.stop();
+    expect(harness.unsubscribed).toBe(true);
+  });
+
+  it("eseq 断档 → 触发 history 补拉（ZMQ 丢包自愈）；连续断档不叠加补拉", async () => {
+    const harness = platformSourceHarness();
+    let historyCalls = 0;
+    const history = async (): Promise<ProjectedEvent[]> => {
+      historyCalls += 1;
+      return [];
+    };
+    const proj = new ConversationProjection(harness.handle, "c1", history, harness.source);
+    await proj.start();
+    expect(historyCalls).toBe(1); // 初始重放
+    harness.push({ ...userMessage("hi"), eseq: 1 });
+    harness.push({ ...delta("a"), eseq: 2 });
+    // 断档：跳过 eseq 3、4
+    harness.push({ ...delta("c"), eseq: 5 });
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 catch-up 微任务
+    expect(historyCalls).toBe(2);
+    // 后续连续事件（无新断档）不再补拉
+    harness.push({ ...delta("d"), eseq: 6 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(historyCalls).toBe(2);
+  });
+
+  it("重放事件无 eseq（journal 域）不建立基线：首个实时事件不误报断档", async () => {
+    const harness = platformSourceHarness();
+    const history = async (): Promise<ProjectedEvent[]> => [
+      userMessage("历史消息") as ProjectedEvent,
+    ];
+    const proj = new ConversationProjection(harness.handle, "c1", history, harness.source);
+    await proj.start();
+    // 首个实时事件 eseq=100（重放不建立基线）→ 不触发补拉
+    harness.push({ ...delta("live"), eseq: 100 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const snapshot = proj.getSnapshot();
+    expect(snapshot.timeline.at(-1)).toMatchObject({ text: "live" });
   });
 });

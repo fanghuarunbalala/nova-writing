@@ -7,9 +7,14 @@
  * ```novel fenced code block 切出交给 NovelDraftPanel（正文草稿面板），
  * 与聊天注释视觉分离；流式期间最后一个正文块末尾显示闪烁光标。
  * memo 包裹：text 原值比较，历史消息零重解析（markdown 全管道是最大单项成本）。
+ *
+ * 流式前缀封存（gui-performance-2 功能点四）：streaming 时最后一个 md 段按段落
+ * 边界拆「稳定前缀 + 活动尾段」——前缀经 MarkdownBlock memo（content 原值比较）
+ * 跳过 ReactMarkdown 重解析，每次发布的解析成本 O(尾段) 而非 O(全文)。
+ * components/urlTransform 经 useMemo 每实例一次（稳定 <a> 元素类型，避免重挂载）。
  */
-import { memo } from "react";
-import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import { Fragment, memo, useMemo, useRef } from "react";
+import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ToastKind } from "../../../../shared/state/ToastStore.js";
 import {
@@ -33,6 +38,9 @@ export interface AssistantMarkdownProps {
 }
 
 const REFERENCE_PREFIX = "cc://";
+
+/** remark 插件（模块常量：稳定引用，避免每次 render 重建数组） */
+const REMARK_PLUGINS = [remarkGfm];
 
 /** ```novel fenced block（小说正文草稿）；正文按空行分段、段内换行保留。 */
 const NOVEL_FENCE_RE = /```novel\s*\n?([\s\S]*?)```/g;
@@ -60,6 +68,48 @@ function splitNovelSegments(text: string): MarkdownSegment[] {
   return segments;
 }
 
+/**
+ * 流式封存点：最后一个段落边界（\n\n）位置；无安全边界返回 -1。
+ * 安全条件（逐个候选回退）：前缀无悬空标签开标记（'<' 后无 '>'，防拆开成对引用标签）、
+ * 尾段 ``` 栅栏配对（防拆开未闭合的 fenced block）。
+ */
+function findSealBoundary(text: string): number {
+  let idx = text.lastIndexOf("\n\n");
+  while (idx > 0) {
+    const prefix = text.slice(0, idx);
+    const tail = text.slice(idx + 2);
+    const lastLt = prefix.lastIndexOf("<");
+    const danglingOpener = lastLt >= 0 && prefix.indexOf(">", lastLt) < 0;
+    const fences = (tail.match(/```/g) ?? []).length;
+    if (!danglingOpener && fences % 2 === 0) return idx;
+    idx = text.lastIndexOf("\n\n", idx - 1);
+  }
+  return -1;
+}
+
+/** 单个 md 段渲染（memo：content 原值比较，封存前缀零重解析） */
+const MarkdownBlock = memo(function MarkdownBlock({
+  content,
+  components,
+  urlTransform,
+}: {
+  readonly content: string;
+  readonly components: Components;
+  readonly urlTransform: (url: string) => string;
+}) {
+  return (
+    <ReactMarkdown remarkPlugins={REMARK_PLUGINS} urlTransform={urlTransform} components={components}>
+      {content}
+    </ReactMarkdown>
+  );
+});
+
+/** 历史正文草稿面板（memo：content/streaming 相等即跳过；onNotify 仅影响 toast 展示） */
+const MemoNovelDraftPanel = memo(
+  NovelDraftPanel,
+  (prev, next) => prev.content === next.content && prev.streaming === next.streaming,
+);
+
 export const AssistantMarkdown = memo(function AssistantMarkdown({
   text,
   onReferenceClick,
@@ -74,6 +124,34 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
     -1,
   );
 
+  // 稳定渲染参数（每实例一次）：a 渲染器经 ref 读最新回调——类型引用稳定，
+  // chip 点击/解析行为跟随本次 props（gui-performance-2 功能点四）
+  const handlersRef = useRef({ onReferenceClick, resolveReference });
+  handlersRef.current = { onReferenceClick, resolveReference };
+  const components = useMemo<Components>(
+    () => ({
+      a: ({ href, children }) => {
+        if (typeof href === "string" && href.startsWith(REFERENCE_PREFIX)) {
+          const reference = parseReferenceHref(href);
+          if (reference !== null) {
+            const { onReferenceClick: onClick, resolveReference: resolve } = handlersRef.current;
+            const resolved = resolve?.(reference);
+            return (
+              <MessageReferenceChip reference={reference} onClick={onClick} resolved={resolved} />
+            );
+          }
+        }
+        return <a href={href}>{children}</a>;
+      },
+    }),
+    [],
+  );
+  const urlTransform = useMemo(
+    () => (url: string) =>
+      url.startsWith(REFERENCE_PREFIX) ? url : defaultUrlTransform(url),
+    [],
+  );
+
   return (
     <div className={styles.markdown}>
       {segments.map((segment, index) => {
@@ -82,7 +160,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           // 完成后空块直接丢弃。
           if (segment.content.trim() === "" && !streaming) return null;
           return (
-            <NovelDraftPanel
+            <MemoNovelDraftPanel
               key={index}
               content={segment.content}
               streaming={streaming && index === lastNovelIndex}
@@ -91,34 +169,31 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           );
         }
         if (segment.content.trim() === "") return null;
+        // 流式封存：最后一个 md 段拆稳定前缀（memo 命中）+ 活动尾段（每次解析）
+        if (streaming && index === segments.length - 1) {
+          const boundary = findSealBoundary(segment.content);
+          if (boundary > 0) {
+            const prefix = segment.content.slice(0, boundary);
+            const tail = segment.content.slice(boundary + 2);
+            return (
+              <Fragment key={index}>
+                {prefix.trim() !== "" && (
+                  <MarkdownBlock content={prefix} components={components} urlTransform={urlTransform} />
+                )}
+                {tail.trim() !== "" && (
+                  <MarkdownBlock content={tail} components={components} urlTransform={urlTransform} />
+                )}
+              </Fragment>
+            );
+          }
+        }
         return (
-          <ReactMarkdown
+          <MarkdownBlock
             key={index}
-            remarkPlugins={[remarkGfm]}
-            urlTransform={(url) =>
-              url.startsWith(REFERENCE_PREFIX) ? url : defaultUrlTransform(url)
-            }
-            components={{
-              a: ({ href, children }) => {
-                if (typeof href === "string" && href.startsWith(REFERENCE_PREFIX)) {
-                  const reference = parseReferenceHref(href);
-                  if (reference !== null) {
-                    const resolved = resolveReference?.(reference);
-                    return (
-                      <MessageReferenceChip
-                        reference={reference}
-                        onClick={onReferenceClick}
-                        resolved={resolved}
-                      />
-                    );
-                  }
-                }
-                return <a href={href}>{children}</a>;
-              },
-            }}
-          >
-            {segment.content}
-          </ReactMarkdown>
+            content={segment.content}
+            components={components}
+            urlTransform={urlTransform}
+          />
         );
       })}
     </div>

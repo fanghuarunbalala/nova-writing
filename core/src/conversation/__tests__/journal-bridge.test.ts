@@ -6,6 +6,7 @@ import type { RunContext } from "../../runtime/loop/types.js";
 function mockJournal() {
   return {
     appendRun: vi.fn().mockResolvedValue({ seq: 1, recordedAt: "t" }),
+    appendRunMessages: vi.fn().mockResolvedValue({ seq: 1, recordedAt: "t" }),
     writeRuns: vi.fn().mockResolvedValue(undefined),
   } as unknown as ConversationJournalService;
 }
@@ -15,12 +16,14 @@ function makeTurn(): RunContext {
 }
 
 describe("journalListener（LoopContext → journal 映射）", () => {
-  it("onRunMessageAppend → appendRun", async () => {
+  it("onRunMessageAppend → appendRunMessages（增量行，只传本次追加消息）", async () => {
     const journal = mockJournal();
     const l = journalListener(journal);
     const turn = makeTurn();
-    l.onRunMessageAppend?.(turn, [{ role: "assistant", content: "ok" }]);
-    expect((journal.appendRun as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(turn);
+    const appended = [{ role: "assistant", content: "ok" }];
+    l.onRunMessageAppend?.(turn, appended);
+    expect(journal.appendRunMessages as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(1, appended);
+    expect(journal.appendRun as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 
   it("onCompacted → writeRuns", async () => {

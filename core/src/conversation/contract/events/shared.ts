@@ -11,6 +11,11 @@ export interface ConversationEventBase {
 	conversationId: ConversationId;
 	agentId?: AgentId;
 	ts: string;
+	/**
+	 * 事件流序号（child 侧 emit 盖章，逐会话单调递增；ZMQ fire-and-forget
+	 * 通道的消费方断档检测用。journal 落盘/重放域不携带。gui-performance-2 功能点八）
+	 */
+	eseq?: number;
 }
 
 /** run 开始边界事件（runSeq = 本轮 run 序号） */

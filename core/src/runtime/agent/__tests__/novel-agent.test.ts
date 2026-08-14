@@ -76,7 +76,12 @@ describe("buildNovelAgent 组装", () => {
       loop as unknown as {
         config: {
           agentCapability: {
-            toolDefs: Array<{ name: string; handler: { execute: (c: { id: string; name: string; args: string }) => Promise<string> } }>;
+            toolDefs: Array<{
+              name: string;
+              description: string;
+              parameters: { properties: { agentType: { enum: string[] } } };
+              handler: { execute: (c: { id: string; name: string; args: string }) => Promise<string> };
+            }>;
           };
         };
       }
@@ -89,6 +94,13 @@ describe("buildNovelAgent 组装", () => {
     expect(names).toContain("TaskStop");
     const agent = cap.toolDefs.find((t) => t.name === "Agent");
     expect(agent).toBeDefined();
+    // 白名单由 novelAgentDefinition.delegation.allowedAgentTypes 派生（explorer + compose）
+    expect(agent!.description).toContain("- novel_explorer（只读探索）：");
+    expect(agent!.description).toContain("- novel_compose（草案创作）：");
+    expect((agent!.parameters as { properties: { agentType: { enum: string[] } } }).properties.agentType.enum).toEqual([
+      "novel_explorer",
+      "novel_compose",
+    ]);
     const out = await agent!.handler.execute({
       id: "c1",
       name: "Agent",

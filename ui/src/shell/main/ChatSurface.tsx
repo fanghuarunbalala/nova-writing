@@ -2,7 +2,8 @@
  * ChatSurface
  *
  * 组合对话域：timeline + composer；无对话时渲染空态。
- * session 由 shell 级 hook（useActiveConversationSession）单订阅注入，
+ * binding 由 shell 持有注入（单实例不变量）；快照订阅在本组件内
+ * （gui-performance-2 功能点五：流式发布只重渲染本子树，壳层零成本），
  * 发送经 sendUserMessage，时间线由 chatSurfaceMapper 映射（逐项缓存 + useMemo）。
  */
 import { useEffect, useMemo, useState } from "react";
@@ -17,13 +18,15 @@ import type { MessageReference } from "../../domains/conversation/components/Mes
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
-import type { ActiveConversationSession } from "../../domains/conversation/hooks/useActiveConversationSession.js";
+import type { ConversationProjectionBinding } from "../../domains/conversation/binding/ConversationProjectionBinding.js";
+import { useActiveConversationSession } from "../../domains/conversation/hooks/useActiveConversationSession.js";
 import { useConversationRuntimeStatus } from "../../domains/conversation/hooks/useConversationRuntimeStatus.js";
 import { mapProjectionTimeline } from "./chatSurfaceMapper.js";
 import styles from "./ChatSurface.module.css";
 
 export interface ChatSurfaceProps {
-  readonly session: ActiveConversationSession;
+  /** 活动会话投影 binding（shell 持有；本组件内订阅快照） */
+  readonly conversationBinding: ConversationProjectionBinding | undefined;
   readonly conversationCatalog: ConversationCatalogStore;
   readonly onCreateConversation: () => void;
   /** 本会话待审批数（CMS wait 队列派生；>0 时 composer 等待态） */
@@ -34,7 +37,7 @@ export interface ChatSurfaceProps {
 }
 
 export function ChatSurface({
-  session,
+  conversationBinding,
   conversationCatalog,
   onCreateConversation,
   pendingApprovalCount = 0,
@@ -49,7 +52,7 @@ export function ChatSurface({
   }
   return (
     <ActiveChatSurface
-      session={session}
+      conversationBinding={conversationBinding}
       conversationId={activeId}
       title={catalog.conversations.find((item) => item.id === activeId)?.title ?? "对话"}
       pendingApprovalCount={pendingApprovalCount}
@@ -61,7 +64,7 @@ export function ChatSurface({
 }
 
 interface ActiveChatSurfaceProps {
-  readonly session: ActiveConversationSession;
+  readonly conversationBinding: ConversationProjectionBinding | undefined;
   readonly conversationId: string;
   readonly title: string;
   readonly pendingApprovalCount: number;
@@ -71,13 +74,14 @@ interface ActiveChatSurfaceProps {
 }
 
 function ActiveChatSurface({
-  session,
+  conversationBinding,
   conversationId,
   pendingApprovalCount,
   onReferenceClick,
   resolveReference,
   onNotify,
 }: ActiveChatSurfaceProps) {
+  const session = useActiveConversationSession(conversationBinding);
   const { snapshot, sendUserMessage, sendSystemControl, getConversationMode, resume } = session;
   const [sendError, setSendError] = useState<string | undefined>(undefined);
   // 会话模式：权威回显 = 事件（projection.mode/modePending）；事件未达前经查询兜底。

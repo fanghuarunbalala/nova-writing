@@ -13,13 +13,16 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { RPCChannel } from "kkrpc";
 import { webSocketClientTransport } from "kkrpc/ws";
-import { Conversation, type ManagerWaitChannel } from "../../conversation/server/Conversation.js";
+import { Conversation, type ConversationEventPublisher, type ManagerWaitChannel } from "../../conversation/server/Conversation.js";
+import { EventPublisher } from "../../event/EventPublisher.js";
+import { conversationEventsAddr } from "../../event/topics.js";
 import { FileConversationJournalService } from "../../conversation/persistence/FileConversationJournalService.js";
 import { FileConversationJournalReadOnlyService } from "../../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { FileConversationStateJournalService } from "../../conversation/persistence/FileConversationStateJournalService.js";
 import { journalListener } from "../../conversation/JournalBridge.js";
 import { debugLog } from "../../log/debug.js";
 import { createLogger } from "../../log/pino.js";
+import type { Logger } from "../../log/Logger.js";
 import { SubagentRuntime } from "../../conversation/server/SubagentRuntime.js";
 import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
@@ -39,6 +42,7 @@ import type { AgentRunConfig } from "../../runtime/loop/types.js";
 import { findPendingToolIds } from "../../runtime/loop/AgentLoop.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
+import { buildNovelComposeAgent } from "../../runtime/agent/NovelComposeAgent.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 import type { ProjectedEvent } from "../../conversation/contract/events/index.js";
@@ -96,6 +100,27 @@ const CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
 
 /** 合法会话模式集合（meta.json 恢复校验用） */
 const KNOWN_MODES = new Set(["review", "bypass", "compose"]);
+
+/**
+ * 绑定会话事件 PUB（每会话一个 ipc:// 命名管道地址；main 侧 register 后 SUB 接入）。
+ * bind 失败（地址占用等）→ 告警并返回 undefined（内存 hub 照常分发）。
+ */
+async function bindConversationEventPublisher(
+	conversationId: string,
+	logger?: Logger,
+): Promise<ConversationEventPublisher | undefined> {
+	const publisher = new EventPublisher(conversationEventsAddr(conversationId));
+	try {
+		await publisher.bind();
+		return publisher;
+	} catch (err) {
+		logger?.error("conversation_events.bind_failed", {
+			conversationId,
+			error: err instanceof Error ? err.message : String(err),
+		});
+		return undefined;
+	}
+}
 
 /** 读 storedir/meta.json 的持久化模式（无文件/损坏/非法值 → undefined 回退默认） */
 export function readPersistedMode(storedir: string | undefined): ConversationMode | undefined {
@@ -281,6 +306,15 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 					conversationId,
 					agentId,
 				}),
+			novel_compose: (agentId) =>
+				buildNovelComposeAgent({
+					workspace,
+					provider: createProvider({ id: "compose", ...providerConfig }),
+					handle: novelHandle,
+					todoStore,
+					conversationId,
+					agentId,
+				}),
 		},
 	});
 
@@ -385,6 +419,11 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		initialMode: readPersistedMode(storedir),
 		onModeChanged: (mode) => persistMode(storedir, mode),
 		logger,
+		// 事件火线 ZeroMQ 广播（gui-performance-2 功能点八）：每会话一个 PUB，
+		// main 侧 register 后 SUB 接入转发 renderer（裸 IPC，无 kkrpc 往返）。
+		// bind 失败仅告警降级（内存 hub 照常，renderer 走 kkrpc subscribeEvents 兜底不可用，
+		// 表现为投影错误可重试——地址冲突仅在同名会话双开时发生，属配置错误）。
+		eventPublisher: await bindConversationEventPublisher(conversationId, logger),
 	// 审批等待不设超时：进程驻留，UI 决策随时经 resolveApproval 直推解除
 	//（提前 exit 会丢内存态 subagent/todo，且决策无法送达；Exit 审批驻留同理）
 	});

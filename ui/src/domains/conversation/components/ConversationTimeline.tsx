@@ -3,8 +3,11 @@
  *
  * 按 mapper 输出追加序渲染时间线（chatSurfaceMapper 保证序不变量，不重排）；
  * 新消息到达自动滚到底（用户上滚除外）。
+ * 虚拟化走 CSS content-visibility（gui-performance-2 功能点六）：视口外行
+ * 跳过 layout/paint，滚动位置由 contain-intrinsic-size 估高支撑——无固定行高
+ * 失真、无窗口重挂载闪烁；滚动路径零 setState（仅 ref 记忆贴底状态）。
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ConversationTimelineItem as TimelineItem } from "../projection/ConversationTimelineItem.js";
@@ -12,12 +15,7 @@ import type { MessageReference } from "./MessageReference.js";
 import { AssistantMessage } from "./AssistantMessage.js";
 import { DesignCard } from "./DesignCard.js";
 import { UserMessage } from "./UserMessage.js";
-import { computeTimelineWindow } from "./timelineWindow.js";
 import styles from "./ConversationTimeline.module.css";
-
-const VIRTUALIZE_THRESHOLD = 200;
-const ROW_HEIGHT = 56;
-const OVERSCAN = 12;
 
 export interface ConversationTimelineProps {
   readonly conversationId: string;
@@ -43,21 +41,13 @@ export function ConversationTimeline({
 }: ConversationTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(0);
   // 首条用户消息：复制按钮收进气泡内边距带（原型 .msg-actions-inpad）。
   const firstUserSequence = items.find((item) => item.kind === "user")?.sequence;
-  const virtualized = items.length > VIRTUALIZE_THRESHOLD;
-  const timelineWindow = virtualized
-    ? computeTimelineWindow({
-        itemCount: items.length,
-        scrollTop,
-        viewportHeight,
-        rowHeight: ROW_HEIGHT,
-        overscan: OVERSCAN,
-      })
-    : { startIndex: 0, endIndex: items.length };
-  const visibleItems = items.slice(timelineWindow.startIndex, timelineWindow.endIndex);
+  // 流式正文增长（贴底跟随依据）：末项文本长度随发布递增
+  const lastItemTextLength = (() => {
+    const last = items.at(-1);
+    return last !== undefined && "text" in last ? last.text.length : 0;
+  })();
 
   // 卡片动作回调稳定引用（AssistantMessage memo 浅比较依赖）
   const handleCardAction = useCallback(
@@ -74,11 +64,12 @@ export function ConversationTimeline({
     [onProposalAction],
   );
 
+  // 贴底跟随：新消息 / persist 序号 / 流式正文增长时滚到底（用户上滚除外）
   useEffect(() => {
     const node = scrollRef.current;
     if (node === null || !stickToBottom.current) return;
     node.scrollTop = node.scrollHeight;
-  }, [items.length, streamingSequence]);
+  }, [items.length, streamingSequence, lastItemTextLength]);
 
   return (
     <div
@@ -87,20 +78,13 @@ export function ConversationTimeline({
       role="log"
       aria-label="对话时间线"
       onScroll={(event) => {
+        // 仅 ref 记忆贴底状态（零 setState：滚动路径不产生重渲染）
         const node = event.currentTarget;
         stickToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
-        setScrollTop(node.scrollTop);
-        setViewportHeight(node.clientHeight);
       }}
     >
       <div className={styles.inner} key={conversationId}>
-        {virtualized ? (
-          <div
-            style={{ height: timelineWindow.startIndex * ROW_HEIGHT }}
-            aria-hidden="true"
-          />
-        ) : null}
-        {visibleItems.map((item, index) => {
+        {items.map((item, index) => {
           return (
             <div
               key={item.sequence}
@@ -119,12 +103,6 @@ export function ConversationTimeline({
             </div>
           );
         })}
-        {virtualized ? (
-          <div
-            style={{ height: (items.length - timelineWindow.endIndex) * ROW_HEIGHT }}
-            aria-hidden="true"
-          />
-        ) : null}
       </div>
     </div>
   );

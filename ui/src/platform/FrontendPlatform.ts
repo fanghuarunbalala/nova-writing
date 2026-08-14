@@ -1,4 +1,6 @@
 /** Platform-neutral browser and desktop capabilities injected into shared UI. */
+import type { ConversationPlatformEventSource } from "@novel/core/client";
+
 export interface PlatformCapabilities {
   readonly fileSelection: boolean;
   readonly clipboardRead: boolean;
@@ -54,4 +56,9 @@ export interface FrontendPlatform {
   /** compose 设计草稿文件能力；缺失时 UI 降级为只读提示。 */
   /** Compose design-file capability; the UI degrades to a read-only note when absent. */
   readonly designFile?: DesignFilePort;
+  /**
+   * 会话事件推送源（Electron ZMQ 火线的 renderer 侧形态；gui-performance-2
+   * 功能点八）。缺失时投影回退 kkrpc subscribeEvents（测试/浏览器）。
+   */
+  readonly conversationEvents?: ConversationPlatformEventSource;
 }

@@ -12,16 +12,11 @@ import type { NovelConstraintsProvider } from "../prompt/PromptSection.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
 import { AgentAssembler } from "./AgentAssembler.js";
-import {
-  novelAgentDefinition,
-  novelSectionRegistry,
-} from "./definitions/NovelAgentDefinition.js";
+import { novelAgentDefinition } from "./definitions/NovelAgentDefinition.js";
+import { novelSectionRegistry } from "./definitions/novelSections.js";
 import { createSubagentTools } from "../tool/definitions/subagent.js";
 import type { SubagentToolsOptions } from "../tool/definitions/subagent.js";
-import {
-  NOVEL_SUBAGENT_DEFINITIONS,
-  NOVEL_SUBAGENT_ALLOWED_TYPES,
-} from "./NovelExplorerAgent.js";
+import { NOVEL_SUBAGENT_DEFINITIONS } from "./definitions/index.js";
 import {
   NOVEL_TOOL_GROUP_CATALOG,
   createNovelToolGroupResolver,
@@ -141,14 +136,15 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
   });
   const capability = assembler.assemble();
   // subagent 派发三工具（Agent/TaskOutput/TaskStop）：组系统外追加——
-  // 本期 groupIds 契约不含 subagent 组；定义 tools 策略只过滤组内工具，
-  // 追加工具不受 allow/deny 影响（main agent 全量策略本就不过滤）。
+  // groupIds 契约不含 subagent 组。白名单由 definition.delegation 派生
+  // （声明即生效，无平行常量；delegation 禁用时 allowedAgentTypes 恒空，
+  // createSubagentTools 对空白名单抛错，误配即暴露）。
   if (opts.subagent !== undefined) {
     capability.toolDefs.push(
       ...createSubagentTools({
         ...opts.subagent,
         agents: NOVEL_SUBAGENT_DEFINITIONS,
-        allowedAgentTypes: NOVEL_SUBAGENT_ALLOWED_TYPES,
+        allowedAgentTypes: definition.delegation.allowedAgentTypes,
       }),
     );
   }

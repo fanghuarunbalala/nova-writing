@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   buildNovelExplorerAgent,
-  NOVEL_EXPLORER_DEFINITION,
   NOVEL_EXPLORER_TOOL_NAMES,
 } from "../NovelExplorerAgent.js";
+import { NOVEL_SUBAGENT_DEFINITIONS } from "../definitions/index.js";
 import { InMemoryConversationTodoStore } from "../../todo/InMemoryConversationTodoStore.js";
 import type { Provider } from "../../provider/Provider.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
@@ -84,10 +84,11 @@ describe("buildNovelExplorerAgent 装配", () => {
     expect(snapshot?.todos[0]).toMatchObject({ content: "盘点角色", status: "in_progress" });
   });
 
-  it("NOVEL_EXPLORER_DEFINITION 数据常量对齐（label/description/tools 策略，目录条目形态）", () => {
-    expect(NOVEL_EXPLORER_DEFINITION.agentType).toBe("novel_explorer");
-    expect(NOVEL_EXPLORER_DEFINITION.label).toBe("只读探索");
-    expect(NOVEL_EXPLORER_DEFINITION.description).toBeTruthy();
-    expect(NOVEL_EXPLORER_DEFINITION.tools?.allow).toEqual([...NOVEL_EXPLORER_TOOL_NAMES]);
+  it("目录条目从声明式定义派生（agentType/label/description/tools 策略）", () => {
+    const entry = NOVEL_SUBAGENT_DEFINITIONS.find((d) => d.agentType === "novel_explorer");
+    expect(entry).toBeDefined();
+    expect(entry!.label).toBe("只读探索");
+    expect(entry!.description).toBeTruthy();
+    expect(entry!.tools?.allow).toEqual([...NOVEL_EXPLORER_TOOL_NAMES]);
   });
 });

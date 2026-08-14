@@ -163,6 +163,7 @@ describe("Conversation", () => {
         appended.push(turn);
         return { seq: turn.seq, recordedAt: "t" };
       },
+      appendRunMessages: async (seq) => ({ seq, recordedAt: "t" }),
       writeRuns: async () => {},
       flush: async () => {},
       close: async () => {},

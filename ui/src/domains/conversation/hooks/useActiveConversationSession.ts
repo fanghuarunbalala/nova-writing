@@ -1,8 +1,11 @@
 /**
  * useActiveConversationSession
  *
- * shell 级活动会话 hook：随 catalog.activeConversationId 建/拆投影 binding（单订阅，
- * 避免 ChatSurface 与审批域各开一条订阅导致事件双投）。
+ * 活动会话 hook，两层拆分（gui-performance-2 功能点五）：
+ * - useActiveConversationBinding：随 catalog.activeConversationId 建/拆投影 binding，
+ *   只管生命周期不订阅快照——shell 持有不随流式发布重渲染；
+ * - useActiveConversationSession：订阅 binding 快照（消费方局部重渲染）+ 会话方法。
+ * 单 binding 不变量保持：ChatSurface 与审批域共用 shell 持有的同一实例。
  * conversationId 未定义（无活动会话）时返回空快照（null），方法调用抛错。
  */
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
@@ -14,6 +17,10 @@ import type {
   NovelApiClient,
   Receipt,
 } from "@novel/core";
+import type {
+  ConversationPlatformEventSource,
+  ConversationTimelineItem,
+} from "@novel/core/client";
 import { ConversationProjectionBinding } from "../binding/ConversationProjectionBinding.js";
 import type { ConversationProjectionBindingSnapshot } from "../binding/ConversationProjectionBindingTypes.js";
 
@@ -33,17 +40,19 @@ export interface ActiveConversationSession {
 }
 
 /**
- * 打开并跟踪活动会话（shell 单订阅）。
+ * 打开并跟踪活动会话 binding（不订阅快照：shell 级持有，流式发布零重渲染）。
  * @param api 客户端门面
  * @param conversationId 活动会话 id（undefined = 无活动会话）
  * @param logger 可选日志
- * @returns 会话句柄（快照 + 发送 + 审批决策回传）
+ * @param eventSource 平台事件源（ZMQ 推送；缺省投影走 kkrpc subscribeEvents）
+ * @returns 投影 binding（无活动会话为 undefined）
  */
-export function useActiveConversationSession(
+export function useActiveConversationBinding(
   api: NovelApiClient,
   conversationId: string | undefined,
   logger?: Logger,
-): ActiveConversationSession {
+  eventSource?: ConversationPlatformEventSource,
+): ConversationProjectionBinding | undefined {
   const binding = useMemo(
     () =>
       conversationId !== undefined
@@ -51,10 +60,31 @@ export function useActiveConversationSession(
             api,
             conversationId,
             ...(logger !== undefined ? { logger } : {}),
+            ...(eventSource !== undefined ? { eventSource } : {}),
           })
         : undefined,
-    [api, conversationId, logger],
+    [api, conversationId, logger, eventSource],
   );
+
+  useEffect(() => {
+    if (binding === undefined) return;
+    void binding.start().catch(() => undefined);
+    return () => {
+      void binding.stop();
+    };
+  }, [binding]);
+
+  return binding;
+}
+
+/**
+ * 订阅 binding 快照并组装会话句柄（消费方局部：仅本 hook 调用组件随发布重渲染）。
+ * @param binding 投影 binding（useActiveConversationBinding 产出；undefined = 无活动会话）
+ * @returns 会话句柄（快照 + 发送 + 审批决策回传）
+ */
+export function useActiveConversationSession(
+  binding: ConversationProjectionBinding | undefined,
+): ActiveConversationSession {
   const subscribe = useCallback(
     (listener: () => void) => (binding !== undefined ? binding.subscribe(listener) : () => {}),
     [binding],
@@ -64,14 +94,6 @@ export function useActiveConversationSession(
     [binding],
   );
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-
-  useEffect(() => {
-    if (binding === undefined) return;
-    void binding.start().catch(() => undefined);
-    return () => {
-      void binding.stop();
-    };
-  }, [binding]);
 
   const sendUserMessage = useCallback(
     (text: string): Promise<Receipt> => {
@@ -110,4 +132,22 @@ export function useActiveConversationSession(
       }),
     [getConversationMode, resolveApproval, resume, sendSystemControl, sendUserMessage, snapshot],
   );
+}
+
+/**
+ * 选择 binding 投影中的首条用户消息（会话标题派生用）。
+ * user 项跨快照引用稳定（core 投影 + mapper 缓存）→ 流式发布期间零重渲染。
+ */
+export function useFirstUserMessage(
+  binding: ConversationProjectionBinding | undefined,
+): ConversationTimelineItem | undefined {
+  const subscribe = useCallback(
+    (listener: () => void) => (binding !== undefined ? binding.subscribe(listener) : () => {}),
+    [binding],
+  );
+  const getSnapshot = useCallback(
+    () => binding?.getSnapshot().projection.timeline.find((item) => item.kind === "user"),
+    [binding],
+  );
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

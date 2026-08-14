@@ -9,6 +9,7 @@ import type { ProjectedEvent, StateEvent } from "../contract/events/index.js";
 import { ProjectionLayer } from "../projection/ProjectionLayer.js";
 import type { Logger } from "../../log/Logger.js";
 import { noopLogger } from "../../log/noop.js";
+import { CONVERSATION_OUTPUT } from "../../event/topics.js";
 import type { ConversationJournalService, ConversationStateJournalService } from "../contract/journal/index.js";
 import type { ComposeModeStateProvider } from "../compose/ComposeModeState.js";
 import type { ComposeModeService } from "../compose/ComposeModeService.js";
@@ -82,6 +83,16 @@ export interface ConversationOptions {
 	onModeChanged?: (mode: ConversationMode) => void;
 	/** 结构化日志（缺省 noop；审批入队/决议、mode 晋升、状态落盘失败等关键链路埋点） */
 	logger?: Logger;
+	/**
+	 * 事件发布器（ZeroMQ PUB 形态；gui-performance-2 功能点八——事件火线
+	 * fire-and-forget 广播，与 kkrpc 控制通道分离）。缺省仅内存 hub。
+	 */
+	eventPublisher?: ConversationEventPublisher;
+}
+
+/** 事件发布器（结构化接口：child 注入 EventPublisher；测试/内存模式缺省） */
+export interface ConversationEventPublisher {
+	publish(topic: string, payload: unknown): void;
 }
 
 /** 输出事件订阅回调（hub 广播投影事件 + compose/mode 状态事件） */
@@ -132,6 +143,10 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	private readonly onModeChanged?: (mode: ConversationMode) => void;
 	/** 结构化日志（审批/mode/状态事件关键链路埋点；缺省 noop） */
 	private readonly logger: Logger;
+	/** 事件发布器（可选：child 侧 ZeroMQ PUB 广播；缺省仅内存 hub） */
+	private readonly eventPublisher?: ConversationEventPublisher;
+	/** 事件流序号（逐会话单调递增；消费方 eseq 断档检测重放用） */
+	private eventSeq = 0;
 	/** 待决审批（requestId → {resolve, timer}），无阻塞驻留等待决策 */
 	private readonly pendingApprovals = new Map<
 		string,
@@ -164,6 +179,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		this.lastPersistedMode = opts.initialMode;
 		this.onModeChanged = opts.onModeChanged;
 		this.logger = (opts.logger ?? noopLogger).child({ component: "conversation" });
+		this.eventPublisher = opts.eventPublisher;
 		// 投影层：缺省经 loop.toolDispatcher 取 ToolDef.preview（live 与 replay 同实现）
 		this.projection = opts.projection ?? this.createProjection();
 		// 订阅 loop 的输出事件：经投影层映射后转发到本会话 hub（hub 只广播 ProjectedEvent）
@@ -481,15 +497,23 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		}
 	}
 
-	/** 分发输出事件给所有订阅者（逐个保护：单个订阅者异常不阻断广播与其余订阅者） */
+	/**
+	 * 分发输出事件给所有订阅者（内存 hub + ZeroMQ 广播；事件盖 eseq 单调序号）。
+	 * 逐订阅者保护：单个订阅者异常不阻断广播与其余订阅者。
+	 */
 	private emit(e: ProjectedEvent): void {
+		const stamped = { ...e, eseq: ++this.eventSeq } as ProjectedEvent;
 		for (const l of this.eventListeners) {
 			try {
-				l(e);
+				l(stamped);
 			} catch (error) {
 				this.logger.warn("hub.listener_failed", { type: e.type, error: String(error) });
 			}
 		}
+		this.eventPublisher?.publish(CONVERSATION_OUTPUT, {
+			conversationId: this.conversationId,
+			event: stamped,
+		});
 	}
 
 	/**

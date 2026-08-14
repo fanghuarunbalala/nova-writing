@@ -69,8 +69,9 @@ export const AssistantMessage = memo(function AssistantMessage({
   // 一轮只显示最后一 turn：正文 = 最后一段的内容片段；工具行 = 最后一次请求的工具
   const lastSegment = segments.length > 0 ? segments[segments.length - 1] : undefined;
   const lastText = lastSegment?.text ?? "";
-  // 最后一段无内容（重放形态段文本为空）时回退完整文本
-  const bodyText = lastText.length > 0 ? lastText : text;
+  // live 流式期间正文连续累积（避免 turn 切换瞬间整体跳变 + markdown 重解析卡顿）；
+  // 轮收口后收敛为最后一段（最后一段无内容——重放形态——回退完整文本）
+  const bodyText = streaming ? text : lastText.length > 0 ? lastText : text;
   const lastTools = lastSegment?.tools ?? EMPTY_TOOLS;
   return (
     <div className={styles.message} data-sequence={sequence}>

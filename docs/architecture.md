@@ -243,8 +243,8 @@ type ConversationSystemControl =
 runtime/
 ├── provider/      多模型（Anthropic/OpenAI/DeepSeek）+ 流式 + 错误分类 + 模型能力
 ├── tool/          ToolDef/ToolHandler/ToolGroupManifest/ToolDispatcher/MapToolDispatcher + definitions（files/novel/todo）+ groups（NovelToolGroups）
-├── prompt/        PromptSection 判别联合（static/dynamic）+ PromptRecipe/PromptSectionRegistry + sections（9 段）
-├── agent/         AgentDefinition（值对象）/AgentAssembler/NovelAgent（buildNovelAgent）+ definitions（NovelAgentDefinition）
+├── prompt/        PromptSection 判别联合（static/dynamic）+ PromptRecipe/PromptSectionRegistry + sections（agent 通用 + novel 域，含 compose 四段）
+├── agent/         AgentDefinition（值对象）/AgentAssembler/NovelAgent + NovelSubagent/NovelExplorerAgent/NovelComposeAgent（薄 builder）+ definitions（三 agent 声明 + novelSections 单一注册表 + 派生 subagent 目录）
 ├── loop/          AgentLoop（输入队列 + round/turn）+ LoopContext（static base 缓存 + 动态输入通道）
 ├── nudge/         ContextNudgePolicy + definitions（todo_idle/compose_mode）
 ├── compact/       ContextCompactPolicy + CompactPolicyChain
@@ -265,6 +265,7 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
 - **compose 状态机**：phase（idle/designing/pending/applied/discarded）+ active + preComposeMode
 - **进程化**：novel-db 进程、conversation 子进程 spawn、teammate 派生（ManagerServer 双模式）
 - **agent 装配**：声明式 `novelAgentDefinition`（9 段 recipe / 8 工具组 21 工具 / 2 nudge）经 `AgentAssembler` 解析为 `AgentCapability`；段 `id@version` 注册表解析；nudge 生效集 = `nudgeEnablement.enabled` ∩ 实现目录
+- **subagent 定义统一在 definitions/**：`novelExplorerAgentDefinition`（只读探索）与 `novelComposeAgentDefinition`（草案创作，legacy 迁移）与 main 同走 declarative 路线（`buildNovelSubagent` 共享装配）；只读边界用 `groupIds + allow` 正向钉死；Agent 工具描述目录（`NOVEL_SUBAGENT_DEFINITIONS`）与派发白名单（`definition.delegation.allowedAgentTypes`）均从定义派生，无平行常量
 - **system prompt 渲染**：static 段一次渲染进 base 缓存，dynamic 段每 provider call 渲染（`core.environment` 环境块 / `novel.global_constraints` NOVEL.md 注入 / `tool.guidance` 工具清单）；动态输入由 LoopContext 自组装（workdir/modelId）+ 宿主注入（platform 常量 / NOVEL.md 每调用 fs 读）
 - **样式架构**（ui 包）：三层 token 模型（L1 结构常量 / L2 设计语言 / L3 语义色+阴影，
   dark 主题只覆盖 L3）+ 纪律测试（`ui/tests/theme/cssDiscipline.test.ts` 规则 a-d）+

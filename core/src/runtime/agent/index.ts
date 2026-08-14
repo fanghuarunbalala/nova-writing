@@ -4,5 +4,7 @@ export * from "./AgentDefinition.js";
 export * from "./AgentCapability.js";
 export * from "./AgentAssembler.js";
 export * from "./NovelAgent.js";
+export * from "./NovelSubagent.js";
 export * from "./NovelExplorerAgent.js";
+export * from "./NovelComposeAgent.js";
 export * from "./definitions/index.js";

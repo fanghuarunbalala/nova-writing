@@ -35,6 +35,7 @@ import type { AgentRunConfig } from "../../runtime/loop/types.js";
 import { findPendingToolIds } from "../../runtime/loop/AgentLoop.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
+import { buildNovelComposeAgent } from "../../runtime/agent/NovelComposeAgent.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 import type { ProjectedEvent } from "../../conversation/contract/events/index.js";
@@ -271,6 +272,15 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 				buildNovelExplorerAgent({
 					workspace,
 					provider: createProvider({ id: "explorer", ...providerConfig }),
+					handle: novelHandle,
+					todoStore,
+					conversationId,
+					agentId,
+				}),
+			novel_compose: (agentId) =>
+				buildNovelComposeAgent({
+					workspace,
+					provider: createProvider({ id: "compose", ...providerConfig }),
 					handle: novelHandle,
 					todoStore,
 					conversationId,

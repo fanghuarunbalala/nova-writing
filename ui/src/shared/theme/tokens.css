@@ -1,13 +1,165 @@
 /**
- * Novel 设计令牌（design tokens）。
+ * Novel 设计令牌。三层模型（本文件单文件承载，dark 落地时色层可再拆）：
  *
- * 颜色/渐变/字体/阴影直接继承 `vendor/index.html` 原型的 :root 变量（OKLCH），
- * 布局尺寸按 v2 原型校准（inspector 默认 860px；宽度由 --insp-w 的
- * 媒体查询 / 拖拽 inline 覆盖）。
- * V1 仅实现 light；dark 调色板在 V2 通过 [data-theme="dark"] 覆盖。
+ *   L1 结构常量层 —— 布局尺寸 / max-width / z-index 刻度。
+ *     变化机制是 media query / JS inline 覆盖，不随 theme 变化；
+ *     [data-theme] 覆盖块禁止触碰。
+ *   L2 设计语言层 —— 字体栈 / 字号刻度 / 字重 / 间距 / 圆角 / 品牌渐变 / 时长缓动。
+ *     只有改版或密度设置才变，同样不随 theme 变化。
+ *   L3 语义色层 + 阴影 —— 唯一允许被 [data-theme="dark"] 覆盖的层
+ *     （覆盖块只允许 --color-* 与 --shadow-*，由 ui/tests/theme 纪律测试执法）。
+ *
+ * 命名约定：
+ *   - 数值型 token（--fs-12 / --space-13px / --fw-750 / --radius-10px）是原型
+ *     遗留的精确值快照，保证与 vendor/index.html 原型像素一致；新 UI 优先用
+ *     语义型（--fs-h1/body、4px 刻度 --space-1..16）。
+ *   - 语义色混合 token（--color-{base}-{N}）为 color-mix 精确百分比快照，
+ *     按"两次晋升制"：任一 (base, N) 组合在全仓出现 ≥2 次即晋升为 token；
+ *     频次 1 的组合留在组件内（color-mix 引用基色 token，dark 覆盖基色后自动适配）。
  */
 :root {
-  /* ============ 颜色（OKLCH） ============ */
+  /* ============ L1 结构常量（theme 不可覆盖；media query/JS 调节） ============ */
+  --topbar-height:       56px;
+  --subhead-height:      58px;
+  --sidebar-width:       292px;
+  --sidebar-width-collapsed: 0;
+  /* inspector 宽度：默认 860px。响应式收窄由 InspectorHost.module.css 的
+     媒体查询覆盖；用户拖拽时写入 inline --insp-w（未拖过则交给 CSS）。
+     响应式断点约定（1280/1080/860，InspectorHost 媒体查询）与 --insp-w 耦合；
+     CSS 变量不能用于 @media 条件，暂以注释约定，不可 token 化。 */
+  --insp-w: 860px;
+
+  /* max-width 快照（跨组件复用 ≥2 次才建 token；Dialog 的 400/720/960 频次 1 留在组件内） */
+  --max-w-surface:   1000px; /* ContentSurface + ScheduleSurface 的 paneInner */
+  --max-w-composer:   880px; /* ConversationComposer + ConversationTimeline */
+  --max-w-dialog-md:  560px; /* Dialog.md + ChatEmptyState 标题区 */
+  --max-w-overlay:    360px; /* ToastHost + ChatEmptyState 提示区 */
+
+  /* z-index 角色刻度（值为现有精确快照，同名不同值不合并；
+     Dialog 的 backdrop/content 用 50/51 区分，Toast 与 backdrop 同为 50） */
+  --z-list-item:      2;   /* ConversationListItem 状态点 */
+  --z-menu-item:      3;   /* ConversationItemMenu 浮层 */
+  --z-decor:          5;   /* ChatSurface ::before 装饰渐变 */
+  --z-drag-handle:    5;   /* DragHandle + InspectorHost .drag（与 --z-decor 同值不同角色） */
+  --z-composer:       6;   /* ConversationComposer 容器（盖在 ::before 渐变之上） */
+  --z-topbar:        20;   /* TopBar */
+  --z-dock-scrim:    24;   /* ApprovalPanel .scrim 抽屉遮罩 */
+  --z-dock:          30;   /* ApprovalPanel .list 抽屉内容 */
+  --z-mode-options:  30;   /* ComposerModeBar .options 弹出（与 --z-dock 同值不同角色） */
+  --z-inspector:     42;   /* InspectorHost .pending 待审徽标 */
+  --z-overlay:       50;   /* Dialog .overlay + ToastHost */
+  --z-dialog:        51;   /* Dialog .content */
+  --z-dropdown:      60;   /* Dropdown .content */
+  --z-tooltip:       70;   /* Tooltip .content */
+
+  /* ============ L2 设计语言（theme 不可覆盖；改版/密度才变） ============ */
+  /* 字体：英文在前、中文兜底（对齐原型 :root）：每种文字都落到为它设计的字体
+     - --font-display / --font-ui：黑体（英文 SF Pro / Segoe UI，中文苹方）
+     - --font-body：宋体正文（英文 Iowan Old Style 衬线，中文宋体/思源宋体）
+     - --font-kai：楷体点缀（引用块 / 空态引导）
+     - --font-mono：等宽（事件名 / 时间 / ID / 代码） */
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Songti SC", "STSong",
+    "Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif;
+  --font-mono:    "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  --font-kai:     "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
+
+  /* 字号：语义型为刻度主干；数值型（--fs-12 等）为原型遗留精确快照 */
+  --fs-display: 19px;
+  --fs-h1:      16px;
+  --fs-h2:      14px;
+  --fs-body:    15px;
+  --fs-meta:    11.5px;
+  --fs-mono:    11px;
+  --fs-xs:      10.5px;
+  /* 精确值快照：Button 尺寸表 / 状态标签等原型遗留字号 */
+  --fs-12:      12px;
+  --fs-13:      13px;
+  --fs-12-5:    12.5px;
+  --fs-13-5:    13.5px;
+
+  /* 字重 */
+  --fw-regular: 400;
+  --fw-medium:  550;
+  --fw-semibold: 650;
+  --fw-bold:    700;
+  --fw-heavy:   800;
+  --fw-750:     750; /* 精确值快照：Button.new-conv-btn */
+
+  /* 间距：4px scale 为刻度主干；px 后缀为原型遗留精确快照（区别于 --space-10=40px） */
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  /* 精确值快照：非刻度间距（hairline/徽标内边距/网格 gap 等原型遗留值） */
+  --space-1-5px: 1.5px;
+  --space-2px: 2px;
+  --space-3px: 3px;
+  --space-5px: 5px;
+  --space-6px: 6px;
+  --space-7px: 7px;
+  --space-9px: 9px;
+  --space-10px: 10px;
+  --space-11px: 11px;
+  --space-13px: 13px;
+  --space-14px: 14px;
+  --space-18px: 18px;
+  --space-22px: 22px;
+  --space-34px: 34px;
+
+  /* 圆角 */
+  --radius-xs:    5px;
+  --radius-sm:    6px;
+  --radius-md:    9px;
+  --radius-lg:    14px;
+  --radius-pill:  999px;
+  --radius-10px:  10px; /* 精确值快照：Button.new-conv-btn */
+
+  /* 品牌渐变（美术资产，非角色色；dark 沿用不改） */
+  --grad-accent: linear-gradient(
+    105deg,
+    var(--color-orange) 0%,
+    var(--color-accent) 48%,
+    var(--color-red) 100%
+  );
+  /* 状态文字渐变（background-clip:text + grad-flow），warn/info 系：
+     原为 ApprovalDock / RuntimeStatusIndicator 两份逐字重复的 oklch 三站渐变 */
+  --grad-warn-text: linear-gradient(
+    105deg,
+    oklch(82% 0.055 85),
+    oklch(59% 0.07 80) 55%,
+    oklch(68% 0.07 75)
+  );
+  --grad-info-text: linear-gradient(
+    105deg,
+    oklch(79% 0.05 230),
+    oklch(54% 0.05 235) 55%,
+    oklch(60% 0.07 260)
+  );
+
+  /* 动画时长 */
+  --duration-fast: 0.15s;
+  --duration-base: 0.22s;
+  --duration-slow: 0.4s;
+
+  /* 缓动 */
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* ============ L3 语义色 + 阴影（theme 唯一可覆盖层） ============ */
+  /* 颜色（OKLCH）：语义色 token 按"两次晋升制"增补（见文件头注释） */
   --color-bg:            oklch(97.9% 0.003 85);
   --color-surface:       oklch(99.8% 0.0015 85);
   --color-surface-2:     oklch(96.2% 0.004 82);
@@ -29,99 +181,29 @@
   --color-info:          oklch(54% 0.05 235);
   --color-info-bg:       oklch(97.2% 0.007 236);
 
+  /* 强调底/渐变底上的前景（恒白，dark 不变）：Button.primary、GenStatus、
+     ProjectSelectionPage、WorkspaceSelectionDialog 渐变底白字 */
+  --color-on-accent: #fff;
+
   /* legacy dark 快照（原 var() fallback 固化，值为当前实际渲染值；dark 落地时清理）。
      这些 hex 不参与 dark 覆盖，仅保证引用不落空。 */
   --color-danger-border: #b3554d;
   --color-bg-elevated:   #1e1e24;
   --color-text:          #ddd;
 
-  /* ============ 渐变 ============ */
-  --grad-accent: linear-gradient(
-    105deg,
-    var(--color-orange) 0%,
-    var(--color-accent) 48%,
-    var(--color-red) 100%
-  );
-
-  /* ============ 字体 ============ */
-  /* 英文在前、中文兜底（对齐原型 :root）：每种文字都落到为它设计的字体
-     - --font-display / --font-ui：黑体（英文 SF Pro / Segoe UI，中文苹方）
-     - --font-body：宋体正文（英文 Iowan Old Style 衬线，中文宋体/思源宋体）
-     - --font-kai：楷体点缀（引用块 / 空态引导）
-     - --font-mono：等宽（事件名 / 时间 / ID / 代码） */
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
-    "Microsoft YaHei", system-ui, sans-serif;
-  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
-    "Microsoft YaHei", system-ui, sans-serif;
-  --font-body: "Iowan Old Style", "Palatino Linotype", "Songti SC", "STSong",
-    "Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif;
-  --font-mono:    "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
-  --font-kai:     "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
-
-  /* ============ 字号 ============ */
-  --fs-display: 19px;
-  --fs-h1:      16px;
-  --fs-h2:      14px;
-  --fs-body:    15px;
-  --fs-meta:    11.5px;
-  --fs-mono:    11px;
-  --fs-xs:      10.5px;
-
-  /* ============ 字重 ============ */
-  --fw-regular: 400;
-  --fw-medium:  550;
-  --fw-semibold: 650;
-  --fw-bold:    700;
-  --fw-heavy:   800;
-
-  /* ============ 间距（4px scale） ============ */
-  --space-0:  0;
-  --space-1:  4px;
-  --space-2:  8px;
-  --space-3:  12px;
-  --space-4:  16px;
-  --space-5:  20px;
-  --space-6:  24px;
-  --space-8:  32px;
-  --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-
-  /* ============ 圆角 ============ */
-  --radius-xs:    5px;
-  --radius-sm:    6px;
-  --radius-md:    9px;
-  --radius-lg:    14px;
-  --radius-pill:  999px;
-
-  /* ============ 阴影 ============ */
+  /* 阴影 */
   --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04),
               0 8px 24px rgba(40, 22, 10, 0.045);
   --shadow-2: 0 2px 4px rgba(40, 22, 10, 0.05),
               0 16px 40px rgba(40, 22, 10, 0.11);
-
-  /* ============ 动画时长 ============ */
-  --duration-fast: 0.15s;
-  --duration-base: 0.22s;
-  --duration-slow: 0.4s;
-
-  /* ============ 缓动 ============ */
-  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
-
-  /* ============ 布局尺寸 ============ */
-  --topbar-height:       56px;
-  --subhead-height:      58px;
-  --sidebar-width:       292px;
-  --sidebar-width-collapsed: 0;
-  /* inspector 宽度：默认 860px。响应式收窄由 InspectorHost.module.css 的
-     媒体查询覆盖；用户拖拽时写入 inline --insp-w（未拖过则交给 CSS）。 */
-  --insp-w: 860px;
+  /* 组件级阴影快照（模块内 rgba 字面量固化） */
+  --shadow-xs:     0 1px 3px rgba(20, 12, 6, 0.08);       /* TopBarViewSwitcher + Tabs */
+  --shadow-drawer: -18px 0 50px rgba(20, 12, 6, 0.18);    /* InspectorHost 抽屉 */
+  --shadow-panel:  12px 0 30px rgba(20, 12, 6, 0.18);     /* ApprovalPanel 面板 */
 }
 
-/* Dark mode 预留（V1 不实现，但结构支持） */
+/* Dark mode 预留（V1 不实现，但结构支持；V2 落地时只覆盖 L3 的
+   --color-* / --shadow-*，纪律测试执法） */
 [data-theme="dark"] {
   /* color tokens 重写为 dark 调色板；V2 实现 */
 }

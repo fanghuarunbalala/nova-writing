@@ -53,7 +53,7 @@
 }
 
 .row.agent {
-  border-left-color: color-mix(in oklab, var(--color-accent) 55%, transparent);
+  border-left-color: var(--color-accent-55);
 }
 
 .row.system {
@@ -96,7 +96,7 @@
   font-size: var(--fs-10);
   font-weight: var(--fw-heavy);
   color: var(--color-danger);
-  background: color-mix(in oklab, var(--color-danger) 12%, transparent);
+  background: var(--color-danger-12-transparent);
   border-radius: var(--radius-pill);
   padding: 1px var(--space-7px);
 }

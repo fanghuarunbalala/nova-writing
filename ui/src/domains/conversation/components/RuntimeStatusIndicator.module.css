@@ -30,7 +30,7 @@
 }
 
 .thinking .icon svg {
-  animation: status-breath 2.2s ease-in-out infinite;
+  animation: var(--anim-status-breath) 2.2s ease-in-out infinite;
   transform-origin: center;
 }
 
@@ -40,7 +40,7 @@
 }
 
 .generating .icon svg {
-  animation: status-bob 1.5s ease-in-out infinite;
+  animation: var(--anim-status-bob) 1.5s ease-in-out infinite;
 }
 
 .ink {
@@ -51,7 +51,7 @@
   height: 5px;
   border-radius: 50%;
   background: currentColor;
-  animation: status-drop 1.2s ease-in infinite;
+  animation: var(--anim-status-drop) 1.2s ease-in infinite;
   opacity: 0;
 }
 
@@ -61,7 +61,7 @@
 }
 
 .waiting .icon svg {
-  animation: status-sway 2.8s ease-in-out infinite;
+  animation: var(--anim-status-sway) 2.8s ease-in-out infinite;
 }
 
 .label {
@@ -73,7 +73,7 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: grad-flow 4.5s ease-in-out infinite;
+  animation: var(--anim-grad-flow) 4.5s ease-in-out infinite;
   opacity: 0.92;
   /* 浅色下划线：border-bottom 最干净（text-decoration 会跟随透明文字不好控色）。 */
   border-bottom: 1px solid transparent;
@@ -93,7 +93,7 @@
 
 .waiting .label {
   background-image: var(--grad-warn-text);
-  border-bottom-color: color-mix(in oklab, var(--color-warn) 40%, transparent);
+  border-bottom-color: var(--color-warn-40);
 }
 
 .seconds {
@@ -103,23 +103,6 @@
   white-space: nowrap;
 }
 
-@keyframes status-breath {
-  0%, 100% { opacity: 0.55; transform: scale(0.94); }
-  50% { opacity: 1; transform: scale(1.04); }
-}
 
-@keyframes status-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
-}
 
-@keyframes status-drop {
-  0% { transform: translateY(0); opacity: 0; }
-  20% { opacity: 1; }
-  100% { transform: translateY(9px); opacity: 0; }
-}
 
-@keyframes status-sway {
-  0%, 100% { transform: rotate(-7deg); }
-  50% { transform: rotate(7deg); }
-}

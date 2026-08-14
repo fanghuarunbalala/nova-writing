@@ -42,7 +42,7 @@
 
 .navItem[data-active="true"] {
   border-left-color: var(--color-accent);
-  background: color-mix(in oklab, var(--color-accent) 8%, var(--color-surface));
+  background: var(--color-accent-8-surface);
   color: var(--color-accent-ink);
   font-weight: var(--fw-heavy);
 }

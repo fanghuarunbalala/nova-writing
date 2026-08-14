@@ -18,7 +18,7 @@
 
 .handle:hover::before,
 .dragging::before {
-  background: color-mix(in oklab, var(--color-accent) 45%, transparent);
+  background: var(--color-accent-45);
 }
 
 .horizontal {

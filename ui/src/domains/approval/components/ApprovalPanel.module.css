@@ -71,7 +71,7 @@
   font-size: var(--fs-10);
   font-weight: var(--fw-heavy);
   color: var(--color-accent-ink);
-  background: color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+  background: var(--color-accent-11);
   padding: 1px var(--space-7px);
   border-radius: var(--radius-pill);
 }
@@ -132,7 +132,7 @@
 }
 
 .agJump:hover {
-  background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  background: var(--color-accent-10);
 }
 
 .row {
@@ -154,7 +154,7 @@
 
 .row.active {
   border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-border));
-  background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  background: var(--color-accent-8-transparent);
 }
 
 .title {
@@ -227,14 +227,14 @@
 
 .opEdit {
   color: var(--color-danger);
-  background: color-mix(in oklab, var(--color-danger) 12%, var(--color-surface));
-  border: 1px solid color-mix(in oklab, var(--color-danger) 32%, transparent);
+  background: var(--color-danger-12-surface);
+  border: 1px solid var(--color-danger-32);
 }
 
 .opDel {
   color: var(--color-danger);
-  background: color-mix(in oklab, var(--color-danger) 12%, var(--color-surface));
-  border: 1px solid color-mix(in oklab, var(--color-danger) 32%, transparent);
+  background: var(--color-danger-12-surface);
+  border: 1px solid var(--color-danger-32);
 }
 
 .detail {
@@ -340,12 +340,12 @@
 }
 
 .bandEdit {
-  background: color-mix(in oklab, var(--color-danger) 18%, var(--color-surface));
+  background: var(--color-danger-18);
   border-left-color: var(--color-danger);
 }
 
 .bandDel {
-  background: color-mix(in oklab, var(--color-danger) 18%, var(--color-surface));
+  background: var(--color-danger-18);
   border-left-color: var(--color-danger);
 }
 

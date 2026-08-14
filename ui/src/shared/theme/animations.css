@@ -1,6 +1,15 @@
 /**
- * 共享动画 keyframes 与 utility class。
- * 组件内动画优先复用这里；时长/缓动一律走 design tokens。
+ * 共享动画：全仓唯一允许定义 @keyframes 的文件（纪律测试规则 c 执法）。
+ *
+ * 集中策略：
+ * - 模块 css 不得定义本地 @keyframes（CSS Modules 会对模块内 animation 引用
+ *   无条件 hash 重命名，本地/全局声明均无法被引用；且 hash 名无对应定义，
+ *   动画静默失效——grad-flow 曾因此从未运行）。
+ * - 模块 css 经动画名 token 间接引用（animation 属性引用 --anim-*，
+ *   定义于 tokens.css L2），绕过重命名。
+ * - 同名且帧体相同的关键帧合并一份（conv-spin / toast-in / status-sway /
+ *   nodePulse 均为多文件逐字重复后合并）；近似不同（view-in 家族）各自保留。
+ * - 动画参数（时长/缓动/iteration）留在组件侧，集中不改变参数。
  */
 @keyframes grad-flow {
   0%, 100% { background-position: 0% 50%; }
@@ -26,7 +35,88 @@
   to   { opacity: 1; transform: none; }
 }
 
-/* 通用动画 utility class */
+/* ============ 自模块集中上移的关键帧（原本地定义） ============ */
+
+@keyframes dialog-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: translate(-50%, -48%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes tooltip-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes nodePulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@keyframes status-sway {
+  0%, 100% { transform: rotate(-7deg); }
+  50% { transform: rotate(7deg); }
+}
+
+@keyframes status-breath {
+  0%, 100% { opacity: 0.55; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+@keyframes status-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes status-drop {
+  0% { transform: translateY(0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(9px); opacity: 0; }
+}
+
+@keyframes conv-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes failed-shake {
+  0% { transform: translateX(0); }
+  20% { transform: translateX(-2px); }
+  40% { transform: translateX(2px); }
+  60% { transform: translateX(-1px); }
+  80% { transform: translateX(1px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes block-flash {
+  0%, 100% {
+    background: transparent;
+  }
+  25% {
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  }
+}
+
+/* 通用动画 utility class（全局类；TSX 可直接挂 class 使用） */
 .anim-grad-flow { animation: grad-flow 7s ease-in-out infinite; }
 .anim-view-in   { animation: view-in var(--duration-base) var(--ease-out); }
 .anim-msg-enter { animation: msg-enter var(--duration-base) var(--ease-out); }

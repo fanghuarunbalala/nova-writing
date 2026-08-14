@@ -23,8 +23,8 @@
   height: 34px;
   flex: none;
   border-radius: var(--radius-10px);
-  background: color-mix(in oklab, var(--color-accent) 12%, var(--color-surface-2));
-  border: 1px solid color-mix(in oklab, var(--color-accent) 18%, var(--color-border-strong));
+  background: var(--color-accent-12);
+  border: 1px solid var(--color-accent-18);
   color: var(--color-accent-ink);
   font-weight: var(--fw-heavy);
   font-size: var(--fs-13);

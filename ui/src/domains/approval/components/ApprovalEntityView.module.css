@@ -55,12 +55,12 @@
 .dl.add .g { color: var(--color-success); }
 .dl.add .txt { color: var(--color-fg); }
 
-.dl.del { background: color-mix(in oklab, var(--color-danger) 8%, var(--color-surface)); }
+.dl.del { background: var(--color-danger-8); }
 .dl.del .g { color: var(--color-danger); }
 .dl.del .txt {
   color: var(--color-muted);
   text-decoration: line-through;
-  text-decoration-color: color-mix(in oklab, var(--color-danger) 45%, transparent);
+  text-decoration-color: var(--color-danger-45);
 }
 
 .dl.old { background: color-mix(in oklab, var(--color-danger) 9%, var(--color-surface)); }
@@ -68,7 +68,7 @@
 .dl.old .txt {
   color: var(--color-muted);
   text-decoration: line-through;
-  text-decoration-color: color-mix(in oklab, var(--color-danger) 45%, transparent);
+  text-decoration-color: var(--color-danger-45);
 }
 
 .dl.new { background: color-mix(in oklab, var(--color-success) 10%, var(--color-surface)); }
@@ -113,7 +113,7 @@
   font-size: var(--fs-9);
   font-weight: var(--fw-bold);
   color: var(--color-accent-ink);
-  background: color-mix(in oklab, var(--color-accent) 8%, var(--color-surface));
+  background: var(--color-accent-8-surface);
   border: 1px solid color-mix(in oklab, var(--color-accent) 22%, var(--color-border));
   border-radius: var(--radius-4px);
   padding: 0 var(--space-1);
@@ -174,7 +174,7 @@
 .node.del .nm {
   font-weight: var(--fw-heavy);
   text-decoration: line-through;
-  text-decoration-color: color-mix(in oklab, var(--color-danger) 45%, transparent);
+  text-decoration-color: var(--color-danger-45);
 }
 
 /* ---------- 写作方案（leaf） ---------- */

@@ -108,7 +108,7 @@
   width: 5px;
   height: 3px;
   border-radius: var(--radius-2px);
-  background: color-mix(in oklab, var(--color-border-strong) 72%, transparent);
+  background: var(--color-border-strong-72);
 }
 
 .planM[data-value="1"] .seg:nth-child(-n + 1) {
@@ -140,7 +140,7 @@
 }
 
 .real-in-progress {
-  border: 1.5px solid color-mix(in oklab, var(--color-accent) 55%, transparent);
+  border: 1.5px solid var(--color-accent-55);
 }
 
 .real-in-progress::after {
@@ -149,7 +149,7 @@
   inset: var(--space-2px);
   border-radius: 50%;
   background: var(--color-accent);
-  animation: nodePulse 1.8s ease-in-out infinite;
+  animation: var(--anim-node-pulse) 1.8s ease-in-out infinite;
 }
 
 .real-completed {
@@ -192,10 +192,6 @@
   border-radius: 1px;
 }
 
-@keyframes nodePulse {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 1; }
-}
 
 .uProg {
   font-family: var(--font-mono);

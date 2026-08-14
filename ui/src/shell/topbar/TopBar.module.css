@@ -8,7 +8,7 @@
   height: var(--topbar-height);
   flex: none;
   padding: 0 var(--space-4);
-  background: color-mix(in oklab, var(--color-surface) 82%, transparent);
+  background: var(--color-chrome-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--color-border);
@@ -33,7 +33,7 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: grad-flow 7s ease-in-out infinite;
+  animation: var(--anim-grad-flow) 7s ease-in-out infinite;
 }
 
 .wsName {

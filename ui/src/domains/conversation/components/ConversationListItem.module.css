@@ -19,7 +19,7 @@
 }
 
 .active {
-  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+  background: var(--color-accent-9);
 }
 
 .main {
@@ -57,7 +57,7 @@
   font-weight: var(--fw-bold);
   letter-spacing: 0.04em;
   color: var(--color-accent-ink);
-  background: color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+  background: var(--color-accent-11);
   vertical-align: 1px;
 }
 
@@ -89,7 +89,7 @@
   border-radius: 50%;
   border: 1.5px solid var(--color-border-strong);
   border-top-color: color-mix(in oklab, var(--color-accent) 62%, var(--color-border-strong));
-  animation: conv-spin 0.9s linear infinite;
+  animation: var(--anim-conv-spin) 0.9s linear infinite;
   will-change: transform;
 }
 
@@ -117,6 +117,3 @@
   animation: none;
 }
 
-@keyframes conv-spin {
-  to { transform: rotate(360deg); }
-}

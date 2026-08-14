@@ -30,7 +30,7 @@
   margin-top: var(--space-7px);
   padding: var(--space-10px) var(--space-15px);
   border-radius: var(--radius-16px);
-  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+  background: var(--color-accent-9);
   color: var(--color-accent-ink);
   /* 用户要求正文用黑体（--font-ui），配合 medium 字重提升可读性。 */
   font-family: var(--font-ui);
@@ -90,7 +90,7 @@
 
 .action:hover,
 .action:focus-visible {
-  background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  background: var(--color-accent-10);
   color: var(--color-accent-ink);
   outline: none;
 }

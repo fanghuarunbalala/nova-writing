@@ -41,7 +41,7 @@
 .listToggle[aria-expanded="true"] {
   color: var(--color-accent-ink);
   border-color: color-mix(in oklab, var(--color-accent) 34%, var(--color-border));
-  background: color-mix(in oklab, var(--color-accent) 8%, var(--color-surface));
+  background: var(--color-accent-8-surface);
 }
 
 .ltCnt {

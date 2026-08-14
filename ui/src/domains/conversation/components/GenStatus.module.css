@@ -30,7 +30,7 @@
 .failed .icon svg {
   width: 15px;
   height: 15px;
-  animation: failed-shake 0.45s ease-out both;
+  animation: var(--anim-failed-shake) 0.45s ease-out both;
 }
 
 .failed .main {
@@ -63,7 +63,7 @@
   display: inline-grid;
   place-items: center;
   color: var(--color-danger);
-  background: color-mix(in oklab, var(--color-danger) 12%, transparent);
+  background: var(--color-danger-12-transparent);
   cursor: pointer;
   transition:
     background var(--duration-fast) var(--ease-out),
@@ -85,11 +85,3 @@
 }
 
 /* 失败出现时的一次性微抖动（抓注意，然后静止）。 */
-@keyframes failed-shake {
-  0% { transform: translateX(0); }
-  20% { transform: translateX(-2px); }
-  40% { transform: translateX(2px); }
-  60% { transform: translateX(-1px); }
-  80% { transform: translateX(1px); }
-  100% { transform: translateX(0); }
-}

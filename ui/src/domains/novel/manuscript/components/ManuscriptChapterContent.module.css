@@ -4,17 +4,9 @@
  * 独立滚动（flex:1 + overflow-y:auto）；章头 h2 16px/heavy + draft-tag；
  * 正文块列表复用 ManuscriptBlock；草稿底部「前往审批 →」入口。
  */
-@keyframes block-flash {
-  0%, 100% {
-    background: transparent;
-  }
-  25% {
-    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
-  }
-}
 
 .flash {
-  animation: block-flash 1.8s ease;
+  animation: var(--anim-block-flash) 1.8s ease;
 }
 
 .content {

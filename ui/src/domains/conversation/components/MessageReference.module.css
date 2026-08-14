@@ -10,7 +10,7 @@
   font: inherit;
   color: inherit;
   text-decoration: underline;
-  text-decoration-color: color-mix(in oklab, var(--color-accent) 55%, transparent);
+  text-decoration-color: var(--color-accent-55);
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
   border-radius: var(--radius-2px);
@@ -21,7 +21,7 @@
 }
 
 .chip:hover {
-  background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  background: var(--color-accent-10);
   text-decoration-color: var(--color-accent-ink);
 }
 

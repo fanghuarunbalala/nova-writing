@@ -24,12 +24,12 @@
 
 .toneEdit {
   border-left: var(--space-3px) solid var(--color-danger);
-  background: color-mix(in oklab, var(--color-danger) 8%, var(--color-surface));
+  background: var(--color-danger-8);
 }
 
 .toneDel {
   border-left: var(--space-3px) solid var(--color-danger);
-  background: color-mix(in oklab, var(--color-danger) 8%, var(--color-surface));
+  background: var(--color-danger-8);
 }
 
 .paramGutter {

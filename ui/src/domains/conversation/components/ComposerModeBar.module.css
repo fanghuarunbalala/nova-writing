@@ -32,7 +32,7 @@
 }
 
 .trigger:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--color-accent) 45%, transparent);
+  outline: 2px solid var(--color-accent-45);
   outline-offset: var(--space-2px);
   border-radius: var(--radius-sm);
 }
@@ -146,7 +146,7 @@
 
 /* 选中项按模式染色（原型 .mode-opt.sel） */
 .option.selected {
-  background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  background: var(--color-accent-8-transparent);
 }
 
 .option.selected.opt-compose {

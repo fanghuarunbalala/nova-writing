@@ -35,5 +35,5 @@
 
 .reference:hover {
   border-color: var(--color-border-strong);
-  background: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+  background: var(--color-accent-9);
 }

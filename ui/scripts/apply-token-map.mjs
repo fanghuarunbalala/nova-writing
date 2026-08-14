@@ -89,6 +89,32 @@ const COLOR_MAP = [
   ["color: #e5484d", "color: var(--color-design-error)"],
 ];
 
+/** 语义混合 token（两次晋升制：完全相同 (基色,%,target) 组合 ≥2 次；精确字符串替换） */
+const COLOR_MIX_MAP = [
+  ["color-mix(in oklab, var(--color-accent) 9%, var(--color-surface))", "var(--color-accent-9)"],
+  ["color-mix(in oklab, var(--color-accent) 55%, transparent)", "var(--color-accent-55)"],
+  ["color-mix(in oklab, var(--color-accent) 18%, var(--color-border-strong))", "var(--color-accent-18)"],
+  ["color-mix(in oklab, var(--color-accent) 12%, var(--color-surface-2))", "var(--color-accent-12)"],
+  ["color-mix(in oklab, var(--color-accent) 8%, var(--color-surface))", "var(--color-accent-8-surface)"],
+  ["color-mix(in oklab, var(--color-accent) 8%, transparent)", "var(--color-accent-8-transparent)"],
+  ["color-mix(in oklab, var(--color-accent) 45%, transparent)", "var(--color-accent-45)"],
+  ["color-mix(in oklab, var(--color-accent) 10%, transparent)", "var(--color-accent-10)"],
+  ["color-mix(in oklab, var(--color-accent) 11%, var(--color-surface))", "var(--color-accent-11)"],
+  ["color-mix(in oklab, var(--color-accent) 6%, transparent)", "var(--color-accent-6)"],
+  ["color-mix(in oklab, var(--color-accent) 88%, var(--color-fg))", "var(--color-accent-88)"],
+  ["color-mix(in oklab, var(--color-warn) 40%, transparent)", "var(--color-warn-40)"],
+  ["color-mix(in oklab, var(--color-danger) 8%, var(--color-surface))", "var(--color-danger-8)"],
+  ["color-mix(in oklab, var(--color-danger) 45%, transparent)", "var(--color-danger-45)"],
+  ["color-mix(in oklab, var(--color-danger) 32%, transparent)", "var(--color-danger-32)"],
+  ["color-mix(in oklab, var(--color-danger) 18%, var(--color-surface))", "var(--color-danger-18)"],
+  ["color-mix(in oklab, var(--color-danger) 12%, var(--color-surface))", "var(--color-danger-12-surface)"],
+  ["color-mix(in oklab, var(--color-danger) 12%, transparent)", "var(--color-danger-12-transparent)"],
+  ["color-mix(in oklab, var(--color-danger) 10%, transparent)", "var(--color-danger-10)"],
+  ["color-mix(in oklab, var(--color-border-strong) 72%, transparent)", "var(--color-border-strong-72)"],
+  ["color-mix(in oklab, var(--color-surface) 82%, transparent)", "var(--color-chrome-bg)"],
+  ["color-mix(in oklab, var(--color-accent) 50%, transparent)", "var(--color-focus-ring-strong)"],
+];
+
 /* ---------- 工具 ---------- */
 
 async function collectCss(dir) {
@@ -122,6 +148,66 @@ function replacePx(head, map) {
   });
 }
 
+/** animation 引用 → var(--anim-*)（CSS Modules 会对模块内 animation 引用
+ *  无条件 hash 重命名，直接写名会指向不存在的 hash 名） */
+const ANIM_MAP = [
+  ["animation: status-sway ", "animation: var(--anim-status-sway) "],
+  ["animation: grad-flow ", "animation: var(--anim-grad-flow) "],
+  ["animation: conv-spin ", "animation: var(--anim-conv-spin) "],
+  ["animation: conv-in ", "animation: var(--anim-conv-in) "],
+  ["animation: failed-shake ", "animation: var(--anim-failed-shake) "],
+  ["animation: status-breath ", "animation: var(--anim-status-breath) "],
+  ["animation: status-bob ", "animation: var(--anim-status-bob) "],
+  ["animation: status-drop ", "animation: var(--anim-status-drop) "],
+  ["animation: block-flash ", "animation: var(--anim-block-flash) "],
+  ["animation: nodePulse ", "animation: var(--anim-node-pulse) "],
+  ["animation: dialog-fade ", "animation: var(--anim-dialog-fade) "],
+  ["animation: dialog-in ", "animation: var(--anim-dialog-in) "],
+  ["animation: dropdown-in ", "animation: var(--anim-dropdown-in) "],
+  ["animation: spinner-rotate ", "animation: var(--anim-spinner-rotate) "],
+  ["animation: tooltip-in ", "animation: var(--anim-tooltip-in) "],
+  ["animation: toast-in ", "animation: var(--anim-toast-in) "],
+];
+
+/** 移除模块 css 内的 @keyframes 块（含嵌套花括号的帧体；规则 c 执法集中制） */
+function stripKeyframes(content) {
+  let out = "";
+  let i = 0;
+  while (i < content.length) {
+    const idx = content.indexOf("@keyframes", i);
+    if (idx === -1) {
+      out += content.slice(i);
+      break;
+    }
+    // 仅当 "@keyframes" 位于行首空白之后（排除注释内提及）
+    const lineStart = content.lastIndexOf("\n", idx) + 1;
+    let lineEnd = content.indexOf("\n", idx);
+    if (lineEnd === -1) lineEnd = content.length;
+    if (/^\s*@keyframes\s+[\w-]+\s*\{/.test(content.slice(lineStart, lineEnd))) {
+      out += content.slice(i, idx);
+      const brace = content.indexOf("{", idx);
+      let depth = 0;
+      let k = brace;
+      for (; k < content.length; k++) {
+        if (content[k] === "{") depth++;
+        else if (content[k] === "}") {
+          depth--;
+          if (depth === 0) break;
+        }
+      }
+      let end = k + 1;
+      // 吃掉块尾到行尾（含换行）
+      while (end < content.length && content[end] !== "\n") end++;
+      if (content[end] === "\n") end++;
+      i = end;
+    } else {
+      out += content.slice(i, idx + "@keyframes".length);
+      i = idx + "@keyframes".length;
+    }
+  }
+  return out;
+}
+
 /** 单行变换：返回 { head, changed }（注释尾保留不动） */
 function transformLine(head, fileRel, tokens) {
   let out = head;
@@ -136,6 +222,20 @@ function transformLine(head, fileRel, tokens) {
   }
   // 2) 前景色字面量
   for (const [from, to] of COLOR_MAP) {
+    if (out.includes(from)) {
+      out = out.replace(from, to);
+      changed = true;
+    }
+  }
+  // 2b) 语义混合 token（两次晋升制）
+  for (const [from, to] of COLOR_MIX_MAP) {
+    if (out.includes(from)) {
+      out = out.replace(from, to);
+      changed = true;
+    }
+  }
+  // 2c) animation 引用 → var(--anim-*)（避免 CSS Modules hash 重命名）
+  for (const [from, to] of ANIM_MAP) {
     if (out.includes(from)) {
       out = out.replace(from, to);
       changed = true;
@@ -187,7 +287,12 @@ const report = [];
 
 for (const file of files) {
   const fileRel = relative(srcDir, file).replaceAll("\\", "/");
-  const content = await readFile(file, "utf8");
+  const raw = await readFile(file, "utf8");
+  const content = stripKeyframes(raw);
+  if (content !== raw) {
+    totalChanged += 1;
+    report.push(`${fileRel}: 移除本地 @keyframes 块（集中到 shared/theme/animations.css）`);
+  }
   const crlf = content.includes("\r\n"); // 工作区为 CRLF（core.autocrlf），写入时保留原行尾
   const lines = content.split(/\r?\n/);
   const next = lines.map((line) => {

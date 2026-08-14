@@ -74,7 +74,7 @@
 .hourglass svg {
   width: 14px;
   height: 14px;
-  animation: status-sway 2.8s ease-in-out infinite;
+  animation: var(--anim-status-sway) 2.8s ease-in-out infinite;
   transform-origin: center;
 }
 
@@ -88,8 +88,8 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: grad-flow 4.5s ease-in-out infinite;
-  border-bottom: 1px solid color-mix(in oklab, var(--color-warn) 40%, transparent);
+  animation: var(--anim-grad-flow) 4.5s ease-in-out infinite;
+  border-bottom: 1px solid var(--color-warn-40);
   padding-bottom: 1px;
 }
 
@@ -118,7 +118,7 @@
   width: 15px;
   height: 15px;
   color: var(--color-warn);
-  filter: drop-shadow(0 1px 2px color-mix(in oklab, var(--color-warn) 40%, transparent));
+  filter: drop-shadow(0 1px 2px var(--color-warn-40));
   transition: transform 0.14s;
 }
 
@@ -150,7 +150,7 @@
   width: 17px;
   height: 17px;
   color: var(--color-warn);
-  filter: drop-shadow(0 1px 2px color-mix(in oklab, var(--color-warn) 40%, transparent));
+  filter: drop-shadow(0 1px 2px var(--color-warn-40));
   transition: transform 0.14s;
 }
 
@@ -158,7 +158,3 @@
   transform: translateY(-1px);
 }
 
-@keyframes status-sway {
-  0%, 100% { transform: rotate(-7deg); }
-  50% { transform: rotate(7deg); }
-}

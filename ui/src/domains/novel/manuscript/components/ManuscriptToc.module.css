@@ -44,7 +44,7 @@
 
 .active,
 .active:hover {
-  background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  background: var(--color-accent-10);
   color: var(--color-accent);
   font-weight: var(--fw-semibold);
 }

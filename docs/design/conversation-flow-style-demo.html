@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>对话流样式改进 Demo（现状 vs 提案）</title>
+<style>
+  /* Demo 专用：token 值对齐 ui/src/shared/theme/tokens.css（demo 内联，不受纪律约束） */
+  :root {
+    --color-bg: oklch(97.9% 0.003 85);
+    --color-surface: oklch(99.8% 0.0015 85);
+    --color-surface-2: oklch(96.2% 0.004 82);
+    --color-fg: oklch(30% 0.009 46);
+    --color-muted: oklch(52% 0.009 54);
+    --color-faint: oklch(60% 0.009 58);
+    --color-border: oklch(92.4% 0.003 82);
+    --color-border-strong: oklch(86.4% 0.006 72);
+    --color-orange: oklch(73% 0.068 60);
+    --color-accent: oklch(55% 0.072 42);
+    --color-accent-ink: oklch(47% 0.062 41);
+    --color-success: oklch(52% 0.07 156);
+    --color-warn: oklch(59% 0.07 80);
+    --color-accent-6: color-mix(in oklab, var(--color-accent) 6%, transparent);
+    --color-accent-9: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+    --color-accent-12: color-mix(in oklab, var(--color-accent) 12%, var(--color-surface-2));
+    --color-accent-18: color-mix(in oklab, var(--color-accent) 18%, var(--color-border-strong));
+    --color-accent-45: color-mix(in oklab, var(--color-accent) 45%, transparent);
+    --color-warn-16: color-mix(in oklab, var(--color-warn) 16%, transparent);
+
+    /* 现状字体栈（tokens.css 现值） */
+    --font-ui-now: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+      "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
+      "Microsoft YaHei", system-ui, sans-serif;
+    --font-body-now: "Iowan Old Style", "Palatino Linotype", "Songti SC", "STSong",
+      "Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif;
+    --font-kai-now: "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
+
+    /* 提案字体栈：增补 Windows 清晰黑体（YaHei UI / HarmonyOS / MiSans）与思源宋体前置 */
+    --font-ui-new: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+      "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Noto Sans SC",
+      "Source Han Sans SC", "Microsoft YaHei UI", "Microsoft YaHei",
+      system-ui, sans-serif;
+    --font-body-new: "Iowan Old Style", "Palatino Linotype",
+      "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong",
+      "SimSun", Georgia, serif;
+    --font-kai-new: "Kaiti SC", "STKaiti", "KaiTi", "LXGW WenKai", "Noto Serif SC", serif;
+
+    --radius-8px: 8px; --radius-10px: 10px; --radius-14px: 14px; --radius-16px: 16px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-6px: 6px;
+    --space-7px: 7px; --space-9px: 9px; --space-10px: 10px; --space-13px: 13px;
+    --space-14px: 14px; --space-15px: 15px; --space-18px: 18px; --space-22px: 22px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-ui-new);
+    padding: 24px 16px 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+  .page-head { text-align: center; max-width: 880px; }
+  .page-head h1 { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+  .page-head p { font-size: 12.5px; color: var(--color-muted); line-height: 1.7; }
+
+  .cols { display: flex; gap: 16px; width: 100%; max-width: 1180px; justify-content: center; flex-wrap: wrap; }
+  .col { flex: 1 1 520px; min-width: 0; max-width: 600px; display: flex; flex-direction: column; }
+  .col-tag {
+    align-self: center; font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
+    color: var(--color-faint); text-transform: uppercase; margin-bottom: 8px;
+    border: 1px solid var(--color-border); border-radius: 999px; padding: 2px 14px;
+    background: var(--color-surface);
+  }
+
+  .panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-14px);
+    padding: 18px 18px 8px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+
+  /* ============ 轮次分隔 ============ */
+  .turnSep {
+    display: flex; align-items: center; gap: 12px; margin: 12px 0 4px;
+    color: var(--color-faint); font-size: 10px; font-weight: 600;
+    letter-spacing: 0.16em; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .turnSep::before, .turnSep::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
+
+  /* ============ 用户消息 ============ */
+  .msg-user { display: flex; flex-direction: row-reverse; padding: 18px 0 6px; }
+  .user-bubble-now, .user-bubble-new {
+    display: inline-block; padding: 10px 15px; border-radius: var(--radius-16px);
+    max-width: 100%; text-align: left; line-height: 1.75;
+  }
+  .user-bubble-now {
+    background: var(--color-accent-9); color: var(--color-accent-ink);
+    font-family: var(--font-ui-now); font-size: 15px; font-weight: 550;
+  }
+  .user-bubble-new {
+    background: var(--color-accent-12); color: var(--color-accent-ink);
+    border: 1px solid var(--color-accent-18);
+    font-family: var(--font-ui-new); font-size: 15.5px; font-weight: 550;
+    letter-spacing: 0.01em;
+  }
+
+  /* ============ 助手消息 ============ */
+  .msg-assistant { padding: 18px 0 6px; display: flex; flex-direction: column; gap: 8px; }
+  .head { display: flex; align-items: baseline; gap: 8px; }
+  .state { font-size: 10.5px; font-weight: 650; color: var(--color-success); }
+  .state-new { font-size: 10.5px; font-weight: 600; color: var(--color-faint); }
+  .state-new b { color: var(--color-success); font-weight: 650; }
+
+  .comment-now {
+    font-family: var(--font-ui-now); font-size: 15px; font-weight: 550; line-height: 1.75;
+    text-wrap: pretty; margin-top: 7px;
+  }
+  .comment-new {
+    font-family: var(--font-ui-new); font-size: 15.5px; font-weight: 550; line-height: 1.8;
+    letter-spacing: 0.01em; text-wrap: pretty; margin-top: 7px; color: var(--color-fg);
+  }
+
+  /* ============ 正文草稿面板（提案新增） ============ */
+  .draft {
+    margin-top: 4px;
+    border-left: 3px solid var(--color-accent-45);
+    background:
+      linear-gradient(to bottom, color-mix(in oklab, var(--color-orange) 3%, transparent), transparent 60%),
+      var(--color-accent-6);
+    border-radius: 0 var(--radius-10px) var(--radius-10px) 0;
+    padding: 14px 18px 14px 18px;
+  }
+  .draft-kicker {
+    display: flex; align-items: baseline; gap: 8px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--color-accent-ink); margin-bottom: 10px;
+  }
+  .draft-kicker .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-accent); }
+  .draft-text {
+    font-family: var(--font-body-new);
+    font-size: 16.5px; font-weight: 400; line-height: 1.95;
+    letter-spacing: 0.015em; text-align: justify;
+  }
+  .draft-text p { margin: 0 0 0.9em; text-indent: 2em; }
+  .draft-text p:last-child { margin-bottom: 0; }
+  .draft-cursor {
+    display: inline-block; width: 2px; height: 1.1em; margin-left: 2px;
+    background: var(--color-accent); vertical-align: -0.15em;
+    animation: blink 1s steps(2, start) infinite;
+  }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+  /* 现状：正文内联在注释文字里，与聊天无区分 */
+  .inline-now {
+    font-family: var(--font-ui-now); font-size: 15px; font-weight: 550; line-height: 1.75;
+    color: var(--color-fg); margin-top: 2px;
+  }
+
+  /* ============ 引用块（楷体） ============ */
+  .quote {
+    margin: 4px 0; padding: 9px 12px; border-left: 2px solid var(--color-accent-45);
+    background: var(--color-accent-6); border-radius: 0 var(--radius-10px) var(--radius-10px) 0;
+    color: var(--color-muted); font-size: 13.5px; line-height: 1.75;
+  }
+  .quote-now { font-family: var(--font-kai-now); }
+  .quote-new { font-family: var(--font-kai-new); }
+  .quote .attribution { display: block; margin-top: 4px; font-size: 10.5px; color: var(--color-faint); font-style: normal; }
+
+  /* ============ 元信息（工具/事件） ============ */
+  .toolstrip-now {
+    margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px;
+    border: 1px solid var(--color-border); border-radius: 999px;
+    background: var(--color-surface-2); font-size: 11px; color: var(--color-fg);
+    font-family: var(--font-ui-now);
+  }
+  .chip b { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 10px; color: var(--color-accent-ink); }
+  .evtflow-now {
+    margin-top: 8px; border: 1px solid var(--color-border); border-radius: var(--radius-10px);
+    background: var(--color-surface); padding: 8px 12px; font-size: 12px;
+    color: var(--color-muted); font-family: var(--font-ui-now);
+  }
+  .evtflow-now span { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; color: var(--color-faint); }
+
+  /* 提案：保持展开但弱化——去边框、降字号、faint 色 */
+  .meta-new-expanded {
+    margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .meta-new-expanded .meta-title { font-size: 10px; color: var(--color-faint); letter-spacing: 0.08em; }
+  .meta-new-expanded .chip-weak {
+    display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+    border-radius: 999px; background: var(--color-surface-2);
+    font-size: 10.5px; color: var(--color-muted);
+    font-family: var(--font-ui-now);
+  }
+  .meta-new-expanded .chip-weak b { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 9.5px; color: var(--color-faint); font-weight: 600; }
+  .meta-new-expanded .meta-evt { font-size: 10px; color: var(--color-faint); margin-left: 2px; }
+  .meta-new-expanded .badge { color: var(--color-warn); }
+
+  .note { font-size: 11px; color: var(--color-faint); line-height: 1.7; padding: 10px 2px 4px; border-top: 1px dashed var(--color-border); margin-top: 10px; }
+  .note code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 4px; padding: 0 4px; }
+
+  /* ============ assistant 字体方案对比 ============ */
+  .variant-cols { display: flex; gap: 16px; width: 100%; max-width: 1180px; justify-content: center; flex-wrap: wrap; }
+  .variant-col { flex: 1 1 300px; min-width: 0; max-width: 384px; display: flex; flex-direction: column; }
+  .variant-panel {
+    background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: var(--radius-14px); padding: 16px 16px 12px;
+    display: flex; flex-direction: column; gap: 10px; flex: 1;
+  }
+  .variant-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .variant-name { font-size: 12.5px; font-weight: 700; color: var(--color-fg); }
+  .variant-spec { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; color: var(--color-faint); }
+
+  .variant-body { text-wrap: pretty; }
+  .variant-body strong { font-weight: 700; color: var(--color-fg); }
+
+  .va-now {
+    font-family: var(--font-ui-now); font-size: 15px; font-weight: 550; line-height: 1.75;
+  }
+  .va-now strong { font-weight: 800; }
+  .va-a {
+    font-family: var(--font-ui-new); font-size: 15.5px; font-weight: 400; line-height: 1.8; letter-spacing: 0.01em;
+  }
+  .va-b {
+    font-family: var(--font-body-new); font-size: 15.5px; font-weight: 400; line-height: 1.85; letter-spacing: 0.01em;
+  }
+
+  .variant-draft {
+    border-left: 3px solid var(--color-accent-45);
+    background: var(--color-accent-6);
+    border-radius: 0 var(--radius-8px) var(--radius-8px) 0;
+    padding: 10px 14px;
+    font-family: var(--font-body-new);
+    font-size: 14.5px; font-weight: 400; line-height: 1.9;
+    color: var(--color-fg);
+    text-align: justify;
+  }
+  .variant-draft p { text-indent: 2em; margin: 0; }
+
+  .variant-note { font-size: 10.5px; color: var(--color-faint); line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>对话流样式改进 Demo</h1>
+  <p>左：现状（正文与聊天注释混排，全 15px 黑体，元信息平铺展开）　右：提案（正文草稿独立面板 + 衬线排版，三级信息层次，元信息默认折叠）</p>
+</div>
+
+<div class="cols">
+
+  <!-- ================= 现状 ================= -->
+  <div class="col">
+    <div class="col-tag">现状</div>
+    <div class="panel">
+
+      <div class="turnSep">第 2 轮</div>
+
+      <div class="msg-user">
+        <div class="user-bubble-now">请写第三章开头，主角在旧宅地下室发现密室。</div>
+      </div>
+
+      <div class="msg-assistant">
+        <div class="head"><span class="state">已完成</span></div>
+        <div class="comment-now">好的，我先查看了大纲与第三章计划。下面是本章开头，注意密室线索与第二章结尾的伏笔呼应：</div>
+        <div class="inline-now">
+          沈砚站在地下室的台阶上，手里的手电筒光柱晃了晃。他听见风从墙缝里钻进来的声音，像是什么人在远处叹气。
+          他数着自己的脚步。七级台阶。墙面是青灰色的砖，砖缝里生着苔藓。但右手边的墙壁上，有一块砖的颜色比周围的都要浅。
+        </div>
+        <blockquote class="quote quote-now">
+          第二章结尾：他临走时回头看了一眼，总觉得那面墙在看他。
+          <span class="attribution">引文 · 第二章</span>
+        </blockquote>
+        <div class="toolstrip-now">
+          <span class="chip"><b>ParagraphRead</b> ch-2</span>
+          <span class="chip"><b>OutlineRead</b> vol-1</span>
+          <span class="chip"><b>ParagraphWrite</b> ch-3</span>
+        </div>
+        <div class="evtflow-now">runtime 事件流：<span>turn-start · thinking · tool-call ×3 · generating · turn-end</span></div>
+      </div>
+
+      <p class="note">问题：正文与注释同为 15px 黑体、无容器区分；三种字号/颜色并存（15 / 13.5 / 11 / 10.5）但层级感弱；工具芯片与事件流占据视觉焦点。</p>
+    </div>
+  </div>
+
+  <!-- ================= 提案 ================= -->
+  <div class="col">
+    <div class="col-tag">提案</div>
+    <div class="panel">
+
+      <div class="turnSep">第 2 轮</div>
+
+      <div class="msg-user">
+        <div class="user-bubble-new">请写第三章开头，主角在旧宅地下室发现密室。</div>
+      </div>
+
+      <div class="msg-assistant">
+        <div class="head"><span class="state-new"><b>已完成</b> · 12:30</span></div>
+        <div class="comment-new">好的，我先查看了大纲与第三章计划。下面是本章开头，密室线索呼应第二章结尾的伏笔：</div>
+
+        <div class="draft">
+          <div class="draft-kicker"><span class="dot"></span>正文草稿 · 第三章 开头</div>
+          <div class="draft-text">
+            <p>沈砚站在地下室的台阶上，手里的手电筒光柱晃了晃。他听见风从墙缝里钻进来的声音，像是什么人在远处叹气。</p>
+            <p>他数着自己的脚步。七级台阶。墙面是青灰色的砖，砖缝里生着苔藓。但右手边的墙壁上，有一块砖的颜色比周围的都要浅。他伸出手，指腹贴上去，凉的。</p>
+            <p>再往上，是一道几乎看不见的缝<span class="draft-cursor"></span></p>
+          </div>
+        </div>
+
+        <blockquote class="quote quote-new">
+          第二章结尾：他临走时回头看了一眼，总觉得那面墙在看他。
+          <span class="attribution">引文 · 第二章</span>
+        </blockquote>
+
+        <div class="meta-new-expanded">
+          <span class="meta-title">工具 · 3</span>
+          <span class="chip-weak"><b>ParagraphRead</b> ch-2</span>
+          <span class="chip-weak"><b>OutlineRead</b> vol-1</span>
+          <span class="chip-weak"><b>ParagraphWrite</b> ch-3</span>
+          <span class="meta-evt">事件 12 · <span class="badge">▲ 1 次写入待确认</span></span>
+        </div>
+      </div>
+
+      <p class="note">正文草稿 = 衬线（思源宋体/宋体）16.5px、行高 1.95、首行缩进 2em、左竖线暖底面板，流式时末尾光标；注释保持黑体 15.5px；元信息<strong>保持展开</strong>但弱化（10.5px、faint、去边框）。</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================= assistant 字体方案对比 ================= -->
+<div class="variant-cols">
+
+  <div class="variant-col">
+    <div class="col-tag">现状</div>
+    <div class="variant-panel">
+      <div class="variant-head">
+        <span class="variant-name">黑体 550（合成加粗）</span>
+        <span class="variant-spec">15px · 550 · 1.75</span>
+      </div>
+      <div class="variant-body va-now">
+        好的，我先查看了大纲与第三章计划。密室线索要呼应第二章结尾的<strong>伏笔</strong>：他临走时回头看了一眼，总觉得<strong>那面墙</strong>在看他。
+      </div>
+      <div class="variant-draft"><p>沈砚站在地下室的台阶上，手电筒的光柱晃了晃，听见风从墙缝里钻进来，像是什么人在远处叹气。</p></div>
+      <p class="variant-note">问题：YaHei / Segoe UI 无原生 550 字重，浏览器合成加粗 → 中文笔画糊、整体显重。</p>
+    </div>
+  </div>
+
+  <div class="variant-col">
+    <div class="col-tag">方案 A · 推荐</div>
+    <div class="variant-panel">
+      <div class="variant-head">
+        <span class="variant-name">黑体 400（原生字重）</span>
+        <span class="variant-spec">15.5px · 400 · 1.8</span>
+      </div>
+      <div class="variant-body va-a">
+        好的，我先查看了大纲与第三章计划。密室线索要呼应第二章结尾的<strong>伏笔</strong>：他临走时回头看了一眼，总觉得<strong>那面墙</strong>在看他。
+      </div>
+      <div class="variant-draft"><p>沈砚站在地下室的台阶上，手电筒的光柱晃了晃，听见风从墙缝里钻进来，像是什么人在远处叹气。</p></div>
+      <p class="variant-note">400 为字体原生字重，渲染最干净；重点词用原生 700，不再合成。注释（黑体）与正文草稿（宋体）对比最强。</p>
+    </div>
+  </div>
+
+  <div class="variant-col">
+    <div class="col-tag">方案 B</div>
+    <div class="variant-panel">
+      <div class="variant-head">
+        <span class="variant-name">宋体衬线</span>
+        <span class="variant-spec">15.5px · 400 · 1.85</span>
+      </div>
+      <div class="variant-body va-b">
+        好的，我先查看了大纲与第三章计划。密室线索要呼应第二章结尾的<strong>伏笔</strong>：他临走时回头看了一眼，总觉得<strong>那面墙</strong>在看他。
+      </div>
+      <div class="variant-draft"><p>沈砚站在地下室的台阶上，手电筒的光柱晃了晃，听见风从墙缝里钻进来，像是什么人在远处叹气。</p></div>
+      <p class="variant-note">注释也走宋体，阅读感统一；但注释与正文草稿同族，主次靠容器与缩进区分，且 Windows 宋体清晰度弱于黑体。</p>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

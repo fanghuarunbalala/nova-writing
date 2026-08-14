@@ -20,9 +20,9 @@
 }
 
 .title {
-  font-size: var(--fs-12);
-  font-weight: var(--fw-750);
-  color: var(--color-fg);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-600);
+  color: var(--color-muted);
 }
 
 .count {
@@ -48,7 +48,7 @@
   gap: var(--space-2);
   align-items: baseline;
   padding: var(--space-5px) var(--space-3);
-  font-size: var(--fs-12);
+  font-size: var(--fs-xs);
   border-left: var(--space-2px) solid transparent;
 }
 
@@ -70,15 +70,15 @@
 
 .time {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-10);
   color: var(--color-faint);
   font-variant-numeric: tabular-nums;
 }
 
 .name {
   font-family: var(--font-mono);
-  font-size: var(--fs-11);
-  color: var(--color-fg);
+  font-size: var(--fs-10);
+  color: var(--color-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

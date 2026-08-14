@@ -5,17 +5,19 @@
   margin-top: var(--space-10px);
 }
 
+/* 三级元信息弱化：保持展开但降字号、去边框、faint/muted 色，不与正文抢焦点 */
 .title {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  font-size: var(--fs-11);
-  color: var(--color-muted);
+  font-size: var(--fs-10);
+  letter-spacing: 0.08em;
+  color: var(--color-faint);
 }
 
 .meta {
   font-family: var(--font-mono);
-  font-size: var(--fs-10);
+  font-size: var(--fs-9-5);
   color: var(--color-faint);
 }
 
@@ -35,23 +37,23 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-5px);
-  padding: var(--space-3px) var(--space-9px);
-  border: 1px solid var(--color-border);
+  padding: var(--space-2px) var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--color-surface-2);
-  font-size: var(--fs-11);
-  color: var(--color-fg);
+  font-size: var(--fs-xs);
+  color: var(--color-muted);
   cursor: pointer;
 }
 
 .chip:hover {
-  border-color: var(--color-border-strong);
+  background: var(--color-accent-9);
 }
 
 .chip b {
   font-family: var(--font-mono);
-  font-size: var(--fs-10);
-  color: var(--color-accent-ink);
+  font-size: var(--fs-9-5);
+  font-weight: var(--fw-600);
+  color: var(--color-faint);
 }
 
 .bad {

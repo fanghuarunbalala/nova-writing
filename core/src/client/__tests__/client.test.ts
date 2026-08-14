@@ -117,6 +117,28 @@ describe("ConversationProjection（精简投影）", () => {
 		await projection.stop();
 		expect(published).toBeGreaterThan(0);
 	});
+
+	it("mode.pending → 快照 modePending；mode.changed → mode 落定 + pending 清除", async () => {
+		const handle = fakeHandle([
+			evt({ type: "mode.pending", persist: false, mode: "compose" }),
+			evt({ type: "mode.changed", persist: true, mode: "compose" }),
+		]);
+		const projection = new ConversationProjection(handle, "c1");
+		await projection.start();
+		await projection.stop();
+		// 终态：mode 权威落定、pending 已清除
+		expect(projection.getSnapshot().mode).toBe("compose");
+		expect(projection.getSnapshot().modePending).toBeUndefined();
+	});
+
+	it("mode.pending 后 mode.changed 未到：快照保留待生效标记", async () => {
+		const handle = fakeHandle([evt({ type: "mode.pending", persist: false, mode: "bypass" })]);
+		const projection = new ConversationProjection(handle, "c1");
+		await projection.start();
+		await projection.stop();
+		expect(projection.getSnapshot().modePending).toBe("bypass");
+		expect(projection.getSnapshot().mode).toBeUndefined();
+	});
 });
 
 describe("ConversationProjection（恢复重放）", () => {

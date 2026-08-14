@@ -7,7 +7,7 @@
 import { proxy } from "kkrpc/remote-refs";
 import type { ConversationHandle } from "../conversation/contract/handle/index.js";
 import type { OutputEvent } from "../conversation/contract/events/index.js";
-import type { ConversationId } from "../conversation/contract/types/index.js";
+import type { ConversationId, ConversationMode } from "../conversation/contract/types/index.js";
 import { CardProjection, type CardDescriptor } from "../conversation/CardProjection.js";
 import { ApprovalProjection, type ApprovalView } from "../conversation/ApprovalProjection.js";
 import { RPCError } from "../rpc/RPCError.js";
@@ -91,6 +91,10 @@ export interface ConversationProjectionSnapshot {
 	toolTraces: readonly ToolTraceView[];
 	/** 运行时事件行（消息内「本轮时序」） */
 	eventFlow: readonly ConversationEventView[];
+	/** 当前生效模式（mode.changed 权威事件派生；未收到前 undefined → UI 查询兜底） */
+	mode?: ConversationMode;
+	/** 待生效模式（mode.pending 瞬态事件派生；mode.changed 到达后清除） */
+	modePending?: ConversationMode;
 	error?: ConversationProjectionErrorSnapshot;
 }
 
@@ -124,6 +128,10 @@ export class ConversationProjection {
 	private toolTraces: ToolTraceView[] = [];
 	/** 运行时事件行 */
 	private eventFlow: ConversationEventView[] = [];
+	/** 当前生效模式（mode.changed 派生） */
+	private mode?: ConversationMode;
+	/** 待生效模式（mode.pending 派生；mode.changed 清除） */
+	private modePending?: ConversationMode;
 	/** 待完成的工具调用（toolCallId → 请求时间） */
 	private readonly pendingTraces = new Map<string, { toolName: string; requestedAt: string; seq: number }>();
 	private revision = 0;
@@ -220,6 +228,11 @@ export class ConversationProjection {
 			// delta 仅当处于 live turn（seq > historyMaxSeq 的 turn-start/user.message 已开）才应用
 			let liveTurn = false;
 			for (const event of buffer) {
+				// 状态事件（mode.pending/mode.changed）不受 liveTurn 门控：模式切换可发生在 turn 间隙
+				if (event.type === "mode.pending" || event.type === "mode.changed") {
+					this.apply(event);
+					continue;
+				}
 				if ("seq" in event && event.persist) {
 					// 状态事件（compose/mode）无 turn seq：不做历史去重，直接应用
 					if (typeof event.seq === "number" && event.seq <= historyMaxSeq) continue;
@@ -364,6 +377,15 @@ export class ConversationProjection {
 				// ApprovalProjection 已消费；仅置脏，快照按需重建
 				this.approvalsDirty = true;
 				break;
+			case "mode.changed":
+				// active 实际切换（权威）：落 mode + 清除待生效标记
+				this.mode = event.mode;
+				this.modePending = undefined;
+				break;
+			case "mode.pending":
+				// mode.set 已记录（瞬态）：UI 回显「待生效」
+				this.modePending = event.mode;
+				break;
 			// turn-start / compacted / clear / retry-request 无影响
 		}
 	}
@@ -442,6 +464,8 @@ export class ConversationProjection {
 			approvals: this.cachedApprovals,
 			toolTraces: this.cachedToolTraces,
 			eventFlow: this.cachedEventFlow,
+			...(this.mode !== undefined ? { mode: this.mode } : {}),
+			...(this.modePending !== undefined ? { modePending: this.modePending } : {}),
 			...(this.error !== undefined ? { error: this.error } : {}),
 		});
 	}

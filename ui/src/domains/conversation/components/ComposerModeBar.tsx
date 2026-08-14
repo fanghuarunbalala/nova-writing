@@ -33,6 +33,8 @@ export interface ComposerModeBarProps {
   readonly mode: ComposerMode;
   readonly onChange: (mode: ComposerMode) => void;
   readonly disabled?: boolean;
+  /** 待生效模式（mode.pending 事件派生）：非 undefined 且不同于 mode 时显示「待生效」提示 */
+  readonly pendingMode?: ComposerMode;
 }
 
 /** 模式图标（原型 m-ico / o-ico，16×16 stroke-width 1.6）。 */
@@ -62,12 +64,17 @@ function ModeIcon({ tone }: { readonly tone: ComposerModeTone }): ReactNode {
   }
 }
 
-export function ComposerModeBar({ mode, onChange, disabled = false }: ComposerModeBarProps) {
+export function ComposerModeBar({ mode, onChange, disabled = false, pendingMode }: ComposerModeBarProps) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const current =
     COMPOSER_MODES.find((item) => item.value === mode) ?? COMPOSER_MODES[0]!;
+  // 待生效提示：pendingMode 已记录且与当前 active 不同（mode.pending 事件已到、mode.changed 未到）
+  const pendingLabel =
+    pendingMode !== undefined && pendingMode !== current.value
+      ? COMPOSER_MODES.find((item) => item.value === pendingMode)?.label
+      : undefined;
 
   // 打开期间：外部 pointerdown 关闭；Escape 关闭并把焦点还给 trigger。
   useEffect(() => {
@@ -113,6 +120,11 @@ export function ComposerModeBar({ mode, onChange, disabled = false }: ComposerMo
           <ModeIcon tone={current.tone} />
         </span>
         <span className={styles.triggerName}>{current.label}</span>
+        {pendingLabel !== undefined ? (
+          <span className={styles.pendingChip} title={`待生效：${pendingLabel}`}>
+            {pendingLabel} 待生效
+          </span>
+        ) : null}
         <span className={[styles.chev, open ? styles.chevOpen : ""].filter(Boolean).join(" ")} aria-hidden="true" />
       </button>
       {open ? (

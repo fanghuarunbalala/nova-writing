@@ -80,13 +80,15 @@ function ActiveChatSurface({
 }: ActiveChatSurfaceProps) {
   const { snapshot, sendUserMessage, sendSystemControl, getConversationMode, resume } = session;
   const [sendError, setSendError] = useState<string | undefined>(undefined);
-  // 会话模式：binding active 后查询（mode.set 待下次 turn 生效；切换后本地即时显示）
-  const [mode, setMode] = useState<ConversationMode>("review");
+  // 会话模式：权威回显 = 事件（projection.mode/modePending）；事件未达前经查询兜底。
+  // mode.set 只记 pending（mode.pending 瞬态事件 → 回显「待生效」），active 切换由
+  // mode.changed 权威事件驱动（provider call 发起时晋升）。
+  const [queriedMode, setQueriedMode] = useState<ConversationMode>("review");
   useEffect(() => {
     let cancelled = false;
     void getConversationMode()
       .then((current) => {
-        if (!cancelled) setMode(current);
+        if (!cancelled) setQueriedMode(current);
       })
       .catch(() => undefined);
     return () => {
@@ -94,6 +96,8 @@ function ActiveChatSurface({
     };
   }, [conversationId, getConversationMode, snapshot?.state]);
   const projection = snapshot?.projection;
+  const mode: ConversationMode = projection?.mode ?? queriedMode;
+  const pendingMode: ConversationMode | undefined = projection?.modePending;
   // mapper 按 core 项缓存：历史项跨快照引用稳定（memo 浅比较基础）；随 projection 快照重建
   const timeline = useMemo(
     () => (projection !== undefined ? mapProjectionTimeline(projection, "Novel Agent") : []),
@@ -139,8 +143,9 @@ function ActiveChatSurface({
         sendDisabled={pendingApprovalCount > 0}
         disconnected={runtime.state === "disconnected"}
         mode={mode}
+        pendingMode={pendingMode}
         onModeChange={(next) => {
-          setMode(next);
+          // 无乐观本地回显：mode.pending 事件回显「待生效」，mode.changed 落 active
           void sendSystemControl({ type: "mode.set", mode: next }).catch(() => {
             onNotify?.("danger", "模式切换失败，请重试");
           });

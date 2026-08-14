@@ -22,9 +22,13 @@ import type { NovelHandle } from "../../novel/client/NovelHandle.js";
 import type { Logger } from "../../log/Logger.js";
 import type { LoopContextListener } from "../loop/types.js";
 import type { LLMessage } from "../provider/types.js";
-import type { ComposeModeStateProvider } from "../../conversation/compose/ComposeModeState.js";
+import {
+  ComposeModeService,
+  ComposeModeStateProvider,
+} from "../../conversation/compose/index.js";
 import type { ConversationTodoStore } from "../todo/TodoProtocol.js";
 import { InMemoryConversationTodoStore } from "../todo/InMemoryConversationTodoStore.js";
+import { join } from "node:path";
 import { TodoIdleNudgePolicy } from "../nudge/definitions/todo.js";
 import { ComposeModeNudgePolicy } from "../nudge/definitions/compose.js";
 import type {
@@ -62,6 +66,8 @@ export interface NovelAgentOptions {
   novelConstraintsProvider?: NovelConstraintsProvider;
   /** compose 模式状态提供者（compose_mode nudge 装配；缺省不注入该 nudge） */
   composeState?: ComposeModeStateProvider;
+  /** compose 工具服务（novel.compose 组 Enter/ExitComposeMode；缺省用 composeState 自建兜底） */
+  composeService?: ComposeModeService;
   /** Todo 存储（runtime.todo 组 TodoWrite 装配；缺省 InMemoryConversationTodoStore） */
   todoStore?: ConversationTodoStore;
 }
@@ -74,9 +80,17 @@ export interface NovelAgentOptions {
 export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
   const definition = opts.definition ?? novelAgentDefinition;
   const todoStore = opts.todoStore ?? new InMemoryConversationTodoStore();
+  // compose 状态权威实例：nudge / 工具 / 权限门共享；显式传入时由上层 hydrate 后注入
+  const composeState = opts.composeState ?? new ComposeModeStateProvider();
+  // compose 工具服务：缺省自建兜底（designRoot = workspace/.novel/design），生产由上层注入（T10）
+  const composeService =
+    opts.composeService ??
+    new ComposeModeService({
+      composeState,
+      designRoot: join(opts.workspace, ".novel", "design"),
+    });
   // nudge 实现目录：definition.nudgeEnablement.enabled ∩ 本目录 → 注入。
-  // todo_idle 恒可注入；compose_mode 依赖 composeState（compose 状态机接线
-  // 不在本期，未传 composeState 时该 nudge 不生效）。
+  // todo_idle 恒可注入；compose_mode 依赖显式 composeState（hydrate 后注入，缺省不生效）。
   const nudgeCatalog: ReadonlyMap<string, () => ContextNudgePolicy> = new Map<
     string,
     () => ContextNudgePolicy
@@ -89,7 +103,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
             "compose_mode",
             () =>
               new ComposeModeNudgePolicy(
-                opts.composeState!,
+                composeState,
                 opts.conversationId ?? "",
               ),
           ],
@@ -104,6 +118,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
       handle: opts.handle,
       todoStore,
       todoConversationId: opts.conversationId ?? "",
+      compose: { service: composeService, conversationId: opts.conversationId ?? "" },
     }),
     nudgeCatalog,
   });

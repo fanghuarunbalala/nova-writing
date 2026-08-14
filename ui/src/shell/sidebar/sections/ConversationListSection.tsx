@@ -94,7 +94,9 @@ export function ConversationListSection({
           if (renameTarget === undefined) return;
           const next = renameValue.trim();
           if (next !== "") {
-            void store.renameConversation(renameTarget.id, next);
+            void store.renameConversation(renameTarget.id, next).catch(() => {
+              toastStore.push({ kind: "danger", text: "重命名失败，请重试" });
+            });
           }
           closeDialogs();
         }}

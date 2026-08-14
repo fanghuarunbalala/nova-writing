@@ -96,7 +96,6 @@ export function ApplicationShell({
 
   const workspace = useExternalStore(workspaceAdapter);
   const overview = useExternalStore(domainStores.novelOverview);
-  const inspector = useExternalStore(inspectorRouter);
   const catalogSnapshot = useExternalStore(domainStores.conversationCatalog);
   const approvalStore = useMemo(() => new ApprovalStore({ api }), [api]);
   // 审批目标实体内容解析器（lite：api.novel.* 查询 + 乐观锁 stale 判定）
@@ -146,7 +145,8 @@ export function ApplicationShell({
     });
   }, [domainStores]);
 
-  // 审批到达自动打开左侧审批面板：仅当 pending 集合出现「新 requestId」时 transition
+  // 审批到达自动打开右侧审批面板（面板已会话化，只认活动会话）：
+  // 仅当活动会话 pending 集合出现「新 requestId」时 transition
   // （同一请求持续 pending 不重复弹；approval.request 为 persist:false，journal 重放不误弹）。
   const prevPendingIds = useRef<ReadonlySet<string>>(new Set());
   useEffect(() => {
@@ -155,7 +155,11 @@ export function ApplicationShell({
   useEffect(() => {
     const ids = new Set(
       approvalSnapshot.approvals
-        .filter((approval) => approval.status === "pending")
+        .filter(
+          (approval) =>
+            approval.status === "pending" &&
+            approval.conversationId === catalogSnapshot.activeConversationId,
+        )
         .map((approval) => approval.requestId),
     );
     const hasNew = [...ids].some((id) => !prevPendingIds.current.has(id));
@@ -167,6 +171,43 @@ export function ApplicationShell({
       });
     }
   }, [approvalSnapshot, inspectorRouter, catalogSnapshot.activeConversationId]);
+
+  // 切换会话（含首次赋值）时：该会话有待审批 → 默认展开审批面板
+  // （「每个会话若待审批，默认右侧就是审批面板」）。
+  const pendingForActive = approvalSnapshot.approvals.some(
+    (approval) =>
+      approval.status === "pending" &&
+      approval.conversationId === catalogSnapshot.activeConversationId,
+  );
+  useEffect(() => {
+    if (
+      catalogSnapshot.activeConversationId !== undefined &&
+      pendingForActive
+    ) {
+      inspectorRouter.transition({
+        kind: "approval",
+        changeSetId: catalogSnapshot.activeConversationId,
+      });
+    }
+  }, [catalogSnapshot.activeConversationId, pendingForActive, inspectorRouter]);
+
+  // 会话首句派生标题：活动会话首条用户消息到达且目录项仍为自动标题时，
+  // 更新侧栏/标题栏显示（显式改名不覆盖；重启恢复由 core scanCatalog 兜底）。
+  const firstUserMessage = session.snapshot?.projection.timeline.find(
+    (item) => item.kind === "user",
+  );
+  useEffect(() => {
+    if (
+      catalogSnapshot.activeConversationId === undefined ||
+      firstUserMessage === undefined
+    ) {
+      return;
+    }
+    domainStores.conversationCatalog.applyDerivedTitle(
+      catalogSnapshot.activeConversationId,
+      firstUserMessage.text,
+    );
+  }, [catalogSnapshot.activeConversationId, firstUserMessage, domainStores]);
 
   // 跨域副作用协调：workspace 变化时并行触发各域 load（spec 1.5.1）
   useEffect(() => {
@@ -311,14 +352,6 @@ export function ApplicationShell({
         onOpenWorkspace={() => onOpenWorkspace?.()}
         onOpenSettings={() => onOpenSettings?.()}
         onOpenSchedule={() => mainViewRouter.transition("schedule")}
-        approvalBadge={approvalSnapshot.pendingCount}
-        approvalActive={inspector.state.kind === "approval"}
-        onOpenApproval={() =>
-          inspectorRouter.transition({
-            kind: "approval",
-            changeSetId: catalogSnapshot.activeConversationId ?? "",
-          })
-        }
         extensions={extensions}
       />
       <div className={styles.body} data-sidebar-mode={sidebarMode}>
@@ -375,7 +408,6 @@ export function ApplicationShell({
           locations={domainStores.location}
           approvalStore={approvalStore}
           resolveEntity={resolveEntity}
-          onJumpToConversation={handleSelectConversation}
         />
       </div>
       <OverlaysHost toastStore={toastStore}>{overlays}</OverlaysHost>

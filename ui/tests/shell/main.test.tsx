@@ -94,45 +94,9 @@ describe("chatSurfaceMapper", () => {
     }
   });
 
-  it("attaches event flow and tool traces inside the sequence window", () => {
+  it("attaches tool traces inside the sequence window", () => {
     const items = mapProjectionTimeline(
       projection({
-        eventFlow: [
-          {
-            sequence: 1,
-            timestamp: 1,
-            eventType: "user.message",
-            family: "agent",
-          },
-          {
-            sequence: 2,
-            timestamp: 2,
-            eventType: "agent.run.state.changed",
-            summary: "— → running · provider_started",
-            family: "agent",
-          },
-          {
-            sequence: 3,
-            timestamp: 3,
-            eventType: "novel.draft.started",
-            summary: "草稿会话 DS-1 启动 · base r041",
-            family: "novel",
-          },
-          {
-            sequence: 5,
-            timestamp: 5,
-            eventType: "system.tool.trace.recorded",
-            summary: "工具 CharacterList",
-            family: "system",
-            outcome: "failed",
-          },
-          {
-            sequence: 9,
-            timestamp: 9,
-            eventType: "agent.assistant.message.delta",
-            family: "agent",
-          },
-        ],
         toolTraces: [
           {
             traceId: "trace-1",
@@ -179,12 +143,7 @@ describe("chatSurfaceMapper", () => {
     const assistant = items.find((item) => item.kind === "assistant");
     expect(assistant).toBeDefined();
     if (assistant === undefined || assistant.kind !== "assistant") return;
-    // 归属范围 [sourceSequence, turnEndSequence] = [2, 7]：seq 1/9 的事件排除
-    expect(assistant.eventFlow).toHaveLength(3);
-    expect(assistant.eventFlow[0].summary).toContain("running");
-    expect(assistant.eventFlow[1].eventType).toBe("novel.draft.started");
-    expect(assistant.eventFlow[2].outcome).toBe("failed");
-    expect(assistant.eventFlow.some((event) => event.eventType === "agent.assistant.message.delta")).toBe(false);
+    // 归属范围 [sourceSequence, turnEndSequence] = [2, 7]
     expect(assistant.toolTraces).toHaveLength(3);
     expect(assistant.toolTraces[0].toolName).toBe("CharacterList");
     expect(assistant.toolTraces[2].toolName).toBe("NovelVolumeRead");

@@ -3,7 +3,7 @@
  *
  * 把 core 投影快照映射为域 ConversationTimelineItem：
  * - turn 分隔（user 消息前插时间标签）
- * - assistant 项的 cards / eventFlow / toolTraces 按事件 seq 范围归属
+ * - assistant 项的 cards / toolTraces 按事件 seq 范围归属
  *   （[sourceSequence, turnEndSequence]，工具调用常落在消息收口前）
  * - cards：core CardDescriptor（proposal/text）→ UI rich ConversationCardDescriptor
  *
@@ -123,9 +123,6 @@ export function mapProjectionTimeline(
           approvalState: (item.streaming === true ? "generating" : "completed") as
             | "generating"
             | "completed",
-          eventFlow: Object.freeze(
-            projection.eventFlow.filter((e) => e.sequence >= from && e.sequence <= to),
-          ),
           toolTraces: Object.freeze(
             projection.toolTraces.filter((t) => t.sequence >= from && t.sequence <= to),
           ),

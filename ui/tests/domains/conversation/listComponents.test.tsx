@@ -209,35 +209,20 @@ describe("ConversationDialogs", () => {
 });
 
 describe("ConversationListSection dialogs", () => {
+  /** 旧版 {conversations:[...]} 形态 → 现行 ConversationSummary[] 形态 */
+  const SUMMARY_A = {
+    conversationId: "conversation_a",
+    name: "conversation_a",
+    storeDir: "",
+    status: "active" as const,
+  };
+
   function buildSection() {
-    const rename = vi.fn(async () => undefined);
+    const rename = vi.fn(async () => true);
     const del = vi.fn(async () => undefined);
     const api = {
       conversations: {
-        list: vi.fn(async () => ({
-          conversations: [
-            {
-              metadata: {
-                id: "conversation_a",
-                workspaceId: "w1",
-                rootConversationId: "conversation_a",
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                updatedAt: "2026-08-05T09:00:00.000Z",
-                lastJournalSequence: 0,
-              },
-              activeAgentBinding: {
-                id: "b1",
-                conversationId: "conversation_a",
-                revision: 1,
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                agentType: "novel",
-                definitionVersion: "1.0.0",
-              },
-            },
-          ],
-        })),
+        list: vi.fn(async () => [SUMMARY_A]),
         create: vi.fn(),
         open: vi.fn(),
         rename,
@@ -291,33 +276,10 @@ describe("ConversationListSection dialogs", () => {
     );
     const api = {
       conversations: {
-        list: vi.fn(async () => ({
-          conversations: [
-            {
-              metadata: {
-                id: "conversation_a",
-                workspaceId: "w1",
-                rootConversationId: "conversation_a",
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                updatedAt: "2026-08-05T09:00:00.000Z",
-                lastJournalSequence: 0,
-              },
-              activeAgentBinding: {
-                id: "b1",
-                conversationId: "conversation_a",
-                revision: 1,
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                agentType: "novel",
-                definitionVersion: "1.0.0",
-              },
-            },
-          ],
-        })),
+        list: vi.fn(async () => [SUMMARY_A]),
         create: vi.fn(),
         open: vi.fn(),
-        rename: vi.fn(async () => undefined),
+        rename: vi.fn(async () => true),
         delete: del,
       },
     } as never;
@@ -360,33 +322,10 @@ describe("ConversationListSection dialogs", () => {
     });
     const api = {
       conversations: {
-        list: vi.fn(async () => ({
-          conversations: [
-            {
-              metadata: {
-                id: "conversation_a",
-                workspaceId: "w1",
-                rootConversationId: "conversation_a",
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                updatedAt: "2026-08-05T09:00:00.000Z",
-                lastJournalSequence: 0,
-              },
-              activeAgentBinding: {
-                id: "b1",
-                conversationId: "conversation_a",
-                revision: 1,
-                status: "active",
-                createdAt: "2026-08-05T09:00:00.000Z",
-                agentType: "novel",
-                definitionVersion: "1.0.0",
-              },
-            },
-          ],
-        })),
+        list: vi.fn(async () => [SUMMARY_A]),
         create: vi.fn(),
         open: vi.fn(),
-        rename: vi.fn(async () => undefined),
+        rename: vi.fn(async () => true),
         delete: del,
       },
     } as never;

@@ -2,14 +2,15 @@
  * ConversationTimelineItem
  *
  * 对话时间线的数据模型（纯数据，不含 React 依赖）。
- * 卡片/事件/工具痕迹由 core 事件投影产生，组件负责渲染；
- * 思考内容已随 loop 层丢弃 reasoning delta 移除（无 thinkLines 数据链）。
- * ConversationEventView / ToolTraceView 由 core 投影直接产出（re-export，单一来源）。
+ * 卡片/工具痕迹由 core 事件投影产生，组件负责渲染；
+ * 思考内容已随 loop 层丢弃 reasoning delta 移除（无 thinkLines 数据链）；
+ * 「本轮时序」面板已移除，eventFlow 不再进入 UI 数据链。
+ * ToolTraceView 由 core 投影直接产出（re-export，单一来源）。
  */
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
-import type { ConversationEventView, ToolTraceView } from "@novel/core/client";
+import type { ToolTraceView } from "@novel/core/client";
 
-export type { ConversationEventView, ToolTraceView };
+export type { ToolTraceView };
 
 export type ConversationTimelineItem =
   | {
@@ -36,7 +37,6 @@ export type ConversationTimelineItem =
       readonly text: string;
       readonly cards: readonly ConversationCardDescriptor[];
       readonly streaming: boolean;
-      readonly eventFlow?: readonly ConversationEventView[];
       readonly toolTraces?: readonly ToolTraceView[];
     }
   | {

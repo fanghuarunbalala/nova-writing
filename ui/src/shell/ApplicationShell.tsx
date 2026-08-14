@@ -17,6 +17,7 @@ import {
 } from "../domains/conversation/reference/ReferenceResolver.js";
 import { ApprovalStore } from "../domains/approval/ApprovalStore.js";
 import { onApprovalsChanged } from "../domains/approval/approvalChangeBus.js";
+import { onNovelChanged } from "../domains/novel/novelChangeBus.js";
 import type { ToastKind, ToastStore } from "../shared/state/ToastStore.js";
 import type { MainViewRouter } from "../shared/routing/MainViewRouter.js";
 import type { InspectorRouter } from "../shared/routing/InspectorRouter.js";
@@ -121,6 +122,29 @@ export function ApplicationShell({
       void approvalStore.refresh();
     });
   }, [approvalStore]);
+
+  // novel 数据变更（agent 经工具写入）→ 按实体类型刷新对应 store（overview 全刷）
+  useEffect(() => {
+    return onNovelChanged((entity) => {
+      const { character, location, storyOutlineTree, manuscriptStructure, novelOverview } =
+        domainStores;
+      switch (entity) {
+        case "character":
+          void character.invalidate();
+          break;
+        case "location":
+          void location.invalidate();
+          break;
+        case "outline":
+          void storyOutlineTree.invalidate();
+          break;
+        case "paragraph":
+          void manuscriptStructure.invalidate();
+          break;
+      }
+      void novelOverview.invalidate();
+    });
+  }, [domainStores]);
 
   // 审批到达自动打开左侧审批面板：仅当 pending 集合出现「新 requestId」时 transition
   // （同一请求持续 pending 不重复弹；approval.request 为 persist:false，journal 重放不误弹）。

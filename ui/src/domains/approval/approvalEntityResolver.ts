@@ -307,6 +307,98 @@ function entityToJsonObject(entity: unknown): JsonObject {
   return (isRecord(entity) ? entity : {}) as JsonObject;
 }
 
+/** 大纲祖先链 → context tree（根→目标；目标标 current，祖先标 ctx） */
+function buildOutlineContext(
+  units: readonly unknown[],
+  targetId: string,
+): ApprovalContext | undefined {
+  const find = (parentId: unknown, trail: unknown[]): unknown[] | undefined => {
+    const children = units.filter((u) => isRecord(u) && (u.parentId ?? undefined) === parentId);
+    for (const child of children) {
+      const next = [...trail, child];
+      if ((child as Record<string, unknown>).id === targetId) return next;
+      const found = find((child as Record<string, unknown>).id, next);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  };
+  const trail = find(undefined, []);
+  if (trail === undefined) return undefined;
+  const toNode = (unit: Record<string, unknown>, state: "ctx" | "current"): ApprovalContextNode => {
+    const scope = asString(unit.scope);
+    const planning = asString(unit.planningStatus);
+    return {
+      id: asString(unit.id) ?? "",
+      label: asString(unit.title) ?? asString(unit.id) ?? "",
+      ...(scope !== undefined ? { scope } : {}),
+      ...(planning !== undefined ? { status: planning } : {}),
+      state,
+    };
+  };
+  const nodes: ApprovalContextNode[] = [];
+  for (let index = 0; index < trail.length; index++) {
+    const unit = trail[index] as Record<string, unknown>;
+    nodes.push(toNode(unit, index === trail.length - 1 ? "current" : "ctx"));
+  }
+  return { type: "tree", nodes };
+}
+
+/** 段落相邻行（前一条/目标/后一条） */
+function buildParagraphContext(
+  paragraphs: readonly unknown[],
+  targetId: string,
+): ApprovalParagraphLine[] {
+  const index = paragraphs.findIndex((p) => isRecord(p) && (p as Record<string, unknown>).id === targetId);
+  if (index < 0) return [];
+  const lines: ApprovalParagraphLine[] = [];
+  for (let i = Math.max(0, index - 1); i <= Math.min(paragraphs.length - 1, index + 1); i++) {
+    const paragraph = paragraphs[i] as Record<string, unknown> | undefined;
+    if (paragraph === undefined) continue;
+    const text = asString(paragraph.text) ?? "";
+    if (text === "") continue;
+    lines.push({
+      text: text.length > 120 ? `${text.slice(0, 120)}…` : text,
+      state: i === index ? "old" : "ctx",
+    });
+  }
+  return lines;
+}
+
+/** 卷章列表 → context list（目标标 current） */
+function buildPublicationContext(
+  volumes: readonly unknown[],
+  chapters: readonly unknown[],
+  targetId: string,
+  kind: "volume" | "chapter",
+): ApprovalContext | undefined {
+  if (kind === "volume") {
+    const nodes: ApprovalContextNode[] = volumes.map((v) => {
+      const volume = v as Record<string, unknown>;
+      return {
+        id: asString(volume.id) ?? "",
+        label: asString(volume.title) ?? "",
+        state: volume.id === targetId ? "current" : "ctx",
+      };
+    });
+    return { type: "list", nodes };
+  }
+  const volume = volumes.find((v) =>
+    chapters.some(
+      (c) => isRecord(c) && (c as Record<string, unknown>).volumeId === (v as Record<string, unknown>).id && (c as Record<string, unknown>).id === targetId,
+    ),
+  ) as Record<string, unknown> | undefined;
+  const parent = volume !== undefined ? (asString(volume.title) ?? "") : undefined;
+  const nodes: ApprovalContextNode[] = chapters.map((c) => {
+    const chapter = c as Record<string, unknown>;
+    return {
+      id: asString(chapter.id) ?? "",
+      label: asString(chapter.title) ?? "",
+      state: chapter.id === targetId ? "current" : "ctx",
+    };
+  });
+  return { type: "list", nodes, ...(parent !== undefined && parent !== "" ? { parent } : {}) };
+}
+
 /** 实体名提取（Write/Edit/Delete 目标标题用） */
 function entityNameOf(entity: unknown, fallback: string): string {
   if (!isRecord(entity)) return fallback;
@@ -337,6 +429,8 @@ export function createApprovalEntityResolver(deps: {
       };
     }
     let entity: unknown;
+    let context: ApprovalContext | undefined;
+    let paragraphs: ApprovalParagraphLine[] | undefined;
     try {
       switch (target.kind) {
         case "character":
@@ -345,20 +439,31 @@ export function createApprovalEntityResolver(deps: {
         case "location":
           entity = await api.novel.locations.get(target.id as never);
           break;
-        case "story_unit":
-          entity = await api.novel.outline.getStoryUnit(target.id as never);
+        case "story_unit": {
+          const outline = await api.novel.outline.get();
+          entity = outline.units.find((u) => u.id === target.id);
+          context = buildOutlineContext(outline.units, target.id);
           break;
-        case "paragraph":
+        }
+        case "paragraph": {
           entity = await api.novel.paragraphs.get(target.id as never);
+          const paragraph = entity as { storyUnitId?: string } | undefined;
+          if (paragraph?.storyUnitId !== undefined) {
+            const siblings = await api.novel.paragraphs.list(paragraph.storyUnitId as never);
+            paragraphs = buildParagraphContext(siblings, target.id);
+          }
           break;
+        }
         case "volume": {
           const publication = await api.novel.publication.get();
           entity = publication.volumes.find((v) => v.id === target.id);
+          context = buildPublicationContext(publication.volumes, publication.chapters, target.id, "volume");
           break;
         }
         case "chapter": {
           const publication = await api.novel.publication.get();
           entity = publication.chapters.find((c) => c.id === target.id);
+          context = buildPublicationContext(publication.volumes, publication.chapters, target.id, "chapter");
           break;
         }
         default:
@@ -383,6 +488,8 @@ export function createApprovalEntityResolver(deps: {
           ? buildFields(current, undefined, "delete")
           : buildFields(current, target.value, "edit"),
       stale,
+      ...(context !== undefined ? { context } : {}),
+      ...(paragraphs !== undefined && paragraphs.length > 0 ? { paragraphs } : {}),
     };
   };
 }

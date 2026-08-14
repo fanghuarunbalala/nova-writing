@@ -10,7 +10,11 @@ import { randomUUID } from "node:crypto";
 import {
   Conversation,
   ConversationManagerServer,
+  EventPublisher,
+  EventSubscriber,
   FileConversationJournalService,
+  NOVEL_CHANGED,
+  NOVEL_EVENTS_ADDR,
   SqliteNovelStore,
   ConfigServer,
   createNovelApiServer,
@@ -24,6 +28,7 @@ import {
   type ConversationJournalService,
   type CredentialCipher,
   type LLMessage,
+  type NovelStore,
   type OutputEvent,
   type TurnContext,
 } from "@novel/core";
@@ -224,6 +229,28 @@ async function main(): Promise<void> {
   );
 
   const store = new SqliteNovelStore(join(app.getPath("userData"), "novel.db"));
+
+  // novel.changed 广播：ZeroMQ PUB/SUB（mutate 成功 → publish；订阅 → rpc 通知 renderer 刷新）
+  const novelPublisher = new EventPublisher(NOVEL_EVENTS_ADDR);
+  await novelPublisher.bind();
+  const publishingStore: NovelStore = {
+    query: (q) => store.query(q),
+    mutate: async (m) => {
+      const result = await store.mutate(m);
+      novelPublisher.publish(NOVEL_CHANGED, {
+        type: "novel.changed",
+        op: m.op,
+        entity: result.entity,
+        id: result.changeId,
+        version: result.version,
+        ts: new Date().toISOString(),
+      });
+      return result;
+    },
+  };
+  app.on("will-quit", () => {
+    void novelPublisher.close();
+  });
   const conversationsRoot = join(app.getPath("userData"), "novel-storage", "conversations");
 
   // config：JSON 文件持久化（凭据暂明文，safeStorage cipher 后续接）
@@ -244,7 +271,7 @@ async function main(): Promise<void> {
   await applyDefaultProviderEnv(configStore);
 
   // novel-db WS：conversation 子进程经 kkrpc/ws + token 访问 canonical store（协议定稿 transport）
-  const novelWs = await startNovelDbWsServer({ store, token: randomUUID() });
+  const novelWs = await startNovelDbWsServer({ store: publishingStore, token: randomUUID() });
   app.on("will-quit", () => {
     void novelWs.close();
   });
@@ -275,7 +302,7 @@ async function main(): Promise<void> {
   manager.onWaitChange(() => {
     uiNotifyHolder.notify?.();
   });
-  const serverApi = createNovelApiServer({ manager, novel: store, proxy, journalDir: conversationsRoot });
+  const serverApi = createNovelApiServer({ manager, novel: publishingStore, proxy, journalDir: conversationsRoot });
 
   // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）
   const endpoint = {
@@ -292,8 +319,11 @@ async function main(): Promise<void> {
   expose(serverApi, electronIpcTransport({ endpoint, channel: IPC_CHANNEL }));
   await configServer.start(electronIpcTransport({ endpoint, channel: CONFIG_CHANNEL }));
 
-  // renderer 暴露面（main 直接 rpc 调用：审批队列变化通知）
-  const uiApi = wrap<{ onApprovalsChanged(): Promise<void> }>(
+  // renderer 暴露面（main 直接 rpc 调用：审批队列变化 / novel 数据变更通知）
+  const uiApi = wrap<{
+    onApprovalsChanged(): Promise<void>;
+    onNovelChanged(change: { entity: string }): Promise<void>;
+  }>(
     electronIpcTransport({ endpoint, channel: UI_CHANNEL }),
   );
   uiNotifyHolder.notify = () => {
@@ -301,6 +331,18 @@ async function main(): Promise<void> {
       // renderer 未就绪/已关窗时忽略
     });
   };
+  // novel.changed 订阅：ZeroMQ → renderer 通知（拉取为准，通知仅触发刷新）
+  const novelSubscriber = new EventSubscriber(NOVEL_EVENTS_ADDR, [NOVEL_CHANGED]);
+  await novelSubscriber.connect();
+  void (async () => {
+    for await (const message of novelSubscriber) {
+      const entity = (message.payload as { entity?: unknown } | null)?.entity;
+      if (typeof entity !== "string") continue;
+      void uiApi.onNovelChanged({ entity }).catch(() => {
+        // renderer 未就绪时忽略（store 下次 loadWorkspace 兜底）
+      });
+    }
+  })();
 
   // workspace：目录选择器 + 定位器 + 最近列表（内存）
   const locator = new NodeWorkspaceStoreLocator({

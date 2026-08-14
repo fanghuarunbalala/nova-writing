@@ -451,3 +451,25 @@
   font-size: 12px;
   font-weight: 750;
 }
+
+/* 请求修改意见输入 */
+.commentBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.commentInput {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-strong, #555);
+  background: var(--color-bg-elevated, #1e1e24);
+  color: var(--color-text, #ddd);
+  font-size: 13px;
+  resize: vertical;
+}
+
+.commentInput:focus {
+  outline: none;
+  border-color: var(--color-accent, #7aa2f7);
+}

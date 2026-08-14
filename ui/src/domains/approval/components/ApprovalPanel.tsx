@@ -185,6 +185,9 @@ export function ApprovalPanel({
 }: ApprovalPanelProps) {
   const snapshot = useExternalStore(store);
   const [selectedKey, setSelectedKey] = useState<string | undefined>(undefined);
+  // 「请求修改」意见输入
+  const [editingComment, setEditingComment] = useState(false);
+  const [commentText, setCommentText] = useState("");
   const groups = useMemo(
     () => groupApprovals(snapshot.approvals),
     [snapshot.approvals],
@@ -427,22 +430,67 @@ export function ApprovalPanel({
             </p>
           ) : null}
           {selectedGroup.status === "pending" ? (
-            <div className={styles.actions}>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => decideGroup(selectedGroup, "approved")}
-              >
-                批准
-              </Button>
-              <Button
-                variant="ghost-danger"
-                size="sm"
-                onClick={() => decideGroup(selectedGroup, "rejected")}
-              >
-                拒绝
-              </Button>
-            </div>
+            <>
+              <div className={styles.actions}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => decideGroup(selectedGroup, "approved")}
+                >
+                  批准
+                </Button>
+                <Button
+                  variant="ghost-danger"
+                  size="sm"
+                  onClick={() => decideGroup(selectedGroup, "rejected")}
+                >
+                  拒绝
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditingComment(!editingComment)}
+                >
+                  请求修改
+                </Button>
+              </div>
+              {editingComment ? (
+                <div className={styles.commentBox}>
+                  <textarea
+                    className={styles.commentInput}
+                    rows={3}
+                    placeholder="填写修改意见（将随决策回传会话）"
+                    value={commentText}
+                    onChange={(event) => setCommentText(event.target.value)}
+                  />
+                  <div className={styles.actions}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEditingComment(false)}
+                    >
+                      取消
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={commentText.trim() === ""}
+                      onClick={() => {
+                        for (const approval of selectedGroup.approvals) {
+                          if (approval.status === "pending") {
+                            void store.decideEdited(approval.requestId, commentText.trim());
+                          }
+                        }
+                        setEditingComment(false);
+                        setCommentText("");
+                      }}
+                    >
+                      提交修改意见
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className={styles.banner}>
               已处理 · {STATUS_LABEL[selectedGroup.status]}

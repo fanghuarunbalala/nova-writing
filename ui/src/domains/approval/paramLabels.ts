@@ -68,6 +68,15 @@ export const PARAM_KEY_LABEL: Readonly<Record<string, string>> = {
   timelineOrderKey: "时间线顺序",
   cascade: "级联删除",
   purpose: "目的",
+  // files 工具参数
+  file_path: "文件路径",
+  content: "文件内容",
+  old_string: "查找内容",
+  new_string: "替换内容",
+  replace_all: "全部替换",
+  pattern: "匹配模式",
+  offset: "偏移量",
+  limit: "数量限制",
 };
 
 export const PARAM_VALUE_LABEL: Readonly<
@@ -123,6 +132,10 @@ export const PARAM_VALUE_LABEL: Readonly<
 };
 
 export const TOOL_NAME_LABEL: Readonly<Record<string, string>> = {
+  Read: "读取文件",
+  Glob: "搜索文件",
+  Write: "写入文件",
+  Edit: "编辑文件",
   OutlineWrite: "大纲写入",
   OutlineEdit: "大纲编辑",
   CharacterWrite: "角色写入",

@@ -27,6 +27,7 @@ import {
   novelExecutionSection,
 } from "../prompt/sections/novel.js";
 import type { NovelHandle } from "../../novel/client/NovelHandle.js";
+import type { Logger } from "../../log/Logger.js";
 import type { LoopContextListener } from "../loop/types.js";
 import type { LLMessage } from "../provider/types.js";
 import type {
@@ -54,6 +55,8 @@ export interface NovelAgentOptions {
   requestApproval?: (req: ConversationApprovalRequest) => Promise<ConversationApprovalDecision>;
   /** 暂停点续跑决策器（重启补完路径：CMS takeDecisions 装配） */
   resumePendingDecider?: (toolCallId: string) => Promise<"approve" | "reject" | "expired" | undefined>;
+  /** 结构化日志（pino；provider 调用错误可见性） */
+  logger?: Logger;
 }
 
 /**
@@ -103,5 +106,6 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     startSeq: opts.resumeSeq,
     requestApproval: opts.requestApproval,
     resumePendingDecider: opts.resumePendingDecider,
+    logger: opts.logger,
   });
 }

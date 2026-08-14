@@ -11,6 +11,8 @@ try {
     allowedChannels: ["novel-rpc", "config-rpc", "workspace-rpc", "ui-rpc"],
   });
   contextBridge.exposeInMainWorld("novelApi", { bridge });
+  // renderer 侧 debugLog 开关（浏览器无 process.env）
+  contextBridge.exposeInMainWorld("__NOVEL_LOG_LEVEL__", process.env.NOVEL_LOG_LEVEL ?? "info");
   console.error("[preload] novelApi exposed");
 } catch (e) {
   console.error("[preload] failed:", e instanceof Error ? e.message : String(e));

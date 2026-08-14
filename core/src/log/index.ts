@@ -3,3 +3,4 @@
 export * from "./Logger.js";
 export * from "./pino.js";
 export * from "./noop.js";
+export * from "./debug.js";

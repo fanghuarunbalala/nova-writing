@@ -27,6 +27,8 @@ import {
   type ConversationApprovalRequest,
   type ConversationJournalService,
   type CredentialCipher,
+  debugLog,
+  infoLog,
   type LLMessage,
   type NovelStore,
   type OutputEvent,
@@ -151,7 +153,7 @@ async function applyDefaultProviderEnv(configStore: NodeApplicationConfigStore):
   process.env.NOVEL_PROVIDER_TYPE = profile.provider;
   process.env.NOVEL_PROVIDER_MODEL = profile.model;
   if (profile.baseUrl !== undefined) process.env.NOVEL_PROVIDER_BASE_URL = profile.baseUrl;
-  console.error(`[main] provider resolved from config: ${profile.provider}/${profile.model}`);
+  infoLog(`[main] provider resolved from config: ${profile.provider}/${profile.model}`);
 }
 
 /** manager：有 provider key 时 spawnConversation 走子进程（真实 provider，novel-db 经 kkrpc/ws）；否则回退内存回显 loop */
@@ -292,7 +294,29 @@ async function main(): Promise<void> {
     managerWs: {
       url: managerWs.url,
       token: managerWs.token,
-      onConnected: managerWs.onConversationConnected,
+      onConnected: (listener) => {
+        // 临时诊断：连接报到 + main 转发调用点日志
+        return managerWs.onConversationConnected((connected) => {
+          debugLog("[main] conversation connected:", connected.conversationId);
+          const raw = connected.handle;
+          connected.handle = new Proxy(raw, {
+            get(target, prop, receiver) {
+              const value = Reflect.get(target, prop, receiver);
+              if (typeof value !== "function") return value;
+              return (...args: unknown[]) => {
+                const head =
+                  typeof args[0] === "function"
+                    ? `<fn>`
+                    : String(args[0] === undefined ? "" : JSON.stringify(args[0])).slice(0, 120);
+                debugLog("[main] handle call:", String(prop), head);
+                // 注意：不可用 value.apply(...)——.apply 属性访问会被 RPC path 代理捕获成路径段
+                return Reflect.apply(value, target, args);
+              };
+            },
+          });
+          listener(connected);
+        });
+      },
     },
     novelWs: { url: novelWs.url, token: novelWs.token },
   });
@@ -382,7 +406,7 @@ async function main(): Promise<void> {
     console.error(`[renderer:${level}] ${message}`);
   });
   await win.loadFile(rendererHtml);
-  console.error("[main] minimal electron ready");
+  infoLog("[main] minimal electron ready");
 }
 
 main().catch((e) => {

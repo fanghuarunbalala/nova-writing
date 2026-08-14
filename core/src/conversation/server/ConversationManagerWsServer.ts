@@ -7,6 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { WebSocketServer, type WebSocket } from "ws";
 import { RPCChannel } from "kkrpc";
+import { debugLog } from "../../log/debug.js";
 import { webSocketTransport, type WebSocketLike } from "kkrpc/ws";
 import type { ConversationManagerServer } from "../../manager/contract/server.js";
 import type { ConversationHandle } from "../contract/handle/index.js";
@@ -108,8 +109,21 @@ export function startConversationManagerWsServer(
 				for (const l of connectedListeners) l(connected);
 			};
 			// 单通道双工：expose CMS 面 + getAPI 得 conversation 面（探针已验证）
-			const channel = new RPCChannel(webSocketTransport(socket as WebSocketLike), {
-				expose: {
+			const rawTransport = webSocketTransport(socket as WebSocketLike);
+			const channel = new RPCChannel(
+				{
+					...rawTransport,
+					// 临时诊断：outbound 消息字节（函数参数编码检查）
+					send: (msg: unknown) => {
+						const encoded = JSON.stringify(msg, (_key, value) =>
+							typeof value === "function" ? "<fn>" : value,
+						);
+						debugLog("[manager-ws] send:", encoded.slice(0, 220));
+						return rawTransport.send(msg as never);
+					},
+				},
+				{
+					expose: {
 					/** 连接报到（spawner 等待点；后续 heartbeat 沿用） */
 					register: async (meta: ConversationMeta) => {
 						conversationId = meta.conversationId;

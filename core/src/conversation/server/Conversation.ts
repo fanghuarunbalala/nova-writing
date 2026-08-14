@@ -5,6 +5,7 @@
 import type { AgentLoop } from "../../runtime/loop/AgentLoop.js";
 import type { SamplingConfig } from "../../runtime/provider/types.js";
 import type { OutputEvent } from "../contract/events/index.js";
+import { debugLog } from "../../log/debug.js";
 import type { ConversationJournalService } from "../contract/journal/index.js";
 import type { ConversationInteraction } from "../contract/interaction/index.js";
 import type { WaitingInteractionRequest } from "../contract/interaction/index.js";
@@ -226,6 +227,7 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 
 	/** 订阅输出事件流（hub 实时推送；dispose 清空全部订阅者） */
 	async subscribeEvents(listener: OutputEventListener): Promise<void> {
+		debugLog("[child] subscribeEvents listener type:", typeof listener, "===", String(listener).slice(0, 60));
 		this.eventListeners.add(listener);
 	}
 

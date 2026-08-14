@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from "react";
 import type { ConversationMode } from "@novel/core";
-import type { ConversationProjectionErrorSnapshot } from "@novel/core/client";
+import { debugLog, type ConversationProjectionErrorSnapshot } from "@novel/core/client";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
 import { ConversationComposer } from "../../domains/conversation/components/ConversationComposer.js";
@@ -146,9 +146,17 @@ function ActiveChatSurface({
         }}
         onSend={(input) => {
           // 发送失败（会话进程崩溃/超时等）必须显性展示，不吞掉
+          debugLog("[renderer] onSend 触发:", input.text.slice(0, 40));
           void sendUserMessage(input.text)
-            .then(() => setSendError(undefined))
+            .then((receipt) => {
+              debugLog("[renderer] send resolved:", JSON.stringify(receipt));
+              setSendError(undefined);
+            })
             .catch((err: unknown) => {
+              debugLog("[renderer] send rejected:", err);
+              if (err instanceof Error && err.stack !== undefined) {
+                console.error("[renderer] stack:", err.stack.split("\n").slice(0, 6).join(" | "));
+              }
               const text = describeSendError(err);
               setSendError(text);
               onNotify?.("danger", text);

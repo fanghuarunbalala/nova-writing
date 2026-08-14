@@ -14,6 +14,7 @@ import type { OutputEvent } from "../conversation/contract/events/index.js";
 import type { ConversationJournalReadOnlyService } from "../conversation/contract/journal/index.js";
 import { FileConversationJournalReadOnlyService } from "../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { toRPCError } from "../rpc/call.js";
+import { debugLog } from "../log/debug.js";
 import type { ApprovalQueueItem } from "../conversation/server/WaitRequestQueue.js";
 import type { ConversationApprovalDecision, ConversationMode } from "../conversation/contract/types/index.js";
 import type { AgentType } from "../conversation/contract/types/index.js";
@@ -253,7 +254,10 @@ function toRemoteHandle(handle: ConversationHandle): ConversationHandle {
 		sendApprovalRequest: (r) => remote.sendApprovalRequest(r),
 		sendAskingQuestionRequest: (r) => remote.sendAskingQuestionRequest(r),
 		sendExitComposeRequest: (r) => remote.sendExitComposeRequest(r),
-		subscribeEvents: (l) => remote.subscribeEvents(l),
+		subscribeEvents: (l) => {
+			debugLog("[facade] subscribeEvents listener type:", typeof l, String(l).slice(0, 80));
+			return remote.subscribeEvents(l);
+		},
 		resolveApproval: (id, d) => remote.resolveApproval(id, d),
 		resolveQuestion: (id, a) => remote.resolveQuestion(id, a),
 		resolveExitCompose: (id) => remote.resolveExitCompose(id),

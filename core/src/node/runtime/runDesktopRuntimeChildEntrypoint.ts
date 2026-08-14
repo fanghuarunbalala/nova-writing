@@ -15,6 +15,8 @@ import { Conversation, type ManagerWaitChannel } from "../../conversation/server
 import { FileConversationJournalService } from "../../conversation/persistence/FileConversationJournalService.js";
 import { FileConversationJournalReadOnlyService } from "../../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { journalListener } from "../../conversation/JournalBridge.js";
+import { debugLog } from "../../log/debug.js";
+import { createLogger } from "../../log/pino.js";
 import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
 import { createProvider } from "../../runtime/provider/Provider.js";
@@ -35,33 +37,34 @@ interface CmsApi {
 	takeDecisions(conversationId: string): Promise<readonly ApprovalQueueItem[]>;
 }
 
-/** 把 holder 里的 conversation 转发为 expose 面（方法全集） */
+/** 把 holder 里的 conversation 转发为 expose 面（方法全集；直接执行，不能返回内层闭包） */
 function conversationExposeOf(holder: { conv?: Conversation }): Record<string, unknown> {
-	const proxy = (fn: (conv: Conversation) => unknown) => (...args: unknown[]) => {
+	const requireConv = (): Conversation => {
 		if (holder.conv === undefined) throw new Error("conversation 尚未装配");
-		return fn(holder.conv);
+		return holder.conv;
 	};
 	return {
-		sendUserMessage: proxy((c) => (...args: unknown[]) => c.sendUserMessage(args[0] as never)),
-		sendUserCommand: proxy((c) => (...args: unknown[]) => c.sendUserCommand(args[0] as never)),
-		sendSystemControl: proxy((c) => (...args: unknown[]) => c.sendSystemControl(args[0] as never)),
-		sendApprovalRequest: proxy((c) => (...args: unknown[]) => c.sendApprovalRequest(args[0] as never)),
-		sendAskingQuestionRequest: proxy((c) => (...args: unknown[]) => c.sendAskingQuestionRequest(args[0] as never)),
-		sendExitComposeRequest: proxy((c) => (...args: unknown[]) => c.sendExitComposeRequest(args[0] as never)),
-		subscribeEvents: proxy((c) => (...args: unknown[]) =>
-			c.subscribeEvents(args[0] as (e: OutputEvent) => void),
-		),
-		resolveApproval: proxy((c) => (...args: unknown[]) =>
-			c.resolveApproval(args[0] as string, args[1] as never),
-		),
-		resolveQuestion: proxy((c) => (...args: unknown[]) =>
-			c.resolveQuestion(args[0] as string, args[1] as string),
-		),
-		resolveExitCompose: proxy((c) => (...args: unknown[]) =>
-			c.resolveExitCompose(args[0] as string),
-		),
-		getConversationMode: proxy((c) => () => c.getConversationMode()),
-		dispose: proxy((c) => () => c.dispose()),
+		sendUserMessage: (...args: unknown[]) => {
+			debugLog("[child] sendUserMessage 到达", String(args[0] === undefined ? "" : JSON.stringify(args[0])).slice(0, 120));
+			return requireConv().sendUserMessage(args[0] as never);
+		},
+		sendUserCommand: (...args: unknown[]) => requireConv().sendUserCommand(args[0] as never),
+		sendSystemControl: (...args: unknown[]) => requireConv().sendSystemControl(args[0] as never),
+		sendApprovalRequest: (...args: unknown[]) => requireConv().sendApprovalRequest(args[0] as never),
+		sendAskingQuestionRequest: (...args: unknown[]) => requireConv().sendAskingQuestionRequest(args[0] as never),
+		sendExitComposeRequest: (...args: unknown[]) => requireConv().sendExitComposeRequest(args[0] as never),
+		subscribeEvents: (...args: unknown[]) => {
+			debugLog("[child] subscribeEvents 到达");
+			return requireConv().subscribeEvents(args[0] as (e: OutputEvent) => void);
+		},
+		resolveApproval: (...args: unknown[]) =>
+			requireConv().resolveApproval(args[0] as string, args[1] as never),
+		resolveQuestion: (...args: unknown[]) =>
+			requireConv().resolveQuestion(args[0] as string, args[1] as string),
+		resolveExitCompose: (...args: unknown[]) =>
+			requireConv().resolveExitCompose(args[0] as string),
+		getConversationMode: () => requireConv().getConversationMode(),
+		dispose: () => requireConv().dispose(),
 	};
 }
 
@@ -170,6 +173,18 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		apiKey: process.env.NOVEL_PROVIDER_API_KEY,
 	});
 
+	// 进程结构化日志：pino（storedir/logs 下每进程独占文件 + stderr 彩色行）。
+	// 级别：NOVEL_LOG_LEVEL（info=release 默认 / verbose=debug）——verbose 映射 pino debug。
+	const logger =
+		storedir !== undefined && storedir.trim() !== ""
+			? await createLogger({
+					name: "conversation",
+					id: conversationId,
+					logDir: join(storedir, "logs"),
+					level: process.env.NOVEL_LOG_LEVEL === "verbose" ? "debug" : "info",
+				})
+			: undefined;
+
 	const loop = buildNovelAgent({
 		workspace,
 		provider,
@@ -180,6 +195,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		resumeSeq,
 		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
 		resumePendingDecider,
+		logger,
 	});
 
 	const managerWait: ManagerWaitChannel | undefined =
@@ -209,7 +225,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		);
 		if (hasPendingTool) {
 			await loop.resumePendingTurn({ sampling, maxTurns: 8 }).catch((err) => {
-				console.error("[child] resumePendingTurn failed:", err);
+				debugLog("[child] resumePendingTurn failed:", err);
 			});
 		}
 	}

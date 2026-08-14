@@ -5,7 +5,8 @@
  * 精简版：session 由 shell 级 hook（useActiveConversationSession）单订阅注入，
  * 发送经 sendUserMessage，时间线由精简投影映射；thinking/runtime-status/cards 延后。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { ConversationMode } from "@novel/core";
 import type { ConversationProjectionErrorSnapshot } from "@novel/core/client";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
@@ -77,10 +78,24 @@ function ActiveChatSurface({
   resolveReference,
   onNotify,
 }: ActiveChatSurfaceProps) {
-  const { snapshot, sendUserMessage, resume } = session;
+  const { snapshot, sendUserMessage, sendSystemControl, getConversationMode, resume } = session;
   const [sendError, setSendError] = useState<string | undefined>(undefined);
+  // 会话模式：启动时查询（mode.set 待下次 turn 生效；切换后本地即时显示）
+  const [mode, setMode] = useState<ConversationMode>("review");
+  useEffect(() => {
+    let cancelled = false;
+    void getConversationMode()
+      .then((current) => {
+        if (!cancelled) setMode(current);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, getConversationMode]);
   const projection = snapshot?.projection;
-  const timeline = mapProjectionTimeline(projection?.timeline ?? [], "Novel Agent");
+  const timeline =
+    projection !== undefined ? mapProjectionTimeline(projection, "Novel Agent") : [];
   const failed = projection?.state === "error";
   const runtime = useConversationRuntimeStatus(projection);
 
@@ -122,6 +137,13 @@ function ActiveChatSurface({
         status={status}
         sendDisabled={pendingApprovalCount > 0}
         disconnected={runtime.state === "disconnected"}
+        mode={mode}
+        onModeChange={(next) => {
+          setMode(next);
+          void sendSystemControl({ type: "mode.set", mode: next }).catch(() => {
+            onNotify?.("danger", "模式切换失败，请重试");
+          });
+        }}
         onSend={(input) => {
           // 发送失败（会话进程崩溃/超时等）必须显性展示，不吞掉
           void sendUserMessage(input.text)

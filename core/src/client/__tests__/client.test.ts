@@ -77,6 +77,7 @@ function fakeHandle(events: OutputEvent[]): ConversationHandle {
 		resolveApproval: () => {},
 		resolveQuestion: () => {},
 		resolveExitCompose: () => {},
+		getConversationMode: async () => "review",
 		dispose: () => {},
 	};
 }
@@ -220,10 +221,38 @@ describe("ConversationProjection（liveState）", () => {
 		expect(snapshot.timeline.map((t) => t.text)).toEqual(["秋夜。"]);
 	});
 
+	it("tool-call 事件派生 toolTraces/eventFlow + timeline 项带 seq 归属范围", async () => {
+		const { projection, emit } = makeLiveProjection();
+		await projection.start();
+		emit(evt({ type: "turn-start", persist: true, seq: 1, turnSeq: 1 }));
+		emit(evt({ type: "user.message", persist: true, seq: 1, text: "写角色" }));
+		emit(evt({ type: "assistant.delta", kind: "text", text: "好" }));
+		emit(evt({ type: "tool-call-request", persist: true, seq: 2, toolCallId: "t1", name: "CharacterWrite", args: "{}", ts: "2026-08-14T10:00:00.000Z" }));
+		emit(evt({ type: "tool-call-response", persist: true, seq: 3, toolCallId: "t1", result: "ok", ts: "2026-08-14T10:00:01.500Z" }));
+		emit(evt({ type: "assistant.message", persist: true, seq: 4, text: "好的" }));
+		emit(evt({ type: "turn-end", persist: true, seq: 4, turnSeq: 1 }));
+
+		const snapshot = projection.getSnapshot();
+		expect(snapshot.toolTraces).toHaveLength(1);
+		expect(snapshot.toolTraces[0]).toMatchObject({
+			traceId: "t1",
+			toolName: "CharacterWrite",
+			outcome: "ok",
+			durationMs: 1500,
+		});
+		expect(snapshot.eventFlow.map((e) => e.eventType)).toEqual(["CharacterWrite", "CharacterWrite"]);
+		expect(snapshot.eventFlow[0]).toMatchObject({ family: "novel", summary: "工具调用" });
+		expect(snapshot.eventFlow[1]).toMatchObject({ family: "novel", outcome: "ok" });
+		// assistant 项归属范围覆盖工具调用（sourceSequence=1 → turnEnd=4）
+		const assistant = snapshot.timeline.find((item) => item.kind === "assistant");
+		expect(assistant).toMatchObject({ sourceSequence: 1, turnEndSequence: 4 });
+	});
+
 	it("history 失败 → state=error 且 liveState 不残留", async () => {
 		const handle: ConversationHandle = {
 			...fakeHandle([]),
 			subscribeEvents: async () => {},
+		getConversationMode: async () => "review",
 		};
 		const projection = new ConversationProjection(handle, "c1", async () => {
 			throw new Error("boom");
@@ -330,6 +359,7 @@ describe("createNovelApiClient（门面）", () => {
 			sendAskingQuestionRequest: async () => "",
 			sendExitComposeRequest: async () => {},
 			subscribeEvents: async () => {},
+		getConversationMode: async () => "review",
 			resolveApproval: () => {},
 			resolveQuestion: () => {},
 			resolveExitCompose: () => {},

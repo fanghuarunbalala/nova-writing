@@ -25,6 +25,44 @@ export interface ConversationTimelineItem {
 	text: string;
 	/** 流式中（assistant.delta 累积期间为 true，turn-end 收口） */
 	streaming?: boolean;
+	/** 首事件 journal seq（cards/eventFlow/toolTraces 归属范围起点） */
+	sourceSequence?: number;
+	/** turn 收口 seq（工具调用常落在消息收口前；归属范围终点） */
+	turnEndSequence?: number;
+	/** 事件时间（turn 分隔条展示） */
+	timestamp?: string;
+}
+
+/** 工具调用行（消息内工具条） */
+export interface ToolTraceView {
+	/** 工具调用 id（= toolCallId） */
+	traceId: string;
+	/** 工具名 */
+	toolName: string;
+	/** 阶段（终态阶段占位；core 无 stage 事件，保留兼容） */
+	stage?: string;
+	/** 结果 */
+	outcome: "ok" | "failed";
+	/** 耗时毫秒 */
+	durationMs?: number;
+	/** 事件 seq（归属） */
+	sequence: number;
+}
+
+/** 运行时事件行（消息内「本轮时序」） */
+export interface ConversationEventView {
+	/** 事件 seq（归属） */
+	sequence: number;
+	/** 时间（epoch 毫秒） */
+	timestamp: number;
+	/** 事件类型（工具名） */
+	eventType: string;
+	/** 家族（色条分组） */
+	family: "agent" | "system" | "novel" | "other";
+	/** 摘要（工具结果摘要） */
+	summary?: string;
+	/** 终态结果 */
+	outcome?: "ok" | "failed";
 }
 
 /** 投影错误快照 */
@@ -47,8 +85,12 @@ export interface ConversationProjectionSnapshot {
 	timeline: readonly ConversationTimelineItem[];
 	/** 工具调用卡片（CardProjection 派生） */
 	cards: readonly CardDescriptor[];
-	/** 审批视图（ApprovalProjection 派生） */
+	/** 审批视图（ApprovalProjection 派生；wait 状态唯一权威为 CMS 队列，此处保留兼容） */
 	approvals: readonly ApprovalView[];
+	/** 工具调用行（tool-call request/response 派生，消息内工具条） */
+	toolTraces: readonly ToolTraceView[];
+	/** 运行时事件行（消息内「本轮时序」） */
+	eventFlow: readonly ConversationEventView[];
 	error?: ConversationProjectionErrorSnapshot;
 }
 
@@ -78,6 +120,12 @@ export class ConversationProjection {
 	private nextSeq = 1;
 	private readonly cardProjection = new CardProjection();
 	private readonly approvalProjection = new ApprovalProjection();
+	/** 工具调用行 */
+	private toolTraces: ToolTraceView[] = [];
+	/** 运行时事件行 */
+	private eventFlow: ConversationEventView[] = [];
+	/** 待完成的工具调用（toolCallId → 请求时间） */
+	private readonly pendingTraces = new Map<string, { toolName: string; requestedAt: string; seq: number }>();
 	private revision = 0;
 	private lastAppliedSequence = 0;
 	private state: ConversationProjectionState = "idle";
@@ -203,7 +251,13 @@ export class ConversationProjection {
 		switch (event.type) {
 			case "user.message":
 				this.finalizeAssistant();
-				this.timeline.push({ kind: "user", sequence: this.nextSeq++, text: event.text });
+				this.timeline.push({
+					kind: "user",
+					sequence: this.nextSeq++,
+					text: event.text,
+					sourceSequence: event.seq,
+					timestamp: event.ts,
+				});
 				break;
 			case "assistant.message":
 				// 幂等：有活跃流式项（delta 已建）→ 替换文本收口；无（journal 历史重放）→ 新推
@@ -211,8 +265,16 @@ export class ConversationProjection {
 					this.replaceActiveAssistant({ text: event.text, streaming: false });
 					this.activeAssistantSeq = undefined;
 					this.assistantBuffer = "";
+					this.setTurnEndOnLast(event.seq, event.ts);
 				} else {
-					this.timeline.push({ kind: "assistant", sequence: this.nextSeq++, text: event.text });
+					this.timeline.push({
+						kind: "assistant",
+						sequence: this.nextSeq++,
+						text: event.text,
+						sourceSequence: event.seq,
+						turnEndSequence: event.seq,
+						timestamp: event.ts,
+					});
 				}
 				this.liveState = undefined;
 				break;
@@ -230,6 +292,8 @@ export class ConversationProjection {
 						sequence: this.activeAssistantSeq,
 						text: "",
 						streaming: true,
+						// 归属起点 = 当前 turn 的首个 persist seq（turn-start/user.message 已推进 lastAppliedSequence）
+						sourceSequence: this.lastAppliedSequence,
 					});
 				}
 				this.assistantBuffer += event.text;
@@ -237,9 +301,54 @@ export class ConversationProjection {
 				break;
 			case "turn-end":
 				this.finalizeAssistant();
+				this.setTurnEndOnLast(event.seq, event.ts);
 				break;
-			// turn-start / tool-call-* / compacted / clear / retry-request 对最小对话无影响
+			case "tool-call-request":
+				this.pendingTraces.set(event.toolCallId, {
+					toolName: event.name,
+					requestedAt: event.ts,
+					seq: event.seq,
+				});
+				this.eventFlow.push({
+					sequence: event.seq,
+					timestamp: Date.parse(event.ts),
+					eventType: event.name,
+					family: familyOf(event.name),
+					summary: "工具调用",
+				});
+				break;
+			case "tool-call-response": {
+				const pending = this.pendingTraces.get(event.toolCallId);
+				this.pendingTraces.delete(event.toolCallId);
+				const failed = event.error !== undefined;
+				this.toolTraces.push({
+					traceId: event.toolCallId,
+					toolName: pending?.toolName ?? "unknown",
+					outcome: failed ? "failed" : "ok",
+					...(pending !== undefined
+						? { durationMs: durationBetween(pending.requestedAt, event.ts) }
+						: {}),
+					sequence: event.seq,
+				});
+				this.eventFlow.push({
+					sequence: event.seq,
+					timestamp: Date.parse(event.ts),
+					eventType: pending?.toolName ?? "unknown",
+					family: familyOf(pending?.toolName ?? ""),
+					summary: failed ? "执行失败" : "执行完成",
+					outcome: failed ? "failed" : "ok",
+				});
+				break;
+			}
+			// turn-start / compacted / clear / retry-request / approval.* 无影响
 		}
+	}
+
+	/** turn 收口：给最后一条 timeline 项补 turnEndSequence/timestamp（工具归属范围终点） */
+	private setTurnEndOnLast(seq: number, ts: string): void {
+		const last = this.timeline.at(-1);
+		if (last === undefined) return;
+		this.timeline[this.timeline.length - 1] = { ...last, turnEndSequence: seq, timestamp: last.timestamp ?? ts };
 	}
 
 	/** 用新字段替换当前流式 assistant 项（不可变，避免旧快照被原地改动） */
@@ -289,9 +398,28 @@ export class ConversationProjection {
 			timeline: Object.freeze([...this.timeline]),
 			cards: Object.freeze(this.cardProjection.getCards()),
 			approvals: Object.freeze(this.approvalProjection.getAll()),
+			toolTraces: Object.freeze([...this.toolTraces]),
+			eventFlow: Object.freeze([...this.eventFlow]),
 			...(this.error !== undefined ? { error: this.error } : {}),
 		});
 	}
+}
+
+/** 工具名 → 事件家族（色条分组：novel 域 / agent 文件操作 / 其他） */
+function familyOf(toolName: string): "agent" | "system" | "novel" | "other" {
+	if (/^(Character|Location|Outline|Paragraph|Publication)/.test(toolName) || toolName === "NovelDelete") {
+		return "novel";
+	}
+	if (/^(Read|Glob|Write|Edit)$/.test(toolName)) return "agent";
+	return "other";
+}
+
+/** ISO 时间差（毫秒；解析失败返回 undefined） */
+function durationBetween(from: string, to: string): number | undefined {
+	const start = Date.parse(from);
+	const end = Date.parse(to);
+	if (Number.isNaN(start) || Number.isNaN(end) || end < start) return undefined;
+	return end - start;
 }
 
 /** 把任意错误归一成投影错误快照 */

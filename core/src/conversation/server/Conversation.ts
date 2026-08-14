@@ -120,6 +120,11 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		return this.activeMode;
 	}
 
+	/** 查询当前生效模式（ConversationHandle 契约；跨 RPC 可调） */
+	async getConversationMode(): Promise<ConversationMode> {
+		return this.activeMode;
+	}
+
 	/**
 	 * 发送用户消息（turn lane）：先应用待生效模式，再入队 followup（不阻塞等待完成）。
 	 * turn 在 followup 时即时创建；有 journal 时同步落盘 user 消息快照后返回持久化回执。

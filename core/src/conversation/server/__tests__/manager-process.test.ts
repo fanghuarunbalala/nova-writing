@@ -73,6 +73,7 @@ function fakeHandle(): ConversationHandle {
 		sendAskingQuestionRequest: async () => "",
 		sendExitComposeRequest: async () => {},
 		subscribeEvents: async () => {},
+		getConversationMode: async () => "review",
 		resolveApproval: () => {},
 		resolveQuestion: () => {},
 		resolveExitCompose: () => {},

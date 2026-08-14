@@ -35,6 +35,7 @@ function makeHandle(): { handle: ConversationHandle; sendUserMessage: ReturnType
     sendUserCommand: async () => ({ seq: 0, recordedAt: "t" }),
     sendSystemControl: async () => ({ seq: 0, recordedAt: "t" }),
     subscribeEvents: async () => {},
+		getConversationMode: async () => "review",
     resolveApproval: () => {},
     resolveQuestion: () => {},
     resolveExitCompose: () => {},

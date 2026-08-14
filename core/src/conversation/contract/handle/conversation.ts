@@ -5,7 +5,7 @@
 import type { OutputEvent } from "../events/index.js";
 import type { ConversationInteraction } from "../interaction/index.js";
 import type { WaitingInteractionRequest } from "../interaction/index.js";
-import type { ConversationApprovalDecision } from "../types/index.js";
+import type { ConversationApprovalDecision, ConversationMode } from "../types/index.js";
 
 /**
  * UI 侧对远端 conversation 的视图（createOrResume / spawnConversation 返回）。
@@ -37,6 +37,12 @@ export interface ConversationHandle extends ConversationInteraction, WaitingInte
 	 * @param requestId 退出请求 id
 	 */
 	resolveExitCompose(requestId: string): void;
+	/**
+	 * 查询当前生效的会话模式（review/bypass/compose；mode.set 待下次 turn 生效）。
+	 * 读走查（进度走读不走推同理，mode 是会话状态非进度）
+	 * @returns 当前生效模式
+	 */
+	getConversationMode(): Promise<ConversationMode>;
 	/** 释放 handle（取消全部订阅 / 断开通道） */
 	dispose(): void;
 }

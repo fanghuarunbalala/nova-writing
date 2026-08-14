@@ -6,7 +6,14 @@
  * conversationId 未定义（无活动会话）时返回空快照（null），方法调用抛错。
  */
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
-import type { ConversationApprovalDecision, Logger, NovelApiClient, Receipt } from "@novel/core";
+import type {
+  ConversationApprovalDecision,
+  ConversationMode,
+  ConversationSystemControl,
+  Logger,
+  NovelApiClient,
+  Receipt,
+} from "@novel/core";
 import { ConversationProjectionBinding } from "../binding/ConversationProjectionBinding.js";
 import type { ConversationProjectionBindingSnapshot } from "../binding/ConversationProjectionBindingTypes.js";
 
@@ -15,6 +22,10 @@ export interface ActiveConversationSession {
   readonly snapshot: ConversationProjectionBindingSnapshot | null;
   /** 发送用户消息（无活动会话时 reject） */
   readonly sendUserMessage: (text: string) => Promise<Receipt>;
+  /** 发送系统控制（mode.set / stop / reload.config） */
+  readonly sendSystemControl: (ctrl: ConversationSystemControl) => Promise<Receipt>;
+  /** 查询当前生效的会话模式 */
+  readonly getConversationMode: () => Promise<ConversationMode>;
   /** 回传审批决策（无活动会话时 no-op） */
   readonly resolveApproval: (requestId: string, decision: ConversationApprovalDecision) => void;
   /** 恢复（失败后重试：重放 journal 增量 + 重建订阅） */
@@ -69,6 +80,17 @@ export function useActiveConversationSession(
     },
     [binding],
   );
+  const sendSystemControl = useCallback(
+    (ctrl: ConversationSystemControl): Promise<Receipt> => {
+      if (binding === undefined) return Promise.reject(new Error("无活动会话"));
+      return binding.sendSystemControl(ctrl);
+    },
+    [binding],
+  );
+  const getConversationMode = useCallback((): Promise<ConversationMode> => {
+    if (binding === undefined) return Promise.resolve("review");
+    return binding.getConversationMode();
+  }, [binding]);
   const resolveApproval = useCallback(
     (requestId: string, decision: ConversationApprovalDecision) => {
       binding?.resolveApproval(requestId, decision);
@@ -77,7 +99,15 @@ export function useActiveConversationSession(
   );
   const resume = useCallback(() => binding?.resume() ?? Promise.resolve(), [binding]);
   return useMemo(
-    () => Object.freeze({ snapshot, sendUserMessage, resolveApproval, resume }),
-    [resolveApproval, resume, sendUserMessage, snapshot],
+    () =>
+      Object.freeze({
+        snapshot,
+        sendUserMessage,
+        sendSystemControl,
+        getConversationMode,
+        resolveApproval,
+        resume,
+      }),
+    [getConversationMode, resolveApproval, resume, sendSystemControl, sendUserMessage, snapshot],
   );
 }

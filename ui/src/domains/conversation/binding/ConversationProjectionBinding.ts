@@ -2,6 +2,7 @@
 import type {
   ConversationApprovalDecision,
   ConversationHandle,
+  ConversationMode,
   ConversationSystemControl,
   Logger,
   NovelApiClient,
@@ -91,6 +92,11 @@ export class ConversationProjectionBinding {
   /** 回传审批决策（解除 sendApprovalRequest 阻塞；decision: approve/reject/edit）。 */
   resolveApproval(requestId: string, decision: ConversationApprovalDecision): void {
     this.requireHandle().resolveApproval(requestId, decision);
+  }
+
+  /** 查询当前生效的会话模式（review/bypass/compose）。 */
+  getConversationMode(): Promise<ConversationMode> {
+    return this.requireHandle().getConversationMode();
   }
 
   resume(): Promise<void> {
@@ -202,6 +208,8 @@ function emptyProjection(conversationId: string): ConversationProjectionSnapshot
     timeline: Object.freeze([]),
     cards: Object.freeze([]),
     approvals: Object.freeze([]),
+    toolTraces: Object.freeze([]),
+    eventFlow: Object.freeze([]),
   });
 }
 

@@ -75,6 +75,7 @@ describe("ConversationManagerWsServer（manager WS 双工 + wait 路由）", () 
 					sendAskingQuestionRequest: async () => "",
 					sendExitComposeRequest: async () => {},
 					subscribeEvents: async () => {},
+					getConversationMode: async () => "review",
 					resolveApproval: () => {},
 					resolveQuestion: () => {},
 					resolveExitCompose: () => {},

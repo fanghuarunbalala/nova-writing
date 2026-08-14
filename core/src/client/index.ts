@@ -3,4 +3,6 @@
 
 export * from "./NovelApiClient.js";
 export * from "./ConversationProjection.js";
+export * from "../conversation/CardProjection.js";
+export * from "../conversation/ApprovalProjection.js";
 export { noopLogger } from "../log/noop.js";

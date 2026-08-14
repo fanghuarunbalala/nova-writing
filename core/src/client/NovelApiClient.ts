@@ -15,7 +15,7 @@ import type { ConversationJournalReadOnlyService } from "../conversation/contrac
 import { FileConversationJournalReadOnlyService } from "../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { toRPCError } from "../rpc/call.js";
 import type { ApprovalQueueItem } from "../conversation/server/WaitRequestQueue.js";
-import type { ConversationApprovalDecision } from "../conversation/contract/types/index.js";
+import type { ConversationApprovalDecision, ConversationMode } from "../conversation/contract/types/index.js";
 import type { AgentType } from "../conversation/contract/types/index.js";
 import type { NovelMutation } from "../novel/contract/mutation.js";
 import type {
@@ -70,6 +70,13 @@ export interface ConversationApi {
 		conversationId: ConversationId,
 		opts?: { fromSeq?: number; limit?: number },
 	): Promise<OutputEvent[]>;
+	/**
+	 * 查询会话当前生效模式（review/bypass/compose；mode.set 待下次 turn 生效）。
+	 * 读走查：经 manager 定位会话后调 handle.getConversationMode。
+	 * @param conversationId 会话 id
+	 * @returns 当前生效模式
+	 */
+	getMode(conversationId: ConversationId): Promise<ConversationMode>;
 }
 
 /** 审批子 API（wait 队列：UI 拉取 + 决策；request/resolve 分离） */
@@ -168,6 +175,10 @@ export function createNovelApiClient(options: NovelApiClientOptions): NovelApiCl
 			delete: (conversationId) => manager.delete(conversationId),
 			history: (conversationId, opts) =>
 				history !== undefined ? history(conversationId, opts) : Promise.resolve([]),
+			getMode: async (conversationId) => {
+				const handle = (await manager.createOrResume(conversationId)).handle;
+				return handle.getConversationMode();
+			},
 		},
 		// 客户端构造不经 manager 的 wait 队列（renderer 经 wrap 直连服务端门面）——占位
 		approvals: {
@@ -246,6 +257,7 @@ function toRemoteHandle(handle: ConversationHandle): ConversationHandle {
 		resolveApproval: (id, d) => remote.resolveApproval(id, d),
 		resolveQuestion: (id, a) => remote.resolveQuestion(id, a),
 		resolveExitCompose: (id) => remote.resolveExitCompose(id),
+		getConversationMode: () => remote.getConversationMode(),
 		dispose: () => remote.dispose(),
 	};
 }
@@ -277,6 +289,10 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 			delete: (conversationId) => manager.delete(conversationId),
 			history: (conversationId, opts) =>
 				readOnly !== undefined ? readOnly.history(conversationId, opts ?? {}) : Promise.resolve([]),
+			getMode: async (conversationId) => {
+				const handle = (await manager.createOrResume(conversationId)).handle;
+				return handle.getConversationMode();
+			},
 		},
 		// wait 队列唯一权威在 CMS：UI 拉取 + 决策（request/resolve 分离）
 		approvals: {

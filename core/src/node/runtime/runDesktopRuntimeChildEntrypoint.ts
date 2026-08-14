@@ -60,6 +60,7 @@ function conversationExposeOf(holder: { conv?: Conversation }): Record<string, u
 		resolveExitCompose: proxy((c) => (...args: unknown[]) =>
 			c.resolveExitCompose(args[0] as string),
 		),
+		getConversationMode: proxy((c) => () => c.getConversationMode()),
 		dispose: proxy((c) => () => c.dispose()),
 	};
 }

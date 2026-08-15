@@ -2,17 +2,17 @@
  * ManuscriptStructureStore
  *
  * 正文结构域 store：以权威 publication 结构（卷 → 章）为目录，
- * 段落按 chapter.storyUnitId 关联（paragraphs.list 返回全文，无需懒加载）。
- * 写路径：paragraph insert/update/delete（乐观锁，baseRevision = entityVersion）。
+ * 章正文按 paragraphIds 有序选择组装（P3 选择模型：可跨单元/拆分/合并）。
+ * 写路径：paragraph insert/update/delete（乐观锁，baseRevision = entityVersion）；
+ * 新增段落 = 插入挂靠单元 + 追加进当前章选择（两步一个 mutateBatch，批内原子）。
  *
- * 数据流（新 core）：
- * - loadWorkspace 读 publication.get → 卷/章；按章 storyUnitId 读 paragraphs.list，
- *   组装 Volume→Chapter 视图（blocks 直接带全文）。
+ * 数据流：
+ * - loadWorkspace 读 publication.get（章含 paragraphIds）+ paragraphs.list 全量，
+ *   组装 Volume→Chapter 视图（blocks 按选择顺序带全文）。
  */
 import type {
   Logger,
   NovelApiClient,
-  OrderKey,
   Paragraph,
   ParagraphId,
   PublicationChapter,
@@ -42,7 +42,9 @@ export interface ManuscriptChapter {
   readonly volumeId: string;
   readonly title: string; // 权威 publication 标题
   readonly orderKey?: string;
-  /** 关联的 story unit（段落挂靠点；未关联章节无法新增段落） */
+  /** 实体版本（章选择的乐观锁 baseRevision） */
+  readonly entityVersion: number;
+  /** 来源提示（P3 起正文以 paragraphIds 选择为准） */
   readonly storyUnitId?: string;
   readonly paragraphIds: readonly string[];
   readonly blocks: readonly ManuscriptBlockData[]; // 按段落 orderKey 顺序
@@ -106,20 +108,15 @@ export class ManuscriptStructureStore extends WorkspaceDomainStore<ManuscriptStr
   ): Promise<ReadyWorkspaceDomainSnapshot<ManuscriptStructureSnapshot> | undefined> {
     const publication = await this.api.novel.publication.get();
     if (this.isStaleGeneration(generation)) return undefined;
-    const paragraphsByStoryUnit = await loadParagraphsByStoryUnit(
-      this.api,
-      publication.chapters,
-    );
+    const allParagraphs = await this.api.novel.paragraphs.list();
     if (this.isStaleGeneration(generation)) return undefined;
     const { volumes, chapters } = buildPublicationView(
       publication.volumes,
       publication.chapters,
-      paragraphsByStoryUnit,
+      allParagraphs,
     );
     const versionsById = new Map<string, number>();
-    for (const paragraphs of paragraphsByStoryUnit.values()) {
-      for (const paragraph of paragraphs) versionsById.set(paragraph.id, paragraph.entityVersion);
-    }
+    for (const paragraph of allParagraphs) versionsById.set(paragraph.id, paragraph.entityVersion);
     this.versionsById = versionsById;
     return {
       phase: "ready",
@@ -152,22 +149,33 @@ export class ManuscriptStructureStore extends WorkspaceDomainStore<ManuscriptStr
   }
 
   /**
-   * 新增段落（追加到 story unit；orderKey 时间戳兜底）
-   * @param storyUnitId 章节关联的 story unit
+   * 新增段落（P3 选择模型）：挂靠到章选择末段的单元，并追加进章选择
+   * @param chapterId 目标章
    * @param text 段落文本
    */
-  insertParagraph(storyUnitId: string, text: string): Promise<void> {
+  insertParagraph(chapterId: string, text: string): Promise<void> {
     return this.serializer.run(async () => {
-      await this.runGuarded(
-        () =>
-          this.api.novel.mutate({
-            op: "paragraph.insert",
-            storyUnitId: storyUnitId as StoryUnitId,
-            orderKey: String(Date.now()) as OrderKey,
-            text,
-          }),
-        "段落",
-      );
+      const chapter = this.snapshot.chapters.find((c) => c.chapterId === chapterId);
+      await this.runGuarded(async () => {
+        if (chapter === undefined || chapter.paragraphIds.length === 0) {
+          throw new Error("章节选择为空，无法确定挂靠单元——请先经 Agent 为该章配置段落选择");
+        }
+        const lastId = chapter.paragraphIds[chapter.paragraphIds.length - 1]!;
+        const unitId = chapter.blocks.find((b) => b.blockId === lastId)?.storyUnitId ?? chapter.storyUnitId;
+        if (unitId === undefined) {
+          throw new Error("无法确定挂靠单元——请先经 Agent 为该章配置段落选择");
+        }
+        const inserted = await this.api.novel.mutateBatch([
+          { op: "paragraph.insert", storyUnitId: unitId as StoryUnitId, text },
+        ]);
+        const newId = inserted[0]!.changeId;
+        await this.api.novel.mutate({
+          op: "publication.chapter.update",
+          chapterId: chapterId as never,
+          baseRevision: chapter.entityVersion,
+          patch: { paragraphIds: [...chapter.paragraphIds, newId] as never },
+        });
+      }, "段落");
     });
   }
 
@@ -245,48 +253,34 @@ export class ManuscriptStructureStore extends WorkspaceDomainStore<ManuscriptStr
   }
 }
 
-/** 按章的 storyUnitId 批量读段落（去重；段落实例全文返回）。 */
-async function loadParagraphsByStoryUnit(
-  api: NovelApiClient,
-  chapters: readonly PublicationChapter[],
-): Promise<Map<string, Paragraph[]>> {
-  const storyUnitIds: StoryUnitId[] = [];
-  for (const chapter of chapters) {
-    if (chapter.storyUnitId !== undefined && !storyUnitIds.includes(chapter.storyUnitId)) {
-      storyUnitIds.push(chapter.storyUnitId);
-    }
-  }
-  const map = new Map<string, Paragraph[]>();
-  for (const storyUnitId of storyUnitIds) {
-    map.set(storyUnitId, await api.novel.paragraphs.list(storyUnitId));
-  }
-  return map;
-}
+/** 段落全量索引（章选择引用解析用；paragraphs.list 缺省全量） */
 
 /**
- * 用 publication 卷章结构与按 storyUnitId 关联的段落组装 Volume→Chapter 视图。
+ * 用 publication 卷章结构与章选择（paragraphIds 有序）组装 Volume→Chapter 视图。
+ * 选择引用的段落缺失（被删未清理）时跳过该段，不阻塞视图。
  */
 function buildPublicationView(
   volumes: readonly PublicationVolume[],
   chapters: readonly PublicationChapter[],
-  paragraphsByStoryUnit: ReadonlyMap<string, readonly Paragraph[]>,
+  allParagraphs: readonly Paragraph[],
 ): {
   readonly volumes: readonly ManuscriptVolume[];
   readonly chapters: readonly ManuscriptChapter[];
 } {
+  const paragraphById = new Map(allParagraphs.map((p) => [p.id, p]));
   const manuscriptChapters: ManuscriptChapter[] = chapters.map((chapter) => {
-    const paragraphs =
-      chapter.storyUnitId !== undefined
-        ? (paragraphsByStoryUnit.get(chapter.storyUnitId) ?? [])
-        : [];
-    const blocks = Object.freeze(paragraphs.map(toBlockData));
+    const selected = (chapter.paragraphIds ?? [])
+      .map((id) => paragraphById.get(id))
+      .filter((p): p is Paragraph => p !== undefined);
+    const blocks = Object.freeze(selected.map(toBlockData));
     return Object.freeze({
       chapterId: chapter.id,
       volumeId: chapter.volumeId ?? "",
       title: chapter.title,
+      entityVersion: chapter.entityVersion,
       ...(chapter.orderKey === undefined ? {} : { orderKey: chapter.orderKey }),
       ...(chapter.storyUnitId === undefined ? {} : { storyUnitId: chapter.storyUnitId }),
-      paragraphIds: Object.freeze(paragraphs.map((p) => p.id)),
+      paragraphIds: Object.freeze(selected.map((p) => p.id)),
       blocks,
     });
   });

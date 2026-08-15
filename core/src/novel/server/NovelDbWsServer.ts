@@ -60,6 +60,7 @@ export function startNovelDbWsServer(options: NovelDbWsServerOptions): Promise<N
 				{
 					query: (q: NovelQuery) => options.store.query(q),
 					mutate: (m: NovelMutation) => options.store.mutate(m),
+					mutateBatch: (ms: readonly NovelMutation[]) => options.store.mutateBatch(ms),
 				},
 				webSocketTransport(socket as WebSocketLike),
 			);

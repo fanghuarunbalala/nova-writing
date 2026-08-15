@@ -2,8 +2,8 @@
  * manuscript 子域测试。
  *
  * 正文视图以权威 publication 结构（卷 → 章）为目录，正文文本随加载一次到位：
- * store 读 publication.get（卷/章），按章 storyUnitId 批量读 paragraphs.list
- * （全文返回）组装 Volume→Chapter 层级（blocks 直接带全文，digest 短码置空）。
+ * store 读 publication.get（卷/章含 paragraphIds 选择）+ paragraphs.list 全量，
+ * 按选择顺序组装 Volume→Chapter 层级（blocks 直接带全文，digest 短码置空）。
  */
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -29,7 +29,7 @@ const publication: PublicationSnapshot = {
       volumeId: "volume_one",
       orderKey: "1000",
       title: "第一章 序章",
-      storyUnitId: "su-1",
+      paragraphIds: ["§3-01-04", "§3-01-05"],
     },
     {
       id: "chapter_two",
@@ -37,7 +37,7 @@ const publication: PublicationSnapshot = {
       volumeId: "volume_one",
       orderKey: "2000",
       title: "第二章 雨夜",
-      storyUnitId: "su-2",
+      paragraphIds: ["§3-01-06"],
     },
     {
       id: "chapter_three",
@@ -45,6 +45,7 @@ const publication: PublicationSnapshot = {
       volumeId: "volume_two",
       orderKey: "1000",
       title: "第三章 新篇",
+      paragraphIds: [],
     },
   ],
 };
@@ -53,10 +54,11 @@ function paragraph(id: string, storyUnitId: string, orderKey: string, text = "")
   return { id, entityVersion: 1, storyUnitId, orderKey, text };
 }
 
-const paragraphsByUnit: Readonly<Record<string, readonly Paragraph[]>> = {
-  "su-1": [paragraph("§3-01-04", "su-1", "0001"), paragraph("§3-01-05", "su-1", "0002")],
-  "su-2": [paragraph("§3-01-06", "su-2", "0003")],
-};
+const allParagraphs: readonly Paragraph[] = [
+  paragraph("§3-01-04", "su-1", "0001"),
+  paragraph("§3-01-05", "su-1", "0002"),
+  paragraph("§3-01-06", "su-2", "0003"),
+];
 
 interface ManuscriptApiOverrides {
   readonly publication?: Partial<NovelApiClient["novel"]["publication"]>;
@@ -72,9 +74,7 @@ function buildApi(overrides: ManuscriptApiOverrides = {}): NovelApiClient {
       characters: {} as never,
       locations: {} as never,
       paragraphs: {
-        list: vi.fn(async (storyUnitId: unknown) => [
-          ...(paragraphsByUnit[String(storyUnitId)] ?? []),
-        ]),
+        list: vi.fn(async () => [...allParagraphs]),
         get: vi.fn(async () => undefined),
         ...overrides.paragraphs,
       },
@@ -164,18 +164,14 @@ describe("ManuscriptStructureStore", () => {
     expect(snapshot.selectedChapterId).toBe("chapter_one");
   });
 
-  it("auto-selects the first chapter and joins paragraph texts by story unit", async () => {
+  it("auto-selects the first chapter and joins paragraph texts by selection", async () => {
     const api = buildApi({
       paragraphs: {
-        list: vi.fn(async (storyUnitId: unknown) => {
-          if (storyUnitId === "su-1") {
-            return [
-              paragraph("§3-01-04", "su-1", "0001", "第一行\n第二行"),
-              paragraph("§3-01-05", "su-1", "0002", "第二段正文。"),
-            ];
-          }
-          return [paragraph("§3-01-06", "su-2", "0003", "")];
-        }),
+        list: vi.fn(async () => [
+          paragraph("§3-01-06", "su-2", "0003", ""),
+          paragraph("§3-01-04", "su-1", "0001", "第一行\n第二行"),
+          paragraph("§3-01-05", "su-1", "0002", "第二段正文。"),
+        ]),
       },
     });
     const store = new ManuscriptStructureStore({ api });
@@ -184,17 +180,18 @@ describe("ManuscriptStructureStore", () => {
     const chapter = store.getSnapshot().chapters[0];
     expect(chapter.blocks[0].text).toBe("第一行\n第二行");
     expect(chapter.blocks[1].text).toBe("第二段正文。");
-    expect(api.novel.paragraphs.list).toHaveBeenCalledTimes(2);
+    // 全量一次拉取（不再按单元多次）
+    expect(api.novel.paragraphs.list).toHaveBeenCalledTimes(1);
   });
 
   it("switches the selected chapter via selectChapter", async () => {
     const api = buildApi({
       paragraphs: {
-        list: vi.fn(async (storyUnitId: unknown) =>
-          storyUnitId === "su-2"
-            ? [paragraph("§3-01-06", "su-2", "0003", "雨落得密。")]
-            : [paragraph("§3-01-04", "su-1", "0001", "段落"), paragraph("§3-01-05", "su-1", "0002", "段落")],
-        ),
+        list: vi.fn(async () => [
+          paragraph("§3-01-04", "su-1", "0001", "段落"),
+          paragraph("§3-01-05", "su-1", "0002", "段落"),
+          paragraph("§3-01-06", "su-2", "0003", "雨落得密。"),
+        ]),
       },
     });
     const store = new ManuscriptStructureStore({ api });

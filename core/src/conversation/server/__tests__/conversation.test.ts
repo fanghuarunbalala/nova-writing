@@ -379,8 +379,8 @@ describe("ConversationManagerServer", () => {
     const ref = await server.createOrResume("c1");
     await conv.sendSystemControl({ type: "mode.set", mode: "bypass" });
     await conv.promotePendingMode();
-    const pending = conv.sendApprovalRequest({ requestId: "r1", toolCalls: [{ toolCallId: "t1", toolName: "ParagraphWrite", args: "{}" }] });
-    await server.submitApprovalRequest(ref.conversationId, { requestId: "r1", toolCalls: [{ toolCallId: "t1", toolName: "ParagraphWrite", args: "{}" }] });
+    const pending = conv.sendApprovalRequest({ requestId: "r1", toolCalls: [{ toolCallId: "t1", toolName: "NovelParagraphWrite", args: "{}" }] });
+    await server.submitApprovalRequest(ref.conversationId, { requestId: "r1", toolCalls: [{ toolCallId: "t1", toolName: "NovelParagraphWrite", args: "{}" }] });
     expect(await pending).toEqual({ kind: "approve" });
     // 队列保留记录（重启补完可查）；listApprovals 含已决历史但不出现 pending 条目
     const items = await server.takeDecisions("c1");

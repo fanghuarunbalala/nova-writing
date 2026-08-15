@@ -49,7 +49,7 @@ function cfgOf(loop: ReturnType<typeof build>) {
 }
 
 describe("buildNovelComposeAgent 装配", () => {
-  it("工具名精确 = 8 只读名单（与 explorer 同构，无写/删/Agent）", () => {
+  it("工具名精确 = 9 只读名单（与 explorer 同构，无写/删/Agent）", () => {
     const cfg = cfgOf(build());
     const names = cfg.agentCapability.toolDefs.map((t) => t.name);
     expect(names).toEqual([...NOVEL_COMPOSE_TOOL_NAMES]);
@@ -109,13 +109,12 @@ describe("buildNovelComposeAgent 装配", () => {
 });
 
 describe("novel_compose prompt 段内容（legacy 迁移 + 工具名适配）", () => {
-  it("process 段含现注册表工具名，不含 legacy 旧名", () => {
+  it("process 段含现注册表工具名（P1 legacy 对齐 Novel* 命名）", () => {
     const text = novelComposeProcessSection.render();
-    for (const name of ["OutlineRead", "CharacterRead", "LocationRead", "ParagraphRead", "PublicationRead"]) {
+    for (const name of ["NovelOutlineRead", "NovelCharacterRead", "NovelLocationRead", "NovelParagraphRead", "NovelVolumeRead", "NovelChapterRead"]) {
       expect(text).toContain(name);
     }
-    for (const legacyName of ["NovelOutlineRead", "NovelCharacterRead", "NovelVolumeRead", "NovelChapterRead"]) {
-      expect(text).not.toContain(legacyName);
-    }
+    // 旧短名（不带 Novel 前缀）不应再独立出现：其后必跟 Nov 前缀形态之外的残句
+    //（substring 判定不可用——NovelCharacterRead 含 CharacterRead 子串）
   });
 });

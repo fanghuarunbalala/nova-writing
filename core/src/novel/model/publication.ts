@@ -1,9 +1,10 @@
 /**
- * 发布模型：卷 → 章 结构。
+ * 发布模型：卷 → 章 结构（P3：章持 paragraphIds 有序选择，可跨单元/拆分/合并）。
  * 与旧系统一致（PublicationStructure + Volume[] + Chapter[]）。
  */
 
 import type {
+	ParagraphId,
 	NovelId,
 	PublicationChapterId,
 	PublicationStructureId,
@@ -44,6 +45,8 @@ export interface PublicationChapter {
 	orderKey: OrderKey
 	/** 章标题 */
 	title: string
-	/** 对应 story unit（发布的正文来源） */
+	/** 对应 story unit（P3 起仅作来源提示；正文以 paragraphIds 选择为准） */
 	storyUnitId?: StoryUnitId
+	/** 章内段落有序选择（P3：可跨单元、可拆分/合并/重排） */
+	paragraphIds: readonly ParagraphId[]
 }

@@ -1,6 +1,6 @@
 /**
- * Novel Agent 工具组：7 组 manifest（展示层）+ 组工厂解析器（manifest → ToolDef[]）。
- * Novel Agent tool groups: 7 group manifests (display layer) plus a group
+ * Novel Agent 工具组：10 组 manifest（展示层）+ 组工厂解析器（manifest → ToolDef[]）。
+ * Novel Agent tool groups: 10 group manifests (display layer) plus a group
  * factory resolver (manifest → ToolDef[]).
  *
  * 组声明与工具工厂分离：manifest 是配置展示层，工厂按 manifest.tools 名称
@@ -19,7 +19,8 @@ import {
   createLocationTools,
   createOutlineTools,
   createParagraphTools,
-  createPublicationTools,
+  createVolumeTools,
+  createChapterTools,
   createDeleteTool,
 } from "../definitions/novel.js";
 
@@ -56,7 +57,7 @@ export const NOVEL_TOOL_GROUP_CHARACTERS = new ToolGroupManifest({
   version: "1.0.0",
   label: "Novel Characters",
   description: "人物档案读/写/改",
-  tools: ["CharacterRead", "CharacterWrite", "CharacterEdit"],
+  tools: ["NovelCharacterRead", "NovelCharacterWrite", "NovelCharacterEdit"],
 });
 
 /** novel.locations：地点档案 */
@@ -65,7 +66,7 @@ export const NOVEL_TOOL_GROUP_LOCATIONS = new ToolGroupManifest({
   version: "1.0.0",
   label: "Novel Locations",
   description: "地点档案读/写/改",
-  tools: ["LocationRead", "LocationWrite", "LocationEdit"],
+  tools: ["NovelLocationRead", "NovelLocationWrite", "NovelLocationEdit"],
 });
 
 /** novel.outline：大纲结构 */
@@ -74,7 +75,7 @@ export const NOVEL_TOOL_GROUP_OUTLINE = new ToolGroupManifest({
   version: "1.0.0",
   label: "Novel Outline",
   description: "大纲单元读/写/改",
-  tools: ["OutlineRead", "OutlineWrite", "OutlineEdit"],
+  tools: ["NovelOutlineRead", "NovelOutlineWrite", "NovelOutlineEdit"],
 });
 
 /** novel.paragraph：正文段落 */
@@ -83,16 +84,25 @@ export const NOVEL_TOOL_GROUP_PARAGRAPH = new ToolGroupManifest({
   version: "1.0.0",
   label: "Novel Paragraph",
   description: "正文段落读/写/改",
-  tools: ["ParagraphRead", "ParagraphWrite", "ParagraphEdit"],
+  tools: ["NovelParagraphRead", "NovelParagraphWrite", "NovelParagraphEdit"],
 });
 
-/** novel.publication：出版结构 */
-export const NOVEL_TOOL_GROUP_PUBLICATION = new ToolGroupManifest({
-  id: "novel.publication",
+/** novel.volumes：卷（发布结构拆分六件套之一） */
+export const NOVEL_TOOL_GROUP_VOLUMES = new ToolGroupManifest({
+  id: "novel.volumes",
   version: "1.0.0",
-  label: "Novel Publication",
-  description: "出版结构读/写/改",
-  tools: ["PublicationRead", "PublicationWrite", "PublicationEdit"],
+  label: "Novel Volumes",
+  description: "卷读/写/改",
+  tools: ["NovelVolumeRead", "NovelVolumeWrite", "NovelVolumeEdit"],
+});
+
+/** novel.chapters：章（发布结构拆分六件套之一） */
+export const NOVEL_TOOL_GROUP_CHAPTERS = new ToolGroupManifest({
+  id: "novel.chapters",
+  version: "1.0.0",
+  label: "Novel Chapters",
+  description: "章读/写/改",
+  tools: ["NovelChapterRead", "NovelChapterWrite", "NovelChapterEdit"],
 });
 
 /** novel.delete：删除（高风险，requireApproval 门控） */
@@ -113,7 +123,8 @@ export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = 
   [NOVEL_TOOL_GROUP_LOCATIONS.id, NOVEL_TOOL_GROUP_LOCATIONS],
   [NOVEL_TOOL_GROUP_OUTLINE.id, NOVEL_TOOL_GROUP_OUTLINE],
   [NOVEL_TOOL_GROUP_PARAGRAPH.id, NOVEL_TOOL_GROUP_PARAGRAPH],
-  [NOVEL_TOOL_GROUP_PUBLICATION.id, NOVEL_TOOL_GROUP_PUBLICATION],
+  [NOVEL_TOOL_GROUP_VOLUMES.id, NOVEL_TOOL_GROUP_VOLUMES],
+  [NOVEL_TOOL_GROUP_CHAPTERS.id, NOVEL_TOOL_GROUP_CHAPTERS],
   [NOVEL_TOOL_GROUP_DELETE.id, NOVEL_TOOL_GROUP_DELETE],
 ]);
 
@@ -158,7 +169,8 @@ export function createNovelToolGroupResolver(
     ["novel.locations", () => createLocationTools(options.handle)],
     ["novel.outline", () => createOutlineTools(options.handle)],
     ["novel.paragraph", () => createParagraphTools(options.handle)],
-    ["novel.publication", () => createPublicationTools(options.handle)],
+    ["novel.volumes", () => createVolumeTools(options.handle)],
+    ["novel.chapters", () => createChapterTools(options.handle)],
     ["novel.delete", () => createDeleteTool(options.handle)],
   ]);
   return (manifest) => {

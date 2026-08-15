@@ -40,6 +40,15 @@ export class NovelHandle {
 		return call(() => this.api.mutate(m), { peer: "novel-db" });
 	}
 
+	/**
+	 * 批量变更（批内原子）：novel-db 单事务执行，任一项失败整批回滚
+	 * @param ms 变更序列
+	 * @returns 逐项变更结果（与 ms 等长同序）
+	 */
+	async mutateBatch(ms: readonly NovelMutation[]): Promise<NovelMutateResult[]> {
+		return call(() => this.api.mutateBatch(ms), { peer: "novel-db" });
+	}
+
 	/** 释放 handle（关闭通道） */
 	dispose(): void {
 		dispose(this.api);

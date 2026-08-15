@@ -21,11 +21,12 @@ import {
 export const NOVEL_COMPOSE_TOOL_NAMES: readonly string[] = Object.freeze([
   "Read",
   "Glob",
-  "CharacterRead",
-  "LocationRead",
-  "OutlineRead",
-  "ParagraphRead",
-  "PublicationRead",
+  "NovelCharacterRead",
+  "NovelLocationRead",
+  "NovelOutlineRead",
+  "NovelParagraphRead",
+  "NovelVolumeRead",
+  "NovelChapterRead",
   "TodoWrite",
 ]);
 
@@ -60,7 +61,8 @@ export const novelComposeAgentDefinition = new AgentDefinition({
       "novel.locations",
       "novel.outline",
       "novel.paragraph",
-      "novel.publication",
+      "novel.volumes",
+      "novel.chapters",
       "runtime.todo",
     ],
     allow: [...NOVEL_COMPOSE_TOOL_NAMES],

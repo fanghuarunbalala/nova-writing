@@ -48,7 +48,7 @@ function characterEntity(overrides: Record<string, unknown> = {}) {
 
 describe("extractApprovalTargets", () => {
   it("extracts add targets from write values", () => {
-    const result = extractApprovalTargets("CharacterWrite", "add", {
+    const result = extractApprovalTargets("NovelCharacterWrite", "add", {
       values: [{ name: "林夏", aliases: ["夏"] }],
     });
     expect(result?.targets).toEqual([
@@ -62,8 +62,8 @@ describe("extractApprovalTargets", () => {
   });
 
   it("extracts edit targets with patch and baseRevision", () => {
-    const result = extractApprovalTargets("CharacterEdit", "edit", {
-      values: [{ characterId: "c-1", baseRevision: 3, patch: { summary: "新简介" } }],
+    const result = extractApprovalTargets("NovelCharacterEdit", "edit", {
+      values: [{ id: "c-1", baseRevision: 3, value: { summary: "新简介" } }],
     });
     expect(result?.targets[0]).toMatchObject({
       kind: "character",
@@ -84,7 +84,7 @@ describe("extractApprovalTargets", () => {
   });
 
   it("returns undefined for unknown op / non-object args / missing fields", () => {
-    expect(extractApprovalTargets("CharacterWrite", "unknown", { values: [] })).toBeUndefined();
+    expect(extractApprovalTargets("NovelCharacterWrite", "unknown", { values: [] })).toBeUndefined();
     expect(extractApprovalTargets("NovelDelete", "delete", "not-object")).toBeUndefined();
     expect(
       extractApprovalTargets("NovelDelete", "delete", { values: [{ kind: "character" }] }),

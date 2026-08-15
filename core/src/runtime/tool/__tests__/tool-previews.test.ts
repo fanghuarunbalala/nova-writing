@@ -8,7 +8,8 @@ import {
 	paragraphReadPreview,
 	paragraphWritePreview,
 	paragraphEditPreview,
-	publicationWritePreview,
+	volumeWritePreview,
+	chapterWritePreview,
 	novelDeletePreview,
 	outlineWritePreview,
 	fileReadPreview,
@@ -82,18 +83,18 @@ describe("内置 preview（动作标识 + 纯内容 title）", () => {
 		});
 	});
 
-	it("paragraphWritePreview：storyUnitId 纯内容 + 正文开头摘要；recorded 给插入结果", () => {
-		const args = JSON.stringify({ storyUnitId: "ch3", text: "秋夜，风起。" });
+	it("paragraphWritePreview：批量插入 → 首项 storyUnitId + 段数 + 正文开头摘要；recorded 给插入结果", () => {
+		const args = JSON.stringify({ values: [{ storyUnitId: "ch3", text: "秋夜，风起。" }, { storyUnitId: "ch3", text: "第二段。" }] });
 		expect(paragraphWritePreview({ args })).toEqual({
 			action: "插入",
 			object: "正文",
-			title: "ch3",
+			title: "ch3（2 段）",
 			summary: "秋夜，风起。",
 		});
 		expect(paragraphWritePreview({ args }, { result: "ok" })).toEqual({
 			action: "插入",
 			object: "正文",
-			title: "ch3",
+			title: "ch3（2 段）",
 			summary: "正文已插入",
 		});
 	});
@@ -110,13 +111,14 @@ describe("内置 preview（动作标识 + 纯内容 title）", () => {
 		expect(defaultToolPreview(call, response, "Foo")).toEqual(defaultToolPreview(call, response, "Foo"));
 	});
 
-	it("resolveToolPreview：全部 24 个工具已注册、未知工具返回 undefined", () => {
+	it("resolveToolPreview：全部 27 个工具已注册、未知工具返回 undefined", () => {
 		for (const name of [
-			"CharacterRead", "CharacterWrite", "CharacterEdit",
-			"LocationRead", "LocationWrite", "LocationEdit",
-			"ParagraphRead", "ParagraphWrite", "ParagraphEdit",
-			"PublicationRead", "PublicationWrite", "PublicationEdit",
-			"NovelDelete", "OutlineRead", "OutlineWrite", "OutlineEdit",
+			"NovelCharacterRead", "NovelCharacterWrite", "NovelCharacterEdit",
+			"NovelLocationRead", "NovelLocationWrite", "NovelLocationEdit",
+			"NovelParagraphRead", "NovelParagraphWrite", "NovelParagraphEdit",
+			"NovelVolumeRead", "NovelVolumeWrite", "NovelVolumeEdit",
+			"NovelChapterRead", "NovelChapterWrite", "NovelChapterEdit",
+			"NovelDelete", "NovelOutlineRead", "NovelOutlineWrite", "NovelOutlineEdit",
 			"Read", "Glob", "Write", "Edit", "TodoWrite",
 			"Agent", "TaskOutput", "TaskStop",
 		]) {
@@ -142,9 +144,9 @@ describe("实体域 preview（动作标识语义）", () => {
 		});
 	});
 
-	it("CharacterEdit：patch.name 优先于 characterId", () => {
+	it("CharacterEdit：value.name 优先于 id（P1 形状 values[{id, baseRevision, value}]）", () => {
 		const args = JSON.stringify({
-			values: [{ characterId: "c1", baseRevision: 1, patch: { name: "张三" } }, { characterId: "c2", baseRevision: 1, patch: {} }],
+			values: [{ id: "c1", baseRevision: 1, value: { name: "张三" } }, { id: "c2", baseRevision: 1, value: {} }],
 		});
 		expect(characterEditPreview({ args })).toEqual({ action: "编辑", object: "角色", title: "张三、c2" });
 		expect(characterEditPreview({ args }, { error: "stale" })).toEqual({
@@ -177,13 +179,13 @@ describe("实体域 preview（动作标识语义）", () => {
 			object: "正文",
 			title: "ch3",
 		});
-		expect(paragraphEditPreview({ args: '{"paragraphId":"p1","baseRevision":1,"text":"新正文"}' })).toEqual({
+		expect(paragraphEditPreview({ args: '{"values":[{"id":"p1","baseRevision":1,"value":{"text":"新正文"}}]}' })).toEqual({
 			action: "编辑",
 			object: "正文",
 			title: "p1",
 			summary: "新正文",
 		});
-		expect(paragraphEditPreview({ args: '{"paragraphId":"p1","baseRevision":1,"text":"新"}' }, { result: "ok" })).toEqual({
+		expect(paragraphEditPreview({ args: '{"values":[{"id":"p1","baseRevision":1,"value":{"text":"新"}}]}' }, { result: "ok" })).toEqual({
 			action: "编辑",
 			object: "正文",
 			title: "p1",
@@ -191,16 +193,16 @@ describe("实体域 preview（动作标识语义）", () => {
 		});
 	});
 
-	it("PublicationWrite：卷/章内容；NovelDelete：kind 标签聚合；OutlineWrite：大纲内容", () => {
-		expect(publicationWritePreview({ args: '{"kind":"chapter","title":"第一章"}' })).toEqual({
+	it("VolumeWrite/ChapterWrite：卷章内容；NovelDelete：kind 标签聚合；OutlineWrite：大纲内容", () => {
+		expect(chapterWritePreview({ args: '{"values":[{"title":"第一章"}]}' })).toEqual({
 			action: "创建",
-			object: "发布",
-			title: "章「第一章」",
+			object: "章",
+			title: "第一章",
 		});
-		expect(publicationWritePreview({ args: '{"kind":"volume","title":"上卷"}' }, { result: "ok" })).toEqual({
+		expect(volumeWritePreview({ args: '{"values":[{"title":"上卷"}]}' }, { result: "ok" })).toEqual({
 			action: "创建",
-			object: "发布",
-			title: "卷「上卷」",
+			object: "卷",
+			title: "上卷",
 			summary: "已创建",
 		});
 		expect(
@@ -208,10 +210,10 @@ describe("实体域 preview（动作标识语义）", () => {
 				args: JSON.stringify({ values: [{ kind: "character", id: "c1", baseRevision: 1 }, { kind: "paragraph", id: "p1", baseRevision: 1 }] }),
 			}),
 		).toEqual({ action: "删除", object: "实体", title: "角色、段落（2 项）" });
-		expect(outlineWritePreview({ args: '{"title":"第一卷：风起"}' }, { result: "ok" })).toEqual({
+		expect(outlineWritePreview({ args: '{"values":[{"title":"第一卷：风起"},{"title":"第二卷：云涌"}]}' }, { result: "ok" })).toEqual({
 			action: "创建",
 			object: "大纲",
-			title: "第一卷：风起",
+			title: "第一卷：风起、第二卷：云涌",
 			summary: "已创建",
 		});
 	});

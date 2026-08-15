@@ -93,8 +93,8 @@ export function ContentSurface({
             onSelectChapter={(chapterId) => manuscript.selectChapter(chapterId)}
             locate={locateReference}
             onOpenDraft={onOpenDraft}
-            onInsertParagraph={(storyUnitId) =>
-              void manuscript.insertParagraph(storyUnitId, "")
+            onInsertParagraph={(chapterId) =>
+              void manuscript.insertParagraph(chapterId, "")
             }
             onSaveParagraph={(paragraphId, text) => {
               const version = manuscript.getParagraphVersion(paragraphId);

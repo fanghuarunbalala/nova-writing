@@ -131,10 +131,10 @@ export interface NovelContentApi {
 		get(): Promise<NovelOverview>;
 	};
 	outline: {
-		/** 大纲（含 story unit 树） */
-		get(): Promise<StoryOutlineSnapshot>;
-		/** 单个 story unit */
-		getStoryUnit(id: StoryUnitId): Promise<StoryUnit>;
+		/** 大纲（含 story unit 树；includePlans=true 附 leaf 计划与叶完成度 rollup） */
+		get(options?: { includePlans?: boolean }): Promise<StoryOutlineSnapshot>;
+		/** 单个 story unit（includePlans=true 附 leaf 计划与 progress） */
+		getStoryUnit(id: StoryUnitId, options?: { includePlans?: boolean }): Promise<StoryUnit>;
 	};
 	characters: {
 		/** 角色列表 */
@@ -149,8 +149,8 @@ export interface NovelContentApi {
 		get(id: LocationId): Promise<Location>;
 	};
 	paragraphs: {
-		/** 某 story unit 的段落列表（按 orderKey） */
-		list(storyUnitId: StoryUnitId): Promise<Paragraph[]>;
+		/** 段落列表（传 storyUnitId 按单元过滤；缺省全量——按单元分组、组内按 orderKey） */
+		list(storyUnitId?: StoryUnitId): Promise<Paragraph[]>;
 		/** 单个段落 */
 		get(id: ParagraphId): Promise<Paragraph>;
 	};
@@ -164,6 +164,12 @@ export interface NovelContentApi {
 	 * @returns 变更结果
 	 */
 	mutate(m: NovelMutation): Promise<NovelMutateResult>;
+	/**
+	 * 批量变更（批内原子）：单事务顺序执行，任一项失败整批回滚并抛错
+	 * @param ms 变更序列
+	 * @returns 逐项变更结果（与 ms 等长同序）
+	 */
+	mutateBatch(ms: readonly NovelMutation[]): Promise<NovelMutateResult[]>;
 }
 
 /** 客户端门面：conversations + novel + approvals 三域 */
@@ -236,9 +242,10 @@ export function createNovelApiClient(options: NovelApiClientOptions): NovelApiCl
 				get: () => novel.query<NovelOverview>({ op: "overview.get" }),
 			},
 			outline: {
-				get: () => novel.query<StoryOutlineSnapshot>({ op: "outline.get" }),
-				getStoryUnit: (id) =>
-					novel.query<StoryUnit>({ op: "outline.storyUnit.get", storyUnitId: id }),
+				get: (options?: { includePlans?: boolean }) =>
+					novel.query<StoryOutlineSnapshot>({ op: "outline.get", includePlans: options?.includePlans }),
+				getStoryUnit: (id: StoryUnitId, options?: { includePlans?: boolean }) =>
+					novel.query<StoryUnit>({ op: "outline.storyUnit.get", storyUnitId: id, includePlans: options?.includePlans }),
 			},
 			characters: {
 				list: () => novel.query<Character[]>({ op: "characters.list" }),
@@ -257,6 +264,7 @@ export function createNovelApiClient(options: NovelApiClientOptions): NovelApiCl
 				get: () => novel.query<PublicationSnapshot>({ op: "publication.get" }),
 			},
 			mutate: (m) => novel.mutate(m),
+			mutateBatch: (ms) => novel.mutateBatch(ms),
 		},
 	};
 }
@@ -362,9 +370,10 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 				get: () => novel.query({ op: "overview.get" }) as Promise<NovelOverview>,
 			},
 			outline: {
-				get: () => novel.query({ op: "outline.get" }) as Promise<StoryOutlineSnapshot>,
-				getStoryUnit: (id) =>
-					novel.query({ op: "outline.storyUnit.get", storyUnitId: id }) as Promise<StoryUnit>,
+				get: (options?: { includePlans?: boolean }) =>
+					novel.query({ op: "outline.get", includePlans: options?.includePlans }) as Promise<StoryOutlineSnapshot>,
+				getStoryUnit: (id: StoryUnitId, options?: { includePlans?: boolean }) =>
+					novel.query({ op: "outline.storyUnit.get", storyUnitId: id, includePlans: options?.includePlans }) as Promise<StoryUnit>,
 			},
 			characters: {
 				list: () => novel.query({ op: "characters.list" }) as Promise<Character[]>,
@@ -389,6 +398,13 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 			mutate: async (m) => {
 				try {
 					return await novel.mutate(m);
+				} catch (err) {
+					throw toRPCError(err, "novel-db");
+				}
+			},
+			mutateBatch: async (ms) => {
+				try {
+					return await novel.mutateBatch(ms);
 				} catch (err) {
 					throw toRPCError(err, "novel-db");
 				}

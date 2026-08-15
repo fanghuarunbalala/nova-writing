@@ -426,6 +426,7 @@ export class AgentLoop {
     const compose = this.config.composeState?.snapshot(this.config.conversationId ?? "");
     const denied = new Map<string, string>();
     const pending: ToolCall[] = [];
+    const willDispatch: ToolCall[] = [];
     for (const tc of toolCalls) {
       // compose 激活：canonical 写硬拒绝（无审批通道），Read/文件工具不受影响
       if (compose?.active === true && isCanonicalNovelWrite(tc.name)) {
@@ -435,22 +436,39 @@ export class AgentLoop {
         );
         continue;
       }
-      if (this.config.toolDispatcher.resolve(tc.name)?.requireApproval !== true) continue;
+      const requireApproval = this.config.toolDispatcher.resolve(tc.name)?.requireApproval === true;
       // bypass 模式：canonical 写跳过审批直接放行
-      if (compose?.mode === "bypass" && isCanonicalNovelWrite(tc.name)) continue;
-      pending.push(tc);
+      const bypass = compose?.mode === "bypass" && isCanonicalNovelWrite(tc.name);
+      if (requireApproval && !bypass) pending.push(tc);
+      willDispatch.push(tc);
     }
-    if (pending.length === 0) return denied;
+    // 审批前预检（PRD novel-tools-legacy-对齐 §4-5）：将执行的调用逐个跑只读 precheck，
+    // 失败项直接以错误文本收口——不进审批批、不执行（避免无效审批）
+    const precheckDenied = new Map<string, string>();
+    for (const tc of willDispatch) {
+      const precheck = this.config.toolDispatcher.resolve(tc.name)?.precheck;
+      if (precheck === undefined) continue;
+      try {
+        await precheck(tc);
+      } catch (err) {
+        const code = err instanceof ToolError ? err.code : "TOOL_PRECHECK_FAILED";
+        const message = err instanceof Error ? err.message : String(err);
+        precheckDenied.set(tc.id, `预检未通过(${code}): ${message}`);
+      }
+    }
+    for (const [id, text] of precheckDenied) denied.set(id, text);
+    const approved = pending.filter((tc) => !precheckDenied.has(tc.id));
+    if (approved.length === 0) return denied;
     if (this.config.requestApproval === undefined) {
-      for (const tc of pending) denied.set(tc.id, "已拒绝（审批通道未装配）");
+      for (const tc of approved) denied.set(tc.id, "已拒绝（审批通道未装配）");
       return denied;
     }
     const decision = await this.config.requestApproval({
       requestId: `approval:${this.config.conversationId ?? "conv"}:${runSeq}:b${++this.batchSeq}`,
-      toolCalls: pending.map((tc) => ({ toolCallId: tc.id, toolName: tc.name, args: tc.args })),
+      toolCalls: approved.map((tc) => ({ toolCallId: tc.id, toolName: tc.name, args: tc.args })),
     });
     if (decision.kind === "approve") return denied;
-    for (const tc of pending) {
+    for (const tc of approved) {
       if (tc.name === "ExitComposeMode") {
         // 退出 compose 的驳回：意见随决策回传（PRD F5/D9）
         denied.set(tc.id, decision.kind === "reject" ? "用户驳回了" : `用户驳回了：${decision.text}`);

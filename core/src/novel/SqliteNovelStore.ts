@@ -18,7 +18,10 @@ import type {
 	StoryUnit,
 } from "./model/index.js";
 import type { NovelChangeEntity } from "./contract/event.js";
-import { NovelStaleRevisionError } from "./errors.js";
+import type { StoryUnitWithLeaf } from "./contract/snapshot.js";
+import type { LeafPlan, LeafPlanPatch } from "./model/outline.js";
+import { NovelDuplicateIdError, NovelStaleRevisionError } from "./errors.js";
+import { ID_PATTERN, nextOrderKey } from "./keys.js";
 
 /** id 递增计数器（进程内唯一） */
 let idCounter = 0;
@@ -73,7 +76,15 @@ export class SqliteNovelStore implements NovelStore {
 				id TEXT PRIMARY KEY, entity_version INTEGER NOT NULL, volume_id TEXT,
 				order_key TEXT NOT NULL, title TEXT NOT NULL, story_unit_id TEXT
 			);
+			CREATE TABLE IF NOT EXISTS leaf_story_unit_plans (
+				story_unit_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS chapter_paragraphs (
+				chapter_id TEXT NOT NULL, paragraph_id TEXT NOT NULL, position INTEGER NOT NULL,
+				PRIMARY KEY (chapter_id, paragraph_id)
+			);
 		`);
+		this.migrateChapterSelections();
 		this.db
 			.prepare("INSERT OR IGNORE INTO outline (id, novel_id) VALUES (?, ?)")
 			.run(this.outline.id, this.outline.novelId);
@@ -98,10 +109,20 @@ export class SqliteNovelStore implements NovelStore {
 				},
 				};
 			}
-			case "outline.get":
-				return { outline: this.outline, units: this.listStoryUnits() };
-			case "outline.storyUnit.get":
-				return this.getStoryUnit(q.storyUnitId);
+			case "outline.get": {
+				const units = this.listStoryUnits();
+				if (q.includePlans === true) {
+					return { outline: this.outline, units: this.attachLeafAndProgress(units) };
+				}
+				return { outline: this.outline, units };
+			}
+			case "outline.storyUnit.get": {
+				const unit = this.getStoryUnit(q.storyUnitId);
+				if (q.includePlans === true) {
+					return this.attachLeafAndProgress([unit])[0];
+				}
+				return unit;
+			}
 			case "characters.list":
 				return this.listCharacters();
 			case "characters.get":
@@ -128,25 +149,30 @@ export class SqliteNovelStore implements NovelStore {
 		switch (m.op) {
 			case "outline.storyUnit.create": {
 				const su: StoryUnit = {
-					id: nextId("su"),
+					id: this.resolveId("story_units", m.id, "su", "story unit") as never,
 					entityVersion: 1,
 					outlineId: this.outline.id,
 					parentId: m.parentId,
-					orderKey: m.orderKey,
+					orderKey: m.orderKey ?? nextOrderKey(this.maxOrderKey("story_units WHERE parent_id IS ?", m.parentId ?? null)),
 					title: m.title,
 					intent: m.intent,
 					synopsis: m.synopsis,
 					scope: m.scope,
-					planningStatus: "idea",
-					realizationStatus: "pending",
+					planningStatus: m.planningStatus ?? "idea",
+					realizationStatus: m.realizationStatus ?? "pending",
+					blockState: m.blockState,
+					abandonment: m.abandonment,
 				} as StoryUnit;
 				this.insertStoryUnit(su);
+				if (m.leaf !== undefined) this.saveLeafPlan(su.id, m.leaf);
 				return this.result(su.entityVersion, su.id, "outline");
 			}
 			case "outline.storyUnit.update": {
 				const su = this.getStoryUnit(m.storyUnitId);
 				this.checkRevision(su.entityVersion, m.baseRevision, su.id);
-				this.updateStoryUnit(m.storyUnitId, su.entityVersion + 1, m.patch);
+				const { leaf, blockState, abandonment, ...rest } = m.patch;
+				this.updateStoryUnit(m.storyUnitId, su.entityVersion + 1, { ...rest, blockState, abandonment });
+				if (leaf !== undefined) this.applyLeafPatch(m.storyUnitId, leaf);
 				return this.result(su.entityVersion + 1, su.id, "outline");
 			}
 			case "outline.storyUnit.move": {
@@ -160,11 +186,54 @@ export class SqliteNovelStore implements NovelStore {
 			case "outline.storyUnit.delete": {
 				const su = this.getStoryUnit(m.storyUnitId);
 				this.checkRevision(su.entityVersion, m.baseRevision, su.id);
-				this.db.prepare("DELETE FROM story_units WHERE id = ?").run(su.id);
-				return this.result(su.entityVersion, su.id, "outline");
+				const all = this.listStoryUnits();
+				const childrenOf = (id: string): StoryUnit[] => all.filter((u) => u.parentId === id);
+				const collect = (unit: StoryUnit, acc: StoryUnit[]): StoryUnit[] => {
+					acc.push(unit);
+					for (const child of childrenOf(unit.id)) collect(child, acc);
+					return acc;
+				};
+				const subtree = collect(su, []);
+				const leafPlans = this.db
+					.prepare("SELECT story_unit_id, plan_json FROM leaf_story_unit_plans")
+					.all() as unknown as Array<{ story_unit_id: string; plan_json: string }>;
+				const paragraphs = (this.db.prepare("SELECT * FROM paragraphs").all() as unknown as Row[]).map(toParagraph);
+				if (m.cascade !== true) {
+					const childCount = subtree.length - 1;
+					const hasLeaf = leafPlans.some((l) => l.story_unit_id === su.id);
+					const paraCount = paragraphs.filter((p) => p.storyUnitId === su.id).length;
+					if (childCount > 0 || hasLeaf || paraCount > 0) {
+						const deps = [
+							childCount > 0 ? `${childCount} 个子单元` : "",
+							hasLeaf ? "leaf 计划" : "",
+							paraCount > 0 ? `${paraCount} 个段落` : "",
+						].filter(Boolean).join(" / ");
+						throw new Error(`story unit ${su.id} 有依赖（${deps}）——需 cascade:true 级联删除整个子树`);
+					}
+				}
+				const deleted: Array<{ kind: string; id: string; data: unknown }> = [];
+				const delUnit = this.db.prepare("DELETE FROM story_units WHERE id = ?");
+				const delLeaf = this.db.prepare("DELETE FROM leaf_story_unit_plans WHERE story_unit_id = ?");
+				const delPara = this.db.prepare("DELETE FROM paragraphs WHERE id = ?");
+				const delSel = this.db.prepare("DELETE FROM chapter_paragraphs WHERE paragraph_id = ?");
+				for (const unit of subtree) {
+					const planRow = leafPlans.find((l) => l.story_unit_id === unit.id);
+					if (planRow !== undefined) {
+						deleted.push({ kind: "leaf_plan", id: unit.id, data: JSON.parse(planRow.plan_json) });
+						delLeaf.run(unit.id);
+					}
+					for (const p of paragraphs.filter((pp) => pp.storyUnitId === unit.id)) {
+						delSel.run(p.id);
+						delPara.run(p.id);
+						deleted.push({ kind: "paragraph", id: p.id, data: p });
+					}
+					delUnit.run(unit.id);
+					deleted.push({ kind: "story_unit", id: unit.id, data: unit });
+				}
+				return this.result(su.entityVersion, su.id, "outline", deleted);
 			}
 			case "character.create":
-				return this.createEntity("characters", m.input, "character");
+				return this.createEntity("characters", m.id, m.input, "character");
 			case "character.update": {
 				const e = this.getCharacter(m.characterId);
 				this.checkRevision(e.entityVersion, m.baseRevision, e.id);
@@ -178,7 +247,7 @@ export class SqliteNovelStore implements NovelStore {
 				return this.result(e.entityVersion, e.id, "character");
 			}
 			case "location.create":
-				return this.createEntity("locations", m.input, "location");
+				return this.createEntity("locations", m.id, m.input, "location");
 			case "location.update": {
 				const e = this.getLocation(m.locationId);
 				this.checkRevision(e.entityVersion, m.baseRevision, e.id);
@@ -193,10 +262,10 @@ export class SqliteNovelStore implements NovelStore {
 			}
 			case "paragraph.insert": {
 				const p: Paragraph = {
-					id: nextId("para"),
+					id: this.resolveId("paragraphs", m.id, "para", "paragraph") as never,
 					entityVersion: 1,
 					storyUnitId: m.storyUnitId,
-					orderKey: m.orderKey,
+					orderKey: m.orderKey ?? nextOrderKey(this.maxOrderKey("paragraphs WHERE story_unit_id = ?", m.storyUnitId)),
 					text: m.text,
 				} as Paragraph;
 				this.db
@@ -208,21 +277,22 @@ export class SqliteNovelStore implements NovelStore {
 				const p = this.getParagraph(m.paragraphId);
 				this.checkRevision(p.entityVersion, m.baseRevision, p.id);
 				this.db
-					.prepare("UPDATE paragraphs SET text = ?, entity_version = ? WHERE id = ?")
-					.run(m.text, p.entityVersion + 1, p.id);
+					.prepare("UPDATE paragraphs SET text = ?, story_unit_id = ?, order_key = ?, entity_version = ? WHERE id = ?")
+					.run(m.text ?? p.text, m.storyUnitId ?? p.storyUnitId, m.orderKey ?? p.orderKey, p.entityVersion + 1, p.id);
 				return this.result(p.entityVersion + 1, p.id, "paragraph");
 			}
 			case "paragraph.delete": {
 				const p = this.getParagraph(m.paragraphId);
 				this.checkRevision(p.entityVersion, m.baseRevision, p.id);
+				this.db.prepare("DELETE FROM chapter_paragraphs WHERE paragraph_id = ?").run(p.id);
 				this.db.prepare("DELETE FROM paragraphs WHERE id = ?").run(p.id);
 				return this.result(p.entityVersion, p.id, "paragraph");
 			}
 			case "publication.volume.create": {
 				const v: PublicationVolume = {
-					id: nextId("vol"),
+					id: this.resolveId("volumes", m.id, "vol", "volume") as never,
 					entityVersion: 1,
-					orderKey: m.orderKey,
+					orderKey: m.orderKey ?? nextOrderKey(this.maxOrderKey("volumes")),
 					title: m.title,
 				} as PublicationVolume;
 				this.db
@@ -241,21 +311,39 @@ export class SqliteNovelStore implements NovelStore {
 			case "publication.volume.delete": {
 				const v = this.getVolume(m.volumeId);
 				this.checkRevision(v.entityVersion, m.baseRevision, v.id);
+				const chapters = this.listChapters().filter((c) => c.volumeId === v.id);
+				if (m.cascade !== true && chapters.length > 0) {
+					throw new Error(`卷 ${v.id} 仍含 ${chapters.length} 章——需 cascade:true 级联删除（含各章段落选择，段落保留）`);
+				}
+				const deleted: Array<{ kind: string; id: string; data: unknown }> = [];
+				const delSel = this.db.prepare("DELETE FROM chapter_paragraphs WHERE chapter_id = ?");
+				const delChapter = this.db.prepare("DELETE FROM chapters WHERE id = ?");
+				for (const c of chapters) {
+					delSel.run(c.id);
+					delChapter.run(c.id);
+					deleted.push({ kind: "chapter", id: c.id, data: c });
+				}
 				this.db.prepare("DELETE FROM volumes WHERE id = ?").run(v.id);
-				return this.result(v.entityVersion, v.id, "publication");
+				deleted.push({ kind: "volume", id: v.id, data: v });
+				return this.result(v.entityVersion, v.id, "publication", deleted);
 			}
 			case "publication.chapter.create": {
 				const c: PublicationChapter = {
-					id: nextId("ch"),
+					id: this.resolveId("chapters", m.id, "ch", "chapter") as never,
 					entityVersion: 1,
 					volumeId: m.volumeId,
-					orderKey: m.orderKey,
+					orderKey: m.orderKey ?? nextOrderKey(this.maxOrderKey("chapters WHERE volume_id IS ?", m.volumeId ?? null)),
 					title: m.title,
 					storyUnitId: m.storyUnitId,
+					paragraphIds: [],
 				} as PublicationChapter;
 				this.db
 					.prepare("INSERT INTO chapters (id, entity_version, volume_id, order_key, title, story_unit_id) VALUES (?, ?, ?, ?, ?, ?)")
 					.run(c.id, c.entityVersion, c.volumeId ?? null, c.orderKey, c.title, c.storyUnitId ?? null);
+				if (m.paragraphIds !== undefined) {
+					this.assertParagraphsExist(m.paragraphIds);
+					this.replaceSelection(c.id, m.paragraphIds as unknown as string[]);
+				}
 				return this.result(c.entityVersion, c.id, "publication");
 			}
 			case "publication.chapter.update": {
@@ -264,13 +352,25 @@ export class SqliteNovelStore implements NovelStore {
 				this.db
 					.prepare("UPDATE chapters SET title = ?, volume_id = ?, order_key = ?, entity_version = ? WHERE id = ?")
 					.run(m.patch.title ?? c.title, m.patch.volumeId ?? c.volumeId ?? null, m.patch.orderKey ?? c.orderKey, c.entityVersion + 1, c.id);
+				if (m.patch.paragraphIds !== undefined) {
+					const ids = m.patch.paragraphIds ?? [];
+					this.assertParagraphsExist(ids);
+					this.replaceSelection(c.id, ids as unknown as string[]);
+				}
 				return this.result(c.entityVersion + 1, c.id, "publication");
 			}
 			case "publication.chapter.delete": {
 				const c = this.getChapter(m.chapterId);
 				this.checkRevision(c.entityVersion, m.baseRevision, c.id);
+				const selection = this.loadSelections().get(c.id) ?? [];
+				if (m.cascade !== true && selection.length > 0) {
+					throw new Error(`章 ${c.id} 仍有 ${selection.length} 个段落选择——需 cascade:true（级联仅解绑选择，段落保留）或先清空选择`);
+				}
+				this.db.prepare("DELETE FROM chapter_paragraphs WHERE chapter_id = ?").run(c.id);
 				this.db.prepare("DELETE FROM chapters WHERE id = ?").run(c.id);
-				return this.result(c.entityVersion, c.id, "publication");
+				return this.result(c.entityVersion, c.id, "publication", [
+					{ kind: "chapter", id: c.id, data: c },
+				]);
 			}
 		}
 	}
@@ -300,10 +400,18 @@ export class SqliteNovelStore implements NovelStore {
 		if (!row) throw new Error(`未找到 location: ${id}`);
 		return toEntity(row) as Location;
 	}
-	private listParagraphs(storyUnitId: string): Paragraph[] {
-		return (
-			this.db.prepare("SELECT * FROM paragraphs WHERE story_unit_id = ? ORDER BY order_key").all(storyUnitId) as unknown as Row[]
-		).map(toParagraph);
+	private listParagraphs(storyUnitId?: string): Paragraph[] {
+		// storyUnitId 缺省 = 全部（按单元分组、组内按 order_key）
+		const sql =
+			storyUnitId === undefined
+				? "SELECT * FROM paragraphs ORDER BY story_unit_id, order_key"
+				: "SELECT * FROM paragraphs WHERE story_unit_id = ? ORDER BY order_key";
+		const rows = (
+			storyUnitId === undefined
+				? this.db.prepare(sql).all()
+				: this.db.prepare(sql).all(storyUnitId)
+		) as unknown as Row[];
+		return rows.map(toParagraph);
 	}
 	private getParagraph(id: string): Paragraph {
 		const row = this.db.prepare("SELECT * FROM paragraphs WHERE id = ?").get(id) as unknown as Row | undefined;
@@ -319,12 +427,60 @@ export class SqliteNovelStore implements NovelStore {
 		return toVolume(row);
 	}
 	private listChapters(): PublicationChapter[] {
-		return (this.db.prepare("SELECT * FROM chapters").all() as unknown as Row[]).map(toChapter);
+		const selections = this.loadSelections();
+		return (this.db.prepare("SELECT * FROM chapters").all() as unknown as Row[]).map((row) =>
+			toChapter(row, selections.get(row.id as string) ?? []),
+		);
 	}
 	private getChapter(id: string): PublicationChapter {
 		const row = this.db.prepare("SELECT * FROM chapters WHERE id = ?").get(id) as unknown as Row | undefined;
 		if (!row) throw new Error(`未找到 chapter: ${id}`);
-		return toChapter(row);
+		return toChapter(row, this.loadSelections().get(id) ?? []);
+	}
+
+	/** 章选择全量（chapter_id → 有序 paragraph_id） */
+	private loadSelections(): Map<string, string[]> {
+		const rows = this.db
+			.prepare("SELECT chapter_id, paragraph_id FROM chapter_paragraphs ORDER BY chapter_id, position")
+			.all() as unknown as Array<{ chapter_id: string; paragraph_id: string }>;
+		const map = new Map<string, string[]>();
+		for (const r of rows) {
+			const list = map.get(r.chapter_id) ?? [];
+			list.push(r.paragraph_id);
+			map.set(r.chapter_id, list);
+		}
+		return map;
+	}
+
+	/** P3 一次性迁移：存量 chapter.story_unit_id 指针展开为该单元全部段落的选择，随后清空指针 */
+	private migrateChapterSelections(): void {
+		const chapters = this.db
+			.prepare("SELECT id, story_unit_id FROM chapters WHERE story_unit_id IS NOT NULL")
+			.all() as unknown as Array<{ id: string; story_unit_id: string }>;
+		for (const c of chapters) {
+			const existing = this.db
+				.prepare("SELECT COUNT(*) AS n FROM chapter_paragraphs WHERE chapter_id = ?")
+				.get(c.id) as { n: number };
+			if (existing.n > 0) continue;
+			const paragraphs = this.db
+				.prepare("SELECT id FROM paragraphs WHERE story_unit_id = ? ORDER BY order_key")
+				.all(c.story_unit_id) as unknown as Array<{ id: string }>;
+			this.replaceSelection(c.id, paragraphs.map((p) => p.id));
+			this.db.prepare("UPDATE chapters SET story_unit_id = NULL WHERE id = ?").run(c.id);
+		}
+	}
+
+	/** 全量替换章选择（空数组即清空） */
+	private replaceSelection(chapterId: string, paragraphIds: readonly string[]): void {
+		this.db.prepare("DELETE FROM chapter_paragraphs WHERE chapter_id = ?").run(chapterId);
+		let pos = 0;
+		const insert = this.db.prepare("INSERT INTO chapter_paragraphs (chapter_id, paragraph_id, position) VALUES (?, ?, ?)");
+		for (const pid of paragraphIds) insert.run(chapterId, pid, pos++);
+	}
+
+	/** 章选择引用的段落存在性校验 */
+	private assertParagraphsExist(paragraphIds: readonly string[]): void {
+		for (const pid of paragraphIds) this.getParagraph(pid);
 	}
 
 	// ── 写 ──
@@ -341,31 +497,133 @@ export class SqliteNovelStore implements NovelStore {
 			);
 	}
 	private updateStoryUnit(id: string, version: number, patch: Record<string, unknown>): void {
+		const cur = this.getStoryUnit(id);
+		const blockJson =
+			patch.blockState === undefined
+				? (cur.blockState ? JSON.stringify(cur.blockState) : null)
+				: patch.blockState === null
+					? null
+					: JSON.stringify(patch.blockState);
+		const abandonJson =
+			patch.abandonment === undefined
+				? (cur.abandonment ? JSON.stringify(cur.abandonment) : null)
+				: patch.abandonment === null
+					? null
+					: JSON.stringify(patch.abandonment);
 		this.db
 			.prepare(
-				"UPDATE story_units SET title = ?, intent = ?, synopsis = ?, scope = ?, planning_status = ?, realization_status = ?, entity_version = ? WHERE id = ?",
+				"UPDATE story_units SET title = ?, intent = ?, synopsis = ?, scope = ?, planning_status = ?, realization_status = ?, parent_id = ?, order_key = ?, block_state = ?, abandonment = ?, entity_version = ? WHERE id = ?",
 			)
 			.run(
-				(patch.title as string | undefined) ?? this.getStoryUnit(id).title,
-				(patch.intent as string | undefined) ?? this.getStoryUnit(id).intent ?? null,
-				(patch.synopsis as string | undefined) ?? this.getStoryUnit(id).synopsis ?? null,
-				(patch.scope as string | undefined) ?? this.getStoryUnit(id).scope ?? null,
-				(patch.planningStatus as string | undefined) ?? this.getStoryUnit(id).planningStatus,
-				(patch.realizationStatus as string | undefined) ?? this.getStoryUnit(id).realizationStatus,
+				(patch.title as string | undefined) ?? cur.title,
+				(patch.intent as string | undefined) ?? cur.intent ?? null,
+				(patch.synopsis as string | undefined) ?? cur.synopsis ?? null,
+				(patch.scope as string | undefined) ?? cur.scope ?? null,
+				(patch.planningStatus as string | undefined) ?? cur.planningStatus,
+				(patch.realizationStatus as string | undefined) ?? cur.realizationStatus,
+				// parentId：null = 移到根（NULL），未提供保留
+				patch.parentId === undefined ? (cur.parentId ?? null) : ((patch.parentId as string | null) ?? null),
+				(patch.orderKey as string | undefined) ?? cur.orderKey,
+				blockJson,
+				abandonJson,
 				version, id,
 			);
 	}
+
+	/** 覆盖保存 leaf 计划 */
+	private saveLeafPlan(storyUnitId: string, plan: LeafPlan): void {
+		this.db
+			.prepare("INSERT OR REPLACE INTO leaf_story_unit_plans (story_unit_id, plan_json) VALUES (?, ?)")
+			.run(storyUnitId, JSON.stringify(plan));
+	}
+
+	/** leaf 计划补丁应用：null 删整计划；字段级替换（null 清对应集合）；无既有计划以缺省基底起步 */
+	private applyLeafPatch(storyUnitId: string, patch: LeafPlanPatch | null): void {
+		if (patch === null) {
+			this.db.prepare("DELETE FROM leaf_story_unit_plans WHERE story_unit_id = ?").run(storyUnitId);
+			return;
+		}
+		const row = this.db
+			.prepare("SELECT plan_json FROM leaf_story_unit_plans WHERE story_unit_id = ?")
+			.get(storyUnitId) as { plan_json: string } | undefined;
+		const base: LeafPlan = row
+			? (JSON.parse(row.plan_json) as LeafPlan)
+			: { settingMode: "located", characters: [], locations: [], events: [], rhythmBeats: [], entityChanges: [] };
+		const next: LeafPlan = {
+			settingMode: patch.settingMode ?? base.settingMode,
+			time: patch.time === undefined ? base.time : (patch.time ?? undefined),
+			characters: patch.characters === undefined ? base.characters : (patch.characters ?? []),
+			locations: patch.locations === undefined ? base.locations : (patch.locations ?? []),
+			events: patch.events === undefined ? base.events : (patch.events ?? []),
+			rhythmBeats: patch.rhythmBeats === undefined ? base.rhythmBeats : (patch.rhythmBeats ?? []),
+			entityChanges: patch.entityChanges === undefined ? base.entityChanges : (patch.entityChanges ?? []),
+		};
+		this.saveLeafPlan(storyUnitId, next);
+	}
+
+	/** units 附 leaf 计划 + 叶完成度 rollup（includePlans 读路径） */
+	private attachLeafAndProgress(units: StoryUnit[]): Array<StoryUnitWithLeaf> {
+		const plans = new Map(
+			(
+				this.db.prepare("SELECT story_unit_id, plan_json FROM leaf_story_unit_plans").all() as unknown as Array<{
+					story_unit_id: string;
+					plan_json: string;
+				}>
+			).map((r) => [r.story_unit_id, JSON.parse(r.plan_json) as LeafPlan]),
+		);
+		const childrenOf = new Map<string | undefined, StoryUnit[]>();
+		for (const u of units) {
+			const key = u.parentId;
+			const list = childrenOf.get(key) ?? [];
+			list.push(u);
+			childrenOf.set(key, list);
+		}
+		const rollup = (unit: StoryUnit): { completed: number; total: number; blocked: boolean } => {
+			let completed = 0;
+			let total = 0;
+			let blocked = unit.blockState !== undefined;
+			for (const child of childrenOf.get(unit.id) ?? []) {
+				const sub = rollup(child);
+				completed += sub.completed;
+				total += sub.total;
+				blocked = blocked || sub.blocked;
+			}
+			if (plans.has(unit.id)) {
+				total += 1;
+				if (unit.realizationStatus === "completed") completed += 1;
+			}
+			return { completed, total, blocked };
+		};
+		return units.map((u) => {
+			const { completed, total, blocked } = rollup(u);
+			const effectiveStatus = blocked
+				? "blocked"
+				: u.abandonment !== undefined
+					? "abandoned"
+					: total > 0 && completed === total
+						? "completed"
+						: completed > 0
+							? "in-progress"
+							: u.realizationStatus;
+			return {
+				...u,
+				...(plans.has(u.id) ? { leaf: plans.get(u.id) } : {}),
+				progress: { effectiveStatus, isBlocked: blocked, completedLeafCount: completed, totalLeafCount: total },
+			};
+		});
+	}
 	private createEntity(
 		table: "characters" | "locations",
+		id: string | undefined,
 		input: { name: string; aliases?: readonly string[]; summary?: string; initialState?: string; authorNotes?: string },
 		entity: NovelChangeEntity,
 	): NovelMutateResult {
 		const now = new Date().toISOString();
-		const id = nextId(entity === "character" ? "char" : "loc");
+		const resolved = this.resolveId(table, id, entity === "character" ? "char" : "loc", entity);
 		this.db
 			.prepare(`INSERT INTO ${table} (id, entity_version, name, aliases, summary, initial_state, author_notes, created_at, updated_at) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)`)
-			.run(id, input.name, JSON.stringify(input.aliases ?? []), input.summary ?? null, input.initialState ?? null, input.authorNotes ?? null, now, now);
-		return this.result(1, id, entity);
+			.run(resolved, input.name, JSON.stringify(input.aliases ?? []), input.summary ?? null, input.initialState ?? null, input.authorNotes ?? null, now, now);
+		return this.result(1, resolved, entity);
 	}
 	private updateEntity(
 		table: "characters" | "locations",
@@ -393,9 +651,47 @@ export class SqliteNovelStore implements NovelStore {
 		}
 	}
 
-	/** 构造 mutate 结果 */
-	private result(version: number, changeId: string, entity: NovelChangeEntity): NovelMutateResult {
-		return { version, changeId, entity };
+	/** 解析创建 id：自选（pattern 校验 + 占用检查抛 duplicate_id）或宿主生成 */
+	private resolveId(table: string, provided: string | undefined, prefix: string, label: string): string {
+		if (provided === undefined) return nextId(prefix);
+		if (!new RegExp(ID_PATTERN).test(provided)) {
+			throw new Error(`id 不合规（须匹配 ${ID_PATTERN}）: ${provided}`);
+		}
+		const row = this.db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(provided);
+		if (row !== undefined) throw new NovelDuplicateIdError(provided, label);
+		return provided;
+	}
+
+	/** 兄弟集合内最大 order_key（字典序；fromClause 含 WHERE，参数可为 null——`IS ?` 匹配 NULL） */
+	private maxOrderKey(fromClause: string, ...params: (string | null)[]): string | undefined {
+		const row = this.db.prepare(`SELECT MAX(order_key) AS k FROM ${fromClause}`).get(...params) as
+			| { k: string | null }
+			| undefined;
+		return row?.k ?? undefined;
+	}
+
+	/** 批量变更（批内原子）：单事务顺序执行，任一项失败回滚并抛错 */
+	async mutateBatch(ms: readonly NovelMutation[]): Promise<NovelMutateResult[]> {
+		this.db.exec("BEGIN");
+		try {
+			const results: NovelMutateResult[] = [];
+			for (const m of ms) results.push(await this.mutate(m));
+			this.db.exec("COMMIT");
+			return results;
+		} catch (err) {
+			this.db.exec("ROLLBACK");
+			throw err;
+		}
+	}
+
+	/** 构造 mutate 结果（级联删除时附完整记录） */
+	private result(
+		version: number,
+		changeId: string,
+		entity: NovelChangeEntity,
+		deleted?: ReadonlyArray<{ kind: string; id: string; data: unknown }>,
+	): NovelMutateResult {
+		return deleted === undefined ? { version, changeId, entity } : { version, changeId, entity, deleted };
 	}
 }
 
@@ -407,7 +703,7 @@ function toStoryUnit(row: Row): StoryUnit {
 		id: row.id as string,
 		entityVersion: row.entity_version as number,
 		outlineId: row.outline_id as string,
-		parentId: row.parent_id as string | undefined,
+		parentId: (row.parent_id as string | null) ?? undefined,
 		orderKey: row.order_key as string,
 		title: row.title as string,
 		intent: row.intent as string | undefined,
@@ -453,13 +749,14 @@ function toVolume(row: Row): PublicationVolume {
 	} as PublicationVolume;
 }
 
-function toChapter(row: Row): PublicationChapter {
+function toChapter(row: Row, paragraphIds: readonly string[] = []): PublicationChapter {
 	return {
 		id: row.id as string,
 		entityVersion: row.entity_version as number,
-		volumeId: row.volume_id as string | undefined,
+		volumeId: (row.volume_id as string | null) ?? undefined,
 		orderKey: row.order_key as string,
 		title: row.title as string,
-		storyUnitId: row.story_unit_id as string | undefined,
+		storyUnitId: (row.story_unit_id as string | null) ?? undefined,
+		paragraphIds,
 	} as PublicationChapter;
 }

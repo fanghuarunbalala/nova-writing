@@ -28,7 +28,7 @@
 }
 
 .error {
-  color: var(--color-design-error);
+  color: var(--color-danger);
   font-size: var(--fs-13);
 }
 

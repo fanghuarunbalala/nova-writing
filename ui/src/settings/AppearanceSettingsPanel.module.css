@@ -1,0 +1,113 @@
+/**
+ * AppearanceSettingsPanel 视觉：主题选择卡片网格。
+ * 双色预览点为固定 hex（tsx 内联，预览各主题自身调色板，不随当前主题变化）。
+ */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  animation: var(--anim-view-in) var(--duration-base) var(--ease-out);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--color-faint);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-1);
+}
+
+.card[data-active="true"] {
+  border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-border-strong));
+  background: var(--color-accent-8-surface);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: var(--space-2px);
+}
+
+.iconWrap {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-9);
+  color: var(--color-accent-ink);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2px);
+}
+
+.name {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.desc {
+  font-size: var(--fs-11);
+  color: var(--color-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview {
+  flex: none;
+  display: inline-flex;
+  gap: var(--space-2px);
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-fg) 12%, transparent);
+}
+
+.check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}

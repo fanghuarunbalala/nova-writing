@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="paper">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>主题候选预览 2（10 套 · 含传统色新增五套）</title>
+<style>
+  /* ============================================================
+     Demo 2：原五套（宣纸白/茶卷/墨夜/黛青/雪青）+ 新增五套
+     （竹雨/鎏金/胭脂/紫檀/烛影——配色取自用户罗列的传统色）。
+     token 值对齐 ui/src/shared/theme/tokens.css（demo 内联，不受纪律约束）。
+     机制与真实实现一致：<html data-theme="..."> 只覆盖 L3 色层
+     （--color-* / --shadow-*），语义混合色引用基色、自动重derive。
+     ============================================================ */
+  :root {
+    /* --- L2 设计语言（摘录，全部主题不变） --- */
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+      "PingFang SC", "Hiragino Sans GB", "HarmonyOS Sans SC", "MiSans",
+      "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Microsoft YaHei",
+      system-ui, sans-serif;
+    --font-body: "Iowan Old Style", "Palatino Linotype",
+      "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong",
+      "SimSun", Georgia, serif;
+    --font-kai: "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+
+    --fs-chat: 15.5px;
+    --fs-12: 12px;
+    --fs-13: 13px;
+    --fs-12-5: 12.5px;
+    --fs-11: 11px;
+    --fs-10-5: 10.5px;
+    --fs-16-5: 16.5px;
+
+    --fw-regular: 400;
+    --fw-medium: 550;
+    --fw-semibold: 650;
+    --fw-bold: 700;
+
+    --radius-sm: 6px;
+    --radius-md: 9px;
+    --radius-lg: 14px;
+    --radius-pill: 999px;
+
+    --duration-fast: 0.15s;
+    --duration-base: 0.22s;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+    /* --- L3 语义色 = 现状「宣纸白」（默认主题） --- */
+    --color-bg:            oklch(97.9% 0.003 85);
+    --color-surface:       oklch(99.8% 0.0015 85);
+    --color-surface-2:     oklch(96.2% 0.004 82);
+    --color-fg:            oklch(30% 0.009 46);
+    --color-muted:         oklch(52% 0.009 54);
+    --color-faint:         oklch(60% 0.009 58);
+    --color-border:        oklch(92.4% 0.003 82);
+    --color-border-strong: oklch(86.4% 0.006 72);
+    --color-orange:        oklch(73% 0.068 60);
+    --color-accent:        oklch(55% 0.072 42);
+    --color-red:           oklch(58% 0.075 32);
+    --color-accent-ink:    oklch(47% 0.062 41);
+    --color-success:       oklch(52% 0.07 156);
+    --color-success-bg:    oklch(97.2% 0.011 156);
+    --color-warn:          oklch(59% 0.07 80);
+    --color-warn-bg:       oklch(97.1% 0.011 86);
+    --color-danger:        oklch(54% 0.068 32);
+    --color-danger-bg:     oklch(97.1% 0.009 33);
+    --color-info:          oklch(54% 0.05 235);
+    --color-info-bg:       oklch(97.2% 0.007 236);
+    --color-on-accent:     #fff;
+
+    /* 语义混合/角色 token（引用基色，主题切换自动重derive） */
+    --color-accent-9:   color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+    --color-accent-8-t: color-mix(in oklab, var(--color-accent) 8%, transparent);
+    --color-accent-11:  color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+    --color-accent-45:  color-mix(in oklab, var(--color-accent) 45%, transparent);
+    --color-danger-12:  color-mix(in oklab, var(--color-danger) 12%, var(--color-surface));
+    --color-danger-32:  color-mix(in oklab, var(--color-danger) 32%, transparent);
+    --color-chrome-bg:  color-mix(in oklab, var(--color-surface) 82%, transparent);
+    --color-focus-ring: color-mix(in oklab, var(--color-accent) 42%, transparent);
+    --color-selection:  color-mix(in oklab, var(--color-accent) 16%, transparent);
+    --color-scrollbar-thumb: color-mix(in oklab, var(--color-fg) 15%, transparent);
+
+    --grad-accent: linear-gradient(105deg,
+      var(--color-orange) 0%, var(--color-accent) 48%, var(--color-red) 100%);
+    /* 状态文字渐变（美术资产，dark/各主题沿用不改——同 tokens.css 定稿） */
+    --grad-warn-text: linear-gradient(105deg,
+      oklch(82% 0.055 85), oklch(59% 0.07 80) 55%, oklch(68% 0.07 75));
+    --color-warn-40:         color-mix(in oklab, var(--color-warn) 40%, transparent);
+    --color-danger-12-t:     color-mix(in oklab, var(--color-danger) 12%, transparent);
+
+    --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04), 0 8px 24px rgba(40, 22, 10, 0.045);
+    --shadow-2: 0 2px 4px rgba(40, 22, 10, 0.05), 0 16px 40px rgba(40, 22, 10, 0.11);
+    --shadow-xs: 0 1px 3px rgba(20, 12, 6, 0.08);
+  }
+
+  /* ============ 原候选 2：茶卷（暖褐羊皮纸 · 深赭强调） ============ */
+  [data-theme="sepia"] {
+    --color-bg:            oklch(93.5% 0.014 78);
+    --color-surface:       oklch(96.8% 0.011 80);
+    --color-surface-2:     oklch(90.6% 0.017 74);
+    --color-fg:            oklch(28% 0.024 50);
+    --color-muted:         oklch(47% 0.022 55);
+    --color-faint:         oklch(56% 0.02 58);
+    --color-border:        oklch(86.2% 0.014 74);
+    --color-border-strong: oklch(78% 0.022 66);
+    --color-orange:        oklch(71% 0.085 62);
+    --color-accent:        oklch(50% 0.095 42);
+    --color-red:           oklch(53% 0.095 32);
+    --color-accent-ink:    oklch(43% 0.08 42);
+    --color-success:       oklch(48% 0.078 156);
+    --color-success-bg:    oklch(93.4% 0.02 156);
+    --color-warn:          oklch(54% 0.082 75);
+    --color-warn-bg:       oklch(93.4% 0.024 85);
+    --color-danger:        oklch(50% 0.085 32);
+    --color-danger-bg:     oklch(93.2% 0.018 33);
+    --color-info:          oklch(50% 0.06 238);
+    --color-info-bg:       oklch(93.4% 0.014 240);
+    --color-on-accent:     #fff;
+    --shadow-1: 0 1px 2px rgba(48, 28, 8, 0.06), 0 8px 24px rgba(48, 28, 8, 0.07);
+    --shadow-2: 0 2px 4px rgba(48, 28, 8, 0.07), 0 16px 40px rgba(48, 28, 8, 0.15);
+    --shadow-xs: 0 1px 3px rgba(40, 24, 8, 0.1);
+  }
+
+  /* ============ 原候选 3：墨夜（暖黑墨底 · 朱砂提亮） ============ */
+  [data-theme="ink"] {
+    --color-bg:            oklch(21% 0.005 80);
+    --color-surface:       oklch(25.5% 0.006 80);
+    --color-surface-2:     oklch(28.5% 0.007 78);
+    --color-fg:            oklch(89% 0.006 85);
+    --color-muted:         oklch(70% 0.008 80);
+    --color-faint:         oklch(59% 0.007 80);
+    --color-border:        oklch(31% 0.007 80);
+    --color-border-strong: oklch(40% 0.01 78);
+    --color-orange:        oklch(77% 0.095 62);
+    --color-accent:        oklch(68% 0.115 42);
+    --color-red:           oklch(66% 0.115 30);
+    --color-accent-ink:    oklch(78% 0.09 45);
+    --color-success:       oklch(72% 0.095 156);
+    --color-success-bg:    oklch(29% 0.032 156);
+    --color-warn:          oklch(75% 0.1 80);
+    --color-warn-bg:       oklch(29% 0.034 85);
+    --color-danger:        oklch(67% 0.1 32);
+    --color-danger-bg:     oklch(28% 0.03 33);
+    --color-info:          oklch(70% 0.075 235);
+    --color-info-bg:       oklch(28% 0.024 236);
+    --color-on-accent:     oklch(24% 0.03 42);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.32), 0 16px 40px rgba(0, 0, 0, 0.48);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+
+  /* ============ 原候选 4：黛青（冷调夜底 · 青瓷强调；渐变换青蓝族） ============ */
+  [data-theme="celadon"] {
+    --color-bg:            oklch(20% 0.013 235);
+    --color-surface:       oklch(24% 0.015 235);
+    --color-surface-2:     oklch(27% 0.017 232);
+    --color-fg:            oklch(89% 0.009 225);
+    --color-muted:         oklch(69% 0.013 230);
+    --color-faint:         oklch(58% 0.012 230);
+    --color-border:        oklch(30% 0.015 235);
+    --color-border-strong: oklch(38% 0.019 232);
+    --color-orange:        oklch(78% 0.07 190);
+    --color-accent:        oklch(75% 0.1 195);
+    --color-red:           oklch(68% 0.11 265);
+    --color-accent-ink:    oklch(84% 0.075 205);
+    --color-success:       oklch(72% 0.095 158);
+    --color-success-bg:    oklch(28% 0.032 158);
+    --color-warn:          oklch(76% 0.1 90);
+    --color-warn-bg:       oklch(28% 0.032 88);
+    --color-danger:        oklch(68% 0.11 25);
+    --color-danger-bg:     oklch(28% 0.03 25);
+    --color-info:          oklch(72% 0.08 240);
+    --color-info-bg:       oklch(28% 0.028 240);
+    --color-on-accent:     oklch(20% 0.04 230);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.32);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.32), 0 16px 40px rgba(0, 0, 0, 0.5);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.36);
+  }
+
+  /* ============ 原候选 5：雪青（冷白瓷底 · 群青强调；渐变换蓝紫族） ============ */
+  [data-theme="frost"] {
+    --color-bg:            oklch(97.4% 0.004 240);
+    --color-surface:       oklch(99.5% 0.002 240);
+    --color-surface-2:     oklch(95.6% 0.005 234);
+    --color-fg:            oklch(29% 0.016 262);
+    --color-muted:         oklch(50% 0.014 256);
+    --color-faint:         oklch(59% 0.012 254);
+    --color-border:        oklch(91.6% 0.005 240);
+    --color-border-strong: oklch(85.4% 0.009 240);
+    --color-orange:        oklch(72% 0.075 230);
+    --color-accent:        oklch(52% 0.1 262);
+    --color-red:           oklch(54% 0.1 285);
+    --color-accent-ink:    oklch(44% 0.09 262);
+    --color-success:       oklch(52% 0.07 156);
+    --color-success-bg:    oklch(96.8% 0.011 156);
+    --color-warn:          oklch(58% 0.07 80);
+    --color-warn-bg:       oklch(96.7% 0.011 86);
+    --color-danger:        oklch(54% 0.068 32);
+    --color-danger-bg:     oklch(96.7% 0.009 33);
+    --color-info:          oklch(54% 0.055 240);
+    --color-info-bg:       oklch(96.8% 0.008 240);
+    --color-on-accent:     #fff;
+    --shadow-1: 0 1px 2px rgba(12, 18, 40, 0.05), 0 8px 24px rgba(12, 18, 40, 0.055);
+    --shadow-2: 0 2px 4px rgba(12, 18, 40, 0.06), 0 16px 40px rgba(12, 18, 40, 0.13);
+    --shadow-xs: 0 1px 3px rgba(8, 12, 30, 0.09);
+  }
+
+  /* ================================================================
+     新增五套：配色取自用户罗列的传统色（沿用原名标注；派生色注明来源）
+     ================================================================ */
+
+  /* ============ 新增 6：竹雨（绿调亮色）============
+     取色：底 珍珠#E4DFD7 / surface 珍珠提白 / surface-2 晓灰#D4C4B7 /
+     fg 京元#31322C / muted 夜灰×京元 / faint 夜灰#847C74 / 边 玛瑙·芦穗 /
+     渐变 蔻梢#5DBE8A → 海王#248067(主) → 深海王 / danger 枫叶#C21F30 */
+  [data-theme="bamboo"] {
+    --color-bg:            #E4DFD7;
+    --color-surface:       #F3F1ED;
+    --color-surface-2:     #D4C4B7;
+    --color-fg:            #31322C;
+    --color-muted:         #5B5750;
+    --color-faint:         #847C74;
+    --color-border:        #CFCCC9;
+    --color-border-strong: #BDAEAD;
+    --color-orange:        #5DBE8A;
+    --color-accent:        #248067;
+    --color-red:           #195A48;
+    --color-accent-ink:    #175343;
+    --color-success:       #206C56;
+    --color-success-bg:    #FFF9DF;
+    --color-warn:          #927104;
+    --color-warn-bg:       #FEF7E2;
+    --color-danger:        #C21F30;
+    --color-danger-bg:     #FBF0F2;
+    --color-info:          #4466B4;
+    --color-info-bg:       #E9EEF8;
+    --color-on-accent:     #fff;
+    --shadow-1: 0 1px 2px rgba(38, 34, 24, 0.06), 0 8px 24px rgba(38, 34, 24, 0.07);
+    --shadow-2: 0 2px 4px rgba(38, 34, 24, 0.07), 0 16px 40px rgba(38, 34, 24, 0.15);
+    --shadow-xs: 0 1px 3px rgba(30, 26, 16, 0.1);
+  }
+
+  /* ============ 新增 7：鎏金（金调暗色）============
+     取色：底 烟墨#353538 / surface-2 朱墨#2D2D30 / fg 珍珠#E4DFD7 /
+     muted 玛瑙#CFCCC9 / faint 芦穗#BDAEAD / success 玉髓#41B349 /
+     渐变 琥珀#FEBA07 → 金盏#FCC307(主) → 玳瑁#DAA45A / danger 茶花提亮 */
+  [data-theme="gilt"] {
+    --color-bg:            #353538;
+    --color-surface:       #414144;
+    --color-surface-2:     #2D2D30;
+    --color-fg:            #E4DFD7;
+    --color-muted:         #CFCCC9;
+    --color-faint:         #BDAEAD;
+    --color-border:        #4D4D50;
+    --color-border-strong: #605C59;
+    --color-orange:        #FEBA07;
+    --color-accent:        #FCC307;
+    --color-red:           #DAA45A;
+    --color-accent-ink:    #FEBA07;
+    --color-success:       #41B349;
+    --color-success-bg:    #37473A;
+    --color-warn:          #F9A633;
+    --color-warn-bg:       #504537;
+    --color-danger:        #F26974;
+    --color-danger-bg:     #4B363B;
+    --color-info:          #7B9CE8;
+    --color-info-bg:       #3D414D;
+    --color-on-accent:     #332400;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.32);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.34), 0 16px 40px rgba(0, 0, 0, 0.5);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.38);
+  }
+
+  /* ============ 新增 8：胭脂（粉调亮色）============
+     取色：底 石蕊#F0C9CF 洗白 / surface-2 石蕊淡染 / fg 酱紫#4D1018 /
+     muted 满江#A7535A / 边 石蕊·合欢#F0A1A8 /
+     渐变 淡茜#E77C8E → 锦葵#BF3553(主) → 深锦葵 / danger 枫叶#C21F30 */
+  [data-theme="rouge"] {
+    --color-bg:            #FBF2F3;
+    --color-surface:       #FFFCFD;
+    --color-surface-2:     #F7E1E5;
+    --color-fg:            #4D1018;
+    --color-muted:         #A7535A;
+    --color-faint:         #B77278;
+    --color-border:        #F0C9CF;
+    --color-border-strong: #F0A1A8;
+    --color-orange:        #E77C8E;
+    --color-accent:        #BF3553;
+    --color-red:           #992A42;
+    --color-accent-ink:    #822438;
+    --color-success:       #20715B;
+    --color-success-bg:    #FFF9DF;
+    --color-warn:          #927104;
+    --color-warn-bg:       #FEF7E2;
+    --color-danger:        #C21F30;
+    --color-danger-bg:     #FBF0F2;
+    --color-info:          #4466B4;
+    --color-info-bg:       #E9EEF8;
+    --color-on-accent:     #fff;
+    --shadow-1: 0 1px 2px rgba(58, 16, 26, 0.05), 0 8px 24px rgba(58, 16, 26, 0.06);
+    --shadow-2: 0 2px 4px rgba(58, 16, 26, 0.06), 0 16px 40px rgba(58, 16, 26, 0.14);
+    --shadow-xs: 0 1px 3px rgba(48, 12, 22, 0.09);
+  }
+
+  /* ============ 新增 9：紫檀（紫调暗色）============
+     取色：底 石青#2E282E / fg 芝兰#E9CCD3 / muted 萝兰#C08EAF / faint 樱草#C06F98 /
+     渐变 芝兰 → 萝兰#C08EAF(主) → 蕈紫#815C94 / danger 淡曙#EE2746 / info 槿紫#806D9E 提亮 */
+  [data-theme="zitan"] {
+    --color-bg:            #2E282E;
+    --color-surface:       #3D373D;
+    --color-surface-2:     #201C20;
+    --color-fg:            #E9CCD3;
+    --color-muted:         #C08EAF;
+    --color-faint:         #C06F98;
+    --color-border:        #544F54;
+    --color-border-strong: #6D696D;
+    --color-orange:        #E9CCD3;
+    --color-accent:        #C08EAF;
+    --color-red:           #815C94;
+    --color-accent-ink:    #D0AAC3;
+    --color-success:       #41B349;
+    --color-success-bg:    #313B32;
+    --color-warn:          #F9A633;
+    --color-warn-bg:       #4A3A2F;
+    --color-danger:        #EE2746;
+    --color-danger-bg:     #452831;
+    --color-info:          #A092B6;
+    --color-info-bg:       #39323E;
+    --color-on-accent:     #2E1626;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.32);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.34), 0 16px 40px rgba(0, 0, 0, 0.5);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.38);
+  }
+
+  /* ============ 新增 10：烛影（棕调暗色）============
+     取色：底 火山#482522 / surface-2 栗棕#5C1E19 / fg 珍珠#E4DFD7 /
+     muted 玳瑁#DAA45A / success 玉髓#41B349 / warn 淡茧#F9D770 /
+     渐变 玳瑁 → 凋叶#E7A23F(主) → 麂棕#DE7622 / accent-ink 琥珀#FEBA07 / danger 淡曙提亮 */
+  [data-theme="candle"] {
+    --color-bg:            #482522;
+    --color-surface:       #5A3B38;
+    --color-surface-2:     #5C1E19;
+    --color-fg:            #E4DFD7;
+    --color-muted:         #DAA45A;
+    --color-faint:         #B78A4C;
+    --color-border:        #654845;
+    --color-border-strong: #7B6260;
+    --color-orange:        #DAA45A;
+    --color-accent:        #E7A23F;
+    --color-red:           #DE7622;
+    --color-accent-ink:    #FEBA07;
+    --color-success:       #41B349;
+    --color-success-bg:    #473927;
+    --color-warn:          #F9D770;
+    --color-warn-bg:       #5D3A2B;
+    --color-danger:        #F14762;
+    --color-danger-bg:     #5C2526;
+    --color-info:          #7B9CE8;
+    --color-info-bg:       #4E333A;
+    --color-on-accent:     #2E1A08;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.34);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.34), 0 16px 40px rgba(0, 0, 0, 0.52);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+
+  /* ============ 主题切换过渡（demo 演示；真实实现可加在全局样式） ============ */
+  html.theming *,
+  html.theming *::before,
+  html.theming *::after {
+    transition:
+      background-color 0.35s var(--ease-out),
+      border-color 0.35s var(--ease-out),
+      color 0.35s var(--ease-out),
+      box-shadow 0.35s var(--ease-out),
+      fill 0.35s var(--ease-out),
+      stroke 0.35s var(--ease-out) !important;
+  }
+
+  /* ============ Demo 页面骨架 ============ */
+  * { box-sizing: border-box; }
+  html { scrollbar-color: var(--color-scrollbar-thumb) transparent; }
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-ui);
+    font-size: var(--fs-13);
+    line-height: 1.6;
+  }
+  ::selection { background: var(--color-selection); }
+  svg { flex: none; }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 20px 28px 64px; }
+
+  /* --- 顶部：主题切换器 --- */
+  .demoBar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 12px 16px; margin: 0 -12px 18px;
+    background: color-mix(in oklab, var(--color-bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .demoBar h1 { font-size: var(--fs-16-5); font-weight: var(--fw-bold); margin: 0 6px 0 0; }
+  .themeBtns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .groupLabel {
+    font-size: var(--fs-11); color: var(--color-faint);
+    font-weight: var(--fw-medium); padding: 0 4px;
+  }
+  .themeBtn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    color: var(--color-muted);
+    font-family: inherit; font-size: var(--fs-12-5); font-weight: var(--fw-medium);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .themeBtn:hover { border-color: var(--color-accent); color: var(--color-accent-ink); }
+  .themeBtn[aria-pressed="true"] {
+    border-color: var(--color-accent);
+    color: var(--color-accent-ink);
+    background: var(--color-accent-9);
+    box-shadow: 0 0 0 3px var(--color-accent-8-t);
+  }
+  .themeBtn .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: linear-gradient(120deg, var(--dot-a), var(--dot-b));
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-fg) 12%, transparent);
+  }
+  .themeMeta { width: 100%; color: var(--color-muted); font-size: var(--fs-12-5); padding-left: 2px; }
+  .themeMeta b { color: var(--color-accent-ink); font-weight: var(--fw-semibold); }
+
+  .sectionTitle {
+    display: flex; align-items: center; gap: 8px;
+    margin: 30px 0 12px;
+    font-size: var(--fs-13); font-weight: var(--fw-semibold); color: var(--color-muted);
+  }
+  .sectionTitle::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
+  .sectionNote { color: var(--color-faint); font-size: var(--fs-12); margin: -6px 0 12px; }
+
+  /* ============ 应用切片复刻（布局取自 ApplicationShell） ============ */
+  .appFrame {
+    display: grid;
+    grid-template-columns: 258px 1fr;
+    grid-template-rows: 52px 1fr;
+    height: 620px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--color-bg);
+    box-shadow: var(--shadow-2);
+  }
+  .topbar {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 16px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-chrome-bg);
+    backdrop-filter: blur(12px);
+  }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: var(--fw-semibold); font-size: var(--fs-13); }
+  .brandDot {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--grad-accent);
+    background-size: 160% 160%;
+    animation: grad-flow 6s var(--ease-in-out) infinite;
+  }
+  .switcher {
+    display: grid; grid-template-columns: repeat(3, 1fr); position: relative;
+    margin: 0 auto;
+    padding: 2px; gap: 2px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    box-shadow: var(--shadow-xs);
+  }
+  .switcher .thumb {
+    position: absolute; top: 2px; bottom: 2px; left: 2px;
+    width: calc((100% - 2px * 2 - 4px) / 3);
+    border-radius: 4px;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-xs);
+    transition: transform var(--duration-base) var(--ease-out);
+  }
+  .switcher button {
+    position: relative; z-index: 1;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    padding: 4px 12px;
+    border: 0; background: transparent;
+    font-family: inherit; font-size: var(--fs-12); font-weight: var(--fw-medium);
+    color: var(--color-muted); cursor: pointer;
+    transition: color var(--duration-base) var(--ease-out);
+  }
+  .switcher button[aria-selected="true"] { color: var(--color-accent-ink); }
+  .topActions { display: flex; gap: 4px; }
+  .iconBtn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px;
+    border: 0; border-radius: var(--radius-sm);
+    background: transparent; color: var(--color-muted); cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .iconBtn:hover { background: var(--color-accent-9); color: var(--color-accent-ink); }
+  .iconBtn:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; }
+
+  /* 侧栏 */
+  .sidebar {
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-chrome-bg);
+    padding: 12px 10px;
+    gap: 10px;
+    overflow: hidden;
+  }
+  .newConvBtn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px;
+    border: 0; border-radius: var(--radius-md);
+    background: var(--grad-accent);
+    color: var(--color-on-accent);
+    font-family: inherit; font-size: var(--fs-12-5); font-weight: var(--fw-semibold);
+    cursor: pointer;
+    box-shadow: 0 2px 8px var(--color-accent-45);
+    transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .newConvBtn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px var(--color-accent-45); }
+  .searchBox {
+    display: flex; align-items: center; gap: 7px;
+    padding: 5px 9px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-faint);
+    font-size: var(--fs-12);
+  }
+  .convGroup { font-size: var(--fs-11); color: var(--color-faint); font-weight: var(--fw-medium); padding: 4px 8px 0; }
+  .convItem {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 9px;
+    border: 1px solid transparent; border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .convItem:hover { background: var(--color-accent-8-t); }
+  .convItem[data-active="true"] {
+    background: var(--color-accent-9);
+    border-color: color-mix(in oklab, var(--color-accent) 18%, var(--color-border-strong));
+  }
+  .convIcon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; flex: none;
+    border-radius: var(--radius-sm);
+    background: var(--color-accent-8-t);
+    color: var(--color-accent-ink);
+  }
+  .convText { min-width: 0; flex: 1; }
+  .convTitle { font-weight: var(--fw-medium); font-size: var(--fs-12-5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .convMeta { font-size: var(--fs-11); color: var(--color-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .statusDot { width: 6px; height: 6px; flex: none; border-radius: 50%; }
+
+  /* 主区：对话流 + 输入区 */
+  .main { display: flex; flex-direction: column; min-width: 0; }
+  .chat {
+    flex: 1; overflow-y: auto;
+    padding: 20px 26px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-scrollbar-thumb) transparent;
+    display: flex; flex-direction: column; gap: 18px;
+  }
+  .msgUser {
+    align-self: flex-end; max-width: 76%;
+    padding: 9px 13px;
+    background: var(--color-accent-9);
+    border: 1px solid color-mix(in oklab, var(--color-accent) 14%, var(--color-border));
+    border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
+    font-size: var(--fs-chat);
+    animation: msg-enter var(--duration-base) var(--ease-out);
+  }
+  .msgAssistant { max-width: 92%; animation: msg-enter var(--duration-base) var(--ease-out); }
+  .toolLine {
+    display: flex; align-items: center; gap: 6px;
+    font-size: var(--fs-12); color: var(--color-muted);
+    padding: 2px 0 8px;
+  }
+  .toolLine .mono { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--color-faint); }
+  .spinner {
+    width: 12px; height: 12px; flex: none;
+    border-radius: 50%;
+    border: 2px solid color-mix(in oklab, currentColor 25%, transparent);
+    border-top-color: currentColor;
+    animation: spinner-rotate 0.8s linear infinite;
+    color: var(--color-warn);
+  }
+  .toolDone { color: var(--color-success); display: inline-flex; }
+  .mdBody { font-family: var(--font-body); font-size: var(--fs-chat); line-height: 1.85; }
+  .mdBody p { margin: 0 0 10px; }
+  .quoteKai {
+    margin: 4px 0 10px; padding: 8px 14px;
+    border-left: 2px solid var(--color-accent-45);
+    font-family: var(--font-kai); font-size: var(--fs-chat); color: var(--color-muted);
+    background: var(--color-accent-8-t);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .draftPanel {
+    margin: 6px 0 10px;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 18%, var(--color-border-strong));
+    border-radius: var(--radius-md);
+    background:
+      linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+      linear-gradient(120deg,
+        color-mix(in oklab, var(--color-orange) 45%, transparent),
+        color-mix(in oklab, var(--color-accent) 35%, transparent),
+        color-mix(in oklab, var(--color-red) 40%, transparent)) border-box;
+    padding: 12px 16px 14px;
+  }
+  .draftKicker {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-ui); font-size: var(--fs-11);
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.08em;
+    background: var(--grad-accent);
+    background-size: 160% 160%;
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+    animation: grad-flow 6s var(--ease-in-out) infinite;
+    margin-bottom: 7px;
+  }
+  .draftBody { font-family: var(--font-body); font-size: var(--fs-chat); line-height: 1.95; }
+  .cursor {
+    display: inline-block; vertical-align: -2px;
+    width: 2px; height: 1em; margin-left: 2px;
+    background: var(--color-accent);
+    animation: draft-cursor 1.1s steps(2) infinite;
+  }
+
+  .composer {
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    padding: 10px 14px 12px;
+  }
+  .modeBar { display: flex; gap: 6px; margin-bottom: 8px; }
+  .modeChip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: transparent; color: var(--color-muted);
+    font-family: inherit; font-size: var(--fs-11); font-weight: var(--fw-medium);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .modeChip[aria-pressed="true"] {
+    border-color: color-mix(in oklab, var(--color-accent) 40%, var(--color-border));
+    background: var(--color-accent-9);
+    color: var(--color-accent-ink);
+  }
+  .composerRow { display: flex; align-items: flex-end; gap: 10px; }
+  .composerInput {
+    flex: 1;
+    padding: 9px 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-faint);
+    font-family: inherit; font-size: var(--fs-13);
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  .composerInput:focus { outline: none; border-color: var(--color-accent); color: var(--color-fg); }
+  .sendBtn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px;
+    border: 0; border-radius: var(--radius-md);
+    background: var(--grad-accent);
+    color: var(--color-on-accent);
+    cursor: pointer;
+    box-shadow: 0 2px 8px var(--color-accent-45);
+    transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .sendBtn:hover { transform: translateY(-1px); }
+
+  /* ============ 组件切片 ============ */
+  .strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  .card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    padding: 14px 16px;
+    box-shadow: var(--shadow-1);
+  }
+  .cardTitle { font-size: var(--fs-12); font-weight: var(--fw-semibold); color: var(--color-muted); margin-bottom: 10px; }
+  .btnRow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-family: inherit; font-size: var(--fs-12-5); font-weight: var(--fw-medium);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .btn:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+  .btnPrimary {
+    border: 0;
+    background: var(--grad-accent);
+    color: var(--color-on-accent);
+    box-shadow: 0 2px 8px var(--color-accent-45);
+  }
+  .btnPrimary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px var(--color-accent-45); }
+  .btnSecondary { border: 1px solid var(--color-border-strong); background: var(--color-surface); color: var(--color-fg); }
+  .btnSecondary:hover { border-color: var(--color-accent); color: var(--color-accent-ink); }
+  .btnGhost { border: 1px solid transparent; background: transparent; color: var(--color-muted); }
+  .btnGhost:hover { background: var(--color-accent-8-t); color: var(--color-accent-ink); }
+  .btnDanger { border: 1px solid color-mix(in oklab, var(--color-danger) 32%, transparent); background: var(--color-danger-12); color: var(--color-danger); }
+  .btnDanger:hover { background: color-mix(in oklab, var(--color-danger) 16%, var(--color-surface)); }
+
+  .fieldCol { display: flex; flex-direction: column; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-12); color: var(--color-muted); }
+  .input, .selectWrap select {
+    width: 100%;
+    padding: 7px 11px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-fg);
+    font-family: inherit; font-size: var(--fs-12-5);
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  .input::placeholder { color: var(--color-faint); }
+  .input:focus, .selectWrap select:focus { outline: none; border-color: var(--color-accent); }
+  .selectWrap { position: relative; }
+  .selectWrap select { appearance: none; cursor: pointer; padding-right: 30px; }
+  .selectWrap > svg { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--color-faint); }
+
+  .badgeRow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    font-size: var(--fs-11); font-weight: var(--fw-medium);
+  }
+  .badgeSuccess { background: var(--color-success-bg); color: var(--color-success); }
+  .badgeWarn { background: var(--color-warn-bg); color: var(--color-warn); }
+  .badgeDanger { background: var(--color-danger-bg); color: var(--color-danger); }
+  .badgeInfo { background: var(--color-info-bg); color: var(--color-info); }
+  .badge .spinner { width: 10px; height: 10px; border-width: 1.5px; }
+
+  .gradBar {
+    height: 22px; border-radius: var(--radius-pill);
+    background: var(--grad-accent);
+    background-size: 180% 180%;
+    animation: grad-flow 6s var(--ease-in-out) infinite;
+    margin-bottom: 12px;
+  }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; }
+  .swatch { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-10-5); color: var(--color-muted); }
+  .swatch i {
+    height: 34px; border-radius: 5px;
+    border: 1px solid var(--color-border);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-surface) 40%, transparent);
+  }
+  .swatch span { font-family: var(--font-mono); font-size: var(--fs-10-5); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .emptyKai { text-align: center; padding: 26px 10px; font-family: var(--font-kai); color: var(--color-muted); font-size: 15px; line-height: 2; }
+  .emptyKai .glyph { font-size: 22px; display: block; margin-bottom: 6px; opacity: 0.55; }
+
+  .footer {
+    margin-top: 34px; padding-top: 14px;
+    border-top: 1px dashed var(--color-border-strong);
+    color: var(--color-faint); font-size: var(--fs-12); line-height: 1.9;
+  }
+  .footer code { font-family: var(--font-mono); font-size: var(--fs-11); background: var(--color-surface-2); padding: 1px 5px; border-radius: 4px; color: var(--color-muted); }
+
+  /* ============ 运行状态切片（RuntimeStatusIndicator / GenStatus 复刻） ============ */
+  .rsBtns { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .rsBtn {
+    padding: 3px 11px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface); color: var(--color-muted);
+    font-family: inherit; font-size: var(--fs-12); font-weight: var(--fw-medium);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .rsBtn[aria-pressed="true"] {
+    border-color: var(--color-accent);
+    background: var(--color-accent-9);
+    color: var(--color-accent-ink);
+  }
+  /* 状态行容器：0fr↔1fr 收展（Composer statusWrap 同款） */
+  .rsWrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s var(--ease-out); }
+  .rsWrap[data-open="true"] { grid-template-rows: 1fr; }
+  .rsInner { overflow: hidden; }
+  .rsRow {
+    display: inline-flex; align-items: center; gap: 8px;
+    min-width: 0; min-height: 20px;
+    margin: 2px 2px 10px;
+  }
+  .rsIcon { position: relative; flex: none; width: 18px; height: 18px; display: grid; place-items: center; }
+  .rsIcon svg { width: 15px; height: 15px; }
+  /* 生成：笔尖 + 品牌系 + 上下浮动 + 墨滴下落 */
+  .rsRow.generating .rsIcon { color: var(--color-accent-ink); }
+  .rsRow.generating .rsIcon svg { animation: status-bob 1.5s ease-in-out infinite; }
+  .rsInk {
+    position: absolute; right: -4px; top: 4px;
+    width: 5px; height: 5px; border-radius: 50%;
+    background: currentColor;
+    animation: status-drop 1.2s ease-in infinite;
+    opacity: 0;
+  }
+  /* 审批：沙漏 + warn 琥珀 + 左右摇摆 */
+  .rsRow.waiting .rsIcon { color: var(--color-warn); }
+  .rsRow.waiting .rsIcon svg { animation: status-sway 2.8s ease-in-out infinite; }
+  .rsLabel {
+    font-size: var(--fs-12-5); font-weight: var(--fw-bold);
+    letter-spacing: 0.02em; white-space: nowrap;
+    background-size: 250% auto;
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+    animation: grad-flow 4.5s ease-in-out infinite;
+    opacity: 0.92;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 1px;
+  }
+  .rsRow.generating .rsLabel {
+    background-image: var(--grad-accent);
+    border-bottom-color: color-mix(in oklab, var(--color-accent) 40%, transparent);
+  }
+  .rsRow.waiting .rsLabel {
+    background-image: var(--grad-warn-text);
+    border-bottom-color: var(--color-warn-40);
+  }
+  .rsSeconds { font-size: var(--fs-10-5); color: var(--color-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* 失败：警示三角一次性抖动 + 加粗红标 + 原因 + 重试圆钮 */
+  .rsRow.failed { color: var(--color-danger); }
+  .rsRow.failed .rsIcon { color: var(--color-danger); }
+  .rsRow.failed .rsIcon svg { animation: failed-shake 0.45s ease-out both; }
+  .rsFailedMain { flex: none; color: var(--color-danger); font-size: var(--fs-12-5); font-weight: var(--fw-bold); white-space: nowrap; }
+  .rsFailedErr {
+    flex: 1; min-width: 0; color: var(--color-faint); font-size: var(--fs-11);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .rsRetry {
+    flex: none; margin-left: auto;
+    width: 22px; height: 22px; padding: 0;
+    border: 0; border-radius: 50%;
+    display: inline-grid; place-items: center;
+    color: var(--color-danger);
+    background: var(--color-danger-12-t);
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .rsRetry:hover {
+    color: var(--color-on-accent);
+    background: var(--color-danger);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px color-mix(in oklab, var(--color-danger) 35%, transparent);
+  }
+  .rsRetry svg { width: 11px; height: 11px; }
+  .rsHint { color: var(--color-faint); font-size: var(--fs-11); margin-top: 6px; }
+
+  @keyframes status-sway {
+    0%, 100% { transform: rotate(-7deg); }
+    50% { transform: rotate(7deg); }
+  }
+  @keyframes status-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+  }
+  @keyframes status-drop {
+    0% { transform: translateY(0); opacity: 0; }
+    20% { opacity: 1; }
+    100% { transform: translateY(9px); opacity: 0; }
+  }
+  @keyframes failed-shake {
+    0% { transform: translateX(0); }
+    20% { transform: translateX(-2px); }
+    40% { transform: translateX(2px); }
+    60% { transform: translateX(-1px); }
+    80% { transform: translateX(1px); }
+    100% { transform: translateX(0); }
+  }
+
+  /* ============ 审批面板切片（增/删/编辑 + 动画） ============ */
+  .btnSm { padding: 4px 12px; font-size: var(--fs-12); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+  .btnGhostDanger { border: 1px solid transparent; background: transparent; color: var(--color-danger); }
+  .btnGhostDanger:hover { background: var(--color-danger-12); }
+
+  .apBar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .apNote { color: var(--color-faint); font-size: var(--fs-12); }
+
+  .apFrame {
+    position: relative; display: flex;
+    height: 540px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+    overflow: hidden; background: var(--color-surface);
+    box-shadow: var(--shadow-2);
+  }
+  /* 抽屉遮罩（现有机制：fg 12% + 0.2s 渐隐） */
+  .apScrim {
+    position: absolute; inset: 0; z-index: 8;
+    background: color-mix(in oklab, var(--color-fg) 12%, transparent);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s var(--ease-out);
+  }
+  .apFrame.drawerOpen .apScrim { opacity: 1; pointer-events: auto; }
+  /* 目录抽屉（现有机制：左滑出 0.22s + blur） */
+  .apList {
+    position: absolute; inset-block: 0; left: 0; z-index: 9;
+    width: min(252px, 74%);
+    overflow-y: auto;
+    padding: 8px 10px;
+    border-right: 1px solid var(--color-border-strong);
+    display: flex; flex-direction: column; gap: 2px;
+    background: color-mix(in oklab, var(--color-surface) 94%, transparent);
+    backdrop-filter: blur(14px);
+    box-shadow: var(--shadow-2);
+    transform: translateX(-104%);
+    transition: transform 0.22s var(--ease-out);
+  }
+  .apFrame.drawerOpen .apList { transform: none; }
+  .apDirHead {
+    display: flex; align-items: center; gap: 7px;
+    padding: 4px 4px 6px;
+    font-size: var(--fs-11); font-weight: var(--fw-bold);
+    letter-spacing: 0.06em; color: var(--color-muted);
+  }
+  .apCnt {
+    font-family: var(--font-mono); font-size: var(--fs-10-5); font-weight: var(--fw-bold);
+    color: var(--color-accent-ink); background: var(--color-accent-11);
+    padding: 1px 7px; border-radius: var(--radius-pill);
+  }
+  .apCnt.pop { animation: cnt-pop 0.3s var(--ease-out); }
+  .apRow {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 6px;
+    border: 1px solid transparent; border-radius: 8px;
+    background: none; text-align: left; cursor: pointer;
+    color: var(--color-fg); font-family: inherit;
+    transition: background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+  }
+  .apRow:hover { background: var(--color-surface-2); }
+  .apRow.active {
+    border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-border));
+    background: var(--color-accent-8-t);
+  }
+  .apRow.enter { animation: appr-in 0.35s var(--ease-out); }
+  .apRow.pulse { animation: status-pulse 0.6s var(--ease-out); }
+  .apRowTitle {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: var(--fs-12-5); font-weight: var(--fw-semibold);
+  }
+  .apPill {
+    flex: none; font-size: 10px; font-weight: var(--fw-bold);
+    border-radius: var(--radius-pill); padding: 1px 7px;
+  }
+  .apPill.pending { background: var(--color-warn-bg); color: var(--color-warn); }
+  .apPill.approved { background: var(--color-success-bg); color: var(--color-success); }
+  .apPill.rejected, .apPill.expired { background: var(--color-danger-bg); color: var(--color-danger); }
+  /* 提案：edited 状态 pill 补 info 配色（现网无样式，渲染为裸文本） */
+  .apPill.edited { background: var(--color-info-bg); color: var(--color-info); }
+
+  .apDetail { flex: 1; min-width: 0; overflow-y: auto; padding: 14px 18px 20px; }
+  .apDetail.viewIn { animation: view-in 0.3s var(--ease-out); }
+  .apIdentity {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-11); color: var(--color-faint);
+  }
+  .apIdentity .apPill { margin-left: auto; }
+  .apTitle {
+    display: flex; align-items: baseline; gap: 8px;
+    margin: 0 0 4px; font-size: 14px; font-weight: var(--fw-bold);
+  }
+  .apGlyph { flex: none; width: 16px; text-align: center; font-family: var(--font-mono); font-weight: var(--fw-bold); }
+  .apGlyph.add { color: var(--color-success); }
+  .apGlyph.edit, .apGlyph.delete { color: var(--color-danger); }
+  .apArgs { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .apArgsTitle { font-size: var(--fs-11); font-weight: var(--fw-bold); color: var(--color-faint); }
+  .apGroup {
+    display: flex; flex-direction: column; overflow: hidden;
+    border: 1px solid var(--color-border); border-radius: 10px;
+    background: var(--color-surface);
+  }
+  /* 方案 E 操作色带：增=success、删/编辑=danger（左色条 + tinted 底 + diff 符号） */
+  .apBand { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-left: 3px solid transparent; }
+  .apBand.add { background: color-mix(in oklab, var(--color-success) 18%, var(--color-surface)); border-left-color: var(--color-success); }
+  .apBand.edit, .apBand.delete { background: color-mix(in oklab, var(--color-danger) 18%, var(--color-surface)); border-left-color: var(--color-danger); }
+  .apBandGlyph { flex: none; width: 16px; font-family: var(--font-mono); font-weight: var(--fw-bold); text-align: center; }
+  .apBand.add .apBandGlyph { color: var(--color-success); }
+  .apBand.edit .apBandGlyph, .apBand.delete .apBandGlyph { color: var(--color-danger); }
+  .apBandTool { font-size: var(--fs-12); font-weight: var(--fw-bold); color: var(--color-fg); }
+  .apBody { padding: 8px 12px 10px; border-top: 1px solid var(--color-border); }
+  .apStale {
+    margin-bottom: 8px; padding: 7px 10px; border-radius: 8px;
+    background: var(--color-warn-bg);
+    border: 1px solid color-mix(in oklab, var(--color-warn) 28%, transparent);
+    color: var(--color-warn);
+    font-size: var(--fs-12); font-weight: var(--fw-semibold); line-height: 1.5;
+  }
+  .apParam { display: grid; grid-template-columns: 76px 1fr; gap: 4px 10px; margin: 0; }
+  .apParam dt { font-size: var(--fs-11); color: var(--color-faint); padding-top: 2px; }
+  .apParam dd { margin: 0; font-size: var(--fs-12); color: var(--color-fg); line-height: 1.6; }
+  .apActions {
+    display: flex; justify-content: flex-end; gap: 8px;
+    margin-top: 14px; padding: 12px 0 4px;
+    border-top: 1px solid var(--color-border);
+    position: sticky; bottom: 0;
+    background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+    backdrop-filter: blur(8px);
+  }
+  .apBanner {
+    margin-top: 14px; padding: 8px 11px; border-radius: 10px;
+    font-size: var(--fs-12); font-weight: var(--fw-semibold);
+    animation: view-in 0.3s var(--ease-out);
+  }
+  .apBanner.approved { background: var(--color-success-bg); color: var(--color-success); }
+  .apBanner.rejected { background: var(--color-danger-bg); color: var(--color-danger); }
+  .apBanner.edited { background: var(--color-info-bg); color: var(--color-info); }
+  /* 提案：请求修改输入 0fr→1fr 展开（GenStatus 同款先例） */
+  .apCommentWrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.25s var(--ease-out); }
+  .apCommentWrap[data-open="true"] { grid-template-rows: 1fr; }
+  .apCommentInner { overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+  .apCommentInner .apActions { position: static; border-top: 0; padding-top: 0; background: none; backdrop-filter: none; }
+  .apComment {
+    width: 100%; padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface);
+    color: var(--color-fg);
+    font-family: inherit; font-size: var(--fs-12-5);
+    resize: vertical;
+  }
+  .apComment:focus { outline: none; border-color: var(--color-accent); }
+
+  @keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  /* 提案：新审批入列（下滑入 + accent 微光） */
+  @keyframes appr-in {
+    0% { opacity: 0; transform: translateY(-8px); }
+    55% { background: var(--color-accent-8-t); }
+    100% { opacity: 1; transform: none; }
+  }
+  /* 提案：决策后状态脉冲（用结果状态色，经 --pulse-c 注入） */
+  @keyframes status-pulse {
+    from { background: color-mix(in oklab, var(--pulse-c) 25%, transparent); }
+    to { background: transparent; }
+  }
+  /* 提案：队列计数弹跳 */
+  @keyframes cnt-pop {
+    0% { transform: scale(0.6); }
+    60% { transform: scale(1.25); }
+    100% { transform: scale(1); }
+  }
+
+  /* ============ 动画（对齐 animations.css；demo 内联） ============ */
+  @keyframes grad-flow {
+    0%, 100% { background-position: 0% 30%; }
+    50% { background-position: 100% 70%; }
+  }
+  @keyframes msg-enter {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes spinner-rotate { to { transform: rotate(360deg); } }
+  @keyframes draft-cursor { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ============ 主题切换器 ============ -->
+  <div class="demoBar">
+    <h1>主题候选预览 2</h1>
+    <div class="themeBtns" id="themeBtns" role="group" aria-label="主题切换"></div>
+    <div class="themeMeta" id="themeMeta"></div>
+  </div>
+
+  <!-- ============ 应用切片 ============ -->
+  <div class="sectionTitle">应用切片 · 对话工作区</div>
+  <p class="sectionNote">与真实实现同一机制：<code>&lt;html data-theme="…"&gt;</code> 覆盖 L3 色层，组件零改动、语义混合色自动重derive。切换上方按钮观察全局过渡动画。</p>
+
+  <div class="appFrame">
+    <div class="topbar">
+      <div class="brand"><span class="brandDot"></span>Novel</div>
+      <div class="switcher">
+        <span class="thumb" id="swThumb"></span>
+        <button aria-selected="true">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          对话
+        </button>
+        <button aria-selected="false">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          内容
+        </button>
+        <button aria-selected="false">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          计划
+        </button>
+      </div>
+      <div class="topActions">
+        <button class="iconBtn" title="设置" aria-label="设置">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3"/><path d="M14 2v4M8 10v4M16 18v4"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <aside class="sidebar">
+      <button class="newConvBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5v14"/></svg>
+        开始一段新的创作
+      </button>
+      <div class="searchBox">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        搜索对话…
+      </div>
+      <div class="convGroup">今天</div>
+      <div class="convItem" data-active="true">
+        <span class="convIcon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </span>
+        <span class="convText">
+          <span class="convTitle">《雾中灯塔》</span>
+          <span class="convMeta">第 12 章 · 追逃段修订</span>
+        </span>
+        <span class="statusDot" style="background: var(--color-warn);"></span>
+      </div>
+      <div class="convItem">
+        <span class="convIcon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        </span>
+        <span class="convText">
+          <span class="convTitle">《北河旧事》</span>
+          <span class="convMeta">已完成 34 章 · 12.4 万字</span>
+        </span>
+        <span class="statusDot" style="background: var(--color-success);"></span>
+      </div>
+      <div class="convGroup">更早</div>
+      <div class="convItem">
+        <span class="convIcon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </span>
+        <span class="convText">
+          <span class="convTitle">新的构思</span>
+          <span class="convMeta">未成卷 · 3 条碎片</span>
+        </span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="chat">
+        <div class="msgUser">把第二章的追逃段改成林晚的主观视角，悬念保留到最后。</div>
+
+        <div class="msgAssistant">
+          <div class="toolLine">
+            <span class="toolDone">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+            已定位 2 处全知视角 <span class="mono">outline/ch2#L48</span>
+          </div>
+          <div class="toolLine">
+            <span class="spinner"></span>
+            修订中 · 第二章 · 雨夜追逃
+          </div>
+          <div class="mdBody">
+            <p>已按林晚的主观视角重写本段：视线收窄到雨幕与灯笼的光斑，删去全知描写两处，铜符来历留白作钩子。修订稿如下，供审阅。</p>
+            <div class="quoteKai">「回头的人，没有一个走到过北桥。」——第二章 · 雨夜追逃</div>
+          </div>
+          <div class="draftPanel">
+            <div class="draftKicker">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              正文草稿 · 第二章
+            </div>
+            <div class="draftBody">雨点砸在青石板上，林晚攥紧了袖中那半枚铜符。巷口的灯笼灭了又亮，像谁在她身后数着她的脚步。她不敢回头——回头的人，没有一个走到过北桥。<span class="cursor"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="composer">
+        <div class="modeBar">
+          <button class="modeChip" aria-pressed="false">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+            审校
+          </button>
+          <button class="modeChip" aria-pressed="false">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+            直达
+          </button>
+          <button class="modeChip" aria-pressed="true">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            撰写
+          </button>
+        </div>
+        <div class="composerRow">
+          <div class="composerInput">输入创作指令… （Tab 引用 角色 / 大纲 / 正文）</div>
+          <button class="sendBtn" title="发送" aria-label="发送">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+          </button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ 审批面板切片 ============ -->
+  <div class="sectionTitle">审批面板 · 增 / 删 / 编辑与动画</div>
+  <p class="sectionNote">
+    复刻 ApprovalPanel：目录抽屉（scrim + 左滑出）· 操作色带（增=success 带、删/编辑=danger 带 + diff 符号 +/~/−）·
+    状态 pill · 版本过期横幅 · 请求修改。<b>可交互</b>：点目录条目选中（自动收起抽屉）、批准 / 拒绝 / 提交修改意见、模拟新审批入列。
+    动画标注——<b>现有</b>：抽屉滑出/遮罩渐隐；<b>提案</b>：新审批入列 appr-in、决策状态脉冲、请求修改 0fr→1fr 展开、详情切换 view-in、计数弹跳。
+  </p>
+
+  <div class="apBar">
+    <button class="btn btnSecondary" id="apDrawerBtn">收起目录</button>
+    <button class="btn btnPrimary" id="apAddBtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5v14"/></svg>
+      模拟新增审批
+    </button>
+    <span class="apNote">新审批按 增 → 编辑 → 删除 轮换入列；编辑条目带「版本已过期」示例</span>
+  </div>
+  <div class="apFrame drawerOpen" id="apFrame">
+    <div class="apScrim" id="apScrim"></div>
+    <nav class="apList" id="apList"></nav>
+    <div class="apDetail" id="apDetail"></div>
+  </div>
+
+  <!-- ============ 组件切片 ============ -->
+  <div class="sectionTitle">组件切片 · 控件 / 状态 / 调色板</div>
+  <div class="strip">
+    <div class="card">
+      <div class="cardTitle">按钮</div>
+      <div class="btnRow">
+        <button class="btn btnPrimary">主要操作</button>
+        <button class="btn btnSecondary">次要</button>
+        <button class="btn btnGhost">幽灵</button>
+        <button class="btn btnDanger">删除</button>
+      </div>
+      <div class="cardTitle" style="margin-top: 14px;">输入（点击看焦点环）</div>
+      <div class="fieldCol">
+        <div class="field">
+          角色名称
+          <input class="input" placeholder="如：林晚">
+        </div>
+        <div class="field">
+          所属卷
+          <div class="selectWrap">
+            <select>
+              <option>第一卷 · 北渡</option>
+              <option>第二卷 · 雾起</option>
+              <option>未分卷</option>
+            </select>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardTitle">状态标签</div>
+      <div class="badgeRow">
+        <span class="badge badgeWarn"><span class="spinner"></span>生成中</span>
+        <span class="badge badgeSuccess">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          已保存
+        </span>
+        <span class="badge badgeInfo">待审批</span>
+        <span class="badge badgeDanger">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          2 处冲突
+        </span>
+      </div>
+      <div class="cardTitle" style="margin-top: 14px;">品牌渐变（grad-accent · 随主题换族）</div>
+      <div class="gradBar"></div>
+      <div class="cardTitle">空态文案（楷体）</div>
+      <div class="emptyKai">
+        <span class="glyph">❦</span>
+        此卷尚未落笔——从一句话开始，让故事自己生长。
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardTitle">运行状态（正在生成 / 等待审批 / 失败 · 复刻）</div>
+      <div class="rsBtns" id="rsBtns">
+        <button class="rsBtn" data-state="generating" aria-pressed="true">正在生成</button>
+        <button class="rsBtn" data-state="waiting" aria-pressed="false">等待审批</button>
+        <button class="rsBtn" data-state="failed" aria-pressed="false">失败</button>
+        <button class="rsBtn" data-state="idle" aria-pressed="false">空闲（收起）</button>
+      </div>
+      <div class="rsWrap" id="rsWrap" data-open="true">
+        <div class="rsInner">
+          <div class="rsRow generating" id="rsRow"></div>
+        </div>
+      </div>
+      <div class="rsHint">状态行位于输入区上方（0fr↔1fr 收展）；「正在生成」= 笔尖浮动 + 墨滴下落 + 品牌渐变流动文字；「等待审批」= 沙漏摇摆 + 琥珀渐变；秒数实时跳动；失败 = 一次性抖动 + 重试圆钮（hover 实心红上浮）。</div>
+    </div>
+
+    <div class="card">
+      <div class="cardTitle">调色板（语义色 token）</div>
+      <div class="swatches" id="swatches"></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    实现方式（与本 demo 同构）：tokens.css 追加 <code>[data-theme]</code> 覆盖块（只含 --color-* / --shadow-*，纪律测试规则 b 自动执法）；
+    ThemeProvider 扩展主题枚举并挂载到 NovelApp 根；设置弹窗新增「外观」分类（主题卡片 + 图标）；选择持久化 localStorage；
+    切换时挂 <code>html.theming</code> 类做 0.35s 全局颜色过渡。暗色主题额外覆盖 <code>--color-on-accent</code> 为深墨色（强调底提亮后白字对比度不足）。
+    新增五套（竹雨/鎏金/胭脂/紫檀/烛影）配色取自用户罗列的传统色，派生色（加深/提亮/染底）已在 CSS 注释中标注来源。
+    审批面板切片：操作色带（增=success / 删·编辑=danger）与状态 pill 全部走语义 token，随主题自动换色；
+    动画提案（appr-in 入列 / 状态脉冲 / 请求修改 0fr→1fr / 详情 view-in / 计数弹跳）实施时并入 animations.css。
+    实施时顺带修两个现网问题：① ApprovalPanel 请求修改输入框用了 legacy hex token（--color-bg-elevated #1e1e24 / --color-text #ddd），
+    亮色主题下渲染为暗底白字，应换 --color-surface / --color-fg；② 已修改（edited）状态 pill 无配色（裸样式），建议补 info 色。
+  </div>
+</div>
+
+<script>
+  const THEMES = [
+    { id: "paper", name: "宣纸白", group: 0, dot: ["#d9a066", "#a0522d"],
+      desc: "现状默认。暖白宣纸底 + 朱砂橙红渐变，白天写作清爽明亮。" },
+    { id: "sepia", name: "茶卷", group: 0, dot: ["#c9a876", "#7a4a2b"],
+      desc: "暖褐羊皮纸底 + 深赭强调。旧籍氛围，夜间灯光下比白底柔和，长时阅读舒适。" },
+    { id: "ink", name: "墨夜", group: 0, dot: ["#2b2723", "#d0765a"],
+      desc: "暖黑墨底 + 朱砂提亮。经典暗色模式，深夜写作护眼，延续品牌朱砂血统。" },
+    { id: "celadon", name: "黛青", group: 0, dot: ["#24303a", "#6fc3b7"],
+      desc: "冷调蓝黑夜底 + 青瓷强调，品牌渐变整体换为青蓝族。冷静专注的另一派暗色。" },
+    { id: "frost", name: "雪青", group: 0, dot: ["#d9e2f2", "#4a5fb8"],
+      desc: "冷白瓷底 + 群青强调，渐变换为蓝紫族。清爽理性的亮色备选。" },
+    { id: "bamboo", name: "竹雨", group: 1, dot: ["#5DBE8A", "#248067"],
+      desc: "绿调亮色（传统色）。底取珍珠，inset 晓灰、正文京元、边玛瑙/芦穗；渐变 蔻梢→海王→深海王，竹林春纸。" },
+    { id: "gilt", name: "鎏金", group: 1, dot: ["#FEBA07", "#DAA45A"],
+      desc: "金调暗色（传统色）。底取烟墨、正文珍珠、inset 朱墨；渐变 琥珀→金盏→玳瑁，墨底鎏金的典籍烫金感。" },
+    { id: "rouge", name: "胭脂", group: 1, dot: ["#E77C8E", "#BF3553"],
+      desc: "粉调亮色（传统色）。底为石蕊洗白、正文酱紫、次要满江、边合欢；渐变 淡茜→锦葵→深锦葵，春樱笺纸。" },
+    { id: "zitan", name: "紫檀", group: 1, dot: ["#E9CCD3", "#815C94"],
+      desc: "紫调暗色（传统色）。底取石青、正文芝兰、次要萝兰；渐变 芝兰→萝兰→蕈紫，info 用槿紫。夜读的紫檀书房。" },
+    { id: "candle", name: "烛影", group: 1, dot: ["#E7A23F", "#DE7622"],
+      desc: "棕调暗色（传统色）。底取火山、inset 栗棕、正文珍珠、次要玳瑁、warn 淡茧；渐变 玳瑁→凋叶→麂棕，烛光暖褐书房。" },
+  ];
+  const SWATCH_TOKENS = [
+    "bg", "surface", "surface-2", "fg", "muted", "faint", "border", "border-strong",
+    "orange", "accent", "red", "accent-ink", "success", "warn", "danger", "info",
+    "success-bg", "warn-bg", "danger-bg", "info-bg", "on-accent",
+  ];
+
+  const btns = document.getElementById("themeBtns");
+  const meta = document.getElementById("themeMeta");
+  const swatches = document.getElementById("swatches");
+  const html = document.documentElement;
+
+  swatches.innerHTML = SWATCH_TOKENS.map((t) =>
+    `<div class="swatch"><i style="background: var(--color-${t})"></i><span>--color-${t}</span></div>`
+  ).join("");
+
+  function render(current) {
+    btns.innerHTML = "";
+    let lastGroup = -1;
+    for (const t of THEMES) {
+      if (t.group !== lastGroup) {
+        const label = document.createElement("span");
+        label.className = "groupLabel";
+        label.textContent = t.group === 0 ? "原五套" : "新增 · 传统色";
+        btns.appendChild(label);
+        lastGroup = t.group;
+      }
+      const b = document.createElement("button");
+      b.className = "themeBtn";
+      b.setAttribute("aria-pressed", String(t.id === current));
+      b.innerHTML = `<span class="dot" style="--dot-a:${t.dot[0]}; --dot-b:${t.dot[1]}"></span>${t.name}`;
+      b.addEventListener("click", () => setTheme(t.id));
+      btns.appendChild(b);
+    }
+    const t = THEMES.find((x) => x.id === current);
+    meta.innerHTML = `<b>${t.name}</b>（data-theme="${t.id}"）—— ${t.desc}`;
+  }
+
+  function setTheme(id) {
+    html.classList.add("theming");
+    html.dataset.theme = id;
+    render(id);
+  }
+
+  // 视图切换器 thumb 演示
+  const sw = document.querySelector(".switcher");
+  const thumb = document.getElementById("swThumb");
+  sw.querySelectorAll("button").forEach((b, i) => {
+    b.addEventListener("click", () => {
+      sw.querySelectorAll("button").forEach((x) => x.setAttribute("aria-selected", "false"));
+      b.setAttribute("aria-selected", "true");
+      thumb.style.transform = `translateX(calc(${i} * 100%))`;
+    });
+  });
+
+  // ---- 审批面板切片（可交互） ----
+  const AP_STATUS_LABEL = { pending: "待批准", approved: "已批准", rejected: "已拒绝", edited: "已修改", expired: "已过期" };
+  const AP_GLYPH = { add: "+", edit: "~", delete: "−" };
+  const AP_PULSE_COLOR = { approved: "var(--color-success)", rejected: "var(--color-danger)", edited: "var(--color-info)" };
+  // 模板轮换顺序：增 → 编辑 → 删除 → 增 → 编辑（覆盖三类操作色带）
+  const AP_TEMPLATES = [
+    { op: "add", tool: "角色写入", title: "沈砚",
+      params: [["名称", "沈砚"], ["简介", "北桥渡口的老船工，三十年来只在雾夜摆渡"], ["初始状态", "袖口藏着一枚不属于他的铜符"]] },
+    { op: "edit", tool: "正文编辑", title: "第 12 章 · 追逃段", stale: true,
+      params: [["所属故事单元", "第 12 章"], ["正文内容", "雨点砸在青石板上，林晚攥紧了袖中那半枚铜符……（修改稿 +38 字）"]] },
+    { op: "delete", tool: "删除", title: "旧的构思（碎片卷）",
+      params: [["ID", "draft-fragments"], ["类型", "碎片卷 · 3 条"]] },
+    { op: "add", tool: "大纲写入", title: "第三卷 · 灯塔",
+      params: [["标题", "第三卷 · 灯塔"], ["描述", "沈砚的身份揭晓与北桥真相"], ["所属卷", "第三卷"]] },
+    { op: "edit", tool: "地点编辑", title: "北桥客栈",
+      params: [["名称", "北桥客栈"], ["简介", "雨夜唯一亮灯的檐下，掌柜记得每个渡客的鞋码（修订）"]] },
+  ];
+  let apSeq = 0;
+  const apGroups = [
+    { id: ++apSeq, ...structuredClone(AP_TEMPLATES[1]), status: "pending" },
+    { id: ++apSeq, ...structuredClone(AP_TEMPLATES[2]), status: "pending" },
+    { id: ++apSeq, ...structuredClone(AP_TEMPLATES[0]), status: "approved" },
+  ];
+  let apCursor = 3;
+  let apSelected = apGroups[0].id;
+  let apCommentOpen = false;
+  let apCommentText = "";
+  let apEnterId = null;      // 入列动画（一次）
+  let apPulseId = null;      // 状态脉冲（一次）
+  let apCntPop = false;      // 计数弹跳（一次）
+  let apLastRenderedSel = null;
+
+  const apFrame = document.getElementById("apFrame");
+  const apList = document.getElementById("apList");
+  const apDetail = document.getElementById("apDetail");
+  const apDrawerBtn = document.getElementById("apDrawerBtn");
+  const apAddBtn = document.getElementById("apAddBtn");
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  function apRender() {
+    const n = apGroups.length;
+    apDrawerBtn.textContent = apFrame.classList.contains("drawerOpen") ? "收起目录" : `目录 ${n}`;
+    let rows = `<div class="apDirHead">审批队列 <span class="apCnt${apCntPop ? " pop" : ""}">${n}</span></div>`;
+    for (const g of apGroups) {
+      const cls = ["apRow", g.id === apSelected ? "active" : "", g.id === apEnterId ? "enter" : "",
+        g.id === apPulseId ? "pulse" : ""].filter(Boolean).join(" ");
+      const pulseStyle = g.id === apPulseId && AP_PULSE_COLOR[g.status]
+        ? ` style="--pulse-c: ${AP_PULSE_COLOR[g.status]}"` : "";
+      rows += `<button type="button" class="${cls}"${pulseStyle} data-id="${g.id}">
+        <span class="apPill ${g.status}">${AP_STATUS_LABEL[g.status]}</span>
+        <span class="apRowTitle">${esc(g.title)}</span>
+      </button>`;
+    }
+    apList.innerHTML = rows;
+    apList.querySelectorAll(".apRow").forEach((b) =>
+      b.addEventListener("click", () => {
+        apSelected = Number(b.dataset.id);
+        apCommentOpen = false;
+        apFrame.classList.remove("drawerOpen"); // 现有行为：选中条目自动收起抽屉
+        apRender();
+      }));
+
+    const g = apGroups.find((x) => x.id === apSelected) ?? apGroups[0];
+    apSelected = g.id;
+    let html = `
+      <div class="apIdentity">
+        <span>${esc(g.tool)}</span>
+        <span class="apPill ${g.status}">${AP_STATUS_LABEL[g.status]}</span>
+      </div>
+      <h4 class="apTitle">
+        <span class="apGlyph ${g.op}">${AP_GLYPH[g.op]}</span>${esc(g.title)}
+      </h4>
+      <div class="apArgs">
+        <span class="apArgsTitle">审批参数</span>
+        <div class="apGroup">
+          <div class="apBand ${g.op}">
+            <span class="apBandGlyph">${AP_GLYPH[g.op]}</span>
+            <span class="apBandTool">${esc(g.tool)}</span>
+          </div>
+          <div class="apBody">
+            ${g.stale ? `<div class="apStale">版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败</div>` : ""}
+            <dl class="apParam">${g.params.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
+          </div>
+        </div>
+      </div>`;
+    if (g.status === "pending") {
+      html += `
+        <div class="apActions">
+          <button class="btn btnPrimary btnSm" data-act="approve">批准</button>
+          <button class="btn btnGhostDanger btnSm" data-act="reject">拒绝</button>
+          <button class="btn btnGhost btnSm" data-act="comment">请求修改</button>
+        </div>
+        <div class="apCommentWrap" data-open="${apCommentOpen}">
+          <div class="apCommentInner">
+            <textarea class="apComment" rows="3" placeholder="填写修改意见（将随决策回传会话）">${esc(apCommentText)}</textarea>
+            <div class="apActions">
+              <button class="btn btnGhost btnSm" data-act="cancel">取消</button>
+              <button class="btn btnPrimary btnSm" data-act="submit" ${apCommentText.trim() === "" ? "disabled" : ""}>提交修改意见</button>
+            </div>
+          </div>
+        </div>`;
+    } else {
+      html += `<div class="apBanner ${g.status}">已处理 · ${AP_STATUS_LABEL[g.status]}</div>`;
+    }
+    apDetail.innerHTML = html;
+
+    const ta = apDetail.querySelector(".apComment");
+    if (ta) ta.addEventListener("input", () => { apCommentText = ta.value; apRender(); });
+    apDetail.querySelectorAll("[data-act]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const act = b.dataset.act;
+        if (act === "approve" || act === "reject") {
+          g.status = act === "approve" ? "approved" : "rejected";
+          apPulseId = g.id;
+          apCommentOpen = false;
+        } else if (act === "comment") {
+          apCommentOpen = !apCommentOpen;
+        } else if (act === "cancel") {
+          apCommentOpen = false;
+        } else if (act === "submit") {
+          g.status = "edited";
+          apPulseId = g.id;
+          apCommentOpen = false;
+          apCommentText = "";
+        }
+        apRender();
+      }));
+
+    // 详情切换才重放 view-in（决策/输入不重放）
+    if (apLastRenderedSel !== g.id) {
+      apDetail.classList.remove("viewIn");
+      void apDetail.offsetWidth;
+      apDetail.classList.add("viewIn");
+      apLastRenderedSel = g.id;
+    }
+    apEnterId = null; apPulseId = null; apCntPop = false;
+  }
+
+  // ---- 运行状态切片（RuntimeStatusIndicator 复刻） ----
+  const RS_ICONS = {
+    // lucide feather（笔尖）
+    generating: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><path d="M16 8 2 22"/><path d="M17.5 15H9"/></svg>`,
+    // lucide hourglass（沙漏）
+    waiting: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>`,
+    // lucide triangle-alert（警示）
+    failed: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`,
+  };
+  const RS_RETRY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`;
+  const RS_LABEL = { generating: "正在生成", waiting: "等待审批" };
+
+  const rsWrap = document.getElementById("rsWrap");
+  const rsRow = document.getElementById("rsRow");
+  let rsState = "generating";
+  let rsSeconds = 0;
+  let rsTimer = null;
+
+  function rsRenderRow() {
+    if (rsState === "generating" || rsState === "waiting") {
+      rsRow.className = `rsRow ${rsState}`;
+      rsRow.innerHTML = `
+        <span class="rsIcon">${RS_ICONS[rsState]}${rsState === "generating" ? '<span class="rsInk" aria-hidden="true"></span>' : ""}</span>
+        <span class="rsLabel">${RS_LABEL[rsState]}</span>
+        <span class="rsSeconds">${rsSeconds}s</span>`;
+    } else if (rsState === "failed") {
+      rsRow.className = "rsRow failed";
+      rsRow.innerHTML = `
+        <span class="rsIcon">${RS_ICONS.failed}</span>
+        <span class="rsFailedMain">生成失败</span>
+        <span class="rsFailedErr">upstream timeout · 请重试或检查模型服务</span>
+        <button class="rsRetry" title="重试" aria-label="重试">${RS_RETRY_ICON}</button>`;
+      rsRow.querySelector(".rsRetry").addEventListener("click", () => rsSetState("generating"));
+    }
+  }
+
+  function rsSetState(next) {
+    rsState = next;
+    rsSeconds = 0;
+    clearInterval(rsTimer);
+    rsTimer = null;
+    document.querySelectorAll("#rsBtns .rsBtn").forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.state === rsState)));
+    rsWrap.dataset.open = rsState !== "idle" ? "true" : "false";
+    if (rsState === "idle") { rsRow.innerHTML = ""; return; }
+    rsRenderRow();
+    if (rsState === "generating" || rsState === "waiting") {
+      rsTimer = setInterval(() => {
+        rsSeconds += 1;
+        const el = rsRow.querySelector(".rsSeconds");
+        if (el) el.textContent = `${rsSeconds}s`;
+      }, 1000);
+    }
+  }
+
+  document.querySelectorAll("#rsBtns .rsBtn").forEach((b) =>
+    b.addEventListener("click", () => rsSetState(b.dataset.state)));
+  rsSetState("generating");
+
+  apRender();
+
+  render("paper");
+</script>
+</body>
+</html>

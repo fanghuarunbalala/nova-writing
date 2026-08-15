@@ -6,7 +6,7 @@
  *     [data-theme] 覆盖块禁止触碰。
  *   L2 设计语言层 —— 字体栈 / 字号刻度 / 字重 / 间距 / 圆角 / 品牌渐变 / 时长缓动。
  *     只有改版或密度设置才变，同样不随 theme 变化。
- *   L3 语义色层 + 阴影 —— 唯一允许被 [data-theme="dark"] 覆盖的层
+ *   L3 语义色层 + 阴影 —— 唯一允许被 [data-theme] 覆盖块覆盖的层
  *     （覆盖块只允许 --color-* 与 --shadow-*，由 ui/tests/theme 纪律测试执法）。
  *
  * 命名约定：
@@ -216,6 +216,9 @@
   --anim-failed-shake:    failed-shake;
   --anim-block-flash:     block-flash;
   --anim-draft-cursor:    draft-cursor;
+  --anim-appr-in:         appr-in;
+  --anim-status-pulse:    status-pulse;
+  --anim-cnt-pop:         cnt-pop;
 
   /* 缓动 */
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
@@ -244,8 +247,9 @@
   --color-info:          oklch(54% 0.05 235);
   --color-info-bg:       oklch(97.2% 0.007 236);
 
-  /* 强调底/渐变底上的前景（恒白，dark 不变）：Button.primary、GenStatus、
-     ProjectSelectionPage、WorkspaceSelectionDialog 渐变底白字 */
+  /* 强调底/渐变底上的前景：亮色主题恒白；暗色主题（墨夜/黛青/鎏金/紫檀）
+     覆盖为深墨——强调底提亮后白字对比度不足 4.5:1。用于 Button.primary、
+     GenStatus、ProjectSelectionPage、WorkspaceSelectionDialog 渐变底文字 */
   --color-on-accent: #fff;
 
   /* 语义混合 token（两次晋升制：完全相同 (基色,百分比,target) 组合 ≥2 次即晋升；
@@ -273,20 +277,15 @@
   --color-border-strong-72: color-mix(in oklab, var(--color-border-strong) 72%, transparent);
   /* 角色 token（角色唯一且跨主题语义明确，不受两次晋升制约束） */
   --color-chrome-bg:       color-mix(in oklab, var(--color-surface) 82%, transparent); /* 顶栏/侧栏/副标题栏 */
+  /* 状态脉冲色：ApprovalPanel 决策后行内高亮经 inline 覆盖注入（approved/
+     rejected/edited 三色），缺省 accent */
+  --pulse-c:               var(--color-accent);
   --color-focus-ring:      color-mix(in oklab, var(--color-accent) 42%, transparent);
   --color-focus-ring-strong: color-mix(in oklab, var(--color-accent) 50%, transparent);
   --color-selection:       color-mix(in oklab, var(--color-accent) 16%, transparent);
   --color-scrollbar-base:  color-mix(in oklab, var(--color-fg) 16%, transparent);
   --color-scrollbar-thumb: color-mix(in oklab, var(--color-fg) 15%, transparent);
   --color-scrollbar-thumb-hover: color-mix(in oklab, var(--color-fg) 26%, transparent);
-
-  /* legacy dark 快照（原 var() fallback 固化，值为当前实际渲染值；dark 落地时清理）。
-     这些 hex 不参与 dark 覆盖，仅保证引用不落空。 */
-  --color-danger-border: #b3554d;
-  --color-bg-elevated:   #1e1e24;
-  --color-text:          #ddd;
-  /* legacy 裸字面量固化：DesignCard.error 的 dark 红（组件内裸 hex，按精确值快照） */
-  --color-design-error:  #e5484d;
 
   /* 阴影 */
   --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04),
@@ -299,9 +298,222 @@
   --shadow-panel:  12px 0 30px rgba(20, 12, 6, 0.18);     /* ApprovalPanel 面板 */
 }
 
-/* Dark mode 预留（V1 不实现，但结构支持；V2 落地时只覆盖 L3 的
-   --color-* / --shadow-*，纪律测试执法） */
-/* stylelint-disable-next-line block-no-empty */
-[data-theme="dark"] {
-  /* color tokens 重写为 dark 调色板；V2 实现 */
+/* ============================================================
+   多主题覆盖块（ThemeProvider 写 <html data-theme="...">）。
+   纪律：只允许 --color-* / --shadow-*（cssDiscipline 规则 b 执法）；
+   每块必须完整覆盖 :root 的「基色集合 + 全部阴影」（themePalettes 契约测试
+   执法）；语义混合 token（accent-9 等）在 :root 引用基色，挂 html 时自动
+   重derive——挂 body 无效（:root 级已解析）。主题候选与对比度校验过程
+   见 docs/design/theme-candidates-demo-2.html。
+   暗色主题（墨夜/黛青/鎏金/紫檀）的 --color-on-accent 翻转为深墨。
+   ============================================================ */
+
+/* ============ 墨夜（暖黑墨底 · 朱砂提亮；经典暗色） ============ */
+[data-theme="ink"] {
+  --color-bg:            oklch(21% 0.005 80);
+  --color-surface:       oklch(25.5% 0.006 80);
+  --color-surface-2:     oklch(28.5% 0.007 78);
+  --color-fg:            oklch(89% 0.006 85);
+  --color-muted:         oklch(70% 0.008 80);
+  --color-faint:         oklch(59% 0.007 80);
+  --color-border:        oklch(31% 0.007 80);
+  --color-border-strong: oklch(40% 0.01 78);
+  --color-orange:        oklch(77% 0.095 62);
+  --color-accent:        oklch(68% 0.115 42);
+  --color-red:           oklch(66% 0.115 30);
+  --color-accent-ink:    oklch(78% 0.09 45);
+  --color-success:       oklch(72% 0.095 156);
+  --color-success-bg:    oklch(29% 0.032 156);
+  --color-warn:          oklch(75% 0.1 80);
+  --color-warn-bg:       oklch(29% 0.034 85);
+  --color-danger:        oklch(67% 0.1 32);
+  --color-danger-bg:     oklch(28% 0.03 33);
+  --color-info:          oklch(70% 0.075 235);
+  --color-info-bg:       oklch(28% 0.024 236);
+  --color-on-accent:     oklch(24% 0.03 42);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.32), 0 16px 40px rgba(0, 0, 0, 0.48);
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-drawer: -18px 0 50px rgba(0, 0, 0, 0.5);
+  --shadow-panel: 12px 0 30px rgba(0, 0, 0, 0.5);
+}
+
+/* ============ 黛青（冷调蓝黑夜底 · 青瓷强调；渐变换青蓝族） ============ */
+[data-theme="celadon"] {
+  --color-bg:            oklch(20% 0.013 235);
+  --color-surface:       oklch(24% 0.015 235);
+  --color-surface-2:     oklch(27% 0.017 232);
+  --color-fg:            oklch(89% 0.009 225);
+  --color-muted:         oklch(69% 0.013 230);
+  --color-faint:         oklch(58% 0.012 230);
+  --color-border:        oklch(30% 0.015 235);
+  --color-border-strong: oklch(38% 0.019 232);
+  --color-orange:        oklch(78% 0.07 190);
+  --color-accent:        oklch(75% 0.1 195);
+  --color-red:           oklch(68% 0.11 265);
+  --color-accent-ink:    oklch(84% 0.075 205);
+  --color-success:       oklch(72% 0.095 158);
+  --color-success-bg:    oklch(28% 0.032 158);
+  --color-warn:          oklch(76% 0.1 90);
+  --color-warn-bg:       oklch(28% 0.032 88);
+  --color-danger:        oklch(68% 0.11 25);
+  --color-danger-bg:     oklch(28% 0.03 25);
+  --color-info:          oklch(72% 0.08 240);
+  --color-info-bg:       oklch(28% 0.028 240);
+  --color-on-accent:     oklch(20% 0.04 230);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.32);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.32), 0 16px 40px rgba(0, 0, 0, 0.5);
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.36);
+  --shadow-drawer: -18px 0 50px rgba(0, 0, 0, 0.5);
+  --shadow-panel: 12px 0 30px rgba(0, 0, 0, 0.5);
+}
+
+/* ============ 雪青（冷白瓷底 · 群青强调；渐变换蓝紫族） ============ */
+[data-theme="frost"] {
+  --color-bg:            oklch(97.4% 0.004 240);
+  --color-surface:       oklch(99.5% 0.002 240);
+  --color-surface-2:     oklch(95.6% 0.005 234);
+  --color-fg:            oklch(29% 0.016 262);
+  --color-muted:         oklch(50% 0.014 256);
+  --color-faint:         oklch(59% 0.012 254);
+  --color-border:        oklch(91.6% 0.005 240);
+  --color-border-strong: oklch(85.4% 0.009 240);
+  --color-orange:        oklch(72% 0.075 230);
+  --color-accent:        oklch(52% 0.1 262);
+  --color-red:           oklch(54% 0.1 285);
+  --color-accent-ink:    oklch(44% 0.09 262);
+  --color-success:       oklch(52% 0.07 156);
+  --color-success-bg:    oklch(96.8% 0.011 156);
+  --color-warn:          oklch(58% 0.07 80);
+  --color-warn-bg:       oklch(96.7% 0.011 86);
+  --color-danger:        oklch(54% 0.068 32);
+  --color-danger-bg:     oklch(96.7% 0.009 33);
+  --color-info:          oklch(54% 0.055 240);
+  --color-info-bg:       oklch(96.8% 0.008 240);
+  --color-on-accent:     #fff;
+  --shadow-1: 0 1px 2px rgba(12, 18, 40, 0.05), 0 8px 24px rgba(12, 18, 40, 0.055);
+  --shadow-2: 0 2px 4px rgba(12, 18, 40, 0.06), 0 16px 40px rgba(12, 18, 40, 0.13);
+  --shadow-xs: 0 1px 3px rgba(8, 12, 30, 0.09);
+  --shadow-drawer: -18px 0 50px rgba(8, 12, 30, 0.2);
+  --shadow-panel: 12px 0 30px rgba(8, 12, 30, 0.2);
+}
+
+/* ============ 竹雨（绿调亮色；取色 珍珠/京元/晓灰/玛瑙/芦穗/夜灰，渐变 蔻梢→海王→深海王） ============ */
+[data-theme="bamboo"] {
+  --color-bg:            #E4DFD7; /* 珍珠 */
+  --color-surface:       #F3F1ED; /* 珍珠提白 */
+  --color-surface-2:     #D4C4B7; /* 晓灰 */
+  --color-fg:            #31322C; /* 京元 */
+  --color-muted:         #5B5750; /* 夜灰×京元 */
+  --color-faint:         #847C74; /* 夜灰 */
+  --color-border:        #CFCCC9; /* 玛瑙 */
+  --color-border-strong: #BDAEAD; /* 芦穗 */
+  --color-orange:        #5DBE8A; /* 蔻梢 */
+  --color-accent:        #248067; /* 海王 */
+  --color-red:           #195A48; /* 深海王 */
+  --color-accent-ink:    #175343;
+  --color-success:       #206C56;
+  --color-success-bg:    #FFF9DF;
+  --color-warn:          #927104; /* 金盏加深 */
+  --color-warn-bg:       #FEF7E2;
+  --color-danger:        #C21F30; /* 枫叶 */
+  --color-danger-bg:     #FBF0F2;
+  --color-info:          #4466B4;
+  --color-info-bg:       #E9EEF8;
+  --color-on-accent:     #fff;
+  --shadow-1: 0 1px 2px rgba(38, 34, 24, 0.06), 0 8px 24px rgba(38, 34, 24, 0.07);
+  --shadow-2: 0 2px 4px rgba(38, 34, 24, 0.07), 0 16px 40px rgba(38, 34, 24, 0.15);
+  --shadow-xs: 0 1px 3px rgba(30, 26, 16, 0.1);
+  --shadow-drawer: -18px 0 50px rgba(30, 26, 16, 0.22);
+  --shadow-panel: 12px 0 30px rgba(30, 26, 16, 0.22);
+}
+
+/* ============ 鎏金（金调暗色；取色 烟墨/朱墨/珍珠/玛瑙/芦穗，渐变 琥珀→金盏→玳瑁） ============ */
+[data-theme="gilt"] {
+  --color-bg:            #353538; /* 烟墨 */
+  --color-surface:       #414144; /* 烟墨提亮 */
+  --color-surface-2:     #2D2D30; /* 朱墨 */
+  --color-fg:            #E4DFD7; /* 珍珠 */
+  --color-muted:         #CFCCC9; /* 玛瑙 */
+  --color-faint:         #BDAEAD; /* 芦穗 */
+  --color-border:        #4D4D50;
+  --color-border-strong: #605C59;
+  --color-orange:        #FEBA07; /* 琥珀 */
+  --color-accent:        #FCC307; /* 金盏 */
+  --color-red:           #DAA45A; /* 玳瑁 */
+  --color-accent-ink:    #FEBA07;
+  --color-success:       #41B349; /* 玉髓 */
+  --color-success-bg:    #37473A;
+  --color-warn:          #F9A633; /* 榴萼 */
+  --color-warn-bg:       #504537;
+  --color-danger:        #F26974; /* 茶花提亮 */
+  --color-danger-bg:     #4B363B;
+  --color-info:          #7B9CE8;
+  --color-info-bg:       #3D414D;
+  --color-on-accent:     #332400;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.32);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.34), 0 16px 40px rgba(0, 0, 0, 0.5);
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.38);
+  --shadow-drawer: -18px 0 50px rgba(0, 0, 0, 0.5);
+  --shadow-panel: 12px 0 30px rgba(0, 0, 0, 0.5);
+}
+
+/* ============ 胭脂（粉调亮色；取色 石蕊洗白/酱紫/满江/合欢，渐变 淡茜→锦葵→深锦葵） ============ */
+[data-theme="rouge"] {
+  --color-bg:            #FBF2F3; /* 石蕊洗白 */
+  --color-surface:       #FFFCFD;
+  --color-surface-2:     #F7E1E5; /* 石蕊淡染 */
+  --color-fg:            #4D1018; /* 酱紫 */
+  --color-muted:         #A7535A; /* 满江 */
+  --color-faint:         #B77278;
+  --color-border:        #F0C9CF; /* 石蕊 */
+  --color-border-strong: #F0A1A8; /* 合欢 */
+  --color-orange:        #E77C8E; /* 淡茜 */
+  --color-accent:        #BF3553; /* 锦葵 */
+  --color-red:           #992A42; /* 深锦葵 */
+  --color-accent-ink:    #822438;
+  --color-success:       #20715B;
+  --color-success-bg:    #FFF9DF;
+  --color-warn:          #927104; /* 金盏加深 */
+  --color-warn-bg:       #FEF7E2;
+  --color-danger:        #C21F30; /* 枫叶 */
+  --color-danger-bg:     #FBF0F2;
+  --color-info:          #4466B4;
+  --color-info-bg:       #E9EEF8;
+  --color-on-accent:     #fff;
+  --shadow-1: 0 1px 2px rgba(58, 16, 26, 0.05), 0 8px 24px rgba(58, 16, 26, 0.06);
+  --shadow-2: 0 2px 4px rgba(58, 16, 26, 0.06), 0 16px 40px rgba(58, 16, 26, 0.14);
+  --shadow-xs: 0 1px 3px rgba(48, 12, 22, 0.09);
+  --shadow-drawer: -18px 0 50px rgba(48, 12, 22, 0.2);
+  --shadow-panel: 12px 0 30px rgba(48, 12, 22, 0.2);
+}
+
+/* ============ 紫檀（紫调暗色；取色 石青/芝兰/萝兰/樱草/蕈紫/槿紫，渐变 芝兰→萝兰→蕈紫） ============ */
+[data-theme="zitan"] {
+  --color-bg:            #2E282E; /* 石青 */
+  --color-surface:       #3D373D; /* 石青提亮 */
+  --color-surface-2:     #201C20; /* 石青压暗 */
+  --color-fg:            #E9CCD3; /* 芝兰 */
+  --color-muted:         #C08EAF; /* 萝兰 */
+  --color-faint:         #C06F98; /* 樱草 */
+  --color-border:        #544F54;
+  --color-border-strong: #6D696D;
+  --color-orange:        #E9CCD3; /* 芝兰 */
+  --color-accent:        #C08EAF; /* 萝兰 */
+  --color-red:           #815C94; /* 蕈紫 */
+  --color-accent-ink:    #D0AAC3;
+  --color-success:       #41B349; /* 玉髓 */
+  --color-success-bg:    #313B32;
+  --color-warn:          #F9A633; /* 榴萼 */
+  --color-warn-bg:       #4A3A2F;
+  --color-danger:        #EE2746; /* 淡曙 */
+  --color-danger-bg:     #452831;
+  --color-info:          #A092B6; /* 槿紫提亮 */
+  --color-info-bg:       #39323E;
+  --color-on-accent:     #2E1626;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.32);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.34), 0 16px 40px rgba(0, 0, 0, 0.5);
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.38);
+  --shadow-drawer: -18px 0 50px rgba(0, 0, 0, 0.5);
+  --shadow-panel: 12px 0 30px rgba(0, 0, 0, 0.5);
 }

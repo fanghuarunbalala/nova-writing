@@ -303,7 +303,8 @@
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-sm);
   background: var(--grad-accent);
-  color: var(--color-surface);
+  /* 渐变底前景必须 on-accent：暗色主题下 surface 为深色，原用 surface 会变深字亮底 */
+  color: var(--color-on-accent);
   font-size: var(--fs-body);
   font-weight: var(--fw-semibold);
   box-shadow: var(--shadow-1);

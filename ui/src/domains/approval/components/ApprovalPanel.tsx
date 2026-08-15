@@ -13,7 +13,7 @@
  * Chinese-labelled parameters, approve/reject actions. Delete/edit groups
  * resolve the target entity's current content and flag stale approvals.
  */
-import { useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
 import type { ApprovalQueueItem } from "@novel/core";
@@ -156,6 +156,38 @@ function groupToolCallCount(group: ApprovalGroup): number {
   return group.approvals.reduce((sum, approval) => sum + approval.toolCalls.length, 0);
 }
 
+/** 决策后行内状态脉冲色（--pulse-c 注入 status-pulse keyframe） */
+const DECISION_PULSE_COLOR: Record<string, string> = {
+  approved: "var(--color-success)",
+  rejected: "var(--color-danger)",
+  edited: "var(--color-info)",
+};
+
+/** 上次目录快照：新组播放入列动画、状态变化播状态脉冲（首帧全量静默） */
+interface DirectoryDelta {
+  readonly enteredKeys: ReadonlySet<string>;
+  readonly pulsedKeys: ReadonlyMap<string, string>;
+}
+
+function diffDirectory(
+  groups: readonly ApprovalGroup[],
+  prev: ReadonlyMap<string, ApprovalQueueItem["status"]> | undefined,
+): DirectoryDelta {
+  const enteredKeys = new Set<string>();
+  const pulsedKeys = new Map<string, string>();
+  if (prev !== undefined) {
+    for (const group of groups) {
+      const before = prev.get(group.key);
+      if (before === undefined) {
+        enteredKeys.add(group.key);
+      } else if (before !== group.status) {
+        pulsedKeys.set(group.key, group.status);
+      }
+    }
+  }
+  return { enteredKeys, pulsedKeys };
+}
+
 export function ApprovalPanel({
   store,
   conversationId,
@@ -168,6 +200,11 @@ export function ApprovalPanel({
   // 「请求修改」意见输入
   const [editingComment, setEditingComment] = useState(false);
   const [commentText, setCommentText] = useState("");
+  // 收展容器常驻 DOM（0fr↔1fr 动画）：展开时聚焦输入（原 autoFocus 只在首挂载生效）
+  const commentInputRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    if (editingComment) commentInputRef.current?.focus();
+  }, [editingComment]);
   // 会话化：只展示当前会话的审批记录（宿主未传 conversationId 时退化为全量）
   const approvals = useMemo(
     () =>
@@ -179,6 +216,16 @@ export function ApprovalPanel({
     [snapshot.approvals, conversationId],
   );
   const groups = useMemo(() => groupApprovals(approvals), [approvals]);
+  // 目录增量动画：新组 appr-in 入列、状态翻转 status-pulse。
+  // 快照在 effect 中提交：render 期间读上一帧状态计算增量（StrictMode 双渲染
+  // 下两遍都读到旧值，动画不丢；提交后同快照重渲染增量为空、不重放）。
+  const prevStatusesRef = useRef<Map<string, ApprovalQueueItem["status"]> | undefined>(undefined);
+  const delta = diffDirectory(groups, prevStatusesRef.current);
+  useEffect(() => {
+    prevStatusesRef.current = new Map(
+      groups.map((group) => [group.key, group.status] as const),
+    );
+  }, [groups]);
   const selectedGroup =
     groups.find((group) => group.key === selectedKey) ??
     (snapshot.selectedId === undefined
@@ -248,7 +295,10 @@ export function ApprovalPanel({
       <nav className={styles.list} id="approval-directory">
         <div className={styles.dirHead}>
           审批队列
-          <span className={styles.cnt}>{groups.length}</span>
+          {/* key=数量：增减时重挂载重放 cnt-pop 弹跳 */}
+          <span key={groups.length} className={styles.cnt}>
+            {groups.length}
+          </span>
         </div>
         {groups.length === 0 ? (
           <div className={styles.empty}>暂无审批请求</div>
@@ -257,13 +307,21 @@ export function ApprovalPanel({
             const toolCallCount = groupToolCallCount(group);
             const label =
               toolCallCount > 1 ? `${group.title} 等 ${toolCallCount} 项` : group.title;
+            const pulseColor = DECISION_PULSE_COLOR[delta.pulsedKeys.get(group.key) ?? ""];
+            const rowStyle =
+              delta.pulsedKeys.has(group.key) && pulseColor !== undefined
+                ? ({ "--pulse-c": pulseColor } as CSSProperties)
+                : undefined;
             return (
               <button
                 key={group.key}
                 type="button"
+                style={rowStyle}
                 className={[
                   styles.row,
                   selectedGroup?.key === group.key ? styles.active : "",
+                  delta.enteredKeys.has(group.key) ? styles.enter : "",
+                  pulseColor !== undefined ? styles.pulse : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -284,6 +342,8 @@ export function ApprovalPanel({
       </nav>
       {selectedGroup !== undefined ? (
         <div className={styles.detail}>
+          {/* key=组：切换选中条目时整块重挂载重放 view-in */}
+          <div key={selectedGroup.key} className={styles.detailInner}>
           <div className={styles.identity}>
             <span className={styles.meta}>
               {selectedGroup.approvals
@@ -416,49 +476,66 @@ export function ApprovalPanel({
                   请求修改
                 </Button>
               </div>
-              {editingComment ? (
-                <div className={styles.commentBox}>
-                  <textarea
-                    className={styles.commentInput}
-                    rows={3}
-                    placeholder="填写修改意见（将随决策回传会话）"
-                    value={commentText}
-                    autoFocus
-                    onChange={(event) => setCommentText(event.target.value)}
-                  />
-                  <div className={styles.actions}>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingComment(false)}
-                    >
-                      取消
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={commentText.trim() === ""}
-                      onClick={() => {
-                        for (const approval of selectedGroup.approvals) {
-                          if (approval.status === "pending") {
-                            void store.decideEdited(approval.requestId, commentText.trim());
+              {/* 0fr↔1fr 收展（GenStatus statusWrap 同款先例） */}
+              <div
+                className={styles.commentCollapsible}
+                data-open={editingComment}
+              >
+                {/* 折叠态保持 DOM 以维持收展动画；inert+aria-hidden 移出可访问树与焦点序列 */}
+                <div
+                  className={styles.commentCollapseInner}
+                  aria-hidden={!editingComment}
+                  inert={!editingComment}
+                >
+                  <div className={styles.commentBox}>
+                    <textarea
+                      ref={commentInputRef}
+                      className={styles.commentInput}
+                      rows={3}
+                      placeholder="填写修改意见（将随决策回传会话）"
+                      value={commentText}
+                      onChange={(event) => setCommentText(event.target.value)}
+                    />
+                    <div className={styles.actions}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingComment(false)}
+                      >
+                        取消
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={commentText.trim() === ""}
+                        onClick={() => {
+                          for (const approval of selectedGroup.approvals) {
+                            if (approval.status === "pending") {
+                              void store.decideEdited(approval.requestId, commentText.trim());
+                            }
                           }
-                        }
-                        setEditingComment(false);
-                        setCommentText("");
-                      }}
-                    >
-                      提交修改意见
-                    </Button>
+                          setEditingComment(false);
+                          setCommentText("");
+                        }}
+                      >
+                        提交修改意见
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              ) : null}
+              </div>
             </>
           ) : (
-            <div className={styles.banner}>
+            <div
+              className={[
+                styles.banner,
+                styles[`banner_${selectedGroup.status}`] ?? "",
+              ].filter(Boolean).join(" ")}
+            >
               已处理 · {STATUS_LABEL[selectedGroup.status]}
             </div>
           )}
+          </div>
         </div>
       ) : null}
     </div>

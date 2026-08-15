@@ -34,6 +34,7 @@ import {
 } from "../domains/index.js";
 import type { FrontendPlatform } from "../platform/index.js";
 import type { NovelUiExtensions } from "../extensions/index.js";
+import { ThemeProvider } from "../shared/theme/index.js";
 import {
   InspectorRouter,
   MainViewRouter,
@@ -61,9 +62,17 @@ export interface NovelAppProps {
 
 export function NovelApp(props: NovelAppProps) {
   if (props.workspaceController === undefined) {
-    return <div className="novel-shell-unavailable">等待 Workspace 控制器…</div>;
+    return (
+      <ThemeProvider>
+        <div className="novel-shell-unavailable">等待 Workspace 控制器…</div>
+      </ThemeProvider>
+    );
   }
-  return <NovelAppReady {...props} workspaceController={props.workspaceController} />;
+  return (
+    <ThemeProvider>
+      <NovelAppReady {...props} workspaceController={props.workspaceController} />
+    </ThemeProvider>
+  );
 }
 
 interface NovelAppReadyProps extends NovelAppProps {

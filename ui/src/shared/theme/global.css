@@ -36,6 +36,21 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   }
 }
 
+/* 主题切换过渡：ThemeProvider 切换时挂 html.theming（400ms 后摘除），
+   期间颜色类属性全局 0.35s 过渡。`!important` 会短暂覆盖组件自身
+   transition（如滑块 transform）——仅在切换窗口内存在，可接受。 */
+html.theming *,
+html.theming *::before,
+html.theming *::after {
+  transition:
+    background-color 0.35s var(--ease-out),
+    border-color 0.35s var(--ease-out),
+    color 0.35s var(--ease-out),
+    box-shadow 0.35s var(--ease-out),
+    fill 0.35s var(--ease-out),
+    stroke 0.35s var(--ease-out) !important;
+}
+
 .sr-only {
   position: absolute; width: 1px; height: 1px;
   padding: 0; margin: -1px; overflow: hidden;

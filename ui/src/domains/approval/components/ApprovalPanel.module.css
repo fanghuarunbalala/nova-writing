@@ -74,6 +74,7 @@
   background: var(--color-accent-11);
   padding: 1px var(--space-7px);
   border-radius: var(--radius-pill);
+  animation: var(--anim-cnt-pop) 0.3s var(--ease-out);
 }
 
 .empty {
@@ -157,6 +158,16 @@
   background: var(--color-accent-8-transparent);
 }
 
+/* 新审批入列：下滑入 + accent 微光（一次性，ApprovalPanel 经 delta 追踪挂类） */
+.row.enter {
+  animation: var(--anim-appr-in) 0.35s var(--ease-out);
+}
+
+/* 决策后状态脉冲：颜色经 --pulse-c 注入（approved/rejected/edited 三色） */
+.row.pulse {
+  animation: var(--anim-status-pulse) 0.6s var(--ease-out);
+}
+
 .title {
   display: flex;
   align-items: baseline;
@@ -207,6 +218,12 @@
   color: var(--color-danger);
 }
 
+/* 已修改（请求修改后回传意见）：info 系（原为裸样式，多主题化时补齐） */
+.pill.edited {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+
 /* 写入/编辑/删除 色块：低调底色 + 同色系描边，对比明显。 */
 .opChip {
   flex: none;
@@ -242,6 +259,11 @@
   min-height: 0;
   overflow-y: auto;
   padding: var(--space-3) var(--space-14px) var(--space-22px);
+}
+
+/* 详情内容：key=组切换时重挂载，重放 view-in（决策/输入不重放） */
+.detailInner {
+  animation: var(--anim-view-in) var(--duration-base) var(--ease-out);
 }
 
 .identity {
@@ -450,6 +472,34 @@
   color: var(--color-success);
   font-size: var(--fs-12);
   font-weight: var(--fw-750);
+  animation: var(--anim-view-in) var(--duration-base) var(--ease-out);
+}
+
+/* 已处理横幅按结果分色（默认 success；拒绝/过期 danger、已修改 info） */
+.bannerRejected,
+.bannerExpired {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.bannerEdited {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+
+/* 请求修改输入：0fr↔1fr 收展（GenStatus statusWrap 同款先例） */
+.commentCollapsible {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--duration-base) var(--ease-out);
+}
+
+.commentCollapsible[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+
+.commentCollapseInner {
+  overflow: hidden;
 }
 
 /* 请求修改意见输入 */
@@ -463,10 +513,12 @@
   padding: var(--space-2) var(--space-10px);
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border-strong);
-  background: var(--color-bg-elevated);
-  color: var(--color-text);
+  background: var(--color-surface);
+  color: var(--color-fg);
   font-size: var(--fs-13);
+  font-family: inherit;
   resize: vertical;
+  transition: border-color var(--duration-fast) var(--ease-out);
 }
 
 .commentInput:focus {

@@ -121,6 +121,26 @@
   50% { opacity: 0; }
 }
 
+/* 新审批入列：下滑入 + accent 微光（ApprovalPanel 目录行；一次性行为动画） */
+@keyframes appr-in {
+  0% { opacity: 0; transform: translateY(-8px); }
+  55% { background: color-mix(in oklab, var(--color-accent) 8%, transparent); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* 审批决策后的状态色脉冲（颜色经 --pulse-c 注入，缺省 accent） */
+@keyframes status-pulse {
+  from { background: color-mix(in oklab, var(--pulse-c, var(--color-accent)) 25%, transparent); }
+  to { background: transparent; }
+}
+
+/* 队列计数弹跳（ApprovalPanel 目录头部计数徽标） */
+@keyframes cnt-pop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
 /* 通用动画 utility class（全局类；TSX 可直接挂 class 使用） */
 .anim-grad-flow { animation: grad-flow 7s ease-in-out infinite; }
 .anim-view-in   { animation: view-in var(--duration-base) var(--ease-out); }

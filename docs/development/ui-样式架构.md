@@ -23,7 +23,7 @@
 
 - 宿主入口 CSS 一次 `@import` 上述四个文件（gui：`gui/src/renderer/renderer.css`），**禁止在 TSX 中副作用引入**全局主题 css。漏 import 的代价：`animations.css` 曾漏引入导致 `grad-flow` 从未运行（fix c375f79）。
 - 组件私有样式一律 `*.module.css` 与组件同目录（现役 98 个）。
-- `ThemeProvider` 经 effect 设置 `<html data-theme="...">` 根属性；V1 仅实现 light，dark 调色板预留。
+- `ThemeProvider` 写 `<html data-theme="...">` 根属性（**必须挂 html**：挂 body 时 `:root` 级语义混合 token 已按旧基色解析，不会跟随覆盖）。现役 8 套主题：宣纸白（`:root` 默认，无覆盖块）、墨夜/黛青/雪青/竹雨/鎏金/胭脂/紫檀（`[data-theme]` 覆盖块，见 tokens.css 文件尾）；选择持久化 `localStorage("novel.theme")`，切换时挂 `html.theming` 做 0.35s 全局颜色过渡（400ms 摘除）。主题候选与对比度校验过程见 `docs/design/theme-candidates-demo-2.html`。
 
 ### 1.3 样式分层职责边界
 
@@ -41,9 +41,9 @@
 | --- | --- | --- |
 | **L1 结构常量** | 布局尺寸（`--topbar-height`/`--sidebar-width`/`--insp-w`）、max-width 快照、z-index 角色刻度 | media query / JS inline 调节，**不随 theme 变化** |
 | **L2 设计语言** | 字体栈、字号/字重/间距/圆角刻度、品牌渐变、动画时长缓动、动画名 token（`--anim-*`） | 只有改版或密度设置才变，**不随 theme 变化** |
-| **L3 语义色 + 阴影** | `--color-*` / `--shadow-*` | **唯一允许 `[data-theme="dark"]` 覆盖的层**（纪律规则 b 执法） |
+| **L3 语义色 + 阴影** | `--color-*` / `--shadow-*` | **唯一允许 `[data-theme]` 覆盖块覆盖的层**（纪律规则 b 执法；覆盖块必须完整覆盖基色集合+全部阴影，themePalettes 契约测试执法） |
 
-dark 落地路径：只覆盖 L3（覆盖块只允许 `--color-*` / `--shadow-*`），组件零改动。
+多主题落地路径：只覆盖 L3（覆盖块只允许 `--color-*` / `--shadow-*`），组件零改动；语义混合 token 在 `:root` 引用基色、自动重derive。暗色主题额外覆盖 `--color-on-accent` 为深墨（强调底提亮后白字对比度不足 4.5:1）。
 
 ### 2.1 命名约定
 

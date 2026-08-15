@@ -1,6 +1,7 @@
 /**
- * ParameterView 视觉（对齐原型 .params 网格：行式标签 + 值）。
- * Matches the prototype .params grid: label + value rows.
+ * ParameterView 视觉（对齐 demo .apParam dl 网格：76px 标签列 + 值）。
+ * 参数行本身无操作色——操作类型由卡片「变更后」段的色带 band 表达。
+ * Matches the demo .apParam dl grid: 76px label column + value.
  */
 .params {
   display: flex;
@@ -9,62 +10,30 @@
 }
 
 .paramRow {
-  display: flex;
-  gap: var(--space-10px);
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: var(--space-1) var(--space-10px);
   align-items: baseline;
-  font-size: var(--fs-13);
-  line-height: 1.6;
 }
-
-/* 方案 E diff 色块：行级左色条 + tinted 底色。Row-level diff-block tone. */
-.toneAdd {
-  border-left: var(--space-3px) solid var(--color-success);
-  background: color-mix(in oklab, var(--color-success) 8%, var(--color-surface));
-}
-
-.toneEdit {
-  border-left: var(--space-3px) solid var(--color-danger);
-  background: var(--color-danger-8);
-}
-
-.toneDel {
-  border-left: var(--space-3px) solid var(--color-danger);
-  background: var(--color-danger-8);
-}
-
-.paramGutter {
-  flex: none;
-  width: 14px;
-  font-family: var(--font-mono);
-  font-weight: var(--fw-heavy);
-  text-align: center;
-}
-
-.toneAdd .paramGutter { color: var(--color-success); }
-.toneEdit .paramGutter { color: var(--color-danger); }
-.toneDel .paramGutter { color: var(--color-danger); }
 
 .paramTag {
-  flex: none;
-  width: 92px;
   font-size: var(--fs-11);
   color: var(--color-faint);
+  padding-top: var(--space-2px);
 }
 
 .paramVal {
-  flex: 1;
-  min-width: 0;
+  font-size: var(--fs-12);
   color: var(--color-fg);
+  line-height: 1.6;
   overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 .paramValWrap {
-  flex: 1;
-  min-width: 0;
   display: inline-flex;
   flex-direction: column;
   gap: var(--space-2px);
+  min-width: 0;
 }
 
 .clamp {

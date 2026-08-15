@@ -8,6 +8,7 @@
  * 失真、无窗口重挂载闪烁；滚动路径零 setState（仅 ref 记忆贴底状态）。
  */
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { debugLog } from "@novel/core/client";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ConversationTimelineItem as TimelineItem } from "../projection/ConversationTimelineItem.js";
@@ -40,6 +41,7 @@ export function ConversationTimeline({
   onNotify,
 }: ConversationTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   // 首条用户消息：复制按钮收进气泡内边距带（原型 .msg-actions-inpad）。
   const firstUserSequence = items.find((item) => item.kind === "user")?.sequence;
@@ -86,7 +88,65 @@ export function ConversationTimeline({
     const node = scrollRef.current;
     if (node === null || !stickToBottom.current) return;
     node.scrollTop = node.scrollHeight;
+    logWrapDiag("publish");
   }, [items.length, streamingSequence, lastItemTextLength]);
+
+  // ============ TEMP-DIAG（断字换行排查，verbose 门控，定位后整体移除） ============
+  // 嫌疑：正文流式写入与主区宽度变化（审批面板 margin-right 过渡）时序重叠，
+  // 首行在窄宽度下定稿后未随容器变宽重排。三路证据：
+  // 1) inner ResizeObserver：主区宽度逐帧变化（面板开合过渡窗口）。
+  // 2) 每次流式发布：最后一个 <p>（markdown 真实标签）的祖先链逐层宽度——
+  //    哪层被压窄一目了然；全宽但断行仍在 → 文本行缓存未重排。
+  // 3) localStorage A/B 开关 novel-diag-no-cv=1：强制 .enter content-visibility
+  //    visible（inline 覆盖），同会话对比验证 containment 嫌疑。
+  useEffect(() => {
+    const inner = innerRef.current;
+    if (inner === null || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const width = Math.round(entries[0]?.contentRect.width ?? 0);
+      debugLog(`[timeline-diag] inner resize w=${width} t=${Math.round(performance.now())}`);
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+    // 仅依赖 conversationId：切换会话时重新挂载观察
+  }, [conversationId]);
+
+  useEffect(() => {
+    logWrapDiag("mount");
+    // 仅依赖 conversationId：切换会话时记录一次基线宽度链
+  }, [conversationId]);
+
+  function logWrapDiag(label: string): void {
+    const inner = innerRef.current;
+    if (inner === null) return;
+    applyNoContentVisibilityOverride(inner);
+    const paragraphs = inner.querySelectorAll("p");
+    const last = paragraphs[paragraphs.length - 1];
+    const chain: string[] = [`inner w=${Math.round(inner.getBoundingClientRect().width)}`];
+    let node: Element | null = last ?? null;
+    while (node !== null && node !== inner) {
+      const rect = node.getBoundingClientRect();
+      chain.push(`${node.tagName.toLowerCase()} w=${Math.round(rect.width)}`);
+      node = node.parentElement;
+    }
+    debugLog(
+      `[timeline-diag] ${label} t=${Math.round(performance.now())} p=${paragraphs.length}` +
+        ` head=${last?.textContent?.slice(0, 10) ?? "-"}`,
+      chain.join(" <- "),
+    );
+  }
+
+  function applyNoContentVisibilityOverride(inner: HTMLElement): void {
+    try {
+      if (window.localStorage.getItem("novel-diag-no-cv") !== "1") return;
+    } catch {
+      return;
+    }
+    for (const child of inner.children) {
+      (child as HTMLElement).style.contentVisibility = "visible";
+    }
+  }
+  // ============ TEMP-DIAG 结束 ============
 
   return (
     <div
@@ -100,7 +160,7 @@ export function ConversationTimeline({
         stickToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
       }}
     >
-      <div className={styles.inner} key={conversationId}>
+      <div className={styles.inner} key={conversationId} ref={innerRef}>
         {items.map((item, index) => {
           return (
             <div

@@ -1,80 +1,13 @@
 /**
- * ApprovalPanel 视觉（原型 .insp-list + .appr-scroll + .identity + .detail-foot）。
- *
- * v2 原型对齐：目录按对话分组（.apprGroup + .apprGroupHead + .agJump），
- * 删除悬浮预览与内部标识；目录始终为左侧滑出覆盖抽屉（触发按钮「目录 N」
- * 在 InspectorHost 头部，.scrim + .list absolute 覆盖详情区）。
+ * ApprovalPanel 视觉（对齐 demo 审批右栏卡片流，app-redesign-demo.html
+ * L905-1005 .insBody/.apCard/.apSection/.apCur/.apGroup/.apParam）：
+ * 一批审批纵向堆叠（一次 call 一批一起审，无目录）；
+ * 卡片两段式——「当前内容」（apCur 左色线 muted 块）+「变更后/写入内容/删除参数」
+ * （apGroup 色带 + 参数网格）+ 决策按钮/意见输入/已处理横幅。
  */
+
 .panel {
-  position: relative;
-  display: flex;
-  flex-direction: row;
-  height: 100%;
-  min-height: 0;
-}
-
-/* 抽屉遮罩：目录覆盖时全屏半透明，点击关闭。 */
-.scrim {
-  position: absolute;
-  inset: 0;
-  z-index: var(--z-dock-scrim);
-  background: color-mix(in oklab, var(--color-fg) 12%, transparent);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s var(--ease-out);
-}
-
-.panel.drawerOpen .scrim {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* 目录：始终为左侧滑出覆盖抽屉（对齐原型 #apprList absolute 弹层）。 */
-.list {
-  position: absolute;
-  inset-block: 0;
-  left: 0;
-  z-index: var(--z-dock);
-  width: min(268px, 82%);
-  height: 100%;
-  overflow-y: auto;
-  padding: var(--space-2) var(--space-10px) var(--space-1);
-  border-right: 1px solid var(--color-border-strong);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2px);
-  background: color-mix(in oklab, var(--color-surface) 94%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: var(--shadow-panel);
-  transform: translateX(-104%);
-  transition: transform 0.22s var(--ease-out);
-}
-
-.panel.drawerOpen .list {
-  transform: none;
-}
-
-.dirHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-7px);
-  padding: var(--space-1) var(--space-1) var(--space-6px);
-  font-size: var(--fs-11);
-  font-weight: var(--fw-heavy);
-  letter-spacing: 0.06em;
-  color: var(--color-muted);
-}
-
-.cnt {
-  font-family: var(--font-mono);
-  font-size: var(--fs-10);
-  font-weight: var(--fw-heavy);
-  color: var(--color-accent-ink);
-  background: var(--color-accent-11);
-  padding: 1px var(--space-7px);
-  border-radius: var(--radius-pill);
-  animation: var(--anim-cnt-pop) 0.3s var(--ease-out);
+  padding: var(--space-3) var(--space-14px) var(--space-18px);
 }
 
 .empty {
@@ -84,121 +17,58 @@
   text-align: center;
 }
 
-.apprGroup + .apprGroup {
-  margin-top: var(--space-1);
-  padding-top: var(--space-6px);
-  border-top: 1px solid var(--color-border);
-}
-
-.apprGroupHead {
+/* ============ 卡片流（PRD AP-3：一批审批纵向堆叠，无目录） ============ */
+.cards {
   display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2px) var(--space-1) var(--space-1);
+  flex-direction: column;
+  gap: var(--space-14px);
 }
 
-.agMain {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-6px);
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+  padding: var(--space-3) var(--space-14px);
 }
 
-.agName {
-  font-size: var(--fs-12);
-  font-weight: var(--fw-heavy);
-  color: var(--color-fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agSub {
-  font-family: var(--font-mono);
-  font-size: var(--fs-10);
-  color: var(--color-faint);
-}
-
-.agJump {
-  flex: none;
-  border: 0;
-  background: transparent;
-  color: var(--color-accent-ink);
-  font-size: var(--fs-11);
-  font-weight: var(--fw-750);
-  padding: var(--space-2px) var(--space-6px);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.agJump:hover {
-  background: var(--color-accent-10);
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-5px) var(--space-6px);
-  border: 1px solid transparent;
-  border-radius: var(--radius-8px);
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  color: var(--color-fg);
-}
-
-.row:hover {
-  background: var(--color-surface-2);
-}
-
-.row.active {
-  border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-border));
-  background: var(--color-accent-8-transparent);
-}
-
-/* 新审批入列：下滑入 + accent 微光（一次性，ApprovalPanel 经 delta 追踪挂类） */
-.row.enter {
-  animation: var(--anim-appr-in) 0.35s var(--ease-out);
-}
-
-/* 决策后状态脉冲：颜色经 --pulse-c 注入（approved/rejected/edited 三色） */
-.row.pulse {
+/* 决策后状态脉冲（--pulse-c 由卡片注入） */
+.card.pulse {
   animation: var(--anim-status-pulse) 0.6s var(--ease-out);
 }
 
-.title {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  font-size: var(--fs-12-5);
-  font-weight: var(--fw-750);
+/* 新审批入列 */
+.card.enter {
+  animation: var(--anim-appr-in) 0.35s var(--ease-out);
 }
 
-/* 目录项标题:单行省略(对齐原型 .appr-title)。 */
-.rowTitle {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--fs-12-5);
-  font-weight: var(--fw-750);
+/* ============ 身份行 / 标题（demo .apIdentity/.apTitle/.apPill） ============ */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-8px);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+}
+
+.identity .pill {
+  margin-left: auto;
+  font-size: var(--fs-xs);
 }
 
 .meta {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
   color: var(--color-faint);
 }
 
 .pill {
   flex: none;
-  font-size: var(--fs-9-5);
-  font-weight: var(--fw-heavy);
+  font-size: var(--fs-10);
+  font-weight: var(--fw-bold);
   border-radius: var(--radius-pill);
-  padding: 1px var(--space-7px);
+  padding: 1px var(--space-6px);
 }
 
 .pill.pending {
@@ -218,125 +88,93 @@
   color: var(--color-danger);
 }
 
-/* 已修改（请求修改后回传意见）：info 系（原为裸样式，多主题化时补齐） */
+/* 已修改（请求修改后回传意见）：info 系 */
 .pill.edited {
   background: var(--color-info-bg);
   color: var(--color-info);
 }
 
-/* 写入/编辑/删除 色块：低调底色 + 同色系描边，对比明显。 */
-.opChip {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  padding: 1px var(--space-7px);
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-10);
-  font-weight: var(--fw-heavy);
-  letter-spacing: 0.03em;
-}
-
-.opAdd {
-  color: var(--color-success);
-  background: color-mix(in oklab, var(--color-success) 12%, var(--color-surface));
-  border: 1px solid color-mix(in oklab, var(--color-success) 32%, transparent);
-}
-
-.opEdit {
-  color: var(--color-danger);
-  background: var(--color-danger-12-surface);
-  border: 1px solid var(--color-danger-32);
-}
-
-.opDel {
-  color: var(--color-danger);
-  background: var(--color-danger-12-surface);
-  border: 1px solid var(--color-danger-32);
-}
-
-.detail {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--space-3) var(--space-14px) var(--space-22px);
-}
-
-/* 详情内容：key=组切换时重挂载，重放 view-in（决策/输入不重放） */
-.detailInner {
-  animation: var(--anim-view-in) var(--duration-base) var(--ease-out);
-}
-
-.identity {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-10px);
-  font-family: var(--font-mono);
-}
-
-.identity .pill {
-  margin-left: auto;
-}
-
-.detail .title {
-  font-size: var(--fs-h2);
-}
-
-.diffSec {
-  margin-top: var(--space-18px);
-}
-
-.diffTitle {
+.title {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  margin: 0;
+  margin: 0 0 var(--space-1);
   font-size: var(--fs-h2);
-  font-weight: var(--fw-heavy);
-  letter-spacing: -0.01em;
-  color: var(--color-fg);
+  font-weight: var(--fw-bold);
 }
 
-.diffCount {
+/* 标题前缀 diff 符号（demo .apGlyph）。 */
+.titleGlyph {
+  flex: none;
   font-family: var(--font-mono);
-  font-size: var(--fs-11);
-  font-weight: var(--fw-medium);
-  color: var(--color-faint);
+  font-weight: var(--fw-bold);
+  width: 16px;
+  text-align: center;
 }
 
-.diffPlaceholder {
-  margin: var(--space-2) 0 0;
-  padding: var(--space-10px) var(--space-3);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-10px);
-  font-size: var(--fs-12);
-  line-height: 1.6;
-  color: var(--color-faint);
+.titleGlyphAdd { color: var(--color-success); }
+.titleGlyphEdit { color: var(--color-danger); }
+.titleGlyphDel { color: var(--color-danger); }
+
+/* ============ 两段式区（demo .apSection/.apSectionHead） ============ */
+.section {
+  margin-top: var(--space-10px);
 }
 
-.emptyDetail {
-  margin: var(--space-14px) 0 0;
-  padding: var(--space-10px) var(--space-3);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-10px);
-  font-size: var(--fs-12);
-  line-height: 1.6;
-  color: var(--color-faint);
-}
-
-.args {
+.sectionHead {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
+  align-items: center;
+  gap: var(--space-5px);
+  margin-bottom: var(--space-5px);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--color-faint);
+  letter-spacing: 0.05em;
 }
 
-.argsTitle {
-  font-size: var(--fs-meta);
-  font-weight: var(--fw-heavy);
+.sectionHead svg {
+  opacity: 0.7;
+}
+
+/* ---------- 当前内容段（demo .apCur）：左 3px 色线 + 浅底 muted 块 ---------- */
+.cur {
+  border-left: var(--space-3px) solid var(--color-border-strong);
+  background: var(--color-surface-2);
+  border-radius: 0 var(--radius-8px) var(--radius-8px) 0;
+  padding: var(--space-8px) var(--space-3) var(--space-9px);
+}
+
+.curEdit {
+  border-left-color: var(--color-warn);
+  background: color-mix(in oklab, var(--color-warn) 5%, var(--color-surface));
+}
+
+.curDelete {
+  border-left-color: var(--color-danger);
+  background: color-mix(in oklab, var(--color-danger) 5%, var(--color-surface));
+}
+
+.curAdd {
+  border-left-style: dashed;
+}
+
+.curEmpty {
+  font-size: var(--fs-11);
   color: var(--color-faint);
 }
 
+.resolvedDivider {
+  height: 1px;
+  margin: var(--space-6px) 0;
+  background: var(--color-border);
+}
+
+.loadingHint {
+  font-size: var(--fs-12);
+  color: var(--color-faint);
+}
+
+/* ---------- 变更后段（demo .apGroup/.apBand/.apBody） ---------- */
 .argsGroup {
   display: flex;
   flex-direction: column;
@@ -375,7 +213,7 @@
   flex: none;
   width: 16px;
   font-family: var(--font-mono);
-  font-weight: var(--fw-heavy);
+  font-weight: var(--fw-bold);
   text-align: center;
 }
 
@@ -384,13 +222,12 @@
 .bandDel .bandGlyph { color: var(--color-danger); }
 
 .bandTool {
-  font-family: var(--font-mono);
   font-size: var(--fs-12);
-  font-weight: var(--fw-heavy);
+  font-weight: var(--fw-bold);
   color: var(--color-fg);
 }
 
-/* 参数区容器：band 下方带边框圆角体。 */
+/* 参数区容器：band 下方带边框圆角体（demo .apBody）。 */
 .body {
   padding: var(--space-2) var(--space-3) var(--space-10px);
   border-top: 1px solid var(--color-border);
@@ -405,73 +242,39 @@
   border: 1px solid color-mix(in oklab, var(--color-warn) 28%, transparent);
   color: var(--color-warn);
   font-size: var(--fs-12);
-  font-weight: var(--fw-750);
+  font-weight: var(--fw-semibold);
   line-height: 1.5;
 }
 
-/* 解析出的变更对象：目标名 + 实体内容。 */
-.resolvedBlock {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2px);
-}
-
-.resolvedLabel {
+.emptyDetail {
+  margin: var(--space-14px) 0 0;
+  padding: var(--space-10px) var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-10px);
   font-size: var(--fs-12);
-  font-weight: var(--fw-heavy);
-  color: var(--color-muted);
-  margin-bottom: var(--space-2px);
-}
-
-.resolvedDivider {
-  height: 1px;
-  margin: var(--space-6px) 0;
-  background: var(--color-border);
-}
-
-.loadingHint {
-  font-size: var(--fs-12);
+  line-height: 1.6;
   color: var(--color-faint);
 }
 
-/* 详情标题前缀 diff 符号。 */
-.titleGlyph {
-  flex: none;
-  font-family: var(--font-mono);
-  font-weight: var(--fw-heavy);
-  width: 16px;
-  text-align: center;
-}
-
-.titleGlyphAdd { color: var(--color-success); }
-.titleGlyphEdit { color: var(--color-danger); }
-.titleGlyphDel { color: var(--color-danger); }
-
-/* 操作按钮悬浮底端：参数滚动时仍可见。Sticky action bar at panel bottom. */
+/* ---------- 决策区（demo .apActions：静态 border-top，非 sticky） ---------- */
 .actions {
-  position: sticky;
-  bottom: 0;
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
-  margin-top: var(--space-14px);
-  padding: var(--space-3) 0 var(--space-1);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+  padding: var(--space-10px) 0 0;
   border-top: 1px solid var(--color-border);
-  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 .banner {
-  position: sticky;
-  bottom: 0;
   margin-top: var(--space-14px);
   padding: var(--space-2) var(--space-11px);
   border-radius: var(--radius-10px);
   background: var(--color-success-bg);
   color: var(--color-success);
   font-size: var(--fs-12);
-  font-weight: var(--fw-750);
+  font-weight: var(--fw-semibold);
   animation: var(--anim-view-in) var(--duration-base) var(--ease-out);
 }
 
@@ -509,13 +312,19 @@
   gap: var(--space-2);
 }
 
+/* 意见输入内的按钮区：无上边框（demo .apCommentInner .apActions 复位） */
+.commentBox .actions {
+  border-top: 0;
+  padding-top: 0;
+}
+
 .commentInput {
   padding: var(--space-2) var(--space-10px);
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border-strong);
   background: var(--color-surface);
   color: var(--color-fg);
-  font-size: var(--fs-13);
+  font-size: var(--fs-12-5);
   font-family: inherit;
   resize: vertical;
   transition: border-color var(--duration-fast) var(--ease-out);
@@ -524,29 +333,4 @@
 .commentInput:focus {
   outline: none;
   border-color: var(--color-accent);
-}
-
-/* ============ 卡片流（PRD AP-3：一批审批纵向堆叠，无目录） ============ */
-.cards {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2px);
-}
-
-.card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-xs);
-  padding: var(--space-2px) var(--space-3px);
-}
-
-/* 决策后状态脉冲（--pulse-c 由卡片注入） */
-.card.pulse {
-  animation: var(--anim-status-pulse) 0.6s var(--ease-out);
-}
-
-/* 新审批入列 */
-.card.enter {
-  animation: var(--anim-appr-in) 0.35s var(--ease-out);
 }

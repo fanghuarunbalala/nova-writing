@@ -1,57 +1,30 @@
 /**
- * InspectorHost 视觉（原型 .inspector + .insp-head + .insp-close + .insp-body）。
- *
- * 恒挂载面板：宽度由 --insp-w 决定（tokens 默认 860px / 媒体查询收窄 /
- * 拖拽写 inline --insp-w），开合通过 margin-right 负值过渡（非条件渲染）。
- * insp-head 对齐原型：标题（.insp-title 13px/700）+ 审批「目录 N」按钮
- * （.appr-list-toggle，aria-expanded 高亮）+ kicker + close 按钮（28x28 1px border）。
+ * InspectorHost 视觉（对齐 demo .inspector + .insHead，app-redesign-demo.html
+ * L879-911）：恒挂载面板，开合通过 margin-right 负值过渡（非条件渲染）；
+ * 面板头 = 标题 + 待审计数徽标（demo .apCnt）+ kicker + close。
+ * 宽度固定档位（决议 2）：>1280 = 376 / ≤1280 = 340 / ≤1080 右缘覆盖抽屉。
  */
 .inspTitle {
   margin: 0;
   font-size: var(--fs-13);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.01em;
+  font-weight: var(--fw-semibold);
   color: var(--color-fg);
 }
 
-.listToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-6px);
-  height: 28px;
-  padding: 0 var(--space-10px);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-8px);
-  background: var(--color-surface);
-  color: var(--color-muted);
-  font: 700 11.5px/1 var(--font-ui);
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  transition:
-    color var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out);
-}
-
-.listToggle:hover {
-  color: var(--color-fg);
-  border-color: var(--color-border-strong);
-}
-
-.listToggle[aria-expanded="true"] {
-  color: var(--color-accent-ink);
-  border-color: color-mix(in oklab, var(--color-accent) 34%, var(--color-border));
-  background: var(--color-accent-8-surface);
-}
-
+/* 待审计数徽标（demo .apCnt）：mono 10.5px/700，>0 warn 琥珀、0 灰。 */
 .ltCnt {
   font-family: var(--font-mono);
-  font-size: var(--fs-9-5);
-  font-weight: var(--fw-heavy);
-  color: var(--color-faint);
-  background: color-mix(in oklab, var(--color-fg) 7%, transparent);
-  padding: 1px var(--space-6px);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--color-warn);
+  background: var(--color-warn-bg);
+  padding: 1px var(--space-8px);
   border-radius: var(--radius-pill);
+}
+
+.ltCntZero {
+  color: var(--color-faint);
+  background: var(--color-surface-2);
 }
 
 .host {
@@ -87,38 +60,37 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: var(--space-2) var(--space-10px);
-  flex-wrap: wrap;
-  padding: var(--space-11px) var(--space-14px) var(--space-10px);
+  gap: var(--space-2);
+  padding: var(--space-8px) var(--space-10px) var(--space-8px) var(--space-14px);
   border-bottom: 1px solid var(--color-border);
+  background: var(--color-chrome-bg);
 }
 
 .kicker {
   flex: 1;
-  font-size: var(--fs-10);
-  letter-spacing: 0.1em;
+  font-size: var(--fs-xs);
   color: var(--color-faint);
   text-transform: none;
 }
 
 .close {
   margin-left: auto;
-  width: 28px;
-  height: 28px;
+  width: var(--space-6);
+  height: var(--space-6);
   flex: none;
   display: grid;
   place-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-8px);
+  border: 0;
+  border-radius: var(--radius-sm);
   color: var(--color-muted);
   font-size: var(--fs-12);
-  background: var(--color-surface);
+  background: transparent;
   cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 
 .close:hover {
-  border-color: var(--color-border-strong);
+  background: color-mix(in oklab, var(--color-fg) 6%, transparent);
   color: var(--color-fg);
 }
 

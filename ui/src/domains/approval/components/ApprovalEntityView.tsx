@@ -1,15 +1,15 @@
 /**
  * ApprovalEntityView
  *
- * 渲染一个解析出的审批目标实体（v4 设计）：目标名 + 结构上下文（大纲树 /
- * 卷章列表 / 相邻段落）+ 字段 diff 行（红=旧/删除、绿=新/新增、灰=上下文）
- * + 「写作方案」（leaf）子块。层级用嵌套容器 + 竖向引导线 + 横向枝表达，
- * 变更节点色块高亮，diff 行挂在被改节点下。
+ * 渲染一个解析出的审批目标实体的「当前内容」视图（demo .apCur 区）：
+ * 目标名 + 结构上下文（大纲树 / 卷章列表 / 相邻段落）+ 当前值字段行
+ * （edit/delete/ctx 取 old，add 字段无当前值跳过）+ 「写作方案」（leaf）子块。
+ * 新值不再在此展示——由卡片「变更后」段的参数行承载（demo 两段式）。
  *
- * Renders one resolved approval target (v4): name, structural context (outline
- * tree / volume-chapter list / neighboring paragraphs), diff-field rows
- * (red=old/delete, green=new/add, gray=context), and the "写作方案" (leaf)
- * sub-block. Hierarchy uses nested containers with guide lines.
+ * Renders one resolved approval target as its CURRENT content (demo .apCur):
+ * name, structural context (outline tree / volume-chapter list / neighboring
+ * paragraphs), current-value field rows, and the "写作方案" (leaf) sub-block.
+ * New values live in the card's "变更后" parameter section instead.
  */
 import type { JSX } from "react";
 import type {
@@ -28,58 +28,26 @@ const STATUS_LABEL: Readonly<Record<string, string>> = {
   abandoned: "已废弃",
 };
 
-/** 单条 diff 行（编辑字段渲染为红旧+绿新两行）。 */
-function FieldLine({ line }: { readonly line: ApprovalFieldLine }): JSX.Element {
-  if (line.state === "edit") {
-    return (
-      <>
-        <div className={[styles.dl, styles.old].join(" ")}>
-          <span className={styles.g}>−</span>
-          <span className={styles.fld}>{line.label}</span>
-          <span className={styles.txt}>{line.old ?? "—"}</span>
-        </div>
-        <div className={[styles.dl, styles.new].join(" ")}>
-          <span className={styles.g}>+</span>
-          <span className={styles.fld}>{line.label}</span>
-          <span className={styles.txt}>{line.new ?? "—"}</span>
-        </div>
-      </>
-    );
-  }
-  const glyph = line.state === "add" ? "+" : line.state === "delete" ? "−" : "·";
-  const value = line.state === "delete" ? line.old : line.new;
-  const tone =
-    line.state === "add"
-      ? styles.add
-      : line.state === "delete"
-        ? styles.del
-        : styles.ctx;
+/** 单条字段行：当前值（edit/delete/ctx → old；add 无当前值不渲染）。 */
+function FieldLine({ line }: { readonly line: ApprovalFieldLine }): JSX.Element | null {
+  const value = line.old ?? (line.state === "ctx" ? line.new : undefined);
+  if (value === undefined) return null;
   return (
-    <div className={[styles.dl, tone].filter(Boolean).join(" ")}>
-      <span className={styles.g}>{glyph}</span>
+    <div className={styles.row}>
       <span className={styles.fld}>{line.label}</span>
-      <span className={styles.txt}>{value ?? "—"}</span>
+      <span className={styles.txt}>{value}</span>
     </div>
   );
 }
 
-/** 树/列表节点（嵌套容器 + 变更高亮）。 */
-function TreeNode({
-  node,
-}: {
-  readonly node: ApprovalContextNode;
-}): JSX.Element {
-  const tone =
-    node.state === "current"
-      ? styles.current
-      : node.state === "add"
-        ? styles.add
-        : node.state === "delete"
-          ? styles.del
-          : "";
+/** 树/列表节点（当前内容视图：目标节点 warn 高亮；新增节点无当前态，跳过）。 */
+function TreeNode({ node }: { readonly node: ApprovalContextNode }): JSX.Element | null {
+  if (node.state === "add") return null;
   return (
     <>
-      <div className={[styles.node, tone].filter(Boolean).join(" ")}>
+      <div className={[styles.node, node.state === "current" ? styles.current : ""]
+        .filter(Boolean)
+        .join(" ")}>
         <span className={styles.nm}>{node.label}</span>
         {node.scope !== undefined ? (
           <span className={styles.sc}>{node.scope}</span>
@@ -102,7 +70,7 @@ function TreeNode({
   );
 }
 
-/** 相邻/章内段落原文。 */
+/** 相邻/章内段落原文（当前内容：仅 old/ctx 行，宋体 muted）。 */
 function ParagraphLines({
   lines,
 }: {
@@ -110,21 +78,11 @@ function ParagraphLines({
 }): JSX.Element {
   return (
     <div className={styles.para}>
-      {lines.map((line, index) => {
-        const tone =
-          line.state === "old"
-            ? styles.old
-            : line.state === "new"
-              ? styles.new
-              : styles.ctx;
-        const glyph = line.state === "old" ? "−" : line.state === "new" ? "+" : "·";
-        return (
-          <div key={index} className={[styles.dl, tone].filter(Boolean).join(" ")}>
-            <span className={styles.g}>{glyph}</span>
-            <span className={styles.txt}>{line.text}</span>
-          </div>
-        );
-      })}
+      {lines
+        .filter((line) => line.state !== "new")
+        .map((line, index) => (
+          <p key={index} className={styles.paraLine}>{line.text}</p>
+        ))}
     </div>
   );
 }
@@ -160,7 +118,7 @@ export function ApprovalEntityView({
       {content.leaf !== undefined && content.leaf.length > 0 ? (
         <div className={styles.leaf}>
           <div className={styles.leafhead}>
-            写作方案 <span className={styles.sc}>LEAF</span>
+            写作方案 <span className={styles.leafTag}>LEAF</span>
           </div>
           {content.leaf.map((line, index) => (
             <FieldLine key={`leaf-${line.field}-${index}`} line={line} />

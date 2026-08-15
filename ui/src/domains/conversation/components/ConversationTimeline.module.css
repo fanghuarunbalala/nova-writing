@@ -76,10 +76,13 @@
 
 /* 消息入场：切换对话时按序错峰（原型 .msg.conv-in）。 */
 /* content-visibility（gui-performance-2 功能点六）：视口外行跳过 layout/paint，
-   contain-intrinsic-size 记忆实际渲染高度（auto 关键字）+ 240px 初始估高——
-   长会话滚动无固定行高失真、无窗口重挂载动画闪烁。 */
+   contain-intrinsic-height 记忆实际渲染高度（auto 关键字）+ 240px 初始估高——
+   长会话滚动无固定行高失真、无窗口重挂载动画闪烁。
+   仅约束高度轴：contain-intrinsic-size 单值语法会同时作用于宽高，宽度轴的
+   记忆尺寸会在主区宽度变化（审批面板开合过渡）时让时间线行按过期宽度排版，
+   产生中文逐字断行。 */
 .enter {
   animation: var(--anim-conv-in) 0.28s ease both;
   content-visibility: auto;
-  contain-intrinsic-size: auto 240px;
+  contain-intrinsic-height: auto 240px;
 }

@@ -1,7 +1,10 @@
 /**
- * ApprovalEntityView 视觉（v4）：diff 行 + 真树形层级 + 段落 + 写作方案。
- * v4 diff-row + tree hierarchy + paragraphs + writing-plan visuals.
+ * ApprovalEntityView 视觉：审批卡「当前内容」段（demo .apCur 区内）——
+ * muted 当前值展示：目标名 + 结构上下文树（目标节点 warn 高亮）+ 当前值字段行
+ * （行网格与 demo .apParam 一致）+ 写作方案（leaf）子块 + 相邻段落原文。
+ * 无红绿 diff 配色：新值由卡片「变更后」段的参数行承载。
  */
+
 .entity {
   display: flex;
   flex-direction: column;
@@ -10,70 +13,36 @@
 
 .name {
   font-size: var(--fs-12);
-  font-weight: var(--fw-heavy);
+  font-weight: var(--fw-semibold);
   color: var(--color-muted);
   margin-bottom: var(--space-2px);
 }
 
-/* ---------- diff 行 ---------- */
-.dl {
+/* ---------- 字段行（当前值）：网格对齐 demo .apParam ---------- */
+.fields {
   display: flex;
-  gap: var(--space-2);
-  align-items: baseline;
-  font-size: var(--fs-13);
-  line-height: 1.55;
-  padding: var(--space-2px) var(--space-2);
-  border-radius: var(--radius-xs);
+  flex-direction: column;
 }
 
-.dl .g {
-  flex: none;
-  width: 13px;
-  font-family: var(--font-mono);
-  font-weight: var(--fw-heavy);
-  text-align: center;
+.row {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: var(--space-1) var(--space-10px);
+  align-items: baseline;
 }
 
 .fld {
-  flex: none;
-  width: 72px;
   font-size: var(--fs-11);
   color: var(--color-faint);
+  padding-top: var(--space-2px);
 }
 
 .txt {
-  flex: 1;
-  min-width: 0;
+  font-size: var(--fs-12);
+  color: var(--color-muted);
+  line-height: 1.6;
   overflow-wrap: anywhere;
 }
-
-.dl.ctx { background: transparent; }
-.dl.ctx .g { color: var(--color-border-strong); }
-.dl.ctx .txt { color: var(--color-muted); }
-
-.dl.add { background: color-mix(in oklab, var(--color-success) 9%, var(--color-surface)); }
-.dl.add .g { color: var(--color-success); }
-.dl.add .txt { color: var(--color-fg); }
-
-.dl.del { background: var(--color-danger-8); }
-.dl.del .g { color: var(--color-danger); }
-.dl.del .txt {
-  color: var(--color-muted);
-  text-decoration: line-through;
-  text-decoration-color: var(--color-danger-45);
-}
-
-.dl.old { background: color-mix(in oklab, var(--color-danger) 9%, var(--color-surface)); }
-.dl.old .g { color: var(--color-danger); }
-.dl.old .txt {
-  color: var(--color-muted);
-  text-decoration: line-through;
-  text-decoration-color: var(--color-danger-45);
-}
-
-.dl.new { background: color-mix(in oklab, var(--color-success) 10%, var(--color-surface)); }
-.dl.new .g { color: var(--color-success); }
-.dl.new .txt { color: var(--color-fg); }
 
 /* ---------- 树 / 列表（嵌套容器 + 引导线 + 横向枝） ---------- */
 .tree {
@@ -85,7 +54,7 @@
 
 .parent {
   font-size: var(--fs-11);
-  font-weight: var(--fw-heavy);
+  font-weight: var(--fw-semibold);
   color: var(--color-faint);
   letter-spacing: 0.04em;
   padding: var(--space-2px) var(--space-2);
@@ -152,29 +121,15 @@
   background: var(--color-border-strong);
 }
 
+/* 目标节点：warn 高亮（demo 卡内定位当前审批对象） */
 .node.current {
   background: color-mix(in oklab, var(--color-warn) 13%, var(--color-surface));
   border-left: var(--space-3px) solid var(--color-warn);
   color: var(--color-fg);
 }
-.node.current .nm { font-weight: 800; }
 
-.node.add {
-  background: color-mix(in oklab, var(--color-success) 13%, var(--color-surface));
-  border-left: var(--space-3px) solid var(--color-success);
-  color: var(--color-fg);
-}
-.node.add .nm { font-weight: 800; }
-
-.node.del {
-  background: color-mix(in oklab, var(--color-danger) 13%, var(--color-surface));
-  border-left: var(--space-3px) solid var(--color-danger);
-  color: var(--color-danger);
-}
-.node.del .nm {
-  font-weight: var(--fw-heavy);
-  text-decoration: line-through;
-  text-decoration-color: var(--color-danger-45);
+.node.current .nm {
+  font-weight: var(--fw-semibold);
 }
 
 /* ---------- 写作方案（leaf） ---------- */
@@ -191,17 +146,28 @@
   gap: var(--space-6px);
   padding: var(--space-1) var(--space-2) 1px;
   font-size: var(--fs-11);
-  font-weight: var(--fw-heavy);
+  font-weight: var(--fw-bold);
   letter-spacing: 0.05em;
-  color: var(--color-success);
+  color: var(--color-faint);
 }
 
-/* ---------- 段落 ---------- */
+.leafTag {
+  font-family: var(--font-mono);
+  font-size: var(--fs-9);
+}
+
+/* ---------- 段落原文（宋体 muted，demo .apCurText） ---------- */
 .para {
-  font-size: var(--fs-13);
   font-family: var(--font-body);
+  font-size: var(--fs-12-5);
+  line-height: 1.85;
+  color: var(--color-muted);
 }
 
-.para .dl .txt {
-  font-family: var(--font-body);
+.paraLine {
+  margin: 0 0 var(--space-5px);
+}
+
+.paraLine:last-child {
+  margin-bottom: 0;
 }

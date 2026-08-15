@@ -92,8 +92,10 @@ describe("ApprovalPanel", () => {
     expect(screen.getAllByText("角色写入").length).toBeGreaterThan(0);
     // op 色块（NovelCharacterWrite → add）：标题 diff 符号。
     expect(screen.getAllByText("+").length).toBeGreaterThan(0);
-    // 参数区（无 resolver → 平铺原始参数）。
-    expect(screen.getByText("当前内容 · 将被变更")).toBeInTheDocument();
+    // 参数区两段式（demo 对齐）：add 未解析到既有数据 →「当前内容」空态 +「写入内容」。
+    expect(screen.getByText("当前内容")).toBeInTheDocument();
+    expect(screen.getByText("无既有数据 · 此操作为新建")).toBeInTheDocument();
+    expect(screen.getByText("写入内容")).toBeInTheDocument();
     // 待审批 → 决策按钮可用；已处理横幅不出现。
     expect(screen.getByRole("button", { name: "批准" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "拒绝" })).toBeInTheDocument();
@@ -173,8 +175,9 @@ describe("ApprovalPanel", () => {
     );
     expect(await screen.findByText("夏、夏夏")).toBeInTheDocument();
     expect(screen.getByText("名称")).toBeInTheDocument();
-    // 原始参数未展示。
-    expect(screen.queryByText("级联删除")).not.toBeInTheDocument();
+    expect(screen.getByText("当前内容 · 将被删除")).toBeInTheDocument();
+    // 两段式（demo 对齐）：当前内容 muted 块 +「删除参数」段的原始参数并存。
+    expect(screen.getByText("删除参数")).toBeInTheDocument();
   });
 
   it("renders old→new changes for edit approvals", async () => {

@@ -1,9 +1,9 @@
 /**
  * AssistantMessage
  *
- * 助手消息（原型 .msg.assistant）：无头像，head 只保留 approval-state 状态
- * 标签；正文 + 按 turn 分段的工具单行（每段 = 内容片段 + 工具行，
- * 见 docs/design/tool-call-embed-demo.html）+ 结构化卡片。
+ * 助手消息（原型 .msg.assistant）：无头像；正文 + 按 turn 分段的工具单行
+ * （每段 = 内容片段 + 工具行，形态定稿见 docs/design/tool-line-redesign-demo.html
+ * 方案 A：状态降噪）+ 结构化卡片。
  * 卡片通过 ConversationCardRendererRegistry 渲染。
  * memo 包裹：历史消息（text/cards/segments 引用稳定）零重渲染、markdown 零重解析。
  */
@@ -133,32 +133,33 @@ export const AssistantMessage = memo(function AssistantMessage({
   );
 });
 
-/** 工具单行：一次请求的工具调用拼成一行（spinner 动作+对象+中：内容 / ✓ 对象+动作+已完成：内容） */
+/** 工具单行（方案 A 状态降噪，docs/design/tool-line-redesign-demo.html）：
+ *  完成 = ✓ 绿图标 + muted 文字（✓ 已表达完成，不显耗时——大多 0s 属噪音）；
+ *  失败 = 红字醒目；进行中 = 唯一强调项（warn 图标 + 实时整数秒）。
+ *  工具项 nowrap，折行只发生在工具之间。 */
 function ToolLine({ tools }: { readonly tools: readonly ToolTraceView[] }) {
   return (
     <div className={styles.toolLine}>
       {tools.map((t) => {
         const action = t.preview?.action ?? "执行";
         const object = t.preview?.object ?? "工具";
-        const content = t.preview?.title !== undefined ? `：${t.preview.title}` : "";
+        const title = t.preview?.title;
         if (t.outcome === undefined) {
           return (
             <span key={t.traceId} className={styles.toolRunning}>
               <span className={styles.spinner} />
               {action}
-              {object}中{content}
+              {object}中{title !== undefined ? `：${title}` : ""}
               <LiveSeconds startedAt={t.startedAt} />
             </span>
           );
         }
-        const dur = t.durationMs !== undefined ? ` ${(t.durationMs / 1000).toFixed(1)}s` : "";
         if (t.outcome === "failed") {
           return (
             <span key={t.traceId} className={styles.toolFailed}>
               <Icon icon={X} size="xs" strokeWidth={2.2} />
               {object}
-              {action}失败{content}
-              {dur}
+              {action}失败{title !== undefined ? `：${title}` : ""}
             </span>
           );
         }
@@ -166,8 +167,8 @@ function ToolLine({ tools }: { readonly tools: readonly ToolTraceView[] }) {
           <span key={t.traceId} className={styles.toolDone}>
             <Icon icon={Check} size="xs" strokeWidth={2.2} />
             {object}
-            {action}已完成{content}
-            {dur}
+            {action}
+            {title !== undefined ? ` · ${title}` : ""}
           </span>
         );
       })}
@@ -175,7 +176,7 @@ function ToolLine({ tools }: { readonly tools: readonly ToolTraceView[] }) {
   );
 }
 
-/** 进行中工具实时秒数（1s 粒度跳动；startedAt 缺失时不渲染也不挂定时器） */
+/** 进行中工具实时秒数（整数粒度，1s 跳动；startedAt 缺失时不渲染也不挂定时器） */
 function LiveSeconds({ startedAt }: { readonly startedAt?: number }) {
   const active = startedAt !== undefined && !Number.isNaN(startedAt);
   const [now, setNow] = useState(() => Date.now());
@@ -185,6 +186,6 @@ function LiveSeconds({ startedAt }: { readonly startedAt?: number }) {
     return () => clearInterval(id);
   }, [active]);
   if (!active) return null;
-  const secs = Math.max(0, (now - startedAt!) / 1000);
-  return <span className={styles.toolSec}>{secs.toFixed(1)}s</span>;
+  const secs = Math.max(0, Math.floor((now - startedAt!) / 1000));
+  return <span className={styles.toolSec}>{secs}s</span>;
 }

@@ -58,7 +58,7 @@ describe("AssistantMessage 一轮只显示最后一 turn", () => {
     expect(screen.getByText(/插入正文中：ch3/)).toBeInTheDocument();
     expect(screen.getByText(/文件查找失败：\*\*\/\*\.md/)).toBeInTheDocument();
     // 历史段的工具行不显示
-    expect(screen.queryByText(/角色创建已完成：张三/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/角色创建 · 张三/)).not.toBeInTheDocument();
   });
 
   it("live 流式（streaming=true）：逐 turn 分段渲染，每段内容 + 工具行换行分隔", () => {
@@ -98,7 +98,7 @@ describe("AssistantMessage 一轮只显示最后一 turn", () => {
     );
     // 流式期间：每个 turn 的内容与工具行都渲染（换行分隔，边界清晰，正文无跳变）
     expect(screen.getByText(/我先创建角色/)).toBeInTheDocument();
-    expect(screen.getByText(/角色创建已完成：张三/)).toBeInTheDocument();
+    expect(screen.getByText(/角色创建 · 张三/)).toBeInTheDocument();
     expect(screen.getByText(/接着写正文/)).toBeInTheDocument();
     expect(screen.getByText(/插入正文中：ch3/)).toBeInTheDocument();
   });
@@ -115,10 +115,10 @@ describe("AssistantMessage 一轮只显示最后一 turn", () => {
       />,
     );
     expect(screen.getByText(/秋夜的风/)).toBeInTheDocument();
-    expect(screen.getByText(/正文插入已完成：ch3/)).toBeInTheDocument();
-    expect(screen.getByText(/3\.4s/)).toBeInTheDocument();
+    expect(screen.getByText(/正文插入 · ch3/)).toBeInTheDocument();
+    // 方案 A：完成态不显示耗时（durationMs 不再渲染）
     // 历史段（角色创建）不显示
-    expect(screen.queryByText(/角色创建已完成：张三/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/角色创建 · 张三/)).not.toBeInTheDocument();
   });
 
   it("无 segments：仅渲染完整文本，无工具行", () => {

@@ -77,16 +77,23 @@
   line-height: 1.6;
 }
 
+/* 方案 A 状态降噪（docs/design/tool-line-redesign-demo.html）：完成文字 muted
+   （✓ 图标独享绿）、失败红字醒目、进行中为唯一强调项（fg 加粗 + warn 图标/秒数）。
+   nowrap：折行只发生在工具之间，不在工具内部断行。 */
 .toolDone {
-  color: var(--color-success);
+  color: var(--color-muted);
+  white-space: nowrap;
 }
 
 .toolFailed {
   color: var(--color-danger);
+  white-space: nowrap;
 }
 
 .toolRunning {
-  color: var(--color-warn);
+  color: var(--color-fg);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
 }
 
 /* 状态图标（lucide）与文字的基线间距 */
@@ -94,6 +101,18 @@
 .toolFailed svg {
   margin-right: var(--space-3px);
   vertical-align: -2px;
+}
+
+.toolDone svg {
+  color: var(--color-success);
+}
+
+.toolRunning .spinner {
+  color: var(--color-warn);
+}
+
+.toolRunning .toolSec {
+  color: var(--color-warn);
 }
 
 .spinner {

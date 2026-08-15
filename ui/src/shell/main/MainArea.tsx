@@ -41,10 +41,13 @@ export interface MainAreaProps {
   readonly schedule: ScheduleStore;
   readonly scheduleTodo: ScheduleTodoStore;
   readonly contentTab: ContentTab;
+  /** 档案选区（壳持有；内容视图详情渲染） */
+  readonly selectedCharacterId?: string;
+  readonly selectedLocationId?: string;
+  /** 计划视图选中待办（null = 总览） */
+  readonly planTodoId: string | null;
+  readonly onSelectPlanTodo: (id: string | null) => void;
   readonly onCreateConversation: () => void;
-  readonly onSelectOutlineUnit?: (unitId: string) => void;
-  readonly onSelectCharacter?: (characterId: string) => void;
-  readonly onSelectLocation?: (locationId: string) => void;
   readonly onTodoAction?: (id: string, action: string) => void;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
@@ -81,9 +84,8 @@ export const MainArea = memo(function MainArea(props: MainAreaProps) {
           manuscript={props.manuscript}
           characters={props.characters}
           locations={props.locations}
-          onSelectOutlineUnit={props.onSelectOutlineUnit}
-          onSelectCharacter={props.onSelectCharacter}
-          onSelectLocation={props.onSelectLocation}
+          selectedCharacterId={props.selectedCharacterId}
+          selectedLocationId={props.selectedLocationId}
           locateReference={props.locateReference}
           onBack={() => props.mainViewRouter.transition("chat")}
         />
@@ -92,6 +94,8 @@ export const MainArea = memo(function MainArea(props: MainAreaProps) {
           schedule={props.schedule}
           scheduleTodo={props.scheduleTodo}
           approvalStore={props.approvalStore}
+          selectedTodoId={props.planTodoId}
+          onSelectTodo={props.onSelectPlanTodo}
           onTodoAction={props.onTodoAction}
           onBack={() => props.mainViewRouter.transition("chat")}
         />

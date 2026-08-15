@@ -5,7 +5,7 @@
  * 并承担唯一允许的跨域副作用协调（workspace 切换触发各域 load）。
  * 审批域：活动会话投影 approvals → ApprovalStore；决策经 binding.resolveApproval 回传。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
 import { useMainView } from "../shared/routing/hooks.js";
@@ -45,6 +45,7 @@ import type { ContentTab } from "./main/contentTab.js";
 import { OverlaysHost } from "./overlays/OverlaysHost.js";
 import { Sidebar } from "./sidebar/Sidebar.js";
 import { TopBar } from "./topbar/TopBar.js";
+import type { WindowChromeProps } from "./topbar/WindowControls.js";
 import styles from "./ApplicationShell.module.css";
 
 /** novel.changed 尾随去抖窗口（ms）：突发连续写实体合并为每实体一次刷新 */
@@ -78,6 +79,8 @@ export interface ApplicationShellProps {
   readonly onOpenWorkspace?: () => void;
   readonly onOpenSettings?: () => void;
   readonly overlays?: ReactNode;
+  /** 窗口控制（PRD WC；桌面宿主经 preload 桥注入） */
+  readonly windowChrome?: WindowChromeProps;
   /** 平台能力（可选：会话事件 ZMQ 火线等；缺省投影回退 kkrpc 通道） */
   readonly platform?: FrontendPlatform;
 }
@@ -95,6 +98,7 @@ export function ApplicationShell({
   onOpenSettings,
   overlays,
   platform,
+  windowChrome,
 }: ApplicationShellProps) {
   const workspaceAdapter = useMemo(
     () => new WorkspaceControllerAdapter(workspaceController),
@@ -112,11 +116,13 @@ export function ApplicationShell({
     [api],
   );
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
-  // 侧栏宽度：未拖拽时 undefined（交给 tokens --sidebar-width），拖过才写 inline 值
-  const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
-  const sidebarWidthRef = useRef<number | null>(null);
   const mainView = useMainView(mainViewRouter);
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
+  // 档案/计划选区（PRD CV/PN）：人物·地点详情在内容视图主区渲染，
+  // 选区状态由壳持有（目录在侧栏、详情在主区，二者为兄弟节点）。
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string | undefined>(undefined);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | undefined>(undefined);
+  const [planTodoId, setPlanTodoId] = useState<string | null>(null);
   const [locateReference, setLocateReference] = useState<
     { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null
   >(null);
@@ -271,16 +277,7 @@ export function ApplicationShell({
     void domainStores.conversationCatalog.createConversation();
   }, [domainStores]);
 
-  // 侧栏拖拽调宽：232–420px（未拖时缺省 tokens 292px）
-  const SIDEBAR_DEFAULT_WIDTH = 292;
-  const handleSidebarResize = useCallback((delta: number) => {
-    const next = Math.min(
-      420,
-      Math.max(232, (sidebarWidthRef.current ?? SIDEBAR_DEFAULT_WIDTH) + delta),
-    );
-    sidebarWidthRef.current = next;
-    setSidebarWidth(next);
-  }, []);
+  // 侧栏宽度固定档位（决议 2：移除拖拽调宽），无本域逻辑。
 
   const handleSelectConversation = useCallback(
     (id: string) => {
@@ -290,37 +287,61 @@ export function ApplicationShell({
     [domainStores, mainViewRouter],
   );
 
+  // 大纲单元：目录树选中即主区详情（PRD OL-1；不再开 inspector）。
   const handleSelectOutlineUnit = useCallback(
     (unitId: string) => {
       domainStores.storyOutlineTree.selectUnit(unitId);
-      inspectorRouter.transition({ kind: "outlineUnit", unitId });
+      setContentTab("outline");
+      mainViewRouter.transition("content");
     },
-    [domainStores, inspectorRouter],
+    [domainStores, mainViewRouter],
   );
 
+  // 人物/地点：选区入壳 + 内容视图对应资料位（PRD PM/PL）。
   const handleSelectCharacter = useCallback(
     (characterId: string) => {
-      domainStores.character.selectCharacter(characterId);
-      inspectorRouter.transition({ kind: "entity", entityType: "character", entityId: characterId });
+      setSelectedCharacterId(characterId);
+      setContentTab("characters");
+      mainViewRouter.transition("content");
     },
-    [domainStores, inspectorRouter],
+    [mainViewRouter],
   );
 
   const handleSelectLocation = useCallback(
     (locationId: string) => {
-      domainStores.location.selectLocation(locationId);
-      inspectorRouter.transition({ kind: "entity", entityType: "location", entityId: locationId });
+      setSelectedLocationId(locationId);
+      setContentTab("locations");
+      mainViewRouter.transition("content");
     },
-    [domainStores, inspectorRouter],
+    [mainViewRouter],
   );
 
+  const handleSelectChapter = useCallback(
+    (chapterId: string) => {
+      domainStores.manuscriptStructure.selectChapter(chapterId);
+    },
+    [domainStores],
+  );
+
+  // 待办动作跨视图直达（PRD PN-8）：去审批 → 对话 + 审批面板；
+  // 去完善档案 → 内容视图对应资料位。
   const handleTodoAction = useCallback(
     (_id: string, action: string) => {
-      if (action === "open-character" || action === "open-location") {
+      if (action === "open-approval") {
+        mainViewRouter.transition("chat");
+        inspectorRouter.transition({
+          kind: "approval",
+          changeSetId: domainStores.conversationCatalog.getSnapshot().activeConversationId ?? "",
+        });
+      } else if (action === "open-character") {
+        setContentTab("characters");
+        mainViewRouter.transition("content");
+      } else if (action === "open-location") {
+        setContentTab("locations");
         mainViewRouter.transition("content");
       }
     },
-    [mainViewRouter],
+    [domainStores, inspectorRouter, mainViewRouter],
   );
 
   const resolveReference: ReferenceResolver = useCallback(
@@ -391,6 +412,10 @@ export function ApplicationShell({
     [mainViewRouter],
   );
 
+  const handleSelectPlanTodo = useCallback((id: string | null) => {
+    setPlanTodoId(id);
+  }, []);
+
   // 稳定回调（memo 边界生效前提：shell 重渲染时子组件 props 引用不变）
   const handleToggleSidebar = useCallback(
     () => setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded")),
@@ -414,23 +439,35 @@ export function ApplicationShell({
         onOpenWorkspace={handleShellOpenWorkspace}
         onOpenSettings={handleShellOpenSettings}
         extensions={extensions}
+        windowChrome={windowChrome}
       />
       <div className={styles.body}>
         <Sidebar
           mode={sidebarMode}
-          widthPx={sidebarWidth ?? undefined}
-          onResizeWidth={handleSidebarResize}
+          view={mainView.state}
           conversationCatalog={domainStores.conversationCatalog}
           novelOverview={domainStores.novelOverview}
+          outlineTree={domainStores.storyOutlineTree}
+          manuscript={domainStores.manuscriptStructure}
+          characters={domainStores.character}
+          locations={domainStores.location}
+          schedule={domainStores.schedule}
+          scheduleTodo={domainStores.scheduleTodo}
+          approvalStore={approvalStore}
           toastStore={toastStore}
+          workspaceId={workspaceId}
           onCreateConversation={handleCreateConversation}
           onSelectConversation={handleSelectConversation}
           contentTab={contentTab}
           onSelectContentPane={handleSelectContentPane}
-          workspaceId={workspaceId}
-          workspaceLabel={workspace.current?.label}
-          revision={overview.sourceRevision}
-          onOpenWorkspace={onOpenWorkspace}
+          onSelectOutlineUnit={handleSelectOutlineUnit}
+          onSelectChapter={handleSelectChapter}
+          selectedCharacterId={selectedCharacterId}
+          selectedLocationId={selectedLocationId}
+          onSelectCharacter={handleSelectCharacter}
+          onSelectLocation={handleSelectLocation}
+          planTodoId={planTodoId}
+          onSelectPlanTodo={handleSelectPlanTodo}
         />
         <MainArea
           api={api}
@@ -452,10 +489,11 @@ export function ApplicationShell({
           schedule={domainStores.schedule}
           scheduleTodo={domainStores.scheduleTodo}
           contentTab={contentTab}
+          selectedCharacterId={selectedCharacterId}
+          selectedLocationId={selectedLocationId}
+          planTodoId={planTodoId}
+          onSelectPlanTodo={handleSelectPlanTodo}
           onCreateConversation={handleCreateConversation}
-          onSelectOutlineUnit={handleSelectOutlineUnit}
-          onSelectCharacter={handleSelectCharacter}
-          onSelectLocation={handleSelectLocation}
           onTodoAction={handleTodoAction}
           onReferenceClick={handleReferenceClick}
           resolveReference={resolveReference}
@@ -465,6 +503,7 @@ export function ApplicationShell({
         />
         <InspectorHost
           inspectorRouter={inspectorRouter}
+          visible={mainView.state === "chat"}
           conversationCatalog={domainStores.conversationCatalog}
           outlineTree={domainStores.storyOutlineTree}
           characters={domainStores.character}

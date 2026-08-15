@@ -479,9 +479,18 @@ async function main(): Promise<void> {
   };
   expose(workspaceApi, electronIpcTransport({ endpoint, channel: WORKSPACE_CHANNEL }));
 
+  // 自绘窗口控制（PRD WC/决议5）：Windows 全 frameless；macOS 保留系统红绿灯
+  // （titleBarStyle hidden）。最小窗口 1080×640（决议 6：断点收敛 1280/1080 两档），
+  // 初始 1280×800。
+  const isDarwin = process.platform === "darwin";
   const win = new BrowserWindow({
-    width: 900,
-    height: 640,
+    width: 1280,
+    height: 800,
+    minWidth: 1080,
+    minHeight: 640,
+    ...(isDarwin
+      ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 13, y: 13 } }
+      : { frame: false }),
     webPreferences: {
       preload: preloadPath,
       // 显式安全声明（Electron 当前默认即此值；显式化防升级/配置漂移后静默回退）
@@ -494,6 +503,34 @@ async function main(): Promise<void> {
     },
   });
   mainWindow = win;
+  // 窗口控制 IPC（window-controls:*）：仅主窗口 webContents 授权；
+  // macOS 用系统红绿灯，renderer 侧不请求窗控（preload 仍暴露桥，win 才接 UI）
+  const WINDOW_CONTROLS_CHANNEL = {
+    minimize: "window-controls:minimize",
+    toggleMaximize: "window-controls:toggle-maximize",
+    close: "window-controls:close",
+    state: "window-controls:maximized",
+  } as const;
+  const isMainWindowSender = (senderId: number): boolean => senderId === win.webContents.id;
+  ipcMain.on(WINDOW_CONTROLS_CHANNEL.minimize, (event) => {
+    if (isMainWindowSender(event.sender.id)) win.minimize();
+  });
+  ipcMain.on(WINDOW_CONTROLS_CHANNEL.toggleMaximize, (event) => {
+    if (!isMainWindowSender(event.sender.id)) return;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
+  ipcMain.on(WINDOW_CONTROLS_CHANNEL.close, (event) => {
+    if (isMainWindowSender(event.sender.id)) win.close();
+  });
+  const sendMaximizedState = (): void => {
+    if (!win.isDestroyed()) {
+      win.webContents.send(WINDOW_CONTROLS_CHANNEL.state, win.isMaximized());
+    }
+  };
+  win.on("maximize", sendMaximizedState);
+  win.on("unmaximize", sendMaximizedState);
+  win.webContents.once("did-finish-load", sendMaximizedState);
   // compose 设计草稿文件 IPC（novel.design.v1.*）：仅主窗口 webContents 授权，
   // workspace 根随当前打开项目切换；renderer 经 preload novelDesign.invoke 调用
   const designController = new DesktopDesignIpcController({

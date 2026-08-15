@@ -141,21 +141,22 @@ describe("ApplicationShell smoke", () => {
     const user = userEvent.setup();
     const { api } = await renderShell();
     expect(screen.getAllByText("白昼计划").length).toBeGreaterThan(0);
-    // 待办仅存在于计划视图（侧栏已无待办组；顶栏中央分段切换器进入）。
+    // 计划视图侧栏 = 安排目录（总览行 + 待办分组；PRD SB-10），无会话目录。
     await user.click(screen.getByRole("tab", { name: "计划" }));
-    expect(await screen.findByText("还没有对话")).toBeInTheDocument();
+    expect(await screen.findByText("总览")).toBeInTheDocument();
     expect(api.conversations.list).toHaveBeenCalledWith();
     expect(api.novel.overview.get).toHaveBeenCalled();
     expect(api.novel.outline.get).toHaveBeenCalled();
   });
 
-  it("switches to content view and opens the outline unit inspector", async () => {
+  it("switches to content view and shows the outline unit detail", async () => {
     const user = userEvent.setup();
     await renderShell();
-    await user.click(screen.getByText("大纲"));
+    // 资料位在内容视图侧栏：先经顶栏切到内容视图（PRD SB-1 上下文目录）。
+    await user.click(screen.getByRole("tab", { name: "内容" }));
     expect(await screen.findByText("第一卷：旧船坞")).toBeInTheDocument();
+    // 点击侧栏树节点 → 主区渲染选中单元详情（PRD OL-1，不再开 inspector）。
     await user.click(screen.getByText("第一卷：旧船坞"));
-    expect(document.querySelector("aside")).not.toBeNull();
     expect(screen.getAllByText("第一卷：旧船坞").length).toBeGreaterThanOrEqual(2);
   });
 
@@ -200,9 +201,10 @@ describe("ApplicationShell smoke", () => {
       />,
     );
     await screen.findAllByText("对话 000002");
-    // 用户场景：先切到内容视图，再点侧栏对话，应切回聊天并展示对应会话
-    await user.click(screen.getByText("大纲"));
+    // 用户场景：切到内容视图（侧栏变资料目录），经顶栏切回对话再选会话。
+    await user.click(screen.getByRole("tab", { name: "内容" }));
     expect(await screen.findByText("第一卷：旧船坞")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "对话" }));
     await user.click(screen.getAllByText("对话 000001")[0]);
     // chat 视图不再渲染会话标题 heading，改为断言对话输入框出现（切回聊天）。
     expect(

@@ -15,6 +15,7 @@ import type { NovelUiExtensions } from "../../extensions/NovelUiExtensions.js";
 import { TopBarAction } from "./TopBarAction.js";
 import { TopBarMenuSlot } from "./TopBarMenuSlot.js";
 import { TopBarViewSwitcher } from "./TopBarViewSwitcher.js";
+import { WindowControls, type WindowChromeProps } from "./WindowControls.js";
 import styles from "./TopBar.module.css";
 
 export interface TopBarProps {
@@ -29,6 +30,8 @@ export interface TopBarProps {
   readonly onOpenSettings: () => void;
   /** 第一方扩展点；titleBar 渲染到 TopBarMenuSlot（spec 4.2） */
   readonly extensions?: NovelUiExtensions;
+  /** 窗口控制（PRD WC）：mac 渲染在左缘（红绿灯位）、win 渲染在右缘（设置钮后） */
+  readonly windowChrome?: WindowChromeProps;
 }
 
 /** 顶栏（memo：流式发布期间跳过，gui-performance-2 功能点五） */
@@ -42,10 +45,14 @@ export const TopBar = memo(function TopBar({
   onOpenWorkspace,
   onOpenSettings,
   extensions,
+  windowChrome,
 }: TopBarProps) {
   const TitleBar = extensions?.titleBar;
   return (
     <header className={styles.topbar}>
+      {windowChrome !== undefined && windowChrome.platform === "mac" ? (
+        <WindowControls {...windowChrome} />
+      ) : null}
       <IconButton label={sidebarMode === "expanded" ? "收起侧栏" : "展开侧栏"} onClick={onToggleSidebar}>
         <Icon icon={PanelLeft} size="sm" />
       </IconButton>
@@ -66,6 +73,9 @@ export const TopBar = memo(function TopBar({
       <span className={styles.spacer} />
       <TopBarAction label="Workspace" icon={<Icon icon={FolderOpen} size="sm" />} onClick={onOpenWorkspace} />
       <TopBarAction label="设置" icon={<Icon icon={Settings} size="sm" />} onClick={onOpenSettings} />
+      {windowChrome !== undefined && windowChrome.platform === "win" ? (
+        <WindowControls {...windowChrome} />
+      ) : null}
     </header>
   );
 });

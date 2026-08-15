@@ -1,23 +1,27 @@
 /**
  * ContentSurface
  *
- * 内容视图：按侧栏选中的 pane（大纲/正文/人物/地点）渲染对应域内容；
- * 数据来自 novel 域 store。
- * 内容区用 .paneBody + .paneInner 包裹（原型 .pane-body + .pane-inner），
- * 提供 padding 与 max-width 1000 居中。
+ * 内容视图（PRD §7）：目录在侧栏（大纲树/卷章/人物/地点），主区按资料位渲染——
+ *   outline    = 选中单元详情（OutlineUnitInspectorPanel 复用，PRD OL-2~7）；
+ *   manuscript = 双栏阅读器（左目录右正文，保留现实现，PRD MS-1）；
+ *   characters = 角色档案详情（EntityInspectorPanel 复用，PRD PM）；
+ *   locations  = 地点档案详情（同上，PRD PL）。
+ * 新建角色/地点对话框从主区操作区触发（原 Grid 入口移除）。
  */
-import { useEffect, useState } from "react";
-import { CharacterGrid } from "../../domains/novel/character/components/CharacterGrid.js";
-import { LocationGrid } from "../../domains/novel/location/components/LocationGrid.js";
+import { useEffect, useState, type ReactNode } from "react";
+import { Plus } from "lucide-react";
 import { ManuscriptReader } from "../../domains/novel/manuscript/components/ManuscriptReader.js";
-import { StoryOutlineTree } from "../../domains/novel/outline/components/StoryOutlineTree.js";
 import { EntityEditDialog } from "../../domains/novel/components/EntityEditDialog.js";
 import type { CharacterStore } from "../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
 import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
+import { Button } from "../../shared/primitives/Button.js";
+import { Icon } from "../../shared/primitives/Icon.js";
 import { ConfirmDialog } from "../../shared/primitives/ConfirmDialog.js";
+import { OutlineUnitInspectorPanel } from "../inspector/panels/OutlineUnitInspectorPanel.js";
+import { EntityInspectorPanel } from "../inspector/panels/EntityInspectorPanel.js";
 import type { ContentTab } from "./contentTab.js";
 import { MainSubHead } from "./MainSubHead.js";
 import styles from "./ContentSurface.module.css";
@@ -36,9 +40,9 @@ export interface ContentSurfaceProps {
   readonly manuscript: ManuscriptStructureStore;
   readonly characters: CharacterStore;
   readonly locations: LocationStore;
-  readonly onSelectOutlineUnit?: (unitId: string) => void;
-  readonly onSelectCharacter?: (characterId: string) => void;
-  readonly onSelectLocation?: (locationId: string) => void;
+  /** 档案选区（壳持有；目录在侧栏、详情在此渲染） */
+  readonly selectedCharacterId?: string;
+  readonly selectedLocationId?: string;
   readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
   readonly onOpenDraft?: (changeSetId: string) => void;
   readonly onBack?: () => void;
@@ -51,9 +55,8 @@ export function ContentSurface({
   manuscript,
   characters,
   locations,
-  onSelectOutlineUnit,
-  onSelectCharacter,
-  onSelectLocation,
+  selectedCharacterId,
+  selectedLocationId,
   locateReference,
   onOpenDraft,
   onBack,
@@ -79,78 +82,128 @@ export function ContentSurface({
     }
   }, [manuscript, locateReference]);
 
-  const renderTab = (tab: ContentTab) => {
-    // 正文阅读器：双栏各自独立滚动，不走 1000px 居中列。
+  const renderTab = (tab: ContentTab): ReactNode => {
+    // 正文阅读器：双栏各自独立滚动，不走居中列。
     if (tab === "manuscript") {
-      const content = (
-        <ManuscriptReader
-          workspaceId={workspaceId ?? ""}
-          snapshot={manuscriptSnapshot}
-          onSelectChapter={(chapterId) => manuscript.selectChapter(chapterId)}
-          locate={locateReference}
-          onOpenDraft={onOpenDraft}
-          onInsertParagraph={(storyUnitId) =>
-            void manuscript.insertParagraph(storyUnitId, "")
-          }
-          onSaveParagraph={(paragraphId, text) => {
-            const version = manuscript.getParagraphVersion(paragraphId);
-            if (version === undefined) return;
-            return manuscript.updateParagraph(paragraphId, text, version);
-          }}
-          onDeleteParagraph={(paragraphId) => {
-            const version = manuscript.getParagraphVersion(paragraphId);
-            if (version === undefined) return;
-            setDeleteParagraphId(paragraphId);
-          }}
-        />
+      return (
+        <div className={styles.readerBody}>
+          <ManuscriptReader
+            workspaceId={workspaceId ?? ""}
+            snapshot={manuscriptSnapshot}
+            onSelectChapter={(chapterId) => manuscript.selectChapter(chapterId)}
+            locate={locateReference}
+            onOpenDraft={onOpenDraft}
+            onInsertParagraph={(storyUnitId) =>
+              void manuscript.insertParagraph(storyUnitId, "")
+            }
+            onSaveParagraph={(paragraphId, text) => {
+              const version = manuscript.getParagraphVersion(paragraphId);
+              if (version === undefined) return;
+              return manuscript.updateParagraph(paragraphId, text, version);
+            }}
+            onDeleteParagraph={(paragraphId) => {
+              const version = manuscript.getParagraphVersion(paragraphId);
+              if (version === undefined) return;
+              setDeleteParagraphId(paragraphId);
+            }}
+          />
+        </div>
       );
-      return <div className={styles.readerBody}>{content}</div>;
     }
-    let content;
+    let content: ReactNode;
+    let actions: ReactNode = null;
     switch (tab) {
       case "outline":
-        content = (
-          <StoryOutlineTree
-            workspaceId={workspaceId ?? ""}
-            tree={outline.tree}
-            phase={outline.phase}
-            expansionState={outline.expansionState}
-            selectedUnitId={outline.selectedUnitId}
-            onSelectUnit={onSelectOutlineUnit}
-            onToggleExpand={(id) => outlineTree.toggleExpand(id)}
-            onExpandAll={() => outlineTree.expandAll()}
-            onCollapseAll={() => outlineTree.collapseAll()}
-          />
+        // 大纲树在侧栏；主区 = 选中单元详情（无选中给引导空态）。
+        content =
+          outline.selectedUnitId !== undefined ? (
+            <OutlineUnitInspectorPanel
+              workspaceId={workspaceId ?? ""}
+              unitId={outline.selectedUnitId}
+              outlineTree={outlineTree}
+            />
+          ) : (
+            <div className={styles.emptyPane}>
+              在左侧大纲树选择一个单元，这里显示它的规划 / 实现状态与关联。
+            </div>
+          );
+        break;
+      case "characters": {
+        const effectiveId =
+          selectedCharacterId ?? characterSnapshot.characters[0]?.characterId;
+        content =
+          effectiveId !== undefined ? (
+            <EntityInspectorPanel
+              workspaceId={workspaceId ?? ""}
+              entityType="character"
+              entityId={effectiveId}
+              characters={characters}
+              locations={locations}
+            />
+          ) : (
+            <div className={styles.emptyPane}>
+              尚无角色档案——让助理在对话中建档，或点右上「新建角色」。
+            </div>
+          );
+        actions = (
+          <Button
+            variant="secondary"
+            leadingIcon={<Icon icon={Plus} size="sm" />}
+            onClick={() => setCharacterDialogOpen(true)}
+          >
+            新建角色
+          </Button>
         );
         break;
-      case "characters":
-        content = (
-          <CharacterGrid
-            workspaceId={workspaceId ?? ""}
-            characters={characterSnapshot.characters}
-            phase={characterSnapshot.phase}
-            onSelect={onSelectCharacter}
-            onNewCharacter={() => setCharacterDialogOpen(true)}
-          />
-        );
-        break;
+      }
       case "locations":
-        content = (
-          <LocationGrid
-            workspaceId={workspaceId ?? ""}
-            locations={locationSnapshot.locations}
-            phase={locationSnapshot.phase}
-            onSelect={onSelectLocation}
-            onNewLocation={() => setLocationDialogOpen(true)}
-          />
+      default: {
+        const effectiveId = selectedLocationId ?? locationSnapshot.locations[0]?.locationId;
+        content =
+          effectiveId !== undefined ? (
+            <EntityInspectorPanel
+              workspaceId={workspaceId ?? ""}
+              entityType="location"
+              entityId={effectiveId}
+              characters={characters}
+              locations={locations}
+            />
+          ) : (
+            <div className={styles.emptyPane}>
+              尚无地点档案——让助理在对话中建档，或点右上「新建地点」。
+            </div>
+          );
+        actions = (
+          <Button
+            variant="secondary"
+            leadingIcon={<Icon icon={Plus} size="sm" />}
+            onClick={() => setLocationDialogOpen(true)}
+          >
+            新建地点
+          </Button>
         );
         break;
+      }
     }
-    return <div className={styles.paneBody}><div className={styles.paneInner}>{content}</div></div>;
+    return (
+      <>
+        <MainSubHead
+          title={PANE_META[tab].title}
+          sub={PANE_META[tab].kicker}
+          onBack={onBack}
+          actions={actions}
+        />
+        <div className={styles.paneBody}>
+          <div className={styles.paneInner}>{content}</div>
+        </div>
+      </>
+    );
   };
   return (
     <div className={styles.surface}>
-      <MainSubHead title={PANE_META[value].title} sub={PANE_META[value].kicker} onBack={onBack} />
+      {value === "manuscript" ? (
+        <MainSubHead title={PANE_META[value].title} sub={PANE_META[value].kicker} onBack={onBack} />
+      ) : null}
       {renderTab(value)}
       <EntityEditDialog
         open={characterDialogOpen}

@@ -93,7 +93,7 @@ describe("ApprovalPanel", () => {
     // op 色块（CharacterWrite → add）：标题 diff 符号。
     expect(screen.getAllByText("+").length).toBeGreaterThan(0);
     // 参数区（无 resolver → 平铺原始参数）。
-    expect(screen.getByText("审批参数")).toBeInTheDocument();
+    expect(screen.getByText("当前内容 · 将被变更")).toBeInTheDocument();
     // 待审批 → 决策按钮可用；已处理横幅不出现。
     expect(screen.getByRole("button", { name: "批准" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "拒绝" })).toBeInTheDocument();
@@ -394,7 +394,7 @@ describe("ApprovalPanel", () => {
     // CCB 式提交说明已由定稿的全文展示取代（PRD compose-审批流）。
     expect(await screen.findByText("正文草稿内容")).toBeInTheDocument();
     expect(screen.queryByText("提交说明")).not.toBeInTheDocument();
-    expect(screen.queryByText("审批参数")).not.toBeInTheDocument();
+    expect(screen.queryByText("当前内容 · 将被变更")).not.toBeInTheDocument();
     expect(screen.queryByText(/旧版本审批/)).not.toBeInTheDocument();
 
     // 审批卡内直接编辑：编辑 → 改草稿 → 保存写回 design 文件。

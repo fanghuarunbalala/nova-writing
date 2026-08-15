@@ -139,7 +139,7 @@ describe("GenStatus", () => {
 
   it("shows the waiting indicator without seconds", () => {
     render(<GenStatus phase="waiting" />);
-    expect(screen.getByRole("status")).toHaveTextContent("等待审批");
+    expect(screen.getByRole("status")).toHaveTextContent("正在审批");
     expect(screen.getByRole("status")).not.toHaveTextContent(/s$/);
   });
 
@@ -190,10 +190,10 @@ describe("ConversationComposer", () => {
     );
     const input = screen.getByRole("textbox", { name: "对话输入" });
     await user.type(input, "hi");
-    // 发送按钮禁用，但打字区仍可用，显示「等待审批」。
+    // 发送按钮禁用，但打字区仍可用，显示「正在审批」。
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
     expect(input).toBeEnabled();
-    expect(screen.getByText("等待审批")).toBeInTheDocument();
+    expect(screen.getByText("正在审批")).toBeInTheDocument();
     // 切 mode 的触发按钮仍可用。
     expect(screen.getByRole("button", { name: /执行模式|模式|下拉/ })).toBeEnabled();
   });
@@ -212,10 +212,10 @@ describe("ConversationComposer", () => {
     );
     const input = screen.getByRole("textbox", { name: "对话输入" });
     await user.type(input, "hi");
-    // 断开时审批阻塞解除：发送可用、显示「进程已断开」，不显示「等待审批」。
+    // 断开时审批阻塞解除：发送可用、显示「进程已断开」，不显示「正在审批」。
     expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
     expect(screen.getByText("进程已断开，审批已结束")).toBeInTheDocument();
-    expect(screen.queryByText("等待审批")).not.toBeInTheDocument();
+    expect(screen.queryByText("正在审批")).not.toBeInTheDocument();
   });
 
   it("renders the generation status pill above the input when status is provided", () => {

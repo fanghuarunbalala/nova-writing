@@ -1,5 +1,5 @@
 /**
- * sidebar 组件测试。
+ * sidebar 组件测试：上下文目录（PRD SB）——对话/内容/计划三态。
  */
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -8,6 +8,13 @@ import { Sidebar } from "../../src/shell/sidebar/Sidebar.js";
 import { SidebarSection } from "../../src/shell/sidebar/SidebarSection.js";
 import { ConversationCatalogStore } from "../../src/domains/conversation/store/ConversationCatalogStore.js";
 import { NovelOverviewStore } from "../../src/domains/novel/overview/NovelOverviewStore.js";
+import { StoryOutlineTreeStore } from "../../src/domains/novel/outline/store/StoryOutlineTreeStore.js";
+import { ManuscriptStructureStore } from "../../src/domains/novel/manuscript/store/ManuscriptStructureStore.js";
+import { CharacterStore } from "../../src/domains/novel/character/store/CharacterStore.js";
+import { LocationStore } from "../../src/domains/novel/location/store/LocationStore.js";
+import { ScheduleStore } from "../../src/domains/schedule/store/ScheduleStore.js";
+import { ScheduleTodoStore } from "../../src/domains/schedule/store/ScheduleTodoStore.js";
+import { ApprovalStore } from "../../src/domains/approval/ApprovalStore.js";
 import { ToastStore } from "../../src/shared/state/ToastStore.js";
 
 function makeStores() {
@@ -20,49 +27,114 @@ function makeStores() {
       create: vi.fn(),
       open: vi.fn(),
     },
+    approvals: { list: vi.fn(async () => []), resolve: vi.fn() },
     novel: {
-      overview: { get: vi.fn() },
-      outline: { get: vi.fn(), getStoryUnit: vi.fn() },
-      characters: {},
-      locations: {},
-      manuscript: {},
+      overview: {
+        get: vi.fn(async () => ({
+          novelId: "n1",
+          title: "n1",
+          counts: { storyUnits: 1, characters: 0, locations: 0, paragraphs: 0 },
+        })),
+      },
+      outline: { get: vi.fn(async () => ({ units: [] })), getStoryUnit: vi.fn() },
+      characters: { list: vi.fn(async () => []), get: vi.fn() },
+      locations: { list: vi.fn(async () => []), get: vi.fn() },
+      paragraphs: { list: vi.fn(async () => []), get: vi.fn() },
+      publication: { get: vi.fn(async () => ({ volumes: [], chapters: [] })) },
     },
   } as never;
   const conversationCatalog = new ConversationCatalogStore({ api });
   const novelOverview = new NovelOverviewStore({ api });
-  return { conversationCatalog, novelOverview };
+  const storyOutlineTree = new StoryOutlineTreeStore({ api });
+  const manuscriptStructure = new ManuscriptStructureStore({ api });
+  const character = new CharacterStore({ api });
+  const location = new LocationStore({ api });
+  const schedule = new ScheduleStore({ novelOverview, outlineTree: storyOutlineTree, conversationCatalog });
+  return {
+    api,
+    stores: {
+      conversationCatalog,
+      novelOverview,
+      storyOutlineTree,
+      manuscriptStructure,
+      character,
+      location,
+      schedule,
+      scheduleTodo: new ScheduleTodoStore(),
+      approvalStore: new ApprovalStore({ api }),
+    },
+  };
 }
 
-describe("Sidebar", () => {
-  it("renders sections, conversations and content panes", async () => {
+function renderSidebar(
+  stores: ReturnType<typeof makeStores>["stores"],
+  props: Partial<Parameters<typeof Sidebar>[0]> = {},
+) {
+  return render(
+    <Sidebar
+      mode="expanded"
+      view="chat"
+      toastStore={new ToastStore()}
+      workspaceId="w1"
+      onCreateConversation={vi.fn()}
+      onSelectConversation={vi.fn()}
+      contentTab="outline"
+      onSelectContentPane={vi.fn()}
+      onSelectOutlineUnit={vi.fn()}
+      onSelectChapter={vi.fn()}
+      onSelectCharacter={vi.fn()}
+      onSelectLocation={vi.fn()}
+      planTodoId={null}
+      onSelectPlanTodo={vi.fn()}
+      conversationCatalog={stores.conversationCatalog}
+      novelOverview={stores.novelOverview}
+      outlineTree={stores.storyOutlineTree}
+      manuscript={stores.manuscriptStructure}
+      characters={stores.character}
+      locations={stores.location}
+      schedule={stores.schedule}
+      scheduleTodo={stores.scheduleTodo}
+      approvalStore={stores.approvalStore}
+      {...props}
+    />,
+  );
+}
+
+describe("Sidebar (context directory)", () => {
+  it("chat view: new conversation + conversation list, no content tabs", async () => {
     const user = userEvent.setup();
-    const { conversationCatalog, novelOverview } = makeStores();
-    await conversationCatalog.loadWorkspace("w1");
-    await novelOverview.loadWorkspace("w1");
+    const { stores } = makeStores();
+    await stores.conversationCatalog.loadWorkspace("w1");
     const onCreateConversation = vi.fn();
-    const onSelectContentPane = vi.fn();
-    render(
-      <Sidebar
-        mode="expanded"
-        conversationCatalog={conversationCatalog}
-        novelOverview={novelOverview}
-        toastStore={new ToastStore()}
-        onCreateConversation={onCreateConversation}
-        onSelectConversation={vi.fn()}
-        contentTab="outline"
-        onSelectContentPane={onSelectContentPane}
-        workspaceId="w1"
-        workspaceLabel="白昼计划"
-      />,
-    );
-    // v2 原型已删 side-foot：workspace 名不再显示在侧栏底部。
-    expect(screen.queryByText("白昼计划")).not.toBeInTheDocument();
+    renderSidebar(stores, { onCreateConversation });
     expect(screen.getByText(/对话 tion_a/)).toBeInTheDocument();
-    expect(screen.getByText("大纲")).toBeInTheDocument();
+    // 对话视图不渲染资料位（PRD SB-1）。
+    expect(screen.queryByRole("tab", { name: /大纲/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "创建对话" }));
     expect(onCreateConversation).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByText("人物"));
+  });
+
+  it("content view: seg tabs switch panes and notify host", async () => {
+    const user = userEvent.setup();
+    const { stores } = makeStores();
+    await stores.conversationCatalog.loadWorkspace("w1");
+    const onSelectContentPane = vi.fn();
+    renderSidebar(stores, { view: "content", onSelectContentPane });
+    // 四段资料位（大纲/正文/人物/地点；可访问名含计数，用正则匹配）。
+    for (const name of ["大纲", "正文", "人物", "地点"]) {
+      expect(screen.getByRole("tab", { name: new RegExp(name) })).toBeInTheDocument();
+    }
+    // 对话目录在内容视图不可见（上下文切换）。
+    expect(screen.queryByText(/对话 tion_a/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /人物/ }));
     expect(onSelectContentPane).toHaveBeenCalledWith("characters");
+  });
+
+  it("plan view: overview row + 安排 directory", () => {
+    const { stores } = makeStores();
+    renderSidebar(stores, { view: "plan" });
+    expect(screen.getByText("总览")).toBeInTheDocument();
+    expect(screen.getByText("统计 · 双状态轴 · 大纲进度")).toBeInTheDocument();
   });
 });
 

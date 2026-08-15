@@ -1,17 +1,12 @@
 /**
  * ApprovalPanel
  *
- * 审批面板（会话化）：只展示当前会话（conversationId）的审批记录，
- * 目录为平铺的审批组列表（每组=一次审批请求及其重试），
- * 下方为选中组详情（审批参数 + 批准/拒绝，作用于组内全部请求）。
- * 删除/编辑审批经 resolveEntity（lite 解析器）解析目标实体当前内容替换原始
- * 参数展示；目标 baseRevision 与实体 entityVersion 不一致时显示失效提示。
- * 目录始终为左侧滑出覆盖抽屉（触发按钮「目录 N」在 InspectorHost 头部），
- * 宿主传入 drawerOpen/onToggleDrawer，选中条目自动收起。
- *
- * Approval panel: per-request grouped list on top, group detail below with
- * Chinese-labelled parameters, approve/reject actions. Delete/edit groups
- * resolve the target entity's current content and flag stale approvals.
+ * 审批面板（PRD §9 · 卡片流）：只展示当前会话（conversationId）的审批记录，
+ * 一次调用带来的一批审批作为卡片纵向堆叠、逐项决策——无目录列
+ * （决议：一次 call 一批一起审）。每组 = 一次审批请求及其重试。
+ * 删除/编辑审批经 resolveEntity（lite 解析器）解析目标实体当前内容（「当前内容」区）
+ * 替换原始参数展示；目标 baseRevision 与实体 entityVersion 不一致时显示失效提示。
+ * ExitComposeMode 组固定标题「提交设计草稿」，详情区渲染 design 文件全文。
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from "react";
 import { Button } from "../../../shared/primitives/Button.js";
@@ -37,9 +32,6 @@ export interface ApprovalPanelProps {
   readonly conversationId?: string;
   /** 删除/编辑目标实体内容解析器（宿主注入）。Entity content resolver. */
   readonly resolveEntity?: ApprovalEntityResolver;
-  /** 目录覆盖抽屉是否展开。 */
-  readonly drawerOpen?: boolean;
-  readonly onToggleDrawer?: (open: boolean) => void;
 }
 
 interface ApprovalGroup {
@@ -151,11 +143,6 @@ function groupApprovals(
   );
 }
 
-/** 组内待审工具调用总数（一个批次条目可含多个 toolCall） */
-function groupToolCallCount(group: ApprovalGroup): number {
-  return group.approvals.reduce((sum, approval) => sum + approval.toolCalls.length, 0);
-}
-
 /** 决策后行内状态脉冲色（--pulse-c 注入 status-pulse keyframe） */
 const DECISION_PULSE_COLOR: Record<string, string> = {
   approved: "var(--color-success)",
@@ -163,7 +150,7 @@ const DECISION_PULSE_COLOR: Record<string, string> = {
   edited: "var(--color-info)",
 };
 
-/** 上次目录快照：新组播放入列动画、状态变化播状态脉冲（首帧全量静默） */
+/** 上次快照：新组播放入列动画、状态变化播状态脉冲（首帧全量静默） */
 interface DirectoryDelta {
   readonly enteredKeys: ReadonlySet<string>;
   readonly pulsedKeys: ReadonlyMap<string, string>;
@@ -188,23 +175,237 @@ function diffDirectory(
   return { enteredKeys, pulsedKeys };
 }
 
-export function ApprovalPanel({
+/**
+ * 审批卡片：一组审批（一次调用）的完整决策单元——
+ * 身份行 + 标题 + 参数/实体当前内容 + 批准/拒绝/请求修改。
+ */
+function ApprovalGroupCard({
+  group,
   store,
-  conversationId,
   resolveEntity,
-  drawerOpen = false,
-  onToggleDrawer,
-}: ApprovalPanelProps) {
-  const snapshot = useExternalStore(store);
-  const [selectedKey, setSelectedKey] = useState<string | undefined>(undefined);
-  // 「请求修改」意见输入
+  entered,
+  pulseColor,
+}: {
+  readonly group: ApprovalGroup;
+  readonly store: ApprovalStore;
+  readonly resolveEntity?: ApprovalEntityResolver;
+  readonly entered: boolean;
+  readonly pulseColor: string | undefined;
+}) {
+  // 「请求修改」意见输入（按组独立）
   const [editingComment, setEditingComment] = useState(false);
   const [commentText, setCommentText] = useState("");
-  // 收展容器常驻 DOM（0fr↔1fr 动画）：展开时聚焦输入（原 autoFocus 只在首挂载生效）
   const commentInputRef = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
     if (editingComment) commentInputRef.current?.focus();
   }, [editingComment]);
+
+  const decideGroup = (decision: "approved" | "rejected"): void => {
+    for (const approval of group.approvals) {
+      if (approval.status === "pending") {
+        void store.decide(approval.requestId, decision);
+      }
+    }
+  };
+
+  // 参数区按 toolCall 平铺：一个批次条目展开为多项
+  const argumentGroups = useMemo(
+    () =>
+      group.approvals.flatMap((approval) =>
+        approval.toolCalls.map((tc) => ({
+          toolName: tc.toolName,
+          arguments: parseApprovalArgs(tc.args),
+          op: inferOperation(tc.toolName),
+        })),
+      ),
+    [group],
+  );
+  const op = inferOperation(group.approvals[0]!.toolCalls[0]!.toolName ?? "");
+  // ExitComposeMode：设计草稿审批（无实体参数，详情区改渲染 design 文件全文）
+  const isExitCompose = group.approvals[0]?.toolCalls[0]?.toolName === "ExitComposeMode";
+  // 已决审批不再解析实体内容；仅待批准解析并判断 revision 是否过期。
+  const isPending = group.status === "pending";
+  const resolutions = useApprovalEntityResolution(
+    isPending && !isExitCompose ? argumentGroups : undefined,
+    resolveEntity,
+  );
+
+  const cardStyle =
+    pulseColor !== undefined ? ({ "--pulse-c": pulseColor } as CSSProperties) : undefined;
+
+  return (
+    <section
+      className={[
+        styles.card,
+        entered ? styles.enter : "",
+        pulseColor !== undefined ? styles.pulse : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      style={cardStyle}
+    >
+      <div className={styles.identity}>
+        <span className={styles.meta}>
+          {group.approvals
+            .flatMap((approval) =>
+              approval.toolCalls.map((tc) => toolNameLabel(tc.toolName)),
+            )
+            .join(" · ")}
+        </span>
+        <span className={[styles.pill, styles[group.status]].join(" ")}>
+          {STATUS_LABEL[group.status]}
+        </span>
+      </div>
+      <h4 className={styles.title}>
+        {op !== undefined ? (
+          <span
+            className={[styles.titleGlyph, OP_GLYPH_CLASS[op]].filter(Boolean).join(" ")}
+          >
+            {operationGlyph(op)}
+          </span>
+        ) : null}
+        {group.title}
+      </h4>
+      {isExitCompose ? (
+        // 设计草稿审批：md 全文展示（内容经 designFile 按会话读取，不经审批 payload）
+        <ExitComposeApprovalView
+          conversationId={group.approvals[0]!.conversationId}
+        />
+      ) : (
+        <>
+          {argumentGroups.length > 0 ? (
+            <div className={styles.args}>
+              <span className={styles.argsTitle}>
+                {isPending ? "当前内容 · 将被变更" : "审批参数"}
+              </span>
+              {argumentGroups.map((argumentGroup, index) => {
+                const resolution = resolutions?.[index];
+                let body: JSX.Element;
+                if (resolution !== undefined && resolution.status === "ready") {
+                  body = (
+                    <>
+                      {resolution.stale ? (
+                        <div className={styles.staleBanner}>
+                          版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败
+                        </div>
+                      ) : null}
+                      {resolution.contents.map((content, contentIndex) => (
+                        <div key={content.id}>
+                          {contentIndex > 0 ? (
+                            <div className={styles.resolvedDivider} />
+                          ) : null}
+                          <ApprovalEntityView content={content} />
+                        </div>
+                      ))}
+                    </>
+                  );
+                } else if (resolution !== undefined && resolution.status === "loading") {
+                  body = <span className={styles.loadingHint}>内容解析中…</span>;
+                } else {
+                  body =
+                    argumentGroup.arguments !== undefined ? (
+                      <ParameterView value={argumentGroup.arguments} tone={argumentGroup.op} />
+                    ) : (
+                      <span className={styles.loadingHint}>旧版本审批 · 无参数详情</span>
+                    );
+                }
+                return (
+                  <div key={`${argumentGroup.toolName}-${index}`} className={styles.argsGroup}>
+                    <div
+                      className={[styles.band, OP_BAND_CLASS[argumentGroup.op ?? ""]]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      <span className={styles.bandGlyph}>
+                        {operationGlyph(argumentGroup.op ?? "")}
+                      </span>
+                      <span className={styles.bandTool}>
+                        {toolNameLabel(argumentGroup.toolName)}
+                      </span>
+                    </div>
+                    <div className={styles.body}>{body}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className={styles.emptyDetail}>
+              旧版本审批 · 无参数详情（建议在新会话重新发起写入）
+            </p>
+          )}
+        </>
+      )}
+      {group.status === "pending" ? (
+        <>
+          <div className={styles.actions}>
+            <Button variant="primary" size="sm" onClick={() => decideGroup("approved")}>
+              批准
+            </Button>
+            <Button variant="ghost-danger" size="sm" onClick={() => decideGroup("rejected")}>
+              拒绝
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setEditingComment(!editingComment)}>
+              请求修改
+            </Button>
+          </div>
+          {/* 0fr↔1fr 收展（GenStatus statusWrap 同款先例） */}
+          <div className={styles.commentCollapsible} data-open={editingComment}>
+            {/* 折叠态保持 DOM 以维持收展动画；inert+aria-hidden 移出可访问树与焦点序列 */}
+            <div
+              className={styles.commentCollapseInner}
+              aria-hidden={!editingComment}
+              inert={!editingComment}
+            >
+              <div className={styles.commentBox}>
+                <textarea
+                  ref={commentInputRef}
+                  className={styles.commentInput}
+                  rows={3}
+                  placeholder="填写修改意见（将随决策回传会话）"
+                  value={commentText}
+                  onChange={(event) => setCommentText(event.target.value)}
+                />
+                <div className={styles.actions}>
+                  <Button variant="ghost" size="sm" onClick={() => setEditingComment(false)}>
+                    取消
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={commentText.trim() === ""}
+                    onClick={() => {
+                      for (const approval of group.approvals) {
+                        if (approval.status === "pending") {
+                          void store.decideEdited(approval.requestId, commentText.trim());
+                        }
+                      }
+                      setEditingComment(false);
+                      setCommentText("");
+                    }}
+                  >
+                    提交修改意见
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div
+          className={[
+            styles.banner,
+            styles[`banner_${group.status}`] ?? "",
+          ].filter(Boolean).join(" ")}
+        >
+          已处理 · {STATUS_LABEL[group.status]}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function ApprovalPanel({ store, conversationId, resolveEntity }: ApprovalPanelProps) {
+  const snapshot = useExternalStore(store);
   // 会话化：只展示当前会话的审批记录（宿主未传 conversationId 时退化为全量）
   const approvals = useMemo(
     () =>
@@ -216,7 +417,7 @@ export function ApprovalPanel({
     [snapshot.approvals, conversationId],
   );
   const groups = useMemo(() => groupApprovals(approvals), [approvals]);
-  // 目录增量动画：新组 appr-in 入列、状态翻转 status-pulse。
+  // 卡片增量动画：新组 appr-in 入列、状态翻转 status-pulse。
   // 快照在 effect 中提交：render 期间读上一帧状态计算增量（StrictMode 双渲染
   // 下两遍都读到旧值，动画不丢；提交后同快照重渲染增量为空、不重放）。
   const prevStatusesRef = useRef<Map<string, ApprovalQueueItem["status"]> | undefined>(undefined);
@@ -226,318 +427,25 @@ export function ApprovalPanel({
       groups.map((group) => [group.key, group.status] as const),
     );
   }, [groups]);
-  const selectedGroup =
-    groups.find((group) => group.key === selectedKey) ??
-    (snapshot.selectedId === undefined
-      ? undefined
-      : groups.find((group) =>
-          group.approvals.some(
-            (approval) => approval.requestId === snapshot.selectedId,
-          ),
-        )) ??
-    groups.find((group) => group.status === "pending") ??
-    groups[0];
-
-  const decideGroup = (
-    group: ApprovalGroup,
-    decision: "approved" | "rejected",
-  ): void => {
-    for (const approval of group.approvals) {
-      if (approval.status === "pending") {
-        void store.decide(approval.requestId, decision);
-      }
-    }
-  };
-
-  // 选中目录条目：记录选中 key 并自动收起抽屉（窄面板模式）。
-  const selectGroup = (key: string): void => {
-    setSelectedKey(key);
-    onToggleDrawer?.(false);
-  };
-
-  // 参数区按 toolCall 平铺：一个批次条目（一次模型返回的待审调用）展开为多项
-  const argumentGroups = useMemo(
-    () =>
-      selectedGroup?.approvals.flatMap((approval) =>
-        approval.toolCalls.map((tc) => ({
-          toolName: tc.toolName,
-          arguments: parseApprovalArgs(tc.args),
-          op: inferOperation(tc.toolName),
-        })),
-      ),
-    [selectedGroup],
-  );
-  const selectedOp = inferOperation(
-    selectedGroup?.approvals[0]!.toolCalls[0]!.toolName ?? "",
-  );
-  // ExitComposeMode：设计草稿审批（无实体参数，详情区改渲染 design 文件全文）
-  const isExitCompose =
-    selectedGroup?.approvals[0]?.toolCalls[0]?.toolName === "ExitComposeMode";
-  // 已决审批不再解析实体内容（批准后 canonical 已变，取到的是新状态）；
-  // 仅待批准解析并判断 revision 是否过期。ExitComposeMode 无实体参数，不解析。
-  const isPending = selectedGroup?.status === "pending";
-  const resolutions = useApprovalEntityResolution(
-    isPending && !isExitCompose ? argumentGroups : undefined,
-    resolveEntity,
-  );
 
   return (
-    <div
-      className={[styles.panel, drawerOpen ? styles.drawerOpen : ""]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <div
-        className={styles.scrim}
-        onClick={() => onToggleDrawer?.(false)}
-        aria-hidden="true"
-      />
-      <nav className={styles.list} id="approval-directory">
-        <div className={styles.dirHead}>
-          审批队列
-          {/* key=数量：增减时重挂载重放 cnt-pop 弹跳 */}
-          <span key={groups.length} className={styles.cnt}>
-            {groups.length}
-          </span>
-        </div>
+    <div className={styles.panel}>
+      <div className={styles.cards}>
         {groups.length === 0 ? (
           <div className={styles.empty}>暂无审批请求</div>
         ) : (
-          groups.map((group) => {
-            const toolCallCount = groupToolCallCount(group);
-            const label =
-              toolCallCount > 1 ? `${group.title} 等 ${toolCallCount} 项` : group.title;
-            const pulseColor = DECISION_PULSE_COLOR[delta.pulsedKeys.get(group.key) ?? ""];
-            const rowStyle =
-              delta.pulsedKeys.has(group.key) && pulseColor !== undefined
-                ? ({ "--pulse-c": pulseColor } as CSSProperties)
-                : undefined;
-            return (
-              <button
-                key={group.key}
-                type="button"
-                style={rowStyle}
-                className={[
-                  styles.row,
-                  selectedGroup?.key === group.key ? styles.active : "",
-                  delta.enteredKeys.has(group.key) ? styles.enter : "",
-                  pulseColor !== undefined ? styles.pulse : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                onClick={() => selectGroup(group.key)}
-              >
-                <span
-                  className={[styles.pill, styles[group.status]].join(" ")}
-                >
-                  {group.status === "pending" && toolCallCount > 1
-                    ? `待批准 ${toolCallCount} 项`
-                    : STATUS_LABEL[group.status]}
-                </span>
-                <span className={styles.rowTitle}>{label}</span>
-              </button>
-            );
-          })
-        )}
-      </nav>
-      {selectedGroup !== undefined ? (
-        <div className={styles.detail}>
-          {/* key=组：切换选中条目时整块重挂载重放 view-in */}
-          <div key={selectedGroup.key} className={styles.detailInner}>
-          <div className={styles.identity}>
-            <span className={styles.meta}>
-              {selectedGroup.approvals
-                .flatMap((approval) =>
-                  approval.toolCalls.map((tc) => toolNameLabel(tc.toolName)),
-                )
-                .join(" · ")}
-            </span>
-            <span
-              className={[styles.pill, styles[selectedGroup.status]].join(" ")}
-            >
-              {STATUS_LABEL[selectedGroup.status]}
-            </span>
-          </div>
-          <h4 className={styles.title}>
-            {selectedOp !== undefined ? (
-              <span
-                className={[styles.titleGlyph, OP_GLYPH_CLASS[selectedOp]]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
-                {operationGlyph(selectedOp)}
-              </span>
-            ) : null}
-            {selectedGroup.title}
-          </h4>
-          {isExitCompose ? (
-            // 设计草稿审批：md 全文展示（内容经 designFile 按会话读取，不经审批 payload）
-            <ExitComposeApprovalView
-              conversationId={selectedGroup.approvals[0]!.conversationId}
+          groups.map((group) => (
+            <ApprovalGroupCard
+              key={group.key}
+              group={group}
+              store={store}
+              resolveEntity={resolveEntity}
+              entered={delta.enteredKeys.has(group.key)}
+              pulseColor={DECISION_PULSE_COLOR[delta.pulsedKeys.get(group.key) ?? ""]}
             />
-          ) : (
-            <>
-              {argumentGroups !== undefined && argumentGroups.length > 0 ? (
-                <div className={styles.args}>
-                  <span className={styles.argsTitle}>审批参数</span>
-                  {argumentGroups.map((group, index) => {
-                    const resolution = resolutions?.[index];
-                    let body: JSX.Element;
-                    if (
-                      resolution !== undefined &&
-                      resolution.status === "ready"
-                    ) {
-                      body = (
-                        <>
-                          {resolution.stale ? (
-                            <div className={styles.staleBanner}>
-                              版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败
-                            </div>
-                          ) : null}
-                          {resolution.contents.map((content, contentIndex) => (
-                            <div key={content.id}>
-                              {contentIndex > 0 ? (
-                                <div className={styles.resolvedDivider} />
-                              ) : null}
-                              <ApprovalEntityView content={content} />
-                            </div>
-                          ))}
-                        </>
-                      );
-                    } else if (
-                      resolution !== undefined &&
-                      resolution.status === "loading"
-                    ) {
-                      body = (
-                        <span className={styles.loadingHint}>内容解析中…</span>
-                      );
-                    } else {
-                      body =
-                        group.arguments !== undefined ? (
-                          <ParameterView value={group.arguments} tone={group.op} />
-                        ) : (
-                          <span className={styles.loadingHint}>
-                            旧版本审批 · 无参数详情
-                          </span>
-                        );
-                    }
-                    return (
-                      <div
-                        key={`${group.toolName}-${index}`}
-                        className={styles.argsGroup}
-                      >
-                        <div
-                          className={[styles.band, OP_BAND_CLASS[group.op ?? ""]]
-                            .filter(Boolean)
-                            .join(" ")}
-                        >
-                          <span className={styles.bandGlyph}>
-                            {operationGlyph(group.op ?? "")}
-                          </span>
-                          <span className={styles.bandTool}>
-                            {toolNameLabel(group.toolName)}
-                          </span>
-                        </div>
-                        <div className={styles.body}>{body}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-              {(argumentGroups?.length ?? 0) === 0 ? (
-                <p className={styles.emptyDetail}>
-                  旧版本审批 · 无参数详情（建议在新会话重新发起写入）
-                </p>
-              ) : null}
-            </>
-          )}
-          {selectedGroup.status === "pending" ? (
-            <>
-              <div className={styles.actions}>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => decideGroup(selectedGroup, "approved")}
-                >
-                  批准
-                </Button>
-                <Button
-                  variant="ghost-danger"
-                  size="sm"
-                  onClick={() => decideGroup(selectedGroup, "rejected")}
-                >
-                  拒绝
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEditingComment(!editingComment)}
-                >
-                  请求修改
-                </Button>
-              </div>
-              {/* 0fr↔1fr 收展（GenStatus statusWrap 同款先例） */}
-              <div
-                className={styles.commentCollapsible}
-                data-open={editingComment}
-              >
-                {/* 折叠态保持 DOM 以维持收展动画；inert+aria-hidden 移出可访问树与焦点序列 */}
-                <div
-                  className={styles.commentCollapseInner}
-                  aria-hidden={!editingComment}
-                  inert={!editingComment}
-                >
-                  <div className={styles.commentBox}>
-                    <textarea
-                      ref={commentInputRef}
-                      className={styles.commentInput}
-                      rows={3}
-                      placeholder="填写修改意见（将随决策回传会话）"
-                      value={commentText}
-                      onChange={(event) => setCommentText(event.target.value)}
-                    />
-                    <div className={styles.actions}>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditingComment(false)}
-                      >
-                        取消
-                      </Button>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={commentText.trim() === ""}
-                        onClick={() => {
-                          for (const approval of selectedGroup.approvals) {
-                            if (approval.status === "pending") {
-                              void store.decideEdited(approval.requestId, commentText.trim());
-                            }
-                          }
-                          setEditingComment(false);
-                          setCommentText("");
-                        }}
-                      >
-                        提交修改意见
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div
-              className={[
-                styles.banner,
-                styles[`banner_${selectedGroup.status}`] ?? "",
-              ].filter(Boolean).join(" ")}
-            >
-              已处理 · {STATUS_LABEL[selectedGroup.status]}
-            </div>
-          )}
-          </div>
-        </div>
-      ) : null}
+          ))
+        )}
+      </div>
     </div>
   );
 }

@@ -30,3 +30,12 @@
   min-height: 0;
   padding: var(--space-18px) var(--space-22px) var(--space-10);
 }
+
+/* 资料位空态引导（PRD CV：无选中/无数据） */
+.emptyPane {
+  padding: var(--space-8) var(--space-4);
+  color: var(--color-faint);
+  font-size: var(--fs-13);
+  text-align: center;
+  line-height: 2;
+}

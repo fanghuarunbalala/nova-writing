@@ -104,7 +104,7 @@ export function ComposerModeBar({ mode, onChange, disabled = false, pendingMode 
         <span className={styles.triggerName}>{current.label}</span>
         {pendingLabel !== undefined ? (
           <span className={styles.pendingChip} title={`待生效：${pendingLabel}`}>
-            {pendingLabel} 待生效
+            待生效
           </span>
         ) : null}
         <span className={[styles.chev, open ? styles.chevOpen : ""].filter(Boolean).join(" ")} aria-hidden="true" />

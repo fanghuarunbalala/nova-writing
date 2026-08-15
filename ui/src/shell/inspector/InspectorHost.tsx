@@ -1,29 +1,18 @@
 /**
  * InspectorHost
  *
- * 右侧 inspector（原型 .inspector）：恒挂载 + 拖拽调宽 + insp-head（kicker + close）
- * + insp-body（按路由渲染 panel）。
+ * 右侧 inspector（PRD AP-1/2）：恒挂载 + insp-head（kicker + close）+ insp-body。
  *
+ * 与对话视图绑定（PRD AP-1）：visible=false（非 chat 视图）时按收起态呈现，
+ * 路由状态保留——回到对话视图自动恢复。
  * 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right 收起），
- * 开合切换 .open class 触发过渡（非条件渲染）。宽度由 --insp-w 决定——
- * 默认取 tokens 860px，响应式收窄由媒体查询覆盖；用户拖拽时写 inline
- * --insp-w（仅拖过才写，未拖交给 CSS）。
- *
- * insp-head（对齐原型）：标题（.insp-title，按面板类型显示「审批/档案/大纲单元/
- * 对话元信息」）+ 审批模式下「目录 N」按钮（点击弹出覆盖抽屉，drawerOpen 状态，
- * N = 当前活动会话的待审批数）+ kicker + close。面板内审批目录始终为
- * 左侧滑出覆盖抽屉（无常驻列），选中条目自动收起。close 触发 inspectorRouter.close()。
+ * 开合切换 .open class 触发过渡（非条件渲染）。
+ * 宽度固定档位（决议 2）：>1280 = 376 / ≤1280 = 340 / ≤1080 右缘覆盖抽屉
+ * （InspectorHost.module.css 媒体查询；拖拽调宽已移除）。
+ * 审批卡片流无目录抽屉（一次 call 一批一起审，PRD AP-3）。
  */
-import {
-  memo,
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { memo, useMemo } from "react";
 import { X } from "lucide-react";
-import { DragHandle } from "../../shared/primitives/DragHandle.js";
 import { Icon } from "../../shared/primitives/Icon.js";
 import { useInspectorRoute } from "../../shared/routing/hooks.js";
 import type { InspectorRouter } from "../../shared/routing/InspectorRouter.js";
@@ -40,26 +29,21 @@ import { EntityInspectorPanel } from "./panels/EntityInspectorPanel.js";
 import { OutlineUnitInspectorPanel } from "./panels/OutlineUnitInspectorPanel.js";
 import styles from "./InspectorHost.module.css";
 
-/** 未拖拽时的默认宽度（与 tokens --insp-w 一致）。 */
-const DEFAULT_WIDTH = 860;
-
 const KICKER_BY_KIND: Record<string, string> = {
-  entity: "档案 · 角色 / 地点",
-  outlineUnit: "大纲单元",
+  approval: "当前对话 · 一次调用一批",
   conversation: "对话元信息",
-  approval: "审批参数 · 变更集不可变，批准执行后才产出差异",
 };
 
 /** 面板标题（原型 .insp-title，无 tab 切换，模式由入口决定）。 */
 const TITLE_BY_KIND: Record<string, string> = {
   approval: "审批",
-  entity: "档案",
-  outlineUnit: "大纲单元",
   conversation: "对话元信息",
 };
 
 export interface InspectorHostProps {
   readonly inspectorRouter: InspectorRouter;
+  /** 与对话视图绑定（PRD AP-1）：非 chat 视图按收起态呈现，路由状态保留。 */
+  readonly visible?: boolean;
   readonly conversationCatalog: ConversationCatalogStore;
   readonly outlineTree: StoryOutlineTreeStore;
   readonly characters: CharacterStore;
@@ -73,6 +57,7 @@ export interface InspectorHostProps {
 /** 右侧审批/档案面板宿主（memo：流式发布期间跳过，gui-performance-2 功能点五） */
 export const InspectorHost = memo(function InspectorHost({
   inspectorRouter,
+  visible = true,
   conversationCatalog,
   outlineTree,
   characters,
@@ -82,12 +67,9 @@ export const InspectorHost = memo(function InspectorHost({
   onLocateInContent,
 }: InspectorHostProps) {
   const route = useInspectorRoute(inspectorRouter);
-  const [draggedW, setDraggedW] = useState<number | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const widthRef = useRef<number | null>(null);
   const approvalSnapshot = useExternalStore(approvalStore);
   const activeConversationId = conversationCatalog.getSnapshot().activeConversationId;
-  // 「目录 N」徽标：当前活动会话的待审批数（面板已会话化，不再展示全局计数）
+  // 待审计数徽标：当前活动会话的待审批数（面板已会话化，不再展示全局计数）
   const pendingCount = useMemo(
     () =>
       approvalSnapshot.approvals.filter(
@@ -98,26 +80,8 @@ export const InspectorHost = memo(function InspectorHost({
     [approvalSnapshot.approvals, activeConversationId],
   );
   // 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right 收起）。
-  const open = route.state.kind !== "closed";
+  const open = route.state.kind !== "closed" && visible;
 
-  // 拖拽调宽（对齐原型 JS）：≤860 不拖；minW 560/340、maxW min(1120, vw-520)。
-  const handleResize = useCallback((delta: number) => {
-    const vw = window.innerWidth;
-    if (vw <= 860) return;
-    const minW = vw > 860 && vw <= 1200 ? 340 : 560;
-    const maxW = Math.min(1120, vw - 520);
-    // 右侧面板左缘把手:向左拖变宽、向右拖变窄(原型 startW + (startX - clientX) = -delta)。
-    const next = Math.min(
-      maxW,
-      Math.max(minW, (widthRef.current ?? DEFAULT_WIDTH) - delta),
-    );
-    widthRef.current = next;
-    setDraggedW(next);
-  }, []);
-
-  const workspaceId =
-    conversationCatalog.getSnapshot().workspaceId ??
-    outlineTree.getSnapshot().workspaceId;
   const kicker = KICKER_BY_KIND[route.state.kind] ?? "详情";
   const title = TITLE_BY_KIND[route.state.kind] ?? "详情";
   return (
@@ -125,36 +89,13 @@ export const InspectorHost = memo(function InspectorHost({
       className={[styles.host, open ? styles.open : ""].filter(Boolean).join(" ")}
       aria-hidden={!open}
       inert={!open}
-      style={
-        draggedW !== null
-          ? ({ "--insp-w": `${draggedW}px` } as CSSProperties)
-          : undefined
-      }
     >
-      <div className={styles.drag}>
-        <DragHandle
-          orientation="horizontal"
-          ariaLabel="调整面板宽度"
-          onResize={handleResize}
-        />
-      </div>
       {open ? (
         <>
           <header className={styles.head}>
             <h3 className={styles.inspTitle}>{title}</h3>
-            {route.state.kind === "approval" ? (
-              <button
-                type="button"
-                className={styles.listToggle}
-                onClick={() => setDrawerOpen((value) => !value)}
-                aria-expanded={drawerOpen}
-                aria-controls="approval-directory"
-              >
-                目录
-                {pendingCount > 0 ? (
-                  <span className={styles.ltCnt}>{pendingCount}</span>
-                ) : null}
-              </button>
+            {route.state.kind === "approval" && pendingCount > 0 ? (
+              <span className={styles.ltCnt}>{pendingCount}</span>
             ) : null}
             <span className={styles.kicker}>{kicker}</span>
             <button
@@ -172,23 +113,6 @@ export const InspectorHost = memo(function InspectorHost({
                 store={approvalStore}
                 conversationId={activeConversationId}
                 resolveEntity={resolveEntity}
-                drawerOpen={drawerOpen}
-                onToggleDrawer={setDrawerOpen}
-              />
-            ) : route.state.kind === "entity" ? (
-              <EntityInspectorPanel
-                workspaceId={workspaceId}
-                entityType={route.state.entityType}
-                entityId={route.state.entityId}
-                characters={characters}
-                locations={locations}
-                onLocateInContent={onLocateInContent}
-              />
-            ) : route.state.kind === "outlineUnit" ? (
-              <OutlineUnitInspectorPanel
-                workspaceId={workspaceId}
-                unitId={route.state.unitId}
-                outlineTree={outlineTree}
               />
             ) : route.state.kind === "conversation" ? (
               <ConversationInspectorPanel
@@ -196,7 +120,7 @@ export const InspectorHost = memo(function InspectorHost({
                 conversationCatalog={conversationCatalog}
               />
             ) : (
-              <div className={styles.pending}>审批面板待定（approval 域延后）</div>
+              <div className={styles.pending}>详情面板待定</div>
             )}
           </div>
         </>

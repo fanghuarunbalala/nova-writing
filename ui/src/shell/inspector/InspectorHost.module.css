@@ -135,35 +135,24 @@
   color: var(--color-faint);
 }
 
-/* ============ 响应式收窄（对齐原型媒体查询） ============ */
+/* ============ 响应式固定档位（PRD RWD 1-3 / 决议 2：无拖拽；最小窗口 1080） ============
+ * >1280  宽 376（tokens --insp-w 缺省）
+ * ≤1280  收窄 340
+ * ≤1080（最小档）右缘覆盖抽屉：min(400px, 86vw)，transform 滑出 + 投影 */
 @media (max-width: 1280px) {
   .host {
-    --insp-w: 720px;
+    --insp-w: 340px;
   }
 }
 
 @media (max-width: 1080px) {
-  .host {
-    --insp-w: 640px;
-  }
-}
-
-/* 中等宽度：流式右列（原型 ≤1200 且 ≥861 clamp）。 */
-@media (min-width: 861px) and (max-width: 1200px) {
-  .host {
-    --insp-w: clamp(380px, 46vw, 560px);
-  }
-}
-
-/* ≤860：固定抽屉滑出（transform），拖拽手柄隐藏；移除旧 <640 纵向叠砌。 */
-@media (max-width: 860px) {
   .host {
     position: fixed;
     top: var(--space-56px);
     right: 0;
     bottom: 0;
     z-index: var(--z-inspector);
-    width: min(560px, 88vw);
+    width: min(400px, 86vw);
     margin-right: 0;
     transform: translateX(102%);
     transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
@@ -172,9 +161,5 @@
 
   .host.open {
     transform: none;
-  }
-
-  .drag {
-    display: none;
   }
 }

@@ -1,10 +1,9 @@
 /**
- * Sidebar 视觉（原型 .sidebar）。
+ * Sidebar 视觉（上下文目录，PRD SB）。
  *
  * 折叠动画用 margin-left 负偏移（原型做法），比 width 过渡更平滑——
  * sidebar 内部布局不重排，仅整体滑出视野。过渡时长走 --duration-base。
- * 宽度：未拖拽缺省 tokens --sidebar-width；拖过后宿主写 inline
- * --sidebar-current-w（宽度与折叠偏移同源，保证两者恒一致）。
+ * 宽度固定档位（决议 2：无拖拽）：>1280 = 272（tokens 缺省）/ ≤1280 = 238。
  */
 .sidebar {
   position: relative;
@@ -26,12 +25,9 @@
   margin-left: calc(-1 * var(--sidebar-current-w));
 }
 
-/* 右缘拖拽调宽手柄锚点（贴边覆盖热区，DragHandle 自带 hover 引导线） */
-.dragAnchor {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: 6px;
-  z-index: var(--z-drag-handle);
+/* ≤1280：侧栏收窄档（PRD RWD-2；>1280 缺省 272 见 tokens） */
+@media (max-width: 1280px) {
+  .sidebar {
+    --sidebar-current-w: 238px;
+  }
 }

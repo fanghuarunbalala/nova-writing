@@ -1,0 +1,205 @@
+/**
+ * 上下文目录通用视觉（PRD SB-5~10）：资料位四段 tab、目录分组头、目录行。
+ * 仅结构样式；颜色/间距/圆角全部走 token。
+ */
+
+/* ---------- 资料位四段 tab（PRD SB-5） ---------- */
+.segTabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3px);
+  padding: var(--space-3px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  box-shadow: var(--shadow-xs);
+}
+
+.segTab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3px);
+  padding: var(--space-6px) 0 var(--space-3px);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.segTab:hover {
+  color: var(--color-accent-ink);
+}
+
+.segTab[aria-selected="true"] {
+  background: var(--color-surface);
+  color: var(--color-accent-ink);
+  box-shadow: var(--shadow-xs);
+}
+
+.segTab .count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+}
+
+/* ---------- 目录容器（滚动） ---------- */
+.directory {
+  flex: 1;
+  min-height: 0;
+  overflow: auto hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2px);
+  padding-bottom: var(--space-2);
+}
+
+/* ---------- 目录分组头（卷名 / 待办分组） ---------- */
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6px);
+  padding: var(--space-2) var(--space-2) var(--space-3px);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-11);
+  font-weight: var(--fw-semibold);
+  color: var(--color-faint);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.groupHead .count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+}
+
+.groupHead .chev {
+  display: grid;
+  place-items: center;
+  color: var(--color-faint);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.groupHead[data-open="false"] .chev {
+  transform: rotate(-90deg);
+}
+
+/* ---------- 通用目录行 ---------- */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6px) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-fg);
+  font: inherit;
+  width: 100%;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--color-accent-8-transparent);
+}
+
+.row[data-active="true"] {
+  background: var(--color-accent-9);
+  border-color: var(--color-accent-18);
+}
+
+.row .avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-accent-11);
+  color: var(--color-accent-ink);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-semibold);
+}
+
+.row .iconBox {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-8-transparent);
+  color: var(--color-accent-ink);
+}
+
+.row .text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.row .title {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row .subtitle {
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 计划待办行：状态圆点 */
+.todoDot {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--color-faint);
+  display: grid;
+  place-items: center;
+  color: transparent;
+}
+
+.row[data-done="true"] .todoDot {
+  border-color: var(--color-success);
+  background: var(--color-success);
+  color: var(--color-on-accent);
+}
+
+.row[data-done="true"] .title {
+  color: var(--color-faint);
+}
+
+.empty {
+  padding: var(--space-4) var(--space-2);
+  color: var(--color-faint);
+  font-size: var(--fs-12);
+  text-align: center;
+  line-height: 1.8;
+}

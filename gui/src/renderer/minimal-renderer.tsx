@@ -4,7 +4,7 @@
  * workspace 用固定内存 stub（默认项目）；config 经 config-rpc 通道接 ConfigServer。
  */
 import "./renderer.css";
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { expose, wrap } from "kkrpc/remote-refs";
 import { electronIpcTransport } from "kkrpc/electron";
@@ -16,6 +16,7 @@ import {
   NovelApp,
   WorkspaceController,
   type FrontendPlatform,
+  type WindowChromeProps,
 } from "@novel/ui";
 import { createElectronDesignFilePort } from "./platform/index.js";
 
@@ -28,6 +29,13 @@ declare global {
     };
     novelEvents?: {
       onConversationEvent: (callback: (payload: unknown) => void) => () => void;
+    };
+    novelWindow?: {
+      platform: "win" | "mac";
+      minimize(): void;
+      toggleMaximize(): void;
+      close(): void;
+      onMaximizedChange(callback: (maximized: boolean) => void): () => void;
     };
   }
 }
@@ -110,20 +118,45 @@ const workspaceController = new WorkspaceController({
   },
 });
 
+// 窗口控制（PRD WC）：preload novelWindow 桥存在时装配 WindowChromeProps
+// （macOS 系统红绿灯在 titleBarStyle:hidden 下由系统渲染，UI 侧不再自绘）。
+const novelWindow = window.novelWindow;
+const useWindowChrome = (): WindowChromeProps | undefined => {
+  const [maximized, setMaximized] = useState(false);
+  useEffect(() => {
+    if (novelWindow === undefined) return;
+    return novelWindow.onMaximizedChange(setMaximized);
+  }, []);
+  if (novelWindow === undefined || novelWindow.platform === "mac") return undefined;
+  return {
+    platform: "win",
+    maximized,
+    onMinimize: () => novelWindow.minimize(),
+    onToggleMaximize: () => novelWindow.toggleMaximize(),
+    onClose: () => novelWindow.close(),
+  };
+};
+
+function AppRoot() {
+  const windowChrome = useWindowChrome();
+  return (
+    <StrictMode>
+      <NovelApp
+        api={api}
+        platform={platform}
+        workspaceController={workspaceController}
+        configurationClient={configurationClient}
+        windowChrome={windowChrome}
+      />
+    </StrictMode>
+  );
+}
+
 const rootElement = document.getElementById("root");
 if (rootElement === null) {
   throw new Error("renderer root element 缺失");
 }
 const root = createRoot(rootElement);
-root.render(
-  <StrictMode>
-    <NovelApp
-      api={api}
-      platform={platform}
-      workspaceController={workspaceController}
-      configurationClient={configurationClient}
-    />
-  </StrictMode>,
-);
+root.render(<AppRoot />);
 
 // 不自动打开：NovelApp 无 current 时显示项目选择页，由用户 chooseAndOpen（走目录选择器）。

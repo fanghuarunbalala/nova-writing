@@ -45,6 +45,7 @@ import {
   ApplicationShell,
   type ApplicationShellDomainStores,
 } from "../shell/ApplicationShell.js";
+import type { WindowChromeProps } from "../shell/topbar/WindowControls.js";
 import { NovelAppProvider } from "./NovelAppProvider.js";
 
 export interface NovelAppProps {
@@ -58,6 +59,8 @@ export interface NovelAppProps {
   readonly extensions?: NovelUiExtensions;
   /** 宿主追加的 overlay 节点（与默认 overlays 一并渲染进 OverlaysHost） */
   readonly overlays?: ReactNode;
+  /** 窗口控制（PRD WC；桌面宿主经 preload 桥注入，透传到 TopBar） */
+  readonly windowChrome?: WindowChromeProps;
 }
 
 export function NovelApp(props: NovelAppProps) {
@@ -88,6 +91,7 @@ function NovelAppReady({
   workspaceController,
   extensions,
   overlays,
+  windowChrome,
 }: NovelAppReadyProps) {
   const domainStores = useMemo(
     () => createDomainStores(api, logger),
@@ -145,6 +149,7 @@ function NovelAppReady({
           configurationClient={configurationClient}
           commandSource={commandSource}
           extensions={extensions}
+          windowChrome={windowChrome}
           onOpenWorkspace={() => setWorkspaceOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           overlays={

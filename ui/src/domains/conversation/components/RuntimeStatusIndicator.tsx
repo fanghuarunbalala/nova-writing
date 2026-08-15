@@ -1,7 +1,7 @@
 /**
  * RuntimeStatusIndicator
  *
- * 状态指示统一语言（正在生成/等待审批）：[图标动效] [渐变流动文字] [可选秒数]。
+ * 状态指示统一语言（正在生成/正在审批）：[图标动效] [渐变流动文字] [可选秒数]。
  * 颜色/图标/动画按 state 区分，但共用同一套语言：
  * - generating 笔尖 + 品牌渐变（--grad-accent）+ 上下浮动 + 墨滴下落
  * - waiting    沙漏 + warn 琥珀渐变 + 左右摇摆
@@ -22,7 +22,7 @@ export interface RuntimeStatusIndicatorProps {
 
 const LABEL: Record<RuntimeStatusState, string> = {
   generating: "正在生成",
-  waiting: "等待审批",
+  waiting: "正在审批",
 };
 
 const STATE_ICON: Record<RuntimeStatusState, LucideIcon> = {

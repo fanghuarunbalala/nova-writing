@@ -18,19 +18,17 @@
  *     频次 1 的组合留在组件内（color-mix 引用基色 token，dark 覆盖基色后自动适配）。
  */
 :root {
-  /* ============ L1 结构常量（theme 不可覆盖；media query/JS 调节） ============ */
+  /* ============ L1 结构常量（theme 不可覆盖；断点档位调节） ============
+     PRD 决议 2：侧栏/审批面板不再拖拽调宽，宽度为断点固定档位——
+     侧栏 >1280 = 272 / ≤1280 = 238；审批 >1280 = 376 / ≤1280 = 340，
+     ≤1080 审批转右缘覆盖抽屉（InspectorHost 媒体查询）。 */
   --topbar-height:       56px;
   --subhead-height:      58px;
-  --sidebar-width:       292px;
-  /* 侧栏当前宽度：与 --insp-w 同一先例——tokens 持默认值，
-     用户拖拽调宽时宿主写 inline 覆盖（宽度与折叠偏移同源）。 */
-  --sidebar-current-w:   292px;
+  --sidebar-width:       272px;
+  /* 侧栏当前宽度：与折叠负偏移同源（保持两值恒一致）。 */
+  --sidebar-current-w:   272px;
   --sidebar-width-collapsed: 0;
-  /* inspector 宽度：默认 860px。响应式收窄由 InspectorHost.module.css 的
-     媒体查询覆盖；用户拖拽时写入 inline --insp-w（未拖过则交给 CSS）。
-     响应式断点约定（1280/1080/860，InspectorHost 媒体查询）与 --insp-w 耦合；
-     CSS 变量不能用于 @media 条件，暂以注释约定，不可 token 化。 */
-  --insp-w: 860px;
+  --insp-w: 376px;
 
   /* max-width 快照（跨组件复用 ≥2 次才建 token；Dialog 的 400/720/960 频次 1 留在组件内） */
   --max-w-surface:   1000px; /* ContentSurface + ScheduleSurface 的 paneInner */
@@ -251,6 +249,16 @@
      覆盖为深墨——强调底提亮后白字对比度不足 4.5:1。用于 Button.primary、
      GenStatus、ProjectSelectionPage、WorkspaceSelectionDialog 渐变底文字 */
   --color-on-accent: #fff;
+
+  /* 窗口控制平台规范色（PRD WC-1/2 + TH-6 例外：平台规范固定值，不随主题；
+     仅 WindowControls.module.css 引用，theme 全局层定义故不受 module 零字面量纪律约束） */
+  --winctl-win-close-hover: #e81123;
+  --winctl-win-close-hover-fg: #fff;
+  --winctl-win-hover: color-mix(in oklab, var(--color-fg) 8%, transparent);
+  --winctl-mac-close: #ff5f57;
+  --winctl-mac-minimize: #febc2e;
+  --winctl-mac-maximize: #28c840;
+  --winctl-mac-glyph: rgb(0 0 0 / 55%);
 
   /* 语义混合 token（两次晋升制：完全相同 (基色,百分比,target) 组合 ≥2 次即晋升；
      频次 1 的组合留在组件内）。同名 (基色,%) 多 target 时全部带 target 后缀。

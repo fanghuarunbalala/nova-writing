@@ -24,6 +24,27 @@ try {
   });
   // renderer 侧 debugLog 开关（浏览器无 process.env）
   contextBridge.exposeInMainWorld("__NOVEL_LOG_LEVEL__", process.env.NOVEL_LOG_LEVEL ?? "info");
+  // 窗口控制端口（PRD WC；main 侧 window-controls:* 按 sender.id 授权）：
+  // platform 判定 + 最小化/最大化切换/关闭 + 最大化状态订阅
+  contextBridge.exposeInMainWorld("novelWindow", {
+    platform: process.platform === "darwin" ? "mac" : "win",
+    minimize: () => {
+      ipcRenderer.send("window-controls:minimize");
+    },
+    toggleMaximize: () => {
+      ipcRenderer.send("window-controls:toggle-maximize");
+    },
+    close: () => {
+      ipcRenderer.send("window-controls:close");
+    },
+    onMaximizedChange: (callback: (maximized: boolean) => void): (() => void) => {
+      const handler = (_event: unknown, maximized: boolean): void => callback(maximized);
+      ipcRenderer.on("window-controls:maximized", handler as never);
+      return () => {
+        ipcRenderer.off("window-controls:maximized", handler as never);
+      };
+    },
+  });
   contextBridge.exposeInMainWorld("novelEvents", {
     /** 订阅会话事件推送（payload = {conversationId, event}）；返回取消订阅 */
     onConversationEvent: (callback: (payload: unknown) => void): (() => void) => {

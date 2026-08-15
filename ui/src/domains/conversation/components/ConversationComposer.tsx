@@ -108,6 +108,16 @@ export function ConversationComposer({
             aria-label="对话输入"
             data-conversation={conversationId}
           />
+        </div>
+        {disconnected ? (
+          <span className={styles.pendingHint}>进程已断开，审批已结束</span>
+        ) : sendDisabled ? (
+          <span className={styles.pendingHint}>正在审批</span>
+        ) : null}
+        {/* 底栏：模式（左） + 发送（右）——PRD CH-16 */}
+        <div className={styles.bottomBar}>
+          <ComposerModeBar mode={mode} pendingMode={pendingMode} onChange={onModeChange} disabled={!enabled} />
+          <span className={styles.bottomSpacer} />
           <Button
             variant="primary"
             leadingIcon={<Icon icon={Send} size="sm" />}
@@ -117,12 +127,6 @@ export function ConversationComposer({
             发送
           </Button>
         </div>
-        {disconnected ? (
-          <span className={styles.pendingHint}>进程已断开，审批已结束</span>
-        ) : sendDisabled ? (
-          <span className={styles.pendingHint}>等待审批</span>
-        ) : null}
-        <ComposerModeBar mode={mode} pendingMode={pendingMode} onChange={onModeChange} disabled={!enabled} />
       </form>
     </div>
   );

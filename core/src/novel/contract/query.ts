@@ -13,10 +13,10 @@ import type {
 export type NovelQuery =
 	/** 小说总览（标题 + 各实体计数） */
 	| { op: "overview.get" }
-	/** 大纲（含全部 story unit 树） */
-	| { op: "outline.get" }
-	/** 单个 story unit */
-	| { op: "outline.storyUnit.get"; storyUnitId: StoryUnitId }
+	/** 大纲（含全部 story unit 树；includePlans=true 附 leaf 计划与叶完成度 rollup） */
+	| { op: "outline.get"; includePlans?: boolean }
+	/** 单个 story unit（includePlans=true 附 leaf 计划） */
+	| { op: "outline.storyUnit.get"; storyUnitId: StoryUnitId; includePlans?: boolean }
 	/** 角色列表 */
 	| { op: "characters.list" }
 	/** 单个角色 */
@@ -25,8 +25,8 @@ export type NovelQuery =
 	| { op: "locations.list" }
 	/** 单个地点 */
 	| { op: "locations.get"; locationId: LocationId }
-	/** 某 story unit 的段落列表（按 orderKey 排序） */
-	| { op: "paragraphs.list"; storyUnitId: StoryUnitId }
+	/** 段落列表（storyUnitId 缺省返回全部——按单元分组、组内按 orderKey 排序） */
+	| { op: "paragraphs.list"; storyUnitId?: StoryUnitId }
 	/** 单个段落 */
 	| { op: "paragraph.get"; paragraphId: ParagraphId }
 	/** 发布结构（卷/章） */

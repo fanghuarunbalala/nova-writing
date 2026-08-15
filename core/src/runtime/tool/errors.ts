@@ -9,6 +9,7 @@ export type ToolErrorCode =
   | "TOOL_DUPLICATE" // 重复注册（注册表已有同 name 工具）
   | "TOOL_POLICY_INVALID" // 工具策略名单含未注册工具（allow/deny 校验失败）
   | "TOOL_ARGUMENTS_INVALID" // 工具参数 JSON 非法
+  | "TOOL_PRECHECK_FAILED" // 审批前预检失败（存在性/乐观锁/id 占用；不进审批批）
   | "TOOL_HANDLER_FAILED"; // handler 抛错归一（dispatcher 包装非 ToolError 异常）
 
 /** ToolError 构造选项 */

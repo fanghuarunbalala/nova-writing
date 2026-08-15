@@ -192,14 +192,98 @@ describe("AgentLoop 审批门控（按 turn 批量）", () => {
     expect(requestApproval).not.toHaveBeenCalled();
   });
 
+  describe("审批前预检（PRD novel-tools-legacy-对齐 §4-5）", () => {
+    it("precheck 抛错 → 不发起审批、不执行、错误文本进 turn", async () => {
+      const execute = vi.fn().mockResolvedValue("written");
+      const tool: ToolDef = {
+        ...writeTool("NovelCharacterEdit", true),
+        precheck: async () => {
+          throw new Error("角色 c1 版本过期：当前 entityVersion 7，请求基于 3");
+        },
+        handler: { execute },
+      };
+      const requestApproval = vi.fn();
+      const loop = makeLoop([toolCallResult([{ toolName: "NovelCharacterEdit", id: "t1" }]), stopResult("ok")], {
+        toolDefs: [tool],
+        requestApproval,
+      });
+      const responses: string[] = [];
+      await loop.run("hi", { sampling: { model: "gpt-5" } }, (e) => {
+        if (e.type === "tool-call-response" && "result" in e) responses.push(e.result ?? "");
+      });
+      expect(requestApproval).not.toHaveBeenCalled();
+      expect(execute).not.toHaveBeenCalled();
+      expect(responses[0]).toContain("预检未通过");
+      expect(responses[0]).toContain("版本过期");
+    });
+
+    it("precheck 通过 → 正常走审批；免审工具的 precheck 失败同样短路执行", async () => {
+      const requestApproval = vi.fn().mockResolvedValue({ kind: "approve" });
+      const gated: ToolDef = { ...writeTool("NovelCharacterEdit", true), precheck: async () => {} };
+      const loop = makeLoop([toolCallResult([{ toolName: "NovelCharacterEdit", id: "t1" }]), stopResult("ok")], {
+        toolDefs: [gated],
+        requestApproval,
+      });
+      await loop.run("hi", { sampling: { model: "gpt-5" } });
+      expect(requestApproval).toHaveBeenCalledOnce();
+
+      const ungated: ToolDef = {
+        ...writeTool("SomeRead", false),
+        precheck: async () => {
+          throw new Error("目标不存在");
+        },
+      };
+      const loop2 = makeLoop([toolCallResult([{ toolName: "SomeRead", id: "t1" }]), stopResult("ok")], {
+        toolDefs: [ungated],
+      });
+      const responses: string[] = [];
+      await loop2.run("hi", { sampling: { model: "gpt-5" } }, (e) => {
+        if (e.type === "tool-call-response" && "result" in e) responses.push(e.result ?? "");
+      });
+      expect(responses[0]).toContain("预检未通过");
+    });
+
+    it("批内多项：一项 precheck 失败 → 该项短路，其余项仍可整批送审", async () => {
+      const requestApproval = vi.fn().mockResolvedValue({ kind: "approve" });
+      const bad: ToolDef = {
+        ...writeTool("NovelCharacterEdit", true),
+        precheck: async () => {
+          throw new Error("未找到 角色 c9");
+        },
+      };
+      const good: ToolDef = { ...writeTool("NovelOutlineEdit", true), precheck: async () => {} };
+      const loop = makeLoop(
+        [
+          toolCallResult([
+            { toolName: "NovelCharacterEdit", id: "t1" },
+            { toolName: "NovelOutlineEdit", id: "t2" },
+          ]),
+          stopResult("ok"),
+        ],
+        { toolDefs: [bad, good], requestApproval },
+      );
+      const responses: string[] = [];
+      await loop.run("hi", { sampling: { model: "gpt-5" } }, (e) => {
+        if (e.type === "tool-call-response" && "result" in e) responses.push(e.result ?? "");
+      });
+      // 送审的批只含通过的项
+      expect(requestApproval).toHaveBeenCalledOnce();
+      expect(requestApproval.mock.calls[0][0].toolCalls).toEqual([
+        { toolCallId: "t2", toolName: "NovelOutlineEdit", args: "{}" },
+      ]);
+      expect(responses[0]).toContain("未找到 角色 c9");
+      expect(responses[1]).toBe("result:NovelOutlineEdit");
+    });
+  });
+
   describe("compose 权限门（gateBatch）", () => {
     it("compose 激活：canonical 写被硬拒绝（handler 不执行、不经审批通道）", async () => {
       const execute = vi.fn().mockResolvedValue("written");
-      const tool: ToolDef = { ...writeTool("ParagraphWrite", true), handler: { execute } };
+      const tool: ToolDef = { ...writeTool("NovelParagraphWrite", true), handler: { execute } };
       const composeState = new ComposeModeStateProvider();
       composeState.enter("c1", { designFilePath: "/ws/.novel/design/c1.md" });
       const requestApproval = vi.fn();
-      const loop = makeLoop([toolCallResult([{ toolName: "ParagraphWrite", id: "t1" }]), stopResult("ok")], {
+      const loop = makeLoop([toolCallResult([{ toolName: "NovelParagraphWrite", id: "t1" }]), stopResult("ok")], {
         toolDefs: [tool],
         composeState,
         requestApproval,
@@ -225,11 +309,11 @@ describe("AgentLoop 审批门控（按 turn 批量）", () => {
     });
 
     it("bypass 模式：canonical 写跳过审批直接放行", async () => {
-      const tool = writeTool("ParagraphWrite", true);
+      const tool = writeTool("NovelParagraphWrite", true);
       const composeState = new ComposeModeStateProvider();
       composeState.setMode("c1", "bypass");
       const requestApproval = vi.fn();
-      const loop = makeLoop([toolCallResult([{ toolName: "ParagraphWrite", id: "t1" }]), stopResult("ok")], {
+      const loop = makeLoop([toolCallResult([{ toolName: "NovelParagraphWrite", id: "t1" }]), stopResult("ok")], {
         toolDefs: [tool],
         composeState,
         requestApproval,
@@ -240,7 +324,7 @@ describe("AgentLoop 审批门控（按 turn 批量）", () => {
       });
       expect(r.final.content).toBe("ok");
       // 直达 dispatch（无拒绝文本）、审批通道未被询问
-      expect(responses[0]).toBe("result:ParagraphWrite");
+      expect(responses[0]).toBe("result:NovelParagraphWrite");
       expect(requestApproval).not.toHaveBeenCalled();
     });
 

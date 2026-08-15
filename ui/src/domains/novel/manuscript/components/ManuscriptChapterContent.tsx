@@ -23,7 +23,7 @@ export interface ManuscriptChapterContentProps {
     readonly nonce: number;
   } | null;
   readonly onOpenDraft?: (changeSetId: string) => void;
-  /** 新增段落（宿主按 chapter.storyUnitId 调 store.insertParagraph） */
+  /** 新增段落（宿主按章选择末位追加） */
   readonly onInsertParagraph?: () => void;
   /** 保存段落编辑（宿主带乐观锁） */
   readonly onSaveParagraph?: (paragraphId: string, text: string) => Promise<void> | void;

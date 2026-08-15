@@ -102,16 +102,20 @@ export type ApprovalEntityResolver = (
   target: ApprovalTarget,
 ) => Promise<ResolvedEntityContent | undefined>;
 
-/** 工具名 → 实体 kind（新版工具命名：CharacterWrite/Edit/…） */
+/** 工具名 → 实体 kind（P1 legacy 对齐命名：NovelXxxWrite/Edit…） */
 const KIND_BY_TOOL_NAME: Readonly<Record<string, string>> = {
-  CharacterWrite: "character",
-  CharacterEdit: "character",
-  LocationWrite: "location",
-  LocationEdit: "location",
-  OutlineWrite: "story_unit",
-  OutlineEdit: "story_unit",
-  ParagraphWrite: "paragraph",
-  ParagraphEdit: "paragraph",
+  NovelCharacterWrite: "character",
+  NovelCharacterEdit: "character",
+  NovelLocationWrite: "location",
+  NovelLocationEdit: "location",
+  NovelOutlineWrite: "story_unit",
+  NovelOutlineEdit: "story_unit",
+  NovelParagraphWrite: "paragraph",
+  NovelParagraphEdit: "paragraph",
+  NovelVolumeWrite: "volume",
+  NovelVolumeEdit: "volume",
+  NovelChapterWrite: "chapter",
+  NovelChapterEdit: "chapter",
 };
 
 /** 内部/结构性字段不展示（顺序由树/列表位置体现，id/baseRevision 无信息量）。 */
@@ -230,8 +234,8 @@ function buildFields(
 }
 
 /**
- * 从工具名 + 参数解析审批目标集合（新版 args 形状：Write=values[] 或单对象、
- * Edit=values[{<kind>Id, baseRevision, patch}] 或单对象、Delete=values[{kind,id,baseRevision}]）。
+ * 从工具名 + 参数解析审批目标集合（P1 legacy 形状：Write=values[{id?,...}]、
+ * Edit=values[{id, baseRevision, value}]、Delete=values[{kind,id,baseRevision}]）。
  * @param toolName 工具名
  * @param op 操作类型（add/edit/delete）
  * @param args 解析后的参数
@@ -279,18 +283,17 @@ export function extractApprovalTargets(
     return targets.length > 0 ? { targets } : undefined;
   }
 
-  // Edit：values[{<kind>Id, baseRevision, patch}] 或单对象
+  // Edit：values[{id, baseRevision, value}]（P1 legacy 形状）
   const kind = KIND_BY_TOOL_NAME[toolName];
   if (kind === undefined) return undefined;
   const items = Array.isArray(args.values) ? args.values : [args];
-  const idField = `${kind === "story_unit" ? "storyUnit" : kind}Id`;
   const targets: ApprovalTarget[] = [];
   for (const item of items) {
     if (!isRecord(item)) continue;
-    const id = asString(item[idField]);
+    const id = asString(item.id);
     const baseRevision =
       typeof item.baseRevision === "number" ? item.baseRevision : undefined;
-    const patch = isRecord(item.patch) ? (item.patch as JsonObject) : undefined;
+    const patch = isRecord(item.value) ? (item.value as JsonObject) : undefined;
     if (id === undefined || patch === undefined) continue;
     targets.push({ kind, id, op: "edit", value: patch, baseRevision });
   }

@@ -28,7 +28,7 @@ function item(opts: {
     toolCalls: [
       {
         toolCallId: "t1",
-        toolName: opts.toolName ?? "CharacterWrite",
+        toolName: opts.toolName ?? "NovelCharacterWrite",
         args: opts.args ?? JSON.stringify({ values: [{ name: "林夏" }] }),
       },
     ],
@@ -90,7 +90,7 @@ describe("ApprovalPanel", () => {
     render(<ApprovalPanel store={store} conversationId="conv-a" drawerOpen />);
     // 工具名中文化（identity meta + 详情色带）。
     expect(screen.getAllByText("角色写入").length).toBeGreaterThan(0);
-    // op 色块（CharacterWrite → add）：标题 diff 符号。
+    // op 色块（NovelCharacterWrite → add）：标题 diff 符号。
     expect(screen.getAllByText("+").length).toBeGreaterThan(0);
     // 参数区（无 resolver → 平铺原始参数）。
     expect(screen.getByText("审批参数")).toBeInTheDocument();
@@ -121,9 +121,9 @@ describe("ApprovalPanel", () => {
       item({
         conversationId: "conv-a",
         requestId: "r2",
-        toolName: "CharacterEdit",
+        toolName: "NovelCharacterEdit",
         args: JSON.stringify({
-          values: [{ characterId: "c-1", baseRevision: 1, patch: { summary: "新简介" } }],
+          values: [{ id: "c-1", baseRevision: 1, value: { summary: "新简介" } }],
         }),
       }),
     ]);
@@ -182,9 +182,9 @@ describe("ApprovalPanel", () => {
       item({
         conversationId: "conv-a",
         requestId: "r3",
-        toolName: "CharacterEdit",
+        toolName: "NovelCharacterEdit",
         args: JSON.stringify({
-          values: [{ characterId: "c-1", baseRevision: 1, patch: { summary: "新简介" } }],
+          values: [{ id: "c-1", baseRevision: 1, value: { summary: "新简介" } }],
         }),
       }),
     ]);
@@ -212,9 +212,9 @@ describe("ApprovalPanel", () => {
       item({
         conversationId: "conv-a",
         requestId: "r4",
-        toolName: "CharacterEdit",
+        toolName: "NovelCharacterEdit",
         args: JSON.stringify({
-          values: [{ characterId: "c-1", baseRevision: 1, patch: { summary: "新简介" } }],
+          values: [{ id: "c-1", baseRevision: 1, value: { summary: "新简介" } }],
         }),
       }),
     ]);
@@ -341,10 +341,10 @@ describe("ApprovalPanel", () => {
       item({
         conversationId: "conv-a",
         requestId: "r9",
-        toolName: "CharacterEdit",
+        toolName: "NovelCharacterEdit",
         status: "approved",
         args: JSON.stringify({
-          values: [{ characterId: "c-1", baseRevision: 1, patch: { summary: "新简介" } }],
+          values: [{ id: "c-1", baseRevision: 1, value: { summary: "新简介" } }],
         }),
       }),
     ]);

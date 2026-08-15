@@ -1,4 +1,4 @@
-import type { ToolScheme } from "../provider/types.js";
+import type { ToolScheme, ToolCall } from "../provider/types.js";
 import type { ToolHandler } from "./ToolHandler.js";
 import type { ToolPreviewFn } from "./previews.js";
 
@@ -16,6 +16,12 @@ export interface ToolDef extends ToolScheme {
   version: string;
   /** 工具实现 */
   handler: ToolHandler;
+  /**
+   * 审批前预检（PRD novel-tools-legacy-对齐 §4-5）：只读校验目标存在性 /
+   * baseRevision 乐观锁 / id 占用，失败抛 ToolError——该调用以错误文本收口，
+   * 不进审批批、不执行（避免用户批准注定失败的批次）。AgentLoop 在提交审批前调用。
+   */
+  precheck?: (call: ToolCall) => Promise<void>;
   /** 工具 prompt 细节（经 PromptSection 渲染进 system） */
   promptDetail?: ToolPromptDetail;
   /** 执行前需用户审批（AgentLoop 经 requestApproval 通道征询；未装配通道时按拒绝处理） */

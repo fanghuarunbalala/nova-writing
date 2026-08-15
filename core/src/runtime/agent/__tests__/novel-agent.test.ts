@@ -13,7 +13,7 @@ const handle = {
 } as unknown;
 
 describe("buildNovelAgent 组装", () => {
-  it("systemSections 齐全（9 段 recipe 序）+ toolDefs 齐全（23 工具）", () => {
+  it("systemSections 齐全（9 段 recipe 序）+ toolDefs 齐全（26 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { systemSections: Array<{ id: string; kind: string }>; toolDefs: unknown[] } } }).config.agentCapability;
     expect(cap.systemSections).toHaveLength(9);
@@ -30,10 +30,10 @@ describe("buildNovelAgent 组装", () => {
     ]);
     expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(6);
     expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(3);
-    expect(cap.toolDefs).toHaveLength(23);
+    expect(cap.toolDefs).toHaveLength(26);
   });
 
-  it("工具名覆盖 todo + files + compose + novel 各域（9 组 23 工具）", () => {
+  it("工具名覆盖 todo + files + compose + novel 各域（10 组 26 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { toolDefs: Array<{ name: string }> } } }).config.agentCapability;
     const names = cap.toolDefs.map((t) => t.name);
@@ -44,11 +44,11 @@ describe("buildNovelAgent 组装", () => {
     expect(names).toContain("Edit");
     expect(names).toContain("EnterComposeMode");
     expect(names).toContain("ExitComposeMode");
-    expect(names).toContain("CharacterRead");
-    expect(names).toContain("LocationWrite");
-    expect(names).toContain("OutlineEdit");
-    expect(names).toContain("ParagraphWrite");
-    expect(names).toContain("PublicationRead");
+    expect(names).toContain("NovelCharacterRead");
+    expect(names).toContain("NovelLocationWrite");
+    expect(names).toContain("NovelOutlineEdit");
+    expect(names).toContain("NovelParagraphWrite");
+    expect(names).toContain("NovelChapterRead");
     expect(names).toContain("NovelDelete");
   });
 
@@ -56,11 +56,11 @@ describe("buildNovelAgent 组装", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const dispatcher = (loop as unknown as { config: { toolDispatcher: { dispatch: (ctx: unknown, call: { name: string }) => Promise<string> } } }).config.toolDispatcher;
     // CharacterRead 会调 handle.query（characters.list）
-    const result = await dispatcher.dispatch({} as never, { name: "CharacterRead", args: "{}" } as never);
+    const result = await dispatcher.dispatch({} as never, { name: "NovelCharacterRead", args: "{}" } as never);
     expect(result).toContain("[]");
   });
 
-  it("subagent 选项存在时追加 Agent/TaskOutput/TaskStop（24 工具），Agent 返回 acceptance", async () => {
+  it("subagent 选项存在时追加 Agent/TaskOutput/TaskStop（29 工具），Agent 返回 acceptance", async () => {
     const spawner = {
       spawn: () => ({ taskId: "task_1", status: "running" as const }),
       queryTasks: async () => [],
@@ -86,8 +86,8 @@ describe("buildNovelAgent 组装", () => {
         };
       }
     ).config.agentCapability;
-    // 23（9 组，含 novel.compose 两工具） + 3（subagent 派发三工具）
-    expect(cap.toolDefs).toHaveLength(26);
+    // 26（10 组，含 novel.compose 两工具） + 3（subagent 派发三工具）
+    expect(cap.toolDefs).toHaveLength(29);
     const names = cap.toolDefs.map((t) => t.name);
     expect(names).toContain("Agent");
     expect(names).toContain("TaskOutput");

@@ -3,19 +3,21 @@
  * 工具定义 / 权限门 / 测试三方共用本常量；文件工具（Read/Glob/Write/Edit）不受此名单约束。
  */
 
-/** canonical 写工具（10 个 Write/Edit + NovelDelete）；读工具不在列 */
+/** canonical 写工具（12 个 Write/Edit + NovelDelete）；读工具不在列 */
 export const CANONICAL_NOVEL_WRITES: ReadonlySet<string> = new Set([
-	"OutlineWrite",
-	"OutlineEdit",
-	"CharacterWrite",
-	"CharacterEdit",
-	"LocationWrite",
-	"LocationEdit",
-	"ParagraphWrite",
-	"ParagraphEdit",
-	"PublicationWrite",
-	"PublicationEdit",
-	"NovelDelete",
+  "NovelOutlineWrite",
+  "NovelOutlineEdit",
+  "NovelCharacterWrite",
+  "NovelCharacterEdit",
+  "NovelLocationWrite",
+  "NovelLocationEdit",
+  "NovelParagraphWrite",
+  "NovelParagraphEdit",
+  "NovelVolumeWrite",
+  "NovelVolumeEdit",
+  "NovelChapterWrite",
+  "NovelChapterEdit",
+  "NovelDelete",
 ]);
 
 /**

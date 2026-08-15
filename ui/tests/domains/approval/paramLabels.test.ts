@@ -30,7 +30,7 @@ describe("paramLabels", () => {
   });
 
   it("translates tool names and falls back to raw", () => {
-    expect(toolNameLabel("CharacterWrite")).toBe("角色写入");
+    expect(toolNameLabel("NovelCharacterWrite")).toBe("角色写入");
     expect(toolNameLabel("NovelDelete")).toBe("删除");
     expect(toolNameLabel("UnknownTool")).toBe("UnknownTool");
   });
@@ -52,8 +52,8 @@ describe("paramLabels", () => {
   });
 
   it("infers operation from operations[0] and falls back to tool name", () => {
-    expect(inferOperation("CharacterWrite", [{ op: "add" }])).toBe("add");
-    expect(inferOperation("CharacterEdit", undefined)).toBe("edit");
+    expect(inferOperation("NovelCharacterWrite", [{ op: "add" }])).toBe("add");
+    expect(inferOperation("NovelCharacterEdit", undefined)).toBe("edit");
     expect(inferOperation("NovelDelete", undefined)).toBe("delete");
     expect(inferOperation("EnterComposeMode", undefined)).toBeUndefined();
   });

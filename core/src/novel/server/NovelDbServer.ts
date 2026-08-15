@@ -37,6 +37,7 @@ export class NovelDbServer {
 		const api: NovelApi = {
 			query: (q) => this.query(q),
 			mutate: (m) => this.applyMutation(m),
+			mutateBatch: (ms) => this.applyMutationBatch(ms),
 		};
 		this.controller = expose(api, transport);
 	}
@@ -67,6 +68,29 @@ export class NovelDbServer {
 		};
 		this.publisher.publish(NOVEL_CHANGED, evt);
 		return result;
+	}
+
+	/**
+	 * 批量应用变更（批内原子）并逐项广播 novel.changed（整批成功才广播）
+	 * @param ms 变更序列
+	 * @returns 逐项变更结果
+	 */
+	async applyMutationBatch(ms: readonly NovelMutation[]): Promise<NovelMutateResult[]> {
+		const results = await this.store.mutateBatch(ms);
+		for (let i = 0; i < ms.length; i++) {
+			const m = ms[i]!;
+			const result = results[i]!;
+			const evt: NovelChangeEvent = {
+				type: "novel.changed",
+				op: m.op,
+				entity: result.entity,
+				id: result.changeId,
+				version: result.version,
+				ts: new Date().toISOString(),
+			};
+			this.publisher.publish(NOVEL_CHANGED, evt);
+		}
+		return results;
 	}
 
 	/** 关闭：dispose expose */

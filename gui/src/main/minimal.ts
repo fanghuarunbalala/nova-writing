@@ -295,6 +295,23 @@ async function main(): Promise<void> {
       });
       return result;
     },
+    // 批内原子：整批成功才逐项广播（失败回滚不广播）
+    mutateBatch: async (ms) => {
+      const results = await store.mutateBatch(ms);
+      for (let i = 0; i < ms.length; i++) {
+        const m = ms[i]!;
+        const result = results[i]!;
+        novelPublisher.publish(NOVEL_CHANGED, {
+          type: "novel.changed",
+          op: m.op,
+          entity: result.entity,
+          id: result.changeId,
+          version: result.version,
+          ts: new Date().toISOString(),
+        });
+      }
+      return results;
+    },
   };
   const conversationsRoot = join(app.getPath("userData"), "novel-storage", "conversations");
 

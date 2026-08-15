@@ -20,11 +20,12 @@ import {
 export const NOVEL_EXPLORER_TOOL_NAMES: readonly string[] = Object.freeze([
   "Read",
   "Glob",
-  "CharacterRead",
-  "LocationRead",
-  "OutlineRead",
-  "ParagraphRead",
-  "PublicationRead",
+  "NovelCharacterRead",
+  "NovelLocationRead",
+  "NovelOutlineRead",
+  "NovelParagraphRead",
+  "NovelVolumeRead",
+  "NovelChapterRead",
   "TodoWrite",
 ]);
 
@@ -54,7 +55,8 @@ export const novelExplorerAgentDefinition = new AgentDefinition({
       "novel.locations",
       "novel.outline",
       "novel.paragraph",
-      "novel.publication",
+      "novel.volumes",
+      "novel.chapters",
       "runtime.todo",
     ],
     allow: [...NOVEL_EXPLORER_TOOL_NAMES],

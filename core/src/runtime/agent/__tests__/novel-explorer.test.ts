@@ -44,11 +44,11 @@ function cfgOf(loop: ReturnType<typeof build>) {
 }
 
 describe("buildNovelExplorerAgent 装配", () => {
-  it("工具名精确 = 8 只读名单（无 Write/Edit/Delete/Agent）", () => {
+  it("工具名精确 = 9 只读名单（无 Write/Edit/Delete/Agent）", () => {
     const cfg = cfgOf(build());
     const names = cfg.agentCapability.toolDefs.map((t) => t.name);
     expect(names).toEqual([...NOVEL_EXPLORER_TOOL_NAMES]);
-    for (const n of ["Write", "Edit", "NovelDelete", "CharacterWrite", "LocationEdit", "Agent", "TaskOutput", "TaskStop"]) {
+    for (const n of ["Write", "Edit", "NovelDelete", "NovelCharacterWrite", "NovelLocationEdit", "Agent", "TaskOutput", "TaskStop"]) {
       expect(names).not.toContain(n);
     }
   });

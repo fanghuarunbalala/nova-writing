@@ -21,8 +21,8 @@ export interface ManuscriptReaderProps {
     readonly nonce: number;
   } | null;
   readonly onOpenDraft?: (changeSetId: string) => void;
-  /** 新增段落（宿主按章 storyUnitId 插入） */
-  readonly onInsertParagraph?: (storyUnitId: string) => void;
+  /** 新增段落（宿主按章选择末位追加） */
+  readonly onInsertParagraph?: (chapterId: string) => void;
   /** 保存段落编辑（宿主带乐观锁） */
   readonly onSaveParagraph?: (paragraphId: string, text: string) => Promise<void> | void;
   /** 删除段落（宿主确认后执行） */
@@ -67,8 +67,8 @@ export function ManuscriptReader({
         locate={locate}
         onOpenDraft={onOpenDraft}
         onInsertParagraph={
-          onInsertParagraph !== undefined && selectedChapter?.storyUnitId !== undefined
-            ? () => onInsertParagraph(selectedChapter!.storyUnitId!)
+          onInsertParagraph !== undefined && (selectedChapter?.paragraphIds.length ?? 0) > 0
+            ? () => onInsertParagraph(selectedChapter!.chapterId)
             : undefined
         }
         onSaveParagraph={onSaveParagraph}

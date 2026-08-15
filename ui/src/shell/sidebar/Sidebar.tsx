@@ -33,7 +33,6 @@ import { ManuscriptDirectory } from "./sections/ManuscriptDirectory.js";
 import { PlanDirectory } from "./sections/PlanDirectory.js";
 import { ConversationListSection } from "./sections/ConversationListSection.js";
 import { NewConversationSection } from "./sections/NewConversationSection.js";
-import { SidebarSection } from "./SidebarSection.js";
 import styles from "./Sidebar.module.css";
 
 export interface SidebarProps {
@@ -118,19 +117,18 @@ export const Sidebar = memo(function Sidebar({
 
   let content: ReactNode = null;
   if (view === "chat") {
+    // demo 侧栏无「对话」分组头：按钮 → 搜索框 → 时间分组（置顶/今天/更早）直达
     content = (
       <>
         <NewConversationSection
           onCreate={onCreateConversation}
           disabled={catalogSnapshot.workspaceId === undefined}
         />
-        <SidebarSection label="对话" count={catalogSnapshot.conversations.length}>
-          <ConversationListSection
-            store={conversationCatalog}
-            toastStore={toastStore}
-            onSelect={onSelectConversation}
-          />
-        </SidebarSection>
+        <ConversationListSection
+          store={conversationCatalog}
+          toastStore={toastStore}
+          onSelect={onSelectConversation}
+        />
       </>
     );
   } else if (view === "content") {

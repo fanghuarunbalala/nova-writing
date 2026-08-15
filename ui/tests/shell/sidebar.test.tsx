@@ -87,7 +87,6 @@ function renderSidebar(
       planTodoId={null}
       onSelectPlanTodo={vi.fn()}
       conversationCatalog={stores.conversationCatalog}
-      novelOverview={stores.novelOverview}
       outlineTree={stores.storyOutlineTree}
       manuscript={stores.manuscriptStructure}
       characters={stores.character}
@@ -120,10 +119,11 @@ describe("Sidebar (context directory)", () => {
     await stores.conversationCatalog.loadWorkspace("w1");
     const onSelectContentPane = vi.fn();
     renderSidebar(stores, { view: "content", onSelectContentPane });
-    // 四段资料位（大纲/正文/人物/地点；可访问名含计数，用正则匹配）。
+    // 四段资料位（大纲/正文/人物/地点；计数在 dirHead 标题行，不在 tab 上）。
     for (const name of ["大纲", "正文", "人物", "地点"]) {
       expect(screen.getByRole("tab", { name: new RegExp(name) })).toBeInTheDocument();
     }
+    expect(screen.getByText("故事单元")).toBeInTheDocument();
     // 对话目录在内容视图不可见（上下文切换）。
     expect(screen.queryByText(/对话 tion_a/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /人物/ }));

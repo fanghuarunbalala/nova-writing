@@ -8,11 +8,10 @@ import { TopBar } from "../../src/shell/topbar/TopBar.js";
 import { TopBarAction } from "../../src/shell/topbar/TopBarAction.js";
 
 describe("TopBar", () => {
-  it("renders wordmark, workspace name, view switcher and actions", () => {
+  it("renders brand, workspace chip, view switcher and actions", () => {
     render(
       <TopBar
         workspaceName="白昼计划"
-        workspaceSub="第三卷 · 回声"
         sidebarMode="expanded"
         onToggleSidebar={vi.fn()}
         view="chat"
@@ -23,14 +22,14 @@ describe("TopBar", () => {
     );
     expect(screen.getByText("Novel")).toBeInTheDocument();
     expect(screen.getByText("白昼计划")).toBeInTheDocument();
-    expect(screen.getByText("第三卷 · 回声")).toBeInTheDocument();
     // 中央分段切换器：三个视图 tab，当前视图 aria-selected
     expect(screen.getByRole("tab", { name: "对话" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: "内容" }).getAttribute("aria-selected")).toBe("false");
     expect(screen.getByRole("tab", { name: "计划" }).getAttribute("aria-selected")).toBe("false");
     // 审批入口已移除：待审批时右侧面板自动展开（见 ApplicationShell 自动展开 effect）。
     expect(screen.queryByRole("button", { name: "审批" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Workspace" })).toBeInTheDocument();
+    // 右侧动作对齐 demo：纯图标钮（IconButton aria-label）
+    expect(screen.getByRole("button", { name: "打开工作区" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "设置" })).toBeInTheDocument();
   });
 

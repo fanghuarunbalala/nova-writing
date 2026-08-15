@@ -454,7 +454,6 @@ export function ApplicationShell({
           mode={sidebarMode}
           view={mainView.state}
           conversationCatalog={domainStores.conversationCatalog}
-          novelOverview={domainStores.novelOverview}
           outlineTree={domainStores.storyOutlineTree}
           manuscript={domainStores.manuscriptStructure}
           characters={domainStores.character}
@@ -508,6 +507,9 @@ export function ApplicationShell({
           resolveReference={resolveReference}
           locateReference={locateReference}
           onNotify={handleNotify}
+          onSelectContentPane={handleSelectContentPane}
+          onOpenCharacter={handleSelectCharacter}
+          onOpenLocation={handleSelectLocation}
           approvalStore={approvalStore}
         />
         <InspectorHost

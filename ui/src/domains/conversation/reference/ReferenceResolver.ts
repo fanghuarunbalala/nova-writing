@@ -58,7 +58,7 @@ export function createDomainReferenceResolver(
         const found = findUnit(deps.outline.getSnapshot().tree, reference.id);
         return found === undefined
           ? { label: reference.label ?? reference.id, known: false }
-          : { label: found.label, known: true };
+          : { label: found.title, known: true };
       }
       case "chapter": {
         const found = deps.manuscript

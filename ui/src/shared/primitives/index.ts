@@ -18,6 +18,7 @@ export * from "./Pill.js";
 export * from "./Select.js";
 export * from "./Separator.js";
 export * from "./Spinner.js";
+export * from "./StatusChip.js";
 export * from "./Tabs.js";
 export * from "./Text.js";
 export * from "./Textarea.js";

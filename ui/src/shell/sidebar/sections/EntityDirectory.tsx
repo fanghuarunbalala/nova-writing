@@ -1,10 +1,13 @@
 /**
  * EntityDirectory
  *
- * 人物 / 地点目录（PRD SB-9）：首字头像 + 名称 + 角色/现状副行；选中态 accent。
- * 通用实体列表——由调用方传入 items（character/location summary 投影）。
+ * 人物 / 地点目录（PRD SB-9）：首字头像（地点用 mapPin 图标盒）+ 名称 +
+ * 角色/现状副行；选中态 accent。通用实体列表——由调用方传入 items
+ * （character/location summary 投影）。
  */
 import { memo } from "react";
+import type { LucideIcon } from "lucide-react";
+import { Icon } from "../../../shared/primitives/Icon.js";
 import styles from "./directory.module.css";
 
 export interface EntityDirectoryItem {
@@ -12,6 +15,8 @@ export interface EntityDirectoryItem {
   readonly avatarText: string;
   readonly title: string;
   readonly subtitle: string;
+  /** 前导图标（地点 = MapPin；缺省渲染首字头像） */
+  readonly icon?: LucideIcon;
 }
 
 export interface EntityDirectoryProps {
@@ -42,9 +47,15 @@ export const EntityDirectory = memo(function EntityDirectory({
           data-active={item.id === activeId || undefined}
           onClick={() => onSelect(item.id)}
         >
-          <span className={styles.avatar} aria-hidden="true">
-            {item.avatarText}
-          </span>
+          {item.icon !== undefined ? (
+            <span className={styles.iconBox} aria-hidden="true">
+              <Icon icon={item.icon} size="xs" />
+            </span>
+          ) : (
+            <span className={styles.avatar} aria-hidden="true">
+              {item.avatarText}
+            </span>
+          )}
           <span className={styles.text}>
             <span className={styles.title}>{item.title}</span>
             <span className={styles.subtitle}>{item.subtitle}</span>

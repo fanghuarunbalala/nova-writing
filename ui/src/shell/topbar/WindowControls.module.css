@@ -56,7 +56,8 @@
 }
 
 .wbtn {
-  width: var(--space-11px);
+  /* 平台规范硬编码例外（PRD TH-6，同 mac 红绿灯）：Windows 三钮通高 44px 宽 */
+  width: 44px;
   display: grid;
   place-items: center;
   border: 0;

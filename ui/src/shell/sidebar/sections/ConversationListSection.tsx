@@ -100,9 +100,12 @@ export function ConversationListSection({
   );
   const handlePin = useCallback(
     (id: string, pinned: boolean) => {
-      void store.pinConversation(id, pinned);
+      // pinConversation 为存根（core 契约延后）：显性提示，避免 unhandled rejection
+      void store.pinConversation(id, pinned).catch(() => {
+        toastStore.push({ kind: "warn", text: "置顶暂未支持" });
+      });
     },
-    [store],
+    [store, toastStore],
   );
   const handleDelete = useCallback((id: string) => {
     setDeleteTarget(id);
@@ -126,38 +129,40 @@ export function ConversationListSection({
 
   return (
     <>
-      <div className={dirStyles.searchBox}>
-        <Icon icon={Search} size="xs" />
-        <input
-          type="text"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索对话…"
-          aria-label="搜索对话"
-        />
-      </div>
-      {snapshot.conversations.length === 0 ? (
-        <div className={styles.empty}>暂无对话 · 点击上方创建</div>
-      ) : filtered.length === 0 ? (
-        <div className={styles.empty}>没有匹配「{query.trim()}」的对话</div>
-      ) : (
-        groups.map((group) => (
-          <div key={group.label} className={styles.group}>
-            <div className={dirStyles.groupHead}>
-              {group.label}
-              <span className={dirStyles.count}>{group.items.length}</span>
+      <div className={styles.listSection}>
+        <div className={dirStyles.searchBox}>
+          <Icon icon={Search} size="xs" />
+          <input
+            type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索对话…"
+            aria-label="搜索对话"
+          />
+        </div>
+        {snapshot.conversations.length === 0 ? (
+          <div className={styles.empty}>暂无对话 · 点击上方创建</div>
+        ) : filtered.length === 0 ? (
+          <div className={styles.empty}>没有匹配「{query.trim()}」的对话</div>
+        ) : (
+          groups.map((group) => (
+            <div key={group.label} className={styles.group}>
+              <div className={dirStyles.groupHead}>
+                {group.label}
+                <span className={dirStyles.count}>{group.items.length}</span>
+              </div>
+              <ConversationList
+                conversations={group.items}
+                activeId={snapshot.activeConversationId}
+                onSelect={onSelect}
+                onRename={handleRename}
+                onPin={handlePin}
+                onDelete={handleDelete}
+              />
             </div>
-            <ConversationList
-              conversations={group.items}
-              activeId={snapshot.activeConversationId}
-              onSelect={onSelect}
-              onRename={handleRename}
-              onPin={handlePin}
-              onDelete={handleDelete}
-            />
-          </div>
-        ))
-      )}
+          ))
+        )}
+      </div>
       <ConversationDialogs
         renameTarget={renameTarget}
         deleteTarget={deleteTarget}

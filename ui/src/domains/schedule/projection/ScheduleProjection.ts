@@ -141,10 +141,11 @@ export const ScheduleProjection = {
       for (const node of nodes) {
         into.push({
           unitId: node.unitId,
-          label: node.label,
+          label: node.title,
           depth,
-          planM: node.planM,
-          realNode: node.realNode,
+          planM:
+            node.planningStatus === "idea" ? 1 : node.planningStatus === "outlined" ? 2 : 3,
+          realNode: node.realization,
           ...(node.progress !== undefined ? { progress: node.progress } : {}),
           ...(node.blockedReason !== undefined ? { blockedReason: node.blockedReason } : {}),
           ...(node.abandonedReason !== undefined ? { abandonedReason: node.abandonedReason } : {}),
@@ -165,7 +166,7 @@ function collectOutlineProgress(
   let total = 0;
   const walk = (nodes: readonly StoryOutlineTreeNode[]): void => {
     for (const node of nodes) {
-      if (node.realNode === "completed") completed += 1;
+      if (node.realization === "completed") completed += 1;
       total += 1;
       walk(node.children);
     }

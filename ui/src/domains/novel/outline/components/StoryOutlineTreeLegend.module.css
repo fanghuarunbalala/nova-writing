@@ -1,125 +1,25 @@
 /**
- * StoryOutlineTreeLegend 视觉（原型 .tree-legend + .lg-key + .plan-m + .real-node）。
- *
- * 顶部 wrap flex；每项 lg-key pill：边框 + 999px 圆角 + surface 底。
- * plan-m 与 real-node 复用 .plan-m / .real-node 视觉规则（与
- * StoryOutlineTreeStatus 同源）。
+ * StoryOutlineTreeLegend 视觉（原型 .tree-legend + .legendLine + .legendLbl）。
  */
 .legend {
   display: flex;
-  gap: var(--space-2);
   flex-wrap: wrap;
-  margin-bottom: var(--space-10px);
+  align-items: center;
+  gap: var(--space-1) var(--space-6px);
+  padding: var(--space-10px) var(--space-8px) var(--space-1);
+  border-top: 1px dashed var(--color-border);
+  margin-top: var(--space-10px);
 }
 
-.item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-5px);
+.line {
+  width: 100%;
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.lbl {
   font-size: var(--fs-10);
-  color: var(--color-muted);
+  color: var(--color-faint);
   font-weight: var(--fw-semibold);
-  padding: var(--space-2px) var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
+  letter-spacing: 0.06em;
 }
-
-.label {
-  font-style: normal;
-}
-
-.planM {
-  display: inline-flex;
-  gap: var(--space-2px);
-  align-items: center;
-  flex: none;
-}
-
-.seg {
-  width: 5px;
-  height: 3px;
-  border-radius: var(--radius-2px);
-  background: var(--color-border-strong-72);
-}
-
-.planM[data-value="1"] .seg:nth-child(-n + 1) {
-  background: var(--color-muted);
-  opacity: 0.85;
-}
-
-.planM[data-value="2"] .seg:nth-child(-n + 2) {
-  background: var(--color-info);
-  opacity: 0.9;
-}
-
-.planM[data-value="3"] .seg:nth-child(-n + 3) {
-  background: var(--color-success);
-}
-
-.realNode {
-  position: relative;
-  width: 9px;
-  height: 9px;
-  flex: none;
-  border-radius: 50%;
-}
-
-.real-pending {
-  border: 1.5px solid var(--color-border-strong);
-  opacity: 0.62;
-}
-
-.real-in-progress {
-  border: 1.5px solid var(--color-accent-55);
-}
-
-.real-in-progress::after {
-  content: "";
-  position: absolute;
-  inset: var(--space-2px);
-  border-radius: 50%;
-  background: var(--color-accent);
-  animation: var(--anim-node-pulse) 1.8s ease-in-out infinite;
-}
-
-.real-completed {
-  background: var(--color-success);
-}
-
-.real-completed::after {
-  content: "";
-  position: absolute;
-  left: var(--space-2px);
-  top: var(--space-1);
-  width: 4px;
-  height: 2px;
-  border-left: var(--space-5px) solid var(--color-bg);
-  border-bottom: var(--space-5px) solid var(--color-bg);
-  transform: rotate(-45deg);
-}
-
-.real-blocked {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-2px);
-  background: var(--color-danger);
-  transform: rotate(45deg);
-}
-
-.real-abandoned {
-  border: 1.5px solid var(--color-border-strong);
-  opacity: 0.45;
-}
-
-.real-abandoned::after {
-  content: "";
-  position: absolute;
-  left: -1px;
-  top: var(--space-2);
-  width: 10px;
-  height: 1.5px;
-  background: var(--color-muted);
-  border-radius: 1px;
-}
-

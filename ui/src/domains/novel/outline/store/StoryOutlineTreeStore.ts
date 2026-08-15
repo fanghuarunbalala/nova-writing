@@ -11,9 +11,9 @@ import type {
   Logger,
   NovelApiClient,
   OrderKey,
-  StoryUnit,
   StoryUnitId,
   StoryUnitScope,
+  StoryUnitWithLeaf,
 } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
 import { WorkspaceDomainStore, type ReadyWorkspaceDomainSnapshot } from "../../../../shared/state/WorkspaceDomainStore.js";
@@ -52,8 +52,8 @@ export class StoryOutlineTreeStore extends WorkspaceDomainStore<StoryOutlineTree
   private readonly logger: Logger;
   /** 变更串行（乐观锁操作不并发） */
   private readonly serializer = new TaskSerializer();
-  /** 单元版本缓存（id → core StoryUnit，乐观锁 baseRevision 来源） */
-  private unitsById: ReadonlyMap<string, StoryUnit> = new Map();
+  /** 单元版本缓存（id → core StoryUnit（含 leaf/progress），乐观锁 baseRevision 来源） */
+  private unitsById: ReadonlyMap<string, StoryUnitWithLeaf> = new Map();
 
   constructor(deps: { readonly api: NovelApiClient; readonly logger?: Logger }) {
     super(
@@ -74,10 +74,11 @@ export class StoryOutlineTreeStore extends WorkspaceDomainStore<StoryOutlineTree
     workspaceId: string,
     generation: number,
   ): Promise<ReadyWorkspaceDomainSnapshot<StoryOutlineTreeSnapshot> | undefined> {
-    const outline = await this.api.novel.outline.get();
+    // includePlans：units 附 leaf 计划与叶完成度 rollup（详情面板/树行进度数字）。
+    const outline = await this.api.novel.outline.get({ includePlans: true });
     if (this.isStaleGeneration(generation)) return undefined;
     const tree = StoryOutlineTreeProjection.build(outline.units);
-    this.unitsById = new Map(outline.units.map((unit) => [unit.id, unit]));
+    this.unitsById = new Map(outline.units.map((unit) => [unit.id, unit as StoryUnitWithLeaf]));
     return {
       phase: "ready",
       workspaceId,
@@ -98,8 +99,8 @@ export class StoryOutlineTreeStore extends WorkspaceDomainStore<StoryOutlineTree
     this.logger.warn("story_outline_tree.load_failed");
   }
 
-  /** 单元版本（乐观锁 baseRevision）；未加载/不存在返回 undefined */
-  getUnit(unitId: string): StoryUnit | undefined {
+  /** 单元版本（乐观锁 baseRevision；含 leaf/progress）；未加载/不存在返回 undefined */
+  getUnit(unitId: string): StoryUnitWithLeaf | undefined {
     return this.unitsById.get(unitId);
   }
 

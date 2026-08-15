@@ -38,6 +38,14 @@
   white-space: nowrap;
 }
 
+.context {
+  font-size: var(--fs-12-5);
+  color: var(--color-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .actions {
   margin-left: auto;
   display: flex;

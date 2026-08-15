@@ -12,11 +12,13 @@ import styles from "./MainSubHead.module.css";
 export interface MainSubHeadProps {
   readonly title: string;
   readonly sub?: string;
+  /** 当前选中项名称（demo .subCtx，标题右侧） */
+  readonly context?: string;
   readonly onBack?: () => void;
   readonly actions?: ReactNode;
 }
 
-export function MainSubHead({ title, sub, onBack, actions }: MainSubHeadProps) {
+export function MainSubHead({ title, sub, context, onBack, actions }: MainSubHeadProps) {
   return (
     <div className={styles.subhead}>
       {onBack !== undefined ? (
@@ -28,6 +30,9 @@ export function MainSubHead({ title, sub, onBack, actions }: MainSubHeadProps) {
         <h2 className={styles.title}>{title}</h2>
         {sub !== undefined ? <span className={styles.sub}>{sub}</span> : null}
       </div>
+      {context !== undefined && context !== "" ? (
+        <span className={styles.context}>{context}</span>
+      ) : null}
       {actions !== undefined ? <div className={styles.actions}>{actions}</div> : null}
     </div>
   );

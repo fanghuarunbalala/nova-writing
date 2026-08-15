@@ -1,11 +1,12 @@
 /**
  * ManuscriptDirectory
  *
- * 正文目录（PRD SB-8）：卷分组（可折叠，chevron + 章数）→ 章行（含草稿标记「草」）。
- * 点击章 = manuscript.selectChapter（阅读器同步选中）。
+ * 正文目录（PRD SB-8）：dirHead「卷 · 章」由 Sidebar 提供；卷分组（可折叠，
+ * chevron + 章数）→ 章行（状态圆点 + 草稿标记「草」）。章状态从关联 story unit
+ * 的实现态派生（无关联 = neutral）。点击章 = manuscript.selectChapter。
  */
 import { memo, useState } from "react";
-import { ChevronDown, ScrollText } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import type { ManuscriptStructureSnapshot } from "../../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import styles from "./directory.module.css";
@@ -13,11 +14,14 @@ import styles from "./directory.module.css";
 export interface ManuscriptDirectoryProps {
   readonly snapshot: ManuscriptStructureSnapshot;
   readonly onSelectChapter: (chapterId: string) => void;
+  /** 章状态解析（storyUnitId → 实现态；宿主用大纲树派生） */
+  readonly resolveChapterState?: (chapterId: string) => string | undefined;
 }
 
 export const ManuscriptDirectory = memo(function ManuscriptDirectory({
   snapshot,
   onSelectChapter,
+  resolveChapterState,
 }: ManuscriptDirectoryProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   if (snapshot.volumes.length === 0) {
@@ -58,12 +62,14 @@ export const ManuscriptDirectory = memo(function ManuscriptDirectory({
                     data-active={
                       chapter.chapterId === snapshot.selectedChapterId || undefined
                     }
-                    style={{ paddingLeft: "var(--space-4)" }}
+                    style={{ paddingLeft: "var(--space-6)" }}
                     onClick={() => onSelectChapter(chapter.chapterId)}
                   >
-                    <span className={styles.iconBox}>
-                      <Icon icon={ScrollText} size="xs" />
-                    </span>
+                    <span
+                      className={styles.statusDot}
+                      data-state={resolveChapterState?.(chapter.chapterId)}
+                      aria-hidden="true"
+                    />
                     <span className={styles.text}>
                       <span className={styles.title}>{chapter.title}</span>
                     </span>

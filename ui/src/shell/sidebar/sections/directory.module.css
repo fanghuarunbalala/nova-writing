@@ -51,6 +51,59 @@
   color: var(--color-faint);
 }
 
+/* ---------- 目录标题行（demo .dirHead） ---------- */
+.dirHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6px);
+  flex: none;
+  padding: var(--space-2px) var(--space-1) 0;
+  font-size: var(--fs-11);
+  font-weight: var(--fw-semibold);
+  color: var(--color-muted);
+  letter-spacing: 0.03em;
+}
+
+.dirHead .cnt {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-accent-ink);
+  background: var(--color-accent-11);
+  padding: 0 var(--space-7px);
+  border-radius: var(--radius-pill);
+}
+
+.dirTools {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-2px);
+}
+
+/* ---------- 章行状态圆点（demo .statusDot，颜色由 data-state 驱动） ---------- */
+.statusDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-border-strong);
+}
+
+.statusDot[data-state="completed"] {
+  background: var(--color-success);
+}
+
+.statusDot[data-state="in-progress"] {
+  background: var(--color-warn);
+}
+
+.statusDot[data-state="blocked"] {
+  background: var(--color-danger);
+}
+
+.statusDot[data-state="abandoned"] {
+  background: var(--color-faint);
+}
+
 /* ---------- 搜索框（demo .searchBox） ---------- */
 .searchBox {
   display: flex;

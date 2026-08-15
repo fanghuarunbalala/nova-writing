@@ -1,16 +1,17 @@
 /**
  * StoryOutlineTreeRow
  *
- * 大纲树行（原型 .unit）：caret + label + u-scope + u-status。
+ * 大纲树行（原型 .treeRow）：chev（父）/ 短横线 tick（叶）+ 标题 +
+ * scope chip（仅父）+ 进度数字 + 实现状态 chip。
  *
  * 缩进与字重由 data-depth 属性驱动（CSS 规则 per depth），depth 1/2 带左侧
  * 引导线。阻塞/废弃原因作为兄弟 OutlineBlockNote 渲染，缩进对齐父单元。
  */
-import { Icon } from "../../../../shared/primitives/Icon.js";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { Icon, StatusChip } from "../../../../shared/primitives/index.js";
 import type { StoryOutlineTreeNode } from "../projection/StoryOutlineTreeProjection.js";
+import { REAL_STATUS, SCOPE_TYPE } from "../outlineStatus.js";
 import { OutlineBlockNote } from "./OutlineBlockNote.js";
-import { StoryOutlineTreeStatus } from "./StoryOutlineTreeStatus.js";
 import styles from "./StoryOutlineTreeRow.module.css";
 
 export interface StoryOutlineTreeRowProps {
@@ -31,7 +32,10 @@ export function StoryOutlineTreeRow({
   onToggleExpand,
 }: StoryOutlineTreeRowProps) {
   const hasChildren = unit.children.length > 0;
-  const noteKind = unit.realNode === "blocked" ? "blocked" : "abandoned";
+  const real = REAL_STATUS[unit.realization];
+  // 受阻/废弃行不给进度数字（原型口径：状态本身说明问题）。
+  const showProgress =
+    unit.progress !== undefined && unit.realization !== "blocked" && unit.realization !== "abandoned";
   const noteReason = unit.blockedReason ?? unit.abandonedReason;
   return (
     <div className={styles.rowGroup}>
@@ -40,27 +44,46 @@ export function StoryOutlineTreeRow({
         data-depth={depth}
         data-expanded={expanded ? "true" : "false"}
       >
+        {hasChildren ? (
+          <button
+            type="button"
+            className={styles.caret}
+            onClick={onToggleExpand}
+            aria-label={expanded ? "折叠" : "展开"}
+          >
+            <Icon icon={expanded ? ChevronDown : ChevronRight} size="sm" />
+          </button>
+        ) : (
+          <span className={styles.tick} aria-hidden="true" />
+        )}
         <button
           type="button"
-          className={styles.caret}
-          onClick={onToggleExpand}
-          disabled={!hasChildren}
-          aria-label={hasChildren ? (expanded ? "折叠" : "展开") : undefined}
+          className={styles.main}
+          onClick={onSelect}
+          title={`${unit.title} · ${unit.scope}`}
         >
-          {hasChildren ? (
-            <Icon icon={expanded ? ChevronDown : ChevronRight} size="sm" />
-          ) : (
-            <span className={styles.caretSpacer} />
-          )}
+          <span className={styles.label}>{unit.title}</span>
         </button>
-        <button type="button" className={styles.main} onClick={onSelect}>
-          <span className={styles.label}>{unit.label}</span>
-          <span className={styles.scope}>{unit.scope}</span>
-        </button>
-        <StoryOutlineTreeStatus planM={unit.planM} realNode={unit.realNode} />
+        {hasChildren ? (
+          <StatusChip variant={SCOPE_TYPE[unit.scope].variant} compact title={unit.scope}>
+            {SCOPE_TYPE[unit.scope].label}
+          </StatusChip>
+        ) : null}
+        {showProgress ? (
+          <span className={styles.miniNum}>
+            {unit.progress!.completed}/{unit.progress!.total}
+          </span>
+        ) : null}
+        <StatusChip variant={real.variant} title={unit.realization}>
+          {real.label}
+        </StatusChip>
       </div>
       {noteReason !== undefined ? (
-        <OutlineBlockNote kind={noteKind} reason={noteReason} depth={depth} />
+        <OutlineBlockNote
+          kind={unit.realization === "blocked" ? "blocked" : "abandoned"}
+          reason={noteReason}
+          depth={depth}
+        />
       ) : null}
     </div>
   );

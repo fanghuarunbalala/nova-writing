@@ -22,43 +22,61 @@
   flex: 1;
 }
 
-.wordmark {
-  font-family: var(--font-display);
-  font-size: var(--fs-display);
-  font-weight: var(--fw-heavy);
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  background: var(--grad-accent);
-  background-size: 220% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: var(--anim-grad-flow) 7s ease-in-out infinite;
+/* 品牌（demo .brand）：渐变圆点 + 粗体小字名称 */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8px);
+  padding: 0 var(--space-2px);
 }
 
-.wsName {
-  font-size: var(--fs-h2);
-  font-weight: var(--fw-750);
-  letter-spacing: 0.01em;
-  white-space: nowrap;
+.brandDot {
+  width: var(--space-13px);
+  height: var(--space-13px);
+  flex: none;
+  border-radius: 50%;
+  background: var(--grad-accent);
+  background-size: 160% 160%;
+  animation: var(--anim-grad-flow) 6s var(--ease-in-out) infinite;
+}
+
+.brandName {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.02em;
   color: var(--color-fg);
-  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* 工作区 chip（demo .wsChip）：folder 图标 + 名称 + 下拉箭头 */
+.wsChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6px);
+  max-width: 220px;
+  padding: var(--space-1) var(--space-9px);
+  border: 0;
   border-radius: var(--radius-sm);
-  padding: var(--space-2px) var(--space-6px);
-  margin: -var(--space-2px) -var(--space-6px);
-  transition: background var(--duration-fast) var(--ease-out);
+  background: transparent;
+  color: var(--color-muted);
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
   -webkit-app-region: no-drag;
 }
 
-.wsName:hover {
-  background: var(--color-surface-2);
+.wsChip:hover {
+  background: var(--color-accent-9);
+  color: var(--color-accent-ink);
 }
 
-.wsSub {
-  font-size: var(--fs-meta);
-  color: var(--color-faint);
-  font-family: var(--font-mono);
-  white-space: nowrap;
+.wsChip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 所有按钮（IconButton / TopBarAction）在 drag 区域内需标记 no-drag 才可点击 */

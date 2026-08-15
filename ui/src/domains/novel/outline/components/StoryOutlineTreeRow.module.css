@@ -1,8 +1,8 @@
 /**
- * StoryOutlineTreeRow 视觉（原型 .unit + .caret + .u-scope）。
+ * StoryOutlineTreeRow 视觉（原型 .dirRow.treeRow + .chev/.treeTick/.treeLabel/.miniNum）。
  *
  * 缩进与字重梯度按 data-depth；depth 1/2 带左侧引导线（::before/::after）。
- * caret 18x18，hover surface-2；折叠态旋转 -90deg。选中态 accent 浅底。
+ * 叶节点 treeTick 为 7px 短横线；选中态 accent 浅底。
  */
 .rowGroup {
   display: flex;
@@ -13,9 +13,10 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-6px);
-  padding: var(--space-5px) var(--space-2);
-  font-size: var(--fs-13);
+  gap: var(--space-5px);
+  padding: var(--space-5px) var(--space-7px);
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-medium);
   color: var(--color-fg);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -27,28 +28,24 @@
 }
 
 .row[data-depth="0"] {
-  font-weight: var(--fw-750);
+  font-weight: var(--fw-semibold);
   margin-top: var(--space-10px);
-  font-size: var(--fs-13-5);
 }
 
 .row[data-depth="1"] {
   padding-left: var(--space-18px);
-  font-weight: var(--fw-600);
 }
 
 .row[data-depth="2"] {
   padding-left: var(--space-38px);
-  font-weight: var(--fw-500);
-  color: var(--color-muted);
 }
 
 .row[data-depth="1"]::before {
   content: "";
   position: absolute;
   left: var(--space-9px);
-  top: -var(--space-1);
-  bottom: -var(--space-1);
+  top: calc(-1 * var(--space-1));
+  bottom: calc(-1 * var(--space-1));
   width: 1px;
   background: var(--color-border-strong);
   opacity: 0.45;
@@ -71,8 +68,8 @@
   content: "";
   position: absolute;
   left: var(--space-29px);
-  top: -var(--space-1);
-  bottom: -var(--space-1);
+  top: calc(-1 * var(--space-1));
+  bottom: calc(-1 * var(--space-1));
   width: 1px;
   background: var(--color-border-strong);
   opacity: 0.45;
@@ -95,47 +92,51 @@
   background: var(--color-accent-9);
 }
 
+.selected .label {
+  color: var(--color-accent-ink);
+}
+
 .caret {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   flex: none;
-  border-radius: var(--radius-xs);
   color: var(--color-faint);
-  font-size: var(--fs-11);
-  cursor: pointer;
   background: none;
   border: 0;
   padding: 0;
-  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+  cursor: pointer;
+  transition: transform 0.18s var(--ease-out);
 }
 
-.caret:hover:not(:disabled) {
-  background: var(--color-surface-2);
-  color: var(--color-fg);
-}
-
-.caret:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.row[data-expanded="false"] .caret:not(:disabled) {
+.row[data-expanded="false"] .caret {
   transform: rotate(-90deg);
 }
 
-.caretSpacer {
-  width: 18px;
-  height: 18px;
+/* 叶节点 treeTick：7px 短横线（原型 .treeTick::before） */
+.tick {
+  position: relative;
+  width: 12px;
+  height: 15px;
+  flex: none;
+}
+
+.tick::before {
+  content: "";
+  position: absolute;
+  left: var(--space-2px);
+  top: 50%;
+  width: 7px;
+  height: 1px;
+  background: var(--color-border-strong-72);
 }
 
 .main {
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: baseline;
-  gap: var(--space-6px);
+  align-items: center;
   text-align: left;
   background: none;
   border: 0;
@@ -146,21 +147,15 @@
 }
 
 .label {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.scope {
+.miniNum {
   flex: none;
   font-family: var(--font-mono);
-  font-size: var(--fs-9-5);
-  letter-spacing: 0.08em;
+  font-size: var(--fs-xs);
   color: var(--color-faint);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-4px);
-  padding: 0 var(--space-1);
-  font-weight: var(--fw-medium);
 }

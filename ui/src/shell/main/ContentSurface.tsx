@@ -6,20 +6,22 @@
  *   manuscript = 双栏阅读器（左目录右正文，保留现实现，PRD MS-1）；
  *   characters = 角色档案详情（EntityInspectorPanel 复用，PRD PM）；
  *   locations  = 地点档案详情（同上，PRD PL）。
- * 新建角色/地点对话框从主区操作区触发（原 Grid 入口移除）。
+ * subHead：subCtx 显示当前选中项；大纲 pane 动作 = 展开全部 + 新建单元，
+ * 正文 pane 动作 = 复制正文；新建角色/地点对话框从主区操作区触发。
  */
-import { useEffect, useState, type ReactNode } from "react";
-import { Plus } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ChevronsDownUp, ChevronsUpDown, Copy, Plus } from "lucide-react";
 import { ManuscriptReader } from "../../domains/novel/manuscript/components/ManuscriptReader.js";
 import { EntityEditDialog } from "../../domains/novel/components/EntityEditDialog.js";
 import type { CharacterStore } from "../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
 import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
+import type { StoryOutlineTreeNode } from "../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
+import { StoryUnitEditDialog } from "../../domains/novel/outline/components/StoryUnitEditDialog.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
-import { Button } from "../../shared/primitives/Button.js";
-import { Icon } from "../../shared/primitives/Icon.js";
-import { ConfirmDialog } from "../../shared/primitives/ConfirmDialog.js";
+import type { ToastKind } from "../../shared/state/ToastStore.js";
+import { Button, ConfirmDialog, Icon } from "../../shared/primitives/index.js";
 import { OutlineUnitInspectorPanel } from "../inspector/panels/OutlineUnitInspectorPanel.js";
 import { EntityInspectorPanel } from "../inspector/panels/EntityInspectorPanel.js";
 import type { ContentTab } from "./contentTab.js";
@@ -46,6 +48,26 @@ export interface ContentSurfaceProps {
   readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
   readonly onOpenDraft?: (changeSetId: string) => void;
   readonly onBack?: () => void;
+  /** 切资料位（「在正文中查看」跳正文阅读器） */
+  readonly onSelectContentPane?: (pane: ContentTab) => void;
+  /** 跳人物/地点档案（详情面板 leaf chips） */
+  readonly onOpenCharacter?: (characterId: string) => void;
+  readonly onOpenLocation?: (locationId: string) => void;
+  /** toast（复制正文反馈） */
+  readonly onNotify?: (kind: ToastKind, text: string) => void;
+}
+
+function findOutlineTitle(
+  nodes: readonly StoryOutlineTreeNode[],
+  unitId: string | undefined,
+): string | undefined {
+  if (unitId === undefined) return undefined;
+  for (const node of nodes) {
+    if (node.unitId === unitId) return node.title;
+    const child = findOutlineTitle(node.children, unitId);
+    if (child !== undefined) return child;
+  }
+  return undefined;
 }
 
 export function ContentSurface({
@@ -60,6 +82,10 @@ export function ContentSurface({
   locateReference,
   onOpenDraft,
   onBack,
+  onSelectContentPane,
+  onOpenCharacter,
+  onOpenLocation,
+  onNotify,
 }: ContentSurfaceProps) {
   const outline = useExternalStore(outlineTree);
   const manuscriptSnapshot = useExternalStore(manuscript);
@@ -67,6 +93,7 @@ export function ContentSurface({
   const locationSnapshot = useExternalStore(locations);
   const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
+  const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [deleteParagraphId, setDeleteParagraphId] = useState<string | undefined>(undefined);
 
   // 定位：来自对话引用的章节/段落自动选中所属章节。
@@ -81,6 +108,46 @@ export function ContentSurface({
       if (chapter !== undefined) manuscript.selectChapter(chapter.chapterId);
     }
   }, [manuscript, locateReference]);
+
+  const selectedChapter = manuscriptSnapshot.chapters.find(
+    (chapter) => chapter.chapterId === manuscriptSnapshot.selectedChapterId,
+  );
+  const effectiveCharacter =
+    characterSnapshot.characters.find((c) => c.characterId === selectedCharacterId) ??
+    characterSnapshot.characters[0];
+  const effectiveLocation =
+    locationSnapshot.locations.find((l) => l.locationId === selectedLocationId) ??
+    locationSnapshot.locations[0];
+  const characterNames = useMemo(
+    () =>
+      new Map(
+        characterSnapshot.characters.map((c) => [c.characterId, { name: c.name }] as const),
+      ),
+    [characterSnapshot.characters],
+  );
+  const locationNames = useMemo(
+    () =>
+      new Map(
+        locationSnapshot.locations.map((l) => [l.locationId, { name: l.name }] as const),
+      ),
+    [locationSnapshot.locations],
+  );
+
+  const handleCopyChapter = async (): Promise<void> => {
+    if (selectedChapter === undefined) return;
+    const text = selectedChapter.blocks.map((block) => block.text).join("\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      onNotify?.("success", `已复制「${selectedChapter.title}」正文`);
+    } catch {
+      onNotify?.("warn", "复制失败：剪贴板不可用");
+    }
+  };
+
+  const handleOpenChapter = (chapterId: string): void => {
+    manuscript.selectChapter(chapterId);
+    onSelectContentPane?.("manuscript");
+  };
 
   const renderTab = (tab: ContentTab): ReactNode => {
     // 正文阅读器：双栏各自独立滚动，不走居中列。
@@ -112,31 +179,73 @@ export function ContentSurface({
     }
     let content: ReactNode;
     let actions: ReactNode = null;
+    let context: string | undefined;
     switch (tab) {
-      case "outline":
+      case "outline": {
         // 大纲树在侧栏；主区 = 选中单元详情（无选中给引导空态）。
+        context = findOutlineTitle(outline.tree, outline.selectedUnitId);
         content =
           outline.selectedUnitId !== undefined ? (
             <OutlineUnitInspectorPanel
               workspaceId={workspaceId ?? ""}
               unitId={outline.selectedUnitId}
               outlineTree={outlineTree}
+              chapters={manuscriptSnapshot.chapters}
+              characterNames={characterNames}
+              locationNames={locationNames}
+              onOpenChapter={onSelectContentPane !== undefined ? handleOpenChapter : undefined}
+              onDiscuss={onBack}
+              onOpenCharacter={onOpenCharacter}
+              onOpenLocation={onOpenLocation}
             />
           ) : (
             <div className={styles.emptyPane}>
               在左侧大纲树选择一个单元，这里显示它的规划 / 实现状态与关联。
             </div>
           );
+        actions =
+          outline.tree.length > 0 ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={<Icon icon={ChevronsUpDown} size="xs" />}
+                onClick={() => outlineTree.expandAll()}
+              >
+                展开全部
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                leadingIcon={<Icon icon={Plus} size="xs" />}
+                onClick={() => setUnitDialogOpen(true)}
+              >
+                新建单元
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              leadingIcon={<Icon icon={Plus} size="xs" />}
+              onClick={() => setUnitDialogOpen(true)}
+            >
+              新建单元
+            </Button>
+          );
         break;
+      }
       case "characters": {
-        const effectiveId =
-          selectedCharacterId ?? characterSnapshot.characters[0]?.characterId;
+        context =
+          effectiveCharacter !== undefined
+            ? `${effectiveCharacter.name} · ${effectiveCharacter.role}`
+            : undefined;
         content =
-          effectiveId !== undefined ? (
+          effectiveCharacter !== undefined ? (
             <EntityInspectorPanel
               workspaceId={workspaceId ?? ""}
               entityType="character"
-              entityId={effectiveId}
+              entityId={effectiveCharacter.characterId}
               characters={characters}
               locations={locations}
             />
@@ -148,7 +257,8 @@ export function ContentSurface({
         actions = (
           <Button
             variant="secondary"
-            leadingIcon={<Icon icon={Plus} size="sm" />}
+            size="sm"
+            leadingIcon={<Icon icon={Plus} size="xs" />}
             onClick={() => setCharacterDialogOpen(true)}
           >
             新建角色
@@ -158,13 +268,16 @@ export function ContentSurface({
       }
       case "locations":
       default: {
-        const effectiveId = selectedLocationId ?? locationSnapshot.locations[0]?.locationId;
+        context =
+          effectiveLocation !== undefined
+            ? `${effectiveLocation.name} · ${effectiveLocation.locState}`
+            : undefined;
         content =
-          effectiveId !== undefined ? (
+          effectiveLocation !== undefined ? (
             <EntityInspectorPanel
               workspaceId={workspaceId ?? ""}
               entityType="location"
-              entityId={effectiveId}
+              entityId={effectiveLocation.locationId}
               characters={characters}
               locations={locations}
             />
@@ -176,7 +289,8 @@ export function ContentSurface({
         actions = (
           <Button
             variant="secondary"
-            leadingIcon={<Icon icon={Plus} size="sm" />}
+            size="sm"
+            leadingIcon={<Icon icon={Plus} size="xs" />}
             onClick={() => setLocationDialogOpen(true)}
           >
             新建地点
@@ -190,6 +304,7 @@ export function ContentSurface({
         <MainSubHead
           title={PANE_META[tab].title}
           sub={PANE_META[tab].kicker}
+          context={context}
           onBack={onBack}
           actions={actions}
         />
@@ -202,9 +317,40 @@ export function ContentSurface({
   return (
     <div className={styles.surface}>
       {value === "manuscript" ? (
-        <MainSubHead title={PANE_META[value].title} sub={PANE_META[value].kicker} onBack={onBack} />
+        <MainSubHead
+          title={PANE_META[value].title}
+          sub={PANE_META[value].kicker}
+          context={selectedChapter?.title}
+          onBack={onBack}
+          actions={
+            selectedChapter !== undefined ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={<Icon icon={Copy} size="xs" />}
+                onClick={() => void handleCopyChapter()}
+              >
+                复制正文
+              </Button>
+            ) : null
+          }
+        />
       ) : null}
       {renderTab(value)}
+      <StoryUnitEditDialog
+        open={unitDialogOpen}
+        onOpenChange={setUnitDialogOpen}
+        title={outline.selectedUnitId !== undefined ? "新建子单元" : "新建单元"}
+        error={outline.error?.message}
+        onSubmit={(input) =>
+          outlineTree.createStoryUnit({
+            ...(outline.selectedUnitId !== undefined
+              ? { parentId: outline.selectedUnitId as never }
+              : {}),
+            ...input,
+          })
+        }
+      />
       <EntityEditDialog
         open={characterDialogOpen}
         onOpenChange={setCharacterDialogOpen}

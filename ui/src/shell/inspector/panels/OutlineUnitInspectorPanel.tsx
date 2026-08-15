@@ -1,23 +1,69 @@
 /**
  * OutlineUnitInspectorPanel
  *
- * 大纲单元详情（inspector 用）：在大纲树中定位节点并展示状态 + 写路径
- * （编辑 / 新建子单元 / 删除，乐观锁 baseRevision = core StoryUnit.entityVersion）。
- *
- * 复用 StoryOutlineTreeStatus 与 OutlineBlockNote，结构与原型 detail-card 对齐：
- * head（title + scope + status）+ dMeta（progress）+ note（block/abandoned）。
+ * 大纲单元详情：对齐 core StoryUnit 契约与 app-redesign demo unitDetailHTML——
+ * scope chip + 标题 / 元信息行（id·scope·orderKey·v·父） / 双状态 chip + 叶完成度
+ * miniBar / blockState·abandonment banner / intent·synopsis / 跳转按钮 /
+ * 场景计划 leaf 卡 / 关联卡（依赖·人物·子单元·发布章）。
+ * 写路径（编辑 / 新建子单元 / 删除，乐观锁 baseRevision = entityVersion）保留。
  */
-import { useState } from "react";
-import { ListPlus, Pencil, Trash2 } from "lucide-react";
-import { OutlineBlockNote } from "../../../domains/novel/outline/components/OutlineBlockNote.js";
-import { StoryOutlineTreeStatus } from "../../../domains/novel/outline/components/StoryOutlineTreeStatus.js";
-import { StoryUnitEditDialog } from "../../../domains/novel/outline/components/StoryUnitEditDialog.js";
+import { useState, type ReactNode } from "react";
+import {
+  AlertTriangle,
+  ListPlus,
+  ListTree,
+  MapPin,
+  MessageSquare,
+  Pencil,
+  ScrollText,
+  Trash2,
+  UserRound,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import type { LeafPlan } from "@novel/core";
 import type { StoryOutlineTreeNode } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
 import type { StoryOutlineTreeStore } from "../../../domains/novel/outline/store/StoryOutlineTreeStore.js";
+import {
+  ABANDON_REASON_LABEL,
+  BLOCK_REASON_LABEL,
+  LEAF_CHANGE_LABEL,
+  LEAF_LOC_ROLE_LABEL,
+  LEAF_PRESENCE_LABEL,
+  LEAF_RHYTHM_LABEL,
+  LEAF_ROLE_LABEL,
+  PLAN_STATUS,
+  REAL_STATUS,
+  scopeView,
+} from "../../../domains/novel/outline/outlineStatus.js";
+import { OutlineBlockNote } from "../../../domains/novel/outline/components/OutlineBlockNote.js";
+import { StoryUnitEditDialog } from "../../../domains/novel/outline/components/StoryUnitEditDialog.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
-import { ConfirmDialog } from "../../../shared/primitives/ConfirmDialog.js";
-import { Icon } from "../../../shared/primitives/Icon.js";
+import { Button, ConfirmDialog, Icon, StatusChip } from "../../../shared/primitives/index.js";
 import styles from "./OutlineUnitInspectorPanel.module.css";
+
+/** 名称解析（leaf chips 显示角色/地点名） */
+export interface OutlinePanelEntityLookup {
+  readonly name: string;
+}
+
+export interface OutlineUnitInspectorPanelProps {
+  readonly workspaceId: string | undefined;
+  readonly unitId: string;
+  readonly outlineTree: StoryOutlineTreeStore;
+  /** 发布章候选（chapter.storyUnitId 反查；正文视图传入） */
+  readonly chapters?: readonly { readonly chapterId: string; readonly title: string; readonly storyUnitId?: string }[];
+  readonly characterNames?: ReadonlyMap<string, OutlinePanelEntityLookup>;
+  readonly locationNames?: ReadonlyMap<string, OutlinePanelEntityLookup>;
+  /** 「在正文中查看」/ 发布章 chip：选章并切到正文资料位 */
+  readonly onOpenChapter?: (chapterId: string) => void;
+  /** 「在对话中讨论」：切回对话视图 */
+  readonly onDiscuss?: () => void;
+  /** leaf 人物 chip → 人物档案 */
+  readonly onOpenCharacter?: (characterId: string) => void;
+  /** leaf 地点 chip → 地点档案 */
+  readonly onOpenLocation?: (locationId: string) => void;
+}
 
 function findNode(
   tree: readonly StoryOutlineTreeNode[],
@@ -31,16 +77,181 @@ function findNode(
   return undefined;
 }
 
-export interface OutlineUnitInspectorPanelProps {
-  readonly workspaceId: string | undefined;
-  readonly unitId: string;
-  readonly outlineTree: StoryOutlineTreeStore;
+function RefChip({
+  icon,
+  label,
+  tag,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  tag?: string;
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
+      <Icon icon={icon} size="xs" />
+      {label}
+      {tag !== undefined && tag !== "" ? <small className={styles.refTag}>{tag}</small> : null}
+    </>
+  );
+  return onClick !== undefined ? (
+    <button type="button" className={styles.refChip} onClick={onClick}>
+      {body}
+    </button>
+  ) : (
+    <span className={styles.refChip}>{body}</span>
+  );
+}
+
+/** 场景计划 leaf 卡（仅 scene 叶单元；demo leafHTML） */
+function LeafPlanCard({
+  leaf,
+  characterNames,
+  locationNames,
+  onOpenCharacter,
+  onOpenLocation,
+}: {
+  leaf: LeafPlan | undefined;
+  characterNames?: ReadonlyMap<string, OutlinePanelEntityLookup>;
+  locationNames?: ReadonlyMap<string, OutlinePanelEntityLookup>;
+  onOpenCharacter?: (characterId: string) => void;
+  onOpenLocation?: (locationId: string) => void;
+}) {
+  if (leaf === undefined) {
+    return (
+      <div className={styles.card}>
+        <h3 className={styles.cardTitle}>场景计划 · leaf</h3>
+        <div className={`${styles.banner} ${styles.faint}`}>
+          <Icon icon={ScrollText} size="sm" />
+          <span>leaf 未编写——写场景前先补场景设计：人物 / 地点绑定、事件序列、节奏拍、实体变更。</span>
+        </div>
+      </div>
+    );
+  }
+  const charChips = leaf.characters.map((binding) => {
+    const involvement = binding.involvement;
+    const tag =
+      involvement !== undefined
+        ? [
+            involvement.roles.map((role) => LEAF_ROLE_LABEL[role]).join("/"),
+            LEAF_PRESENCE_LABEL[involvement.presence],
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : "";
+    return (
+      <RefChip
+        key={binding.characterId}
+        icon={UserRound}
+        label={characterNames?.get(binding.characterId)?.name ?? binding.characterId}
+        tag={tag}
+        onClick={
+          onOpenCharacter !== undefined
+            ? () => onOpenCharacter(binding.characterId)
+            : undefined
+        }
+      />
+    );
+  });
+  const locChips = leaf.locations.map((binding) => {
+    const involvement = binding.involvement;
+    const tag =
+      involvement !== undefined
+        ? [LEAF_LOC_ROLE_LABEL[involvement.role], involvement.affected ? "受影响" : ""]
+            .filter(Boolean)
+            .join(" · ")
+        : "";
+    return (
+      <RefChip
+        key={binding.locationId}
+        icon={MapPin}
+        label={locationNames?.get(binding.locationId)?.name ?? binding.locationId}
+        tag={tag}
+        onClick={
+          onOpenLocation !== undefined ? () => onOpenLocation(binding.locationId) : undefined
+        }
+      />
+    );
+  });
+  const row = (key: string, value: ReactNode): ReactNode =>
+    value === undefined || value === null ? null : (
+      <>
+        <dt>{key}</dt>
+        <dd>{value}</dd>
+      </>
+    );
+  return (
+    <div className={styles.card}>
+      <h3 className={styles.cardTitle}>场景计划 · leaf</h3>
+      <dl className={styles.paramList}>
+        {row(
+          "场景模式",
+          leaf.settingMode === "located" ? "located · 有确定地点" : "location-independent · 无固定地点",
+        )}
+        {row("时间", leaf.time?.description)}
+        {row(
+          "人物绑定",
+          charChips.length > 0 ? <div className={styles.refChips}>{charChips}</div> : undefined,
+        )}
+        {row(
+          "地点绑定",
+          locChips.length > 0 ? <div className={styles.refChips}>{locChips}</div> : undefined,
+        )}
+        {row(
+          "事件序列",
+          leaf.events.length > 0 ? (
+            <div className={styles.leafSeq}>
+              {leaf.events.map((event, index) => (
+                <span key={event.id}>
+                  <i>{String(index + 1).padStart(2, "0")}</i>
+                  {event.description}
+                </span>
+              ))}
+            </div>
+          ) : undefined,
+        )}
+        {row(
+          "节奏拍",
+          leaf.rhythmBeats.length > 0 ? (
+            <div className={styles.refChips}>
+              {leaf.rhythmBeats.map((beat) => (
+                <StatusChip key={beat.id} variant="neutral">
+                  {`${LEAF_RHYTHM_LABEL[beat.rhythm]} · 强度 ${beat.intensity}${beat.readerEmotion ? ` · ${beat.readerEmotion}` : ""}`}
+                </StatusChip>
+              ))}
+            </div>
+          ) : undefined,
+        )}
+        {row(
+          "实体变更",
+          leaf.entityChanges.length > 0 ? (
+            <div className={styles.leafSeq}>
+              {leaf.entityChanges.map((change) => (
+                <span key={change.id}>
+                  <i>{LEAF_CHANGE_LABEL[change.category]}</i>
+                  {change.summary}
+                </span>
+              ))}
+            </div>
+          ) : undefined,
+        )}
+      </dl>
+    </div>
+  );
 }
 
 export function OutlineUnitInspectorPanel({
   workspaceId,
   unitId,
   outlineTree,
+  chapters,
+  characterNames,
+  locationNames,
+  onOpenChapter,
+  onDiscuss,
+  onOpenCharacter,
+  onOpenLocation,
 }: OutlineUnitInspectorPanelProps) {
   const snapshot = useExternalStore(outlineTree);
   const unit = findNode(snapshot.tree, unitId);
@@ -52,44 +263,212 @@ export function OutlineUnitInspectorPanel({
   if (unit === undefined) {
     return <div className={styles.panel}>未找到大纲单元</div>;
   }
+  const plan = PLAN_STATUS[unit.planningStatus];
+  const real = REAL_STATUS[unit.realization];
+  const scope = scopeView(unit.scope);
+  const chapter =
+    chapters !== undefined
+      ? chapters.find((item) => item.storyUnitId === unitId)
+      : undefined;
+  const dependencyChips = (unit.blockState?.dependencyIds ?? [])
+    .map((id) => findNode(snapshot.tree, id))
+    .filter((node): node is StoryOutlineTreeNode => node !== undefined);
+  const leafChildren = unit.children;
+  const hasRelations =
+    dependencyChips.length > 0 ||
+    (coreUnit?.leaf?.characters.length ?? 0) > 0 ||
+    leafChildren.length > 0 ||
+    chapter !== undefined;
   return (
     <div className={styles.panel} data-workspace={workspaceId}>
-      <div className={styles.head}>
-        <h3 className={styles.title}>{unit.label}</h3>
-        <span className={styles.scope}>{unit.scope}</span>
-        <StoryOutlineTreeStatus planM={unit.planM} realNode={unit.realNode} />
-      </div>
-      <div className={styles.dMeta}>{unit.unitId}</div>
-      {unit.progress !== undefined ? (
-        <div className={styles.dMeta}>
-          已完成 {unit.progress.completed}/{unit.progress.total}
+      <div className={styles.card}>
+        <div className={styles.unitHead}>
+          <StatusChip variant={scope.variant} title={unit.scope}>
+            {scope.label}
+          </StatusChip>
+          <h2 className={styles.title}>{unit.title}</h2>
         </div>
+        <div className={styles.unitSub}>
+          storyUnit {unit.unitId} · scope {unit.scope} · orderKey {unit.orderKey} · v{unit.entityVersion}
+          {unit.parentTitle !== undefined ? ` · 父 ${unit.parentTitle}` : ""}
+        </div>
+        <div className={styles.statRow}>
+          <StatusChip variant={plan.variant}>{plan.label}</StatusChip>
+          <StatusChip variant={real.variant}>{real.label}</StatusChip>
+          {unit.progress !== undefined ? (
+            <>
+              <span className={styles.miniBar} aria-hidden="true">
+                <i
+                  style={{
+                    width: `${Math.round((unit.progress.completed / unit.progress.total) * 100)}%`,
+                  }}
+                />
+              </span>
+              <span className={styles.progressNum}>
+                {unit.progress.completed} / {unit.progress.total} 叶单元已完成
+              </span>
+            </>
+          ) : null}
+        </div>
+        {unit.blockState !== undefined ? (
+          <div className={`${styles.banner} ${styles.warn}`}>
+            <Icon icon={AlertTriangle} size="sm" />
+            <span>
+              受阻 · {unit.blockState.reasonCode !== undefined ? (BLOCK_REASON_LABEL[unit.blockState.reasonCode] ?? unit.blockState.reasonCode) : "其他"}
+              ：{unit.blockState.note ?? "（未填说明）"}
+            </span>
+          </div>
+        ) : null}
+        {unit.abandonment !== undefined ? (
+          <div className={`${styles.banner} ${styles.faint}`}>
+            <Icon icon={X} size="sm" />
+            <span>
+              已废弃 · {ABANDON_REASON_LABEL[unit.abandonment.reasonCode]}：{unit.abandonment.note ?? ""}
+            </span>
+          </div>
+        ) : null}
+        <div className={styles.sectionHead}>意图 · intent</div>
+        <p className={styles.cardP}>{coreUnit?.intent ?? "（尚未填写——这个单元要达成什么）"}</p>
+        <div className={styles.sectionHead}>梗概 · synopsis</div>
+        <p className={styles.cardP}>{coreUnit?.synopsis ?? "（尚未填写情节梗概）"}</p>
+        {(chapter !== undefined || onDiscuss !== undefined) && (
+          <div className={styles.jumpActions}>
+            {chapter !== undefined && onOpenChapter !== undefined ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                leadingIcon={<Icon icon={ScrollText} size="xs" />}
+                onClick={() => onOpenChapter(chapter.chapterId)}
+              >
+                在正文中查看
+              </Button>
+            ) : null}
+            {onDiscuss !== undefined ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={<Icon icon={MessageSquare} size="xs" />}
+                onClick={onDiscuss}
+              >
+                在对话中讨论
+              </Button>
+            ) : null}
+          </div>
+        )}
+      </div>
+      {unit.scope === "scene" ? (
+        <LeafPlanCard
+          leaf={coreUnit?.leaf}
+          characterNames={characterNames}
+          locationNames={locationNames}
+          onOpenCharacter={onOpenCharacter}
+          onOpenLocation={onOpenLocation}
+        />
       ) : null}
-      {unit.blockedReason !== undefined ? (
-        <OutlineBlockNote kind="blocked" reason={unit.blockedReason} />
-      ) : null}
-      {unit.abandonedReason !== undefined ? (
-        <OutlineBlockNote kind="abandoned" reason={unit.abandonedReason} />
-      ) : null}
+      <div className={styles.card}>
+        <h3 className={styles.cardTitle}>关联</h3>
+        {hasRelations ? (
+          <>
+            {dependencyChips.length > 0 ? (
+              <>
+                <div className={styles.sectionHead}>阻塞依赖 · dependencyIds</div>
+                <div className={styles.refChips}>
+                  {dependencyChips.map((dep) => (
+                    <RefChip
+                      key={dep.unitId}
+                      icon={AlertTriangle}
+                      label={dep.title}
+                      onClick={() => outlineTree.selectUnit(dep.unitId)}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : null}
+            {(coreUnit?.leaf?.characters.length ?? 0) > 0 ? (
+              <>
+                <div className={styles.sectionHead}>出场人物 · leaf.characters</div>
+                <div className={styles.refChips}>
+                  {(coreUnit?.leaf?.characters ?? []).map((binding) => {
+                    const involvement = binding.involvement;
+                    const tag =
+                      involvement !== undefined
+                        ? [
+                            involvement.roles.map((role) => LEAF_ROLE_LABEL[role]).join("/"),
+                            LEAF_PRESENCE_LABEL[involvement.presence],
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : "";
+                    return (
+                      <RefChip
+                        key={binding.characterId}
+                        icon={UserRound}
+                        label={characterNames?.get(binding.characterId)?.name ?? binding.characterId}
+                        tag={tag}
+                        onClick={
+                          onOpenCharacter !== undefined
+                            ? () => onOpenCharacter(binding.characterId)
+                            : undefined
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </>
+            ) : null}
+            {leafChildren.length > 0 ? (
+              <>
+                <div className={styles.sectionHead}>子单元</div>
+                <div className={styles.refChips}>
+                  {leafChildren.map((child) => (
+                    <RefChip
+                      key={child.unitId}
+                      icon={ListTree}
+                      label={child.title}
+                      onClick={() => outlineTree.selectUnit(child.unitId)}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : null}
+            {chapter !== undefined ? (
+              <>
+                <div className={styles.sectionHead}>发布章 · 从场景选段</div>
+                <div className={styles.refChips}>
+                  {onOpenChapter !== undefined ? (
+                    <RefChip
+                      icon={ScrollText}
+                      label={chapter.title}
+                      onClick={() => onOpenChapter(chapter.chapterId)}
+                    />
+                  ) : (
+                    <RefChip icon={ScrollText} label={chapter.title} />
+                  )}
+                </div>
+              </>
+            ) : null}
+          </>
+        ) : (
+          <span className={styles.noRelations}>无关联条目</span>
+        )}
+      </div>
       <div className={styles.dFoot}>
-        <button type="button" className={styles.action} onClick={() => setEditOpen(true)}>
-          <Icon icon={Pencil} size="xs" />
+        <Button variant="ghost" size="sm" leadingIcon={<Icon icon={Pencil} size="xs" />} onClick={() => setEditOpen(true)}>
           编辑
-        </button>
-        <button type="button" className={styles.action} onClick={() => setChildOpen(true)}>
-          <Icon icon={ListPlus} size="xs" />
+        </Button>
+        <Button variant="ghost" size="sm" leadingIcon={<Icon icon={ListPlus} size="xs" />} onClick={() => setChildOpen(true)}>
           新建子单元
-        </button>
-        <button
-          type="button"
-          className={styles.action}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          leadingIcon={<Icon icon={Trash2} size="xs" />}
           onClick={() => {
             if (coreUnit !== undefined) setDeleteOpen(true);
           }}
         >
-          <Icon icon={Trash2} size="xs" />
           删除
-        </button>
+        </Button>
       </div>
       <StoryUnitEditDialog
         open={editOpen}
@@ -127,7 +506,7 @@ export function OutlineUnitInspectorPanel({
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="删除大纲单元"
-        description={`确定删除大纲单元「${unit.label}」？其子单元将一并删除。`}
+        description={`确定删除大纲单元「${unit.title}」？其子单元将一并删除。`}
         onConfirm={() => {
           setDeleteOpen(false);
           if (coreUnit !== undefined) void outlineTree.deleteStoryUnit(unitId, coreUnit.entityVersion);

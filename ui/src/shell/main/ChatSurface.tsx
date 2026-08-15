@@ -65,7 +65,12 @@ export function ChatSurface({
       title={activeItem?.title ?? "对话"}
       agentLabel={activeItem?.agentLabel}
       pinned={activeItem?.pinned === true}
-      onTogglePin={() => void conversationCatalog.pinConversation(activeId, !(activeItem?.pinned === true))}
+      onTogglePin={() => {
+        // pinConversation 为存根（core 契约延后）：显性提示，避免 unhandled rejection
+        void conversationCatalog.pinConversation(activeId, !(activeItem?.pinned === true)).catch(() =>
+          onNotify?.("warn", "置顶暂未支持"),
+        );
+      }}
       onOpenInfo={onOpenConversationInfo !== undefined ? () => onOpenConversationInfo(activeId) : undefined}
       pendingApprovalCount={pendingApprovalCount}
       onReferenceClick={onReferenceClick}

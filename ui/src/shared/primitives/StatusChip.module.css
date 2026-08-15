@@ -1,0 +1,55 @@
+/**
+ * StatusChip 视觉（原型 .chip + .chip.neutral/.accent/.info/.warn/.success/.danger/.faint）。
+ */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3px);
+  flex: none;
+  padding: var(--space-1) var(--space-7px);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.compact {
+  padding: 0 var(--space-6px);
+}
+
+.neutral {
+  background: var(--color-surface-2);
+  color: var(--color-muted);
+}
+
+.accent {
+  background: var(--color-accent-11);
+  color: var(--color-accent-ink);
+}
+
+.info {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+
+.warn {
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+}
+
+.success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.faint {
+  background: transparent;
+  color: var(--color-faint);
+  border: 1px solid var(--color-border);
+}

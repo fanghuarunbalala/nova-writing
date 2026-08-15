@@ -55,6 +55,11 @@ export interface MainAreaProps {
   readonly resolveReference?: ReferenceResolver;
   readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
+  /** 内容视图：切资料位（详情面板「在正文中查看」） */
+  readonly onSelectContentPane?: (pane: ContentTab) => void;
+  /** 内容视图：跳人物/地点档案（leaf chips） */
+  readonly onOpenCharacter?: (characterId: string) => void;
+  readonly onOpenLocation?: (locationId: string) => void;
   readonly approvalStore: ApprovalStore;
 }
 
@@ -91,6 +96,10 @@ export const MainArea = memo(function MainArea(props: MainAreaProps) {
           selectedLocationId={props.selectedLocationId}
           locateReference={props.locateReference}
           onBack={() => props.mainViewRouter.transition("chat")}
+          onSelectContentPane={props.onSelectContentPane}
+          onOpenCharacter={props.onOpenCharacter}
+          onOpenLocation={props.onOpenLocation}
+          onNotify={props.onNotify}
         />
       ) : (
         <ScheduleSurface

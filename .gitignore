@@ -14,6 +14,9 @@ dist/
 *.log
 npm-debug.log*
 
+# 会话事件运行时生成物（gui 本地跑起来的空转储文件）
+gui/conversation-*-events
+
 # editor / OS
 .DS_Store
 .idea/

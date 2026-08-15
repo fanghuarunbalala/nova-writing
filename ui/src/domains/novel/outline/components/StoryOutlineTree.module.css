@@ -6,11 +6,5 @@
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-}
-
-.tools {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-1);
-  margin-bottom: var(--space-1);
+  padding: var(--space-2px) var(--space-6px);
 }

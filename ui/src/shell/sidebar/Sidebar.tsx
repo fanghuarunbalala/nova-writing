@@ -3,15 +3,17 @@
  *
  * 左侧栏 · 上下文目录（PRD SB-1~10）：内容随主视图切换——
  *   chat    = 新建对话 + 会话目录；
- *   content = 资料位四段 tab（大纲/正文/人物/地点）+ 对应目录
+ *   content = 资料位四段 tab（大纲/正文/人物/地点）+ dirHead 标题行 + 对应目录
  *             （大纲树 / 卷章目录 / 人物档案 / 地点档案）；
  *   plan    = 「安排」待办目录（总览 + 按标签分组）。
  * 宽度固定档位随断点（决议 2：移除拖拽调宽），显隐由 mode 控制（负 margin 收起）。
  */
-import { memo, type ReactNode } from "react";
+import { memo, useMemo, type ReactNode } from "react";
+import { ChevronsDownUp, ChevronsUpDown, MapPin } from "lucide-react";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
-import type { NovelOverviewStore } from "../../domains/novel/overview/NovelOverviewStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
+import type { StoryOutlineTreeNode } from "../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
+import { StoryOutlineTreeProjection } from "../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
 import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { CharacterStore } from "../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
@@ -21,9 +23,11 @@ import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
 import type { ToastStore } from "../../shared/state/ToastStore.js";
 import type { MainViewState } from "../../shared/routing/MainViewRouter.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
+import { Icon, IconButton } from "../../shared/primitives/index.js";
 import { StoryOutlineTree } from "../../domains/novel/outline/components/StoryOutlineTree.js";
 import type { ContentTab } from "../main/contentTab.js";
 import { ContentTabs } from "./sections/ContentTabs.js";
+import { DirectoryHead } from "./sections/DirectoryHead.js";
 import { EntityDirectory } from "./sections/EntityDirectory.js";
 import { ManuscriptDirectory } from "./sections/ManuscriptDirectory.js";
 import { PlanDirectory } from "./sections/PlanDirectory.js";
@@ -37,7 +41,6 @@ export interface SidebarProps {
   /** 当前主视图（决定侧栏目录形态） */
   readonly view: MainViewState;
   readonly conversationCatalog: ConversationCatalogStore;
-  readonly novelOverview: NovelOverviewStore;
   readonly outlineTree: StoryOutlineTreeStore;
   readonly manuscript: ManuscriptStructureStore;
   readonly characters: CharacterStore;
@@ -64,12 +67,22 @@ export interface SidebarProps {
   readonly onSelectPlanTodo: (id: string | null) => void;
 }
 
+/** storyUnitId → 实现态（章行状态圆点派生用） */
+function collectRealization(
+  nodes: readonly StoryOutlineTreeNode[],
+  into: Map<string, string>,
+): void {
+  for (const node of nodes) {
+    into.set(node.unitId, node.realization);
+    collectRealization(node.children, into);
+  }
+}
+
 /** 左侧栏 · 上下文目录（memo：流式发布期间跳过，gui-performance-2 功能点五） */
 export const Sidebar = memo(function Sidebar({
   mode,
   view,
   conversationCatalog,
-  novelOverview,
   outlineTree,
   manuscript,
   characters,
@@ -97,6 +110,11 @@ export const Sidebar = memo(function Sidebar({
   const manuscriptSnapshot = useExternalStore(manuscript);
   const characterSnapshot = useExternalStore(characters);
   const locationSnapshot = useExternalStore(locations);
+  const realizationByUnit = useMemo(() => {
+    const map = new Map<string, string>();
+    collectRealization(outlineSnapshot.tree, map);
+    return map;
+  }, [outlineSnapshot.tree]);
 
   let content: ReactNode = null;
   if (view === "chat") {
@@ -116,9 +134,43 @@ export const Sidebar = memo(function Sidebar({
       </>
     );
   } else if (view === "content") {
+    const outlineTools =
+      outlineSnapshot.tree.length > 0 ? (
+        <>
+          <IconButton
+            label="展开全部"
+            size="sm"
+            onClick={() => outlineTree.expandAll()}
+          >
+            <Icon icon={ChevronsUpDown} size="xs" />
+          </IconButton>
+          <IconButton
+            label="折叠全部"
+            size="sm"
+            onClick={() => outlineTree.collapseAll()}
+          >
+            <Icon icon={ChevronsDownUp} size="xs" />
+          </IconButton>
+        </>
+      ) : null;
+    const dirHead =
+      contentTab === "outline" ? (
+        <DirectoryHead
+          label="故事单元"
+          count={StoryOutlineTreeProjection.countAll(outlineSnapshot.tree)}
+          tools={outlineTools}
+        />
+      ) : contentTab === "manuscript" ? (
+        <DirectoryHead label="卷 · 章" count={manuscriptSnapshot.chapters.length} />
+      ) : contentTab === "characters" ? (
+        <DirectoryHead label="角色档案" count={characterSnapshot.characters.length} />
+      ) : (
+        <DirectoryHead label="地点档案" count={locationSnapshot.locations.length} />
+      );
     content = (
       <>
-        <ContentTabs overview={novelOverview} active={contentTab} onSelect={onSelectContentPane} />
+        <ContentTabs active={contentTab} onSelect={onSelectContentPane} />
+        {dirHead}
         {contentTab === "outline" ? (
           <StoryOutlineTree
             workspaceId={workspaceId ?? ""}
@@ -128,11 +180,20 @@ export const Sidebar = memo(function Sidebar({
             selectedUnitId={outlineSnapshot.selectedUnitId}
             onSelectUnit={onSelectOutlineUnit}
             onToggleExpand={(id) => outlineTree.toggleExpand(id)}
-            onExpandAll={() => outlineTree.expandAll()}
-            onCollapseAll={() => outlineTree.collapseAll()}
           />
         ) : contentTab === "manuscript" ? (
-          <ManuscriptDirectory snapshot={manuscriptSnapshot} onSelectChapter={onSelectChapter} />
+          <ManuscriptDirectory
+            snapshot={manuscriptSnapshot}
+            onSelectChapter={onSelectChapter}
+            resolveChapterState={(chapterId) => {
+              const chapter = manuscriptSnapshot.chapters.find(
+                (item) => item.chapterId === chapterId,
+              );
+              return chapter?.storyUnitId !== undefined
+                ? realizationByUnit.get(chapter.storyUnitId)
+                : undefined;
+            }}
+          />
         ) : contentTab === "characters" ? (
           <EntityDirectory
             items={characterSnapshot.characters.map((c) => ({
@@ -152,6 +213,7 @@ export const Sidebar = memo(function Sidebar({
               avatarText: l.avatarText,
               title: l.name,
               subtitle: l.locState,
+              icon: MapPin,
             }))}
             activeId={selectedLocationId}
             onSelect={onSelectLocation}

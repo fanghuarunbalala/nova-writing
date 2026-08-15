@@ -38,17 +38,17 @@ const outlineReady = {
   tree: [
     {
       unitId: "arc-v1",
-      label: "第一卷",
-      scope: "ARC" as const,
-      planM: 3 as const,
-      realNode: "in-progress" as const,
+      title: "第一卷",
+      scope: "arc" as const,
+      planningStatus: "ready" as const,
+      realization: "in-progress" as const,
       children: [
         {
           unitId: "scene-1",
-          label: "第 7 号场景",
-          scope: "SCENE" as const,
-          planM: 2 as const,
-          realNode: "completed" as const,
+          title: "第 7 号场景",
+          scope: "scene" as const,
+          planningStatus: "outlined" as const,
+          realization: "completed" as const,
           children: [],
         },
       ],

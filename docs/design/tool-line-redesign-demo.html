@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>对话流工具行重设计 Demo（现状 vs 方案 A/B/C）</title>
+<style>
+  /* ============================================================
+     工具行重设计 demo：token 内联对齐 ui/src/shared/theme/tokens.css（宣纸白）。
+     对比：现状（每请求一行、整段状态色）vs
+       A 状态降噪（色收进图标，去掉「已完成」冗词）
+       B 完成折叠（多项完成折叠成摘要行，失败/进行中始终外露）
+       C 工时轴（左竖线 + 节点，进行中带流光）
+     共同微修（各方案均含）：每个工具为不可拆分的 nowrap 行内块，
+     折行只发生在工具之间（现状会在工具内部断行）。
+     ============================================================ */
+  :root {
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+      "PingFang SC", "Hiragino Sans GB", "HarmonyOS Sans SC", "MiSans",
+      "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Microsoft YaHei",
+      system-ui, sans-serif;
+    --font-body: "Iowan Old Style", "Palatino Linotype",
+      "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong",
+      "SimSun", Georgia, serif;
+    --font-kai: "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+
+    --fs-chat: 15.5px;
+    --fs-12: 12px;
+    --fs-13: 13px;
+    --fs-12-5: 12.5px;
+    --fs-11: 11px;
+
+    --fw-medium: 550;
+    --fw-semibold: 650;
+    --fw-bold: 700;
+
+    --radius-sm: 6px;
+    --radius-md: 9px;
+    --radius-lg: 14px;
+    --radius-pill: 999px;
+
+    --duration-fast: 0.15s;
+    --duration-base: 0.22s;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* 宣纸白 L3（现值） */
+    --color-bg: oklch(97.9% 0.003 85);
+    --color-surface: oklch(99.8% 0.0015 85);
+    --color-surface-2: oklch(96.2% 0.004 82);
+    --color-fg: oklch(30% 0.009 46);
+    --color-muted: oklch(52% 0.009 54);
+    --color-faint: oklch(60% 0.009 58);
+    --color-border: oklch(92.4% 0.003 82);
+    --color-border-strong: oklch(86.4% 0.006 72);
+    --color-orange: oklch(73% 0.068 60);
+    --color-accent: oklch(55% 0.072 42);
+    --color-red: oklch(58% 0.075 32);
+    --color-accent-ink: oklch(47% 0.062 41);
+    --color-success: oklch(52% 0.07 156);
+    --color-success-bg: oklch(97.2% 0.011 156);
+    --color-warn: oklch(59% 0.07 80);
+    --color-warn-bg: oklch(97.1% 0.011 86);
+    --color-danger: oklch(54% 0.068 32);
+    --color-danger-bg: oklch(97.1% 0.009 33);
+    --color-accent-8-t: color-mix(in oklab, var(--color-accent) 8%, transparent);
+    --color-accent-9: color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+    --color-accent-45: color-mix(in oklab, var(--color-accent) 45%, transparent);
+    --color-danger-12: color-mix(in oklab, var(--color-danger) 12%, var(--color-surface));
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-ui);
+    font-size: var(--fs-13);
+    line-height: 1.6;
+  }
+  .page { max-width: 900px; margin: 0 auto; padding: 22px 28px 70px; }
+
+  h1 { font-size: 16.5px; font-weight: var(--fw-bold); margin: 0 0 6px; }
+  .lede { color: var(--color-muted); font-size: var(--fs-12-5); margin: 0 0 8px; }
+  .lede b { color: var(--color-accent-ink); }
+  .toggleBar {
+    display: flex; align-items: center; gap: 10px;
+    margin: 14px 0 6px; flex-wrap: wrap;
+  }
+  .simBtn {
+    padding: 5px 14px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    color: var(--color-muted);
+    font-family: inherit; font-size: var(--fs-12); font-weight: var(--fw-medium);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .simBtn[aria-pressed="true"] {
+    border-color: var(--color-accent);
+    background: var(--color-accent-9);
+    color: var(--color-accent-ink);
+  }
+  .toggleHint { color: var(--color-faint); font-size: var(--fs-11); }
+
+  /* ============ 方案区块 ============ */
+  .variant {
+    margin-top: 26px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    overflow: hidden;
+  }
+  .vHead {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding: 12px 18px 0;
+  }
+  .vTag {
+    font-family: var(--font-mono); font-size: var(--fs-11);
+    letter-spacing: 0.08em;
+    color: var(--color-accent-ink);
+    background: var(--color-accent-8-t);
+    padding: 2px 9px;
+    border-radius: var(--radius-pill);
+  }
+  .vTag.reco { color: var(--color-success); background: var(--color-success-bg); }
+  .vTitle { font-size: var(--fs-13); font-weight: var(--fw-semibold); }
+  .vDesc { width: 100%; padding: 4px 18px 10px; color: var(--color-faint); font-size: var(--fs-12); }
+
+  /* 聊天切片（各方案共用） */
+  .chatExcerpt {
+    padding: 14px 18px 16px;
+    border-top: 1px solid var(--color-border);
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .msgUser {
+    align-self: flex-end; max-width: 76%;
+    padding: 8px 13px;
+    background: var(--color-accent-9);
+    border: 1px solid color-mix(in oklab, var(--color-accent) 14%, var(--color-border));
+    border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
+    font-size: var(--fs-chat);
+  }
+  .msgAssistant { max-width: 96%; }
+  .mdBody { font-family: var(--font-body); font-size: var(--fs-chat); line-height: 1.85; }
+  .mdBody p { margin: 8px 0 0; }
+  .quoteKai {
+    margin: 6px 0 0; padding: 7px 13px;
+    border-left: 2px solid var(--color-accent-45);
+    font-family: var(--font-kai); font-size: var(--fs-chat); color: var(--color-muted);
+    background: var(--color-accent-8-t);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+
+  /* ============ 现状工具行（对齐当前真实实现） ============ */
+  .tlNow {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: 6px 8px;
+    margin-bottom: 2px;
+    font-size: var(--fs-12); line-height: 1.6;
+  }
+  .tlNow .done { color: var(--color-success); }
+  .tlNow .fail { color: var(--color-danger); }
+  .tlNow .run { color: var(--color-warn); }
+  .tlNow svg { margin-right: 3px; vertical-align: -2px; }
+
+  /* ============ 各方案共用原子 ============ */
+  .spin {
+    display: inline-block;
+    width: 10px; height: 10px;
+    margin-right: 5px;
+    border: 1.5px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    vertical-align: -1px;
+    animation: spin 0.8s linear infinite;
+  }
+  .dur { margin-left: 4px; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--color-faint); }
+  .sec { margin-left: 4px; font-family: var(--font-mono); font-size: var(--fs-11); animation: pulse 2.4s ease-in-out infinite; }
+
+  /* 工具项：nowrap 行内块——折行只发生在工具之间 */
+  .t {
+    display: inline-flex; align-items: baseline;
+    white-space: nowrap;
+  }
+  .t svg { margin-right: 3px; vertical-align: -2px; }
+  .t .obj { color: var(--color-fg); }
+  .t .lbl { color: var(--color-muted); }
+
+  /* ============ 方案 A：状态降噪 ============ */
+  .tlA { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 10px; margin-bottom: 2px; font-size: var(--fs-12); line-height: 1.6; }
+  .tlA .t.done svg { color: var(--color-success); }
+  .tlA .t.done { color: var(--color-muted); }          /* 文字降噪，✓ 承载状态色 */
+  .tlA .t.fail { color: var(--color-danger); }          /* 失败保持醒目 */
+  .tlA .t.fail svg { color: var(--color-danger); }
+  .tlA .t.run { color: var(--color-fg); font-weight: var(--fw-medium); }
+  .tlA .t.run .spin { color: var(--color-warn); }
+  .tlA .t.run .sec { color: var(--color-warn); }
+
+  /* ============ 方案 B：完成折叠 ============ */
+  .tlB { display: flex; flex-direction: column; gap: 3px; margin-bottom: 2px; font-size: var(--fs-12); line-height: 1.6; }
+  .tlB details.doneFold { display: inline-block; width: fit-content; }
+  .tlB summary {
+    list-style: none;
+    display: inline-flex; align-items: baseline; gap: 6px;
+    padding: 1px 8px 1px 2px;
+    border-radius: var(--radius-sm);
+    color: var(--color-faint);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+  }
+  .tlB summary::-webkit-details-marker { display: none; }
+  .tlB summary:hover { background: var(--color-surface-2); color: var(--color-muted); }
+  .tlB summary .foldCaret {
+    display: inline-block;
+    font-size: 9px;
+    color: var(--color-faint);
+    transition: transform var(--duration-fast) var(--ease-out);
+  }
+  .tlB details[open] summary .foldCaret { transform: rotate(90deg); }
+  .tlB summary svg { color: var(--color-success); margin-right: 3px; vertical-align: -2px; }
+  .foldList { display: flex; flex-direction: column; gap: 2px; padding: 3px 0 2px 16px; }
+  .tlB .t.done { color: var(--color-muted); }
+  .tlB .t.done svg { color: var(--color-success); }
+  .tlB .t.fail { color: var(--color-danger); }
+  .tlB .t.run { color: var(--color-fg); font-weight: var(--fw-medium); }
+  .tlB .t.run .spin { color: var(--color-warn); }
+  .tlB .t.run .sec { color: var(--color-warn); }
+
+  /* ============ 方案 C：工时轴 ============ */
+  .tlC {
+    --rail: color-mix(in oklab, var(--color-fg) 14%, transparent);
+    display: flex; flex-direction: column;
+    margin: 2px 0 4px;
+    font-size: var(--fs-12); line-height: 1.6;
+  }
+  .railItem {
+    position: relative;
+    display: flex; align-items: baseline;
+    gap: 8px;
+    padding: 1px 4px 1px 0;
+    border-left: 2px solid var(--rail);
+    margin-left: 5px;
+  }
+  .railItem::before {
+    content: "";
+    position: absolute; left: -5px; top: 50%;
+    width: 8px; height: 8px;
+    transform: translateY(-50%);
+    border-radius: 50%;
+    background: var(--color-surface);
+    border: 2px solid var(--rail);
+  }
+  .railItem.done { color: var(--color-muted); margin-left: 5px; }
+  .railItem.done::before { border-color: var(--color-success); background: var(--color-success); }
+  .railItem.fail { color: var(--color-danger); }
+  .railItem.fail::before { border-color: var(--color-danger); background: var(--color-danger); }
+  .railItem.run {
+    color: var(--color-fg); font-weight: var(--fw-medium);
+    border-left-color: color-mix(in oklab, var(--color-warn) 55%, transparent);
+    background:
+      linear-gradient(90deg,
+        color-mix(in oklab, var(--color-warn) 7%, transparent),
+        transparent 55%);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .railItem.run::before {
+    border-color: var(--color-warn);
+    background: var(--color-warn);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  .railItem.run .spin { color: var(--color-warn); }
+  .railItem.run .sec { color: var(--color-warn); }
+  .railItem svg { margin-right: 3px; vertical-align: -2px; }
+  /* 末段：竖线只延伸到最后一个节点 */
+  .railItem.last { border-left-color: transparent; }
+
+  /* 模拟完成切换：running 与 doneAfter 二态互斥 */
+  .onlyRun { display: revert; }
+  .onlyAfter { display: none !important; }
+  body.simDone .onlyRun { display: none !important; }
+  body.simDone .onlyAfter { display: revert; }
+  details.doneFold.onlyAfter { display: inline-block !important; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>对话流工具行重设计</h1>
+  <p class="lede">
+    现状的四个问题：<b>① 完成态永久高亮</b>（绿字随历史堆积、与正文抢注意力）·
+    <b>② 整段文字按状态染色</b>（绿/红/黄满行，噪音大）·
+    <b>③「已完成」与 ✓ 语义重复</b> ·
+    <b>④ 折行从工具中间断开</b>。下面 A/B/C 三个方案都内置微修 ④（每个工具为不可拆分行内块）。
+  </p>
+  <div class="toggleBar">
+    <button class="simBtn" id="simBtn" aria-pressed="false">模拟全部完成</button>
+    <span class="toggleHint">切换后观察各方案的终态（进行中 → 完成收口、B 的摘要计数变化）</span>
+  </div>
+
+  <!-- ============ 现状 ============ -->
+  <section class="variant">
+    <div class="vHead"><span class="vTag">现状</span><span class="vTitle">每请求一行 · 整段状态色</span></div>
+    <p class="vDesc">对齐当前真实实现（含刚统一的 demo 形态）。五个工具同行 wrap，三色文字全量铺开。</p>
+    <div class="chatExcerpt">
+      <div class="msgUser">把第二章的追逃段改成林晚的主观视角，悬念保留到最后。</div>
+      <div class="msgAssistant">
+        <div class="tlNow">
+          <span class="t done">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            大纲读取已完成：第 12 章 0.8s
+          </span>
+          <span class="t done">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            角色读取已完成：林晚 0.3s
+          </span>
+          <span class="t done">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            正文检索已完成：铜符 0.5s
+          </span>
+          <span class="t fail">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            旧稿读取失败：北河渡口 0.4s
+          </span>
+          <span class="t run onlyRun">
+            <span class="spin"></span>修订正文中：追逃段<span class="sec tick">12.4s</span>
+          </span>
+          <span class="t done onlyAfter">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            修订正文已完成：追逃段 13.2s
+          </span>
+        </div>
+        <div class="mdBody">
+          <p>已按林晚的主观视角重写本段：视线收窄到雨幕与灯笼的光斑，铜符来历留白作钩子。</p>
+          <div class="quoteKai">「回头的人，没有一个走到过北桥。」——第二章 · 雨夜追逃</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 方案 A ============ -->
+  <section class="variant">
+    <div class="vHead"><span class="vTag reco">A · 推荐</span><span class="vTitle">状态降噪——色收进图标，正文回归阅读</span></div>
+    <p class="vDesc">
+      完成态文字降为 muted（✓ 独享绿色，「已完成」冗词删去，耗时 mono 淡色）；失败保持红（例外事件必须醒目）；
+      进行中为唯一强调项（warn 图标 + 秒数脉动 + 文字加粗）。工具多了依然是一行，但视觉安静。
+    </p>
+    <div class="chatExcerpt">
+      <div class="msgUser">把第二章的追逃段改成林晚的主观视角，悬念保留到最后。</div>
+      <div class="msgAssistant">
+        <div class="tlA">
+          <span class="t done">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            大纲读取 · <span class="obj">第 12 章</span><span class="dur">0.8s</span>
+          </span>
+          <span class="t done">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            角色读取 · <span class="obj">林晚</span><span class="dur">0.3s</span>
+          </span>
+          <span class="t done">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            正文检索 · <span class="obj">铜符</span><span class="dur">0.5s</span>
+          </span>
+          <span class="t fail">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            旧稿读取失败：北河渡口<span class="dur">0.4s</span>
+          </span>
+          <span class="t run onlyRun">
+            <span class="spin"></span>修订正文中：<span class="obj">追逃段</span><span class="sec tick">12.4s</span>
+          </span>
+          <span class="t done onlyAfter">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            修订正文 · <span class="obj">追逃段</span><span class="dur">13.2s</span>
+          </span>
+        </div>
+        <div class="mdBody">
+          <p>已按林晚的主观视角重写本段：视线收窄到雨幕与灯笼的光斑，铜符来历留白作钩子。</p>
+          <div class="quoteKai">「回头的人，没有一个走到过北桥。」——第二章 · 雨夜追逃</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 方案 B ============ -->
+  <section class="variant">
+    <div class="vHead"><span class="vTag reco">B · 推荐（可与 A 组合）</span><span class="vTitle">完成折叠——多项完成收成一行摘要</span></div>
+    <p class="vDesc">
+      同请求 ≥2 个完成项时折叠为「✓ N 项 · 总耗时」摘要（点击展开明细）；失败与进行中始终外露不折叠。
+      历史滚动时工具痕迹降到最低，需要时可查。展开态本次会话内保持。
+    </p>
+    <div class="chatExcerpt">
+      <div class="msgUser">把第二章的追逃段改成林晚的主观视角，悬念保留到最后。</div>
+      <div class="msgAssistant">
+        <div class="tlB">
+          <!-- 运行中：完成后折叠进摘要 -->
+          <details class="doneFold onlyRun" style="display:none !important;"></details>
+          <details class="doneFold onlyAfter" style="display:inline-block !important;">
+            <summary>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              4 项 · 14.8s <span class="foldCaret">▶</span>
+            </summary>
+            <div class="foldList">
+              <span class="t done">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                大纲读取 · 第 12 章<span class="dur">0.8s</span>
+              </span>
+              <span class="t done">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                角色读取 · 林晚<span class="dur">0.3s</span>
+              </span>
+              <span class="t done">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                正文检索 · 铜符<span class="dur">0.5s</span>
+              </span>
+              <span class="t done">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                修订正文 · 追逃段<span class="dur">13.2s</span>
+              </span>
+            </div>
+          </details>
+
+          <!-- 运行中状态：3 项完成摘要 + 失败 + 进行中 -->
+          <div class="onlyRun" style="display:flex; flex-direction:column; gap:3px;">
+            <details class="doneFold" style="display:inline-block;">
+              <summary>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                3 项 · 1.6s <span class="foldCaret">▶</span>
+              </summary>
+              <div class="foldList">
+                <span class="t done">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                  大纲读取 · 第 12 章<span class="dur">0.8s</span>
+                </span>
+                <span class="t done">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                  角色读取 · 林晚<span class="dur">0.3s</span>
+                </span>
+                <span class="t done">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                  正文检索 · 铜符<span class="dur">0.5s</span>
+                </span>
+              </div>
+            </details>
+            <span class="t fail">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              旧稿读取失败：北河渡口<span class="dur">0.4s</span>
+            </span>
+            <span class="t run">
+              <span class="spin"></span>修订正文中：<span class="obj">追逃段</span><span class="sec tick">12.4s</span>
+            </span>
+          </div>
+        </div>
+        <div class="mdBody">
+          <p>已按林晚的主观视角重写本段：视线收窄到雨幕与灯笼的光斑，铜符来历留白作钩子。</p>
+          <div class="quoteKai">「回头的人，没有一个走到过北桥。」——第二章 · 雨夜追逃</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 方案 C ============ -->
+  <section class="variant">
+    <div class="vHead"><span class="vTag">C</span><span class="vTitle">工时轴——左竖线 + 节点，进行中带流光</span></div>
+    <p class="vDesc">
+      每工具一行挂在左侧竖线上（节点=状态色圆点，完成实心绿、失败实心红、进行中 warn 呼吸 + 行尾流光）。
+      时间序列感最强，但占垂直空间，更接近审批面板的形态而非对话流。
+    </p>
+    <div class="chatExcerpt">
+      <div class="msgUser">把第二章的追逃段改成林晚的主观视角，悬念保留到最后。</div>
+      <div class="msgAssistant">
+        <div class="tlC">
+          <div class="railItem done">大纲读取 · 第 12 章<span class="dur">0.8s</span></div>
+          <div class="railItem done">角色读取 · 林晚<span class="dur">0.3s</span></div>
+          <div class="railItem done">正文检索 · 铜符<span class="dur">0.5s</span></div>
+          <div class="railItem fail">旧稿读取失败：北河渡口<span class="dur">0.4s</span></div>
+          <div class="railItem run onlyRun">修订正文中：追逃段<span class="sec tick">12.4s</span></div>
+          <div class="railItem done last onlyAfter">修订正文 · 追逃段<span class="dur">13.2s</span></div>
+        </div>
+        <div class="mdBody">
+          <p>已按林晚的主观视角重写本段：视线收窄到雨幕与灯笼的光斑，铜符来历留白作钩子。</p>
+          <div class="quoteKai">「回头的人，没有一个走到过北桥。」——第二章 · 雨夜追逃</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="lede" style="margin-top: 26px;">
+    推荐组合：<b>A（降噪基础）+ B（≥2 个完成项时折叠）</b>——完成痕迹最小化、失败/进行中永远可见，
+    且与现有 turn 分段结构（每段 = 内容 + 工具行）完全兼容；C 的形态建议留给审批面板类场景。
+  </p>
+</div>
+
+<script>
+  // 跑动秒数（所有进行中项共用一个节拍）
+  let sec = 12.4;
+  setInterval(() => {
+    sec += 1;
+    document.querySelectorAll(".tick").forEach((el) => (el.textContent = `${sec.toFixed(1)}s`));
+  }, 1000);
+
+  const btn = document.getElementById("simBtn");
+  btn.addEventListener("click", () => {
+    const on = btn.getAttribute("aria-pressed") !== "true";
+    btn.setAttribute("aria-pressed", String(on));
+    document.body.classList.toggle("simDone", on);
+    btn.textContent = on ? "回到进行中" : "模拟全部完成";
+  });
+</script>
+</body>
+</html>

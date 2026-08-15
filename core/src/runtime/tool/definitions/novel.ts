@@ -450,9 +450,8 @@ function characterRead(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Reads committed (canonical) Character profiles; use it before any NovelCharacterEdit or NovelDelete on a character.",
-      guidance:
-        "Omit characterId to list all. The returned entityVersion is the baseRevision later edits and deletes must carry; stale revisions are rejected before approval.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {
@@ -510,9 +509,8 @@ function characterWrite(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch-creates Character profiles in the canonical store (atomic per batch).",
-      guidance:
-        "name is required and not uniqueness-checked — list first to avoid duplicates. id is optional (client-chosen, duplicate_id rejected). To change an existing profile use NovelCharacterEdit, not Write.",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const values = valuesOf(parseArgs(call));
@@ -583,9 +581,8 @@ function characterEdit(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch field-level partial updates (PATCH) of existing Character profiles (atomic per batch).",
-      guidance:
-        "Read first, then patch only the changed fields. baseRevision = entityVersion from the most recent read; stale revisions are rejected before approval — re-read and retry. null clears summary/initialState/authorNotes; [] clears aliases.",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const items = valuesOf(parseArgs(call)) as unknown as TargetedItem[];
@@ -637,9 +634,8 @@ function locationRead(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Reads committed (canonical) Location profiles; use it before any NovelLocationEdit or NovelDelete on a location.",
-      guidance:
-        "Omit locationId to list all. The returned entityVersion is the baseRevision later edits and deletes must carry; stale revisions are rejected before approval.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {
@@ -697,9 +693,8 @@ function locationWrite(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch-creates Location profiles in the canonical store (atomic per batch).",
-      guidance:
-        "name is required and not uniqueness-checked — list first to avoid duplicates. id is optional (client-chosen, duplicate_id rejected). To change an existing profile use NovelLocationEdit, not Write.",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const values = valuesOf(parseArgs(call));
@@ -770,9 +765,8 @@ function locationEdit(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch field-level partial updates (PATCH) of existing Location profiles (atomic per batch).",
-      guidance:
-        "Read first, then patch only the changed fields. baseRevision = entityVersion from the most recent read; stale revisions are rejected before approval — re-read and retry. null clears summary/initialState/authorNotes; [] clears aliases.",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const items = valuesOf(parseArgs(call)) as unknown as TargetedItem[];
@@ -826,9 +820,8 @@ function paragraphRead(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Reads committed Paragraph content in story-unit order.",
-      guidance:
-        "storyUnitId lists that unit's paragraphs in order; omit it to read all paragraphs grouped by unit; paragraphId reads one. ids + entityVersion feed NovelParagraphEdit / NovelDelete.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {
@@ -883,9 +876,8 @@ function paragraphWrite(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch-inserts Paragraphs under story units (atomic per batch).",
-      guidance:
-        "Target scene-level story units (paragraphs live at the tree's leaves; chapters publish from them). One natural paragraph per item — do not merge multiple paragraphs into one text. orderKey (4-hex-digit groups) is optional and appends to the end when omitted.",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const values = valuesOf(parseArgs(call));
@@ -967,9 +959,8 @@ function paragraphEdit(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch field-level PATCH updates for Paragraphs (atomic per batch).",
-      guidance:
-        "text replaces the paragraph entirely — not a diff. storyUnitId moves the paragraph, orderKey reorders it. Read first; stale baseRevision is rejected before approval.",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const items = valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value?: Record<string, unknown> }>;
@@ -1035,8 +1026,8 @@ function volumeRead(handle: NovelHandle): ToolDef {
     ].join("\n"),
     parameters: { type: "object", properties: {}, additionalProperties: false },
     promptDetail: {
-      policy: "Reads all Volumes in order.",
-      guidance: "Returns id/title/orderKey only — use NovelChapterRead to inspect chapters. entityVersion feeds NovelVolumeEdit / NovelDelete.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async () => {
@@ -1091,8 +1082,8 @@ function volumeWrite(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch-creates Volumes in the publication structure (atomic per batch).",
-      guidance: "title required; orderKey optional (4-hex-digit groups, appends after the last volume when omitted); id optional (duplicate_id rejected).",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const values = valuesOf(parseArgs(call));
@@ -1158,8 +1149,8 @@ function volumeEdit(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch field-level PATCH updates for Volumes (atomic per batch).",
-      guidance: "value supports title/orderKey; baseRevision = entityVersion from the latest read.",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const items = valuesOf(parseArgs(call)) as unknown as TargetedItem[];
@@ -1204,9 +1195,8 @@ function chapterRead(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Reads Chapters, optionally filtered by chapterId or volumeId.",
-      guidance:
-        "Chapter.volumeId absent = unassigned; Chapter.storyUnitId links the story unit providing its text (prefer scene-level). includeContent=true also returns the unit's paragraphs. entityVersion feeds NovelChapterEdit / NovelDelete.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {
@@ -1280,9 +1270,8 @@ function chapterWrite(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch-creates Chapters (atomic per batch).",
-      guidance:
-        "title required; volumeId absent = unassigned; storyUnitId (prefer scene-level) links the story unit providing its text. orderKey optional, appends after the last chapter in the same volume.",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const values = valuesOf(parseArgs(call));
@@ -1378,8 +1367,8 @@ function chapterEdit(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch field-level PATCH updates for Chapters (atomic per batch).",
-      guidance: "value supports title/orderKey/volumeId (re-assigning the volume). Chapter content belongs to paragraph tools — this only touches publication structure.",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const items = valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value?: Record<string, unknown> }>;
@@ -1468,9 +1457,8 @@ export function createDeleteTool(handle: NovelHandle): ToolDef[] {
         additionalProperties: false,
       },
       promptDetail: {
-        policy: "Deletes novel entities by kind; irreversible, atomic per batch; dependency-checked unless cascade:true.",
-        guidance:
-          "High-risk: read the target first (for identity and entityVersion) and confirm with the author before calling. Default rejects units with children/leaf/paragraphs, volumes with chapters, chapters with selections; cascade:true deletes subtrees and returns full deleted[] records.",
+        policy: "",
+        guidance: "",
       },
       precheck: async (call) => {
         const args = parseArgs(call);
@@ -1616,17 +1604,65 @@ function outlineRead(handle: NovelHandle): ToolDef {
     preview: outlineReadPreview,
     description: [
       "读取大纲（story unit 层级树，正式稿），只读。",
+      "大纲是整本书的结构真相源：正文挂在它上面、发布从它取材、进度沿它滚动。动笔、改结构、回答剧情问题之前，先读大纲。",
       "",
-      "故事单元（story unit）是大纲树的节点，身兼三职：",
-      "- 规划节点：intent（要达成什么）/ synopsis（梗概），加上规划、实现双状态推进写作。",
-      "- 正文容器：正文段落直接挂在单元上（推荐落在 scene 场景级，见 NovelParagraphWrite）。",
-      "- 发布来源：发布结构的「章」可关联一个单元作为正文来源（见 NovelChapterWrite）。",
+      "## 大纲模型（先读懂再动手）",
+      "- 唯一根：每本书恰好一个大纲，自动存在、无需创建；你创建和修改的是其中的「故事单元（story unit）」。",
+      "- 树结构：units 平铺返回，层级看 parentId（缺省 = 顶层，直接挂在大纲根下），兄弟顺序看 orderKey。",
+      "- 层级建议：saga（全书）→ arc（卷级弧）→ sequence（序列）→ scene（场景），按体量可省略中间层；",
+      "  无论省几层，树的末端（叶）必须是能承载具体故事的 scene 级单元——正文段落落在叶单元上。",
+      "- 故事单元身兼三职：",
+      "  1. 规划节点：intent（这个单元要达成什么）+ synopsis（情节梗概），随双状态推进（见下）。",
+      "  2. 正文容器：正文段落直接挂在单元上（推荐 scene 级，用 NovelParagraphWrite 写入）。",
+      "  3. 发布来源：发布结构的「章」从场景单元选取段落组装正文（NovelChapterWrite 的 paragraphIds）。",
+      "- 双状态推进：planningStatus 管「规划」（idea 点子 → outlined 已成纲 → ready 可开写），",
+      "  realizationStatus 管「写作」（pending 未动笔 → in-progress 写作中 → completed 已完成；abandoned 废弃）。",
+      "  父单元进度不手填：由叶单元自动汇总（includePlans=true 时返回 progress）。",
+      "- leaf 计划（场景级设计文档，挂 scene 级叶单元）：人物/地点绑定（在场/离场/提及，视角/参与等角色）、",
+      "  事件序列、节奏拍（setup→aftermath 八档、强度 1-5、读者/视角情绪）、实体状态变更（9 类，连贯性追踪）。",
+      "  写场景前读 leaf，保证人物、地点、节奏与前后状态一致。",
       "",
-      "用法：",
-      "- 省略 storyUnitId：返回 { outline, units }——每本书有唯一一个大纲（自动存在，无需创建）；units 为全部单元平铺，层级由 parentId、顺序由 orderKey 表达，顶层单元即 parentId 缺省的单元（直接挂在大纲根下）。",
-      "- 传入 storyUnitId：返回单个单元（含 intent / synopsis / scope / planningStatus / realizationStatus）。",
-      "- includePlans=true：附带各单元的 leaf 计划（场景级故事设计：人物/地点绑定、事件序列、节奏拍、实体状态变更）与叶完成度 rollup（progress：effectiveStatus / isBlocked / completedLeafCount / totalLeafCount）——设计后续场景或检查进度时开启。",
-      "- 新建子单元前先读全树定位 parentId；返回的 entityVersion 用于 NovelOutlineEdit / NovelDelete。",
+      "## 何时使用",
+      "1. 创建任何大纲单元、写段落、建章之前——parentId 与 entityVersion 都取自最近一次读取结果。",
+      "2. 作者说「继续写 / 推进主线」——读全树定位下一个未完成场景。",
+      "3. 回答剧情、时间线、人物位置类问题——查证后再答，不凭记忆。",
+      "4. 检查进度或阻塞——includePlans=true 看各单元 progress 与 blockState。",
+      "5. 本轮对话首次涉及大纲任务时。",
+      "",
+      "## 何时不用",
+      "1. 本轮已读过全树、且期间没有任何写操作——直接用已有读取结果。",
+      "2. 只需单个已知 id 的单元且不需要 leaf——传 storyUnitId 单查，不必拉全树。",
+      "",
+      "## 示例",
+      "<example>",
+      "作者：继续写",
+      "→ NovelOutlineRead（includePlans=true）",
+      "→ 从 progress 找到第一个未完成的 arc，其下第一个未完成 scene",
+      "→ 读该 scene 的 leaf：人物/地点绑定、事件序列、节奏拍",
+      "→ 用 NovelParagraphWrite 按场景设计写正文",
+      "<reasoning>先读树确认进度与结构现状，避免凭记忆臆造走向或重写已完成场景；leaf 提供场景内一致性约束。</reasoning>",
+      "</example>",
+      "",
+      "<example>",
+      "作者：第二卷开头主角在哪？",
+      "→ NovelOutlineRead 全树 → 定位第二卷 arc → 沿其下 scene 的 synopsis 与 leaf（地点绑定、实体变更）",
+      "→ 基于查证结果回答，引用单元 id",
+      "<reasoning>时间线与人物位置必须查大纲而非凭记忆；leaf 的地点绑定与实体变更是权威依据。</reasoning>",
+      "</example>",
+      "",
+      "<example>",
+      "作者：加一段雨夜刺杀",
+      "（反例）未读树直接 NovelOutlineWrite 建 scene → parentId 挂到已废弃的 arc 下，与既有雨夜场景重复",
+      "<reasoning>大纲是正式稿，凭记忆写必然漂移；先读树定位正确父单元与相邻场景，成本远低于返工。</reasoning>",
+      "</example>",
+      "",
+      "## 参数",
+      "- 省略 storyUnitId：返回 { outline, units } 全树平铺。",
+      "- 传入 storyUnitId：返回单个单元（不存在报 not_found）。",
+      "- includePlans=true：各单元附 leaf 与 progress（effectiveStatus / isBlocked / completedLeafCount / totalLeafCount）。",
+      "- 返回的 entityVersion 是后续 NovelOutlineEdit / NovelDelete 的 baseRevision。",
+      "",
+      "拿不准就读一次大纲再动手。",
     ].join("\n"),
     parameters: {
       type: "object",
@@ -1637,9 +1673,8 @@ function outlineRead(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Reads the story outline (story unit tree).",
-      guidance:
-        "Omit storyUnitId for the whole tree — one outline per book already exists; top-level units are those without parentId. A story unit is both a planning node (intent/synopsis/statuses) and the container for paragraphs (prefer scene-level). includePlans=true also returns leaf plans (scene-level design) and progress rollups. entityVersion feeds NovelOutlineEdit / NovelDelete.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {
@@ -1661,19 +1696,51 @@ function outlineWrite(handle: NovelHandle): ToolDef {
     preview: outlineWritePreview,
     requireApproval: true,
     description: [
-      "批量创建故事单元（story unit；大纲每本书唯一且自动存在，本工具只建单元；整批原子）。",
+      "批量创建故事单元（整批原子、需作者审批）。大纲每本书唯一且自动存在——本工具只建单元，没有「建大纲」这个动作。",
+      "大纲模型与层级概念见 NovelOutlineRead 的说明。建树要点：自上而下（saga → arc → sequence → scene），",
+      "按体量可省略中间层；正文段落落在 scene 级叶单元，发布「章」从场景单元选段组装。",
       "",
-      "层级建议：saga（全书）→ arc（卷级弧）→ sequence（序列）→ scene（场景）自上而下建树；可按体量省略中间层（短篇可直接顶层建 scene），不必严格逐层。正文段落推荐落在 scene 级单元，发布时「章」关联该 scene 单元（storyUnitId）作为正文来源。",
+      "## 何时使用",
+      "1. 新书开局搭骨架——从顶层（或 arc）开始逐层建。",
+      "2. 既有多线扩展——新增 arc / sequence。",
+      "3. 为既有 arc 补场景（先 NovelOutlineRead 定位 parentId）。",
       "",
-      "用法：",
-      "- 每项 = { title, parentId?, scope?, intent?, synopsis?, id?, orderKey?, planningStatus?, realizationStatus?, blockState?, abandonment?, leaf? }；title 必填（1-500 字）。",
-      "- parentId 可选（缺省 = 顶层；建子单元前先 NovelOutlineRead 定位）。",
-      "- intent：这个单元要达成什么；synopsis：情节梗概。",
-      "- leaf：场景级故事设计文档（人物/地点绑定、事件序列、节奏拍、实体状态变更）——推荐挂在 scene 级叶单元，树末端承载具体故事；引用的角色/地点 id 必须已存在。",
-      "- blockState：阻塞状态（原因 + 依赖单元）；abandonment：废弃状态（原因 + 替换单元）。一般随 NovelOutlineEdit 维护，创建时可直接带。",
-      "- id 可选：自选 id（重复报 duplicate_id）；缺省宿主生成并在结果回传。",
-      "- orderKey 可选（兄弟间排序，4 位大写十六进制组）；缺省追加到末位兄弟之后。",
-      "- 新单元初始 planningStatus=idea、realizationStatus=pending（可随创建指定），随推进用 NovelOutlineEdit 更新。",
+      "## 何时不用",
+      "1. 修改已有单元——用 NovelOutlineEdit；本工具只创建，撞已有 id 报 duplicate_id。",
+      "2. 在一次调用里建「父 + 子」且子引用父——parentId 必须引用已存在的单元，",
+      "   不能引用同批先建项（审批前预检会拦截）；多层结构分批建。",
+      "",
+      "## 示例",
+      "<example>",
+      "作者：新书，都市异能，先搭第一卷",
+      "→ 第一次 NovelOutlineWrite：values=[{ title:\"觉醒之卷\", scope:\"arc\", intent:\"主角发现能力并卷入第一场冲突\", synopsis:\"……\" }]",
+      "→ 第二次 NovelOutlineWrite：values=[{ title:\"雨夜觉醒\", scope:\"scene\", parentId:<上批返回的 arc id>, synopsis:\"雨夜遇袭，能力觉醒\", leaf:{ settingMode:\"located\", characters:[…], locations:[…], events:[…], rhythmBeats:[…], entityChanges:[] } }]",
+      "<reasoning>自上而下分批建树：arc 先落地拿到 id，scene 挂靠；leaf 随场景创建即挂上，后续写作有一致性约束可依。</reasoning>",
+      "</example>",
+      "",
+      "<example>",
+      "作者：把这一章三千字写进大纲",
+      "（反例）整段正文塞进 synopsis",
+      "<reasoning>synopsis 是给协作者看的情节梗概（数百字量级）；正文用 NovelParagraphWrite 落在场景单元上。",
+      "大纲里堆正文会让树不可读、进度汇总失真。</reasoning>",
+      "</example>",
+      "",
+      "<example>",
+      "作者：把「雨夜觉醒」的梗概改一下",
+      "（反例）重新 Write 一条同名单元",
+      "<reasoning>同 id 报 duplicate_id；换新 id 则制造重复节点污染树。改内容用 NovelOutlineEdit。</reasoning>",
+      "</example>",
+      "",
+      "## 字段细则",
+      "- title 必填（1-500 字）；parentId 缺省 = 顶层；建子单元前先 NovelOutlineRead 定位父节点。",
+      "- intent：这个单元要达成什么（高层单元重点写）；synopsis：情节梗概（叶场景重点写）。",
+      "- leaf：场景级设计文档，推荐挂 scene 级叶单元；引用的角色/地点 id 必须已存在（预检拦截）。",
+      "- blockState（dependencyIds + blockedAt 必填）/ abandonment（reasonCode + abandonedAt 必填）：一般随 NovelOutlineEdit 维护，创建时可直接带。",
+      "- id 可选：自选 id（重复报 duplicate_id）；缺省宿主生成并在结果回传。orderKey 可选（4 位大写十六进制组，缺省排到末位兄弟之后）。",
+      "- 新单元初始 planningStatus=idea、realizationStatus=pending（可随创建指定）。",
+      "- 批内任一项失败整批回滚，不会留半截树。",
+      "",
+      "建好后用 NovelOutlineRead 复核结构；推进状态用 NovelOutlineEdit。",
     ].join("\n"),
     parameters: {
       type: "object",
@@ -1726,9 +1793,8 @@ function outlineWrite(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch-creates story units in the outline tree (atomic per batch).",
-      guidance:
-        "title required; parentId absent = top level (the one outline per book already exists). Build saga→arc→sequence→scene top-down, skipping middle tiers for short works; paragraphs live on scene-level units and chapters link them via storyUnitId. leaf attaches the scene-level design doc (character/location bindings, events, rhythm beats, entity changes) — referenced ids must exist. New units default to planningStatus=idea / realizationStatus=pending.",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const values = valuesOf(parseArgs(call));
@@ -1788,16 +1854,53 @@ function outlineEdit(handle: NovelHandle): ToolDef {
     preview: outlineEditPreview,
     requireApproval: true,
     description: [
-      "批量局部更新（PATCH）已有大纲单元，整批原子。",
+      "批量局部更新（PATCH）已有大纲单元（整批原子、需作者审批）。",
+      "大纲模型与层级概念见 NovelOutlineRead 的说明。",
       "",
-      "用法：",
-      "- 每项 = { id, baseRevision, value }（baseRevision = 最近读到的 entityVersion，审批前预检，过期直接拒绝并附当前版本）。",
-      "- value 支持：title / intent / synopsis / scope / planningStatus / realizationStatus / parentId / orderKey / blockState / abandonment / leaf，未提供的保留。",
-      "- 移动即编辑：parentId 换父节点（null = 移到顶层）、orderKey 重排，同在本工具表达。",
-      "- blockState（null 清除）：阻塞状态（六类原因 + 依赖单元列表）；abandonment（null 清除）：废弃状态（六类原因 + 替换单元）。读路径的 progress.isBlocked 即由 blockState 派生。",
-      "- leaf（null 清整个计划）：字段级替换——只传要改的集合（characters/locations/events/rhythmBeats/entityChanges），集合传 null 清空；引用的角色/地点/单元 id 必须已存在。",
-      "- planningStatus（规划状态）：idea（点子）→ outlined（已成纲）→ ready（可开写）。",
-      "- realizationStatus（实现状态）：pending（未动笔）/ in-progress（写作中）/ completed（已完成）/ abandoned（已废弃）。",
+      "## 何时使用",
+      "1. 改单元内容：title / intent / synopsis / scope。",
+      "2. 推进状态：planningStatus（idea → outlined → ready）、realizationStatus（开写标 in-progress、写完标 completed）。",
+      "3. 结构调整：parentId 换父（null = 移到顶层）、orderKey 兄弟重排——移动即编辑，同在本工具。",
+      "4. 维护 leaf：补/改人物绑定、事件序列、节奏拍、实体变更。",
+      "5. 标记阻塞 blockState / 废弃 abandonment；清除时传 null。",
+      "",
+      "## 何时不用",
+      "1. 写或改正文——用 NovelParagraphWrite / NovelParagraphEdit。",
+      "2. 建新单元——用 NovelOutlineWrite。",
+      "3. 删除单元——用 NovelDelete（有依赖检查与级联选项）。",
+      "",
+      "## 示例",
+      "<example>",
+      "一个场景写完，开写下一个：",
+      "→ NovelOutlineEdit values=[",
+      "  { id:<scene-A>, baseRevision:<v>, value:{ realizationStatus:\"completed\" } },",
+      "  { id:<scene-B>, baseRevision:<v>, value:{ realizationStatus:\"in-progress\", planningStatus:\"ready\" } } ]",
+      "<reasoning>写完立即标 completed、下一个标 in-progress；父 arc 与全书进度由叶单元自动汇总，",
+      "不需要（也不应该）手动改父单元的 realizationStatus。</reasoning>",
+      "</example>",
+      "",
+      "<example>",
+      "第二卷内两个场景顺序对调：",
+      "→ 各传一项，value 只含 orderKey（其余字段不受影响）",
+      "<reasoning>PATCH 语义：只改传了的字段；orderKey 是兄弟间稠密排序键（4 位大写十六进制组）。</reasoning>",
+      "</example>",
+      "",
+      "<example>",
+      "baseRevision 用了本轮开头的旧值，期间作者手动改过大纲 → 预检拒绝并附当前版本",
+      "（反例：不看拒绝原因原样重试）",
+      "<reasoning>正确做法：重新 NovelOutlineRead 拿最新 entityVersion，确认作者的改动没有被覆盖风险后再提交。</reasoning>",
+      "</example>",
+      "",
+      "## 字段细则",
+      "- 每项 = { id, baseRevision, value }；baseRevision 取最近一次 NovelOutlineRead 的 entityVersion（审批前预检，过期直接拒绝）。",
+      "- PATCH：value 未提供的字段保留原值；parentId / orderKey 移动语义同字段表达。",
+      "- blockState（null 清除）：六类 reasonCode + 依赖单元列表；abandonment（null 清除）：六类 reasonCode + 可选替换单元。",
+      "  读路径 progress.isBlocked 由自身或后代的 blockState 派生。",
+      "- leaf（null 删整个计划）：字段级替换——只传要改的集合，集合传 null 清空；",
+      "  引用的角色/地点/单元 id 必须已存在（预检拦截）。",
+      "- 编辑前先读目标单元（内容与版本）。",
+      "",
+      "拿不准就先 NovelOutlineRead 再编辑。",
     ].join("\n"),
     parameters: {
       type: "object",
@@ -1857,9 +1960,8 @@ function outlineEdit(handle: NovelHandle): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Batch field-level PATCH updates for story units (atomic per batch): title/intent/synopsis/scope/statuses/parentId/orderKey/blockState/abandonment/leaf.",
-      guidance:
-        "id + baseRevision required (entityVersion from the latest NovelOutlineRead; stale = rejected before approval). Moving a unit is an Edit of parentId (null = root) and/or orderKey. blockState/abandonment null-clear; leaf patch replaces fields (null clears the whole plan or a collection). Referenced character/location/unit ids must exist.",
+      policy: "",
+      guidance: "",
     },
     precheck: async (call) => {
       const items = valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value?: Record<string, unknown> }>;

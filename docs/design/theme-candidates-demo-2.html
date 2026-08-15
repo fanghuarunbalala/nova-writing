@@ -365,19 +365,19 @@
     --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.4);
   }
 
-  /* ============ 新增 11：凝脂（青玉白底 · 杨妃强调；渐变 杨妃→深杨妃→殷红）============
-     取色（用户指定精确值）：底 凝脂#F5FCE9（青玉白）/ 渐变首 杨妃#F091A0 →
-     主 #B95160（杨妃×殷红）→ 尾 #932432（殷红向）/ 边 玉簪#A4CAB6 洗淡 /
-     正文·次要·faint 凝脂加深系（青墨绿灰） */
+  /* ============ 新增 11：凝脂（暖玉白底 · 杨妃强调；渐变 杨妃→深杨妃→殷红向）============
+     取色（用户指定 RGB）：底 凝脂 rgb(245,242,233)=#F5F2E9（暖玉白）/
+     渐变首 杨妃 rgb(240,145,160)=#F091A0 → 主 #B95160（杨妃×殷红）→
+     尾 #932432（殷红向）/ 正文·次要·faint·边框 凝脂加深系（暖墨灰） */
   [data-theme="ningzhi"] {
-    --color-bg:            #F5FCE9; /* 凝脂 */
-    --color-surface:       #FCFEF7; /* 凝脂提白 */
-    --color-surface-2:     #E8EEDC; /* 凝脂压暗（青灰绿） */
-    --color-fg:            #252623; /* 青墨 */
-    --color-muted:         #676A62;
-    --color-faint:         #8E9287;
-    --color-border:        #E2EEE8; /* 玉簪洗淡 */
-    --color-border-strong: #CAE0D5; /* 玉簪 */
+    --color-bg:            #F5F2E9; /* 凝脂 */
+    --color-surface:       #FCFAF7; /* 凝脂提白 */
+    --color-surface-2:     #E9E6DD; /* 凝脂压暗 */
+    --color-fg:            #222221; /* 暖墨 */
+    --color-muted:         #676662;
+    --color-faint:         #8E8C87;
+    --color-border:        #E0DDD5; /* 凝脂加深 */
+    --color-border-strong: #CBC9C1;
     --color-orange:        #F091A0; /* 杨妃 */
     --color-accent:        #B95160; /* 杨妃×殷红（深杨妃） */
     --color-red:           #932432; /* 殷红向 */
@@ -391,9 +391,40 @@
     --color-info:          #4466B4;
     --color-info-bg:       #E9EEF8;
     --color-on-accent:     #fff;
-    --shadow-1: 0 1px 2px rgba(40, 52, 30, 0.04), 0 8px 24px rgba(40, 52, 30, 0.05);
-    --shadow-2: 0 2px 4px rgba(40, 52, 30, 0.05), 0 16px 40px rgba(40, 52, 30, 0.12);
-    --shadow-xs: 0 1px 3px rgba(34, 44, 26, 0.08);
+    --shadow-1: 0 1px 2px rgba(52, 48, 36, 0.04), 0 8px 24px rgba(52, 48, 36, 0.05);
+    --shadow-2: 0 2px 4px rgba(52, 48, 36, 0.05), 0 16px 40px rgba(52, 48, 36, 0.12);
+    --shadow-xs: 0 1px 3px rgba(44, 40, 30, 0.08);
+  }
+
+  /* ============ 新增 12：行香子（葱白底 · 行香子强调；渐变 行香子提白→茶褐→深茶褐）============
+     取色（用户指定 RGB）：底 葱白 rgb(235,238,232)=#EBEEE8 /
+     强调 行香子 rgb(191,185,156)=#BFB99C → 主 #8A6954（行香子×淡栗·茶褐）→
+     尾 #774C3A（深茶褐）/ 正文 茶墨（行香子×京元）/ 边 行香子洗淡 */
+  [data-theme="xingxiangzi"] {
+    --color-bg:            #EBEEE8; /* 葱白 */
+    --color-surface:       #F9FAF8; /* 葱白提白 */
+    --color-surface-2:     #E0E3DE; /* 葱白压暗 */
+    --color-fg:            #4B4A40; /* 茶墨 */
+    --color-muted:         #6D6B5B;
+    --color-faint:         #8C8874;
+    --color-border:        #E2E0D2; /* 行香子洗淡 */
+    --color-border-strong: #D1CDB8;
+    --color-orange:        #D1CDB8; /* 行香子提白（渐变首） */
+    --color-accent:        #8A6954; /* 茶褐（行香子×淡栗） */
+    --color-red:           #774C3A; /* 深茶褐 */
+    --color-accent-ink:    #7A513E;
+    --color-success:       #20715B;
+    --color-success-bg:    #FFF9DF;
+    --color-warn:          #927104; /* 金盏加深 */
+    --color-warn-bg:       #FEF7E2;
+    --color-danger:        #C21F30; /* 枫叶 */
+    --color-danger-bg:     #FBF0F2;
+    --color-info:          #4466B4;
+    --color-info-bg:       #E9EEF8;
+    --color-on-accent:     #fff;
+    --shadow-1: 0 1px 2px rgba(44, 40, 28, 0.05), 0 8px 24px rgba(44, 40, 28, 0.06);
+    --shadow-2: 0 2px 4px rgba(44, 40, 28, 0.06), 0 16px 40px rgba(44, 40, 28, 0.13);
+    --shadow-xs: 0 1px 3px rgba(38, 34, 24, 0.09);
   }
 
   /* ============ 主题切换过渡（demo 演示；真实实现可加在全局样式） ============ */
@@ -1368,7 +1399,9 @@
     { id: "zitan", name: "紫檀", group: 1, dot: ["#E9CCD3", "#815C94"],
       desc: "紫调暗色（传统色）。底取石青、正文芝兰、次要萝兰；渐变 芝兰→萝兰→蕈紫，info 用槿紫。夜读的紫檀书房。" },
     { id: "ningzhi", name: "凝脂", group: 1, dot: ["#F091A0", "#932432"],
-      desc: "青玉白亮色（传统色，用户指定精确值）。底取凝脂#F5FCE9（青玉白）、边玉簪、正文青墨；渐变 杨妃#F091A0→深杨妃→殷红，青玉纸上的杨妃醉色。" },
+      desc: "暖玉白亮色（传统色，用户指定 RGB）。底取凝脂#F5F2E9（暖玉白）、正文暖墨；渐变 杨妃#F091A0→深杨妃→殷红向，凝脂纸上的一抹杨妃醉色。" },
+    { id: "xingxiangzi", name: "行香子", group: 1, dot: ["#BFB99C", "#774C3A"],
+      desc: "茶调亮色（传统色·词牌名，用户指定 RGB）。底取葱白#EBEEE8、边行香子洗淡、正文茶墨；渐变 行香子提白→茶褐→深茶褐（行香子×淡栗），茶烟卷册的沉静。" },
     { id: "candle", name: "烛影", group: 1, dot: ["#E7A23F", "#DE7622"],
       desc: "棕调暗色（传统色）。底取火山、inset 栗棕、正文珍珠、次要玳瑁、warn 淡茧；渐变 玳瑁→凋叶→麂棕，烛光暖褐书房。" },
   ];

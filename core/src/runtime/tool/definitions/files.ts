@@ -113,8 +113,8 @@ function readTool(workspace: string): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Use Read to review files inside the workspace (e.g., the current design draft).",
-      guidance: "file_path is required and must be workspace-relative; pass offset/limit to read a slice of a long file. Read-only; confined to the workspace sandbox.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {
@@ -146,8 +146,8 @@ function globTool(workspace: string): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Use Glob to discover workspace files before reading or editing them.",
-      guidance: "Patterns are resolved against the workspace root; absolute patterns and parent traversal are rejected. Read-only.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {
@@ -182,8 +182,8 @@ function writeTool(workspace: string): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Use Write to replace a whole workspace file (e.g., the design draft) with new content.",
-      guidance: "file_path must be a workspace-relative path; content is written atomically. Writes outside the workspace sandbox are rejected.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {
@@ -220,8 +220,8 @@ function editTool(workspace: string): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Use Edit for small incremental changes to a workspace file (e.g., the design draft).",
-      guidance: "old_string must appear in the file; provide enough context to match exactly once when replace_all=false. Edits outside the workspace sandbox are rejected.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {

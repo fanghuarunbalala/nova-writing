@@ -178,9 +178,8 @@ export function createSubagentTools(opts: SubagentToolsOptions): ToolDef[] {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Use Agent to delegate independent sub-tasks; it accepts immediately and the task runs asynchronously.",
-      guidance:
-        "Pass a self-contained prompt, then poll with TaskOutput (block:true) or cancel with TaskStop. Never block the main turn waiting.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {
@@ -218,8 +217,8 @@ export function createSubagentTools(opts: SubagentToolsOptions): ToolDef[] {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Use TaskOutput to inspect subagent progress; prefer block:true over busy retrying.",
-      guidance: "Returns snapshots of all requested tasks; terminal tasks carry result or error.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {
@@ -264,8 +263,8 @@ export function createSubagentTools(opts: SubagentToolsOptions): ToolDef[] {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Use TaskStop to cancel a subagent task that is no longer needed or heading off-track.",
-      guidance: "Outcome is one of cancellation_requested / already_terminal / not_found.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {

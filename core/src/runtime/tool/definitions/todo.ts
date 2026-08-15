@@ -86,8 +86,8 @@ export function createTodoWriteTool(todoStore: ConversationTodoStore, conversati
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Use TodoWrite to track progress on non-trivial multi-step work.",
-      guidance: "Replace the whole todo list; exactly one in_progress; provide content + activeForm for each item.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {

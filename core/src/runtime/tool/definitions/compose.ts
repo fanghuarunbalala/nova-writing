@@ -35,10 +35,8 @@ function enterComposeModeTool(service: ComposeModeService, conversationId: strin
       additionalProperties: false,
     },
     promptDetail: {
-      policy:
-        "Call EnterComposeMode before drafting content; then use Read/Glob/Write/Edit on the returned design file using its workspace-relative path.",
-      guidance:
-        "purpose is optional and only recorded in the result. While compose is active, canonical novel writes are denied; file tools work across the workspace sandbox with workspace-relative paths.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async (call) => {
@@ -82,8 +80,8 @@ function exitComposeModeTool(service: ComposeModeService, conversationId: string
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "Call ExitComposeMode only after the design draft is complete and ready for the author's approval.",
-      guidance: "No parameters are required. Requires author approval; rejection returns to composing for revision.",
+      policy: "",
+      guidance: "",
     },
     handler: {
       execute: async () => {

@@ -81,7 +81,7 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     expect(prompt.slice(wrapStart, wrapEnd)).toContain("基调热血");
   });
 
-  it("无 platform/provider：环境块省略 + 约束占位 + 工具清单（26 工具）+ ToolPolicy 追加", async () => {
+  it("无 platform/provider：环境块省略 + 约束占位 + 工具清单（26 工具）+ 无 ToolPolicy 块", async () => {
     const loop = buildNovelAgent({
       workspace: "/ws",
       provider,
@@ -92,11 +92,10 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     const prompt = (loop as unknown as { context: { systemPrompt: string } }).context.systemPrompt;
     expect(prompt).not.toContain("# 环境信息");
     expect(prompt).toContain("（当前无可用内容");
-    // 工具清单 23 个 + ToolPolicy（TodoWrite promptDetail）在清单之后
+    // 工具清单 23 个；promptDetail policy/guidance 已全量清空 → system 不再有 ToolPolicy 块
     const toolsIdx = prompt.indexOf("Available Tools:");
-    const policyIdx = prompt.indexOf("# ToolPolicy");
-    expect(policyIdx).toBeGreaterThan(toolsIdx);
-    const toolSection = prompt.slice(toolsIdx, policyIdx);
+    expect(prompt).not.toContain("# ToolPolicy");
+    const toolSection = prompt.slice(toolsIdx);
     for (const name of ["TodoWrite", "Read", "EnterComposeMode", "ExitComposeMode", "NovelCharacterRead", "NovelDelete", "NovelOutlineWrite"]) {
       expect(toolSection).toContain(`- ${name}`);
     }

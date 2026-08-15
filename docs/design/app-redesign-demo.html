@@ -490,6 +490,7 @@
   .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--color-bg); }
 
   .subHead {
+    position: relative;
     display: flex; align-items: center; gap: 10px; flex: none;
     padding: 9px 16px;
     border-bottom: 1px solid var(--color-border);
@@ -725,6 +726,22 @@
     transition: all var(--duration-fast) var(--ease-out);
   }
   .sysMsg:hover { box-shadow: 0 0 0 3px var(--color-warn-40); }
+
+  /* 助理消息头：头像 + 名称 + 时间 + 模式 chip（正文与工具行分层更明确） */
+  .msgHead { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+  .msgHead .avatar { width: 24px; height: 24px; font-size: 11px; }
+  .msgHead .avatar.assistant { background: var(--grad-accent); color: var(--color-on-accent); }
+  .msgHead b { font-size: var(--fs-12-5); font-weight: var(--fw-semibold); }
+  .msgHead .mMeta { font-size: var(--fs-11); color: var(--color-faint); font-family: var(--font-mono); }
+  /* 工具调用带：一轮里夹在正文中间的调用行分组（含失败 / 运行中） */
+  .toolGroup {
+    display: flex; flex-direction: column; gap: 5px;
+    margin: 8px 0 10px; padding: 7px 11px;
+    border-left: 2px solid color-mix(in oklab, var(--color-accent) 32%, transparent);
+    background: color-mix(in oklab, var(--color-fg) 3.5%, transparent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .toolGroup .toolLine { margin-top: 0; }
 
   /* 输入区 */
   .composer {
@@ -1006,6 +1023,36 @@
   .closedCard { text-align: center; }
   .closedCard .glyph { font-family: var(--font-kai); font-size: 30px; color: var(--color-faint); display: block; margin-bottom: 8px; }
 
+  /* ============ 长任务等待动画（打开项目 / 新建会话等阻塞操作） ============ */
+  .loadingMask {
+    position: absolute; inset: 0; z-index: 55;
+    display: none; place-items: center;
+    background: color-mix(in oklab, var(--color-bg) 86%, transparent);
+    backdrop-filter: blur(6px);
+  }
+  .loadingMask.show { display: grid; animation: view-in 0.2s var(--ease-out); }
+  .loadingCard { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+  .loadingOrb {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--grad-accent); background-size: 160% 160%;
+    animation: grad-flow 6s var(--ease-in-out) infinite, loading-bob 1.3s var(--ease-in-out) infinite;
+  }
+  .loadingTitle { font-size: var(--fs-13); font-weight: var(--fw-semibold); }
+  .loadingSteps { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+  .loadingStep {
+    display: flex; align-items: center; gap: 7px;
+    font-size: var(--fs-12); color: var(--color-faint); font-family: var(--font-mono);
+    opacity: 0.35; transition: opacity 0.25s var(--ease-out);
+  }
+  .loadingStep .tick {
+    display: inline-grid; place-items: center; width: 13px; height: 13px;
+    color: var(--color-success); opacity: 0; transform: scale(0.6);
+    transition: opacity 0.25s var(--ease-out), transform 0.25s var(--ease-out);
+  }
+  .loadingStep.on { opacity: 1; color: var(--color-muted); }
+  .loadingStep.on .tick { opacity: 1; transform: scale(1); }
+  @keyframes loading-bob { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-5px) scale(1.06); } }
+
   .wsMenu {
     position: fixed; z-index: 70; min-width: 240px;
     border: 1px solid var(--color-border-strong); border-radius: var(--radius-md);
@@ -1027,6 +1074,64 @@
   .wsItem svg { color: var(--color-faint); }
   .wsItem.cur svg { color: var(--color-accent); }
   .wsMenuDivider { height: 1px; background: var(--color-border); margin: 5px 8px; }
+
+  /* ============ 顶栏通知中心（铃铛下拉） ============ */
+  .bellWrap { position: relative; }
+  .bellBadge {
+    position: absolute; top: 0; right: 0;
+    min-width: 14px; height: 14px; padding: 0 3px;
+    display: grid; place-items: center;
+    border-radius: 7px; background: var(--color-danger); color: var(--color-on-accent);
+    font-family: var(--font-mono); font-size: 9px; font-weight: var(--fw-bold);
+    box-shadow: 0 0 0 2px var(--color-chrome-bg);
+  }
+  .notifMenu {
+    position: fixed; z-index: 70; width: min(348px, 92vw); max-height: 64vh; overflow-y: auto;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-md);
+    background: color-mix(in oklab, var(--color-surface) 96%, transparent);
+    backdrop-filter: blur(14px); box-shadow: var(--shadow-2); padding: 6px;
+    display: none;
+  }
+  .notifMenu.show { display: block; animation: view-in 0.18s var(--ease-out); }
+  .notifHead { display: flex; align-items: center; gap: 7px; padding: 6px 8px 7px; }
+  .notifHead b { font-size: var(--fs-13); font-weight: var(--fw-semibold); }
+  .notifItem {
+    display: flex; align-items: flex-start; gap: 9px; width: 100%;
+    padding: 8px 9px; border: 0; border-radius: var(--radius-sm); background: none;
+    text-align: left; cursor: pointer; transition: background-color var(--duration-fast) var(--ease-out);
+  }
+  .notifItem:hover { background: var(--color-accent-8-t); }
+  .notifItem.read { opacity: 0.6; }
+  .notifItem b { display: block; font-size: var(--fs-12-5); font-weight: var(--fw-semibold); }
+  .notifItem small { display: block; font-size: var(--fs-11); color: var(--color-faint); line-height: 1.5; margin-top: 1px; }
+  .nIcon { flex: none; width: 26px; height: 26px; border-radius: var(--radius-sm); display: grid; place-items: center; }
+  .nIcon.warn { background: var(--color-warn-bg); color: var(--color-warn); }
+  .nIcon.danger { background: var(--color-danger-bg); color: var(--color-danger); }
+  .nIcon.info { background: var(--color-info-bg); color: var(--color-info); }
+  .nIcon.success { background: var(--color-success-bg); color: var(--color-success); }
+  .nIcon.neutral { background: var(--color-surface-2); color: var(--color-faint); }
+  .notifItem .nDot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); margin-top: 8px; }
+
+  /* ============ 对话顶条「更多」会话菜单 ============ */
+  .subMenu {
+    position: absolute; top: calc(100% - 4px); right: 10px; z-index: 40;
+    min-width: 232px; padding: 5px;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-md);
+    background: color-mix(in oklab, var(--color-surface) 96%, transparent);
+    backdrop-filter: blur(14px); box-shadow: var(--shadow-2);
+    animation: view-in 0.18s var(--ease-out);
+  }
+  .subMenuItem {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    padding: 7px 10px; border: 0; border-radius: var(--radius-sm); background: none;
+    color: var(--color-fg); font-size: var(--fs-12-5); font-weight: var(--fw-medium);
+    text-align: left; cursor: pointer; transition: background-color var(--duration-fast) var(--ease-out);
+  }
+  .subMenuItem svg { color: var(--color-faint); }
+  .subMenuItem:hover { background: var(--color-accent-8-t); }
+  .subMenuItem.danger { color: var(--color-danger); }
+  .subMenuItem.danger svg { color: var(--color-danger); }
+  .subMenuItem.danger:hover { background: var(--color-danger-12); }
 
   .dialogMask {
     position: fixed; inset: 0; z-index: 75;
@@ -1219,10 +1324,12 @@
         <button class="btn btnPrimary" data-act="reopen">重新打开</button>
       </div>
     </div>
+    <div class="loadingMask" id="loadingMask"></div>
   </div>
 </div>
 
 <div class="wsMenu" id="wsMenu"></div>
+<div class="notifMenu" id="notifMenu"></div>
 
 <div class="dialogMask" id="settingsMask" data-act="settingsCloseMask">
   <div class="dialog" data-noclose="1">
@@ -1277,6 +1384,7 @@ const P = {
   zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
   feather: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   alertTri: '<path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   retry: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   minus: '<path d="M5 12h14"/>',
@@ -1603,7 +1711,7 @@ const state = {
   view: "chat", contentTab: "outline",
   selUnit: "u2", selChapter: "c2", selChar: "ch1", selLoc: "l1",
   planSel: "overview", mode: "compose", pendingMode: null, modeMenuOpen: false, genState: "generating",
-  sidebarCollapsed: false, maximized: false, ws: "北河旧事",
+  sidebarCollapsed: false, maximized: false, ws: "北河旧事", pinned: false,
   approvalOpen: true, settingsTab: "appearance",
   vpMid: false,
 };
@@ -1647,6 +1755,28 @@ function toast(msg) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
 }
 
+/* 长任务等待动画：全屏分步加载遮罩（步骤逐个点亮），完成后收起并回调。
+   用于打开 / 切换项目、打开其他项目等阻塞操作。 */
+let loadingTimer = null;
+function runLoading(title, steps, done) {
+  const mask = $("loadingMask");
+  if (mask.classList.contains("show")) return;
+  mask.innerHTML = `<div class="loadingCard">
+    <span class="loadingOrb"></span>
+    <div class="loadingTitle">${esc(title)}</div>
+    <div class="loadingSteps">${steps.map((s, i) => `<div class="loadingStep" data-i="${i}"><span class="tick">${ic("check", 11, 2.6)}</span>${esc(s)}</div>`).join("")}</div>
+  </div>`;
+  mask.classList.add("show");
+  steps.forEach((_, i) => setTimeout(() => {
+    mask.querySelectorAll(`.loadingStep[data-i="${i}"]`).forEach(el => el.classList.add("on"));
+  }, 300 * (i + 1)));
+  clearTimeout(loadingTimer);
+  loadingTimer = setTimeout(() => {
+    mask.classList.remove("show");
+    if (done) done();
+  }, 300 * steps.length + 550);
+}
+
 /* ================= 顶栏 ================= */
 function renderTitlebar() {
   const p = state.platform;
@@ -1666,6 +1796,7 @@ function renderTitlebar() {
     </nav>
     <div class="tbRight">
       <button class="iconBtn" data-act="wsOpen" title="打开工作区">${ic("folderOpen")}</button>
+      <button class="iconBtn bellWrap" data-act="notifOpen" title="通知中心">${ic("bell")}${NOTIFS.some(n => n.unread) ? `<span class="bellBadge">${NOTIFS.filter(n => n.unread).length}</span>` : ""}</button>
       <button class="iconBtn" data-act="settingsOpen" title="设置">${ic("gear")}</button>
       ${p === "win" ? `<div class="winCtl">
         <button data-act="wMin" title="最小化">${ic("minus", 13)}</button>
@@ -1676,20 +1807,26 @@ function renderTitlebar() {
 }
 
 /* ================= 侧栏 ================= */
+/* 会话目录数据（新建会话动态插入新行） */
+let convSeq = 0;
+const CONVS = [
+  { title: "《北河旧事》", meta: "第 2 章 · 追逃段修订 · 生成中", icon: "messageSquare", dot: "var(--color-warn)", active: true, pin: true, group: "置顶" },
+  { title: "铜符设定推敲", meta: "3 条消息 · 刚刚", icon: "messageSquare", group: "今天" },
+  { title: "第 5 章 去留讨论", meta: "生成失败 · 点重试", icon: "messageSquare", dot: "var(--color-danger)", group: "今天" },
+  { title: "《雾中灯塔》", meta: "已完成 34 章 · 12.4 万字", icon: "bookOpen", dot: "var(--color-success)", group: "更早" },
+  { title: "新的构思", meta: "未成卷 · 3 条碎片", icon: "feather", group: "更早" },
+  { title: "大纲重构实验", meta: "3 天前", icon: "listTree", group: "更早" },
+];
 function chatSidebarHTML() {
   return `
     <button class="newConvBtn" data-act="newConv">${ic("plus", 13, 2.2)}开始一段新的创作</button>
     <div class="searchBox">${ic("search", 13)}搜索对话…</div>
     <div class="sideScroll">
-      <div class="dirGroup">置顶</div>
-      ${convRow({ title: "《北河旧事》", meta: "第 2 章 · 追逃段修订 · 生成中", icon: "messageSquare", dot: "var(--color-warn)", active: true, pin: true })}
-      <div class="dirGroup">今天</div>
-      ${convRow({ title: "铜符设定推敲", meta: "3 条消息 · 刚刚", icon: "messageSquare" })}
-      ${convRow({ title: "第 5 章 去留讨论", meta: "生成失败 · 点重试", icon: "messageSquare", dot: "var(--color-danger)" })}
-      <div class="dirGroup">更早</div>
-      ${convRow({ title: "《雾中灯塔》", meta: "已完成 34 章 · 12.4 万字", icon: "bookOpen", dot: "var(--color-success)" })}
-      ${convRow({ title: "新的构思", meta: "未成卷 · 3 条碎片", icon: "feather" })}
-      ${convRow({ title: "大纲重构实验", meta: "3 天前", icon: "listTree" })}
+      ${["置顶", "今天", "更早"].map(g => {
+        const items = CONVS.filter(c => c.group === g);
+        if (!items.length) return "";
+        return `<div class="dirGroup">${g}</div>` + items.map(convRow).join("");
+      }).join("")}
     </div>`;
 }
 function convRow({ title, meta, icon, dot, active, pin }) {
@@ -1835,25 +1972,51 @@ function updateScrims() {
 
 /* ================= 主区 ================= */
 function chatTimelineHTML() {
+  /* 每轮助手消息：头（头像/名称/时间/模式）→ 可选前言 → 工具调用带（夹在正文中间）→ 最后一次 call 的返回正文 */
+  const head = (time) => `
+      <div class="msgHead">
+        <span class="avatar assistant">${ic("feather", 12, 2)}</span>
+        <b>NovelAI</b>
+        <span class="mMeta">${time}</span>
+        <span class="chip faint">设计</span>
+      </div>`;
   return `
+    <div class="runDivider"><span>第 1 轮 · 二卷开篇</span></div>
+    <div class="msgUser">帮我把第二卷的开头理一下，先看看现在的大纲。</div>
+    <div class="msgAssistant">
+      ${head("今天 14:02")}
+      <div class="toolGroup">
+        <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}NovelOutlineRead · 全树（includePlans）</span></div>
+      </div>
+      <div class="mdBody">
+        <p>第二卷「雾锁」现状：<b>已成纲 · 未动笔</b>，父单元进度 0/3——「旧案重启 · 档案房线」序列两章（第 6、7 章，已成纲、草稿已成），第 8 章「断缆」还只是点子。</p>
+        <p>建议从档案房线开笔：第 6 章调卷先行，第 7 章夜话的证词拆台才有着力点；「断缆」等线索对齐后再成纲。</p>
+      </div>
+    </div>
     <div class="runDivider"><span>第 2 轮 · 大纲核对</span></div>
     <div class="msgUser">第二章追逃段现在的写法太全知了，帮我核对一下大纲里这一章的定位。</div>
     <div class="msgAssistant">
-      <div class="toolLine">
-        <span class="toolDone">${ic("check", 12, 2.2)}大纲读取 · 第 2 章</span>
+      ${head("今天 14:08")}
+      <div class="mdBody"><p>我先读第 2 章的单元与 leaf 计划，再对照现稿给结论。</p></div>
+      <div class="toolGroup">
+        <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}NovelOutlineRead · u2（含 leaf）</span></div>
       </div>
-      <div class="mdBody"><p>大纲定位：主观视角的追逃，悬念保留到最后。现稿第 2、3 段确实滑向了全知（「她认得这条路」以下）。建议改写焦点：只写林晚看得见、听得见的。</p></div>
+      <div class="mdBody">
+        <p>大纲定位：主观视角的追逃，悬念保留到最后——leaf 写明「全程主观视角，不越界」，节奏拍为 上升 → 保持 → 转折。现稿第 2、3 段确实滑向了全知（「她认得这条路」以下）。建议改写焦点：只写林晚看得见、听得见的。</p>
+      </div>
     </div>
     <div class="runDivider"><span>第 3 轮 · 追逃段修订</span></div>
     <div class="msgUser">把第二章的追逃段改成林晚的主观视角，悬念保留到最后。</div>
     <div class="msgAssistant">
-      <div class="toolLine">
-        <span class="toolDone">${ic("check", 12, 2.2)}大纲读取 · 第 2 章</span>
-        <span class="toolFailed">${ic("x", 12, 2.2)}旧稿读取失败：北河渡口</span>
-        <span class="toolRunning"><span class="spinner"></span>修订正文中：追逃段<span class="toolSec" id="toolSecTick">12s</span></span>
+      ${head("今天 14:20")}
+      <div class="mdBody"><p>按 leaf 的节奏拍重写：视线收窄到雨幕与灯笼的光斑。先取旧稿比对，再落修订。</p></div>
+      <div class="toolGroup">
+        <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}NovelOutlineRead · u2（含 leaf）</span></div>
+        <div class="toolLine"><span class="toolFailed">${ic("x", 12, 2.2)}NovelParagraphRead 失败：北河渡口 · 旧稿</span></div>
+        <div class="toolLine"><span class="toolRunning"><span class="spinner"></span>NovelParagraphWrite · 追逃段修订<span class="toolSec" id="toolSecTick">12s</span></span></div>
       </div>
       <div class="mdBody">
-        <p>已按林晚的主观视角重写本段：视线收窄到雨幕与灯笼的光斑，删去全知描写两处，铜符来历留白作钩子。修订稿如下，供审阅。</p>
+        <p>已按林晚的主观视角重写本段：删去全知描写两处，铜符来历留白作钩子。修订稿如下，供审阅。</p>
         <div class="quoteKai">「回头的人，没有一个走到过北桥。」——第二章 · 雨夜追逃</div>
       </div>
       <div class="draftPanel">
@@ -1913,8 +2076,8 @@ function chatMainHTML() {
     <div class="subHead">
       <div class="subTitle"><b>《北河旧事》</b><span class="kicker">第 2 章 · 追逃段修订 · 第 3 轮</span></div>
       <div class="subActions">
-        <button class="iconBtn" title="置顶">${ic("pin", 14)}</button>
-        <button class="iconBtn" title="更多">${ic("more", 14)}</button>
+        <button class="iconBtn" data-act="convPin" title="置顶会话">${ic("pin", 14)}</button>
+        <button class="iconBtn" data-act="convMenu" title="更多">${ic("more", 14)}</button>
       </div>
     </div>
     <div class="chatScroll" id="chatScroll"><div class="chatInner">${chatTimelineHTML()}</div></div>
@@ -2325,7 +2488,7 @@ function renderSettings() {
   } else {
     html = `<div style="text-align:center;padding:26px 0;">
       <div class="brand" style="justify-content:center;margin-bottom:8px;"><span class="brandDot"></span><span class="brandName" style="font-size:16px;">Novel</span></div>
-      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.3<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>大纲对齐 core StoryUnit 模型（泛型树 · 双状态 · leaf）</div>
+      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.5<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>大纲对齐 StoryUnit 模型 · 通知中心 · 会话菜单 · 轮次分层 · 长任务等待</div>
     </div>`;
   }
   $("settingsContent").innerHTML = html;
@@ -2339,6 +2502,65 @@ const WS_LIST = [
   { name: "雾中灯塔", sub: "34 章 · 12.4 万字 · 3 天前" },
   { name: "新的构思", sub: "未成卷 · 3 条碎片" },
 ];
+/* ================= 通知中心（顶栏铃铛 + 下拉列表） ================= */
+/* 类型 → [图标, 色调]：approval 审批 / writing 写作 / profile 档案 / done 完成 / system 系统 */
+const NOTIF_META = {
+  approval: ["shieldCheck", "warn"], writing: ["alertTri", "danger"], profile: ["mapPin", "info"],
+  done: ["check", "success"], system: ["folderOpen", "neutral"],
+};
+const NOTIFS = [
+  { id: "n1", type: "approval", title: "角色写入待审批 · 沈砚", desc: "对话《北河旧事》第 3 轮 · 刚刚", unread: true,
+    goto: { view: "chat" } },
+  { id: "n2", type: "writing", title: "第 4 章 · 铜符 受阻", desc: "依赖未定：等待第 2 章定稿（铜符是否示人） · 12 分钟前", unread: true,
+    goto: { unit: "u4" } },
+  { id: "n3", type: "profile", title: "雾角灯塔 · 档案待完善", desc: "缺少现状与关联单元，影响第 9 章成纲 · 昨天", unread: true,
+    goto: { loc: "l3" } },
+  { id: "n4", type: "done", title: "第 1 章 · 雾起北河 初稿完成", desc: "已转入正式稿 · 前天", unread: false },
+  { id: "n5", type: "system", title: "已切换工作区", desc: "《雾中灯塔》 → 《北河旧事》 · 3 天前", unread: false },
+];
+function notifItemHTML(n) {
+  const [icon, tone] = NOTIF_META[n.type] || NOTIF_META.system;
+  return `<button class="notifItem${n.unread ? "" : " read"}" data-act="notifGo" data-id="${n.id}" title="${esc(n.title)}">
+    <span class="nIcon ${tone}">${ic(icon, 13)}</span>
+    <span style="min-width:0;flex:1;"><b>${esc(n.title)}</b><small>${esc(n.desc)}</small></span>
+    ${n.unread ? `<span class="nDot"></span>` : ""}
+  </button>`;
+}
+let lastNotifPos = { x: 0, y: 0 };
+function renderNotifMenu(x, y) {
+  if (x === undefined) { x = lastNotifPos.x; y = lastNotifPos.y; }
+  lastNotifPos = { x, y };
+  const m = $("notifMenu");
+  const unread = NOTIFS.filter(n => n.unread).length;
+  m.innerHTML = `
+    <div class="notifHead">
+      <b>通知</b>
+      <span class="apCnt${unread === 0 ? " zero" : ""}">${unread}</span>
+      <span style="flex:1"></span>
+      <button class="btn btnGhost btnSm" data-act="notifReadAll">全部已读</button>
+    </div>
+    ${NOTIFS.map(notifItemHTML).join("")}
+    <div class="wsMenuDivider"></div>
+    <button class="wsItem" data-act="noop">${ic("gear", 13)}<span>通知设置…</span></button>`;
+  m.style.left = Math.min(Math.max(8, x), window.innerWidth - 360) + "px";
+  m.style.top = Math.min(y, window.innerHeight - 140) + "px";
+  m.classList.add("show");
+}
+
+/* 对话顶条「更多」会话菜单（挂在 subActions 内，DOM 原地插拔不动输入区） */
+function convMenuHTML() {
+  const item = (id, icon, label, danger) =>
+    `<button class="subMenuItem${danger ? " danger" : ""}" data-act="convAct" data-id="${id}">${ic(icon, 13)}<span>${label}</span></button>`;
+  return `<div class="subMenu" id="convMenu" role="menu">
+    ${item("rename", "edit", "重命名对话")}
+    ${item("copy", "copy", "复制最后一条回复")}
+    ${item("export", "scrollText", "导出为 Markdown")}
+    ${item("clear", "gitBranch", "清空上下文 · 开始新一轮")}
+    <div class="wsMenuDivider"></div>
+    ${item("del", "x", "删除对话", true)}
+  </div>`;
+}
+
 function renderWsMenu(x, y) {
   const m = $("wsMenu");
   m.innerHTML = `<div class="wsMenuHead">当前工作区</div>
@@ -2346,7 +2568,7 @@ function renderWsMenu(x, y) {
       ? `<button class="wsItem cur" data-act="noop">${ic("check", 13, 2.4)}<span>${esc(w.name)}<span class="sub">${esc(w.sub)}</span></span></button>`
       : `<button class="wsItem" data-act="wsPick" data-id="${esc(w.name)}">${ic("folderOpen", 13)}<span>${esc(w.name)}<span class="sub">${esc(w.sub)}</span></span></button>`).join("")}
     <div class="wsMenuDivider"></div>
-    <button class="wsItem" data-act="noop">${ic("plus", 13, 2.2)}<span>打开其他项目…</span></button>`;
+    <button class="wsItem" data-act="wsOpenOther">${ic("plus", 13, 2.2)}<span>打开其他项目…</span></button>`;
   m.style.left = Math.min(x, window.innerWidth - 260) + "px";
   m.style.top = y + "px";
   m.classList.add("show");
@@ -2394,6 +2616,9 @@ function renderInfoPop() {
       <li><b>审批面板 = 当前对话的一批审批，且与对话视图绑定</b>：一次工具调用带来的审批作为卡片纵向堆叠、逐项决策，无目录列（对齐现网会话化分组）；切到内容 / 计划视图自动隐藏，回到对话恢复。编辑显示<b>「当前内容 · 将被覆盖」</b>（原文），删除显示<b>「当前内容 · 将被删除」</b>（既有数据），写入遇同名/既有数据同样展示，纯新建则标注「无既有数据」；<b>退出设计模式（ExitComposeMode）</b>为特殊卡片——固定标题「提交设计草稿」，正文渲染 design 文件 markdown 全文（品牌渐变描边）。</li>
       <li><b>审批挂起时状态行显示「正在审批」</b>（沙漏琥珀态），生成中仍为「正在生成」。</li>
       <li><b>执行模式位于输入框底栏左侧</b>（发送 / 暂停在底栏右侧），点击向上弹出下拉列表（图标 + 名称 + 说明）；选择后仅显示「待生效」chip（不带模式名），随下一条消息发出时生效——对齐现网 ComposerModeBar 的会话级权威状态。</li>
+      <li><b>消息通知 = 顶栏铃铛 + 通知中心</b>：审批到达 / 写作受阻 / 档案待完善等沉淀在通知中心（铃铛带未读计数角标），点击条目标记已读并跳转对应视图；对话顶条「置顶」右侧的 <b>「更多 ⋯」为会话菜单</b>——重命名 / 复制最后回复 / 导出 Markdown / 清空上下文 / 删除。</li>
+      <li><b>一轮会话只展示最后一次 call 的返回</b>：每轮助手消息带头像 / 名称 / 时间 / 模式 chip；工具调用以分组条带（左侧强调线）夹在正文中间，含已完成 / 失败 / 运行中三态，中间结果不单独渲染成正文。</li>
+      <li><b>长任务等待动画</b>：新建会话 = 按钮内 spinner，完成后目录动态插入新行；打开 / 切换项目 = 全屏分步加载遮罩（载入大纲树 → 读取卷章 → 档案 → 恢复会话，逐项点亮），完成后才真正切换并 toast。</li>
       <li><b>恢复「暂停」按钮</b>：生成中发送按钮替换为暂停；审批挂起时发送禁用。现网已移除暂停，此处按需求恢复。</li>
       <li><b>窗口控制</b>：Windows 右侧 最小化 / 最大化·还原 / 关闭（关闭悬停红）；macOS 左侧红绿灯。双击顶栏空白 = 最大化切换。对应 Electron <code>frame:false</code> + <code>-webkit-app-region: drag</code>（顶栏 CSS 已预留）。</li>
       <li><b>窗口尺寸</b>（容器查询，断点 1280 / 1080；<b>最小窗口 1080</b>——Electron minWidth，不做 860 级移动布局）：<code>&gt;1280</code> 侧栏 272 / 审批 376 常驻；<code>≤1280</code> 收窄 238 / 340；<code>≤1080</code>（最小档）审批变右缘覆盖抽屉 + 遮罩。用下方「窗口宽度」模拟（满 / 1440 / 1280 / 1080）。</li>
@@ -2409,6 +2634,9 @@ function renderAll() { renderTitlebar(); renderSidebar(); renderMain(); renderIn
 document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-act]");
   if (!e.target.closest("#wsMenu")) $("wsMenu").classList.remove("show");
+  if (!e.target.closest("#notifMenu") && !e.target.closest('[data-act="notifOpen"]')) $("notifMenu").classList.remove("show");
+  const convMenuEl = document.getElementById("convMenu");
+  if (convMenuEl && !e.target.closest("#convMenu") && !e.target.closest('[data-act="convMenu"]')) convMenuEl.remove();
   if (state.modeMenuOpen && !e.target.closest("#modeRow")) { state.modeMenuOpen = false; updateModeUI(); }
   if (!el) return;
   const act = el.dataset.act, id = el.dataset.id;
@@ -2526,9 +2754,71 @@ document.addEventListener("click", (e) => {
       break;
     }
     case "wsPick":
-      state.ws = id; WS_LIST.forEach(w => w.cur = w.name === id);
-      $("wsMenu").classList.remove("show"); renderTitlebar();
-      toast("已切换到工作区：" + id);
+      /* 切换工作区：分步加载遮罩 → 完成后才切换标题与提示 */
+      $("wsMenu").classList.remove("show");
+      runLoading(`正在打开《${id}》`, ["载入大纲树", "读取卷章与段落", "角色 / 地点档案", "恢复最近会话"], () => {
+        state.ws = id;
+        WS_LIST.forEach(w => w.cur = w.name === id);
+        renderTitlebar();
+        toast("已切换到工作区：" + id);
+      });
+      break;
+    case "wsOpenOther":
+      $("wsMenu").classList.remove("show");
+      runLoading("正在打开项目…", ["扫描工作区目录", "载入项目档案", "建立索引"], () => {
+        toast("演示：此处弹出系统项目选择器");
+      });
+      break;
+    case "notifOpen": {
+      e.stopPropagation();
+      const m = $("notifMenu");
+      if (m.classList.contains("show")) { m.classList.remove("show"); break; }
+      $("wsMenu").classList.remove("show");
+      const r = el.getBoundingClientRect();
+      renderNotifMenu(Math.max(8, r.right - 348), r.bottom + 6);
+      break;
+    }
+    case "notifGo": {
+      const n = NOTIFS.find(x => x.id === id);
+      if (n) n.unread = false;
+      $("notifMenu").classList.remove("show");
+      const g = n && n.goto;
+      if (n && g) {
+        if (g.view === "chat") { state.view = "chat"; state.approvalOpen = true; }
+        else if (g.unit) { state.view = "content"; state.contentTab = "outline"; state.selUnit = g.unit; }
+        else if (g.loc) { state.view = "content"; state.contentTab = "locations"; state.selLoc = g.loc; }
+        renderTitlebar(); renderSidebar(); renderMain(); renderInspector();
+        toast("已读并跳转：" + n.title);
+      }
+      break;
+    }
+    case "notifReadAll":
+      NOTIFS.forEach(n => { n.unread = false; });
+      renderNotifMenu(); renderTitlebar();
+      break;
+    case "convMenu": {
+      e.stopPropagation();
+      const ex = document.getElementById("convMenu");
+      if (ex) { ex.remove(); break; }
+      const host = el.closest(".subActions");
+      if (host) host.insertAdjacentHTML("beforeend", convMenuHTML());
+      break;
+    }
+    case "convAct": {
+      const cm = document.getElementById("convMenu");
+      if (cm) cm.remove();
+      toast({
+        rename: "重命名对话（演示）",
+        copy: "已复制最后一条回复（演示）",
+        export: "已导出为 Markdown（演示）",
+        clear: "已清空上下文，下一轮从新基线开始（演示）",
+        del: "删除对话（演示）",
+      }[id] || "（演示）");
+      break;
+    }
+    case "convPin":
+      state.pinned = !state.pinned;
+      toast(state.pinned ? "已置顶《北河旧事》（演示）" : "已取消置顶（演示）");
       break;
     case "settingsOpen": $("settingsMask").classList.add("show"); renderSettings(); break;
     case "settingsClose": case "settingsCloseMask":
@@ -2550,7 +2840,19 @@ document.addEventListener("click", (e) => {
       break;
     case "noop": break;
     case "copyChap": toast("已复制本章正文（演示）"); break;
-    case "newConv": toast("已开始新的创作（演示）"); break;
+    case "newConv": {
+      /* 新建会话：按钮内 spinner 等待，完成后向目录动态插入新行 */
+      if (el.disabled) break;
+      el.disabled = true;
+      el.innerHTML = `<span class="spinner"></span>正在创建…`;
+      setTimeout(() => {
+        convSeq += 1;
+        CONVS.unshift({ title: "新的创作 " + convSeq, meta: "空会话 · 刚刚", icon: "feather", group: "今天" });
+        renderSidebar();
+        toast("已开始新的创作");
+      }, 900);
+      break;
+    }
   }
 });
 
@@ -2626,7 +2928,15 @@ function sendMsg() {
   setTimeout(() => {
     const reply = `
       <div class="msgAssistant">
-        <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}上下文读取</span></div>
+        <div class="msgHead">
+          <span class="avatar assistant">${ic("feather", 12, 2)}</span>
+          <b>NovelAI</b>
+          <span class="mMeta">刚刚</span>
+          <span class="chip faint">设计</span>
+        </div>
+        <div class="toolGroup">
+          <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}上下文读取 · 大纲与档案</span></div>
+        </div>
         <div class="mdBody"><p>收到（演示回复 ${seq}）。我会先核对大纲与既有设定，再给出修订建议与草稿；正式环境里这里会流式输出正文。</p></div>
       </div>`;
     liveMsgs.push(reply);

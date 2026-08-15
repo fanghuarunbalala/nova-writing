@@ -3,11 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>主题候选预览 2（10 套 · 含传统色新增五套）</title>
+<title>主题预览（宣纸白 / 墨夜 / 黛青 / 雪青）</title>
 <style>
   /* ============================================================
-     Demo 2：原五套（宣纸白/茶卷/墨夜/黛青/雪青）+ 新增五套
-     （竹雨/鎏金/胭脂/紫檀/烛影——配色取自用户罗列的传统色）。
+     主题 demo：宣纸白（默认）/ 墨夜 / 黛青 / 雪青 四套。
      token 值对齐 ui/src/shared/theme/tokens.css（demo 内联，不受纪律约束）。
      机制与真实实现一致：<html data-theme="..."> 只覆盖 L3 色层
      （--color-* / --shadow-*），语义混合色引用基色、自动重derive。
@@ -95,34 +94,6 @@
     --shadow-xs: 0 1px 3px rgba(20, 12, 6, 0.08);
   }
 
-  /* ============ 原候选 2：茶卷（暖褐羊皮纸 · 深赭强调） ============ */
-  [data-theme="sepia"] {
-    --color-bg:            oklch(93.5% 0.014 78);
-    --color-surface:       oklch(96.8% 0.011 80);
-    --color-surface-2:     oklch(90.6% 0.017 74);
-    --color-fg:            oklch(28% 0.024 50);
-    --color-muted:         oklch(47% 0.022 55);
-    --color-faint:         oklch(56% 0.02 58);
-    --color-border:        oklch(86.2% 0.014 74);
-    --color-border-strong: oklch(78% 0.022 66);
-    --color-orange:        oklch(71% 0.085 62);
-    --color-accent:        oklch(50% 0.095 42);
-    --color-red:           oklch(53% 0.095 32);
-    --color-accent-ink:    oklch(43% 0.08 42);
-    --color-success:       oklch(48% 0.078 156);
-    --color-success-bg:    oklch(93.4% 0.02 156);
-    --color-warn:          oklch(54% 0.082 75);
-    --color-warn-bg:       oklch(93.4% 0.024 85);
-    --color-danger:        oklch(50% 0.085 32);
-    --color-danger-bg:     oklch(93.2% 0.018 33);
-    --color-info:          oklch(50% 0.06 238);
-    --color-info-bg:       oklch(93.4% 0.014 240);
-    --color-on-accent:     #fff;
-    --shadow-1: 0 1px 2px rgba(48, 28, 8, 0.06), 0 8px 24px rgba(48, 28, 8, 0.07);
-    --shadow-2: 0 2px 4px rgba(48, 28, 8, 0.07), 0 16px 40px rgba(48, 28, 8, 0.15);
-    --shadow-xs: 0 1px 3px rgba(40, 24, 8, 0.1);
-  }
-
   /* ============ 原候选 3：墨夜（暖黑墨底 · 朱砂提亮） ============ */
   [data-theme="ink"] {
     --color-bg:            oklch(21% 0.005 80);
@@ -207,226 +178,6 @@
     --shadow-xs: 0 1px 3px rgba(8, 12, 30, 0.09);
   }
 
-  /* ================================================================
-     新增五套：配色取自用户罗列的传统色（沿用原名标注；派生色注明来源）
-     ================================================================ */
-
-  /* ============ 新增 6：竹雨（绿调亮色）============
-     取色：底 珍珠#E4DFD7 / surface 珍珠提白45%（同色系轻提，弹窗不洗白）/
-     surface-2 晓灰#D4C4B7 / fg 京元#31322C / muted 夜灰×京元 / faint 夜灰#847C74 /
-     边 玛瑙·芦穗 / 渐变 蔻梢#5DBE8A → 海王#248067(主) → 深海王 / danger 枫叶#C21F30 */
-  [data-theme="bamboo"] {
-    --color-bg:            #E4DFD7;
-    --color-surface:       #F0EDE9;
-    --color-surface-2:     #D4C4B7;
-    --color-fg:            #31322C;
-    --color-muted:         #5B5750;
-    --color-faint:         #847C74;
-    --color-border:        #CFCCC9;
-    --color-border-strong: #BDAEAD;
-    --color-orange:        #5DBE8A;
-    --color-accent:        #248067;
-    --color-red:           #195A48;
-    --color-accent-ink:    #175343;
-    --color-success:       #206C56;
-    --color-success-bg:    #FFF9DF;
-    --color-warn:          #927104;
-    --color-warn-bg:       #FEF7E2;
-    --color-danger:        #C21F30;
-    --color-danger-bg:     #FBF0F2;
-    --color-info:          #4466B4;
-    --color-info-bg:       #E9EEF8;
-    --color-on-accent:     #fff;
-    --shadow-1: 0 1px 2px rgba(38, 34, 24, 0.06), 0 8px 24px rgba(38, 34, 24, 0.07);
-    --shadow-2: 0 2px 4px rgba(38, 34, 24, 0.07), 0 16px 40px rgba(38, 34, 24, 0.15);
-    --shadow-xs: 0 1px 3px rgba(30, 26, 16, 0.1);
-  }
-
-  /* ============ 新增 7：鎏金（金调暗色）============
-     取色：底 烟墨#353538 / surface-2 朱墨#2D2D30 / fg 珍珠#E4DFD7 /
-     muted 玛瑙#CFCCC9 / faint 芦穗#BDAEAD / success 玉髓#41B349 /
-     渐变 琥珀#FEBA07 → 金盏#FCC307(主) → 玳瑁#DAA45A / danger 茶花提亮 */
-  [data-theme="gilt"] {
-    --color-bg:            #353538;
-    --color-surface:       #414144;
-    --color-surface-2:     #2D2D30;
-    --color-fg:            #E4DFD7;
-    --color-muted:         #CFCCC9;
-    --color-faint:         #BDAEAD;
-    --color-border:        #4D4D50;
-    --color-border-strong: #605C59;
-    --color-orange:        #FEBA07;
-    --color-accent:        #FCC307;
-    --color-red:           #DAA45A;
-    --color-accent-ink:    #FEBA07;
-    --color-success:       #41B349;
-    --color-success-bg:    #37473A;
-    --color-warn:          #F9A633;
-    --color-warn-bg:       #504537;
-    --color-danger:        #F26974;
-    --color-danger-bg:     #4B363B;
-    --color-info:          #7B9CE8;
-    --color-info-bg:       #3D414D;
-    --color-on-accent:     #332400;
-    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.32);
-    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.34), 0 16px 40px rgba(0, 0, 0, 0.5);
-    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.38);
-  }
-
-  /* ============ 新增 8：胭脂（粉调亮色）============
-     取色：底 石蕊#F0C9CF 洗白60%（整体压深一档留层次）/ surface 石蕊洗白75%（原底色，
-     弹窗保持粉调不洗白）/ surface-2 石蕊淡染 / fg 酱紫#4D1018 / muted 满江加深 /
-     边 石蕊·合欢#F0A1A8 / 渐变 淡茜#E77C8E → 锦葵#BF3553(主) → 深锦葵 / danger 枫叶 */
-  [data-theme="rouge"] {
-    --color-bg:            #F9E9EC;
-    --color-surface:       #FBF2F3;
-    --color-surface-2:     #F7E1E5;
-    --color-fg:            #4D1018;
-    --color-muted:         #9F4F56;
-    --color-faint:         #B77278;
-    --color-border:        #F0C9CF;
-    --color-border-strong: #F0A1A8;
-    --color-orange:        #E77C8E;
-    --color-accent:        #BF3553;
-    --color-red:           #992A42;
-    --color-accent-ink:    #822438;
-    --color-success:       #20715B;
-    --color-success-bg:    #FFF9DF;
-    --color-warn:          #927104;
-    --color-warn-bg:       #FEF7E2;
-    --color-danger:        #C21F30;
-    --color-danger-bg:     #FBF0F2;
-    --color-info:          #4466B4;
-    --color-info-bg:       #E9EEF8;
-    --color-on-accent:     #fff;
-    --shadow-1: 0 1px 2px rgba(58, 16, 26, 0.05), 0 8px 24px rgba(58, 16, 26, 0.06);
-    --shadow-2: 0 2px 4px rgba(58, 16, 26, 0.06), 0 16px 40px rgba(58, 16, 26, 0.14);
-    --shadow-xs: 0 1px 3px rgba(48, 12, 22, 0.09);
-  }
-
-  /* ============ 新增 9：紫檀（紫调暗色）============
-     取色：底 石青#2E282E / fg 芝兰#E9CCD3 / muted 萝兰#C08EAF / faint 樱草#C06F98 /
-     渐变 芝兰 → 萝兰#C08EAF(主) → 蕈紫#815C94 / danger 淡曙#EE2746 / info 槿紫#806D9E 提亮 */
-  [data-theme="zitan"] {
-    --color-bg:            #2E282E;
-    --color-surface:       #3D373D;
-    --color-surface-2:     #201C20;
-    --color-fg:            #E9CCD3;
-    --color-muted:         #C08EAF;
-    --color-faint:         #C06F98;
-    --color-border:        #544F54;
-    --color-border-strong: #6D696D;
-    --color-orange:        #E9CCD3;
-    --color-accent:        #C08EAF;
-    --color-red:           #815C94;
-    --color-accent-ink:    #D0AAC3;
-    --color-success:       #41B349;
-    --color-success-bg:    #313B32;
-    --color-warn:          #F9A633;
-    --color-warn-bg:       #4A3A2F;
-    --color-danger:        #EE2746;
-    --color-danger-bg:     #452831;
-    --color-info:          #A092B6;
-    --color-info-bg:       #39323E;
-    --color-on-accent:     #2E1626;
-    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.32);
-    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.34), 0 16px 40px rgba(0, 0, 0, 0.5);
-    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.38);
-  }
-
-  /* ============ 新增 10：烛影（棕调暗色）============
-     取色：底 火山#482522 / surface-2 栗棕#5C1E19 / fg 珍珠#E4DFD7 /
-     muted 玳瑁#DAA45A / success 玉髓#41B349 / warn 淡茧#F9D770 /
-     渐变 玳瑁 → 凋叶#E7A23F(主) → 麂棕#DE7622 / accent-ink 琥珀#FEBA07 / danger 淡曙提亮 */
-  [data-theme="candle"] {
-    --color-bg:            #482522;
-    --color-surface:       #5A3B38;
-    --color-surface-2:     #5C1E19;
-    --color-fg:            #E4DFD7;
-    --color-muted:         #DAA45A;
-    --color-faint:         #B78A4C;
-    --color-border:        #654845;
-    --color-border-strong: #7B6260;
-    --color-orange:        #DAA45A;
-    --color-accent:        #E7A23F;
-    --color-red:           #DE7622;
-    --color-accent-ink:    #FEBA07;
-    --color-success:       #41B349;
-    --color-success-bg:    #473927;
-    --color-warn:          #F9D770;
-    --color-warn-bg:       #5D3A2B;
-    --color-danger:        #F14762;
-    --color-danger-bg:     #5C2526;
-    --color-info:          #7B9CE8;
-    --color-info-bg:       #4E333A;
-    --color-on-accent:     #2E1A08;
-    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.34);
-    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.34), 0 16px 40px rgba(0, 0, 0, 0.52);
-    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.4);
-  }
-
-  /* ============ 新增 11：凝脂（暖玉白底 · 杨妃强调；渐变 杨妃→深杨妃→殷红向）============
-     取色（用户指定 RGB）：底 凝脂 rgb(245,242,233)=#F5F2E9（暖玉白）/
-     渐变首 杨妃 rgb(240,145,160)=#F091A0 → 主 #B95160（杨妃×殷红）→
-     尾 #932432（殷红向）/ 正文·次要·faint·边框 凝脂加深系（暖墨灰） */
-  [data-theme="ningzhi"] {
-    --color-bg:            #F5F2E9; /* 凝脂 */
-    --color-surface:       #F9F7F1; /* 凝脂提白 35%（同色系轻提） */
-    --color-surface-2:     #E9E6DD; /* 凝脂压暗 */
-    --color-fg:            #222221; /* 暖墨 */
-    --color-muted:         #676662;
-    --color-faint:         #8E8C87;
-    --color-border:        #E0DDD5; /* 凝脂加深 */
-    --color-border-strong: #CBC9C1;
-    --color-orange:        #F091A0; /* 杨妃 */
-    --color-accent:        #B95160; /* 杨妃×殷红（深杨妃） */
-    --color-red:           #932432; /* 殷红向 */
-    --color-accent-ink:    #9E3140;
-    --color-success:       #20715B;
-    --color-success-bg:    #FFF9DF;
-    --color-warn:          #927104; /* 金盏加深 */
-    --color-warn-bg:       #FEF7E2;
-    --color-danger:        #C21F30; /* 枫叶 */
-    --color-danger-bg:     #FBF0F2;
-    --color-info:          #4466B4;
-    --color-info-bg:       #E9EEF8;
-    --color-on-accent:     #fff;
-    --shadow-1: 0 1px 2px rgba(52, 48, 36, 0.04), 0 8px 24px rgba(52, 48, 36, 0.05);
-    --shadow-2: 0 2px 4px rgba(52, 48, 36, 0.05), 0 16px 40px rgba(52, 48, 36, 0.12);
-    --shadow-xs: 0 1px 3px rgba(44, 40, 30, 0.08);
-  }
-
-  /* ============ 新增 12：行香子（葱白底 · 行香子强调；渐变 行香子提白→茶褐→深茶褐）============
-     取色（用户指定 RGB）：底 葱白 rgb(235,238,232)=#EBEEE8 /
-     强调 行香子 rgb(191,185,156)=#BFB99C → 主 #8A6954（行香子×淡栗·茶褐）→
-     尾 #774C3A（深茶褐）/ 正文 茶墨（行香子×京元）/ 边 行香子洗淡 */
-  [data-theme="xingxiangzi"] {
-    --color-bg:            #EBEEE8; /* 葱白 */
-    --color-surface:       #F3F5F1; /* 葱白提白 40%（同色系轻提） */
-    --color-surface-2:     #E0E3DE; /* 葱白压暗 */
-    --color-fg:            #4B4A40; /* 茶墨 */
-    --color-muted:         #6D6B5B;
-    --color-faint:         #8C8874;
-    --color-border:        #E2E0D2; /* 行香子洗淡 */
-    --color-border-strong: #D1CDB8;
-    --color-orange:        #D1CDB8; /* 行香子提白（渐变首） */
-    --color-accent:        #8A6954; /* 茶褐（行香子×淡栗） */
-    --color-red:           #774C3A; /* 深茶褐 */
-    --color-accent-ink:    #7A513E;
-    --color-success:       #20715B;
-    --color-success-bg:    #FFF9DF;
-    --color-warn:          #927104; /* 金盏加深 */
-    --color-warn-bg:       #FEF7E2;
-    --color-danger:        #C21F30; /* 枫叶 */
-    --color-danger-bg:     #FBF0F2;
-    --color-info:          #4466B4;
-    --color-info-bg:       #E9EEF8;
-    --color-on-accent:     #fff;
-    --shadow-1: 0 1px 2px rgba(44, 40, 28, 0.05), 0 8px 24px rgba(44, 40, 28, 0.06);
-    --shadow-2: 0 2px 4px rgba(44, 40, 28, 0.06), 0 16px 40px rgba(44, 40, 28, 0.13);
-    --shadow-xs: 0 1px 3px rgba(38, 34, 24, 0.09);
-  }
-
   /* ============ 主题切换过渡（demo 演示；真实实现可加在全局样式） ============ */
   html.theming *,
   html.theming *::before,
@@ -467,10 +218,6 @@
   }
   .demoBar h1 { font-size: var(--fs-16-5); font-weight: var(--fw-bold); margin: 0 6px 0 0; }
   .themeBtns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .groupLabel {
-    font-size: var(--fs-11); color: var(--color-faint);
-    font-weight: var(--fw-medium); padding: 0 4px;
-  }
   .themeBtn {
     display: inline-flex; align-items: center; gap: 7px;
     padding: 6px 12px;
@@ -1138,7 +885,7 @@
 
   <!-- ============ 主题切换器 ============ -->
   <div class="demoBar">
-    <h1>主题候选预览 2</h1>
+    <h1>主题预览</h1>
     <div class="themeBtns" id="themeBtns" role="group" aria-label="主题切换"></div>
     <div class="themeMeta" id="themeMeta"></div>
   </div>
@@ -1370,7 +1117,6 @@
     实现方式（与本 demo 同构）：tokens.css 追加 <code>[data-theme]</code> 覆盖块（只含 --color-* / --shadow-*，纪律测试规则 b 自动执法）；
     ThemeProvider 扩展主题枚举并挂载到 NovelApp 根；设置弹窗新增「外观」分类（主题卡片 + 图标）；选择持久化 localStorage；
     切换时挂 <code>html.theming</code> 类做 0.35s 全局颜色过渡。暗色主题额外覆盖 <code>--color-on-accent</code> 为深墨色（强调底提亮后白字对比度不足）。
-    新增五套（竹雨/鎏金/胭脂/紫檀/烛影）配色取自用户罗列的传统色，派生色（加深/提亮/染底）已在 CSS 注释中标注来源。
     审批面板切片：操作色带（增=success / 删·编辑=danger）与状态 pill 全部走语义 token，随主题自动换色；
     动画提案（appr-in 入列 / 状态脉冲 / 请求修改 0fr→1fr / 详情 view-in / 计数弹跳）实施时并入 animations.css。
     实施时顺带修两个现网问题：① ApprovalPanel 请求修改输入框用了 legacy hex token（--color-bg-elevated #1e1e24 / --color-text #ddd），
@@ -1380,30 +1126,14 @@
 
 <script>
   const THEMES = [
-    { id: "paper", name: "宣纸白", group: 0, dot: ["#d9a066", "#a0522d"],
-      desc: "现状默认。暖白宣纸底 + 朱砂橙红渐变，白天写作清爽明亮。" },
-    { id: "sepia", name: "茶卷", group: 0, dot: ["#c9a876", "#7a4a2b"],
-      desc: "暖褐羊皮纸底 + 深赭强调。旧籍氛围，夜间灯光下比白底柔和，长时阅读舒适。" },
-    { id: "ink", name: "墨夜", group: 0, dot: ["#2b2723", "#d0765a"],
+    { id: "paper", name: "宣纸白", dot: ["#d9a066", "#a0522d"],
+      desc: "默认主题。暖白宣纸底 + 朱砂橙红渐变，白天写作清爽明亮。" },
+    { id: "ink", name: "墨夜", dot: ["#2b2723", "#d0765a"],
       desc: "暖黑墨底 + 朱砂提亮。经典暗色模式，深夜写作护眼，延续品牌朱砂血统。" },
-    { id: "celadon", name: "黛青", group: 0, dot: ["#24303a", "#6fc3b7"],
+    { id: "celadon", name: "黛青", dot: ["#24303a", "#6fc3b7"],
       desc: "冷调蓝黑夜底 + 青瓷强调，品牌渐变整体换为青蓝族。冷静专注的另一派暗色。" },
-    { id: "frost", name: "雪青", group: 0, dot: ["#d9e2f2", "#4a5fb8"],
+    { id: "frost", name: "雪青", dot: ["#d9e2f2", "#4a5fb8"],
       desc: "冷白瓷底 + 群青强调，渐变换为蓝紫族。清爽理性的亮色备选。" },
-    { id: "bamboo", name: "竹雨", group: 1, dot: ["#5DBE8A", "#248067"],
-      desc: "绿调亮色（传统色）。底取珍珠，inset 晓灰、正文京元、边玛瑙/芦穗；渐变 蔻梢→海王→深海王，竹林春纸。" },
-    { id: "gilt", name: "鎏金", group: 1, dot: ["#FEBA07", "#DAA45A"],
-      desc: "金调暗色（传统色）。底取烟墨、正文珍珠、inset 朱墨；渐变 琥珀→金盏→玳瑁，墨底鎏金的典籍烫金感。" },
-    { id: "rouge", name: "胭脂", group: 1, dot: ["#E77C8E", "#BF3553"],
-      desc: "粉调亮色（传统色）。底为石蕊洗白、正文酱紫、次要满江、边合欢；渐变 淡茜→锦葵→深锦葵，春樱笺纸。" },
-    { id: "zitan", name: "紫檀", group: 1, dot: ["#E9CCD3", "#815C94"],
-      desc: "紫调暗色（传统色）。底取石青、正文芝兰、次要萝兰；渐变 芝兰→萝兰→蕈紫，info 用槿紫。夜读的紫檀书房。" },
-    { id: "ningzhi", name: "凝脂", group: 1, dot: ["#F091A0", "#932432"],
-      desc: "暖玉白亮色（传统色，用户指定 RGB）。底取凝脂#F5F2E9（暖玉白）、正文暖墨；渐变 杨妃#F091A0→深杨妃→殷红向，凝脂纸上的一抹杨妃醉色。" },
-    { id: "xingxiangzi", name: "行香子", group: 1, dot: ["#BFB99C", "#774C3A"],
-      desc: "茶调亮色（传统色·词牌名，用户指定 RGB）。底取葱白#EBEEE8、边行香子洗淡、正文茶墨；渐变 行香子提白→茶褐→深茶褐（行香子×淡栗），茶烟卷册的沉静。" },
-    { id: "candle", name: "烛影", group: 1, dot: ["#E7A23F", "#DE7622"],
-      desc: "棕调暗色（传统色）。底取火山、inset 栗棕、正文珍珠、次要玳瑁、warn 淡茧；渐变 玳瑁→凋叶→麂棕，烛光暖褐书房。" },
   ];
   const SWATCH_TOKENS = [
     "bg", "surface", "surface-2", "fg", "muted", "faint", "border", "border-strong",
@@ -1422,15 +1152,7 @@
 
   function render(current) {
     btns.innerHTML = "";
-    let lastGroup = -1;
     for (const t of THEMES) {
-      if (t.group !== lastGroup) {
-        const label = document.createElement("span");
-        label.className = "groupLabel";
-        label.textContent = t.group === 0 ? "原五套" : "新增 · 传统色";
-        btns.appendChild(label);
-        lastGroup = t.group;
-      }
       const b = document.createElement("button");
       b.className = "themeBtn";
       b.setAttribute("aria-pressed", String(t.id === current));

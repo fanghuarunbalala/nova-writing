@@ -6,7 +6,7 @@
  * 提供全局颜色过渡）并经 ThemeProvider 持久化 localStorage。
  * 双色预览点为主题调色板固定 hex（预览该主题自身颜色，不随当前主题变化）。
  */
-import { Check, Coins, Droplets, Flower2, Gem, Leaf, Moon, Snowflake, Sun, type LucideIcon } from "lucide-react";
+import { Check, Droplets, Moon, Snowflake, Sun, type LucideIcon } from "lucide-react";
 import { Icon } from "../shared/primitives/Icon.js";
 import { useTheme, type Theme } from "../shared/theme/index.js";
 import styles from "./AppearanceSettingsPanel.module.css";
@@ -25,10 +25,6 @@ const THEME_CARDS: readonly ThemeCardMeta[] = [
   { id: "ink", label: "墨夜", desc: "暖黑墨底 · 朱砂提亮", icon: Moon, dots: ["#2b2723", "#d0765a"] },
   { id: "celadon", label: "黛青", desc: "青蓝夜底 · 青瓷强调", icon: Droplets, dots: ["#24303a", "#6fc3b7"] },
   { id: "frost", label: "雪青", desc: "冷白瓷底 · 群青强调", icon: Snowflake, dots: ["#d9e2f2", "#4a5fb8"] },
-  { id: "bamboo", label: "竹雨", desc: "珍珠纸底 · 海王绿强调", icon: Leaf, dots: ["#5dbe8a", "#248067"] },
-  { id: "gilt", label: "鎏金", desc: "烟墨底 · 金盏强调", icon: Coins, dots: ["#feba07", "#daa45a"] },
-  { id: "rouge", label: "胭脂", desc: "石蕊洗白底 · 锦葵强调", icon: Flower2, dots: ["#e77c8e", "#bf3553"] },
-  { id: "zitan", label: "紫檀", desc: "石青底 · 萝兰强调", icon: Gem, dots: ["#e9ccd3", "#815c94"] },
 ];
 
 export function AppearanceSettingsPanel() {

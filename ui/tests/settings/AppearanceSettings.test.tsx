@@ -16,7 +16,7 @@ describe("AppearanceSettings", () => {
     document.documentElement.classList.remove("theming");
   });
 
-  it("opens the appearance section, lists 8 themes and switches on click", () => {
+  it("opens the appearance section, lists 4 themes and switches on click", () => {
     render(
       <ThemeProvider>
         <SettingsDialog
@@ -29,16 +29,16 @@ describe("AppearanceSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: "外观" }));
 
     const cards = screen.getAllByRole("radio");
-    expect(cards).toHaveLength(8);
+    expect(cards).toHaveLength(4);
     expect(screen.getByRole("radio", { name: /宣纸白/ })).toHaveAttribute(
       "aria-checked",
       "true",
     );
 
-    fireEvent.click(screen.getByRole("radio", { name: /鎏金/ }));
-    expect(document.documentElement.dataset.theme).toBe("gilt");
-    expect(localStorage.getItem("novel.theme")).toBe("gilt");
-    expect(screen.getByRole("radio", { name: /鎏金/ })).toHaveAttribute(
+    fireEvent.click(screen.getByRole("radio", { name: /黛青/ }));
+    expect(document.documentElement.dataset.theme).toBe("celadon");
+    expect(localStorage.getItem("novel.theme")).toBe("celadon");
+    expect(screen.getByRole("radio", { name: /黛青/ })).toHaveAttribute(
       "aria-checked",
       "true",
     );

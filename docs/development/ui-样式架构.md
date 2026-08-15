@@ -23,7 +23,7 @@
 
 - 宿主入口 CSS 一次 `@import` 上述四个文件（gui：`gui/src/renderer/renderer.css`），**禁止在 TSX 中副作用引入**全局主题 css。漏 import 的代价：`animations.css` 曾漏引入导致 `grad-flow` 从未运行（fix c375f79）。
 - 组件私有样式一律 `*.module.css` 与组件同目录（现役 98 个）。
-- `ThemeProvider` 写 `<html data-theme="...">` 根属性（**必须挂 html**：挂 body 时 `:root` 级语义混合 token 已按旧基色解析，不会跟随覆盖）。现役 8 套主题：宣纸白（`:root` 默认，无覆盖块）、墨夜/黛青/雪青/竹雨/鎏金/胭脂/紫檀（`[data-theme]` 覆盖块，见 tokens.css 文件尾）；选择持久化 `localStorage("novel.theme")`，切换时挂 `html.theming` 做 0.35s 全局颜色过渡（400ms 摘除）。主题候选与对比度校验过程见 `docs/design/theme-candidates-demo-2.html`。
+- `ThemeProvider` 写 `<html data-theme="...">` 根属性（**必须挂 html**：挂 body 时 `:root` 级语义混合 token 已按旧基色解析，不会跟随覆盖）。现役 4 套主题：宣纸白（`:root` 默认，无覆盖块）、墨夜/黛青/雪青（`[data-theme]` 覆盖块，见 tokens.css 文件尾）；选择持久化 `localStorage("novel.theme")`，切换时挂 `html.theming` 做 0.35s 全局颜色过渡（400ms 摘除）。主题候选与对比度校验过程见 `docs/design/theme-candidates-demo-2.html`（历史候选在 git 记录中）。
 
 ### 1.3 样式分层职责边界
 

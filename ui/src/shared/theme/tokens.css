@@ -247,7 +247,7 @@
   --color-info:          oklch(54% 0.05 235);
   --color-info-bg:       oklch(97.2% 0.007 236);
 
-  /* 强调底/渐变底上的前景：亮色主题恒白；暗色主题（墨夜/黛青/鎏金/紫檀）
+  /* 强调底/渐变底上的前景：亮色主题恒白；暗色主题（墨夜/黛青）
      覆盖为深墨——强调底提亮后白字对比度不足 4.5:1。用于 Button.primary、
      GenStatus、ProjectSelectionPage、WorkspaceSelectionDialog 渐变底文字 */
   --color-on-accent: #fff;
@@ -305,7 +305,7 @@
    执法）；语义混合 token（accent-9 等）在 :root 引用基色，挂 html 时自动
    重derive——挂 body 无效（:root 级已解析）。主题候选与对比度校验过程
    见 docs/design/theme-candidates-demo-2.html。
-   暗色主题（墨夜/黛青/鎏金/紫檀）的 --color-on-accent 翻转为深墨。
+   暗色主题（墨夜/黛青）的 --color-on-accent 翻转为深墨（强调底提亮后白字对比度不足）。
    ============================================================ */
 
 /* ============ 墨夜（暖黑墨底 · 朱砂提亮；经典暗色） ============ */
@@ -396,124 +396,4 @@
   --shadow-xs: 0 1px 3px rgba(8, 12, 30, 0.09);
   --shadow-drawer: -18px 0 50px rgba(8, 12, 30, 0.2);
   --shadow-panel: 12px 0 30px rgba(8, 12, 30, 0.2);
-}
-
-/* ============ 竹雨（绿调亮色；取色 珍珠/京元/晓灰/玛瑙/芦穗/夜灰，渐变 蔻梢→海王→深海王） ============ */
-[data-theme="bamboo"] {
-  --color-bg:            #E4DFD7; /* 珍珠 */
-  --color-surface:       #F3F1ED; /* 珍珠提白 */
-  --color-surface-2:     #D4C4B7; /* 晓灰 */
-  --color-fg:            #31322C; /* 京元 */
-  --color-muted:         #5B5750; /* 夜灰×京元 */
-  --color-faint:         #847C74; /* 夜灰 */
-  --color-border:        #CFCCC9; /* 玛瑙 */
-  --color-border-strong: #BDAEAD; /* 芦穗 */
-  --color-orange:        #5DBE8A; /* 蔻梢 */
-  --color-accent:        #248067; /* 海王 */
-  --color-red:           #195A48; /* 深海王 */
-  --color-accent-ink:    #175343;
-  --color-success:       #206C56;
-  --color-success-bg:    #FFF9DF;
-  --color-warn:          #927104; /* 金盏加深 */
-  --color-warn-bg:       #FEF7E2;
-  --color-danger:        #C21F30; /* 枫叶 */
-  --color-danger-bg:     #FBF0F2;
-  --color-info:          #4466B4;
-  --color-info-bg:       #E9EEF8;
-  --color-on-accent:     #fff;
-  --shadow-1: 0 1px 2px rgba(38, 34, 24, 0.06), 0 8px 24px rgba(38, 34, 24, 0.07);
-  --shadow-2: 0 2px 4px rgba(38, 34, 24, 0.07), 0 16px 40px rgba(38, 34, 24, 0.15);
-  --shadow-xs: 0 1px 3px rgba(30, 26, 16, 0.1);
-  --shadow-drawer: -18px 0 50px rgba(30, 26, 16, 0.22);
-  --shadow-panel: 12px 0 30px rgba(30, 26, 16, 0.22);
-}
-
-/* ============ 鎏金（金调暗色；取色 烟墨/朱墨/珍珠/玛瑙/芦穗，渐变 琥珀→金盏→玳瑁） ============ */
-[data-theme="gilt"] {
-  --color-bg:            #353538; /* 烟墨 */
-  --color-surface:       #414144; /* 烟墨提亮 */
-  --color-surface-2:     #2D2D30; /* 朱墨 */
-  --color-fg:            #E4DFD7; /* 珍珠 */
-  --color-muted:         #CFCCC9; /* 玛瑙 */
-  --color-faint:         #BDAEAD; /* 芦穗 */
-  --color-border:        #4D4D50;
-  --color-border-strong: #605C59;
-  --color-orange:        #FEBA07; /* 琥珀 */
-  --color-accent:        #FCC307; /* 金盏 */
-  --color-red:           #DAA45A; /* 玳瑁 */
-  --color-accent-ink:    #FEBA07;
-  --color-success:       #41B349; /* 玉髓 */
-  --color-success-bg:    #37473A;
-  --color-warn:          #F9A633; /* 榴萼 */
-  --color-warn-bg:       #504537;
-  --color-danger:        #F26974; /* 茶花提亮 */
-  --color-danger-bg:     #4B363B;
-  --color-info:          #7B9CE8;
-  --color-info-bg:       #3D414D;
-  --color-on-accent:     #332400;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.32);
-  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.34), 0 16px 40px rgba(0, 0, 0, 0.5);
-  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.38);
-  --shadow-drawer: -18px 0 50px rgba(0, 0, 0, 0.5);
-  --shadow-panel: 12px 0 30px rgba(0, 0, 0, 0.5);
-}
-
-/* ============ 胭脂（粉调亮色；取色 石蕊洗白/酱紫/满江/合欢，渐变 淡茜→锦葵→深锦葵） ============ */
-[data-theme="rouge"] {
-  --color-bg:            #FBF2F3; /* 石蕊洗白 */
-  --color-surface:       #FFFCFD;
-  --color-surface-2:     #F7E1E5; /* 石蕊淡染 */
-  --color-fg:            #4D1018; /* 酱紫 */
-  --color-muted:         #A7535A; /* 满江 */
-  --color-faint:         #B77278;
-  --color-border:        #F0C9CF; /* 石蕊 */
-  --color-border-strong: #F0A1A8; /* 合欢 */
-  --color-orange:        #E77C8E; /* 淡茜 */
-  --color-accent:        #BF3553; /* 锦葵 */
-  --color-red:           #992A42; /* 深锦葵 */
-  --color-accent-ink:    #822438;
-  --color-success:       #20715B;
-  --color-success-bg:    #FFF9DF;
-  --color-warn:          #927104; /* 金盏加深 */
-  --color-warn-bg:       #FEF7E2;
-  --color-danger:        #C21F30; /* 枫叶 */
-  --color-danger-bg:     #FBF0F2;
-  --color-info:          #4466B4;
-  --color-info-bg:       #E9EEF8;
-  --color-on-accent:     #fff;
-  --shadow-1: 0 1px 2px rgba(58, 16, 26, 0.05), 0 8px 24px rgba(58, 16, 26, 0.06);
-  --shadow-2: 0 2px 4px rgba(58, 16, 26, 0.06), 0 16px 40px rgba(58, 16, 26, 0.14);
-  --shadow-xs: 0 1px 3px rgba(48, 12, 22, 0.09);
-  --shadow-drawer: -18px 0 50px rgba(48, 12, 22, 0.2);
-  --shadow-panel: 12px 0 30px rgba(48, 12, 22, 0.2);
-}
-
-/* ============ 紫檀（紫调暗色；取色 石青/芝兰/萝兰/樱草/蕈紫/槿紫，渐变 芝兰→萝兰→蕈紫） ============ */
-[data-theme="zitan"] {
-  --color-bg:            #2E282E; /* 石青 */
-  --color-surface:       #3D373D; /* 石青提亮 */
-  --color-surface-2:     #201C20; /* 石青压暗 */
-  --color-fg:            #E9CCD3; /* 芝兰 */
-  --color-muted:         #C08EAF; /* 萝兰 */
-  --color-faint:         #C06F98; /* 樱草 */
-  --color-border:        #544F54;
-  --color-border-strong: #6D696D;
-  --color-orange:        #E9CCD3; /* 芝兰 */
-  --color-accent:        #C08EAF; /* 萝兰 */
-  --color-red:           #815C94; /* 蕈紫 */
-  --color-accent-ink:    #D0AAC3;
-  --color-success:       #41B349; /* 玉髓 */
-  --color-success-bg:    #313B32;
-  --color-warn:          #F9A633; /* 榴萼 */
-  --color-warn-bg:       #4A3A2F;
-  --color-danger:        #EE2746; /* 淡曙 */
-  --color-danger-bg:     #452831;
-  --color-info:          #A092B6; /* 槿紫提亮 */
-  --color-info-bg:       #39323E;
-  --color-on-accent:     #2E1626;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.32);
-  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.34), 0 16px 40px rgba(0, 0, 0, 0.5);
-  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.38);
-  --shadow-drawer: -18px 0 50px rgba(0, 0, 0, 0.5);
-  --shadow-panel: 12px 0 30px rgba(0, 0, 0, 0.5);
 }

@@ -66,8 +66,8 @@ describe("theme palettes contract", () => {
   });
 
   it("dark themes override --color-on-accent away from pure white", () => {
-    // 墨夜/黛青/鎏金/紫檀强调底提亮，白字对比度不足 4.5:1 → 前景必须翻转为深墨
-    const darkThemes = ["ink", "celadon", "gilt", "zitan"];
+    // 墨夜/黛青强调底提亮，白字对比度不足 4.5:1 → 前景必须翻转为深墨
+    const darkThemes = ["ink", "celadon"];
     const bodyRe = (id: string) =>
       new RegExp(`\\[data-theme="${id}"\\][^}]*--color-on-accent:\\s*([^;]+);`);
     for (const id of darkThemes) {

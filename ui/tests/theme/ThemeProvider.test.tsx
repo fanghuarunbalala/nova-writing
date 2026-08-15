@@ -54,13 +54,13 @@ describe("ThemeProvider", () => {
   });
 
   it("restores the persisted theme on mount without initialTheme", () => {
-    localStorage.setItem("novel.theme", "gilt");
+    localStorage.setItem("novel.theme", "celadon");
     render(
       <ThemeProvider>
         <span>content</span>
       </ThemeProvider>,
     );
-    expect(document.documentElement.dataset.theme).toBe("gilt");
+    expect(document.documentElement.dataset.theme).toBe("celadon");
   });
 
   it("falls back to the default theme for invalid stored values", () => {
@@ -77,10 +77,8 @@ describe("ThemeProvider", () => {
     expect(() => render(<ThemeProbe />)).toThrow("useTheme must be used within ThemeProvider");
   });
 
-  it("ships exactly the eight themes with paper as default", () => {
-    expect([...THEMES]).toEqual([
-      "paper", "ink", "celadon", "frost", "bamboo", "gilt", "rouge", "zitan",
-    ]);
+  it("ships exactly the four themes with paper as default", () => {
+    expect([...THEMES]).toEqual(["paper", "ink", "celadon", "frost"]);
     expect(DEFAULT_THEME).toBe("paper");
   });
 });

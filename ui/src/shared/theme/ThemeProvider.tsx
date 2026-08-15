@@ -1,7 +1,7 @@
 /**
  * ThemeProvider
  *
- * 多主题（宣纸白/墨夜/黛青/雪青/竹雨/鎏金/胭脂/紫檀）：useTheme() 读取与切换，
+ * 多主题（宣纸白/墨夜/黛青/雪青）：useTheme() 读取与切换，
  * 写 <html data-theme="..."> 使 tokens.css 的 [data-theme] 覆盖块生效。
  * 只覆盖 L3 色层；语义混合 token 引用基色自动重derive——必须挂在 html 元素上
  * （挂 body 时 :root 级混合 token 已按旧基色解析，不会跟随）。
@@ -22,16 +22,7 @@ import {
   type ReactNode,
 } from "react";
 
-export const THEMES = [
-  "paper",
-  "ink",
-  "celadon",
-  "frost",
-  "bamboo",
-  "gilt",
-  "rouge",
-  "zitan",
-] as const;
+export const THEMES = ["paper", "ink", "celadon", "frost"] as const;
 
 export type Theme = (typeof THEMES)[number];
 

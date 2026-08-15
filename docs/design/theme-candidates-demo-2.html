@@ -365,22 +365,23 @@
     --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.4);
   }
 
-  /* ============ 新增 11：凝脂（玉白底 · 杨妃强调；渐变 杨妃→深绯→殷红）============
-     取色：底 凝脂#FFFFFA（温润玉白）/ 渐变首 杨妃#FFB3A7 → 主 莲瓣×殷红 #C03759 →
-     尾 殷红#82111F / 边 石蕊#F0C9CF / 正文·次要·faint 杨妃加深系 */
+  /* ============ 新增 11：凝脂（青玉白底 · 杨妃强调；渐变 杨妃→深杨妃→殷红）============
+     取色（用户指定精确值）：底 凝脂#F5FCE9（青玉白）/ 渐变首 杨妃#F091A0 →
+     主 #B95160（杨妃×殷红）→ 尾 #932432（殷红向）/ 边 玉簪#A4CAB6 洗淡 /
+     正文·次要·faint 凝脂加深系（青墨绿灰） */
   [data-theme="ningzhi"] {
-    --color-bg:            #FFFFFA; /* 凝脂 */
-    --color-surface:       #FFFFFF;
-    --color-surface-2:     #FFF9F8; /* 杨妃微染 */
-    --color-fg:            #2E201E; /* 深杨妃褐墨 */
-    --color-muted:         #664843;
-    --color-faint:         #855D57;
-    --color-border:        #F8E4E7; /* 石蕊洗淡 */
-    --color-border-strong: #F0C9CF; /* 石蕊 */
-    --color-orange:        #FFB3A7; /* 杨妃 */
-    --color-accent:        #C03759; /* 莲瓣×殷红（深杨妃/绯） */
-    --color-red:           #82111F; /* 殷红 */
-    --color-accent-ink:    #A1243C;
+    --color-bg:            #F5FCE9; /* 凝脂 */
+    --color-surface:       #FCFEF7; /* 凝脂提白 */
+    --color-surface-2:     #E8EEDC; /* 凝脂压暗（青灰绿） */
+    --color-fg:            #252623; /* 青墨 */
+    --color-muted:         #676A62;
+    --color-faint:         #8E9287;
+    --color-border:        #E2EEE8; /* 玉簪洗淡 */
+    --color-border-strong: #CAE0D5; /* 玉簪 */
+    --color-orange:        #F091A0; /* 杨妃 */
+    --color-accent:        #B95160; /* 杨妃×殷红（深杨妃） */
+    --color-red:           #932432; /* 殷红向 */
+    --color-accent-ink:    #9E3140;
     --color-success:       #20715B;
     --color-success-bg:    #FFF9DF;
     --color-warn:          #927104; /* 金盏加深 */
@@ -390,9 +391,9 @@
     --color-info:          #4466B4;
     --color-info-bg:       #E9EEF8;
     --color-on-accent:     #fff;
-    --shadow-1: 0 1px 2px rgba(64, 20, 26, 0.04), 0 8px 24px rgba(64, 20, 26, 0.05);
-    --shadow-2: 0 2px 4px rgba(64, 20, 26, 0.05), 0 16px 40px rgba(64, 20, 26, 0.12);
-    --shadow-xs: 0 1px 3px rgba(52, 16, 22, 0.08);
+    --shadow-1: 0 1px 2px rgba(40, 52, 30, 0.04), 0 8px 24px rgba(40, 52, 30, 0.05);
+    --shadow-2: 0 2px 4px rgba(40, 52, 30, 0.05), 0 16px 40px rgba(40, 52, 30, 0.12);
+    --shadow-xs: 0 1px 3px rgba(34, 44, 26, 0.08);
   }
 
   /* ============ 主题切换过渡（demo 演示；真实实现可加在全局样式） ============ */
@@ -1366,8 +1367,8 @@
       desc: "粉调亮色（传统色）。底为石蕊洗白、正文酱紫、次要满江、边合欢；渐变 淡茜→锦葵→深锦葵，春樱笺纸。" },
     { id: "zitan", name: "紫檀", group: 1, dot: ["#E9CCD3", "#815C94"],
       desc: "紫调暗色（传统色）。底取石青、正文芝兰、次要萝兰；渐变 芝兰→萝兰→蕈紫，info 用槿紫。夜读的紫檀书房。" },
-    { id: "ningzhi", name: "凝脂", group: 1, dot: ["#FFB3A7", "#82111F"],
-      desc: "玉白亮色（传统色）。底取凝脂#FFFFFA（肤如凝脂之玉白）、边石蕊；渐变 杨妃#FFB3A7→深绯→殷红，贵妃出浴的柔粉落日。" },
+    { id: "ningzhi", name: "凝脂", group: 1, dot: ["#F091A0", "#932432"],
+      desc: "青玉白亮色（传统色，用户指定精确值）。底取凝脂#F5FCE9（青玉白）、边玉簪、正文青墨；渐变 杨妃#F091A0→深杨妃→殷红，青玉纸上的杨妃醉色。" },
     { id: "candle", name: "烛影", group: 1, dot: ["#E7A23F", "#DE7622"],
       desc: "棕调暗色（传统色）。底取火山、inset 栗棕、正文珍珠、次要玳瑁、warn 淡茧；渐变 玳瑁→凋叶→麂棕，烛光暖褐书房。" },
   ];

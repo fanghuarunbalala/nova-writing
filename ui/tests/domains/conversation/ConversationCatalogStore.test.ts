@@ -1,7 +1,7 @@
 /**
  * ConversationCatalogStore 契约测试（现行 API）：
  * load/create/select/clear/retry 与 core API 交互 + 标题（summary.name / 自动格式）+
- * renameConversation / applyDerivedTitle。
+ * renameConversation / applyDerivedTitle / pinConversation / touchActivity。
  */
 import { describe, expect, it, vi } from "vitest";
 import type { NovelApiClient } from "@novel/core";
@@ -20,6 +20,7 @@ function buildApi(overrides: Partial<NovelApiClient["conversations"]> = {}): Nov
       open: vi.fn(),
       delete: vi.fn(async () => undefined),
       rename: vi.fn(async () => true),
+      pin: vi.fn(async () => true),
       history: vi.fn(async () => []),
       getMode: vi.fn(async () => "review"),
       ...overrides,
@@ -163,5 +164,61 @@ describe("ConversationCatalogStore", () => {
     await store2.loadWorkspace("w1");
     store2.applyDerivedTitle("conv_000002", long);
     expect(store2.getSnapshot().conversations[0]!.title).toBe(`${long.slice(0, 30)}…`);
+  });
+
+  it("loadWorkspace 采集 pinned/lastActivityAt；新建会话 lastActivityAt 为当前时间", async () => {
+    const api = buildApi({
+      list: vi.fn(async () => [
+        { ...summary("conv_000001", "置顶对话"), pinned: true, lastActivityAt: 123 },
+        summary("conv_000002"),
+      ]),
+    });
+    const store = new ConversationCatalogStore({ api });
+    await store.loadWorkspace("w1");
+    const items = store.getSnapshot().conversations;
+    expect(items[0]!.pinned).toBe(true);
+    expect(items[0]!.lastActivityAt).toBe(123);
+    expect(items[1]!.pinned).toBeUndefined();
+    expect(items[1]!.lastActivityAt).toBe(0);
+
+    const before = Date.now();
+    await store.createConversation();
+    const created = store.getSnapshot().conversations.find((item) => item.id === "conversation_created")!;
+    expect(created.lastActivityAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it("pinConversation 经 api 持久化并本地 patch；未命中 reject", async () => {
+    const pin = vi.fn(async () => true);
+    const api = buildApi({ list: vi.fn(async () => [summary("conv_000001")]), pin });
+    const store = new ConversationCatalogStore({ api });
+    await store.loadWorkspace("w1");
+
+    await store.pinConversation("conv_000001", true);
+    expect(pin).toHaveBeenCalledWith("conv_000001", true);
+    expect(store.getSnapshot().conversations[0]!.pinned).toBe(true);
+
+    await store.pinConversation("conv_000001", false);
+    expect(pin).toHaveBeenCalledWith("conv_000001", false);
+    expect(store.getSnapshot().conversations[0]!.pinned).toBe(false);
+
+    const miss = buildApi({ list: vi.fn(async () => [summary("conv_000001")]), pin: vi.fn(async () => false) });
+    const missStore = new ConversationCatalogStore({ api: miss });
+    await missStore.loadWorkspace("w1");
+    await expect(missStore.pinConversation("conv_000001", true)).rejects.toThrow();
+  });
+
+  it("touchActivity 本地刷新 lastActivityAt；未知 id no-op", async () => {
+    const api = buildApi({ list: vi.fn(async () => [summary("conv_000001")]) });
+    const store = new ConversationCatalogStore({ api });
+    await store.loadWorkspace("w1");
+    expect(store.getSnapshot().conversations[0]!.lastActivityAt).toBe(0);
+
+    const before = Date.now();
+    store.touchActivity("conv_000001");
+    expect(store.getSnapshot().conversations[0]!.lastActivityAt).toBeGreaterThanOrEqual(before);
+
+    const snapshot = store.getSnapshot();
+    store.touchActivity("missing");
+    expect(store.getSnapshot()).toBe(snapshot); // no-op：快照引用不变
   });
 });

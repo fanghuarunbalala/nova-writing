@@ -1,8 +1,9 @@
 /**
  * ConversationProjection：精简投影（客户端侧）。
  * 消费 ConversationHandle.subscribeEvents 的 ProjectedEvent 流 → 累积 timeline 快照。
- * assistant 项按 turn（一次 API 请求）分段：每段 = 内容片段 + 本请求的工具行
- * （见 docs/design/tool-call-embed-demo.html）；工具行承载 preview（action/object/title/summary）。
+ * assistant 项按正文片段分段：每段 = 内容片段 + 其后的工具行批次（无正文间隔的
+ * 连续工具行并组，demo .toolGroup 单盒多行；见 docs/design/app-redesign-demo.html）；
+ * 工具行承载 preview（action/object/title/summary）。
  */
 
 import { proxy } from "kkrpc/remote-refs";
@@ -36,13 +37,13 @@ export interface ToolTraceView {
 	preview?: ToolPreview;
 }
 
-/** assistant 消息的一个 turn 分段：内容片段 + 本请求的工具行 */
-export interface AssistantSegment {
-	/** 本段内容片段（live 按 delta 切段；重放形态可为空） */
-	text: string;
-	/** 本请求的工具行（进行中/完成/失败；同一请求多工具并列） */
-	tools: readonly ToolTraceView[];
-}
+	/** assistant 消息的一个分段：内容片段 + 其后的工具行批次 */
+	export interface AssistantSegment {
+		/** 本段内容片段（live 按 delta 切段；重放形态为空） */
+		text: string;
+		/** 本批工具行（进行中/完成/失败；无正文间隔的连续调用并组） */
+		tools: readonly ToolTraceView[];
+	}
 
 /** timeline 项（对齐 UI 消息视图的精简子集） */
 export interface ConversationTimelineItem {
@@ -52,7 +53,7 @@ export interface ConversationTimelineItem {
 	sequence: number;
 	/** 完整文本（markdown 渲染；live 为分段拼接，重放为完整消息） */
 	text: string;
-	/** assistant 专用：turn 分段（每段 = 内容 + 工具行；无工具调用时为空数组） */
+	/** assistant 专用：正文分段（每段 = 内容片段 + 其后工具批次；无工具调用时为空数组） */
 	segments?: readonly AssistantSegment[];
 	/** 流式中（assistant.delta 累积期间为 true，run-end 收口） */
 	streaming?: boolean;
@@ -62,6 +63,8 @@ export interface ConversationTimelineItem {
 	runEndSequence?: number;
 	/** 事件时间（run 分隔条展示） */
 	timestamp?: string;
+	/** 建项时生效模式（头部 chip 展示；按 mode.changed 在 assistant 建项点盖章） */
+	mode?: ConversationMode;
 }
 
 /** 投影错误快照 */
@@ -129,6 +132,10 @@ export class ConversationProjection {
 	 * 新请求文本持续并入上一段（正文不在句中断裂）。工具行再开段/收口时解除。
 	 */
 	private continuingIntoLastSegment = false;
+	/** 自上一工具批次以来累积的正文（assistant.message 幂等去重/补尾/修正判定基准） */
+	private textSinceLastTool = "";
+	/** canonical 修正全文（assistant.message 与已流式文本存在细微差异时暂存，收口优先采用） */
+	private pendingFullText: string | undefined;
 	/** 实时生成状态（generating；run 收口清除） */
 	private liveState: "generating" | undefined;
 	private nextSeq = 1;
@@ -329,23 +336,27 @@ export class ConversationProjection {
 				});
 				break;
 			case "assistant.message": {
-				// 幂等：有活跃项（delta/tool-recorded 已建）→ 收口（fullText 兜底重放形态的完整文本）；
-				// 无（纯历史重放无工具）→ 新推
-				if (this.activeAssistantSeq !== undefined) {
-					this.finalizeAssistant(event.text);
-					this.setRunEndOnLast(event.seq, event.ts);
-				} else {
-					this.timeline.push({
-						kind: "assistant",
-						sequence: this.nextSeq++,
-						text: event.text,
-						segments: Object.freeze([]),
-						sourceSequence: event.seq,
-						runEndSequence: event.seq,
-						timestamp: event.ts,
-					});
+				// 轮文本（不收口：收口统一由 run-end/user.message 边界触发，assistant.message
+				// 只承载文本）。以「自上一工具批次以来的文本」（本轮已流式部分）为基准：
+				// live 已流式 → 幂等去重；delta 丢包 → 前缀补尾；重放（无 delta）→ 整段
+				// 补进正文分段，工具组与各轮文本按出现顺序交错（不拆多消息、不错位配对）；
+				// canonical 修正（本轮已流式但与最终文本有细微差异）→ 不追加（避免重复），
+				// 存为权威全文，收口时优先采用。
+				this.ensureActiveAssistant(event);
+				const messageText = event.text ?? "";
+				const streamed = this.textSinceLastTool;
+				if (!streamed.endsWith(messageText)) {
+					if (streamed !== "" && messageText.startsWith(streamed)) {
+						this.appendAssistantText(messageText.slice(streamed.length));
+					} else if (streamed === "") {
+						if (messageText !== "") this.appendAssistantText(messageText);
+					} else {
+						this.pendingFullText = messageText;
+					}
 				}
 				this.liveState = undefined;
+				this.activeItemDirty = true;
+				this.publish();
 				break;
 			}
 			case "assistant.delta": {
@@ -353,19 +364,7 @@ export class ConversationProjection {
 				if (event.kind === "reasoning") break;
 				this.liveState = "generating";
 				this.ensureActiveAssistant(event);
-				// 上一段已收口工具行 → 新请求的内容：句读收尾开新段（段间换行分隔）；
-				// 半句被工具调用/审批打断（无句读结尾）→ 续句并入上一段，正文不在句中断裂
-				if (this.segmentIsClosed()) {
-					if (!this.continuingIntoLastSegment && this.lastSegmentAcceptsContinuation()) {
-						this.continuingIntoLastSegment = true;
-					}
-					if (!this.continuingIntoLastSegment) this.openSegment();
-				}
-				if (this.continuingIntoLastSegment) {
-					this.appendToLastSegment(event.text);
-				} else {
-					this.activeSegmentText += event.text;
-				}
+				this.appendAssistantText(event.text);
 				// 置脏 + 合并发布（gui-performance-2 功能点三）：单条 delta 成本 = 一次追加 + 置位，
 				// 全文 join / segments 重建 / timeline 拷贝挪到 32ms 发布窗口（或下一次立即 publish 前）
 				this.activeItemDirty = true;
@@ -427,20 +426,44 @@ export class ConversationProjection {
 			streaming: true,
 			// 归属起点 = 当前 run 的首个 persist seq（run-start/user.message 已推进 lastAppliedSequence）
 			sourceSequence: this.lastAppliedSequence,
+			...(this.mode !== undefined ? { mode: this.mode } : {}),
 			...(typeof event.ts === "string" ? { timestamp: event.ts } : {}),
 		});
 		this.activeIndex = this.timeline.length - 1;
 	}
 
-	/** 把工作区（已封段 + 当前缓冲）同步进 timeline 项对象（publish 前调用：脏文本落快照） */
+	/**
+	 * 追加 assistant 正文（delta 与 assistant.message 共用）：
+	 * 上一段已收口工具行 → 新请求的内容：句读收尾开新段（段间换行分隔）；
+	 * 半句被工具调用/审批打断（无句读结尾）→ 续句并入上一段，正文不在句中断裂
+	 */
+	private appendAssistantText(text: string): void {
+		if (this.segmentIsClosed()) {
+			if (!this.continuingIntoLastSegment && this.lastSegmentAcceptsContinuation()) {
+				this.continuingIntoLastSegment = true;
+			}
+			if (!this.continuingIntoLastSegment) this.openSegment();
+		}
+		if (this.continuingIntoLastSegment) {
+			this.appendToLastSegment(text);
+		} else {
+			this.activeSegmentText += text;
+		}
+		this.textSinceLastTool += text;
+	}
+
+	/** 把工作区（已封段 + 当前缓冲）同步进 timeline 项对象（publish 前调用：脏文本落快照）。
+	 *  未封缓冲以尾段（纯文本段）并入 segments：段文本拼接恒等于 item.text，
+	 *  UI 交错渲染形态在流式期间稳定（不因缓冲未封而回退堆叠形态）。 */
 	private syncActiveItem(): void {
 		if (this.activeAssistantSeq === undefined) return;
 		const idx = this.activeIndexResolved();
 		if (idx < 0) return;
 		const item = this.timeline[idx]!;
-		const segments = Object.freeze(
-			this.activeSegments.map((s) => Object.freeze({ text: s.text, tools: Object.freeze([...s.tools]) })),
-		);
+		const segments = Object.freeze([
+			...this.activeSegments.map((s) => Object.freeze({ text: s.text, tools: Object.freeze([...s.tools]) })),
+			...(this.activeSegmentText !== "" ? [Object.freeze({ text: this.activeSegmentText, tools: Object.freeze([]) })] : []),
+		]);
 		this.timeline[idx] = {
 			...item,
 			text: this.activeSegments.map((s) => s.text).join("") + this.activeSegmentText,
@@ -455,7 +478,7 @@ export class ConversationProjection {
 		return this.activeIndex;
 	}
 
-	/** 当前段是否已收口（存在完成/失败工具行）→ 后续内容/工具属于新请求段 */
+	/** 当前段是否已收口（最后工具行已有结果）→ 后续正文开新段（连续工具行仍并组） */
 	private segmentIsClosed(): boolean {
 		const last = this.activeSegments.at(-1);
 		if (last === undefined || last.tools.length === 0) return false;
@@ -504,6 +527,7 @@ export class ConversationProjection {
 	/** 当前段追加工具行（started：进行中）；先封存缓冲中的 delta 内容（工具行属于当前段）；续句合并解除（工具行再开段，其后文本重新起段） */
 	private pushToolRow(row: ToolTraceView): void {
 		this.continuingIntoLastSegment = false;
+		this.textSinceLastTool = "";
 		this.pushSegment(this.activeSegmentText);
 		this.activeSegmentText = "";
 		const last = this.activeSegments.at(-1);
@@ -511,12 +535,9 @@ export class ConversationProjection {
 			this.activeSegments.push({ text: "", tools: [row] });
 			return;
 		}
-		// 上一段已收口（上一请求的工具批次完成）→ 本次调用属于新请求：开新段（每请求一段）。
-		// 无显式请求边界事件，同一请求内顺序多工具与此场景不可区分，一并按新段处理。
-		if (this.segmentIsClosed()) {
-			this.activeSegments.push({ text: "", tools: [row] });
-			return;
-		}
+		// 上一段已收口且无正文间隔（缓冲为空、未封存文本段）→ 并入上一段：
+		// 无正文间隔的连续工具行同组（demo .toolGroup 单盒多行）；正文出现才开新段。
+		// 无显式请求边界事件，「新请求直接开工具（无正文）」与此场景不可区分，一并并组。
 		this.activeSegments[this.activeSegments.length - 1] = { text: last.text, tools: [...last.tools, row] };
 	}
 
@@ -536,9 +557,10 @@ export class ConversationProjection {
 
 	/**
 	 * 收口流式 assistant：segments 冻结进项、streaming=false、清工作区。
-	 * @param fullText 完整消息文本（assistant.message 提供；重放形态段文本为空时兜底）
+	 * 文本优先级：canonical 修正全文 > 分段拼接（live delta 与重放轮文本都落在段里）
+	 * > 既有项文本。
 	 */
-	private finalizeAssistant(fullText?: string): void {
+	private finalizeAssistant(): void {
 		this.liveState = undefined;
 		if (this.activeAssistantSeq === undefined) return;
 		const idx = this.activeIndexResolved();
@@ -554,8 +576,7 @@ export class ConversationProjection {
 		);
 		this.timeline[idx] = {
 			...item,
-			// 完整文本优先取 assistant.message（live 与 delta 拼接一致；重放段文本为空时兜底）
-			text: fullText || segments.map((s) => s.text).join("") || item.text,
+			text: this.pendingFullText || segments.map((s) => s.text).join("") || item.text,
 			segments,
 			streaming: false,
 		};
@@ -573,6 +594,8 @@ export class ConversationProjection {
 		this.activeSegments = [];
 		this.activeSegmentText = "";
 		this.continuingIntoLastSegment = false;
+		this.textSinceLastTool = "";
+		this.pendingFullText = undefined;
 		this.activeIndex = -1;
 		this.activeItemDirty = false;
 	}

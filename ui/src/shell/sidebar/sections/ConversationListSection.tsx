@@ -100,9 +100,9 @@ export function ConversationListSection({
   );
   const handlePin = useCallback(
     (id: string, pinned: boolean) => {
-      // pinConversation 为存根（core 契约延后）：显性提示，避免 unhandled rejection
+      // 持久化失败（会话不存在/RPC 断连）显性提示，避免 unhandled rejection
       void store.pinConversation(id, pinned).catch(() => {
-        toastStore.push({ kind: "warn", text: "置顶暂未支持" });
+        toastStore.push({ kind: "warn", text: "置顶失败，请重试" });
       });
     },
     [store, toastStore],

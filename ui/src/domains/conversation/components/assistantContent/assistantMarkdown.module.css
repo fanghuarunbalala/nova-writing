@@ -1,26 +1,27 @@
 /**
- * Assistant Markdown 正文排版（对齐原型 .msg-text 与 .nm-* 系列）。
- * Prose layout aligned with the prototype .msg-text and .nm-* styles.
+ * Assistant Markdown 正文排版（对齐 app-redesign demo .mdBody/.quoteKai，
+ * docs/design/app-redesign-demo.html L680–688 chat CSS）。
+ * Prose layout aligned with the demo .mdBody and .quoteKai styles.
  *
- * 标准 Markdown 元素（react-markdown 输出）复刻原型视觉：标题带下边框、
- * 表格为圆角容器且无竖线、引用块左侧 accent 细线 + 楷体、列表网格间距、
- * code 带边框底、正文 text-wrap: pretty。
+ * 标准 Markdown 元素（react-markdown 输出）复刻 demo 视觉：正文宋体基座
+ * （--font-body + 1.85 行高，用户决议翻转旧黑体决议）、p 段距 10px、引用块
+ * 左侧 accent 细线 + 楷体 + accent-8 透明底（demo .quoteKai）；
+ * 列表/表格 demo .mdBody 未定义 → 继承宋体基座（与正文字体一致），
+ * 标题/code 保留各自的 --font-display/--font-mono。
  */
 .markdown {
-  /* 正文基座：黑体（--font-ui）400 原生字重（YaHei/Segoe UI 无原生 550，
-     合成加粗发糊发重）；15.5px + 0.01em 字距（Windows 15px 发虚）。
+  /* 正文基座：宋体（--font-body，demo .mdBody 决议）+ 1.85 行高，无字距；
      标题/引用/代码等元素保留各自的 --font-display/--font-kai/--font-mono。 */
-  font-family: var(--font-ui);
+  font-family: var(--font-body);
   font-size: var(--fs-chat);
   font-weight: var(--fw-regular);
-  letter-spacing: 0.01em;
-  line-height: 1.8;
+  line-height: 1.85;
   min-width: 0;
   text-wrap: pretty;
 }
 
 .markdown p {
-  margin: 0 0 0.6em;
+  margin: 0 0 var(--space-10px);
 }
 
 .markdown p:last-child {
@@ -61,6 +62,7 @@
   margin-top: var(--space-1);
 }
 
+/* 表格：字体/字号继承正文基座（demo .mdBody 无表格覆盖）；仅结构样式自定义 */
 .markdown table {
   width: 100%;
   border-collapse: collapse;
@@ -68,8 +70,6 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-10px);
   overflow: hidden;
-  font-size: var(--fs-12-5);
-  line-height: 1.55;
 }
 
 .markdown th,
@@ -79,12 +79,9 @@
 }
 
 .markdown th {
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-heavy);
+  font-weight: var(--fw-semibold);
   color: var(--color-muted);
   background: var(--color-surface-2);
-  letter-spacing: 0.04em;
-  font-family: var(--font-mono);
 }
 
 .markdown td {
@@ -116,28 +113,25 @@
   font-weight: var(--fw-bold);
 }
 
+/* 引用块（demo .quoteKai）：accent-45 左线 + 楷体 + accent-8 透明底，圆角只切右侧 */
 .markdown blockquote {
-  margin: var(--space-10px) 0 var(--space-1);
-  padding: var(--space-10px) var(--space-14px);
+  margin: var(--space-1) 0 var(--space-10px);
+  padding: var(--space-8px) var(--space-14px);
   border-left: var(--space-2px) solid var(--color-accent-45);
-  background: var(--color-accent-6);
-  border-radius: 0 var(--radius-8px) var(--radius-8px) 0;
+  background: var(--color-accent-8-transparent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   color: var(--color-muted);
-  font-size: var(--fs-13-5);
+  font-size: var(--fs-chat);
   font-family: var(--font-kai);
 }
 
+/* 列表：字体/字号/行高继承正文基座（demo .mdBody 无列表覆盖） */
 .markdown ul,
 .markdown ol {
   margin: var(--space-2) 0 var(--space-1);
   padding-left: var(--space-5);
   display: grid;
   gap: var(--space-1);
-}
-
-.markdown li {
-  font-size: var(--fs-13-5);
-  line-height: 1.6;
 }
 
 

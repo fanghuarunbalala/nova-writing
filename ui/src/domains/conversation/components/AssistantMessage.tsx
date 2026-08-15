@@ -1,14 +1,16 @@
 /**
  * AssistantMessage
  *
- * 助手消息（原型 .msg.assistant）：无头像；正文 + 按 turn 分段的工具单行
- * （每段 = 内容片段 + 工具行，形态定稿见 docs/design/tool-line-redesign-demo.html
- * 方案 A：状态降噪）+ 结构化卡片。
+ * 助手消息（对齐 app-redesign demo .msgAssistant）：头部行（渐变圆头像 +
+ * 名称 + mono 时间 + 模式 chip）+ 正文片段与工具带交错（每段 = 内容片段 +
+ * 工具行分组，live 与收口一致渲染、不丢段；重放回退全文 + 工具组，
+ * 形态定稿见 docs/design/app-redesign-demo.html .msgHead/.toolGroup）
+ * + 结构化卡片。
  * 卡片通过 ConversationCardRendererRegistry 渲染。
  * memo 包裹：历史消息（text/cards/segments 引用稳定）零重渲染、markdown 零重解析。
  */
 import { memo, useEffect, useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, Feather, X } from "lucide-react";
 import { createDefaultConversationCardRendererRegistry } from "../cards/defaultRenderers.js";
 import type { ConversationCardRendererRegistry } from "../cards/ConversationCardRendererRegistry.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
@@ -19,9 +21,11 @@ import type {
   AssistantSegment,
   ToolTraceView,
 } from "../projection/ConversationTimelineItem.js";
+import type { ConversationMode } from "@novel/core/client";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import { AssistantMarkdown } from "./assistantContent/AssistantMarkdown.js";
+import { COMPOSER_MODE_META } from "./ComposerModeBar.js";
 import type { MessageReference } from "./MessageReference.js";
 import styles from "./AssistantMessage.module.css";
 
@@ -31,21 +35,22 @@ const DEFAULT_CARD_RENDERERS = createDefaultConversationCardRendererRegistry();
 /** 缺省空数组（冻结单例：memo 浅比较稳定引用） */
 const EMPTY_CARDS: readonly ConversationCardDescriptor[] = Object.freeze([]);
 const EMPTY_SEGMENTS: readonly AssistantSegment[] = Object.freeze([]);
-const EMPTY_TOOLS: readonly ToolTraceView[] = Object.freeze([]);
 
 export interface AssistantMessageProps {
   readonly sequence: number;
-  /** 保留兼容调用方；v2 原型 head 只显示 approval-state，不再渲染。 */
+  /** 头部显示名（timeline 统一「Novel 助理」） */
   readonly agentLabel: string;
-  /** 保留兼容调用方；v2 原型时间只在轮次分隔显示。 */
-  readonly timestamp: number;
+  /** 消息事件时间（epoch ms；头部 meta 显示；缺省 0 → meta 不渲染） */
+  readonly timestamp?: number;
   /** 保留兼容调用方；v2 原型 head 不再显示 revision。 */
   readonly revision?: string;
   readonly failureDetail?: string;
+  /** 建项时生效模式（undefined 不渲染 chip） */
+  readonly mode?: ConversationMode;
   readonly text: string;
   readonly cards?: readonly ConversationCardDescriptor[];
   readonly streaming?: boolean;
-  /** turn 分段：每段 = 内容片段 + 该请求的工具行（缺省空数组） */
+  /** 正文分段：每段 = 内容片段 + 其后工具批次（缺省空数组） */
   readonly segments?: readonly AssistantSegment[];
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly onResolveReference?: ReferenceResolver;
@@ -57,28 +62,39 @@ export interface AssistantMessageProps {
 
 export const AssistantMessage = memo(function AssistantMessage({
   sequence,
+  agentLabel,
+  timestamp,
   failureDetail,
   text,
   cards = EMPTY_CARDS,
   streaming = false,
   segments = EMPTY_SEGMENTS,
+  mode,
   onReferenceClick,
   onResolveReference,
   cardRenderers = DEFAULT_CARD_RENDERERS,
   onCardAction,
   onNotify,
 }: AssistantMessageProps) {
-  // live 流式：逐 turn 分段渲染（每段 = 内容 + 工具行，换行分隔，边界清晰、正文随流式增长无跳变）；
-  // 轮收口后：收敛为最后一段（正文 = 最后一段内容片段，重放空段回退完整文本）
-  const lastSegment = segments.length > 0 ? segments[segments.length - 1] : undefined;
-  const lastText = lastSegment?.text ?? "";
-  const bodyText = lastText.length > 0 ? lastText : text;
-  const lastTools = lastSegment?.tools ?? EMPTY_TOOLS;
-  const segmentedLive = streaming && segments.length > 0;
+  // 分段渲染（demo 定稿形态）：live 与收口一致——段文本完整（拼接 === 全文）时
+  // 按段交错渲染「正文片段 + 工具组」；重放形态（段文本为空，拼接 ≠ 全文）回退
+  // 「完整正文 + 各批工具组」。收口后不再丢弃早期正文片段与工具组（对齐 demo）。
+  const segmentsComplete =
+    segments.length > 0 && segments.map((seg) => seg.text).join("") === text;
+  const replayTools = segments.filter((seg) => seg.tools.length > 0);
+  const headTime = formatHeadTime(timestamp ?? 0);
   return (
     <div className={styles.message} data-sequence={sequence}>
+      <div className={styles.head}>
+        <span className={styles.avatar}>
+          <Icon icon={Feather} size="xs" strokeWidth={2} />
+        </span>
+        <b>{agentLabel}</b>
+        {headTime !== "" ? <span className={styles.meta}>{headTime}</span> : null}
+        {mode !== undefined ? <span className={styles.chip}>{COMPOSER_MODE_META[mode]}</span> : null}
+      </div>
       <div className={styles.body}>
-        {segmentedLive ? (
+        {segmentsComplete ? (
           segments.map((seg, i) => (
             <div key={i} className={styles.segment}>
               {seg.text !== "" ? (
@@ -87,26 +103,34 @@ export const AssistantMessage = memo(function AssistantMessage({
                     text={seg.text}
                     onReferenceClick={onReferenceClick}
                     resolveReference={onResolveReference}
-                    streaming={i === segments.length - 1}
+                    streaming={streaming && i === segments.length - 1}
                     onNotify={onNotify}
                   />
                 </div>
               ) : null}
-              {seg.tools.length > 0 ? <ToolLine tools={seg.tools} /> : null}
+              {seg.tools.length > 0 ? (
+                <div className={styles.toolGroup}>
+                  <ToolLine tools={seg.tools} />
+                </div>
+              ) : null}
             </div>
           ))
         ) : (
           <>
             <div className={styles.text}>
               <AssistantMarkdown
-                text={bodyText}
+                text={text}
                 onReferenceClick={onReferenceClick}
                 resolveReference={onResolveReference}
                 streaming={streaming}
                 onNotify={onNotify}
               />
             </div>
-            {lastTools.length > 0 ? <ToolLine tools={lastTools} /> : null}
+            {replayTools.map((seg, i) => (
+              <div key={i} className={styles.toolGroup}>
+                <ToolLine tools={seg.tools} />
+              </div>
+            ))}
           </>
         )}
         {failureDetail !== undefined ? (
@@ -133,23 +157,42 @@ export const AssistantMessage = memo(function AssistantMessage({
   );
 });
 
-/** 工具单行（方案 A 状态降噪，docs/design/tool-line-redesign-demo.html）：
- *  完成 = ✓ 绿图标 + muted 文字（✓ 已表达完成，不显耗时——大多 0s 属噪音）；
- *  失败 = 红字醒目；进行中 = 唯一强调项（warn 图标 + 实时整数秒）。
+/** 头部时间格式化（demo .mMeta 文案）：今天→「今天 HH:mm」、昨天→「昨天 HH:mm」、
+ *  同年→「M月D日 HH:mm」、更早→「YYYY年M月D日 HH:mm」；非法/空时间返回空串（meta 不渲染）。
+ *  @param epochMs 事件时间（epoch 毫秒）
+ *  @returns 格式化时间串，非法输入返回空串 */
+function formatHeadTime(epochMs: number): string {
+  if (epochMs <= 0 || Number.isNaN(epochMs)) return "";
+  const date = new Date(epochMs);
+  const now = new Date();
+  const hhmm = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const dayDiff = Math.round((startOfToday - startOfDay) / 86_400_000);
+  if (dayDiff === 0) return `今天 ${hhmm}`;
+  if (dayDiff === 1) return `昨天 ${hhmm}`;
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${date.getMonth() + 1}月${date.getDate()}日 ${hhmm}`;
+  }
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${hhmm}`;
+}
+
+/** 工具单行（对齐 demo .toolLine 文案 `工具原名 · 摘要`，app-redesign-demo.html）：
+ *  完成 = ✓ 绿图标 + muted（toolName · title/summary）；失败 = 红字 `toolName 失败：title`；
+ *  进行中 = 唯一强调项（warn spinner + `toolName · title` + 实时整数秒）。
  *  工具项 nowrap，折行只发生在工具之间。 */
 function ToolLine({ tools }: { readonly tools: readonly ToolTraceView[] }) {
   return (
     <div className={styles.toolLine}>
       {tools.map((t) => {
-        const action = t.preview?.action ?? "执行";
-        const object = t.preview?.object ?? "工具";
         const title = t.preview?.title;
+        const sum = title ?? t.preview?.summary;
         if (t.outcome === undefined) {
           return (
             <span key={t.traceId} className={styles.toolRunning}>
               <span className={styles.spinner} />
-              {action}
-              {object}中{title !== undefined ? `：${title}` : ""}
+              {t.toolName}
+              {title !== undefined ? ` · ${title}` : ""}
               <LiveSeconds startedAt={t.startedAt} />
             </span>
           );
@@ -158,17 +201,15 @@ function ToolLine({ tools }: { readonly tools: readonly ToolTraceView[] }) {
           return (
             <span key={t.traceId} className={styles.toolFailed}>
               <Icon icon={X} size="xs" strokeWidth={2.2} />
-              {object}
-              {action}失败{title !== undefined ? `：${title}` : ""}
+              {t.toolName} 失败{title !== undefined ? `：${title}` : ""}
             </span>
           );
         }
         return (
           <span key={t.traceId} className={styles.toolDone}>
             <Icon icon={Check} size="xs" strokeWidth={2.2} />
-            {object}
-            {action}
-            {title !== undefined ? ` · ${title}` : ""}
+            {t.toolName}
+            {sum !== undefined ? ` · ${sum}` : ""}
           </span>
         );
       })}

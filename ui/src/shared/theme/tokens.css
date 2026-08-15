@@ -32,9 +32,9 @@
 
   /* max-width 快照（跨组件复用 ≥2 次才建 token；Dialog 的 400/720/960 频次 1 留在组件内） */
   --max-w-surface:   1000px; /* ContentSurface + ScheduleSurface 的 paneInner */
-  /* 对话列宽：居中 + 随容器宽度自适应（880px 底线、1600px 封顶、中间按 62%；
-     窄屏维持 880px，宽屏按实际可用宽度增长，两端空白收敛） */
-  --max-w-composer:   clamp(880px, 62%, 1600px); /* ConversationComposer + ConversationTimeline */
+  /* 对话列宽：demo 对齐——时间线与悬浮 composer 同宽居中 760px（用户决议，
+     app-redesign-demo.html .chatInner） */
+  --max-w-composer:   760px; /* ConversationComposer + ConversationTimeline */
   --max-w-dialog-md:  560px; /* Dialog.md + ChatEmptyState 标题区 */
   --max-w-overlay:    360px; /* ToastHost + ChatEmptyState 提示区 */
 

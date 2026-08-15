@@ -23,3 +23,4 @@ gui/conversation-*-events
 .vscode/
 novel-events-*
 novel-events
+.zcode/

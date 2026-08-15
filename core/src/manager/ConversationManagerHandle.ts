@@ -76,6 +76,16 @@ export class ConversationManagerHandle {
 	}
 
 	/**
+	 * 置顶/取消置顶会话（持久化到 storedir/meta.json，重启扫描恢复）
+	 * @param conversationId 会话 id
+	 * @param pinned 是否置顶
+	 * @returns 是否命中会话
+	 */
+	async setPinned(conversationId: ConversationId, pinned: boolean): Promise<boolean> {
+		return call(() => this.api.setPinned(conversationId, pinned), { peer: "manager" });
+	}
+
+	/**
 	 * 转发消息到目标会话（投递 user / command / control）
 	 * @param conversationId 目标会话 id
 	 * @param msg 会话消息

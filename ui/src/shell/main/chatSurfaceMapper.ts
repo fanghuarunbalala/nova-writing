@@ -122,6 +122,8 @@ export function mapProjectionTimeline(
           streaming: item.streaming === true,
           // 工具行随 core 项的分段结构直接透传（每段 = 内容 + 单行工具，无 seq 过滤）
           segments: item.segments ?? Object.freeze([]),
+          // mode 透传（core 项引用稳定 → WeakMap 缓存语义不变）
+          ...(item.mode !== undefined ? { mode: item.mode } : {}),
         }),
       );
     }

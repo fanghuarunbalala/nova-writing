@@ -1053,6 +1053,63 @@
   .loadingStep.on .tick { opacity: 1; transform: scale(1); }
   @keyframes loading-bob { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-5px) scale(1.06); } }
 
+  /* ============ 启动 · 项目选择页（欢迎页） ============ */
+  .welcome {
+    position: absolute; inset: 0; z-index: 50;
+    display: grid; place-items: center;
+    background: var(--color-bg);
+    overflow-y: auto; padding: 30px 20px;
+  }
+  .welcome.leave { animation: welcome-leave 0.45s var(--ease-out) both; pointer-events: none; }
+  .welcomeInner { width: min(560px, 94vw); display: flex; flex-direction: column; }
+  .welcomeBrand { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 26px; animation: view-in 0.5s 0.05s var(--ease-out) both; }
+  .welcomeBrand .brandDot { width: 22px; height: 22px; }
+  .welcomeName { font-size: 24px; font-weight: var(--fw-bold); letter-spacing: 0.04em; font-family: var(--font-kai); }
+  .welcomeTag { font-family: var(--font-kai); color: var(--color-muted); font-size: var(--fs-13); }
+  .welcomeSec { font-size: var(--fs-11); color: var(--color-faint); font-weight: var(--fw-semibold); letter-spacing: 0.04em; margin: 0 2px 9px; animation: view-in 0.5s 0.12s var(--ease-out) both; }
+  .welcomeGrid { display: flex; flex-direction: column; gap: 9px; animation: view-in 0.5s 0.18s var(--ease-out) both; }
+  .projCard {
+    display: flex; align-items: center; gap: 13px;
+    padding: 13px 15px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+    background: var(--color-surface); box-shadow: var(--shadow-1);
+    cursor: pointer; text-align: left; width: 100%;
+    transition: all var(--duration-base) var(--ease-out);
+  }
+  .projCard:hover {
+    transform: translateY(-2px); box-shadow: var(--shadow-2);
+    border-color: color-mix(in oklab, var(--color-accent) 30%, var(--color-border));
+  }
+  .projCover {
+    width: 46px; height: 60px; flex: none; border-radius: var(--radius-sm);
+    display: grid; place-items: center;
+    font-family: var(--font-kai); font-size: 21px; color: #fff;
+    background: linear-gradient(150deg, var(--pc1), var(--pc2));
+    box-shadow: var(--shadow-xs), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+  .projText { flex: 1; min-width: 0; }
+  .projText b { display: block; font-size: 15px; font-weight: var(--fw-semibold); }
+  .projText small { display: block; margin-top: 3px; font-size: var(--fs-12); color: var(--color-faint); }
+  .projOpen {
+    flex: none; display: inline-flex; align-items: center; gap: 5px;
+    color: var(--color-faint); font-size: var(--fs-12); font-weight: var(--fw-medium);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .projCard:hover .projOpen { color: var(--color-accent-ink); gap: 9px; }
+  .welcomeActions { display: flex; gap: 9px; margin-top: 18px; animation: view-in 0.5s 0.24s var(--ease-out) both; }
+  .welcomeActions .btn { flex: 1; justify-content: center; padding: 8px; }
+  .welcomeFoot { margin-top: 16px; text-align: center; color: var(--color-faint); font-size: var(--fs-10-5); animation: view-in 0.5s 0.3s var(--ease-out) both; }
+  @keyframes welcome-leave { to { opacity: 0; transform: scale(1.03); filter: blur(6px); } }
+
+  /* 进入应用：先以固定尺寸浮现（面板依次淡入，期间尺寸不动），停一拍后整体扩大铺满 */
+  .appFrame.bootIn { animation: boot-zoom 0.7s 0.12s var(--ease-out) both; }
+  .appFrame.bootIn .titlebar  { animation: boot-fade 0.4s 0.02s var(--ease-out) both; }
+  .appFrame.bootIn .sidebar   { animation: boot-fade 0.45s 0.08s var(--ease-out) both; }
+  .appFrame.bootIn .main      { animation: boot-fade 0.45s 0.14s var(--ease-out) both; }
+  .appFrame.bootIn .inspector { animation: boot-fade 0.45s 0.2s var(--ease-out) both; }
+  @keyframes boot-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes boot-zoom { 0%, 45% { transform: scale(0.92); } 100% { transform: scale(1); } }
+
   .wsMenu {
     position: fixed; z-index: 70; min-width: 240px;
     border: 1px solid var(--color-border-strong); border-radius: var(--radius-md);
@@ -1325,6 +1382,7 @@
       </div>
     </div>
     <div class="loadingMask" id="loadingMask"></div>
+    <div class="welcome" id="welcome"></div>
   </div>
 </div>
 
@@ -1712,7 +1770,7 @@ const state = {
   selUnit: "u2", selChapter: "c2", selChar: "ch1", selLoc: "l1",
   planSel: "overview", mode: "compose", pendingMode: null, modeMenuOpen: false, genState: "generating",
   sidebarCollapsed: false, maximized: false, ws: "北河旧事", pinned: false,
-  approvalOpen: true, settingsTab: "appearance",
+  approvalOpen: true, settingsTab: "appearance", booted: false,
   vpMid: false,
 };
 /* 会话内新消息（重渲染不丢失） */
@@ -1775,6 +1833,54 @@ function runLoading(title, steps, done) {
     mask.classList.remove("show");
     if (done) done();
   }, 300 * steps.length + 550);
+}
+
+/* ================= 启动 · 项目选择页（刚启动时） ================= */
+const WS_COVERS = {
+  "北河旧事": ["#a0522d", "#d9a066"],
+  "雾中灯塔": ["#41708f", "#9fc0cf"],
+  "新的构思": ["#6d675e", "#3a342e"],
+};
+function renderWelcome() {
+  const w = $("welcome");
+  if (state.booted) { w.classList.remove("leave"); w.innerHTML = ""; w.style.display = "none"; return; }
+  w.style.display = "";
+  w.classList.remove("leave");
+  w.innerHTML = `<div class="welcomeInner">
+    <div class="welcomeBrand">
+      <span class="brandDot"></span>
+      <div class="welcomeName">Novel</div>
+      <div class="welcomeTag">把一桩旧事，写成一本新书。</div>
+    </div>
+    <div class="welcomeSec">最近的项目</div>
+    <div class="welcomeGrid">
+      ${WS_LIST.map(p => {
+        const cover = WS_COVERS[p.name] || ["#8a8378", "#3a342e"];
+        return `<button class="projCard" data-act="welcomePick" data-id="${esc(p.name)}">
+          <span class="projCover" style="--pc1:${cover[0]};--pc2:${cover[1]};">${esc(p.name[0])}</span>
+          <span class="projText"><b>${esc(p.name)}</b><small>${esc(p.sub)}</small></span>
+          <span class="projOpen">打开 ${ic("arrowRight", 13)}</span>
+        </button>`;
+      }).join("")}
+    </div>
+    <div class="welcomeActions">
+      <button class="btn btnPrimary" data-act="welcomeNew">${ic("plus", 13, 2.2)}新建项目</button>
+      <button class="btn btnSecondary" data-act="welcomeOther">${ic("folderOpen", 13)}打开其他项目…</button>
+    </div>
+    <div class="welcomeFoot">「启动时打开上次工作区」可在 设置 · 通用 中开启</div>
+  </div>`;
+}
+/* 启动页 → 进入应用：欢迎页退场（缩放+模糊淡出）→ 分步加载 → 面板级联入场 */
+function bootIntoApp(title, steps, after) {
+  const w = $("welcome");
+  w.classList.add("leave");
+  runLoading(title, steps, () => {
+    state.booted = true;
+    renderWelcome();
+    frame.classList.add("bootIn");
+    setTimeout(() => frame.classList.remove("bootIn"), 1000);
+    if (after) after();
+  });
 }
 
 /* ================= 顶栏 ================= */
@@ -2488,7 +2594,7 @@ function renderSettings() {
   } else {
     html = `<div style="text-align:center;padding:26px 0;">
       <div class="brand" style="justify-content:center;margin-bottom:8px;"><span class="brandDot"></span><span class="brandName" style="font-size:16px;">Novel</span></div>
-      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.5<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>大纲对齐 StoryUnit 模型 · 通知中心 · 会话菜单 · 轮次分层 · 长任务等待</div>
+      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.6<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>大纲对齐 StoryUnit 模型 · 通知中心 · 会话菜单 · 轮次分层 · 启动页与入场动画</div>
     </div>`;
   }
   $("settingsContent").innerHTML = html;
@@ -2602,6 +2708,7 @@ function renderDemoBar() {
     <span class="demoDivider"></span>
     <div class="demoGroup"><span class="lbl">面板</span><div class="demoBtns">
       <button class="dbtn" data-act="insToggle" aria-pressed="${state.approvalOpen}">审批面板</button>
+      <button class="dbtn" data-act="welcomeBack">启动页</button>
       <button class="dbtn" data-act="infoToggle" aria-pressed="${$("infoPop").classList.contains("show")}">说明</button>
       <button class="dbtn" data-act="barHide">收起</button>
     </div></div>`;
@@ -2619,6 +2726,7 @@ function renderInfoPop() {
       <li><b>消息通知 = 顶栏铃铛 + 通知中心</b>：审批到达 / 写作受阻 / 档案待完善等沉淀在通知中心（铃铛带未读计数角标），点击条目标记已读并跳转对应视图；对话顶条「置顶」右侧的 <b>「更多 ⋯」为会话菜单</b>——重命名 / 复制最后回复 / 导出 Markdown / 清空上下文 / 删除。</li>
       <li><b>一轮会话只展示最后一次 call 的返回</b>：每轮助手消息带头像 / 名称 / 时间 / 模式 chip；工具调用以分组条带（左侧强调线）夹在正文中间，含已完成 / 失败 / 运行中三态，中间结果不单独渲染成正文。</li>
       <li><b>长任务等待动画</b>：新建会话 = 按钮内 spinner，完成后目录动态插入新行；打开 / 切换项目 = 全屏分步加载遮罩（载入大纲树 → 读取卷章 → 档案 → 恢复会话，逐项点亮），完成后才真正切换并 toast。</li>
+      <li><b>启动 · 项目选择页</b>：刚启动时全窗欢迎页（品牌 + 最近项目卡片 + 新建 / 打开其他项目，元素级联浮入）；选择项目后 欢迎页缩放模糊退场 → 分步加载 → 应用<b>固定尺寸浮现再扩大</b>（顶栏 → 侧栏 → 主区 → 审批依次淡入，期间窗口尺寸保持不变，停一拍后整体放大铺满）。控制条「启动页」可随时回放。</li>
       <li><b>恢复「暂停」按钮</b>：生成中发送按钮替换为暂停；审批挂起时发送禁用。现网已移除暂停，此处按需求恢复。</li>
       <li><b>窗口控制</b>：Windows 右侧 最小化 / 最大化·还原 / 关闭（关闭悬停红）；macOS 左侧红绿灯。双击顶栏空白 = 最大化切换。对应 Electron <code>frame:false</code> + <code>-webkit-app-region: drag</code>（顶栏 CSS 已预留）。</li>
       <li><b>窗口尺寸</b>（容器查询，断点 1280 / 1080；<b>最小窗口 1080</b>——Electron minWidth，不做 860 级移动布局）：<code>&gt;1280</code> 侧栏 272 / 审批 376 常驻；<code>≤1280</code> 收窄 238 / 340；<code>≤1080</code>（最小档）审批变右缘覆盖抽屉 + 遮罩。用下方「窗口宽度」模拟（满 / 1440 / 1280 / 1080）。</li>
@@ -2628,7 +2736,7 @@ function renderInfoPop() {
 
 /* ================= 渲染入口 ================= */
 function renderChrome() { renderTitlebar(); renderDemoBar(); }
-function renderAll() { renderTitlebar(); renderSidebar(); renderMain(); renderInspector(); renderDemoBar(); }
+function renderAll() { renderTitlebar(); renderSidebar(); renderMain(); renderInspector(); renderDemoBar(); renderWelcome(); }
 
 /* ================= 交互（事件委托） ================= */
 document.addEventListener("click", (e) => {
@@ -2768,6 +2876,28 @@ document.addEventListener("click", (e) => {
       runLoading("正在打开项目…", ["扫描工作区目录", "载入项目档案", "建立索引"], () => {
         toast("演示：此处弹出系统项目选择器");
       });
+      break;
+    case "welcomePick":
+      bootIntoApp(`正在打开《${id}》`, ["载入大纲树", "读取卷章与段落", "角色 / 地点档案", "恢复最近会话"], () => {
+        state.ws = id;
+        WS_LIST.forEach(x => x.cur = x.name === id);
+        renderTitlebar();
+        toast("已切换到工作区：" + id);
+      });
+      break;
+    case "welcomeNew":
+      bootIntoApp("正在创建项目…", ["初始化工作区", "创建大纲根", "准备会话"], () => {
+        toast("已创建新项目（演示）");
+      });
+      break;
+    case "welcomeOther":
+      bootIntoApp("正在打开项目…", ["扫描工作区目录", "载入项目档案", "建立索引"], () => {
+        toast("演示：此处弹出系统项目选择器");
+      });
+      break;
+    case "welcomeBack":
+      state.booted = false;
+      renderWelcome();
       break;
     case "notifOpen": {
       e.stopPropagation();

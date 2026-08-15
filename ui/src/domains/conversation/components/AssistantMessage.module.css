@@ -1,20 +1,63 @@
 /**
- * AssistantMessage 视觉（原型 .msg.assistant + .msg-text）。
+ * AssistantMessage 视觉（对齐 app-redesign demo .msgAssistant，docs/design/app-redesign-demo.html
+ * L642–744 chat CSS）。
  *
- * v2 原型：无 avatar、无状态 head（approval-state 标签已移除）；消息文本
- * 无气泡、font-size 15.5 / line-height 1.8。turn 分段渲染：内容片段紧凑
- * 续排（分段间无间距，段落内 0.6em 段距由 markdown p 规则保留），
- * 工具行承担视觉分隔（docs/design/tool-call-embed-demo.html）。
+ * 结构与 demo 一致：头部行（渐变圆头像 + 名称 + mono 时间 + 模式 chip）→
+ * 正文（宋体 --font-body，line-height 1.85）与工具带（.toolGroup 浅灰底 +
+ * 2px 强调左竖线）分层；turn 分段渲染：内容片段紧凑续排，工具带承担视觉分隔。
  */
 .message {
   display: flex;
-  gap: var(--space-3);
-  padding: var(--space-6px) 0;
+  flex-direction: column;
+  max-width: 94%;
+}
+
+/* 头部行（demo .msgHead）：头像 + 名称 + mono 时间 + 模式 chip */
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-7px);
+  margin-bottom: var(--space-7px);
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: 50%;
+  background: var(--grad-accent);
+  color: var(--color-on-accent);
+}
+
+.head b {
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-semibold);
+}
+
+.meta {
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 1px var(--space-7px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-faint);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  line-height: 1.6;
+  white-space: nowrap;
 }
 
 .body {
   min-width: 0;
-  flex: 1;
 }
 
 .segment {
@@ -28,13 +71,12 @@
 
 .text {
   margin-top: 0;
-  /* 用户要求正文用黑体（--font-ui）；400 原生字重——YaHei/Segoe UI 无原生
-     550，合成加粗会发糊发重。15.5px + 0.01em 字距（Windows 15px 发虚）。 */
-  font-family: var(--font-ui);
+  /* 正文宋体（demo .mdBody 基座：--font-body + 1.85 行高，用户决议翻转旧黑体决议）；
+     15.5px 原生字重，无 letter-spacing（demo 无字距）。 */
+  font-family: var(--font-body);
   font-size: var(--fs-chat);
   font-weight: var(--fw-regular);
-  letter-spacing: 0.01em;
-  line-height: 1.8;
+  line-height: 1.85;
   color: var(--color-fg);
   text-wrap: pretty;
 }
@@ -64,6 +106,23 @@
 
 
 .segment:first-child .text {
+  margin-top: 0;
+}
+
+/* 工具调用带（demo .toolGroup）：一轮里夹在正文中间的调用行分组（含失败 / 运行中），
+   浅灰底 + 2px 强调左竖线，圆角只切右侧 */
+.toolGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5px);
+  margin: var(--space-8px) 0 var(--space-10px);
+  padding: var(--space-7px) var(--space-11px);
+  border-left: var(--space-2px) solid color-mix(in oklab, var(--color-accent) 32%, transparent);
+  background: color-mix(in oklab, var(--color-fg) 3.5%, transparent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.toolGroup .toolLine {
   margin-top: 0;
 }
 
@@ -134,4 +193,3 @@
   font-size: var(--fs-11);
   animation: var(--anim-node-pulse);
 }
-

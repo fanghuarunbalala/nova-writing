@@ -1,9 +1,10 @@
 /**
- * UserMessage 视觉（原型 .msg.user + .msg-body + .msg-text + .msg-actions）。
+ * UserMessage 视觉（对齐 app-redesign demo .msgUser，docs/design/app-redesign-demo.html
+ * L653–661 chat CSS）。
  *
  * 用户消息：无头像/头部，气泡贴右。根 .message flex-direction:row-reverse，
- * .body align-items:flex-end 让气泡收缩贴右；气泡统一 16px 圆角、text-align:left、
- * 无边框（区别于旧版非对称圆角 + 边框）。
+ * .body align-items:flex-end 让气泡收缩贴右；气泡 9px/13px 内边距、accent-9 底、
+ * 1px accent 14% 混合描边、非对称圆角（右上 14px、左上 4px）、限宽 76%（demo 决议）。
  * .actions 复制按钮绝对定位于气泡右下（right:2px; bottom:-28px），默认 opacity 0
  * 且 pointer-events:none，悬停消息行/按钮/focus-within 显形；::before 是 hover
  * bridge（覆盖按钮与气泡之间 8px 过渡带，悬停此处也能保持显形）。
@@ -13,7 +14,6 @@
   display: flex;
   flex-direction: row-reverse;
   gap: var(--space-3);
-  padding: var(--space-6px) 0;
 }
 
 .body {
@@ -28,10 +28,10 @@
 .text {
   display: inline-block;
   margin-top: var(--space-7px);
-  padding: var(--space-10px) var(--space-15px);
-  border: 1px solid var(--color-accent-18);
-  border-radius: var(--radius-16px);
-  background: var(--color-accent-12);
+  padding: var(--space-9px) var(--space-13px);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 14%, var(--color-border));
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-4px) var(--radius-lg);
+  background: var(--color-accent-9);
   color: var(--color-accent-ink);
   /* 用户要求正文用黑体（--font-ui）；400 原生字重——YaHei/Segoe UI 无原生
      550，合成加粗会发糊发重。15.5px + 0.01em 字距（Windows 15px 发虚）。 */
@@ -39,10 +39,10 @@
   font-size: var(--fs-chat);
   font-weight: var(--fw-regular);
   letter-spacing: 0.01em;
-  line-height: 1.8;
+  line-height: 1.6;
   text-align: left;
   text-wrap: pretty;
-  max-width: 100%;
+  max-width: 76%;
 }
 
 .actions {

@@ -20,6 +20,7 @@ import {
 	readSync,
 	readdirSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import { join, resolve, sep } from "node:path";
@@ -168,17 +169,21 @@ export class ConversationManagerServer implements Contract {
 	}
 
 	/** 扫描 storedirRoot 种子 catalog（重启恢复）：目录名 = conversationId，status:"stopped"，seq 取 conv_<n> 最大值防 id 撞车；
-	 *  名字恢复优先级：meta.json 显式名 → journal 首句用户消息（截断）→ conversationId */
+	 *  名字恢复优先级：meta.json 显式名 → journal 首句用户消息（截断）→ conversationId；
+	 *  pinned 自 meta.json 恢复；lastActivityAt 取 journal.jsonl mtime（无 journal → 0） */
 	private scanCatalog(): void {
 		if (this.storedirRoot === undefined || !existsSync(this.storedirRoot)) return;
 		for (const entry of readdirSync(this.storedirRoot, { withFileTypes: true })) {
 			if (!entry.isDirectory()) continue;
 			const conversationId = entry.name;
+			const meta = this.readMeta(conversationId);
 			this.summaries.set(conversationId, {
 				conversationId,
 				name: this.readMetaName(conversationId) ?? this.deriveFirstName(conversationId) ?? conversationId,
 				storeDir: this.allocStoredir(conversationId),
 				status: "stopped",
+				...(meta.pinned === true ? { pinned: true } : {}),
+				lastActivityAt: this.journalMtime(conversationId),
 			});
 			const match = /^conv_(\d+)$/.exec(conversationId);
 			if (match) this.seq = Math.max(this.seq, Number(match[1]));
@@ -191,32 +196,41 @@ export class ConversationManagerServer implements Contract {
 		return join(this.storedirRoot, conversationId, "meta.json");
 	}
 
-	/** 读 meta.json 显式名（无文件/损坏/空名 → undefined） */
-	private readMetaName(conversationId: string): string | undefined {
+	/** 读 meta.json 对象（无文件/损坏/未提供 storedirRoot → 空对象） */
+	private readMeta(conversationId: string): Record<string, unknown> {
 		const path = this.metaPath(conversationId);
-		if (path === undefined) return undefined;
+		if (path === undefined) return {};
 		try {
-			const parsed = JSON.parse(readFileSync(path, "utf8")) as { name?: unknown };
-			return typeof parsed.name === "string" && parsed.name.trim() !== "" ? parsed.name : undefined;
+			return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
 		} catch {
-			return undefined;
+			return {};
 		}
 	}
 
-	/** 写 meta.json 显式名（合并保留 mode 等其他字段；落盘失败忽略：内存态仍生效，重启回退首句派生） */
-	private writeMetaName(conversationId: string, name: string): void {
+	/** 读 meta.json 显式名（无文件/损坏/空名 → undefined） */
+	private readMetaName(conversationId: string): string | undefined {
+		const name = this.readMeta(conversationId).name;
+		return typeof name === "string" && name.trim() !== "" ? name : undefined;
+	}
+
+	/** 合并写 meta.json 部分字段（保留 name/mode 等其他字段；落盘失败忽略：内存态仍生效，重启回退扫描恢复） */
+	private writeMetaFields(conversationId: string, patch: Record<string, unknown>): void {
 		const path = this.metaPath(conversationId);
 		if (path === undefined) return;
 		try {
-			let existing: Record<string, unknown> = {};
-			try {
-				existing = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-			} catch {
-				// 无文件/损坏：从空对象起步
-			}
-			writeFileSync(path, JSON.stringify({ ...existing, name }), "utf8");
+			writeFileSync(path, JSON.stringify({ ...this.readMeta(conversationId), ...patch }), "utf8");
 		} catch {
 			// 见方法注释
+		}
+	}
+
+	/** journal.jsonl 最后修改时间（epoch ms；无 storedirRoot/无文件 → 0）。journal 每次追加都更新 mtime，作为 lastActivityAt 的持久来源 */
+	private journalMtime(conversationId: string): number {
+		if (this.storedirRoot === undefined) return 0;
+		try {
+			return statSync(join(this.storedirRoot, conversationId, "journal.jsonl")).mtimeMs;
+		} catch {
+			return 0;
 		}
 	}
 
@@ -378,9 +392,12 @@ export class ConversationManagerServer implements Contract {
 		return { conversationId, handle: conversation };
 	}
 
-	/** 列出所有会话摘要 */
+	/** 列出所有会话摘要（置顶优先 → lastActivityAt 降序；同权值保持登记序） */
 	async list(): Promise<ConversationSummary[]> {
-		return [...this.summaries.values()];
+		return [...this.summaries.values()].sort((a, b) => {
+			if ((a.pinned === true) !== (b.pinned === true)) return a.pinned === true ? -1 : 1;
+			return (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0);
+		});
 	}
 
 	/** 创建或恢复会话（spawner 可用时派生/复用子进程，否则内存新建） */
@@ -403,7 +420,7 @@ export class ConversationManagerServer implements Contract {
 				});
 				const prevSummary = this.summaries.get(id);
 				this.childProcesses.set(id, child);
-				// 重派生保留既有 parentId（F6 teammate 冒泡依赖；崩溃重启不得丢）
+				// 重派生保留既有 parentId（F6 teammate 冒泡依赖；崩溃重启不得丢）与 pinned（目录置顶态）
 				const existing = this.summaries.get(id);
 				this.summaries.set(id, {
 					conversationId: id,
@@ -411,6 +428,8 @@ export class ConversationManagerServer implements Contract {
 					storeDir: storedir,
 					status: "active",
 					...(existing?.parentId === undefined ? {} : { parentId: existing.parentId }),
+					...(existing?.pinned === true ? { pinned: true } : {}),
+					lastActivityAt: Date.now(),
 				});
 				this.attachExit(id, child);
 				try {
@@ -436,6 +455,7 @@ export class ConversationManagerServer implements Contract {
 				name: id,
 				storeDir: this.allocStoredir(id),
 				status: "active",
+				lastActivityAt: Date.now(),
 			});
 		}
 		return { conversationId: id, handle: conversation };
@@ -448,7 +468,18 @@ export class ConversationManagerServer implements Contract {
 		const trimmed = name.trim();
 		if (summary === undefined || trimmed === "") return false;
 		summary.name = trimmed;
-		this.writeMetaName(conversationId, trimmed);
+		this.writeMetaFields(conversationId, { name: trimmed });
+		return true;
+	}
+
+	/** 置顶/取消置顶会话：更新目录摘要 + 写 meta.json 持久化（重启扫描恢复） */
+	async setPinned(conversationId: ConversationId, pinned: boolean): Promise<boolean> {
+		if (!this.isKnownConversationId(conversationId)) return false;
+		const summary = this.summaries.get(conversationId);
+		if (summary === undefined) return false;
+		if (pinned) summary.pinned = true;
+		else delete summary.pinned;
+		this.writeMetaFields(conversationId, { pinned });
 		return true;
 	}
 

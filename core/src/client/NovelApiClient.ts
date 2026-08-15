@@ -36,7 +36,7 @@ import type {
 	StoryUnitId,
 } from "../novel/model/index.js";
 
-/** 会话子 API（目录 + 生命周期；pin 延后） */
+/** 会话子 API（目录 + 生命周期） */
 export interface ConversationApi {
 	/**
 	 * 列出所有会话摘要
@@ -67,6 +67,13 @@ export interface ConversationApi {
 	 * @returns 是否命中会话（false = 会话不存在或名字为空）
 	 */
 	rename(conversationId: ConversationId, name: string): Promise<boolean>;
+	/**
+	 * 置顶/取消置顶会话（持久化到会话存储，重启后恢复）
+	 * @param conversationId 会话 id
+	 * @param pinned 是否置顶
+	 * @returns 是否命中会话（false = 会话不存在）
+	 */
+	pin(conversationId: ConversationId, pinned: boolean): Promise<boolean>;
 	/**
 	 * 读取会话已落盘历史（journal 沙盒子集 → OutputEvent 序列，无 delta）。
 	 * renderer 无文件权限，经 Main 代读。
@@ -217,6 +224,7 @@ export function createNovelApiClient(options: NovelApiClientOptions): NovelApiCl
 			open: async (conversationId) => (await manager.createOrResume(conversationId)).handle,
 			delete: (conversationId) => manager.delete(conversationId),
 			rename: (conversationId, name) => manager.rename(conversationId, name),
+			pin: (conversationId, pinned) => manager.setPinned(conversationId, pinned),
 			history: (conversationId, opts) =>
 				history !== undefined ? history(conversationId, opts) : Promise.resolve([]),
 			projectedHistory: (conversationId, opts) =>
@@ -345,6 +353,7 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 				mark(toRemoteHandle((await manager.createOrResume(conversationId)).handle)),
 			delete: (conversationId) => manager.delete(conversationId),
 			rename: (conversationId, name) => manager.rename(conversationId, name),
+			pin: (conversationId, pinned) => manager.setPinned(conversationId, pinned),
 			history: (conversationId, opts) =>
 				readOnly !== undefined ? readOnly.history(conversationId, opts ?? {}) : Promise.resolve([]),
 			projectedHistory: (conversationId, opts) =>

@@ -4,6 +4,8 @@
 export * from "./NovelApiClient.js";
 export * from "./ConversationProjection.js";
 export * from "../conversation/CardProjection.js";
+// 投影快照/时间线项引用的会话模式类型（type-only，browser-safe；消费侧头部 chip 使用）
+export type { ConversationMode } from "../conversation/contract/types/index.js";
 export { noopLogger } from "../log/noop.js";
 export { debugLog, infoLog, isVerboseLog } from "../log/debug.js";
 // RPC 错误类型（纯类，browser-safe）：renderer 侧错误处理需要——值导入必须

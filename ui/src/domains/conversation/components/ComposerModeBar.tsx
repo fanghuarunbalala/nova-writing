@@ -31,6 +31,11 @@ export const COMPOSER_MODES: readonly ComposerModeMeta[] = Object.freeze([
   { value: "compose", label: "设计", description: "仅草稿文件可写", tone: "compose" },
 ]);
 
+/** mode → label 查表（助手消息头部 chip 复用；单一来源，改文案只动上面 COMPOSER_MODES） */
+export const COMPOSER_MODE_META: Readonly<Record<ComposerMode, string>> = Object.freeze(
+  Object.fromEntries(COMPOSER_MODES.map((item) => [item.value, item.label])) as Record<ComposerMode, string>,
+);
+
 export interface ComposerModeBarProps {
   readonly mode: ComposerMode;
   readonly onChange: (mode: ComposerMode) => void;

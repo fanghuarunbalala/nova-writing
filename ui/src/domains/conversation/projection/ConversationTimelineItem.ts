@@ -9,7 +9,7 @@
  * ToolTraceView / AssistantSegment 由 core 投影直接产出（re-export，单一来源）。
  */
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
-import type { AssistantSegment, ToolTraceView } from "@novel/core/client";
+import type { AssistantSegment, ConversationMode, ToolTraceView } from "@novel/core/client";
 
 export type { ToolTraceView, AssistantSegment };
 
@@ -34,6 +34,8 @@ export type ConversationTimelineItem =
       readonly revision?: string;
       /** 脱敏失败详情（provider 错误摘要）。Redacted failure detail. */
       readonly failureDetail?: string;
+      /** 建项时生效模式（core 投影在 assistant 建项点盖章；头部 chip 展示） */
+      readonly mode?: ConversationMode;
       readonly text: string;
       readonly cards: readonly ConversationCardDescriptor[];
       readonly streaming: boolean;

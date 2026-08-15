@@ -14,6 +14,7 @@
 import { memo } from "react";
 import { MessageSquare, Pin } from "lucide-react";
 import { Icon } from "../../../shared/primitives/Icon.js";
+import { formatRelativeTime } from "../../../shared/format/relativeTime.js";
 import { ConversationItemMenu } from "./ConversationItemMenu.js";
 import styles from "./ConversationListItem.module.css";
 
@@ -51,6 +52,8 @@ export const ConversationListItem = memo(function ConversationListItem({
   onDelete,
 }: ConversationListItemProps) {
   const statusLabel = item.status !== undefined ? STATUS_LABEL[item.status] : undefined;
+  // 副标题 = 相对时间（对齐 demo convMeta）；未知时间（0）回退 agentLabel
+  const subtitle = formatRelativeTime(item.lastActivityAt) || item.agentLabel;
   return (
     <div
       className={[
@@ -86,7 +89,7 @@ export const ConversationListItem = memo(function ConversationListItem({
               </span>
             ) : null}
           </span>
-          <span className={styles.subtitle}>{item.agentLabel}</span>
+          <span className={styles.subtitle}>{subtitle}</span>
         </span>
       </button>
       {item.status !== undefined ? (

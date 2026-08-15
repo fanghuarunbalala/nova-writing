@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
@@ -292,3 +292,79 @@ describe("ConversationManagerServer（会话命名）", () => {
 		expect((await server.list())[0]!.name).toBe("雨景改稿");
 	});
 });
+
+describe("ConversationManagerServer（会话置顶与时间分组）", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = mkdtempSync(join(tmpdir(), "novel-mgr-pin-"));
+	});
+
+	afterEach(() => {
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	/** 写 journal.jsonl 并把 mtime 设为指定时间（scanCatalog 的 lastActivityAt 来源） */
+	function writeJournalAt(conversationId: string, mtime: Date): void {
+		const dir = join(root, conversationId);
+		mkdirSync(dir, { recursive: true });
+		const file = join(dir, "journal.jsonl");
+		writeFileSync(file, JSON.stringify({ seq: 1 }) + "\n", "utf8");
+		utimesSync(file, mtime, mtime);
+	}
+
+	it("setPinned 更新摘要并写 meta.json（未知会话返回 false；取消置顶移除标记）", async () => {
+		const { spawner } = makeFakeSpawner();
+		const server = new ConversationManagerServer(noopFactory(), spawner, { storedirRoot: root });
+		const ref = await server.spawnConversation({ agentType: "novel" });
+
+		expect(await server.setPinned(ref.conversationId, true)).toBe(true);
+		expect((await server.list())[0]!.pinned).toBe(true);
+		const meta = JSON.parse(readFile(join(root, ref.conversationId, "meta.json"))) as { pinned?: boolean };
+		expect(meta.pinned).toBe(true);
+
+		expect(await server.setPinned(ref.conversationId, false)).toBe(true);
+		expect((await server.list())[0]!.pinned).toBeUndefined();
+
+		expect(await server.setPinned("conv_404", true)).toBe(false);
+	});
+
+	it("scanCatalog 恢复 pinned（meta.json）与 lastActivityAt（journal mtime；无 journal → 0）", async () => {
+		const today = new Date("2026-08-15T10:00:00.000Z");
+		const old = new Date("2026-07-01T10:00:00.000Z");
+		writeJournalAt("conv_1", today);
+		writeFileSync(join(root, "conv_1", "meta.json"), JSON.stringify({ pinned: true }), "utf8");
+		writeJournalAt("conv_2", old);
+		mkdirSync(join(root, "conv_3"), { recursive: true }); // 无 journal
+
+		const server = new ConversationManagerServer(noopFactory(), undefined, { storedirRoot: root });
+		const list = await server.list();
+		const byId = new Map(list.map((s) => [s.conversationId, s]));
+		expect(byId.get("conv_1")!.pinned).toBe(true);
+		expect(Math.abs(byId.get("conv_1")!.lastActivityAt! - today.getTime())).toBeLessThan(5);
+		expect(byId.get("conv_2")!.pinned).toBeUndefined();
+		expect(byId.get("conv_2")!.lastActivityAt).toBe(old.getTime());
+		expect(byId.get("conv_3")!.lastActivityAt).toBe(0);
+	});
+
+	it("list 排序：置顶优先 → lastActivityAt 降序（同权值保持登记序）", async () => {
+		const day3 = new Date("2026-08-12T10:00:00.000Z");
+		const day1 = new Date("2026-08-14T10:00:00.000Z");
+		const day2 = new Date("2026-08-13T10:00:00.000Z");
+		writeJournalAt("conv_a", day3);
+		writeJournalAt("conv_b", day1);
+		writeJournalAt("conv_c", day2);
+		writeJournalAt("conv_d", day1);
+		writeFileSync(join(root, "conv_a", "meta.json"), JSON.stringify({ pinned: true }), "utf8");
+
+		const server = new ConversationManagerServer(noopFactory(), undefined, { storedirRoot: root });
+		// readdirSync 返回 a/b/c/d（登记序）：置顶 conv_a 最前；其余按时间降序 b/d 同权保持登记序，c 最后
+		const order = (await server.list()).map((s) => s.conversationId);
+		expect(order).toEqual(["conv_a", "conv_b", "conv_d", "conv_c"]);
+	});
+});
+
+/** 读文本文件（测试便捷） */
+function readFile(path: string): string {
+	return readFileSync(path, "utf8");
+}

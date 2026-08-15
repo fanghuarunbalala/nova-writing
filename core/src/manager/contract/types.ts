@@ -33,6 +33,10 @@ export interface ConversationSummary {
 	storeDir: string;
 	status: ConversationStatus;
 	parentId?: ConversationId;
+	/** 置顶（UI 目录置顶分组；持久化 meta.json） */
+	pinned?: boolean;
+	/** 最后活动时间（epoch ms；重启恢复取 journal mtime，运行期由 UI 本地维护） */
+	lastActivityAt?: number;
 }
 
 /** 会话引用：spawnConversation / createOrResume 返回，含对端 handle */

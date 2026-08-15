@@ -16,6 +16,10 @@
 .inner {
   max-width: var(--max-w-composer);
   margin: 0 auto;
+  /* demo chatInner 节奏：消息/分隔条目 16px 等距（各消息模块的垂直 padding 已移除） */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .system {
@@ -45,17 +49,16 @@
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-warn) 14%, transparent);
 }
 
-/* 轮次分隔（原型 .turn-sep）：居中 mono faint，两侧渐变细线。 */
+/* 轮次分隔（对齐 demo .runDivider，app-redesign-demo.html L650–651）：11px 常规无衬线
+   + 0.05em 字距，两侧平直 1px 细线（去 mono/fw-600/渐变）。标签内容仅 HH:mm（用户决议）。 */
 .runSep {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  margin: var(--space-6) 0 var(--space-2px);
+  margin: var(--space-8px) 0 var(--space-2px);
   color: var(--color-faint);
-  font-family: var(--font-mono);
-  font-size: var(--fs-10);
-  font-weight: var(--fw-600);
-  letter-spacing: 0.16em;
+  font-size: var(--fs-11);
+  letter-spacing: 0.05em;
 }
 
 .runSep::before,
@@ -66,15 +69,7 @@
   background: var(--color-border);
 }
 
-.runSep::before {
-  background: linear-gradient(to right, transparent, var(--color-border-strong));
-}
-
-.runSep::after {
-  background: linear-gradient(to left, transparent, var(--color-border-strong));
-}
-
-/* 首条轮次分隔收窄上边距（原型 .turn-sep:first-child；条目外层有 .enter 包裹） */
+/* 首条轮次分隔上边距微调（demo 无此规则：首条时更贴合顶部，条目外层有 .enter 包裹） */
 .enter:first-child .runSep {
   margin-top: var(--space-10px);
 }

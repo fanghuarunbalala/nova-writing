@@ -9,9 +9,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ConversationMode } from "@novel/core";
 import { debugLog, type ConversationProjectionErrorSnapshot } from "@novel/core/client";
-import { MoreHorizontal, Pin } from "lucide-react";
+import { Info, MoreHorizontal, Pencil, Pin, Trash2 } from "lucide-react";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
+import {
+  ConversationDialogs,
+  type RenameTarget,
+} from "../../domains/conversation/components/ConversationDialogs.js";
 import { ConversationComposer } from "../../domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../domains/conversation/components/ConversationTimeline.js";
 import type { GenStatusProps } from "../../domains/conversation/components/GenStatus.js";
@@ -20,6 +24,7 @@ import type { ConversationCatalogStore } from "../../domains/conversation/store/
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import { Icon } from "../../shared/primitives/Icon.js";
 import { IconButton } from "../../shared/primitives/IconButton.js";
+import { Dropdown, DropdownItem, DropdownSeparator } from "../../shared/primitives/Dropdown.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { ConversationProjectionBinding } from "../../domains/conversation/binding/ConversationProjectionBinding.js";
 import { useActiveConversationSession } from "../../domains/conversation/hooks/useActiveConversationSession.js";
@@ -58,18 +63,21 @@ export function ChatSurface({
     return <ChatEmptyState onCreate={onCreateConversation} />;
   }
   const activeItem = catalog.conversations.find((item) => item.id === activeId);
+  const title = activeItem?.title ?? "对话";
   return (
     <ActiveChatSurface
       conversationBinding={conversationBinding}
       conversationId={activeId}
-      title={activeItem?.title ?? "对话"}
+      title={title}
       agentLabel={activeItem?.agentLabel}
       pinned={activeItem?.pinned === true}
+      catalog={conversationCatalog}
       onTogglePin={() => {
-        // pinConversation 为存根（core 契约延后）：显性提示，避免 unhandled rejection
-        void conversationCatalog.pinConversation(activeId, !(activeItem?.pinned === true)).catch(() =>
-          onNotify?.("warn", "置顶暂未支持"),
-        );
+        const next = !(activeItem?.pinned === true);
+        void conversationCatalog
+          .pinConversation(activeId, next)
+          .then(() => onNotify?.("success", next ? `已置顶「${title}」` : "已取消置顶"))
+          .catch(() => onNotify?.("danger", "操作失败，请重试"));
       }}
       onOpenInfo={onOpenConversationInfo !== undefined ? () => onOpenConversationInfo(activeId) : undefined}
       pendingApprovalCount={pendingApprovalCount}
@@ -86,6 +94,8 @@ interface ActiveChatSurfaceProps {
   readonly title: string;
   readonly agentLabel: string | undefined;
   readonly pinned: boolean;
+  /** 目录 store：顶条菜单的重命名/删除 + 发送成功后 touchActivity */
+  readonly catalog: ConversationCatalogStore;
   readonly onTogglePin: () => void;
   readonly onOpenInfo: (() => void) | undefined;
   readonly pendingApprovalCount: number;
@@ -100,6 +110,7 @@ function ActiveChatSurface({
   title,
   agentLabel,
   pinned,
+  catalog,
   onTogglePin,
   onOpenInfo,
   pendingApprovalCount,
@@ -110,6 +121,16 @@ function ActiveChatSurface({
   const session = useActiveConversationSession(conversationBinding);
   const { snapshot, sendUserMessage, sendSystemControl, getConversationMode, resume } = session;
   const [sendError, setSendError] = useState<string | undefined>(undefined);
+  // 顶条菜单的重命名/删除对话框（G7：自定义 Dialog 替代原生 prompt/confirm）
+  const [renameTarget, setRenameTarget] = useState<RenameTarget | undefined>(undefined);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<string | undefined>(undefined);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const closeDialogs = (): void => {
+    setRenameTarget(undefined);
+    setRenameValue("");
+    setDeleteTarget(undefined);
+  };
   // 会话模式：权威回显 = 事件（projection.mode/modePending）；事件未达前经查询兜底。
   // mode.set 只记 pending（mode.pending 瞬态事件 → 回显「待生效」），active 切换由
   // mode.changed 权威事件驱动（provider call 发起时晋升）。
@@ -130,7 +151,7 @@ function ActiveChatSurface({
   const pendingMode: ConversationMode | undefined = projection?.modePending;
   // mapper 按 core 项缓存：历史项跨快照引用稳定（memo 浅比较基础）；随 projection 快照重建
   const timeline = useMemo(
-    () => (projection !== undefined ? mapProjectionTimeline(projection, "Novel Agent") : []),
+    () => (projection !== undefined ? mapProjectionTimeline(projection, "Novel 助理") : []),
     [projection],
   );
   const failed = projection?.state === "error";
@@ -161,11 +182,32 @@ function ActiveChatSurface({
             <IconButton label={pinned ? "取消置顶" : "置顶会话"} onClick={onTogglePin}>
               <Icon icon={Pin} size="sm" />
             </IconButton>
-            {onOpenInfo !== undefined ? (
-              <IconButton label="会话信息" onClick={onOpenInfo}>
-                <Icon icon={MoreHorizontal} size="sm" />
-              </IconButton>
-            ) : null}
+            <Dropdown
+              trigger={
+                <IconButton label="会话菜单">
+                  <Icon icon={MoreHorizontal} size="sm" />
+                </IconButton>
+              }
+            >
+              <DropdownItem
+                label="重命名对话"
+                icon={<Pencil size={14} />}
+                onSelect={() => {
+                  setRenameValue(title);
+                  setRenameTarget({ id: conversationId, title });
+                }}
+              />
+              {onOpenInfo !== undefined ? (
+                <DropdownItem label="会话信息" icon={<Info size={14} />} onSelect={onOpenInfo} />
+              ) : null}
+              <DropdownSeparator />
+              <DropdownItem
+                label="删除对话"
+                danger
+                icon={<Trash2 size={14} />}
+                onSelect={() => setDeleteTarget(conversationId)}
+              />
+            </Dropdown>
           </>
         }
       />
@@ -203,6 +245,8 @@ function ActiveChatSurface({
             .then((receipt) => {
               debugLog("[renderer] send resolved:", JSON.stringify(receipt));
               setSendError(undefined);
+              // 发送成功 = 会话有活动：本地刷新，驱动侧栏「今天」分组即时生效
+              catalog.touchActivity(conversationId);
             })
             .catch((err: unknown) => {
               debugLog("[renderer] send rejected:", err);
@@ -214,6 +258,38 @@ function ActiveChatSurface({
               onNotify?.("danger", text);
             });
         }}
+      />
+      <ConversationDialogs
+        renameTarget={renameTarget}
+        deleteTarget={deleteTarget}
+        renameValue={renameValue}
+        deleteBusy={deleteBusy}
+        onRenameValueChange={setRenameValue}
+        onRenameConfirm={() => {
+          if (renameTarget === undefined) return;
+          const next = renameValue.trim();
+          if (next !== "") {
+            void catalog.renameConversation(renameTarget.id, next).catch(() => {
+              onNotify?.("danger", "重命名失败，请重试");
+            });
+          }
+          closeDialogs();
+        }}
+        onDeleteConfirm={async () => {
+          if (deleteTarget === undefined) return;
+          const target = deleteTarget;
+          setDeleteBusy(true);
+          try {
+            await catalog.deleteConversation(target);
+            onNotify?.("success", "会话已删除");
+          } catch {
+            onNotify?.("danger", "删除失败，请重试");
+          } finally {
+            setDeleteBusy(false);
+            closeDialogs();
+          }
+        }}
+        onClose={closeDialogs}
       />
     </div>
   );

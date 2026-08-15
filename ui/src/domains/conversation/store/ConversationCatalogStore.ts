@@ -5,7 +5,10 @@
  * 提供 create/select。所有 mutation 经 TaskSerializer 串行。
  *
  * 说明：
- * - 提供 create/select/delete/rename；pin 延后（新 core 无此契约，方法 reject）。
+ * - 提供 create/select/delete/rename/pin；pin 经 api.conversations.pin 持久化
+ *   （core meta.json），重启由 journal mtime / meta 恢复。
+ * - lastActivityAt 运行期本地维护（touchActivity），不落盘：journal 每次追加都会
+ *   更新 mtime，重启恢复时由 core 以 mtime 为权威来源。
  * - loadWorkspace 只加载不自动创建（spec 1.5.1 语义；空态由 ChatEmptyState 引导）。
  * - 标题来源：summary.name（core 侧为显式名或 journal 首句派生名）；
  *   未命名（name === conversationId）时展示自动格式「对话 + id 尾号」，
@@ -136,6 +139,7 @@ export class ConversationCatalogStore extends ExternalStore<ConversationCatalogS
           name: ref.conversationId,
           storeDir: "",
           status: "active",
+          lastActivityAt: Date.now(),
         });
         this.setSnapshot({
           phase: "ready",
@@ -224,9 +228,44 @@ export class ConversationCatalogStore extends ExternalStore<ConversationCatalogS
     this.setSnapshot({ ...this.snapshot, conversations });
   }
 
-  /** 置顶/取消置顶（新 core 无契约，延后）。 */
-  pinConversation(_id: string, _pinned: boolean): Promise<void> {
-    return Promise.reject(new Error("pin-not-implemented"));
+  /**
+   * 置顶/取消置顶对话：经 api.conversations.pin 持久化（storedir/meta.json），
+   * 成功后本地 patch pinned；失败向上抛（调用方 toast）。
+   * @param id 会话 id
+   * @param pinned 是否置顶
+   */
+  pinConversation(id: string, pinned: boolean): Promise<void> {
+    const capturedId = requireNonBlank(id, "Conversation id");
+    return this.serializer.run(async () => {
+      this.logger.info("conversation_catalog.pin_started");
+      const hit = await this.api.conversations.pin(capturedId, pinned);
+      if (!hit) throw new Error("pin-not-found");
+      const conversations = Object.freeze(
+        this.snapshot.conversations.map((item) =>
+          item.id === capturedId ? Object.freeze({ ...item, pinned }) : item,
+        ),
+      );
+      this.setSnapshot({ ...this.snapshot, conversations });
+      this.logger.info("conversation_catalog.pin_completed");
+    });
+  }
+
+  /**
+   * 刷新会话最后活动时间（本地，不落盘：重启由 core 从 journal mtime 恢复）。
+   * 发送消息成功后调用，驱动「今天」分组即时生效。
+   * @param id 会话 id
+   */
+  touchActivity(id: string): void {
+    const capturedId = requireNonBlank(id, "Conversation id");
+    const hit = this.snapshot.conversations.some((item) => item.id === capturedId);
+    if (!hit) return;
+    const now = Date.now();
+    const conversations = Object.freeze(
+      this.snapshot.conversations.map((item) =>
+        item.id === capturedId ? Object.freeze({ ...item, lastActivityAt: now }) : item,
+      ),
+    );
+    this.setSnapshot({ ...this.snapshot, conversations });
   }
 
   /** 删除对话（软删除）。Deletes a conversation (soft). */
@@ -279,7 +318,8 @@ function captureCatalogItem(summary: ConversationSummary): ConversationCatalogIt
     title: summary.name !== id ? summary.name : autoTitle(id),
     agentType: "novel",
     agentLabel: "Novel Agent",
-    lastActivityAt: 0,
+    ...(summary.pinned === true ? { pinned: true } : {}),
+    lastActivityAt: summary.lastActivityAt ?? 0,
   });
 }
 

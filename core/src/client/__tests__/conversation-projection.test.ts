@@ -1,7 +1,8 @@
 /**
  * ConversationProjection（客户端投影）单测：
  * - subagent 隔离：盖章（agentId ≠ main）事件不进主流时间线
- * - 连续工具批次：两次请求的工具行分段（每请求一段）
+ * - 工具行分组：无正文间隔的连续工具行并入同段（demo .toolGroup 单盒多行），
+ *   正文出现才开新段
  */
 import { describe, expect, it, vi } from "vitest";
 import { ConversationProjection } from "../ConversationProjection.js";
@@ -76,6 +77,26 @@ function toolRecorded(id: string): ProjectedEvent {
     ts: new Date().toISOString(),
   } as unknown as ProjectedEvent;
 }
+function assistantMessage(text: string): ProjectedEvent {
+  return {
+    type: "assistant.message",
+    persist: true,
+    seq: 12,
+    text,
+    ...base,
+    ts: new Date().toISOString(),
+  } as unknown as ProjectedEvent;
+}
+function runEnd(): ProjectedEvent {
+  return {
+    type: "run-end",
+    persist: true,
+    seq: 13,
+    runSeq: 1,
+    ...base,
+    ts: new Date().toISOString(),
+  } as unknown as ProjectedEvent;
+}
 
 describe("ConversationProjection subagent 隔离（agentId 过滤）", () => {
   it("盖章（非 main）事件不进时间线；未盖章与 main 正常进入", async () => {
@@ -99,8 +120,8 @@ describe("ConversationProjection subagent 隔离（agentId 过滤）", () => {
   });
 });
 
-describe("ConversationProjection 连续工具批次分段（每请求一段）", () => {
-  it("两次连续工具请求（中间无正文）渲染为两段工具行；半句无句读结尾 → 尾文本续句并入首段", async () => {
+describe("ConversationProjection 工具行并组（无正文间隔并入同段）", () => {
+  it("连续工具行（中间无正文）并入同段单组；尾文本续句并入该段", async () => {
     const fake = fakeHandle();
     const proj = new ConversationProjection(fake.handle, "c1");
     await proj.start();
@@ -114,11 +135,10 @@ describe("ConversationProjection 连续工具批次分段（每请求一段）",
 
     const item = proj.getSnapshot().timeline.at(-1)!;
     const segments = item.segments!;
-    // 段结构：[先查 + t1] [空文本 + t2]（"完成"跟在纯工具段后 → 缓冲在 text 字段，时序正确）
-    expect(segments).toHaveLength(2);
-    expect(segments[0]!.text).toBe("先查");
-    expect(segments[0]!.tools.map((t) => t.traceId)).toEqual(["t1"]);
-    expect(segments[1]!.tools.map((t) => t.traceId)).toEqual(["t2"]);
+    // 段结构：[先查完成 + t1、t2]（无正文间隔的连续调用同组；"完成"无句读结尾 → 续句并入）
+    expect(segments).toHaveLength(1);
+    expect(segments[0]!.text).toBe("先查完成");
+    expect(segments[0]!.tools.map((t) => t.traceId)).toEqual(["t1", "t2"]);
     expect(item.text).toBe("先查完成");
   });
 });
@@ -166,7 +186,7 @@ describe("ConversationProjection 续句合并（审批暂停后正文不在句�
     expect(segments[1]!.text).toBe("现在开始写入");
   });
 
-  it("空文本段（纯工具段）后的文本不并入，重新起段", async () => {
+  it("句读收尾后的正文开新段（此前连续工具已并组）", async () => {
     const fake = fakeHandle();
     const proj = new ConversationProjection(fake.handle, "c1");
     await proj.start();
@@ -177,18 +197,26 @@ describe("ConversationProjection 续句合并（审批暂停后正文不在句�
     fake.push(toolStarted("t2"));
     fake.push(toolRecorded("t2"));
     fake.push(delta("继续"));
+    fake.push({
+      type: "run-end",
+      persist: true,
+      seq: 1,
+      runSeq: 1,
+      ...base,
+      ts: new Date().toISOString(),
+    } as unknown as ProjectedEvent);
 
     const item = proj.getSnapshot().timeline.at(-1)!;
     const segments = item.segments!;
     expect(segments).toHaveLength(2);
     expect(segments[0]!.text).toBe("第一句。");
-    expect(segments[0]!.tools.map((t) => t.traceId)).toEqual(["t1"]);
-    expect(segments[1]!.text).toBe("");
-    expect(segments[1]!.tools.map((t) => t.traceId)).toEqual(["t2"]);
+    expect(segments[0]!.tools.map((t) => t.traceId)).toEqual(["t1", "t2"]);
+    expect(segments[1]!.text).toBe("继续");
+    expect(segments[1]!.tools).toHaveLength(0);
     expect(item.text).toBe("第一句。继续");
   });
 
-  it("续句合并后再次出现工具行 → 工具行开新段，其后文本重新起段（粘性解除）", async () => {
+  it("续句合并后再次出现工具行 → 并入同组；其后文本无句读结尾续句并入", async () => {
     const fake = fakeHandle();
     const proj = new ConversationProjection(fake.handle, "c1");
     await proj.start();
@@ -203,11 +231,65 @@ describe("ConversationProjection 续句合并（审批暂停后正文不在句�
 
     const item = proj.getSnapshot().timeline.at(-1)!;
     const segments = item.segments!;
-    expect(segments).toHaveLength(2);
-    expect(segments[0]!.text).toBe("我先读到了");
+    expect(segments).toHaveLength(1);
+    expect(segments[0]!.text).toBe("我先读到了接着写");
+    expect(segments[0]!.tools.map((t) => t.traceId)).toEqual(["t1", "t2"]);
+    expect(item.text).toBe("我先读到了接着写");
+  });
+});
+
+describe("ConversationProjection 轮文本与收口（demo 交错形态）", () => {
+  it("重放多轮（journal 按轮落盘 assistant.message）：单条消息，正文与工具组按出现顺序交错", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+
+    fake.push(userMessage("测试"));
+    fake.push(assistantMessage("我先看一下。"));
+    fake.push(toolStarted("t1"));
+    fake.push(toolRecorded("t1"));
+    fake.push(assistantMessage("写入。"));
+    fake.push(toolStarted("t2"));
+    fake.push(toolRecorded("t2"));
+    fake.push(assistantMessage("完成。"));
+    fake.push(runEnd());
+
+    const timeline = proj.getSnapshot().timeline;
+    // 一个 run 收口为单条 assistant 消息（不按轮拆多条）
+    expect(timeline.filter((i) => i.kind === "assistant")).toHaveLength(1);
+    const item = timeline.at(-1)!;
+    const segments = item.segments!;
+    // 交错形态：[先看一下 + t1] [写入 + t2] [完成]
+    expect(segments.map((s) => s.text)).toEqual(["我先看一下。", "写入。", "完成。"]);
     expect(segments[0]!.tools.map((t) => t.traceId)).toEqual(["t1"]);
     expect(segments[1]!.tools.map((t) => t.traceId)).toEqual(["t2"]);
-    expect(item.text).toBe("我先读到了接着写");
+    expect(item.text).toBe("我先看一下。写入。完成。");
+    expect(item.streaming).toBe(false);
+  });
+
+  it("live 收尾 assistant.message 与已流式文本幂等去重（不重复、不覆盖丢前轮）", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+
+    fake.push(delta("先看。"));
+    fake.push(toolStarted("t1"));
+    fake.push(toolRecorded("t1"));
+    fake.push(delta("结论。"));
+    // 流式期间：未封缓冲以尾段并入快照（段文本拼接恒等于全文，交错形态稳定）
+    let item = proj.getSnapshot().timeline.at(-1)!;
+    expect(item.segments!.at(-1)!.text).toBe("结论。");
+    expect(item.segments!.at(-1)!.tools).toHaveLength(0);
+    expect(item.text).toBe("先看。结论。");
+
+    // 收尾只带最后一轮文本：已流式 → 去重跳过（不覆盖丢前轮、不重复追加）
+    fake.push(assistantMessage("结论。"));
+    fake.push(runEnd());
+
+    item = proj.getSnapshot().timeline.at(-1)!;
+    expect(item.text).toBe("先看。结论。");
+    expect(item.segments!.map((s) => s.text)).toEqual(["先看。", "结论。"]);
+    expect(item.streaming).toBe(false);
   });
 });
 

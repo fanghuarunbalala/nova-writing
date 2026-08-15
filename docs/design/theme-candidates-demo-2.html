@@ -391,21 +391,36 @@
     animation: msg-enter var(--duration-base) var(--ease-out);
   }
   .msgAssistant { max-width: 92%; animation: msg-enter var(--duration-base) var(--ease-out); }
+  /* 工具行：对齐真实 AssistantMessage（turn 分段工具行，设计稿 tool-call-embed-demo） */
   .toolLine {
-    display: flex; align-items: center; gap: 6px;
-    font-size: var(--fs-12); color: var(--color-muted);
-    padding: 2px 0 8px;
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: 6px 8px;
+    margin-top: 2px;
+    font-size: var(--fs-12); line-height: 1.6;
   }
-  .toolLine .mono { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--color-faint); }
+  .toolDone { color: var(--color-success); }
+  .toolFailed { color: var(--color-danger); }
+  .toolRunning { color: var(--color-warn); }
+  .toolDone svg, .toolFailed svg { margin-right: 3px; vertical-align: -2px; }
   .spinner {
-    width: 12px; height: 12px; flex: none;
+    display: inline-block;
+    width: 10px; height: 10px;
+    margin-right: 5px;
+    border: 1.5px solid currentColor;
+    border-top-color: transparent;
     border-radius: 50%;
-    border: 2px solid color-mix(in oklab, currentColor 25%, transparent);
-    border-top-color: currentColor;
+    vertical-align: -1px;
     animation: spinner-rotate 0.8s linear infinite;
-    color: var(--color-warn);
   }
-  .toolDone { color: var(--color-success); display: inline-flex; }
+  .toolSec {
+    margin-left: 4px;
+    font-family: var(--font-mono); font-size: var(--fs-11);
+    animation: node-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes node-pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
   .mdBody { font-family: var(--font-body); font-size: var(--fs-chat); line-height: 1.85; }
   .mdBody p { margin: 0 0 10px; }
   .quoteKai {
@@ -966,15 +981,21 @@
         <div class="msgUser">把第二章的追逃段改成林晚的主观视角，悬念保留到最后。</div>
 
         <div class="msgAssistant">
+          <!-- 工具行：每请求一行、多工具同行 gap 分隔；命名=真实格式
+               （进行中 动作+对象+中：内容+脉动秒数 · 完成 对象+动作+已完成：内容+定格耗时 · 失败 ✗） -->
           <div class="toolLine">
             <span class="toolDone">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              大纲读取已完成：第 12 章 0.8s
             </span>
-            已定位 2 处全知视角 <span class="mono">outline/ch2#L48</span>
-          </div>
-          <div class="toolLine">
-            <span class="spinner"></span>
-            修订中 · 第二章 · 雨夜追逃
+            <span class="toolFailed">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              旧稿读取失败：北河渡口 0.4s
+            </span>
+            <span class="toolRunning">
+              <span class="spinner"></span>
+              修订正文中：追逃段<span class="toolSec" id="toolSecTick">12.4s</span>
+            </span>
           </div>
           <div class="mdBody">
             <p>已按林晚的主观视角重写本段：视线收窄到雨幕与灯笼的光斑，删去全知描写两处，铜符来历留白作钩子。修订稿如下，供审阅。</p>
@@ -1380,6 +1401,14 @@
   rsSetState("generating");
 
   apRender();
+
+  // 工具行实时秒数（1s 跳动，对齐真实 LiveSeconds）
+  let toolSec = 12.4;
+  setInterval(() => {
+    toolSec += 1;
+    const el = document.getElementById("toolSecTick");
+    if (el) el.textContent = `${toolSec.toFixed(1)}s`;
+  }, 1000);
 
   render("paper");
 </script>

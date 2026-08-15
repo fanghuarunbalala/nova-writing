@@ -13,6 +13,11 @@ import { Icon } from "../../shared/primitives/Icon.js";
 import { IconButton } from "../../shared/primitives/IconButton.js";
 import type { MainViewState } from "../../shared/routing/MainViewRouter.js";
 import type { NovelUiExtensions } from "../../extensions/NovelUiExtensions.js";
+import type {
+  NotificationItem,
+  NotificationStore,
+} from "../../domains/notification/index.js";
+import { NotificationBell } from "./NotificationBell.js";
 import { TopBarMenuSlot } from "./TopBarMenuSlot.js";
 import { TopBarViewSwitcher } from "./TopBarViewSwitcher.js";
 import { WindowControls, type WindowChromeProps } from "./WindowControls.js";
@@ -27,6 +32,9 @@ export interface TopBarProps {
   readonly onViewChange: (state: MainViewState) => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenSettings: () => void;
+  /** 通知中心（demo 铃铛）：传入即在「打开工作区」与「设置」之间渲染 */
+  readonly notifications?: NotificationStore;
+  readonly onNotificationActivate?: (item: NotificationItem) => void;
   /** 第一方扩展点；titleBar 渲染到 TopBarMenuSlot（spec 4.2） */
   readonly extensions?: NovelUiExtensions;
   /** 窗口控制（PRD WC）：mac 渲染在左缘（红绿灯位）、win 渲染在右缘（设置钮后） */
@@ -42,6 +50,8 @@ export const TopBar = memo(function TopBar({
   onViewChange,
   onOpenWorkspace,
   onOpenSettings,
+  notifications,
+  onNotificationActivate,
   extensions,
   windowChrome,
 }: TopBarProps) {
@@ -76,6 +86,13 @@ export const TopBar = memo(function TopBar({
       <IconButton label="打开工作区" onClick={onOpenWorkspace}>
         <Icon icon={FolderOpen} size="sm" />
       </IconButton>
+      {notifications !== undefined ? (
+        <NotificationBell
+          store={notifications}
+          onActivate={onNotificationActivate}
+          onOpenSettings={onOpenSettings}
+        />
+      ) : null}
       <IconButton label="设置" onClick={onOpenSettings}>
         <Icon icon={Settings} size="sm" />
       </IconButton>

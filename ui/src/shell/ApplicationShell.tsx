@@ -31,6 +31,10 @@ import type { NovelOverviewStore } from "../domains/novel/overview/NovelOverview
 import type { StoryOutlineTreeStore } from "../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import type { ScheduleStore } from "../domains/schedule/store/ScheduleStore.js";
 import type { ScheduleTodoStore } from "../domains/schedule/store/ScheduleTodoStore.js";
+import type {
+  NotificationItem,
+  NotificationStore,
+} from "../domains/notification/index.js";
 import type { WorkspaceControllerPort } from "../domains/workspace/store/WorkspaceControllerAdapter.js";
 import { WorkspaceControllerAdapter } from "../domains/workspace/store/WorkspaceControllerAdapter.js";
 import type { ApplicationConfigurationClient } from "../settings/ApplicationConfigurationClient.js";
@@ -60,6 +64,7 @@ export interface ApplicationShellDomainStores {
   readonly location: LocationStore;
   readonly schedule: ScheduleStore;
   readonly scheduleTodo: ScheduleTodoStore;
+  readonly notifications: NotificationStore;
 }
 
 export interface ApplicationShellProps {
@@ -107,7 +112,6 @@ export function ApplicationShell({
   useEffect(() => () => workspaceAdapter.dispose(), [workspaceAdapter]);
 
   const workspace = useExternalStore(workspaceAdapter);
-  const overview = useExternalStore(domainStores.novelOverview);
   const catalogSnapshot = useExternalStore(domainStores.conversationCatalog);
   const approvalStore = useMemo(() => new ApprovalStore({ api }), [api]);
   // 审批目标实体内容解析器（lite：api.novel.* 查询 + 乐观锁 stale 判定）
@@ -127,6 +131,28 @@ export function ApplicationShell({
     { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null
   >(null);
   const workspaceId = workspace.current?.id;
+
+  // 通知中心数据源（1/2）工作区切换：清空旧项目通知（跨项目不串）+ 记 system 通知；
+  // 首次挂载不记（那是「打开」而非「切换」）。
+  const prevWorkspaceSession = useRef<{ readonly id: string; readonly label: string } | undefined>(
+    undefined,
+  );
+  useEffect(() => {
+    const current = workspace.current;
+    const previous = prevWorkspaceSession.current;
+    prevWorkspaceSession.current = current;
+    if (current === undefined || previous === undefined) return;
+    const notifications = domainStores.notifications;
+    notifications.clear();
+    notifications.upsert({
+      id: `ws-switch:${current.id}`,
+      type: "system",
+      title: "已切换工作区",
+      desc: `《${previous.label}》 → 《${current.label}》`,
+      createdAt: Date.now(),
+      read: false,
+    });
+  }, [workspace.current, domainStores.notifications]);
 
   // 活动会话 binding：shell 只持生命周期（gui-performance-2 功能点五——流式发布
   // 不再重渲染整壳）；快照订阅下沉 ChatSurface，标题派生走首用户消息选择器。
@@ -238,6 +264,30 @@ export function ApplicationShell({
       inspectorRouter.close();
     }
   }, [approvalSnapshot.pendingCount, inspectorRouter]);
+
+  // 通知中心数据源（2/2）审批聚合：全局 pending 数（不限活动会话）→ 通知条目；
+  // 计数较上次增长才置未读（持续 pending 不重复打扰），归零移除。
+  const prevPendingTotal = useRef(0);
+  useEffect(() => {
+    const pending = approvalSnapshot.approvals.filter((item) => item.status === "pending");
+    const notifications = domainStores.notifications;
+    if (pending.length === 0) {
+      prevPendingTotal.current = 0;
+      notifications.remove("approvals");
+      return;
+    }
+    const grew = pending.length > prevPendingTotal.current;
+    prevPendingTotal.current = pending.length;
+    notifications.upsert({
+      id: "approvals",
+      type: "approval",
+      title: `写入待审批 · ${pending.length} 项`,
+      desc: `工具 ${pending[0]?.toolCalls[0]?.toolName ?? "—"} · 待你决策`,
+      createdAt: Date.now(),
+      read: !grew,
+      goto: { view: "chat" },
+    });
+  }, [approvalSnapshot, domainStores.notifications]);
 
   // 会话首句派生标题：活动会话首条用户消息到达且目录项仍为自动标题时，
   // 更新侧栏/标题栏显示（显式改名不覆盖；重启恢复由 core scanCatalog 兜底）。
@@ -435,6 +485,19 @@ export function ApplicationShell({
   );
   const handleShellOpenWorkspace = useCallback(() => onOpenWorkspace?.(), [onOpenWorkspace]);
   const handleShellOpenSettings = useCallback(() => onOpenSettings?.(), [onOpenSettings]);
+  // 通知条目激活：goto.view 切主视图；审批类额外展开右侧审批面板
+  const handleNotificationActivate = useCallback(
+    (item: NotificationItem) => {
+      if (item.goto?.view !== undefined) mainViewRouter.transition(item.goto.view);
+      if (item.type === "approval") {
+        inspectorRouter.transition({
+          kind: "approval",
+          changeSetId: catalogSnapshot.activeConversationId ?? "",
+        });
+      }
+    },
+    [mainViewRouter, inspectorRouter, catalogSnapshot.activeConversationId],
+  );
 
   return (
     <div className={styles.shell}>
@@ -446,6 +509,8 @@ export function ApplicationShell({
         onViewChange={handleViewChange}
         onOpenWorkspace={handleShellOpenWorkspace}
         onOpenSettings={handleShellOpenSettings}
+        notifications={domainStores.notifications}
+        onNotificationActivate={handleNotificationActivate}
         extensions={extensions}
         windowChrome={windowChrome}
       />

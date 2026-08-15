@@ -14,6 +14,7 @@ import { CharacterStore } from "../../src/domains/novel/character/store/Characte
 import { LocationStore } from "../../src/domains/novel/location/store/LocationStore.js";
 import { ScheduleStore } from "../../src/domains/schedule/store/ScheduleStore.js";
 import { ScheduleTodoStore } from "../../src/domains/schedule/store/ScheduleTodoStore.js";
+import { NotificationStore } from "../../src/domains/notification/store/NotificationStore.js";
 import { ApprovalStore } from "../../src/domains/approval/ApprovalStore.js";
 import { ToastStore } from "../../src/shared/state/ToastStore.js";
 
@@ -61,6 +62,7 @@ function makeStores() {
       location,
       schedule,
       scheduleTodo: new ScheduleTodoStore(),
+      notifications: new NotificationStore(),
       approvalStore: new ApprovalStore({ api }),
     },
   };

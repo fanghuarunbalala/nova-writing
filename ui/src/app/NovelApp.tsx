@@ -23,6 +23,7 @@ import {
   LocationStore,
   ManuscriptStructureStore,
   NovelOverviewStore,
+  NotificationStore,
   ProjectSelectionPage,
   ScheduleStore,
   ScheduleTodoStore,
@@ -212,5 +213,6 @@ export function createDomainStores(
     location,
     schedule,
     scheduleTodo: new ScheduleTodoStore(),
+    notifications: new NotificationStore(),
   };
 }

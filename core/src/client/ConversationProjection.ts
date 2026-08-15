@@ -435,14 +435,17 @@ export class ConversationProjection {
 	/**
 	 * 追加 assistant 正文（delta 与 assistant.message 共用）：
 	 * 上一段已收口工具行 → 新请求的内容：句读收尾开新段（段间换行分隔）；
-	 * 半句被工具调用/审批打断（无句读结尾）→ 续句并入上一段，正文不在句中断裂
+	 * 半句被工具调用/审批打断（无句读结尾）→ 续句并入上一段，正文不在句中断裂。
 	 */
 	private appendAssistantText(text: string): void {
 		if (this.segmentIsClosed()) {
 			if (!this.continuingIntoLastSegment && this.lastSegmentAcceptsContinuation()) {
 				this.continuingIntoLastSegment = true;
 			}
-			if (!this.continuingIntoLastSegment) this.openSegment();
+			// 不接受续句：正文在未封缓冲累积为新段（syncActiveItem 以尾段渲染）。
+			// 不得在此 openSegment()——closed 态每条 delta 都会重入本分支，
+			// 首条 delta 的文本块会被提前封成独立 segment，续流正文在 delta
+			// 边界（可能在词中间）被拆成两段，渲染成「断字换行」形态。
 		}
 		if (this.continuingIntoLastSegment) {
 			this.appendToLastSegment(text);

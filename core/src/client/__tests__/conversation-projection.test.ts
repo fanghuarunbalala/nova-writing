@@ -186,6 +186,39 @@ describe("ConversationProjection 续句合并（审批暂停后正文不在句�
     expect(segments[1]!.text).toBe("现在开始写入");
   });
 
+  it("句读收尾后的续流多 delta 不在首块边界拆段（断字换行回归）", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+
+    // 审批/工具段收口 + 上一段以句号结尾（不接受续句合并）
+    fake.push(delta("这一大纲编辑需要审核，应该会弹出审批面板。"));
+    fake.push(toolStarted("t1"));
+    fake.push(toolRecorded("t1"));
+    // 续流正文按多条 delta 到达（流式分块边界可在词中间）
+    fake.push(delta("已触发审批流程"));
+    fake.push(delta("并生效"));
+    fake.push(delta("：第一个场景状态由 ready 改为 outlined。"));
+    fake.push({
+      type: "run-end",
+      persist: true,
+      seq: 1,
+      runSeq: 1,
+      ...base,
+      ts: new Date().toISOString(),
+    } as unknown as ProjectedEvent);
+
+    const item = proj.getSnapshot().timeline.at(-1)!;
+    const segments = item.segments!;
+    // 续流正文是完整一句：不得被首条 delta（「已触发审批流程」）提前封段
+    expect(segments).toHaveLength(2);
+    expect(segments[0]!.text).toBe("这一大纲编辑需要审核，应该会弹出审批面板。");
+    expect(segments[1]!.text).toBe("已触发审批流程并生效：第一个场景状态由 ready 改为 outlined。");
+    expect(item.text).toBe(
+      "这一大纲编辑需要审核，应该会弹出审批面板。已触发审批流程并生效：第一个场景状态由 ready 改为 outlined。",
+    );
+  });
+
   it("句读收尾后的正文开新段（此前连续工具已并组）", async () => {
     const fake = fakeHandle();
     const proj = new ConversationProjection(fake.handle, "c1");

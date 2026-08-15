@@ -11,9 +11,8 @@
  * （InspectorHost.module.css 媒体查询；拖拽调宽已移除）。
  * 审批卡片流无目录抽屉（一次 call 一批一起审，PRD AP-3）。
  */
-import { memo, useEffect, useMemo } from "react";
+import { memo, useMemo } from "react";
 import { X } from "lucide-react";
-import { debugLog } from "@novel/core/client";
 import { Icon } from "../../shared/primitives/Icon.js";
 import { useInspectorRoute } from "../../shared/routing/hooks.js";
 import type { InspectorRouter } from "../../shared/routing/InspectorRouter.js";
@@ -82,13 +81,6 @@ export const InspectorHost = memo(function InspectorHost({
   );
   // 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right 收起）。
   const open = route.state.kind !== "closed" && visible;
-
-  // TEMP-DIAG（断字换行排查，verbose 门控）：面板开合时序，与 [timeline-diag] 时间轴对齐
-  useEffect(() => {
-    debugLog(
-      `[inspector-diag] kind=${route.state.kind} open=${open} t=${Math.round(performance.now())}`,
-    );
-  }, [route.state.kind, open]);
 
   const kicker = KICKER_BY_KIND[route.state.kind] ?? "详情";
   const title = TITLE_BY_KIND[route.state.kind] ?? "详情";

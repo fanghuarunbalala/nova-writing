@@ -266,7 +266,7 @@ describe("ConversationProjection（liveState）", () => {
 			durationMs: 1500,
 			preview: { action: "创建", object: "角色", title: "张三" },
 		});
-		// 完成工具行之后的新 delta → 开新段
+		// 完成工具行之后的新 delta：上一段无句读结尾（"好"）→ 续句并入首段（不在句中断行）
 		emit(evt({ type: "assistant.delta", kind: "text", text: "接着写正文" }));
 		emit(evt({ type: "assistant.message", persist: true, seq: 1, text: "好的，接着写正文" }));
 		emit(evt({ type: "run-end", persist: true, seq: 1, runSeq: 1 }));
@@ -275,10 +275,9 @@ describe("ConversationProjection（liveState）", () => {
 		const assistant = snapshot.timeline.find((item) => item.kind === "assistant");
 		expect(assistant).toMatchObject({ sourceSequence: 1, runEndSequence: 1, streaming: false });
 		expect(assistant?.text).toBe("好的，接着写正文");
-		expect(assistant?.segments).toHaveLength(2);
-		expect(assistant?.segments?.[0]).toMatchObject({ text: "好" });
+		expect(assistant?.segments).toHaveLength(1);
+		expect(assistant?.segments?.[0]).toMatchObject({ text: "好接着写正文" });
 		expect(assistant?.segments?.[0]?.tools).toHaveLength(1);
-		expect(assistant?.segments?.[1]).toMatchObject({ text: "接着写正文", tools: [] });
 		// eventFlow 已随本轮时序删除
 		expect(snapshot).not.toHaveProperty("eventFlow");
 		expect(snapshot).not.toHaveProperty("toolTraces");

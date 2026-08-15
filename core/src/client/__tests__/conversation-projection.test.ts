@@ -100,7 +100,7 @@ describe("ConversationProjection subagent 隔离（agentId 过滤）", () => {
 });
 
 describe("ConversationProjection 连续工具批次分段（每请求一段）", () => {
-  it("两次连续工具请求（中间无正文）渲染为两段工具行，不并段", async () => {
+  it("两次连续工具请求（中间无正文）渲染为两段工具行；半句无句读结尾 → 尾文本续句并入首段", async () => {
     const fake = fakeHandle();
     const proj = new ConversationProjection(fake.handle, "c1");
     await proj.start();
@@ -114,11 +114,100 @@ describe("ConversationProjection 连续工具批次分段（每请求一段）",
 
     const item = proj.getSnapshot().timeline.at(-1)!;
     const segments = item.segments!;
-    // 段结构：[先查 + t1] [空文本 + t2] [完成]（最后段缓冲收口前在 text 字段）
+    // 段结构：[先查 + t1] [空文本 + t2]（"完成"跟在纯工具段后 → 缓冲在 text 字段，时序正确）
     expect(segments).toHaveLength(2);
     expect(segments[0]!.text).toBe("先查");
     expect(segments[0]!.tools.map((t) => t.traceId)).toEqual(["t1"]);
     expect(segments[1]!.tools.map((t) => t.traceId)).toEqual(["t2"]);
+    expect(item.text).toBe("先查完成");
+  });
+});
+
+describe("ConversationProjection 续句合并（审批暂停后正文不在句中断裂）", () => {
+  it("半句被审批打断（无句读结尾）→ 新请求文本并入上一段，单段连续", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+
+    fake.push(delta("我先读"));
+    fake.push(toolStarted("t1"));
+    fake.push(toolRecorded("t1"));
+    fake.push(delta("角色档案"));
+    fake.push(delta("如下"));
+
+    const item = proj.getSnapshot().timeline.at(-1)!;
+    const segments = item.segments!;
+    expect(segments).toHaveLength(1);
+    expect(segments[0]!.text).toBe("我先读角色档案如下");
+    expect(item.text).toBe("我先读角色档案如下");
+  });
+
+  it("句读收尾（。结尾）→ 新请求文本开新段，段间分隔", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+
+    fake.push(delta("我先看看现有档案。"));
+    fake.push(toolStarted("t1"));
+    fake.push(toolRecorded("t1"));
+    fake.push(delta("现在开始写入"));
+    fake.push({
+      type: "assistant.message",
+      persist: true,
+      seq: 12,
+      ...base,
+      ts: new Date().toISOString(),
+    } as unknown as ProjectedEvent);
+
+    const item = proj.getSnapshot().timeline.at(-1)!;
+    const segments = item.segments!;
+    expect(segments).toHaveLength(2);
+    expect(segments[0]!.text).toBe("我先看看现有档案。");
+    expect(segments[1]!.text).toBe("现在开始写入");
+  });
+
+  it("空文本段（纯工具段）后的文本不并入，重新起段", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+
+    fake.push(delta("第一句。"));
+    fake.push(toolStarted("t1"));
+    fake.push(toolRecorded("t1"));
+    fake.push(toolStarted("t2"));
+    fake.push(toolRecorded("t2"));
+    fake.push(delta("继续"));
+
+    const item = proj.getSnapshot().timeline.at(-1)!;
+    const segments = item.segments!;
+    expect(segments).toHaveLength(2);
+    expect(segments[0]!.text).toBe("第一句。");
+    expect(segments[0]!.tools.map((t) => t.traceId)).toEqual(["t1"]);
+    expect(segments[1]!.text).toBe("");
+    expect(segments[1]!.tools.map((t) => t.traceId)).toEqual(["t2"]);
+    expect(item.text).toBe("第一句。继续");
+  });
+
+  it("续句合并后再次出现工具行 → 工具行开新段，其后文本重新起段（粘性解除）", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+
+    fake.push(delta("我先读"));
+    fake.push(toolStarted("t1"));
+    fake.push(toolRecorded("t1"));
+    fake.push(delta("到了"));
+    fake.push(toolStarted("t2"));
+    fake.push(toolRecorded("t2"));
+    fake.push(delta("接着写"));
+
+    const item = proj.getSnapshot().timeline.at(-1)!;
+    const segments = item.segments!;
+    expect(segments).toHaveLength(2);
+    expect(segments[0]!.text).toBe("我先读到了");
+    expect(segments[0]!.tools.map((t) => t.traceId)).toEqual(["t1"]);
+    expect(segments[1]!.tools.map((t) => t.traceId)).toEqual(["t2"]);
+    expect(item.text).toBe("我先读到了接着写");
   });
 });
 

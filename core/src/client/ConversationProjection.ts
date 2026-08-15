@@ -124,6 +124,11 @@ export class ConversationProjection {
 	private activeSegments: AssistantSegment[] = [];
 	/** 当前段 delta 累积缓冲（assistant.delta 追加） */
 	private activeSegmentText = "";
+	/**
+	 * 续句合并进行中：上一请求文本无句读结尾（半句被工具调用/审批打断），
+	 * 新请求文本持续并入上一段（正文不在句中断裂）。工具行再开段/收口时解除。
+	 */
+	private continuingIntoLastSegment = false;
 	/** 实时生成状态（generating；run 收口清除） */
 	private liveState: "generating" | undefined;
 	private nextSeq = 1;
@@ -348,9 +353,19 @@ export class ConversationProjection {
 				if (event.kind === "reasoning") break;
 				this.liveState = "generating";
 				this.ensureActiveAssistant(event);
-				// 上一段已有收口工具行 → 新请求的内容 → 开新段
-				if (this.segmentIsClosed()) this.openSegment();
-				this.activeSegmentText += event.text;
+				// 上一段已收口工具行 → 新请求的内容：句读收尾开新段（段间换行分隔）；
+				// 半句被工具调用/审批打断（无句读结尾）→ 续句并入上一段，正文不在句中断裂
+				if (this.segmentIsClosed()) {
+					if (!this.continuingIntoLastSegment && this.lastSegmentAcceptsContinuation()) {
+						this.continuingIntoLastSegment = true;
+					}
+					if (!this.continuingIntoLastSegment) this.openSegment();
+				}
+				if (this.continuingIntoLastSegment) {
+					this.appendToLastSegment(event.text);
+				} else {
+					this.activeSegmentText += event.text;
+				}
 				// 置脏 + 合并发布（gui-performance-2 功能点三）：单条 delta 成本 = 一次追加 + 置位，
 				// 全文 join / segments 重建 / timeline 拷贝挪到 32ms 发布窗口（或下一次立即 publish 前）
 				this.activeItemDirty = true;
@@ -448,10 +463,36 @@ export class ConversationProjection {
 		return lastTool !== undefined && lastTool.outcome !== undefined;
 	}
 
-	/** 开新段（把当前缓冲封进上一段，重置缓冲） */
+	/** 开新段（把当前缓冲封进上一段，重置缓冲；续句合并解除） */
 	private openSegment(): void {
+		this.continuingIntoLastSegment = false;
 		this.pushSegment(this.activeSegmentText);
 		this.activeSegmentText = "";
+	}
+
+	/** 句读结尾判定（续句合并边界）：以句末标点/换行收尾视为完整句，允许分段换行 */
+	private static readonly SENTENCE_END = /[。！？…!?;；:：\n\r]$/;
+
+	/** 上一段是否接受续句合并：文本非空且未以句读收尾（半句被工具调用打断） */
+	private lastSegmentAcceptsContinuation(): boolean {
+		const last = this.activeSegments.at(-1);
+		if (last === undefined) return false;
+		const text = last.text.trimEnd();
+		if (text === "") return false;
+		return !ConversationProjection.SENTENCE_END.test(text);
+	}
+
+	/** 续句文本并入上一段（工具行归属该段，渲染在其下方） */
+	private appendToLastSegment(text: string): void {
+		const last = this.activeSegments[this.activeSegments.length - 1];
+		if (last === undefined) {
+			this.activeSegmentText += text;
+			return;
+		}
+		this.activeSegments[this.activeSegments.length - 1] = {
+			text: last.text + text,
+			tools: last.tools,
+		};
 	}
 
 	/** 把当前缓冲封进 activeSegments（缓冲为空且段无工具时跳过） */
@@ -460,8 +501,9 @@ export class ConversationProjection {
 		this.activeSegments.push({ text, tools: [] });
 	}
 
-	/** 当前段追加工具行（started：进行中）；先封存缓冲中的 delta 内容（工具行属于当前段） */
+	/** 当前段追加工具行（started：进行中）；先封存缓冲中的 delta 内容（工具行属于当前段）；续句合并解除（工具行再开段，其后文本重新起段） */
 	private pushToolRow(row: ToolTraceView): void {
+		this.continuingIntoLastSegment = false;
 		this.pushSegment(this.activeSegmentText);
 		this.activeSegmentText = "";
 		const last = this.activeSegments.at(-1);
@@ -530,6 +572,7 @@ export class ConversationProjection {
 		this.activeAssistantSeq = undefined;
 		this.activeSegments = [];
 		this.activeSegmentText = "";
+		this.continuingIntoLastSegment = false;
 		this.activeIndex = -1;
 		this.activeItemDirty = false;
 	}

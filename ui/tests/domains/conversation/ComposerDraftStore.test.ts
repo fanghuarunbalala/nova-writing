@@ -58,6 +58,18 @@ describe("ComposerDraftStore", () => {
     expect(store.getSnapshot()).toHaveLength(0);
   });
 
+  it("clearAll empties every draft (workspace switch)", () => {
+    const store = new ComposerDraftStore();
+    store.setText("conv_1", "A 项目草稿");
+    store.setText("conv_2", "另一会话草稿");
+    store.clearAll();
+    expect(store.getSnapshot()).toHaveLength(0);
+    // 空态再调用为 no-op（快照引用不变）
+    const snapshot = store.getSnapshot();
+    store.clearAll();
+    expect(store.getSnapshot()).toBe(snapshot);
+  });
+
   it("keeps snapshots immutable", () => {
     const store = new ComposerDraftStore();
     store.setText("c1", "草稿");

@@ -111,6 +111,12 @@ export class ComposerDraftStore extends ExternalStore<readonly ComposerDraft[]> 
     );
   }
 
+  /** 清空全部草稿（workspace 切换时调用：conversationId 各项目同号（conv_1 起），不清会串项目）。 */
+  clearAll(): void {
+    if (this.snapshot.length === 0) return;
+    this.setSnapshot(Object.freeze([]));
+  }
+
   private upsert(conversationId: string, update: (draft: ComposerDraft) => ComposerDraft): void {
     const current = this.getDraft(conversationId);
     const next = update(current);

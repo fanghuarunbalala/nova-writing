@@ -291,8 +291,9 @@ export interface NovelApiServerOptions {
 	/**
 	 * journal 根目录（conversation 存储根，`<dir>/<conversationId>/journal.jsonl`）。
 	 * 提供时 conversations.history 由 Main 侧代读实现；缺省返回空序列。
+	 * 字符串形态构造期固定；函数形态每次调用现取（宿主 workspace 热切换重绑目录）。
 	 */
-	journalDir?: string;
+	journalDir?: string | (() => string | undefined);
 }
 
 /**
@@ -336,11 +337,18 @@ function toRemoteHandle(handle: ConversationHandle): ConversationHandle {
 export function createNovelApiServer(options: NovelApiServerOptions): NovelApiClient {
 	const { manager, novel } = options;
 	const mark = options.proxy ?? (<T extends object>(value: T): T => value);
-	// history 代读（renderer 无文件权限，Main 侧读 journal 沙盒）
-	const readOnly: ConversationJournalReadOnlyService | undefined =
-		options.journalDir !== undefined
+	// history 代读（renderer 无文件权限，Main 侧读 journal 沙盒）：
+	// 字符串形态构造期固定单例；函数形态（workspace 热切换）每次现取目录、
+	// 按调用实例化（服务无状态，无副作用）
+	const fixedReadOnly: ConversationJournalReadOnlyService | undefined =
+		typeof options.journalDir === "string"
 			? new FileConversationJournalReadOnlyService({ journalDir: options.journalDir })
 			: undefined;
+	const readOnly = (): ConversationJournalReadOnlyService | undefined => {
+		if (fixedReadOnly !== undefined) return fixedReadOnly;
+		const dir = typeof options.journalDir === "function" ? options.journalDir() : undefined;
+		return dir !== undefined ? new FileConversationJournalReadOnlyService({ journalDir: dir }) : undefined;
+	};
 	return {
 		conversations: {
 			list: () => manager.list(),
@@ -354,12 +362,16 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 			delete: (conversationId) => manager.delete(conversationId),
 			rename: (conversationId, name) => manager.rename(conversationId, name),
 			pin: (conversationId, pinned) => manager.setPinned(conversationId, pinned),
-			history: (conversationId, opts) =>
-				readOnly !== undefined ? readOnly.history(conversationId, opts ?? {}) : Promise.resolve([]),
-			projectedHistory: (conversationId, opts) =>
-				readOnly !== undefined
-					? readOnly.projectedHistory(conversationId, opts ?? {})
-					: Promise.resolve([]),
+			history: (conversationId, opts) => {
+				const service = readOnly();
+				return service !== undefined ? service.history(conversationId, opts ?? {}) : Promise.resolve([]);
+			},
+			projectedHistory: (conversationId, opts) => {
+				const service = readOnly();
+				return service !== undefined
+					? service.projectedHistory(conversationId, opts ?? {})
+					: Promise.resolve([]);
+			},
 			getMode: async (conversationId) => {
 				const handle = (await manager.createOrResume(conversationId)).handle;
 				return handle.getConversationMode();

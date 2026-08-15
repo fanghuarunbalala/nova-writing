@@ -109,8 +109,8 @@ export class ConversationManagerServer implements Contract {
 	private readonly conversationExitListeners = new Set<(conversationId: ConversationId) => void>();
 	/** wait 请求队列（request/resolve 分离的缓冲层） */
 	private readonly waitQueue = new WaitRequestQueue();
-	/** 会话存储根目录（undefined = 不落盘目录，storedir 为空串） */
-	private readonly storedirRoot?: string;
+	/** 会话存储根目录（undefined = 不落盘目录，storedir 为空串；rescope 可重绑，见方法注释） */
+	private storedirRoot?: string;
 	/** 当前工作区根路径提供器（spawn 时求值） */
 	private readonly workspaceProvider?: () => string | undefined;
 	/** id 递增 */
@@ -333,6 +333,26 @@ export class ConversationManagerServer implements Contract {
 		if (s) s.status = "stopped";
 		// 内存模式无 attachExit：终止即通知拆除（进程模式 attachExit 亦会通知，关闭幂等）
 		this.notifyConversationExited(conversationId);
+	}
+
+	/**
+	 * 重绑会话存储根目录（workspace 切换）：终止全部运行中会话（触发 conversationExited
+	 * 通知，上层事件订阅对称拆除）、清空目录与 wait 队列，再按新 storedirRoot 重扫恢复
+	 * （meta.json 名字/pinned + journal mtime + seq 拦截）。监听器与实例身份不变，
+	 * 上层（gui main）接线无需重做；undefined = 切回无落盘空目录态。
+	 */
+	async rescope(storedirRoot?: string): Promise<void> {
+		for (const conversationId of [...this.childProcesses.keys(), ...this.conversations.keys()]) {
+			await this.terminate(conversationId);
+		}
+		this.conversations.clear();
+		this.handles.clear();
+		this.childProcesses.clear();
+		this.summaries.clear();
+		this.terminatedIds.clear();
+		this.seq = 0;
+		this.storedirRoot = storedirRoot;
+		this.scanCatalog();
 	}
 
 	/** 派生 conversation（进程 spawn 优先，缺省内存 factory） */

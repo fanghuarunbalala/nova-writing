@@ -364,6 +364,89 @@ describe("ConversationManagerServer（会话置顶与时间分组）", () => {
 	});
 });
 
+describe("ConversationManagerServer（workspace 重绑定 rescope）", () => {
+	let rootA: string;
+	let rootB: string;
+
+	beforeEach(() => {
+		rootA = mkdtempSync(join(tmpdir(), "novel-mgr-scope-a-"));
+		rootB = mkdtempSync(join(tmpdir(), "novel-mgr-scope-b-"));
+	});
+
+	afterEach(() => {
+		rmSync(rootA, { recursive: true, force: true });
+		rmSync(rootB, { recursive: true, force: true });
+	});
+
+	/** 在指定 root 下写 journal.jsonl（mtime 即 lastActivityAt 来源） */
+	function writeJournalAt(root: string, conversationId: string, mtime: Date): void {
+		const dir = join(root, conversationId);
+		mkdirSync(dir, { recursive: true });
+		const file = join(dir, "journal.jsonl");
+		writeFileSync(file, JSON.stringify({ seq: 1 }) + "\n", "utf8");
+		utimesSync(file, mtime, mtime);
+	}
+
+	it("rescope 切换存储根：目录只含新 root 会话（meta/journal 恢复语义复用）", async () => {
+		const today = new Date("2026-08-15T10:00:00.000Z");
+		writeJournalAt(rootA, "conv_1", today);
+		writeFileSync(join(rootA, "conv_1", "meta.json"), JSON.stringify({ name: "A 项目会话" }), "utf8");
+		writeJournalAt(rootB, "conv_1", today);
+		writeFileSync(join(rootB, "conv_1", "meta.json"), JSON.stringify({ pinned: true }), "utf8");
+		writeJournalAt(rootB, "conv_2", today);
+
+		const server = new ConversationManagerServer(noopFactory(), undefined, { storedirRoot: rootA });
+		expect((await server.list()).map((s) => s.name)).toEqual(["A 项目会话"]);
+
+		await server.rescope(rootB);
+		const list = await server.list();
+		expect(list.map((s) => s.conversationId).sort()).toEqual(["conv_1", "conv_2"]);
+		const byId = new Map(list.map((s) => [s.conversationId, s]));
+		// 同名 conv_1 换了归属：名字回退 id、pinned 自 rootB meta 恢复
+		expect(byId.get("conv_1")!.name).toBe("conv_1");
+		expect(byId.get("conv_1")!.pinned).toBe(true);
+		expect(byId.get("conv_1")!.storeDir).toBe(join(rootB, "conv_1"));
+
+		// 切回 rootA：原会话照旧恢复（数据互不污染）
+		await server.rescope(rootA);
+		expect((await server.list()).map((s) => s.name)).toEqual(["A 项目会话"]);
+	});
+
+	it("rescope 终止运行中会话（子进程 kill + conversationExited 通知）", async () => {
+		const { spawner, spawned } = makeFakeSpawner();
+		const server = new ConversationManagerServer(noopFactory(), spawner, { storedirRoot: rootA });
+		const ref = await server.spawnConversation({ agentType: "novel" });
+
+		const exited: string[] = [];
+		server.onConversationExited((id) => exited.push(id));
+		await server.rescope(rootB);
+
+		expect(spawned[0]!.child.killed).toBe(true);
+		expect(exited).toEqual([ref.conversationId]);
+		expect(await server.list()).toHaveLength(0);
+	});
+
+	it("rescope 后 seq 按新 root 重扫拦截（不沿用旧 root 的最大号）", async () => {
+		mkdirSync(join(rootA, "conv_9"), { recursive: true });
+		writeJournalAt(rootB, "conv_2", new Date("2026-08-15T10:00:00.000Z"));
+		const { spawner } = makeFakeSpawner();
+		const server = new ConversationManagerServer(noopFactory(), spawner, { storedirRoot: rootA });
+
+		await server.rescope(rootB);
+		const ref = await server.spawnConversation({ agentType: "novel" });
+		expect(ref.conversationId).toBe("conv_3");
+	});
+
+	it("rescope(undefined) 清空目录（关闭工作区回空态）", async () => {
+		writeJournalAt(rootA, "conv_1", new Date("2026-08-15T10:00:00.000Z"));
+		const server = new ConversationManagerServer(noopFactory(), undefined, { storedirRoot: rootA });
+		expect(await server.list()).toHaveLength(1);
+
+		await server.rescope(undefined);
+		expect(await server.list()).toHaveLength(0);
+	});
+});
+
 /** 读文本文件（测试便捷） */
 function readFile(path: string): string {
 	return readFileSync(path, "utf8");

@@ -5,7 +5,7 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -189,7 +189,7 @@ async function applyDefaultProviderEnv(configStore: NodeApplicationConfigStore):
 
 /** manager：有 provider key 时 spawnConversation 走子进程（真实 provider，novel-db 经 kkrpc/ws）；否则回退内存回显 loop */
 function createManager(
-  conversationsRoot: string,
+  conversationsRoot: () => string | undefined,
   workspaceProvider: () => string | undefined,
   transports: {
     managerWs: { url: string; token: string; onConnected: Parameters<typeof createProcessSpawner>[1]["managerWs"]["onConnected"] };
@@ -204,11 +204,16 @@ function createManager(
     create: (o: { conversationId: string }) => {
       // 回显模式同样落盘：与子进程 journal 语义一致（history/回执互认）。
       // 审批触发经 conv 自引用：requestApproval → conv.sendApprovalRequest（无阻塞提交 + 驻留等待）
-      const journal = new FileConversationJournalService({
-        conversationId: o.conversationId,
-        filePath: join(conversationsRoot, o.conversationId, "journal.jsonl"),
-      });
-      void journal.open();
+      // journal 根随 workspace 热重绑，每次创建时现取（未开工作区时不落盘）
+      const root = conversationsRoot();
+      const journal =
+        root !== undefined
+          ? new FileConversationJournalService({
+              conversationId: o.conversationId,
+              filePath: join(root, o.conversationId, "journal.jsonl"),
+            })
+          : undefined;
+      void journal?.open();
       let conv: Conversation | undefined;
       const loop = createEchoLoop(o.conversationId, journal, (req) =>
         conv!.sendApprovalRequest(req),
@@ -241,7 +246,8 @@ function createManager(
         })
       : undefined;
   server = new ConversationManagerServer(factory, spawner, {
-    storedirRoot: conversationsRoot,
+    // 启动时无工作区：不扫描；open() 时经 rescope 重绑 <storeDir>/conversations
+    storedirRoot: conversationsRoot(),
     workspaceProvider,
     logger,
   });
@@ -276,15 +282,21 @@ async function main(): Promise<void> {
     ]),
   );
 
-  const store = new SqliteNovelStore(join(app.getPath("userData"), "novel.db"));
+  // novel 库随 workspace 热重绑（<storeDir>/novel.db，open/close 时切换）：
+  // publishingStore 对象身份恒定（novel WS 子进程通道与 serverApi 不重建），内部委托当前库
+  let currentNovelStore: SqliteNovelStore | undefined;
+  const requireNovelStore = (): NovelStore => {
+    if (currentNovelStore === undefined) throw new Error("未打开工作区（novel store 未初始化）");
+    return currentNovelStore;
+  };
 
   // novel.changed 广播：ZeroMQ PUB/SUB（mutate 成功 → publish；订阅 → rpc 通知 renderer 刷新）
   const novelPublisher = new EventPublisher(NOVEL_EVENTS_ADDR);
   await novelPublisher.bind();
   const publishingStore: NovelStore = {
-    query: (q) => store.query(q),
+    query: (q) => requireNovelStore().query(q),
     mutate: async (m) => {
-      const result = await store.mutate(m);
+      const result = await requireNovelStore().mutate(m);
       novelPublisher.publish(NOVEL_CHANGED, {
         type: "novel.changed",
         op: m.op,
@@ -297,7 +309,7 @@ async function main(): Promise<void> {
     },
     // 批内原子：整批成功才逐项广播（失败回滚不广播）
     mutateBatch: async (ms) => {
-      const results = await store.mutateBatch(ms);
+      const results = await requireNovelStore().mutateBatch(ms);
       for (let i = 0; i < ms.length; i++) {
         const m = ms[i]!;
         const result = results[i]!;
@@ -313,7 +325,8 @@ async function main(): Promise<void> {
       return results;
     },
   };
-  const conversationsRoot = join(app.getPath("userData"), "novel-storage", "conversations");
+  // 会话存储根随 workspace 重绑（<storeDir>/conversations；未开工作区时 undefined）
+  let currentJournalDir: string | undefined;
 
   // config：JSON 文件持久化（凭据暂明文，safeStorage cipher 后续接）
   const configHome = new NodeConfigHomeResolver(app.getPath("userData"));
@@ -344,7 +357,7 @@ async function main(): Promise<void> {
 
   // 当前工作区根路径（spawn 时经 env 注入子进程，agent 文件工具落点）
   let currentWorkspaceRoot: string | undefined;
-  const manager = createManager(conversationsRoot, () => currentWorkspaceRoot, {
+  const manager = createManager(() => currentJournalDir, () => currentWorkspaceRoot, {
     managerWs: {
       url: managerWs.url,
       token: managerWs.token,
@@ -358,7 +371,8 @@ async function main(): Promise<void> {
   manager.onWaitChange(() => {
     uiNotifyHolder.notify?.();
   });
-  const serverApi = createNovelApiServer({ manager, novel: publishingStore, proxy, journalDir: conversationsRoot });
+  // journalDir 传函数形态：history 代读随 workspace 重绑现取当前会话根
+  const serverApi = createNovelApiServer({ manager, novel: publishingStore, proxy, journalDir: () => currentJournalDir });
 
   // 主窗口引用（IPC sender 校验 + 定向发送；窗口创建晚于端点注册）
   let mainWindow: BrowserWindow | undefined;
@@ -449,6 +463,11 @@ async function main(): Promise<void> {
     if (shutdownReady) return;
     e.preventDefault();
     shutdownReady = true;
+    try {
+      currentNovelStore?.close();
+    } catch (e2) {
+      console.warn("[main] novel store close failed on quit:", e2);
+    }
     void Promise.race([
       Promise.allSettled([
         novelPublisher.close(),
@@ -460,14 +479,89 @@ async function main(): Promise<void> {
     ]).finally(() => app.quit());
   });
 
-  // workspace：目录选择器 + 定位器 + 最近列表（内存）
-  const locator = new NodeWorkspaceStoreLocator({
-    storageRoot: join(app.getPath("userData"), "novel-storage"),
-  });
-  const recentWorkspaces: { id: string; label: string }[] = [];
+  // workspace：目录选择器 + 定位器 + 最近列表（workspaces.json 持久化）。
+  // 每项目存储根 = storageRoot/<workspaceId>（locator 派生）：novel.db + conversations/ 均落此处，
+  // open/close 时热重绑（rebindWorkspace），实现数据库与会话的项目级隔离
+  const storageRoot = join(app.getPath("userData"), "novel-storage");
+  const locator = new NodeWorkspaceStoreLocator({ storageRoot });
+  // 旧全局数据位置（项目隔离引入前）：首个打开的项目一次性继承（move 后原位置清空，幂等）
+  const legacyGlobalDbPath = join(app.getPath("userData"), "novel.db");
+  const legacyConversationsRoot = join(storageRoot, "conversations");
+
+  interface WorkspaceRegistryEntry {
+    workspaceId: string;
+    workspaceRoot: string;
+    label: string;
+    lastOpenedAt: string;
+  }
+  // 最近工作区注册表：id→root 反查（openRecent 修复）+ 重启恢复（roots 重新入白名单）
+  const registryPath = join(app.getPath("userData"), "workspaces.json");
+  const registryEntries: WorkspaceRegistryEntry[] = (() => {
+    try {
+      const parsed = JSON.parse(readFileSync(registryPath, "utf8")) as {
+        entries?: WorkspaceRegistryEntry[];
+      };
+      return Array.isArray(parsed.entries)
+        ? parsed.entries.filter(
+            (entry) =>
+              typeof entry.workspaceId === "string" &&
+              typeof entry.workspaceRoot === "string" &&
+              typeof entry.label === "string",
+          )
+        : [];
+    } catch {
+      return [];
+    }
+  })();
+  const saveRegistry = (): void => {
+    try {
+      writeFileSync(registryPath, JSON.stringify({ version: 1, entries: registryEntries }), "utf8");
+    } catch (e) {
+      console.warn("[main] workspaces registry persist failed:", e);
+    }
+  };
+
   // 允许 open 的 referenceId 白名单：仅 pickWorkspace（原生目录对话框）返回的路径可设为工作区，
-  // 渲染进程直传任意路径会被拒绝（防渲染端被污染后把 agent 文件工具指向任意目录）
-  const allowedWorkspaceReferences = new Set<string>();
+  // 以及注册表中曾经授权过的路径（重启恢复）；渲染进程直传任意路径会被拒绝
+  // （防渲染端被污染后把 agent 文件工具指向任意目录）
+  const allowedWorkspaceReferences = new Set<string>(registryEntries.map((e) => e.workspaceRoot));
+
+  /** 旧全局数据一次性迁移进首个打开项目的 storeDir（失败跳过，按全新库处理） */
+  const adoptLegacyData = (storeDir: string): void => {
+    const hasLegacy = existsSync(legacyGlobalDbPath) || existsSync(legacyConversationsRoot);
+    if (!hasLegacy) return;
+    try {
+      // 目录不存在视作空（可继承）；已有项目数据不覆盖
+      if (existsSync(storeDir) && readdirSync(storeDir).length > 0) return;
+      mkdirSync(storeDir, { recursive: true });
+      if (existsSync(legacyGlobalDbPath)) renameSync(legacyGlobalDbPath, join(storeDir, "novel.db"));
+      if (existsSync(legacyConversationsRoot)) {
+        renameSync(legacyConversationsRoot, join(storeDir, "conversations"));
+      }
+      infoLog("[main] legacy global data adopted into workspace storeDir");
+    } catch (e) {
+      console.warn("[main] legacy data adoption failed (start fresh):", e);
+    }
+  };
+
+  /** 数据库与会话目录随 workspace 重绑：关旧库 → 开新库（<storeDir>/novel.db）→ manager rescope；
+   *  storeDir undefined（关闭工作区）= 全部清空回空态。open 返回前完成，渲染端随后 refetch 即新数据 */
+  const rebindWorkspace = async (storeDir: string | undefined): Promise<void> => {
+    try {
+      currentNovelStore?.close();
+    } catch (e) {
+      console.warn("[main] novel store close failed on rebind:", e);
+    }
+    currentNovelStore = undefined;
+    currentJournalDir = undefined;
+    if (storeDir !== undefined) {
+      currentJournalDir = join(storeDir, "conversations");
+      mkdirSync(currentJournalDir, { recursive: true });
+      currentNovelStore = new SqliteNovelStore(join(storeDir, "novel.db"));
+    }
+    await manager.rescope(currentJournalDir);
+  };
+
   const workspaceApi = {
     pickWorkspace: async (): Promise<{ referenceId: string; label: string } | undefined> => {
       const result = await dialog.showOpenDialog({
@@ -479,19 +573,46 @@ async function main(): Promise<void> {
       allowedWorkspaceReferences.add(root);
       return { referenceId: root, label: basename(root) };
     },
-    listRecent: async () => Object.freeze([...recentWorkspaces]),
+    listRecent: async () =>
+      Object.freeze(
+        [...registryEntries]
+          .sort((a, b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt))
+          .slice(0, 8)
+          .map((e) => ({ id: e.workspaceId, label: e.label })),
+      ),
     open: async (reference: { referenceId: string; label: string }) => {
-      if (!allowedWorkspaceReferences.has(reference.referenceId)) {
+      // referenceId 两种来源：最近列表传 workspaceId（哈希，注册表反查 root）；
+      // 目录选择器传 root 路径（白名单校验）
+      const registryHit = registryEntries.find((e) => e.workspaceId === reference.referenceId);
+      const root = registryHit?.workspaceRoot;
+      if (root === undefined && !allowedWorkspaceReferences.has(reference.referenceId)) {
         throw new Error(`未授权的 workspace 引用（请先经目录选择器打开）: ${reference.referenceId}`);
       }
-      const location = await locator.resolve(reference.referenceId);
-      const session = { id: location.workspaceId, label: reference.label };
-      recentWorkspaces.unshift(session);
+      const workspaceRoot = root ?? reference.referenceId;
+      const label = reference.label.trim() !== "" ? reference.label : basename(workspaceRoot);
+      const location = await locator.resolve(workspaceRoot);
+      adoptLegacyData(location.storeDir);
+      await rebindWorkspace(location.storeDir);
       currentWorkspaceRoot = location.workspaceRoot;
-      return session;
+      const lastOpenedAt = new Date().toISOString();
+      const existing = registryEntries.find((e) => e.workspaceId === location.workspaceId);
+      if (existing !== undefined) {
+        existing.label = label;
+        existing.lastOpenedAt = lastOpenedAt;
+      } else {
+        registryEntries.push({
+          workspaceId: location.workspaceId,
+          workspaceRoot: location.workspaceRoot,
+          label,
+          lastOpenedAt,
+        });
+      }
+      saveRegistry();
+      return { id: location.workspaceId, label };
     },
     close: async () => {
       currentWorkspaceRoot = undefined;
+      await rebindWorkspace(undefined);
     },
   };
   expose(workspaceApi, electronIpcTransport({ endpoint, channel: WORKSPACE_CHANNEL }));

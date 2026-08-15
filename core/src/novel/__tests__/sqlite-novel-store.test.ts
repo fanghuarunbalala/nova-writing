@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { SqliteNovelStore } from "../SqliteNovelStore.js";
 import { NovelStaleRevisionError } from "../errors.js";
 
@@ -25,5 +29,18 @@ describe("SqliteNovelStore", () => {
 		const outline = (await store.query({ op: "outline.get" })) as { units: { title: string }[] };
 		expect(outline.units).toHaveLength(1);
 		expect(outline.units[0].title).toBe("第一章");
+	});
+
+	it("close 后同路径新实例可读写（workspace 切换热重绑）", async () => {
+		const dbPath = join(tmpdir(), `novel-store-close-${randomUUID()}.db`);
+		const first = new SqliteNovelStore(dbPath);
+		await first.mutate({ op: "character.create", input: { name: "张三" } });
+		first.close();
+
+		const second = new SqliteNovelStore(dbPath);
+		const characters = (await second.query({ op: "characters.list" })) as { name: string }[];
+		expect(characters.map((c) => c.name)).toEqual(["张三"]);
+		second.close();
+		rmSync(dbPath, { force: true });
 	});
 });

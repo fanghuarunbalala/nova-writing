@@ -45,6 +45,11 @@ export class SqliteNovelStore implements NovelStore {
 		this.migrate();
 	}
 
+	/** 关闭连接（workspace 切换热重绑 / 应用退出；关闭后本实例不可再用） */
+	close(): void {
+		this.db.close();
+	}
+
 	/** 建表 + 种子 outline */
 	private migrate(): void {
 		this.db.exec(`

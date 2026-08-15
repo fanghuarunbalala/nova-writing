@@ -460,6 +460,12 @@
   .chip.faint   { background: transparent; color: var(--color-faint); border: 1px solid var(--color-border); }
 
   .treeLegend { display: flex; flex-wrap: wrap; gap: 4px 6px; padding: 10px 8px 4px; border-top: 1px dashed var(--color-border); margin-top: 8px; }
+  .legendLine { width: 100%; font-size: var(--fs-10-5); color: var(--color-faint); }
+  .legendLbl { font-size: 10px; color: var(--color-faint); font-weight: var(--fw-semibold); letter-spacing: 0.06em; align-self: center; }
+  /* leaf 计划：事件序列 / 实体变更的小行 */
+  .leafSeq { display: flex; flex-direction: column; gap: 3px; }
+  .leafSeq span { display: flex; gap: 7px; align-items: baseline; font-size: var(--fs-12); line-height: 1.6; }
+  .leafSeq i { font-family: var(--font-mono); font-style: normal; font-size: var(--fs-10-5); color: var(--color-faint); flex: none; }
 
   .miniBar { width: 42px; height: 4px; flex: none; border-radius: 2px; background: var(--color-surface-2); overflow: hidden; }
   .miniBar i { display: block; height: 100%; border-radius: 2px; background: var(--color-success); }
@@ -1290,47 +1296,162 @@ const ic = (n, s = 14, w = 1.8) =>
   `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${P[n] || ""}</svg>`;
 
 /* ================= 数据（与《北河旧事》示例一致） ================= */
-const PLAN_MAP = { 1: ["构想", "neutral"], 2: ["成纲", "info"], 3: ["备写", "accent"] };
+/* 大纲展示态 —— 对齐 core/src/novel/model/outline.ts（StoryUnit）：
+   scope：saga 全书 / arc 卷 / sequence 序列 / scene 场景 / custom 自定义；
+   planningStatus：idea 点子 / outlined 已成纲 / ready 可开写；
+   realizationStatus：pending 未动笔 / in-progress 写作中 / completed 已完成 / abandoned 废弃；
+   「受阻」不是独立状态，由 pending + blockState 推导（同 ui StoryOutlineTreeProjection）。 */
+const PLAN_MAP = { idea: ["点子", "neutral"], outlined: ["已成纲", "info"], ready: ["可开写", "accent"] };
 const REAL_MAP = {
-  pending: ["待写", "neutral"], "in-progress": ["撰写中", "warn"], completed: ["已完成", "success"],
-  blocked: ["受阻", "danger"], abandoned: ["弃置", "faint"],
+  pending: ["未动笔", "neutral"], "in-progress": ["写作中", "warn"], completed: ["已完成", "success"],
+  blocked: ["受阻", "danger"], abandoned: ["废弃", "faint"],
 };
-const SCOPE_MAP = { ARC: ["卷", "accent"], SCENE: ["章", "neutral"] };
+const SCOPE_MAP = { saga: ["全书", "accent"], arc: ["卷", "accent"], sequence: ["序列", "info"], scene: ["场景", "neutral"], custom: ["自定义", "faint"] };
+const BLOCK_REASON = { dependency: "依赖未定", "decision-required": "待决策", "continuity-conflict": "连贯性冲突", "missing-material": "素材缺失", "outline-incomplete": "大纲未完成", other: "其他" };
+const ABANDON_REASON = { "story-direction-changed": "故事方向调整", replaced: "被替代", merged: "已并入", duplicate: "重复", "scope-reduced": "体量缩减", other: "其他" };
+const LEAF_PRESENCE = { present: "在场", offstage: "离场", mentioned: "提及" };
+const LEAF_ROLE = { "point-of-view": "视角", participant: "参与", observer: "旁观", affected: "受影响" };
+const LEAF_LOC_ROLE = { primary: "主要", secondary: "次要", mentioned: "提及" };
+const LEAF_RHYTHM = { setup: "铺垫", rise: "上升", hold: "保持", turn: "转折", climax: "高潮", fall: "回落", release: "释放", aftermath: "余波" };
+const LEAF_CHANGE = { identity: "身份", condition: "状态", location: "位置", relationship: "关系", knowledge: "认知", goal: "目标", ownership: "所有", environment: "环境", custom: "自定义" };
+const realState = (u) => (u.realizationStatus === "pending" && u.blockState) ? "blocked" : u.realizationStatus;
 
+/* 大纲演示数据 —— StoryUnit 泛型树（parentId 由嵌套表达，orderKey 为兄弟排序键）：
+   层级可省中间层，但叶必须为 scene（正文段落挂叶，发布「章」从场景选段）；父单元 progress 由叶 rollup。 */
 const OUTLINE = [
-  { id: "a1", label: "第一卷 · 北渡", scope: "ARC", plan: 3, real: "in-progress", progress: { c: 2, t: 5 }, open: true,
-    desc: "林晚携半枚铜符夜渡北河：追逃、投宿、遇船工沈砚。本卷收在铜符的另一半现形。",
+  { id: "sg0", title: "北河旧事", scope: "saga", orderKey: "0001", entityVersion: 6, open: true,
+    planningStatus: "outlined", realizationStatus: "in-progress", progress: { c: 2, t: 10 },
+    intent: "以半枚铜符为线索，写一桩横跨三十年的北河旧案如何被渡口孤女重新翻开。",
+    synopsis: "三卷推进：北渡（追逃与投宿）→ 雾锁（旧案重启）→ 灯塔（真相与去处）。",
     children: [
-      { id: "u1", label: "第 1 章 · 雾起北河", scope: "SCENE", plan: 3, real: "completed",
-        desc: "开卷。渡口的日常与暗流：绸缎庄孤女、夜航的船、雨讯。章末铜符首次露形半枚。",
-        chapter: "c1", chars: ["林晚", "沈砚"] },
-      { id: "u2", label: "第 2 章 · 雨夜追逃", scope: "SCENE", plan: 3, real: "in-progress", progress: { c: 3, t: 5 },
-        desc: "追逃。主观视角收窄到雨幕与灯笼的光斑，删全知描写；铜符来历留白作钩子。",
-        chapter: "c2", chars: ["林晚"] },
-      { id: "u3", label: "第 3 章 · 客栈灯火", scope: "SCENE", plan: 3, real: "completed",
-        desc: "投宿北桥客栈。阿枝的鞋码与口音伏笔；周慎的灯笼罩子出现在门外。",
-        chapter: "c3", chars: ["林晚", "阿枝"] },
-      { id: "u4", label: "第 4 章 · 铜符", scope: "SCENE", plan: 2, real: "blocked", blockedReason: "等待第 2 章定稿：铜符是否示人。",
-        desc: "沈砚的袖口。成纲完成，但依赖第 2 章追逃段的定稿结果。",
-        chapter: "c4", chars: ["沈砚"] },
-      { id: "u5", label: "第 5 章 · 渡资", scope: "SCENE", plan: 3, real: "abandoned", abandonedReason: "与主线重复，渡资线并入第 3 章。",
-        desc: "（已弃置）原计划的渡资纠纷章。", chapter: "c5" },
-    ] },
-  { id: "a2", label: "第二卷 · 雾锁", scope: "ARC", plan: 2, real: "pending", progress: { c: 0, t: 3 }, open: true,
-    desc: "旧案重启。档案房的潮气里，十年前的卷宗与眼下的人开始对位。",
-    children: [
-      { id: "u6", label: "第 6 章 · 旧案卷宗", scope: "SCENE", plan: 2, real: "pending",
-        desc: "周慎调卷。卷宗编号做线索；草稿已成。", chapter: "c6", chars: ["周慎"] },
-      { id: "u7", label: "第 7 章 · 档案房夜话", scope: "SCENE", plan: 2, real: "pending",
-        desc: "夜话。两代人的证词互相拆台；草稿已成。", chapter: "c7", chars: ["林晚", "周慎"] },
-      { id: "u8", label: "第 8 章 · 断缆", scope: "SCENE", plan: 1, real: "pending",
-        desc: "渡船断缆。尚未成纲，仅有意象。", chapter: "c8" },
-    ] },
-  { id: "a3", label: "第三卷 · 灯塔", scope: "ARC", plan: 1, real: "pending", progress: { c: 0, t: 2 }, open: true,
-    desc: "真相与去处。沈砚身份揭晓、北桥三十年的灯还亮着。结局走向待定（两种揭法）。",
-    children: [
-      { id: "u9", label: "第 9 章 · 雾角", scope: "SCENE", plan: 1, real: "pending", desc: "雾角声。尚未成纲。", chapter: "c9" },
-      { id: "u10", label: "第 10 章 · 灯还亮着", scope: "SCENE", plan: 1, real: "pending", desc: "收束章。尚未成纲。", chapter: "c10" },
+      { id: "a1", title: "第一卷 · 北渡", scope: "arc", orderKey: "1000", entityVersion: 9, open: true,
+        planningStatus: "ready", realizationStatus: "in-progress", progress: { c: 2, t: 5 },
+        intent: "把林晚送上夜渡船：追逃、投宿、遇船工沈砚。",
+        synopsis: "本卷收在铜符的另一半现形。",
+        children: [
+          { id: "u1", title: "第 1 章 · 雾起北河", scope: "scene", orderKey: "1000", entityVersion: 12,
+            planningStatus: "ready", realizationStatus: "completed", chapter: "c1",
+            intent: "开卷：渡口的日常与暗流。",
+            synopsis: "绸缎庄孤女、夜航的船、雨讯；章末铜符首次露形半枚。",
+            leaf: {
+              settingMode: "located",
+              time: { description: "雨夜 · 申时末" },
+              characters: [
+                { id: "ch1", involvement: { presence: "present", roles: ["point-of-view"] } },
+                { id: "ch2", involvement: { presence: "present", roles: ["participant"] } },
+              ],
+              locations: [{ id: "l1", involvement: { role: "primary", affected: false } }],
+              events: [
+                { id: "e1", orderKey: "1000", description: "渡口收船，梆子三长一短——雾夜的调子" },
+                { id: "e2", orderKey: "2000", description: "林晚上板时，袖中铜符露形半枚" },
+              ],
+              rhythmBeats: [
+                { id: "b1", orderKey: "1000", rhythm: "setup", intensity: 2, readerEmotion: "安稳里的不安", relatedEventIds: ["e1"] },
+                { id: "b2", orderKey: "2000", rhythm: "turn", intensity: 4, pointOfViewEmotion: "心口一紧", relatedEventIds: ["e2"] },
+              ],
+              entityChanges: [
+                { id: "ec1", entityType: "character", entityId: "ch1", category: "knowledge", summary: "确认铜符缺口与来处有关", sourceEventIds: ["e2"] },
+              ],
+            } },
+          { id: "u2", title: "第 2 章 · 雨夜追逃", scope: "scene", orderKey: "2000", entityVersion: 15,
+            planningStatus: "ready", realizationStatus: "in-progress", chapter: "c2",
+            intent: "主观视角的追逃，悬念保留到最后。",
+            synopsis: "视线收窄到雨幕与灯笼的光斑，删全知描写；铜符来历留白作钩子。",
+            leaf: {
+              settingMode: "located",
+              time: { description: "雨夜 · 亥时前后" },
+              characters: [
+                { id: "ch1", involvement: { presence: "present", roles: ["point-of-view"] }, note: "全程主观视角，不越界" },
+              ],
+              locations: [{ id: "l1", involvement: { role: "primary", affected: false }, note: "雨幕封闭：只留一条退路" }],
+              events: [
+                { id: "e1", orderKey: "1000", description: "雨点砸青石板，攥符奔逃" },
+                { id: "e2", orderKey: "2000", description: "巷口灯笼灭而复亮，绕井台" },
+                { id: "e3", orderKey: "3000", description: "北桥上有人唤她的旧名" },
+              ],
+              rhythmBeats: [
+                { id: "b1", orderKey: "1000", rhythm: "rise", intensity: 3, readerEmotion: "屏息", relatedEventIds: ["e1"] },
+                { id: "b2", orderKey: "2000", rhythm: "hold", intensity: 3, readerEmotion: "悬念压住", relatedEventIds: ["e2"] },
+                { id: "b3", orderKey: "3000", rhythm: "turn", intensity: 5, readerEmotion: "寒意", pointOfViewEmotion: "不敢回头", relatedEventIds: ["e3"] },
+              ],
+              entityChanges: [
+                { id: "ec1", entityType: "character", entityId: "ch1", category: "knowledge", summary: "旧名被人知晓——来历线索浮出", sourceEventIds: ["e3"] },
+                { id: "ec2", entityType: "character", entityId: "ch1", category: "condition", summary: "鞋底湿透、体力见底", sourceEventIds: ["e1"] },
+              ],
+            } },
+          { id: "u3", title: "第 3 章 · 客栈灯火", scope: "scene", orderKey: "3000", entityVersion: 8,
+            planningStatus: "ready", realizationStatus: "completed", chapter: "c3",
+            intent: "投宿北桥客栈，安顿与观察。",
+            synopsis: "阿枝的鞋码与口音伏笔；周慎的灯笼罩子出现在门外。",
+            leaf: {
+              settingMode: "located",
+              characters: [
+                { id: "ch1", involvement: { presence: "present", roles: ["point-of-view"] } },
+                { id: "ch4", involvement: { presence: "present", roles: ["participant"] } },
+              ],
+              locations: [{ id: "l2", involvement: { role: "primary", affected: false } }],
+              events: [
+                { id: "e1", orderKey: "1000", description: "阿枝看鞋看伞，收留林晚" },
+                { id: "e2", orderKey: "2000", description: "门外灯笼罩子一闪而过" },
+              ],
+              rhythmBeats: [],
+              entityChanges: [],
+            } },
+          { id: "u4", title: "第 4 章 · 铜符", scope: "scene", orderKey: "4000", entityVersion: 3,
+            planningStatus: "outlined", realizationStatus: "pending", chapter: "c4",
+            blockState: { reasonCode: "dependency", note: "等待第 2 章定稿：铜符是否示人。", dependencyIds: ["u2"] },
+            intent: "沈砚的袖口。",
+            synopsis: "成纲完成，但依赖第 2 章追逃段的定稿结果。" },
+          { id: "u5", title: "第 5 章 · 渡资", scope: "scene", orderKey: "5000", entityVersion: 2,
+            planningStatus: "outlined", realizationStatus: "abandoned", chapter: "c5",
+            abandonment: { reasonCode: "merged", note: "与主线重复，渡资线并入第 3 章。" },
+            intent: "（已并入第 3 章）原计划的渡资纠纷章。",
+            synopsis: "废弃不删节点：保留 merged 标记，供连贯性回溯。" },
+        ] },
+      { id: "a2", title: "第二卷 · 雾锁", scope: "arc", orderKey: "2000", entityVersion: 5, open: true,
+        planningStatus: "outlined", realizationStatus: "pending", progress: { c: 0, t: 3 },
+        intent: "旧案重启，把档案房线落到单元。",
+        synopsis: "档案房的潮气里，十年前的卷宗与眼下的人开始对位。",
+        children: [
+          { id: "sq1", title: "旧案重启 · 档案房线", scope: "sequence", orderKey: "1000", entityVersion: 4, open: true,
+            planningStatus: "outlined", realizationStatus: "pending", progress: { c: 0, t: 2 },
+            intent: "两章一组：调卷 → 夜话，证词互相拆台。",
+            synopsis: "卷宗编号做线索，老书办只肯在雾夜开口。",
+            children: [
+              { id: "u6", title: "第 6 章 · 旧案卷宗", scope: "scene", orderKey: "1000", entityVersion: 6,
+                planningStatus: "outlined", realizationStatus: "pending", chapter: "c6",
+                intent: "周慎调卷，旧案与铜符缺口对上。",
+                synopsis: "卷宗编号丙三七；草稿已成。",
+                leaf: {
+                  settingMode: "located",
+                  characters: [{ id: "ch3", involvement: { presence: "present", roles: ["point-of-view"] } }],
+                  locations: [{ id: "l4", involvement: { role: "primary", affected: false } }],
+                  events: [{ id: "e1", orderKey: "1000", description: "丙三七号卷宗出架，封皮发脆" }],
+                  rhythmBeats: [],
+                  entityChanges: [],
+                } },
+              { id: "u7", title: "第 7 章 · 档案房夜话", scope: "scene", orderKey: "2000", entityVersion: 4,
+                planningStatus: "outlined", realizationStatus: "pending", chapter: "c7",
+                intent: "两代人的证词互相拆台。",
+                synopsis: "老书办雾夜开口；草稿已成。" },
+            ] },
+          { id: "u8", title: "第 8 章 · 断缆", scope: "scene", orderKey: "2000", entityVersion: 1,
+            planningStatus: "idea", realizationStatus: "pending", chapter: "c8",
+            intent: "渡船断缆是人为。",
+            synopsis: "尚未成纲，仅有意象；留一个不揭的「谁割的」。" },
+        ] },
+      { id: "a3", title: "第三卷 · 灯塔", scope: "arc", orderKey: "3000", entityVersion: 2, open: true,
+        planningStatus: "idea", realizationStatus: "pending", progress: { c: 0, t: 2 },
+        intent: "真相与去处。",
+        synopsis: "沈砚身份揭晓、北桥三十年的灯还亮着。结局走向待定（两种揭法）。",
+        children: [
+          { id: "u9", title: "第 9 章 · 雾角", scope: "scene", orderKey: "1000", entityVersion: 1,
+            planningStatus: "idea", realizationStatus: "pending", chapter: "c9",
+            intent: "雾角声里的接近。", synopsis: "尚未成纲。" },
+          { id: "u10", title: "第 10 章 · 灯还亮着", scope: "scene", orderKey: "2000", entityVersion: 1,
+            planningStatus: "idea", realizationStatus: "pending", chapter: "c10",
+            intent: "收束章。", synopsis: "尚未成纲。" },
+        ] },
     ] },
 ];
 const unitById = {}; const walkUnits = (ns, depth, parent) => ns.forEach(n => { n.depth = depth; n.parent = parent; unitById[n.id] = n; if (n.children) walkUnits(n.children, depth + 1, n); });
@@ -1410,7 +1531,7 @@ const LOCS = [
 ];
 
 const STATS = [
-  { num: "13", label: "大纲单元", note: "3 卷 · 10 章" },
+  { num: "15", label: "故事单元", note: "全书 1 · 卷 3 · 序列 1 · 场景 10" },
   { num: "4", label: "角色", note: "1 主角 · 3 配角" },
   { num: "4", label: "地点", note: "1 处待完善" },
   { num: "10", label: "章节", note: "2 章有草稿" },
@@ -1418,8 +1539,8 @@ const STATS = [
   { num: "2", label: "已完成单元", note: "1 受阻 · 1 弃置", warn: true },
 ];
 const AXIS = {
-  plan: [[1, "构想", 4], [2, "成纲", 3], [3, "备写", 6]],
-  real: [["pending", "待写", 7], ["in-progress", "撰写中", 2], ["completed", "已完成", 2], ["abandoned", "弃置", 1]],
+  plan: [["idea", "点子", 4], ["outlined", "已成纲", 7], ["ready", "可开写", 4]],
+  real: [["pending", "未动笔", 8], ["in-progress", "写作中", 3], ["completed", "已完成", 2], ["abandoned", "废弃", 1]],
 };
 const TAGS = {
   approval: ["审批", "shieldCheck", "warn"],
@@ -1456,9 +1577,9 @@ const AP_TEMPLATES = [
   { op: "delete", tool: "删除", title: "旧的构思（碎片卷）",
     existing: { rows: [["碎片 1", "铜符的另一枚在哪——沈砚袖口的轮廓"], ["碎片 2", "渡口的规矩：雾夜不渡生人，除非付得起代价"], ["碎片 3", "灯塔的守夜人，三十年前换过一次"]] },
     params: [["ID", "draft-fragments"], ["类型", "碎片卷 · 3 条"]] },
-  { op: "add", tool: "大纲写入", title: "第三卷 · 灯塔",
-    existing: { rows: [["当前标题", "第三卷 · 灯塔"], ["当前状态", "构想 · 待写"], ["已有子单元", "第 9 章 · 雾角 / 第 10 章 · 灯还亮着"]] },
-    params: [["标题", "第三卷 · 灯塔"], ["描述", "沈砚的身份揭晓与北桥真相"], ["所属卷", "第三卷"]] },
+  { op: "add", tool: "NovelOutlineWrite", title: "第 11 章 · 守塔人的账本",
+    existing: { head: "父单元现状 · a3", rows: [["父单元", "a3 · 第三卷 · 灯塔（点子 · 未动笔）"], ["既有子单元", "第 9 章 · 雾角 / 第 10 章 · 灯还亮着"], ["排序", "orderKey 3000 · 排在第 10 章之后"]] },
+    params: [["values[0].parentId", "a3"], ["values[0].title", "第 11 章 · 守塔人的账本"], ["values[0].scope", "scene"], ["values[0].intent", "从账本侧写三十年前的换班夜"], ["values[0].synopsis", "灯塔账房残页：煤油与灯芯的数目对不上，换班夜多领了一份。"]] },
   { op: "edit", tool: "地点编辑", title: "北桥客栈",
     existing: { rows: [["名称", "北桥客栈"], ["简介", "雨夜唯一亮灯的檐下，掌柜记得每个渡客的鞋码。"], ["现状", "雨夜亮灯"]] },
     params: [["名称", "北桥客栈"], ["简介", "北桥客栈：雨夜唯一亮灯的檐下，掌柜记得每个渡客的鞋码与口音（修订）"]] },
@@ -1582,18 +1703,20 @@ function convRow({ title, meta, icon, dot, active, pin }) {
   </div>`;
 }
 
-/* 大纲树：嵌套层级 + 引导线（父节点折叠，子级缩进连线） */
+/* 大纲树：任意层级嵌套 + 引导线（saga/arc/sequence/… 可省中间层，叶为 scene） */
 function treeNodeHTML(n) {
   const isParent = !!n.children;
   const open = !!n.open;
   const active = state.selUnit === n.id;
-  const row = `<div class="dirRow treeRow${isParent ? " parent" : " leaf"}${active ? " active" : ""}${isParent && open ? " open" : ""}" data-act="unitSel" data-id="${n.id}">
+  const real = realState(n);
+  const row = `<div class="dirRow treeRow${isParent ? " parent" : " leaf"}${active ? " active" : ""}${isParent && open ? " open" : ""}" data-act="unitSel" data-id="${n.id}" title="${esc(n.title)} · ${n.scope}">
     ${isParent
       ? `<span class="chev" data-act="treeChev" data-id="${n.id}">${ic("chevRight", 12, 2.2)}</span>`
       : `<span class="treeTick"></span>`}
-    <span class="treeLabel">${esc(n.label)}</span>
-    ${n.real === "blocked" || n.real === "abandoned" ? "" : (n.progress ? `<span class="miniNum">${n.progress.c}/${n.progress.t}</span>` : "")}
-    ${chip(REAL_MAP[n.real])}
+    <span class="treeLabel">${esc(n.title)}</span>
+    ${isParent ? `<span class="chip faint" style="padding:0 6px;">${SCOPE_MAP[n.scope][0]}</span>` : ""}
+    ${real === "blocked" || real === "abandoned" ? "" : (n.progress ? `<span class="miniNum">${n.progress.c}/${n.progress.t}</span>` : "")}
+    ${chip(REAL_MAP[real])}
   </div>`;
   return `<div class="treeNode">${row}${isParent && open ? `<div class="treeChildren">${n.children.map(treeNodeHTML).join("")}</div>` : ""}</div>`;
 }
@@ -1608,14 +1731,16 @@ function contentSidebarHTML() {
   ];
   let dir = "";
   if (tab === "outline") {
-    dir = `<div class="dirHead">大纲单元<span class="cnt">${Object.keys(unitById).length}</span>
+    dir = `<div class="dirHead">故事单元<span class="cnt">${Object.keys(unitById).length}</span>
       <span class="dirTools">
         <button class="iconBtn" data-act="treeAll" data-id="open" title="展开全部">${ic("expand", 12)}</button>
         <button class="iconBtn" data-act="treeAll" data-id="close" title="折叠全部">${ic("collapse", 12)}</button>
       </span></div>
     <div class="sideScroll">${OUTLINE.map(treeNodeHTML).join("")}
       <div class="treeLegend">
-        ${chip(REAL_MAP.completed)}${chip(REAL_MAP["in-progress"])}${chip(REAL_MAP.pending)}${chip(REAL_MAP.blocked)}${chip(REAL_MAP.abandoned)}
+        <span class="legendLine">saga 全书 → arc 卷 → sequence 序列 → scene 场景（叶 = 场景，正文挂叶）</span>
+        <span class="legendLbl">规划</span>${chip(PLAN_MAP.idea)}${chip(PLAN_MAP.outlined)}${chip(PLAN_MAP.ready)}
+        <span class="legendLbl">实现</span>${chip(REAL_MAP.pending)}${chip(REAL_MAP["in-progress"])}${chip(REAL_MAP.completed)}${chip(REAL_MAP.blocked)}${chip(REAL_MAP.abandoned)}
       </div>
     </div>`;
   } else if (tab === "manuscript") {
@@ -1808,37 +1933,85 @@ function chatMainHTML() {
 }
 
 /* --- 内容视图 --- */
+/* leaf 绑定 → 可点击 chip（引用角色 / 地点档案；involvement 见 model LeafCharacterBinding / LeafLocationBinding） */
+function leafCharChips(u) {
+  return (((u.leaf && u.leaf.characters) || [])).map(b => {
+    const c = CHARS.find(x => x.id === b.id);
+    const inv = b.involvement;
+    const tag = inv ? [inv.roles.map(r => LEAF_ROLE[r]).join("/"), LEAF_PRESENCE[inv.presence]].filter(Boolean).join(" · ") : "";
+    return `<button class="refChip" data-act="charSel" data-id="${b.id}">${ic("userRound", 11)}${esc(c ? c.name : b.id)}${tag ? `<small style="font-size:var(--fs-10-5);color:var(--color-faint);font-weight:var(--fw-regular);">${tag}</small>` : ""}</button>`;
+  }).join("");
+}
+function leafLocChips(u) {
+  return (((u.leaf && u.leaf.locations) || [])).map(b => {
+    const l = LOCS.find(x => x.id === b.id);
+    const inv = b.involvement;
+    const tag = inv ? [LEAF_LOC_ROLE[inv.role], inv.affected ? "受影响" : ""].filter(Boolean).join(" · ") : "";
+    return `<button class="refChip" data-act="locSel" data-id="${b.id}">${ic("mapPin", 11)}${esc(l ? l.name : b.id)}${tag ? `<small style="font-size:var(--fs-10-5);color:var(--color-faint);font-weight:var(--fw-regular);">${tag}</small>` : ""}</button>`;
+  }).join("");
+}
+/* 场景计划 leaf：仅 scene 叶单元（人物/地点绑定、事件序列、节奏拍、实体状态变更） */
+function leafHTML(u) {
+  if (u.scope !== "scene") return "";
+  if (!u.leaf) return `
+    <div class="cardBlock">
+      <h3>场景计划 · leaf</h3>
+      <div class="banner faint">${ic("feather", 13)}<span>leaf 未编写——写场景前先补场景设计：人物 / 地点绑定、事件序列、节奏拍、实体变更。</span></div>
+    </div>`;
+  const L = u.leaf;
+  const chars = leafCharChips(u), locs = leafLocChips(u);
+  const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : "";
+  return `
+    <div class="cardBlock">
+      <h3>场景计划 · leaf</h3>
+      <dl class="apParam">
+        ${row("场景模式", L.settingMode === "located" ? "located · 有确定地点" : "location-independent · 无固定地点")}
+        ${row("时间", L.time ? esc(L.time.description) : "")}
+        ${row("人物绑定", chars ? `<div class="refChips">${chars}</div>` : "")}
+        ${row("地点绑定", locs ? `<div class="refChips">${locs}</div>` : "")}
+        ${row("事件序列", (L.events || []).length ? `<div class="leafSeq">${L.events.map((ev, i) => `<span><i>${String(i + 1).padStart(2, "0")}</i>${esc(ev.description)}</span>`).join("")}</div>` : "")}
+        ${row("节奏拍", (L.rhythmBeats || []).length ? `<div class="refChips">${L.rhythmBeats.map(b => `<span class="chip neutral">${LEAF_RHYTHM[b.rhythm] || esc(b.rhythm)} · 强度 ${b.intensity}${b.readerEmotion ? " · " + esc(b.readerEmotion) : ""}</span>`).join("")}</div>` : "")}
+        ${row("实体变更", (L.entityChanges || []).length ? `<div class="leafSeq">${L.entityChanges.map(ch => `<span><i>${LEAF_CHANGE[ch.category] || esc(ch.category)}</i>${esc(ch.summary)}</span>`).join("")}</div>` : "")}
+      </dl>
+    </div>`;
+}
+
+/* 大纲单元详情：对齐 StoryUnit 字段（title / intent / synopsis / 双状态 / blockState / abandonment / leaf） */
 function unitDetailHTML(u) {
-  const plan = PLAN_MAP[u.plan], real = REAL_MAP[u.real], scope = SCOPE_MAP[u.scope];
-  const relatedChars = CHARS.filter(c => (u.chars || []).includes(c.name));
+  if (!u) return "";
+  const real = realState(u);
   const chap = u.chapter ? chapById[u.chapter] : null;
+  const deps = (u.blockState && u.blockState.dependencyIds) || [];
+  const chars = leafCharChips(u);
+  const kids = u.children || [];
+  const sec = (t) => `<div class="apSectionHead" style="margin-bottom:5px;">${t}</div>`;
   return `
     <div class="paneInner">
       <div class="cardBlock">
-        <div class="unitHead">
-          ${chip(scope)}<h2>${esc(u.label)}</h2>
-        </div>
-        <div class="unitSub">unit ${u.id} · depth ${u.depth}${u.parent ? " · " + esc(u.parent.label) : ""}</div>
+        <div class="unitHead">${chip(SCOPE_MAP[u.scope] || SCOPE_MAP.custom)}<h2>${esc(u.title)}</h2></div>
+        <div class="unitSub">storyUnit ${u.id} · scope ${u.scope} · orderKey ${u.orderKey} · v${u.entityVersion}${u.parent ? " · 父 " + esc(u.parent.title) : ""}</div>
         <div class="statRowChips">
-          ${chip(plan)}${chip(real)}
-          ${u.progress ? `<span class="miniBar" style="width:120px;height:6px;"><i style="width:${Math.round(u.progress.c / u.progress.t * 100)}%;background:var(--grad-accent);"></i></span><span class="miniNum" style="font-size:var(--fs-12);">${u.progress.c} / ${u.progress.t} 子单元完成</span>` : ""}
+          ${chip(PLAN_MAP[u.planningStatus])}${chip(REAL_MAP[real])}
+          ${u.progress ? `<span class="miniBar" style="width:120px;height:6px;"><i style="width:${Math.round(u.progress.c / u.progress.t * 100)}%;background:var(--grad-accent);"></i></span><span class="miniNum" style="font-size:var(--fs-12);">${u.progress.c} / ${u.progress.t} 叶单元已完成</span>` : ""}
         </div>
-        ${u.blockedReason ? `<div class="banner warn">${ic("alertTri", 14)}<span>受阻：${esc(u.blockedReason)}</span></div>` : ""}
-        ${u.abandonedReason ? `<div class="banner faint">${ic("x", 13)}<span>已弃置：${esc(u.abandonedReason)}</span></div>` : ""}
-        <p class="cardP">${esc(u.desc || "（尚未填写单元简介）")}</p>
+        ${u.blockState ? `<div class="banner warn" style="margin-bottom:10px;">${ic("alertTri", 14)}<span>受阻 · ${BLOCK_REASON[u.blockState.reasonCode] || esc(u.blockState.reasonCode || "")}：${esc(u.blockState.note || "（未填说明）")}</span></div>` : ""}
+        ${u.abandonment ? `<div class="banner faint" style="margin-bottom:10px;">${ic("x", 13)}<span>已废弃 · ${ABANDON_REASON[u.abandonment.reasonCode] || esc(u.abandonment.reasonCode)}：${esc(u.abandonment.note || "")}</span></div>` : ""}
+        <div class="apSectionHead" style="margin:4px 0 5px;">意图 · intent</div>
+        <p class="cardP">${esc(u.intent || "（尚未填写——这个单元要达成什么）")}</p>
+        <div class="apSectionHead" style="margin-top:10px;">梗概 · synopsis</div>
+        <p class="cardP">${esc(u.synopsis || "（尚未填写情节梗概）")}</p>
         <div class="apActions" style="justify-content:flex-start;">
           ${chap ? `<button class="btn btnSecondary btnSm" data-act="jumpChapter" data-id="${chap.id}">${ic("scrollText", 12)}在正文中查看</button>` : ""}
           <button class="btn btnGhost btnSm" data-act="view" data-id="chat">${ic("messageSquare", 12)}在对话中讨论</button>
         </div>
       </div>
+      ${leafHTML(u)}
       <div class="cardBlock">
         <h3>关联</h3>
-        <div class="refChips" style="margin-bottom:${relatedChars.length ? 10 : 0}px;">
-          ${relatedChars.map(c => `<button class="refChip" data-act="charSelJump" data-id="${c.id}">${ic("userRound", 11)}${esc(c.name)}</button>`).join("")}
-        </div>
-        <div class="refChips">
-          ${(u.children || []).map(ch => `<button class="refChip" data-act="unitSel" data-id="${ch.id}">${ic("listTree", 11)}${esc(ch.label)}</button>`).join("") || `<span style="color:var(--color-faint);font-size:var(--fs-12);">无关联条目</span>`}
-        </div>
+        ${deps.length ? sec("阻塞依赖 · dependencyIds") + `<div class="refChips" style="margin-bottom:10px;">${deps.map(d => unitById[d] ? `<button class="refChip" data-act="unitSel" data-id="${d}">${ic("alertTri", 11)}${esc(unitById[d].title)}</button>` : "").join("")}</div>` : ""}
+        ${chars ? sec("出场人物 · leaf.characters") + `<div class="refChips" style="margin-bottom:10px;">${chars}</div>` : ""}
+        ${kids.length ? sec("子单元") + `<div class="refChips" style="margin-bottom:10px;">${kids.map(ch => `<button class="refChip" data-act="unitSel" data-id="${ch.id}">${ic("listTree", 11)}${esc(ch.title)}</button>`).join("")}</div>` : ""}
+        ${chap ? sec("发布章 · 从场景选段") + `<div class="refChips"><button class="refChip" data-act="jumpChapter" data-id="${chap.id}">${ic("scrollText", 11)}${esc(chap.title)}</button></div>` : ""}
       </div>
     </div>`;
 }
@@ -1885,7 +2058,7 @@ function charHTML(c) {
       <div class="cardBlock"><h3>关联单元</h3>
         <div class="refChips">${c.related.length ? c.related.map(uid => {
           const u = unitById[uid];
-          return u ? `<button class="refChip" data-act="unitSelJump" data-id="${uid}">${ic("listTree", 11)}${esc(u.label)}</button>` : "";
+          return u ? `<button class="refChip" data-act="unitSelJump" data-id="${uid}">${ic("listTree", 11)}${esc(u.title)}</button>` : "";
         }).join("") : `<span style="color:var(--color-faint);font-size:var(--fs-12);">尚未关联</span>`}</div>
       </div>
     </div>`;
@@ -1906,7 +2079,7 @@ function locHTML(l) {
       <div class="cardBlock"><h3>关联单元</h3>
         <div class="refChips">${l.related.length ? l.related.map(uid => {
           const u = unitById[uid];
-          return u ? `<button class="refChip" data-act="unitSelJump" data-id="${uid}">${ic("listTree", 11)}${esc(u.label)}</button>` : "";
+          return u ? `<button class="refChip" data-act="unitSelJump" data-id="${uid}">${ic("listTree", 11)}${esc(u.title)}</button>` : "";
         }).join("") : `<span style="color:var(--color-faint);font-size:var(--fs-12);">尚未关联 —— 计划视图有待办提醒</span>`}</div>
       </div>
     </div>`;
@@ -1916,9 +2089,9 @@ function planOverviewHTML() {
   const progRow = (n) => {
     const active = state.selUnit === n.id;
     return `<div class="progRow${n.children ? " parent" : ""}${active ? " active" : ""}" data-act="unitSelJump" data-id="${n.id}" style="padding-left:${8 + n.depth * 16}px;">
-      <span class="treeLabel">${esc(n.label)}</span>
+      <span class="treeLabel">${esc(n.title)}</span>
       ${n.progress ? `<span class="miniBar"><i style="width:${Math.round(n.progress.c / n.progress.t * 100)}%"></i></span><span class="miniNum">${n.progress.c}/${n.progress.t}</span>` : ""}
-      ${chip(PLAN_MAP[n.plan])}${chip(REAL_MAP[n.real])}
+      ${chip(PLAN_MAP[n.planningStatus])}${chip(REAL_MAP[realState(n)])}
     </div>`;
   };
   const flatten = (ns, out) => { ns.forEach(n => { out.push(n); if (n.children && n.open) flatten(n.children, out); }); return out; };
@@ -1978,7 +2151,7 @@ function todoDetailHTML(t) {
 
 function contentSubHead() {
   const meta = {
-    outline: { name: "大纲", kicker: "故事单元 · 规划轴与实现轴", ctx: () => unitById[state.selUnit] ? unitById[state.selUnit].label : "" },
+    outline: { name: "大纲", kicker: "故事单元 · 规划轴与实现轴", ctx: () => unitById[state.selUnit] ? unitById[state.selUnit].title : "" },
     manuscript: { name: "正文", kicker: "章节与正文块 · 草稿 / 正式稿", ctx: () => chapById[state.selChapter] ? chapById[state.selChapter].title : "" },
     characters: { name: "人物", kicker: "角色档案", ctx: () => { const c = CHARS.find(x => x.id === state.selChar); return c ? c.name + " · " + c.role : ""; } },
     locations: { name: "地点", kicker: "地点档案", ctx: () => { const l = LOCS.find(x => x.id === state.selLoc); return l ? l.name + " · " + l.locState : ""; } },
@@ -2078,7 +2251,7 @@ function apCardHTML(g) {
   }
   const curHead = g.op === "delete" ? "当前内容 · 将被删除"
     : g.op === "edit" ? "当前内容 · 将被覆盖"
-    : (g.existing ? "当前内容 · 已存在同名数据" : "当前内容");
+    : (g.existing ? (g.existing.head || "当前内容 · 已存在同名数据") : "当前内容");
   let cur = "";
   if (g.existing) {
     cur = `<div class="apSection">
@@ -2152,7 +2325,7 @@ function renderSettings() {
   } else {
     html = `<div style="text-align:center;padding:26px 0;">
       <div class="brand" style="justify-content:center;margin-bottom:8px;"><span class="brandDot"></span><span class="brandName" style="font-size:16px;">Novel</span></div>
-      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.2<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080</div>
+      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.3<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>大纲对齐 core StoryUnit 模型（泛型树 · 双状态 · leaf）</div>
     </div>`;
   }
   $("settingsContent").innerHTML = html;
@@ -2162,7 +2335,7 @@ function renderSettings() {
 
 /* ================= 工作区菜单 ================= */
 const WS_LIST = [
-  { name: "北河旧事", sub: "13 单元 · 216 段落 · 今天", cur: true },
+  { name: "北河旧事", sub: "15 故事单元 · 216 段落 · 今天", cur: true },
   { name: "雾中灯塔", sub: "34 章 · 12.4 万字 · 3 天前" },
   { name: "新的构思", sub: "未成卷 · 3 条碎片" },
 ];
@@ -2217,6 +2390,7 @@ function renderInfoPop() {
     <h4>重设计要点（相对现状的差异）</h4>
     <ul>
       <li><b>侧栏随视图切换内容</b>：对话 = 会话目录；内容 = 资料位（大纲树 / 正文卷章 / 人物 / 地点）；计划 = 「安排」待办目录。现状是全局侧栏混排两组。</li>
+      <li><b>大纲树对齐 core 模型（StoryUnit 泛型树）</b>：saga 全书 → arc 卷 → sequence 序列 → scene 场景，可省中间层、叶必须是场景（正文段落挂叶、发布「章」从场景选段）；双状态 = 规划（idea 点子 → outlined 已成纲 → ready 可开写）+ 实现（pending 未动笔 → in-progress 写作中 → completed 已完成 / abandoned 废弃），「受阻」由 pending + blockState 推导并展示原因码与依赖；父单元进度由叶单元 rollup；场景叶可挂 <b>leaf 场景计划</b>（人物/地点绑定、事件序列、节奏拍、实体变更）。树形目录任意层级嵌套 + 引导线呈现。</li>
       <li><b>审批面板 = 当前对话的一批审批，且与对话视图绑定</b>：一次工具调用带来的审批作为卡片纵向堆叠、逐项决策，无目录列（对齐现网会话化分组）；切到内容 / 计划视图自动隐藏，回到对话恢复。编辑显示<b>「当前内容 · 将被覆盖」</b>（原文），删除显示<b>「当前内容 · 将被删除」</b>（既有数据），写入遇同名/既有数据同样展示，纯新建则标注「无既有数据」；<b>退出设计模式（ExitComposeMode）</b>为特殊卡片——固定标题「提交设计草稿」，正文渲染 design 文件 markdown 全文（品牌渐变描边）。</li>
       <li><b>审批挂起时状态行显示「正在审批」</b>（沙漏琥珀态），生成中仍为「正在生成」。</li>
       <li><b>执行模式位于输入框底栏左侧</b>（发送 / 暂停在底栏右侧），点击向上弹出下拉列表（图标 + 名称 + 说明）；选择后仅显示「待生效」chip（不带模式名），随下一条消息发出时生效——对齐现网 ComposerModeBar 的会话级权威状态。</li>
@@ -2247,7 +2421,7 @@ document.addEventListener("click", (e) => {
     case "contentTab": state.contentTab = id; renderSidebar(); renderMain(); break;
     case "unitSel": state.selUnit = id; state.contentTab = "outline"; renderSidebar(); renderMain(); break;
     case "unitSelJump":
-      if (e.target.closest(".progRow")) { toast("已定位到大纲：" + unitById[id].label); }
+      if (e.target.closest(".progRow")) { toast("已定位到大纲：" + unitById[id].title); }
       state.contentTab = "outline"; state.selUnit = id; state.view = "content";
       renderTitlebar(); renderSidebar(); renderMain();
       break;

@@ -1,7 +1,7 @@
 /**
  * NewConversationButton
  *
- * 新建对话按钮。
+ * 新建对话按钮（对齐 demo .newConvBtn）：品牌渐变整宽主按钮。
  */
 import { Button } from "../../../shared/primitives/Button.js";
 import { Plus } from "lucide-react";
@@ -14,15 +14,14 @@ export interface NewConversationButtonProps {
 export function NewConversationButton({ onClick, disabled = false }: NewConversationButtonProps) {
   return (
     <Button
-      variant="secondary"
-      size="sm"
+      variant="primary"
       fullWidth
       className="novel-new-conv-btn"
       leadingIcon={<Plus size={14} />}
       onClick={onClick}
       disabled={disabled}
     >
-      创建对话
+      开始一段新的创作
     </Button>
   );
 }

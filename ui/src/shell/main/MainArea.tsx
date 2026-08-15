@@ -48,6 +48,8 @@ export interface MainAreaProps {
   readonly planTodoId: string | null;
   readonly onSelectPlanTodo: (id: string | null) => void;
   readonly onCreateConversation: () => void;
+  /** 打开会话信息面板（inspector conversation 路由；PRD 决议 1） */
+  readonly onOpenConversationInfo?: (conversationId: string) => void;
   readonly onTodoAction?: (id: string, action: string) => void;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
@@ -70,6 +72,7 @@ export const MainArea = memo(function MainArea(props: MainAreaProps) {
           conversationCatalog={props.conversationCatalog}
           onCreateConversation={props.onCreateConversation}
           pendingApprovalCount={props.pendingApprovalCount ?? 0}
+          onOpenConversationInfo={props.onOpenConversationInfo}
           onReferenceClick={props.onReferenceClick}
           resolveReference={props.resolveReference}
           onNotify={props.onNotify}

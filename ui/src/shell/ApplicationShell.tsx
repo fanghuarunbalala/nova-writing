@@ -416,6 +416,14 @@ export function ApplicationShell({
     setPlanTodoId(id);
   }, []);
 
+  // 会话信息面板（PRD 决议 1：并入对话 subHead「更多」，inspector conversation 路由）
+  const handleOpenConversationInfo = useCallback(
+    (conversationId: string) => {
+      inspectorRouter.transition({ kind: "conversation", conversationId });
+    },
+    [inspectorRouter],
+  );
+
   // 稳定回调（memo 边界生效前提：shell 重渲染时子组件 props 引用不变）
   const handleToggleSidebar = useCallback(
     () => setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded")),
@@ -494,6 +502,7 @@ export function ApplicationShell({
           planTodoId={planTodoId}
           onSelectPlanTodo={handleSelectPlanTodo}
           onCreateConversation={handleCreateConversation}
+          onOpenConversationInfo={handleOpenConversationInfo}
           onTodoAction={handleTodoAction}
           onReferenceClick={handleReferenceClick}
           resolveReference={resolveReference}

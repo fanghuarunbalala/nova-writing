@@ -1,10 +1,10 @@
 /**
- * ConversationListItem 视觉（原型 .conv-row + .conv-item + .conv-status + .conv-more）。
+ * ConversationListItem 视觉（对齐 app-redesign demo 的 convItem）。
  *
- * conv-row 为 relative 容器；conv-item 主按钮 padding 8/30，左右 30px 留给
- * status + more；conv-status 左侧绝对定位，generating/failed 时显示；
- * conv-more 右侧绝对定位（始终可见，faint 色，见 ConversationItemMenu.module.css）。
- * title 单行(宋体衬线 14px/600)，不再显示 agentLabel 与时间。
+ * conv-row 为 relative 容器；main 按钮横向排 [图标位 | 标题/副信息两行]，
+ * 右侧留 30px 给 ⋯ 菜单（ConversationItemMenu 绝对定位）与状态点。
+ * 状态覆盖层（.status）绝对定位于图标位（left 3px），generating/failed/
+ * unavailable 时以 spinner 覆盖图标；右缘状态点（.dot）给出持久颜色提示。
  */
 .row {
   position: relative;
@@ -26,9 +26,9 @@
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--space-2px);
-  padding: var(--space-2) var(--space-30px);
+  padding: var(--space-6px) var(--space-30px) var(--space-6px) var(--space-6px);
   border: 0;
   background: none;
   text-align: left;
@@ -37,39 +37,93 @@
   color: inherit;
 }
 
+/* 图标位：26px accent 底色方块（demo .convIcon） */
+.iconBox {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-8-transparent);
+  color: var(--color-accent-ink);
+}
+
+.text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
 .title {
-  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3px);
+  min-width: 0;
+}
+
+.titleText {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-body);
-  font-size: var(--fs-h2);
-  font-weight: var(--fw-600);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-medium);
   color: var(--color-fg);
 }
 
+/* 置顶小图标（替代旧文字 tag） */
 .pinTag {
-  display: inline-block;
-  margin-left: var(--space-6px);
-  padding: 1px var(--space-6px);
-  border-radius: var(--radius-pill);
-  font-size: var(--fs-9-5);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.04em;
-  color: var(--color-accent-ink);
-  background: var(--color-accent-11);
-  vertical-align: 1px;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  color: var(--color-faint);
 }
 
-/* 状态指示器：左侧绝对定位，generating/failed 时显示 */
-.status {
+.subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+}
+
+/* 右缘状态点（demo .statusDot）：generating=warn / failed=danger / unavailable=muted */
+.dot {
   position: absolute;
-  left: var(--space-5px);
+  right: var(--space-28px);
   top: 50%;
   transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.dot-generating {
+  background: var(--color-warn);
+  animation: var(--anim-node-pulse) 2.4s ease-in-out infinite;
+}
+
+.dot-failed {
+  background: color-mix(in oklab, var(--color-danger) 72%, transparent);
+}
+
+.dot-unavailable {
+  background: color-mix(in oklab, var(--color-muted) 60%, transparent);
+}
+
+/* 状态覆盖层：绝对定位于图标位上方（generating/failed/unavailable 显示） */
+.status {
+  position: absolute;
+  left: var(--space-3px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
   border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
   z-index: var(--z-list-item);
   display: grid;
   place-items: center;
@@ -116,4 +170,3 @@
   background: color-mix(in oklab, var(--color-muted) 60%, transparent);
   animation: none;
 }
-

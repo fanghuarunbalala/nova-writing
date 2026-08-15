@@ -67,6 +67,15 @@
   flex: 1;
 }
 
+/* 发送 icon 钮：28px 渐变方形（demo .sendBtn，icon-only） */
+.sendBtn {
+  flex: none;
+  width: var(--space-28px);
+  height: var(--space-28px);
+  padding: 0;
+  justify-content: center;
+}
+
 .input {
   flex: 1;
   min-height: 44px;

@@ -6,3 +6,9 @@
   font-size: var(--fs-12);
   color: var(--color-faint);
 }
+
+/* 时间分组容器（置顶/今天/更早；分组头复用 directory.module.css .groupHead） */
+.group {
+  display: flex;
+  flex-direction: column;
+}

@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ConversationMode } from "@novel/core";
 import { debugLog, type ConversationProjectionErrorSnapshot } from "@novel/core/client";
+import { MoreHorizontal, Pin } from "lucide-react";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
 import { ConversationComposer } from "../../domains/conversation/components/ConversationComposer.js";
@@ -17,10 +18,13 @@ import type { GenStatusProps } from "../../domains/conversation/components/GenSt
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
+import { Icon } from "../../shared/primitives/Icon.js";
+import { IconButton } from "../../shared/primitives/IconButton.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { ConversationProjectionBinding } from "../../domains/conversation/binding/ConversationProjectionBinding.js";
 import { useActiveConversationSession } from "../../domains/conversation/hooks/useActiveConversationSession.js";
 import { useConversationRuntimeStatus } from "../../domains/conversation/hooks/useConversationRuntimeStatus.js";
+import { MainSubHead } from "./MainSubHead.js";
 import { mapProjectionTimeline } from "./chatSurfaceMapper.js";
 import styles from "./ChatSurface.module.css";
 
@@ -31,6 +35,8 @@ export interface ChatSurfaceProps {
   readonly onCreateConversation: () => void;
   /** 本会话待审批数（CMS wait 队列派生；>0 时 composer 等待态） */
   readonly pendingApprovalCount?: number;
+  /** 打开会话信息面板（inspector conversation 路由；PRD 决议 1） */
+  readonly onOpenConversationInfo?: (conversationId: string) => void;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
@@ -41,6 +47,7 @@ export function ChatSurface({
   conversationCatalog,
   onCreateConversation,
   pendingApprovalCount = 0,
+  onOpenConversationInfo,
   onReferenceClick,
   resolveReference,
   onNotify,
@@ -50,11 +57,16 @@ export function ChatSurface({
   if (activeId === undefined) {
     return <ChatEmptyState onCreate={onCreateConversation} />;
   }
+  const activeItem = catalog.conversations.find((item) => item.id === activeId);
   return (
     <ActiveChatSurface
       conversationBinding={conversationBinding}
       conversationId={activeId}
-      title={catalog.conversations.find((item) => item.id === activeId)?.title ?? "对话"}
+      title={activeItem?.title ?? "对话"}
+      agentLabel={activeItem?.agentLabel}
+      pinned={activeItem?.pinned === true}
+      onTogglePin={() => void conversationCatalog.pinConversation(activeId, !(activeItem?.pinned === true))}
+      onOpenInfo={onOpenConversationInfo !== undefined ? () => onOpenConversationInfo(activeId) : undefined}
       pendingApprovalCount={pendingApprovalCount}
       onReferenceClick={onReferenceClick}
       resolveReference={resolveReference}
@@ -67,6 +79,10 @@ interface ActiveChatSurfaceProps {
   readonly conversationBinding: ConversationProjectionBinding | undefined;
   readonly conversationId: string;
   readonly title: string;
+  readonly agentLabel: string | undefined;
+  readonly pinned: boolean;
+  readonly onTogglePin: () => void;
+  readonly onOpenInfo: (() => void) | undefined;
   readonly pendingApprovalCount: number;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
@@ -76,6 +92,11 @@ interface ActiveChatSurfaceProps {
 function ActiveChatSurface({
   conversationBinding,
   conversationId,
+  title,
+  agentLabel,
+  pinned,
+  onTogglePin,
+  onOpenInfo,
   pendingApprovalCount,
   onReferenceClick,
   resolveReference,
@@ -127,6 +148,22 @@ function ActiveChatSurface({
 
   return (
     <div className={styles.surface}>
+      <MainSubHead
+        title={title}
+        sub={agentLabel}
+        actions={
+          <>
+            <IconButton label={pinned ? "取消置顶" : "置顶会话"} onClick={onTogglePin}>
+              <Icon icon={Pin} size="sm" />
+            </IconButton>
+            {onOpenInfo !== undefined ? (
+              <IconButton label="会话信息" onClick={onOpenInfo}>
+                <Icon icon={MoreHorizontal} size="sm" />
+              </IconButton>
+            ) : null}
+          </>
+        }
+      />
       <ConversationTimeline
         conversationId={conversationId}
         items={timeline}

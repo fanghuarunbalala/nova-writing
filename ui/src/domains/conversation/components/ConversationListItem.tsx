@@ -1,17 +1,19 @@
 /**
  * ConversationListItem
  *
- * 侧栏对话行（原型 .conv-row + .conv-item + .conv-status + .conv-more）。
+ * 侧栏对话行（对齐 app-redesign demo 的 convItem）：
+ * [图标位 26px（accent 底 + message 图标；generating/failed/unavailable 时被
+ *  状态 spinner 覆盖）] [标题（+置顶小图标）/ 副信息 agentLabel] [状态点?] [⋯ 菜单]
  *
- * conv-row 为 relative 容器；conv-item 是主按钮（padding 8/30，左右 30px 留给
- * status + more）；conv-status 在左侧绝对定位（generating/failed 时显示 spinner）；
- * conv-more 在右侧绝对定位（始终可见，faint 色）。
- *
+ * .conv-row 为 relative 容器；状态覆盖层（.status）绝对定位于图标位上方，
+ * conv-more（ConversationItemMenu）右侧绝对定位常驻。
  * .conv-row / .pinned 同时作为 :global 全局类名，供 ConversationItemMenu.module.css
  * 跨文件定位 .more 的 pinned 高亮（CSS Modules 默认按文件作用域隔离，跨文件
  * 选择器需借助 :global）。
  */
 import { memo } from "react";
+import { MessageSquare, Pin } from "lucide-react";
+import { Icon } from "../../../shared/primitives/Icon.js";
 import { ConversationItemMenu } from "./ConversationItemMenu.js";
 import styles from "./ConversationListItem.module.css";
 
@@ -63,6 +65,7 @@ export const ConversationListItem = memo(function ConversationListItem({
       // 全局 conv-row/pinned 类名供 ConversationItemMenu.module.css 跨文件定位
       data-conv={item.id}
     >
+      {/* 状态覆盖层：generating/failed/unavailable 时以 spinner 覆盖图标位 */}
       <span
         className={styles.status}
         aria-hidden={statusLabel === undefined ? true : undefined}
@@ -71,11 +74,27 @@ export const ConversationListItem = memo(function ConversationListItem({
         <span className={styles.spinner} />
       </span>
       <button type="button" className={styles.main} onClick={() => onSelect(item.id)}>
-        <span className={styles.title}>
-          {item.title}
-          {item.pinned ? <span className={styles.pinTag}>置顶</span> : null}
+        <span className={styles.iconBox} aria-hidden="true">
+          <Icon icon={MessageSquare} size="xs" />
+        </span>
+        <span className={styles.text}>
+          <span className={styles.title}>
+            <span className={styles.titleText}>{item.title}</span>
+            {item.pinned ? (
+              <span className={styles.pinTag} aria-label="已置顶">
+                <Icon icon={Pin} size="xs" />
+              </span>
+            ) : null}
+          </span>
+          <span className={styles.subtitle}>{item.agentLabel}</span>
         </span>
       </button>
+      {item.status !== undefined ? (
+        <span
+          className={`${styles.dot} ${styles[`dot-${item.status}`] ?? ""}`}
+          aria-hidden="true"
+        />
+      ) : null}
       <ConversationItemMenu
         conversationId={item.id}
         pinned={item.pinned}

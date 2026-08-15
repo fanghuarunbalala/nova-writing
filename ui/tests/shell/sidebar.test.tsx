@@ -110,7 +110,7 @@ describe("Sidebar (context directory)", () => {
     expect(screen.getByText(/对话 tion_a/)).toBeInTheDocument();
     // 对话视图不渲染资料位（PRD SB-1）。
     expect(screen.queryByRole("tab", { name: /大纲/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "创建对话" }));
+    await user.click(screen.getByRole("button", { name: "开始一段新的创作" }));
     expect(onCreateConversation).toHaveBeenCalledTimes(1);
   });
 

@@ -114,18 +114,19 @@ export function ConversationComposer({
         ) : sendDisabled ? (
           <span className={styles.pendingHint}>正在审批</span>
         ) : null}
-        {/* 底栏：模式（左） + 发送（右）——PRD CH-16 */}
+        {/* 底栏：模式（左） + 发送（右，icon 钮）——PRD CH-16/20 */}
         <div className={styles.bottomBar}>
           <ComposerModeBar mode={mode} pendingMode={pendingMode} onChange={onModeChange} disabled={!enabled} />
           <span className={styles.bottomSpacer} />
           <Button
             variant="primary"
+            className={styles.sendBtn}
+            aria-label="发送"
+            title="发送（Enter）"
             leadingIcon={<Icon icon={Send} size="sm" />}
             onClick={submit}
             disabled={!enabled || (disconnected ? false : sendDisabled) || text.trim() === ""}
-          >
-            发送
-          </Button>
+          />
         </div>
       </form>
     </div>

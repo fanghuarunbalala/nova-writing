@@ -26,21 +26,23 @@
   color: var(--color-faint);
 }
 
+/* 审批系统消息（demo .sysMsg）：居中 warn 胶囊，点击打开审批面板 */
 .systemAction {
   display: block;
   margin: var(--space-1) auto;
-  padding: var(--space-3px) var(--space-3);
-  border: 1px solid var(--color-border);
+  padding: var(--space-5px) var(--space-3);
+  border: 1px solid color-mix(in oklab, var(--color-warn) 32%, transparent);
   border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--color-accent-ink);
+  background: var(--color-warn-bg);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  color: var(--color-warn);
   cursor: pointer;
+  transition: box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .systemAction:hover {
-  border-color: color-mix(in oklab, var(--color-accent) 38%, var(--color-border));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-warn) 14%, transparent);
 }
 
 /* 轮次分隔（原型 .turn-sep）：居中 mono faint，两侧渐变细线。 */

@@ -10,7 +10,9 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-2) var(--space-22px) var(--space-132px);
+  /* 底部预留（悬浮 composer 让位）：tokens 缺省 132px；shell 传 bottomReserve 时按
+     composer 实际高度（状态行展开/输入增高会变）内联覆盖——否则末条消息会被悬浮框盖住 */
+  padding: var(--space-2) var(--space-22px) var(--timeline-bottom-reserve);
 }
 
 .inner {

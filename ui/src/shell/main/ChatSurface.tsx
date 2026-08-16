@@ -157,10 +157,26 @@ function ActiveChatSurface({
   const failed = projection?.state === "error";
   const runtime = useConversationRuntimeStatus(projection);
 
-  // 排队中（demo）：生成/审批进行中再发送 → 消息要等上一 run 收口才实际执行
-  // （run-start/user.message 在执行时才发射，时间线迟迟不出现新 user 项）。
-  // 本地计数即时反馈；时间线出现新 user 项（排队 run 开跑）或换会话时收口。
-  const [queuedCount, setQueuedCount] = useState(0);
+  // 排队幽灵项：生成/审批进行中再发送 → 消息要等上一 run 收口才实际执行
+  // （run-start/user.message 在执行时才发射）——本地数组即时回显到时间线末尾；
+  // 真实 user 项出现 N 条（排队 run 开跑）即移除队首 N 条，失败按 id 回收。
+  const [queuedSends, setQueuedSends] = useState<readonly { id: number; text: string; at: number }[]>([]);
+  const queuedSeqRef = useRef(0);
+
+  // composer 实际高度 → 时间线底部预留（悬浮框盖不住末条消息）：状态行展开、
+  // 输入增高都会变，ResizeObserver 实测回填（缺省 132px 由 CSS 回落）
+  const composerRef = useRef<HTMLDivElement>(null);
+  const [composerHeight, setComposerHeight] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const node = composerRef.current;
+    if (node === null || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      setComposerHeight(node.offsetHeight);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const bottomReserve = composerHeight !== undefined ? composerHeight + 16 : undefined;
   const projectionUserCount =
     projection?.timeline.reduce((count, item) => (item.kind === "user" ? count + 1 : count), 0) ?? 0;
   const queuedTrackRef = useRef({ id: conversationId, userCount: projectionUserCount });
@@ -170,8 +186,22 @@ function ActiveChatSurface({
     const switched = track.id !== conversationId;
     const appeared = switched ? 0 : Math.max(0, projectionUserCount - track.userCount);
     queuedTrackRef.current = { id: conversationId, userCount: projectionUserCount };
-    setQueuedCount((current) => (switched ? 0 : Math.max(0, current - appeared)));
+    setQueuedSends((current) => (switched ? [] : current.slice(appeared)));
   }, [conversationId, projectionUserCount]);
+  const queuedCount = queuedSends.length;
+  // 时间线末尾拼接幽灵项（sequence 本地合成，不与 core 事件序号冲突）
+  const timelineWithGhosts = useMemo(
+    () => [
+      ...timeline,
+      ...queuedSends.map((queued) => ({
+        kind: "queued" as const,
+        sequence: 9_000_000 + queued.id,
+        text: queued.text,
+        queuedAt: queued.at,
+      })),
+    ],
+    [timeline, queuedSends],
+  );
 
   // 三态推导（对齐旧版优先级）：failed > waiting（待审批，CMS 队列派生）> generating。
   // thinking 态已随 loop 层丢弃 reasoning delta 移除；waiting 复用 GenStatus 沙漏+摇摆动画。
@@ -232,8 +262,9 @@ function ActiveChatSurface({
       />
       <ConversationTimeline
         conversationId={conversationId}
-        items={timeline}
+        items={timelineWithGhosts}
         streamingSequence={projection?.lastAppliedSequence ?? 0}
+        bottomReserve={bottomReserve}
         onMessageReferenceClick={onReferenceClick}
         resolveReference={resolveReference}
         onNotify={onNotify}
@@ -245,6 +276,7 @@ function ActiveChatSurface({
       )}
       <ConversationComposer
         conversationId={conversationId}
+        containerRef={composerRef}
         enabled={snapshot?.state === "active" && !failed}
         status={status}
         sendDisabled={pendingApprovalCount > 0}
@@ -260,9 +292,10 @@ function ActiveChatSurface({
         onSend={(input) => {
           // 发送失败（会话进程崩溃/超时等）必须显性展示，不吞掉
           debugLog("[renderer] onSend 触发:", input.text.slice(0, 40));
-          // 生成/审批中发送 → 立即计入「排队中」（demo：不等回执/时间线出现）
+          // 生成/审批中发送 → 立即入队幽灵项（demo 方案 A：不等回执/时间线出现）
           const queued = status?.phase === "generating" || status?.phase === "waiting";
-          if (queued) setQueuedCount((current) => current + 1);
+          const queuedId = ++queuedSeqRef.current;
+          if (queued) setQueuedSends((current) => [...current, { id: queuedId, text: input.text, at: Date.now() }]);
           void sendUserMessage(input.text)
             .then((receipt) => {
               debugLog("[renderer] send resolved:", JSON.stringify(receipt));
@@ -272,7 +305,7 @@ function ActiveChatSurface({
             })
             .catch((err: unknown) => {
               debugLog("[renderer] send rejected:", err);
-              if (queued) setQueuedCount((current) => Math.max(0, current - 1));
+              if (queued) setQueuedSends((current) => current.filter((item) => item.id !== queuedId));
               if (err instanceof Error && err.stack !== undefined) {
                 console.error("[renderer] stack:", err.stack.split("\n").slice(0, 6).join(" | "));
               }

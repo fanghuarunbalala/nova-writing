@@ -8,6 +8,7 @@ import { ChatEmptyState } from "../../../src/domains/conversation/components/Cha
 import { ConversationComposer } from "../../../src/domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../../src/domains/conversation/components/ConversationTimeline.js";
 import { GenStatus } from "../../../src/domains/conversation/components/GenStatus.js";
+import { QueuedUserMessage } from "../../../src/domains/conversation/components/QueuedUserMessage.js";
 import { UserMessage } from "../../../src/domains/conversation/components/UserMessage.js";
 import type { ConversationTimelineItem } from "../../../src/domains/conversation/projection/ConversationTimelineItem.js";
 
@@ -52,6 +53,40 @@ describe("ConversationTimeline", () => {
     render(<ConversationTimeline conversationId="c1" items={items} onProposalAction={onProposalAction} />);
     await user.click(screen.getByRole("button", { name: "前往审批 Diff" }));
     expect(onProposalAction).toHaveBeenCalledWith("CS-1", "view-diff");
+  });
+
+  it("排队幽灵项渲染在流式回复之后（生成中发送的本地回显）", () => {
+    const items: ConversationTimelineItem[] = [
+      { kind: "user", sequence: 1, text: "上一条", timestamp: 100 },
+      {
+        kind: "assistant",
+        sequence: 2,
+        agentLabel: "Novel Agent",
+        timestamp: 200,
+        text: "正在流式的回复",
+        cards: [],
+        streaming: true,
+      },
+      { kind: "queued", sequence: 9_000_001, text: "排队消息内容", queuedAt: 1_000 },
+    ];
+    render(<ConversationTimeline conversationId="c1" items={items} />);
+    // 角标是气泡子元素（demo 同构）：「排队中」与秒数是角标内的直接文本
+    expect(screen.getByText("排队中")).toBeInTheDocument();
+    expect(screen.getByText(/^\d+s$/)).toBeInTheDocument();
+    const nodes = screen.getAllByText(/正在流式的回复|排队消息内容/);
+    expect(nodes.map((node) => node.textContent)).toEqual([
+      "正在流式的回复",
+      expect.stringContaining("排队消息内容"),
+    ]);
+  });
+});
+
+describe("QueuedUserMessage", () => {
+  it("renders ghost bubble text and queueing badge", () => {
+    render(<QueuedUserMessage text="第三卷结尾改成开放式" queuedAt={Date.now()} />);
+    expect(screen.getByText(/第三卷结尾改成开放式/)).toBeInTheDocument();
+    expect(screen.getByText("排队中")).toBeInTheDocument();
+    expect(screen.getByText(/^\d+s$/)).toBeInTheDocument();
   });
 });
 

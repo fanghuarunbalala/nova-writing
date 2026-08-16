@@ -27,6 +27,14 @@ export type ConversationTimelineItem =
       readonly timestamp: number;
     }
   | {
+      /** 排队幽灵项（生成/审批中发送的本地回显）：真实 user.message 到达时被替换。
+       *  sequence 为本地合成（9e6+自增），不与 core 事件序号冲突。 */
+      readonly kind: "queued";
+      readonly sequence: number;
+      readonly text: string;
+      readonly queuedAt: number;
+    }
+  | {
       readonly kind: "assistant";
       readonly sequence: number;
       readonly agentLabel: string;

@@ -8,7 +8,7 @@
  * 模式栏为受控组件：mode 来自投影的会话级权威状态，切换由上层 enqueue
  * ConversationModeSetInputEvent（mode 不再随 onSend 丢弃）。
  */
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { Send } from "lucide-react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
@@ -38,6 +38,8 @@ export interface ConversationComposerProps {
   readonly sendDisabled?: boolean;
   /** 运行时传输断开（进程死亡/重启中）：解锁审批阻塞并提示已断开。 */
   readonly disconnected?: boolean;
+  /** 根容器 ref（上层量实际高度 → 时间线底部预留自适应，避免悬浮盖住末条消息）。 */
+  readonly containerRef?: Ref<HTMLDivElement>;
 }
 
 export function ConversationComposer({
@@ -50,6 +52,7 @@ export function ConversationComposer({
   onModeChange = noopModeChange,
   sendDisabled = false,
   disconnected = false,
+  containerRef,
 }: ConversationComposerProps) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -77,7 +80,7 @@ export function ConversationComposer({
   };
 
   return (
-    <div className={styles.composer}>
+    <div className={styles.composer} ref={containerRef}>
       <form
         className={styles.form}
         onSubmit={(event) => {

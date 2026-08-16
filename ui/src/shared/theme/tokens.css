@@ -138,7 +138,12 @@
   --space-14px: 14px;
   --space-18px: 18px;
   --space-22px: 22px;
+  --space-30px: 30px; /* 精确值快照：QueuedUserMessage 角标让位高度 */
   --space-34px: 34px;
+
+  /* 组件级动态预留：时间线底部悬浮 composer 让位（shell 按 composer 实测高度
+     经内联样式覆盖；此处缺省值兜底） */
+  --timeline-bottom-reserve: var(--space-132px);
   --space-15px: 15px;
   --space-17px: 17px;
   --space-26px: 26px;

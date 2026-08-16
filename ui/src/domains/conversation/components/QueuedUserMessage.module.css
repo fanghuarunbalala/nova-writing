@@ -1,0 +1,66 @@
+/**
+ * QueuedUserMessage 视觉（demo .msgUser.ghost / .ghostBadge，docs/design/
+ * app-redesign-demo.html）：UserMessage 同构气泡，降透明度 + 虚线 accent 描边
+ * + surface 混底；琥珀角标绝对定位于气泡左上（跨出气泡上缘）。
+ */
+
+.message {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: var(--space-3);
+}
+
+.body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.text {
+  position: relative;
+  display: inline-block;
+  /* 角标让位高度（约 20px + 上浮 9px）：.enter 的 content-visibility 隐含
+     paint containment，角标不得越出行盒上缘，故气泡下移让位、角标相对气泡上浮 */
+  margin-top: var(--space-30px);
+  padding: var(--space-9px) var(--space-13px);
+  border: 1px dashed color-mix(in oklab, var(--color-accent) 34%, var(--color-border-strong));
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-4px) var(--radius-lg);
+  background: color-mix(in oklab, var(--color-surface-2) 70%, var(--color-surface));
+  color: var(--color-muted);
+  font-family: var(--font-ui);
+  font-size: var(--fs-chat);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0.01em;
+  line-height: 1.6;
+  text-align: left;
+  max-width: 76%;
+  opacity: 0.62;
+}
+
+/* 相对气泡定位（demo .ghostBadge）：贴气泡左上角上浮——不放 .body（flex:1
+   占满整行，left 会落到行最左端，与上一条消息的工具组混杂） */
+.badge {
+  position: absolute;
+  top: calc(-1 * var(--space-9px));
+  left: var(--space-10px);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3px);
+  padding: 1px var(--space-8px);
+  border: 1px solid color-mix(in oklab, var(--color-warn) 26%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.seconds {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-regular);
+  opacity: 0.85;
+}

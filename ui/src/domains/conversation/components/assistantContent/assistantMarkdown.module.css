@@ -54,6 +54,61 @@
   color: var(--color-muted);
 }
 
+/* h4–h6（markdown 全格式样例，demo .mdBody h4-h6）：逐级弱化，h6 降为辅助文字 */
+.markdown h4 {
+  font-size: var(--fs-13);
+}
+
+.markdown h5 {
+  font-size: var(--fs-12-5);
+  color: var(--color-muted);
+}
+
+.markdown h6 {
+  font-size: var(--fs-12);
+  color: var(--color-faint);
+  letter-spacing: 0.05em;
+}
+
+.markdown h4:first-child,
+.markdown h5:first-child,
+.markdown h6:first-child {
+  margin-top: var(--space-1);
+}
+
+/* 行内强调（demo .mdBody del/kbd/a）：删除线淡色 danger 线、kbd 键帽、链接 accent 点下划线 */
+.markdown del {
+  color: var(--color-faint);
+  text-decoration-color: color-mix(in oklab, var(--color-danger) 55%, transparent);
+}
+
+.markdown kbd {
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+  padding: 1px var(--space-5px);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-bottom-width: 2px;
+  color: var(--color-fg);
+}
+
+.markdown a {
+  color: var(--color-accent-ink);
+  text-decoration: underline dotted color-mix(in oklab, var(--color-accent) 55%, transparent);
+  text-underline-offset: 3px;
+}
+
+.markdown a:hover {
+  text-decoration-style: solid;
+}
+
+.markdown hr {
+  border: 0;
+  border-top: 1px solid var(--color-border-strong);
+  margin: var(--space-14px) 0;
+}
+
 .markdown h1:first-child,
 .markdown h2:first-child,
 .markdown h3:first-child {
@@ -92,6 +147,10 @@
   padding-left: var(--space-3);
 }
 
+.markdown tbody tr:nth-child(even) td {
+  background: color-mix(in oklab, var(--color-surface-2) 45%, transparent);
+}
+
 .markdown tr:hover td {
   background: color-mix(in oklab, var(--color-accent) 4%, transparent);
 }
@@ -123,13 +182,220 @@
   font-family: var(--font-kai);
 }
 
-/* 列表：字体/字号/行高继承正文基座（demo .mdBody 无列表覆盖） */
+/* 嵌套引用（demo .mdBody blockquote blockquote）：去楷体缩一档，左线转中性 */
+.markdown blockquote blockquote {
+  background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+  border-left-color: var(--color-border-strong);
+  font-size: 0.94em;
+}
+
+.markdown blockquote p {
+  margin: 0 0 var(--space-6px);
+}
+
+.markdown blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* 列表：字体/字号/行高继承正文基座；无序列表自定义 accent 方点（demo .mdBody ul li::before） */
 .markdown ul,
 .markdown ol {
   margin: var(--space-2) 0 var(--space-1);
   padding-left: var(--space-5);
   display: grid;
   gap: var(--space-1);
+}
+
+.markdown ul {
+  list-style: none;
+}
+
+.markdown ul > li {
+  position: relative;
+}
+
+.markdown ul > li::before {
+  content: "";
+  position: absolute;
+  left: -1em;
+  top: 0.72em;
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--color-accent) 55%, transparent);
+}
+
+/* GFM 任务清单（demo .mdBody .taskBox）：自绘勾选框（禁用态，模型输出只读） */
+.markdown ul.contains-task-list,
+.markdown li.task-list-item {
+  list-style: none;
+}
+
+.markdown li.task-list-item::before {
+  content: none;
+}
+
+.markdown li.task-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8px);
+}
+
+.markdown input[type="checkbox"] {
+  appearance: none;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: var(--space-5px);
+  display: inline-grid;
+  place-content: center;
+  border: var(--space-2px) solid var(--color-border-strong);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  cursor: default;
+}
+
+.markdown input[type="checkbox"]::after {
+  content: "";
+  width: var(--space-5px);
+  height: var(--space-8px);
+  border: solid var(--color-on-accent);
+  border-width: 0 var(--space-2px) var(--space-2px) 0;
+  transform: rotate(45deg);
+  opacity: 0;
+}
+
+.markdown input[type="checkbox"]:checked {
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.markdown input[type="checkbox"]:checked::after {
+  opacity: 1;
+}
+
+/* 代码块（demo .mdBody .codeBlock/.codeHead/pre）：外壳/头/体由组件定制渲染，这里补滚动 */
+.markdown .codeBlock {
+  margin: var(--space-10px) 0 var(--space-14px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  overflow: hidden;
+}
+
+.markdown .codeHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5px);
+  padding: var(--space-5px) var(--space-10px);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+}
+
+.markdown .codeHeadDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--color-accent) 45%, transparent);
+}
+
+.markdown .copyBtn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5px);
+  padding: 1px var(--space-8px);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font: inherit;
+  font-size: var(--fs-10);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.markdown .copyBtn:hover {
+  color: var(--color-accent-ink);
+  border-color: var(--color-accent);
+}
+
+.markdown pre {
+  margin: 0;
+  padding: var(--space-10px) var(--space-14px);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: 1.75;
+  color: var(--color-fg);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+.markdown pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* 脚注（remark-gfm footnotes；demo .mdFootnotes）：上标小号 accent，尾注区虚线分隔 */
+.markdown sup[data-footnote-ref] a,
+.markdown sup a[href^="#user-content-fn"] {
+  font-size: 0.72em;
+  text-decoration: none;
+  padding: 0 var(--space-5px);
+}
+
+.markdown section[data-footnotes] {
+  margin-top: var(--space-14px);
+  padding-top: var(--space-8px);
+  border-top: 1px dashed var(--color-border-strong);
+  font-size: var(--fs-12);
+  color: var(--color-faint);
+  line-height: 1.8;
+}
+
+.markdown section[data-footnotes] ol {
+  padding-left: var(--space-14px);
+}
+
+/* 图片（demo .mdImgPh）：占位块（不加载外链）；由组件定制渲染，此处定义视觉 */
+.markdown .imageWrap {
+  display: block;
+}
+
+.markdown .imagePlaceholder {
+  display: grid;
+  place-items: center;
+  height: 118px;
+  margin: var(--space-10px) 0 var(--space-5px);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(
+      120deg,
+      color-mix(in oklab, var(--color-accent) 7%, transparent),
+      color-mix(in oklab, var(--color-orange) 9%, transparent) 55%,
+      color-mix(in oklab, var(--color-red) 6%, transparent)
+    ),
+    var(--color-surface);
+  color: var(--color-muted);
+  font-family: var(--font-kai);
+  font-size: var(--fs-13);
+}
+
+.markdown .imageCaption {
+  text-align: center;
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  margin-bottom: var(--space-10px);
 }
 
 

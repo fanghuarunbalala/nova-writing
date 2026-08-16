@@ -89,3 +89,58 @@ describe("AssistantMarkdown", () => {
     expect(chip.textContent).toContain("名字");
   });
 });
+
+describe("AssistantMarkdown 全格式排版（demo .mdBody 对齐）", () => {
+  it("代码块：语言标签头 + 复制按钮（点击写剪贴板并 toast）", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const onNotify = vi.fn();
+    render(
+      <AssistantMarkdown
+        text={"```yaml\nunit:\n  id: u6\n```"}
+        onNotify={onNotify}
+      />,
+    );
+    expect(screen.getByText("yaml")).toBeTruthy();
+    const copy = screen.getByRole("button", { name: "复制" });
+    fireEvent.click(copy);
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith("unit:\n  id: u6\n"));
+    expect(onNotify).toHaveBeenCalledWith("success", "代码已复制");
+  });
+
+  it("任务清单：GFM checkbox 渲染（勾选/未勾选）且不产生外层圆点", () => {
+    render(
+      <AssistantMarkdown text={"- [x] 已完成\n- [ ] 待办"} />,
+    );
+    const boxes = screen.getAllByRole("checkbox");
+    expect(boxes.length).toBe(2);
+    expect((boxes[0] as HTMLInputElement).checked).toBe(true);
+    expect((boxes[1] as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("脚注：上标引用 + 尾注区（remark-gfm footnotes）", () => {
+    render(
+      <AssistantMarkdown text={"线索[^1]。\n\n[^1]: 第二章实体变更。"} />,
+    );
+    expect(screen.getByText(/第二章实体变更/)).toBeTruthy();
+  });
+
+  it("图片渲染为占位块（不加载外链），alt 作题注", () => {
+    render(<AssistantMarkdown text={"![北河渡口 · 雾夜](https://example.com/x.png)"} />);
+    expect(screen.queryByRole("img", { name: /北河渡口/ })).toBeTruthy();
+    // 占位块呈现 alt 文案，且不产生真实 <img> 外链请求
+    expect(document.querySelector("img")).toBeNull();
+  });
+
+  it("行内强调族：删除线 / 分割线 / 四级以下标题（kbd 为原始 HTML，安全转义不渲染）", () => {
+    render(
+      <AssistantMarkdown
+        text={"~~旧稿~~ 按键\n\n#### 四级\n\n##### 五级\n\n------\n\n尾段。"}
+      />,
+    );
+    expect(screen.getByText("旧稿").tagName).toBe("DEL");
+    expect(screen.getByText("四级").tagName).toBe("H4");
+    expect(screen.getByText("五级").tagName).toBe("H5");
+    expect(document.querySelector("hr")).not.toBeNull();
+  });
+});

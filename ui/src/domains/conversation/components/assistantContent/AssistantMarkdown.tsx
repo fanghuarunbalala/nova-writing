@@ -13,7 +13,7 @@
  * 跳过 ReactMarkdown 重解析，每次发布的解析成本 O(尾段) 而非 O(全文)。
  * components/urlTransform 经 useMemo 每实例一次（稳定 <a> 元素类型，避免重挂载）。
  */
-import { Fragment, memo, useMemo, useRef } from "react";
+import { Fragment, memo, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ToastKind } from "../../../../shared/state/ToastStore.js";
@@ -126,10 +126,37 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
 
   // 稳定渲染参数（每实例一次）：a 渲染器经 ref 读最新回调——类型引用稳定，
   // chip 点击/解析行为跟随本次 props（gui-performance-2 功能点四）
-  const handlersRef = useRef({ onReferenceClick, resolveReference });
-  handlersRef.current = { onReferenceClick, resolveReference };
-  const components = useMemo<Components>(
-    () => ({
+  const handlersRef = useRef({ onReferenceClick, resolveReference, onNotify });
+  handlersRef.current = { onReferenceClick, resolveReference, onNotify };
+  const components = useMemo<Components>(() => {
+    // 复制按钮（useMemo 内定义一次 → 组件身份稳定；点击时读 handlersRef 最新 onNotify）
+    const CopyCodeButton = ({ code }: { readonly code: string }) => {
+      const [copied, setCopied] = useState(false);
+      return (
+        <button
+          type="button"
+          className={styles.copyBtn}
+          onClick={() => {
+            const notify = handlersRef.current.onNotify;
+            if (navigator.clipboard === undefined) {
+              notify?.("danger", "剪贴板不可用，请手动选择复制");
+              return;
+            }
+            void navigator.clipboard
+              .writeText(code)
+              .then(() => {
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1500);
+                notify?.("success", "代码已复制");
+              })
+              .catch(() => notify?.("danger", "复制失败，请手动选择复制"));
+          }}
+        >
+          {copied ? "已复制" : "复制"}
+        </button>
+      );
+    };
+    return {
       a: ({ href, children }) => {
         if (typeof href === "string" && href.startsWith(REFERENCE_PREFIX)) {
           const reference = parseReferenceHref(href);
@@ -143,9 +170,45 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         }
         return <a href={href}>{children}</a>;
       },
-    }),
-    [],
-  );
+      // 代码块（demo .codeBlock）：语言标签头 + 复制按钮 + 等宽体（```novel 已在
+      // 上游 splitNovelSegments 切出，此处只处理普通 fenced code）
+      pre: ({ children }) => {
+        const child = Array.isArray(children) ? children[0] : children;
+        const className =
+          typeof child === "object" && child !== null && "props" in child
+            ? String((child as { props?: { className?: string } }).props?.className ?? "")
+            : "";
+        const language = /language-([\w-]+)/.exec(className)?.[1];
+        const raw =
+          typeof child === "object" && child !== null && "props" in child
+            ? (child as { props?: { children?: unknown } }).props?.children
+            : undefined;
+        const code = typeof raw === "string" ? raw : "";
+        return (
+          <div className={styles.codeBlock}>
+            <div className={styles.codeHead}>
+              <span className={styles.codeHeadDot} aria-hidden="true" />
+              {language === undefined ? "code" : language}
+              <CopyCodeButton code={code} />
+            </div>
+            <pre>{children}</pre>
+          </div>
+        );
+      },
+      // 图片占位（demo .mdImgPh）：不加载外链（聊天正文防外链追踪/泄漏），
+      // alt 作为占位文案与题注
+      img: ({ alt }) => (
+        <span className={styles.imageWrap}>
+          <span className={styles.imagePlaceholder} role="img" aria-label={alt ?? "图片"}>
+            {alt === undefined || alt === "" ? "图片（占位）" : `${alt}（占位图）`}
+          </span>
+          {alt !== undefined && alt !== "" ? (
+            <span className={styles.imageCaption}>{alt}</span>
+          ) : null}
+        </span>
+      ),
+    };
+  }, []);
   const urlTransform = useMemo(
     () => (url: string) =>
       url.startsWith(REFERENCE_PREFIX) ? url : defaultUrlTransform(url),

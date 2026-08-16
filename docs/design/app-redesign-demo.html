@@ -652,6 +652,11 @@
     padding: 18px 24px 8px;
   }
   .chatInner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  /* 视图切回对话：整条时间线作为一个整体淡入。fresh 常驻不摘——摘类会让被抑制
+     子元素的 animation 从 none 变回 msg-enter 触发整列二次重播；live 追加的消息
+     改用内联 animation（内联优先级高于此抑制规则） */
+  .chatInner.fresh { animation: view-in 0.3s var(--ease-out); }
+  .chatInner.fresh .msgUser, .chatInner.fresh .msgAssistant, .chatInner.fresh .askGroupCard { animation: none; }
 
   .runDivider { display: flex; align-items: center; gap: 12px; color: var(--color-faint); font-size: var(--fs-11); letter-spacing: 0.05em; margin: 8px 0 2px; }
   .runDivider::before, .runDivider::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
@@ -936,10 +941,13 @@
     background: var(--color-warn); color: var(--color-surface);
     font-size: var(--fs-12); font-weight: var(--fw-semibold);
   }
+  /* 消失退场（updateAlertBar 隐藏分支先播再 display:none） */
+  .apAlertBar.leaving { animation: alert-out 0.25s ease-in forwards; }
   @keyframes alert-glow {
     0%, 100% { box-shadow: 0 0 0 0 var(--color-warn-40); }
     55% { box-shadow: 0 0 0 5px transparent; }
   }
+  @keyframes alert-out { to { opacity: 0; transform: translateY(-6px); } }
 
   /* 助理消息头：头像 + 名称 + 时间 + 模式 chip（正文与工具行分层更明确） */
   .msgHead { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
@@ -1240,7 +1248,8 @@
     border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg);
     background: var(--color-surface); box-shadow: var(--shadow-2);
     overflow: hidden;
-    animation: view-in 0.25s var(--ease-out);
+    transform-origin: top center;
+    animation: sheet-in 0.5s var(--ease-out);
   }
   .apModalHead {
     display: flex; align-items: center; gap: 9px; flex: none;
@@ -1257,6 +1266,8 @@
     border-right: 1px solid var(--color-border);
   }
   .apListScroll { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent; }
+  /* 决策脉冲：批准/拒绝/修改或新增的清单行入场高亮一次（apPulseId/apEnterId 置类，渲染后清零） */
+  .apListItem.pulse { animation: appr-in 0.4s var(--ease-out); }
   .apListItem {
     display: flex; align-items: center; gap: 8px;
     padding: 8px 9px; text-align: left;
@@ -1679,14 +1690,18 @@
     display: none; place-items: center;
     background: color-mix(in oklab, var(--color-fg) 22%, transparent);
   }
-  .dialogMask.show { display: grid; }
+  .dialogMask.show { display: grid; animation: mask-in 0.3s var(--ease-out); }
+  /* 关闭走 JS（closeApModal/closeSettings）：先播遮罩淡出 + 弹窗收纸，动画结束后再摘 .show */
+  .dialogMask.closing { animation: mask-out 0.28s ease-in forwards; }
+  .dialogMask.closing .apModal, .dialogMask.closing .dialog { animation: sheet-out 0.24s ease-in forwards; }
   .dialog {
     width: min(560px, 92vw); max-height: 84vh;
     display: flex; flex-direction: column;
     border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg);
     background: var(--color-surface); box-shadow: var(--shadow-2);
     overflow: hidden;
-    animation: view-in 0.25s var(--ease-out);
+    transform-origin: top center;
+    animation: sheet-in 0.5s var(--ease-out);
   }
   .dialogHead {
     display: flex; align-items: center; gap: 8px;
@@ -1818,6 +1833,17 @@
   @keyframes grad-flow { 0%, 100% { background-position: 0% 30%; } 50% { background-position: 100% 70%; } }
   @keyframes msg-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  /* 弹窗抽纸式（macOS sheet）：以顶边为轴从上方抽出展开 + 弹簧回弹；收起为反向回抽 */
+  @keyframes sheet-in {
+    0% { transform: translateY(-46px) scaleY(0.25); opacity: 0; }
+    45% { transform: translateY(0) scaleY(1.07); opacity: 1; }
+    65% { transform: translateY(0) scaleY(0.96); }
+    80% { transform: translateY(0) scaleY(1.02); }
+    100% { transform: translateY(0) scaleY(1); }
+  }
+  @keyframes sheet-out { from { transform: translateY(0) scaleY(1); opacity: 1; } to { transform: translateY(-36px) scaleY(0.2); opacity: 0; } }
+  @keyframes mask-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes mask-out { from { opacity: 1; } to { opacity: 0; } }
   @keyframes spinner-rotate { to { transform: rotate(360deg); } }
   @keyframes draft-cursor { 50% { opacity: 0; } }
   @keyframes node-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
@@ -1826,8 +1852,10 @@
   @keyframes status-drop { 0% { transform: translateY(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(9px); opacity: 0; } }
   @keyframes failed-shake { 0% { transform: translateX(0); } 20% { transform: translateX(-2px); } 40% { transform: translateX(2px); } 60% { transform: translateX(-1px); } 80% { transform: translateX(1px); } 100% { transform: translateX(0); } }
   @keyframes appr-in { 0% { opacity: 0; transform: translateY(-8px); } 55% { background: var(--color-accent-8-t); } 100% { opacity: 1; transform: none; } }
-  @keyframes status-pulse { from { background: color-mix(in oklab, var(--pulse-c) 25%, transparent); } to { background: transparent; } }
   @keyframes cnt-pop { 0% { transform: scale(0.6); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+  @keyframes menu-out { to { opacity: 0; } }
+  /* 菜单统一退场（JS hideMenu 先播动画再摘 .show / 移除；infoPop 带 translateX 定位，退场仅淡出不动 transform） */
+  .wsMenu.closing, .notifMenu.closing, .subMenu.closing, .modeMenu.closing, .infoPop.closing { animation: menu-out 0.15s ease-in forwards; }
 
   /* ============ 窗口尺寸（容器查询；最小窗口 1080，断点 1280 / 1080） ============ */
   @container (width <= 1280px) {
@@ -2951,7 +2979,7 @@ function chatMainHTML() {
       ${ic("hourglass", 15)}<b>审批挂起</b><span>· <span id="alertN">${pendingN()}</span> 项待决，会话已暂停——处理完继续</span>
       <span class="alertBtn">立即处理 ${ic("arrowRight", 11)}</span>
     </div>
-    <div class="chatScroll" id="chatScroll"><div class="chatInner">${chatTimelineHTML()}</div></div>
+    <div class="chatScroll" id="chatScroll"><div class="chatInner fresh">${chatTimelineHTML()}</div></div>
     <div class="composer" data-gen="${state.genState}">
       <div class="composerInner">
         <div class="composerBox">
@@ -3210,7 +3238,10 @@ function contentSubHead() {
 }
 
 function renderMain() {
-  if (state.view === "chat") { mainEl.innerHTML = chatMainHTML(); scrollChat(true); bindChatInput(); updateAlertBar(); return; }
+  if (state.view === "chat") {
+    mainEl.innerHTML = chatMainHTML(); scrollChat(true); bindChatInput(); updateAlertBar();
+    return;
+  }
   if (state.view === "plan") {
     const isOverview = state.planSel === "overview";
     const t = TODOS.find(x => x.id === state.planSel);
@@ -3314,7 +3345,7 @@ function apModalDetailHTML(g) {
 }
 function renderApModal() {
   const mask = $("apMask");
-  if (!state.modalOpen) { mask.classList.remove("show"); mask.innerHTML = ""; updateAlertBar(); return; }
+  if (!state.modalOpen) { mask.classList.remove("show", "closing"); mask.innerHTML = ""; updateAlertBar(); return; }
   const n = pendingN();
   const sel = apGroups[state.apSel] || apGroups[0];
   mask.innerHTML = `
@@ -3322,7 +3353,7 @@ function renderApModal() {
     <div class="apModalHead">
       <span class="hIcon">${ic("shieldCheck", 16)}</span>
       <b>审批 · 本轮工具调用</b>
-      <span class="apCnt${n === 0 ? " zero" : ""}">${n === 0 ? "全部处理完" : n + " 项待决"}</span>
+      <span class="apCnt${n === 0 ? " zero" : ""}${apCntPop ? " pop" : ""}">${n === 0 ? "全部处理完" : n + " 项待决"}</span>
       <span style="flex:1"></span>
       <button class="btn btnGhost btnSm" data-act="apLater">${ic("clock", 12)}稍后处理</button>
       <button class="iconBtn" data-act="apLater" title="收起弹窗">${ic("x", 13)}</button>
@@ -3331,7 +3362,7 @@ function renderApModal() {
       <aside class="apList">
         <div class="apListScroll">
           ${apGroups.map((g, i) => `
-            <button class="apListItem${i === state.apSel ? " active" : ""}" data-act="apSel" data-id="${i}">
+            <button class="apListItem${i === state.apSel ? " active" : ""}${g.id === apPulseId || g.id === apEnterId ? " pulse" : ""}" data-act="apSel" data-id="${i}">
               <span class="apGlyph ${g.kind === "exit" ? "exit" : g.op}">${g.kind === "exit" ? "»" : AP_GLYPH[g.op]}</span>
               <span class="aliText"><b>${esc(g.tool)} · ${esc(g.title)}</b><small>${g.kind === "exit" ? "ExitComposeMode" : ({ add: "写入", edit: "编辑", delete: "删除" }[g.op] || "")}</small></span>
               <span class="apPill ${g.status}">${AP_STATUS_LABEL[g.status]}</span>
@@ -3344,7 +3375,9 @@ function renderApModal() {
       <section class="apDetail">${apModalDetailHTML(sel)}</section>
     </div>
   </div>`;
+  mask.classList.remove("closing");
   mask.classList.add("show");
+  apPulseId = null; apEnterId = null; apCntPop = false;
   updateAlertBar();
 }
 function openApModal() { state.modalOpen = true; renderApModal(); }
@@ -3353,22 +3386,57 @@ function apFinishIfNeeded() {
   if (state.view === "chat") renderMain();
   if (pendingN() > 0) return;
   setTimeout(() => {
-    state.modalOpen = false; renderApModal();
+    closeApModal();
     toast("本轮审批已全部处理，会话继续");
   }, 600);
 }
+/* 收起审批弹窗：先播 sheet-out 收纸 + 遮罩淡出，动画结束后再卸载 DOM（重开由 renderApModal 清 .closing 防竞态） */
+function closeApModal() {
+  if (!state.modalOpen) return;
+  state.modalOpen = false;
+  const mask = $("apMask");
+  mask.classList.add("closing");
+  updateAlertBar();
+  setTimeout(() => {
+    if (!mask.classList.contains("closing")) return;
+    mask.classList.remove("show", "closing");
+    mask.innerHTML = "";
+  }, 300);
+}
 function apLater() {
-  state.modalOpen = false; renderApModal();
+  closeApModal();
   if (pendingN() > 0) toast("已稍后处理——顶部提示条 · 状态行 · 工具行均可唤回审批弹窗");
 }
-/* 挂起提示条（对话视图顶部）：有待决且弹窗收起时常驻，点击唤回 */
+/* 收起设置弹窗：同样先播 sheet-out + 遮罩淡出再摘 .show */
+function closeSettings() {
+  const m = $("settingsMask");
+  if (!m.classList.contains("show") || m.classList.contains("closing")) return;
+  m.classList.add("closing");
+  setTimeout(() => {
+    if (!m.classList.contains("closing")) return;
+    m.classList.remove("show", "closing");
+  }, 300);
+}
+/* 挂起提示条（对话视图顶部）：有待决且弹窗收起时常驻，点击唤回；出现/消失均有动画 */
 function updateAlertBar() {
   const bar = $("apAlertBar");
   if (!bar) return;
   const show = pendingN() > 0 && !state.modalOpen;
-  bar.style.display = show ? "flex" : "none";
   const c = bar.querySelector("#alertN");
   if (c) c.textContent = pendingN();
+  if (show) {
+    bar.classList.remove("leaving");
+    clearTimeout(bar._t);
+    bar.style.display = "flex";
+  } else if (bar.style.display !== "none" && !bar.classList.contains("leaving")) {
+    bar.classList.add("leaving");
+    clearTimeout(bar._t);
+    bar._t = setTimeout(() => {
+      if (!bar.classList.contains("leaving")) return;
+      bar.classList.remove("leaving");
+      bar.style.display = "none";
+    }, 250);
+  }
 }
 
 /* ================= 右栏 · 内容目录 =================
@@ -3520,7 +3588,7 @@ function renderNotifMenu(x, y) {
     <button class="wsItem" data-act="noop">${ic("gear", 13)}<span>通知设置…</span></button>`;
   m.style.left = Math.min(Math.max(8, x), window.innerWidth - 360) + "px";
   m.style.top = Math.min(y, window.innerHeight - 140) + "px";
-  m.classList.add("show");
+  showMenu(m);
 }
 
 /* 对话顶条「更多」会话菜单（挂在 subActions 内，DOM 原地插拔不动输入区） */
@@ -3547,7 +3615,7 @@ function renderWsMenu(x, y) {
     <button class="wsItem" data-act="wsOpenOther">${ic("plus", 13, 2.2)}<span>打开其他项目…</span></button>`;
   m.style.left = Math.min(x, window.innerWidth - 260) + "px";
   m.style.top = y + "px";
-  m.classList.add("show");
+  showMenu(m);
 }
 
 /* ================= demo 控制条 ================= */
@@ -3624,13 +3692,33 @@ function renderChrome() { renderTitlebar(); renderDemoBar(); }
 function renderAll() { renderTitlebar(); renderSidebar(); renderMain(); renderInspector(); renderDemoBar(); renderWelcome(); }
 
 /* ================= 交互（事件委托） ================= */
+/* 菜单淡出退场：先播 menu-out 再摘 .show / 移除；showMenu 清挂起定时器与 .closing（重开防竞态） */
+function hideMenu(el) {
+  if (!el || !el.classList.contains("show")) return;
+  el.classList.add("closing");
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove("show", "closing"), 160);
+}
+function showMenu(el) {
+  clearTimeout(el._t);
+  el.classList.remove("closing");
+  el.classList.add("show");
+}
 document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-act]");
-  if (!e.target.closest("#wsMenu")) $("wsMenu").classList.remove("show");
-  if (!e.target.closest("#notifMenu") && !e.target.closest('[data-act="notifOpen"]')) $("notifMenu").classList.remove("show");
+  if (!e.target.closest("#wsMenu")) hideMenu($("wsMenu"));
+  if (!e.target.closest("#notifMenu") && !e.target.closest('[data-act="notifOpen"]')) hideMenu($("notifMenu"));
   const convMenuEl = document.getElementById("convMenu");
-  if (convMenuEl && !e.target.closest("#convMenu") && !e.target.closest('[data-act="convMenu"]')) convMenuEl.remove();
-  if (state.modeMenuOpen && !e.target.closest("#modeRow")) { state.modeMenuOpen = false; updateModeUI(); }
+  if (convMenuEl && !e.target.closest("#convMenu") && !e.target.closest('[data-act="convMenu"]')) {
+    convMenuEl.classList.add("closing");
+    clearTimeout(convMenuEl._t);
+    convMenuEl._t = setTimeout(() => convMenuEl.remove(), 160);
+  }
+  if (state.modeMenuOpen && !e.target.closest("#modeRow")) {
+    state.modeMenuOpen = false;
+    const mm = document.querySelector(".modeMenu");
+    if (mm) { mm.classList.add("closing"); setTimeout(updateModeUI, 160); } else updateModeUI();
+  }
   /* 提问卡选项点选（.opt 无 data-act；先于 data-act 路由拦截，「其他」输入框点击除外） */
   const askOptEl = e.target instanceof Element ? e.target.closest(".opt[data-qid]") : null;
   if (askOptEl && !askDone && !(e.target instanceof Element && e.target.classList.contains("otherInput"))) {
@@ -3929,14 +4017,14 @@ document.addEventListener("click", (e) => {
     case "convMenu": {
       e.stopPropagation();
       const ex = document.getElementById("convMenu");
-      if (ex) { ex.remove(); break; }
+      if (ex) { ex.classList.add("closing"); clearTimeout(ex._t); ex._t = setTimeout(() => ex.remove(), 160); break; }
       const host = el.closest(".subActions");
       if (host) host.insertAdjacentHTML("beforeend", convMenuHTML());
       break;
     }
     case "convAct": {
       const cm = document.getElementById("convMenu");
-      if (cm) cm.remove();
+      if (cm) { cm.classList.add("closing"); clearTimeout(cm._t); cm._t = setTimeout(() => cm.remove(), 160); }
       toast({
         rename: "重命名对话（演示）",
         copy: "已复制最后一条回复（演示）",
@@ -3950,14 +4038,15 @@ document.addEventListener("click", (e) => {
       state.pinned = !state.pinned;
       toast(state.pinned ? "已置顶《北河旧事》（演示）" : "已取消置顶（演示）");
       break;
-    case "settingsOpen": $("settingsMask").classList.add("show"); renderSettings(); break;
+    case "settingsOpen": { const m = $("settingsMask"); m.classList.remove("closing"); m.classList.add("show"); renderSettings(); break; }
     case "settingsClose": case "settingsCloseMask":
       if (act === "settingsCloseMask" && e.target.closest('[data-noclose="1"]')) break;
-      $("settingsMask").classList.remove("show"); break;
+      closeSettings(); break;
     case "settingsTab": state.settingsTab = id; renderSettings(); break;
     case "infoToggle": {
-      const p = $("infoPop"); p.classList.toggle("show");
-      if (p.classList.contains("show")) renderInfoPop();
+      const p = $("infoPop");
+      if (p.classList.contains("show")) hideMenu(p);
+      else { renderInfoPop(); showMenu(p); }
       renderDemoBar(); break;
     }
     case "barHide":
@@ -3996,7 +4085,7 @@ titlebarEl.addEventListener("dblclick", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (state.modalOpen) { apLater(); return; }
-  if ($("settingsMask").classList.contains("show")) $("settingsMask").classList.remove("show");
+  if ($("settingsMask").classList.contains("show")) closeSettings();
 });
 /* 点审批弹窗遮罩空白 = 稍后处理 */
 $("apMask").addEventListener("click", (e) => {
@@ -4120,18 +4209,20 @@ function refreshGenStatus() {
   const inner = document.querySelector(".composer .statusInner");
   if (inner) inner.innerHTML = genStatusHTML();
 }
-/* 排队幽灵项 HTML（data-at 供等待秒数计时，跨重渲染稳定） */
-function ghostHTML(q) {
-  return `<div class="msgUser ghost" data-at="${q.at}"><span class="ghostBadge">${ic("clock", 10)}排队中 <span class="qSec">0s</span></span>${esc(q.text)}</div>`;
+/* 排队幽灵项 HTML（data-at 供等待秒数计时，跨重渲染稳定）。
+   live=仅即时插入带内联入场动画——重渲染缓存不带（.chatInner.fresh 抑制下
+   静态项不重播，内联动画会盖过抑制导致整列重播） */
+function ghostHTML(q, { live = false } = {}) {
+  const anim = live ? ' style="animation: ghost-in var(--duration-base) var(--ease-out)"' : "";
+  return `<div class="msgUser ghost" data-at="${q.at}"${anim}><span class="ghostBadge">${ic("clock", 10)}排队中 <span class="qSec">0s</span></span>${esc(q.text)}</div>`;
 }
 /* 生成/审批中发送 → 入队：幽灵项即时回显（时间线末尾）+ 状态行计数 */
 function enqueueMsg(text) {
   const q = { text, at: Date.now(), liveIdx: liveMsgs.length };
   queuedMsgs.push(q);
-  const html = ghostHTML(q);
-  liveMsgs.push(html);
+  liveMsgs.push(ghostHTML(q));
   const live = $("liveMsgs");
-  if (live) live.insertAdjacentHTML("beforeend", html);
+  if (live) live.insertAdjacentHTML("beforeend", ghostHTML(q, { live: true }));
   refreshGenStatus();
   renderDemoBar();
   scrollChat();
@@ -4144,6 +4235,8 @@ function flushQueue() {
   if (ghostEl) {
     ghostEl.classList.remove("ghost");
     ghostEl.classList.add("promoted");
+    /* 内联换 ghost-promote：类规则的 animation 被 .chatInner.fresh 抑制规则盖过 */
+    ghostEl.style.animation = "ghost-promote var(--duration-base) var(--ease-out)";
     ghostEl.querySelector(".ghostBadge")?.remove();
   }
   if (q.liveIdx !== undefined) liveMsgs[q.liveIdx] = `<div class="msgUser">${esc(q.text)}</div>`;
@@ -4184,7 +4277,8 @@ function sendMsg() {
   const html = `<div class="msgUser">${esc(text)}</div>`;
   liveMsgs.push(html);
   const live = $("liveMsgs");
-  if (live) live.insertAdjacentHTML("beforeend", html);
+  /* 插入项带内联入场（盖过 .chatInner.fresh 抑制；缓存不带，重渲染不重播） */
+  if (live) live.insertAdjacentHTML("beforeend", `<div class="msgUser" style="animation: msg-enter var(--duration-base) var(--ease-out)">${esc(text)}</div>`);
   demoReply();
 }
 /* 发送后的演示回复（450ms 后收口；收口 → setGen("idle") → flushQueue 接续排队） */
@@ -4208,7 +4302,8 @@ function demoReply() {
       </div>`;
     liveMsgs.push(reply);
     const live2 = $("liveMsgs");
-    if (live2) live2.insertAdjacentHTML("beforeend", reply);
+    /* 插入项带内联入场（同 sendMsg：缓存不带，重渲染不重播） */
+    if (live2) live2.insertAdjacentHTML("beforeend", reply.replace('<div class="msgAssistant">', '<div class="msgAssistant" style="animation: msg-enter var(--duration-base) var(--ease-out)">'));
     setGen("idle");
     scrollChat();
   }, 450);

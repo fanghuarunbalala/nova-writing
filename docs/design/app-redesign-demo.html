@@ -6,10 +6,14 @@
 <title>布局重设计 demo · Novel 创作台</title>
 <style>
   /* ============================================================
-     前端整体布局重设计 demo（单文件，交互式）
+     前端整体布局重设计 demo（单文件，交互式）· v0.8
      基于 theme-candidates-demo-2.html 的四主题 token 体系 + 现有功能结构：
        · 顶栏：侧栏开关 / 品牌 / 工作区 / 中央三视图 tab / 工作区·设置 / 窗口控制（Win·Mac）
-       · 对话视图：左侧会话目录 · 中部对话流（正文/草稿/工具行/输入区/模式/发送·暂停）· 右侧审批面板
+       · 对话视图：左侧会话目录 · 中部对话流（正文/草稿/工具行/输入区/模式/发送·暂停
+         + markdown 全格式样例轮 + 实体标签定位）· 右侧内容目录（大纲/人物/地点，
+         详情卡 + 跳完整档案 + 拖拽调宽）
+       · 审批：整体弹窗（左清单 + 右详情 + 全部批准；稍后处理 → 顶部提示条常驻唤回，
+         处理完不留过往记录）
        · 内容视图：左侧资料位（大纲树 / 正文卷章 / 人物 / 地点）· 右侧具体内容
        · 计划视图：左侧「安排」目录 · 右侧总览（统计/双状态轴/大纲进度）或待办详情
      窗口尺寸：容器查询断点 1280 / 1080；最小窗口 1080（对齐 tokens.css 约定）。
@@ -241,6 +245,8 @@
   }
   .iconBtn:hover { background: var(--color-accent-9); color: var(--color-accent-ink); }
   .iconBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  /* 激活态（如对话顶条的内容目录开关：目录展开时点亮） */
+  .iconBtn.on { background: var(--color-accent-9); color: var(--color-accent-ink); box-shadow: 0 0 0 2px var(--color-accent-8-t); }
 
   .brand { display: flex; align-items: center; gap: 8px; padding: 0 2px; }
   .brandDot {
@@ -696,6 +702,8 @@
   .rsQueued { color: var(--color-warn); font-size: var(--fs-12); font-weight: var(--fw-semibold); }
 
   .toolLine { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; margin-top: 2px; font-size: var(--fs-12); line-height: 1.6; }
+  .toolLine.apToolLink { cursor: pointer; border-radius: 5px; transition: background var(--duration-fast) var(--ease-out); }
+  .toolLine.apToolLink:hover { background: var(--color-accent-8-t); }
   .toolDone { color: var(--color-muted); white-space: nowrap; }
   .toolDone svg { color: var(--color-success); margin-right: 3px; vertical-align: -2px; }
   .toolFailed { color: var(--color-danger); white-space: nowrap; }
@@ -720,6 +728,148 @@
     background: var(--color-accent-8-t);
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   }
+
+  /* ---- markdown 全格式排版（.mdBody 扩展；全部走主题 token，四主题自动适配） ---- */
+  .mdBody h1, .mdBody h2, .mdBody h3, .mdBody h4, .mdBody h5, .mdBody h6 {
+    font-family: var(--font-ui); color: var(--color-fg); font-weight: var(--fw-bold);
+    line-height: 1.4; margin: 18px 0 8px;
+  }
+  .mdBody > :first-child, .mdBody h1:first-child, .mdBody h2:first-child { margin-top: 2px; }
+  .mdBody h1 { font-size: 20px; letter-spacing: 0.01em; }
+  .mdBody h2 { font-size: 17.5px; padding-bottom: 5px; border-bottom: 1px solid var(--color-border); }
+  .mdBody h3 { font-size: 15.5px; }
+  .mdBody h4 { font-size: 14px; }
+  .mdBody h5 { font-size: 13px; }
+  .mdBody h6 { font-size: 12px; color: var(--color-faint); letter-spacing: 0.05em; }
+  .mdBody strong, .mdBody b { font-weight: var(--fw-bold); }
+  .mdBody em, .mdBody i { font-style: italic; }
+  .mdBody del { color: var(--color-faint); text-decoration-color: color-mix(in oklab, var(--color-danger) 55%, transparent); }
+  .mdBody code {
+    font-family: var(--font-mono); font-size: 0.84em;
+    padding: 1px 5px; border-radius: 4px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    color: var(--color-accent-ink);
+  }
+  .mdBody kbd {
+    font-family: var(--font-mono); font-size: 0.78em;
+    padding: 1px 5px; border-radius: 4px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
+    border-bottom-width: 2px;
+    color: var(--color-fg);
+  }
+  .mdBody a {
+    color: var(--color-accent-ink);
+    text-decoration: underline dotted color-mix(in oklab, var(--color-accent) 55%, transparent);
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .mdBody a:hover { text-decoration-style: solid; }
+  .mdBody ul, .mdBody ol { margin: 2px 0 10px; padding-left: 1.5em; }
+  .mdBody li { margin: 2px 0; }
+  .mdBody li > ul, .mdBody li > ol { margin: 2px 0 2px; }
+  .mdBody ul { list-style: none; }
+  .mdBody ul > li { position: relative; }
+  .mdBody ul > li::before {
+    content: ""; position: absolute; left: -1em; top: 0.72em;
+    width: 5px; height: 5px; border-radius: 1.5px;
+    background: color-mix(in oklab, var(--color-accent) 55%, transparent);
+  }
+  .mdBody ul.task { padding-left: 1.35em; }
+  .mdBody ul.task > li::before { content: none; }
+  .mdBody ul.task > li { display: flex; align-items: baseline; gap: 7px; }
+  .mdBody .taskBox {
+    flex: none; width: 14px; height: 14px; margin-top: 4px;
+    display: inline-grid; place-items: center;
+    border: 1.5px solid var(--color-border-strong); border-radius: 4px;
+    font-size: 10px; line-height: 1; color: transparent;
+  }
+  .mdBody .taskBox.done { background: var(--color-success); border-color: var(--color-success); color: var(--color-on-accent); }
+  .mdBody blockquote {
+    margin: 4px 0 10px; padding: 7px 14px;
+    border-left: 2.5px solid var(--color-accent-45);
+    background: var(--color-accent-8-t);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: var(--color-muted);
+  }
+  .mdBody blockquote p { margin: 0 0 6px; }
+  .mdBody blockquote p:last-child { margin-bottom: 0; }
+  .mdBody blockquote blockquote {
+    background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+    border-left-color: var(--color-border-strong);
+    font-size: 0.94em;
+  }
+  .mdBody .codeBlock {
+    margin: 6px 0 12px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    background: var(--color-surface-2); overflow: hidden;
+  }
+  .mdBody .codeHead {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-faint); font-family: var(--font-mono); font-size: var(--fs-10-5);
+    letter-spacing: 0.04em;
+  }
+  .mdBody .codeHead .dotC { width: 7px; height: 7px; border-radius: 50%; background: var(--color-accent-45); }
+  .mdBody pre {
+    margin: 0; padding: 10px 12px;
+    overflow-x: auto;
+    font-family: var(--font-mono); font-size: var(--fs-12); line-height: 1.75;
+    color: var(--color-fg);
+  }
+  .mdBody pre .cmt { color: var(--color-faint); }
+  .mdBody pre .key { color: var(--color-accent-ink); }
+  .mdBody pre .str { color: var(--color-success); }
+  .mdBody table {
+    margin: 6px 0 12px; border-collapse: collapse; width: 100%;
+    font-family: var(--font-ui); font-size: var(--fs-12-5);
+  }
+  .mdBody th, .mdBody td { border: 1px solid var(--color-border); padding: 5px 11px; text-align: left; line-height: 1.6; }
+  .mdBody th { background: var(--color-surface-2); font-weight: var(--fw-semibold); white-space: nowrap; }
+  .mdBody tbody tr:nth-child(even) { background: color-mix(in oklab, var(--color-surface-2) 45%, transparent); }
+  .mdBody hr { border: 0; border-top: 1px solid var(--color-border-strong); margin: 16px 0 14px; }
+  .mdBody sup.fnRef { font-size: 0.72em; }
+  .mdBody sup.fnRef a { margin: 0 1px; text-decoration: none; padding: 0 3px; }
+  .mdBody .mdFootnotes {
+    margin-top: 12px; padding-top: 8px;
+    border-top: 1px dashed var(--color-border-strong);
+    font-size: var(--fs-12); color: var(--color-faint); line-height: 1.8;
+  }
+  .mdBody .mdFootnotes .fnSym { font-family: var(--font-mono); color: var(--color-accent-ink); margin-right: 5px; }
+  .mdBody figure { margin: 6px 0 12px; }
+  .mdBody .mdImgPh {
+    display: grid; place-items: center;
+    height: 118px;
+    border: 1px dashed var(--color-border-strong); border-radius: var(--radius-md);
+    background:
+      linear-gradient(120deg,
+        color-mix(in oklab, var(--color-accent) 7%, transparent),
+        color-mix(in oklab, var(--color-orange) 9%, transparent) 55%,
+        color-mix(in oklab, var(--color-red) 6%, transparent)),
+      var(--color-surface);
+    color: var(--color-muted); font-family: var(--font-kai); font-size: var(--fs-13);
+  }
+  .mdBody figcaption { text-align: center; font-size: var(--fs-11); color: var(--color-faint); margin-top: 5px; }
+
+  /* ---- 实体标签（对话流内 <character_沈砚> 等；点击 → 右栏目录定位 + 展开详情） ---- */
+  .entTag {
+    display: inline-flex; align-items: center; gap: 3px;
+    margin: 0 1px; padding: 0 6px; vertical-align: 1px;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 30%, var(--color-border));
+    border-radius: var(--radius-sm);
+    background: var(--color-accent-8-t); color: var(--color-accent-ink);
+    font-family: var(--font-mono); font-size: 0.82em; line-height: 1.7;
+    cursor: pointer; white-space: nowrap;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .entTag:hover {
+    border-color: var(--color-accent);
+    background: var(--color-accent-11);
+    box-shadow: 0 0 0 2px var(--color-accent-8-t);
+  }
+  .entTag svg { opacity: 0.75; }
 
   .draftPanel {
     margin: 6px 0 10px;
@@ -760,6 +910,36 @@
     transition: all var(--duration-fast) var(--ease-out);
   }
   .sysMsg:hover { box-shadow: 0 0 0 3px var(--color-warn-40); }
+  /* 挂起提示条（审批稍后处理后常驻主区顶部，点击唤回弹窗） */
+  .apAlertBar {
+    flex: none;
+    display: flex; align-items: center; gap: 10px;
+    width: calc(100% - 48px); max-width: 760px;
+    margin: 10px auto 0;
+    padding: 8px 9px 8px 15px;
+    border: 1px solid color-mix(in oklab, var(--color-warn) 42%, transparent);
+    border-radius: var(--radius-pill);
+    background: var(--color-warn-bg); color: var(--color-warn);
+    font-size: var(--fs-12-5);
+    cursor: pointer;
+    animation: msg-enter var(--duration-base) var(--ease-out), alert-glow 2.4s var(--ease-in-out) infinite;
+    transition: box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .apAlertBar:hover { box-shadow: 0 0 0 4px var(--color-warn-40); }
+  .apAlertBar b { font-weight: var(--fw-bold); }
+  .apAlertBar > svg { flex: none; animation: status-sway 2.8s ease-in-out infinite; }
+  .apAlertBar .alertBtn {
+    margin-left: auto; flex: none;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 13px;
+    border-radius: var(--radius-pill);
+    background: var(--color-warn); color: var(--color-surface);
+    font-size: var(--fs-12); font-weight: var(--fw-semibold);
+  }
+  @keyframes alert-glow {
+    0%, 100% { box-shadow: 0 0 0 0 var(--color-warn-40); }
+    55% { box-shadow: 0 0 0 5px transparent; }
+  }
 
   /* 助理消息头：头像 + 名称 + 时间 + 模式 chip（正文与工具行分层更明确） */
   .msgHead { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
@@ -814,6 +994,14 @@
   }
   .rsRow.waiting .rsIcon { color: var(--color-warn); }
   .rsRow.waiting .rsIcon svg { animation: status-sway 2.8s ease-in-out infinite; }
+  /* 审批挂起态：状态行升级为可点胶囊（点击唤回审批弹窗） */
+  .rsRow.apPending {
+    padding: 3px 12px; margin: 0 2px 6px;
+    border: 1px solid color-mix(in oklab, var(--color-warn) 38%, transparent);
+    border-radius: var(--radius-pill);
+    background: var(--color-warn-bg);
+  }
+  .rsRow.apPending:hover { box-shadow: 0 0 0 3px var(--color-warn-40); }
   .rsLabel {
     font-size: var(--fs-12-5); font-weight: var(--fw-bold); letter-spacing: 0.02em; white-space: nowrap;
     background-size: 250% auto;
@@ -919,6 +1107,27 @@
     transition: margin-right 0.26s var(--ease-out), opacity 0.26s var(--ease-out), transform 0.26s var(--ease-out);
   }
   .inspector.closedDock { margin-right: calc(-1 * var(--insp-w)); opacity: 0; pointer-events: none; }
+  /* 拖拽调宽把手（inspector 左缘；≤1280 由容器查询隐藏） */
+  .insGrip {
+    position: absolute; left: -4px; top: 0; bottom: 0; width: 8px;
+    cursor: col-resize; z-index: 22;
+  }
+  .insGrip::after {
+    content: ""; position: absolute; left: 3.5px; top: 0; bottom: 0; width: 1px;
+    background: transparent; transition: background var(--duration-fast) var(--ease-out);
+  }
+  .insGrip:hover::after, .insGrip.dragging::after { background: var(--color-accent); }
+  .gripTip {
+    position: absolute; left: 14px; top: 8px; z-index: 23;
+    padding: 2px 8px; border-radius: var(--radius-sm);
+    background: color-mix(in oklab, var(--color-fg) 88%, transparent);
+    color: var(--color-bg);
+    font-family: var(--font-mono); font-size: var(--fs-10-5);
+    opacity: 0; pointer-events: none; transition: opacity var(--duration-fast) var(--ease-out);
+  }
+  .gripTip.show { opacity: 1; }
+  body.resizing, body.resizing * { cursor: col-resize !important; user-select: none !important; }
+  body.resizing .inspector { transition: none !important; }
 
   .insHead {
     display: flex; align-items: center; gap: 8px; flex: none;
@@ -936,21 +1145,7 @@
   .apCnt.pop { animation: cnt-pop 0.3s var(--ease-out); }
   .insHead .iconBtn { width: 24px; height: 24px; }
 
-  /* 审批列表：当前会话的一批审批纵向堆叠（一次 call 一批一起审，无目录） */
-  .insBody {
-    flex: 1; min-height: 0; overflow-y: auto;
-    display: flex; flex-direction: column; gap: 14px;
-    padding: 12px 14px 18px;
-    scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent;
-  }
-  .apCard {
-    border: 1px solid var(--color-border); border-radius: var(--radius-md);
-    background: var(--color-surface); padding: 12px 14px 12px;
-    box-shadow: var(--shadow-xs);
-  }
-  .apCard.enter { animation: appr-in 0.35s var(--ease-out); }
-  .apCard.pulse { animation: status-pulse 0.6s var(--ease-out); }
-
+  /* 内容目录列表（右栏）：人物/地点行 + 展开详情卡；大纲复用侧栏树样式 */
   .apPill { flex: none; font-size: 10px; font-weight: var(--fw-bold); border-radius: var(--radius-pill); padding: 1px 6px; }
   .apPill.pending { background: var(--color-warn-bg); color: var(--color-warn); }
   .apPill.approved { background: var(--color-success-bg); color: var(--color-success); }
@@ -1037,6 +1232,96 @@
     font-family: inherit; font-size: var(--fs-12-5); resize: vertical;
   }
   .apComment:focus { outline: none; border-color: var(--color-accent); }
+
+  /* ============ 审批整体弹窗（左清单 + 右详情；阻塞式决策） ============ */
+  .apModal {
+    width: min(920px, 94vw); height: min(640px, 88vh);
+    display: flex; flex-direction: column;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg);
+    background: var(--color-surface); box-shadow: var(--shadow-2);
+    overflow: hidden;
+    animation: view-in 0.25s var(--ease-out);
+  }
+  .apModalHead {
+    display: flex; align-items: center; gap: 9px; flex: none;
+    padding: 11px 14px 11px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-chrome-bg);
+  }
+  .apModalHead .hIcon { color: var(--color-warn); display: inline-flex; }
+  .apModalHead b { font-size: var(--fs-13); }
+  .apModalBody { flex: 1; min-height: 0; display: flex; }
+  .apList {
+    width: 252px; flex: none;
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--color-border);
+  }
+  .apListScroll { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent; }
+  .apListItem {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 9px; text-align: left;
+    border: 1px solid transparent; border-radius: var(--radius-sm);
+    background: transparent; cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .apListItem:hover { background: var(--color-surface-2); }
+  .apListItem.active {
+    background: var(--color-accent-9);
+    border-color: color-mix(in oklab, var(--color-accent) 26%, transparent);
+  }
+  .apListItem .apGlyph { width: 17px; font-size: var(--fs-13); }
+  .aliText { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .aliText b { font-size: var(--fs-12-5); font-weight: var(--fw-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .aliText small { font-size: var(--fs-10-5); color: var(--color-faint); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .apListFoot { flex: none; padding: 10px; border-top: 1px solid var(--color-border); }
+  .apListFoot .btn { width: 100%; justify-content: center; }
+  .apDetail { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .apDetailScroll {
+    flex: 1; min-height: 0; overflow-y: auto;
+    padding: 14px 18px 16px;
+    scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  }
+  .apDetail .apTitle { font-size: 15px; }
+  .apDetailFoot { flex: none; border-top: 1px solid var(--color-border); padding: 10px 16px 12px; background: var(--color-surface); }
+  .apDetailFoot .apActions { position: static; border-top: 0; padding-top: 0; background: none; backdrop-filter: none; }
+
+  /* ============ 右栏 · 内容目录（人物/地点行展开详情卡 + 跳转完整档案） ============ */
+  .rowChev { margin-left: auto; flex: none; color: var(--color-faint); display: grid; place-items: center; transition: transform .18s var(--ease-out); }
+  .dirRow.open .rowChev { transform: rotate(90deg); }
+  .dirDetail {
+    display: none;
+    margin: 2px 6px 8px 30px;
+    padding: 10px 12px 11px;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 22%, var(--color-border));
+    border-left: 2.5px solid var(--color-accent-45);
+    border-radius: var(--radius-sm);
+    background: color-mix(in oklab, var(--color-accent-8-t) 40%, var(--color-surface));
+  }
+  .dirDetail.show { display: block; animation: view-in 0.2s var(--ease-out); }
+  .ddHead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .ddHead .avatar { width: 24px; height: 24px; font-size: 11px; }
+  .ddHead .convIcon { width: 24px; height: 24px; }
+  .ddHead b { font-size: var(--fs-12-5); font-weight: var(--fw-semibold); }
+  .ddHead small { display: block; font-size: var(--fs-10-5); color: var(--color-faint); }
+  .ddSec { font-size: var(--fs-11-5); line-height: 1.7; color: var(--color-muted); margin-bottom: 6px; }
+  .ddSec > span:first-child {
+    display: block; margin-bottom: 1px;
+    font-size: 10px; font-weight: var(--fw-bold); color: var(--color-faint); letter-spacing: 0.06em;
+  }
+  .ddChips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .ddGo {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin-top: 3px; padding: 0; border: 0; background: none;
+    color: var(--color-accent-ink); font-size: var(--fs-11-5); font-weight: var(--fw-semibold);
+    cursor: pointer;
+  }
+  .ddGo:hover { text-decoration: underline; }
+  @keyframes row-flash {
+    0% { background: var(--color-accent-11); box-shadow: 0 0 0 0 var(--color-accent-45); }
+    60% { background: var(--color-accent-8-t); }
+    100% { background: transparent; box-shadow: 0 0 0 6px transparent; }
+  }
+  .dirRow.flash { animation: row-flash 1.8s var(--ease-out); border-radius: var(--radius-sm); }
 
   /* ============ 遮罩 / 抽屉 / 弹层 ============ */
   .scrim {
@@ -1225,7 +1510,7 @@
   .subMenuItem.danger:hover { background: var(--color-danger-12); }
 
   .dialogMask {
-    position: fixed; inset: 0; z-index: 75;
+    position: fixed; inset: 0; z-index: 115; /* 高于 demo 控制条(110)，弹窗打开时不被遮挡 */
     display: none; place-items: center;
     background: color-mix(in oklab, var(--color-fg) 22%, transparent);
   }
@@ -1383,6 +1668,8 @@
   @container (width <= 1280px) {
     .sidebar { --sidebar-w: 238px; }
     .inspector { --insp-w: 340px; }
+    /* 窄档禁用拖拽调宽（宽度回落到断点分档，拖宽仅在 >1280 生效） */
+    .insGrip { display: none; }
   }
   @container (width <= 1080px) {
     /* 审批面板脱离文档流，变右缘覆盖抽屉 */
@@ -1442,6 +1729,7 @@
 </div>
 
 <div class="infoPop" id="infoPop"></div>
+<div class="dialogMask" id="apMask"></div>
 <div class="toast" id="toast"></div>
 <div class="demoBar" id="demoBar"></div>
 <button class="iconBtn barToggle" id="barToggle" data-act="barShow" style="display:none; background: var(--color-surface); box-shadow: var(--shadow-2); border:1px solid var(--color-border-strong);" title="展开 demo 控制条"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3"/><path d="M14 2v4M8 10v4M16 18v4"/></svg></button>
@@ -1730,6 +2018,19 @@ const LOCS = [
     related: ["u6", "u7"] },
 ];
 
+/* 实体标签：<character_沈砚> / <location_县档案房> —— 点击在右栏内容目录定位并展开详情卡 */
+const ENT = {
+  char: { tab: "characters", label: "人物", list: CHARS, icon: "userRound", selKey: "selChar" },
+  loc: { tab: "locations", label: "地点", list: LOCS, icon: "mapPin", selKey: "selLoc" },
+};
+const entTag = (type, id) => {
+  const meta = ENT[type];
+  const e = meta.list.find(x => x.id === id);
+  const name = e ? e.name : id;
+  return `<button class="entTag" data-act="entLocate" data-type="${type}" data-id="${id}" title="在右栏目录定位：${meta.label} › ${name}">${ic(meta.icon, 10.5)}&lt;${type === "char" ? "character" : "location"}_${esc(name)}&gt;</button>`;
+};
+
+
 const STATS = [
   { num: "15", label: "故事单元", note: "全书 1 · 卷 3 · 序列 1 · 场景 10" },
   { num: "4", label: "角色", note: "1 主角 · 3 配角" },
@@ -1804,8 +2105,10 @@ const state = {
   selUnit: "u2", selChapter: "c2", selChar: "ch1", selLoc: "l1",
   planSel: "overview", mode: "compose", pendingMode: null, modeMenuOpen: false, genState: "generating",
   sidebarCollapsed: false, maximized: false, ws: "北河旧事", pinned: false,
-  approvalOpen: true, settingsTab: "appearance", booted: false,
-  vpMid: false,
+  dirOpen: true, dirTab: "outline", expandedDir: null, insW: null,
+  modalOpen: false, apSel: 0, apShownOnce: false,
+  settingsTab: "appearance", booted: false,
+  vpMid: false, vpNarrow: false,
 };
 /* 会话内新消息（重渲染不丢失） */
 const liveMsgs = [];
@@ -1916,6 +2219,11 @@ function bootIntoApp(title, steps, after) {
     frame.classList.add("bootIn");
     setTimeout(() => frame.classList.remove("bootIn"), 1000);
     if (after) after();
+    /* 进入应用后首次演示：审批弹窗自动弹出一次（稍后处理可收起，提示条常驻唤回） */
+    if (!state.apShownOnce) {
+      state.apShownOnce = true;
+      setTimeout(openApModal, 1100);
+    }
   });
 }
 
@@ -1982,13 +2290,14 @@ function convRow({ title, meta, icon, dot, active, pin }) {
   </div>`;
 }
 
-/* 大纲树：任意层级嵌套 + 引导线（saga/arc/sequence/… 可省中间层，叶为 scene） */
-function treeNodeHTML(n) {
+/* 大纲树：任意层级嵌套 + 引导线（saga/arc/sequence/… 可省中间层，叶为 scene）；
+   act 参数：内容视图左栏用 unitSel（就地选中），右栏内容目录用 unitSelJump（跳到内容视图） */
+function treeNodeHTML(n, act = "unitSel") {
   const isParent = !!n.children;
   const open = !!n.open;
   const active = state.selUnit === n.id;
   const real = realState(n);
-  const row = `<div class="dirRow treeRow${isParent ? " parent" : " leaf"}${active ? " active" : ""}${isParent && open ? " open" : ""}" data-act="unitSel" data-id="${n.id}" title="${esc(n.title)} · ${n.scope}">
+  const row = `<div class="dirRow treeRow${isParent ? " parent" : " leaf"}${active ? " active" : ""}${isParent && open ? " open" : ""}" data-act="${act}" data-id="${n.id}" title="${esc(n.title)} · ${n.scope}">
     ${isParent
       ? `<span class="chev" data-act="treeChev" data-id="${n.id}">${ic("chevRight", 12, 2.2)}</span>`
       : `<span class="treeTick"></span>`}
@@ -1997,7 +2306,7 @@ function treeNodeHTML(n) {
     ${real === "blocked" || real === "abandoned" ? "" : (n.progress ? `<span class="miniNum">${n.progress.c}/${n.progress.t}</span>` : "")}
     ${chip(REAL_MAP[real])}
   </div>`;
-  return `<div class="treeNode">${row}${isParent && open ? `<div class="treeChildren">${n.children.map(treeNodeHTML).join("")}</div>` : ""}</div>`;
+  return `<div class="treeNode">${row}${isParent && open ? `<div class="treeChildren">${n.children.map(c => treeNodeHTML(c, act)).join("")}</div>` : ""}</div>`;
 }
 
 function contentSidebarHTML() {
@@ -2015,7 +2324,7 @@ function contentSidebarHTML() {
         <button class="iconBtn" data-act="treeAll" data-id="open" title="展开全部">${ic("expand", 12)}</button>
         <button class="iconBtn" data-act="treeAll" data-id="close" title="折叠全部">${ic("collapse", 12)}</button>
       </span></div>
-    <div class="sideScroll">${OUTLINE.map(treeNodeHTML).join("")}
+    <div class="sideScroll">${OUTLINE.map(n => treeNodeHTML(n)).join("")}
       <div class="treeLegend">
         <span class="legendLine">saga 全书 → arc 卷 → sequence 序列 → scene 场景（叶 = 场景，正文挂叶）</span>
         <span class="legendLbl">规划</span>${chip(PLAN_MAP.idea)}${chip(PLAN_MAP.outlined)}${chip(PLAN_MAP.ready)}
@@ -2107,12 +2416,82 @@ function renderSidebar() {
   sidebarEl.classList.toggle("collapsed", state.sidebarCollapsed);
   updateScrims();
 }
-/* 窄窗遮罩：≤1080 审批覆盖抽屉（审批仅对话视图显示；最小窗口 1080，无更窄档） */
+/* 窄窗遮罩：≤1080 右栏目录变覆盖抽屉（仅对话视图显示；最小窗口 1080，无更窄档） */
 function updateScrims() {
-  $("inspScrim").classList.toggle("show", state.vpMid && state.approvalOpen && state.view === "chat");
+  $("inspScrim").classList.toggle("show", state.vpMid && state.dirOpen && state.view === "chat");
 }
 
 /* ================= 主区 ================= */
+/* markdown 全格式渲染样例（自描述：小节标题即格式名；全部走主题 token） */
+function mdShowcaseHTML() {
+  return `
+  <h2>标题 Heading（h1–h6 逐级）</h2>
+  <h1>一级标题 · 全书名</h1>
+  <h2>二级标题 · 卷名</h2>
+  <h3>三级标题 · 章名</h3>
+  <h4>四级标题 · 场景</h4>
+  <h5>五级标题 · 小节</h5>
+  <h6>六级标题 · 备注（弱化为辅助文字）</h6>
+  <h2>行内强调</h2>
+  <p><b>粗体</b>、<i>斜体</i>、<b><i>粗斜体</i></b>、<del>删除线</del>、<code>行内代码</code>、<a data-act="mdLink">行内链接</a>，以及按键 <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 发送。</p>
+  <h2>列表</h2>
+  <ul>
+    <li>无序列表：雾夜的调子——梆子三长一短</li>
+    <li>嵌套子项
+      <ul>
+        <li>第二层：灯笼灭而复亮</li>
+        <li>第二层：井台成了一团墨影</li>
+      </ul>
+    </li>
+  </ul>
+  <ol>
+    <li>有序列表：调卷（丙三七出架）</li>
+    <li>夜话（证词互相拆台）</li>
+    <li>断缆（留一个不揭的「谁割的」）</li>
+  </ol>
+  <ul class="task">
+    <li><span class="taskBox done">${ic("check", 9, 3)}</span><span>任务清单 · 已完成：第 1 章 初稿</span></li>
+    <li><span class="taskBox"></span><span>任务清单 · 待办：第 4 章成纲（受阻，等待第 2 章定稿）</span></li>
+  </ul>
+  <h2>引用</h2>
+  <blockquote>
+    <p>「那年也是这样的雨。你问的船工，三十年里我只见过他一个，雾夜肯摆渡的。」</p>
+    <blockquote><p>嵌套引用——老书办的补充：那晚的灯，比平时多亮了一刻钟。</p></blockquote>
+  </blockquote>
+  <h2>代码块</h2>
+  <div class="codeBlock">
+    <div class="codeHead"><span class="dotC"></span>yaml · story-unit</div>
+    <pre><span class="cmt"># 场景单元（scope: scene，叶节点）</span>
+<span class="key">unit:</span>
+  <span class="key">id:</span> <span class="str">u6</span>
+  <span class="key">title:</span> <span class="str">第 6 章 · 旧案卷宗</span>
+  <span class="key">scope:</span> <span class="str">scene</span>
+  <span class="key">planningStatus:</span> <span class="str">outlined</span>
+  <span class="key">intent:</span> <span class="str">周慎调卷，旧案与铜符缺口对上。</span></pre>
+  </div>
+  <h2>表格</h2>
+  <table>
+    <thead><tr><th>人物</th><th>身份</th><th>出场章</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr><td>林晚</td><td>主角 · 佩符人</td><td>第 1–3 章</td><td>写作中</td></tr>
+      <tr><td>沈砚</td><td>配角 · 船工</td><td>第 1、4 章</td><td>写入待审批</td></tr>
+      <tr><td>周慎</td><td>配角 · 捕头</td><td>第 6–7 章</td><td>已成纲</td></tr>
+    </tbody>
+  </table>
+  <h2>分割线</h2>
+  <hr>
+  <h2>图片</h2>
+  <figure>
+    <div class="mdImgPh">北河渡口 · 雾夜（占位图）</div>
+    <figcaption>demo 中图片以占位块呈现，真实实现走图片资源</figcaption>
+  </figure>
+  <h2>脚注 Footnote</h2>
+  <p>铜符缺口与来处有关<sup class="fnRef"><a data-act="fnGo" title="跳到页末注释">[1]</a></sup>，这是全书最早已埋下的线索之一。</p>
+  <div class="mdFootnotes">
+    <div><span class="fnSym">[1]</span>第 2 章 entityChanges：knowledge——「确认铜符缺口与来处有关」。</div>
+  </div>`;
+}
+
 function chatTimelineHTML() {
   /* 每轮助手消息：头（头像/名称/时间/模式）→ 可选前言 → 工具调用带（夹在正文中间）→ 最后一次 call 的返回正文 */
   const head = (time) => `
@@ -2132,7 +2511,7 @@ function chatTimelineHTML() {
       </div>
       <div class="mdBody">
         <p>第二卷「雾锁」现状：<b>已成纲 · 未动笔</b>，父单元进度 0/3——「旧案重启 · 档案房线」序列两章（第 6、7 章，已成纲、草稿已成），第 8 章「断缆」还只是点子。</p>
-        <p>建议从档案房线开笔：第 6 章调卷先行，第 7 章夜话的证词拆台才有着力点；「断缆」等线索对齐后再成纲。</p>
+        <p>建议从档案房线开笔：先让 ${entTag("char", "ch3")} 在 ${entTag("loc", "l4")} 调卷，第 7 章夜话的证词拆台才有着力点。点正文里的实体标签，可在右栏内容目录直接定位对应档案。</p>
       </div>
     </div>
     <div class="runDivider"><span>第 2 轮 · 大纲核对</span></div>
@@ -2144,18 +2523,28 @@ function chatTimelineHTML() {
         <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}NovelOutlineRead · u2（含 leaf）</span></div>
       </div>
       <div class="mdBody">
-        <p>大纲定位：主观视角的追逃，悬念保留到最后——leaf 写明「全程主观视角，不越界」，节奏拍为 上升 → 保持 → 转折。现稿第 2、3 段确实滑向了全知（「她认得这条路」以下）。建议改写焦点：只写林晚看得见、听得见的。</p>
+        <p>大纲定位：主观视角的追逃，悬念保留到最后——leaf 写明「全程主观视角，不越界」，节奏拍为 上升 → 保持 → 转折。现稿第 2、3 段确实滑向了全知（「她认得这条路」以下）。建议改写焦点：只写 ${entTag("char", "ch1")} 看得见、听得见的。</p>
       </div>
     </div>
-    <div class="runDivider"><span>第 3 轮 · 追逃段修订</span></div>
-    <div class="msgUser">把第二章的追逃段改成林晚的主观视角，悬念保留到最后。</div>
+    <div class="runDivider"><span>第 3 轮 · 排版样例</span></div>
+    <div class="msgUser">给我一条消息，把你会的 markdown 排版全部过一遍，我看看渲染效果。</div>
+    <div class="msgAssistant">
+      ${head("今天 14:15")}
+      <div class="mdBody"><p>好——下面这条正文覆盖常用 markdown 格式的渲染样例，小节标题即格式名：</p></div>
+      <div class="mdBody">${mdShowcaseHTML()}</div>
+    </div>
+    <div class="runDivider"><span>第 4 轮 · 追逃段修订 + 设计草稿</span></div>
+    <div class="msgUser">把第二章的追逃段改成林晚的主观视角，然后按这轮讨论出一份二卷设计草稿，一起给我审。</div>
     <div class="msgAssistant">
       ${head("今天 14:20")}
-      <div class="mdBody"><p>按 leaf 的节奏拍重写：视线收窄到雨幕与灯笼的光斑。先取旧稿比对，再落修订。</p></div>
+      <div class="mdBody"><p>按 leaf 的节奏拍重写追逃段（只写 ${entTag("char", "ch1")} 看得见、听得见的），并把二卷设计整理成草稿——<b>4 项变更待审批</b>，审批弹窗即将弹出。</p></div>
       <div class="toolGroup">
         <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}NovelOutlineRead · u2（含 leaf）</span></div>
         <div class="toolLine"><span class="toolFailed">${ic("x", 12, 2.2)}NovelParagraphRead 失败：北河渡口 · 旧稿</span></div>
-        <div class="toolLine"><span class="toolRunning"><span class="spinner"></span>NovelParagraphWrite · 追逃段修订<span class="toolSec" id="toolSecTick">12s</span></span></div>
+        <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}NovelParagraphWrite · 追逃段修订（12s）</span></div>
+        ${pendingN() > 0
+          ? `<div class="toolLine apToolLink" data-act="apModalOpen" title="打开审批弹窗"><span class="toolRunning"><span class="spinner"></span>等待审批 · ${pendingN()} 项（角色写入 / 正文编辑 / 碎片删除 / 设计草稿）—— 点击处理</span></div>`
+          : `<div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}审批完成 · 4 项已处理（14:31）</span></div>`}
       </div>
       <div class="mdBody">
         <p>已按林晚的主观视角重写本段：删去全知描写两处，铜符来历留白作钩子。修订稿如下，供审阅。</p>
@@ -2166,7 +2555,9 @@ function chatTimelineHTML() {
         <div class="draftBody">雨点砸在青石板上，林晚攥紧了袖中那半枚铜符。巷口的灯笼灭了又亮，像谁在她身后数着她的脚步。她不敢回头——回头的人，没有一个走到过北桥。<span class="cursor"></span></div>
       </div>
     </div>
-    <div class="sysMsg" data-act="insOpen" title="打开审批面板">${ic("shieldCheck", 13)}角色写入 · 沈砚 待审批 —— 点击查看</div>
+    ${pendingN() > 0
+      ? `<div class="sysMsg" data-act="apModalOpen" title="打开审批弹窗">${ic("shieldCheck", 13)}4 项变更待审批（含设计草稿）—— 点击处理</div>`
+      : ""}
     <div id="liveMsgs" style="display:flex;flex-direction:column;gap:16px;">${liveMsgs.join("")}</div>`;
 }
 
@@ -2181,11 +2572,14 @@ function genStatusHTML() {
     </div>`;
   }
   const s = state.genState;
-  return `<div class="rsRow ${s}" data-act="genCycle" title="演示：点击切换运行状态">
+  /* 审批挂起时状态行升级为可点胶囊：点击唤回审批弹窗 */
+  const apPend = s === "waiting" && pendingN() > 0;
+  return `<div class="rsRow ${s}${apPend ? " apPending" : ""}" ${apPend ? 'data-act="apModalOpen" title="打开审批弹窗"' : 'data-act="genCycle" title="演示：点击切换运行状态"'}>
     <span class="rsIcon">${ic0(RS_ICONS[s])}${s === "generating" ? '<span class="rsInk"></span>' : ""}</span>
     <span class="rsLabel">${s === "generating" ? "正在生成" : "正在审批"}</span>
     <span class="rsSeconds" id="genSec">0s</span>
-    ${queuedMsgs.length > 0 ? `<span class="rsQueued">· 排队中 ${queuedMsgs.length} 条</span>` : ""}
+    ${apPend ? `<span class="rsHint" style="font-size:var(--fs-11);color:var(--color-faint);">· ${pendingN()} 项待决，点击处理（发送已暂停）</span>` : ""}
+    ${!apPend && queuedMsgs.length > 0 ? `<span class="rsQueued">· 排队中 ${queuedMsgs.length} 条</span>` : ""}
   </div>`;
 }
 function ic0(path) { return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`; }
@@ -2217,11 +2611,16 @@ function updateModeUI() {
 function chatMainHTML() {
   return `
     <div class="subHead">
-      <div class="subTitle"><b>《北河旧事》</b><span class="kicker">第 2 章 · 追逃段修订 · 第 3 轮</span></div>
+      <div class="subTitle"><b>《北河旧事》</b><span class="kicker">第 2 章 · 追逃段修订 · 第 4 轮</span></div>
       <div class="subActions">
+        <button class="iconBtn dirToggleBtn${state.dirOpen ? " on" : ""}" data-act="insToggle" title="${state.dirOpen ? "收起内容目录" : "展开内容目录"}">${ic("listTree", 14)}</button>
         <button class="iconBtn" data-act="convPin" title="置顶会话">${ic("pin", 14)}</button>
         <button class="iconBtn" data-act="convMenu" title="更多">${ic("more", 14)}</button>
       </div>
+    </div>
+    <div class="apAlertBar" id="apAlertBar" data-act="apModalOpen" title="打开审批弹窗" style="display:none;">
+      ${ic("hourglass", 15)}<b>审批挂起</b><span>· <span id="alertN">${pendingN()}</span> 项待决，会话已暂停——处理完继续</span>
+      <span class="alertBtn">立即处理 ${ic("arrowRight", 11)}</span>
     </div>
     <div class="chatScroll" id="chatScroll"><div class="chatInner">${chatTimelineHTML()}</div></div>
     <div class="composer" data-gen="${state.genState}">
@@ -2482,7 +2881,7 @@ function contentSubHead() {
 }
 
 function renderMain() {
-  if (state.view === "chat") { mainEl.innerHTML = chatMainHTML(); scrollChat(true); bindChatInput(); return; }
+  if (state.view === "chat") { mainEl.innerHTML = chatMainHTML(); scrollChat(true); bindChatInput(); updateAlertBar(); return; }
   if (state.view === "plan") {
     const isOverview = state.planSel === "overview";
     const t = TODOS.find(x => x.id === state.planSel);
@@ -2510,18 +2909,14 @@ const apGroups = [
   { id: ++apSeq, ...structuredClone(AP_TEMPLATES[5]), status: "pending" },
   { id: ++apSeq, ...structuredClone(AP_TEMPLATES[1]), status: "pending" },
   { id: ++apSeq, ...structuredClone(AP_TEMPLATES[2]), status: "pending" },
-  { id: ++apSeq, ...structuredClone(AP_TEMPLATES[0]), status: "approved" },
+  { id: ++apSeq, ...structuredClone(AP_TEMPLATES[0]), status: "pending" },
 ];
 let apCursor = 3;
 let apEnterId = null, apPulseId = null, apCntPop = false;
+const pendingN = () => apGroups.filter(g => g.status === "pending").length;
 
 const AP_STATUS_LABEL = { pending: "待批准", approved: "已批准", rejected: "已拒绝", edited: "已修改", expired: "已过期" };
 const AP_GLYPH = { add: "+", edit: "~", delete: "−" };
-const AP_PULSE_COLOR = { approved: "var(--color-success)", rejected: "var(--color-danger)", edited: "var(--color-info)" };
-
-/* 审批卡片：当前对话一次 call 带来的一批审批，纵向堆叠逐项决策。
-   编辑 / 删除 / 写入（遇既有数据）均展示「当前内容」，与变更后参数对照。 */
-const AP_OP_SECTION = { add: "写入内容", edit: "变更后", delete: "删除参数" };
 function apFootHTML(g) {
   if (g.status !== "pending") return `<div class="apBanner ${g.status}">已处理 · ${AP_STATUS_LABEL[g.status]}</div>`;
   return `
@@ -2540,45 +2935,36 @@ function apFootHTML(g) {
       </div>
     </div>`;
 }
-function apCardHTML(g) {
-  const cls = ["apCard", g.id === apEnterId ? "enter" : "", g.id === apPulseId ? "pulse" : ""].filter(Boolean).join(" ");
-  const pulse = g.id === apPulseId && AP_PULSE_COLOR[g.status] ? ` style="--pulse-c: ${AP_PULSE_COLOR[g.status]}"` : "";
-  /* ExitComposeMode：固定标题「提交设计草稿」，正文 = design 文件 md 全文 */
+/* 审批整体弹窗：左清单 + 右详情（审批是阻塞的——挂起时不能发送，弹窗即"必须先决策"；
+   稍后处理可收起，由 顶部提示条 / 状态行 / 工具行 唤回；处理完不留过往记录） */
+function apModalDetailHTML(g) {
+  let body = "";
   if (g.kind === "exit") {
-    return `<section class="${cls}"${pulse} data-gid="${g.id}" data-status="${g.status}">
-      <div class="apIdentity"><span>退出设计模式 · ExitComposeMode</span><span class="apPill ${g.status}">${AP_STATUS_LABEL[g.status]}</span></div>
-      <h4 class="apTitle"><span class="apGlyph exit">»</span>提交设计草稿</h4>
-      <div class="apSection">
-        <div class="apSectionHead">${ic("feather", 11)}设计草稿 · design.md（全文）</div>
-        <div class="apDesign">${g.designHTML}</div>
-      </div>
-      ${apFootHTML(g)}
-    </section>`;
-  }
-  const curHead = g.op === "delete" ? "当前内容 · 将被删除"
-    : g.op === "edit" ? "当前内容 · 将被覆盖"
-    : (g.existing ? (g.existing.head || "当前内容 · 已存在同名数据") : "当前内容");
-  let cur = "";
-  if (g.existing) {
-    cur = `<div class="apSection">
-      <div class="apSectionHead">${ic("clock", 11)}${curHead}</div>
-      <div class="apCur ${g.op}">
-        ${g.existing.text ? `<div class="apCurText">${esc(g.existing.text)}</div>` : ""}
-        ${g.existing.rows ? `<dl class="apParam">${g.existing.rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
-      </div>
+    body = `<div class="apSection">
+      <div class="apSectionHead">${ic("feather", 11)}设计草稿 · design.md（全文）</div>
+      <div class="apDesign">${g.designHTML}</div>
     </div>`;
-  } else if (g.op === "add") {
-    cur = `<div class="apSection">
-      <div class="apSectionHead">${ic("clock", 11)}当前内容</div>
-      <div class="apCur add"><span class="apEmpty">无既有数据 · 此操作为新建</span></div>
-    </div>`;
-  }
-  return `<section class="${cls}"${pulse} data-gid="${g.id}" data-status="${g.status}">
-    <div class="apIdentity"><span>${esc(g.tool)}</span><span class="apPill ${g.status}">${AP_STATUS_LABEL[g.status]}</span></div>
-    <h4 class="apTitle"><span class="apGlyph ${g.op}">${AP_GLYPH[g.op]}</span>${esc(g.title)}</h4>
-    ${cur}
-    <div class="apSection">
-      <div class="apSectionHead">${ic(g.op === "delete" ? "x" : g.op === "add" ? "plus" : "edit", 11)}${AP_OP_SECTION[g.op]}</div>
+  } else {
+    const curHead = g.op === "delete" ? "当前内容 · 将被删除"
+      : g.op === "edit" ? "当前内容 · 将被覆盖"
+      : (g.existing ? (g.existing.head || "当前内容 · 已存在同名数据") : "当前内容");
+    let cur = "";
+    if (g.existing) {
+      cur = `<div class="apSection">
+        <div class="apSectionHead">${ic("clock", 11)}${curHead}</div>
+        <div class="apCur ${g.op}">
+          ${g.existing.text ? `<div class="apCurText">${esc(g.existing.text)}</div>` : ""}
+          ${g.existing.rows ? `<dl class="apParam">${g.existing.rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
+        </div>
+      </div>`;
+    } else if (g.op === "add") {
+      cur = `<div class="apSection">
+        <div class="apSectionHead">${ic("clock", 11)}当前内容</div>
+        <div class="apCur add"><span class="apEmpty">无既有数据 · 此操作为新建</span></div>
+      </div>`;
+    }
+    body = cur + `<div class="apSection">
+      <div class="apSectionHead">${ic(g.op === "delete" ? "x" : g.op === "add" ? "plus" : "edit", 11)}${g.op === "delete" ? "删除参数" : g.op === "edit" ? "变更后" : "写入内容"}</div>
       <div class="apGroup">
         <div class="apBand ${g.op}"><span class="apBandGlyph">${AP_GLYPH[g.op]}</span><span class="apBandTool">${esc(g.tool)}</span></div>
         <div class="apBody">
@@ -2586,30 +2972,148 @@ function apCardHTML(g) {
           <dl class="apParam">${g.params.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
         </div>
       </div>
+    </div>`;
+  }
+  const ident = g.kind === "exit" ? "退出设计模式 · ExitComposeMode" : esc(g.tool);
+  return `
+    <div class="apDetailScroll">
+      <div class="apIdentity"><span>${ident}</span><span class="apPill ${g.status}">${AP_STATUS_LABEL[g.status]}</span></div>
+      <h4 class="apTitle"><span class="apGlyph ${g.kind === "exit" ? "exit" : g.op}">${g.kind === "exit" ? "»" : AP_GLYPH[g.op]}</span>${esc(g.title)}</h4>
+      ${body}
     </div>
-    ${apFootHTML(g)}
-  </section>`;
+    <div class="apDetailFoot">${apFootHTML(g)}</div>`;
+}
+function renderApModal() {
+  const mask = $("apMask");
+  if (!state.modalOpen) { mask.classList.remove("show"); mask.innerHTML = ""; updateAlertBar(); return; }
+  const n = pendingN();
+  const sel = apGroups[state.apSel] || apGroups[0];
+  mask.innerHTML = `
+  <div class="apModal" data-noclose="1">
+    <div class="apModalHead">
+      <span class="hIcon">${ic("shieldCheck", 16)}</span>
+      <b>审批 · 本轮工具调用</b>
+      <span class="apCnt${n === 0 ? " zero" : ""}">${n === 0 ? "全部处理完" : n + " 项待决"}</span>
+      <span style="flex:1"></span>
+      <button class="btn btnGhost btnSm" data-act="apLater">${ic("clock", 12)}稍后处理</button>
+      <button class="iconBtn" data-act="apLater" title="收起弹窗">${ic("x", 13)}</button>
+    </div>
+    <div class="apModalBody">
+      <aside class="apList">
+        <div class="apListScroll">
+          ${apGroups.map((g, i) => `
+            <button class="apListItem${i === state.apSel ? " active" : ""}" data-act="apSel" data-id="${i}">
+              <span class="apGlyph ${g.kind === "exit" ? "exit" : g.op}">${g.kind === "exit" ? "»" : AP_GLYPH[g.op]}</span>
+              <span class="aliText"><b>${esc(g.tool)} · ${esc(g.title)}</b><small>${g.kind === "exit" ? "ExitComposeMode" : ({ add: "写入", edit: "编辑", delete: "删除" }[g.op] || "")}</small></span>
+              <span class="apPill ${g.status}">${AP_STATUS_LABEL[g.status]}</span>
+            </button>`).join("")}
+        </div>
+        <div class="apListFoot">
+          <button class="btn btnSecondary btnSm" data-act="apAll" ${n === 0 ? "disabled" : ""}>${ic("check", 12)}全部批准（${n}）</button>
+        </div>
+      </aside>
+      <section class="apDetail">${apModalDetailHTML(sel)}</section>
+    </div>
+  </div>`;
+  mask.classList.add("show");
+  updateAlertBar();
+}
+function openApModal() { state.modalOpen = true; renderApModal(); }
+/* 决策后联动：刷新对话流工具行；全部处理完 → 弹窗自动收口 + toast（不留过往记录） */
+function apFinishIfNeeded() {
+  if (state.view === "chat") renderMain();
+  if (pendingN() > 0) return;
+  setTimeout(() => {
+    state.modalOpen = false; renderApModal();
+    toast("本轮审批已全部处理，会话继续");
+  }, 600);
+}
+function apLater() {
+  state.modalOpen = false; renderApModal();
+  if (pendingN() > 0) toast("已稍后处理——顶部提示条 · 状态行 · 工具行均可唤回审批弹窗");
+}
+/* 挂起提示条（对话视图顶部）：有待决且弹窗收起时常驻，点击唤回 */
+function updateAlertBar() {
+  const bar = $("apAlertBar");
+  if (!bar) return;
+  const show = pendingN() > 0 && !state.modalOpen;
+  bar.style.display = show ? "flex" : "none";
+  const c = bar.querySelector("#alertN");
+  if (c) c.textContent = pendingN();
 }
 
+/* ================= 右栏 · 内容目录 =================
+   对话视图常驻：大纲树（点击跳内容视图单元详情）/ 人物 / 地点（行点击展开详情卡，
+   「打开完整档案」跳内容视图完整档案）；对话流实体标签点击在此定位。 */
+function dirDetailCardHTML(type, id) {
+  const meta = ENT[type];
+  const e = meta.list.find(x => x.id === id);
+  if (!e) return "";
+  const rel = e.related || [];
+  const jumpAct = type === "char" ? "charSelJump" : "locSelJump";
+  return `<div class="dirDetail${state.expandedDir === type + ":" + id ? " show" : ""}" data-sum="${type}:${id}">
+    <div class="ddHead">
+      ${type === "char" ? `<span class="avatar">${esc(e.name[0])}</span>` : `<span class="convIcon" style="width:24px;height:24px;">${ic("mapPin", 12)}</span>`}
+      <div><b>${esc(e.name)}</b><small>${meta.label} · ${esc(e.role || e.locState || "")}</small></div>
+    </div>
+    <div class="ddSec"><span>简介</span>${esc(e.summary)}</div>
+    ${type === "char" && e.initialState ? `<div class="ddSec"><span>初始状态</span>${esc(e.initialState)}</div>` : ""}
+    ${rel.length ? `<div class="ddSec"><span>关联单元</span><span class="ddChips">${rel.map(uid => unitById[uid] ? `<span class="chip faint" style="padding:0 5px;font-size:10px;">${esc(unitById[uid].title)}</span>` : "").join("")}</span></div>` : ""}
+    <button class="ddGo" data-act="${jumpAct}" data-id="${id}">打开完整档案 ${ic("arrowRight", 11)}</button>
+  </div>`;
+}
+/* 对话顶条「内容目录」开关按钮状态原地同步（不重渲染对话流，避免滚动跳动） */
+function syncDirToggleBtn() {
+  const btn = document.querySelector("#main .dirToggleBtn");
+  if (!btn) return;
+  btn.classList.toggle("on", state.dirOpen && state.view === "chat");
+  btn.title = state.dirOpen ? "收起内容目录" : "展开内容目录";
+}
 function renderInspector() {
-  /* 审批面板与对话视图绑定：切到内容 / 计划视图自动隐藏，回到对话恢复 */
-  const open = state.approvalOpen && state.view === "chat";
-  const pendingN = apGroups.filter(g => g.status === "pending").length;
+  /* 内容目录与对话视图绑定：切到内容 / 计划视图自动隐藏（内容视图左栏已有完整资料位），回到对话恢复 */
+  const open = state.dirOpen && state.view === "chat";
+  syncDirToggleBtn();
   inspectorEl.classList.toggle("closedDock", !open);
   updateScrims();
   if (!open) { inspectorEl.setAttribute("aria-hidden", "true"); return; }
   inspectorEl.removeAttribute("aria-hidden");
+  const tabs = [
+    { id: "outline", name: "大纲", icon: "listTree", n: Object.keys(unitById).length },
+    { id: "characters", name: "人物", icon: "userRound", n: CHARS.length },
+    { id: "locations", name: "地点", icon: "mapPin", n: LOCS.length },
+  ];
+  let body = "";
+  if (state.dirTab === "outline") {
+    body = OUTLINE.map(n => treeNodeHTML(n, "unitSelJump")).join("");
+  } else {
+    const type = state.dirTab === "characters" ? "char" : "loc";
+    const meta = ENT[type];
+    body = meta.list.map(e => {
+      const key = type + ":" + e.id;
+      return `<div class="dirRow${state.expandedDir === key ? " open" : ""}" data-act="dirToggle" data-id="${key}" data-ent="${key}">
+        ${type === "char" ? `<span class="avatar">${esc(e.name[0])}</span>` : `<span class="convIcon" style="width:24px;height:24px;">${ic("mapPin", 12)}</span>`}
+        <span class="dirLabel"><b>${esc(e.name)}</b><small>${esc(e.role || e.locState || "")}</small></span>
+        <span class="rowChev">${ic("chevRight", 12, 2.2)}</span>
+      </div>
+      ${dirDetailCardHTML(type, e.id)}`;
+    }).join("");
+  }
   inspectorEl.innerHTML = `
+    <div class="insGrip" id="insGrip" title="拖拽调宽 · 双击复位"><span class="gripTip" id="gripTip"></span></div>
     <div class="insHead">
-      <b>审批</b>
-      <span class="apCnt${pendingN === 0 ? " zero" : ""}${apCntPop ? " pop" : ""}">${pendingN}</span>
-      <span class="kicker" style="font-size:var(--fs-10-5);color:var(--color-faint);">当前对话 · 一次调用一批</span>
+      <b>内容目录</b>
+      <span class="kicker" style="font-size:var(--fs-10-5);color:var(--color-faint);">对话随手查 · 实体标签可定位</span>
       <span style="flex:1"></span>
-      <button class="iconBtn" data-act="apAdd" title="模拟新审批">${ic("plus", 13, 2.2)}</button>
       <button class="iconBtn" data-act="insClose" title="收起面板">${ic("x", 13)}</button>
     </div>
-    <div class="insBody">${apGroups.map(apCardHTML).join("")}</div>`;
-  apEnterId = null; apPulseId = null; apCntPop = false;
+    <div class="segTabs" role="tablist" style="flex:none;padding:8px 10px 4px;">
+      ${tabs.map(t => `<button data-act="dirTab" data-id="${t.id}" aria-selected="${t.id === state.dirTab}">${ic(t.icon, 13)}<span>${t.name}</span><span style="font-family:var(--font-mono);font-size:10px;color:var(--color-faint);">${t.n}</span></button>`).join("")}
+    </div>
+    <div class="sideScroll">${body}
+      <div style="padding:12px 10px 0;border-top:1px dashed var(--color-border);margin:10px 6px 0;font-size:var(--fs-10-5);color:var(--color-faint);line-height:1.7;">
+        对话流中的 <span class="entTag" style="cursor:default;">&lt;character_沈砚&gt;</span> 等实体标签可点击：本栏切到对应目录并高亮定位。面板左缘可拖拽调宽（双击复位）。
+      </div>
+    </div>`;
 }
 
 /* ================= 设置弹窗 ================= */
@@ -2631,7 +3135,7 @@ function renderSettings() {
   } else {
     html = `<div style="text-align:center;padding:26px 0;">
       <div class="brand" style="justify-content:center;margin-bottom:8px;"><span class="brandDot"></span><span class="brandName" style="font-size:16px;">Novel</span></div>
-      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.7<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>大纲对齐 StoryUnit 模型 · 通知中心 · 会话菜单 · 轮次分层 · 启动页与入场动画 · 排队回显（幽灵项）</div>
+      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.8<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>审批整体弹窗（稍后处理 + 挂起提示条） · 右栏内容目录（详情卡 / 跳完整档案 / 拖宽） · 实体标签定位 · markdown 全格式样例 · 排队回显（幽灵项） · 大纲对齐 StoryUnit 模型 · 通知中心 · 启动页与入场动画</div>
     </div>`;
   }
   $("settingsContent").innerHTML = html;
@@ -2748,7 +3252,9 @@ function renderDemoBar() {
     </div></div>
     <span class="demoDivider"></span>
     <div class="demoGroup"><span class="lbl">面板</span><div class="demoBtns">
-      <button class="dbtn" data-act="insToggle" aria-pressed="${state.approvalOpen}">审批面板</button>
+      <button class="dbtn" data-act="insToggle" aria-pressed="${state.dirOpen}">右栏目录</button>
+      <button class="dbtn" data-act="apModalOpen">审批弹窗</button>
+      <button class="dbtn" data-act="apReset">重放审批</button>
       <button class="dbtn" data-act="welcomeBack">启动页</button>
       <button class="dbtn" data-act="infoToggle" aria-pressed="${$("infoPop").classList.contains("show")}">说明</button>
       <button class="dbtn" data-act="barHide">收起</button>
@@ -2761,7 +3267,10 @@ function renderInfoPop() {
     <ul>
       <li><b>侧栏随视图切换内容</b>：对话 = 会话目录；内容 = 资料位（大纲树 / 正文卷章 / 人物 / 地点）；计划 = 「安排」待办目录。现状是全局侧栏混排两组。</li>
       <li><b>大纲树对齐 core 模型（StoryUnit 泛型树）</b>：saga 全书 → arc 卷 → sequence 序列 → scene 场景，可省中间层、叶必须是场景（正文段落挂叶、发布「章」从场景选段）；双状态 = 规划（idea 点子 → outlined 已成纲 → ready 可开写）+ 实现（pending 未动笔 → in-progress 写作中 → completed 已完成 / abandoned 废弃），「受阻」由 pending + blockState 推导并展示原因码与依赖；父单元进度由叶单元 rollup；场景叶可挂 <b>leaf 场景计划</b>（人物/地点绑定、事件序列、节奏拍、实体变更）。树形目录任意层级嵌套 + 引导线呈现。</li>
-      <li><b>审批面板 = 当前对话的一批审批，且与对话视图绑定</b>：一次工具调用带来的审批作为卡片纵向堆叠、逐项决策，无目录列（对齐现网会话化分组）；切到内容 / 计划视图自动隐藏，回到对话恢复。编辑显示<b>「当前内容 · 将被覆盖」</b>（原文），删除显示<b>「当前内容 · 将被删除」</b>（既有数据），写入遇同名/既有数据同样展示，纯新建则标注「无既有数据」；<b>退出设计模式（ExitComposeMode）</b>为特殊卡片——固定标题「提交设计草稿」，正文渲染 design 文件 markdown 全文（品牌渐变描边）。</li>
+      <li><b>审批改为整体弹窗（阻塞式）</b>：审批挂起时本就不能发送，弹窗是对"必须先决策"最直接的表达。一次调用一批审批在弹窗内<b>左清单 + 右详情</b>呈现（原文前后对照 / exit 设计草稿全文在 920px 宽度整页可读），支持逐项决策与<b>全部批准</b>；<b>稍后处理</b>可收起——顶部琥珀<b>提示条</b>常驻唤回（呼吸光晕），状态行升级为可点胶囊、对话流"等待审批"工具行亦可点击，处理完自动收口且<b>不在对话流留过往审批记录</b>（仅工具行落"审批完成"）。</li>
+      <li><b>右栏 = 内容目录（大纲 / 人物 / 地点）</b>：对话视图常驻，随手查故事资料。人物/地点行点击就地展开<b>详情卡</b>（简介 / 初始状态 / 关联单元），「打开完整档案」跳内容视图对应档案；大纲树行点击直接跳内容视图单元详情。切到内容 / 计划视图自动隐藏（左栏已有资料位），≤1080 变右缘覆盖抽屉；<b>左缘把手可拖拽调宽</b>（320–640px，双击复位；≤1280 窄档隐藏并回落断点宽度）。</li>
+      <li><b>对话流实体标签</b>：正文中的 <code>&lt;character_沈砚&gt;</code> / <code>&lt;location_县档案房&gt;</code> 等标签可点击——右栏内容目录切到对应 tab 并高亮定位、展开详情卡，从那里再跳完整档案。</li>
+      <li><b>markdown 全格式渲染样例</b>：对话第 3 轮为排版样例消息，覆盖 标题 1–6 / 粗斜删除 / 行内代码 / kbd / 三种列表+任务清单 / 嵌套引用 / 带语言标签代码块 / 表格 / 链接 / 分割线 / 图片占位 / 脚注，全部走主题 token 四主题适配。</li>
       <li><b>审批挂起时状态行显示「正在审批」</b>（沙漏琥珀态），生成中仍为「正在生成」。</li>
     <li><b>生成中发送 = 排队幽灵项</b>：正在生成/审批时发送的消息不再被吞掉，以降透明度虚线气泡<b>即时回显</b>在时间线末尾（琥珀「排队中 Ns」角标），状态行追加「· 排队中 N 条」；当前回复收口后幽灵项<b>原地晋升</b>为正式消息并依次开跑（2 条排队会链式执行）。控制条「排队示例」可罗列 清空 / 1 条 / 2 条。</li>
       <li><b>执行模式位于输入框底栏左侧</b>（发送 / 暂停在底栏右侧），点击向上弹出下拉列表（图标 + 名称 + 说明）；选择后仅显示「待生效」chip（不带模式名），随下一条消息发出时生效——对齐现网 ComposerModeBar 的会话级权威状态。</li>
@@ -2821,6 +3330,9 @@ document.addEventListener("click", (e) => {
     case "charSelJump":
       state.contentTab = "characters"; state.selChar = id; state.view = "content";
       renderTitlebar(); renderSidebar(); renderMain(); break;
+    case "locSelJump":
+      state.contentTab = "locations"; state.selLoc = id; state.view = "content";
+      renderTitlebar(); renderSidebar(); renderMain(); break;
     case "locSel": state.contentTab = "locations"; state.selLoc = id; renderSidebar(); renderMain(); break;
     case "planSel": state.planSel = id; renderSidebar(); renderMain(); break;
     case "todoDone": {
@@ -2830,11 +3342,11 @@ document.addEventListener("click", (e) => {
     }
     case "todoGo": {
       const t = TODOS.find(x => x.id === id); const kind = t.action && t.action.kind;
-      if (kind === "approval") { state.view = "chat"; state.approvalOpen = true; renderInspector(); toast("已打开审批队列"); }
+      if (kind === "approval") { state.view = "chat"; openApModal(); toast("已打开审批弹窗"); }
       else if (kind === "location") { state.view = "content"; state.contentTab = "locations"; state.selLoc = "l3"; }
       else if (kind === "chapter") { state.view = "content"; state.contentTab = "manuscript"; state.selChapter = t.action.target; }
       else if (kind === "chat") { state.view = "chat"; }
-      renderTitlebar(); renderSidebar(); renderMain(); renderDemoBar(); break;
+      renderTitlebar(); renderSidebar(); renderMain(); renderInspector(); renderDemoBar(); break;
     }
     case "modeMenu":
       state.modeMenuOpen = !state.modeMenuOpen; updateModeUI(); break;
@@ -2852,11 +3364,69 @@ document.addEventListener("click", (e) => {
     case "genSet": setGen(id); break;
     case "queueSet": queueSet(Number(id)); break;
     case "send": sendMsg(); break;
-    case "insOpen": state.approvalOpen = true; renderInspector(); renderDemoBar(); break;
-    case "insClose": state.approvalOpen = false; renderInspector(); renderDemoBar(); break;
+    /* ---- 审批弹窗（阻塞式决策；稍后处理由提示条/状态行/工具行唤回） ---- */
+    case "apModalOpen": openApModal(); break;
+    case "apLater": apLater(); break;
+    case "apSel": state.apSel = Number(id); renderApModal(); break;
+    case "apAll": {
+      apGroups.filter(g => g.status === "pending").forEach(g => { g.status = "approved"; g._cOpen = false; });
+      apFinishIfNeeded();
+      renderApModal();
+      break;
+    }
+    case "apReset": {
+      apGroups.forEach(g => { g.status = "pending"; g._cOpen = false; g._ctext = ""; delete g._ctextShow; });
+      state.apSel = 0;
+      if (state.view === "chat") renderMain();
+      openApModal();
+      toast("已重放：审批到达，弹窗已打开");
+      break;
+    }
+    /* ---- 右栏内容目录 ---- */
+    case "dirTab": state.dirTab = id; renderInspector(); break;
+    case "dirToggle": {
+      const key = el.dataset.ent || null;
+      const willOpen = state.expandedDir !== key;
+      /* 展开新行时收起上一张详情卡（手风琴单开） */
+      if (willOpen && state.expandedDir && state.expandedDir !== key) {
+        const prevDetail = document.querySelector(`.dirDetail[data-sum="${state.expandedDir}"]`);
+        if (prevDetail) prevDetail.classList.remove("show");
+        const prevRow = document.querySelector(`.dirRow[data-ent="${state.expandedDir}"]`);
+        if (prevRow) prevRow.classList.remove("open");
+      }
+      state.expandedDir = willOpen ? key : null;
+      const detail = el.nextElementSibling;
+      if (detail && detail.classList.contains("dirDetail")) {
+        detail.classList.toggle("show", willOpen);
+      }
+      el.classList.toggle("open", willOpen);
+      break;
+    }
+    case "entLocate": {
+      /* 对话流实体标签 → 右栏目录切 tab + 定位高亮 + 展开详情卡 */
+      const meta = ENT[el.dataset.type];
+      const e = meta.list.find(x => x.id === el.dataset.id);
+      if (!e) break;
+      state.dirTab = meta.tab;
+      state.expandedDir = el.dataset.type + ":" + el.dataset.id;
+      state.dirOpen = true;
+      renderInspector();
+      const row = inspectorEl.querySelector(`.dirRow[data-ent="${el.dataset.type}:${el.dataset.id}"]`);
+      if (row) {
+        row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        row.classList.remove("flash"); void row.offsetWidth; row.classList.add("flash");
+      }
+      toast(`已在内容目录定位：${meta.label} › ${e.name}（展开详情卡，可跳完整档案）`);
+      break;
+    }
+    case "mdLink": toast("演示链接：真实实现打开目标地址"); break;
+    case "fnGo":
+      document.querySelector(".mdFootnotes")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      break;
+    case "insClose": state.dirOpen = false; renderInspector(); renderDemoBar(); break;
     case "insToggle":
-      state.approvalOpen = !state.approvalOpen;
-      if (state.approvalOpen && state.view !== "chat") {
+      state.dirOpen = !state.dirOpen;
+      if (state.dirOpen && state.view !== "chat") {
         state.view = "chat"; renderTitlebar(); renderSidebar(); renderMain();
       }
       renderInspector(); renderDemoBar(); break;
@@ -2867,13 +3437,18 @@ document.addEventListener("click", (e) => {
       else if (id === "comment") g._cOpen = !g._cOpen;
       else if (id === "cancel") g._cOpen = false;
       else if (id === "submit") { g.status = "edited"; apPulseId = g.id; g._cOpen = false; g._ctext = ""; }
-      renderInspector(); break;
+      apFinishIfNeeded();
+      renderApModal();
+      break;
     }
     case "apAdd": {
       apCursor += 1;
       apGroups.unshift({ id: ++apSeq, ...structuredClone(AP_TEMPLATES[apCursor % AP_TEMPLATES.length]), status: "pending" });
       apEnterId = apSeq; apCntPop = true;
-      renderInspector(); break;
+      state.apSel = 0;
+      if (state.view === "chat") renderMain();
+      openApModal();
+      break;
     }
     case "sideToggle":
       state.sidebarCollapsed = !state.sidebarCollapsed;
@@ -2957,7 +3532,7 @@ document.addEventListener("click", (e) => {
       $("notifMenu").classList.remove("show");
       const g = n && n.goto;
       if (n && g) {
-        if (g.view === "chat") { state.view = "chat"; state.approvalOpen = true; }
+        if (g.view === "chat") { state.view = "chat"; openApModal(); }
         else if (g.unit) { state.view = "content"; state.contentTab = "outline"; state.selUnit = g.unit; }
         else if (g.loc) { state.view = "content"; state.contentTab = "locations"; state.selLoc = g.loc; }
         renderTitlebar(); renderSidebar(); renderMain(); renderInspector();
@@ -3033,6 +3608,54 @@ document.addEventListener("click", (e) => {
 titlebarEl.addEventListener("dblclick", (e) => {
   if (e.target.closest("button") || e.target.closest(".tabs")) return;
   state.maximized = !state.maximized; renderTitlebar();
+});
+
+/* ESC：先收审批弹窗（= 稍后处理，提示条常驻唤回），再关设置 */
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (state.modalOpen) { apLater(); return; }
+  if ($("settingsMask").classList.contains("show")) $("settingsMask").classList.remove("show");
+});
+/* 点审批弹窗遮罩空白 = 稍后处理 */
+$("apMask").addEventListener("click", (e) => {
+  if (!e.target.closest("[data-noclose='1']")) apLater();
+});
+
+/* 右栏拖拽调宽：把手随 renderInspector 重建，监听挂在稳定的 inspector 元素上（>1280 生效，窄档 CSS 隐藏） */
+const INSP_MIN = 320, INSP_MAX = 640, INSP_DEFAULT = 376;
+function applyInsW(w) {
+  state.insW = w;
+  frame.style.setProperty("--insp-w", w + "px");
+  const tip = $("gripTip");
+  if (tip) tip.textContent = w + "px";
+}
+inspectorEl.addEventListener("pointerdown", (e) => {
+  const grip = e.target.closest(".insGrip");
+  if (!grip) return;
+  e.preventDefault();
+  grip.setPointerCapture(e.pointerId);
+  grip.classList.add("dragging");
+  document.body.classList.add("resizing");
+  const tip = $("gripTip");
+  if (tip) tip.classList.add("show");
+  const startX = e.clientX, startW = state.insW || INSP_DEFAULT;
+  applyInsW(startW);
+  const move = (ev) => applyInsW(Math.max(INSP_MIN, Math.min(INSP_MAX, Math.round(startW - (ev.clientX - startX)))));
+  const up = () => {
+    grip.removeEventListener("pointermove", move);
+    grip.removeEventListener("pointerup", up);
+    grip.classList.remove("dragging");
+    document.body.classList.remove("resizing");
+    setTimeout(() => { const t2 = $("gripTip"); if (t2) t2.classList.remove("show"); }, 500);
+  };
+  grip.addEventListener("pointermove", move);
+  grip.addEventListener("pointerup", up);
+});
+inspectorEl.addEventListener("dblclick", (e) => {
+  if (!e.target.closest(".insGrip")) return;
+  state.insW = null;
+  frame.style.removeProperty("--insp-w");
+  toast("已复位右栏宽度 " + INSP_DEFAULT + "px");
 });
 
 /* 审批意见输入（按组定位） */

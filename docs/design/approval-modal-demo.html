@@ -1,0 +1,1690 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="paper">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>审批交互方案 A · 弹窗审批 + 右栏内容目录</title>
+<style>
+  /* ============================================================
+     审批交互 demo · 方案 A v2：弹窗审批 + 右栏内容目录（用户反馈迭代）
+     【状态】已实施于 ui/（分支 feature/approval-modal-content-directory，
+     P1-P4，对应 PRD 决议 7）；本文件保留为交互原型与决策留档。
+     前提：审批是阻塞的（挂起时不能发送）→ 弹窗是对"必须先决策"
+     最诚实的表达；原文在 min(920px,94vw) 宽度内可读（含 exit 设计
+     草稿全文）。三个兜底设计点：
+       · 稍后处理：弹窗可收起，会话保持挂起——重新唤起做多处强调：
+         顶部琥珀提示条（常驻可点）+ 铃铛计数脉冲 + 状态行胶囊 +
+         对话流工具行可点，任一入口均可唤回弹窗
+       · 批量组织：弹窗内 左清单 + 右详情，支持全部批准
+       · 不留过往审批记录：处理完仅工具行落"审批完成"，时间线保持干净
+     右栏 = 内容目录（大纲 / 人物 / 地点）：行点击就地展开富详情卡
+     （简介 / 初始状态 / 关联单元），"打开完整档案"跳转主区档案页
+     （带返回）；对话流实体标签 <character_沈砚> 点击 → 目录切 tab +
+     定位高亮 + 展开详情。
+     另含：markdown 全格式渲染样例消息、右栏拖拽调宽（320–640，双击复位）。
+     主题 token 对齐 app-redesign-demo.html（四主题零组件改动）。
+     ============================================================ */
+  :root {
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+      "PingFang SC", "Hiragino Sans GB", "HarmonyOS Sans SC", "MiSans",
+      "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Microsoft YaHei",
+      system-ui, sans-serif;
+    --font-body: "Iowan Old Style", "Palatino Linotype",
+      "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong",
+      "SimSun", Georgia, serif;
+    --font-kai: "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+
+    --fs-chat: 15.5px;
+    --fs-12: 12px; --fs-13: 13px; --fs-12-5: 12.5px; --fs-11: 11px;
+    --fs-10-5: 10.5px;
+    --fw-regular: 400; --fw-medium: 550; --fw-semibold: 650; --fw-bold: 700;
+
+    --radius-sm: 6px; --radius-md: 9px; --radius-lg: 14px; --radius-pill: 999px;
+    --duration-fast: 0.15s; --duration-base: 0.22s;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* 宣纸白（默认） */
+    --color-bg:            oklch(97.9% 0.003 85);
+    --color-surface:       oklch(99.8% 0.0015 85);
+    --color-surface-2:     oklch(96.2% 0.004 82);
+    --color-fg:            oklch(30% 0.009 46);
+    --color-muted:         oklch(52% 0.009 54);
+    --color-faint:         oklch(60% 0.009 58);
+    --color-border:        oklch(92.4% 0.003 82);
+    --color-border-strong: oklch(86.4% 0.006 72);
+    --color-orange:        oklch(73% 0.068 60);
+    --color-accent:        oklch(55% 0.072 42);
+    --color-red:           oklch(58% 0.075 32);
+    --color-accent-ink:    oklch(47% 0.062 41);
+    --color-success:       oklch(52% 0.07 156);
+    --color-success-bg:    oklch(97.2% 0.011 156);
+    --color-warn:          oklch(59% 0.07 80);
+    --color-warn-bg:       oklch(97.1% 0.011 86);
+    --color-danger:        oklch(54% 0.068 32);
+    --color-danger-bg:     oklch(97.1% 0.009 33);
+    --color-info:          oklch(54% 0.05 235);
+    --color-info-bg:       oklch(97.2% 0.007 236);
+    --color-on-accent:     #fff;
+
+    --color-accent-9:   color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+    --color-accent-8-t: color-mix(in oklab, var(--color-accent) 8%, transparent);
+    --color-accent-11:  color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+    --color-accent-45:  color-mix(in oklab, var(--color-accent) 45%, transparent);
+    --color-danger-12:  color-mix(in oklab, var(--color-danger) 12%, var(--color-surface));
+    --color-chrome-bg:  color-mix(in oklab, var(--color-surface) 82%, transparent);
+    --color-focus-ring: color-mix(in oklab, var(--color-accent) 42%, transparent);
+    --color-scrollbar-thumb: color-mix(in oklab, var(--color-fg) 15%, transparent);
+    --color-warn-40:    color-mix(in oklab, var(--color-warn) 40%, transparent);
+
+    --grad-accent: linear-gradient(105deg,
+      var(--color-orange) 0%, var(--color-accent) 48%, var(--color-red) 100%);
+
+    --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04), 0 8px 24px rgba(40, 22, 10, 0.045);
+    --shadow-2: 0 2px 4px rgba(40, 22, 10, 0.05), 0 16px 40px rgba(40, 22, 10, 0.11);
+    --shadow-xs: 0 1px 3px rgba(20, 12, 6, 0.08);
+
+    --insp-w: 360px;
+  }
+  /* ============ 墨夜 ============ */
+  [data-theme="ink"] {
+    --color-bg:            oklch(21% 0.005 80);
+    --color-surface:       oklch(25.5% 0.006 80);
+    --color-surface-2:     oklch(28.5% 0.007 78);
+    --color-fg:            oklch(89% 0.006 85);
+    --color-muted:         oklch(70% 0.008 80);
+    --color-faint:         oklch(59% 0.007 80);
+    --color-border:        oklch(31% 0.007 80);
+    --color-border-strong: oklch(40% 0.01 78);
+    --color-orange:        oklch(77% 0.095 62);
+    --color-accent:        oklch(68% 0.115 42);
+    --color-red:           oklch(66% 0.115 30);
+    --color-accent-ink:    oklch(78% 0.09 45);
+    --color-success:       oklch(72% 0.095 156);
+    --color-success-bg:    oklch(29% 0.032 156);
+    --color-warn:          oklch(75% 0.1 80);
+    --color-warn-bg:       oklch(29% 0.034 85);
+    --color-danger:        oklch(67% 0.1 32);
+    --color-danger-bg:     oklch(28% 0.03 33);
+    --color-info:          oklch(70% 0.075 235);
+    --color-info-bg:       oklch(28% 0.024 236);
+    --color-on-accent:     oklch(24% 0.03 42);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.32), 0 16px 40px rgba(0, 0, 0, 0.48);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+  /* ============ 黛青 ============ */
+  [data-theme="celadon"] {
+    --color-bg:            oklch(20% 0.013 235);
+    --color-surface:       oklch(24% 0.015 235);
+    --color-surface-2:     oklch(27% 0.017 232);
+    --color-fg:            oklch(89% 0.009 225);
+    --color-muted:         oklch(69% 0.013 230);
+    --color-faint:         oklch(58% 0.012 230);
+    --color-border:        oklch(30% 0.015 235);
+    --color-border-strong: oklch(38% 0.019 232);
+    --color-orange:        oklch(78% 0.07 190);
+    --color-accent:        oklch(75% 0.1 195);
+    --color-red:           oklch(68% 0.11 265);
+    --color-accent-ink:    oklch(84% 0.075 205);
+    --color-success:       oklch(72% 0.095 158);
+    --color-success-bg:    oklch(28% 0.032 158);
+    --color-warn:          oklch(76% 0.1 90);
+    --color-warn-bg:       oklch(28% 0.032 88);
+    --color-danger:        oklch(68% 0.11 25);
+    --color-danger-bg:     oklch(28% 0.03 25);
+    --color-info:          oklch(72% 0.08 240);
+    --color-info-bg:       oklch(28% 0.028 240);
+    --color-on-accent:     oklch(20% 0.04 230);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.32);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.32), 0 16px 40px rgba(0, 0, 0, 0.5);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.36);
+  }
+  /* ============ 雪青 ============ */
+  [data-theme="frost"] {
+    --color-bg:            oklch(97.4% 0.004 240);
+    --color-surface:       oklch(99.5% 0.002 240);
+    --color-surface-2:     oklch(95.6% 0.005 234);
+    --color-fg:            oklch(29% 0.016 262);
+    --color-muted:         oklch(50% 0.014 256);
+    --color-faint:         oklch(59% 0.012 254);
+    --color-border:        oklch(91.6% 0.005 240);
+    --color-border-strong: oklch(85.4% 0.009 234);
+    --color-orange:        oklch(72% 0.075 230);
+    --color-accent:        oklch(52% 0.1 262);
+    --color-red:           oklch(54% 0.1 285);
+    --color-accent-ink:    oklch(44% 0.09 262);
+    --color-success:       oklch(52% 0.07 156);
+    --color-success-bg:    oklch(96.8% 0.011 156);
+    --color-warn:          oklch(58% 0.07 80);
+    --color-warn-bg:       oklch(96.7% 0.011 86);
+    --color-danger:        oklch(54% 0.068 32);
+    --color-danger-bg:     oklch(96.7% 0.009 33);
+    --color-info:          oklch(54% 0.055 240);
+    --color-info-bg:       oklch(96.8% 0.008 240);
+    --color-on-accent:     #fff;
+    --shadow-1: 0 1px 2px rgba(12, 18, 40, 0.05), 0 8px 24px rgba(12, 18, 40, 0.055);
+    --shadow-2: 0 2px 4px rgba(12, 18, 40, 0.06), 0 16px 40px rgba(12, 18, 40, 0.13);
+    --shadow-xs: 0 1px 3px rgba(8, 12, 30, 0.09);
+  }
+
+  /* ============ 基础 ============ */
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; overflow: hidden;
+    background: var(--color-bg); color: var(--color-fg);
+    font-family: var(--font-ui); font-size: var(--fs-13); line-height: 1.6;
+  }
+  svg { flex: none; }
+  button { font-family: inherit; }
+  :focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; }
+
+  .app { display: flex; flex-direction: column; height: 100%; }
+
+  /* ============ 顶栏（极简） ============ */
+  .topbar {
+    display: flex; align-items: center; gap: 10px; flex: none;
+    padding: 0 14px 0 16px; height: 44px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-chrome-bg);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brandDot {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--grad-accent); background-size: 160% 160%;
+  }
+  .brandName { font-weight: var(--fw-bold); font-size: var(--fs-13); }
+  .schemeTag {
+    font-size: var(--fs-11); color: var(--color-faint);
+    padding: 2px 9px; border: 1px solid var(--color-border); border-radius: var(--radius-pill);
+  }
+  .topRight { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .themeDots { display: flex; gap: 5px; padding: 3px 6px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); }
+  .tdot {
+    width: 16px; height: 16px; padding: 0; border-radius: 50%; cursor: pointer;
+    border: 1px solid var(--color-border-strong);
+    transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .tdot:hover { transform: scale(1.12); }
+  .tdot[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--color-accent-45); }
+  .iconBtn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; flex: none; position: relative;
+    border: 0; border-radius: var(--radius-sm);
+    background: transparent; color: var(--color-muted); cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .iconBtn:hover { background: var(--color-accent-9); color: var(--color-accent-ink); }
+  .bellBadge {
+    position: absolute; top: -3px; right: -4px;
+    min-width: 14px; height: 14px; padding: 0 3px;
+    display: grid; place-items: center;
+    border-radius: var(--radius-pill);
+    background: var(--color-warn); color: var(--color-on-accent);
+    font-size: 9.5px; font-weight: var(--fw-bold); line-height: 1;
+    font-family: var(--font-mono);
+    animation: bell-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes bell-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+  }
+
+  /* ============ 主体两栏：对话流 + 内容目录 ============ */
+  .shell { flex: 1; min-height: 0; display: flex; }
+
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--color-bg); }
+
+  .chatScroll {
+    flex: 1; min-height: 0; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent;
+    padding: 18px 24px 8px;
+  }
+  .chatInner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+  .runDivider { display: flex; align-items: center; gap: 12px; color: var(--color-faint); font-size: var(--fs-11); letter-spacing: 0.05em; margin: 8px 0 2px; }
+  .runDivider::before, .runDivider::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
+
+  .msgUser {
+    align-self: flex-end; max-width: 76%;
+    padding: 9px 13px;
+    background: var(--color-accent-9);
+    border: 1px solid color-mix(in oklab, var(--color-accent) 14%, var(--color-border));
+    border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
+    font-size: var(--fs-chat);
+    animation: msg-enter var(--duration-base) var(--ease-out);
+  }
+  .msgAssistant { max-width: 94%; animation: msg-enter var(--duration-base) var(--ease-out); }
+  .msgHead { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+  .avatar {
+    display: inline-grid; place-items: center; flex: none;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--color-accent-11); color: var(--color-accent-ink);
+    font-size: 11px; font-weight: var(--fw-semibold);
+  }
+  .msgHead .avatar.assistant { background: var(--grad-accent); color: var(--color-on-accent); }
+  .msgHead b { font-size: var(--fs-12-5); font-weight: var(--fw-semibold); }
+  .msgHead .mMeta { font-size: var(--fs-11); color: var(--color-faint); font-family: var(--font-mono); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 3px; flex: none;
+    padding: 1px 7px; border-radius: var(--radius-pill);
+    font-size: var(--fs-10-5); font-weight: var(--fw-semibold); line-height: 1.6; white-space: nowrap;
+  }
+  .chip.faint { background: transparent; color: var(--color-faint); border: 1px solid var(--color-border); }
+  .chip.warn { background: var(--color-warn-bg); color: var(--color-warn); }
+
+  .toolGroup {
+    display: flex; flex-direction: column; gap: 5px;
+    margin: 8px 0 10px; padding: 7px 11px;
+    border-left: 2px solid color-mix(in oklab, var(--color-accent) 32%, transparent);
+    background: color-mix(in oklab, var(--color-fg) 3.5%, transparent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .toolLine { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; font-size: var(--fs-12); line-height: 1.6; }
+  .toolLine.apToolLink { cursor: pointer; border-radius: 5px; transition: background var(--duration-fast) var(--ease-out); }
+  .toolLine.apToolLink:hover { background: var(--color-accent-8-t); }
+  .toolDone { color: var(--color-muted); white-space: nowrap; }
+  .toolDone svg { color: var(--color-success); margin-right: 3px; vertical-align: -2px; }
+  .toolRunning { color: var(--color-fg); font-weight: var(--fw-medium); white-space: nowrap; }
+  .spinner {
+    display: inline-block; width: 10px; height: 10px;
+    border: 1.5px solid currentColor; border-top-color: transparent;
+    border-radius: 50%; vertical-align: -1px;
+    animation: spinner-rotate 0.8s linear infinite;
+  }
+
+  /* ---- 实体标签（<character_沈砚> 等，可点击 → 右栏目录定位） ---- */
+  .entTag {
+    display: inline-flex; align-items: center; gap: 3px;
+    margin: 0 1px; padding: 0 6px; vertical-align: 1px;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 30%, var(--color-border));
+    border-radius: var(--radius-sm);
+    background: var(--color-accent-8-t); color: var(--color-accent-ink);
+    font-family: var(--font-mono); font-size: 0.82em; line-height: 1.7;
+    cursor: pointer; white-space: nowrap;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .entTag:hover {
+    border-color: var(--color-accent);
+    background: var(--color-accent-11);
+    box-shadow: 0 0 0 2px var(--color-accent-8-t);
+  }
+  .entTag svg { opacity: 0.75; }
+
+  /* ---- 审批挂起提示条（稍后处理后常驻顶部，任一点击唤回弹窗） ---- */
+  .apAlertBar {
+    flex: none;
+    display: flex; align-items: center; gap: 10px;
+    width: calc(100% - 48px); max-width: 760px;
+    margin: 10px auto 0;
+    padding: 8px 9px 8px 15px;
+    border: 1px solid color-mix(in oklab, var(--color-warn) 42%, transparent);
+    border-radius: var(--radius-pill);
+    background: var(--color-warn-bg); color: var(--color-warn);
+    font-size: var(--fs-12-5);
+    cursor: pointer;
+    animation: msg-enter var(--duration-base) var(--ease-out), alert-glow 2.4s var(--ease-in-out) infinite;
+    transition: box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .apAlertBar:hover { box-shadow: 0 0 0 4px var(--color-warn-40); }
+  .apAlertBar b { font-weight: var(--fw-bold); }
+  .apAlertBar svg { flex: none; animation: status-sway 2.8s ease-in-out infinite; }
+  .apAlertBar .alertBtn {
+    margin-left: auto; flex: none;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 13px;
+    border-radius: var(--radius-pill);
+    background: var(--color-warn); color: var(--color-surface);
+    font-size: var(--fs-12); font-weight: var(--fw-semibold);
+  }
+  @keyframes alert-glow {
+    0%, 100% { box-shadow: 0 0 0 0 var(--color-warn-40); }
+    55% { box-shadow: 0 0 0 5px transparent; }
+  }
+
+  /* ============ markdown 全格式排版（.mdBody） ============ */
+  .mdBody { font-family: var(--font-body); font-size: var(--fs-chat); line-height: 1.85; }
+  .mdBody p { margin: 0 0 10px; }
+  .mdBody h1, .mdBody h2, .mdBody h3, .mdBody h4, .mdBody h5, .mdBody h6 {
+    font-family: var(--font-ui); color: var(--color-fg); font-weight: var(--fw-bold);
+    line-height: 1.4; margin: 18px 0 8px;
+  }
+  .mdBody > :first-child, .mdBody h1:first-child, .mdBody h2:first-child { margin-top: 2px; }
+  .mdBody h1 { font-size: 20px; letter-spacing: 0.01em; }
+  .mdBody h2 { font-size: 17.5px; padding-bottom: 5px; border-bottom: 1px solid var(--color-border); }
+  .mdBody h3 { font-size: 15.5px; }
+  .mdBody h4 { font-size: 14px; }
+  .mdBody h5 { font-size: 13px; }
+  .mdBody h6 { font-size: 12px; color: var(--color-faint); letter-spacing: 0.05em; }
+  .mdBody strong, .mdBody b { font-weight: var(--fw-bold); }
+  .mdBody em, .mdBody i { font-style: italic; }
+  .mdBody del { color: var(--color-faint); text-decoration-color: color-mix(in oklab, var(--color-danger) 55%, transparent); }
+  .mdBody code {
+    font-family: var(--font-mono); font-size: 0.84em;
+    padding: 1px 5px; border-radius: 4px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    color: var(--color-accent-ink);
+  }
+  .mdBody kbd {
+    font-family: var(--font-mono); font-size: 0.78em;
+    padding: 1px 5px; border-radius: 4px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
+    border-bottom-width: 2px;
+    box-shadow: none; color: var(--color-fg);
+  }
+  .mdBody a {
+    color: var(--color-accent-ink);
+    text-decoration: underline dotted color-mix(in oklab, var(--color-accent) 55%, transparent);
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .mdBody a:hover { text-decoration-style: solid; }
+  .mdBody ul, .mdBody ol { margin: 2px 0 10px; padding-left: 1.5em; }
+  .mdBody li { margin: 2px 0; }
+  .mdBody li > ul, .mdBody li > ol { margin: 2px 0 2px; }
+  .mdBody ul { list-style: none; }
+  .mdBody ul > li { position: relative; }
+  .mdBody ul > li::before {
+    content: ""; position: absolute; left: -1em; top: 0.72em;
+    width: 5px; height: 5px; border-radius: 1.5px;
+    background: color-mix(in oklab, var(--color-accent) 55%, transparent);
+  }
+  .mdBody ul.task { padding-left: 1.35em; }
+  .mdBody ul.task > li::before { content: none; }
+  .mdBody ul.task > li { display: flex; align-items: baseline; gap: 7px; }
+  .mdBody .taskBox {
+    flex: none; width: 14px; height: 14px; margin-top: 4px;
+    display: inline-grid; place-items: center;
+    border: 1.5px solid var(--color-border-strong); border-radius: 4px;
+    font-size: 10px; line-height: 1; color: transparent;
+  }
+  .mdBody .taskBox.done { background: var(--color-success); border-color: var(--color-success); color: var(--color-on-accent); }
+  .mdBody blockquote {
+    margin: 4px 0 10px; padding: 7px 14px;
+    border-left: 2.5px solid var(--color-accent-45);
+    background: var(--color-accent-8-t);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: var(--color-muted);
+  }
+  .mdBody blockquote p { margin: 0 0 6px; }
+  .mdBody blockquote p:last-child { margin-bottom: 0; }
+  .mdBody blockquote blockquote {
+    background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+    border-left-color: var(--color-border-strong);
+    font-size: 0.94em;
+  }
+  .mdBody .codeBlock {
+    margin: 6px 0 12px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    background: var(--color-surface-2); overflow: hidden;
+  }
+  .mdBody .codeHead {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-faint); font-family: var(--font-mono); font-size: var(--fs-10-5);
+    letter-spacing: 0.04em;
+  }
+  .mdBody .codeHead .dotC { width: 7px; height: 7px; border-radius: 50%; background: var(--color-accent-45); }
+  .mdBody pre {
+    margin: 0; padding: 10px 12px;
+    overflow-x: auto;
+    font-family: var(--font-mono); font-size: var(--fs-12); line-height: 1.75;
+    color: var(--color-fg);
+  }
+  .mdBody pre .cmt { color: var(--color-faint); }
+  .mdBody pre .key { color: var(--color-accent-ink); }
+  .mdBody pre .str { color: var(--color-success); }
+  .mdBody table {
+    margin: 6px 0 12px; border-collapse: collapse; width: 100%;
+    font-family: var(--font-ui); font-size: var(--fs-12-5);
+  }
+  .mdBody th, .mdBody td { border: 1px solid var(--color-border); padding: 5px 11px; text-align: left; line-height: 1.6; }
+  .mdBody th { background: var(--color-surface-2); font-weight: var(--fw-semibold); white-space: nowrap; }
+  .mdBody tbody tr:nth-child(even) { background: color-mix(in oklab, var(--color-surface-2) 45%, transparent); }
+  .mdBody hr { border: 0; border-top: 1px solid var(--color-border-strong); margin: 16px 0 14px; }
+  .mdBody sup.fnRef { font-size: 0.72em; }
+  .mdBody sup.fnRef a { margin: 0 1px; text-decoration: none; padding: 0 3px; }
+  .mdBody .mdFootnotes {
+    margin-top: 12px; padding-top: 8px;
+    border-top: 1px dashed var(--color-border-strong);
+    font-size: var(--fs-12); color: var(--color-faint); line-height: 1.8;
+  }
+  .mdBody .mdFootnotes .fnSym { font-family: var(--font-mono); color: var(--color-accent-ink); margin-right: 5px; }
+  .mdBody figure { margin: 6px 0 12px; }
+  .mdBody .mdImgPh {
+    display: grid; place-items: center;
+    height: 118px;
+    border: 1px dashed var(--color-border-strong); border-radius: var(--radius-md);
+    background:
+      linear-gradient(120deg,
+        color-mix(in oklab, var(--color-accent) 7%, transparent),
+        color-mix(in oklab, var(--color-orange) 9%, transparent) 55%,
+        color-mix(in oklab, var(--color-red) 6%, transparent)),
+      var(--color-surface);
+    color: var(--color-muted); font-family: var(--font-kai); font-size: var(--fs-13);
+  }
+  .mdBody figcaption { text-align: center; font-size: var(--fs-11); color: var(--color-faint); margin-top: 5px; }
+
+  .quoteKai {
+    margin: 4px 0 10px; padding: 8px 14px;
+    border-left: 2px solid var(--color-accent-45);
+    font-family: var(--font-kai); font-size: var(--fs-chat); color: var(--color-muted);
+    background: var(--color-accent-8-t);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+
+  /* ============ 输入区 ============ */
+  .composer { flex: none; padding: 8px 24px 12px; background: linear-gradient(to top, var(--color-bg) 55%, transparent); }
+  .composerInner { max-width: 760px; margin: 0 auto; }
+  .composerBox {
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-1);
+    padding: 8px 10px 8px;
+    transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .composerBox:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-8-t), var(--shadow-1); }
+  .statusWrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s var(--ease-out); }
+  .statusWrap[data-open="true"] { grid-template-rows: 1fr; }
+  .statusInner { overflow: hidden; }
+  .rsRow {
+    display: inline-flex; align-items: center; gap: 8px;
+    min-width: 0; margin: 0 2px 6px;
+    padding: 4px 13px;
+    cursor: pointer;
+    border: 1px solid color-mix(in oklab, var(--color-warn) 38%, transparent);
+    border-radius: var(--radius-pill);
+    background: var(--color-warn-bg);
+    transition: box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .rsRow:hover { box-shadow: 0 0 0 3px var(--color-warn-40); }
+  .rsRow svg { color: var(--color-warn); }
+  .rsLabel {
+    font-size: var(--fs-12-5); font-weight: var(--fw-bold); letter-spacing: 0.02em; white-space: nowrap;
+    color: var(--color-warn);
+    animation: status-sway 2.8s ease-in-out infinite;
+  }
+  .rsSec { font-size: var(--fs-10-5); color: var(--color-faint); font-variant-numeric: tabular-nums; white-space: nowrap; font-family: var(--font-mono); }
+  .rsHint { font-size: var(--fs-11); color: var(--color-faint); }
+  .composerRow textarea {
+    width: 100%; border: 0; outline: none; resize: none;
+    background: transparent; color: var(--color-fg);
+    font-family: inherit; font-size: var(--fs-chat); line-height: 1.6;
+    min-height: 24px; max-height: 140px; padding: 2px 4px;
+  }
+  .composerRow textarea::placeholder { color: var(--color-faint); }
+  .modeRow { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .modeChip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px; border-radius: var(--radius-pill);
+    border: 1px solid var(--color-border); background: var(--color-surface);
+    color: var(--color-muted); font-size: var(--fs-11-5); font-weight: var(--fw-medium);
+  }
+  .modeChip svg { color: var(--color-accent-ink); }
+  .sendBtn {
+    margin-left: auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0;
+    border: 0; border-radius: var(--radius-sm);
+    background: var(--grad-accent); color: var(--color-on-accent);
+    cursor: pointer; transition: all var(--duration-fast) var(--ease-out);
+  }
+  .sendBtn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px var(--color-accent-45); }
+  .sendBtn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+  .composerHint { margin: 6px 4px 0; font-size: var(--fs-10-5); color: var(--color-faint); display: flex; gap: 10px; }
+  .composerHint b { color: var(--color-muted); font-weight: var(--fw-medium); }
+
+  /* ============ 按钮 ============ */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-12-5); font-weight: var(--fw-medium); cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .btnPrimary { border: 0; background: var(--grad-accent); color: var(--color-on-accent); box-shadow: 0 2px 8px var(--color-accent-45); }
+  .btnPrimary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px var(--color-accent-45); }
+  .btnSecondary { border: 1px solid var(--color-border-strong); background: var(--color-surface); color: var(--color-fg); }
+  .btnSecondary:hover { border-color: var(--color-accent); color: var(--color-accent-ink); }
+  .btnGhost { border: 1px solid transparent; background: transparent; color: var(--color-muted); }
+  .btnGhost:hover { background: var(--color-accent-8-t); color: var(--color-accent-ink); }
+  .btnGhostDanger { border: 1px solid transparent; background: transparent; color: var(--color-danger); }
+  .btnGhostDanger:hover { background: var(--color-danger-12); }
+  .btnSm { padding: 4px 11px; font-size: var(--fs-12); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+
+  /* ============ 右栏 · 内容目录 ============ */
+  .inspector {
+    position: relative;
+    display: flex; flex-direction: column; flex: none;
+    width: var(--insp-w); min-width: 0;
+    border-left: 1px solid var(--color-border);
+    background: var(--color-surface);
+  }
+  /* 拖拽调宽把手（左缘） */
+  .insGrip {
+    position: absolute; left: -4px; top: 0; bottom: 0; width: 8px;
+    cursor: col-resize; z-index: 20;
+    background: transparent;
+  }
+  .insGrip::after {
+    content: ""; position: absolute; left: 3.5px; top: 0; bottom: 0; width: 1px;
+    background: transparent; transition: background var(--duration-fast) var(--ease-out);
+  }
+  .insGrip:hover::after, .insGrip.dragging::after { background: var(--color-accent); }
+  .insGrip.dragging { cursor: col-resize; }
+  .gripTip {
+    position: absolute; left: 14px; top: 8px; z-index: 21;
+    padding: 2px 8px; border-radius: var(--radius-sm);
+    background: color-mix(in oklab, var(--color-fg) 88%, transparent);
+    color: var(--color-bg);
+    font-family: var(--font-mono); font-size: var(--fs-10-5);
+    opacity: 0; pointer-events: none; transition: opacity var(--duration-fast) var(--ease-out);
+  }
+  .gripTip.show { opacity: 1; }
+  body.resizing, body.resizing * { cursor: col-resize !important; user-select: none !important; }
+  body.resizing .inspector { transition: none !important; }
+
+  .insHead {
+    display: flex; align-items: center; gap: 8px; flex: none;
+    padding: 9px 12px 8px 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-chrome-bg);
+  }
+  .insHead b { font-size: var(--fs-13); font-weight: var(--fw-semibold); }
+  .insHead .kicker { font-size: var(--fs-10-5); color: var(--color-faint); }
+
+  .segTabs { display: flex; gap: 2px; padding: 8px 10px 6px; flex: none; }
+  .segTabs button {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
+    padding: 5px 0; border: 1px solid transparent; border-radius: var(--radius-sm);
+    background: transparent; color: var(--color-muted);
+    font-size: var(--fs-12); font-weight: var(--fw-medium); cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .segTabs button:hover { background: var(--color-surface-2); }
+  .segTabs button[aria-selected="true"] {
+    background: var(--color-accent-9); color: var(--color-accent-ink);
+    border-color: color-mix(in oklab, var(--color-accent) 22%, transparent);
+  }
+  .segTabs .cnt {
+    font-family: var(--font-mono); font-size: 10px; color: var(--color-faint);
+  }
+
+  .sideScroll {
+    flex: 1; min-height: 0; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent;
+    padding: 2px 8px 16px;
+  }
+  .dirGroup { font-size: var(--fs-11); color: var(--color-faint); font-weight: var(--fw-semibold); padding: 10px 8px 4px; letter-spacing: 0.04em; }
+  .dirRow {
+    position: relative;
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: var(--radius-sm);
+    cursor: pointer; transition: background var(--duration-fast) var(--ease-out);
+  }
+  .dirRow:hover { background: var(--color-surface-2); }
+  .dirRow .chev { width: 13px; height: 13px; display: grid; place-items: center; color: var(--color-faint); transition: transform .18s; flex: none; }
+  .dirRow.open .chev { transform: rotate(90deg); }
+  .treeIndent { width: 14px; flex: none; }
+  .dirLabel { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+  .dirLabel b { font-size: var(--fs-12-5); font-weight: var(--fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dirLabel small { font-size: var(--fs-10-5); color: var(--color-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dirRow .avatar { width: 22px; height: 22px; font-size: 11px; }
+  .dirRow .convIcon {
+    width: 22px; height: 22px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 50%; background: var(--color-surface-2); color: var(--color-muted);
+  }
+  .chip.mini { padding: 0 5px; font-size: 10px; }
+  .chip.success { background: var(--color-success-bg); color: var(--color-success); }
+  .chip.danger { background: var(--color-danger-bg); color: var(--color-danger); }
+  .chip.info { background: var(--color-info-bg); color: var(--color-info); }
+
+  /* 实体标签点击后的定位高亮 */
+  @keyframes row-flash {
+    0% { background: var(--color-accent-11); box-shadow: 0 0 0 0 var(--color-accent-45); }
+    60% { background: var(--color-accent-8-t); }
+    100% { background: transparent; box-shadow: 0 0 0 6px transparent; }
+  }
+  .dirRow.flash { animation: row-flash 1.8s var(--ease-out); border-radius: var(--radius-sm); }
+
+  /* 目录条目详情卡（行点击就地展开：简介 / 初始状态 / 关联单元 + 跳转） */
+  .dirDetail {
+    display: none;
+    margin: 2px 6px 8px 30px;
+    padding: 10px 12px 11px;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 22%, var(--color-border));
+    border-left: 2.5px solid var(--color-accent-45);
+    border-radius: var(--radius-sm);
+    background: color-mix(in oklab, var(--color-accent-8-t) 40%, var(--color-surface));
+  }
+  .dirDetail.show { display: block; animation: view-in 0.2s var(--ease-out); }
+  .ddHead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .ddHead .avatar { width: 24px; height: 24px; font-size: 11px; }
+  .ddHead .convIcon { width: 24px; height: 24px; }
+  .ddHead b { font-size: var(--fs-12-5); font-weight: var(--fw-semibold); }
+  .ddHead small { display: block; font-size: var(--fs-10-5); color: var(--color-faint); }
+  .ddSec { font-size: var(--fs-11-5); line-height: 1.7; color: var(--color-muted); margin-bottom: 6px; }
+  .ddSec > span:first-child {
+    display: block; margin-bottom: 1px;
+    font-size: 10px; font-weight: var(--fw-bold); color: var(--color-faint); letter-spacing: 0.06em;
+  }
+  .ddChips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .ddGo {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin-top: 3px; padding: 0; border: 0; background: none;
+    color: var(--color-accent-ink); font-size: var(--fs-11-5); font-weight: var(--fw-semibold);
+    cursor: pointer;
+  }
+  .ddGo:hover { text-decoration: underline; }
+  .rowChev { margin-left: auto; flex: none; color: var(--color-faint); display: grid; place-items: center; transition: transform .18s var(--ease-out); }
+  .dirRow.open .rowChev { transform: rotate(90deg); }
+
+  /* ---- 完整档案视图（右栏目录"打开完整档案"的跳转目标，主区替换 + 返回） ---- */
+  .subHead {
+    display: flex; align-items: center; gap: 10px; flex: none;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-chrome-bg);
+  }
+  .subTitle { display: flex; flex-direction: column; min-width: 0; }
+  .subTitle b { font-size: var(--fs-13); font-weight: var(--fw-semibold); }
+  .subTitle .kicker { font-size: var(--fs-11); color: var(--color-faint); }
+  .subActions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .paneBody { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent; }
+  .paneInner { max-width: 760px; margin: 0 auto; padding: 18px 24px 30px; display: flex; flex-direction: column; gap: 14px; }
+  .cardBlock { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); padding: 14px 16px 15px; box-shadow: var(--shadow-xs); animation: view-in 0.25s var(--ease-out); }
+  .cardBlock h3 { margin: 0 0 7px; font-size: var(--fs-12); font-weight: var(--fw-bold); color: var(--color-faint); letter-spacing: 0.05em; }
+  .cardP { margin: 0; font-family: var(--font-body); font-size: var(--fs-13); line-height: 1.9; color: var(--color-muted); }
+  .cardP.kai { font-family: var(--font-kai); }
+  .profileHead { display: flex; align-items: center; gap: 12px; }
+  .profileHead .avatar { width: 46px; height: 46px; font-size: 19px; }
+  .profileHead h2 { margin: 0; font-size: 17px; font-weight: var(--fw-bold); }
+  .profileHead .kicker { font-size: var(--fs-11); color: var(--color-faint); }
+  .relChips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .dirFoot { padding: 12px 10px 0; border-top: 1px dashed var(--color-border); margin: 10px 6px 0; font-size: var(--fs-10-5); color: var(--color-faint); line-height: 1.7; }
+
+  /* ============ 审批整体弹窗 ============ */
+  .dialogMask {
+    position: fixed; inset: 0; z-index: 75;
+    display: none; place-items: center;
+    background: color-mix(in oklab, var(--color-fg) 22%, transparent);
+  }
+  .dialogMask.show { display: grid; }
+  .apModal {
+    width: min(920px, 94vw); height: min(640px, 88vh);
+    display: flex; flex-direction: column;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg);
+    background: var(--color-surface); box-shadow: var(--shadow-2);
+    overflow: hidden;
+    animation: view-in 0.25s var(--ease-out);
+  }
+  .apModalHead {
+    display: flex; align-items: center; gap: 9px; flex: none;
+    padding: 11px 14px 11px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-chrome-bg);
+  }
+  .apModalHead .hIcon { color: var(--color-warn); display: inline-flex; }
+  .apModalHead b { font-size: var(--fs-13); }
+  .apCnt {
+    font-family: var(--font-mono); font-size: var(--fs-10-5); font-weight: var(--fw-bold);
+    color: var(--color-warn); background: var(--color-warn-bg);
+    padding: 1px 8px; border-radius: var(--radius-pill);
+  }
+  .apCnt.zero { color: var(--color-faint); background: var(--color-surface-2); }
+  .apModalBody { flex: 1; min-height: 0; display: flex; }
+
+  /* 左：批量清单 */
+  .apList {
+    width: 252px; flex: none;
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--color-border);
+  }
+  .apListScroll { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent; }
+  .apListItem {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 9px; text-align: left;
+    border: 1px solid transparent; border-radius: var(--radius-sm);
+    background: transparent; cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .apListItem:hover { background: var(--color-surface-2); }
+  .apListItem.active {
+    background: var(--color-accent-9);
+    border-color: color-mix(in oklab, var(--color-accent) 26%, transparent);
+  }
+  .apListItem .glyph {
+    flex: none; width: 17px; text-align: center;
+    font-family: var(--font-mono); font-weight: var(--fw-bold); font-size: var(--fs-13);
+  }
+  .glyph.add { color: var(--color-success); }
+  .glyph.edit, .glyph.delete { color: var(--color-danger); }
+  .glyph.exit { color: var(--color-accent-ink); }
+  .aliText { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .aliText b { font-size: var(--fs-12-5); font-weight: var(--fw-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .aliText small { font-size: var(--fs-10-5); color: var(--color-faint); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .apPill { flex: none; font-size: 10px; font-weight: var(--fw-bold); border-radius: var(--radius-pill); padding: 1px 6px; }
+  .apPill.pending { background: var(--color-warn-bg); color: var(--color-warn); }
+  .apPill.approved { background: var(--color-success-bg); color: var(--color-success); }
+  .apPill.rejected { background: var(--color-danger-bg); color: var(--color-danger); }
+  .apPill.edited { background: var(--color-info-bg); color: var(--color-info); }
+  .apListFoot { flex: none; padding: 10px; border-top: 1px solid var(--color-border); }
+  .apListFoot .btn { width: 100%; justify-content: center; }
+
+  /* 右：当前项详情 */
+  .apDetail { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .apDetailScroll {
+    flex: 1; min-height: 0; overflow-y: auto;
+    padding: 14px 18px 16px;
+    scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  }
+  .apIdentity { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--color-faint); }
+  .apIdentity .apPill { margin-left: auto; font-size: var(--fs-10-5); }
+  .apTitle { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; font-size: 15px; font-weight: var(--fw-bold); }
+  .apTitle .glyph { flex: none; width: 16px; text-align: center; font-family: var(--font-mono); font-weight: var(--fw-bold); }
+  .apSection { margin-top: 12px; }
+  .apSectionHead { display: flex; align-items: center; gap: 5px; font-size: var(--fs-10-5); font-weight: var(--fw-bold); color: var(--color-faint); letter-spacing: 0.05em; margin-bottom: 5px; }
+  .apSectionHead svg { opacity: 0.7; }
+  .apCur {
+    border-left: 3px solid var(--color-border-strong);
+    background: var(--color-surface-2);
+    border-radius: 0 8px 8px 0;
+    padding: 8px 12px 9px;
+  }
+  .apCur.edit { border-left-color: var(--color-warn); background: color-mix(in oklab, var(--color-warn) 5%, var(--color-surface)); }
+  .apCur.delete { border-left-color: var(--color-danger); background: color-mix(in oklab, var(--color-danger) 5%, var(--color-surface)); }
+  .apCur.add { border-left-style: dashed; }
+  .apCurText { font-family: var(--font-body); font-size: var(--fs-12-5); line-height: 1.85; color: var(--color-muted); }
+  .apEmpty { font-size: var(--fs-11); color: var(--color-faint); }
+  .apStale {
+    margin-bottom: 8px; padding: 7px 10px; border-radius: 8px;
+    background: var(--color-warn-bg);
+    border: 1px solid color-mix(in oklab, var(--color-warn) 28%, transparent);
+    color: var(--color-warn); font-size: var(--fs-12); font-weight: var(--fw-semibold); line-height: 1.5;
+  }
+  .apParam { display: grid; grid-template-columns: 88px 1fr; gap: 4px 10px; margin: 0; }
+  .apParam dt { font-size: var(--fs-11); color: var(--color-faint); padding-top: 2px; }
+  .apParam dd { margin: 0; font-size: var(--fs-12); color: var(--color-fg); line-height: 1.6; overflow-wrap: anywhere; }
+  /* 设计草稿全文（ExitComposeMode） */
+  .apDesign {
+    border: 1px solid color-mix(in oklab, var(--color-accent) 18%, var(--color-border-strong));
+    border-radius: var(--radius-md);
+    background:
+      linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+      linear-gradient(120deg,
+        color-mix(in oklab, var(--color-orange) 45%, transparent),
+        color-mix(in oklab, var(--color-accent) 35%, transparent),
+        color-mix(in oklab, var(--color-red) 40%, transparent)) border-box;
+    padding: 12px 16px 14px;
+  }
+  .apDesign h5 { margin: 0 0 8px; font-size: var(--fs-13); font-weight: var(--fw-bold); font-family: var(--font-body); }
+  .apDesign p { margin: 0 0 7px; font-size: var(--fs-12); line-height: 1.8; color: var(--color-muted); }
+  .apDesign ul { margin: 0 0 7px; padding-left: 16px; }
+  .apDesign li { font-size: var(--fs-12); line-height: 1.8; color: var(--color-muted); }
+  .apDesign p b, .apDesign li b { color: var(--color-fg); font-weight: var(--fw-semibold); margin-right: 5px; }
+
+  /* 详情底部操作区（固定不随内容滚动） */
+  .apDetailFoot { flex: none; border-top: 1px solid var(--color-border); padding: 10px 16px 12px; background: var(--color-surface); }
+  .apActions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+  .apBanner { padding: 8px 11px; border-radius: 10px; font-size: var(--fs-12); font-weight: var(--fw-semibold); animation: view-in 0.3s var(--ease-out); text-align: center; }
+  .apBanner.approved { background: var(--color-success-bg); color: var(--color-success); }
+  .apBanner.rejected { background: var(--color-danger-bg); color: var(--color-danger); }
+  .apBanner.edited { background: var(--color-info-bg); color: var(--color-info); }
+  .apCommentWrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.25s var(--ease-out); }
+  .apCommentWrap[data-open="true"] { grid-template-rows: 1fr; }
+  .apCommentInner { overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+  .apComment {
+    width: 100%; padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface); color: var(--color-fg);
+    font-family: inherit; font-size: var(--fs-12-5); resize: vertical;
+  }
+  .apComment:focus { outline: none; border-color: var(--color-accent); }
+
+  /* ============ Toast / demo 条 ============ */
+  .toast {
+    position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%) translateY(8px);
+    z-index: 120;
+    padding: 7px 16px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in oklab, var(--color-fg) 88%, transparent);
+    color: var(--color-bg);
+    font-size: var(--fs-12-5); font-weight: var(--fw-medium);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s var(--ease-out), transform 0.2s var(--ease-out);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .demoBar {
+    position: fixed; bottom: 14px; left: 14px; z-index: 110;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg);
+    background: color-mix(in oklab, var(--color-surface) 90%, transparent);
+    backdrop-filter: blur(14px);
+    box-shadow: var(--shadow-2);
+    font-size: var(--fs-11-5);
+  }
+  .demoBar .title { font-size: var(--fs-11); font-weight: var(--fw-bold); color: var(--color-faint); letter-spacing: 0.04em; }
+  .dbtn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-pill);
+    background: var(--color-surface); color: var(--color-muted);
+    font-size: var(--fs-11-5); font-weight: var(--fw-medium); cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out); white-space: nowrap;
+  }
+  .dbtn:hover { border-color: var(--color-accent); color: var(--color-accent-ink); }
+
+  /* ============ 动画 ============ */
+  @keyframes msg-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes spinner-rotate { to { transform: rotate(360deg); } }
+  @keyframes status-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-7deg); } 75% { transform: rotate(7deg); } }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="brand"><span class="brandDot"></span><span class="brandName">Novel</span></div>
+    <span class="schemeTag">方案 A · 弹窗审批 + 右栏内容目录</span>
+    <div class="topRight">
+      <div class="themeDots" id="themeDots"></div>
+      <button class="iconBtn" id="bellBtn" data-act="bell" title="待审批通知">
+        <span id="bellIcon"></span><span class="bellBadge" id="bellBadge" style="display:none;">0</span>
+      </button>
+    </div>
+  </header>
+  <div class="shell">
+    <main class="main" id="main"></main>
+    <aside class="inspector" id="inspector">
+      <div class="insGrip" id="insGrip" title="拖拽调宽 · 双击复位"><span class="gripTip" id="gripTip">360px</span></div>
+      <div id="insBody" style="display:flex;flex-direction:column;min-height:0;flex:1;"></div>
+    </aside>
+  </div>
+</div>
+
+<div class="dialogMask" id="apMask"></div>
+<div class="toast" id="toast"></div>
+<div class="demoBar">
+  <span class="title">审批方案 A</span>
+  <button class="dbtn" data-act="replay">重放审批到达</button>
+  <button class="dbtn" data-act="openModal">打开审批弹窗</button>
+</div>
+
+<script>
+"use strict";
+/* ================= 图标（lucide 风格内联 SVG） ================= */
+const P = {
+  feather: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  shieldCheck: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>',
+  userRound: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+  mapPin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+  listTree: '<path d="M21 10h-8"/><path d="M21 14h-8"/><path d="M21 18h-8"/><path d="M3 4v13a2 2 0 0 0 2 2h3"/><path d="M3 8h5"/>',
+  chevRight: '<path d="m9 18 6-6-6-6"/>',
+  chevLeft: '<path d="m15 18-6-6 6-6"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  edit: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
+  plus: '<path d="M5 12h14M12 5v14"/>',
+  retry: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  bookOpen: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+};
+const ic = (n, s = 14, w = 1.8) =>
+  `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${P[n] || ""}</svg>`;
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const $ = (id) => document.getElementById(id);
+
+/* ================= 数据（与《北河旧事》示例一致 · 精简） ================= */
+const CHARS = [
+  { id: "ch1", name: "林晚", role: "主角 · 佩符人",
+    summary: "渡口绸缎庄的孤女，袖中藏着半枚来历不明的铜符。心思细，肯忍，惯于把话说一半。",
+    initialState: "被县衙捕头周慎盯上，夜宿北桥客栈，等一场雾夜的渡船。",
+    profile: "全书视角人物。保持有限视角，不写她不知道的事；她对铜符的态度每卷松动一寸，是全书的暗节拍。",
+    related: ["u1", "u2", "u3"] },
+  { id: "ch2", name: "沈砚", role: "配角 · 船工",
+    summary: "北桥渡口的老船工，三十年来只在雾夜摆渡。话少，收费看人。（写入待审批）",
+    initialState: "袖口藏着一枚不属于他的铜符（写入待审批）。",
+    profile: "与林晚的铜符互为呼应。第 4 章之前不正面写他的内心，只写他的手。",
+    related: ["u4"] },
+  { id: "ch3", name: "周慎", role: "配角 · 捕头",
+    summary: "县衙捕头，十年前旧案的经手人。办案讲规矩，也讲代价。",
+    initialState: "复查旧案，重新盯上绸缎庄。",
+    profile: "不写成脸谱化的追捕者——他也在等铜符的另一半。",
+    related: ["u6", "u7"] },
+  { id: "ch4", name: "阿枝", role: "次要 · 客栈帮工",
+    summary: "北桥客栈掌柜的独女，记得每个渡客的鞋码与口音。",
+    initialState: "雨夜里替林晚瞒了一程。",
+    profile: "细节型人物，用鞋码、口音做伏笔，不单独开视角。",
+    related: ["u3"] },
+];
+const LOCS = [
+  { id: "l1", name: "北河渡口", locState: "晨雾未散",
+    summary: "南北往来的官渡。白天船家吆喝，雾夜只剩沈砚一条船。",
+    profile: "渡口地形在第 2 章追逃中第二次出现时应当封闭：只留一条退路。",
+    related: ["u1", "u2"] },
+  { id: "l2", name: "北桥客栈", locState: "雨夜亮灯",
+    summary: "雨夜唯一亮灯的檐下，掌柜记得每个渡客的鞋码。",
+    profile: "大堂、后厨、天井三层空间。第 3 章灯火戏只用大堂与门外。",
+    related: ["u3"] },
+  { id: "l3", name: "雾角灯塔", locState: "年久失修",
+    summary: "北河入海口的旧灯塔，三十年前换过一次守塔人。",
+    profile: "第三卷核心场景。现状与关联单元待完善，影响第 9 章成纲。",
+    related: [] },
+  { id: "l4", name: "县档案房", locState: "需调阅",
+    summary: "县衙西跨院，旧案卷宗存放处，潮气重。",
+    profile: "第 6–7 章夜话场景。卷宗编号做线索。",
+    related: ["u6", "u7"] },
+];
+/* 大纲目录（两级：卷 → 章） */
+const OUTLINE_DIR = [
+  { id: "a1", title: "第一卷 · 北渡", children: [
+    { id: "u1", title: "第 1 章 · 雾起北河", state: "completed", note: "开卷：渡口的日常与暗流；章末铜符露形半枚。" },
+    { id: "u2", title: "第 2 章 · 雨夜追逃", state: "writing", note: "主观视角的追逃，悬念保留到最后；修订待审批。" },
+    { id: "u3", title: "第 3 章 · 客栈灯火", state: "completed", note: "投宿北桥客栈，安顿与观察；鞋码与口音伏笔。" },
+    { id: "u4", title: "第 4 章 · 铜符", state: "blocked", note: "受阻：等待第 2 章定稿（铜符是否示人）。" },
+  ] },
+  { id: "a2", title: "第二卷 · 雾锁", children: [
+    { id: "u6", title: "第 6 章 · 旧案卷宗", state: "pending", note: "周慎调卷，卷宗编号丙三七与铜符缺口对上。" },
+    { id: "u7", title: "第 7 章 · 档案房夜话", state: "pending", note: "两代证词互拆，老书办只肯在雾夜开口。" },
+  ] },
+  { id: "a3", title: "第三卷 · 灯塔", children: [
+    { id: "u9", title: "第 9 章 · 雾角", state: "idea", note: "雾角声里的接近。尚未成纲。" },
+    { id: "u10", title: "第 10 章 · 灯还亮着", state: "idea", note: "收束章。尚未成纲。" },
+  ] },
+];
+const STATE_CHIP = {
+  completed: ["完成", "success"], writing: ["写作中", "warn"],
+  pending: ["未动笔", ""], blocked: ["受阻", "danger"], idea: ["点子", "info"],
+};
+const unitTitle = (uid) => {
+  for (const v of OUTLINE_DIR) for (const u of v.children) if (u.id === uid) return u.title;
+  return null;
+};
+
+/* 实体标签 → 目录定位映射 */
+const ENT = {
+  char: { tab: "characters", label: "人物", list: CHARS, icon: "userRound" },
+  loc: { tab: "locations", label: "地点", list: LOCS, icon: "mapPin" },
+};
+const entTag = (type, id) => {
+  const meta = ENT[type];
+  const e = meta.list.find(x => x.id === id);
+  const name = e ? e.name : id;
+  return `<button class="entTag" data-act="ent" data-type="${type}" data-id="${id}" title="在右栏目录定位：${meta.label} › ${name}">${ic(meta.icon, 10.5)}&lt;${type === "char" ? "character" : "location"}_${esc(name)}&gt;</button>`;
+};
+
+/* ================= 审批数据（一次调用一批 · 4 项） ================= */
+const AP_STATUS_LABEL = { pending: "待批准", approved: "已批准", rejected: "已拒绝", edited: "已修改" };
+const AP_GLYPH = { add: "+", edit: "~", delete: "−", exit: "»" };
+const AP_TOOL_CODE = { add: "NovelCharacterWrite", edit: "NovelParagraphWrite", delete: "NovelFragmentDelete", exit: "ExitComposeMode" };
+const AP_TEMPLATES = [
+  { op: "add", tool: "角色写入", title: "沈砚",
+    params: [["名称", "沈砚"], ["简介", "北桥渡口的老船工，三十年来只在雾夜摆渡"], ["初始状态", "袖口藏着一枚不属于他的铜符"]] },
+  { op: "edit", tool: "正文编辑", title: "第 2 章 · 追逃段", stale: true,
+    existing: { text: "雨幕里，林晚沿着河街奔逃。她认得这条路——白天走过两遍，第二遍时她特意记下了井台的位置。过北桥时她听见身后有人唤她的名字，那声音让她想起十年前的另一个雨夜。她没有回头，也没有停下。" },
+    params: [["所属故事单元", "第 2 章 · 雨夜追逃"], ["正文内容", "雨点砸在青石板上，溅起的水星子扑在她的裤脚。她攥紧袖中那半枚铜符，缺口硌着腕骨。巷口的灯笼灭了又亮……她不敢回头——回头的人，没有一个走到过北桥。（修改稿 +38 字）"]] },
+  { op: "delete", tool: "删除", title: "旧的构思（碎片卷）",
+    existing: { rows: [["碎片 1", "铜符的另一枚在哪——沈砚袖口的轮廓"], ["碎片 2", "渡口的规矩：雾夜不渡生人，除非付得起代价"], ["碎片 3", "灯塔的守夜人，三十年前换过一次"]] },
+    params: [["ID", "draft-fragments"], ["类型", "碎片卷 · 3 条"]] },
+  { op: "exit", tool: "退出设计模式", title: "提交设计草稿",
+    designHTML: `
+      <h5>《北河旧事》第二卷 · 雾锁 —— 设计草稿</h5>
+      <p><b>目标</b>重启十年前旧案，把「档案房」线落到 3 个单元；为周慎补一条「他也在等另一半铜符」的暗线。</p>
+      <ul>
+        <li><b>第 6 章 · 旧案卷宗</b>周慎调卷，卷宗编号丙三七与铜符缺口对上。</li>
+        <li><b>第 7 章 · 档案房夜话</b>两代证词互拆，老书办只肯在雾夜开口。</li>
+        <li><b>第 8 章 · 断缆</b>渡船断缆是人为；留一个不揭的「谁割的」。</li>
+      </ul>
+      <p><b>改动</b>地点「县档案房」补现状「需调阅」；角色「周慎」补作者备注。</p>
+      <p><b>风险</b>第 8 章与已弃置的第 5 章（渡资）意象重复，注意区分。</p>` },
+];
+let aps = [];
+const state = {
+  theme: "paper", dirTab: "outline", apSel: 0, modalOpen: false,
+  expandedDir: null, insW: null, done: false,
+  archive: null, chatTop: 0,
+};
+let pendSec = 0;
+const pendingN = () => aps.filter(g => g.status === "pending").length;
+
+/* ================= 渲染 · 对话流 ================= */
+function headHTML(time) {
+  return `<div class="msgHead">
+    <span class="avatar assistant">${ic("feather", 12, 2)}</span>
+    <b>NovelAI</b><span class="mMeta">${time}</span><span class="chip faint">设计</span>
+  </div>`;
+}
+
+/* markdown 全格式样例（自描述：用格式名做小节标题） */
+function mdShowcaseHTML() {
+  return `
+  <h2>标题 Heading（h1–h6 逐级）</h2>
+  <h1>一级标题 · 全书名</h1>
+  <h2>二级标题 · 卷名</h2>
+  <h3>三级标题 · 章名</h3>
+  <h4>四级标题 · 场景</h4>
+  <h5>五级标题 · 小节</h5>
+  <h6>六级标题 · 备注（弱化为辅助文字）</h6>
+  <h2>行内强调</h2>
+  <p><b>粗体</b>、<i>斜体</i>、<b><i>粗斜体</i></b>、<del>删除线</del>、<code>行内代码</code>、<a data-act="mdLink">行内链接</a>，以及按键 <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 发送。</p>
+  <h2>列表</h2>
+  <ul>
+    <li>无序列表：雾夜的调子——梆子三长一短</li>
+    <li>嵌套子项
+      <ul>
+        <li>第二层：灯笼灭而复亮</li>
+        <li>第二层：井台成了一团墨影</li>
+      </ul>
+    </li>
+  </ul>
+  <ol>
+    <li>有序列表：调卷（丙三七出架）</li>
+    <li>夜话（证词互相拆台）</li>
+    <li>断缆（留一个不揭的「谁割的」）</li>
+  </ol>
+  <ul class="task">
+    <li><span class="taskBox done">${ic("check", 9, 3)}</span><span>任务清单 · 已完成：第 1 章 初稿</span></li>
+    <li><span class="taskBox"></span><span>任务清单 · 待办：第 4 章成纲（受阻，等待第 2 章定稿）</span></li>
+  </ul>
+  <h2>引用</h2>
+  <blockquote>
+    <p>「那年也是这样的雨。你问的船工，三十年里我只见过他一个，雾夜肯摆渡的。」</p>
+    <blockquote><p>嵌套引用——老书办的补充：那晚的灯，比平时多亮了一刻钟。</p></blockquote>
+  </blockquote>
+  <h2>代码块</h2>
+  <div class="codeBlock">
+    <div class="codeHead"><span class="dotC"></span>yaml · story-unit</div>
+    <pre><span class="cmt"># 场景单元（scope: scene，叶节点）</span>
+<span class="key">unit:</span>
+  <span class="key">id:</span> <span class="str">u6</span>
+  <span class="key">title:</span> <span class="str">第 6 章 · 旧案卷宗</span>
+  <span class="key">scope:</span> <span class="str">scene</span>
+  <span class="key">planningStatus:</span> <span class="str">outlined</span>
+  <span class="key">intent:</span> <span class="str">周慎调卷，旧案与铜符缺口对上。</span></pre>
+  </div>
+  <h2>表格</h2>
+  <table>
+    <thead><tr><th>人物</th><th>身份</th><th>出场章</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr><td>林晚</td><td>主角 · 佩符人</td><td>第 1–3 章</td><td>写作中</td></tr>
+      <tr><td>沈砚</td><td>配角 · 船工</td><td>第 1、4 章</td><td>写入待审批</td></tr>
+      <tr><td>周慎</td><td>配角 · 捕头</td><td>第 6–7 章</td><td>已成纲</td></tr>
+    </tbody>
+  </table>
+  <h2>分割线</h2>
+  <hr>
+  <h2>图片</h2>
+  <figure>
+    <div class="mdImgPh">北河渡口 · 雾夜（占位图）</div>
+    <figcaption>demo 中图片以占位块呈现，真实实现走图片资源</figcaption>
+  </figure>
+  <h2>脚注 Footnote</h2>
+  <p>铜符缺口与来处有关<sup class="fnRef"><a data-act="fnGo" title="跳到页末注释">[1]</a></sup>，这是全书最早已埋下的线索之一。</p>
+  <div class="mdFootnotes">
+    <div><span class="fnSym">[1]</span>第 2 章 entityChanges：knowledge——「确认铜符缺口与来处有关」。</div>
+  </div>`;
+}
+
+function chatTimelineHTML() {
+  return `
+    <div class="runDivider"><span>第 1 轮 · 二卷开篇</span></div>
+    <div class="msgUser">帮我把第二卷的开头理一下，先看看现在的大纲。</div>
+    <div class="msgAssistant">
+      ${headHTML("今天 14:02")}
+      <div class="toolGroup">
+        <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}NovelOutlineRead · 全树（includePlans）</span></div>
+      </div>
+      <div class="mdBody">
+        <p>第二卷「雾锁」现状：<b>已成纲 · 未动笔</b>，「旧案重启 · 档案房线」序列两章（第 6、7 章，草稿已成），第 8 章「断缆」还只是点子。</p>
+        <p>建议从档案房线开笔：先让 ${entTag("char", "ch3")} 在 ${entTag("loc", "l4")} 调卷，第 7 章夜话的证词拆台才有着力点。点正文里的实体标签，可在右栏目录直接定位对应档案。</p>
+      </div>
+    </div>
+    <div class="runDivider"><span>第 2 轮 · 排版样例</span></div>
+    <div class="msgUser">给我一条消息，把你会的 markdown 排版全部过一遍，我看看渲染效果。</div>
+    <div class="msgAssistant">
+      ${headHTML("今天 14:10")}
+      <div class="mdBody"><p>好——下面这条正文覆盖常用 markdown 格式的渲染样例，小节标题即格式名：</p></div>
+      <div class="mdBody">${mdShowcaseHTML()}</div>
+    </div>
+    <div class="runDivider"><span>第 3 轮 · 追逃段修订 + 设计草稿</span></div>
+    <div class="msgUser">把第二章的追逃段改成林晚的主观视角，然后按这轮讨论出一份二卷设计草稿，一起给我审。</div>
+    <div class="msgAssistant">
+      ${headHTML("今天 14:20")}
+      <div class="mdBody"><p>按 leaf 的节奏拍重写追逃段（只写 ${entTag("char", "ch1")} 看得见、听得见的），并把二卷设计整理成草稿——<b>4 项变更待审批</b>，审批窗口已弹出。</p></div>
+      <div class="toolGroup">
+        <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}NovelOutlineRead · u2（含 leaf）</span></div>
+        ${state.done
+          ? `<div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}审批完成 · 4 项已处理（14:31）</span></div>`
+          : `<div class="toolLine apToolLink" id="apToolLine" data-act="openModal" title="打开审批弹窗"><span class="toolRunning"><span class="spinner"></span>等待审批 · ${pendingN()} 项（角色写入 / 正文编辑 / 碎片删除 / 设计草稿）—— 点击处理</span></div>`}
+      </div>
+      <div class="mdBody">
+        <div class="quoteKai">「回头的人，没有一个走到过北桥。」——第二章 · 雨夜追逃</div>
+      </div>
+    </div>`;
+}
+
+function statusRowHTML() {
+  if (state.done) return "";
+  const n = pendingN();
+  return `<div class="rsRow" data-act="openModal" title="打开审批弹窗">
+    ${ic("hourglass", 15)}
+    <span class="rsLabel">审批挂起</span>
+    <span class="rsSec" id="pendSec">0s</span>
+    <span class="rsHint">· ${n} 项待决，点击处理（发送已暂停）</span>
+  </div>`;
+}
+function composerHTML() {
+  return `
+  <div class="composer">
+    <div class="composerInner">
+      <div class="composerBox">
+        <div class="statusWrap" data-open="${!state.done}"><div class="statusInner">${statusRowHTML()}</div></div>
+        <div class="composerRow">
+          <textarea id="chatInput" rows="1" placeholder="${state.done ? "输入创作指令… （Enter 发送）" : "审批挂起中——处理完本轮审批后恢复发送"}"></textarea>
+        </div>
+        <div class="modeRow">
+          <span class="modeChip">${ic("shieldCheck", 12)}需审核</span>
+          <span style="flex:1"></span>
+          <button class="sendBtn" id="sendBtn" ${state.done ? "" : "disabled"} title="发送（Enter）">${ic("send", 14)}</button>
+        </div>
+      </div>
+      <div class="composerHint"><span><b>Enter</b> 发送</span><span><b>Shift+Enter</b> 换行</span><span>Tab 引用 角色 / 大纲 / 正文</span></div>
+    </div>
+  </div>`;
+}
+/* 完整档案页（右栏目录 / 详情卡"打开完整档案"的跳转目标：主区替换 + 返回） */
+function archiveHTML() {
+  const { type, id } = state.archive || {};
+  const meta = ENT[type];
+  const e = meta && meta.list.find(x => x.id === id);
+  if (!e) return "";
+  const rel = e.related || [];
+  return `
+  <div class="subHead">
+    <button class="iconBtn" data-act="archiveBack" title="返回对话">${ic("chevLeft", 15)}</button>
+    <div class="subTitle"><b>${meta.label}档案 · ${esc(e.name)}</b><span class="kicker">完整档案 —— 从右栏目录跳转</span></div>
+    <div class="subActions"><button class="btn btnGhost btnSm" data-act="archEdit">${ic("edit", 12)}编辑</button></div>
+  </div>
+  <div class="paneBody"><div class="paneInner">
+    <div class="cardBlock">
+      <div class="profileHead">
+        ${type === "char" ? `<span class="avatar">${esc(e.name[0])}</span>` : `<span class="avatar">${ic("mapPin", 18)}</span>`}
+        <div><h2>${esc(e.name)}</h2><div class="kicker">${type === "char" ? esc(e.role) : "地点 · 现状：" + esc(e.locState)} · v3</div></div>
+      </div>
+    </div>
+    <div class="cardBlock"><h3>简介</h3><p class="cardP">${esc(e.summary)}</p></div>
+    ${type === "char" ? `<div class="cardBlock"><h3>初始状态</h3><p class="cardP">${esc(e.initialState || "（未填写）")}</p></div>` : ""}
+    <div class="cardBlock"><h3>作者备注</h3><p class="cardP kai">${esc(e.profile || "（未填写）")}</p></div>
+    <div class="cardBlock"><h3>关联单元</h3>
+      <div class="relChips">${rel.length
+        ? rel.map(uid => unitTitle(uid)).filter(Boolean).map(t => `<span class="chip faint">${ic("listTree", 10)}${esc(t)}</span>`).join("")
+        : `<span style="color:var(--color-faint);font-size:var(--fs-12);">尚未关联 —— 计划视图有待办提醒</span>`}</div>
+    </div>
+  </div></div>`;
+}
+function renderMain() {
+  const prev = $("chatScroll");
+  const top = prev ? prev.scrollTop : 0;
+  $("main").innerHTML = `
+    <div class="apAlertBar" id="apAlertBar" data-act="openModal" title="打开审批弹窗" style="display:none;">
+      ${ic("hourglass", 15)}<b>审批挂起</b><span>· <span id="alertN">${pendingN()}</span> 项待决，会话已暂停——处理完继续</span>
+      <span class="alertBtn">立即处理 ${ic("arrowRight", 11)}</span>
+    </div>
+    ${state.archive ? archiveHTML() : `
+      <div class="chatScroll" id="chatScroll"><div class="chatInner">${chatTimelineHTML()}</div></div>
+      ${composerHTML()}`}`;
+  const sc = $("chatScroll");
+  /* 同视图重渲染保持原位；从档案页返回时恢复进入前位置 */
+  if (sc) sc.scrollTop = prev ? top : (state.chatTop || 0);
+  updateAlertBar();
+}
+
+/* ================= 渲染 · 右栏内容目录 ================= */
+const DIR_TABS = [
+  { id: "outline", name: "大纲", icon: "listTree", n: OUTLINE_DIR.reduce((s, v) => s + v.children.length, 0) },
+  { id: "characters", name: "人物", icon: "userRound", n: CHARS.length },
+  { id: "locations", name: "地点", icon: "mapPin", n: LOCS.length },
+];
+/* 目录条目详情卡：行点击就地展开（简介 / 初始状态 / 关联单元 + 打开完整档案） */
+function dirDetailHTML(type, id) {
+  const meta = ENT[type];
+  const e = meta.list.find(x => x.id === id);
+  if (!e) return "";
+  const rel = e.related || [];
+  return `<div class="dirDetail${state.expandedDir === type + ":" + id ? " show" : ""}" data-sum="${type}:${id}">
+    <div class="ddHead">
+      ${type === "char" ? `<span class="avatar">${esc(e.name[0])}</span>` : `<span class="convIcon">${ic("mapPin", 12)}</span>`}
+      <div><b>${esc(e.name)}</b><small>${meta.label} · ${esc(e.role || e.locState || "")}</small></div>
+    </div>
+    <div class="ddSec"><span>简介</span>${esc(e.summary)}</div>
+    ${type === "char" && e.initialState ? `<div class="ddSec"><span>初始状态</span>${esc(e.initialState)}</div>` : ""}
+    ${rel.length ? `<div class="ddSec"><span>关联单元</span><span class="ddChips">${rel.map(uid => unitTitle(uid)).filter(Boolean).map(t => `<span class="chip faint mini">${esc(t)}</span>`).join("")}</span></div>` : ""}
+    <button class="ddGo" data-act="archiveOpen" data-type="${type}" data-id="${id}">打开完整档案 ${ic("arrowRight", 11)}</button>
+  </div>`;
+}
+function outlineDirHTML() {
+  return OUTLINE_DIR.map(v => `
+    <div class="dirRow open" data-act="dirToggle" data-id="${v.id}">
+      <span class="chev">${ic("chevRight", 12, 2.2)}</span>
+      <span class="dirLabel"><b>${esc(v.title)}</b><small>${v.children.length} 章</small></span>
+    </div>
+    ${v.children.map(u => {
+      const c = STATE_CHIP[u.state] || ["", ""];
+      return `<div class="dirRow" style="padding-left:30px;" data-act="dirToggle" data-id="${u.id}">
+          <span class="treeIndent"></span>
+          <span class="dirLabel"><b>${esc(u.title)}</b><small>${esc(u.note)}</small></span>
+          ${c[0] ? `<span class="chip mini ${c[1]}">${c[0]}</span>` : ""}
+        </div>`;
+    }).join("")}`).join("");
+}
+function entityDirHTML(type) {
+  const meta = ENT[type];
+  return meta.list.map(e => {
+    const key = type + ":" + e.id;
+    return `
+    <div class="dirRow${state.expandedDir === key ? " open" : ""}" data-act="dirToggle" data-id="${key}" data-ent="${key}">
+      ${type === "char" ? `<span class="avatar">${esc(e.name[0])}</span>` : `<span class="convIcon">${ic("mapPin", 12)}</span>`}
+      <span class="dirLabel"><b>${esc(e.name)}</b><small>${esc(e.role || e.locState || "")}</small></span>
+      <span class="rowChev">${ic("chevRight", 12, 2.2)}</span>
+    </div>
+    ${dirDetailHTML(type, e.id)}`;
+  }).join("");
+}
+function renderInspector() {
+  $("insBody").innerHTML = `
+    <div class="insHead">
+      <b>内容目录</b>
+      <span class="kicker">对话随手查 · 实体标签可定位</span>
+    </div>
+    <div class="segTabs" role="tablist">
+      ${DIR_TABS.map(t => `<button data-act="dirTab" data-id="${t.id}" aria-selected="${t.id === state.dirTab}">${ic(t.icon, 13)}<span>${t.name}</span><span class="cnt">${t.n}</span></button>`).join("")}
+    </div>
+    <div class="sideScroll">
+      ${state.dirTab === "outline" ? outlineDirHTML() : entityDirHTML(state.dirTab === "characters" ? "char" : "loc")}
+      <div class="dirFoot">对话流中的 <span class="entTag" style="cursor:default;">&lt;character_沈砚&gt;</span> 等实体标签可点击：右栏切到对应目录并高亮定位。面板左缘可拖拽调宽（双击复位）。</div>
+    </div>`;
+}
+
+/* ================= 渲染 · 审批弹窗 ================= */
+function detailHTML(g) {
+  const ident = g.op === "exit" ? "退出设计模式 · ExitComposeMode" : esc(g.tool) + " · " + AP_TOOL_CODE[g.op];
+  let body = "";
+  if (g.op === "exit") {
+    body = `<div class="apSection">
+      <div class="apSectionHead">${ic("feather", 11)}设计草稿 · design.md（全文）</div>
+      <div class="apDesign">${g.designHTML}</div>
+    </div>`;
+  } else {
+    const curHead = g.op === "delete" ? "当前内容 · 将被删除" : g.op === "edit" ? "当前内容 · 将被覆盖" : "当前内容";
+    let cur = "";
+    if (g.existing) {
+      cur = `<div class="apSection">
+        <div class="apSectionHead">${ic("clock", 11)}${curHead}</div>
+        <div class="apCur ${g.op}">
+          ${g.existing.text ? `<div class="apCurText">${esc(g.existing.text)}</div>` : ""}
+          ${g.existing.rows ? `<dl class="apParam">${g.existing.rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
+        </div>
+      </div>`;
+    } else {
+      cur = `<div class="apSection">
+        <div class="apSectionHead">${ic("clock", 11)}当前内容</div>
+        <div class="apCur add"><span class="apEmpty">无既有数据 · 此操作为新建</span></div>
+      </div>`;
+    }
+    body = cur + `<div class="apSection">
+      <div class="apSectionHead">${ic(g.op === "delete" ? "x" : g.op === "add" ? "plus" : "edit", 11)}${g.op === "delete" ? "删除参数" : g.op === "edit" ? "变更后" : "写入内容"}</div>
+      <dl class="apParam">${g.params.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
+    </div>`;
+  }
+  return `
+    <div class="apDetailScroll">
+      <div class="apIdentity"><span>${ident}</span><span class="apPill ${g.status}">${AP_STATUS_LABEL[g.status]}</span></div>
+      <h4 class="apTitle"><span class="glyph ${g.op === "exit" ? "exit" : g.op}">${AP_GLYPH[g.op]}</span>${esc(g.title)}</h4>
+      ${g.stale && g.status === "pending" ? `<div class="apStale">版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败</div>` : ""}
+      ${body}
+    </div>
+    <div class="apDetailFoot">
+      ${g.status !== "pending"
+        ? `<div class="apBanner ${g.status}">已处理 · ${AP_STATUS_LABEL[g.status]}${g._ctextShow ? "（" + esc(g._ctextShow) + "）" : ""}</div>`
+        : `<div class="apActions">
+            <button class="btn btnPrimary btnSm" data-act="apDecide" data-id="approve">${ic("check", 12)}批准</button>
+            <button class="btn btnGhostDanger btnSm" data-act="apDecide" data-id="reject">${ic("x", 12)}拒绝</button>
+            <button class="btn btnGhost btnSm" data-act="apDecide" data-id="comment">请求修改</button>
+          </div>
+          <div class="apCommentWrap" data-open="${!!g._cOpen}" style="margin-top:8px;">
+            <div class="apCommentInner">
+              <textarea class="apComment" data-gid="${g.id}" rows="2" placeholder="填写修改意见（将随决策回传会话）">${esc(g._ctext || "")}</textarea>
+              <div class="apActions">
+                <button class="btn btnGhost btnSm" data-act="apDecide" data-id="cancel">取消</button>
+                <button class="btn btnPrimary btnSm" data-act="apDecide" data-id="submit" ${!(g._ctext || "").trim() ? "disabled" : ""}>提交修改意见</button>
+              </div>
+            </div>
+          </div>`}
+    </div>`;
+}
+function renderModal() {
+  const mask = $("apMask");
+  if (!state.modalOpen) { mask.classList.remove("show"); mask.innerHTML = ""; updateAlertBar(); return; }
+  const n = pendingN();
+  const sel = aps[state.apSel] || aps[0];
+  mask.innerHTML = `
+  <div class="apModal" data-noclose="1">
+    <div class="apModalHead">
+      <span class="hIcon">${ic("shieldCheck", 16)}</span>
+      <b>审批 · 本轮工具调用</b>
+      <span class="apCnt${n === 0 ? " zero" : ""}">${n === 0 ? "全部处理完" : n + " 项待决"}</span>
+      <span style="flex:1"></span>
+      <button class="btn btnGhost btnSm" data-act="later">${ic("clock", 12)}稍后处理</button>
+      <button class="iconBtn" data-act="later" title="收起弹窗">${ic("x", 13)}</button>
+    </div>
+    <div class="apModalBody">
+      <aside class="apList">
+        <div class="apListScroll">
+          ${aps.map((g, i) => `
+            <button class="apListItem${i === state.apSel ? " active" : ""}" data-act="apSel" data-id="${i}">
+              <span class="glyph ${g.op === "exit" ? "exit" : g.op}">${AP_GLYPH[g.op]}</span>
+              <span class="aliText"><b>${esc(g.tool)} · ${esc(g.title)}</b><small>${AP_TOOL_CODE[g.op]}</small></span>
+              <span class="apPill ${g.status}">${AP_STATUS_LABEL[g.status]}</span>
+            </button>`).join("")}
+        </div>
+        <div class="apListFoot">
+          <button class="btn btnSecondary btnSm" data-act="apAll" ${n === 0 ? "disabled" : ""}>${ic("check", 12)}全部批准（${n}）</button>
+        </div>
+      </aside>
+      <section class="apDetail">${detailHTML(sel)}</section>
+    </div>
+  </div>`;
+  mask.classList.add("show");
+  updateAlertBar();
+}
+/* 挂起提示条：弹窗收起（稍后处理 / ESC）且仍有待决时常驻主区顶部，点击唤回 */
+function updateAlertBar() {
+  const bar = $("apAlertBar");
+  if (!bar) return;
+  const show = !state.done && !state.modalOpen && pendingN() > 0;
+  bar.style.display = show ? "flex" : "none";
+  const n = bar.querySelector("#alertN");
+  if (n) n.textContent = pendingN();
+}
+
+/* ================= 状态联动 ================= */
+function renderStatus() {
+  const wrap = document.querySelector(".statusWrap");
+  if (wrap) {
+    wrap.dataset.open = String(!state.done);
+    const inner = wrap.querySelector(".statusInner");
+    if (inner) inner.innerHTML = statusRowHTML();
+  }
+  const send = $("sendBtn");
+  if (send) send.disabled = !state.done;
+  const ta = $("chatInput");
+  if (ta) ta.placeholder = state.done ? "输入创作指令… （Enter 发送）" : "审批挂起中——处理完本轮审批后恢复发送";
+}
+function renderBell() {
+  const n = pendingN();
+  const badge = $("bellBadge");
+  badge.style.display = n > 0 ? "" : "none";
+  badge.textContent = n;
+}
+function decide(g, kind, note) {
+  if (g.status !== "pending") return;
+  g.status = kind;
+  g._cOpen = false;
+  if (note) g._ctextShow = note;
+  renderBell();
+  if (pendingN() === 0) finishAll();
+}
+function finishAll() {
+  state.done = true;
+  renderMain();
+  toast("本轮审批已全部处理，会话继续");
+  setTimeout(() => { state.modalOpen = false; renderModal(); }, 600);
+  scrollChatBottom();
+}
+function scrollChatBottom() {
+  const sc = $("chatScroll");
+  if (sc) sc.scrollTo({ top: sc.scrollHeight, behavior: "smooth" });
+}
+function resetApproval(autoOpen) {
+  aps = AP_TEMPLATES.map((t, i) => ({ id: i, ...structuredClone(t), status: "pending" }));
+  state.apSel = 0; state.done = false; state.archive = null; pendSec = 0;
+  renderMain(); renderBell();
+  if (autoOpen) setTimeout(() => { state.modalOpen = true; renderModal(); }, 700);
+}
+
+/* ================= 右栏拖拽调宽 ================= */
+const INSP_MIN = 320, INSP_MAX = 640, INSP_DEFAULT = 360;
+const grip = $("insGrip"), gripTip = $("gripTip");
+function applyW(w, tip) {
+  state.insW = w;
+  document.querySelector(".app").style.setProperty("--insp-w", w + "px");
+  if (tip) { gripTip.textContent = w + "px"; gripTip.classList.add("show"); }
+}
+grip.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  grip.setPointerCapture(e.pointerId);
+  grip.classList.add("dragging");
+  document.body.classList.add("resizing");
+  const startX = e.clientX, startW = state.insW || INSP_DEFAULT;
+  applyW(startW, true);
+  const move = (ev) => {
+    const w = Math.max(INSP_MIN, Math.min(INSP_MAX, Math.round(startW - (ev.clientX - startX))));
+    applyW(w, true);
+  };
+  const up = () => {
+    grip.removeEventListener("pointermove", move);
+    grip.removeEventListener("pointerup", up);
+    grip.classList.remove("dragging");
+    document.body.classList.remove("resizing");
+    setTimeout(() => gripTip.classList.remove("show"), 500);
+  };
+  grip.addEventListener("pointermove", move);
+  grip.addEventListener("pointerup", up);
+});
+grip.addEventListener("dblclick", () => {
+  state.insW = null;
+  document.querySelector(".app").style.removeProperty("--insp-w");
+  gripTip.textContent = INSP_DEFAULT + "px";
+  gripTip.classList.add("show");
+  setTimeout(() => gripTip.classList.remove("show"), 600);
+  toast("已复位右栏宽度 " + INSP_DEFAULT + "px");
+});
+
+/* ================= 实体标签 → 目录定位 ================= */
+function locateEntity(type, id) {
+  const meta = ENT[type];
+  const e = meta.list.find(x => x.id === id);
+  if (!e) return;
+  state.dirTab = meta.tab;
+  state.expandedDir = type + ":" + id;
+  renderInspector();
+  const row = document.querySelector(`.dirRow[data-ent="${type}:${id}"]`);
+  if (row) {
+    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    row.classList.remove("flash"); void row.offsetWidth; row.classList.add("flash");
+    row.classList.add("open");
+  }
+  toast(`已在目录定位：${meta.label} › ${e.name}（展开详情卡，可跳完整档案）`);
+}
+
+/* ================= 事件委托 ================= */
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  const act = el.dataset.act, id = el.dataset.id;
+  switch (act) {
+    case "theme": {
+      document.documentElement.dataset.theme = id;
+      state.theme = id; renderThemeDots();
+      break;
+    }
+    case "bell":
+      if (pendingN() > 0) { state.modalOpen = true; renderModal(); }
+      else toast("当前没有待审批项");
+      break;
+    case "openModal":
+      if (state.done) { toast("本轮已处理完，点「重放审批到达」再看一遍"); break; }
+      state.modalOpen = true; renderModal();
+      break;
+    case "later":
+      if (!state.done) toast("已稍后处理——顶部提示条 · 状态行 · 铃铛 · 工具行均可唤回审批弹窗");
+      state.modalOpen = false; renderModal();
+      break;
+    case "apSel":
+      state.apSel = Number(id); renderModal();
+      break;
+    case "apDecide": {
+      const g = aps[state.apSel];
+      if (!g) break;
+      if (id === "approve") decide(g, "approved");
+      else if (id === "reject") decide(g, "rejected");
+      else if (id === "comment") { g._cOpen = !g._cOpen; }
+      else if (id === "cancel") g._cOpen = false;
+      else if (id === "submit") decide(g, "edited", (g._ctext || "").trim());
+      renderModal();
+      break;
+    }
+    case "apAll": {
+      aps.filter(g => g.status === "pending").forEach(g => decide(g, "approved"));
+      renderModal();
+      break;
+    }
+    case "replay":
+      state.modalOpen = false; renderModal();
+      resetApproval(true);
+      toast("已重放：审批到达，弹窗即将弹出");
+      break;
+    case "ent":
+      locateEntity(el.dataset.type, el.dataset.id);
+      break;
+    case "archiveOpen": {
+      const meta = ENT[el.dataset.type];
+      const e2 = meta.list.find(x => x.id === el.dataset.id);
+      const sc = $("chatScroll");
+      if (sc) state.chatTop = sc.scrollTop;
+      state.archive = { type: el.dataset.type, id: el.dataset.id };
+      renderMain();
+      toast(`已打开完整档案：${meta.label} › ${e2 ? e2.name : el.dataset.id}`);
+      break;
+    }
+    case "archiveBack":
+      state.archive = null;
+      renderMain();
+      break;
+    case "archEdit":
+      toast("编辑档案（演示）");
+      break;
+    case "dirTab":
+      state.dirTab = id; renderInspector();
+      break;
+    case "dirToggle": {
+      const key = el.dataset.ent || null;
+      const willOpen = state.expandedDir !== key;
+      /* 展开新行时收起上一张详情卡（手风琴单开） */
+      if (willOpen && state.expandedDir && state.expandedDir !== key) {
+        const prevDetail = document.querySelector(`.dirDetail[data-sum="${state.expandedDir}"]`);
+        if (prevDetail) prevDetail.classList.remove("show");
+        const prevRow = document.querySelector(`.dirRow[data-ent="${state.expandedDir}"]`);
+        if (prevRow) prevRow.classList.remove("open");
+      }
+      state.expandedDir = willOpen ? key : null;
+      const detail = el.nextElementSibling;
+      if (detail && detail.classList.contains("dirDetail")) {
+        detail.classList.toggle("show", willOpen);
+      }
+      el.classList.toggle("open", willOpen);
+      break;
+    }
+    case "mdLink":
+      toast("演示链接：真实实现打开目标地址");
+      break;
+    case "fnGo":
+      document.querySelector(".mdFootnotes")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      toast("脚注：正文上标 → 页末注释区");
+      break;
+  }
+});
+/* 意见输入（启用提交按钮） */
+document.addEventListener("input", (e) => {
+  const ta = e.target;
+  if (ta.classList && ta.classList.contains("apComment")) {
+    const g = aps[state.apSel];
+    if (!g) return;
+    g._ctext = ta.value;
+    const submit = ta.closest(".apCommentInner").querySelector('[data-id="submit"]');
+    if (submit) submit.disabled = g._ctext.trim() === "";
+  }
+});
+/* ESC：先收弹窗（=稍后处理），再退档案页 */
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (state.modalOpen) {
+    state.modalOpen = false; renderModal();
+    if (!state.done) toast("已稍后处理——顶部提示条 · 状态行 · 铃铛 · 工具行均可唤回");
+  } else if (state.archive) {
+    state.archive = null; renderMain();
+  }
+});
+/* 点遮罩空白 = 稍后处理 */
+$("apMask").addEventListener("click", (e) => {
+  if (!e.target.closest("[data-noclose='1']")) {
+    state.modalOpen = false; renderModal();
+    if (!state.done) toast("已稍后处理——顶部提示条 · 状态行 · 铃铛 · 工具行均可唤回");
+  }
+});
+
+/* ================= 计时器 / Toast / 主题点 ================= */
+let toastTimer = null;
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2400);
+}
+const THEMES = [
+  { id: "paper", c: "#a0522d" }, { id: "ink", c: "#2b2723" },
+  { id: "celadon", c: "#24303a" }, { id: "frost", c: "#d9e2f2" },
+];
+function renderThemeDots() {
+  $("themeDots").innerHTML = THEMES.map(t =>
+    `<button class="tdot" data-act="theme" data-id="${t.id}" aria-pressed="${state.theme === t.id}" title="${t.id}" style="background:${t.c}"></button>`).join("");
+}
+$("bellIcon").innerHTML = ic("bell", 15);
+setInterval(() => {
+  if (state.done || pendingN() === 0) { pendSec = 0; }
+  else pendSec += 1;
+  const el = $("pendSec");
+  if (el) el.textContent = pendSec + "s";
+}, 1000);
+/* 输入框自适应高度（演示） */
+document.addEventListener("input", (e) => {
+  if (e.target.id === "chatInput") {
+    const ta = e.target;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
+  }
+});
+
+/* ================= 启动 ================= */
+renderThemeDots();
+resetApproval(false);
+renderInspector();
+setTimeout(() => { state.modalOpen = true; renderModal(); }, 900);
+</script>
+</body>
+</html>

@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="paper">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AskUserQuestion · 流内提问卡 demo</title>
+<style>
+  /* ============================================================
+     AskUserQuestion（向作者提问）流内交互 demo。
+     形态对齐 NovelAI-Event approval-inline-demo 的「流内阻塞卡」：
+     提问组卡内联在对话流末尾（紧跟引发它的轮次），问题逐项折叠
+     （首问展开、其余折叠），作答后原地留痕为简约记录（时间线即审计）。
+     与审批 demo 的差异：不关联右侧面板——提问在 760px 宽度内就地
+     阅读、就地作答；多问题时刻（单选/多选/开放混排 4 问）为重点展示。
+     主题 token 对齐 app-redesign-demo.html（四主题零组件改动）。
+     ============================================================ */
+  :root {
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+      "PingFang SC", "Hiragino Sans GB", "HarmonyOS Sans SC", "MiSans",
+      "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Microsoft YaHei",
+      system-ui, sans-serif;
+    --font-body: "Iowan Old Style", "Palatino Linotype",
+      "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong",
+      "SimSun", Georgia, serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+
+    --fs-chat: 15.5px;
+    --fs-12: 12px; --fs-13: 13px; --fs-12-5: 12.5px; --fs-11: 11px; --fs-10-5: 10.5px;
+    --fw-regular: 400; --fw-medium: 550; --fw-semibold: 650; --fw-bold: 700;
+    --radius-sm: 6px; --radius-md: 9px; --radius-lg: 14px; --radius-pill: 999px;
+    --duration-fast: 0.15s; --duration-base: 0.22s;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+    --color-bg:            oklch(97.9% 0.003 85);
+    --color-surface:       oklch(99.8% 0.0015 85);
+    --color-surface-2:     oklch(96.2% 0.004 82);
+    --color-fg:            oklch(30% 0.009 46);
+    --color-muted:         oklch(52% 0.009 54);
+    --color-faint:         oklch(60% 0.009 58);
+    --color-border:        oklch(92.4% 0.003 82);
+    --color-border-strong: oklch(86.4% 0.006 72);
+    --color-orange:        oklch(73% 0.068 60);
+    --color-accent:        oklch(55% 0.072 42);
+    --color-red:           oklch(58% 0.075 32);
+    --color-accent-ink:    oklch(47% 0.062 41);
+    --color-success:       oklch(52% 0.07 156);
+    --color-success-bg:    oklch(97.2% 0.011 156);
+    --color-warn:          oklch(59% 0.07 80);
+    --color-warn-bg:       oklch(97.1% 0.011 86);
+    --color-danger:        oklch(54% 0.068 32);
+    --color-info:          oklch(54% 0.05 235);
+    --color-info-bg:       oklch(97.2% 0.007 236);
+    --color-on-accent:     #fff;
+
+    --color-accent-9:   color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+    --color-accent-8-t: color-mix(in oklab, var(--color-accent) 8%, transparent);
+    --color-accent-11:  color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+    --color-accent-45:  color-mix(in oklab, var(--color-accent) 45%, transparent);
+    --color-chrome-bg:  color-mix(in oklab, var(--color-surface) 82%, transparent);
+    --color-focus-ring: color-mix(in oklab, var(--color-accent) 42%, transparent);
+    --color-scrollbar-thumb: color-mix(in oklab, var(--color-fg) 15%, transparent);
+
+    --grad-accent: linear-gradient(105deg,
+      var(--color-orange) 0%, var(--color-accent) 48%, var(--color-red) 100%);
+    --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04), 0 8px 24px rgba(40, 22, 10, 0.045);
+    --shadow-2: 0 2px 4px rgba(40, 22, 10, 0.05), 0 16px 40px rgba(40, 22, 10, 0.11);
+    --shadow-xs: 0 1px 3px rgba(20, 12, 6, 0.08);
+  }
+  [data-theme="ink"] {
+    --color-bg:            oklch(21% 0.005 80);
+    --color-surface:       oklch(25.5% 0.006 80);
+    --color-surface-2:     oklch(28.5% 0.007 78);
+    --color-fg:            oklch(89% 0.006 85);
+    --color-muted:         oklch(70% 0.008 80);
+    --color-faint:         oklch(59% 0.007 80);
+    --color-border:        oklch(31% 0.007 80);
+    --color-border-strong: oklch(40% 0.01 78);
+    --color-orange:        oklch(77% 0.095 62);
+    --color-accent:        oklch(68% 0.115 42);
+    --color-red:           oklch(66% 0.115 30);
+    --color-accent-ink:    oklch(78% 0.09 45);
+    --color-success:       oklch(72% 0.095 156);
+    --color-success-bg:    oklch(29% 0.032 156);
+    --color-warn:          oklch(75% 0.1 80);
+    --color-warn-bg:       oklch(29% 0.034 85);
+    --color-danger:        oklch(67% 0.1 32);
+    --color-info:          oklch(70% 0.075 235);
+    --color-info-bg:       oklch(28% 0.024 236);
+    --color-on-accent:     oklch(24% 0.03 42);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.32), 0 16px 40px rgba(0, 0, 0, 0.48);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+  [data-theme="celadon"] {
+    --color-bg:            oklch(20% 0.013 235);
+    --color-surface:       oklch(24% 0.015 235);
+    --color-surface-2:     oklch(27% 0.017 232);
+    --color-fg:            oklch(89% 0.009 225);
+    --color-muted:         oklch(69% 0.013 230);
+    --color-faint:         oklch(58% 0.012 230);
+    --color-border:        oklch(30% 0.015 235);
+    --color-border-strong: oklch(38% 0.019 232);
+    --color-orange:        oklch(78% 0.07 190);
+    --color-accent:        oklch(75% 0.1 195);
+    --color-red:           oklch(68% 0.11 265);
+    --color-accent-ink:    oklch(84% 0.075 205);
+    --color-success:       oklch(72% 0.095 158);
+    --color-success-bg:    oklch(28% 0.032 158);
+    --color-warn:          oklch(76% 0.1 90);
+    --color-warn-bg:       oklch(28% 0.032 88);
+    --color-danger:        oklch(68% 0.11 25);
+    --color-info:          oklch(72% 0.08 240);
+    --color-info-bg:       oklch(28% 0.028 240);
+    --color-on-accent:     oklch(20% 0.04 230);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.32);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.32), 0 16px 40px rgba(0, 0, 0, 0.5);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.36);
+  }
+  [data-theme="frost"] {
+    --color-bg:            oklch(97.4% 0.004 240);
+    --color-surface:       oklch(99.5% 0.002 240);
+    --color-surface-2:     oklch(95.6% 0.005 234);
+    --color-fg:            oklch(29% 0.016 262);
+    --color-muted:         oklch(50% 0.014 256);
+    --color-faint:         oklch(59% 0.012 254);
+    --color-border:        oklch(91.6% 0.005 240);
+    --color-border-strong: oklch(85.4% 0.009 234);
+    --color-orange:        oklch(72% 0.075 230);
+    --color-accent:        oklch(52% 0.1 262);
+    --color-red:           oklch(54% 0.1 285);
+    --color-accent-ink:    oklch(44% 0.09 262);
+    --color-success:       oklch(52% 0.07 156);
+    --color-success-bg:    oklch(96.8% 0.011 156);
+    --color-warn:          oklch(58% 0.07 80);
+    --color-warn-bg:       oklch(96.7% 0.011 86);
+    --color-danger:        oklch(54% 0.068 32);
+    --color-info:          oklch(54% 0.055 240);
+    --color-info-bg:       oklch(96.8% 0.008 240);
+    --color-on-accent:     #fff;
+    --shadow-1: 0 1px 2px rgba(12, 18, 40, 0.05), 0 8px 24px rgba(12, 18, 40, 0.055);
+    --shadow-2: 0 2px 4px rgba(12, 18, 40, 0.06), 0 16px 40px rgba(12, 18, 40, 0.13);
+    --shadow-xs: 0 1px 3px rgba(8, 12, 30, 0.09);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; overflow: hidden;
+    background: var(--color-bg); color: var(--color-fg);
+    font-family: var(--font-ui); font-size: var(--fs-13); line-height: 1.6;
+  }
+  svg { flex: none; }
+  button { font-family: inherit; }
+  :focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; }
+
+  .app { display: flex; flex-direction: column; height: 100%; }
+
+  /* ============ 顶栏（极简） ============ */
+  .topbar {
+    display: flex; align-items: center; gap: 10px; flex: none;
+    padding: 0 14px 0 16px; height: 44px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-chrome-bg);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brandDot { width: 13px; height: 13px; border-radius: 50%; background: var(--grad-accent); background-size: 160% 160%; }
+  .brandName { font-weight: var(--fw-bold); font-size: var(--fs-13); }
+  .schemeTag {
+    font-size: var(--fs-11); color: var(--color-faint);
+    padding: 2px 9px; border: 1px solid var(--color-border); border-radius: var(--radius-pill);
+  }
+  .topRight { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .themeDots { display: flex; gap: 5px; padding: 3px 6px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); }
+  .tdot {
+    width: 16px; height: 16px; padding: 0; border-radius: 50%; cursor: pointer;
+    border: 1px solid var(--color-border-strong);
+    transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .tdot:hover { transform: scale(1.12); }
+  .tdot[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--color-accent-45); }
+
+  /* ============ 主体（单栏对话流，无右栏关联） ============ */
+  .shell { flex: 1; min-height: 0; display: flex; }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--color-bg); }
+
+  .chatScroll {
+    flex: 1; min-height: 0; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent;
+    padding: 18px 24px 8px;
+  }
+  .chatInner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+  .runDivider { display: flex; align-items: center; gap: 12px; color: var(--color-faint); font-size: var(--fs-11); letter-spacing: 0.05em; margin: 8px 0 2px; }
+  .runDivider::before, .runDivider::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
+
+  .msgUser {
+    align-self: flex-end; max-width: 76%;
+    padding: 9px 13px;
+    background: var(--color-accent-9);
+    border: 1px solid color-mix(in oklab, var(--color-accent) 14%, var(--color-border));
+    border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
+    font-size: var(--fs-chat);
+    animation: msg-enter var(--duration-base) var(--ease-out);
+  }
+  .msgAssistant { max-width: 94%; animation: msg-enter var(--duration-base) var(--ease-out); }
+  .msgHead { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+  .avatar {
+    display: inline-grid; place-items: center; flex: none;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--grad-accent); color: var(--color-on-accent);
+    font-size: 11px; font-weight: var(--fw-semibold);
+  }
+  .msgHead b { font-size: var(--fs-12-5); font-weight: var(--fw-semibold); }
+  .msgHead .mMeta { font-size: var(--fs-11); color: var(--color-faint); font-family: var(--font-mono); }
+
+  .toolGroup {
+    display: flex; flex-direction: column; gap: 5px;
+    margin: 8px 0 10px; padding: 7px 11px;
+    border-left: 2px solid color-mix(in oklab, var(--color-accent) 32%, transparent);
+    background: color-mix(in oklab, var(--color-fg) 3.5%, transparent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .toolLine { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; font-size: var(--fs-12); line-height: 1.6; }
+  .toolDone { color: var(--color-muted); white-space: nowrap; }
+  .toolDone svg { color: var(--color-success); margin-right: 3px; vertical-align: -2px; }
+  .toolRunning { color: var(--color-fg); font-weight: var(--fw-medium); white-space: nowrap; }
+  .toolRunning .spinner { color: var(--color-warn); margin-right: 5px; }
+  .spinner {
+    display: inline-block; width: 10px; height: 10px;
+    border: 1.5px solid currentColor; border-top-color: transparent;
+    border-radius: 50%; vertical-align: -1px;
+    animation: spinner-rotate 0.8s linear infinite;
+  }
+
+  .mdBody { font-family: var(--font-body); font-size: var(--fs-chat); line-height: 1.85; }
+  .mdBody p { margin: 0 0 10px; }
+  .mdBody b { color: var(--color-fg); font-weight: var(--fw-bold); }
+
+  /* ---- 决策收口提示 ---- */
+  .sysMsg {
+    align-self: center;
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 14px;
+    border: 1px solid color-mix(in oklab, var(--color-success) 32%, transparent);
+    border-radius: var(--radius-pill);
+    background: var(--color-success-bg); color: var(--color-success);
+    font-size: var(--fs-12); font-weight: var(--fw-medium);
+    animation: msg-enter var(--duration-base) var(--ease-out);
+  }
+
+  /* ============ 流内提问组卡（形态对齐审批组卡；不关联右栏） ============ */
+  .askGroupCard {
+    border: 1px solid color-mix(in oklab, var(--color-warn) 36%, var(--color-border-strong));
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-1);
+    overflow: hidden;
+    animation: msg-enter var(--duration-base) var(--ease-out);
+  }
+  .askGroupCard.done { border-color: var(--color-border-strong); }
+  .askGroupHead {
+    display: flex; align-items: center; gap: 9px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-chrome-bg);
+  }
+  .askGroupHead .hIcon { color: var(--color-warn); display: inline-flex; }
+  .askGroupCard.done .askGroupHead .hIcon { color: var(--color-success); }
+  .askGroupHead b { font-size: var(--fs-13); }
+  .askCnt {
+    font-family: var(--font-mono); font-size: var(--fs-10-5); font-weight: var(--fw-bold);
+    color: var(--color-warn); background: var(--color-warn-bg);
+    padding: 1px 8px; border-radius: var(--radius-pill);
+  }
+  .askCnt.zero { color: var(--color-success); background: var(--color-success-bg); }
+  .askGroupHead .hint { font-size: var(--fs-10-5); color: var(--color-faint); }
+
+  .qItem + .qItem { border-top: 1px solid var(--color-border); }
+  .qItemBar {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 14px; cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+  .qItemBar:hover { background: var(--color-surface-2); }
+  .qItem.pending .qItemBar { background: color-mix(in oklab, var(--color-warn) 4%, transparent); }
+  .qChip {
+    flex: none; font-size: var(--fs-10-5); font-weight: var(--fw-semibold); letter-spacing: 0.02em;
+    padding: 1px 8px; border-radius: var(--radius-pill);
+    background: var(--color-accent-11); color: var(--color-accent-ink);
+    border: 1px solid color-mix(in oklab, var(--color-accent) 22%, transparent);
+    white-space: nowrap;
+  }
+  .qItemBar .qText { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+  .qItemBar .qText b { font-size: var(--fs-13); font-weight: var(--fw-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qTag { font-size: var(--fs-10-5); color: var(--color-faint); border: 1px solid var(--color-border-strong); border-radius: var(--radius-pill); padding: 0 7px; white-space: nowrap; }
+  .qPill { flex: none; font-size: 10px; font-weight: var(--fw-bold); border-radius: var(--radius-pill); padding: 1px 7px; }
+  .qPill.pending { background: var(--color-warn-bg); color: var(--color-warn); }
+  .qPill.chosen { background: var(--color-info-bg); color: var(--color-info); }
+  .qPill.answered { background: var(--color-success-bg); color: var(--color-success); }
+  .qPill.skipped { background: var(--color-surface-2); color: var(--color-muted); }
+  .qItemBar .chev { color: var(--color-faint); display: grid; place-items: center; transition: transform .18s var(--ease-out); }
+  .qItem.open .qItemBar .chev { transform: rotate(180deg); }
+  .qItem.processed { background: color-mix(in oklab, var(--color-surface-2) 42%, var(--color-surface)); }
+  .qItem.processed .qItemBar b { color: var(--color-muted); font-weight: var(--fw-medium); }
+
+  .qItemBody { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.28s var(--ease-out); }
+  .qItemBody[data-open="true"] { grid-template-rows: 1fr; }
+  .qItemBodyInner { overflow: hidden; }
+  .qItemBodyPad { padding: 4px 16px 14px 40px; }
+
+  /* 问题标题（展开体首行：完整题目突出呈现，与折叠条的截断摘要区分） */
+  .qFull {
+    font-size: 14.5px;
+    font-weight: 650;
+    line-height: 1.55;
+    margin: 4px 0 10px;
+  }
+
+  /* context md 引导块（markdown 渲染，样例含粗体/列表/引用） */
+  .qContext {
+    font-size: var(--fs-12-5); line-height: 1.75; color: var(--color-muted);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-left: 2.5px solid var(--color-accent-45);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 8px 12px 9px; margin: 0 0 9px;
+  }
+  .qContext b { color: var(--color-fg); font-weight: var(--fw-semibold); }
+  .qContext ul { margin: 4px 0 0; padding-left: 16px; }
+  .qContext li { margin: 2px 0; }
+  .qContext li::marker { color: var(--color-accent-45); }
+  .qContext .ex { font-family: var(--font-body); color: var(--color-fg); }
+
+  /* 选项 */
+  .optList { display: flex; flex-direction: column; gap: 6px; }
+  .opt {
+    display: grid; grid-template-columns: 15px 1fr; gap: 2px 9px; align-items: start;
+    padding: 8px 11px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: border-color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
+  }
+  .opt:hover { border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-border-strong)); }
+  .opt[data-selected] {
+    border-color: var(--color-accent);
+    background: var(--color-accent-9);
+    box-shadow: inset 0 0 0 1px var(--color-accent-45);
+  }
+  .optMark {
+    width: 14px; height: 14px; margin-top: 3px;
+    border: 1.5px solid var(--color-border-strong); border-radius: 50%;
+    display: grid; place-items: center;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .opt.multi .optMark { border-radius: 4px; }
+  .opt[data-selected] .optMark { border-color: var(--color-accent); }
+  .opt[data-selected] .optMark::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--grad-accent); }
+  .opt.multi[data-selected] .optMark::after { border-radius: 1px; }
+  .optLabel { font-size: var(--fs-13); font-weight: var(--fw-medium); line-height: 1.5; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .recBadge {
+    font-size: var(--fs-10-5); font-weight: var(--fw-semibold);
+    color: var(--color-warn); background: var(--color-warn-bg);
+    border: 1px solid color-mix(in oklab, var(--color-warn) 26%, transparent);
+    padding: 0 7px; border-radius: var(--radius-pill); white-space: nowrap;
+  }
+  .optDesc { grid-column: 2; font-size: var(--fs-12); line-height: 1.65; color: var(--color-muted); }
+  .optDesc b { color: var(--color-fg); font-weight: var(--fw-medium); }
+  .otherInput {
+    grid-column: 1 / -1; margin-top: 4px;
+    font: inherit; font-size: var(--fs-12-5); color: var(--color-fg);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+    padding: 6px 9px; width: 100%; outline: none;
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  .otherInput:focus { border-color: var(--color-accent); }
+  .otherInput::placeholder { color: var(--color-faint); }
+
+  /* 开放填空 */
+  .openInput {
+    font: inherit; font-family: var(--font-body);
+    font-size: var(--fs-13); color: var(--color-fg);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-md);
+    padding: 9px 11px; width: 100%; min-height: 72px; resize: vertical; outline: none;
+    line-height: 1.7;
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  .openInput:focus { border-color: var(--color-accent); }
+  .openInput::placeholder { color: var(--color-faint); font-family: var(--font-ui); font-size: var(--fs-12); }
+
+  /* 组卡操作区（活动态） */
+  .askActions {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 11px 14px; border-top: 1px solid var(--color-border);
+  }
+  .askActions .hint { font-size: var(--fs-11); color: var(--color-faint); margin-right: auto; }
+
+  /* 已答简约记录行（作答后留痕：条内直接给答案，不再展开选项） */
+  /* 已答简约记录（作答后留痕：整卡只渲染「题目 → 答案」行） */
+  .recList { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px 12px; }
+  .recRow {
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    font-size: var(--fs-12-5); line-height: 1.6;
+  }
+  .recRow .q { color: var(--color-muted); min-width: 0; }
+  .recRow .arr { flex: none; color: var(--color-faint); }
+  .recRow .a { color: var(--color-fg); font-weight: var(--fw-medium); }
+  .recRow .a.self { font-family: var(--font-body); }
+  .recRow .a.quiet { color: var(--color-muted); font-weight: var(--fw-regular); }
+
+  /* ============ 按钮 ============ */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-12-5); font-weight: var(--fw-medium); cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .btnPrimary { border: 0; background: var(--grad-accent); color: var(--color-on-accent); box-shadow: 0 2px 8px var(--color-accent-45); }
+  .btnPrimary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px var(--color-accent-45); }
+  .btnSecondary { border: 1px solid var(--color-border-strong); background: var(--color-surface); color: var(--color-fg); }
+  .btnSecondary:hover { border-color: var(--color-accent); color: var(--color-accent-ink); }
+  .btnGhost { border: 1px solid transparent; background: transparent; color: var(--color-muted); }
+  .btnGhost:hover { background: var(--color-accent-8-t); color: var(--color-accent-ink); }
+  .btnSm { padding: 4px 11px; font-size: var(--fs-12); }
+
+  /* ============ 输入区（提问挂起等待态） ============ */
+  .composer { flex: none; padding: 8px 24px 12px; background: linear-gradient(to top, var(--color-bg) 55%, transparent); }
+  .composerInner { max-width: 760px; margin: 0 auto; }
+  .composerBox {
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-1);
+    padding: 8px 10px 8px;
+    transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .composerBox:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-8-t), var(--shadow-1); }
+  .statusWrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s var(--ease-out); }
+  .statusWrap[data-open="true"] { grid-template-rows: 1fr; }
+  .statusInner { overflow: hidden; }
+  .rsRow { display: inline-flex; align-items: center; gap: 8px; min-width: 0; min-height: 22px; margin: 0 2px 6px; }
+  .rsRow svg { color: var(--color-warn); }
+  .rsLabel {
+    font-size: var(--fs-12-5); font-weight: var(--fw-bold); letter-spacing: 0.02em; white-space: nowrap;
+    color: var(--color-warn);
+    animation: status-sway 2.8s ease-in-out infinite;
+  }
+  .rsSec { font-size: var(--fs-10-5); color: var(--color-faint); font-variant-numeric: tabular-nums; white-space: nowrap; font-family: var(--font-mono); }
+  .rsHint { font-size: var(--fs-11); color: var(--color-faint); }
+  .composerRow textarea {
+    width: 100%; border: 0; outline: none; resize: none;
+    background: transparent; color: var(--color-fg);
+    font-family: inherit; font-size: var(--fs-chat); line-height: 1.6;
+    min-height: 24px; max-height: 140px; padding: 2px 4px;
+  }
+  .composerRow textarea::placeholder { color: var(--color-faint); }
+  .modeRow { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .modeChip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px; border-radius: var(--radius-pill);
+    border: 1px solid var(--color-border); background: var(--color-surface);
+    color: var(--color-muted); font-size: var(--fs-11-5); font-weight: var(--fw-medium);
+  }
+  .sendBtn {
+    margin-left: auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0;
+    border: 0; border-radius: var(--radius-sm);
+    background: var(--grad-accent); color: var(--color-on-accent);
+    cursor: pointer; transition: all var(--duration-fast) var(--ease-out);
+  }
+  .sendBtn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px var(--color-accent-45); }
+  .sendBtn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+  .composerHint { margin: 6px 4px 0; font-size: var(--fs-10-5); color: var(--color-faint); display: flex; gap: 10px; }
+  .composerHint b { color: var(--color-muted); font-weight: var(--fw-medium); }
+
+  /* ============ Toast / demo 条 ============ */
+  .toast {
+    position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%) translateY(8px);
+    z-index: 120;
+    padding: 7px 16px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in oklab, var(--color-fg) 88%, transparent);
+    color: var(--color-bg);
+    font-size: var(--fs-12-5); font-weight: var(--fw-medium);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s var(--ease-out), transform 0.2s var(--ease-out);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .demoBar {
+    position: fixed; bottom: 14px; left: 14px; z-index: 110;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg);
+    background: color-mix(in oklab, var(--color-surface) 90%, transparent);
+    backdrop-filter: blur(14px);
+    box-shadow: var(--shadow-2);
+    font-size: var(--fs-11-5);
+  }
+  .demoBar .title { font-size: var(--fs-11); font-weight: var(--fw-bold); color: var(--color-faint); letter-spacing: 0.04em; }
+  .dbtn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-pill);
+    background: var(--color-surface); color: var(--color-muted);
+    font-size: var(--fs-11-5); font-weight: var(--fw-medium); cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out); white-space: nowrap;
+  }
+  .dbtn:hover { border-color: var(--color-accent); color: var(--color-accent-ink); }
+
+  /* ============ 动画 ============ */
+  @keyframes msg-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes spinner-rotate { to { transform: rotate(360deg); } }
+  @keyframes status-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-7deg); } 75% { transform: rotate(7deg); } }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="brand"><span class="brandDot"></span><span class="brandName">Novel</span></div>
+    <span class="schemeTag">AskUserQuestion · 流内提问卡（无右栏关联）</span>
+    <div class="topRight"><div class="themeDots" id="themeDots"></div></div>
+  </header>
+  <div class="shell">
+    <main class="main" id="main"></main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="demoBar">
+  <span class="title">提问 demo</span>
+  <button class="dbtn" data-act="replay">重放提问到达</button>
+  <button class="dbtn" data-act="scrollToCard">定位提问卡</button>
+</div>
+
+<script>
+"use strict";
+/* ================= 图标（lucide 风格内联 SVG） ================= */
+const P = {
+  feather: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  shieldCheck: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>',
+  helpCircle: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  chevDown: '<path d="m6 9 6 6 6-6"/>',
+};
+const ic = (n, s = 14, w = 1.8) =>
+  `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${P[n] || ""}</svg>`;
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const $ = (id) => document.getElementById(id);
+
+/* ================= 问题数据（活动批 · 4 问混排：单选/多选/开放/带 context 单选） ================= */
+const QUESTIONS = [
+  {
+    id: 0, chip: "主线走向", tag: "单选", question: "第二卷主线冲突升级走哪个方向？",
+    options: [
+      { label: "外部势力正面压境", rec: true, desc: "承接第一卷铜符伏笔，冲突外化，<b>动作场面多</b>；适合快节奏开局。" },
+      { label: "阵营内部瓦解", desc: "重心转权谋与信任崩塌，节奏更沉；<b>心理戏占比高</b>。" },
+      { label: "双线并行", desc: "明线外部压境 + 暗线内鬼渗透，信息密度最高，结构难度也最高。" },
+    ],
+  },
+  {
+    id: 1, chip: "伏笔回收", tag: "多选", question: "下面哪些伏笔要在本卷内回收？", multi: true,
+    options: [
+      { label: "铜符的另一半下落", desc: "第 2 章埋（沈砚袖口轮廓），回收成本最低。" },
+      { label: "十年前旧案卷宗", desc: "需调档案房线，牵动周慎立场。" },
+      { label: "雾夜摆渡的规矩", desc: "世界观型伏笔，可留到第三卷，本卷只推进不揭底。" },
+    ],
+  },
+  {
+    id: 2, chip: "尺度", tag: "单选", question: "本卷的暴力与阴郁尺度控制在哪一档？",
+    options: [
+      { label: "网文主流（推荐）", rec: true, desc: "冲突点到即止，无血腥描写，<b>过审与读者面最稳</b>。" },
+      { label: "偏硬核", desc: "允许写实伤害与道德灰区，氛围更冷。" },
+    ],
+  },
+  {
+    id: 3, chip: "一句话创意", tag: "开放", question: "卷末你想看到什么样的画面或情绪落点？", open: true,
+    context: `不用具体情节，给一个<b>画面感或情绪</b>即可，比如：
+      <ul>
+        <li><span class="ex">「雾散了，渡口第一次来了一艘不认得的船」</span></li>
+        <li><span class="ex">「两枚铜符在灯下拼上，缺口里卡着一张纸」</span></li>
+      </ul>
+      没想法也可以留空或跳过——我会从已有伏笔里选一个收束点。`,
+    placeholder: "一句话：画面或情绪落点（可留空）",
+  },
+];
+
+/* 已答批（上一轮的简约留痕示例：2/3 作答、1 跳过） */
+const ANSWERED = [
+  { chip: "叙事视角", question: "这本书用什么叙事视角？", answer: "第三人称有限（推荐）", self: false },
+  { chip: "一句话创意", question: "用一句话说说你想写的故事？", answer: "末世邮差要送出最后一封信", self: true },
+  { chip: "题材尺度", question: "敏感题材的处理尺度？", answer: "跳过 · 授权自行决断", quiet: true },
+];
+
+let sel = {};        // qid → { picks: Set<labelIdx>, other: string, text: string }
+let open = 0;        // 展开的 qid（-1 全收起）
+let done = false;    // 本批是否已提交/跳过
+let pendSec = 0;
+
+const answeredN = () => QUESTIONS.filter((q) => isAnswered(q)).length;
+function isAnswered(q) {
+  const s = sel[q.id] || {};
+  return q.open ? (s.text || "").trim() !== "" : ((s.picks && s.picks.size) > 0 || (s.other || "").trim() !== "");
+}
+
+/* ================= 渲染 · 对话流 ================= */
+function headHTML(time) {
+  return `<div class="msgHead">
+    <span class="avatar">${ic("feather", 12, 2)}</span>
+    <b>NovelAI</b><span class="mMeta">${time}</span>
+  </div>`;
+}
+
+/* 活动批组卡（多问题时刻：首问展开、其余折叠；逐项作答） */
+function qItemBodyHTML(q) {
+  const s = sel[q.id] || {};
+  let body = "";
+  if (q.context) body += `<div class="qContext">${q.context}</div>`;
+  if (q.open) {
+    body += `<textarea class="openInput" data-qid="${q.id}" placeholder="${esc(q.placeholder || "")}" rows="3">${esc(s.text || "")}</textarea>`;
+  } else {
+    body += `<div class="optList">` + q.options.map((o, i) => `
+      <div class="opt${q.multi ? " multi" : ""}${s.picks && s.picks.has(i) ? '" data-selected="' : ""}" data-qid="${q.id}" data-oi="${i}">
+        <span class="optMark"></span>
+        <span class="optLabel">${esc(o.label)}${o.rec ? '<span class="recBadge">推荐</span>' : ""}</span>
+        <span class="optDesc">${o.desc}</span>
+      </div>`).join("") + `
+      <div class="opt${(s.other || "").trim() !== "" || (s.picks && s.picks.has("other")) ? '" data-selected="' : ""}" data-qid="${q.id}" data-oi="other">
+        <span class="optMark"></span>
+        <span class="optLabel">其他</span>
+        <input class="otherInput" data-qid="${q.id}" placeholder="自填（可只填不选）" value="${esc(s.other || "")}">
+      </div>
+    </div>`;
+  }
+  return `<div class="qFull">${esc(q.question)}</div>${body}`;
+}
+
+function askGroupHTML() {
+  const n = answeredN();
+  return `
+  <div class="askGroupCard${done ? " done" : ""}" id="askGroupCard">
+    <div class="askGroupHead">
+      <span class="hIcon">${ic(done ? "check" : "helpCircle", 15)}</span>
+      <b>向作者提问</b>
+      <span class="askCnt${done ? " zero" : n === QUESTIONS.length ? " zero" : ""}">${done ? "已作答" : `${QUESTIONS.length - n} 问待答`}</span>
+      ${done ? "" : `<span class="hint">首问已展开 · 一次问完不连环追问</span>`}
+    </div>
+    ${done
+      ? `<div class="recList">${QUESTIONS.map((q) => doneRowHTML(q)).join("")}</div>`
+      : QUESTIONS.map((q) => {
+      const answered = isAnswered(q);
+      const isOpen = open === q.id;
+      return `
+      <div class="qItem ${answered ? "" : "pending"}${isOpen ? " open" : ""}" id="qItem-${q.id}">
+        <div class="qItemBar" data-act="qToggle" data-id="${q.id}">
+          <span class="qChip">${esc(q.chip)}</span>
+          <span class="qText"><b>${esc(q.question)}</b>${q.tag ? `<span class="qTag">${q.tag}</span>` : ""}</span>
+          <span class="qPill ${answered ? "chosen" : "pending"}">${answered ? "已选" : "待答"}</span>
+          <span class="chev">${ic("chevDown", 13, 2.2)}</span>
+        </div>
+        <div class="qItemBody" data-open="${isOpen}">
+          <div class="qItemBodyInner"><div class="qItemBodyPad">
+            ${qItemBodyHTML(q)}
+          </div></div>
+        </div>
+      </div>`;
+    }).join("")}
+    ${done ? "" : `
+    <div class="askActions">
+      <span class="hint">跳过的问 = 授权我自行决断并继续</span>
+      <button class="btn btnGhost btnSm" data-act="askSkip">跳过全部</button>
+      <button class="btn btnPrimary btnSm" data-act="askSubmit">${ic("check", 12)}提交回答（${n}/${QUESTIONS.length}）</button>
+    </div>`}
+  </div>
+  ${done ? `<div class="sysMsg">${ic("check", 12, 2.4)}作者已作答 · 生成继续</div>` : ""}`;
+}
+
+/* 已答简约记录行：只渲染「题目 → 答案」 */
+function doneRowHTML(q) {
+  const s = sel[q.id] || {};
+  let answer, self = false, quiet = false;
+  if (q.open) {
+    const t = (s.text || "").trim();
+    if (t === "") { answer = "跳过 · 授权自行决断"; quiet = true; }
+    else { answer = t; self = true; }
+  } else {
+    const picks = [...(s.picks || [])].filter((i) => i !== "other").map((i) => q.options[i].label);
+    const other = (s.other || "").trim();
+    if (picks.length === 0 && other === "") { answer = "跳过 · 授权自行决断"; quiet = true; }
+    else {
+      const parts = [...picks, ...(other !== "" ? ["其他：" + other] : [])];
+      answer = parts.join("、") + (q.multi && picks.length > 1 ? `（多选 ${picks.length} 项）` : "");
+    }
+  }
+  return `<div class="recRow"><span class="q">${esc(q.question)}</span><span class="arr">→</span><span class="a${self ? " self" : ""}${quiet ? " quiet" : ""}">${esc(answer)}</span></div>`;
+}
+
+/* 历史批（开书时）的简约留痕卡 */
+function answeredGroupHTML() {
+  return `
+  <div class="askGroupCard done">
+    <div class="askGroupHead">
+      <span class="hIcon">${ic("check", 15)}</span>
+      <b>向作者提问</b>
+      <span class="askCnt zero">已作答 2/3</span>
+    </div>
+    <div class="recList">
+      ${ANSWERED.map((a) => `<div class="recRow"><span class="q">${esc(a.question)}</span><span class="arr">→</span><span class="a${a.self ? " self" : ""}${a.quiet ? " quiet" : ""}">${esc(a.answer)}</span></div>`).join("")}
+    </div>
+  </div>`;
+}
+
+function chatTimelineHTML() {
+  return `
+    <div class="runDivider"><span>第 2 轮 · 开书提问（已答留痕示例）</span></div>
+    <div class="msgUser">帮我开一本新书。</div>
+    <div class="msgAssistant">
+      ${headHTML("昨天 21:14")}
+      <div class="toolGroup">
+        <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}向作者提问 · 3 问（已作答）</span></div>
+      </div>
+      <div class="mdBody"><p>收到——按你的创意与视角先把书架起来，尺度我来把握。</p></div>
+    </div>
+    ${answeredGroupHTML()}
+    <div class="runDivider"><span>第 7 轮 · 二卷开笔前 · 多问题时刻</span></div>
+    <div class="msgUser">开始写第二卷吧。</div>
+    <div class="msgAssistant">
+      ${headHTML("今天 14:02")}
+      <div class="toolGroup">
+        <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}读取大纲 · 全树（includePlans）</span></div>
+        ${done
+          ? `<div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}向作者提问 · 4 问（已作答 14:31）</span></div>`
+          : `<div class="toolLine"><span class="toolRunning"><span class="spinner"></span>向作者提问 · 4 问 · 等待作答（见下方提问卡）</span></div>`}
+      </div>
+      <div class="mdBody"><p>二卷「雾锁」已成纲未动笔。开笔前有 <b>4 个真实分叉</b>——一次问完，不连环打断：</p></div>
+    </div>
+    ${askGroupHTML()}`;
+}
+
+function composerHTML() {
+  return `
+  <div class="composer">
+    <div class="composerInner">
+      <div class="composerBox">
+        <div class="statusWrap" data-open="${!done}"><div class="statusInner">
+          <div class="rsRow" data-act="scrollToCard" title="滚动定位到提问卡">
+            ${ic("hourglass", 15)}
+            <span class="rsLabel">提问挂起</span>
+            <span class="rsSec" id="pendSec">0s</span>
+            <span class="rsHint">· 回答提交后生成自动继续（发送已暂停）</span>
+          </div>
+        </div></div>
+        <div class="composerRow">
+          <textarea id="chatInput" rows="1" placeholder="${done ? "输入创作指令…（Enter 发送）" : "提问挂起中——在上方提问卡作答后恢复发送"}"></textarea>
+        </div>
+        <div class="modeRow">
+          <span class="modeChip">${ic("shieldCheck", 12)}需审核</span>
+          <span style="flex:1"></span>
+          <button class="sendBtn" id="sendBtn" ${done ? "" : "disabled"} title="发送（Enter）">${ic("send", 14)}</button>
+        </div>
+      </div>
+      <div class="composerHint"><span><b>Enter</b> 发送</span><span><b>Shift+Enter</b> 换行</span><span>demo：点选项作答，开放题直接输入</span></div>
+    </div>
+  </div>`;
+}
+
+function renderMain() {
+  const prev = $("chatScroll");
+  const top = prev ? prev.scrollTop : 0;
+  $("main").innerHTML = `
+    <div class="chatScroll" id="chatScroll"><div class="chatInner">${chatTimelineHTML()}</div></div>
+    ${composerHTML()}`;
+  const sc = $("chatScroll");
+  if (sc) sc.scrollTop = top;
+}
+
+/* ================= 作答交互 ================= */
+function toggleOpt(qid, oi) {
+  const q = QUESTIONS.find((x) => x.id === qid);
+  if (!q || q.open) return;
+  sel[qid] = sel[qid] || { picks: new Set(), other: "" };
+  const s = sel[qid];
+  s.picks = s.picks || new Set();
+  if (q.multi) {
+    if (oi === "other") {
+      if (s.picks.has("other")) { s.picks.delete("other"); s.other = ""; }
+      else s.picks.add("other");
+    } else s.picks.has(oi) ? s.picks.delete(oi) : s.picks.add(oi);
+  } else {
+    if (oi !== "other" && s.picks.has(oi)) s.picks.clear();
+    else {
+      s.picks.clear();
+      if (oi === "other") { s.picks.add("other"); }
+      else s.picks.add(oi);
+    }
+  }
+  renderMain();
+}
+
+function decide() {
+  done = true;
+  open = -1;
+  renderMain();
+  toast("回答已提交，生成继续");
+  const sc = $("chatScroll");
+  if (sc) sc.scrollTo({ top: sc.scrollHeight, behavior: "smooth" });
+}
+
+function resetAsk() {
+  sel = {}; open = 0; done = false; pendSec = 0;
+  renderMain();
+  const sc = $("chatScroll");
+  if (sc) sc.scrollTo({ top: sc.scrollHeight, behavior: "smooth" });
+}
+
+/* ================= 事件委托 ================= */
+document.addEventListener("click", (e) => {
+  const optEl = e.target.closest(".opt");
+  if (optEl && !done && !e.target.classList.contains("otherInput")) {
+    toggleOpt(Number(optEl.dataset.qid), optEl.dataset.oi === "other" ? "other" : Number(optEl.dataset.oi));
+    return;
+  }
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  const act = el.dataset.act, id = Number(el.dataset.id);
+  switch (act) {
+    case "theme":
+      document.documentElement.dataset.theme = id;
+      state.theme = id; renderThemeDots();
+      break;
+    case "qToggle": {
+      if (done) break; // 留痕态不可再作答（展开仅审阅已答行）
+      open = open === id ? -1 : id;
+      renderMain();
+      break;
+    }
+    case "askSubmit":
+      decide();
+      break;
+    case "askSkip":
+      sel = {}; decide();
+      toast("已跳过全部问题——基于现有信息自行决断");
+      break;
+    case "scrollToCard": {
+      const card = $("askGroupCard");
+      if (card) card.scrollIntoView({ block: "center", behavior: "smooth" });
+      break;
+    }
+    case "replay":
+      resetAsk();
+      toast("已重放：提问卡到达对话流末尾");
+      break;
+  }
+});
+document.addEventListener("input", (e) => {
+  const t = e.target;
+  if (t.classList && (t.classList.contains("openInput") || t.classList.contains("otherInput"))) {
+    const qid = Number(t.dataset.qid);
+    sel[qid] = sel[qid] || { picks: new Set(), other: "" };
+    if (t.classList.contains("openInput")) sel[qid].text = t.value;
+    else {
+      sel[qid].other = t.value;
+      if (t.value.trim() !== "") {
+        sel[qid].picks = sel[qid].picks || new Set();
+        sel[qid].picks.add("other");
+        t.closest(".opt").setAttribute("data-selected", "");
+      }
+    }
+    /* 只刷新 pill 计数，避免输入中整卡重渲染丢焦点 */
+    const n = answeredN();
+    const btn = document.querySelector('[data-act="askSubmit"]');
+    if (btn) btn.innerHTML = `${ic("check", 12)}提交回答（${n}/${QUESTIONS.length}）`;
+    const cnt = document.querySelector(".askCnt");
+    if (cnt && !done) cnt.textContent = `${QUESTIONS.length - n} 问待答`;
+    const q = QUESTIONS.find((x) => x.id === qid);
+    const pill = document.querySelector(`#qItem-${qid} .qPill`);
+    if (pill && !done) {
+      pill.className = `qPill ${isAnswered(q) ? "chosen" : "pending"}`;
+      pill.textContent = isAnswered(q) ? "已选" : "待答";
+    }
+  }
+  if (t.id === "chatInput") {
+    t.style.height = "auto";
+    t.style.height = Math.min(t.scrollHeight, 140) + "px";
+  }
+});
+
+/* ================= Toast / 主题 / 计时 ================= */
+let toastTimer = null;
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2400);
+}
+const state = { theme: "paper" };
+const THEMES = [
+  { id: "paper", c: "#a0522d" }, { id: "ink", c: "#2b2723" },
+  { id: "celadon", c: "#24303a" }, { id: "frost", c: "#d9e2f2" },
+];
+function renderThemeDots() {
+  $("themeDots").innerHTML = THEMES.map(t =>
+    `<button class="tdot" data-act="theme" data-id="${t.id}" aria-pressed="${state.theme === t.id}" title="${t.id}" style="background:${t.c}"></button>`).join("");
+}
+setInterval(() => {
+  if (done) pendSec = 0;
+  else pendSec += 1;
+  const el = $("pendSec");
+  if (el) el.textContent = pendSec + "s";
+}, 1000);
+
+/* ================= 启动 ================= */
+renderThemeDots();
+resetAsk();
+</script>
+</body>
+</html>

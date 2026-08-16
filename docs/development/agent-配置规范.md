@@ -22,6 +22,10 @@
    `ToolGroupManifest` 展示层（id/version/label/tools 有序唯一）+ 组工厂解析
    （按 manifest.tools 名称 → ToolDef，缺工具报错）。新工具先入 definitions
    工厂，再入 groups 清单，最后进 `AgentDefinition.tools.groupIds`。
+   运行时依赖经 `NovelToolGroupResolverOptions` 闭包注入（如 `compose` 服务、
+   `ask` 提问通道——AskUserQuestion 挂起等待作者作答，由 buildNovelAgent 从
+   `requestAsk` 传入；**仅主代理启用 `runtime.ask`**，compose 子代理刻意不启用
+   （子代理专注草稿，提问经主代理）。
 
 5. **nudge 生效集**：`definition.nudgeEnablement.enabled` ∩ 实现目录
    （buildNovelAgent 组装 catalog，按 enabled 声明序实例化）；

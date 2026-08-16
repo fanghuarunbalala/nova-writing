@@ -375,11 +375,11 @@ describe("NewConversationButton / ComposerModeBar / MessageReferenceChip", () =>
     expect(screen.getByText("跳过审批 · 立即落地")).toBeInTheDocument();
     expect(screen.getByText("仅草稿文件可写")).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /需审核/ })).toHaveAttribute("aria-selected", "true");
-    // 选择「直接执行」→ onChange("bypass") + 面板收起。
+    // 选择「直接执行」→ onChange("bypass") + 面板收起（150ms 退场淡出后卸载）。
     await user.click(screen.getByRole("menuitem", { name: /直接执行/ }));
     expect(onChange).toHaveBeenCalledWith("bypass");
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
   });
 
   it("ComposerModeBar closes on external click and Escape", async () => {
@@ -389,14 +389,14 @@ describe("NewConversationButton / ComposerModeBar / MessageReferenceChip", () =>
     const trigger = screen.getByRole("button", { name: "执行模式：需审核" });
     await user.click(trigger);
     expect(screen.getByRole("menu")).toBeInTheDocument();
-    // Escape 关闭（焦点回到 trigger）。
+    // Escape 关闭（焦点回到 trigger；退场淡出后卸载）。
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
     // 再次打开后外部点击关闭。
     await user.click(trigger);
     expect(screen.getByRole("menu")).toBeInTheDocument();
     await user.click(document.body);
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
   });
 
   it("MessageReferenceChip fires onClick with the reference", async () => {

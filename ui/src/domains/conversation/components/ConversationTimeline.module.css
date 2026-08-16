@@ -83,8 +83,15 @@
    仅约束高度轴：contain-intrinsic-size 单值语法会同时作用于宽高，宽度轴的
    记忆尺寸会在主区宽度变化（审批面板开合过渡）时让时间线行按过期宽度排版，
    产生中文逐字断行。 */
-.enter {
-  animation: var(--anim-conv-in) 0.28s ease both;
+/* enterStatic：初始项（挂载时已在列）不重播入场——视图切换由容器 .surface
+   view-in 承担整体淡入，避免整列级联重播（见 ConversationTimeline initialRef）；
+   containment 声明与 .enter 共享 */
+.enter,
+.enterStatic {
   content-visibility: auto;
   contain-intrinsic-height: auto 240px;
+}
+
+.enter {
+  animation: var(--anim-conv-in) 0.28s ease both;
 }

@@ -21,6 +21,9 @@ import { AskQuestionCard } from "../../asking/components/AskQuestionCard.js";
 import { AskRecordCard } from "../../asking/components/AskRecordCard.js";
 import styles from "./ConversationTimeline.module.css";
 
+/** 非挂载会话时的初始集合占位（全量入场，见 initialRef 注释）。 */
+const EMPTY_SEQUENCES: ReadonlySet<number> = new Set();
+
 export interface ConversationTimelineProps {
   readonly conversationId: string;
   readonly items: readonly TimelineItem[];
@@ -55,6 +58,20 @@ export function ConversationTimeline({
 }: ConversationTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
+  // 初始项（组件挂载时该会话已在列的 sequence）：视图切换重挂后整列重播
+  // conv-in 级联是突兀源——初始项不入场（容器 .surface view-in 已承担整体淡入），
+  // 仅后续追加项逐条入场。无类切换/定时器，不存在「摘抑制类→动画重播」问题。
+  // 会话切换只重挂 .inner（组件实例保留）：sequence 跨会话可能撞号，集合绑定
+  // 挂载时的 conversationId，切走后按空集处理 → 会话切换保留级联入场。
+  const initialRef = useRef<{ readonly id: string; readonly set: ReadonlySet<number> } | null>(null);
+  if (initialRef.current === null) {
+    initialRef.current = {
+      id: conversationId,
+      set: new Set(items.map((item) => item.sequence)),
+    };
+  }
+  const initialSequences =
+    initialRef.current.id === conversationId ? initialRef.current.set : EMPTY_SEQUENCES;
   // 首条用户消息：复制按钮收进气泡内边距带（原型 .msg-actions-inpad）。
   const firstUserSequence = items.find((item) => item.kind === "user")?.sequence;
   // 流式正文增长（贴底跟随依据）：末项文本长度随发布递增；
@@ -134,11 +151,16 @@ export function ConversationTimeline({
     >
       <div className={styles.inner} key={conversationId}>
         {items.map((item, index) => {
+          const isInitial = initialSequences.has(item.sequence);
           return (
             <div
               key={item.sequence}
-              className={styles.enter}
-              style={{ animationDelay: `${Math.min(index * 0.03, 0.42)}s` }}
+              className={isInitial ? styles.enterStatic : styles.enter}
+              style={
+                isInitial
+                  ? undefined
+                  : { animationDelay: `${Math.min(index * 0.03, 0.42)}s` }
+              }
             >
               {renderItem(item, {
                 conversationId,

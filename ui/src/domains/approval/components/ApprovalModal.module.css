@@ -13,12 +13,18 @@
   animation: var(--anim-dialog-fade) var(--duration-fast) var(--ease-out);
 }
 
+/* radix Presence 退出：data-state=closed 时播淡出，播完再卸载（重开自动取消） */
+.overlay[data-state="closed"] {
+  animation: var(--anim-dialog-fade-out) 0.28s var(--ease-in) forwards;
+}
+
 .modal {
   position: fixed;
   top: 50%;
   left: 50%;
   z-index: var(--z-dialog);
   transform: translate(-50%, -50%);
+  transform-origin: top center;
   display: flex;
   flex-direction: column;
   width: min(920px, calc(100vw - 48px));
@@ -28,7 +34,12 @@
   background: var(--color-surface);
   box-shadow: var(--shadow-2);
   overflow: hidden;
-  animation: var(--anim-dialog-in) var(--duration-base) var(--ease-out);
+  animation: var(--anim-sheet-in) 0.5s var(--ease-out);
+}
+
+/* 抽纸式收起（demo sheet-out）：以顶边为轴反向回抽 */
+.modal[data-state="closed"] {
+  animation: var(--anim-sheet-out) 0.24s var(--ease-in) forwards;
 }
 
 /* ============ 头部：图标 + 标题 + 待决计数 + 稍后处理/关闭 ============ */
@@ -146,6 +157,11 @@
 .listItemActive {
   background: var(--color-accent-9);
   border-color: color-mix(in oklab, var(--color-accent) 26%, transparent);
+}
+
+/* 决策/新增脉冲（demo .apListItem.pulse）：diff 出的组一次性高亮入场 */
+.listItemPulse {
+  animation: var(--anim-appr-in) 0.4s var(--ease-out);
 }
 
 /* 标题 diff 符号（add=绿/edit·delete=红/exit=» 强调色） */

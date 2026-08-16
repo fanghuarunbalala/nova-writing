@@ -25,6 +25,32 @@ describe("ConversationTimeline", () => {
     expect(textNodes.map((node) => node.textContent)).toEqual(["第二条", "第一条", "已提交 r042"]);
   });
 
+  it("suppresses entry animation for initial items and animates appended ones (视图切换不重播级联)", () => {
+    const base: ConversationTimelineItem[] = [
+      { kind: "user", sequence: 1, text: "第一条", timestamp: 100 },
+      { kind: "assistant", sequence: 2, agentLabel: "Novel Agent", timestamp: 200, text: "第二条", cards: [], streaming: false },
+    ];
+    const { container, rerender } = render(<ConversationTimeline conversationId="c1" items={base} />);
+    // 初始项（挂载时已在列）：enterStatic——容器 view-in 已承担整体淡入
+    expect(container.querySelectorAll(".enterStatic").length).toBe(2);
+    expect(container.querySelectorAll(".enter").length).toBe(0);
+
+    // 追加项：逐条入场（enter + 错峰 delay）
+    rerender(
+      <ConversationTimeline
+        conversationId="c1"
+        items={[...base, { kind: "user", sequence: 3, text: "新到", timestamp: 300 }]}
+      />,
+    );
+    expect(container.querySelectorAll(".enterStatic").length).toBe(2);
+    expect(container.querySelectorAll(".enter").length).toBe(1);
+
+    // 会话切换：初始集合按挂载会话绑定，切走后全量入场（级联保留）
+    rerender(<ConversationTimeline conversationId="c2" items={base} />);
+    expect(container.querySelectorAll(".enter").length).toBe(2);
+    expect(container.querySelectorAll(".enterStatic").length).toBe(0);
+  });
+
   it("forwards proposal view-diff actions", async () => {
     const user = userEvent.setup();
     const onProposalAction = vi.fn();

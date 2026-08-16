@@ -35,6 +35,11 @@
   white-space: nowrap;
 }
 
+/* 挂起提示条退场（useExitPhase：先播 pending-out 再卸载） */
+.approvalBarLeave {
+  animation: var(--anim-pending-out) 0.25s var(--ease-in) forwards;
+}
+
 /* 发送失败横幅：会话进程崩溃等错误显性展示（不吞消息） */
 .sendError {
   margin: 0 var(--space-3) var(--space-2);

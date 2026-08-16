@@ -207,8 +207,11 @@
   --anim-msg-enter:       msg-enter;
   --anim-toast-in:        toast-in;
   --anim-dialog-fade:     dialog-fade;
-  --anim-dialog-in:       dialog-in;
+  --anim-dialog-fade-out: dialog-fade-out;
+  --anim-sheet-in:        sheet-in;
+  --anim-sheet-out:       sheet-out;
   --anim-dropdown-in:     dropdown-in;
+  --anim-menu-out:        menu-out;
   --anim-spinner-rotate:  spinner-rotate;
   --anim-tooltip-in:      tooltip-in;
   --anim-node-pulse:      node-pulse;
@@ -221,13 +224,14 @@
   --anim-block-flash:     block-flash;
   --anim-draft-cursor:    draft-cursor;
   --anim-appr-in:         appr-in;
-  --anim-status-pulse:    status-pulse;
   --anim-cnt-pop:         cnt-pop;
   --anim-pending-glow:    pending-glow;
+  --anim-pending-out:     pending-out;
   --anim-dir-flash:       dir-flash;
 
   /* 缓动 */
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:      cubic-bezier(0.55, 0, 1, 0.45);
   --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
 
   /* ============ L3 语义色 + 阴影（theme 唯一可覆盖层） ============ */

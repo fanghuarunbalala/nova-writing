@@ -494,3 +494,71 @@ describe("ConversationProjection 平台事件源与 eseq 断档（gui-performanc
     expect(snapshot.timeline.at(-1)).toMatchObject({ text: "live" });
   });
 });
+
+describe("ConversationProjection AskUserQuestion 留影（askRecord 项）", () => {
+  const askQuestions = [
+    { question: "第二卷主线走哪个方向？", header: "主线走向", options: [{ label: "外部压境（推荐）", description: "冲突外化" }] },
+    { question: "一句话创意？", header: "一句话创意" },
+  ];
+  function askRecorded(id: string, result: string, seq = 11): ProjectedEvent {
+    return {
+      type: "tool-recorded.recorded",
+      seq,
+      toolCallId: id,
+      name: "AskUserQuestion",
+      outcome: "ok",
+      durationMs: 1200,
+      ask: { questions: askQuestions, result },
+      ...base,
+      ts: new Date().toISOString(),
+    } as unknown as ProjectedEvent;
+  }
+
+  it("recorded 带 ask 载荷 → 紧跟 assistant 项后插入 askRecord 留影项", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+
+    fake.push(delta("开笔前有几个分叉——"));
+    fake.push(toolStarted("ask-1"));
+    fake.push(
+      askRecorded(
+        "ask-1",
+        "作者已作答（2/2 问）：\n- 「第二卷主线走哪个方向？」选择：外部压境（推荐）\n- 「一句话创意？」自填：末世邮差送最后一封信",
+      ),
+    );
+    fake.push(runEnd());
+
+    const timeline = proj.getSnapshot().timeline;
+    const askIdx = timeline.findIndex((i) => i.kind === "askRecord");
+    const assistantIdx = timeline.findIndex((i) => i.kind === "assistant");
+    expect(askIdx).toBeGreaterThan(-1);
+    expect(askIdx).toBeGreaterThan(assistantIdx);
+    const record = timeline[askIdx] as { kind: "askRecord"; text: string; toolCallId?: string };
+    expect(record.toolCallId).toBe("ask-1");
+    expect(record.text).toContain("选择：外部压境（推荐）");
+  });
+
+  it("同 toolCallId 重放去重（实时流与 history 重叠只留一份）", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+
+    fake.push(toolStarted("ask-2"));
+    fake.push(askRecorded("ask-2", "作者已作答（1/1 问）：\n- 「q？」跳过（作者授权自行决断）", 11));
+    fake.push(askRecorded("ask-2", "作者已作答（1/1 问）：\n- 「q？」跳过（作者授权自行决断）", 11));
+
+    expect(proj.getSnapshot().timeline.filter((i) => i.kind === "askRecord")).toHaveLength(1);
+  });
+
+  it("无 ask 载荷的普通工具 → 不产生 askRecord 项", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1");
+    await proj.start();
+
+    fake.push(toolStarted("t-1"));
+    fake.push(toolRecorded("t-1"));
+
+    expect(proj.getSnapshot().timeline.filter((i) => i.kind === "askRecord")).toHaveLength(0);
+  });
+});

@@ -9,7 +9,7 @@
 import { proxy } from "kkrpc/remote-refs";
 import type { ConversationHandle } from "../conversation/contract/handle/index.js";
 import type { ProjectedEvent, ToolPreview } from "../conversation/contract/events/index.js";
-import type { ConversationId, ConversationMode } from "../conversation/contract/types/index.js";
+import type { AskQuestionSpec, ConversationId, ConversationMode } from "../conversation/contract/types/index.js";
 import { CardProjection, type CardDescriptor } from "../conversation/CardProjection.js";
 import { RPCError } from "../rpc/RPCError.js";
 
@@ -48,7 +48,7 @@ export interface ToolTraceView {
 /** timeline 项（对齐 UI 消息视图的精简子集） */
 export interface ConversationTimelineItem {
 	/** 角色 */
-	kind: "user" | "assistant";
+	kind: "user" | "assistant" | "askRecord";
 	/** 单调递增序号（虚拟化列表排序/去重用） */
 	sequence: number;
 	/** 完整文本（markdown 渲染；live 为分段拼接，重放为完整消息） */
@@ -65,6 +65,10 @@ export interface ConversationTimelineItem {
 	timestamp?: string;
 	/** 建项时生效模式（头部 chip 展示；按 mode.changed 在 assistant 建项点盖章） */
 	mode?: ConversationMode;
+	/** askRecord 专用：提问工具调用 id（去重） */
+	toolCallId?: string;
+	/** askRecord 专用：提问问题（留影载荷） */
+	questions?: readonly AskQuestionSpec[];
 }
 
 /** 投影错误快照 */
@@ -140,6 +144,8 @@ export class ConversationProjection {
 	private liveState: "generating" | undefined;
 	private nextSeq = 1;
 	private readonly cardProjection = new CardProjection();
+	/** 已产出 askRecord 留影项的工具调用 id（实时流与 history 重放重叠时去重） */
+	private readonly askRecordIds = new Set<string>();
 	/** 当前生效模式（mode.changed 派生） */
 	private mode?: ConversationMode;
 	/** 待生效模式（mode.pending 派生；mode.changed 清除） */
@@ -394,6 +400,17 @@ export class ConversationProjection {
 					preview: event.preview,
 				});
 				this.syncActiveItem();
+				// AskUserQuestion 留影：紧跟所属 assistant 项后插入简约记录（journal 重放同路径）
+				if (event.ask !== undefined && !this.askRecordIds.has(event.toolCallId)) {
+					this.askRecordIds.add(event.toolCallId);
+					this.timeline.push({
+						kind: "askRecord",
+						sequence: this.nextSeq++,
+						text: event.ask.result,
+						toolCallId: event.toolCallId,
+						questions: event.ask.questions,
+					});
+				}
 				break;
 			case "run-end":
 				this.finalizeAssistant();

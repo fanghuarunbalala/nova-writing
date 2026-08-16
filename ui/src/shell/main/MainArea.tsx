@@ -8,7 +8,7 @@ import { memo } from "react";
 import { useMainView } from "../../shared/routing/hooks.js";
 import type { MainViewRouter } from "../../shared/routing/MainViewRouter.js";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
-import type { Logger, NovelApiClient } from "@novel/core";
+import type { AskQuestionAnswer, AskingQueueItem, Logger, NovelApiClient } from "@novel/core";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import type { CharacterStore } from "../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
@@ -40,6 +40,13 @@ export interface MainAreaProps {
   readonly directoryOpen?: boolean;
   /** 对话顶条「内容目录」开关（directory ↔ closed） */
   readonly onToggleDirectory?: () => void;
+  /** 本会话提问条目（时间线流内提问卡） */
+  readonly askings?: readonly AskingQueueItem[];
+  /** 本会话待作答提问数 */
+  readonly pendingAskingCount?: number;
+  /** 提问作答/跳过回传（AskingStore） */
+  readonly onResolveAsking?: (requestId: string, answers: readonly AskQuestionAnswer[]) => void;
+  readonly onSkipAsking?: (requestId: string) => void;
   readonly mainViewRouter: MainViewRouter;
   readonly conversationCatalog: ConversationCatalogStore;
   readonly outlineTree: StoryOutlineTreeStore;
@@ -89,6 +96,10 @@ export const MainArea = memo(function MainArea(props: MainAreaProps) {
           onSummonApproval={props.onSummonApproval}
           directoryOpen={props.directoryOpen ?? true}
           onToggleDirectory={props.onToggleDirectory}
+          askings={props.askings}
+          pendingAskingCount={props.pendingAskingCount ?? 0}
+          onResolveAsking={props.onResolveAsking}
+          onSkipAsking={props.onSkipAsking}
           onOpenConversationInfo={props.onOpenConversationInfo}
           onReferenceClick={props.onReferenceClick}
           resolveReference={props.resolveReference}

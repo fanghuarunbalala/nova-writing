@@ -19,6 +19,7 @@
 3. **rpc（消息与控制）**
    - 用户输入、控制指令、inter-conversation 消息（经 ConversationManagerServer 调度）、wait 请求（审批/提问/退出 compose，经 CMS 队列路由；desktop 通知 renderer 决策，teammate 场景转发 parent）、审批/提问应答、novel 查询/变更。
    - 请求带 id，响应带 ok/result/error（远程失败归一 `RPCError`，带 code）。
+   - wait 队列拉取/决议面（与审批同构）：`approvals.list/resolve` + `askings.list/resolve`（AskUserQuestion 工具发起；条目 `AskQuestionSpec[]` 问题、`AskQuestionAnswer[]` 回答，结构见 `contract/types/request.ts`；提问不经 bypass 短路——答案只在作者手里）。
 
 约定：output 是内存产物、按需落盘，未落盘仅订阅者可见；进度走读不走推；manager 只管生命周期 + 消息调度。
 实现：rpc 半边基于 **kkrpc**（stdio / Electron IPC / WS）；novel.changed 与 conversation 输出事件走 ZeroMQ PUB/SUB。

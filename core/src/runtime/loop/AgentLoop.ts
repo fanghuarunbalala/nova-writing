@@ -288,7 +288,11 @@ export class AgentLoop {
       if (toolCall === undefined) continue;
       const decision = await this.config.resumePendingDecider?.(toolCallId);
       let text: string;
-      if (decision === "approve") {
+      if (toolCall.name === "AskUserQuestion") {
+        // 提问挂起期间重启：答案未回传，不重放提问（会二次打扰）——回填未回答让模型自决
+        text =
+          "提问因会话重启中断，未获回答；如仍需要作者输入请重新提问，否则基于现有信息继续。";
+      } else if (decision === "approve") {
         // 重启补完同样执行 compose 权限检查（approve 分支绕过 gateBatch）
         const compose = this.config.composeState?.snapshot(this.config.conversationId ?? "");
         if (compose?.active === true && isCanonicalNovelWrite(toolCall.name)) {

@@ -289,11 +289,30 @@ describe("Conversation", () => {
     expect(decision).toEqual({ kind: "reject" });
   });
 
-  it("sendAskingQuestionRequest 阻塞 + resolveQuestion 回传", async () => {
+  it("sendAskingQuestionRequest 阻塞 + resolveQuestion 回传（结构化问题/回答）", async () => {
     const conv = new Conversation({ conversationId: "c1", loop: mockLoop(), sampling: { model: "gpt-5" } });
-    const pending = conv.sendAskingQuestionRequest({ requestId: "q1", questions: ["怎么写？"] });
-    conv.resolveQuestion("q1", "就这样写");
-    expect(await pending).toBe("就这样写");
+    const pending = conv.sendAskingQuestionRequest({
+      requestId: "q1",
+      questions: [
+        {
+          question: "第二卷主线走哪个方向？",
+          header: "主线走向",
+          options: [
+            { label: "外部压境（推荐）", description: "冲突外化" },
+            { label: "内部瓦解", description: "权谋向" },
+          ],
+        },
+        { question: "一句话说说你的创意？", header: "一句话创意" },
+      ],
+    });
+    conv.resolveQuestion("q1", [
+      { question: "第二卷主线走哪个方向？", selections: ["外部压境（推荐）"] },
+      { question: "一句话说说你的创意？", selections: [], text: "末世邮差送最后一封信" },
+    ]);
+    expect(await pending).toEqual([
+      { question: "第二卷主线走哪个方向？", selections: ["外部压境（推荐）"] },
+      { question: "一句话说说你的创意？", selections: [], text: "末世邮差送最后一封信" },
+    ]);
   });
 });
 
@@ -361,6 +380,52 @@ describe("ConversationManagerServer", () => {
     expect(await server.resolveApproval("r2", { kind: "reject" })).toBe(true);
     expect(await pending).toEqual({ kind: "reject" });
     expect(await server.takeDecisions("c1")).toHaveLength(2);
+  });
+
+  it("submitAskingRequest 入队 + listAskings 可见 + resolveAsking 直推驻留会话（bypass 不短路）", async () => {
+    const conv = new Conversation({ conversationId: "c1", loop: mockLoop(), sampling: { model: "gpt-5" } });
+    const server = new ConversationManagerServer({ create: () => conv });
+    const ref = await server.createOrResume("c1");
+    // bypass 模式下提问同样入队（答案只在作者手里，不自动跳过）
+    await conv.sendSystemControl({ type: "mode.set", mode: "bypass" });
+    await conv.promotePendingMode();
+    const questions = [
+      {
+        question: "第二卷主线走哪个方向？",
+        header: "主线走向",
+        options: [
+          { label: "外部压境（推荐）", description: "冲突外化" },
+          { label: "内部瓦解", description: "权谋向" },
+        ],
+      },
+      { question: "一句话说说你的创意？", header: "一句话创意" },
+    ];
+    await server.submitAskingRequest(ref.conversationId, { requestId: "ask:1", questions });
+    const list = await server.listAskings();
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ decisioner: "ui", status: "pending", requestId: "ask:1" });
+    // 审批列表不混入提问条目
+    expect(await server.listApprovals()).toHaveLength(0);
+    // 作答：记录 + 直推驻留会话（conversation 的 resolveQuestion 解除等待）
+    const pending = conv.sendAskingQuestionRequest({ requestId: "ask:2", questions });
+    await server.submitAskingRequest(ref.conversationId, { requestId: "ask:2", questions });
+    const answers = [
+      { question: "第二卷主线走哪个方向？", selections: ["外部压境（推荐）"] },
+      { question: "一句话说说你的创意？", selections: [], text: "末世邮差送最后一封信" },
+    ];
+    expect(await server.resolveAsking("ask:2", answers)).toBe(true);
+    expect(await pending).toEqual(answers);
+    // 全跳过 → 状态记 skipped；已答历史保留在 listAskings
+    await server.submitAskingRequest(ref.conversationId, { requestId: "ask:3", questions });
+    expect(
+      await server.resolveAsking("ask:3", [
+        { question: "第二卷主线走哪个方向？", selections: [], skipped: true },
+        { question: "一句话说说你的创意？", selections: [], skipped: true },
+      ]),
+    ).toBe(true);
+    const after = await server.listAskings();
+    expect(after.find((i) => i.requestId === "ask:2")?.status).toBe("answered");
+    expect(after.find((i) => i.requestId === "ask:3")?.status).toBe("skipped");
   });
 
   it("terminate 清理会话", async () => {

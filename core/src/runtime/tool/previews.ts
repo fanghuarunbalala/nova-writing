@@ -447,6 +447,29 @@ export function todoWritePreview(call: ToolPreviewInput, response?: ToolPreviewR
 	return withIdentity("更新", "待办", title, "已更新", "更新失败", response);
 }
 
+/* ============ ask 域 ============ */
+
+/** AskUserQuestion preview：向作者提问 → N 问 + 首问 header 摘要 */
+export function askUserPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
+	const parsed = parseArgsJson(call.args);
+	const questions = Array.isArray(parsed?.questions) ? (parsed.questions as unknown[]) : [];
+	const title = `${questions.length} 问`;
+	if (response === undefined) {
+		const first =
+			typeof questions[0] === "object" && questions[0] !== null
+				? (questions[0] as Record<string, unknown>)
+				: {};
+		const header = typeof first.header === "string" && first.header.length > 0 ? first.header : undefined;
+		return {
+			action: "提问",
+			object: "作者",
+			title,
+			...(header !== undefined ? { summary: `等待作答 · ${header}` } : { summary: "等待作答" }),
+		};
+	}
+	return withIdentity("提问", "作者", title, "已作答", "未获回答", response);
+}
+
 /* ============ subagent 域（Agent / TaskOutput / TaskStop） ============ */
 
 /** Agent preview：子任务执行 → title=agentType + prompt 摘要 */
@@ -511,6 +534,7 @@ export const TOOL_PREVIEWS: ReadonlyMap<string, ToolPreviewFn> = new Map<string,
 	["Write", fileWritePreview],
 	["Edit", fileEditPreview],
 	["TodoWrite", todoWritePreview],
+	["AskUserQuestion", askUserPreview],
 	["Agent", agentTaskPreview],
 	["TaskOutput", taskOutputPreview],
 	["TaskStop", taskStopPreview],

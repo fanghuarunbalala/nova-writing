@@ -215,7 +215,7 @@ interface ConversationInteraction {
 // contract/interaction/waiting.ts —— 延迟 RPC（阻塞到决策）
 interface WaitingInteractionRequest {
   sendApprovalRequest(req): Promise<ConversationApprovalDecision>   // 阻塞到 approve/reject/edit
-  sendAskingQuestionRequest(req): Promise<string>                   // 阻塞到回答
+  sendAskingQuestionRequest(req): Promise<readonly AskQuestionAnswer[]>  // 阻塞到作者逐问作答（AskUserQuestion 工具）
   sendExitComposeRequest(req): Promise<void>                        // 阻塞到退出
 }
 

@@ -9,6 +9,7 @@
 
 import type {
 	AgentType,
+	AskQuestionAnswer,
 	ConversationApprovalDecision,
 	ConversationApprovalRequest,
 	ConversationAskingRequest,
@@ -17,7 +18,7 @@ import type {
 	ConversationMessage,
 	Receipt,
 } from "../../conversation/contract/types/index.js";
-import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
+import type { ApprovalQueueItem, AskingQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import type {
 	ConversationMeta,
 	ConversationRef,
@@ -105,7 +106,7 @@ export interface ConversationManagerServer {
 	 */
 	submitApprovalRequest(conversationId: ConversationId, req: ConversationApprovalRequest): Promise<void>;
 	/**
-	 * 提交提问请求（非阻塞；路由同审批，UI 展示延后）
+	 * 提交提问请求（非阻塞；入 CMS wait 队列，UI 经 listAskings 拉取作答）
 	 * @param conversationId 发起会话 id
 	 * @param req 提问请求
 	 */
@@ -122,6 +123,11 @@ export interface ConversationManagerServer {
 	 */
 	listApprovals(): Promise<readonly ApprovalQueueItem[]>;
 	/**
+	 * 待 UI 作答的提问列表（decisioner="ui"；含近期已答条目供卡片展示）
+	 * @returns 队列条目（按提交时间倒序）
+	 */
+	listAskings(): Promise<readonly AskingQueueItem[]>;
+	/**
 	 * 记录 UI 决策：驻留中的会话直推其 resolveApproval（rpc 调用），
 	 * 已退出的会话留待重启后经 takeDecisions 查询续跑。
 	 * @param requestId 请求 id
@@ -129,6 +135,17 @@ export interface ConversationManagerServer {
 	 * @returns 是否命中待决条目
 	 */
 	resolveApproval(requestId: string, decision: ConversationApprovalDecision): Promise<boolean>;
+	/**
+	 * 记录 UI 提问回答：驻留中的会话直推其 resolveQuestion（rpc 调用），
+	 * 已退出的会话留待重启按未回答回填。
+	 * @param requestId 提问请求 id
+	 * @param answers 逐问回答（skipped 表示作者跳过）
+	 * @returns 是否命中待决条目
+	 */
+	resolveAsking(
+		requestId: string,
+		answers: readonly AskQuestionAnswer[],
+	): Promise<boolean>;
 	/**
 	 * 子进程重启查询：该会话的待决/已决条目（暂停点续跑用）
 	 * @param conversationId 会话 id

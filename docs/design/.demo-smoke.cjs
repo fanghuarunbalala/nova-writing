@@ -50,19 +50,26 @@ click('[data-act="modePick"][data-id="bypass"]');
 assert(doc.body.textContent.includes("待生效"), "选择模式显示「待生效」chip");
 assert($(".draftPanel") && $(".toolLine"), "草稿面板与工具行");
 assert($(".sysMsg"), "审批系统消息");
-assert($$(".apCard").length === 4, "审批一批 4 张卡片（含 Exit 设计草稿）");
+// v0.8 审批整体弹窗：点时间线胶囊同步唤起（自动弹出走 boot 后 1.1s，冒烟不等）
+click('[data-act="apModalOpen"]');
+assert($(".apModal") && $$(".apListItem").length === 4, "审批弹窗：左清单 4 项（含设计草稿）");
+assert($(".apDetail") && $$(".apListItem.active").length === 1, "右详情渲染当前选中组（清单单选高亮）");
 assert(!$(".apCatalog"), "审批无目录列");
-assert(doc.body.textContent.includes("提交设计草稿") && $(".apDesign"), "Exit 审批：固定标题 + 设计草稿全文视图");
-assert(doc.body.textContent.includes("ExitComposeMode"), "Exit 审批身份行显示工具名");
-assert(doc.body.textContent.includes("将被覆盖") && $(".apCurText"), "编辑显示当前内容（将被覆盖的原文）");
-assert(doc.body.textContent.includes("将被删除") && doc.body.textContent.includes("碎片 1"), "删除显示既有数据（碎片列表）");
-assert(doc.body.textContent.includes("无既有数据"), "纯新建写入标注无既有数据");
-click('[data-act="apAdd"]'); // 轮到模板[4] 地点编辑 北桥客栈（含既有档案）
-assert(doc.body.textContent.includes("当前内容 · 将被覆盖") && doc.body.textContent.includes("雨夜唯一亮灯的檐下，掌柜记得每个渡客的鞋码。"), "写入/编辑遇既有数据展示当前档案");
+// 清单序：[0] Exit 设计草稿（初始选中）→ [1] 正文编辑 → [2] 删除 → [3] 角色写入
+assert($(".apDetail").textContent.includes("提交设计草稿") && $(".apDesign"), "Exit 审批：固定标题 + 设计草稿全文视图");
+assert($(".apDetail").textContent.includes("ExitComposeMode"), "Exit 审批身份行显示工具名");
+click('[data-act="apSel"][data-id="1"]');
+assert($(".apDetail").textContent.includes("将被覆盖") && $(".apCurText") && $(".apDetail").textContent.includes("雨幕里，林晚沿着河街奔逃"), "编辑显示当前内容（将被覆盖的原文）");
+click('[data-act="apSel"][data-id="2"]');
+assert($(".apDetail").textContent.includes("将被删除") && $(".apDetail").textContent.includes("碎片 1"), "删除显示既有数据（碎片列表）");
+click('[data-act="apSel"][data-id="3"]');
+assert($(".apDetail").textContent.includes("无既有数据"), "纯新建写入标注无既有数据");
+click('[data-act="apLater"]');
+assert($("#apAlertBar") && $("#apAlertBar").style.display === "flex", "稍后处理 → 挂起提示条常驻唤回");
 
-// --- 切内容视图：四资料位 ---
+// --- 切内容视图：四资料位（作用域 #sidebar：chat 右栏内容目录同样用 segTabs/dirRow） ---
 click('[data-act="view"][data-id="content"]');
-assert($(".segTabs") && $$(".segTabs button").length === 4, "内容视图四资料位 tab");
+assert($("#sidebar .segTabs") && $$("#sidebar .segTabs button").length === 4, "内容视图四资料位 tab");
 assert($(".inspector").classList.contains("closedDock"), "切到内容视图审批面板隐藏");
 assert($$(".treeRow").length >= 10 && $(".treeChildren") && $(".treeTick"), "大纲树嵌套层级 + 引导线渲染");
 assert($(".paneBody .unitHead"), "大纲单元详情渲染");
@@ -77,7 +84,7 @@ click('[data-act="chapSel"][data-id="c8"]');
 assert(doc.body.textContent.includes("尚未落笔"), "未开笔章显示空态");
 
 click('[data-act="contentTab"][data-id="characters"]');
-assert($$(".dirRow").length === 4, "人物目录 4 条");
+assert($$("#sidebar .dirRow").length === 4, "人物目录 4 条");
 assert($(".profileHead h2"), "人物档案详情");
 click('[data-act="charSel"][data-id="ch2"]');
 assert($(".profileHead h2").textContent.includes("沈砚"), "选择人物切换详情");
@@ -106,11 +113,11 @@ assert($$(".progRow").length >= 10, "大纲进度行");
 click('[data-act="planSel"][data-id="t1"]');
 assert($(".todoCard"), "待办详情卡");
 click('[data-act="todoGo"][data-id="t1"]');
-assert($(".inspector") && !$(".inspector").classList.contains("closedDock"), "去审批跳回对话并打开审批面板");
+assert($(".apModal"), "去审批跳回对话并打开审批弹窗");
 click('[data-act="apDecide"][data-id="approve"]');
-assert(doc.body.textContent.includes("已处理"), "批准后显示已处理横幅");
-click('[data-act="apAdd"]');
-assert($$(".apCard").length === 6, "模拟新增审批入列");
+assert($(".apDetail").textContent.includes("已处理"), "批准后显示已处理横幅");
+click('[data-act="apLater"]');
+assert($("#apAlertBar") && $("#apAlertBar").style.display === "flex", "稍后处理 → 提示条常驻（3 项待决）");
 
 // --- 平台切换 / 窗控 / 主题 / 宽度 ---
 click('[data-act="platform"][data-id="mac"]');
@@ -141,6 +148,25 @@ ta.value = "测试发送一条";
 ta.dispatchEvent(new window.Event("input", { bubbles: true }));
 click('[data-act="send"]');
 assert($$("#liveMsgs .msgUser").length === 1, "发送后追加用户气泡");
+
+// --- AskUserQuestion 流内提问卡（与审批右栏互不影响） ---
+assert($("#askGroupCard") && doc.body.textContent.includes("提交回答"), "提问卡初始渲染（pending 交互态）");
+assert($("#askToolLine") && $("#askToolLine").textContent.includes("等待作答"), "提问工具行运行态（等待作答）");
+click('.opt[data-qid="0"][data-oi="0"]');
+assert(doc.querySelector('#askQItem-0 .qPill').classList.contains("chosen"), "单选点选后该问 pill 变已选");
+const askOpenTa = doc.querySelector('.openInput[data-qid="3"]');
+askOpenTa.value = "雾散了，渡口第一次来了一艘不认得的船";
+askOpenTa.dispatchEvent(new window.Event("input", { bubbles: true }));
+assert(doc.querySelector('[data-act="askSubmit"]').textContent.includes("2/4"), "开放题输入后提交计数刷新（2/4）");
+click('[data-act="askSubmit"]');
+assert(doc.querySelector("#askScene .recList") && $$("#askScene .recRow").length === 4, "提交后留痕为题目→答案行（4 行）");
+assert($(".sysMsg.ok"), "收口胶囊（作者已作答）");
+assert($("#askToolLine").textContent.includes("已作答"), "提问工具行转完成态");
+click('[data-act="apModalOpen"]');
+assert($$(".apListItem").length === 4, "提问交互不影响审批清单（弹窗重开仍 4 项）");
+click('[data-act="apLater"]');
+click('[data-act="askReplay"]');
+assert($("#askGroupCard") && !$(".sysMsg.ok") && $("#askToolLine").textContent.includes("等待作答"), "重放提问恢复 pending 态");
 
 setTimeout(() => {
   assert($$("#liveMsgs .msgAssistant").length === 1, "演示助手回复延迟出现");

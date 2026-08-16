@@ -7,6 +7,7 @@
  */
 
 import type { ConversationEventBase, SharedConversationEvent } from "./shared.js";
+import type { AskQuestionSpec } from "../types/index.js";
 
 /** 工具投影预览内容（ToolDef.preview 产出：动作标识 + 内容 + 摘要） */
 export interface ToolPreview {
@@ -30,6 +31,14 @@ export interface ToolRecordedStartedEvent extends ConversationEventBase {
 	preview?: ToolPreview;
 }
 
+/** AskUserQuestion 提问留影载荷（tool-recorded.recorded 携带；时间线历史留痕重建用） */
+export interface AskRecordedPayload {
+	/** 提问问题（来自 tool-call-request args；透传不加工） */
+	questions: readonly AskQuestionSpec[];
+	/** 工具回填文本（含逐问「题目 → 答案」行；UI 直接按行渲染简约记录） */
+	result: string;
+}
+
 /** 工具调用投影：完成事件（tool-call-response 的投影，preview 为 preview(args, response) 输出） */
 export interface ToolRecordedRecordedEvent extends ConversationEventBase {
 	type: "tool-recorded.recorded";
@@ -44,6 +53,8 @@ export interface ToolRecordedRecordedEvent extends ConversationEventBase {
 	error?: string;
 	/** request→response 耗时毫秒 */
 	durationMs?: number;
+	/** AskUserQuestion 专用：提问留影（成功作答时携带；journal 重放同路径产出） */
+	ask?: AskRecordedPayload;
 }
 
 /** 投影事件全集（hub 订阅与 projectedHistory 读取的唯二形态，UI 只消费此类型） */

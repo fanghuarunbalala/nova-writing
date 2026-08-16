@@ -31,10 +31,10 @@ describe("buildNovelAgent 组装", () => {
     ]);
     expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(6);
     expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(4);
-    expect(cap.toolDefs).toHaveLength(26);
+    expect(cap.toolDefs).toHaveLength(27);
   });
 
-  it("工具名覆盖 todo + files + compose + novel 各域（10 组 26 工具）", () => {
+  it("工具名覆盖 todo + files + ask + compose + novel 各域（11 组 27 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { toolDefs: Array<{ name: string }> } } }).config.agentCapability;
     const names = cap.toolDefs.map((t) => t.name);
@@ -43,6 +43,7 @@ describe("buildNovelAgent 组装", () => {
     expect(names).toContain("Glob");
     expect(names).toContain("Write");
     expect(names).toContain("Edit");
+    expect(names).toContain("AskUserQuestion");
     expect(names).toContain("EnterComposeMode");
     expect(names).toContain("ExitComposeMode");
     expect(names).toContain("NovelCharacterRead");
@@ -61,7 +62,7 @@ describe("buildNovelAgent 组装", () => {
     expect(result).toContain("[]");
   });
 
-  it("subagent 选项存在时追加 Agent/TaskOutput/TaskStop（29 工具），Agent 返回 acceptance", async () => {
+  it("subagent 选项存在时追加 Agent/TaskOutput/TaskStop（30 工具），Agent 返回 acceptance", async () => {
     const spawner = {
       spawn: () => ({ taskId: "task_1", status: "running" as const }),
       queryTasks: async () => [],
@@ -88,8 +89,8 @@ describe("buildNovelAgent 组装", () => {
         };
       }
     ).config.agentCapability;
-    // 26（10 组，含 novel.compose 两工具） + 3（subagent 派发三工具）
-    expect(cap.toolDefs).toHaveLength(29);
+    // 27（11 组，含 novel.compose 两工具） + 3（subagent 派发三工具）
+    expect(cap.toolDefs).toHaveLength(30);
     const names = cap.toolDefs.map((t) => t.name);
     expect(names).toContain("Agent");
     expect(names).toContain("TaskOutput");

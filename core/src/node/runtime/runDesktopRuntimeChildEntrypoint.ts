@@ -88,7 +88,7 @@ function conversationExposeOf(holder: { conv?: Conversation }): Record<string, u
 		resolveApproval: (...args: unknown[]) =>
 			requireConv().resolveApproval(args[0] as string, args[1] as never),
 		resolveQuestion: (...args: unknown[]) =>
-			requireConv().resolveQuestion(args[0] as string, args[1] as string),
+			requireConv().resolveQuestion(args[0] as string, args[1] as never),
 		resolveExitCompose: (...args: unknown[]) =>
 			requireConv().resolveExitCompose(args[0] as string),
 		getConversationMode: () => requireConv().getConversationMode(),
@@ -404,6 +404,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		runMessages,
 		resumeSeq,
 		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
+		requestAsk: (req) => holder.conv!.sendAskingQuestionRequest(req),
 		resumePendingDecider,
 		logger,
 		debugger: createCallDebugger?.("main"),

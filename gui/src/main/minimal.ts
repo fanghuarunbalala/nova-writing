@@ -398,9 +398,10 @@ async function main(): Promise<void> {
   expose(serverApi, electronIpcTransport({ endpoint, channel: IPC_CHANNEL }));
   await configServer.start(electronIpcTransport({ endpoint, channel: CONFIG_CHANNEL }));
 
-  // renderer 暴露面（main 直接 rpc 调用：审批队列变化 / novel 数据变更通知）
+  // renderer 暴露面（main 直接 rpc 调用：审批/提问队列变化 / novel 数据变更通知）
   const uiApi = wrap<{
     onApprovalsChanged(): Promise<void>;
+    onAskingsChanged(): Promise<void>;
     onNovelChanged(change: { entity: string }): Promise<void>;
   }>(
     electronIpcTransport({ endpoint, channel: UI_CHANNEL }),
@@ -408,6 +409,9 @@ async function main(): Promise<void> {
   uiNotifyHolder.notify = () => {
     void uiApi.onApprovalsChanged().catch(() => {
       // renderer 未就绪/已关窗时忽略
+    });
+    void uiApi.onAskingsChanged().catch(() => {
+      // 同上
     });
   };
   // novel.changed 订阅：ZeroMQ → renderer 通知（拉取为准，通知仅触发刷新）

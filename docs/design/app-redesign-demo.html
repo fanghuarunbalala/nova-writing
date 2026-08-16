@@ -31,7 +31,7 @@
     --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
 
     --fs-chat: 15.5px;
-    --fs-12: 12px; --fs-13: 13px; --fs-12-5: 12.5px; --fs-11: 11px;
+    --fs-12: 12px; --fs-13: 13px; --fs-12-5: 12.5px; --fs-11: 11px; --fs-11-5: 11.5px;
     --fs-10-5: 10.5px; --fs-16-5: 16.5px;
     --fw-regular: 400; --fw-medium: 550; --fw-semibold: 650; --fw-bold: 700;
 
@@ -1322,6 +1322,171 @@
     100% { background: transparent; box-shadow: 0 0 0 6px transparent; }
   }
   .dirRow.flash { animation: row-flash 1.8s var(--ease-out); border-radius: var(--radius-sm); }
+  /* ============ 流内提问卡（AskUserQuestion；对话流嵌入式，与审批弹窗互不影响） ============ */
+  .askGroupCard {
+    border: 1px solid color-mix(in oklab, var(--color-warn) 36%, var(--color-border-strong));
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-1);
+    overflow: hidden;
+    animation: msg-enter var(--duration-base) var(--ease-out);
+  }
+  .askGroupCard.done { border-color: var(--color-border-strong); }
+  .askGroupHead {
+    display: flex; align-items: center; gap: 9px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-chrome-bg);
+  }
+  .askGroupHead .hIcon { color: var(--color-warn); display: inline-flex; }
+  .askGroupCard.done .askGroupHead .hIcon { color: var(--color-success); }
+  .askGroupHead b { font-size: var(--fs-13); }
+  .askCnt {
+    font-family: var(--font-mono); font-size: var(--fs-10-5); font-weight: var(--fw-bold);
+    color: var(--color-warn); background: var(--color-warn-bg);
+    padding: 1px 8px; border-radius: var(--radius-pill);
+  }
+  .askCnt.zero { color: var(--color-success); background: var(--color-success-bg); }
+  .askGroupHead .hint { font-size: var(--fs-10-5); color: var(--color-faint); }
+
+  .qItem + .qItem { border-top: 1px solid var(--color-border); }
+  .qItemBar {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 14px; cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+  .qItemBar:hover { background: var(--color-surface-2); }
+  .qItem.pending .qItemBar { background: color-mix(in oklab, var(--color-warn) 4%, transparent); }
+  .qChip {
+    flex: none; font-size: var(--fs-10-5); font-weight: var(--fw-semibold); letter-spacing: 0.02em;
+    padding: 1px 8px; border-radius: var(--radius-pill);
+    background: var(--color-accent-11); color: var(--color-accent-ink);
+    border: 1px solid color-mix(in oklab, var(--color-accent) 22%, transparent);
+    white-space: nowrap;
+  }
+  .qItemBar .qText { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+  .qItemBar .qText b { font-size: var(--fs-13); font-weight: var(--fw-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qTag { font-size: var(--fs-10-5); color: var(--color-faint); border: 1px solid var(--color-border-strong); border-radius: var(--radius-pill); padding: 0 7px; white-space: nowrap; }
+  .qPill { flex: none; font-size: 10px; font-weight: var(--fw-bold); border-radius: var(--radius-pill); padding: 1px 7px; }
+  .qPill.pending { background: var(--color-warn-bg); color: var(--color-warn); }
+  .qPill.chosen { background: var(--color-info-bg); color: var(--color-info); }
+  .qItemBar .chev { color: var(--color-faint); display: grid; place-items: center; transition: transform .18s var(--ease-out); }
+  .qItem.open .qItemBar .chev { transform: rotate(180deg); }
+
+  .qItemBody { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.28s var(--ease-out); }
+  .qItemBody[data-open="true"] { grid-template-rows: 1fr; }
+  .qItemBodyInner { overflow: hidden; }
+  .qItemBodyPad { padding: 4px 16px 14px 40px; }
+
+  /* 问题标题（展开体首行：完整题目突出呈现，与折叠条的截断摘要区分） */
+  .qFull {
+    font-size: 14.5px;
+    font-weight: 650;
+    line-height: 1.55;
+    margin: 4px 0 10px;
+  }
+
+  /* context md 引导块（markdown 渲染，样例含粗体/列表） */
+  .qContext {
+    font-size: var(--fs-12-5); line-height: 1.75; color: var(--color-muted);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-left: 2.5px solid var(--color-accent-45);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 8px 12px 9px; margin: 0 0 9px;
+  }
+  .qContext b { color: var(--color-fg); font-weight: var(--fw-semibold); }
+  .qContext ul { margin: 4px 0 0; padding-left: 16px; }
+  .qContext li { margin: 2px 0; }
+  .qContext li::marker { color: var(--color-accent-45); }
+  .qContext .ex { font-family: var(--font-body); color: var(--color-fg); }
+
+  /* 选项 */
+  .optList { display: flex; flex-direction: column; gap: 6px; }
+  .opt {
+    display: grid; grid-template-columns: 15px 1fr; gap: 2px 9px; align-items: start;
+    padding: 8px 11px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: border-color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
+  }
+  .opt:hover { border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-border-strong)); }
+  .opt[data-selected] {
+    border-color: var(--color-accent);
+    background: var(--color-accent-9);
+    box-shadow: inset 0 0 0 1px var(--color-accent-45);
+  }
+  .optMark {
+    width: 14px; height: 14px; margin-top: 3px;
+    border: 1.5px solid var(--color-border-strong); border-radius: 50%;
+    display: grid; place-items: center;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .opt.multi .optMark { border-radius: 4px; }
+  .opt[data-selected] .optMark { border-color: var(--color-accent); }
+  .opt[data-selected] .optMark::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--grad-accent); }
+  .opt.multi[data-selected] .optMark::after { border-radius: 1px; }
+  .optLabel { font-size: var(--fs-13); font-weight: var(--fw-medium); line-height: 1.5; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .recBadge {
+    font-size: var(--fs-10-5); font-weight: var(--fw-semibold);
+    color: var(--color-warn); background: var(--color-warn-bg);
+    border: 1px solid color-mix(in oklab, var(--color-warn) 26%, transparent);
+    padding: 0 7px; border-radius: var(--radius-pill); white-space: nowrap;
+  }
+  .optDesc { grid-column: 2; font-size: var(--fs-12); line-height: 1.65; color: var(--color-muted); }
+  .optDesc b { color: var(--color-fg); font-weight: var(--fw-medium); }
+  .otherInput {
+    grid-column: 1 / -1; margin-top: 4px;
+    font: inherit; font-size: var(--fs-12-5); color: var(--color-fg);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+    padding: 6px 9px; width: 100%; outline: none;
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  .otherInput:focus { border-color: var(--color-accent); }
+  .otherInput::placeholder { color: var(--color-faint); }
+
+  /* 开放填空 */
+  .openInput {
+    font: inherit; font-family: var(--font-body);
+    font-size: var(--fs-13); color: var(--color-fg);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-md);
+    padding: 9px 11px; width: 100%; min-height: 72px; resize: vertical; outline: none;
+    line-height: 1.7;
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  .openInput:focus { border-color: var(--color-accent); }
+  .openInput::placeholder { color: var(--color-faint); font-family: var(--font-ui); font-size: var(--fs-12); }
+
+  /* 组卡操作区（活动态；按钮复用既有 .btn 家族） */
+  .askActions {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 11px 14px; border-top: 1px solid var(--color-border);
+  }
+  .askActions .hint { font-size: var(--fs-11); color: var(--color-faint); margin-right: auto; }
+
+  /* 已答简约记录（作答后留痕：整卡只渲染「题目 → 答案」行） */
+  .recList { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px 12px; }
+  .recRow {
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    font-size: var(--fs-12-5); line-height: 1.6;
+  }
+  .recRow .q { color: var(--color-muted); min-width: 0; }
+  .recRow .arr { flex: none; color: var(--color-faint); }
+  .recRow .a { color: var(--color-fg); font-weight: var(--fw-medium); }
+  .recRow .a.self { font-family: var(--font-body); }
+  .recRow .a.quiet { color: var(--color-muted); font-weight: var(--fw-regular); }
+
+  /* 提问收口胶囊（.sysMsg 审批版为 warn 可点击；.ok 为 success 不可点） */
+  .sysMsg.ok {
+    border-color: color-mix(in oklab, var(--color-success) 32%, transparent);
+    background: var(--color-success-bg); color: var(--color-success);
+    cursor: default;
+  }
+  .sysMsg.ok:hover { box-shadow: none; transform: none; }
 
   /* ============ 遮罩 / 抽屉 / 弹层 ============ */
   .scrim {
@@ -1754,6 +1919,7 @@ const P = {
   mapPin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
   chevRight: '<path d="m9 18 6-6-6-6"/>',
   chevDown: '<path d="m6 9 6 6 6-6"/>',
+  helpCircle: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
   chevLeft: '<path d="m15 18-6-6 6-6"/>',
   chevsDown: '<path d="m7 6 5 5 5-5"/><path d="m7 13 5 5 5-5"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
@@ -2492,6 +2658,158 @@ function mdShowcaseHTML() {
   </div>`;
 }
 
+/* ================= AskUserQuestion 流内提问卡（AskUserQuestion 工具；对话流嵌入式，与审批弹窗互不影响） ================= */
+const ASK_QUESTIONS = [
+  {
+    id: 0, chip: "主线走向", tag: "单选", question: "第二卷主线冲突升级走哪个方向？",
+    options: [
+      { label: "外部势力正面压境", rec: true, desc: "承接第一卷铜符伏笔，冲突外化，<b>动作场面多</b>；适合快节奏开局。" },
+      { label: "阵营内部瓦解", desc: "重心转权谋与信任崩塌，节奏更沉；<b>心理戏占比高</b>。" },
+      { label: "双线并行", desc: "明线外部压境 + 暗线内鬼渗透，信息密度最高，结构难度也最高。" },
+    ],
+  },
+  {
+    id: 1, chip: "伏笔回收", tag: "多选", question: "下面哪些伏笔要在本卷内回收？", multi: true,
+    options: [
+      { label: "铜符的另一半下落", desc: "第 2 章埋（沈砚袖口轮廓），回收成本最低。" },
+      { label: "十年前旧案卷宗", desc: "需调档案房线，牵动周慎立场。" },
+      { label: "雾夜摆渡的规矩", desc: "世界观型伏笔，可留到第三卷，本卷只推进不揭底。" },
+    ],
+  },
+  {
+    id: 2, chip: "尺度", tag: "单选", question: "本卷的暴力与阴郁尺度控制在哪一档？",
+    options: [
+      { label: "网文主流（推荐）", rec: true, desc: "冲突点到即止，无血腥描写，<b>过审与读者面最稳</b>。" },
+      { label: "偏硬核", desc: "允许写实伤害与道德灰区，氛围更冷。" },
+    ],
+  },
+  {
+    id: 3, chip: "卷末落点", tag: "开放", question: "卷末你想看到什么样的画面或情绪落点？", open: true,
+    context: `不用具体情节，给一个<b>画面感或情绪</b>即可，比如：
+      <ul>
+        <li><span class="ex">「雾散了，渡口第一次来了一艘不认得的船」</span></li>
+        <li><span class="ex">「两枚铜符在灯下拼上，缺口里卡着一张纸」</span></li>
+      </ul>
+      没想法也可以留空或跳过——我会从已有伏笔里选一个收束点。`,
+    placeholder: "一句话：画面或情绪落点（可留空）",
+  },
+];
+let askSel = {};   // qid → { picks: Set<optionIdx|"other">, other, text }
+let askOpen = 0;   // 展开的 qid（-1 全收起）
+let askDone = false;
+
+function askIsAnswered(q) {
+  const s = askSel[q.id] || {};
+  return q.open ? (s.text || "").trim() !== "" : ((s.picks && s.picks.size) > 0 || (s.other || "").trim() !== "");
+}
+const askAnsweredN = () => ASK_QUESTIONS.filter(askIsAnswered).length;
+
+function askItemBodyHTML(q) {
+  const s = askSel[q.id] || {};
+  let body = "";
+  if (q.context) body += `<div class="qContext">${q.context}</div>`;
+  if (q.open) {
+    body += `<textarea class="openInput" data-qid="${q.id}" placeholder="${esc(q.placeholder || "")}" rows="3">${esc(s.text || "")}</textarea>`;
+  } else {
+    body += `<div class="optList">` + q.options.map((o, i) => `
+      <div class="opt${q.multi ? " multi" : ""}${s.picks && s.picks.has(i) ? '" data-selected="' : ""}" data-qid="${q.id}" data-oi="${i}">
+        <span class="optMark"></span>
+        <span class="optLabel">${esc(o.label)}${o.rec ? '<span class="recBadge">推荐</span>' : ""}</span>
+        <span class="optDesc">${o.desc}</span>
+      </div>`).join("") + `
+      <div class="opt${(s.other || "").trim() !== "" ? '" data-selected="' : ""}" data-qid="${q.id}" data-oi="other">
+        <span class="optMark"></span>
+        <span class="optLabel">其他</span>
+        <input class="otherInput" data-qid="${q.id}" placeholder="自填你的答案" value="${esc(s.other || "")}">
+      </div>
+    </div>`;
+  }
+  return `<div class="qFull">${esc(q.question)}</div>${body}`;
+}
+
+/* AskUserQuestion 工具行：pending 运行态 → 已作答完成态（时间线内就地翻转） */
+function askToolLineHTML() {
+  return askDone
+    ? `<div class="toolLine" id="askToolLine"><span class="toolDone">${ic("check", 12, 2.2)}向作者提问 · 4 问（已作答 14:31）</span></div>`
+    : `<div class="toolLine" id="askToolLine"><span class="toolRunning"><span class="spinner"></span>向作者提问 · 4 问 · 等待作答（见下方提问卡）</span></div>`;
+}
+
+function askGroupHTML() {
+  const n = askAnsweredN();
+  return `
+  <div class="askGroupCard${askDone ? " done" : ""}" id="askGroupCard">
+    <div class="askGroupHead">
+      <span class="hIcon">${ic(askDone ? "check" : "helpCircle", 15)}</span>
+      <b>向作者提问</b>
+      <span class="askCnt${askDone ? " zero" : n === ASK_QUESTIONS.length ? " zero" : ""}">${askDone ? "已作答" : `${ASK_QUESTIONS.length - n} 问待答`}</span>
+      ${askDone ? "" : `<span class="hint">首问已展开 · 一次问完不连环追问</span>`}
+    </div>
+    ${askDone
+      ? `<div class="recList">${ASK_QUESTIONS.map((q) => askDoneRowHTML(q)).join("")}</div>`
+      : ASK_QUESTIONS.map((q) => {
+      const answered = askIsAnswered(q);
+      const isOpen = askOpen === q.id;
+      return `
+      <div class="qItem ${answered ? "" : "pending"}${isOpen ? " open" : ""}" id="askQItem-${q.id}">
+        <div class="qItemBar" data-act="qToggle" data-id="${q.id}">
+          <span class="qChip">${esc(q.chip)}</span>
+          <span class="qText"><b>${esc(q.question)}</b>${q.tag ? `<span class="qTag">${q.tag}</span>` : ""}</span>
+          <span class="qPill ${answered ? "chosen" : "pending"}">${answered ? "已选" : "待答"}</span>
+          <span class="chev">${ic("chevDown", 13, 2.2)}</span>
+        </div>
+        <div class="qItemBody" data-open="${isOpen}">
+          <div class="qItemBodyInner"><div class="qItemBodyPad">
+            ${askItemBodyHTML(q)}
+          </div></div>
+        </div>
+      </div>`;
+    }).join("")}
+    ${askDone ? "" : `
+    <div class="askActions">
+      <span class="hint">跳过的问 = 授权我自行决断并继续</span>
+      <button class="btn btnGhost btnSm" data-act="askSkip">跳过全部</button>
+      <button class="btn btnPrimary btnSm" data-act="askSubmit">${ic("check", 12)}提交回答（${n}/${ASK_QUESTIONS.length}）</button>
+    </div>`}
+  </div>`;
+}
+
+/* 已答简约记录行：只渲染「题目 → 答案」 */
+function askDoneRowHTML(q) {
+  const s = askSel[q.id] || {};
+  let answer, self = false, quiet = false;
+  if (q.open) {
+    const t = (s.text || "").trim();
+    if (t === "") { answer = "跳过 · 授权自行决断"; quiet = true; }
+    else { answer = t; self = true; }
+  } else {
+    const picks = [...(s.picks || [])].filter((i) => i !== "other").map((i) => q.options[i].label);
+    const other = (s.other || "").trim();
+    if (picks.length === 0 && other === "") { answer = "跳过 · 授权自行决断"; quiet = true; }
+    else {
+      const parts = [...picks, ...(other !== "" ? ["其他：" + other] : [])];
+      answer = parts.join("、") + (q.multi && picks.length > 1 ? `（多选 ${picks.length} 项）` : "");
+    }
+  }
+  return `<div class="recRow"><span class="q">${esc(q.question)}</span><span class="arr">→</span><span class="a${self ? " self" : ""}${quiet ? " quiet" : ""}">${esc(answer)}</span></div>`;
+}
+
+function askSceneHTML() {
+  return `<div id="askScene" style="display:flex;flex-direction:column;gap:16px;">${askGroupHTML()}${askDone ? `<div class="sysMsg ok">${ic("check", 12, 2.4)}作者已作答 · 生成继续</div>` : ""}</div>`;
+}
+
+/* 局部更新：只替换提问场景容器与工具行（保 #chatInput 等既有 DOM 不整页重渲染） */
+function renderAskCard() {
+  const scene = document.getElementById("askScene");
+  if (scene) scene.outerHTML = askSceneHTML();
+  const tl = document.getElementById("askToolLine");
+  if (tl) tl.outerHTML = askToolLineHTML();
+}
+function askReset() {
+  askSel = {}; askOpen = 0; askDone = false;
+  renderAskCard();
+  toast("已重放：提问卡到达对话流末尾");
+}
+
 function chatTimelineHTML() {
   /* 每轮助手消息：头（头像/名称/时间/模式）→ 可选前言 → 工具调用带（夹在正文中间）→ 最后一次 call 的返回正文 */
   const head = (time) => `
@@ -2558,6 +2876,17 @@ function chatTimelineHTML() {
     ${pendingN() > 0
       ? `<div class="sysMsg" data-act="apModalOpen" title="打开审批弹窗">${ic("shieldCheck", 13)}4 项变更待审批（含设计草稿）—— 点击处理</div>`
       : ""}
+    <div class="runDivider"><span>第 4 轮 · 二卷开笔前 · 向作者提问</span></div>
+    <div class="msgUser">开始写第二卷吧。</div>
+    <div class="msgAssistant">
+      ${head("今天 14:26")}
+      <div class="toolGroup">
+        <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}读取大纲 · 全树（includePlans）</span></div>
+        ${askToolLineHTML()}
+      </div>
+      <div class="mdBody"><p>二卷「雾锁」已成纲未动笔。开笔前有 <b>4 个真实分叉</b>——一次问完，不连环打断：</p></div>
+    </div>
+    ${askSceneHTML()}
     <div id="liveMsgs" style="display:flex;flex-direction:column;gap:16px;">${liveMsgs.join("")}</div>`;
 }
 
@@ -3251,6 +3580,10 @@ function renderDemoBar() {
       ${[0, 1, 2].map(n => `<button class="dbtn" data-act="queueSet" data-id="${n}" aria-pressed="${queuedMsgs.length === n}">${n === 0 ? "清空" : `排队 ${n} 条`}</button>`).join("")}
     </div></div>
     <span class="demoDivider"></span>
+    <div class="demoGroup"><span class="lbl">提问示例</span><div class="demoBtns">
+      <button class="dbtn" data-act="askReplay" aria-pressed="${!askDone}">重放提问到达</button>
+    </div></div>
+    <span class="demoDivider"></span>
     <div class="demoGroup"><span class="lbl">面板</span><div class="demoBtns">
       <button class="dbtn" data-act="insToggle" aria-pressed="${state.dirOpen}">右栏目录</button>
       <button class="dbtn" data-act="apModalOpen">审批弹窗</button>
@@ -3272,6 +3605,7 @@ function renderInfoPop() {
       <li><b>对话流实体标签</b>：正文中的 <code>&lt;character_沈砚&gt;</code> / <code>&lt;location_县档案房&gt;</code> 等标签可点击——右栏内容目录切到对应 tab 并高亮定位、展开详情卡，从那里再跳完整档案。</li>
       <li><b>markdown 全格式渲染样例</b>：对话第 3 轮为排版样例消息，覆盖 标题 1–6 / 粗斜删除 / 行内代码 / kbd / 三种列表+任务清单 / 嵌套引用 / 带语言标签代码块 / 表格 / 链接 / 分割线 / 图片占位 / 脚注，全部走主题 token 四主题适配。</li>
       <li><b>审批挂起时状态行显示「正在审批」</b>（沙漏琥珀态），生成中仍为「正在生成」。</li>
+      <li><b>AskUserQuestion = 流内提问卡</b>：模型需要作者决策 / 澄清 / 采集创意时，提问组卡内联在对话流末尾（<b>不弹窗、不占右栏</b>，与审批的分工：审批弹窗管写操作放行，提问卡管创作输入）。一次 1-4 问混排（单选 / 多选 / 开放填空），逐问折叠、题目突出呈现；作者作答（选 / 「其他」自填 / 跳过）后卡片<b>原地留痕为「题目 → 答案」简约记录</b>，工具行转完成态，生成继续。控制条「提问示例」可重放。</li>
     <li><b>生成中发送 = 排队幽灵项</b>：正在生成/审批时发送的消息不再被吞掉，以降透明度虚线气泡<b>即时回显</b>在时间线末尾（琥珀「排队中 Ns」角标），状态行追加「· 排队中 N 条」；当前回复收口后幽灵项<b>原地晋升</b>为正式消息并依次开跑（2 条排队会链式执行）。控制条「排队示例」可罗列 清空 / 1 条 / 2 条。</li>
       <li><b>执行模式位于输入框底栏左侧</b>（发送 / 暂停在底栏右侧），点击向上弹出下拉列表（图标 + 名称 + 说明）；选择后仅显示「待生效」chip（不带模式名），随下一条消息发出时生效——对齐现网 ComposerModeBar 的会话级权威状态。</li>
       <li><b>消息通知 = 顶栏铃铛 + 通知中心</b>：审批到达 / 写作受阻 / 档案待完善等沉淀在通知中心（铃铛带未读计数角标），点击条目标记已读并跳转对应视图；对话顶条「置顶」右侧的 <b>「更多 ⋯」为会话菜单</b>——重命名 / 复制最后回复 / 导出 Markdown / 清空上下文 / 删除。</li>
@@ -3297,6 +3631,33 @@ document.addEventListener("click", (e) => {
   const convMenuEl = document.getElementById("convMenu");
   if (convMenuEl && !e.target.closest("#convMenu") && !e.target.closest('[data-act="convMenu"]')) convMenuEl.remove();
   if (state.modeMenuOpen && !e.target.closest("#modeRow")) { state.modeMenuOpen = false; updateModeUI(); }
+  /* 提问卡选项点选（.opt 无 data-act；先于 data-act 路由拦截，「其他」输入框点击除外） */
+  const askOptEl = e.target instanceof Element ? e.target.closest(".opt[data-qid]") : null;
+  if (askOptEl && !askDone && !(e.target instanceof Element && e.target.classList.contains("otherInput"))) {
+    const qid = Number(askOptEl.dataset.qid);
+    const oi = askOptEl.dataset.oi === "other" ? "other" : Number(askOptEl.dataset.oi);
+    const q = ASK_QUESTIONS.find((x) => x.id === qid);
+    if (q && !q.open) {
+      askSel[qid] = askSel[qid] || { picks: new Set(), other: "" };
+      const s = askSel[qid];
+      s.picks = s.picks || new Set();
+      if (q.multi) {
+        if (oi === "other") {
+          if (s.picks.has("other")) { s.picks.delete("other"); s.other = ""; }
+          else s.picks.add("other");
+        } else s.picks.has(oi) ? s.picks.delete(oi) : s.picks.add(oi);
+      } else {
+        if (oi !== "other" && s.picks.has(oi)) s.picks.clear();
+        else {
+          s.picks.clear();
+          if (oi === "other") s.picks.add("other");
+          else s.picks.add(oi);
+        }
+      }
+      renderAskCard();
+    }
+    return;
+  }
   if (!el) return;
   const act = el.dataset.act, id = el.dataset.id;
   switch (act) {
@@ -3450,6 +3811,27 @@ document.addEventListener("click", (e) => {
       openApModal();
       break;
     }
+    case "qToggle": {
+      if (askDone) break;
+      const qid = Number(id);
+      askOpen = askOpen === qid ? -1 : qid;
+      renderAskCard();
+      break;
+    }
+    case "askSubmit":
+      askDone = true; askOpen = -1;
+      renderAskCard();
+      toast("回答已提交，生成继续");
+      try { const sc = $("chatScroll"); if (sc) sc.scrollTop = sc.scrollHeight; } catch { /* jsdom */ }
+      break;
+    case "askSkip":
+      askSel = {}; askDone = true; askOpen = -1;
+      renderAskCard();
+      toast("已跳过全部问题——基于现有信息自行决断");
+      break;
+    case "askReplay":
+      askReset();
+      break;
     case "sideToggle":
       state.sidebarCollapsed = !state.sidebarCollapsed;
       renderTitlebar(); renderSidebar();
@@ -3667,6 +4049,32 @@ document.addEventListener("input", (e) => {
     g._ctext = ta.value;
     const submit = ta.closest(".apCommentInner").querySelector('[data-id="submit"]');
     if (submit) submit.disabled = g._ctext.trim() === "";
+  }
+  /* 提问卡开放题 / 「其他」输入：只刷 pill 与计数，不整卡重渲染（保输入焦点） */
+  if (ta.classList && (ta.classList.contains("openInput") || ta.classList.contains("otherInput"))) {
+    const qid = Number(ta.dataset.qid);
+    askSel[qid] = askSel[qid] || { picks: new Set(), other: "" };
+    const s = askSel[qid];
+    if (ta.classList.contains("openInput")) s.text = ta.value;
+    else {
+      s.other = ta.value;
+      if (ta.value.trim() !== "") {
+        s.picks = s.picks || new Set();
+        s.picks.add("other");
+        ta.closest(".opt")?.setAttribute("data-selected", "");
+      }
+    }
+    const n = askAnsweredN();
+    const btn = document.querySelector('[data-act="askSubmit"]');
+    if (btn) btn.innerHTML = `${ic("check", 12)}提交回答（${n}/${ASK_QUESTIONS.length}）`;
+    const cnt = document.querySelector(".askCnt");
+    if (cnt && !askDone) cnt.textContent = `${ASK_QUESTIONS.length - n} 问待答`;
+    const q = ASK_QUESTIONS.find((x) => x.id === qid);
+    const pill = document.querySelector(`#askQItem-${qid} .qPill`);
+    if (pill && !askDone) {
+      pill.className = `qPill ${askIsAnswered(q) ? "chosen" : "pending"}`;
+      pill.textContent = askIsAnswered(q) ? "已选" : "待答";
+    }
   }
 });
 

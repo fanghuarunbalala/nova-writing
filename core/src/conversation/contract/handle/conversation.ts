@@ -5,7 +5,7 @@
 import type { ProjectedEvent } from "../events/index.js";
 import type { ConversationInteraction } from "../interaction/index.js";
 import type { WaitingInteractionRequest } from "../interaction/index.js";
-import type { ConversationApprovalDecision, ConversationMode } from "../types/index.js";
+import type { AskQuestionAnswer, ConversationApprovalDecision, ConversationMode } from "../types/index.js";
 
 /**
  * UI 侧对远端 conversation 的视图（createOrResume / spawnConversation 返回）。
@@ -28,10 +28,10 @@ export interface ConversationHandle extends ConversationInteraction, WaitingInte
 	resolveApproval(requestId: string, decision: ConversationApprovalDecision): void;
 	/**
 	 * 回传提问回答（解除 sendAskingQuestionRequest 的阻塞等待）
-	 * @param requestId 提问请求 id
-	 * @param answer 回答文本
+	 * @param requestId 提问请求 id（CMS wait 队列条目）
+	 * @param answers 逐问回答（与提问 questions 对应；skipped 表示作者跳过）
 	 */
-	resolveQuestion(requestId: string, answer: string): void;
+	resolveQuestion(requestId: string, answers: readonly AskQuestionAnswer[]): void;
 	/**
 	 * 回传退出 compose 完成（解除 sendExitComposeRequest 的阻塞等待）
 	 * @param requestId 退出请求 id

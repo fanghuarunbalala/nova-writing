@@ -3,6 +3,7 @@
  * 生命周期 + 目录 + 消息调度 + wait 请求路由。进程派生后续接 stdio/kkrpc transport。
  */
 import type {
+	AskQuestionAnswer,
 	ConversationId,
 	ConversationMessage,
 	ConversationApprovalDecision,
@@ -35,7 +36,7 @@ import type {
 	ConversationSummary,
 } from "../../manager/contract/types.js";
 import type { ConversationManagerServer as Contract } from "../../manager/contract/server.js";
-import { WaitRequestQueue, type ApprovalQueueItem } from "./WaitRequestQueue.js";
+import { WaitRequestQueue, type ApprovalQueueItem, type AskingQueueItem } from "./WaitRequestQueue.js";
 import type { Conversation } from "./Conversation.js";
 import type { ConversationHandle } from "../contract/handle/index.js";
 import type { ConversationInteraction } from "../contract/interaction/index.js";
@@ -625,12 +626,44 @@ export class ConversationManagerServer implements Contract {
 		}
 	}
 
-	/** 提交提问请求（非阻塞；路由同审批，UI 展示延后——本期内入队仅登记） */
+	/** 驻留直推提问回答（进程存活则解除 sendAskingQuestionRequest 的挂起等待） */
+	private pushAskingAnswer(
+		conversationId: ConversationId,
+		requestId: string,
+		answers: readonly AskQuestionAnswer[],
+	): void {
+		const handle = this.handles.get(conversationId);
+		if (handle === undefined) return;
+		try {
+			void Promise.resolve(
+				handle.resolveQuestion(requestId, answers) as unknown,
+			).catch(() => {});
+		} catch {
+			// 代理同步抛错（通道已关）属预期，忽略
+		}
+	}
+
+	/** 提交提问请求（非阻塞；路由同审批：decisioner 派生 + 入队，UI 经 listAskings 拉取作答） */
 	async submitAskingRequest(
-		_conversationId: ConversationId,
-		_req: ConversationAskingRequest,
+		conversationId: ConversationId,
+		req: ConversationAskingRequest,
 	): Promise<void> {
-		// 提问/退出 compose 与审批同一路由；UI 面板延后，队列登记后续接入
+		// 提问不参与 bypass 短路：答案只在作者手里，bypass 模式同样路由到 UI
+		const parentId = this.summaries.get(conversationId)?.parentId;
+		this.waitQueue.submitAsking({
+			conversationId,
+			requestId: req.requestId,
+			questions: req.questions,
+			decisioner: parentId !== undefined ? "parent" : "ui",
+			status: "pending",
+			requestedAt: new Date().toISOString(),
+		});
+		this.logger.info("asking.enqueued", {
+			conversationId,
+			requestId: req.requestId,
+			decisioner: parentId !== undefined ? "parent" : "ui",
+			questionCount: req.questions.length,
+		});
 	}
 
 	/** 提交退出 compose 请求（非阻塞；路由同审批） */
@@ -646,6 +679,11 @@ export class ConversationManagerServer implements Contract {
 		return this.waitQueue.list();
 	}
 
+	/** 待 UI 作答的提问列表（decisioner="ui"；含近期已答条目供卡片展示历史） */
+	async listAskings(): Promise<readonly AskingQueueItem[]> {
+		return this.waitQueue.listAskings();
+	}
+
 	/** 记录 UI 决策：驻留会话直推 resolveApproval，已退出留待重启查询 */
 	async resolveApproval(requestId: string, decision: ConversationApprovalDecision): Promise<boolean> {
 		const resolved = this.waitQueue.resolve(requestId, decision, new Date().toISOString());
@@ -655,6 +693,24 @@ export class ConversationManagerServer implements Contract {
 		const item = this.waitQueue.takeByRequestId(requestId);
 		if (item !== undefined) {
 			this.pushDecision(item.conversationId, requestId, decision);
+		}
+		return true;
+	}
+
+	/** 记录 UI 提问回答：驻留会话直推 resolveQuestion，已退出留待重启按未回答处理 */
+	async resolveAsking(
+		requestId: string,
+		answers: readonly AskQuestionAnswer[],
+	): Promise<boolean> {
+		const resolved = this.waitQueue.resolveAsking(requestId, answers, new Date().toISOString());
+		if (!resolved) return false;
+		this.logger.info("asking.resolved", {
+			requestId,
+			skipped: answers.every((a) => a.skipped === true),
+		});
+		const item = this.waitQueue.takeByRequestId(requestId);
+		if (item !== undefined) {
+			this.pushAskingAnswer(item.conversationId, requestId, answers);
 		}
 		return true;
 	}

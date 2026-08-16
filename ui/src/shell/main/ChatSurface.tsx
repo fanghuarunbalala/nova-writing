@@ -7,7 +7,7 @@
  * 发送经 sendUserMessage，时间线由 chatSurfaceMapper 映射（逐项缓存 + useMemo）。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ConversationMode } from "@novel/core";
+import type { AskQuestionAnswer, AskingQueueItem, ConversationMode } from "@novel/core";
 import { debugLog, type ConversationProjectionErrorSnapshot } from "@novel/core/client";
 import { Info, ListTree, MoreHorizontal, Pencil, Pin, Trash2 } from "lucide-react";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
@@ -49,6 +49,14 @@ export interface ChatSurfaceProps {
   readonly directoryOpen?: boolean;
   /** 顶条「内容目录」开关（directory ↔ closed） */
   readonly onToggleDirectory?: () => void;
+  /** 本会话提问条目（CMS wait 队列派生；时间线末尾渲染提问卡/留痕卡） */
+  readonly askings?: readonly AskingQueueItem[];
+  /** 本会话待作答提问数（>0 时 composer 等待态） */
+  readonly pendingAskingCount?: number;
+  /** 提问作答回传（AskingStore.resolve） */
+  readonly onResolveAsking?: (requestId: string, answers: readonly AskQuestionAnswer[]) => void;
+  /** 提问跳过回传（逐问按 skipped） */
+  readonly onSkipAsking?: (requestId: string) => void;
   /** 打开会话信息面板（inspector conversation 路由；PRD 决议 1） */
   readonly onOpenConversationInfo?: (conversationId: string) => void;
   readonly onReferenceClick?: (reference: MessageReference) => void;
@@ -65,6 +73,10 @@ export function ChatSurface({
   onSummonApproval,
   directoryOpen = true,
   onToggleDirectory,
+  askings,
+  pendingAskingCount = 0,
+  onResolveAsking,
+  onSkipAsking,
   onOpenConversationInfo,
   onReferenceClick,
   resolveReference,
@@ -98,6 +110,10 @@ export function ChatSurface({
       onSummonApproval={onSummonApproval}
       directoryOpen={directoryOpen}
       onToggleDirectory={onToggleDirectory}
+      askings={askings}
+      pendingAskingCount={pendingAskingCount}
+      onResolveAsking={onResolveAsking}
+      onSkipAsking={onSkipAsking}
       onReferenceClick={onReferenceClick}
       resolveReference={resolveReference}
       onNotify={onNotify}
@@ -120,6 +136,10 @@ interface ActiveChatSurfaceProps {
   readonly onSummonApproval: ((requestId?: string) => void) | undefined;
   readonly directoryOpen: boolean;
   readonly onToggleDirectory: (() => void) | undefined;
+  readonly askings: readonly AskingQueueItem[] | undefined;
+  readonly pendingAskingCount: number;
+  readonly onResolveAsking: ((requestId: string, answers: readonly AskQuestionAnswer[]) => void) | undefined;
+  readonly onSkipAsking: ((requestId: string) => void) | undefined;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
@@ -139,6 +159,10 @@ function ActiveChatSurface({
   onSummonApproval,
   directoryOpen,
   onToggleDirectory,
+  askings,
+  pendingAskingCount,
+  onResolveAsking,
+  onSkipAsking,
   onReferenceClick,
   resolveReference,
   onNotify,
@@ -214,7 +238,25 @@ function ActiveChatSurface({
     setQueuedSends((current) => (switched ? [] : current.slice(appeared)));
   }, [conversationId, projectionUserCount]);
   const queuedCount = queuedSends.length;
-  // 时间线末尾拼接幽灵项（sequence 本地合成，不与 core 事件序号冲突）
+  // 提问项：pending 恒显示（时间线末尾的流内提问卡）；本挂载期间 pending 过的
+  // 已答条目保留为简约留痕（历史会话重开只显示工具行记录，避免旧答案卡沉底）。
+  const seenPendingAsksRef = useRef<Set<string>>(new Set());
+  for (const asking of askings ?? []) {
+    if (asking.status === "pending") seenPendingAsksRef.current.add(asking.requestId);
+  }
+  const askItems = useMemo(() => {
+    return (askings ?? [])
+      .filter(
+        (asking) =>
+          asking.status === "pending" || seenPendingAsksRef.current.has(asking.requestId),
+      )
+      .map((asking, index) => ({
+        kind: "ask" as const,
+        sequence: 8_000_000 + index,
+        asking,
+      }));
+  }, [askings]);
+  // 时间线末尾拼接：幽灵项 → 提问卡（sequence 本地合成，不与 core 事件序号冲突）
   const timelineWithGhosts = useMemo(
     () => [
       ...timeline,
@@ -224,13 +266,15 @@ function ActiveChatSurface({
         text: queued.text,
         queuedAt: queued.at,
       })),
+      ...askItems,
     ],
-    [timeline, queuedSends],
+    [timeline, queuedSends, askItems],
   );
 
-  // 三态推导（对齐旧版优先级）：failed > waiting（待审批，CMS 队列派生）> generating。
+  // 三态推导（对齐旧版优先级）：failed > waiting（待审批/待作答，CMS 队列派生）> generating。
   // thinking 态已随 loop 层丢弃 reasoning delta 移除；waiting 复用 GenStatus 沙漏+摇摆动画。
-  // waiting + 唤起回调 → 状态行升级为可点胶囊（点击打开审批弹窗）。
+  // waiting + 唤起回调 → 状态行升级为可点胶囊（点击打开审批弹窗；纯提问挂起无弹窗，保持普通等待行）。
+  const waitingCount = pendingApprovalCount + pendingAskingCount;
   let status: GenStatusProps | undefined;
   if (failed) {
     status = {
@@ -238,11 +282,11 @@ function ActiveChatSurface({
       error: describeProjectionError(projection?.error),
       onRetry: () => void resume(),
     };
-  } else if (pendingApprovalCount > 0) {
+  } else if (waitingCount > 0) {
     status = {
       phase: "waiting",
       queuedCount,
-      ...(onSummonApproval !== undefined
+      ...(pendingApprovalCount > 0 && onSummonApproval !== undefined
         ? { onWaitingClick: () => onSummonApproval() }
         : {}),
     };
@@ -317,6 +361,8 @@ function ActiveChatSurface({
         bottomReserve={bottomReserve}
         onMessageReferenceClick={onReferenceClick}
         resolveReference={resolveReference}
+        onResolveAsking={onResolveAsking}
+        onSkipAsking={onSkipAsking}
         onNotify={onNotify}
         onOpenApproval={onSummonApproval}
       />
@@ -330,7 +376,7 @@ function ActiveChatSurface({
         containerRef={composerRef}
         enabled={snapshot?.state === "active" && !failed}
         status={status}
-        sendDisabled={pendingApprovalCount > 0}
+        sendDisabled={waitingCount > 0}
         disconnected={runtime.state === "disconnected"}
         mode={mode}
         pendingMode={pendingMode}

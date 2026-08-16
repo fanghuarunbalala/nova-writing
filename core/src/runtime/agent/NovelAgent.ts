@@ -36,9 +36,11 @@ import { join } from "node:path";
 import { TodoIdleNudgePolicy } from "../nudge/definitions/todo.js";
 import { ComposeModeNudgePolicy } from "../nudge/definitions/compose.js";
 import type {
-  ConversationApprovalDecision,
-  ConversationApprovalRequest,
+	AskQuestionAnswer,
+	ConversationApprovalDecision,
+	ConversationApprovalRequest,
 } from "../../conversation/contract/types/index.js";
+import type { AskUserChannel } from "../tool/definitions/askUser.js";
 
 /** Novel Agent 装配选项 */
 export interface NovelAgentOptions {
@@ -60,6 +62,8 @@ export interface NovelAgentOptions {
   resumeSeq?: number;
   /** 审批通道（mutation 工具执行前征询；子进程内闭包 → conv.sendApprovalRequest） */
   requestApproval?: (req: ConversationApprovalRequest) => Promise<ConversationApprovalDecision>;
+  /** 提问通道（AskUserQuestion 工具挂起等待作者作答；子进程内闭包 → conv.sendAskingQuestionRequest） */
+  requestAsk?: AskUserChannel;
   /** 暂停点续跑决策器（重启补完路径：CMS takeDecisions 装配） */
   resumePendingDecider?: (toolCallId: string) => Promise<"approve" | "reject" | "expired" | undefined>;
   /** 结构化日志（pino；provider 调用错误可见性） */
@@ -134,6 +138,9 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
       todoStore,
       todoConversationId: opts.conversationId ?? "",
       compose: { service: composeService, conversationId: opts.conversationId ?? "" },
+      ...(opts.requestAsk !== undefined
+        ? { ask: { channel: opts.requestAsk, conversationId: opts.conversationId ?? "" } }
+        : {}),
     }),
     nudgeCatalog,
   });

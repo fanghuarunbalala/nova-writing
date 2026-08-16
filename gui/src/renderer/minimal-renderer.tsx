@@ -11,7 +11,7 @@ import { electronIpcTransport } from "kkrpc/electron";
 import type { NovelApiClient } from "@novel/core/client";
 import type { ProjectedEvent } from "@novel/core";
 import type { ConfigApi, ConfigMutation } from "@novel/core";
-import { emitApprovalsChanged, emitNovelChanged } from "@novel/ui";
+import { emitApprovalsChanged, emitAskingsChanged, emitNovelChanged } from "@novel/ui";
 import {
   NovelApp,
   WorkspaceController,
@@ -47,10 +47,11 @@ if (!bridge) {
 const transport = electronIpcTransport({ endpoint: bridge as never, channel: "novel-rpc" });
 const api = wrap<NovelApiClient>(transport);
 
-// renderer 暴露面：main 直接 rpc 调用（审批队列变化 / novel 数据变更通知 → 触发 UI 刷新）
+// renderer 暴露面：main 直接 rpc 调用（审批/提问队列变化 / novel 数据变更通知 → 触发 UI 刷新）
 expose(
   {
     onApprovalsChanged: async () => emitApprovalsChanged(),
+    onAskingsChanged: async () => emitAskingsChanged(),
     onNovelChanged: async (change: { entity: string }) => emitNovelChanged(change.entity),
   },
   electronIpcTransport({ endpoint: bridge as never, channel: "ui-rpc" }),

@@ -160,3 +160,39 @@ describe("ProjectionLayer", () => {
 		expect(run1.find((e) => e?.type === "tool-recorded.recorded")).toMatchObject({ name: "ParagraphWrite", outcome: "ok", durationMs: 0 });
 	});
 });
+
+describe("ProjectionLayer AskUserQuestion ask 载荷", () => {
+	const askArgs = JSON.stringify({
+		questions: [{ question: "主线走向？", header: "主线", options: [{ label: "外部压境", description: "x" }] }],
+	});
+
+	it("AskUserQuestion 成功作答 → recorded 携带 ask 载荷（questions + result）", () => {
+		const layer = new ProjectionLayer();
+		layer.project(evt({ type: "tool-call-request", persist: true, seq: 1, toolCallId: "a1", name: "AskUserQuestion", args: askArgs }));
+		const out = layer.project(evt({ type: "tool-call-response", persist: true, seq: 2, toolCallId: "a1", result: "作者已作答（1/1 问）：\n- 「主线走向？」选择：外部压境" }));
+		expect(out).toMatchObject({
+			type: "tool-recorded.recorded",
+			name: "AskUserQuestion",
+			ask: {
+				result: "作者已作答（1/1 问）：\n- 「主线走向？」选择：外部压境",
+			},
+		});
+		expect((out as { ask?: { questions: unknown[] } }).ask?.questions).toHaveLength(1);
+	});
+
+	it("普通工具与失败响应 → 无 ask 载荷", () => {
+		const layer = new ProjectionLayer();
+		layer.project(evt({ type: "tool-call-request", persist: true, seq: 1, toolCallId: "t1", name: "ParagraphWrite", args: "{}" }));
+		expect(layer.project(evt({ type: "tool-call-response", persist: true, seq: 2, toolCallId: "t1", result: "ok" }))).not.toHaveProperty("ask");
+		layer.project(evt({ type: "tool-call-request", persist: true, seq: 3, toolCallId: "a2", name: "AskUserQuestion", args: askArgs }));
+		expect(layer.project(evt({ type: "tool-call-response", persist: true, seq: 4, toolCallId: "a2", error: "通道未装配" }))).not.toHaveProperty("ask");
+	});
+
+	it("args 损坏（非法 JSON / questions 非数组）→ 静默省略 ask", () => {
+		const layer = new ProjectionLayer();
+		layer.project(evt({ type: "tool-call-request", persist: true, seq: 1, toolCallId: "a3", name: "AskUserQuestion", args: "{broken" }));
+		expect(layer.project(evt({ type: "tool-call-response", persist: true, seq: 2, toolCallId: "a3", result: "x" }))).not.toHaveProperty("ask");
+		layer.project(evt({ type: "tool-call-request", persist: true, seq: 3, toolCallId: "a4", name: "AskUserQuestion", args: '{"questions":42}' }));
+		expect(layer.project(evt({ type: "tool-call-response", persist: true, seq: 4, toolCallId: "a4", result: "x" }))).not.toHaveProperty("ask");
+	});
+});

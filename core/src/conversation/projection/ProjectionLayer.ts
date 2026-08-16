@@ -10,10 +10,12 @@ import type { LoopEvent } from "../../runtime/loop/types.js";
 import type { ToolPreviewFn, ToolPreviewResolver } from "../../runtime/tool/previews.js";
 import { defaultToolPreview, resolveToolPreview } from "../../runtime/tool/previews.js";
 import type {
+	AskRecordedPayload,
 	ProjectedEvent,
 	ToolRecordedRecordedEvent,
 	ToolRecordedStartedEvent,
 } from "../contract/events/index.js";
+import type { AskQuestionSpec } from "../contract/types/index.js";
 
 /** ProjectionLayer 构造选项 */
 export interface ProjectionLayerOptions {
@@ -111,11 +113,30 @@ export class ProjectionLayer {
 				  }
 				: {}),
 			...(errorText !== undefined ? { error: errorText } : {}),
+			...this.buildAskPayload(pending, response),
 			conversationId: response.conversationId,
 			...(response.agentId !== undefined ? { agentId: response.agentId } : {}),
 			ts: response.ts,
 		};
 		return recorded;
+	}
+
+	/** AskUserQuestion 成功作答 → 提问留影载荷（questions 取自 request args；解析失败静默省略） */
+	private buildAskPayload(
+		pending: PendingToolCall | undefined,
+		response: LoopEvent & { type: "tool-call-response" },
+	): { ask: AskRecordedPayload } | undefined {
+		if (pending === undefined || pending.name !== "AskUserQuestion") return undefined;
+		if (response.error !== undefined || typeof response.result !== "string") return undefined;
+		try {
+			const parsed = JSON.parse(pending.args) as { questions?: unknown };
+			if (!Array.isArray(parsed.questions)) return undefined;
+			return {
+				ask: { questions: parsed.questions as readonly AskQuestionSpec[], result: response.result },
+			};
+		} catch {
+			return undefined;
+		}
 	}
 
 	/** 安全调用 preview（未注册走默认；抛错/非法值回退默认，投影流不断裂） */

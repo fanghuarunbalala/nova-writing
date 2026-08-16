@@ -15,8 +15,12 @@ import type { ConversationJournalReadOnlyService } from "../conversation/contrac
 import { FileConversationJournalReadOnlyService } from "../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { toRPCError } from "../rpc/call.js";
 import { debugLog } from "../log/debug.js";
-import type { ApprovalQueueItem } from "../conversation/server/WaitRequestQueue.js";
-import type { ConversationApprovalDecision, ConversationMode } from "../conversation/contract/types/index.js";
+import type { ApprovalQueueItem, AskingQueueItem } from "../conversation/server/WaitRequestQueue.js";
+import type {
+	AskQuestionAnswer,
+	ConversationApprovalDecision,
+	ConversationMode,
+} from "../conversation/contract/types/index.js";
 import type { AgentType } from "../conversation/contract/types/index.js";
 import type { NovelMutation } from "../novel/contract/mutation.js";
 import type {
@@ -131,6 +135,22 @@ export interface ApprovalApi {
 	resolve(requestId: string, decision: ConversationApprovalDecision): Promise<boolean>;
 }
 
+/** 提问子 API（wait 队列：UI 拉取 + 作答；request/resolve 分离） */
+export interface AskingApi {
+	/**
+	 * 待 UI 作答的提问列表（decisioner="ui"；含近期已答条目供卡片展示）
+	 * @returns 队列条目（按提交时间倒序）
+	 */
+	list(): Promise<readonly AskingQueueItem[]>;
+	/**
+	 * 提交提问回答（CMS 记录并直推驻留 conversation；已退出则重启后按未回答回填）
+	 * @param requestId 提问请求 id
+	 * @param answers 逐问回答（skipped 表示作者跳过）
+	 * @returns 是否命中待决条目
+	 */
+	resolve(requestId: string, answers: readonly AskQuestionAnswer[]): Promise<boolean>;
+}
+
 /** novel 查询子 API（按 op 包装 NovelHandle.query 的强类型面） */
 export interface NovelContentApi {
 	overview: {
@@ -179,11 +199,12 @@ export interface NovelContentApi {
 	mutateBatch(ms: readonly NovelMutation[]): Promise<NovelMutateResult[]>;
 }
 
-/** 客户端门面：conversations + novel + approvals 三域 */
+/** 客户端门面：conversations + novel + approvals + askings 四域 */
 export interface NovelApiClient {
 	readonly conversations: ConversationApi;
 	readonly novel: NovelContentApi;
 	readonly approvals: ApprovalApi;
+	readonly askings: AskingApi;
 }
 
 /** 门面构造依赖（注入两域 handle） */
@@ -242,6 +263,10 @@ export function createNovelApiClient(options: NovelApiClientOptions): NovelApiCl
 		},
 		// 客户端构造不经 manager 的 wait 队列（renderer 经 wrap 直连服务端门面）——占位
 		approvals: {
+			list: () => Promise.resolve([]),
+			resolve: async () => false,
+		},
+		askings: {
 			list: () => Promise.resolve([]),
 			resolve: async () => false,
 		},
@@ -381,10 +406,14 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 				return handle.sendSystemControl({ type: "mode.set", mode });
 			},
 		},
-		// wait 队列唯一权威在 CMS：UI 拉取 + 决策（request/resolve 分离）
+		// wait 队列唯一权威在 CMS：UI 拉取 + 决策/作答（request/resolve 分离）
 		approvals: {
 			list: () => manager.listApprovals(),
 			resolve: (requestId, decision) => manager.resolveApproval(requestId, decision),
+		},
+		askings: {
+			list: () => manager.listAskings(),
+			resolve: (requestId, answers) => manager.resolveAsking(requestId, answers),
 		},
 		novel: {
 			overview: {

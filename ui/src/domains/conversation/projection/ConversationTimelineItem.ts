@@ -10,6 +10,7 @@
  */
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
 import type { AssistantSegment, ConversationMode, ToolTraceView } from "@novel/core/client";
+import type { AskingQueueItem } from "@novel/core";
 
 export type { ToolTraceView, AssistantSegment };
 
@@ -57,6 +58,13 @@ export type ConversationTimelineItem =
       readonly timestamp: number;
       /** 工具审批行：携带 approvalRequestId 时可点击打开审批面板。 */
       readonly approvalRequestId?: string;
+    }
+  | {
+      /** 提问项（AskUserQuestion 工具发起的流内提问卡；pending 交互、其余留痕）。
+       *  sequence 为本地合成（8e6+），不与 core 事件序号冲突；数据与状态来自 CMS wait 队列。 */
+      readonly kind: "ask";
+      readonly sequence: number;
+      readonly asking: AskingQueueItem;
     }
   | {
       readonly kind: "design";

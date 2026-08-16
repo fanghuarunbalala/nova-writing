@@ -6,6 +6,7 @@
  */
 
 import type {
+	AskQuestionAnswer,
 	ConversationApprovalDecision,
 	ConversationApprovalRequest,
 	ConversationAskingRequest,
@@ -25,9 +26,9 @@ export interface WaitingInteractionRequest {
 	/**
 	 * 请求提问（阻塞直到回答）
 	 * @param req 提问请求
-	 * @returns 用户回答文本
+	 * @returns 逐问回答（与 req.questions 顺序对应；skipped 表示作者跳过）
 	 */
-	sendAskingQuestionRequest(req: ConversationAskingRequest): Promise<string>;
+	sendAskingQuestionRequest(req: ConversationAskingRequest): Promise<readonly AskQuestionAnswer[]>;
 	/**
 	 * 请求退出 compose（阻塞直到退出）
 	 * @param req 退出请求

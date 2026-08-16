@@ -16,6 +16,7 @@ import type { ComposeModeService } from "../compose/ComposeModeService.js";
 import type { ConversationInteraction } from "../contract/interaction/index.js";
 import type { WaitingInteractionRequest } from "../contract/interaction/index.js";
 import type {
+	AskQuestionAnswer,
 	ConversationApprovalDecision,
 	ConversationApprovalRequest,
 	ConversationAskingRequest,
@@ -153,7 +154,10 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		{ resolve: (d: ConversationApprovalDecision) => void; timer: NodeJS.Timeout | undefined }
 	>();
 	/** 待决提问（requestId → resolve） */
-	private readonly pendingQuestions = new Map<string, (answer: string) => void>();
+	private readonly pendingQuestions = new Map<
+		string,
+		(answers: readonly AskQuestionAnswer[]) => void
+	>();
 	/** 待决退出 compose（requestId → resolve） */
 	private readonly pendingExitCompose = new Map<string, () => void>();
 
@@ -439,15 +443,17 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		await this.composeService.applyPendingModeTarget(this.conversationId);
 	}
 
-	/** 请求提问（无阻塞；路由同审批，UI 展示延后） */
-	async sendAskingQuestionRequest(req: ConversationAskingRequest): Promise<string> {
-		return new Promise<string>((resolve) => {
+	/** 请求提问（挂起等待回答；经 CMS wait 队列路由到 UI，回答经 resolveQuestion 回传） */
+	async sendAskingQuestionRequest(
+		req: ConversationAskingRequest,
+	): Promise<readonly AskQuestionAnswer[]> {
+		return new Promise<readonly AskQuestionAnswer[]>((resolve) => {
 			this.pendingQuestions.set(req.requestId, resolve);
 			if (this.managerWait !== undefined) {
 				void this.managerWait.submitAsking(this.conversationId, req).catch(() => {
-					// 提交失败：解除避免悬挂
+					// 提交失败：按全跳过解除避免悬挂
 					this.pendingQuestions.delete(req.requestId);
-					resolve("");
+					resolve(req.questions.map((q) => ({ question: q.question, selections: [], skipped: true })));
 				});
 			}
 		});
@@ -488,12 +494,12 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 		}
 	}
 
-	/** 解析待决提问（回答回传） */
-	resolveQuestion(requestId: string, answer: string): void {
+	/** 解析待决提问（回答回传：解除 sendAskingQuestionRequest 的挂起等待） */
+	resolveQuestion(requestId: string, answers: readonly AskQuestionAnswer[]): void {
 		const resolve = this.pendingQuestions.get(requestId);
 		if (resolve) {
 			this.pendingQuestions.delete(requestId);
-			resolve(answer);
+			resolve(answers);
 		}
 	}
 

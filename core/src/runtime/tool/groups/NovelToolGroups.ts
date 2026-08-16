@@ -14,6 +14,8 @@ import type { ComposeModeService } from "../../../conversation/compose/index.js"
 import { createFileTools } from "../definitions/files.js";
 import { createTodoWriteTool } from "../definitions/todo.js";
 import { createComposeTools } from "../definitions/compose.js";
+import { createAskUserTool } from "../definitions/askUser.js";
+import type { AskUserChannel } from "../definitions/askUser.js";
 import {
   createCharacterTools,
   createLocationTools,
@@ -40,6 +42,15 @@ export const NOVEL_TOOL_GROUP_FILES = new ToolGroupManifest({
   label: "Runtime Files",
   description: "workspace 沙盒文件读写（Read/Glob/Write/Edit）",
   tools: ["Read", "Glob", "Write", "Edit"],
+});
+
+/** runtime.ask：向作者提问（AskUserQuestion；挂起等待作答） */
+export const NOVEL_TOOL_GROUP_ASK = new ToolGroupManifest({
+  id: "runtime.ask",
+  version: "1.0.0",
+  label: "Runtime Ask",
+  description: "向作者提问（选择题/开放填空题，AskUserQuestion 挂起等待作答）",
+  tools: ["AskUserQuestion"],
 });
 
 /** novel.compose：设计模式进入/退出（Exit 硬审批门） */
@@ -118,6 +129,7 @@ export const NOVEL_TOOL_GROUP_DELETE = new ToolGroupManifest({
 export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = new Map([
   [NOVEL_TOOL_GROUP_TODO.id, NOVEL_TOOL_GROUP_TODO],
   [NOVEL_TOOL_GROUP_FILES.id, NOVEL_TOOL_GROUP_FILES],
+  [NOVEL_TOOL_GROUP_ASK.id, NOVEL_TOOL_GROUP_ASK],
   [NOVEL_TOOL_GROUP_COMPOSE.id, NOVEL_TOOL_GROUP_COMPOSE],
   [NOVEL_TOOL_GROUP_CHARACTERS.id, NOVEL_TOOL_GROUP_CHARACTERS],
   [NOVEL_TOOL_GROUP_LOCATIONS.id, NOVEL_TOOL_GROUP_LOCATIONS],
@@ -140,6 +152,8 @@ export interface NovelToolGroupResolverOptions {
   todoConversationId: string;
   /** compose 服务 + 会话（novel.compose 组 Enter/ExitComposeMode；由 buildNovelAgent 注入，缺省自建兜底） */
   compose?: { service: ComposeModeService; conversationId: string };
+  /** 提问通道（runtime.ask 组 AskUserQuestion；由 buildNovelAgent 注入，缺省工具回「未送达」文本） */
+  ask?: { channel: AskUserChannel; conversationId: string };
 }
 
 /**
@@ -156,6 +170,10 @@ export function createNovelToolGroupResolver(
       () => [createTodoWriteTool(options.todoStore, options.todoConversationId)],
     ],
     ["runtime.files", () => createFileTools(options.workspace)],
+    [
+      "runtime.ask",
+      () => [createAskUserTool(options.ask?.channel, options.ask?.conversationId ?? "")],
+    ],
     [
       "novel.compose",
       () => {

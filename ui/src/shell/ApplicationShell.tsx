@@ -21,6 +21,8 @@ import { ApprovalStore } from "../domains/approval/ApprovalStore.js";
 import { ApprovalModalStore } from "../domains/approval/ApprovalModalStore.js";
 import { ApprovalModal } from "../domains/approval/components/ApprovalModal.js";
 import { onApprovalsChanged } from "../domains/approval/approvalChangeBus.js";
+import { AskingStore } from "../domains/asking/AskingStore.js";
+import { onAskingsChanged } from "../domains/asking/askingChangeBus.js";
 import { onNovelChanged } from "../domains/novel/novelChangeBus.js";
 import type { ToastKind, ToastStore } from "../shared/state/ToastStore.js";
 import type { MainViewState, MainViewRouter } from "../shared/routing/MainViewRouter.js";
@@ -186,6 +188,8 @@ export function ApplicationShell({
   );
   const firstUserMessage = useFirstUserMessage(conversationBinding);
   const approvalSnapshot = useExternalStore(approvalStore);
+  const askingStore = useMemo(() => new AskingStore({ api }), [api]);
+  const askingSnapshot = useExternalStore(askingStore);
 
   // 审批面板数据源 = CMS wait 队列：初始拉取 + 变化通知触发重拉（拉取为准，推送仅触发）
   useEffect(() => {
@@ -194,6 +198,14 @@ export function ApplicationShell({
       void approvalStore.refresh();
     });
   }, [approvalStore]);
+
+  // 提问卡数据源 = CMS wait 队列 asking 条目：同款拉取为准 + 推送触发
+  useEffect(() => {
+    void askingStore.refresh();
+    return onAskingsChanged(() => {
+      void askingStore.refresh();
+    });
+  }, [askingStore]);
 
   // novel 数据变更（agent 经工具写入）→ 按实体类型刷新对应 store（overview 全刷）。
   // 150ms 尾随去抖（gui-performance-2 功能点七）：agent 突发连续写实体时合并为
@@ -610,6 +622,27 @@ export function ApplicationShell({
           onSummonApproval={handleSummonApproval}
           directoryOpen={inspectorRoute.state.kind !== "closed"}
           onToggleDirectory={handleToggleDirectory}
+          askings={askingSnapshot.askings.filter(
+            (item) => item.conversationId === catalogSnapshot.activeConversationId,
+          )}
+          pendingAskingCount={
+            askingSnapshot.askings.filter(
+              (item) =>
+                item.conversationId === catalogSnapshot.activeConversationId &&
+                item.status === "pending",
+            ).length
+          }
+          onResolveAsking={(requestId, answers) => {
+            void askingStore.resolve(requestId, answers);
+          }}
+          onSkipAsking={(requestId) => {
+            const item = askingSnapshot.askings.find((a) => a.requestId === requestId);
+            if (item === undefined) return;
+            void askingStore.resolve(
+              requestId,
+              item.questions.map((q) => ({ question: q.question, selections: [], skipped: true })),
+            );
+          }}
           mainViewRouter={mainViewRouter}
           conversationCatalog={domainStores.conversationCatalog}
           outlineTree={domainStores.storyOutlineTree}

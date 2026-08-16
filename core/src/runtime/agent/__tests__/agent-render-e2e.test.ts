@@ -80,7 +80,7 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     expect(prompt.slice(wrapStart, wrapEnd)).toContain("基调热血");
   });
 
-  it("无 platform/provider：环境块省略 + 约束占位 + 工具名单（26 工具）+ 无 ToolPolicy 块", async () => {
+  it("无 platform/provider：环境块省略 + 约束占位 + 工具名单（27 工具）+ 无 ToolPolicy 块", async () => {
     const loop = buildNovelAgent({
       workspace: "/ws",
       provider,
@@ -97,7 +97,7 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     expect(toolsIdx).toBeGreaterThanOrEqual(0);
     expect(prompt).not.toContain("# ToolPolicy");
     const toolSection = prompt.slice(toolsIdx);
-    for (const name of ["TodoWrite", "Read", "EnterComposeMode", "ExitComposeMode", "NovelCharacterRead", "NovelDelete", "NovelOutlineWrite"]) {
+    for (const name of ["TodoWrite", "Read", "AskUserQuestion", "EnterComposeMode", "ExitComposeMode", "NovelCharacterRead", "NovelDelete", "NovelOutlineWrite"]) {
       expect(toolSection).toContain(name);
     }
     // 名单行格式：单行逗号分隔

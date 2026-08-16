@@ -8,6 +8,7 @@
  * 失真、无窗口重挂载闪烁；滚动路径零 setState（仅 ref 记忆贴底状态）。
  */
 import { useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import type { AskQuestionAnswer } from "@novel/core";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ConversationTimelineItem as TimelineItem } from "../projection/ConversationTimelineItem.js";
@@ -16,6 +17,7 @@ import { AssistantMessage } from "./AssistantMessage.js";
 import { DesignCard } from "./DesignCard.js";
 import { QueuedUserMessage } from "./QueuedUserMessage.js";
 import { UserMessage } from "./UserMessage.js";
+import { AskQuestionCard } from "../../asking/components/AskQuestionCard.js";
 import styles from "./ConversationTimeline.module.css";
 
 export interface ConversationTimelineProps {
@@ -29,6 +31,10 @@ export interface ConversationTimelineProps {
   readonly resolveReference?: ReferenceResolver;
   readonly onProposalAction?: (changeSetId: string, action: "approve" | "reject" | "view-diff") => void;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
+  /** 提问卡作答回传（AskUserQuestion 工具挂起等待解除） */
+  readonly onResolveAsking?: (requestId: string, answers: readonly AskQuestionAnswer[]) => void;
+  /** 提问卡跳过全部（逐问按 skipped 回传） */
+  readonly onSkipAsking?: (requestId: string) => void;
   /** 消息内操作提示（如复制结果）；上行到 shell ToastHost。 */
   readonly onNotify?: (kind: ToastKind, text: string) => void;
 }
@@ -42,6 +48,8 @@ export function ConversationTimeline({
   resolveReference,
   onProposalAction,
   onOpenApproval,
+  onResolveAsking,
+  onSkipAsking,
   onNotify,
 }: ConversationTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -136,6 +144,8 @@ export function ConversationTimeline({
                 onMessageReferenceClick,
                 resolveReference,
                 onOpenApproval,
+                onResolveAsking,
+                onSkipAsking,
                 onNotify,
                 firstUserSequence,
                 onCardAction: handleCardAction,
@@ -153,6 +163,8 @@ interface RenderItemDeps {
   readonly onMessageReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onOpenApproval?: (approvalRequestId: string) => void;
+  readonly onResolveAsking?: (requestId: string, answers: readonly AskQuestionAnswer[]) => void;
+  readonly onSkipAsking?: (requestId: string) => void;
   /** 消息内操作提示（如复制结果）；上行到 shell ToastHost。 */
   readonly onNotify?: (kind: ToastKind, text: string) => void;
   /** 时间线中首条用户消息的 sequence（决定复制按钮 inPad 态）。 */
@@ -166,6 +178,8 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
     onMessageReferenceClick,
     resolveReference,
     onOpenApproval,
+    onResolveAsking,
+    onSkipAsking,
     onNotify,
     firstUserSequence,
     onCardAction,
@@ -226,6 +240,16 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
           conversationId={item.design.conversationId}
           phase={item.design.phase}
         />
+      );
+    case "ask":
+      return onResolveAsking !== undefined && onSkipAsking !== undefined ? (
+        <AskQuestionCard
+          asking={item.asking}
+          onResolve={onResolveAsking}
+          onSkip={onSkipAsking}
+        />
+      ) : (
+        <AskQuestionCard asking={item.asking} onResolve={() => {}} onSkip={() => {}} />
       );
   }
 }

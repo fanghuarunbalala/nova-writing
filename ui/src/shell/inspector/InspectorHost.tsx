@@ -11,9 +11,10 @@
  * directory = 对话视图默认态（内容目录，demo 方案 A v0.8）；
  * 审批已弹窗化：审批交互走 ApprovalModal，不走 inspector。
  */
-import { memo } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { X } from "lucide-react";
 import { Icon } from "../../shared/primitives/Icon.js";
+import { DragHandle } from "../../shared/primitives/DragHandle.js";
 import { useInspectorRoute } from "../../shared/routing/hooks.js";
 import type { InspectorRouter } from "../../shared/routing/InspectorRouter.js";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
@@ -24,6 +25,17 @@ import { ContentDirectoryPanel } from "./panels/ContentDirectoryPanel.js";
 import { ContentDirectoryStore } from "./ContentDirectoryStore.js";
 import { ConversationInspectorPanel } from "./panels/ConversationInspectorPanel.js";
 import styles from "./InspectorHost.module.css";
+
+/** 拖拽调宽档位（demo 方案 A v0.8：320–640，双击复位 376 与断点缺省一致） */
+export const INSPECTOR_WIDTH = {
+  min: 320,
+  max: 640,
+  default: 376,
+} as const;
+
+export function clampInspectorWidth(px: number): number {
+  return Math.max(INSPECTOR_WIDTH.min, Math.min(INSPECTOR_WIDTH.max, Math.round(px)));
+}
 
 const KICKER_BY_KIND: Record<string, string> = {
   directory: "对话随手查 · 实体标签可定位",
@@ -51,6 +63,10 @@ export interface InspectorHostProps {
   readonly onOpenCharacter: (characterId: string) => void;
   /** 内容目录：详情卡「打开完整档案」→ 跳内容视图地点档案 */
   readonly onOpenLocation: (locationId: string) => void;
+  /** 自定义宽度 px（>1280 生效；undefined = 断点缺省 376） */
+  readonly widthPx?: number;
+  /** 宽度变更（拖拽 delta 累计后的目标宽度；undefined = 双击复位） */
+  readonly onWidthChange?: (px: number | undefined) => void;
 }
 
 /** 右侧面板宿主（memo：流式发布期间跳过，gui-performance-2 功能点五） */
@@ -65,21 +81,69 @@ export const InspectorHost = memo(function InspectorHost({
   onSelectOutlineUnit,
   onOpenCharacter,
   onOpenLocation,
+  widthPx,
+  onWidthChange,
 }: InspectorHostProps) {
   const route = useInspectorRoute(inspectorRouter);
   // 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right 收起）。
   const open = route.state.kind !== "closed" && visible;
+
+  // 窄档（≤1280）禁用自定义宽度与拖宽把手：断点档位优先（≤1080 抽屉同理）。
+  // jsdom 无 matchMedia → 缺省宽档。
+  const [narrow, setNarrow] = useState(() =>
+    window.matchMedia?.("(max-width: 1280px)").matches ?? false,
+  );
+  useEffect(() => {
+    const mql = window.matchMedia?.("(max-width: 1280px)");
+    if (mql === undefined) return;
+    const listener = (event: MediaQueryListEvent): void => setNarrow(event.matches);
+    mql.addEventListener("change", listener);
+    return () => mql.removeEventListener("change", listener);
+  }, []);
+
+  // 拖宽：delta 累计到当前宽度（ref 防拖拽会话内闭包过期）；把手左移 = 负 delta = 增宽。
+  const currentWidth = widthPx ?? INSPECTOR_WIDTH.default;
+  const widthRef = useRef(currentWidth);
+  widthRef.current = currentWidth;
+  const handleResize = useCallback(
+    (deltaPx: number) => {
+      onWidthChange?.(clampInspectorWidth(widthRef.current - deltaPx));
+    },
+    [onWidthChange],
+  );
+
+  const customWidthStyle =
+    widthPx !== undefined && !narrow
+      ? ({ "--insp-w": `${clampInspectorWidth(widthPx)}px` } as CSSProperties)
+      : undefined;
 
   const kicker = KICKER_BY_KIND[route.state.kind] ?? "详情";
   const title = TITLE_BY_KIND[route.state.kind] ?? "详情";
   return (
     <aside
       className={[styles.host, open ? styles.open : ""].filter(Boolean).join(" ")}
+      style={customWidthStyle}
       aria-hidden={!open}
       inert={!open}
     >
       {open ? (
         <>
+          {onWidthChange !== undefined && !narrow ? (
+            // 双击复位 376（demo 方案 A）；DragHandle 负责拖拽与 rAF 节流
+            <span
+              className={styles.gripWrap}
+              onDoubleClick={() => onWidthChange(undefined)}
+              title="拖拽调宽 · 双击复位"
+            >
+              <DragHandle
+                orientation="horizontal"
+                onResize={handleResize}
+                ariaLabel="拖拽调整目录宽度"
+                min={-INSPECTOR_WIDTH.max}
+                max={INSPECTOR_WIDTH.max}
+              />
+            </span>
+          ) : null}
           <header className={styles.head}>
             <h3 className={styles.inspTitle}>{title}</h3>
             <span className={styles.kicker}>{kicker}</span>

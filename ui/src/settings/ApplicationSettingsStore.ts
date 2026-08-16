@@ -8,10 +8,15 @@ import {
 
 export type SidebarMode = "expanded" | "collapsed";
 
+/** 右栏（内容目录）自定义宽度档位：与 InspectorHost.INSPECTOR_WIDTH 保持一致 */
+export const INSPECTOR_WIDTH_BOUNDS = { min: 320, max: 640 } as const;
+
 export interface ApplicationSettingsState {
   readonly sidebarMode?: SidebarMode;
   readonly modelProviders?: readonly ModelProviderSettings[];
   readonly activeModelProviderId?: string;
+  /** 右栏自定义宽度 px（>1280 生效；undefined = 断点缺省） */
+  readonly inspectorWidthPx?: number;
 }
 
 export interface ApplicationSettingsSnapshot {
@@ -19,6 +24,7 @@ export interface ApplicationSettingsSnapshot {
   readonly sidebarMode: SidebarMode;
   readonly modelProviders: readonly ModelProviderSettings[];
   readonly activeModelProviderId?: string;
+  readonly inspectorWidthPx?: number;
 }
 
 export type ApplicationSettingsListener = () => void;
@@ -40,6 +46,9 @@ export class ApplicationSettingsStore {
       sidebarMode: initialState.sidebarMode ?? "expanded",
       modelProviders,
       ...(activeModelProviderId === undefined ? {} : { activeModelProviderId }),
+      ...(initialState.inspectorWidthPx === undefined
+        ? {}
+        : { inspectorWidthPx: clampInspectorWidthPx(initialState.inspectorWidthPx) }),
     });
   }
 
@@ -55,6 +64,16 @@ export class ApplicationSettingsStore {
   setSidebarMode(sidebarMode: SidebarMode): void {
     if (this.snapshot.sidebarMode === sidebarMode) return;
     this.update({ ...this.snapshot, sidebarMode });
+  }
+
+  /** 右栏宽度：undefined = 复位断点缺省；越界值静默 clamp 到 [320, 640] */
+  setInspectorWidthPx(px: number | undefined): void {
+    const next = px === undefined ? undefined : clampInspectorWidthPx(px);
+    if (this.snapshot.inspectorWidthPx === next) return;
+    const snapshot = { ...this.snapshot };
+    if (next === undefined) delete snapshot.inspectorWidthPx;
+    else snapshot.inspectorWidthPx = next;
+    this.update(snapshot);
   }
 
   addModelProvider(input: ModelProviderSettingsInput): ModelProviderSettings {
@@ -143,11 +162,19 @@ function captureInitialProviders(
 
 function captureActiveProviderId(
   providers: readonly ModelProviderSettings[],
-  activeProviderId: string | undefined,
+  activeModelProviderId: string | undefined,
 ): string | undefined {
-  if (activeProviderId === undefined) return providers[0]?.id;
-  if (!providers.some((provider) => provider.id === activeProviderId)) {
+  if (activeModelProviderId === undefined) return providers[0]?.id;
+  if (!providers.some((provider) => provider.id === activeModelProviderId)) {
     throw new Error("MODEL_PROVIDER_NOT_FOUND");
   }
-  return activeProviderId;
+  return activeModelProviderId;
+}
+
+function clampInspectorWidthPx(px: number): number {
+  if (!Number.isFinite(px)) return INSPECTOR_WIDTH_BOUNDS.min;
+  return Math.max(
+    INSPECTOR_WIDTH_BOUNDS.min,
+    Math.min(INSPECTOR_WIDTH_BOUNDS.max, Math.round(px)),
+  );
 }

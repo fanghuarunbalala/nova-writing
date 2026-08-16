@@ -1,8 +1,9 @@
 /**
- * InspectorHost 视觉（对齐 demo .inspector + .insHead，app-redesign-demo.html
- * L879-911）：恒挂载面板，开合通过 margin-right 负值过渡（非条件渲染）；
- * 面板头 = 标题 + 待审计数徽标（demo .apCnt）+ kicker + close。
- * 宽度固定档位（决议 2）：>1280 = 376 / ≤1280 = 340 / ≤1080 右缘覆盖抽屉。
+ * InspectorHost 视觉（对齐 demo .inspector + .insHead，app-redesign-demo.html）：
+ * 恒挂载面板，开合通过 margin-right 负值过渡（非条件渲染）；
+ * 面板头 = 标题 + kicker + close。
+ * 宽度：>1280 可拖拽调宽（320–640，双击复位；inline --insp-w 覆盖缺省 376）、
+ * ≤1280 固定 340（把手隐藏）、≤1080 右缘覆盖抽屉（决议 2 修订：v0.8 恢复拖宽）。
  */
 .inspTitle {
   margin: 0;
@@ -47,13 +48,33 @@
   margin-right: 0;
 }
 
-.drag {
+/* 拖拽调宽把手（左缘悬挂，双击复位；DragHandle 自身透明，hover 显示 accent 竖线） */
+.gripWrap {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0;
+  left: calc(-1 * var(--space-4px));
   z-index: var(--z-drag-handle);
-  width: 6px;
+  width: 8px;
+  cursor: col-resize;
+}
+
+.gripWrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.gripWrap:hover::after,
+.gripWrap:focus-within::after,
+.gripWrap:has([data-dragging="true"])::after {
+  background: var(--color-accent);
 }
 
 .head {
@@ -107,13 +128,17 @@
   color: var(--color-faint);
 }
 
-/* ============ 响应式固定档位（PRD RWD 1-3 / 决议 2：无拖拽；最小窗口 1080） ============
- * >1280  宽 376（tokens --insp-w 缺省）
- * ≤1280  收窄 340
+/* ============ 响应式档位（PRD RWD 1-3；最小窗口 1080） ============
+ * >1280  可拖拽调宽（inline --insp-w 覆盖缺省 376）
+ * ≤1280  收窄 340 + 拖宽把手隐藏（断点档位优先）
  * ≤1080（最小档）右缘覆盖抽屉：min(400px, 86vw)，transform 滑出 + 投影 */
 @media (max-width: 1280px) {
   .host {
     --insp-w: 340px;
+  }
+
+  .gripWrap {
+    display: none;
   }
 }
 

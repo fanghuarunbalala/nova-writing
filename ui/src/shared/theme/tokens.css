@@ -156,6 +156,7 @@
   --space-3-4px: 3.4px;
   --space-5-5px: 5.5px;
   --space-6-5px: 6.5px;
+  --space-4px: 4px; /* 精确值快照：InspectorHost 拖宽把手悬挂偏移 */
 
   /* 圆角 */
   --radius-xs:    5px;

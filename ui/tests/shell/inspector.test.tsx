@@ -107,4 +107,26 @@ describe("InspectorHost", () => {
     expect(screen.getByRole("tab", { name: /人物/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /地点/ })).toBeInTheDocument();
   });
+
+  it("injects custom width and resets on grip double-click (拖宽/复位)", async () => {
+    const stores = await makeStores();
+    const router = new InspectorRouter();
+    router.transition({ kind: "directory" });
+    const onWidthChange = vi.fn();
+    const { rerender } = render(
+      <InspectorHost inspectorRouter={router} {...stores} widthPx={500} onWidthChange={onWidthChange} />,
+    );
+    // 自定义宽度经 inline --insp-w 注入（jsdom 无 matchMedia → 视为宽档）
+    const aside = document.querySelector("aside") as HTMLElement;
+    expect(aside.style.getPropertyValue("--insp-w")).toBe("500px");
+    // 双击把手 → 复位回调（undefined = 断点缺省）
+    const grip = screen.getByRole("separator", { name: "拖拽调整目录宽度" });
+    grip.parentElement?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(onWidthChange).toHaveBeenCalledWith(undefined);
+    // 复位后（widthPx=undefined）不再注入 inline 宽度
+    rerender(
+      <InspectorHost inspectorRouter={router} {...stores} onWidthChange={onWidthChange} />,
+    );
+    expect(aside.style.getPropertyValue("--insp-w")).toBe("");
+  });
 });

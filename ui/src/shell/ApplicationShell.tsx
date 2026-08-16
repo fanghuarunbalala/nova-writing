@@ -101,6 +101,7 @@ export function ApplicationShell({
   workspaceController,
   domainStores,
   toastStore,
+  settingsStore,
   extensions,
   onOpenWorkspace,
   onOpenSettings,
@@ -126,6 +127,17 @@ export function ApplicationShell({
     [api],
   );
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
+  // 右栏自定义宽度（>1280 生效）：初值取设置快照（宿主接线后持久化），变更写回
+  const [inspectorWidthPx, setInspectorWidthPx] = useState<number | undefined>(
+    () => settingsStore?.getSnapshot().inspectorWidthPx,
+  );
+  const handleInspectorWidthChange = useCallback(
+    (px: number | undefined) => {
+      setInspectorWidthPx(px);
+      settingsStore?.setInspectorWidthPx(px);
+    },
+    [settingsStore],
+  );
   const mainView = useMainView(mainViewRouter);
   const inspectorRoute = useInspectorRoute(inspectorRouter);
   // 右栏内容目录（demo 方案 A v0.8）：tab / 手风琴 / 实体标签定位
@@ -634,6 +646,8 @@ export function ApplicationShell({
           onSelectOutlineUnit={handleSelectOutlineUnit}
           onOpenCharacter={handleSelectCharacter}
           onOpenLocation={handleSelectLocation}
+          widthPx={inspectorWidthPx}
+          onWidthChange={handleInspectorWidthChange}
         />
       </div>
       <OverlaysHost toastStore={toastStore}>

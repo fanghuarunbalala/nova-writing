@@ -151,6 +151,11 @@ export class SqliteNovelStore implements NovelStore {
 
 	/** 变更（switch op + revision 乐观锁校验） */
 	async mutate(m: NovelMutation): Promise<NovelMutateResult> {
+		return this.applyMutation(m);
+	}
+
+	/** 变更执行体（纯同步，无 await——并发调用天然不交错，见 mutateBatch） */
+	private applyMutation(m: NovelMutation): NovelMutateResult {
 		switch (m.op) {
 			case "outline.storyUnit.create": {
 				const su: StoryUnit = {
@@ -220,7 +225,6 @@ export class SqliteNovelStore implements NovelStore {
 				const delUnit = this.db.prepare("DELETE FROM story_units WHERE id = ?");
 				const delLeaf = this.db.prepare("DELETE FROM leaf_story_unit_plans WHERE story_unit_id = ?");
 				const delPara = this.db.prepare("DELETE FROM paragraphs WHERE id = ?");
-				const delSel = this.db.prepare("DELETE FROM chapter_paragraphs WHERE paragraph_id = ?");
 				for (const unit of subtree) {
 					const planRow = leafPlans.find((l) => l.story_unit_id === unit.id);
 					if (planRow !== undefined) {
@@ -228,7 +232,7 @@ export class SqliteNovelStore implements NovelStore {
 						delLeaf.run(unit.id);
 					}
 					for (const p of paragraphs.filter((pp) => pp.storyUnitId === unit.id)) {
-						delSel.run(p.id);
+						this.removeParagraphSelections(p.id);
 						delPara.run(p.id);
 						deleted.push({ kind: "paragraph", id: p.id, data: p });
 					}
@@ -289,7 +293,7 @@ export class SqliteNovelStore implements NovelStore {
 			case "paragraph.delete": {
 				const p = this.getParagraph(m.paragraphId);
 				this.checkRevision(p.entityVersion, m.baseRevision, p.id);
-				this.db.prepare("DELETE FROM chapter_paragraphs WHERE paragraph_id = ?").run(p.id);
+				this.removeParagraphSelections(p.id);
 				this.db.prepare("DELETE FROM paragraphs WHERE id = ?").run(p.id);
 				return this.result(p.entityVersion, p.id, "paragraph");
 			}
@@ -342,11 +346,14 @@ export class SqliteNovelStore implements NovelStore {
 					storyUnitId: m.storyUnitId,
 					paragraphIds: [],
 				} as PublicationChapter;
+				// 校验前置：任何写库前完成（裸 mutate 无事务，失败不得留下章行或已提版本）
+				if (m.paragraphIds !== undefined) {
+					this.assertParagraphsExist(m.paragraphIds);
+				}
 				this.db
 					.prepare("INSERT INTO chapters (id, entity_version, volume_id, order_key, title, story_unit_id) VALUES (?, ?, ?, ?, ?, ?)")
 					.run(c.id, c.entityVersion, c.volumeId ?? null, c.orderKey, c.title, c.storyUnitId ?? null);
 				if (m.paragraphIds !== undefined) {
-					this.assertParagraphsExist(m.paragraphIds);
 					this.replaceSelection(c.id, m.paragraphIds as unknown as string[]);
 				}
 				return this.result(c.entityVersion, c.id, "publication");
@@ -354,13 +361,15 @@ export class SqliteNovelStore implements NovelStore {
 			case "publication.chapter.update": {
 				const c = this.getChapter(m.chapterId);
 				this.checkRevision(c.entityVersion, m.baseRevision, c.id);
+				// 校验前置：先于版本提升与选择替换（失败不消耗版本号、不留半替换选择）
+				if (m.patch.paragraphIds !== undefined) {
+					this.assertParagraphsExist(m.patch.paragraphIds ?? []);
+				}
 				this.db
 					.prepare("UPDATE chapters SET title = ?, volume_id = ?, order_key = ?, entity_version = ? WHERE id = ?")
 					.run(m.patch.title ?? c.title, m.patch.volumeId ?? c.volumeId ?? null, m.patch.orderKey ?? c.orderKey, c.entityVersion + 1, c.id);
 				if (m.patch.paragraphIds !== undefined) {
-					const ids = m.patch.paragraphIds ?? [];
-					this.assertParagraphsExist(ids);
-					this.replaceSelection(c.id, ids as unknown as string[]);
+					this.replaceSelection(c.id, (m.patch.paragraphIds ?? []) as unknown as string[]);
 				}
 				return this.result(c.entityVersion + 1, c.id, "publication");
 			}
@@ -471,7 +480,10 @@ export class SqliteNovelStore implements NovelStore {
 				.prepare("SELECT id FROM paragraphs WHERE story_unit_id = ? ORDER BY order_key")
 				.all(c.story_unit_id) as unknown as Array<{ id: string }>;
 			this.replaceSelection(c.id, paragraphs.map((p) => p.id));
-			this.db.prepare("UPDATE chapters SET story_unit_id = NULL WHERE id = ?").run(c.id);
+			// 选择由指针展开为显式列表（语义变更）→ 版本 +1，旧 baseRevision 的写入（如重启审批重放）会被 stale 拦截
+			this.db
+				.prepare("UPDATE chapters SET story_unit_id = NULL, entity_version = entity_version + 1 WHERE id = ?")
+				.run(c.id);
 		}
 	}
 
@@ -483,9 +495,23 @@ export class SqliteNovelStore implements NovelStore {
 		for (const pid of paragraphIds) insert.run(chapterId, pid, pos++);
 	}
 
-	/** 章选择引用的段落存在性校验 */
+	/** 章选择引用校验：段落存在且无重复（重复会撞 chapter_paragraphs 主键；须在任何写之前拦截） */
 	private assertParagraphsExist(paragraphIds: readonly string[]): void {
+		if (new Set(paragraphIds).size !== paragraphIds.length) {
+			throw new Error("章段落选择含重复 id");
+		}
 		for (const pid of paragraphIds) this.getParagraph(pid);
+	}
+
+	/** 段落从所有章选择移除；选择发生变化的章 entityVersion+1（选择变更须反映到版本，乐观锁语义一致） */
+	private removeParagraphSelections(paragraphId: string): void {
+		const rows = this.db
+			.prepare("SELECT DISTINCT chapter_id FROM chapter_paragraphs WHERE paragraph_id = ?")
+			.all(paragraphId) as unknown as Array<{ chapter_id: string }>;
+		if (rows.length === 0) return;
+		this.db.prepare("DELETE FROM chapter_paragraphs WHERE paragraph_id = ?").run(paragraphId);
+		const bump = this.db.prepare("UPDATE chapters SET entity_version = entity_version + 1 WHERE id = ?");
+		for (const r of rows) bump.run(r.chapter_id);
 	}
 
 	// ── 写 ──
@@ -675,12 +701,14 @@ export class SqliteNovelStore implements NovelStore {
 		return row?.k ?? undefined;
 	}
 
-	/** 批量变更（批内原子）：单事务顺序执行，任一项失败回滚并抛错 */
+	/** 批量变更（批内原子）：单事务顺序执行，任一项失败回滚并抛错。
+	 * 循环不 await（applyMutation 纯同步）——BEGIN→COMMIT 期间不让出事件循环，
+	 * 并发 mutate/mutateBatch 自然串行：杜绝嵌套 BEGIN 报错与裸 mutate 加入他批事务被连带回滚。 */
 	async mutateBatch(ms: readonly NovelMutation[]): Promise<NovelMutateResult[]> {
 		this.db.exec("BEGIN");
 		try {
 			const results: NovelMutateResult[] = [];
-			for (const m of ms) results.push(await this.mutate(m));
+			for (const m of ms) results.push(this.applyMutation(m));
 			this.db.exec("COMMIT");
 			return results;
 		} catch (err) {

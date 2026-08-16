@@ -119,6 +119,11 @@ export class InMemoryNovelStore implements NovelStore {
 
 	/** 变更（switch op + revision 乐观锁校验） */
 	async mutate(m: NovelMutation): Promise<NovelMutateResult> {
+		return this.applyMutation(m);
+	}
+
+	/** 变更执行体（纯同步，无 await——并发调用天然不交错，见 mutateBatch） */
+	private applyMutation(m: NovelMutation): NovelMutateResult {
 		switch (m.op) {
 			// ── 大纲 ──
 			case "outline.storyUnit.create": {
@@ -310,6 +315,10 @@ export class InMemoryNovelStore implements NovelStore {
 					storyUnitId: m.storyUnitId,
 					paragraphIds: [],
 				};
+				// 校验前置：任何写之前完成（失败不留章实体，与 Sqlite 实现统一报错语义）
+				if (m.paragraphIds !== undefined) {
+					this.validateSelection(m.paragraphIds);
+				}
 				this.chapters.set(c.id, c);
 				if (m.paragraphIds !== undefined) {
 					this.replaceSelection(c.id, m.paragraphIds);
@@ -320,6 +329,10 @@ export class InMemoryNovelStore implements NovelStore {
 				const c = this.require(this.chapters, m.chapterId, "chapter");
 				this.checkRevision(c.entityVersion, m.baseRevision, c.id);
 				const { paragraphIds, ...rest } = m.patch;
+				// 校验前置：先于对象修改（失败不留部分写）
+				if (paragraphIds !== undefined) {
+					this.validateSelection(paragraphIds ?? []);
+				}
 				Object.assign(c, rest);
 				if (paragraphIds !== undefined) {
 					this.replaceSelection(c.id, paragraphIds ?? []);
@@ -343,12 +356,12 @@ export class InMemoryNovelStore implements NovelStore {
 		}
 	}
 
-	/** 批量变更（批内原子）：逐项执行，任一项失败恢复快照并抛错 */
+	/** 批量变更（批内原子）：逐项执行，任一项失败恢复快照并抛错（循环不 await，执行期间不让出事件循环） */
 	async mutateBatch(ms: readonly NovelMutation[]): Promise<NovelMutateResult[]> {
 		const snapshot = this.snapshotState();
 		try {
 			const results: NovelMutateResult[] = [];
-			for (const m of ms) results.push(await this.mutate(m));
+			for (const m of ms) results.push(this.applyMutation(m));
 			return results;
 		} catch (err) {
 			this.restoreState(snapshot);
@@ -422,17 +435,27 @@ export class InMemoryNovelStore implements NovelStore {
 		return deleted === undefined ? { version, changeId: id, entity } : { version, changeId: id, entity, deleted };
 	}
 
-	/** 全量替换章选择（空数组即清空；引用段落须存在） */
-	private replaceSelection(chapterId: string, paragraphIds: readonly string[]): void {
+	/** 章选择校验：引用段落存在且无重复（与 Sqlite 实现统一报错语义；调用方须在任何写之前校验） */
+	private validateSelection(paragraphIds: readonly string[]): void {
+		if (new Set(paragraphIds).size !== paragraphIds.length) {
+			throw new Error("章段落选择含重复 id");
+		}
 		for (const pid of paragraphIds) this.require(this.paragraphs, pid, "paragraph");
+	}
+
+	/** 全量替换章选择（空数组即清空；引用校验由 validateSelection 前置完成） */
+	private replaceSelection(chapterId: string, paragraphIds: readonly string[]): void {
 		this.chapterSelections.set(chapterId, [...paragraphIds]);
 	}
 
-	/** 段落从所有章选择中移除 */
+	/** 段落从所有章选择移除；选择发生变化的章 entityVersion+1（选择变更须反映到版本，乐观锁语义一致） */
 	private removeParagraphSelections(paragraphId: string): void {
 		for (const [chapterId, ids] of this.chapterSelections) {
 			const next = ids.filter((id) => id !== paragraphId);
-			if (next.length !== ids.length) this.chapterSelections.set(chapterId, next);
+			if (next.length === ids.length) continue;
+			this.chapterSelections.set(chapterId, next);
+			const c = this.chapters.get(chapterId);
+			if (c !== undefined) c.entityVersion++;
 		}
 	}
 

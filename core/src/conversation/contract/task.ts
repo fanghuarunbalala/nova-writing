@@ -7,7 +7,7 @@ export type SubagentTaskStatus = "running" | "completed" | "failed" | "cancelled
 export interface SubagentTaskSnapshot {
   /** 任务 id（runtime 内唯一，task_<seq>） */
   taskId: string;
-  /** 派生任务的 agent 类型（如 novel_explorer） */
+  /** 派生任务的 agent 类型（如 Explore） */
   agentType: string;
   /** 任务状态 */
   status: SubagentTaskStatus;

@@ -178,7 +178,9 @@ export function createSubagentTools(opts: SubagentToolsOptions): ToolDef[] {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "",
+      // 工具优先级（system 恒可见）：委托纪律——独立探索/草案走子代理，不与子代理重复劳动
+      policy:
+        "独立只读探索与草案创作委托 Explore / Compose；已委托给子代理的工作不要自己重复做。",
       guidance: "",
     },
     handler: {

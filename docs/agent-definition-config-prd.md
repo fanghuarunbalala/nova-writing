@@ -24,7 +24,7 @@
 
 ```
 agentType: "novel", definitionVersion: "1.0.0", label: "Novel Agent"
-delegation: subagent[novel_explorer, novel_compose]   # 声明保留、运行时零效果
+delegation: subagent[Explore, Compose]   # 声明保留、运行时零效果
 communication: standalone
 nudgeEnablement: [compose_mode, todo_idle]
 recipe: 9 段（6 static 全前 + 3 dynamic 后）

@@ -37,7 +37,7 @@ export interface NovelSubagentOptions {
 
 /** buildNovelSubagent 选项 = 公共装配依赖 + 目标定义 */
 export interface BuildNovelSubagentOptions extends NovelSubagentOptions {
-  /** subagent 声明式定义（novel_explorer / novel_compose） */
+  /** subagent 声明式定义（Explore / Compose） */
   definition: AgentDefinition;
 }
 

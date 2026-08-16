@@ -15,7 +15,7 @@ function call(name: string, args: Record<string, unknown>): ToolCall {
 function snapshot(over: Partial<SubagentTaskSnapshot> = {}): SubagentTaskSnapshot {
   return {
     taskId: "task_1",
-    agentType: "novel_explorer",
+    agentType: "Explore",
     status: "running",
     createdAt: "2026-08-13T00:00:00.000Z",
     updatedAt: "2026-08-13T00:00:00.000Z",
@@ -46,14 +46,14 @@ function fakeSpawner(init: SubagentTaskSnapshot[] = []): {
 /** 定义目录 fixture（形状对齐 NOVEL_SUBAGENT_DEFINITIONS） */
 const agents: readonly AgentDefinition[] = [
   {
-    agentType: "novel_explorer",
+    agentType: "Explore",
     agentVersion: "1.0.0",
     label: "只读探索",
     description: "读取大纲、人物、地点、段落、卷与章节，返回简洁的文本性发现。",
     tools: { allow: ["Read", "Glob"] },
   },
 ];
-const allowedTypes: readonly string[] = ["novel_explorer"];
+const allowedTypes: readonly string[] = ["Explore"];
 
 /** 公共装配（注入定义目录 + 白名单） */
 function makeTools(over: Omit<SubagentToolsOptions, "agents" | "allowedAgentTypes">): ToolDef[] {
@@ -65,9 +65,9 @@ describe("createSubagentTools", () => {
     const fake = fakeSpawner();
     const [agent] = makeTools({ spawner: fake.spawner });
     expect(agent.name).toBe("Agent");
-    const out = await agent.handler.execute(call("Agent", { agentType: "novel_explorer", prompt: "列出角色" }));
+    const out = await agent.handler.execute(call("Agent", { agentType: "Explore", prompt: "列出角色" }));
     expect(JSON.parse(out)).toEqual({ taskId: "task_1", status: "running" });
-    expect(fake.spawner.spawn).toHaveBeenCalledWith({ agentType: "novel_explorer", prompt: "列出角色" });
+    expect(fake.spawner.spawn).toHaveBeenCalledWith({ agentType: "Explore", prompt: "列出角色" });
   });
 
   it("Agent schema 限制 agentType 枚举（白名单推导）", () => {
@@ -77,7 +77,7 @@ describe("createSubagentTools", () => {
       properties: { agentType: { enum: string[] } };
       required: string[];
     };
-    expect(params.properties.agentType.enum).toEqual(["novel_explorer"]);
+    expect(params.properties.agentType.enum).toEqual(["Explore"]);
     expect(params.required).toEqual(["agentType", "prompt"]);
   });
 
@@ -86,7 +86,7 @@ describe("createSubagentTools", () => {
     const [agent] = makeTools({ spawner: fake.spawner });
     expect(agent.description).toContain("## 允许的子代理类型");
     expect(agent.description).toContain(
-      "- novel_explorer（只读探索）：读取大纲、人物、地点、段落、卷与章节，返回简洁的文本性发现。\n  （工具：Read、Glob）",
+      "- Explore（只读探索）：读取大纲、人物、地点、段落、卷与章节，返回简洁的文本性发现。\n  （工具：Read、Glob）",
     );
   });
 
@@ -117,7 +117,7 @@ describe("createSubagentTools", () => {
   it("多类型白名单：enum 推导 + 逐项渲染（无 tools 策略不渲染工具行）", () => {
     const fake = fakeSpawner();
     const compose: AgentDefinition = {
-      agentType: "novel_compose",
+      agentType: "Compose",
       agentVersion: "1.0.0",
       label: "创作助手",
       description: "读取当前故事状态，以文本形式起草大纲与正文设计提案。",
@@ -125,12 +125,12 @@ describe("createSubagentTools", () => {
     const [agent] = createSubagentTools({
       spawner: fake.spawner,
       agents: [...agents, compose],
-      allowedAgentTypes: ["novel_compose", "novel_explorer"],
+      allowedAgentTypes: ["Compose", "Explore"],
     });
     const params = agent.parameters as { properties: { agentType: { enum: string[] } } };
-    expect(params.properties.agentType.enum).toEqual(["novel_compose", "novel_explorer"]);
+    expect(params.properties.agentType.enum).toEqual(["Compose", "Explore"]);
     expect(agent.description).toContain(
-      "- novel_compose（创作助手）：读取当前故事状态，以文本形式起草大纲与正文设计提案。",
+      "- Compose（创作助手）：读取当前故事状态，以文本形式起草大纲与正文设计提案。",
     );
     expect(agent.description).not.toContain("以文本形式起草大纲与正文设计提案。\n  （工具");
     expect(agent.description).toContain("（工具：Read、Glob）");

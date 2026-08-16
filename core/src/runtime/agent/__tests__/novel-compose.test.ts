@@ -26,7 +26,7 @@ function build(todoStore = new InMemoryConversationTodoStore()) {
     handle: handle as NovelHandle,
     todoStore,
     conversationId: "c1",
-    agentId: "novel_compose:task_1",
+    agentId: "Compose:task_1",
   });
 }
 
@@ -77,7 +77,7 @@ describe("buildNovelComposeAgent 装配", () => {
   it("config 盖章 conversationId + agentId，且无 listeners（live-only）", () => {
     const cfg = cfgOf(build());
     expect(cfg.conversationId).toBe("c1");
-    expect(cfg.agentId).toBe("novel_compose:task_1");
+    expect(cfg.agentId).toBe("Compose:task_1");
     expect(cfg.listeners).toBeUndefined();
   });
 
@@ -101,7 +101,7 @@ describe("buildNovelComposeAgent 装配", () => {
   });
 
   it("目录条目从声明式定义派生（agentType/label/description/tools 策略）", () => {
-    const entry = NOVEL_SUBAGENT_DEFINITIONS.find((d) => d.agentType === "novel_compose");
+    const entry = NOVEL_SUBAGENT_DEFINITIONS.find((d) => d.agentType === "Compose");
     expect(entry).toBeDefined();
     expect(entry!.label).toBe("草案创作");
     expect(entry!.description).toContain("草案");
@@ -109,7 +109,7 @@ describe("buildNovelComposeAgent 装配", () => {
   });
 });
 
-describe("novel_compose prompt 段内容（legacy 迁移 + 工具名适配）", () => {
+describe("Compose prompt 段内容（legacy 迁移 + 工具名适配）", () => {
   it("process 段含现注册表工具名（P1 legacy 对齐 Novel* 命名）", () => {
     const text = novelComposeProcessSection.render();
     for (const name of ["NovelOutlineRead", "NovelCharacterRead", "NovelLocationRead", "NovelParagraphRead", "NovelVolumeRead", "NovelChapterRead"]) {

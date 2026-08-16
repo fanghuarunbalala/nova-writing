@@ -225,9 +225,9 @@ describe("Conversation", () => {
     });
     const received: OutputEvent[] = [];
     await conv.subscribeEvents((e) => received.push(e));
-    rt.emit({ type: "run-start", seq: 0, persist: true, runSeq: 0, conversationId: "c1", agentId: "novel_explorer:task_1", ts: "t" } as OutputEvent);
+    rt.emit({ type: "run-start", seq: 0, persist: true, runSeq: 0, conversationId: "c1", agentId: "Explore:task_1", ts: "t" } as OutputEvent);
     expect(received).toHaveLength(1);
-    expect(received[0]?.agentId).toBe("novel_explorer:task_1");
+    expect(received[0]?.agentId).toBe("Explore:task_1");
   });
 
   it("sendSystemControl stop 级联 stopAll", async () => {
@@ -522,8 +522,8 @@ describe("Conversation subagent 投影层隔离", () => {
     // run1：main 发出 m1 request（pending 挂起）
     await conv.sendUserMessage({ text: "a" });
     // subagent 任务事件插入（含未配对 s1 + run-end；旧实现会顺带清掉 main 的 m1）
-    rt.emit({ type: "tool-call-request", persist: true, seq: 9, toolCallId: "s1", name: "SubTool", args: "{}", conversationId: "c1", agentId: "novel_explorer:task_1", ts: "t" } as OutputEvent);
-    rt.emit({ type: "run-end", persist: true, seq: 9, runSeq: 9, conversationId: "c1", agentId: "novel_explorer:task_1", ts: "t" } as OutputEvent);
+    rt.emit({ type: "tool-call-request", persist: true, seq: 9, toolCallId: "s1", name: "SubTool", args: "{}", conversationId: "c1", agentId: "Explore:task_1", ts: "t" } as OutputEvent);
+    rt.emit({ type: "run-end", persist: true, seq: 9, runSeq: 9, conversationId: "c1", agentId: "Explore:task_1", ts: "t" } as OutputEvent);
     // run2：main 配对 m1 —— pending 未被 subagent 清掉则 name 正确（否则 unknown）
     script.push((emit) => emit("tool-call-response", { toolCallId: "m1", result: "ok" }));
     await conv.sendUserMessage({ text: "b" });

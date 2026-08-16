@@ -26,7 +26,7 @@ function fakeLoop(runImpl?: (input: string) => Promise<AgentLoopResult>) {
 function runtimeWith(loop: ReturnType<typeof fakeLoop>): { rt: SubagentRuntime; loop: ReturnType<typeof fakeLoop> } {
   const rt = new SubagentRuntime({
     sampling: { model: "deepseek-v4-flash" },
-    builders: { novel_explorer: () => loop as unknown as AgentLoop },
+    builders: { Explore: () => loop as unknown as AgentLoop },
   });
   return { rt, loop };
 }
@@ -34,8 +34,8 @@ function runtimeWith(loop: ReturnType<typeof fakeLoop>): { rt: SubagentRuntime; 
 describe("SubagentRuntime", () => {
   it("spawn 返回 running acceptance 且 taskId 递增唯一", async () => {
     const { rt } = runtimeWith(fakeLoop());
-    const a1 = rt.spawn({ agentType: "novel_explorer", prompt: "p1" });
-    const a2 = rt.spawn({ agentType: "novel_explorer", prompt: "p2" });
+    const a1 = rt.spawn({ agentType: "Explore", prompt: "p1" });
+    const a2 = rt.spawn({ agentType: "Explore", prompt: "p2" });
     expect(a1).toEqual({ taskId: "task_1", status: "running" });
     expect(a2).toEqual({ taskId: "task_2", status: "running" });
     expect(a1.taskId).not.toBe(a2.taskId);
@@ -48,13 +48,13 @@ describe("SubagentRuntime", () => {
 
   it("任务完成 → completed + result（agentId = agentType:taskId）", async () => {
     const { rt, loop } = runtimeWith(fakeLoop());
-    const { taskId } = rt.spawn({ agentType: "novel_explorer", prompt: "查角色" });
+    const { taskId } = rt.spawn({ agentType: "Explore", prompt: "查角色" });
     expect(loop.onOutputEvent).toHaveBeenCalled();
     await vi.waitFor(async () => {
       const [snap] = await rt.queryTasks([taskId]);
       expect(snap?.status).toBe("completed");
       expect(snap?.result).toBe("done");
-      expect(snap?.agentType).toBe("novel_explorer");
+      expect(snap?.agentType).toBe("Explore");
     });
   });
 
@@ -62,7 +62,7 @@ describe("SubagentRuntime", () => {
     const { rt } = runtimeWith(fakeLoop(async () => {
       throw new Error("provider 挂了");
     }));
-    const { taskId } = rt.spawn({ agentType: "novel_explorer", prompt: "查角色" });
+    const { taskId } = rt.spawn({ agentType: "Explore", prompt: "查角色" });
     await vi.waitFor(async () => {
       const [snap] = await rt.queryTasks([taskId]);
       expect(snap?.status).toBe("failed");
@@ -74,20 +74,20 @@ describe("SubagentRuntime", () => {
     const { rt } = runtimeWith(fakeLoop());
     expect(await rt.stopTask("task_99")).toBe("not_found");
 
-    const { taskId } = rt.spawn({ agentType: "novel_explorer", prompt: "p" });
+    const { taskId } = rt.spawn({ agentType: "Explore", prompt: "p" });
     await vi.waitFor(async () => {
       expect((await rt.queryTasks([taskId]))[0]?.status).toBe("completed");
     });
     expect(await rt.stopTask(taskId)).toBe("already_terminal");
 
-    const { taskId: tid2 } = rt.spawn({ agentType: "novel_explorer", prompt: "p2" });
+    const { taskId: tid2 } = rt.spawn({ agentType: "Explore", prompt: "p2" });
     expect(await rt.stopTask(tid2)).toBe("cancellation_requested");
   });
 
   it("晚 settle 不覆盖 cancelled（stop 后 run 完成也不写 completed）", async () => {
     let resolveRun!: (r: AgentLoopResult) => void;
     const { rt, loop } = runtimeWith(fakeLoop(() => new Promise((resolve) => (resolveRun = resolve))));
-    const { taskId } = rt.spawn({ agentType: "novel_explorer", prompt: "p" });
+    const { taskId } = rt.spawn({ agentType: "Explore", prompt: "p" });
     await vi.waitFor(() => expect(loop.run).toHaveBeenCalled());
     expect(await rt.stopTask(taskId)).toBe("cancellation_requested");
     expect(loop.cancel).toHaveBeenCalled();
@@ -101,8 +101,8 @@ describe("SubagentRuntime", () => {
 
   it("stopAll 取消全部 running 任务", async () => {
     const { rt, loop } = runtimeWith(fakeLoop());
-    rt.spawn({ agentType: "novel_explorer", prompt: "p1" });
-    rt.spawn({ agentType: "novel_explorer", prompt: "p2" });
+    rt.spawn({ agentType: "Explore", prompt: "p1" });
+    rt.spawn({ agentType: "Explore", prompt: "p2" });
     rt.stopAll();
     const snaps = await rt.queryTasks(["task_1", "task_2"]);
     expect(snaps.map((s) => s.status)).toEqual(["cancelled", "cancelled"]);
@@ -113,24 +113,24 @@ describe("SubagentRuntime", () => {
     const { rt, loop } = runtimeWith(fakeLoop());
     const seen: OutputEvent[] = [];
     rt.onEvent((e) => seen.push(e));
-    rt.spawn({ agentType: "novel_explorer", prompt: "p" });
+    rt.spawn({ agentType: "Explore", prompt: "p" });
     loop.emit({
       type: "run-start",
       seq: 0,
       conversationId: "c1",
-      agentId: "novel_explorer:task_1",
+      agentId: "Explore:task_1",
       ts: "2026-08-13T00:00:00.000Z",
       persist: true,
       runSeq: 0,
     } as OutputEvent);
     expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({ agentId: "novel_explorer:task_1", conversationId: "c1" });
+    expect(seen[0]).toMatchObject({ agentId: "Explore:task_1", conversationId: "c1" });
   });
 
   it("queryTasks 未知 taskId 忽略、顺序保持", async () => {
     const { rt } = runtimeWith(fakeLoop());
-    rt.spawn({ agentType: "novel_explorer", prompt: "p1" });
-    rt.spawn({ agentType: "novel_explorer", prompt: "p2" });
+    rt.spawn({ agentType: "Explore", prompt: "p1" });
+    rt.spawn({ agentType: "Explore", prompt: "p2" });
     const snaps = await rt.queryTasks(["task_2", "task_99", "task_1"]);
     expect(snaps.map((s) => s.taskId)).toEqual(["task_2", "task_1"]);
   });

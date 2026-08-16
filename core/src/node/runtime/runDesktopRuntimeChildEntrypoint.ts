@@ -153,7 +153,7 @@ export function persistMode(storedir: string | undefined, mode: ConversationMode
 	}
 }
 
-/** id → 调试输出目录安全段（agentId 形如 "novel_explorer:<taskId>"，":" 在 Windows 路径非法） */
+/** id → 调试输出目录安全段（agentId 形如 "Explore:<taskId>"，":" 在 Windows 路径非法） */
 function toDebugDirSegment(id: string): string {
   return id.replace(/[^A-Za-z0-9._-]/g, "-");
 }
@@ -319,7 +319,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	const subagentRuntime = new SubagentRuntime({
 		sampling,
 		builders: {
-			novel_explorer: (agentId) =>
+			Explore: (agentId) =>
 				buildNovelExplorerAgent({
 					workspace,
 					provider: createProvider({ id: "explorer", ...providerConfig }),
@@ -329,7 +329,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 					agentId,
 					debugger: createCallDebugger?.(agentId),
 				}),
-			novel_compose: (agentId) =>
+			Compose: (agentId) =>
 				buildNovelComposeAgent({
 					workspace,
 					provider: createProvider({ id: "compose", ...providerConfig }),

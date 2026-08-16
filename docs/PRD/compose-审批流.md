@@ -242,10 +242,10 @@ flowchart TD
     聚焦给定的创作需求，阅读相关既有设定（大纲/人物/地点），理解当前故事结构与约束。
 
     ### Phase 2: 探索
-    建议派 **novel_explore** 子代理并行查设定、时间线、伏笔、矛盾点；复杂任务必派，琐碎任务可直接用只读工具自行探索。
+    建议派 **Explore** 子代理并行查设定、时间线、伏笔、矛盾点；复杂任务必派，琐碎任务可直接用只读工具自行探索。
 
     ### Phase 3: 创作草案
-    建议派 **novel_compose** 子代理设计大纲或正文草案；复杂草稿必派，琐碎草稿可自行创作。
+    建议派 **Compose** 子代理设计大纲或正文草案；复杂草稿必派，琐碎草稿可自行创作。
 
     ### Phase 4: 综合写入草稿
     评审子代理产出，用 Write/Edit 增量完善 design 文件（唯一可写文件）。
@@ -303,7 +303,7 @@ flowchart TD
 ## 5. 边界与非目标
 
 - 明确不做：
-  - **subagent 运行时装配**：`novel_explore` / `novel_compose` 只读子代理本期仍为声明保留（nudge 文案中「建议派子代理」保留，运行时无效果）；依赖 `feat/subagent-in-process` 分支合入。
+  - **subagent 运行时装配**：`Explore` / `Compose` 只读子代理本期仍为声明保留（nudge 文案中「建议派子代理」保留，运行时无效果）；依赖 `feat/subagent-in-process` 分支合入。
   - **批准后自动落库**：ExitComposeMode 批准只恢复权限，草稿内容由 agent 用 canon 写工具自行写入正式稿（沿用 legacy 语义）。
   - **web 端 designFile 读写**：本期仅 desktop 有 designFile 能力；web 降级只读提示。
   - **审批 payload 携带 md 内容**：内容一律经 designFile 能力按路径读取，事件/队列脱敏。

@@ -23,7 +23,7 @@ function makeDefinition(overrides: Partial<ConstructorParameters<typeof AgentDef
     tools: new AgentToolPolicy({ groupIds: ["runtime.files"] }),
     delegation: new AgentDelegationPolicy({
       mode: "subagent",
-      allowedAgentTypes: ["novel_explorer", "novel_compose"],
+      allowedAgentTypes: ["Explore", "Compose"],
     }),
     communication: new AgentCommunicationPolicy("standalone"),
     runtimePolicyId: "default",
@@ -40,7 +40,7 @@ describe("AgentDefinition（值对象体系）", () => {
     expect(def.promptRecipe.items).toHaveLength(1);
     expect(def.tools.groupIds).toEqual(["runtime.files"]);
     expect(def.delegation.mode).toBe("subagent");
-    expect(def.delegation.allowedAgentTypes).toEqual(["novel_explorer", "novel_compose"]);
+    expect(def.delegation.allowedAgentTypes).toEqual(["Explore", "Compose"]);
     expect(def.communication.role).toBe("standalone");
     expect(def.runtimePolicyId).toBe("default");
     expect(def.nudgeEnablement).toBe(EMPTY_AGENT_NUDGE_ENABLEMENT);
@@ -58,7 +58,7 @@ describe("AgentDefinition（值对象体系）", () => {
   });
 
   it("校验：非法 agentType / 版本 / 空 label 报错", () => {
-    expect(() => makeDefinition({ agentType: "Novel" })).toThrow(/Agent type/);
+    expect(() => makeDefinition({ agentType: "Novel Agent" })).toThrow(/Agent type/);
     expect(() => makeDefinition({ definitionVersion: "1" })).toThrow(/version/);
     expect(() => makeDefinition({ label: "  " })).toThrow(/label/);
   });
@@ -89,7 +89,7 @@ describe("AgentDefinition（值对象体系）", () => {
       () =>
         new AgentDelegationPolicy({
           mode: "disabled",
-          allowedAgentTypes: ["novel_explorer"],
+          allowedAgentTypes: ["Explore"],
         }),
     ).toThrow(/Disabled/);
   });
@@ -108,7 +108,7 @@ describe("AgentDefinition（值对象体系）", () => {
     expect(snapshot.agentType).toBe("novel");
     expect(snapshot.promptRecipe.items).toHaveLength(3);
     expect(snapshot.tools.groupIds).toEqual(["runtime.files"]);
-    expect(snapshot.delegation.allowedAgentTypes).toEqual(["novel_explorer", "novel_compose"]);
+    expect(snapshot.delegation.allowedAgentTypes).toEqual(["Explore", "Compose"]);
     expect(snapshot.communication.role).toBe("standalone");
     expect(snapshot.nudgeEnablement.enabled).toEqual(["todo_idle"]);
   });

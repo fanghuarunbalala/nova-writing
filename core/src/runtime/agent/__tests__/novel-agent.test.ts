@@ -82,6 +82,7 @@ describe("buildNovelAgent 组装", () => {
               description: string;
               parameters: { properties: { agentType: { enum: string[] } } };
               handler: { execute: (c: { id: string; name: string; args: string }) => Promise<string> };
+              promptDetail?: { policy?: string; guidance?: string };
             }>;
           };
         };
@@ -95,17 +96,19 @@ describe("buildNovelAgent 组装", () => {
     expect(names).toContain("TaskStop");
     const agent = cap.toolDefs.find((t) => t.name === "Agent");
     expect(agent).toBeDefined();
+    // Agent 的 policy 优先级行（委托纪律）
+    expect(agent!.promptDetail?.policy).toContain("Explore");
     // 白名单由 novelAgentDefinition.delegation.allowedAgentTypes 派生（explorer + compose）
-    expect(agent!.description).toContain("- novel_explorer（只读探索）：");
-    expect(agent!.description).toContain("- novel_compose（草案创作）：");
+    expect(agent!.description).toContain("- Explore（只读探索）：");
+    expect(agent!.description).toContain("- Compose（草案创作）：");
     expect((agent!.parameters as { properties: { agentType: { enum: string[] } } }).properties.agentType.enum).toEqual([
-      "novel_explorer",
-      "novel_compose",
+      "Explore",
+      "Compose",
     ]);
     const out = await agent!.handler.execute({
       id: "c1",
       name: "Agent",
-      args: JSON.stringify({ agentType: "novel_explorer", prompt: "列出角色" }),
+      args: JSON.stringify({ agentType: "Explore", prompt: "列出角色" }),
     });
     expect(JSON.parse(out)).toEqual({ taskId: "task_1", status: "running" });
   });

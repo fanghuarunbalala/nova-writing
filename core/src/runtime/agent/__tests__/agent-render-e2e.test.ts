@@ -102,5 +102,7 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     }
     // 名单行格式：单行逗号分隔
     expect(toolSection).toContain("- available tools: TodoWrite");
+    // Write 的 policy 优先级行（名单行后原样一行）
+    expect(toolSection).toContain("改已有文件用 Edit，禁止 Write 覆盖做小改动");
   });
 });

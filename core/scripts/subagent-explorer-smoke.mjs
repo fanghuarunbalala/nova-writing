@@ -1,4 +1,4 @@
-// subagent 进程内派发 smoke：main 经 Agent 工具派 novel_explorer → TaskOutput 收结果 → store 未变更（只读证明）
+// subagent 进程内派发 smoke：main 经 Agent 工具派 Explore → TaskOutput 收结果 → store 未变更（只读证明）
 // 运行：node core/scripts/subagent-explorer-smoke.mjs（需 build，且设置 ANTHROPIC_AUTH_TOKEN）
 
 import {
@@ -33,7 +33,7 @@ const conversationId = "smoke-c1";
 const subagentRuntime = new SubagentRuntime({
   sampling,
   builders: {
-    novel_explorer: (agentId) =>
+    Explore: (agentId) =>
       buildNovelExplorerAgent({
         workspace: ".",
         provider: createProvider({ id: "explorer", ...providerConfig }),
@@ -63,7 +63,7 @@ await conversation.subscribeEvents((e) => {
 
 console.log("=== subagent 进程内派发 smoke ===");
 const r = await loop.run(
-  "用 Agent 工具派发一个 novel_explorer 子代理，任务是列出当前小说的全部角色名字。然后等它完成（TaskOutput block:true），最后用一句话汇总角色名单。",
+  "用 Agent 工具派发一个 Explore 子代理，任务是列出当前小说的全部角色名字。然后等它完成（TaskOutput block:true），最后用一句话汇总角色名单。",
   { sampling, maxTurns: 8 },
 );
 console.log("\nfinal:", r.final.content);

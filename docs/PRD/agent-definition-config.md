@@ -139,7 +139,7 @@ export const novelAgentDefinition = new AgentDefinition({
                "novel.outline", "novel.paragraph", "novel.publication", "novel.delete"],
   }),
   delegation: new AgentDelegationPolicy({ mode: "subagent",
-    allowedAgentTypes: ["novel_explorer", "novel_compose"] }),   // 声明保留、运行时零效果（subagent 装配不在本期）
+    allowedAgentTypes: ["Explore", "Compose"] }),   // 声明保留、运行时零效果（subagent 装配不在本期）
   communication: new AgentCommunicationPolicy("standalone"),
   runtimePolicyId: "default",
   nudgeEnablement: { enabled: ["compose_mode", "todo_idle"] },

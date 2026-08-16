@@ -105,8 +105,8 @@ describe("ConversationProjection subagent 隔离（agentId 过滤）", () => {
     await proj.start();
 
     fake.push(delta("主流程"));
-    fake.push(delta("子任务输出", "novel_explorer:task_1"));
-    fake.push(userMessage("子任务 prompt", "novel_explorer:task_1"));
+    fake.push(delta("子任务输出", "Explore:task_1"));
+    fake.push(userMessage("子任务 prompt", "Explore:task_1"));
     fake.push(delta("继续", "main"));
 
     const timeline = proj.getSnapshot().timeline;

@@ -1,10 +1,10 @@
 /**
  * 独立 Novel Agent 声明式定义：通用协议段 + novel.* 创作段 + 文件与大纲等工具，
- * 可委托 novel_explorer / novel_compose 只读子代理（delegation.allowedAgentTypes
+ * 可委托 Explore / Compose 只读子代理（delegation.allowedAgentTypes
  * 驱动 Agent 工具白名单，见 NovelAgent.ts 装配）。
  * Standalone Novel Agent declarative definition with generic protocol sections,
  * novel.* creative sections, file tools, outline tools, and delegation to the
- * read-only novel_explorer / novel_compose subagents (delegation.allowedAgentTypes
+ * read-only Explore / Compose subagents (delegation.allowedAgentTypes
  * drives the Agent tool whitelist; see assembly in NovelAgent.ts).
  *
  * recipe 序（static 全前、dynamic 后）：
@@ -58,7 +58,7 @@ export const novelAgentDefinition = new AgentDefinition({
   }),
   delegation: new AgentDelegationPolicy({
     mode: "subagent",
-    allowedAgentTypes: ["novel_explorer", "novel_compose"],
+    allowedAgentTypes: ["Explore", "Compose"],
   }),
   communication: new AgentCommunicationPolicy("standalone"),
   runtimePolicyId: "default",

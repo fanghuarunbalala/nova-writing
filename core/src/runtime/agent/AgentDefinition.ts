@@ -230,12 +230,12 @@ export class AgentDefinition {
 }
 
 /**
- * 捕获 agent 类型（小写字母开头，字母数字下划线，≤64 字符）
+ * 捕获 agent 类型（字母开头（大小写均可，如 Explore / novel），字母数字下划线，≤64 字符）
  * @param value 待校验值
  * @returns 校验通过的 agent 类型
  */
 export function captureAgentType(value: unknown): string {
-  if (typeof value !== "string" || !/^[a-z][a-z0-9_]{0,63}$/.test(value)) {
+  if (typeof value !== "string" || !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value)) {
     throw new TypeError("Agent type is invalid");
   }
   return value;

@@ -24,7 +24,7 @@ function build(todoStore = new InMemoryConversationTodoStore()) {
     handle: handle as NovelHandle,
     todoStore,
     conversationId: "c1",
-    agentId: "novel_explorer:task_1",
+    agentId: "Explore:task_1",
   });
 }
 
@@ -61,7 +61,7 @@ describe("buildNovelExplorerAgent 装配", () => {
   it("config 盖章 conversationId + agentId，且无 listeners（live-only）", () => {
     const cfg = cfgOf(build());
     expect(cfg.conversationId).toBe("c1");
-    expect(cfg.agentId).toBe("novel_explorer:task_1");
+    expect(cfg.agentId).toBe("Explore:task_1");
     expect(cfg.listeners).toBeUndefined();
   });
 
@@ -85,7 +85,7 @@ describe("buildNovelExplorerAgent 装配", () => {
   });
 
   it("目录条目从声明式定义派生（agentType/label/description/tools 策略）", () => {
-    const entry = NOVEL_SUBAGENT_DEFINITIONS.find((d) => d.agentType === "novel_explorer");
+    const entry = NOVEL_SUBAGENT_DEFINITIONS.find((d) => d.agentType === "Explore");
     expect(entry).toBeDefined();
     expect(entry!.label).toBe("只读探索");
     expect(entry!.description).toBeTruthy();

@@ -182,7 +182,10 @@ function writeTool(workspace: string): ToolDef {
       additionalProperties: false,
     },
     promptDetail: {
-      policy: "",
+      // 工具优先级（system 恒可见）：改已有内容用 Edit；Write/Edit 只碰 workspace 文件，
+      // 小说实体一律经 Novel* 工具操作（走 db + revision 乐观锁）
+      policy:
+        "改已有文件用 Edit，禁止 Write 覆盖做小改动；Write/Edit 只作用于 workspace 文件，小说实体一律经 Novel* 工具操作。",
       guidance: "",
     },
     handler: {

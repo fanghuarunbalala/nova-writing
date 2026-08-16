@@ -11,21 +11,20 @@ const handle = {
   mutate: async () => ({ version: 1, changeId: "x", entity: "character" }),
 } as unknown;
 
-/** 9 段标记（recipe 序；environment 依赖动态输入） */
+/** 8 个段标记（recipe 序；environment 依赖动态输入；清空段与空 guidance 不产出标记） */
 const SECTION_MARKERS = [
   "# 身份与创作定位",
   "# 系统与运行规则",
   "# 创作任务",
   "# 谨慎行动",
   "# 交流风格",
-  "Operate through the provided Conversation",
+  "# Using Tools",
   "# 环境信息",
   "# 小说全局约束（NOVEL.md）",
-  "Available Tools:",
 ] as const;
 
 describe("端到端渲染回归（assemble → LoopContext → system prompt）", () => {
-  it("9 段按 recipe 序渲染 + 每段恰好一次（锁死 staticSystemCache 短路不回归）", async () => {
+  it("段按 recipe 序渲染 + 每段恰好一次（锁死 staticSystemCache 短路不回归）", async () => {
     const loop = buildNovelAgent({
       workspace: "/ws",
       provider,
@@ -41,7 +40,7 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     // 经 AgentLoop 内部 LoopContext 拿最近一次渲染的 system prompt
     const prompt = (loop as unknown as { context: { systemPrompt: string } }).context.systemPrompt;
 
-    // 块序：各标记 indexOf 递增
+    // 块序：各标记 indexOf 递增（tool.policy 在 env 前、guidance 全空省略）
     const indices = SECTION_MARKERS.map((marker) => {
       const idx = prompt.indexOf(marker);
       expect(idx, `缺段标记: ${marker}`).toBeGreaterThanOrEqual(0);
@@ -51,7 +50,7 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
       expect(indices[i]!).toBeGreaterThan(indices[i - 1]!);
     }
     // 缓存 bug 锁死：static 段内容各出现恰好一次（旧 bug 协议段重复 5 次、novel 4 段为 0）
-    expect(prompt.split("Operate through the provided Conversation").length - 1).toBe(1);
+    expect(prompt.split("# 身份与创作定位").length - 1).toBe(1);
     expect(prompt.split("# 创作任务").length - 1).toBe(1);
     expect(prompt.split("# 谨慎行动").length - 1).toBe(1);
   });
@@ -81,7 +80,7 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     expect(prompt.slice(wrapStart, wrapEnd)).toContain("基调热血");
   });
 
-  it("无 platform/provider：环境块省略 + 约束占位 + 工具清单（26 工具）+ 无 ToolPolicy 块", async () => {
+  it("无 platform/provider：环境块省略 + 约束占位 + 工具名单（26 工具）+ 无 ToolPolicy 块", async () => {
     const loop = buildNovelAgent({
       workspace: "/ws",
       provider,
@@ -92,12 +91,16 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     const prompt = (loop as unknown as { context: { systemPrompt: string } }).context.systemPrompt;
     expect(prompt).not.toContain("# 环境信息");
     expect(prompt).toContain("（当前无可用内容");
-    // 工具清单 23 个；promptDetail policy/guidance 已全量清空 → system 不再有 ToolPolicy 块
-    const toolsIdx = prompt.indexOf("Available Tools:");
+    // promptDetail policy/guidance 已全量清空 → 名单行后无 policy 行、guidance 段省略；
+    // 旧 renderSystem 的 # ToolPolicy 块路径已删除
+    const toolsIdx = prompt.indexOf("# Using Tools");
+    expect(toolsIdx).toBeGreaterThanOrEqual(0);
     expect(prompt).not.toContain("# ToolPolicy");
     const toolSection = prompt.slice(toolsIdx);
     for (const name of ["TodoWrite", "Read", "EnterComposeMode", "ExitComposeMode", "NovelCharacterRead", "NovelDelete", "NovelOutlineWrite"]) {
-      expect(toolSection).toContain(`- ${name}`);
+      expect(toolSection).toContain(name);
     }
+    // 名单行格式：单行逗号分隔
+    expect(toolSection).toContain("- available tools: TodoWrite");
   });
 });

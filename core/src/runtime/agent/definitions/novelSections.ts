@@ -12,6 +12,7 @@ import {
   contextReliabilitySection,
   todoGuidanceSection,
   toolGuidanceSection,
+  toolPolicySection,
 } from "../../prompt/sections/agent.js";
 import {
   novelIdentitySection,
@@ -38,6 +39,7 @@ export const novelSectionRegistry = new PromptSectionRegistry([
   coreRuntimeProtocolSection,
   coreEnvironmentSection,
   novelGlobalConstraintsSection,
+  toolPolicySection,
   toolGuidanceSection,
   // subagent 共享段（explorer/compose recipe 引用）
   contextReliabilitySection,

@@ -14,11 +14,14 @@ import {
 } from "../novel.js";
 
 describe("prompt 分节文案（迁移完整性）", () => {
-  it("agent 通用 5 段非空", () => {
-    expect(coreRuntimeProtocolSection.render({} as never)).toContain("Runtime");
-    expect(completionContractSection.render({} as never)).toContain("objective");
-    expect(contextReliabilitySection.render({} as never)).toContain("authoritative");
-    expect(conversationBehaviorSection.render({} as never)).toContain("Collaborate");
+  it("4 个通用协议段保持清空（render 返回空串，不产出内容）", () => {
+    expect(coreRuntimeProtocolSection.render({} as never)).toBe("");
+    expect(completionContractSection.render({} as never)).toBe("");
+    expect(contextReliabilitySection.render({} as never)).toBe("");
+    expect(conversationBehaviorSection.render({} as never)).toBe("");
+  });
+
+  it("todoGuidance 段保留 Todo 指导文案", () => {
     expect(todoGuidanceSection.render({} as never)).toContain("TodoWrite");
   });
 

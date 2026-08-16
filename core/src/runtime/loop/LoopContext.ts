@@ -1,9 +1,6 @@
-import type {
-  ProviderCall,
-  LLMessage,
-  ToolScheme,
-} from "../provider/types.js";
+import type { ProviderCall, LLMessage } from "../provider/types.js";
 import type { AgentCapability } from "../agent/AgentCapability.js";
+import type { ToolDef } from "../tool/ToolDef.js";
 import type {
   DynamicPromptSectionInput,
   NovelConstraintsProvider,
@@ -27,8 +24,8 @@ export interface ReadonlyLoopContext {
   readonly messages: LLMessage[];
   /** 当前系统提示词（渲染后） */
   readonly systemPrompt: string;
-  /** 当前工具 schemes */
-  readonly toolSchemes: ToolScheme[];
+  /** 当前工具定义（ToolDef 含 promptDetail，供 tool.policy / tool.guidance 段消费） */
+  readonly toolSchemes: ToolDef[];
   /** 最近 run 记录 */
   readonly runs: RunContext[];
 }
@@ -137,7 +134,7 @@ export class LoopContext implements ReadonlyLoopContext {
    * 组装下一次 ProviderCall：触发压缩（compactIfNeeded，影响 runs）+ 组装动态段输入
    * （workdir=this.workspace、platform=构造注入常量、modelId=run.sampling.model；
    * NOVEL.md 内容经宿主 provider 每调用读取）+ 收集 nudge（persistent 追加 /
-   * transient 改 call）+ 生成 system（static base 缓存 + dynamic 每调用渲染 + 工具 promptDetail）
+   * transient 改 call）+ 生成 system（static base 缓存 + dynamic 每调用渲染）
    * @param run 单次运行配置
    * @param runProgress 当前 run 运行进度（nudge 判断依据）
    * @param signal 取消信号
@@ -192,7 +189,7 @@ export class LoopContext implements ReadonlyLoopContext {
     return this.lastSystemPrompt ?? this.renderSystem({});
   }
   /** 当前工具 schemes（agentCapability.toolDefs） */
-  get toolSchemes(): ToolScheme[] {
+  get toolSchemes(): ToolDef[] {
     return this.agentCapability.toolDefs;
   }
   /** 最近 run 记录（滑动窗口） */
@@ -216,8 +213,9 @@ export class LoopContext implements ReadonlyLoopContext {
   }
 
   /**
-   * 渲染完整 system：静态 base（一次缓存）+ 动态分段（每调用）+ 工具 promptDetail。
-   * 渲染结果记为最近一次渲染值（systemPrompt getter）。
+   * 渲染完整 system：静态 base（一次缓存）+ 动态分段（每调用）。
+   * 工具 promptDetail（policy/guidance）经声明式段 tool.policy / tool.guidance 注入，
+   * 不再在此渲染。渲染结果记为最近一次渲染值（systemPrompt getter）。
    * @param input 动态段输入（宿主注入 + modelId 补齐）
    * @returns 完整 system 文本
    */
@@ -231,14 +229,6 @@ export class LoopContext implements ReadonlyLoopContext {
       if (section.kind === "dynamic") {
         const rendered = section.renderDynamic(input, this);
         if (rendered.length > 0) parts.push(rendered);
-      }
-    }
-    for (const tool of this.agentCapability.toolDefs) {
-      if (tool.promptDetail?.policy) {
-        parts.push(`# ToolPolicy\n${tool.promptDetail.policy}`);
-      }
-      if (tool.promptDetail?.guidance) {
-        parts.push(tool.promptDetail.guidance);
       }
     }
     this.lastSystemPrompt = parts.join("\n");

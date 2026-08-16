@@ -9,8 +9,9 @@
  *
  * recipe 序（static 全前、dynamic 后）：
  * novel.identity → novel.system → novel.doing-tasks → novel.actions →
- * novel.communication → core.runtime.protocol → core.environment(dynamic) →
- * novel.global_constraints(dynamic) → tool.guidance(dynamic)
+ * novel.communication → core.runtime.protocol → tool.policy(dynamic) →
+ * tool.guidance(dynamic) → core.environment(dynamic) →
+ * novel.global_constraints(dynamic)
  */
 import {
   AgentCommunicationPolicy,
@@ -36,9 +37,10 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.actions"),
     new PromptSectionItem("novel.communication"),
     new PromptSectionItem("core.runtime.protocol"),
+    new PromptSectionItem("tool.policy"),
+    new PromptSectionItem("tool.guidance"),
     new PromptSectionItem("core.environment"),
     new PromptSectionItem("novel.global_constraints"),
-    new PromptSectionItem("tool.guidance"),
   ]),
   tools: new AgentToolPolicy({
     groupIds: [

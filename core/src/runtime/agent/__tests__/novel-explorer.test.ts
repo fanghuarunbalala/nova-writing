@@ -53,9 +53,9 @@ describe("buildNovelExplorerAgent 装配", () => {
     }
   });
 
-  it("systemSections 6 段（跳过 conversationBehavior 与 novel 创作 4 段）", () => {
+  it("systemSections 7 段（跳过 conversationBehavior 与 novel 创作 4 段；tool.policy/tool.guidance 收尾）", () => {
     const cfg = cfgOf(build());
-    expect(cfg.agentCapability.systemSections).toHaveLength(6);
+    expect(cfg.agentCapability.systemSections).toHaveLength(7);
   });
 
   it("config 盖章 conversationId + agentId，且无 listeners（live-only）", () => {

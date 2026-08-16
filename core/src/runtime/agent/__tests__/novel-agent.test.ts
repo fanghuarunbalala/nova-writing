@@ -13,10 +13,10 @@ const handle = {
 } as unknown;
 
 describe("buildNovelAgent 组装", () => {
-  it("systemSections 齐全（9 段 recipe 序）+ toolDefs 齐全（26 工具）", () => {
+  it("systemSections 齐全（10 段 recipe 序，tool.policy/tool.guidance 在 env 前）+ toolDefs 齐全（26 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { systemSections: Array<{ id: string; kind: string }>; toolDefs: unknown[] } } }).config.agentCapability;
-    expect(cap.systemSections).toHaveLength(9);
+    expect(cap.systemSections).toHaveLength(10);
     expect(cap.systemSections.map((s) => s.id)).toEqual([
       "novel.identity",
       "novel.system",
@@ -24,12 +24,13 @@ describe("buildNovelAgent 组装", () => {
       "novel.actions",
       "novel.communication",
       "core.runtime.protocol",
+      "tool.policy",
+      "tool.guidance",
       "core.environment",
       "novel.global_constraints",
-      "tool.guidance",
     ]);
     expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(6);
-    expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(3);
+    expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(4);
     expect(cap.toolDefs).toHaveLength(26);
   });
 

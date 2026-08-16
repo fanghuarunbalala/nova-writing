@@ -32,7 +32,7 @@ export const NOVEL_EXPLORER_TOOL_NAMES: readonly string[] = Object.freeze([
 /**
  * novel_explorer 声明式定义（label/description 供 Agent 工具描述渲染——中文）。
  * recipe 序：protocol → context.reliability → completion.contract → todo.guidance
- * → novel.explorer → tool.guidance(dynamic 收尾)。
+ * → novel.explorer → tool.policy(dynamic) → tool.guidance(dynamic 收尾)。
  */
 export const novelExplorerAgentDefinition = new AgentDefinition({
   agentType: "novel_explorer",
@@ -45,6 +45,7 @@ export const novelExplorerAgentDefinition = new AgentDefinition({
     new PromptSectionItem("completion.contract"),
     new PromptSectionItem("todo.guidance"),
     new PromptSectionItem("novel.explorer"),
+    new PromptSectionItem("tool.policy"),
     new PromptSectionItem("tool.guidance"),
   ]),
   tools: new AgentToolPolicy({

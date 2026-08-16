@@ -18,9 +18,7 @@ export const coreRuntimeProtocolSection: PromptSection = {
   label: "Core Runtime Protocol",
   render: () =>
     [
-      "Operate through the provided Conversation input, event, context, and Tool protocols.",
-      "Do not claim that an external action or persisted change occurred unless the Runtime or a Tool confirms it.",
-      "Treat cancellation, approval, and Tool failures as authoritative Runtime state.",
+
     ].join("\n"),
 };
 
@@ -32,9 +30,7 @@ export const completionContractSection: PromptSection = {
   label: "Completion Contract",
   render: () =>
     [
-      "Complete the current objective before declaring success.",
-      "Distinguish completed work from proposals, pending approval, and unavailable capabilities.",
-      "Conclude with the result and any concrete next action the user must take.",
+     
     ].join("\n"),
 };
 
@@ -46,9 +42,7 @@ export const contextReliabilitySection: PromptSection = {
   label: "Context Reliability",
   render: () =>
     [
-      "Treat current Runtime state and Tool results as more authoritative than remembered earlier text.",
-      "Do not invent missing persisted state, Tool results, configuration, or user decisions.",
-      "When context is incomplete, state the uncertainty and obtain the missing information through available capabilities.",
+   
     ].join("\n"),
 };
 
@@ -60,11 +54,10 @@ export const conversationBehaviorSection: PromptSection = {
   label: "Conversation Behavior",
   render: () =>
     [
-      "Collaborate with the user, preserve their intent, and make reasonable progress without unnecessary questions.",
-      "Present important alternatives clearly when the user's creative judgment is required.",
-      "Keep responses focused on the current Conversation objective.",
+    
     ].join("\n"),
 };
+
 
 /** Todo 指导段（todo.guidance） */
 export const todoGuidanceSection: PromptSection = {
@@ -80,23 +73,51 @@ export const todoGuidanceSection: PromptSection = {
     ].join("\n"),
 };
 
-/** 工具指导段（tool.guidance）：动态列出可用工具（只消费 ctx，忽略动态输入） */
-export const toolGuidanceSection: PromptSection = {
+/**
+ * 工具策略段（tool.policy）：渲染 `# Using Tools` 标题 + 可用工具名单行，
+ * 随后每个带 promptDetail.policy 的工具原样输出一行（内容由 policy 自定，渲染层零包装）。
+ * 依赖当前 agent 的 toolDefs（ctx.toolSchemes），只消费 ctx。
+ */
+export const toolPolicySection: PromptSection = {
   kind: "dynamic",
-  id: "tool.guidance",
+  id: "tool.policy",
   version: "1.0.0",
-  label: "Tool Guidance",
+  label: "Tool Policy",
   renderDynamic: (_input, ctx: ReadonlyLoopContext) => {
     if (ctx.toolSchemes.length === 0) {
       return "No Tools are available in this Agent Manifest. Do not simulate Tool execution.";
     }
-    return [
-      "Available Tools:",
-      ...ctx.toolSchemes.map(
-        (tool) => `- ${tool.name}${tool.description ? `: ${tool.description.split("\n")[0]}` : ""}`,
-      ),
-      "Use only the listed Tools and follow each Tool schema exactly.",
-    ].join("\n");
+    const lines = [
+      "# Using Tools",
+      `- available tools: ${ctx.toolSchemes.map((tool) => tool.name).join(", ")};`,
+    ];
+    for (const tool of ctx.toolSchemes) {
+      const policy = tool.promptDetail?.policy?.trim();
+      if (policy !== undefined && policy.length > 0) {
+        lines.push(policy);
+      }
+    }
+    return lines.join("\n");
+  },
+};
+
+/**
+ * 工具指导段（tool.guidance）：每个注册工具的 promptDetail.guidance 原样输出
+ * 一整段（标题与内容均由 guidance 文本自定），段间空行分隔；全空返回空串（整段省略）。
+ * 依赖当前 agent 的 toolDefs（ctx.toolSchemes），只消费 ctx。
+ */
+export const toolGuidanceSection: PromptSection = {
+  kind: "dynamic",
+  id: "tool.guidance",
+  version: "2.0.0",
+  label: "Tool Guidance",
+  renderDynamic: (_input, ctx: ReadonlyLoopContext) => {
+    const blocks = ctx.toolSchemes
+      .map((tool) => tool.promptDetail?.guidance?.trim())
+      .filter(
+        (block): block is string => block !== undefined && block.length > 0,
+      );
+    return blocks.join("\n\n");
   },
 };
 

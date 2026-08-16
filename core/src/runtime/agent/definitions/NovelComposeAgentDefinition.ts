@@ -35,7 +35,7 @@ export const NOVEL_COMPOSE_TOOL_NAMES: readonly string[] = Object.freeze([
  * recipe 序（explorer 框架 + legacy compose 四段）：
  * protocol → context.reliability → completion.contract → todo.guidance →
  * novel.compose.identity → novel.compose.system → novel.compose.process →
- * novel.compose.reporting → tool.guidance(dynamic 收尾)。
+ * novel.compose.reporting → tool.policy(dynamic) → tool.guidance(dynamic 收尾)。
  */
 export const novelComposeAgentDefinition = new AgentDefinition({
   agentType: "novel_compose",
@@ -52,6 +52,7 @@ export const novelComposeAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.compose.system"),
     new PromptSectionItem("novel.compose.process"),
     new PromptSectionItem("novel.compose.reporting"),
+    new PromptSectionItem("tool.policy"),
     new PromptSectionItem("tool.guidance"),
   ]),
   tools: new AgentToolPolicy({

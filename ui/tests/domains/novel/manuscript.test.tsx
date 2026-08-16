@@ -63,6 +63,8 @@ const allParagraphs: readonly Paragraph[] = [
 interface ManuscriptApiOverrides {
   readonly publication?: Partial<NovelApiClient["novel"]["publication"]>;
   readonly paragraphs?: Partial<NovelApiClient["novel"]["paragraphs"]>;
+  readonly mutate?: NovelApiClient["novel"]["mutate"];
+  readonly mutateBatch?: NovelApiClient["novel"]["mutateBatch"];
 }
 
 function buildApi(overrides: ManuscriptApiOverrides = {}): NovelApiClient {
@@ -73,6 +75,13 @@ function buildApi(overrides: ManuscriptApiOverrides = {}): NovelApiClient {
       outline: {} as never,
       characters: {} as never,
       locations: {} as never,
+      // 裸 mutate 在 insertParagraph 新路径中不应被触达（stale 须整批回滚而非留孤儿）
+      mutate:
+        overrides.mutate ??
+        (vi.fn(async () => {
+          throw new Error("unexpected bare mutate");
+        }) as never),
+      mutateBatch: overrides.mutateBatch ?? (vi.fn(async () => []) as never),
       paragraphs: {
         list: vi.fn(async () => [...allParagraphs]),
         get: vi.fn(async () => undefined),
@@ -233,6 +242,71 @@ describe("ManuscriptStructureStore", () => {
     await store.loadWorkspace("w1");
     expect(store.getSnapshot().phase).toBe("error");
     expect(store.getSnapshot().error?.retryable).toBe(true);
+  });
+
+  it("insertParagraph: 插段 + 追加章选择合并为单个 mutateBatch（客户端预生成 id，无裸 mutate）", async () => {
+    const mutateBatch = vi.fn(async () => [
+      { version: 1, changeId: "ignored", entity: "paragraph" },
+      { version: 2, changeId: "chapter_one", entity: "publication" },
+    ]) as unknown as NovelApiClient["novel"]["mutateBatch"];
+    const api = buildApi({ mutateBatch });
+    const store = new ManuscriptStructureStore({ api });
+    await store.loadWorkspace("w1");
+    await store.insertParagraph("chapter_one", "新段落正文。");
+
+    expect(api.novel.mutateBatch).toHaveBeenCalledTimes(1);
+    const batch = (api.novel.mutateBatch as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as Array<Record<string, unknown>>;
+    expect(batch).toHaveLength(2);
+    const [insert, update] = batch;
+    expect(insert.op).toBe("paragraph.insert");
+    expect(insert.id).toMatch(/^para_/); // 客户端预生成（两步无结果依赖，可并入单批）
+    expect(insert.text).toBe("新段落正文。");
+    expect(insert.storyUnitId).toBe("su-1"); // 挂靠章选择末段（§3-01-05）所在单元
+    expect(update.op).toBe("publication.chapter.update");
+    expect(update.baseRevision).toBe(1);
+    expect(update.patch).toEqual({
+      paragraphIds: ["§3-01-04", "§3-01-05", insert.id],
+    });
+  });
+
+  it("insertParagraph: 批 stale 整批回滚（不留孤儿段落）并重拉最新供重试", async () => {
+    const mutateBatch = vi.fn(async () => {
+      throw Object.assign(new Error("stale"), { code: "stale" });
+    }) as unknown as NovelApiClient["novel"]["mutateBatch"];
+    const api = buildApi({ mutateBatch });
+    const store = new ManuscriptStructureStore({ api });
+    await store.loadWorkspace("w1");
+    await store.insertParagraph("chapter_one", "新段落正文。");
+
+    expect(api.novel.mutateBatch).toHaveBeenCalledTimes(1); // 仅一次批调用，失败即整批回滚（无第二步裸 mutate）
+    expect(api.novel.publication.get).toHaveBeenCalledTimes(2); // stale → 自动重拉最新（stale 提示随重拉被 ready 覆盖）
+    expect(store.getSnapshot().phase).toBe("ready");
+  });
+
+  it("keeps per-unit paragraph index (incl. unpublished) and preserves selectedChapterId on reload", async () => {
+    const api = buildApi({
+      paragraphs: {
+        list: vi.fn(async () => [
+          paragraph("§3-01-04", "su-1", "0001", "第一段"),
+          paragraph("§3-01-05", "su-1", "0002", "第二段"),
+          paragraph("§3-01-06", "su-2", "0003", "第三段"),
+          paragraph("para_draft", "su-2", "0004", "挂在单元但未入选任何章的段落"),
+        ]),
+      },
+    });
+    const store = new ManuscriptStructureStore({ api });
+    await store.loadWorkspace("w1");
+    const snapshot = store.getSnapshot();
+    // 单元分组：大纲详情「单元段落」数据源（含未发布段落）
+    expect(snapshot.unitParagraphs.get("su-1")?.map((p) => p.paragraphId)).toEqual(["§3-01-04", "§3-01-05"]);
+    expect(snapshot.unitParagraphs.get("su-2")?.map((p) => p.paragraphId)).toEqual(["§3-01-06", "para_draft"]);
+    expect(snapshot.publishedParagraphIds.has("para_draft")).toBe(false); // 未入选任何章
+    expect(snapshot.publishedParagraphIds.has("§3-01-04")).toBe(true);
+    // 事件失效重载保留选中章（agent 写入不把阅读器跳回第一章）
+    store.selectChapter("chapter_two");
+    await store.loadWorkspace("w1");
+    expect(store.getSnapshot().selectedChapterId).toBe("chapter_two");
   });
 });
 

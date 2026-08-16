@@ -10,7 +10,7 @@
   "scripts": {
     "build": "pnpm --filter @novel/core build && pnpm --filter @novel/ui build && node gui/scripts/build-minimal.mjs",
     "gui:release": "pnpm --filter @novel/gui exec electron dist/minimal/main.cjs",
-    "gui:debug": "set NOVEL_LOG_LEVEL=verbose&& pnpm gui:release"
+    "gui:debug": "set NOVEL_LOG_LEVEL=verbose&& set NOVEL_DEBUG=1&& pnpm gui:release"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

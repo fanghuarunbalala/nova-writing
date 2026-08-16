@@ -5,7 +5,9 @@ import type { ProviderCall, LLMessage, ToolScheme } from "../provider/types.js";
 /**
  * ProviderCall 调试器：记录每次请求与相邻差异。
  * 输出以 conversation/agent 为单位区分（dir 由上层拼好路径），jsonl + html（默认展示），debug 开启。
- * html：初次请求展示完整 system（markdown）/tools/messages；后续展示各字段 diff。
+ * html 增量写入：构造写头部、record 逐条追加——初次请求完整展示 system（markdown）/tools/messages，
+ * 后续展示各字段 diff，会话进行中即可用浏览器打开查看（生产子进程常驻、无自然收尾时机，
+ * Windows 外部 kill 也不触发 exit 钩子，不能依赖 close 渲染）。
  */
 export class ProviderCallDebugger {
   /** 是否启用 */
@@ -14,8 +16,12 @@ export class ProviderCallDebugger {
   private readonly jsonlPath: string;
   /** html 输出路径（默认展示） */
   private readonly htmlPath: string;
-  /** 已记录请求序列 */
-  private readonly requests: ProviderCall[] = [];
+  /** 上一条请求（相邻 diff 基准；只留一条，避免常驻进程内存随请求数累积） */
+  private prev: ProviderCall | undefined;
+  /** 已记录请求序号（html 行标题用） */
+  private count = 0;
+  /** close 后 html 已闭合，不再追加行 */
+  private closed = false;
 
   /**
    * 构造 ProviderCallDebugger
@@ -27,32 +33,38 @@ export class ProviderCallDebugger {
     this.htmlPath = join(opts.dir, "provider-calls.html");
     if (this.enabled) {
       mkdirSync(opts.dir, { recursive: true });
+      // 头部整写：进程每次运行干净起步（jsonl 跨重启续 append，html 只反映本进程）
+      writeFileSync(this.htmlPath, this.renderHead());
     }
   }
 
   /**
-   * 记录一次请求（追加 jsonl；html 在 close 时渲染）
+   * 记录一次请求（追加 jsonl 行 + html 行）
    * @param call ProviderCall
    */
   record(call: ProviderCall): void {
     if (!this.enabled) return;
-    this.requests.push(call);
+    this.count += 1;
     appendFileSync(this.jsonlPath, `${JSON.stringify(call)}\n`);
-  }
-
-  /** 关闭：渲染并写最终 html */
-  close(): void {
-    if (!this.enabled) return;
-    writeFileSync(this.htmlPath, this.renderHtml());
-  }
-
-  /** 渲染 html：初次请求完整展示，后续展示相邻差异 */
-  private renderHtml(): string {
-    const rows: string[] = [];
-    for (let i = 0; i < this.requests.length; i++) {
-      const call = this.requests[i]!;
-      rows.push(i === 0 ? this.renderFirst(call) : this.renderDiff(this.requests[i - 1]!, call, i + 1));
+    if (!this.closed) {
+      const row =
+        this.prev === undefined
+          ? this.renderFirst(call)
+          : this.renderDiff(this.prev, call, this.count);
+      appendFileSync(this.htmlPath, `${row}\n`);
     }
+    this.prev = call;
+  }
+
+  /** 关闭：补 html 闭合标签（幂等；渲染已随 record 增量完成，此处仅收尾） */
+  close(): void {
+    if (!this.enabled || this.closed) return;
+    appendFileSync(this.htmlPath, "</body></html>\n");
+    this.closed = true;
+  }
+
+  /** html 头部：doctype + 样式 + 标题 */
+  private renderHead(): string {
     return `<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>Provider Calls</title>
 <style>
 :root{--bg:#ffffff;--card:#f6f8fa;--border:#d8dee4;--text:#1f2328;--muted:#57606a;--accent:#0969da;--hl:#9a6700;--add-bg:#ccffd8;--add-border:#1a7f37;--add-text:#116329;--del-bg:#ffeef0;--del-border:#cf222e;--del-text:#cf222e}
@@ -73,8 +85,7 @@ h1{color:var(--accent)} h2{font-size:1.1em} h3{margin:0 0 8px;color:var(--accent
 pre{background:#f6f8fa;padding:8px 12px;border-radius:6px;overflow-x:auto;border:1px solid var(--border)}
 </style></head><body>
 <h1>Provider Calls</h1>
-${rows.join("\n")}
-</body></html>`;
+`;
   }
 
   /** 初次请求：完整展示 system（markdown）/tools/messages */

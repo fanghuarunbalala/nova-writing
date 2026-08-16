@@ -24,6 +24,7 @@ import {
 import type { NovelHandle } from "../../novel/client/NovelHandle.js";
 import type { Logger } from "../../log/Logger.js";
 import type { LoopContextListener } from "../loop/types.js";
+import type { ProviderCallDebugger } from "../debug/ProviderCallDebugger.js";
 import type { LLMessage } from "../provider/types.js";
 import {
   ComposeModeService,
@@ -63,6 +64,8 @@ export interface NovelAgentOptions {
   resumePendingDecider?: (toolCallId: string) => Promise<"approve" | "reject" | "expired" | undefined>;
   /** 结构化日志（pino；provider 调用错误可见性） */
   logger?: Logger;
+  /** ProviderCall 调试器（debug 模式注入；记录每次请求 + 相邻差异，jsonl + html 增量） */
+  debugger?: ProviderCallDebugger;
   /** 宿主平台显示名（core.environment 动态段；缺省不渲染环境块） */
   platform?: string;
   /** 小说全局约束提供者（node 层每调用读 NOVEL.md；失败返回 undefined → 动态段占位） */
@@ -162,6 +165,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     requestApproval: opts.requestApproval,
     resumePendingDecider: opts.resumePendingDecider,
     logger: opts.logger,
+    debugger: opts.debugger,
     platform: opts.platform,
     novelConstraintsProvider: opts.novelConstraintsProvider,
     composeState,

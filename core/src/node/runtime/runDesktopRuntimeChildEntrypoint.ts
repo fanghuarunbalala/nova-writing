@@ -28,6 +28,7 @@ import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
 import { createProvider } from "../../runtime/provider/Provider.js";
 import { buildNovelAgent } from "../../runtime/agent/NovelAgent.js";
+import { ProviderCallDebugger } from "../../runtime/debug/ProviderCallDebugger.js";
 import {
   readNovelGlobalConstraintsSafe,
   NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME,
@@ -150,6 +151,11 @@ export function persistMode(storedir: string | undefined, mode: ConversationMode
 	} catch {
 		// 落盘失败忽略（重启回退默认模式）
 	}
+}
+
+/** id → 调试输出目录安全段（agentId 形如 "novel_explorer:<taskId>"，":" 在 Windows 路径非法） */
+function toDebugDirSegment(id: string): string {
+  return id.replace(/[^A-Za-z0-9._-]/g, "-");
 }
 
 /** 崩溃自曝：同步写堆栈到 runtime-child.log + 回写 stderr（父进程捕获缓冲），再按原语义退出。 */
@@ -293,6 +299,22 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	// 扫描进度草稿不覆盖 main 的执行计划；两者同为进程内内存级）
 	const todoStore = new InMemoryConversationTodoStore();
 
+	// provider-call 调试（NOVEL_DEBUG，gui:debug 经 ProcessSpawner env 透传注入）：
+	// jsonl + html 落盘到 storedir/debug/<agentId>/（无 storedir 的独立脚本/dev 回退
+	// cwd 相对 debug/<conversationId>/<agentId>/）；html 增量写入，会话进行中即可打开查看
+	const providerDebugEnabled = (process.env.NOVEL_DEBUG ?? "").trim() !== "";
+	const providerDebugBaseDir =
+		storedir !== undefined && storedir.trim() !== ""
+			? join(storedir, "debug")
+			: join("debug", toDebugDirSegment(conversationId));
+	const createCallDebugger = providerDebugEnabled
+		? (agentId: string) =>
+				new ProviderCallDebugger({
+					enabled: true,
+					dir: join(providerDebugBaseDir, toDebugDirSegment(agentId)),
+				})
+		: undefined;
+
 	// subagent 任务编排：builder 每任务新建 provider（流式累积状态不可跨 loop 共享）
 	const subagentRuntime = new SubagentRuntime({
 		sampling,
@@ -305,6 +327,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 					todoStore,
 					conversationId,
 					agentId,
+					debugger: createCallDebugger?.(agentId),
 				}),
 			novel_compose: (agentId) =>
 				buildNovelComposeAgent({
@@ -314,6 +337,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 					todoStore,
 					conversationId,
 					agentId,
+					debugger: createCallDebugger?.(agentId),
 				}),
 		},
 	});
@@ -329,6 +353,10 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 					level: process.env.NOVEL_LOG_LEVEL === "verbose" ? "debug" : "info",
 				})
 			: undefined;
+	// debug 开启提示：定位 provider-calls.{jsonl,html}（main 与 subagent 同基目录，按 agentId 分目录）
+	if (providerDebugEnabled) {
+		logger?.info("child.provider_debug", { baseDir: providerDebugBaseDir });
+	}
 
 	// ① compose 状态与服务：状态实例先 hydrate（state.jsonl 重放）再装配——
 	// 顺序保证：nudge 策略构造（buildNovelAgent 内）时 latch 已 seed（重启不误发上升沿）
@@ -378,6 +406,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
 		resumePendingDecider,
 		logger,
+		debugger: createCallDebugger?.("main"),
 		subagent: { spawner: subagentRuntime },
 		// 动态段输入：workdir/modelId 由 LoopContext 自组装（workspace /
 		// run.sampling.model）；宿主只注入平台常量 + 每调用读 NOVEL.md

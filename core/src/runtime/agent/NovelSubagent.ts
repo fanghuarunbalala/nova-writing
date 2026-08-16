@@ -15,6 +15,7 @@ import {
 } from "../tool/groups/NovelToolGroups.js";
 import type { NovelHandle } from "../../novel/client/NovelHandle.js";
 import type { ConversationTodoStore } from "../todo/TodoProtocol.js";
+import type { ProviderCallDebugger } from "../debug/ProviderCallDebugger.js";
 
 /** novel 域 subagent 装配选项（explorer/compose 同构） */
 export interface NovelSubagentOptions {
@@ -30,6 +31,8 @@ export interface NovelSubagentOptions {
   conversationId: string;
   /** agent id（事件盖章；runtime 传 <agentType>:<taskId>，非 "main"） */
   agentId: string;
+  /** ProviderCall 调试器（debug 模式注入；runtime builder 每任务新建，输出目录按 agentId 区分） */
+  debugger?: ProviderCallDebugger;
 }
 
 /** buildNovelSubagent 选项 = 公共装配依赖 + 目标定义 */
@@ -63,5 +66,6 @@ export function buildNovelSubagent(opts: BuildNovelSubagentOptions): AgentLoop {
     toolDispatcher: new MapToolDispatcher(capability.toolDefs),
     conversationId: opts.conversationId,
     agentId: opts.agentId,
+    debugger: opts.debugger,
   });
 }

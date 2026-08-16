@@ -238,18 +238,11 @@ function ActiveChatSurface({
     setQueuedSends((current) => (switched ? [] : current.slice(appeared)));
   }, [conversationId, projectionUserCount]);
   const queuedCount = queuedSends.length;
-  // 提问项：pending 恒显示（时间线末尾的流内提问卡）；本挂载期间 pending 过的
-  // 已答条目保留为简约留痕（历史会话重开只显示工具行记录，避免旧答案卡沉底）。
-  const seenPendingAsksRef = useRef<Set<string>>(new Set());
-  for (const asking of askings ?? []) {
-    if (asking.status === "pending") seenPendingAsksRef.current.add(asking.requestId);
-  }
+  // 提问项：只渲染 pending 交互卡（时间线末尾）；作答后的历史留痕由投影层
+  // askRecord 项承载（tool-recorded.recorded.ask 载荷，journal 重放位置精确）。
   const askItems = useMemo(() => {
     return (askings ?? [])
-      .filter(
-        (asking) =>
-          asking.status === "pending" || seenPendingAsksRef.current.has(asking.requestId),
-      )
+      .filter((asking) => asking.status === "pending")
       .map((asking, index) => ({
         kind: "ask" as const,
         sequence: 8_000_000 + index,
@@ -286,6 +279,10 @@ function ActiveChatSurface({
     status = {
       phase: "waiting",
       queuedCount,
+      // 纯提问挂起显示「等待作答」（提问卡在流内，无弹窗可唤起）；含审批则维持可点胶囊
+      ...(pendingAskingCount > 0 && pendingApprovalCount === 0
+        ? { waitingLabel: "等待作答" }
+        : {}),
       ...(pendingApprovalCount > 0 && onSummonApproval !== undefined
         ? { onWaitingClick: () => onSummonApproval() }
         : {}),

@@ -10,7 +10,7 @@
  */
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
 import type { AssistantSegment, ConversationMode, ToolTraceView } from "@novel/core/client";
-import type { AskingQueueItem } from "@novel/core";
+import type { AskQuestionSpec, AskingQueueItem } from "@novel/core";
 
 export type { ToolTraceView, AssistantSegment };
 
@@ -65,6 +65,15 @@ export type ConversationTimelineItem =
       readonly kind: "ask";
       readonly sequence: number;
       readonly asking: AskingQueueItem;
+    }
+  | {
+      /** 提问留影项（tool-recorded.recorded.ask 载荷派生；journal 重放同路径，
+       *  历史位置精确——重开会话后富答案卡据此重建）。 */
+      readonly kind: "askRecord";
+      readonly sequence: number;
+      readonly toolCallId: string;
+      readonly questions: readonly AskQuestionSpec[];
+      readonly result: string;
     }
   | {
       readonly kind: "design";

@@ -18,6 +18,8 @@ export interface RuntimeStatusIndicatorProps {
   readonly state: RuntimeStatusState;
   /** 提供时显示 `Ns`（如 12s）。 */
   readonly seconds?: number;
+  /** 覆盖状态文字（如纯提问挂起传「等待作答」；缺省按 state 取「正在审批」）。 */
+  readonly label?: string;
 }
 
 const LABEL: Record<RuntimeStatusState, string> = {
@@ -33,6 +35,7 @@ const STATE_ICON: Record<RuntimeStatusState, LucideIcon> = {
 export function RuntimeStatusIndicator({
   state,
   seconds,
+  label,
 }: RuntimeStatusIndicatorProps) {
   const IconComponent = STATE_ICON[state];
   return (
@@ -44,7 +47,7 @@ export function RuntimeStatusIndicator({
           <span className={styles.ink} aria-hidden="true" />
         ) : null}
       </span>
-      <span className={styles.label}>{LABEL[state]}</span>
+      <span className={styles.label}>{label ?? LABEL[state]}</span>
       {seconds !== undefined ? (
         <span className={styles.seconds}>{seconds}s</span>
       ) : null}

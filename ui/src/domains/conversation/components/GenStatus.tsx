@@ -25,9 +25,11 @@ export interface GenStatusProps {
   readonly queuedCount?: number;
   /** 审批挂起时点击状态行唤回审批弹窗（提供时 waiting 升级为可点胶囊） */
   readonly onWaitingClick?: () => void;
+  /** waiting 态文字覆盖（纯提问挂起传「等待作答」；缺省「正在审批」） */
+  readonly waitingLabel?: string;
 }
 
-export function GenStatus({ phase, error, onRetry, queuedCount, onWaitingClick }: GenStatusProps) {
+export function GenStatus({ phase, error, onRetry, queuedCount, onWaitingClick, waitingLabel }: GenStatusProps) {
   const live = phase === "generating";
   const startRef = useRef<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -93,7 +95,11 @@ export function GenStatus({ phase, error, onRetry, queuedCount, onWaitingClick }
 
   return (
     <div className={styles.status} role="status">
-      <RuntimeStatusIndicator state={phase} seconds={live ? elapsed : undefined} />
+      <RuntimeStatusIndicator
+        state={phase}
+        seconds={live ? elapsed : undefined}
+        label={phase === "waiting" ? waitingLabel : undefined}
+      />
       {queuedCount !== undefined && queuedCount > 0 ? (
         <span className={styles.queued}>· 排队中 {queuedCount} 条</span>
       ) : null}

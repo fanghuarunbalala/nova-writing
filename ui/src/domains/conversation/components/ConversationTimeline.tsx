@@ -18,6 +18,7 @@ import { DesignCard } from "./DesignCard.js";
 import { QueuedUserMessage } from "./QueuedUserMessage.js";
 import { UserMessage } from "./UserMessage.js";
 import { AskQuestionCard } from "../../asking/components/AskQuestionCard.js";
+import { AskRecordCard } from "../../asking/components/AskRecordCard.js";
 import styles from "./ConversationTimeline.module.css";
 
 export interface ConversationTimelineProps {
@@ -250,6 +251,14 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
         />
       ) : (
         <AskQuestionCard asking={item.asking} onResolve={() => {}} onSkip={() => {}} />
+      );
+    case "askRecord":
+      return (
+        <AskRecordCard
+          toolCallId={item.toolCallId}
+          questions={item.questions}
+          result={item.result}
+        />
       );
   }
 }

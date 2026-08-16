@@ -312,6 +312,30 @@ export function ApplicationShell({
     });
   }, [approvalSnapshot, domainStores.notifications]);
 
+  // 通知中心数据源（3/3）提问聚合：全局 pending 数（不限活动会话）→ 通知条目；
+  // 计数增长才置未读，归零移除（与审批聚合同款节流语义）。
+  const prevPendingAskTotal = useRef(0);
+  useEffect(() => {
+    const pending = askingSnapshot.askings.filter((item) => item.status === "pending");
+    const notifications = domainStores.notifications;
+    if (pending.length === 0) {
+      prevPendingAskTotal.current = 0;
+      notifications.remove("askings");
+      return;
+    }
+    const grew = pending.length > prevPendingAskTotal.current;
+    prevPendingAskTotal.current = pending.length;
+    notifications.upsert({
+      id: "askings",
+      type: "asking",
+      title: `作者待作答 · ${pending.length} 组提问`,
+      desc: `「${pending[0]?.questions[0]?.header ?? "—"}」等 ${pending[0]?.questions.length ?? 0} 问 · 在对话流内作答`,
+      createdAt: Date.now(),
+      read: !grew,
+      goto: { view: "chat" },
+    });
+  }, [askingSnapshot, domainStores.notifications]);
+
   // 会话首句派生标题：活动会话首条用户消息到达且目录项仍为自动标题时，
   // 更新侧栏/标题栏显示（显式改名不覆盖；重启恢复由 core scanCatalog 兜底）。
   useEffect(() => {

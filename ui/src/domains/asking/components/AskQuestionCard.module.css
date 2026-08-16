@@ -1,0 +1,482 @@
+/* AskQuestionCard：时间线内提问卡（token 全走 tokens.css；形态对齐 ask-user-question-demo.html） */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  max-width: 94%;
+  border: 1px solid color-mix(in oklab, var(--color-warn) 36%, var(--color-border-strong));
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.done {
+  border-color: var(--color-border-strong);
+}
+
+/* ---- 头部 ---- */
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-9px);
+  padding: var(--space-10px) var(--space-14px);
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in oklab, var(--color-surface) 82%, transparent);
+}
+
+.headIcon {
+  display: inline-flex;
+  color: var(--color-warn);
+}
+
+.done .headIcon {
+  color: var(--color-success);
+}
+
+.head b {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+}
+
+.count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-10);
+  font-weight: var(--fw-bold);
+  color: var(--color-warn);
+  background: var(--color-warn-bg);
+  padding: 1px var(--space-8px);
+  border-radius: var(--radius-pill);
+}
+
+.countDone {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.hint {
+  font-size: var(--fs-10);
+  color: var(--color-faint);
+}
+
+/* ---- 问题条（折叠头） ---- */
+.item + .item {
+  border-top: 1px solid var(--color-border);
+}
+
+.itemBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-9px);
+  width: 100%;
+  padding: var(--space-9px) var(--space-14px);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.itemBar:hover {
+  background: var(--color-surface-2);
+}
+
+.itemPending .itemBar {
+  background: color-mix(in oklab, var(--color-warn) 4%, transparent);
+}
+
+.itemProcessed .itemBar {
+  cursor: default;
+}
+
+.itemProcessed .itemBar:hover {
+  background: color-mix(in oklab, var(--color-surface-2) 42%, var(--color-surface));
+}
+
+.chip {
+  flex: none;
+  font-size: var(--fs-10);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  padding: 1px var(--space-8px);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-11);
+  color: var(--color-accent-ink);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 22%, transparent);
+  white-space: nowrap;
+}
+
+.itemText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8px);
+}
+
+.itemText b {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag {
+  flex: none;
+  font-size: var(--fs-10);
+  color: var(--color-faint);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-7px);
+  white-space: nowrap;
+}
+
+.pill {
+  flex: none;
+  font-size: var(--fs-10);
+  font-weight: var(--fw-bold);
+  border-radius: var(--radius-pill);
+  padding: 1px var(--space-7px);
+}
+
+.pillPending {
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+}
+
+.pillChosen {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+
+.chev {
+  color: var(--color-faint);
+  display: grid;
+  place-items: center;
+  transition: transform 0.18s var(--ease-out);
+}
+
+.itemOpen .chev {
+  transform: rotate(180deg);
+}
+
+/* ---- 折叠体 ---- */
+.itemBody {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s var(--ease-out);
+}
+
+.itemBody[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+
+.itemBodyInner {
+  overflow: hidden;
+}
+
+.itemBodyPad {
+  padding: var(--space-1) var(--space-4) var(--space-14px) var(--space-34px);
+}
+
+/* ---- 问题标题（展开体首行：完整题目，与折叠条的截断摘要区分） ---- */
+.qTitle {
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-semibold);
+  line-height: 1.55;
+  margin: var(--space-2px) 0 var(--space-10px);
+}
+
+/* ---- context 引导块（markdown） ---- */
+.context {
+  font-size: var(--fs-12-5);
+  line-height: 1.75;
+  color: var(--color-muted);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-left: var(--space-3px) solid var(--color-accent-45);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: var(--space-8px) var(--space-3) var(--space-9px);
+  margin-bottom: var(--space-9px);
+}
+
+.context p {
+  margin: 0 0 var(--space-6px);
+}
+
+.context p:last-child {
+  margin-bottom: 0;
+}
+
+.context ul,
+.context ol {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-18px);
+}
+
+.context li {
+  margin: var(--space-2px) 0;
+}
+
+.context li::marker {
+  color: var(--color-accent-45);
+}
+
+.context strong,
+.context b {
+  color: var(--color-fg);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- 选项 ---- */
+.optList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6px);
+}
+
+.opt {
+  display: grid;
+  grid-template-columns: var(--space-14px) 1fr;
+  gap: var(--space-2px) var(--space-9px);
+  align-items: start;
+  padding: var(--space-8px) var(--space-11px);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.opt:hover {
+  border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-border-strong));
+}
+
+.optSelected {
+  border-color: var(--color-accent);
+  background: var(--color-accent-9);
+  box-shadow: inset 0 0 0 1px var(--color-accent-45);
+}
+
+.optMark {
+  width: var(--space-14px);
+  height: var(--space-14px);
+  margin-top: var(--space-3px);
+  border: var(--space-1-5px) solid var(--color-border-strong);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.optMulti .optMark {
+  border-radius: var(--radius-4px);
+}
+
+.optSelected .optMark {
+  border-color: var(--color-accent);
+}
+
+.optSelected .optMark::after {
+  content: "";
+  width: var(--space-6px);
+  height: var(--space-6px);
+  border-radius: 50%;
+  background: linear-gradient(105deg, var(--color-orange), var(--color-accent), var(--color-red));
+}
+
+.optMulti.optSelected .optMark::after {
+  border-radius: 1px;
+}
+
+.optLabel {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-medium);
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-7px);
+  flex-wrap: wrap;
+}
+
+.recBadge {
+  font-size: var(--fs-10);
+  font-weight: var(--fw-semibold);
+  color: var(--color-warn);
+  background: var(--color-warn-bg);
+  border: 1px solid color-mix(in oklab, var(--color-warn) 26%, transparent);
+  padding: 0 var(--space-7px);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+.optDesc {
+  grid-column: 2;
+  font-size: var(--fs-12);
+  line-height: 1.65;
+  color: var(--color-muted);
+}
+
+.optDesc p {
+  margin: 0;
+}
+
+.optDesc strong,
+.optDesc b {
+  color: var(--color-fg);
+  font-weight: var(--fw-medium);
+}
+
+.otherInput {
+  grid-column: 1 / -1;
+  margin-top: var(--space-1);
+  font: inherit;
+  font-size: var(--fs-12-5);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-6px) var(--space-9px);
+  width: 100%;
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.otherInput:focus {
+  border-color: var(--color-accent);
+}
+
+.otherInput::placeholder {
+  color: var(--color-faint);
+}
+
+/* ---- 开放填空 ---- */
+.openInput {
+  font-family: var(--font-body);
+  font-size: var(--fs-13);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-9px) var(--space-11px);
+  width: 100%;
+  min-height: calc(var(--space-18px) * 4);
+  resize: vertical;
+  outline: none;
+  line-height: 1.7;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.openInput:focus {
+  border-color: var(--color-accent);
+}
+
+.openInput::placeholder {
+  color: var(--color-faint);
+  font-family: var(--font-ui);
+  font-size: var(--fs-12);
+}
+
+/* ---- 操作区 ---- */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8px);
+  flex-wrap: wrap;
+  padding: var(--space-11px) var(--space-14px);
+  border-top: 1px solid var(--color-border);
+}
+
+.actionHint {
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  margin-right: auto;
+}
+
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6px);
+  padding: var(--space-5px) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  color: var(--color-on-accent);
+  background: linear-gradient(105deg, var(--color-orange), var(--color-accent), var(--color-red));
+  box-shadow: 0 var(--space-2px) var(--space-8px) var(--color-accent-45);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.btnPrimary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 var(--space-1) var(--space-3) var(--color-accent-45);
+}
+
+.btnGhost {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6px);
+  padding: var(--space-5px) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-muted);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.btnGhost:hover {
+  background: var(--color-accent-8-transparent);
+  color: var(--color-accent-ink);
+}
+
+/* ---- 留痕记录（已答态：整卡只渲染「题目 → 答案」行） ---- */
+.recordList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6px);
+  padding: var(--space-10px) var(--space-14px) var(--space-3);
+}
+
+.recordRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8px);
+  flex-wrap: wrap;
+  font-size: var(--fs-12-5);
+  line-height: 1.6;
+}
+
+.recordQ {
+  color: var(--color-muted);
+  min-width: 0;
+}
+
+.recordArrow {
+  flex: none;
+  color: var(--color-faint);
+}
+
+.recordA {
+  color: var(--color-fg);
+  font-weight: var(--fw-medium);
+}
+
+.recordSelf {
+  font-family: var(--font-body);
+}
+
+.recordQuiet {
+  color: var(--color-muted);
+  font-weight: var(--fw-regular);
+}

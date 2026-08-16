@@ -10,6 +10,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Bell,
   Check,
+  CircleHelp,
   FolderOpen,
   MapPin,
   Settings,
@@ -28,11 +29,12 @@ import type {
 } from "../../domains/notification/index.js";
 import styles from "./NotificationBell.module.css";
 
-/** 类型 → [图标, 色调]（demo NOTIF_META：approval/writing/profile/done/system） */
+/** 类型 → [图标, 色调]（demo NOTIF_META + asking 提问待答） */
 const TYPE_META: Readonly<
   Record<NotificationType, { readonly icon: LucideIcon; readonly tone: string | undefined }>
 > = {
   approval: { icon: ShieldCheck, tone: styles.toneWarn },
+  asking: { icon: CircleHelp, tone: styles.toneInfo },
   writing: { icon: TriangleAlert, tone: styles.toneDanger },
   profile: { icon: MapPin, tone: styles.toneInfo },
   done: { icon: Check, tone: styles.toneSuccess },

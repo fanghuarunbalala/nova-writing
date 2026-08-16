@@ -9,8 +9,8 @@
 import { ExternalStore } from "../../../shared/state/ExternalStore.js";
 import type { MainViewState } from "../../../shared/routing/MainViewRouter.js";
 
-/** 通知类型（demo NOTIF_META：approval/writing/profile/done/system） */
-export type NotificationType = "approval" | "writing" | "profile" | "done" | "system";
+/** 通知类型（demo NOTIF_META：approval/writing/profile/done/system + asking 提问） */
+export type NotificationType = "approval" | "asking" | "writing" | "profile" | "done" | "system";
 
 export interface NotificationItem {
   readonly id: string;

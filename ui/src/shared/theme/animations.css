@@ -152,6 +152,21 @@
   }
 }
 
+/* 内容目录定位高亮（ContentDirectory 行；实体标签点击后一次性闪烁） */
+@keyframes dir-flash {
+  0% {
+    background: color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-accent) 45%, transparent);
+  }
+  60% {
+    background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
 /* 通用动画 utility class（全局类；TSX 可直接挂 class 使用） */
 .anim-grad-flow { animation: grad-flow 7s ease-in-out infinite; }
 .anim-view-in   { animation: view-in var(--duration-base) var(--ease-out); }

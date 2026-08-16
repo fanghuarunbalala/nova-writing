@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { InspectorRouter } from "../../src/shared/routing/InspectorRouter.js";
 import { InspectorHost } from "../../src/shell/inspector/InspectorHost.js";
+import { ContentDirectoryStore } from "../../src/shell/inspector/ContentDirectoryStore.js";
 import { ConversationCatalogStore } from "../../src/domains/conversation/store/ConversationCatalogStore.js";
 import { StoryOutlineTreeStore } from "../../src/domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { CharacterStore } from "../../src/domains/novel/character/store/CharacterStore.js";
@@ -51,7 +52,16 @@ async function makeStores() {
   await outlineTree.loadWorkspace("w1");
   await characters.loadWorkspace("w1");
   await locations.loadWorkspace("w1");
-  return { conversationCatalog, outlineTree, characters, locations };
+  return {
+    conversationCatalog,
+    outlineTree,
+    characters,
+    locations,
+    contentDirectory: new ContentDirectoryStore(),
+    onSelectOutlineUnit: vi.fn(),
+    onOpenCharacter: vi.fn(),
+    onOpenLocation: vi.fn(),
+  };
 }
 
 describe("InspectorHost", () => {
@@ -85,5 +95,16 @@ describe("InspectorHost", () => {
     router.transition({ kind: "conversation", conversationId: "conv-a" });
     render(<InspectorHost inspectorRouter={router} {...stores} />);
     expect(screen.getByRole("heading", { name: "对话元信息" })).toBeInTheDocument();
+  });
+
+  it("renders content directory for directory route (chat 默认态)", async () => {
+    const stores = await makeStores();
+    const router = new InspectorRouter();
+    router.transition({ kind: "directory" });
+    render(<InspectorHost inspectorRouter={router} {...stores} />);
+    expect(screen.getByRole("heading", { name: "内容目录" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /大纲/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /人物/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /地点/ })).toBeInTheDocument();
   });
 });

@@ -223,6 +223,7 @@
   --anim-status-pulse:    status-pulse;
   --anim-cnt-pop:         cnt-pop;
   --anim-pending-glow:    pending-glow;
+  --anim-dir-flash:       dir-flash;
 
   /* 缓动 */
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);

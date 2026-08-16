@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
 import { useExternalStore } from "../shared/state/useExternalStore.js";
-import { useMainView } from "../shared/routing/hooks.js";
+import { useMainView, useInspectorRoute } from "../shared/routing/hooks.js";
 import type { FrontendPlatform } from "../platform/FrontendPlatform.js";
 import { useActiveConversationBinding, useFirstUserMessage } from "../domains/conversation/hooks/useActiveConversationSession.js";
 import { createApprovalEntityResolver } from "../domains/approval/approvalEntityResolver.js";
@@ -46,6 +46,7 @@ import type { NovelUiExtensions } from "../extensions/NovelUiExtensions.js";
 import type { ConversationCardRendererRegistry } from "../domains/conversation/cards/ConversationCardRendererRegistry.js";
 import type { InspectorRendererRegistry } from "./inspector/InspectorRendererRegistry.js";
 import { InspectorHost } from "./inspector/InspectorHost.js";
+import { ContentDirectoryStore } from "./inspector/ContentDirectoryStore.js";
 import { MainArea } from "./main/MainArea.js";
 import type { ContentTab } from "./main/contentTab.js";
 import { OverlaysHost } from "./overlays/OverlaysHost.js";
@@ -126,6 +127,9 @@ export function ApplicationShell({
   );
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
   const mainView = useMainView(mainViewRouter);
+  const inspectorRoute = useInspectorRoute(inspectorRouter);
+  // 右栏内容目录（demo 方案 A v0.8）：tab / 手风琴 / 实体标签定位
+  const contentDirectory = useMemo(() => new ContentDirectoryStore(), []);
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
   // 档案/计划选区（PRD CV/PN）：人物·地点详情在内容视图主区渲染，
   // 选区状态由壳持有（目录在侧栏、详情在主区，二者为兄弟节点）。
@@ -318,6 +322,30 @@ export function ApplicationShell({
     void location.loadWorkspace(workspaceId);
   }, [domainStores, workspaceId]);
 
+  // 进入对话视图默认展开内容目录（首次挂载同样生效）；用户手动收起后
+  // 本次停留内不再强制展开（离开再回来才恢复默认）。
+  const prevViewStateRef = useRef<MainViewState | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevViewStateRef.current;
+    prevViewStateRef.current = mainView.state;
+    if (
+      mainView.state === "chat" &&
+      prev !== "chat" &&
+      inspectorRouter.getSnapshot().state.kind === "closed"
+    ) {
+      inspectorRouter.transition({ kind: "directory" });
+    }
+  }, [mainView.state, inspectorRouter]);
+
+  // 对话顶条「内容目录」开关：directory ↔ closed（原地切换，不重渲染对话流）
+  const handleToggleDirectory = useCallback(() => {
+    if (inspectorRouter.getSnapshot().state.kind === "directory") {
+      inspectorRouter.close();
+    } else {
+      inspectorRouter.transition({ kind: "directory" });
+    }
+  }, [inspectorRouter]);
+
   const handleCreateConversation = useCallback(() => {
     void domainStores.conversationCatalog.createConversation();
   }, [domainStores]);
@@ -407,11 +435,19 @@ export function ApplicationShell({
       }
       switch (reference.refKind) {
         case "character":
-          handleSelectCharacter(reference.id);
+        case "location": {
+          // 对话视图：实体标签定位优先（demo 方案 A）——右栏目录切 tab +
+          // 展开详情卡 + 滚动高亮；详情卡「打开完整档案」再跳内容视图。
+          if (mainView.state === "chat") {
+            contentDirectory.locate(reference.refKind, reference.id);
+            inspectorRouter.transition({ kind: "directory" });
+          } else if (reference.refKind === "character") {
+            handleSelectCharacter(reference.id);
+          } else {
+            handleSelectLocation(reference.id);
+          }
           break;
-        case "location":
-          handleSelectLocation(reference.id);
-          break;
+        }
         case "outline":
           handleSelectOutlineUnit(reference.id);
           break;
@@ -433,7 +469,10 @@ export function ApplicationShell({
       handleSelectCharacter,
       handleSelectLocation,
       handleSelectOutlineUnit,
+      mainView,
       mainViewRouter,
+      contentDirectory,
+      inspectorRouter,
       resolveReference,
       toastStore,
     ],
@@ -557,6 +596,8 @@ export function ApplicationShell({
           }
           approvalModalOpen={approvalModalSnapshot.open}
           onSummonApproval={handleSummonApproval}
+          directoryOpen={inspectorRoute.state.kind !== "closed"}
+          onToggleDirectory={handleToggleDirectory}
           mainViewRouter={mainViewRouter}
           conversationCatalog={domainStores.conversationCatalog}
           outlineTree={domainStores.storyOutlineTree}
@@ -586,9 +627,13 @@ export function ApplicationShell({
           inspectorRouter={inspectorRouter}
           visible={mainView.state === "chat"}
           conversationCatalog={domainStores.conversationCatalog}
+          contentDirectory={contentDirectory}
           outlineTree={domainStores.storyOutlineTree}
           characters={domainStores.character}
           locations={domainStores.location}
+          onSelectOutlineUnit={handleSelectOutlineUnit}
+          onOpenCharacter={handleSelectCharacter}
+          onOpenLocation={handleSelectLocation}
         />
       </div>
       <OverlaysHost toastStore={toastStore}>

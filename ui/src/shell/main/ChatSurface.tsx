@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ConversationMode } from "@novel/core";
 import { debugLog, type ConversationProjectionErrorSnapshot } from "@novel/core/client";
-import { Info, MoreHorizontal, Pencil, Pin, Trash2 } from "lucide-react";
+import { Info, ListTree, MoreHorizontal, Pencil, Pin, Trash2 } from "lucide-react";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
 import {
@@ -45,6 +45,10 @@ export interface ChatSurfaceProps {
   readonly approvalModalOpen?: boolean;
   /** 唤起审批弹窗（挂起提示条 / 状态行 / 时间线系统行入口；可带 requestId 定位组） */
   readonly onSummonApproval?: (requestId?: string) => void;
+  /** 右栏内容目录开合（顶条开关按钮点亮态） */
+  readonly directoryOpen?: boolean;
+  /** 顶条「内容目录」开关（directory ↔ closed） */
+  readonly onToggleDirectory?: () => void;
   /** 打开会话信息面板（inspector conversation 路由；PRD 决议 1） */
   readonly onOpenConversationInfo?: (conversationId: string) => void;
   readonly onReferenceClick?: (reference: MessageReference) => void;
@@ -59,6 +63,8 @@ export function ChatSurface({
   pendingApprovalCount = 0,
   approvalModalOpen = false,
   onSummonApproval,
+  directoryOpen = true,
+  onToggleDirectory,
   onOpenConversationInfo,
   onReferenceClick,
   resolveReference,
@@ -90,6 +96,8 @@ export function ChatSurface({
       pendingApprovalCount={pendingApprovalCount}
       approvalModalOpen={approvalModalOpen}
       onSummonApproval={onSummonApproval}
+      directoryOpen={directoryOpen}
+      onToggleDirectory={onToggleDirectory}
       onReferenceClick={onReferenceClick}
       resolveReference={resolveReference}
       onNotify={onNotify}
@@ -110,6 +118,8 @@ interface ActiveChatSurfaceProps {
   readonly pendingApprovalCount: number;
   readonly approvalModalOpen: boolean;
   readonly onSummonApproval: ((requestId?: string) => void) | undefined;
+  readonly directoryOpen: boolean;
+  readonly onToggleDirectory: (() => void) | undefined;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
@@ -127,6 +137,8 @@ function ActiveChatSurface({
   pendingApprovalCount,
   approvalModalOpen,
   onSummonApproval,
+  directoryOpen,
+  onToggleDirectory,
   onReferenceClick,
   resolveReference,
   onNotify,
@@ -252,6 +264,17 @@ function ActiveChatSurface({
         sub={agentLabel}
         actions={
           <>
+            {onToggleDirectory !== undefined ? (
+              <IconButton
+                label={directoryOpen ? "收起内容目录" : "展开内容目录"}
+                size="sm"
+                className={directoryOpen ? styles.dirToggleOn : undefined}
+                aria-pressed={directoryOpen}
+                onClick={onToggleDirectory}
+              >
+                <Icon icon={ListTree} size="sm" />
+              </IconButton>
+            ) : null}
             <IconButton label={pinned ? "取消置顶" : "置顶会话"} onClick={onTogglePin}>
               <Icon icon={Pin} size="sm" />
             </IconButton>

@@ -1,0 +1,225 @@
+/**
+ * ContentDirectoryPanel 视觉（demo app-redesign-demo v0.8 右栏内容目录
+ * .segTabs/.dirRow/.rowChev/.dirDetail/.ddSec）：三 tab + 目录行 +
+ * 手风琴详情卡（左强调线 + 浅 accent 底）。
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+/* ============ 三 tab（demo .segTabs） ============ */
+.tabs {
+  flex: none;
+  display: flex;
+  gap: var(--space-5px);
+  padding: var(--space-2) var(--space-10px) var(--space-5px);
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5px);
+  padding: var(--space-5px) 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.tab:hover {
+  background: var(--color-surface-2);
+}
+
+.tabActive {
+  background: var(--color-accent-9);
+  color: var(--color-accent-ink);
+  border-color: color-mix(in oklab, var(--color-accent) 22%, transparent);
+}
+
+.tabCount {
+  font-family: var(--font-mono);
+  font-size: var(--fs-10);
+  color: var(--color-faint);
+}
+
+/* ============ 目录滚动区 ============ */
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5px) var(--space-8px) var(--space-18px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+.empty {
+  padding: var(--space-18px) var(--space-3);
+  font-size: var(--fs-12-5);
+  color: var(--color-faint);
+  text-align: center;
+}
+
+.foot {
+  margin: var(--space-10px) var(--space-6px) 0;
+  padding: var(--space-3) var(--space-10px) 0;
+  border-top: 1px dashed var(--color-border);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+  line-height: 1.7;
+}
+
+/* ============ 人物/地点目录行（demo .dirRow + .rowChev） ============ */
+.entityBlock + .entityBlock {
+  margin-top: var(--space-5px);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-5px) var(--space-8px);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--color-surface-2);
+}
+
+.row[data-active="true"] {
+  background: var(--color-accent-9);
+}
+
+/* 实体标签定位闪烁（nonce 驱动，一次性） */
+.rowFlash {
+  animation: var(--anim-dir-flash) 1.8s var(--ease-out);
+}
+
+.avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-accent-11);
+  color: var(--color-accent-ink);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-semibold);
+}
+
+.rowText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rowTitle {
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowSubtitle {
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowChev {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--color-faint);
+  transition: transform 0.18s var(--ease-out);
+}
+
+.rowChevOpen {
+  transform: rotate(90deg);
+}
+
+/* ============ 详情卡（demo .dirDetail/.ddSec/.ddGo） ============ */
+.detailCard {
+  margin: var(--space-5px) var(--space-6px) var(--space-8px) var(--space-30px);
+  padding: var(--space-10px) var(--space-14px) var(--space-11px);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 22%, var(--color-border));
+  border-left: var(--space-3px) solid color-mix(in oklab, var(--color-accent) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, color-mix(in oklab, var(--color-accent) 8%, transparent) 40%, var(--color-surface));
+  animation: var(--anim-view-in) var(--duration-fast) var(--ease-out);
+}
+
+.ddSec {
+  margin-bottom: var(--space-5px);
+  font-size: var(--fs-11);
+  line-height: 1.7;
+  color: var(--color-muted);
+}
+
+.ddLabel {
+  display: block;
+  margin-bottom: 1px;
+  font-size: var(--fs-10);
+  font-weight: var(--fw-bold);
+  color: var(--color-faint);
+  letter-spacing: 0.06em;
+}
+
+.ddChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5px);
+}
+
+.ddChip {
+  padding: 1px var(--space-6px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-faint);
+  font-size: var(--fs-10);
+}
+
+.ddGo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5px);
+  margin-top: var(--space-5px);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent-ink);
+  font: inherit;
+  font-size: var(--fs-11);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+
+.ddGo:hover {
+  text-decoration: underline;
+}

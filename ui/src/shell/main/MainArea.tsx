@@ -36,6 +36,10 @@ export interface MainAreaProps {
   readonly approvalModalOpen?: boolean;
   /** 唤起审批弹窗（挂起提示条 / 状态行 / 工具行 / 时间线系统行入口） */
   readonly onSummonApproval?: (requestId?: string) => void;
+  /** 右栏内容目录开合（对话顶条开关按钮点亮态） */
+  readonly directoryOpen?: boolean;
+  /** 对话顶条「内容目录」开关（directory ↔ closed） */
+  readonly onToggleDirectory?: () => void;
   readonly mainViewRouter: MainViewRouter;
   readonly conversationCatalog: ConversationCatalogStore;
   readonly outlineTree: StoryOutlineTreeStore;
@@ -83,6 +87,8 @@ export const MainArea = memo(function MainArea(props: MainAreaProps) {
           pendingApprovalCount={props.pendingApprovalCount ?? 0}
           approvalModalOpen={props.approvalModalOpen ?? false}
           onSummonApproval={props.onSummonApproval}
+          directoryOpen={props.directoryOpen ?? true}
+          onToggleDirectory={props.onToggleDirectory}
           onOpenConversationInfo={props.onOpenConversationInfo}
           onReferenceClick={props.onReferenceClick}
           resolveReference={props.resolveReference}

@@ -45,3 +45,10 @@
   color: var(--color-danger);
   font-size: var(--fs-13);
 }
+
+/* 对话顶条「内容目录」开关点亮态（目录展开时） */
+.dirToggleOn {
+  background: var(--color-accent-9);
+  color: var(--color-accent-ink);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-accent) 8%, transparent);
+}

@@ -239,9 +239,18 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	 * run 在 followup 时即时创建；有 journal 时同步落盘 user 消息快照后返回持久化回执。
 	 */
 	async sendUserMessage(msg: ConversationUserMessage): Promise<Receipt> {
+		const arrivedAt = Date.now();
 		await this.promotePendingMode().catch(() => undefined);
 		const run = this.loop.followup(msg.text, { sampling: this.sampling });
-		return this.journal !== undefined ? await this.journal.appendRun(run) : this.receipt(run.seq);
+		const receipt =
+			this.journal !== undefined ? await this.journal.appendRun(run) : this.receipt(run.seq);
+		// 回执延迟（debug）：流式 run 的 journal 增量写在同队列前面排队时，appendRun 会等待——
+		// 该值大 = 写队列积压（「发送后长时间无回音」的鉴别点）
+		this.logger.debug("conversation.user_message_receipt", {
+			seq: run.seq,
+			receiptMs: Date.now() - arrivedAt,
+		});
+		return receipt;
 	}
 
 	/** 发送用户命令（run lane，agent 可见）：转文本入队 */

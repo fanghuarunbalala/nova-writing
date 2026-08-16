@@ -51,6 +51,15 @@
   white-space: nowrap;
 }
 
+/* 排队中后缀（generating/waiting 行内追加）：琥珀弱强调，不与 live 渐变抢焦点 */
+.queued {
+  flex: none;
+  color: var(--color-warn);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
 /* 重试：图标按钮，danger 圆钮，hover 实心红 + 白图标 + 上浮。 */
 .failed .retry {
   flex: none;

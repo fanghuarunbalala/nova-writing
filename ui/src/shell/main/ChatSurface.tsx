@@ -6,7 +6,7 @@
  * （gui-performance-2 功能点五：流式发布只重渲染本子树，壳层零成本），
  * 发送经 sendUserMessage，时间线由 chatSurfaceMapper 映射（逐项缓存 + useMemo）。
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ConversationMode } from "@novel/core";
 import { debugLog, type ConversationProjectionErrorSnapshot } from "@novel/core/client";
 import { Info, MoreHorizontal, Pencil, Pin, Trash2 } from "lucide-react";
@@ -157,6 +157,22 @@ function ActiveChatSurface({
   const failed = projection?.state === "error";
   const runtime = useConversationRuntimeStatus(projection);
 
+  // 排队中（demo）：生成/审批进行中再发送 → 消息要等上一 run 收口才实际执行
+  // （run-start/user.message 在执行时才发射，时间线迟迟不出现新 user 项）。
+  // 本地计数即时反馈；时间线出现新 user 项（排队 run 开跑）或换会话时收口。
+  const [queuedCount, setQueuedCount] = useState(0);
+  const projectionUserCount =
+    projection?.timeline.reduce((count, item) => (item.kind === "user" ? count + 1 : count), 0) ?? 0;
+  const queuedTrackRef = useRef({ id: conversationId, userCount: projectionUserCount });
+  useEffect(() => {
+    const track = queuedTrackRef.current;
+    if (track.id === conversationId && track.userCount === projectionUserCount) return;
+    const switched = track.id !== conversationId;
+    const appeared = switched ? 0 : Math.max(0, projectionUserCount - track.userCount);
+    queuedTrackRef.current = { id: conversationId, userCount: projectionUserCount };
+    setQueuedCount((current) => (switched ? 0 : Math.max(0, current - appeared)));
+  }, [conversationId, projectionUserCount]);
+
   // 三态推导（对齐旧版优先级）：failed > waiting（待审批，CMS 队列派生）> generating。
   // thinking 态已随 loop 层丢弃 reasoning delta 移除；waiting 复用 GenStatus 沙漏+摇摆动画。
   let status: GenStatusProps | undefined;
@@ -167,9 +183,12 @@ function ActiveChatSurface({
       onRetry: () => void resume(),
     };
   } else if (pendingApprovalCount > 0) {
-    status = { phase: "waiting" };
+    status = { phase: "waiting", queuedCount };
   } else if (projection?.liveState === "generating") {
-    status = { phase: "generating" };
+    status = { phase: "generating", queuedCount };
+  } else if (queuedCount > 0) {
+    // 不在生成但仍有排队（刚收口、排队 run 即将接续）：保持可见直到 user 项出现
+    status = { phase: "waiting", queuedCount };
   }
 
   return (
@@ -241,6 +260,9 @@ function ActiveChatSurface({
         onSend={(input) => {
           // 发送失败（会话进程崩溃/超时等）必须显性展示，不吞掉
           debugLog("[renderer] onSend 触发:", input.text.slice(0, 40));
+          // 生成/审批中发送 → 立即计入「排队中」（demo：不等回执/时间线出现）
+          const queued = status?.phase === "generating" || status?.phase === "waiting";
+          if (queued) setQueuedCount((current) => current + 1);
           void sendUserMessage(input.text)
             .then((receipt) => {
               debugLog("[renderer] send resolved:", JSON.stringify(receipt));
@@ -250,6 +272,7 @@ function ActiveChatSurface({
             })
             .catch((err: unknown) => {
               debugLog("[renderer] send rejected:", err);
+              if (queued) setQueuedCount((current) => Math.max(0, current - 1));
               if (err instanceof Error && err.stack !== undefined) {
                 console.error("[renderer] stack:", err.stack.split("\n").slice(0, 6).join(" | "));
               }

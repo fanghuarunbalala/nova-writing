@@ -661,6 +661,40 @@
   }
   .msgAssistant { max-width: 94%; animation: msg-enter var(--duration-base) var(--ease-out); }
 
+  /* ============ 排队消息（幽灵项） ============
+     生成/审批中发送 → 消息不进正式时间线，以降透明度虚线气泡即时回显在末尾；
+     当前 run 收口后原地晋升为正式气泡（位置不动）。 */
+  .msgUser.ghost {
+    position: relative;
+    opacity: 0.62;
+    background: color-mix(in oklab, var(--color-surface-2) 70%, var(--color-surface));
+    border: 1px dashed color-mix(in oklab, var(--color-accent) 34%, var(--color-border-strong));
+    animation: ghost-in var(--duration-base) var(--ease-out);
+  }
+  .ghostBadge {
+    position: absolute; top: -9px; left: 10px;
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--color-warn-bg); color: var(--color-warn);
+    border: 1px solid color-mix(in oklab, var(--color-warn) 26%, transparent);
+    font-size: var(--fs-10-5); font-weight: var(--fw-semibold);
+    line-height: 1.5;
+  }
+  .ghostBadge svg { width: 10px; height: 10px; }
+  .ghostBadge .qSec { font-family: var(--font-mono); font-weight: var(--fw-regular); opacity: 0.85; }
+  .msgUser.promoted { animation: ghost-promote var(--duration-base) var(--ease-out); }
+  @keyframes ghost-in {
+    from { opacity: 0; transform: translateY(6px) scale(0.98); }
+    to { opacity: 0.62; transform: none; }
+  }
+  @keyframes ghost-promote {
+    from { opacity: 0.62; border-style: dashed; }
+    to { opacity: 1; border-style: solid; }
+  }
+  /* 状态行排队后缀（正在生成/正在审批 行内追加） */
+  .rsQueued { color: var(--color-warn); font-size: var(--fs-12); font-weight: var(--fw-semibold); }
+
   .toolLine { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; margin-top: 2px; font-size: var(--fs-12); line-height: 1.6; }
   .toolDone { color: var(--color-muted); white-space: nowrap; }
   .toolDone svg { color: var(--color-success); margin-right: 3px; vertical-align: -2px; }
@@ -1775,6 +1809,8 @@ const state = {
 };
 /* 会话内新消息（重渲染不丢失） */
 const liveMsgs = [];
+/* 排队消息（生成/审批中发送）：{ text, at, liveIdx }——幽灵项即时回显，收口后 flushQueue 晋升 */
+const queuedMsgs = [];
 const VIEWS = [
   { id: "chat", name: "对话", icon: "messageSquare" },
   { id: "content", name: "内容", icon: "bookOpen" },
@@ -2149,6 +2185,7 @@ function genStatusHTML() {
     <span class="rsIcon">${ic0(RS_ICONS[s])}${s === "generating" ? '<span class="rsInk"></span>' : ""}</span>
     <span class="rsLabel">${s === "generating" ? "正在生成" : "正在审批"}</span>
     <span class="rsSeconds" id="genSec">0s</span>
+    ${queuedMsgs.length > 0 ? `<span class="rsQueued">· 排队中 ${queuedMsgs.length} 条</span>` : ""}
   </div>`;
 }
 function ic0(path) { return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`; }
@@ -2594,7 +2631,7 @@ function renderSettings() {
   } else {
     html = `<div style="text-align:center;padding:26px 0;">
       <div class="brand" style="justify-content:center;margin-bottom:8px;"><span class="brandDot"></span><span class="brandName" style="font-size:16px;">Novel</span></div>
-      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.6<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>大纲对齐 StoryUnit 模型 · 通知中心 · 会话菜单 · 轮次分层 · 启动页与入场动画</div>
+      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.7<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>大纲对齐 StoryUnit 模型 · 通知中心 · 会话菜单 · 轮次分层 · 启动页与入场动画 · 排队回显（幽灵项）</div>
     </div>`;
   }
   $("settingsContent").innerHTML = html;
@@ -2706,6 +2743,10 @@ function renderDemoBar() {
         `<button class="dbtn" data-act="genSet" data-id="${v}" aria-pressed="${state.genState === v}">${n}</button>`).join("")}
     </div></div>
     <span class="demoDivider"></span>
+    <div class="demoGroup"><span class="lbl">排队示例</span><div class="demoBtns">
+      ${[0, 1, 2].map(n => `<button class="dbtn" data-act="queueSet" data-id="${n}" aria-pressed="${queuedMsgs.length === n}">${n === 0 ? "清空" : `排队 ${n} 条`}</button>`).join("")}
+    </div></div>
+    <span class="demoDivider"></span>
     <div class="demoGroup"><span class="lbl">面板</span><div class="demoBtns">
       <button class="dbtn" data-act="insToggle" aria-pressed="${state.approvalOpen}">审批面板</button>
       <button class="dbtn" data-act="welcomeBack">启动页</button>
@@ -2722,6 +2763,7 @@ function renderInfoPop() {
       <li><b>大纲树对齐 core 模型（StoryUnit 泛型树）</b>：saga 全书 → arc 卷 → sequence 序列 → scene 场景，可省中间层、叶必须是场景（正文段落挂叶、发布「章」从场景选段）；双状态 = 规划（idea 点子 → outlined 已成纲 → ready 可开写）+ 实现（pending 未动笔 → in-progress 写作中 → completed 已完成 / abandoned 废弃），「受阻」由 pending + blockState 推导并展示原因码与依赖；父单元进度由叶单元 rollup；场景叶可挂 <b>leaf 场景计划</b>（人物/地点绑定、事件序列、节奏拍、实体变更）。树形目录任意层级嵌套 + 引导线呈现。</li>
       <li><b>审批面板 = 当前对话的一批审批，且与对话视图绑定</b>：一次工具调用带来的审批作为卡片纵向堆叠、逐项决策，无目录列（对齐现网会话化分组）；切到内容 / 计划视图自动隐藏，回到对话恢复。编辑显示<b>「当前内容 · 将被覆盖」</b>（原文），删除显示<b>「当前内容 · 将被删除」</b>（既有数据），写入遇同名/既有数据同样展示，纯新建则标注「无既有数据」；<b>退出设计模式（ExitComposeMode）</b>为特殊卡片——固定标题「提交设计草稿」，正文渲染 design 文件 markdown 全文（品牌渐变描边）。</li>
       <li><b>审批挂起时状态行显示「正在审批」</b>（沙漏琥珀态），生成中仍为「正在生成」。</li>
+    <li><b>生成中发送 = 排队幽灵项</b>：正在生成/审批时发送的消息不再被吞掉，以降透明度虚线气泡<b>即时回显</b>在时间线末尾（琥珀「排队中 Ns」角标），状态行追加「· 排队中 N 条」；当前回复收口后幽灵项<b>原地晋升</b>为正式消息并依次开跑（2 条排队会链式执行）。控制条「排队示例」可罗列 清空 / 1 条 / 2 条。</li>
       <li><b>执行模式位于输入框底栏左侧</b>（发送 / 暂停在底栏右侧），点击向上弹出下拉列表（图标 + 名称 + 说明）；选择后仅显示「待生效」chip（不带模式名），随下一条消息发出时生效——对齐现网 ComposerModeBar 的会话级权威状态。</li>
       <li><b>消息通知 = 顶栏铃铛 + 通知中心</b>：审批到达 / 写作受阻 / 档案待完善等沉淀在通知中心（铃铛带未读计数角标），点击条目标记已读并跳转对应视图；对话顶条「置顶」右侧的 <b>「更多 ⋯」为会话菜单</b>——重命名 / 复制最后回复 / 导出 Markdown / 清空上下文 / 删除。</li>
       <li><b>一轮会话只展示最后一次 call 的返回</b>：每轮助手消息带头像 / 名称 / 时间 / 模式 chip；工具调用以分组条带（左侧强调线）夹在正文中间，含已完成 / 失败 / 运行中三态，中间结果不单独渲染成正文。</li>
@@ -2808,6 +2850,7 @@ document.addEventListener("click", (e) => {
     case "genRetry": setGen("generating"); break;
     case "genPause": setGen("idle"); toast("已暂停生成（演示）"); break;
     case "genSet": setGen(id); break;
+    case "queueSet": queueSet(Number(id)); break;
     case "send": sendMsg(); break;
     case "insOpen": state.approvalOpen = true; renderInspector(); renderDemoBar(); break;
     case "insClose": state.approvalOpen = false; renderInspector(); renderDemoBar(); break;
@@ -3021,7 +3064,8 @@ function scrollChat(instant) {
   if (sc) sc.scrollTo({ top: sc.scrollHeight, behavior: instant ? "auto" : "smooth" });
 }
 let sendSeq = 0;
-/* 生成状态切换：原地刷新输入区（状态行 0fr↔1fr、发送↔暂停、禁用态），不重渲染时间线 */
+/* 生成状态切换：原地刷新输入区（状态行 0fr↔1fr、发送↔暂停、禁用态），不重渲染时间线。
+   切到 idle 且有排队 → flushQueue 晋升队首并接续开跑（2 条排队会依次执行） */
 function setGen(s) {
   state.genState = s;
   if (s === "generating" || s === "waiting") genSec = 0;
@@ -3038,20 +3082,82 @@ function setGen(s) {
     if (send) send.disabled = s === "waiting";
   }
   renderDemoBar();
+  if (s === "idle") flushQueue();
+}
+/* 状态行原地刷新（不动 genSec 计时） */
+function refreshGenStatus() {
+  const inner = document.querySelector(".composer .statusInner");
+  if (inner) inner.innerHTML = genStatusHTML();
+}
+/* 排队幽灵项 HTML（data-at 供等待秒数计时，跨重渲染稳定） */
+function ghostHTML(q) {
+  return `<div class="msgUser ghost" data-at="${q.at}"><span class="ghostBadge">${ic("clock", 10)}排队中 <span class="qSec">0s</span></span>${esc(q.text)}</div>`;
+}
+/* 生成/审批中发送 → 入队：幽灵项即时回显（时间线末尾）+ 状态行计数 */
+function enqueueMsg(text) {
+  const q = { text, at: Date.now(), liveIdx: liveMsgs.length };
+  queuedMsgs.push(q);
+  const html = ghostHTML(q);
+  liveMsgs.push(html);
+  const live = $("liveMsgs");
+  if (live) live.insertAdjacentHTML("beforeend", html);
+  refreshGenStatus();
+  renderDemoBar();
+  scrollChat();
+}
+/* run 收口 → 晋升队首幽灵项为正式气泡（原地，位置不动）并接续开跑 */
+function flushQueue() {
+  if (queuedMsgs.length === 0) return;
+  const q = queuedMsgs.shift();
+  const ghostEl = document.querySelector("#liveMsgs .msgUser.ghost");
+  if (ghostEl) {
+    ghostEl.classList.remove("ghost");
+    ghostEl.classList.add("promoted");
+    ghostEl.querySelector(".ghostBadge")?.remove();
+  }
+  if (q.liveIdx !== undefined) liveMsgs[q.liveIdx] = `<div class="msgUser">${esc(q.text)}</div>`;
+  refreshGenStatus();
+  renderDemoBar();
+  demoReply();
+}
+/* 排队示例（控制条）：清空后压入 n 条示例（空闲态自动先进入生成，幽灵项才有语境） */
+function queueSet(n) {
+  clearQueue();
+  if (state.genState === "idle" || state.genState === "failed") setGen("generating");
+  if (n >= 1) enqueueMsg("排队 1：把第三章的伏笔清单整理出来，标出哪些还没回收。");
+  if (n >= 2) enqueueMsg("排队 2：顺带核对雾角灯塔的档案——现状字段还空着。");
+}
+function clearQueue() {
+  for (const q of queuedMsgs) {
+    if (q.liveIdx !== undefined) liveMsgs[q.liveIdx] = "";
+  }
+  queuedMsgs.length = 0;
+  document.querySelectorAll("#liveMsgs .msgUser.ghost").forEach((el) => el.remove());
+  refreshGenStatus();
+  renderDemoBar();
 }
 function sendMsg() {
   const ta = $("chatInput");
   const text = (ta ? ta.value : "").trim();
   if (!text) { toast("先写点什么吧（演示）"); return; }
-  if (state.genState === "generating") return;
+  if (ta) { ta.value = ""; ta.style.height = "auto"; }
+  // 生成/审批中发送 → 排队（幽灵项即时回显，不再吞掉输入）
+  if (state.genState === "generating" || state.genState === "waiting") {
+    enqueueMsg(text);
+    toast(`已排队（第 ${queuedMsgs.length} 条），当前回复完成后执行`);
+    return;
+  }
+  if (state.pendingMode && state.pendingMode !== state.mode) {
+    state.mode = state.pendingMode; state.pendingMode = null; updateModeUI();
+  }
   const html = `<div class="msgUser">${esc(text)}</div>`;
   liveMsgs.push(html);
   const live = $("liveMsgs");
   if (live) live.insertAdjacentHTML("beforeend", html);
-  if (ta) { ta.value = ""; ta.style.height = "auto"; }
-  if (state.pendingMode && state.pendingMode !== state.mode) {
-    state.mode = state.pendingMode; state.pendingMode = null; updateModeUI();
-  }
+  demoReply();
+}
+/* 发送后的演示回复（450ms 后收口；收口 → setGen("idle") → flushQueue 接续排队） */
+function demoReply() {
   setGen("generating");
   scrollChat();
   const seq = ++sendSeq;
@@ -3096,6 +3202,14 @@ setInterval(() => {
   document.querySelectorAll("#liveMsgs .toolSec").forEach(el => {
     const m = el.textContent.match(/^(\d+)s$/);
     if (m) el.textContent = (Number(m[1]) + 1) + "s";
+  });
+}, 1000);
+// 排队幽灵项等待秒数（data-at 起算，跨重渲染稳定）
+setInterval(() => {
+  document.querySelectorAll("#liveMsgs .msgUser.ghost").forEach(el => {
+    const badge = el.querySelector(".qSec");
+    const at = Number(el.dataset.at || 0);
+    if (badge && at > 0) badge.textContent = Math.max(0, Math.round((Date.now() - at) / 1000)) + "s";
   });
 }, 1000);
 

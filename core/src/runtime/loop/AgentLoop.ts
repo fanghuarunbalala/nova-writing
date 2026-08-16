@@ -248,7 +248,11 @@ export class AgentLoop {
     run: RunContext,
   ): Promise<AgentLoopResult> {
     const logger = this.config.logger;
-    logger?.info("agent.loop.run.start", { inputLen: input.length });
+    // queuedMs：run 开号（createRun，输入时序）→ 实际执行的排队等待（前序 run 占用）
+    logger?.info("agent.loop.run.start", {
+      inputLen: input.length,
+      queuedMs: Date.now() - Date.parse(run.ts),
+    });
     this.emitRunOpen(run, input, onEvent);
 
     // ① 由 runConfig 初始化运行进度
@@ -323,13 +327,18 @@ export class AgentLoop {
     runProgress: RunProgress,
   ): Promise<AgentLoopResult> {
     const logger = this.config.logger;
+    const runStartedAt = Date.now();
     let usage: { inputTokens: number; outputTokens: number } | undefined;
     for (runProgress.curTurn = 0; runProgress.curTurn < runProgress.maxTurn; runProgress.curTurn++) {
       logger?.debug("agent.call.request", {
         model: runConfig.sampling.model,
         curTurn: runProgress.curTurn,
       });
+      // 耗时拆解（debug）：assembleMs = 上下文组装（含压缩）/ providerMs = 模型调用网络耗时
+      const assembleStartedAt = Date.now();
       const call = await this.context.toProviderCall(runConfig, runProgress, this.controller.signal);
+      const assembleMs = Date.now() - assembleStartedAt;
+      const providerStartedAt = Date.now();
       this.config.debugger?.record(call); // 记录每次请求（相邻差异在 html 展示）
       let result: ProviderResult;
       try {
@@ -354,6 +363,10 @@ export class AgentLoop {
       logger?.debug("agent.call.result", {
         finishReason: result.finishReason,
         curTurn: runProgress.curTurn,
+        elapsedMs: Date.now() - assembleStartedAt,
+        assembleMs,
+        providerMs: Date.now() - providerStartedAt,
+        usage: result.usage,
       });
 
       // tool_call → 执行工具，结果追加后继续下一轮（turn）
@@ -370,6 +383,7 @@ export class AgentLoop {
             args: tc.args,
           });
           logger?.debug("agent.tool.dispatch", { tool: tc.name });
+          const toolStartedAt = Date.now();
           let text: string;
           try {
             text = gate.get(tc.id) ?? (await this.config.toolDispatcher.dispatch(this.context, tc));
@@ -393,7 +407,7 @@ export class AgentLoop {
               error: message,
             });
           }
-          logger?.debug("agent.tool.result", { tool: tc.name });
+          logger?.debug("agent.tool.result", { tool: tc.name, elapsedMs: Date.now() - toolStartedAt });
           this.context.appendRunMessages([{ role: "tool", content: text, id: tc.id }]);
           runProgress.toolsLastTurn.set(tc.name, runProgress.curTurn);
         }
@@ -407,7 +421,12 @@ export class AgentLoop {
         text: result.message.content,
       });
       this.emit(onEvent, "run-end", { persist: true, seq: run.seq, runSeq: run.seq });
-      logger?.info("agent.loop.run.done", { finishReason: result.finishReason, usage });
+      logger?.info("agent.loop.run.done", {
+        finishReason: result.finishReason,
+        usage,
+        elapsedMs: Date.now() - runStartedAt,
+        turns: runProgress.curTurn + 1,
+      });
       return { final: result.message, usage };
     }
     throw new Error(`达到最大轮次 ${runProgress.maxTurn}`);

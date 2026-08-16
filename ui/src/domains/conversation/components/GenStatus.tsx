@@ -6,6 +6,7 @@
  * - generating（live）经 RuntimeStatusIndicator 展示统一语言
  *   （图标动效 + 渐变流动文字 + 秒数），live 时展示已用秒数。
  * - waiting（审批挂起）展示沙漏琥珀态，无秒数。
+ * - queuedCount > 0 时行尾追加「排队中 N 条」（生成中再发送 → 消息排队等收口，本地计数）。
  * - failed：alert 图标（出现时一次性微抖动）+ 红色加粗「生成失败」+ 具体原因 + 图标重试
  *   （终结态不做循环动效，避免误导「还在工作」）。
  * 已移除三点呼吸 dots 与停止按钮（对齐新三态语言）。
@@ -20,9 +21,11 @@ export interface GenStatusProps {
   readonly phase: "generating" | "waiting" | "failed";
   readonly error?: string;
   readonly onRetry?: () => void;
+  /** 排队中的消息数（>0 时追加「排队中 N 条」后缀；发送后本地计数，见 ChatSurface） */
+  readonly queuedCount?: number;
 }
 
-export function GenStatus({ phase, error, onRetry }: GenStatusProps) {
+export function GenStatus({ phase, error, onRetry, queuedCount }: GenStatusProps) {
   const live = phase === "generating";
   const startRef = useRef<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -71,6 +74,9 @@ export function GenStatus({ phase, error, onRetry }: GenStatusProps) {
   return (
     <div className={styles.status} role="status">
       <RuntimeStatusIndicator state={phase} seconds={live ? elapsed : undefined} />
+      {queuedCount !== undefined && queuedCount > 0 ? (
+        <span className={styles.queued}>· 排队中 {queuedCount} 条</span>
+      ) : null}
     </div>
   );
 }

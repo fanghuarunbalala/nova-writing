@@ -191,6 +191,8 @@ export function ContentSurface({
               unitId={outline.selectedUnitId}
               outlineTree={outlineTree}
               chapters={manuscriptSnapshot.chapters}
+              unitParagraphs={manuscriptSnapshot.unitParagraphs.get(outline.selectedUnitId) ?? []}
+              publishedParagraphIds={manuscriptSnapshot.publishedParagraphIds}
               characterNames={characterNames}
               locationNames={locationNames}
               onOpenChapter={onSelectContentPane !== undefined ? handleOpenChapter : undefined}

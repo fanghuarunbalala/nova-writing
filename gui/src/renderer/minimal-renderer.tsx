@@ -9,7 +9,7 @@ import { createRoot } from "react-dom/client";
 import { expose, wrap } from "kkrpc/remote-refs";
 import { electronIpcTransport } from "kkrpc/electron";
 import type { NovelApiClient } from "@novel/core/client";
-import type { ProjectedEvent } from "@novel/core";
+import type { Logger, ProjectedEvent } from "@novel/core";
 import type { ConfigApi, ConfigMutation } from "@novel/core";
 import { emitApprovalsChanged, emitAskingsChanged, emitNovelChanged } from "@novel/ui";
 import {
@@ -138,12 +138,32 @@ const useWindowChrome = (): WindowChromeProps | undefined => {
   };
 };
 
+// renderer console logger（此前 NovelApp 缺省 noopLogger，renderer 侧日志全部丢失）：
+// 输出 renderer console；warn/error 经 main 的 console-message 桥转发到主进程 stderr。
+const rendererLogger: Logger = {
+  trace: () => {},
+  debug: (event, fields) => console.debug(`[renderer] ${event}`, fields ?? ""),
+  info: (event, fields) => console.info(`[renderer] ${event}`, fields ?? ""),
+  warn: (event, fields) => console.warn(`[renderer] ${event}`, fields ?? ""),
+  error: (event, fields) => console.error(`[renderer] ${event}`, fields ?? ""),
+  child: (bindings) => ({
+    ...rendererLogger,
+    debug: (event, fields) => rendererLogger.debug(event, { ...bindings, ...fields }),
+    info: (event, fields) => rendererLogger.info(event, { ...bindings, ...fields }),
+    warn: (event, fields) => rendererLogger.warn(event, { ...bindings, ...fields }),
+    error: (event, fields) => rendererLogger.error(event, { ...bindings, ...fields }),
+  }),
+  flush: async () => {},
+  close: async () => {},
+};
+
 function AppRoot() {
   const windowChrome = useWindowChrome();
   return (
     <StrictMode>
       <NovelApp
         api={api}
+        logger={rendererLogger}
         platform={platform}
         workspaceController={workspaceController}
         configurationClient={configurationClient}

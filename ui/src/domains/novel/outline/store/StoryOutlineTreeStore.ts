@@ -79,12 +79,24 @@ export class StoryOutlineTreeStore extends WorkspaceDomainStore<StoryOutlineTree
     if (this.isStaleGeneration(generation)) return undefined;
     const tree = StoryOutlineTreeProjection.build(outline.units);
     this.unitsById = new Map(outline.units.map((unit) => [unit.id, unit as StoryUnitWithLeaf]));
+    // 事件失效刷新保留视图状态：选中单元仍存在则保留（被删才清空），展开态整份保留
+    //（含已删单元的 key 无害）——否则 agent 每次写大纲都会收起树、把用户正看的详情退回空态。
+    // lastReadySnapshot 仅作「重载而非首载」标志；数据取当前快照（基类 reload 分支已保留用户视图状态）。
+    const prev = this.lastReadySnapshot !== undefined ? this.snapshot : undefined;
+    const unitIds = new Set<string>(outline.units.map((unit) => unit.id));
+    const selectedUnitId =
+      prev !== undefined &&
+      prev.selectedUnitId !== undefined &&
+      unitIds.has(prev.selectedUnitId)
+        ? prev.selectedUnitId
+        : undefined;
     return {
       phase: "ready",
       workspaceId,
       tree,
-      expansionState: new Map<string, boolean>(),
-      selectedUnitId: undefined,
+      expansionState:
+        prev !== undefined ? new Map(prev.expansionState) : new Map<string, boolean>(),
+      selectedUnitId,
       error: undefined,
     };
   }

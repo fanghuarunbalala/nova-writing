@@ -47,12 +47,25 @@ export interface OutlinePanelEntityLookup {
   readonly name: string;
 }
 
+/** 大纲单元详情展示的段落条目（来自 manuscript 域全量段落分组） */
+export interface OutlinePanelUnitParagraph {
+  readonly paragraphId: string;
+  readonly orderKey?: string;
+  readonly text: string;
+  readonly textLength: number;
+  readonly entityVersion: number;
+}
+
 export interface OutlineUnitInspectorPanelProps {
   readonly workspaceId: string | undefined;
   readonly unitId: string;
   readonly outlineTree: StoryOutlineTreeStore;
   /** 发布章候选（chapter.storyUnitId 反查；正文视图传入） */
   readonly chapters?: readonly { readonly chapterId: string; readonly title: string; readonly storyUnitId?: string }[];
+  /** 本单元挂靠的全部段落（含未入选章选择的——agent 写入后在此立即可见） */
+  readonly unitParagraphs?: readonly OutlinePanelUnitParagraph[];
+  /** 已被任一章选择收录的段落 id（区分「已入选章 / 未发布」） */
+  readonly publishedParagraphIds?: ReadonlySet<string>;
   readonly characterNames?: ReadonlyMap<string, OutlinePanelEntityLookup>;
   readonly locationNames?: ReadonlyMap<string, OutlinePanelEntityLookup>;
   /** 「在正文中查看」/ 发布章 chip：选章并切到正文资料位 */
@@ -241,11 +254,49 @@ function LeafPlanCard({
   );
 }
 
+/** 单元段落卡：列出挂靠本单元的全部段落（含未入选章选择的），agent 写入后在此可见 */
+function UnitParagraphsCard({
+  unitParagraphs,
+  publishedParagraphIds,
+}: {
+  unitParagraphs: readonly OutlinePanelUnitParagraph[];
+  publishedParagraphIds: ReadonlySet<string> | undefined;
+}) {
+  return (
+    <div className={styles.card}>
+      <h3 className={styles.cardTitle}>单元段落 · {unitParagraphs.length}</h3>
+      {unitParagraphs.length === 0 ? (
+        <span className={styles.noRelations}>
+          暂无段落——可在对话中让 AI 写入本单元，段落会先出现在这里，再经章选择进入正文。
+        </span>
+      ) : (
+        <div className={styles.leafSeq}>
+          {unitParagraphs.map((p, index) => {
+            const published = publishedParagraphIds?.has(p.paragraphId) ?? false;
+            const text = p.text.trim();
+            return (
+              <span key={p.paragraphId} title={`${p.paragraphId} · ${p.textLength} 字`}>
+                <i>
+                  {String(index + 1).padStart(2, "0")}
+                  <em className={styles.refTag}>{published ? "已入选章" : "未发布"}</em>
+                </i>
+                {text.length > 0 ? (text.length > 80 ? `${text.slice(0, 80)}…` : text) : "（空段落——待编写）"}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function OutlineUnitInspectorPanel({
   workspaceId,
   unitId,
   outlineTree,
   chapters,
+  unitParagraphs,
+  publishedParagraphIds,
   characterNames,
   locationNames,
   onOpenChapter,
@@ -363,6 +414,12 @@ export function OutlineUnitInspectorPanel({
           locationNames={locationNames}
           onOpenCharacter={onOpenCharacter}
           onOpenLocation={onOpenLocation}
+        />
+      ) : null}
+      {unitParagraphs !== undefined ? (
+        <UnitParagraphsCard
+          unitParagraphs={unitParagraphs}
+          publishedParagraphIds={publishedParagraphIds}
         />
       ) : null}
       <div className={styles.card}>

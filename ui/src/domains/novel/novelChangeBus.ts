@@ -12,6 +12,10 @@ const listeners = new Set<(entity: string) => void>();
  * @param entity 变更实体类型（outline/character/location/paragraph/publication）
  */
 export function emitNovelChanged(entity: string): void {
+  // 事件链断点可观测性：main 已转发但 renderer 侧无人订阅（ApplicationShell 未挂载/订阅断开）时告警
+  if (listeners.size === 0) {
+    console.warn(`[novelChangeBus] novel.changed(${entity}) 无监听者——ApplicationShell 未订阅，本次变更不会即时刷新`);
+  }
   for (const listener of [...listeners]) {
     try {
       listener(entity);

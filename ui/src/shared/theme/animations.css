@@ -141,6 +141,17 @@
   100% { transform: scale(1); }
 }
 
+/* 审批挂起提示条呼吸光晕（ApprovalPendingBar；琥珀弱扩散抓注意，不与 hover 光环冲突） */
+@keyframes pending-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-warn) 40%, transparent);
+  }
+  55% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+
 /* 通用动画 utility class（全局类；TSX 可直接挂 class 使用） */
 .anim-grad-flow { animation: grad-flow 7s ease-in-out infinite; }
 .anim-view-in   { animation: view-in var(--duration-base) var(--ease-out); }

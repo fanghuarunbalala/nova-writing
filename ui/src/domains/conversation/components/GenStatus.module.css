@@ -60,6 +60,22 @@
   white-space: nowrap;
 }
 
+/* 审批挂起可点胶囊（demo .rsRow.apPending）：琥珀底 + 边框 + hover 光环 */
+.waitingAction {
+  border: 1px solid color-mix(in oklab, var(--color-warn) 38%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--color-warn-bg);
+  padding: var(--space-5px) var(--space-14px);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.waitingAction:hover {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-warn) 40%, transparent);
+}
+
 /* 重试：图标按钮，danger 圆钮，hover 实心红 + 白图标 + 上浮。 */
 .failed .retry {
   flex: none;

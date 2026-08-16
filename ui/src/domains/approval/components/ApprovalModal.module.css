@@ -1,0 +1,255 @@
+/**
+ * ApprovalModal 视觉（对齐 demo approval-modal-demo.html 方案 A / app-redesign-demo v0.8
+ * .apModal/.apList/.apListItem/.apDetail）：min(920px,94vw) 双栏——
+ * 左清单（审批组列表 + 全部批准）+ 右详情（ApprovalGroupDetail 滚动区）。
+ * 遮罩/入场动画复用 Dialog 同款 token。
+ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  background: color-mix(in oklab, var(--color-fg) 26%, transparent);
+  animation: var(--anim-dialog-fade) var(--duration-fast) var(--ease-out);
+}
+
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: var(--z-dialog);
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  width: min(920px, calc(100vw - 48px));
+  height: min(640px, calc(100vh - 80px));
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  animation: var(--anim-dialog-in) var(--duration-base) var(--ease-out);
+}
+
+/* ============ 头部：图标 + 标题 + 待决计数 + 稍后处理/关闭 ============ */
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-9px);
+  flex: none;
+  padding: var(--space-3) var(--space-14px) var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-chrome-bg);
+}
+
+.headIcon {
+  color: var(--color-warn);
+  display: inline-flex;
+}
+
+.headTitle {
+  margin: 0;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  color: var(--color-fg);
+}
+
+/* 待决计数（demo .apCnt） */
+.count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--color-warn);
+  background: var(--color-warn-bg);
+  padding: 1px var(--space-8px);
+  border-radius: var(--radius-pill);
+}
+
+.countZero {
+  color: var(--color-faint);
+  background: var(--color-surface-2);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* 关闭钮（=稍后处理；Dialog 同款视觉） */
+.close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.close:hover {
+  color: var(--color-fg);
+  background: var(--color-surface-2);
+}
+
+/* ============ 双栏主体 ============ */
+.bodyArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* ---- 左：审批组清单 ---- */
+.list {
+  width: 252px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--color-border);
+}
+
+.listScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+.listItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-9px);
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-fg);
+  font: inherit;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.listItem:hover {
+  background: var(--color-surface-2);
+}
+
+.listItemActive {
+  background: var(--color-accent-9);
+  border-color: color-mix(in oklab, var(--color-accent) 26%, transparent);
+}
+
+/* 标题 diff 符号（add=绿/edit·delete=红/exit=» 强调色） */
+.itemGlyph {
+  flex: none;
+  width: 17px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-13);
+}
+
+.itemGlyphAdd { color: var(--color-success); }
+.itemGlyphEdit { color: var(--color-danger); }
+.itemGlyphDel { color: var(--color-danger); }
+.itemGlyphExit { color: var(--color-accent-ink); }
+
+.itemText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.itemTitle {
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemMeta {
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 状态 pill（复用 ApprovalPanel 视觉语言） */
+.itemPill {
+  flex: none;
+  font-size: var(--fs-10);
+  font-weight: var(--fw-bold);
+  border-radius: var(--radius-pill);
+  padding: 1px var(--space-6px);
+}
+
+.itemPillPending {
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+}
+
+.itemPillApproved {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.itemPillRejected,
+.itemPillExpired {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.itemPillEdited {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+
+.listEmpty {
+  padding: var(--space-18px) var(--space-3);
+  font-size: var(--fs-12-5);
+  color: var(--color-faint);
+  text-align: center;
+}
+
+.listFoot {
+  flex: none;
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.listFootButton {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ---- 右：当前组详情（滚动区） ---- */
+.detail {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--space-14px) var(--space-18px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+.detailEmpty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: var(--fs-12-5);
+  color: var(--color-faint);
+}

@@ -149,7 +149,6 @@
   --space-26px: 26px;
   --space-28px: 28px;
   --space-29px: 29px;
-  --space-30px: 30px;
   --space-38px: 38px;
   --space-56px: 56px;
   --space-132px: 132px;
@@ -223,6 +222,7 @@
   --anim-appr-in:         appr-in;
   --anim-status-pulse:    status-pulse;
   --anim-cnt-pop:         cnt-pop;
+  --anim-pending-glow:    pending-glow;
 
   /* 缓动 */
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);

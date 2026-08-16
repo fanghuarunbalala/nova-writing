@@ -18,6 +18,8 @@ import {
   type ReferenceResolver,
 } from "../domains/conversation/reference/ReferenceResolver.js";
 import { ApprovalStore } from "../domains/approval/ApprovalStore.js";
+import { ApprovalModalStore } from "../domains/approval/ApprovalModalStore.js";
+import { ApprovalModal } from "../domains/approval/components/ApprovalModal.js";
 import { onApprovalsChanged } from "../domains/approval/approvalChangeBus.js";
 import { onNovelChanged } from "../domains/novel/novelChangeBus.js";
 import type { ToastKind, ToastStore } from "../shared/state/ToastStore.js";
@@ -114,6 +116,9 @@ export function ApplicationShell({
   const workspace = useExternalStore(workspaceAdapter);
   const catalogSnapshot = useExternalStore(domainStores.conversationCatalog);
   const approvalStore = useMemo(() => new ApprovalStore({ api }), [api]);
+  // 审批整体弹窗（方案 A）：开关与选中态；挂起时阻塞发送，稍后处理由提示条唤回
+  const approvalModalStore = useMemo(() => new ApprovalModalStore(), []);
+  const approvalModalSnapshot = useExternalStore(approvalModalStore);
   // 审批目标实体内容解析器（lite：api.novel.* 查询 + 乐观锁 stale 判定）
   const resolveEntity = useMemo(
     () => createApprovalEntityResolver({ api }),
@@ -210,60 +215,50 @@ export function ApplicationShell({
     };
   }, [domainStores]);
 
-  // 审批到达自动打开右侧审批面板（面板已会话化，只认活动会话）：
-  // 仅当活动会话 pending 集合出现「新 requestId」时 transition
-  // （同一请求持续 pending 不重复弹；approval.request 为 persist:false，journal 重放不误弹）。
+  // 审批到达自动弹窗一次（面板已会话化，只认活动会话）：
+  // 仅当活动会话 pending 集合出现「新 requestId」时唤起
+  // （同一请求持续 pending 不重复弹；approval.request 为 persist:false，journal 重放不误弹；
+  //   稍后处理收起后同一请求不重弹——由 挂起提示条/状态行/工具行 唤回）。
   const prevPendingIds = useRef<ReadonlySet<string>>(new Set());
   useEffect(() => {
     prevPendingIds.current = new Set();
   }, [catalogSnapshot.activeConversationId]);
   useEffect(() => {
+    const activeId = catalogSnapshot.activeConversationId;
     const ids = new Set(
       approvalSnapshot.approvals
         .filter(
           (approval) =>
             approval.status === "pending" &&
-            approval.conversationId === catalogSnapshot.activeConversationId,
+            approval.conversationId === activeId,
         )
         .map((approval) => approval.requestId),
     );
-    const hasNew = [...ids].some((id) => !prevPendingIds.current.has(id));
+    const fresh = [...ids].filter((id) => !prevPendingIds.current.has(id));
     prevPendingIds.current = ids;
-    if (hasNew) {
-      inspectorRouter.transition({
-        kind: "approval",
-        changeSetId: catalogSnapshot.activeConversationId ?? "",
-      });
+    if (fresh.length > 0 && activeId !== undefined) {
+      approvalModalStore.summon(`${activeId}:${fresh[0]}`);
     }
-  }, [approvalSnapshot, inspectorRouter, catalogSnapshot.activeConversationId]);
+  }, [approvalSnapshot, approvalModalStore, catalogSnapshot.activeConversationId]);
 
-  // 切换会话（含首次赋值）时：该会话有待审批 → 默认展开审批面板
-  // （「每个会话若待审批，默认右侧就是审批面板」）。
-  const pendingForActive = approvalSnapshot.approvals.some(
+  // 本会话审批全部处理完 → 弹窗自动收口 + toast（时间线不留过往审批记录）。
+  // 与上方唤起共存：其他会话仍有待审批时不收口（弹窗按活动会话过滤）。
+  const pendingInActiveConversation = approvalSnapshot.approvals.some(
     (approval) =>
       approval.status === "pending" &&
       approval.conversationId === catalogSnapshot.activeConversationId,
   );
   useEffect(() => {
-    if (
-      catalogSnapshot.activeConversationId !== undefined &&
-      pendingForActive
-    ) {
-      inspectorRouter.transition({
-        kind: "approval",
-        changeSetId: catalogSnapshot.activeConversationId,
-      });
+    if (!pendingInActiveConversation && approvalModalSnapshot.open) {
+      approvalModalStore.minimize();
+      toastStore.push({ kind: "success", text: "本轮审批已全部处理，会话继续" });
     }
-  }, [catalogSnapshot.activeConversationId, pendingForActive, inspectorRouter]);
-
-  // 审批全部处理完 → 自动收起审批面板（creation 线「面板收拢」语义；
-  // 与上方的会话化展开共存：全局清零才收起，其他会话仍有待审批时不打断）。
-  useEffect(() => {
-    const route = inspectorRouter.getSnapshot().state;
-    if (approvalSnapshot.pendingCount === 0 && route.kind === "approval") {
-      inspectorRouter.close();
-    }
-  }, [approvalSnapshot.pendingCount, inspectorRouter]);
+  }, [
+    pendingInActiveConversation,
+    approvalModalSnapshot.open,
+    approvalModalStore,
+    toastStore,
+  ]);
 
   // 通知中心数据源（2/2）审批聚合：全局 pending 数（不限活动会话）→ 通知条目；
   // 计数较上次增长才置未读（持续 pending 不重复打扰），归零移除。
@@ -373,16 +368,13 @@ export function ApplicationShell({
     [domainStores],
   );
 
-  // 待办动作跨视图直达（PRD PN-8）：去审批 → 对话 + 审批面板；
+  // 待办动作跨视图直达（PRD PN-8）：去审批 → 对话 + 唤起审批弹窗；
   // 去完善档案 → 内容视图对应资料位。
   const handleTodoAction = useCallback(
     (_id: string, action: string) => {
       if (action === "open-approval") {
         mainViewRouter.transition("chat");
-        inspectorRouter.transition({
-          kind: "approval",
-          changeSetId: domainStores.conversationCatalog.getSnapshot().activeConversationId ?? "",
-        });
+        approvalModalStore.summon();
       } else if (action === "open-character") {
         setContentTab("characters");
         mainViewRouter.transition("content");
@@ -391,7 +383,7 @@ export function ApplicationShell({
         mainViewRouter.transition("content");
       }
     },
-    [domainStores, inspectorRouter, mainViewRouter],
+    [approvalModalStore, mainViewRouter],
   );
 
   const resolveReference: ReferenceResolver = useCallback(
@@ -485,18 +477,29 @@ export function ApplicationShell({
   );
   const handleShellOpenWorkspace = useCallback(() => onOpenWorkspace?.(), [onOpenWorkspace]);
   const handleShellOpenSettings = useCallback(() => onOpenSettings?.(), [onOpenSettings]);
-  // 通知条目激活：goto.view 切主视图；审批类额外展开右侧审批面板
+  // 通知条目激活：goto.view 切主视图；审批类额外唤起审批弹窗
   const handleNotificationActivate = useCallback(
     (item: NotificationItem) => {
       if (item.goto?.view !== undefined) mainViewRouter.transition(item.goto.view);
       if (item.type === "approval") {
-        inspectorRouter.transition({
-          kind: "approval",
-          changeSetId: catalogSnapshot.activeConversationId ?? "",
-        });
+        approvalModalStore.summon();
       }
     },
-    [mainViewRouter, inspectorRouter, catalogSnapshot.activeConversationId],
+    [mainViewRouter, approvalModalStore],
+  );
+
+  // 唤起审批弹窗（挂起提示条 / 状态行 / 工具行 / 时间线系统行共用）；
+  // 携带 requestId 时定位到该审批组（时间线入口用）。
+  const handleSummonApproval = useCallback(
+    (requestId?: string) => {
+      const activeId = catalogSnapshot.activeConversationId;
+      approvalModalStore.summon(
+        requestId !== undefined && activeId !== undefined
+          ? `${activeId}:${requestId}`
+          : undefined,
+      );
+    },
+    [approvalModalStore, catalogSnapshot.activeConversationId],
   );
 
   return (
@@ -552,6 +555,8 @@ export function ApplicationShell({
                 item.status === "pending",
             ).length
           }
+          approvalModalOpen={approvalModalSnapshot.open}
+          onSummonApproval={handleSummonApproval}
           mainViewRouter={mainViewRouter}
           conversationCatalog={domainStores.conversationCatalog}
           outlineTree={domainStores.storyOutlineTree}
@@ -584,11 +589,18 @@ export function ApplicationShell({
           outlineTree={domainStores.storyOutlineTree}
           characters={domainStores.character}
           locations={domainStores.location}
-          approvalStore={approvalStore}
-          resolveEntity={resolveEntity}
         />
       </div>
-      <OverlaysHost toastStore={toastStore}>{overlays}</OverlaysHost>
+      <OverlaysHost toastStore={toastStore}>
+        {overlays}
+        <ApprovalModal
+          store={approvalStore}
+          modalStore={approvalModalStore}
+          conversationId={catalogSnapshot.activeConversationId}
+          resolveEntity={resolveEntity}
+          onNotify={handleNotify}
+        />
+      </OverlaysHost>
     </div>
   );
 }

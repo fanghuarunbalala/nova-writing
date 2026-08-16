@@ -32,6 +32,10 @@ export interface MainAreaProps {
   /** 活动会话投影 binding（shell 持有；快照订阅在 ChatSurface 内——流式发布不重渲染本组件） */
   readonly conversationBinding: ConversationProjectionBinding | undefined;
   readonly pendingApprovalCount?: number;
+  /** 审批弹窗开合（挂起提示条显隐：弹窗开着时提示条让位） */
+  readonly approvalModalOpen?: boolean;
+  /** 唤起审批弹窗（挂起提示条 / 状态行 / 工具行 / 时间线系统行入口） */
+  readonly onSummonApproval?: (requestId?: string) => void;
   readonly mainViewRouter: MainViewRouter;
   readonly conversationCatalog: ConversationCatalogStore;
   readonly outlineTree: StoryOutlineTreeStore;
@@ -77,6 +81,8 @@ export const MainArea = memo(function MainArea(props: MainAreaProps) {
           conversationCatalog={props.conversationCatalog}
           onCreateConversation={props.onCreateConversation}
           pendingApprovalCount={props.pendingApprovalCount ?? 0}
+          approvalModalOpen={props.approvalModalOpen ?? false}
+          onSummonApproval={props.onSummonApproval}
           onOpenConversationInfo={props.onOpenConversationInfo}
           onReferenceClick={props.onReferenceClick}
           resolveReference={props.resolveReference}

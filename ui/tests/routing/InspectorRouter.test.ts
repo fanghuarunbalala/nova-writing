@@ -12,9 +12,9 @@ describe("InspectorRouter", () => {
 
   it("transition opens a panel with a mode", () => {
     const router = new InspectorRouter();
-    router.transition({ kind: "approval", changeSetId: "CS-1" });
+    router.transition({ kind: "conversation", conversationId: "c1" });
     expect(router.getSnapshot()).toEqual({
-      state: { kind: "approval", changeSetId: "CS-1" },
+      state: { kind: "conversation", conversationId: "c1" },
       mode: "normal",
     });
   });

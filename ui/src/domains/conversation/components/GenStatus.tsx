@@ -23,9 +23,11 @@ export interface GenStatusProps {
   readonly onRetry?: () => void;
   /** 排队中的消息数（>0 时追加「排队中 N 条」后缀；发送后本地计数，见 ChatSurface） */
   readonly queuedCount?: number;
+  /** 审批挂起时点击状态行唤回审批弹窗（提供时 waiting 升级为可点胶囊） */
+  readonly onWaitingClick?: () => void;
 }
 
-export function GenStatus({ phase, error, onRetry, queuedCount }: GenStatusProps) {
+export function GenStatus({ phase, error, onRetry, queuedCount, onWaitingClick }: GenStatusProps) {
   const live = phase === "generating";
   const startRef = useRef<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -68,6 +70,24 @@ export function GenStatus({ phase, error, onRetry, queuedCount }: GenStatusProps
           </button>
         ) : null}
       </div>
+    );
+  }
+
+  // 审批挂起 + 唤起回调：状态行升级为可点胶囊（点击打开审批弹窗）
+  if (phase === "waiting" && onWaitingClick !== undefined) {
+    return (
+      <button
+        type="button"
+        className={[styles.status, styles.waitingAction].join(" ")}
+        onClick={onWaitingClick}
+        title="打开审批弹窗"
+      >
+        <RuntimeStatusIndicator state={phase} seconds={undefined} />
+        <span className={styles.queued}>· 点击处理</span>
+        {queuedCount !== undefined && queuedCount > 0 ? (
+          <span className={styles.queued}>· 排队中 {queuedCount} 条</span>
+        ) : null}
+      </button>
     );
   }
 

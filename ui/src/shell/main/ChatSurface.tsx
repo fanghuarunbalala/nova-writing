@@ -21,6 +21,7 @@ import { ConversationTimeline } from "../../domains/conversation/components/Conv
 import type { GenStatusProps } from "../../domains/conversation/components/GenStatus.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
+import { ApprovalPendingBar } from "../../domains/approval/components/ApprovalPendingBar.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import { Icon } from "../../shared/primitives/Icon.js";
 import { IconButton } from "../../shared/primitives/IconButton.js";
@@ -40,6 +41,10 @@ export interface ChatSurfaceProps {
   readonly onCreateConversation: () => void;
   /** 本会话待审批数（CMS wait 队列派生；>0 时 composer 等待态） */
   readonly pendingApprovalCount?: number;
+  /** 审批弹窗开合（挂起提示条显隐：弹窗开着时提示条让位） */
+  readonly approvalModalOpen?: boolean;
+  /** 唤起审批弹窗（挂起提示条 / 状态行 / 时间线系统行入口；可带 requestId 定位组） */
+  readonly onSummonApproval?: (requestId?: string) => void;
   /** 打开会话信息面板（inspector conversation 路由；PRD 决议 1） */
   readonly onOpenConversationInfo?: (conversationId: string) => void;
   readonly onReferenceClick?: (reference: MessageReference) => void;
@@ -52,6 +57,8 @@ export function ChatSurface({
   conversationCatalog,
   onCreateConversation,
   pendingApprovalCount = 0,
+  approvalModalOpen = false,
+  onSummonApproval,
   onOpenConversationInfo,
   onReferenceClick,
   resolveReference,
@@ -81,6 +88,8 @@ export function ChatSurface({
       }}
       onOpenInfo={onOpenConversationInfo !== undefined ? () => onOpenConversationInfo(activeId) : undefined}
       pendingApprovalCount={pendingApprovalCount}
+      approvalModalOpen={approvalModalOpen}
+      onSummonApproval={onSummonApproval}
       onReferenceClick={onReferenceClick}
       resolveReference={resolveReference}
       onNotify={onNotify}
@@ -99,6 +108,8 @@ interface ActiveChatSurfaceProps {
   readonly onTogglePin: () => void;
   readonly onOpenInfo: (() => void) | undefined;
   readonly pendingApprovalCount: number;
+  readonly approvalModalOpen: boolean;
+  readonly onSummonApproval: ((requestId?: string) => void) | undefined;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
@@ -114,6 +125,8 @@ function ActiveChatSurface({
   onTogglePin,
   onOpenInfo,
   pendingApprovalCount,
+  approvalModalOpen,
+  onSummonApproval,
   onReferenceClick,
   resolveReference,
   onNotify,
@@ -205,6 +218,7 @@ function ActiveChatSurface({
 
   // 三态推导（对齐旧版优先级）：failed > waiting（待审批，CMS 队列派生）> generating。
   // thinking 态已随 loop 层丢弃 reasoning delta 移除；waiting 复用 GenStatus 沙漏+摇摆动画。
+  // waiting + 唤起回调 → 状态行升级为可点胶囊（点击打开审批弹窗）。
   let status: GenStatusProps | undefined;
   if (failed) {
     status = {
@@ -213,13 +227,23 @@ function ActiveChatSurface({
       onRetry: () => void resume(),
     };
   } else if (pendingApprovalCount > 0) {
-    status = { phase: "waiting", queuedCount };
+    status = {
+      phase: "waiting",
+      queuedCount,
+      ...(onSummonApproval !== undefined
+        ? { onWaitingClick: () => onSummonApproval() }
+        : {}),
+    };
   } else if (projection?.liveState === "generating") {
     status = { phase: "generating", queuedCount };
   } else if (queuedCount > 0) {
     // 不在生成但仍有排队（刚收口、排队 run 即将接续）：保持可见直到 user 项出现
     status = { phase: "waiting", queuedCount };
   }
+
+  // 挂起提示条：有待决且弹窗未开时常驻顶部（demo .apAlertBar）
+  const showApprovalBar =
+    pendingApprovalCount > 0 && !approvalModalOpen && onSummonApproval !== undefined;
 
   return (
     <div className={styles.surface}>
@@ -260,6 +284,9 @@ function ActiveChatSurface({
           </>
         }
       />
+      {showApprovalBar ? (
+        <ApprovalPendingBar count={pendingApprovalCount} onSummon={() => onSummonApproval?.()} />
+      ) : null}
       <ConversationTimeline
         conversationId={conversationId}
         items={timelineWithGhosts}
@@ -268,6 +295,7 @@ function ActiveChatSurface({
         onMessageReferenceClick={onReferenceClick}
         resolveReference={resolveReference}
         onNotify={onNotify}
+        onOpenApproval={onSummonApproval}
       />
       {sendError !== undefined && (
         <div className={styles.sendError} role="alert">

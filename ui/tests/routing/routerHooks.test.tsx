@@ -30,7 +30,7 @@ describe("routing hooks", () => {
     const router = new InspectorRouter();
     render(<InspectorProbe router={router} />);
     expect(screen.getByRole("status")).toHaveTextContent("closed");
-    act(() => router.transition({ kind: "approval", changeSetId: "CS-1" }));
-    expect(screen.getByRole("status")).toHaveTextContent("approval");
+    act(() => router.transition({ kind: "conversation", conversationId: "c1" }));
+    expect(screen.getByRole("status")).toHaveTextContent("conversation");
   });
 });

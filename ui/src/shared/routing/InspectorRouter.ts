@@ -1,14 +1,14 @@
 /**
  * InspectorRouter
  *
- * 右侧 inspector 状态机：关闭 / 审批 / 实体 / 对话 / 大纲单元，
+ * 右侧 inspector 状态机：关闭 / 实体 / 对话 / 大纲单元，
  * 模式 closed | normal | wide（wide 由卡片 inspectorSize 触发）。
+ * 审批已弹窗化（方案 A v0.8）：approval 路由移除，审批交互走 ApprovalModal。
  */
 import { ExternalStore } from "../state/ExternalStore.js";
 
 export type InspectorState =
   | { readonly kind: "closed" }
-  | { readonly kind: "approval"; readonly changeSetId: string }
   | { readonly kind: "entity"; readonly entityType: "character" | "location"; readonly entityId: string }
   | { readonly kind: "conversation"; readonly conversationId: string }
   | { readonly kind: "outlineUnit"; readonly unitId: string };

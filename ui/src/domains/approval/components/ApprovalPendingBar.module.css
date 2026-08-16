@@ -1,0 +1,54 @@
+/**
+ * ApprovalPendingBar 视觉（demo app-redesign-demo v0.8 .apAlertBar）：
+ * 琥珀胶囊常驻对话视图顶部，呼吸光晕抓注意；整体可点唤回弹窗。
+ */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-9px);
+  width: calc(100% - 48px);
+  max-width: 760px;
+  margin: var(--space-3) auto 0;
+  padding: var(--space-2) var(--space-9px) var(--space-2) var(--space-14px);
+  border: 1px solid color-mix(in oklab, var(--color-warn) 42%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+  font: inherit;
+  font-size: var(--fs-12-5);
+  cursor: pointer;
+  transition: box-shadow var(--duration-fast) var(--ease-out);
+  animation:
+    var(--anim-view-in) var(--duration-base) var(--ease-out),
+    var(--anim-pending-glow) 2.4s var(--ease-in-out) infinite;
+}
+
+.bar:hover {
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-warn) 40%, transparent);
+}
+
+.bar b {
+  font-weight: var(--fw-bold);
+}
+
+/* 沙漏图标摇摆（GenStatus waiting 同款语言） */
+.bar > svg {
+  flex: none;
+  animation: var(--anim-status-sway) 2.8s var(--ease-in-out) infinite;
+}
+
+/* 右侧「立即处理」实底小钮（视觉按钮，整体可点） */
+.action {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5px);
+  padding: var(--space-5px) var(--space-14px);
+  border-radius: var(--radius-pill);
+  background: var(--color-warn);
+  color: var(--color-surface);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-semibold);
+}

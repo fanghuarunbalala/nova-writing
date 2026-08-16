@@ -7,7 +7,8 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApprovalStore } from "../../../src/domains/approval/ApprovalStore.js";
-import { ApprovalPanel } from "../../../src/domains/approval/components/ApprovalPanel.js";
+import { ApprovalModalStore } from "../../../src/domains/approval/ApprovalModalStore.js";
+import { ApprovalModal } from "../../../src/domains/approval/components/ApprovalModal.js";
 import { ExitComposeApprovalView } from "../../../src/domains/approval/components/ExitComposeApprovalView.js";
 import { FrontendPlatformProvider } from "../../../src/platform/FrontendPlatformContext.js";
 import type {
@@ -81,18 +82,26 @@ describe("ExitComposeApprovalView", () => {
   });
 });
 
-describe("ApprovalPanel ExitComposeMode 特化", () => {
+describe("ApprovalModal ExitComposeMode 特化", () => {
+  /** 以打开态渲染审批弹窗（radix Portal 挂 document.body） */
+  function renderModal(store: ApprovalStore, platform: FrontendPlatform): void {
+    const modalStore = new ApprovalModalStore();
+    modalStore.summon();
+    render(
+      <FrontendPlatformProvider platform={platform}>
+        <ApprovalModal store={store} modalStore={modalStore} />
+      </FrontendPlatformProvider>,
+    );
+  }
+
   it("标题「提交设计草稿」+ 详情区渲染 design 文件全文，无「审批参数」区", async () => {
     const store = await makeStore([exitComposeItem()]);
-    render(
-      <FrontendPlatformProvider
-        platform={makePlatform({
-          read: vi.fn().mockResolvedValue("## 草稿全文\n\n段落一…\n"),
-          write: vi.fn(),
-        })}
-      >
-        <ApprovalPanel store={store} />
-      </FrontendPlatformProvider>,
+    renderModal(
+      store,
+      makePlatform({
+        read: vi.fn().mockResolvedValue("## 草稿全文\n\n段落一…\n"),
+        write: vi.fn(),
+      }),
     );
     expect(screen.getAllByText("提交设计草稿").length).toBeGreaterThan(0);
     expect(await screen.findByText(/草稿全文/)).toBeTruthy();
@@ -105,15 +114,12 @@ describe("ApprovalPanel ExitComposeMode 特化", () => {
     const api = makeApi(items);
     const store = new ApprovalStore({ api });
     await store.refresh();
-    render(
-      <FrontendPlatformProvider
-        platform={makePlatform({
-          read: vi.fn().mockResolvedValue("# 草稿\n"),
-          write: vi.fn(),
-        })}
-      >
-        <ApprovalPanel store={store} />
-      </FrontendPlatformProvider>,
+    renderModal(
+      store,
+      makePlatform({
+        read: vi.fn().mockResolvedValue("# 草稿\n"),
+        write: vi.fn(),
+      }),
     );
     const approve = screen.getByRole("button", { name: "批准" });
     approve.click();
@@ -131,15 +137,12 @@ describe("ApprovalPanel ExitComposeMode 特化", () => {
     const store = new ApprovalStore({ api });
     await store.refresh();
     const user = userEvent.setup();
-    render(
-      <FrontendPlatformProvider
-        platform={makePlatform({
-          read: vi.fn().mockResolvedValue("# 草稿\n"),
-          write: vi.fn(),
-        })}
-      >
-        <ApprovalPanel store={store} />
-      </FrontendPlatformProvider>,
+    renderModal(
+      store,
+      makePlatform({
+        read: vi.fn().mockResolvedValue("# 草稿\n"),
+        write: vi.fn(),
+      }),
     );
     await user.click(screen.getByRole("button", { name: "请求修改" }));
     await user.type(screen.getByPlaceholderText(/填写修改意见/), "节奏太慢");

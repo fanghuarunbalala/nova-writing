@@ -1,10 +1,15 @@
 /**
- * ApprovalPanel 视觉（对齐 demo 审批右栏卡片流，app-redesign-demo.html
- * L905-1005 .insBody/.apCard/.apSection/.apCur/.apGroup/.apParam）：
- * 一批审批纵向堆叠（一次 call 一批一起审，无目录）；
- * 卡片两段式——「当前内容」（apCur 左色线 muted 块）+「变更后/写入内容/删除参数」
+ * 审批组视觉（对齐 demo app-redesign-demo.html 审批卡片 + 方案 A 弹窗详情）：
+ * ApprovalGroupDetail（弹窗右栏）复用本文件；两段式——「当前内容」
+ * （apCur 左色线 muted 块）+「变更后/写入内容/删除参数」
  * （apGroup 色带 + 参数网格）+ 决策按钮/意见输入/已处理横幅。
  */
+
+/* 弹窗详情容器（无卡片边框：弹窗自身即容器） */
+.detail {
+  display: flex;
+  flex-direction: column;
+}
 
 .panel {
   padding: var(--space-3) var(--space-14px) var(--space-18px);

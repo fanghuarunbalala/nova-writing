@@ -237,13 +237,16 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			: undefined;
 	await journal?.open();
 
-	// 恢复上下文：journal 已落盘 runs → 历史消息 + resumeSeq（崩溃重派生续跑）
+	// 恢复上下文：journal 已落盘 runs → run 边界 + resumeSeq（崩溃重派生续跑）。
+	// run 边界保留传递（context-compact PRD：压缩分区/摘要标记跨重启保持）
 	let runMessages: LLMessage[] | undefined;
+	let resumeRuns: { seq: number; messages: LLMessage[]; ts?: string }[] | undefined;
 	let resumeSeq: number | undefined;
 	if (journal !== undefined && storedir !== undefined) {
 		const readOnly = new FileConversationJournalReadOnlyService({ journalDir: storedir });
 		const runs = await readOnly.readRuns(conversationId);
 		runMessages = runs.flatMap((r) => r.messages);
+		resumeRuns = runs.map((r) => ({ seq: r.seq, messages: r.messages, ts: r.ts }));
 		resumeSeq = journal.lastSeq;
 	}
 
@@ -402,6 +405,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		conversationId,
 		listeners: journal !== undefined ? [journalListener(journal)] : undefined,
 		runMessages,
+		resumeRuns,
 		resumeSeq,
 		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
 		requestAsk: (req) => holder.conv!.sendAskingQuestionRequest(req),

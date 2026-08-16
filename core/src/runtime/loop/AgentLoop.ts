@@ -16,6 +16,8 @@ import type {
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { OutputEvent } from "../../conversation/contract/events/index.js";
 import { isCanonicalNovelWrite } from "../../conversation/compose/canonicalTools.js";
+import { isContextLengthError } from "../provider/errors.js";
+import { countRunChars } from "../compact/definitions/auto-compact.js";
 import { ToolError } from "../tool/errors.js";
 import { LoopContext } from "./LoopContext.js";
 
@@ -73,6 +75,8 @@ export class AgentLoop {
   private lastConfig?: AgentRunConfig;
   /** 输出事件订阅者（持久：run/followup 产出的所有 LoopEvent） */
   private readonly outputListeners = new Set<(e: LoopEvent) => void>();
+  /** 压缩发生待发射标记（LoopContext.onCompacted 置位，flushCompacted 冲刷） */
+  private pendingCompacted = false;
 
   /**
    * 构造 AgentLoop
@@ -84,10 +88,17 @@ export class AgentLoop {
       agentCapability: config.agentCapability,
       workspace: config.workspace,
       runMessages: config.runMessages,
+      restoreRuns: config.restoreRuns,
       startSeq: config.startSeq,
       platform: config.platform,
       novelConstraintsProvider: config.novelConstraintsProvider,
       beforeProviderCall: config.beforeProviderCall,
+    });
+    // 压缩边界事件桥接：onCompacted 置标记，runTurnLoop / 保险丝路径冲刷为 compacted 事件
+    this.context.subscribe({
+      onCompacted: () => {
+        this.pendingCompacted = true;
+      },
     });
     for (const listener of config.listeners ?? []) {
       this.context.subscribe(listener);
@@ -338,38 +349,31 @@ export class AgentLoop {
         model: runConfig.sampling.model,
         curTurn: runProgress.curTurn,
       });
-      // 耗时拆解（debug）：assembleMs = 上下文组装（含压缩）/ providerMs = 模型调用网络耗时
-      const assembleStartedAt = Date.now();
-      const call = await this.context.toProviderCall(runConfig, runProgress, this.controller.signal);
-      const assembleMs = Date.now() - assembleStartedAt;
-      const providerStartedAt = Date.now();
-      this.config.debugger?.record(call); // 记录每次请求（相邻差异在 html 展示）
-      let result: ProviderResult;
-      try {
-        result = await this.config.provider.call(call, (d) => {
-          // reasoning delta 在 loop 层直接丢弃（思考内容不上链、UI 不展示思考中态）：
-          // 不 emit 任何事件，省去 hub/WS/IPC 全链传输成本。见 docs/PRD/gui-performance.md。
-          if (d.type !== "text-delta") return;
-          // text-delta 进合并缓冲（32ms 尾窗冲刷；任何其他事件发射前强制冲刷保序）：
-          // 每 SSE chunk 一条 RPC → ≤~30Hz 合并事件，见 docs/PRD/gui-performance-2.md 功能点一。
-          this.bufferDelta(onEvent, d.text);
-        });
-      } catch (err) {
-        logger?.error("agent.call.error", {
-          curTurn: runProgress.curTurn,
-          error: err instanceof Error ? err.constructor.name : String(err),
-        });
-        throw err;
-      }
+      // 耗时拆解（debug）：assembleMs = 上下文组装（含压缩）/ providerMs = 模型调用网络耗时；
+      // 超窗保险丝：context-length 类错误 → 强制压缩 + 重组装重试一次
+      const { result, assembleMs, providerMs, elapsedMs } = await this.callProviderWithFuse(
+        run,
+        runConfig,
+        runProgress,
+        onEvent,
+      );
       this.context.appendRunMessages([result.message]);
       logger?.debug("agent.turn.messageAppended", { seq: run.seq, appended: 1 });
       if (result.usage) usage = addUsage(usage, result.usage);
+      // 压缩阈值信号回写：最近一次输入 token = 当前完整上下文占用（含 system/tools）；
+      // signalChars 记录此刻字符总量，压缩后按比例重估（context-compact PRD）
+      if (result.usage) {
+        run.lastInputTokens = result.usage.inputTokens;
+        run.signalChars = countRunChars(this.context.runs);
+        run.model = runConfig.sampling.model;
+        run.maxOutputTokens = runConfig.sampling.maxTokens;
+      }
       logger?.debug("agent.call.result", {
         finishReason: result.finishReason,
         curTurn: runProgress.curTurn,
-        elapsedMs: Date.now() - assembleStartedAt,
+        elapsedMs,
         assembleMs,
-        providerMs: Date.now() - providerStartedAt,
+        providerMs,
         usage: result.usage,
       });
 
@@ -434,6 +438,82 @@ export class AgentLoop {
       return { final: result.message, usage };
     }
     throw new Error(`达到最大轮次 ${runProgress.maxTurn}`);
+  }
+
+  /**
+   * provider 调用 + 超窗保险丝：组装请求（含压缩）→ 调用；context-length 类错误时
+   * 强制压缩（跳过阈值门）并重新组装请求重试一次，仍失败则原样抛出
+   * （docs/PRD/context-compact.md 保险丝）
+   * @param run 当前 run（压缩事件 seq / 日志用）
+   * @param runConfig 单次运行配置（重组装用）
+   * @param runProgress 当前进度（重组装用）
+   * @param onEvent 输出事件回调（delta 缓冲 / compacted 事件）
+   * @returns 结果与耗时拆解
+   */
+  private async callProviderWithFuse(
+    run: RunContext,
+    runConfig: AgentRunConfig,
+    runProgress: RunProgress,
+    onEvent: ((e: LoopEvent) => void) | undefined,
+  ): Promise<{
+    result: ProviderResult;
+    assembleMs: number;
+    providerMs: number;
+    elapsedMs: number;
+  }> {
+    const logger = this.config.logger;
+    const assembleStartedAt = Date.now();
+    let call = await this.context.toProviderCall(runConfig, runProgress, this.controller.signal);
+    this.flushCompacted(onEvent, run);
+    const assembleMs = Date.now() - assembleStartedAt;
+    const providerStartedAt = Date.now();
+    for (let attempt = 0; ; attempt++) {
+      this.config.debugger?.record(call); // 记录每次请求（相邻差异在 html 展示）
+      try {
+        const result = await this.config.provider.call(call, (d) => {
+          // reasoning delta 在 loop 层直接丢弃（思考内容不上链、UI 不展示思考中态）：
+          // 不 emit 任何事件，省去 hub/WS/IPC 全链传输成本。见 docs/PRD/gui-performance.md。
+          if (d.type !== "text-delta") return;
+          // text-delta 进合并缓冲（32ms 尾窗冲刷；任何其他事件发射前强制冲刷保序）：
+          // 每 SSE chunk 一条 RPC → ≤~30Hz 合并事件，见 docs/PRD/gui-performance-2.md 功能点一。
+          this.bufferDelta(onEvent, d.text);
+        });
+        return {
+          result,
+          assembleMs,
+          providerMs: Date.now() - providerStartedAt,
+          elapsedMs: Date.now() - assembleStartedAt,
+        };
+      } catch (err) {
+        if (attempt === 0 && isContextLengthError(err)) {
+          logger?.warn("agent.call.context_length_fuse", {
+            seq: run.seq,
+            curTurn: runProgress.curTurn,
+          });
+          const compacted = await this.context.forceCompact();
+          this.flushCompacted(onEvent, run);
+          if (compacted) {
+            // 重组装（压缩已改写消息序列）后重试一次；二次超窗不再重试。
+            // 重组装本身也可能再触发常规压缩（阈值已降），随后立即冲刷事件防归属错位
+            call = await this.context.toProviderCall(runConfig, runProgress, this.controller.signal);
+            this.flushCompacted(onEvent, run);
+            continue;
+          }
+        }
+        logger?.error("agent.call.error", {
+          curTurn: runProgress.curTurn,
+          error: err instanceof Error ? err.constructor.name : String(err),
+        });
+        throw err;
+      }
+    }
+  }
+
+  /** 压缩通知冲刷：onCompacted 置位后发射 compacted 边界事件（幂等，无 pending 时 no-op） */
+  private flushCompacted(onEvent: ((e: LoopEvent) => void) | undefined, run: RunContext): void {
+    if (!this.pendingCompacted) return;
+    this.pendingCompacted = false;
+    this.emit(onEvent, "compacted", { persist: true, seq: run.seq });
   }
 
   /**

@@ -35,7 +35,7 @@ export interface AgentAssemblerOptions {
   resolveToolGroup: (manifest: ToolGroupManifest) => ToolDef[];
   /** nudge 实现目录：nudgeId → policy 工厂（每 agent 实例新建，策略有状态） */
   nudgeCatalog?: ReadonlyMap<string, () => ContextNudgePolicy>;
-  /** 压缩策略（agent 定义自带；本期空） */
+  /** 压缩策略（宿主注入；main agent 装配 AutoCompactPolicy，subagent 缺省空） */
   compactPolicies?: ContextCompactPolicy[];
 }
 

@@ -3,3 +3,4 @@
 export * from "./ContextCompactPolicy.js";
 export * from "./CompactPolicyChain.js";
 export * from "./CompactPolicyChainImpl.js";
+export * from "./definitions/auto-compact.js";

@@ -40,6 +40,10 @@ export interface AgentLoopConfig {
   agentId?: string;
   /** 可恢复的 run 消息（上次会话；缺省从空开始） */
   runMessages?: LLMessage[];
+  /**
+   * 按 run 边界恢复（journal 重放，压缩分区/摘要标记跨重启保持；提供时优先于 runMessages）
+   */
+  restoreRuns?: readonly { seq: number; messages: LLMessage[]; ts?: string }[];
   /** run seq 起始值（journal 恢复：重放后的下个 run 从 resumeSeq+1 开始） */
   startSeq?: number;
   /** 状态变化监听器（AgentLoop 构造时注册到 LoopContext；可多个） */
@@ -99,6 +103,17 @@ export interface RunContext {
   messages: LLMessage[];
   /** 本 run 累计用量 */
   usage?: { inputTokens: number; outputTokens: number };
+  /**
+   * 最近一次 provider call 的输入 token（= 那次调用时的完整上下文占用，含 system/tools；
+   * 压缩策略阈值信号。区别于 usage 的跨 turn 累加语义）
+   */
+  lastInputTokens?: number;
+  /** 记录信号时全部 run 消息的字符总量（压缩后按 charsNow/signalChars 比例重估占用） */
+  signalChars?: number;
+  /** 本 run 最近一次 provider call 使用的模型名（压缩策略查窗口用） */
+  model?: string;
+  /** 本 run 最近一次 provider call 的输出上限（T2 阈值公式用） */
+  maxOutputTokens?: number;
   /** 时间 */
   ts: string;
   /**

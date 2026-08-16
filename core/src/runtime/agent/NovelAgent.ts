@@ -10,6 +10,7 @@ import type { AgentDefinition } from "./AgentDefinition.js";
 import { MapToolDispatcher } from "../tool/MapToolDispatcher.js";
 import type { NovelConstraintsProvider } from "../prompt/PromptSection.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
+import { AutoCompactPolicy } from "../compact/definitions/auto-compact.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
 import { AgentAssembler } from "./AgentAssembler.js";
 import { novelAgentDefinition } from "./definitions/NovelAgentDefinition.js";
@@ -58,6 +59,8 @@ export interface NovelAgentOptions {
   listeners?: LoopContextListener[];
   /** 可恢复的 run 消息（journal 重放；缺省从空开始） */
   runMessages?: LLMessage[];
+  /** 按 run 边界恢复（journal 重放；压缩分区/摘要标记跨重启保持，提供时优先于 runMessages） */
+  resumeRuns?: readonly { seq: number; messages: LLMessage[]; ts?: string }[];
   /** run seq 起始值（journal 恢复：resumeSeq = journal.lastSeq） */
   resumeSeq?: number;
   /** 审批通道（mutation 工具执行前征询；子进程内闭包 → conv.sendApprovalRequest） */
@@ -143,6 +146,9 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
         : {}),
     }),
     nudgeCatalog,
+    // 自动上下文压缩（docs/PRD/context-compact.md）：以 provider 闭包构造，
+    // 阈值信号/窗口查询/摘要调用都走会话同一 provider
+    compactPolicies: [new AutoCompactPolicy(opts.provider, { logger: opts.logger })],
   });
   const capability = assembler.assemble();
   // subagent 派发三工具（Agent/TaskOutput/TaskStop）：组系统外追加——
@@ -168,6 +174,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     conversationId: opts.conversationId,
     listeners: opts.listeners,
     runMessages: opts.runMessages,
+    restoreRuns: opts.resumeRuns,
     startSeq: opts.resumeSeq,
     requestApproval: opts.requestApproval,
     resumePendingDecider: opts.resumePendingDecider,

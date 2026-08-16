@@ -66,6 +66,8 @@ export class LoopContext implements ReadonlyLoopContext {
     agentCapability: AgentCapability;
     workspace: string;
     runMessages?: LLMessage[];
+    /** 按 run 边界恢复（journal 重放；提供时优先于 runMessages 平铺恢复） */
+    restoreRuns?: readonly { seq: number; messages: LLMessage[]; ts?: string }[];
     startSeq?: number;
     platform?: string;
     novelConstraintsProvider?: NovelConstraintsProvider;
@@ -79,6 +81,23 @@ export class LoopContext implements ReadonlyLoopContext {
     this.beforeProviderCall = opts.beforeProviderCall ?? (async () => {});
     for (const policy of opts.agentCapability.compactPolicies) {
       this.compactChain.register(policy, 0);
+    }
+    if (opts.restoreRuns !== undefined && opts.restoreRuns.length > 0) {
+      // 按 run 边界恢复（压缩分区/摘要标记跨重启保持）；seq 对齐到最大值，
+      // 后续新 run 从 max+1 起，不与压缩摘要 run 消耗过的 seq 冲突
+      for (const restored of opts.restoreRuns) {
+        const messages = [...restored.messages];
+        this.runList.push({
+          seq: restored.seq,
+          messages,
+          ts: restored.ts ?? new Date().toISOString(),
+          appendRunMessages: (m) => {
+            messages.push(...m);
+          },
+        });
+        if (restored.seq > this.seq) this.seq = restored.seq;
+      }
+      return;
     }
     // 恢复上次会话（不触发 onRunAppended）；恢复 run 沿用 journal 最后 seq
     // （= startSeq，不消耗新号）——暂停点续跑时补完消息同 seq 重写原快照，
@@ -131,6 +150,26 @@ export class LoopContext implements ReadonlyLoopContext {
   }
 
   /**
+   * 分配新 run 序号（压缩策略插入摘要 run 用；与 appendRun 同一计数器，防冲突）
+   * @returns 新 seq
+   */
+  allocateSeq(): number {
+    return ++this.seq;
+  }
+
+  /**
+   * 强制压缩（跳过 shouldCompact 阈值门；provider 超窗错误的保险丝路径）
+   * @returns 是否有策略实际压缩了（压缩后同样触发 onCompacted）
+   */
+  async forceCompact(): Promise<boolean> {
+    if (await this.compactChain.compactAll(this)) {
+      this.notify((l) => l.onCompacted?.(this.runList));
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * 组装下一次 ProviderCall：触发压缩（compactIfNeeded，影响 runs）+ 组装动态段输入
    * （workdir=this.workspace、platform=构造注入常量、modelId=run.sampling.model；
    * NOVEL.md 内容经宿主 provider 每调用读取）+ 收集 nudge（persistent 追加 /
@@ -147,8 +186,8 @@ export class LoopContext implements ReadonlyLoopContext {
   ): Promise<ProviderCall> {
     // ⓪ provider call 发起前回调（mode pending→active 晋升等；在一切渲染/门控之前）
     await this.beforeProviderCall();
-    // ① 压缩（链式，影响 runs）
-    if (this.compactChain.compactIfNeeded(this)) {
+    // ① 压缩（链式，影响 runs；策略可含 LLM 摘要调用，需 await）
+    if (await this.compactChain.compactIfNeeded(this)) {
       this.notify((l) => l.onCompacted?.(this.runList));
     }
     // ② 动态段输入：LoopContext 自组装 + 宿主注入约束内容（每调用重读）

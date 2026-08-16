@@ -4,6 +4,7 @@ import type {
   ProviderResult,
   ProviderOnDelta,
 } from "./types.js";
+import type { ModelInfo } from "./model-info.js";
 import { AnthropicProvider } from "./adapters/AnthropicProvider.js";
 import { OpenAIProvider } from "./adapters/OpenAIProvider.js";
 
@@ -17,6 +18,13 @@ export interface Provider {
    * @throws ProviderError 标准化异常（请求错误 / 认证 / 费用不足 / 限流 / 超时 / 网络 / 服务端 / 取消）
    */
   call(call: ProviderCall, onDelta?: ProviderOnDelta): Promise<ProviderResult>;
+
+  /**
+   * 查询模型能力信息（含上下文窗口 token 数；压缩策略阈值基准）
+   * @param model 模型名
+   * @returns 模型能力信息（注册覆盖优先，缺省按名启发式推断）
+   */
+  getModelInfo(model: string): ModelInfo;
 }
 
 /**

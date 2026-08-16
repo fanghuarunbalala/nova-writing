@@ -124,6 +124,20 @@ export class ProviderUnknownError extends ProviderError {
 }
 
 /**
+ * 判断是否为上下文超窗类错误（HTTP 400 + 超窗特征文案；压缩保险丝用）。
+ * 覆盖主流厂商报错："prompt is too long" / "maximum context length is N tokens"
+ * / "context window" / "token limit" 等；不含裸 "token"（避免误吞参数校验类 400）
+ * @param err 待判断错误（provider 标准化后）
+ * @returns 是否为上下文超窗错误
+ */
+export function isContextLengthError(err: unknown): boolean {
+  if (!(err instanceof ProviderRequestError)) return false;
+  return /too long|context length|context window|maximum context|token limit|exceeds?.{0,20}token/i.test(
+    err.message,
+  );
+}
+
+/**
  * 将原始错误封装为具体 ProviderError（SDK 原始错误 → 对应错误类，向上抛出）
  * @param raw 原始错误（SDK 错误对象 / HTTP 状态 / AbortError 等）
  * @param provider 来源 provider 名

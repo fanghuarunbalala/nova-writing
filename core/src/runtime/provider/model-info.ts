@@ -23,6 +23,8 @@ export interface ModelInfo {
   effortLevels?: readonly EffortLevel[];
   /** 最大输出 token（budget-tokens 映射档位用） */
   maxOutputTokens?: number;
+  /** 上下文窗口 token 数（压缩策略阈值基准；缺省按模型名启发式推断） */
+  contextWindowTokens?: number;
 }
 
 /** 厂商思考参数（适配层映射产物，供子类组装 SDK 请求） */
@@ -77,10 +79,10 @@ export class ModelInfoRegistry {
     if (m.includes("claude")) {
       // 新一代：adaptive thinking + effort，已移除采样温度
       if (/(opus-4-(7|8)|opus-5|sonnet-5|fable-5|mythos-5)/.test(m)) {
-        return { model, supportsTemperature: false, thinkingMode: "adaptive-effort" };
+        return { model, supportsTemperature: false, thinkingMode: "adaptive-effort", contextWindowTokens: 200_000 };
       }
       // 4.6 及更早：adaptive-effort + 支持温度
-      return { model, supportsTemperature: true, thinkingMode: "adaptive-effort" };
+      return { model, supportsTemperature: true, thinkingMode: "adaptive-effort", contextWindowTokens: 200_000 };
     }
     if (m.includes("deepseek")) {
       // DeepSeek（OpenAI 兼容）：thinking 默认开启，reasoning_effort 仅 low/high/max（xhigh 落到 high）
@@ -89,6 +91,7 @@ export class ModelInfoRegistry {
         supportsTemperature: true,
         thinkingMode: "reasoning-effort",
         effortLevels: ["low", "high", "max"],
+        contextWindowTokens: 128_000,
       };
     }
     if (
@@ -98,9 +101,9 @@ export class ModelInfoRegistry {
       m.includes("gpt-5") ||
       m.includes("gpt-o")
     ) {
-      return { model, supportsTemperature: true, thinkingMode: "reasoning-effort" };
+      return { model, supportsTemperature: true, thinkingMode: "reasoning-effort", contextWindowTokens: 400_000 };
     }
     // 本地 / 未知模型：保守默认
-    return { model, supportsTemperature: true, thinkingMode: "none" };
+    return { model, supportsTemperature: true, thinkingMode: "none", contextWindowTokens: 128_000 };
   }
 }

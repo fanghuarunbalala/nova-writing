@@ -72,6 +72,15 @@ export abstract class BaseProvider implements Provider {
   protected abstract buildResult(call: ProviderCall): ProviderResult;
 
   /**
+   * 查询模型能力信息（含上下文窗口；压缩策略阈值基准）
+   * @param model 模型名
+   * @returns 模型能力信息（overrides 优先，缺省按名启发式）
+   */
+  getModelInfo(model: string): ModelInfo {
+    return this.modelInfo.getModelInfo(model);
+  }
+
+  /**
    * 模板方法：SamplingConfig + ModelInfo → 厂商采样参数（子类组装 SDK 请求用）
    * @param sampling 中立采样配置
    * @returns 中立偏厂商的采样参数

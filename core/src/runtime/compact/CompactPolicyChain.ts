@@ -15,9 +15,15 @@ export interface CompactPolicyChain {
    */
   unregister(policy: ContextCompactPolicy): void;
   /**
-   * 链式检查并压缩（策略按优先级逐个 shouldCompact → compact）
+   * 链式检查并压缩（策略按优先级逐个 shouldCompact → compact；策略可含 LLM 调用，故为异步）
    * @param loop LoopContext（策略直接操作上下文）
    * @returns 是否有策略执行了压缩
    */
-  compactIfNeeded(loop: LoopContext): boolean;
+  compactIfNeeded(loop: LoopContext): Promise<boolean>;
+  /**
+   * 强制压缩（跳过 shouldCompact 阈值门，逐策略直接 compact；超窗保险丝用）
+   * @param loop LoopContext（策略直接操作上下文）
+   * @returns 是否有策略实际压缩了
+   */
+  compactAll(loop: LoopContext): Promise<boolean>;
 }

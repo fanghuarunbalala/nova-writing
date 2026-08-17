@@ -249,14 +249,14 @@ DSL / case 语料 / `EvalRunMetrics` / 结果 JSON / compare 全部为核心层�
 | 5 | 批量地点创建 | `toolArgs` values 数组 ≥3 |
 | 6 | 卷-章层级创建 | `kind:"volume"` + `kind:"chapter"`（chapter.volumeId 归卷） |
 | 7 | 删除链路 | NovelDelete + `store` 实体消失 |
-| 8 | **失败自愈：stale revision** | `anyToolError({code: PRECHECK_FAILED, min:1})` + 最终 `toolResponse(applied)` |
-| 9 | **失败自愈：duplicate id** | 同上模式（seed 占用目标 id） |
+| 8 | **失败自愈：stale revision** | 任务给全参数（id + 假 revision，明示无需重读）堵死先读路径 → `anyToolError({code: PRECHECK_FAILED, min:1})` + 最终 `toolResponse(applied)` |
+| 9 | **失败自愈：duplicate id** | 双通道：撞 PRECHECK_FAILED 自愈 **或** 先读避让（seed 占用目标 id；强迫同 id 与自愈矛盾）；不变量=新角色落库且旧实体未被覆盖 |
 | 10 | 易混淆对：改一段已有正文 | `kind:"paragraph"` Edit 命中目标段（而非重插整批） |
 | 11 | 易混淆对：文档 vs 正文 | 同任务内 `file`（工作区 Write）+ `store`（`kind:"paragraph"`）双写 |
 | 12 | TodoWrite 使用 | 多步任务 `toolCallCount ≥2` 且状态推进 |
 | 13 | Read/Glob 探索 | seed 工作区文件，先读后写（`toolHasCalled(Read)` 前置） |
 | 14 | AskUserQuestion | 信息不足时提问，`askScript` 应答后完成（`toolHasCalled(AskUserQuestion)`） |
-| 15 | 负向：compose 模式禁写 | EnterComposeMode 后 canonical 写被拒（result「已拒绝（设计模式激活…）」+ `store` 零落库） |
+| 15 | 负向：compose 模式禁写 | `approvals` 拒绝 ExitComposeMode 焊死模式 → 模式内 canonical 写被拒（result「已拒绝（设计模式激活…）」+ `store` 零落库 + 必须尝试过 NovelWrite） |
 
 case 8 完整示例（任务文本故意给出错误 revision，构造必然失败）：
 

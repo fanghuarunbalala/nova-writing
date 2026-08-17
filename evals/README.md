@@ -16,6 +16,7 @@
 | `pnpm --filter @novel/evals dev` | evalite watch：改 case 即重跑 + 本地 UI（http://localhost:3006），迭代语料用 | 是 |
 | `pnpm --filter @novel/evals suite -- --tag baseline` | 跑全套件一次：`run-once-and-exit`，落盘 `results/<时间戳>-baseline/` | 是 |
 | `pnpm --filter @novel/evals compare -- results/<A> results/<B>` | 基线对比：逐 case delta 表 + 红线判定，报告写 `<B>/compare.md`；**触发红线时退出码 1**（可作门禁） | 否 |
+| `pnpm --filter @novel/evals report -- results/<目录>` | 为既有运行目录渲染自包含可视化报告 `report.html`（suite 结束时也会自动生成） | 否 |
 
 常用变体：
 
@@ -68,6 +69,9 @@ results/<时间戳>-<tag>/
 ├── evalite.json   # 完整运行数据（逐 trial 的 output=EvalRunMetrics、逐断言 score/metadata）
 ├── manifest.json  # 归因：git SHA/branch、prompt 渲染 sha256、tool schema sha256、
 │                  #   model+采样、judge 模型、case 集文件清单与 hash
+├── report.html    # 可视化报告（suite 自动生成，也可用 report 命令补生成）：
+│                  #   单文件零依赖、离线可看，风格对齐 docs/design/app-redesign-demo.html，
+│                  #   含四主题切换与 case 筛选，全量 trial 细节内嵌
 └── compare.md     # compare 命令产物：delta 表 + 红线结论
 ```
 

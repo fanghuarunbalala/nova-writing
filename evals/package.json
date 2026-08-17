@@ -9,7 +9,8 @@
     "test": "vitest run",
     "dev": "evalite watch",
     "suite": "tsc -p tsconfig.json && node dist/suite.js",
-    "compare": "tsc -p tsconfig.json && node dist/compare.js"
+    "compare": "tsc -p tsconfig.json && node dist/compare.js",
+    "report": "tsc -p tsconfig.json && node dist/report.js"
   },
   "dependencies": {
     "@novel/core": "workspace:*"

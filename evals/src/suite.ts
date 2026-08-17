@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { runEvalite } from "evalite/runner";
 import { buildNovelAgent, InMemoryNovelStore } from "@novel/core";
 import type { NovelHandle, Provider } from "@novel/core";
+import { writeReport } from "./report.js";
 
 function sha256(s: string): string {
 	return createHash("sha256").update(s).digest("hex");
@@ -141,9 +142,11 @@ async function main(): Promise<void> {
 		...caseSet,
 	};
 	await writeFile(join(outDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
+	const reportPath = await writeReport(outDir);
 	console.log(
 		`[suite] 完成：manifest 已落盘（git ${manifest.git.sha.slice(0, 8)}，prompt ${fingerprint.promptSha256.slice(0, 8)}，schema ${fingerprint.toolSchemaSha256.slice(0, 8)}）`,
 	);
+	console.log(`[suite] 可视化报告：${reportPath}`);
 }
 
 await main();

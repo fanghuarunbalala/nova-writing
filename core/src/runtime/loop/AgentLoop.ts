@@ -324,7 +324,7 @@ export class AgentLoop {
         toolCallId,
         result: text,
       });
-      this.context.appendRunMessages([{ role: "tool", content: text, id: toolCallId }]);
+      this.context.appendMessagesTo(run, [{ role: "tool", content: text, id: toolCallId }]);
     }
     const runProgress: RunProgress = {
       curTurn: 0,
@@ -357,7 +357,7 @@ export class AgentLoop {
         runProgress,
         onEvent,
       );
-      this.context.appendRunMessages([result.message]);
+      this.context.appendMessagesTo(run, [result.message]);
       logger?.debug("agent.turn.messageAppended", { seq: run.seq, appended: 1 });
       if (result.usage) usage = addUsage(usage, result.usage);
       // 压缩阈值信号回写：最近一次输入 token = 当前完整上下文占用（含 system/tools）；
@@ -416,7 +416,7 @@ export class AgentLoop {
             });
           }
           logger?.debug("agent.tool.result", { tool: tc.name, elapsedMs: Date.now() - toolStartedAt });
-          this.context.appendRunMessages([{ role: "tool", content: text, id: tc.id }]);
+          this.context.appendMessagesTo(run, [{ role: "tool", content: text, id: tc.id }]);
           runProgress.toolsLastTurn.set(tc.name, runProgress.curTurn);
         }
         continue;

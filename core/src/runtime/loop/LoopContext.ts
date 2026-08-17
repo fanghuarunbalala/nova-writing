@@ -6,6 +6,7 @@ import type {
   NovelConstraintsProvider,
 } from "../prompt/PromptSection.js";
 import { CompactPolicyChainImpl } from "../compact/CompactPolicyChainImpl.js";
+import { reorderToolResults } from "./toolSequenceGuard.js";
 import type {
   AgentRunConfig,
   RunContext,
@@ -147,6 +148,17 @@ export class LoopContext implements ReadonlyLoopContext {
   appendRunMessages(messages: LLMessage[]): void {
     const run = this.runList.at(-1);
     if (!run) return;
+    this.appendMessagesTo(run, messages);
+  }
+
+  /**
+   * 追加消息到指定 run（loop 执行路径专用：assistant / tool 结果必须落回发起 turn 的 run，
+   * 不能定位 runList 末尾——工具挂起期间用户新开 run 会让末尾错位，tool result 落到
+   * user 消息之后，平铺出 assistant(toolCalls) → user → tool 的协议非法序列被 provider 400）
+   * @param run 目标 run（须已在 runList 中）
+   * @param messages 本次追加的消息
+   */
+  appendMessagesTo(run: RunContext, messages: LLMessage[]): void {
     run.messages.push(...messages);
     this.notify((l) => l.onRunMessageAppend?.(run, messages));
   }
@@ -215,11 +227,12 @@ export class LoopContext implements ReadonlyLoopContext {
             },
       ...(constraints === undefined ? {} : { novelGlobalConstraints: constraints }),
     };
-    // ④ 组装基础请求（system / tools / messages / sampling；messages 快照含 ② 注入）
+    // ④ 组装基础请求（system / tools / messages / sampling；messages 快照含 ② 注入；
+    // toolSequenceGuard 兜底协议合法性——存量 journal 坏序列在此自愈，不落盘）
     const call: ProviderCall = {
       system: this.renderSystem(dynamicInput),
       tools: this.toolSchemes,
-      messages: this.messages,
+      messages: reorderToolResults(this.messages),
       sampling: run.sampling,
       signal,
     };

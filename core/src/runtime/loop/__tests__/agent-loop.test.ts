@@ -256,6 +256,65 @@ describe("AgentLoop.run", () => {
   });
 });
 
+describe("AgentLoop 工具挂起期间 followup 追发（tool result 归位）", () => {
+  it("tool result 定向追加回发起 run：追发的 user 不插进 assistant 与 tool result 之间，下一次请求序列合法", async () => {
+    let releaseTool!: () => void;
+    const gate = new Promise<void>((resolve) => (releaseTool = resolve));
+    const calls: ProviderCall["messages"][] = [];
+    const provider: Provider = {
+      call: async (call: ProviderCall) => {
+        calls.push(call.messages);
+        return calls.length === 1
+          ? result("tool_call", "查", [{ id: "q1", name: "read", args: "{}" }])
+          : result("stop", "done");
+      },
+    };
+    const slowDispatcher: ToolDispatcher = {
+      dispatch: async () => {
+        await gate;
+        return "slow-result";
+      },
+      resolve: () => undefined,
+    };
+    const loop = new AgentLoop({
+      workspace: "/ws",
+      provider,
+      agentCapability: capability,
+      toolDispatcher: slowDispatcher,
+    });
+    const events: string[] = [];
+    loop.onOutputEvent((e) => events.push(e.type));
+    const bothDone = new Promise<void>((resolve) => {
+      const id = setInterval(() => {
+        if (events.filter((t) => t === "run-end").length >= 2) {
+          clearInterval(id);
+          resolve();
+        }
+      }, 2);
+    });
+    loop.followup("hi", { sampling: { model: "m" } });
+    await new Promise((r) => setTimeout(r, 5)); // run1 进入工具挂起（running=true）
+    loop.followup("追发", { sampling: { model: "m" } }); // 挂起期间追发（run2 入队）
+    releaseTool();
+    await bothDone;
+
+    // run1 收口前的请求（第二次 call）：tool result 紧跟 assistant(toolCalls)，追发 user 在其后
+    const second = calls[1];
+    expect(second).toBeDefined();
+    const toolIdx = second.findIndex((m) => m.role === "tool");
+    expect(toolIdx).toBeGreaterThan(0);
+    expect(second[toolIdx - 1]).toMatchObject({ role: "assistant", toolCalls: [{ id: "q1" }] });
+    const followupIdx = second.findIndex((m) => m.role === "user" && m.content === "追发");
+    expect(followupIdx).toBeGreaterThan(toolIdx);
+
+    // run 边界：tool result 落回 seq=1（发起 run），seq=2 以追发 user 开头且不含 tool 消息
+    const runs = loop["context"].runs;
+    expect(runs[0].messages.some((m) => m.role === "tool")).toBe(true);
+    expect(runs[1].messages[0]).toEqual({ role: "user", content: "追发" });
+    expect(runs[1].messages.some((m) => m.role === "tool")).toBe(false);
+  });
+});
+
 describe("AgentLoop.resumePendingRun 补完", () => {
   /** 恢复快照：assistant 带一个未补 tool 结果的 toolCall（ParagraphWrite） */
   function makeResumeLoop(overrides: {

@@ -2,11 +2,14 @@ packages:
   - "core"
   - "ui"
   - "gui"
+  - "evals"
 
 allowBuilds:
+  better-sqlite3: true
   esbuild: true
   zeromq: true
 
 onlyBuiltDependencies:
   - zeromq
   - esbuild
+  - better-sqlite3

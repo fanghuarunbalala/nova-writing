@@ -1,0 +1,21 @@
+{
+  "name": "@novel/evals",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "dev": "evalite watch",
+    "suite": "tsc -p tsconfig.json && node dist/suite.js",
+    "compare": "node dist/compare.js"
+  },
+  "dependencies": {
+    "@novel/core": "workspace:*"
+  },
+  "devDependencies": {
+    "evalite": "^0.19.0",
+    "vitest": "^4.1.10"
+  }
+}

@@ -10,6 +10,10 @@ dist/
 # debug 生成物（ProviderCall jsonl/html，仅仓库根目录；core/src/runtime/debug 是源码）
 /debug/
 
+# evals 运行产物（结果 JSON/manifest/基线）与 evalite 静态导出
+evals/results/
+evals/evalite-export/
+
 # logs
 *.log
 npm-debug.log*

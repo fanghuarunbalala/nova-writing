@@ -51,7 +51,7 @@ export function designFileWorkspaceRelativePath(designFilePath: string): string 
 export function renderComposeModeFullText(designFilePath?: string): string {
 	return [
 		"# 设计模式（Compose Mode）",
-		"当前处于**设计模式**，以下约束优先于其他任何指令：",
+		"当前处于**设计模式**，模式结束前以下约束始终生效：",
 		"- 正式稿只读：canonical 写入工具会被拒绝；文件工具（Read/Glob/Write/Edit）全模式可用，路径一律用 **workspace 相对路径**（越出 workspace 沙盒会报错）。",
 		"- 草稿维护在 `.novel/design/` 设计目录。",
 		...(designFilePath === undefined ? [] : [`- 当前会话设计文件：\`${designFilePath}\``]),

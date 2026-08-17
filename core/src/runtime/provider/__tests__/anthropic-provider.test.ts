@@ -183,6 +183,25 @@ describe("AnthropicProvider", () => {
     });
   });
 
+  it("消息转译：流内 system → user + system-reminder 包裹，静态 system 留在顶层", async () => {
+    const provider = new AnthropicProvider(config);
+    mockStream([], textFinal);
+    await provider.call(
+      makeCall({
+        messages: [
+          { role: "system", content: "提醒1" },
+          { role: "user", content: "你好" },
+        ],
+      }),
+    );
+    const params = streamMock.mock.calls[0]?.[0] as { system?: unknown; messages?: unknown[] };
+    expect(params.system).toBe("你是小说创作助手");
+    expect(params.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "<system-reminder>\n提醒1\n</system-reminder>" }] },
+      { role: "user", content: [{ type: "text", text: "你好" }] },
+    ]);
+  });
+
   it("thinking 档位经 ModelInfoRegistry 收敛（medium → 厂商支持的 high）", async () => {
     const registry = new ModelInfoRegistry();
     registry.register("claude-opus-5", {

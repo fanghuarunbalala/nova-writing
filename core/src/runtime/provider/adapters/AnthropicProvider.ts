@@ -10,6 +10,7 @@ import type {
 import { BaseProvider } from "../BaseProvider.js";
 import { ProviderUnknownError } from "../errors.js";
 import type { ThinkingParam } from "../model-info.js";
+import { wrapSystemReminder } from "../systemReminder.js";
 
 /** Anthropic 适配器实现（基于 @anthropic-ai/sdk，模板三钩子落地） */
 export class AnthropicProvider extends BaseProvider {
@@ -122,7 +123,9 @@ export class AnthropicProvider extends BaseProvider {
     const result: Anthropic.MessageParam[] = [];
     for (const m of messages) {
       if (m.role === "user" || m.role === "system") {
-        result.push({ role: "user", content: [{ type: "text", text: m.content }] });
+        // 流内 system 提醒与其他适配器一致：user 角色 + 标签包裹（见 systemReminder.ts）
+        const text = m.role === "system" ? wrapSystemReminder(m.content) : m.content;
+        result.push({ role: "user", content: [{ type: "text", text }] });
       } else if (m.role === "assistant") {
         const blocks: Anthropic.ContentBlockParam[] = [];
         if (m.content) blocks.push({ type: "text", text: m.content });

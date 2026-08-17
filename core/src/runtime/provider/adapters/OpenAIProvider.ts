@@ -8,6 +8,7 @@ import type {
 } from "../types.js";
 import { BaseProvider } from "../BaseProvider.js";
 import type { ThinkingParam } from "../model-info.js";
+import { wrapSystemReminder } from "../systemReminder.js";
 
 /** 流式累积状态（createStream 迭代填充，buildResult 读取；实例串行使用约定） */
 interface Accumulator {
@@ -180,7 +181,8 @@ export class OpenAIProvider extends BaseProvider {
     }
     for (const m of call.messages) {
       if (m.role === "system") {
-        result.push({ role: "system", content: m.content });
+        // 流内 system 提醒：user 角色 + 标签包裹（不继承 system 权威；见 systemReminder.ts）
+        result.push({ role: "user", content: wrapSystemReminder(m.content) });
       } else if (m.role === "user") {
         result.push({ role: "user", content: m.content });
       } else if (m.role === "assistant") {

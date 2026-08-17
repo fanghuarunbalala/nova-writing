@@ -14,11 +14,16 @@ import {
 } from "../novel.js";
 
 describe("prompt 分节文案（迁移完整性）", () => {
-  it("4 个通用协议段保持清空（render 返回空串，不产出内容）", () => {
+  it("3 个通用协议段保持清空（render 返回空串，不产出内容）", () => {
     expect(coreRuntimeProtocolSection.render({} as never)).toBe("");
     expect(completionContractSection.render({} as never)).toBe("");
-    expect(contextReliabilitySection.render({} as never)).toBe("");
     expect(conversationBehaviorSection.render({} as never)).toBe("");
+  });
+
+  it("contextReliability 段说明 system-reminder 标签语义（流内提醒的可辨识框架）", () => {
+    const text = contextReliabilitySection.render({} as never);
+    expect(text).toContain("<system-reminder>");
+    expect(text).toContain("不是用户发言");
   });
 
   it("todoGuidance 段保留 Todo 指导文案", () => {

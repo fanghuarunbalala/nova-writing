@@ -10,14 +10,15 @@ import { evalCase } from "./dsl.js";
 import { jsonSubset, contains, regex } from "./matcher.js";
 
 /**
- * 脚本化 provider：按序返回预置结果；检测到新 run 起点（messages 仅 1 条）时重置脚本，
- * 使 evalCase 的 repeats 各次执行看到相同剧本。
+ * 脚本化 provider：按序返回预置结果；检测到新 run 起点（上下文尚无 assistant
+ * 消息——project_stage nudge 会在首 call 头插 system，不能按 messages 条数判定）
+ * 时重置脚本，使 evalCase 的 repeats 各次执行看到相同剧本。
  */
 function scriptedProvider(results: ProviderResult[]): Provider {
 	let i = 0;
 	return {
 		call: async (call) => {
-			if (call.messages.length <= 1) i = 0;
+			if (!call.messages.some((m) => m.role === "assistant")) i = 0;
 			const r = results[Math.min(i, results.length - 1)]!;
 			i++;
 			return r;

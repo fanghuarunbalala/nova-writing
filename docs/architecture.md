@@ -243,11 +243,11 @@ type ConversationSystemControl =
 runtime/
 ├── provider/      多模型（Anthropic/OpenAI/DeepSeek）+ 流式 + 错误分类 + 模型能力
 ├── tool/          ToolDef/ToolHandler/ToolGroupManifest/ToolDispatcher/MapToolDispatcher + definitions（files/novel/todo/compose）+ groups（NovelToolGroups）
-├── prompt/        PromptSection 判别联合（static/dynamic）+ PromptRecipe/PromptSectionRegistry + sections（agent 通用 + novel 域，含 compose 四段）
+├── prompt/        PromptSection 判别联合（static/dynamic）+ PromptRecipe/PromptSectionRegistry + sections（agent 通用 + novel 域含 compose 四段 + novelStandards 三质量规范：story_appeal/outline_standard/prose_standard，main 与 compose 共享）
 ├── agent/         AgentDefinition（值对象）/AgentAssembler/NovelAgent + NovelSubagent/NovelExplorerAgent/NovelComposeAgent（薄 builder）+ definitions（三 agent 声明 + novelSections 单一注册表 + 派生 subagent 目录）
-├── loop/          AgentLoop（输入队列 + round/turn）+ LoopContext（static base 缓存 + 动态输入通道 + beforeProviderCall 步骤⓪）
-├── nudge/         ContextNudgePolicy + definitions（todo_idle/compose_mode 五件套）
-├── compact/       ContextCompactPolicy + CompactPolicyChain
+├── loop/          AgentLoop（输入队列 + round/turn）+ LoopContext（static base 缓存 + 动态输入通道 + beforeProviderCall 步骤⓪ + compactionGeneration）
+├── nudge/         ContextNudgePolicy + definitions（todo_idle/compose_mode 五件套 + project_stage v2：persistent append full/sparse 双密度，纪元=压缩，nudge 标记消息压缩清扫）
+├── compact/       ContextCompactPolicy + CompactPolicyChain（T2 摘要输入过滤 nudge 标记消息）
 ├── todo/          TodoProtocol + InMemoryConversationTodoStore
 └── debug/         ProviderCallDebugger（jsonl + html diff）
 conversation/      contract + persistence（journal + state.jsonl sidecar）+ server（Conversation/ManagerServer/Subagent/WaitRequestQueue）+ compose（状态机/服务/文案/canonical 名单）+ JournalBridge + projection（ProjectionLayer/CardProjection）

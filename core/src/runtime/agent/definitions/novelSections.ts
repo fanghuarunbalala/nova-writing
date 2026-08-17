@@ -27,8 +27,13 @@ import {
   novelComposeProcessSection,
   novelComposeReportingSection,
 } from "../../prompt/sections/novel.js";
+import {
+  novelStoryAppealSection,
+  novelOutlineStandardSection,
+  novelProseStandardSection,
+} from "../../prompt/sections/novelStandards.js";
 
-/** novel 域段注册表（id@version；17 段：main 9 + 共享 3 + explorer 1 + compose 4） */
+/** novel 域段注册表（id@version；20 段：main 9 + 共享 3 + 标准 3 + explorer 1 + compose 4） */
 export const novelSectionRegistry = new PromptSectionRegistry([
   // main（novel）recipe 段
   novelIdentitySection,
@@ -45,6 +50,10 @@ export const novelSectionRegistry = new PromptSectionRegistry([
   contextReliabilitySection,
   completionContractSection,
   todoGuidanceSection,
+  // 质量标准段（规范层：main 与 compose recipe 引用，按名被 project_stage nudge 引用）
+  novelStoryAppealSection,
+  novelOutlineStandardSection,
+  novelProseStandardSection,
   // explorer 专属段
   novelExplorerSection,
   // compose 专属段（legacy 迁移）

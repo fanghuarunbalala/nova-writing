@@ -72,7 +72,7 @@ describe("createAskUserTool", () => {
     expect(out).toContain("不要重试");
   });
 
-  it("参数防御：questions 数量 / options 数量 / 缺字段拒绝", async () => {
+  it("参数防御：questions 数量 / options 数量 / 缺字段 / options+placeholder 互斥拒绝", async () => {
     const tool = createAskUserTool(async () => [], "conv-1");
     await expect(tool.handler.execute(call({ questions: [] }))).rejects.toThrow(/1-4/);
     await expect(
@@ -80,6 +80,24 @@ describe("createAskUserTool", () => {
     ).rejects.toThrow(/2-4/);
     await expect(tool.handler.execute(call({ questions: [{ header: "h" }] }))).rejects.toThrow(/question 或 header/);
     await expect(tool.handler.execute(call({}))).rejects.toThrow(/无效的 JSON 参数|questions/);
+    // 开放填空题只有一个文本框：选择题带 placeholder 拒绝（2026-08-17 日志错乱形态回归）
+    await expect(
+      tool.handler.execute(
+        call({
+          questions: [
+            {
+              question: "q?",
+              header: "h",
+              options: [
+                { label: "a", description: "x" },
+                { label: "b", description: "y" },
+              ],
+              placeholder: "提示",
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/placeholder/);
   });
 
   it("schema：questions 1-4、options 给出则 2-4、开放题省略 options", () => {

@@ -47,6 +47,12 @@ export interface ToolCall {
 export interface SystemMessage {
   role: "system";
   content: string;
+  /**
+   * nudge 来源标记（如 project_stage_full / project_stage_sparse）：
+   * 压缩时统一清扫、T2 摘要输入过滤用；适配器 wire 转译时忽略，journal 原样保留。
+   * 无标记的 system（compose/todo/steer）不受清扫影响
+   */
+  nudge?: string;
 }
 
 /** 用户消息 */

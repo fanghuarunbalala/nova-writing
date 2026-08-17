@@ -43,6 +43,8 @@ export class LoopContext implements ReadonlyLoopContext {
   private listeners: LoopContextListener[] = [];
   /** run 序号递增器 */
   private seq = 0;
+  /** 压缩代数（每次实际压缩 +1；暴露给 nudge 感知「刚压缩」） */
+  private compactionCount = 0;
   /** 压缩策略链（注册 agentCapability.compactPolicies） */
   private compactChain = new CompactPolicyChainImpl();
   /** 静态 system 分段 base 缓存（全部 static 段一次渲染；dynamic 段不进 base） */
@@ -163,6 +165,8 @@ export class LoopContext implements ReadonlyLoopContext {
    */
   async forceCompact(): Promise<boolean> {
     if (await this.compactChain.compactAll(this)) {
+      this.sweepNudgeMessages();
+      this.compactionCount++;
       this.notify((l) => l.onCompacted?.(this.runList));
       return true;
     }
@@ -186,11 +190,19 @@ export class LoopContext implements ReadonlyLoopContext {
   ): Promise<ProviderCall> {
     // ⓪ provider call 发起前回调（mode pending→active 晋升等；在一切渲染/门控之前）
     await this.beforeProviderCall();
-    // ① 压缩（链式，影响 runs；策略可含 LLM 摘要调用，需 await）
+    // ① 压缩（链式，影响 runs；策略可含 LLM 摘要调用，需 await）。
+    // 压缩后清扫带 nudge 标记的流内 system 消息（nudge 策略按纪元重注）
     if (await this.compactChain.compactIfNeeded(this)) {
+      this.sweepNudgeMessages();
+      this.compactionCount++;
       this.notify((l) => l.onCompacted?.(this.runList));
     }
-    // ② 动态段输入：LoopContext 自组装 + 宿主注入约束内容（每调用重读）
+    // ② persistent nudge：先于消息快照 append（本 call 即可见、紧贴用户消息、
+    // 落 journal；可为 async——实现需异步查询外部状态，如 novel-db）
+    for (const policy of this.agentCapability.nudgePolicies) {
+      await policy.persistentNudgeIfNeeded(this, runProgress);
+    }
+    // ③ 动态段输入：LoopContext 自组装 + 宿主注入约束内容（每调用重读）
     const constraints = await this.novelConstraintsProvider();
     const dynamicInput: DynamicPromptSectionInput = {
       environment:
@@ -203,7 +215,7 @@ export class LoopContext implements ReadonlyLoopContext {
             },
       ...(constraints === undefined ? {} : { novelGlobalConstraints: constraints }),
     };
-    // ③ 组装基础请求（system / tools / messages / sampling）
+    // ④ 组装基础请求（system / tools / messages / sampling；messages 快照含 ② 注入）
     const call: ProviderCall = {
       system: this.renderSystem(dynamicInput),
       tools: this.toolSchemes,
@@ -211,10 +223,9 @@ export class LoopContext implements ReadonlyLoopContext {
       sampling: run.sampling,
       signal,
     };
-    // ④ nudge：persistent（内部 append → onRunMessageAppend）/ transient（原地改 call）
+    // ⑤ transient nudge：原地改 call（不持久化；可为 async）
     for (const policy of this.agentCapability.nudgePolicies) {
-      policy.persistentNudgeIfNeeded(this, runProgress);
-      policy.transientNudgeIfNeeded(this, runProgress, call);
+      await policy.transientNudgeIfNeeded(this, runProgress, call);
     }
     return call;
   }
@@ -234,6 +245,27 @@ export class LoopContext implements ReadonlyLoopContext {
   /** 最近 run 记录（滑动窗口） */
   get runs(): RunContext[] {
     return this.runList;
+  }
+  /** 压缩代数（每次实际压缩 +1；nudge 感知「刚压缩」用，无其他语义） */
+  get compactionGeneration(): number {
+    return this.compactionCount;
+  }
+
+  /**
+   * 压缩后清扫：删除全部带 nudge 标记的流内 system 消息——标记消息由 nudge
+   * 策略按纪元（压缩重置）重注，不能残留；system 无 toolCall 配对约束，可安全删。
+   * 无标记的 system（compose/todo/steer）不受影响
+   */
+  private sweepNudgeMessages(): void {
+    for (const run of this.runList) {
+      const kept = run.messages.filter(
+        (m) => !(m.role === "system" && m.nudge !== undefined),
+      );
+      if (kept.length !== run.messages.length) {
+        run.messages.length = 0;
+        run.messages.push(...kept);
+      }
+    }
   }
 
   /**

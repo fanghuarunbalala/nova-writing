@@ -254,4 +254,91 @@ describe("LoopContext", () => {
     );
     expect(call.sampling.model).toBe("gpt-5");
   });
+
+  it("compactionGeneration：实际压缩 +1，未压缩不变", async () => {
+    const compactCapability: AgentCapability = {
+      ...capability,
+      compactPolicies: [
+        {
+          shouldCompact: () => true,
+          compact: async () => true,
+        },
+      ],
+    };
+    const ctx = new LoopContext({ agentCapability: compactCapability, workspace: "/ws" });
+    ctx.appendRun(makeRun([{ role: "user", content: "hi" }]));
+    expect(ctx.compactionGeneration).toBe(0);
+    await ctx.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(ctx.compactionGeneration).toBe(1);
+    // 无压缩策略：代数恒 0
+    const bare = new LoopContext({ agentCapability: capability, workspace: "/ws" });
+    bare.appendRun(makeRun([{ role: "user", content: "hi" }]));
+    await bare.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(bare.compactionGeneration).toBe(0);
+  });
+
+  it("persistent nudge 先于消息快照：本 call 即可见（注入紧贴用户消息）", async () => {
+    const nudgeCapability: AgentCapability = {
+      ...capability,
+      nudgePolicies: [
+        {
+          persistentNudgeIfNeeded: (loop) => {
+            loop.appendRunMessages([{ role: "system", content: "【项目状态】…" }]);
+            return true;
+          },
+          transientNudgeIfNeeded: () => false,
+        },
+      ],
+    };
+    const ctx = new LoopContext({ agentCapability: nudgeCapability, workspace: "/ws" });
+    ctx.appendRun(makeRun([{ role: "user", content: "hi" }]));
+    const call = await ctx.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(call.messages.map((m) => m.content)).toEqual(["hi", "【项目状态】…"]);
+  });
+
+  it("压缩后清扫：带 nudge 标记的 system 被删，无标记 system 保留（forceCompact 与 toProviderCall 两路径）", async () => {
+    const compactCapability: AgentCapability = {
+      ...capability,
+      compactPolicies: [
+        {
+          shouldCompact: () => true,
+          compact: async () => true,
+        },
+      ],
+    };
+    const mk = async (viaForce: boolean) => {
+      const ctx = new LoopContext({ agentCapability: compactCapability, workspace: "/ws" });
+      ctx.appendRun(
+        makeRun([
+          { role: "user", content: "hi" },
+          { role: "system", content: "【项目状态】…", nudge: "project_stage_sparse" } as never,
+          { role: "system", content: "工作流全文", nudge: "project_stage_full" } as never,
+          { role: "system", content: "# 设计模式（Compose Mode）" },
+          { role: "assistant", content: "ok" },
+        ]),
+      );
+      if (viaForce) {
+        await ctx.forceCompact();
+      } else {
+        await ctx.toProviderCall(
+          { sampling: { model: "gpt-5" } },
+          { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+        );
+      }
+      return ctx.messages.map((m) => m.content);
+    };
+    for (const viaForce of [true, false]) {
+      const contents = await mk(viaForce);
+      expect(contents).toEqual(["hi", "# 设计模式（Compose Mode）", "ok"]);
+    }
+  });
 });

@@ -58,7 +58,7 @@ describe("buildNovelComposeAgent 装配", () => {
     }
   });
 
-  it("systemSections 10 段 recipe 序（explorer 框架 + compose 四段 + toolPolicy/toolGuidance 收尾）", () => {
+  it("systemSections 13 段 recipe 序（explorer 框架 + compose 四段 + 三质量规范段 + toolPolicy/toolGuidance 收尾）", () => {
     const cfg = cfgOf(build());
     expect(cfg.agentCapability.systemSections.map((s) => s.id)).toEqual([
       "core.runtime.protocol",
@@ -69,6 +69,9 @@ describe("buildNovelComposeAgent 装配", () => {
       "novel.compose.system",
       "novel.compose.process",
       "novel.compose.reporting",
+      "novel.story_appeal",
+      "novel.outline_standard",
+      "novel.prose_standard",
       "tool.policy",
       "tool.guidance",
     ]);

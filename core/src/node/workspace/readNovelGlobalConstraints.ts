@@ -37,8 +37,15 @@ export async function readNovelGlobalConstraintsSafe(
     }
     return await readFile(target, "utf8");
   } catch (error) {
+    if (error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT") {
+      // 文件缺失（新项目常态）/workdir 不存在：静默返回 undefined，不打日志
+      return undefined;
+    }
     logger?.debug("novel_global_constraints.read_failed", {
-      failure: error instanceof Error ? error.name : "unknown",
+      failure:
+        error instanceof Error
+          ? ((error as NodeJS.ErrnoException).code ?? error.name)
+          : "unknown",
     });
     return undefined;
   }

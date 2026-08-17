@@ -87,7 +87,8 @@ async function summarize(
   m: Measure,
   cfg: AutoCompactConfig,
 ): Promise<string> {
-  const messages = segment.flatMap((r) => r.messages);
+  // nudge 标记消息不进摘要输入（指导文本由策略按纪元重注，不应污染摘要/浪费预算）
+  const messages = stripNudgeMessages(segment.flatMap((r) => r.messages));
   const model = m.model!;
   try {
     const call: ProviderCall = {
@@ -133,4 +134,9 @@ function makeSummaryRun(
       messages.push(...m);
     },
   };
+}
+
+/** 过滤 nudge 标记的流内 system 消息（摘要输入用；标记消息由策略按纪元重注） */
+export function stripNudgeMessages(messages: readonly LLMessage[]): LLMessage[] {
+  return messages.filter((m) => !(m.role === "system" && m.nudge !== undefined));
 }

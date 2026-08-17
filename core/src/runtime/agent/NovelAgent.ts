@@ -36,6 +36,7 @@ import { InMemoryConversationTodoStore } from "../todo/InMemoryConversationTodoS
 import { join } from "node:path";
 import { TodoIdleNudgePolicy } from "../nudge/definitions/todo.js";
 import { ComposeModeNudgePolicy } from "../nudge/definitions/compose.js";
+import { ProjectStageNudgePolicy } from "../nudge/definitions/project-stage.js";
 import type {
 	AskQuestionAnswer,
 	ConversationApprovalDecision,
@@ -109,12 +110,14 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
       designRoot: join(opts.workspace, ".novel", "design"),
     });
   // nudge 实现目录：definition.nudgeEnablement.enabled ∩ 本目录 → 注入。
-  // todo_idle 恒可注入；compose_mode 依赖显式 composeState（hydrate 后注入，缺省不生效）。
+  // todo_idle / project_stage 恒可注入（project_stage 依赖 opts.handle，必传项）；
+  // compose_mode 依赖显式 composeState（hydrate 后注入，缺省不生效）。
   const nudgeCatalog: ReadonlyMap<string, () => ContextNudgePolicy> = new Map<
     string,
     () => ContextNudgePolicy
   >([
     ["todo_idle", () => new TodoIdleNudgePolicy()],
+    ["project_stage", () => new ProjectStageNudgePolicy({ handle: opts.handle })],
     ...(opts.composeState === undefined
       ? []
       : ([

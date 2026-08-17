@@ -84,6 +84,12 @@ function toQuestionSpec(raw: unknown, index: number): AskQuestionSpec {
 			return { label: opt.label.trim(), description: opt.description } satisfies AskOptionSpec;
 		});
 	}
+	if (spec.options !== undefined && spec.placeholder !== undefined) {
+		throw new ToolError(
+			{ code: "TOOL_ARGUMENTS_INVALID", toolName: "AskUserQuestion" },
+			`questions[${index}] 同时给了 options 与 placeholder：选择题省略 placeholder；开放填空题省略 options（只有一个文本框，不带选项）`,
+		);
+	}
 	return spec;
 }
 
@@ -163,11 +169,11 @@ const ASK_USER_QUESTION_DESCRIPTION = [
   "</example>",
   "",
   "## 字段细则",
-  "- questions 1-4 个：问题文本完整、以问号结尾、互不重复；一次把该问的问完。",
+  "- questions 1-4 个：问题文本完整、以问号结尾、互不重复；一次把该问的问完。跨轮派生式提问（由工作流驱动的逐步补充/逐步细化，每轮由前文派生新问题）不视为连环追问。",
   "- header ≤6 个汉字（UI 显示为芯片，如「主线走向」「视角」）。",
   "- context（可选，markdown）：问题上方的引导块——背景铺垫、灵感方向简述、示例；开放式创意题常用。",
-  "- 选择题 options 2-4 个：label 简短（1-5 个词）、同问内不重复；description（markdown）说明含义与选中后的影响；不要设「其他」——UI 自动提供自由输入。",
-  "- 开放填空题省略 options，给 placeholder（纯文本输入提示）。",
+  "- 选择题 options 2-4 个：label 简短（1-5 个词）、同问内不重复；description（markdown）说明含义与选中后的影响；不要设「其他」——UI 自动提供自由输入。候选多于 4 个时精选最可能的 ≤4 个：不要为穷举超限，更不要把别题的选项混入本题。「（推荐）」标记必须有前文依据（作者已给信息或既有设定）；冷启动问题（无上下文，如开书第一批）不带推荐。",
+  "- 开放填空题（一句话创意、既有构思等）只有一个文本框：省略 options，**绝不配选项**——候选会把作者思路锚死；placeholder 是纯文本输入提示，与 options 互斥（选择题省略）。",
   "- multiSelect: true 用于素材/伏笔/支线取舍等选项不互斥的场景。",
   "- 返回作者的逐问回答（选择/自填/跳过）；跳过 = 作者授权你自行决断，不要重复追问。",
   "",
@@ -240,7 +246,8 @@ export function createAskUserTool(ask: AskUserChannel | undefined, conversationI
 							},
 							placeholder: {
 								type: "string",
-								description: "开放填空题的输入提示（纯文本）。例：「一句话：主角是谁 + 最想看的冲突」",
+								description:
+									"开放填空题的输入提示（纯文本，仅开放填空题可用；选择题省略）。例：「一句话：主角是谁 + 最想看的冲突」",
 							},
 							multiSelect: {
 								type: "boolean",

@@ -9,7 +9,8 @@
  *
  * recipe 序（static 全前、dynamic 后）：
  * novel.identity → novel.system → novel.doing-tasks → novel.actions →
- * novel.communication → core.runtime.protocol → tool.policy(dynamic) →
+ * novel.communication → novel.story_appeal → novel.outline_standard →
+ * novel.prose_standard → core.runtime.protocol → tool.policy(dynamic) →
  * tool.guidance(dynamic) → core.environment(dynamic) →
  * novel.global_constraints(dynamic)
  */
@@ -24,10 +25,10 @@ import {
   PromptSectionItem,
 } from "../../prompt/PromptRecipe.js";
 
-/** Novel Agent 声明式定义（definitionVersion 1.0.0，新架构起版） */
+/** Novel Agent 声明式定义（definitionVersion 1.1.0：+三质量规范段） */
 export const novelAgentDefinition = new AgentDefinition({
   agentType: "novel",
-  definitionVersion: "1.0.0",
+  definitionVersion: "1.1.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
@@ -36,6 +37,9 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.doing-tasks"),
     new PromptSectionItem("novel.actions"),
     new PromptSectionItem("novel.communication"),
+    new PromptSectionItem("novel.story_appeal"),
+    new PromptSectionItem("novel.outline_standard"),
+    new PromptSectionItem("novel.prose_standard"),
     new PromptSectionItem("core.runtime.protocol"),
     new PromptSectionItem("tool.policy"),
     new PromptSectionItem("tool.guidance"),
@@ -59,6 +63,6 @@ export const novelAgentDefinition = new AgentDefinition({
   runtimePolicyId: "default",
   /** Novel agent 显式启用的 nudge（nudgeId）；装配侧 ∩ 实现目录后注入。 */
   nudgeEnablement: Object.freeze({
-    enabled: Object.freeze(["compose_mode", "todo_idle"]),
+    enabled: Object.freeze(["compose_mode", "todo_idle", "project_stage"]),
   }),
 });

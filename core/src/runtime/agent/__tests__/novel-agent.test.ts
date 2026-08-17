@@ -13,23 +13,26 @@ const handle = {
 } as unknown;
 
 describe("buildNovelAgent 组装", () => {
-  it("systemSections 齐全（10 段 recipe 序，tool.policy/tool.guidance 在 env 前）+ toolDefs 齐全（12 工具）", () => {
+  it("systemSections 齐全（13 段 recipe 序含三质量规范段，tool.policy/tool.guidance 在 env 前）+ toolDefs 齐全（12 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { systemSections: Array<{ id: string; kind: string }>; toolDefs: unknown[] } } }).config.agentCapability;
-    expect(cap.systemSections).toHaveLength(10);
+    expect(cap.systemSections).toHaveLength(13);
     expect(cap.systemSections.map((s) => s.id)).toEqual([
       "novel.identity",
       "novel.system",
       "novel.doing-tasks",
       "novel.actions",
       "novel.communication",
+      "novel.story_appeal",
+      "novel.outline_standard",
+      "novel.prose_standard",
       "core.runtime.protocol",
       "tool.policy",
       "tool.guidance",
       "core.environment",
       "novel.global_constraints",
     ]);
-    expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(6);
+    expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(9);
     expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(4);
     expect(cap.toolDefs).toHaveLength(12);
   });
@@ -129,7 +132,7 @@ describe("buildNovelAgent 组装", () => {
     expect(result).toContain("写第一章");
   });
 
-  it("nudge 接线：todo_idle 恒注入；compose_mode 需 composeState（enabled ∩ 目录）", () => {
+  it("nudge 接线：todo_idle/project_stage 恒注入；compose_mode 需 composeState（enabled ∩ 目录）", () => {
     const withoutCompose = buildNovelAgent({
       workspace: "/ws",
       provider,
@@ -138,6 +141,7 @@ describe("buildNovelAgent 组装", () => {
     const capNoCompose = (withoutCompose as unknown as { config: { agentCapability: { nudgePolicies: Array<{ constructor: { name: string } }> } } }).config.agentCapability;
     expect(capNoCompose.nudgePolicies.map((n) => n.constructor.name)).toEqual([
       "TodoIdleNudgePolicy",
+      "ProjectStageNudgePolicy",
     ]);
     const withCompose = buildNovelAgent({
       workspace: "/ws",
@@ -151,6 +155,7 @@ describe("buildNovelAgent 组装", () => {
     expect(capCompose.nudgePolicies.map((n) => n.constructor.name)).toEqual([
       "ComposeModeNudgePolicy",
       "TodoIdleNudgePolicy",
+      "ProjectStageNudgePolicy",
     ]);
   });
 });

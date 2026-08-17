@@ -27,14 +27,15 @@ export const NOVEL_COMPOSE_TOOL_NAMES: readonly string[] = Object.freeze([
 
 /**
  * Compose 声明式定义（label/description 供 Agent 工具描述渲染——中文）。
- * recipe 序（explorer 框架 + legacy compose 四段）：
+ * recipe 序（explorer 框架 + legacy compose 四段 + 三质量规范段）：
  * protocol → context.reliability → completion.contract → todo.guidance →
  * novel.compose.identity → novel.compose.system → novel.compose.process →
- * novel.compose.reporting → tool.policy(dynamic) → tool.guidance(dynamic 收尾)。
+ * novel.compose.reporting → novel.story_appeal → novel.outline_standard →
+ * novel.prose_standard → tool.policy(dynamic) → tool.guidance(dynamic 收尾)。
  */
 export const novelComposeAgentDefinition = new AgentDefinition({
   agentType: "Compose",
-  definitionVersion: "1.0.0",
+  definitionVersion: "1.1.0",
   label: "草案创作",
   description:
     "基于当前故事状态起草大纲与行文设计方案，返回主代理可直接应用的草案文本（只读，不落库）。",
@@ -47,6 +48,9 @@ export const novelComposeAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.compose.system"),
     new PromptSectionItem("novel.compose.process"),
     new PromptSectionItem("novel.compose.reporting"),
+    new PromptSectionItem("novel.story_appeal"),
+    new PromptSectionItem("novel.outline_standard"),
+    new PromptSectionItem("novel.prose_standard"),
     new PromptSectionItem("tool.policy"),
     new PromptSectionItem("tool.guidance"),
   ]),

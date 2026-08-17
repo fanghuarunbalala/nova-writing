@@ -5,6 +5,7 @@ import {
   estimateTokens,
   countRunChars,
 } from "../definitions/auto-compact.js";
+import { stripNudgeMessages } from "../definitions/auto-compact-t2.js";
 import { ModelInfoRegistry } from "../../provider/model-info.js";
 import type { LoopContext } from "../../loop/LoopContext.js";
 import type { RunContext } from "../../loop/types.js";
@@ -752,5 +753,23 @@ describe("AutoCompactPolicy T3 硬丢弃", () => {
     // 丢 run2（小）后 est 仍 ≥9000 → 继续丢 run3；低于线即停
     const seqs = loop.runs.map((r) => r.seq);
     expect(seqs).toEqual([1, 4, 5, 6, 7]);
+  });
+});
+
+describe("stripNudgeMessages（T2 摘要输入过滤）", () => {
+  it("带 nudge 标记的 system 被滤除；无标记 system 与其他角色保留", () => {
+    const messages = [
+      { role: "system", content: "【项目状态】…", nudge: "project_stage_sparse" },
+      { role: "user", content: "你好" },
+      { role: "system", content: "# 设计模式（Compose Mode）" },
+      { role: "system", content: "工作流全文", nudge: "project_stage_full" },
+      { role: "assistant", content: "ok" },
+    ] as RunContext["messages"];
+    const kept = stripNudgeMessages(messages);
+    expect(kept.map((m) => m.content)).toEqual([
+      "你好",
+      "# 设计模式（Compose Mode）",
+      "ok",
+    ]);
   });
 });

@@ -12,3 +12,8 @@ export { debugLog, infoLog, isVerboseLog } from "../log/debug.js";
 // 走本出口而非根入口（根入口 re-export event/EventPublisher → zeromq 原生
 // addon 模块顶层加载，浏览器环境抛 __dirname is not defined → renderer 白屏）
 export { RPCError, ApiTransportError } from "../rpc/RPCError.js";
+// 设置页运行参数（browser-safe 纯值/纯模块：档位常量 + 模型能力注册表；
+// runtimeSettings 与 model-info 的依赖均为 type-only，dist 产物零运行时 import）
+export { FAST_PROFILE_REF, RUNTIME_AGENT_TYPES } from "../config/runtimeSettings.js";
+export { ModelInfoRegistry } from "../runtime/provider/model-info.js";
+export type { ModelInfo, ThinkingMode } from "../runtime/provider/model-info.js";

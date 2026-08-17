@@ -1,12 +1,13 @@
 /** Persists Model Profiles (provider/model/baseUrl/credential/capabilities) and the default model. */
 import { useEffect, useState, type FormEvent } from "react";
-import {
-  ModelInfoRegistry,
-  type ConfigSnapshot,
-  type ModelCapabilities,
-  type ModelProfile,
-  type ProviderType,
-  type ThinkingMode,
+// 运行时值必须走 browser-safe 的 /client 出口（根入口会拖入 zeromq 等 node 依赖 → renderer 白屏）
+import { ModelInfoRegistry } from "@novel/core/client";
+import type {
+  ConfigSnapshot,
+  ModelCapabilities,
+  ModelProfile,
+  ProviderType,
+  ThinkingMode,
 } from "@novel/core";
 import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
 

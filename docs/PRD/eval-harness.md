@@ -75,7 +75,7 @@ interface EvalRunMetrics {
 
 interface ToolCallTrace {
 	turn: number;
-	name: string;                    // "NovelCharacterWrite"
+	name: string;                    // "NovelWrite"
 	args: unknown;                   // 已解析的 JSON 参数
 	result?: string;
 	error?: { code: ToolErrorCode; message: string };
@@ -89,13 +89,14 @@ interface ToolCallTrace {
 const r = await evalCase({
 	task: "为我的小说创建一个角色：主角叫林默，是一名剑客。用工具完成。",
 })
-	.toolHasCalled("NovelCharacterWrite")               // 该工具被调用过
+	.toolHasCalled("NovelWrite")                          // 该工具被调用过
 	.toolNotCalled("AskUserQuestion")                   // 该工具从未被调用
-	.toolCallCount("NovelCharacterWrite", { min: 1, max: 2 })
-	.toolArgs("NovelCharacterWrite", jsonSubset({       // 参数结构检查
+	.toolCallCount("NovelWrite", { min: 1, max: 2 })
+	.toolArgs("NovelWrite", jsonSubset({                // 参数结构检查
+		kind: "character",
 		values: [{ name: "林默" }],
 	}))
-	.toolResponse("NovelCharacterWrite", jsonSubset({  // 某工具出现 + 响应结构
+	.toolResponse("NovelWrite", jsonSubset({            // 某工具出现 + 响应结构
 		items: [{ status: "applied" }],
 	}))
 	.anyToolError({ code: "TOOL_ARGUMENTS_INVALID", max: 0 })  // 禁止参数错
@@ -147,7 +148,7 @@ interface EvalResult {
 	passed: boolean;
 	runs: EvalRunMetrics[];              // 每次 repeat 的完整指标
 	assertions: {                        // 断言 × 执行 矩阵
-		name: string;                    //   "toolHasCalled(NovelCharacterWrite)"
+		name: string;                    //   "toolHasCalled(NovelWrite)"
 		perRun: { run: number; passed: boolean; actual: string }[];
 	}[];
 	aggregate: { passRate: number; avgTurns: number; totalTokens: number; totalMs: number };
@@ -183,10 +184,11 @@ interface EvalResult {
 ### 4.2 映射方式（与两层接口一一对应）
 
 ```ts
-// 每个 case 编译为一个 evalite 评测：task = Runner，scorer = DSL 方法，data N 行 = repeats
+// 每个 case 编译为一个 evalite 评测：task = Runner，scorer = DSL 方法，trialCount = repeats
 evalite("character-create", {
-	data: [input, input, input],                 // N 行 = 重复采样缺省 3
+	data: [{ input }],                           // 单行；重复采样交给 trialCount
 	task: async (input) => runAgent(input),      // 我们的 Runner，返回 EvalRunMetrics
+	trialCount: 3,                               // evalite 原生重复采样（trialIndex 落结果）
 	scorers: compileAssertions(dslChain),        // 链上每方法 → 一个类型化 scorer 闭包
 });
 ```
@@ -236,35 +238,37 @@ DSL / case 语料 / `EvalRunMetrics` / 结果 JSON / compare 全部为核心层�
 
 ## 9. 首批 15 个 case
 
+> 注：`abb7da0f` 工具面收敛后，novel 域为 `NovelRead/NovelWrite/NovelEdit/NovelDelete` 四件 kind 分发工具（主 agent 共 12 件）；下表与示例均按新工具面书写。
+
 | # | case | 关键断言 |
 | --- | --- | --- |
-| 1 | 角色创建 | `toolHasCalled(NovelCharacterWrite)` + `store` 字段正确 |
-| 2 | 大纲创建 | `toolArgs` 结构（story units + leaf plans） |
-| 3 | 章节创建 + 段落正文写入 | ChapterWrite → ParagraphWrite 链式 |
-| 4 | 读后改（预置角色） | CharacterEdit 且 `anyToolError max:0`（baseRevision 正确获取） |
+| 1 | 角色创建 | `toolArgs(NovelWrite, {kind:"character", values:[{name}]})` + `store` 字段正确 |
+| 2 | 大纲创建 | `kind:"story_unit"` 父子链（须先建父拿 id 再挂子） |
+| 3 | 章节创建 + 段落正文写入 | `kind:"paragraph"` → `kind:"chapter"`（paragraphIds 按序挂载）链式 |
+| 4 | 读后改（预置角色） | `kind:"character"` Edit 且 `anyToolError max:0`（baseRevision 正确获取） |
 | 5 | 批量地点创建 | `toolArgs` values 数组 ≥3 |
-| 6 | 卷-章层级创建 | VolumeWrite + ChapterWrite |
+| 6 | 卷-章层级创建 | `kind:"volume"` + `kind:"chapter"`（chapter.volumeId 归卷） |
 | 7 | 删除链路 | NovelDelete + `store` 实体消失 |
 | 8 | **失败自愈：stale revision** | `anyToolError({code: PRECHECK_FAILED, min:1})` + 最终 `toolResponse(applied)` |
 | 9 | **失败自愈：duplicate id** | 同上模式（seed 占用目标 id） |
-| 10 | 易混淆对：改一段已有正文 | `toolNotCalled(NovelChapterWrite)`（应段落级 Edit 而非整章重写） |
-| 11 | 易混淆对：文档 vs 正文 | 同任务内 `file`（工作区 Write）+ `store`（ParagraphWrite）双写 |
+| 10 | 易混淆对：改一段已有正文 | `kind:"paragraph"` Edit 命中目标段（而非重插整批） |
+| 11 | 易混淆对：文档 vs 正文 | 同任务内 `file`（工作区 Write）+ `store`（`kind:"paragraph"`）双写 |
 | 12 | TodoWrite 使用 | 多步任务 `toolCallCount ≥2` 且状态推进 |
 | 13 | Read/Glob 探索 | seed 工作区文件，先读后写（`toolHasCalled(Read)` 前置） |
 | 14 | AskUserQuestion | 信息不足时提问，`askScript` 应答后完成（`toolHasCalled(AskUserQuestion)`） |
-| 15 | 负向：compose 模式禁写 | EnterComposeMode 后 canonical 写被拒，`toolNotCalled` 硬写 |
+| 15 | 负向：compose 模式禁写 | EnterComposeMode 后 canonical 写被拒（result「已拒绝（设计模式激活…）」+ `store` 零落库） |
 
 case 8 完整示例（任务文本故意给出错误 revision，构造必然失败）：
 
 ```ts
 evalCase({
 	task: "把角色林默的简介改为「散人」。他当前 revision 是 3，直接基于 revision 3 改。",
-	seed: { novel: [{ kind: "character", id: "char_linmo", name: "林默", revision: 1 }] },
+	seed: { novel: [{ op: "character.create", id: "char_linmo", input: { name: "林默" } }] },
 })
-	.toolHasCalled("NovelCharacterRead")                                   // 失败后应重读
+	.toolHasCalled("NovelRead")                                             // 失败后应重读
 	.anyToolError({ code: "TOOL_PRECHECK_FAILED", min: 1, max: 2 })        // 预期撞锁
-	.toolResponse("NovelCharacterEdit", jsonSubset({ items: [{ status: "applied" }] }))
-	.store((s) => s.characters.find((c) => c.id === "char_linmo")?.bio === "散人")
+	.toolResponse("NovelEdit", jsonSubset({ items: [{ status: "applied" }] }))
+	.store((s) => (s.characters as Array<{ id: string; summary?: string }>).find((c) => c.id === "char_linmo")?.summary === "散人")
 	.run();
 ```
 
@@ -298,7 +302,7 @@ evals/（新 workspace 包，依赖 @novel/core + evalite）
 - [x] 本轮：PRD 评审通过，接口与底座决策对齐（2026-08-17）。
 - [x] 一期：Tier 0 快照绿——prompt 金样（屏蔽日期行）+ section 序 + 27 工具 desc/schema 金样 + schema 卫生自检（存量欠账显式登记），`pnpm --filter @novel/evals test` 通过（2026-08-17，`feature/eval-harness`）。
 - [x] 二期（框架）：Runner + DSL + evalite 集成 + 密闭自测（scripted provider 驱动真装配，不依赖 API key）全绿；`EvalRunMetrics` 经 evalite `trialCount` 原生重复采样导出落盘 results/。
-- [ ] 二期（语料）：首批 15 case 待补；`finalReplyJudge` 已实现，判定与 reason 落盘待 live 冒烟（需 NOVEL_EVAL_API_KEY）。
+- [x] 二期（语料）：首批 15 case 已落地（2026-08-17，`abb7da0f` 工具面收敛后按 `NovelWrite/Edit/Delete` + kind 分发面书写；规格 `*.case.ts` 与注册壳 `*.eval.ts` 分离）；结构自测（断言可求值 + seed 落库合法）全绿；`finalReplyJudge` 已实现，live 冒烟待有 key 环境。
 - [x] 三期：`eval:compare` 可用——逐 case delta 表 + 双红线（降幅 >10pp / 新增系统性 `TOOL_ARGUMENTS_INVALID`）+ 退出码 1；已用 stub 链路正/负例端到端验证。
 
 ## 13. 开放问题

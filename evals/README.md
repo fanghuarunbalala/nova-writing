@@ -23,23 +23,31 @@
 
 ## 写一个 case
 
+规格与注册分离：`*.case.ts` 导出纯 `CaseSpec`（核心资产，结构自测消费）；`*.eval.ts` 只做一行注册（evalite 发现与运行用）。**规格文件不要 import compile/evalite**——evalite 在模块加载时即向 vitest 注册真实测试，只有 evalite 运行器才应加载注册壳。
+
 ```ts
-// cases/xx.eval.ts
-import { defineCase } from "../src/compile.js";
+// cases/xx.case.ts —— 规格
+import type { CaseSpec } from "../src/compile.js";
 import { jsonSubset } from "../src/matcher.js";
 
-defineCase(
-  "my-case",
-  { task: "……", repeats: 3, seed: { novel: [/* NovelMutation[] */] } },
-  (b) => b
-    .toolHasCalled("NovelCharacterWrite")
+export const spec: CaseSpec = {
+  name: "my-case",
+  input: { task: "……", repeats: 3, seed: { novel: [/* NovelMutation[] */] } },
+  configure: (b) => b
+    .toolHasCalled("NovelWrite")
     .anyToolError({ code: "TOOL_ARGUMENTS_INVALID", max: 0 })
-    .toolResponse("NovelCharacterWrite", jsonSubset({ items: [{ status: "applied" }] }))
-    .store((s) => Array.isArray(s.characters) && s.characters.length > 0),
-);
+    .toolArgs("NovelWrite", jsonSubset({ kind: "character", values: [{ name: "林默" }] }))
+    .toolResponse("NovelWrite", jsonSubset({ items: [{ status: "applied" }] }))
+    .store((s) => listOf(s.characters).length > 0),
+};
+
+// cases/xx.eval.ts —— 注册壳
+import { defineCase } from "../src/compile.js";
+import { spec } from "./xx.case.js";
+defineCase(spec);
 ```
 
-断言词表与 matcher 见 PRD §3.4–§3.7；单跑调试：`const b = defineCase(...)` 后 `await b.run()`。
+断言词表与 matcher 见 PRD §3.4–§3.7；空安全快照读取用 `src/snapshot-view.ts` 的 `listOf/outlineUnits/publicationOf`；单跑调试：`defineCase(spec)` 返回 builder，可 `await builder.run()`。
 
 ## 回归流程（改动 prompt/schema 后）
 

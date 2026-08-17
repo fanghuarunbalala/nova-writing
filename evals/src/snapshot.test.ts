@@ -111,18 +111,33 @@ describe("Tier 0 自检：tool schema 卫生", () => {
 	]);
 
 	it("parameters 形状合法（type=object）+ properties 缺 description 仅限登记欠账", () => {
+		const missing: string[] = [];
 		for (const t of capability().toolDefs) {
 			const p = t.parameters as { type?: string; properties?: Record<string, { description?: unknown }> } | undefined;
 			if (p === undefined) continue;
-			expect(p.type, `${t.name}.parameters.type`).toBe("object");
+			if (p.type !== "object") missing.push(`${t.name}.parameters.type`);
 			for (const [key, prop] of Object.entries(p.properties ?? {})) {
 				const hasDescription = typeof prop.description === "string" && prop.description.length > 0;
 				const known = KNOWN_MISSING_DESCRIPTION.has(`${t.name}#${key}`);
-				expect(
-					hasDescription || known,
-					`${t.name}.parameters.properties.${key}.description`,
-				).toBe(true);
+				if (!hasDescription && !known) missing.push(`${t.name}#${key}`);
 			}
 		}
+		// 汇总报告：一次看全未登记的缺失，而非逐条断言中断
+		expect(missing, `未登记的缺 description 属性：${missing.join(", ")}`).toEqual([]);
+		// 反向锁：登记项若已补齐 description，须从清单移除（防清单腐烂）
+		const repaid: string[] = [];
+		for (const t of capability().toolDefs) {
+			const p = t.parameters as { properties?: Record<string, { description?: unknown }> } | undefined;
+			for (const [key, prop] of Object.entries(p?.properties ?? {})) {
+				if (
+					KNOWN_MISSING_DESCRIPTION.has(`${t.name}#${key}`) &&
+					typeof prop.description === "string" &&
+					prop.description.length > 0
+				) {
+					repaid.push(`${t.name}#${key}`);
+				}
+			}
+		}
+		expect(repaid, `已补齐 description，请从 KNOWN_MISSING_DESCRIPTION 移除：${repaid.join(", ")}`).toEqual([]);
 	});
 });

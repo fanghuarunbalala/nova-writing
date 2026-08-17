@@ -232,13 +232,13 @@ export class EvalCaseBuilder {
 		}));
 	}
 
-	/** 工作区文件断言（内容匹配） */
-	file(path: string, matcher: string | ValueMatcher): this {
-		const mfn = toMatcher(matcher);
+	/** 工作区文件断言（内容匹配：子串简写或字符串谓词） */
+	file(path: string, matcher: string | ((text: string) => boolean)): this {
+		const fn = typeof matcher === "string" ? (text: string) => text.includes(matcher) : matcher;
 		return this.push(`file(${path})`, (m) => {
 			const content = m.files[path];
 			return {
-				passed: content !== undefined && mfn(content, content),
+				passed: content !== undefined && fn(content),
 				actual: content === undefined ? "文件不存在" : truncate(content, 80),
 			};
 		});

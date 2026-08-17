@@ -644,7 +644,7 @@ exports[`Tier 0 快照：toolDefs（desc / schema / promptDetail） > 全部工�
 ## 小说数据模型
 
 ### 大纲（story_unit）
-整本书的结构真相源：saga（全书）→ arc（卷级弧）→ sequence → scene 层级树，可按体量省略中间层，但树末端必须是能承载正文的 scene 级单元。正文挂在它上面、发布从它取材、进度沿它滚动。每本书恰好一个大纲、自动存在；你读取与修改的是其中的故事单元（units 平铺返回，层级看 parentId，兄弟序看 orderKey）。
+整本书的结构真相源：saga（全书）→ arc（叙事弧，跨度由故事节奏决定，与卷的划分无关）→ sequence → scene 层级树，可按体量省略中间层，但树末端必须是能承载正文的 scene 级单元。正文挂在它上面、发布从它取材、进度沿它滚动。每本书恰好一个大纲、自动存在；你读取与修改的是其中的故事单元（units 平铺返回，层级看 parentId，兄弟序看 orderKey）。
 双状态推进：planningStatus（idea→outlined→ready）管规划；realizationStatus（pending→in-progress→completed/abandoned）管写作；父单元进度由叶自动汇总，不手填。
 leaf 计划（场景级设计文档，挂 scene 叶单元）：人物/地点绑定、事件序列、节奏拍、实体状态变更——写场景前先读 leaf 保证一致性。
 
@@ -775,7 +775,7 @@ items 形态：每项 { id: 变更id, status: "applied", version: 新 entityVers
 ## 实例
 <example>
 作者：新书，都市异能，先搭第一卷
-→ NovelWrite(kind=story_unit, values=[{ title:"觉醒之卷", scope:"arc", intent:"主角发现能力并卷入第一场冲突", synopsis:"……" }])
+→ NovelWrite(kind=story_unit, values=[{ title:"觉醒之弧", scope:"arc", intent:"主角发现能力并卷入第一场冲突", synopsis:"……" }])
 → NovelWrite(kind=story_unit, values=[{ title:"雨夜觉醒", scope:"scene", parentId:<上批返回的 arc id>, synopsis:"雨夜遇袭，能力觉醒", leaf:{…} }])
 <reasoning>自上而下分批建树：arc 先落地拿到 id，scene 再挂靠；leaf 随场景创建即挂上，后续写作有一致性约束可依。</reasoning>
 </example>",
@@ -1286,7 +1286,7 @@ items 形态：每项 { id: 变更id, status: "applied", version: 新 entityVers
                 "type": "string",
               },
               "scope": {
-                "description": "层级作用域（story_unit）：saga=全书 / arc=卷级弧 / sequence=序列 / scene=场景 / custom=自定义",
+                "description": "层级作用域（story_unit）：saga=全书 / arc=叙事弧（跨度由故事节奏决定，与卷的划分无关） / sequence=序列 / scene=场景 / custom=自定义",
                 "enum": [
                   "saga",
                   "arc",

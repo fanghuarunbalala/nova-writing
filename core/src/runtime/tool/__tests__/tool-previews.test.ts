@@ -10,6 +10,9 @@ import {
 	paragraphEditPreview,
 	volumeWritePreview,
 	chapterWritePreview,
+	novelReadPreview,
+	novelWritePreview,
+	novelEditPreview,
 	novelDeletePreview,
 	outlineWritePreview,
 	fileReadPreview,
@@ -23,6 +26,49 @@ import {
 	resolveToolPreview,
 	TOOL_PREVIEWS,
 } from "../previews.js";
+
+describe("novel 通用工具 preview（kind 分派）", () => {
+	it("NovelRead 按 kind 分派到对应域渲染", () => {
+		const read = (args: Record<string, unknown>) => novelReadPreview({ args: JSON.stringify(args) }, { result: "ok" });
+		expect(read({ kind: "character", characterId: "c1" })).toEqual({
+			action: "读取",
+			object: "角色",
+			title: "c1",
+			summary: "已读取",
+		});
+		expect(read({ kind: "overview" })).toEqual({ action: "读取", object: "总览", summary: "已读取" });
+		expect(read({ kind: "paragraph", paragraphId: "p1" })).toMatchObject({ object: "正文", title: "p1" });
+	});
+
+	it("NovelWrite 按 kind 分派到对应域渲染", () => {
+		const write = (args: Record<string, unknown>) => novelWritePreview({ args: JSON.stringify(args) }, { result: "ok" });
+		expect(write({ kind: "character", values: [{ name: "林默" }] })).toMatchObject({
+			action: "创建",
+			object: "角色",
+			title: "林默",
+		});
+		expect(write({ kind: "volume", values: [{ title: "第一卷" }] })).toMatchObject({ object: "卷", title: "第一卷" });
+	});
+
+	it("NovelEdit 按 kind 分派到对应域渲染", () => {
+		const edit = (args: Record<string, unknown>) => novelEditPreview({ args: JSON.stringify(args) }, { result: "ok" });
+		expect(edit({ kind: "character", values: [{ id: "c1", baseRevision: 1, value: { name: "新名" } }] })).toMatchObject({
+			action: "编辑",
+			object: "角色",
+			title: "新名",
+		});
+		expect(edit({ kind: "story_unit", values: [{ id: "su1", baseRevision: 1, value: { title: "雨夜" } }] })).toMatchObject({
+			object: "大纲",
+			title: "雨夜",
+		});
+	});
+
+	it("缺 kind / 非法 JSON → 缺省降级不抛错", () => {
+		expect(novelReadPreview({ args: "{}" })).toEqual({ action: "读取", object: "小说" });
+		expect(novelWritePreview({ args: "not-json" })).toEqual({ action: "创建", object: "实体" });
+		expect(novelEditPreview({ args: "not-json" })).toEqual({ action: "编辑", object: "实体" });
+	});
+});
 
 describe("defaultToolPreview（未声明 preview 的回退）", () => {
 	it("started：args 截断为 title，动作标识 = 执行/工具名", () => {
@@ -111,14 +157,15 @@ describe("内置 preview（动作标识 + 纯内容 title）", () => {
 		expect(defaultToolPreview(call, response, "Foo")).toEqual(defaultToolPreview(call, response, "Foo"));
 	});
 
-	it("resolveToolPreview：全部 27 个工具已注册、未知工具返回 undefined", () => {
+	it("resolveToolPreview：当前工具面 + 旧三件套名（journal 兼容）全注册、未知工具返回 undefined", () => {
 		for (const name of [
+			"NovelRead", "NovelWrite", "NovelEdit", "NovelDelete",
 			"NovelCharacterRead", "NovelCharacterWrite", "NovelCharacterEdit",
 			"NovelLocationRead", "NovelLocationWrite", "NovelLocationEdit",
 			"NovelParagraphRead", "NovelParagraphWrite", "NovelParagraphEdit",
 			"NovelVolumeRead", "NovelVolumeWrite", "NovelVolumeEdit",
 			"NovelChapterRead", "NovelChapterWrite", "NovelChapterEdit",
-			"NovelDelete", "NovelOutlineRead", "NovelOutlineWrite", "NovelOutlineEdit",
+			"NovelOutlineRead", "NovelOutlineWrite", "NovelOutlineEdit",
 			"Read", "Glob", "Write", "Edit", "TodoWrite",
 			"Agent", "TaskOutput", "TaskStop",
 		]) {

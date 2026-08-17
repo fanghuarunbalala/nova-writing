@@ -97,7 +97,7 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     expect(toolsIdx).toBeGreaterThanOrEqual(0);
     expect(prompt).not.toContain("# ToolPolicy");
     const toolSection = prompt.slice(toolsIdx);
-    for (const name of ["TodoWrite", "Read", "AskUserQuestion", "EnterComposeMode", "ExitComposeMode", "NovelCharacterRead", "NovelDelete", "NovelOutlineWrite"]) {
+    for (const name of ["TodoWrite", "Read", "AskUserQuestion", "EnterComposeMode", "ExitComposeMode", "NovelRead", "NovelDelete", "NovelWrite"]) {
       expect(toolSection).toContain(name);
     }
     // 名单行格式：单行逗号分隔

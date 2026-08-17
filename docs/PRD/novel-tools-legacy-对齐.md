@@ -1,6 +1,7 @@
 # novel-tools-legacy-对齐 PRD —— v0.1
 
 > 状态：✅ 已定稿（2026-08-14；**P1、P2、P3 全部实施完毕**。实施偏差见 §7 决议与 §8-§10）
+> ⚠️ 工具面已收敛：本 PRD 的 19 件 Novel* 工具于 2026-08-17 合并为 4 件 kind 分发通用工具（NovelRead/NovelWrite/NovelEdit/NovelDelete），实体契约（参数形状/约束/预检语义）不变，见 [`novel-tools-通用合并.md`](./novel-tools-通用合并.md)
 > 关联：整体产品 PRD [`产品总览.md`](./产品总览.md)；技术设计 `docs/architecture.md`
 > 参考：legacy-main 既有实现（`core/src/tools/novel/{character,location,outline,paragraph,publication,delete}/`、`core/src/novel/{draft,commit,approval,conflict}/`）；本轮对照结论见本文 §1。
 

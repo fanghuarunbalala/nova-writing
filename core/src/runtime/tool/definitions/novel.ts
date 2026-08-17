@@ -1,13 +1,20 @@
 /**
- * novel 域工具（P1 对齐 legacy-main 契约，PRD docs/PRD/novel-tools-legacy-对齐.md）。
+ * novel 域通用工具（PRD docs/PRD/novel-tools-通用合并.md）。
  *
- * - 命名：19 件 Novel* 工具（Volume/Chapter 拆分六件套），compose 两件套不在本文件。
- * - 形状：Write `{ values:[{id?,...}] }`（1-64 项，id 可自选，重复 duplicate_id）；
- *   Edit `{ values:[{id, baseRevision, value}] }`；Delete `{ values:[{kind,id,baseRevision}] }`。
+ * - 形态：4 件工具 NovelRead / NovelWrite / NovelEdit / NovelDelete，六域三件套
+ *   （19 件 Novel* 工具）收敛为 kind 分发；参数字段名与形状沿用 legacy 契约零变化，
+ *   仅工具名收敛 + 顶层新增 kind。
+ * - kind：character / location / story_unit / paragraph / volume / chapter（与
+ *   NovelDelete 一致）；NovelRead 另有 overview（novel-db overview.get 首次暴露）。
+ * - 校验：kind 与参数不匹配（Read 顶层过滤字段 / Write values 项字段 / Edit value
+ *   字段）报 TOOL_ARGUMENTS_INVALID；各 kind 必填字段由 handler 收窄校验。
+ * - 形状：Write `{ kind, values:[{…}] }`（1-64 项，id 可自选，重复 duplicate_id）；
+ *   Edit `{ kind, values:[{id, baseRevision, value}] }`；Delete `{ cascade?, values:[{kind,id,baseRevision}] }`。
  * - 约束：ID_PATTERN / ORDER_KEY_PATTERN（hex 4 位组）+ 字段长度/数量上限（legacy 同款）。
- * - 预检：precheck 在审批请求提交前校验存在性/乐观锁/id 占用（失败不进审批）。
+ * - 预检：precheck 在审批请求提交前校验存在性/乐观锁/id 占用（失败不进审批）；
+ *   Delete 对 character/location 额外做 leaf 引用检查（悬空引用防护，cascade 不豁免）。
  * - 原子：写批经 mutateBatch 单事务执行，任一项失败整批回滚。
- * - 描述：中文详述（口径：schema 对齐 legacy、描述保留中文）。
+ * - 描述：中文 + Markdown 骨架（小说数据模型仅 NovelRead 详述，Write/Edit 引用）。
  */
 import type { ToolDef } from "../ToolDef.js";
 import type { ToolCall } from "../../provider/types.js";
@@ -16,25 +23,10 @@ import type { NovelMutateResult } from "../../../novel/contract/snapshot.js";
 import type { OrderKey } from "../../../novel/model/outline.js";
 import { ID_PATTERN, ORDER_KEY_PATTERN } from "../../../novel/keys.js";
 import {
-  characterReadPreview,
-  characterWritePreview,
-  characterEditPreview,
-  locationReadPreview,
-  locationWritePreview,
-  locationEditPreview,
-  paragraphReadPreview,
-  paragraphWritePreview,
-  paragraphEditPreview,
+  novelReadPreview,
+  novelWritePreview,
+  novelEditPreview,
   novelDeletePreview,
-  outlineReadPreview,
-  outlineWritePreview,
-  outlineEditPreview,
-  volumeReadPreview,
-  volumeWritePreview,
-  volumeEditPreview,
-  chapterReadPreview,
-  chapterWritePreview,
-  chapterEditPreview,
 } from "../previews.js";
 import { ToolError } from "../errors.js";
 
@@ -67,6 +59,19 @@ interface TargetedItem {
 /** 版本索引：id → 当前 entityVersion（预检用） */
 type VersionIndex = ReadonlyMap<string, number>;
 
+/** NovelRead/Write/Edit 的实体 kind（与 NovelDelete 的 values[].kind 一致） */
+type NovelKind = "character" | "location" | "story_unit" | "paragraph" | "volume" | "chapter";
+
+/** kind → 中文标签（预检报错与 desc 共用口径） */
+const KIND_LABELS: Record<NovelKind, string> = {
+  character: "角色",
+  location: "地点",
+  story_unit: "大纲单元",
+  paragraph: "段落",
+  volume: "卷",
+  chapter: "章",
+};
+
 /** values 数组解析（缺省空数组） */
 function valuesOf(args: Record<string, unknown>): Record<string, unknown>[] {
   return Array.isArray(args.values) ? (args.values as Record<string, unknown>[]) : [];
@@ -75,6 +80,11 @@ function valuesOf(args: Record<string, unknown>): Record<string, unknown>[] {
 /** string 字段读取（缺省 undefined） */
 function str(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
+}
+
+/** 参数校验失败（kind 非法 / kind 与参数不匹配 / values 项字段不合法） */
+function argsFail(toolName: string, message: string): ToolError {
+  return new ToolError({ code: "TOOL_ARGUMENTS_INVALID", toolName }, message);
 }
 
 /** 预检失败错误（AgentLoop 在审批前收口，不进审批批） */
@@ -418,35 +428,264 @@ async function assertReferencesExist(
   }
 }
 
-// ═══════════════ character ═══════════════
+// ── kind 参数校验（合并工具的 kind 级收窄；扁平并集 schema 之上） ──
+
+/** NovelRead 各 kind 允许的顶层参数（kind 之外） */
+const READ_ALLOWED_PARAMS: Record<NovelKind | "overview", ReadonlySet<string>> = {
+  overview: new Set<string>(),
+  character: new Set(["characterId"]),
+  location: new Set(["locationId"]),
+  story_unit: new Set(["storyUnitId", "includePlans"]),
+  paragraph: new Set(["paragraphId", "storyUnitId"]),
+  volume: new Set<string>(),
+  chapter: new Set(["chapterId", "volumeId", "includeContent"]),
+};
+
+/** NovelWrite 各 kind 的 values 项允许字段 */
+const WRITE_ITEM_FIELDS: Record<NovelKind, ReadonlySet<string>> = {
+  character: new Set(["id", "name", "aliases", "summary", "initialState", "authorNotes"]),
+  location: new Set(["id", "name", "aliases", "summary", "initialState", "authorNotes"]),
+  paragraph: new Set(["id", "storyUnitId", "orderKey", "text"]),
+  volume: new Set(["id", "title", "orderKey"]),
+  chapter: new Set(["id", "volumeId", "title", "storyUnitId", "paragraphIds", "orderKey"]),
+  story_unit: new Set([
+    "id", "parentId", "orderKey", "title", "intent", "synopsis", "scope",
+    "planningStatus", "realizationStatus", "blockState", "abandonment", "leaf",
+  ]),
+};
+
+/** NovelWrite 各 kind 的 values 项必填字段（扁平并集 schema 无法表达，handler 校验） */
+const WRITE_REQUIRED_FIELDS: Record<NovelKind, readonly string[]> = {
+  character: ["name"],
+  location: ["name"],
+  paragraph: ["storyUnitId", "text"],
+  volume: ["title"],
+  chapter: ["title"],
+  story_unit: ["title"],
+};
+
+/** NovelEdit 各 kind 的 value 允许字段 */
+const EDIT_VALUE_FIELDS: Record<NovelKind, ReadonlySet<string>> = {
+  character: new Set(["name", "aliases", "summary", "initialState", "authorNotes"]),
+  location: new Set(["name", "aliases", "summary", "initialState", "authorNotes"]),
+  paragraph: new Set(["storyUnitId", "orderKey", "text"]),
+  volume: new Set(["title", "orderKey"]),
+  chapter: new Set(["title", "orderKey", "volumeId", "paragraphIds"]),
+  story_unit: new Set([
+    "title", "intent", "synopsis", "scope", "planningStatus", "realizationStatus",
+    "parentId", "orderKey", "blockState", "abandonment", "leaf",
+  ]),
+};
+
+/** 校验 NovelRead 参数：kind 合法 + 顶层参数与 kind 匹配 */
+function validateReadArgs(toolName: string, args: Record<string, unknown>): NovelKind | "overview" {
+  const kind = args.kind;
+  if (typeof kind !== "string" || kind.length === 0) {
+    throw argsFail(
+      toolName,
+      "缺少必填参数 kind（character / location / story_unit / paragraph / volume / chapter / overview）",
+    );
+  }
+  const allowed = READ_ALLOWED_PARAMS[kind as keyof typeof READ_ALLOWED_PARAMS];
+  if (allowed === undefined) {
+    throw argsFail(
+      toolName,
+      `未知 kind：${kind}（可选 character / location / story_unit / paragraph / volume / chapter / overview）`,
+    );
+  }
+  for (const key of Object.keys(args)) {
+    if (key !== "kind" && !allowed.has(key)) {
+      throw argsFail(
+        toolName,
+        `kind=${kind} 不支持参数 ${key}（可用参数：${[...allowed].join(" / ") || "无"}）`,
+      );
+    }
+  }
+  return kind as NovelKind | "overview";
+}
+
+/** 校验 NovelWrite 参数：kind 合法（无 overview）+ values 项字段与 kind 匹配 + 必填齐备 */
+function validateWriteArgs(
+  toolName: string,
+  args: Record<string, unknown>,
+): { kind: NovelKind; values: Record<string, unknown>[] } {
+  const kind = args.kind;
+  if (typeof kind !== "string" || WRITE_ITEM_FIELDS[kind as NovelKind] === undefined) {
+    throw argsFail(
+      toolName,
+      "缺少或非法的 kind（可选 character / location / story_unit / paragraph / volume / chapter；overview 只读）",
+    );
+  }
+  const values = valuesOf(args);
+  if (values.length === 0) {
+    throw argsFail(toolName, "values 不能为空（1-64 项）");
+  }
+  const allowed = WRITE_ITEM_FIELDS[kind as NovelKind];
+  const required = WRITE_REQUIRED_FIELDS[kind as NovelKind];
+  for (const v of values) {
+    for (const key of Object.keys(v)) {
+      if (!allowed.has(key)) {
+        throw argsFail(
+          toolName,
+          `kind=${kind} 的 values 项不支持字段 ${key}（可用字段：${[...allowed].join(" / ")}）`,
+        );
+      }
+    }
+    for (const field of required) {
+      const value = v[field];
+      if (typeof value !== "string" || value.length === 0) {
+        throw argsFail(toolName, `kind=${kind} 的 values 项缺少必填字段 ${field}`);
+      }
+    }
+  }
+  return { kind: kind as NovelKind, values };
+}
+
+/** 校验 NovelEdit 参数：kind 合法 + 每项 {id, baseRevision, value} + value 字段与 kind 匹配 */
+function validateEditArgs(
+  toolName: string,
+  args: Record<string, unknown>,
+): { kind: NovelKind; items: Array<TargetedItem & { value: Record<string, unknown> }> } {
+  const kind = args.kind;
+  if (typeof kind !== "string" || EDIT_VALUE_FIELDS[kind as NovelKind] === undefined) {
+    throw argsFail(
+      toolName,
+      "缺少或非法的 kind（可选 character / location / story_unit / paragraph / volume / chapter；overview 只读）",
+    );
+  }
+  const items = valuesOf(args);
+  if (items.length === 0) {
+    throw argsFail(toolName, "values 不能为空（1-64 项）");
+  }
+  const allowed = EDIT_VALUE_FIELDS[kind as NovelKind];
+  for (const item of items) {
+    for (const key of Object.keys(item)) {
+      if (key !== "id" && key !== "baseRevision" && key !== "value") {
+        throw argsFail(toolName, `values 项不支持字段 ${key}（每项 = { id, baseRevision, value }）`);
+      }
+    }
+    if (
+      typeof item.id !== "string" ||
+      item.id.length === 0 ||
+      typeof item.baseRevision !== "number" ||
+      typeof item.value !== "object" ||
+      item.value === null
+    ) {
+      throw argsFail(toolName, "每项必须为 { id, baseRevision, value } 形状");
+    }
+    const value = item.value as Record<string, unknown>;
+    for (const key of Object.keys(value)) {
+      if (!allowed.has(key)) {
+        throw argsFail(
+          toolName,
+          `kind=${kind} 的 value 不支持字段 ${key}（可用字段：${[...allowed].join(" / ")}）`,
+        );
+      }
+    }
+  }
+  return {
+    kind: kind as NovelKind,
+    items: items as unknown as Array<TargetedItem & { value: Record<string, unknown> }>,
+  };
+}
+
+// ═══════════════ 工具组工厂（novel.entities：NovelRead/Write/Edit/Delete） ═══════════════
 
 /**
- * 创建 character 工具（Read/Write/Edit），handler 对接 NovelHandle
+ * 创建 novel 实体通用工具（kind 分发；组 novel.entities 的全部 4 件）
  * @param handle novel 客户端（query/mutate/mutateBatch）
- * @returns 角色工具定义
+ * @returns [NovelRead, NovelWrite, NovelEdit, NovelDelete]
  */
-export function createCharacterTools(handle: NovelHandle): ToolDef[] {
-  return [characterRead(handle), characterWrite(handle), characterEdit(handle)];
+export function createNovelEntityTools(handle: NovelHandle): ToolDef[] {
+  return [novelRead(handle), novelWrite(handle), novelEdit(handle), novelDelete(handle)];
 }
 
-function characterRead(handle: NovelHandle): ToolDef {
+// ── NovelRead ──
+
+function novelRead(handle: NovelHandle): ToolDef {
   return {
-    name: "NovelCharacterRead",
+    name: "NovelRead",
     version: "1.0.0",
-    preview: characterReadPreview,
+    preview: novelReadPreview,
     description: [
-      "读取角色档案（正式稿），只读。",
+      "读取小说正式稿数据，只读。kind 必填选择实体类型；各 kind 用各自的 id 字段，传不适用参数直接报错。",
       "",
-      "用法：",
-      "- 省略 characterId：返回全部角色（含 id / name / entityVersion）。",
-      "- 传入 characterId：返回单个角色完整档案（aliases / summary / initialState / authorNotes）。",
-      "- 返回的 entityVersion 是 NovelCharacterEdit / NovelDelete 所需 baseRevision 的来源；修改前先 Read 拿最新版本。",
+      "## 小说数据模型",
+      "",
+      "### 大纲（story_unit）",
+      "整本书的结构真相源：saga（全书）→ arc（卷级弧）→ sequence → scene 层级树，可按体量省略中间层，但树末端必须是能承载正文的 scene 级单元。正文挂在它上面、发布从它取材、进度沿它滚动。每本书恰好一个大纲、自动存在；你读取与修改的是其中的故事单元（units 平铺返回，层级看 parentId，兄弟序看 orderKey）。",
+      "双状态推进：planningStatus（idea→outlined→ready）管规划；realizationStatus（pending→in-progress→completed/abandoned）管写作；父单元进度由叶自动汇总，不手填。",
+      "leaf 计划（场景级设计文档，挂 scene 叶单元）：人物/地点绑定、事件序列、节奏拍、实体状态变更——写场景前先读 leaf 保证一致性。",
+      "",
+      "### 段落（paragraph）",
+      "正文的唯一载体，挂在 scene 级单元上；不可变追加，修改走 NovelEdit。",
+      "",
+      "### 章（chapter）",
+      "发布结构单元：按 paragraphIds 有序选择段落组装正文（可跨单元、可拆分/合并/重排）；volumeId 缺省=未归卷；storyUnitId 仅为来源提示（创建时可带，之后不可改）。",
+      "",
+      "### 卷（volume）",
+      "发布结构容器，含章；发布结构根自动存在、无需创建。",
+      "",
+      "### 人物（character）/ 地点（location）",
+      "档案实体（name/aliases/summary/initialState/authorNotes），本体没有任何关系字段——人物↔人物、人物↔地点的互相关联全部记录在 scene 的 leaf 计划里（绑定 + 实体状态变更），查关联要去读大纲。",
+      "",
+      "### 实体关联总览",
+      "- story_unit → story_unit：parentId（树）、blockState.dependencyIds（依赖）、abandonment.replacementStoryUnitId（替换单元）",
+      "- scene.leaf → 人物/地点：characters[].characterId（在场/参与）、locations[].locationId（主/次/提及）、entityChanges（entityId + relatedEntityId——人物↔人物、人物↔地点的关系演变只记在这里）",
+      "- paragraph → story_unit：storyUnitId（挂靠）",
+      "- chapter → volume（归卷）、→ paragraph（paragraphIds 有序选择）、→ story_unit（来源提示）",
+      "- 无反向查询：查「某角色/地点出现在哪些场景」→ 读大纲（includePlans=true）后按 leaf 引用自行过滤。",
+      "",
+      "写作主线：大纲规划（story_unit）→ 场景设计（leaf）→ 写正文（paragraph 挂 scene）→ 发布组装（chapter 选段 + volume 归卷）。",
+      "",
+      "## 用法",
+      "- overview：返回 { title, counts: { storyUnits, characters, locations, volumes, chapters, paragraphs } }——开卷、汇报进度先看总览。",
+      "- character / location：省略 id 列出全部（含 id/name/entityVersion）；传 characterId / locationId 返回单个完整档案（aliases/summary/initialState/authorNotes）。",
+      "- story_unit：省略 storyUnitId 返回全树平铺；传 storyUnitId 返回单个单元；includePlans=true 各单元附 leaf 计划与叶完成度 progress。",
+      "- paragraph：传 paragraphId 返回单段；传 storyUnitId 返回该单元全部段落（orderKey 升序）；都省略返回全部段落（按单元分组）。",
+      "- volume：无参数，恒返回全部卷（id/title/orderKey，不含章）。",
+      "- chapter：省略参数返回全部章；volumeId 过滤某卷；chapterId 只读该章；includeContent=true 附带每章按 paragraphIds 选择取回的正文段落。",
+      "",
+      "## 返回",
+      "- 全部结果为 JSON。",
+      "- 列表形态返回概要（id/name 或 id/title + entityVersion）；单实体形态返回完整档案。",
+      "- entityVersion 是 NovelEdit / NovelDelete 所需 baseRevision 的唯一来源——修改/删除前先读。",
+      "",
+      "## 实例",
+      "<example>",
+      "作者：继续写",
+      "→ NovelRead(kind=story_unit, includePlans=true)",
+      "→ 从 progress 定位第一个未完成 scene → 读其 leaf → 按场景设计写正文",
+      "<reasoning>先读树确认进度与结构现状，避免凭记忆臆造走向或重写已完成场景。</reasoning>",
+      "</example>",
+      "<example>",
+      "作者：第二卷开头主角在哪？",
+      "→ NovelRead(kind=story_unit) 全树 → 沿 arc 下 scene 的 synopsis 与 leaf（地点绑定、实体变更）查证后回答",
+      "<reasoning>时间线与人物位置必须查大纲而非凭记忆。</reasoning>",
+      "</example>",
+      "拿不准就读一次再动手。",
     ].join("\n"),
     parameters: {
       type: "object",
       properties: {
-        characterId: { type: "string", description: "角色 id（省略则列出全部角色）" },
+        kind: {
+          type: "string",
+          enum: ["overview", "character", "location", "story_unit", "paragraph", "volume", "chapter"],
+          description: "实体类型（overview=全书总览；story_unit=大纲单元）",
+        },
+        characterId: { type: "string", description: "仅 character：角色 id（省略列全部）" },
+        locationId: { type: "string", description: "仅 location：地点 id（省略列全部）" },
+        storyUnitId: {
+          type: "string",
+          description: "story_unit：单元 id（省略返回全树）；paragraph：按单元过滤段落",
+        },
+        paragraphId: { type: "string", description: "仅 paragraph：段落 id" },
+        chapterId: { type: "string", description: "仅 chapter：章 id" },
+        volumeId: { type: "string", description: "仅 chapter：按卷过滤" },
+        includeContent: { type: "boolean", description: "仅 chapter：附带章的正文来源段落" },
+        includePlans: { type: "boolean", description: "仅 story_unit：附带 leaf 计划与叶完成度 rollup" },
       },
+      required: ["kind"],
       additionalProperties: false,
     },
     promptDetail: {
@@ -456,431 +695,87 @@ function characterRead(handle: NovelHandle): ToolDef {
     handler: {
       execute: async (call) => {
         const args = parseArgs(call);
-        const id = args.characterId as string | undefined;
-        const result = id
-          ? await handle.query({ op: "characters.get", characterId: id as never })
-          : await handle.query({ op: "characters.list" });
-        return JSON.stringify(result, null, 2);
+        const kind = validateReadArgs(call.name, args);
+        switch (kind) {
+          case "overview": {
+            const result = await handle.query({ op: "overview.get" });
+            return JSON.stringify(result, null, 2);
+          }
+          case "character": {
+            const id = args.characterId as string | undefined;
+            const result = id
+              ? await handle.query({ op: "characters.get", characterId: id as never })
+              : await handle.query({ op: "characters.list" });
+            return JSON.stringify(result, null, 2);
+          }
+          case "location": {
+            const id = args.locationId as string | undefined;
+            const result = id
+              ? await handle.query({ op: "locations.get", locationId: id as never })
+              : await handle.query({ op: "locations.list" });
+            return JSON.stringify(result, null, 2);
+          }
+          case "story_unit": {
+            const includePlans = args.includePlans === true;
+            const r = args.storyUnitId
+              ? await handle.query({ op: "outline.storyUnit.get", storyUnitId: args.storyUnitId as never, includePlans })
+              : await handle.query({ op: "outline.get", includePlans });
+            return JSON.stringify(r, null, 2);
+          }
+          case "paragraph": {
+            const result = args.paragraphId
+              ? await handle.query({ op: "paragraph.get", paragraphId: args.paragraphId as never })
+              : await handle.query({ op: "paragraphs.list", storyUnitId: args.storyUnitId as never });
+            return JSON.stringify(result, null, 2);
+          }
+          case "volume": {
+            const snap = (await handle.query({ op: "publication.get" })) as {
+              volumes: { id: string; title: string; orderKey: string }[];
+            };
+            return JSON.stringify(
+              { volumes: snap.volumes.map((v) => ({ id: v.id, title: v.title, orderKey: v.orderKey })) },
+              null,
+              2,
+            );
+          }
+          case "chapter": {
+            const snap = (await handle.query({ op: "publication.get" })) as {
+              chapters: { id: string; volumeId?: string; orderKey: string; title: string; storyUnitId?: string; entityVersion: number; paragraphIds?: string[] }[];
+            };
+            let chapters = snap.chapters;
+            if (args.volumeId !== undefined) chapters = chapters.filter((c) => c.volumeId === args.volumeId);
+            if (args.chapterId !== undefined) chapters = chapters.filter((c) => c.id === args.chapterId);
+            if (args.includeContent === true) {
+              const all = (await handle.query({ op: "paragraphs.list" })) as Array<{ id: string }>;
+              const byId = new Map(all.map((p) => [p.id, p]));
+              const enriched = chapters.map((c) => ({
+                ...c,
+                paragraphs: (c.paragraphIds ?? []).map((id) => byId.get(id)).filter((p) => p !== undefined),
+              }));
+              return JSON.stringify({ chapters: enriched }, null, 2);
+            }
+            return JSON.stringify({ chapters }, null, 2);
+          }
+        }
       },
     },
   };
 }
 
-function characterWrite(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelCharacterWrite",
-    version: "1.0.0",
-    requireApproval: true,
-    preview: characterWritePreview,
-    description: [
-      "批量创建角色档案，直接写入正式稿（values 每项新建一个角色，整批原子：任一项失败整批不落地）。",
-      "",
-      "用法：",
-      "- name 必填；不做重名校验（重名会各自独立建档，查重先 NovelCharacterRead）。",
-      "- id 可选：客户端自选 id（须匹配 ^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$，重复报 duplicate_id）；缺省宿主生成并在结果回传。",
-      "- aliases：别名/称号列表（≤32 项）；summary：一句话人物摘要。",
-      "- initialState：出场时的状态设定；authorNotes：作者私有备注（不进正文）。",
-      "- 只新建、不更新已有角色；修改已有角色用 NovelCharacterEdit。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        values: {
-          type: "array",
-          description: "要创建的角色列表（1-64 项，每项一个角色）",
-          minItems: 1,
-          maxItems: 64,
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", pattern: ID_PATTERN, description: "自选 id（可选；缺省宿主生成）" },
-              name: { type: "string", minLength: 1, maxLength: 200, description: "角色名（必填）" },
-              aliases: { type: "array", items: { type: "string", minLength: 1, maxLength: 200 }, maxItems: 32, description: "别名/称号列表（可选）" },
-              summary: { type: "string", maxLength: 20000, description: "人物摘要（可选）" },
-              initialState: { type: "string", maxLength: 20000, description: "出场时的初始状态（可选）" },
-              authorNotes: { type: "string", maxLength: 50000, description: "作者备注（可选）" },
-            },
-            required: ["name"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["values"],
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    precheck: async (call) => {
-      const values = valuesOf(parseArgs(call));
+// ── NovelWrite ──
+
+/** NovelWrite 各 kind 预检（存在性 / id 占用 / 引用；审批提交前收口） */
+async function precheckWrite(handle: NovelHandle, toolName: string, kind: NovelKind, values: Record<string, unknown>[]): Promise<void> {
+  switch (kind) {
+    case "character":
+    case "location": {
       const withId = values.filter((v) => str(v.id) !== undefined);
       if (withId.length === 0) return;
-      const versions = await characterVersions(handle);
-      for (const v of withId) assertIdFree(call.name, versions, str(v.id)!, "角色");
-    },
-    handler: {
-      execute: async (call) => {
-        const values = valuesOf(parseArgs(call)) as unknown as Array<EntityInput & { id?: string }>;
-        const results = await handle.mutateBatch(
-          values.map((v) => ({ op: "character.create" as const, id: v.id, input: { name: v.name, aliases: v.aliases, summary: v.summary, initialState: v.initialState, authorNotes: v.authorNotes } })),
-        );
-        return formatBatchItems(results);
-      },
-    },
-  };
-}
-
-function characterEdit(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelCharacterEdit",
-    version: "1.0.0",
-    preview: characterEditPreview,
-    requireApproval: true,
-    description: [
-      "批量局部更新（PATCH）已有角色档案，整批原子。",
-      "",
-      "用法：",
-      "- 每项 = { id, baseRevision, value }。",
-      "- baseRevision：最近一次 NovelCharacterRead 读到的该角色 entityVersion（审批前预检，过期直接拒绝并附当前版本）。",
-      "- value 只传要改的字段，未提供的字段保留原值。",
-      "- 清空语义：summary / initialState / authorNotes 传 null 清空；aliases 传 [] 清空。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        values: {
-          type: "array",
-          description: "要更新的角色列表（1-64 项：目标 + 乐观锁版本 + 补丁）",
-          minItems: 1,
-          maxItems: 64,
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", pattern: ID_PATTERN, description: "目标角色 id" },
-              baseRevision: { type: "integer", description: "最近读到的该角色 entityVersion（乐观锁）" },
-              value: {
-                type: "object",
-                description: "要修改的字段（未提供的保留原值）",
-                properties: {
-                  name: { type: "string", minLength: 1, maxLength: 200, description: "新角色名（覆盖）" },
-                  aliases: { type: "array", items: { type: "string", minLength: 1, maxLength: 200 }, maxItems: 32, description: "全量替换别名列表（[] 即清空）" },
-                  summary: { type: ["string", "null"], maxLength: 20000, description: "摘要（null 清空）" },
-                  initialState: { type: ["string", "null"], maxLength: 20000, description: "初始状态（null 清空）" },
-                  authorNotes: { type: ["string", "null"], maxLength: 50000, description: "作者备注（null 清空）" },
-                },
-                additionalProperties: false,
-              },
-            },
-            required: ["id", "baseRevision", "value"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["values"],
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    precheck: async (call) => {
-      const items = valuesOf(parseArgs(call)) as unknown as TargetedItem[];
-      if (items.length === 0) return;
-      const versions = await characterVersions(handle);
-      for (const item of items) assertRevision(call.name, versions, item.id, item.baseRevision, "角色");
-    },
-    handler: {
-      execute: async (call) => {
-        const values = (valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value: Partial<EntityInput> }>) ?? [];
-        const results = await handle.mutateBatch(
-          values.map((v) => ({ op: "character.update" as const, characterId: v.id as never, baseRevision: v.baseRevision, patch: v.value })),
-        );
-        return formatBatchItems(results);
-      },
-    },
-  };
-}
-
-// ═══════════════ location ═══════════════
-
-/**
- * 创建 location 工具（Read/Write/Edit），与 character 同构
- * @param handle novel 客户端
- * @returns 地点工具定义
- */
-export function createLocationTools(handle: NovelHandle): ToolDef[] {
-  return [locationRead(handle), locationWrite(handle), locationEdit(handle)];
-}
-
-function locationRead(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelLocationRead",
-    version: "1.0.0",
-    preview: locationReadPreview,
-    description: [
-      "读取地点档案（正式稿），只读。",
-      "",
-      "用法：",
-      "- 省略 locationId：返回全部地点（含 id / name / entityVersion）。",
-      "- 传入 locationId：返回单个地点完整档案（aliases / summary / initialState / authorNotes）。",
-      "- 返回的 entityVersion 是 NovelLocationEdit / NovelDelete 所需 baseRevision 的来源；修改前先 Read 拿最新版本。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        locationId: { type: "string", description: "地点 id（省略则列出全部地点）" },
-      },
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    handler: {
-      execute: async (call) => {
-        const args = parseArgs(call);
-        const id = args.locationId as string | undefined;
-        const result = id
-          ? await handle.query({ op: "locations.get", locationId: id as never })
-          : await handle.query({ op: "locations.list" });
-        return JSON.stringify(result, null, 2);
-      },
-    },
-  };
-}
-
-function locationWrite(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelLocationWrite",
-    version: "1.0.0",
-    preview: locationWritePreview,
-    requireApproval: true,
-    description: [
-      "批量创建地点档案，直接写入正式稿（values 每项新建一个地点，整批原子）。",
-      "",
-      "用法：",
-      "- name 必填；不做重名校验（重名会各自独立建档，查重先 NovelLocationRead）。",
-      "- id 可选：客户端自选 id（重复报 duplicate_id）；缺省宿主生成并在结果回传。",
-      "- aliases：别名/别称列表（≤32 项）；summary：一句话地点摘要。",
-      "- initialState：登场时的状态设定；authorNotes：作者私有备注（不进正文）。",
-      "- 只新建、不更新已有地点；修改已有地点用 NovelLocationEdit。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        values: {
-          type: "array",
-          description: "要创建的地点列表（1-64 项，每项一个地点）",
-          minItems: 1,
-          maxItems: 64,
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", pattern: ID_PATTERN, description: "自选 id（可选；缺省宿主生成）" },
-              name: { type: "string", minLength: 1, maxLength: 200, description: "地点名（必填）" },
-              aliases: { type: "array", items: { type: "string", minLength: 1, maxLength: 200 }, maxItems: 32, description: "别名/别称列表（可选）" },
-              summary: { type: "string", maxLength: 20000, description: "地点摘要（可选）" },
-              initialState: { type: "string", maxLength: 20000, description: "登场时的初始状态（可选）" },
-              authorNotes: { type: "string", maxLength: 50000, description: "作者备注（可选）" },
-            },
-            required: ["name"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["values"],
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    precheck: async (call) => {
-      const values = valuesOf(parseArgs(call));
-      const withId = values.filter((v) => str(v.id) !== undefined);
-      if (withId.length === 0) return;
-      const versions = await locationVersions(handle);
-      for (const v of withId) assertIdFree(call.name, versions, str(v.id)!, "地点");
-    },
-    handler: {
-      execute: async (call) => {
-        const values = valuesOf(parseArgs(call)) as unknown as Array<EntityInput & { id?: string }>;
-        const results = await handle.mutateBatch(
-          values.map((v) => ({ op: "location.create" as const, id: v.id, input: { name: v.name, aliases: v.aliases, summary: v.summary, initialState: v.initialState, authorNotes: v.authorNotes } })),
-        );
-        return formatBatchItems(results);
-      },
-    },
-  };
-}
-
-function locationEdit(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelLocationEdit",
-    version: "1.0.0",
-    preview: locationEditPreview,
-    requireApproval: true,
-    description: [
-      "批量局部更新（PATCH）已有地点档案，整批原子。",
-      "",
-      "用法：",
-      "- 每项 = { id, baseRevision, value }。",
-      "- baseRevision：最近一次 NovelLocationRead 读到的该地点 entityVersion（审批前预检，过期直接拒绝并附当前版本）。",
-      "- value 只传要改的字段，未提供的字段保留原值。",
-      "- 清空语义：summary / initialState / authorNotes 传 null 清空；aliases 传 [] 清空。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        values: {
-          type: "array",
-          description: "要更新的地点列表（1-64 项：目标 + 乐观锁版本 + 补丁）",
-          minItems: 1,
-          maxItems: 64,
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", pattern: ID_PATTERN, description: "目标地点 id" },
-              baseRevision: { type: "integer", description: "最近读到的该地点 entityVersion（乐观锁）" },
-              value: {
-                type: "object",
-                description: "要修改的字段（未提供的保留原值）",
-                properties: {
-                  name: { type: "string", minLength: 1, maxLength: 200, description: "新地点名（覆盖）" },
-                  aliases: { type: "array", items: { type: "string", minLength: 1, maxLength: 200 }, maxItems: 32, description: "全量替换别名列表（[] 即清空）" },
-                  summary: { type: ["string", "null"], maxLength: 20000, description: "摘要（null 清空）" },
-                  initialState: { type: ["string", "null"], maxLength: 20000, description: "初始状态（null 清空）" },
-                  authorNotes: { type: ["string", "null"], maxLength: 50000, description: "作者备注（null 清空）" },
-                },
-                additionalProperties: false,
-              },
-            },
-            required: ["id", "baseRevision", "value"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["values"],
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    precheck: async (call) => {
-      const items = valuesOf(parseArgs(call)) as unknown as TargetedItem[];
-      if (items.length === 0) return;
-      const versions = await locationVersions(handle);
-      for (const item of items) assertRevision(call.name, versions, item.id, item.baseRevision, "地点");
-    },
-    handler: {
-      execute: async (call) => {
-        const values = (valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value: Partial<EntityInput> }>) ?? [];
-        const results = await handle.mutateBatch(
-          values.map((v) => ({ op: "location.update" as const, locationId: v.id as never, baseRevision: v.baseRevision, patch: v.value })),
-        );
-        return formatBatchItems(results);
-      },
-    },
-  };
-}
-
-// ═══════════════ paragraph ═══════════════
-
-/**
- * 创建 paragraph 工具（Read/Write/Edit），段落归属 story unit
- * @param handle novel 客户端
- * @returns 段落工具定义
- */
-export function createParagraphTools(handle: NovelHandle): ToolDef[] {
-  return [paragraphRead(handle), paragraphWrite(handle), paragraphEdit(handle)];
-}
-
-function paragraphRead(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelParagraphRead",
-    version: "1.0.0",
-    preview: paragraphReadPreview,
-    description: [
-      "读取正文段落（正式稿），只读。",
-      "",
-      "用法：",
-      "- 传 storyUnitId：返回该大纲单元的全部段落，按 orderKey 升序。",
-      "- 省略全部参数：返回全部段落（按单元分组、组内按 orderKey）。",
-      "- 传 paragraphId：返回单个段落（含 entityVersion / text）。",
-      "- 返回的 id 与 entityVersion 是 NovelParagraphEdit / NovelDelete 的输入来源；续写前先读现有段落以保持衔接。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        storyUnitId: { type: "string", description: "大纲单元 id（按 orderKey 列出其全部段落；省略则返回全部段落）" },
-        paragraphId: { type: "string", description: "段落 id（读取单个段落）" },
-      },
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    handler: {
-      execute: async (call) => {
-        const args = parseArgs(call);
-        const result = args.paragraphId
-          ? await handle.query({ op: "paragraph.get", paragraphId: args.paragraphId as never })
-          : await handle.query({ op: "paragraphs.list", storyUnitId: args.storyUnitId as never });
-        return JSON.stringify(result, null, 2);
-      },
-    },
-  };
-}
-
-function paragraphWrite(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelParagraphWrite",
-    version: "1.0.0",
-    requireApproval: true,
-    preview: paragraphWritePreview,
-    description: [
-      "批量在大纲单元（story unit）下插入新段落（按 values 顺序追加，整批原子）。",
-      "",
-      "用法：",
-      "- 每项 = { storyUnitId, text, id?, orderKey? }；storyUnitId 推荐传 scene（场景）级单元——正文落在大纲树末端，章关联该单元后按此发布。",
-      "- text 为该段完整正文（一个自然段一项，不合并多段）。",
-      "- id 可选：自选 id（重复报 duplicate_id）；缺省宿主生成并在结果回传。",
-      "- orderKey 可选：段间排序键（4 位大写十六进制组，如 \"0001\"/\"0002\"）；缺省由系统生成并排到该单元末尾。",
-      "- 段落不可变：已有段落不受影响；修改已有段落用 NovelParagraphEdit。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        values: {
-          type: "array",
-          description: "要插入的段落列表（1-64 项，按序追加）",
-          minItems: 1,
-          maxItems: 64,
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", pattern: ID_PATTERN, description: "自选 id（可选；缺省宿主生成）" },
-              storyUnitId: { type: "string", pattern: ID_PATTERN, description: "所属大纲单元 id" },
-              orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "段间排序键（可选，缺省排到该单元末尾）" },
-              text: { type: "string", description: "段落正文" },
-            },
-            required: ["storyUnitId", "text"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["values"],
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    precheck: async (call) => {
-      const values = valuesOf(parseArgs(call));
+      const versions = kind === "character" ? await characterVersions(handle) : await locationVersions(handle);
+      for (const v of withId) assertIdFree(toolName, versions, str(v.id)!, KIND_LABELS[kind]);
+      return;
+    }
+    case "paragraph": {
       if (values.length === 0) return;
       const [units, paras] = await Promise.all([
         values.some((v) => str(v.storyUnitId) !== undefined) ? storyUnitVersions(handle) : Promise.resolve(new Map<string, number>()),
@@ -888,393 +783,20 @@ function paragraphWrite(handle: NovelHandle): ToolDef {
       ]);
       for (const v of values) {
         const unitId = str(v.storyUnitId);
-        if (unitId !== undefined) assertExists(call.name, units, unitId, "大纲单元");
+        if (unitId !== undefined) assertExists(toolName, units, unitId, "大纲单元");
         const id = str(v.id);
-        if (id !== undefined) assertIdFree(call.name, paras, id, "段落");
+        if (id !== undefined) assertIdFree(toolName, paras, id, "段落");
       }
-    },
-    handler: {
-      execute: async (call) => {
-        const values = valuesOf(parseArgs(call)) as Array<{ id?: string; storyUnitId: string; orderKey?: string; text: string }>;
-        const results = await handle.mutateBatch(
-          values.map((v) => ({
-            op: "paragraph.insert" as const,
-            id: v.id,
-            storyUnitId: v.storyUnitId as never,
-            orderKey: v.orderKey as OrderKey | undefined,
-            text: v.text,
-          })),
-        );
-        return formatBatchItems(results);
-      },
-    },
-  };
-}
-
-function paragraphEdit(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelParagraphEdit",
-    version: "1.0.0",
-    preview: paragraphEditPreview,
-    requireApproval: true,
-    description: [
-      "批量局部更新（PATCH）已有段落，整批原子。",
-      "",
-      "用法：",
-      "- 每项 = { id, baseRevision, value }；value 支持 text / storyUnitId / orderKey，未提供的保留。",
-      "- text 为替换后的完整段落文本（不是增量片段）；storyUnitId 变更即移动段落到另一单元；orderKey 重排序。",
-      "- baseRevision：最近读到的该段 entityVersion（审批前预检，过期直接拒绝并附当前版本）。",
-      "- 建议先 NovelParagraphRead 取最新文本与版本，改写后整体替换。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        values: {
-          type: "array",
-          description: "要更新的段落列表（1-64 项：目标 + 乐观锁版本 + 补丁）",
-          minItems: 1,
-          maxItems: 64,
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", pattern: ID_PATTERN, description: "目标段落 id" },
-              baseRevision: { type: "integer", description: "最近读到的该段 entityVersion（乐观锁）" },
-              value: {
-                type: "object",
-                description: "要修改的字段（未提供的保留原值）",
-                properties: {
-                  storyUnitId: { type: "string", pattern: ID_PATTERN, description: "移动到该大纲单元" },
-                  orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "重排序" },
-                  text: { type: "string", description: "替换后的完整段落文本" },
-                },
-                additionalProperties: false,
-              },
-            },
-            required: ["id", "baseRevision", "value"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["values"],
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    precheck: async (call) => {
-      const items = valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value?: Record<string, unknown> }>;
-      if (items.length === 0) return;
-      const paras = await paragraphVersions(handle);
-      const units = await storyUnitVersions(handle);
-      for (const item of items) {
-        assertRevision(call.name, paras, item.id, item.baseRevision, "段落");
-        const target = str(item.value?.storyUnitId);
-        if (target !== undefined) assertExists(call.name, units, target, "大纲单元");
-      }
-    },
-    handler: {
-      execute: async (call) => {
-        const values = (valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value: { text?: string; storyUnitId?: string; orderKey?: string } }>) ?? [];
-        const results = await handle.mutateBatch(
-          values.map((v) => ({
-            op: "paragraph.update" as const,
-            paragraphId: v.id as never,
-            baseRevision: v.baseRevision,
-            text: v.value.text,
-            storyUnitId: v.value.storyUnitId as never | undefined,
-            orderKey: v.value.orderKey as OrderKey | undefined,
-          })),
-        );
-        return formatBatchItems(results);
-      },
-    },
-  };
-}
-
-// ═══════════════ volume / chapter（publication 拆分六件套） ═══════════════
-
-/**
- * 创建 volume 工具（Read/Write/Edit）
- * @param handle novel 客户端
- * @returns 卷工具定义
- */
-export function createVolumeTools(handle: NovelHandle): ToolDef[] {
-  return [volumeRead(handle), volumeWrite(handle), volumeEdit(handle)];
-}
-
-/**
- * 创建 chapter 工具（Read/Write/Edit）
- * @param handle novel 客户端
- * @returns 章工具定义
- */
-export function createChapterTools(handle: NovelHandle): ToolDef[] {
-  return [chapterRead(handle), chapterWrite(handle), chapterEdit(handle)];
-}
-
-function volumeRead(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelVolumeRead",
-    version: "1.0.0",
-    preview: volumeReadPreview,
-    description: [
-      "读取全部卷（按 orderKey 排序），只读、无参数。",
-      "",
-      "用法：",
-      "- 只返回每卷的 id / title / orderKey（不含章）；查章用 NovelChapterRead。",
-      "- 卷的 entityVersion 在 NovelVolumeEdit / NovelDelete 前需先从这里拿。",
-    ].join("\n"),
-    parameters: { type: "object", properties: {}, additionalProperties: false },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    handler: {
-      execute: async () => {
-        const snap = (await handle.query({ op: "publication.get" })) as {
-          volumes: { id: string; title: string; orderKey: string }[];
-        };
-        return JSON.stringify(
-          { volumes: snap.volumes.map((v) => ({ id: v.id, title: v.title, orderKey: v.orderKey })) },
-          null,
-          2,
-        );
-      },
-    },
-  };
-}
-
-function volumeWrite(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelVolumeWrite",
-    version: "1.0.0",
-    preview: volumeWritePreview,
-    requireApproval: true,
-    description: [
-      "批量创建卷（整批原子）。发布结构根自动存在，无需创建。",
-      "",
-      "用法：",
-      "- 每项 = { title, id?, orderKey? }；title 必填（1-500 字）。",
-      "- id 可选：自选 id（重复报 duplicate_id）；缺省宿主生成并在结果回传。",
-      "- orderKey 可选（卷间排序，4 位大写十六进制组）；缺省追加到末卷之后。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        values: {
-          type: "array",
-          description: "要创建的卷列表（1-64 项）",
-          minItems: 1,
-          maxItems: 64,
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", pattern: ID_PATTERN, description: "自选 id（可选；缺省宿主生成）" },
-              title: { type: "string", minLength: 1, maxLength: 500, description: "卷标题（必填）" },
-              orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "卷间排序键（可选，缺省排到末尾）" },
-            },
-            required: ["title"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["values"],
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    precheck: async (call) => {
-      const values = valuesOf(parseArgs(call));
+      return;
+    }
+    case "volume": {
       const withId = values.filter((v) => str(v.id) !== undefined);
       if (withId.length === 0) return;
       const { volumes } = await publicationVersions(handle);
-      for (const v of withId) assertIdFree(call.name, volumes, str(v.id)!, "卷");
-    },
-    handler: {
-      execute: async (call) => {
-        const values = valuesOf(parseArgs(call)) as Array<{ id?: string; title: string; orderKey?: string }>;
-        const results = await handle.mutateBatch(
-          values.map((v) => ({ op: "publication.volume.create" as const, id: v.id, title: v.title, orderKey: v.orderKey as OrderKey | undefined })),
-        );
-        return formatBatchItems(results);
-      },
-    },
-  };
-}
-
-function volumeEdit(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelVolumeEdit",
-    version: "1.0.0",
-    preview: volumeEditPreview,
-    requireApproval: true,
-    description: [
-      "批量局部更新（PATCH）已有卷，整批原子。",
-      "",
-      "用法：",
-      "- 每项 = { id, baseRevision, value }；value 支持 title / orderKey，未提供的保留。",
-      "- baseRevision：最近一次 NovelVolumeRead / NovelChapterRead 读到的该卷 entityVersion（审批前预检）。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        values: {
-          type: "array",
-          description: "要更新的卷列表（1-64 项：目标 + 乐观锁版本 + 补丁）",
-          minItems: 1,
-          maxItems: 64,
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", pattern: ID_PATTERN, description: "目标卷 id" },
-              baseRevision: { type: "integer", description: "最近读到的该卷 entityVersion（乐观锁）" },
-              value: {
-                type: "object",
-                description: "要修改的字段（未提供的保留原值）",
-                properties: {
-                  title: { type: "string", minLength: 1, maxLength: 500, description: "标题（覆盖）" },
-                  orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "排序键（覆盖）" },
-                },
-                additionalProperties: false,
-              },
-            },
-            required: ["id", "baseRevision", "value"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["values"],
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    precheck: async (call) => {
-      const items = valuesOf(parseArgs(call)) as unknown as TargetedItem[];
-      if (items.length === 0) return;
-      const { volumes } = await publicationVersions(handle);
-      for (const item of items) assertRevision(call.name, volumes, item.id, item.baseRevision, "卷");
-    },
-    handler: {
-      execute: async (call) => {
-        const values = (valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value: { title?: string; orderKey?: string } }>) ?? [];
-        const results = await handle.mutateBatch(
-          values.map((v) => ({ op: "publication.volume.update" as const, volumeId: v.id as never, baseRevision: v.baseRevision, patch: v.value as never })),
-        );
-        return formatBatchItems(results);
-      },
-    },
-  };
-}
-
-function chapterRead(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelChapterRead",
-    version: "1.0.0",
-    preview: chapterReadPreview,
-    description: [
-      "读取章（可按 chapterId / volumeId 过滤），只读。",
-      "",
-      "用法：",
-      "- 省略参数：返回全部章。",
-      "- 传 volumeId：只返回该卷的章；传 chapterId：只返回该章。",
-      "- includeContent=true：附带每章按选择（paragraphIds 有序，可跨单元）取回的正文段落。",
-      "- 章（chapter）的 volumeId 缺省表示未归卷；正文以 paragraphIds 有序选择为准（拆分/合并/重排经 NovelChapterEdit）。",
-      "- 返回的 entityVersion 是 NovelChapterEdit / NovelDelete 的 baseRevision 来源。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        chapterId: { type: "string", description: "章 id（只读该章）" },
-        volumeId: { type: "string", description: "卷 id（只读该卷的章）" },
-        includeContent: { type: "boolean", description: "true 时附带章的正文来源段落" },
-      },
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    handler: {
-      execute: async (call) => {
-        const args = parseArgs(call);
-        const snap = (await handle.query({ op: "publication.get" })) as {
-          chapters: { id: string; volumeId?: string; orderKey: string; title: string; storyUnitId?: string; entityVersion: number; paragraphIds?: string[] }[];
-        };
-        let chapters = snap.chapters;
-        if (args.volumeId !== undefined) chapters = chapters.filter((c) => c.volumeId === args.volumeId);
-        if (args.chapterId !== undefined) chapters = chapters.filter((c) => c.id === args.chapterId);
-        if (args.includeContent === true) {
-          const all = (await handle.query({ op: "paragraphs.list" })) as Array<{ id: string }>;
-          const byId = new Map(all.map((p) => [p.id, p]));
-          const enriched = chapters.map((c) => ({
-            ...c,
-            paragraphs: (c.paragraphIds ?? []).map((id) => byId.get(id)).filter((p) => p !== undefined),
-          }));
-          return JSON.stringify({ chapters: enriched }, null, 2);
-        }
-        return JSON.stringify({ chapters }, null, 2);
-      },
-    },
-  };
-}
-
-function chapterWrite(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelChapterWrite",
-    version: "1.0.0",
-    preview: chapterWritePreview,
-    requireApproval: true,
-    description: [
-      "批量创建章（整批原子）。一次调用只建章；卷用 NovelVolumeWrite。",
-      "",
-      "用法：",
-      "- 每项 = { title, volumeId?, paragraphIds?, storyUnitId?, id?, orderKey? }；title 必填（1-500 字）。",
-      "- volumeId 可选（缺省 = 未归卷）。",
-      "- paragraphIds 可选：章内段落有序选择（缺省空选择）——章的正文以选择为准，可跨单元、可拆分/合并/重排（后续调整用 NovelChapterEdit 的 paragraphIds 全量替换）；引用段落须已存在。",
-      "- id 可选：自选 id（重复报 duplicate_id）；缺省宿主生成并在结果回传。",
-      "- orderKey 可选（同卷章排序，4 位大写十六进制组）；缺省追加到同卷末章之后。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        values: {
-          type: "array",
-          description: "要创建的章列表（1-64 项）",
-          minItems: 1,
-          maxItems: 64,
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", pattern: ID_PATTERN, description: "自选 id（可选；缺省宿主生成）" },
-              volumeId: { type: "string", pattern: ID_PATTERN, description: "所属卷 id（可选，缺省 = 未归卷）" },
-              title: { type: "string", minLength: 1, maxLength: 500, description: "章标题（必填）" },
-              storyUnitId: { type: "string", pattern: ID_PATTERN, description: "来源提示：正文以 paragraphIds 选择为准" },
-              paragraphIds: {
-                type: "array",
-                items: { type: "string", pattern: ID_PATTERN },
-                maxItems: 4096,
-                description: "章内段落有序选择（可选，缺省空选择；引用段落须已存在）",
-              },
-              orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "同卷排序键（可选，缺省排到末尾）" },
-            },
-            required: ["title"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["values"],
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    precheck: async (call) => {
-      const values = valuesOf(parseArgs(call));
+      for (const v of withId) assertIdFree(toolName, volumes, str(v.id)!, "卷");
+      return;
+    }
+    case "chapter": {
       if (values.length === 0) return;
       const [pub, units, hasSelection] = await Promise.all([
         publicationVersions(handle),
@@ -1284,512 +806,122 @@ function chapterWrite(handle: NovelHandle): ToolDef {
       const paras = hasSelection ? await paragraphVersions(handle) : new Map<string, number>();
       for (const v of values) {
         const vol = str(v.volumeId);
-        if (vol !== undefined) assertExists(call.name, pub.volumes, vol, "卷");
+        if (vol !== undefined) assertExists(toolName, pub.volumes, vol, "卷");
         const unit = str(v.storyUnitId);
-        if (unit !== undefined) assertExists(call.name, units, unit, "大纲单元");
+        if (unit !== undefined) assertExists(toolName, units, unit, "大纲单元");
         const id = str(v.id);
-        if (id !== undefined) assertIdFree(call.name, pub.chapters, id, "章");
+        if (id !== undefined) assertIdFree(toolName, pub.chapters, id, "章");
         if (Array.isArray(v.paragraphIds)) {
-          for (const pid of v.paragraphIds) assertExists(call.name, paras, String(pid), "段落");
+          for (const pid of v.paragraphIds) assertExists(toolName, paras, String(pid), "段落");
         }
       }
-    },
-    handler: {
-      execute: async (call) => {
-        const values = valuesOf(parseArgs(call)) as Array<{ id?: string; volumeId?: string; title: string; storyUnitId?: string; orderKey?: string; paragraphIds?: string[] }>;
-        const results = await handle.mutateBatch(
-          values.map((v) => ({
-            op: "publication.chapter.create" as const,
-            id: v.id,
-            volumeId: v.volumeId as never | undefined,
-            title: v.title,
-            storyUnitId: v.storyUnitId as never | undefined,
-            orderKey: v.orderKey as OrderKey | undefined,
-            paragraphIds: v.paragraphIds as never | undefined,
-          })),
-        );
-        return formatBatchItems(results);
-      },
-    },
-  };
-}
-
-function chapterEdit(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelChapterEdit",
-    version: "1.0.0",
-    preview: chapterEditPreview,
-    requireApproval: true,
-    description: [
-      "批量局部更新（PATCH）已有章，整批原子。",
-      "",
-      "用法：",
-      "- 每项 = { id, baseRevision, value }；value 支持 title / orderKey / volumeId（调整归卷）/ paragraphIds，未提供的保留。",
-      "- paragraphIds 全量替换章的有序段落选择——拆分、合并、重排、跨单元、单元中途收章都靠它；null 清空选择；引用段落须已存在。",
-      "- baseRevision：最近读到的该章 entityVersion（审批前预检，过期直接拒绝并附当前版本）。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        values: {
-          type: "array",
-          description: "要更新的章列表（1-64 项：目标 + 乐观锁版本 + 补丁）",
-          minItems: 1,
-          maxItems: 64,
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", pattern: ID_PATTERN, description: "目标章 id" },
-              baseRevision: { type: "integer", description: "最近读到的该章 entityVersion（乐观锁）" },
-              value: {
-                type: "object",
-                description: "要修改的字段（未提供的保留原值）",
-                properties: {
-                  title: { type: "string", minLength: 1, maxLength: 500, description: "标题（覆盖）" },
-                  orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "排序键（覆盖）" },
-                  volumeId: { type: "string", pattern: ID_PATTERN, description: "所属卷 id（调整归卷）" },
-                  paragraphIds: {
-                    type: ["array", "null"],
-                    items: { type: "string", pattern: ID_PATTERN },
-                    maxItems: 4096,
-                    description: "全量替换有序段落选择（拆分/合并/重排/跨单元/中途收章）；null 清空选择",
-                  },
-                },
-                additionalProperties: false,
-              },
-            },
-            required: ["id", "baseRevision", "value"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["values"],
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    precheck: async (call) => {
-      const items = valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value?: Record<string, unknown> }>;
-      if (items.length === 0) return;
-      const { volumes, chapters } = await publicationVersions(handle);
-      const needParas = items.some((item) => Array.isArray(item.value?.paragraphIds));
-      const paras = needParas ? await paragraphVersions(handle) : new Map<string, number>();
-      for (const item of items) {
-        assertRevision(call.name, chapters, item.id, item.baseRevision, "章");
-        const vol = str(item.value?.volumeId);
-        if (vol !== undefined) assertExists(call.name, volumes, vol, "卷");
-        if (Array.isArray(item.value?.paragraphIds)) {
-          for (const pid of item.value.paragraphIds as unknown[]) {
-            assertExists(call.name, paras, String(pid), "段落");
-          }
-        }
+      return;
+    }
+    case "story_unit": {
+      if (values.length === 0) return;
+      const units = await storyUnitVersions(handle);
+      for (const v of values) {
+        const parent = str(v.parentId);
+        if (parent !== undefined) assertExists(toolName, units, parent, "父大纲单元");
+        const id = str(v.id);
+        if (id !== undefined) assertIdFree(toolName, units, id, "大纲单元");
       }
-    },
-    handler: {
-      execute: async (call) => {
-        const values = (valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value: { title?: string; orderKey?: string; volumeId?: string } }>) ?? [];
-        const results = await handle.mutateBatch(
-          values.map((v) => ({ op: "publication.chapter.update" as const, chapterId: v.id as never, baseRevision: v.baseRevision, patch: v.value as never })),
-        );
-        return formatBatchItems(results);
-      },
-    },
-  };
+      await assertReferencesExist(handle, toolName, collectReferences(values), units);
+      return;
+    }
+  }
 }
 
-// ═══════════════ delete ═══════════════
-
-/**
- * 创建 delete 工具（按实体 kind 分发删除）
- * @param handle novel 客户端
- * @returns 删除工具定义
- */
-export function createDeleteTool(handle: NovelHandle): ToolDef[] {
-  return [
-    {
-      name: "NovelDelete",
-      version: "1.0.0",
-      preview: novelDeletePreview,
-      requireApproval: true,
-      description: [
-        "批量删除小说实体（高风险，不可恢复；整批原子）。",
-        "",
-        "用法：",
-        "- 顶层 cascade（缺省 false）+ values 每项 = { kind, id, baseRevision }。",
-        "- kind ∈ story_unit / character / location / paragraph / volume / chapter。",
-        "- baseRevision：该实体最近一次读到的 entityVersion（审批前预检，过期直接拒绝并附当前版本）。",
-        "- 依赖检查（cascade=false 默认拒绝）：story unit 有子单元/leaf 计划/段落、卷有章、章有段落选择——均直接拒绝并列出依赖。",
-        "- cascade=true 级联：story unit 删整个子树（单元 + leaf 计划 + 段落及其章选择）、卷删其章（含各自选择，段落保留）、章解绑段落选择（段落保留）；删除段落会同时从所有章选择移除。",
-        "- 返回 items + deleted[]（实际删除的每个实体完整记录，级联展开、跨批去重）。",
-        "- 调用前先读（对应 Read 工具）确认目标与版本，并向用户确认后再执行（谨慎行动）。",
-      ].join("\n"),
-      parameters: {
-        type: "object",
-        properties: {
-          cascade: {
-            type: "boolean",
-            description: "级联删除（缺省 false）：true 时 story unit 删整个子树、卷删其章、章解绑选择",
-          },
-          values: {
-            type: "array",
-            description: "要删除的实体列表（1-64 项：类型 + id + 乐观锁版本）",
-            minItems: 1,
-            maxItems: 64,
-            items: {
-              type: "object",
-              properties: {
-                kind: {
-                  type: "string",
-                  enum: ["story_unit", "character", "location", "paragraph", "volume", "chapter"],
-                  description: "实体类型（story_unit=大纲单元 / character=角色 / location=地点 / paragraph=段落 / volume=卷 / chapter=章）",
-                },
-                id: { type: "string", pattern: ID_PATTERN, description: "目标实体 id" },
-                baseRevision: { type: "integer", description: "最近读到的该实体 entityVersion（乐观锁）" },
-              },
-              required: ["kind", "id", "baseRevision"],
-              additionalProperties: false,
-            },
-          },
-        },
-        required: ["values"],
-        additionalProperties: false,
-      },
-      promptDetail: {
-        policy: "",
-        guidance: "",
-      },
-      precheck: async (call) => {
-        const args = parseArgs(call);
-        const items = valuesOf(args) as unknown as Array<TargetedItem & { kind: string }>;
-        if (items.length === 0) return;
-        const kinds = new Set(items.map((v) => v.kind));
-        const labels: Record<string, string> = {
-          story_unit: "大纲单元",
-          character: "角色",
-          location: "地点",
-          paragraph: "段落",
-          volume: "卷",
-          chapter: "章",
-        };
-        const indexes = new Map<string, Promise<VersionIndex>>();
-        const indexOf = (kind: string): Promise<VersionIndex> => {
-          let p = indexes.get(kind);
-          if (p === undefined) {
-            p = (async () => {
-              switch (kind) {
-                case "story_unit":
-                  return storyUnitVersions(handle);
-                case "character":
-                  return characterVersions(handle);
-                case "location":
-                  return locationVersions(handle);
-                case "paragraph":
-                  return paragraphVersions(handle);
-                case "volume":
-                  return (await publicationVersions(handle)).volumes;
-                case "chapter":
-                  return (await publicationVersions(handle)).chapters;
-                default:
-                  return new Map<string, number>();
-              }
-            })();
-            indexes.set(kind, p);
-          }
-          return p;
-        };
-        for (const item of items) {
-          const versions = await indexOf(item.kind);
-          assertRevision(call.name, versions, item.id, item.baseRevision, labels[item.kind] ?? item.kind);
-        }
-        // 依赖检查（PRD §4-11）：cascade=false 时默认拒绝有依赖的删除
-        if (args.cascade === true) return;
-        const depKinds = new Set(items.map((v) => v.kind));
-        const needUnits = depKinds.has("story_unit");
-        const needParas = depKinds.has("paragraph") || needUnits;
-        const needPub = depKinds.has("volume") || depKinds.has("chapter");
-        const [unitsSnap, parasSnap, pubSnap] = await Promise.all([
-          needUnits ? handle.query({ op: "outline.get", includePlans: true }) : Promise.resolve(undefined),
-          needParas ? handle.query({ op: "paragraphs.list" }) : Promise.resolve(undefined),
-          needPub ? handle.query({ op: "publication.get" }) : Promise.resolve(undefined),
-        ]);
-        const units = (unitsSnap as { units: Array<{ id: string; parentId?: string; leaf?: unknown }> } | undefined)?.units ?? [];
-        const paras = (parasSnap as Array<{ id: string; storyUnitId: string }> | undefined) ?? [];
-        const chapters = (pubSnap as { chapters: Array<{ id: string; volumeId?: string; paragraphIds?: string[] }> } | undefined)?.chapters ?? [];
-        for (const item of items) {
-          if (item.kind === "story_unit") {
-            const childCount = units.filter((u) => u.parentId === item.id).length;
-            const hasLeaf = units.find((u) => u.id === item.id)?.leaf !== undefined;
-            const paraCount = paras.filter((p) => p.storyUnitId === item.id).length;
-            if (childCount > 0 || hasLeaf || paraCount > 0) {
-              const deps = [
-                childCount > 0 ? `${childCount} 个子单元` : "",
-                hasLeaf ? "leaf 计划" : "",
-                paraCount > 0 ? `${paraCount} 个段落` : "",
-              ].filter(Boolean).join(" / ");
-              throw precheckFail(call.name, `大纲单元 ${item.id} 有依赖（${deps}）——需 cascade:true 级联删除`);
-            }
-          } else if (item.kind === "volume") {
-            const chapterCount = chapters.filter((c) => c.volumeId === item.id).length;
-            if (chapterCount > 0) {
-              throw precheckFail(call.name, `卷 ${item.id} 仍含 ${chapterCount} 章——需 cascade:true 级联删除`);
-            }
-          } else if (item.kind === "chapter") {
-            const selection = chapters.find((c) => c.id === item.id)?.paragraphIds ?? [];
-            if (selection.length > 0) {
-              throw precheckFail(call.name, `章 ${item.id} 仍有 ${selection.length} 个段落选择——需 cascade:true（级联仅解绑选择）或先清空选择`);
-            }
-          }
-        }
-      },
-      handler: {
-        execute: async (call) => {
-          const args = parseArgs(call);
-          const cascade = args.cascade === true;
-          const values = (args.values as Array<{ kind: string; id: string; baseRevision: number }>) ?? [];
-          const results = await handle.mutateBatch(
-            values.map((v) => {
-              const op = `${kindToOp(v.kind)}.delete` as const;
-              const withCascade = cascade && (v.kind === "story_unit" || v.kind === "volume" || v.kind === "chapter");
-              return {
-                op,
-                baseRevision: v.baseRevision,
-                ...(withCascade ? { cascade: true } : {}),
-                ...({ [kindToIdField(v.kind)]: v.id } as Record<string, unknown>),
-              } as never;
-            }),
-          );
-          // 跨批去重汇总被删实体完整记录（级联展开）
-          const seen = new Set<string>();
-          const deleted: Array<{ kind: string; id: string; data: unknown }> = [];
-          for (const r of results) {
-            for (const d of r.deleted ?? []) {
-              const key = `${d.kind}:${d.id}`;
-              if (!seen.has(key)) {
-                seen.add(key);
-                deleted.push(d);
-              }
-            }
-          }
-          return JSON.stringify(
-            {
-              items: results.map((r) => ({ id: r.changeId, status: "applied", version: r.version })),
-              ...(deleted.length > 0 ? { deleted } : {}),
-            },
-            null,
-            2,
-          );
-        },
-      },
-    },
-  ];
-}
-
-// ═══════════════ outline ═══════════════
-
-/**
- * 创建 outline 工具（Read/Write/Edit），故事单元树
- * @param handle novel 客户端
- * @returns 大纲工具定义
- */
-export function createOutlineTools(handle: NovelHandle): ToolDef[] {
-  return [outlineRead(handle), outlineWrite(handle), outlineEdit(handle)];
-}
-
-function outlineRead(handle: NovelHandle): ToolDef {
+function novelWrite(handle: NovelHandle): ToolDef {
   return {
-    name: "NovelOutlineRead",
+    name: "NovelWrite",
     version: "1.0.0",
-    preview: outlineReadPreview,
-    description: [
-      "读取大纲（story unit 层级树，正式稿），只读。",
-      "大纲是整本书的结构真相源：正文挂在它上面、发布从它取材、进度沿它滚动。动笔、改结构、回答剧情问题之前，先读大纲。",
-      "",
-      "## 大纲模型（先读懂再动手）",
-      "- 唯一根：每本书恰好一个大纲，自动存在、无需创建；你创建和修改的是其中的「故事单元（story unit）」。",
-      "- 树结构：units 平铺返回，层级看 parentId（缺省 = 顶层，直接挂在大纲根下），兄弟顺序看 orderKey。",
-      "- 层级建议：saga（全书）→ arc（卷级弧）→ sequence（序列）→ scene（场景），按体量可省略中间层；",
-      "  无论省几层，树的末端（叶）必须是能承载具体故事的 scene 级单元——正文段落落在叶单元上。",
-      "- 故事单元身兼三职：",
-      "  1. 规划节点：intent（这个单元要达成什么）+ synopsis（情节梗概），随双状态推进（见下）。",
-      "  2. 正文容器：正文段落直接挂在单元上（推荐 scene 级，用 NovelParagraphWrite 写入）。",
-      "  3. 发布来源：发布结构的「章」从场景单元选取段落组装正文（NovelChapterWrite 的 paragraphIds）。",
-      "- 双状态推进：planningStatus 管「规划」（idea 点子 → outlined 已成纲 → ready 可开写），",
-      "  realizationStatus 管「写作」（pending 未动笔 → in-progress 写作中 → completed 已完成；abandoned 废弃）。",
-      "  父单元进度不手填：由叶单元自动汇总（includePlans=true 时返回 progress）。",
-      "- leaf 计划（场景级设计文档，挂 scene 级叶单元）：人物/地点绑定（在场/离场/提及，视角/参与等角色）、",
-      "  事件序列、节奏拍（setup→aftermath 八档、强度 1-5、读者/视角情绪）、实体状态变更（9 类，连贯性追踪）。",
-      "  写场景前读 leaf，保证人物、地点、节奏与前后状态一致。",
-      "",
-      "## 何时使用",
-      "1. 创建任何大纲单元、写段落、建章之前——parentId 与 entityVersion 都取自最近一次读取结果。",
-      "2. 作者说「继续写 / 推进主线」——读全树定位下一个未完成场景。",
-      "3. 回答剧情、时间线、人物位置类问题——查证后再答，不凭记忆。",
-      "4. 检查进度或阻塞——includePlans=true 看各单元 progress 与 blockState。",
-      "5. 本轮对话首次涉及大纲任务时。",
-      "",
-      "## 何时不用",
-      "1. 本轮已读过全树、且期间没有任何写操作——直接用已有读取结果。",
-      "2. 只需单个已知 id 的单元且不需要 leaf——传 storyUnitId 单查，不必拉全树。",
-      "",
-      "## 示例",
-      "<example>",
-      "作者：继续写",
-      "→ NovelOutlineRead（includePlans=true）",
-      "→ 从 progress 找到第一个未完成的 arc，其下第一个未完成 scene",
-      "→ 读该 scene 的 leaf：人物/地点绑定、事件序列、节奏拍",
-      "→ 用 NovelParagraphWrite 按场景设计写正文",
-      "<reasoning>先读树确认进度与结构现状，避免凭记忆臆造走向或重写已完成场景；leaf 提供场景内一致性约束。</reasoning>",
-      "</example>",
-      "",
-      "<example>",
-      "作者：第二卷开头主角在哪？",
-      "→ NovelOutlineRead 全树 → 定位第二卷 arc → 沿其下 scene 的 synopsis 与 leaf（地点绑定、实体变更）",
-      "→ 基于查证结果回答，引用单元 id",
-      "<reasoning>时间线与人物位置必须查大纲而非凭记忆；leaf 的地点绑定与实体变更是权威依据。</reasoning>",
-      "</example>",
-      "",
-      "<example>",
-      "作者：加一段雨夜刺杀",
-      "（反例）未读树直接 NovelOutlineWrite 建 scene → parentId 挂到已废弃的 arc 下，与既有雨夜场景重复",
-      "<reasoning>大纲是正式稿，凭记忆写必然漂移；先读树定位正确父单元与相邻场景，成本远低于返工。</reasoning>",
-      "</example>",
-      "",
-      "## 参数",
-      "- 省略 storyUnitId：返回 { outline, units } 全树平铺。",
-      "- 传入 storyUnitId：返回单个单元（不存在报 not_found）。",
-      "- includePlans=true：各单元附 leaf 与 progress（effectiveStatus / isBlocked / completedLeafCount / totalLeafCount）。",
-      "- 返回的 entityVersion 是后续 NovelOutlineEdit / NovelDelete 的 baseRevision。",
-      "",
-      "拿不准就读一次大纲再动手。",
-    ].join("\n"),
-    parameters: {
-      type: "object",
-      properties: {
-        storyUnitId: { type: "string", description: "单元 id（省略则返回全树）" },
-        includePlans: { type: "boolean", description: "true 时附带 leaf 计划与叶完成度 rollup" },
-      },
-      additionalProperties: false,
-    },
-    promptDetail: {
-      policy: "",
-      guidance: "",
-    },
-    handler: {
-      execute: async (call) => {
-        const args = parseArgs(call);
-        const includePlans = args.includePlans === true;
-        const r = args.storyUnitId
-          ? await handle.query({ op: "outline.storyUnit.get", storyUnitId: args.storyUnitId as never, includePlans })
-          : await handle.query({ op: "outline.get", includePlans });
-        return JSON.stringify(r, null, 2);
-      },
-    },
-  };
-}
-
-function outlineWrite(handle: NovelHandle): ToolDef {
-  return {
-    name: "NovelOutlineWrite",
-    version: "1.0.0",
-    preview: outlineWritePreview,
     requireApproval: true,
+    preview: novelWritePreview,
     description: [
-      "批量创建故事单元（整批原子、需作者审批）。大纲每本书唯一且自动存在——本工具只建单元，没有「建大纲」这个动作。",
-      "大纲模型与层级概念见 NovelOutlineRead 的说明。建树要点：自上而下（saga → arc → sequence → scene），",
-      "按体量可省略中间层；正文段落落在 scene 级叶单元，发布「章」从场景单元选段组装。",
+      "批量创建实体、直接写入正式稿。kind 必填（无 overview——只读）；values 每项新建一个实体，整批原子（任一项失败整批回滚）；需作者审批；传不适用字段直接报错。",
+      "数据模型见 NovelRead 的「小说数据模型」（写作主线：大纲规划 → 写正文 → 发布组装）。",
       "",
-      "## 何时使用",
-      "1. 新书开局搭骨架——从顶层（或 arc）开始逐层建。",
-      "2. 既有多线扩展——新增 arc / sequence。",
-      "3. 为既有 arc 补场景（先 NovelOutlineRead 定位 parentId）。",
+      "## 用法",
+      "- character / location：name 必填；aliases 别名列表（≤32 项）；summary 摘要；initialState 初始状态；authorNotes 作者备注（不进正文）。不做重名校验——查重先 NovelRead。",
+      "- paragraph：storyUnitId（推荐 scene 级单元，正文落在大纲树末端）+ text（该段完整正文，一个自然段一项，不合并多段）必填；orderKey 可选（4 位大写十六进制组，缺省排到该单元末尾）。",
+      "- volume：title 必填（1-500 字）；orderKey 可选（缺省排到末卷之后）。",
+      "- chapter：title 必填；volumeId 可选（缺省=未归卷）；paragraphIds 可选（章内段落有序选择，可跨单元、可拆分合并重排，引用段落须已存在，缺省空选择）；storyUnitId 仅来源提示（只在创建时可带）；orderKey 可选（同卷排序）。",
+      "- story_unit：title 必填（1-500 字）；parentId 缺省=顶层（必须引用已存在单元——不能引用同批先建项，多层结构分批建）；intent 单元意图；synopsis 情节梗概（数百字量级，勿塞正文）；scope 层级（saga/arc/sequence/scene/custom）；planningStatus / realizationStatus 缺省 idea / pending；blockState / abandonment / leaf 可随创建携带（leaf 引用的角色/地点 id 须已存在）。",
+      "- 通用：id 可选自选（^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$，重复报 duplicate_id）；本工具只新建，修改已有实体用 NovelEdit。建树自上而下分批：arc 先落地拿 id，scene 再挂靠。",
       "",
-      "## 何时不用",
-      "1. 修改已有单元——用 NovelOutlineEdit；本工具只创建，撞已有 id 报 duplicate_id。",
-      "2. 在一次调用里建「父 + 子」且子引用父——parentId 必须引用已存在的单元，",
-      "   不能引用同批先建项（审批前预检会拦截）；多层结构分批建。",
+      "## 返回",
+      "items 形态：每项 { id: 变更id, status: \"applied\", version: 新 entityVersion }；自选 id 缺省由宿主生成并在结果回传；整批原子，任一项失败整批不落地。",
       "",
-      "## 示例",
+      "## 实例",
       "<example>",
       "作者：新书，都市异能，先搭第一卷",
-      "→ 第一次 NovelOutlineWrite：values=[{ title:\"觉醒之卷\", scope:\"arc\", intent:\"主角发现能力并卷入第一场冲突\", synopsis:\"……\" }]",
-      "→ 第二次 NovelOutlineWrite：values=[{ title:\"雨夜觉醒\", scope:\"scene\", parentId:<上批返回的 arc id>, synopsis:\"雨夜遇袭，能力觉醒\", leaf:{ settingMode:\"located\", characters:[…], locations:[…], events:[…], rhythmBeats:[…], entityChanges:[] } }]",
-      "<reasoning>自上而下分批建树：arc 先落地拿到 id，scene 挂靠；leaf 随场景创建即挂上，后续写作有一致性约束可依。</reasoning>",
+      "→ NovelWrite(kind=story_unit, values=[{ title:\"觉醒之卷\", scope:\"arc\", intent:\"主角发现能力并卷入第一场冲突\", synopsis:\"……\" }])",
+      "→ NovelWrite(kind=story_unit, values=[{ title:\"雨夜觉醒\", scope:\"scene\", parentId:<上批返回的 arc id>, synopsis:\"雨夜遇袭，能力觉醒\", leaf:{…} }])",
+      "<reasoning>自上而下分批建树：arc 先落地拿到 id，scene 再挂靠；leaf 随场景创建即挂上，后续写作有一致性约束可依。</reasoning>",
       "</example>",
-      "",
-      "<example>",
-      "作者：把这一章三千字写进大纲",
-      "（反例）整段正文塞进 synopsis",
-      "<reasoning>synopsis 是给协作者看的情节梗概（数百字量级）；正文用 NovelParagraphWrite 落在场景单元上。",
-      "大纲里堆正文会让树不可读、进度汇总失真。</reasoning>",
-      "</example>",
-      "",
-      "<example>",
-      "作者：把「雨夜觉醒」的梗概改一下",
-      "（反例）重新 Write 一条同名单元",
-      "<reasoning>同 id 报 duplicate_id；换新 id 则制造重复节点污染树。改内容用 NovelOutlineEdit。</reasoning>",
-      "</example>",
-      "",
-      "## 字段细则",
-      "- title 必填（1-500 字）；parentId 缺省 = 顶层；建子单元前先 NovelOutlineRead 定位父节点。",
-      "- intent：这个单元要达成什么（高层单元重点写）；synopsis：情节梗概（叶场景重点写）。",
-      "- leaf：场景级设计文档，推荐挂 scene 级叶单元；引用的角色/地点 id 必须已存在（预检拦截）。",
-      "- blockState（dependencyIds + blockedAt 必填）/ abandonment（reasonCode + abandonedAt 必填）：一般随 NovelOutlineEdit 维护，创建时可直接带。",
-      "- id 可选：自选 id（重复报 duplicate_id）；缺省宿主生成并在结果回传。orderKey 可选（4 位大写十六进制组，缺省排到末位兄弟之后）。",
-      "- 新单元初始 planningStatus=idea、realizationStatus=pending（可随创建指定）。",
-      "- 批内任一项失败整批回滚，不会留半截树。",
-      "",
-      "建好后用 NovelOutlineRead 复核结构；推进状态用 NovelOutlineEdit。",
     ].join("\n"),
     parameters: {
       type: "object",
       properties: {
+        kind: {
+          type: "string",
+          enum: ["character", "location", "story_unit", "paragraph", "volume", "chapter"],
+          description: "实体类型（story_unit=大纲单元；overview 只读不适用本工具）",
+        },
         values: {
           type: "array",
-          description: "要创建的大纲单元列表（1-64 项）",
+          description: "要创建的实体列表（1-64 项；字段按 kind 取用，传不适用字段报错）",
           minItems: 1,
           maxItems: 64,
           items: {
             type: "object",
             properties: {
               id: { type: "string", pattern: ID_PATTERN, description: "自选 id（可选；缺省宿主生成）" },
-              parentId: { type: "string", pattern: ID_PATTERN, description: "父单元 id（缺省 = 顶层，挂在大纲根下）" },
-              orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "兄弟间排序键（缺省排到末位之后）" },
-              title: { type: "string", minLength: 1, maxLength: 500, description: "单元标题" },
-              intent: { type: "string", maxLength: 20000, description: "单元意图（要达成什么）" },
-              synopsis: { type: "string", maxLength: 50000, description: "情节梗概" },
+              name: { type: "string", minLength: 1, maxLength: 200, description: "名字（character / location 必填）" },
+              aliases: { type: "array", items: { type: "string", minLength: 1, maxLength: 200 }, maxItems: 32, description: "别名/称号列表（character / location）" },
+              summary: { type: "string", maxLength: 20000, description: "摘要（character / location）" },
+              initialState: { type: "string", maxLength: 20000, description: "初始状态（character / location）" },
+              authorNotes: { type: "string", maxLength: 50000, description: "作者备注（character / location；不进正文）" },
+              storyUnitId: { type: "string", pattern: ID_PATTERN, description: "paragraph：所属大纲单元（必填，推荐 scene 级）；chapter：来源提示（仅创建可带）" },
+              orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "排序键（paragraph 段间 / volume 卷间 / chapter 同卷 / story_unit 兄弟间；缺省排到末尾）" },
+              text: { type: "string", description: "段落完整正文（paragraph 必填；一个自然段一项）" },
+              title: { type: "string", minLength: 1, maxLength: 500, description: "标题（volume / chapter / story_unit 必填）" },
+              volumeId: { type: "string", pattern: ID_PATTERN, description: "所属卷 id（chapter；缺省 = 未归卷）" },
+              paragraphIds: { type: "array", items: { type: "string", pattern: ID_PATTERN }, maxItems: 4096, description: "章内段落有序选择（chapter；可跨单元；引用段落须已存在）" },
+              parentId: { type: "string", pattern: ID_PATTERN, description: "父单元 id（story_unit；缺省 = 顶层；不能引用同批先建项）" },
+              intent: { type: "string", maxLength: 20000, description: "单元意图（story_unit）" },
+              synopsis: { type: "string", maxLength: 50000, description: "情节梗概（story_unit；数百字量级，勿塞正文）" },
               scope: {
                 type: "string",
                 enum: ["saga", "arc", "sequence", "scene", "custom"],
-                description: "层级作用域：saga=全书 / arc=卷级弧 / sequence=序列 / scene=场景 / custom=自定义",
+                description: "层级作用域（story_unit）：saga=全书 / arc=卷级弧 / sequence=序列 / scene=场景 / custom=自定义",
               },
               planningStatus: {
                 type: "string",
                 enum: ["idea", "outlined", "ready"],
-                description: "规划状态：idea=点子 / outlined=已成纲 / ready=可开写（缺省 idea）",
+                description: "规划状态（story_unit；缺省 idea）：idea=点子 / outlined=已成纲 / ready=可开写",
               },
               realizationStatus: {
                 type: "string",
                 enum: ["pending", "in-progress", "completed", "abandoned"],
-                description: "实现状态（缺省 pending）",
+                description: "实现状态（story_unit；缺省 pending）：pending=未动笔 / in-progress=写作中 / completed=已完成 / abandoned=已废弃",
               },
               blockState: blockStateSchema(false),
               abandonment: abandonmentSchema(false),
               leaf: {
                 type: "object",
-                description: "leaf 计划：场景级故事设计文档（推荐挂 scene 级叶单元；引用的角色/地点 id 须已存在）",
+                description: "leaf 计划（story_unit；推荐挂 scene 叶单元；引用的角色/地点 id 须已存在）",
                 properties: LEAF_PLAN_PROPERTIES,
                 required: ["settingMode", "characters", "locations", "events", "rhythmBeats", "entityChanges"],
                 additionalProperties: false,
               },
             },
-            required: ["title"],
             additionalProperties: false,
           },
         },
       },
-      required: ["values"],
+      required: ["kind", "values"],
       additionalProperties: false,
     },
     promptDetail: {
@@ -1797,153 +929,234 @@ function outlineWrite(handle: NovelHandle): ToolDef {
       guidance: "",
     },
     precheck: async (call) => {
-      const values = valuesOf(parseArgs(call));
-      if (values.length === 0) return;
-      const units = await storyUnitVersions(handle);
-      for (const v of values) {
-        const parent = str(v.parentId);
-        if (parent !== undefined) assertExists(call.name, units, parent, "父大纲单元");
-        const id = str(v.id);
-        if (id !== undefined) assertIdFree(call.name, units, id, "大纲单元");
-      }
-      await assertReferencesExist(handle, call.name, collectReferences(values), units);
+      const { kind, values } = validateWriteArgs(call.name, parseArgs(call));
+      await precheckWrite(handle, call.name, kind, values);
     },
     handler: {
       execute: async (call) => {
-        const values = valuesOf(parseArgs(call)) as Array<{
-          id?: string;
-          parentId?: string;
-          orderKey?: string;
-          title: string;
-          intent?: string;
-          synopsis?: string;
-          scope?: string;
-          planningStatus?: string;
-          realizationStatus?: string;
-          blockState?: unknown;
-          abandonment?: unknown;
-          leaf?: unknown;
-        }>;
-        const results = await handle.mutateBatch(
-          values.map((v) => ({
-            op: "outline.storyUnit.create" as const,
-            id: v.id,
-            parentId: v.parentId as never | undefined,
-            orderKey: v.orderKey as OrderKey | undefined,
-            title: v.title,
-            intent: v.intent,
-            synopsis: v.synopsis,
-            scope: v.scope as never,
-            planningStatus: v.planningStatus as never,
-            realizationStatus: v.realizationStatus as never,
-            blockState: v.blockState as never,
-            abandonment: v.abandonment as never,
-            leaf: v.leaf as never,
-          })),
-        );
+        const { kind, values } = validateWriteArgs(call.name, parseArgs(call));
+        let mutations: unknown[];
+        switch (kind) {
+          case "character":
+          case "location": {
+            const op = kind === "character" ? "character.create" : "location.create";
+            mutations = (values as unknown as Array<EntityInput & { id?: string }>).map((v) => ({
+              op,
+              id: v.id,
+              input: { name: v.name, aliases: v.aliases, summary: v.summary, initialState: v.initialState, authorNotes: v.authorNotes },
+            }));
+            break;
+          }
+          case "paragraph": {
+            mutations = (values as Array<{ id?: string; storyUnitId: string; orderKey?: string; text: string }>).map((v) => ({
+              op: "paragraph.insert",
+              id: v.id,
+              storyUnitId: v.storyUnitId as never,
+              orderKey: v.orderKey as OrderKey | undefined,
+              text: v.text,
+            }));
+            break;
+          }
+          case "volume": {
+            mutations = (values as Array<{ id?: string; title: string; orderKey?: string }>).map((v) => ({
+              op: "publication.volume.create",
+              id: v.id,
+              title: v.title,
+              orderKey: v.orderKey as OrderKey | undefined,
+            }));
+            break;
+          }
+          case "chapter": {
+            mutations = (values as Array<{ id?: string; volumeId?: string; title: string; storyUnitId?: string; orderKey?: string; paragraphIds?: string[] }>).map((v) => ({
+              op: "publication.chapter.create",
+              id: v.id,
+              volumeId: v.volumeId as never | undefined,
+              title: v.title,
+              storyUnitId: v.storyUnitId as never | undefined,
+              orderKey: v.orderKey as OrderKey | undefined,
+              paragraphIds: v.paragraphIds as never | undefined,
+            }));
+            break;
+          }
+          case "story_unit": {
+            mutations = (values as Array<{
+              id?: string;
+              parentId?: string;
+              orderKey?: string;
+              title: string;
+              intent?: string;
+              synopsis?: string;
+              scope?: string;
+              planningStatus?: string;
+              realizationStatus?: string;
+              blockState?: unknown;
+              abandonment?: unknown;
+              leaf?: unknown;
+            }>).map((v) => ({
+              op: "outline.storyUnit.create",
+              id: v.id,
+              parentId: v.parentId as never | undefined,
+              orderKey: v.orderKey as OrderKey | undefined,
+              title: v.title,
+              intent: v.intent,
+              synopsis: v.synopsis,
+              scope: v.scope as never,
+              planningStatus: v.planningStatus as never,
+              realizationStatus: v.realizationStatus as never,
+              blockState: v.blockState as never,
+              abandonment: v.abandonment as never,
+              leaf: v.leaf as never,
+            }));
+            break;
+          }
+        }
+        const results = await handle.mutateBatch(mutations as never[]);
         return formatBatchItems(results);
       },
     },
   };
 }
 
-function outlineEdit(handle: NovelHandle): ToolDef {
+// ── NovelEdit ──
+
+/** NovelEdit 各 kind 预检（乐观锁 + 引用存在性；审批提交前收口） */
+async function precheckEdit(
+  handle: NovelHandle,
+  toolName: string,
+  kind: NovelKind,
+  items: Array<TargetedItem & { value?: Record<string, unknown> }>,
+): Promise<void> {
+  switch (kind) {
+    case "character":
+    case "location": {
+      if (items.length === 0) return;
+      const versions = kind === "character" ? await characterVersions(handle) : await locationVersions(handle);
+      for (const item of items) assertRevision(toolName, versions, item.id, item.baseRevision, KIND_LABELS[kind]);
+      return;
+    }
+    case "paragraph": {
+      if (items.length === 0) return;
+      const paras = await paragraphVersions(handle);
+      const units = await storyUnitVersions(handle);
+      for (const item of items) {
+        assertRevision(toolName, paras, item.id, item.baseRevision, "段落");
+        const target = str(item.value?.storyUnitId);
+        if (target !== undefined) assertExists(toolName, units, target, "大纲单元");
+      }
+      return;
+    }
+    case "volume": {
+      if (items.length === 0) return;
+      const { volumes } = await publicationVersions(handle);
+      for (const item of items) assertRevision(toolName, volumes, item.id, item.baseRevision, "卷");
+      return;
+    }
+    case "chapter": {
+      if (items.length === 0) return;
+      const { volumes, chapters } = await publicationVersions(handle);
+      const needParas = items.some((item) => Array.isArray(item.value?.paragraphIds));
+      const paras = needParas ? await paragraphVersions(handle) : new Map<string, number>();
+      for (const item of items) {
+        assertRevision(toolName, chapters, item.id, item.baseRevision, "章");
+        const vol = str(item.value?.volumeId);
+        if (vol !== undefined) assertExists(toolName, volumes, vol, "卷");
+        if (Array.isArray(item.value?.paragraphIds)) {
+          for (const pid of item.value.paragraphIds as unknown[]) {
+            assertExists(toolName, paras, String(pid), "段落");
+          }
+        }
+      }
+      return;
+    }
+    case "story_unit": {
+      if (items.length === 0) return;
+      const units = await storyUnitVersions(handle);
+      for (const item of items) {
+        assertRevision(toolName, units, item.id, item.baseRevision, "大纲单元");
+        const parent = str(item.value?.parentId);
+        if (parent !== undefined) assertExists(toolName, units, parent, "父大纲单元");
+      }
+      await assertReferencesExist(handle, toolName, collectReferences(items.map((i) => i.value)), units);
+      return;
+    }
+  }
+}
+
+function novelEdit(handle: NovelHandle): ToolDef {
   return {
-    name: "NovelOutlineEdit",
+    name: "NovelEdit",
     version: "1.0.0",
-    preview: outlineEditPreview,
+    preview: novelEditPreview,
     requireApproval: true,
     description: [
-      "批量局部更新（PATCH）已有大纲单元（整批原子、需作者审批）。",
-      "大纲模型与层级概念见 NovelOutlineRead 的说明。",
+      "批量局部更新（PATCH）已有实体。kind 必填（无 overview）；每项 = { id, baseRevision, value }，整批原子；需作者审批。",
+      "数据模型见 NovelRead 的「小说数据模型」。",
       "",
-      "## 何时使用",
-      "1. 改单元内容：title / intent / synopsis / scope。",
-      "2. 推进状态：planningStatus（idea → outlined → ready）、realizationStatus（开写标 in-progress、写完标 completed）。",
-      "3. 结构调整：parentId 换父（null = 移到顶层）、orderKey 兄弟重排——移动即编辑，同在本工具。",
-      "4. 维护 leaf：补/改人物绑定、事件序列、节奏拍、实体变更。",
-      "5. 标记阻塞 blockState / 废弃 abandonment；清除时传 null。",
+      "## 用法",
+      "- value 只传要改的字段，未提供的保留原值。各 kind 可改字段：",
+      "  - character / location：name；aliases（全量替换，[] 即清空）；summary / initialState / authorNotes（null 清空）。",
+      "  - paragraph：text（替换后的完整段落文本，非增量片段）；storyUnitId（移动到另一单元）；orderKey（重排）。",
+      "  - volume：title；orderKey。",
+      "  - chapter：title；orderKey；volumeId（调整归卷）；paragraphIds（全量替换有序选择——拆分/合并/重排/跨单元/中途收章都靠它，null 清空，引用段落须已存在）。来源提示 storyUnitId 创建后不可改。",
+      "  - story_unit：title；intent；synopsis；scope；planningStatus；realizationStatus；parentId（换父，null=移到顶层）；orderKey（兄弟重排）；blockState（null 清除）；abandonment（null 清除）；leaf（null 删整个计划；字段级替换，集合字段传 null 清空）。",
       "",
-      "## 何时不用",
-      "1. 写或改正文——用 NovelParagraphWrite / NovelParagraphEdit。",
-      "2. 建新单元——用 NovelOutlineWrite。",
-      "3. 删除单元——用 NovelDelete（有依赖检查与级联选项）。",
+      "## 返回",
+      "items 形态（同 NovelWrite：变更 id + applied + 新 entityVersion）；baseRevision 预检过期时整批拒绝并附当前版本——重读后再提交，勿原样重试。",
       "",
-      "## 示例",
+      "## 实例",
       "<example>",
       "一个场景写完，开写下一个：",
-      "→ NovelOutlineEdit values=[",
+      "→ NovelEdit(kind=story_unit, values=[",
       "  { id:<scene-A>, baseRevision:<v>, value:{ realizationStatus:\"completed\" } },",
-      "  { id:<scene-B>, baseRevision:<v>, value:{ realizationStatus:\"in-progress\", planningStatus:\"ready\" } } ]",
-      "<reasoning>写完立即标 completed、下一个标 in-progress；父 arc 与全书进度由叶单元自动汇总，",
-      "不需要（也不应该）手动改父单元的 realizationStatus。</reasoning>",
+      "  { id:<scene-B>, baseRevision:<v>, value:{ realizationStatus:\"in-progress\", planningStatus:\"ready\" } } ])",
+      "<reasoning>写完立即标 completed、下一个标 in-progress；父 arc 与全书进度由叶单元自动汇总，不手动改父单元。</reasoning>",
       "</example>",
-      "",
-      "<example>",
-      "第二卷内两个场景顺序对调：",
-      "→ 各传一项，value 只含 orderKey（其余字段不受影响）",
-      "<reasoning>PATCH 语义：只改传了的字段；orderKey 是兄弟间稠密排序键（4 位大写十六进制组）。</reasoning>",
-      "</example>",
-      "",
-      "<example>",
-      "baseRevision 用了本轮开头的旧值，期间作者手动改过大纲 → 预检拒绝并附当前版本",
-      "（反例：不看拒绝原因原样重试）",
-      "<reasoning>正确做法：重新 NovelOutlineRead 拿最新 entityVersion，确认作者的改动没有被覆盖风险后再提交。</reasoning>",
-      "</example>",
-      "",
-      "## 字段细则",
-      "- 每项 = { id, baseRevision, value }；baseRevision 取最近一次 NovelOutlineRead 的 entityVersion（审批前预检，过期直接拒绝）。",
-      "- PATCH：value 未提供的字段保留原值；parentId / orderKey 移动语义同字段表达。",
-      "- blockState（null 清除）：六类 reasonCode + 依赖单元列表；abandonment（null 清除）：六类 reasonCode + 可选替换单元。",
-      "  读路径 progress.isBlocked 由自身或后代的 blockState 派生。",
-      "- leaf（null 删整个计划）：字段级替换——只传要改的集合，集合传 null 清空；",
-      "  引用的角色/地点/单元 id 必须已存在（预检拦截）。",
-      "- 编辑前先读目标单元（内容与版本）。",
-      "",
-      "拿不准就先 NovelOutlineRead 再编辑。",
+      "写/改正文用 kind=paragraph，不入大纲字段。先读后改。",
     ].join("\n"),
     parameters: {
       type: "object",
       properties: {
+        kind: {
+          type: "string",
+          enum: ["character", "location", "story_unit", "paragraph", "volume", "chapter"],
+          description: "实体类型（story_unit=大纲单元；overview 只读不适用本工具）",
+        },
         values: {
           type: "array",
-          description: "要更新的单元列表（1-64 项：目标 + 乐观锁版本 + 补丁）",
+          description: "要更新的实体列表（1-64 项：目标 + 乐观锁版本 + 补丁；value 字段按 kind 取用）",
           minItems: 1,
           maxItems: 64,
           items: {
             type: "object",
             properties: {
-              id: { type: "string", pattern: ID_PATTERN, description: "目标单元 id" },
-              baseRevision: { type: "integer", description: "最近读到的该单元 entityVersion（乐观锁）" },
+              id: { type: "string", pattern: ID_PATTERN, description: "目标实体 id" },
+              baseRevision: { type: "integer", description: "最近读到的该实体 entityVersion（乐观锁）" },
               value: {
                 type: "object",
-                description: "要修改的字段（未提供的保留原值）",
+                description: "要修改的字段（未提供的保留原值；字段按 kind 取用）",
                 properties: {
-                  title: { type: "string", minLength: 1, maxLength: 500, description: "标题（覆盖）" },
-                  intent: { type: "string", maxLength: 20000, description: "单元意图（覆盖）" },
-                  synopsis: { type: "string", maxLength: 50000, description: "情节梗概（覆盖）" },
-                  scope: {
-                    type: "string",
-                    enum: ["saga", "arc", "sequence", "scene", "custom"],
-                    description: "层级作用域",
-                  },
-                  planningStatus: {
-                    type: "string",
-                    enum: ["idea", "outlined", "ready"],
-                    description: "规划状态：idea=点子 / outlined=已成纲 / ready=可开写",
-                  },
-                  realizationStatus: {
-                    type: "string",
-                    enum: ["pending", "in-progress", "completed", "abandoned"],
-                    description: "实现状态：pending=未动笔 / in-progress=写作中 / completed=已完成 / abandoned=已废弃",
-                  },
-                  parentId: { type: ["string", "null"], pattern: ID_PATTERN, description: "换父节点（null = 移到顶层）" },
-                  orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "兄弟间重排序" },
+                  name: { type: "string", minLength: 1, maxLength: 200, description: "名字（覆盖；character / location）" },
+                  aliases: { type: "array", items: { type: "string", minLength: 1, maxLength: 200 }, maxItems: 32, description: "全量替换别名列表（[] 即清空；character / location）" },
+                  summary: { type: ["string", "null"], maxLength: 20000, description: "摘要（null 清空；character / location）" },
+                  initialState: { type: ["string", "null"], maxLength: 20000, description: "初始状态（null 清空；character / location）" },
+                  authorNotes: { type: ["string", "null"], maxLength: 50000, description: "作者备注（null 清空；character / location）" },
+                  storyUnitId: { type: "string", pattern: ID_PATTERN, description: "移动到该大纲单元（仅 paragraph；章的来源提示不可改）" },
+                  orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "重排序（paragraph 段间 / volume 卷间 / chapter 同卷 / story_unit 兄弟间）" },
+                  text: { type: "string", description: "替换后的完整段落文本（仅 paragraph）" },
+                  title: { type: "string", minLength: 1, maxLength: 500, description: "标题（覆盖；volume / chapter / story_unit）" },
+                  volumeId: { type: "string", pattern: ID_PATTERN, description: "所属卷 id（仅 chapter；调整归卷）" },
+                  paragraphIds: { type: ["array", "null"], items: { type: "string", pattern: ID_PATTERN }, maxItems: 4096, description: "全量替换有序段落选择（仅 chapter；null 清空；引用段落须已存在）" },
+                  intent: { type: "string", maxLength: 20000, description: "单元意图（仅 story_unit）" },
+                  synopsis: { type: "string", maxLength: 50000, description: "情节梗概（仅 story_unit）" },
+                  scope: { type: "string", enum: ["saga", "arc", "sequence", "scene", "custom"], description: "层级作用域（仅 story_unit）" },
+                  planningStatus: { type: "string", enum: ["idea", "outlined", "ready"], description: "规划状态（仅 story_unit）" },
+                  realizationStatus: { type: "string", enum: ["pending", "in-progress", "completed", "abandoned"], description: "实现状态（仅 story_unit）" },
+                  parentId: { type: ["string", "null"], pattern: ID_PATTERN, description: "换父节点（仅 story_unit；null = 移到顶层）" },
                   blockState: blockStateSchema(true),
                   abandonment: abandonmentSchema(true),
                   leaf: {
                     type: ["object", "null"],
-                    description: "leaf 计划补丁（null 清整个计划；字段级替换，集合字段传 null 清空）",
+                    description: "leaf 计划补丁（仅 story_unit；null 清整个计划；字段级替换，集合字段传 null 清空）",
                     properties: nullableProps(LEAF_PLAN_PROPERTIES, ["settingMode"]),
                     additionalProperties: false,
                   },
@@ -1956,6 +1169,129 @@ function outlineEdit(handle: NovelHandle): ToolDef {
           },
         },
       },
+      required: ["kind", "values"],
+      additionalProperties: false,
+    },
+    promptDetail: {
+      policy: "",
+      guidance: "",
+    },
+    precheck: async (call) => {
+      const { kind, items } = validateEditArgs(call.name, parseArgs(call));
+      await precheckEdit(handle, call.name, kind, items);
+    },
+    handler: {
+      execute: async (call) => {
+        const { kind, items } = validateEditArgs(call.name, parseArgs(call));
+        let mutations: unknown[];
+        switch (kind) {
+          case "character":
+          case "location": {
+            const op = kind === "character" ? "character.update" : "location.update";
+            const idField = kind === "character" ? "characterId" : "locationId";
+            mutations = (items as unknown as Array<TargetedItem & { value: Partial<EntityInput> }>).map((v) => ({
+              op,
+              [idField]: v.id as never,
+              baseRevision: v.baseRevision,
+              patch: v.value,
+            }));
+            break;
+          }
+          case "paragraph": {
+            mutations = (items as unknown as Array<TargetedItem & { value: { text?: string; storyUnitId?: string; orderKey?: string } }>).map((v) => ({
+              op: "paragraph.update",
+              paragraphId: v.id as never,
+              baseRevision: v.baseRevision,
+              text: v.value.text,
+              storyUnitId: v.value.storyUnitId as never | undefined,
+              orderKey: v.value.orderKey as OrderKey | undefined,
+            }));
+            break;
+          }
+          case "volume": {
+            mutations = (items as unknown as Array<TargetedItem & { value: { title?: string; orderKey?: string } }>).map((v) => ({
+              op: "publication.volume.update",
+              volumeId: v.id as never,
+              baseRevision: v.baseRevision,
+              patch: v.value as never,
+            }));
+            break;
+          }
+          case "chapter": {
+            mutations = (items as unknown as Array<TargetedItem & { value: Record<string, unknown> }>).map((v) => ({
+              op: "publication.chapter.update",
+              chapterId: v.id as never,
+              baseRevision: v.baseRevision,
+              patch: v.value as never,
+            }));
+            break;
+          }
+          case "story_unit": {
+            mutations = (items as unknown as Array<TargetedItem & { value: Record<string, unknown> }>).map((v) => ({
+              op: "outline.storyUnit.update",
+              storyUnitId: v.id as never,
+              baseRevision: v.baseRevision,
+              patch: v.value as never,
+            }));
+            break;
+          }
+        }
+        const results = await handle.mutateBatch(mutations as never[]);
+        return formatBatchItems(results);
+      },
+    },
+  };
+}
+
+// ── NovelDelete ──
+
+function novelDelete(handle: NovelHandle): ToolDef {
+  return {
+    name: "NovelDelete",
+    version: "1.0.0",
+    preview: novelDeletePreview,
+    requireApproval: true,
+    description: [
+      "批量删除小说实体（高风险，不可恢复；整批原子）。",
+      "",
+      "用法：",
+      "- 顶层 cascade（缺省 false）+ values 每项 = { kind, id, baseRevision }。",
+      "- kind ∈ story_unit / character / location / paragraph / volume / chapter。",
+      "- baseRevision：该实体最近一次读到的 entityVersion（审批前预检，过期直接拒绝并附当前版本）。",
+      "- 依赖检查（cascade=false 默认拒绝）：story unit 有子单元/leaf 计划/段落、卷有章、章有段落选择——均直接拒绝并列出依赖。",
+      "- character / location 被任何 scene 的 leaf 引用（绑定/实体变更）时直接拒绝并列出引用单元——先用 NovelEdit 清理引用后再删；cascade 不豁免此检查（正文文本提及名字不算引用）。",
+      "- cascade=true 级联：story unit 删整个子树（单元 + leaf 计划 + 段落及其章选择）、卷删其章（含各自选择，段落保留）、章解绑段落选择（段落保留）；删除段落会同时从所有章选择移除。",
+      "- 返回 items + deleted[]（实际删除的每个实体完整记录，级联展开、跨批去重）。",
+      "- 调用前先读（NovelRead）确认目标与版本，并向用户确认后再执行（谨慎行动）。",
+    ].join("\n"),
+    parameters: {
+      type: "object",
+      properties: {
+        cascade: {
+          type: "boolean",
+          description: "级联删除（缺省 false）：true 时 story unit 删整个子树、卷删其章、章解绑选择",
+        },
+        values: {
+          type: "array",
+          description: "要删除的实体列表（1-64 项：类型 + id + 乐观锁版本）",
+          minItems: 1,
+          maxItems: 64,
+          items: {
+            type: "object",
+            properties: {
+              kind: {
+                type: "string",
+                enum: ["story_unit", "character", "location", "paragraph", "volume", "chapter"],
+                description: "实体类型（story_unit=大纲单元 / character=角色 / location=地点 / paragraph=段落 / volume=卷 / chapter=章）",
+              },
+              id: { type: "string", pattern: ID_PATTERN, description: "目标实体 id" },
+              baseRevision: { type: "integer", description: "最近读到的该实体 entityVersion（乐观锁）" },
+            },
+            required: ["kind", "id", "baseRevision"],
+            additionalProperties: false,
+          },
+        },
+      },
       required: ["values"],
       additionalProperties: false,
     },
@@ -1964,28 +1300,168 @@ function outlineEdit(handle: NovelHandle): ToolDef {
       guidance: "",
     },
     precheck: async (call) => {
-      const items = valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value?: Record<string, unknown> }>;
+      const args = parseArgs(call);
+      const items = valuesOf(args) as unknown as Array<TargetedItem & { kind: string }>;
       if (items.length === 0) return;
-      const units = await storyUnitVersions(handle);
+      const kinds = new Set(items.map((v) => v.kind));
+      const labels: Record<string, string> = {
+        story_unit: "大纲单元",
+        character: "角色",
+        location: "地点",
+        paragraph: "段落",
+        volume: "卷",
+        chapter: "章",
+      };
+      const indexes = new Map<string, Promise<VersionIndex>>();
+      const indexOf = (kind: string): Promise<VersionIndex> => {
+        let p = indexes.get(kind);
+        if (p === undefined) {
+          p = (async () => {
+            switch (kind) {
+              case "story_unit":
+                return storyUnitVersions(handle);
+              case "character":
+                return characterVersions(handle);
+              case "location":
+                return locationVersions(handle);
+              case "paragraph":
+                return paragraphVersions(handle);
+              case "volume":
+                return (await publicationVersions(handle)).volumes;
+              case "chapter":
+                return (await publicationVersions(handle)).chapters;
+              default:
+                return new Map<string, number>();
+            }
+          })();
+          indexes.set(kind, p);
+        }
+        return p;
+      };
       for (const item of items) {
-        assertRevision(call.name, units, item.id, item.baseRevision, "大纲单元");
-        const parent = str(item.value?.parentId);
-        if (parent !== undefined) assertExists(call.name, units, parent, "父大纲单元");
+        const versions = await indexOf(item.kind);
+        assertRevision(call.name, versions, item.id, item.baseRevision, labels[item.kind] ?? item.kind);
       }
-      await assertReferencesExist(handle, call.name, collectReferences(items.map((i) => i.value)), units);
+      // leaf 引用检查（悬空引用防护；cascade 不豁免——结构性级联之外，档案引用须显式清理）
+      const entityTargets = items.filter((v) => v.kind === "character" || v.kind === "location");
+      if (entityTargets.length > 0) {
+        const snap = (await handle.query({ op: "outline.get", includePlans: true })) as {
+          units: Array<{ id: string; leaf?: unknown }>;
+        };
+        const refIndex = new Map<string, Set<string>>();
+        const addRef = (target: unknown, unitId: string): void => {
+          if (typeof target === "string" && target.length > 0) {
+            let set = refIndex.get(target);
+            if (set === undefined) {
+              set = new Set<string>();
+              refIndex.set(target, set);
+            }
+            set.add(unitId);
+          }
+        };
+        for (const unit of snap.units ?? []) {
+          const leaf = unit.leaf;
+          if (leaf === undefined || leaf === null || typeof leaf !== "object") continue;
+          const l = leaf as Record<string, unknown>;
+          for (const c of Array.isArray(l.characters) ? l.characters : []) {
+            addRef((c as Record<string, unknown>)?.characterId, unit.id);
+          }
+          for (const loc of Array.isArray(l.locations) ? l.locations : []) {
+            addRef((loc as Record<string, unknown>)?.locationId, unit.id);
+          }
+          for (const e of Array.isArray(l.entityChanges) ? l.entityChanges : []) {
+            const rec = e as Record<string, unknown>;
+            addRef(rec?.entityId, unit.id);
+            addRef(rec?.relatedEntityId, unit.id);
+          }
+        }
+        for (const item of entityTargets) {
+          const refs = refIndex.get(item.id);
+          if (refs !== undefined && refs.size > 0) {
+            throw precheckFail(
+              call.name,
+              `${labels[item.kind]} ${item.id} 被 leaf 引用（场景单元 ${[...refs].join(" / ")}）——先用 NovelEdit 清理对应 leaf 绑定/实体变更后再删除`,
+            );
+          }
+        }
+      }
+      // 依赖检查（PRD §4-11）：cascade=false 时默认拒绝有依赖的删除
+      if (args.cascade === true) return;
+      const depKinds = new Set(items.map((v) => v.kind));
+      const needUnits = depKinds.has("story_unit");
+      const needParas = depKinds.has("paragraph") || needUnits;
+      const needPub = depKinds.has("volume") || depKinds.has("chapter");
+      const [unitsSnap, parasSnap, pubSnap] = await Promise.all([
+        needUnits ? handle.query({ op: "outline.get", includePlans: true }) : Promise.resolve(undefined),
+        needParas ? handle.query({ op: "paragraphs.list" }) : Promise.resolve(undefined),
+        needPub ? handle.query({ op: "publication.get" }) : Promise.resolve(undefined),
+      ]);
+      const units = (unitsSnap as { units: Array<{ id: string; parentId?: string; leaf?: unknown }> } | undefined)?.units ?? [];
+      const paras = (parasSnap as Array<{ id: string; storyUnitId: string }> | undefined) ?? [];
+      const chapters = (pubSnap as { chapters: Array<{ id: string; volumeId?: string; paragraphIds?: string[] }> } | undefined)?.chapters ?? [];
+      for (const item of items) {
+        if (item.kind === "story_unit") {
+          const childCount = units.filter((u) => u.parentId === item.id).length;
+          const hasLeaf = units.find((u) => u.id === item.id)?.leaf !== undefined;
+          const paraCount = paras.filter((p) => p.storyUnitId === item.id).length;
+          if (childCount > 0 || hasLeaf || paraCount > 0) {
+            const deps = [
+              childCount > 0 ? `${childCount} 个子单元` : "",
+              hasLeaf ? "leaf 计划" : "",
+              paraCount > 0 ? `${paraCount} 个段落` : "",
+            ].filter(Boolean).join(" / ");
+            throw precheckFail(call.name, `大纲单元 ${item.id} 有依赖（${deps}）——需 cascade:true 级联删除`);
+          }
+        } else if (item.kind === "volume") {
+          const chapterCount = chapters.filter((c) => c.volumeId === item.id).length;
+          if (chapterCount > 0) {
+            throw precheckFail(call.name, `卷 ${item.id} 仍含 ${chapterCount} 章——需 cascade:true 级联删除`);
+          }
+        } else if (item.kind === "chapter") {
+          const selection = chapters.find((c) => c.id === item.id)?.paragraphIds ?? [];
+          if (selection.length > 0) {
+            throw precheckFail(call.name, `章 ${item.id} 仍有 ${selection.length} 个段落选择——需 cascade:true（级联仅解绑选择）或先清空选择`);
+          }
+        }
+      }
     },
     handler: {
       execute: async (call) => {
-        const values = (valuesOf(parseArgs(call)) as unknown as Array<TargetedItem & { value: Record<string, unknown> }>) ?? [];
+        const args = parseArgs(call);
+        const cascade = args.cascade === true;
+        const values = (args.values as Array<{ kind: string; id: string; baseRevision: number }>) ?? [];
         const results = await handle.mutateBatch(
-          values.map((v) => ({
-            op: "outline.storyUnit.update" as const,
-            storyUnitId: v.id as never,
-            baseRevision: v.baseRevision,
-            patch: v.value as never,
-          })),
+          values.map((v) => {
+            const op = `${kindToOp(v.kind)}.delete` as const;
+            const withCascade = cascade && (v.kind === "story_unit" || v.kind === "volume" || v.kind === "chapter");
+            return {
+              op,
+              baseRevision: v.baseRevision,
+              ...(withCascade ? { cascade: true } : {}),
+              ...({ [kindToIdField(v.kind)]: v.id } as Record<string, unknown>),
+            } as never;
+          }),
         );
-        return formatBatchItems(results);
+        // 跨批去重汇总被删实体完整记录（级联展开）
+        const seen = new Set<string>();
+        const deleted: Array<{ kind: string; id: string; data: unknown }> = [];
+        for (const r of results) {
+          for (const d of r.deleted ?? []) {
+            const key = `${d.kind}:${d.id}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              deleted.push(d);
+            }
+          }
+        }
+        return JSON.stringify(
+          {
+            items: results.map((r) => ({ id: r.changeId, status: "applied", version: r.version })),
+            ...(deleted.length > 0 ? { deleted } : {}),
+          },
+          null,
+          2,
+        );
       },
     },
   };

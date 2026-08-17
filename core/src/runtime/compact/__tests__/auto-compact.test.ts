@@ -95,6 +95,21 @@ describe("parseNovelCall", () => {
     expect([...r!.entityIds]).toEqual(["ch1"]);
   });
 
+  it("通用工具名（NovelRead/Write/Edit）新旧并存识别", () => {
+    const r = parseNovelCall("NovelRead", '{"kind":"character","characterId":"ch1"}');
+    expect(r?.kind).toBe("read");
+    expect([...r!.entityIds]).toEqual(["ch1"]);
+    const list = parseNovelCall("NovelRead", '{"kind":"paragraph","storyUnitId":"su1"}');
+    expect(list?.kind).toBe("read");
+    expect([...list!.entityIds]).toEqual(["su1"]);
+    const w = parseNovelCall("NovelWrite", '{"kind":"chapter","values":[{"id":"ch1","title":"t"}]}');
+    expect(w?.kind).toBe("write");
+    expect([...w!.entityIds]).toEqual(["ch1"]);
+    const e = parseNovelCall("NovelEdit", '{"kind":"story_unit","values":[{"id":"su1","baseRevision":1,"value":{"title":"t"}}]}');
+    expect(e?.kind).toBe("write");
+    expect([...e!.entityIds]).toEqual(["su1"]);
+  });
+
   it("read 省略 id（列表查询）→ 空 entityIds", () => {
     const r = parseNovelCall("NovelChapterRead", "{}");
     expect(r?.kind).toBe("read");

@@ -17,16 +17,11 @@ import {
   PromptSectionItem,
 } from "../../prompt/PromptRecipe.js";
 
-/** 精确只读工具名单（与 explorer 一致：文件读 + novel 各域读 + TodoWrite） */
+/** 精确只读工具名单（与 explorer 一致：文件读 + NovelRead（kind 分发六域）+ TodoWrite） */
 export const NOVEL_COMPOSE_TOOL_NAMES: readonly string[] = Object.freeze([
   "Read",
   "Glob",
-  "NovelCharacterRead",
-  "NovelLocationRead",
-  "NovelOutlineRead",
-  "NovelParagraphRead",
-  "NovelVolumeRead",
-  "NovelChapterRead",
+  "NovelRead",
   "TodoWrite",
 ]);
 
@@ -56,16 +51,7 @@ export const novelComposeAgentDefinition = new AgentDefinition({
     new PromptSectionItem("tool.guidance"),
   ]),
   tools: new AgentToolPolicy({
-    groupIds: [
-      "runtime.files",
-      "novel.characters",
-      "novel.locations",
-      "novel.outline",
-      "novel.paragraph",
-      "novel.volumes",
-      "novel.chapters",
-      "runtime.todo",
-    ],
+    groupIds: ["runtime.files", "novel.entities", "runtime.todo"],
     allow: [...NOVEL_COMPOSE_TOOL_NAMES],
   }),
   delegation: new AgentDelegationPolicy({ mode: "disabled", allowedAgentTypes: [] }),

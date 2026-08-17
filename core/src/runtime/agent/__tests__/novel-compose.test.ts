@@ -110,12 +110,13 @@ describe("buildNovelComposeAgent 装配", () => {
 });
 
 describe("Compose prompt 段内容（legacy 迁移 + 工具名适配）", () => {
-  it("process 段含现注册表工具名（P1 legacy 对齐 Novel* 命名）", () => {
+  it("process 段含通用工具名与 kind 分发表述（novel-tools-通用合并）", () => {
     const text = novelComposeProcessSection.render();
+    expect(text).toContain("NovelRead");
+    expect(text).toContain("kind");
+    // 旧六域三件套名不应再出现
     for (const name of ["NovelOutlineRead", "NovelCharacterRead", "NovelLocationRead", "NovelParagraphRead", "NovelVolumeRead", "NovelChapterRead"]) {
-      expect(text).toContain(name);
+      expect(text).not.toContain(name);
     }
-    // 旧短名（不带 Novel 前缀）不应再独立出现：其后必跟 Nov 前缀形态之外的残句
-    //（substring 判定不可用——NovelCharacterRead 含 CharacterRead 子串）
   });
 });

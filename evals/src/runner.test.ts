@@ -36,7 +36,7 @@ const writeCall = (id: string, values: unknown[]): ProviderResult => ({
 	message: {
 		role: "assistant",
 		content: "",
-		toolCalls: [{ id, name: "NovelCharacterWrite", args: JSON.stringify({ values }) }],
+		toolCalls: [{ id, name: "NovelWrite", args: JSON.stringify({ kind: "character", values }) }],
 	},
 });
 
@@ -55,7 +55,7 @@ describe("runAgent 密闭自测", () => {
 		expect(m.ok).toBe(true);
 		expect(m.turns).toBe(2);
 		expect(m.toolCalls).toHaveLength(1);
-		expect(m.toolCalls[0]!.name).toBe("NovelCharacterWrite");
+		expect(m.toolCalls[0]!.name).toBe("NovelWrite");
 		expect(m.toolCalls[0]!.result ?? "").toContain("applied");
 		expect(m.toolCalls[0]!.error).toBeUndefined();
 		expect(m.toolErrors).toHaveLength(0);
@@ -76,7 +76,7 @@ describe("runAgent 密闭自测", () => {
 		expect(m.toolCalls).toHaveLength(2);
 		expect(m.toolErrors).toHaveLength(1);
 		expect(m.toolErrors[0]!.code).toBe("TOOL_PRECHECK_FAILED");
-		expect(m.toolErrors[0]!.toolName).toBe("NovelCharacterWrite");
+		expect(m.toolErrors[0]!.toolName).toBe("NovelWrite");
 		expect(m.toolCalls[1]!.error?.code).toBe("TOOL_PRECHECK_FAILED");
 		// 终态只有第一次写入生效
 		const characters = m.storeSnapshot.characters as Array<{ id: string }>;
@@ -90,7 +90,7 @@ describe("runAgent 密闭自测", () => {
 				message: {
 					role: "assistant",
 					content: "",
-					toolCalls: [{ id: "t1", name: "NovelCharacterWrite", args: "{not-json" }],
+					toolCalls: [{ id: "t1", name: "NovelWrite", args: "{not-json" }],
 				},
 			},
 			finalMsg("完成"),
@@ -117,7 +117,7 @@ describe("runAgent 密闭自测", () => {
 			finalMsg("被拒了"),
 		]);
 		const m = await runAgent(
-			{ task: "创建", approvals: { deny: ["NovelCharacterWrite"] } },
+			{ task: "创建", approvals: { deny: ["NovelWrite"] } },
 			{ provider },
 		);
 		// 拒绝文本回填为 result（审批门控路径），角色未落库
@@ -137,7 +137,7 @@ describe("evalCase DSL 聚合", () => {
 			{ task: "创建甲", repeats: 2, seed: { files: { "notes.md": "seed" } } },
 			{ provider },
 		)
-			.toolHasCalled("NovelCharacterWrite")
+			.toolHasCalled("NovelWrite")
 			.toolNotCalled("AskUserQuestion")
 			.finalReplyContains("甲")
 			.file("notes.md", "seed")
@@ -170,7 +170,7 @@ describe("evalCase DSL 聚合", () => {
 			finalMsg("完成"),
 		]);
 		const byFn = await evalCase({ task: "x", repeats: 1 }, { provider })
-			.toolResponse("NovelCharacterWrite", (value) => {
+			.toolResponse("NovelWrite", (value) => {
 				const v = value as { items?: Array<{ status?: string }> };
 				return Array.isArray(v.items) && v.items.some((i) => i.status === "applied");
 			})
@@ -178,7 +178,7 @@ describe("evalCase DSL 聚合", () => {
 		expect(byFn.passed).toBe(true);
 
 		const byShape = await evalCase({ task: "x", repeats: 1 }, { provider })
-			.toolResponse("NovelCharacterWrite", jsonSubset({ items: [{ status: "applied" }] }))
+			.toolResponse("NovelWrite", jsonSubset({ items: [{ status: "applied" }] }))
 			.run();
 		expect(byShape.passed).toBe(true);
 	});

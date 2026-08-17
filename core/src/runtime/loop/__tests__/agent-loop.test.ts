@@ -268,7 +268,7 @@ describe("AgentLoop.resumePendingRun 补完", () => {
         return "written";
       },
       resolve: () => ({
-        name: "NovelParagraphWrite",
+        name: "NovelWrite",
         version: "1.0.0",
         requireApproval: true,
         handler: { execute: async () => "written" },
@@ -285,7 +285,7 @@ describe("AgentLoop.resumePendingRun 补完", () => {
         {
           role: "assistant",
           content: "",
-          toolCalls: [{ id: "t1", name: "NovelParagraphWrite", args: "{}" }],
+          toolCalls: [{ id: "t1", name: "NovelWrite", args: "{}" }],
         },
       ],
       ...(overrides.composeState !== undefined ? { composeState: overrides.composeState } : {}),
@@ -301,7 +301,7 @@ describe("AgentLoop.resumePendingRun 补完", () => {
     });
     const r = await loop.resumePendingRun({ sampling: { model: "gpt-5" } });
     expect(r.final.content).toBe("done");
-    expect(dispatched).toEqual(["NovelParagraphWrite"]);
+    expect(dispatched).toEqual(["NovelWrite"]);
     expect(responses[0]).toBe("written");
   });
 

@@ -278,7 +278,7 @@ init/              ConversationInit + ProcessSpawner（bootstrap）
   mode 晋升失败可重试（pendingMode 保留）且不丢用户消息、hub/loop 广播逐订阅者保护、
   state.jsonl 落盘失败兜底不崩、同值 mode.set 补发 mode.changed（chip 不悬挂）
 - **进程化**：novel-db 进程、conversation 子进程 spawn、teammate 派生（ManagerServer 双模式）
-- **agent 装配**：声明式 `novelAgentDefinition`（9 段 recipe / 9 工具组 23 工具 / 2 nudge，compose 域一组两工具）经 `AgentAssembler` 解析为 `AgentCapability`；段 `id@version` 注册表解析；nudge 生效集 = `nudgeEnablement.enabled` ∩ 实现目录
+- **agent 装配**：声明式 `novelAgentDefinition`（10 段 recipe / 5 工具组 12 工具 / 2 nudge；novel.entities 一组四件 kind 分发通用工具 NovelRead/Write/Edit/Delete——六域三件套已收敛，见 PRD novel-tools-通用合并；compose 一组两工具）经 `AgentAssembler` 解析为 `AgentCapability`；段 `id@version` 注册表解析；nudge 生效集 = `nudgeEnablement.enabled` ∩ 实现目录
 - **subagent 定义统一在 definitions/**：`novelExplorerAgentDefinition`（只读探索）与 `novelComposeAgentDefinition`（草案创作，legacy 迁移）与 main 同走 declarative 路线（`buildNovelSubagent` 共享装配）；只读边界用 `groupIds + allow` 正向钉死；Agent 工具描述目录（`NOVEL_SUBAGENT_DEFINITIONS`）与派发白名单（`definition.delegation.allowedAgentTypes`）均从定义派生，无平行常量
 - **system prompt 渲染**：static 段一次渲染进 base 缓存，dynamic 段每 provider call 渲染（`core.environment` 环境块 / `novel.global_constraints` NOVEL.md 注入 / `tool.guidance` 工具清单）；动态输入由 LoopContext 自组装（workdir/modelId）+ 宿主注入（platform 常量 / NOVEL.md 每调用 fs 读）
 - **样式架构**（ui 包）：三层 token 模型（L1 结构常量 / L2 设计语言 / L3 语义色+阴影，

@@ -279,11 +279,11 @@ describe("AgentLoop 审批门控（按 turn 批量）", () => {
   describe("compose 权限门（gateBatch）", () => {
     it("compose 激活：canonical 写被硬拒绝（handler 不执行、不经审批通道）", async () => {
       const execute = vi.fn().mockResolvedValue("written");
-      const tool: ToolDef = { ...writeTool("NovelParagraphWrite", true), handler: { execute } };
+      const tool: ToolDef = { ...writeTool("NovelWrite", true), handler: { execute } };
       const composeState = new ComposeModeStateProvider();
       composeState.enter("c1", { designFilePath: "/ws/.novel/design/c1.md" });
       const requestApproval = vi.fn();
-      const loop = makeLoop([toolCallResult([{ toolName: "NovelParagraphWrite", id: "t1" }]), stopResult("ok")], {
+      const loop = makeLoop([toolCallResult([{ toolName: "NovelWrite", id: "t1" }]), stopResult("ok")], {
         toolDefs: [tool],
         composeState,
         requestApproval,
@@ -309,11 +309,11 @@ describe("AgentLoop 审批门控（按 turn 批量）", () => {
     });
 
     it("bypass 模式：canonical 写跳过审批直接放行", async () => {
-      const tool = writeTool("NovelParagraphWrite", true);
+      const tool = writeTool("NovelWrite", true);
       const composeState = new ComposeModeStateProvider();
       composeState.setMode("c1", "bypass");
       const requestApproval = vi.fn();
-      const loop = makeLoop([toolCallResult([{ toolName: "NovelParagraphWrite", id: "t1" }]), stopResult("ok")], {
+      const loop = makeLoop([toolCallResult([{ toolName: "NovelWrite", id: "t1" }]), stopResult("ok")], {
         toolDefs: [tool],
         composeState,
         requestApproval,
@@ -324,7 +324,7 @@ describe("AgentLoop 审批门控（按 turn 批量）", () => {
       });
       expect(r.final.content).toBe("ok");
       // 直达 dispatch（无拒绝文本）、审批通道未被询问
-      expect(responses[0]).toBe("result:NovelParagraphWrite");
+      expect(responses[0]).toBe("result:NovelWrite");
       expect(requestApproval).not.toHaveBeenCalled();
     });
 

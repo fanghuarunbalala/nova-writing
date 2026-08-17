@@ -16,9 +16,11 @@ import {
   type NovelCallMeta,
 } from "./auto-compact-shared.js";
 
-// ── novel 域工具分类（名字前缀即可判定读写） ──
+// ── novel 域工具分类（新通用名 + 旧三件套名共存：历史会话消息里仍是旧工具名） ──
 
 const NOVEL_READ_TOOLS = new Set([
+  "NovelRead",
+  // 旧六域 Read 名（合并前会话兼容）
   "NovelCharacterRead",
   "NovelLocationRead",
   "NovelParagraphRead",
@@ -28,6 +30,10 @@ const NOVEL_READ_TOOLS = new Set([
 ]);
 
 const NOVEL_WRITE_TOOLS = new Set([
+  "NovelWrite",
+  "NovelEdit",
+  "NovelDelete",
+  // 旧六域 Write/Edit 名（合并前会话兼容）
   "NovelCharacterWrite",
   "NovelCharacterEdit",
   "NovelLocationWrite",
@@ -40,7 +46,6 @@ const NOVEL_WRITE_TOOLS = new Set([
   "NovelChapterEdit",
   "NovelOutlineWrite",
   "NovelOutlineEdit",
-  "NovelDelete",
 ]);
 
 /**

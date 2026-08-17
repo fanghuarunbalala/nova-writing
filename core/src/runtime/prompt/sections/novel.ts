@@ -128,9 +128,8 @@ export const novelExplorerSection: PromptSection = {
 
 /**
  * 草案创作者（compose）子代理四段（novel.compose.identity/system/process/reporting）。
- * 从 legacy main 分支 NovelComposePromptSections 逐字迁移；唯一适配：process 段
- * 的工具清单行随 P1 legacy 对齐改回 Novel* 工具名（卷/章读拆分为
- * NovelVolumeRead / NovelChapterRead），避免指引模型调用不存在的工具。
+ * 从 legacy main 分支 NovelComposePromptSections 逐字迁移；process 段的工具清单行
+ * 随通用工具合并（PRD novel-tools-通用合并）改为 NovelRead 单工具 kind 分发表述。
  */
 
 /** 草案创作者身份与定位段（novel.compose.identity） */
@@ -185,7 +184,7 @@ export const novelComposeProcessSection: PromptSection = {
       "",
       "2. **彻底探索**：",
       "   - 阅读调用方在请求中提供的档案或说明。",
-      "   - 用只读工具查找既有模式与设定：TodoWrite 维护多步探索计划；NovelOutlineRead / NovelCharacterRead / NovelLocationRead / NovelParagraphRead / NovelVolumeRead / NovelChapterRead 分别查询大纲、人物、地点、段落、卷、章。",
+      "   - 用只读工具查找既有模式与设定：TodoWrite 维护多步探索计划；NovelRead 按 kind 分别查询（story_unit=大纲、character=人物、location=地点、paragraph=段落、volume=卷、chapter=章，overview=全书总览）。",
       "   - 理解当前故事结构与既有设定，找出相似内容作为参考。",
       "   - 梳理相关档案之间的依赖与引用，确认不臆造设定。",
       "",

@@ -16,16 +16,11 @@ import {
   PromptSectionItem,
 } from "../../prompt/PromptRecipe.js";
 
-/** 精确只读工具名单（allow 白名单：无 Write/Edit/Delete/NovelDelete/Agent；序 = 池序） */
+/** 精确只读工具名单（allow 白名单：无文件/实体写入与 NovelWrite/NovelEdit/NovelDelete/Agent；序 = 池序） */
 export const NOVEL_EXPLORER_TOOL_NAMES: readonly string[] = Object.freeze([
   "Read",
   "Glob",
-  "NovelCharacterRead",
-  "NovelLocationRead",
-  "NovelOutlineRead",
-  "NovelParagraphRead",
-  "NovelVolumeRead",
-  "NovelChapterRead",
+  "NovelRead",
   "TodoWrite",
 ]);
 
@@ -50,16 +45,7 @@ export const novelExplorerAgentDefinition = new AgentDefinition({
   ]),
   tools: new AgentToolPolicy({
     // 组序决定池序（tool.guidance 段按池序列工具）；runtime.todo 收尾对齐旧装配序
-    groupIds: [
-      "runtime.files",
-      "novel.characters",
-      "novel.locations",
-      "novel.outline",
-      "novel.paragraph",
-      "novel.volumes",
-      "novel.chapters",
-      "runtime.todo",
-    ],
+    groupIds: ["runtime.files", "novel.entities", "runtime.todo"],
     allow: [...NOVEL_EXPLORER_TOOL_NAMES],
   }),
   delegation: new AgentDelegationPolicy({ mode: "disabled", allowedAgentTypes: [] }),

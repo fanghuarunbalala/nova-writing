@@ -374,6 +374,73 @@ export function outlineEditPreview(call: ToolPreviewInput, response?: ToolPrevie
 	return withIdentity("编辑", "大纲", names, "已更新", "更新失败", response);
 }
 
+/* ============ novel 通用工具（NovelRead / NovelWrite / NovelEdit，按 kind 分派） ============ */
+
+/** NovelRead preview：按 kind 分派到对应域渲染（overview 无目标 id） */
+export function novelReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
+	const kind = parseArgsJson(call.args)?.kind;
+	switch (typeof kind === "string" ? kind : "") {
+		case "character":
+			return characterReadPreview(call, response);
+		case "location":
+			return locationReadPreview(call, response);
+		case "story_unit":
+			return outlineReadPreview(call, response);
+		case "paragraph":
+			return paragraphReadPreview(call, response);
+		case "volume":
+			return volumeReadPreview(call, response);
+		case "chapter":
+			return chapterReadPreview(call, response);
+		case "overview":
+			return withIdentity("读取", "总览", undefined, "已读取", "读取失败", response);
+		default:
+			return withIdentity("读取", "小说", undefined, "已读取", "读取失败", response);
+	}
+}
+
+/** NovelWrite preview：按 kind 分派到对应域渲染 */
+export function novelWritePreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
+	const kind = parseArgsJson(call.args)?.kind;
+	switch (typeof kind === "string" ? kind : "") {
+		case "character":
+			return characterWritePreview(call, response);
+		case "location":
+			return locationWritePreview(call, response);
+		case "story_unit":
+			return outlineWritePreview(call, response);
+		case "paragraph":
+			return paragraphWritePreview(call, response);
+		case "volume":
+			return volumeWritePreview(call, response);
+		case "chapter":
+			return chapterWritePreview(call, response);
+		default:
+			return withIdentity("创建", "实体", undefined, "已创建", "创建失败", response);
+	}
+}
+
+/** NovelEdit preview：按 kind 分派到对应域渲染 */
+export function novelEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
+	const kind = parseArgsJson(call.args)?.kind;
+	switch (typeof kind === "string" ? kind : "") {
+		case "character":
+			return characterEditPreview(call, response);
+		case "location":
+			return locationEditPreview(call, response);
+		case "story_unit":
+			return outlineEditPreview(call, response);
+		case "paragraph":
+			return paragraphEditPreview(call, response);
+		case "volume":
+			return volumeEditPreview(call, response);
+		case "chapter":
+			return chapterEditPreview(call, response);
+		default:
+			return withIdentity("编辑", "实体", undefined, "已更新", "更新失败", response);
+	}
+}
+
 /* ============ files 域 ============ */
 
 /** Read preview：文件读取 → basename */
@@ -508,8 +575,13 @@ export function taskStopPreview(call: ToolPreviewInput, response?: ToolPreviewRe
 	return withIdentity("停止", "子任务", taskId, "已停止", "停止失败", response);
 }
 
-/** 内置 preview 目录（工具名 → preview 函数；全部现有工具已注册） */
+/** 内置 preview 目录（工具名 → preview 函数；当前工具面全量注册） */
 export const TOOL_PREVIEWS: ReadonlyMap<string, ToolPreviewFn> = new Map<string, ToolPreviewFn>([
+	["NovelRead", novelReadPreview],
+	["NovelWrite", novelWritePreview],
+	["NovelEdit", novelEditPreview],
+	["NovelDelete", novelDeletePreview],
+	// 旧六域三件套名（live 工具面已收敛为上方 4 件；保留注册供历史 journal 重投影兼容）
 	["NovelCharacterRead", characterReadPreview],
 	["NovelCharacterWrite", characterWritePreview],
 	["NovelCharacterEdit", characterEditPreview],
@@ -525,7 +597,6 @@ export const TOOL_PREVIEWS: ReadonlyMap<string, ToolPreviewFn> = new Map<string,
 	["NovelChapterRead", chapterReadPreview],
 	["NovelChapterWrite", chapterWritePreview],
 	["NovelChapterEdit", chapterEditPreview],
-	["NovelDelete", novelDeletePreview],
 	["NovelOutlineRead", outlineReadPreview],
 	["NovelOutlineWrite", outlineWritePreview],
 	["NovelOutlineEdit", outlineEditPreview],

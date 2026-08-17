@@ -22,6 +22,7 @@ import type { GenStatusProps } from "../../domains/conversation/components/GenSt
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import { ApprovalPendingBar } from "../../domains/approval/components/ApprovalPendingBar.js";
+import { useExitPhase } from "../../shared/state/useExitPhase.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import { Icon } from "../../shared/primitives/Icon.js";
 import { IconButton } from "../../shared/primitives/IconButton.js";
@@ -294,9 +295,11 @@ function ActiveChatSurface({
     status = { phase: "waiting", queuedCount };
   }
 
-  // 挂起提示条：有待决且弹窗未开时常驻顶部（demo .apAlertBar）
+  // 挂起提示条：有待决且弹窗未开时常驻顶部（demo .apAlertBar）；
+  // 消失走退场相位——先播 pending-out 再卸载（弹窗打开/全部处理完时让位不硬切）
   const showApprovalBar =
     pendingApprovalCount > 0 && !approvalModalOpen && onSummonApproval !== undefined;
+  const approvalBarPhase = useExitPhase(showApprovalBar, 250);
 
   return (
     <div className={styles.surface}>
@@ -348,8 +351,10 @@ function ActiveChatSurface({
           </>
         }
       />
-      {showApprovalBar ? (
-        <ApprovalPendingBar count={pendingApprovalCount} onSummon={() => onSummonApproval?.()} />
+      {approvalBarPhase.mounted ? (
+        <div className={approvalBarPhase.exiting ? styles.approvalBarLeave : undefined}>
+          <ApprovalPendingBar count={pendingApprovalCount} onSummon={() => onSummonApproval?.()} />
+        </div>
       ) : null}
       <ConversationTimeline
         conversationId={conversationId}

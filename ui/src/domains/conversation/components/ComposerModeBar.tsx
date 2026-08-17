@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PenLine, ShieldCheck, Zap, type LucideIcon } from "lucide-react";
 import { Icon } from "../../../shared/primitives/Icon.js";
+import { useExitPhase } from "../../../shared/state/useExitPhase.js";
 import type { ComposerMode } from "../store/ComposerDraftStore.js";
 import styles from "./ComposerModeBar.module.css";
 
@@ -53,6 +54,8 @@ const MODE_ICONS: Record<ComposerModeTone, LucideIcon> = {
 
 export function ComposerModeBar({ mode, onChange, disabled = false, pendingMode }: ComposerModeBarProps) {
   const [open, setOpen] = useState(false);
+  // 退场相位：关闭先播 menu-out 再卸载（手写菜单无 radix Presence 兜底）
+  const optionsPhase = useExitPhase(open, 150);
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const current =
@@ -114,8 +117,14 @@ export function ComposerModeBar({ mode, onChange, disabled = false, pendingMode 
         ) : null}
         <span className={[styles.chev, open ? styles.chevOpen : ""].filter(Boolean).join(" ")} aria-hidden="true" />
       </button>
-      {open ? (
-        <div className={styles.options} role="menu" aria-label="执行模式">
+      {optionsPhase.mounted ? (
+        <div
+          className={[styles.options, optionsPhase.exiting ? styles.optionsClosing : ""]
+            .filter(Boolean)
+            .join(" ")}
+          role="menu"
+          aria-label="执行模式"
+        >
           {COMPOSER_MODES.map((item) => {
             const selected = item.value === current.value;
             return (

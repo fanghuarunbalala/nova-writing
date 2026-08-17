@@ -36,6 +36,12 @@
   box-shadow: var(--shadow-2);
   padding: var(--space-6px);
   z-index: 70;
+  animation: var(--anim-dropdown-in) var(--duration-fast) var(--ease-out);
+}
+
+/* radix Presence 退出：淡出后再卸载 */
+.menu[data-state="closed"] {
+  animation: var(--anim-menu-out) 0.15s var(--ease-in) forwards;
 }
 
 .head {

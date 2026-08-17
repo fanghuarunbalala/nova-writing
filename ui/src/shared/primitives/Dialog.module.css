@@ -9,12 +9,18 @@
   animation: var(--anim-dialog-fade) var(--duration-fast) var(--ease-out);
 }
 
+/* radix Presence 退出：data-state=closed 时播淡出，播完再卸载（重开自动取消） */
+.overlay[data-state="closed"] {
+  animation: var(--anim-dialog-fade-out) 0.28s var(--ease-in) forwards;
+}
+
 .content {
   position: fixed;
   top: 50%;
   left: 50%;
   z-index: var(--z-dialog);
   transform: translate(-50%, -50%);
+  transform-origin: top center;
   display: flex;
   flex-direction: column;
   width: calc(100vw - 48px);
@@ -23,7 +29,12 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-2);
-  animation: var(--anim-dialog-in) var(--duration-base) var(--ease-out);
+  animation: var(--anim-sheet-in) 0.5s var(--ease-out);
+}
+
+/* 抽纸式收起（demo sheet-out）：以顶边为轴反向回抽 */
+.content[data-state="closed"] {
+  animation: var(--anim-sheet-out) 0.24s var(--ease-in) forwards;
 }
 
 .sm { max-width: 400px; }

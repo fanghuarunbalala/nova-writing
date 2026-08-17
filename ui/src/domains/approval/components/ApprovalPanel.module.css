@@ -37,16 +37,6 @@
   padding: var(--space-3) var(--space-14px);
 }
 
-/* 决策后状态脉冲（--pulse-c 由卡片注入） */
-.card.pulse {
-  animation: var(--anim-status-pulse) 0.6s var(--ease-out);
-}
-
-/* 新审批入列 */
-.card.enter {
-  animation: var(--anim-appr-in) 0.35s var(--ease-out);
-}
-
 /* ============ 身份行 / 标题（demo .apIdentity/.apTitle/.apPill） ============ */
 .identity {
   display: flex;

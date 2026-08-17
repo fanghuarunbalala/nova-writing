@@ -42,14 +42,37 @@
   to { opacity: 1; }
 }
 
-@keyframes dialog-in {
-  from { opacity: 0; transform: translate(-50%, -48%); }
-  to { opacity: 1; transform: translate(-50%, -50%); }
+@keyframes dialog-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* 弹窗抽纸式（macOS sheet；demo sheet-in/out）：以顶边为轴从上方抽出展开 +
+   弹簧回弹；退出反向回抽。帧内 transform 必须保留 translateX(-50%) 水平居中
+   （弹窗用 translate 居中定位，漏掉会在动画期间水平跳位）。 */
+@keyframes sheet-in {
+  0% { opacity: 0; transform: translate(-50%, calc(-50% - 46px)) scaleY(0.25); }
+  45% { opacity: 1; transform: translate(-50%, -50%) scaleY(1.07); }
+  65% { transform: translate(-50%, -50%) scaleY(0.96); }
+  80% { transform: translate(-50%, -50%) scaleY(1.02); }
+  100% { transform: translate(-50%, -50%); }
+}
+
+@keyframes sheet-out {
+  from { opacity: 1; transform: translate(-50%, -50%); }
+  to { opacity: 0; transform: translate(-50%, calc(-50% - 36px)) scaleY(0.2); }
 }
 
 @keyframes dropdown-in {
   from { opacity: 0; transform: translateY(-2px); }
   to { opacity: 1; transform: none; }
+}
+
+/* 菜单退场：仅淡出不碰 transform（部分浮层用 translateX(-50%) 定位，
+   退场帧覆盖 transform 会跳位——demo menu-out 同款约束） */
+@keyframes menu-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @keyframes spinner-rotate {
@@ -121,17 +144,11 @@
   50% { opacity: 0; }
 }
 
-/* 新审批入列：下滑入 + accent 微光（ApprovalPanel 目录行；一次性行为动画） */
+/* 新审批入列：下滑入 + accent 微光（一次性行为动画；弹窗清单决策脉冲复用） */
 @keyframes appr-in {
   0% { opacity: 0; transform: translateY(-8px); }
   55% { background: color-mix(in oklab, var(--color-accent) 8%, transparent); }
   100% { opacity: 1; transform: none; }
-}
-
-/* 审批决策后的状态色脉冲（颜色经 --pulse-c 注入，缺省 accent） */
-@keyframes status-pulse {
-  from { background: color-mix(in oklab, var(--pulse-c, var(--color-accent)) 25%, transparent); }
-  to { background: transparent; }
 }
 
 /* 队列计数弹跳（ApprovalPanel 目录头部计数徽标） */
@@ -150,6 +167,12 @@
   55% {
     box-shadow: 0 0 0 5px transparent;
   }
+}
+
+/* 挂起提示条退场（demo alert-out）：淡出 + 上移 */
+@keyframes pending-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-6px); }
 }
 
 /* 内容目录定位高亮（ContentDirectory 行；实体标签点击后一次性闪烁） */

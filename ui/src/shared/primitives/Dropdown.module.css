@@ -12,6 +12,11 @@
   animation: var(--anim-dropdown-in) var(--duration-fast) var(--ease-out);
 }
 
+/* radix Presence 退出：data-state=closed 时播淡出，播完再卸载（重开自动取消） */
+.content[data-state="closed"] {
+  animation: var(--anim-menu-out) 0.15s var(--ease-in) forwards;
+}
+
 .item {
   display: flex;
   align-items: center;

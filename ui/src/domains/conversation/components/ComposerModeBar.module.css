@@ -109,6 +109,11 @@
   z-index: var(--z-mode-options);
 }
 
+/* 退场淡出（useExitPhase：先播再卸载；仅淡出不碰定位 transform） */
+.optionsClosing {
+  animation: var(--anim-menu-out) 0.15s var(--ease-in) forwards;
+}
+
 .option {
   display: flex;
   align-items: center;

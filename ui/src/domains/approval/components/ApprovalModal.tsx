@@ -7,7 +7,7 @@
  * 底部「全部批准」批量决策；「稍后处理」/ESC/遮罩收起（会话仍挂起，
  * 由 挂起提示条 / 状态行 / 工具行 唤回）。处理完不在时间线留过往记录。
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Check, Clock, ShieldCheck, X } from "lucide-react";
 import { Button } from "../../../shared/primitives/Button.js";
@@ -59,6 +59,27 @@ function itemPillClass(status: string): string | undefined {
   }
 }
 
+/**
+ * 渲染期 diff：与上一帧相比刚决策（pending → 已决）或新增（非首帧）的组 key。
+ * 首帧（prev 为空）全部不脉冲——弹窗打开不能整列闪；条目按 key 持久 DOM，
+ * 挂上 listItemPulse 类即在既有节点上触发 appr-in 动画（demo .apListItem.pulse）。
+ */
+export function diffPulseKeys(
+  groups: readonly { readonly key: string; readonly status: string }[],
+  prev: ReadonlyMap<string, string>,
+): Set<string> {
+  const pulsed = new Set<string>();
+  for (const group of groups) {
+    const before = prev.get(group.key);
+    if (before === undefined) {
+      if (prev.size > 0) pulsed.add(group.key);
+    } else if (before === "pending" && group.status !== "pending") {
+      pulsed.add(group.key);
+    }
+  }
+  return pulsed;
+}
+
 export interface ApprovalModalProps {
   readonly store: ApprovalStore;
   readonly modalStore: ApprovalModalStore;
@@ -89,6 +110,13 @@ export function ApprovalModal({
   const groups = useMemo(() => groupApprovals(approvals), [approvals]);
   const pendingGroups = groups.filter((group) => group.status === "pending");
 
+  // 决策脉冲：与上一帧组状态 diff（effect 提交后回写 ref，渲染期读旧值判定变化）
+  const prevStatusRef = useRef<ReadonlyMap<string, string>>(new Map());
+  const pulseKeys = diffPulseKeys(groups, prevStatusRef.current);
+  useEffect(() => {
+    prevStatusRef.current = new Map(groups.map((group) => [group.key, group.status]));
+  }, [groups]);
+
   // 选中组：显式选中 key → 最新待审组 → 首组；key 失效时回写 store 保持一致
   const selected =
     groups.find((group) => group.key === modalSnapshot.selectedKey) ??
@@ -117,10 +145,10 @@ export function ApprovalModal({
     }
   };
 
-  if (!modalSnapshot.open) return null;
-
+  // 开合交给 radix（open 受控）：closed 时 Presence 播完 sheet-out 再卸载，
+  // 退出中重开自动取消——无需自写 closing 定时器（demo .closing 的 radix 等价物）
   return (
-    <DialogPrimitive.Root open onOpenChange={(open) => { if (!open) minimize(); }}>
+    <DialogPrimitive.Root open={modalSnapshot.open} onOpenChange={(open) => { if (!open) minimize(); }}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className={styles.overlay} />
         <DialogPrimitive.Content className={styles.modal} aria-describedby={undefined}>
@@ -164,6 +192,7 @@ export function ApprovalModal({
                       className={[
                         styles.listItem,
                         selected?.key === group.key ? styles.listItemActive : "",
+                        pulseKeys.has(group.key) ? styles.listItemPulse : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}

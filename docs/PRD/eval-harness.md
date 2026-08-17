@@ -296,10 +296,10 @@ evals/（新 workspace 包，依赖 @novel/core + evalite）
 ## 12. 验收标准
 
 - [x] 本轮：PRD 评审通过，接口与底座决策对齐（2026-08-17）。
-- [ ] 一期：Tier 0 快照绿——prompt 分节金样 + 27 工具 desc/schema 金样 + schema 自检，`pnpm --filter evals test` 通过。
-- [ ] 二期：Runner + DSL + 15 case 在 evalite 下全部可跑，`EvalRunMetrics` 与断言矩阵落盘 results/。
-- [ ] 二期（可选）：`finalReplyJudge` LLM-as-judge 可用（judge 模型独立配置，判定与 reason 落盘）。
-- [ ] 三期：`eval:compare` 可用——两次 run 的 delta 表 + 回归红线判定。
+- [x] 一期：Tier 0 快照绿——prompt 金样（屏蔽日期行）+ section 序 + 27 工具 desc/schema 金样 + schema 卫生自检（存量欠账显式登记），`pnpm --filter @novel/evals test` 通过（2026-08-17，`feature/eval-harness`）。
+- [x] 二期（框架）：Runner + DSL + evalite 集成 + 密闭自测（scripted provider 驱动真装配，不依赖 API key）全绿；`EvalRunMetrics` 经 evalite `trialCount` 原生重复采样导出落盘 results/。
+- [ ] 二期（语料）：首批 15 case 待补；`finalReplyJudge` 已实现，判定与 reason 落盘待 live 冒烟（需 NOVEL_EVAL_API_KEY）。
+- [x] 三期：`eval:compare` 可用——逐 case delta 表 + 双红线（降幅 >10pp / 新增系统性 `TOOL_ARGUMENTS_INVALID`）+ 退出码 1；已用 stub 链路正/负例端到端验证。
 
 ## 13. 开放问题
 

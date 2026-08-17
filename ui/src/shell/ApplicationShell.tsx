@@ -423,6 +423,21 @@ export function ApplicationShell({
     [domainStores, mainViewRouter],
   );
 
+  // 右栏正文目录章点击：切内容视图正文位 + locate 滚动定位高亮（nonce 驱动，
+  // 同章重复点击也生效；章选中由 ContentSurface 的 locate 副作用完成）。
+  const handleOpenChapter = useCallback(
+    (chapterId: string) => {
+      setContentTab("manuscript");
+      mainViewRouter.transition("content");
+      setLocateReference((current) => ({
+        kind: "chapter",
+        id: chapterId,
+        nonce: (current?.nonce ?? 0) + 1,
+      }));
+    },
+    [mainViewRouter],
+  );
+
   // 人物/地点：选区入壳 + 内容视图对应资料位（PRD PM/PL）。
   const handleSelectCharacter = useCallback(
     (characterId: string) => {
@@ -703,9 +718,11 @@ export function ApplicationShell({
           conversationCatalog={domainStores.conversationCatalog}
           contentDirectory={contentDirectory}
           outlineTree={domainStores.storyOutlineTree}
+          manuscript={domainStores.manuscriptStructure}
           characters={domainStores.character}
           locations={domainStores.location}
           onSelectOutlineUnit={handleSelectOutlineUnit}
+          onOpenChapter={handleOpenChapter}
           onOpenCharacter={handleSelectCharacter}
           onOpenLocation={handleSelectLocation}
           widthPx={inspectorWidthPx}

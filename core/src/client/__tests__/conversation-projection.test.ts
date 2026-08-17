@@ -404,6 +404,64 @@ describe("ConversationProjection delta 置脏与合并发布（gui-performance-2
   });
 });
 
+describe("ConversationProjection run-start 即 generating（首 token 前状态行就绪）", () => {
+  function runStart(seq: number): ProjectedEvent {
+    return {
+      type: "run-start",
+      persist: true,
+      seq,
+      runSeq: seq,
+      ...base,
+      ts: new Date().toISOString(),
+    } as unknown as ProjectedEvent;
+  }
+  function runEndOf(seq: number): ProjectedEvent {
+    return {
+      type: "run-end",
+      persist: true,
+      seq,
+      runSeq: seq,
+      ...base,
+      ts: new Date().toISOString(),
+    } as unknown as ProjectedEvent;
+  }
+
+  it("实时 run-start → liveState=generating；run-end 收口清除", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1", async () => []);
+    await proj.start();
+    expect(proj.getSnapshot().liveState).toBeUndefined();
+    fake.push(runStart(1));
+    expect(proj.getSnapshot().liveState).toBe("generating");
+    fake.push(runEndOf(2));
+    expect(proj.getSnapshot().liveState).toBeUndefined();
+  });
+
+  it("history 重放 run-start（中断 run 的 journal，无 run-end）不置 generating", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1", async () => [runStart(1)]);
+    await proj.start();
+    expect(proj.getSnapshot().liveState).toBeUndefined();
+  });
+
+  it("重放期间缓冲的实时 run-start（重放完成后冲刷）→ generating", async () => {
+    const fake = fakeHandle();
+    let release: ((value: void) => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const proj = new ConversationProjection(fake.handle, "c1", async () => {
+      await gate;
+      return [];
+    });
+    const started = proj.start();
+    fake.push(runStart(3)); // history 未返回 → 进入缓冲
+    release!();
+    await started;
+    expect(proj.getSnapshot().liveState).toBe("generating");
+  });
+});
+
 describe("ConversationProjection 平台事件源与 eseq 断档（gui-performance-2 功能点八）", () => {
   /** kkrpc subscribeEvents 抛错（断言平台源路径完全旁路）+ 可推送的平台源 */
   function platformSourceHarness(): {

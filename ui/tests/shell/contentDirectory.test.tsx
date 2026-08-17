@@ -1,6 +1,8 @@
 /**
- * ContentDirectoryPanel 单测（右栏内容目录，demo 方案 A v0.8）：
- * 三 tab 切换、人物/地点目录行手风琴（单开）、详情卡（简介 + 打开完整档案跳转）、
+ * ContentDirectoryPanel 单测（右栏内容目录）：
+ * 四 tab 切换（大纲/正文/人物/地点）、大纲所有节点点击就地展开详情卡
+ * （含父节点，跳转只走卡内按钮）、正文 tab 卷章目录 + 章点击跳正文回调、
+ * 人物/地点目录行手风琴（单开）、详情卡（简介 + 打开完整档案跳转）、
  * store.locate 定位（切 tab + 展开 + 滚动）。
  * jsdom 无 scrollIntoView：测试内 mock。
  */
@@ -11,6 +13,7 @@ import { ContentDirectoryStore } from "../../src/shell/inspector/ContentDirector
 import { ContentDirectoryPanel } from "../../src/shell/inspector/panels/ContentDirectoryPanel.js";
 import { CharacterStore } from "../../src/domains/novel/character/store/CharacterStore.js";
 import { LocationStore } from "../../src/domains/novel/location/store/LocationStore.js";
+import { ManuscriptStructureStore } from "../../src/domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import { StoryOutlineTreeStore } from "../../src/domains/novel/outline/store/StoryOutlineTreeStore.js";
 
 beforeAll(() => {
@@ -39,7 +42,16 @@ function buildApi() {
           scope: { kind: "canonical" },
           units: [
             {
+              id: "u0",
+              orderKey: "0000",
+              title: "第一幕 · 旧港",
+              scope: "arc",
+              planningStatus: "ready",
+              realizationStatus: "in-progress",
+            },
+            {
               id: "u1",
+              parentId: "u0",
               orderKey: "0001",
               title: "第一章 · 雾起",
               scope: "scene",
@@ -85,6 +97,26 @@ function buildApi() {
           entityVersion: 2,
         })),
       },
+      publication: {
+        get: vi.fn(async () => ({
+          volumes: [{ id: "vol-1", title: "第一卷 · 旧港潮声" }],
+          chapters: [
+            {
+              id: "ch-1",
+              volumeId: "vol-1",
+              title: "雾起",
+              entityVersion: 1,
+              storyUnitId: "u1",
+              paragraphIds: ["p-1"],
+            },
+          ],
+        })),
+      },
+      paragraphs: {
+        list: vi.fn(async () => [
+          { id: "p-1", storyUnitId: "u1", text: "雾从旧船坞漫上来。", entityVersion: 1, orderKey: "0001" },
+        ]),
+      },
       manuscript: {},
     },
   } as never;
@@ -95,10 +127,12 @@ async function makeStores() {
   const outlineTree = new StoryOutlineTreeStore({ api });
   const characters = new CharacterStore({ api });
   const locations = new LocationStore({ api });
+  const manuscript = new ManuscriptStructureStore({ api });
   await outlineTree.loadWorkspace("w1");
   await characters.loadWorkspace("w1");
   await locations.loadWorkspace("w1");
-  return { outlineTree, characters, locations };
+  await manuscript.loadWorkspace("w1");
+  return { outlineTree, characters, locations, manuscript };
 }
 
 function renderPanel(
@@ -106,24 +140,27 @@ function renderPanel(
   dirStore = new ContentDirectoryStore(),
 ) {
   const onSelectOutlineUnit = vi.fn();
+  const onOpenChapter = vi.fn();
   const onOpenCharacter = vi.fn();
   const onOpenLocation = vi.fn();
   render(
     <ContentDirectoryPanel
       store={dirStore}
       outlineTree={stores.outlineTree}
+      manuscript={stores.manuscript}
       characters={stores.characters}
       locations={stores.locations}
       onSelectOutlineUnit={onSelectOutlineUnit}
+      onOpenChapter={onOpenChapter}
       onOpenCharacter={onOpenCharacter}
       onOpenLocation={onOpenLocation}
     />,
   );
-  return { dirStore, onSelectOutlineUnit, onOpenCharacter, onOpenLocation };
+  return { dirStore, onSelectOutlineUnit, onOpenChapter, onOpenCharacter, onOpenLocation };
 }
 
 describe("ContentDirectoryPanel", () => {
-  it("renders three tabs and switches to characters list", async () => {
+  it("renders four tabs and switches to characters list", async () => {
     const stores = await makeStores();
     renderPanel(stores);
     expect(screen.getByRole("tab", { name: /大纲/ }).getAttribute("aria-selected")).toBe("true");
@@ -172,20 +209,35 @@ describe("ContentDirectoryPanel", () => {
     expect(onOpenLocation).toHaveBeenCalledWith("l-1");
   });
 
-  it("outline leaf click expands a brief card with jump button (no direct navigation)", async () => {
+  it("outline click expands a brief card for every node (no direct navigation)", async () => {
     const stores = await makeStores();
     const { onSelectOutlineUnit } = renderPanel(stores);
     const user = userEvent.setup();
-    // leaf（无子级）行点击 → 就地展开简略卡（意图/梗概 + 跳转钮），不直接跳转
-    await user.click(screen.getByRole("button", { name: /第一章 · 雾起/ }));
+    // 父节点（含顶层）行点击 → 就地展开简略卡（意图/梗概 + 跳转钮），不整页跳转
+    await user.click(screen.getByRole("button", { name: /第一幕 · 旧港/ }));
     expect(onSelectOutlineUnit).not.toHaveBeenCalled();
     expect(screen.getByText("意图")).toBeInTheDocument();
     expect(screen.getByText("梗概")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /查看单元详情/ }));
+    expect(onSelectOutlineUnit).toHaveBeenCalledWith("u0");
+    // leaf（无子级）行为一致：点击展开卡，卡内按钮才跳转
+    await user.click(screen.getByRole("button", { name: /第一章 · 雾起/ }));
+    expect(screen.getByText("意图")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /查看单元详情/ }));
     expect(onSelectOutlineUnit).toHaveBeenCalledWith("u1");
     // 再点行 → 收起简略卡
     await user.click(screen.getByRole("button", { name: /第一章 · 雾起/ }));
     expect(screen.queryByRole("button", { name: /查看单元详情/ })).not.toBeInTheDocument();
+  });
+
+  it("manuscript tab lists volumes/chapters and chapter click jumps to text", async () => {
+    const stores = await makeStores();
+    const { onOpenChapter } = renderPanel(stores);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: /正文/ }));
+    expect(screen.getByText("第一卷 · 旧港潮声")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /雾起/ }));
+    expect(onOpenChapter).toHaveBeenCalledWith("ch-1");
   });
 
   it("shows related units derived from outline leaf bindings in entity cards", async () => {

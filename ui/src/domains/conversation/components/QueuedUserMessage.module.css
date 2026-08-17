@@ -1,7 +1,8 @@
 /**
  * QueuedUserMessage 视觉（demo .msgUser.ghost / .ghostBadge，docs/design/
  * app-redesign-demo.html）：UserMessage 同构气泡，降透明度 + 虚线 accent 描边
- * + surface 混底；琥珀角标绝对定位于气泡左上（跨出气泡上缘）。
+ * + surface 混底；角标绝对定位于气泡左上（跨出气泡上缘）——queued 相位为
+ * 琥珀「排队中 Ns」，flight 相位为中性「发送中」+ 气泡左侧旋转图标。
  */
 
 .message {
@@ -63,4 +64,19 @@
   font-family: var(--font-mono);
   font-weight: var(--fw-regular);
   opacity: 0.85;
+}
+
+/* 发送中（flight）：气泡左侧旋转图标（row-reverse → DOM 末位居视觉左侧） */
+.flightSpin {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  color: var(--color-accent);
+}
+
+/* flight 角标：中性 accent 语义（在途，非告警），区别 queued 的琥珀 */
+.badgeFlight {
+  border-color: color-mix(in oklab, var(--color-accent) 30%, transparent);
+  background: var(--color-accent-9);
+  color: var(--color-accent-ink);
 }

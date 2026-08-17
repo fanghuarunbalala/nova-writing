@@ -207,10 +207,14 @@ function ActiveChatSurface({
   const failed = projection?.state === "error";
   const runtime = useConversationRuntimeStatus(projection);
 
-  // 排队幽灵项：生成/审批进行中再发送 → 消息要等上一 run 收口才实际执行
-  // （run-start/user.message 在执行时才发射）——本地数组即时回显到时间线末尾；
-  // 真实 user 项出现 N 条（排队 run 开跑）即移除队首 N 条，失败按 id 回收。
-  const [queuedSends, setQueuedSends] = useState<readonly { id: number; text: string; at: number }[]>([]);
+  // 发送幽灵项（乐观回显）：所有发送都即时回显到时间线末尾，不等后端事件——
+  // flight（空闲发送）：旋转图标「发送中」，user.message 回流即落定为实线消息，
+  //   随后状态行由投影 liveState 接管显示「正在生成」；
+  // queued（生成/审批进行中再发送）：run 边界事件在开跑时才发射，琥珀「排队中」秒表。
+  // 真实 user 项出现 N 条（run 开跑）即移除队首 N 条，失败按 id 回收。
+  const [queuedSends, setQueuedSends] = useState<
+    readonly { id: number; phase: "flight" | "queued"; text: string; at: number }[]
+  >([]);
   const queuedSeqRef = useRef(0);
 
   // composer 实际高度 → 时间线底部预留（悬浮框盖不住末条消息）：状态行展开、
@@ -236,9 +240,18 @@ function ActiveChatSurface({
     const switched = track.id !== conversationId;
     const appeared = switched ? 0 : Math.max(0, projectionUserCount - track.userCount);
     queuedTrackRef.current = { id: conversationId, userCount: projectionUserCount };
+    // 落定诊断：真实 user 项出现 N 条 → 移除队首 N 条幽灵（flight 存活期 =
+    // 发送 → user.message 回流；本机子进程快时可能 <100ms，一闪而过属正常）
+    debugLog("[ghost] settle:", {
+      switched,
+      appeared,
+      userCount: projectionUserCount,
+    });
     setQueuedSends((current) => (switched ? [] : current.slice(appeared)));
   }, [conversationId, projectionUserCount]);
-  const queuedCount = queuedSends.length;
+  // 状态行排队计数只统计 queued 相位：flight 是「发送中」过渡（幽灵动画即
+  // 指示器，不驱动状态行），落定后由投影 liveState 接管。
+  const queuedCount = queuedSends.filter((item) => item.phase === "queued").length;
   // 提问项：只渲染 pending 交互卡（时间线末尾）；作答后的历史留痕由投影层
   // askRecord 项承载（tool-recorded.recorded.ask 载荷，journal 重放位置精确）。
   const askItems = useMemo(() => {
@@ -259,6 +272,7 @@ function ActiveChatSurface({
         sequence: 9_000_000 + queued.id,
         text: queued.text,
         queuedAt: queued.at,
+        phase: queued.phase,
       })),
       ...askItems,
     ],
@@ -391,10 +405,23 @@ function ActiveChatSurface({
         onSend={(input) => {
           // 发送失败（会话进程崩溃/超时等）必须显性展示，不吞掉
           debugLog("[renderer] onSend 触发:", input.text.slice(0, 40));
-          // 生成/审批中发送 → 立即入队幽灵项（demo 方案 A：不等回执/时间线出现）
-          const queued = status?.phase === "generating" || status?.phase === "waiting";
-          const queuedId = ++queuedSeqRef.current;
-          if (queued) setQueuedSends((current) => [...current, { id: queuedId, text: input.text, at: Date.now() }]);
+          // 无条件乐观回显：空闲发送 flight（「发送中」旋转图标，落定即止）；
+          // 生成/审批中发送 queued（「排队中」秒表，等上一 run 收口接续）。
+          const phase =
+            status?.phase === "generating" || status?.phase === "waiting" ? "queued" : "flight";
+          const ghostId = ++queuedSeqRef.current;
+          // 幽灵入队诊断：phase 判定依据 statusPhase（generating/waiting → queued，
+          // 空闲 → flight）。NOVEL_LOG_LEVEL=verbose 时输出（pnpm gui:debug 自带）。
+          debugLog("[ghost] enqueue:", {
+            id: ghostId,
+            phase,
+            statusPhase: status?.phase ?? "none",
+            text: input.text.slice(0, 40),
+          });
+          setQueuedSends((current) => [
+            ...current,
+            { id: ghostId, phase, text: input.text, at: Date.now() },
+          ]);
           void sendUserMessage(input.text)
             .then((receipt) => {
               debugLog("[renderer] send resolved:", JSON.stringify(receipt));
@@ -404,7 +431,8 @@ function ActiveChatSurface({
             })
             .catch((err: unknown) => {
               debugLog("[renderer] send rejected:", err);
-              if (queued) setQueuedSends((current) => current.filter((item) => item.id !== queuedId));
+              debugLog("[ghost] recycle (send failed):", { id: ghostId, phase });
+              setQueuedSends((current) => current.filter((item) => item.id !== ghostId));
               if (err instanceof Error && err.stack !== undefined) {
                 console.error("[renderer] stack:", err.stack.split("\n").slice(0, 6).join(" | "));
               }

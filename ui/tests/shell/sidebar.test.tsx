@@ -132,11 +132,16 @@ describe("Sidebar (context directory)", () => {
     expect(onSelectContentPane).toHaveBeenCalledWith("characters");
   });
 
-  it("plan view: overview row + 安排 directory", () => {
+  it("plan view: overview row + 安排 directory（审批组常驻 + 自动化占位）", () => {
     const { stores } = makeStores();
     renderSidebar(stores, { view: "plan" });
     expect(screen.getByText("总览")).toBeInTheDocument();
     expect(screen.getByText("统计 · 双状态轴 · 大纲进度")).toBeInTheDocument();
+    // 审批组常驻（无待办时轻提示）+ 自动化占位组（路线图，UI 骨架）
+    expect(screen.getByText("待审批")).toBeInTheDocument();
+    expect(screen.getByText("暂无待审批")).toBeInTheDocument();
+    expect(screen.getByText("自动化")).toBeInTheDocument();
+    expect(screen.getByText("定时自动化编排 · 规划中")).toBeInTheDocument();
   });
 });
 

@@ -28,12 +28,14 @@ export type ConversationTimelineItem =
       readonly timestamp: number;
     }
   | {
-      /** 排队幽灵项（生成/审批中发送的本地回显）：真实 user.message 到达时被替换。
-       *  sequence 为本地合成（9e6+自增），不与 core 事件序号冲突。 */
+      /** 发送幽灵项（乐观回显，真实 user.message 到达时被替换）：
+       *  flight = 空闲发送「发送中」（旋转图标动画），queued = 生成/审批中
+       *  再发送「排队中 Ns」。sequence 为本地合成（9e6+自增），不与 core 事件序号冲突。 */
       readonly kind: "queued";
       readonly sequence: number;
       readonly text: string;
       readonly queuedAt: number;
+      readonly phase?: "flight" | "queued";
     }
   | {
       readonly kind: "assistant";

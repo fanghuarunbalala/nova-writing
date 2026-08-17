@@ -13,6 +13,7 @@ import { ConversationCatalogStore } from "../../src/domains/conversation/store/C
 import { StoryOutlineTreeStore } from "../../src/domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { CharacterStore } from "../../src/domains/novel/character/store/CharacterStore.js";
 import { LocationStore } from "../../src/domains/novel/location/store/LocationStore.js";
+import { ManuscriptStructureStore } from "../../src/domains/novel/manuscript/store/ManuscriptStructureStore.js";
 
 function buildApi() {
   return {
@@ -37,6 +38,8 @@ function buildApi() {
         list: vi.fn(async () => ({ schemaVersion: 1, scope: { kind: "canonical" }, locations: [] })),
         get: vi.fn(),
       },
+      publication: { get: vi.fn(async () => ({ volumes: [], chapters: [] })) },
+      paragraphs: { list: vi.fn(async () => []) },
       manuscript: {},
     },
   } as never;
@@ -48,17 +51,21 @@ async function makeStores() {
   const outlineTree = new StoryOutlineTreeStore({ api });
   const characters = new CharacterStore({ api });
   const locations = new LocationStore({ api });
+  const manuscript = new ManuscriptStructureStore({ api });
   await conversationCatalog.loadWorkspace("w1");
   await outlineTree.loadWorkspace("w1");
   await characters.loadWorkspace("w1");
   await locations.loadWorkspace("w1");
+  await manuscript.loadWorkspace("w1");
   return {
     conversationCatalog,
     outlineTree,
+    manuscript,
     characters,
     locations,
     contentDirectory: new ContentDirectoryStore(),
     onSelectOutlineUnit: vi.fn(),
+    onOpenChapter: vi.fn(),
     onOpenCharacter: vi.fn(),
     onOpenLocation: vi.fn(),
   };
@@ -104,6 +111,7 @@ describe("InspectorHost", () => {
     render(<InspectorHost inspectorRouter={router} {...stores} />);
     expect(screen.getByRole("heading", { name: "内容目录" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /大纲/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /正文/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /人物/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /地点/ })).toBeInTheDocument();
   });

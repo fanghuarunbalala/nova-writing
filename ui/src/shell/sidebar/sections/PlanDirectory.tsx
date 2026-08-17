@@ -2,11 +2,13 @@
  * PlanDirectory
  *
  * 计划视图「安排」目录（PRD SB-10）：总览行 + 按标签分组待办
- * （审批/档案/写作/决策，审批组带 warn 计数）+ 已完成组。
+ * （审批/档案/写作/决策，审批组带 warn 计数）+ 已完成组 + 「自动化」占位组。
+ * 审批组常驻渲染（空时轻提示「暂无待审批」），其余标签组空则隐藏；
+ * 自动化为路线图占位（定时任务未实现，UI 骨架先行）。
  * 待办数据 = shell 级审批投影（deriveApprovalTodos）+ 计划域待办（同 ScheduleSurface 合并规则）。
  */
 import { memo, useMemo } from "react";
-import { Check, GitBranch, Layers, PenLine, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
+import { Check, GitBranch, Layers, PenLine, ShieldCheck, UserRound, Zap, type LucideIcon } from "lucide-react";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import type { ApprovalStore } from "../../../domains/approval/ApprovalStore.js";
@@ -72,7 +74,8 @@ export const PlanDirectory = memo(function PlanDirectory({
       </button>
       {TAG_ORDER.map((tag) => {
         const items = open.filter((t) => t.tag === tag);
-        if (items.length === 0) return null;
+        // 审批组常驻（入口可感知，空时轻提示）；其余标签组空则隐藏
+        if (items.length === 0 && tag !== "approval") return null;
         const warn = tag === "approval";
         return (
           <div key={tag}>
@@ -92,24 +95,36 @@ export const PlanDirectory = memo(function PlanDirectory({
               {TAG_META[tag].label}
               <span className={styles.count}>{items.length}</span>
             </div>
-            {items.map((todo) => (
-              <button
-                key={todo.id}
-                type="button"
-                className={styles.row}
-                data-active={todo.id === selectedTodoId || undefined}
-                onClick={() => onSelect(todo.id)}
-              >
-                <span className={styles.todoDot} aria-hidden="true" />
-                <span className={styles.text}>
-                  <span className={styles.title}>{todo.title}</span>
-                </span>
-                <Icon icon={TAG_META[todo.tag].icon} size="xs" />
-              </button>
-            ))}
+            {items.length > 0 ? (
+              items.map((todo) => (
+                <button
+                  key={todo.id}
+                  type="button"
+                  className={styles.row}
+                  data-active={todo.id === selectedTodoId || undefined}
+                  onClick={() => onSelect(todo.id)}
+                >
+                  <span className={styles.todoDot} aria-hidden="true" />
+                  <span className={styles.text}>
+                    <span className={styles.title}>{todo.title}</span>
+                  </span>
+                  <Icon icon={TAG_META[todo.tag].icon} size="xs" />
+                </button>
+              ))
+            ) : (
+              <div className={styles.groupEmpty}>暂无待审批</div>
+            )}
           </div>
         );
       })}
+      {/* 自动化（占位）：定时自动化编排（README 路线图）尚未实现，UI 骨架先行 */}
+      <div>
+        <div className={styles.groupHead}>
+          <Icon icon={Zap} size="xs" />
+          自动化
+        </div>
+        <div className={styles.groupEmpty}>定时自动化编排 · 规划中</div>
+      </div>
       {done.length > 0 ? (
         <div>
           <div className={styles.groupHead}>

@@ -283,3 +283,11 @@
   text-align: center;
   line-height: 1.8;
 }
+
+/* 分组空态提示行（常驻分组的轻提示：审批「暂无待审批」/自动化占位） */
+.groupEmpty {
+  padding: var(--space-3px) var(--space-2) var(--space-2);
+  color: var(--color-faint);
+  font-size: var(--fs-11);
+  line-height: 1.7;
+}

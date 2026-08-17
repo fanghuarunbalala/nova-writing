@@ -114,6 +114,14 @@ describe("QueuedUserMessage", () => {
     expect(screen.getByText("排队中")).toBeInTheDocument();
     expect(screen.getByText(/^\d+s$/)).toBeInTheDocument();
   });
+
+  it("flight 相位（空闲发送）：「发送中」角标，无排队秒表", () => {
+    render(<QueuedUserMessage text="帮我写第三章" queuedAt={Date.now()} phase="flight" />);
+    expect(screen.getByText(/帮我写第三章/)).toBeInTheDocument();
+    expect(screen.getByText("发送中")).toBeInTheDocument();
+    expect(screen.queryByText("排队中")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^\d+s$/)).not.toBeInTheDocument();
+  });
 });
 
 describe("UserMessage", () => {

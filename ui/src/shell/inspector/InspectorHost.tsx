@@ -20,6 +20,7 @@ import type { InspectorRouter } from "../../shared/routing/InspectorRouter.js";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import type { CharacterStore } from "../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
+import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { ContentDirectoryPanel } from "./panels/ContentDirectoryPanel.js";
 import { ContentDirectoryStore } from "./ContentDirectoryStore.js";
@@ -55,10 +56,13 @@ export interface InspectorHostProps {
   readonly conversationCatalog: ConversationCatalogStore;
   readonly contentDirectory: ContentDirectoryStore;
   readonly outlineTree: StoryOutlineTreeStore;
+  readonly manuscript: ManuscriptStructureStore;
   readonly characters: CharacterStore;
   readonly locations: LocationStore;
-  /** 内容目录：大纲行点击 → 跳内容视图单元详情 */
+  /** 内容目录：大纲详情卡「查看单元详情」→ 跳内容视图单元详情 */
   readonly onSelectOutlineUnit: (unitId: string) => void;
+  /** 内容目录：正文 tab 章点击 → 跳内容视图正文位并滚动定位高亮 */
+  readonly onOpenChapter: (chapterId: string) => void;
   /** 内容目录：详情卡「打开完整档案」→ 跳内容视图人物档案 */
   readonly onOpenCharacter: (characterId: string) => void;
   /** 内容目录：详情卡「打开完整档案」→ 跳内容视图地点档案 */
@@ -76,9 +80,11 @@ export const InspectorHost = memo(function InspectorHost({
   conversationCatalog,
   contentDirectory,
   outlineTree,
+  manuscript,
   characters,
   locations,
   onSelectOutlineUnit,
+  onOpenChapter,
   onOpenCharacter,
   onOpenLocation,
   widthPx,
@@ -161,9 +167,11 @@ export const InspectorHost = memo(function InspectorHost({
               <ContentDirectoryPanel
                 store={contentDirectory}
                 outlineTree={outlineTree}
+                manuscript={manuscript}
                 characters={characters}
                 locations={locations}
                 onSelectOutlineUnit={onSelectOutlineUnit}
+                onOpenChapter={onOpenChapter}
                 onOpenCharacter={onOpenCharacter}
                 onOpenLocation={onOpenLocation}
               />

@@ -142,6 +142,9 @@ export class ConversationProjection {
 	private pendingFullText: string | undefined;
 	/** 实时生成状态（generating；run 收口清除） */
 	private liveState: "generating" | undefined;
+	/** history 重放进行中（start() ② 段）：run-start 不据此置 generating——
+	 *  防中断 run 的 journal 重放后永久卡在「正在生成」；实时/缓冲冲刷路径不置位 */
+	private replayingHistory = false;
 	private nextSeq = 1;
 	private readonly cardProjection = new CardProjection();
 	/** 已产出 askRecord 留影项的工具调用 id（实时流与 history 重放重叠时去重） */
@@ -254,12 +257,17 @@ export class ConversationProjection {
 			// ② 拉 journal 已落盘历史并应用（fromSeq 从当前进度之后开始）
 			const events = await this.history({ fromSeq: this.lastAppliedSequence + 1, limit: 256 });
 			if (this.stopRequested || generation !== this.generation) return;
-			for (const event of events) {
-				this.apply(event);
-				// 状态事件（compose/mode）无 turn seq：不参与 historyMaxSeq 推进
-				if ("seq" in event && typeof event.seq === "number") {
-					historyMaxSeq = Math.max(historyMaxSeq, event.seq);
+			this.replayingHistory = true;
+			try {
+				for (const event of events) {
+					this.apply(event);
+					// 状态事件（compose/mode）无 turn seq：不参与 historyMaxSeq 推进
+					if ("seq" in event && typeof event.seq === "number") {
+						historyMaxSeq = Math.max(historyMaxSeq, event.seq);
+					}
 				}
+			} finally {
+				this.replayingHistory = false;
 			}
 			this.publish();
 			replayed = true;
@@ -425,7 +433,16 @@ export class ConversationProjection {
 				// mode.set 已记录（瞬态）：UI 回显「待生效」
 				this.modePending = event.mode;
 				break;
-			// run-start / compacted / clear / retry-request / compose.* 无影响
+			case "run-start":
+				// run 开跑即生成中（不等首个 delta：上下文组装 + 模型 TTFT 期间
+				// 状态行就绪）；history 重放不置位（replayingHistory 守卫）。
+				// 清除：run-end / assistant.message 收口、error 态。
+				if (!this.replayingHistory) {
+					this.liveState = "generating";
+					this.publish();
+				}
+				break;
+			// compacted / clear / retry-request / compose.* 无影响
 		}
 	}
 

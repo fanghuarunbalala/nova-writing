@@ -6,7 +6,7 @@
  */
 import { ExternalStore } from "../../shared/state/ExternalStore.js";
 
-export type ContentDirectoryTab = "outline" | "characters" | "locations";
+export type ContentDirectoryTab = "outline" | "manuscript" | "characters" | "locations";
 
 export type DirectoryEntityKind = "character" | "location";
 

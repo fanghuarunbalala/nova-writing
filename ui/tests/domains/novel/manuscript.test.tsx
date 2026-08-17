@@ -14,7 +14,6 @@ import type { ManuscriptStructureSnapshot } from "../../../src/domains/novel/man
 import { ManuscriptReader } from "../../../src/domains/novel/manuscript/components/ManuscriptReader.js";
 import { ManuscriptChapterContent } from "../../../src/domains/novel/manuscript/components/ManuscriptChapterContent.js";
 import { ManuscriptBlock } from "../../../src/domains/novel/manuscript/components/ManuscriptBlock.js";
-import { ManuscriptDraftTag } from "../../../src/domains/novel/manuscript/components/ManuscriptDraftTag.js";
 
 const publication: PublicationSnapshot = {
   structure: { id: "publication_main", novelId: "novel_1" },
@@ -311,22 +310,63 @@ describe("ManuscriptStructureStore", () => {
 });
 
 describe("ManuscriptReader", () => {
-  it("renders volume and chapter titles in the TOC and selects a chapter on click", async () => {
-    const user = userEvent.setup();
-    const onSelectChapter = vi.fn();
+  it("renders the selected chapter reading area (no inner TOC) with volume meta", () => {
     render(
       <ManuscriptReader
         workspaceId="w1"
         snapshot={readerSnapshot()}
-        onSelectChapter={onSelectChapter}
+        volumeTitleOf={(chapterId) => (chapterId === "chapter_two" ? "第一卷" : undefined)}
       />,
     );
-    expect(screen.getByRole("navigation", { name: "章节目录" })).toBeInTheDocument();
+    // MS-1：主区为纯阅读区（卷章目录在内容视图左栏），无内层目录导航。
+    expect(screen.queryByRole("navigation", { name: "章节目录" })).not.toBeInTheDocument();
+    // selectedChapterId=chapter_two → 阅读区显示该章。
+    expect(screen.getByText("第二章 雨夜")).toBeInTheDocument();
+    // 章头 mono 元信息行带卷名（段落文本为空 → 字数不计入）。
     expect(screen.getByText("第一卷")).toBeInTheDocument();
-    // selectedChapterId=chapter_two → content pane shows it; 序章 appears only in TOC
+  });
+
+  it("falls back to the first chapter when none is selected", () => {
+    const snapshot = readerSnapshot();
+    render(
+      <ManuscriptReader
+        workspaceId="w1"
+        snapshot={{ ...snapshot, selectedChapterId: undefined }}
+      />,
+    );
     expect(screen.getByText("第一章 序章")).toBeInTheDocument();
-    await user.click(screen.getByText("第一章 序章"));
-    expect(onSelectChapter).toHaveBeenCalledWith("chapter_one");
+  });
+
+  it("shows the blocked banner and kai empty state for a blocked chapter", () => {
+    render(
+      <ManuscriptReader
+        workspaceId="w1"
+        snapshot={readerSnapshot()}
+        chapterStatusOf={(chapterId) =>
+          chapterId === "chapter_two"
+            ? { realization: "blocked", blockedReason: "等待第 1 章定稿", abandonedReason: undefined }
+            : undefined
+        }
+      />,
+    );
+    expect(screen.getByText("本章受阻：等待第 1 章定稿")).toBeInTheDocument();
+    expect(screen.getByText("等上游定稿，这一章就能落笔。")).toBeInTheDocument();
+  });
+
+  it("shows the not-started kai empty state for a chapter without blocks", () => {
+    const snapshot = readerSnapshot();
+    const emptyChapter = { ...snapshot.chapters[1], blocks: [], paragraphIds: [] };
+    render(
+      <ManuscriptReader
+        workspaceId="w1"
+        snapshot={{
+          ...snapshot,
+          chapters: [snapshot.chapters[0], emptyChapter],
+          selectedChapterId: "chapter_two",
+        }}
+      />,
+    );
+    expect(screen.getByText("此章尚未落笔——从一句话开始，让故事自己生长。")).toBeInTheDocument();
   });
 
   it("shows an empty state when there are no chapters", () => {
@@ -341,7 +381,6 @@ describe("ManuscriptReader", () => {
           selectedChapterId: undefined,
           error: undefined,
         }}
-        onSelectChapter={vi.fn()}
       />,
     );
     expect(
@@ -365,7 +404,6 @@ describe("ManuscriptReader", () => {
             retryable: true,
           },
         }}
-        onSelectChapter={vi.fn()}
       />,
     );
     expect(screen.getByText("正文结构加载失败，请重试")).toBeInTheDocument();
@@ -446,14 +484,19 @@ describe("manuscript block primitives", () => {
     expect(text).toHaveStyle({ whiteSpace: "pre-wrap" });
   });
 
-  it("renders a loading placeholder while text is empty", () => {
+  it("renders a loading placeholder while text is empty, without block chrome", () => {
     render(<ManuscriptBlock block={{ blockId: "§3-01-04", digest: "8f3a70", text: "" }} />);
-    expect(screen.getByText("§3-01-04")).toBeInTheDocument();
+    // MS-3 口径：段落无常显 blockId/digest 头。
+    expect(screen.queryByText("§3-01-04")).not.toBeInTheDocument();
     expect(screen.getByText("（正文加载中…）")).toBeInTheDocument();
   });
 
-  it("renders the draft tag", () => {
-    render(<ManuscriptDraftTag />);
-    expect(screen.getByText("草稿")).toBeInTheDocument();
+  it("renders the draft block trailing tag (MS-4)", () => {
+    render(
+      <ManuscriptBlock
+        block={{ blockId: "§3-01-04", digest: "8f3a70", text: "草稿段落。", isDraft: true }}
+      />,
+    );
+    expect(screen.getByText("草稿 · 未转入正式稿")).toBeInTheDocument();
   });
 });

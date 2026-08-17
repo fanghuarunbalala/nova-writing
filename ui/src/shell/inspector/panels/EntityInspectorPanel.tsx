@@ -23,7 +23,8 @@ export interface EntityInspectorPanelProps {
   readonly entityId: string;
   readonly characters: CharacterStore;
   readonly locations: LocationStore;
-  readonly onLocateInContent?: (entityId: string) => void;
+  /** 关联单元 chip 点击 → 跳内容视图大纲单元详情 */
+  readonly onOpenUnit?: (unitId: string) => void;
 }
 
 export function EntityInspectorPanel({
@@ -32,7 +33,7 @@ export function EntityInspectorPanel({
   entityId,
   characters,
   locations,
-  onLocateInContent,
+  onOpenUnit,
 }: EntityInspectorPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -51,7 +52,7 @@ export function EntityInspectorPanel({
           workspaceId={workspaceId ?? ""}
           characterId={entityId}
           detail={detail}
-          onLocateInContent={onLocateInContent}
+          onOpenUnit={onOpenUnit}
           onEdit={() => setEditOpen(true)}
           onDelete={() => {
             if (detail !== undefined) setDeleteOpen(true);
@@ -102,7 +103,7 @@ export function EntityInspectorPanel({
         workspaceId={workspaceId ?? ""}
         locationId={entityId}
         detail={detail}
-        onLocateInContent={onLocateInContent}
+        onOpenUnit={onOpenUnit}
         onEdit={() => setEditOpen(true)}
         onDelete={() => {
           if (detail !== undefined) setDeleteOpen(true);

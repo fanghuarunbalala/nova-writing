@@ -36,7 +36,6 @@ import {
   REAL_STATUS,
   scopeView,
 } from "../../../domains/novel/outline/outlineStatus.js";
-import { OutlineBlockNote } from "../../../domains/novel/outline/components/OutlineBlockNote.js";
 import { StoryUnitEditDialog } from "../../../domains/novel/outline/components/StoryUnitEditDialog.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
 import { Button, ConfirmDialog, Icon, StatusChip } from "../../../shared/primitives/index.js";

@@ -97,7 +97,10 @@
   --fs-10:      10px;
   --fs-11:      11px;
   --fs-14-5:    14.5px;
+  --fs-15:      15px; /* 精确值快照：阅读区楷体空态（MS-5） */
   --fs-16-5:    16.5px;
+  --fs-18:      18px; /* 精确值快照：章名/档案名（MS-2 / PM-1 / PL-1） */
+  --fs-19:      19px; /* 精确值快照：档案头 46px 头像首字（PM-1） */
   --fs-22:      22px;
   --fs-30:      30px;
 
@@ -136,6 +139,7 @@
   --space-11px: 11px;
   --space-13px: 13px;
   --space-14px: 14px;
+  --space-16px: 16px; /* 精确值快照：档案卡 padding-bottom（PM-2） */
   --space-18px: 18px;
   --space-22px: 22px;
   --space-30px: 30px; /* 精确值快照：QueuedUserMessage 角标让位高度 */

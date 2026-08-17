@@ -24,7 +24,7 @@
   margin: 0 auto;
 }
 
-/* 正文阅读器容器：铺满剩余高度，不加 overflow（双栏各自滚动）。 */
+/* 正文阅读区容器：铺满剩余高度，不加 overflow（阅读区内部独立滚动，MS-1）。 */
 .readerBody {
   flex: 1;
   min-height: 0;

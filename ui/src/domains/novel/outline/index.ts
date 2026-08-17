@@ -1,7 +1,6 @@
 /**
  * novel/outline 出口。
  */
-export * from "./components/OutlineBlockNote.js";
 export * from "./components/StoryOutlineTree.js";
 export * from "./components/StoryOutlineTreeLegend.js";
 export * from "./components/StoryOutlineTreeRow.js";

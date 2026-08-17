@@ -9,7 +9,6 @@ import { StoryOutlineTreeProjection } from "../../../src/domains/novel/outline/p
 import { StoryOutlineTreeStore } from "../../../src/domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { StoryOutlineTree } from "../../../src/domains/novel/outline/components/StoryOutlineTree.js";
 import { StoryOutlineTreeLegend } from "../../../src/domains/novel/outline/components/StoryOutlineTreeLegend.js";
-import { OutlineBlockNote } from "../../../src/domains/novel/outline/components/OutlineBlockNote.js";
 import { OutlineUnitInspectorPanel } from "../../../src/shell/inspector/panels/OutlineUnitInspectorPanel.js";
 import { StatusChip } from "../../../src/shared/primitives/StatusChip.js";
 
@@ -172,7 +171,7 @@ describe("StoryOutlineTreeStore", () => {
 });
 
 describe("outline components", () => {
-  it("renders the tree with status chips, progress and block notes", async () => {
+  it("renders the tree with status chips and progress, without block notes", async () => {
     const user = userEvent.setup();
     const onSelectUnit = vi.fn();
     const onToggleExpand = vi.fn();
@@ -198,7 +197,8 @@ describe("outline components", () => {
     expect(screen.getByText("1/2")).toBeInTheDocument();
     // 状态 chip（树行与图例都会出现「写作中」）。
     expect(screen.getAllByText("写作中").length).toBeGreaterThan(0);
-    expect(screen.getByText(/阻塞：需要确认追踪目标/)).toBeInTheDocument();
+    // SB-7 口径：阻塞/废弃原因不在树行显示（由单元详情页横幅承载）。
+    expect(screen.queryByText(/阻塞：/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "折叠" }));
     expect(onToggleExpand).toHaveBeenCalledWith("arc-v1");
   });
@@ -213,11 +213,9 @@ describe("outline components", () => {
     }
   });
 
-  it("renders status chip and block note primitives", () => {
+  it("renders status chip primitive", () => {
     render(<StatusChip variant="success">已完成</StatusChip>);
     expect(screen.getByText("已完成")).toBeInTheDocument();
-    render(<OutlineBlockNote kind="blocked" reason="等待审批" />);
-    expect(screen.getByText(/等待审批/)).toBeInTheDocument();
   });
 });
 

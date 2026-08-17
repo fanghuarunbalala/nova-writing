@@ -102,16 +102,35 @@ describe("character components", () => {
     expect(onSelect).toHaveBeenCalledWith("char-linxia");
   });
 
-  it("renders detail and loading placeholder", () => {
+  it("renders detail archive cards and loading placeholder", () => {
     render(<CharacterDetailPanel workspaceId="w1" characterId="char-linxia" />);
     expect(screen.getByText(/加载角色详情/)).toBeInTheDocument();
     render(
       <CharacterDetailPanel
         workspaceId="w1"
         characterId="char-linxia"
-        detail={{ characterId: "char-linxia", avatarText: "林", name: "林夏", role: "女主", profile: "学会告别", version: 3, relatedUnits: [] }}
+        detail={{
+          characterId: "char-linxia",
+          avatarText: "林",
+          name: "林夏",
+          role: "女主",
+          summary: "旧船坞长大的孤女",
+          initialState: "佩着母亲留下的铜符",
+          profile: "学会告别",
+          version: 3,
+          relatedUnits: [],
+        }}
       />,
     );
+    // PM-1：kicker（角色定位 · vN）。
+    expect(screen.getByText("女主 · v3")).toBeInTheDocument();
+    // PM-2：卡片顺序 = 简介 → 初始状态 → 作者备注（楷体）→ 关联单元（空态）。
+    expect(screen.getByText("简介")).toBeInTheDocument();
+    expect(screen.getByText("旧船坞长大的孤女")).toBeInTheDocument();
+    expect(screen.getByText("初始状态")).toBeInTheDocument();
+    expect(screen.getByText("佩着母亲留下的铜符")).toBeInTheDocument();
+    expect(screen.getByText("作者备注")).toBeInTheDocument();
     expect(screen.getByText("学会告别")).toBeInTheDocument();
+    expect(screen.getByText("尚未关联")).toBeInTheDocument();
   });
 });

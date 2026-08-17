@@ -3,7 +3,8 @@
  *
  * 内容视图（PRD §7）：目录在侧栏（大纲树/卷章/人物/地点），主区按资料位渲染——
  *   outline    = 选中单元详情（OutlineUnitInspectorPanel 复用，PRD OL-2~7）；
- *   manuscript = 双栏阅读器（左目录右正文，保留现实现，PRD MS-1）；
+ *   manuscript = 章阅读区（MS-1~5：卷章目录在左栏，此处仅阅读区；章头元信息
+ *                与受阻/弃置状态由大纲树快照派生注入）；
  *   characters = 角色档案详情（EntityInspectorPanel 复用，PRD PM）；
  *   locations  = 地点档案详情（同上，PRD PL）。
  * subHead：subCtx 显示当前选中项；大纲 pane 动作 = 展开全部 + 新建单元，
@@ -70,6 +71,17 @@ function findOutlineTitle(
   return undefined;
 }
 
+/** storyUnitId → 树节点（章状态派生：realization + 受阻/弃置原因） */
+function collectOutlineUnits(
+  nodes: readonly StoryOutlineTreeNode[],
+  into: Map<string, StoryOutlineTreeNode>,
+): void {
+  for (const node of nodes) {
+    into.set(node.unitId, node);
+    collectOutlineUnits(node.children, into);
+  }
+}
+
 export function ContentSurface({
   workspaceId,
   value,
@@ -132,6 +144,25 @@ export function ContentSurface({
       ),
     [locationSnapshot.locations],
   );
+  // 正文阅读区派生数据：chapterId → 卷名；chapterId → 大纲树节点状态。
+  const unitByChapter = useMemo(() => {
+    const unitById = new Map<string, StoryOutlineTreeNode>();
+    collectOutlineUnits(outline.tree, unitById);
+    const map = new Map<string, StoryOutlineTreeNode>();
+    for (const chapter of manuscriptSnapshot.chapters) {
+      if (chapter.storyUnitId === undefined) continue;
+      const unit = unitById.get(chapter.storyUnitId);
+      if (unit !== undefined) map.set(chapter.chapterId, unit);
+    }
+    return map;
+  }, [outline.tree, manuscriptSnapshot.chapters]);
+  const volumeTitleByChapter = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const volume of manuscriptSnapshot.volumes) {
+      for (const chapter of volume.chapters) map.set(chapter.chapterId, volume.title);
+    }
+    return map;
+  }, [manuscriptSnapshot.volumes]);
 
   const handleCopyChapter = async (): Promise<void> => {
     if (selectedChapter === undefined) return;
@@ -149,6 +180,12 @@ export function ContentSurface({
     onSelectContentPane?.("manuscript");
   };
 
+  // 档案「关联单元」chip → 选中大纲单元并切到大纲资料位。
+  const handleOpenUnit = (unitId: string): void => {
+    outlineTree.selectUnit(unitId);
+    onSelectContentPane?.("outline");
+  };
+
   const renderTab = (tab: ContentTab): ReactNode => {
     // 正文阅读器：双栏各自独立滚动，不走居中列。
     if (tab === "manuscript") {
@@ -157,7 +194,17 @@ export function ContentSurface({
           <ManuscriptReader
             workspaceId={workspaceId ?? ""}
             snapshot={manuscriptSnapshot}
-            onSelectChapter={(chapterId) => manuscript.selectChapter(chapterId)}
+            volumeTitleOf={(chapterId) => volumeTitleByChapter.get(chapterId)}
+            chapterStatusOf={(chapterId) => {
+              const unit = unitByChapter.get(chapterId);
+              return unit === undefined
+                ? undefined
+                : {
+                    realization: unit.realization,
+                    blockedReason: unit.blockedReason,
+                    abandonedReason: unit.abandonedReason,
+                  };
+            }}
             locate={locateReference}
             onOpenDraft={onOpenDraft}
             onInsertParagraph={(chapterId) =>
@@ -250,6 +297,7 @@ export function ContentSurface({
               entityId={effectiveCharacter.characterId}
               characters={characters}
               locations={locations}
+              onOpenUnit={handleOpenUnit}
             />
           ) : (
             <div className={styles.emptyPane}>
@@ -282,6 +330,7 @@ export function ContentSurface({
               entityId={effectiveLocation.locationId}
               characters={characters}
               locations={locations}
+              onOpenUnit={handleOpenUnit}
             />
           ) : (
             <div className={styles.emptyPane}>

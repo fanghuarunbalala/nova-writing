@@ -14,6 +14,7 @@ import { useExternalStore } from "../../../shared/state/useExternalStore.js";
 import type { CharacterStore } from "../../../domains/novel/character/store/CharacterStore.js";
 import type { LocationStore } from "../../../domains/novel/location/store/LocationStore.js";
 import type { StoryOutlineTreeStore } from "../../../domains/novel/outline/store/StoryOutlineTreeStore.js";
+import { StoryOutlineTreeProjection } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
 import { StoryOutlineTree } from "../../../domains/novel/outline/components/StoryOutlineTree.js";
 import {
   ContentDirectoryStore,
@@ -86,6 +87,10 @@ export function ContentDirectoryPanel({
 
   const workspaceId =
     outlineSnapshot.workspaceId ?? characterSnapshot.workspaceId ?? "";
+  const outlineCount = useMemo(
+    () => StoryOutlineTreeProjection.countAll(outlineSnapshot.tree),
+    [outlineSnapshot.tree],
+  );
 
   return (
     <div className={styles.panel}>
@@ -103,7 +108,9 @@ export function ContentDirectoryPanel({
           >
             <Icon icon={tab.icon} size="sm" />
             <span>{tab.label}</span>
-            {tab.id === "characters" && characterSnapshot.characters.length > 0 ? (
+            {tab.id === "outline" && outlineCount > 0 ? (
+              <span className={styles.tabCount}>{outlineCount}</span>
+            ) : tab.id === "characters" && characterSnapshot.characters.length > 0 ? (
               <span className={styles.tabCount}>{characterSnapshot.characters.length}</span>
             ) : tab.id === "locations" && locationSnapshot.locations.length > 0 ? (
               <span className={styles.tabCount}>{locationSnapshot.locations.length}</span>
@@ -121,6 +128,7 @@ export function ContentDirectoryPanel({
             selectedUnitId={outlineSnapshot.selectedUnitId}
             onSelectUnit={onSelectOutlineUnit}
             onToggleExpand={(id) => outlineTree.toggleExpand(id)}
+            showLegend={false}
           />
         ) : dirSnapshot.tab === "characters" ? (
           characterSnapshot.characters.length === 0 ? (
@@ -155,7 +163,7 @@ export function ContentDirectoryPanel({
               id={l.locationId}
               avatarText={l.avatarText}
               title={l.name}
-              subtitle={l.role}
+              subtitle={l.locState}
               expanded={dirSnapshot.expandedKey === `location:${l.locationId}`}
               summaryNote={l.note}
               relatedUnits={l.relatedUnits}
@@ -168,7 +176,7 @@ export function ContentDirectoryPanel({
           ))
         )}
         <div className={styles.foot}>
-          对话流中的实体标签可点击：本目录切到对应页签并高亮定位，详情卡可跳完整档案。
+          对话流中的 <code>&lt;character_某某&gt;</code> 等实体标签可点击：本栏切到对应页签并高亮定位；面板左缘可拖拽调宽（双击复位）。
         </div>
       </div>
     </div>

@@ -1,84 +1,82 @@
 /**
- * ManuscriptBlock 视觉（原型 .block + .b-head + .b-id + .b-dg + .b-draft + p）。
+ * ManuscriptBlock 视觉（MS-3/4，demo .blocks p / .draftBlock / .draftTag）。
  *
- * 块用 dashed border-top 分隔（首块无边框）；b-head mono 10.5px/faint；
- * b-draft warn 750；p 14.5px/1.85/fg/text-wrap:pretty。
+ * 正文衬线 16.5px / 1.95 / 首行缩进 2em / 两端对齐；
+ * 草稿块 warn 左线 + 6% 底 + 尾标；编辑/删除 hover 浮现（右上角）。
  */
+
 .block {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-1);
+  position: relative;
   width: 100%;
-  padding: var(--space-10px) 0;
-  border: 0;
-  border-top: 1px dashed var(--color-border);
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
+  margin: 0 0 var(--space-14px);
 }
 
-.block:first-of-type {
-  border-top: 0;
-  padding-top: 0;
-}
-
-.head {
-  display: flex;
-  gap: var(--space-9px);
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--color-faint);
-}
-
-.id {
-  font-weight: var(--fw-semibold);
-  color: var(--color-faint);
-}
-
-.digest {
-  color: var(--color-faint);
-}
-
-.draft {
-  color: var(--color-warn);
-  font-weight: var(--fw-750);
+.block:last-child {
+  margin-bottom: 0;
 }
 
 .text {
-  font-size: var(--fs-14-5);
-  line-height: 1.85;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-16-5);
+  line-height: 1.95;
+  text-indent: 2em;
+  text-align: justify;
   color: var(--color-fg);
-  text-wrap: pretty;
   white-space: pre-wrap; /* 保留正文中的 \n 行分割 */
   overflow-wrap: break-word; /* 长词/CJK 安全折行 */
-  margin: 0;
 }
 
 /* 正文未加载（懒加载中/拉取失败留空）时的淡色占位。 */
 .placeholder {
+  margin: 0;
+  font-family: var(--font-body);
   font-size: var(--fs-13);
   color: var(--color-faint);
-  margin: 0;
 }
 
-/* 块操作（编辑/删除）：hover 显现，不触发块选中 */
+/* 草稿块（MS-4） */
+.draftBlock {
+  padding: var(--space-10px) var(--space-14px);
+  margin: var(--space-4px) 0 var(--space-14px);
+  border-left: 3px solid var(--color-warn);
+  background: color-mix(in oklab, var(--color-warn) 6%, var(--color-surface));
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.draftTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4px);
+  margin-top: var(--space-8px);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-semibold);
+  color: var(--color-warn);
+  letter-spacing: 0.05em;
+}
+
+/* 块操作（编辑/删除）：hover 浮现，不占正文空间 */
 .actions {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: flex;
   gap: var(--space-6px);
-  margin-left: auto;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.block:hover .actions,
+.actions:focus-within {
+  opacity: 1;
 }
 
 .actionButton {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3px);
-  padding: 1px var(--space-6px);
+  justify-content: center;
+  padding: var(--space-2px);
   font-size: var(--fs-xs);
-  font-family: var(--font-mono);
   border: 1px solid transparent;
   border-radius: var(--radius-4px);
   background: none;
@@ -92,8 +90,17 @@
 }
 
 /* inline 编辑 */
+.editingTag {
+  display: inline-block;
+  margin-bottom: var(--space-6px);
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
+  color: var(--color-faint);
+}
+
 .editor {
   width: 100%;
+  box-sizing: border-box;
   padding: var(--space-2) var(--space-10px);
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border-strong);
@@ -111,5 +118,5 @@
 .editActions {
   display: flex;
   gap: var(--space-2);
-  align-self: flex-end;
+  justify-content: flex-end;
 }

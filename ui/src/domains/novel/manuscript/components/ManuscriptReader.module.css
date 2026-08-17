@@ -1,13 +1,12 @@
 /**
- * ManuscriptReader 视觉（原型 .reader 双栏）。
+ * ManuscriptReader 视觉（MS-1：单栏阅读区）。
  *
- * flex 行铺满高度；左栏定宽滚动，右栏 flex:1 各自独立滚动（不整体滚动）。
+ * reader 铺满剩余高度；内容滚动在 ManuscriptChapterContent 内部。
  */
+
 .reader {
-  display: flex;
   height: 100%;
   min-height: 0;
-  gap: var(--space-4);
 }
 
 .empty {

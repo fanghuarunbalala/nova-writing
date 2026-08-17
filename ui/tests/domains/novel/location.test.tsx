@@ -99,16 +99,35 @@ describe("location components", () => {
     expect(screen.getByText("已建档")).toBeInTheDocument();
   });
 
-  it("renders detail and loading placeholder", () => {
+  it("renders detail archive cards and loading placeholder", () => {
     render(<LocationDetailPanel workspaceId="w1" locationId="loc-dock7" />);
     expect(screen.getByText(/加载地点详情/)).toBeInTheDocument();
     render(
       <LocationDetailPanel
         workspaceId="w1"
         locationId="loc-dock7"
-        detail={{ locationId: "loc-dock7", avatarText: "旧", name: "旧船坞", role: "第七号码头", locState: "filed", profile: "距离 200 米", relatedUnits: [] }}
+        detail={{
+          locationId: "loc-dock7",
+          avatarText: "旧",
+          name: "旧船坞",
+          role: "第七号码头",
+          locState: "filed",
+          summary: "雨夜命案的发生地",
+          initialState: "",
+          profile: "距离 200 米",
+          version: 2,
+          relatedUnits: [],
+        }}
       />,
     );
+    // PL-1：kicker 含现状（地点 · vN · 现状）。
+    expect(screen.getByText("地点 · v2 · 现状：已建档")).toBeInTheDocument();
+    // 卡片 = 简介 → 作者备注（楷体）→ 关联单元（无初始状态；空态提示待办闭环）。
+    expect(screen.getByText("简介")).toBeInTheDocument();
+    expect(screen.getByText("雨夜命案的发生地")).toBeInTheDocument();
+    expect(screen.getByText("作者备注")).toBeInTheDocument();
     expect(screen.getByText("距离 200 米")).toBeInTheDocument();
+    expect(screen.queryByText("初始状态")).not.toBeInTheDocument();
+    expect(screen.getByText("尚未关联 —— 计划视图有待办提醒")).toBeInTheDocument();
   });
 });

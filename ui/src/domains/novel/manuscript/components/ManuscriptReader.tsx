@@ -1,20 +1,24 @@
 /**
  * ManuscriptReader
  *
- * 正文阅读器（原型 .reader 双栏）：左侧 ManuscriptToc 按 卷 → 章 列出目录，
- * 右侧 ManuscriptChapterContent 展示选中章节的正文（保留行分割）。
+ * 正文阅读区（MS-1：卷章目录在内容视图左栏 ManuScriptDirectory，主区为
+ * 选中章的阅读区）。未选章时回退首章；空/加载/失败态给出引导。
  *
- * 空/加载/失败态：无卷章结构时给出空态引导；失败态复用 store 的错误文案。
+ * 章头元信息与状态派生（卷名 / 实现态 / 受阻·弃置原因）由宿主经
+ * volumeTitleOf / chapterStatusOf 注入（数据来自大纲树快照）。
  */
 import type { ManuscriptStructureSnapshot } from "../store/ManuscriptStructureStore.js";
 import { ManuscriptChapterContent } from "./ManuscriptChapterContent.js";
-import { ManuscriptToc } from "./ManuscriptToc.js";
+import type { ManuscriptChapterStatus } from "./ManuscriptChapterContent.js";
 import styles from "./ManuscriptReader.module.css";
 
 export interface ManuscriptReaderProps {
   readonly workspaceId: string;
   readonly snapshot: ManuscriptStructureSnapshot;
-  readonly onSelectChapter: (chapterId: string) => void;
+  /** chapterId → 卷名（章头元信息行） */
+  readonly volumeTitleOf?: (chapterId: string) => string | undefined;
+  /** chapterId → 大纲派生章状态（章头 chip / 受阻·弃置横幅） */
+  readonly chapterStatusOf?: (chapterId: string) => ManuscriptChapterStatus | undefined;
   readonly locate?: {
     readonly kind: "chapter" | "paragraph";
     readonly id: string;
@@ -32,7 +36,8 @@ export interface ManuscriptReaderProps {
 export function ManuscriptReader({
   workspaceId,
   snapshot,
-  onSelectChapter,
+  volumeTitleOf,
+  chapterStatusOf,
   locate,
   onOpenDraft,
   onInsertParagraph,
@@ -52,23 +57,26 @@ export function ManuscriptReader({
   if (snapshot.chapters.length === 0) {
     return <div className={styles.empty}>暂无卷章结构，请先在写作工具中创建卷章</div>;
   }
-  const selectedChapter = snapshot.chapters.find(
-    (chapter) => chapter.chapterId === snapshot.selectedChapterId,
-  );
+  const selectedChapter =
+    snapshot.chapters.find((chapter) => chapter.chapterId === snapshot.selectedChapterId) ??
+    snapshot.chapters[0];
+  if (selectedChapter === undefined) {
+    return <div className={styles.empty}>请选择章节</div>;
+  }
+  const status = chapterStatusOf?.(selectedChapter.chapterId);
   return (
     <div className={styles.reader} data-workspace={workspaceId}>
-      <ManuscriptToc
-        volumes={snapshot.volumes}
-        selectedChapterId={snapshot.selectedChapterId}
-        onSelectChapter={onSelectChapter}
-      />
       <ManuscriptChapterContent
         chapter={selectedChapter}
+        volumeTitle={volumeTitleOf?.(selectedChapter.chapterId)}
+        realization={status?.realization}
+        blockedReason={status?.blockedReason}
+        abandonedReason={status?.abandonedReason}
         locate={locate}
         onOpenDraft={onOpenDraft}
         onInsertParagraph={
-          onInsertParagraph !== undefined && (selectedChapter?.paragraphIds.length ?? 0) > 0
-            ? () => onInsertParagraph(selectedChapter!.chapterId)
+          onInsertParagraph !== undefined
+            ? () => onInsertParagraph(selectedChapter.chapterId)
             : undefined
         }
         onSaveParagraph={onSaveParagraph}

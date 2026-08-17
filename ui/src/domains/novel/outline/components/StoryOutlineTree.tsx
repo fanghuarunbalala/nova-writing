@@ -1,7 +1,8 @@
 /**
  * StoryOutlineTree
  *
- * 大纲树容器：递归行 + 底部图例；展开/折叠全部在侧栏 dirHead（DirectoryHead）。
+ * 大纲树容器：递归行 + 底部图例（showLegend=false 时不渲染——右栏内容目录
+ * 无图例，仅内容视图左栏保留）；展开/折叠全部在侧栏 dirHead（DirectoryHead）。
  * loading / 空树走 LoadingState / EmptyState。
  */
 import { ListTree } from "lucide-react";
@@ -19,6 +20,8 @@ export interface StoryOutlineTreeProps {
   readonly selectedUnitId?: string;
   readonly onSelectUnit?: (unitId: string) => void;
   readonly onToggleExpand?: (unitId: string) => void;
+  /** 底部状态图例（默认开；右栏内容目录关） */
+  readonly showLegend?: boolean;
 }
 
 function renderNode(
@@ -59,7 +62,7 @@ export function StoryOutlineTree(props: StoryOutlineTreeProps) {
       ) : (
         <>
           {props.tree.map((node) => renderNode(node, 0, props))}
-          <StoryOutlineTreeLegend />
+          {props.showLegend !== false ? <StoryOutlineTreeLegend /> : null}
         </>
       )}
     </div>

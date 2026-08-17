@@ -1,5 +1,6 @@
 /** Agent 运行参数设置：模型档位（Normal/Fast）+ 全局默认采样 + 按 Agent 覆盖 + 压缩阈值。 */
 import { useEffect, useState } from "react";
+import { Check, Feather, RotateCcw, ScrollText, Search } from "lucide-react";
 // 运行时值必须走 browser-safe 的 /client 出口（根入口会拖入 zeromq 等 node 依赖 → renderer 白屏）
 import { FAST_PROFILE_REF } from "@novel/core/client";
 import type { AgentRuntimeOverride, ConfigSnapshot, RuntimeSettings, ThinkingLevel } from "@novel/core";
@@ -10,18 +11,25 @@ export interface AgentSettingsPanelProps {
 }
 
 /** 参与配置的 Agent 清单（agentType 对齐运行时装配） */
-const AGENTS: readonly { id: string; name: string; desc: string }[] = [
+const AGENTS: readonly {
+  id: string;
+  name: string;
+  icon: typeof Feather;
+  desc: string;
+}[] = [
   {
     id: "novel",
     name: "主创作",
-    desc: "与你对话、规划并执笔的主 Agent（默认 Normal 档）· 上下文压缩仅作用于它",
+    icon: Feather,
+    desc: "与你对话、规划并执笔的主 Agent（默认 Normal 档）· 上下文压缩仅作用于它。",
   },
   {
     id: "Explore",
     name: "探索",
-    desc: "只读检索大纲 / 人物 / 段落 · 建议走 Fast 快速档（便宜快速的模型）",
+    icon: Search,
+    desc: "只读检索大纲 / 人物 / 段落 · 默认走 Fast 快速档，适合便宜快速的模型。",
   },
-  { id: "Compose", name: "起草", desc: "起草大纲与行文设计草案，不直接改动档案" },
+  { id: "Compose", name: "起草", icon: ScrollText, desc: "起草大纲与行文设计草案，不直接改动档案。" },
 ];
 
 const THINKING_LEVELS: readonly { value: ThinkingLevel; label: string }[] = [
@@ -150,6 +158,8 @@ function buildRuntime(draft: RuntimeDraft): RuntimeSettings {
 export function AgentSettingsPanel({ configuration }: AgentSettingsPanelProps) {
   const [snapshot, setSnapshot] = useState<ConfigSnapshot>();
   const [draft, setDraft] = useState<RuntimeDraft>();
+  /** 上次保存的 draft（脏态判定 + 还原基准） */
+  const [savedDraft, setSavedDraft] = useState<RuntimeDraft>();
   const [status, setStatus] = useState("正在读取配置…");
   const [saving, setSaving] = useState(false);
 
@@ -159,7 +169,9 @@ export function AgentSettingsPanel({ configuration }: AgentSettingsPanelProps) {
       (loaded) => {
         if (!active) return;
         setSnapshot(loaded);
-        setDraft(toDraft(loaded));
+        const next = toDraft(loaded);
+        setDraft(next);
+        setSavedDraft(next);
         setStatus("配置已加载");
       },
       (error: unknown) => {
@@ -187,7 +199,9 @@ export function AgentSettingsPanel({ configuration }: AgentSettingsPanelProps) {
       await configuration.mutate({ op: "runtime.set", runtime });
       const loaded = await configuration.load();
       setSnapshot(loaded);
-      setDraft(toDraft(loaded));
+      const next = toDraft(loaded);
+      setDraft(next);
+      setSavedDraft(next);
       setStatus("已保存，对新对话生效（运行中的对话维持原参数）");
     } catch (error) {
       setStatus(`保存失败：${error instanceof Error ? error.message : getErrorCode(error)}`);
@@ -198,7 +212,7 @@ export function AgentSettingsPanel({ configuration }: AgentSettingsPanelProps) {
 
   if (draft === undefined) {
     return (
-      <section className="novel-agent-settings" aria-label="Agent 设置">
+      <section className="novel-model-settings" aria-label="Agent 设置">
         <p className="novel-provider-security-note" role="status">
           {status}
         </p>
@@ -207,18 +221,16 @@ export function AgentSettingsPanel({ configuration }: AgentSettingsPanelProps) {
   }
 
   const profiles = snapshot?.profiles ?? [];
-  const defaultProfile =
-    profiles.find((p) => p.id === snapshot?.defaultProfileId) ?? profiles[0];
-  const fastProfile =
-    profiles.find((p) => p.id === draft.fastProfileId) ?? defaultProfile;
-  const profileLabel = (id: string): string => {
-    const p = profiles.find((x) => x.id === id);
-    return p === undefined ? id : `${p.label ?? p.model} · ${p.model}`;
-  };
+  const defaultProfile = profiles.find((p) => p.id === snapshot?.defaultProfileId) ?? profiles[0];
+  const fastProfile = profiles.find((p) => p.id === draft.fastProfileId) ?? defaultProfile;
+  const defaultLabel =
+    defaultProfile === undefined ? "未配置" : `${defaultProfile.label ?? defaultProfile.model} · ${defaultProfile.model}`;
+  const fastLabel =
+    fastProfile === undefined ? "未配置" : `${fastProfile.label ?? fastProfile.model} · ${fastProfile.model}`;
   const globalTemperature =
     draft.defaultsTemperature.trim() !== "" ? draft.defaultsTemperature.trim() : "厂商默认";
-  const globalMaxTokens =
-    draft.defaultsMaxTokens.trim() !== "" ? draft.defaultsMaxTokens.trim() : "8192";
+  const globalMaxTokens = draft.defaultsMaxTokens.trim() !== "" ? draft.defaultsMaxTokens.trim() : "8192";
+  const dirty = savedDraft !== undefined && JSON.stringify(draft) !== JSON.stringify(savedDraft);
 
   const patchAgent = (id: string, patch: Partial<AgentDraft>): void => {
     setDraft({
@@ -231,223 +243,257 @@ export function AgentSettingsPanel({ configuration }: AgentSettingsPanelProps) {
   };
 
   return (
-    <section className="novel-agent-settings" aria-label="Agent 设置">
+    <section className="novel-model-settings" aria-label="Agent 设置">
       <header className="novel-model-settings-header">
         <div>
           <span>Agents</span>
           <h3>Agent 参数</h3>
-          <p>模型档位 + 全局默认采样 + 按 Agent 覆盖 + 上下文压缩；保存后对新对话生效。</p>
+          <p>模型档位 + 全局默认采样 + 按 Agent 覆盖 + 上下文压缩。</p>
         </div>
-        <button disabled={saving} onClick={() => void save()} type="button">
-          {saving ? "保存中…" : "保存"}
-        </button>
       </header>
 
-      <div className="novel-agent-section">
-        <h4>模型档位</h4>
-        <p className="novel-agent-hint">
-          Normal = 「模型」页的默认服务（主创作）；Fast 建议绑定便宜快速的模型，供 Explore 等检索型 Agent 使用。
-        </p>
-        <div className="novel-provider-fields">
-          <label>
-            <span>Normal 常规</span>
-            <input
-              disabled
-              aria-label="Normal 常规档"
-              value={defaultProfile === undefined ? "未配置模型服务" : `${defaultProfile.label ?? defaultProfile.model} · ${defaultProfile.model}`}
-            />
-          </label>
-          <label>
-            <span>Fast 快速</span>
-            <select
-              aria-label="Fast 快速档"
-              disabled={saving || profiles.length === 0}
-              onChange={(event) => setDraft({ ...draft, fastProfileId: event.currentTarget.value })}
-              value={draft.fastProfileId}
-            >
-              {profiles.length === 0 ? <option value="">未配置模型服务</option> : null}
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label ?? p.model} · {p.model}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+      <div className="novel-set-section">
+        <b>模型档位</b>
+        <small>命名档位 · Agent 卡可直接选用</small>
+      </div>
+      <p className="novel-set-hint">
+        Normal = 「模型」页的默认服务（主创作）；Fast 建议绑定便宜快速的模型，供 Explore 等检索型 Agent 使用。
+      </p>
+      <div className="novel-set-field">
+        <label htmlFor="tier-normal">Normal 常规</label>
+        <input aria-label="Normal 常规档" className="novel-set-input" disabled value={defaultLabel} id="tier-normal" />
+      </div>
+      <div className="novel-set-field">
+        <label htmlFor="tier-fast">Fast 快速</label>
+        <span className="novel-set-select-wrap">
+          <select
+            aria-label="Fast 快速档"
+            className="novel-set-select"
+            disabled={saving || profiles.length === 0}
+            id="tier-fast"
+            onChange={(event) => setDraft({ ...draft, fastProfileId: event.currentTarget.value })}
+            value={draft.fastProfileId}
+          >
+            {profiles.length === 0 ? <option value="">未配置模型服务</option> : null}
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label ?? p.model} · {p.model}
+              </option>
+            ))}
+          </select>
+        </span>
       </div>
 
-      <div className="novel-agent-section">
-        <h4>全局默认采样</h4>
-        <p className="novel-agent-hint">未被 Agent 覆盖的项对所有 Agent 生效；模型不支持温度时自动忽略。</p>
-        <div className="novel-provider-fields">
-          <label>
-            <span>温度</span>
-            <input
-              aria-label="全局温度"
-              disabled={saving}
-              onChange={(event) => setDraft({ ...draft, defaultsTemperature: event.currentTarget.value })}
-              placeholder="厂商默认（0 – 2，如 1.0）"
-              value={draft.defaultsTemperature}
-            />
-          </label>
-          <label>
-            <span>思考强度</span>
-            <select
-              aria-label="全局思考强度"
-              disabled={saving}
-              onChange={(event) =>
-                setDraft({ ...draft, defaultsThinking: event.currentTarget.value as ThinkingLevel })
-              }
-              value={draft.defaultsThinking}
-            >
-              {THINKING_LEVELS.map((level) => (
-                <option key={level.value} value={level.value}>
-                  {level.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>最大输出 Tokens</span>
-            <input
-              aria-label="全局最大输出"
-              disabled={saving}
-              onChange={(event) => setDraft({ ...draft, defaultsMaxTokens: event.currentTarget.value })}
-              placeholder="默认 8192"
-              value={draft.defaultsMaxTokens}
-            />
-          </label>
-        </div>
+      <div className="novel-set-section">
+        <b>全局默认采样</b>
+        <small>未被覆盖的项对所有 Agent 生效</small>
+      </div>
+      <p className="novel-set-hint">修改对新对话生效；模型不支持温度时自动忽略。</p>
+      <div className="novel-set-field">
+        <label htmlFor="global-temp">温度</label>
+        <input
+          aria-label="全局温度"
+          className="novel-set-input"
+          disabled={saving}
+          id="global-temp"
+          inputMode="decimal"
+          onChange={(event) => setDraft({ ...draft, defaultsTemperature: event.currentTarget.value })}
+          placeholder="厂商默认（0 – 2，如 1.0）"
+          value={draft.defaultsTemperature}
+        />
+      </div>
+      <div className="novel-set-field">
+        <label htmlFor="global-thinking">思考强度</label>
+        <span className="novel-set-select-wrap">
+          <select
+            aria-label="全局思考强度"
+            className="novel-set-select"
+            disabled={saving}
+            id="global-thinking"
+            onChange={(event) =>
+              setDraft({ ...draft, defaultsThinking: event.currentTarget.value as ThinkingLevel })
+            }
+            value={draft.defaultsThinking}
+          >
+            {THINKING_LEVELS.map((level) => (
+              <option key={level.value} value={level.value}>
+                {level.label}
+              </option>
+            ))}
+          </select>
+        </span>
+      </div>
+      <div className="novel-set-field">
+        <label htmlFor="global-max-tokens">最大输出</label>
+        <input
+          aria-label="全局最大输出"
+          className="novel-set-input"
+          disabled={saving}
+          id="global-max-tokens"
+          inputMode="numeric"
+          onChange={(event) => setDraft({ ...draft, defaultsMaxTokens: event.currentTarget.value })}
+          placeholder="默认 8192 tokens"
+          value={draft.defaultsMaxTokens}
+        />
       </div>
 
-      <div className="novel-agent-section">
-        <h4>Agent 覆盖（留空继承全局）</h4>
-        <div className="novel-agent-cards">
-          {AGENTS.map((agent) => {
-            const d = draft.agents[agent.id] ?? emptyAgentDraft();
-            const overridden =
-              d.profileId !== "" ||
-              d.temperature.trim() !== "" ||
-              d.thinking !== "" ||
-              d.maxTokens.trim() !== "";
-            return (
-              <article className="novel-agent-card" data-overridden={overridden} key={agent.id}>
-                <header>
-                  <strong>{agent.name}</strong>
-                  <code>{agent.id}</code>
-                  {overridden ? <span className="novel-agent-tag">已覆盖</span> : null}
-                </header>
-                <p className="novel-agent-hint">{agent.desc}</p>
-                <div className="novel-provider-fields">
-                  <label>
-                    <span>模型</span>
-                    <select
-                      aria-label={`${agent.name}模型`}
-                      disabled={saving}
-                      onChange={(event) => patchAgent(agent.id, { profileId: event.currentTarget.value })}
-                      value={d.profileId}
-                    >
-                      <option value="">
-                        继承全局默认（Normal ·{" "}
-                        {defaultProfile === undefined
-                          ? "未配置"
-                          : `${defaultProfile.label ?? defaultProfile.model} · ${defaultProfile.model}`}
-                        ）
-                      </option>
-                      <option value={FAST_PROFILE_REF}>
-                        Fast 快速 · {fastProfile === undefined ? "未配置" : `${fastProfile.label ?? fastProfile.model} · ${fastProfile.model}`}
-                      </option>
-                      {profiles.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {profileLabel(p.id)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>温度</span>
-                    <input
-                      aria-label={`${agent.name}温度`}
-                      disabled={saving}
-                      onChange={(event) => patchAgent(agent.id, { temperature: event.currentTarget.value })}
-                      placeholder={`继承全局 · ${globalTemperature}`}
-                      value={d.temperature}
-                    />
-                  </label>
-                  <label>
-                    <span>思考强度</span>
-                    <select
-                      aria-label={`${agent.name}思考强度`}
-                      disabled={saving}
-                      onChange={(event) =>
-                        patchAgent(agent.id, {
-                          thinking: event.currentTarget.value as AgentDraft["thinking"],
-                        })
-                      }
-                      value={d.thinking}
-                    >
-                      <option value="">继承全局 · {draft.defaultsThinking}</option>
-                      {THINKING_LEVELS.map((level) => (
-                        <option key={level.value} value={level.value}>
-                          {level.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>最大输出 Tokens</span>
-                    <input
-                      aria-label={`${agent.name}最大输出`}
-                      disabled={saving}
-                      onChange={(event) => patchAgent(agent.id, { maxTokens: event.currentTarget.value })}
-                      placeholder={`继承全局 · ${globalMaxTokens}`}
-                      value={d.maxTokens}
-                    />
-                  </label>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+      <div className="novel-set-section">
+        <b>Agent 覆盖</b>
+        <small>留空继承全局</small>
+      </div>
+      {AGENTS.map((agent) => {
+        const d = draft.agents[agent.id] ?? emptyAgentDraft();
+        const overridden =
+          d.profileId !== "" ||
+          d.temperature.trim() !== "" ||
+          d.thinking !== "" ||
+          d.maxTokens.trim() !== "";
+        const Icon = agent.icon;
+        return (
+          <article className="novel-agent-card" data-overridden={overridden} key={agent.id}>
+            <header className="novel-agent-head">
+              <Icon size={13} aria-hidden />
+              <b>{agent.name}</b>
+              <span className="novel-agent-role">{agent.id}</span>
+              {overridden ? <span className="novel-ov-tag">已覆盖</span> : null}
+            </header>
+            <p className="novel-agent-desc">{agent.desc}</p>
+            <div className="novel-set-field">
+              <label htmlFor={`agent-${agent.id}-model`}>模型</label>
+              <span className="novel-set-select-wrap">
+                <select
+                  aria-label={`${agent.name}模型`}
+                  className="novel-set-select"
+                  disabled={saving}
+                  id={`agent-${agent.id}-model`}
+                  onChange={(event) => patchAgent(agent.id, { profileId: event.currentTarget.value })}
+                  value={d.profileId}
+                >
+                  <option value="">继承全局默认（Normal · {defaultLabel}）</option>
+                  <option value={FAST_PROFILE_REF}>Fast 快速 · {fastLabel}</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label ?? p.model} · {p.model}
+                    </option>
+                  ))}
+                </select>
+              </span>
+            </div>
+            <div className="novel-set-field">
+              <label htmlFor={`agent-${agent.id}-temp`}>温度</label>
+              <input
+                aria-label={`${agent.name}温度`}
+                className="novel-set-input"
+                disabled={saving}
+                id={`agent-${agent.id}-temp`}
+                inputMode="decimal"
+                onChange={(event) => patchAgent(agent.id, { temperature: event.currentTarget.value })}
+                placeholder={`继承全局 · ${globalTemperature}`}
+                value={d.temperature}
+              />
+            </div>
+            <div className="novel-set-field">
+              <label htmlFor={`agent-${agent.id}-thinking`}>思考强度</label>
+              <span className="novel-set-select-wrap">
+                <select
+                  aria-label={`${agent.name}思考强度`}
+                  className="novel-set-select"
+                  disabled={saving}
+                  id={`agent-${agent.id}-thinking`}
+                  onChange={(event) =>
+                    patchAgent(agent.id, { thinking: event.currentTarget.value as AgentDraft["thinking"] })
+                  }
+                  value={d.thinking}
+                >
+                  <option value="">继承全局 · {draft.defaultsThinking}</option>
+                  {THINKING_LEVELS.map((level) => (
+                    <option key={level.value} value={level.value}>
+                      {level.label}
+                    </option>
+                  ))}
+                </select>
+              </span>
+            </div>
+            <div className="novel-set-field">
+              <label htmlFor={`agent-${agent.id}-max-tokens`}>最大输出</label>
+              <input
+                aria-label={`${agent.name}最大输出`}
+                className="novel-set-input"
+                disabled={saving}
+                id={`agent-${agent.id}-max-tokens`}
+                inputMode="numeric"
+                onChange={(event) => patchAgent(agent.id, { maxTokens: event.currentTarget.value })}
+                placeholder={`继承全局 · ${globalMaxTokens} tokens`}
+                value={d.maxTokens}
+              />
+            </div>
+          </article>
+        );
+      })}
+
+      <div className="novel-set-section">
+        <b>上下文压缩</b>
+        <small>仅主 Agent · 三级门禁常开</small>
+      </div>
+      <p className="novel-set-hint">
+        阈值按模型上下文窗口的百分比触发：T1 将旧工具输出骨架化，T2 在更高水位折叠为摘要。
+      </p>
+      <div className="novel-set-field">
+        <label htmlFor="compact-t1">T1 骨架化 %</label>
+        <input
+          aria-label="T1 骨架化比例"
+          className="novel-set-input"
+          disabled={saving}
+          id="compact-t1"
+          inputMode="numeric"
+          onChange={(event) => setDraft({ ...draft, compactionT1: event.currentTarget.value })}
+          placeholder="默认 70"
+          value={draft.compactionT1}
+        />
+      </div>
+      <div className="novel-set-field">
+        <label htmlFor="compact-t2">T2 摘要折叠 %</label>
+        <input
+          aria-label="T2 摘要折叠比例"
+          className="novel-set-input"
+          disabled={saving}
+          id="compact-t2"
+          inputMode="numeric"
+          onChange={(event) => setDraft({ ...draft, compactionT2: event.currentTarget.value })}
+          placeholder="默认 92"
+          value={draft.compactionT2}
+        />
+      </div>
+      <div className="novel-set-field">
+        <label htmlFor="compact-summary">摘要输出上限</label>
+        <input
+          aria-label="摘要输出上限"
+          className="novel-set-input"
+          disabled={saving}
+          id="compact-summary"
+          inputMode="numeric"
+          onChange={(event) => setDraft({ ...draft, compactionSummary: event.currentTarget.value })}
+          placeholder="默认 2048 tokens"
+          value={draft.compactionSummary}
+        />
       </div>
 
-      <div className="novel-agent-section">
-        <h4>上下文压缩（仅主 Agent · 三级门禁常开）</h4>
-        <p className="novel-agent-hint">
-          阈值按模型上下文窗口的百分比触发：T1 将旧工具输出骨架化，T2 在更高水位折叠为摘要。
-        </p>
-        <div className="novel-provider-fields">
-          <label>
-            <span>T1 骨架化 %</span>
-            <input
-              aria-label="T1 骨架化比例"
-              disabled={saving}
-              onChange={(event) => setDraft({ ...draft, compactionT1: event.currentTarget.value })}
-              placeholder="默认 70"
-              value={draft.compactionT1}
-            />
-          </label>
-          <label>
-            <span>T2 摘要折叠 %</span>
-            <input
-              aria-label="T2 摘要折叠比例"
-              disabled={saving}
-              onChange={(event) => setDraft({ ...draft, compactionT2: event.currentTarget.value })}
-              placeholder="默认 92"
-              value={draft.compactionT2}
-            />
-          </label>
-          <label>
-            <span>摘要输出上限 Tokens</span>
-            <input
-              aria-label="摘要输出上限"
-              disabled={saving}
-              onChange={(event) => setDraft({ ...draft, compactionSummary: event.currentTarget.value })}
-              placeholder="默认 2048"
-              value={draft.compactionSummary}
-            />
-          </label>
-        </div>
+      <div className="novel-save-bar">
+        {dirty ? <span className="novel-dirty-dot">● 有未保存的修改</span> : null}
+        <span style={{ flex: 1 }} />
+        <button
+          className="novel-set-btn"
+          disabled={saving || savedDraft === undefined}
+          onClick={() => savedDraft !== undefined && setDraft(savedDraft)}
+          type="button"
+        >
+          <RotateCcw size={12} aria-hidden />
+          还原
+        </button>
+        <button className="novel-set-btn primary" disabled={saving} onClick={() => void save()} type="button">
+          <Check size={12} aria-hidden />
+          {saving ? "保存中…" : "保存"}
+        </button>
       </div>
 
       <p className="novel-provider-security-note" role="status">

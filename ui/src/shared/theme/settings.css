@@ -347,105 +347,371 @@
   color: var(--color-danger);
 }
 
-/* ============ 模型能力（高级区） ============ */
-.novel-provider-capabilities {
+/* ============ 设置表单公共（对齐 demo v0.9 setSection/setField/setInput/setSelect） ============ */
+.novel-set-section {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
   gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-md);
+  margin: var(--space-4) 0 var(--space-1);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.novel-cap-title {
-  font-size: var(--fs-meta);
+.novel-set-section:first-child {
+  margin-top: var(--space-0);
+}
+
+.novel-set-section b {
+  font-size: var(--fs-12-5);
   font-weight: var(--fw-semibold);
-  color: var(--color-muted);
-}
-
-.novel-cap-hint {
-  margin: 0;
-  font-size: var(--fs-meta);
-  color: var(--color-faint);
-  line-height: 1.6;
-}
-
-/* ============ Agent 参数面板 ============ */
-.novel-agent-settings {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.novel-agent-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3) 0;
-  border-top: 1px solid var(--color-border);
-}
-
-.novel-agent-section > h4 {
-  margin: 0;
-  font-size: var(--fs-h2);
-  font-weight: var(--fw-heavy);
   color: var(--color-fg);
 }
 
-.novel-agent-hint {
-  margin: 0;
-  font-size: var(--fs-meta);
+.novel-set-section small {
+  font-size: var(--fs-11);
   color: var(--color-faint);
-  line-height: 1.6;
 }
 
-.novel-agent-cards {
+.novel-set-field {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.novel-set-field > label {
+  font-size: var(--fs-12);
+  color: var(--color-muted);
+}
+
+.novel-set-input {
+  font: inherit;
+  font-size: var(--fs-12-5);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 9px;
+  width: 100%;
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.novel-set-input:focus {
+  border-color: var(--color-accent);
+}
+
+.novel-set-input::placeholder {
+  color: var(--color-faint);
+}
+
+.novel-set-input:disabled {
+  color: var(--color-muted);
+  background: var(--color-surface-2);
+  cursor: default;
+}
+
+.novel-set-select-wrap {
+  position: relative;
+}
+
+.novel-set-select-wrap::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -4px;
+  pointer-events: none;
+  border-right: 1.5px solid var(--color-faint);
+  border-bottom: 1.5px solid var(--color-faint);
+  transform: rotate(45deg);
+}
+
+.novel-set-select {
+  font: inherit;
+  font-size: var(--fs-12-5);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 26px 6px 9px;
+  width: 100%;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.novel-set-select:focus {
+  border-color: var(--color-accent);
+}
+
+.novel-set-hint {
+  margin: 0;
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  line-height: 1.7;
+  padding: 2px 0 6px;
+}
+
+/* ============ 设置小按钮（幽灵 / 危险 / 主） ============ */
+.novel-set-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.novel-set-btn:hover:not(:disabled) {
+  background: var(--color-accent-8-transparent);
+  color: var(--color-accent-ink);
+}
+
+.novel-set-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.novel-set-btn.danger {
+  color: var(--color-danger);
+}
+
+.novel-set-btn.danger:hover:not(:disabled) {
+  background: var(--color-danger-12-transparent);
+  color: var(--color-danger);
+}
+
+.novel-set-btn.primary {
+  border: 0;
+  padding: 5px 14px;
+  background: var(--grad-accent);
+  color: var(--color-on-accent);
+  font-weight: var(--fw-semibold);
+  box-shadow: var(--shadow-1);
+}
+
+.novel-set-btn.primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  color: var(--color-on-accent);
+}
+
+.novel-set-btn.block {
+  width: 100%;
+  justify-content: center;
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+}
+
+.novel-set-btn.block:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+/* ============ 模型服务卡（对齐 demo profCard） ============ */
+.novel-prof-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 5px;
+  padding: 9px 12px;
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--duration-fast) var(--ease-out);
 }
 
+.novel-prof-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.novel-prof-card[data-default="true"] {
+  border-color: var(--color-accent-18);
+}
+
+.novel-prof-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.novel-prof-head b {
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.novel-def-tag,
+.novel-cap-tag,
+.novel-ov-tag {
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-10);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+.novel-def-tag {
+  color: var(--color-accent-ink);
+  background: var(--color-accent-9);
+  border: 1px solid var(--color-accent-45);
+}
+
+.novel-cap-tag {
+  color: var(--color-muted);
+  border: 1px solid var(--color-border-strong);
+}
+
+.novel-prof-meta {
+  font-size: var(--fs-11);
+  color: var(--color-muted);
+  line-height: 1.7;
+  word-break: break-all;
+}
+
+.novel-prof-meta code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+}
+
+.novel-prof-meta .ok {
+  color: var(--color-success);
+}
+
+.novel-prof-meta .miss {
+  color: var(--color-warn);
+}
+
+.novel-prof-acts {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+/* ============ 模型能力折叠区（对齐 demo capFold） ============ */
+.novel-cap-fold-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 4px 0 2px;
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--fs-12);
+  color: var(--color-muted);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.novel-cap-fold-head:hover {
+  color: var(--color-fg);
+}
+
+.novel-cap-fold-head small {
+  margin-left: auto;
+  font-size: var(--fs-11);
+  font-weight: var(--fw-regular);
+  color: var(--color-faint);
+}
+
+.novel-cap-fold-body {
+  margin: 2px 0 6px;
+  padding: 2px 0 4px 12px;
+  border-left: 2px solid var(--color-border);
+}
+
+/* ============ Agent 覆盖卡（对齐 demo agentCard） ============ */
 .novel-agent-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  background: var(--color-surface);
+  padding: 10px 12px 6px;
+  margin-bottom: 10px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
 
 .novel-agent-card[data-overridden="true"] {
-  border-color: color-mix(in oklab, var(--color-accent) 40%, var(--color-border-strong));
-  background: color-mix(in oklab, var(--color-accent) 3%, var(--color-surface));
+  border-color: var(--color-accent-18);
 }
 
-.novel-agent-card > header {
+.novel-agent-head {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 7px;
+  margin-bottom: 4px;
 }
 
-.novel-agent-card > header strong {
-  font-size: var(--fs-body);
+.novel-agent-head svg {
+  color: var(--color-muted);
+}
+
+.novel-agent-head b {
+  font-size: var(--fs-12-5);
   font-weight: var(--fw-semibold);
   color: var(--color-fg);
 }
 
-.novel-agent-card > header code {
+.novel-agent-role {
   font-family: var(--font-mono);
-  font-size: var(--fs-mono);
+  font-size: var(--fs-10);
   color: var(--color-faint);
 }
 
-.novel-agent-tag {
+.novel-ov-tag {
   margin-left: auto;
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-pill);
-  background: color-mix(in oklab, var(--color-accent) 12%, var(--color-surface));
   color: var(--color-accent-ink);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
-  white-space: nowrap;
+  background: var(--color-accent-9);
+  border: 1px solid var(--color-accent-45);
+}
+
+.novel-agent-desc {
+  margin: 0 0 4px;
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  line-height: 1.7;
+}
+
+/* ============ 保存栏 / 底部提示（对齐 demo setSaveBar/setFootHint） ============ */
+.novel-save-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.novel-dirty-dot {
+  font-size: var(--fs-11);
+  color: var(--color-warn);
+}
+
+.novel-foot-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-4);
+  padding: var(--space-2) 10px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  line-height: 1.6;
+}
+
+.novel-foot-hint svg {
+  flex: none;
+  color: var(--color-success);
 }

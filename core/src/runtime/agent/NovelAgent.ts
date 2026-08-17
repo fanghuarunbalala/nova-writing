@@ -90,6 +90,12 @@ export interface NovelAgentOptions {
   todoStore?: ConversationTodoStore;
   /** subagent 派发三工具装配（agents/allowedAgentTypes 由 builder 注入定义目录常量，调用方只传 spawner） */
   subagent?: Omit<SubagentToolsOptions, "agents" | "allowedAgentTypes">;
+  /** 自动压缩阈值覆盖（设置页 RuntimeSettings.compaction；缺省项用策略默认值） */
+  compact?: {
+    t1Ratio?: number;
+    t2CapRatio?: number;
+    summaryMaxTokens?: number;
+  };
 }
 
 /**
@@ -150,8 +156,8 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     }),
     nudgeCatalog,
     // 自动上下文压缩（docs/PRD/context-compact.md）：以 provider 闭包构造，
-    // 阈值信号/窗口查询/摘要调用都走会话同一 provider
-    compactPolicies: [new AutoCompactPolicy(opts.provider, { logger: opts.logger })],
+    // 阈值信号/窗口查询/摘要调用都走会话同一 provider；阈值可经 opts.compact 覆盖
+    compactPolicies: [new AutoCompactPolicy(opts.provider, { logger: opts.logger, ...opts.compact })],
   });
   const capability = assembler.assemble();
   // subagent 派发三工具（Agent/TaskOutput/TaskStop）：组系统外追加——

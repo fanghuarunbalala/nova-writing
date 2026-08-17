@@ -32,6 +32,7 @@ import {
   type ConversationApprovalRequest,
   type ConversationJournalService,
   type CredentialCipher,
+  resolveRuntimeAgents,
   createConsoleLogger,
   infoLog,
   type LLMessage,
@@ -186,6 +187,22 @@ async function applyDefaultProviderEnv(configStore: NodeApplicationConfigStore):
   process.env.NOVEL_PROVIDER_MODEL = profile.model;
   if (profile.baseUrl !== undefined) process.env.NOVEL_PROVIDER_BASE_URL = profile.baseUrl;
   infoLog(`[main] provider resolved from config: ${profile.provider}/${profile.model}`);
+}
+
+/**
+ * Agent 运行参数（档位/采样/压缩/能力）解析为 NOVEL_RUNTIME_SETTINGS env。
+ * 配置每次变更后重写（onMutated）：下一个 spawn 的对话生效，运行中对话维持启动时快照。
+ */
+async function applyRuntimeEnv(configStore: NodeApplicationConfigStore): Promise<void> {
+  await applyDefaultProviderEnv(configStore);
+  const snapshot = await configStore.get();
+  if (snapshot.profiles.length === 0) {
+    delete process.env.NOVEL_RUNTIME_SETTINGS;
+    return;
+  }
+  const resolved = await resolveRuntimeAgents(snapshot, (ref) => configStore.resolveSecret(ref));
+  process.env.NOVEL_RUNTIME_SETTINGS = JSON.stringify(resolved);
+  infoLog(`[main] runtime settings resolved: ${Object.keys(resolved.agents).join(",")}`);
 }
 
 /** manager：有 provider key 时 spawnConversation 走子进程（真实 provider，novel-db 经 kkrpc/ws）；否则回退内存回显 loop */
@@ -346,13 +363,20 @@ async function main(): Promise<void> {
   const configStore = new NodeApplicationConfigStore({
     filePath: join(configHome.resolve(), "config.json"),
     cipher: plaintextCipher,
+    // 配置变更 → 重写运行参数 env（新对话生效；回调失败不影响变更本身）
+    onMutated: () => {
+      applyRuntimeEnv(configStore).catch((e) => {
+        infoLog(`[main] runtime env re-apply failed: ${e instanceof Error ? e.message : String(e)}`);
+      });
+    },
   });
   await configStore.load();
   const configServer = new ConfigServer(configStore);
 
-  // provider 配置：默认 model profile 的凭据解析为子进程 env（NOVEL_PROVIDER_*）。
-  // 设置页保存后重启生效（conversation 模式在启动时决定）。
-  await applyDefaultProviderEnv(configStore);
+  // provider 配置：默认 model profile 的凭据解析为子进程 env（NOVEL_PROVIDER_*）+
+  // Agent 运行参数（NOVEL_RUNTIME_SETTINGS）。设置页保存后经 onMutated 重写，
+  // 对新 spawn 的对话生效（运行中对话维持启动时快照）。
+  await applyRuntimeEnv(configStore);
 
   // novel-db WS：conversation 子进程经 kkrpc/ws + token 访问 canonical store（协议定稿 transport）
   const novelWs = await startNovelDbWsServer({ store: publishingStore, token: randomUUID() });

@@ -70,6 +70,35 @@ describe("SubagentRuntime", () => {
     });
   });
 
+  it("samplingByAgent 优先：该 agentType 用覆盖采样，未覆盖的回落共享 sampling", async () => {
+    const explorerLoop = fakeLoop();
+    const composeLoop = fakeLoop();
+    const rt = new SubagentRuntime({
+      sampling: { model: "main-model", maxTokens: 8192 },
+      samplingByAgent: {
+        Explore: { model: "fast-model", maxTokens: 2048, thinking: "low" },
+      },
+      builders: {
+        Explore: () => explorerLoop as unknown as AgentLoop,
+        Compose: () => composeLoop as unknown as AgentLoop,
+      },
+    });
+    rt.spawn({ agentType: "Explore", prompt: "p" });
+    rt.spawn({ agentType: "Compose", prompt: "p" });
+    await vi.waitFor(() => {
+      expect(explorerLoop.run).toHaveBeenCalled();
+      expect(composeLoop.run).toHaveBeenCalled();
+    });
+    expect(explorerLoop.run).toHaveBeenCalledWith("p", {
+      sampling: { model: "fast-model", maxTokens: 2048, thinking: "low" },
+      maxTurns: expect.any(Number),
+    });
+    expect(composeLoop.run).toHaveBeenCalledWith("p", {
+      sampling: { model: "main-model", maxTokens: 8192 },
+      maxTurns: expect.any(Number),
+    });
+  });
+
   it("stopTask 三态：not_found / already_terminal / cancellation_requested", async () => {
     const { rt } = runtimeWith(fakeLoop());
     expect(await rt.stopTask("task_99")).toBe("not_found");

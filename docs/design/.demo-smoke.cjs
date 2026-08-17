@@ -133,6 +133,47 @@ assert($(".stage").classList.contains("sim"), "模拟窗口宽度");
 click('[data-act="settingsOpen"]');
 assert($(".dialogMask").classList.contains("show"), "设置弹窗打开");
 assert($$(".themeCard").length === 4, "设置·外观 4 主题卡");
+// v0.9 设置·模型：profile 列表 + 能力自动识别 + 覆盖
+click('[data-act="settingsTab"][data-id="models"]');
+assert($$(".profCard").length === 3, "模型服务 3 张 profile 卡");
+assert(doc.body.textContent.includes("deepseek-v4-flash") && doc.body.textContent.includes("claude-opus-5"), "profile 显示模型 ID");
+assert(doc.body.textContent.includes("能力覆盖 1 项"), "gpt-5 能力覆盖标记（maxOut 示例）");
+click('[data-act="profEdit"][data-id="p1"]');
+assert(doc.body.textContent.includes("编辑模型服务") && $(".capFoldHead"), "编辑表单展开");
+click('[data-act="capFold"]');
+assert($("#pfCapMaxOut") && $("#pfCapMaxOut").placeholder.includes("8,192"), "能力高级区：maxOut 自动识别 placeholder");
+assert($("#pfDetectLine").textContent.includes("reasoning-effort"), "识别行显示思考模式");
+const pm = doc.querySelector('[data-pf="model"]');
+pm.value = "totally-unknown-model";
+pm.dispatchEvent(new window.Event("input", { bubbles: true }));
+assert($("#pfDetectLine").textContent.includes("未能"), "未知模型识别提示切换");
+assert($("#pfCapMaxOut").placeholder.includes("兜底"), "未识别模型能力 placeholder 定向刷新为兜底值（不重渲染）");
+click('[data-act="profCancel"]');
+// v0.9 设置·Agent：模型档位（Normal/Fast）+ 全局默认 + 三卡继承 + 校验/脏态/覆盖
+click('[data-act="settingsTab"][data-id="agents"]');
+assert($$(".agentCard").length === 3, "Agent 覆盖 3 张卡");
+assert(doc.body.textContent.includes("模型档位") && doc.body.textContent.includes("Normal 常规"), "模型档位分区（Normal/Fast）");
+assert(doc.querySelector('[data-rk="fast"]').value === "p1", "Fast 档默认绑定 DeepSeek");
+assert(doc.querySelector('[data-rk="agents.Explore.profile"]').value === "fast", "Explore 默认使用 Fast 快速档");
+assert(doc.body.textContent.includes("继承全局默认（Normal"), "模型下拉含「继承全局默认（Normal…）」");
+const at = doc.querySelector('[data-rk="defaults.temperature"]');
+at.value = "9";
+at.dispatchEvent(new window.Event("input", { bubbles: true }));
+assert($("#rtDirty") && $("#rtDirty").style.display === "", "输入后脏态提示出现");
+click('[data-act="agentSave"]');
+assert($("#toast").textContent.includes("温度"), "非法温度（9）保存被拦截");
+at.value = "1.2";
+at.dispatchEvent(new window.Event("input", { bubbles: true }));
+assert(doc.querySelector('[data-rk="agents.novel.temperature"]').placeholder.includes("1.2"), "全局温度变化 → 继承 placeholder 联动刷新");
+click('[data-act="agentSave"]');
+assert($("#toast").textContent.includes("对新对话生效"), "合法保存 toast（新对话生效）");
+const es = doc.querySelector('[data-rk="agents.Explore.profile"]');
+es.value = "p3";
+es.dispatchEvent(new window.Event("input", { bubbles: true }));
+click('[data-act="agentSave"]');
+assert(doc.querySelector(".agentCard.overridden .role").textContent === "Explore", "Explore 指定模型后「已覆盖」标记");
+click('[data-act="agentReset"]');
+assert(doc.querySelector('[data-rk="agents.Explore.profile"]').value === "fast" && $$(".agentCard.overridden").length === 1, "还原回到上次保存（Explore 仍为 Fast 档）");
 click('[data-act="settingsClose"]');
 
 // --- 侧栏开关 ---

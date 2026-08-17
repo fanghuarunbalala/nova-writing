@@ -8,7 +8,13 @@ import type {
 	CredentialRef,
 	CredentialStatus,
 	ModelProfile,
+	RuntimeSettings,
 } from "./contract.js";
+import {
+	removeProfileReferences,
+	validateModelCapabilities,
+	validateRuntimeSettings,
+} from "./runtimeSettings.js";
 import type { ConfigStore } from "./store.js";
 
 /** 内存版 config 存储（profile Map + 凭据 Map） */
@@ -16,6 +22,7 @@ export class InMemoryConfigStore implements ConfigStore {
 	private readonly profiles = new Map<string, ModelProfile>();
 	private defaultProfileId?: string;
 	private readonly credentials = new Map<CredentialRef, string>();
+	private runtime?: RuntimeSettings;
 
 	/** 读取配置快照 */
 	async get(): Promise<ConfigSnapshot> {
@@ -25,6 +32,7 @@ export class InMemoryConfigStore implements ConfigStore {
 			profiles: Object.freeze([...this.profiles.values()]),
 			...(this.defaultProfileId !== undefined ? { defaultProfileId: this.defaultProfileId } : {}),
 			credentials: Object.freeze(credentials),
+			...(this.runtime !== undefined ? { runtime: this.runtime } : {}),
 			diagnostics: { logLevel: "info" },
 		};
 	}
@@ -33,7 +41,12 @@ export class InMemoryConfigStore implements ConfigStore {
 	async mutate(m: ConfigMutation): Promise<void> {
 		switch (m.op) {
 			case "model.upsert": {
-				this.profiles.set(m.profileId, { id: m.profileId, ...m.profile });
+				const { capabilities, ...rest } = m.profile;
+				const caps = validateModelCapabilities(capabilities);
+				this.profiles.set(
+					m.profileId,
+					caps !== undefined ? { id: m.profileId, ...rest, capabilities: caps } : { id: m.profileId, ...rest },
+				);
 				if (this.defaultProfileId === undefined) this.defaultProfileId = m.profileId;
 				break;
 			}
@@ -42,10 +55,15 @@ export class InMemoryConfigStore implements ConfigStore {
 				if (this.defaultProfileId === m.profileId) {
 					this.defaultProfileId = this.profiles.keys().next().value;
 				}
+				this.runtime = removeProfileReferences(this.runtime, m.profileId);
 				break;
 			}
 			case "model.setDefault": {
 				if (this.profiles.has(m.profileId)) this.defaultProfileId = m.profileId;
+				break;
+			}
+			case "runtime.set": {
+				this.runtime = validateRuntimeSettings(m.runtime, [...this.profiles.keys()]);
 				break;
 			}
 			case "credential.save": {

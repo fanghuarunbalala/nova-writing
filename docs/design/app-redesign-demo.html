@@ -6,7 +6,7 @@
 <title>布局重设计 demo · Novel 创作台</title>
 <style>
   /* ============================================================
-     前端整体布局重设计 demo（单文件，交互式）· v0.8.1
+     前端整体布局重设计 demo（单文件，交互式）· v0.9.0
      基于 theme-candidates-demo-2.html 的四主题 token 体系 + 现有功能结构：
        · 顶栏：侧栏开关 / 品牌 / 工作区 / 中央三视图 tab / 工作区·设置 / 窗口控制（Win·Mac）
        · 对话视图：左侧会话目录 · 中部对话流（正文/草稿/工具行/输入区/模式/发送·暂停
@@ -17,6 +17,8 @@
        · 内容视图：左侧资料位（大纲树 / 正文卷章 / 人物 / 地点）· 右侧具体内容
          （正文段落内实体标签渲染为可点 chip；段落 hover 高亮 + 悬浮编辑/删除工具组）
        · 计划视图：左侧「安排」目录 · 右侧总览（统计/双状态轴/大纲进度）或待办详情
+       · 设置：通用 / 模型（服务 profile + 模型能力自动识别与手动覆盖）/ Agent
+         （Normal·Fast 模型档位 + 全局默认采样 + 按 Agent 覆盖温度·思考强度·最大输出 + 压缩阈值）/ 外观 / 关于
      窗口尺寸：容器查询断点 1280 / 1080；最小窗口 1080（对齐 tokens.css 约定）。
      ============================================================ */
   :root {
@@ -1761,6 +1763,105 @@
   .toggle[aria-checked="true"] { background: var(--color-accent); }
   .toggle[aria-checked="true"]::after { transform: translateX(14px); }
 
+  /* 设置 · 模型 / Agent 表单（对齐 token 体系，四主题自适应） */
+  .setSection {
+    display: flex; align-items: baseline; gap: 8px;
+    margin: 20px 0 4px; padding-bottom: 6px; border-bottom: 1px solid var(--color-border);
+  }
+  .setSection:first-child { margin-top: 2px; }
+  .setSection b { font-size: var(--fs-12-5); }
+  .setSection small { color: var(--color-faint); font-size: var(--fs-11); }
+  .setField { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 10px; padding: 6px 0; }
+  .setField > label { font-size: var(--fs-12); color: var(--color-muted); }
+  .setField .unit { font-size: var(--fs-11); color: var(--color-faint); margin-left: 6px; }
+  .setInput {
+    font: inherit; font-size: var(--fs-12-5); color: var(--color-fg);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+    padding: 6px 9px; width: 100%; outline: none;
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  .setInput:focus { border-color: var(--color-accent); }
+  .setInput::placeholder { color: var(--color-faint); }
+  .setInput:disabled { color: var(--color-muted); background: var(--color-surface-2); cursor: default; }
+  .setSelWrap { position: relative; }
+  .setSelWrap::after {
+    content: ""; position: absolute; right: 10px; top: 50%; pointer-events: none;
+    width: 6px; height: 6px; margin-top: -4px;
+    border-right: 1.5px solid var(--color-faint); border-bottom: 1.5px solid var(--color-faint);
+    transform: rotate(45deg);
+  }
+  .setSelect {
+    font: inherit; font-size: var(--fs-12-5); color: var(--color-fg);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+    padding: 6px 26px 6px 9px; width: 100%; outline: none; appearance: none; cursor: pointer;
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  .setSelect:focus { border-color: var(--color-accent); }
+  .setHint { font-size: var(--fs-11); color: var(--color-faint); line-height: 1.7; padding: 2px 0 6px; }
+  .setFootHint {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 14px; padding: 8px 10px;
+    border: 1px dashed var(--color-border); border-radius: var(--radius-sm);
+    font-size: var(--fs-11); color: var(--color-faint);
+  }
+  /* profile 服务卡片 */
+  .profCard {
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    padding: 9px 12px; margin-bottom: 8px;
+    display: flex; flex-direction: column; gap: 5px;
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  .profCard:hover { border-color: var(--color-border-strong); }
+  .profCard.isDefault { border-color: color-mix(in oklab, var(--color-accent) 42%, var(--color-border)); }
+  .profHead { display: flex; align-items: center; gap: 7px; }
+  .profHead b { font-size: var(--fs-12-5); }
+  .profHead .defTag {
+    font-size: var(--fs-10-5); font-weight: var(--fw-semibold);
+    color: var(--color-accent-ink); background: var(--color-accent-9);
+    border: 1px solid var(--color-accent-45);
+    padding: 0 7px; border-radius: var(--radius-pill); white-space: nowrap;
+  }
+  .profHead .capTag {
+    font-size: var(--fs-10-5); color: var(--color-muted);
+    border: 1px solid var(--color-border-strong);
+    padding: 0 7px; border-radius: var(--radius-pill); white-space: nowrap;
+  }
+  .profMeta { font-size: var(--fs-11); color: var(--color-muted); line-height: 1.7; word-break: break-all; }
+  .profMeta .ok { color: var(--color-success); }
+  .profMeta .miss { color: var(--color-warn); }
+  .profActs { display: flex; gap: 6px; margin-top: 2px; }
+  /* Agent 覆盖卡 */
+  .agentCard {
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    padding: 10px 12px 6px; margin-bottom: 10px;
+  }
+  .agentCard.overridden { border-color: color-mix(in oklab, var(--color-accent) 36%, var(--color-border)); }
+  .agentHead { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+  .agentHead b { font-size: var(--fs-12-5); }
+  .agentHead .role { font-size: var(--fs-10-5); color: var(--color-faint); font-family: var(--font-mono, monospace); }
+  .agentHead .ovTag {
+    margin-left: auto; font-size: var(--fs-10-5); color: var(--color-accent-ink);
+    background: var(--color-accent-9); border: 1px solid var(--color-accent-45);
+    padding: 0 7px; border-radius: var(--radius-pill); white-space: nowrap;
+  }
+  .agentDesc { font-size: var(--fs-11); color: var(--color-faint); line-height: 1.7; margin-bottom: 4px; }
+  /* 能力折叠区 */
+  .capFoldHead {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    margin: 4px 0 2px; padding: 6px 2px;
+    border: 0; background: none; cursor: pointer;
+    font-size: var(--fs-12); color: var(--color-muted);
+    transition: color var(--duration-fast) var(--ease-out);
+  }
+  .capFoldHead:hover { color: var(--color-fg); }
+  .capFoldBody { border-left: 2px solid var(--color-border); padding: 2px 0 4px 12px; margin: 2px 0 6px; }
+  .setSaveBar {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--color-border);
+  }
+
   .themeCards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   .themeCard {
     display: flex; flex-direction: column; gap: 7px;
@@ -1933,6 +2034,8 @@
     <div class="dialogBody">
       <div class="dialogTabs" id="settingsTabs">
         <button data-act="settingsTab" data-id="general" aria-selected="true">通用</button>
+        <button data-act="settingsTab" data-id="models" aria-selected="false">模型</button>
+        <button data-act="settingsTab" data-id="agents" aria-selected="false">Agent</button>
         <button data-act="settingsTab" data-id="appearance" aria-selected="false">外观</button>
         <button data-act="settingsTab" data-id="about" aria-selected="false">关于</button>
       </div>
@@ -3554,11 +3657,223 @@ function renderInspector() {
     </div>`;
 }
 
+/* ================= 设置 · 模型服务与 Agent 参数（v0.9） ================= */
+/* 模型 profile 演示数据：cred=密钥已配置；caps 为手动能力覆盖（"" = 自动识别）
+   默认服务 = Anthropic claude-opus-5（主创作 Normal 档），Fast 档绑定 DeepSeek 供 Explore */
+const MODEL_PROFILES = [
+  { id: "p1", provider: "openai", label: "DeepSeek", model: "deepseek-v4-flash", baseUrl: "https://api.deepseek.com/v1", cred: true, caps: {} },
+  { id: "p2", provider: "anthropic", label: "Anthropic", model: "claude-opus-5", baseUrl: "", cred: true, caps: {} },
+  { id: "p3", provider: "openai", label: "OpenAI", model: "gpt-5", baseUrl: "", cred: false, caps: { maxOut: "16384" } },
+];
+let defaultProfileId = "p2";
+let profSeq = 3;
+/* 新增/编辑表单草稿（null = 收起）；capsOpen 折叠态 */
+let profDraft = null;
+
+/* 按模型名自动识别能力（对齐运行时 ModelInfoRegistry 启发式的演示版；known=false = 未匹配家族走兜底） */
+function detectModelInfo(model) {
+  const m = (model || "").toLowerCase().trim();
+  if (m === "") return null;
+  if (/claude/.test(m)) {
+    const isNew = /(opus-5|sonnet-5|opus-4-[6-9])/.test(m);
+    return { known: true, think: "adaptive-effort", temp: !isNew, ctx: 200000, maxOut: 64000 };
+  }
+  if (/deepseek/.test(m)) return { known: true, think: "reasoning-effort", temp: true, ctx: 128000, maxOut: 8192 };
+  if (/^(o[134]|gpt-5|gpt-o)/.test(m)) return { known: true, think: "reasoning-effort", temp: false, ctx: 400000, maxOut: 32768 };
+  return { known: false, think: "none", temp: true, ctx: 128000, maxOut: 8192 };
+}
+const fmtTok = (n) => Number(n).toLocaleString("en-US");
+const PROVIDER_OPTS = [["openai", "OpenAI 兼容"], ["anthropic", "Anthropic"]];
+const THINK_MODE_OPTS = [
+  ["adaptive-effort", "自适应思考 · adaptive-effort"], ["reasoning-effort", "推理力度 · reasoning-effort"],
+  ["budget-tokens", "思考预算 · budget-tokens"], ["none", "不支持思考 · none"],
+];
+const THINK_LEVEL_OPTS = [["off", "关闭"], ["low", "低"], ["medium", "中"], ["high", "高"], ["xhigh", "加高"], ["max", "最大"]];
+
+/* Agent 运行参数（"" = 继承/厂商默认；profile 支持 "" 继承 / "fast" 快速档 / 具体 profileId；saved 标记脏态） */
+const RT_INIT = {
+  fast: "p1",
+  defaults: { temperature: "", thinking: "high", maxTokens: "8192" },
+  agents: {
+    novel: { profile: "", temperature: "", thinking: "", maxTokens: "" },
+    Explore: { profile: "fast", temperature: "", thinking: "", maxTokens: "" },
+    Compose: { profile: "", temperature: "", thinking: "", maxTokens: "" },
+  },
+  compaction: { t1: "70", t2: "92", summary: "2048" },
+};
+const RUNTIME = JSON.parse(JSON.stringify(RT_INIT));
+RUNTIME.saved = true;
+const AGENTS_META = [
+  { id: "novel", name: "主创作", icon: "feather", desc: "与你对话、规划并执笔的主 Agent（默认 Normal 档）· 上下文压缩仅作用于它。" },
+  { id: "Explore", name: "探索", icon: "search", desc: "只读检索大纲 / 人物 / 段落 · 默认走 Fast 快速档，适合便宜快速的模型。" },
+  { id: "Compose", name: "起草", icon: "scrollText", desc: "起草大纲与行文设计草案，不直接改动档案。" },
+];
+const defProfile = () => MODEL_PROFILES.find(p => p.id === defaultProfileId);
+const fastProfile = () => MODEL_PROFILES.find(p => p.id === RUNTIME.fast) ?? defProfile();
+
+/* select 通用构造：attrs 为 data-* 映射 */
+function selCtl(attrs, val, opts) {
+  const ds = Object.entries(attrs || {}).map(([k, v]) => `data-${k}="${v}"`).join(" ");
+  return `<div class="setSelWrap"><select class="setSelect" ${ds}>${opts.map(o =>
+    `<option value="${esc(o[0])}"${o[0] === val ? " selected" : ""}>${esc(o[1])}</option>`).join("")}</select></div>`;
+}
+/* 模型 ID 变化 → 定向刷新能力区 placeholder 与「自动识别」选项文案（不重渲染，保输入焦点） */
+function refreshCapDetect(d) {
+  const det = detectModelInfo(d.model);
+  const ph = (id, txt) => { const el = document.getElementById(id); if (el) el.placeholder = txt; };
+  const opt = (id, txt) => { const el = document.getElementById(id); if (el) el.options[0].textContent = txt; };
+  const line = document.getElementById("pfDetectLine");
+  if (!det) {
+    ph("pfCapMaxOut", "未知模型 · 建议手动填写"); ph("pfCapCtx", "未知模型 · 建议手动填写");
+    opt("pfCapThink", "自动识别（未知）"); opt("pfCapTemp", "自动识别（未知）");
+    if (line) line.textContent = "输入模型 ID 后按名称自动识别能力";
+    return;
+  }
+  const pfx = det.known ? "自动识别" : "兜底";
+  ph("pfCapMaxOut", `${pfx} · ${fmtTok(det.maxOut)} tokens`); ph("pfCapCtx", `${pfx} · ${fmtTok(det.ctx)} tokens`);
+  opt("pfCapThink", `自动识别（${det.known ? det.think : "兜底 " + det.think}）`);
+  opt("pfCapTemp", det.temp ? "自动识别（支持）" : "自动识别（不支持）");
+  if (line) line.textContent = det.known
+    ? `识别：${fmtTok(det.ctx)} 窗口 · ${det.think} · ${det.temp ? "支持温度" : "无温度"}`
+    : `未能按名称识别：按 ${fmtTok(det.ctx)} 窗口兜底，建议手动覆盖`;
+}
+/* 全局默认变化 → 定向刷新 Agent 卡片继承 placeholder */
+function refreshInheritPlaceholders() {
+  const temp = RUNTIME.defaults.temperature.trim() || "厂商默认";
+  const tok = RUNTIME.defaults.maxTokens.trim() || "8192";
+  for (const a of Object.keys(RUNTIME.agents)) {
+    document.querySelectorAll(`[data-rk="agents.${a}.temperature"]`).forEach(el => el.setAttribute("placeholder", `继承全局 · ${temp}`));
+    document.querySelectorAll(`[data-rk="agents.${a}.maxTokens"]`).forEach(el => el.setAttribute("placeholder", `继承全局 · ${tok} tokens`));
+  }
+}
+/* runtime 保存校验：返回错误文案（null = 通过） */
+function validateRuntime() {
+  const num = (v) => Number(String(v).trim());
+  const c = RUNTIME.compaction, t1 = num(c.t1), t2 = num(c.t2);
+  if (!(t1 > 0 && t1 < 100 && t2 > 0 && t2 < 100 && t1 < t2)) return "压缩比例需满足 0 < T1 < T2 < 100";
+  if (!(num(c.summary) > 0)) return "摘要输出上限需为正整数";
+  const tempOk = (v) => v.trim() === "" || (num(v) >= 0 && num(v) <= 2);
+  const tokOk = (v) => v.trim() === "" || (Number.isInteger(num(v)) && num(v) > 0);
+  if (!tempOk(RUNTIME.defaults.temperature)) return "全局温度需在 0 – 2 之间";
+  if (!tokOk(RUNTIME.defaults.maxTokens)) return "全局最大输出需为正整数";
+  for (const [k, s] of Object.entries(RUNTIME.agents)) {
+    if (!tempOk(s.temperature)) return `「${k}」温度覆盖需在 0 – 2 之间`;
+    if (!tokOk(s.maxTokens)) return `「${k}」最大输出覆盖需为正整数`;
+  }
+  return null;
+}
+
+function renderModelsTab() {
+  let html = `<div class="setSection"><b>模型服务</b><small>密钥加密存储于本机</small></div>`;
+  html += MODEL_PROFILES.map(p => {
+    const d = detectModelInfo(p.model);
+    const ov = Object.values(p.caps).filter(v => String(v).trim() !== "").length;
+    return `<div class="profCard${p.id === defaultProfileId ? " isDefault" : ""}">
+      <div class="profHead"><b>${esc(p.label || p.model)}</b>
+        ${p.id === defaultProfileId ? `<span class="defTag">默认</span>` : ""}
+        ${ov > 0 ? `<span class="capTag">能力覆盖 ${ov} 项</span>` : ""}
+      </div>
+      <div class="profMeta">${p.provider === "anthropic" ? "Anthropic" : "OpenAI 兼容"} · <span style="font-family:var(--font-mono)">${esc(p.model)}</span>${p.baseUrl ? ` · ${esc(p.baseUrl)}` : ""}<br>
+        ${d ? (d.known ? `识别 ${fmtTok(d.ctx)} 窗口 · ${d.think}` : `未识别 · 按 ${fmtTok(d.ctx)} 窗口兜底`) + (ov > 0 ? "（部分被覆盖）" : "") : ""} · 密钥${p.cred ? `<span class="ok">已配置</span>` : `<span class="miss">未配置</span>`}</div>
+      <div class="profActs">
+        ${p.id !== defaultProfileId ? `<button class="btn btnGhost btnSm" data-act="profDefault" data-id="${p.id}">设为默认</button>` : ""}
+        <button class="btn btnGhost btnSm" data-act="profEdit" data-id="${p.id}">${ic("edit", 12)}编辑</button>
+        <button class="btn btnGhostDanger btnSm" data-act="profDel" data-id="${p.id}">${ic("trash", 12)}删除</button>
+      </div>
+    </div>`;
+  }).join("");
+  html += profDraft ? renderProfForm()
+    : `<button class="btn btnGhost btnSm" style="width:100%;justify-content:center;" data-act="profAdd">${ic("plus", 12)}添加模型服务</button>`;
+  html += `<div class="setFootHint">${ic("check", 12)}Agent 页的 Normal 档 = 此处默认服务，Fast 档在 Agent 页绑定 · 修改对新对话生效，运行中的对话维持原参数</div>`;
+  return html;
+}
+
+function renderProfForm() {
+  const d = profDraft, det = detectModelInfo(d.model), isNew = !d.editing;
+  const capPh = (v) => det ? `${det.known ? "自动识别" : "兜底"} · ${fmtTok(det[v])} tokens` : "未知模型 · 建议手动填写";
+  const detLine = det
+    ? (det.known
+      ? `识别：${fmtTok(det.ctx)} 窗口 · ${det.think} · ${det.temp ? "支持温度" : "无温度"}`
+      : `未能按名称识别：按 ${fmtTok(det.ctx)} 窗口兜底，建议手动覆盖`)
+    : "输入模型 ID 后按名称自动识别能力";
+  return `
+  <div style="border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 12px 8px;margin-top:10px;">
+    <div class="setSection" style="margin-top:0;border-bottom:0;padding-bottom:0;"><b>${isNew ? "添加" : "编辑"}模型服务</b></div>
+    <div class="setField"><label>服务商</label>${selCtl({ pf: "provider" }, d.provider, PROVIDER_OPTS)}</div>
+    <div class="setField"><label>显示名称</label><input class="setInput" data-pf="label" value="${esc(d.label)}" placeholder="如 DeepSeek"></div>
+    <div class="setField"><label>模型 ID</label><input class="setInput" data-pf="model" value="${esc(d.model)}" placeholder="如 deepseek-v4-flash"></div>
+    <div class="setField"><label></label><div class="setHint" id="pfDetectLine">${detLine}</div></div>
+    <div class="setField"><label>Base URL</label><input class="setInput" data-pf="baseUrl" value="${esc(d.baseUrl)}" placeholder="可选 · 缺省用服务商官方地址"></div>
+    <div class="setField"><label>API 密钥</label><input class="setInput" type="password" data-pf="apiKey" placeholder="${isNew ? "sk-…" : "留空保持不变"}"></div>
+    <button class="capFoldHead" data-act="capFold">${ic(d.capsOpen ? "chevDown" : "chevRight", 13)}模型能力（高级）<span style="margin-left:auto;font-size:var(--fs-11);color:var(--color-faint);font-weight:var(--fw-normal);">按模型名自动识别 · 可手动覆盖</span></button>
+    ${d.capsOpen ? `
+    <div class="capFoldBody">
+      <div class="setField"><label>最大输出</label><input class="setInput" id="pfCapMaxOut" data-pf="capMaxOut" inputmode="numeric" value="${esc(d.caps.maxOut)}" placeholder="${capPh("maxOut")}"></div>
+      <div class="setField"><label>上下文窗口</label><input class="setInput" id="pfCapCtx" data-pf="capCtx" inputmode="numeric" value="${esc(d.caps.ctx)}" placeholder="${capPh("ctx")}"></div>
+      <div class="setField"><label>思考模式</label>${selCtl({ pf: "capThink" }, d.caps.think, [["", det ? `自动识别（${det.known ? det.think : "兜底 " + det.think}）` : "自动识别（未知）"], ...THINK_MODE_OPTS])}</div>
+      <div class="setField"><label>支持温度</label>${selCtl({ pf: "capTemp" }, d.caps.temp, [["", det ? (det.temp ? "自动识别（支持）" : "自动识别（不支持）") : "自动识别（未知）"], ["yes", "支持"], ["no", "不支持"]])}</div>
+      <div class="setHint">压缩触发线按上下文窗口计算；不支持温度的模型将忽略温度设置。</div>
+    </div>` : ""}
+    <div class="setSaveBar">
+      <button class="btn btnPrimary btnSm" data-act="profSave">${ic("check", 12)}保存</button>
+      <button class="btn btnGhost btnSm" data-act="profCancel">取消</button>
+    </div>
+  </div>`;
+}
+
+function renderAgentsTab() {
+  const dp = defProfile(), fp = fastProfile();
+  const gTemp = RUNTIME.defaults.temperature.trim() || "厂商默认";
+  const gThink = RUNTIME.defaults.thinking || "high";
+  const gTok = RUNTIME.defaults.maxTokens.trim() || "8192";
+  let html = `<div class="setSection"><b>模型档位</b><small>命名档位 · Agent 卡可直接选用</small></div>
+    <div class="setHint">Normal = 「模型」页的默认服务（主创作）；Fast 建议绑定便宜快速的模型，供 Explore 等检索型 Agent 使用。</div>
+    <div class="setField"><label>Normal 常规</label><input class="setInput" disabled value="${dp ? `${dp.label} · ${dp.model}` : "未配置"}"></div>
+    <div class="setField"><label>Fast 快速</label>${selCtl({ rk: "fast" }, RUNTIME.fast, MODEL_PROFILES.map(p => [p.id, `${p.label} · ${p.model}`]))}</div>`;
+  html += `<div class="setSection"><b>全局默认采样</b><small>未被覆盖的项对所有 Agent 生效</small></div>
+    <div class="setHint">修改对新对话生效。</div>
+    <div class="setField"><label>温度</label><input class="setInput" data-rk="defaults.temperature" value="${esc(RUNTIME.defaults.temperature)}" inputmode="decimal" placeholder="厂商默认（0 – 2，如 1.0）"></div>
+    <div class="setField"><label>思考强度</label>${selCtl({ rk: "defaults.thinking" }, RUNTIME.defaults.thinking, THINK_LEVEL_OPTS)}</div>
+    <div class="setField"><label>最大输出</label><input class="setInput" data-rk="defaults.maxTokens" value="${esc(RUNTIME.defaults.maxTokens)}" inputmode="numeric" placeholder="默认 8192 tokens"></div>`;
+  html += `<div class="setSection"><b>Agent 覆盖</b><small>留空继承全局</small></div>`;
+  html += AGENTS_META.map(a => {
+    const s = RUNTIME.agents[a.id];
+    const ov = Boolean(s.profile || s.temperature.trim() || s.thinking || s.maxTokens.trim());
+    return `<div class="agentCard${ov ? " overridden" : ""}">
+      <div class="agentHead">${ic(a.icon, 13)}<b>${a.name}</b><span class="role">${a.id}</span>${ov ? `<span class="ovTag">已覆盖</span>` : ""}</div>
+      <div class="agentDesc">${a.desc}</div>
+      <div class="setField"><label>模型</label>${selCtl({ rk: `agents.${a.id}.profile` }, s.profile,
+        [["", `继承全局默认（Normal · ${dp ? `${dp.label} · ${dp.model}` : "未配置"}）`],
+         ["fast", `Fast 快速 · ${fp ? `${fp.label} · ${fp.model}` : "未配置"}`],
+         ...MODEL_PROFILES.map(p => [p.id, `${p.label} · ${p.model}`])])}</div>
+      <div class="setField"><label>温度</label><input class="setInput" data-rk="agents.${a.id}.temperature" value="${esc(s.temperature)}" inputmode="decimal" placeholder="继承全局 · ${gTemp}"></div>
+      <div class="setField"><label>思考强度</label>${selCtl({ rk: `agents.${a.id}.thinking` }, s.thinking, [["", `继承全局 · ${gThink}`], ...THINK_LEVEL_OPTS])}</div>
+      <div class="setField"><label>最大输出</label><input class="setInput" data-rk="agents.${a.id}.maxTokens" value="${esc(s.maxTokens)}" inputmode="numeric" placeholder="继承全局 · ${gTok} tokens"></div>
+    </div>`;
+  }).join("");
+  html += `<div class="setSection"><b>上下文压缩</b><small>仅主 Agent · 三级门禁常开</small></div>
+    <div class="setHint">阈值按模型上下文窗口的百分比触发：T1 将旧工具输出骨架化，T2 在更高水位折叠为摘要，超出窗口前硬丢弃。</div>
+    <div class="setField"><label>T1 骨架化 %</label><input class="setInput" data-rk="compaction.t1" value="${esc(RUNTIME.compaction.t1)}" inputmode="numeric" placeholder="默认 70"></div>
+    <div class="setField"><label>T2 摘要折叠 %</label><input class="setInput" data-rk="compaction.t2" value="${esc(RUNTIME.compaction.t2)}" inputmode="numeric" placeholder="默认 92"></div>
+    <div class="setField"><label>摘要输出上限</label><input class="setInput" data-rk="compaction.summary" value="${esc(RUNTIME.compaction.summary)}" inputmode="numeric" placeholder="默认 2048 tokens"></div>
+    <div class="setSaveBar">
+      <span class="setHint" id="rtDirty" style="${RUNTIME.saved ? "display:none;" : ""}color:var(--color-warn);padding:0;">● 有未保存的修改</span>
+      <span style="flex:1"></span>
+      <button class="btn btnGhost btnSm" data-act="agentReset">还原</button>
+      <button class="btn btnPrimary btnSm" id="agentSave" data-act="agentSave">${ic("check", 12)}保存</button>
+    </div>`;
+  return html;
+}
+
 /* ================= 设置弹窗 ================= */
 function renderSettings() {
   const tab = state.settingsTab;
   let html = "";
-  if (tab === "appearance") {
+  if (tab === "models") {
+    html = renderModelsTab();
+  } else if (tab === "agents") {
+    html = renderAgentsTab();
+  } else if (tab === "appearance") {
     html = `<div class="themeCards">${THEMES.map(t => `
       <button class="themeCard" data-act="theme" data-id="${t.id}" aria-pressed="${state.theme === t.id}">
         <span class="strip">${t.sw.map(c => `<i style="background:${c}"></i>`).join("")}</span>
@@ -3573,7 +3888,7 @@ function renderSettings() {
   } else {
     html = `<div style="text-align:center;padding:26px 0;">
       <div class="brand" style="justify-content:center;margin-bottom:8px;"><span class="brandDot"></span><span class="brandName" style="font-size:16px;">Novel</span></div>
-      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.8.1<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>审批整体弹窗（稍后处理 + 挂起提示条） · 右栏内容目录（详情卡 / 跳完整档案 / 拖宽 / leaf 简略卡） · 实体标签定位 · 正文段落实体 chip + hover 编辑 · markdown 全格式样例 · 排队回显（幽灵项） · 大纲对齐 StoryUnit 模型 · 通知中心 · 启动页与入场动画</div>
+      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.9.0<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>设置（模型服务 + 能力覆盖 + Normal·Fast 档位 + Agent 参数与压缩阈值） · 审批整体弹窗（稍后处理 + 挂起提示条） · 右栏内容目录（详情卡 / 跳完整档案 / 拖宽 / leaf 简略卡） · 实体标签定位 · 正文段落实体 chip + hover 编辑 · markdown 全格式样例 · 排队回显（幽灵项） · 大纲对齐 StoryUnit 模型 · 通知中心 · 启动页与入场动画</div>
     </div>`;
   }
   $("settingsContent").innerHTML = html;
@@ -4091,6 +4406,60 @@ document.addEventListener("click", (e) => {
       if (act === "settingsCloseMask" && e.target.closest('[data-noclose="1"]')) break;
       closeSettings(); break;
     case "settingsTab": state.settingsTab = id; renderSettings(); break;
+    /* ---- 设置 · 模型服务 ---- */
+    case "profAdd":
+      profDraft = { editing: null, provider: "openai", label: "", model: "", baseUrl: "", apiKey: "", capsOpen: false, caps: { maxOut: "", ctx: "", think: "", temp: "" } };
+      renderSettings();
+      document.querySelector('[data-pf="label"]')?.focus();
+      break;
+    case "profEdit": {
+      const p = MODEL_PROFILES.find(x => x.id === id);
+      if (p) profDraft = {
+        editing: p.id, provider: p.provider, label: p.label, model: p.model, baseUrl: p.baseUrl, apiKey: "", capsOpen: false,
+        caps: { maxOut: p.caps.maxOut || "", ctx: p.caps.ctx || "", think: p.caps.think || "", temp: p.caps.temp || "" },
+      };
+      renderSettings(); break;
+    }
+    case "profCancel": profDraft = null; renderSettings(); break;
+    case "capFold": if (profDraft) { profDraft.capsOpen = !profDraft.capsOpen; renderSettings(); } break;
+    case "profSave": {
+      const d = profDraft; if (!d) break;
+      if (!d.label.trim() || !d.model.trim()) { toast("请填写显示名称与模型 ID"); break; }
+      const caps = { maxOut: d.caps.maxOut.trim(), ctx: d.caps.ctx.trim(), think: d.caps.think, temp: d.caps.temp };
+      if (caps.maxOut !== "" && !(Number(caps.maxOut) > 0)) { toast("最大输出需为正整数"); break; }
+      if (caps.ctx !== "" && !(Number(caps.ctx) > 0)) { toast("上下文窗口需为正整数"); break; }
+      if (d.editing) {
+        const p = MODEL_PROFILES.find(x => x.id === d.editing);
+        if (p) Object.assign(p, { provider: d.provider, label: d.label.trim(), model: d.model.trim(), baseUrl: d.baseUrl.trim(), caps });
+        if (d.apiKey.trim() !== "") { const p2 = MODEL_PROFILES.find(x => x.id === d.editing); if (p2) p2.cred = true; }
+      } else {
+        MODEL_PROFILES.push({ id: "p" + (++profSeq), provider: d.provider, label: d.label.trim(), model: d.model.trim(), baseUrl: d.baseUrl.trim(), cred: d.apiKey.trim() !== "", caps });
+      }
+      profDraft = null; toast("已保存模型服务 · 对新对话生效"); renderSettings(); break;
+    }
+    case "profDel": {
+      if (MODEL_PROFILES.length <= 1) { toast("至少保留一个模型服务"); break; }
+      const i = MODEL_PROFILES.findIndex(x => x.id === id);
+      if (i >= 0) MODEL_PROFILES.splice(i, 1);
+      if (defaultProfileId === id) defaultProfileId = MODEL_PROFILES[0].id;
+      if (profDraft && profDraft.editing === id) profDraft = null;
+      if (RUNTIME.fast === id) RUNTIME.fast = defaultProfileId;
+      for (const a of Object.values(RUNTIME.agents)) if (a.profile === id) a.profile = "";
+      toast("已删除模型服务"); renderSettings(); break;
+    }
+    case "profDefault": defaultProfileId = id; toast("已设为默认模型 · 对新对话生效"); renderSettings(); break;
+    /* ---- 设置 · Agent 参数 ---- */
+    case "agentReset":
+      RUNTIME.fast = RT_INIT.fast;
+      RUNTIME.defaults = { ...RT_INIT.defaults };
+      for (const k of Object.keys(RUNTIME.agents)) RUNTIME.agents[k] = { ...RT_INIT.agents[k] };
+      RUNTIME.compaction = { ...RT_INIT.compaction };
+      RUNTIME.saved = true; renderSettings(); toast("已还原为上次保存的设置"); break;
+    case "agentSave": {
+      const err = validateRuntime();
+      if (err) { toast(err); break; }
+      RUNTIME.saved = true; toast("已保存，对新对话生效"); renderSettings(); break;
+    }
     case "infoToggle": {
       const p = $("infoPop");
       if (p.classList.contains("show")) hideMenu(p);
@@ -4180,6 +4549,23 @@ inspectorEl.addEventListener("dblclick", (e) => {
 /* 审批意见输入（按组定位） */
 document.addEventListener("input", (e) => {
   const ta = e.target;
+  /* 设置 · 模型/Agent 表单：写 draft 不整块重渲染（保输入焦点），联动定向刷新 */
+  if (ta.classList && (ta.classList.contains("setInput") || ta.classList.contains("setSelect"))) {
+    const pf = ta.dataset.pf, rk = ta.dataset.rk;
+    if (pf !== undefined && profDraft) {
+      const capKeys = { capMaxOut: "maxOut", capCtx: "ctx", capThink: "think", capTemp: "temp" };
+      if (pf in capKeys) profDraft.caps[capKeys[pf]] = ta.value;
+      else profDraft[pf] = ta.value;
+      if (pf === "model") refreshCapDetect(profDraft);
+    }
+    if (rk !== undefined) {
+      const parts = rk.split(".");
+      let o = RUNTIME; while (parts.length > 1) o = o[parts.shift()];
+      o[parts[0]] = ta.value;
+      if (RUNTIME.saved) { RUNTIME.saved = false; const d = $("rtDirty"); if (d) d.style.display = ""; }
+      if (rk.startsWith("defaults.")) refreshInheritPlaceholders();
+    }
+  }
   if (ta.classList && ta.classList.contains("apComment")) {
     const g = apGroups.find(x => x.id === Number(ta.dataset.gid));
     if (!g) return;

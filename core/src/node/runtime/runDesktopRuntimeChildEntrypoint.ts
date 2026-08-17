@@ -38,8 +38,13 @@ import {
   ComposeModeStateProvider,
 } from "../../conversation/compose/index.js";
 import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
-import type { LLMessage, ThinkingLevel } from "../../runtime/provider/types.js";
+import type { LLMessage, SamplingConfig, ThinkingLevel } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
+import { ModelInfoRegistry } from "../../runtime/provider/model-info.js";
+import {
+	parseRuntimeSettingsEnv,
+	type ResolvedAgentConnection,
+} from "../../config/runtimeSettings.js";
 import { findPendingToolIds } from "../../runtime/loop/AgentLoop.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
@@ -105,6 +110,10 @@ const KNOWN_MODES = new Set(["review", "bypass", "compose"]);
 /** 采样覆盖 env（NOVEL_PROVIDER_* 同族；main 侧 env 透传即生效，非法值忽略回落默认） */
 const PROVIDER_MAX_TOKENS_ENV = "NOVEL_PROVIDER_MAX_TOKENS" as const;
 const PROVIDER_THINKING_ENV = "NOVEL_PROVIDER_THINKING" as const;
+
+/** Agent 运行参数 env（RuntimeSettings 解析产物 JSON；main 侧序列化，spawn 时继承。
+ *  新对话生效：配置变更后 main 重写 env，已启动进程维持启动时快照） */
+const RUNTIME_SETTINGS_ENV = "NOVEL_RUNTIME_SETTINGS" as const;
 
 /**
  * 绑定会话事件 PUB（每会话一个 ipc:// 命名管道地址；main 侧 register 后 SUB 接入）。
@@ -230,13 +239,18 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	const conversationId = process.env.CONVERSATION_ID ?? "main";
 	const storedir = process.env.NOVEL_CONVERSATION_STOREDIR;
 	const workspace = process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".";
-	// 采样：model/maxTokens/thinking 均可经 NOVEL_PROVIDER_* env 覆盖。默认 8192/high
+	// 运行参数（设置页 RuntimeSettings：档位/采样/压缩/能力，main 解析后序列化为 env）。
+	// 非法/缺省整体回落 NOVEL_PROVIDER_* env 默认
+	const runtimeSettings = parseRuntimeSettingsEnv(process.env[RUNTIME_SETTINGS_ENV]);
+	const novelRuntime = runtimeSettings?.agents.novel;
+	// 采样：runtime 优先，其次 NOVEL_PROVIDER_* env。默认 8192/high
 	// ——reasoning 模型的思考 token 计入 max_completion_tokens 预算，上限过低会被
 	// 思考独占导致空回复/截断（finish_reason=length）
 	const sampling: AgentRunConfig["sampling"] = {
-		model: process.env.NOVEL_PROVIDER_MODEL ?? "deepseek-v4-flash",
-		maxTokens: readPositiveIntEnv(PROVIDER_MAX_TOKENS_ENV) ?? 8192,
-		thinking: readThinkingLevelEnv(PROVIDER_THINKING_ENV) ?? "high",
+		model: novelRuntime?.model ?? process.env.NOVEL_PROVIDER_MODEL ?? "deepseek-v4-flash",
+		maxTokens: novelRuntime?.maxTokens ?? readPositiveIntEnv(PROVIDER_MAX_TOKENS_ENV) ?? 8192,
+		thinking: novelRuntime?.thinking ?? readThinkingLevelEnv(PROVIDER_THINKING_ENV) ?? "high",
+		...(novelRuntime?.temperature !== undefined ? { temperature: novelRuntime.temperature } : {}),
 	};
 
 	// novel-db：经 kkrpc/ws 连接 main 的 NovelDbWsServer（协议定稿 transport；token 走 subprotocol）。
@@ -322,13 +336,47 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		};
 	}
 
-	// provider 配置（main 与 explorer 共享；type 从 env，缺省 openai）
-	const providerConfig = {
-		type: (process.env.NOVEL_PROVIDER_TYPE as "openai" | "anthropic" | undefined) ?? "openai",
-		baseUrl: process.env.NOVEL_PROVIDER_BASE_URL ?? "https://api.deepseek.com/v1",
-		apiKey: process.env.NOVEL_PROVIDER_API_KEY,
-	} as const;
-	const provider = createProvider({ id: "default", ...providerConfig });
+	// provider 配置（novel 运行参数优先，缺省 env 默认；main 与 subagent builder 共享兜底）
+	const providerConfig = novelRuntime !== undefined
+		? {
+				type: novelRuntime.provider,
+				...(novelRuntime.baseUrl !== undefined ? { baseUrl: novelRuntime.baseUrl } : {}),
+				apiKey: novelRuntime.apiKey,
+			}
+		: {
+				type: (process.env.NOVEL_PROVIDER_TYPE as "openai" | "anthropic" | undefined) ?? "openai",
+				baseUrl: process.env.NOVEL_PROVIDER_BASE_URL ?? "https://api.deepseek.com/v1",
+				apiKey: process.env.NOVEL_PROVIDER_API_KEY,
+			};
+	// 模型能力覆盖（设置页 profile.capabilities）：注册到共享 registry，覆盖按名启发式；
+	// 全部 provider 实例共用（压缩窗口查询 / 温度过滤 / 思考映射一致）
+	const modelInfoRegistry = new ModelInfoRegistry();
+	for (const info of runtimeSettings?.modelInfos ?? []) {
+		modelInfoRegistry.register(info.model, {
+			...modelInfoRegistry.getModelInfo(info.model),
+			...info.capabilities,
+		});
+	}
+	const provider = createProvider({ id: "default", ...providerConfig }, modelInfoRegistry);
+	/** runtime 条目 → provider 连接配置（条目缺省回落 env 默认连接） */
+	const runtimeProviderConfig = (rt: ResolvedAgentConnection | undefined) =>
+		rt === undefined
+			? providerConfig
+			: {
+					type: rt.provider,
+					...(rt.baseUrl !== undefined ? { baseUrl: rt.baseUrl } : {}),
+					apiKey: rt.apiKey,
+				};
+	/** runtime 条目 → 采样配置（字段缺省回落主采样） */
+	const toAgentSampling = (rt: ResolvedAgentConnection | undefined): SamplingConfig =>
+		rt === undefined
+			? sampling
+			: {
+					model: rt.model,
+					maxTokens: rt.maxTokens ?? sampling.maxTokens,
+					thinking: rt.thinking ?? sampling.thinking,
+					...(rt.temperature !== undefined ? { temperature: rt.temperature } : {}),
+				};
 
 	// explorer 专用 todo 存储（与 main 计划分离：TodoWrite 整体替换语义，
 	// 扫描进度草稿不覆盖 main 的执行计划；两者同为进程内内存级）
@@ -350,14 +398,26 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 				})
 		: undefined;
 
-	// subagent 任务编排：builder 每任务新建 provider（流式累积状态不可跨 loop 共享）
+	// subagent 任务编排：builder 每任务新建 provider（流式累积状态不可跨 loop 共享）。
+	// 运行参数存在时：Explore/Compose 各自走解析后的连接与采样（如 Explore → Fast 档）
 	const subagentRuntime = new SubagentRuntime({
 		sampling,
+		...(runtimeSettings !== undefined
+			? {
+					samplingByAgent: {
+						Explore: toAgentSampling(runtimeSettings.agents.Explore),
+						Compose: toAgentSampling(runtimeSettings.agents.Compose),
+					},
+				}
+			: {}),
 		builders: {
 			Explore: (agentId) =>
 				buildNovelExplorerAgent({
 					workspace,
-					provider: createProvider({ id: "explorer", ...providerConfig }),
+					provider: createProvider(
+						{ id: "explorer", ...runtimeProviderConfig(runtimeSettings?.agents.Explore) },
+						modelInfoRegistry,
+					),
 					handle: novelHandle,
 					todoStore,
 					conversationId,
@@ -367,7 +427,10 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			Compose: (agentId) =>
 				buildNovelComposeAgent({
 					workspace,
-					provider: createProvider({ id: "compose", ...providerConfig }),
+					provider: createProvider(
+						{ id: "compose", ...runtimeProviderConfig(runtimeSettings?.agents.Compose) },
+						modelInfoRegistry,
+					),
 					handle: novelHandle,
 					todoStore,
 					conversationId,
@@ -445,6 +508,10 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		logger,
 		debugger: createCallDebugger?.("main"),
 		subagent: { spawner: subagentRuntime },
+		// 压缩阈值（设置页 RuntimeSettings.compaction；缺省项用策略默认值）
+		...(runtimeSettings?.compaction !== undefined
+			? { compact: runtimeSettings.compaction }
+			: {}),
 		// 动态段输入：workdir/modelId 由 LoopContext 自组装（workspace /
 		// run.sampling.model）；宿主只注入平台常量 + 每调用读 NOVEL.md
 		//（失败返回 undefined → 动态段渲染占位）

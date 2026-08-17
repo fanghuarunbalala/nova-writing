@@ -346,3 +346,106 @@
   background: var(--color-danger-bg);
   color: var(--color-danger);
 }
+
+/* ============ 模型能力（高级区） ============ */
+.novel-provider-capabilities {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.novel-cap-title {
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-semibold);
+  color: var(--color-muted);
+}
+
+.novel-cap-hint {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--color-faint);
+  line-height: 1.6;
+}
+
+/* ============ Agent 参数面板 ============ */
+.novel-agent-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.novel-agent-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.novel-agent-section > h4 {
+  margin: 0;
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-heavy);
+  color: var(--color-fg);
+}
+
+.novel-agent-hint {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--color-faint);
+  line-height: 1.6;
+}
+
+.novel-agent-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.novel-agent-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.novel-agent-card[data-overridden="true"] {
+  border-color: color-mix(in oklab, var(--color-accent) 40%, var(--color-border-strong));
+  background: color-mix(in oklab, var(--color-accent) 3%, var(--color-surface));
+}
+
+.novel-agent-card > header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.novel-agent-card > header strong {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.novel-agent-card > header code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  color: var(--color-faint);
+}
+
+.novel-agent-tag {
+  margin-left: auto;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--color-accent) 12%, var(--color-surface));
+  color: var(--color-accent-ink);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}

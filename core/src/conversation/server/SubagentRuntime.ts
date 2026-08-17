@@ -25,8 +25,10 @@ export const TERMINAL_SNAPSHOT_RETAIN = 20;
 
 /** SubagentRuntime 构造选项 */
 export interface SubagentRuntimeOptions {
-	/** 采样配置（继承 conversation 同一对象） */
+	/** 采样配置（agentType 未覆盖时的共享缺省） */
 	sampling: SamplingConfig;
+	/** agentType → 采样覆盖（如 Explore 走 Fast 档模型；缺省回落共享 sampling） */
+	samplingByAgent?: Readonly<Record<string, SamplingConfig>>;
 	/** 单任务最大轮次（超限抛错 → failed） */
 	maxTurns?: number;
 	/** 并发 running 任务上限（缺省 8） */
@@ -54,8 +56,10 @@ interface TaskRecord {
  * - 终态不覆盖：任务被 cancelled 后，loop.run 晚到的 settle 不得改写 cancelled 快照。
  */
 export class SubagentRuntime implements SubagentSpawner {
-  /** 采样配置 */
+  /** 采样配置（agentType 未覆盖时的共享缺省） */
   private readonly sampling: SamplingConfig;
+  /** agentType → 采样覆盖 */
+  private readonly samplingByAgent: Readonly<Record<string, SamplingConfig>> | undefined;
   /** 单任务最大轮次 */
   private readonly maxTurns: number;
   /** agentType → loop 工厂 */
@@ -77,6 +81,7 @@ export class SubagentRuntime implements SubagentSpawner {
    */
 	constructor(opts: SubagentRuntimeOptions) {
 		this.sampling = opts.sampling;
+		this.samplingByAgent = opts.samplingByAgent;
 		this.maxTurns = opts.maxTurns ?? DEFAULT_SUBAGENT_MAX_TURNS;
 		this.maxConcurrent = opts.maxConcurrent ?? DEFAULT_MAX_CONCURRENT_TASKS;
 		this.builders = opts.builders;
@@ -182,7 +187,8 @@ export class SubagentRuntime implements SubagentSpawner {
 		const loop = record.loop;
 		if (!loop) return;
 		try {
-			const result = await loop.run(prompt, { sampling: this.sampling, maxTurns: this.maxTurns });
+			const sampling = this.samplingByAgent?.[record.snapshot.agentType] ?? this.sampling;
+			const result = await loop.run(prompt, { sampling, maxTurns: this.maxTurns });
 			if (record.snapshot.status !== "cancelled") {
 				record.snapshot = {
 					...record.snapshot,

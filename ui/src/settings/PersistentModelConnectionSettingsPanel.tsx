@@ -1,10 +1,25 @@
-/** Persists Model Profiles (provider/model/baseUrl/credential) and the default model. */
+/** Persists Model Profiles (provider/model/baseUrl/credential/capabilities) and the default model. */
 import { useEffect, useState, type FormEvent } from "react";
-import type { ConfigSnapshot, ModelProfile, ProviderType } from "@novel/core";
+import {
+  ModelInfoRegistry,
+  type ConfigSnapshot,
+  type ModelCapabilities,
+  type ModelProfile,
+  type ProviderType,
+  type ThinkingMode,
+} from "@novel/core";
 import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
 
 export interface PersistentModelConnectionSettingsPanelProps {
   readonly configuration: ApplicationConfigurationClient;
+}
+
+/** 能力覆盖 draft（字符串态；空 = 自动识别） */
+interface CapabilitiesDraft {
+  readonly maxOutputTokens: string;
+  readonly contextWindowTokens: string;
+  readonly thinkingMode: "" | ThinkingMode;
+  readonly supportsTemperature: "" | "yes" | "no";
 }
 
 interface ProfileDraft {
@@ -15,7 +30,15 @@ interface ProfileDraft {
   readonly baseUrl: string;
   readonly credentialRef: string;
   readonly apiKey: string;
+  readonly capabilities: CapabilitiesDraft;
 }
+
+const EMPTY_CAPS: CapabilitiesDraft = Object.freeze({
+  maxOutputTokens: "",
+  contextWindowTokens: "",
+  thinkingMode: "",
+  supportsTemperature: "",
+});
 
 const NEW_DRAFT: ProfileDraft = Object.freeze({
   label: "默认模型",
@@ -24,7 +47,37 @@ const NEW_DRAFT: ProfileDraft = Object.freeze({
   baseUrl: "",
   credentialRef: "default",
   apiKey: "",
+  capabilities: EMPTY_CAPS,
 });
+
+/** 模型能力自动识别（纯启发式，无覆盖注册；占位/提示用） */
+const modelInfoRegistry = new ModelInfoRegistry();
+const THINK_MODES: readonly { value: ThinkingMode; label: string }[] = [
+  { value: "adaptive-effort", label: "自适应思考 · adaptive-effort" },
+  { value: "reasoning-effort", label: "推理力度 · reasoning-effort" },
+  { value: "budget-tokens", label: "思考预算 · budget-tokens" },
+  { value: "none", label: "不支持思考 · none" },
+];
+
+/** draft 能力字符串 → 契约能力对象（全部为空返回 undefined = 自动识别） */
+function buildCapabilities(
+  caps: CapabilitiesDraft,
+): { ok: true; capabilities?: ModelCapabilities } | { ok: false; error: string } {
+  const out: ModelCapabilities = {};
+  if (caps.maxOutputTokens.trim() !== "") {
+    const n = Number(caps.maxOutputTokens);
+    if (!Number.isInteger(n) || n <= 0) return { ok: false, error: "最大输出需为正整数" };
+    out.maxOutputTokens = n;
+  }
+  if (caps.contextWindowTokens.trim() !== "") {
+    const n = Number(caps.contextWindowTokens);
+    if (!Number.isInteger(n) || n <= 0) return { ok: false, error: "上下文窗口需为正整数" };
+    out.contextWindowTokens = n;
+  }
+  if (caps.thinkingMode !== "") out.thinkingMode = caps.thinkingMode;
+  if (caps.supportsTemperature !== "") out.supportsTemperature = caps.supportsTemperature === "yes";
+  return { ok: true, ...(Object.keys(out).length > 0 ? { capabilities: out } : {}) };
+}
 
 export function PersistentModelConnectionSettingsPanel({
   configuration,
@@ -55,6 +108,11 @@ export function PersistentModelConnectionSettingsPanel({
   async function saveProfile(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (draft === undefined || !isDraftValid(draft)) return;
+    const caps = buildCapabilities(draft.capabilities);
+    if (!caps.ok) {
+      setStatus(caps.error);
+      return;
+    }
     setSaving(true);
     setStatus("正在保存…");
     const profileId = draft.profileId ?? `profile_${Date.now()}`;
@@ -68,6 +126,7 @@ export function PersistentModelConnectionSettingsPanel({
           ...(draft.baseUrl.trim() === "" ? {} : { baseUrl: draft.baseUrl.trim() }),
           credentialRef: draft.credentialRef,
           label: draft.label.trim(),
+          ...(caps.capabilities !== undefined ? { capabilities: caps.capabilities } : {}),
         },
       });
       if (draft.apiKey.length > 0) {
@@ -152,6 +211,12 @@ export function PersistentModelConnectionSettingsPanel({
                     ? "API Key 已配置"
                     : "API Key 未配置"}
                 </small>
+                {profile.capabilities !== undefined ? (
+                  <small>
+                    能力覆盖 {Object.keys(profile.capabilities).length} 项 · 识别{" "}
+                    {modelInfoRegistry.getModelInfo(profile.model).contextWindowTokens ?? "?"} 窗口
+                  </small>
+                ) : null}
               </div>
               {profile.id === snapshot?.defaultProfileId ? (
                 <span className="novel-provider-active-badge">默认</span>
@@ -217,6 +282,82 @@ export function PersistentModelConnectionSettingsPanel({
               />
             </label>
           </div>
+          {(() => {
+            const detected = modelInfoRegistry.getModelInfo(draft.model.trim() || "unknown-model");
+            return (
+              <div className="novel-provider-capabilities">
+                <div className="novel-cap-title">模型能力（高级 · 按模型名自动识别，可覆盖）</div>
+                <div className="novel-provider-fields">
+                  <TextField
+                    disabled={saving}
+                    label="最大输出 Tokens"
+                    onChange={(maxOutputTokens) =>
+                      setDraft({ ...draft, capabilities: { ...draft.capabilities, maxOutputTokens } })
+                    }
+                    placeholder={`自动识别 · ${detected.maxOutputTokens ?? "8192（默认）"}`}
+                    value={draft.capabilities.maxOutputTokens}
+                  />
+                  <TextField
+                    disabled={saving}
+                    label="上下文窗口 Tokens"
+                    onChange={(contextWindowTokens) =>
+                      setDraft({ ...draft, capabilities: { ...draft.capabilities, contextWindowTokens } })
+                    }
+                    placeholder={`自动识别 · ${detected.contextWindowTokens ?? "128000（兜底）"}`}
+                    value={draft.capabilities.contextWindowTokens}
+                  />
+                  <label>
+                    <span>思考模式</span>
+                    <select
+                      aria-label="思考模式"
+                      disabled={saving}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          capabilities: {
+                            ...draft.capabilities,
+                            thinkingMode: event.currentTarget.value as CapabilitiesDraft["thinkingMode"],
+                          },
+                        })
+                      }
+                      value={draft.capabilities.thinkingMode}
+                    >
+                      <option value="">自动识别（{detected.thinkingMode}）</option>
+                      {THINK_MODES.map((mode) => (
+                        <option key={mode.value} value={mode.value}>
+                          {mode.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>支持温度</span>
+                    <select
+                      aria-label="支持温度"
+                      disabled={saving}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          capabilities: {
+                            ...draft.capabilities,
+                            supportsTemperature: event.currentTarget.value as CapabilitiesDraft["supportsTemperature"],
+                          },
+                        })
+                      }
+                      value={draft.capabilities.supportsTemperature}
+                    >
+                      <option value="">自动识别（{detected.supportsTemperature ? "支持" : "不支持"}）</option>
+                      <option value="yes">支持</option>
+                      <option value="no">不支持</option>
+                    </select>
+                  </label>
+                </div>
+                <p className="novel-cap-hint">
+                  压缩触发线按上下文窗口计算；不支持温度的模型将忽略温度设置。
+                </p>
+              </div>
+            );
+          })()}
           <footer>
             <button disabled={saving || !isDraftValid(draft)} type="submit">
               {saving ? "保存中…" : "保存并设为默认"}
@@ -236,11 +377,13 @@ function TextField({
   label,
   value,
   disabled,
+  placeholder,
   onChange,
 }: {
   readonly label: string;
   readonly value: string;
   readonly disabled: boolean;
+  readonly placeholder?: string;
   readonly onChange: (value: string) => void;
 }) {
   return (
@@ -250,6 +393,7 @@ function TextField({
         aria-label={label}
         disabled={disabled}
         onChange={(event) => onChange(event.currentTarget.value)}
+        placeholder={placeholder}
         value={value}
       />
     </label>
@@ -257,6 +401,7 @@ function TextField({
 }
 
 function toDraft(profile: ModelProfile): ProfileDraft {
+  const caps = profile.capabilities;
   return Object.freeze({
     profileId: profile.id,
     label: profile.label ?? "",
@@ -265,6 +410,14 @@ function toDraft(profile: ModelProfile): ProfileDraft {
     baseUrl: profile.baseUrl ?? "",
     credentialRef: profile.credentialRef,
     apiKey: "",
+    capabilities: Object.freeze({
+      maxOutputTokens: caps?.maxOutputTokens !== undefined ? String(caps.maxOutputTokens) : "",
+      contextWindowTokens:
+        caps?.contextWindowTokens !== undefined ? String(caps.contextWindowTokens) : "",
+      thinkingMode: caps?.thinkingMode ?? "",
+      supportsTemperature:
+        caps?.supportsTemperature === undefined ? "" : caps.supportsTemperature ? "yes" : "no",
+    }),
   });
 }
 

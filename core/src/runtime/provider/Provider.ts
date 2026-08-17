@@ -5,6 +5,7 @@ import type {
   ProviderOnDelta,
 } from "./types.js";
 import type { ModelInfo } from "./model-info.js";
+import { ModelInfoRegistry } from "./model-info.js";
 import { AnthropicProvider } from "./adapters/AnthropicProvider.js";
 import { OpenAIProvider } from "./adapters/OpenAIProvider.js";
 
@@ -30,13 +31,14 @@ export interface Provider {
 /**
  * 依据 ProviderConfig 创建对应类型的 Provider 适配器实例
  * @param config Provider 实例配置
- * @returns Provider 适配器实例
+ * @param modelInfo 可选：模型信息注册表（多 provider 实例共享能力覆盖时传入同一实例；缺省各自新建）
+ * @returns Provider 适配器
  */
-export function createProvider(config: ProviderConfig): Provider {
+export function createProvider(config: ProviderConfig, modelInfo?: ModelInfoRegistry): Provider {
   switch (config.type) {
     case "anthropic":
-      return new AnthropicProvider(config);
+      return new AnthropicProvider(config, modelInfo);
     case "openai":
-      return new OpenAIProvider(config);
+      return new OpenAIProvider(config, modelInfo);
   }
 }

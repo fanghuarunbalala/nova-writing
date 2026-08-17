@@ -11,6 +11,7 @@ import type { NovelSettingsSection } from "../extensions/index.js";
 import type { ApplicationSettingsStore } from "./ApplicationSettingsStore.js";
 import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
 import { ModelProviderSettingsPanel } from "./ModelProviderSettingsPanel.js";
+import { AgentSettingsPanel } from "./AgentSettingsPanel.js";
 import { AppearanceSettingsPanel } from "./AppearanceSettingsPanel.js";
 import styles from "./SettingsDialog.module.css";
 
@@ -61,6 +62,16 @@ export function SettingsDialog({
           >
             模型
           </button>
+          {configuration !== undefined ? (
+            <button
+              type="button"
+              className={styles.navItem}
+              data-active={activeSectionId === "agents"}
+              onClick={() => setActiveSectionId("agents")}
+            >
+              Agent
+            </button>
+          ) : null}
           <button
             type="button"
             className={styles.navItem}
@@ -87,6 +98,9 @@ export function SettingsDialog({
               store={store}
               configuration={configuration}
             />
+          ) : null}
+          {activeSectionId === "agents" && configuration !== undefined ? (
+            <AgentSettingsPanel configuration={configuration} />
           ) : null}
           {activeSectionId === "appearance" ? <AppearanceSettingsPanel /> : null}
           {extensionSection !== undefined && ExtensionSection !== undefined ? (

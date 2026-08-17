@@ -38,7 +38,7 @@ import {
   ComposeModeStateProvider,
 } from "../../conversation/compose/index.js";
 import { InMemoryConversationTodoStore } from "../../runtime/todo/InMemoryConversationTodoStore.js";
-import type { LLMessage } from "../../runtime/provider/types.js";
+import type { LLMessage, ThinkingLevel } from "../../runtime/provider/types.js";
 import type { AgentRunConfig } from "../../runtime/loop/types.js";
 import { findPendingToolIds } from "../../runtime/loop/AgentLoop.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
@@ -102,6 +102,10 @@ const CHILD_LOG_ENV = "NOVEL_DESKTOP_CHILD_LOG" as const;
 /** 合法会话模式集合（meta.json 恢复校验用） */
 const KNOWN_MODES = new Set(["review", "bypass", "compose"]);
 
+/** 采样覆盖 env（NOVEL_PROVIDER_* 同族；main 侧 env 透传即生效，非法值忽略回落默认） */
+const PROVIDER_MAX_TOKENS_ENV = "NOVEL_PROVIDER_MAX_TOKENS" as const;
+const PROVIDER_THINKING_ENV = "NOVEL_PROVIDER_THINKING" as const;
+
 /**
  * 绑定会话事件 PUB（每会话一个 ipc:// 命名管道地址；main 侧 register 后 SUB 接入）。
  * bind 失败（地址占用等）→ 告警并返回 undefined（内存 hub 照常分发）。
@@ -158,6 +162,31 @@ function toDebugDirSegment(id: string): string {
   return id.replace(/[^A-Za-z0-9._-]/g, "-");
 }
 
+/** 合法思考档位全集（env 校验用） */
+const THINKING_LEVELS: ReadonlySet<ThinkingLevel> = new Set([
+	"off",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+]);
+
+/** env → 正整数（缺省/空白/非法返回 undefined，调用方回落默认） */
+function readPositiveIntEnv(name: string): number | undefined {
+	const raw = process.env[name];
+	if (raw === undefined || raw.trim() === "") return undefined;
+	const value = Number.parseInt(raw, 10);
+	return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+/** env → 思考档位（缺省/非法返回 undefined，调用方回落默认） */
+function readThinkingLevelEnv(name: string): ThinkingLevel | undefined {
+	const raw = process.env[name];
+	if (raw === undefined || raw.trim() === "") return undefined;
+	return THINKING_LEVELS.has(raw as ThinkingLevel) ? (raw as ThinkingLevel) : undefined;
+}
+
 /** 崩溃自曝：同步写堆栈到 runtime-child.log + 回写 stderr（父进程捕获缓冲），再按原语义退出。 */
 function writeCrashTrace(line: string): void {
 	// 父进程 stderr 捕获埋点（runtime.process.child_stderr）也会收到这份内容。
@@ -201,10 +230,13 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	const conversationId = process.env.CONVERSATION_ID ?? "main";
 	const storedir = process.env.NOVEL_CONVERSATION_STOREDIR;
 	const workspace = process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".";
+	// 采样：model/maxTokens/thinking 均可经 NOVEL_PROVIDER_* env 覆盖。默认 8192/high
+	// ——reasoning 模型的思考 token 计入 max_completion_tokens 预算，上限过低会被
+	// 思考独占导致空回复/截断（finish_reason=length）
 	const sampling: AgentRunConfig["sampling"] = {
 		model: process.env.NOVEL_PROVIDER_MODEL ?? "deepseek-v4-flash",
-		maxTokens: 512,
-		thinking: "high",
+		maxTokens: readPositiveIntEnv(PROVIDER_MAX_TOKENS_ENV) ?? 8192,
+		thinking: readThinkingLevelEnv(PROVIDER_THINKING_ENV) ?? "high",
 	};
 
 	// novel-db：经 kkrpc/ws 连接 main 的 NovelDbWsServer（协议定稿 transport；token 走 subprotocol）。

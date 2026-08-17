@@ -499,4 +499,27 @@ describe("manuscript block primitives", () => {
     );
     expect(screen.getByText("草稿 · 未转入正式稿")).toBeInTheDocument();
   });
+
+  it("renders entity reference tags in paragraph text as clickable chips", async () => {
+    const onReferenceClick = vi.fn();
+    render(
+      <ManuscriptBlock
+        block={{
+          blockId: "§3-01-04",
+          digest: "",
+          text: '她回到<character id="c-1" name="林夏">林夏</character>的旧船坞，在<location id="l-1" name="北河"/>边停下。',
+        }}
+        onReferenceClick={onReferenceClick}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "林夏" }));
+    expect(onReferenceClick).toHaveBeenCalledWith(
+      expect.objectContaining({ refKind: "character", id: "c-1", label: "林夏" }),
+    );
+    // 自闭合标签（name 提供 label）同样渲染为 chip；其余正文保持原样
+    expect(screen.getByRole("button", { name: "北河" })).toBeInTheDocument();
+    expect(screen.getByText(/她回到/)).toBeInTheDocument();
+    expect(screen.getByText(/边停下。/)).toBeInTheDocument();
+  });
 });

@@ -15,6 +15,8 @@ import { AlertTriangle, ArrowRight, Plus, X } from "lucide-react";
 import { Button, Icon, StatusChip } from "../../../../shared/primitives/index.js";
 import { REAL_STATUS, type RealizationView } from "../../outline/outlineStatus.js";
 import type { ManuscriptChapter } from "../store/ManuscriptStructureStore.js";
+import type { MessageReference } from "../../../conversation/components/MessageReference.js";
+import type { ReferenceResolver } from "../../../conversation/reference/ReferenceResolver.js";
 import { ManuscriptBlock } from "./ManuscriptBlock.js";
 import styles from "./ManuscriptChapterContent.module.css";
 
@@ -37,6 +39,10 @@ export interface ManuscriptChapterContentProps {
     readonly nonce: number;
   } | null;
   readonly onOpenDraft?: (changeSetId: string) => void;
+  /** 实体引用 chip 点击（宿主路由） */
+  readonly onReferenceClick?: (reference: MessageReference) => void;
+  /** 引用解析（chip 显示名 / missing 态） */
+  readonly resolveReference?: ReferenceResolver;
   /** 新增段落（文末细链接） */
   readonly onInsertParagraph?: () => void;
   /** 保存段落编辑（宿主带乐观锁） */
@@ -53,6 +59,8 @@ export function ManuscriptChapterContent({
   abandonedReason,
   locate,
   onOpenDraft,
+  onReferenceClick,
+  resolveReference,
   onInsertParagraph,
   onSaveParagraph,
   onDeleteParagraph,
@@ -142,6 +150,8 @@ export function ManuscriptChapterContent({
               <ManuscriptBlock
                 key={block.blockId}
                 block={block}
+                onReferenceClick={onReferenceClick}
+                resolveReference={resolveReference}
                 onSave={
                   onSaveParagraph !== undefined
                     ? (text) => onSaveParagraph(block.blockId, text)

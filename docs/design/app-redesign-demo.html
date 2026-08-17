@@ -6,15 +6,16 @@
 <title>布局重设计 demo · Novel 创作台</title>
 <style>
   /* ============================================================
-     前端整体布局重设计 demo（单文件，交互式）· v0.8
+     前端整体布局重设计 demo（单文件，交互式）· v0.8.1
      基于 theme-candidates-demo-2.html 的四主题 token 体系 + 现有功能结构：
        · 顶栏：侧栏开关 / 品牌 / 工作区 / 中央三视图 tab / 工作区·设置 / 窗口控制（Win·Mac）
        · 对话视图：左侧会话目录 · 中部对话流（正文/草稿/工具行/输入区/模式/发送·暂停
          + markdown 全格式样例轮 + 实体标签定位）· 右侧内容目录（大纲/人物/地点，
-         详情卡 + 跳完整档案 + 拖拽调宽）
+         详情卡 + 跳完整档案 + 拖拽调宽；leaf 单元点击就地展开简略卡，卡内跳详情）
        · 审批：整体弹窗（左清单 + 右详情 + 全部批准；稍后处理 → 顶部提示条常驻唤回，
          处理完不留过往记录）
        · 内容视图：左侧资料位（大纲树 / 正文卷章 / 人物 / 地点）· 右侧具体内容
+         （正文段落内实体标签渲染为可点 chip；段落 hover 高亮 + 悬浮编辑/删除工具组）
        · 计划视图：左侧「安排」目录 · 右侧总览（统计/双状态轴/大纲进度）或待办详情
      窗口尺寸：容器查询断点 1280 / 1080；最小窗口 1080（对齐 tokens.css 约定）。
      ============================================================ */
@@ -579,6 +580,25 @@
     margin: 0 0 14px; font-family: var(--font-body); font-size: var(--fs-16-5);
     line-height: 1.95; text-indent: 2em; text-align: justify; color: var(--color-fg);
   }
+  /* 段落行：hover 底色分隔 + 悬浮编辑/删除工具组（写路径降噪保留） */
+  .paraRow { position: relative; margin: 0 0 14px; border-radius: 6px; transition: background var(--duration-fast) var(--ease-out); }
+  .paraRow:hover { background: var(--color-surface-2); }
+  .paraRow p { margin: 0; }
+  .paraTools {
+    position: absolute; top: -9px; right: 2px; display: flex; gap: 2px; padding: 2px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-pill);
+    background: var(--color-surface); box-shadow: var(--shadow-1);
+    opacity: 0; transform: translateY(2px); transition: all var(--duration-fast) var(--ease-out);
+  }
+  .paraRow:hover .paraTools, .paraTools:focus-within { opacity: 1; transform: translateY(0); }
+  .paraTool {
+    display: inline-flex; align-items: center; padding: 3px 7px;
+    border: 1px solid transparent; border-radius: var(--radius-pill);
+    background: none; color: var(--color-muted); cursor: pointer;
+  }
+  .paraTool:hover { border-color: var(--color-border-strong); background: var(--color-accent-9); color: var(--color-accent-ink); }
+  /* 右栏大纲 leaf 简略卡（对齐树行缩进） */
+  .dirDetail.treeBrief { margin: 2px 6px 6px 20px; }
   .draftBlock {
     position: relative; padding: 10px 14px; margin: 4px 0 14px;
     border-left: 3px solid var(--color-warn);
@@ -1972,6 +1992,7 @@ const P = {
   expand: '<path d="m7 9 5 5 5-5"/><path d="m7 4 5 5 5-5"/>',
   collapse: '<path d="m7 4 5 5 5-5"/><path d="m7 15 5-5 5 5"/>',
   edit: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
 };
 const ic = (n, s = 14, w = 1.8) =>
@@ -2152,8 +2173,8 @@ const MANUSCRIPT = [
       { text: "她不敢回头。回头的人，没有一个走到过北桥。", draft: true },
     ] },
     { id: "c3", title: "第 3 章 · 客栈灯火", state: "completed", words: "1,764", updated: "昨天", blocks: [
-      { text: "北桥客栈是雨夜里唯一亮灯的檐下。阿枝来开门的时候先看了一眼她的鞋，又看了一眼她的伞——伞是新伞，鞋是旧鞋，这不是赶路人的穿法。" },
-      { text: "「上房还有一间。」阿枝把灯举高了些，「就是挨着天井，夜里听得见雨。」林晚说要的就是这一间。" },
+      { text: "<location_北桥客栈>是雨夜里唯一亮灯的檐下。阿枝来开门的时候先看了一眼她的鞋，又看了一眼她的伞——伞是新伞，鞋是旧鞋，这不是赶路人的穿法。" },
+      { text: "「上房还有一间。」阿枝把灯举高了些，「就是挨着天井，夜里听得见雨。」<character_林晚>说要的就是这一间。" },
     ] },
     { id: "c4", title: "第 4 章 · 铜符", state: "blocked", blocked: "等待第 2 章定稿：铜符是否示人。", unit: "u4" },
     { id: "c5", title: "第 5 章 · 渡资", state: "abandoned", abandoned: "与主线重复，渡资线并入第 3 章。", unit: "u5" },
@@ -2299,7 +2320,7 @@ const state = {
   selUnit: "u2", selChapter: "c2", selChar: "ch1", selLoc: "l1",
   planSel: "overview", mode: "compose", pendingMode: null, modeMenuOpen: false, genState: "generating",
   sidebarCollapsed: false, maximized: false, ws: "北河旧事", pinned: false,
-  dirOpen: true, dirTab: "outline", expandedDir: null, insW: null,
+  dirOpen: true, dirTab: "outline", expandedDir: null, insW: null, unitBrief: null,
   modalOpen: false, apSel: 0, apShownOnce: false,
   settingsTab: "appearance", booted: false,
   vpMid: false, vpNarrow: false,
@@ -2485,13 +2506,16 @@ function convRow({ title, meta, icon, dot, active, pin }) {
 }
 
 /* 大纲树：任意层级嵌套 + 引导线（saga/arc/sequence/… 可省中间层，叶为 scene）；
-   act 参数：内容视图左栏用 unitSel（就地选中），右栏内容目录用 unitSelJump（跳到内容视图） */
-function treeNodeHTML(n, act = "unitSel") {
+   act 参数：内容视图左栏用 unitSel（就地选中），右栏内容目录用 unitSelJump（跳到内容视图）；
+   leafAct（右栏）：leaf 行改为就地展开简略卡（意图/梗概 + 查看单元详情），不直接跳转 */
+function treeNodeHTML(n, act = "unitSel", leafAct) {
   const isParent = !!n.children;
   const open = !!n.open;
   const active = state.selUnit === n.id;
   const real = realState(n);
-  const row = `<div class="dirRow treeRow${isParent ? " parent" : " leaf"}${active ? " active" : ""}${isParent && open ? " open" : ""}" data-act="${act}" data-id="${n.id}" title="${esc(n.title)} · ${n.scope}">
+  const briefOpen = !isParent && leafAct && state.unitBrief === n.id;
+  const rowAct = !isParent && leafAct ? leafAct : act;
+  const row = `<div class="dirRow treeRow${isParent ? " parent" : " leaf"}${active ? " active" : ""}${(isParent && open) || briefOpen ? " open" : ""}" data-act="${rowAct}" data-id="${n.id}" title="${esc(n.title)} · ${n.scope}">
     ${isParent
       ? `<span class="chev" data-act="treeChev" data-id="${n.id}">${ic("chevRight", 12, 2.2)}</span>`
       : `<span class="treeTick"></span>`}
@@ -2500,7 +2524,13 @@ function treeNodeHTML(n, act = "unitSel") {
     ${real === "blocked" || real === "abandoned" ? "" : (n.progress ? `<span class="miniNum">${n.progress.c}/${n.progress.t}</span>` : "")}
     ${chip(REAL_MAP[real])}
   </div>`;
-  return `<div class="treeNode">${row}${isParent && open ? `<div class="treeChildren">${n.children.map(c => treeNodeHTML(c, act)).join("")}</div>` : ""}</div>`;
+  const brief = briefOpen ? `
+    <div class="dirDetail show treeBrief">
+      <div class="ddSec"><span>意图</span>${esc(n.intent || "（尚未填写——这个单元要达成什么）")}</div>
+      <div class="ddSec"><span>梗概</span>${esc(n.synopsis || "（尚未填写情节梗概）")}</div>
+      <button class="ddGo" data-act="${act}" data-id="${n.id}">查看单元详情 ${ic("arrowRight", 11)}</button>
+    </div>` : "";
+  return `<div class="treeNode">${row}${brief}${isParent && open ? `<div class="treeChildren">${n.children.map(c => treeNodeHTML(c, act, leafAct)).join("")}</div>` : ""}</div>`;
 }
 
 function contentSidebarHTML() {
@@ -3078,6 +3108,16 @@ function unitDetailHTML(u) {
     </div>`;
 }
 
+/* 正文段落内实体标签（<character_名> / <location_名>）→ 可点 chip（跳对应档案） */
+function paraHTML(text) {
+  return esc(text).replace(/&lt;(character|location)_([^&;]+?)&gt;/g, (m, kind, name) => {
+    const type = kind === "character" ? "char" : "loc";
+    const ent = ENT[type].list.find(x => x.name === name);
+    if (!ent) return m;
+    return `<button class="entTag" data-act="${type === "char" ? "charSelJump" : "locSelJump"}" data-id="${ent.id}" title="打开${ENT[type].label}档案：${esc(name)}">${ic(ENT[type].icon, 10.5)}&lt;${kind}_${esc(name)}&gt;</button>`;
+  });
+}
+
 function chapterHTML(c) {
   let body = "";
   if (c.blocked) {
@@ -3087,8 +3127,8 @@ function chapterHTML(c) {
     body = `<div class="banner faint">${ic("x", 13)}<span>本单元已弃置：${esc(c.abandoned)}</span></div>`;
   } else if (c.blocks && c.blocks.length) {
     body = c.blocks.map(b => b.draft
-      ? `<div class="draftBlock"><p>${esc(b.text)}</p><span class="draftTag">${ic("feather", 10, 2)}草稿 · 未转入正式稿</span></div>`
-      : `<p>${esc(b.text)}</p>`).join("");
+      ? `<div class="draftBlock"><p>${paraHTML(b.text)}</p><span class="draftTag">${ic("feather", 10, 2)}草稿 · 未转入正式稿</span></div>`
+      : `<div class="paraRow"><p>${paraHTML(b.text)}</p><span class="paraTools"><button class="paraTool" data-act="paraEditHint" title="编辑段落">${ic("edit", 11)}</button><button class="paraTool" data-act="paraDelHint" title="删除段落">${ic("trash", 11)}</button></span></div>`).join("");
   } else {
     body = `<div class="emptyKai"><span class="glyph">❦</span>此章尚未落笔——从一句话开始，让故事自己生长。</div>`;
   }
@@ -3481,7 +3521,8 @@ function renderInspector() {
   ];
   let body = "";
   if (state.dirTab === "outline") {
-    body = OUTLINE.map(n => treeNodeHTML(n, "unitSelJump")).join("");
+    /* leaf 行点击 → 就地展开简略卡（意图/梗概 + 查看单元详情）；父节点点击仍跳内容视图 */
+    body = OUTLINE.map(n => treeNodeHTML(n, "unitSelJump", "unitBrief")).join("");
   } else {
     const type = state.dirTab === "characters" ? "char" : "loc";
     const meta = ENT[type];
@@ -3532,7 +3573,7 @@ function renderSettings() {
   } else {
     html = `<div style="text-align:center;padding:26px 0;">
       <div class="brand" style="justify-content:center;margin-bottom:8px;"><span class="brandDot"></span><span class="brandName" style="font-size:16px;">Novel</span></div>
-      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.8<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>审批整体弹窗（稍后处理 + 挂起提示条） · 右栏内容目录（详情卡 / 跳完整档案 / 拖宽） · 实体标签定位 · markdown 全格式样例 · 排队回显（幽灵项） · 大纲对齐 StoryUnit 模型 · 通知中心 · 启动页与入场动画</div>
+      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.8.1<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>审批整体弹窗（稍后处理 + 挂起提示条） · 右栏内容目录（详情卡 / 跳完整档案 / 拖宽 / leaf 简略卡） · 实体标签定位 · 正文段落实体 chip + hover 编辑 · markdown 全格式样例 · 排队回显（幽灵项） · 大纲对齐 StoryUnit 模型 · 通知中心 · 启动页与入场动画</div>
     </div>`;
   }
   $("settingsContent").innerHTML = html;
@@ -3761,6 +3802,13 @@ document.addEventListener("click", (e) => {
       state.contentTab = "outline"; state.selUnit = id; state.view = "content";
       renderTitlebar(); renderSidebar(); renderMain();
       break;
+    case "unitBrief": {
+      /* 右栏大纲 leaf：就地展开/收起简略卡（单开；卡内「查看单元详情」才跳转） */
+      state.unitBrief = state.unitBrief === id ? null : id;
+      renderInspector(); break;
+    }
+    case "paraEditHint": toast("行内编辑段落（应用内为 textarea + 乐观锁保存）"); break;
+    case "paraDelHint": toast("删除段落（应用内需二次确认）"); break;
     case "treeChev": {
       e.stopPropagation();
       const n = unitById[id]; n.open = !n.open; renderSidebar(); break;

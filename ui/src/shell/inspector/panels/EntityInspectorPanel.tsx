@@ -25,6 +25,8 @@ export interface EntityInspectorPanelProps {
   readonly locations: LocationStore;
   /** 关联单元 chip 点击 → 跳内容视图大纲单元详情 */
   readonly onOpenUnit?: (unitId: string) => void;
+  /** 关联单元覆盖（大纲 leaf 绑定派生；缺省回落 detail.relatedUnits） */
+  readonly relatedUnitLinks?: readonly { readonly unitId: string; readonly label: string }[];
 }
 
 export function EntityInspectorPanel({
@@ -34,6 +36,7 @@ export function EntityInspectorPanel({
   characters,
   locations,
   onOpenUnit,
+  relatedUnitLinks,
 }: EntityInspectorPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -53,6 +56,7 @@ export function EntityInspectorPanel({
           characterId={entityId}
           detail={detail}
           onOpenUnit={onOpenUnit}
+          relatedUnitLinks={relatedUnitLinks}
           onEdit={() => setEditOpen(true)}
           onDelete={() => {
             if (detail !== undefined) setDeleteOpen(true);
@@ -104,6 +108,7 @@ export function EntityInspectorPanel({
         locationId={entityId}
         detail={detail}
         onOpenUnit={onOpenUnit}
+        relatedUnitLinks={relatedUnitLinks}
         onEdit={() => setEditOpen(true)}
         onDelete={() => {
           if (detail !== undefined) setDeleteOpen(true);

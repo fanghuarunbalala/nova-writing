@@ -23,6 +23,8 @@ import { StoryUnitEditDialog } from "../../domains/novel/outline/components/Stor
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
 import { Button, ConfirmDialog, Icon } from "../../shared/primitives/index.js";
+import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
+import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import { OutlineUnitInspectorPanel } from "../inspector/panels/OutlineUnitInspectorPanel.js";
 import { EntityInspectorPanel } from "../inspector/panels/EntityInspectorPanel.js";
 import type { ContentTab } from "./contentTab.js";
@@ -48,6 +50,10 @@ export interface ContentSurfaceProps {
   readonly selectedLocationId?: string;
   readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
   readonly onOpenDraft?: (changeSetId: string) => void;
+  /** 实体引用 chip 点击（正文内 <character…> 标签；路由与对话流一致） */
+  readonly onReferenceClick?: (reference: MessageReference) => void;
+  /** 引用解析（chip 显示名 / missing 态） */
+  readonly resolveReference?: ReferenceResolver;
   readonly onBack?: () => void;
   /** 切资料位（「在正文中查看」跳正文阅读器） */
   readonly onSelectContentPane?: (pane: ContentTab) => void;
@@ -93,6 +99,8 @@ export function ContentSurface({
   selectedLocationId,
   locateReference,
   onOpenDraft,
+  onReferenceClick,
+  resolveReference,
   onBack,
   onSelectContentPane,
   onOpenCharacter,
@@ -163,6 +171,25 @@ export function ContentSurface({
     }
     return map;
   }, [manuscriptSnapshot.volumes]);
+  // 档案「关联单元」：大纲 leaf 绑定派生（unitId → 标题经树快照解析）。
+  const characterUnitLinks = useMemo(() => {
+    if (effectiveCharacter === undefined) return undefined;
+    const unitIds = outline.bindings.characters.get(effectiveCharacter.characterId);
+    if (unitIds === undefined || unitIds.length === 0) return undefined;
+    return unitIds.map((unitId) => ({
+      unitId,
+      label: findOutlineTitle(outline.tree, unitId) ?? unitId,
+    }));
+  }, [outline.bindings, outline.tree, effectiveCharacter]);
+  const locationUnitLinks = useMemo(() => {
+    if (effectiveLocation === undefined) return undefined;
+    const unitIds = outline.bindings.locations.get(effectiveLocation.locationId);
+    if (unitIds === undefined || unitIds.length === 0) return undefined;
+    return unitIds.map((unitId) => ({
+      unitId,
+      label: findOutlineTitle(outline.tree, unitId) ?? unitId,
+    }));
+  }, [outline.bindings, outline.tree, effectiveLocation]);
 
   const handleCopyChapter = async (): Promise<void> => {
     if (selectedChapter === undefined) return;
@@ -206,6 +233,8 @@ export function ContentSurface({
                   };
             }}
             locate={locateReference}
+            onReferenceClick={onReferenceClick}
+            resolveReference={resolveReference}
             onOpenDraft={onOpenDraft}
             onInsertParagraph={(chapterId) =>
               void manuscript.insertParagraph(chapterId, "")
@@ -298,6 +327,7 @@ export function ContentSurface({
               characters={characters}
               locations={locations}
               onOpenUnit={handleOpenUnit}
+              relatedUnitLinks={characterUnitLinks}
             />
           ) : (
             <div className={styles.emptyPane}>
@@ -331,6 +361,7 @@ export function ContentSurface({
               characters={characters}
               locations={locations}
               onOpenUnit={handleOpenUnit}
+              relatedUnitLinks={locationUnitLinks}
             />
           ) : (
             <div className={styles.emptyPane}>

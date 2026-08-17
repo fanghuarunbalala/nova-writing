@@ -8,7 +8,16 @@
 .block {
   position: relative;
   width: 100%;
-  margin: 0 0 var(--space-14px);
+  /* 常量负 margin + padding：hover 背景外扩且不引起布局位移 */
+  margin: 0 calc(-1 * var(--space-10px)) var(--space-14px);
+  padding: var(--space-2px) var(--space-10px);
+  border-radius: var(--radius-sm);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+/* hover：段落底色分隔，提示可操作 */
+.block:hover {
+  background: var(--color-surface-2);
 }
 
 .block:last-child {
@@ -55,38 +64,56 @@
   letter-spacing: 0.05em;
 }
 
-/* 块操作（编辑/删除）：hover 浮现，不占正文空间 */
+/* 块操作（编辑/删除）：hover 浮现为悬浮工具组（surface 底 + 描边 + 阴影） */
 .actions {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: calc(-1 * var(--space-2px));
+  right: var(--space-2px);
   display: flex;
-  gap: var(--space-6px);
+  gap: var(--space-2px);
+  padding: var(--space-2px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
   opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-out);
+  transform: translateY(var(--space-2px));
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+  z-index: 1;
 }
 
 .block:hover .actions,
 .actions:focus-within {
   opacity: 1;
+  transform: translateY(0);
 }
 
 .actionButton {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: var(--space-2px);
-  font-size: var(--fs-xs);
+  gap: var(--space-3px);
+  padding: var(--space-2px) var(--space-8px);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-medium);
   border: 1px solid transparent;
-  border-radius: var(--radius-4px);
+  border-radius: var(--radius-pill);
   background: none;
-  color: var(--color-faint);
+  color: var(--color-muted);
   cursor: pointer;
 }
 
 .actionButton:hover {
   border-color: var(--color-border-strong);
-  color: var(--color-fg);
+  background: var(--color-accent-9);
+  color: var(--color-accent-ink);
+}
+
+.actionButton.danger:hover {
+  border-color: var(--color-border-strong);
+  background: color-mix(in oklab, var(--color-danger) 9%, var(--color-surface));
+  color: var(--color-danger);
 }
 
 /* inline 编辑 */

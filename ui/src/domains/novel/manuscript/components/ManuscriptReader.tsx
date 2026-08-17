@@ -10,6 +10,8 @@
 import type { ManuscriptStructureSnapshot } from "../store/ManuscriptStructureStore.js";
 import { ManuscriptChapterContent } from "./ManuscriptChapterContent.js";
 import type { ManuscriptChapterStatus } from "./ManuscriptChapterContent.js";
+import type { MessageReference } from "../../../conversation/components/MessageReference.js";
+import type { ReferenceResolver } from "../../../conversation/reference/ReferenceResolver.js";
 import styles from "./ManuscriptReader.module.css";
 
 export interface ManuscriptReaderProps {
@@ -25,6 +27,10 @@ export interface ManuscriptReaderProps {
     readonly nonce: number;
   } | null;
   readonly onOpenDraft?: (changeSetId: string) => void;
+  /** 实体引用 chip 点击（宿主路由） */
+  readonly onReferenceClick?: (reference: MessageReference) => void;
+  /** 引用解析（chip 显示名 / missing 态） */
+  readonly resolveReference?: ReferenceResolver;
   /** 新增段落（宿主按章选择末位追加） */
   readonly onInsertParagraph?: (chapterId: string) => void;
   /** 保存段落编辑（宿主带乐观锁） */
@@ -40,6 +46,8 @@ export function ManuscriptReader({
   chapterStatusOf,
   locate,
   onOpenDraft,
+  onReferenceClick,
+  resolveReference,
   onInsertParagraph,
   onSaveParagraph,
   onDeleteParagraph,
@@ -74,6 +82,8 @@ export function ManuscriptReader({
         abandonedReason={status?.abandonedReason}
         locate={locate}
         onOpenDraft={onOpenDraft}
+        onReferenceClick={onReferenceClick}
+        resolveReference={resolveReference}
         onInsertParagraph={
           onInsertParagraph !== undefined
             ? () => onInsertParagraph(selectedChapter.chapterId)

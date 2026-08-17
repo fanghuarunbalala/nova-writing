@@ -17,6 +17,8 @@ export interface CharacterDetailPanelProps {
   readonly detail?: CharacterDetail;
   /** 关联单元 chip 点击 → 跳内容视图大纲单元详情 */
   readonly onOpenUnit?: (unitId: string) => void;
+  /** 关联单元覆盖（大纲 leaf 绑定派生；缺省回落 detail.relatedUnits） */
+  readonly relatedUnitLinks?: readonly { readonly unitId: string; readonly label: string }[];
   /** 编辑入口（宿主打开编辑对话框） */
   readonly onEdit?: () => void;
   /** 删除入口（宿主确认后删除） */
@@ -27,12 +29,14 @@ export function CharacterDetailPanel({
   workspaceId,
   detail,
   onOpenUnit,
+  relatedUnitLinks,
   onEdit,
   onDelete,
 }: CharacterDetailPanelProps) {
   if (detail === undefined) {
     return <div className={styles.panel}>加载角色详情…</div>;
   }
+  const relatedUnits = relatedUnitLinks ?? detail.relatedUnits;
   return (
     <div className={styles.panel} data-workspace={workspaceId}>
       <div className={styles.head}>
@@ -82,8 +86,8 @@ export function CharacterDetailPanel({
       <section className={styles.card}>
         <h3 className={styles.cardTitle}>关联单元</h3>
         <div className={styles.refChips}>
-          {detail.relatedUnits.length > 0 ? (
-            detail.relatedUnits.map((unit) => (
+          {relatedUnits.length > 0 ? (
+            relatedUnits.map((unit) => (
               <button
                 key={unit.unitId}
                 type="button"

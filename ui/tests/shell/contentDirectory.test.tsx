@@ -45,6 +45,11 @@ function buildApi() {
               scope: "scene",
               planningStatus: "ready",
               realizationStatus: "in-progress",
+              // leaf 绑定（部分字段）：档案「关联单元」派生数据源
+              leaf: {
+                characters: [{ characterId: "c-1" }],
+                locations: [{ locationId: "l-1" }],
+              },
             },
           ],
         })),
@@ -165,5 +170,31 @@ describe("ContentDirectoryPanel", () => {
     await user.click(screen.getByRole("button", { name: /旧船坞/ }));
     await user.click(await screen.findByRole("button", { name: /打开完整档案/ }));
     expect(onOpenLocation).toHaveBeenCalledWith("l-1");
+  });
+
+  it("outline leaf click expands a brief card with jump button (no direct navigation)", async () => {
+    const stores = await makeStores();
+    const { onSelectOutlineUnit } = renderPanel(stores);
+    const user = userEvent.setup();
+    // leaf（无子级）行点击 → 就地展开简略卡（意图/梗概 + 跳转钮），不直接跳转
+    await user.click(screen.getByRole("button", { name: /第一章 · 雾起/ }));
+    expect(onSelectOutlineUnit).not.toHaveBeenCalled();
+    expect(screen.getByText("意图")).toBeInTheDocument();
+    expect(screen.getByText("梗概")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /查看单元详情/ }));
+    expect(onSelectOutlineUnit).toHaveBeenCalledWith("u1");
+    // 再点行 → 收起简略卡
+    await user.click(screen.getByRole("button", { name: /第一章 · 雾起/ }));
+    expect(screen.queryByRole("button", { name: /查看单元详情/ })).not.toBeInTheDocument();
+  });
+
+  it("shows related units derived from outline leaf bindings in entity cards", async () => {
+    const stores = await makeStores();
+    renderPanel(stores);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: /人物/ }));
+    await user.click(screen.getByRole("button", { name: /林夏/ }));
+    // 详情卡「关联单元」chip = leaf 绑定派生（c-1 出场于 u1）
+    expect(await screen.findByText("第一章 · 雾起")).toBeInTheDocument();
   });
 });

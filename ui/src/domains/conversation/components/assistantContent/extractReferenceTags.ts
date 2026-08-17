@@ -24,6 +24,37 @@ const HTML_TAG_PATTERN = /<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s+[^<>]*)?>/g;
 
 export const REFERENCE_LINK_TEXT = "ref";
 
+/** 引用分段：正文片段或实体引用（ManuscriptBlock 等纯文本渲染处复用） */
+export type ReferenceSpan =
+  | { readonly type: "text"; readonly text: string }
+  | {
+      readonly type: "ref";
+      readonly refKind: "character" | "location" | "outline" | "chapter" | "paragraph";
+      readonly id: string;
+      readonly label: string;
+    };
+
+/** 把正文拆为 文本/引用 分段（同一标签口径；无标签时返回单 text 段）。 */
+export function parseReferenceSpans(text: string): readonly ReferenceSpan[] {
+  const spans: ReferenceSpan[] = [];
+  let last = 0;
+  for (const match of text.matchAll(REF_TAG_PATTERN)) {
+    const index = match.index ?? 0;
+    const [, kind, id, name, inner] = match;
+    if (typeof kind !== "string" || typeof id !== "string") continue;
+    if (index > last) spans.push({ type: "text", text: text.slice(last, index) });
+    spans.push({
+      type: "ref",
+      refKind: kind as "character" | "location" | "outline" | "chapter" | "paragraph",
+      id,
+      label: name !== undefined && name !== "" ? name : (inner ?? ""),
+    });
+    last = index + match[0].length;
+  }
+  if (last < text.length) spans.push({ type: "text", text: text.slice(last) });
+  return spans.length > 0 ? spans : [{ type: "text", text }];
+}
+
 export function extractReferenceTags(text: string): string {
   const withTokens = text.replace(
     REF_TAG_PATTERN,

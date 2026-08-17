@@ -2,9 +2,11 @@
  * ContentDirectoryPanel
  *
  * 右栏内容目录（demo 方案 A v0.8）：对话视图常驻的三 tab——
- * 大纲（树复用，点击跳内容视图单元详情）/ 人物 / 地点（行点击就地展开
+ * 大纲（树复用：父节点点击跳内容视图单元详情；leaf 点击就地展开简略卡
+ * 「意图/梗概 + 查看单元详情」，不直接跳转）/ 人物 / 地点（行点击就地展开
  * 详情卡：简介 / 初始状态 / 关联单元 chips +「打开完整档案」跳内容视图）。
- * 手风琴单开；实体标签点击经 ContentDirectoryStore.locate 切 tab + 滚动高亮。
+ * 关联单元由大纲 leaf 绑定派生；手风琴单开；实体标签点击经
+ * ContentDirectoryStore.locate 切 tab + 滚动高亮。
  * 数据复用 chat 视图已加载的三个域 store（novelChangeBus 自动失效刷新）。
  */
 import { useEffect, useMemo, useRef } from "react";
@@ -15,6 +17,7 @@ import type { CharacterStore } from "../../../domains/novel/character/store/Char
 import type { LocationStore } from "../../../domains/novel/location/store/LocationStore.js";
 import type { StoryOutlineTreeStore } from "../../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { StoryOutlineTreeProjection } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
+import type { StoryOutlineTreeNode } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
 import { StoryOutlineTree } from "../../../domains/novel/outline/components/StoryOutlineTree.js";
 import {
   ContentDirectoryStore,
@@ -57,7 +60,7 @@ export function ContentDirectoryPanel({
   const locationSnapshot = useExternalStore(locations);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // 关联单元 chips：unitId → 标题（大纲树快照派生）
+  // 关联单元 chips：unitId → 标题（大纲树快照派生）；实体 → unitIds（leaf 绑定派生）
   const unitTitleById = useMemo(() => {
     const map = new Map<string, string>();
     const walk = (nodes: readonly { unitId: string; title: string; children: readonly unknown[] }[]): void => {
@@ -69,6 +72,19 @@ export function ContentDirectoryPanel({
     walk(outlineSnapshot.tree as never);
     return map;
   }, [outlineSnapshot.tree]);
+  const nodeById = useMemo(() => {
+    const map = new Map<string, StoryOutlineTreeNode>();
+    const walk = (nodes: readonly StoryOutlineTreeNode[]): void => {
+      for (const node of nodes) {
+        map.set(node.unitId, node);
+        walk(node.children);
+      }
+    };
+    walk(outlineSnapshot.tree);
+    return map;
+  }, [outlineSnapshot.tree]);
+  const unitIdsOf = (kind: "characters" | "locations", id: string): readonly string[] =>
+    outlineSnapshot.bindings[kind].get(id) ?? [];
 
   // 实体定位：切 tab 后滚动到目标行并闪烁（nonce 驱动，同一目标重复点击也生效）
   const locate = dirSnapshot.locate;
@@ -126,9 +142,42 @@ export function ContentDirectoryPanel({
             phase={outlineSnapshot.phase}
             expansionState={outlineSnapshot.expansionState}
             selectedUnitId={outlineSnapshot.selectedUnitId}
-            onSelectUnit={onSelectOutlineUnit}
+            onSelectUnit={(unitId) => {
+              // 父节点：跳内容视图单元详情；leaf：就地展开简略卡（内含跳转钮）。
+              const node = nodeById.get(unitId);
+              if (node !== undefined && node.children.length === 0) {
+                store.toggleExpand(`outline:${unitId}`);
+              } else {
+                onSelectOutlineUnit(unitId);
+              }
+            }}
             onToggleExpand={(id) => outlineTree.toggleExpand(id)}
             showLegend={false}
+            renderUnitDetail={(node) => {
+              if (node.children.length > 0) return null;
+              if (dirSnapshot.expandedKey !== `outline:${node.unitId}`) return null;
+              const unit = outlineTree.getUnit(node.unitId);
+              return (
+                <div className={styles.detailCard} data-dir-key={`outline:${node.unitId}`}>
+                  <div className={styles.ddSec}>
+                    <span className={styles.ddLabel}>意图</span>
+                    {unit?.intent ?? "（尚未填写——这个单元要达成什么）"}
+                  </div>
+                  <div className={styles.ddSec}>
+                    <span className={styles.ddLabel}>梗概</span>
+                    {unit?.synopsis ?? "（尚未填写情节梗概）"}
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.ddGo}
+                    onClick={() => onSelectOutlineUnit(node.unitId)}
+                  >
+                    查看单元详情
+                    <Icon icon={ArrowRight} size="xs" />
+                  </button>
+                </div>
+              );
+            }}
           />
         ) : dirSnapshot.tab === "characters" ? (
           characterSnapshot.characters.length === 0 ? (
@@ -144,7 +193,7 @@ export function ContentDirectoryPanel({
                 subtitle={c.role}
                 expanded={dirSnapshot.expandedKey === `character:${c.characterId}`}
                 summaryNote={c.note}
-                relatedUnits={c.relatedUnits}
+                relatedUnits={unitIdsOf("characters", c.characterId)}
                 unitTitleById={unitTitleById}
                 onToggle={() => store.toggleExpand(`character:${c.characterId}`)}
                 onOpen={() => onOpenCharacter(c.characterId)}
@@ -166,7 +215,7 @@ export function ContentDirectoryPanel({
               subtitle={l.locState}
               expanded={dirSnapshot.expandedKey === `location:${l.locationId}`}
               summaryNote={l.note}
-              relatedUnits={l.relatedUnits}
+              relatedUnits={unitIdsOf("locations", l.locationId)}
               unitTitleById={unitTitleById}
               onToggle={() => store.toggleExpand(`location:${l.locationId}`)}
               onOpen={() => onOpenLocation(l.locationId)}

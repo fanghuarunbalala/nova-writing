@@ -6,6 +6,7 @@
  * loading / 空树走 LoadingState / EmptyState。
  */
 import { ListTree } from "lucide-react";
+import type { ReactNode } from "react";
 import type { StoryOutlineTreeNode } from "../projection/StoryOutlineTreeProjection.js";
 import { EmptyState, LoadingState } from "../../../../shared/primitives/index.js";
 import { StoryOutlineTreeLegend } from "./StoryOutlineTreeLegend.js";
@@ -22,6 +23,8 @@ export interface StoryOutlineTreeProps {
   readonly onToggleExpand?: (unitId: string) => void;
   /** 底部状态图例（默认开；右栏内容目录关） */
   readonly showLegend?: boolean;
+  /** 行下详情插槽（如右栏 leaf 简略卡；返回 null 不渲染） */
+  readonly renderUnitDetail?: (unit: StoryOutlineTreeNode) => ReactNode;
 }
 
 function renderNode(
@@ -30,6 +33,8 @@ function renderNode(
   props: StoryOutlineTreeProps,
 ) {
   const expanded = props.expansionState.get(node.unitId) ?? false;
+  const detail =
+    props.renderUnitDetail !== undefined ? props.renderUnitDetail(node) : null;
   return (
     <div key={node.unitId}>
       <StoryOutlineTreeRow
@@ -40,6 +45,7 @@ function renderNode(
         onSelect={() => props.onSelectUnit?.(node.unitId)}
         onToggleExpand={() => props.onToggleExpand?.(node.unitId)}
       />
+      {detail}
       {expanded
         ? node.children.map((child) => renderNode(child, depth + 1, props))
         : null}

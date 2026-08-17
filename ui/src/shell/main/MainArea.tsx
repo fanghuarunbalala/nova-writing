@@ -118,6 +118,8 @@ export const MainArea = memo(function MainArea(props: MainAreaProps) {
           selectedCharacterId={props.selectedCharacterId}
           selectedLocationId={props.selectedLocationId}
           locateReference={props.locateReference}
+          onReferenceClick={props.onReferenceClick}
+          resolveReference={props.resolveReference}
           onBack={() => props.mainViewRouter.transition("chat")}
           onSelectContentPane={props.onSelectContentPane}
           onOpenCharacter={props.onOpenCharacter}

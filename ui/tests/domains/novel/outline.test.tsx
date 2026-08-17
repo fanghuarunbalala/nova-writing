@@ -110,15 +110,48 @@ describe("StoryOutlineTreeStore", () => {
     expect(store.getSnapshot().tree).toHaveLength(1);
   });
 
-  it("tracks selection and expansion", async () => {
+  it("derives entity bindings from leaf plans (character/location → units)", async () => {
+    const snapshot: StoryOutlineSnapshot = {
+      outline: { id: "outline_1", novelId: "novel_1" },
+      units: [
+        ...units,
+        {
+          ...unit({ id: "scene-9", title: "雨夜码头", parentId: "arc-v1", scope: "scene" }),
+          leaf: {
+            settingMode: "located",
+            characters: [{ characterId: "char-a" }, { characterId: "char-b" }],
+            locations: [{ locationId: "loc-x" }],
+            events: [],
+            rhythmBeats: [],
+            entityChanges: [],
+          },
+        },
+      ],
+    };
+    const store = new StoryOutlineTreeStore({ api: buildApi({ get: vi.fn(async () => snapshot) }) });
+    await store.loadWorkspace("w1");
+    const bindings = store.getSnapshot().bindings;
+    expect(bindings.characters.get("char-a")).toEqual(["scene-9"]);
+    expect(bindings.characters.get("char-b")).toEqual(["scene-9"]);
+    expect(bindings.locations.get("loc-x")).toEqual(["scene-9"]);
+    expect(bindings.characters.get("char-missing")).toBeUndefined();
+  });
+
+  it("tracks selection and expansion (default expanded on first load)", async () => {
     const store = new StoryOutlineTreeStore({ api: buildApi() });
     await store.loadWorkspace("w1");
     store.selectUnit("scene-1");
     expect(store.getSnapshot().selectedUnitId).toBe("scene-1");
+    // 首载默认全展开（demo 口径）
+    expect(store.getSnapshot().expansionState.get("arc-v1")).toBe(true);
+    store.toggleExpand("arc-v1");
+    expect(store.getSnapshot().expansionState.get("arc-v1")).toBe(false);
     store.toggleExpand("arc-v1");
     expect(store.getSnapshot().expansionState.get("arc-v1")).toBe(true);
     store.collapseAll();
     expect(store.getSnapshot().expansionState.get("arc-v1")).toBe(false);
+    store.expandAll();
+    expect(store.getSnapshot().expansionState.get("arc-v1")).toBe(true);
   });
 
   it("records errors and supports invalidate", async () => {
@@ -140,11 +173,11 @@ describe("StoryOutlineTreeStore", () => {
     const store = new StoryOutlineTreeStore({ api: buildApi({ get }) });
     await store.loadWorkspace("w1");
     store.selectUnit("scene-1");
-    store.toggleExpand("arc-v1");
+    store.toggleExpand("arc-v1"); // 默认展开 → 收起
     // agent 写入大纲 → invalidate 重拉：用户正看的选中/展开不被清掉
     await store.loadWorkspace("w1");
     expect(store.getSnapshot().selectedUnitId).toBe("scene-1");
-    expect(store.getSnapshot().expansionState.get("arc-v1")).toBe(true);
+    expect(store.getSnapshot().expansionState.get("arc-v1")).toBe(false);
     // 选中单元在重放数据中不存在（被删）→ 清空
     current = {
       outline: { id: "outline_1", novelId: "novel_1" },

@@ -29,12 +29,21 @@ export interface NovelDomainError {
   readonly retryable: boolean;
 }
 
+/** 实体 → 关联单元索引（leaf 绑定派生，档案「关联单元」数据源） */
+export interface OutlineEntityBindings {
+  /** characterId → 出场单元 id 列表（树序） */
+  readonly characters: ReadonlyMap<string, readonly string[]>;
+  /** locationId → 出场单元 id 列表（树序） */
+  readonly locations: ReadonlyMap<string, readonly string[]>;
+}
+
 export interface StoryOutlineTreeSnapshot {
   readonly phase: "idle" | "loading" | "ready" | "error";
   readonly workspaceId: string | undefined;
   readonly tree: readonly StoryOutlineTreeNode[];
   readonly expansionState: ReadonlyMap<string, boolean>;
   readonly selectedUnitId: string | undefined;
+  readonly bindings: OutlineEntityBindings;
   readonly error: NovelDomainError | undefined;
 }
 
@@ -44,6 +53,10 @@ const EMPTY_SNAPSHOT: StoryOutlineTreeSnapshot = Object.freeze({
   tree: Object.freeze([]),
   expansionState: new Map<string, boolean>(),
   selectedUnitId: undefined,
+  bindings: Object.freeze({
+    characters: new Map<string, readonly string[]>(),
+    locations: new Map<string, readonly string[]>(),
+  }),
   error: undefined,
 });
 
@@ -90,13 +103,18 @@ export class StoryOutlineTreeStore extends WorkspaceDomainStore<StoryOutlineTree
       unitIds.has(prev.selectedUnitId)
         ? prev.selectedUnitId
         : undefined;
+    // 首载默认展开全部（demo 口径）；重载保留用户展开态。
+    const expansionState =
+      prev !== undefined
+        ? new Map(prev.expansionState)
+        : defaultExpandedState(tree);
     return {
       phase: "ready",
       workspaceId,
       tree,
-      expansionState:
-        prev !== undefined ? new Map(prev.expansionState) : new Map<string, boolean>(),
+      expansionState,
       selectedUnitId,
+      bindings: deriveEntityBindings(outline.units),
       error: undefined,
     };
   }
@@ -284,4 +302,37 @@ function collectUnitIds(node: StoryOutlineTreeNode, into: Map<string, boolean>):
   for (const child of node.children) {
     collectUnitIds(child, into);
   }
+}
+
+/** 首载展开态：全部单元置 true（默认展开，demo 口径） */
+function defaultExpandedState(tree: readonly StoryOutlineTreeNode[]): Map<string, boolean> {
+  const next = new Map<string, boolean>();
+  for (const node of tree) collectUnitIds(node, next);
+  for (const key of next.keys()) next.set(key, true);
+  return next;
+}
+
+/** leaf 绑定 → 实体关联索引（unit.leaf.characters/locations；unitId 按树序收集） */
+function deriveEntityBindings(
+  units: readonly { id: string; leaf?: { characters?: readonly { characterId: string }[] | null; locations?: readonly { locationId: string }[] | null } | null }[],
+): OutlineEntityBindings {
+  const characters = new Map<string, string[]>();
+  const locations = new Map<string, string[]>();
+  const push = (map: Map<string, string[]>, key: string, unitId: string): void => {
+    const list = map.get(key);
+    if (list === undefined) map.set(key, [unitId]);
+    else list.push(unitId);
+  };
+  for (const unit of units) {
+    for (const binding of unit.leaf?.characters ?? []) {
+      push(characters, binding.characterId, unit.id);
+    }
+    for (const binding of unit.leaf?.locations ?? []) {
+      push(locations, binding.locationId, unit.id);
+    }
+  }
+  return {
+    characters: characters as ReadonlyMap<string, readonly string[]>,
+    locations: locations as ReadonlyMap<string, readonly string[]>,
+  };
 }

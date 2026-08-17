@@ -220,19 +220,19 @@ describe("nextActionOf", () => {
 describe("renderFullText / renderSparseText", () => {
   it("full = 工作流全文 + 路线图 + 全局规则", () => {
     const text = renderFullText({ workflow: "expand_outline" });
-    expect(text.startsWith("## 工作流·大纲")).toBe(true);
+    expect(text.startsWith("## 大纲推荐工作流")).toBe(true);
     expect(text).toContain("## 工作流路线图");
     expect(text).toContain("## 全局规则");
     expect(text).toContain("情绪优先");
   });
 
-  it("开书 full 含每轮 ≤3 / 最多追加 2 轮 / 确认门；不含每章推荐字数", () => {
+  it("开书 full 按作者定稿：创意+目标字数+每章推荐字数，确认后写入 NOVEL.md 或正式稿", () => {
     const text = FULL_TEXT_OF.collect;
-    expect(text).toContain("每轮 ≤3 题");
-    expect(text).toContain("最多追加 2 轮");
-    expect(text).toContain("展示当前故事核请求确认");
-    expect(text).toContain("目标字数");
-    expect(text).not.toContain("每章推荐字数");
+    expect(text.startsWith("## 开书推荐工作流")).toBe(true);
+    expect(text).toContain("一句话创意（开放填空，绝不配选项）");
+    expect(text).toContain("全篇目标字数及每章推荐字数");
+    expect(text).toContain("帮助用户完成一个吸引人的故事构建");
+    expect(text).toContain("写入 NOVEL.md 或者正式稿");
   });
 
   it("正文 full 含三态审阅 / 两轮上限 / 发布延后", () => {
@@ -260,7 +260,7 @@ describe("renderFullText / renderSparseText", () => {
     const action = nextActionOf(units);
     const sparse = renderSparseText(stage, action);
     expect(sparse).toContain("【项目状态】大纲细化");
-    expect(sparse).toContain("1/2 完成");
+    expect(sparse).toContain("1/2 不可再分");
     expect(sparse).toContain("细化「b」");
   });
 });
@@ -273,7 +273,7 @@ describe("ProjectStageNudgePolicy v2（persistent full/sparse）", () => {
     expect(await policy.persistentNudgeIfNeeded(loop, run())).toBe(true);
     expect(appended).toHaveLength(1);
     expect(appended[0]).toMatchObject({ role: "system", nudge: PROJECT_STAGE_NUDGE_FULL });
-    expect(appended[0]!.content).toContain("## 工作流·开书");
+    expect(appended[0]!.content).toContain("## 开书推荐工作流");
     expect(appended[0]!.content).toContain("## 全局规则");
     expect(policy.transientNudgeIfNeeded(loop, run(), { system: "", tools: [], messages: [], sampling: { model: "gpt-5" } })).toBe(false);
   });
@@ -298,7 +298,7 @@ describe("ProjectStageNudgePolicy v2（persistent full/sparse）", () => {
     const outlineRun = mockLoop();
     await policy.persistentNudgeIfNeeded(outlineRun.loop, run()); // outline full
     expect(outlineRun.appended[0]!.nudge).toBe(PROJECT_STAGE_NUDGE_FULL);
-    expect(outlineRun.appended[0]!.content).toContain("## 工作流·大纲");
+    expect(outlineRun.appended[0]!.content).toContain("## 大纲推荐工作流");
     // 同工作流再次 → sparse
     const outlineAgain = mockLoop();
     await policy.persistentNudgeIfNeeded(outlineAgain.loop, run());
@@ -326,7 +326,7 @@ describe("ProjectStageNudgePolicy v2（persistent full/sparse）", () => {
     const postCompact = mockLoop({ generation: 1 });
     await policy.persistentNudgeIfNeeded(postCompact.loop, run());
     expect(postCompact.appended[0]!.nudge).toBe(PROJECT_STAGE_NUDGE_FULL);
-    expect(postCompact.appended[0]!.content).toContain("## 工作流·开书");
+    expect(postCompact.appended[0]!.content).toContain("## 开书推荐工作流");
   });
 
   it("查询失败：本次静默不注入；恢复后下次 run 补 full", async () => {

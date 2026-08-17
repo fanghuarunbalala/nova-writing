@@ -10,6 +10,7 @@ import { StoryOutlineTreeStore } from "../../../src/domains/novel/outline/store/
 import { StoryOutlineTree } from "../../../src/domains/novel/outline/components/StoryOutlineTree.js";
 import { StoryOutlineTreeLegend } from "../../../src/domains/novel/outline/components/StoryOutlineTreeLegend.js";
 import { OutlineBlockNote } from "../../../src/domains/novel/outline/components/OutlineBlockNote.js";
+import { OutlineUnitInspectorPanel } from "../../../src/shell/inspector/panels/OutlineUnitInspectorPanel.js";
 import { StatusChip } from "../../../src/shared/primitives/StatusChip.js";
 
 function unit(overrides: Partial<StoryUnit> & { readonly id: string; readonly title: string }): StoryUnit {
@@ -133,6 +134,41 @@ describe("StoryOutlineTreeStore", () => {
     await store.invalidate();
     expect(store.getSnapshot().phase).toBe("ready");
   });
+
+  it("事件失效重载保留选中与展开（单元仍在时）；单元被删则清空选中", async () => {
+    let current = outlineSnapshot();
+    const get = vi.fn(async () => current);
+    const store = new StoryOutlineTreeStore({ api: buildApi({ get }) });
+    await store.loadWorkspace("w1");
+    store.selectUnit("scene-1");
+    store.toggleExpand("arc-v1");
+    // agent 写入大纲 → invalidate 重拉：用户正看的选中/展开不被清掉
+    await store.loadWorkspace("w1");
+    expect(store.getSnapshot().selectedUnitId).toBe("scene-1");
+    expect(store.getSnapshot().expansionState.get("arc-v1")).toBe(true);
+    // 选中单元在重放数据中不存在（被删）→ 清空
+    current = {
+      outline: { id: "outline_1", novelId: "novel_1" },
+      units: [unit({ id: "arc-v1", title: "第一卷：旧船坞", scope: "arc" })],
+    };
+    await store.loadWorkspace("w1");
+    expect(store.getSnapshot().selectedUnitId).toBeUndefined();
+  });
+
+  it("同工作区重载（事件失效刷新）loading 期不闪空：保留现有树与选中", async () => {
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce(outlineSnapshot())
+      .mockImplementationOnce(() => new Promise<StoryOutlineSnapshot>(() => {})); // 第二次拉取挂起
+    const store = new StoryOutlineTreeStore({ api: buildApi({ get }) });
+    await store.loadWorkspace("w1");
+    store.selectUnit("scene-1");
+    void store.loadWorkspace("w1"); // 重载挂起中
+    const snapshot = store.getSnapshot();
+    expect(snapshot.phase).toBe("loading");
+    expect(snapshot.tree).toHaveLength(1); // 不闪回空初始态
+    expect(snapshot.selectedUnitId).toBe("scene-1");
+  });
 });
 
 describe("outline components", () => {
@@ -182,5 +218,34 @@ describe("outline components", () => {
     expect(screen.getByText("已完成")).toBeInTheDocument();
     render(<OutlineBlockNote kind="blocked" reason="等待审批" />);
     expect(screen.getByText(/等待审批/)).toBeInTheDocument();
+  });
+});
+
+describe("OutlineUnitInspectorPanel 单元段落卡", () => {
+  it("renders unit paragraphs with publish status chips and empty state", async () => {
+    const store = new StoryOutlineTreeStore({ api: buildApi() });
+    await store.loadWorkspace("w1");
+    store.selectUnit("scene-1");
+    const view = (unitParagraphs: readonly { paragraphId: string; text: string; textLength: number; entityVersion: number }[]) => (
+      <OutlineUnitInspectorPanel
+        workspaceId="w1"
+        unitId="scene-1"
+        outlineTree={store}
+        unitParagraphs={unitParagraphs}
+        publishedParagraphIds={new Set(["para_a"])}
+      />
+    );
+    const { rerender } = render(view([
+      { paragraphId: "para_a", text: "已入选章选择的段落。", textLength: 10, entityVersion: 1 },
+      { paragraphId: "para_b", text: "挂在单元下但尚未进入任何章选择的段落。", textLength: 20, entityVersion: 1 },
+    ]));
+    expect(screen.getByText("单元段落 · 2")).toBeInTheDocument();
+    expect(screen.getByText(/已入选章选择的段落。/)).toBeInTheDocument();
+    expect(screen.getByText(/挂在单元下但尚未进入任何章选择的段落。/)).toBeInTheDocument();
+    expect(screen.getByText("已入选章")).toBeInTheDocument();
+    expect(screen.getByText("未发布")).toBeInTheDocument();
+    // 空态：引导到对话写入
+    rerender(view([]));
+    expect(screen.getByText(/暂无段落/)).toBeInTheDocument();
   });
 });

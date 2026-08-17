@@ -217,12 +217,17 @@ export function ApplicationShell({
       flushTimer = undefined;
       const { character, location, storyOutlineTree, manuscriptStructure, novelOverview } =
         domainStores;
-      // 实体类型 → 域 store 映射（各 store 均实现统一 invalidate）
+      // 事件链终点可观测性：去抖合并后实际刷新的实体批次（main 侧有 mutated/forwarded 前置日志）
+      logger?.info("shell.novel_changed_refresh", { entities: [...pendingEntities] });
+      // 实体类型 → 域 store 映射（各 store 均实现统一 invalidate）。
+      // publication（卷/章及章选择 paragraphIds）变更直接影响正文结构视图——
+      // 段落真正进正文靠 publication.chapter.update，漏映射会导致会话内正文不刷新、重启才可见。
       const storeByEntity: Readonly<Record<string, { invalidate(): Promise<void> }>> = {
         character,
         location,
         outline: storyOutlineTree,
         paragraph: manuscriptStructure,
+        publication: manuscriptStructure,
       };
       for (const entity of pendingEntities) {
         const store = storeByEntity[entity];
@@ -241,7 +246,7 @@ export function ApplicationShell({
       unsubscribe();
       if (flushTimer !== undefined) clearTimeout(flushTimer);
     };
-  }, [domainStores]);
+  }, [domainStores, logger]);
 
   // 审批到达自动弹窗一次（面板已会话化，只认活动会话）：
   // 仅当活动会话 pending 集合出现「新 requestId」时唤起

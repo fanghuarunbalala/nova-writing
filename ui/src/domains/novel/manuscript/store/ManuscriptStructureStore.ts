@@ -4,7 +4,8 @@
  * 正文结构域 store：以权威 publication 结构（卷 → 章）为目录，
  * 章正文按 paragraphIds 有序选择组装（P3 选择模型：可跨单元/拆分/合并）。
  * 写路径：paragraph insert/update/delete（乐观锁，baseRevision = entityVersion）；
- * 新增段落 = 插入挂靠单元 + 追加进当前章选择（两步一个 mutateBatch，批内原子）。
+ * 新增段落 = 客户端预生成 id，插段 + 追加章选择合并为单个 mutateBatch
+ * （批内原子：stale 整批回滚，不留孤儿段落）。
  *
  * 数据流：
  * - loadWorkspace 读 publication.get（章含 paragraphIds）+ paragraphs.list 全量，
@@ -67,7 +68,20 @@ export interface ManuscriptStructureSnapshot {
   readonly volumes: readonly ManuscriptVolume[];
   readonly chapters: readonly ManuscriptChapter[]; // 平铺有序，供引用解析/查找
   readonly selectedChapterId: string | undefined;
+  /** 按挂靠单元分组的全部段落（大纲详情「单元段落」数据源；含未入选章选择的段落） */
+  readonly unitParagraphs: ReadonlyMap<string, readonly ManuscriptUnitParagraph[]>;
+  /** 已被任一章选择收录的段落 id（区分「已入选章 / 未发布」） */
+  readonly publishedParagraphIds: ReadonlySet<string>;
   readonly error: NovelDomainError | undefined;
+}
+
+/** 大纲单元详情展示用的段落条目（全量 list 的轻量投影） */
+export interface ManuscriptUnitParagraph {
+  readonly paragraphId: string;
+  readonly orderKey?: string;
+  readonly text: string;
+  readonly textLength: number;
+  readonly entityVersion: number;
 }
 
 const EMPTY_SNAPSHOT: ManuscriptStructureSnapshot = Object.freeze({
@@ -76,6 +90,8 @@ const EMPTY_SNAPSHOT: ManuscriptStructureSnapshot = Object.freeze({
   volumes: Object.freeze([]),
   chapters: Object.freeze([]),
   selectedChapterId: undefined,
+  unitParagraphs: new Map<string, readonly ManuscriptUnitParagraph[]>(),
+  publishedParagraphIds: new Set<string>(),
   error: undefined,
 });
 
@@ -116,14 +132,33 @@ export class ManuscriptStructureStore extends WorkspaceDomainStore<ManuscriptStr
       allParagraphs,
     );
     const versionsById = new Map<string, number>();
-    for (const paragraph of allParagraphs) versionsById.set(paragraph.id, paragraph.entityVersion);
+    const unitParagraphs = new Map<string, ManuscriptUnitParagraph[]>();
+    for (const paragraph of allParagraphs) {
+      versionsById.set(paragraph.id, paragraph.entityVersion);
+      const list = unitParagraphs.get(paragraph.storyUnitId) ?? [];
+      list.push(toUnitParagraph(paragraph));
+      unitParagraphs.set(paragraph.storyUnitId, list);
+    }
     this.versionsById = versionsById;
+    // 事件失效刷新保留选中章（章仍在时），避免 agent 写入后阅读器跳回第一章。
+    // lastReadySnapshot 仅作「重载而非首载」标志；数据取当前快照（基类 reload 分支已保留用户选中）。
+    const prev = this.lastReadySnapshot !== undefined ? this.snapshot : undefined;
+    const keepChapterId =
+      prev !== undefined &&
+      prev.selectedChapterId !== undefined &&
+      chapters.some((c) => c.chapterId === prev.selectedChapterId)
+        ? prev.selectedChapterId
+        : chapters[0]?.chapterId;
     return {
       phase: "ready",
       workspaceId,
       volumes,
       chapters,
-      selectedChapterId: chapters[0]?.chapterId,
+      selectedChapterId: keepChapterId,
+      unitParagraphs: new Map(
+        [...unitParagraphs].map(([unitId, list]) => [unitId, Object.freeze(list)]),
+      ),
+      publishedParagraphIds: new Set(chapters.flatMap((c) => c.paragraphIds)),
       error: undefined,
     };
   }
@@ -149,7 +184,9 @@ export class ManuscriptStructureStore extends WorkspaceDomainStore<ManuscriptStr
   }
 
   /**
-   * 新增段落（P3 选择模型）：挂靠到章选择末段的单元，并追加进章选择
+   * 新增段落（P3 选择模型）：挂靠到章选择末段的单元，并追加进章选择。
+   * 单个 mutateBatch 批内原子（客户端预生成 id 使两步无结果依赖）：
+   * 章选择更新 stale → 整批回滚，段落不落库（无孤儿）；重试基于重拉快照与新 id。
    * @param chapterId 目标章
    * @param text 段落文本
    */
@@ -165,16 +202,16 @@ export class ManuscriptStructureStore extends WorkspaceDomainStore<ManuscriptStr
         if (unitId === undefined) {
           throw new Error("无法确定挂靠单元——请先经 Agent 为该章配置段落选择");
         }
-        const inserted = await this.api.novel.mutateBatch([
-          { op: "paragraph.insert", storyUnitId: unitId as StoryUnitId, text },
+        const paragraphId = newParagraphId();
+        await this.api.novel.mutateBatch([
+          { op: "paragraph.insert", id: paragraphId, storyUnitId: unitId as StoryUnitId, text },
+          {
+            op: "publication.chapter.update",
+            chapterId: chapterId as never,
+            baseRevision: chapter.entityVersion,
+            patch: { paragraphIds: [...chapter.paragraphIds, paragraphId] as never },
+          },
         ]);
-        const newId = inserted[0]!.changeId;
-        await this.api.novel.mutate({
-          op: "publication.chapter.update",
-          chapterId: chapterId as never,
-          baseRevision: chapter.entityVersion,
-          patch: { paragraphIds: [...chapter.paragraphIds, newId] as never },
-        });
       }, "段落");
     });
   }
@@ -316,4 +353,19 @@ function toBlockData(paragraph: Paragraph): ManuscriptBlockData {
     textLength: paragraph.text.length,
     entityVersion: paragraph.entityVersion,
   });
+}
+
+function toUnitParagraph(paragraph: Paragraph): ManuscriptUnitParagraph {
+  return {
+    paragraphId: paragraph.id,
+    ...(paragraph.orderKey === undefined ? {} : { orderKey: paragraph.orderKey }),
+    text: paragraph.text,
+    textLength: paragraph.text.length,
+    entityVersion: paragraph.entityVersion,
+  };
+}
+
+/** 客户端段落 id（para_ 前缀 + 随机；匹配 core ID_PATTERN，插段与章选择更新可合并单批原子提交） */
+function newParagraphId(): string {
+  return `para_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
 }

@@ -26,6 +26,12 @@ export type ReadyWorkspaceDomainSnapshot<S> = Omit<S, "phase" | "workspaceId"> &
 export abstract class WorkspaceDomainStore<S extends WorkspaceDomainSnapshot> extends ExternalStore<S> {
   /** 初始（idle/错误重建用）快照 */
   protected readonly initialSnapshot: S;
+  /**
+   * 最近一次 ready 快照：事件失效刷新时子类 fetchReadySnapshot 用于保留视图状态
+   * （选中/展开等）——loadWorkspace 进入 loading 后 snapshot.phase 已非 ready，无法回看。
+   * 首次加载 / 切换工作区时清除。
+   */
+  protected lastReadySnapshot: S | undefined;
   private generation = 0;
   private readonly loadError: NonNullable<S["error"]>;
 
@@ -68,24 +74,34 @@ export abstract class WorkspaceDomainStore<S extends WorkspaceDomainSnapshot> ex
   async loadWorkspace(workspaceId: string): Promise<void> {
     const capturedId = requireNonBlank(workspaceId, "Workspace id");
     const generation = ++this.generation;
-    this.setSnapshot({
-      ...this.initialSnapshot,
-      phase: "loading",
-      workspaceId: capturedId,
-    });
+    // 同工作区重载（事件失效刷新）：保留现有数据置 loading，避免视图闪空；
+    // 首次加载 / 切换工作区仍从初始快照起步（且清除旧视图状态保留基线）。
+    const reload = this.snapshot.workspaceId === capturedId && this.snapshot.phase === "ready";
+    if (!reload) this.lastReadySnapshot = undefined;
+    this.setSnapshot(
+      reload
+        ? { ...this.snapshot, phase: "loading", error: undefined }
+        : { ...this.initialSnapshot, phase: "loading", workspaceId: capturedId },
+    );
     try {
       const next = await this.fetchReadySnapshot(capturedId, generation);
       if (next === undefined || this.isStaleGeneration(generation)) return;
       this.setSnapshot(next as S);
+      this.lastReadySnapshot = next as S;
       this.onLoadSucceeded(next as S);
     } catch {
       if (this.isStaleGeneration(generation)) return;
-      this.setSnapshot({
-        ...this.initialSnapshot,
-        phase: "error",
-        workspaceId: capturedId,
-        error: this.loadError,
-      });
+      // 重载失败同样保数据（旧视图 + 错误提示）；首载失败基于初始快照
+      this.setSnapshot(
+        reload
+          ? { ...this.snapshot, phase: "error", error: this.loadError }
+          : {
+              ...this.initialSnapshot,
+              phase: "error",
+              workspaceId: capturedId,
+              error: this.loadError,
+            },
+      );
       this.onLoadFailed();
     }
   }

@@ -79,12 +79,21 @@ export class CharacterStore extends WorkspaceDomainStore<CharacterSnapshot> {
   ): Promise<ReadyWorkspaceDomainSnapshot<CharacterSnapshot> | undefined> {
     const result = await this.api.novel.characters.list();
     if (this.isStaleGeneration(generation)) return undefined;
+    // 事件失效刷新保留选中（实体仍存在时）；detailCache 维持每次重拉避免陈旧详情。
+    // lastReadySnapshot 仅作「重载而非首载」标志；数据取当前快照（基类 reload 分支已保留用户选中）。
+    const prev = this.lastReadySnapshot !== undefined ? this.snapshot : undefined;
+    const selectedId =
+      prev !== undefined &&
+      prev.selectedId !== undefined &&
+      result.some((c) => c.id === prev.selectedId)
+        ? prev.selectedId
+        : undefined;
     return {
       phase: "ready",
       workspaceId,
       characters: Object.freeze(result.map(captureSummary)),
       detailCache: new Map<string, CharacterDetail>(),
-      selectedId: undefined,
+      selectedId,
       error: undefined,
     };
   }

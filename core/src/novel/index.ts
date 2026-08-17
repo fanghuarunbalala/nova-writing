@@ -3,6 +3,7 @@
 export * from "./model/index.js";
 export * from "./contract/index.js";
 export * from "./errors.js";
+export * from "./changeEvents.js";
 export * from "./InMemoryNovelStore.js";
 export * from "./SqliteNovelStore.js";
 export * from "./store.js";

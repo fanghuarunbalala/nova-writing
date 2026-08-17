@@ -20,6 +20,7 @@ import {
   NOVEL_CHANGED,
   NOVEL_EVENTS_ADDR,
   SqliteNovelStore,
+  deriveChangeEntities,
   ConfigServer,
   createNovelApiServer,
   createProcessSpawner,
@@ -290,21 +291,27 @@ async function main(): Promise<void> {
     return currentNovelStore;
   };
 
-  // novel.changed 广播：ZeroMQ PUB/SUB（mutate 成功 → publish；订阅 → rpc 通知 renderer 刷新）
+  // novel.changed 广播：ZeroMQ PUB/SUB（mutate 成功 → publish；订阅 → rpc 通知 renderer 刷新）。
+  // 派生规则：级联删除波及其他实体（如 storyUnit.delete 删段落）时补发对应实体事件。
+  const novelLogger = createConsoleLogger();
   const novelPublisher = new EventPublisher(NOVEL_EVENTS_ADDR);
   await novelPublisher.bind();
   const publishingStore: NovelStore = {
     query: (q) => requireNovelStore().query(q),
     mutate: async (m) => {
       const result = await requireNovelStore().mutate(m);
-      novelPublisher.publish(NOVEL_CHANGED, {
-        type: "novel.changed",
-        op: m.op,
-        entity: result.entity,
-        id: result.changeId,
-        version: result.version,
-        ts: new Date().toISOString(),
-      });
+      const entities = deriveChangeEntities(m, result);
+      for (const entity of entities) {
+        novelPublisher.publish(NOVEL_CHANGED, {
+          type: "novel.changed",
+          op: m.op,
+          entity,
+          id: result.changeId,
+          version: result.version,
+          ts: new Date().toISOString(),
+        });
+      }
+      novelLogger.info("novel_db.mutated", { op: m.op, id: result.changeId, entities: entities.join(",") });
       return result;
     },
     // 批内原子：整批成功才逐项广播（失败回滚不广播）
@@ -313,14 +320,16 @@ async function main(): Promise<void> {
       for (let i = 0; i < ms.length; i++) {
         const m = ms[i]!;
         const result = results[i]!;
-        novelPublisher.publish(NOVEL_CHANGED, {
-          type: "novel.changed",
-          op: m.op,
-          entity: result.entity,
-          id: result.changeId,
-          version: result.version,
-          ts: new Date().toISOString(),
-        });
+        for (const entity of deriveChangeEntities(m, result)) {
+          novelPublisher.publish(NOVEL_CHANGED, {
+            type: "novel.changed",
+            op: m.op,
+            entity,
+            id: result.changeId,
+            version: result.version,
+            ts: new Date().toISOString(),
+          });
+        }
       }
       return results;
     },
@@ -422,8 +431,10 @@ async function main(): Promise<void> {
       for await (const message of novelSubscriber) {
         const entity = (message.payload as { entity?: unknown } | null)?.entity;
         if (typeof entity !== "string") continue;
-        void uiApi.onNovelChanged({ entity }).catch(() => {
-          // renderer 未就绪时忽略（store 下次 loadWorkspace 兜底）
+        novelLogger.info("novel_change.forwarded", { entity });
+        void uiApi.onNovelChanged({ entity }).catch((err) => {
+          // renderer 未就绪/已关窗：可见化失败（此前静默），数据仍由下次 loadWorkspace 兜底
+          console.warn("[main] novel.changed 送达 renderer 失败:", err);
         });
       }
     } catch (e) {

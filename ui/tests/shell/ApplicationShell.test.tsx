@@ -2,7 +2,7 @@
  * ApplicationShell 冒烟：组合渲染、workspace 加载、视图切换、inspector 联动。
  */
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MainViewRouter } from "../../src/shared/routing/MainViewRouter.js";
 import { InspectorRouter } from "../../src/shared/routing/InspectorRouter.js";
@@ -18,6 +18,7 @@ import { ScheduleTodoStore } from "../../src/domains/schedule/store/ScheduleTodo
 import { NotificationStore } from "../../src/domains/notification/store/NotificationStore.js";
 import { type WorkspaceControllerPort } from "../../src/domains/workspace/store/WorkspaceControllerAdapter.js";
 import { ApplicationShell } from "../../src/shell/ApplicationShell.js";
+import { emitNovelChanged } from "../../src/domains/novel/novelChangeBus.js";
 import type { WorkspaceControllerSnapshot } from "../../src/domains/workspace/controller/WorkspaceController.js";
 
 function buildApi() {
@@ -213,5 +214,50 @@ describe("ApplicationShell smoke", () => {
     expect(
       await screen.findByRole("textbox", { name: "对话输入" }),
     ).toBeInTheDocument();
+  });
+
+  it("refreshes manuscript structure when a publication change arrives (chapter selection update)", async () => {
+    // 回归：实体→store 映射曾漏 publication——章选择更新（段落真正进正文的时刻）
+    // 落库成功但正文不重拉，新段落要重启应用后才可见。
+    const api = buildApi();
+    const conversationCatalog = new ConversationCatalogStore({ api });
+    const novelOverview = new NovelOverviewStore({ api });
+    const storyOutlineTree = new StoryOutlineTreeStore({ api });
+    const manuscriptStructure = new ManuscriptStructureStore({ api });
+    const invalidateSpy = vi
+      .spyOn(manuscriptStructure, "invalidate")
+      .mockResolvedValue(undefined);
+    const character = new CharacterStore({ api });
+    const location = new LocationStore({ api });
+    const schedule = new ScheduleStore({ novelOverview, outlineTree: storyOutlineTree, conversationCatalog });
+    const workspaceController = new FakeWorkspaceController({
+      revision: 1,
+      phase: "ready",
+      current: { id: "w1", label: "白昼计划" },
+      recent: [],
+    });
+    render(
+      <ApplicationShell
+        api={api}
+        mainViewRouter={new MainViewRouter()}
+        inspectorRouter={new InspectorRouter()}
+        workspaceController={workspaceController}
+        domainStores={{
+          conversationCatalog,
+          novelOverview,
+          storyOutlineTree,
+          manuscriptStructure,
+          character,
+          location,
+          schedule,
+          scheduleTodo: new ScheduleTodoStore(),
+          notifications: new NotificationStore(),
+        }}
+        toastStore={new ToastStore()}
+      />,
+    );
+    // 章选择更新落库 → novel.changed(entity="publication") → 正文结构域应在去抖后重拉
+    emitNovelChanged("publication");
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(1));
   });
 });

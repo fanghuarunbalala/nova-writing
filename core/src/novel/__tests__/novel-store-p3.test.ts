@@ -124,11 +124,78 @@ describe("P3 章选择与级联（两 store 同语义）", () => {
     });
   });
 
-  it("段落删除：同时从章选择移除", async () => {
+  it("段落删除：同时从章选择移除 + 受影响章 entityVersion+1（选择变更反映到版本）", async () => {
     await runBoth(async (store) => {
       const { p1, p2, chapterId } = await seedSelectionScene(store);
       await store.mutate({ op: "paragraph.delete", paragraphId: p1 as never, baseRevision: 1 });
       expect(await selectionOf(store, chapterId)).toEqual([p2]);
+      const pub = (await store.query({ op: "publication.get" })) as {
+        chapters: { id: string; entityVersion: number }[];
+      };
+      expect(pub.chapters.find((c) => c.id === chapterId)?.entityVersion).toBe(2);
+    });
+  });
+
+  it("章选择校验失败（ghost / 重复 id）：不消耗版本号、不留部分写", async () => {
+    await runBoth(async (store) => {
+      const { chapterId, p1, p2 } = await seedSelectionScene(store);
+      await expect(
+        store.mutate({
+          op: "publication.chapter.update",
+          chapterId: chapterId as never,
+          baseRevision: 1,
+          patch: { paragraphIds: [p1, "ghost"] as never[] },
+        }),
+      ).rejects.toThrow(/ghost/);
+      await expect(
+        store.mutate({
+          op: "publication.chapter.update",
+          chapterId: chapterId as never,
+          baseRevision: 1,
+          patch: { paragraphIds: [p1, p1] as never[] },
+        }),
+      ).rejects.toThrow(/重复/);
+      const pub = (await store.query({ op: "publication.get" })) as {
+        chapters: { id: string; entityVersion: number; paragraphIds: string[] }[];
+      };
+      const ch = pub.chapters.find((c) => c.id === chapterId);
+      expect(ch?.entityVersion).toBe(1);
+      expect(ch?.paragraphIds).toEqual([p1, p2]);
+    });
+  });
+
+  it("并发批执行互不串扰：失败批回滚不吞他人已成功的写；并发两批均成功", async () => {
+    await runBoth(async (store) => {
+      const { unitId } = await seedSelectionScene(store);
+      const n = ++seedSeq;
+      // 场景一：失败批（stale/缺失项回滚）与并发裸 mutate——裸写不得被批回滚连带丢弃
+      const failing = store.mutateBatch([
+        { op: "paragraph.insert", id: `fa${n}`, storyUnitId: unitId as never, text: "将被回滚。" },
+        { op: "paragraph.delete", paragraphId: "ghost" as never, baseRevision: 1 },
+      ]);
+      const concurrent = store.mutate({
+        op: "paragraph.insert",
+        id: `fb${n}`,
+        storyUnitId: unitId as never,
+        text: "并发插入。",
+      });
+      const [failResult, okResult] = await Promise.allSettled([failing, concurrent]);
+      expect(failResult.status).toBe("rejected");
+      expect(okResult.status).toBe("fulfilled");
+      // 场景二：两个并发批（修复前第二个 BEGIN 报嵌套事务错）
+      await Promise.all([
+        store.mutateBatch([
+          { op: "paragraph.insert", id: `ca${n}`, storyUnitId: unitId as never, text: "并发批一。" },
+          { op: "paragraph.insert", id: `ca2${n}`, storyUnitId: unitId as never, text: "并发批一续。" },
+        ]),
+        store.mutateBatch([
+          { op: "paragraph.insert", id: `cb${n}`, storyUnitId: unitId as never, text: "并发批二。" },
+          { op: "paragraph.insert", id: `cb2${n}`, storyUnitId: unitId as never, text: "并发批二续。" },
+        ]),
+      ]);
+      const paras = (await store.query({ op: "paragraphs.list", storyUnitId: unitId as never })) as unknown[];
+      // 种子 2 + 并发裸写 1 + 两批 4；失败批的 fa 不落库
+      expect(paras).toHaveLength(7);
     });
   });
 
@@ -218,10 +285,11 @@ describe("P3 存量章指针一次性迁移（sqlite）", () => {
 
     const store = new SqliteNovelStore(dbPath); // 构造即迁移
     const pub = (await store.query({ op: "publication.get" })) as {
-      chapters: { id: string; paragraphIds: string[]; storyUnitId?: string }[];
+      chapters: { id: string; entityVersion: number; paragraphIds: string[]; storyUnitId?: string }[];
     };
     const ch = pub.chapters.find((c) => c.id === "ch1");
     expect(ch?.paragraphIds).toEqual(["p1", "p2"]);
     expect(ch?.storyUnitId).toBeUndefined(); // 指针已清空（防二次展开）
+    expect(ch?.entityVersion).toBe(2); // 选择由指针展开为显式列表 → 版本 +1（旧 baseRevision 写入会被 stale 拦截）
   });
 });

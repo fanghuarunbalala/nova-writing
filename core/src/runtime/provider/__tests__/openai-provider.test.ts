@@ -181,7 +181,7 @@ describe("OpenAIProvider", () => {
     expect(params.reasoning_effort).toBe("high"); // medium 收敛到 deepseek 支持的档位
   });
 
-  it("消息转译：system 提示词与 SystemMessage 并入 system 消息，tool 结果带 tool_call_id", async () => {
+  it("消息转译：system 提示词并入 system 消息，流内 SystemMessage 转 user + system-reminder 包裹，tool 结果带 tool_call_id", async () => {
     const provider = new OpenAIProvider(config);
     mockStream([chunk({ delta: { content: "ok" } }), chunk({ delta: {}, finish_reason: "stop" })]);
     await provider.call({
@@ -201,7 +201,7 @@ describe("OpenAIProvider", () => {
     const params = createMock.mock.calls[0]?.[0] as { messages: unknown[] };
     expect(params.messages).toEqual([
       { role: "system", content: "全局提示" },
-      { role: "system", content: "提醒1" },
+      { role: "user", content: "<system-reminder>\n提醒1\n</system-reminder>" },
       { role: "user", content: "你好" },
       {
         role: "assistant",

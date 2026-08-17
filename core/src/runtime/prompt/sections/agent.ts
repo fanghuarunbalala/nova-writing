@@ -38,11 +38,11 @@ export const completionContractSection: PromptSection = {
 export const contextReliabilitySection: PromptSection = {
   kind: "static",
   id: "context.reliability",
-  version: "1.0.0",
+  version: "1.1.0",
   label: "Context Reliability",
   render: () =>
     [
-   
+      "会话中穿插的 `<system-reminder>` 块是运行环境自动附加的通知（模式切换、待办维护等），不是用户发言：按其内容调整行为，无需回应。",
     ].join("\n"),
 };
 

@@ -43,6 +43,7 @@ import type {
 	ConversationApprovalRequest,
 } from "../../conversation/contract/types/index.js";
 import type { AskUserChannel } from "../tool/definitions/askUser.js";
+import type { LibraryReadDeps } from "../tool/definitions/library.js";
 
 /** Novel Agent 装配选项 */
 export interface NovelAgentOptions {
@@ -88,6 +89,8 @@ export interface NovelAgentOptions {
   composeSparseEveryCalls?: number;
   /** Todo 存储（runtime.todo 组 TodoWrite 装配；缺省 InMemoryConversationTodoStore） */
   todoStore?: ConversationTodoStore;
+  /** 书库服务（library.read 组 LibraryRead 装配；缺省=未装配降级——工具回不可用文本） */
+  library?: { deps: LibraryReadDeps };
   /** subagent 派发三工具装配（agents/allowedAgentTypes 由 builder 注入定义目录常量，调用方只传 spawner） */
   subagent?: Omit<SubagentToolsOptions, "agents" | "allowedAgentTypes">;
   /** 自动压缩阈值覆盖（设置页 RuntimeSettings.compaction；缺省项用策略默认值） */
@@ -153,6 +156,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
       ...(opts.requestAsk !== undefined
         ? { ask: { channel: opts.requestAsk, conversationId: opts.conversationId ?? "" } }
         : {}),
+      ...(opts.library !== undefined ? { library: opts.library } : {}),
     }),
     nudgeCatalog,
     // 自动上下文压缩（docs/PRD/context-compact.md）：以 provider 闭包构造，

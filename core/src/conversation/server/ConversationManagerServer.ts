@@ -68,6 +68,10 @@ export interface ConversationProcessSpawner {
 		parentId?: string;
 		storedir: string;
 		workspace?: string;
+		/** 后台任务载荷（写 storedir/task.json 并注入 NOVEL_ANALYST_TASK 路径；缺省无） */
+		task?: unknown;
+		/** 附加 env（如 NOVEL_LIBRARY_ROOT；缺省无） */
+		extraEnv?: Record<string, string>;
 	}): {
 		child: ChildProcess;
 		handle: Promise<ConversationHandle>;
@@ -362,6 +366,10 @@ export class ConversationManagerServer implements Contract {
 		agentVersion?: string;
 		extraPrompt?: string;
 		parentId?: ConversationId;
+		/** 后台任务载荷（BookAnalyst 自动驱动；经 spawner 落 storedir/task.json） */
+		task?: unknown;
+		/** 附加 env（如 NOVEL_LIBRARY_ROOT） */
+		extraEnv?: Record<string, string>;
 	}): Promise<ConversationRef> {
 		const conversationId = `conv_${++this.seq}`;
 		const storedir = this.allocStoredir(conversationId);
@@ -373,6 +381,8 @@ export class ConversationManagerServer implements Contract {
 				parentId: opts.parentId,
 				storedir,
 				workspace: this.workspaceProvider?.(),
+				...(opts.task !== undefined ? { task: opts.task } : {}),
+				...(opts.extraEnv !== undefined ? { extraEnv: opts.extraEnv } : {}),
 			});
 			this.childProcesses.set(conversationId, child);
 			this.summaries.set(conversationId, {

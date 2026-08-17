@@ -53,6 +53,7 @@ export const novelAgentDefinition = new AgentDefinition({
       "runtime.ask",
       "novel.compose",
       "novel.entities",
+      "library.read",
     ],
   }),
   delegation: new AgentDelegationPolicy({

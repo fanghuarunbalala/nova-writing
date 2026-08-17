@@ -57,6 +57,10 @@ export interface ConversationManagerServer {
 		/** 额外 prompt（叠加在 agent 定义的系统提示之上） */
 		extraPrompt?: string;
 		parentId?: ConversationId;
+		/** 后台任务载荷（BookAnalyst 自动驱动；经 spawner 落 storedir/task.json） */
+		task?: unknown;
+		/** 附加 env（如 NOVEL_LIBRARY_ROOT） */
+		extraEnv?: Record<string, string>;
 	}): Promise<ConversationRef>;
 	/**
 	 * 列出所有会话摘要（UI 目录）

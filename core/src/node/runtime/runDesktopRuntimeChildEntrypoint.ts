@@ -49,6 +49,13 @@ import { findPendingToolIds } from "../../runtime/loop/AgentLoop.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
 import { buildNovelComposeAgent } from "../../runtime/agent/NovelComposeAgent.js";
+import {
+	buildBookAnalystAgent,
+	BOOK_ANALYST_AGENT_TYPE,
+} from "../../runtime/agent/BookAnalystAgent.js";
+import { SqliteNovelStore } from "../../novel/SqliteNovelStore.js";
+import { LibraryService } from "../../library/LibraryService.js";
+import { bookDbPath } from "../../library/LibraryPaths.js";
 import type { NovelQuery } from "../../novel/contract/query.js";
 import type { NovelMutation } from "../../novel/contract/mutation.js";
 import type { ProjectedEvent } from "../../conversation/contract/events/index.js";
@@ -238,7 +245,18 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	registerCrashHandlers();
 	const conversationId = process.env.CONVERSATION_ID ?? "main";
 	const storedir = process.env.NOVEL_CONVERSATION_STOREDIR;
-	const workspace = process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".";
+	// agentType 分发（spawner 注入；缺省 novel 主 Agent）。BookAnalyst = 书库完本
+	// 解构后台会话：工作区=书库根、任务载荷 task.json 驱动自动开跑、bypass 模式
+	const agentType = process.env.NOVEL_AGENT_TYPE ?? "novel";
+	const isAnalyst = agentType === BOOK_ANALYST_AGENT_TYPE;
+	const analystTask = isAnalyst ? readAnalystTask(process.env.NOVEL_ANALYST_TASK) : undefined;
+	if (isAnalyst && analystTask === undefined) {
+		writeCrashTrace("CRASH analyst task payload missing（NOVEL_ANALYST_TASK 未注入或损坏）");
+		process.exit(1);
+	}
+	const workspace = isAnalyst
+		? (process.env.NOVEL_LIBRARY_ROOT ?? ".")
+		: (process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".");
 	// 运行参数（设置页 RuntimeSettings：档位/采样/压缩/能力，main 解析后序列化为 env）。
 	// 非法/缺省整体回落 NOVEL_PROVIDER_* env 默认
 	const runtimeSettings = parseRuntimeSettingsEnv(process.env[RUNTIME_SETTINGS_ENV]);
@@ -255,9 +273,18 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 
 	// novel-db：经 kkrpc/ws 连接 main 的 NovelDbWsServer（协议定稿 transport；token 走 subprotocol）。
 	// 无 NOVEL_DB_WS_URL（独立脚本/开发）回退进程内内存 store。
+	// BookAnalyst 分支：不经 WS，进程内直开该书 book.db（唯一写者，PRD library F5）。
 	let novelHandle: NovelHandle;
+	let analystStore: SqliteNovelStore | undefined;
 	const novelWsUrl = process.env.NOVEL_DB_WS_URL;
-	if (novelWsUrl !== undefined && novelWsUrl.trim() !== "") {
+	if (isAnalyst && analystTask !== undefined) {
+		analystStore = new SqliteNovelStore(bookDbPath(workspace, analystTask.bookId));
+		const store = analystStore;
+		novelHandle = {
+			query: (q: NovelQuery) => store.query(q),
+			mutate: (m: NovelMutation) => store.mutate(m),
+		} as unknown as NovelHandle;
+	} else if (novelWsUrl !== undefined && novelWsUrl.trim() !== "") {
 		const wsToken = process.env.NOVEL_DB_WS_TOKEN;
 		novelHandle = new NovelHandle(
 			webSocketClientTransport({
@@ -399,46 +426,49 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		: undefined;
 
 	// subagent 任务编排：builder 每任务新建 provider（流式累积状态不可跨 loop 共享）。
+	// BookAnalyst 不委托子代理（delegation disabled）——不装配编排；
 	// 运行参数存在时：Explore/Compose 各自走解析后的连接与采样（如 Explore → Fast 档）
-	const subagentRuntime = new SubagentRuntime({
-		sampling,
-		...(runtimeSettings !== undefined
-			? {
-					samplingByAgent: {
-						Explore: toAgentSampling(runtimeSettings.agents.Explore),
-						Compose: toAgentSampling(runtimeSettings.agents.Compose),
-					},
-				}
-			: {}),
-		builders: {
-			Explore: (agentId) =>
-				buildNovelExplorerAgent({
-					workspace,
-					provider: createProvider(
-						{ id: "explorer", ...runtimeProviderConfig(runtimeSettings?.agents.Explore) },
-						modelInfoRegistry,
-					),
-					handle: novelHandle,
-					todoStore,
-					conversationId,
-					agentId,
-					debugger: createCallDebugger?.(agentId),
-				}),
-			Compose: (agentId) =>
-				buildNovelComposeAgent({
-					workspace,
-					provider: createProvider(
-						{ id: "compose", ...runtimeProviderConfig(runtimeSettings?.agents.Compose) },
-						modelInfoRegistry,
-					),
-					handle: novelHandle,
-					todoStore,
-					conversationId,
-					agentId,
-					debugger: createCallDebugger?.(agentId),
-				}),
-		},
-	});
+	const subagentRuntime = isAnalyst
+		? undefined
+		: new SubagentRuntime({
+				sampling,
+				...(runtimeSettings !== undefined
+					? {
+							samplingByAgent: {
+								Explore: toAgentSampling(runtimeSettings.agents.Explore),
+								Compose: toAgentSampling(runtimeSettings.agents.Compose),
+							},
+						}
+					: {}),
+				builders: {
+					Explore: (agentId) =>
+						buildNovelExplorerAgent({
+							workspace,
+							provider: createProvider(
+								{ id: "explorer", ...runtimeProviderConfig(runtimeSettings?.agents.Explore) },
+								modelInfoRegistry,
+							),
+							handle: novelHandle,
+							todoStore,
+							conversationId,
+							agentId,
+							debugger: createCallDebugger?.(agentId),
+						}),
+					Compose: (agentId) =>
+						buildNovelComposeAgent({
+							workspace,
+							provider: createProvider(
+								{ id: "compose", ...runtimeProviderConfig(runtimeSettings?.agents.Compose) },
+								modelInfoRegistry,
+							),
+							handle: novelHandle,
+							todoStore,
+							conversationId,
+							agentId,
+							debugger: createCallDebugger?.(agentId),
+						}),
+				},
+			});
 
 	// 进程结构化日志：pino（storedir/logs 下每进程独占文件 + stderr 彩色行）。
 	// 级别：NOVEL_LOG_LEVEL（info=release 默认 / verbose=debug）——verbose 映射 pino debug。
@@ -493,7 +523,34 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		};
 	}
 
-	const loop = buildNovelAgent({
+	// 书库只读服务（novel 主 Agent 的 library.read 组）：NOVEL_LIBRARY_ROOT 注入时
+	// 以会话工作区为书单访问控制根构造；BookAnalyst 会话不需要
+	const libraryRootEnv = process.env.NOVEL_LIBRARY_ROOT;
+	const libraryDeps =
+		!isAnalyst && libraryRootEnv !== undefined && libraryRootEnv.trim() !== ""
+			? {
+					deps: new LibraryService({
+						libraryRoot: libraryRootEnv,
+						workspaceRoot: process.env.NOVEL_CONVERSATION_WORKSPACE,
+					}),
+				}
+			: undefined;
+
+	// agentType 分发：BookAnalyst = 书库完本解构后台装配（书库根沙盒 + 该书 book.db
+	// 读写 + bypass + journal 恢复；无 compose/ask/subagent）；否则 novel 主 Agent。
+	const loop = isAnalyst
+		? buildBookAnalystAgent({
+				libraryRoot: workspace,
+				provider,
+				store: analystStore as SqliteNovelStore,
+				conversationId,
+				listeners: journal !== undefined ? [journalListener(journal)] : undefined,
+				runMessages,
+				resumeSeq,
+				logger,
+				debugger: createCallDebugger?.("main"),
+			})
+		: buildNovelAgent({
 		workspace,
 		provider,
 		handle: novelHandle,
@@ -507,7 +564,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		resumePendingDecider,
 		logger,
 		debugger: createCallDebugger?.("main"),
-		subagent: { spawner: subagentRuntime },
+		subagent: subagentRuntime !== undefined ? { spawner: subagentRuntime } : undefined,
 		// 压缩阈值（设置页 RuntimeSettings.compaction；缺省项用策略默认值）
 		...(runtimeSettings?.compaction !== undefined
 			? { compact: runtimeSettings.compaction }
@@ -528,6 +585,8 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		composeService,
 		beforeProviderCall: () => holder.conv?.promotePendingMode() ?? Promise.resolve(),
 		todoStore: new InMemoryConversationTodoStore(),
+		// 书库只读引用（NOVEL_LIBRARY_ROOT 注入时装配；缺省=未装配降级，工具回不可用文本）
+		...(libraryDeps !== undefined ? { library: libraryDeps } : {}),
 	});
 
 	const managerWait: ManagerWaitChannel | undefined =
@@ -549,7 +608,8 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		composeService,
 		stateJournal,
 		subagentRuntime,
-		initialMode: readPersistedMode(storedir),
+		// BookAnalyst 恒 bypass（后台无人应答审批；canonical 写自动放行 + 免审批文件工具）
+		initialMode: isAnalyst ? "bypass" : readPersistedMode(storedir),
 		onModeChanged: (mode) => persistMode(storedir, mode),
 		logger,
 		// 事件火线 ZeroMQ 广播（gui-performance-2 功能点八）：每会话一个 PUB，
@@ -591,5 +651,65 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			debugLog("[child] resumePendingRun failed:", err);
 		});
 	}
+
+	// BookAnalyst 自动驱动：任务载荷经首条用户消息发起解析 run（journal 已有恢复
+	// 消息时跳过——重启续跑优先，不重复发起）。无 manager WS 的独立运行（冒烟）
+	// 用心跳定时器驻留，run 收口后由外部（脚本）观察产物并回收进程。
+	if (isAnalyst && analystTask !== undefined) {
+		if (runMessages === undefined || runMessages.length === 0) {
+			const prompt = analystTaskPrompt(analystTask);
+			const receipt = await holder.conv!.sendUserMessage({ text: prompt });
+			logger?.info("child.analyst.autodrive", {
+				conversationId,
+				bookId: analystTask.bookId,
+				receipt: String(JSON.stringify(receipt)).slice(0, 120),
+			});
+		}
+		if (cmsApi === undefined) {
+			setInterval(() => {}, 3_600_000);
+		}
+	}
 	// 子进程驻留：事件循环由 WS 连接与定时器维持
+}
+
+/** BookAnalyst 任务载荷（task.json；导入服务经 spawner 落盘） */
+interface AnalystTaskPayload {
+	/** 书 id */
+	bookId: string;
+	/** 书名（缺省取 meta） */
+	title?: string;
+}
+
+/**
+ * 读任务载荷（NOVEL_ANALYST_TASK 指向 task.json）
+ * @param envValue env 值（路径）
+ * @returns 载荷（缺失/损坏 → undefined）
+ */
+function readAnalystTask(envValue: string | undefined): AnalystTaskPayload | undefined {
+	if (envValue === undefined || envValue.trim() === "") return undefined;
+	try {
+		const parsed = JSON.parse(readFileSync(envValue, "utf8")) as { bookId?: unknown; title?: unknown };
+		if (typeof parsed.bookId !== "string" || parsed.bookId.length === 0) return undefined;
+		return {
+			bookId: parsed.bookId,
+			...(typeof parsed.title === "string" && parsed.title.length > 0 ? { title: parsed.title } : {}),
+		};
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * 构造解析 run 的首条任务消息
+ * @param task 任务载荷
+ * @returns 任务指令文本
+ */
+function analystTaskPrompt(task: AnalystTaskPayload): string {
+	return [
+		"【完本解构任务】",
+		`- bookId：${task.bookId}${task.title === undefined ? "" : `（书名：${task.title}）`}`,
+		"- 你的工作区即书库根；本书目录为上述 bookId。",
+		"- 步骤：Read <bookId>/book.meta.json 与 <bookId>/paragraphs/manifest.jsonl → TodoWrite 建全书计划 → 按 manifest 顺序逐批 Read 分段文件 → 增量产出大纲（幕级 story_unit：时间/地点/人物/事件 + paragraph id 区间）、人物卡、地点卡 → 维护 analysis/style.md 与 analysis/excerpts.md → 收尾自查后把 book.meta.json 的 status 置为「已完成」。",
+		"- 引用正文一律写 paragraph id；完成后输出一段简报（章数/幕数/人物数/产物路径）即可，无作者交互。",
+	].join("\n");
 }

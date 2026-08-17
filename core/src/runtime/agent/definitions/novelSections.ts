@@ -26,6 +26,9 @@ import {
   novelComposeSystemSection,
   novelComposeProcessSection,
   novelComposeReportingSection,
+  novelBookAnalystIdentitySection,
+  novelBookAnalystProcessSection,
+  novelBookAnalystArtifactsSection,
 } from "../../prompt/sections/novel.js";
 import {
   novelStoryAppealSection,
@@ -33,7 +36,7 @@ import {
   novelProseStandardSection,
 } from "../../prompt/sections/novelStandards.js";
 
-/** novel 域段注册表（id@version；20 段：main 9 + 共享 3 + 标准 3 + explorer 1 + compose 4） */
+/** novel 域段注册表（id@version；23 段：main 9 + 共享 3 + 标准 3 + explorer 1 + compose 4 + book-analyst 3） */
 export const novelSectionRegistry = new PromptSectionRegistry([
   // main（novel）recipe 段
   novelIdentitySection,
@@ -61,4 +64,8 @@ export const novelSectionRegistry = new PromptSectionRegistry([
   novelComposeSystemSection,
   novelComposeProcessSection,
   novelComposeReportingSection,
+  // BookAnalyst 专属段（书库完本解构，PRD library-完本解构 F4）
+  novelBookAnalystIdentitySection,
+  novelBookAnalystProcessSection,
+  novelBookAnalystArtifactsSection,
 ]);

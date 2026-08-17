@@ -228,8 +228,9 @@ exports[`Tier 0 快照：system prompt 渲染 > 完整 system prompt 金样（�
 - **钩子缺失**：场景结束时情绪已经完全落地，没有任何悬念或期待残留。读者读完觉得“哦，结束了”，没有翻页动力。
 
 # Using Tools
-- available tools: TodoWrite, Read, Glob, Write, Edit, AskUserQuestion, EnterComposeMode, ExitComposeMode, NovelRead, NovelWrite, NovelEdit, NovelDelete;
+- available tools: TodoWrite, Read, Glob, Write, Edit, AskUserQuestion, EnterComposeMode, ExitComposeMode, NovelRead, NovelWrite, NovelEdit, NovelDelete, LibraryRead;
 改已有文件用 Edit，禁止 Write 覆盖做小改动；Write/Edit 只作用于 workspace 文件，小说实体一律经 Novel* 工具操作。
+书库只读引用：先 overview 拿 bookId 再细读；引用原文一律写 paragraph id，禁止大段复制进本项目实体。
 # 环境信息
 - 当前日期：<masked>
 - 平台：Windows
@@ -2058,6 +2059,110 @@ items 形态（同 NovelWrite：变更 id + applied + 新 entityVersion）；bas
       "policy": "",
     },
     "requireApproval": true,
+    "version": "1.0.0",
+  },
+  {
+    "description": "读取书库（已完本参考书）资产，只读。kind 必填；除 overview 外必须给 bookId。
+
+## 数据形态
+- 书库是全局的（跨工作区共享）；当前工作区只能访问书单授权的书（未授权/不存在统一报错）。
+- 每本书与本项目同构：卷/章（发布骨架）、人物/地点/大纲 story unit（解构产物）在库内；
+  正文段落以文件分段存储，经 paragraph kind 按 id 或按章批量读取。
+- 概念边界（域模型规范）：大纲（story unit）= 叙事单位（幕级：时间/地点/人物/事件）；卷/章 = 发布单位——两者无结构对应。
+
+## 用法
+- overview：列出当前工作区可访问的书目（bookId/标题/状态/统计/产物就绪位）。先看这里。
+- character / location / story_unit / volume / chapter：同 NovelRead 语义的过滤参数 + 顶层 bookId。
+- paragraph：paragraphId 精确取一段；或 chapterNo 批量取该章分段（offset/limit 翻页，单次上限 24 段）。
+- style：该书全局风格 md（内容风格/技法，结论附 paragraph id 例证）。
+- excerpt：该书特色原文摘录（paragraph id + 摘录 + 代表性说明）。
+- 一切产物引用正文都用 paragraph id（形如 <bookId>-p000123）；不要整段复制进实体或正文。
+
+## 实例
+<example>
+作者：参考书库里那本，它的对话风格有什么特点？
+→ LibraryRead(kind=overview)
+→ LibraryRead(kind=style, bookId=<书目 id>)
+<reasoning>先列书拿 bookId，再读风格 md；引用例证时用其中的 paragraph id。</reasoning>
+</example>",
+    "name": "LibraryRead",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "bookId": {
+          "description": "书 id（除 overview 外必填；来自 overview 返回的 bookId）",
+          "type": "string",
+        },
+        "chapterId": {
+          "description": "仅 chapter：只读该章",
+          "type": "string",
+        },
+        "chapterNo": {
+          "description": "仅 paragraph：批量取该章全部分段",
+          "type": "integer",
+        },
+        "characterId": {
+          "description": "仅 character：角色 id（省略列全部）",
+          "type": "string",
+        },
+        "includeContent": {
+          "description": "仅 chapter：附带每章按 paragraphIds 选择取回的正文段落",
+          "type": "boolean",
+        },
+        "includePlans": {
+          "description": "仅 story_unit：附带 leaf 计划与叶完成度 rollup",
+          "type": "boolean",
+        },
+        "kind": {
+          "description": "读取类型：overview=可访问书目；character/location/story_unit/volume/chapter=该书实体（同 NovelRead 过滤参数）；paragraph=正文分段；style=全局风格 md；excerpt=特色原文摘录",
+          "enum": [
+            "overview",
+            "character",
+            "location",
+            "story_unit",
+            "paragraph",
+            "volume",
+            "chapter",
+            "style",
+            "excerpt",
+          ],
+          "type": "string",
+        },
+        "limit": {
+          "description": "仅 paragraph：单次条数（缺省 6，上限 24）",
+          "type": "integer",
+        },
+        "locationId": {
+          "description": "仅 location：地点 id（省略列全部）",
+          "type": "string",
+        },
+        "offset": {
+          "description": "仅 paragraph：翻页偏移（缺省 0）",
+          "type": "integer",
+        },
+        "paragraphId": {
+          "description": "仅 paragraph：精确取该分段",
+          "type": "string",
+        },
+        "storyUnitId": {
+          "description": "仅 story_unit：单元 id（省略返回全树）",
+          "type": "string",
+        },
+        "volumeId": {
+          "description": "仅 chapter：按卷过滤",
+          "type": "string",
+        },
+      },
+      "required": [
+        "kind",
+      ],
+      "type": "object",
+    },
+    "promptDetail": {
+      "guidance": "",
+      "policy": "书库只读引用：先 overview 拿 bookId 再细读；引用原文一律写 paragraph id，禁止大段复制进本项目实体。",
+    },
+    "requireApproval": undefined,
     "version": "1.0.0",
   },
 ]

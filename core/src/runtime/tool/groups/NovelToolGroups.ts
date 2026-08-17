@@ -19,6 +19,8 @@ import { createComposeTools } from "../definitions/compose.js";
 import { createAskUserTool } from "../definitions/askUser.js";
 import type { AskUserChannel } from "../definitions/askUser.js";
 import { createNovelEntityTools } from "../definitions/novel.js";
+import { createLibraryReadTool } from "../definitions/library.js";
+import type { LibraryReadDeps } from "../definitions/library.js";
 
 /** runtime.todo：会话执行计划（TodoWrite） */
 export const NOVEL_TOOL_GROUP_TODO = new ToolGroupManifest({
@@ -66,6 +68,24 @@ export const NOVEL_TOOL_GROUP_ENTITIES = new ToolGroupManifest({
   tools: ["NovelRead", "NovelWrite", "NovelEdit", "NovelDelete"],
 });
 
+/** analyst.files：书库解析会话免审批文件四件套（后台无人应答审批） */
+export const NOVEL_TOOL_GROUP_ANALYST_FILES = new ToolGroupManifest({
+  id: "analyst.files",
+  version: "1.0.0",
+  label: "Analyst Files",
+  description: "书库解析会话专用文件四件套（Read/Glob/Write/Edit 免审批，沙盒=书库根）",
+  tools: ["Read", "Glob", "Write", "Edit"],
+});
+
+/** library.read：书库只读引用（novel 主 Agent 经工作区书单访问全局书库） */
+export const NOVEL_TOOL_GROUP_LIBRARY = new ToolGroupManifest({
+  id: "library.read",
+  version: "1.0.0",
+  label: "Library Read",
+  description: "书库只读工具（LibraryRead：overview/实体/分段/风格/摘录，kind 分发）",
+  tools: ["LibraryRead"],
+});
+
 /** Novel Agent 工具组目录：groupId → manifest（有序插入，与 definition.tools.groupIds 对齐） */
 export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = new Map([
   [NOVEL_TOOL_GROUP_TODO.id, NOVEL_TOOL_GROUP_TODO],
@@ -73,6 +93,8 @@ export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = 
   [NOVEL_TOOL_GROUP_ASK.id, NOVEL_TOOL_GROUP_ASK],
   [NOVEL_TOOL_GROUP_COMPOSE.id, NOVEL_TOOL_GROUP_COMPOSE],
   [NOVEL_TOOL_GROUP_ENTITIES.id, NOVEL_TOOL_GROUP_ENTITIES],
+  [NOVEL_TOOL_GROUP_ANALYST_FILES.id, NOVEL_TOOL_GROUP_ANALYST_FILES],
+  [NOVEL_TOOL_GROUP_LIBRARY.id, NOVEL_TOOL_GROUP_LIBRARY],
 ]);
 
 /** 工具组工厂选项（workspace / novel handle / todo 闭包 / compose 闭包） */
@@ -89,6 +111,8 @@ export interface NovelToolGroupResolverOptions {
   compose?: { service: ComposeModeService; conversationId: string };
   /** 提问通道（runtime.ask 组 AskUserQuestion；由 buildNovelAgent 注入，缺省工具回「未送达」文本） */
   ask?: { channel: AskUserChannel; conversationId: string };
+  /** 书库服务（library.read 组 LibraryRead；workspace 同上作为书单访问控制根。缺省组装配报错） */
+  library?: { deps: LibraryReadDeps };
 }
 
 /**
@@ -105,6 +129,12 @@ export function createNovelToolGroupResolver(
       () => [createTodoWriteTool(options.todoStore, options.todoConversationId)],
     ],
     ["runtime.files", () => createFileTools(options.workspace)],
+    [
+      "analyst.files",
+      () => createFileTools(options.workspace, { requireApproval: false }),
+    ],
+    // library.read：deps 缺省=未装配降级（工具回不可用文本，对齐 runtime.ask 先例）
+    ["library.read", () => [createLibraryReadTool({ deps: options.library?.deps })]],
     [
       "runtime.ask",
       () => [createAskUserTool(options.ask?.channel, options.ask?.conversationId ?? "")],

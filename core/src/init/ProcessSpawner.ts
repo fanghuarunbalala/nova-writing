@@ -5,7 +5,7 @@
  * fd>2 管道禁用（Windows 写方向失效，见 CLAUDE.md transport 约束）。
  */
 import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ConversationProcessSpawner } from "../conversation/server/ConversationManagerServer.js";
 import type { ConnectedConversation } from "../conversation/server/ConversationManagerWsServer.js";
@@ -73,6 +73,13 @@ export function createProcessSpawner(
 			// 崩溃自曝日志目录：child 入口在一切逻辑之前同步 appendFile，目录必须已存在
 			const childLogPath = join(opts.storedir, "logs", "runtime-child.log");
 			mkdirSync(join(opts.storedir, "logs"), { recursive: true });
+			// 后台任务载荷（如 BookAnalyst 自动驱动）：落 storedir/task.json，路径经 env 注入
+			let taskEnv: Record<string, string> = {};
+			if (opts.task !== undefined) {
+				const taskPath = join(opts.storedir, "task.json");
+				writeFileSync(taskPath, JSON.stringify(opts.task), "utf8");
+				taskEnv = { NOVEL_ANALYST_TASK: taskPath };
+			}
 			// Electron main 里 process.execPath 是 electron.exe：ELECTRON_RUN_AS_NODE 使其按
 			// 纯 Node 运行脚本（否则子进程是 Electron 实例，脚本完成后无窗口自动退出）
 			const child = spawn(process.execPath, [childScriptPath], {
@@ -83,11 +90,14 @@ export function createProcessSpawner(
 					ELECTRON_RUN_AS_NODE: "1",
 					CONVERSATION_ID: opts.conversationId,
 					AGENT_ID: "main",
+					NOVEL_AGENT_TYPE: opts.agentType,
 					NOVEL_CONVERSATION_STOREDIR: opts.storedir,
 					NOVEL_CONVERSATION_WORKSPACE: opts.workspace ?? ".",
 					NOVEL_MANAGER_WS_URL: transports.managerWs.url,
 					NOVEL_MANAGER_WS_TOKEN: transports.managerWs.token,
 					[CHILD_LOG_ENV]: childLogPath,
+					...taskEnv,
+					...(opts.extraEnv ?? {}),
 					...(transports.novelWs !== undefined
 						? { NOVEL_DB_WS_URL: transports.novelWs.url, NOVEL_DB_WS_TOKEN: transports.novelWs.token }
 						: {}),

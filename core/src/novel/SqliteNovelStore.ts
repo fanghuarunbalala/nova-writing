@@ -38,11 +38,29 @@ export class SqliteNovelStore implements NovelStore {
 
 	/**
 	 * @param dbPath sqlite 文件路径（:memory: 供测试）
+	 * @param options 打开选项（readOnly：只读直开——跳过建表迁移，供书库读路径
+	 *   跨进程并发访问；WAL 由建库方初始化，读写均受益）
 	 */
-	constructor(dbPath: string) {
-		this.db = new DatabaseSync(dbPath);
+	constructor(dbPath: string, options?: { readOnly?: boolean }) {
+		this.db =
+			options?.readOnly === true
+				? new DatabaseSync(dbPath, { readOnly: true })
+				: new DatabaseSync(dbPath);
 		this.outline = { id: "outline_1", novelId: "novel_1" } as StoryOutline;
-		this.migrate();
+		if (options?.readOnly !== true) this.migrate();
+	}
+
+	/**
+	 * 确保数据库为 WAL 模式（跨进程「单写者 + 多只读者」直开的前提；建库方调用一次）
+	 * @param dbPath sqlite 文件路径
+	 */
+	static ensureWal(dbPath: string): void {
+		const db = new DatabaseSync(dbPath);
+		try {
+			db.exec("PRAGMA journal_mode=WAL;");
+		} finally {
+			db.close();
+		}
 	}
 
 	/** 关闭连接（workspace 切换热重绑 / 应用退出；关闭后本实例不可再用） */

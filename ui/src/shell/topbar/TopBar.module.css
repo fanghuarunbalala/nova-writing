@@ -4,10 +4,11 @@
 .topbar {
   display: flex;
   align-items: center;
-  gap: var(--space-14px);
+  gap: var(--space-8px);
   height: var(--topbar-height);
   flex: none;
-  padding: 0 var(--space-4);
+  /* demo .titlebar：左缘 10px；右缘 0（右距由 .tbRight padding-right 收口） */
+  padding: 0 0 0 var(--space-10px);
   background: var(--color-chrome-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -20,6 +21,19 @@
 
 .spacer {
   flex: 1;
+}
+
+/* 右侧纯图标动作组（demo .tbRight）：组内 2px 间距 */
+.tbRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2px);
+  padding-right: var(--space-8px);
+}
+
+/* win 平台窗口控制贴右缘（demo .appFrame[data-platform="win"] .tbRight） */
+.tbRight[data-win="true"] {
+  padding-right: 0;
 }
 
 /* 品牌（demo .brand）：渐变圆点 + 粗体小字名称 */

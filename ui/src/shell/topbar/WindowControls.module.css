@@ -52,7 +52,7 @@
 .winCtl {
   display: flex;
   align-self: stretch;
-  margin-left: var(--space-3px);
+  margin-left: var(--space-4px); /* demo .winCtl：与左侧动作组间距 */
 }
 
 .wbtn {

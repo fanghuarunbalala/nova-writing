@@ -55,7 +55,7 @@ export function NotificationBell({ store, onActivate, onOpenSettings }: Notifica
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
-        <IconButton label="通知中心" className={styles.bellWrap}>
+        <IconButton label="通知中心" size="sm" className={styles.bellWrap}>
           <Icon icon={Bell} size="sm" />
           {unread > 0 ? <span className={styles.bellBadge}>{unread}</span> : null}
         </IconButton>

@@ -2,7 +2,7 @@
  * ConversationListItem
  *
  * 侧栏对话行（对齐 app-redesign demo 的 convItem）：
- * [图标位 26px（accent 底 + message 图标；generating/failed/unavailable 时被
+ * [图标位 27px（accent 底 + message 图标；generating/failed/unavailable 时被
  *  状态 spinner 覆盖）] [标题（+置顶小图标）/ 副信息 agentLabel] [状态点?] [⋯ 菜单]
  *
  * .conv-row 为 relative 容器；状态覆盖层（.status）绝对定位于图标位上方，

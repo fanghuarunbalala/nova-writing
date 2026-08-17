@@ -61,7 +61,11 @@ export const TopBar = memo(function TopBar({
       {windowChrome !== undefined && windowChrome.platform === "mac" ? (
         <WindowControls {...windowChrome} />
       ) : null}
-      <IconButton label={sidebarMode === "expanded" ? "收起侧栏" : "展开侧栏"} onClick={onToggleSidebar}>
+      <IconButton
+        label={sidebarMode === "expanded" ? "收起侧栏" : "展开侧栏"}
+        size="sm"
+        onClick={onToggleSidebar}
+      >
         <Icon icon={PanelLeft} size="sm" />
       </IconButton>
       <div className={styles.brand}>
@@ -83,22 +87,27 @@ export const TopBar = memo(function TopBar({
       <span className={styles.spacer} />
       <TopBarViewSwitcher state={view} onChange={onViewChange} />
       <span className={styles.spacer} />
-      <IconButton label="打开工作区" onClick={onOpenWorkspace}>
-        <Icon icon={FolderOpen} size="sm" />
-      </IconButton>
-      {notifications !== undefined ? (
-        <NotificationBell
-          store={notifications}
-          onActivate={onNotificationActivate}
-          onOpenSettings={onOpenSettings}
-        />
-      ) : null}
-      <IconButton label="设置" onClick={onOpenSettings}>
-        <Icon icon={Settings} size="sm" />
-      </IconButton>
-      {windowChrome !== undefined && windowChrome.platform === "win" ? (
-        <WindowControls {...windowChrome} />
-      ) : null}
+      <div
+        className={styles.tbRight}
+        data-win={windowChrome !== undefined && windowChrome.platform === "win" ? "true" : undefined}
+      >
+        <IconButton label="打开工作区" size="sm" onClick={onOpenWorkspace}>
+          <Icon icon={FolderOpen} size="sm" />
+        </IconButton>
+        {notifications !== undefined ? (
+          <NotificationBell
+            store={notifications}
+            onActivate={onNotificationActivate}
+            onOpenSettings={onOpenSettings}
+          />
+        ) : null}
+        <IconButton label="设置" size="sm" onClick={onOpenSettings}>
+          <Icon icon={Settings} size="sm" />
+        </IconButton>
+        {windowChrome !== undefined && windowChrome.platform === "win" ? (
+          <WindowControls {...windowChrome} />
+        ) : null}
+      </div>
     </header>
   );
 });

@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.check.json --noEmit",
     "test": "vitest run",
     "dev": "evalite watch",
     "suite": "tsc -p tsconfig.json && node dist/suite.js",
-    "compare": "node dist/compare.js"
+    "compare": "tsc -p tsconfig.json && node dist/compare.js"
   },
   "dependencies": {
     "@novel/core": "workspace:*"

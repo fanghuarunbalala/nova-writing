@@ -11,6 +11,12 @@ import type { Provider, NovelHandle, ToolDef } from "@novel/core";
 
 const provider: Provider = {
 	call: async () => ({ finishReason: "stop", message: { role: "assistant", content: "ok" } }),
+	getModelInfo: (model: string) => ({
+		model,
+		supportsTemperature: true,
+		thinkingMode: "none" as const,
+		contextWindowTokens: 128_000,
+	}),
 };
 
 /** 固定装配：workspace/platform/model/constraints 全部钉死，唯一动态量是日期行 → 屏蔽 */

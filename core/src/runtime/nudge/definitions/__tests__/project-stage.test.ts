@@ -226,12 +226,12 @@ describe("renderFullText / renderSparseText", () => {
     expect(text).toContain("情绪优先");
   });
 
-  it("开书 full 按作者定稿：创意+目标字数+每章推荐字数，确认后写入 NOVEL.md 或正式稿", () => {
+  it("开书 full 按作者定稿：创意+目标字数+每章推荐字数，建议先行构建，确认后写入 NOVEL.md 或正式稿", () => {
     const text = FULL_TEXT_OF.collect;
     expect(text.startsWith("## 开书推荐工作流")).toBe(true);
     expect(text).toContain("一句话创意（开放填空，绝不配选项）");
     expect(text).toContain("全篇目标字数及每章推荐字数");
-    expect(text).toContain("帮助用户完成一个吸引人的故事构建");
+    expect(text).toContain("建议先行");
     expect(text).toContain("写入 NOVEL.md 或者正式稿");
   });
 

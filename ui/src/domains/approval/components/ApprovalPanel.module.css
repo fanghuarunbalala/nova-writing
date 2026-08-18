@@ -5,10 +5,30 @@
  * （apGroup 色带 + 参数网格）+ 决策按钮/意见输入/已处理横幅。
  */
 
-/* 弹窗详情容器（无卡片边框：弹窗自身即容器） */
+/* 弹窗详情容器（无卡片边框：弹窗自身即容器）：滚动区 + 固定底脚（demo .apDetail 结构） */
 .detail {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+/* 滚动区：身份行/标题/两段式内容（demo .apDetailScroll） */
+.detailScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-14px) var(--space-18px) var(--space-4);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+/* 固定底脚：决策按钮/意见输入/已处理横幅，不随内容滚动（demo .apDetailFoot） */
+.detailFoot {
+  flex: none;
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-10px) var(--space-18px) var(--space-14px);
+  background: var(--color-surface);
 }
 
 .panel {
@@ -94,7 +114,7 @@
   align-items: baseline;
   gap: var(--space-2);
   margin: 0 0 var(--space-1);
-  font-size: var(--fs-h2);
+  font-size: 15px;
   font-weight: var(--fw-bold);
 }
 
@@ -251,25 +271,22 @@
   color: var(--color-faint);
 }
 
-/* ---------- 决策区（demo .apActions：静态 border-top，非 sticky） ---------- */
+/* ---------- 决策区（固定底脚内，demo .apActions/.apBanner） ---------- */
 .actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
   flex-wrap: wrap;
-  margin-top: var(--space-3);
-  padding: var(--space-10px) 0 0;
-  border-top: 1px solid var(--color-border);
 }
 
 .banner {
-  margin-top: var(--space-14px);
   padding: var(--space-2) var(--space-11px);
   border-radius: var(--radius-10px);
   background: var(--color-success-bg);
   color: var(--color-success);
   font-size: var(--fs-12);
   font-weight: var(--fw-semibold);
+  text-align: center;
   animation: var(--anim-view-in) var(--duration-base) var(--ease-out);
 }
 
@@ -289,6 +306,7 @@
 .commentCollapsible {
   display: grid;
   grid-template-rows: 0fr;
+  margin-top: var(--space-2);
   transition: grid-template-rows var(--duration-base) var(--ease-out);
 }
 
@@ -305,12 +323,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-}
-
-/* 意见输入内的按钮区：无上边框（demo .apCommentInner .apActions 复位） */
-.commentBox .actions {
-  border-top: 0;
-  padding-top: 0;
 }
 
 .commentInput {

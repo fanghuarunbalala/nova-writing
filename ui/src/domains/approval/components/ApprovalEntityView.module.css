@@ -1,8 +1,8 @@
 /**
  * ApprovalEntityView 视觉：审批卡「当前内容」段（demo .apCur 区内）——
- * muted 当前值展示：目标名 + 结构上下文树（目标节点 warn 高亮）+ 当前值字段行
- * （行网格与 demo .apParam 一致）+ 写作方案（leaf）子块 + 相邻段落原文。
- * 无红绿 diff 配色：新值由卡片「变更后」段的参数行承载。
+ * muted 当前值展示：目标名 + 结构上下文面包屑（单行，demo 极简形态）+
+ * 当前值字段行（行网格与 demo .apParam 一致）+ 场景计划 leaf 卡 + 相邻段落
+ * 原文。无红绿 diff 配色：新值由卡片「变更后」段的参数行承载。
  */
 
 .entity {
@@ -16,6 +16,16 @@
   font-weight: var(--fw-semibold);
   color: var(--color-muted);
   margin-bottom: var(--space-2px);
+}
+
+/* 结构上下文面包屑：卷 › 章 › 单元（单行省略，定位审批对象） */
+.crumb {
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  margin: 0 0 var(--space-2px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- 字段行（当前值）：网格对齐 demo .apParam ---------- */
@@ -44,116 +54,9 @@
   overflow-wrap: anywhere;
 }
 
-/* ---------- 树 / 列表（嵌套容器 + 引导线 + 横向枝） ---------- */
-.tree {
-  font-size: var(--fs-12-5);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.parent {
-  font-size: var(--fs-11);
-  font-weight: var(--fw-semibold);
-  color: var(--color-faint);
-  letter-spacing: 0.04em;
-  padding: var(--space-2px) var(--space-2);
-}
-
-.node {
-  position: relative;
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-6px);
-  padding: var(--space-3px) var(--space-2) var(--space-3px) var(--space-6px);
-  border-radius: var(--radius-sm);
-  color: var(--color-muted);
-}
-
-.nm {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sc {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: var(--fs-9);
-  font-weight: var(--fw-bold);
-  color: var(--color-accent-ink);
-  background: var(--color-accent-8-surface);
-  border: 1px solid color-mix(in oklab, var(--color-accent) 22%, var(--color-border));
-  border-radius: var(--radius-4px);
-  padding: 0 var(--space-1);
-}
-
-.st {
-  margin-left: auto;
-  font-size: var(--fs-10);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3px);
-  color: var(--color-muted);
-  flex: none;
-}
-
-.st i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-border-strong);
-}
-
-.children {
-  margin-left: var(--space-7px);
-  padding-left: var(--space-4);
-  border-left: var(--space-5px) solid var(--color-border-strong);
-}
-
-.children > .node::before {
-  content: "";
-  position: absolute;
-  left: -var(--space-4);
-  top: 50%;
-  width: 12px;
-  height: 1.5px;
-  background: var(--color-border-strong);
-}
-
-/* 目标节点：warn 高亮（demo 卡内定位当前审批对象） */
-.node.current {
-  background: color-mix(in oklab, var(--color-warn) 13%, var(--color-surface));
-  border-left: var(--space-3px) solid var(--color-warn);
-  color: var(--color-fg);
-}
-
-.node.current .nm {
-  font-weight: var(--fw-semibold);
-}
-
-/* ---------- 写作方案（leaf） ---------- */
-.leaf {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin-top: var(--space-1);
-}
-
-.leafhead {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-6px);
-  padding: var(--space-1) var(--space-2) 1px;
-  font-size: var(--fs-11);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.05em;
-  color: var(--color-faint);
-}
-
-.leafTag {
-  font-family: var(--font-mono);
-  font-size: var(--fs-9);
+/* ---------- 场景计划 leaf 卡（LeafPlanCard） ---------- */
+.leafCard {
+  margin-top: var(--space-2px);
 }
 
 /* ---------- 段落原文（宋体 muted，demo .apCurText） ---------- */

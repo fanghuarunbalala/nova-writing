@@ -11,7 +11,10 @@ import { useExternalStore } from "../shared/state/useExternalStore.js";
 import { useMainView, useInspectorRoute } from "../shared/routing/hooks.js";
 import type { FrontendPlatform } from "../platform/FrontendPlatform.js";
 import { useActiveConversationBinding, useFirstUserMessage } from "../domains/conversation/hooks/useActiveConversationSession.js";
-import { createApprovalEntityResolver } from "../domains/approval/approvalEntityResolver.js";
+import {
+  createApprovalEntityResolver,
+  createApprovalIdNameResolver,
+} from "../domains/approval/approvalEntityResolver.js";
 import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
 import {
   createDomainReferenceResolver,
@@ -128,6 +131,11 @@ export function ApplicationShell({
   // 审批目标实体内容解析器（lite：api.novel.* 查询 + 乐观锁 stale 判定）
   const resolveEntity = useMemo(
     () => createApprovalEntityResolver({ api }),
+    [api],
+  );
+  // 审批参数 id 引用 → 实体名称映射解析器（大纲/角色/地点/卷章全量一次拉取）
+  const resolveIdNames = useMemo(
+    () => createApprovalIdNameResolver({ api }),
     [api],
   );
   const [sidebarMode, setSidebarMode] = useState<"expanded" | "collapsed">("expanded");
@@ -742,6 +750,7 @@ export function ApplicationShell({
           modalStore={approvalModalStore}
           conversationId={catalogSnapshot.activeConversationId}
           resolveEntity={resolveEntity}
+          resolveIdNames={resolveIdNames}
           onNotify={handleNotify}
         />
       </OverlaysHost>

@@ -172,7 +172,38 @@ export function paramFieldRank(field: string): number {
 }
 
 /** 审批详情不展示的字段（内部标识，对审批决策无信息量）。Hidden param fields. */
-const PARAM_HIDDEN_FIELDS: ReadonlySet<string> = new Set(["baseRevision", "id"]);
+const PARAM_HIDDEN_FIELDS: ReadonlySet<string> = new Set([
+  "baseRevision",
+  "id",
+  // leaf 内部事件引用（relatedEventIds/sourceEventIds）：事件无独立名称，
+  // 平铺只会露出 e1/e2 内部 id；leaf 走 LeafPlanCard 专用渲染。
+  "relatedEventIds",
+  "sourceEventIds",
+]);
+
+/**
+ * id 引用字段（值指向其他实体，如 storyUnitId → 大纲单元）：渲染时经
+ * id→名称映射替换为名称（demo 样例均显示名称）；paragraphIds 不在此列，
+ * 按段落数摘要展示。ID-reference fields resolved to entity names.
+ */
+export const ID_REFERENCE_FIELDS: ReadonlySet<string> = new Set([
+  "storyUnitId",
+  "volumeId",
+  "parentId",
+  "characterId",
+  "locationId",
+  "entityId",
+  "relatedEntityId",
+  "replacementStoryUnitId",
+  "dependencyIds",
+]);
+
+/** 段落 id 列表字段：显示为「正文 · N 段」摘要（段落 id 对作者无意义）。 */
+export const PARAGRAPH_IDS_FIELD = "paragraphIds";
+
+export function isIdReferenceField(field: string): boolean {
+  return ID_REFERENCE_FIELDS.has(field);
+}
 
 export function isParamFieldHidden(field: string): boolean {
   return PARAM_HIDDEN_FIELDS.has(field);

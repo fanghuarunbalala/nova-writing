@@ -94,13 +94,19 @@ export interface ResolvedEntityContent {
   readonly context?: ApprovalContext;
   /** 段落行（lite 版不产出） */
   readonly paragraphs?: readonly ApprovalParagraphLine[];
-  /** 写作方案 leaf 行（lite 版不产出） */
-  readonly leaf?: readonly ApprovalFieldLine[];
+  /** 当前值 leaf（原始 JSON；视图经 coerceLeafPlan 渲染为场景计划卡） */
+  readonly leaf?: unknown;
 }
 
 export type ApprovalEntityResolver = (
   target: ApprovalTarget,
 ) => Promise<ResolvedEntityContent | undefined>;
+
+/**
+ * id → 实体名称映射解析器（审批参数渲染用）：一次拉取大纲/角色/地点/卷章
+ * 全量，构建 id→title/name 映射；任一查询失败跳过（对应 id 显示原值兜底）。
+ */
+export type ApprovalIdNameResolver = () => Promise<ReadonlyMap<string, string>>;
 
 /** 工具名 → 实体 kind（P1 legacy 对齐命名：NovelXxxWrite/Edit…） */
 const KIND_BY_TOOL_NAME: Readonly<Record<string, string>> = {
@@ -133,6 +139,11 @@ const SKIP_FIELDS: ReadonlySet<string> = new Set([
   "novelId",
   "storyUnitId",
   "volumeId",
+  // leaf 走 LeafPlanCard 专用渲染（场景计划卡），不平铺为 JSON 字段行。
+  "leaf",
+  // leaf 内部事件引用（无名称可解析，平铺只露 e1/e2 内部 id）。
+  "relatedEventIds",
+  "sourceEventIds",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -332,7 +343,7 @@ function buildOutlineContext(
     const planning = asString(unit.planningStatus);
     return {
       id: asString(unit.id) ?? "",
-      label: asString(unit.title) ?? asString(unit.id) ?? "",
+      label: asString(unit.title) ?? "",
       ...(scope !== undefined ? { scope } : {}),
       ...(planning !== undefined ? { status: planning } : {}),
       state,
@@ -402,11 +413,10 @@ function buildPublicationContext(
   return { type: "list", nodes, ...(parent !== undefined && parent !== "" ? { parent } : {}) };
 }
 
-/** 实体名提取（Write/Edit/Delete 目标标题用） */
+/** 实体名提取（Write/Edit/Delete 目标标题用；无名的实体不回退内部 id） */
 function entityNameOf(entity: unknown, fallback: string): string {
   if (!isRecord(entity)) return fallback;
-  const name = asString(entity.name) ?? asString(entity.title);
-  return name ?? fallback;
+  return asString(entity.name) ?? asString(entity.title) ?? "（未命名）";
 }
 
 /**
@@ -493,6 +503,58 @@ export function createApprovalEntityResolver(deps: {
       stale,
       ...(context !== undefined ? { context } : {}),
       ...(paragraphs !== undefined && paragraphs.length > 0 ? { paragraphs } : {}),
+      ...(current.leaf !== undefined ? { leaf: current.leaf } : {}),
     };
+  };
+}
+
+/**
+ * 创建 id → 名称映射解析器：并行拉取大纲（units→title）、角色（name）、
+ * 地点（name）、卷章（title）全量构建映射；任一查询失败跳过该域
+ * （对应 id 渲染时回退原值）。数据量为单部作品级，整映射一次返回。
+ * @param deps api（novel 查询）
+ * @returns 解析器
+ */
+export function createApprovalIdNameResolver(deps: {
+  readonly api: NovelApiClient;
+}): ApprovalIdNameResolver {
+  const { api } = deps;
+  return async () => {
+    const names = new Map<string, string>();
+    const put = (id: unknown, name: unknown): void => {
+      if (typeof id === "string" && id !== "" && typeof name === "string" && name !== "") {
+        names.set(id, name);
+      }
+    };
+    const [outline, characters, locations, publication] = await Promise.allSettled([
+      api.novel.outline.get(),
+      api.novel.characters.list(),
+      api.novel.locations.list(),
+      api.novel.publication.get(),
+    ]);
+    if (outline.status === "fulfilled") {
+      for (const unit of outline.value.units) {
+        put(unit.id, unit.title);
+      }
+    }
+    if (characters.status === "fulfilled") {
+      for (const character of characters.value) {
+        put(character.id, character.name);
+      }
+    }
+    if (locations.status === "fulfilled") {
+      for (const location of locations.value) {
+        put(location.id, location.name);
+      }
+    }
+    if (publication.status === "fulfilled") {
+      for (const volume of publication.value.volumes) {
+        put(volume.id, volume.title);
+      }
+      for (const chapter of publication.value.chapters) {
+        put(chapter.id, chapter.title);
+      }
+    }
+    return names;
   };
 }

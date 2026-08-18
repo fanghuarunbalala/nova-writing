@@ -252,14 +252,13 @@
   justify-content: center;
 }
 
-/* ---- 右：当前组详情（滚动区） ---- */
+/* ---- 右：当前组详情（容器；内部 ApprovalGroupDetail 拆滚动区 + 固定底脚） ---- */
 .detail {
   flex: 1;
   min-width: 0;
-  overflow-y: auto;
-  padding: var(--space-14px) var(--space-18px);
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .detailEmpty {

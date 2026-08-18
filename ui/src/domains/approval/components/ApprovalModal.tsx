@@ -14,7 +14,10 @@ import { Button } from "../../../shared/primitives/Button.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
-import type { ApprovalEntityResolver } from "../approvalEntityResolver.js";
+import type {
+  ApprovalEntityResolver,
+  ApprovalIdNameResolver,
+} from "../approvalEntityResolver.js";
 import {
   APPROVAL_STATUS_LABEL,
   groupApprovals,
@@ -87,6 +90,8 @@ export interface ApprovalModalProps {
   readonly conversationId?: string;
   /** 删除/编辑目标实体内容解析器（宿主注入）。 */
   readonly resolveEntity?: ApprovalEntityResolver;
+  /** id → 实体名称映射解析器（宿主注入；id 引用字段与 leaf chips 显示名称）。 */
+  readonly resolveIdNames?: ApprovalIdNameResolver;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
 }
 
@@ -95,6 +100,7 @@ export function ApprovalModal({
   modalStore,
   conversationId,
   resolveEntity,
+  resolveIdNames,
   onNotify,
 }: ApprovalModalProps) {
   const snapshot = useExternalStore(store);
@@ -207,9 +213,7 @@ export function ApprovalModal({
                         <span className={styles.itemTitle}>{group.title}</span>
                         <span className={styles.itemMeta}>
                           {group.approvals
-                            .flatMap((approval) =>
-                              approval.toolCalls.map((tc) => tc.toolName.split(/(?=[A-Z])/).pop() ?? tc.toolName),
-                            )
+                            .flatMap((approval) => approval.toolCalls.map((tc) => tc.toolName))
                             .join(" · ")}
                         </span>
                       </span>
@@ -242,6 +246,7 @@ export function ApprovalModal({
                   group={selected}
                   store={store}
                   resolveEntity={resolveEntity}
+                  resolveIdNames={resolveIdNames}
                 />
               )}
             </section>

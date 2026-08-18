@@ -2,16 +2,21 @@
  * ApprovalGroupDetail
  *
  * 一个审批组的完整详情（自原 ApprovalPanel 卡片抽出，供弹窗右栏复用）：
- * 身份行（工具名·状态 pill）+ 标题（diff 符号）+ 两段式内容
- * （当前内容·将被覆盖/删除 + 写入内容/变更后/删除参数）+ 决策按钮/意见输入/已处理横幅。
- * ExitComposeMode 组详情区改渲染 design 文件全文（经 platform.designFile，可编辑保存）。
- * 组内整批决策（core WaitRequestQueue 粒度：组 = 一次请求及其重试）。
+ * 滚动区（身份行「中文 · 工具码」+ 标题 diff 符号 + 两段式内容——当前内容·
+ * 将被覆盖/删除 + 写入内容/变更后/删除参数）+ 固定底部决策区（批准/拒绝/
+ * 请求修改 + 意见输入 / 已处理横幅；demo .apDetailFoot 不随内容滚动）。
+ * ExitComposeMode 组详情区改渲染 design 文件全文（经 platform.designFile，
+ * 可编辑保存）。组内整批决策（core WaitRequestQueue 粒度：组 = 一次请求
+ * 及其重试）。id 引用与 leaf chips 经 idNames 渲染为实体名称。
  */
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { Clock, Pencil, Plus, X, type LucideIcon } from "lucide-react";
 import { Button } from "../../../shared/primitives/Button.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
-import type { ApprovalEntityResolver } from "../approvalEntityResolver.js";
+import type {
+  ApprovalEntityResolver,
+  ApprovalIdNameResolver,
+} from "../approvalEntityResolver.js";
 import {
   APPROVAL_STATUS_LABEL,
   isExitComposeGroup,
@@ -25,6 +30,7 @@ import styles from "./ApprovalPanel.module.css";
 import { ApprovalEntityView } from "./ApprovalEntityView.js";
 import { ParameterView } from "./ParameterView.js";
 import { useApprovalEntityResolution } from "./useApprovalEntityResolution.js";
+import { useApprovalIdNames } from "./useApprovalIdNames.js";
 import { ExitComposeApprovalView } from "./ExitComposeApprovalView.js";
 
 /** 方案 E：标题 diff 符号 class。 */
@@ -89,9 +95,16 @@ export interface ApprovalGroupDetailProps {
   readonly store: ApprovalStore;
   /** 删除/编辑目标实体内容解析器（宿主注入）。 */
   readonly resolveEntity?: ApprovalEntityResolver;
+  /** id → 实体名称映射解析器（宿主注入）。 */
+  readonly resolveIdNames?: ApprovalIdNameResolver;
 }
 
-export function ApprovalGroupDetail({ group, store, resolveEntity }: ApprovalGroupDetailProps) {
+export function ApprovalGroupDetail({
+  group,
+  store,
+  resolveEntity,
+  resolveIdNames,
+}: ApprovalGroupDetailProps) {
   // 「请求修改」意见输入（按组独立）
   const [editingComment, setEditingComment] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -132,130 +145,140 @@ export function ApprovalGroupDetail({ group, store, resolveEntity }: ApprovalGro
     isPending && !isExitCompose ? argumentGroups : undefined,
     resolveEntity,
   );
+  const idNames = useApprovalIdNames(
+    isPending && !isExitCompose ? argumentGroups : undefined,
+    resolveIdNames,
+  );
 
   return (
     <div className={styles.detail}>
-      <div className={styles.identity}>
-        <span className={styles.meta}>
-          {group.approvals
-            .flatMap((approval) => approval.toolCalls.map((tc) => toolNameLabel(tc.toolName)))
-            .join(" · ")}
-        </span>
-        <span className={[styles.pill, styles[group.status]].join(" ")}>
-          {APPROVAL_STATUS_LABEL[group.status]}
-        </span>
-      </div>
-      <h4 className={styles.title}>
-        {op !== undefined ? (
-          <span className={[styles.titleGlyph, OP_GLYPH_CLASS[op]].filter(Boolean).join(" ")}>
-            {operationGlyph(op ?? "")}
+      <div className={styles.detailScroll}>
+        <div className={styles.identity}>
+          <span className={styles.meta}>
+            {group.approvals
+              .flatMap((approval) =>
+                approval.toolCalls.map((tc) => `${toolNameLabel(tc.toolName)} · ${tc.toolName}`),
+              )
+              .join(" · ")}
           </span>
-        ) : null}
-        {group.title}
-      </h4>
-      {isExitCompose ? (
-        // 设计草稿审批：md 全文展示（内容经 designFile 按会话读取，不经审批 payload）
-        <ExitComposeApprovalView conversationId={group.approvals[0]!.conversationId} />
-      ) : (
-        <>
-          {argumentGroups.length > 0 ? (
-            argumentGroups.map((argumentGroup, index) => {
-              const resolution = resolutions?.[index];
-              const readyResolution =
-                resolution !== undefined && resolution.status === "ready" ? resolution : undefined;
-              const ready = readyResolution !== undefined;
-              const op = argumentGroup.op;
-              // 「当前内容」段：待审且可解析（或 add 空态）才出现。
-              // add 的实体读取 404 → error，即「无既有数据 · 此操作为新建」。
-              const showCurrent =
-                isPending &&
-                resolution !== undefined &&
-                (ready ||
-                  resolution.status === "loading" ||
-                  (op === "add" && (resolution.status === "unresolved" || resolution.status === "error")));
-              const currentHead =
-                op === "add"
-                  ? ready
-                    ? "当前内容 · 已存在同名数据"
-                    : "当前内容"
-                  : OP_CURRENT_HEAD[op ?? ""] ?? "当前内容";
-              const changeHead = isPending ? OP_CHANGE_HEAD[op ?? ""] ?? "审批参数" : "审批参数";
-              const changeIcon = OP_CHANGE_ICON[op ?? ""] ?? Pencil;
-              let currentBody: JSX.Element | undefined;
-              if (readyResolution !== undefined) {
-                currentBody = (
-                  <>
-                    {readyResolution.contents.map((content, contentIndex) => (
-                      <div key={content.id}>
-                        {contentIndex > 0 ? <div className={styles.resolvedDivider} /> : null}
-                        <ApprovalEntityView content={content} />
+          <span className={[styles.pill, styles[group.status]].join(" ")}>
+            {APPROVAL_STATUS_LABEL[group.status]}
+          </span>
+        </div>
+        <h4 className={styles.title}>
+          {op !== undefined ? (
+            <span className={[styles.titleGlyph, OP_GLYPH_CLASS[op]].filter(Boolean).join(" ")}>
+              {operationGlyph(op ?? "")}
+            </span>
+          ) : null}
+          {group.title}
+        </h4>
+        {isExitCompose ? (
+          // 设计草稿审批：md 全文展示（内容经 designFile 按会话读取，不经审批 payload）
+          <ExitComposeApprovalView conversationId={group.approvals[0]!.conversationId} />
+        ) : (
+          <>
+            {argumentGroups.length > 0 ? (
+              argumentGroups.map((argumentGroup, index) => {
+                const resolution = resolutions?.[index];
+                const readyResolution =
+                  resolution !== undefined && resolution.status === "ready" ? resolution : undefined;
+                const ready = readyResolution !== undefined;
+                const op = argumentGroup.op;
+                // 「当前内容」段：待审且可解析（或 add 空态）才出现。
+                // add 的实体读取 404 → error，即「无既有数据 · 此操作为新建」。
+                const showCurrent =
+                  isPending &&
+                  resolution !== undefined &&
+                  (ready ||
+                    resolution.status === "loading" ||
+                    (op === "add" && (resolution.status === "unresolved" || resolution.status === "error")));
+                const currentHead =
+                  op === "add"
+                    ? ready
+                      ? "当前内容 · 已存在同名数据"
+                      : "当前内容"
+                    : OP_CURRENT_HEAD[op ?? ""] ?? "当前内容";
+                const changeHead = isPending ? OP_CHANGE_HEAD[op ?? ""] ?? "审批参数" : "审批参数";
+                const changeIcon = OP_CHANGE_ICON[op ?? ""] ?? Pencil;
+                let currentBody: JSX.Element | undefined;
+                if (readyResolution !== undefined) {
+                  currentBody = (
+                    <>
+                      {readyResolution.contents.map((content, contentIndex) => (
+                        <div key={content.id}>
+                          {contentIndex > 0 ? <div className={styles.resolvedDivider} /> : null}
+                          <ApprovalEntityView content={content} idNames={idNames} />
+                        </div>
+                      ))}
+                    </>
+                  );
+                } else if (resolution?.status === "loading") {
+                  currentBody = <span className={styles.loadingHint}>内容解析中…</span>;
+                } else if (op === "add") {
+                  currentBody = <span className={styles.curEmpty}>无既有数据 · 此操作为新建</span>;
+                }
+                return (
+                  <div key={`${argumentGroup.toolName}-${index}`}>
+                    {showCurrent ? (
+                      <div className={styles.section}>
+                        <div className={styles.sectionHead}>
+                          <Icon icon={Clock} size="xs" />
+                          {currentHead}
+                        </div>
+                        <div
+                          className={[styles.cur, OP_CUR_CLASS[op ?? ""]].filter(Boolean).join(" ")}
+                        >
+                          {currentBody}
+                        </div>
                       </div>
-                    ))}
-                  </>
-                );
-              } else if (resolution?.status === "loading") {
-                currentBody = <span className={styles.loadingHint}>内容解析中…</span>;
-              } else if (op === "add") {
-                currentBody = <span className={styles.curEmpty}>无既有数据 · 此操作为新建</span>;
-              }
-              return (
-                <div key={`${argumentGroup.toolName}-${index}`}>
-                  {showCurrent ? (
+                    ) : null}
                     <div className={styles.section}>
                       <div className={styles.sectionHead}>
-                        <Icon icon={Clock} size="xs" />
-                        {currentHead}
+                        <Icon icon={changeIcon} size="xs" />
+                        {changeHead}
                       </div>
-                      <div
-                        className={[styles.cur, OP_CUR_CLASS[op ?? ""]].filter(Boolean).join(" ")}
-                      >
-                        {currentBody}
-                      </div>
-                    </div>
-                  ) : null}
-                  <div className={styles.section}>
-                    <div className={styles.sectionHead}>
-                      <Icon icon={changeIcon} size="xs" />
-                      {changeHead}
-                    </div>
-                    <div className={styles.argsGroup}>
-                      <div
-                        className={[styles.band, OP_BAND_CLASS[op ?? ""]].filter(Boolean).join(" ")}
-                      >
-                        <span className={styles.bandGlyph}>{operationGlyph(op ?? "")}</span>
-                        <span className={styles.bandTool}>
-                          {toolNameLabel(argumentGroup.toolName)}
-                        </span>
-                      </div>
-                      <div className={styles.body}>
-                        {readyResolution !== undefined && readyResolution.stale ? (
-                          <div className={styles.staleBanner}>
-                            版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败
-                          </div>
-                        ) : null}
-                        {argumentGroup.arguments !== undefined ? (
-                          <ParameterView
-                            value={argumentGroup.arguments}
-                            contentAsMarkdown={argumentGroup.markdownDoc}
-                          />
-                        ) : (
-                          <span className={styles.loadingHint}>旧版本审批 · 无参数详情</span>
-                        )}
+                      <div className={styles.argsGroup}>
+                        <div
+                          className={[styles.band, OP_BAND_CLASS[op ?? ""]].filter(Boolean).join(" ")}
+                        >
+                          <span className={styles.bandGlyph}>{operationGlyph(op ?? "")}</span>
+                          <span className={styles.bandTool}>
+                            {toolNameLabel(argumentGroup.toolName)}
+                          </span>
+                        </div>
+                        <div className={styles.body}>
+                          {readyResolution !== undefined && readyResolution.stale ? (
+                            <div className={styles.staleBanner}>
+                              版本已过期：正式稿已被其他修改更新，批准后此操作可能执行失败
+                            </div>
+                          ) : null}
+                          {argumentGroup.arguments !== undefined ? (
+                            <ParameterView
+                              value={argumentGroup.arguments}
+                              contentAsMarkdown={argumentGroup.markdownDoc}
+                              idNames={idNames}
+                            />
+                          ) : (
+                            <span className={styles.loadingHint}>旧版本审批 · 无参数详情</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })
-          ) : (
-            <p className={styles.emptyDetail}>
-              旧版本审批 · 无参数详情（建议在新会话重新发起写入）
-            </p>
-          )}
-        </>
-      )}
+                );
+              })
+            ) : (
+              <p className={styles.emptyDetail}>
+                旧版本审批 · 无参数详情（建议在新会话重新发起写入）
+              </p>
+            )}
+          </>
+        )}
+      </div>
+      {/* 固定底部决策区（demo .apDetailFoot：不随内容滚动） */}
       {group.status === "pending" ? (
-        <>
+        <div className={styles.detailFoot}>
           <div className={styles.actions}>
             <Button variant="primary" size="sm" onClick={() => decideGroup("approved")}>
               批准
@@ -304,15 +327,17 @@ export function ApprovalGroupDetail({ group, store, resolveEntity }: ApprovalGro
               </div>
             </div>
           </div>
-        </>
+        </div>
       ) : (
-        <div
-          className={[
-            styles.banner,
-            styles[`banner_${group.status}`] ?? "",
-          ].filter(Boolean).join(" ")}
-        >
-          已处理 · {APPROVAL_STATUS_LABEL[group.status]}
+        <div className={styles.detailFoot}>
+          <div
+            className={[
+              styles.banner,
+              styles[`banner_${group.status}`] ?? "",
+            ].filter(Boolean).join(" ")}
+          >
+            已处理 · {APPROVAL_STATUS_LABEL[group.status]}
+          </div>
         </div>
       )}
     </div>

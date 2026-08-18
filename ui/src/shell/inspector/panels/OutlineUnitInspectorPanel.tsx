@@ -7,44 +7,38 @@
  * 场景计划 leaf 卡 / 关联卡（依赖·人物·子单元·发布章）。
  * 写路径（编辑 / 新建子单元 / 删除，乐观锁 baseRevision = entityVersion）保留。
  */
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import {
   AlertTriangle,
   ListPlus,
   ListTree,
-  MapPin,
   MessageSquare,
   Pencil,
   ScrollText,
   Trash2,
   UserRound,
   X,
-  type LucideIcon,
 } from "lucide-react";
-import type { LeafPlan } from "@novel/core";
 import type { StoryOutlineTreeNode } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
 import type { StoryOutlineTreeStore } from "../../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import {
   ABANDON_REASON_LABEL,
   BLOCK_REASON_LABEL,
-  LEAF_CHANGE_LABEL,
-  LEAF_LOC_ROLE_LABEL,
   LEAF_PRESENCE_LABEL,
-  LEAF_RHYTHM_LABEL,
   LEAF_ROLE_LABEL,
   PLAN_STATUS,
   REAL_STATUS,
   scopeView,
 } from "../../../domains/novel/outline/outlineStatus.js";
+import {
+  LeafEntityLookup,
+  LeafPlanCard,
+  RefChip,
+} from "../../../domains/novel/outline/components/LeafPlanCard.js";
 import { StoryUnitEditDialog } from "../../../domains/novel/outline/components/StoryUnitEditDialog.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
 import { Button, ConfirmDialog, Icon, StatusChip } from "../../../shared/primitives/index.js";
 import styles from "./OutlineUnitInspectorPanel.module.css";
-
-/** 名称解析（leaf chips 显示角色/地点名） */
-export interface OutlinePanelEntityLookup {
-  readonly name: string;
-}
 
 /** 大纲单元详情展示的段落条目（来自 manuscript 域全量段落分组） */
 export interface OutlinePanelUnitParagraph {
@@ -65,8 +59,8 @@ export interface OutlineUnitInspectorPanelProps {
   readonly unitParagraphs?: readonly OutlinePanelUnitParagraph[];
   /** 已被任一章选择收录的段落 id（区分「已入选章 / 未发布」） */
   readonly publishedParagraphIds?: ReadonlySet<string>;
-  readonly characterNames?: ReadonlyMap<string, OutlinePanelEntityLookup>;
-  readonly locationNames?: ReadonlyMap<string, OutlinePanelEntityLookup>;
+  readonly characterNames?: ReadonlyMap<string, LeafEntityLookup>;
+  readonly locationNames?: ReadonlyMap<string, LeafEntityLookup>;
   /** 「在正文中查看」/ 发布章 chip：选章并切到正文资料位 */
   readonly onOpenChapter?: (chapterId: string) => void;
   /** 「在对话中讨论」：切回对话视图 */
@@ -87,170 +81,6 @@ function findNode(
     if (child !== undefined) return child;
   }
   return undefined;
-}
-
-function RefChip({
-  icon,
-  label,
-  tag,
-  onClick,
-}: {
-  icon: LucideIcon;
-  label: string;
-  tag?: string;
-  onClick?: () => void;
-}) {
-  const body = (
-    <>
-      <Icon icon={icon} size="xs" />
-      {label}
-      {tag !== undefined && tag !== "" ? <small className={styles.refTag}>{tag}</small> : null}
-    </>
-  );
-  return onClick !== undefined ? (
-    <button type="button" className={styles.refChip} onClick={onClick}>
-      {body}
-    </button>
-  ) : (
-    <span className={styles.refChip}>{body}</span>
-  );
-}
-
-/** 场景计划 leaf 卡（仅 scene 叶单元；demo leafHTML） */
-function LeafPlanCard({
-  leaf,
-  characterNames,
-  locationNames,
-  onOpenCharacter,
-  onOpenLocation,
-}: {
-  leaf: LeafPlan | undefined;
-  characterNames?: ReadonlyMap<string, OutlinePanelEntityLookup>;
-  locationNames?: ReadonlyMap<string, OutlinePanelEntityLookup>;
-  onOpenCharacter?: (characterId: string) => void;
-  onOpenLocation?: (locationId: string) => void;
-}) {
-  if (leaf === undefined) {
-    return (
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>场景计划 · leaf</h3>
-        <div className={`${styles.banner} ${styles.faint}`}>
-          <Icon icon={ScrollText} size="sm" />
-          <span>leaf 未编写——写场景前先补场景设计：人物 / 地点绑定、事件序列、节奏拍、实体变更。</span>
-        </div>
-      </div>
-    );
-  }
-  const charChips = leaf.characters.map((binding) => {
-    const involvement = binding.involvement;
-    const tag =
-      involvement !== undefined
-        ? [
-            involvement.roles.map((role) => LEAF_ROLE_LABEL[role]).join("/"),
-            LEAF_PRESENCE_LABEL[involvement.presence],
-          ]
-            .filter(Boolean)
-            .join(" · ")
-        : "";
-    return (
-      <RefChip
-        key={binding.characterId}
-        icon={UserRound}
-        label={characterNames?.get(binding.characterId)?.name ?? binding.characterId}
-        tag={tag}
-        onClick={
-          onOpenCharacter !== undefined
-            ? () => onOpenCharacter(binding.characterId)
-            : undefined
-        }
-      />
-    );
-  });
-  const locChips = leaf.locations.map((binding) => {
-    const involvement = binding.involvement;
-    const tag =
-      involvement !== undefined
-        ? [LEAF_LOC_ROLE_LABEL[involvement.role], involvement.affected ? "受影响" : ""]
-            .filter(Boolean)
-            .join(" · ")
-        : "";
-    return (
-      <RefChip
-        key={binding.locationId}
-        icon={MapPin}
-        label={locationNames?.get(binding.locationId)?.name ?? binding.locationId}
-        tag={tag}
-        onClick={
-          onOpenLocation !== undefined ? () => onOpenLocation(binding.locationId) : undefined
-        }
-      />
-    );
-  });
-  const row = (key: string, value: ReactNode): ReactNode =>
-    value === undefined || value === null ? null : (
-      <>
-        <dt>{key}</dt>
-        <dd>{value}</dd>
-      </>
-    );
-  return (
-    <div className={styles.card}>
-      <h3 className={styles.cardTitle}>场景计划 · leaf</h3>
-      <dl className={styles.paramList}>
-        {row(
-          "场景模式",
-          leaf.settingMode === "located" ? "located · 有确定地点" : "location-independent · 无固定地点",
-        )}
-        {row("时间", leaf.time?.description)}
-        {row(
-          "人物绑定",
-          charChips.length > 0 ? <div className={styles.refChips}>{charChips}</div> : undefined,
-        )}
-        {row(
-          "地点绑定",
-          locChips.length > 0 ? <div className={styles.refChips}>{locChips}</div> : undefined,
-        )}
-        {row(
-          "事件序列",
-          leaf.events.length > 0 ? (
-            <div className={styles.leafSeq}>
-              {leaf.events.map((event, index) => (
-                <span key={event.id}>
-                  <i>{String(index + 1).padStart(2, "0")}</i>
-                  {event.description}
-                </span>
-              ))}
-            </div>
-          ) : undefined,
-        )}
-        {row(
-          "节奏拍",
-          leaf.rhythmBeats.length > 0 ? (
-            <div className={styles.refChips}>
-              {leaf.rhythmBeats.map((beat) => (
-                <StatusChip key={beat.id} variant="neutral">
-                  {`${LEAF_RHYTHM_LABEL[beat.rhythm]} · 强度 ${beat.intensity}${beat.readerEmotion ? ` · ${beat.readerEmotion}` : ""}`}
-                </StatusChip>
-              ))}
-            </div>
-          ) : undefined,
-        )}
-        {row(
-          "实体变更",
-          leaf.entityChanges.length > 0 ? (
-            <div className={styles.leafSeq}>
-              {leaf.entityChanges.map((change) => (
-                <span key={change.id}>
-                  <i>{LEAF_CHANGE_LABEL[change.category]}</i>
-                  {change.summary}
-                </span>
-              ))}
-            </div>
-          ) : undefined,
-        )}
-      </dl>
-    </div>
-  );
 }
 
 /** 单元段落卡：列出挂靠本单元的全部段落（含未入选章选择的），agent 写入后在此可见 */

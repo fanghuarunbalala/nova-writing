@@ -21,6 +21,7 @@ import {
 	bookMetaPath,
 	bookParagraphsDir,
 	bookSourceDir,
+	highlightsFilePath,
 	isValidBookId,
 	nextBookId,
 	paragraphFilePath,
@@ -42,6 +43,18 @@ export interface ParagraphManifestEntry {
 	readonly chars: number;
 	/** 批文件（书目录内相对路径，如 `paragraphs/<id>.md`） */
 	readonly file: string;
+}
+
+/** 好句好段条目（analysis/highlights.jsonl 每行；tag 召回范句库） */
+export interface HighlightEntry {
+	/** 源分段 id（完整形式 `<bookId>-p<6位序>`，manifest 可查） */
+	readonly paragraphId: string;
+	/** 关键字（多个；覆盖技法与情绪/场景两个维度） */
+	readonly tags: readonly string[];
+	/** 受控摘录（≤200 字） */
+	readonly text: string;
+	/** 为什么好 / 什么写作场景可借鉴 */
+	readonly note?: string;
 }
 
 /** 书元数据（book.meta.json） */
@@ -107,6 +120,12 @@ const PARAGRAPH_BATCH_MAX = 24;
 
 /** 分析产物单次返回字符上限（截断标记附加） */
 const ANALYSIS_MAX_CHARS = 20_000;
+
+/** 好句好段召回默认条数（token 护栏） */
+const HIGHLIGHTS_DEFAULT_LIMIT = 20;
+
+/** 好句好段召回最大条数（token 护栏硬上限） */
+const HIGHLIGHTS_MAX_LIMIT = 50;
 
 /** chapter.create 批量分片（单事务上限，防超大书单批过大） */
 const MUTATE_CHUNK = 200;
@@ -428,6 +447,59 @@ export class LibraryService {
 		const cap = maxChars ?? ANALYSIS_MAX_CHARS;
 		if (raw.length <= cap) return { content: raw, truncated: false };
 		return { content: `${raw.slice(0, cap)}\n\n…（已截断，全文 ${raw.length} 字符）`, truncated: true };
+	}
+
+	/**
+	 * 好句好段按 tag 召回（analysis/highlights.jsonl；解析 Agent 边读边记的
+	 * 可复用范句库——体现作者风格的好句好段 + 多关键字 tag，创作侧按关键字召回）
+	 * @param bookId 书 id
+	 * @param query tags 关键字过滤（mode=any 命中任一即中 / all 全部命中；缺省 any）
+	 * @returns 命中条目（按文件序）+ 截断标记
+	 */
+	async searchHighlights(
+		bookId: string,
+		query?: { tags?: readonly string[]; mode?: "any" | "all"; limit?: number },
+	): Promise<{ items: HighlightEntry[]; total: number; truncated: boolean }> {
+		await this.assertReadableBook(bookId);
+		const path = highlightsFilePath(this.libraryRoot, bookId);
+		if (!(await existsFile(path))) {
+			throw new LibraryError(
+				"LIB_BOOK_NOT_FOUND",
+				"该书尚无好句好段库（解析未完成？）",
+			);
+		}
+		const raw = await readFile(path, "utf8");
+		const all: HighlightEntry[] = [];
+		for (const line of raw.split(/\r?\n/)) {
+			if (line.trim().length === 0) continue;
+			// 脏行容错：非法 JSON / 形状不符的行跳过，不中断召回
+			let entry: HighlightEntry;
+			try {
+				entry = JSON.parse(line) as HighlightEntry;
+			} catch {
+				continue;
+			}
+			if (
+				typeof entry.paragraphId === "string" &&
+				Array.isArray(entry.tags) &&
+				typeof entry.text === "string"
+			) {
+				all.push(entry);
+			}
+		}
+		const wanted = (query?.tags ?? []).filter((t) => t.trim().length > 0);
+		const mode = query?.mode ?? "any";
+		const matched =
+			wanted.length === 0
+				? all
+				: all.filter((e) =>
+						mode === "all"
+							? wanted.every((t) => e.tags.includes(t))
+							: wanted.some((t) => e.tags.includes(t)),
+					);
+		const limit = Math.min(query?.limit ?? HIGHLIGHTS_DEFAULT_LIMIT, HIGHLIGHTS_MAX_LIMIT);
+		const items = matched.slice(0, limit);
+		return { items, total: matched.length, truncated: matched.length > items.length };
 	}
 
 	/**

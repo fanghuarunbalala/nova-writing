@@ -49,6 +49,20 @@ export interface LibraryReadDeps {
 		which: "style" | "excerpt",
 		maxChars?: number,
 	): Promise<{ content: string; truncated: boolean }>;
+	/** 好句好段按 tag 召回（service 内已做书单校验 + 条数护栏） */
+	searchHighlights(
+		bookId: string,
+		query?: { tags?: readonly string[]; mode?: "any" | "all"; limit?: number },
+	): Promise<{
+		items: ReadonlyArray<{
+			paragraphId: string;
+			tags: readonly string[];
+			text: string;
+			note?: string;
+		}>;
+		total: number;
+		truncated: boolean;
+	}>;
 }
 
 /** LibraryRead 组装选项 */
@@ -69,6 +83,7 @@ const ALL_KINDS = [
 	"chapter",
 	"style",
 	"excerpt",
+	"highlight",
 ] as const;
 
 /** 实体类 kind 允许透传给 NovelRead 的过滤参数 */
@@ -116,7 +131,7 @@ export function createLibraryReadTool(options: LibraryReadToolOptions): ToolDef 
 
 	return {
 		name: "LibraryRead",
-		version: "1.0.0",
+		version: "1.1.0",
 		description: [
 			"读取书库（已完本参考书）资产，只读。kind 必填；除 overview 外必须给 bookId。",
 			"",
@@ -132,6 +147,8 @@ export function createLibraryReadTool(options: LibraryReadToolOptions): ToolDef 
 			"- paragraph：paragraphId 精确取一段；或 chapterNo 批量取该章分段（offset/limit 翻页，单次上限 24 段）。",
 			"- style：该书全局风格 md（内容风格/技法，结论附 paragraph id 例证）。",
 			"- excerpt：该书特色原文摘录（paragraph id + 摘录 + 代表性说明）。",
+			"- highlight：该书好句好段库，按 tag 关键字召回可复用范句（写同类场景前先召回参考——",
+			"  tags 过滤（mode=any 命中任一 / all 全命中）、limit 条数上限 50；不带 tags 返回前 20 条浏览 tag 词汇）。",
 			"- 一切产物引用正文都用 paragraph id（形如 <bookId>-p000123）；不要整段复制进实体或正文。",
 			"",
 			"## 实例",
@@ -141,6 +158,11 @@ export function createLibraryReadTool(options: LibraryReadToolOptions): ToolDef 
 			"→ LibraryRead(kind=style, bookId=<书目 id>)",
 			"<reasoning>先列书拿 bookId，再读风格 md；引用例证时用其中的 paragraph id。</reasoning>",
 			"</example>",
+			"<example>",
+			"作者：帮我写一段紧张的追逐戏，参考下那本书的写法。",
+			"→ LibraryRead(kind=highlight, bookId=<书目 id>, tags=[\"动作\",\"紧张\"], mode=all)",
+			"<reasoning>按 tag 召回该书的好句好段做范句参考，仿其节奏与技法写新场景（不复制原文）。</reasoning>",
+			"</example>",
 		].join("\n"),
 		parameters: {
 			type: "object",
@@ -149,7 +171,7 @@ export function createLibraryReadTool(options: LibraryReadToolOptions): ToolDef 
 					type: "string",
 					enum: [...ALL_KINDS],
 					description:
-						"读取类型：overview=可访问书目；character/location/story_unit/volume/chapter=该书实体（同 NovelRead 过滤参数）；paragraph=正文分段；style=全局风格 md；excerpt=特色原文摘录",
+						"读取类型：overview=可访问书目；character/location/story_unit/volume/chapter=该书实体（同 NovelRead 过滤参数）；paragraph=正文分段；style=全局风格 md；excerpt=特色原文摘录；highlight=好句好段按 tag 召回",
 				},
 				bookId: {
 					type: "string",
@@ -171,7 +193,17 @@ export function createLibraryReadTool(options: LibraryReadToolOptions): ToolDef 
 				paragraphId: { type: "string", description: "仅 paragraph：精确取该分段" },
 				chapterNo: { type: "integer", description: "仅 paragraph：批量取该章全部分段" },
 				offset: { type: "integer", description: "仅 paragraph：翻页偏移（缺省 0）" },
-				limit: { type: "integer", description: "仅 paragraph：单次条数（缺省 6，上限 24）" },
+				limit: { type: "integer", description: "仅 paragraph/highlight：单次条数（paragraph 缺省 6 上限 24；highlight 缺省 20 上限 50）" },
+				tags: {
+					type: "array",
+					items: { type: "string" },
+					description: "仅 highlight：关键字过滤（技法/情绪/场景维度，如 动作、比喻、紧张、幽默、开篇、收尾）",
+				},
+				mode: {
+					type: "string",
+					enum: ["any", "all"],
+					description: "仅 highlight：tags 匹配模式（any=命中任一，缺省；all=全部命中）",
+				},
 			},
 			required: ["kind"],
 			additionalProperties: false,
@@ -250,6 +282,18 @@ async function executeLibraryRead(
 	}
 	if (kind === "style" || kind === "excerpt") {
 		const result = await deps.readAnalysis(bookId, kind);
+		return JSON.stringify(result);
+	}
+	if (kind === "highlight") {
+		const tags = Array.isArray(args.tags)
+			? args.tags.filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+			: undefined;
+		const mode = args.mode === "all" ? "all" : "any";
+		const result = await deps.searchHighlights(bookId, {
+			...(tags !== undefined && tags.length > 0 ? { tags } : {}),
+			...(args.mode !== undefined ? { mode } : {}),
+			...(typeof args.limit === "number" ? { limit: args.limit } : {}),
+		});
 		return JSON.stringify(result);
 	}
 	// 实体类 kind：复用 NovelRead 执行体（同套 kind 校验与查询语义）

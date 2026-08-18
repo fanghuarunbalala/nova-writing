@@ -4,7 +4,7 @@
 // 运行前需先 pnpm build（desktop-child.mjs 走 dist）+ NOVEL_PROVIDER_API_KEY。
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { read } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -104,8 +104,10 @@ async function main() {
 	const bookDir = join(libraryRoot, result.bookId);
 	const stylePath = join(bookDir, "analysis", "style.md");
 	const excerptsPath = join(bookDir, "analysis", "excerpts.md");
+	const highlightsPath = join(bookDir, "analysis", "highlights.jsonl");
 	if (!existsSync(stylePath)) failures.push("analysis/style.md 缺失");
 	if (!existsSync(excerptsPath)) failures.push("analysis/excerpts.md 缺失");
+	if (!existsSync(highlightsPath)) failures.push("analysis/highlights.jsonl 缺失（好句好段库）");
 
 	// 引用 id 有效性：excerpts/style 中出现的 paragraph id 必须在 manifest 内
 	const manifestRaw = readFileSync(join(bookDir, "paragraphs", "manifest.jsonl"), "utf8");
@@ -114,11 +116,23 @@ async function main() {
 	);
 	for (const [name, path] of [["style", stylePath], ["excerpts", excerptsPath]]) {
 		if (!existsSync(path)) continue;
-		const text = await read(path, "utf8");
+		const text = await readFile(path, "utf8");
 		const refs = [...text.matchAll(new RegExp(`${result.bookId}-p\\d{6}`, "g"))].map((m) => m[0]);
 		const dangling = refs.filter((id) => !validIds.has(id));
 		if (refs.length === 0) failures.push(`${name} 无任何 paragraph id 引用`);
 		if (dangling.length > 0) failures.push(`${name} 悬空引用: ${dangling.slice(0, 3).join(",")}`);
+	}
+
+	// 好句好段库：JSONL 有效 + id/tag 契约
+	if (existsSync(highlightsPath)) {
+		const parsed = readFileSync(highlightsPath, "utf8")
+			.split(/\r?\n/).filter((l) => l.trim())
+			.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+		if (parsed.length === 0) failures.push("highlights.jsonl 无有效条目");
+		const badTag = parsed.filter((e) => !Array.isArray(e.tags) || e.tags.length === 0);
+		if (badTag.length > 0) failures.push(`highlights ${badTag.length} 条缺 tags`);
+		const danglingHl = parsed.filter((e) => !validIds.has(e.paragraphId));
+		if (danglingHl.length > 0) failures.push(`highlights 悬空引用: ${danglingHl.slice(0, 3).map((e) => e.paragraphId).join(",")}`);
 	}
 
 	// 库内智能解构实体（大纲幕级单元 / 人物）

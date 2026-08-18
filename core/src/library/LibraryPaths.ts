@@ -127,6 +127,16 @@ export function analysisFilePath(
 }
 
 /**
+ * 好句好段库路径（<bookDir>/analysis/highlights.jsonl——tag 召回范句库）
+ * @param libraryRoot 书库根
+ * @param bookId 书 id
+ * @returns highlights 文件路径
+ */
+export function highlightsFilePath(libraryRoot: string, bookId: string): string {
+	return join(bookDir(libraryRoot, bookId), "analysis", "highlights.jsonl");
+}
+
+/**
  * 生成分段 id（`<bookId>-p<6位序>`；全库唯一、可排序、可作文件名）
  * @param bookId 书 id
  * @param seq 全书分段序（1 起）

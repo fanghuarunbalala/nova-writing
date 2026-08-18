@@ -174,6 +174,45 @@ describe("LibraryService", () => {
 		}
 	});
 
+	it("searchHighlights：缺库报错；tag any/all 过滤 + limit 护栏 + 脏行跳过", async () => {
+		const root = tmpRoot();
+		try {
+			const service = new LibraryService({ libraryRoot: root });
+			await service.importBook({ sourcePath: writeSample(root), bookId: "bk_test06" });
+			await expect(service.searchHighlights("bk_test06")).rejects.toMatchObject({
+				code: "LIB_BOOK_NOT_FOUND",
+			});
+			mkdirSync(join(root, "bk_test06", "analysis"), { recursive: true });
+			const entries = [
+				{ paragraphId: "bk_test06-p000001", tags: ["动作", "紧张"], text: "刀出鞘。", note: "单句成段" },
+				{ paragraphId: "bk_test06-p000002", tags: ["对话", "幽默"], text: "「走路是养生。」" },
+				{ paragraphId: "bk_test06-p000003", tags: ["动作", "幽默"], text: "他撞上了门框。" },
+			];
+			writeFileSync(
+				join(root, "bk_test06", "analysis", "highlights.jsonl"),
+				[...entries.map((e) => JSON.stringify(e)), "不是json", ""].join("\n"),
+				"utf8",
+			);
+			// 不带 tags：全量（脏行被跳过）
+			const all = await service.searchHighlights("bk_test06");
+			expect(all.items).toHaveLength(3);
+			expect(all.truncated).toBe(false);
+			// any：命中任一
+			const any = await service.searchHighlights("bk_test06", { tags: ["紧张"] });
+			expect(any.items.map((e) => e.paragraphId)).toEqual(["bk_test06-p000001"]);
+			// all：全部命中
+			const both = await service.searchHighlights("bk_test06", { tags: ["动作", "幽默"], mode: "all" });
+			expect(both.items.map((e) => e.paragraphId)).toEqual(["bk_test06-p000003"]);
+			// limit：截断标记
+			const limited = await service.searchHighlights("bk_test06", { limit: 2 });
+			expect(limited.items).toHaveLength(2);
+			expect(limited.total).toBe(3);
+			expect(limited.truncated).toBe(true);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
 	it("导入失败回滚（非法编码路径不留半截目录）", async () => {
 		const root = tmpRoot();
 		try {

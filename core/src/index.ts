@@ -10,6 +10,7 @@ export * from "./runtime/debug/index.js";
 export * from "./runtime/todo/index.js";
 export * from "./runtime/loop/index.js";
 export * from "./novel/index.js";
+export * from "./library/index.js";
 export * from "./conversation/index.js";
 export * from "./client/index.js";
 export * from "./config/index.js";

@@ -11,6 +11,11 @@ export type RPCErrorCode =
 	| "invalid-request"
 	| "cancelled"
 	| "unknown"
+	/** 书库业务码（LibraryError.code 跨 RPC 映射；renderer 按 code 分支提示） */
+	| "lib-book-not-found"
+	| "lib-book-not-authorized"
+	| "lib-invalid-argument"
+	| "lib-import-failed"
 
 /** RPCError 构造选项 */
 export interface RPCErrorOptions {

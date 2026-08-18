@@ -2,7 +2,7 @@
  * 工作区书单（访问控制，PRD library-完本解构 F10）：allowlist 存工作区侧
  * `.novel/library.json`，默认（缺失/空/损坏）不可见任何书，逐书 opt-in。
  */
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isValidBookId } from "./LibraryPaths.js";
 
@@ -47,4 +47,25 @@ export async function readLibraryAllowlist(
 		);
 		return new Set<string>();
 	}
+}
+
+/**
+ * 把书加入工作区书单（F12 书单维护 / GUI 导入自动授权）：读现有集合 → 并集 → 写回。
+ * 损坏的现有文件按空集合处理后重建（自愈）。
+ * @param workspaceRoot 工作区根
+ * @param bookId 书 id（非法 id 抛错）
+ */
+export async function addBookToLibraryAllowlist(
+	workspaceRoot: string,
+	bookId: string,
+): Promise<void> {
+	if (!isValidBookId(bookId)) {
+		throw new Error(`非法 bookId：${bookId}`);
+	}
+	const existing = await readLibraryAllowlist(workspaceRoot);
+	if (existing.has(bookId)) return;
+	const books = [...existing, bookId].sort();
+	const dir = join(workspaceRoot, ".novel");
+	await mkdir(dir, { recursive: true });
+	await writeFile(join(dir, LIBRARY_ACCESS_FILE_NAME), `${JSON.stringify({ books }, null, "\t")}\n`, "utf8");
 }

@@ -95,4 +95,46 @@ export class BookImportService {
 			throw err;
 		}
 	}
+
+	/**
+	 * 派生 BookAnalyst 解析会话（不导入；spawn 失败置解析失败后原样抛错，目录保留供重试）
+	 * @param bookId 书 id
+	 * @param title 任务书名（缺省读 meta）
+	 * @returns 解析会话 id
+	 */
+	async startAnalysis(bookId: string, title?: string): Promise<{ conversationId: string }> {
+		if (this.spawner === undefined) {
+			throw new Error("解析会话不可用（spawner 未装配：需模型 provider 配置）");
+		}
+		const taskTitle = title ?? (await this.service.readMeta(bookId)).title;
+		try {
+			const spawned = await this.spawner.spawn({
+				agentType: BOOK_ANALYST_AGENT_TYPE,
+				task: { bookId, title: taskTitle },
+				extraEnv: { NOVEL_LIBRARY_ROOT: this.libraryRoot },
+			});
+			return { conversationId: spawned.conversationId };
+		} catch (err) {
+			// spawn 失败（报到超时等）：书本置解析失败、目录保留供重试
+			const reason = err instanceof Error ? err.message : String(err);
+			await this.service
+				.updateBookMeta(bookId, {
+					status: "解析失败",
+					...(reason.length > 0 ? { statusReason: reason.slice(0, 500) } : {}),
+				})
+				.catch(() => {});
+			throw err;
+		}
+	}
+
+	/**
+	 * 重新拉起解析（失败/中断重试）：复用既有确定性产物（卷章/分段），置解析中后派生新会话
+	 * @param bookId 书 id
+	 * @returns 新解析会话 id
+	 */
+	async retryAnalysis(bookId: string): Promise<{ conversationId: string }> {
+		await this.service.readMeta(bookId);
+		await this.service.updateBookMeta(bookId, { status: "解析中", statusReason: undefined });
+		return this.startAnalysis(bookId);
+	}
 }

@@ -27,6 +27,14 @@ export async function call<T>(fn: () => Promise<T>, ctx: CallContext = {}): Prom
 	}
 }
 
+/** LibraryError.code → RPCError code 映射（可枚举 code 字段跨 RPC 存活，同 novel-stale 模式） */
+const LIB_CODE_MAP: Record<string, RPCError["code"]> = {
+	LIB_BOOK_NOT_FOUND: "lib-book-not-found",
+	LIB_BOOK_NOT_AUTHORIZED: "lib-book-not-authorized",
+	LIB_INVALID_ARGUMENT: "lib-invalid-argument",
+	LIB_IMPORT_FAILED: "lib-import-failed",
+};
+
 /**
  * 把任意错误归一成 RPCError（已是 RPCError 原样返回）。
  * @param err 原始错误
@@ -35,7 +43,7 @@ export async function call<T>(fn: () => Promise<T>, ctx: CallContext = {}): Prom
  */
 export function toRPCError(err: unknown, peer?: string): RPCError {
 	if (err instanceof RPCError) return err
-	const record = err as { name?: string; errorCode?: string }
+	const record = err as { name?: string; errorCode?: string; code?: unknown }
 	if (record.name === "RPCTransportClosedError") {
 		return new RPCError({ code: "peer-closed", peer, cause: err })
 	}
@@ -46,6 +54,11 @@ export function toRPCError(err: unknown, peer?: string): RPCError {
 	// 可枚举 errorCode 字段标识（本地/远端实例都能判）
 	if (record.errorCode === "novel-stale") {
 		return new RPCError({ code: "stale", peer, cause: err })
+	}
+	// 书库业务错误：LibraryError 以可枚举 code 字段（LIB_*）标识，映射为专用码
+	const libCode = typeof record.code === "string" ? LIB_CODE_MAP[record.code] : undefined;
+	if (libCode !== undefined) {
+		return new RPCError({ code: libCode, peer, cause: err })
 	}
 	// 远程方法抛错（kkrpc 保留 name/message/stack）与本地抛错都归 remote——
 	// call 无法区分，统一按"远程调用失败"处理

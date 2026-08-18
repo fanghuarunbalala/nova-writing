@@ -4,6 +4,15 @@
 export * from "./NovelApiClient.js";
 export * from "./ConversationProjection.js";
 export * from "../conversation/CardProjection.js";
+// 书库域类型 type-only 再导出（LibraryService.ts 顶层 import node:fs——类型引用
+// 编译期擦除，本出口保持 browser-safe；renderer 书库视图消费）
+export type {
+	BookMeta,
+	BookStatus,
+	BookSummary,
+	ImportBookResult,
+	ParagraphManifestEntry,
+} from "../library/LibraryService.js";
 // 投影快照/时间线项引用的会话模式类型（type-only，browser-safe；消费侧头部 chip 使用）
 export type { ConversationMode } from "../conversation/contract/types/index.js";
 export { noopLogger } from "../log/noop.js";

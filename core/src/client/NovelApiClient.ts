@@ -14,6 +14,7 @@ import type { OutputEvent, ProjectedEvent } from "../conversation/contract/event
 import type { ConversationJournalReadOnlyService } from "../conversation/contract/journal/index.js";
 import { FileConversationJournalReadOnlyService } from "../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { toRPCError } from "../rpc/call.js";
+import { RPCError } from "../rpc/RPCError.js";
 import { debugLog } from "../log/debug.js";
 import type { ApprovalQueueItem, AskingQueueItem } from "../conversation/server/WaitRequestQueue.js";
 import type {
@@ -28,6 +29,7 @@ import type {
 	NovelOverview,
 	PublicationSnapshot,
 	StoryOutlineSnapshot,
+	StoryUnitWithLeaf,
 } from "../novel/contract/snapshot.js";
 import type {
 	Character,
@@ -39,6 +41,14 @@ import type {
 	StoryUnit,
 	StoryUnitId,
 } from "../novel/model/index.js";
+// 书库类型 type-only 引入（LibraryService.ts 顶层 import node:fs——类型引用编译期擦除，
+// 本文件保持 browser-safe，供 client 出口 re-export）
+import type {
+	BookMeta,
+	BookSummary,
+	ImportBookResult,
+	ParagraphManifestEntry,
+} from "../library/LibraryService.js";
 
 /** 会话子 API（目录 + 生命周期） */
 export interface ConversationApi {
@@ -199,12 +209,73 @@ export interface NovelContentApi {
 	mutateBatch(ms: readonly NovelMutation[]): Promise<NovelMutateResult[]>;
 }
 
-/** 客户端门面：conversations + novel + approvals + askings 四域 */
+/** 分段批（manifest 条目 + 正文文本） */
+export type ParagraphTextBatch = ParagraphManifestEntry & { text: string };
+
+/** 解析会话派生结果 */
+export interface LibrarySpawnResult {
+	/** 解析会话 id（派生成功时） */
+	conversationId?: string;
+	/** 未派生的原因（降级仅导入等） */
+	spawnSkipped?: string;
+}
+
+/** 导入结果（含解析会话派生） */
+export interface LibraryImportResult extends ImportBookResult, LibrarySpawnResult {}
+
+/** 书库大纲快照（outline.get + includePlans：units 附 leaf 绑定） */
+export interface LibraryOutlineSnapshot {
+	readonly outline: StoryOutlineSnapshot["outline"];
+	readonly units: readonly StoryUnitWithLeaf[];
+}
+
+/**
+ * 书库子 API（完本解构：读面 + 导入写面）。
+ * 形状对齐 core/src/library/LibraryService；宿主（Electron main）经
+ * createLibraryFace 组装注入，renderer 经 novel-rpc 直连。未装配时各方法
+ * 抛 invalid-request「书库服务未装配」（对齐 LibraryRead 工具降级模式）。
+ */
+export interface LibraryApi {
+	/** 书单（经工作区 allowlist 过滤；导入时间序） */
+	listBooks(): Promise<BookSummary[]>;
+	/** 书元数据（含 status / statusReason / stats；进度轮询读面） */
+	readMeta(bookId: string): Promise<BookMeta>;
+	/** 分段索引（manifest：全书有序） */
+	readManifest(bookId: string): Promise<ParagraphManifestEntry[]>;
+	/** 分段正文（按章或按 id；条数护栏单次默认 6、上限 24） */
+	readParagraphs(
+		bookId: string,
+		query: { ids?: readonly string[]; chapterNo?: number; offset?: number; limit?: number },
+	): Promise<{ items: ParagraphTextBatch[]; total: number }>;
+	/** 分析产物（style.md / excerpts.md；长度护栏截断） */
+	readAnalysis(
+		bookId: string,
+		which: "style" | "excerpt",
+		maxChars?: number,
+	): Promise<{ content: string; truncated: boolean }>;
+	/** 每书 book.db 只读直开代读：幕级大纲（includePlans——附 leaf 人物/地点绑定） */
+	bookOutline(bookId: string): Promise<LibraryOutlineSnapshot>;
+	/** 每书 book.db 只读直开代读：人物 */
+	bookCharacters(bookId: string): Promise<Character[]>;
+	/** 每书 book.db 只读直开代读：地点 */
+	bookLocations(bookId: string): Promise<Location[]>;
+	/** 每书 book.db 只读直开代读：卷章发布骨架 */
+	bookPublication(bookId: string): Promise<PublicationSnapshot>;
+	/** 选择源文件（宿主原生对话框 + 路径白名单登记；取消返回 null） */
+	pickBookFile(): Promise<{ sourcePath: string } | null>;
+	/** 导入（确定性解析；可选拉起 BookAnalyst 解析会话；成功自动授权当前工作区书单） */
+	importBook(input: { sourcePath: string; title?: string; spawnAnalysis?: boolean }): Promise<LibraryImportResult>;
+	/** 重试解析（复用确定性产物，置解析中后派生新会话） */
+	retryAnalysis(bookId: string): Promise<LibrarySpawnResult>;
+}
+
+/** 客户端门面：conversations + novel + approvals + askings + library 五域 */
 export interface NovelApiClient {
 	readonly conversations: ConversationApi;
 	readonly novel: NovelContentApi;
 	readonly approvals: ApprovalApi;
 	readonly askings: AskingApi;
+	readonly library: LibraryApi;
 }
 
 /** 门面构造依赖（注入两域 handle） */
@@ -229,6 +300,28 @@ export interface NovelApiClientOptions {
 		conversationId: ConversationId,
 		opts?: { fromSeq?: number; limit?: number },
 	) => Promise<ProjectedEvent[]>;
+	/** 书库面注入（内存测试用；renderer 经 wrap 不经此构造） */
+	library?: LibraryApi;
+}
+
+/** 书库未装配降级实现（各方法抛 invalid-request；对齐 LibraryRead 工具降级模式） */
+function createUnavailableLibrary(): LibraryApi {
+	const unavailable = (method: string): Promise<never> =>
+		Promise.reject(new RPCError({ code: "invalid-request" }, `书库服务未装配（library.${method} 不可用）`));
+	return {
+		listBooks: () => unavailable("listBooks"),
+		readMeta: () => unavailable("readMeta"),
+		readManifest: () => unavailable("readManifest"),
+		readParagraphs: () => unavailable("readParagraphs"),
+		readAnalysis: () => unavailable("readAnalysis"),
+		bookOutline: () => unavailable("bookOutline"),
+		bookCharacters: () => unavailable("bookCharacters"),
+		bookLocations: () => unavailable("bookLocations"),
+		bookPublication: () => unavailable("bookPublication"),
+		pickBookFile: () => unavailable("pickBookFile"),
+		importBook: () => unavailable("importBook"),
+		retryAnalysis: () => unavailable("retryAnalysis"),
+	};
 }
 
 /**
@@ -237,7 +330,7 @@ export interface NovelApiClientOptions {
  * @returns NovelApiClient
  */
 export function createNovelApiClient(options: NovelApiClientOptions): NovelApiClient {
-	const { manager, novel, history, projectedHistory } = options;
+	const { manager, novel, history, projectedHistory, library } = options;
 	return {
 		conversations: {
 			list: () => manager.list(),
@@ -299,6 +392,8 @@ export function createNovelApiClient(options: NovelApiClientOptions): NovelApiCl
 			mutate: (m) => novel.mutate(m),
 			mutateBatch: (ms) => novel.mutateBatch(ms),
 		},
+		// 书库面：宿主装配注入；缺省 = 未装配降级（browser/内存测试）
+		library: library ?? createUnavailableLibrary(),
 	};
 }
 
@@ -319,6 +414,11 @@ export interface NovelApiServerOptions {
 	 * 字符串形态构造期固定；函数形态每次调用现取（宿主 workspace 热切换重绑目录）。
 	 */
 	journalDir?: string | (() => string | undefined);
+	/**
+	 * 书库面（宿主经 createLibraryFace 组装注入：读面 + 导入 + 文件选择白名单）。
+	 * 缺省 = 未装配降级（各方法抛 invalid-request「书库服务未装配」）。
+	 */
+	library?: LibraryApi;
 }
 
 /**
@@ -460,5 +560,35 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 				}
 			},
 		},
+		// 书库面：宿主注入的 LibraryApi 直挂 + LIB_* 业务错误归一（LibraryError.code →
+		// lib-* RPCError code；renderer 按 code 分支提示）；未装配 = 降级实现
+		library: wrapLibraryWithErrorNormalize(options.library),
+	};
+}
+
+/** 书库面包装：逐方法归一错误（保持方法集合与实现一一对应） */
+function wrapLibraryWithErrorNormalize(impl: LibraryApi | undefined): LibraryApi {
+	const face = impl ?? createUnavailableLibrary();
+	const wrap = async <T>(run: () => Promise<T>): Promise<T> => {
+		try {
+			return await run();
+		} catch (err) {
+			if (err instanceof RPCError) throw err;
+			throw toRPCError(err, "library");
+		}
+	};
+	return {
+		listBooks: () => wrap(face.listBooks),
+		readMeta: (bookId) => wrap(() => face.readMeta(bookId)),
+		readManifest: (bookId) => wrap(() => face.readManifest(bookId)),
+		readParagraphs: (bookId, query) => wrap(() => face.readParagraphs(bookId, query)),
+		readAnalysis: (bookId, which, maxChars) => wrap(() => face.readAnalysis(bookId, which, maxChars)),
+		bookOutline: (bookId) => wrap(() => face.bookOutline(bookId)),
+		bookCharacters: (bookId) => wrap(() => face.bookCharacters(bookId)),
+		bookLocations: (bookId) => wrap(() => face.bookLocations(bookId)),
+		bookPublication: (bookId) => wrap(() => face.bookPublication(bookId)),
+		pickBookFile: () => wrap(face.pickBookFile),
+		importBook: (input) => wrap(() => face.importBook(input)),
+		retryAnalysis: (bookId) => wrap(() => face.retryAnalysis(bookId)),
 	};
 }

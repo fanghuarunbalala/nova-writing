@@ -442,6 +442,16 @@ export class LibraryService {
 	}
 
 	/**
+	 * 读某书元数据（经书单校验——读面，GUI 进度/详情用）
+	 * @param bookId 书 id
+	 * @returns 元数据
+	 */
+	async readBookMeta(bookId: string): Promise<BookMeta> {
+		await this.assertReadableBook(bookId);
+		return this.readMeta(bookId);
+	}
+
+	/**
 	 * 读某书元数据（不做书单校验——内部/写侧）
 	 * @param bookId 书 id
 	 * @returns 元数据

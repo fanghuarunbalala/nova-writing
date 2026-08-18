@@ -214,7 +214,7 @@ DSL / case 语料 / `EvalRunMetrics` / 结果 JSON / compare 全部为核心层�
 - **装配入口**：`buildNovelAgent()`（`core/src/runtime/agent/NovelAgent.ts:99`）注入点即 Runner 的全部旋钮：
   - `provider`：`createProvider({type:"openai", baseUrl: DeepSeek})`，model 经 `SamplingConfig`；
   - `handle`：duck-typed `{query, mutate}` 直接盖在 `InMemoryNovelStore` 上（`core/scripts/novel-agent-smoke.mjs` 已示范此装配）；
-  - `requestApproval`：**不注入时 requireApproval 工具按拒绝处理**（Write/Edit/ExitComposeMode 均需审批）——eval 必须按 `approvals` 配置注入放行/拒绝闭包；
+  - `requestApproval`：**不注入时 requireApproval 工具按拒绝处理**（ExitComposeMode 与 Novel* 写/删工具需审批；文件 Write/Edit 免审批）——eval 必须按 `approvals` 配置注入放行/拒绝闭包；
   - `requestAsk`：AskUserQuestion 脚本应答通道；
   - `definition`：prompt 变体入口（留给 A/B 评测）；
   - `listeners` / `debugger`：轨迹采集与录制。

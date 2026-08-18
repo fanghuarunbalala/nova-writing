@@ -133,7 +133,8 @@ export function createNovelToolGroupResolver(
     ["runtime.files", () => createFileTools(options.workspace)],
     [
       "analyst.files",
-      () => createFileTools(options.workspace, { requireApproval: false }),
+      // 文件写本就免审批（沙盒内可逆）；该组差异在沙盒=书库根（runtime.files 同工厂）
+      () => createFileTools(options.workspace),
     ],
     // library.read：deps 缺省=未装配降级（工具回不可用文本，对齐 runtime.ask 先例）
     ["library.read", () => [createLibraryReadTool({ deps: options.library?.deps })]],

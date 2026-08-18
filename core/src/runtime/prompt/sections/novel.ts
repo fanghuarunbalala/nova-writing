@@ -174,7 +174,7 @@ export const novelComposeSystemSection: PromptSection = {
 export const novelComposeProcessSection: PromptSection = {
   kind: "static",
   id: "novel.compose.process",
-  version: "1.1.0",
+  version: "1.2.0",
   label: "Novel Compose Process",
   render: () =>
     [
@@ -187,7 +187,7 @@ export const novelComposeProcessSection: PromptSection = {
       "   - 用只读工具查找既有模式与设定：TodoWrite 维护多步探索计划；NovelRead 按 kind 分别查询（story_unit=大纲、character=人物、location=地点、paragraph=段落、volume=卷、chapter=章，overview=全书总览）。",
       "   - 理解当前故事结构与既有设定，找出相似内容作为参考。",
       "   - 梳理相关档案之间的依赖与引用，确认不臆造设定。",
-      "   - 起草前对照消息中 `<novel-guide>` 块的本任务案例；「任务案例引导」索引中未注入的案例按需 Read 自读（`.novel/cases/`）。",
+      "   - **编写前先查案例**：按「任务案例引导」索引选取与本任务匹配的案例，用 Read 通读后再动笔（或对照已注入的 `<novel-guide>` 块）；案例**仅供参考——不抄袭、不照搬原文**，产出基于当前故事的实际状态与设定。",
       "",
       "3. **创作草案**：基于探索结果构建大纲与行文设计；权衡取舍与结构决策（节奏、伏笔、视角、章节划分）；适当沿用既有风格与模式。",
       "",
@@ -227,7 +227,7 @@ export const novelComposeReportingSection: PromptSection = {
 export const novelComposeGuideSection: PromptSection = {
   kind: "dynamic",
   id: "novel.compose.guide",
-  version: "1.0.0",
+  version: "1.1.0",
   label: "Novel Compose Guide",
   renderDynamic: (input) => {
     const snapshot = input.composeGuide;
@@ -237,8 +237,9 @@ export const novelComposeGuideSection: PromptSection = {
     return [
       "# 任务案例引导",
       "",
-      "- 本任务匹配的案例已以 `<novel-guide>` 消息注入（紧随委派需求），**起草前必须对照**。",
-      "- 未注入的案例按需用 Read 自读（workspace 相对路径，位于 `.novel/cases/`）：",
+      "- **编写前先查案例**：按下方索引选取与本任务匹配的案例，用 Read 通读后再起草；匹配案例也可能已以 `<novel-guide>` 消息注入（紧随委派需求）。",
+      "- **案例仅供参考**：对照其方法、结构与要点清单；**不抄袭、不照搬案例原文**，产出必须基于当前故事的实际状态与设定。",
+      "- 案例位于 workspace `.novel/cases/`（相对路径）：",
       "",
       snapshot.index,
     ].join("\n");

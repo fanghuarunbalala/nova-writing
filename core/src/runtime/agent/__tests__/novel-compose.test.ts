@@ -135,10 +135,11 @@ describe("Compose prompt 段内容（legacy 迁移 + 工具名适配）", () => 
     }
   });
 
-  it("process/reporting 段含案例引导协议（v1.1.0：对照 + 自报）", () => {
+  it("process/reporting 段含案例引导协议（先查后写、仅参考不抄袭 + 自报）", () => {
     const process = novelComposeProcessSection.render();
+    expect(process).toContain("编写前先查案例");
     expect(process).toContain("<novel-guide>");
-    expect(process).toContain(".novel/cases/");
+    expect(process).toContain("不抄袭");
     const reporting = novelComposeReportingSection.render();
     expect(reporting).toContain("参考案例");
   });
@@ -168,10 +169,10 @@ describe("Compose 案例引导装配（novel-guide，PRD compose-案例引导 �
     });
     await loop.run("把 S3 细化为子故事", { sampling: { model: "m" } });
     expect(calls).toHaveLength(1);
-    // system：guide 段渲染（索引 + 背书）
+    // system：guide 段渲染（索引 + 先查后写协议）
     expect(calls[0].system).toContain("# 任务案例引导");
     expect(calls[0].system).toContain(".novel/cases/outline-refine.md");
-    expect(calls[0].system).toContain("起草前必须对照");
+    expect(calls[0].system).toContain("编写前先查案例");
     // 段序：guide 在 prose_standard 之后、tool.policy 之前
     expect(calls[0].system.indexOf("# 任务案例引导")).toBeGreaterThan(
       calls[0].system.indexOf("正文规范"),

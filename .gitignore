@@ -32,3 +32,6 @@ gui/conversation-*-events
 novel-events-*
 novel-events
 .zcode/
+
+# 闭源案例：真实书提取的开篇幕大纲案例（版权考虑，仅本地使用，不入仓库）
+/private/

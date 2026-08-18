@@ -172,7 +172,7 @@ flowchart LR
   - 输入：`agentType: "BookAnalyst"`，`communication: "standalone"`，`delegation: disabled`。
   - 处理：**不加入** novel 主 Agent 的 `delegation.allowedAgentTypes`（保持 `["Explore", "Compose"]`）→ 主 Agent 的 Agent 工具目录不可派发它。工具组 `groupIds`：
     - `novel.entities`（NovelRead/NovelWrite/NovelEdit/NovelDelete 四件 kind 分发通用工具，**整组装配、无 kind 收窄**——handle 指向 每书 book.db；实际用于写**大纲（story_unit）**/人物/地点/卷章，`kind=paragraph` 写在书库管线不使用：正文不入库、分批由宿主文件化）；
-    - `analyst.files`（**新增免审批四件套**：Read/Glob/Write/Edit，`requireApproval=false`，沙盒 = 书库根目录——解析会话的 workspace 注入书库根）；
+    - `analyst.files`（**免审批文件四件套**：Read/Glob/Write/Edit——文件写本就免审批，该组差异在沙盒 = 书库根目录：解析会话的 workspace 注入书库根）；
     - `runtime.todo`（解析进度计划）；
     - 不装配：`novel.compose`、`runtime.ask`、subagent 派发三件套。
   - 输出：新增 prompt 段（`novel.book-analyst.*`：身份/流程/产物契约）+ 上述定义实例。

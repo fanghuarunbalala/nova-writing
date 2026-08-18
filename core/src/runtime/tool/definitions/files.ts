@@ -97,7 +97,9 @@ export function createFileTools(
   workspace: string,
   options?: { requireApproval?: boolean },
 ): ToolDef[] {
-  const approval = options?.requireApproval !== false;
+  // 文件写默认免审批：workspace 沙盒内、本地可逆，对齐主代理「本地可逆动作可直接做」
+  // （谨慎行动段）；显式 requireApproval: true 才强制征询（预留未来高风险文件会话）。
+  const approval = options?.requireApproval === true;
   return [
     readTool(workspace),
     globTool(workspace),
@@ -179,8 +181,8 @@ function writeTool(workspace: string, approval: boolean): ToolDef {
     name: "Write",
     version: "1.0.0",
     preview: fileWritePreview,
-    // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询；
-    // approval=false 为后台非交互会话免审批变体）
+    // mutation 工具：缺省免审批（沙盒内本地可逆）；approval=true 为强制征询变体
+    //（AgentLoop 经 requestApproval 征询；后台非交互会话缺省即免审批）
     ...(approval ? { requireApproval: true } : {}),
     description:
       "将完整内容写入 workspace 目录内的文件，使用 workspace 相对路径。\n\n用法：\n- 若目标路径已有文件，本工具会整体覆盖。\n- 只用于新建或整体重写；小改动优先用 Edit。\n- 写入是原子的；缺失父目录自动创建。\n- 内容超过 512 KiB 会被拒绝；路径限定在 workspace 沙盒内。",
@@ -219,8 +221,8 @@ function editTool(workspace: string, approval: boolean): ToolDef {
     name: "Edit",
     version: "1.0.0",
     preview: fileEditPreview,
-    // mutation 工具：执行前需用户审批（AgentLoop 经 requestApproval 征询；
-    // approval=false 为后台非交互会话免审批变体）
+    // mutation 工具：缺省免审批（沙盒内本地可逆）；approval=true 为强制征询变体
+    //（AgentLoop 经 requestApproval 征询；后台非交互会话缺省即免审批）
     ...(approval ? { requireApproval: true } : {}),
     description:
       "在 workspace 目录内的文件中做精确字符串替换。\n\n用法：\n- file_path 必须指向 workspace 内已有文件。\n- old_string 必须出现；未命中会报错。\n- replace_all=false（默认）只替换第一处。\n- 整体重写用 Write；编辑前建议先 Read。\n- 结果不得超过 512 KiB；路径限定在 workspace 沙盒内。",

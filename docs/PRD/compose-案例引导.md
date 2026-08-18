@@ -1,8 +1,8 @@
-# compose 案例引导（novel-guide）PRD —— v0.4
+# compose 案例引导（novel-guide）PRD —— v0.5
 
-> 状态：⏳ 待敲定（机制已实现：core 710 用例全绿 + typecheck + build 产物链通过；**定稿前置：作者手工验证"案例粘贴进委派 prompt 能否改善草案"——进行中，结果回填后清零**）
+> 状态：⏳ 待敲定（机制已实现：core 710 用例全绿 + typecheck + build 产物链通过；**作者已交付 15 份真实案例并替换初稿**；分类默认关闭，待验证后开启——见 §7）
 > 关联：整体产品 PRD [`产品总览.md`](./产品总览.md)；[`agent-definition-config.md`](./agent-definition-config.md)（声明式装配规范）；[`project-stage-nudge.md`](./project-stage-nudge.md)（"分类 → 注入"先例、persistent append 通道与"邻接输入"原则）；[`eval-harness.md`](./eval-harness.md)；NOVEL.md 动态段先例（`core/src/runtime/prompt/sections/novel.ts` 的 `novel.global_constraints`）
-> 演进：v0.1 选中案例正文与索引同走 system 动态段 → v0.2 通道分离（索引+协议进 system、正文以 `<novel-guide>` 标记 persistent append 进 msg）→ v0.3 **分类器直接上 LLM（Fast 采样档，弃权语义）**；**案例落位 workspace `.novel/cases/`（宿主 seed-if-absent）**——经核实文件沙盒只挡逃逸不挡 `.novel/`，自读通道 v1 即生效 → v0.4 **实现定稿**：标签/摘要由每份案例 front-matter 自描述（手写扁平解析，不引 YAML 依赖），**索引动态扫描派生、无 INDEX.md**（加/删案例 = 单文件操作，索引与目录永不漂移）；母版扁平布局 `core/resources/agent-cases/*.md`，构建期 `scripts/copy-resources.mjs` 拷入 dist 随包；evals 无 subagent 接线先例，全链路以 core 集成测试覆盖
+> 演进：v0.1 选中案例正文与索引同走 system 动态段 → v0.2 通道分离（索引+协议进 system、正文以 `<novel-guide>` 标记 persistent append 进 msg）→ v0.3 **分类器直接上 LLM（Fast 采样档，弃权语义）**；**案例落位 workspace `.novel/cases/`（宿主 seed-if-absent）**——经核实文件沙盒只挡逃逸不挡 `.novel/`，自读通道 v1 即生效 → v0.4 **实现定稿**：标签/摘要由每份案例 front-matter 自描述（手写扁平解析，不引 YAML 依赖），**索引动态扫描派生、无 INDEX.md**（加/删案例 = 单文件操作，索引与目录永不漂移）；母版扁平布局 `core/resources/agent-cases/*.md`，构建期 `scripts/copy-resources.mjs` 拷入 dist 随包；evals 无 subagent 接线先例，全链路以 core 集成测试覆盖 → v0.5 **意图分类默认关闭**（`NOVEL_COMPOSE_GUIDE_CLASSIFY` env 显式开启）——索引+自读为主通道，prompt 升级为"**编写前先查案例、仅供参考、不抄袭**"；作者交付 15 份真实案例（大纲系 act/scene/overview + 设定系 world/character + 正文系 draft 与 8 类摘录），新增真实母版生效检查测试
 
 ---
 
@@ -77,7 +77,7 @@ flowchart LR
 - **索引动态派生**：扫描 `.novel/cases/*.md` 解析 front-matter → 条目 + 渲染索引文本；以目录 mtimeMs 记忆化（增删/改名触发重扫）。加/删案例 = 单文件操作，索引与目录永不漂移。
 - 案例正文结构："任务需求 → 参考产出 + 要点清单"的 few-shot 形态；**要点清单引用标准段标题而非复述条文**（如"对照「大纲规范」节奏拍条目"），缩小与 `novelStandards` 静态标准的漂移面。
 - **标签筛选而非笛卡尔积**：分类结果做标签匹配选 1~2 份；未命中的维度不筛选（细筛空则退化任务级），task_type 不中 → 不注入。
-- 首批：大纲细化设计 / 开头大纲设计 / 正文撰写各一份（初稿已入库，内容待作者定稿，见 §7）。
+- 首批（**作者已定稿交付，15 份**）：大纲系（act-design 幕设计 / scene-design 场景设计 / outline-overview 总纲）＋ 设定系（world-design 世界观 / character-design 人物）＋ 正文系（prose-draft 撰写 + 8 类摘录：suspense/plot/atmosphere/dialogue/character/combat/emotion/psyche/setting）；situation 维度已启用（如世界观案例标"穿越流"）。
 - 索引规模约束：每案一行，总量 ≤ 20 案（索引每 provider call 渲染，控制常驻 token）。
 
 ### F3 `novel.compose.guide` 动态段（system 侧：索引 + 协议）
@@ -87,9 +87,9 @@ flowchart LR
 - **不渲染选中案例正文**（通道分离）也不承载成段协议文案（协议单一来源住静态段，见 F7——避免三处文案漂移）。
 - 动态段不进 base 缓存；每 provider call 重渲染（索引文件变更即时生效）。
 
-### F4 novel-guide 消息注入（msg 侧：主通道）
+### F4 novel-guide 消息注入（msg 侧；**v0.5 起随分类默认关闭，暂不生效**——机制保留，env 开启后恢复）
 
-- 触发：spawn 完成、`loop.run` 发起首 run 后、首个 provider call 前，执行一次。
+- 触发：spawn 完成、`loop.run` 发起首 run 后、首个 provider call 前，执行一次（分类关闭时钩子直接返回 undefined，不注入）。
 - 输入：分类标签筛选选中的 1~2 份案例正文。
 - 处理：
   - 以 **persistent append** 注入一条 system 消息到首 run，位置**紧随委派 prompt**（compose 无压缩策略，无需清扫/重注入）。
@@ -99,7 +99,7 @@ flowchart LR
 - 输出：首 run 消息序 `user(委派) → system(novel-guide)`；后续 provider call 均可见，不重算。
 - 异常：分类弃权或无匹配 → 不注入该消息（system 侧仅剩索引 + 兜底提示）；资源读取失败 → 同 F1 降级，不阻断。
 
-### F5 LLM 分类器（spawn 一次，弃权语义）
+### F5 LLM 分类器（spawn 一次，弃权语义；**v0.5 起默认关闭**——`NOVEL_COMPOSE_GUIDE_CLASSIFY=1|true` 显式开启，待作者验证后转常开）
 
 - 接口 `IntentClassifier`：输入委派 prompt，输出标签集（task_type 必出或弃权；character_type / situation 有信号则出，无信号不出）。
 - **v1 唯一实现 `LlmIntentClassifier`**（规则分类器不做，见 §1 否决理由）：
@@ -117,11 +117,11 @@ flowchart LR
 - `NovelSubagentOptions` 增加 `composeGuideProvider` 与正文注入装配项，`buildNovelSubagent` 透传。
 - prompt 层保持 provider-neutral（不接触 node:fs），文件读取与 seed 全部在 node 层。
 
-### F7 静态段协议文案（必读 + 自报，协议单一来源）
+### F7 静态段协议文案（先查后写 + 仅参考不抄袭 + 自报）
 
-- `novel.compose.process`（1.0.0 → 1.1.0）：「彻底探索」步骤加入——起草前对照消息中 `<novel-guide>` 块的本任务案例；索引中未注入的案例按需用 Read 从 `.novel/cases/` 自读。
+- `novel.compose.process`（1.0.0 → 1.2.0）：「彻底探索」步骤加入——**编写前先查案例**：按「任务案例引导」索引选取匹配案例用 Read 通读后再动笔（或对照已注入的 `<novel-guide>` 块）；案例**仅供参考——不抄袭、不照搬原文**，产出基于当前故事的实际状态与设定。
 - `novel.compose.reporting`（1.0.0 → 1.1.0）：草案概要新增必填项「参考案例：<名称/路径>」——把软约束变成可观察、可审计的交付契约。
-- 协议文案只住静态段（F3 动态段仅一句背书 + 数据），避免多份文案漂移。
+- 协议文案只住静态段（F3 动态段仅指引 + 数据），避免多份文案漂移。
 
 ### F8 Compose recipe 与定义版本
 
@@ -132,6 +132,7 @@ flowchart LR
 
 - 明确不做（v1）：
   - **规则关键词分类器**（否决理由见 §1；接口保留，未来如需可加实现）。
+  - **意图分类默认关闭**（v0.5 决策）：LLM 分类与 `<novel-guide>` msg 注入经 `NOVEL_COMPOSE_GUIDE_CLASSIFY` env 显式开启；关闭期间索引自读为主通道——分类器代码与测试保留，开启零改动。
   - **沙盒代码改动**（`.novel/` 现状已放行，无需任何变更；写入类工具沙盒策略同样不动——compose 本就无写入工具）。
   - 不修改 `novelStandards` 三段静态标准本体（案例引用标准段标题，不复述条文）。
   - 不做 mid-loop 追加 / steer 化注入（仅 spawn 一次；compose 无压缩、单任务生命周期，无需 full/sparse、纪元、压缩清扫）。
@@ -152,14 +153,15 @@ flowchart LR
 - [x] recipe 生效断言：段序 14 段含 `novel.compose.guide`（dynamic，位于 `novel.prose_standard` 后）、definitionVersion 1.2.0。
 - [x] 集成用例（替代 evals——runner 无 subagent 接线先例）：真装配 + stub 闭包跑一次 `loop.run`，断言 system 含 guide 段渲染、消息序 `user → system(novel-guide)`、seed 异常降级。
 - [x] 既有 core 用例全绿（85 文件 710 用例）+ typecheck + build 产物链（copy-resources 落 dist/resources/agent-cases）。
+- [x] **真实母版生效检查**（v0.5）：`agent-cases-real.test.ts` 以 `core/resources/agent-cases` 实文件跑通 seed→扫描→解析→索引全链（锚定标签体系与 order 序，防手写 front-matter 笔误）。
 
 ## 7. 开放问题（定稿前必须清零）
 
-- **定稿前置：作者手工验证案例有效性（进行中）**——真实委派任务 + 案例内容手工粘贴进 prompt 跑 compose，对比草案质量；结果回填后本条清零（可直接用 `core/resources/agent-cases/` 三份初稿做素材）。
-- 首批案例内容定稿：三份初稿（大纲细化设计 / 开头大纲设计 / 正文撰写）的篇目、篇幅、要点清单需作者修订确认。
+- **作者手工验证案例有效性（进行中）**——索引自读模式下的真实委派任务验证（compose 是否先查案例、是否只参考不抄袭）；结果回填后本条清零。
+- **意图分类开启时点**：索引自读模式验证满意后再开 `NOVEL_COMPOSE_GUIDE_CLASSIFY` 常开（分类注入是否带来增量收益，与自读模式对比）。
 - 无匹配兜底形态：仅索引 + 通用提示（当前实现）vs 增设一份"通用起草案例"必注入。
-- seed 升级传播策略：母版更新后如何到达旧 workspace（版本戳 + 用户未改动则更新 vs 手动刷新命令 vs 不传播；当前实现 = 不传播）。
+- seed 升级传播策略：母版更新后如何到达旧 workspace（版本戳 + 用户未改动则更新 vs 手动刷新命令 vs 不传播；当前实现 = 不传播——**注意：15 份案例入库后，早期已 seed 过三份初稿的旧 workspace 需删除 `.novel/cases/` 重新 seed**）。
 - novel-guide 消息的 journal 级持久化是否启用（需 subagent listeners 扩展；当前 live-only，留痕仅事件流 + debug 落盘）。
 - novel-guide 消息在 UI 任务详情中的展示策略（project_stage F10 有"UI 不展示"先例，subagent 事件面如何呈现待定）。
 
-（已清零：母版位置 = `core/resources/agent-cases/` + 构建拷贝，运行时向上查找 + env 覆盖；分类器采样入口 = 复用 Explore Fast 档回落主采样，不新增设置项；evals 替代 = core 集成测试覆盖全链路。）
+（已清零：母版位置 = `core/resources/agent-cases/` + 构建拷贝，运行时向上查找 + env 覆盖；分类器采样入口 = 复用 Explore Fast 档回落主采样，不新增设置项；evals 替代 = core 集成测试覆盖全链路；**首批案例内容定稿 = 作者已交付 15 份真实案例并替换初稿**。）

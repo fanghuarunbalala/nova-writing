@@ -93,21 +93,23 @@ describe("novel.communication 静态段", () => {
 });
 
 describe("novel.compose.guide 动态段（PRD compose-案例引导）", () => {
-  it("快照输入：背书 + 派生索引 + 自读指引（不渲染正文——正文走 msg 通道）", () => {
+  it("快照输入：先查后写 + 仅参考不抄袭 + 派生索引（不渲染正文——正文走 msg 通道）", () => {
     const text = novelComposeGuideSection.renderDynamic(
       {
         composeGuide: {
-          index: "- .novel/cases/outline-refine.md ｜ task=outline-refine ｜ 大纲细化",
+          index: "- .novel/cases/大纲细化设计案例.md ｜ task=act-design ｜ 大纲-幕设计",
           casesDir: ".novel/cases",
         },
       },
       {} as never,
     );
     expect(text).toContain("# 任务案例引导");
+    expect(text).toContain("**编写前先查案例**");
+    expect(text).toContain("用 Read 通读");
     expect(text).toContain("`<novel-guide>` 消息注入");
-    expect(text).toContain("**起草前必须对照**");
-    expect(text).toContain(".novel/cases/outline-refine.md");
-    expect(text).toContain("Read 自读");
+    expect(text).toContain("**案例仅供参考**");
+    expect(text).toContain("不抄袭");
+    expect(text).toContain(".novel/cases/大纲细化设计案例.md");
     expect(text).not.toContain("<Novel-Constraints-Content>");
   });
 

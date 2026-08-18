@@ -133,6 +133,10 @@ const PROVIDER_THINKING_ENV = "NOVEL_PROVIDER_THINKING" as const;
  * leaf 密度持平；off 292s 但 leaf 事件数掉到 1 条/场景且出现编造 paragraph id） */
 const ANALYST_THINKING_ENV = "NOVEL_ANALYST_THINKING" as const;
 
+/** Compose 案例意图分类开关（默认关——PRD compose-案例引导：索引+自读为主通道，
+ *  分类与 <novel-guide> msg 注入待作者验证后经此 env 显式开启） */
+const COMPOSE_GUIDE_CLASSIFY_ENV = "NOVEL_COMPOSE_GUIDE_CLASSIFY" as const;
+
 /** Agent 运行参数 env（RuntimeSettings 解析产物 JSON；main 侧序列化，spawn 时继承。
  *  新对话生效：配置变更后 main 重写 env，已启动进程维持启动时快照） */
 const RUNTIME_SETTINGS_ENV = "NOVEL_RUNTIME_SETTINGS" as const;
@@ -485,20 +489,25 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 							debugger: createCallDebugger?.(agentId),
 						}),
 				Compose: (agentId) => {
-					// compose 案例引导装配（PRD compose-案例引导）：seed 钩子在 run 内对委派
-					// prompt 分类一次（Compose 连接 + Fast 档），选中案例以 <novel-guide>
-					// 消息注入；索引动态段每 call 扫描 .novel/cases（ensureSeeded 先行）
-					const classifier = new LlmIntentClassifier({
-						provider: createProvider(
-							{
-								id: "compose-classifier",
-								...runtimeProviderConfig(runtimeSettings?.agents.Compose),
-								timeoutMs: 15_000,
-							},
-							modelInfoRegistry,
-						),
-						sampling: composeClassifierSampling(),
-					});
+					// compose 案例引导装配（PRD compose-案例引导）：索引动态段常开
+					// （ensureSeeded + .novel/cases 扫描，compose 按索引先查案例再编写）；
+					// 意图分类默认关（COMPOSE_GUIDE_CLASSIFY_ENV 显式开启）——关闭时无
+					// <novel-guide> msg 注入，索引自读为主通道
+					const classifyEnabled =
+						/^(1|true)$/i.test(process.env[COMPOSE_GUIDE_CLASSIFY_ENV] ?? "");
+					const classifier = classifyEnabled
+						? new LlmIntentClassifier({
+								provider: createProvider(
+									{
+										id: "compose-classifier",
+										...runtimeProviderConfig(runtimeSettings?.agents.Compose),
+										timeoutMs: 15_000,
+									},
+									modelInfoRegistry,
+								),
+								sampling: composeClassifierSampling(),
+							})
+						: undefined;
 					let seededOnce: Promise<boolean> | undefined;
 					const ensureSeeded = () =>
 						(seededOnce ??= seedAgentCasesIfNeeded(workspace, logger));
@@ -522,6 +531,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 						},
 						composeGuideSeed: (input) =>
 							(guideOnce ??= (async () => {
+								if (classifier === undefined) return undefined;
 								await ensureSeeded();
 								const entries = await scanAgentCases(workspace, logger);
 								if (entries === undefined || entries.length === 0) return undefined;

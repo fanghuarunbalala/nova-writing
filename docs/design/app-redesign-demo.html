@@ -8,7 +8,7 @@
   /* ============================================================
      前端整体布局重设计 demo（单文件，交互式）· v0.9.0
      基于 theme-candidates-demo-2.html 的四主题 token 体系 + 现有功能结构：
-       · 顶栏：侧栏开关 / 品牌 / 工作区 / 中央三视图 tab / 工作区·设置 / 窗口控制（Win·Mac）
+       · 顶栏：侧栏开关 / 品牌 / 工作区 / 中央四视图 tab / 工作区·设置 / 窗口控制（Win·Mac）
        · 对话视图：左侧会话目录 · 中部对话流（正文/草稿/工具行/输入区/模式/发送·暂停
          + markdown 全格式样例轮 + 实体标签定位）· 右侧内容目录（大纲/人物/地点，
          详情卡 + 跳完整档案 + 拖拽调宽；leaf 单元点击就地展开简略卡，卡内跳详情）
@@ -19,6 +19,11 @@
        · 计划视图：左侧「安排」目录 · 右侧总览（统计/双状态轴/大纲进度）或待办详情
        · 设置：通用 / 模型（服务 profile + 模型能力自动识别与手动覆盖）/ Agent
          （Normal·Fast 模型档位 + 全局默认采样 + 按 Agent 覆盖温度·思考强度·最大输出 + 压缩阈值）/ 外观 / 关于
+       · 书库视图（完本解构 · v0.9）：左侧书单（状态 chip）· 右侧七资料位
+         （总览：状态时间线/统计/产物就绪 · 大纲/正文/人物/地点：双栏 左目录+右详情；
+         正文融合卷章——左卷章目录，右章头（来源幕提示）+ 分段批卡片 paragraph id 契约 ·
+         风格/摘录：id 引用可点跳正文）·
+         导入弹窗（仅导入 / 拉起 BookAnalyst）· 解析进度示例（示例数据，未接后端）
      窗口尺寸：容器查询断点 1280 / 1080；最小窗口 1080（对齐 tokens.css 约定）。
      ============================================================ */
   :root {
@@ -271,9 +276,9 @@
   .wsChip:hover { background: var(--color-accent-9); color: var(--color-accent-ink); }
   .wsChip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* 中央三视图切换器 */
+  /* 中央视图切换器（四段等宽；thumb 宽 = (100% - 2px×2 padding - 2px×3 gap) / 4） */
   .tabs {
-    display: grid; grid-template-columns: repeat(3, 1fr); position: relative;
+    display: grid; grid-template-columns: repeat(4, 1fr); position: relative;
     margin: 0 auto; padding: 2px; gap: 2px;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
@@ -282,7 +287,7 @@
   }
   .tabs .thumb {
     position: absolute; top: 2px; bottom: 2px; left: 2px;
-    width: calc((100% - 8px) / 3);
+    width: calc((100% - 10px) / 4);
     border-radius: 4px; background: var(--color-surface);
     box-shadow: var(--shadow-xs);
     transition: transform var(--duration-base) var(--ease-out);
@@ -1950,6 +1955,103 @@
   .infoPop li { margin: 2px 0; }
   .infoPop code { font-family: var(--font-mono); font-size: var(--fs-11); background: var(--color-surface-2); padding: 1px 5px; border-radius: 4px; }
 
+  /* ============ 书库视图（完本解构 · v0.9） ============ */
+  /* 主区资料位：横向分段控件（图标 + 名称 + 计数同行；不与侧栏 segTabs 竖排混用） */
+  .libTabs {
+    display: flex; flex-wrap: wrap; gap: 2px; flex: none;
+    padding: 3px; margin-bottom: 12px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    background: var(--color-surface-2); box-shadow: var(--shadow-xs);
+  }
+  .libTabs button {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border: 0; border-radius: var(--radius-sm);
+    background: transparent; color: var(--color-muted);
+    font-size: var(--fs-12); font-weight: var(--fw-medium);
+    cursor: pointer; white-space: nowrap;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .libTabs button svg { flex: none; }
+  .libTabs button:hover:not([disabled]) { color: var(--color-accent-ink); }
+  .libTabs button[aria-selected="true"] {
+    background: var(--color-surface); color: var(--color-accent-ink); box-shadow: var(--shadow-xs);
+  }
+  .libTabs .n {
+    font-family: var(--font-mono); font-size: var(--fs-10-5); color: var(--color-faint);
+    padding: 0 5px; border-radius: var(--radius-pill); background: var(--color-bg);
+  }
+  .libTabs button[aria-selected="true"] .n { color: var(--color-accent-ink); }
+  .libTabs button:disabled { cursor: not-allowed; opacity: 0.42; }
+  .libTabs button:disabled:hover { color: var(--color-muted); }
+  /* 资料位双栏（对齐内容视图：左目录 + 右详情；两列各自滚动，paneBody 不整体滚） */
+  .libSplit {
+    height: 100%; box-sizing: border-box; min-height: 0;
+    display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: 14px;
+    padding: 0 24px 30px;
+  }
+  .libDirCol {
+    min-height: 0; align-self: stretch; overflow-y: auto;
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    background: var(--color-surface); box-shadow: var(--shadow-xs);
+    padding: 8px 8px 10px; scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  }
+  .libDetailCol { min-height: 0; align-self: stretch; overflow-y: auto; padding: 2px 2px 30px; scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) transparent; }
+  @media (max-width: 1280px) { .libSplit { grid-template-columns: 216px minmax(0, 1fr); padding: 0 18px 26px; } }
+  /* 解析中脉冲点（状态 chip 旁 / 时间线当前步） */
+  .pulseDot { position: relative; width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--color-warn); }
+  .pulseDot::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%; background: inherit;
+    animation: lib-pulse 1.5s var(--ease-out) infinite;
+  }
+  @keyframes lib-pulse { from { transform: scale(0.8); opacity: 0.55; } to { transform: scale(2.6); opacity: 0; } }
+  /* 正文分段批卡片（manifest 一行 = 一卡；id 即写 id 契约的引用单元） */
+  .paraCard {
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    background: var(--color-surface); padding: 9px 12px 10px; margin-bottom: 8px;
+  }
+  .paraCard.flash { animation: row-flash 1.2s var(--ease-out); }
+  .paraHead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .paraHead .chars { font-family: var(--font-mono); font-size: var(--fs-10-5); color: var(--color-faint); }
+  .pid {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: var(--font-mono); font-size: var(--fs-10-5); line-height: 1;
+    padding: 3px 7px; border-radius: 5px; border: 1px solid var(--color-border);
+    background: var(--color-surface-2); color: var(--color-muted); cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .pid:hover { color: var(--color-accent-ink); border-color: var(--color-accent); background: var(--color-accent-8-t); }
+  .paraCard p { margin: 0 0 0.6em; font-size: var(--fs-13); line-height: 1.9; }
+  .paraCard p:last-child { margin-bottom: 0; }
+  .paraFoot { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; font-size: var(--fs-11-5); color: var(--color-faint); }
+  .paraFoot .grow { flex: 1; }
+  /* 卷章详情：分段批行（pid + 字数 + 查看） */
+  /* 导入弹窗：源文件/书名输入 + 解析选项单选卡 */
+  .libFld { margin-bottom: 10px; }
+  .libFld label { display: block; font-size: var(--fs-11-5); color: var(--color-muted); margin-bottom: 4px; }
+  .libInput {
+    width: 100%; padding: 7px 10px; box-sizing: border-box;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-md);
+    background: var(--color-bg); color: var(--color-fg);
+    font: inherit; font-size: var(--fs-12-5);
+  }
+  .libInput:focus { outline: none; border-color: var(--color-accent); }
+  .libInput.mono { font-family: var(--font-mono); font-size: var(--fs-11-5); }
+  .libOpt {
+    display: flex; gap: 9px; align-items: flex-start; padding: 9px 11px; margin-bottom: 6px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .libOpt:hover { border-color: var(--color-accent); }
+  .libOpt.on { border-color: var(--color-accent); background: var(--color-accent-8-t); }
+  .libOpt .radio { flex: none; width: 14px; height: 14px; margin-top: 2px; border-radius: 50%; border: 1.5px solid var(--color-border-strong); transition: all var(--duration-fast) var(--ease-out); }
+  .libOpt.on .radio { border-color: var(--color-accent); border-width: 4px; }
+  .libOpt b { display: block; font-size: var(--fs-12-5); margin-bottom: 1px; }
+  .libOpt small { font-size: var(--fs-11); color: var(--color-muted); line-height: 1.6; }
+  /* 幕级大纲行 + 手风琴详情（对齐 dirRow / dirDetail 词汇） */
+  .libUnitRow .scopeChip { padding: 0 6px; }
+  .libLiveNum { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--color-accent-ink); }
+  .axisPill.danger { border-color: color-mix(in oklab, var(--color-danger) 35%, transparent); color: var(--color-danger); }
+
   /* ============ 动画 ============ */
   @keyframes grad-flow { 0%, 100% { background-position: 0% 30%; } 50% { background-position: 100% 70%; } }
   @keyframes msg-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -2046,6 +2148,7 @@
 
 <div class="infoPop" id="infoPop"></div>
 <div class="dialogMask" id="apMask"></div>
+<div class="dialogMask" id="libImportMask" data-act="libImportMask"><div class="dialog" data-noclose="1" id="libImportDialog"></div></div>
 <div class="toast" id="toast"></div>
 <div class="demoBar" id="demoBar"></div>
 <button class="iconBtn barToggle" id="barToggle" data-act="barShow" style="display:none; background: var(--color-surface); box-shadow: var(--shadow-2); border:1px solid var(--color-border-strong);" title="展开 demo 控制条"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3"/><path d="M14 2v4M8 10v4M16 18v4"/></svg></button>
@@ -2097,6 +2200,10 @@ const P = {
   edit: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
   trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  library: '<path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
+  fileText: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  quote: '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
 };
 const ic = (n, s = 14, w = 1.8) =>
   `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${P[n] || ""}</svg>`;
@@ -2416,6 +2523,330 @@ const AP_TEMPLATES = [
       <p><b>风险</b>第 8 章与已弃置的第 5 章（渡资）意象重复，注意区分。</p>` },
 ];
 
+/* ================= 书库（完本解构）· 示例数据 =================
+   形状对齐 core/src/library/：BookSummary/BookMeta（LibraryService）与 id 方案
+   （LibraryPaths：bookId=bk_月季、卷 …-volNN、章 …-chNNNN、分段 …-pNNNNNN）。
+   示例数据未接后端——导入与解析进度均为前端模拟（真实接入走 LibraryService 门面）。
+   状态机（PRD library-完本解构 §3.4）：导入写 meta 即 status=解析中；BookAnalyst
+   后台会话收尾翻转 已完成/解析失败；spawnAnalysis=false 停在解析中待触发。
+   卷/章/分段 = 确定性解析产物（导入即可读）；幕级大纲/人物/地点/风格/摘录 =
+   Agent 解析产物（解析完成后可读）。 */
+const LIB_STATUS_CHIP = { "解析中": "warn", "已完成": "success", "解析失败": "danger" };
+const LIB_SCOPE = { saga: ["全书", "accent"], arc: ["卷弧", "accent"], sequence: ["幕", "info"] };
+const libHash = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+const libW = (n) => n >= 10000 ? (n / 10000).toFixed(1) + " 万" : String(n);
+
+/* 《雨夜刀客（样例）》—— 短篇样例书，段落文本复用 core/scripts/book-analyst-smoke.mjs；
+   无卷标记 → 全书无卷实体（stats.volumes=0）、每章一批 */
+const LIB_YYKJ_TEXT = [
+  ["第一章 雨夜", "雨下了三天。", "刀在鞘里，人在檐下。", "他数着更声，等一个不该来的人。", "来了。", "伞压得很低，低到看不见脸。", "刀出鞘的时候，雨停了半拍。", "半拍之后，雨声里多了一具尸体。"],
+  ["第二章 旧账", "酒是陈的，账是旧的。", "掌柜的手在抖，算盘却不响。", "\"十年前，黑水镇。\"他说。", "掌柜终于抬头，脸白得像纸钱。", "\"你还记得。\"", "\"我记得每一笔。\""],
+  ["第三章 断桥", "桥断了三年，人等了三年。", "对岸的灯每晚都亮，亮得像一句谎话。", "今夜他过桥，踩的是自己的影子。", "灯灭了。", "灯灭的地方，站着一个披蓑衣的人。", "\"你迟了。\"那人开口。", "\"路远。\"他答，刀已在手。"],
+  ["第四章 归人", "雪落进京城的时候，他到了。", "朱门大开，没人拦他。", "拦他的人，都在来时的路上。", "堂上那把椅子空着，像等了很多人，最后只等到他。", "他没坐。", "他把刀放在案上，转身走进雪里。"],
+];
+
+/* 发布骨架（卷/章；章持 batches 计数 + storyUnitId 来源提示——大纲/卷章解耦） */
+const LIB_TITLE_POOL = ["雾里灯", "旧渡", "井台", "灯下影", "潮信", "纸伞", "更声", "雪意", "归帆", "空椅", "夜航", "檐下"];
+function libBuildPub(bookId, volSpecs, titleFn) {
+  const volumes = []; const chapters = []; let no = 0;
+  volSpecs.forEach(([volTitle, count], vi) => {
+    const vol = volTitle === null ? null : { id: `${bookId}-vol${String(vi + 1).padStart(2, "0")}`, title: volTitle };
+    if (vol) volumes.push(vol);
+    for (let i = 0; i < count; i++) {
+      no += 1;
+      chapters.push({
+        no, id: `${bookId}-ch${String(no).padStart(4, "0")}`, title: titleFn(no),
+        volumeId: vol ? vol.id : null, batches: 4 + ((no * 7 + vi * 3) % 5),
+      });
+    }
+  });
+  return { volumes, chapters };
+}
+const LIB_PUB_CACHE = new Map();
+function libPubOf(bookId) {
+  if (LIB_PUB_CACHE.has(bookId)) return LIB_PUB_CACHE.get(bookId);
+  let pub;
+  if (bookId === "bk_yykj") {
+    pub = { volumes: [], chapters: LIB_YYKJ_TEXT.map(([title, ...paras], i) => ({ no: i + 1, id: `bk_yykj-ch${String(i + 1).padStart(4, "0")}`, title, volumeId: null, batches: 1, text: paras.join("\n\n") })) };
+  } else if (bookId === "bk_beihe") {
+    const curated = { 1: "雾起北河", 2: "雨夜追逃", 3: "客栈灯火", 4: "铜符", 5: "渡资", 6: "夜船", 7: "北渡", 8: "对岸灯", 15: "旧案卷宗", 16: "档案房夜话", 17: "断缆", 31: "换守塔人", 32: "雾角", 41: "真相", 42: "去处" };
+    pub = libBuildPub(bookId, [["第一卷 · 北渡", 14], ["第二卷 · 雾锁", 16], ["第三卷 · 灯塔", 12]],
+      (no) => `第 ${no} 章 · ${curated[no] || LIB_TITLE_POOL[no % LIB_TITLE_POOL.length]}`);
+  } else if (bookId === "bk_cywj") {
+    pub = libBuildPub(bookId, [["第一卷 · 烬城", 18], ["第二卷 · 北上", 18]],
+      (no) => `第 ${no} 章 · ${LIB_TITLE_POOL[(no + 4) % LIB_TITLE_POOL.length]}`);
+  } else if (bookId === "bk_shiben") {
+    pub = libBuildPub(bookId, [["卷一（试读版）", 12]], (no) => `第 ${no} 章 · ${LIB_TITLE_POOL[(no + 7) % LIB_TITLE_POOL.length]}`);
+  } else {
+    /* 动态导入的书：按 stats 生成通用骨架（一章一批上下浮动） */
+    const b = libBookById(bookId);
+    const chs = b ? Math.min(b.stats.chapters, 60) : 6;
+    pub = libBuildPub(bookId, [["第一卷", chs]], (no) => `第 ${no} 章 · ${LIB_TITLE_POOL[no % LIB_TITLE_POOL.length]}`);
+  }
+  LIB_PUB_CACHE.set(bookId, pub);
+  return pub;
+}
+/* manifest（一行 = 一分段批；id 全库唯一） */
+const LIB_MANI_CACHE = new Map();
+function libManifestOf(bookId) {
+  if (LIB_MANI_CACHE.has(bookId)) return LIB_MANI_CACHE.get(bookId);
+  const out = []; let seq = 0;
+  for (const c of libPubOf(bookId).chapters) {
+    for (let i = 0; i < c.batches; i++) {
+      seq += 1;
+      const id = `${bookId}-p${String(seq).padStart(6, "0")}`;
+      out.push({ id, chapterNo: c.no, chapterTitle: c.title, chars: c.text ? c.text.length : 3150 + ((seq * 137) % 780), file: `paragraphs/${id}.md` });
+    }
+  }
+  LIB_MANI_CACHE.set(bookId, out);
+  return out;
+}
+/* 分段批正文：策展文本优先（雨夜刀客全量 + 北河旧事数批），其余按句池确定性生成 */
+const LIB_BATCH_TEXT = {};
+LIB_YYKJ_TEXT.forEach(([title, ...paras], i) => { LIB_BATCH_TEXT[`bk_yykj-p${String(i + 1).padStart(6, "0")}`] = paras.join("\n\n"); });
+LIB_BATCH_TEXT["bk_beihe-p000001"] = "雨是从申时下起来的，起先只是屋檐上碎碎的一层响，入夜便连成了片。北河渡口的灯笼在雨里洇开，像化不掉的一点朱砂。\n\n林晚把绸缎庄的门板上到一半，听见河那边传来梆子声——三长一短，是雾夜的调子。老辈人说，这调子一响，北河就要收人了。";
+LIB_BATCH_TEXT["bk_beihe-p000012"] = "巷口的灯笼灭了又亮。她认得这条路——白天走过两遍，第二遍时她刻意多看了一眼井台的位置。此刻井台成了一团墨影，她绕过去，鞋底没有声音。";
+LIB_BATCH_TEXT["bk_beihe-p000087"] = "档案房的潮气是从地下漫上来的。周慎点着灯在丙字架上找了半炷香的工夫，抽出来的卷宗封皮已经发脆——卷宗编号丙三七，十年前，北河渡口。";
+LIB_BATCH_TEXT["bk_beihe-p000236"] = "灯塔的门是虚掩的。三十年换过一次守塔人，这一次，灯又要换主人了。林晚把那半枚铜符贴在灯壁上，缺口严丝合缝——原来另一半，一直在这里等她。";
+const LIB_POOL = {
+  bk_beihe: [
+    "河雾漫上来的时候，船家的号子就停了，只剩橹声，一声一声，像在替谁数着更。",
+    "北桥的灯每晚都亮，亮得像一句谎话；可赶夜路的人，还是愿意信它一回。",
+    "绸缎庄的账目做得很干净，干净得像是什么都没发生过——越干净，越有事。",
+    "更声三长一短。老辈人说这是雾夜的调子，年轻人只当是夜太静。",
+    "铜符在袖中贴着腕骨，一下，又一下，像谁在替她数着步子。",
+    "档案房的卷宗发脆，翻页要凑着灯，气都不敢多喘一口。",
+    "对岸的灯火隔着雨幕，远一阵近一阵，人的心事也是。",
+    "船到北渡口，水色就变了；人说北河的水记得每一笔账。",
+    "客栈天井的雨声大起来，屋里的话反而轻下去。",
+    "灯塔的雾角一响，出海的船就都知道：该回头了。",
+    "雪落在北河上，落不到水底；有些事也一样。",
+    "堂上的椅子空着，像等了很多人，最后只等到一个。",
+  ],
+  default: [
+    "长夜将尽的时候，烬里还剩一点火，谁也不敢先开口。",
+    "城门的更鼓敲过三巡，街上只剩巡夜人的灯笼，一晃一晃地远。",
+    "旧账翻到最后一页，纸边卷了角，字迹却还硬。",
+    "有人从北边来，带着一身雪气和一句没说完的话。",
+    "灯油见了底，火苗矮下去，影子反倒高起来。",
+    "他数着自己的脚步过桥，数到第七步，桥断了。",
+    "话到嘴边又咽回去——这城里，会听的人太多。",
+    "南边的信使隔日一到，马蹄声成了这条街唯一的钟。",
+    "檐下的冰棱化了又冻，冻了又化，像一句反复改口的证词。",
+    "收账的人不急：账在，人就跑不出这座城。",
+  ],
+};
+function libBatchText(bookId, pid) {
+  if (LIB_BATCH_TEXT[pid]) return LIB_BATCH_TEXT[pid];
+  const pool = LIB_POOL[bookId] || LIB_POOL.default;
+  const h = libHash(pid);
+  return [0, 1, 2].map((i) => pool[(h + i * 5) % pool.length]).join("\n\n");
+}
+
+/* 幕级大纲（story unit 树：saga → arc/sequence；chs = 覆盖章区间） + 人物/地点 */
+const LIB_UNITS = {
+  bk_yykj: [
+    { id: "bk_yykj-sg0", parentId: null, orderKey: "0001", scope: "saga", title: "雨夜刀客", intent: "一个无名刀客的收账之旅：从雨夜杀人到雪中归人，四幕走完一笔十年旧账。", synopsis: "幕序：檐下杀局 → 旧账重启 → 断桥对峙 → 雪中归人；全程不给主角名字，以刀与规矩立人。", chs: [1, 4], chars: ["bk_yykj-chr1", "bk_yykj-chr2", "bk_yykj-chr3"], locs: ["bk_yykj-loc1", "bk_yykj-loc2", "bk_yykj-loc3", "bk_yykj-loc4"] },
+    { id: "bk_yykj-sq1", parentId: "bk_yykj-sg0", orderKey: "1000", scope: "sequence", title: "第一幕 · 檐下杀局", intent: "用一场雨夜杀人立住主角的刀与规矩。", synopsis: "等人 → 来人 → 杀人；「来了。」两字切进对峙，雨停半拍收束暴力。", chs: [1, 1], chars: ["bk_yykj-chr1"], locs: ["bk_yykj-loc1"] },
+    { id: "bk_yykj-sq2", parentId: "bk_yykj-sg0", orderKey: "2000", scope: "sequence", title: "第二幕 · 旧账重启", intent: "十年前的账从掌柜嘴里翻出来，动机从此有据。", synopsis: "酒肆对坐：掌柜的手抖、算盘不响；「我记得每一笔」交代前史。", chs: [2, 2], chars: ["bk_yykj-chr1", "bk_yykj-chr2"], locs: ["bk_yykj-loc2"] },
+    { id: "bk_yykj-sq3", parentId: "bk_yykj-sg0", orderKey: "3000", scope: "sequence", title: "第三幕 · 断桥对峙", intent: "仇家现身，桥上对决把张力推到顶。", synopsis: "断桥三年、灯灭人现；对话极简（「你迟了。」「路远。」），刀已在手收幕。", chs: [3, 3], chars: ["bk_yykj-chr1", "bk_yykj-chr3"], locs: ["bk_yykj-loc3"] },
+    { id: "bk_yykj-sq4", parentId: "bk_yykj-sg0", orderKey: "4000", scope: "sequence", title: "第四幕 · 雪中归人", intent: "京城收账，事了转身——目的达成即退场。", synopsis: "朱门大开无人拦；空椅意象收束全书，刀放案上，转身入雪。", chs: [4, 4], chars: ["bk_yykj-chr1"], locs: ["bk_yykj-loc4"] },
+  ],
+  bk_beihe: [
+    { id: "bk_beihe-sg0", parentId: null, orderKey: "0001", scope: "saga", title: "北河旧事（完本）", intent: "以半枚铜符为线索，一桩横跨三十年的北河旧案如何被渡口孤女重新翻开。", synopsis: "三卷推进：北渡（追逃与投宿）→ 雾锁（旧案重启）→ 灯塔（真相与去处）。", chs: [1, 42], chars: ["bk_beihe-chr1", "bk_beihe-chr2", "bk_beihe-chr3", "bk_beihe-chr4"], locs: ["bk_beihe-loc1", "bk_beihe-loc2", "bk_beihe-loc3", "bk_beihe-loc4"] },
+    { id: "bk_beihe-ar1", parentId: "bk_beihe-sg0", orderKey: "1000", scope: "arc", title: "卷一弧 · 北渡", intent: "把林晚送上夜渡船：追逃、投宿、遇船工沈砚。", synopsis: "本弧收在铜符的另一半现形。", chs: [1, 14], chars: [], locs: [] },
+    { id: "bk_beihe-sq1", parentId: "bk_beihe-ar1", orderKey: "1000", scope: "sequence", title: "旧符初现", intent: "渡口日常与暗流，铜符首次露形半枚。", synopsis: "绸缎庄孤女、夜航的船、雨讯；章末袖中铜符硌腕。", chs: [1, 3], chars: ["bk_beihe-chr1", "bk_beihe-chr4"], locs: ["bk_beihe-loc1", "bk_beihe-loc2"] },
+    { id: "bk_beihe-sq2", parentId: "bk_beihe-ar1", orderKey: "2000", scope: "sequence", title: "夜船北渡", intent: "主观视角的夜航，悬念压到卷末。", synopsis: "雾夜摆渡、船上对坐；铜符另一半在沈砚袖口现形，本弧收束。", chs: [4, 8], chars: ["bk_beihe-chr1", "bk_beihe-chr2"], locs: ["bk_beihe-loc1"] },
+    { id: "bk_beihe-ar2", parentId: "bk_beihe-sg0", orderKey: "2000", scope: "arc", title: "卷二弧 · 雾锁", intent: "旧案重启，档案房线落到单元。", synopsis: "卷宗与活人对位，周慎入场。", chs: [15, 30], chars: [], locs: [] },
+    { id: "bk_beihe-sq3", parentId: "bk_beihe-ar2", orderKey: "1000", scope: "sequence", title: "调卷", intent: "十年前卷宗出土，旧案有了纸面证据。", synopsis: "丙三七号卷宗、潮气、灯下翻页；证词互相拆台。", chs: [15, 20], chars: ["bk_beihe-chr3", "bk_beihe-chr1"], locs: ["bk_beihe-loc4"] },
+    { id: "bk_beihe-sq4", parentId: "bk_beihe-ar2", orderKey: "2000", scope: "sequence", title: "夜话与断缆", intent: "守夜人的证词补上最后一块拼图，同时断掉退路。", synopsis: "档案房夜话后渡船缆绳被割——「谁割的」留到卷三。", chs: [21, 26], chars: ["bk_beihe-chr1", "bk_beihe-chr2"], locs: ["bk_beihe-loc4", "bk_beihe-loc1"] },
+    { id: "bk_beihe-ar3", parentId: "bk_beihe-sg0", orderKey: "3000", scope: "arc", title: "卷三弧 · 灯塔", intent: "真相与去处：铜符合拢，旧案收口。", synopsis: "守塔人换代的当夜，两半铜符在灯下合缝。", chs: [31, 42], chars: [], locs: [] },
+    { id: "bk_beihe-sq5", parentId: "bk_beihe-ar3", orderKey: "1000", scope: "sequence", title: "换守塔人", intent: "三十年前的换班内幕浮出。", synopsis: "雾角、虚掩的门、守塔人的登记簿。", chs: [31, 36], chars: ["bk_beihe-chr1"], locs: ["bk_beihe-loc3"] },
+    { id: "bk_beihe-sq6", parentId: "bk_beihe-ar3", orderKey: "2000", scope: "sequence", title: "真相与去处", intent: "合符、结案、各自的下落。", synopsis: "灯壁合缝；林晚选择不揭尽，留一处体面。", chs: [37, 42], chars: ["bk_beihe-chr1", "bk_beihe-chr2", "bk_beihe-chr3"], locs: ["bk_beihe-loc3"] },
+  ],
+};
+const LIB_CHARS = {
+  bk_yykj: [
+    { id: "bk_yykj-chr1", name: "无名刀客", role: "主角 · 收账人", summary: "全程无名。等一个不该来的人，记着十年前的每一笔账；刀快，规矩也硬——「我记得每一笔」。" },
+    { id: "bk_yykj-chr2", name: "酒肆掌柜", role: "配角 · 经手人", summary: "旧账的经手人。手在抖、算盘不响，脸白得像纸钱——知情人怕的不是刀，是账。" },
+    { id: "bk_yykj-chr3", name: "蓑衣人", role: "对手 · 旧案主使", summary: "断桥上等了三年的人。灯灭处现身，一句「你迟了」点破旧约。" },
+  ],
+  bk_beihe: [
+    { id: "bk_beihe-chr1", name: "林晚", role: "主角 · 佩符人", summary: "渡口绸缎庄孤女，袖中半枚铜符。心思细，肯忍，惯于把话说一半；她对铜符的态度每卷松动一寸。" },
+    { id: "bk_beihe-chr2", name: "沈砚", role: "配角 · 船工", summary: "北桥老船工，三十年只在雾夜摆渡。袖口藏着另一半铜符；正面场景只写他的手。" },
+    { id: "bk_beihe-chr3", name: "周慎", role: "配角 · 捕头", summary: "十年前旧案经手人。办案讲规矩也讲代价——他也在等铜符的另一半。" },
+    { id: "bk_beihe-chr4", name: "阿枝", role: "次要 · 客栈帮工", summary: "记得每个渡客的鞋码与口音；用细节做伏笔，不单独开视角。" },
+  ],
+};
+const LIB_LOCS = {
+  bk_yykj: [
+    { id: "bk_yykj-loc1", name: "雨巷檐下", state: "雨夜", summary: "杀人现场：檐、鞘、更声，三组静物把人钉在原地。" },
+    { id: "bk_yykj-loc2", name: "黑水镇酒肆", state: "十年旧账所在", summary: "旧账的地理坐标：酒是陈的，账是旧的。" },
+    { id: "bk_yykj-loc3", name: "断桥", state: "断三年", summary: "对峙场：灯灭人现，桥面只剩两个人的影子。" },
+    { id: "bk_yykj-loc4", name: "京城朱门", state: "雪中", summary: "终点：朱门大开无人拦，空椅收束全书。" },
+  ],
+  bk_beihe: [
+    { id: "bk_beihe-loc1", name: "北河渡口", state: "雾夜有船", summary: "南北官渡。白天船家吆喝，雾夜只剩沈砚一条船。" },
+    { id: "bk_beihe-loc2", name: "北桥客栈", state: "雨夜亮灯", summary: "雨夜唯一亮灯的檐下；大堂、后厨、天井三层空间。" },
+    { id: "bk_beihe-loc3", name: "雾角灯塔", state: "守塔人将换", summary: "北河入海口旧灯塔，三十年前换过一次守塔人。" },
+    { id: "bk_beihe-loc4", name: "县档案房", state: "潮气重", summary: "县衙西跨院，旧案卷宗存放处；卷宗编号做线索。" },
+  ],
+};
+
+/* 分析产物（style.md / excerpts.md 摘要；引用一律 paragraph id —— 写 id 契约） */
+const LIB_ANALYSIS = {
+  bk_yykj: {
+    style: `## 人称与视角
+第三人称有限，全程贴无名刀客的外部动作，不进内心。代表批：bk_yykj-p000001、bk_yykj-p000004。
+## 句式节奏
+短句与独段为常态，动作句三到五字收束（「来了。」「灯灭了。」）；暴力前后各留一拍静默。见 bk_yykj-p000001、bk_yykj-p000003。
+## 意象系统
+雨、刀、灯三元循环：雨压场，刀破局，灯转场；雪替换雨即收束信号（bk_yykj-p000004）。
+## 对话风格
+引号内不超过两句，应答常以动作代替；对账式对话（「你还记得。」「我记得每一笔。」）见 bk_yykj-p000002。
+## 描写密度
+低密度白描，暴力瞬间零渲染，以环境静默反衬（bk_yykj-p000003）。
+## 时态与语体
+过去时 · 话本体，说书人节奏但不跳出场景。
+## 禁忌清单
+不写内心独白；不解释动机；尸体不细写；形容词每段至多一处。`,
+    excerpt: `## 开篇定调
+bk_yykj-p000001 —— 「雨下了三天。」三个字起势，天气即杀意；刀/鞘/檐三组静物把人钉在原地。
+## 暴力瞬间的留白
+bk_yykj-p000001 —— 「刀出鞘的时候，雨停了半拍。半拍之后，雨声里多了一具尸体。」以声音写杀人，不见血。
+## 对账式对话
+bk_yykj-p000002 —— 「酒是陈的，账是旧的。」对偶开场；掌柜的生理反应（手抖、算盘不响）替代心理描写。
+## 对峙收幕
+bk_yykj-p000003 —— 「你迟了。」「路远。」四字对话 + 刀已在手，断桥幕收在将发未发。
+## 结尾退场
+bk_yykj-p000004 —— 「他把刀放在案上，转身走进雪里。」目的达成即退场，情绪零出口。`,
+  },
+  bk_beihe: {
+    style: `## 人称与视角
+第三人称有限视角，紧贴林晚；她的认知边界即叙事边界（bk_beihe-p000001、bk_beihe-p000087）。
+## 句式节奏
+长短交错：环境长句铺陈 + 动作短句切分；雨夜场景以声音层次（檐响、梆子、橹声）控速（bk_beihe-p000001）。
+## 意象系统
+铜符（缺口）、灯（真假）、水（记忆）三条意象线贯穿三卷；合符场景见 bk_beihe-p000236。
+## 对话风格
+对话留半句，信息量压在停顿里；守夜人夜话以口述史语体呈现（bk_beihe-p000087）。
+## 描写密度
+中密度：场景首段重描写，冲突段转白描；档案房段落以触觉（潮气、发脆）代视觉（bk_beihe-p000087）。
+## 时态与语体
+过去时 · 现当代文学语体，偶用方言词（雾角、更声）锚地理。
+## 禁忌清单
+不越视角写他人内心；旧案真相不一次性揭尽；每卷至少留一处不揭。`,
+    excerpt: `## 开篇 · 雾夜调子
+bk_beihe-p000001 —— 梆子三长一短，「老辈人说，这调子一响，北河就要收人了」：民俗式悬念定调。
+## 追逃 · 鞋底没有声音
+bk_beihe-p000012 —— 以「井台成了一团墨影」写黑暗中的熟路记忆，动作精确到鞋底。
+## 旧案出土
+bk_beihe-p000087 —— 「卷宗编号丙三七，十年前，北河渡口」：编号即线索，档案房的潮气可感。
+## 合符收束
+bk_beihe-p000236 —— 「缺口严丝合缝——原来另一半，一直在这里等她」：全书意象线在此闭合。`,
+  },
+};
+/* 未策展书（动态导入/解析完成）的通用产物模板 */
+function libGenericAnalysis(bookId, which) {
+  const m = libManifestOf(bookId);
+  const first = m[0] ? m[0].id : bookId + "-p000001";
+  const last = m.length ? m[m.length - 1].id : first;
+  return which === "style"
+    ? `## 人称与视角\n第三人称有限视角；开篇定调见 ${first}。\n## 句式节奏\n短句为主的动作节奏，环境描写集中于段落首句。\n## 意象系统\n（示例数据——真实产物由 BookAnalyst 按八要素模板写入 analysis/style.md。）\n## 禁忌清单\n引用正文一律 paragraph id（如 ${first}、${last}），不复制长段原文。`
+    : `## 开篇\n${first} —— 开篇定调段（示例摘录，真实产物见 analysis/excerpts.md）。\n## 收束\n${last} —— 全书收束段（示例摘录）。`;
+}
+
+/* 书单（运行时可变：导入插入新书、解析状态推进） */
+let libConvSeq = 12;
+let libSeq = 5000;
+const libBooks = [
+  { bookId: "bk_yykj", title: "雨夜刀客（样例）", sourceFile: "雨夜刀客.txt", status: "已完成",
+    createdAt: "2026-08-09 21:12", updatedAt: "2026-08-09 21:15", hasStyle: true, hasExcerpt: true },
+  { bookId: "bk_beihe", title: "北河旧事（完本）", sourceFile: "北河旧事_完本.txt", status: "已完成",
+    createdAt: "2026-07-28 10:03", updatedAt: "2026-07-29 02:41", hasStyle: true, hasExcerpt: true },
+  { bookId: "bk_cywj", title: "长夜余烬", sourceFile: "长夜余烬.txt", status: "解析中",
+    createdAt: "2026-08-17 09:40", updatedAt: "2026-08-17 09:43", hasStyle: false, hasExcerpt: false,
+    live: { conv: "conv_12", seq: 0, done: 0, tUnits: 14, tChars: 8, tLocs: 6 } },
+  { bookId: "bk_shiben", title: "旧版试读本（卷一）", sourceFile: "试读本_v1.txt", status: "解析失败",
+    statusReason: "解析会话启动失败：BookAnalyst 子进程 15s 内未向 manager 报到（NOVEL_PROVIDER_API_KEY 缺失）。书目录已保留，确定性产物可读，可重试解析。",
+    createdAt: "2026-08-02 16:22", updatedAt: "2026-08-02 16:23", hasStyle: false, hasExcerpt: false },
+];
+/* stats 与发布骨架/manifest 一致：由 libPubOf/libManifestOf 派生 */
+function libStatsOf(bookId) {
+  const pub = libPubOf(bookId); const mani = libManifestOf(bookId);
+  const chars = mani.reduce((n, e) => n + e.chars, 0);
+  return { volumes: pub.volumes.length, chapters: pub.chapters.length, batches: mani.length, chars, paragraphs: Math.max(pub.chapters.length, Math.round(chars / 68)) };
+}
+const libBookById = (id) => libBooks.find((b) => b.bookId === id);
+/* 解析中样例的进度与 manifest 对齐（批次总数由骨架派生；起点约一半） */
+(() => { const s = libBookById("bk_cywj"); if (s && s.live) { s.live.seq = libManifestOf("bk_cywj").length; s.live.done = Math.floor(s.live.seq * 0.48); } })();
+function libProducts(b) {
+  if (b.status !== "已完成") return null;
+  if (LIB_UNITS[b.bookId]) {
+    return { units: LIB_UNITS[b.bookId].filter((u) => u.scope !== "saga").length, chars: (LIB_CHARS[b.bookId] || []).length, locs: (LIB_LOCS[b.bookId] || []).length };
+  }
+  if (b.products) return b.products;
+  return null;
+}
+/* 解析完成的书：幕级单元（未策展书生成通用骨架） */
+const LIB_UNIT_CACHE = new Map();
+function libUnitsOf(bookId) {
+  if (LIB_UNITS[bookId]) return LIB_UNITS[bookId];
+  const b = libBookById(bookId);
+  if (!b || b.status !== "已完成") return null;
+  if (LIB_UNIT_CACHE.has(bookId)) return LIB_UNIT_CACHE.get(bookId);
+  const pub = libPubOf(bookId); const chN = pub.chapters.length;
+  const seqN = Math.max(3, Math.min(8, Math.round(chN / 6)));
+  const per = Math.ceil(chN / seqN); const units = [];
+  const root = { id: `${bookId}-sg0`, parentId: null, orderKey: "0001", scope: "saga", title: b.title, intent: "BookAnalyst 产出的幕级叙事大纲（示例数据 · 通用骨架）。", synopsis: `全书 ${chN} 章解构为 ${seqN} 幕；卷/章为发布单位，与本大纲解耦。`, chs: [1, chN], chars: [], locs: [] };
+  units.push(root);
+  for (let i = 0; i < seqN; i++) {
+    units.push({ id: `${bookId}-sq${i + 1}`, parentId: root.id, orderKey: String((i + 1) * 1000).padStart(4, "0"), scope: "sequence", title: `第 ${i + 1} 幕 · ${LIB_TITLE_POOL[(i * 3 + 2) % LIB_TITLE_POOL.length]}`, intent: `覆盖第 ${i * per + 1}–${Math.min(chN, (i + 1) * per)} 章的叙事单元（示例）。`, synopsis: "示例数据：真实产物含意图 / 梗概 / 人物地点绑定 / 关联章。", chs: [i * per + 1, Math.min(chN, (i + 1) * per)], chars: [], locs: [] });
+  }
+  LIB_UNIT_CACHE.set(bookId, units);
+  return units;
+}
+
+/* ================= 书库 · 模拟逻辑 ================= */
+/* 拉起解析（BookAnalyst 后台会话模拟）：live.done 由计时器推进，收尾翻转状态 */
+function libSpawnSim(book) {
+  book.status = "解析中";
+  delete book.statusReason;
+  delete book.pendingSpawn;
+  book.updatedAt = "刚刚";
+  const seq = libManifestOf(book.bookId).length;
+  const chN = book.stats ? book.stats.chapters : libPubOf(book.bookId).chapters.length;
+  book.live = { conv: "conv_" + (++libConvSeq), seq, done: 0, tUnits: Math.max(3, Math.round(chN / 5)), tChars: Math.max(3, Math.round(chN / 6)), tLocs: Math.max(2, Math.round(chN / 9)) };
+}
+function libFinish(book) {
+  book.status = "已完成";
+  book.hasStyle = true; book.hasExcerpt = true;
+  book.products = { units: book.live.tUnits, chars: book.live.tChars, locs: book.live.tLocs };
+  book.live = null;
+  book.updatedAt = "刚刚";
+  toast(`《${book.title}》解析完成：幕级大纲 / 人物 / 地点 / 风格 / 摘录已就绪`);
+}
+/* 导入（确定性解析 + 可选拉起解析会话）——统计按源文件规模模拟 */
+function libImportBook({ sourcePath, title, analyze }) {
+  const fileName = String(sourcePath || "").replace(/\\/g, "/").split("/").pop() || "未命名.txt";
+  libSeq += 1;
+  const bookId = "bk_" + libSeq.toString(36);
+  const base = String(title || "").trim() || fileName.replace(/\.[^.]+$/, "");
+  const chars = 26000 + (libHash(base) % 64) * 1500;
+  const chapters = Math.max(3, Math.round(chars / 2400));
+  const book = {
+    bookId, title: base, sourceFile: fileName, status: "解析中",
+    createdAt: "刚刚", updatedAt: "刚刚", hasStyle: false, hasExcerpt: false,
+    stats: { volumes: 1, chapters, batches: Math.ceil(chars / 3400), chars, paragraphs: Math.round(chars / 62) },
+  };
+  /* manifest 派生依赖 stats.chapters：先登记再生成，保证骨架一致 */
+  libBooks.unshift(book);
+  const mani = libManifestOf(bookId);
+  book.stats.batches = mani.length;
+  if (analyze) libSpawnSim(book); else book.pendingSpawn = true;
+  return book;
+}
+
 /* ================= 状态 ================= */
 const state = {
   theme: "paper", platform: "win", simWidth: null,
@@ -2427,6 +2858,10 @@ const state = {
   modalOpen: false, apSel: 0, apShownOnce: false,
   settingsTab: "appearance", booted: false,
   vpMid: false, vpNarrow: false,
+  /* 书库视图：资料位 tab / 选中书 / 各资料位选中项 / 正文页 / 导入弹窗 */
+  libTab: "overview", selBook: "bk_yykj", libChap: 1, libPage: 0,
+  selLibUnit: null, selLibChar: null, selLibLoc: null,
+  libImportOpen: false, libImportAnalyze: true,
 };
 /* 会话内新消息（重渲染不丢失） */
 const liveMsgs = [];
@@ -2436,6 +2871,7 @@ const VIEWS = [
   { id: "chat", name: "对话", icon: "messageSquare" },
   { id: "content", name: "内容", icon: "bookOpen" },
   { id: "plan", name: "计划", icon: "calendar" },
+  { id: "library", name: "书库", icon: "library" },
 ];
 /* 执行模式（下拉列表；对齐现网 ComposerModeBar：会话级权威状态 + 待生效 chip） */
 const MODES = [
@@ -2739,7 +3175,8 @@ function planSidebarHTML() {
 function renderSidebar() {
   sidebarEl.innerHTML =
     state.view === "chat" ? chatSidebarHTML() :
-    state.view === "content" ? contentSidebarHTML() : planSidebarHTML();
+    state.view === "content" ? contentSidebarHTML() :
+    state.view === "library" ? librarySidebarHTML() : planSidebarHTML();
   sidebarEl.classList.toggle("collapsed", state.sidebarCollapsed);
   updateScrims();
 }
@@ -3397,6 +3834,10 @@ function renderMain() {
       <div class="paneBody">${isOverview ? planOverviewHTML() : todoDetailHTML(t)}</div>`;
     return;
   }
+  if (state.view === "library") {
+    libraryMainHTML();
+    return;
+  }
   // content
   let body = "";
   if (state.contentTab === "outline") body = unitDetailHTML(unitById[state.selUnit]);
@@ -3404,6 +3845,366 @@ function renderMain() {
   else if (state.contentTab === "characters") body = charHTML(CHARS.find(c => c.id === state.selChar));
   else body = locHTML(LOCS.find(l => l.id === state.selLoc));
   mainEl.innerHTML = contentSubHead() + `<div class="paneBody">${body}</div>`;
+}
+
+/* ================= 书库视图（侧栏 + 主区资料位） ================= */
+function librarySidebarHTML() {
+  return `
+    <div class="dirHead">书单<span class="cnt">${libBooks.length}</span>
+      <span class="dirTools">
+        <button class="btn btnPrimary btnSm" data-act="libImportOpen">${ic("upload", 11, 2)}导入</button>
+      </span>
+    </div>
+    <div class="sideScroll">
+      ${libBooks.map((b) => {
+        const st = libStatsOf(b.bookId);
+        return `<div class="dirRow${state.selBook === b.bookId ? " active" : ""}" data-act="libBookSel" data-id="${b.bookId}" title="${esc(b.title)} · ${b.bookId}">
+          ${b.status === "解析中" ? '<span class="pulseDot"></span>' : `<span class="convIcon" style="width:24px;height:24px;">${ic("bookOpen", 12)}</span>`}
+          <span class="dirLabel">${esc(b.title)}<small>${st.chapters} 章 · ${libW(st.chars)} 字</small></span>
+          <span class="chip ${LIB_STATUS_CHIP[b.status]}" style="padding:0 6px;">${b.status}</span>
+        </div>`;
+      }).join("")}
+      <div class="treeLegend">
+        <span class="legendLine">全局书库 · 跨工作区共享 —— 工作区经 .novel/library.json 书单 opt-in（缺省无权限）</span>
+        <span class="legendLine">导入 = 确定性解析（卷章 + 分段）；幕级大纲 / 风格 / 摘录由 BookAnalyst 后台会话产出</span>
+      </div>
+    </div>`;
+}
+
+/* 资料位 tab（ready = 可用性；大纲/人物/地点/风格/摘录为解析产物，解析完成才开放） */
+const LIB_TABS = [
+  { id: "overview", name: "总览", icon: "layers", ready: () => true, n: null },
+  { id: "outline", name: "大纲", icon: "listTree", ready: (b) => b.status === "已完成", n: (b) => { const p = libProducts(b); return p ? p.units : null; } },
+  { id: "paras", name: "正文", icon: "scrollText", ready: () => true, n: (b) => libStatsOf(b.bookId).chapters },
+  { id: "chars", name: "人物", icon: "userRound", ready: (b) => b.status === "已完成", n: (b) => (LIB_CHARS[b.bookId] || []).length },
+  { id: "locs", name: "地点", icon: "mapPin", ready: (b) => b.status === "已完成", n: (b) => (LIB_LOCS[b.bookId] || []).length },
+  { id: "style", name: "风格", icon: "feather", ready: (b) => b.status === "已完成" && b.hasStyle, n: null },
+  { id: "excerpt", name: "摘录", icon: "quote", ready: (b) => b.status === "已完成" && b.hasExcerpt, n: null },
+];
+
+function libSubHeadHTML(b) {
+  let actions = "";
+  if (b.status === "解析失败") actions = `<button class="btn btnSecondary btnSm" data-act="libRetry" data-id="${b.bookId}">${ic("retry", 12)}重试解析</button>`;
+  else if (b.pendingSpawn) actions = `<button class="btn btnSecondary btnSm" data-act="libAnalyze" data-id="${b.bookId}">${ic("zap", 12)}拉起解析</button>`;
+  else if (b.status === "已完成") actions = `<button class="btn btnGhost btnSm" data-act="libUse" data-id="${b.bookId}">${ic("messageSquare", 12)}在对话中引用</button>`;
+  return `<div class="subHead">
+    <button class="iconBtn" data-act="view" data-id="chat" title="返回对话">${ic("chevLeft", 15)}</button>
+    <div class="subTitle"><b>书库 · ${esc(b.title)}</b><span class="kicker">${esc(b.bookId)} · ${esc(b.sourceFile)}</span></div>
+    <span class="subCtx"><span class="chip ${LIB_STATUS_CHIP[b.status]}">${b.status}</span></span>
+    <div class="subActions">${actions}</div>
+  </div>`;
+}
+
+function libraryMainHTML() {
+  const b = libBookById(state.selBook) || libBooks[0];
+  if (!b) { mainEl.innerHTML = `<div class="emptyKai"><span class="glyph">❦</span>书单还是空的——点左上「导入」收第一本完本。</div>`; return; }
+  state.selBook = b.bookId;
+  const tabs = LIB_TABS.map((t) => {
+    const ok = t.ready(b);
+    const n = t.n ? t.n(b) : null;
+    return `<button data-act="libTab" data-id="${t.id}" aria-selected="${state.libTab === t.id}"${ok ? "" : ' disabled title="解析完成后可用"'}>${ic(t.icon, 13)}<span>${t.name}</span>${n != null ? `<span class="n">${n}</span>` : ""}</button>`;
+  }).join("");
+  let body = "";
+  if (state.libTab === "overview") body = `<div class="paneInner">${libOverviewHTML(b)}</div>`;
+  else if (state.libTab === "outline") body = libOutlineHTML(b);
+  else if (state.libTab === "paras") body = libParasHTML(b);
+  else if (state.libTab === "chars") body = libCharsHTML(b);
+  else if (state.libTab === "locs") body = libLocsHTML(b);
+  else body = `<div class="paneInner">${libAnalysisHTML(b, state.libTab)}</div>`;
+  mainEl.innerHTML = libSubHeadHTML(b) + `<div class="paneBody"><div class="libTabs" role="tablist">${tabs}</div>${body}</div>`;
+}
+
+/* 总览：状态时间线（已导入→落库中→解析中→已完成/失败）+ 统计 + 产物就绪位 + meta */
+function libStepsHTML(b) {
+  const failed = b.status === "解析失败";
+  const steps = [
+    ["已导入", "success"], ["落库中", "success"],
+    ["解析中", b.status === "解析中" ? "warn" : "success"],
+    [failed ? "解析失败" : "已完成", failed ? "danger" : "success"],
+  ];
+  return `<div class="axisRow"><span class="axisName">状态</span>
+    ${steps.map(([name, tone], i) => `${i ? `<span class="axisArrow">${ic("arrowRight", 13)}</span>` : ""}<span class="axisPill ${tone}">${name}${tone === "warn" ? '<span class="pulseDot" style="width:5px;height:5px;"></span>' : ""}</span>`).join("")}
+  </div>`;
+}
+function libOverviewHTML(b) {
+  const st = libStatsOf(b.bookId);
+  const pr = libProducts(b);
+  const cards = [
+    { num: st.volumes, label: "卷", note: st.volumes ? "有卷标记" : "无卷标记 · 不建卷实体" },
+    { num: st.chapters, label: "章", note: "发布单位" },
+    { num: st.batches, label: "分段", note: "目标 3500 字/批" },
+    { num: libW(st.chars), label: "字数", note: "原文长度" },
+    { num: libW(st.paragraphs), label: "自然段", note: "非空行计" },
+  ];
+  let progress = "";
+  if (b.status === "解析中" && b.live) {
+    const L = b.live; const pct = Math.min(100, Math.round((L.done / L.seq) * 100));
+    const cnt = (t) => Math.round((t * L.done) / L.seq);
+    progress = `<div class="cardBlock">
+      <h3>解析进度 · BookAnalyst 后台会话</h3>
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;">
+        <span class="pulseDot"></span>
+        <b style="font-size:var(--fs-13);">会话 ${esc(L.conv)} 运行中</b>
+        <span class="miniBar" style="width:180px;height:6px;"><i style="width:${pct}%;background:var(--grad-accent);"></i></span>
+        <span class="libLiveNum">${L.done}/${L.seq} 批 · ${pct}%</span>
+      </div>
+      <div class="statGrid">
+        <div class="statCard"><div class="num">${cnt(L.tUnits)}</div><div class="label">幕级单元</div><div class="note">目标 ${L.tUnits}</div></div>
+        <div class="statCard"><div class="num">${cnt(L.tChars)}</div><div class="label">人物</div><div class="note">目标 ${L.tChars}</div></div>
+        <div class="statCard"><div class="num">${cnt(L.tLocs)}</div><div class="label">地点</div><div class="note">目标 ${L.tLocs}</div></div>
+      </div>
+      <div class="banner faint" style="margin-top:6px;">${ic("clock", 13)}<span>状态落 book.meta.json · 宿主 3s 轮询（走读不走推）；中断可恢复——journal 重放 + 断点续跑</span></div>
+    </div>`;
+  } else if (b.status === "解析中") {
+    progress = `<div class="banner faint" style="margin-bottom:10px;">${ic("fileText", 13)}<span>仅导入（spawnAnalysis=false）：卷章 / 分段已就绪，解析会话未拉起——点右上「拉起解析」开始解构。</span></div>`;
+  } else if (b.status === "解析失败") {
+    progress = `<div class="banner warn" style="margin-bottom:10px;">${ic("alertTri", 14)}<span><b>解析失败</b> —— ${esc(b.statusReason || "（未记录原因）")}</span></div>`;
+  }
+  return `
+    ${progress}
+    <div class="cardBlock"><h3>状态时间线</h3>${libStepsHTML(b)}
+      <div style="font-size:var(--fs-11);color:var(--color-faint);margin-top:6px;">导入于 ${esc(b.createdAt)} · 更新于 ${esc(b.updatedAt)}</div>
+    </div>
+    <div class="statGrid">${cards.map((s) => `<div class="statCard"><div class="num">${s.num}</div><div class="label">${s.label}</div><div class="note">${s.note}</div></div>`).join("")}</div>
+    <div class="cardBlock"><h3>解构产物</h3>
+      <div class="refChips">${pr ? `
+        <span class="chip accent">幕级大纲 ${pr.units}</span>
+        <span class="chip accent">人物 ${pr.chars}</span>
+        <span class="chip accent">地点 ${pr.locs}</span>
+        <span class="chip ${b.hasStyle ? "success" : "faint"}">style.md ${b.hasStyle ? "就绪" : "未产出"}</span>
+        <span class="chip ${b.hasExcerpt ? "success" : "faint"}">excerpts.md ${b.hasExcerpt ? "就绪" : "未产出"}</span>` : `<span class="chip faint">解析${b.status === "解析失败" ? "失败" : "中"} · 产物未就绪</span>`}
+      </div>
+    </div>
+    <div class="cardBlock"><h3>元数据 · book.meta.json</h3>
+      <dl class="apParam">
+        <dt>bookId</dt><dd style="font-family:var(--font-mono);">${esc(b.bookId)}</dd>
+        <dt>源文件</dt><dd>${esc(b.sourceFile)}（source/ · ≤ 20 MiB · UTF-8 / GB18030 / Big5 探测）</dd>
+        <dt>存储布局</dt><dd style="font-family:var(--font-mono);">&lt;书库根&gt;/${esc(b.bookId)}/ · book.meta.json · book.db · source/ · paragraphs/ · analysis/</dd>
+      </dl>
+    </div>`;
+}
+
+/* 大纲：双栏（左 = 幕级单元树，右 = 选中单元详情）—— 对齐内容视图大纲资料位 */
+function libOutlineHTML(b) {
+  const units = libUnitsOf(b.bookId);
+  if (!units) return `<div class="paneInner"><div class="emptyKai"><span class="glyph">❦</span>${b.status === "解析中" ? "BookAnalyst 仍在解构这本书——幕级大纲稍后就绪。" : "解析尚未完成，大纲产物未就绪。"}</div></div>`;
+  const byId = {}; units.forEach((u) => { byId[u.id] = u; });
+  if (!byId[state.selLibUnit]) state.selLibUnit = (units.find((u) => u.scope === "sequence") || units[0]).id;
+  const chars = LIB_CHARS[b.bookId] || [];
+  const locs = LIB_LOCS[b.bookId] || [];
+  const row = (u, depth) => {
+    const kids = units.filter((x) => x.parentId === u.id);
+    return `<div class="dirRow treeRow${state.selLibUnit === u.id ? " active" : ""}" style="padding-left:${8 + depth * 14}px;" data-act="libUnitSel" data-id="${u.id}" title="${esc(u.title)} · ${u.orderKey}">
+        <span class="treeTick"></span>
+        <span class="treeLabel">${esc(u.title)}</span>
+        <span class="chip faint" style="padding:0 6px;">${LIB_SCOPE[u.scope][0]}</span>
+      </div>${kids.map((k) => row(k, depth + 1)).join("")}`;
+  };
+  const left = `<div class="libDirCol">
+    <div class="dirHead">幕级单元<span class="cnt">${units.filter((u) => u.scope !== "saga").length}</span></div>
+    ${units.filter((u) => !u.parentId).map((r) => row(r, 0)).join("")}
+    <div class="treeLegend"><span class="legendLine">saga 全书 → arc 卷弧 → sequence 幕；卷/章为发布单位，与本大纲解耦</span></div>
+  </div>`;
+  const u = byId[state.selLibUnit];
+  const entChips = (ids, go, kind) => (ids || []).map((eid) => {
+    const e = (kind === "c" ? chars : locs).find((x) => x.id === eid);
+    return e ? `<button class="refChip" data-act="${go}" data-id="${e.id}" title="${esc(e.summary)}">${ic(kind === "c" ? "userRound" : "mapPin", 11)}${esc(e.name)}</button>` : "";
+  }).join("");
+  const kids = units.filter((x) => x.parentId === u.id);
+  const parent = u.parentId ? byId[u.parentId] : null;
+  const chRange = u.chs ? (u.chs[0] === u.chs[1] ? `第 ${u.chs[0]} 章` : `第 ${u.chs[0]}–${u.chs[1]} 章`) : "";
+  const right = `<div>
+    <div class="cardBlock">
+      <div class="unitHead">${chip(LIB_SCOPE[u.scope] || ["单元", "faint"])}<h2>${esc(u.title)}</h2></div>
+      <div class="unitSub">storyUnit ${esc(u.id)} · orderKey ${esc(u.orderKey)} · ${chRange || "覆盖全书"}${parent ? " · 父 " + esc(parent.title) : ""}</div>
+      <div class="apSectionHead" style="margin:8px 0 5px;">意图 · intent</div>
+      <p class="cardP">${esc(u.intent || "—")}</p>
+      <div class="apSectionHead" style="margin-top:10px;">梗概 · synopsis</div>
+      <p class="cardP">${esc(u.synopsis || "—")}</p>
+      <div class="apActions" style="justify-content:flex-start;">
+        ${u.chs ? `<button class="btn btnSecondary btnSm" data-act="libChapJump" data-id="${u.chs[0]}">${ic("scrollText", 12)}去正文第 ${u.chs[0]} 章</button>` : ""}
+      </div>
+    </div>
+    <div class="cardBlock"><h3>关联</h3>
+      ${(u.chars || []).length ? `<div class="apSectionHead" style="margin-bottom:5px;">人物绑定 · leaf.characters</div><div class="refChips" style="margin-bottom:10px;">${entChips(u.chars, "libCharGo", "c")}</div>` : ""}
+      ${(u.locs || []).length ? `<div class="apSectionHead" style="margin-bottom:5px;">地点绑定 · leaf.locations</div><div class="refChips" style="margin-bottom:10px;">${entChips(u.locs, "libLocGo", "l")}</div>` : ""}
+      ${kids.length ? `<div class="apSectionHead" style="margin-bottom:5px;">子单元</div><div class="refChips" style="margin-bottom:10px;">${kids.map((k) => `<button class="refChip" data-act="libUnitSel" data-id="${k.id}">${ic("listTree", 11)}${esc(k.title)}</button>`).join("")}</div>` : ""}
+      ${parent ? `<div class="apSectionHead" style="margin-bottom:5px;">父单元</div><div class="refChips"><button class="refChip" data-act="libUnitSel" data-id="${parent.id}">${ic("listTree", 11)}${esc(parent.title)}</button></div>` : ""}
+      ${!(u.chars || []).length && !(u.locs || []).length && !kids.length && !parent ? `<span style="color:var(--color-faint);font-size:var(--fs-12);">示例数据：真实产物含人物/地点绑定与关联章区间</span>` : ""}
+    </div>
+  </div>`;
+  return `<div class="libSplit">${left}<div class="libDetailCol">${right}</div></div>`;
+}
+
+/* 人物 / 地点：双栏（左 = 解构实体列表，右 = 档案：简介 + 关联幕反查） */
+function libUnitsOfEnt(b, eid, kind) {
+  return (libUnitsOf(b.bookId) || []).filter((u) => u.scope === "sequence" && ((kind === "c" ? u.chars : u.locs) || []).includes(eid));
+}
+function libEntityHTML(b, kind) {
+  const list = kind === "c" ? LIB_CHARS[b.bookId] || [] : LIB_LOCS[b.bookId] || [];
+  const meta = kind === "c"
+    ? { name: "人物", sel: "selLibChar", sub: (e) => e.role }
+    : { name: "地点", sel: "selLibLoc", sub: (e) => e.state };
+  if (!list.length) return `<div class="paneInner"><div class="emptyKai"><span class="glyph">❦</span>该书未预置${meta.name}档案（示例数据）——真实产物由 BookAnalyst 解构写入 book.db；可在「大纲」幕详情查看实体绑定，或导入样例书查看完整档案。</div></div>`;
+  if (!list.find((e) => e.id === state[meta.sel])) state[meta.sel] = list[0].id;
+  const left = `<div class="libDirCol">
+    <div class="dirHead">${meta.name}档案<span class="cnt">${list.length}</span></div>
+    ${list.map((e) => `<div class="dirRow${state[meta.sel] === e.id ? " active" : ""}" data-act="libEntSel" data-id="${e.id}" data-kind="${kind}" title="${esc(e.name)}">
+        ${kind === "c" ? `<span class="avatar">${esc(e.name[0])}</span>` : `<span class="convIcon" style="width:24px;height:24px;">${ic("mapPin", 12)}</span>`}
+        <span class="dirLabel">${esc(e.name)}<small>${esc(meta.sub(e))}</small></span>
+      </div>`).join("")}
+  </div>`;
+  const e = list.find((x) => x.id === state[meta.sel]);
+  const relUnits = libUnitsOfEnt(b, e.id, kind);
+  const right = `<div>
+    <div class="profileHead">
+      ${kind === "c" ? `<span class="avatar">${esc(e.name[0])}</span>` : `<span class="avatar">${ic("mapPin", 18)}</span>`}
+      <div><h2>${esc(e.name)}</h2><div class="kicker">${meta.name} · 书库解构 · ${esc(meta.sub(e))}</div></div>
+    </div>
+    <div class="cardBlock"><h3>简介</h3><p class="cardP">${esc(e.summary)}</p></div>
+    <div class="cardBlock"><h3>关联幕</h3>
+      <div class="refChips">${relUnits.length ? relUnits.map((u) => `<button class="refChip" data-act="libUnitGo" data-id="${u.id}">${ic("listTree", 11)}${esc(u.title)}</button>`).join("") : `<span style="color:var(--color-faint);font-size:var(--fs-12);">未绑定——真实产物经幕级单元的实体绑定反查</span>`}</div>
+      <div style="font-size:var(--fs-11);color:var(--color-faint);margin-top:8px;">书库实体与创作库同构（Character / Location · StableEntityProfile），只读直开每书 book.db</div>
+    </div>
+  </div>`;
+  return `<div class="libSplit">${left}<div class="libDetailCol">${right}</div></div>`;
+}
+function libCharsHTML(b) { return libEntityHTML(b, "c"); }
+function libLocsHTML(b) { return libEntityHTML(b, "l"); }
+
+/* 卷章目录（正文资料位左栏；当前章高亮，点行切章） */
+function libChapDirHTML(b) {
+  const pub = libPubOf(b.bookId);
+  const mani = libManifestOf(b.bookId);
+  const chapRow = (c) => `<div class="dirRow${Number(state.libChap) === c.no ? " active" : ""}" style="padding-left:24px;" data-act="libChapSel" data-id="${c.no}" title="${esc(c.title)}">
+      <span class="statusDot" style="background:var(--color-border-strong);"></span>
+      <span class="dirLabel">${esc(c.title)}<small>${mani.filter((e) => e.chapterNo === c.no).length} 批</small></span>
+    </div>`;
+  return pub.volumes.length
+    ? pub.volumes.map((v) => `
+      <div class="dirGroup" style="display:flex;align-items:center;gap:5px;">${ic("layers", 11)}${esc(v.title)}<span style="margin-left:auto;font-family:var(--font-mono);font-size:10px;">${pub.chapters.filter((c) => c.volumeId === v.id).length}</span></div>
+      ${pub.chapters.filter((c) => c.volumeId === v.id).map(chapRow).join("")}`).join("")
+    : `<div class="dirGroup">无卷标记 · 全书一卷</div>${pub.chapters.map(chapRow).join("")}`;
+}
+
+/* 正文（融合卷章）：双栏（左 = 卷章目录，右 = 章头 + 来源幕 + 分段批卡片 + 分页护栏）
+   —— 与内容视图「正文」资料位同构：卷·章目录 + 章头 + 正文；发布骨架信息（publication id /
+   来源幕提示）并入章头，manifest 批行即分段卡本身 */
+const LIB_PAGE = 6;
+function libParasHTML(b) {
+  const pub = libPubOf(b.bookId);
+  const mani = libManifestOf(b.bookId);
+  const chapters = [...new Set(mani.map((e) => e.chapterNo))];
+  const chap = chapters.includes(Number(state.libChap)) ? Number(state.libChap) : chapters[0];
+  state.libChap = chap;
+  const chapMeta = pub.chapters.find((c) => c.no === chap) || { id: `${b.bookId}-ch?`, title: "", volumeId: null };
+  const vol = chapMeta.volumeId ? pub.volumes.find((v) => v.id === chapMeta.volumeId) : null;
+  const units = libUnitsOf(b.bookId);
+  const unit = units ? units.find((u) => u.scope === "sequence" && u.chs && chap >= u.chs[0] && chap <= u.chs[1]) : null;
+  const ofChap = mani.filter((e) => e.chapterNo === chap);
+  const pages = Math.max(1, Math.ceil(ofChap.length / LIB_PAGE));
+  const page = Math.max(0, Math.min(state.libPage || 0, pages - 1));
+  state.libPage = page;
+  const slice = ofChap.slice(page * LIB_PAGE, page * LIB_PAGE + LIB_PAGE);
+  const left = `<div class="libDirCol"><div class="dirHead">卷 · 章<span class="cnt">${chapters.length}</span></div>${libChapDirHTML(b)}</div>`;
+  const cards = slice.map((e) => `
+    <div class="paraCard" id="para-${e.id}">
+      <div class="paraHead">
+        <button class="pid" data-act="libPidCopy" data-id="${e.id}" title="点击复制分段 id —— 写 id 契约：引用正文一律 paragraph id">${ic("copy", 10)}${e.id}</button>
+        <span class="chars">${e.chars} 字 · ${esc(e.chapterTitle)}</span>
+        <span class="chars" style="margin-left:auto;">${esc(e.file)}</span>
+      </div>
+      ${libBatchText(b.bookId, e.id).split(/\n\n/).map((p) => `<p>${esc(p)}</p>`).join("")}
+    </div>`).join("");
+  const from = page * LIB_PAGE + 1;
+  const to = Math.min(ofChap.length, (page + 1) * LIB_PAGE);
+  const right = `<div>
+    <div class="chapterTitle">
+      <h2>${esc(chapMeta.title)}</h2>
+      <span class="chip accent">${ofChap.length} 批</span>
+    </div>
+    <div class="chapterMeta">${vol ? esc(vol.title) : "无卷标记 · 全书一卷"} · publication ${esc(chapMeta.id)} · 单次 ${LIB_PAGE} 批（护栏上限 24）</div>
+    <div class="statRowChips" style="margin:8px 0 4px;">
+      <span style="font-size:var(--fs-11);color:var(--color-muted);">来源幕</span>
+      ${unit
+        ? `<button class="refChip" data-act="libUnitGo" data-id="${unit.id}">${ic("listTree", 11)}${esc(unit.title)}</button><span style="font-size:var(--fs-11);color:var(--color-faint);">仅来源提示（大纲/卷章解耦）</span>`
+        : `<span class="chip faint" style="padding:0 6px;">未溯源</span>`}
+    </div>
+    <div class="paraFoot">
+      <span>第 ${from}–${to} 批 / 本章 ${ofChap.length} 批 · 全书 ${mani.length} 批</span>
+      <span class="grow"></span>
+      <button class="btn btnGhost btnSm" data-act="libParaPage" data-id="prev"${page === 0 ? " disabled" : ""}>${ic("chevLeft", 12)}上一页</button>
+      <button class="btn btnGhost btnSm" data-act="libParaPage" data-id="next"${page >= pages - 1 ? " disabled" : ""}>下一页${ic("chevRight", 12)}</button>
+    </div>
+    ${cards}
+  </div>`;
+  return `<div class="libSplit">${left}<div class="libDetailCol">${right}</div></div>`;
+}
+
+/* 风格 / 摘录：md 摘要渲染，paragraph id 引用 → 可点 chip（跳正文并高亮） */
+function libPidChips(safeText) {
+  return safeText.replace(/bk_[a-z0-9]+-p\d{6}/g, (pid) =>
+    `<button class="pid" data-act="libPidJump" data-id="${pid}" title="跳到正文分段：${pid}">${pid}</button>`);
+}
+function libMdHTML(text) {
+  return text.split(/\n/).map((line) => {
+    if (!line.trim()) return "";
+    if (line.startsWith("## ")) return `<h3>${esc(line.slice(3))}</h3>`;
+    return `<p class="cardP">${libPidChips(esc(line))}</p>`;
+  }).join("");
+}
+function libAnalysisHTML(b, which) {
+  const ok = which === "style" ? b.hasStyle : b.hasExcerpt;
+  if (b.status !== "已完成" || !ok) {
+    return `<div class="emptyKai"><span class="glyph">❦</span>解析产物未就绪——${which === "style" ? "风格档案（analysis/style.md）" : "特色摘录（analysis/excerpts.md）"}由 BookAnalyst 收尾写入。</div>`;
+  }
+  const text = (LIB_ANALYSIS[b.bookId] && LIB_ANALYSIS[b.bookId][which]) || libGenericAnalysis(b.bookId, which);
+  return `<div class="banner faint" style="margin-bottom:10px;">${ic("feather", 13)}<span>写 id 契约：引用正文一律 paragraph id（点引用跳到正文分段），不复制长段原文；单次返回上限 20,000 字符。</span></div>
+    <div class="cardBlock">${libMdHTML(text)}</div>`;
+}
+
+/* 导入弹窗（确定性导入 + 可选拉起解析；示例数据全流程前端模拟） */
+function renderLibImport() {
+  const mask = $("libImportMask");
+  if (!state.libImportOpen) { mask.classList.remove("show", "closing"); $("libImportDialog").innerHTML = ""; return; }
+  const opt = (id, on, title, desc) => `<div class="libOpt${on ? " on" : ""}" data-act="libImportOpt" data-id="${id}">
+      <span class="radio"></span>
+      <span><b>${title}</b><small>${desc}</small></span>
+    </div>`;
+  $("libImportDialog").innerHTML = `
+    <div class="dialogHead">
+      <b>导入完本</b>
+      <span style="flex:1"></span>
+      <button class="iconBtn" data-act="libImportClose" title="关闭">${ic("x", 13)}</button>
+    </div>
+    <div class="dialogContent" style="padding:14px 16px;">
+      <div class="libFld"><label>源文件路径（服务端文件系统 · ≤ 20 MiB）</label>
+        <input class="libInput mono" id="libSrcPath" value="D:\\books\\雾中灯塔_完本.txt" spellcheck="false"></div>
+      <div class="libFld"><label>书名（可选 · 缺省取文件名去扩展）</label>
+        <input class="libInput" id="libTitle" placeholder="雾中灯塔（完本）" spellcheck="false"></div>
+      <div class="libFld"><label>解析选项</label>
+        ${opt("analyze", state.libImportAnalyze, "导入并解析", "导入后拉起 BookAnalyst 后台会话：幕级大纲 / 人物 / 地点 / 风格 / 摘录。")}
+        ${opt("import-only", !state.libImportAnalyze, "仅导入", "确定性解析：卷章骨架 + 分段落盘 + manifest。不拉起解析会话，可稍后触发。")}
+      </div>
+      <div style="font-size:var(--fs-11);color:var(--color-faint);line-height:1.7;margin:2px 0 12px;">编码自动探测（UTF-8 / GB18030 / Big5）· 导入即写 book.meta.json（status=解析中）· 失败整目录回滚不留脏书</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btnGhost btnSm" data-act="libImportClose">取消</button>
+        <button class="btn btnPrimary btnSm" data-act="libImportGo">${ic("upload", 12)}开始导入</button>
+      </div>
+    </div>`;
+  mask.classList.remove("closing");
+  mask.classList.add("show");
+}
+function openLibImport() { state.libImportOpen = true; renderLibImport(); }
+function closeLibImport() {
+  state.libImportOpen = false;
+  const mask = $("libImportMask");
+  mask.classList.add("closing");
+  setTimeout(() => {
+    if (!mask.classList.contains("closing")) return;
+    mask.classList.remove("show", "closing");
+    $("libImportDialog").innerHTML = "";
+  }, 280);
 }
 
 /* ================= 审批面板 ================= */
@@ -3888,7 +4689,7 @@ function renderSettings() {
   } else {
     html = `<div style="text-align:center;padding:26px 0;">
       <div class="brand" style="justify-content:center;margin-bottom:8px;"><span class="brandDot"></span><span class="brandName" style="font-size:16px;">Novel</span></div>
-      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.9.0<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>设置（模型服务 + 能力覆盖 + Normal·Fast 档位 + Agent 参数与压缩阈值） · 审批整体弹窗（稍后处理 + 挂起提示条） · 右栏内容目录（详情卡 / 跳完整档案 / 拖宽 / leaf 简略卡） · 实体标签定位 · 正文段落实体 chip + hover 编辑 · markdown 全格式样例 · 排队回显（幽灵项） · 大纲对齐 StoryUnit 模型 · 通知中心 · 启动页与入场动画</div>
+      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.9.0<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>设置（模型服务 + 能力覆盖 + Normal·Fast 档位 + Agent 参数与压缩阈值） · 审批整体弹窗（稍后处理 + 挂起提示条） · 右栏内容目录（详情卡 / 跳完整档案 / 拖宽 / leaf 简略卡） · 实体标签定位 · 正文段落实体 chip + hover 编辑 · markdown 全格式样例 · 排队回显（幽灵项） · 大纲对齐 StoryUnit 模型 · 通知中心 · 启动页与入场动画</div><br>书库视图（v0.9 · 完本解构 · 示例数据）：书单 + 导入弹窗 + 解析进度 + 幕级大纲 / 卷章 / 正文分段（paragraph id 契约）/ 风格摘录</div>
     </div>`;
   }
   $("settingsContent").innerHTML = html;
@@ -4008,6 +4809,11 @@ function renderDemoBar() {
       <button class="dbtn" data-act="askReplay" aria-pressed="${!askDone}">重放提问到达</button>
     </div></div>
     <span class="demoDivider"></span>
+    <div class="demoGroup"><span class="lbl">书库示例</span><div class="demoBtns">
+      <button class="dbtn" data-act="libReplay">解析进度重放</button>
+      <button class="dbtn" data-act="libImportOpen">导入弹窗</button>
+    </div></div>
+    <span class="demoDivider"></span>
     <div class="demoGroup"><span class="lbl">面板</span><div class="demoBtns">
       <button class="dbtn" data-act="insToggle" aria-pressed="${state.dirOpen}">右栏目录</button>
       <button class="dbtn" data-act="apModalOpen">审批弹窗</button>
@@ -4022,7 +4828,8 @@ function renderInfoPop() {
   $("infoPop").innerHTML = `
     <h4>重设计要点（相对现状的差异）</h4>
     <ul>
-      <li><b>侧栏随视图切换内容</b>：对话 = 会话目录；内容 = 资料位（大纲树 / 正文卷章 / 人物 / 地点）；计划 = 「安排」待办目录。现状是全局侧栏混排两组。</li>
+      <li><b>侧栏随视图切换内容</b>：对话 = 会话目录；内容 = 资料位（大纲树 / 正文卷章 / 人物 / 地点）；计划 = 「安排」待办目录；书库 = 书单（状态 chip + 导入）。现状是全局侧栏混排两组。</li>
+      <li><b>书库视图 = 完本解构前端基准（v0.9 · 示例数据）</b>：第四视图「书库」。左栏书单（解析中脉冲 / 已完成 / 解析失败状态 chip）；主区七资料位：<b>总览</b>（状态时间线 已导入→落库中→解析中→已完成/失败 + 统计 + 产物就绪位 + book.meta.json）、<b>大纲</b>（双栏：幕级单元树 + 单元详情，人物/地点绑定可跳）、<b>正文</b>（融合卷章，双栏：左卷章目录 + 右章头〔publication id · 来源幕提示——大纲/卷章解耦〕+ manifest 分段批卡片，单次 6 批护栏 + 分页）、<b>人物 / 地点</b>（双栏：实体列表 + 档案，关联幕反查）、<b>风格/摘录</b>（paragraph id 引用可点跳正文并高亮——写 id 契约）。导入弹窗支持 仅导入 / 导入并解析（拉起 BookAnalyst）；解析进度面板展示后台会话 + 逐批推进 + 幕/人物/地点实时计数（示例数据，未接后端；真实接入走 LibraryService 门面）。控制条「书库示例」可重放进度。</li>
       <li><b>大纲树对齐 core 模型（StoryUnit 泛型树）</b>：saga 全书 → arc 卷 → sequence 序列 → scene 场景，可省中间层、叶必须是场景（正文段落挂叶、发布「章」从场景选段）；双状态 = 规划（idea 点子 → outlined 已成纲 → ready 可开写）+ 实现（pending 未动笔 → in-progress 写作中 → completed 已完成 / abandoned 废弃），「受阻」由 pending + blockState 推导并展示原因码与依赖；父单元进度由叶单元 rollup；场景叶可挂 <b>leaf 场景计划</b>（人物/地点绑定、事件序列、节奏拍、实体变更）。树形目录任意层级嵌套 + 引导线呈现。</li>
       <li><b>审批改为整体弹窗（阻塞式）</b>：审批挂起时本就不能发送，弹窗是对"必须先决策"最直接的表达。一次调用一批审批在弹窗内<b>左清单 + 右详情</b>呈现（原文前后对照 / exit 设计草稿全文在 920px 宽度整页可读），支持逐项决策与<b>全部批准</b>；<b>稍后处理</b>可收起——顶部琥珀<b>提示条</b>常驻唤回（呼吸光晕），状态行升级为可点胶囊、对话流"等待审批"工具行亦可点击，处理完自动收口且<b>不在对话流留过往审批记录</b>（仅工具行落"审批完成"）。</li>
       <li><b>右栏 = 内容目录（大纲 / 人物 / 地点）</b>：对话视图常驻，随手查故事资料。人物/地点行点击就地展开<b>详情卡</b>（简介 / 初始状态 / 关联单元），「打开完整档案」跳内容视图对应档案；大纲树行点击直接跳内容视图单元详情。切到内容 / 计划视图自动隐藏（左栏已有资料位），≤1080 变右缘覆盖抽屉；<b>左缘把手可拖拽调宽</b>（320–640px，双击复位；≤1280 窄档隐藏并回落断点宽度）。</li>
@@ -4474,6 +5281,108 @@ document.addEventListener("click", (e) => {
       $("demoBar").classList.remove("hiddenBar");
       $("barToggle").style.display = "none";
       break;
+    /* ---- 书库视图（完本解构 · v0.9） ---- */
+    case "libBookSel": {
+      state.selBook = id;
+      state.libTab = "overview"; state.libChap = 1; state.libPage = 0;
+      state.selLibUnit = null; state.selLibChar = null; state.selLibLoc = null;
+      renderSidebar(); renderMain(); break;
+    }
+    case "libTab": {
+      const b = libBookById(state.selBook);
+      const t = LIB_TABS.find((x) => x.id === id);
+      if (!b || !t || !t.ready(b)) { toast("解析完成后可用——该资料位是 BookAnalyst 产物"); break; }
+      state.libTab = id; renderMain(); break;
+    }
+    case "libUnitSel":
+      state.selLibUnit = id; renderMain(); break;
+    case "libUnitGo":
+      state.libTab = "outline"; state.selLibUnit = id; renderMain(); break;
+    case "libEntSel": {
+      state[el.dataset.kind === "c" ? "selLibChar" : "selLibLoc"] = id;
+      renderMain(); break;
+    }
+    case "libCharGo":
+      state.libTab = "chars"; state.selLibChar = id; renderMain(); break;
+    case "libLocGo":
+      state.libTab = "locs"; state.selLibLoc = id; renderMain(); break;
+    case "libChapSel":
+      state.libChap = Number(id); state.libPage = 0; renderMain(); break;
+    case "libChapJump":
+      state.libTab = "paras"; state.libChap = Number(id); state.libPage = 0;
+      renderMain(); break;
+    case "libParaPage": {
+      const b = libBookById(state.selBook);
+      const mani = libManifestOf(b.bookId).filter((e) => e.chapterNo === Number(state.libChap));
+      const pages = Math.max(1, Math.ceil(mani.length / LIB_PAGE));
+      state.libPage = Math.max(0, Math.min(pages - 1, (state.libPage || 0) + (id === "next" ? 1 : -1)));
+      renderMain(); break;
+    }
+    case "libPidCopy":
+      try { navigator.clipboard?.writeText(id); } catch { /* file:// 下可能无权限 */ }
+      toast("已复制分段 id：" + id + "（写 id 契约：引用正文一律 paragraph id）");
+      break;
+    case "libPidJump": {
+      const bid = id.slice(0, id.lastIndexOf("-p"));
+      const mani = libManifestOf(bid);
+      const e = mani.find((x) => x.id === id);
+      if (!e) { toast("未找到分段：" + id); break; }
+      state.selBook = bid; state.libTab = "paras"; state.libChap = e.chapterNo;
+      const ofChap = mani.filter((x) => x.chapterNo === e.chapterNo);
+      state.libPage = Math.floor(ofChap.findIndex((x) => x.id === id) / LIB_PAGE);
+      renderSidebar(); renderMain();
+      const card = document.getElementById("para-" + id);
+      if (card) {
+        card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash");
+        try { card.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* jsdom */ }
+      }
+      toast("已定位正文分段：" + id);
+      break;
+    }
+    case "libImportOpen": openLibImport(); break;
+    case "libImportClose": closeLibImport(); break;
+    case "libImportMask":
+      if (e.target.closest('[data-noclose="1"]')) break;
+      closeLibImport(); break;
+    case "libImportOpt":
+      state.libImportAnalyze = id === "analyze";
+      renderLibImport(); break;
+    case "libImportGo": {
+      const src = ($("libSrcPath") && $("libSrcPath").value.trim()) || "";
+      const title = ($("libTitle") && $("libTitle").value.trim()) || "";
+      if (!src) { toast("先填源文件路径（演示）"); break; }
+      const book = libImportBook({ sourcePath: src, title, analyze: state.libImportAnalyze });
+      closeLibImport();
+      state.selBook = book.bookId; state.libTab = "overview"; state.libChap = 1; state.libPage = 0;
+      state.selLibUnit = null; state.selLibChar = null; state.selLibLoc = null;
+      renderSidebar(); renderMain();
+      toast(`已导入《${book.title}》：${book.stats.chapters} 章 · ${book.stats.batches} 批${state.libImportAnalyze ? " · BookAnalyst 已拉起（解析中）" : " · 解析会话未拉起（可稍后触发）"}`);
+      break;
+    }
+    case "libAnalyze": case "libRetry": {
+      const b = libBookById(id);
+      if (!b) break;
+      libSpawnSim(b);
+      if (act === "libRetry") toast(`已重试解析《${b.title}》——复用确定性产物（卷章/分段），从断点续跑`);
+      else toast(`已拉起解析《${b.title}》——BookAnalyst 后台会话运行中`);
+      state.libTab = "overview";
+      renderSidebar(); renderMain(); break;
+    }
+    case "libReplay": {
+      const b = libBookById("bk_cywj");
+      if (!b) break;
+      b.status = "解析中"; b.hasStyle = false; b.hasExcerpt = false; delete b.products; delete b.statusReason;
+      b.updatedAt = "刚刚";
+      b.live = { conv: "conv_" + (++libConvSeq), seq: libManifestOf("bk_cywj").length, done: 0, tUnits: 14, tChars: 8, tLocs: 6 };
+      state.selBook = "bk_cywj"; state.libTab = "overview";
+      if (state.view !== "library") { state.view = "library"; renderTitlebar(); }
+      renderSidebar(); renderMain();
+      toast("已重放解析进度：《长夜余烬》从头解构（示例数据）");
+      break;
+    }
+    case "libUse":
+      toast("对话中主 Agent 经 library.read 工具可读该书：overview / paragraph / character / location / story_unit / volume / chapter / style / excerpt");
+      break;
     case "noop": break;
     case "copyChap": toast("已复制本章正文（演示）"); break;
     case "newConv": {
@@ -4772,6 +5681,18 @@ setInterval(() => {
     if (badge && at > 0) badge.textContent = Math.max(0, Math.round((Date.now() - at) / 1000)) + "s";
   });
 }, 1000);
+// 书库解析进度模拟（示例数据）：解析中的书每 1.6s 推进一批次段；真实接入为 3s 轮询 book.meta.json
+setInterval(() => {
+  const b = libBooks.find((x) => x.status === "解析中" && x.live);
+  if (!b) return;
+  const L = b.live;
+  L.done = Math.min(L.seq, L.done + Math.max(1, Math.round(L.seq / 30)));
+  if (L.done >= L.seq) libFinish(b);
+  if (state.view === "library") {
+    renderSidebar();
+    if (state.selBook === b.bookId) renderMain();
+  }
+}, 1600);
 
 /* ================= 容器宽度断点联动 =================
    CSS 容器查询负责布局（≤1280 收窄 / ≤1080 审批覆盖抽屉）；

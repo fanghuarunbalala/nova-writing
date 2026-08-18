@@ -2,15 +2,15 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 版本 | v1.1（对齐 demo 终版；含决议：最小窗口 1080，开放问题已定案见 §17） |
-| 日期 | 2026-08-15 |
+| 版本 | v1.2（对齐 demo v0.9.0：新增 §8A 书库视图——完本解构前端基准；此前决议见 §17） |
+| 日期 | 2026-08-17 |
 | 状态 | 待评审 |
 | 规范来源 | `docs/design/app-redesign-demo.html`（交互 demo，唯一视觉/交互基准） |
-| 回归脚本 | `docs/design/.demo-smoke.cjs`（`node .demo-smoke.cjs`，56 项断言） |
+| 回归脚本 | `docs/design/.demo-smoke.cjs`（`node .demo-smoke.cjs`，92 项断言） |
 | 主题基准 | `docs/design/theme-candidates-demo-2.html`（四主题 token 体系） |
 
 > 本文所有尺寸、文案、状态、断点均以 demo 终版为准；demo 与本文冲突时**以 demo 为准并回改本文**。
-> 需求编号规则：TB 标题栏 / WC 窗控 / WS 工作区 / ST 设置 / SB 侧栏 / CH 对话 / CV 内容（OL 大纲 · MS 正文 · PM 人物 · PL 地点）/ PN 计划 / AP 审批 / RWD 响应式 / TH 主题 / AN 动效 / A11Y 无障碍。
+> 需求编号规则：TB 标题栏 / WC 窗控 / WS 工作区 / ST 设置 / SB 侧栏 / CH 对话 / CV 内容（OL 大纲 · MS 正文 · PM 人物 · PL 地点）/ PN 计划 / LB 书库（§8A）/ AP 审批 / RWD 响应式 / TH 主题 / AN 动效 / A11Y 无障碍。
 
 ---
 
@@ -27,7 +27,7 @@
 ## 2. 范围
 
 ### 2.1 本期范围
-应用外壳（标题栏 / 视图切换 / 窗控 / 工作区 / 设置）、三视图布局与目录、对话输入区、审批面板、主题与响应式。对应 demo 全部可见元素与交互。
+应用外壳（标题栏 / 视图切换 / 窗控 / 工作区 / 设置）、视图布局与目录（对话 / 内容 / 计划 / 书库）、对话输入区、审批面板、主题与响应式。对应 demo 全部可见元素与交互。
 
 ### 2.2 非目标（含已决议排除项）
 - ~~侧栏 / 审批面板的拖拽调宽：**已决议移除** DragHandle，宽度采用断点固定档位（§17 决议 2）~~ → **v0.8 修订（§17 决议 7）**：右栏（内容目录）恢复拖拽调宽（320–640、双击复位，≤1280 仍固定档）；侧栏维持固定档；
@@ -42,15 +42,15 @@
 ## 3. 信息架构
 
 ### 3.1 视图模型
-- 主视图状态：`chat | content | plan`（沿用 `MainViewRouter` 双栈历史，支持返回）。
-- 内容视图子位：`outline | manuscript | characters | locations`（沿用 `contentTab`）。
+- 主视图状态：`chat | content | plan | library`（书库视图 v0.9 增补，见 §8A；沿用 `MainViewRouter` 双栈历史，支持返回）。
+- 内容视图子位：`outline | manuscript | characters | locations`（沿用 `contentTab`）；书库视图子位：`overview | outline | pub | paras | style | excerpt`。
 - 侧栏为**上下文目录**：内容由当前主视图决定，非全局混排（**与现状的核心差异**）。
 - 布局骨架：
 
 ```
-┌─ 标题栏 46px（窗控 · 品牌 · 工作区 · [对话|内容|计划] · 工作区 · 设置 · 窗控）─┐
+┌─ 标题栏 46px（窗控 · 品牌 · 工作区 · [对话|内容|计划|书库] · 工作区 · 设置 · 窗控）─┐
 ├─ 侧栏（随视图切换） ─┬─ 主区（subHead + 内容） ─┬─ 审批面板（仅对话视图） ─┤
-└──────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.2 跨视图导航（demo 已实现，必须保留）
@@ -65,6 +65,9 @@
 | 待办「去讨论」 | 计划 | 对话 |
 | 对话流审批系统消息 | 对话 | 打开审批面板 |
 | 计划·大纲进度行 | 计划 | 内容·大纲（定位到该单元，toast「已定位到大纲：…」） |
+| 书库·风格/摘录 的 paragraph id 引用 chip | 书库 | 书库·正文（定位到章/页并高亮该批卡片） |
+| 书库·卷章章行 / 幕「去正文第 N 章」 | 书库 | 书库·正文（切到对应章） |
+| 书库·已完成书「在对话中引用」 | 书库 | toast 提示主 Agent `library.read` 能力（不跳转） |
 
 ---
 
@@ -81,7 +84,7 @@
 ### 4.2 视图切换器
 | 编号 | 需求 |
 | --- | --- |
-| TB-5 | 三段等宽 grid（`repeat(3, 1fr)`，padding 2 / gap 2 / radius 6），`surface-2` 底 + `shadow-xs`；每钮 = 图标 13px + 文案 12px（对话 messageSquare / 内容 bookOpen / 计划 calendarDays）。 |
+| TB-5 | 四段等宽 grid（`repeat(4, 1fr)`，padding 2 / gap 2 / radius 6），`surface-2` 底 + `shadow-xs`；每钮 = 图标 13px + 文案 12px（对话 messageSquare / 内容 bookOpen / 计划 calendarDays / 书库 library）。 |
 | TB-6 | 选中态由滑块 thumb 表达：`surface` 底 + `shadow-xs`，位移 `translateX(calc(i * (100% + 2px)))`，0.22s `ease-out`；选中文字 `accent-ink`。 |
 | TB-7 | `aria-selected` 表达选中；`role="tablist"`。 |
 
@@ -238,7 +241,43 @@
 | PN-7 | 详情卡：分组 chip + 状态 chip（待处理 warn / 已完成 success）+ 标题（17 粗）+ mono 元信息 + 描述 + 动作区。 |
 | PN-8 | 动作按 `kind`：`approval`→主钮「去审批」（跳对话 + 开审批面板）；`location`→「去完善」（跳内容·地点定位）；`chapter`→「去处理」（跳正文定位）；`chat`→「去讨论」；一律附 ghost「标记完成」（toast 反馈）。已完成待办显示 ghost「标记为未完成」。标记完成后若正选中该待办则回总览。 |
 
+## 8A. 书库视图（LB · v0.9 增补，完本解构前端基准）
+
+对应后端「完本解构」管线（`core/src/library/`：LibraryService 门面 + BookAnalyst 后台会话；PRD `docs/PRD/library-完本解构.md`）。demo 当前为**纯示例数据**（导入与解析进度前端模拟，未接后端）；数据形状逐字段对齐后端类型，真实接入时替换数据源即可（LB-10）。
+
+### 8A.1 视图与侧栏（书单）
+| 编号 | 需求 |
+| --- | --- |
+| LB-1 | 第四视图「书库」（library 图标：四根书脊）。左栏 = **书单**（全局书库 · 跨工作区）：目录头「书单」+ 计数胶囊 + 右侧「导入」主钮（upload 图标）；书行 = 书名 + 副信息「N 章 · 字数（万级缩写）」+ 状态 chip（解析中 `warn` 带脉冲点 / 已完成 `success` / 解析失败 `danger`）；底部注记：全局书库跨工作区共享、工作区经 `.novel/library.json` 书单 opt-in、导入与解析产物分工。 |
+| LB-2 | 主区资料位 **七段横向分段控件**（libTabs：图标 13px + 名称 + mono 计数胶囊同行，选中 `surface` 浮起；不与侧栏 segTabs 竖排词汇混用）：**总览 layers / 大纲 listTree（计数 = 幕）/ 正文 scrollText（计数 = 章）/ 人物 userRound（计数 = 人物）/ 地点 mapPin（计数 = 地点）/ 风格 feather / 摘录 quote**。**卷章并入正文**（发布骨架信息呈现于章头，LB-11）。大纲/人物/地点/风格/摘录为 BookAnalyst 解析产物——书未完成解析时这五钮 `disabled`（title「解析完成后可用」）；总览/正文为确定性导入产物，任何状态可读。**大纲/正文/人物/地点四个资料位为双栏**（对齐内容视图：左目录列 248px〔≤1280 收窄 216〕+ 右详情列，两列各自滚动）；总览/风格/摘录单栏居中。 |
+
+### 8A.2 总览
+| 编号 | 需求 |
+| --- | --- |
+| LB-3 | subHead：返回箭头（→对话）+「书库 · {书名}」+ kicker（bookId · 源文件名）+ 状态 chip（subCtx）+ 状态相关动作：解析失败 →「重试解析」；仅导入 →「拉起解析」；已完成 →「在对话中引用」（toast 提示 `library.read` 工具 kind 全集）。 |
+| LB-4 | **状态时间线**（axisRow 词汇）：已导入 → 落库中 → 解析中 → 已完成/解析失败（axisPill + arrowRight；当前步脉冲点；失败步 danger）；下方「导入于 / 更新于」。 |
+| LB-5 | **统计卡** 5 张（statCard）：卷（有标记卷计数；无卷标记显示 0 + 注「不建卷实体」）/ 章 / 分段（注「目标 3500 字/批」）/ 字数（万级缩写）/ 自然段。 |
+| LB-6 | **解构产物就绪位** chips：幕级大纲 N · 人物 N · 地点 N · style.md 就绪/未产出 · excerpts.md 就绪/未产出；未完成解析时显示「解析中/失败 · 产物未就绪」。 |
+| LB-7 | **解析中 + 会话在跑**：进度面板 = pulseDot + 「会话 conv_N 运行中」+ miniBar（已读批次 x/y · 百分比）+ 三张实时计数卡（幕级单元/人物/地点，目标值注记）+ faint 注记「状态落 book.meta.json · 宿主 3s 轮询（走读不走推）；中断可恢复——journal 重放 + 断点续跑」。**仅导入**（spawnAnalysis=false）：faint 横幅说明确定性产物已就绪、会话未拉起。**解析失败**：warn 横幅展示 statusReason（子进程未报到等）+ 重试入口。 |
+| LB-8 | **元数据卡**（apParam dl）：bookId（mono）/ 源文件（source/ · ≤20 MiB · UTF-8/GB18030/Big5 探测）/ 存储布局（`<书库根>/<bookId>/` 下 book.meta.json · book.db · source/ · paragraphs/ · analysis/）。 |
+
+### 8A.3 大纲 / 正文 / 人物 / 地点 / 风格 / 摘录
+| 编号 | 需求 |
+| --- | --- |
+| LB-9 | **大纲（双栏）**：左列 = 幕级单元树（saga 全书 → arc 卷弧 → sequence 幕；行 = 短横线 + 标题 + scope chip，选中高亮，目录头带计数）；右列 = 选中单元详情：scope chip + 标题 + mono 副行（storyUnit id · orderKey · 覆盖章区间 · 父单元）+ 意图 / 梗概 + 动作「去正文第 N 章」+ 关联卡（人物绑定 / 地点绑定 refChip 跳对应档案；子单元 / 父单元 refChip 就地切换）。未就绪时楷体空态。 |
+| LB-10 | **人物 / 地点（双栏）**：左列 = 实体列表（人物：首字头像 + 姓名 + 角色；地点：mapPin 图标位 + 名称 + 现状）；右列 = 档案：profileHead + 简介 + **关联幕**（经幕级单元的实体绑定反查，refChip 跳大纲单元详情）+ 注记「书库实体与创作库同构（Character / Location · StableEntityProfile），只读直开每书 book.db」。未预置档案的书显示示例数据空态。 |
+| LB-11 | **正文（双栏 · 融合卷章，与内容视图「正文」资料位同构）**：左列 = 卷章目录——卷组（layers 图标 + 卷名 + 章数）+ 章行（状态点 + 标题 +「N 批」副信息，当前章高亮；无卷标记的书显示「无卷标记 · 全书一卷」）；右列 = 章头（chapterTitle 标题 +「N 批」chip + chapterMeta：卷名 · publication id · 单次 6 批〔护栏上限 24〕）+ **来源幕**行（refChip +「仅来源提示（大纲/卷章解耦）」注记，或「未溯源」faint chip；refChip 跳大纲单元详情）+ 分页 footer（第 x–y 批 / 本章 N 批 · 全书 M 批 + 上一页/下一页，边界禁用）+ **分段批卡片**（manifest 一行一卡：头行 = paragraph id mono chip〔点击复制，写 id 契约〕+ 字数 + 章题 + 批文件相对路径；正文段 13px/1.9）。 |
+| LB-12 | **风格 / 摘录**：md 摘要渲染（`##` 小节标题 + cardP 段落）；正文中 `bk_…-pNNNNNN` 引用渲染为可点 pid chip → 跳正文资料位对应章/页并高亮（row-flash）；顶部「写 id 契约」注记（引用一律 paragraph id、不复制长段原文；单次返回上限 20,000 字符）。未产出时楷体空态。 |
+
+### 8A.4 导入与演示控制
+| 编号 | 需求 |
+| --- | --- |
+| LB-13 | **导入弹窗**（dialog/sheet 词汇）：源文件路径（mono 输入）+ 书名（可选，缺省取文件名去扩展）+ **解析选项单选卡**两档——「导入并解析」（拉起 BookAnalyst：幕级大纲/人物/地点/风格/摘录）/「仅导入」（确定性解析：卷章骨架 + 分段落盘 + manifest，可稍后触发）；脚注：编码自动探测、导入即写 meta（status=解析中）、失败整目录回滚；确认 → 书单顶部插入新书（解析中）+ toast（章数/批数/会话）。 |
+| LB-14 | demo 控制条「书库示例」组：**解析进度重放**（长夜余烬复位为解析中、从头推进）/ **导入弹窗**。 |
+| LB-15 | **数据契约（示例数据 ↔ 后端类型逐字段对齐）**：`BookSummary/BookMeta`（status ∈ 解析中/已完成/解析失败 + stats{volumes,chapters,batches,chars,paragraphs} + hasStyle/hasExcerpt）、`ParagraphManifestEntry`（id 全库唯一）、id 方案 `bk_月季` / 卷 `…-volNN` / 章 `…-chNNNN` / 分段 `…-pNNNNNN`；状态机：导入写 meta 即解析中、Agent 收尾翻转、spawnAnalysis=false 停在解析中。真实接入走 LibraryService 门面（listBooks / importBook / readManifest / readParagraphs / readAnalysis），进度 3s 轮询 `book.meta.json`——替换 demo 数据源不改交互。 |
+
 ---
+
 
 ## 9. 审批面板（AP）
 
@@ -335,13 +374,14 @@
 | A11Y-4 | 键盘：Enter 发送 / Shift+Enter 换行 / IME 组合态不触发；Esc 关闭弹窗与下拉（模式菜单 / 工作区菜单 / 设置）。 |
 | A11Y-5 | 文案对比度满足现有纪律测试（亮暗主题分别校验）。 |
 
-## 15. 验收标准（对齐 demo 冒烟 56 项，按域归并）
+## 15. 验收标准（对齐 demo 冒烟 92 项，按域归并）
 
 **外壳**：三视图 tab 与滑块；Win 三窗控（关闭 hover 红）；mac 红绿灯且互斥；双击标题栏最大化切换；关闭出现退出遮罩、可重新打开；工作区菜单可切换并更新 chip + toast。
 **侧栏**：随视图切换三种目录；大纲树为嵌套层级 + 引导线 + 叶节点短线；展开/折叠全部生效；卷组折叠生效。
 **对话**：输入框与底栏（模式左 / 发送右）；模式下拉 3 项含图标名称说明；选择后显示「待生效」（无模式名）且不丢输入草稿；发送追加用户气泡与演示回复；生成中发送→暂停互换；状态三态：正在生成 / **正在审批** / 失败（重试）；Enter/Shift+Enter/IME。
 **内容**：四资料位切换；大纲单元详情（chips/进度/受阻/弃置/关联）；正文目录 + 阅读区（草稿块标记、受阻横幅、未开笔空态）；人物/地点目录与档案、关联跳转；单元详情→正文跳转。
 **计划**：6 统计卡；双状态轴；大纲进度行点击定位；待办详情跨视图动作（去审批/完善/处理/讨论）+ 标记完成。
+**书库（§8A）**：书单四态样例（已完成/解析中/解析失败重试/仅导入）；七资料位 tab 与产物 tab 禁用逻辑（解析中 5 钮禁用）；总览状态时间线 + 统计卡 + 产物就绪位 + 元数据；解析进度面板（会话 id + 批次进度 + 实时计数）；大纲双栏（左幕级树 + 右单元详情切换）；人物/地点双栏（列表 + 档案 + 关联幕反查跳转）；正文融合卷章双栏（左卷章目录 + 章头〔来源幕/未溯源 + publication id〕+ 分段批卡片：id 契约格式 `bk_…-pNNNNNN` + 单页 6 批护栏 + 分页）；风格/摘录 id 引用可点跳正文并高亮；导入弹窗两档选项全流程（导入并解析 / 仅导入）+ 新书入列解析中；控制条解析进度重放。
 **审批**：与对话视图绑定（切内容/计划隐藏、回来恢复）；一批卡片堆叠无目录；Exit 卡片（固定标题 + design.md 全文 + `»`）；编辑显示「当前内容 · 将被覆盖」原文；删除显示将被删除的既有数据；写入遇同名展示既有档案、纯新建标注「无既有数据」；批准/拒绝/请求修改（含意见展开与禁用态）→ 横幅 + 脉冲 + 计数更新；新审批入列动画。
 **系统**：四主题即时切换（含设置卡入口）与过渡；窗口宽度四档模拟（满 / 1440 / 1280 / 1080）；≤1080 降级路径（审批右缘覆盖抽屉 + 遮罩）；最小窗口 1080 下三视图可用；toast 2.2s 自动消失。
 
@@ -355,6 +395,7 @@
 | 输入区 | ConversationComposer / ComposerModeBar / GenStatus | 改造：模式下拉移至底栏 + 待生效 chip；恢复暂停钮；挂起文案改「正在审批」 |
 | 内容视图 | ContentSurface + 四 pane | 改造：StoryOutlineTree 嵌套 + 引导线 + 详情区；ManuscriptReader 保留双栏；Character/LocationGrid → 左目录 + 右档案 |
 | 计划视图 | ScheduleSurface | 改造：单列 → 左目录 + 右总览/详情；待办动作跨视图化 |
+| 书库视图（v0.9 demo） | （新增）`ui/src/domains/library/`（store + components）+ shell 侧栏/主区落点 | 新增：交互基准即 demo §8A；数据接入 LibraryService 门面（`listBooks/importBook/readManifest/readParagraphs/readAnalysis` + 3s 轮询 `book.meta.json`）；GUI 上传入口在 library PRD 中列为后续迭代 |
 | 审批面板 | InspectorHost / ApprovalPanel | 改造：去目录抽屉 → 卡片流；新增 当前内容 / Exit 视图；绑定对话视图；仍复用 ApprovalStore |
 | 主题/断点 | tokens.css / ThemeProvider / global.css | 复用（主题已定稿）；新增容器查询断点样式 |
 | 窗控 IPC | gui/src/main/minimal.ts | 新增：frameless + 窗控 IPC + 平台判定 + 最小窗口 1080×640（初始 1280×800） |
@@ -373,4 +414,4 @@
 
 ---
 
-*附：demo 快速对照——打开 `docs/design/app-redesign-demo.html`，底部控制条可切 主题 / 平台窗控 / 窗口宽度 / 运行状态 / 审批面板 / 说明；「说明」弹层即本 PRD 要点速览。*
+*附：demo 快速对照——打开 `docs/design/app-redesign-demo.html`，底部控制条可切 主题 / 平台窗控 / 窗口宽度 / 运行状态 / 审批面板 / 书库示例（解析进度重放 · 导入弹窗）/ 说明；「说明」弹层即本 PRD 要点速览。*

@@ -12,7 +12,7 @@ const dom = new JSDOM(
   {
     runScripts: "dangerously",
     pretendToBeVisual: true,
-    url: "file:///D:/workplace/NovelAI-Refact/NovelAI-Event/docs/design/app-redesign-demo.html",
+    url: "file:///D:/workplace/NovelAI-Refact/NovelAI/docs/design/app-redesign-demo.html",
     virtualConsole: vc,
     beforeParse(window) {
       window.structuredClone = window.structuredClone || structuredClone;
@@ -38,7 +38,7 @@ const click = (sel) => {
 };
 
 // --- 初始渲染（对话视图 + Win 窗控 + 审批面板开） ---
-assert($$(".tabs button").length === 3, "顶栏三视图 tab");
+assert($$(".tabs button").length === 4, "顶栏四视图 tab");
 assert($$(".winCtl button").length === 3, "Windows 三窗口按钮（最小化/最大化/关闭）");
 assert($(".composer") && $(".composer textarea"), "聊天输入框");
 assert($(".modeRow .sendBtn") && $(".modeRow .pauseBtn"), "发送/暂停在输入框底栏");
@@ -118,6 +118,73 @@ click('[data-act="apDecide"][data-id="approve"]');
 assert($(".apDetail").textContent.includes("已处理"), "批准后显示已处理横幅");
 click('[data-act="apLater"]');
 assert($("#apAlertBar") && $("#apAlertBar").style.display === "flex", "稍后处理 → 提示条常驻（3 项待决）");
+
+// --- 书库视图（v0.9 完本解构 · 示例数据） ---
+click('[data-act="view"][data-id="library"]');
+assert($("#sidebar .dirHead").textContent.includes("书单"), "书库侧栏书单目录");
+assert($$("#sidebar .dirRow").length === 4, "书单 4 本（含解析中/失败样例）");
+assert(doc.body.textContent.includes("解析失败"), "书单状态 chip（解析失败）");
+assert($(".subHead .kicker").textContent.includes("bk_yykj"), "选中书 kicker 显示 bookId");
+assert($$(".libTabs button").length === 7, "主区七资料位 tab（卷章并入正文）");
+assert($$(".statCard").length >= 5, "总览统计卡（卷/章/分段/字数/自然段）");
+assert(doc.body.textContent.includes("已导入") && doc.body.textContent.includes("落库中"), "状态时间线（已导入→落库中→…）");
+assert(doc.body.textContent.includes("style.md") && doc.body.textContent.includes("幕级大纲"), "解构产物就绪位");
+// 解析中的书：五个产物 tab 禁用 + 进度面板
+click('[data-act="libBookSel"][data-id="bk_cywj"]');
+assert($$(".libTabs button[disabled]").length === 5, "解析中：大纲/人物/地点/风格/摘录产物 tab 禁用");
+assert(doc.body.textContent.includes("conv_12") && /\d+\/\d+ 批/.test(doc.body.textContent), "解析进度面板（后台会话 + 批次进度）");
+// 解析失败的书：确定性产物仍可读（卷章/正文）
+click('[data-act="libBookSel"][data-id="bk_shiben"]');
+assert(doc.body.textContent.includes("解析失败") && doc.body.textContent.includes("重试解析"), "失败书显示原因 + 重试入口");
+// 正文（融合卷章）：双栏（左卷章目录 + 右章头/来源幕/分段批卡片/分页）
+click('[data-act="libTab"][data-id="paras"]');
+assert($$("#main .libDirCol .dirRow").length === 12 && $(".libDetailCol .chapterTitle h2"), "正文双栏：左卷章目录 12 章 + 右章头");
+assert(doc.body.textContent.includes("来源幕") && doc.body.textContent.includes("护栏上限 24"), "章头来源幕（解耦提示）+ 护栏注记");
+assert($$(".paraCard").length === 6, "分段批卡片（单页 6 批护栏）");
+assert(/^bk_[a-z0-9]+-p\d{6}$/.test($(".pid").textContent.trim()), "paragraph id 契约格式（bk_…-pNNNNNN）");
+click('[data-act="libChapSel"][data-id="3"]');
+assert($$(".paraCard").length >= 1, "章目录切换章");
+// 大体量书分页（第 2 章 8 批 → 两页）
+click('[data-act="libBookSel"][data-id="bk_beihe"]');
+click('[data-act="libTab"][data-id="paras"]');
+click('[data-act="libChapSel"][data-id="2"]');
+click('[data-act="libParaPage"][data-id="next"]');
+assert(doc.body.textContent.includes("第 7–8 批"), "正文分页（下一页第 7–8 批）");
+// 风格档案：paragraph id 引用可点跳正文并高亮
+click('[data-act="libBookSel"][data-id="bk_yykj"]');
+click('[data-act="libTab"][data-id="style"]');
+assert($$(".pid").length >= 3 && doc.body.textContent.includes("写 id 契约"), "风格档案含 id 引用 chip + 契约注记");
+click('[data-act="libPidJump"][data-id="bk_yykj-p000002"]');
+assert($(".paraCard.flash"), "id 引用跳正文并高亮定位");
+// 大纲：双栏（左幕级树 + 右单元详情）
+click('[data-act="libTab"][data-id="outline"]');
+assert($$(".treeRow").length >= 5 && $(".libDirCol"), "大纲双栏：左幕级树");
+assert($(".libDetailCol .unitHead h2"), "大纲双栏：右单元详情默认选中");
+click('[data-act="libUnitSel"][data-id="bk_yykj-sq2"]');
+assert($(".libDetailCol").textContent.includes("掌柜的手抖") && $(".libDetailCol").textContent.includes("意图"), "切换单元 → 详情（意图/梗概）");
+// 人物 / 地点：双栏 + 关联幕反查跳转
+click('[data-act="libTab"][data-id="chars"]');
+assert($$("#main .libDirCol .dirRow").length === 3 && $(".profileHead h2"), "人物资料位：左列表 + 右档案");
+click('[data-act="libEntSel"][data-id="bk_yykj-chr2"]');
+assert($(".profileHead h2").textContent.includes("掌柜"), "切换人物档案");
+assert($$('.refChip[data-act="libUnitGo"]').length >= 1, "人物档案关联幕反查 chips");
+click('.refChip[data-act="libUnitGo"]');
+assert($(".libDetailCol .unitHead h2").textContent.includes("旧账重启"), "关联幕跳转大纲单元详情");
+click('[data-act="libTab"][data-id="locs"]');
+assert($$("#main .libDirCol .dirRow").length === 4 && $(".profileHead h2"), "地点资料位：左列表 + 右档案");
+// 导入弹窗全流程（默认 导入并解析）
+click('[data-act="libImportOpen"]');
+assert($("#libImportMask").classList.contains("show") && $$(".libOpt").length === 2, "导入弹窗（解析选项两档）");
+click('[data-act="libImportOpt"][data-id="import-only"]');
+assert($$(".libOpt.on").length === 1 && $(".libOpt.on").dataset.id === "import-only", "解析选项单选切换（仅导入）");
+click('[data-act="libImportOpt"][data-id="analyze"]');
+click('[data-act="libImportGo"]');
+assert($$("#sidebar .dirRow").length === 5, "导入后书单出现第 5 本");
+assert($(".subHead .chip").textContent.includes("解析中"), "新书状态 = 解析中（导入即写 meta）");
+// demo 控制条：解析进度重放
+assert($('[data-act="libReplay"]'), "控制条书库示例组");
+click('[data-act="libReplay"]');
+assert($(".subHead .kicker").textContent.includes("bk_cywj") && doc.body.textContent.includes("解析进度"), "重放复位长夜余烬为解析中");
 
 // --- 平台切换 / 窗控 / 主题 / 宽度 ---
 click('[data-act="platform"][data-id="mac"]');

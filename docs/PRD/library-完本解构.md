@@ -278,7 +278,7 @@ flowchart LR
 ## 5. 边界与非目标
 
 - 明确不做：
-  - GUI：上传入口、解析进度、书单设置界面、书库管理（列表/删除/重命名）——均后续迭代。
+  - GUI：上传入口、解析进度、书单设置界面、书库管理（列表/删除/重命名）——均后续迭代。前端交互基准已由 `docs/design/app-redesign-demo.html` v0.9.0「书库」视图先行定义（示例数据，未接后端；见 `docs/design/app-redesign-prd.md` §8A）。
   - 语义/向量检索（LibraryRead 只做精确 id + 过滤查询 + 关键词非目标）。
   - `LibraryWrite` / 会话侧写书库——书库写路径仅导入/解析管线（单写者）。
   - 生产端 Agent 誊写正文（确定性落库由宿主完成，Agent 不批量复制原文，节省 token）。

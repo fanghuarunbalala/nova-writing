@@ -213,6 +213,68 @@ describe("LibraryService", () => {
 		}
 	});
 
+	it("analysisProgress：outline 覆盖推导——无 scene indeterminate；有引用取 maxSeq；未授权拒绝", async () => {
+		const root = tmpRoot();
+		try {
+			const service = new LibraryService({ libraryRoot: root });
+			// 大样例（每章 ~10 批，全书 ~30 批——maxSeq=5 不触顶）
+			const prose = (n: number): string =>
+				Array.from({ length: n }, (_, i) => `第${i}句：夜雨敲窗，他握刀立于巷口，听见熟悉的脚步声由远及近，又缓缓远去。`).join("\n\n");
+			const sourcePath = join(root, "大样例.txt");
+			writeFileSync(sourcePath, ["第一章 出门", prose(320), "第二章 行路", prose(320), "第三章 入局", prose(320)].join("\n"), "utf8");
+			await service.importBook({ sourcePath, bookId: "bk_test07" });
+			// 未建任何 scene：indeterminate
+			const empty = await service.analysisProgress("bk_test07");
+			expect(empty.indeterminate).toBe(true);
+			expect(empty.percent).toBe(0);
+			expect(empty.totalBatches).toBeGreaterThan(0);
+			expect(empty.unitCount).toBe(0);
+			// 建 saga + 两个 scene（synopsis 引用分段 id，非连续取最大）
+			const store = await service.openBookStore("bk_test07", { readOnly: false });
+			await store.mutateBatch([
+				{ op: "outline.storyUnit.create", id: "bk_test07-su-0001", title: "总纲" },
+				{
+					op: "outline.storyUnit.create",
+					id: "bk_test07-scn-0001",
+					parentId: "bk_test07-su-0001",
+					title: "苏醒",
+					synopsis: "覆盖 bk_test07-p000001 至 p000002。",
+				},
+				{
+					op: "outline.storyUnit.create",
+					id: "bk_test07-scn-0002",
+					parentId: "bk_test07-su-0001",
+					title: "出门",
+					synopsis: "读到 bk_test07-p000005（出门段）。",
+				},
+			] as never);
+			store.close();
+			const progress = await service.analysisProgress("bk_test07");
+			expect(progress.indeterminate).toBe(false);
+			expect(progress.coveredBatches).toBe(5);
+			expect(progress.unitCount).toBe(3);
+			expect(progress.percent).toBe(Math.round((5 / progress.totalBatches) * 100));
+			// 书单外（带 workspaceRoot 的服务）：未授权统一拒绝
+			const gated = new LibraryService({ libraryRoot: root, workspaceRoot: root });
+			await expect(gated.analysisProgress("bk_test07")).rejects.toMatchObject({
+				code: "LIB_BOOK_NOT_AUTHORIZED",
+			});
+			// 释放只读句柄（Windows 下未关会锁 db 文件，临时目录删不掉）
+			service.close();
+			gated.close();
+		} finally {
+			// Windows 下 WAL/SHM 句柄释放有延迟：删除带重试
+			for (let i = 0; i < 5; i += 1) {
+				try {
+					rmSync(root, { recursive: true, force: true });
+					break;
+				} catch {
+					await new Promise((r) => setTimeout(r, 50));
+				}
+			}
+		}
+	});
+
 	it("导入失败回滚（非法编码路径不留半截目录）", async () => {
 		const root = tmpRoot();
 		try {

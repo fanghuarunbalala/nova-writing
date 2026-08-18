@@ -44,6 +44,7 @@ import type {
 // 书库类型 type-only 引入（LibraryService.ts 顶层 import node:fs——类型引用编译期擦除，
 // 本文件保持 browser-safe，供 client 出口 re-export）
 import type {
+	AnalysisProgress,
 	BookMeta,
 	BookSummary,
 	ImportBookResult,
@@ -253,6 +254,8 @@ export interface LibraryApi {
 		which: "style" | "excerpt",
 		maxChars?: number,
 	): Promise<{ content: string; truncated: boolean }>;
+	/** 解析进度（outline 覆盖推导；GUI 3s 轮询读面） */
+	analysisProgress(bookId: string): Promise<AnalysisProgress>;
 	/** 每书 book.db 只读直开代读：幕级大纲（includePlans——附 leaf 人物/地点绑定） */
 	bookOutline(bookId: string): Promise<LibraryOutlineSnapshot>;
 	/** 每书 book.db 只读直开代读：人物 */
@@ -314,6 +317,7 @@ function createUnavailableLibrary(): LibraryApi {
 		readManifest: () => unavailable("readManifest"),
 		readParagraphs: () => unavailable("readParagraphs"),
 		readAnalysis: () => unavailable("readAnalysis"),
+		analysisProgress: () => unavailable("analysisProgress"),
 		bookOutline: () => unavailable("bookOutline"),
 		bookCharacters: () => unavailable("bookCharacters"),
 		bookLocations: () => unavailable("bookLocations"),
@@ -583,6 +587,7 @@ function wrapLibraryWithErrorNormalize(impl: LibraryApi | undefined): LibraryApi
 		readManifest: (bookId) => wrap(() => face.readManifest(bookId)),
 		readParagraphs: (bookId, query) => wrap(() => face.readParagraphs(bookId, query)),
 		readAnalysis: (bookId, which, maxChars) => wrap(() => face.readAnalysis(bookId, which, maxChars)),
+		analysisProgress: (bookId) => wrap(() => face.analysisProgress(bookId)),
 		bookOutline: (bookId) => wrap(() => face.bookOutline(bookId)),
 		bookCharacters: (bookId) => wrap(() => face.bookCharacters(bookId)),
 		bookLocations: (bookId) => wrap(() => face.bookLocations(bookId)),

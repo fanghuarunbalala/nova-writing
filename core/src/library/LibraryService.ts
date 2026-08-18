@@ -57,6 +57,22 @@ export interface HighlightEntry {
 	readonly note?: string;
 }
 
+/** 解析进度（outline 覆盖推导；GUI 3s 轮询读面） */
+export interface AnalysisProgress {
+	/** 当前状态（meta.status） */
+	readonly status: BookStatus;
+	/** 全书分段总数（manifest 条数） */
+	readonly totalBatches: number;
+	/** 已覆盖分段序（scene synopsis 引用 id 的最大序号——顺序解析的读取游标） */
+	readonly coveredBatches: number;
+	/** 百分比 0–100（indeterminate 时 0） */
+	readonly percent: number;
+	/** 无任何 scene 引用（导入完成/大纲未开建，进度不可定） */
+	readonly indeterminate: boolean;
+	/** 已建 story unit 数（供进度卡展示） */
+	readonly unitCount: number;
+}
+
 /** 书元数据（book.meta.json） */
 export interface BookMeta {
 	/** 书 id */
@@ -169,6 +185,17 @@ export class LibraryService {
 	constructor(options: LibraryServiceOptions) {
 		this.libraryRoot = options.libraryRoot;
 		this.workspaceRoot = options.workspaceRoot;
+	}
+
+	/**
+	 * 释放缓存的只读 store 句柄（服务弃用前调用——GUI 热重绑换实例、测试清理临时目录；
+	 * Windows 下未关句柄会锁 db 文件致目录不可删）
+	 */
+	close(): void {
+		for (const store of this.readonlyStores.values()) {
+			store.close();
+		}
+		this.readonlyStores.clear();
 	}
 
 	// ── 写面：导入（确定性解析；大纲零产出） ──
@@ -500,6 +527,42 @@ export class LibraryService {
 		const limit = Math.min(query?.limit ?? HIGHLIGHTS_DEFAULT_LIMIT, HIGHLIGHTS_MAX_LIMIT);
 		const items = matched.slice(0, limit);
 		return { items, total: matched.length, truncated: matched.length > items.length };
+	}
+
+	/**
+	 * 解析进度（GUI 3s 轮询读面）：outline 覆盖推导——全部 scene synopsis/intent
+	 * 中出现的分段 id 取最大序号（顺序解析的读取游标）/ manifest 总数。
+	 * synopsis 是自由文本，只认完整 id 形式（`<bookId>-p<6位序>`），不依赖固定句式。
+	 * @param bookId 书 id
+	 * @returns 进度（无任何 scene 引用时 indeterminate）
+	 */
+	async analysisProgress(bookId: string): Promise<AnalysisProgress> {
+		await this.assertReadableBook(bookId);
+		const meta = await this.readMeta(bookId);
+		const manifest = await this.readManifest(bookId);
+		const totalBatches = manifest.length;
+		const store = await this.openBookStore(bookId, { readOnly: true });
+		const outline = (await store.query({ op: "outline.get" })) as {
+			units: ReadonlyArray<{ scope?: string; synopsis?: string; intent?: string }>;
+		};
+		const idRe = new RegExp(`${bookId}-p(\\d{6})`, "g");
+		let maxSeq = 0;
+		for (const unit of outline.units) {
+			const text = `${unit.synopsis ?? ""}\n${unit.intent ?? ""}`;
+			for (const m of text.matchAll(idRe)) {
+				const seq = Number(m[1]);
+				if (seq > maxSeq) maxSeq = seq;
+			}
+		}
+		const coveredBatches = Math.min(maxSeq, totalBatches);
+		return {
+			status: meta.status,
+			totalBatches,
+			coveredBatches,
+			percent: totalBatches === 0 || maxSeq === 0 ? 0 : Math.round((coveredBatches / totalBatches) * 100),
+			indeterminate: maxSeq === 0,
+			unitCount: outline.units.length,
+		};
 	}
 
 	/**

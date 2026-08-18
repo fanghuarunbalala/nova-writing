@@ -57,6 +57,9 @@ export function createLibraryFace(deps: LibraryFaceDeps): LibraryApi {
 		async readAnalysis(bookId, which, maxChars) {
 			return deps.service().readAnalysis(bookId, which, maxChars);
 		},
+		async analysisProgress(bookId) {
+			return deps.service().analysisProgress(bookId);
+		},
 		async bookOutline(bookId) {
 			return queryBook<LibraryOutlineSnapshot>(bookId, { op: "outline.get", includePlans: true });
 		},

@@ -69,6 +69,21 @@ describe("DesignCard", () => {
     );
   });
 
+  it("shows the edit entry in the card header while pending approval (审批面板可改)", async () => {
+    render(
+      <FrontendPlatformProvider
+        platform={makePlatform({
+          read: vi.fn().mockResolvedValue("# 设计草稿\n"),
+          write: vi.fn(),
+        })}
+      >
+        <DesignCard conversationId="conversation:e2e" phase="pending" />
+      </FrontendPlatformProvider>,
+    );
+    expect(await screen.findByText(/待审批/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
+  });
+
   it("degrades to a note when the designFile capability is absent", () => {
     render(
       <FrontendPlatformProvider platform={makePlatform()}>

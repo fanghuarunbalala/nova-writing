@@ -1,6 +1,6 @@
 /**
- * ApprovalModal 单测（方案 A 弹窗：左清单 + 右详情 + 全部批准 + 稍后处理）：
- * 会话化过滤、清单/详情切换、批量批准、决策回传（api.approvals.resolve）、
+ * ApprovalModal 单测（单栏弹窗：详情 + 头部导航/全部批准 + 稍后处理）：
+ * 会话化过滤、组间导航切换、批量批准、决策回传（api.approvals.resolve）、
  * 实体内容解析与 stale 提示、已处理横幅、稍后处理收起。
  */
 import { describe, expect, it, vi } from "vitest";
@@ -76,7 +76,7 @@ describe("ApprovalModal", () => {
       item({ conversationId: "conv-b", requestId: "r2", args: JSON.stringify({ values: [{ name: "苏眉" }] }) }),
     ]);
     renderModal(store, { conversationId: "conv-a" });
-    // 清单只渲染当前会话的组；详情默认选中该组（标题出现在清单 + 详情）。
+    // 只渲染当前会话的组；详情默认选中该组（标题出现在详情）。
     expect(screen.getAllByText("林夏").length).toBeGreaterThan(0);
     expect(screen.queryByText("苏眉")).not.toBeInTheDocument();
   });
@@ -101,7 +101,7 @@ describe("ApprovalModal", () => {
     expect(screen.getByRole("button", { name: "请求修改" })).toBeInTheDocument();
   });
 
-  it("switches the detail when another list item is selected", async () => {
+  it("switches the detail via prev/next navigation when multiple groups exist", async () => {
     const { store } = await makeStore([
       item({ conversationId: "conv-a", requestId: "r1", args: JSON.stringify({ values: [{ name: "林夏" }] }) }),
       item({
@@ -112,22 +112,18 @@ describe("ApprovalModal", () => {
       }),
     ]);
     renderModal(store, { conversationId: "conv-a" });
-    // 清单 2 项（最新在前，默认选中苏眉）；点未激活项（林夏）切换激活态。
-    const listItems = screen
-      .getAllByRole("button")
-      .filter((node) => node.className.includes("listItem"));
-    expect(listItems.length).toBe(2);
-    const activeBefore = listItems.find((node) => node.className.includes("listItemActive"));
-    expect(activeBefore?.textContent).toContain("苏眉");
-    const inactive = listItems.find((node) => !node.className.includes("listItemActive"));
-    expect(inactive?.textContent).toContain("林夏");
+    // 默认选中最新待审组（苏眉）；导航出现且位置指示 2/2。
+    expect(screen.getAllByText("苏眉").length).toBeGreaterThan(0);
+    expect(screen.getByText("1/2")).toBeInTheDocument();
     const user = userEvent.setup();
-    await user.click(inactive!);
-    const activeAfter = screen
-      .getAllByRole("button")
-      .filter((node) => node.className.includes("listItemActive"));
-    expect(activeAfter.length).toBe(1);
-    expect(activeAfter[0]!.textContent).toContain("林夏");
+    await user.click(screen.getByRole("button", { name: "上一项" }));
+    // 切到第一组（林夏），详情不再显示苏眉。
+    expect(screen.getAllByText("林夏").length).toBeGreaterThan(0);
+    expect(screen.queryByText("苏眉")).not.toBeInTheDocument();
+    expect(screen.getByText("2/2")).toBeInTheDocument();
+    // 循环导航：在末项点下一项回到首项。
+    await user.click(screen.getByRole("button", { name: "下一项" }));
+    expect(screen.getAllByText("苏眉").length).toBeGreaterThan(0);
   });
 
   it("decides a pending group inline (approve) via api.approvals.resolve", async () => {

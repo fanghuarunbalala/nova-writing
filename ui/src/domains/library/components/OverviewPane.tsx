@@ -14,7 +14,7 @@ import { Spinner } from "../../../shared/primitives/Spinner.js";
 import { StatusChip } from "../../../shared/primitives/StatusChip.js";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import type { LibraryStore, LibrarySnapshot } from "../store/LibraryStore.js";
-import { bookStatusChip, formatChars } from "../viewModel.js";
+import { formatChars } from "../viewModel.js";
 import styles from "./library.module.css";
 
 export interface OverviewPaneProps {

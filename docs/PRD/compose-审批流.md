@@ -195,8 +195,9 @@ flowchart TD
 - 处理：
   - **ComposerModeBar**（现状已有）：三模式下拉（需审核/直接执行/设计，按 tone 染色）。
   - **mode.set 经 CMS 入 core**（本期补接线）：现状 `ComposerDraftStore` 仅本地 state（注释明确「不写 core」）；切换时须经 api 层调 CMS `sendMessageTo(conversationId, { type: "mode.set", mode })` 下发，UI 侧 mode 回显以 `mode.changed` 事件为准（pending 期间回显「待生效」）。
-  - **DesignCard**（现状已有）：经 platform `designFile` 能力读 design 文件，Markdown 预览 + 编辑/保存写回；phase 徽标（设计中/待审批/已批准/已放弃）。
+  - **DesignCard**（现状已有）：经 platform `designFile` 能力读 design 文件，Markdown 预览 + 编辑/保存写回；phase 徽标（设计中/待审批/已批准/已放弃）。**编辑入口在卡片 header**（2026-08-18 调整：原入口埋在预览底部，长文档不可见——审批中改稿"改完再批"随入口可见而可达：编辑保存直接写文件，批准时按文件现状归档）。
   - **审批期间展示 md 内容**：pending 态审批卡（「提交设计草稿」）+ DesignCard 展示草稿全文；**无渲染上限（全文渲染，不截断）**；**内容不经审批 payload 传输**（事件脱敏只带 designFilePath），UI 经 designFile 能力读文件。
+  - **审批弹窗单栏化**（2026-08-18 调整）：移除左侧审批组清单——详情占满弹窗（宽收窄 min(760px)）；多组时头部「上一项/下一项」循环导航 + 位置指示；「全部批准（N）」迁至头部（>1 待决时显示）；清单 diffPulse 动画随清单移除。
   - 驳回时审批卡附带意见输入，意见随决策回传 agent（作为 reject 反馈）。
 - 输出：可见的审批决策。
 - 异常：无 designFile 能力（web 等非桌面）→ DesignCard 降级只读提示；读文件失败显示错误态。

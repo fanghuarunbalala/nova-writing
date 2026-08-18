@@ -77,6 +77,11 @@ export const DesignCard = memo(function DesignCard({ conversationId, phase }: De
       <header className={styles.header}>
         <span className={styles.title}>设计草稿</span>
         <span className={styles.phase}>{PHASE_LABEL[phase] ?? phase}</span>
+        {!editing && designFile !== undefined && !loading && error === undefined && (
+          <button type="button" className={styles.edit} onClick={() => setEditing(true)}>
+            编辑
+          </button>
+        )}
       </header>
       {designFile === undefined ? (
         <p className={styles.note}>设计草稿文件能力不可用。</p>
@@ -114,13 +119,6 @@ export const DesignCard = memo(function DesignCard({ conversationId, phase }: De
       ) : (
         <div className={styles.preview}>
           <AssistantMarkdown text={content} />
-          <button
-            type="button"
-            className={styles.edit}
-            onClick={() => setEditing(true)}
-          >
-            编辑
-          </button>
         </div>
       )}
     </div>

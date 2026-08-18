@@ -481,8 +481,8 @@ export class LibraryStore extends WorkspaceDomainStore<LibrarySnapshot> {
 			});
 			await this.refreshBooks();
 			if (this.snapshot.books.some((b) => b.bookId === result.bookId)) this.selectBook(result.bookId);
-			// 导入即拉一次进度（解析卡立即可见，不等首个 3s tick）
-			if (result.conversationId !== undefined) await this.refreshProgress();
+			// 导入即拉一次进度（解析中的书立即见进度卡；仅导入的书刷新为空、无害）
+			await this.refreshProgress();
 			return result;
 		} finally {
 			this.setSnapshot({ ...this.snapshot, importBusy: false, importSourcePath: undefined });

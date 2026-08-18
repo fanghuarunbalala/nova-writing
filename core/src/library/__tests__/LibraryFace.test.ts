@@ -35,6 +35,25 @@ function fakeSpawner(log: string[], opts?: { throws?: string }) {
 	return spawner;
 }
 
+/** 等后台 spawn 链落定（face 派生为 void 异步：startAnalysis → spawn → 回写 meta）；
+ * 轮询 listBooks 直到 status 达预期（Windows 文件 IO 抖动下比固定 sleep 稳） */
+async function waitForStatus(
+	face: ReturnType<typeof createLibraryFace>,
+	bookId: string,
+	status: string,
+	timeoutMs = 2000,
+): Promise<void> {
+	const startedAt = Date.now();
+	for (;;) {
+		const books = await face.listBooks();
+		if (books.find((b) => b.bookId === bookId)?.status === status) return;
+		if (Date.now() - startedAt > timeoutMs) {
+			throw new Error(`等待 status=${status} 超时（当前 ${books.find((b) => b.bookId === bookId)?.status}）`);
+		}
+		await new Promise((resolve) => setTimeout(resolve, 25));
+	}
+}
+
 /** 组装 face + 依赖件 */
 function setup(tag: string, opts?: { importer?: boolean; spawnThrows?: string }) {
 	const libraryRoot = tmpRoot(tag);
@@ -89,14 +108,16 @@ describe("LibraryFace", () => {
 		}
 	});
 
-	it("importBook：spawner 可用 + spawnAnalysis → 派生解析会话；spawnAnalysis=false → spawnSkipped", async () => {
+	it("importBook：spawner 可用 + spawnAnalysis → 后台派生解析会话；spawnAnalysis=false → spawnSkipped + 未解析", async () => {
 		const s = setup("spawn", { importer: true });
 		try {
 			const sourcePath = writeSample(s.libraryRoot);
 			s.allowed.add(sourcePath);
+			// spawn 后台化：导入返回不再等子进程报到（conversationId 不随导入返回）
 			const withSpawn = await s.face.importBook({ sourcePath: sourcePath, title: "甲" });
-			expect(withSpawn.conversationId).toBe("conv_test");
+			expect(withSpawn.conversationId).toBeUndefined();
 			expect(withSpawn.spawnSkipped).toBeUndefined();
+			await waitForStatus(s.face, withSpawn.bookId, "解析中");
 			expect(s.spawnLog[0]).toContain("BookAnalyst");
 
 			const sourcePath2 = writeSample(s.libraryRoot, "乙书.txt");
@@ -104,7 +125,11 @@ describe("LibraryFace", () => {
 			const importOnly = await s.face.importBook({ sourcePath: sourcePath2, spawnAnalysis: false });
 			expect(importOnly.conversationId).toBeUndefined();
 			expect(importOnly.spawnSkipped).toContain("仅导入");
+			// 仅导入：状态置「未解析」（不再是永远解析中）
+			const [unparsed] = (await s.face.listBooks()).filter((b) => b.bookId === importOnly.bookId);
+			expect(unparsed?.status).toBe("未解析");
 		} finally {
+			s.service.close();
 			rmSync(s.libraryRoot, { recursive: true, force: true });
 			rmSync(s.workspaceRoot, { recursive: true, force: true });
 		}
@@ -130,8 +155,9 @@ describe("LibraryFace", () => {
 			const sourcePath = writeSample(s.libraryRoot);
 			s.allowed.add(sourcePath);
 			const { bookId } = await s.face.importBook({ sourcePath });
+			// 无 importer（降级）→ 未解析
 			const meta = await s.face.readMeta(bookId);
-			expect(meta.status).toBe("解析中");
+			expect(meta.status).toBe("未解析");
 			const manifest = await s.face.readManifest(bookId);
 			expect(manifest.length).toBeGreaterThan(0);
 			const paras = await s.face.readParagraphs(bookId, { chapterNo: 1 });
@@ -149,13 +175,15 @@ describe("LibraryFace", () => {
 		}
 	});
 
-	it("retryAnalysis：置解析中 + 派生新会话；spawner 不可用 → 业务错误", async () => {
+	it("retryAnalysis：置解析中 + 派生新会话；后台 spawn 失败 → 解析失败（导入不抛错）；spawner 不可用 → 业务错误", async () => {
 		const s = setup("retry", { importer: true, spawnThrows: "first-fails" });
 		try {
 			const sourcePath = writeSample(s.libraryRoot);
 			s.allowed.add(sourcePath);
-			// 首次导入：spawn 失败 → 书本置解析失败（BookImportService 回写）+ importBook 抛错
-			await expect(s.face.importBook({ sourcePath })).rejects.toThrow("first-fails");
+			// 首次导入：spawn 后台失败 → 导入正常返回，书本由 startAnalysis 回写解析失败
+			const imported = await s.face.importBook({ sourcePath });
+			expect(imported.conversationId).toBeUndefined();
+			await waitForStatus(s.face, imported.bookId, "解析失败");
 			const [failed] = await s.face.listBooks();
 			expect(failed?.status).toBe("解析失败");
 			expect(failed?.statusReason).toContain("first-fails");

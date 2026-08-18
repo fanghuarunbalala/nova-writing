@@ -47,8 +47,10 @@ export function ImportDialog({ snapshot, store, onNotify }: ImportDialogProps) {
 			setTitle("");
 			const head = `已导入《${title.trim() !== "" ? title.trim() : "新书"}》：${result.stats.chapters} 章 · ${result.stats.batches} 批`;
 			onNotify(
-				result.conversationId !== undefined ? "success" : "info",
-				result.spawnSkipped !== undefined ? `${head} · ${result.spawnSkipped}` : `${head} · BookAnalyst 解析中`,
+				"success",
+				result.spawnSkipped !== undefined
+					? `${head} · ${result.spawnSkipped}（总览页可随时开始解析）`
+					: `${head} · 解析已在后台启动，进度见总览`,
 			);
 		} catch (err) {
 			onNotify("danger", `导入失败：${err instanceof Error ? err.message : String(err)}`);
@@ -117,7 +119,7 @@ export function ImportDialog({ snapshot, store, onNotify }: ImportDialogProps) {
 					</div>
 				</div>
 				<p className={styles.progressNote} style={{ margin: 0 }}>
-					编码自动探测（UTF-8 / GB18030 / Big5）· 导入即写 book.meta.json（status=解析中）· 成功自动授权当前工作区书单 · 失败整目录回滚
+					编码自动探测（UTF-8 / GB18030 / Big5）· 仅导入完成即确定就绪（可随时开始解析）· 成功自动授权当前工作区书单 · 失败整目录回滚
 				</p>
 			</div>
 		</Dialog>

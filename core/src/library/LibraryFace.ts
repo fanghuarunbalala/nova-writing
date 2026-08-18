@@ -87,32 +87,34 @@ export function createLibraryFace(deps: LibraryFaceDeps): LibraryApi {
 					"源文件路径未经宿主文件选择器授权（先经「选择文件」获取）",
 				);
 			}
-			// 导入（确定性解析）→ 授权先行（spawn 失败的书也要在书单可见、可重试）
-			const base = await deps.service().importBook({
-				sourcePath: input.sourcePath,
-				...(input.title !== undefined ? { title: input.title } : {}),
+		// 导入（确定性解析）→ 授权先行（spawn 失败的书也要在书单可见、可重试）
+		const base = await deps.service().importBook({
+			sourcePath: input.sourcePath,
+			...(input.title !== undefined ? { title: input.title } : {}),
+		});
+		const workspaceRoot = deps.workspaceRoot();
+		if (workspaceRoot !== undefined) {
+			await addBookToLibraryAllowlist(workspaceRoot, base.bookId);
+		}
+		// 解析会话派生（可选）：不可用/未请求 → 置「未解析」（确定性产物就绪，可随时开始解析）；
+		// 派生本身后台化——不阻塞导入 RPC（子进程报到秒级、最坏 15s，失败由 startAnalysis 回写解析失败）
+		const result: LibraryImportResult = { ...base };
+		const importer = deps.importer?.();
+		if (input.spawnAnalysis === false || importer === undefined) {
+			result.spawnSkipped =
+				input.spawnAnalysis === false ? "仅导入（未请求解析会话）" : SPAWN_UNAVAILABLE;
+			await deps
+				.service()
+				.updateBookMeta(base.bookId, { status: "未解析" })
+				.catch(() => {});
+		} else {
+			// 后台派生：conversationId 不随导入返回（子进程报到异步）；进度/完成经状态轮询可见
+			void importer.startAnalysis(base.bookId, input.title).catch(() => {
+				/* startAnalysis 已回写解析失败（statusReason）；后台失败经状态轮询可见 */
 			});
-			const workspaceRoot = deps.workspaceRoot();
-			if (workspaceRoot !== undefined) {
-				await addBookToLibraryAllowlist(workspaceRoot, base.bookId);
-			}
-			// 解析会话派生（可选）：不可用 → 降级仅导入；失败 → 书本已置解析失败，原样抛错
-			const result: LibraryImportResult = { ...base };
-			const importer = deps.importer?.();
-			if (input.spawnAnalysis !== false && importer !== undefined) {
-				result.conversationId = (
-					await importer.startAnalysis(
-						base.bookId,
-						input.title !== undefined ? input.title : undefined,
-					)
-				).conversationId;
-			} else if (input.spawnAnalysis !== false) {
-				result.spawnSkipped = SPAWN_UNAVAILABLE;
-			} else {
-				result.spawnSkipped = "仅导入（未请求解析会话）";
-			}
-			return result;
-		},
+		}
+		return result;
+	},
 		async retryAnalysis(bookId) {
 			const importer = deps.importer?.();
 			if (importer === undefined) {

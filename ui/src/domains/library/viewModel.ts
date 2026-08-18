@@ -8,6 +8,7 @@ import type { StatusChipVariant } from "../../shared/primitives/StatusChip.js";
 export function bookStatusChip(status: BookStatus): StatusChipVariant {
 	if (status === "已完成") return "success";
 	if (status === "解析失败") return "danger";
+	if (status === "未解析") return "faint";
 	return "warn";
 }
 

@@ -209,8 +209,8 @@ export function createDomainStores(
     readonly onBookStatusChanged?: (book: {
       bookId: string;
       title: string;
-      from: "解析中" | "已完成" | "解析失败";
-      to: "解析中" | "已完成" | "解析失败";
+      from: "未解析" | "解析中" | "已完成" | "解析失败";
+      to: "未解析" | "解析中" | "已完成" | "解析失败";
     }) => void;
   },
 ): ApplicationShellDomainStores {

@@ -71,6 +71,10 @@ export class BookImportService {
 			...(input.title !== undefined ? { title: input.title } : {}),
 		});
 		if (this.spawner === undefined || input.spawnAnalysis === false) {
+			// 仅导入：没有解析会话在跑，置「未解析」（否则无人翻转、永远停在解析中）
+			await this.service
+				.updateBookMeta(result.bookId, { status: "未解析" })
+				.catch(() => {});
 			return result;
 		}
 		try {

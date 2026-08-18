@@ -28,8 +28,9 @@ import {
 	paragraphIdOf,
 } from "./LibraryPaths.js";
 
-/** 书本解析状态（book.meta.json.status；解析中由 Agent 收尾置已完成/解析失败） */
-export type BookStatus = "解析中" | "已完成" | "解析失败";
+/** 书本解析状态（book.meta.json.status）：未解析=仅导入（确定性产物就绪、无解析会话）；
+ * 解析中由 BookAnalyst 收尾置已完成/解析失败；未解析经 startAnalysis/retryAnalysis 置解析中 */
+export type BookStatus = "未解析" | "解析中" | "已完成" | "解析失败";
 
 /** 分段索引条目（manifest.jsonl 每行） */
 export interface ParagraphManifestEntry {

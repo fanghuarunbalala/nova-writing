@@ -103,6 +103,12 @@ describe("BookImportService", () => {
 			});
 			expect(spawnCount).toBe(0);
 			expect(result.conversationId).toBeUndefined();
+			// 仅导入：置「未解析」（无解析会话在跑，不留永远解析中）
+			const dir = readdirSync(root).find((e) => e.startsWith("bk_"));
+			const meta = JSON.parse(
+				readFileSync(join(root, dir ?? "", "book.meta.json"), "utf8"),
+			) as { status: string };
+			expect(meta.status).toBe("未解析");
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}

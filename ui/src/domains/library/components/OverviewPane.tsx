@@ -53,9 +53,9 @@ export function OverviewPane({ book, snapshot, store, onNotify }: OverviewPanePr
 	const handleRetry = async () => {
 		try {
 			const result = await store.retryAnalysis(book.bookId);
-			onNotify("info", result.conversationId !== undefined ? `已重试解析：会话 ${result.conversationId} 运行中` : "已重试解析");
+			onNotify("info", result.conversationId !== undefined ? `解析已启动：会话 ${result.conversationId} 运行中` : "解析已启动，进度见上方");
 		} catch (err) {
-			onNotify("danger", `重试失败：${err instanceof Error ? err.message : String(err)}`);
+			onNotify("danger", `启动解析失败：${err instanceof Error ? err.message : String(err)}`);
 		}
 	};
 
@@ -69,6 +69,20 @@ export function OverviewPane({ book, snapshot, store, onNotify }: OverviewPanePr
 
 	return (
 		<div>
+			{book.status === "未解析" ? (
+				<div className={styles.paraCard}>
+					<div className={styles.paraHead}>
+						<StatusChip variant="faint">未解析</StatusChip>
+						<Button size="sm" variant="secondary" onClick={() => void handleRetry()}>
+							开始解析
+						</Button>
+					</div>
+					<p className={styles.progressNote}>
+						仅导入完成：卷章 / 分段等确定性产物已就绪（正文资料位可读）。
+						点「开始解析」派生 BookAnalyst 后台会话——产出幕级大纲 / 人物 / 地点 / 风格 / 摘录 / 好句好段。
+					</p>
+				</div>
+			) : null}
 			{book.status === "解析中" ? (
 				<div className={styles.paraCard}>
 					<div className={styles.progressRow}>
@@ -131,14 +145,14 @@ export function OverviewPane({ book, snapshot, store, onNotify }: OverviewPanePr
 					<Step tone="success" label="落库中" />
 					<span className={styles.stepArrow}><Icon icon={ArrowRight} size="xs" /></span>
 					<Step
-						tone={book.status === "解析中" ? "warn" : "success"}
+						tone={book.status === "解析中" ? "warn" : book.status === "未解析" ? "neutral" : "success"}
 						label="解析中"
 						pulse={book.status === "解析中"}
 					/>
 					<span className={styles.stepArrow}><Icon icon={ArrowRight} size="xs" /></span>
 					<Step
-						tone={book.status === "解析失败" ? "danger" : "success"}
-						label={book.status === "解析失败" ? "解析失败" : "已完成"}
+						tone={book.status === "解析失败" ? "danger" : book.status === "未解析" ? "neutral" : "success"}
+						label={book.status === "解析失败" ? "解析失败" : book.status === "未解析" ? "未解析" : "已完成"}
 					/>
 				</div>
 			</div>

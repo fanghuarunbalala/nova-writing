@@ -21,6 +21,7 @@ import type { AskUserChannel } from "../definitions/askUser.js";
 import { createNovelEntityTools } from "../definitions/novel.js";
 import { createLibraryReadTool } from "../definitions/library.js";
 import type { LibraryReadDeps } from "../definitions/library.js";
+import { createMemoryWriteGuard } from "../../../memory/index.js";
 
 /** runtime.todo：会话执行计划（TodoWrite） */
 export const NOVEL_TOOL_GROUP_TODO = new ToolGroupManifest({
@@ -130,7 +131,15 @@ export function createNovelToolGroupResolver(
       "runtime.todo",
       () => [createTodoWriteTool(options.todoStore, options.todoConversationId)],
     ],
-    ["runtime.files", () => createFileTools(options.workspace)],
+    // runtime.files：memory 写守卫（preset 硬闸 + MEMORY.yaml/references 写后动态编译校验；
+    // analyst.files 不装配——书库工作区无 memory 体系）
+    [
+      "runtime.files",
+      () =>
+        createFileTools(options.workspace, {
+          guard: createMemoryWriteGuard(options.workspace),
+        }),
+    ],
     [
       "analyst.files",
       () => createFileTools(options.workspace, { requireApproval: false }),

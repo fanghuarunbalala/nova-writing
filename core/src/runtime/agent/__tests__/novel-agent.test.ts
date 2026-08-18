@@ -13,10 +13,10 @@ const handle = {
 } as unknown;
 
 describe("buildNovelAgent 组装", () => {
-  it("systemSections 齐全（14 段 recipe 序含四质量规范段，tool.policy/tool.guidance 在 env 前）+ toolDefs 齐全（13 工具）", () => {
+  it("systemSections 齐全（15 段 recipe 序含四质量规范段与记忆偏好段，tool.policy/tool.guidance 在 env 前）+ toolDefs 齐全（13 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { systemSections: Array<{ id: string; kind: string }>; toolDefs: unknown[] } } }).config.agentCapability;
-    expect(cap.systemSections).toHaveLength(14);
+    expect(cap.systemSections).toHaveLength(15);
     expect(cap.systemSections.map((s) => s.id)).toEqual([
       "novel.identity",
       "novel.system",
@@ -27,13 +27,14 @@ describe("buildNovelAgent 组装", () => {
       "novel.outline_standard",
       "novel.prose_standard",
       "novel.publication_standard",
+      "novel.memory",
       "core.runtime.protocol",
       "tool.policy",
       "tool.guidance",
       "core.environment",
       "novel.global_constraints",
     ]);
-    expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(10);
+    expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(11);
     expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(4);
     // library.read 暂不接入 main（定义组序已移除）——book-analyst 分支恢复后回 13
     expect(cap.toolDefs).toHaveLength(12);
@@ -134,7 +135,7 @@ describe("buildNovelAgent 组装", () => {
     expect(result).toContain("写第一章");
   });
 
-  it("nudge 接线：todo_idle/project_stage 恒注入；compose_mode 需 composeState（enabled ∩ 目录）", () => {
+  it("nudge 接线：todo_idle/project_stage/memory 恒注入；compose_mode 需 composeState（enabled ∩ 目录）", () => {
     const withoutCompose = buildNovelAgent({
       workspace: "/ws",
       provider,
@@ -144,6 +145,7 @@ describe("buildNovelAgent 组装", () => {
     expect(capNoCompose.nudgePolicies.map((n) => n.constructor.name)).toEqual([
       "TodoIdleNudgePolicy",
       "ProjectStageNudgePolicy",
+      "MemoryNudgePolicy",
     ]);
     const withCompose = buildNovelAgent({
       workspace: "/ws",
@@ -158,6 +160,7 @@ describe("buildNovelAgent 组装", () => {
       "ComposeModeNudgePolicy",
       "TodoIdleNudgePolicy",
       "ProjectStageNudgePolicy",
+      "MemoryNudgePolicy",
     ]);
   });
 });

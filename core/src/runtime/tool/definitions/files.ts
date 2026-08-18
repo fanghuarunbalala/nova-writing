@@ -86,23 +86,33 @@ function parseArgs(call: ToolCall): Record<string, unknown> {
   }
 }
 
+/** files 工具写守卫（memory 域注入；files.ts 只依赖此形状） */
+export interface FileWriteGuardShape {
+  /** 受保护路径前缀（workspace 相对，/ 分隔）；Write/Edit 命中 → 拒绝执行 */
+  readonly protectedPrefixes: readonly string[];
+  /** 写后校验：返回需呈现在工具结果里的问题列表（空 = 通过） */
+  afterWrite(relPath: string): Promise<string[]>;
+}
+
 /**
  * 创建 files 四件套 ToolDef（handler 闭包 workspace 做沙盒限定）
  * @param workspace 工作区绝对路径
  * @param options approval=false 时 Write/Edit 免审批（后台非交互会话用，如
- *   BookAnalyst 的 analyst.files 组——无人应答审批，requireApproval 会永久挂起）
+ *   BookAnalyst 的 analyst.files 组——无人应答审批，requireApproval 会永久挂起）；
+ *   guard=写守卫（受保护路径硬闸 + memory 文件写后动态编译校验）
  * @returns Read/Glob/Write/Edit 四个工具定义
  */
 export function createFileTools(
   workspace: string,
-  options?: { requireApproval?: boolean },
+  options?: { requireApproval?: boolean; guard?: FileWriteGuardShape },
 ): ToolDef[] {
   const approval = options?.requireApproval !== false;
+  const guard = options?.guard;
   return [
     readTool(workspace),
     globTool(workspace),
-    writeTool(workspace, approval),
-    editTool(workspace, approval),
+    writeTool(workspace, approval, guard),
+    editTool(workspace, approval, guard),
   ];
 }
 
@@ -174,7 +184,49 @@ function globTool(workspace: string): ToolDef {
   };
 }
 
-function writeTool(workspace: string, approval: boolean): ToolDef {
+/** 守卫检查：受保护路径 → 抛错拒绝；返回 workspace 相对路径（/ 分隔） */
+async function guardProtectedPath(
+  workspace: string,
+  abs: string,
+  guard?: FileWriteGuardShape,
+): Promise<string> {
+  const rel = relative(workspace, abs).split(sep).join("/");
+  if (guard !== undefined) {
+    for (const prefix of guard.protectedPrefixes) {
+      if (rel === prefix || rel.startsWith(`${prefix}/`)) {
+        throw new Error(
+          `预设只读：${rel} 属于作者预设资产，仅作者手动或代码变更；如需调整请告知作者。`,
+        );
+      }
+    }
+  }
+  return rel;
+}
+
+/** 写后校验：问题附在工具结果尾部（不回滚，构成 agent 修复环） */
+async function guardAfterWrite(
+  guard: FileWriteGuardShape | undefined,
+  rel: string,
+  baseResult: string,
+): Promise<string> {
+  if (guard === undefined) {
+    return baseResult;
+  }
+  let problems: string[] = [];
+  try {
+    problems = await guard.afterWrite(rel);
+  } catch {
+    return baseResult; // 校验器自身故障不阻塞写入结果
+  }
+  if (problems.length === 0) {
+    return baseResult;
+  }
+  return `${baseResult}\n⚠ 动态编译校验未通过（须当场修复后再继续）：\n${problems
+    .map((p) => `- ${p}`)
+    .join("\n")}`;
+}
+
+function writeTool(workspace: string, approval: boolean, guard?: FileWriteGuardShape): ToolDef {
   return {
     name: "Write",
     version: "1.0.0",
@@ -206,15 +258,16 @@ function writeTool(workspace: string, approval: boolean): ToolDef {
         const content = String(args.content);
         if (content.length > CONTENT_MAX) throw new Error("内容超过 512 KiB");
         const abs = await resolveInWorkspace(workspace, String(args.file_path));
+        const rel = await guardProtectedPath(workspace, abs, guard);
         await mkdir(dirname(abs), { recursive: true });
         await writeFileAtomic(abs, content);
-        return `已写入 ${args.file_path}`;
+        return guardAfterWrite(guard, rel, `已写入 ${args.file_path}`);
       },
     },
   };
 }
 
-function editTool(workspace: string, approval: boolean): ToolDef {
+function editTool(workspace: string, approval: boolean, guard?: FileWriteGuardShape): ToolDef {
   return {
     name: "Edit",
     version: "1.0.0",
@@ -243,6 +296,7 @@ function editTool(workspace: string, approval: boolean): ToolDef {
       execute: async (call) => {
         const args = parseArgs(call);
         const abs = await resolveInWorkspace(workspace, String(args.file_path));
+        const rel = await guardProtectedPath(workspace, abs, guard);
         const oldStr = String(args.old_string);
         const newStr = String(args.new_string);
         const content = await readFile(abs, "utf8");
@@ -251,7 +305,7 @@ function editTool(workspace: string, approval: boolean): ToolDef {
         const result = replaceAll ? content.split(oldStr).join(newStr) : content.replace(oldStr, newStr);
         if (result.length > CONTENT_MAX) throw new Error("结果超过 512 KiB");
         await writeFileAtomic(abs, result);
-        return `已替换${replaceAll ? "（全部）" : ""}`;
+        return guardAfterWrite(guard, rel, `已替换${replaceAll ? "（全部）" : ""}`);
       },
     },
   };

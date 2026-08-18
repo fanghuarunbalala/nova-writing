@@ -2102,6 +2102,8 @@ items 形态（同 NovelWrite：变更 id + applied + 新 entityVersion）；bas
 - paragraph：paragraphId 精确取一段；或 chapterNo 批量取该章分段（offset/limit 翻页，单次上限 24 段）。
 - style：该书全局风格 md（内容风格/技法，结论附 paragraph id 例证）。
 - excerpt：该书特色原文摘录（paragraph id + 摘录 + 代表性说明）。
+- highlight：该书好句好段库，按 tag 关键字召回可复用范句（写同类场景前先召回参考——
+  tags 过滤（mode=any 命中任一 / all 全命中）、limit 条数上限 50；不带 tags 返回前 20 条浏览 tag 词汇）。
 - 一切产物引用正文都用 paragraph id（形如 <bookId>-p000123）；不要整段复制进实体或正文。
 
 ## 实例
@@ -2110,6 +2112,11 @@ items 形态（同 NovelWrite：变更 id + applied + 新 entityVersion）；bas
 → LibraryRead(kind=overview)
 → LibraryRead(kind=style, bookId=<书目 id>)
 <reasoning>先列书拿 bookId，再读风格 md；引用例证时用其中的 paragraph id。</reasoning>
+</example>
+<example>
+作者：帮我写一段紧张的追逐戏，参考下那本书的写法。
+→ LibraryRead(kind=highlight, bookId=<书目 id>, tags=["动作","紧张"], mode=all)
+<reasoning>按 tag 召回该书的好句好段做范句参考，仿其节奏与技法写新场景（不复制原文）。</reasoning>
 </example>",
     "name": "LibraryRead",
     "parameters": {
@@ -2140,7 +2147,7 @@ items 形态（同 NovelWrite：变更 id + applied + 新 entityVersion）；bas
           "type": "boolean",
         },
         "kind": {
-          "description": "读取类型：overview=可访问书目；character/location/story_unit/volume/chapter=该书实体（同 NovelRead 过滤参数）；paragraph=正文分段；style=全局风格 md；excerpt=特色原文摘录",
+          "description": "读取类型：overview=可访问书目；character/location/story_unit/volume/chapter=该书实体（同 NovelRead 过滤参数）；paragraph=正文分段；style=全局风格 md；excerpt=特色原文摘录；highlight=好句好段按 tag 召回",
           "enum": [
             "overview",
             "character",
@@ -2151,15 +2158,24 @@ items 形态（同 NovelWrite：变更 id + applied + 新 entityVersion）；bas
             "chapter",
             "style",
             "excerpt",
+            "highlight",
           ],
           "type": "string",
         },
         "limit": {
-          "description": "仅 paragraph：单次条数（缺省 6，上限 24）",
+          "description": "仅 paragraph/highlight：单次条数（paragraph 缺省 6 上限 24；highlight 缺省 20 上限 50）",
           "type": "integer",
         },
         "locationId": {
           "description": "仅 location：地点 id（省略列全部）",
+          "type": "string",
+        },
+        "mode": {
+          "description": "仅 highlight：tags 匹配模式（any=命中任一，缺省；all=全部命中）",
+          "enum": [
+            "any",
+            "all",
+          ],
           "type": "string",
         },
         "offset": {
@@ -2173,6 +2189,13 @@ items 形态（同 NovelWrite：变更 id + applied + 新 entityVersion）；bas
         "storyUnitId": {
           "description": "仅 story_unit：单元 id（省略返回全树）",
           "type": "string",
+        },
+        "tags": {
+          "description": "仅 highlight：关键字过滤（技法/情绪/场景维度，如 动作、比喻、紧张、幽默、开篇、收尾）",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
         },
         "volumeId": {
           "description": "仅 chapter：按卷过滤",
@@ -2189,7 +2212,7 @@ items 形态（同 NovelWrite：变更 id + applied + 新 entityVersion）；bas
       "policy": "书库只读引用：先 overview 拿 bookId 再细读；引用原文一律写 paragraph id，禁止大段复制进本项目实体。",
     },
     "requireApproval": undefined,
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
 ]
 `;

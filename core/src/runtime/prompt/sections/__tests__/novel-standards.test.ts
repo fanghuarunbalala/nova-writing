@@ -31,7 +31,7 @@ describe("novel 质量规范段（规范层，main/compose 共享）", () => {
     expect(text).toContain("不是大纲的组织单位");
   });
 
-  it("novel.prose_standard：定义 + 八好九坏", () => {
+  it("novel.prose_standard：定义 + 好/坏判据（含去 AI 味条目）", () => {
     const text = novelProseStandardSection.render(ctx);
     expect(text).toContain("# 正文规范");
     expect(text).toContain("情绪传递工程");
@@ -39,5 +39,14 @@ describe("novel 质量规范段（规范层，main/compose 共享）", () => {
     expect(text).toContain("视角锁定");
     expect(text).toContain("对话像说明文");
     expect(text).toContain("钩子缺失");
+    // 去 AI 味判据（v1.1.0 新增）
+    expect(text).toContain("先呈现后解释");
+    expect(text).toContain("节奏有呼吸");
+    expect(text).toContain("心理真实");
+    expect(text).toContain("物象具体");
+    expect(text).toContain("AI 套话");
+    expect(text).toContain("情绪先行标注");
+    expect(text).toContain("书面化内心活动");
+    expect(text).toContain("段落均质");
   });
 });

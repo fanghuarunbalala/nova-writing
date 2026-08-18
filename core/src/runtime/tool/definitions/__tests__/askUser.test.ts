@@ -72,7 +72,7 @@ describe("createAskUserTool", () => {
     expect(out).toContain("不要重试");
   });
 
-  it("参数防御：questions 数量 / options 数量 / 缺字段 / options+placeholder 互斥拒绝", async () => {
+  it("参数防御：questions 数量 / options 数量 / 缺字段 / 非对象形态", async () => {
     const tool = createAskUserTool(async () => [], "conv-1");
     await expect(tool.handler.execute(call({ questions: [] }))).rejects.toThrow(/1-4/);
     await expect(
@@ -80,24 +80,34 @@ describe("createAskUserTool", () => {
     ).rejects.toThrow(/2-4/);
     await expect(tool.handler.execute(call({ questions: [{ header: "h" }] }))).rejects.toThrow(/question 或 header/);
     await expect(tool.handler.execute(call({}))).rejects.toThrow(/无效的 JSON 参数|questions/);
-    // 开放填空题只有一个文本框：选择题带 placeholder 拒绝（2026-08-17 日志错乱形态回归）
     await expect(
-      tool.handler.execute(
-        call({
-          questions: [
-            {
-              question: "q?",
-              header: "h",
-              options: [
-                { label: "a", description: "x" },
-                { label: "b", description: "y" },
-              ],
-              placeholder: "提示",
-            },
-          ],
-        }),
-      ),
-    ).rejects.toThrow(/placeholder/);
+      tool.handler.execute(call({ questions: ["不是对象"] })),
+    ).rejects.toThrow(/不是对象/);
+  });
+
+  it("options+placeholder 并用降级：忽略 placeholder 不抛错（选择题 UI 自动提供自由输入）", async () => {
+    // 2026-08-17 conv_1 实测形态：命名题给候选又写「（自由发挥）」placeholder——
+    // 自然用法，降级而非浪费一轮重试
+    const tool = createAskUserTool(
+      async (req) => req.questions.map((q) => ({ question: q.question, selections: [q.options![0]!.label] })),
+      "conv-1",
+    );
+    const out = await tool.handler.execute(
+      call({
+        questions: [
+          {
+            question: "书名选哪个？",
+            header: "书名",
+            options: [
+              { label: "《隐秘任务》", description: "x" },
+              { label: "《开局一个系统》", description: "y" },
+            ],
+            placeholder: "书名（自由发挥）",
+          },
+        ],
+      }),
+    );
+    expect(out).toContain("《隐秘任务》");
   });
 
   it("schema：questions 1-4、options 给出则 2-4、开放题省略 options", () => {

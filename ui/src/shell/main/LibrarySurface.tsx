@@ -187,7 +187,20 @@ export function LibrarySurface({ library, onBack, onNotify }: LibrarySurfaceProp
 			<MainSubHead
 				title={book !== undefined ? `书库 · ${book.title}` : "书库"}
 				sub={book !== undefined ? `${book.bookId} · ${book.sourceFile}` : "全局书库 · 跨工作区"}
-				context={book !== undefined ? <StatusChip variant={bookStatusChip(book.status)}>{book.status}</StatusChip> : undefined}
+				context={
+				book !== undefined ? (
+					<StatusChip variant={bookStatusChip(book.status)}>
+						{book.status === "解析中"
+							? (() => {
+									const progress = snapshot.progress.get(book.bookId);
+									return progress !== undefined && !progress.indeterminate
+										? `解析中 ${progress.percent}%`
+										: "解析中";
+								})()
+							: book.status}
+					</StatusChip>
+				) : undefined
+			}
 				onBack={onBack}
 				actions={
 					book !== undefined && book.status === "解析失败" ? (

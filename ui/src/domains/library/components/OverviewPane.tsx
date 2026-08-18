@@ -36,6 +36,7 @@ function Step({ tone, label, pulse }: { tone: "success" | "warn" | "danger" | "n
 
 export function OverviewPane({ book, snapshot, store, onNotify }: OverviewPaneProps) {
 	const parts = snapshot.parts.get(book.bookId);
+	const progress = snapshot.progress.get(book.bookId);
 	const outlineLoaded = parts?.outline !== undefined;
 	const charactersLoaded = parts?.characters !== undefined;
 	const locationsLoaded = parts?.locations !== undefined;
@@ -73,10 +74,30 @@ export function OverviewPane({ book, snapshot, store, onNotify }: OverviewPanePr
 					<div className={styles.progressRow}>
 						<span className={styles.pulseDot} aria-hidden="true" />
 						<b>BookAnalyst 后台会话运行中</b>
+						<span className={styles.progressPercent}>
+							{progress !== undefined && !progress.indeterminate ? `${progress.percent}%` : "…"}
+						</span>
+					</div>
+					<div
+						className={styles.progressBar}
+						data-indeterminate={progress === undefined || progress.indeterminate ? "true" : "false"}
+						role="progressbar"
+						aria-valuenow={progress?.indeterminate === false ? progress.percent : undefined}
+						aria-valuemin={0}
+						aria-valuemax={100}
+					>
+						<div
+							className={styles.progressFill}
+							style={{
+								width:
+									progress !== undefined && !progress.indeterminate ? `${progress.percent}%` : undefined,
+							}}
+						/>
 					</div>
 					<p className={styles.progressNote}>
-						状态落 book.meta.json · 宿主 3s 轮询（走读不走推）；中断可恢复——journal 重放 + 断点续跑。
-						完成后幕级大纲 / 人物 / 地点 / 风格 / 摘录自动就绪。
+						{progress !== undefined && !progress.indeterminate
+							? `已读 ${progress.coveredBatches}/${progress.totalBatches} 批 · 已建 ${progress.unitCount} 个故事单元 · 状态 3s 轮询，中断可恢复（journal 重放 + 断点续跑）`
+							: "状态落 book.meta.json · 宿主 3s 轮询（走读不走推）；中断可恢复——journal 重放 + 断点续跑。完成后幕级大纲 / 人物 / 地点 / 风格 / 摘录自动就绪。"}
 					</p>
 				</div>
 			) : null}

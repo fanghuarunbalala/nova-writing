@@ -9,6 +9,8 @@
  * - 进度轮询：存在「解析中」的书时每 3s 刷新 listBooks（走读不走推）
  */
 import type {
+	AnalysisProgress,
+	BookStatus,
 	BookSummary,
 	Character,
 	LibraryImportResult,
@@ -85,6 +87,8 @@ export interface LibrarySnapshot {
 	readonly charId: string | undefined;
 	readonly locId: string | undefined;
 	readonly parts: ReadonlyMap<string, BookParts>;
+	/** 解析进度（仅含「解析中」的书；3s 轮询同帧更新） */
+	readonly progress: ReadonlyMap<string, AnalysisProgress>;
 	/** 加载中的部件键 `${bookId}:${kind}` */
 	readonly loading: ReadonlySet<string>;
 	readonly importBusy: boolean;
@@ -124,6 +128,7 @@ const EMPTY_SNAPSHOT: LibrarySnapshot = Object.freeze({
 	charId: undefined,
 	locId: undefined,
 	parts: new Map<string, BookParts>(),
+	progress: new Map<string, AnalysisProgress>(),
 	loading: new Set<string>(),
 	importBusy: false,
 	importSourcePath: undefined,
@@ -134,8 +139,21 @@ export class LibraryStore extends WorkspaceDomainStore<LibrarySnapshot> {
 	private readonly api: NovelApiClient;
 	private readonly logger: Logger;
 	private pollTimer: ReturnType<typeof setInterval> | undefined;
+	/** 书本状态翻转回调（解析完成/失败通知；构造注入，每书每翻转发一次） */
+	private readonly onBookStatusChanged:
+		| ((book: { bookId: string; title: string; from: BookStatus; to: BookStatus }) => void)
+		| undefined;
 
-	constructor(deps: { readonly api: NovelApiClient; readonly logger?: Logger }) {
+	constructor(deps: {
+		readonly api: NovelApiClient;
+		readonly logger?: Logger;
+		readonly onBookStatusChanged?: (book: {
+			bookId: string;
+			title: string;
+			from: BookStatus;
+			to: BookStatus;
+		}) => void;
+	}) {
 		super(
 			EMPTY_SNAPSHOT,
 			Object.freeze({
@@ -146,6 +164,7 @@ export class LibraryStore extends WorkspaceDomainStore<LibrarySnapshot> {
 		);
 		this.api = deps.api;
 		this.logger = (deps.logger ?? noopLogger).child({ component: "library_store" });
+		this.onBookStatusChanged = deps.onBookStatusChanged;
 	}
 
 	protected override setSnapshot(next: LibrarySnapshot): void {
@@ -153,15 +172,17 @@ export class LibraryStore extends WorkspaceDomainStore<LibrarySnapshot> {
 		this.syncPolling();
 	}
 
-	/** 存在解析中的书 → 启动 3s 轮询；否则停止（快照每次变更后自检） */
+	/** 存在解析中的书 → 启动 3s 轮询（刷书单 + 拉进度）；否则停止（快照每次变更后自检） */
 	private syncPolling(): void {
 		const active =
 			this.snapshot.phase === "ready" && this.snapshot.books.some((b) => b.status === "解析中");
 		if (active && this.pollTimer === undefined) {
 			this.pollTimer = setInterval(() => {
-				void this.refreshBooks().catch(() => {
-					/* 轮询失败：下一轮重试 */
-				});
+				void this.refreshBooks()
+					.then(() => this.refreshProgress())
+					.catch(() => {
+						/* 轮询失败：下一轮重试 */
+					});
 			}, POLL_INTERVAL_MS);
 		} else if (!active && this.pollTimer !== undefined) {
 			clearInterval(this.pollTimer);
@@ -194,6 +215,13 @@ export class LibraryStore extends WorkspaceDomainStore<LibrarySnapshot> {
 				? prev.selectedBookId
 				: books[0]?.bookId;
 		const keepSelection = prev !== undefined && selectedBookId !== undefined && selectedBookId === prev.selectedBookId;
+		// 进度缓存：保留仍「解析中」书的条目（重载不闪断）
+		const progress = new Map<string, AnalysisProgress>();
+		if (prev !== undefined) {
+			for (const [bookId, p] of prev.progress) {
+				if (books.some((b) => b.bookId === bookId && b.status === "解析中")) progress.set(bookId, p);
+			}
+		}
 		return {
 			phase: "ready",
 			workspaceId,
@@ -206,6 +234,7 @@ export class LibraryStore extends WorkspaceDomainStore<LibrarySnapshot> {
 			charId: keepSelection ? prev.charId : undefined,
 			locId: keepSelection ? prev.locId : undefined,
 			parts,
+			progress,
 			loading: new Set<string>(),
 			importBusy: false,
 			importSourcePath: undefined,
@@ -214,7 +243,7 @@ export class LibraryStore extends WorkspaceDomainStore<LibrarySnapshot> {
 		};
 	}
 
-	/** 轮询/导入后刷新书单：状态翻转的书部件缓存失效（产物可能就绪） */
+	/** 轮询/导入后刷新书单：状态翻转的书部件缓存失效（产物可能就绪）+ 翻转回调（完成/失败通知） */
 	async refreshBooks(): Promise<void> {
 		if (this.snapshot.phase !== "ready") return;
 		const books = Object.freeze([...(await this.api.library.listBooks())]);
@@ -227,6 +256,17 @@ export class LibraryStore extends WorkspaceDomainStore<LibrarySnapshot> {
 			if (after === undefined) parts.delete(bookId);
 			else if (before !== undefined && before.status !== after.status) parts.set(bookId, EMPTY_PARTS);
 		}
+		// 状态翻转检测（解析中 → 已完成/解析失败）：清进度缓存 + 发完成/失败通知
+		const flips: Array<{ bookId: string; title: string; from: BookStatus; to: BookStatus }> = [];
+		const progress = new Map(prev.progress);
+		for (const after of books) {
+			const before = prev.books.find((b) => b.bookId === after.bookId);
+			if (before === undefined || before.status === after.status) continue;
+			if (after.status !== "解析中") progress.delete(after.bookId);
+			if (before.status === "解析中" && after.status !== "解析中") {
+				flips.push({ bookId: after.bookId, title: after.title, from: before.status, to: after.status });
+			}
+		}
 		const selectedBookId =
 			prev.selectedBookId !== undefined && books.some((b) => b.bookId === prev.selectedBookId)
 				? prev.selectedBookId
@@ -236,11 +276,35 @@ export class LibraryStore extends WorkspaceDomainStore<LibrarySnapshot> {
 			...prev,
 			books,
 			parts,
+			progress,
 			selectedBookId,
 			...(selectionReset
 				? { tab: "overview" as const, chapterNo: 1, page: 0, unitId: undefined, charId: undefined, locId: undefined }
 				: {}),
 		});
+		for (const flip of flips) this.onBookStatusChanged?.(flip);
+	}
+
+	/** 拉取「解析中」书的解析进度（轮询同帧；失败静默保旧值） */
+	async refreshProgress(): Promise<void> {
+		if (this.snapshot.phase !== "ready") return;
+		const parsing = this.snapshot.books.filter((b) => b.status === "解析中");
+		if (parsing.length === 0) return;
+		const entries = await Promise.all(
+			parsing.map(async (book) => {
+				try {
+					return [book.bookId, await this.api.library.analysisProgress(book.bookId)] as const;
+				} catch {
+					return undefined;
+				}
+			}),
+		);
+		const next = new Map(this.snapshot.progress);
+		for (const entry of entries) {
+			if (entry !== undefined) next.set(entry[0], entry[1]);
+		}
+		if (this.snapshot.phase !== "ready") return;
+		this.setSnapshot({ ...this.snapshot, progress: next });
 	}
 
 	// ── 选区动作 ──
@@ -417,6 +481,8 @@ export class LibraryStore extends WorkspaceDomainStore<LibrarySnapshot> {
 			});
 			await this.refreshBooks();
 			if (this.snapshot.books.some((b) => b.bookId === result.bookId)) this.selectBook(result.bookId);
+			// 导入即拉一次进度（解析卡立即可见，不等首个 3s tick）
+			if (result.conversationId !== undefined) await this.refreshProgress();
 			return result;
 		} finally {
 			this.setSnapshot({ ...this.snapshot, importBusy: false, importSourcePath: undefined });

@@ -25,6 +25,7 @@ interface FakeApiShape {
 	readonly readParagraphs: ReturnType<typeof vi.fn>;
 	readonly pickBookFile: ReturnType<typeof vi.fn>;
 	readonly importBook: ReturnType<typeof vi.fn>;
+	readonly analysisProgress: ReturnType<typeof vi.fn>;
 }
 
 function makeApi(initial: BookSummary[]): { api: NovelApiClient; fake: FakeApiShape } {
@@ -42,6 +43,15 @@ function makeApi(initial: BookSummary[]): { api: NovelApiClient; fake: FakeApiSh
 		})),
 		pickBookFile: vi.fn(async () => ({ sourcePath: "D:\\books\\样例.txt" })),
 		importBook: vi.fn(async () => ({ bookId: "bk_new01", bookDir: "bk_new01", stats: { volumes: 1, chapters: 3, batches: 3, chars: 900, paragraphs: 9 }, conversationId: "conv_9" })),
+		analysisProgress: vi.fn(async (bookId: string) => ({
+			status: "解析中" as const,
+			totalBatches: 10,
+			coveredBatches: 4,
+			percent: 40,
+			indeterminate: false,
+			unitCount: 3,
+			bookId,
+		})),
 	};
 	return { api: { library: fake } as unknown as NovelApiClient, fake };
 }
@@ -149,6 +159,61 @@ describe("LibraryStore", () => {
 		books = [book({ bookId: "bk_a" })];
 		await store.refreshBooks();
 		expect(store.getSnapshot().parts.get("bk_a")?.manifest).toBeUndefined();
+		store.dispose();
+	});
+
+	it("进度轮询：解析中的书拉 analysisProgress 入快照", async () => {
+		const books = [book({ bookId: "bk_run", status: "解析中", hasStyle: false, hasExcerpt: false })];
+		const { api, fake } = makeApi(books);
+		fake.listBooks.mockImplementation(async () => [...books]);
+		const store = new LibraryStore({ api });
+		await store.loadWorkspace("w1");
+		await vi.advanceTimersByTimeAsync(3100);
+		const progress = store.getSnapshot().progress.get("bk_run");
+		expect(progress).toBeDefined();
+		expect(progress?.percent).toBe(40);
+		expect(progress?.coveredBatches).toBe(4);
+		store.dispose();
+	});
+
+	it("状态翻转通知：解析中→已完成 恰发一次回调 + 清进度缓存", async () => {
+		let books = [book({ bookId: "bk_run", title: "样例书", status: "解析中", hasStyle: false, hasExcerpt: false })];
+		const { api, fake } = makeApi(books);
+		fake.listBooks.mockImplementation(async () => [...books]);
+		const flips: Array<{ bookId: string; title: string; from: string; to: string }> = [];
+		const store = new LibraryStore({
+			api,
+			onBookStatusChanged: (flip) => flips.push(flip),
+		});
+		await store.loadWorkspace("w1");
+		await vi.advanceTimersByTimeAsync(3100);
+		expect(store.getSnapshot().progress.get("bk_run")).toBeDefined();
+		// 翻转为已完成
+		books = [book({ bookId: "bk_run", title: "样例书" })];
+		await vi.advanceTimersByTimeAsync(3100);
+		expect(flips).toHaveLength(1);
+		expect(flips[0]).toMatchObject({ bookId: "bk_run", title: "样例书", from: "解析中", to: "已完成" });
+		// 进度缓存清空；后续轮询停止不再触发
+		expect(store.getSnapshot().progress.get("bk_run")).toBeUndefined();
+		await vi.advanceTimersByTimeAsync(7000);
+		expect(flips).toHaveLength(1);
+		store.dispose();
+	});
+
+	it("翻转回调不发：非解析中起点（重试场景 from=解析失败 不通知）", async () => {
+		let books = [book({ bookId: "bk_bad", status: "解析失败" })];
+		const { api, fake } = makeApi(books);
+		fake.listBooks.mockImplementation(async () => [...books]);
+		const flips: unknown[] = [];
+		const store = new LibraryStore({ api, onBookStatusChanged: (f) => flips.push(f) });
+		await store.loadWorkspace("w1");
+		books = [book({ bookId: "bk_bad", status: "解析中", hasStyle: false, hasExcerpt: false })];
+		await store.refreshBooks();
+		books = [book({ bookId: "bk_bad" })];
+		await store.refreshBooks();
+		// 解析失败 → 解析中 → 已完成：只有 解析中→已完成 这一次翻转发通知
+		expect(flips).toHaveLength(1);
+		expect(flips[0]).toMatchObject({ from: "解析中", to: "已完成" });
 		store.dispose();
 	});
 });

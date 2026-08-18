@@ -95,13 +95,25 @@ function NovelAppReady({
   overlays,
   windowChrome,
 }: NovelAppReadyProps) {
+  const toastStore = useMemo(() => new ToastStore(), []);
   const domainStores = useMemo(
-    () => createDomainStores(api, logger),
-    [api, logger],
+    () =>
+      createDomainStores(api, logger, {
+        // 解析完成/失败 toast（通知中心已在 createDomainStores 内接线）
+        onBookStatusChanged: (book) => {
+          toastStore.push({
+            kind: book.to === "已完成" ? "success" : "danger",
+            text:
+              book.to === "已完成"
+                ? `《${book.title}》解析完成——大纲 / 人物 / 地点 / 风格 / 摘录已就绪`
+                : `《${book.title}》解析失败——可在书库总览重试`,
+          });
+        },
+      }),
+    [api, logger, toastStore],
   );
   const mainViewRouter = useMemo(() => new MainViewRouter(), []);
   const inspectorRouter = useMemo(() => new InspectorRouter(), []);
-  const toastStore = useMemo(() => new ToastStore(), []);
   const settingsStore = useMemo(() => new ApplicationSettingsStore(), []);
   // NovelApp 自身需要 workspace 快照以驱动 WorkspaceSelectionDialog overlay；
   // ApplicationShell 内部还会再包一层 adapter 订阅同一个 controller（spec 4.1）。
@@ -192,6 +204,15 @@ function NovelAppReady({
 export function createDomainStores(
   api: NovelApiClient,
   logger?: Logger,
+  options?: {
+    /** 书本状态翻转外部钩子（解析完成/失败 toast；通知中心已在内部接线） */
+    readonly onBookStatusChanged?: (book: {
+      bookId: string;
+      title: string;
+      from: "解析中" | "已完成" | "解析失败";
+      to: "解析中" | "已完成" | "解析失败";
+    }) => void;
+  },
 ): ApplicationShellDomainStores {
   const conversationCatalog = new ConversationCatalogStore({ api, logger });
   const novelOverview = new NovelOverviewStore({ api, logger });
@@ -199,7 +220,25 @@ export function createDomainStores(
   const manuscriptStructure = new ManuscriptStructureStore({ api, logger });
   const character = new CharacterStore({ api, logger });
   const location = new LocationStore({ api, logger });
-  const library = new LibraryStore({ api, logger });
+  const notifications = new NotificationStore();
+  const library = new LibraryStore({
+    api,
+    logger,
+    // 解析完成/失败：通知中心入列（done 类型 + goto 跳书库）+ 转发外部钩子（toast）
+    onBookStatusChanged: (book) => {
+      const done = book.to === "已完成";
+      notifications.upsert({
+        id: `library-parse-${book.bookId}-${book.to}`,
+        type: "done",
+        title: done ? "书籍解析完成" : "书籍解析失败",
+        desc: `《${book.title}》${done ? "幕级大纲 / 人物 / 地点 / 风格 / 摘录已就绪" : book.bookId}`,
+        createdAt: Date.now(),
+        read: false,
+        goto: { view: "library" },
+      });
+      options?.onBookStatusChanged?.(book);
+    },
+  });
   const schedule = new ScheduleStore({
     novelOverview,
     outlineTree: storyOutlineTree,
@@ -215,7 +254,7 @@ export function createDomainStores(
     location,
     schedule,
     scheduleTodo: new ScheduleTodoStore(),
-    notifications: new NotificationStore(),
+    notifications,
     library,
   };
 }

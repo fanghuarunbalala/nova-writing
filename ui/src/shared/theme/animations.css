@@ -35,6 +35,22 @@
   to   { opacity: 1; transform: none; }
 }
 
+@keyframes toast-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateX(24px); }
+}
+
+@keyframes toast-countdown {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+/* 书库解析进度不定态条纹（30% 条带往返扫过轨道） */
+@keyframes lib-progress-indeterminate {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(340%); }
+}
+
 /* ============ 自模块集中上移的关键帧（原本地定义） ============ */
 
 @keyframes dialog-fade {

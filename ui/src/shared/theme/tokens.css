@@ -210,6 +210,7 @@
   --anim-conv-spin:       conv-spin;
   --anim-msg-enter:       msg-enter;
   --anim-toast-in:        toast-in;
+  --anim-toast-out:       toast-out;
   --anim-dialog-fade:     dialog-fade;
   --anim-dialog-fade-out: dialog-fade-out;
   --anim-sheet-in:        sheet-in;
@@ -233,6 +234,7 @@
   --anim-pending-out:     pending-out;
   --anim-dir-flash:       dir-flash;
   --anim-lib-pulse:       lib-pulse;
+  --anim-lib-progress-indeterminate: lib-progress-indeterminate;
 
   /* 缓动 */
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);

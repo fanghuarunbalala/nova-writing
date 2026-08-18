@@ -7,6 +7,7 @@ export * from "../conversation/CardProjection.js";
 // 书库域类型 type-only 再导出（LibraryService.ts 顶层 import node:fs——类型引用
 // 编译期擦除，本出口保持 browser-safe；renderer 书库视图消费）
 export type {
+	AnalysisProgress,
 	BookMeta,
 	BookStatus,
 	BookSummary,

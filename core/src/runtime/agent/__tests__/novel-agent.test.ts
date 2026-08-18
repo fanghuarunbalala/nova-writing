@@ -13,10 +13,10 @@ const handle = {
 } as unknown;
 
 describe("buildNovelAgent 组装", () => {
-  it("systemSections 齐全（13 段 recipe 序含三质量规范段，tool.policy/tool.guidance 在 env 前）+ toolDefs 齐全（13 工具）", () => {
+  it("systemSections 齐全（14 段 recipe 序含四质量规范段，tool.policy/tool.guidance 在 env 前）+ toolDefs 齐全（13 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { systemSections: Array<{ id: string; kind: string }>; toolDefs: unknown[] } } }).config.agentCapability;
-    expect(cap.systemSections).toHaveLength(13);
+    expect(cap.systemSections).toHaveLength(14);
     expect(cap.systemSections.map((s) => s.id)).toEqual([
       "novel.identity",
       "novel.system",
@@ -26,13 +26,14 @@ describe("buildNovelAgent 组装", () => {
       "novel.story_appeal",
       "novel.outline_standard",
       "novel.prose_standard",
+      "novel.publication_standard",
       "core.runtime.protocol",
       "tool.policy",
       "tool.guidance",
       "core.environment",
       "novel.global_constraints",
     ]);
-    expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(9);
+    expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(10);
     expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(4);
     expect(cap.toolDefs).toHaveLength(13);
   });

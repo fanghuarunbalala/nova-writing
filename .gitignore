@@ -14,6 +14,10 @@ dist/
 evals/results/
 evals/evalite-export/
 
+# evals 书库夹具：真实书不入仓库（版权）；合成书 ywjs 随仓库提交（PRD evals-书库真实评测 F1）
+evals/fixtures/books/*
+!evals/fixtures/books/ywjs/
+
 # logs
 *.log
 npm-debug.log*

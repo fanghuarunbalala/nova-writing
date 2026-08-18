@@ -23,6 +23,8 @@ interface ReportManifest {
 	model: { baseUrl: string; model: string; judgeModel: string | null; temperature: number };
 	caseFiles: string[];
 	caseSetSha256: string;
+	/** 夹具归因（F7；旧报告无此字段） */
+	fixtures?: Array<{ alias: string; sha256: string }>;
 }
 
 /** evalite --outputPath 导出结构（Evalite.Exported.Output）中本工具消费的子集（全量 trial 细节） */
@@ -189,6 +191,25 @@ function renderTrial(t: Trial, idx: number): string {
 				`<div class="errBlock"><span class="pill bad mono">${esc(e.code)}</span> ${toolChip(e.toolName)}<div class="errMsg">${esc(e.message)}</div></div>`,
 		)
 		.join("");
+	// 护栏终止块（F4：rule 归因置顶）
+	const abortBlock =
+		m?.abort !== undefined
+			? `<div class="errBlock"><span class="pill bad mono">护栏 ${esc(m.abort.rule)}</span> @T${m.abort.turn}<div class="errMsg">${esc(m.abort.detail)}</div></div>`
+			: "";
+	// 引用有效率与书库调用序列（F7）
+	const citationPill =
+		m?.citations !== undefined
+			? `<span class="pill mono ${m.citations.valid.length === m.citations.cited.length ? "ok" : "bad"}">引用 ${m.citations.valid.length}/${m.citations.cited.length}</span>`
+			: "";
+	const libraryLine =
+		m?.libraryCalls !== undefined && m.libraryCalls.length > 0
+			? `<div class="chips"><span class="faint">书库调用</span>${m.libraryCalls
+					.map(
+						(c) =>
+							`<span class="pill mono ${c.error !== undefined ? "bad" : ""}">${esc(c.kind)}</span>`,
+					)
+					.join("")}</div>`
+			: "";
 	const usage =
 		m?.usage !== undefined
 			? `<span class="pill mono">in ${fmtTokens(m.usage.inputTokens)} · out ${fmtTokens(m.usage.outputTokens)}</span>`
@@ -199,11 +220,13 @@ function renderTrial(t: Trial, idx: number): string {
 		m === null || m === undefined
 			? `<div class="errBlock"><span class="pill bad">run 无输出</span></div>`
 			: `
-	<div class="trialMeta">${turns}${time}${usage}</div>
+	<div class="trialMeta">${turns}${time}${usage}${citationPill}</div>
 	<div class="taskSay">${esc(taskText(t))}</div>
 	${scoreRows === "" ? '<div class="faint">（无断言记录）</div>' : `<div class="scoreList">${scoreRows}</div>`}
+	${abortBlock}
 	${m.toolCalls === undefined ? '<div class="faint">（无工具调用）</div>' : `<div class="calls">${m.toolCalls.map(renderCall).join("")}</div>`}
 	${errBlocks}
+	${libraryLine}
 	${m.final === undefined || m.final === "" ? "" : `<div class="finalSay">${esc(m.final)}</div>`}
 	<div class="storeHead faint">终态快照</div>
 	${renderStore(m)}`;
@@ -460,6 +483,18 @@ export function renderReportHtml(data: ExportedEvalite, manifest: ReportManifest
 	}, 0);
 	const totalMs = evals.reduce((a, ev) => a + (ev.duration ?? 0), 0);
 	const errTotal = trials.reduce((a, t) => a + (t.output?.toolErrors ?? []).length, 0);
+	// 护栏终止与引用有效率（F7；无数据不占卡片）
+	const abortTotal = trials.reduce((a, t) => a + (t.output?.abort !== undefined ? 1 : 0), 0);
+	let citedSum = 0;
+	let validSum = 0;
+	for (const t of trials) {
+		const c = t.output?.citations;
+		if (c !== undefined) {
+			citedSum += c.cited.length;
+			validSum += c.valid.length;
+		}
+	}
+	const citationRate = citedSum === 0 ? null : validSum / citedSum;
 
 	const stat = (num: string, lbl: string) =>
 		`<div class="statCard"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`;
@@ -489,6 +524,8 @@ export function renderReportHtml(data: ExportedEvalite, manifest: ReportManifest
     ${stat(fmtTokens(tokens), "tokens 总量")}
     ${stat(fmtMs(totalMs), "总耗时")}
     ${stat(String(errTotal), "工具错误")}
+    ${abortTotal > 0 ? stat(String(abortTotal), "护栏终止") : ""}
+    ${citationRate !== null ? stat(pct(citationRate), `引用有效率（${validSum}/${citedSum}）`) : ""}
   </div>
   <div class="metaStrip">
     ${meta(`git ${esc(manifest.git.sha.slice(0, 8))} (${esc(manifest.git.branch)})`)}
@@ -498,6 +535,7 @@ export function renderReportHtml(data: ExportedEvalite, manifest: ReportManifest
     ${meta(`prompt ${manifest.promptSha256.slice(0, 8)}`)}
     ${meta(`schema ${manifest.toolSchemaSha256.slice(0, 8)}`)}
     ${meta(`caseSet ${manifest.caseSetSha256.slice(0, 8)}`)}
+    ${manifest.fixtures !== undefined && manifest.fixtures.length > 0 ? meta(`fixtures ${manifest.fixtures.map((f) => `${esc(f.alias)}@${f.sha256.slice(0, 6)}`).join(" ")}`) : ""}
   </div>
   <div class="filterBar">
     <button class="filterBtn on" data-f="all" type="button">全部 ${evals.length}</button>

@@ -1,7 +1,7 @@
 # eval-harness PRD —— Agent 能力评测框架：两层接口 + evalite 底座 + 三层评测体系
 
 > 状态：📋 设计评审中（接口与底座决策已对齐，未实施）
-> 关联：[`产品总览.md`](./产品总览.md)；[`context-compact.md`](./context-compact.md)（Tier 1 回放覆盖其长链路回归）
+> 关联：[`产品总览.md`](./产品总览.md)；[`context-compact.md`](./context-compact.md)（Tier 1 回放覆盖其长链路回归）；书库夹具扩展 [`evals-书库真实评测.md`](./evals-书库真实评测.md)（静态夹具 + 桩注入，case 语料面扩展，不改本主体）
 
 ---
 

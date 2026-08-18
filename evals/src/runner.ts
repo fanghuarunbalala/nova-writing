@@ -22,7 +22,17 @@ import type {
 	ProviderConfig,
 } from "@novel/core";
 import { MetricsCollector, reduceMetrics } from "./collector.js";
-import type { EvalInput, EvalRunMetrics, NovelStoreSnapshot } from "./types.js";
+import type {
+	EvalAbortInfo,
+	EvalInput,
+	EvalRunMetrics,
+	NovelStoreSnapshot,
+} from "./types.js";
+import { loadBookFixture, extractPids, type BookFixturePack } from "./fixture/pack.js";
+import { createFabricatedLibraryDeps } from "./mock/fabricated-library.js";
+import { LibraryCallRecorder, MockEngine } from "./mock/engine.js";
+import { GuardEvaluator } from "./guards.js";
+import { compilePreset } from "./preset.js";
 
 /** 注入点：密闭自测用 stub provider / 固定 workspace；缺省真实 DeepSeek + 临时目录 */
 export interface RunAgentOptions {
@@ -130,6 +140,17 @@ export async function runAgent(
 	const maxTurns = input.budget?.maxTurns ?? 30;
 	const timeoutMs = input.budget?.timeoutMs ?? 300_000;
 
+	// 书库 mock（F3）：夹具包 → 桩 deps + 调用记录；缺书在装配期抛明确错误（不静默跳过）
+	const pack: BookFixturePack | undefined =
+		input.library !== undefined ? await loadBookFixture(input.library.book) : undefined;
+	const recorder = new LibraryCallRecorder();
+	const mockEngine = new MockEngine(input.library?.mock);
+	const libraryDeps =
+		pack !== undefined ? createFabricatedLibraryDeps(pack, recorder, mockEngine) : undefined;
+	// 执行护栏（F4）与预置会话史（F6）
+	const guardEvaluator = new GuardEvaluator(input.guards);
+	const presetMessages = input.preset !== undefined ? compilePreset(input.preset.messages) : undefined;
+
 	const approvals = input.approvals;
 	const requestApproval = async (
 		req: ConversationApprovalRequest,
@@ -162,6 +183,8 @@ export async function runAgent(
 		conversationId: `eval-${randomUUID()}`,
 		requestApproval,
 		requestAsk,
+		...(libraryDeps !== undefined ? { library: { deps: libraryDeps } } : {}),
+		...(presetMessages !== undefined ? { runMessages: presetMessages } : {}),
 	});
 	// 错误码推断需要「工具名在册」清单（沿既有测试 cast 先例读私有装配）
 	const knownNames = new Set(
@@ -173,7 +196,28 @@ export async function runAgent(
 	);
 
 	const collector = new MetricsCollector();
-	const onEvent = (e: LoopEvent): void => collector.push(e, Date.now());
+	// 护栏（F4）：tool-call-request 时点（core 保证先于工具执行）逐调用评估，
+	// 违规即 loop.stop() 并记 abort——in-flight 工具可能已返回，不影响 abort 归因。
+	let abortInfo: EvalAbortInfo | undefined;
+	const onEvent = (e: LoopEvent): void => {
+		collector.push(e, Date.now());
+		if (e.type === "tool-call-request" && abortInfo === undefined) {
+			const violation = guardEvaluator.onRequest({
+				name: e.name,
+				args: parseArgsSafe(e.args),
+				argsRaw: e.args,
+			});
+			if (violation !== null) {
+				abortInfo = {
+					rule: violation.rule,
+					detail: violation.detail,
+					turn: turnOfRequest(collector.records),
+					toolCall: { name: e.name, argsRaw: e.args },
+				};
+				loop.stop();
+			}
+		}
+	};
 	const messages = Array.isArray(input.task) ? input.task : [input.task];
 
 	const usage = { inputTokens: 0, outputTokens: 0 };
@@ -213,6 +257,19 @@ export async function runAgent(
 		await rm(workspace, { recursive: true, force: true }).catch(() => {});
 	}
 
+	// 护栏终止（F4 已定口径）：ok=false + rule 归因（覆盖 stop 引发的原始异常文本）
+	if (abortInfo !== undefined) {
+		ok = false;
+		runError = `护栏终止(${abortInfo.rule}): ${abortInfo.detail}`;
+	}
+	// 引用信息边界（F7）：final 中的该书 pid 引用，valid = 本 run 实际返回过的
+	const returnedIds = new Set(recorder.calls.flatMap((c) => c.returnedParagraphIds ?? []));
+	const cited = pack !== undefined && final !== "" ? extractPids(final, pack.alias) : [];
+	const citations =
+		cited.length > 0
+			? { cited, valid: cited.filter((id) => returnedIds.has(id)) }
+			: undefined;
+
 	return {
 		ok,
 		...(runError !== undefined ? { error: runError } : {}),
@@ -224,5 +281,35 @@ export async function runAgent(
 		final,
 		storeSnapshot,
 		files,
+		...(recorder.calls.length > 0 ? { libraryCalls: recorder.calls } : {}),
+		...(citations !== undefined ? { citations } : {}),
+		...(abortInfo !== undefined ? { abort: abortInfo } : {}),
+		...(mockEngine.exhaustedCount > 0 ? { scriptExhausted: mockEngine.exhaustedCount } : {}),
 	};
+}
+
+/** 工具参数安全解析（护栏 args 通道用；失败保留原文） */
+function parseArgsSafe(raw: string): unknown {
+	try {
+		return JSON.parse(raw) as unknown;
+	} catch {
+		return raw;
+	}
+}
+
+/** 违规请求所在的 turn 序（工具批次 + assistant.message 各占一单元，对齐 collector 语义） */
+function turnOfRequest(records: readonly unknown[]): number {
+	let units = 0;
+	let prevKind: string | undefined;
+	for (const rec of records) {
+		const kind = (rec as { kind: string }).kind;
+		if (kind === "run-start" || kind === "user.message") {
+			prevKind = kind;
+			continue;
+		}
+		const isNewBatch = kind === "tool-call-request" && prevKind !== "tool-call-request";
+		if (isNewBatch || kind === "assistant.message") units++;
+		prevKind = kind;
+	}
+	return Math.max(1, units);
 }

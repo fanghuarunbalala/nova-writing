@@ -1,7 +1,9 @@
 # @novel/evals —— Agent 能力评测框架
 
-设计文档：`docs/PRD/eval-harness.md`。两层接口：`evalCase(input).run()` 纯采集
-`(input) → { turns, toolErrors, usage, times }`，链式断言在其上叠加；底座 evalite（可替换壳）。
+设计文档：`docs/PRD/eval-harness.md`；书库真实评测扩展（静态夹具 + mock 引擎 +
+执行护栏 + 预置上下文短跑）：`docs/PRD/evals-书库真实评测.md`。两层接口：
+`evalCase(input).run()` 纯采集 `(input) → { turns, toolErrors, usage, times }`，
+链式断言在其上叠加；底座 evalite（可替换壳）。
 三层评测：Tier 0 确定性快照（无 LLM）／密闭自测（stub provider）／Tier 2 真实评测（live API）。
 
 ## 命令
@@ -10,9 +12,10 @@
 
 | 命令 | 作用 | 需 API key |
 | --- | --- | --- |
-| `pnpm --filter @novel/evals test` | Tier 0 快照回归 + Runner/DSL 密闭自测 + case 结构自测（秒级，CI 可跑） | 否 |
+| `pnpm --filter @novel/evals test` | Tier 0 快照回归 + Runner/DSL 密闭自测 + case 结构自测 + 书库桩/护栏/preset 闭环（秒级，CI 可跑） | 否 |
 | `pnpm --filter @novel/evals typecheck` | src + cases + evalite.config 全量 noEmit 类型检查 | 否 |
 | `pnpm --filter @novel/evals build` | tsc 构建到 dist | 否 |
+| `pnpm --filter @novel/evals fixture:build -- <book.txt> <别名> [--force] [--title 书名]` | 构建书库夹具包解析层（确定性免 key）+ 缺件补模板 + 构建期校验（ground-truth pid / entities 落库形状）；幂等（source 哈希一致跳过） | 否 |
 | `pnpm --filter @novel/evals dev` | evalite watch：改 case 即重跑 + 本地 UI（http://localhost:3006），迭代语料用 | 是 |
 | `pnpm --filter @novel/evals suite -- --tag baseline` | 跑全套件一次：`run-once-and-exit`，落盘 `results/<时间戳>-baseline/` | 是 |
 | `pnpm --filter @novel/evals compare -- results/<A> results/<B>` | 基线对比：逐 case delta 表 + 红线判定，报告写 `<B>/compare.md`；**触发红线时退出码 1**（可作门禁） | 否 |
@@ -52,8 +55,24 @@ pnpm --filter @novel/evals compare -- results/2026-08-17T10-00-00-baseline resul
 | `budget.timeoutMs` | `300_000` | 每 run 墙钟超时（`Promise.race` + `loop.stop()`） |
 | `askScript` | `readonly AskQuestionAnswer[]` | AskUserQuestion 应答脚本，按提问顺序消耗；耗尽按「作者跳过」应答；`selections:[] + text` 为合法自由文本答案 |
 | `approvals` | `"auto"` | 全放行；`{ deny: ["NovelWrite"] }` 对含拒绝工具的审批批次拒绝 |
+| `library.book` | — | 书库夹具别名：经桩 deps 装配真 LibraryRead 工具壳（书单/护栏语义复刻生产；缺夹具构造期报错不静默跳过） |
+| `library.mock` | — | 服务层 mock 脚本（三态：静态查询缺省 / 脚本序列含错误注入 / 状态函数常驻——队列末位函数耗尽后复用） |
+| `guards.allowedTools` | — | 声明即启用意外工具护栏（allowlist 外调用硬停，`ok:false` + `abort.rule` 归因） |
+| `guards.callSequence` | — | 顺序护栏：`{expect, mode:"strict"|"loose"}`（strict 跳步/耗尽后调用违规；loose 期望子序列、越序违规） |
+| `guards.argsGuard` | — | 参数护栏：返回违规描述即硬停（soft 档不设护栏、让真实校验自然报错配自愈断言） |
+| `guards.loopDetect` | `{maxRepeats:3}` | 连续同名同参 ≥ N 次硬停（声明即启用） |
+| `preset.messages` | — | 预置会话史（简化格式 `{role:"user"\|"assistant"\|"tool", forCall, …}` 或 raw LLMessage[]）；配合 `budget.maxTurns=1–5` 即短跑 |
 | `repeats` | `3` | 重复次数（evalite `trialCount` 原生重复采样） |
 | `.threshold(ratio)`（DSL 方法） | `1.0` | case 级 passRate 阈值；含 judge 或高方差 case 建议 `2/3` |
+
+metrics 扩展：`libraryCalls`（书库调用轨迹，含 `returnedParagraphIds` 证据链）、
+`citations { cited, valid }`（最终回复 pid 引用与其中实际返回过的——引用有效率）、
+`abort { rule, detail, turn, toolCall }`（护栏终止归因）、`scriptExhausted`（mock 脚本
+耗尽回退静态次数）。断言辅助（`custom(fn)` 包装，`src/assertions.ts`）：
+`expectToolCalls([{tool, args}], {mode:"subset"|"sequence"})`（缺省 subset 宽松）、
+`expectedAbort(rule?)`（负向：期望违规如期发生即通过）、`returnedParagraphIds(m)`、
+`toolArgsJudge(tool, rubric, {reference})`（工具参数作 judge 载荷，多次调用取最差）；
+`finalReplyJudge` 增 `reference` 参考原文（判贴合/合理/不照抄，非标准答案）。
 
 ## 套件级配置（`evalite.config.ts`）
 
@@ -61,6 +80,22 @@ pnpm --filter @novel/evals compare -- results/2026-08-17T10-00-00-baseline resul
 | --- | --- | --- |
 | `testTimeout` | `600_000` | 单测试超时（evalite 缺省 30s 远不够 agent 多 turn 长任务） |
 | `maxConcurrency` | `2` | case 间并发（防限流） |
+
+## 书库夹具（fixtures/books/，docs/PRD/evals-书库真实评测.md）
+
+一书一目录 `fixtures/books/<别名>/`：`source.txt`（真实书 gitignore 不入库；
+合成书 `ywjs`《雨夜旧事》随仓库提交）、`book.json`（确定性解析层：卷章骨架 +
+分段清单，pid 契约 `<别名>-p<6位>`）、`fabricated/`（自造产物冻结：style.md /
+excerpts.md / entities.json 种子 mutation）、`ground-truth.json`（探针锚点：伏笔对 /
+矛盾对 / 单分段细节 / 人物事实 / 章节弧线）。构建期校验 ground-truth pid 存在性
+与 entities 落库形状；夹具根可经 `NOVEL_EVAL_FIXTURES` 覆盖（密闭测试用）。
+
+```bash
+# 接入一本真实书：放 txt → 构建 → 手填 fabricated/ 与 ground-truth（模板已生成）
+pnpm --filter @novel/evals fixture:build -- path/to/book.txt mybook --title 书名
+# source 变更后强制重建解析层（作者产物保留；pid 编号变了会触发 ground-truth 校验报错）
+pnpm --filter @novel/evals fixture:build -- path/to/book.txt mybook --force
+```
 
 ## 运行产物（`evals/results/`，gitignored）
 

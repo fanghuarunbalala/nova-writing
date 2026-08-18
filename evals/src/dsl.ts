@@ -192,10 +192,10 @@ export class EvalCaseBuilder {
 		}));
 	}
 
-	/** LLM-as-judge 按 rubric 判定最终回复（每 repeat 一次独立 judge 调用，判定与理由同源） */
+	/** LLM-as-judge 按 rubric 判定最终回复（每 repeat 一次独立 judge 调用，判定与理由同源；reference = 参考原文） */
 	finalReplyJudge(
 		rubric: string,
-		opts: { model?: string; scoreAtLeast?: number } = {},
+		opts: { model?: string; scoreAtLeast?: number; reference?: string } = {},
 	): this {
 		const taskText = Array.isArray(this.input.task)
 			? this.input.task.join("\n")
@@ -205,6 +205,7 @@ export class EvalCaseBuilder {
 				task: taskText,
 				finalReply: m.final,
 				rubric,
+				...(opts.reference !== undefined ? { reference: opts.reference } : {}),
 				...(opts.model !== undefined ? { model: opts.model } : {}),
 				...(opts.scoreAtLeast !== undefined ? { scoreAtLeast: opts.scoreAtLeast } : {}),
 			});
@@ -256,12 +257,19 @@ export class EvalCaseBuilder {
 		}));
 	}
 
-	/** 逃生舱：任意谓词，收完整 EvalRunMetrics */
-	custom(fn: (m: EvalRunMetrics) => boolean | Promise<boolean>): this {
-		return this.push("custom(…)", async (m) => ({
-			passed: await fn(m),
-			actual: `ok=${m.ok}, turns=${m.turns}, errors=${m.toolErrors.length}`,
-		}));
+	/**
+	 * 逃生舱：任意谓词，收完整 EvalRunMetrics——返回 boolean 或 Verdict 形态
+	 * {passed, actual}（断言辅助 helpers 走后者，actual 描述直达报告；不扩 DSL 词表）。
+	 */
+	custom(
+		fn: (m: EvalRunMetrics) => boolean | Promise<boolean> | Verdict | Promise<Verdict>,
+	): this {
+		return this.push("custom(…)", async (m) => {
+			const out = await fn(m);
+			return typeof out === "boolean"
+				? { passed: out, actual: `ok=${m.ok}, turns=${m.turns}, errors=${m.toolErrors.length}` }
+				: out;
+		});
 	}
 
 	/** case 级 passRate 阈值（缺省 1.0；含 judge 的 case 建议 2/3） */

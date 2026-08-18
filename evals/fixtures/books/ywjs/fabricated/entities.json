@@ -1,0 +1,70 @@
+{
+  "mutations": [
+    {
+      "op": "character.create",
+      "id": "ywjs-char-0001",
+      "input": {
+        "name": "沈砚",
+        "summary": "收账人，用刀。以「不喝酒」闻名，却在第七章满碗饮尽——矛盾的设定锚点之一。"
+      }
+    },
+    {
+      "op": "character.create",
+      "id": "ywjs-char-0002",
+      "input": {
+        "name": "阿蘅",
+        "summary": "蘅记茶馆掌柜。左腕旧疤（第三章埋、第九章揭：黑水镇火场铁梁所伤），十年前旧案幸存者。"
+      }
+    },
+    {
+      "op": "character.create",
+      "id": "ywjs-char-0003",
+      "input": {
+        "name": "裴七",
+        "summary": "戏班班主。油纸伞（第七根伞骨断、铜丝缠），实为黑水镇旧案的对手方。"
+      }
+    },
+    {
+      "op": "location.create",
+      "id": "ywjs-loc-0001",
+      "input": {
+        "name": "集风镇",
+        "summary": "故事发生地，雨下七日；镇口有断灯三年的瞭望塔。"
+      }
+    },
+    {
+      "op": "location.create",
+      "id": "ywjs-loc-0002",
+      "input": {
+        "name": "黑水镇",
+        "summary": "十年前火场旧案发生地，阿蘅妹妹殁于此。"
+      }
+    },
+    {
+      "op": "location.create",
+      "id": "ywjs-loc-0003",
+      "input": {
+        "name": "瞭望塔",
+        "summary": "集风镇口；塔灯断三年，第八章复明即信号。"
+      }
+    },
+    {
+      "op": "outline.storyUnit.create",
+      "id": "ywjs-su-0001",
+      "title": "雨夜入镇（第1–3章）：沈砚入集风镇，与阿蘅初会，塔灯与腕疤两处埋线",
+      "scope": "arc"
+    },
+    {
+      "op": "outline.storyUnit.create",
+      "id": "ywjs-su-0002",
+      "title": "戏班与账（第4–7章）：裴七进镇试探，不喝酒的设定与饮尽的矛盾并置，账本日期浮出",
+      "scope": "arc"
+    },
+    {
+      "op": "outline.storyUnit.create",
+      "id": "ywjs-su-0003",
+      "title": "灯与收账（第8–10章）：塔灯复明回收伏笔，疤的来历揭开，三月初七终局对决",
+      "scope": "arc"
+    }
+  ]
+}

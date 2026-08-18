@@ -108,6 +108,29 @@ async function caseSetFingerprint(): Promise<{
 	return { caseFiles: files, caseSetSha256: hash.digest("hex") };
 }
 
+/** 夹具归因（F7）：fixtures/books 下各夹具 book.json 内容哈希（语料漂移可追溯） */
+async function fixtureFingerprint(): Promise<{
+	fixtures: Array<{ alias: string; sha256: string }>;
+}> {
+	const root = join(process.cwd(), "fixtures", "books");
+	const books: Array<{ alias: string; sha256: string }> = [];
+	try {
+		for (const entry of (await readdir(root, { withFileTypes: true })).filter((e) =>
+			e.isDirectory(),
+		)) {
+			try {
+				const raw = await readFile(join(root, entry.name, "book.json"), "utf8");
+				books.push({ alias: entry.name, sha256: sha256(raw).slice(0, 16) });
+			} catch {
+				// 无 book.json 的目录（半成品夹具）跳过
+			}
+		}
+	} catch {
+		// 无 fixtures 目录 = 空集
+	}
+	return { fixtures: books.sort((a, b) => a.alias.localeCompare(b.alias)) };
+}
+
 async function main(): Promise<void> {
 	const tagIndex = process.argv.indexOf("--tag");
 	const tag = tagIndex >= 0 ? (process.argv[tagIndex + 1] ?? "run") : "run";
@@ -121,9 +144,10 @@ async function main(): Promise<void> {
 		outputPath: join(outDir, "evalite.json"),
 	});
 
-	const [fingerprint, caseSet] = await Promise.all([
+	const [fingerprint, caseSet, fixtures] = await Promise.all([
 		agentFingerprint(),
 		caseSetFingerprint(),
+		fixtureFingerprint(),
 	]);
 	const manifest = {
 		tag,
@@ -140,6 +164,7 @@ async function main(): Promise<void> {
 		},
 		...fingerprint,
 		...caseSet,
+		...fixtures,
 	};
 	await writeFile(join(outDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
 	const reportPath = await writeReport(outDir);

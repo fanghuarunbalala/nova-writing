@@ -43,6 +43,11 @@ interface CaseSummary {
 	avgTurns: number;
 	totalTokens: number;
 	errorHistogram: Record<string, number>;
+	/** 引用有效率分子/分母（F7；无引用数据为 0/0） */
+	citationValid: number;
+	citationCited: number;
+	/** 护栏终止规则直方图（F4） */
+	abortHistogram: Record<string, number>;
 }
 
 function toCaseSummaries(json: ExportedOutput): Map<string, CaseSummary> {
@@ -52,7 +57,10 @@ function toCaseSummaries(json: ExportedOutput): Map<string, CaseSummary> {
 		let allPassed = 0;
 		let turnsSum = 0;
 		let tokens = 0;
+		let citationValid = 0;
+		let citationCited = 0;
 		const hist: Record<string, number> = {};
+		const aborts: Record<string, number> = {};
 		for (const r of ev.results ?? []) {
 			runsTotal++;
 			const m = r.output as Partial<EvalRunMetrics> | null | undefined;
@@ -62,6 +70,13 @@ function toCaseSummaries(json: ExportedOutput): Map<string, CaseSummary> {
 			}
 			for (const e of m?.toolErrors ?? []) {
 				hist[e.code] = (hist[e.code] ?? 0) + 1;
+			}
+			if (m?.citations !== undefined) {
+				citationCited += m.citations.cited.length;
+				citationValid += m.citations.valid.length;
+			}
+			if (m?.abort !== undefined) {
+				aborts[m.abort.rule] = (aborts[m.abort.rule] ?? 0) + 1;
 			}
 			if ((r.scores ?? []).length > 0 && r.scores.every((s) => s.score === 1)) {
 				allPassed++;
@@ -75,6 +90,9 @@ function toCaseSummaries(json: ExportedOutput): Map<string, CaseSummary> {
 			avgTurns: runsTotal === 0 ? 0 : turnsSum / runsTotal,
 			totalTokens: tokens,
 			errorHistogram: hist,
+			citationValid,
+			citationCited,
+			abortHistogram: aborts,
 		});
 	}
 	return out;
@@ -112,6 +130,15 @@ function histDelta(
 	return parts.length === 0 ? "—" : parts.join("; ");
 }
 
+function citationCell(s: CaseSummary): string {
+	return s.citationCited === 0 ? "—" : `${s.citationValid}/${s.citationCited}`;
+}
+
+function abortCell(s: CaseSummary): string {
+	const parts = Object.entries(s.abortHistogram).map(([rule, n]) => `${rule}×${n}`);
+	return parts.length === 0 ? "—" : parts.join("; ");
+}
+
 const REGRESSION_PP = 0.1;
 
 async function main(): Promise<void> {
@@ -136,8 +163,8 @@ async function main(): Promise<void> {
 		"",
 	);
 	lines.push(
-		"| case | baseline | candidate | ΔpassRate | avgTurns | 错误码变化 | 红线 |",
-		"| --- | --- | --- | --- | --- | --- | --- |",
+		"| case | baseline | candidate | ΔpassRate | avgTurns | 错误码变化 | 引用 | 护栏 | 红线 |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 	);
 
 	const names = [...new Set([...baseline.summaries.keys(), ...candidate.summaries.keys()])].sort();
@@ -146,7 +173,7 @@ async function main(): Promise<void> {
 		const bs = baseline.summaries.get(name);
 		const cs = candidate.summaries.get(name);
 		if (bs === undefined || cs === undefined) {
-			lines.push(`| ${name} | ${bs ? fmtRate(bs.passRate) : "（缺失）"} | ${cs ? fmtRate(cs.passRate) : "（新增/缺失）"} | — | — | — | ⚠️ 仅一侧存在 |`);
+			lines.push(`| ${name} | ${bs ? fmtRate(bs.passRate) : "（缺失）"} | ${cs ? fmtRate(cs.passRate) : "（新增/缺失）"} | — | — | — | — | — | ⚠️ 仅一侧存在 |`);
 			continue;
 		}
 		const drop = bs.passRate - cs.passRate;
@@ -156,7 +183,7 @@ async function main(): Promise<void> {
 		const red = drop > REGRESSION_PP || newArgsInvalid;
 		if (red) redLines++;
 		lines.push(
-			`| ${name} | ${fmtRate(bs.passRate)}（${bs.runsAllPassed}/${bs.runsTotal}） | ${fmtRate(cs.passRate)}（${cs.runsAllPassed}/${cs.runsTotal}） | ${drop === 0 ? "±0pp" : `${drop > 0 ? "-" : "+"}${Math.round(Math.abs(drop) * 100)}pp`} | ${bs.avgTurns.toFixed(1)}→${cs.avgTurns.toFixed(1)} | ${histDelta(bs.errorHistogram, cs.errorHistogram)} | ${red ? "🔴" : "✅"} |`,
+			`| ${name} | ${fmtRate(bs.passRate)}（${bs.runsAllPassed}/${bs.runsTotal}） | ${fmtRate(cs.passRate)}（${cs.runsAllPassed}/${cs.runsTotal}） | ${drop === 0 ? "±0pp" : `${drop > 0 ? "-" : "+"}${Math.round(Math.abs(drop) * 100)}pp`} | ${bs.avgTurns.toFixed(1)}→${cs.avgTurns.toFixed(1)} | ${histDelta(bs.errorHistogram, cs.errorHistogram)} | ${citationCell(bs)}→${citationCell(cs)} | ${abortCell(bs)}→${abortCell(cs)} | ${red ? "🔴" : "✅"} |`,
 		);
 	}
 

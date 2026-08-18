@@ -1,7 +1,7 @@
 # library-完本解构（书库全景）PRD —— v0.2
 
 > 状态：⏳ 待敲定（定稿后改 ✅ 已定稿）
-> 关联：整体产品 PRD [`产品总览.md`](./产品总览.md)；评测框架 [`eval-harness.md`](./eval-harness.md)；工具面收敛 [`novel-tools-通用合并.md`](./novel-tools-通用合并.md)；域概念边界 [`../development/域模型规范.md`](../development/域模型规范.md)；技术设计 `docs/architecture.md`；装配规范 `docs/development/agent-配置规范.md`
+> 关联：整体产品 PRD [`产品总览.md`](./产品总览.md)；评测框架 [`eval-harness.md`](./eval-harness.md)；书库评测平面实现口径 [`evals-书库真实评测.md`](./evals-书库真实评测.md)（附录 C F13–F15 以静态夹具 + 桩注入落地，见其 §1 修订说明）；工具面收敛 [`novel-tools-通用合并.md`](./novel-tools-通用合并.md)；域概念边界 [`../development/域模型规范.md`](../development/域模型规范.md)；技术设计 `docs/architecture.md`；装配规范 `docs/development/agent-配置规范.md`
 > v0.2 变更：合并为书库全景（解构管线 + 工作区接入 + 书库评测）；适配 `abb7da0f` 工具面收敛（novel.entities 组 kind 分发）；明确大纲与卷章解耦——大纲（叙事单位，幕级时间/地点/人物/事件）全部由 Agent 生成，卷/章（发布单位）为确定性骨架，段落每批输入文件化不入库；读取/导出统一封装 LibraryService（组合封装，上层不感知存储细节）；确定 每书 book.db 不经 RPC 直开（WAL 单写多读）；新增长上下文忠实度评测完整规格。实现修订：书库 db 为每书一库 `<bookId>/book.db`（store 单书模型决定）。
 
 ---

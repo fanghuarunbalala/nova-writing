@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "title": "雨夜旧事",
+  "notes": "探针锚点（每章单批 → 第 n 章 pid = ywjs-p00000n；fixture:build 后由校验兜底）。伏笔=埋设/回收两侧；矛盾=同一事实两侧冲突；singleSegmentDetails=仅存在于该分段的细节。",
+  "foreshadows": [
+    {
+      "desc": "瞭望塔灯断三年（信号装置）",
+      "plantPids": [
+        "ywjs-p000002"
+      ],
+      "payoffPids": [
+        "ywjs-p000008"
+      ]
+    },
+    {
+      "desc": "阿蘅左腕旧疤",
+      "plantPids": [
+        "ywjs-p000003"
+      ],
+      "payoffPids": [
+        "ywjs-p000009"
+      ]
+    }
+  ],
+  "contradictions": [
+    {
+      "desc": "沈砚是否喝酒",
+      "sides": [
+        {
+          "claim": "不喝酒（镇上人都知道，接风酒盖杯）",
+          "pids": [
+            "ywjs-p000004"
+          ]
+        },
+        {
+          "claim": "斟满一碗、一饮而尽",
+          "pids": [
+            "ywjs-p000007"
+          ]
+        }
+      ]
+    }
+  ],
+  "characterFacts": [
+    {
+      "name": "沈砚",
+      "facts": [
+        "收账人",
+        "用刀",
+        "不喝酒（第四章设定）",
+        "雨夜入镇"
+      ],
+      "pids": [
+        "ywjs-p000001",
+        "ywjs-p000004"
+      ]
+    },
+    {
+      "name": "阿蘅",
+      "facts": [
+        "蘅记掌柜",
+        "左腕疤来自黑水镇火场铁梁",
+        "妹妹殁于火场",
+        "账本记着三月初七"
+      ],
+      "pids": [
+        "ywjs-p000003",
+        "ywjs-p000006",
+        "ywjs-p000009"
+      ]
+    },
+    {
+      "name": "裴七",
+      "facts": [
+        "戏班班主",
+        "油纸伞第七根伞骨断、铜丝缠",
+        "终局以枪对刀"
+      ],
+      "pids": [
+        "ywjs-p000005",
+        "ywjs-p000010"
+      ]
+    }
+  ],
+  "singleSegmentDetails": [
+    {
+      "desc": "裴七油纸伞的伞骨细节（第几根断、以什么缠）",
+      "pids": [
+        "ywjs-p000005"
+      ],
+      "answer": "第七根断，铜丝缠着"
+    },
+    {
+      "desc": "蘅记账本最后一页写的日期",
+      "pids": [
+        "ywjs-p000006"
+      ],
+      "answer": "三月初七"
+    }
+  ],
+  "chapterArcs": [
+    {
+      "chapterNo": 1,
+      "events": [
+        "沈砚入镇",
+        "初会阿蘅"
+      ]
+    },
+    {
+      "chapterNo": 2,
+      "events": [
+        "瞭望塔灯断三年（埋）"
+      ]
+    },
+    {
+      "chapterNo": 3,
+      "events": [
+        "阿蘅腕疤（埋）"
+      ]
+    },
+    {
+      "chapterNo": 4,
+      "events": [
+        "戏班进镇",
+        "不喝酒设定（矛盾A）"
+      ]
+    },
+    {
+      "chapterNo": 5,
+      "events": [
+        "油纸伞对峙"
+      ]
+    },
+    {
+      "chapterNo": 6,
+      "events": [
+        "账本日期三月初七"
+      ]
+    },
+    {
+      "chapterNo": 7,
+      "events": [
+        "满碗饮尽（矛盾B）"
+      ]
+    },
+    {
+      "chapterNo": 8,
+      "events": [
+        "塔灯复明（收）"
+      ]
+    },
+    {
+      "chapterNo": 9,
+      "events": [
+        "疤的来历：黑水镇火场（收）"
+      ]
+    },
+    {
+      "chapterNo": 10,
+      "events": [
+        "三月初七终局",
+        "枪对刀",
+        "账收讫"
+      ]
+    }
+  ]
+}

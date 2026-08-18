@@ -10,7 +10,8 @@
     "dev": "evalite watch",
     "suite": "tsc -p tsconfig.json && node dist/suite.js",
     "compare": "tsc -p tsconfig.json && node dist/compare.js",
-    "report": "tsc -p tsconfig.json && node dist/report.js"
+    "report": "tsc -p tsconfig.json && node dist/report.js",
+    "fixture:build": "tsc -p tsconfig.json && node dist/fixture/cli.js"
   },
   "dependencies": {
     "@novel/core": "workspace:*"

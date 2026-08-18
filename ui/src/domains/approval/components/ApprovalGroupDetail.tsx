@@ -20,6 +20,7 @@ import {
 } from "../approvalGroups.js";
 import { inferOperation, operationGlyph, toolNameLabel } from "../paramLabels.js";
 import type { ApprovalStore } from "../ApprovalStore.js";
+import type { JsonValue } from "../jsonTypes.js";
 import styles from "./ApprovalPanel.module.css";
 import { ApprovalEntityView } from "./ApprovalEntityView.js";
 import { ParameterView } from "./ParameterView.js";
@@ -67,6 +68,22 @@ const OP_CHANGE_ICON: Record<string, LucideIcon> = {
   delete: X,
 };
 
+/** markdown 文档文件扩展（Write 的 content 为 md 全文 → 审批弹窗 markdown 渲染）。 */
+const MD_FILE_EXT_RE = /\.(md|markdown)$/i;
+
+/** 参数含 file_path（.md/.markdown）+ 字符串 content → markdown 文档写入。 */
+function isMarkdownDocArgs(args: JsonValue | undefined): boolean {
+  return (
+    args !== undefined &&
+    args !== null &&
+    typeof args === "object" &&
+    !Array.isArray(args) &&
+    typeof args.file_path === "string" &&
+    MD_FILE_EXT_RE.test(args.file_path) &&
+    typeof args.content === "string"
+  );
+}
+
 export interface ApprovalGroupDetailProps {
   readonly group: ApprovalGroup;
   readonly store: ApprovalStore;
@@ -95,11 +112,15 @@ export function ApprovalGroupDetail({ group, store, resolveEntity }: ApprovalGro
   const argumentGroups = useMemo(
     () =>
       group.approvals.flatMap((approval) =>
-        approval.toolCalls.map((tc) => ({
-          toolName: tc.toolName,
-          arguments: parseApprovalArgs(tc.args),
-          op: inferOperation(tc.toolName),
-        })),
+        approval.toolCalls.map((tc) => {
+          const args = parseApprovalArgs(tc.args);
+          return {
+            toolName: tc.toolName,
+            arguments: args,
+            op: inferOperation(tc.toolName),
+            markdownDoc: isMarkdownDocArgs(args),
+          };
+        }),
       ),
     [group],
   );
@@ -213,7 +234,10 @@ export function ApprovalGroupDetail({ group, store, resolveEntity }: ApprovalGro
                           </div>
                         ) : null}
                         {argumentGroup.arguments !== undefined ? (
-                          <ParameterView value={argumentGroup.arguments} />
+                          <ParameterView
+                            value={argumentGroup.arguments}
+                            contentAsMarkdown={argumentGroup.markdownDoc}
+                          />
                         ) : (
                           <span className={styles.loadingHint}>旧版本审批 · 无参数详情</span>
                         )}

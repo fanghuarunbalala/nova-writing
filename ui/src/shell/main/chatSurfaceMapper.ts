@@ -107,17 +107,6 @@ export function mapProjectionTimeline(
           timestamp: Number.isNaN(timestamp) ? 0 : timestamp,
         }),
       );
-    } else if (item.kind === "askRecord") {
-      // AskUserQuestion 留影：紧跟所属 assistant 项（core 投影已按事件序插入）
-      mapped.push(
-        Object.freeze({
-          kind: "askRecord",
-          sequence: item.sequence,
-          toolCallId: item.toolCallId ?? "",
-          questions: item.questions ?? [],
-          result: item.text,
-        }),
-      );
     } else {
       const from = item.sourceSequence ?? item.sequence;
       const to = item.runEndSequence ?? from;

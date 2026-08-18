@@ -125,6 +125,14 @@
   margin-top: 0;
 }
 
+/* AskUserQuestion 作答留影卡：内联在所属工具行下方（原地留痕） */
+.askRecords {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6px);
+  margin-top: var(--space-5px);
+}
+
 .toolLine {
   display: flex;
   flex-wrap: wrap;

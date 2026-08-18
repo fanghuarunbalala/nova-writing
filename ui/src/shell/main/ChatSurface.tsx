@@ -253,7 +253,8 @@ function ActiveChatSurface({
   // 指示器，不驱动状态行），落定后由投影 liveState 接管。
   const queuedCount = queuedSends.filter((item) => item.phase === "queued").length;
   // 提问项：只渲染 pending 交互卡（时间线末尾）；作答后的历史留痕由投影层
-  // askRecord 项承载（tool-recorded.recorded.ask 载荷，journal 重放位置精确）。
+  // 工具行 ask 载荷承载（tool-recorded.recorded.ask，AssistantMessage 内联
+  // 渲染在对应工具行下方；journal 重放位置精确）。
   const askItems = useMemo(() => {
     return (askings ?? [])
       .filter((asking) => asking.status === "pending")

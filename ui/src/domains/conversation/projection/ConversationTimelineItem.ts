@@ -10,7 +10,7 @@
  */
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
 import type { AssistantSegment, ConversationMode, ToolTraceView } from "@novel/core/client";
-import type { AskQuestionSpec, AskingQueueItem } from "@novel/core";
+import type { AskingQueueItem } from "@novel/core";
 
 export type { ToolTraceView, AssistantSegment };
 
@@ -63,19 +63,12 @@ export type ConversationTimelineItem =
     }
   | {
       /** 提问项（AskUserQuestion 工具发起的流内提问卡；pending 交互、其余留痕）。
-       *  sequence 为本地合成（8e6+），不与 core 事件序号冲突；数据与状态来自 CMS wait 队列。 */
+       *  sequence 为本地合成（8e6+），不与 core 事件序号冲突；数据与状态来自 CMS wait 队列。
+       *  作答后的留影不再独立成项：ask 载荷挂在 assistant 段的工具行上（见 ToolTraceView），
+       *  AssistantMessage 内联渲染在对应工具行下方。 */
       readonly kind: "ask";
       readonly sequence: number;
       readonly asking: AskingQueueItem;
-    }
-  | {
-      /** 提问留影项（tool-recorded.recorded.ask 载荷派生；journal 重放同路径，
-       *  历史位置精确——重开会话后富答案卡据此重建）。 */
-      readonly kind: "askRecord";
-      readonly sequence: number;
-      readonly toolCallId: string;
-      readonly questions: readonly AskQuestionSpec[];
-      readonly result: string;
     }
   | {
       readonly kind: "design";

@@ -553,7 +553,7 @@ describe("ConversationProjection 平台事件源与 eseq 断档（gui-performanc
   });
 });
 
-describe("ConversationProjection AskUserQuestion 留影（askRecord 项）", () => {
+describe("ConversationProjection AskUserQuestion 留影（工具行 ask 载荷）", () => {
   const askQuestions = [
     { question: "第二卷主线走哪个方向？", header: "主线走向", options: [{ label: "外部压境（推荐）", description: "冲突外化" }] },
     { question: "一句话创意？", header: "一句话创意" },
@@ -572,7 +572,12 @@ describe("ConversationProjection AskUserQuestion 留影（askRecord 项）", () 
     } as unknown as ProjectedEvent;
   }
 
-  it("recorded 带 ask 载荷 → 紧跟 assistant 项后插入 askRecord 留影项", async () => {
+  /** 收集 timeline 内全部工具行（跨段平铺） */
+  function toolRowsOf(timeline: readonly { segments?: readonly { tools: readonly unknown[] }[] }[]): unknown[] {
+    return timeline.flatMap((item) => (item.segments ?? []).flatMap((seg) => [...seg.tools]));
+  }
+
+  it("recorded 带 ask 载荷 → 载荷挂到对应工具行，不产生顶层留影项", async () => {
     const fake = fakeHandle();
     const proj = new ConversationProjection(fake.handle, "c1");
     await proj.start();
@@ -588,16 +593,20 @@ describe("ConversationProjection AskUserQuestion 留影（askRecord 项）", () 
     fake.push(runEnd());
 
     const timeline = proj.getSnapshot().timeline;
-    const askIdx = timeline.findIndex((i) => i.kind === "askRecord");
-    const assistantIdx = timeline.findIndex((i) => i.kind === "assistant");
-    expect(askIdx).toBeGreaterThan(-1);
-    expect(askIdx).toBeGreaterThan(assistantIdx);
-    const record = timeline[askIdx] as { kind: "askRecord"; text: string; toolCallId?: string };
-    expect(record.toolCallId).toBe("ask-1");
-    expect(record.text).toContain("选择：外部压境（推荐）");
+    // 留影不独立成项：时间线只有 assistant（与可能的 user）项
+    expect(timeline.map((i) => i.kind)).toEqual(["assistant"]);
+    const rows = toolRowsOf(timeline) as {
+      traceId: string;
+      outcome?: string;
+      ask?: { questions: unknown[]; result: string };
+    }[];
+    const row = rows.find((t) => t.traceId === "ask-1");
+    expect(row?.outcome).toBe("ok");
+    expect(row?.ask?.result).toContain("选择：外部压境（推荐）");
+    expect(row?.ask?.questions).toHaveLength(2);
   });
 
-  it("同 toolCallId 重放去重（实时流与 history 重叠只留一份）", async () => {
+  it("同 toolCallId 重放去重（重叠只留一份载荷，工具行原位幂等替换）", async () => {
     const fake = fakeHandle();
     const proj = new ConversationProjection(fake.handle, "c1");
     await proj.start();
@@ -606,10 +615,13 @@ describe("ConversationProjection AskUserQuestion 留影（askRecord 项）", () 
     fake.push(askRecorded("ask-2", "作者已作答（1/1 问）：\n- 「q？」跳过（作者授权自行决断）", 11));
     fake.push(askRecorded("ask-2", "作者已作答（1/1 问）：\n- 「q？」跳过（作者授权自行决断）", 11));
 
-    expect(proj.getSnapshot().timeline.filter((i) => i.kind === "askRecord")).toHaveLength(1);
+    const rows = toolRowsOf(proj.getSnapshot().timeline) as { traceId: string; ask?: { result: string } }[];
+    const askRows = rows.filter((t) => t.traceId === "ask-2");
+    expect(askRows).toHaveLength(1);
+    expect(askRows[0]?.ask?.result).toContain("跳过（作者授权自行决断）");
   });
 
-  it("无 ask 载荷的普通工具 → 不产生 askRecord 项", async () => {
+  it("无 ask 载荷的普通工具 → 工具行不携带 ask 载荷", async () => {
     const fake = fakeHandle();
     const proj = new ConversationProjection(fake.handle, "c1");
     await proj.start();
@@ -617,6 +629,9 @@ describe("ConversationProjection AskUserQuestion 留影（askRecord 项）", () 
     fake.push(toolStarted("t-1"));
     fake.push(toolRecorded("t-1"));
 
-    expect(proj.getSnapshot().timeline.filter((i) => i.kind === "askRecord")).toHaveLength(0);
+    const rows = toolRowsOf(proj.getSnapshot().timeline) as { traceId: string; ask?: unknown }[];
+    const toolRows = rows.filter((t) => t.traceId === "t-1");
+    expect(toolRows).toHaveLength(1);
+    expect(toolRows[0]?.ask).toBeUndefined();
   });
 });

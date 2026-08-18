@@ -18,7 +18,6 @@ import { DesignCard } from "./DesignCard.js";
 import { QueuedUserMessage } from "./QueuedUserMessage.js";
 import { UserMessage } from "./UserMessage.js";
 import { AskQuestionCard } from "../../asking/components/AskQuestionCard.js";
-import { AskRecordCard } from "../../asking/components/AskRecordCard.js";
 import styles from "./ConversationTimeline.module.css";
 
 /** 非挂载会话时的初始集合占位（全量入场，见 initialRef 注释）。 */
@@ -273,14 +272,6 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
         />
       ) : (
         <AskQuestionCard asking={item.asking} onResolve={() => {}} onSkip={() => {}} />
-      );
-    case "askRecord":
-      return (
-        <AskRecordCard
-          toolCallId={item.toolCallId}
-          questions={item.questions}
-          result={item.result}
-        />
       );
   }
 }

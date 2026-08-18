@@ -6,10 +6,12 @@
  * 工具行分组，live 与收口一致渲染、不丢段；重放回退全文 + 工具组，
  * 形态定稿见 docs/design/app-redesign-demo.html .msgHead/.toolGroup）
  * + 结构化卡片。
+ * AskUserQuestion 作答留影卡内联在所属工具行下方（工具行 ask 载荷；原地留痕，
+ * journal 重放同位置）。
  * 卡片通过 ConversationCardRendererRegistry 渲染。
  * memo 包裹：历史消息（text/cards/segments 引用稳定）零重渲染、markdown 零重解析。
  */
-import { memo, useEffect, useState } from "react";
+import { Fragment, memo, useEffect, useState, type JSX } from "react";
 import { Check, Feather, X } from "lucide-react";
 import { createDefaultConversationCardRendererRegistry } from "../cards/defaultRenderers.js";
 import type { ConversationCardRendererRegistry } from "../cards/ConversationCardRendererRegistry.js";
@@ -26,6 +28,7 @@ import type { ReferenceResolver } from "../reference/ReferenceResolver.js";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import { AssistantMarkdown } from "./assistantContent/AssistantMarkdown.js";
 import { COMPOSER_MODE_META } from "./ComposerModeBar.js";
+import { AskRecordCard } from "../../asking/components/AskRecordCard.js";
 import type { MessageReference } from "./MessageReference.js";
 import styles from "./AssistantMessage.module.css";
 
@@ -109,9 +112,12 @@ export const AssistantMessage = memo(function AssistantMessage({
                 </div>
               ) : null}
               {seg.tools.length > 0 ? (
-                <div className={styles.toolGroup}>
-                  <ToolLine tools={seg.tools} />
-                </div>
+                <>
+                  <div className={styles.toolGroup}>
+                    <ToolLine tools={seg.tools} />
+                  </div>
+                  <AskToolRecords tools={seg.tools} />
+                </>
               ) : null}
             </div>
           ))
@@ -127,9 +133,12 @@ export const AssistantMessage = memo(function AssistantMessage({
               />
             </div>
             {replayTools.map((seg, i) => (
-              <div key={i} className={styles.toolGroup}>
-                <ToolLine tools={seg.tools} />
-              </div>
+              <Fragment key={i}>
+                <div className={styles.toolGroup}>
+                  <ToolLine tools={seg.tools} />
+                </div>
+                <AskToolRecords tools={seg.tools} />
+              </Fragment>
             ))}
           </>
         )}
@@ -175,6 +184,29 @@ function formatHeadTime(epochMs: number): string {
     return `${date.getMonth() + 1}月${date.getDate()}日 ${hhmm}`;
   }
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${hhmm}`;
+}
+
+/** AskUserQuestion 作答留影：内联渲染在所属工具行下方（工具行 ask 载荷；
+ *  原地留痕，journal 重放同位置重建）。 */
+function AskToolRecords({
+  tools,
+}: {
+  readonly tools: readonly ToolTraceView[];
+}): JSX.Element | null {
+  const asked = tools.filter((t) => t.ask !== undefined);
+  if (asked.length === 0) return null;
+  return (
+    <div className={styles.askRecords}>
+      {asked.map((t) => (
+        <AskRecordCard
+          key={t.traceId}
+          toolCallId={t.traceId}
+          questions={t.ask!.questions}
+          result={t.ask!.result}
+        />
+      ))}
+    </div>
+  );
 }
 
 /** 工具单行（对齐 demo .toolLine 文案 `工具原名 · 摘要`，app-redesign-demo.html）：

@@ -5,13 +5,16 @@
  * 对象逐字段「中文标签 + 值」，基本值数组顿号连接，对象数组（values、
  * leaf.characters 等）直接平铺字段省略「变更项 / 第 N 项」包装，项间用细分割线；
  * 已知枚举值翻译为中文。长文本默认 4 行截断，可「展开全文」。
+ * markdown 文档（Write .md 文件的 content 全文）改走 AssistantMarkdown 渲染，
+ * 不截断——审批需通读全文。
  * 操作类型由卡片「变更后」段的色带 band 表达，参数行本身不再着色。
  *
  * Recursively renders tool arguments as Chinese-labelled rows matching the
  * demo .apParam dl grid; primitive arrays join with 、; object arrays flatten
  * their fields directly (no 变更项 / 第 N 项 wrappers), separated by thin
  * dividers; known enum values are translated. Long text is clamped to 4 lines
- * with an expand toggle.
+ * with an expand toggle; markdown document content (Write .md) renders via
+ * AssistantMarkdown unclamped for full review.
  */
 import { Fragment, useState, type JSX } from "react";
 import type { JsonObject, JsonValue } from "../jsonTypes.js";
@@ -21,6 +24,7 @@ import {
   paramKeyLabel,
   paramValueLabel,
 } from "../paramLabels.js";
+import { AssistantMarkdown } from "../../conversation/components/assistantContent/AssistantMarkdown.js";
 import styles from "./ParameterView.module.css";
 
 const LONG_TEXT_CHARS = 120;
@@ -209,12 +213,44 @@ function ParamFields({
   return <ParamObject obj={value} />;
 }
 
+/** markdown 文档参数：其余字段照常网格行，content 全文走 markdown 渲染（限高滚动）。 */
+function MarkdownDocFields({
+  obj,
+  content,
+}: {
+  readonly obj: JsonObject;
+  readonly content: string;
+}): JSX.Element {
+  const rest = Object.fromEntries(
+    Object.entries(obj).filter(([field]) => field !== "content"),
+  );
+  return (
+    <div className={styles.params}>
+      {Object.keys(rest).length > 0 ? <ParamObject obj={rest} /> : null}
+      <div className={styles.paramRow}>
+        <span className={styles.paramTag}>{paramKeyLabel("content") ?? "content"}</span>
+        <div className={styles.mdContent}>
+          <AssistantMarkdown text={content} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export interface ParameterViewProps {
   /** 待渲染的工具参数（JsonValue）。Tool arguments to render. */
   readonly value: JsonValue;
+  /** content 为 markdown 文档全文（Write .md 文件）：改走 AssistantMarkdown 渲染。 */
+  readonly contentAsMarkdown?: boolean;
 }
 
-export function ParameterView({ value }: ParameterViewProps): JSX.Element {
+export function ParameterView({
+  value,
+  contentAsMarkdown = false,
+}: ParameterViewProps): JSX.Element {
+  if (contentAsMarkdown && isJsonObject(value) && typeof value.content === "string") {
+    return <MarkdownDocFields obj={value} content={value.content} />;
+  }
   if (isJsonObject(value) || Array.isArray(value)) {
     return <ParamFields value={value} />;
   }

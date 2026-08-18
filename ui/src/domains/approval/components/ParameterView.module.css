@@ -36,6 +36,16 @@
   min-width: 0;
 }
 
+/* markdown 文档全文（Write .md 审批）：限高滚动，防长文撑爆弹窗。
+ * Full markdown document: capped height with scroll. */
+.mdContent {
+  min-width: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  font-size: var(--fs-12);
+  color: var(--color-fg);
+}
+
 .clamp {
   display: -webkit-box;
   -webkit-line-clamp: 4;

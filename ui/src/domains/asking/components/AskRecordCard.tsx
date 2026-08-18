@@ -1,8 +1,9 @@
 /**
  * AskRecordCard
  *
- * 提问留影卡（askRecord 时间线项）：AskUserQuestion 工具回填后由投影层的
- * ask 载荷派生，journal 重放同路径——重开会话后富答案记录在精确历史位置重建。
+ * 提问留影卡：AskUserQuestion 工具回填后由投影层的工具行 ask 载荷派生，
+ * AssistantMessage 内联渲染在对应工具行下方（原地留痕；journal 重放同路径——
+ * 重开会话后富答案记录在精确历史位置重建）。
  * result 为工具回填文本（行格式「- 『题目』选择：…」），逐行解析为「题目 → 答案」；
  * 解析不入的行（如首行汇总、全跳过文案）原样弱化呈现。
  */

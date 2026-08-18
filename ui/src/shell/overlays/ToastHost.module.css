@@ -1,5 +1,6 @@
 /**
- * ToastHost 视觉。
+ * ToastHost 视觉：图标化卡片（kind 色 = 图标底 + 左侧细条）+ 退场动画 +
+ * 底部倒计时条（hover 暂停；时长由组件内联 animationDuration 注入）。
  */
 .host {
   position: fixed;
@@ -9,26 +10,58 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  max-width: 360px;
+  width: 380px;
+  max-width: calc(100vw - var(--space-8));
 }
 
 .toast {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-9px) var(--space-3);
+  padding: var(--space-9px) var(--space-3) calc(var(--space-9px) + var(--space-2px));
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-2);
   font-size: var(--fs-body);
+  line-height: 1.5;
   color: var(--color-fg);
+  overflow: hidden;
   animation: var(--anim-toast-in) var(--duration-base) var(--ease-out);
 }
+
+/* 退场：右滑淡出（dismiss 置 leaving 后播放，EXIT_MS 后移除） */
+.toast[data-leaving='true'] {
+  animation: var(--anim-toast-out) var(--duration-fast) var(--ease-in) forwards;
+  pointer-events: none;
+}
+
+.iconWrap {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: var(--radius-sm);
+  color: var(--color-surface);
+}
+
+.iconWrap[data-kind='info'] { background: var(--color-info); }
+.iconWrap[data-kind='success'] { background: var(--color-success); }
+.iconWrap[data-kind='warn'] { background: var(--color-warn); }
+.iconWrap[data-kind='danger'] { background: var(--color-danger); }
+
+/* kind 左侧细条（保留既有语义，与 iconWrap 同色） */
+.toast[data-kind='info'] { border-left: var(--space-2px) solid var(--color-info); }
+.toast[data-kind='success'] { border-left: var(--space-2px) solid var(--color-success); }
+.toast[data-kind='warn'] { border-left: var(--space-2px) solid var(--color-warn); }
+.toast[data-kind='danger'] { border-left: var(--space-2px) solid var(--color-danger); }
 
 .text {
   flex: 1;
   min-width: 0;
+  word-break: break-word;
 }
 
 .dismiss {
@@ -47,8 +80,32 @@
   background: var(--color-surface-2);
 }
 
-.info { border-left: 3px solid var(--color-info); }
-.success { border-left: 3px solid var(--color-success); }
-.warn { border-left: 3px solid var(--color-warn); }
-.danger { border-left: 3px solid var(--color-danger); }
+/* 倒计时条：宽度线性收缩；hover 暂停（冻结剩余时间）；时长内联注入 */
+.timer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: var(--space-2px);
+  width: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  transform-origin: left;
+  animation-name: toast-countdown;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
 
+.toast[data-kind='info'] .timer { background: var(--color-info); }
+.toast[data-kind='success'] .timer { background: var(--color-success); }
+.toast[data-kind='warn'] .timer { background: var(--color-warn); }
+.toast[data-kind='danger'] .timer { background: var(--color-danger); }
+
+.toast:hover .timer {
+  animation-play-state: paused;
+}
+
+/* leaving 态倒计时条不再消耗（与退场同步隐藏） */
+.toast[data-leaving='true'] .timer {
+  animation: none;
+  opacity: 0;
+}
